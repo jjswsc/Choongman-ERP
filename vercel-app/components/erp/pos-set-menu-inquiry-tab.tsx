@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import { ExternalLink, RefreshCw, ClipboardCopy, Pencil, Play, Ban, Trash2, Link2 } from "lucide-react"
 import { appAlert, appConfirm } from "@/lib/app-message"
@@ -690,7 +691,7 @@ export function PosSetMenuInquiryTab({
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border/80">
+        <AdminTableScroll className="rounded-xl border border-border/80" hint={false}>
           <table className="w-full min-w-[1040px] border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/50 text-left text-xs font-medium text-muted-foreground">
@@ -885,7 +886,7 @@ export function PosSetMenuInquiryTab({
               )}
             </tbody>
           </table>
-        </div>
+        </AdminTableScroll>
       )}
       {filtered.length > 0 ? (
         <p className="text-[10px] leading-relaxed text-muted-foreground">

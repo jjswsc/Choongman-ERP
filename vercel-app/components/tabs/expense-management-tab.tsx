@@ -58,7 +58,7 @@ import { canApproveExpenseAccrual, canDeleteExpenseAccrual, canEditExpenseAccrua
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
 import { ExpenseRegisterSearchTab } from "@/components/tabs/expense-register-search-tab"
 import { CardManagementTab } from "@/components/tabs/card-management-tab"
-import { AdminDesktopOnly } from "@/components/erp/admin-responsive-list"
+import { AdminDesktopOnly, AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { ExpensePlanMobileList } from "@/components/erp/expense-plan-mobile-list"
 import { useSearchParams, useRouter } from "next/navigation"
 
@@ -1123,7 +1123,7 @@ export function ExpenseManagementTab() {
               ) : (
                 <>
                 <AdminDesktopOnly>
-                <div className="overflow-x-auto rounded-md border border-border/60">
+                <AdminTableScroll className="rounded-md border border-border/60" hint={false}>
                   <table className="w-full min-w-[1032px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
@@ -1407,7 +1407,7 @@ export function ExpenseManagementTab() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
                 </AdminDesktopOnly>
                 <ExpensePlanMobileList
                   plansByStore={expensePlansByStore}
@@ -1426,7 +1426,7 @@ export function ExpenseManagementTab() {
               ) : (
                 <>
                 <AdminDesktopOnly>
-                <div className="overflow-x-auto rounded-md border border-border/60">
+                <AdminTableScroll className="rounded-md border border-border/60" hint={false}>
                   <table className="w-full min-w-[1032px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
@@ -1613,7 +1613,7 @@ export function ExpenseManagementTab() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
                 </AdminDesktopOnly>
                 <ExpensePlanMobileList
                   plansByStore={purchasePlansByStore}

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import {
   Bar,
   BarChart,
@@ -503,7 +504,7 @@ function KindTableChart({
       {onDrill && drillHint ? (
         <p className="text-xs text-muted-foreground lg:col-span-2">{drillHint}</p>
       ) : null}
-      <div className="overflow-x-auto rounded-md border">
+      <AdminTableScroll className="rounded-md border" hint={false}>
         <table className="w-full min-w-[520px] text-sm">
           <thead>
             <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -550,7 +551,7 @@ function KindTableChart({
             ))}
           </tbody>
         </table>
-      </div>
+      </AdminTableScroll>
       <KindBreakdownChart
         data={chartData}
         tr={tr}
@@ -579,7 +580,7 @@ function PromoDetailTable({
       {onDrill && drillHint ? (
         <p className="mb-2 text-xs text-muted-foreground">{drillHint}</p>
       ) : null}
-      <div className="overflow-x-auto rounded-md border">
+      <AdminTableScroll className="rounded-md border" hint={false}>
       <table className="w-full min-w-[1040px] text-sm">
         <thead>
           <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -659,7 +660,7 @@ function PromoDetailTable({
           </tr>
         </tfoot>
       </table>
-      </div>
+      </AdminTableScroll>
     </div>
   )
 }
@@ -682,7 +683,7 @@ function PaymentDetailTable({
       {onDrill && drillHint ? (
         <p className="mb-2 text-xs text-muted-foreground">{drillHint}</p>
       ) : null}
-      <div className="overflow-x-auto rounded-md border">
+      <AdminTableScroll className="rounded-md border" hint={false}>
       <table className="w-full min-w-[920px] text-sm">
         <thead>
           <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -750,7 +751,7 @@ function PaymentDetailTable({
           </tr>
         </tfoot>
       </table>
-      </div>
+      </AdminTableScroll>
     </div>
   )
 }
@@ -771,7 +772,7 @@ export function CombinedKindSection({
       {onDrill && drillHint ? (
         <p className="text-xs text-muted-foreground lg:col-span-2">{drillHint}</p>
       ) : null}
-      <div className="overflow-x-auto rounded-md border">
+      <AdminTableScroll className="rounded-md border" hint={false}>
         <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -820,7 +821,7 @@ export function CombinedKindSection({
             ))}
           </tbody>
         </table>
-      </div>
+      </AdminTableScroll>
       <KindBreakdownChart
         data={byKind.map((k) => ({
           axisLabel: `${combinedLayerLabel(k.layer, tr)} · ${combinedKindLabel(k, tr)}`,

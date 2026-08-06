@@ -18,6 +18,7 @@ import { RankedBarChart } from "./ranked-bar-chart"
 import {
   AdminDesktopOnly,
   AdminMobileOnly,
+  AdminTableScroll,
 } from "@/components/erp/admin-responsive-list"
 import { attendanceBusinessDayBoundsMs } from "@/lib/attendance-utils"
 import { useErpPolling } from "@/lib/erp-page-visibility"
@@ -271,7 +272,7 @@ export function VisitTodayTab() {
           ) : (
             <>
             <AdminDesktopOnly>
-            <div className="overflow-x-auto">
+            <AdminTableScroll hint={false}>
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="border-b bg-muted/50">
@@ -298,7 +299,7 @@ export function VisitTodayTab() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
             </AdminDesktopOnly>
             <AdminMobileOnly className="divide-y divide-border/60 rounded-lg border border-border/60">
               {active.map((a) => (

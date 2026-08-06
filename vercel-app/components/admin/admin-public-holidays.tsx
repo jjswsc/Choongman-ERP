@@ -1,5 +1,6 @@
 "use client"
 import { appConfirm } from "@/lib/app-message"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -221,7 +222,7 @@ export function AdminPublicHolidays() {
         )}
 
         {list.length > 0 && (
-          <div className="overflow-x-auto">
+          <AdminTableScroll hint={false}>
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
@@ -295,7 +296,7 @@ export function AdminPublicHolidays() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         )}
 
         {!queried && (

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { CalendarIcon, Search, Building2, User, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -215,7 +216,7 @@ export function WorklogAuditPanel() {
         </div>
       ) : (
         hasSearched && (
-          <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+          <AdminTableScroll className="rounded-xl border bg-card shadow-sm" hint={false}>
             <table className="w-full min-w-[720px] text-xs">
               <thead>
                 <tr className="border-b bg-muted/40 text-left">
@@ -254,7 +255,7 @@ export function WorklogAuditPanel() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         )
       )}
     </div>

@@ -27,7 +27,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
+import { AdminDesktopOnly, AdminMobileOnly, AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getWorkLogManagerReport,
@@ -612,7 +612,7 @@ export function WorklogApproval({ onPendingChange }: Props) {
           ) : (
             <>
             <AdminDesktopOnly>
-            <div className="overflow-x-auto">
+            <AdminTableScroll hint={false}>
             <table className="w-full min-w-[960px] text-left text-sm">
               <thead>
                 <tr className="border-b bg-muted/10">
@@ -797,7 +797,7 @@ export function WorklogApproval({ onPendingChange }: Props) {
                 })}
               </tbody>
             </table>
-            </div>
+            </AdminTableScroll>
             </AdminDesktopOnly>
             <AdminMobileOnly className="divide-y divide-border/60">
               {sortedList.map((it) => {

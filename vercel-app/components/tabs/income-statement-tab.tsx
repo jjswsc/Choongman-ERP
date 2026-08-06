@@ -91,6 +91,7 @@ import {
   yearlyExpenseSubjectAmount,
   yearlyExpenseBreakdownField,
 } from "./income-statement-tab-utils"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { IncomePlDetailTableContent } from "./income-statement-pl-detail"
 import { IncomePurchaseDrillDialog } from "./income-statement-purchase-drill-dialog"
 
@@ -1479,7 +1480,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                       {compareGranularity === "year" && (
                         <p className="text-xs text-muted-foreground">{t("fs_compareYearOnlySummaryNote")}</p>
                       )}
-                      <div className="overflow-x-auto overscroll-x-contain rounded-md border [-webkit-overflow-scrolling:touch]">
+                      <AdminTableScroll className="rounded-md border" hint={false}>
                         <table className="text-sm w-full min-w-max">
                           <caption className="caption-top text-left text-sm font-semibold text-foreground py-2 px-2 border-b border-border">
                             {t("incomeStatementTitle")}
@@ -2244,7 +2245,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                             )}
                           </tbody>
                         </table>
-                      </div>
+                      </AdminTableScroll>
                       <IncomePurchaseDrillDialog
                         open={compareDrillOpen}
                         onOpenChange={(o) => {

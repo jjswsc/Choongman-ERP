@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -3373,7 +3374,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       {tr("salesDataNone", "데이터 없음")}
                     </p>
                   ) : (
-                    <div className="overflow-x-auto rounded-md border">
+                    <AdminTableScroll className="rounded-md border" hint={false}>
                       <table className="w-full min-w-[1480px] text-sm">
                         <thead>
                           <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -3446,7 +3447,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           })}
                         </tbody>
                       </table>
-                    </div>
+                    </AdminTableScroll>
                   )}
                   <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
                     {tr(
@@ -3820,7 +3821,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="overflow-x-auto rounded-lg border">
+                  <AdminTableScroll className="rounded-lg border" hint={false}>
                     <table className="w-full min-w-[1120px] text-sm">
                       <thead className="bg-slate-100">
                         <tr>
@@ -3968,7 +3969,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         )}
                       </tbody>
                     </table>
-                  </div>
+                  </AdminTableScroll>
                   <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
                     {tr(
                       "salesAmountBreakdownFootnote",
@@ -4027,7 +4028,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
-                    <div className="overflow-x-auto rounded-lg border">
+                    <AdminTableScroll className="rounded-lg border" hint={false}>
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50">
                           <tr>
@@ -4046,7 +4047,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </AdminTableScroll>
                   </div>
                   <div>
                     <h3 className="mb-3 text-sm font-semibold">{tr("salesByCategory", "분류별 (채널)")}</h3>
@@ -4061,7 +4062,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
-                    <div className="overflow-x-auto rounded-lg border">
+                    <AdminTableScroll className="rounded-lg border" hint={false}>
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50">
                           <tr>
@@ -4078,7 +4079,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </AdminTableScroll>
                   </div>
                 </div>
                 </>

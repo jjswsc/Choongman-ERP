@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Building2, RefreshCw } from "lucide-react"
 import {
   Bar,
@@ -451,7 +452,7 @@ export function PosRevenueRealtimeDashboard({
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-md border">
+              <AdminTableScroll className="rounded-md border" hint={false}>
                 <table className="min-w-[640px] w-full text-xs">
                   <thead>
                     <tr className="border-b border-border/60 bg-muted/40 text-muted-foreground">
@@ -472,7 +473,7 @@ export function PosRevenueRealtimeDashboard({
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </AdminTableScroll>
             </>
           )}
           <p className="text-[11px] text-muted-foreground">

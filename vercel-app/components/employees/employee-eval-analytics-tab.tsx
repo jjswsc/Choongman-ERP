@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import {
   Bar,
   BarChart,
@@ -413,7 +414,7 @@ export function EmployeeEvalAnalyticsTab({
               {typeRows.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t("emp_result_empty")}</p>
               ) : (
-                <div className="overflow-x-auto">
+                <AdminTableScroll hint={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-left text-xs text-muted-foreground">
@@ -436,7 +437,7 @@ export function EmployeeEvalAnalyticsTab({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               )}
             </div>
           </div>

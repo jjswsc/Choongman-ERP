@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Gift, Plus, Stamp, Trash2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -671,7 +672,7 @@ export function MemberStampCardAdminPanel({ canEdit, onNotice, onError }: Props)
                 </div>
               </div>
               {validations.length > 0 ? (
-                <div className="overflow-x-auto rounded-lg border">
+                <AdminTableScroll className="rounded-lg border" hint={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40 text-left">
@@ -692,7 +693,7 @@ export function MemberStampCardAdminPanel({ canEdit, onNotice, onError }: Props)
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               ) : null}
               {milestones.map((row, idx) => (
                 <div key={idx} className="space-y-2 rounded-lg border p-3">
@@ -870,7 +871,7 @@ export function MemberStampCardAdminPanel({ canEdit, onNotice, onError }: Props)
                 ))}
               </div>
               {stats.storeRows.length > 0 ? (
-                <div className="overflow-x-auto rounded-lg border">
+                <AdminTableScroll className="rounded-lg border" hint={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40 text-left">
@@ -887,7 +888,7 @@ export function MemberStampCardAdminPanel({ canEdit, onNotice, onError }: Props)
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               ) : (
                 <p className="text-sm text-muted-foreground">{t("mpAdmin_stampStatsEmpty")}</p>
               )}
@@ -899,7 +900,7 @@ export function MemberStampCardAdminPanel({ canEdit, onNotice, onError }: Props)
           {failures.length > 0 ? (
             <div className="space-y-2">
               <Label>{t("mpAdmin_stampRecentFailuresTitle")}</Label>
-              <div className="overflow-x-auto rounded-lg border">
+              <AdminTableScroll className="rounded-lg border" hint={false}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40 text-left">
@@ -920,7 +921,7 @@ export function MemberStampCardAdminPanel({ canEdit, onNotice, onError }: Props)
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </AdminTableScroll>
             </div>
           ) : null}
         </CardContent>

@@ -40,6 +40,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { getBangkokRecentYearMonths, getBangkokMonthRange } from "@/lib/bangkok-time"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
@@ -1577,7 +1578,7 @@ ${rows.map((row, ri) => {
               })}
               {renderAdminViewToolbar()}
               <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
-              <div className="max-h-[min(70vh,_420px)] overflow-x-auto overflow-y-auto sm:max-h-[min(60vh,_480px)]">
+              <AdminTableScroll className="max-h-[min(70vh,_420px)] overflow-x-auto overflow-y-auto sm:max-h-[min(60vh,_480px)]" hint={false}>
                 {adminEnhancedSearch && adminViewMode !== "detail" ? (
                   renderAdminAggregationTable(
                     adminViewMode,
@@ -1638,7 +1639,7 @@ ${rows.map((row, ri) => {
                     </tbody>
                   </table>
                 )}
-              </div>
+              </AdminTableScroll>
               </div>
               {(adminEnhancedSearch ? adminViewMode === "detail" : true) && (
               <ListPaginationBar
@@ -1976,7 +1977,7 @@ ${rows.map((row, ri) => {
               })}
               {renderAdminViewToolbar()}
               <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
-              <div className="max-h-[min(78vh,_560px)] overflow-x-auto overflow-y-auto sm:max-h-[min(72vh,_620px)]">
+              <AdminTableScroll className="max-h-[min(78vh,_560px)] overflow-x-auto overflow-y-auto sm:max-h-[min(72vh,_620px)]" hint={false}>
                 {adminEnhancedSearch && adminViewMode !== "detail" ? (
                   renderAdminAggregationTable(
                     adminViewMode,
@@ -2105,7 +2106,7 @@ ${rows.map((row, ri) => {
                     </tbody>
                   </table>
                 )}
-              </div>
+              </AdminTableScroll>
               </div>
             </TabsContent>
           </Tabs>

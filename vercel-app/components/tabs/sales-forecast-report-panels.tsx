@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import type {
   ForecastHorizon,
   MomDayCompareRow,
@@ -58,7 +59,7 @@ export function SalesYoyComparePanel({
       <p className="text-xs text-muted-foreground">
         {tr("salesYoyReportHint", "매출일자(종료일)의 연도 기준으로 전년 동월과 비교합니다.")}
       </p>
-      <div className="overflow-x-auto rounded-md border">
+      <AdminTableScroll className="rounded-md border" hint={false}>
         <table className="w-full min-w-[1100px] text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-muted-foreground">
@@ -112,7 +113,7 @@ export function SalesYoyComparePanel({
             </tr>
           </tbody>
         </table>
-      </div>
+      </AdminTableScroll>
     </div>
   )
 }
@@ -153,7 +154,7 @@ export function SalesMomComparePanel({
       <p className="text-xs text-muted-foreground">
         {tr("salesMomReportHint", "매출일자(종료일)의 월 기준으로 전월 같은 일자와 비교합니다.")}
       </p>
-      <div className="overflow-x-auto rounded-md border">
+      <AdminTableScroll className="rounded-md border" hint={false}>
         <table className="w-full min-w-[1200px] text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-muted-foreground">
@@ -211,7 +212,7 @@ export function SalesMomComparePanel({
             </tr>
           </tbody>
         </table>
-      </div>
+      </AdminTableScroll>
     </div>
   )
 }
@@ -284,7 +285,7 @@ export function SalesForecastPanel({
               </p>
             </div>
           </div>
-          <div className="overflow-x-auto rounded-md border">
+          <AdminTableScroll className="rounded-md border" hint={false}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -303,7 +304,7 @@ export function SalesForecastPanel({
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         </>
       ) : (
         <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>

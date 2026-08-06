@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -1450,7 +1451,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             <Card>
               <CardContent className="p-2 overflow-x-auto space-y-3">
                 {vatInputViewMode === "vendor" ? (
-                  <div className="rounded-md border border-border/70 overflow-x-auto">
+                  <AdminTableScroll className="rounded-md border border-border/70" hint={false}>
                     <table className="w-full text-sm">
                       <thead className="bg-muted/30">
                         <tr className="border-b border-border/70">
@@ -1492,7 +1493,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                         </tfoot>
                       ) : null}
                     </table>
-                  </div>
+                  </AdminTableScroll>
                 ) : null}
                 {vatInputViewMode === "detail" ? vatRows.map((row, idx) => {
                   if (row.direction !== "input") return null
@@ -2195,7 +2196,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <div className="text-xs text-muted-foreground py-2">{t("accCompPnd91Empty")}</div>
                 ) : null}
                 {pnd91Summary && pnd91Summary.employees.length > 0 ? (
-                  <div className="overflow-x-auto rounded border border-border/60">
+                  <AdminTableScroll className="rounded border border-border/60" hint={false}>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/30">
@@ -2264,7 +2265,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                         })}
                       </tbody>
                     </table>
-                  </div>
+                  </AdminTableScroll>
                 ) : null}
               </div>
             ) : null}
@@ -2297,7 +2298,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                     {payrollTinGapResult.uniqueEmployeeCount.toLocaleString()}
                   </div>
                 </div>
-                <div className="overflow-x-auto rounded border border-border/60">
+                <AdminTableScroll className="rounded border border-border/60" hint={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/30">
@@ -2341,7 +2342,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                       ) : null}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             ) : null}
             {showPnd1Area && pnd1ValidationResult ? (
@@ -2416,7 +2417,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                     </div>
                   </div>
                 </div>
-                <div className="overflow-x-auto rounded border border-border/60">
+                <AdminTableScroll className="rounded border border-border/60" hint={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/30">
@@ -2457,7 +2458,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                       ) : null}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             ) : null}
             {showWhtLedger && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (

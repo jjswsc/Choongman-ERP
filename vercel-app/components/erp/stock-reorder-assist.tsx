@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import { ClipboardList, ExternalLink, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -314,7 +315,7 @@ export function StockReorderAssist({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border/60">
+      <AdminTableScroll className="rounded-lg border border-border/60" hint={false}>
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
@@ -402,7 +403,7 @@ export function StockReorderAssist({
             )}
           </tbody>
         </table>
-      </div>
+      </AdminTableScroll>
     </div>
   )
 }

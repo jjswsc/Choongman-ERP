@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -528,7 +529,7 @@ export function IngredientTable({
         ) : null}
       </div>
 
-      <div className="overflow-x-auto">
+      <AdminTableScroll hint={false}>
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
@@ -738,7 +739,7 @@ export function IngredientTable({
             )}
           </TableBody>
         </Table>
-      </div>
+      </AdminTableScroll>
 
       {/* 배합 재료 추가 팝업 - 배합 원가 탭에서 등록한 항목 목록 */}
       {type === "food" && (

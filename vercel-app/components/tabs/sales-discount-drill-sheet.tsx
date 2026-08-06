@@ -20,6 +20,7 @@ import {
   resolveSalesDiscountDrillExplanation,
 } from "@/lib/sales-discount-analytics-labels"
 import { normalizePosOrderTypeKey } from "@/lib/pos-sales-order-type-filter"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 
 export type SalesDiscountDrillContext = {
   startStr: string
@@ -158,7 +159,7 @@ export function useSalesDiscountDrillSheet(ctx: SalesDiscountDrillContext, tr: T
                   )}
                 </p>
               ) : null}
-              <div className="overflow-x-auto rounded-md border">
+              <AdminTableScroll className="rounded-md border" hint={false} lockViewport={false}>
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -199,7 +200,7 @@ export function useSalesDiscountDrillSheet(ctx: SalesDiscountDrillContext, tr: T
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </AdminTableScroll>
               <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
                 {tr(
                   "salesDiscountDrillFootnote",

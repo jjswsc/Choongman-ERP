@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table"
 import { CompanyHybridDocumentExpiryBadge } from "@/components/erp/company-hybrid-documents/document-expiry-badge"
 import { formatFileSize, formatHybridDocumentCreatedAt } from "@/components/erp/company-hybrid-documents/shared"
-import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
+import { AdminDesktopOnly, AdminMobileOnly, AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { cn } from "@/lib/utils"
 
 type Props = {
@@ -69,7 +69,7 @@ export function CompanyHybridDocumentListTable({
   return (
     <>
     <AdminDesktopOnly>
-    <div className="overflow-x-auto">
+    <AdminTableScroll hint={false}>
       <Table>
         <TableHeader>
           <TableRow>
@@ -240,7 +240,7 @@ export function CompanyHybridDocumentListTable({
           })}
         </TableBody>
       </Table>
-    </div>
+    </AdminTableScroll>
     </AdminDesktopOnly>
     <AdminMobileOnly className="divide-y divide-border/60 rounded-lg border border-border/60">
       {list.map((row) => {

@@ -2,6 +2,7 @@
 
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -4336,7 +4337,7 @@ export function AdminAccountingCompliance({
               </div>
               <div>
                 <div className="font-medium text-sm mb-2">{t("accCompSched_tbl_title")}</div>
-                <div className="overflow-x-auto rounded-md border border-border/80">
+                <AdminTableScroll className="rounded-md border border-border/80" hint={false}>
                   <table className="w-full text-sm border-collapse min-w-[520px]">
                     <thead>
                       <tr className="border-b bg-muted/40">
@@ -4355,7 +4356,7 @@ export function AdminAccountingCompliance({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             </CardContent>
           </Card>
@@ -4460,7 +4461,7 @@ export function AdminAccountingCompliance({
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto rounded border border-border/60">
+                  <AdminTableScroll className="rounded border border-border/60" hint={false}>
                     <table className="w-full text-sm min-w-[760px]">
                       <thead>
                         <tr className="border-b bg-muted/40">
@@ -4490,7 +4491,7 @@ export function AdminAccountingCompliance({
                         ) : null}
                       </tbody>
                     </table>
-                  </div>
+                  </AdminTableScroll>
 
                   <div className="space-y-2">
                     <div className="text-xs text-muted-foreground">
@@ -4534,7 +4535,7 @@ export function AdminAccountingCompliance({
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto rounded border border-border/60">
+                  <AdminTableScroll className="rounded border border-border/60" hint={false}>
                     <table className="w-full text-sm min-w-[760px]">
                       <thead>
                         <tr className="border-b bg-muted/40">
@@ -4578,7 +4579,7 @@ export function AdminAccountingCompliance({
                         ) : null}
                       </tbody>
                     </table>
-                  </div>
+                  </AdminTableScroll>
                 </>
               ) : (
                 <div className="text-xs text-muted-foreground">
@@ -5579,7 +5580,7 @@ export function AdminAccountingCompliance({
                 </span>
               </div>
               {workflowReminderRows.length ? (
-                <div className="rounded border border-border/60 overflow-x-auto">
+                <AdminTableScroll className="rounded border border-border/60" hint={false}>
                   <table className="w-full text-[11px]">
                     <thead>
                       <tr className="border-b bg-muted/30">
@@ -5621,7 +5622,7 @@ export function AdminAccountingCompliance({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               ) : (
                 <div className="text-muted-foreground">{t("accCompReminderEmpty")}</div>
               )}

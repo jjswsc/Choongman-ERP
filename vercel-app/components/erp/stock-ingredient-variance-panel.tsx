@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { ChevronDown, ChevronRight, Download, PackageSearch, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -328,7 +329,7 @@ export function StockIngredientVariancePanel({
           description={t("stockVarianceNoDataHint") || "기간·매장을 선택한 뒤 조회하세요."}
         />
       ) : (
-        <div className="overflow-x-auto rounded-md border">
+        <AdminTableScroll className="rounded-md border" hint={false}>
           <table className="w-full min-w-[960px] text-left text-xs">
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
@@ -445,7 +446,7 @@ export function StockIngredientVariancePanel({
               })}
             </tbody>
           </table>
-        </div>
+        </AdminTableScroll>
       )}
     </div>
   )

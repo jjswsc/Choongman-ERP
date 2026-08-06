@@ -1,5 +1,6 @@
 "use client"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 
 import * as React from "react"
 import { History, Search, Calendar } from "lucide-react"
@@ -395,7 +396,7 @@ export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHisto
       <div className="rounded-xl border bg-card overflow-hidden">
         {/* 품목/메뉴 공통: 이름 > 초기 > 변경날짜1 > ... > 현재 (테이블로 칸 정렬) */}
         {timelines.length > 0 && maxNodes > 0 && (
-          <div className="overflow-x-auto">
+          <AdminTableScroll hint={false}>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b bg-muted/50">
@@ -434,7 +435,7 @@ export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHisto
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         )}
         {timelines.length === 0 && !loading && (
           <div className="px-6 py-12 text-center text-sm text-muted-foreground space-y-2">

@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getWorkLogWeekly, getWorkLogOfficeOptions, type WorkLogWeeklySummary } from "@/lib/api-client"
@@ -402,7 +403,7 @@ export function WorklogWeekly() {
             </Select>
           )}
         </div>
-        <div className="overflow-x-auto">
+        <AdminTableScroll hint={false}>
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -490,7 +491,7 @@ export function WorklogWeekly() {
               </tbody>
             </table>
           )}
-        </div>
+        </AdminTableScroll>
       </div>
     </div>
   )

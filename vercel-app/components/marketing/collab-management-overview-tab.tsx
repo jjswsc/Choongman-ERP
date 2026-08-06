@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -441,7 +442,7 @@ export function CollabManagementOverviewTab(props: {
             {t("marketingCollabPartnersEmpty")}
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-border/80">
+          <AdminTableScroll className="rounded-xl border border-border/80" hint={false}>
             <table className="w-full min-w-[720px] border-collapse text-sm">
               <thead>
                 <tr className="border-b bg-muted/50 text-left text-xs font-medium text-muted-foreground">
@@ -491,7 +492,7 @@ export function CollabManagementOverviewTab(props: {
                 })}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         )
       ) : rows.length === 0 ? (
         <p className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
@@ -499,7 +500,7 @@ export function CollabManagementOverviewTab(props: {
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-border/80">
+          <AdminTableScroll className="rounded-xl border border-border/80" hint={false}>
             <table className="w-full min-w-[920px] border-collapse text-sm">
               <thead>
                 <tr className="border-b bg-muted/50 text-left text-xs font-medium text-muted-foreground">
@@ -569,7 +570,7 @@ export function CollabManagementOverviewTab(props: {
                 })}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
 
           <Dialog
             open={storesDialogCampaignId != null}

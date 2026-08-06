@@ -42,6 +42,7 @@ import {
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { CHART_OF_ACCOUNTS_BY_CODE } from "@/lib/chart-of-accounts-mapping"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -540,7 +541,7 @@ export function DepreciationTab() {
                 </span>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border">
+              <AdminTableScroll className="rounded-lg border" hint={false}>
                 <table className="w-full text-sm">
                   <thead className="bg-muted/40">
                     <tr className="border-b">
@@ -603,7 +604,7 @@ export function DepreciationTab() {
                 {!loading && displayAssets.length === 0 && (
                   <p className="py-8 text-center text-muted-foreground text-sm">{t("dep_noAssets")}</p>
                 )}
-              </div>
+              </AdminTableScroll>
 
               {showAssetForm ? (
                 <div className="border rounded-lg p-4 space-y-3 bg-muted/10">
@@ -766,7 +767,7 @@ export function DepreciationTab() {
                 {yearMonth} {t("dep_entriesTotal")}: <span className="font-mono font-medium">{formatBaht(entriesTotal)}</span>
               </div>
 
-              <div className="overflow-x-auto">
+              <AdminTableScroll hint={false}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
@@ -792,7 +793,7 @@ export function DepreciationTab() {
                 {!loading && entries.length === 0 && (
                   <p className="py-4 text-center text-muted-foreground text-sm">{t("dep_noEntries")}</p>
                 )}
-              </div>
+              </AdminTableScroll>
             </TabsContent>
 
             <TabsContent value="disposal" className={cn(adminTabsContentFlushCn, "space-y-4 pt-4")}>
@@ -878,7 +879,7 @@ export function DepreciationTab() {
               <Card>
                 <CardContent className="pt-4 space-y-2">
                   <div className="text-sm font-medium">{tt("dep_activeAssetsDisposable", "Active Assets (Disposal Available)")}</div>
-                  <div className="overflow-x-auto">
+                  <AdminTableScroll hint={false}>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
@@ -919,14 +920,14 @@ export function DepreciationTab() {
                     {!loading && assets.length === 0 ? (
                       <div className="py-4 text-center text-muted-foreground text-sm">{tt("dep_noDisposableAssets", "No active assets available for disposal.")}</div>
                     ) : null}
-                  </div>
+                  </AdminTableScroll>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardContent className="pt-4 space-y-2">
                   <div className="text-sm font-medium">{tt("dep_disposedAssetsRestorable", "Disposed Assets (Restorable)")}</div>
-                  <div className="overflow-x-auto">
+                  <AdminTableScroll hint={false}>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
@@ -968,7 +969,7 @@ export function DepreciationTab() {
                     {!loading && disposedAssets.length === 0 ? (
                       <div className="py-4 text-center text-muted-foreground text-sm">{tt("dep_noDisposedAssets", "No disposed assets.")}</div>
                     ) : null}
-                  </div>
+                  </AdminTableScroll>
                 </CardContent>
               </Card>
             </TabsContent>

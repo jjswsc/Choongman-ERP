@@ -92,6 +92,7 @@ import {
   isManualReceivableBalanceRow,
 } from "@/lib/manual-balance-transaction"
 import { cn } from "@/lib/utils"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
 import {
   getReceivablePayableList,
@@ -1405,7 +1406,6 @@ export function ReceivablePayableTab() {
   const amountGridCols =
     "grid grid-cols-[minmax(0,2fr)_repeat(4,minmax(6rem,1fr))] gap-x-2 sm:gap-x-3 gap-y-1 items-center w-full min-w-0"
   const ledgerSummaryHeaderCellCn = "text-center min-w-0 px-1 text-sm sm:text-sm leading-tight"
-  const ledgerDetailTableWrapCn = "overflow-x-auto -mx-1 px-1 pb-1 touch-pan-x overscroll-x-contain"
   /** table-fixed+w-full은 모바일에서 뒤쪽 금액 열이 0폭으로 잘림 → min-width + 가로 스크롤 */
   const ledgerDetailTableCn = "min-w-[1150px] w-max max-w-none text-sm border-separate border-spacing-0"
 
@@ -2058,7 +2058,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   }
                                 />
                               ) : (
-                              <div className={ledgerDetailTableWrapCn}>
+                              <AdminTableScroll className="-mx-1 px-1 pb-1 touch-pan-x" hint={false}>
                               <table className={ledgerDetailTableCn}>
                                 <thead>
                                   <tr className="border-b bg-muted/50">
@@ -2559,7 +2559,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   })}
                                 </tbody>
                               </table>
-                              </div>
+                              </AdminTableScroll>
                               )}
                             </AccordionContent>
                           </AccordionItem>
@@ -2805,7 +2805,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   }
                                 />
                               ) : (
-                              <div className={ledgerDetailTableWrapCn}>
+                              <AdminTableScroll className="-mx-1 px-1 pb-1 touch-pan-x" hint={false}>
                               <table className={ledgerDetailTableCn}>
                                 <thead>
                                   <tr className="border-b bg-muted/50">
@@ -3077,7 +3077,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   })}
                                 </tbody>
                               </table>
-                              </div>
+                              </AdminTableScroll>
                               )}
                             </AccordionContent>
                           </AccordionItem>

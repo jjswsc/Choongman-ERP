@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -109,7 +110,7 @@ export function AdminLeaveStats() {
           {loading ? t("loading") : t("search")}
         </Button>
         <p className="text-[11px] leading-snug text-muted-foreground px-0.5">{t("leave_stats_approved_only")}</p>
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <AdminTableScroll className="rounded-lg border border-border" hint={false}>
           <table className="w-full text-xs text-center">
             <thead>
               <tr className="border-b bg-muted/50">
@@ -165,7 +166,7 @@ export function AdminLeaveStats() {
               )}
             </tbody>
           </table>
-        </div>
+        </AdminTableScroll>
       </CardContent>
     </Card>
   )

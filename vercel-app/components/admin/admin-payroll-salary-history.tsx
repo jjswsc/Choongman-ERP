@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -183,7 +184,7 @@ export function AdminPayrollSalaryHistory() {
         )}
 
         {hasResult && (
-          <div className="overflow-x-auto -mx-2">
+          <AdminTableScroll className="-mx-2" hint={false}>
             <table className="w-full text-sm border-collapse min-w-[900px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
@@ -230,7 +231,7 @@ export function AdminPayrollSalaryHistory() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         )}
 
         {!queried && (

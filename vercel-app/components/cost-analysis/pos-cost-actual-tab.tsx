@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import { BarChart3, ExternalLink, Loader2, Search, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -688,7 +689,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
               </p>
             ) : null}
             {whatIfRows.length > 0 ? (
-              <div className="overflow-x-auto rounded-md border">
+              <AdminTableScroll className="rounded-md border" hint={false}>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b bg-muted/40">
@@ -722,7 +723,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </AdminTableScroll>
             ) : itemCode.trim() ? (
               <p className="text-xs text-muted-foreground">{t("posCostWhatIfEmpty")}</p>
             ) : null}

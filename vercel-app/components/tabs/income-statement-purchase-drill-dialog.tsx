@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Link from "next/link"
 import { ExternalLink, Loader2 } from "lucide-react"
@@ -138,7 +139,7 @@ export function IncomePurchaseDrillDialog({
                 <p className="text-sm font-bold text-foreground mb-1.5">
                   {t("pL_purchaseDrillHqOutbound")}
                 </p>
-                <div className="rounded-md border overflow-x-auto">
+                <AdminTableScroll className="rounded-md border" hint={false} lockViewport={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
@@ -167,7 +168,7 @@ export function IncomePurchaseDrillDialog({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             )}
 
@@ -176,7 +177,7 @@ export function IncomePurchaseDrillDialog({
                 <p className="text-sm font-bold text-foreground mb-1.5">
                   {t("pL_purchaseDrillHqOrdersRef")}
                 </p>
-                <div className="rounded-md border overflow-x-auto">
+                <AdminTableScroll className="rounded-md border" hint={false} lockViewport={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
@@ -199,7 +200,7 @@ export function IncomePurchaseDrillDialog({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             )}
 
@@ -208,7 +209,7 @@ export function IncomePurchaseDrillDialog({
                 <p className="text-sm font-bold text-foreground mb-1.5">
                   {t("pL_purchaseDrillInbound")}
                 </p>
-                <div className="rounded-md border overflow-x-auto">
+                <AdminTableScroll className="rounded-md border" hint={false} lockViewport={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
@@ -233,7 +234,7 @@ export function IncomePurchaseDrillDialog({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             )}
 
@@ -242,7 +243,7 @@ export function IncomePurchaseDrillDialog({
                 <p className="text-sm font-bold text-foreground mb-1.5">
                   {t("pL_purchaseDrillBank")}
                 </p>
-                <div className="rounded-md border overflow-x-auto">
+                <AdminTableScroll className="rounded-md border" hint={false} lockViewport={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
@@ -281,14 +282,14 @@ export function IncomePurchaseDrillDialog({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             )}
 
             {(purchaseDrillData.pettyCash?.length || 0) > 0 && (
               <div>
                 <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_purchaseDrillPetty") || t("pL_expenseDrillPetty") || "패티캐시"}</p>
-                <div className="overflow-x-auto rounded border">
+                <AdminTableScroll className="rounded border" hint={false} lockViewport={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
@@ -319,7 +320,7 @@ export function IncomePurchaseDrillDialog({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             )}
 

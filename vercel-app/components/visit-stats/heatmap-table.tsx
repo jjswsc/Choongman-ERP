@@ -1,6 +1,7 @@
 "use client"
 
 import { formatMinutesWithT } from "@/lib/visit-data"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -147,7 +148,7 @@ export function HeatmapTable({ stores, purposes, matrixMin, matrixCount }: Heatm
           ))}
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <AdminTableScroll hint={false}>
         <table className="w-full text-[12px] border-collapse">
           <thead>
             <tr>
@@ -277,7 +278,7 @@ export function HeatmapTable({ stores, purposes, matrixMin, matrixCount }: Heatm
             </tr>
           </tfoot>
         </table>
-      </div>
+      </AdminTableScroll>
     </div>
   )
 }

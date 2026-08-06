@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -721,7 +722,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                           {formatBaht(data.unpostedBankWithdrawals.reduce((s, x) => s + x.amount, 0))})
                         </div>
                         <div className="overflow-hidden rounded-lg border border-amber-200/80 bg-white/60 dark:bg-background/40">
-                          <div className="max-h-48 overflow-x-auto overflow-y-auto text-sm text-amber-900 dark:text-amber-100">
+                          <AdminTableScroll className="max-h-48 overflow-x-auto overflow-y-auto text-sm text-amber-900 dark:text-amber-100" hint={false}>
                             <table className="w-full min-w-[320px] border-collapse">
                               <thead>
                                 <tr className="border-b border-amber-200/80 bg-amber-100/50 dark:bg-amber-950/30">
@@ -760,7 +761,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                                 ))}
                               </tbody>
                             </table>
-                          </div>
+                          </AdminTableScroll>
                         </div>
                         <p className="mt-3 text-xs text-amber-800 dark:text-amber-200">{t("bs_unpostedWithdrawalsHint")}</p>
                       </div>

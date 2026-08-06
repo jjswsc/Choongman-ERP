@@ -1,5 +1,6 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -370,7 +371,7 @@ export function AdminOrderCreate() {
             <p className="py-4 text-center text-sm text-muted-foreground">{t("noCartItems")}</p>
           ) : (
             <div className="space-y-2">
-              <div className="overflow-x-auto rounded-lg border border-border">
+              <AdminTableScroll className="rounded-lg border border-border" hint={false}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
@@ -416,7 +417,7 @@ export function AdminOrderCreate() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </AdminTableScroll>
               <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                 <div className="flex justify-between">
                   <span>{t("subtotal")}</span>

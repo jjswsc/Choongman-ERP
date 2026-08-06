@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import { AlertTriangle, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -96,7 +97,7 @@ export function InteriorProjectCompareBar({ projectIds }: InteriorProjectCompare
             {t("interiorCompareExportCsv")}
           </Button>
         </div>
-        <div className="overflow-x-auto">
+        <AdminTableScroll hint={false}>
           <table className="w-full min-w-[640px] text-xs">
             <thead>
               <tr className="border-b text-muted-foreground">
@@ -153,7 +154,7 @@ export function InteriorProjectCompareBar({ projectIds }: InteriorProjectCompare
               })}
             </tbody>
           </table>
-        </div>
+        </AdminTableScroll>
       </div>
     </div>
   )

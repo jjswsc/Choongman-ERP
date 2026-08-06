@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import { BarChart3, RefreshCw } from "lucide-react"
 import {
@@ -409,7 +410,7 @@ export function AdminSalesDashboardCharts({
             <h3 className="mb-2 text-xs font-semibold text-muted-foreground">
               {tr("salesByStore", "매장별")}
             </h3>
-            <div className="overflow-x-auto rounded-lg border">
+            <AdminTableScroll className="rounded-lg border" hint={false}>
               <table className="min-w-[720px] w-full text-xs">
                 <thead className="bg-muted/50">
                   <tr>
@@ -446,7 +447,7 @@ export function AdminSalesDashboardCharts({
                   </tr>
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
             <p className="mt-1.5 text-[10px] text-muted-foreground">
               {tr(
                 "adminDashboardStoreTableFootnote",

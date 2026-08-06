@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -519,7 +520,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
                 {t("accCompClosingProfitLossAccountApplied")}: {closingPreview.profitLossAccountCode} (
                 {closingPreview.profitLossAccountName})
               </div>
-              <div className="overflow-x-auto rounded border border-border/60">
+              <AdminTableScroll className="rounded border border-border/60" hint={false}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
@@ -540,7 +541,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </AdminTableScroll>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -630,7 +631,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
                         </div>
                         {closingHistoryExpandedId === Number(h.id || 0) &&
                         Array.isArray((h.payload as { lines?: unknown[] } | null)?.lines) ? (
-                          <div className="mt-1 overflow-x-auto rounded border border-border/50">
+                          <AdminTableScroll className="mt-1 rounded border border-border/50" hint={false}>
                             <table className="w-full text-[10px]">
                               <thead>
                                 <tr className="border-b bg-muted/30">
@@ -651,7 +652,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
                                 ))}
                               </tbody>
                             </table>
-                          </div>
+                          </AdminTableScroll>
                         ) : null}
                       </div>
                     ))}
@@ -790,7 +791,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
           </div>
           <div className="rounded border border-border/60 p-2">
             <div className="text-[11px] font-medium mb-1">{t("accCompAuditLast3MonthsTrend")}</div>
-            <div className="overflow-x-auto">
+            <AdminTableScroll hint={false}>
               <table className="w-full text-[11px]">
                 <thead>
                   <tr className="border-b bg-muted/30">
@@ -819,7 +820,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
                   )}
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
           </div>
           <div className="text-xs text-muted-foreground">
             {tr(t, "accCompAuditRecentMeta", {
@@ -828,7 +829,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
               store: storeTb,
             })}
           </div>
-          <div className="overflow-x-auto rounded border border-border/60">
+          <AdminTableScroll className="rounded border border-border/60" hint={false}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
@@ -931,7 +932,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
                 )}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         </CardContent>
       </Card>
       <Card>

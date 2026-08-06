@@ -1,5 +1,6 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 
 import * as React from "react"
 import {
@@ -933,7 +934,7 @@ export function EmployeeHeadcountTab({
           </>
         )}
         {hasSearched && overviewByStore.length > 0 && (
-        <div className="overflow-x-auto rounded-md border border-border">
+        <AdminTableScroll className="rounded-md border border-border" hint={false}>
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border bg-muted/40 text-left">
@@ -1005,7 +1006,7 @@ export function EmployeeHeadcountTab({
               )}
             </tbody>
           </table>
-        </div>
+        </AdminTableScroll>
         )}
       </div>
 
@@ -1080,7 +1081,7 @@ export function EmployeeHeadcountTab({
           +
         </button>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      <AdminTableScroll className="rounded-lg border border-border bg-card" hint={false}>
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left">
@@ -1144,7 +1145,7 @@ export function EmployeeHeadcountTab({
             )}
           </tbody>
         </table>
-      </div>
+      </AdminTableScroll>
       <p className="text-xs text-muted-foreground">{t("emp_hc_asof_hint")}</p>
       <p className="text-xs text-muted-foreground">{t("emp_hc_resign_soon_hint")}</p>
       <p className="text-xs text-muted-foreground">{t("emp_hc_parttime_half_hint")}</p>

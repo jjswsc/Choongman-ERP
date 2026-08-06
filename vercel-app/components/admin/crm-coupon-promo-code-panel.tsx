@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { KeyRound, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { Badge } from "@/components/ui/badge"
@@ -357,7 +358,7 @@ export function CrmCouponPromoCodePanel({
             {t("crmPromoCodeEmpty") || "등록된 프로모 코드가 없습니다."}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <AdminTableScroll hint={false}>
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
                 <tr>
@@ -409,7 +410,7 @@ export function CrmCouponPromoCodePanel({
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         )}
       </div>
     </div>

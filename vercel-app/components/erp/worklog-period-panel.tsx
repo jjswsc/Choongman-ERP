@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { CalendarIcon, Search, CheckCircle2, ArrowRightFromLine, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -149,7 +150,7 @@ export function WorklogPeriodPanel({ employeeId, employeeName, onDatePick, embed
         </div>
       ) : (
         hasSearched && (
-          <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+          <AdminTableScroll className="rounded-xl border bg-card shadow-sm" hint={false}>
             <table className="w-full min-w-[640px] text-xs">
               <thead>
                 <tr className="border-b bg-muted/40 text-left">
@@ -199,7 +200,7 @@ export function WorklogPeriodPanel({ employeeId, employeeName, onDatePick, embed
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         )
       )}
     </div>

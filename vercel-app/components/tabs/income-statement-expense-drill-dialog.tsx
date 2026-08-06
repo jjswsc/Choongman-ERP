@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Link from "next/link"
 import { ExternalLink, Loader2 } from "lucide-react"
@@ -101,7 +102,7 @@ export function IncomeExpenseDrillDialog({
             {expenseDrillData.petty.length > 0 && (
               <div>
                 <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_expenseDrillPetty")}</p>
-                <div className="overflow-x-auto rounded border">
+                <AdminTableScroll className="rounded border" hint={false} lockViewport={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
@@ -126,14 +127,14 @@ export function IncomeExpenseDrillDialog({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             )}
 
             {expenseDrillData.bankWithdrawals.length > 0 && (
               <div>
                 <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_expenseDrillBank")}</p>
-                <div className="overflow-x-auto rounded border">
+                <AdminTableScroll className="rounded border" hint={false} lockViewport={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
@@ -158,7 +159,7 @@ export function IncomeExpenseDrillDialog({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             )}
 
@@ -166,7 +167,7 @@ export function IncomeExpenseDrillDialog({
               <div>
                 <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_expenseDrillFixed")}</p>
                 <p className="text-xs text-muted-foreground mb-2">{t("pL_expenseDrillFixedNote")}</p>
-                <div className="overflow-x-auto rounded border">
+                <AdminTableScroll className="rounded border" hint={false} lockViewport={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
@@ -187,7 +188,7 @@ export function IncomeExpenseDrillDialog({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             )}
 
@@ -195,7 +196,7 @@ export function IncomeExpenseDrillDialog({
               <div>
                 <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_expenseDrillPayroll")}</p>
                 <p className="text-xs text-muted-foreground mb-2">{t("pL_expenseDrillPayrollNote")}</p>
-                <div className="overflow-x-auto rounded border">
+                <AdminTableScroll className="rounded border" hint={false} lockViewport={false}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
@@ -218,7 +219,7 @@ export function IncomeExpenseDrillDialog({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </div>
             )}
 

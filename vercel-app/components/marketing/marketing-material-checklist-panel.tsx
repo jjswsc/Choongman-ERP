@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import { appAlert } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
@@ -391,7 +392,7 @@ export function MarketingMaterialChecklistPanel({
       )}
 
       {isHqView && !storeFilter && !mobileMode && (
-        <div className="overflow-x-auto rounded-xl border bg-card">
+        <AdminTableScroll className="rounded-xl border bg-card" hint={false}>
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
@@ -498,7 +499,7 @@ export function MarketingMaterialChecklistPanel({
               })}
             </tbody>
           </table>
-        </div>
+        </AdminTableScroll>
       )}
 
       {(isStoreUser || (isHqView && storeFilter)) && (

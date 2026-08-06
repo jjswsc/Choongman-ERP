@@ -50,6 +50,7 @@ import { NoticeHistory } from "@/components/erp/notice-history"
 import { displayLabelShort } from "@/lib/utils"
 import { hasOfficeStaffScope } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { isAttendanceOutApproved } from "@/lib/attendance-utils"
 
 function todayStr() {
@@ -435,7 +436,7 @@ export function AdminTab() {
               <p className="mt-2 text-xs text-muted-foreground">{t("adminAttNoPending")}</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border bg-card -mx-1">
+            <AdminTableScroll className="rounded-lg border border-border bg-card -mx-1" hint={false}>
               <form
                 id="att-adjust-form"
                 onSubmit={(e) => e.preventDefault()}
@@ -854,7 +855,7 @@ export function AdminTab() {
                 </tbody>
               </table>
               </form>
-            </div>
+            </AdminTableScroll>
           )}
         </CardContent>
       </Card>

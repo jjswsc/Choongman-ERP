@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import {
   ArrowDownToLine,
@@ -607,7 +608,7 @@ export function StockDailyMatrixPanel({ storeTargets }: StockDailyMatrixPanelPro
             <h3 className="text-sm font-semibold">{t("stockDailyMatrixInvoicesTitle")}</h3>
             <Badge variant="secondary" className="text-[10px]">{data.dayInvoices.length}</Badge>
           </div>
-          <div className="overflow-x-auto">
+          <AdminTableScroll hint={false}>
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="border-b bg-muted/40 text-muted-foreground">
@@ -645,7 +646,7 @@ export function StockDailyMatrixPanel({ storeTargets }: StockDailyMatrixPanelPro
                 })}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         </div>
       )}
     </div>

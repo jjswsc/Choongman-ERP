@@ -1,6 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
 
@@ -3164,7 +3165,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 onManageClick={openBankQuickMemosEdit}
                 manageLabel={t("bankQuickMemosManage") || "편집"}
               />
-              <div className="max-h-[520px] overflow-x-auto overflow-y-auto border rounded">
+              <AdminTableScroll className="max-h-[520px] overflow-x-auto overflow-y-auto border rounded" hint={false}>
                 <table className="w-full text-sm min-w-[900px]">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
@@ -3434,7 +3435,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     })}
                   </tbody>
                 </table>
-              </div>
+              </AdminTableScroll>
               <Button size="sm" onClick={handleImportSave} disabled={importSaving || !accountId}>
                 {importSaving ? "..." : t("bankImportSave")}
               </Button>

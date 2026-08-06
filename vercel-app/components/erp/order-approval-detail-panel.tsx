@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Package, Truck, Pause, XCircle, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -159,7 +160,7 @@ export function OrderApprovalDetailPanel({
                           </Button>
                         )}
                       </div>
-                      <div className="overflow-x-auto">
+                      <AdminTableScroll hint={false} lockViewport={false}>
                         <table className="w-full text-left text-sm">
                           <thead>
                             <tr className="border-b bg-muted/30">
@@ -331,7 +332,7 @@ export function OrderApprovalDetailPanel({
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                      </AdminTableScroll>
                     </div>
                   )
                 })}

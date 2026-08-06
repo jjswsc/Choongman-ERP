@@ -24,6 +24,7 @@ import {
   channelToOrderTypesParam,
 } from "@/lib/management-margin-drill-links"
 import { cn } from "@/lib/utils"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { ChevronDown, ExternalLink, Loader2 } from "lucide-react"
 
 type ManagementMarginTabProps = {
@@ -255,7 +256,7 @@ function DataQualityBadge({
             <SheetTitle>{t("mmBridgeDqBomDetailTitle")}</SheetTitle>
           </SheetHeader>
           <p className="mt-2 text-xs text-muted-foreground leading-relaxed">{t("mmBridgeDqBomDetailHint")}</p>
-          <div className="mt-4 overflow-x-auto rounded-md border">
+          <AdminTableScroll className="mt-4 rounded-md border" hint={false} lockViewport={false}>
             <table className="w-full min-w-[420px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/40 text-sm text-muted-foreground">
@@ -278,7 +279,7 @@ function DataQualityBadge({
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
           <Link
             href="/admin/pos-cost-analysis?tab=actual"
             className="mt-4 inline-flex items-center gap-1 text-xs text-primary hover:underline"
@@ -596,7 +597,7 @@ export function ManagementMarginTab({
                       : `${data.priorPeriod.yearMonthStart} ~ ${data.priorPeriod.yearMonthEnd}`
                   )}
                 </p>
-                <div className="overflow-x-auto rounded-md border">
+                <AdminTableScroll className="rounded-md border" hint={false}>
                   <table className="w-full min-w-[520px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40 text-muted-foreground text-sm">
@@ -647,7 +648,7 @@ export function ManagementMarginTab({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </CardContent>
             </Card>
           ) : null}
@@ -657,7 +658,7 @@ export function ManagementMarginTab({
               <CardContent className="pt-4">
                 <p className="mb-2 text-sm font-bold">{t("mmBridgeChannelTitle")}</p>
                 <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">{t("mmBridgeChannelHint")}</p>
-                <div className="overflow-x-auto rounded-md border">
+                <AdminTableScroll className="rounded-md border" hint={false}>
                   <table className="w-full min-w-[1100px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40 text-sm text-muted-foreground">
@@ -749,7 +750,7 @@ export function ManagementMarginTab({
                       })}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </CardContent>
             </Card>
           ) : null}
@@ -761,7 +762,7 @@ export function ManagementMarginTab({
                 <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">
                   {t("mmBridgeStoreRankingHint")}
                 </p>
-                <div className="overflow-x-auto rounded-md border">
+                <AdminTableScroll className="rounded-md border" hint={false}>
                   <table className="w-full min-w-[1040px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40 text-sm text-muted-foreground">
@@ -848,7 +849,7 @@ export function ManagementMarginTab({
                       })}
                     </tbody>
                   </table>
-                </div>
+                </AdminTableScroll>
               </CardContent>
             </Card>
           ) : null}

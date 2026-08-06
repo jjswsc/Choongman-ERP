@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Search, Radio, CalendarDays } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -411,7 +412,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
             <p className="mt-2 text-xs text-muted-foreground">{t("scheduleTodayEmpty")}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto overscroll-x-contain rounded-xl border">
+          <AdminTableScroll className="overscroll-x-contain rounded-xl border" hint={false}>
             <table className="w-full border-collapse text-left">
               {/* 헤더: 구역 | 이름 | 9 | 10 | ... | 21 */}
               <thead>
@@ -542,7 +543,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                 })()}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         )}
       </div>
 

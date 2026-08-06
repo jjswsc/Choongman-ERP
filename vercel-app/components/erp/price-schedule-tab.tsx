@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { CalendarClock, RefreshCw, XCircle, PlayCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -414,7 +415,7 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
       </div>
 
       <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="overflow-x-auto">
+        <AdminTableScroll hint={false}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
@@ -455,7 +456,7 @@ export function PriceScheduleTab({ mode, canManage }: PriceScheduleTabProps) {
               )}
             </tbody>
           </table>
-        </div>
+        </AdminTableScroll>
       </div>
     </div>
   )

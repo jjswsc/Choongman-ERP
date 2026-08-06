@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -602,7 +603,7 @@ ${rows.map((row, ri) => {
         )}
 
         {hasResult && (
-          <div className="overflow-x-auto -mx-2">
+          <AdminTableScroll className="-mx-2" hint={false}>
             <table className="w-full text-sm border-collapse min-w-[900px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
@@ -697,7 +698,7 @@ ${rows.map((row, ri) => {
             <div className="mt-3 text-end font-bold text-base">
               {t("pay_total_amount")}: <span className="text-destructive">{fmt(totalAmount)}</span> THB
             </div>
-          </div>
+          </AdminTableScroll>
         )}
 
         {!queried && (

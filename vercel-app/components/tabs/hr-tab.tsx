@@ -1,5 +1,6 @@
 "use client"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -559,7 +560,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
               {t("attHelp")}
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border">
+            <AdminTableScroll className="rounded-lg border border-border" hint={false}>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
@@ -620,7 +621,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                   })}
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
           )}
         </CardContent>
       </Card>

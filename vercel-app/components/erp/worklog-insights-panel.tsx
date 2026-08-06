@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -330,7 +331,7 @@ export function WorklogInsightsPanel() {
               <Star className="h-4 w-4 text-warning" />
               <h3 className="text-sm font-bold">{t("workLogInsightsEvalSection")}</h3>
             </div>
-            <div className="overflow-x-auto">
+            <AdminTableScroll hint={false}>
               {evalRows.length === 0 ? (
                 <p className="p-4 text-xs text-muted-foreground">{t("workLogNoInsightsEval")}</p>
               ) : (
@@ -357,7 +358,7 @@ export function WorklogInsightsPanel() {
                   </tbody>
                 </table>
               )}
-            </div>
+            </AdminTableScroll>
           </section>
         </>
       )}

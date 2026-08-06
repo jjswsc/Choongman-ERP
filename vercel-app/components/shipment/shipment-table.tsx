@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { ChevronDown, ChevronRight, Image as ImageIcon, MessageSquare, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
@@ -746,7 +747,7 @@ function TableRow({
       {isExpanded && hasDetails && (
         <tr>
           <td colSpan={12} className="px-0 py-0">
-            <div className="mx-3 my-3 overflow-x-auto rounded-lg border border-border/80 bg-muted/40 shadow-sm">
+            <AdminTableScroll className="mx-3 my-3 rounded-lg border border-border/80 bg-muted/40 shadow-sm" hint={false} lockViewport={false}>
               <table
                 className={cn(
                   "max-w-full table-fixed border-collapse text-xs leading-normal sm:text-[13px] sm:leading-normal",
@@ -912,7 +913,7 @@ function TableRow({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
           </td>
         </tr>
       )}

@@ -1,6 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback } from "react"
@@ -604,7 +605,7 @@ export function AdminSettings() {
                         .replace("{{cap}}", String(limitsData.selectPageCap))
                         .replace("{{rows}}", (limitsData.selectAllPagesMaxPages * limitsData.selectPageCap).toLocaleString())}
                     </p>
-                    <div className="overflow-x-auto rounded-lg border text-xs">
+                    <AdminTableScroll className="rounded-lg border text-xs" hint={false}>
                       <table className="w-full border-collapse">
                         <thead>
                           <tr className="bg-muted/50 border-b">
@@ -696,7 +697,7 @@ export function AdminSettings() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </AdminTableScroll>
                     <ul className="text-[11px] text-muted-foreground space-y-1 list-disc pl-4">
                       <li>{t("settings_data_limits_hint_rows")}</li>
                       <li>{t("settings_data_limits_hint_env")}</li>
@@ -837,7 +838,7 @@ export function AdminSettings() {
                 </p>
                 <div>
                   <h4 className="text-sm font-semibold mb-3">{t("settings_perm_table_title")}</h4>
-                  <div className="overflow-x-auto rounded-lg border text-sm">
+                  <AdminTableScroll className="rounded-lg border text-sm" hint={false}>
                     <table className="w-full border-collapse table-fixed">
                       <colgroup>
                         <col className="w-[30%]" />
@@ -873,7 +874,7 @@ export function AdminSettings() {
                         <tr><td className="p-2.5 text-center">{t("adminSettings")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
                       </tbody>
                     </table>
-                  </div>
+                  </AdminTableScroll>
                 </div>
 
                 <p className="text-xs text-muted-foreground pt-2">{t("settings_permission_note")}</p>

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { AlertTriangle, ChevronDown, FilePlus, FileStack, LayoutList, Mail, Tags } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
@@ -1464,7 +1465,7 @@ export function CompanyHybridDocumentsPanel() {
                 <CardTitle className="text-base">{t("companyHybridDocComplianceTitle")}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
+                <AdminTableScroll hint={false}>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1489,7 +1490,7 @@ export function CompanyHybridDocumentsPanel() {
                       ))}
                     </TableBody>
                   </Table>
-                </div>
+                </AdminTableScroll>
               </CardContent>
             </Card>
           ) : null}

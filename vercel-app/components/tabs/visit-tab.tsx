@@ -1,5 +1,6 @@
 "use client"
 import { appAlert } from "@/lib/app-message"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -313,7 +314,7 @@ export function VisitTab() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+            <AdminTableScroll hint={false}>
               <table className="w-full min-w-[280px] border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
@@ -336,7 +337,7 @@ export function VisitTab() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
           )}
         </CardContent>
       </Card>

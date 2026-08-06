@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Download, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -407,7 +408,7 @@ export function CollabManagementUsageTab(props: {
               {t("marketingCollabUsageEmpty")}
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border/80">
+            <AdminTableScroll className="rounded-xl border border-border/80" hint={false}>
               <table className="w-full min-w-[720px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50 text-left text-xs font-medium text-muted-foreground">
@@ -432,7 +433,7 @@ export function CollabManagementUsageTab(props: {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
           )}
         </>
       )}

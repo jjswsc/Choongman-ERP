@@ -1,6 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { appAlert } from "@/lib/app-message"
 
 import { useEffect, useState, useMemo, useRef } from "react"
@@ -889,7 +890,7 @@ export function OrderTab({
                 <p className="py-4 text-center text-sm text-muted-foreground">{t('noCartItems')}</p>
               ) : (
                 <div className="space-y-2">
-                  <div className="overflow-x-auto rounded-lg border border-border">
+                  <AdminTableScroll className="rounded-lg border border-border" hint={false}>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border bg-muted/50">
@@ -919,7 +920,7 @@ export function OrderTab({
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </AdminTableScroll>
                   <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                     <div className="flex justify-between">
                       <span>{t('subtotal')}</span>

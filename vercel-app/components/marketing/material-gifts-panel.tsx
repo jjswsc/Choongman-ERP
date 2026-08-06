@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import {
   Gift,
@@ -537,7 +538,7 @@ export function MarketingMaterialGiftsPanel({
               {t("marketingMaterialGiftMismatchOnly")}
             </label>
           </div>
-          <div className="overflow-x-auto rounded-lg border">
+          <AdminTableScroll className="rounded-lg border" hint={false}>
             <table className="w-full min-w-[880px] text-left text-xs">
               <thead className="border-b bg-muted/40 text-muted-foreground">
                 <tr>
@@ -600,7 +601,7 @@ export function MarketingMaterialGiftsPanel({
                 ))}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
         </div>
       )}
 
@@ -696,7 +697,7 @@ export function MarketingMaterialGiftsPanel({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <AdminTableScroll className="rounded-xl border bg-card" hint={false}>
         <table className="w-full min-w-[800px] text-left text-sm">
           <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
             <tr>
@@ -877,7 +878,7 @@ export function MarketingMaterialGiftsPanel({
             )}
           </tbody>
         </table>
-      </div>
+      </AdminTableScroll>
         </>
       )}
     </div>
