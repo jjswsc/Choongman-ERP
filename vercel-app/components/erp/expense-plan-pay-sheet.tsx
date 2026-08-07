@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import type { BankAccount, ExpenseAccrualPlanItem } from "@/lib/api-client"
+import { formatBankAccountLabel } from "@/lib/bank-account-display"
 import { Link2, Wallet } from "lucide-react"
 
 type Tt = (key: string, fallback: string) => string
@@ -75,6 +76,8 @@ export function ExpensePlanPaySheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional reset on open/row change
   }, [open, row?.id, row?.remainingAmount])
 
+  const storeLabel = String(row?.storeName || "").trim()
+
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
@@ -88,6 +91,11 @@ export function ExpensePlanPaySheet({
               <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
                 {row.documentNo || `#${row.id}`} · ฿{(row.remainingAmount || 0).toLocaleString()}
               </p>
+              {storeLabel ? (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {tt("store", "Store")}: {storeLabel}
+                </p>
+              ) : null}
               {(row.payeeBankName || row.payeeBankAccountNo) && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   {[row.payeeBankName, row.payeeBankAccountNo].filter(Boolean).join(" · ")}
@@ -109,15 +117,14 @@ export function ExpensePlanPaySheet({
             {payMethod === "bank" ? (
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">{tt("bankAccount", "Account")}</label>
-                <Select value={payBankId} onValueChange={onPayBankChange}>
+                <Select value={payBankId || undefined} onValueChange={onPayBankChange}>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder={tt("bankAccount", "Account")} />
                   </SelectTrigger>
                   <SelectContent>
                     {bankAccounts.map((a) => (
                       <SelectItem key={a.id} value={String(a.id)}>
-                        {a.bankName ? `[${a.bankName}] ` : ""}
-                        {a.name}
+                        {formatBankAccountLabel(a)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -126,7 +133,7 @@ export function ExpensePlanPaySheet({
             ) : (
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">{tt("store", "Store")}</label>
-                <Select value={payStore} onValueChange={onPayStoreChange}>
+                <Select value={payStore || undefined} onValueChange={onPayStoreChange}>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder={tt("recFilterStoreSelect", "Select Store")} />
                   </SelectTrigger>

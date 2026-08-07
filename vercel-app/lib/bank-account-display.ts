@@ -32,6 +32,16 @@ export function bankAccountStoreKeysMatch(
   return norm(a) === norm(b)
 }
 
+/** 지출·지급 시 매장명에 맞는 통장 계좌 (본사 계열 Office 통일 매칭) */
+export function findBankAccountForStore<T extends { id?: number; store?: string | null }>(
+  accounts: T[],
+  storeName: string | null | undefined
+): T | undefined {
+  const want = String(storeName || '').trim()
+  if (!want || !accounts.length) return undefined
+  return accounts.find((a) => bankAccountStoreKeysMatch(a.store, want))
+}
+
 export function formatBankAccountLabel(account: {
   id?: number
   name?: string

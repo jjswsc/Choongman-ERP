@@ -68,6 +68,10 @@ import { ExpensePlanMobileList } from "@/components/erp/expense-plan-mobile-list
 import { ExpensePlanDesktopList } from "@/components/erp/expense-plan-desktop-list"
 import { ExpensePlanPaySheet } from "@/components/erp/expense-plan-pay-sheet"
 import { ExpenseBankTransferView } from "@/components/erp/expense-bank-transfer-view"
+import {
+  findBankAccountForStore,
+  formatBankAccountLabel,
+} from "@/lib/bank-account-display"
 import { useSearchParams, useRouter, usePathname } from "next/navigation"
 
 function groupPlansByStore(rows: ExpenseAccrualPlanItem[]): [string, ExpenseAccrualPlanItem[]][] {
@@ -720,14 +724,27 @@ export function ExpenseManagementTab() {
     [t]
   )
 
-  const openPaySheet = React.useCallback((r: ExpenseAccrualPlanItem) => {
-    setPaySheetRow(r)
-    // 잔액·오늘로 강제 리셋 (이전 입력·부분지급 후 과다 지급 방지)
-    setPayAmountById((p) => ({ ...p, [r.id]: String(r.remainingAmount || 0) }))
-    setPayDateById((p) => ({ ...p, [r.id]: todayStrBkk() }))
-    setPayMethodById((p) => ({ ...p, [r.id]: p[r.id] || "bank" }))
-    setPayMemoById((p) => ({ ...p, [r.id]: r.memo || "" }))
-  }, [])
+  const openPaySheet = React.useCallback(
+    (r: ExpenseAccrualPlanItem) => {
+      setPaySheetRow(r)
+      // 잔액·오늘로 강제 리셋 (이전 입력·부분지급 후 과다 지급 방지)
+      setPayAmountById((p) => ({ ...p, [r.id]: String(r.remainingAmount || 0) }))
+      setPayDateById((p) => ({ ...p, [r.id]: todayStrBkk() }))
+      setPayMethodById((p) => ({ ...p, [r.id]: p[r.id] || "bank" }))
+      setPayMemoById((p) => ({ ...p, [r.id]: r.memo || "" }))
+      const storeName = String(r.storeName || "").trim()
+      // 매장 통장 자동 선택 (은행 계좌 마스터의 store와 매칭)
+      const matched = findBankAccountForStore(bankAccounts, storeName)
+      if (matched?.id != null) {
+        setPayBankById((p) => ({ ...p, [r.id]: String(matched.id) }))
+      }
+      // 패티 지급용 매장도 동일하게 자동 채움
+      if (storeName) {
+        setPayStoreById((p) => ({ ...p, [r.id]: storeName }))
+      }
+    },
+    [bankAccounts]
+  )
 
   const handleSavePayeeBank = React.useCallback(
     async (
@@ -878,11 +895,23 @@ export function ExpenseManagementTab() {
       void appAlert(tt("bankAccount", "Account"))
       return
     }
-    setPayAllBankId(String(bankAccounts[0]?.id || ""))
+    // 매장 필터·동일 매장 일괄 건이면 해당 매장 통장 우선
+    const filterStore = planStoreFilter !== "__all__" ? planStoreFilter : ""
+    const uniqueStores = [
+      ...new Set(
+        payablePlansForDay
+          .map((r) => String(r.storeName || "").trim())
+          .filter(Boolean)
+      ),
+    ]
+    const storeWant =
+      filterStore || (uniqueStores.length === 1 ? uniqueStores[0] : "")
+    const matched = findBankAccountForStore(bankAccounts, storeWant)
+    setPayAllBankId(String(matched?.id || bankAccounts[0]?.id || ""))
     setPayAllDate(todayStrBkk())
     setPayAllAllowMissingBank(false)
     setPayAllOpen(true)
-  }, [bankAccounts, payablePlansForDay.length, tt])
+  }, [bankAccounts, payablePlansForDay, planStoreFilter, tt])
 
   const handlePayAllForDay = React.useCallback(async () => {
     const accountId = Number(payAllBankId || 0)
@@ -1598,8 +1627,7 @@ export function ExpenseManagementTab() {
                 <SelectContent>
                   {bankAccounts.map((a) => (
                     <SelectItem key={a.id} value={String(a.id)}>
-                      {a.bankName ? `[${a.bankName}] ` : ""}
-                      {a.name}
+                      {formatBankAccountLabel(a)}
                     </SelectItem>
                   ))}
                 </SelectContent>
