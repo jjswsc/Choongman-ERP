@@ -28,7 +28,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLang } from "@/lib/lang-context"
 import { useOnlineStatus } from "@/lib/offline"
 import { useT, i18n, tOr } from "@/lib/i18n"
-import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { useErpPageActive, useErpPageActiveRef, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import {
   combinedKindLabel,
   combinedLayerLabel,
@@ -180,6 +180,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const pageActive = useErpPageActive()
+  const pageActiveRef = useErpPageActiveRef()
   const isHoursPanel = searchParams.get("hours") === "1"
   const { auth } = useAuth()
   const { viewStore } = useStoreView()
@@ -1098,6 +1100,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   )
 
   React.useEffect(() => {
+    // keep-alive 숨김 중 dataFilterKey가 다른 탭 URL 때문에 바뀌어도 조회 결과를 지우지 않음.
+    // pageActive를 deps에 넣으면 탭 복귀 시 effect가 재실행되며 결과가 초기화되므로 ref로만 가드한다.
+    if (!pageActiveRef.current) return
     setPeriodData([])
     setPeriodSplitSeries(null)
     setPeriodTruncated(false)
@@ -1121,7 +1126,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setForecastActualRows([])
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
     setFetchedAnalyticsKey("")
-  }, [dataFilterKey])
+  }, [dataFilterKey, pageActiveRef])
 
   const validTopicByMenu = React.useMemo(
     () =>
@@ -1708,6 +1713,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [selectedStoresParam, compareStores])
 
   React.useEffect(() => {
+    if (!pageActive) return
     if (searchParams.get("hours") === "1") return
     const qMenu = searchParams.get("menu")
     const qTopic = searchParams.get("topic")
@@ -1725,9 +1731,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       if (prev[defaultLanding.menuId] === defaultLanding.topicId) return prev
       return { ...prev, [defaultLanding.menuId]: defaultLanding.topicId }
     })
-  }, [searchParams, defaultLanding, activeSubMenuId, periodGroup])
+  }, [pageActive, searchParams, defaultLanding, activeSubMenuId, periodGroup])
 
   React.useEffect(() => {
+    if (!pageActive) return
     const qMenu = searchParams.get("menu")
     const qTopic = searchParams.get("topic")
     const qGroup = searchParams.get("group")
@@ -1797,6 +1804,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       userSelectedRef.current = {}
     }
   }, [
+    pageActive,
     searchParams,
     activeSubMenuId,
     selectedStoresKey,
@@ -1811,6 +1819,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   ])
 
   React.useEffect(() => {
+    if (!pageActive) return
     if (searchParams.get("hours") === "1") return
     if (storePickerOpen) return
     const currentTopic = selectedTopic?.id
@@ -1874,6 +1883,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }, 0)
     return () => clearTimeout(tid)
   }, [
+    pageActive,
     activeSubMenuId,
     pathname,
     periodGroup,
@@ -1939,6 +1949,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [loadPosOptions, canSearchAll])
 
   React.useEffect(() => {
+    if (!pageActive) return
     if (defaultStoresHydratedRef.current) return
     if (!canMultiStorePicker) {
       defaultStoresHydratedRef.current = true
@@ -1967,6 +1978,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     userSelectedRef.current.storesKey = base.join(",")
     setSelectedStores(base)
   }, [
+    pageActive,
     canMultiStorePicker,
     canSearchAll,
     posOptions,

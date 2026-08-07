@@ -60,6 +60,22 @@ export function useErpPageFullyActive(): boolean {
 }
 
 /**
+ * 최신 `useErpPageActive()` 값을 ref로 읽는다.
+ * keep-alive로 숨겨진 탭의 effect에서 `usePathname`/`useSearchParams`를 다룰 때 사용한다.
+ *
+ * 숨김 중에도 훅은 **현재 활성 탭 URL**을 반환한다. 그 변화를 그대로 동기화·초기화하면
+ * (1) 조회 결과가 지워지거나 (2) 다른 탭 URL을 router.replace로 덮어쓴다.
+ * `pageActive`를 effect deps에 넣으면 탭 복귀 시 effect가 다시 돌며 결과를 지울 수 있으므로,
+ * URL/필터 초기화 effect는 deps에 넣지 말고 `if (!activeRef.current) return`으로 가드한다.
+ */
+export function useErpPageActiveRef(): React.MutableRefObject<boolean> {
+  const active = useErpPageActive()
+  const ref = React.useRef(active)
+  ref.current = active
+  return ref
+}
+
+/**
  * keep-alive 캐시에서 다시 보일 때(다른 메뉴 갔다 복귀) callback 1회 실행.
  */
 export function useErpRefetchOnActivate(callback: () => void, enabled = true) {

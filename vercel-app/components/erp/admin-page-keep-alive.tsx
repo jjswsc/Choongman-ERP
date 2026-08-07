@@ -51,6 +51,9 @@ function syncCacheWithWorkspaceTabs(
 /**
  * 관리자 메뉴 이동 시 페이지를 unmount하지 않고 숨김 보관.
  * softDisplayHref가 있으면 라우터 pathname과 달라도 해당 캐시 슬롯을 표시한다.
+ *
+ * 주의: 숨김 슬롯도 usePathname/useSearchParams는 **활성 탭 URL**을 본다.
+ * 페이지 effect에서 URL 동기화·조회 초기화를 돌리면 상태가 날아간다 → useErpPageActive / useErpPageActiveRef 가드.
  */
 export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()

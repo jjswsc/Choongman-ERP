@@ -34,7 +34,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList } from "@/lib/api-client"
-import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { useErpPageActive, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import {
   approveExpenseAccrual,
   deleteExpenseAccrual,
@@ -133,24 +133,28 @@ export function ExpenseManagementTab() {
   const { posStores: stores } = useStoreList()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pageActive = useErpPageActive()
 
   const initialTab = searchParams.get("tab") === "expenseRegister" ? "expenseRegister" : searchParams.get("tab") === "expenseSearch" ? "expenseSearch" : searchParams.get("tab") === "card" ? "card" : "plan"
   const [tab, setTab] = React.useState<"plan" | "expenseRegister" | "expenseSearch" | "card">(initialTab)
 
   React.useEffect(() => {
+    // keep-alive 숨김 중에는 다른 탭 URL의 ?tab= 을 읽지 않음
+    if (!pageActive) return
     const tabParam = searchParams.get("tab")
     if (tabParam === "expenseRegister") setTab("expenseRegister")
     else if (tabParam === "expenseSearch") setTab("expenseSearch")
     else if (tabParam === "card") setTab("card")
     else if (tabParam === "plan") setTab("plan")
-  }, [searchParams])
+  }, [pageActive, searchParams])
 
   React.useEffect(() => {
+    if (!pageActive) return
     const s = searchParams.get("startStr")
     const e = searchParams.get("endStr")
     if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) setStartStr(s)
     if (e && /^\d{4}-\d{2}-\d{2}$/.test(e)) setEndStr(e)
-  }, [searchParams])
+  }, [pageActive, searchParams])
   const [startStr, setStartStr] = React.useState(todayStrBkk)
   const [endStr, setEndStr] = React.useState(todayStrBkk)
   /** 지출 등록(지급 예정) 저장 후 지급예정 탭 강제 재조회 */
@@ -318,6 +322,7 @@ export function ExpenseManagementTab() {
       }
       setTab("plan")
       setPlanRefreshToken((t) => t + 1)
+      if (!pageActive) return
       const q = new URLSearchParams({ tab: "plan" })
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
         q.set("startStr", d)
@@ -325,7 +330,7 @@ export function ExpenseManagementTab() {
       }
       router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
     },
-    [router]
+    [router, pageActive]
   )
 
   const handleBatchWithdrawalSaved = React.useCallback(
@@ -336,6 +341,7 @@ export function ExpenseManagementTab() {
       setStartStr(start)
       setEndStr(end)
       setTab("expenseSearch")
+      if (!pageActive) return
       const q = new URLSearchParams({
         tab: "expenseSearch",
         startStr: start,
@@ -344,7 +350,7 @@ export function ExpenseManagementTab() {
       })
       router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
     },
-    [router]
+    [router, pageActive]
   )
 
   /** 지급예정 탭 진입·등록 저장·auth.role 확정 시 조회. 기간만 바꾼 뒤에는 [조회] 버튼. */
