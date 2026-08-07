@@ -22,7 +22,6 @@ import {
 } from "@/lib/erp-keep-alive-remount"
 import {
   clearErpKeepAliveCacheRegistry,
-  hasErpKeepAliveCache,
 } from "@/lib/erp-keep-alive-registry"
 
 const STACK_KEY = "erp_nav_stack_v1"
@@ -283,38 +282,31 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
     router.refresh()
   }, [router])
 
+  /**
+   * 워크스페이스 탭 활성화.
+   *
+   * 불변식 (soft ↔ hard 핑퐁 금지):
+   * - 탭 클릭은 항상 router.push로 URL·본문을 맞춘다.
+   * - softDisplayHref(캐시 hit 시 push 생략)는 라우터가 옛 페이지에 남은 채
+   *   KeepAlive가 miss 시 cacheHref로 fallback → 「탭만 바뀌고 조회 화면 고정」이 된다.
+   * - 조회·필터 유지는 페이지 스냅샷(예: sales-management-view-cache) +
+   *   keep-alive fiber 재사용 + 숨김 탭 URL effect 가드로 담당한다.
+   */
   const activateWorkspaceTab = React.useCallback(
     (href: string) => {
       const target = resolveErpWorkspaceTabHref(href)
       const full = getErpWorkspaceTabFullHref(target)
       const routerCurrent = routerHrefRef.current
-      const softCurrent = softDisplayHref
-        ? resolveErpWorkspaceTabHref(softDisplayHref)
-        : null
 
       ensureErpWorkspaceTab(full)
-
-      // 이미 soft로 그 탭을 보는 중
-      if (softCurrent === target) return
-
-      // Next 라우터가 이미 그 탭이면 soft만 해제(표시·URL 일치)
-      if (routerCurrent === target) {
-        if (softDisplayHref) setSoftDisplayHref(null)
-        return
-      }
-
-      // keep-alive에 있으면 router.push 없이 슬롯만 전환 — remount·조회결과 소실 방지.
-      // history API는 Next가 가로채 soft와 충돌하므로 URL은 라우터 경로 유지.
-      if (hasErpKeepAliveCache(target)) {
-        setSoftDisplayHref(full)
-        return
-      }
-
       setSoftDisplayHref(null)
+
+      if (routerCurrent === target) return
+
       markErpBackNavigation()
       router.push(full, { scroll: false })
     },
-    [router, softDisplayHref]
+    [router]
   )
 
   const refreshWorkspaceTab = React.useCallback(

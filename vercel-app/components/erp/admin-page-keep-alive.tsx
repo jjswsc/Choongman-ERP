@@ -70,11 +70,12 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
 
   /** Next 라우터 기준 — children이 속한 슬롯 */
   const cacheHref = React.useMemo(() => resolveErpKeepAliveCacheHref(href), [href])
-  /** 실제 화면에 보여줄 슬롯 (soft 탭 전환 포함) */
-  const displayHref = React.useMemo(() => {
-    if (erpNav?.softDisplayHref) return resolveErpKeepAliveCacheHref(erpNav.softDisplayHref)
-    return cacheHref
-  }, [erpNav?.softDisplayHref, cacheHref])
+  /**
+   * 표시 슬롯 = 라우터만 따른다.
+   * softDisplayHref로 바꾸면 라우터는 옛 페이지인데 슬롯만 바꾸려다 miss 시
+   * 조회 화면에 고정되는 핑퐁이 난다. 조회 유지는 스냅샷·fiber 재사용으로 한다.
+   */
+  const displayHref = cacheHref
 
   const remountStamp = getErpKeepAliveRemountStamp(cacheHref)
   const keepAliveCurrent = !isErpKeepAliveExcluded(href)
@@ -169,14 +170,13 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
   }, [displayHref])
 
   const entries = Array.from(cacheRef.current.entries())
-  const hasDisplaySlot = entries.some(([key]) => key === displayHref)
-  const effectiveDisplayHref = hasDisplaySlot || entries.length === 0 ? displayHref : cacheHref
+  const effectiveDisplayHref = displayHref
 
+  // 잔여 soft가 있으면 해제(표시는 라우터만 사용)
   React.useEffect(() => {
     if (!erpNav?.softDisplayHref) return
-    if (hasDisplaySlot || entries.length === 0) return
     erpNav.clearSoftDisplayHref()
-  }, [erpNav, hasDisplaySlot, entries.length, displayHref])
+  }, [erpNav, erpNav?.softDisplayHref])
 
   const hiddenSlotClass =
     "pointer-events-none invisible absolute inset-0 -z-10 overflow-hidden opacity-0"
@@ -187,7 +187,7 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
    * 이미 열어 둔 keep-alive 탭 트리는 unmount하면 안 된다(상태 증발).
    * soft로 keep-alive 탭을 보여주는 중이면 아래 일반 분기로 캐시 슬롯을 표시한다.
    */
-  if (!keepAliveCurrent && !erpNav?.softDisplayHref) {
+  if (!keepAliveCurrent) {
     return (
       <div className="relative flex min-h-0 flex-1 flex-col">
         {entries.map(([key, { node }]) => (
