@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
+import { addDayBangkok } from '@/lib/attendance-utils'
+import {
+  latestOpenVisit,
+  pairVisitEventsForPerson,
+  type StoreVisitEventRow,
+} from '@/lib/store-visit-pairing'
 
 const TZ = 'Asia/Bangkok'
 
@@ -9,19 +15,39 @@ function getBangkokHour(): number {
   return parseInt(str, 10) || 0
 }
 
-function addDays(dateStr: string, delta: number): string {
-  const d = new Date(dateStr + 'T12:00:00')
-  d.setDate(d.getDate() + delta)
-  return d.toISOString().slice(0, 10)
-}
-
-async function fetchVisitList(userName: string, dateStr: string): Promise<{ visit_type?: string; store_name?: string; purpose?: string; visit_date?: string; visit_time?: string }[]> {
+async function fetchVisitList(userName: string, dateStr: string): Promise<StoreVisitEventRow[]> {
   const rows = (await supabaseSelectFilter(
     'store_visits',
     `visit_date=eq.${dateStr}&name=eq.${encodeURIComponent(userName)}`,
-    { order: 'visit_time.desc', limit: 50 }
-  )) as { visit_type?: string; store_name?: string; purpose?: string; visit_date?: string; visit_time?: string }[]
+    { order: 'visit_time.asc,created_at.asc', limit: 200 }
+  )) as StoreVisitEventRow[]
   return rows || []
+}
+
+async function resolveActiveVisit(userName: string): Promise<{
+  active: boolean
+  storeName?: string
+  purpose?: string
+}> {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+  let list = await fetchVisitList(userName, today)
+  // 자정 넘김(00:00~07:59 방콕): 전날 방문시작도 조회
+  const bangkokHour = getBangkokHour()
+  if (bangkokHour >= 0 && bangkokHour <= 7) {
+    const yesterday = addDayBangkok(today, -1)
+    const yesterdayList = await fetchVisitList(userName, yesterday)
+    list = [...yesterdayList, ...list]
+  }
+
+  // last-event-wins 폐기: 짝짓기 후 미종료 open이 있으면 active
+  const { open } = pairVisitEventsForPerson(list, { personExclusive: true })
+  const latest = latestOpenVisit(open)
+  if (!latest) return { active: false }
+  return {
+    active: true,
+    storeName: latest.store,
+    purpose: latest.purpose,
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -41,32 +67,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
-    let list = await fetchVisitList(userName, today)
-    // 자정 넘김(00:00~07:59 방콕): 전날 방문시작도 조회 (밤에 시작한 방문 → 익일 새벽 종료)
-    const bangkokHour = getBangkokHour()
-    if (bangkokHour >= 0 && bangkokHour <= 7) {
-      const yesterday = addDays(today, -1)
-      const yesterdayList = await fetchVisitList(userName, yesterday)
-      list = [...yesterdayList, ...list].sort((a, b) => {
-        const dA = String(a.visit_date || '') + String(a.visit_time || '')
-        const dB = String(b.visit_date || '') + String(b.visit_time || '')
-        return dB.localeCompare(dA)
-      })
-    }
-
-    for (const row of list) {
-      if (row.visit_type === '방문시작' || row.visit_type === '강제 방문시작') {
-        return NextResponse.json(
-          { active: true, storeName: row.store_name, purpose: row.purpose },
-          { headers }
-        )
-      }
-      if (row.visit_type === '방문종료' || row.visit_type === '강제 방문종료') {
-        return NextResponse.json({ active: false }, { headers })
-      }
-    }
-    return NextResponse.json({ active: false }, { headers })
+    const status = await resolveActiveVisit(userName)
+    return NextResponse.json(status, { headers })
   } catch (e) {
     console.error('checkUserVisitStatus:', e)
     return NextResponse.json({ active: false }, { headers })
@@ -90,31 +92,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ active: false }, { headers })
     }
 
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
-    let list = await fetchVisitList(userName, today)
-    const bangkokHour = getBangkokHour()
-    if (bangkokHour >= 0 && bangkokHour <= 7) {
-      const yesterday = addDays(today, -1)
-      const yesterdayList = await fetchVisitList(userName, yesterday)
-      list = [...yesterdayList, ...list].sort((a, b) => {
-        const dA = String(a.visit_date || '') + String(a.visit_time || '')
-        const dB = String(b.visit_date || '') + String(b.visit_time || '')
-        return dB.localeCompare(dA)
-      })
-    }
-
-    for (const row of list) {
-      if (row.visit_type === '방문시작' || row.visit_type === '강제 방문시작') {
-        return NextResponse.json(
-          { active: true, storeName: row.store_name, purpose: row.purpose },
-          { headers }
-        )
-      }
-      if (row.visit_type === '방문종료' || row.visit_type === '강제 방문종료') {
-        return NextResponse.json({ active: false }, { headers })
-      }
-    }
-    return NextResponse.json({ active: false }, { headers })
+    const status = await resolveActiveVisit(userName)
+    return NextResponse.json(status, { headers })
   } catch (e) {
     console.error('checkUserVisitStatus:', e)
     return NextResponse.json({ active: false }, { headers })

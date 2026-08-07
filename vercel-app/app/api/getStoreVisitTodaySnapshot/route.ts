@@ -8,13 +8,16 @@ import {
   attendanceBusinessDateStrBangkok,
   attendanceBusinessDayBoundsMs,
   segmentOverlapsAttendanceBusinessDay,
-  visitInstantMsBangkok,
   addDayBangkok,
 } from "@/lib/attendance-utils"
+import {
+  STORE_VISIT_END_TYPES,
+  STORE_VISIT_START_TYPES,
+  pairVisitEventsForPerson,
+  type StoreVisitEventRow,
+} from "@/lib/store-visit-pairing"
 
 const TZ = "Asia/Bangkok"
-const START_TYPES = new Set(["방문시작", "강제 방문시작"])
-const END_TYPES = new Set(["방문종료", "강제 방문종료"])
 
 function toIsoBangkok(ms: number): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -106,20 +109,11 @@ export async function GET(request: NextRequest) {
       order: "visit_date.asc,visit_time.asc,created_at.asc",
       limit: 8000,
       select: "visit_date,visit_time,name,store_name,visit_type,purpose,created_at,duration_min",
-    })) as {
-      visit_date?: string
-      visit_time?: string
-      name?: string
-      store_name?: string
-      visit_type?: string
-      purpose?: string
-      created_at?: string
-      duration_min?: number | string
-    }[]
+    })) as (StoreVisitEventRow & { duration_min?: number | string })[]
 
     const typed = (rows || []).filter((r) => {
       const vt = String(r.visit_type || "")
-      if (!(START_TYPES.has(vt) || END_TYPES.has(vt))) return false
+      if (!(STORE_VISIT_START_TYPES.has(vt) || STORE_VISIT_END_TYPES.has(vt))) return false
       if (!isScopedRole) return true
       const rowStore = String(r.store_name || "").trim()
       return allowedStores.some((s) => storesMatchForGradeLookup(s, rowStore))
@@ -136,72 +130,36 @@ export async function GET(request: NextRequest) {
     const segmentsOut: SnapshotSegment[] = []
     const activeOut: SnapshotActive[] = []
 
-    type Pending = {
-      store: string
-      purpose: string
-      startMs: number
-    }
-
     for (const name of Array.from(byName.keys()).sort()) {
       const showName = visitDisplayName(name, displayMap)
-      const arr = byName.get(name)!
-      arr.sort((a, b) => {
-        const ma = visitInstantMsBangkok(String(a.visit_date), a.visit_time, a.created_at)
-        const mb = visitInstantMsBangkok(String(b.visit_date), b.visit_time, b.created_at)
-        if (ma !== mb) return ma - mb
-        return String(a.created_at || "").localeCompare(String(b.created_at || ""))
+      const dept = nameToDept[name] || "기타"
+      // 사람당 동시 open 1개 + 짧은 간격 동일매장 재시작 무시 → Grace 중복 표시 방지
+      const { completed, open } = pairVisitEventsForPerson(byName.get(name)!, {
+        personExclusive: true,
       })
 
-      const pending: Pending[] = []
-
-      for (const row of arr) {
-        const vt = String(row.visit_type || "")
-        const store = String(row.store_name || "").trim()
-        const purpose = String(row.purpose || "").trim() || "기타"
-
-        if (START_TYPES.has(vt)) {
-          const startMs = visitInstantMsBangkok(String(row.visit_date), row.visit_time, row.created_at)
-          pending.push({ store, purpose, startMs })
-          continue
-        }
-
-        if (END_TYPES.has(vt)) {
-          const endMs = visitInstantMsBangkok(String(row.visit_date), row.visit_time, row.created_at)
-          let idx = -1
-          for (let i = pending.length - 1; i >= 0; i--) {
-            if (pending[i].store === store) {
-              idx = i
-              break
-            }
-          }
-          if (idx < 0) continue
-          const [start] = pending.splice(idx, 1)
-          const ongoing = false
-          // 방문 시작의 근무일만 스냅샷 일자에 묶음 (예: 22일 02:00 기록 → 근무일 21일 → 22일 당일 탭 제외, 21일 검색에만 표시)
-          if (
-            attendanceBusinessDateStrBangkok(start.startMs) === businessToday &&
-            segmentOverlapsAttendanceBusinessDay(start.startMs, endMs, ongoing, winStart, winEndEx, nowMs)
-          ) {
-            const dept = nameToDept[name] || "기타"
-            segmentsOut.push({
-              name: showName,
-              department: dept,
-              store: start.store,
-              purpose: start.purpose,
-              startAt: toIsoBangkok(start.startMs),
-              endAt: toIsoBangkok(endMs),
-              ongoing: false,
-            })
-          }
+      for (const c of completed) {
+        if (
+          attendanceBusinessDateStrBangkok(c.startMs) === businessToday &&
+          segmentOverlapsAttendanceBusinessDay(c.startMs, c.endMs, false, winStart, winEndEx, nowMs)
+        ) {
+          segmentsOut.push({
+            name: showName,
+            department: dept,
+            store: c.store,
+            purpose: c.purpose,
+            startAt: toIsoBangkok(c.startMs),
+            endAt: toIsoBangkok(c.endMs),
+            ongoing: false,
+          })
         }
       }
 
-      for (const p of pending) {
+      for (const p of open) {
         if (
           attendanceBusinessDateStrBangkok(p.startMs) === businessToday &&
           segmentOverlapsAttendanceBusinessDay(p.startMs, null, true, winStart, winEndEx, nowMs)
         ) {
-          const dept = nameToDept[name] || "기타"
           segmentsOut.push({
             name: showName,
             department: dept,

@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
 import { verifyAttendanceQrPayload } from '@/lib/attendance-qr-token'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { addDayBangkok } from '@/lib/attendance-utils'
+import {
+  STORE_VISIT_DUPLICATE_START_MS,
+  latestOpenVisit,
+  pairVisitEventsForPerson,
+  type StoreVisitEventRow,
+  type StoreVisitOpen,
+} from '@/lib/store-visit-pairing'
 
 const TZ = 'Asia/Bangkok'
 
@@ -16,6 +24,72 @@ function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number): n
     Math.cos(radLat1) * Math.cos(radLat2) * Math.sin(diffLon / 2) ** 2
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return R * c
+}
+
+function bangkokParts(ms: number): { dateStr: string; timeStr: string } {
+  const d = new Date(ms)
+  return {
+    dateStr: d.toLocaleDateString('en-CA', { timeZone: TZ }),
+    timeStr: d.toLocaleTimeString('en-GB', {
+      timeZone: TZ,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }),
+  }
+}
+
+function getBangkokHour(ms = Date.now()): number {
+  const str = new Date(ms).toLocaleTimeString('en-US', { timeZone: TZ, hour: '2-digit', hour12: false })
+  return parseInt(str, 10) || 0
+}
+
+async function fetchRecentVisitsForUser(userName: string, nowMs: number): Promise<StoreVisitEventRow[]> {
+  const today = new Date(nowMs).toLocaleDateString('en-CA', { timeZone: TZ })
+  const dates = [today]
+  const hour = getBangkokHour(nowMs)
+  if (hour >= 0 && hour <= 7) {
+    dates.unshift(addDayBangkok(today, -1))
+  } else {
+    // 낮에도 어제 미종료 방문이 남을 수 있어 어제까지 포함
+    dates.unshift(addDayBangkok(today, -1))
+  }
+  const all: StoreVisitEventRow[] = []
+  for (const dateStr of dates) {
+    const rows = (await supabaseSelectFilter(
+      'store_visits',
+      `visit_date=eq.${dateStr}&name=eq.${encodeURIComponent(userName)}`,
+      { order: 'visit_time.asc,created_at.asc', limit: 200 }
+    )) as StoreVisitEventRow[]
+    if (rows?.length) all.push(...rows)
+  }
+  return all
+}
+
+async function insertAutoCloseEnds(
+  userName: string,
+  opens: StoreVisitOpen[],
+  closeAtMs: number
+): Promise<void> {
+  const { dateStr, timeStr } = bangkokParts(closeAtMs)
+  for (let i = 0; i < opens.length; i++) {
+    const open = opens[i]
+    const durationMin = Math.max(0, Math.floor((closeAtMs - open.startMs) / (1000 * 60)))
+    await supabaseInsert('store_visits', {
+      id: `V${closeAtMs}c${i}`,
+      visit_date: dateStr,
+      name: userName,
+      store_name: open.store,
+      visit_type: '강제 방문종료',
+      purpose: open.purpose,
+      visit_time: timeStr,
+      lat: '',
+      lng: '',
+      duration_min: durationMin,
+      memo: 'auto-closed-on-new-start',
+    })
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -33,14 +107,16 @@ export async function POST(request: NextRequest) {
       attendanceQrToken?: string
     }
     const storeNameTrim = String(data.storeName || '').trim()
+    const userName = String(data.userName || '').trim()
     const visitType = String(data.type || '').trim()
     const attendanceQrToken = String(data.attendanceQrToken ?? '').trim()
     let recordLat = String(data.lat ?? '')
     let recordLng = String(data.lng ?? '')
     const isForce = visitType.includes('강제')
     const isStart = visitType === '방문시작' || visitType === '강제 방문시작'
+    const isEnd = visitType === '방문종료' || visitType === '강제 방문종료'
 
-    if (!storeNameTrim || !data.userName) {
+    if (!storeNameTrim || !userName) {
       return NextResponse.json(
         { success: false, msg: '매장과 사용자 정보가 필요합니다.' },
         { headers }
@@ -183,54 +259,70 @@ export async function POST(request: NextRequest) {
     const clientTs = typeof data.clientTimestamp === 'number' ? data.clientTimestamp : null
     const skewOk = clientTs != null && Math.abs(serverNow - clientTs) <= 10 * 60 * 1000
     const now = skewOk ? new Date(clientTs) : new Date()
-    const dateStr = now.toLocaleDateString('en-CA', { timeZone: TZ })
-    const timeStr = now.toLocaleTimeString('en-GB', {
-      timeZone: TZ,
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    })
+    const nowMs = now.getTime()
+    const { dateStr, timeStr } = bangkokParts(nowMs)
     let durationMin: number | null = null
+    let autoClosedNote = ''
 
-    if (visitType === '방문종료' || visitType === '강제 방문종료') {
-      const searchName = String(data.userName || '').trim()
-      const searchStore = String(data.storeName || '').trim()
-      // 방문시작 또는 강제 방문시작 둘 다 검색 (최신 2건 가져와서 방문시작 유형만 사용)
-      const rawRecent = (await supabaseSelectFilter('store_visits', `name=eq.${encodeURIComponent(searchName)}&store_name=eq.${encodeURIComponent(searchStore)}`, {
-        order: 'visit_date.desc,created_at.desc',
-        limit: 10,
-      })) as { visit_type?: string; visit_date?: string; visit_time?: string; created_at?: string }[]
-      const recent = (rawRecent || []).filter(
-        (r) => r.visit_type === '방문시작' || r.visit_type === '강제 방문시작'
-      ).slice(0, 1)
-      if (recent && recent.length > 0) {
-        const startRow = recent[0]
-        const startDateStr = String(startRow.visit_date || '').substring(0, 10)
-        let startTimeStr = String(startRow.visit_time || '').trim()
-        // visit_time이 비어있으면 created_at에서 시간 추출
-        if (startTimeStr.length < 5 && startRow.created_at && String(startRow.created_at).indexOf('T') >= 0) {
-          const iso = String(startRow.created_at)
-          const tPart = iso.substring(iso.indexOf('T') + 1)
-          if (tPart.length >= 8) startTimeStr = tPart.substring(0, 8)
-          else if (tPart.length >= 5) startTimeStr = tPart.substring(0, 5) + ':00'
-        }
-        const rawTime = startTimeStr.length >= 8 ? startTimeStr : startTimeStr.length >= 5 ? startTimeStr + ':00' : '00:00:00'
-        const timePart = rawTime.length >= 8 ? rawTime.substring(0, 8) : rawTime.padEnd(8, ':00').substring(0, 8)
-        const startDateTime = new Date(startDateStr + 'T' + timePart + '+07:00')
-        const startParsed = startDateTime.getTime()
-        const diffMs = !isNaN(startParsed) ? now.getTime() - startParsed : 0
-        durationMin = diffMs > 0 ? Math.floor(diffMs / (1000 * 60)) : 0
+    const recent = await fetchRecentVisitsForUser(userName, nowMs)
+    // 가드·종료 duration은 실제 DB 짝(암묵 종료 없이)으로 open 판정
+    const { open: openVisits } = pairVisitEventsForPerson(recent, { personExclusive: false })
+
+    if (isStart) {
+      const sameStoreOpens = openVisits.filter((o) => o.store === storeNameTrim)
+      const otherOpens = openVisits.filter((o) => o.store !== storeNameTrim)
+      const latestSame = latestOpenVisit(sameStoreOpens)
+
+      // 동일 매장·짧은 간격 재시작 → 멱등 성공 (더블탭/오프라인 재전송)
+      if (
+        latestSame &&
+        nowMs - latestSame.startMs >= 0 &&
+        nowMs - latestSame.startMs <= STORE_VISIT_DUPLICATE_START_MS
+      ) {
+        return NextResponse.json(
+          {
+            success: true,
+            msg: '✅ 방문시작 완료! (이미 등록됨)',
+            deduped: true,
+          },
+          { headers }
+        )
+      }
+
+      // 동일 매장에 이미 진행 중이면 거절 (종료 후 다시 시작)
+      if (latestSame) {
+        return NextResponse.json(
+          {
+            success: false,
+            msg: `❌ 이미 ${storeNameTrim} 방문 중입니다. 먼저 방문종료 해 주세요.`,
+          },
+          { headers }
+        )
+      }
+
+      // 다른 매장 open → 자동 종료 후 새 시작 (한 사람 동시 1곳)
+      if (otherOpens.length > 0) {
+        await insertAutoCloseEnds(userName, otherOpens, nowMs)
+        const names = [...new Set(otherOpens.map((o) => o.store))].join(', ')
+        autoClosedNote = ` (이전 방문 ${names} 자동 종료)`
+      }
+    }
+
+    if (isEnd) {
+      const openAtStore = openVisits.filter((o) => o.store === storeNameTrim)
+      const matched = latestOpenVisit(openAtStore)
+      if (matched) {
+        durationMin = Math.max(0, Math.floor((nowMs - matched.startMs) / (1000 * 60)))
       } else {
         durationMin = 0
       }
     }
 
     const row = {
-      id: 'V' + now.getTime(),
+      id: 'V' + nowMs,
       visit_date: dateStr,
-      name: data.userName,
-      store_name: data.storeName,
+      name: userName,
+      store_name: storeNameTrim,
       visit_type: visitType,
       purpose: data.purpose || '',
       visit_time: timeStr,
@@ -243,6 +335,7 @@ export async function POST(request: NextRequest) {
 
     let msg = '✅ ' + visitType.replace('강제 ', '') + ' 완료!'
     if (durationMin !== null && durationMin > 0) msg += ` (${durationMin}분 체류)`
+    if (autoClosedNote) msg += autoClosedNote
     return NextResponse.json({ success: true, msg }, { headers })
   } catch (e) {
     console.error('submitStoreVisit:', e)
