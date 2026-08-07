@@ -28,6 +28,7 @@ import {
 } from "@/lib/marketing-collab-detail"
 import { CollabManagementDetailForm } from "@/components/marketing/collab-management-detail-form"
 import { CollabManagementOverviewTab } from "@/components/marketing/collab-management-overview-tab"
+import { CollabManagementAnalyticsTab } from "@/components/marketing/collab-management-analytics-tab"
 import { CollabManagementUsageTab } from "@/components/marketing/collab-management-usage-tab"
 import { MarketingLinkedCampaignStrip } from "@/components/marketing/marketing-linked-campaign-strip"
 import { MarketingHubRecordScheduleCard } from "@/components/marketing/marketing-hub-record-schedule-card"
@@ -53,7 +54,11 @@ export default function MarketingCollabMenusPage() {
   const searchParams = useSearchParams()
   const urlCampaignId = searchParams.get("campaignId")?.trim() ?? ""
   const { stores, loading: storesLoading } = useStoreList()
-  const [mainTab, setMainTab] = useAdminUrlTab("tab", ["edit", "overview", "usage"] as const, "edit")
+  const [mainTab, setMainTab] = useAdminUrlTab(
+    "tab",
+    ["edit", "overview", "usage", "analytics"] as const,
+    "edit"
+  )
   const [list, setList] = React.useState<MarketingCampaign[]>([])
   const [loading, setLoading] = React.useState(true)
   const [selectedCampaignId, setSelectedCampaignId] = React.useState<string>("")
@@ -220,9 +225,12 @@ export default function MarketingCollabMenusPage() {
       <MarketingPageHero icon={Handshake} title={t("adminMarketingCollabMenus")} description={t("marketingHeroDescCollab")} />
       <Tabs
         value={mainTab}
-        onValueChange={(v) =>
-          setMainTab(v === "overview" ? "overview" : v === "usage" ? "usage" : "edit")
-        }
+        onValueChange={(v) => {
+          if (v === "overview") setMainTab("overview")
+          else if (v === "usage") setMainTab("usage")
+          else if (v === "analytics") setMainTab("analytics")
+          else setMainTab("edit")
+        }}
         className={adminTabsRootCn}
       >
         <div className={cn(adminTabsBarCn, "px-2 py-2.5 sm:px-4")}>
@@ -236,6 +244,9 @@ export default function MarketingCollabMenusPage() {
               </TabsTrigger>
               <TabsTrigger value="usage" className={adminTabsTriggerCn}>
                 {t("marketingCollabTabUsage")}
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className={adminTabsTriggerCn}>
+                {t("marketingCollabTabAnalytics")}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -439,6 +450,14 @@ export default function MarketingCollabMenusPage() {
           <Card>
             <CardContent className="p-4 sm:p-5">
               <CollabManagementUsageTab campaigns={list} t={t} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="analytics" className={adminTabsContentCn}>
+          <Card>
+            <CardContent className="p-4 sm:p-5">
+              <CollabManagementAnalyticsTab campaigns={list} t={t} />
             </CardContent>
           </Card>
         </TabsContent>

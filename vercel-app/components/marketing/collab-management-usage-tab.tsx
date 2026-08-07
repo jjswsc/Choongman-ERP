@@ -4,16 +4,28 @@ import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Download, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { MarketingCampaign } from "@/lib/api-client"
-import { getCollabDiscountUsage, type CollabDiscountUsageRow } from "@/lib/api-client"
+import {
+  getCollabDiscountUsage,
+  type CollabDiscountUsageRow,
+  type CollabDiscountUsageStoreRow,
+} from "@/lib/api-client"
 import { normalizeMarketingCollabDetail } from "@/lib/marketing-collab-detail"
 import { useStoreList } from "@/lib/use-store-list"
 import {
   getBangkokCurrentMonthRangeYmd,
   getBangkokTodayRangeYmd,
 } from "@/lib/collab-overview-period"
+import { cn } from "@/lib/utils"
 
 type TFn = (key: string) => string
 
@@ -50,6 +62,11 @@ function rowMatchesTokens(r: CollabDiscountUsageRow, tokens: string[]): boolean 
   return tokens.every((t) => blob.includes(t))
 }
 
+function sharePercent(value: number, total: number): string {
+  if (!Number.isFinite(total) || total <= 0) return "0.0%"
+  return `${((Number(value) / total) * 100).toFixed(1)}%`
+}
+
 export function CollabManagementUsageTab(props: {
   campaigns: MarketingCampaign[]
   t: TFn
@@ -73,6 +90,11 @@ export function CollabManagementUsageTab(props: {
   const [totals, setTotals] = React.useState({ orderCount: 0, discountAmount: 0, campaignCount: 0 })
   const [sourceNote, setSourceNote] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+
+  const [storeDrillRow, setStoreDrillRow] = React.useState<CollabDiscountUsageRow | null>(null)
+  const [storeDrillLoading, setStoreDrillLoading] = React.useState(false)
+  const [storeDrillError, setStoreDrillError] = React.useState<string | null>(null)
+  const [storeDrillRows, setStoreDrillRows] = React.useState<CollabDiscountUsageStoreRow[]>([])
 
   const selectedCampaign = React.useMemo(
     () => campaigns.find((c) => c.id === selectedCampaignId) ?? null,
@@ -128,6 +150,11 @@ export function CollabManagementUsageTab(props: {
     }
   }, [appliedSearchTokens.length, displayRows, selectedCampaignId, totals])
 
+  const storeDrillTotalDiscount = React.useMemo(
+    () => Math.round(storeDrillRows.reduce((s, r) => s + r.discountAmount, 0) * 100) / 100,
+    [storeDrillRows]
+  )
+
   const load = React.useCallback(async () => {
     if (!periodFrom || !periodTo || periodFrom > periodTo) {
       setError(t("marketingCollabUsageInvalidPeriod"))
@@ -175,6 +202,34 @@ export function CollabManagementUsageTab(props: {
     }
   }, [campaignSearchDraft, periodFrom, periodTo, selectedCampaignId, storeFilter, t])
 
+  const openStoreDrill = React.useCallback(
+    async (row: CollabDiscountUsageRow) => {
+      setStoreDrillRow(row)
+      setStoreDrillLoading(true)
+      setStoreDrillError(null)
+      setStoreDrillRows([])
+      try {
+        const res = await getCollabDiscountUsage({
+          startStr: periodFrom,
+          endStr: periodTo,
+          groupBy: "store",
+          campaignId: row.campaignId,
+          ...(storeFilter.trim() ? { store: storeFilter.trim() } : {}),
+        })
+        if (!res.success) {
+          setStoreDrillError(res.message || t("marketingCollabUsageLoadError"))
+          return
+        }
+        setStoreDrillRows(Array.isArray(res.storeRows) ? res.storeRows : [])
+      } catch (e) {
+        setStoreDrillError(String(e))
+      } finally {
+        setStoreDrillLoading(false)
+      }
+    },
+    [periodFrom, periodTo, storeFilter, t]
+  )
+
   const clearCampaignSelection = React.useCallback(() => {
     setSelectedCampaignId("")
     setCampaignSearchDraft("")
@@ -205,11 +260,44 @@ export function CollabManagementUsageTab(props: {
     URL.revokeObjectURL(a.href)
   }
 
+  const handleStoreDrillDownload = () => {
+    if (!storeDrillRow) return
+    const title = t("marketingCollabUsageStoreCsvTitle")
+      .replace("{from}", periodFrom)
+      .replace("{to}", periodTo)
+      .replace(
+        "{campaign}",
+        storeDrillRow.campaignNo
+          ? `[${storeDrillRow.campaignNo}] ${storeDrillRow.topic || storeDrillRow.campaignId}`
+          : storeDrillRow.topic || storeDrillRow.campaignId
+      )
+    const lines = [
+      title,
+      "",
+      t("marketingCollabUsageStoreCsvHeader"),
+      ...storeDrillRows.map((r) => {
+        const label = formatStoreLabel(r.storeCode).replace(/"/g, '""')
+        const share = sharePercent(r.discountAmount, storeDrillTotalDiscount).replace("%", "")
+        return `"${r.storeCode.replace(/"/g, '""')}","${label}",${r.orderCount},${r.discountAmount},${share}`
+      }),
+      "",
+      `${t("marketingCollabUsageCsvTotalOrders")},${storeDrillRows.reduce((s, r) => s + r.orderCount, 0)}`,
+      `${t("marketingCollabUsageCsvTotalDiscount")},${storeDrillTotalDiscount}`,
+    ]
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" })
+    const a = document.createElement("a")
+    a.href = URL.createObjectURL(blob)
+    a.download = `collab-discount-usage-stores-${storeDrillRow.campaignId}-${periodFrom}_${periodTo}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   return (
     <div className="space-y-4">
       <p className="text-xs leading-relaxed text-muted-foreground">{t("marketingCollabUsageHint")}</p>
       <p className="text-[11px] leading-relaxed text-muted-foreground">{t("marketingCollabUsageLegacyNote")}</p>
       <p className="text-[11px] leading-relaxed text-muted-foreground">{t("marketingCollabUsageSearchHint")}</p>
+      <p className="text-[11px] leading-relaxed text-muted-foreground">{t("marketingCollabUsageStoreDrillHint")}</p>
 
       <div className="space-y-3 rounded-lg border border-border/70 bg-muted/10 p-3 sm:px-4">
         <div className="flex flex-wrap gap-2">
@@ -421,14 +509,30 @@ export function CollabManagementUsageTab(props: {
                 </thead>
                 <tbody>
                   {displayRows.map((r) => (
-                    <tr key={r.campaignId} className="border-b border-border/40 last:border-0">
+                    <tr
+                      key={r.campaignId}
+                      className="border-b border-border/40 last:border-0 hover:bg-muted/30"
+                    >
                       <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{r.campaignNo || "—"}</td>
                       <td className="px-3 py-2.5 font-medium leading-snug">{r.topic || r.campaignId}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{r.orderCount.toLocaleString()}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-rose-700 dark:text-rose-300">
                         -฿{r.discountAmount.toLocaleString()}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{r.storeCount.toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        <button
+                          type="button"
+                          className={cn(
+                            "inline-flex min-w-[2.5rem] items-center justify-end gap-1 rounded-md px-1.5 py-0.5 text-right tabular-nums",
+                            "text-primary underline-offset-2 hover:bg-primary/10 hover:underline",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          )}
+                          onClick={() => void openStoreDrill(r)}
+                          title={t("marketingCollabUsageStoreDrillOpen")}
+                        >
+                          {r.storeCount.toLocaleString()}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -437,6 +541,87 @@ export function CollabManagementUsageTab(props: {
           )}
         </>
       )}
+
+      <Dialog
+        open={storeDrillRow != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setStoreDrillRow(null)
+            setStoreDrillRows([])
+            setStoreDrillError(null)
+          }
+        }}
+      >
+        <DialogContent className="max-h-[85vh] max-w-lg overflow-hidden sm:rounded-xl">
+          <DialogHeader>
+            <DialogTitle>{t("marketingCollabUsageStoreDrillTitle")}</DialogTitle>
+            <DialogDescription className="text-left">
+              {storeDrillRow
+                ? `${storeDrillRow.campaignNo ? `${storeDrillRow.campaignNo} · ` : ""}${storeDrillRow.topic || storeDrillRow.campaignId}`
+                : ""}
+              <span className="mt-1 block text-[11px] text-muted-foreground">
+                {periodFrom} ~ {periodTo}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          {storeDrillLoading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</p>
+          ) : storeDrillError ? (
+            <p className="text-sm text-destructive">{storeDrillError}</p>
+          ) : storeDrillRows.length === 0 ? (
+            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+              {t("marketingCollabUsageStoreDrillEmpty")}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  {t("marketingCollabUsageStoreDrillCount").replace("{n}", String(storeDrillRows.length))}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={handleStoreDrillDownload}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {t("marketingCollabUsageCsvDownload")}
+                </Button>
+              </div>
+              <AdminTableScroll className="max-h-[min(50vh,22rem)] rounded-lg border border-border/60" hint={false}>
+                <table className="w-full min-w-[420px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40 text-left text-xs font-medium text-muted-foreground">
+                      <th className="px-2.5 py-2">{t("marketingCollabUsageStoreColStore")}</th>
+                      <th className="whitespace-nowrap px-2.5 py-2 text-right">{t("marketingCollabUsageColOrders")}</th>
+                      <th className="whitespace-nowrap px-2.5 py-2 text-right">{t("marketingCollabUsageColDiscount")}</th>
+                      <th className="whitespace-nowrap px-2.5 py-2 text-right">{t("marketingCollabUsageColShare")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {storeDrillRows.map((r) => (
+                      <tr key={r.storeCode} className="border-b border-border/40 last:border-0">
+                        <td className="px-2.5 py-2 text-xs font-medium leading-snug">
+                          {formatStoreLabel(r.storeCode)}
+                        </td>
+                        <td className="px-2.5 py-2 text-right tabular-nums">{r.orderCount.toLocaleString()}</td>
+                        <td className="px-2.5 py-2 text-right tabular-nums text-rose-700 dark:text-rose-300">
+                          -฿{r.discountAmount.toLocaleString()}
+                        </td>
+                        <td className="px-2.5 py-2 text-right tabular-nums text-muted-foreground">
+                          {sharePercent(r.discountAmount, storeDrillTotalDiscount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </AdminTableScroll>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
