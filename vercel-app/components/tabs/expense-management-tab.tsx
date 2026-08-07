@@ -1095,7 +1095,7 @@ export function ExpenseManagementTab() {
               <button
                 type="button"
                 className={cn(
-                  "rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "min-w-0 rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   planSegment === "approve" && planKindFilter === "__all__" && "ring-2 ring-primary"
                 )}
                 onClick={() => applyPlanKpi("__all__", "approve")}
@@ -1105,15 +1105,12 @@ export function ExpenseManagementTab() {
                   variant={kpiApprovePendingCount > 0 ? "warning" : "default"}
                   label={t("acct_kpi_expense_approve_pending")}
                   value={String(kpiApprovePendingCount)}
-                  subLabel={
-                    endStr && endStr !== startStr ? `${startStr} ~ ${endStr}` : startStr
-                  }
                 />
               </button>
               <button
                 type="button"
                 className={cn(
-                  "rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "min-w-0 rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   planSegment === "pay" && planKindFilter === "general" && "ring-2 ring-primary"
                 )}
                 onClick={() => applyPlanKpi("general", "pay")}
@@ -1128,7 +1125,7 @@ export function ExpenseManagementTab() {
               <button
                 type="button"
                 className={cn(
-                  "rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "min-w-0 rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   planSegment === "pay" && planKindFilter === "logistics" && "ring-2 ring-primary"
                 )}
                 onClick={() => applyPlanKpi("logistics", "pay")}
@@ -1142,7 +1139,7 @@ export function ExpenseManagementTab() {
               <button
                 type="button"
                 className={cn(
-                  "rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "min-w-0 rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   planSegment === "pay" && planKindFilter === "__all__" && "ring-2 ring-primary"
                 )}
                 onClick={() => applyPlanKpi("__all__", "pay")}
@@ -1153,7 +1150,6 @@ export function ExpenseManagementTab() {
                   value={`฿${(
                     filteredPlanTotals.expenseRemaining + filteredPlanTotals.logisticsRemaining
                   ).toLocaleString()}`}
-                  subLabel={`${startStr} ~ ${endStr}`}
                 />
               </button>
             </div>

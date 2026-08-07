@@ -22,7 +22,7 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl border border-border p-4 transition-all duration-200 hover:border-primary/30",
+        "relative h-full overflow-hidden rounded-xl border border-border p-4 transition-all duration-200 hover:border-primary/30",
         size === "lg" && "p-6",
         size === "sm" && "p-3",
         variant === "default" && "bg-card",
