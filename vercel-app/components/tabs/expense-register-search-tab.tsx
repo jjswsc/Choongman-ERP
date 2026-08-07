@@ -26,6 +26,7 @@ import {
   getAccountSubjects,
   getVendorsForPurchase,
   deleteExpenseRegisterItem,
+  deleteExpenseAccrual,
   updateBankTransactionInvoice,
   updateExpenseAccrualInvoice,
   translateTexts,
@@ -42,7 +43,10 @@ import { compressImageForUpload, cn } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
-import { canEditExpenseAccrualClassification } from "@/lib/expense-accrual-approve-policy"
+import {
+  canDeleteExpenseAccrual,
+  canEditExpenseAccrualClassification,
+} from "@/lib/expense-accrual-approve-policy"
 
 function getCategoryLabel(cat: string, t: (k: string) => string): string {
   const map: Record<string, string> = {
@@ -120,7 +124,7 @@ export function ExpenseRegisterSearchTab() {
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
   const [invoicePhotoPreviewUrl, setInvoicePhotoPreviewUrl] = React.useState<string | null>(null)
   const [invoicePhotoUploadingId, setInvoicePhotoUploadingId] = React.useState<number | null>(null)
-  const [deletingId, setDeletingId] = React.useState<number | null>(null)
+  const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
   const [loadedOnce, setLoadedOnce] = React.useState(false)
 
@@ -615,9 +619,21 @@ export function ExpenseRegisterSearchTab() {
                     )
                     // 지급예정 연동 건은 지급예정 수정(계정과목·유형), bank_only만 통장 수정 — 수정 루프 방지
                     const showPlanEdit = canEditPlan
+                    const showPlanDelete = Boolean(
+                      r.accrualId &&
+                        canDeleteExpenseAccrual({
+                          userRole: auth?.role,
+                          storeName: r.storeName,
+                          status: r.accrualStatus ?? r.planStatus,
+                          paidAmount: r.paidAmount,
+                          hasPaymentLink: Boolean(r.bankLinked || r.pettyLinked || r.bankTransactionId),
+                        })
+                    )
                     const showBankEdit = canEditBank && !r.accrualId
                     const showBankDelete = canEditBank
                     const invoiceTargetId = r.bankTransactionId ?? r.accrualId
+                    const planDeleteKey = r.accrualId ? `accrual-${r.accrualId}` : null
+                    const bankDeleteKey = r.bankTransactionId ? `bank-${r.bankTransactionId}` : null
                     return (
                       <tr key={r.rowKey} className="border-t align-top">
                         <td className="p-2 text-center">
@@ -705,6 +721,55 @@ export function ExpenseRegisterSearchTab() {
                                 <Pencil className="h-4 w-4" />
                               </Button>
                             ) : null}
+                            {showPlanDelete && planDeleteKey ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8 border-destructive/40 text-destructive"
+                                title={tt("delete", "Delete")}
+                                disabled={deletingId === planDeleteKey}
+                                onClick={async () => {
+                                  if (!r.accrualId) return
+                                  const status = String(r.accrualStatus ?? r.planStatus ?? "").toLowerCase()
+                                  const confirmMsg =
+                                    status === "approved"
+                                      ? tt(
+                                          "expensePlanDeleteApprovedConfirm",
+                                          "This accrual is approved but unpaid. Delete it? Journals and payables for this plan will be removed."
+                                        )
+                                      : tt("emp_confirm_delete", "Delete this item?")
+                                  const ok = await appConfirm(confirmMsg)
+                                  if (!ok) return
+                                  setDeletingId(planDeleteKey)
+                                  try {
+                                    const res = await deleteExpenseAccrual({
+                                      expenseAccrualId: r.accrualId,
+                                      userRole: auth?.role,
+                                    })
+                                    if (!res.success) {
+                                      await appAlert(res.message || tt("msg_delete_fail", "Delete failed"))
+                                      return
+                                    }
+                                    setList((prev) => prev.filter((x) => x.rowKey !== r.rowKey))
+                                  } catch (e) {
+                                    await appAlert(
+                                      tt("msg_delete_fail", "Delete failed") +
+                                        ": " +
+                                        (e instanceof Error ? e.message : String(e))
+                                    )
+                                  } finally {
+                                    setDeletingId(null)
+                                  }
+                                }}
+                              >
+                                {deletingId === planDeleteKey ? (
+                                  <span className="text-xs">...</span>
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            ) : null}
                             {showBankEdit ? (
                               <Button
                                 type="button"
@@ -738,19 +803,19 @@ export function ExpenseRegisterSearchTab() {
                                 <Pencil className="h-4 w-4" />
                               </Button>
                             ) : null}
-                            {showBankDelete ? (
+                            {showBankDelete && bankDeleteKey ? (
                               <Button
                                 type="button"
                                 size="icon"
                                 variant="outline"
                                 className="h-8 w-8 border-destructive/40 text-destructive"
                                 title={tt("delete", "Delete")}
-                                disabled={deletingId === r.bankTransactionId}
+                                disabled={deletingId === bankDeleteKey}
                                 onClick={async () => {
                                   if (!r.bankTransactionId) return
                                   const ok = await appConfirm(tt("emp_confirm_delete", "Delete this item?"))
                                   if (!ok) return
-                                  setDeletingId(r.bankTransactionId)
+                                  setDeletingId(bankDeleteKey)
                                   try {
                                     const res = await deleteExpenseRegisterItem({
                                       bankTransactionId: r.bankTransactionId,
@@ -768,7 +833,7 @@ export function ExpenseRegisterSearchTab() {
                                   }
                                 }}
                               >
-                                {deletingId === r.bankTransactionId ? <span className="text-xs">...</span> : <Trash2 className="h-4 w-4" />}
+                                {deletingId === bankDeleteKey ? <span className="text-xs">...</span> : <Trash2 className="h-4 w-4" />}
                               </Button>
                             ) : null}
                           </div>

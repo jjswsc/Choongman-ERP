@@ -27,9 +27,9 @@ export function canMutateExpenseAccrualRecord(userRoleRaw: string | undefined): 
 /**
  * 지급 상태상 삭제 가능 여부
  * - 매장 미선택: 정리용으로 허용
- * - planned / rejected
- * - approved 이면서 미지급·통장/패티 미연결
- * - partial / paid / done 또는 지급·연결 있으면 차단
+ * - planned / rejected / approved 이면서 미지급·통장/패티 미연결
+ * - paid / done / partial 이어도 **실제 지급액·연결이 없으면** 오표시 정리용으로 허용
+ * - 지급액>0 또는 통장/패티 연결 있으면 차단
  */
 export function isExpenseAccrualDeletableByPaymentState(input: {
   status?: string
@@ -42,8 +42,14 @@ export function isExpenseAccrualDeletableByPaymentState(input: {
   const paid = Math.max(0, Number(input.paidAmount) || 0)
   if (paid > 0.005) return false
   const status = String(input.status || '').toLowerCase()
-  if (status === 'paid' || status === 'done' || status === 'partial') return false
-  return status === 'planned' || status === 'rejected' || status === 'approved'
+  return (
+    status === 'planned' ||
+    status === 'rejected' ||
+    status === 'approved' ||
+    status === 'partial' ||
+    status === 'paid' ||
+    status === 'done'
+  )
 }
 
 /**

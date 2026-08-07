@@ -15,6 +15,9 @@ export async function POST(req: NextRequest) {
     res.headers.set('Access-Control-Allow-Origin', '*')
     return res
   }
+  const auth = authResult.auth
+  const changedBy =
+    String(auth.name || '').trim() || String(auth.employeeCode || '').trim() || 'importPosMenus'
 
   try {
     const body = (await req.json()) as { menus?: unknown }
@@ -57,7 +60,7 @@ export async function POST(req: NextRequest) {
       const hadId = !!(row.id && String(row.id).trim())
       const result = await upsertPosMenuFromBody(
         { ...row, code, name, id: hadId ? String(row.id).trim() : undefined },
-        { upsertByCode: !hadId }
+        { upsertByCode: !hadId, changedBy }
       )
 
       if (!result.success) {

@@ -4,6 +4,7 @@ import { recordPriceChanges } from "@/lib/price-history"
 import { triggerGrabMenuNotification } from "@/lib/grab-menu-sync-trigger"
 import { createMenuOptionCodeAllocator } from "@/lib/pos-option-code-server"
 import { validateStrictBonelessBbqOption } from '@/lib/pos-bbq-option-guard'
+import { getVerifiedAuth } from "@/lib/verify-auth"
 
 type SavePosMenuOptionInput = {
   id?: string
@@ -46,7 +47,8 @@ async function getMenuMeta(menuId: number): Promise<{ code: string; categoryMain
 
 async function saveSingleOption(
   input: SavePosMenuOptionInput,
-  allocatorByMenuId: Map<number, Awaited<ReturnType<typeof createMenuOptionCodeAllocator>>>
+  allocatorByMenuId: Map<number, Awaited<ReturnType<typeof createMenuOptionCodeAllocator>>>,
+  changedBy?: string
 ): Promise<{ optionCode?: string; remapped?: boolean }> {
   const id = input.id
   const menuId = Number(input.menuId)
@@ -137,6 +139,7 @@ async function saveSingleOption(
           entityId: String(id),
           entityDisplayName: prev.name ?? name,
           changes,
+          changedBy,
           category: category || undefined,
           categoryMain: categoryMain || undefined,
           parentEntityId: String(menuId),
@@ -189,6 +192,7 @@ async function saveSingleOption(
     entityId: newId,
     entityDisplayName: name,
     changes: initChanges,
+    changedBy,
     category: category || undefined,
     categoryMain: categoryMain || undefined,
     parentEntityId: String(menuId),
@@ -201,6 +205,8 @@ export async function POST(req: NextRequest) {
   headers.set("Access-Control-Allow-Origin", "*")
 
   try {
+    const auth = await getVerifiedAuth(req, { skipSaasGate: true })
+    const changedBy = String(auth?.name || "").trim() || String(auth?.employeeCode || "").trim() || undefined
     const body = await req.json()
     const optionsRaw = Array.isArray(body?.options) ? body.options : []
     if (optionsRaw.length === 0) {
@@ -211,7 +217,7 @@ export async function POST(req: NextRequest) {
     let remappedCount = 0
     for (const row of optionsRaw as SavePosMenuOptionInput[]) {
       try {
-        const saveResult = await saveSingleOption(row, allocatorByMenuId)
+        const saveResult = await saveSingleOption(row, allocatorByMenuId, changedBy)
         if (saveResult.remapped) remappedCount += 1
         results.push({ id: row.id, success: true, optionCode: saveResult.optionCode, remapped: saveResult.remapped })
       } catch (err) {

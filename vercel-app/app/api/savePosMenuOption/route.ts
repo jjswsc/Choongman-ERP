@@ -7,6 +7,7 @@ import {
 } from '@/lib/grab-menu-sync-trigger'
 import { createMenuOptionCodeAllocator } from '@/lib/pos-option-code-server'
 import { validateStrictBonelessBbqOption } from '@/lib/pos-bbq-option-guard'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 async function getMenuMeta(menuId: number): Promise<{ code: string; categoryMain: string; category: string }> {
   try {
@@ -33,6 +34,8 @@ export async function POST(req: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(req, { skipSaasGate: true })
+    const changedBy = String(auth?.name || '').trim() || String(auth?.employeeCode || '').trim() || undefined
     const body = await req.json()
     const id = body?.id
     const menuId = Number(body?.menuId)
@@ -138,6 +141,7 @@ export async function POST(req: NextRequest) {
               entityId: String(id),
               entityDisplayName: prev.name ?? name,
               changes,
+              changedBy,
               category: category || undefined,
               categoryMain: categoryMain || undefined,
               parentEntityId: String(menuId),
@@ -162,6 +166,7 @@ export async function POST(req: NextRequest) {
               entityId: newId,
               entityDisplayName: name,
               changes: initChanges,
+              changedBy,
               category: category || undefined,
               categoryMain: categoryMain || undefined,
               parentEntityId: String(menuId),

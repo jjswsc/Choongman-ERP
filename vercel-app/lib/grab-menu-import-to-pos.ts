@@ -154,7 +154,7 @@ export async function importGrabMenuToPos(payload: Record<string, unknown>): Pro
           isActive: availableStatus !== 'UNAVAILABLE',
           sortOrder: sequence,
         },
-        { upsertByCode: true }
+        { upsertByCode: true, changedBy: 'grab_menu_import' }
       )
       if (!upsert.success) {
         result.skipped += 1

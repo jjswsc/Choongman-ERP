@@ -158,6 +158,8 @@ function resolvePlanStatus(
 ): 'planned' | 'approved' | 'paid' | 'rejected' {
   const raw = String(rawStatus || '').toLowerCase()
   if (raw === 'rejected') return 'rejected'
+  // DB status paid/done 은 remaining 과 무관하게 지급완료로 표시 (오표시 plan_only 방지)
+  if (raw === 'paid' || raw === 'done') return 'paid'
   if (remaining <= 0) return 'paid'
   if (raw === 'approved' || raw === 'partial') return 'approved'
   return 'planned'
@@ -174,7 +176,7 @@ function resolveRelation(
   if (hasBank) return 'paid_bank'
   if (hasPetty && planStatus === 'paid') return 'paid_petty'
   if (planStatus === 'approved') return 'approved_unpaid'
-  if (planStatus === 'paid') return hasPetty ? 'paid_petty' : 'paid_bank'
+  // paid/done 이지만 통장·패티 미연결(오표시) — paid_bank 로 위장하지 않음
   return 'plan_only'
 }
 

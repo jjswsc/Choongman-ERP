@@ -263,7 +263,7 @@ export function buildPosMenuUpsertRow(
  */
 export async function upsertPosMenuFromBody(
   body: PosMenuUpsertApiBody,
-  opts?: { upsertByCode?: boolean; catalogScope?: PosCatalogTenantScope }
+  opts?: { upsertByCode?: boolean; catalogScope?: PosCatalogTenantScope; changedBy?: string }
 ): Promise<{
   success: boolean
   message: string
@@ -275,6 +275,7 @@ export async function upsertPosMenuFromBody(
   }
 }> {
   const catalogScope: PosCatalogTenantScope = opts?.catalogScope ?? { enforce: false, tenantId: '' }
+  const changedBy = String(opts?.changedBy || '').trim() || undefined
   const tenantWriteBlock = assertPosCatalogTenantWritable(catalogScope)
   if (tenantWriteBlock) {
     return { success: false, message: tenantWriteBlock }
@@ -881,6 +882,7 @@ export async function upsertPosMenuFromBody(
             entityId: editingId,
             entityDisplayName: prev.name ?? code,
             changes,
+            changedBy,
             category: cat || undefined,
             categoryMain: catMain || undefined,
           }).catch(() => {})
@@ -944,6 +946,7 @@ export async function upsertPosMenuFromBody(
         entityId: newId,
         entityDisplayName: name,
         changes: initChanges,
+        changedBy,
         category: cat || undefined,
         categoryMain: catMain || undefined,
       }).catch(() => {})

@@ -16,8 +16,47 @@ import {
 import { getPriceHistory, getPosMenus, getPosMenuCategoriesConfig, getItemCategories, type PriceHistoryRow, backfillPriceHistory, restoreFromPriceHistory } from "@/lib/api-client"
 import { POS_MAIN_CATEGORIES, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
 import { useT } from "@/lib/i18n"
-import { useLang } from "@/lib/lang-context"
+import { useLang, type LangCode } from "@/lib/lang-context"
 import { cn } from "@/lib/utils"
+
+const PRICE_HISTORY_TZ = "Asia/Bangkok"
+
+function localeForPriceHistory(lang: LangCode): string {
+  switch (lang) {
+    case "ko":
+      return "ko-KR"
+    case "th":
+      // Gregory: 불기(พ.ศ.) 연도 대신 서기 표시. th는 일/월/년.
+      return "th-TH-u-ca-gregory"
+    case "mm":
+      return "my-MM"
+    case "la":
+      return "lo-LA"
+    case "kh":
+      return "km-KH"
+    case "vi":
+      return "vi-VN"
+    case "ms":
+      return "ms-MY"
+    default:
+      return "en-US"
+  }
+}
+
+function formatPriceHistoryChangedBy(
+  raw: string | null | undefined,
+  t: (key: string) => string
+): string {
+  const s = String(raw || "").trim()
+  if (!s) return t("priceHistoryByUnknown") || "—"
+  if (s.startsWith("price_schedule:")) {
+    const who = s.slice("price_schedule:".length).trim()
+    const label = t("priceHistoryBySchedule") || "가격 예약"
+    if (!who || who === "system") return label
+    return `${label} (${who})`
+  }
+  return s
+}
 
 export interface PriceHistoryTabProps {
   /** 조회할 엔티티 타입들 (메뉴 페이지: pos_menu, pos_menu_option / 품목 페이지: item) */
@@ -148,18 +187,38 @@ export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHisto
   }, [restoreDate, loadHistory, t])
 
   const formatValue = (v: number | null) =>
-    v != null ? Number(v).toLocaleString(lang === "ko" ? "ko-KR" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"
+    v != null
+      ? Number(v).toLocaleString(localeForPriceHistory(lang), {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      : "—"
 
   const formatDateOnly = React.useCallback((dateStr: string) => {
     try {
       const d = new Date(dateStr)
-      return d.toLocaleDateString(lang === "ko" ? "ko-KR" : "en-US", {
+      return d.toLocaleDateString(localeForPriceHistory(lang), {
+        timeZone: PRICE_HISTORY_TZ,
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
       })
     } catch {
       return dateStr
+    }
+  }, [lang])
+
+  const formatTimeOnly = React.useCallback((dateStr: string) => {
+    try {
+      const d = new Date(dateStr)
+      return d.toLocaleTimeString(localeForPriceHistory(lang), {
+        timeZone: PRICE_HISTORY_TZ,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      })
+    } catch {
+      return ""
     }
   }, [lang])
 
@@ -198,15 +257,29 @@ export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHisto
       .map(([entityId, list]) => {
         const sorted = [...list].sort((a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime())
         const name = sorted[0]?.entity_display_name || entityId
-        const nodes: { label: string; price: number | null; date?: string }[] = []
+        const nodes: {
+          label: string
+          price: number | null
+          date?: string
+          changedBy?: string | null
+          showMeta?: boolean
+        }[] = []
         for (const row of sorted) {
           if (row.old_value == null) {
-            nodes.push({ label: t("priceHistoryInitial") || "초기", price: row.new_value, date: row.changed_at })
+            nodes.push({
+              label: t("priceHistoryInitial") || "초기",
+              price: row.new_value,
+              date: row.changed_at,
+              changedBy: row.changed_by,
+              showMeta: true,
+            })
           } else {
             nodes.push({
               label: formatDateOnly(row.changed_at),
               price: row.new_value,
               date: row.changed_at,
+              changedBy: row.changed_by,
+              showMeta: true,
             })
           }
         }
@@ -233,15 +306,29 @@ export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHisto
       .map(([entityId, list]) => {
         const sorted = [...list].sort((a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime())
         const name = sorted[0]?.entity_display_name || entityId
-        const nodes: { label: string; price: number | null; date?: string }[] = []
+        const nodes: {
+          label: string
+          price: number | null
+          date?: string
+          changedBy?: string | null
+          showMeta?: boolean
+        }[] = []
         for (const row of sorted) {
           if (row.old_value == null) {
-            nodes.push({ label: t("priceHistoryInitial") || "초기", price: row.new_value, date: row.changed_at })
+            nodes.push({
+              label: t("priceHistoryInitial") || "초기",
+              price: row.new_value,
+              date: row.changed_at,
+              changedBy: row.changed_by,
+              showMeta: true,
+            })
           } else {
             nodes.push({
               label: formatDateOnly(row.changed_at),
               price: row.new_value,
               date: row.changed_at,
+              changedBy: row.changed_by,
+              showMeta: true,
             })
           }
         }
@@ -424,6 +511,17 @@ export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHisto
                             <>
                               <div className="text-xs text-muted-foreground mb-0.5">{node.label}</div>
                               <div className="tabular-nums font-medium text-primary">{formatValue(node.price)}</div>
+                              {node.showMeta && node.date ? (
+                                <div className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
+                                  <div>{formatTimeOnly(node.date)}</div>
+                                  <div
+                                    className="truncate max-w-[90px] mx-auto"
+                                    title={formatPriceHistoryChangedBy(node.changedBy, t)}
+                                  >
+                                    {formatPriceHistoryChangedBy(node.changedBy, t)}
+                                  </div>
+                                </div>
+                              ) : null}
                             </>
                           ) : (
                             <span className="text-muted-foreground/50">—</span>

@@ -127,7 +127,11 @@ export async function POST(req: NextRequest) {
     })
     const beforeId = String(body.id || '').trim()
     const beforeSnapshot = beforeId ? await loadMenuAuditSnapshot(beforeId) : null
-    const result = await upsertPosMenuFromBody(body, { upsertByCode: false, catalogScope })
+    const result = await upsertPosMenuFromBody(body, {
+      upsertByCode: false,
+      catalogScope,
+      changedBy: String(auth?.name || '').trim() || String(auth?.employeeCode || '').trim() || undefined,
+    })
     if (result.success) {
       const changed = result.syncHint?.changedFields || []
       const hasMenuImpact =

@@ -49,8 +49,8 @@ export async function GET(req: NextRequest) {
     }
     if (categoryMain.trim()) conditions.push(`category_main=eq.${encodeURIComponent(categoryMain.trim())}`)
     if (category.trim()) conditions.push(`category=eq.${encodeURIComponent(category.trim())}`)
-    if (from) conditions.push(`changed_at=gte.${encodeURIComponent(from + 'T00:00:00Z')}`)
-    if (to) conditions.push(`changed_at=lte.${encodeURIComponent(to + 'T23:59:59.999Z')}`)
+    if (from) conditions.push(`changed_at=gte.${encodeURIComponent(from + 'T00:00:00+07:00')}`)
+    if (to) conditions.push(`changed_at=lte.${encodeURIComponent(to + 'T23:59:59.999+07:00')}`)
     if (search.trim()) {
       const term = encodeURIComponent(`*${search.trim()}*`)
       conditions.push(`entity_display_name=ilike.${term}`)
@@ -80,8 +80,8 @@ export async function GET(req: NextRequest) {
         if (entityType) conditionsBasic.push(`entity_type=eq.${encodeURIComponent(entityType)}`)
         if (entityId) conditionsBasic.push(`entity_id=eq.${encodeURIComponent(entityId)}`)
         if (menuId && entityType === 'pos_menu') conditionsBasic.push(`entity_id=eq.${encodeURIComponent(menuId)}`)
-        if (from) conditionsBasic.push(`changed_at=gte.${encodeURIComponent(from + 'T00:00:00Z')}`)
-        if (to) conditionsBasic.push(`changed_at=lte.${encodeURIComponent(to + 'T23:59:59.999Z')}`)
+        if (from) conditionsBasic.push(`changed_at=gte.${encodeURIComponent(from + 'T00:00:00+07:00')}`)
+        if (to) conditionsBasic.push(`changed_at=lte.${encodeURIComponent(to + 'T23:59:59.999+07:00')}`)
         if (search.trim()) {
           const term = encodeURIComponent(`*${search.trim()}*`)
           conditionsBasic.push(`entity_display_name=ilike.${term}`)

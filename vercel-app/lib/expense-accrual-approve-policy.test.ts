@@ -36,9 +36,15 @@ describe('isExpenseAccrualDeletableByPaymentState', () => {
     expect(isExpenseAccrualDeletableByPaymentState({ status: 'approved', paidAmount: 0 })).toBe(true)
   })
 
-  it('blocks paid, partial, or linked rows', () => {
+  it('allows paid/done/partial when there is no payment amount or bank/petty link', () => {
+    expect(isExpenseAccrualDeletableByPaymentState({ status: 'done', paidAmount: 0 })).toBe(true)
+    expect(isExpenseAccrualDeletableByPaymentState({ status: 'paid', paidAmount: 0 })).toBe(true)
+    expect(isExpenseAccrualDeletableByPaymentState({ status: 'partial', paidAmount: 0 })).toBe(true)
+  })
+
+  it('blocks rows with payment amount or bank/petty link', () => {
     expect(isExpenseAccrualDeletableByPaymentState({ status: 'approved', paidAmount: 50 })).toBe(false)
-    expect(isExpenseAccrualDeletableByPaymentState({ status: 'partial', paidAmount: 0 })).toBe(false)
+    expect(isExpenseAccrualDeletableByPaymentState({ status: 'done', paidAmount: 50 })).toBe(false)
     expect(
       isExpenseAccrualDeletableByPaymentState({ status: 'approved', paidAmount: 0, hasPaymentLink: true })
     ).toBe(false)

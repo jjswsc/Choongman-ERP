@@ -243,6 +243,7 @@ export async function POST(request: NextRequest) {
           entityId: filterCode,
           entityDisplayName: prev.name ?? name,
           changes,
+          changedBy: String(auth?.name || '').trim() || String(auth?.employeeCode || '').trim() || undefined,
           category: cat || undefined,
         }).catch(() => {})
       }
@@ -263,6 +264,7 @@ export async function POST(request: NextRequest) {
             { fieldName: 'price', oldValue: null, newValue: price },
             { fieldName: 'cost', oldValue: null, newValue: cost },
           ],
+          changedBy: String(auth?.name || '').trim() || String(auth?.employeeCode || '').trim() || undefined,
           category: (row.category as string || '').trim() || undefined,
         }).catch(() => {})
       }
