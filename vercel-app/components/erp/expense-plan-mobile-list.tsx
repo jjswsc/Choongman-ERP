@@ -1,13 +1,12 @@
 "use client"
 
 import type { ReactNode } from "react"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ExpensePlanStatusBadge } from "@/components/erp/expense-plan-status-badge"
+import { ExpensePayeeBankMissingLink } from "@/components/erp/expense-payee-bank-missing-link"
 import { AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 import type { ExpenseAccrualPlanItem } from "@/lib/api-client"
-import { expensePayeeVendorManageHref } from "@/lib/expense-payee-vendor-href"
 import { expensePlanRowAccentClass, expensePlanRowToneClass } from "@/lib/expense-plan-row-tone"
 import { cn } from "@/lib/utils"
 import { Pencil, Trash2 } from "lucide-react"
@@ -132,20 +131,29 @@ export function ExpensePlanMobileList({
                     </div>
                     {(r.payeeBankName || r.payeeBankAccountNo || missingBank) &&
                       (missingBank ? (
-                        <Link
-                          href={expensePayeeVendorManageHref(r.payeeCode, r.payeeName)}
-                          className="inline-flex text-[11px] font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
+                        <ExpensePayeeBankMissingLink
+                          payeeCode={r.payeeCode}
+                          payeeName={r.payeeName}
+                          label={tt("expenseBankAccountMissing", "Account missing")}
                           title={tt(
                             "expenseBankAccountMissingHint",
                             "Open Vendor Management to enter the bank account"
                           )}
-                        >
-                          {tt("expenseBankAccountMissing", "Account missing")}
-                        </Link>
+                          className="bg-transparent px-0 text-[11px] text-amber-700 dark:text-amber-400"
+                        />
                       ) : (
-                        <p className="text-[11px] text-muted-foreground">
-                          {[r.payeeBankName, r.payeeBankAccountNo].filter(Boolean).join(" · ")}
-                        </p>
+                        <div className="min-w-0 space-y-0.5">
+                          {r.payeeBankName ? (
+                            <p className="truncate text-[10px] font-normal text-muted-foreground">
+                              {r.payeeBankName}
+                            </p>
+                          ) : null}
+                          {r.payeeBankAccountNo ? (
+                            <p className="break-all text-sm font-bold tabular-nums tracking-wide text-foreground">
+                              {r.payeeBankAccountNo}
+                            </p>
+                          ) : null}
+                        </div>
                       ))}
                     {r.memo ? (
                       <button

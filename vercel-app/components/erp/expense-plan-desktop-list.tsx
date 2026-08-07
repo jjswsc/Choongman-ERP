@@ -1,14 +1,13 @@
 "use client"
 
 import type { ReactNode } from "react"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { ExpensePlanStatusBadge } from "@/components/erp/expense-plan-status-badge"
 import { ExpensePlanRowActions } from "@/components/erp/expense-plan-row-actions"
+import { ExpensePayeeBankMissingLink } from "@/components/erp/expense-payee-bank-missing-link"
 import type { ExpenseAccrualPlanItem } from "@/lib/api-client"
-import { expensePayeeVendorManageHref } from "@/lib/expense-payee-vendor-href"
 import {
   expensePlanRowAccentClass,
   expensePlanRowToneClass,
@@ -153,25 +152,24 @@ export function ExpensePlanDesktopList({
                         </td>
                         <td className="min-w-[200px] px-2 py-2 align-middle">
                           {missingBank ? (
-                            <Link
-                              href={expensePayeeVendorManageHref(r.payeeCode, r.payeeName)}
-                              className="inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 underline-offset-2 hover:underline dark:bg-amber-950/50 dark:text-amber-200"
+                            <ExpensePayeeBankMissingLink
+                              payeeCode={r.payeeCode}
+                              payeeName={r.payeeName}
+                              label={tt("expenseBankAccountMissing", "Account missing")}
                               title={tt(
                                 "expenseBankAccountMissingHint",
                                 "Open Vendor Management to enter the bank account"
                               )}
-                            >
-                              {tt("expenseBankAccountMissing", "Account missing")}
-                            </Link>
+                            />
                           ) : r.payeeBankName || r.payeeBankAccountNo ? (
                             <div className="min-w-0 space-y-0.5" title={bankLine}>
                               {r.payeeBankName ? (
-                                <div className="truncate text-[11px] font-medium text-foreground">
+                                <div className="truncate text-[10px] font-normal text-muted-foreground">
                                   {r.payeeBankName}
                                 </div>
                               ) : null}
                               {r.payeeBankAccountNo ? (
-                                <div className="break-all font-mono text-[11px] tabular-nums text-muted-foreground">
+                                <div className="break-all text-sm font-bold tabular-nums tracking-wide text-foreground">
                                   {r.payeeBankAccountNo}
                                 </div>
                               ) : null}

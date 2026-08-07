@@ -39,6 +39,7 @@ export const ERP_KEEP_ALIVE_QUERY_AGNOSTIC_PATH_PREFIXES = [
   "/admin/marketing/report",
   "/admin/order-create",
   "/admin/accounting/purchase-order",
+  "/admin/vendors",
 ] as const
 
 export function normalizeErpPathOnly(href: string): string {

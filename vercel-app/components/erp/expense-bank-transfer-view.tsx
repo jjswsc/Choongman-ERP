@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -13,7 +12,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import type { ExpenseAccrualPlanItem } from "@/lib/api-client"
-import { expensePayeeVendorManageHref } from "@/lib/expense-payee-vendor-href"
+import { ExpensePayeeBankMissingLink } from "@/components/erp/expense-payee-bank-missing-link"
 import { appAlert } from "@/lib/app-message"
 import { Check, Copy, Download, Printer, Wallet } from "lucide-react"
 
@@ -539,16 +538,16 @@ th{background:#e8f0fe;text-align:center}
                       <p className="text-xs">
                         {r.payeeBankName ||
                           (missingBank ? (
-                            <Link
-                              href={expensePayeeVendorManageHref(r.payeeCode, r.payeeName)}
-                              className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
+                            <ExpensePayeeBankMissingLink
+                              payeeCode={r.payeeCode}
+                              payeeName={r.payeeName}
+                              label={tt("expenseBankAccountMissing", "Account missing")}
                               title={tt(
                                 "expenseBankAccountMissingHint",
                                 "Open Vendor Management to enter the bank account"
                               )}
-                            >
-                              {tt("expenseBankAccountMissing", "Account missing")}
-                            </Link>
+                              className="bg-transparent px-0 text-xs text-amber-700 dark:text-amber-400"
+                            />
                           ) : (
                             "—"
                           ))}
@@ -673,27 +672,27 @@ th{background:#e8f0fe;text-align:center}
                           <>
                             <div>{r.payeeAccountHolder || r.payeeName || "—"}</div>
                             {r.payeeBankAccountNo ? (
-                              <div className="text-xs tabular-nums text-muted-foreground">
-                                ({r.payeeBankAccountNo})
+                              <div className="text-sm font-bold tabular-nums tracking-wide text-foreground">
+                                {r.payeeBankAccountNo}
                               </div>
                             ) : (
                               <div>
-                                <Link
-                                  href={expensePayeeVendorManageHref(r.payeeCode, r.payeeName)}
-                                  className="text-xs font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
+                                <ExpensePayeeBankMissingLink
+                                  payeeCode={r.payeeCode}
+                                  payeeName={r.payeeName}
+                                  label={tt("expenseBankAccountMissing", "Account missing")}
                                   title={tt(
                                     "expenseBankAccountMissingHint",
                                     "Open Vendor Management to enter the bank account"
                                   )}
-                                >
-                                  {tt("expenseBankAccountMissing", "Account missing")}
-                                </Link>
+                                  className="bg-transparent px-0 text-xs text-amber-700 dark:text-amber-400"
+                                />
                               </div>
                             )}
                           </>
                         )}
                       </td>
-                      <td className="px-2 py-2 text-center align-top">
+                      <td className="px-2 py-2 text-center align-top text-[10px] font-normal text-muted-foreground">
                         {isEditing ? null : r.payeeBankName || "—"}
                       </td>
                       <td className="max-w-[220px] px-2 py-2 align-top text-xs leading-snug text-muted-foreground">

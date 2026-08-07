@@ -224,6 +224,7 @@ export function VendorForm({
               {t("inv_account_no") || "Account"}
             </label>
             <Input
+              id="vendor-bank-account-no"
               placeholder={t("vendorBankAccountPh") || "Account number"}
               className="h-10 text-sm"
               value={formData.bank_account_no}

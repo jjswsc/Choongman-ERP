@@ -13,7 +13,11 @@ import { getAdminVendors, getStoreTaxFilingProfiles, saveVendor, deleteVendor, u
 import type { Vendor } from "@/components/erp/vendor-table"
 import type { VendorLinkedStore } from "@/components/erp/vendor-table"
 import { storesLinkedToVendor } from "@/lib/store-vendor-tax-link"
-import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { useErpPageActive, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import {
+  consumeVendorEditIntent,
+  peekVendorEditIntent,
+} from "@/lib/expense-payee-vendor-href"
 
 const emptyForm: VendorFormData = {
   code: "",
@@ -36,6 +40,7 @@ export default function VendorsPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const searchParams = useSearchParams()
+  const pageActive = useErpPageActive()
   const [vendors, setVendors] = React.useState<Vendor[]>([])
   const [loading, setLoading] = React.useState(true)
   const [formData, setFormData] = React.useState<VendorFormData>(emptyForm)
@@ -44,6 +49,7 @@ export default function VendorsPage() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<VendorTypeFilter>("all")
   const [profilesByStore, setProfilesByStore] = React.useState<Record<string, { storeCode: string; vendorCode?: string }>>({})
+  const [deepLinkBanner, setDeepLinkBanner] = React.useState(false)
   const reloadSeqRef = React.useRef(0)
   const deepLinkKeyRef = React.useRef<string>("")
   const { stores: storeList, storeLabels, legacyToCanonical } = useStoreList()
@@ -204,7 +210,7 @@ export default function VendorsPage() {
     setEditingCode(null)
   }
 
-  const handleEdit = (vendor: Vendor) => {
+  const handleEdit = React.useCallback((vendor: Vendor) => {
     setFormData({
       code: vendor.code,
       name: vendor.name,
@@ -222,37 +228,108 @@ export default function VendorsPage() {
       bank_account_no: vendor.bank_account_no ?? "",
     })
     setEditingCode(vendor.code)
-  }
+  }, [])
+
+  const findVendorForDeepLink = React.useCallback(
+    (codeRaw: string, qRaw: string): Vendor | null => {
+      const code = String(codeRaw || "").trim()
+      const q = String(qRaw || "").trim()
+      if (code) {
+        const exact =
+          vendors.find((x) => x.code === code) ||
+          vendors.find((x) => x.code.toLowerCase() === code.toLowerCase())
+        if (exact) return exact
+      }
+      const term = (q || code).trim()
+      if (!term) return null
+      const lower = term.toLowerCase()
+      const matches = vendors.filter((v) => {
+        const name = (v.name || "").toLowerCase()
+        const gps = (v.gps_name || "").toLowerCase()
+        const outlet = (v.sales_outlet || "").toLowerCase()
+        const vc = (v.code || "").toLowerCase()
+        return (
+          vc === lower ||
+          name === lower ||
+          gps === lower ||
+          outlet === lower ||
+          name.includes(lower) ||
+          gps.includes(lower) ||
+          vc.includes(lower)
+        )
+      })
+      if (matches.length === 1) return matches[0]
+      return (
+        matches.find(
+          (v) =>
+            v.code.toLowerCase() === lower ||
+            (v.name || "").toLowerCase() === lower ||
+            (v.gps_name || "").toLowerCase() === lower
+        ) || null
+      )
+    },
+    [vendors]
+  )
+
+  const focusBankFields = React.useCallback(() => {
+    window.setTimeout(() => {
+      document.getElementById("vendor-bank-fields")?.scrollIntoView({ behavior: "smooth", block: "center" })
+      const input = document.getElementById("vendor-bank-account-no") as HTMLInputElement | null
+      input?.focus()
+      input?.select()
+    }, 120)
+  }, [])
+
+  const applyVendorDeepLink = React.useCallback(
+    (intent: { code?: string; q?: string; focusBank?: boolean }, force = false) => {
+      const code = String(intent.code || "").trim()
+      const q = String(intent.q || "").trim()
+      if (!code && !q) return false
+      const baseKey = `${code}|${q}`
+
+      if (!force && deepLinkKeyRef.current === `${baseKey}|ok` && editingCode) {
+        if (intent.focusBank) focusBankFields()
+        return true
+      }
+
+      const vendor = findVendorForDeepLink(code, q)
+      if (vendor) {
+        deepLinkKeyRef.current = `${baseKey}|ok`
+        handleEdit(vendor)
+        setSearchTerm(vendor.code)
+        setHasSearched(true)
+        setTypeFilter("all")
+        setDeepLinkBanner(Boolean(intent.focusBank))
+        if (intent.focusBank) focusBankFields()
+        return true
+      }
+
+      deepLinkKeyRef.current = `${baseKey}|search`
+      setSearchTerm(q || code)
+      setHasSearched(true)
+      setDeepLinkBanner(Boolean(intent.focusBank))
+      return false
+    },
+    [editingCode, findVendorForDeepLink, focusBankFields, handleEdit]
+  )
 
   // Deep link from Expense Management "Account missing" → open vendor edit (+ bank fields).
   React.useEffect(() => {
-    if (loading) return
-    const code = String(searchParams.get("code") || "").trim()
-    const q = String(searchParams.get("q") || "").trim()
-    const key = `${code}|${q}`
+    if (!pageActive || loading) return
+
+    const session = peekVendorEditIntent()
+    const code = String(session?.code || searchParams.get("code") || "").trim()
+    const q = String(session?.q || searchParams.get("q") || "").trim()
+    const focusBank = Boolean(session?.focusBank) || searchParams.get("focus") === "bank"
     if (!code && !q) return
-    if (deepLinkKeyRef.current === key) return
 
-    if (code) {
-      const v = vendors.find((x) => x.code === code)
-      if (v) {
-        deepLinkKeyRef.current = key
-        handleEdit(v)
-        setSearchTerm(code)
-        setHasSearched(true)
-        requestAnimationFrame(() => {
-          document.getElementById("vendor-bank-fields")?.scrollIntoView({ behavior: "smooth", block: "center" })
-        })
-        return
-      }
-    }
+    // Wait for vendor list before consuming session intent (avoid losing the target).
+    if (session && vendors.length === 0) return
 
-    deepLinkKeyRef.current = key
-    if (q || code) {
-      setSearchTerm(q || code)
-      setHasSearched(true)
-    }
-  }, [loading, vendors, searchParams])
+    const applied = applyVendorDeepLink({ code, q, focusBank }, Boolean(session))
+    if (session) consumeVendorEditIntent()
+    void applied
+  }, [pageActive, loading, vendors, searchParams, applyVendorDeepLink])
 
   const handleDelete = async (vendor: Vendor) => {
     const displayName = (vendor.type === "sales" || vendor.type === "both") && (vendor.gps_name?.trim() || vendor.sales_outlet?.trim())
@@ -306,6 +383,14 @@ export default function VendorsPage() {
           </div>
         </div>
 
+        {deepLinkBanner && editingCode ? (
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+            {t("expenseBankAccountMissingHint") ||
+              "Open Vendor Management to enter the bank account"}
+            {" — "}
+            <span className="font-semibold">{formData.name || editingCode}</span>
+          </div>
+        ) : null}
         {loading && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             {t("loading")}
