@@ -250,11 +250,17 @@ export type PosCostSalesWeightedResult = {
   warnings: string[]
   summary: {
     netSales: number
+    /** POS 주문 전체 순매출(미매칭 포함) */
+    posNetSales?: number
+    excludedUnmatchedSales?: number
+    salesCoveragePct?: number
     grossSalesBeforeDiscount: number
     totalCost: number
     foodCost: number
     packagingCost: number
     costPctOfNet: number
+    /** 옵션→기본 BOM 폴백 제외 원가율 */
+    costPctOfNetExactBom?: number
     costPctOfGross: number
     matchedLineQty: number
     unmatchedLineQty: number
@@ -304,6 +310,7 @@ export type PosCostSalesWeightedResult = {
     serviceAmtAllocated: number
     optionBaseFallbackQty?: number
     optionBaseFallbackSales?: number
+    optionBaseFallbackCost?: number
   }
   bomUnmatchedLines: {
     menuId: string

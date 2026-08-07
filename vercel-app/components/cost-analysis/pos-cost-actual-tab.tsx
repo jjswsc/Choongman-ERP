@@ -358,14 +358,31 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
             <MetricCard
               label={t("posCostWeightedRatioTitle")}
               value={`${summary.costPctOfNet.toFixed(1)}%`}
-              subLabel={t("posCostActualCostPctNetHint")}
+              subLabel={
+                summary.costPctOfNetExactBom != null &&
+                Math.abs(summary.costPctOfNetExactBom - summary.costPctOfNet) > 0.05
+                  ? `${t("posCostActualCostPctNetHint")} · ${t("posCostActualExactBomPct").replace(
+                      "{pct}",
+                      summary.costPctOfNetExactBom.toFixed(1)
+                    )}`
+                  : t("posCostActualCostPctNetHint")
+              }
               variant="primary"
               icon={<TrendingUp className="h-4 w-4" />}
             />
             <MetricCard
               label={t("posCostActualNetSales")}
               value={`฿${formatBaht(summary.netSales)}`}
-              subLabel={`${t("posCostActualOrderCount")}: ${summary.periodOrderCount.toLocaleString()}`}
+              subLabel={
+                summary.posNetSales != null && summary.posNetSales > summary.netSales + 0.01
+                  ? t("posCostActualMatchedSalesSub")
+                      .replace("{pos}", formatBaht(summary.posNetSales))
+                      .replace(
+                        "{coverage}",
+                        (summary.salesCoveragePct ?? 0).toFixed(1)
+                      )
+                  : `${t("posCostActualOrderCount")}: ${summary.periodOrderCount.toLocaleString()}`
+              }
             />
             <MetricCard
               label={t("posCostActualTotalCost")}
@@ -374,8 +391,14 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
             />
             <MetricCard
               label={t("posCostActualBomMatch")}
-              value={`${summary.matchedLineQty.toLocaleString()} / ${(summary.matchedLineQty + summary.unmatchedLineQty).toLocaleString()}`}
-              subLabel={`${t("posCostActualUnmatchedLines")}: ${summary.unmatchedLineQty.toLocaleString()}`}
+              value={`${Math.round(summary.matchedLineQty).toLocaleString()} / ${Math.round(summary.matchedLineQty + summary.unmatchedLineQty).toLocaleString()}`}
+              subLabel={
+                summary.unmatchedLineQty > 0
+                  ? t("posCostActualUnmatchedSalesSub")
+                      .replace("{qty}", String(Math.round(summary.unmatchedLineQty)))
+                      .replace("{sales}", formatBaht(summary.excludedUnmatchedSales ?? 0))
+                  : `${t("posCostActualUnmatchedLines")}: 0`
+              }
             />
           </div>
 

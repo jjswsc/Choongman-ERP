@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { aggregatePosCostWeightedByCategory } from '@/lib/pos-cost-category-weighted'
+import {
+  aggregatePosCostWeightedByCategory,
+  computeExactBomCostPct,
+  sumPosCostCategoryWeightedTotals,
+} from '@/lib/pos-cost-category-weighted'
 import { toPosCostSalesExclVat } from '@/lib/pos-cost-vat'
 
 describe('aggregatePosCostWeightedByCategory', () => {
@@ -214,10 +218,44 @@ describe('aggregatePosCostWeightedByCategory', () => {
     })
     expect(meta.optionBaseFallbackQty).toBe(1)
     expect(meta.optionBaseFallbackSales).toBe(toPosCostSalesExclVat(200))
+    expect(meta.optionBaseFallbackCost).toBe(40)
     expect(rows[0]?.topMenus[0]?.baseFallbackQty).toBe(1)
     expect(rows[0]?.topMenus[0]?.costPctOfNet).toBe(
       // 40 / (200/1.07) ≈ 21.4% — 목록 옵션 원가보다 낮게 잡히는 전형
       Math.round((40 / toPosCostSalesExclVat(200)) * 10000) / 100
     )
+  })
+
+  it('sumPosCostCategoryWeightedTotals and exactBom exclude unmatched/fallback correctly', () => {
+    const costIndex = new Map([
+      ['10|', { costHall: 40, costDelivery: 40, foodCost: 40, packagingCost: 0 }],
+    ])
+    const menus = [
+      { id: '10', name: '치킨', category_main: 'Chicken' },
+      { id: '99', name: '미등록', category_main: 'Side' },
+    ]
+    const orderRows = [
+      {
+        order_type: 'dine_in',
+        items_json: JSON.stringify([
+          { menuId: '10', optionId: '99', price: 200, quantity: 1 },
+          { menuId: '99', price: 50, quantity: 1 },
+        ]),
+      },
+    ]
+    const { rows, meta } = aggregatePosCostWeightedByCategory({
+      orderRows,
+      menus,
+      costIndex,
+      miseRatePercent: 0,
+    })
+    const totals = sumPosCostCategoryWeightedTotals(rows)
+    expect(meta.excludedUnmatchedSales).toBe(toPosCostSalesExclVat(50))
+    expect(totals.netSales).toBe(toPosCostSalesExclVat(200))
+    expect(totals.totalCost).toBe(40)
+    const exact = computeExactBomCostPct({ totals, meta })
+    expect(exact.netSales).toBe(0)
+    expect(exact.totalCost).toBe(0)
+    expect(exact.costPctOfNet).toBe(0)
   })
 })

@@ -48,7 +48,7 @@ export type PosCostCategoryMenuContribution = {
 }
 
 export type PosCostCategoryWeightedMeta = {
-  /** BOM 미매칭으로 대분류 합계에서 뺀 배분 매출 */
+  /** BOM 미매칭으로 대분류·요약 합계에서 뺀 배분 매출 */
   excludedUnmatchedSales: number
   excludedUnmatchedQty: number
   /** 라인 할인 외 잔여 결제·쿠폰 할인(대분류 분모에 반영) */
@@ -58,6 +58,67 @@ export type PosCostCategoryWeightedMeta = {
   /** 옵션 지정인데 기본 BOM 폴백(원가 과소·원가율 하락 가능) */
   optionBaseFallbackQty: number
   optionBaseFallbackSales: number
+  /** 옵션→기본 BOM 폴백 라인의 이론 원가(식재+포장) */
+  optionBaseFallbackCost: number
+}
+
+export type PosCostCategoryWeightedTotals = {
+  netSales: number
+  totalCost: number
+  foodCost: number
+  packagingCost: number
+  matchedQty: number
+  unmatchedQty: number
+  costPctOfNet: number
+}
+
+/** 대분류 행 합÷합 — 상단 KPI·채널 합계와 동일 분모 */
+export function sumPosCostCategoryWeightedTotals(
+  rows: PosCostCategoryWeightedRow[]
+): PosCostCategoryWeightedTotals {
+  let netSales = 0
+  let foodCost = 0
+  let packagingCost = 0
+  let matchedQty = 0
+  let unmatchedQty = 0
+  for (const r of rows) {
+    netSales = round2(netSales + r.netSales)
+    foodCost = round2(foodCost + r.foodCost)
+    packagingCost = round2(packagingCost + r.packagingCost)
+    matchedQty = round2(matchedQty + r.matchedQty)
+    unmatchedQty = round2(unmatchedQty + r.unmatchedQty)
+  }
+  const totalCost = round2(foodCost + packagingCost)
+  return {
+    netSales,
+    totalCost,
+    foodCost,
+    packagingCost,
+    matchedQty,
+    unmatchedQty,
+    costPctOfNet: pctOf(totalCost, netSales),
+  }
+}
+
+/**
+ * 옵션 BOM이 있어 정확히 매칭된 라인만(기본 BOM 폴백 제외)의 원가율.
+ * 폴백 매출·원가를 meta에서 차감. 폴백이 없으면 totals와 동일.
+ */
+export function computeExactBomCostPct(params: {
+  totals: PosCostCategoryWeightedTotals
+  meta: Pick<PosCostCategoryWeightedMeta, 'optionBaseFallbackSales' | 'optionBaseFallbackCost'>
+}): { netSales: number; totalCost: number; costPctOfNet: number } {
+  const netSales = round2(
+    Math.max(0, params.totals.netSales - (params.meta.optionBaseFallbackSales || 0))
+  )
+  const totalCost = round2(
+    Math.max(0, params.totals.totalCost - (params.meta.optionBaseFallbackCost || 0))
+  )
+  return {
+    netSales,
+    totalCost,
+    costPctOfNet: pctOf(totalCost, netSales),
+  }
 }
 
 export type PosCostCategoryWeightedResult = {
@@ -303,6 +364,7 @@ export function aggregatePosCostWeightedByCategory(params: {
     serviceAmtAllocated: 0,
     optionBaseFallbackQty: 0,
     optionBaseFallbackSales: 0,
+    optionBaseFallbackCost: 0,
   }
 
   for (const order of params.orderRows) {
@@ -459,6 +521,9 @@ export function aggregatePosCostWeightedByCategory(params: {
         meta.optionBaseFallbackQty = round2(meta.optionBaseFallbackQty + mb.baseFallbackQty)
         meta.optionBaseFallbackSales = round2(
           meta.optionBaseFallbackSales + mb.netSales * salesFactor
+        )
+        meta.optionBaseFallbackCost = round2(
+          meta.optionBaseFallbackCost + (mb.foodCost + mb.packagingCost)
         )
       }
     }
