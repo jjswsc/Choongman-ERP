@@ -132,12 +132,12 @@ export function useSalesDiscountDrillSheet(ctx: SalesDiscountDrillContext, tr: T
 
   const sheet = (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
-        <SheetHeader>
+      <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl">
+        <SheetHeader className="shrink-0 border-b border-border/60 px-5 py-4 pr-12 text-left">
           <SheetTitle className="text-base">{title}</SheetTitle>
           {explanation ? <SheetDescription className="text-left leading-relaxed">{explanation}</SheetDescription> : null}
         </SheetHeader>
-        <div className="px-4 pb-6">
+        <div className="px-5 pb-6 pt-4">
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />

@@ -80,6 +80,12 @@ import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { cn, roundErp3, formatErpCostInputString, formatErpNum } from "@/lib/utils"
 import { buildItemTaxMapFromRows, computeInboundBatchAmounts } from "@/lib/inbound-payable-amount"
+import {
+  type InboundSourceCurrency,
+  parseInboundFxRate,
+  thbUnitCostFromKrw,
+  validateInboundFxHeader,
+} from "@/lib/inbound-fx"
 import { sortVendorNameStrings, sortVendorsByDisplayName } from "@/lib/vendor-sort"
 import {
   CANONICAL_OFFICE_STORE,
@@ -139,6 +145,8 @@ export default function InboundPage() {
   const [inPoNo, setInPoNo] = React.useState("")
   const [inInvoiceNo, setInInvoiceNo] = React.useState("")
   const [inQty, setInQty] = React.useState("")
+  const [sourceCurrency, setSourceCurrency] = React.useState<InboundSourceCurrency>("THB")
+  const [fxRate, setFxRate] = React.useState("")
   const [cart, setCart] = React.useState<InboundCartItem[]>([])
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [selectedItem, setSelectedItem] = React.useState<AdminItem | null>(null)
@@ -387,6 +395,8 @@ export default function InboundPage() {
           setFromPoNo(poNo)
           setFromPoOrderDate(poOrderDate)
           setFromPoInboundDateDraft(inboundDate)
+          setSourceCurrency("THB")
+          setFxRate("")
           setFromPoDateDialogOpen(true)
           setTabValue("new")
         }
@@ -444,7 +454,10 @@ export default function InboundPage() {
         name: selectedItem.name,
         spec: selectedItem.spec || "",
         qty: inQty,
-        cost: formatErpCostInputString(selectedItem.cost ?? 0),
+        cost:
+          sourceCurrency === "KRW"
+            ? ""
+            : formatErpCostInputString(selectedItem.cost ?? 0),
       },
     ])
     setSelectedItem(null)
@@ -474,6 +487,8 @@ export default function InboundPage() {
     setInVendor("")
     setSelectedItem(null)
     setInQty("")
+    setSourceCurrency("THB")
+    setFxRate("")
   }, [])
 
   const resolveInboundStoreName = React.useCallback((): string | undefined => {
@@ -500,6 +515,24 @@ export default function InboundPage() {
       await appAlert(t("inAlertInboundDate"))
       return
     }
+    const parsedFx = parseInboundFxRate(fxRate)
+    const fxErr = validateInboundFxHeader(sourceCurrency, parsedFx)
+    if (fxErr) {
+      await appAlert(t("inAlertFxRequired"))
+      return
+    }
+    if (sourceCurrency === "KRW") {
+      const missingCost = cart.some((c) => {
+        const raw = String(c.cost ?? "").replace(/,/g, "").trim()
+        if (!raw) return true
+        const n = parseFloat(raw)
+        return !Number.isFinite(n) || n < 0
+      })
+      if (missingCost) {
+        await appAlert(t("inAlertKrwCostRequired"))
+        return
+      }
+    }
     const confirmKey = editingBatchId ? "inConfirmUpdate" : "inConfirmSave"
     const msg = t(confirmKey).replace("{count}", String(cart.length))
     if (!await appConfirm(msg)) return
@@ -516,6 +549,10 @@ export default function InboundPage() {
       }))
       const storeName = resolveInboundStoreName()
       const vendorCode = purchaseVendors.find((v) => v.name === (inVendor.trim() || cart[0]?.vendor))?.code
+      const fxOptions = {
+        sourceCurrency,
+        fxRate: sourceCurrency === "KRW" ? parsedFx : null,
+      }
 
       if (editingBatchId) {
         const res = await updateInboundBatch({
@@ -527,6 +564,7 @@ export default function InboundPage() {
           storeName: storeName || CANONICAL_OFFICE_STORE,
           purchaseOrderId: editingPurchaseOrderId,
           list,
+          ...fxOptions,
         })
         if (res.success) {
           await appAlert(translateApiMessage(res.message, t) || t("inUpdateSuccess"))
@@ -545,6 +583,7 @@ export default function InboundPage() {
           purchaseOrderId: fromPoId ?? undefined,
           poNo: inPoNo.trim() || undefined,
           invoiceNo: inInvoiceNo.trim() || undefined,
+          ...fxOptions,
         })
         if (res.success) {
           await appAlert(translateApiMessage(res.message, t) || t("inSaveSuccess"))
@@ -554,6 +593,8 @@ export default function InboundPage() {
           setFromPoId(null)
           setFromPoNo("")
           setFromPoOrderDate("")
+          setSourceCurrency("THB")
+          setFxRate("")
         } else {
           await appAlert(translateApiMessage(res.message, t) || t("inSaveFailed"))
         }
@@ -822,7 +863,24 @@ export default function InboundPage() {
   }, [historyList, histPurchaseSource])
 
   const groupedHistory = React.useMemo(() => {
-    const g: Record<string, { date: string; po_created_at?: string | null; vendor: string; totalQty: number; totalAmt: number; totalVat: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
+    const g: Record<
+      string,
+      {
+        date: string
+        po_created_at?: string | null
+        vendor: string
+        totalQty: number
+        totalAmt: number
+        totalVat: number
+        items: InboundHistoryItem[]
+        inbound_batch_id?: number | null
+        po_no?: string | null
+        invoice_no?: string | null
+        invoice_received?: boolean
+        sourceCurrency?: "THB" | "KRW"
+        fxRate?: number | null
+      }
+    > = {}
     for (const i of filteredHistoryList) {
       const batchId = i.inbound_batch_id
       const k = batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
@@ -839,6 +897,8 @@ export default function InboundPage() {
           po_no: i.po_no ?? null,
           invoice_no: i.invoice_no ?? null,
           invoice_received: Boolean(i.invoice_received),
+          sourceCurrency: i.sourceCurrency,
+          fxRate: i.fxRate ?? null,
         }
       } else {
         const cur = g[k]
@@ -847,6 +907,8 @@ export default function InboundPage() {
         if (!cur.po_created_at && i.po_created_at) cur.po_created_at = i.po_created_at
         cur.invoice_received = Boolean(cur.invoice_received) || Boolean(i.invoice_received)
         if (cur.inbound_batch_id == null && batchId != null) cur.inbound_batch_id = batchId
+        if (!cur.sourceCurrency && i.sourceCurrency) cur.sourceCurrency = i.sourceCurrency
+        if ((cur.fxRate == null || cur.fxRate <= 0) && i.fxRate != null) cur.fxRate = i.fxRate
       }
       g[k].items.push(i)
       g[k].totalQty += i.qty
@@ -881,12 +943,15 @@ export default function InboundPage() {
         poNo: g.po_no ?? undefined,
         invoiceNo: g.invoice_no ?? undefined,
         invoiceReceived: g.invoice_received,
+        sourceCurrency: g.sourceCurrency,
+        fxRate: g.fxRate ?? null,
         items: g.items.map((it) => ({
           name: formatInboundLineName(it),
           spec: it.spec || "",
           qty: it.qty || 0,
           amount: it.amount || 0,
           vatAmount: it.vatAmount || 0,
+          sourceUnitCost: it.sourceUnitCost ?? null,
         })),
         itemsSummary,
         totalQty: g.totalQty,
@@ -901,15 +966,25 @@ export default function InboundPage() {
     const taxByCode = buildItemTaxMapFromRows(
       items.map((it) => ({ code: it.code, tax: it.taxType }))
     )
-    const lines = cart.map((c) => ({
-      code: c.code,
-      qty: parseFloat(String(c.qty).replace(/,/g, "")) || 0,
-      unitCost: parseFloat(String(c.cost).replace(/,/g, "")) || 0,
-      dateYmd: (inDate || c.date || "").slice(0, 10),
-    }))
+    const fxNum = parseInboundFxRate(fxRate)
+    const lines = cart.map((c) => {
+      const rawCost = parseFloat(String(c.cost).replace(/,/g, "")) || 0
+      const unitCost =
+        sourceCurrency === "KRW"
+          ? fxNum != null
+            ? thbUnitCostFromKrw(rawCost, fxNum)
+            : 0
+          : rawCost
+      return {
+        code: c.code,
+        qty: parseFloat(String(c.qty).replace(/,/g, "")) || 0,
+        unitCost,
+        dateYmd: (inDate || c.date || "").slice(0, 10),
+      }
+    })
     const { netTotal, vatTotal, grossTotal } = computeInboundBatchAmounts(lines, taxByCode)
     return { net: netTotal, vat: vatTotal, gross: grossTotal }
-  }, [cart, items, inDate])
+  }, [cart, items, inDate, sourceCurrency, fxRate])
 
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "summary" | "guide">("new")
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
@@ -1082,15 +1157,24 @@ export default function InboundPage() {
         const vendorName = String(b.vendorName || row.vendor || "").trim()
         const prefill: InboundCartItem[] = (b.items || [])
           .filter((it) => String(it.code || "").trim())
-          .map((it) => ({
-            date: batchDate,
-            vendor: vendorName,
-            code: String(it.code || "").trim(),
-            name: String(it.name || "").trim() || String(it.code || "").trim(),
-            spec: String(it.spec || "").trim(),
-            qty: String(it.qty ?? 0),
-            cost: formatErpCostInputString(it.unitCost ?? 0),
-          }))
+          .map((it) => {
+            const isKrw = String(b.sourceCurrency || "").toUpperCase() === "KRW"
+            // KRW인데 원화 스냅샷이 없으면 THB 단가를 원화칸에 넣지 않음(재저장 시 원가 붕괴 방지)
+            const displayCost = isKrw
+              ? it.sourceUnitCost != null
+                ? it.sourceUnitCost
+                : null
+              : (it.unitCost ?? 0)
+            return {
+              date: batchDate,
+              vendor: vendorName,
+              code: String(it.code || "").trim(),
+              name: String(it.name || "").trim() || String(it.code || "").trim(),
+              spec: String(it.spec || "").trim(),
+              qty: String(it.qty ?? 0),
+              cost: displayCost == null ? "" : formatErpCostInputString(displayCost),
+            }
+          })
         if (!prefill.length) {
           await appAlert(t("inEditLoadFailed"))
           return
@@ -1115,6 +1199,10 @@ export default function InboundPage() {
         setInPoNo(String(b.poNo || "").trim())
         setInInvoiceNo(String(b.invoiceNo || "").trim())
         setInStore(storeValue)
+        setSourceCurrency(String(b.sourceCurrency || "").toUpperCase() === "KRW" ? "KRW" : "THB")
+        setFxRate(
+          b.fxRate != null && Number(b.fxRate) > 0 ? formatErpCostInputString(Number(b.fxRate)) : ""
+        )
         setSelectedItem(null)
         setInQty("")
         setTabValue("new")
@@ -1609,6 +1697,16 @@ export default function InboundPage() {
                     editingBatchId={editingBatchId}
                     saving={saving || editLoading}
                     totals={cartTotals}
+                    sourceCurrency={sourceCurrency}
+                    fxRate={fxRate}
+                    onSourceCurrencyChange={(next) => {
+                      if (next === sourceCurrency) return
+                      setSourceCurrency(next)
+                      if (next === "THB") setFxRate("")
+                      // 통화 전환 시 단가 단위가 달라지므로 비워 오입력 방지
+                      setCart((prev) => prev.map((c) => ({ ...c, cost: "" })))
+                    }}
+                    onFxRateChange={setFxRate}
                     onUpdateCost={handleUpdateCartCost}
                     onUpdateQty={handleUpdateCartQty}
                     onRemove={handleRemoveFromCart}

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseInsertMany, supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter } from '@/lib/supabase-server'
 import { deletePayableFromPO } from '@/lib/receivable-payable'
 import { buildItemTaxMapFromRows, inboundLogDateIsoFromBangkokYmd } from '@/lib/inbound-payable-amount'
 import { computeInboundRegisterTotals, upsertInboundPayableTransaction } from '@/lib/inbound-payable-sync'
-import { roundErp3 } from '@/lib/utils'
+import {
+  normalizeInboundSourceCurrency,
+  parseInboundFxRate,
+  resolveInboundLineCost,
+  validateInboundFxHeader,
+} from '@/lib/inbound-fx'
 import { inboundPersistLocation } from '@/lib/office-store-canonical'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import {
@@ -33,7 +38,16 @@ export async function POST(request: NextRequest) {
     const purchaseOrderId = (typeof body === 'object' && body?.purchaseOrderId) ? Number(body.purchaseOrderId) : null
     const poNo = (typeof body === 'object' && body?.poNo) ? String(body.poNo).trim() || null : null
     const invoiceNo = (typeof body === 'object' && body?.invoiceNo) ? String(body.invoiceNo).trim() || null : null
-    const list = Array.isArray(body) ? body : (body?.list || []) as {
+    const sourceCurrency = normalizeInboundSourceCurrency(
+      typeof body === 'object' ? body?.sourceCurrency ?? body?.source_currency : null
+    )
+    const fxRate = parseInboundFxRate(typeof body === 'object' ? body?.fxRate ?? body?.fx_rate : null)
+    const fxHeaderErr = validateInboundFxHeader(sourceCurrency, fxRate)
+    if (fxHeaderErr) {
+      return NextResponse.json({ success: false, message: fxHeaderErr }, { status: 400, headers })
+    }
+
+    const list = (Array.isArray(body) ? body : (body?.list || [])) as {
       date?: string
       vendor?: string
       code?: string
@@ -60,12 +74,39 @@ export async function POST(request: NextRequest) {
     })) as { code?: string; tax?: string | null }[] | null
     const taxByCode = buildItemTaxMapFromRows(itemRows)
 
-    const { grossTotal, batchDateYmd } = computeInboundRegisterTotals(list, taxByCode)
+    const resolvedLines: {
+      date?: string
+      vendor?: string
+      code?: string
+      name?: string
+      spec?: string
+      qty?: number | string
+      cost?: number | string
+      unitCostThb: number | null
+      sourceUnitCost: number | null
+    }[] = []
 
-    const rows = list.map((item) => {
+    for (const item of list) {
+      const resolved = resolveInboundLineCost({
+        costRaw: item.cost,
+        sourceCurrency,
+        fxRate,
+      })
+      if (!resolved.ok) {
+        return NextResponse.json({ success: false, message: resolved.message }, { status: 400, headers })
+      }
+      resolvedLines.push({
+        ...item,
+        cost: resolved.unitCostThb != null ? resolved.unitCostThb : item.cost,
+        unitCostThb: resolved.unitCostThb,
+        sourceUnitCost: resolved.sourceUnitCost,
+      })
+    }
+
+    const { grossTotal, batchDateYmd } = computeInboundRegisterTotals(resolvedLines, taxByCode)
+
+    const rows = resolvedLines.map((item) => {
       const qty = parseFloat(String(item.qty || 0).replace(/,/g, '')) || 0
-      const costVal = item.cost != null && item.cost !== '' ? parseFloat(String(item.cost).replace(/,/g, '')) : null
-      const cost = costVal != null && !isNaN(costVal) && costVal >= 0 ? costVal : 0
       const lineYmd = String(item.date || batchDateYmd).trim().slice(0, 10)
       const row: Record<string, unknown> = {
         location,
@@ -77,8 +118,13 @@ export async function POST(request: NextRequest) {
         vendor_target: String(item.vendor || '').trim(),
         log_type: 'Inbound',
       }
-      if (costVal != null && !isNaN(costVal) && costVal >= 0) {
-        row.unit_cost = roundErp3(costVal)
+      if (item.unitCostThb != null) {
+        row.unit_cost = item.unitCostThb
+      }
+      if (sourceCurrency === 'KRW' && item.sourceUnitCost != null) {
+        row.source_unit_cost = item.sourceUnitCost
+      } else {
+        row.source_unit_cost = null
       }
       return stampInventoryTenantId(row, tenantScope)
     })
@@ -123,6 +169,8 @@ export async function POST(request: NextRequest) {
       batch_date: batchDateYmd,
       total_amount: grossTotal,
       purchase_order_id: purchaseOrderId && !isNaN(purchaseOrderId) ? purchaseOrderId : null,
+      source_currency: sourceCurrency,
+      fx_rate: sourceCurrency === 'KRW' ? fxRate : null,
     }
     if (poNo) batchRow.po_no = poNo
     if (invoiceNo) batchRow.invoice_no = invoiceNo

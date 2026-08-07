@@ -3,6 +3,7 @@
  */
 import { apiFetchWithOffline } from '../api/fetch-offline'
 import { jsonAsArray } from '../safe-api-json'
+import type { InboundSourceCurrency } from '../inbound-fx'
 
 export interface InboundHistoryItem {
   date: string
@@ -19,6 +20,9 @@ export interface InboundHistoryItem {
   po_created_at?: string | null
   code?: string
   purchaseSource?: 'hq' | 'store'
+  sourceCurrency?: InboundSourceCurrency
+  fxRate?: number | null
+  sourceUnitCost?: number | null
 }
 
 export interface InboundBatchDetail {
@@ -32,7 +36,17 @@ export interface InboundBatchDetail {
   poNo?: string | null
   invoiceNo?: string | null
   invoicePhotoUrl?: string | null
-  items: { code: string; name: string; spec: string; qty: number; unitCost: number; amount: number }[]
+  sourceCurrency?: InboundSourceCurrency
+  fxRate?: number | null
+  items: {
+    code: string
+    name: string
+    spec: string
+    qty: number
+    unitCost: number
+    sourceUnitCost?: number | null
+    amount: number
+  }[]
 }
 
 export async function getInboundBatch(batchId: number) {
@@ -50,6 +64,8 @@ export async function updateInboundBatch(params: {
   purchaseOrderId?: number | null
   /** 매장/위치. 품목 수정 시 함께 전달 */
   storeName?: string
+  sourceCurrency?: InboundSourceCurrency
+  fxRate?: number | null
   /** 있으면 품목·단가·수량까지 갱신 (재고·미지급 재계산) */
   list?: {
     date?: string
@@ -89,7 +105,14 @@ export async function registerInboundBatch(
     cost?: number | string
   }[],
   storeName?: string,
-  options?: { vendorCode?: string; purchaseOrderId?: number; poNo?: string; invoiceNo?: string }
+  options?: {
+    vendorCode?: string
+    purchaseOrderId?: number
+    poNo?: string
+    invoiceNo?: string
+    sourceCurrency?: InboundSourceCurrency
+    fxRate?: number | null
+  }
 ) {
   const res = await apiFetchWithOffline('/api/registerInboundBatch', {
     method: 'POST',
@@ -101,6 +124,8 @@ export async function registerInboundBatch(
       purchaseOrderId: options?.purchaseOrderId || undefined,
       poNo: options?.poNo || undefined,
       invoiceNo: options?.invoiceNo || undefined,
+      sourceCurrency: options?.sourceCurrency || undefined,
+      fxRate: options?.fxRate ?? undefined,
     }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>

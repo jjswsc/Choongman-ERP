@@ -18,7 +18,16 @@ export interface InboundTableRow {
   poNo?: string
   invoiceNo?: string
   invoiceReceived?: boolean
-  items: { name: string; spec: string; qty: number; amount: number; vatAmount: number }[]
+  sourceCurrency?: "THB" | "KRW"
+  fxRate?: number | null
+  items: {
+    name: string
+    spec: string
+    qty: number
+    amount: number
+    vatAmount: number
+    sourceUnitCost?: number | null
+  }[]
   itemsSummary: string
   totalQty: number
   totalAmt: number
@@ -400,7 +409,19 @@ function TableRow({
         )}
         <td className="px-2 py-2.5 text-center text-card-foreground whitespace-nowrap text-muted-foreground">{row.poDate ?? "—"}</td>
         <td className="px-2 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">{row.date}</td>
-        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">{row.vendor}</td>
+        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">
+          <div className="flex flex-col items-center gap-0.5">
+            <span>{row.vendor}</span>
+            {row.sourceCurrency === "KRW" ? (
+              <span className="text-[10px] font-normal text-sky-700">
+                KRW
+                {row.fxRate != null && row.fxRate > 0
+                  ? ` · ${t("inFxRateShort").replace("{rate}", formatErpNum(row.fxRate))}`
+                  : ""}
+              </span>
+            ) : null}
+          </div>
+        </td>
         <td className="px-3 py-2.5 text-card-foreground">
           <div className="flex items-center gap-1.5">
             {hasDetails && (
@@ -520,6 +541,9 @@ function TableRow({
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColItem")}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("spec")}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColQty")}</th>
+                    {row.sourceCurrency === "KRW" ? (
+                      <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("inColCostKrw")}</th>
+                    ) : null}
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{supplyLabel}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{vatLabel}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{totalLabel}</th>
@@ -531,6 +555,11 @@ function TableRow({
                       <td className="px-4 py-2 text-center text-card-foreground">{d.name}</td>
                       <td className="px-4 py-2 text-center text-muted-foreground">{d.spec}</td>
                       <td className="px-4 py-2 text-center text-card-foreground font-medium tabular-nums">{d.qty.toLocaleString()}</td>
+                      {row.sourceCurrency === "KRW" ? (
+                        <td className="px-4 py-2 text-right text-muted-foreground tabular-nums">
+                          {d.sourceUnitCost != null ? formatErpNum(d.sourceUnitCost) : "—"}
+                        </td>
+                      ) : null}
                       <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{formatErpNum(d.amount)}</td>
                       <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{formatErpNum(d.vatAmount)}</td>
                       <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{formatErpNum(d.amount + d.vatAmount)}</td>

@@ -41,6 +41,8 @@ export async function GET(request: NextRequest) {
       po_no?: string | null
       invoice_no?: string | null
       invoice_photo_url?: string | null
+      source_currency?: string | null
+      fx_rate?: number | null
     }[]
     const batch = batchRows?.[0]
     if (!batch) {
@@ -63,21 +65,37 @@ export async function GET(request: NextRequest) {
     }
 
     const logRows = (await supabaseSelectFilter('stock_logs', appendInventoryTenantFilter(`inbound_batch_id=eq.${batchId}`, scope), {
-      select: 'item_code,item_name,spec,qty,unit_cost',
+      select: 'item_code,item_name,spec,qty,unit_cost,source_unit_cost',
       limit: 500,
-    })) as { item_code?: string; item_name?: string; spec?: string; qty?: number; unit_cost?: number | null }[] | null
+    })) as {
+      item_code?: string
+      item_name?: string
+      spec?: string
+      qty?: number
+      unit_cost?: number | null
+      source_unit_cost?: number | null
+    }[] | null
+
+    const sourceCurrency = String(batch.source_currency || 'THB').trim().toUpperCase() === 'KRW' ? 'KRW' : 'THB'
+    const fxRate =
+      batch.fx_rate != null && !isNaN(Number(batch.fx_rate)) && Number(batch.fx_rate) > 0
+        ? Number(batch.fx_rate)
+        : null
 
     const items = (logRows || []).map((r) => {
       const code = String(r.item_code || '').trim()
       const info = itemMap[code] || { spec: '-', cost: 0 }
       const qty = Number(r.qty) || 0
       const unitCost = r.unit_cost != null && !isNaN(Number(r.unit_cost)) ? Number(r.unit_cost) : info.cost
+      const sourceUnitCost =
+        r.source_unit_cost != null && !isNaN(Number(r.source_unit_cost)) ? Number(r.source_unit_cost) : null
       return {
         code,
         name: r.item_name || '-',
         spec: r.spec || info.spec,
         qty,
         unitCost,
+        sourceUnitCost: sourceUnitCost ?? undefined,
         amount: qty * unitCost,
       }
     })
@@ -94,6 +112,8 @@ export async function GET(request: NextRequest) {
         poNo: batch.po_no ?? undefined,
         invoiceNo: batch.invoice_no ?? undefined,
         invoicePhotoUrl: batch.invoice_photo_url ?? undefined,
+        sourceCurrency,
+        fxRate: fxRate ?? undefined,
         items,
       },
       { headers }

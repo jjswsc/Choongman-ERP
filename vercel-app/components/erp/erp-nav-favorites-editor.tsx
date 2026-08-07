@@ -79,8 +79,8 @@ export function ErpNavFavoritesEditor({ open, onOpenChange }: ErpNavFavoritesEdi
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col sm:max-w-md">
-        <SheetHeader>
+      <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-md">
+        <SheetHeader className="shrink-0 border-b border-border/60 px-5 py-4 pr-12 text-left">
           <SheetTitle>{tr("erpNavFavoritesEditTitle", "바로가기 편집")}</SheetTitle>
           <SheetDescription>
             {tr(
@@ -90,7 +90,7 @@ export function ErpNavFavoritesEditor({ open, onOpenChange }: ErpNavFavoritesEdi
           </SheetDescription>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <section className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">{tr("erpNavFavorites", "즐겨찾기")}</h3>

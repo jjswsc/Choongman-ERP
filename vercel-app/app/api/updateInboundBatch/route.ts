@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   supabaseDeleteByFilter,
   supabaseInsertMany,
-  supabaseSelect,
   supabaseSelectFilter,
   supabaseUpdate,
 } from '@/lib/supabase-server'
@@ -17,7 +16,12 @@ import {
   syncPayableFromInboundBatch,
   upsertInboundPayableTransaction,
 } from '@/lib/inbound-payable-sync'
-import { roundErp3 } from '@/lib/utils'
+import {
+  normalizeInboundSourceCurrency,
+  parseInboundFxRate,
+  resolveInboundLineCost,
+  validateInboundFxHeader,
+} from '@/lib/inbound-fx'
 import { inboundPersistLocation } from '@/lib/office-store-canonical'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import {
@@ -94,6 +98,8 @@ export async function POST(request: NextRequest) {
     }
 
     const list = (Array.isArray(body.list) ? body.list : null) as InboundLineBody[] | null
+    const hasFxInBody = body.sourceCurrency !== undefined || body.source_currency !== undefined ||
+      body.fxRate !== undefined || body.fx_rate !== undefined
 
     // 헤더만 수정 (인보이스 수령 토글 등)
     if (!list) {
@@ -110,6 +116,13 @@ export async function POST(request: NextRequest) {
       }
       if (body.storeName !== undefined) {
         patch.location = inboundPersistLocation(body.storeName)
+      }
+      // 헤더만 수정 시 통화·환율 변경 금지 (stock_logs 단가와 불일치 방지)
+      if (hasFxInBody) {
+        return NextResponse.json(
+          { success: false, message: '통화·환율 변경은 품목 목록과 함께 수정하세요.' },
+          { status: 400, headers }
+        )
       }
 
       if (Object.keys(patch).length === 0) {
@@ -142,13 +155,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '저장할 목록이 없습니다.' }, { status: 400, headers })
     }
 
+    const existingFx = (await supabaseSelectFilter('inbound_batches', appendInventoryTenantFilter(`id=eq.${batchId}`, tenantScope), {
+      limit: 1,
+      select: 'source_currency,fx_rate',
+    })) as { source_currency?: string | null; fx_rate?: number | null }[] | null
+    const sourceCurrency = hasFxInBody
+      ? normalizeInboundSourceCurrency(body.sourceCurrency ?? body.source_currency)
+      : normalizeInboundSourceCurrency(existingFx?.[0]?.source_currency)
+    const fxRate = hasFxInBody
+      ? parseInboundFxRate(body.fxRate ?? body.fx_rate)
+      : parseInboundFxRate(existingFx?.[0]?.fx_rate)
+    const fxHeaderErr = validateInboundFxHeader(sourceCurrency, fxRate)
+    if (fxHeaderErr) {
+      return NextResponse.json({ success: false, message: fxHeaderErr }, { status: 400, headers })
+    }
+
     const itemRows = (await supabaseSelectFilter('items', appendInventoryTenantFilter('', tenantScope), {
       order: 'id.asc',
       limit: 5000,
       select: 'code,tax',
     })) as { code?: string; tax?: string | null }[] | null
     const taxByCode = buildItemTaxMapFromRows(itemRows)
-    const { grossTotal, batchDateYmd } = computeInboundRegisterTotals(list, taxByCode)
+
+    const resolvedLines: (InboundLineBody & {
+      unitCostThb: number | null
+      sourceUnitCost: number | null
+    })[] = []
+    for (const item of list) {
+      const resolved = resolveInboundLineCost({
+        costRaw: item.cost,
+        sourceCurrency,
+        fxRate,
+      })
+      if (!resolved.ok) {
+        return NextResponse.json({ success: false, message: resolved.message }, { status: 400, headers })
+      }
+      resolvedLines.push({
+        ...item,
+        cost: resolved.unitCostThb != null ? resolved.unitCostThb : item.cost,
+        unitCostThb: resolved.unitCostThb,
+        sourceUnitCost: resolved.sourceUnitCost,
+      })
+    }
+
+    const { grossTotal, batchDateYmd } = computeInboundRegisterTotals(resolvedLines, taxByCode)
 
     const vendorName =
       body.vendorName !== undefined
@@ -164,10 +214,8 @@ export async function POST(request: NextRequest) {
         ? inboundPersistLocation(body.storeName)
         : inboundPersistLocation(existing[0].location)
 
-    const rows = list.map((item) => {
+    const rows = resolvedLines.map((item) => {
       const qty = parseFloat(String(item.qty || 0).replace(/,/g, '')) || 0
-      const costVal =
-        item.cost != null && item.cost !== '' ? parseFloat(String(item.cost).replace(/,/g, '')) : null
       const lineYmd = String(item.date || batchDateYmd).trim().slice(0, 10)
       const row: Record<string, unknown> = {
         location,
@@ -180,8 +228,13 @@ export async function POST(request: NextRequest) {
         log_type: 'Inbound',
         inbound_batch_id: batchId,
       }
-      if (costVal != null && !isNaN(costVal) && costVal >= 0) {
-        row.unit_cost = roundErp3(costVal)
+      if (item.unitCostThb != null) {
+        row.unit_cost = item.unitCostThb
+      }
+      if (sourceCurrency === 'KRW' && item.sourceUnitCost != null) {
+        row.source_unit_cost = item.sourceUnitCost
+      } else {
+        row.source_unit_cost = null
       }
       return stampInventoryTenantId(row, tenantScope)
     })
@@ -197,6 +250,8 @@ export async function POST(request: NextRequest) {
       vendor_code: effectiveVendorCode,
       batch_date: batchDateYmd,
       total_amount: grossTotal,
+      source_currency: sourceCurrency,
+      fx_rate: sourceCurrency === 'KRW' ? fxRate : null,
     }
     if (body.poNo !== undefined) batchPatch.po_no = String(body.poNo || '').trim() || null
     if (body.invoiceNo !== undefined) batchPatch.invoice_no = String(body.invoiceNo || '').trim() || null

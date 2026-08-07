@@ -94,12 +94,12 @@ export function CompanyHybridDocumentRegisterSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
-        <SheetHeader>
+      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto p-0 sm:max-w-xl">
+        <SheetHeader className="shrink-0 border-b border-border/60 px-5 py-4 pr-12 text-left">
           <SheetTitle>{editing ? t("companyHybridDocEdit") : t("companyHybridDocNewRegister")}</SheetTitle>
         </SheetHeader>
 
-        <div className="mt-4 space-y-4">
+        <div className="space-y-4 px-5 py-5 pb-6">
           {canPickStore ? (
             <div className="space-y-1.5">
               <Label>{t("companyHybridDocEditStoreLabel")}</Label>

@@ -251,11 +251,12 @@ function DataQualityBadge({
       </div>
 
       <Sheet open={bomOpen} onOpenChange={setBomOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-lg">
+          <SheetHeader className="shrink-0 border-b border-border/60 px-5 py-4 pr-12 text-left">
             <SheetTitle>{t("mmBridgeDqBomDetailTitle")}</SheetTitle>
           </SheetHeader>
-          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">{t("mmBridgeDqBomDetailHint")}</p>
+          <div className="px-5 pb-5 pt-4">
+          <p className="text-xs leading-relaxed text-muted-foreground">{t("mmBridgeDqBomDetailHint")}</p>
           <AdminTableScroll className="mt-4 rounded-md border" hint={false} lockViewport={false}>
             <table className="w-full min-w-[420px] text-sm">
               <thead>
@@ -287,6 +288,7 @@ function DataQualityBadge({
             {t("mmBridgeOpenCostAnalysis")}
             <ExternalLink className="h-3 w-3" />
           </Link>
+          </div>
         </SheetContent>
       </Sheet>
     </>

@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
 
     const logs = (await supabaseSelectFilterAllPages('stock_logs', stockFilter, {
       order: 'log_date.desc',
-      select: 'log_date,log_type,location,vendor_target,item_code,item_name,qty,unit_cost,inbound_batch_id',
+      select: 'log_date,log_type,location,vendor_target,item_code,item_name,qty,unit_cost,source_unit_cost,inbound_batch_id',
       pageSize: 8000,
       maxRows: 80000,
     })) as {
@@ -129,6 +129,7 @@ export async function GET(request: NextRequest) {
       item_name?: string
       qty?: number
       unit_cost?: number | null
+      source_unit_cost?: number | null
       inbound_batch_id?: number | null
     }[]
 
@@ -147,6 +148,9 @@ export async function GET(request: NextRequest) {
       invoice_no?: string | null
       invoice_received?: boolean
       po_created_at?: string | null
+      sourceCurrency?: 'THB' | 'KRW'
+      fxRate?: number | null
+      sourceUnitCost?: number | null
     }[] = []
     for (const row of logs || []) {
       const type = String(row.log_type || '')
@@ -183,6 +187,10 @@ export async function GET(request: NextRequest) {
       const amount = roundErp3(unitCost * qty)
       const vatAmount = Math.round(amount * info.taxRate * 100) / 100
       const vendor = rowVendor
+      const sourceUnitCost =
+        row.source_unit_cost != null && !isNaN(Number(row.source_unit_cost))
+          ? Number(row.source_unit_cost)
+          : null
       list.push({
         date: formatStockLogDateBangkokYmd(row.log_date),
         vendor,
@@ -194,6 +202,7 @@ export async function GET(request: NextRequest) {
         code: code || undefined,
         purchaseSource: info.purchaseSource,
         inbound_batch_id: row.inbound_batch_id ?? undefined,
+        sourceUnitCost,
       })
     }
 
@@ -206,12 +215,30 @@ export async function GET(request: NextRequest) {
     list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
 
     const batchIds = [...new Set(list.map((r) => r.inbound_batch_id).filter((id): id is number => typeof id === 'number' && id > 0))]
-    const batchMap: Record<number, { po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; po_created_at?: string | null }> = {}
+    const batchMap: Record<
+      number,
+      {
+        po_no?: string | null
+        invoice_no?: string | null
+        invoice_received?: boolean
+        po_created_at?: string | null
+        source_currency?: string | null
+        fx_rate?: number | null
+      }
+    > = {}
     if (batchIds.length > 0) {
       const batchFilter = appendInventoryTenantFilter(`id=in.(${batchIds.join(',')})`, tenantScope)
       const batches = (await supabaseSelectFilter('inbound_batches', batchFilter, {
-        select: 'id,po_no,invoice_no,invoice_received,purchase_order_id',
-      })) as { id?: number; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; purchase_order_id?: number | null }[]
+        select: 'id,po_no,invoice_no,invoice_received,purchase_order_id,source_currency,fx_rate',
+      })) as {
+        id?: number
+        po_no?: string | null
+        invoice_no?: string | null
+        invoice_received?: boolean
+        purchase_order_id?: number | null
+        source_currency?: string | null
+        fx_rate?: number | null
+      }[]
       const poIds = [...new Set((batches || []).map((b) => b.purchase_order_id).filter((id): id is number => typeof id === 'number' && id > 0))]
       const poCreatedMap: Record<number, string> = {}
       if (poIds.length > 0) {
@@ -226,7 +253,14 @@ export async function GET(request: NextRequest) {
       for (const b of batches || []) {
         if (b.id) {
           const poDate = b.purchase_order_id ? (poCreatedMap[b.purchase_order_id] ?? null) : null
-          batchMap[b.id] = { po_no: b.po_no, invoice_no: b.invoice_no, invoice_received: Boolean(b.invoice_received), po_created_at: poDate }
+          batchMap[b.id] = {
+            po_no: b.po_no,
+            invoice_no: b.invoice_no,
+            invoice_received: Boolean(b.invoice_received),
+            po_created_at: poDate,
+            source_currency: b.source_currency,
+            fx_rate: b.fx_rate,
+          }
         }
       }
     }
@@ -237,6 +271,11 @@ export async function GET(request: NextRequest) {
         item.invoice_no = batch.invoice_no
         item.invoice_received = batch.invoice_received
         item.po_created_at = batch.po_created_at
+        item.sourceCurrency = String(batch.source_currency || 'THB').trim().toUpperCase() === 'KRW' ? 'KRW' : 'THB'
+        item.fxRate =
+          batch.fx_rate != null && !isNaN(Number(batch.fx_rate)) && Number(batch.fx_rate) > 0
+            ? Number(batch.fx_rate)
+            : null
       }
     }
 

@@ -72,7 +72,9 @@ function SheetContent({
         data-slot="sheet-content"
         aria-describedby={ariaDescribedBy ?? undefined}
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+          // 기본 좌·우·상·하 여백 — 본문이 SheetHeader만 패딩 쓰는 경우 가장자리 붙음 방지
+          // p-0을 className으로 주면(전체폭 커스텀 시트) twMerge로 덮어씀
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 px-5 py-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" &&
             "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
           side === "left" &&
@@ -101,7 +103,8 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-header"
-      className={cn("flex flex-col gap-1.5 p-4", className)}
+      // 여백은 SheetContent(px-5 py-4)에서 통일. 닫기 버튼(absolute right-4)과 겹치지 않게 pr-8
+      className={cn("flex flex-col gap-1.5 pr-8 text-left", className)}
       {...props}
     />
   )
@@ -111,7 +114,7 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-footer"
-      className={cn("mt-auto flex flex-col gap-2 p-4", className)}
+      className={cn("mt-auto flex flex-col gap-2 pt-2", className)}
       {...props}
     />
   )
@@ -124,7 +127,7 @@ function SheetTitle({
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
-      className={cn("text-foreground font-semibold", className)}
+      className={cn("text-foreground text-base font-semibold tracking-tight", className)}
       {...props}
     />
   )

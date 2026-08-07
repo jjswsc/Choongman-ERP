@@ -45,8 +45,8 @@ export function AiCenterDrawer({ triggerClassName }: Props) {
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-xl">
-        <SheetHeader className="border-b px-4 py-3">
-          <div className="flex items-center justify-between gap-2">
+        <SheetHeader className="border-b px-4 py-3 pr-14">
+          <div className="flex items-center justify-between gap-2 pr-1">
             <SheetTitle className="text-left text-base">{t("aiCenterAskDrawerTitle")}</SheetTitle>
             <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" asChild>
               <Link href={`/admin/ai-center?intent=qa&q=${encodeURIComponent(prefillQ)}&store=${encodeURIComponent(viewStore || "")}`}>

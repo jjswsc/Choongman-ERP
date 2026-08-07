@@ -1468,57 +1468,60 @@ export function ExpenseManagementTab() {
           />
 
           <Sheet open={!!planDetailRow} onOpenChange={(open) => !open && setPlanDetailRow(null)}>
-            <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
-              <SheetHeader>
+            <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-md">
+              <SheetHeader className="shrink-0 border-b border-border/60 px-5 py-4 pr-12 text-left">
                 <SheetTitle>
                   {tt("expensePlanDetailTitle", "Payment plan detail")}
                   {planDetailRow ? ` #${planDetailRow.id}` : ""}
                 </SheetTitle>
               </SheetHeader>
               {planDetailRow ? (
-                <div className="mt-4 space-y-3 px-4 pb-4 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted-foreground">{tt("expensePlanStatusCol", "Status")}</span>
+                <div className="space-y-4 px-5 py-5 text-sm">
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-muted/25 px-4 py-3 shadow-sm">
+                    <span className="text-xs text-muted-foreground">{tt("expensePlanStatusCol", "Status")}</span>
                     <ExpensePlanStatusBadge status={planDetailRow.status} />
                   </div>
+                  <div className="space-y-3 rounded-xl border border-border/60 px-4 py-3.5">
                   <div>
-                    <div className="text-muted-foreground text-xs">{tt("expenseDocumentNo", "Doc No.")}</div>
-                    <div className="tabular-nums">{planDetailRow.documentNo || "—"}</div>
+                    <div className="text-[11px] font-medium text-muted-foreground">{tt("expenseDocumentNo", "Doc No.")}</div>
+                    <div className="mt-0.5 tabular-nums">{planDetailRow.documentNo || "—"}</div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground text-xs">{tt("vendor", "Vendor")}</div>
-                    <div>{planDetailRow.payeeName || "—"}</div>
+                    <div className="text-[11px] font-medium text-muted-foreground">{tt("vendor", "Vendor")}</div>
+                    <div className="mt-0.5 font-medium">{planDetailRow.payeeName || "—"}</div>
                     {planDetailRow.payeeCode && !planDetailRow.payeeCode.startsWith("auto_") ? (
                       <div className="text-[11px] text-muted-foreground">{planDetailRow.payeeCode}</div>
                     ) : null}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <div className="text-muted-foreground text-xs">{tt("store", "Store")}</div>
-                      <div>{planDetailRow.storeName || "—"}</div>
+                      <div className="text-[11px] font-medium text-muted-foreground">{tt("store", "Store")}</div>
+                      <div className="mt-0.5">{planDetailRow.storeName || "—"}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground text-xs">{tt("date", "Date")}</div>
-                      <div>{planDetailRow.dueDate || planDetailRow.expenseDate || "—"}</div>
+                      <div className="text-[11px] font-medium text-muted-foreground">{tt("date", "Date")}</div>
+                      <div className="mt-0.5">{planDetailRow.dueDate || planDetailRow.expenseDate || "—"}</div>
                     </div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground text-xs">{tt("expensePayeeAccountHolder", "Account holder")}</div>
-                    <div>{planDetailRow.payeeAccountHolder || planDetailRow.payeeName || "—"}</div>
+                    <div className="text-[11px] font-medium text-muted-foreground">{tt("expensePayeeAccountHolder", "Account holder")}</div>
+                    <div className="mt-0.5">{planDetailRow.payeeAccountHolder || planDetailRow.payeeName || "—"}</div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <div className="text-muted-foreground text-xs">{tt("expensePayeeBankName", "Bank")}</div>
-                      <div>{planDetailRow.payeeBankName || "—"}</div>
+                      <div className="text-[11px] font-medium text-muted-foreground">{tt("expensePayeeBankName", "Bank")}</div>
+                      <div className="mt-0.5">{planDetailRow.payeeBankName || "—"}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground text-xs">{tt("inv_account_no", "Account")}</div>
-                      <div className="tabular-nums">{planDetailRow.payeeBankAccountNo || "—"}</div>
+                      <div className="text-[11px] font-medium text-muted-foreground">{tt("inv_account_no", "Account")}</div>
+                      <div className="mt-0.5 font-mono text-xs tabular-nums">{planDetailRow.payeeBankAccountNo || "—"}</div>
                     </div>
                   </div>
+                  </div>
+                  <div className="space-y-3 rounded-xl border border-border/60 px-4 py-3.5">
                   <div>
-                    <div className="text-muted-foreground text-xs">{tt("expensePlanPayAmount", "Pay Amount")}</div>
-                    <div className="tabular-nums font-medium">
+                    <div className="text-[11px] font-medium text-muted-foreground">{tt("expensePlanPayAmount", "Pay Amount")}</div>
+                    <div className="mt-0.5 tabular-nums text-base font-semibold">
                       ฿{(planDetailRow.grossAmount ?? planDetailRow.plannedAmount ?? 0).toLocaleString()}
                     </div>
                     {(planDetailRow.remainingAmount || 0) > 0 &&
@@ -1530,8 +1533,8 @@ export function ExpenseManagementTab() {
                     ) : null}
                   </div>
                   <div>
-                    <div className="text-muted-foreground text-xs">{tt("poInvoice", "Invoice")}</div>
-                    <div>
+                    <div className="text-[11px] font-medium text-muted-foreground">{tt("poInvoice", "Invoice")}</div>
+                    <div className="mt-0.5">
                       {planDetailRow.invoiceReceived
                         ? tt("poInvoiceReceived", "Invoice Received")
                         : "—"}
@@ -1539,18 +1542,18 @@ export function ExpenseManagementTab() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground text-xs">{tt("memo", "Memo")}</div>
-                    <div className="whitespace-pre-wrap">{planDetailRow.memo || "—"}</div>
+                    <div className="text-[11px] font-medium text-muted-foreground">{tt("memo", "Memo")}</div>
+                    <div className="mt-0.5 whitespace-pre-wrap leading-relaxed">{planDetailRow.memo || "—"}</div>
                   </div>
                   {(planDetailRow.attachmentUrls?.length ?? 0) > 0 ? (
                     <div>
-                      <div className="text-muted-foreground text-xs mb-2">{tt("expenseAttachmentTitle", "Attachment")}</div>
+                      <div className="mb-2 text-[11px] font-medium text-muted-foreground">{tt("expenseAttachmentTitle", "Attachment")}</div>
                       <div className="flex flex-wrap gap-2">
                         {planDetailRow.attachmentUrls!.map((url, i) => (
                           <button
                             key={i}
                             type="button"
-                            className="h-16 w-16 rounded border overflow-hidden"
+                            className="h-16 w-16 overflow-hidden rounded-lg border border-border/70"
                             onClick={() =>
                               setAttachmentPreview({
                                 urls: planDetailRow.attachmentUrls!,
@@ -1561,13 +1564,14 @@ export function ExpenseManagementTab() {
                             {expenseAttachmentKind(url) === "image" ? (
                               <img src={url} alt="" className="h-full w-full object-cover" />
                             ) : (
-                              <span className="text-[10px] p-1">PDF</span>
+                              <span className="p-1 text-[10px]">PDF</span>
                             )}
                           </button>
                         ))}
                       </div>
                     </div>
                   ) : null}
+                  </div>
                 </div>
               ) : null}
             </SheetContent>

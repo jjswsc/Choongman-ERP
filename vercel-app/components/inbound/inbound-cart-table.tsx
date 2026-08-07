@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
 import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN, ADMIN_TABLE_SCROLL_PANEL_SM_CN } from "@/lib/admin-ui-standards"
 import { formatErpNum, normalizeErpDecimalInput, roundErp3, formatErpCostInputString } from "@/lib/utils"
+import type { InboundSourceCurrency } from "@/lib/inbound-fx"
+import { parseInboundFxRate, thbUnitCostFromKrw } from "@/lib/inbound-fx"
 
 export type InboundCartLine = {
   date: string
@@ -27,8 +29,12 @@ type InboundCartTableProps = {
   /** 수정 모드 배치 ID — 표시·저장 문구용 */
   editingBatchId?: number | null
   saving?: boolean
-  /** 공급가 / VAT / 합계 (VAT 포함) — 페이지에서 계산해 전달 */
+  /** 공급가 / VAT / 합계 (VAT 포함) — 페이지에서 계산해 전달 (항상 THB) */
   totals?: { net: number; vat: number; gross: number } | null
+  sourceCurrency?: InboundSourceCurrency
+  fxRate?: string
+  onSourceCurrencyChange?: (currency: InboundSourceCurrency) => void
+  onFxRateChange?: (fxRate: string) => void
   onUpdateCost: (idx: number, cost: string) => void
   onUpdateQty?: (idx: number, qty: string) => void
   onRemove: (idx: number) => void
@@ -42,6 +48,10 @@ export function InboundCartTable({
   editingBatchId = null,
   saving = false,
   totals = null,
+  sourceCurrency = "THB",
+  fxRate = "",
+  onSourceCurrencyChange,
+  onFxRateChange,
   onUpdateCost,
   onUpdateQty,
   onRemove,
@@ -51,6 +61,8 @@ export function InboundCartTable({
   const { lang } = useLang()
   const t = useT(lang)
   const isEdit = !!editingBatchId
+  const isKrw = sourceCurrency === "KRW"
+  const fxNum = parseInboundFxRate(fxRate)
 
   return (
     <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
@@ -70,6 +82,11 @@ export function InboundCartTable({
               {t("inFromPO")} #{fromPoId}
             </Badge>
           ) : null}
+          {isKrw ? (
+            <Badge variant="outline" className="text-[10px] border-sky-500/40 text-sky-700">
+              KRW
+            </Badge>
+          ) : null}
         </div>
         {isEdit && onCancelEdit ? (
           <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={onCancelEdit} disabled={saving}>
@@ -77,6 +94,55 @@ export function InboundCartTable({
           </Button>
         ) : null}
       </div>
+
+      {onSourceCurrencyChange ? (
+        <div className="border-b px-5 py-3 space-y-2 bg-muted/20">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground">{t("inCurrency")}</label>
+              <div className="mt-1 flex gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={!isKrw ? "default" : "outline"}
+                  className="h-8 text-xs"
+                  disabled={saving}
+                  onClick={() => onSourceCurrencyChange("THB")}
+                >
+                  THB
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isKrw ? "default" : "outline"}
+                  className="h-8 text-xs"
+                  disabled={saving}
+                  onClick={() => onSourceCurrencyChange("KRW")}
+                >
+                  KRW
+                </Button>
+              </div>
+            </div>
+            {isKrw && onFxRateChange ? (
+              <div className="min-w-[140px] flex-1 max-w-[200px]">
+                <label className="text-[11px] font-semibold text-muted-foreground">{t("inFxRate")}</label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={fxRate}
+                  onChange={(e) => onFxRateChange(normalizeErpDecimalInput(e.target.value))}
+                  placeholder={t("inFxRatePlaceholder")}
+                  className="mt-1 h-8 text-right text-sm"
+                  disabled={saving}
+                />
+              </div>
+            ) : null}
+          </div>
+          {isKrw ? (
+            <p className="text-[11px] text-muted-foreground leading-snug">{t("inFxRateHint")}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className={ADMIN_TABLE_SCROLL_PANEL_SM_CN}>
         <table className="w-full text-sm">
@@ -89,10 +155,11 @@ export function InboundCartTable({
                 {t("inColQty")}
               </th>
               <th className="px-3 py-2.5 text-right text-[11px] font-bold text-muted-foreground w-28">
-                {t("inColCost")}
+                {isKrw ? t("inColCostKrw") : t("inColCost")}
               </th>
               <th className="px-3 py-2.5 text-right text-[11px] font-bold text-muted-foreground w-24">
                 {t("inColAmount")}
+                {isKrw ? " (THB)" : ""}
               </th>
               <th className="w-12" />
             </tr>
@@ -112,7 +179,9 @@ export function InboundCartTable({
               cart.map((c, idx) => {
                 const qtyNum = parseFloat(String(c.qty).replace(/,/g, "")) || 0
                 const costNum = parseFloat(String(c.cost).replace(/,/g, "")) || 0
-                const amount = roundErp3(qtyNum * costNum)
+                const unitThb =
+                  isKrw && fxNum != null ? thbUnitCostFromKrw(costNum, fxNum) : isKrw ? 0 : costNum
+                const amount = roundErp3(qtyNum * unitThb)
                 return (
                   <tr key={idx} className="border-b last:border-b-0 hover:bg-muted/20">
                     <td className="px-4 py-2.5">

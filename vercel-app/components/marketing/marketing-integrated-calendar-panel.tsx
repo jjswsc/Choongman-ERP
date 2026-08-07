@@ -525,14 +525,14 @@ export function MarketingIntegratedCalendarPanel({
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="right" className="flex w-full flex-col sm:max-w-md">
-          <SheetHeader>
+        <SheetContent side="right" className="flex w-full flex-col p-0 sm:max-w-md">
+          <SheetHeader className="shrink-0 border-b border-border/60 px-5 py-4 pr-12 text-left">
             <SheetTitle className="text-left">
               {selectedDay ? formatSheetDayTitle(selectedDay, lang) : ""}
             </SheetTitle>
             <p className="text-left text-xs text-muted-foreground">{t("marketingCalSheetDayHint")}</p>
           </SheetHeader>
-          <ScrollArea className="mt-4 flex-1 pr-3">
+          <ScrollArea className="mt-0 flex-1 px-5 pt-4">
             {selectedDay && (
               <ul className="space-y-3 pb-6">
                 {(eventsByDate[selectedDay] || []).map((ev) => (
