@@ -68,7 +68,7 @@ import { ExpensePlanMobileList } from "@/components/erp/expense-plan-mobile-list
 import { ExpensePlanDesktopList } from "@/components/erp/expense-plan-desktop-list"
 import { ExpensePlanPaySheet } from "@/components/erp/expense-plan-pay-sheet"
 import { ExpenseBankTransferView } from "@/components/erp/expense-bank-transfer-view"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 
 function groupPlansByStore(rows: ExpenseAccrualPlanItem[]): [string, ExpenseAccrualPlanItem[]][] {
   const map = new Map<string, ExpenseAccrualPlanItem[]>()
@@ -133,28 +133,31 @@ export function ExpenseManagementTab() {
   const { posStores: stores } = useStoreList()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const pageActive = useErpPageActive()
+  const allowExpenseUrlSync =
+    pageActive && (pathname || "").startsWith("/admin/expense-management")
 
   const initialTab = searchParams.get("tab") === "expenseRegister" ? "expenseRegister" : searchParams.get("tab") === "expenseSearch" ? "expenseSearch" : searchParams.get("tab") === "card" ? "card" : "plan"
   const [tab, setTab] = React.useState<"plan" | "expenseRegister" | "expenseSearch" | "card">(initialTab)
 
   React.useEffect(() => {
-    // keep-alive 숨김 중에는 다른 탭 URL의 ?tab= 을 읽지 않음
-    if (!pageActive) return
+    // keep-alive 숨김·soft 표시 중에는 다른 탭 URL의 ?tab= 을 읽지 않음
+    if (!allowExpenseUrlSync) return
     const tabParam = searchParams.get("tab")
     if (tabParam === "expenseRegister") setTab("expenseRegister")
     else if (tabParam === "expenseSearch") setTab("expenseSearch")
     else if (tabParam === "card") setTab("card")
     else if (tabParam === "plan") setTab("plan")
-  }, [pageActive, searchParams])
+  }, [allowExpenseUrlSync, searchParams])
 
   React.useEffect(() => {
-    if (!pageActive) return
+    if (!allowExpenseUrlSync) return
     const s = searchParams.get("startStr")
     const e = searchParams.get("endStr")
     if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) setStartStr(s)
     if (e && /^\d{4}-\d{2}-\d{2}$/.test(e)) setEndStr(e)
-  }, [pageActive, searchParams])
+  }, [allowExpenseUrlSync, searchParams])
   const [startStr, setStartStr] = React.useState(todayStrBkk)
   const [endStr, setEndStr] = React.useState(todayStrBkk)
   /** 지출 등록(지급 예정) 저장 후 지급예정 탭 강제 재조회 */
@@ -322,7 +325,7 @@ export function ExpenseManagementTab() {
       }
       setTab("plan")
       setPlanRefreshToken((t) => t + 1)
-      if (!pageActive) return
+      if (!allowExpenseUrlSync) return
       const q = new URLSearchParams({ tab: "plan" })
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
         q.set("startStr", d)
@@ -330,7 +333,7 @@ export function ExpenseManagementTab() {
       }
       router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
     },
-    [router, pageActive]
+    [router, allowExpenseUrlSync]
   )
 
   const handleBatchWithdrawalSaved = React.useCallback(
@@ -341,7 +344,7 @@ export function ExpenseManagementTab() {
       setStartStr(start)
       setEndStr(end)
       setTab("expenseSearch")
-      if (!pageActive) return
+      if (!allowExpenseUrlSync) return
       const q = new URLSearchParams({
         tab: "expenseSearch",
         startStr: start,
@@ -350,7 +353,7 @@ export function ExpenseManagementTab() {
       })
       router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
     },
-    [router, pageActive]
+    [router, allowExpenseUrlSync]
   )
 
   /** 지급예정 탭 진입·등록 저장·auth.role 확정 시 조회. 기간만 바꾼 뒤에는 [조회] 버튼. */

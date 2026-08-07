@@ -22,6 +22,7 @@ import {
 } from "@/lib/erp-keep-alive-remount"
 import {
   clearErpKeepAliveCacheRegistry,
+  hasErpKeepAliveCache,
 } from "@/lib/erp-keep-alive-registry"
 
 const STACK_KEY = "erp_nav_stack_v1"
@@ -287,22 +288,29 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
       const target = resolveErpWorkspaceTabHref(href)
       const full = getErpWorkspaceTabFullHref(target)
       const routerCurrent = routerHrefRef.current
+      const softCurrent = softDisplayHref
+        ? resolveErpWorkspaceTabHref(softDisplayHref)
+        : null
 
-      // soft와 본문이 어긋난 경우(탭만 바뀌고 화면 유지)를 풀기 위해
-      // soft가 켜져 있으면 무조건 hard navigate로 맞춘다.
-      if (softDisplayHref) {
-        setSoftDisplayHref(null)
-        ensureErpWorkspaceTab(full)
-        markErpBackNavigation()
-        router.push(full, { scroll: false })
+      ensureErpWorkspaceTab(full)
+
+      // 이미 soft로 그 탭을 보는 중
+      if (softCurrent === target) return
+
+      // Next 라우터가 이미 그 탭이면 soft만 해제(표시·URL 일치)
+      if (routerCurrent === target) {
+        if (softDisplayHref) setSoftDisplayHref(null)
         return
       }
 
-      if (routerCurrent === target) return
+      // keep-alive에 있으면 router.push 없이 슬롯만 전환 — remount·조회결과 소실 방지.
+      // history API는 Next가 가로채 soft와 충돌하므로 URL은 라우터 경로 유지.
+      if (hasErpKeepAliveCache(target)) {
+        setSoftDisplayHref(full)
+        return
+      }
 
-      // soft pushState는 Next와 어긋나 본문이 안 바뀌는 사고가 있어 사용하지 않음.
-      // 검색·필터 유지는 KeepAlive stamp 재사용 + AdminShell Suspense 제거로 담당.
-      ensureErpWorkspaceTab(full)
+      setSoftDisplayHref(null)
       markErpBackNavigation()
       router.push(full, { scroll: false })
     },

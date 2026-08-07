@@ -30,6 +30,10 @@ import { useOnlineStatus } from "@/lib/offline"
 import { useT, i18n, tOr } from "@/lib/i18n"
 import { useErpPageActive, useErpPageActiveRef, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import {
+  readSalesManagementViewCache,
+  saveSalesManagementViewCache,
+} from "@/lib/sales-management-view-cache"
+import {
   combinedKindLabel,
   combinedLayerLabel,
   paymentDiscountRowLabel,
@@ -182,6 +186,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const searchParams = useSearchParams()
   const pageActive = useErpPageActive()
   const pageActiveRef = useErpPageActiveRef()
+  /** soft 탭일 때 usePathname은 다른 메뉴를 가리키므로 URL 동기화는 hard 라우트일 때만 */
+  const onSalesRoute = (pathname || "").startsWith("/admin/sales-management")
+  const allowSalesUrlSync = pageActive && onSalesRoute
   const isHoursPanel = searchParams.get("hours") === "1"
   const { auth } = useAuth()
   const { viewStore } = useStoreView()
@@ -956,6 +963,52 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   const showSalesResults = fetchedAnalyticsKey !== "" && fetchedAnalyticsKey === analyticsParamKey
 
+  const viewCacheRestoreKeyRef = React.useRef<string | null>(null)
+
+  React.useEffect(() => {
+    if (!fetchedAnalyticsKey || fetchedAnalyticsKey !== analyticsParamKey) return
+    saveSalesManagementViewCache({
+      analyticsParamKey: fetchedAnalyticsKey,
+      periodData,
+      periodSplitSeries,
+      periodTruncated,
+      deliveryAppData,
+      channelData,
+      menuData,
+      promoBundleData,
+      paymentData,
+      paymentBreakdownData,
+      storeData,
+      yoyCompareRows,
+      momCompareRows,
+      forecastSummary,
+      forecastLookbackRows,
+      forecastActualRows,
+      summaryCards,
+      cancelReasonSummary,
+    })
+  }, [
+    fetchedAnalyticsKey,
+    analyticsParamKey,
+    periodData,
+    periodSplitSeries,
+    periodTruncated,
+    deliveryAppData,
+    channelData,
+    menuData,
+    promoBundleData,
+    paymentData,
+    paymentBreakdownData,
+    storeData,
+    yoyCompareRows,
+    momCompareRows,
+    forecastSummary,
+    forecastLookbackRows,
+    forecastActualRows,
+    summaryCards,
+    cancelReasonSummary,
+  ])
+
   const salesAnalyticsPlaceholder = React.useMemo(() => {
     if (!hasData) return tr("salesSelectPeriod", "기간을 선택해 주세요.")
     if (canMultiStorePicker && selectedStores.length === 0) {
@@ -1126,7 +1179,36 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setForecastActualRows([])
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
     setFetchedAnalyticsKey("")
+    viewCacheRestoreKeyRef.current = null
   }, [dataFilterKey, pageActiveRef])
+
+  // clear effect 이후에 복구 — 같은 틱에서 초기화 후 스냅샷으로 다시 채움
+  React.useEffect(() => {
+    if (fetchedAnalyticsKey) return
+    if (!analyticsParamKey || isHoursPanel) return
+    if (viewCacheRestoreKeyRef.current === analyticsParamKey) return
+    const snap = readSalesManagementViewCache(analyticsParamKey)
+    if (!snap) return
+    viewCacheRestoreKeyRef.current = analyticsParamKey
+    setPeriodData(snap.periodData)
+    setPeriodSplitSeries(snap.periodSplitSeries)
+    setPeriodTruncated(snap.periodTruncated)
+    setDeliveryAppData(snap.deliveryAppData)
+    setChannelData(snap.channelData)
+    setMenuData(snap.menuData)
+    setPromoBundleData(snap.promoBundleData)
+    setPaymentData(snap.paymentData)
+    setPaymentBreakdownData(snap.paymentBreakdownData)
+    setStoreData(snap.storeData)
+    setYoyCompareRows(snap.yoyCompareRows)
+    setMomCompareRows(snap.momCompareRows)
+    setForecastSummary(snap.forecastSummary)
+    setForecastLookbackRows(snap.forecastLookbackRows)
+    setForecastActualRows(snap.forecastActualRows)
+    setSummaryCards(snap.summaryCards)
+    setCancelReasonSummary(snap.cancelReasonSummary)
+    setFetchedAnalyticsKey(snap.analyticsParamKey)
+  }, [analyticsParamKey, fetchedAnalyticsKey, isHoursPanel])
 
   const validTopicByMenu = React.useMemo(
     () =>
@@ -1713,7 +1795,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [selectedStoresParam, compareStores])
 
   React.useEffect(() => {
-    if (!pageActive) return
+    if (!allowSalesUrlSync) return
     if (searchParams.get("hours") === "1") return
     const qMenu = searchParams.get("menu")
     const qTopic = searchParams.get("topic")
@@ -1731,10 +1813,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       if (prev[defaultLanding.menuId] === defaultLanding.topicId) return prev
       return { ...prev, [defaultLanding.menuId]: defaultLanding.topicId }
     })
-  }, [pageActive, searchParams, defaultLanding, activeSubMenuId, periodGroup])
+  }, [allowSalesUrlSync, searchParams, defaultLanding, activeSubMenuId, periodGroup])
 
   React.useEffect(() => {
-    if (!pageActive) return
+    if (!allowSalesUrlSync) return
     const qMenu = searchParams.get("menu")
     const qTopic = searchParams.get("topic")
     const qGroup = searchParams.get("group")
@@ -1804,7 +1886,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       userSelectedRef.current = {}
     }
   }, [
-    pageActive,
+    allowSalesUrlSync,
     searchParams,
     activeSubMenuId,
     selectedStoresKey,
@@ -1819,7 +1901,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   ])
 
   React.useEffect(() => {
-    if (!pageActive) return
+    if (!allowSalesUrlSync) return
     if (searchParams.get("hours") === "1") return
     if (storePickerOpen) return
     const currentTopic = selectedTopic?.id
@@ -1883,7 +1965,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }, 0)
     return () => clearTimeout(tid)
   }, [
-    pageActive,
+    allowSalesUrlSync,
     activeSubMenuId,
     pathname,
     periodGroup,
@@ -1949,7 +2031,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [loadPosOptions, canSearchAll])
 
   React.useEffect(() => {
-    if (!pageActive) return
+    if (!allowSalesUrlSync) return
     if (defaultStoresHydratedRef.current) return
     if (!canMultiStorePicker) {
       defaultStoresHydratedRef.current = true
@@ -1978,7 +2060,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     userSelectedRef.current.storesKey = base.join(",")
     setSelectedStores(base)
   }, [
-    pageActive,
+    allowSalesUrlSync,
     canMultiStorePicker,
     canSearchAll,
     posOptions,
