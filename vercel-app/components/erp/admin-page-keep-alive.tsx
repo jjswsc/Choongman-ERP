@@ -100,6 +100,9 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
 
   prevCacheHrefRef.current = cacheHref
 
+  // soft 탭 전환이 useEffect 전에 캐시를 보도록 동기 보고
+  reportErpKeepAliveCacheKeys(cacheRef.current.keys())
+
   const publishKeys = React.useCallback(() => {
     reportErpKeepAliveCacheKeys(cacheRef.current.keys())
   }, [])
@@ -179,8 +182,9 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
   /**
    * 제외 경로(급여·재고 등)는 캐시에 넣지 않지만,
    * 이미 열어 둔 keep-alive 탭 트리는 unmount하면 안 된다(상태 증발).
+   * soft로 keep-alive 탭을 보여주는 중이면 아래 일반 분기로 캐시 슬롯을 표시한다.
    */
-  if (!keepAliveCurrent) {
+  if (!keepAliveCurrent && !erpNav?.softDisplayHref) {
     return (
       <div className="relative flex min-h-0 flex-1 flex-col">
         {entries.map(([key, { node }]) => (

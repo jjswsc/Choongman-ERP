@@ -20,8 +20,10 @@ import {
   bumpErpKeepAliveRemount,
   clearErpKeepAliveRemountStamps,
 } from "@/lib/erp-keep-alive-remount"
+import { isErpKeepAliveExcluded } from "@/lib/erp-keep-alive-config"
 import {
   clearErpKeepAliveCacheRegistry,
+  hasErpKeepAliveCache,
 } from "@/lib/erp-keep-alive-registry"
 
 const STACK_KEY = "erp_nav_stack_v1"
@@ -229,13 +231,15 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
 
   React.useEffect(() => {
     const onPopState = () => {
-      // 브라우저 뒤로/앞으로: soft 표시만 쓰지 않고 Next가 pathname을 맞추게 둔다.
-      // (과거 soft pushState로 URL만 바뀐 경우와 혼선 방지)
-      setSoftDisplayHref(null)
       const p = normalizePath(window.location.pathname)
       const qs = window.location.search
       const next = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
       ensureErpWorkspaceTab(next)
+      if (hasErpKeepAliveCache(next) && !isErpKeepAliveExcluded(next)) {
+        setSoftDisplayHref(next)
+        return
+      }
+      setSoftDisplayHref(null)
     }
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
@@ -287,12 +291,21 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
     (href: string) => {
       const target = resolveErpWorkspaceTabHref(href)
       const full = getErpWorkspaceTabFullHref(target)
-      // window.location은 soft pushState로 Next pathname과 어긋날 수 있음 → routerHrefRef 사용
       const current = softDisplayHref || routerHrefRef.current
       if (current === target) return
 
-      // soft pushState만 하면 URL·탭만 바뀌고 본문이 안 바뀌는 사고가 있어
-      // 탭 전환은 항상 Next router.push (keep-alive가 캐시 슬롯 재사용)
+      // 캐시 hit: RSC push 없이 표시만 전환 → 검색·필터 state 유지
+      if (
+        typeof window !== "undefined" &&
+        hasErpKeepAliveCache(target) &&
+        !isErpKeepAliveExcluded(target)
+      ) {
+        setSoftDisplayHref(target)
+        ensureErpWorkspaceTab(full)
+        window.history.pushState({ erpSoftTab: 1 }, "", full)
+        return
+      }
+
       setSoftDisplayHref(null)
       ensureErpWorkspaceTab(full)
       markErpBackNavigation()

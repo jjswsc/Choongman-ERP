@@ -1,6 +1,5 @@
 "use client"
 
-import { Suspense } from "react"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { ErpSidebar } from "@/components/erp/erp-sidebar"
 import { ErpHeader } from "@/components/erp/erp-header"
@@ -30,9 +29,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <ErpHeader />
                 <AdminDesktopPreferredBanner />
                 <OfflineBanner pendingLabel={t("offlineBannerPendingData")} />
-                <Suspense fallback={<div className="min-h-0 flex-1" aria-hidden />}>
-                  <AdminContentHelpTabShell>{children}</AdminContentHelpTabShell>
-                </Suspense>
+                {/*
+                  KeepAlive를 감싼 Suspense를 두면 탭 전환 RSC 대기 중 fallback으로
+                  KeepAlive 전체가 unmount되어 검색·필터 상태가 초기화된다.
+                  Suspense는 AdminPageKeepAlive 내부 children에만 둔다.
+                */}
+                <AdminContentHelpTabShell>{children}</AdminContentHelpTabShell>
                 <ErpKeepAliveDebug />
               </SidebarInset>
             </SidebarProvider>
