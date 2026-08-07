@@ -20,10 +20,8 @@ import {
   bumpErpKeepAliveRemount,
   clearErpKeepAliveRemountStamps,
 } from "@/lib/erp-keep-alive-remount"
-import { isErpKeepAliveExcluded } from "@/lib/erp-keep-alive-config"
 import {
   clearErpKeepAliveCacheRegistry,
-  hasErpKeepAliveCache,
 } from "@/lib/erp-keep-alive-registry"
 
 const STACK_KEY = "erp_nav_stack_v1"
@@ -231,15 +229,12 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
 
   React.useEffect(() => {
     const onPopState = () => {
+      // soft pushState 잔여와 혼선 방지 — 항상 soft 해제 후 탭만 동기화
+      setSoftDisplayHref(null)
       const p = normalizePath(window.location.pathname)
       const qs = window.location.search
       const next = resolveErpWorkspaceTabHref(normalizeErpHref(p, qs))
       ensureErpWorkspaceTab(next)
-      if (hasErpKeepAliveCache(next) && !isErpKeepAliveExcluded(next)) {
-        setSoftDisplayHref(next)
-        return
-      }
-      setSoftDisplayHref(null)
     }
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
@@ -291,22 +286,22 @@ export function ErpNavigationProvider({ children }: { children: React.ReactNode 
     (href: string) => {
       const target = resolveErpWorkspaceTabHref(href)
       const full = getErpWorkspaceTabFullHref(target)
-      const current = softDisplayHref || routerHrefRef.current
-      if (current === target) return
+      const routerCurrent = routerHrefRef.current
 
-      // 캐시 hit: RSC push 없이 표시만 전환 → 검색·필터 state 유지
-      if (
-        typeof window !== "undefined" &&
-        hasErpKeepAliveCache(target) &&
-        !isErpKeepAliveExcluded(target)
-      ) {
-        setSoftDisplayHref(target)
+      // soft와 본문이 어긋난 경우(탭만 바뀌고 화면 유지)를 풀기 위해
+      // soft가 켜져 있으면 무조건 hard navigate로 맞춘다.
+      if (softDisplayHref) {
+        setSoftDisplayHref(null)
         ensureErpWorkspaceTab(full)
-        window.history.pushState({ erpSoftTab: 1 }, "", full)
+        markErpBackNavigation()
+        router.push(full, { scroll: false })
         return
       }
 
-      setSoftDisplayHref(null)
+      if (routerCurrent === target) return
+
+      // soft pushState는 Next와 어긋나 본문이 안 바뀌는 사고가 있어 사용하지 않음.
+      // 검색·필터 유지는 KeepAlive stamp 재사용 + AdminShell Suspense 제거로 담당.
       ensureErpWorkspaceTab(full)
       markErpBackNavigation()
       router.push(full, { scroll: false })
