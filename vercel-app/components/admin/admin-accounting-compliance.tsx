@@ -3376,7 +3376,11 @@ export function AdminAccountingCompliance({
       const ho = await loadHeadOfficeForWht()
       const vendors = await getVendorsForPurchase().catch(() => [])
       const profileCache = new Map<string, Awaited<ReturnType<typeof getStoreTaxFilingProfile>>["profile"]>()
-      const resolveAgentForStore = async (storeRaw: string) => {
+      const resolveAgentForStore = async (
+        storeRaw: string,
+        payeeTaxId?: string,
+        opts?: { hqEntityBranchesOnly?: boolean }
+      ) => {
         const storeKey = String(storeRaw || "").trim()
         if (!storeKey) return ho
         if (!profileCache.has(storeKey)) {
@@ -3387,6 +3391,8 @@ export function AdminAccountingCompliance({
           headOffice: ho,
           storeName: storeKey,
           profile: profileCache.get(storeKey),
+          payeeTaxId,
+          hqEntityBranchesOnly: opts?.hqEntityBranchesOnly,
         })
       }
       const items = await Promise.all(
@@ -3400,7 +3406,10 @@ export function AdminAccountingCompliance({
           const dirRaw = String(r.direction || "").trim().toLowerCase()
           const direction =
             src === "purchase_order" ? "outbound" : dirRaw === "inbound" ? "inbound" : "outbound"
-          const agent = await resolveAgentForStore(String(r.store_name || ""))
+          // 발주 원장 store_name은 relatedStore일 수 있음 → 직영(본사 TIN)만 매장 표기
+          const agent = await resolveAgentForStore(String(r.store_name || ""), payeeTaxId, {
+            hqEntityBranchesOnly: src === "purchase_order",
+          })
           return whtCertificateFromLedgerRow(
             {
               payment_date: r.payment_date,

@@ -2,7 +2,10 @@
 
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
-import { purchaseOrderMetaOrderDate } from '@/lib/purchase-order-cart'
+import {
+  purchaseOrderMetaOrderDate,
+  resolveAccountingPoIssuerStore,
+} from '@/lib/purchase-order-cart'
 import { cleanTaxEntityDisplayName } from '@/lib/tax-entity-scope-label'
 import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
 
@@ -86,11 +89,17 @@ export function formatWhtAgentDisplayName(params: {
 /**
  * 지출 등록 매장·세무 프로필로 원천징수자(상단) 회사 블록 결정.
  * Tax ID는 프로필 13자리 우선, 없으면 본사. 주소는 place_of_business 우선.
+ * payeeTaxId가 넘어오고 프로필 TIN과 같으면(가맹점=거래처 오인) 본사로 둔다.
+ * hqEntityBranchesOnly면 프로필 TIN이 본사와 다를 때(가맹 법인) 본사만 사용.
  */
 export function resolveWhtWithholdingAgentCompany(params: {
   headOffice: HeadOfficeCompany
   storeName?: string | null
   profile?: WhtStoreAgentProfile | null
+  /** 소득자(하단) TIN — 상단 프로필과 동일하면 본사 폴백 */
+  payeeTaxId?: string | null
+  /** 발주 원장 등: 직영(본사와 동일 TIN) 지점만 매장 표기 */
+  hqEntityBranchesOnly?: boolean
 }): HeadOfficeCompany {
   const ho = params.headOffice
   const store = String(params.storeName || '').trim()
@@ -100,13 +109,23 @@ export function resolveWhtWithholdingAgentCompany(params: {
 
   const profile = params.profile
   const profileTin = normalizeWhtTaxId(profile?.taxId)
-  const taxId = profileTin.length === 13 ? profileTin : normalizeWhtTaxId(ho.taxId) || String(ho.taxId || '')
+  const hoTin = normalizeWhtTaxId(ho.taxId)
+  if (
+    params.hqEntityBranchesOnly &&
+    profileTin.length === 13 &&
+    hoTin.length === 13 &&
+    profileTin !== hoTin
+  ) {
+    return { ...ho }
+  }
+
+  const taxId = profileTin.length === 13 ? profileTin : hoTin || String(ho.taxId || '')
   const place = String(profile?.placeOfBusiness || '').trim()
   const address = place || String(ho.address || '')
   const phone =
     String(profile?.phone || profile?.ssoPhone || '').trim() || (ho.phone ? String(ho.phone) : undefined)
 
-  return {
+  const agent: HeadOfficeCompany = {
     companyName: formatWhtAgentDisplayName({
       taxpayerName: profile?.taxpayerName,
       headOfficeName: ho.companyName,
@@ -116,6 +135,21 @@ export function resolveWhtWithholdingAgentCompany(params: {
     address,
     phone,
   }
+
+  const payeeTin = normalizeWhtTaxId(params.payeeTaxId)
+  if (payeeTin.length === 13 && normalizeWhtTaxId(agent.taxId) === payeeTin) {
+    return { ...ho }
+  }
+  return agent
+}
+
+/**
+ * 발주 50 ทวิ 상단(원천징수자) 매장 키.
+ * 발행 주체(issuerStore)만 사용 — relatedStore(청구·귀속 매장)는 거래처 쪽이라 쓰면 안 됨.
+ * 비어 있으면 본사(S&J).
+ */
+export function resolvePoWhtAgentStoreKey(po: { cart_json?: unknown }): string {
+  return resolveAccountingPoIssuerStore(po) || ''
 }
 
 export function resolveWhtCertificateParties(params: {

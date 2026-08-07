@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatWhtAgentDisplayName,
+  resolvePoWhtAgentStoreKey,
   resolveVendorPayeeForWht,
   resolveWhtCertificateParties,
   resolveWhtWithholdingAgentCompany,
   whtCertificateFromExpenseRegister,
   whtCertificateFromLedgerRow,
+  whtCertificateFromPurchaseOrder,
 } from '@/lib/wht-certificate-data'
 
 const headOffice = {
@@ -78,6 +80,58 @@ describe('resolveWhtWithholdingAgentCompany', () => {
     expect(agent.address).toBe(headOffice.address)
     expect(agent.taxId).toBe(headOffice.taxId)
   })
+
+  it('falls back to HQ when store profile TIN matches payee (franchise clash)', () => {
+    const agent = resolveWhtWithholdingAgentCompany({
+      headOffice,
+      storeName: 'CM Asoke',
+      profile: {
+        taxpayerName: 'Han Enterprise Co.,Ltd.',
+        taxId: '0105553119650',
+        placeOfBusiness: '',
+      },
+      payeeTaxId: '0105553119650',
+    })
+    expect(agent.companyName).toBe(headOffice.companyName)
+    expect(agent.taxId).toBe(headOffice.taxId)
+  })
+
+  it('uses HQ when hqEntityBranchesOnly and profile TIN differs from HQ', () => {
+    const agent = resolveWhtWithholdingAgentCompany({
+      headOffice,
+      storeName: 'CM Asoke',
+      profile: {
+        taxpayerName: 'Han Enterprise Co.,Ltd.',
+        taxId: '0105553119650',
+      },
+      payeeTaxId: '0105553045044',
+      hqEntityBranchesOnly: true,
+    })
+    expect(agent.companyName).toBe(headOffice.companyName)
+  })
+})
+
+describe('resolvePoWhtAgentStoreKey', () => {
+  it('uses issuerStore only, not relatedStore', () => {
+    expect(
+      resolvePoWhtAgentStoreKey({
+        cart_json: {
+          v: 1,
+          items: [],
+          meta: { issuerStore: 'Union Mall', relatedStore: 'CM Asoke' },
+        },
+      })
+    ).toBe('Union Mall')
+    expect(
+      resolvePoWhtAgentStoreKey({
+        cart_json: {
+          v: 1,
+          items: [],
+          meta: { relatedStore: 'CM Asoke' },
+        },
+      })
+    ).toBe('')
+  })
 })
 
 describe('formatWhtAgentDisplayName', () => {
@@ -110,6 +164,63 @@ describe('resolveVendorPayeeForWht', () => {
     )
     expect(found.taxId).toBe('0105553045044')
     expect(found.address).toContain('ทรู ทาวเวอร์')
+  })
+})
+
+describe('whtCertificateFromPurchaseOrder', () => {
+  it('puts S&J (head office) on top when PO has no issuerStore (HQ issue)', () => {
+    const cert = whtCertificateFromPurchaseOrder(
+      {
+        po_no: 'PO-20260807',
+        vendor_name: 'Han Enterprise Co.,Ltd. (00001)',
+        vendor_code: 'HAN',
+        total: 17514.72,
+        vat: 1145.82,
+        withholding_tax_amount: 491.07,
+        withholding_tax_rate: 3,
+        cart_json: { v: 1, items: [], meta: { orderDate: '2026-08-07', relatedStore: 'CM Asoke' } },
+      },
+      headOffice,
+      '0105553119650',
+      'No. 212/2-3, Sukhumvit Plaza'
+    )
+    expect(cert?.withholdingAgent.name).toBe('S&J GLOBAL CO., LTD. (Head Office)')
+    expect(cert?.withholdingAgent.taxId).toBe(headOffice.taxId)
+    expect(cert?.incomeRecipient.name).toBe('Han Enterprise Co.,Ltd. (00001)')
+    expect(cert?.incomeRecipient.taxId).toBe('0105553119650')
+  })
+
+  it('puts selected issuer store agent on top when issuerStore is set', () => {
+    const storeAgent = resolveWhtWithholdingAgentCompany({
+      headOffice,
+      storeName: 'Union Mall',
+      profile: {
+        taxpayerName: 'S&J GLOBAL CO., LTD.',
+        taxId: '0105566137147',
+        placeOfBusiness: 'Union Mall, Bangkok',
+      },
+      payeeTaxId: '0105553045044',
+    })
+    const cert = whtCertificateFromPurchaseOrder(
+      {
+        po_no: 'PO-20260808',
+        vendor_name: 'True Move H',
+        total: 1070,
+        vat: 70,
+        withholding_tax_amount: 30,
+        withholding_tax_rate: 3,
+        cart_json: {
+          v: 1,
+          items: [],
+          meta: { orderDate: '2026-08-08', issuerStore: 'Union Mall', relatedStore: 'CM Asoke' },
+        },
+      },
+      storeAgent,
+      '0105553045044',
+      '18 True Tower'
+    )
+    expect(cert?.withholdingAgent.name).toBe('S&J GLOBAL CO., LTD. (สาขา Union Mall)')
+    expect(cert?.incomeRecipient.name).toBe('True Move H')
   })
 })
 

@@ -771,6 +771,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           },
           storeName: storeKey,
           profile: profileRes.profile,
+          payeeTaxId: params.payeeTaxId,
         })
         const cert = whtCertificateFromExpenseRegister(
           {

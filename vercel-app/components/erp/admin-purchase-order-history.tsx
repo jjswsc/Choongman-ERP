@@ -64,13 +64,13 @@ import {
   parsePurchaseOrderCart,
   poQuotationFromMeta,
   resolveAccountingPoIssuerStore,
-  resolveAccountingPoReceivableStoreName,
 } from "@/lib/purchase-order-cart"
 import { resolvePoIssuerCompany } from "@/lib/po-issuer-company"
 import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
 import { todayStrBangkok } from "@/lib/attendance-utils"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import {
+  resolvePoWhtAgentStoreKey,
   resolveWhtWithholdingAgentCompany,
   whtCertificateFromPurchaseOrder,
 } from "@/lib/wht-certificate-data"
@@ -269,10 +269,9 @@ export function AdminPurchaseOrderHistory() {
         const ho = await getHeadOfficeInfo()
         const vendorCode = String(po.vendor_code || "").trim()
         const vendorResolved = vendors.find((v) => v.code === vendorCode)
-        const storeKey =
-          resolveAccountingPoIssuerStore(po) ||
-          resolveAccountingPoReceivableStoreName(po) ||
-          ""
+        // 상단 = 발행 주체(본사 또는 issuerStore). relatedStore(청구 매장)는 쓰지 않음.
+        // 가맹 세무 프로필 TIN이 거래처와 같으면 본사로 폴백.
+        const storeKey = resolvePoWhtAgentStoreKey(po)
         const profileRes = storeKey
           ? await getStoreTaxFilingProfile(storeKey).catch(() => ({ profile: null }))
           : { profile: null }
@@ -285,6 +284,7 @@ export function AdminPurchaseOrderHistory() {
           },
           storeName: storeKey,
           profile: profileRes.profile,
+          payeeTaxId: vendorResolved?.taxId,
         })
         const cert = whtCertificateFromPurchaseOrder(
           po,
@@ -668,13 +668,13 @@ ${allRows.map((row, ri) => {
                   <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("poHistoryColOrigin")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poNo")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poDate")}</th>
-                  <th className="px-3 py-2 text-left font-medium">{t("poVendor")}</th>
+                  <th className="min-w-[14rem] px-3 py-2 text-left font-medium">{t("poVendor")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poShipTo")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("status")}</th>
                   <th className="px-3 py-2 text-right font-medium">{t("vat")}</th>
                   <th className="px-3 py-2 text-right font-medium">{t("total")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poPreparedBy")}</th>
-                  <th className="w-28 px-1 py-2" />
+                  <th className="w-[6.75rem] px-1 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -708,7 +708,7 @@ ${allRows.map((row, ri) => {
                       </td>
                       <td className="px-3 py-2 font-medium">{po.po_no || `#${po.id}`}</td>
                       <td className="px-3 py-2 text-muted-foreground">{dateStr}</td>
-                      <td className="px-3 py-2">{po.vendor_name || "-"}</td>
+                      <td className="min-w-[14rem] px-3 py-2">{po.vendor_name || "-"}</td>
                       <td className="px-3 py-2">{po.location_name || "-"}</td>
                       <td className="px-3 py-2">
                         {isPoApprovedStatus(po.status) ? (
@@ -724,8 +724,8 @@ ${allRows.map((row, ri) => {
                         {formatPoAmount(po.total)}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
-                      <td className="px-1 py-2">
-                        <div className="flex items-center gap-0.5">
+                      <td className="w-[6.75rem] px-1 py-2">
+                        <div className="grid grid-cols-3 gap-0.5">
                           {isAcct && quotation && (
                             <Button
                               variant="ghost"
