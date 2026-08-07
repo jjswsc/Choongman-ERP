@@ -1,27 +1,40 @@
-import { isPosPaidLikeStatus } from '@/lib/pos-order-policy'
 import { resolveStoreListKey } from '@/lib/store-list-keys'
 import { orderListMergeKey } from '@/lib/pos-terminal-active-orders-persist'
 import type { Store } from '@/lib/pos-types'
 
+type OrderStatusLike = { status?: string; id?: string | number; total?: number }
+
 /**
- * 실시간「미결제 테이블」합산 대상 — pending/cooking/preparing 등.
- * ready·paid·completed 는 확정 매출(홀)에 이미 포함되므로 제외해 이중 집계를 막는다.
+ * 실시간「미결제 테이블」표시용 — 결제 전 좌석(ready 포함).
+ * paid·completed·취소만 제외. (ready는 손님이 앉아 있으면 아직 미결제로 보여 줌)
  */
-export function countsTowardUnpaidTableTotal(order: { status?: string } | null | undefined): boolean {
+export function countsTowardUnpaidTableTotal(order: OrderStatusLike | null | undefined): boolean {
   if (!order) return false
   const st = String(order.status ?? 'pending').trim().toLowerCase()
   if (['cancelled', 'canceled', 'refunded'].includes(st)) return false
-  if (isPosPaidLikeStatus(st)) return false
+  if (['paid', 'completed'].includes(st)) return false
   return true
 }
 
-/** 매장 스냅샷의 미결제 테이블 주문 금액 합 — 동일 주문이 여러 테이블에 매칭돼도 1회만 합산 */
-export function sumStoreTableOrders(store: Store | undefined | null): number {
+/**
+ * 「예상 총액」가산분 — 확정 매출에 아직 안 잡힌 좌석만.
+ * ready는 확정(홀)에 이미 포함되므로 여기서는 제외해 이중 합산을 막는다.
+ */
+export function countsTowardExpectedSalesAddend(order: OrderStatusLike | null | undefined): boolean {
+  if (!countsTowardUnpaidTableTotal(order)) return false
+  const st = String(order?.status ?? 'pending').trim().toLowerCase()
+  return st !== 'ready'
+}
+
+function sumStoreTableOrdersWith(
+  store: Store | undefined | null,
+  include: (order: OrderStatusLike) => boolean
+): number {
   const seen = new Set<string>()
   let total = 0
   for (const tbl of store?.tables || []) {
     const order = tbl.order
-    if (!order || !countsTowardUnpaidTableTotal(order)) continue
+    if (!order || !include(order)) continue
     const key =
       orderListMergeKey(order) ||
       `${String(tbl.id || tbl.name || '').trim()}:${Number(order.total ?? 0)}`
@@ -32,17 +45,26 @@ export function sumStoreTableOrders(store: Store | undefined | null): number {
   return total
 }
 
-/** 단일 매장 또는 전체 매장 선택 시 미결제 테이블 총액(ready·paid·completed 제외) */
-export function computeRealtimeTableTotal(params: {
+/** 매장 스냅샷의 미결제 테이블 주문 금액 합 — 동일 주문이 여러 테이블에 매칭돼도 1회만 합산 */
+export function sumStoreTableOrders(store: Store | undefined | null): number {
+  return sumStoreTableOrdersWith(store, countsTowardUnpaidTableTotal)
+}
+
+/** 확정에 아직 없는 좌석만 — 예상 총액 = 확정 + 이 값 */
+export function sumStoreTableOrdersForExpectedAddend(store: Store | undefined | null): number {
+  return sumStoreTableOrdersWith(store, countsTowardExpectedSalesAddend)
+}
+
+function computeRealtimeSumByCanonical(params: {
   isAllStores: boolean
   stores: ReadonlyArray<Store>
   currentStore?: Store
-  /** legacy·Grab ID 중복 스냅샷 합산 방지 — `mergeRealtimeStoreSalesRows`와 동일 canonical */
   storeCodes?: string[]
   legacyToCanonical?: Record<string, string>
+  sumFn: (store: Store | undefined | null) => number
 }): number {
   if (!params.isAllStores && params.currentStore) {
-    return sumStoreTableOrders(params.currentStore)
+    return params.sumFn(params.currentStore)
   }
 
   const storeCodes = params.storeCodes?.map((s) => String(s || '').trim()).filter(Boolean) ?? []
@@ -54,7 +76,7 @@ export function computeRealtimeTableTotal(params: {
       const rawId = String(store.id || '').trim()
       if (!rawId) continue
       const canon = resolveStoreListKey(rawId, storeCodes, legacy)
-      const tableTotal = sumStoreTableOrders(store)
+      const tableTotal = params.sumFn(store)
       byCanon.set(canon, Math.max(byCanon.get(canon) ?? 0, tableTotal))
     }
     let sum = 0
@@ -62,7 +84,30 @@ export function computeRealtimeTableTotal(params: {
     return sum
   }
 
-  return params.stores.reduce((acc, s) => acc + sumStoreTableOrders(s), 0)
+  return params.stores.reduce((acc, s) => acc + params.sumFn(s), 0)
+}
+
+/** 단일 매장 또는 전체 매장 선택 시 미결제 테이블 총액(paid·completed 제외, ready 포함) */
+export function computeRealtimeTableTotal(params: {
+  isAllStores: boolean
+  stores: ReadonlyArray<Store>
+  currentStore?: Store
+  /** legacy·Grab ID 중복 스냅샷 합산 방지 — `mergeRealtimeStoreSalesRows`와 동일 canonical */
+  storeCodes?: string[]
+  legacyToCanonical?: Record<string, string>
+}): number {
+  return computeRealtimeSumByCanonical({ ...params, sumFn: sumStoreTableOrders })
+}
+
+/** 예상 총액용 가산분(ready 제외 — 확정에 이미 포함) */
+export function computeRealtimeExpectedAddend(params: {
+  isAllStores: boolean
+  stores: ReadonlyArray<Store>
+  currentStore?: Store
+  storeCodes?: string[]
+  legacyToCanonical?: Record<string, string>
+}): number {
+  return computeRealtimeSumByCanonical({ ...params, sumFn: sumStoreTableOrdersForExpectedAddend })
 }
 
 export type RealtimeStoreSalesRow = {

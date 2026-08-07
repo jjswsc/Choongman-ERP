@@ -3874,9 +3874,9 @@ export const i18n = {
     adminLiveStoreSalesDataTruncated: '집계 행 제한으로 일부 데이터가 생략될 수 있습니다.',
     adminLiveStoreSalesDataRealtimeHint: '최신 집계는「검색」으로 갱신합니다.',
     adminRealtimeTableTotalHint:
-      '미결제 테이블은 결제·서빙완료(ready) 전 좌석 합계입니다. 확정 매출과 더하지 말고, 예상 총액만 합산 참고용으로 보세요.「검색」으로 갱신합니다.',
+      '미결제 테이블은 결제 전 좌석(서빙완료 ready 포함) 합계입니다. 합계·홀에는 더하지 않습니다. 예상 총액은 확정 + 아직 확정에 없는 좌석(조리중 등)만 합산합니다.「검색」으로 갱신합니다.',
     adminDashboardStoreTableFootnote:
-      '홀·배달·포장·합계는 당일 확정 매출(POS 영업일)입니다. 미결제 테이블은 결제·서빙완료(ready) 전 좌석만 합산하며 합계에 더하지 않습니다. 실시간 패널「검색」 시 갱신됩니다.',
+      '홀·배달·포장·합계는 당일 확정 매출(POS 영업일)입니다. 미결제 테이블은 결제 전 좌석(서빙완료 ready 포함)이며 합계에 더하지 않습니다. 실시간 패널「검색」 시 갱신됩니다.',
     adminDashboardChartsTitle: '당일 매출 차트',
     adminDashboardChartsSub: 'POS 영업일 기준 — 매장·홀/포장/배달·배달앱별 매출을 도표로 확인합니다.',
     adminDashboardChartsRefreshHint:
@@ -6297,9 +6297,9 @@ export const i18n = {
     mobileStoreSalesTableTotal: '미결제 테이블',
     mobileStoreSalesUnpaidTableTotal: '미결제 테이블',
     mobileStoreSalesExpectedTotal: '예상 총액',
-    mobileStoreSalesExpectedTotalHint: '확정 + 미결제 테이블',
+    mobileStoreSalesExpectedTotalHint: '확정 + 미확정 좌석',
     mobileStoreSalesMetricSplitHint:
-      '확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 아직 결제 전 좌석 금액이며 홀(확정)에 더하지 않습니다. 서빙 완료(ready)는 확정에 포함됩니다.',
+      '확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 결제 전 좌석(서빙완료 ready 포함)이며 홀(확정)에 더하지 않습니다. 예상 총액은 확정 + 아직 확정에 없는 좌석(조리중 등)만 합산합니다.',
     mobileStoreSalesCashTotal: '현금 매출(완료 건)',
     mobileStoreSalesTableHeading: '테이블 현황',
     mobileStoreSalesTableEmpty: '등록된 테이블이 없습니다. 관리자에서 테이블 배치를 확인하세요.',
@@ -7322,7 +7322,7 @@ export const i18n = {
     helpSum_admin_live_store_sales:
       '당일 실시간 매출 전용 화면입니다. 확정 매출·미결제 테이블·예상 총액을 구분해 보고, 차트·운영 KPI·테이블 현황을 확인합니다. 홈「대시보드」와 별도 메뉴입니다.',
     helpHow_admin_live_store_sales:
-      '① 본사(오피스)는 기본「전체 매장」입니다. 상단에서 지점만 골라 상세를 볼 수 있습니다.\n② 확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 결제·서빙완료(ready) 전 좌석이며 홀에 더하지 않습니다. 예상 총액=확정+미결제.\n③ 당일 매출 차트: 시간대·매장별·홀/배달/포장·배달앱 —「검색」으로 갱신. 상세 분석은「매출 관리」.\n④ 운영 대시보드: 확정·미결제 테이블·예상·대기·지연·품절·취소율.\n⑤ 하단: 매장별 테이블·주문 실시간(지점·가맹 전체 선택 시).\n⑥ 모바일 전용 UI는 `/store-sales`를 이용하세요.',
+      '① 본사(오피스)는 기본「전체 매장」입니다. 상단에서 지점만 골라 상세를 볼 수 있습니다.\n② 확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 결제 전 좌석(서빙완료 ready 포함)이며 홀에 더하지 않습니다. 예상 총액=확정+아직 확정에 없는 좌석(조리중 등).\n③ 당일 매출 차트: 시간대·매장별·홀/배달/포장·배달앱 —「검색」으로 갱신. 상세 분석은「매출 관리」.\n④ 운영 대시보드: 확정·미결제 테이블·예상·대기·지연·품절·취소율.\n⑤ 하단: 매장별 테이블·주문 실시간(지점·가맹 전체 선택 시).\n⑥ 모바일 전용 UI는 `/store-sales`를 이용하세요.',
     helpSum_admin_ops_center:
       '주문·결제·인쇄·일마감 지표를 한 화면에서 모니터링하고, 임계치 경보를 빠르게 확인하는 운영 관제 화면입니다.',
     helpSum_admin_ai_center:
@@ -11653,9 +11653,9 @@ Only matters the employee must handle personally on a working day:
     adminLiveStoreSalesDataTruncated: 'Some rows may be omitted due to aggregation limits.',
     adminLiveStoreSalesDataRealtimeHint: 'Press Search to refresh the latest totals.',
     adminRealtimeTableTotalHint:
-      'Unpaid tables = open seats before pay/ready. Do not add to confirmed sales; use Expected only as a sum. Refresh via Search.',
+      'Unpaid tables = seats not yet paid (includes ready/served). Do not add into Total/hall. Expected = confirmed + seats not yet in confirmed (e.g. cooking). Refresh via Search.',
     adminDashboardStoreTableFootnote:
-      'Dine-in, delivery, takeout, and total are confirmed sales for the POS business day. Unpaid table sums seats before pay/ready and is not added into Total. Refresh via Search in the live panel.',
+      'Dine-in, delivery, takeout, and total are confirmed sales for the POS business day. Unpaid tables are seats not yet paid (includes ready/served) and are not added into Total. Refresh via Search in the live panel.',
     adminDashboardChartsTitle: 'Today sales charts',
     adminDashboardChartsSub: 'POS business day — store, hall/takeout/delivery, and delivery-app breakdown.',
     adminDashboardChartsRefreshHint:
@@ -14077,9 +14077,9 @@ orderItemQty: 'Qty',
     mobileStoreSalesTableTotal: 'Unpaid tables',
     mobileStoreSalesUnpaidTableTotal: 'Unpaid tables',
     mobileStoreSalesExpectedTotal: 'Expected total',
-    mobileStoreSalesExpectedTotalHint: 'Confirmed + unpaid tables',
+    mobileStoreSalesExpectedTotalHint: 'Confirmed + seats not yet confirmed',
     mobileStoreSalesMetricSplitHint:
-      'Use Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid and are not added into hall (confirmed). Ready (served) is already in confirmed.',
+      'Use Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid (includes ready/served) and are not added into hall (confirmed). Expected = confirmed + seats not yet in confirmed (e.g. cooking).',
     mobileStoreSalesCashTotal: 'Cash (completed)',
     mobileStoreSalesTableHeading: 'Tables',
     mobileStoreSalesTableEmpty: 'No tables configured. Check table layout in admin.',
@@ -15104,7 +15104,7 @@ orderItemQty: 'Qty',
     helpSum_admin_live_store_sales:
       'Dedicated live sales screen: confirmed sales, unpaid tables, expected total, charts, ops KPIs, and live table status. Separate from the home Dashboard menu.',
     helpHow_admin_live_store_sales:
-      '① Head office defaults to All stores; pick a branch at the top for detail.\n② Treat Confirmed sales as today’s revenue. Unpaid tables are seats before pay/ready — do not add them into hall. Expected = confirmed + unpaid.\n③ Today’s charts: hourly, by store, hall/delivery/takeout, delivery apps — press Search to refresh. Use Sales management for deep dives.\n④ Ops block: confirmed, unpaid tables, expected, waiting/delay, stockout/cancel rates.\n⑤ Bottom: per-store live tables when a branch or franchise-all view is selected.\n⑥ Use `/store-sales` on mobile.',
+      '① Head office defaults to All stores; pick a branch at the top for detail.\n② Treat Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid (includes ready/served) — do not add them into hall. Expected = confirmed + seats not yet in confirmed (e.g. cooking).\n③ Today’s charts: hourly, by store, hall/delivery/takeout, delivery apps — press Search to refresh. Use Sales management for deep dives.\n④ Ops block: confirmed, unpaid tables, expected, waiting/delay, stockout/cancel rates.\n⑤ Bottom: per-store live tables when a branch or franchise-all view is selected.\n⑥ Use `/store-sales` on mobile.',
     helpSum_admin_ops_center:
       'Monitor order, payment, print, and day-close KPIs in one place and quickly triage threshold-based alerts.',
     helpSum_admin_ai_center:
@@ -21768,9 +21768,9 @@ orderItemQty: 'จำนวน',
     mobileStoreSalesTableTotal: 'โต๊ะยังไม่ชำระ',
     mobileStoreSalesUnpaidTableTotal: 'โต๊ะยังไม่ชำระ',
     mobileStoreSalesExpectedTotal: 'ยอดคาดการณ์',
-    mobileStoreSalesExpectedTotalHint: 'ยืนยัน + โต๊ะยังไม่ชำระ',
+    mobileStoreSalesExpectedTotalHint: 'ยืนยัน + ที่นั่งที่ยังไม่อยู่ในยอดยืนยัน',
     mobileStoreSalesMetricSplitHint:
-      'ใช้ยอดยืนยันเป็นยอดขายวันนี้ โต๊ะยังไม่ชำระคือที่นั่งที่ยังไม่จ่าย และไม่บวกเข้าโฮล (ยอดยืนยัน) สถานะ ready รวมในยอดยืนยันแล้ว',
+      'ใช้ยอดยืนยันเป็นยอดขายวันนี้ โต๊ะยังไม่ชำระคือที่นั่งที่ยังไม่จ่าย (รวม ready ที่เสิร์ฟแล้ว) และไม่บวกเข้าโฮล ยอดคาดการณ์ = ยืนยัน + ที่นั่งที่ยังไม่อยู่ในยอดยืนยัน (เช่น กำลังทำ)',
     mobileStoreSalesCashTotal: 'เงินสด (ออเดอร์ที่เสร็จ)',
     mobileStoreSalesTableHeading: 'โต๊ะ',
     mobileStoreSalesTableEmpty: 'ยังไม่ได้ตั้งค่าโต๊ะ ตรวจสอบการจัดวางโต๊ะในแอดมิน',
@@ -26580,9 +26580,9 @@ orderItemQty: 'အရေအတွက်',
     mobileStoreSalesTableTotal: 'Unpaid tables',
     mobileStoreSalesUnpaidTableTotal: 'Unpaid tables',
     mobileStoreSalesExpectedTotal: 'Expected total',
-    mobileStoreSalesExpectedTotalHint: 'Confirmed + unpaid tables',
+    mobileStoreSalesExpectedTotalHint: 'Confirmed + seats not yet confirmed',
     mobileStoreSalesMetricSplitHint:
-      'Use Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid and are not added into hall (confirmed). Ready (served) is already in confirmed.',
+      'Use Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid (includes ready/served) and are not added into hall (confirmed). Expected = confirmed + seats not yet in confirmed (e.g. cooking).',
     mobileStoreSalesCashTotal: 'Cash (completed)',
     mobileStoreSalesTableHeading: 'Tables',
     mobileStoreSalesTableEmpty: 'No tables configured. Check table layout in admin.',
@@ -31341,9 +31341,9 @@ orderItemQty: 'ຈຳນວນ',
     mobileStoreSalesTableTotal: 'Unpaid tables',
     mobileStoreSalesUnpaidTableTotal: 'Unpaid tables',
     mobileStoreSalesExpectedTotal: 'Expected total',
-    mobileStoreSalesExpectedTotalHint: 'Confirmed + unpaid tables',
+    mobileStoreSalesExpectedTotalHint: 'Confirmed + seats not yet confirmed',
     mobileStoreSalesMetricSplitHint:
-      'Use Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid and are not added into hall (confirmed). Ready (served) is already in confirmed.',
+      'Use Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid (includes ready/served) and are not added into hall (confirmed). Expected = confirmed + seats not yet in confirmed (e.g. cooking).',
     mobileStoreSalesCashTotal: 'Cash (completed)',
     mobileStoreSalesTableHeading: 'Tables',
     mobileStoreSalesTableEmpty: 'No tables configured. Check table layout in admin.',
@@ -32821,9 +32821,9 @@ orderItemQty: 'ຈຳນວນ',
     mobileStoreSalesTableTotal: 'Unpaid tables',
     mobileStoreSalesUnpaidTableTotal: 'Unpaid tables',
     mobileStoreSalesExpectedTotal: 'Expected total',
-    mobileStoreSalesExpectedTotalHint: 'Confirmed + unpaid tables',
+    mobileStoreSalesExpectedTotalHint: 'Confirmed + seats not yet confirmed',
     mobileStoreSalesMetricSplitHint:
-      'Use Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid and are not added into hall (confirmed). Ready (served) is already in confirmed.',
+      'Use Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid (includes ready/served) and are not added into hall (confirmed). Expected = confirmed + seats not yet in confirmed (e.g. cooking).',
     mobileStoreSalesCashTotal: 'Cash (completed)',
     mobileStoreSalesTableHeading: 'Tables',
     mobileStoreSalesTableEmpty: 'No tables configured. Check table layout in admin.',

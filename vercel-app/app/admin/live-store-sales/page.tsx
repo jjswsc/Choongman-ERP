@@ -24,7 +24,11 @@ import { SalesPageHeader } from "@/components/erp/sales-page-header"
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { storeMatches } from "@/lib/admin-employee-store-access"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
-import { computeRealtimeTableTotal, mergeRealtimeStoreSalesRows } from "@/lib/pos-realtime-store-rows"
+import {
+  computeRealtimeExpectedAddend,
+  computeRealtimeTableTotal,
+  mergeRealtimeStoreSalesRows,
+} from "@/lib/pos-realtime-store-rows"
 import { useStoreList } from "@/lib/use-store-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -114,6 +118,18 @@ export default function AdminLiveStoreSalesPage() {
   const adminTableTotal = useMemo(
     () =>
       computeRealtimeTableTotal({
+        isAllStores: isAllStoresTableTotal,
+        stores: operationalStoresForTableTotal,
+        currentStore: isAllStoresTableTotal ? undefined : currentStore,
+        storeCodes: storeListCodes,
+        legacyToCanonical,
+      }),
+    [isAllStoresTableTotal, operationalStoresForTableTotal, currentStore, storeListCodes, legacyToCanonical]
+  )
+
+  const adminExpectedTableAddend = useMemo(
+    () =>
+      computeRealtimeExpectedAddend({
         isAllStores: isAllStoresTableTotal,
         stores: operationalStoresForTableTotal,
         currentStore: isAllStoresTableTotal ? undefined : currentStore,
@@ -277,6 +293,7 @@ export default function AdminLiveStoreSalesPage() {
               isOfficeSelector={isOfficeSelector}
               salesStoreCodes={franchiseSalesStoreCodes}
               tableTotal={adminTableTotal}
+              expectedTableAddend={adminExpectedTableAddend}
               tableTotalLoading={loadingTables}
               refreshToken={refreshToken}
             />

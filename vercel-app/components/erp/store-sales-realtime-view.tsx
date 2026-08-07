@@ -22,6 +22,7 @@ import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-of
 import { useStoreList } from "@/lib/use-store-list"
 import {
   aggregateTodaySalesByCanonical,
+  computeRealtimeExpectedAddend,
   computeRealtimeTableTotal,
   mergeRealtimeStoreSalesRows,
 } from "@/lib/pos-realtime-store-rows"
@@ -252,8 +253,20 @@ export function StoreSalesRealtimeView({
     [isAllStoresSelected, operationalStores, currentStore, storeListCodes, legacyToCanonical]
   )
 
+  const expectedTableAddend = useMemo(
+    () =>
+      computeRealtimeExpectedAddend({
+        isAllStores: isAllStoresSelected,
+        stores: operationalStores,
+        currentStore,
+        storeCodes: storeListCodes,
+        legacyToCanonical,
+      }),
+    [isAllStoresSelected, operationalStores, currentStore, storeListCodes, legacyToCanonical]
+  )
+
   const expectedTotal =
-    todaySales != null ? Number(todaySales.completedTotal ?? 0) + summaryTableTotal : null
+    todaySales != null ? Number(todaySales.completedTotal ?? 0) + expectedTableAddend : null
 
   const summaryMetricsGrid = (
     <div className="mt-4 space-y-2">
@@ -279,7 +292,7 @@ export function StoreSalesRealtimeView({
         <p className="text-[10px] text-muted-foreground">
           {tr("mobileStoreSalesExpectedTotal", "예상 총액")}
           <span className="ml-1 text-muted-foreground/80">
-            ({tr("mobileStoreSalesExpectedTotalHint", "확정 + 미결제 테이블")})
+            ({tr("mobileStoreSalesExpectedTotalHint", "확정 + 미확정 좌석")})
           </span>
         </p>
         <p className="text-base font-semibold tabular-nums text-foreground">
@@ -289,7 +302,7 @@ export function StoreSalesRealtimeView({
       <p className="text-[10px] leading-relaxed text-muted-foreground">
         {tr(
           "mobileStoreSalesMetricSplitHint",
-          "확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 아직 결제 전 좌석 금액이며 홀(확정)에 더하지 않습니다. 서빙 완료(ready)는 확정에 포함됩니다."
+          "확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 결제 전 좌석(서빙완료 ready 포함)이며 홀(확정)에 더하지 않습니다. 예상 총액은 확정 + 아직 확정에 없는 좌석(조리중 등)만 합산합니다."
         )}
       </p>
     </div>

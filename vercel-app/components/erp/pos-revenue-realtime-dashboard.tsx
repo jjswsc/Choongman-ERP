@@ -64,8 +64,13 @@ type PosRevenueRealtimeDashboardProps = {
   isOfficeSelector: boolean
   /** 가맹 허용 매장 합산 — stores 쿼리에 명시 */
   salesStoreCodes?: string[]
-  /** POS 테이블 스냅샷 — 미결제(pending/cooking 등) 합계. ready·paid는 확정 매출에 포함되어 제외 */
+  /** POS 테이블 스냅샷 — 미결제 좌석 합계(ready 포함, paid·completed 제외) */
   tableTotal?: number
+  /**
+   * 예상 총액 가산분 — 확정에 아직 없는 좌석만(ready 제외).
+   * 미지정 시 tableTotal을 쓰되, ready 이중합산 방지를 위해 부모에서 넘기는 것을 권장.
+   */
+  expectedTableAddend?: number
   tableTotalLoading?: boolean
   /** 부모 자동 갱신 토큰 */
   refreshToken?: number
@@ -92,6 +97,7 @@ export function PosRevenueRealtimeDashboard({
   isOfficeSelector,
   salesStoreCodes,
   tableTotal,
+  expectedTableAddend,
   tableTotalLoading = false,
   refreshToken,
 }: PosRevenueRealtimeDashboardProps) {
@@ -268,20 +274,25 @@ export function PosRevenueRealtimeDashboard({
               <p className="text-xs font-medium text-muted-foreground">
                 {tr("mobileStoreSalesExpectedTotal", "예상 총액")}
                 <span className="ml-1 font-normal text-muted-foreground/80">
-                  ({tr("mobileStoreSalesExpectedTotalHint", "확정 + 미결제 테이블")})
+                  ({tr("mobileStoreSalesExpectedTotalHint", "확정 + 미확정 좌석")})
                 </span>
               </p>
               <p className="mt-1 text-xl font-bold tabular-nums text-foreground">
                 {tableTotalLoading || confirmedRevenue == null
                   ? "—"
-                  : formatBaht(confirmedRevenue + Number(tableTotal ?? 0))}
+                  : formatBaht(
+                      confirmedRevenue +
+                        Number(
+                          expectedTableAddend != null ? expectedTableAddend : (tableTotal ?? 0)
+                        )
+                    )}
               </p>
             </div>
           </div>
           <p className="text-[10px] text-muted-foreground">
             {tr(
               "adminRealtimeTableTotalHint",
-              "미결제 테이블은 결제·서빙완료(ready) 전 좌석 합계입니다. 확정 매출과 더하지 말고, 예상 총액만 합산 참고용으로 보세요.「검색」으로 갱신합니다."
+              "미결제 테이블은 결제 전 좌석(서빙완료 ready 포함) 합계입니다. 합계·홀에는 더하지 않습니다. 예상 총액은 확정 + 아직 확정에 없는 좌석(조리중 등)만 합산합니다.「검색」으로 갱신합니다."
             )}
           </p>
         </div>

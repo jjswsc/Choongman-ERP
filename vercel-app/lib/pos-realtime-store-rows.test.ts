@@ -7,9 +7,11 @@ import {
 import { labelForStore } from '@/lib/store-list-keys'
 import {
   aggregateTodaySalesByCanonical,
+  computeRealtimeExpectedAddend,
   computeRealtimeTableTotal,
   mergeRealtimeStoreSalesRows,
   sumStoreTableOrders,
+  sumStoreTableOrdersForExpectedAddend,
 } from '@/lib/pos-realtime-store-rows'
 import type { Store } from '@/lib/pos-types'
 
@@ -183,7 +185,7 @@ describe('sumStoreTableOrders', () => {
     expect(sumStoreTableOrders(store)).toBe(800)
   })
 
-  it('excludes ready/paid/completed so hall-confirmed sales are not double-counted', () => {
+  it('includes ready (unpaid seat) but excludes paid/completed', () => {
     const base = { type: 'dine-in' as const, items: [], createdAt: new Date() }
     const store: Store = {
       id: 'CM A',
@@ -195,7 +197,8 @@ describe('sumStoreTableOrders', () => {
         { id: 'd', name: '4', order: { ...base, id: '4', total: 400, status: 'completed' }, isOccupied: true },
       ],
     }
-    expect(sumStoreTableOrders(store)).toBe(100)
+    expect(sumStoreTableOrders(store)).toBe(300)
+    expect(sumStoreTableOrdersForExpectedAddend(store)).toBe(100)
   })
 })
 
@@ -221,5 +224,35 @@ describe('computeRealtimeTableTotal', () => {
       legacyToCanonical: { '1040': 'CM True Digital' },
     })
     expect(total).toBe(300)
+  })
+
+  it('expected addend excludes ready already in confirmed sales', () => {
+    const base = { type: 'dine-in' as const, items: [], createdAt: new Date() }
+    const stores: Store[] = [
+      {
+        id: 'CM A',
+        name: 'CM A',
+        tables: [
+          { id: 'a', name: '1', order: { ...base, id: '1', total: 100, status: 'pending' }, isOccupied: true },
+          { id: 'b', name: '2', order: { ...base, id: '2', total: 200, status: 'ready' }, isOccupied: true },
+        ],
+      },
+    ]
+    expect(
+      computeRealtimeTableTotal({
+        isAllStores: true,
+        stores,
+        storeCodes: ['CM A'],
+        legacyToCanonical: {},
+      })
+    ).toBe(300)
+    expect(
+      computeRealtimeExpectedAddend({
+        isAllStores: true,
+        stores,
+        storeCodes: ['CM A'],
+        legacyToCanonical: {},
+      })
+    ).toBe(100)
   })
 })
