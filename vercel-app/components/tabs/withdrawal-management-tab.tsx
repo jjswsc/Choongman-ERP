@@ -84,6 +84,11 @@ import {
   type ExpenseOcrFieldPayload,
 } from "@/components/erp/expense-document-attach-panel"
 import { ExpenseRecurringTemplatesBar } from "@/components/erp/expense-recurring-templates-bar"
+import {
+  ExpenseRegisterField,
+  ExpenseRegisterFieldRow,
+  ExpenseRegisterSection,
+} from "@/components/erp/expense-register-form-field"
 import { suggestAccountSubjectId, suggestVendorFromHint } from "@/lib/expense-ocr-suggestions"
 import {
   type ExpenseDocumentType,
@@ -2214,34 +2219,29 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="pt-5 space-y-5">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">
-                {tt("expenseStoreSelect", "Store")}
-              </Label>
-              <Select
-                value={storeSelectOptions.includes(displayStoreName) ? displayStoreName : (storeSelectOptions[0] || "")}
-                onValueChange={(v) => {
-                  bankLinkStorePinned.current = true
-                  setStoreName(v)
-                }}
-              >
-                <SelectTrigger className="w-[200px] h-9">
-                  <SelectValue placeholder={tt("expenseStoreSelect", "Select Store")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {storeSelectOptions.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        <CardContent className="pt-5 space-y-6">
+          <ExpenseRegisterField label={tt("expenseStoreSelect", "Store")} className="max-w-[220px]">
+            <Select
+              value={storeSelectOptions.includes(displayStoreName) ? displayStoreName : (storeSelectOptions[0] || "")}
+              onValueChange={(v) => {
+                bankLinkStorePinned.current = true
+                setStoreName(v)
+              }}
+            >
+              <SelectTrigger className="w-full h-9">
+                <SelectValue placeholder={tt("expenseStoreSelect", "Select Store")} />
+              </SelectTrigger>
+              <SelectContent>
+                {storeSelectOptions.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ExpenseRegisterField>
 
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">{tt("wm_title", "Withdrawal Type")}</div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="space-y-2.5">
+            <div className="text-xs font-semibold tracking-tight text-foreground/80">{tt("wm_title", "Withdrawal Type")}</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {CATEGORY_MAIN_OPTIONS.map((opt) => (
                 <Button
                   key={opt.value}
@@ -2262,33 +2262,30 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           </div>
 
           {categoryMain && !isBankLinkMode && !isEditMode && (categoryMain === "purchase" || categoryMain === "expense") && (
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">{tt("wm_payMode", "Payment Mode")}</Label>
-                <div className="flex gap-2">
-                  {categoryMain !== "purchase" ? (
-                  <Button
-                    type="button"
-                    variant={expensePayMode === "immediate" ? "default" : "outline"}
-                    size="sm"
-                    className="h-9"
-                    onClick={() => setExpensePayMode("immediate")}
-                  >
-                    {tt("wm_payImmediate", "Pay Now")}
-                  </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant={expensePayMode === "later" ? "default" : "outline"}
-                    size="sm"
-                    className="h-9"
-                    onClick={() => setExpensePayMode("later")}
-                  >
-                    {tt("wm_payLater", "Pay Later")}
-                  </Button>
-                </div>
+            <ExpenseRegisterField label={tt("wm_payMode", "Payment Mode")}>
+              <div className="flex flex-wrap gap-2">
+                {categoryMain !== "purchase" ? (
+                <Button
+                  type="button"
+                  variant={expensePayMode === "immediate" ? "default" : "outline"}
+                  size="sm"
+                  className="h-9"
+                  onClick={() => setExpensePayMode("immediate")}
+                >
+                  {tt("wm_payImmediate", "Pay Now")}
+                </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant={expensePayMode === "later" ? "default" : "outline"}
+                  size="sm"
+                  className="h-9"
+                  onClick={() => setExpensePayMode("later")}
+                >
+                  {tt("wm_payLater", "Pay Later")}
+                </Button>
               </div>
-            </div>
+            </ExpenseRegisterField>
           )}
 
           {showRecurringTemplatesBar ? (
@@ -2328,10 +2325,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           ) : null}
 
           {hasTaxSub && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">{tt("wm_subType", "Detail")}</Label>
+            <ExpenseRegisterField label={tt("wm_subType", "Detail")} className="max-w-[200px]">
               <Select value={categorySub} onValueChange={setCategorySub}>
-                <SelectTrigger className="w-[180px] h-9">
+                <SelectTrigger className="w-full h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2340,13 +2336,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   <SelectItem value="corporate">{tt("wm_tax_corporate", "Corporate Tax Payment")}</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </ExpenseRegisterField>
           )}
           {hasLoanSub && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">{tt("wm_subType", "Detail")}</Label>
+            <ExpenseRegisterField label={tt("wm_subType", "Detail")} className="max-w-[180px]">
               <Select value={categorySub} onValueChange={setCategorySub}>
-                <SelectTrigger className="w-[160px] h-9">
+                <SelectTrigger className="w-full h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2354,16 +2349,15 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   <SelectItem value="given">{tt("wm_loan_given", "Loan Given")}</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </ExpenseRegisterField>
           )}
 
-          <div className="flex flex-wrap items-end gap-x-5 gap-y-4">
+          <div className="space-y-4">
           {hasSub && !hasTaxSub && !hasLoanSub && (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "loan") && (
-            <div className="flex flex-wrap items-end gap-x-4 gap-y-3 w-full">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">{tt("wm_subType", "Detail")}</Label>
+            <div className="flex flex-wrap items-end gap-x-5 gap-y-3 w-full">
+              <ExpenseRegisterField label={tt("wm_subType", "Detail")} className="w-[140px]">
                 <Select value={categorySub} onValueChange={setCategorySub}>
-                  <SelectTrigger className="w-[120px] h-9">
+                  <SelectTrigger className="w-full h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2371,24 +2365,22 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     <SelectItem value="advance">{tt("wm_advance", "Advance")}</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </ExpenseRegisterField>
               {showAdvanceInstallments && (
                 <>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">{tt("wm_advanceInstallments", "Installments")}</Label>
-                    <Input type="number" min={1} value={advanceInstallments} onChange={(e) => setAdvanceInstallments(e.target.value)} className="w-[70px] h-9" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">{tt("wm_advanceInstallmentCurrent", "Current Installment")}</Label>
+                  <ExpenseRegisterField label={tt("wm_advanceInstallments", "Installments")} className="w-[90px]">
+                    <Input type="number" min={1} value={advanceInstallments} onChange={(e) => setAdvanceInstallments(e.target.value)} className="w-full h-9" />
+                  </ExpenseRegisterField>
+                  <ExpenseRegisterField label={tt("wm_advanceInstallmentCurrent", "Current Installment")} className="w-[160px]">
                     <div className="flex items-center gap-2">
                       <Input type="number" min={1} value={advanceInstallmentCurrent} onChange={(e) => setAdvanceInstallmentCurrent(e.target.value)} className="w-[70px] h-9" />
                       <span className="text-sm font-medium tabular-nums text-muted-foreground">({advanceInstallmentCurrent}/{advanceInstallments})</span>
                     </div>
-                  </div>
+                  </ExpenseRegisterField>
                 </>
               )}
               {categoryMain === "expense" && (
-                <div className="ml-auto flex flex-wrap gap-2">
+                <div className="ml-auto flex flex-wrap gap-2 pb-0.5">
                   <Button
                     type="button"
                     variant="outline"
@@ -2414,9 +2406,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           {(categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "loan") && (
             <>
               {categoryMain === "purchase" && (
-                <div className="flex flex-wrap items-end gap-x-4 gap-y-3 w-full">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">{tt("vendor", "Vendor")}</Label>
+                <ExpenseRegisterSection>
+                  <ExpenseRegisterFieldRow cols="payee">
+                  <ExpenseRegisterField label={tt("vendor", "Vendor")} className="sm:col-span-2 xl:col-span-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Select
                         value={vendorCode}
@@ -2430,7 +2422,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                           }
                         }}
                       >
-                        <SelectTrigger className="h-9 w-[220px]">
+                        <SelectTrigger className="h-9 w-full min-w-[160px] max-w-[240px]">
                           <SelectValue placeholder={tt("vendor", "Select Vendor")} />
                         </SelectTrigger>
                         <SelectContent>
@@ -2468,53 +2460,47 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         }}
                       />
                     </div>
-                  </div>
+                  </ExpenseRegisterField>
                   {vendorCode && (
                     <>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-muted-foreground">
-                          {tt("expensePayeeAccountHolder", "Account holder")}
-                        </Label>
+                      <ExpenseRegisterField label={tt("expensePayeeAccountHolder", "Account holder")}>
                         <Input
-                          className="h-9 w-[160px]"
+                          className="h-9 w-full"
                           value={payeeAccountHolder}
                           onChange={(e) => setPayeeAccountHolder(e.target.value)}
                           placeholder={vendors.find((x) => x.code === vendorCode)?.name || ""}
                         />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-muted-foreground">
-                          {tt("expensePayeeBankName", "Bank")}
-                        </Label>
+                      </ExpenseRegisterField>
+                      <ExpenseRegisterField label={tt("expensePayeeBankName", "Bank")}>
                         <Input
-                          className="h-9 w-[120px]"
+                          className="h-9 w-full"
                           value={payeeBankName}
                           onChange={(e) => setPayeeBankName(e.target.value)}
                           placeholder="K-BANK"
                         />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-muted-foreground">
-                          {tt("inv_account_no", "Account")}
-                        </Label>
+                      </ExpenseRegisterField>
+                      <ExpenseRegisterField label={tt("inv_account_no", "Account")}>
                         <Input
-                          className="h-9 w-[160px]"
+                          className="h-9 w-full"
                           value={payeeBankAccountNo}
                           onChange={(e) => setPayeeBankAccountNo(e.target.value)}
                           placeholder={
                             vendors.find((x) => x.code === vendorCode)?.bankAccountNo || "—"
                           }
                         />
-                      </div>
-                      <p className="w-full text-[11px] text-muted-foreground -mt-1">
-                        {tt(
-                          "expensePayeeBankRegisterHint",
-                          "Saved on this expense for bank transfer. Also updates the vendor master when a vendor is selected."
-                        )}
-                      </p>
+                      </ExpenseRegisterField>
                     </>
                   )}
-                </div>
+                  </ExpenseRegisterFieldRow>
+                  {vendorCode ? (
+                    <p className="text-[11px] leading-snug text-muted-foreground -mt-1">
+                      {tt(
+                        "expensePayeeBankRegisterHint",
+                        "Saved on this expense for bank transfer. Also updates the vendor master when a vendor is selected."
+                      )}
+                    </p>
+                  ) : null}
+                </ExpenseRegisterSection>
               )}
               {categoryMain === "purchase" && vendorCode && !isBankLinkMode && !isEditMode && (
                 <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
@@ -2585,9 +2571,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 </div>
               )}
               {categoryMain === "expense" && (
-                <div className="flex flex-wrap items-end gap-x-4 gap-y-3 w-full">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">{tt("vendor", "Payee")}</Label>
+                <ExpenseRegisterSection>
+                  <ExpenseRegisterFieldRow cols="payee">
+                  <ExpenseRegisterField label={tt("vendor", "Payee")} className="sm:col-span-2 xl:col-span-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Select
                         value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
@@ -2604,7 +2590,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                           }
                         }}
                       >
-                        <SelectTrigger className="w-[180px] h-9">
+                        <SelectTrigger className="w-full min-w-[140px] max-w-[200px] h-9">
                           <SelectValue placeholder={tt("vendor", "Payee")} />
                         </SelectTrigger>
                         <SelectContent>
@@ -2662,46 +2648,36 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         }}
                       />
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">
-                      {tt("expensePayeeAccountHolder", "Account holder")}
-                    </Label>
+                  </ExpenseRegisterField>
+                  <ExpenseRegisterField label={tt("expensePayeeAccountHolder", "Account holder")}>
                     <Input
-                      className="h-9 w-[160px]"
+                      className="h-9 w-full"
                       value={payeeAccountHolder}
                       onChange={(e) => setPayeeAccountHolder(e.target.value)}
                       placeholder={payeeName || ""}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">
-                      {tt("expensePayeeBankName", "Bank")}
-                    </Label>
+                  </ExpenseRegisterField>
+                  <ExpenseRegisterField label={tt("expensePayeeBankName", "Bank")}>
                     <Input
-                      className="h-9 w-[120px]"
+                      className="h-9 w-full"
                       value={payeeBankName}
                       onChange={(e) => setPayeeBankName(e.target.value)}
                       placeholder="K-BANK"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">
-                      {tt("inv_account_no", "Account")}
-                    </Label>
+                  </ExpenseRegisterField>
+                  <ExpenseRegisterField label={tt("inv_account_no", "Account")}>
                     <Input
-                      className="h-9 w-[160px]"
+                      className="h-9 w-full"
                       value={payeeBankAccountNo}
                       onChange={(e) => setPayeeBankAccountNo(e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium text-muted-foreground">{tt("wm_accountSubject", "Account Subject")}</Label>
+                  </ExpenseRegisterField>
+                  <ExpenseRegisterField label={tt("wm_accountSubject", "Account Subject")}>
                     <Select
                       value={accountSubjectId || "__none__"}
                       onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}
                     >
-                      <SelectTrigger className="h-9 w-[200px]">
+                      <SelectTrigger className="h-9 w-full">
                         <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
                       </SelectTrigger>
                       <SelectContent>
@@ -2713,40 +2689,19 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
+                  </ExpenseRegisterField>
+                  </ExpenseRegisterFieldRow>
+                </ExpenseRegisterSection>
               )}
             </>
           )}
 
           {categoryMain === "transfer" && (
-            <div className="rounded-lg border border-border/60 bg-muted/15 p-4 space-y-3 max-w-3xl">
-              <div>
-                <Label className="font-medium">{tt("wm_transferKind", "이체 유형")}</Label>
-                <Select
-                  value={transferKind}
-                  onValueChange={(v) => {
-                    setTransferKind(v as TransferKind)
-                    if (v !== "bank_to_card") setTransferToCardAccountId("")
-                    if (v !== "bank_general") {
-                      setAccountSubjectId("")
-                      setTransferBankAccountNo("")
-                      setTransferBankRecipientName("")
-                    }
-                    if (v !== "bank_to_petty") setTransferToPettyStore("")
-                  }}
-                >
-                  <SelectTrigger className="h-9 w-full max-w-xl mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bank_to_petty">{tt("wm_transferKindBankToPetty", "통장 → 패티캐시")}</SelectItem>
-                    <SelectItem value="bank_to_card">{tt("wm_transferKindBankToCard", "통장 → 카드 대금")}</SelectItem>
-                    <SelectItem value="bank_general">{tt("wm_transferKindBankGeneral", "일반 이체")}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  {isBankLinkMode
+            <div className="rounded-lg border border-border/60 bg-muted/15 p-4 space-y-4 max-w-3xl">
+              <ExpenseRegisterField
+                label={tt("wm_transferKind", "이체 유형")}
+                hint={
+                  isBankLinkMode
                     ? transferKind === "bank_to_card"
                       ? tt(
                           "wm_transferKindHintBankToCardLink",
@@ -2774,14 +2729,44 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         : tt(
                             "wm_transferKindHintBankGeneral",
                             "이체용 계정과목·금액 입력 후 저장하면 통장 출금으로 등록됩니다."
-                          )}
-                </p>
-              </div>
+                          )
+                }
+              >
+                <Select
+                  value={transferKind}
+                  onValueChange={(v) => {
+                    setTransferKind(v as TransferKind)
+                    if (v !== "bank_to_card") setTransferToCardAccountId("")
+                    if (v !== "bank_general") {
+                      setAccountSubjectId("")
+                      setTransferBankAccountNo("")
+                      setTransferBankRecipientName("")
+                    }
+                    if (v !== "bank_to_petty") setTransferToPettyStore("")
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-full max-w-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bank_to_petty">{tt("wm_transferKindBankToPetty", "통장 → 패티캐시")}</SelectItem>
+                    <SelectItem value="bank_to_card">{tt("wm_transferKindBankToCard", "통장 → 카드 대금")}</SelectItem>
+                    <SelectItem value="bank_general">{tt("wm_transferKindBankGeneral", "일반 이체")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </ExpenseRegisterField>
 
-              <div className="max-w-md">
-                <Label className="text-xs text-muted-foreground">{tt("bankAccount", "Account")}</Label>
+              <ExpenseRegisterField
+                label={tt("bankAccount", "Account")}
+                className="max-w-md"
+                hint={
+                  !storeName
+                    ? tt("expenseStoreSelect", "매장을 먼저 선택하세요.")
+                    : undefined
+                }
+              >
                 <Select value={accountId || "__none__"} onValueChange={(v) => setAccountId(v === "__none__" ? "" : v)} disabled={isBankLinkMode}>
-                  <SelectTrigger className="h-9 w-full mt-1">
+                  <SelectTrigger className="h-9 w-full">
                     <SelectValue placeholder={tt("bankAccount", "Select Account")} />
                   </SelectTrigger>
                   <SelectContent>
@@ -2793,16 +2778,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     ))}
                   </SelectContent>
                 </Select>
-                {!storeName && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {tt("expenseStoreSelect", "매장을 먼저 선택하세요.")}
-                  </p>
-                )}
-              </div>
+              </ExpenseRegisterField>
 
               {transferKind === "bank_to_petty" && (
-                <div className="max-w-md">
-                  <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferToPetty", "패티캐시 매장")}</Label>
+                <ExpenseRegisterField
+                  label={tt("wm_transferToPetty", "패티캐시 매장")}
+                  className="max-w-md"
+                  hint={tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010) — 내부 자금 이동")}
+                >
                   <Select
                     value={transferToPettyStore || "__none__"}
                     onValueChange={(v) => setTransferToPettyStore(v === "__none__" ? "" : v)}
@@ -2818,16 +2801,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    {tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010) — 내부 자금 이동")}
-                  </p>
-                </div>
+                </ExpenseRegisterField>
               )}
 
               {transferKind === "bank_general" && (
                 <>
-                  <div className="max-w-md">
-                    <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferAccountSubject", "이체 계정과목")}</Label>
+                  <ExpenseRegisterField label={tt("wm_transferAccountSubject", "이체 계정과목")} className="max-w-md">
                     <Select value={accountSubjectId || "__none__"} onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}>
                       <SelectTrigger className="h-9 w-full">
                         <SelectValue placeholder={tt("wm_transferAccountSubjectPlaceholder", "이체 계정과목 선택")} />
@@ -2841,10 +2820,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
-                    <div>
-                      <Label className="text-xs text-muted-foreground block mb-1">{tt("inv_account_no", "계좌번호")}</Label>
+                  </ExpenseRegisterField>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 max-w-xl">
+                    <ExpenseRegisterField label={tt("inv_account_no", "계좌번호")}>
                       <Input
                         value={transferBankAccountNo}
                         onChange={(e) => setTransferBankAccountNo(e.target.value)}
@@ -2852,9 +2830,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         className="h-9"
                         readOnly={isBankLinkMode}
                       />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground block mb-1">{tt("wm_transferRecipient", "받는 사람")}</Label>
+                    </ExpenseRegisterField>
+                    <ExpenseRegisterField label={tt("wm_transferRecipient", "받는 사람")}>
                       <Input
                         value={transferBankRecipientName}
                         onChange={(e) => setTransferBankRecipientName(e.target.value)}
@@ -2862,7 +2839,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         className="h-9"
                         readOnly={isBankLinkMode}
                       />
-                    </div>
+                    </ExpenseRegisterField>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {tt(
@@ -2874,8 +2851,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               )}
 
               {transferKind === "bank_to_card" && !isBankLinkMode && (
-                <div className="max-w-md">
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{tt("wm_transferToCardCharge", "Card")}</Label>
+                <ExpenseRegisterField label={tt("wm_transferToCardCharge", "Card")} className="max-w-md">
                   <Select value={transferToCardAccountId || "__none__"} onValueChange={(v) => setTransferToCardAccountId(v === "__none__" ? "" : v)}>
                     <SelectTrigger className="h-9 w-full">
                       <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
@@ -2889,44 +2865,41 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </ExpenseRegisterField>
               )}
             </div>
           )}
           </div>
 
           {categoryMain === "fixed_asset" && (
-            <div className="flex flex-wrap items-end gap-x-4 gap-y-3 w-full">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">{tt("wm_assetName", "Asset Name")}</Label>
+            <ExpenseRegisterSection>
+              <ExpenseRegisterFieldRow cols="auto">
+              <ExpenseRegisterField label={tt("wm_assetName", "Asset Name")}>
                 <Input
                   value={assetName}
                   onChange={(e) => setAssetName(e.target.value)}
                   placeholder={tt("wm_assetNamePlaceholder", "Vehicle, equipment, etc.")}
-                  className="h-9 w-[180px]"
+                  className="h-9 w-full"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">{tt("wm_assetCode", "Asset Code")}</Label>
+              </ExpenseRegisterField>
+              <ExpenseRegisterField label={tt("wm_assetCode", "Asset Code")}>
                 <Input
                   value={assetCode}
                   onChange={(e) => setAssetCode(e.target.value)}
                   placeholder={tt("wm_assetCodePlaceholder", "FA-001 (optional)")}
-                  className="h-9 w-[130px]"
+                  className="h-9 w-full"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">{tt("wm_usefulLife", "Useful Life (months)")}</Label>
+              </ExpenseRegisterField>
+              <ExpenseRegisterField label={tt("wm_usefulLife", "Useful Life (months)")}>
                 <Input
                   value={usefulLifeMonths}
                   onChange={(e) => setUsefulLifeMonths(e.target.value)}
                   type="number"
                   min={1}
-                  className="h-9 w-[110px]"
+                  className="h-9 w-full max-w-[140px]"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">{tt("vendor", "Payee")}</Label>
+              </ExpenseRegisterField>
+              <ExpenseRegisterField label={tt("vendor", "Payee")} className="sm:col-span-2 lg:col-span-2 xl:col-span-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Select
                     value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
@@ -2947,7 +2920,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       }
                     }}
                   >
-                    <SelectTrigger className="w-[180px] h-9">
+                    <SelectTrigger className="w-full min-w-[140px] max-w-[200px] h-9">
                       <SelectValue placeholder={tt("vendor", "Payee")} />
                     </SelectTrigger>
                     <SelectContent>
@@ -3005,21 +2978,21 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     }}
                   />
                 </div>
-              </div>
-            </div>
+              </ExpenseRegisterField>
+              </ExpenseRegisterFieldRow>
+            </ExpenseRegisterSection>
           )}
 
-          <div className="border-t border-border/60 pt-4 space-y-3">
-            <div className="flex flex-wrap items-end gap-x-4 gap-y-3 max-w-6xl">
+          <div className="border-t border-border/60 pt-5 space-y-4">
+            <ExpenseRegisterFieldRow cols="auto" className="max-w-6xl">
               {!isLaterPayment && showBankAccountOutsideTransfer && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">{tt("bankAccount", "Account")}</Label>
+                <ExpenseRegisterField label={tt("bankAccount", "Account")}>
                   <Select
                     value={accountId || "__none__"}
                     onValueChange={(v) => setAccountId(v === "__none__" ? "" : v)}
                     disabled={isExistingBankTxMode}
                   >
-                    <SelectTrigger className="w-[220px] h-9">
+                    <SelectTrigger className="w-full h-9">
                       <SelectValue placeholder={tt("bankAccount", "Select Account")} />
                     </SelectTrigger>
                     <SelectContent>
@@ -3030,79 +3003,75 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </ExpenseRegisterField>
               )}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">
-                  {activeFeeVatMode && categoryMain === "expense"
+              <ExpenseRegisterField
+                label={
+                  activeFeeVatMode && categoryMain === "expense"
                     ? feeAmountFieldLabel(activeFeeVatMode)
                     : supportsExpenseDocs
                       ? tt("expenseAccrualGrossTotal", "Total (incl. tax)")
-                      : tt("amount", "Amount")}
-                </Label>
+                      : tt("amount", "Amount")
+                }
+                hint={
+                  feeAmountPreview ? (
+                    <span className="tabular-nums">
+                      {tt("expenseFeeWithdrawPreview", "Withdrawal")} ฿{feeAmountPreview.gross.toLocaleString()}
+                      {feeAmountPreview.vat > 0
+                        ? ` (${tt("expenseAccrualVat", "VAT")} ฿${feeAmountPreview.vat.toLocaleString()} · ${tt("expenseFeeNetLabel", "Net")} ฿${feeAmountPreview.net.toLocaleString()})`
+                        : ""}
+                    </span>
+                  ) : activeFeeVatMode ? (
+                    feeVatModeLabel(activeFeeVatMode)
+                  ) : undefined
+                }
+              >
                 <Input
                   value={amount}
                   onChange={(e) => handleMoneyInputChange(e.target.value, setAmount)}
                   type="text"
                   inputMode="decimal"
                   placeholder="0"
-                  className={`w-[130px] h-9 ${isBankLinkMode ? "bg-muted/50 cursor-default" : ""}`}
+                  className={`w-full max-w-[160px] h-9 ${isBankLinkMode ? "bg-muted/50 cursor-default" : ""}`}
                   readOnly={isBankLinkMode}
                 />
-                {feeAmountPreview ? (
-                  <p className="text-[11px] text-muted-foreground tabular-nums">
-                    {tt("expenseFeeWithdrawPreview", "Withdrawal")} ฿{feeAmountPreview.gross.toLocaleString()}
-                    {feeAmountPreview.vat > 0
-                      ? ` (${tt("expenseAccrualVat", "VAT")} ฿${feeAmountPreview.vat.toLocaleString()} · ${tt("expenseFeeNetLabel", "Net")} ฿${feeAmountPreview.net.toLocaleString()})`
-                      : ""}
-                  </p>
-                ) : activeFeeVatMode ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    {feeVatModeLabel(activeFeeVatMode)}
-                  </p>
-                ) : null}
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">{tt("date", "Date")}</Label>
+              </ExpenseRegisterField>
+              <ExpenseRegisterField label={tt("date", "Date")}>
                 <Input
                   type="date"
                   value={transDate}
                   onChange={(e) => setTransDate(e.target.value)}
-                  className={`w-[150px] h-9 ${isBankLinkMode ? "bg-muted/50 cursor-default" : ""}`}
+                  className={`w-full max-w-[180px] h-9 ${isBankLinkMode ? "bg-muted/50 cursor-default" : ""}`}
                   readOnly={isBankLinkMode}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">{tt("memo", "Memo")}</Label>
-                <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={tt("memo", "Memo")} className="h-9 w-[280px]" />
-              </div>
-              <div className="space-y-1.5" title={bankMemo || undefined}>
-                <Label className="text-xs font-medium text-muted-foreground">{tt("bankMemoLabel", "Bank Memo")}</Label>
+              </ExpenseRegisterField>
+              <ExpenseRegisterField label={tt("memo", "Memo")} className="sm:col-span-2 lg:col-span-1 xl:col-span-1">
+                <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={tt("memo", "Memo")} className="h-9 w-full" />
+              </ExpenseRegisterField>
+              <ExpenseRegisterField label={tt("bankMemoLabel", "Bank Memo")} className="sm:col-span-2 lg:col-span-2">
                 <Input
                   value={bankMemo}
                   readOnly
+                  title={bankMemo || undefined}
                   placeholder={tt("bankMemoFromBank", "Memo from bank transaction")}
-                  className="h-9 w-[320px] bg-muted/50 cursor-default"
+                  className="h-9 w-full bg-muted/50 cursor-default"
                 />
-              </div>
-            </div>
+              </ExpenseRegisterField>
+            </ExpenseRegisterFieldRow>
             {supportsExpenseDocs && (
-              <div className="flex flex-wrap items-end gap-x-4 gap-y-3 max-w-6xl rounded-lg border border-border/50 bg-muted/10 px-3 py-2.5">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">{tt("expenseAccrualVat", "VAT")}</Label>
+              <ExpenseRegisterSection className="max-w-6xl bg-muted/15">
+                <ExpenseRegisterFieldRow cols="dense">
+                <ExpenseRegisterField label={tt("expenseAccrualVat", "VAT")}>
                   <Input
                     value={accrualVatAmount}
                     onChange={(e) => handleMoneyInputChange(e.target.value, setAccrualVatAmount)}
                     type="text"
                     inputMode="decimal"
                     placeholder="0"
-                    className="h-9 w-[110px]"
+                    className="h-9 w-full"
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    {tt("expenseAccrualWhtRate", "WHT rate")}
-                  </Label>
+                </ExpenseRegisterField>
+                <ExpenseRegisterField label={tt("expenseAccrualWhtRate", "WHT rate")}>
                   <Select
                     value={accrualWhtRate == null ? "__none__" : String(accrualWhtRate)}
                     onValueChange={(v) => {
@@ -3114,7 +3083,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       setAccrualWhtRate(Number.isFinite(n) && n > 0 ? n : null)
                     }}
                   >
-                    <SelectTrigger className="h-9 w-[120px]">
+                    <SelectTrigger className="h-9 w-full">
                       <SelectValue placeholder={tt("expenseAccrualWhtRateNone", "Select")} />
                     </SelectTrigger>
                     <SelectContent>
@@ -3126,25 +3095,26 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-muted-foreground">{tt("expenseAccrualWithholding", "Withholding Tax")}</Label>
+                </ExpenseRegisterField>
+                <ExpenseRegisterField label={tt("expenseAccrualWithholding", "Withholding Tax")}>
                   <Input
                     value={accrualWithholdingTax}
                     onChange={(e) => handleMoneyInputChange(e.target.value, setAccrualWithholdingTax)}
                     type="text"
                     inputMode="decimal"
                     placeholder="0"
-                    className="h-9 w-[110px]"
+                    className="h-9 w-full"
                   />
-                </div>
-                <div className="space-y-1 min-w-[140px]">
-                  <span className="text-xs font-medium text-muted-foreground block">{tt("expenseAccrualNetPayableLabel", "Net Payable")}</span>
-                  <span className="text-sm font-semibold tabular-nums leading-9">
-                    ฿{(accrualNetPreview ?? 0).toLocaleString()}
-                  </span>
-                </div>
-              </div>
+                </ExpenseRegisterField>
+                <ExpenseRegisterField label={tt("expenseAccrualNetPayableLabel", "Net Payable")}>
+                  <div className="flex h-9 items-center">
+                    <span className="text-sm font-semibold tabular-nums">
+                      ฿{(accrualNetPreview ?? 0).toLocaleString()}
+                    </span>
+                  </div>
+                </ExpenseRegisterField>
+                </ExpenseRegisterFieldRow>
+              </ExpenseRegisterSection>
             )}
           </div>
 
@@ -3163,7 +3133,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             />
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-3 pt-2">
               {supportsExpenseDocs ? (
                 <label className="flex items-center gap-2 text-sm cursor-pointer select-none mr-1">
                   <Checkbox

@@ -38,9 +38,9 @@ export function ExpenseRecurringTemplatesBar({
   if (templates.length === 0 && !canSave) return null
 
   return (
-    <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 p-3 space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-medium text-muted-foreground">
+    <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 px-4 py-3.5 space-y-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs font-semibold tracking-tight text-foreground/80">
           {tt("expenseRecurringTemplatesTitle", "반복 경비 빠른 입력")}
         </span>
         {canSave ? (
@@ -83,7 +83,7 @@ export function ExpenseRecurringTemplatesBar({
           ))}
         </div>
       ) : (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           {tt("expenseRecurringTemplatesEmpty", "자주 쓰는 경비를 입력한 뒤 「현재 양식 저장」을 누르세요.")}
         </p>
       )}

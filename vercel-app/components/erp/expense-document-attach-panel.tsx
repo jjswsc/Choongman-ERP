@@ -259,11 +259,11 @@ export function ExpenseDocumentAttachPanel({
     <div
       className={
         className ??
-        "rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5 space-y-2"
+        "rounded-lg border border-border/60 bg-muted/15 px-4 py-3.5 space-y-3"
       }
     >
       {/* Row 1: title + prefs + count */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Label className="text-sm font-semibold tracking-tight shrink-0">
           {tt("expenseAccrualAttachLabel", "Attach Invoice/Receipt")}
         </Label>
@@ -321,11 +321,11 @@ export function ExpenseDocumentAttachPanel({
         </div>
       </div>
 
-      {/* Row 2: doc type pills + invoice no + upload (horizontal) */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+      {/* Row 2: doc type pills + invoice no + upload */}
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
         {showInvoice ? (
           <div
-            className="inline-flex flex-wrap items-center gap-1"
+            className="inline-flex flex-wrap items-center gap-1.5 pb-0.5"
             role="radiogroup"
             aria-label={tt("expenseDocTypeLabel", "문서 유형")}
           >
@@ -361,21 +361,21 @@ export function ExpenseDocumentAttachPanel({
         ) : null}
 
         {showDocNo ? (
-          <div className="flex items-center gap-1.5">
-            <Label className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+          <div className="flex min-w-0 flex-col gap-2">
+            <Label className="block text-xs font-medium leading-4 text-muted-foreground">
               {tt("wm_invoiceNoLabel", "Invoice Number")}
             </Label>
             <Input
               value={invoiceNo}
               onChange={(e) => onInvoiceNoChange(e.target.value)}
               placeholder={t("wm_invoiceNoPlaceholder") || "IV-xxx"}
-              className="h-8 w-[140px] text-sm"
+              className="h-9 w-[160px] text-sm"
               disabled={disabled}
             />
           </div>
         ) : null}
 
-        <div className="flex items-center gap-1.5 sm:ml-auto">
+        <div className="flex items-center gap-2 sm:ml-auto pb-0.5">
           <input
             ref={cameraRef}
             type="file"
