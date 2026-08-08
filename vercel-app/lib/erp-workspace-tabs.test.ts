@@ -32,6 +32,15 @@ describe("erp-workspace-tabs", () => {
     expect(resolveErpKeepAliveCacheHref("/admin/leave?tab=stats")).toBe("/admin/leave")
   })
 
+  it("keeps financial-statements?tab= under one workspace key", () => {
+    expect(resolveErpWorkspaceTabHref("/admin/financial-statements?tab=balance")).toBe(
+      "/admin/financial-statements"
+    )
+    expect(resolveErpKeepAliveCacheHref("/admin/financial-statements?tab=margin&store=All")).toBe(
+      "/admin/financial-statements"
+    )
+  })
+
   it("accumulates menus without forcing dashboard", () => {
     ensureErpWorkspaceTab("/admin/vendors")
     ensureErpWorkspaceTab("/admin/leave?tab=stats")

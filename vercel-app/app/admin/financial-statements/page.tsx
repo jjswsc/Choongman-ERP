@@ -40,6 +40,7 @@ import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { AccountingPageShell } from "@/components/erp/accounting-page-shell"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import { useErpPageActive } from "@/lib/erp-page-visibility"
 
 export default function FinancialStatementsPage() {
   const { auth } = useAuth()
@@ -85,9 +86,11 @@ export default function FinancialStatementsPage() {
   )
   const [queryToken, setQueryToken] = React.useState(0)
   const searchParams = useSearchParams()
+  const pageActive = useErpPageActive()
   const urlAppliedRef = React.useRef(false)
 
   React.useEffect(() => {
+    if (!pageActive) return
     if (urlAppliedRef.current) return
     urlAppliedRef.current = true
     const ymStart = searchParams.get("ymStart")
@@ -96,9 +99,10 @@ export default function FinancialStatementsPage() {
     if (ymStart && /^\d{4}-\d{2}$/.test(ymStart)) setYearMonthStart(ymStart)
     if (ymEnd && /^\d{4}-\d{2}$/.test(ymEnd)) setYearMonthEnd(ymEnd)
     if (store) setStoreFilter(store)
-  }, [searchParams])
+  }, [pageActive, searchParams])
 
   React.useEffect(() => {
+    if (!pageActive) return
     if (!canFranchiseeMultiStore) {
       if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
       return
@@ -109,7 +113,7 @@ export default function FinancialStatementsPage() {
       return
     }
     if (scopedStoreChoices.includes(v)) setStoreFilter(v)
-  }, [canFranchiseeMultiStore, isManager, scopedStoreChoices, viewStore])
+  }, [pageActive, canFranchiseeMultiStore, isManager, scopedStoreChoices, viewStore])
 
   const franchiseStoreOptions = React.useMemo(
     () => buildFinancialStatementFranchiseStoreOptions(storeList, storeLabels),
