@@ -129,7 +129,8 @@ export function AdminLeaveApproval() {
     const apiStore = !isOffice && auth.store ? auth.store : decStore && decStore !== "All" ? decStore : undefined
 
     setLeaveLoading(true)
-    const statusForApi = searchParams.get("status") === "all" ? "All" : leaveStatusFilter
+    // 딥링크는 URL status만 사용. leaveStatusFilter를 deps에 넣으면 필터 변경마다 기간·조회가 재적용됨.
+    const statusForApi = searchParams.get("status") === "all" ? "All" : "대기"
 
     getLeavePendingList({
       startStr: start,
@@ -145,7 +146,7 @@ export function AdminLeaveApproval() {
       .catch(() => setLeaveList([]))
       .finally(() => setLeaveLoading(false))
      
-  }, [auth?.store, auth?.role, isOffice, searchParams, leaveStatusFilter, pageActiveRef])
+  }, [auth?.store, auth?.role, isOffice, searchParams, pageActiveRef])
 
   const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
   const translateLeaveType = (type: string) => translateLeaveTypeFromDb(type, t)

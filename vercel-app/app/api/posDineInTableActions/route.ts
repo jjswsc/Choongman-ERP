@@ -29,6 +29,8 @@ type PosOrderRow = {
   discount_amt?: number
   discount_reason?: string
   guest_count?: number
+  packaging_fee?: number
+  total?: number
   payment_cash?: number
   payment_card?: number
   payment_qr?: number
@@ -41,6 +43,25 @@ type PosOrderRow = {
   coupon_discount_amt?: number
   point_used?: number
   point_earned?: number
+}
+
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100
+}
+
+/** 품목 orderType takeout → dine-in (하이픈/언더스코어 모두) */
+function remapTakeoutItemOrderTypes(items: Record<string, unknown>[]): Record<string, unknown>[] {
+  return items.map((raw) => {
+    const ot = String(raw.orderType ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/-/g, '_')
+    if (ot !== 'takeout') return raw
+    const next = { ...raw }
+    const original = String(raw.orderType ?? '')
+    next.orderType = original.includes('_') ? 'dine_in' : 'dine-in'
+    return next
+  })
 }
 
 function isClosedStatus(status: string): boolean {
@@ -130,8 +151,9 @@ async function hasOtherActiveOrderOnTable(
 }
 
 /**
- * 홀(dine_in) 테이블 이동·합석 — 상세 규칙은 `lib/pos-dine-in-table-merge-rules.ts` 주석 참고.
+ * 홀(dine_in) 테이블 이동·합석·포장→테이블 — 상세 규칙은 `lib/pos-dine-in-table-merge-rules.ts` 주석 참고.
  * - move: 같은 주문의 table_name만 변경 (빈 테이블로만)
+ * - takeout_to_table: 포장 주문을 빈 홀 테이블로 전환 (order_type → dine_in)
  * - merge: keep 주문에 absorb 주문 품목·인원·할인 등을 합친 뒤 absorb는 cancelled
  */
 export async function POST(req: NextRequest) {
@@ -205,6 +227,98 @@ export async function POST(req: NextRequest) {
         await syncQrSessionTableNameForOrder({ orderId, targetTableName })
       } catch (qrSyncErr) {
         console.error('posDineInTableActions move qr session sync:', qrSyncErr)
+      }
+      return NextResponse.json({ success: true }, { headers })
+    }
+
+    if (action === 'takeout_to_table') {
+      const orderId = Number(body?.orderId)
+      const targetTableName = String(body?.targetTableName ?? '').trim()
+      if (!orderId || !targetTableName) {
+        return NextResponse.json(
+          { success: false, message: 'orderId and targetTableName required' },
+          { headers }
+        )
+      }
+
+      const row = await fetchOrder(orderId)
+      if (!row?.id) {
+        return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
+      }
+      if (!(await authCanAccessPosStoreWrite(auth, String(row.store_code ?? '')))) {
+        return NextResponse.json(
+          { success: false, message: '해당 매장에 대한 권한이 없습니다.' },
+          { status: 403, headers }
+        )
+      }
+      const currentType = coercePosOrderTypeForDb(row.order_type)
+      // 이미 전환된 경우(오프라인 재전송·중복 탭) — 성공으로 처리
+      if (
+        currentType === 'dine_in' &&
+        String(row.table_name ?? '').trim() === targetTableName
+      ) {
+        return NextResponse.json({ success: true }, { headers })
+      }
+      if (currentType !== 'takeout') {
+        return NextResponse.json(
+          { success: false, message: '포장(takeout) 주문만 테이블로 옮길 수 있습니다.' },
+          { headers }
+        )
+      }
+      if (isClosedStatus(String(row.status ?? ''))) {
+        return NextResponse.json({ success: false, message: '완료·취소된 주문은 이동할 수 없습니다.' }, { headers })
+      }
+
+      const store = String(row.store_code ?? '').trim()
+      const busy = await hasOtherActiveOrderOnTable(store, targetTableName, orderId)
+      if (busy) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              '이미 주문이 있는 테이블입니다. 빈 테이블로 이동하거나 합석 기능을 사용해 주세요.',
+          },
+          { headers }
+        )
+      }
+
+      const itemsRaw = parseItems(row.items_json)
+      const remappedItems = remapTakeoutItemOrderTypes(itemsRaw)
+      const itemsChanged =
+        remappedItems.length !== itemsRaw.length ||
+        remappedItems.some((it, i) => it !== itemsRaw[i])
+
+      const patch: Record<string, unknown> = {
+        order_type: 'dine_in',
+        table_name: targetTableName,
+      }
+      if (itemsChanged) {
+        patch.items_json = JSON.stringify(remappedItems)
+      }
+
+      const packagingFee = Math.max(0, Number(row.packaging_fee) || 0)
+      if (paymentSum(row) <= 0.005 && packagingFee > 0.005) {
+        patch.packaging_fee = 0
+        patch.total = Math.max(0, round2((Number(row.total) || 0) - packagingFee))
+      }
+
+      const prevMemo = String(row.memo ?? '').trim()
+      const stamp = `[TAKEOUT_TO_TABLE table=${targetTableName}]`
+      if (!prevMemo.includes('[TAKEOUT_TO_TABLE')) {
+        patch.memo = prevMemo ? `${prevMemo}\n${stamp}` : stamp
+      }
+
+      await supabaseUpdateByFilterWithPgrst204Fallback(
+        'pos_orders',
+        `id=eq.${orderId}`,
+        patch,
+        'posDineInTableActions'
+      )
+      try {
+        const { syncQrSessionTableNameForOrder } = await import('@/lib/qr-table-server')
+        await syncQrSessionTableNameForOrder({ orderId, targetTableName })
+      } catch (qrSyncErr) {
+        console.error('posDineInTableActions takeout_to_table qr session sync:', qrSyncErr)
       }
       return NextResponse.json({ success: true }, { headers })
     }

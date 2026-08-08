@@ -4,10 +4,19 @@ import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { Order } from '@/lib/pos-types'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { Order, Table } from '@/lib/pos-types'
 import {
   getPosPackagingChecklistByOrder,
   markPosOrderItemServed,
+  posTakeoutToTable,
   type PosMenu,
   type PosOrderPackagingChecklistGroup,
   updatePosOrderStatus,
@@ -15,7 +24,7 @@ import {
 import { executePosFullOrderCancel } from '@/lib/pos-order-full-cancel-execute'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { cn } from '@/lib/utils'
-import { Check, CheckCircle, Clock } from 'lucide-react'
+import { ArrowRightLeft, Check, CheckCircle, Clock } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
@@ -24,6 +33,7 @@ import { PackagingChecklistDialog } from '@/components/pos/packaging-checklist-d
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import {
   translatePosMenuLineForReceipt,
+  translateReceiptTableDisplayName,
   translateTakeoutOrderDisplayLabel,
 } from '@/lib/pos-print-translate'
 import {
@@ -50,6 +60,8 @@ export interface TakeoutOrderPanelProps {
   orderLabel: string
   order: Order | null
   menus?: PosMenu[]
+  /** 빈 테이블 선택용 — 매장 테이블 목록 */
+  allTables?: Table[]
   onPackaged?: () => void
   /** 기존 포장 주문에 메뉴 추가(메뉴 화면으로) */
   onAddOrder?: () => void
@@ -63,6 +75,10 @@ export interface TakeoutOrderPanelProps {
   onAfterPartialLineRemoved?: (orderId: number, detail?: PosKitchenReprintPayload) => void | Promise<void>
   /** 전체 취소 직후 주방 취소 전표 */
   onAfterFullOrderKitchenReprint?: (orderId: number, detail: PosKitchenReprintPayload) => void | Promise<void>
+  /** 포장→빈 테이블 전환 직전(Realtime 억제용) */
+  onBeforeTakeoutToTable?: (orderId: number) => void
+  /** 포장→빈 테이블 전환 성공 후(홀 탭 이동·재인쇄) */
+  onAfterTakeoutToTable?: (orderId: number, targetTableName: string) => void | Promise<void>
   onClose?: () => void
   t?: (key: string) => string
   storeCode?: string
@@ -72,6 +88,7 @@ export function TakeoutOrderPanel({
   orderLabel,
   order,
   menus: menusFromProps = [],
+  allTables = [],
   onPackaged,
   onAddOrder,
   onPay,
@@ -80,6 +97,8 @@ export function TakeoutOrderPanel({
   onOrderDismissed,
   onAfterPartialLineRemoved,
   onAfterFullOrderKitchenReprint,
+  onBeforeTakeoutToTable,
+  onAfterTakeoutToTable,
   onClose,
   t = (k) => k,
   storeCode = '',
@@ -259,10 +278,34 @@ export function TakeoutOrderPanel({
       normalizedStatus !== 'refunded' &&
       orderPaymentsSum(order) <= 0.005
   )
+  const canMoveToTable = Boolean(
+    order &&
+      order.type === 'takeout' &&
+      canCancel &&
+      posOrderHasServerId(order.id) &&
+      (order.items?.length ?? 0) > 0
+  )
+  const emptyTableOptions = useMemo(
+    () =>
+      allTables.filter((tab) => {
+        const n = String(tab.name ?? '').trim()
+        return Boolean(n) && !tab.isOccupied
+      }),
+    [allTables]
+  )
   const [cancelling, setCancelling] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   const [selectedLineItemId, setSelectedLineItemId] = useState<string | null>(null)
   const [cancelQtyDialogOpen, setCancelQtyDialogOpen] = useState(false)
+  const [moveToTableOpen, setMoveToTableOpen] = useState(false)
+  const [moveTargetName, setMoveTargetName] = useState('')
+  const [moveSubmitting, setMoveSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!moveToTableOpen) return
+    const first = emptyTableOptions[0]?.name
+    setMoveTargetName(first ? String(first) : '')
+  }, [moveToTableOpen, emptyTableOptions])
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -433,6 +476,56 @@ export function TakeoutOrderPanel({
     }
   }
 
+  const handleTakeoutToTable = async () => {
+    if (!order || !canMoveToTable || !moveTargetName.trim()) return
+    const orderId = Number(order.id)
+    if (!Number.isFinite(orderId) || orderId <= 0) return
+    const target = moveTargetName.trim()
+    const fromLabel = translateTakeoutOrderDisplayLabel(orderLabel, t)
+    const toLabel = translateReceiptTableDisplayName(target, t)
+    if (
+      !(await appConfirm(
+        `${t('posTakeoutToTableConfirm') || '테이블로 이동'}?\n${fromLabel} → ${toLabel}\n${t('posTakeoutToTableHint') || ''}`
+      ))
+    ) {
+      return
+    }
+    setMoveSubmitting(true)
+    try {
+      onBeforeTakeoutToTable?.(orderId)
+      const res = await posTakeoutToTable({ orderId, targetTableName: target })
+      if (!res.success) {
+        await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
+        return
+      }
+      setMoveToTableOpen(false)
+      await onAfterTakeoutToTable?.(orderId, target)
+      onClose?.()
+    } catch (e) {
+      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setMoveSubmitting(false)
+    }
+  }
+
+  const moveToTableButton = canMoveToTable ? (
+    <Button
+      type="button"
+      variant="outline"
+      className="h-11 w-full gap-1.5 text-base font-semibold"
+      disabled={emptyTableOptions.length === 0 || moveSubmitting}
+      title={
+        emptyTableOptions.length === 0
+          ? t('posTableMoveEmpty') || ''
+          : t('posTakeoutToTableHint') || ''
+      }
+      onClick={() => setMoveToTableOpen(true)}
+    >
+      <ArrowRightLeft className="h-4 w-4 shrink-0" aria-hidden />
+      {t('posTakeoutToTableBtn') || '테이블로 이동'}
+    </Button>
+  ) : null
+
   return (
     <>
       <div className="h-full flex flex-col border-l border-border bg-card">
@@ -573,6 +666,7 @@ export function TakeoutOrderPanel({
                   </Button>
                 </div>
               ) : null}
+              {moveToTableButton}
               {canCancel && (
                 <div className="space-y-1.5">
                   {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
@@ -756,6 +850,7 @@ export function TakeoutOrderPanel({
                     : (t('posTablePayInStore') || '매장 결제')}
                 </Button>
               </div>
+              {moveToTableButton}
               <Button
                 onClick={handlePackComplete}
                 className="h-11 w-full text-base font-semibold"
@@ -848,6 +943,47 @@ export function TakeoutOrderPanel({
           void applyLineCancel(selectedLineItemId, cq, false)
         }}
       />
+
+      <Dialog open={moveToTableOpen} onOpenChange={setMoveToTableOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('posTakeoutToTableTitle') || '테이블로 이동'}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{t('posTakeoutToTableHint') || ''}</p>
+          {emptyTableOptions.length === 0 ? (
+            <p className="text-sm text-amber-700 dark:text-amber-400 py-2">
+              {t('posTableMoveEmpty') || ''}
+            </p>
+          ) : (
+            <div className="space-y-2 py-2">
+              <Label className="text-xs font-semibold">
+                {t('posTakeoutToTableTarget') || t('posTableMoveTarget') || '이동할 테이블'}
+              </Label>
+              <Select value={moveTargetName} onValueChange={setMoveTargetName}>
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {emptyTableOptions.map((tab) => (
+                    <SelectItem key={tab.id} value={String(tab.name ?? '').trim()}>
+                      {translateReceiptTableDisplayName(String(tab.name ?? ''), t)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                className="w-full"
+                disabled={!moveTargetName || moveSubmitting}
+                onClick={() => {
+                  void handleTakeoutToTable()
+                }}
+              >
+                {moveSubmitting ? '…' : t('posTakeoutToTableConfirm') || '이 테이블로 이동'}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

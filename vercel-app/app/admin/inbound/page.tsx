@@ -6,6 +6,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { ArrowDownToLine, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -190,6 +191,10 @@ export default function InboundPage() {
   const [taxInvoicePreviewData, setTaxInvoicePreviewData] = React.useState<InvoiceData | null>(null)
 
   const searchParams = useSearchParams()
+  const allowInboundUrlSync = useErpAllowUrlSync("/admin/inbound")
+  const pageActiveRef = useErpPageActiveRef()
+  const fromPoAppliedRef = React.useRef<number | null>(null)
+  const filtersHydratedOnceRef = React.useRef(false)
   const { posStores: storeList } = useStoreList()
 
   const isOffice = React.useMemo(() => {
@@ -363,9 +368,12 @@ export default function InboundPage() {
 
   // 발주서에서 입고 등록 시 해당 PO 품목 pre-fill
   React.useEffect(() => {
+    if (!pageActiveRef.current || !allowInboundUrlSync) return
     const poIdParam = searchParams.get("fromPo")
     const poId = poIdParam ? parseInt(poIdParam, 10) : NaN
     if (!poId || isNaN(poId) || !isOffice) return
+    if (fromPoAppliedRef.current === poId) return
+    fromPoAppliedRef.current = poId
     setFromPoId(poId)
     getPurchaseOrders({ poId })
       .then((rows) => {
@@ -402,7 +410,7 @@ export default function InboundPage() {
         }
       })
       .catch(() => {})
-  }, [searchParams, isOffice])
+  }, [searchParams, isOffice, allowInboundUrlSync, pageActiveRef])
 
   React.useEffect(() => {
     if ((!fromPoId && !editingBatchId) || !inDate.trim()) return
@@ -991,8 +999,10 @@ export default function InboundPage() {
   const [filtersHydrated, setFiltersHydrated] = React.useState(false)
 
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     const plNav = parsePurchaseDrillNav(searchParams)
     if (plNav.fromPlDrill) {
+      if (!allowInboundUrlSync) return
       if (plNav.startStr) setHistStart(plNav.startStr)
       if (plNav.endStr) setHistEnd(plNav.endStr)
       if (plNav.yearMonth) setHistMonth(plNav.yearMonth)
@@ -1002,9 +1012,12 @@ export default function InboundPage() {
       }
       if (plNav.store) setHistStore(canonicalOfficeStore(plNav.store) || plNav.store)
       if (searchParams.get("tab") === "hist") setTabValue("hist")
+      filtersHydratedOnceRef.current = true
       setFiltersHydrated(true)
       return
     }
+    if (filtersHydratedOnceRef.current) return
+    filtersHydratedOnceRef.current = true
     try {
       const histRaw = sessionStorage.getItem("inbound:hist-filters:v1")
       if (histRaw) {
@@ -1066,7 +1079,7 @@ export default function InboundPage() {
       }
     } catch {}
     setFiltersHydrated(true)
-  }, [searchParams])
+  }, [searchParams, allowInboundUrlSync, pageActiveRef])
 
   React.useEffect(() => {
     if (!filtersHydrated) return

@@ -2011,6 +2011,17 @@ export const I18N_POS_KO: Record<string, string> = {
     posTableMoveEmpty: '이동 가능한 빈 테이블이 없습니다.',
     posTableMergeTitle: '테이블 합석',
     posTableMoveBtn: '이동',
+    posTakeoutToTableBtn: '테이블로 이동',
+    posTakeoutToTableTitle: '포장 → 테이블',
+    posTakeoutToTableHint:
+      '빈 테이블을 선택하면 포장 주문이 홀 주문으로 바뀝니다. 이미 주문이 있는 테이블은 홀에서 합석을 사용하세요.',
+    posTakeoutToTableTarget: '이동할 테이블',
+    posTakeoutToTableConfirm: '이 테이블로 이동',
+    posTakeoutToTableOnlyTakeout: '포장(takeout) 주문만 테이블로 옮길 수 있습니다.',
+    posTableMoveDineInOnly: '매장(홀) 주문만 이동할 수 있습니다.',
+    posTableMoveTargetOccupied:
+      '이미 주문이 있는 테이블입니다. 빈 테이블로 이동하거나 합석 기능을 사용해 주세요.',
+    posTableMoveClosedOrder: '완료·취소된 주문은 이동할 수 없습니다.',
     posTableGuestTapHint: '숫자를 선택하거나 직접 입력하세요.',
     posTableMergeBtn: '합석',
     posTableMergeHint: '미결제 주문끼리만 합칠 수 있습니다. 한쪽에 결제가 들어가 있으면 이동만 가능합니다.',
@@ -2055,7 +2066,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posIncomingDeliveryArrivedPrompt: '신규 배달 주문이 도착했습니다. 주문 화면으로 이동할까요?',
     posIncomingDeliveryDecisionPrompt: '신규 배달 주문입니다.\n이 주문을 수락할까요?',
     posIncomingDeliveryDeferredBatchHint:
-      '홀/포장 주문 입력 또는 결제 중 배달 주문 {{count}}건이 들어와 주방·영수증은 자동 출력했습니다. 배달 탭에서 확인해 주세요.',
+      '홀·포장·배달 주문 입력 또는 결제 중 배달 주문 {{count}}건이 들어와 주방·영수증은 자동 출력했습니다. 배달 탭에서 확인해 주세요.',
     posIncomingDeliveryDeferredTabHint: '배달 ({{count}}건 자동 출력됨)',
     posGrabCustomerCancelledAlert:
       '고객이 Grab에서 주문을 취소했습니다.\n\n{{label}}\n\n배달 탭에서 확인해 주세요.',
@@ -5317,6 +5328,17 @@ export const I18N_POS_EN: Record<string, string> = {
     posTableMoveEmpty: 'No empty table available.',
     posTableMergeTitle: 'Merge tables',
     posTableMoveBtn: 'Move',
+    posTakeoutToTableBtn: 'Move to table',
+    posTakeoutToTableTitle: 'Takeout → table',
+    posTakeoutToTableHint:
+      'Pick an empty table to convert this takeout order into a dine-in bill. If the table already has an order, use Merge on the Tables tab.',
+    posTakeoutToTableTarget: 'Target table',
+    posTakeoutToTableConfirm: 'Move to this table',
+    posTakeoutToTableOnlyTakeout: 'Only takeout orders can be moved to a table.',
+    posTableMoveDineInOnly: 'Only dine-in orders can be moved.',
+    posTableMoveTargetOccupied:
+      'That table already has an order. Move to an empty table or use Merge.',
+    posTableMoveClosedOrder: 'Completed or cancelled orders cannot be moved.',
     posTableGuestTapHint: 'Pick a number or tap “Direct input”.',
     posTableMergeBtn: 'Merge',
     posTableMergeHint: 'Only unpaid orders can be merged. If either side has payments recorded, use move only.',
@@ -8782,6 +8804,17 @@ export const I18N_POS_TH: Record<string, string> = {
     posTableMoveTarget: 'ย้ายไปโต๊ะ',
     posTableMoveTitle: 'ย้ายโต๊ะ',
     posTableMoveBtn: 'ย้าย',
+    posTakeoutToTableBtn: 'ย้ายไปโต๊ะ',
+    posTakeoutToTableTitle: 'กลับบ้าน → โต๊ะ',
+    posTakeoutToTableHint:
+      'เลือกโต๊ะว่าง แล้วออเดอร์กลับบ้านจะเปลี่ยนเป็นออเดอร์ทานที่ร้าน หากโต๊ะมีออเดอร์อยู่แล้ว ให้ใช้รวมโต๊ะที่แท็บสถานะโต๊ะ',
+    posTakeoutToTableTarget: 'โต๊ะปลายทาง',
+    posTakeoutToTableConfirm: 'ย้ายมาที่โต๊ะนี้',
+    posTakeoutToTableOnlyTakeout: 'ย้ายไปโต๊ะได้เฉพาะออเดอร์กลับบ้านเท่านั้น',
+    posTableMoveDineInOnly: 'ย้ายได้เฉพาะออเดอร์ทานที่ร้านเท่านั้น',
+    posTableMoveTargetOccupied:
+      'โต๊ะนี้มีออเดอร์อยู่แล้ว ย้ายไปโต๊ะว่างหรือใช้รวมโต๊ะ',
+    posTableMoveClosedOrder: 'ออเดอร์ที่เสร็จหรือยกเลิกแล้ว ย้ายไม่ได้',
     posTableGuestTapHint: 'เลือกตัวเลข หรือแตะ「กรอกเอง」',
     posTableMergeBtn: 'รวม',
     posStoreFixedFeesSection: 'ค่าจัดส่งและค่าหีบห่อ (คงที่)',

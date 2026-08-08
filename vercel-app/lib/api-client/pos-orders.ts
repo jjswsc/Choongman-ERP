@@ -485,6 +485,20 @@ export async function posDineInTableMove(params: { orderId: number; targetTableN
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+/** 포장 주문 → 빈 홀 테이블 (order_type takeout→dine_in, table_name 지정) */
+export async function posTakeoutToTable(params: { orderId: number; targetTableName: string }) {
+  const res = await apiFetchWithOffline('/api/posDineInTableActions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'takeout_to_table',
+      orderId: params.orderId,
+      targetTableName: params.targetTableName,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 /**
  * 홀 주문 합석: keep는 매장(dine_in)만. absorb는 매장 또는 포장(takeout) — 포장은 이 테이블 청구서로만 합침.
  * keep에 absorb 품목·인원 등을 합치고 absorb는 cancelled + `[ORDER_MERGED …]` 메모. 결제 반영된 주문은 합석 불가(API).

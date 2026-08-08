@@ -211,7 +211,10 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
     let store = storeFilterFinal || auth?.store
     if (!store) return
     setHasSearched(true)
-    store = (store === t("scheduleStoreAll") || store === "All" || store === "전체") ? "All" : store
+    // "All" / 전체 / i18n 라벨 — t를 deps에 넣지 않아 언어 함수 참조 변경으로 재조회가 반복되지 않게 함
+    const allLabel = String(t("scheduleStoreAll") || "").trim()
+    store =
+      store === "All" || store === "전체" || (allLabel && store === allLabel) ? "All" : store
     setLoading(true)
     Promise.all([getTodaySchedule({ store, date }), getTodayAttendanceSummary({ store, date })])
       .then(([sch, att]) => {
@@ -223,7 +226,13 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         setAttendance([])
       })
       .finally(() => setLoading(false))
-  }, [storeFilterFinal, auth?.store, date])
+  }, [storeFilterFinal, auth?.store, date, t])
+
+  // 매장·날짜 준비되면 자동 조회 (모바일에서 검색 버튼 없이 바로 보이게)
+  React.useEffect(() => {
+    if (!(storeFilterFinal || auth?.store)) return
+    loadTodayData()
+  }, [loadTodayData, storeFilterFinal, auth?.store])
 
   // 당일 조회 중일 때 실시간 반영: 60초마다 출퇴근 데이터 재조회(관리자 트래픽 절감)
   const isViewingToday = date === todayStr()
@@ -412,7 +421,11 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
             <p className="mt-2 text-xs text-muted-foreground">{t("scheduleTodayEmpty")}</p>
           </div>
         ) : (
-          <AdminTableScroll className="overscroll-x-contain rounded-xl border" hint={false}>
+          <AdminTableScroll
+            className="overscroll-x-contain rounded-xl border"
+            hint={false}
+            lockViewport={false}
+          >
             <table className="w-full border-collapse text-left">
               {/* 헤더: 구역 | 이름 | 9 | 10 | ... | 21 */}
               <thead>

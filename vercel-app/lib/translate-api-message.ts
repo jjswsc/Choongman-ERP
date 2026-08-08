@@ -72,6 +72,10 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   pos_drawer_pin_wrong: "posDrawerPinWrong",
   pos_drawer_pin_current_required: "posDrawerPinCurrentRequired",
   payment_exceeds_total: "posPaymentExceedsTotal",
+  "포장(takeout) 주문만 테이블로 옮길 수 있습니다.": "posTakeoutToTableOnlyTakeout",
+  "매장(홀) 주문만 이동할 수 있습니다.": "posTableMoveDineInOnly",
+  "이미 주문이 있는 테이블입니다. 빈 테이블로 이동하거나 합석 기능을 사용해 주세요.": "posTableMoveTargetOccupied",
+  "완료·취소된 주문은 이동할 수 없습니다.": "posTableMoveClosedOrder",
 
   // POS 단말 역할 제한
   "단말 대수 설정은 본사(OFFICE) 직원만 변경할 수 있습니다.": "posDeviceRoleLimitsAdminDenied",

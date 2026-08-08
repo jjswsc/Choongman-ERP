@@ -2139,16 +2139,26 @@ export default function PosTerminalPage() {
     Boolean(pendingDineInOrderId) ||
     Boolean(pendingTakeoutOrderId) ||
     Boolean(pendingDeliveryOrderId)
-  /** 홀·포장 장바구니 입력 중 — 배달 자동 탭 전환·모달 억제(결제 중과 동일 대기 큐) */
-  const hasActiveWalkInCart =
-    terminalCartLines.length > 0 && (activeTab === 'tables' || activeTab === 'takeout')
-  /** 결제 모달·QR 대기·거스름 확인·홀/포장 입력 중 — 신규 배달 자동 탭 전환 억제 */
+  /**
+   * 홀·포장·배달 장바구니 입력 중 — 배달 자동 탭 전환·모달 억제(결제 중과 동일 대기 큐).
+   * 배달 탭도 포함: Line Man/Shopee 수동 키인 중 Grab 유입이 확인창으로 화면을 뺏지 않도록.
+   */
+  const hasActiveOrderEntryCart =
+    terminalCartLines.length > 0 &&
+    (activeTab === 'tables' || activeTab === 'takeout' || activeTab === 'delivery')
+  /** 결제 모달·QR 대기·거스름 확인·홀/포장/배달 입력 중 — 신규 배달 자동 탭 전환 억제 */
   const isIncomingDeliveryFocusLocked =
     tourPaymentModalOpen ||
     hasPendingPaymentFlow ||
     postPaymentCashChangeBaht != null ||
     kbankCallbackState === 'waiting' ||
-    hasActiveWalkInCart
+    hasActiveOrderEntryCart
+  /**
+   * Realtime INSERT effect가 autoFocus를 deps에 안 넣어 결제·키인 잠금이 스냅샷으로 남는 문제 방지.
+   * 잠금 여부는 항상 최신 ref를 본다.
+   */
+  const isIncomingDeliveryFocusLockedRef = useRef(isIncomingDeliveryFocusLocked)
+  isIncomingDeliveryFocusLockedRef.current = isIncomingDeliveryFocusLocked
   const customerDisplayOrderItems = useMemo(
     () =>
       terminalCartLines.map((line) => {
@@ -3064,7 +3074,7 @@ export default function PosTerminalPage() {
 
   /**
    * 신규 "배달" 주문 자동 처리:
-   * - 배달 탭으로 전환(결제 중이면 대기 큐)
+   * - 배달 탭으로 전환(결제·키인 중이면 대기 큐)
    * - 해당 주문 자동 선택
    * - 배달앱 코드가 있으면 Grab/LineMan/Shopee 자동 선택
    * - 알림음 재생
@@ -3088,7 +3098,7 @@ export default function PosTerminalPage() {
       if (promptedPendingDeliveryOrderIdsRef.current.has(orderId)) return
       if (deferredIncomingDeliveryQueueRef.current.some((entry) => entry.orderId === orderId)) return
 
-      if (isIncomingDeliveryFocusLocked) {
+      if (isIncomingDeliveryFocusLockedRef.current) {
         deferredIncomingDeliveryQueueRef.current.push({ ...params, orderId })
         setDeferredIncomingDeliveryCount(deferredIncomingDeliveryQueueRef.current.length)
         refetchStores({ scope: 'all' })
@@ -3103,7 +3113,6 @@ export default function PosTerminalPage() {
     },
     [
       applyIncomingDeliveryFocusUi,
-      isIncomingDeliveryFocusLocked,
       isMainPosDevice,
       playIncomingOrderBeep,
       refetchStores,
@@ -3111,8 +3120,11 @@ export default function PosTerminalPage() {
     ]
   )
 
+  const autoFocusIncomingDeliveryOrderRef = useRef(autoFocusIncomingDeliveryOrder)
+  autoFocusIncomingDeliveryOrderRef.current = autoFocusIncomingDeliveryOrder
+
   const flushDeferredIncomingDeliveryOrders = useCallback(() => {
-    if (isIncomingDeliveryFocusLocked) return
+    if (isIncomingDeliveryFocusLockedRef.current) return
     const batch = [...deferredIncomingDeliveryQueueRef.current]
     if (batch.length === 0) return
     deferredIncomingDeliveryQueueRef.current = []
@@ -3129,13 +3141,13 @@ export default function PosTerminalPage() {
     if (batch.length > 1) {
       void appAlert(
         (t('posIncomingDeliveryDeferredBatchHint') ||
-          '결제 중 배달 주문 {{count}}건이 대기했습니다. 배달 탭에서 확인해 주세요.').replace(
+          '주문 입력 또는 결제 중 배달 주문 {{count}}건이 들어와 주방·영수증은 자동 출력했습니다. 배달 탭에서 확인해 주세요.').replace(
           '{{count}}',
           String(batch.length)
         )
       )
     }
-  }, [applyIncomingDeliveryFocusUi, isIncomingDeliveryFocusLocked, t])
+  }, [applyIncomingDeliveryFocusUi, t])
 
   useEffect(() => {
     flushDeferredIncomingDeliveryOrders()
@@ -3164,7 +3176,7 @@ export default function PosTerminalPage() {
         label
       )
 
-      if (isIncomingDeliveryFocusLocked) {
+      if (isIncomingDeliveryFocusLockedRef.current) {
         void appAlert(msg)
         return
       }
@@ -3174,7 +3186,7 @@ export default function PosTerminalPage() {
       setSelectedDeliveryTargetId(`delivery-order-${orderId}`)
       void appAlert(msg)
     },
-    [isIncomingDeliveryFocusLocked, playIncomingOrderBeep, refetchCurrentStore, t]
+    [playIncomingOrderBeep, refetchCurrentStore, t]
   )
 
   const runGrabCancelWatchOnOrders = useCallback(
@@ -4634,7 +4646,7 @@ export default function PosTerminalPage() {
         delivery_payment_channel: String(row.delivery_payment_channel ?? ''),
         items_json: row.items_json,
       })
-      autoFocusIncomingDeliveryOrder({
+      autoFocusIncomingDeliveryOrderRef.current({
         orderId,
         orderType: inferredOrderType,
         deliveryAppCode: String(row.delivery_app_code ?? ''),
@@ -4643,7 +4655,7 @@ export default function PosTerminalPage() {
         storeCode: String(row.store_code ?? ''),
         memo: String(row.memo ?? ''),
       })
-      // 주문 바/배달 목록은 usePosStore 스냅샷을 사용하므로, 신규 주문 수신 시 즉시 갱신합니다.
+      // 주문 바/배달 목록은 usePosStore 스냅샷을 사용하므로, 신규 주문 도착 시 즉시 갱신합니다.
       refetchCurrentStore()
       const storeCode = String(row.store_code ?? currentStoreId)
       const orderNo = String(row.order_no ?? '')
@@ -4837,7 +4849,7 @@ export default function PosTerminalPage() {
       if (seenOrderIdsRef.current.has(orderId)) return
       seenOrderIdsRef.current.add(orderId)
       bumpLastSeenOrderId(orderId)
-      autoFocusIncomingDeliveryOrder({
+      autoFocusIncomingDeliveryOrderRef.current({
         orderId,
         orderType: String(row.order_type ?? ''),
         deliveryAppCode: String(row.delivery_app_code ?? ''),
@@ -4863,13 +4875,11 @@ export default function PosTerminalPage() {
     isMainPosDevice,
     currentStoreId,
     currentStoreCodeVariants,
-    autoFocusIncomingDeliveryOrder,
     refetchCurrentStore,
     bumpLastSeenOrderId,
     shouldTreatAsIncomingOrder,
+    isCurrentStoreOrder,
     auth?.tenantId,
-    runGrabCancelWatchOnOrders,
-    notifyGrabCustomerCancelledOrder,
   ])
 
   useEffect(() => {
@@ -5555,7 +5565,7 @@ export default function PosTerminalPage() {
             String(
               (order.items || []).find((it) => String(it.deliveryAppCode ?? '').trim())?.deliveryAppCode ?? ''
             ).trim()
-          autoFocusIncomingDeliveryOrder({
+          autoFocusIncomingDeliveryOrderRef.current({
             orderId: oid,
             orderType: String(order.orderType ?? ''),
             deliveryAppCode: inferredDeliveryCode,
@@ -5863,7 +5873,6 @@ export default function PosTerminalPage() {
     pricingAdjustments,
     posReceiptLineOpts,
     menus,
-    autoFocusIncomingDeliveryOrder,
     t,
     lang,
     refetchCurrentStore,
@@ -11598,6 +11607,7 @@ export default function PosTerminalPage() {
               order={selectedTakeoutOrder}
               storeCode={currentStoreId}
               menus={menus}
+              allTables={currentStore?.tables ?? []}
               onPackaged={() => refetchStores({ scope: 'all' })}
               onAfterPartialLineRemoved={
                 isPosDemo
@@ -11611,6 +11621,35 @@ export default function PosTerminalPage() {
                   ? undefined
                   : async (orderId, detail) => {
                       await runAfterFullOrderCancelKitchenPrints(orderId, 'takeout', detail)
+                    }
+              }
+              onBeforeTakeoutToTable={
+                isPosDemo
+                  ? undefined
+                  : (orderId) => {
+                      mainPosSelfDineInUpdateSuppressUntilRef.current.set(
+                        orderId,
+                        Date.now() + 20_000
+                      )
+                    }
+              }
+              onAfterTakeoutToTable={
+                isPosDemo
+                  ? undefined
+                  : async (orderId, targetTableName) => {
+                      dismissTerminalOrder(selectedTakeoutOrder)
+                      setSelectedTakeoutTargetId(null)
+                      setSelectedTakeoutTargetLabel('')
+                      setActiveTab('tables')
+                      const match = (currentStore?.tables ?? []).find(
+                        (tab) => String(tab.name ?? '').trim() === String(targetTableName).trim()
+                      )
+                      if (match?.id) {
+                        setServingTableId(match.id)
+                        setSelectedTableId(null)
+                      }
+                      await refetchStores({ scope: 'all' })
+                      await runAfterTableTransferHallReprint(orderId)
                     }
               }
               onCancel={refetchCurrentStore}
