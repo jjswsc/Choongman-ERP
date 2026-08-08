@@ -5,6 +5,7 @@ import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtm
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -206,11 +207,14 @@ export function AdminPayrollRecords() {
     }
   }
 
+  const pageActiveRef = useErpPageActiveRef()
+
   /**
    * 명세서 탭 마운트 시 URL(?tab=records&month=&store=)으로 폼·목록 복원.
    * searchParams는 deps에 넣지 않음 — 검색 후 router.replace 시 중복 조회 방지.
    */
   useEffect(() => {
+    if (!pageActiveRef.current) return
     if (!auth?.store) return
     if (searchParams.get("tab") !== "records") return
     const m = searchParams.get("month")
@@ -242,8 +246,8 @@ export function AdminPayrollRecords() {
     return () => {
       cancelled = true
     }
-     
-  }, [auth?.store, fetchPayrollRecords, isManager, t, userStore])
+    // searchParams는 deps에 넣지 않음 — 검색 후 router.replace 시 중복 조회 방지
+  }, [auth?.store, fetchPayrollRecords, isManager, t, userStore, pageActiveRef])
 
   const handleToggleRow = (idx: number) => {
     setSelected((prev) => {

@@ -1,12 +1,9 @@
 /**
- * keep-alive 제외 경로 — 메모리·Realtime 부담이 특히 큰 화면만.
- * 나머지는 워크스페이스 탭에서 조회·필터 상태를 유지한다.
+ * keep-alive 제외 경로 — Realtime·폴링 부담이 큰 화면만.
+ * 재고·근태·급여 등 조회형 화면은 탭 전환 후에도 검색 상태를 유지한다.
  */
 export const ERP_KEEP_ALIVE_EXCLUDED_PATH_PREFIXES = [
   "/admin/live-store-sales",
-  "/admin/stock",
-  "/admin/attendance",
-  "/admin/payroll",
 ] as const
 
 /**

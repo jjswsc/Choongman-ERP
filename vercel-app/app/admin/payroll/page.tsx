@@ -4,6 +4,7 @@
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
+import { useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { Wallet } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { AdminPayrollCalc } from "@/components/admin/admin-payroll-calc"
@@ -40,16 +41,18 @@ function PayrollPageInner() {
   const searchParams = useSearchParams()
   const canAccessPayroll = isOfficeRole(auth?.role || "") || isManagerRole(auth?.role || "") || isFranchiseeRole(auth?.role || "")
 
-  /** 탭은 URL과 분리(입고·출고와 동일). ?tab= 변경 시 keep-alive가 href별로 페이지를 나눠 계산 탭 편집 상태가 사라짐. */
+  /** 탭은 URL과 분리. keep-alive 중 다른 메뉴 ?tab=으로 덮지 않음. */
   const [tabValue, setTabValue] = useState<PayrollTab>("calc")
   const tabFromUrlAppliedRef = useRef(false)
+  const pageActiveRef = useErpPageActiveRef()
 
   useEffect(() => {
+    if (!pageActiveRef.current) return
     if (tabFromUrlAppliedRef.current) return
     const rawTab = searchParams.get("tab")
     if (isPayrollTab(rawTab)) setTabValue(rawTab)
     tabFromUrlAppliedRef.current = true
-  }, [searchParams])
+  }, [searchParams, pageActiveRef])
 
   const setTab = (v: string) => {
     if (isPayrollTab(v)) setTabValue(v)

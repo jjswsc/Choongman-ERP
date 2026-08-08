@@ -5,6 +5,7 @@ import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { CheckCircle2, Clock, Save, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
@@ -179,6 +180,8 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
   const t = useT(lang)
   const allowEdit = !readOnly
   const searchParams = useSearchParams()
+  const allowAttendanceUrlSync = useErpAllowUrlSync("/admin/attendance")
+  const pageActiveRef = useErpPageActiveRef()
   const focusDateParam = String(searchParams.get("focusDate") || "").trim()
   const focusStoreParam = String(searchParams.get("store") || "").trim()
   const focusEmployeeParam = String(searchParams.get("employee") || "").trim()
@@ -243,6 +246,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
   }, [employeeOptions, employeeFilter])
 
   React.useEffect(() => {
+    if (!allowAttendanceUrlSync) return
     const p = searchParams.get("tab")
     if (p === "help" || p === "today" || p === "view") {
       setAttTab(p)
@@ -253,10 +257,11 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
       return
     }
     if (p === "status") setAttTab("status")
-  }, [searchParams, allowEdit])
+  }, [allowAttendanceUrlSync, searchParams, allowEdit])
 
   /** 급여 수정 등 ?month=yyyy-MM&store&employee&tab=status */
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     const month = searchParams.get("month")
     if (!month || !/^\d{4}-\d{2}$/.test(month)) return
 
@@ -304,7 +309,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
       .catch(() => setList([]))
       .finally(() => setLoading(false))
      
-  }, [auth?.store, auth?.role, isOffice, searchParams.toString()])
+  }, [auth?.store, auth?.role, isOffice, searchParams, pageActiveRef])
 
   const loadRecords = React.useCallback(() => {
     setLoading(true)
