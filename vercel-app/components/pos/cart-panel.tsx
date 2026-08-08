@@ -212,6 +212,7 @@ import {
   type TaxSearchField,
 } from '@/lib/cart-panel-tax-invoice-utils'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { formatMemberPortalReceiptMemo } from '@/lib/pos-member-portal-takeout-label'
 import { searchCartPanelTaxInvoiceProfile } from '@/lib/cart-panel-tax-invoice-search'
 import { CartPanelTaxInvoiceSection } from '@/components/pos/cart-panel-tax-invoice-section'
 import {
@@ -531,6 +532,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [guestDirectOpen, setGuestDirectOpen] = useState(false)
   const [guestDirectValue, setGuestDirectValue] = useState('10')
   const [customerMemo, setCustomerMemo] = useState('')
+  const displayCustomerMemo = useMemo(
+    () => formatMemberPortalReceiptMemo(customerMemo, t, lang),
+    [customerMemo, t, lang]
+  )
+  const [customerMemoDraft, setCustomerMemoDraft] = useState('')
   const [couponCode, setCouponCode] = useState('')
   const pendingMemberCouponQrRawRef = useRef<string | null>(null)
   const lastScanBeepAtRef = useRef(0)
@@ -5450,9 +5456,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               {editingCustomerMemo ? (
                 <Input
                   placeholder={t('posCustomerMemoPh') || '알레르기, 맵기 조절 등'}
-                  value={customerMemo}
-                  onChange={e => setCustomerMemo(e.target.value)}
-                  onBlur={() => setEditingCustomerMemo(false)}
+                  value={customerMemoDraft}
+                  onChange={e => setCustomerMemoDraft(e.target.value)}
+                  onBlur={() => {
+                    const next = customerMemoDraft.trim()
+                    const localized = displayCustomerMemo.trim()
+                    // 회원앱 자동 메모는 화면만 번역 — 내용 미변경 시 저장용 한글 태그 유지
+                    if (next !== localized) setCustomerMemo(customerMemoDraft)
+                    setEditingCustomerMemo(false)
+                  }}
                   className="h-8 text-sm border-0 bg-transparent focus-visible:ring-2"
                   autoFocus
                   aria-label={t('posCustomerMemo') || '손님 메모'}
@@ -5460,14 +5472,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               ) : (
                 <div className="flex items-center gap-1.5 min-h-8">
                   <p className="flex-1 text-sm font-medium text-blue-800 dark:text-blue-200 break-words">
-                    {customerMemo.trim()}
+                    {displayCustomerMemo.trim()}
                   </p>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6 shrink-0 text-blue-600 hover:text-blue-800"
-                    onClick={() => setEditingCustomerMemo(true)}
+                    onClick={() => {
+                      setCustomerMemoDraft(displayCustomerMemo)
+                      setEditingCustomerMemo(true)
+                    }}
                   >
                     <Pencil className="h-3 w-3" />
                   </Button>
@@ -5480,7 +5495,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               variant="ghost"
               size="sm"
               className="h-8 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setEditingCustomerMemo(true)}
+              onClick={() => {
+                setCustomerMemoDraft(customerMemo)
+                setEditingCustomerMemo(true)
+              }}
               aria-label={t('posCustomerMemo') || '손님 메모'}
             >
               + {t('posCustomerMemo') || '손님 메모'}

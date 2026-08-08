@@ -4,6 +4,7 @@ import { appAlert } from "@/lib/app-message"
 import { useEffect, useRef, type RefObject } from 'react'
 import { getPosMenus, getPosMenuOptions, getPosPrinterSettings, type PosPrinterSettings } from '@/lib/api-client'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { buildPosCustomerMemoLineForPrint } from '@/lib/pos-member-portal-takeout-label'
 import { escapeHtml } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import type { PosMenu } from '@/lib/api-client'
@@ -494,8 +495,9 @@ export function PosReceiptModal({
         const tablePart = receiptData.tableName
           ? ` · ${ki.t('posTable') || '테이블'}: ${translateReceiptTableDisplayName(receiptData.tableName, ki.t)}`
           : ''
-        const memoLine =
-          kitchenMemo.trim() ? `${ki.t('posCustomerMemo') || '메모'}: ${kitchenMemo.trim()}` : ''
+        const memoLine = kitchenMemo.trim()
+          ? buildPosCustomerMemoLineForPrint(receiptData.memo, ki.t, ki.lang)
+          : ''
         const html = buildKitchenSlipDocumentHtml({
           label: slip.label,
           orderNo: kitchenOrderNoRaw,

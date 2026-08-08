@@ -12,6 +12,7 @@ import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { translatePosCustomerMemoForReceipt } from '@/lib/pos-member-portal-takeout-label'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import type { LangCode } from '@/lib/lang-context'
 
@@ -195,7 +196,8 @@ export function PosHallOrderReceiptPreview({
       ) : null}
       {parsedMemo.plainMemo ? (
         <div className="memo text-xs">
-          {tr('posCustomerMemo', '메모')}: {parsedMemo.plainMemo}
+          {tr('posCustomerMemo', '메모')}:{' '}
+          {translatePosCustomerMemoForReceipt(memo, t, lang) || parsedMemo.plainMemo}
         </div>
       ) : null}
       <div className="receipt-divider border-t border-dashed border-black" />
