@@ -38,8 +38,8 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { useSearchParams } from "next/navigation"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import { getBangkokDateStr } from "@/lib/pos-business-day"
 import { addDaysYmd } from "@/lib/pos-business-day"
 import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
@@ -121,23 +121,10 @@ export default function MarketingMaterialsPage() {
   const t = useT(lang)
   const { auth } = useAuth()
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
-  const mainTab: MainTab =
-    searchParams.get("tab") === "gifts"
-      ? "gifts"
-      : searchParams.get("tab") === "checklist"
-        ? "checklist"
-        : "overview"
-
-  const setMainTab = React.useCallback(
-    (tab: MainTab) => {
-      const p = new URLSearchParams(searchParams.toString())
-      if (tab === "gifts") p.set("tab", "gifts")
-      else if (tab === "checklist") p.set("tab", "checklist")
-      else p.delete("tab")
-      const qs = p.toString()
-      router.replace(qs ? `/admin/marketing/materials?${qs}` : "/admin/marketing/materials")
-    },
-    [router, searchParams]
+  const [mainTab, setMainTab] = useAdminUrlTab(
+    "tab",
+    ["overview", "gifts", "checklist"] as const,
+    "overview"
   )
 
   const [materials, setMaterials] = React.useState<MarketingMaterial[]>([])

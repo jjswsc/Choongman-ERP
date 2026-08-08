@@ -4,6 +4,7 @@ import { appAlert } from "@/lib/app-message"
 import * as React from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import {
   Users,
   UserPlus,
@@ -375,6 +376,8 @@ function SelectedMemberBar({
 
 export default function MembersPage() {
   const searchParams = useSearchParams()
+  const allowMembersUrlSync = useErpAllowUrlSync("/admin/members")
+  const pageActiveRef = useErpPageActiveRef()
   const { lang } = useLang()
   const t = useT(lang)
   const listRef = React.useRef<MemberListPanelHandle>(null)
@@ -387,10 +390,12 @@ export default function MembersPage() {
   const [mergeOpen, setMergeOpen] = React.useState(false)
 
   React.useEffect(() => {
+    if (!allowMembersUrlSync) return
     if (searchParams.get("tab") === "points") setDetailTab("points")
-  }, [searchParams])
+  }, [allowMembersUrlSync, searchParams])
 
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     const id = Number(searchParams.get("memberId") || 0)
     if (!id) return
     void (async () => {
@@ -406,7 +411,7 @@ export default function MembersPage() {
         /* fallback */
       }
     })()
-  }, [searchParams])
+  }, [searchParams, pageActiveRef])
 
   const handleFormChange = React.useCallback((patch: Partial<MemberForm>) => {
     setForm((p) => ({ ...p, ...patch }))

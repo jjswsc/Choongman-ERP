@@ -2,7 +2,6 @@
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
-import { useSearchParams } from "next/navigation"
 import { FileText } from "lucide-react"
 import { AdminPurchaseOrder } from "@/components/erp/admin-purchase-order"
 import { AdminPurchaseOrderHistory } from "@/components/erp/admin-purchase-order-history"
@@ -19,16 +18,17 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { resolvePoIssuerStoreFromAuth } from "@/lib/po-issuer-scope"
 import { AccountingPageShell } from "@/components/erp/accounting-page-shell"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
+
 export default function AccountingPurchaseOrderPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
-  const [tab, setTab] = React.useState("hq")
-  const searchParams = useSearchParams()
-  React.useEffect(() => {
-    const q = String(searchParams.get("tab") || "").trim()
-    if (q === "billing_settings") setTab("billing_settings")
-  }, [searchParams])
+  const [tab, setTab] = useAdminUrlTab(
+    "tab",
+    ["hq", "billing_settings", "history"] as const,
+    "hq"
+  )
   const isStoreIssuer = Boolean(
     auth && resolvePoIssuerStoreFromAuth({ role: auth.role, store: auth.store })
   )
@@ -41,7 +41,11 @@ export default function AccountingPurchaseOrderPage() {
         isStoreIssuer ? t("adminAccountingPurchaseOrderSubStore") : t("adminAccountingPurchaseOrderSub")
       }
     >
-      <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as "hq" | "billing_settings" | "history")}
+        className={adminTabsRootCn}
+      >
         <AdminTabsBarWithHelp>
           <TabsList className={adminTabsListRowCn}>
             <TabsTrigger value="hq" className={adminTabsTriggerCn}>

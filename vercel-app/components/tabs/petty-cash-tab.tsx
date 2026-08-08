@@ -6,6 +6,7 @@ import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtm
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
+import { useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -218,7 +219,10 @@ export function PettyCashTab({
   /** petty_cash.user_name 은 로그인 시점 문자열이라 직원 마스터 name 과 1:1이 아닐 수 있음 — 스케줄과 동일한 매칭 사용 */
   const [staffForNickMatch, setStaffForNickMatch] = useState<StaffRowForScheduleMatch[]>([])
 
+  const pageActiveRef = useErpPageActiveRef()
+
   useEffect(() => {
+    if (!pageActiveRef.current) return
     const nav = parsePurchaseDrillNav(searchParams)
     if (!nav.fromPlDrill) return
     if (nav.startStr && /^\d{4}-\d{2}-\d{2}$/.test(nav.startStr)) setListStart(nav.startStr)
@@ -230,7 +234,7 @@ export function PettyCashTab({
     setFilterPlCostPurchaseOnly(nav.filterPlCostPurchaseOnly === true)
     setFilterPettyNoVendor(nav.filterPettyNoVendor === true)
     setPlDrillFetchPending(true)
-  }, [searchParams, canSearchAll])
+  }, [searchParams, canSearchAll, pageActiveRef])
 
   useEffect(() => {
     if (!auth?.store) return

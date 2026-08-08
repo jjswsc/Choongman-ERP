@@ -3,6 +3,7 @@
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
+import { useErpAllowUrlSync } from "@/lib/erp-page-visibility"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   adminTabsContentCn,
@@ -236,9 +237,11 @@ export function TaxFilingShell() {
   const isManager = !isOffice && isManagerOrFranchiseeRole(role)
 
   const searchParams = useSearchParams()
+  const allowUrlSync = useErpAllowUrlSync("/admin/tax-filing", "/admin/accounting-compliance")
   const [tab, setTab] = React.useState("pp30")
 
   React.useEffect(() => {
+    if (!allowUrlSync) return
     const q = String(searchParams.get("tab") || "").trim()
     if (
       q === "storeProfiles" ||
@@ -264,7 +267,7 @@ export function TaxFilingShell() {
     } else if (q === "dbd" || q === "workflow" || q === "pnd5354") {
       setTab("pnd53")
     }
-  }, [searchParams])
+  }, [allowUrlSync, searchParams])
 
   const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<TaxEntityScopeOption[]>([])
 

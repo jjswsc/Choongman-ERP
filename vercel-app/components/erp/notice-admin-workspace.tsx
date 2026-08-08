@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useSearchParams } from "next/navigation"
 import { Megaphone, Send, History } from "lucide-react"
 import { AdminNoticeCompose } from "@/components/erp/admin-notice-compose"
 import { AdminNoticeHistory } from "@/components/erp/admin-notice-history"
@@ -16,25 +15,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-
-type NoticeTab = "compose" | "history"
-
-function parseNoticeTab(raw: string | null): NoticeTab {
-  return raw === "history" ? "history" : "compose"
-}
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 
 export function NoticeAdminWorkspace() {
   const { lang } = useLang()
   const t = useT(lang)
-  const searchParams = useSearchParams()
-  const [tab, setTab] = React.useState<NoticeTab>(() => parseNoticeTab(searchParams.get("tab")))
-
-  React.useEffect(() => {
-    setTab(parseNoticeTab(searchParams.get("tab")))
-  }, [searchParams])
+  const [tab, setTab] = useAdminUrlTab("tab", ["compose", "history"] as const, "compose")
 
   return (
-    <Tabs value={tab} onValueChange={(v) => setTab(v as NoticeTab)} className={adminTabsRootCn}>
+    <Tabs value={tab} onValueChange={(v) => setTab(v as "compose" | "history")} className={adminTabsRootCn}>
       <AdminTabsBarWithHelp>
         <TabsList className={adminTabsListRowCn}>
           <TabsTrigger value="compose" className={adminTabsTriggerCn}>

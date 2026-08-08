@@ -3,7 +3,7 @@
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
-import { useSearchParams } from "next/navigation"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset, Smartphone, Save, Users } from "lucide-react"
 import {
   adminTabsBarCn,
@@ -41,8 +41,18 @@ import { useStoreList } from "@/lib/api-client"
 import { isOfficeRole, canPickPosTerminalStore } from "@/lib/permissions"
 
 
+const POS_SCREEN_TABS = [
+  "tables",
+  "cook-timer",
+  "menus",
+  "payment",
+  "delivery",
+  "terminal",
+  "order-behavior",
+  "dual-monitor",
+] as const
+
 export default function PosScreenConfigPage() {
-  const searchParams = useSearchParams()
   const { auth } = useAuth()
   const { posStores: stores, posStoreOptions: storeOptions, storeLabels } = useStoreList()
   const { lang } = useLang()
@@ -68,12 +78,7 @@ export default function PosScreenConfigPage() {
     }
   }, [canPickStore, stores, auth?.store, pickedStore])
 
-  const tabParam = searchParams.get("tab") || "tables"
-  const [activeTab, setActiveTab] = React.useState(
-    ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "order-behavior", "dual-monitor"].includes(tabParam)
-      ? tabParam
-      : "tables"
-  )
+  const [activeTab, setActiveTab] = useAdminUrlTab("tab", POS_SCREEN_TABS, "tables")
   const [menusSubTab, setMenusSubTab] = React.useState<"menu-screen" | "menu-board">("menu-screen")
   const [menuScreenOrderType, setMenuScreenOrderType] = React.useState<"dine-in" | "delivery" | "takeout">("dine-in")
   const [menuConfigReloadNonce, setMenuConfigReloadNonce] = React.useState(0)
@@ -94,16 +99,6 @@ export default function PosScreenConfigPage() {
     }
   }, [canPickStore, auth?.store])
 
-  React.useEffect(() => {
-    const tab = searchParams.get("tab")
-    if (
-      tab &&
-      ["tables", "cook-timer", "menus", "payment", "delivery", "terminal", "order-behavior", "dual-monitor"].includes(tab)
-    ) {
-      setActiveTab(tab)
-    }
-  }, [searchParams])
-
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -121,7 +116,11 @@ export default function PosScreenConfigPage() {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as (typeof POS_SCREEN_TABS)[number])}
+          className={adminTabsRootCn}
+        >
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="tables" className={adminTabsTriggerCn}>

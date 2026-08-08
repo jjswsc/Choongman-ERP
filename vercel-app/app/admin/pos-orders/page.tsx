@@ -133,6 +133,7 @@ import {
 } from "@/lib/pos-kitchen-print-tracking"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 
 type CookCompareKey = "unset" | "ok" | "warn" | "late"
 
@@ -289,6 +290,8 @@ export default function PosOrdersPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const allowPosOrdersUrlSync = useErpAllowUrlSync("/admin/pos-orders")
+  const pageActiveRef = useErpPageActiveRef()
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -367,6 +370,7 @@ export default function PosOrdersPage() {
   const urlDrilldownSearchedRef = React.useRef(false)
 
   React.useEffect(() => {
+    if (!allowPosOrdersUrlSync) return
     const qStart = String(searchParams.get("start") || "").trim()
     const qEnd = String(searchParams.get("end") || "").trim()
     const qStatus = String(searchParams.get("status") || "").trim().toLowerCase()
@@ -400,7 +404,7 @@ export default function PosOrdersPage() {
     else if (qTab !== "auditTrail") setAuditEmployeeFilter("")
     if (qAuditOrderNo) setAuditOrderNoFilter(qAuditOrderNo)
     else if (qTab !== "auditTrail") setAuditOrderNoFilter("")
-  }, [searchParams])
+  }, [allowPosOrdersUrlSync, searchParams])
 
   /** 감사로그 직원·주문번호는 입력마다 URL을 바꾸지 않음(router.replace 깜빡임 방지). [조회]/Enter 시에만 반영. */
   const commitAuditFiltersToUrl = React.useCallback(() => {
@@ -429,6 +433,7 @@ export default function PosOrdersPage() {
   ])
 
   React.useEffect(() => {
+    if (!allowPosOrdersUrlSync) return
     const next = new URLSearchParams(searchParams.toString())
     const prevQs = searchParams.toString()
     if (activeTab === "orders") next.delete("tab")
@@ -449,7 +454,7 @@ export default function PosOrdersPage() {
     const nextQs = next.toString()
     if (nextQs === prevQs) return
     router.replace(nextQs ? `${pathname}?${nextQs}` : pathname, { scroll: false })
-  }, [activeTab, auditStartStr, auditEndStr, searchParams, router, pathname])
+  }, [allowPosOrdersUrlSync, activeTab, auditStartStr, auditEndStr, searchParams, router, pathname])
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   /** 목록 API에 넘길 매장: 본사(오피스)는 선택값·「전체」는 미지정, 매니저/가맹점주 등은 로그인 매장 고정 */

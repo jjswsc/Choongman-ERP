@@ -122,8 +122,9 @@ function OrderCreatePageInner() {
   const isManager = isManagerRole(auth?.role || "")
   const initialTab = resolveOrderCreateTabFromQuery(searchParams.get("tab"), isManager)
 
+  // key로 remount 하면 keep-alive 중 다른 메뉴 ?tab= 변화에도 Provider가 리셋됨
   return (
-    <OrderCreateProvider key={initialTab} defaultTab={initialTab}>
+    <OrderCreateProvider defaultTab={initialTab}>
       <OrderCreatePageLayout />
     </OrderCreateProvider>
   )

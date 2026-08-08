@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { usePathname } from "next/navigation"
 
 const ErpPageVisibilityContext = React.createContext(true)
 const ErpTabActiveContext = React.createContext(true)
@@ -73,6 +74,23 @@ export function useErpPageActiveRef(): React.MutableRefObject<boolean> {
   const ref = React.useRef(active)
   ref.current = active
   return ref
+}
+
+/**
+ * keep-alive 숨김 중 URL→state 동기화 허용 여부.
+ * 페이지가 활성(보이는 슬롯)이고 pathname이 인자 경로 중 하나일 때만 true.
+ */
+export function useErpAllowUrlSync(...pathPrefixes: string[]): boolean {
+  const pageActive = useErpPageActive()
+  const pathname = usePathname()
+  const path = (pathname || "").split("?")[0] || ""
+  const normalized = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path
+  if (!pageActive || pathPrefixes.length === 0) return false
+  return pathPrefixes.some((pathPrefix) => {
+    const prefix =
+      pathPrefix.length > 1 && pathPrefix.endsWith("/") ? pathPrefix.slice(0, -1) : pathPrefix
+    return normalized === prefix || normalized.startsWith(`${prefix}/`)
+  })
 }
 
 /**

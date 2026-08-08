@@ -86,14 +86,15 @@ describe("erp-workspace-tabs", () => {
 })
 
 describe("erp-keep-alive-config excludes", () => {
-  it("excludes heavy P0/P1 paths", () => {
-    expect(isErpKeepAliveExcluded("/admin/outbound")).toBe(true)
-    expect(isErpKeepAliveExcluded("/admin/pos-printers")).toBe(true)
-    expect(isErpKeepAliveExcluded("/admin/pos-orders")).toBe(true)
+  it("excludes only heaviest paths; operational menus stay keep-alive", () => {
+    expect(isErpKeepAliveExcluded("/admin/live-store-sales")).toBe(true)
     expect(isErpKeepAliveExcluded("/admin/attendance")).toBe(true)
     expect(isErpKeepAliveExcluded("/admin/payroll")).toBe(true)
     expect(isErpKeepAliveExcluded("/admin/stock")).toBe(true)
+    expect(isErpKeepAliveExcluded("/admin/outbound")).toBe(false)
+    expect(isErpKeepAliveExcluded("/admin/pos-orders")).toBe(false)
     expect(isErpKeepAliveExcluded("/admin/vendors")).toBe(false)
     expect(isErpKeepAliveExcluded("/admin/sales-management")).toBe(false)
+    expect(isErpKeepAliveExcluded("/admin/financial-statements")).toBe(false)
   })
 })

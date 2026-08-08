@@ -3,6 +3,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
+import { useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -89,8 +90,11 @@ export function AdminLeaveApproval() {
 
   const isOffice = hasOfficeStaffScope(auth?.role || "", auth?.store)
 
+  const pageActiveRef = useErpPageActiveRef()
+
   /** 급여 수정 등에서 ?month=yyyy-MM&store&name&status=all 로 진입 시 기간·조회 자동 적용 */
   useEffect(() => {
+    if (!pageActiveRef.current) return
     if (!auth?.store) return
     const month = searchParams.get("month")
     if (!month || !/^\d{4}-\d{2}$/.test(month)) return
@@ -141,7 +145,7 @@ export function AdminLeaveApproval() {
       .catch(() => setLeaveList([]))
       .finally(() => setLeaveLoading(false))
      
-  }, [auth?.store, auth?.role, isOffice, searchParams.toString()])
+  }, [auth?.store, auth?.role, isOffice, searchParams, leaveStatusFilter, pageActiveRef])
 
   const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
   const translateLeaveType = (type: string) => translateLeaveTypeFromDb(type, t)

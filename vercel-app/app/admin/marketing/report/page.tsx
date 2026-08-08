@@ -3,7 +3,7 @@
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import * as React from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { FileText } from "lucide-react"
 import {
   adminTabsBarCn,
@@ -22,6 +22,7 @@ import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 
 const TAB_IDS = ["monthly", "performance", "calendar", "costs"] as const
 type ReportTab = (typeof TAB_IDS)[number]
@@ -32,33 +33,11 @@ function normalizeTab(raw: string | null): ReportTab {
 }
 
 export default function MarketingReportHubPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
-  const activeTab = normalizeTab(searchParams.get("tab"))
-
-  const setTab = React.useCallback(
-    (next: ReportTab) => {
-      const p = new URLSearchParams(searchParams.toString())
-      if (next === "monthly") p.delete("tab")
-      else p.set("tab", next)
-      const qs = p.toString()
-      router.replace(qs ? `/admin/marketing/report?${qs}` : "/admin/marketing/report", { scroll: false })
-    },
-    [router, searchParams]
-  )
-
-  React.useEffect(() => {
-    const raw = searchParams.get("tab")?.trim()
-    if (raw && !TAB_IDS.includes(raw as ReportTab)) {
-      const p = new URLSearchParams(searchParams.toString())
-      p.delete("tab")
-      const qs = p.toString()
-      router.replace(qs ? `/admin/marketing/report?${qs}` : "/admin/marketing/report", { scroll: false })
-    }
-  }, [router, searchParams])
+  const [activeTab, setTab] = useAdminUrlTab("tab", TAB_IDS, "monthly")
 
   const wide = activeTab !== "monthly"
 

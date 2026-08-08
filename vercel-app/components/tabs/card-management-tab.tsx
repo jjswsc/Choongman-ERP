@@ -26,6 +26,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { useSearchParams, useRouter } from "next/navigation"
+import { useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import {
   getCardAccounts,
   getCardTransactions,
@@ -82,6 +83,7 @@ function newAllocationLine(): AllocationLineForm {
 export function CardManagementTab() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pageActiveRef = useErpPageActiveRef()
   const { lang } = useLang()
   const t = useT(lang)
   const tt = React.useCallback((key: string, fallback: string) => {
@@ -371,11 +373,12 @@ export function CardManagementTab() {
   }
 
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     const raw = searchParams.get("allocateId")
     const id = Number(raw || 0)
     if (!id || allocateParentId === id) return
     void openAllocation(id)
-  }, [searchParams, allocateParentId, openAllocation])
+  }, [searchParams, allocateParentId, openAllocation, pageActiveRef])
 
   const pendingBillHeaders = React.useMemo(
     () => transactions.filter((tx) => tx.isBillHeader && !tx.allocationComplete),

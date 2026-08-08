@@ -22,7 +22,7 @@ import { CRM_SEGMENT_DESC_KEYS, CRM_SEGMENT_KEYS, type CrmSegmentKey } from "@/l
 import { CRM_SEGMENT_LABEL_KEYS } from "@/lib/i18n-crm-segments"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
-import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { useErpAllowUrlSync, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 
 type SegmentRow = {
@@ -51,6 +51,7 @@ function fmtDate(v?: string): string {
 
 export default function CrmSegmentsPage() {
   const searchParams = useSearchParams()
+  const allowSegmentsUrlSync = useErpAllowUrlSync("/admin/crm/segments")
   const { lang } = useLang()
   const t = useT(lang)
   const initialSeg = searchParams.get("segment")
@@ -140,6 +141,7 @@ export default function CrmSegmentsPage() {
   })
 
   React.useEffect(() => {
+    if (!allowSegmentsUrlSync) return
     const s = searchParams.get("segment")
     if (isSegmentKey(s)) setSegment(s)
     const store = searchParams.get("store") || searchParams.get("storeCode")
@@ -156,7 +158,7 @@ export default function CrmSegmentsPage() {
       setDormantDays(n)
       setDraftDormantDays(String(n))
     }
-  }, [searchParams])
+  }, [allowSegmentsUrlSync, searchParams])
 
   React.useEffect(() => {
     setFilterDraft("")

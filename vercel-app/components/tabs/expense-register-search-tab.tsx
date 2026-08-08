@@ -42,6 +42,7 @@ import { useAuth } from "@/lib/auth-context"
 import { compressImageForUpload, cn } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import {
   canDeleteExpenseAccrual,
@@ -97,6 +98,8 @@ export function ExpenseRegisterSearchTab() {
   const { auth } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const allowExpenseUrlSync = useErpAllowUrlSync("/admin/expense-management")
+  const pageActiveRef = useErpPageActiveRef()
   const { posStores: stores } = useStoreList()
   const asDisplayName = (a: AccountSubjectItem) => (lang === "ko" ? a.name : (a.nameEn || a.name))
 
@@ -207,11 +210,12 @@ export function ExpenseRegisterSearchTab() {
   }, [accountId, categoryFilter, documentNoFilter, endStr, startStr, storeFilter, vendorFilter])
 
   React.useEffect(() => {
+    if (!allowExpenseUrlSync) return
     const s = searchParams.get("startStr")
     const e = searchParams.get("endStr")
     if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) setStartStr(s)
     if (e && /^\d{4}-\d{2}-\d{2}$/.test(e)) setEndStr(e)
-  }, [searchParams])
+  }, [allowExpenseUrlSync, searchParams])
 
   React.useEffect(() => {
     setLoadedOnce(false)
@@ -222,6 +226,7 @@ export function ExpenseRegisterSearchTab() {
   const handledSearchRefreshRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     const token = searchParams.get("searchRefresh")
     if (!token || token === handledSearchRefreshRef.current) return
     handledSearchRefreshRef.current = token
@@ -231,7 +236,7 @@ export function ExpenseRegisterSearchTab() {
       startStr: s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : undefined,
       endStr: e && /^\d{4}-\d{2}-\d{2}$/.test(e) ? e : undefined,
     })
-  }, [loadData, searchParams])
+  }, [loadData, searchParams, pageActiveRef])
 
   const filteredList = React.useMemo(() => {
     return (list || []).filter((r) => {

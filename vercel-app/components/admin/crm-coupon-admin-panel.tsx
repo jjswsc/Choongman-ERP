@@ -34,9 +34,8 @@ export function CrmCouponAdminPanel({ initialTab, onTabChange }: CrmCouponAdminP
   const [tab, setTab] = React.useState<CrmCouponAdminTab>(parseCrmCouponAdminTab(initialTab))
   const [promoPrefill, setPromoPrefill] = React.useState<CrmPromoCodePrefill | null>(null)
 
-  React.useEffect(() => {
-    setTab(parseCrmCouponAdminTab(initialTab))
-  }, [initialTab])
+  // keep-alive: 부모가 넘긴 initialTab이 다른 메뉴 URL로 바뀌어도 덮지 않음.
+  // 탭 전환은 onTabChange / handleTab 경로만 사용.
 
   const handleTab = (next: string) => {
     const parsed = parseCrmCouponAdminTab(next)

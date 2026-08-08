@@ -27,7 +27,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Settings2, Save, Pencil, FileSpreadsheet, AlertCircle } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { useErpPageActive, useErpTabActive, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import {
+  useErpAllowUrlSync,
+  useErpPageActive,
+  useErpPageActiveRef,
+  useErpTabActive,
+  useErpRefetchOnActivate,
+} from "@/lib/erp-page-visibility"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, canDeleteBankAccount, canViewBankAccountAuditLogs } from "@/lib/permissions"
@@ -644,6 +650,8 @@ export function BankTransactionsTab() {
   }, [registerExpenseRow, accountSubjectOptions])
 
   const searchParams = useSearchParams()
+  const allowBankUrlSync = useErpAllowUrlSync("/admin/bank-transactions")
+  const pageActiveRef = useErpPageActiveRef()
   const tabParam = searchParams.get("tab")
   const openRegisterTxIdParam = searchParams.get("openRegisterTxId")
   const [activeBankTab, setActiveBankTab] = React.useState(
@@ -705,6 +713,7 @@ export function BankTransactionsTab() {
     return true
   }, [])
   React.useEffect(() => {
+    if (!allowBankUrlSync) return
     if (tabParam === "account-subjects") {
       router.replace("/admin/chart-of-accounts")
       return
@@ -712,8 +721,9 @@ export function BankTransactionsTab() {
     if (tabParam === "input") setActiveBankTab("input")
     else if (tabParam === "query") setActiveBankTab("query")
     if (openRegisterTxIdParam && Number(openRegisterTxIdParam) > 0) setActiveBankTab("query")
-  }, [tabParam, openRegisterTxIdParam, router])
+  }, [allowBankUrlSync, tabParam, openRegisterTxIdParam, router])
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     if (urlParamsApplied.current) return
     const nav = parsePurchaseDrillNav(searchParams)
     const aid = searchParams.get("accountId")
@@ -746,9 +756,10 @@ export function BankTransactionsTab() {
     }
     if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) setStartStr(start)
     if (end && /^\d{4}-\d{2}-\d{2}$/.test(end)) setEndStr(end)
-  }, [searchParams])
+  }, [searchParams, pageActiveRef])
 
   React.useEffect(() => {
+    if (!allowBankUrlSync) return
     if (parsePurchaseDrillNav(searchParams).fromPlDrill) return
     setFilterPlExpenseOnly(false)
     setFilterVendorCode("")
@@ -761,9 +772,10 @@ export function BankTransactionsTab() {
       delete data.filterVendorCode
       sessionStorage.setItem(queryDraftStorageKey, JSON.stringify(data))
     } catch {}
-  }, [searchParams, queryDraftStorageKey])
+  }, [allowBankUrlSync, searchParams, queryDraftStorageKey])
 
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     try {
       const draftRaw = sessionStorage.getItem(importDraftStorageKey)
       if (draftRaw) {
@@ -790,7 +802,7 @@ export function BankTransactionsTab() {
         sessionStorage.removeItem(queryDraftStorageKey)
       } catch {}
     }
-  }, [clearBankImportDraft, importDraftStorageKey, importRestoreKey, queryDraftStorageKey, restoreBankImportDraft, restoreBankQueryDraft, searchParams])
+  }, [clearBankImportDraft, importDraftStorageKey, importRestoreKey, queryDraftStorageKey, restoreBankImportDraft, restoreBankQueryDraft, searchParams, pageActiveRef])
 
   React.useEffect(() => {
     try {

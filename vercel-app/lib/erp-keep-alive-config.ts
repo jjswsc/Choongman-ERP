@@ -1,32 +1,22 @@
 /**
- * keep-alive 제외 경로 — 메모리·백그라운드 부담이 큰 화면.
- * 방문 후 다른 메뉴로 나가면 unmount(기존 Next 동작), 돌아올 때 새로 로드.
+ * keep-alive 제외 경로 — 메모리·Realtime 부담이 특히 큰 화면만.
+ * 나머지는 워크스페이스 탭에서 조회·필터 상태를 유지한다.
  */
 export const ERP_KEEP_ALIVE_EXCLUDED_PATH_PREFIXES = [
   "/admin/live-store-sales",
-  "/admin/pos-menus",
-  "/admin/pos-orders",
-  "/admin/pos-printers",
-  "/admin/inbound",
-  "/admin/outbound",
   "/admin/stock",
   "/admin/attendance",
   "/admin/payroll",
-  "/admin/marketing/campaigns",
-  "/admin/marketing/materials",
-  "/admin/crm/member-app",
-  "/admin/interior",
 ] as const
 
 /**
  * 예외: 쿼리마다 keep-alive/탭 슬롯을 분리해야 하는 경로.
- * 기본은 모든 /admin 경로가 pathname만 키로 쓴다(?tab= 등이 슬롯을 갈라 상태를 날리지 않게).
+ * 기본은 모든 /admin 경로가 pathname만 키로 쓴다.
  */
 export const ERP_KEEP_ALIVE_QUERY_SENSITIVE_PATH_PREFIXES = [] as const
 
 /**
- * @deprecated QUERY_SENSITIVE로 전환 — 호환용으로 pathname 키 대상 예시만 남김.
- * resolveErpKeepAliveCacheHref는 admin 기본 pathname 키를 사용한다.
+ * @deprecated admin 기본 pathname 키 — 호환용 예시 목록
  */
 export const ERP_KEEP_ALIVE_QUERY_AGNOSTIC_PATH_PREFIXES = [
   "/admin/sales-management",
@@ -77,7 +67,6 @@ export function isErpKeepAliveQuerySensitive(href: string): boolean {
   )
 }
 
-/** @deprecated isErpKeepAliveQuerySensitive의 반대에 가깝게 admin 전체를 pathname 키로 봄 */
 export function isErpKeepAliveQueryAgnostic(href: string): boolean {
   const path = normalizeErpPathOnly(href)
   if (!path.startsWith("/admin")) return false

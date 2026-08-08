@@ -6,6 +6,7 @@ import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtm
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { ArrowUpFromLine, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -295,6 +296,8 @@ export default function OutboundPage() {
     "new" | "hist" | "warehouse" | "invoice" | "summary" | "storeMonth"
   >("hist")
   const searchParams = useSearchParams()
+  const allowOutboundUrlSync = useErpAllowUrlSync("/admin/outbound")
+  const pageActiveRef = useErpPageActiveRef()
   const plDrillNavAppliedRef = React.useRef(false)
   const plDrillAutoFetchRef = React.useRef(false)
 
@@ -304,6 +307,7 @@ export default function OutboundPage() {
   }, [])
 
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     const nav = parsePurchaseDrillNav(searchParams)
     if (nav.fromPlDrill) {
       if (nav.startStr) setHistStart(nav.startStr)
@@ -321,10 +325,13 @@ export default function OutboundPage() {
       plDrillNavAppliedRef.current = true
       return
     }
+    // keep-alive: 다른 메뉴 URL일 때 히스토리 기간을 오늘로 덮지 않음
+    if (!allowOutboundUrlSync) return
+    if (plDrillNavAppliedRef.current) return
     const today = getBangkokTodayDateString()
     setHistStart(today)
     setHistEnd(today)
-  }, [searchParams])
+  }, [searchParams, allowOutboundUrlSync, pageActiveRef])
 
   const handleHistStartChange = React.useCallback((next: string) => {
     setHistStart(next)
