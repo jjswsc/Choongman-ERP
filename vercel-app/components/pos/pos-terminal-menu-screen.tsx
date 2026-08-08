@@ -1208,93 +1208,102 @@ export function PosTerminalMenuScreen({
           ref={categoryPanelRef}
           className={cn(
             isAdminMode
-              ? 'bg-muted/20 px-3 py-3 min-[980px]:min-h-0 min-[980px]:overflow-hidden border-r'
+              ? // 태블릿·좁은 높이에서 หมวดหลัก/หมวดหมู่가 하단 설정바에 잘려도 터치 스크롤 되도록
+                'flex min-h-0 flex-col overflow-hidden border-r bg-muted/20 px-3 py-3'
               : 'flex shrink-0 flex-col gap-2 border-b border-border/50 bg-muted/25 px-2 py-2'
           )}
         >
-          {isAdminMode && (
-            <p className="mb-2 font-semibold text-xs text-muted-foreground">{t('posMainCategory') || '대분류'}</p>
-          )}
           <div
             className={cn(
-              isAdminMode ? 'grid gap-1.5' : 'flex gap-2 overflow-x-auto scroll-smooth [-webkit-overflow-scrolling:touch]'
+              isAdminMode
+                ? 'min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-pan-y [-webkit-overflow-scrolling:touch] pr-0.5'
+                : 'flex flex-col gap-2'
             )}
-            role="group"
-            aria-label={t('posMainCategory') || '대분류'}
           >
-            {mainCategories.map((main) => (
-              <button
-                key={main}
-                type="button"
-                onClick={() => {
-                  setSelectedMainCategory(main)
-                  setSelectedCategory('')
-                }}
-                className={cn(
-                  isAdminMode
-                    ? cn(
-                        'rounded-md border px-3 py-2 text-left font-semibold transition whitespace-nowrap leading-none',
-                        selectedMainCategory === main
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border bg-background hover:bg-muted'
-                      )
-                    : cn(
-                        'touch-manipulation shrink-0 rounded-lg border px-3 py-1.5 text-left font-semibold leading-snug whitespace-nowrap transition-all',
-                        'min-h-10 min-w-[2.75rem] active:scale-[0.98]',
-                        selectedMainCategory === main
-                          ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                          : 'border-border/80 bg-background text-foreground hover:border-primary/40 hover:bg-muted/70'
-                      )
-                )}
-                style={{
-                  fontSize: `${isAdminMode ? mainCategoryFontPx : posMainBtnFontPx}px`,
-                }}
-              >
-                {main}
-              </button>
-            ))}
-          </div>
-          {isAdminMode && (
-            <p className="mb-2 mt-4 font-semibold text-xs text-muted-foreground">{t('posCategory') || '카테고리'}</p>
-          )}
-          {!isAdminMode && categoriesForSelectedMain.length > 0 && (
-            <div className="mx-0.5 h-px shrink-0 bg-border/50" aria-hidden />
-          )}
-          <div
-            className={cn(
-              isAdminMode ? 'grid gap-1.5' : 'flex gap-2 overflow-x-auto scroll-smooth [-webkit-overflow-scrolling:touch]'
+            {isAdminMode && (
+              <p className="mb-2 font-semibold text-xs text-muted-foreground">{t('posMainCategory') || '대분류'}</p>
             )}
-            role="group"
-            aria-label={t('posCategory') || '카테고리'}
-          >
-            {categoriesForSelectedMain.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={cn(
-                  isAdminMode
-                    ? cn(
-                        'rounded-md border px-3 py-1.5 text-left transition whitespace-nowrap leading-none',
-                        selectedCategory === cat
-                          ? 'border-sky-600 bg-sky-500 text-white'
-                          : 'border-border bg-background hover:bg-muted'
-                      )
-                    : cn(
-                        'touch-manipulation shrink-0 rounded-lg border px-3 py-1.5 text-left font-medium leading-snug whitespace-nowrap transition-all',
-                        'min-h-10 min-w-[2.75rem] active:scale-[0.98]',
-                        selectedCategory === cat
-                          ? 'border-sky-600 bg-sky-500 text-white shadow-sm'
-                          : 'border-border/80 bg-background text-foreground hover:border-sky-400/60 hover:bg-sky-50/70 dark:hover:bg-sky-950/30'
-                      )
-                )}
-                style={{
-                  fontSize: `${isAdminMode ? categoryFontPx : posCategoryBtnFontPx}px`,
-                }}
-              >
-                {translatePosMenuCategoryLabel(cat, t)}
-              </button>
-            ))}
+            <div
+              className={cn(
+                isAdminMode ? 'grid gap-1.5' : 'flex gap-2 overflow-x-auto scroll-smooth [-webkit-overflow-scrolling:touch]'
+              )}
+              role="group"
+              aria-label={t('posMainCategory') || '대분류'}
+            >
+              {mainCategories.map((main) => (
+                <button
+                  key={main}
+                  type="button"
+                  onClick={() => {
+                    setSelectedMainCategory(main)
+                    setSelectedCategory('')
+                  }}
+                  className={cn(
+                    isAdminMode
+                      ? cn(
+                          'rounded-md border px-3 py-2 text-left font-semibold transition whitespace-nowrap leading-none',
+                          selectedMainCategory === main
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-background hover:bg-muted'
+                        )
+                      : cn(
+                          'touch-manipulation shrink-0 rounded-lg border px-3 py-1.5 text-left font-semibold leading-snug whitespace-nowrap transition-all',
+                          'min-h-10 min-w-[2.75rem] active:scale-[0.98]',
+                          selectedMainCategory === main
+                            ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                            : 'border-border/80 bg-background text-foreground hover:border-primary/40 hover:bg-muted/70'
+                        )
+                  )}
+                  style={{
+                    fontSize: `${isAdminMode ? mainCategoryFontPx : posMainBtnFontPx}px`,
+                  }}
+                >
+                  {main}
+                </button>
+              ))}
+            </div>
+            {isAdminMode && (
+              <p className="mb-2 mt-4 font-semibold text-xs text-muted-foreground">{t('posCategory') || '카테고리'}</p>
+            )}
+            {!isAdminMode && categoriesForSelectedMain.length > 0 && (
+              <div className="mx-0.5 h-px shrink-0 bg-border/50" aria-hidden />
+            )}
+            <div
+              className={cn(
+                isAdminMode ? 'grid gap-1.5' : 'flex gap-2 overflow-x-auto scroll-smooth [-webkit-overflow-scrolling:touch]'
+              )}
+              role="group"
+              aria-label={t('posCategory') || '카테고리'}
+            >
+              {categoriesForSelectedMain.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat)}
+                  className={cn(
+                    isAdminMode
+                      ? cn(
+                          'rounded-md border px-3 py-1.5 text-left transition whitespace-nowrap leading-none',
+                          selectedCategory === cat
+                            ? 'border-sky-600 bg-sky-500 text-white'
+                            : 'border-border bg-background hover:bg-muted'
+                        )
+                      : cn(
+                          'touch-manipulation shrink-0 rounded-lg border px-3 py-1.5 text-left font-medium leading-snug whitespace-nowrap transition-all',
+                          'min-h-10 min-w-[2.75rem] active:scale-[0.98]',
+                          selectedCategory === cat
+                            ? 'border-sky-600 bg-sky-500 text-white shadow-sm'
+                            : 'border-border/80 bg-background text-foreground hover:border-sky-400/60 hover:bg-sky-50/70 dark:hover:bg-sky-950/30'
+                        )
+                  )}
+                  style={{
+                    fontSize: `${isAdminMode ? categoryFontPx : posCategoryBtnFontPx}px`,
+                  }}
+                >
+                  {translatePosMenuCategoryLabel(cat, t)}
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
