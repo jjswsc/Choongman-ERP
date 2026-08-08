@@ -25,6 +25,7 @@ import { isServerSaasBrand } from '@/lib/app-brand-server'
 import { resolveSaasTenantForLogin } from '@/lib/saas-login-tenant-resolve'
 import { loadSaasLoginSecurityPolicy } from '@/lib/saas/saas-login-security-server'
 import { clientIpFromHeaders, ipMatchesAllowlist } from '@/lib/saas/saas-login-security'
+import { todayStrBangkok } from '@/lib/attendance-utils'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
       role?: string
       job?: string
       resign_date?: string | null
+      deleted_at?: string | null
       extra_stores?: unknown
       can_manage_office_payroll?: boolean | null
       tenant_id?: string | null
@@ -98,9 +100,13 @@ export async function POST(req: NextRequest) {
     if (!row) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }
+    if (String(row.deleted_at || '').trim()) {
+      return NextResponse.json({ success: false, message: '퇴사된 계정은 사용할 수 없습니다.' }, { headers })
+    }
     const resignStr = row.resign_date ? String(row.resign_date).trim().slice(0, 10) : ''
     if (resignStr) {
-      const todayStr = new Date().toISOString().slice(0, 10)
+      /** 퇴사 당일까지는 로그인 허용(마지막 근무일). soft-delete는 위에서 즉시 차단 */
+      const todayStr = todayStrBangkok()
       if (todayStr > resignStr) {
         return NextResponse.json({ success: false, message: '퇴사된 계정은 사용할 수 없습니다.' }, { headers })
       }

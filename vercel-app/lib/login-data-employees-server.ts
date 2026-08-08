@@ -12,6 +12,8 @@ export type LoginEmployeeRow = {
   job?: string
   role?: string
   resign_date?: string | null
+  employment_status?: string | null
+  deleted_at?: string | null
   tenant_id?: string | null
 }
 
@@ -38,10 +40,14 @@ function isMissingColumnError(err: unknown): boolean {
 
 async function selectEmployeesByFilter(filter: string): Promise<LoginEmployeeRow[]> {
   const selects = [
+    'company,store,name,nick,job,role,resign_date,employment_status,deleted_at,tenant_id',
+    'company,store,name,job,role,resign_date,employment_status,deleted_at,tenant_id',
     'company,store,name,nick,job,role,resign_date,tenant_id',
     'company,store,name,job,role,resign_date,tenant_id',
     'company,store,name,nick,job,role,resign_date',
     'company,store,name,job,role,resign_date',
+    'store,name,nick,job,role,resign_date,employment_status,deleted_at',
+    'store,name,job,role,resign_date,employment_status,deleted_at',
     'store,name,nick,job,role,resign_date',
     'store,name,job,role,resign_date',
   ] as const

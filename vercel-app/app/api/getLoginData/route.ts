@@ -155,10 +155,8 @@ async function getLoginDataHandler(opts: {
       : loadSaasLoginStoreEntries(),
   ])
 
-  const built = enrichStoreListWithGrabMap(
-    buildStoreListFromEmployees(empList, masters, { includeResignedInUserMap: true }),
-    masters
-  )
+  /** 퇴사·삭제(soft-delete) 직원은 로그인 이름 목록에서 제외 (관리자 휴지통과 동일) */
+  const built = enrichStoreListWithGrabMap(buildStoreListFromEmployees(empList, masters), masters)
 
   const vendorList = buildVendorList(vendorRows)
 

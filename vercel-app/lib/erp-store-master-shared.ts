@@ -101,6 +101,11 @@ type EmpRow = {
   role?: string
   resign_date?: string | null
   employment_status?: string | null
+  deleted_at?: string | null
+}
+
+function isSoftDeletedEmployee(row: EmpRow): boolean {
+  return Boolean(String(row.deleted_at || '').trim())
 }
 
 /** 로그인·비밀번호 변경: 제출된 매장 키(보통 store_code)와 employees.store 매칭 */
@@ -173,6 +178,8 @@ export function buildStoreListFromEmployees(
 
   const includeResigned = options?.includeResignedInUserMap === true
   for (const r of empList || []) {
+    /** soft-delete는 옵션과 무관하게 로그인·스태프 맵에서 제외 */
+    if (isSoftDeletedEmployee(r)) continue
     if (!includeResigned && isEffectivelyResignedForStaffRollup(r.employment_status, r.resign_date)) continue
     const rawStore = String(r.store || '').trim()
     if (isPlaceholderStoreValue(rawStore)) continue

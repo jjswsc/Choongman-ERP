@@ -40,6 +40,7 @@ import {
   assertSaasManagerRegistrationAllowed,
   roleCountsAsManagerSeat,
 } from '@/lib/saas/saas-manager-limit-server'
+import { invalidateLoginDataCache } from '@/lib/login-data-cache-server'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 const EMPLOYMENT_STATUS_VALUES = new Set(['active', 'leave', 'resigned', 'suspended'])
@@ -621,6 +622,7 @@ export async function POST(req: NextRequest) {
         changeReason: changeReason || null,
         actor: auditActor,
       })
+      invalidateLoginDataCache()
       return NextResponse.json({ success: true, message: '✅ 신규 직원이 등록되었습니다.' }, { headers })
     }
 
@@ -857,6 +859,7 @@ export async function POST(req: NextRequest) {
       actor: auditActor,
     })
 
+    invalidateLoginDataCache()
     return NextResponse.json({ success: true, message: '✅ 직원 정보가 수정되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveAdminEmployee:', e)

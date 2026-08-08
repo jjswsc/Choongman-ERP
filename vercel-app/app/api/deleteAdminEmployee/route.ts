@@ -13,6 +13,7 @@ import {
   sanitizeEmployeeAuditRow,
   writeEmployeeAudit,
 } from '@/lib/employee-audit'
+import { invalidateLoginDataCache } from '@/lib/login-data-cache-server'
 import {
   appendSaasTenantFilter,
   assertSaasTenantWritable,
@@ -114,6 +115,8 @@ export async function POST(req: NextRequest) {
       changeReason: reason || null,
       actor: actorFromJwt(auth, userName),
     })
+
+    invalidateLoginDataCache()
 
     return NextResponse.json({ success: true, message: '✅ 퇴사/비활성 처리되었습니다.' }, { headers })
   } catch (e) {
