@@ -2240,6 +2240,14 @@ export default function PosTerminalPage() {
       (activeTab === 'takeout' && Boolean(selectedTakeoutOrder)) ||
       (activeTab === 'tables' && Boolean(servingTableId) && !selectedTableId)
     )
+  /**
+   * 좁은 화면에서 메뉴+하단 카트를 함께 쓸 때:
+   * 메뉴 열이 shrink-0 + 페이지 overflow-y-auto 이면 음료처럼 품목이 많은 카테고리에서
+   * 메뉴가 세로로 늘어나 카트(주문 버튼)가 헤더만 남기고 눌린다.
+   * → 메뉴는 flex-1로 내부 스크롤, 카트 영역 높이를 보장한다.
+   */
+  const narrowStackedMenuWithCart =
+    isNarrowViewport && showSidePanel && !shouldFullscreenOrderDetailOnNarrow
   const isDineInAddOrderMode =
     activeTab === 'tables' &&
     Boolean(pendingDineInOrderId) &&
@@ -10738,7 +10746,7 @@ export default function PosTerminalPage() {
         className={cn(
           'flex-1 flex min-h-0 min-w-0',
           isNarrowViewport
-            ? shouldFullscreenOrderDetailOnNarrow
+            ? shouldFullscreenOrderDetailOnNarrow || narrowStackedMenuWithCart
               ? 'flex-col overflow-hidden'
               : 'flex-col overflow-y-auto'
             : 'flex-row overflow-hidden'
@@ -10750,7 +10758,9 @@ export default function PosTerminalPage() {
             isNarrowViewport
               ? shouldFullscreenOrderDetailOnNarrow
                 ? 'hidden'
-                : 'min-h-0 shrink-0'
+                : narrowStackedMenuWithCart
+                  ? 'min-h-0 flex-1 overflow-hidden'
+                  : 'min-h-0 shrink-0'
               : 'flex-1 min-h-0 overflow-hidden'
           )}
         >
@@ -11586,13 +11596,19 @@ export default function PosTerminalPage() {
           ) : activeTab === 'tables' && servingTableId ? (
             isDineInAddOrderMode ? (
               <div className="flex flex-col flex-1 min-h-0">
-                <div className="min-h-0 flex-1 overflow-hidden">
+                {/* 카트(주문 버튼) 최소 높이 확보 — 기존 테이블 패널이 카트를 밀어내지 않게 */}
+                <div
+                  className={cn(
+                    'min-h-0 overflow-hidden',
+                    isNarrowViewport ? 'flex-[1.35] min-h-[240px]' : 'flex-1'
+                  )}
+                >
                   {renderTerminalCartPanel('side-panel')}
                 </div>
                 <div
                   className={cn(
                     'min-h-0 overflow-hidden border-t border-border',
-                    isNarrowViewport ? 'max-h-[46%] shrink-0' : 'flex-1'
+                    isNarrowViewport ? 'max-h-[36%] min-h-0 shrink-0' : 'flex-1'
                   )}
                 >
                   {dineInTableOrderPanel}
@@ -11696,14 +11712,16 @@ export default function PosTerminalPage() {
           return (
             <div
               className={cn(
-                'flex-shrink-0 overflow-hidden flex flex-col border-border bg-card',
+                'overflow-hidden flex flex-col border-border bg-card',
                 isNarrowViewport
                   ? shouldFullscreenOrderDetailOnNarrow
                     ? 'flex-1 min-h-0 border-t'
                     : isDineInAddOrderMode
-                      ? 'flex-1 min-h-0 border-t'
-                      : 'border-t min-h-[180px] max-h-[50vh]'
-                  : 'w-72 border-l min-h-0'
+                      ? 'flex-1 min-h-[42vh] border-t'
+                      : narrowStackedMenuWithCart
+                        ? 'shrink-0 border-t min-h-[280px] max-h-[46vh]'
+                        : 'shrink-0 border-t min-h-[180px] max-h-[50vh]'
+                  : 'w-72 shrink-0 border-l min-h-0'
               )}
             >
               {panelContent}

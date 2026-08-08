@@ -5558,8 +5558,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             </div>
           </div>
         </div>
+      </CardContent>
 
-        <div className="px-3 flex flex-col gap-2">
+      {/* 주문/결제 버튼은 스크롤 밖 고정 — 좁은 화면에서 메뉴 카테고리와 무관하게 항상 노출 */}
+      <div className="shrink-0 border-t border-border/60 bg-card px-3 py-2 flex flex-col gap-2">
           {orderType === 'dine-in' && selectedTable && requireGuestCount && guestCount <= 0 && (
             <p className="text-xs text-amber-700">
               {t('posTourTableGuestRequired') || '테이블 주문은 인원을 먼저 선택해야 주문할 수 있습니다.'}
@@ -5638,8 +5640,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </Button>
             </div>
           )}
-        </div>
-      </CardContent>
+      </div>
     </Card>
 
     <Dialog
