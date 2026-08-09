@@ -172,6 +172,39 @@ describe('expandOrderLineToCostLines', () => {
     )
     expect(lines[0]).toMatchObject({ menuId: '4', optionId: '7', qty: 2 })
   })
+
+  it('remaps order menu_id=29 option null via catalog name / With Rice strip', () => {
+    const costIndex = new Map<string, PosMenuCostIndexEntry>([
+      ['4|', entry(40)],
+      ['4|7', entry(52)],
+      ['29|', entry(12)],
+    ])
+    const ctx = buildTheoreticalCostResolveContext({
+      costIndex,
+      catalog: {
+        menus: [
+          { id: '4', name: 'KIMCHI SOUP' },
+          { id: '29', name: 'KIMCHI SOUP With Rice' },
+        ],
+        optionsByMenuId: {
+          '4': [{ id: '7', name: 'With Rice', priceModifier: 20 }],
+        },
+        promoMetaById: new Map(),
+        promoItemsByPromoId: new Map(),
+        promoIdByMirrorMenuId: new Map(),
+      },
+    })
+    const lines = expandOrderLineToCostLines(
+      {
+        menuId: '29',
+        optionId: null,
+        name: 'KIMCHI SOUP With Rice',
+        quantity: 481,
+      },
+      ctx
+    )
+    expect(lines[0]).toMatchObject({ menuId: '4', optionId: '7', qty: 481 })
+  })
 })
 
 describe('collectTheoreticalCostUnmatchedLines', () => {

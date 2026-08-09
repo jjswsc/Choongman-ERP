@@ -102,6 +102,8 @@ function normalizeLookupName(raw: string): string {
 export type TheoreticalCostResolveContext = {
   knownMenuIds: Set<string>
   menuIdByNormalizedName: Map<string, string>
+  /** menuId → 카탈로그 메뉴명 */
+  menuNameById: Map<string, string>
   /** menuId → 옵션 목록(이름 포함) */
   optionsByMenuId: Record<string, PromoOptionLike[]>
   /**
@@ -176,6 +178,7 @@ export function buildTheoreticalCostResolveContext(params: {
   return {
     knownMenuIds,
     menuIdByNormalizedName,
+    menuNameById,
     optionsByMenuId,
     composedMenuOptionByNormalizedName,
     promoItemsByPromoId: params.catalog?.promoItemsByPromoId,
@@ -314,6 +317,57 @@ function effectivePromoItemRows(
   }))
 }
 
+/** "… With Rice" 전용 SKU/합성명을 기본메뉴+옵션으로 분해 */
+function resolveComposedOrWithRicePair(
+  lookupName: string,
+  currentMenuId: string,
+  ctx?: TheoreticalCostResolveContext
+): { menuId: string; optionId: string } | null {
+  if (!ctx) return null
+
+  const tryNames = [lookupName]
+  if (currentMenuId) {
+    const catalogName = ctx.menuNameById.get(currentMenuId) || ''
+    if (catalogName && normalizeLookupName(catalogName) !== normalizeLookupName(lookupName)) {
+      tryNames.push(catalogName)
+    } else if (catalogName) {
+      tryNames.push(catalogName)
+    }
+  }
+
+  for (const name of tryNames) {
+    const composed = lookupComposedMenuOption(name, ctx)
+    if (composed) return composed
+  }
+
+  for (const name of tryNames) {
+    const key = normalizeLookupName(name)
+    const m = key.match(/^(.+?)\s+with\s+rice$/)
+    if (!m?.[1]) continue
+    const baseName = m[1].trim()
+    if (!baseName) continue
+    const baseMenuId = lookupMenuIdByName(baseName, ctx)
+    if (!baseMenuId) continue
+    // 이미 base 메뉴인데 option만 없는 경우·전용 SKU에서 base로 옮기는 경우 모두
+    const optId =
+      inferOptionIdFromNames({
+        menuId: baseMenuId,
+        lineName: name,
+        optionName: 'With Rice',
+        ctx,
+      }) ||
+      inferOptionIdFromNames({
+        menuId: baseMenuId,
+        lineName: name,
+        optionName: '',
+        ctx,
+      })
+    if (optId) return { menuId: baseMenuId, optionId: optId }
+  }
+
+  return null
+}
+
 function resolveMenuAndOptionForCostLine(
   row: Record<string, unknown>,
   ctx?: TheoreticalCostResolveContext
@@ -331,12 +385,13 @@ function resolveMenuAndOptionForCostLine(
     if (menuId && !optionId) optionId = resolveOptionIdFromLineId(str(row.id), menuId)
   }
 
-  // optionId가 비어 있고 합성명(기본+옵션)이 맞으면 전용 SKU menuId보다 가산 BOM 쪽을 우선
-  if (!optionId && lookupName) {
-    const composed = lookupComposedMenuOption(lookupName, ctx)
-    if (composed) {
-      menuId = composed.menuId
-      optionId = composed.optionId
+  // optionId 비어 있으면 합성명·With Rice 접미·전용 SKU 카탈로그명으로 기본+옵션 복원
+  // (주문 menu_id=29 + option null + name "KIMCHI SOUP With Rice" 패턴)
+  if (!optionId) {
+    const remapped = resolveComposedOrWithRicePair(lookupName, menuId, ctx)
+    if (remapped) {
+      menuId = remapped.menuId
+      optionId = remapped.optionId
     }
   }
 
