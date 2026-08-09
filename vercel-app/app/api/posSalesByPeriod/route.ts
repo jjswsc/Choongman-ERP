@@ -1,6 +1,8 @@
 /**
  * 기간별 집계 (연/월/주/일/요일/시간대별). pos_orders 기반.
  * 우선 RPC get_pos_sales_analytics_agg → 미배포 시 fetch 폴백.
+ * 요일 필터: RPC 일별 집계 → 요일 필터 → groupBy rollup (주문 풀스캔 회피).
+ * 시간대(hour)+요일만 RPC로 불가 → fetch 폴백.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
@@ -10,6 +12,8 @@ import { resolvePosSalesStoresFromRequest } from '@/lib/pos-sales-request-scope'
 import {
   aggregatePosSalesByPeriod,
   buildPosSalesSplitSeriesByStore,
+  rollupPeriodDayRows,
+  rollupPeriodDaySeries,
 } from '@/lib/pos-sales-period-aggregate'
 import { fetchPosSalesOrdersForBusinessRange, POS_SALES_PAYMENT_ROW_SELECT } from '@/lib/pos-sales-fetch-rows'
 import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
@@ -32,6 +36,7 @@ export async function GET(request: NextRequest) {
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const groupBy = searchParams.get('groupBy') || 'day'
+    const groupByNorm = String(groupBy).toLowerCase()
     const pos = searchParams.get('pos')?.trim()
     const stores = await resolvePosSalesStoresFromRequest(
       request,
@@ -45,11 +50,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    // 요일 필터는 RPC 미지원 → fetch 집계 경로만 사용
-    const rpcRows =
-      daysOfWeekAllowed != null
-        ? null
-        : await tryFetchPosSalesAnalyticsAgg({
+    /** 요일 필터 + 비-hour: RPC day → filter → rollup (풀스캔 금지) */
+    const useDowRpcFastPath = daysOfWeekAllowed != null && groupByNorm !== 'hour'
+    const rpcRows = useDowRpcFastPath
+      ? await tryFetchPosSalesAnalyticsAgg({
+          request,
+          startStr,
+          endStr,
+          storeCodes: stores.length > 0 ? stores : undefined,
+          orderTypes: orderTypesAllowed,
+          aggMode: splitByStore ? 'period_by_store' : 'period',
+          periodGroup: 'day',
+        })
+      : daysOfWeekAllowed == null
+        ? await tryFetchPosSalesAnalyticsAgg({
             request,
             startStr,
             endStr,
@@ -58,15 +72,29 @@ export async function GET(request: NextRequest) {
             aggMode: splitByStore ? 'period_by_store' : 'period',
             periodGroup: groupBy,
           })
+        : null
 
     if (rpcRows) {
-      headers.set('X-Pos-Sales-Source', 'rpc')
+      headers.set('X-Pos-Sales-Source', useDowRpcFastPath ? 'rpc-dow' : 'rpc')
       if (splitByStore) {
-        const series = canonicalizePeriodSeriesKeys(
-          buildPeriodSeriesFromAnalyticsAggRows(rpcRows, groupBy),
+        const dayOrGroupSeries = canonicalizePeriodSeriesKeys(
+          buildPeriodSeriesFromAnalyticsAggRows(rpcRows, useDowRpcFastPath ? 'day' : groupBy),
           stores.length > 0 ? stores : undefined
         )
+        const series = useDowRpcFastPath
+          ? rollupPeriodDaySeries(dayOrGroupSeries, groupBy, daysOfWeekAllowed)
+          : dayOrGroupSeries
         return NextResponse.json({ split: true as const, series, truncated: false }, { headers })
+      }
+      if (useDowRpcFastPath) {
+        const dayRows = sortPeriodAggRows(
+          rpcRows.map((r) => mapAnalyticsAggRowToPeriodRow(r)),
+          'day'
+        )
+        return NextResponse.json(
+          rollupPeriodDayRows(dayRows, groupBy, daysOfWeekAllowed),
+          { headers }
+        )
       }
       const result = sortPeriodAggRows(
         rpcRows.map((r) => mapAnalyticsAggRowToPeriodRow(r)),

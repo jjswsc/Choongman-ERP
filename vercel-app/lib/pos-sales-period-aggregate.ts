@@ -274,6 +274,138 @@ export function aggregatePosSalesByPeriod(
     .map(([k, v]) => toRow(k, v))
 }
 
+function emptyPeriodAggRow(key: string): PeriodAggRow {
+  return {
+    key,
+    label: key,
+    sales: 0,
+    count: 0,
+    subtotal: 0,
+    vat: 0,
+    discount: 0,
+    service: 0,
+    total: 0,
+    guestSum: 0,
+    dineInOrderCount: 0,
+    dineInTotal: 0,
+    dineInGuestSum: 0,
+    salesPerDineInOrder: 0,
+    salesPerGuest: 0,
+    salesPerOrder: 0,
+    cashSales: 0,
+    creditSales: 0,
+    qrSales: 0,
+    otherSales: 0,
+    deliveryAppSales: 0,
+  }
+}
+
+function addPeriodAggRow(into: PeriodAggRow, row: PeriodAggRow): void {
+  into.count += row.count
+  into.subtotal += row.subtotal
+  into.vat += row.vat
+  into.discount += row.discount
+  into.service += row.service
+  into.total += row.total
+  into.guestSum += row.guestSum
+  into.dineInOrderCount += row.dineInOrderCount
+  into.dineInTotal += row.dineInTotal
+  into.dineInGuestSum += row.dineInGuestSum
+  into.cashSales += row.cashSales
+  into.creditSales += row.creditSales
+  into.qrSales += row.qrSales
+  into.otherSales += row.otherSales
+  into.deliveryAppSales += row.deliveryAppSales
+}
+
+function finalizePeriodAggRow(row: PeriodAggRow): PeriodAggRow {
+  row.sales = row.total
+  row.salesPerDineInOrder =
+    row.dineInOrderCount > 0
+      ? Math.round((row.dineInTotal / row.dineInOrderCount) * 100) / 100
+      : 0
+  row.salesPerGuest =
+    row.dineInGuestSum > 0 ? Math.round((row.dineInTotal / row.dineInGuestSum) * 100) / 100 : 0
+  row.salesPerOrder = row.count > 0 ? Math.round((row.total / row.count) * 100) / 100 : 0
+  return row
+}
+
+/** RPC 일별 버킷만 골라 요일 필터 (key = YYYY-MM-DD) */
+export function filterPeriodDayRowsByDow(
+  dayRows: PeriodAggRow[],
+  allowed: PosSalesDowValue[] | null
+): PeriodAggRow[] {
+  if (allowed == null) return dayRows
+  return dayRows.filter((r) => {
+    const ymd = String(r.key || '').trim().slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false
+    return rowMatchesDowFilter(ymd, allowed, getDayOfWeekBangkok)
+  })
+}
+
+/**
+ * 일별 PeriodAggRow → 요청 groupBy로 재합산.
+ * 요일 필터 시 RPC(day) 결과를 쓰며 주문 풀스캔을 피한다 (hour는 호출하지 말 것).
+ */
+export function rollupPeriodDayRows(
+  dayRows: PeriodAggRow[],
+  groupBy: string,
+  daysOfWeekAllowed?: PosSalesDowValue[] | null
+): PeriodAggRow[] {
+  const filtered = filterPeriodDayRowsByDow(dayRows, daysOfWeekAllowed ?? null)
+  const g = String(groupBy || 'day').toLowerCase()
+  if (g === 'day') {
+    return [...filtered].sort((a, b) => a.key.localeCompare(b.key))
+  }
+  if (g === 'hour') {
+    return filtered
+  }
+
+  const byKey: Record<string, PeriodAggRow> = {}
+  const addTo = (key: string, row: PeriodAggRow) => {
+    const b = (byKey[key] ??= emptyPeriodAggRow(key))
+    addPeriodAggRow(b, row)
+  }
+
+  for (const r of filtered) {
+    const ymd = String(r.key || '').trim().slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) continue
+    if (g === 'month') addTo(ymd.slice(0, 7), r)
+    else if (g === 'year') addTo(ymd.slice(0, 4), r)
+    else if (g === 'week') {
+      const mon = getMondayOfWeekBangkok(ymd)
+      const sun = addDayBangkok(mon, 6)
+      addTo(`${mon}~${sun}`, r)
+    } else if (g === 'dow') addTo(String(getDayOfWeekBangkok(ymd)), r)
+    else addTo(ymd, r)
+  }
+
+  if (g === 'dow') {
+    const dowAxis =
+      daysOfWeekAllowed != null && daysOfWeekAllowed.length > 0
+        ? daysOfWeekAllowed
+        : ([0, 1, 2, 3, 4, 5, 6] as const)
+    return dowAxis.map((dow) => finalizePeriodAggRow(byKey[String(dow)] ?? emptyPeriodAggRow(String(dow))))
+  }
+
+  return Object.keys(byKey)
+    .sort((a, b) => a.localeCompare(b))
+    .map((k) => finalizePeriodAggRow(byKey[k]!))
+}
+
+/** split 시리즈(일별)에 요일 필터 + groupBy rollup */
+export function rollupPeriodDaySeries(
+  daySeries: Record<string, PeriodAggRow[]>,
+  groupBy: string,
+  daysOfWeekAllowed?: PosSalesDowValue[] | null
+): Record<string, PeriodAggRow[]> {
+  const out: Record<string, PeriodAggRow[]> = {}
+  for (const [store, rows] of Object.entries(daySeries)) {
+    out[store] = rollupPeriodDayRows(rows, groupBy, daysOfWeekAllowed)
+  }
+  return out
+}
+
 /** 매장별 시리즈를 동일 축(key 순서는 기준 매장 행 순서)으로 합산 */
 export function mergePeriodSeriesToAggregated(
   series: Record<string, PeriodAggRow[]>,

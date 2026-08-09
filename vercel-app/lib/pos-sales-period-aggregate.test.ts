@@ -3,10 +3,12 @@ import type { PeriodAggRow } from '@/lib/pos-sales-period-aggregate'
 import {
   aggregatePosSalesByPeriod,
   buildPosSalesSplitSeriesByStore,
+  filterPeriodDayRowsByDow,
   groupPosSalesRowsByCanonicalStore,
   mergePeriodSeriesToAggregated,
   periodRowsForStoreSelection,
   resolvePeriodSeriesStoreKey,
+  rollupPeriodDayRows,
   type PeriodOrderRow,
 } from '@/lib/pos-sales-period-aggregate'
 
@@ -251,5 +253,38 @@ describe('aggregatePosSalesByPeriod daysOfWeek filter', () => {
     expect(rows.map((r) => r.key)).toEqual(['5', '6'])
     expect(rows[0]?.total).toBe(100)
     expect(rows[1]?.total).toBe(200)
+  })
+})
+
+describe('rollupPeriodDayRows (RPC-dow fast path)', () => {
+  const dayRows: PeriodAggRow[] = [
+    row('2026-08-07', 100, 1), // Fri
+    row('2026-08-08', 200, 2), // Sat
+    row('2026-08-09', 50, 1), // Sun
+  ]
+
+  it('filters day keys by dow', () => {
+    const filtered = filterPeriodDayRowsByDow(dayRows, [5, 6])
+    expect(filtered.map((r) => r.key)).toEqual(['2026-08-07', '2026-08-08'])
+  })
+
+  it('keeps day buckets after dow filter', () => {
+    const rows = rollupPeriodDayRows(dayRows, 'day', [5, 6])
+    expect(rows.map((r) => r.key)).toEqual(['2026-08-07', '2026-08-08'])
+    expect(rows.reduce((s, r) => s + r.total, 0)).toBe(300)
+  })
+
+  it('rolls filtered days into dow axis', () => {
+    const rows = rollupPeriodDayRows(dayRows, 'dow', [5, 6])
+    expect(rows.map((r) => r.key)).toEqual(['5', '6'])
+    expect(rows[0]?.total).toBe(100)
+    expect(rows[1]?.total).toBe(200)
+  })
+
+  it('rolls filtered days into month', () => {
+    const rows = rollupPeriodDayRows(dayRows, 'month', [5])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.key).toBe('2026-08')
+    expect(rows[0]?.total).toBe(100)
   })
 })
