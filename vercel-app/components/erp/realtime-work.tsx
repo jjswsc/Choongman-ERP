@@ -198,7 +198,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   const [loading, setLoading] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
 
-  const { posStores: storeListFromHook } = useStoreList()
+  const { posStores: storeListFromHook, resolveStoreKey } = useStoreList()
   React.useEffect(() => {
     if (auth?.store && storeListProp.length === 0 && storeListFromHook.length > 0) {
       setStoreFilter(auth.store)
@@ -215,6 +215,9 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
     const allLabel = String(t("scheduleStoreAll") || "").trim()
     store =
       store === "All" || store === "전체" || (allLabel && store === allLabel) ? "All" : store
+    if (store !== "All") {
+      store = resolveStoreKey(store) || store
+    }
     setLoading(true)
     Promise.all([getTodaySchedule({ store, date }), getTodayAttendanceSummary({ store, date })])
       .then(([sch, att]) => {
@@ -226,7 +229,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         setAttendance([])
       })
       .finally(() => setLoading(false))
-  }, [storeFilterFinal, auth?.store, date, t])
+  }, [storeFilterFinal, auth?.store, date, t, resolveStoreKey])
 
   // 매장·날짜 준비되면 자동 조회 (모바일에서 검색 버튼 없이 바로 보이게)
   React.useEffect(() => {

@@ -50,6 +50,7 @@ import { AdminScheduleEdit } from "@/components/admin/admin-schedule-edit"
 import { cn } from "@/lib/utils"
 import { isAttendanceOutApproved, todayStrBangkok } from "@/lib/attendance-utils"
 import { hasOfficeStaffScope } from "@/lib/permissions"
+import { filterOperationalStorePickerOptions } from "@/lib/store-view-context"
 
 function todayStr() {
   return todayStrBangkok()
@@ -211,19 +212,21 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
     [auth?.role, auth?.store]
   )
 
-  /** CM Office 등 본사 매장 포함 — `stores`(매출 집계용)와 분리 */
+  /** 당일·주간 스케줄: 운영 매장만(본사 Office 제외). 출퇴근 기록 탭은 pos 전체도 쓸 수 있으나 기본 목록은 동일 기준 */
   const { posStores, users: usersMap, staffByStore } = useStoreList()
   React.useEffect(() => {
-    const st = (posStores || []).filter((s) => s && String(s).trim())
-    setStores(isOffice ? ["All", ...st.filter((s) => s !== "All")] : ["All", auth?.store || ""].filter(Boolean))
+    const st = filterOperationalStorePickerOptions(
+      (posStores || []).filter((s) => s && String(s).trim() && s !== "All")
+    )
+    setStores(isOffice ? ["All", ...st] : ["All", auth?.store || ""].filter(Boolean))
     if (!isOffice && auth?.store) {
       setStoreFilter(auth.store)
       setTodayStore(auth.store)
       setScheduleStore(auth.store)
     } else if (isOffice && st.length > 0) {
       const firstStore = st[0]
-      setTodayStore(firstStore)
-      setScheduleStore(firstStore)
+      setTodayStore((prev) => (prev && st.includes(prev) ? prev : firstStore))
+      setScheduleStore((prev) => (prev && st.includes(prev) ? prev : firstStore))
     }
   }, [auth?.store, isOffice, posStores])
 

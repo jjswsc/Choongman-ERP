@@ -21,35 +21,40 @@ export function TimesheetTab() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const { posStores: storeListRaw, formatStoreLabel } = useStoreList()
+  /** 상단 MobileStoreSelectorBar 와 동일 소스(`stores`) — posStores 와 키가 어긋나면 조회가 빈 화면이 됨 */
+  const { stores, formatStoreLabel, resolveStoreKey } = useStoreList()
   const { viewStore, setViewStore } = useStoreView()
   const isOffice = hasOfficeStaffScope(auth?.role || "", auth?.store)
 
   const operationalStores = React.useMemo(
-    () => filterOperationalStorePickerOptions(storeListRaw),
-    [storeListRaw]
+    () => filterOperationalStorePickerOptions(stores),
+    [stores]
   )
 
   const storeList = React.useMemo(() => {
     if (!auth?.store) return [] as string[]
     if (isOffice) return [ALL_STORE_VALUE, ...operationalStores]
-    return [auth.store]
-  }, [auth?.store, isOffice, operationalStores])
+    return [resolveStoreKey(auth.store) || auth.store]
+  }, [auth?.store, isOffice, operationalStores, resolveStoreKey])
 
   /**
-   * 본사 모바일: 상단 매장바(viewStore)와 동일 기준.
-   * auth.store가 Office/본사여도 스케줄 없는 HQ로 조회하지 않음(관리자 당일탭과 동일).
+   * 본사 모바일: 상단 매장바(viewStore)를 그대로 조회에 씀.
+   * 목록 exact match 실패 시 다른 매장으로 silent fallback 하지 않음(PC 관리자와 결과 불일치 원인).
    */
   const storeFilter = React.useMemo(() => {
     if (!auth?.store) return ""
-    if (!isOffice) return auth.store
-    const v = String(viewStore || "").trim()
-    if (v === ALL_STORE_VALUE) return ALL_STORE_VALUE
-    if (v && !isOfficeStore(v)) {
-      if (operationalStores.includes(v) || storeListRaw.includes(v)) return v
+    if (!isOffice) return resolveStoreKey(auth.store) || auth.store
+    const raw = String(viewStore || "").trim()
+    if (!raw || isOfficeStore(raw)) {
+      return operationalStores[0] || ALL_STORE_VALUE
     }
-    return operationalStores[0] || ALL_STORE_VALUE
-  }, [auth?.store, isOffice, viewStore, operationalStores, storeListRaw])
+    if (raw === ALL_STORE_VALUE) return ALL_STORE_VALUE
+    const resolved = resolveStoreKey(raw) || raw
+    if (isOfficeStore(resolved)) {
+      return operationalStores[0] || ALL_STORE_VALUE
+    }
+    return resolved
+  }, [auth?.store, isOffice, viewStore, operationalStores, resolveStoreKey])
 
   const onStoreChange = React.useCallback(
     (next: string) => {
