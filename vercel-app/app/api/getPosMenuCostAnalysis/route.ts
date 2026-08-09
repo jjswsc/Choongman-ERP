@@ -727,8 +727,34 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    /** 세트 메뉴 탭 등: 행마다 breakdown 제거 → 응답 크기 대폭 감소(파싱 실패·빈 목록 방지) */
-    const payload = summaryOnly ? result.map((r) => ({ ...r, breakdown: [] })) : result
+    /**
+     * summary=1: breakdown 제거 + 목록에 필요한 필드만 → 응답 축소
+     * (모바일·저사양에서 대용량 JSON 파싱 실패·빈 목록 방지)
+     * hasBom: breakdown 비우기 전 여부 — 클라이언트 이슈 필터용
+     */
+    const payload = summaryOnly
+      ? result.map((r) => ({
+          menuId: r.menuId,
+          menuCode: r.menuCode,
+          menuName: r.menuName,
+          category: r.category,
+          categoryMain: r.categoryMain,
+          priceHall: r.priceHall,
+          priceDelivery: r.priceDelivery,
+          vatIncluded: r.vatIncluded,
+          deliveryAppFeePercent: r.deliveryAppFeePercent,
+          optionId: r.optionId,
+          optionCode: r.optionCode,
+          optionName: r.optionName,
+          optionType: r.optionType,
+          costHall: r.costHall,
+          costDelivery: r.costDelivery,
+          cookingTimeMin: r.cookingTimeMin,
+          isActive: r.isActive,
+          hasBom: (r.breakdown?.length ?? 0) > 0,
+          breakdown: [] as typeof r.breakdown,
+        }))
+      : result
     headers.set('X-CM-Pos-Cost-Analysis-Rows', String(payload.length))
     return NextResponse.json(payload, { headers })
   } catch (e) {

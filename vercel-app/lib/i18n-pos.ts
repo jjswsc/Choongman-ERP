@@ -2958,6 +2958,10 @@ export const I18N_POS_KO: Record<string, string> = {
       '표시할 행이 없습니다. 서버가 0건을 돌려줬거나 응답 파싱에 실패했을 수 있습니다.',
     posCostEmptyHintDev:
       '개발자 도구 Network에서 해당 요청 → Headers의 X-CM-Pos-Cost-Analysis-Rows, Response 본문을 확인하거나 Console 로그를 확인하세요.',
+    posCostLoadTimeout: '조회 시간이 초과되었습니다. Wi‑Fi에서 다시 검색해 주세요.',
+    posCostLoadFailed: '원가 분석 목록을 불러오지 못했습니다.',
+    posCostLoadRetryHint:
+      '대분류를 「전체」로 두고 다시 검색해 보세요. 폰은 PC처럼 이전 조회 캐시가 없어 목록을 새로 받습니다. 브라우저 번역(Translate)이 켜져 있으면 잠시 끄고 재시도해 보세요.',
     posCostFood: '음식',
     posCostPackaging: '포장',
     posCostExportCsv: 'CSV 내보내기',
@@ -2976,7 +2980,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostOpenItems: '품목 관리',
     posCostActualNeedList: '먼저 목록 탭에서 [조회]로 원가 데이터를 불러오세요.',
     posCostActualNeedListForExtras:
-      '대분류 목표·What-if 시뮬레이션은 목록 탭에서 [조회] 후 사용할 수 있습니다. 위 실적 원가율은 바로 [실적 조회]로 확인하세요.',
+      '레시피 마스터 평균·What-if 시뮬레이션은 목록 탭에서 [조회] 후 사용할 수 있습니다. 판매 가중 실적·목표 대비는 위 [실적 조회]만으로 확인하세요.',
     posCostActualFiltersTitle: '실적 조회 조건',
     posCostActualPeriodStart: '시작일',
     posCostActualPeriodEnd: '종료일',
@@ -3017,13 +3021,29 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostActualExactBomPct: '정확 BOM {pct}%',
     posCostActualMatchedSalesSub: 'POS 전체 ฿{pos} · 커버리지 {coverage}%',
     posCostActualUnmatchedSalesSub: '미매칭 {qty} · 제외 매출 ฿{sales}',
-    posCostActualCategoryMasterHint: '메뉴 마스터(BOM) 기준 평균 원가율입니다. 위 실적 원가율과 구분해 보세요.',
+    posCostActualCoveragePanelTitle: '커버리지·제외·폴백 안내',
+    posCostActualExclusionPolicyHint:
+      '제외 = 원가율 합계에서 매출·원가를 빼 둔 것(빠진 원가를 0으로 넣은 것이 아님). 폴백 = 옵션 전용 BOM이 없어 기본 BOM으로 대체 → 실적 원가율이 목록·마스터 평균보다 낮아질 수 있음.',
+    posCostActualCoverageLine:
+      '매출 커버리지 {coverage}% (원가율 분모 ฿{matched} / POS 전체 ฿{pos})',
+    posCostActualExcludedLine: 'BOM 미매칭으로 제외한 매출 ฿{sales} · 수량 {qty}',
+    posCostActualFallbackLine:
+      '옵션→기본 BOM 폴백 수량 {qty} · 매출 ฿{sales} · 원가 ฿{cost}',
+    posCostActualExactBomCompare:
+      '판매 가중 {weighted}% vs 정확 BOM(폴백 제외) {exact}%',
+    posCostActualCategoryWeightedHint:
+      '위 대분류 표와 같은 판매 가중 실적 원가율입니다. 목표와 비교하세요.',
+    posCostActualCategoryMasterTitle: '메뉴 마스터 홀 원가율 단순평균 (진단)',
+    posCostActualCategoryMasterHint:
+      '판매중 기본 메뉴의 홀 원가율%를 행마다 같은 비중으로 평균한 레시피 지표입니다. 판매 비중이 없어 위 판매 가중 실적과 숫자가 달라도 정상입니다. 직접 비교하지 마세요.',
+    posCostActualMasterSampleHint: '기본 메뉴·판매중만',
     posCostWeightedRatioTitle: '판매 가중 실적 원가율',
     posCostWeightedMenuCount: '매칭 메뉴',
     posCostWeightedHint: '실적 조회로 기간·매장·채널별 계산 · 분모=VAT 제외·BOM 매칭 매출',
     posCostWeightedLoad: '판매 연동 계산',
     posCostOpenManagementMargin: '관리마진 보기',
-    posCostCategoryTargetTitle: '대분류별 평균 원가율 vs 목표',
+    posCostCategoryTargetTitle: '대분류별 판매 가중 원가율 vs 목표',
+    posCostCategoryTargetsEdit: '대분류별 원가율 목표 (%)',
     posCostTarget: '목표',
     posCostWhatIfTitle: '품목 단가 What-if',
     posCostWhatIfHint: '품목 코드와 가격 변동(%)을 입력하면 영향받는 메뉴의 원가율 변화를 미리 봅니다. (행 펼침으로 BOM을 로드한 뒤 정확도가 올라갑니다.)',
@@ -6131,6 +6151,10 @@ export const I18N_POS_EN: Record<string, string> = {
       'No rows to show. The server may have returned zero rows or response parsing may have failed.',
     posCostEmptyHintDev:
       'In DevTools → Network, open the request: check header X-CM-Pos-Cost-Analysis-Rows and the response body, or check the console.',
+    posCostLoadTimeout: 'The request timed out. Please retry on Wi‑Fi.',
+    posCostLoadFailed: 'Failed to load the cost analysis list.',
+    posCostLoadRetryHint:
+      'Set the main category to All and search again. Phones do not keep the same session cache as PC. If browser Translate is on, turn it off and retry.',
     posCostFood: 'Food',
     posCostPackaging: 'Packaging',
     posCostExportCsv: 'Export CSV',
@@ -6148,7 +6172,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostOpenItems: 'Item master',
     posCostActualNeedList: 'Load cost data from the List tab first.',
     posCostActualNeedListForExtras:
-      'Category targets and What-if need List tab [Query] first. Use [Query actuals] above for sales-weighted cost % anytime.',
+      'Master recipe average and What-if need List tab [Query] first. Sales-weighted actuals and vs-target use [Query actuals] above only.',
     posCostActualFiltersTitle: 'Actual query filters',
     posCostActualPeriodStart: 'Start date',
     posCostActualPeriodEnd: 'End date',
@@ -6189,13 +6213,29 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostActualExactBomPct: 'Exact BOM {pct}%',
     posCostActualMatchedSalesSub: 'POS total ฿{pos} · coverage {coverage}%',
     posCostActualUnmatchedSalesSub: 'Unmatched {qty} · excluded sales ฿{sales}',
-    posCostActualCategoryMasterHint: 'Master (BOM) average cost % — compare with actual weighted % above.',
+    posCostActualCoveragePanelTitle: 'Coverage, exclusions, and fallback',
+    posCostActualExclusionPolicyHint:
+      'Excluded = sales and cost removed from cost% totals (not zero-costed). Fallback = option used base BOM when option BOM is missing — actual cost% can look lower than list/master averages.',
+    posCostActualCoverageLine:
+      'Sales coverage {coverage}% (cost% denom ฿{matched} / POS total ฿{pos})',
+    posCostActualExcludedLine: 'BOM-unmatched excluded sales ฿{sales} · qty {qty}',
+    posCostActualFallbackLine:
+      'Option→base BOM fallback qty {qty} · sales ฿{sales} · cost ฿{cost}',
+    posCostActualExactBomCompare:
+      'Sales-weighted {weighted}% vs exact BOM (no fallback) {exact}%',
+    posCostActualCategoryWeightedHint:
+      'Same sales-weighted actual cost % as the category table above. Compare with targets.',
+    posCostActualCategoryMasterTitle: 'Master hall cost % simple average (diagnostic)',
+    posCostActualCategoryMasterHint:
+      'Unweighted mean of hall cost % for active base menus only. No sales mix — it is normal if this differs from sales-weighted actuals above. Do not compare them directly.',
+    posCostActualMasterSampleHint: 'active base menus only',
     posCostWeightedRatioTitle: 'Sales-weighted actual cost %',
     posCostWeightedMenuCount: 'Matched menus',
     posCostWeightedHint: 'Query by period, store, and channel · denom = excl. VAT matched sales',
     posCostWeightedLoad: 'Calculate with sales',
     posCostOpenManagementMargin: 'Management margin',
-    posCostCategoryTargetTitle: 'Avg cost % by main category vs target',
+    posCostCategoryTargetTitle: 'Sales-weighted cost % by category vs target',
+    posCostCategoryTargetsEdit: 'Cost % target by main category (%)',
     posCostTarget: 'Target',
     posCostWhatIfTitle: 'Item price what-if',
     posCostWhatIfHint: 'Enter item code and price change (%) to preview cost ratio impact. Expand rows to load BOM for accuracy.',

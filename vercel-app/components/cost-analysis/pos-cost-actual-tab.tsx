@@ -3,7 +3,7 @@
 import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
-import { BarChart3, ExternalLink, Loader2, Search, TrendingUp } from "lucide-react"
+import { BarChart3, ChevronDown, ChevronRight, ExternalLink, Loader2, Search, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -30,6 +30,7 @@ import {
   simulateItemPriceDelta,
   type PosCostListSettings,
 } from "@/lib/pos-cost-analysis-shared"
+import { isCostAnalysisBaseRow } from "@/lib/pos-cost-analysis-keys"
 import {
   addBangkokCalendarDays,
   getBangkokMonthRange,
@@ -105,6 +106,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
 
   const [itemCode, setItemCode] = React.useState("")
   const [whatIfPct, setWhatIfPct] = React.useState(10)
+  const [masterAvgOpen, setMasterAvgOpen] = React.useState(false)
 
   React.useEffect(() => {
     setStoreFilter((prev) => {
@@ -123,9 +125,33 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
     [rows, itemCode, whatIfPct, settings.misePercent]
   )
 
-  const categoryStats = React.useMemo(() => {
+  /** 목표 대비 바 — 대분류 표와 동일(판매 가중 costPctOfNet) */
+  const weightedCategoryTargetStats = React.useMemo(() => {
+    if (!result?.byCategory?.length) return [] as Array<{
+      cat: string
+      ratio: number
+      netSales: number
+      target?: number
+    }>
+    return result.byCategory
+      .map((row) => ({
+        cat: row.categoryMain,
+        ratio: row.costPctOfNet,
+        netSales: row.netSales,
+        target: settings.categoryTargets[row.categoryMain],
+      }))
+      .sort((a, b) => b.ratio - a.ratio)
+  }, [result, settings.categoryTargets])
+
+  /**
+   * 레시피 진단용 마스터 단순평균 — 기본 메뉴·판매중만.
+   * 판매 비중 없음 → 위 가중 실적과 직접 비교하지 않음.
+   */
+  const masterRecipeAvgStats = React.useMemo(() => {
     const map = new Map<string, { sumRatio: number; n: number; target?: number }>()
     for (const r of rows) {
+      if (!isCostAnalysisBaseRow(r)) continue
+      if (r.isActive === false) continue
       const cat = String(r.categoryMain ?? r.category ?? t("posMenuCategoryAll")).trim() || "—"
       const m = computePosCostRowMetrics(r, settings.misePercent)
       if (m.costRatioH <= 0) continue
@@ -402,6 +428,61 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
             />
           </div>
 
+          {(summary.salesCoveragePct != null && summary.salesCoveragePct < 99.5) ||
+          (result?.categoryMeta?.optionBaseFallbackQty ?? 0) > 0 ||
+          (summary.excludedUnmatchedSales ?? 0) > 0.01 ||
+          (summary.costPctOfNetExactBom != null &&
+            Math.abs((summary.costPctOfNetExactBom ?? 0) - summary.costPctOfNet) > 0.05) ? (
+            <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 px-4 py-3 text-xs text-sky-950 dark:text-sky-100 space-y-1.5">
+              <p className="font-medium">{t("posCostActualCoveragePanelTitle")}</p>
+              <p className="leading-relaxed text-sky-900/90 dark:text-sky-100/90">
+                {t("posCostActualExclusionPolicyHint")}
+              </p>
+              <ul className="list-disc pl-4 space-y-0.5 tabular-nums">
+                {summary.salesCoveragePct != null ? (
+                  <li>
+                    {t("posCostActualCoverageLine")
+                      .replace("{coverage}", summary.salesCoveragePct.toFixed(1))
+                      .replace("{matched}", formatBaht(summary.netSales))
+                      .replace("{pos}", formatBaht(summary.posNetSales ?? summary.netSales))}
+                  </li>
+                ) : null}
+                {(summary.excludedUnmatchedSales ?? 0) > 0.01 ? (
+                  <li>
+                    {t("posCostActualExcludedLine")
+                      .replace("{sales}", formatBaht(summary.excludedUnmatchedSales ?? 0))
+                      .replace("{qty}", String(Math.round(summary.unmatchedLineQty)))}
+                  </li>
+                ) : null}
+                {(result?.categoryMeta?.optionBaseFallbackQty ?? 0) > 0 ? (
+                  <li>
+                    {t("posCostActualFallbackLine")
+                      .replace(
+                        "{qty}",
+                        String(Math.round(result?.categoryMeta?.optionBaseFallbackQty ?? 0))
+                      )
+                      .replace(
+                        "{sales}",
+                        formatBaht(result?.categoryMeta?.optionBaseFallbackSales ?? 0)
+                      )
+                      .replace(
+                        "{cost}",
+                        formatBaht(result?.categoryMeta?.optionBaseFallbackCost ?? 0)
+                      )}
+                  </li>
+                ) : null}
+                {summary.costPctOfNetExactBom != null &&
+                Math.abs(summary.costPctOfNetExactBom - summary.costPctOfNet) > 0.05 ? (
+                  <li>
+                    {t("posCostActualExactBomCompare")
+                      .replace("{weighted}", summary.costPctOfNet.toFixed(1))
+                      .replace("{exact}", summary.costPctOfNetExactBom.toFixed(1))}
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+          ) : null}
+
           <div className="flex items-center gap-2">
             <Link
               href="/admin/financial-statements?tab=margin"
@@ -619,6 +700,63 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
               </table>
             </div>
           ) : null}
+
+          {weightedCategoryTargetStats.length > 0 ? (
+            <div className="rounded-xl border bg-card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">{t("posCostCategoryTargetTitle")}</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">{t("posCostActualCategoryWeightedHint")}</p>
+              <div className="space-y-3">
+                {weightedCategoryTargetStats.slice(0, 12).map((c) => {
+                  const target = c.target ?? settings.costRatioGoodMax
+                  const over = c.ratio > target
+                  return (
+                    <div key={c.cat} className="space-y-1">
+                      <div className="flex justify-between items-center gap-2 text-xs">
+                        <span className="font-medium">{c.cat}</span>
+                        <span
+                          className={cn(
+                            "tabular-nums shrink-0",
+                            over ? "text-rose-600" : "text-emerald-600"
+                          )}
+                        >
+                          {c.ratio.toFixed(1)}% / {t("posCostTarget")}{" "}
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              className="underline underline-offset-2 hover:text-primary"
+                              onClick={() => {
+                                document
+                                  .querySelector<HTMLButtonElement>("[data-pos-cost-settings-toggle]")
+                                  ?.click()
+                              }}
+                            >
+                              {target}%
+                            </button>
+                          ) : (
+                            `${target}%`
+                          )}
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full", over ? "bg-rose-500" : "bg-emerald-500")}
+                          style={{
+                            width: `${Math.min(100, (c.ratio / Math.max(target, 1)) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground tabular-nums">
+                        {t("posCostActualNetSales")}: ฿{formatBaht(c.netSales)}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
         </>
       ) : queryToken === 0 ? (
         <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
@@ -635,52 +773,66 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
             onSaved={onSettingsSaved}
           />
 
-          <div className="rounded-xl border bg-card p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">{t("posCostCategoryTargetTitle")}</h3>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("posCostActualCategoryMasterHint")}</p>
-            <div className="space-y-3">
-              {categoryStats.slice(0, 12).map((c) => {
-                const target = c.target ?? settings.costRatioGoodMax
-                const over = c.avgRatio > target
-                return (
-                  <div key={c.cat} className="space-y-1">
-                    <div className="flex justify-between items-center gap-2 text-xs">
-                      <span className="font-medium">{c.cat}</span>
-                      <span className={cn("tabular-nums shrink-0", over ? "text-rose-600" : "text-emerald-600")}>
-                        {c.avgRatio.toFixed(1)}% / {t("posCostTarget")}{" "}
-                        {canEdit ? (
-                          <button
-                            type="button"
-                            className="underline underline-offset-2 hover:text-primary"
-                            onClick={() => {
-                              document.querySelector<HTMLButtonElement>('[data-pos-cost-settings-toggle]')?.click()
-                            }}
-                          >
-                            {target}%
-                          </button>
-                        ) : (
-                          `${target}%`
-                        )}
-                      </span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={cn("h-full rounded-full", over ? "bg-rose-500" : "bg-emerald-500")}
-                        style={{ width: `${Math.min(100, (c.avgRatio / Math.max(target, 1)) * 100)}%` }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      {c.n}
-                      {t("posCostItemsUnit")}
-                    </p>
+          {masterRecipeAvgStats.length > 0 ? (
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-5 py-3 text-left hover:bg-muted/30"
+                onClick={() => setMasterAvgOpen((v) => !v)}
+                aria-expanded={masterAvgOpen}
+              >
+                {masterAvgOpen ? (
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                )}
+                <span className="text-sm font-semibold">{t("posCostActualCategoryMasterTitle")}</span>
+              </button>
+              {masterAvgOpen ? (
+                <div className="space-y-4 border-t px-5 py-4">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {t("posCostActualCategoryMasterHint")}
+                  </p>
+                  <div className="space-y-3">
+                    {masterRecipeAvgStats.slice(0, 12).map((c) => {
+                      const target = c.target ?? settings.costRatioGoodMax
+                      const over = c.avgRatio > target
+                      return (
+                        <div key={c.cat} className="space-y-1">
+                          <div className="flex justify-between items-center gap-2 text-xs">
+                            <span className="font-medium">{c.cat}</span>
+                            <span
+                              className={cn(
+                                "tabular-nums shrink-0",
+                                over ? "text-rose-600" : "text-emerald-600"
+                              )}
+                            >
+                              {c.avgRatio.toFixed(1)}% / {t("posCostTarget")} {target}%
+                            </span>
+                          </div>
+                          <div className="h-2 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full opacity-70",
+                                over ? "bg-rose-400" : "bg-emerald-400"
+                              )}
+                              style={{
+                                width: `${Math.min(100, (c.avgRatio / Math.max(target, 1)) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            {c.n}
+                            {t("posCostItemsUnit")} · {t("posCostActualMasterSampleHint")}
+                          </p>
+                        </div>
+                      )
+                    })}
                   </div>
-                )
-              })}
+                </div>
+              ) : null}
             </div>
-          </div>
+          ) : null}
 
           <div className="rounded-xl border bg-card p-5 space-y-4">
             <h3 className="text-sm font-semibold">{t("posCostWhatIfTitle")}</h3>

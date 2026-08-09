@@ -30,11 +30,7 @@ import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { ADMIN_TABLE_SCROLL_CN } from "@/lib/admin-ui-standards"
 import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
-import {
-  POS_MAIN_CATEGORIES,
-  getPresetCategoriesForMain,
-  mainCategoryMatches,
-} from "@/lib/pos-menu-categories"
+import { mainCategoryMatches } from "@/lib/pos-menu-categories"
 import {
   costAnalysisMenuIdKey,
   isCostAnalysisBaseRow,
@@ -82,6 +78,8 @@ type Props = {
   rows: PosMenuCostAnalysisRow[]
   loading: boolean
   listQueried: boolean
+  /** 조회 실패 메시지 — 있으면 빈 목록 대신 표시 */
+  loadError?: string | null
   settings: PosCostListSettings
   lastLoadedAt: string | null
   onLoad: () => void
@@ -94,6 +92,7 @@ export function PosCostListPanel({
   rows,
   loading,
   listQueried,
+  loadError = null,
   settings,
   lastLoadedAt,
   onLoad,
@@ -121,8 +120,11 @@ export function PosCostListPanel({
     })
   }, [])
 
+  /** 조회된 행에 실제로 있는 값만 — 검색 전 프리셋(Chicken/Korean…)이 미리 보이던 혼선 방지 */
   const categories = React.useMemo(() => {
-    const set = new Set(rows.map((r) => r.category).filter(Boolean))
+    const set = new Set(
+      rows.map((r) => String(r.category ?? "").trim()).filter(Boolean)
+    )
     return Array.from(set).sort()
   }, [rows])
 
@@ -134,14 +136,14 @@ export function PosCostListPanel({
       const c = String(r.category ?? "").trim()
       if (c) set.add(c)
     }
-    const preset = getPresetCategoriesForMain(mainCategoryFilter)
-    if (preset) for (const c of preset) set.add(c)
     return Array.from(set).sort()
   }, [rows, mainCategoryFilter, categories])
 
   const mainCategories = React.useMemo(() => {
-    const fromRows = rows.map((r) => r.categoryMain).filter((c): c is string => Boolean(c))
-    return Array.from(new Set([...POS_MAIN_CATEGORIES, ...fromRows])).sort()
+    const set = new Set(
+      rows.map((r) => String(r.categoryMain ?? "").trim()).filter(Boolean)
+    )
+    return Array.from(set).sort()
   }, [rows])
 
   const filtered = React.useMemo(() => {
@@ -337,7 +339,11 @@ export function PosCostListPanel({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <Select
-          value={mainCategoryFilter}
+          value={
+            mainCategoryFilter === "all" || mainCategories.includes(mainCategoryFilter)
+              ? mainCategoryFilter
+              : "all"
+          }
           onValueChange={(v) => {
             setMainCategoryFilter(v)
             setCategoryFilter("all")
@@ -699,9 +705,27 @@ export function PosCostListPanel({
               })}
             </AdminMobileOnly>
             {flatList.length === 0 && !loading && rows.length === 0 ? (
-              <div className="px-6 py-12 text-center text-sm text-muted-foreground space-y-2">
-                <p>{t("posCostEmptyAfterLoad")}</p>
-                {isOffice ? <p className="text-xs opacity-80">{t("posCostEmptyHintDev")}</p> : null}
+              <div className="px-6 py-12 text-center text-sm text-muted-foreground space-y-3">
+                {loadError ? (
+                  <>
+                    <p className="text-rose-700 dark:text-rose-400">{loadError}</p>
+                    <p className="text-xs">
+                      {t("posCostLoadRetryHint") ||
+                        "대분류를 「전체」로 두고 다시 검색해 보세요. PC와 달리 폰은 캐시가 없어 전체 목록을 새로 받습니다."}
+                    </p>
+                    <Button size="sm" className="mt-1" onClick={onLoad} disabled={loading}>
+                      {t("posCostBtnQuery")}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p>{t("posCostEmptyAfterLoad")}</p>
+                    {isOffice ? <p className="text-xs opacity-80">{t("posCostEmptyHintDev")}</p> : null}
+                    <Button size="sm" variant="outline" className="mt-1" onClick={onLoad} disabled={loading}>
+                      {t("posCostBtnQuery")}
+                    </Button>
+                  </>
+                )}
               </div>
             ) : null}
             {flatList.length === 0 && !loading && rows.length > 0 ? (

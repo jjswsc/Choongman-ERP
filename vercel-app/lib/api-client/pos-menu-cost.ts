@@ -141,6 +141,11 @@ export interface PosMenuCostAnalysisRow {
   deliveryAppFeePercent?: number | null
   /** pos_menus.is_active — false면 미판매(비활성) */
   isActive?: boolean
+  /**
+   * summary=1 응답용 — breakdown 비우기 전 BOM 존재 여부.
+   * 없으면 breakdown.length 로 판정.
+   */
+  hasBom?: boolean
   breakdown: {
     itemCode: string
     itemName: string
@@ -155,6 +160,28 @@ export interface PosMenuCostAnalysisRow {
   }[]
 }
 
+/** 원가 분석 목록 로드 실패 — 빈 배열과 구분 */
+export class PosMenuCostAnalysisLoadError extends Error {
+  readonly code: 'http' | 'parse' | 'server' | 'empty_body'
+  readonly status?: number
+  readonly serverCount?: number
+
+  constructor(
+    message: string,
+    opts: {
+      code: PosMenuCostAnalysisLoadError['code']
+      status?: number
+      serverCount?: number
+    }
+  ) {
+    super(message)
+    this.name = 'PosMenuCostAnalysisLoadError'
+    this.code = opts.code
+    this.status = opts.status
+    this.serverCount = opts.serverCount
+  }
+}
+
 export async function getPosMenuCostAnalysis(params?: { summary?: boolean }): Promise<PosMenuCostAnalysisRow[]> {
   const q = params?.summary ? '?summary=1' : ''
   const res = await apiFetch(`/api/getPosMenuCostAnalysis${q}`)
@@ -162,20 +189,36 @@ export async function getPosMenuCostAnalysis(params?: { summary?: boolean }): Pr
   const headerRows = res.headers.get('X-CM-Pos-Cost-Analysis-Rows')
   const headerErr = res.headers.get('X-CM-Pos-Cost-Analysis-Error')
   const serverCount = headerRows != null && headerRows !== '' ? Number(headerRows) : NaN
+  let parseFailed = false
   let raw: unknown = null
   try {
     raw = text ? JSON.parse(text) : null
   } catch {
+    parseFailed = true
     raw = null
   }
   if (typeof raw === 'string') {
     try {
       raw = JSON.parse(raw)
     } catch {
-      /* ignore */
+      parseFailed = true
+      raw = null
     }
   }
-  if (!res.ok) return []
+  if (!res.ok) {
+    let msg = `원가 분석 조회 실패 (HTTP ${res.status})`
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const o = raw as { message?: string; msg?: string; error?: string }
+      msg = String(o.message || o.msg || o.error || msg)
+    }
+    throw new PosMenuCostAnalysisLoadError(msg, { code: 'http', status: res.status, serverCount })
+  }
+  if (headerErr === '1') {
+    throw new PosMenuCostAnalysisLoadError(
+      '서버에서 원가 분석 계산 중 오류가 발생했습니다. 잠시 후 다시 검색해 주세요.',
+      { code: 'server', serverCount: 0 }
+    )
+  }
   let data: unknown = raw
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const o = raw as Record<string, unknown>
@@ -184,14 +227,29 @@ export async function getPosMenuCostAnalysis(params?: { summary?: boolean }): Pr
     else if (Array.isArray(o.items)) data = o.items
   }
   const arr = Array.isArray(data) ? (data as PosMenuCostAnalysisRow[]) : []
+  if (parseFailed || !Array.isArray(data)) {
+    const expected =
+      !Number.isNaN(serverCount) && serverCount > 0
+        ? ` (서버 ${serverCount}건 표시)`
+        : ''
+    throw new PosMenuCostAnalysisLoadError(
+      `원가 분석 응답을 읽지 못했습니다${expected}. 네트워크가 불안정하거나 응답이 잘렸을 수 있습니다. Wi‑Fi에서 다시 검색해 주세요.`,
+      { code: 'parse', serverCount }
+    )
+  }
+  if (!Number.isNaN(serverCount) && serverCount > 0 && arr.length === 0) {
+    throw new PosMenuCostAnalysisLoadError(
+      `서버는 ${serverCount}건을 보냈다고 표시했지만 목록이 비었습니다. 응답이 잘렸을 수 있습니다. 다시 검색해 주세요.`,
+      { code: 'parse', serverCount }
+    )
+  }
+  if (!text.trim() && (Number.isNaN(serverCount) || serverCount > 0)) {
+    throw new PosMenuCostAnalysisLoadError(
+      '원가 분석 응답 본문이 비어 있습니다. 다시 검색해 주세요.',
+      { code: 'empty_body', serverCount }
+    )
+  }
   if (process.env.NODE_ENV === 'development') {
-    if (!Array.isArray(data)) {
-      console.warn(
-        '[getPosMenuCostAnalysis] 응답이 배열이 아닙니다. Network → Response 본문 확인.',
-        typeof raw,
-        raw && typeof raw === 'object' ? Object.keys(raw as object).slice(0, 8) : raw
-      )
-    }
     if (!Number.isNaN(serverCount) && arr.length !== serverCount) {
       console.error(
         '[getPosMenuCostAnalysis] 서버 헤더 X-CM-Pos-Cost-Analysis-Rows=' +
@@ -200,11 +258,6 @@ export async function getPosMenuCostAnalysis(params?: { summary?: boolean }): Pr
           arr.length +
           '. 본문 잘림·JSON 오류 가능. response 본문 앞 200자:',
         text.slice(0, 200)
-      )
-    }
-    if (headerErr === '1' && arr.length === 0) {
-      console.error(
-        '[getPosMenuCostAnalysis] 서버에서 예외 처리됨(X-CM-Pos-Cost-Analysis-Error=1). API 라우트 터미널 로그(getPosMenuCostAnalysis:) 확인.'
       )
     }
   }

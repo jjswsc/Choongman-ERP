@@ -84,6 +84,7 @@ export default function PosCostAnalysisPage() {
   const [rows, setRows] = React.useState<PosMenuCostAnalysisRow[]>([])
   const [loading, setLoading] = React.useState(false)
   const [listQueried, setListQueried] = React.useState(false)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [lastLoadedAt, setLastLoadedAt] = React.useState<string | null>(null)
   const [activeTab, setActiveTab] = React.useState(() => {
     const tab = (searchParams.get("tab") || "").trim()
@@ -126,6 +127,7 @@ export default function PosCostAnalysisPage() {
       if (!allowed) return null
       const seq = ++posCostAnalysisLoadSeq
       setLoading(true)
+      setLoadError(null)
       const timeoutMs = process.env.NODE_ENV === "development" ? 600000 : 180000
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("timeout")), timeoutMs)
@@ -139,6 +141,7 @@ export default function PosCostAnalysisPage() {
         const next = Array.isArray(data) ? data : []
         setRows(next)
         setListQueried(true)
+        setLoadError(null)
         const at = new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok", hour12: false })
         setLastLoadedAt(at)
         writePosCostSessionCache(next)
@@ -146,14 +149,22 @@ export default function PosCostAnalysisPage() {
       } catch (e) {
         if (seq !== posCostAnalysisLoadSeq) return null
         console.error("getPosMenuCostAnalysis:", e)
+        const msg =
+          e instanceof Error && e.message === "timeout"
+            ? t("posCostLoadTimeout") ||
+              "조회 시간이 초과되었습니다. Wi‑Fi에서 다시 검색해 주세요."
+            : e instanceof Error && e.message
+              ? e.message
+              : t("posCostLoadFailed") || "원가 분석 목록을 불러오지 못했습니다."
         setRows([])
-        setListQueried(false)
+        setListQueried(true)
+        setLoadError(msg)
         return []
       } finally {
         if (seq === posCostAnalysisLoadSeq) setLoading(false)
       }
     },
-    [allowed]
+    [allowed, t]
   )
 
   const loadList = React.useCallback(() => {
@@ -267,6 +278,7 @@ export default function PosCostAnalysisPage() {
               rows={rows}
               loading={loading}
               listQueried={listQueried}
+              loadError={loadError}
               settings={settings}
               lastLoadedAt={lastLoadedAt}
               onLoad={loadList}

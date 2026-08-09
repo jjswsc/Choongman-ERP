@@ -111,4 +111,22 @@ describe("pos-cost-analysis-shared", () => {
     expect(rowMatchesSaleFilter({ isActive: true }, "all")).toBe(true)
     expect(rowMatchesSaleFilter({}, "active")).toBe(true)
   })
+
+  it("summary hasBom 플래그로 BOM 없음을 판정한다", () => {
+    const summaryNoBom: PosMenuCostAnalysisRow = {
+      ...baseRow,
+      costHall: 0,
+      costDelivery: 0,
+      breakdown: [],
+      hasBom: false,
+    }
+    expect(computePosCostRowMetrics(summaryNoBom).issues).toContain("no_bom")
+
+    const summaryWithBom: PosMenuCostAnalysisRow = {
+      ...baseRow,
+      breakdown: [],
+      hasBom: true,
+    }
+    expect(computePosCostRowMetrics(summaryWithBom).issues).not.toContain("no_bom")
+  })
 })

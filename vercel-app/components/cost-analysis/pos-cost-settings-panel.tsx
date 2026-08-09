@@ -133,7 +133,7 @@ export function PosCostSettingsPanel({ settings, rows, canEdit, onSaved }: Props
           </div>
           {categories.length > 0 ? (
             <div className="space-y-2">
-              <Label className="text-xs">{t("posCostCategoryTargetTitle")}</Label>
+              <Label className="text-xs">{t("posCostCategoryTargetsEdit") || t("posCostCategoryTargetTitle")}</Label>
               <div className="max-h-48 overflow-y-auto rounded-md border divide-y">
                 {categories.map((cat) => (
                   <div key={cat} className="flex items-center gap-2 px-3 py-2 text-xs">

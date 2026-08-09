@@ -104,7 +104,8 @@ export function computePosCostRowMetrics(
   const costRatioD = netDel > 0 ? (costDMise / netDel) * 100 : 0
 
   const issues: PosCostIssueKind[] = []
-  const hasBom = (r.breakdown ?? []).length > 0
+  const hasBom =
+    typeof r.hasBom === "boolean" ? r.hasBom : (r.breakdown ?? []).length > 0
   if (!hasBom && costHMise <= 0 && costDMise <= 0) issues.push("no_bom")
   else if (costHMise <= 0 && costDMise <= 0) issues.push("zero_cost")
   if (costRatioH > cautionMax || costRatioD > cautionMax) {
