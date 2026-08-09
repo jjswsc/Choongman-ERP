@@ -425,7 +425,10 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
                   <li>
                     {t("posCostActualCoverageLine")
                       .replace("{coverage}", summary.salesCoveragePct.toFixed(1))
-                      .replace("{matched}", formatBaht(summary.netSales))
+                      .replace(
+                        "{matched}",
+                        formatBaht(summary.matchedOrderNetSales ?? summary.netSales)
+                      )
                       .replace("{pos}", formatBaht(summary.posNetSales ?? summary.netSales))}
                   </li>
                 ) : null}

@@ -100,13 +100,15 @@ describe('aggregatePosCostWeightedByCategory', () => {
 
     const chicken = rows.find((r) => r.categoryMain === 'Chicken')
     const side = rows.find((r) => r.categoryMain === 'Side')
-    // 200(In VAT)→186.92 공급가, 정가 비중 4:1 → 149.54 / 37.38
-    expect(chicken?.netSales).toBe(149.54)
-    expect(side?.netSales).toBe(37.38)
+    // 원가분석 기준: 구성품 각자 정가 공급가(200·50 In VAT) — 세트 할인 판매가 배분 아님
+    expect(chicken?.netSales).toBe(toPosCostSalesExclVat(200))
+    expect(side?.netSales).toBe(toPosCostSalesExclVat(50))
     expect(chicken?.totalCost).toBe(70)
     expect(side?.totalCost).toBe(10)
-    expect(chicken?.costPctOfNet).toBe(46.81)
-    expect(side?.costPctOfNet).toBe(26.75)
+    expect(chicken?.costPctOfNet).toBe(
+      Math.round((70 / toPosCostSalesExclVat(200)) * 10000) / 100
+    )
+    expect(side?.costPctOfNet).toBe(Math.round((10 / toPosCostSalesExclVat(50)) * 10000) / 100)
   })
 
   it('excludes unmatched BOM lines from category sales/cost totals', () => {
@@ -143,7 +145,7 @@ describe('aggregatePosCostWeightedByCategory', () => {
     expect(side).toBeUndefined()
   })
 
-  it('applies residual payment discount and service_amt to category sales', () => {
+  it('does not shrink catalog/order denom with payment/service discounts (원가분석 정가 기준)', () => {
     const costIndex = new Map([
       ['10|', { costHall: 40, costDelivery: 40, foodCost: 40, packagingCost: 0 }],
     ])
@@ -164,14 +166,14 @@ describe('aggregatePosCostWeightedByCategory', () => {
       miseRatePercent: 0,
     })
 
-    expect(meta.paymentDiscountAllocated).toBe(toPosCostSalesExclVat(20))
-    expect(meta.serviceAmtAllocated).toBe(toPosCostSalesExclVat(10))
-    expect(rows[0]?.netSales).toBe(toPosCostSalesExclVat(70))
+    expect(meta.paymentDiscountAllocated).toBe(0)
+    expect(meta.serviceAmtAllocated).toBe(0)
+    expect(rows[0]?.netSales).toBe(toPosCostSalesExclVat(100))
     expect(rows[0]?.totalCost).toBe(40)
-    expect(rows[0]?.costPctOfNet).toBe(61.14)
+    expect(rows[0]?.costPctOfNet).toBe(Math.round((40 / toPosCostSalesExclVat(100)) * 10000) / 100)
   })
 
-  it('does not double-count lineDiscountAmt already in line net sales', () => {
+  it('uses line net when no catalog (lineDiscount already in line sales)', () => {
     const costIndex = new Map([
       ['10|', { costHall: 40, costDelivery: 40, foodCost: 40, packagingCost: 0 }],
     ])
@@ -224,6 +226,38 @@ describe('aggregatePosCostWeightedByCategory', () => {
       // 40 / (200/1.07) ≈ 21.4% — 목록 옵션 원가보다 낮게 잡히는 전형
       Math.round((40 / toPosCostSalesExclVat(200)) * 10000) / 100
     )
+  })
+
+  it('uses catalog regular price as denom when catalog is present (원가분석 기준)', () => {
+    const costIndex = new Map([
+      ['10|', { costHall: 30, costDelivery: 32, foodCost: 30, packagingCost: 2 }],
+    ])
+    const menus = [{ id: '10', name: '치킨', category_main: 'Chicken' }]
+    const catalog = {
+      menus: [{ id: '10', name: '치킨', price: 107 }],
+      optionsByMenuId: {},
+      promoMetaById: new Map(),
+      promoItemsByPromoId: new Map(),
+      promoIdByMirrorMenuId: new Map<string, string>(),
+    }
+    const orderRows = [
+      {
+        order_type: 'dine_in',
+        // 실제 판매가 90이어도 분모는 정가 107(공급가 100)
+        items_json: JSON.stringify([{ menuId: '10', price: 90, quantity: 2 }]),
+      },
+    ]
+    const { rows, meta } = aggregatePosCostWeightedByCategory({
+      orderRows,
+      menus,
+      costIndex,
+      catalog,
+      miseRatePercent: 0,
+    })
+    expect(rows[0]?.netSales).toBe(toPosCostSalesExclVat(214))
+    expect(rows[0]?.totalCost).toBe(60)
+    expect(rows[0]?.costPctOfNet).toBe(30)
+    expect(meta.matchedOrderNetSales).toBe(toPosCostSalesExclVat(180))
   })
 
   it('sumPosCostCategoryWeightedTotals and exactBom exclude unmatched/fallback correctly', () => {

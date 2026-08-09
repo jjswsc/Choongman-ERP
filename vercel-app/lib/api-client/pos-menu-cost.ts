@@ -302,9 +302,12 @@ export type PosCostSalesWeightedResult = {
   posTruncated: boolean
   warnings: string[]
   summary: {
+    /** 정가매출(VAT 제외) — 원가율 분모 */
     netSales: number
     /** POS 주문 전체 순매출(미매칭 포함) */
     posNetSales?: number
+    /** BOM 매칭 POS 실매출 — 커버리지 분자 */
+    matchedOrderNetSales?: number
     excludedUnmatchedSales?: number
     salesCoveragePct?: number
     grossSalesBeforeDiscount: number

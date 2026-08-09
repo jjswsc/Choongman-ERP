@@ -37,13 +37,15 @@ import type { PosMenuCatalogRow } from '@/lib/pos-sales-menu-hierarchy-aggregate
 export type PosCostSalesWeightedChannelFilter = 'all' | ManagementMarginChannelKey
 
 export type PosCostSalesWeightedSummary = {
-  /** BOM 매칭(+할인 반영) 순매출 — 원가율 분모 */
+  /** BOM 매칭 정가매출(VAT 제외) — 원가율 분모(목록 원가분석과 동일) */
   netSales: number
   /** POS 주문 전체 순매출(미매칭 포함, 참고용) */
   posNetSales: number
-  /** 미매칭으로 원가율 분모에서 제외한 매출 */
+  /** BOM 매칭 POS 실매출(VAT 제외) — 커버리지 분자 */
+  matchedOrderNetSales: number
+  /** 미매칭으로 원가율에서 제외한 주문 매출(참고) */
   excludedUnmatchedSales: number
-  /** 매칭 매출 / POS 전체 매출 (%) */
+  /** 매칭 POS 실매출 / POS 전체 매출 (%) */
   salesCoveragePct: number
   grossSalesBeforeDiscount: number
   totalCost: number
@@ -89,6 +91,7 @@ const EMPTY_CATEGORY_META: PosCostCategoryWeightedMeta = {
   optionBaseFallbackQty: 0,
   optionBaseFallbackSales: 0,
   optionBaseFallbackCost: 0,
+  matchedOrderNetSales: 0,
 }
 
 function round2(n: number): number {
@@ -261,12 +264,6 @@ export async function computePosCostSalesWeighted(params: {
     warnings.push('CAT_BOM_UNMATCHED_EXCLUDED')
   }
   if (
-    categoryAgg.meta.paymentDiscountAllocated > 0.0001 ||
-    categoryAgg.meta.serviceAmtAllocated > 0.0001
-  ) {
-    warnings.push('CAT_ORDER_DISCOUNT_APPLIED')
-  }
-  if (
     categoryAgg.meta.optionBaseFallbackQty > 0.0001 ||
     categoryAgg.meta.optionBaseFallbackSales > 0.0001
   ) {
@@ -274,7 +271,8 @@ export async function computePosCostSalesWeighted(params: {
   }
 
   const posNetSales = slice.netSales
-  const salesCoveragePct = pctOf(matchedTotals.netSales, posNetSales)
+  const matchedOrderNet = categoryAgg.meta.matchedOrderNetSales ?? matchedTotals.netSales
+  const salesCoveragePct = pctOf(matchedOrderNet, posNetSales)
 
   return {
     startStr,
@@ -286,6 +284,7 @@ export async function computePosCostSalesWeighted(params: {
     summary: {
       netSales: matchedTotals.netSales,
       posNetSales,
+      matchedOrderNetSales: matchedOrderNet,
       excludedUnmatchedSales: categoryAgg.meta.excludedUnmatchedSales,
       salesCoveragePct,
       grossSalesBeforeDiscount: slice.grossSalesBeforeDiscount,

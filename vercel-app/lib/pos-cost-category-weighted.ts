@@ -1,5 +1,4 @@
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
-import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import type { PosMenuCostIndexEntry } from '@/lib/pos-menu-cost-index-server'
 import {
   buildTheoreticalCostResolveContext,
@@ -14,7 +13,7 @@ import {
   type RegularPriceChannel,
 } from '@/lib/pos-order-promo-regular-price'
 import type { PosMenuCatalogRow } from '@/lib/pos-sales-menu-hierarchy-aggregate'
-import { resolvePosOrderVatExclFactor } from '@/lib/pos-cost-vat'
+import { resolvePosOrderVatExclFactor, toPosCostSalesExclVat } from '@/lib/pos-cost-vat'
 
 const EMPTY_MAIN = '(대분류 없음)'
 const TOP_MENUS_PER_CATEGORY = 20
@@ -48,18 +47,20 @@ export type PosCostCategoryMenuContribution = {
 }
 
 export type PosCostCategoryWeightedMeta = {
-  /** BOM 미매칭으로 대분류·요약 합계에서 뺀 배분 매출 */
+  /** BOM 미매칭으로 대분류·요약 합계에서 뺀 배분 매출(주문 라인 기준, 커버리지용) */
   excludedUnmatchedSales: number
   excludedUnmatchedQty: number
-  /** 라인 할인 외 잔여 결제·쿠폰 할인(대분류 분모에 반영) */
+  /** @deprecated 원가분석 정가 분모 전환 후 분모에 미반영(0). 호환용 유지 */
   paymentDiscountAllocated: number
-  /** 서비스(컴프) 금액(대분류 분모에 반영) */
+  /** @deprecated 원가분석 정가 분모 전환 후 분모에 미반영(0). 호환용 유지 */
   serviceAmtAllocated: number
   /** 옵션 지정인데 기본 BOM 폴백(원가 과소·원가율 하락 가능) */
   optionBaseFallbackQty: number
   optionBaseFallbackSales: number
   /** 옵션→기본 BOM 폴백 라인의 이론 원가(식재+포장) */
   optionBaseFallbackCost: number
+  /** 주문 라인 매칭 순매출(할인 반영) — 커버리지 분모 비교용 */
+  matchedOrderNetSales?: number
 }
 
 export type PosCostCategoryWeightedTotals = {
@@ -167,10 +168,6 @@ function resolveLineSales(row: Record<string, unknown>, qty: number): number {
   const price = Number(row.price ?? 0) || 0
   const discount = Math.max(0, Number(row.lineDiscountAmt ?? row.line_discount_amt ?? 0) || 0)
   return Math.max(0, qty * price - discount)
-}
-
-function resolveLineDiscountAmt(row: Record<string, unknown>): number {
-  return Math.max(0, Number(row.lineDiscountAmt ?? row.line_discount_amt ?? 0) || 0)
 }
 
 function buildMenuCategoryById(menus: PosMenuCatalogRow[]): Map<string, string> {
@@ -326,11 +323,12 @@ function mergeMenuBucket(target: MenuBucket, src: MenuBucket, salesFactor: numbe
 }
 
 /**
- * 대분류별 판매 가중 실적 원가율.
- * - 매출·할인은 부가세 제외(품목 원가·원가 계산기와 동일 기준)
- * - 세트/프로모: 구성품 카탈로그 정가 비중으로 매출 배분(없으면 수량 비중)
- * - 결제·쿠폰(라인 할인 잔여분) + 서비스(컴프)를 주문 단위로 분모에 반영
- * - BOM 미매칭 라인의 매출·원가는 대분류 합계에서 제외
+ * 대분류별 판매 가중 실적 원가율 (원가분석·목록과 동일 기준).
+ * - 분모: 카탈로그 정가(VAT 제외)×판매수량 — 목록 홀/배달 원가율과 같은 정가 기준
+ * - 분자: BOM 이론원가(홀=식재, 배달=식재+포장)
+ * - 세트: 구성품 각자 정가 공급가로 분모 산정(할인된 세트 판매가 배분 아님)
+ * - 카탈로그 없으면 주문 라인 순매출로 폴백
+ * - BOM 미매칭 라인의 매출·원가는 합계에서 제외
  */
 export function aggregatePosCostWeightedByCategory(params: {
   orderRows: CategoryOrderRow[]
@@ -365,6 +363,7 @@ export function aggregatePosCostWeightedByCategory(params: {
     optionBaseFallbackQty: 0,
     optionBaseFallbackSales: 0,
     optionBaseFallbackCost: 0,
+    matchedOrderNetSales: 0,
   }
 
   for (const order of params.orderRows) {
@@ -373,14 +372,13 @@ export function aggregatePosCostWeightedByCategory(params: {
     const vatExclFactor = resolvePosOrderVatExclFactor(order)
     const orderBuckets = new Map<string, Bucket>()
     const orderMenus = new Map<string, MenuBucket>()
-    let lineDiscountSum = 0
+    let orderMatchedSales = 0
 
     for (const row of parseOrderItems(order.items_json)) {
       if (isLineCancelled(row)) continue
       const parentQty = Math.max(0, resolveItemsJsonLineQty(row))
       if (parentQty <= 0) continue
 
-      lineDiscountSum = round2(lineDiscountSum + resolveLineDiscountAmt(row) * vatExclFactor)
       const parentSales = round2(resolveLineSales(row, parentQty) * vatExclFactor)
       const costLines = expandOrderLineToCostLines(row, resolveContext)
       if (costLines.length === 0) continue
@@ -392,6 +390,8 @@ export function aggregatePosCostWeightedByCategory(params: {
         categoryMain: string
         entry: PosMenuCostIndexEntry | undefined
         baseFallback: boolean
+        /** 카탈로그 정가×수량(VAT 포함). 0이면 주문매출 폴백 */
+        catalogIncl: number
         weight: number
         menuLabel: string
         optionLabel: string
@@ -403,8 +403,10 @@ export function aggregatePosCostWeightedByCategory(params: {
         if (qty <= 0) continue
         const menuId = str(line.menuId)
         const optionId = str(line.optionId)
-        const looked = menuId ? lookupCostEntry(params.costIndex, menuId, optionId) : { entry: undefined, baseFallback: false }
-        const catalogWeight = catalogRegularWeight({
+        const looked = menuId
+          ? lookupCostEntry(params.costIndex, menuId, optionId)
+          : { entry: undefined, baseFallback: false }
+        const catalogIncl = catalogRegularWeight({
           menuId,
           optionId,
           qty,
@@ -418,7 +420,8 @@ export function aggregatePosCostWeightedByCategory(params: {
           categoryMain: resolveCategoryForMenu(menuId, row, categoryByMenuId),
           entry: looked.entry,
           baseFallback: looked.baseFallback,
-          weight: catalogWeight > 0.0001 ? catalogWeight : qty,
+          catalogIncl,
+          weight: catalogIncl > 0.0001 ? catalogIncl : qty,
           menuLabel: str(line.menuName) || (menuId ? `#${menuId}` : '—'),
           optionLabel: str(line.optionName) || (optionId ? `#${optionId}` : ''),
         })
@@ -452,10 +455,13 @@ export function aggregatePosCostWeightedByCategory(params: {
       const matchedSalesPool = round2(parentSales * (weightMatched / weightAll))
       for (const p of matched) {
         const entry = p.entry!
-        const share = (matchedSalesPool * p.weight) / weightMatched
+        const orderShare = (matchedSalesPool * p.weight) / weightMatched
+        const catalogNet =
+          p.catalogIncl > 0.0001 ? toPosCostSalesExclVat(p.catalogIncl) : orderShare
         const bucket = upsertBucket(orderBuckets, p.categoryMain)
-        bucket.netSales = round2(bucket.netSales + share)
+        bucket.netSales = round2(bucket.netSales + catalogNet)
         bucket.matchedQty = round2(bucket.matchedQty + p.qty)
+        orderMatchedSales = round2(orderMatchedSales + orderShare)
         const unitFood = entry.foodCost
         const unitPack = entry.packagingCost
         bucket.foodCost = round2(bucket.foodCost + unitFood * p.qty)
@@ -470,7 +476,7 @@ export function aggregatePosCostWeightedByCategory(params: {
           menuLabel: p.menuLabel,
           optionLabel: p.optionLabel,
         })
-        mBucket.netSales = round2(mBucket.netSales + share)
+        mBucket.netSales = round2(mBucket.netSales + catalogNet)
         mBucket.matchedQty = round2(mBucket.matchedQty + p.qty)
         mBucket.foodCost = round2(mBucket.foodCost + unitFood * p.qty)
         if (isDelivery) {
@@ -482,46 +488,21 @@ export function aggregatePosCostWeightedByCategory(params: {
       }
     }
 
-    const provisionalSales = round2(
-      Array.from(orderBuckets.values()).reduce((s, b) => s + b.netSales, 0)
-    )
-    const headerDisc = round2(
-      resolvePosSalesDiscountAmount(
-        Number(order.discount_amt) || 0,
-        Number(order.coupon_discount_amt) || 0
-      ) * vatExclFactor
-    )
-    const residualPaymentDisc = Math.max(0, round2(headerDisc - lineDiscountSum))
-    const serviceAmt = round2(Math.max(0, Number(order.service_amt) || 0) * vatExclFactor)
-    const reduction = Math.min(provisionalSales, round2(residualPaymentDisc + serviceAmt))
-
-    let salesFactor = 1
-    if (provisionalSales > 0.0001 && reduction > 0.0001) {
-      salesFactor = Math.max(0, (provisionalSales - reduction) / provisionalSales)
-      const paymentPart = Math.min(residualPaymentDisc, reduction)
-      const servicePart = Math.max(0, round2(reduction - paymentPart))
-      meta.paymentDiscountAllocated = round2(meta.paymentDiscountAllocated + paymentPart)
-      meta.serviceAmtAllocated = round2(meta.serviceAmtAllocated + servicePart)
-    }
+    meta.matchedOrderNetSales = round2((meta.matchedOrderNetSales || 0) + orderMatchedSales)
 
     for (const [cat, bucket] of orderBuckets) {
-      mergeBucket(upsertBucket(globalBuckets, cat), bucket, salesFactor)
+      mergeBucket(upsertBucket(globalBuckets, cat), bucket, 1)
     }
     for (const [, mb] of orderMenus) {
       const key = menuKey(mb.categoryMain, mb.menuId, mb.optionId)
       const prev = globalMenus.get(key)
-      if (prev) mergeMenuBucket(prev, mb, salesFactor)
+      if (prev) mergeMenuBucket(prev, mb, 1)
       else {
-        globalMenus.set(key, {
-          ...mb,
-          netSales: round2(mb.netSales * salesFactor),
-        })
+        globalMenus.set(key, { ...mb })
       }
       if (mb.baseFallbackQty > 0) {
         meta.optionBaseFallbackQty = round2(meta.optionBaseFallbackQty + mb.baseFallbackQty)
-        meta.optionBaseFallbackSales = round2(
-          meta.optionBaseFallbackSales + mb.netSales * salesFactor
-        )
+        meta.optionBaseFallbackSales = round2(meta.optionBaseFallbackSales + mb.netSales)
         meta.optionBaseFallbackCost = round2(
           meta.optionBaseFallbackCost + (mb.foodCost + mb.packagingCost)
         )

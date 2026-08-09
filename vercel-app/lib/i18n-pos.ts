@@ -2991,7 +2991,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostActualPresetToday: '오늘',
     posCostActualPreset7d: '최근 7일',
     posCostActualPresetMonth: '이번 달',
-    posCostActualNetSales: '순매출(VAT 제외)',
+    posCostActualNetSales: '정가매출(VAT 제외)',
     posCostActualTotalCost: '이론 원가 합계',
     posCostActualTableTotal: '합계',
     posCostActualOrderCount: '주문 수',
@@ -3000,7 +3000,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostActualByChannel: '채널별 실적 원가율',
     posCostActualByCategory: '대분류별 판매 가중 실적 원가율',
     posCostActualByCategoryHint:
-      '세트는 구성품 카탈로그 정가 비중으로 매출을 배분합니다. 결제·서비스 할인은 대분류 분모에 반영하고, BOM 미매칭 매출·원가는 상단·채널·대분류에서 모두 제외합니다. 하단 합계 원가율=합÷합. 매출·원가율은 부가세 제외(공급가) 기준입니다.',
+      '원가분석과 동일: 분모=카탈로그 정가(공급가)×판매수량, 분자=BOM 이론원가. 세트는 구성품 각자 정가. 할인·실판매가는 분모에 넣지 않습니다. BOM 미매칭은 제외. 합계 원가율=합÷합.',
     posCostActualUnmatchedTitle: 'BOM 미매칭 주문 라인 (원가율 합계 제외)',
     posCostActualUnmatchedReason: '사유',
     posCostActualUnmatchedNoMenu: '메뉴 ID 없음',
@@ -3016,16 +3016,16 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostActualTopMenusHint: '행을 클릭하면 해당 대분류 매출 상위 메뉴(옵션)별 실적 원가율을 봅니다.',
     posCostActualBaseFallbackBadge: '기본BOM폴백',
     posCostActualFormulaHint:
-      '완료 주문 × BOM 이론 원가. 순매출·원가율 분모는 VAT 제외(공급가)·BOM 매칭 라인만. 세트는 정가 비중 배분, 결제·서비스 할인 반영. 미매칭은 매출·원가 모두 제외. (채널·대분류·상단 KPI 동일 엔진)',
-    posCostActualCostPctNetHint: 'BOM 매칭 순매출(VAT 제외) 대비',
+      '완료 주문 판매수량 × 원가분석 BOM. 원가율 분모=메뉴 정가(VAT 제외), 목록 원가율과 같은 기준입니다. 실판매가·결제할인은 분모에 넣지 않습니다. 미매칭은 제외.',
+    posCostActualCostPctNetHint: '정가(공급가)×수량 대비',
     posCostActualExactBomPct: '정확 BOM {pct}%',
-    posCostActualMatchedSalesSub: 'POS 전체 ฿{pos} · 커버리지 {coverage}%',
+    posCostActualMatchedSalesSub: 'POS 실매출 ฿{pos} · 커버리지 {coverage}%',
     posCostActualUnmatchedSalesSub: '미매칭 {qty} · 제외 매출 ฿{sales}',
     posCostActualCoveragePanelTitle: '커버리지·제외·폴백 안내',
     posCostActualExclusionPolicyHint:
       '제외 = 원가율 합계에서 매출·원가를 빼 둔 것(빠진 원가를 0으로 넣은 것이 아님). 폴백 = 옵션 전용 BOM이 없어 기본 BOM으로 대체 → 실적 원가율이 목록·마스터 평균보다 낮아질 수 있음.',
     posCostActualCoverageLine:
-      '매출 커버리지 {coverage}% (원가율 분모 ฿{matched} / POS 전체 ฿{pos})',
+      'POS 매출 커버리지 {coverage}% (BOM 매칭 실매출 ฿{matched} / POS 전체 ฿{pos})',
     posCostActualExcludedLine: 'BOM 미매칭으로 제외한 매출 ฿{sales} · 수량 {qty}',
     posCostActualFallbackLine:
       '옵션→기본 BOM 폴백 수량 {qty} · 매출 ฿{sales} · 원가 ฿{cost}',
@@ -6184,7 +6184,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostActualPresetToday: 'Today',
     posCostActualPreset7d: 'Last 7 days',
     posCostActualPresetMonth: 'This month',
-    posCostActualNetSales: 'Net sales (excl. VAT)',
+    posCostActualNetSales: 'Catalog sales (excl. VAT)',
     posCostActualTotalCost: 'Theoretical cost total',
     posCostActualTableTotal: 'Total',
     posCostActualOrderCount: 'Orders',
@@ -6193,7 +6193,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostActualByChannel: 'Actual cost % by channel',
     posCostActualByCategory: 'Sales-weighted actual cost % by category',
     posCostActualByCategoryHint:
-      'Set sales allocate by catalog regular-price weight. Payment/service discounts reduce category net sales; BOM-unmatched sales and cost are excluded from headline, channel, and category totals. Footer cost% = total÷total. Sales and cost% use excl.-VAT (net) amounts.',
+      'Same as list cost analysis: denom = catalog regular price (excl. VAT) × qty; numer = BOM theoretical cost. Sets use each component catalog price. Discounts/actual sell price are not in the denom. Unmatched BOM excluded. Footer = total÷total.',
     posCostActualUnmatchedTitle: 'BOM unmatched order lines (excluded from cost% totals)',
     posCostActualUnmatchedReason: 'Reason',
     posCostActualUnmatchedNoMenu: 'Missing menu ID',
@@ -6209,16 +6209,16 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostActualTopMenusHint: 'Click a row to see top menus (options) by sales for that category.',
     posCostActualBaseFallbackBadge: 'base BOM fallback',
     posCostActualFormulaHint:
-      'Completed orders × BOM theoretical cost. Denominator = excl.-VAT matched sales only. Sets use regular-price weight; payment/service discounts applied; unmatched sales and cost excluded. Headline, channel, and category share one engine.',
-    posCostActualCostPctNetHint: 'vs BOM-matched net sales (excl. VAT)',
+      'Sold qty × list BOM. Cost% denom = menu catalog price (excl. VAT), same basis as list cost analysis. Actual sell price and payment discounts are not in the denom. Unmatched excluded.',
+    posCostActualCostPctNetHint: 'vs catalog price (excl. VAT) × qty',
     posCostActualExactBomPct: 'Exact BOM {pct}%',
-    posCostActualMatchedSalesSub: 'POS total ฿{pos} · coverage {coverage}%',
+    posCostActualMatchedSalesSub: 'POS actual sales ฿{pos} · coverage {coverage}%',
     posCostActualUnmatchedSalesSub: 'Unmatched {qty} · excluded sales ฿{sales}',
     posCostActualCoveragePanelTitle: 'Coverage, exclusions, and fallback',
     posCostActualExclusionPolicyHint:
       'Excluded = sales and cost removed from cost% totals (not zero-costed). Fallback = option used base BOM when option BOM is missing — actual cost% can look lower than list/master averages.',
     posCostActualCoverageLine:
-      'Sales coverage {coverage}% (cost% denom ฿{matched} / POS total ฿{pos})',
+      'POS sales coverage {coverage}% (BOM-matched actual sales ฿{matched} / POS total ฿{pos})',
     posCostActualExcludedLine: 'BOM-unmatched excluded sales ฿{sales} · qty {qty}',
     posCostActualFallbackLine:
       'Option→base BOM fallback qty {qty} · sales ฿{sales} · cost ฿{cost}',
