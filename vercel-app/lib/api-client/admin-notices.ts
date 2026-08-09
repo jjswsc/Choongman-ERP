@@ -167,6 +167,8 @@ export async function getNoticeReaderStats(params: {
   store?: string
   searchType?: 'all' | 'notice' | 'order'
   minMissed?: number
+  /** 발송 후 N일 이상 경과한 공지만 집계 (0=제한 없음) */
+  minUnreadDays?: number
 }): Promise<{
   success: boolean
   message?: string
@@ -181,6 +183,9 @@ export async function getNoticeReaderStats(params: {
   if (params.store) q.set('store', params.store)
   if (params.searchType && params.searchType !== 'all') q.set('searchType', params.searchType)
   if (params.minMissed != null && params.minMissed > 0) q.set('minMissed', String(params.minMissed))
+  if (params.minUnreadDays != null && params.minUnreadDays > 0) {
+    q.set('minUnreadDays', String(params.minUnreadDays))
+  }
   const res = await apiFetchWithOffline(`/api/getNoticeReaderStats?${q}`)
   const data = (await res.json()) as {
     success?: boolean
@@ -204,6 +209,93 @@ export async function getNoticeReaderStats(params: {
     items: Array.isArray(data.items) ? data.items : [],
     truncated: Boolean(data.truncated),
     noticeInRange: data.noticeInRange ?? 0,
+  }
+}
+
+export interface NoticeUnreadDetailItem {
+  id: number
+  title: string
+  createdAt: string
+  sender: string
+}
+
+export async function getNoticeUnreadForEmployee(params: {
+  store: string
+  name: string
+  startDate: string
+  endDate: string
+  searchType?: 'all' | 'notice' | 'order'
+  minUnreadDays?: number
+}): Promise<{
+  success: boolean
+  message?: string
+  items: NoticeUnreadDetailItem[]
+  truncated: boolean
+}> {
+  const q = new URLSearchParams({
+    store: params.store,
+    name: params.name,
+    startDate: params.startDate,
+    endDate: params.endDate,
+  })
+  if (params.searchType && params.searchType !== 'all') q.set('searchType', params.searchType)
+  if (params.minUnreadDays != null && params.minUnreadDays > 0) {
+    q.set('minUnreadDays', String(params.minUnreadDays))
+  }
+  const res = await apiFetchWithOffline(`/api/getNoticeUnreadForEmployee?${q}`)
+  const data = (await res.json()) as {
+    success?: boolean
+    message?: string
+    items?: NoticeUnreadDetailItem[]
+    truncated?: boolean
+  }
+  if (!res.ok) {
+    return { success: false, message: data?.message, items: [], truncated: false }
+  }
+  return {
+    success: data.success !== false,
+    message: data.message,
+    items: Array.isArray(data.items) ? data.items : [],
+    truncated: Boolean(data.truncated),
+  }
+}
+
+export async function applyNoticeUnreadAllowanceExclusion(params: {
+  action?: 'apply' | 'remove'
+  payrollMonth: string
+  periodStart?: string
+  periodEnd?: string
+  employees: Array<{ store: string; name: string; missedCount?: number; noticeIds?: number[] }>
+}): Promise<{ success: boolean; message?: string; count?: number; payrollMonth?: string }> {
+  const res = await apiFetchWithOffline('/api/applyNoticeUnreadAllowanceExclusion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    count?: number
+    payrollMonth?: string
+  }>
+}
+
+export async function listNoticeUnreadAllowanceExclusions(params: { payrollMonth: string }): Promise<{
+  success: boolean
+  message?: string
+  items: Array<{ store: string; name: string; missed_count?: number; reason?: string }>
+}> {
+  const q = new URLSearchParams({ payrollMonth: params.payrollMonth })
+  const res = await apiFetchWithOffline(`/api/applyNoticeUnreadAllowanceExclusion?${q}`)
+  const data = (await res.json()) as {
+    success?: boolean
+    message?: string
+    items?: Array<{ store: string; name: string; missed_count?: number; reason?: string }>
+  }
+  return {
+    success: data.success !== false,
+    message: data.message,
+    items: Array.isArray(data.items) ? data.items : [],
   }
 }
 

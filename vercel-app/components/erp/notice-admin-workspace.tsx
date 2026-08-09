@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Megaphone, Send, History } from "lucide-react"
+import { Megaphone, Send, History, UserX } from "lucide-react"
 import { AdminNoticeCompose } from "@/components/erp/admin-notice-compose"
 import { AdminNoticeHistory } from "@/components/erp/admin-notice-history"
+import { AdminNoticeUnread } from "@/components/erp/admin-notice-unread"
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import {
   adminTabsContentCn,
@@ -17,13 +18,19 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 
+const NOTICE_TABS = ["compose", "history", "unread"] as const
+
 export function NoticeAdminWorkspace() {
   const { lang } = useLang()
   const t = useT(lang)
-  const [tab, setTab] = useAdminUrlTab("tab", ["compose", "history"] as const, "compose")
+  const [tab, setTab] = useAdminUrlTab("tab", NOTICE_TABS, "compose")
 
   return (
-    <Tabs value={tab} onValueChange={(v) => setTab(v as "compose" | "history")} className={adminTabsRootCn}>
+    <Tabs
+      value={tab}
+      onValueChange={(v) => setTab(v as (typeof NOTICE_TABS)[number])}
+      className={adminTabsRootCn}
+    >
       <AdminTabsBarWithHelp>
         <TabsList className={adminTabsListRowCn}>
           <TabsTrigger value="compose" className={adminTabsTriggerCn}>
@@ -34,6 +41,10 @@ export function NoticeAdminWorkspace() {
             <History className={adminTabsIconCn} aria-hidden />
             {t("noticeHistoryTitle")}
           </TabsTrigger>
+          <TabsTrigger value="unread" className={adminTabsTriggerCn}>
+            <UserX className={adminTabsIconCn} aria-hidden />
+            {t("noticeUnreadTabTitle")}
+          </TabsTrigger>
         </TabsList>
       </AdminTabsBarWithHelp>
       <TabsContent value="compose" className={adminTabsContentCn}>
@@ -43,6 +54,9 @@ export function NoticeAdminWorkspace() {
       </TabsContent>
       <TabsContent value="history" className={adminTabsContentCn}>
         <AdminNoticeHistory />
+      </TabsContent>
+      <TabsContent value="unread" className={adminTabsContentCn}>
+        <AdminNoticeUnread />
       </TabsContent>
     </Tabs>
   )

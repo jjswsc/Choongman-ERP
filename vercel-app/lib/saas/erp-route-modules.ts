@@ -84,6 +84,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/deleteNoticeAdmin", module: "notices" },
   { prefix: "/api/updateNoticeAdmin", module: "notices" },
   { prefix: "/api/remindNoticeUnread", module: "notices" },
+  { prefix: "/api/applyNoticeUnreadAllowanceExclusion", module: "notices" },
   { prefix: "/api/estimateNoticeRecipients", module: "notices" },
   { prefix: "/api/uploadNoticeAttachment", module: "notices" },
   { prefix: "/api/getCompanyHybridDocument", module: "documents" },

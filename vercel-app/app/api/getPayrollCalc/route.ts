@@ -47,6 +47,10 @@ import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-setti
 import { EVAL_RESULTS_ORDER, postgrestEvalTypeInFilter } from '@/lib/evaluation-postgrest-filters'
 import { isKitchenJobForPayroll } from '@/lib/employee-job-rules'
 import {
+  hasAllowanceExclusion,
+  loadAllowanceExclusionKeysForMonth,
+} from '@/lib/payroll-allowance-exclusions'
+import {
   appendSaasTenantFilter,
   isSaasTenantQueryBlocked,
   resolveSaasTenantScope,
@@ -1179,6 +1183,7 @@ export async function GET(request: NextRequest) {
     }
 
     const list: PayrollCalcRow[] = []
+    const allowanceExclusionKeys = await loadAllowanceExclusionKeysForMonth(normMonth)
 
     for (const e of empRows || []) {
       const store = String(e.store || '').trim()
@@ -1491,16 +1496,29 @@ export async function GET(request: NextRequest) {
         lateMin === 0 &&
         earlyMin === 0 &&
         lateDaysOver10 < LATE_HALF_DAY_COUNT
-      const diligenceAllow = diligentEligible ? diligenceCfg : 0
+      const diligenceAllowRaw = diligentEligible ? diligenceCfg : 0
+      const noticeUnreadExcludeAllowances = hasAllowanceExclusion(
+        allowanceExclusionKeys,
+        store,
+        name
+      )
+      let posAllowFinal = posAllowAmount
+      let hazAllowFinal = hazAllow
+      let diligenceAllow = diligenceAllowRaw
+      if (noticeUnreadExcludeAllowances) {
+        posAllowFinal = 0
+        hazAllowFinal = 0
+        diligenceAllow = 0
+      }
 
       const income =
-        salary + posAllowAmount + hazAllow + diligenceAllow + birthBonus + holidayPay + otAmt
+        salary + posAllowFinal + hazAllowFinal + diligenceAllow + birthBonus + holidayPay + otAmt
       const ssoExempt = isEmployeeSsoExemptFlag((e as EmpRowPayroll).sso_exempt)
       const ssoBase = ssoContributionBaseWage(isHourly, salAmt, salary)
       const ssoGrossWage = grossWageBeforeSSO({
         salary,
-        posAllow: posAllowAmount,
-        hazAllow,
+        posAllow: posAllowFinal,
+        hazAllow: hazAllowFinal,
         diligenceAllow,
         birthBonus,
         holidayPay,
@@ -1557,6 +1575,23 @@ export async function GET(request: NextRequest) {
             })(),
         amount: salary,
       })
+      if (noticeUnreadExcludeAllowances) {
+        explain.posAllow.push({
+          reason: '직책수당 제외',
+          detail: '공지 미확인 패널티(수당 제외)',
+          amount: 0,
+        })
+        explain.hazAllow.push({
+          reason: '위험수당 제외',
+          detail: '공지 미확인 패널티(수당 제외)',
+          amount: 0,
+        })
+        explain.diligenceAllow.push({
+          reason: '근면수당 제외',
+          detail: '공지 미확인 패널티(수당 제외)',
+          amount: 0,
+        })
+      } else {
       if (posAllowAmount > 0) {
         explain.posAllow.push({
           reason: '직책수당',
@@ -1594,11 +1629,11 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      if (diligenceAllow > 0) {
+      if (diligenceAllowRaw > 0) {
         explain.diligenceAllow.push({
           reason: '근면수당',
           detail: '해당 월 휴가 미사용(유급·무급 승인 건 포함), 지각·조퇴·결석 없음',
-          amount: diligenceAllow,
+          amount: diligenceAllowRaw,
         })
       } else if (diligenceCfg > 0 && !isDirectorRole && workDays > 0) {
         const missReason = leaveEvents.length > 0
@@ -1613,6 +1648,7 @@ export async function GET(request: NextRequest) {
           detail: missReason,
           amount: 0,
         })
+      }
       }
 
       if (birthBonus > 0 && birth) {
@@ -1785,8 +1821,8 @@ export async function GET(request: NextRequest) {
         ...(serviceGrade ? { serviceGrade } : {}),
         ...(managerGrade ? { managerGrade } : {}),
         salary,
-        posAllow: posAllowAmount,
-        hazAllow,
+        posAllow: posAllowFinal,
+        hazAllow: hazAllowFinal,
         diligenceAllow,
         birthBonus,
         holidayPay,

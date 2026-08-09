@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { NOTICE_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
-  aggregateNoticeReadStats,
+  listUnreadNoticesForEmployee,
   type EmpRow,
   type NoticeForAggregation,
 } from '@/lib/notice-read-aggregation'
@@ -38,7 +38,7 @@ function isStoreAllowedForAuth(
 }
 
 /**
- * GET 기간·유형(공지/전체)별 — 직원이 수신 대상이었던 공지 수 대비 수신 확인 수·미확인(모바일 수신 확인 기준)
+ * GET — 한 직원의 기간 내 미확인 공지 목록 (미확인자 탭 드릴다운)
  */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -53,123 +53,95 @@ export async function GET(request: NextRequest) {
   const auth = authRes.auth
 
   const { searchParams } = new URL(request.url)
+  const store = String(searchParams.get('store') || '').trim()
+  const name = String(searchParams.get('name') || '').trim()
   const startStr = String(searchParams.get('startDate') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
-  const storeFilter = String(searchParams.get('store') || '전체').trim() || '전체'
-  const minMissed = Math.max(1, Math.floor(Number(searchParams.get('minMissed') || 1) || 1))
-  const minUnreadDays = Math.max(0, Math.min(90, Math.floor(Number(searchParams.get('minUnreadDays') || 0) || 0)))
   const searchTypeParam = (searchParams.get('searchType') || 'all').toLowerCase()
   const searchType: 'all' | 'notice' | 'order' =
     searchTypeParam === 'order' ? 'order' : searchTypeParam === 'notice' ? 'notice' : 'all'
+  const minUnreadDays = Math.max(
+    0,
+    Math.min(90, Math.floor(Number(searchParams.get('minUnreadDays') || 0) || 0))
+  )
 
-  if (!startStr || !endStr) {
+  if (!store || !name || !startStr || !endStr) {
     return NextResponse.json(
-      { success: false, message: '시작일·종료일이 필요합니다.', items: [] },
+      { success: false, message: 'store·name·시작일·종료일이 필요합니다.', items: [] },
       { status: 400, headers }
     )
   }
 
   const userRole = (auth.role || '').toLowerCase()
   const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
+  if (!isStoreAllowedForAuth(store, auth, isOffice)) {
+    return NextResponse.json(
+      { success: false, message: '해당 매장 조회 권한이 없습니다.', items: [] },
+      { status: 403, headers }
+    )
+  }
 
   try {
     const { gteIso, lteIso } = bangkokYmdRangeToIsoBounds(startStr, endStr)
-    let filter = 'id=gte.0'
-    filter += `&created_at=gte.${gteIso}`
-    filter += `&created_at=lte.${lteIso}`
+    const filter = `id=gte.0&created_at=gte.${gteIso}&created_at=lte.${lteIso}`
 
     const noticeRows = (await supabaseSelectFilter('notices', filter, {
       order: 'created_at.desc',
       limit: NOTICE_READ_STATS_LIMIT,
       select: NOTICE_LIST_COLS,
-    })) as (NoticeForAggregation & { title?: string; content?: string; created_at?: string })[]
+    })) as (NoticeForAggregation & {
+      title?: string
+      content?: string
+      sender?: string
+      created_at?: string
+    })[]
 
     const truncated = (noticeRows || []).length >= NOTICE_READ_STATS_LIMIT
-    const notices = (noticeRows || []) as NoticeForAggregation[]
 
-    const empListRaw = (await supabaseSelect('employees', {
-      order: 'id.asc',
-      select: 'store,name,job,role,resign_date',
-    })) as { store?: string; name?: string; job?: string; role?: string; resign_date?: string }[]
+    const empListRaw = (await supabaseSelectFilter(
+      'employees',
+      `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`,
+      { limit: 5, select: 'store,name,job,role,resign_date' }
+    )) as { store?: string; name?: string; job?: string; role?: string; resign_date?: string }[]
 
-    const employees: EmpRow[] = (empListRaw || [])
-      .map((e) => ({
-        store: String(e.store || '').trim(),
-        name: String(e.name || '').trim(),
-        job: String(e.job || e.role || '').trim(),
-        role: String(e.role || '').trim(),
-        resignDate: String(e.resign_date || '').trim(),
-      }))
-      .filter((e) => e.name)
+    const empHit = (empListRaw || []).find(
+      (e) => String(e.store || '').trim() === store && String(e.name || '').trim() === name
+    )
+    const employee: EmpRow = {
+      store,
+      name,
+      job: String(empHit?.job || empHit?.role || '').trim() || '—',
+      role: String(empHit?.role || '').trim(),
+      resignDate: String(empHit?.resign_date || '').trim(),
+    }
 
-    const noticeIds = notices.map((n) => n.id)
+    const noticeIds = (noticeRows || []).map((n) => n.id)
     const readRows: { notice_id: number; store?: string; name?: string; status?: string }[] = []
     for (const part of chunk(noticeIds, IN_CHUNK)) {
       if (part.length === 0) continue
       const rows = (await supabaseSelectFilter(
         'notice_reads',
-        `notice_id=in.(${part.join(',')})`,
+        `notice_id=in.(${part.join(',')})&store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`,
         { limit: 50000, select: 'notice_id,store,name,status' }
       )) as { notice_id: number; store?: string; name?: string; status?: string }[]
       readRows.push(...(rows || []))
     }
 
-    const asOfYmd = bangkokTodayYmd()
-    const agg = aggregateNoticeReadStats(notices, employees, readRows, {
+    const items = listUnreadNoticesForEmployee(noticeRows || [], employee, readRows, {
       searchType,
       minUnreadDays,
-      asOfYmd,
+      asOfYmd: bangkokTodayYmd(),
     })
 
-    const items: {
-      store: string
-      name: string
-      job: string
-      targeted: number
-      confirmed: number
-      missed: number
-      missRate: number
-    }[] = []
-
-    for (const a of agg.values()) {
-      if (!isStoreAllowedForAuth(a.store, auth, isOffice)) continue
-      if (storeFilter && storeFilter !== '전체' && storeFilter !== 'All') {
-        if (a.store !== storeFilter && !storesMatchForGradeLookup(storeFilter, a.store)) continue
-      }
-      const missed = a.targeted - a.confirmed
-      if (missed < minMissed) continue
-      const missRate = a.targeted > 0 ? Math.round((1000 * missed) / a.targeted) / 10 : 0
-      items.push({
-        store: a.store,
-        name: a.name,
-        job: a.job,
-        targeted: a.targeted,
-        confirmed: a.confirmed,
-        missed,
-        missRate,
-      })
-    }
-
-    items.sort((x, y) => {
-      if (y.missed !== x.missed) return y.missed - x.missed
-      if (y.missRate !== x.missRate) return y.missRate - x.missRate
-      if (x.store !== y.store) return x.store.localeCompare(y.store)
-      return x.name.localeCompare(y.name)
-    })
-
-    return NextResponse.json(
-      { success: true, items, truncated, noticeInRange: noticeIds.length },
-      { headers }
-    )
+    return NextResponse.json({ success: true, items, truncated }, { headers })
   } catch (e) {
-    console.error('getNoticeReaderStats:', e)
+    console.error('getNoticeUnreadForEmployee:', e)
     return NextResponse.json(
       {
         success: false,
-        message: '집계 실패: ' + (e instanceof Error ? e.message : String(e)),
-        items: [] as never[],
+        message: '조회 실패: ' + (e instanceof Error ? e.message : String(e)),
+        items: [],
         truncated: false,
-        noticeInRange: 0,
       },
       { status: 500, headers }
     )
