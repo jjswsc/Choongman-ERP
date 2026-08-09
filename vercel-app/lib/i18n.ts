@@ -4616,10 +4616,13 @@ export const i18n = {
     salesPeriodWeek: '주간별',
     salesPeriodDay: '일별',
     salesPeriodDow: '요일별',
+    salesDowFilterLabel: '요일',
+    salesDowFilterAll: '전체',
+    salesDowFilterHint: '선택한 요일만 집계합니다(POS 영업일 기준).',
     salesPeriodHour: '시간대별',
     salesPeriodHourColumn: '시간대',
     salesTopicExplorePeriod: '일자/시간 추이',
-    salesTopicExplorePeriodHint: '일매출, 시간대, 프라임타임',
+    salesTopicExplorePeriodHint: '일매출, 시간대, 프라임타임 · 요일 필터로 특정 요일만 비교',
     salesTopicRealtimeRevenueOps: '실시간 운영(매출 중심)',
     salesTopicRealtimeRevenueOpsHint: '대기·지연·조리시간 + 매장 비교',
     salesTopicExploreChannel: '채널/카테고리',
@@ -4633,7 +4636,7 @@ export const i18n = {
     salesTopicPivotStoreSummary: '매장별 매출 집계',
     salesTopicPivotStoreSummaryHint: '매장별 주문건수·공급가액·세금·매출액',
     salesTopicPivotStoreByPeriod: '매장·기간 목록',
-    salesTopicPivotStoreByPeriodHint: '집계 기간(년·월·주·일 등)마다 매장별 행으로 표시',
+    salesTopicPivotStoreByPeriodHint: '집계 기간(년·월·주·일 등)마다 매장별 행으로 표시 · 요일 필터 지원',
     salesStorePeriodFootnote:
       '매장을 전체로 두면 이 기간에 주문이 있는 매장만 행으로 나옵니다. 위쪽「집계 기간」으로 년·월·주·일·요일·시간대를 바꿀 수 있습니다. 일별·요일은 주문 시각 기준 방콕 달력일이며, 월·연 집계만 매장 POS 영업일 경계를 씁니다.',
     salesTopicPivotStoreCategory: '매출 집계(매장&분류)',
@@ -7322,7 +7325,7 @@ export const i18n = {
     helpSum_admin_sales_management:
       '기간·매장·채널·메뉴·할인·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다.',
     helpHow_admin_sales_management:
-      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(실적 분석·매장 비교·할인·예측)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n④ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑤ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑥ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.',
+      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「일자/시간 추이」·「매장·기간 목록」에서는 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n④ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑤ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑥ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑦ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.',
     salesSubnavAria: '매출 관리 메뉴',
     salesTopicHintLabel: '이 리포트',
     salesOverviewIntro:
@@ -12428,10 +12431,13 @@ Only matters the employee must handle personally on a working day:
     salesPeriodWeek: 'Weekly',
     salesPeriodDay: 'Daily',
     salesPeriodDow: 'By weekday',
+    salesDowFilterLabel: 'Weekday',
+    salesDowFilterAll: 'All',
+    salesDowFilterHint: 'Include only selected weekdays (POS business day).',
     salesPeriodHour: 'By hour',
     salesPeriodHourColumn: 'Time slot',
     salesTopicExplorePeriod: 'Date/Time trend',
-    salesTopicExplorePeriodHint: 'Daily sales, time slots, prime time',
+    salesTopicExplorePeriodHint: 'Daily sales, time slots, prime time · weekday filter to compare selected days',
     salesTopicRealtimeRevenueOps: 'Realtime operations (revenue-first)',
     salesTopicRealtimeRevenueOpsHint: 'Waiting/delay/cooking metrics + store comparison',
     salesTopicExploreChannel: 'Channel/Category',
@@ -12445,7 +12451,7 @@ Only matters the employee must handle personally on a working day:
     salesTopicPivotStoreSummary: 'Sales by store',
     salesTopicPivotStoreSummaryHint: 'Order count·Supply·Tax·Sales by store',
     salesTopicPivotStoreByPeriod: 'Store × period list',
-    salesTopicPivotStoreByPeriodHint: 'One row per store and time bucket (year, month, week, day…)',
+    salesTopicPivotStoreByPeriodHint: 'One row per store and time bucket (year, month, week, day…) · weekday filter supported',
     salesStorePeriodFootnote:
       'With all stores, only branches with orders in the range appear. Use “Period granularity” above for year/month/week/day/DOW/hour. Day and DOW buckets use Bangkok calendar dates from order time; month/year use each store’s POS business-day boundaries.',
     salesTopicPivotStoreCategory: 'Sales (Store & Category)',
@@ -15135,7 +15141,7 @@ orderItemQty: 'Qty',
     helpSum_admin_sales_management:
       'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache.',
     helpHow_admin_sales_management:
-      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (analysis, store compare, discounts, forecast) and a report topic; read the hint under the topic buttons.\n③ Reuse filters via URL or Save preset.\n④ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑤ Business hours tab adjusts POS business-day boundaries.\n⑥ If payment tender gap warning appears, fix missing payments in POS receipt management.',
+      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast) and a report topic; read the hint under the topic buttons.\n③ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n④ Reuse filters via URL or Save preset.\n⑤ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑥ Business hours tab adjusts POS business-day boundaries.\n⑦ If payment tender gap warning appears, fix missing payments in POS receipt management.',
     salesSubnavAria: 'Sales menu',
     salesTopicHintLabel: 'This report',
     salesOverviewIntro:

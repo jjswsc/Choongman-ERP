@@ -18,6 +18,10 @@ import {
   rowMatchesOrderFilter,
   type PosOrderTypeValue,
 } from '@/lib/pos-sales-order-type-filter'
+import {
+  rowMatchesDowFilter,
+  type PosSalesDowValue,
+} from '@/lib/pos-sales-dow-filter'
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import {
   canonicalSalesStoreRowKey,
@@ -166,6 +170,7 @@ export function groupPosSalesRowsByCanonicalStore(
 
 /**
  * @param orderTypesAllowed - parseOrderTypesParam 결과(null = 전체)
+ * @param daysOfWeekAllowed - parseDowsParam 결과(null = 전체). 영업일 요일 기준.
  */
 export function aggregatePosSalesByPeriod(
   rows: PeriodOrderRow[],
@@ -173,10 +178,12 @@ export function aggregatePosSalesByPeriod(
   orderTypesAllowed: PosOrderTypeValue[] | null,
   businessDayStart?: PosBusinessHoursConfig,
   /** 제공 시 매장별 영업 시간(행의 store_code 기준), 없으면 `businessDayStart` 단일값 */
-  resolveBusinessDayStart?: (storeCode: string) => PosBusinessHoursConfig
+  resolveBusinessDayStart?: (storeCode: string) => PosBusinessHoursConfig,
+  daysOfWeekAllowed?: PosSalesDowValue[] | null
 ): PeriodAggRow[] {
   const defaultHours = businessDayStart ?? POS_BUSINESS_DAY_DEFAULT_HOURS
   const getHours = (sc: string) => (resolveBusinessDayStart ? resolveBusinessDayStart(sc) : defaultHours)
+  const dowFilter = daysOfWeekAllowed ?? null
   const byKey: Record<string, Bucket> = {}
 
   const add = (key: string, r: PeriodOrderRow) => {
@@ -212,6 +219,7 @@ export function aggregatePosSalesByPeriod(
 
     /** 일·주·요일·월·연: 모두 POS 영업일 라벨(매장별 영업시간) 기준 */
     const bizYmd = getPosBusinessDateStrFromConfig(new Date(dt), getHours(String(r.store_code ?? '').trim()))
+    if (!rowMatchesDowFilter(bizYmd, dowFilter, getDayOfWeekBangkok)) continue
 
     if (groupBy === 'month') {
       add(bizYmd.slice(0, 7), r)
@@ -250,9 +258,9 @@ export function aggregatePosSalesByPeriod(
       .map(([k, v]) => toRow(k, v))
   }
   if (groupBy === 'dow') {
-    return [0, 1, 2, 3, 4, 5, 6].map((dow) =>
-      toRow(String(dow), byKey[String(dow)] ?? emptyBucket())
-    )
+    const dowAxis =
+      dowFilter != null && dowFilter.length > 0 ? dowFilter : ([0, 1, 2, 3, 4, 5, 6] as const)
+    return dowAxis.map((dow) => toRow(String(dow), byKey[String(dow)] ?? emptyBucket()))
   }
   if (groupBy === 'hour') {
     const empty = emptyBucket()
@@ -381,11 +389,12 @@ type BuildSplitSeriesParams = {
   groupBy: string
   orderTypesAllowed: PosOrderTypeValue[] | null
   resolveBusinessDayStart: (storeCode: string) => PosBusinessHoursConfig
+  daysOfWeekAllowed?: PosSalesDowValue[] | null
 }
 
 /** splitByStore 응답 — 매장 키는 canonicalSalesStoreRowKey (posSalesByStore 와 동일) */
 export function buildPosSalesSplitSeriesByStore(params: BuildSplitSeriesParams): Record<string, PeriodAggRow[]> {
-  const { rows, stores, groupBy, orderTypesAllowed, resolveBusinessDayStart } = params
+  const { rows, stores, groupBy, orderTypesAllowed, resolveBusinessDayStart, daysOfWeekAllowed } = params
   const series: Record<string, PeriodAggRow[]> = {}
   const grouped = groupPosSalesRowsByCanonicalStore(rows, orderTypesAllowed)
 
@@ -401,7 +410,8 @@ export function buildPosSalesSplitSeriesByStore(params: BuildSplitSeriesParams):
       groupBy,
       orderTypesAllowed,
       undefined,
-      resolveBusinessDayStart
+      resolveBusinessDayStart,
+      daysOfWeekAllowed ?? null
     )
   }
   return series

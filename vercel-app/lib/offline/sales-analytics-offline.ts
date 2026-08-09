@@ -53,6 +53,7 @@ export async function getPosSalesByPeriodWithCache(params: {
   pos?: string
   stores?: string[]
   orderTypes?: string[]
+  daysOfWeek?: number[]
   splitByStore?: boolean
 }) {
   const key = cacheKeyAnalytics('period', {
@@ -61,6 +62,7 @@ export async function getPosSalesByPeriodWithCache(params: {
     pos: params.pos ?? '',
     stores: (params.stores ?? []).slice().sort().join(','),
     orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
+    daysOfWeek: (params.daysOfWeek ?? []).slice().sort((a, b) => a - b).join(','),
     splitByStore: params.splitByStore ? '1' : '',
   })
   if (isOnline()) {

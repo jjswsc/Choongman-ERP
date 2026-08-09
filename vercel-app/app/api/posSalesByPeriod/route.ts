@@ -4,6 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { parseOrderTypesParam } from '@/lib/pos-sales-order-type-filter'
+import { parseDowsParam } from '@/lib/pos-sales-dow-filter'
 import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
 import { resolvePosSalesStoresFromRequest } from '@/lib/pos-sales-request-scope'
 import {
@@ -38,20 +39,25 @@ export async function GET(request: NextRequest) {
     )
     const splitByStore = searchParams.get('splitByStore') === '1' || searchParams.get('splitByStore') === 'true'
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
+    const daysOfWeekAllowed = parseDowsParam(searchParams.get('dows'))
 
     if (!startStr || !endStr) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const rpcRows = await tryFetchPosSalesAnalyticsAgg({
-      request,
-      startStr,
-      endStr,
-      storeCodes: stores.length > 0 ? stores : undefined,
-      orderTypes: orderTypesAllowed,
-      aggMode: splitByStore ? 'period_by_store' : 'period',
-      periodGroup: groupBy,
-    })
+    // 요일 필터는 RPC 미지원 → fetch 집계 경로만 사용
+    const rpcRows =
+      daysOfWeekAllowed != null
+        ? null
+        : await tryFetchPosSalesAnalyticsAgg({
+            request,
+            startStr,
+            endStr,
+            storeCodes: stores.length > 0 ? stores : undefined,
+            orderTypes: orderTypesAllowed,
+            aggMode: splitByStore ? 'period_by_store' : 'period',
+            periodGroup: groupBy,
+          })
 
     if (rpcRows) {
       headers.set('X-Pos-Sales-Source', 'rpc')
@@ -90,11 +96,19 @@ export async function GET(request: NextRequest) {
         groupBy,
         orderTypesAllowed,
         resolveBusinessDayStart: resolveSc,
+        daysOfWeekAllowed,
       })
       return NextResponse.json({ split: true as const, series, truncated }, { headers })
     }
 
-    const result = aggregatePosSalesByPeriod(rows, groupBy, orderTypesAllowed, undefined, resolveSc)
+    const result = aggregatePosSalesByPeriod(
+      rows,
+      groupBy,
+      orderTypesAllowed,
+      undefined,
+      resolveSc,
+      daysOfWeekAllowed
+    )
     return NextResponse.json(result, { headers })
   } catch (e) {
     console.error('posSalesByPeriod:', e)

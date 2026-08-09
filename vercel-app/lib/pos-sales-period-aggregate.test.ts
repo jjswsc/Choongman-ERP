@@ -215,3 +215,41 @@ describe('periodRowsForStoreSelection', () => {
     expect(picked[0]?.count).toBe(3)
   })
 })
+
+describe('aggregatePosSalesByPeriod daysOfWeek filter', () => {
+  // 2026-08-07 = Fri, 2026-08-08 = Sat, 2026-08-09 = Sun (Bangkok business ymd via default hours)
+  const sample: PeriodOrderRow[] = [
+    {
+      store_code: 'S1',
+      status: 'completed',
+      total: 100,
+      created_at: '2026-08-07T05:00:00.000Z', // Fri Bangkok afternoon
+    },
+    {
+      store_code: 'S1',
+      status: 'completed',
+      total: 200,
+      created_at: '2026-08-08T05:00:00.000Z', // Sat
+    },
+    {
+      store_code: 'S1',
+      status: 'completed',
+      total: 50,
+      created_at: '2026-08-09T05:00:00.000Z', // Sun
+    },
+  ]
+
+  it('keeps only selected weekdays for day buckets', () => {
+    const rows = aggregatePosSalesByPeriod(sample, 'day', null, undefined, undefined, [5, 6])
+    expect(rows.map((r) => r.key).sort()).toEqual(['2026-08-07', '2026-08-08'])
+    expect(rows.find((r) => r.key === '2026-08-07')?.total).toBe(100)
+    expect(rows.find((r) => r.key === '2026-08-08')?.total).toBe(200)
+  })
+
+  it('limits dow axis to selected days', () => {
+    const rows = aggregatePosSalesByPeriod(sample, 'dow', null, undefined, undefined, [5, 6])
+    expect(rows.map((r) => r.key)).toEqual(['5', '6'])
+    expect(rows[0]?.total).toBe(100)
+    expect(rows[1]?.total).toBe(200)
+  })
+})

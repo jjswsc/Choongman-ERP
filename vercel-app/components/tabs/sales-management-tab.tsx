@@ -24,6 +24,13 @@ import {
   normalizeOrderTypesQueryString,
   type PosOrderTypeValue,
 } from "@/lib/pos-sales-order-type-filter"
+import {
+  parseDowsParam,
+  normalizeDowsQueryString,
+  POS_SALES_DOW_TOGGLE_ORDER,
+  POS_SALES_DOW_LABEL_KEYS,
+  type PosSalesDowValue,
+} from "@/lib/pos-sales-dow-filter"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLang } from "@/lib/lang-context"
 import { useOnlineStatus } from "@/lib/offline"
@@ -245,6 +252,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const defaultStoresHydratedRef = React.useRef(false)
   /** 빈 문자열 = 매출액 종류 전체(필터 없음) */
   const [orderTypesKey, setOrderTypesKey] = React.useState("")
+  /** 빈 문자열 = 요일 전체. `5,6` = 금·토 (0=일…6=토) */
+  const [dowsKey, setDowsKey] = React.useState("")
   const [compareStores, setCompareStores] = React.useState(false)
   const [periodSplitSeries, setPeriodSplitSeries] = React.useState<Record<string, PosSalesPeriodRow[]> | null>(null)
   const [periodTruncated, setPeriodTruncated] = React.useState(false)
@@ -681,6 +690,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (selectedStoresKey) p.set("stores", selectedStoresKey)
     if (compareStores) p.set("compare", "1")
     if (orderTypesKey) p.set("orderTypes", orderTypesKey)
+    if (dowsKey) p.set("dows", dowsKey)
     router.replace(`${pathname}?${p.toString()}`, { scroll: false })
   }, [
     activeSubMenuId,
@@ -691,6 +701,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     selectedStoresKey,
     compareStores,
     orderTypesKey,
+    dowsKey,
     pathname,
     router,
   ])
@@ -902,6 +913,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     [orderTypesKey]
   )
 
+  const daysOfWeekParam = React.useMemo(
+    () => parseDowsParam(dowsKey || null) ?? undefined,
+    [dowsKey]
+  )
+
+  const showDowFilter = selectedView === "period" || selectedView === "store-period"
+  /** 요일 필터는 일자/시간·매장×기간에만 적용 (다른 주제의 기간 차트에 섞이지 않게) */
+  const periodDaysOfWeekParam = showDowFilter ? daysOfWeekParam : undefined
+
   const discountDrillContext = React.useMemo(
     () => ({
       startStr,
@@ -940,6 +960,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         selectedStoresKey,
         periodGroup,
         orderTypesKey,
+        dowsKey,
         compareStores ? "1" : "0",
         menuSearch.trim(),
         menuSearchAnd ? "1" : "0",
@@ -950,6 +971,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedStoresKey,
       periodGroup,
       orderTypesKey,
+      dowsKey,
       compareStores,
       menuSearch,
       menuSearchAnd,
@@ -1226,6 +1248,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     periodGroup?: string
     dateRange?: string
     orderTypesKey?: string
+    dowsKey?: string
     compare?: boolean
   }>({})
 
@@ -1255,6 +1278,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       stores: selectedStores,
       periodGroup,
       orderTypesKey,
+      dowsKey,
       activeSubMenuId,
       selectedTopicId: currentTopic,
       menuSearch,
@@ -1270,6 +1294,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     selectedStores,
     periodGroup,
     orderTypesKey,
+    dowsKey,
     activeSubMenuId,
     menuSearch,
     menuSearchAnd,
@@ -1762,18 +1787,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const normalizedStores = normalizeStoreCodes(preset.stores || [])
     const normalizedPeriodGroup = PERIOD_GROUP_VALUES.has(preset.periodGroup) ? preset.periodGroup : periodGroup
     const normalizedOrderTypesKey = normalizeOrderTypesQueryString(preset.orderTypesKey)
+    const normalizedDowsKey = normalizeDowsQueryString(preset.dowsKey)
     userSelectedRef.current = {
       subMenu: preset.activeSubMenuId,
       topic: preset.selectedTopicId,
       storesKey: normalizedStores.join(","),
       periodGroup: normalizedPeriodGroup,
       orderTypesKey: normalizedOrderTypesKey,
+      dowsKey: normalizedDowsKey,
       compare: preset.compareStores,
     }
     skipDefaultStoreAutoSelectRef.current = normalizedStores.length === 0
     setSelectedStores(normalizedStores)
     setPeriodGroup(normalizedPeriodGroup)
     setOrderTypesKey(normalizedOrderTypesKey)
+    setDowsKey(normalizedDowsKey)
     setMenuSearch(preset.menuSearch || "")
     setMenuSearchAnd(Boolean(preset.menuSearchAnd))
     setCompareStores(Boolean(preset.compareStores))
@@ -1826,6 +1854,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     )
     const qStoresKey = qStores.join(",")
     const qOrderTypes = normalizeOrderTypesQueryString(searchParams.get("orderTypes"))
+    const qDows = normalizeDowsQueryString(searchParams.get("dows"))
     const qStart = searchParams.get("start")
     const qEnd = searchParams.get("end")
     if (qStart && /^\d{4}-\d{2}-\d{2}$/.test(qStart) && userSelectedRef.current.dateRange !== `${startStr}~${endStr}`) {
@@ -1871,6 +1900,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (qOrderTypes !== orderTypesKey && userSelectedRef.current.orderTypesKey !== orderTypesKey) {
       setOrderTypesKey(qOrderTypes)
     }
+    if (qDows !== dowsKey && userSelectedRef.current.dowsKey !== dowsKey) {
+      setDowsKey(qDows)
+    }
     if (qCompare !== compareStores && userSelectedRef.current.compare !== compareStores) {
       setCompareStores(qCompare)
     }
@@ -1881,6 +1913,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       qStart === startStr &&
       qEnd === endStr &&
       qOrderTypes === orderTypesKey &&
+      qDows === dowsKey &&
       qCompare === compareStores
     ) {
       userSelectedRef.current = {}
@@ -1894,6 +1927,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     startStr,
     endStr,
     orderTypesKey,
+    dowsKey,
     compareStores,
     validTopicByMenu,
     selectedTopicBySubMenu,
@@ -1915,6 +1949,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     ).join(",")
     const qCompare = searchParams.get("compare") === "1"
     const qOrderTypes = normalizeOrderTypesQueryString(searchParams.get("orderTypes"))
+    const qDows = normalizeDowsQueryString(searchParams.get("dows"))
     const qStart = searchParams.get("start")
     const qEnd = searchParams.get("end")
     if (
@@ -1923,6 +1958,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       qGroup === periodGroup &&
       qStoresKey === selectedStoresKey &&
       qOrderTypes === orderTypesKey &&
+      qDows === dowsKey &&
       qStart === startStr &&
       qEnd === endStr &&
       qCompare === compareStores
@@ -1937,6 +1973,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (selectedStoresKey) expected.set("stores", selectedStoresKey)
     if (compareStores) expected.set("compare", "1")
     if (orderTypesKey) expected.set("orderTypes", orderTypesKey)
+    if (dowsKey) expected.set("dows", dowsKey)
     const expectedStr = expected.toString()
     const currentStr = [
       searchParams.get("menu"),
@@ -1946,6 +1983,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       searchParams.get("end"),
       normalizeStoreCodes((searchParams.get("stores") ?? searchParams.get("pos") ?? "").split(",")).join(","),
       normalizeOrderTypesQueryString(searchParams.get("orderTypes")),
+      normalizeDowsQueryString(searchParams.get("dows")),
       searchParams.get("compare") === "1" ? "1" : "",
     ].join("|")
     const expectedValues = [
@@ -1956,6 +1994,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       endStr,
       selectedStoresKey,
       orderTypesKey,
+      dowsKey,
       compareStores ? "1" : "",
     ].join("|")
     if (currentStr === expectedValues) return
@@ -1971,6 +2010,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     periodGroup,
     selectedStoresKey,
     orderTypesKey,
+    dowsKey,
     compareStores,
     startStr,
     endStr,
@@ -2217,6 +2257,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           groupBy: effectivePeriodGroup,
           stores: salesFetchStoresParam,
           orderTypes: orderTypesParam,
+          daysOfWeek: periodDaysOfWeekParam,
           splitByStore: needSplit,
         })
           .then((res) => {
@@ -2496,36 +2537,72 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       const sumScopedStoreTotal = (rows: { total?: number }[]): number =>
         rows.reduce((s, r) => s + (Number(r.total) || 0), 0)
       // 당월 합계는 period 응답에서 채움 — store RPC는 전기·직전7일만 (중복 스캔 제거)
-      tasks.push(
-        Promise.all([
-          storeSummaryFetcher({
-            startStr: prevStart,
-            endStr: prevEnd,
-            stores: salesFetchStoresParam,
-            orderTypes: orderTypesParam,
-          }),
-          storeSummaryFetcher({
-            startStr: weekStart,
-            endStr: weekEnd,
-            stores: salesFetchStoresParam,
-            orderTypes: orderTypesParam,
-          }),
-        ])
-          .then(([prevRows, weekRows]) => {
-            if (loadIdRef.current !== id) return
-            const scope = (rows: { total?: number; storeName: string }[]) =>
-              filterStoreRowsBySalesSelection(rows, salesFetchStoresParam)
-            setSummaryCards((prev) => ({
-              current: prev.current,
-              prevRange: sumScopedStoreTotal(scope(prevRows)),
-              prevWeek: sumScopedStoreTotal(scope(weekRows)),
-            }))
-          })
-          .catch(() => {
-            if (loadIdRef.current !== id) return
-            setSummaryCards((prev) => ({ current: prev.current, prevRange: 0, prevWeek: 0 }))
-          })
-      )
+      // 요일 필터 시 store API는 요일을 모름 → period 일별 합으로 맞춘다
+      if (periodDaysOfWeekParam?.length) {
+        tasks.push(
+          Promise.all([
+            periodRun({
+              startStr: prevStart,
+              endStr: prevEnd,
+              groupBy: "day",
+              stores: salesFetchStoresParam,
+              orderTypes: orderTypesParam,
+              daysOfWeek: periodDaysOfWeekParam,
+            }),
+            periodRun({
+              startStr: weekStart,
+              endStr: weekEnd,
+              groupBy: "day",
+              stores: salesFetchStoresParam,
+              orderTypes: orderTypesParam,
+              daysOfWeek: periodDaysOfWeekParam,
+            }),
+          ])
+            .then(([prevRes, weekRes]) => {
+              if (loadIdRef.current !== id) return
+              setSummaryCards((prev) => ({
+                current: prev.current,
+                prevRange: sumPeriodTotal(prevRes),
+                prevWeek: sumPeriodTotal(weekRes),
+              }))
+            })
+            .catch(() => {
+              if (loadIdRef.current !== id) return
+              setSummaryCards((prev) => ({ current: prev.current, prevRange: 0, prevWeek: 0 }))
+            })
+        )
+      } else {
+        tasks.push(
+          Promise.all([
+            storeSummaryFetcher({
+              startStr: prevStart,
+              endStr: prevEnd,
+              stores: salesFetchStoresParam,
+              orderTypes: orderTypesParam,
+            }),
+            storeSummaryFetcher({
+              startStr: weekStart,
+              endStr: weekEnd,
+              stores: salesFetchStoresParam,
+              orderTypes: orderTypesParam,
+            }),
+          ])
+            .then(([prevRows, weekRows]) => {
+              if (loadIdRef.current !== id) return
+              const scope = (rows: { total?: number; storeName: string }[]) =>
+                filterStoreRowsBySalesSelection(rows, salesFetchStoresParam)
+              setSummaryCards((prev) => ({
+                current: prev.current,
+                prevRange: sumScopedStoreTotal(scope(prevRows)),
+                prevWeek: sumScopedStoreTotal(scope(weekRows)),
+              }))
+            })
+            .catch(() => {
+              if (loadIdRef.current !== id) return
+              setSummaryCards((prev) => ({ current: prev.current, prevRange: 0, prevWeek: 0 }))
+            })
+        )
+      }
     }
     // 취소사유는 스피너를 막지 않음 — 메인 집계와 병렬이지만 Promise.all 밖
     if (needCancelReason) {
@@ -2597,6 +2674,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     periodGroup,
     salesFetchStoresParam,
     orderTypesParam,
+    periodDaysOfWeekParam,
     compareStores,
     selectedView,
     offlineAware,
@@ -2664,6 +2742,33 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       const next = [...nextSet].sort().join(",")
       userSelectedRef.current.orderTypesKey = next
       return next
+    })
+  }, [])
+
+  const setSalesAllDows = React.useCallback(() => {
+    userSelectedRef.current.dowsKey = ""
+    setDowsKey("")
+  }, [])
+
+  const toggleDowFilter = React.useCallback((d: PosSalesDowValue) => {
+    setDowsKey((prev) => {
+      const normalized = normalizeDowsQueryString(prev)
+      const parts = normalized
+        ? (normalized.split(",").map((x) => Number(x)) as PosSalesDowValue[])
+        : []
+      const nextSet = new Set(parts)
+      if (nextSet.size === 0) {
+        nextSet.add(d)
+      } else if (nextSet.has(d)) {
+        nextSet.delete(d)
+      } else {
+        nextSet.add(d)
+      }
+      const next = [...nextSet].sort((a, b) => a - b).join(",")
+      // 7개 모두면 전체와 동일
+      const normalizedNext = normalizeDowsQueryString(next)
+      userSelectedRef.current.dowsKey = normalizedNext
+      return normalizedNext
     })
   }, [])
 
@@ -3141,6 +3246,36 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   </div>
                 </div>
               ) : null}
+              {showDowFilter ? (
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">{tr("salesDowFilterLabel", "요일")}</span>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={dowsKey === "" ? "default" : "outline"}
+                      onClick={setSalesAllDows}
+                    >
+                      {tr("salesDowFilterAll", "전체")}
+                    </Button>
+                    {POS_SALES_DOW_TOGGLE_ORDER.map((d) => {
+                      const active = dowsKey !== "" && dowsKey.split(",").includes(String(d))
+                      const labelKey = POS_SALES_DOW_LABEL_KEYS[d]
+                      return (
+                        <Button
+                          key={d}
+                          type="button"
+                          size="sm"
+                          variant={active ? "default" : "outline"}
+                          onClick={() => toggleDowFilter(d)}
+                        >
+                          {tr(labelKey, I18N_KO[labelKey] ?? String(d))}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="mb-3 hidden rounded-lg border bg-muted/20 p-3 md:block">
@@ -3195,6 +3330,41 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             {tr(g.labelKey, I18N_KO[g.labelKey] ?? g.labelKey)}
                           </Button>
                         ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+                {showDowFilter ? (
+                  <>
+                    <span className="hidden h-4 w-px shrink-0 bg-border sm:inline-block" aria-hidden />
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="shrink-0 text-sm font-medium">
+                        {tr("salesDowFilterLabel", "요일")}
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={dowsKey === "" ? "default" : "outline"}
+                          onClick={setSalesAllDows}
+                        >
+                          {tr("salesDowFilterAll", "전체")}
+                        </Button>
+                        {POS_SALES_DOW_TOGGLE_ORDER.map((d) => {
+                          const active = dowsKey !== "" && dowsKey.split(",").includes(String(d))
+                          const labelKey = POS_SALES_DOW_LABEL_KEYS[d]
+                          return (
+                            <Button
+                              key={d}
+                              type="button"
+                              size="sm"
+                              variant={active ? "default" : "outline"}
+                              onClick={() => toggleDowFilter(d)}
+                            >
+                              {tr(labelKey, I18N_KO[labelKey] ?? String(d))}
+                            </Button>
+                          )
+                        })}
                       </div>
                     </div>
                   </>

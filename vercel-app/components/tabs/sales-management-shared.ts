@@ -56,6 +56,8 @@ export type SalesFilterPreset = {
   stores: string[]
   periodGroup: PeriodGroupValue
   orderTypesKey: string
+  /** 요일 필터. 빈 문자열 = 전체. 구 프리셋은 없을 수 있음 */
+  dowsKey?: string
   activeSubMenuId: string
   selectedTopicId: string
   menuSearch: string

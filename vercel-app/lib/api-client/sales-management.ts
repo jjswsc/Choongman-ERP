@@ -153,6 +153,8 @@ export async function getPosSalesByPeriod(params: {
   pos?: string
   stores?: string[]
   orderTypes?: string[]
+  /** 0=일 … 6=토. 없으면 전체 */
+  daysOfWeek?: number[]
   splitByStore?: boolean
   fresh?: boolean
 }): Promise<PosSalesByPeriodResult> {
@@ -164,6 +166,7 @@ export async function getPosSalesByPeriod(params: {
   if (params.stores?.length) q.set('stores', params.stores.join(','))
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
+  if (params.daysOfWeek?.length) q.set('dows', params.daysOfWeek.join(','))
   if (params.splitByStore) q.set('splitByStore', '1')
   appendPosSalesFreshParam(q, params.fresh)
   const res = await apiFetchWithOffline(`/api/posSalesByPeriod?${q}`, posSalesFetchInit(params.fresh))
