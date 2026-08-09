@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS,
   MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS,
-  MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS,
   MAIN_POS_POLL_INTERVAL_DEGRADED_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_MS,
   isMainPosRealtimeInsertChannelHealthy,
   isMainPosRealtimeRecentlyActive,
   resolveMainPosHeadPollIntervalMs,
+  resolveMainPosHeadPollSchedule,
   resolveMainPosPollIntervalMs,
   shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
@@ -58,14 +59,19 @@ describe('pos-main-poll-interval', () => {
     ).toBe(MAIN_POS_POLL_INTERVAL_DEGRADED_MS)
   })
 
-  it('uses modest head poll when degraded and sparse safety head when healthy', () => {
-    expect(MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS).toBeGreaterThanOrEqual(10_000)
-    expect(MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS).toBeGreaterThanOrEqual(60_000)
+  it('skips head API when realtime healthy; fetches only when degraded', () => {
+    expect(MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS).toBeGreaterThanOrEqual(30_000)
+    expect(resolveMainPosHeadPollSchedule({ realtimeChannelHealthy: true })).toEqual({
+      delayMs: MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS,
+      fetch: false,
+    })
+    expect(resolveMainPosHeadPollSchedule({ realtimeChannelHealthy: false })).toEqual({
+      delayMs: MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS,
+      fetch: true,
+    })
+    expect(resolveMainPosHeadPollIntervalMs({ realtimeChannelHealthy: true })).toBeNull()
     expect(resolveMainPosHeadPollIntervalMs({ realtimeChannelHealthy: false })).toBe(
       MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS
-    )
-    expect(resolveMainPosHeadPollIntervalMs({ realtimeChannelHealthy: true })).toBe(
-      MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS
     )
   })
 

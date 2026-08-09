@@ -3,10 +3,11 @@
  *
  * 안전 우선 규칙:
  * - HEALTHY: Realtime INSERT 채널이 SUBSCRIBED 이면 heavy 180s (조용한 매장도 가속하지 않음).
- * - DEGRADED: Realtime 미연결 시 heavy(items_json) 15s + head(초경량) 10s.
+ * - DEGRADED: Realtime 미연결 시 heavy(items_json) 15s + head(초경량) 30s.
  * - HEAD: items_json 없는 초경량 폴링으로 신규 id·updated_at 만 감시 → 변경 시 heavy 즉시 트리거.
  * - 2026-08-04 head(healthy 6s / degraded 3s)는 전 매장 getPosOrders 폭증으로 Fluid Active CPU가
- *   약 2배가 되어, healthy는 90s 안전망·degraded는 10s로 되돌림 (7/27 요금대 복구).
+ *   약 2배가 되어, 8/6에 healthy 90s·degraded 10s로 완화.
+ * - 그래도 7/27 대비 높음 → **Realtime 정상 시 head 폴링 완전 중지**(null). 7월 말은 head 자체가 없었음.
  * - `realtimeRecentlyActive`는 폴링 간격이 아니라 limit=800 풀 스캔 폴백(`shouldUseMainPosHeavyOrderScanFallback`)에만 사용.
  */
 export const MAIN_POS_POLL_INTERVAL_HEALTHY_MS = 180_000
@@ -18,15 +19,15 @@ export const MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS = 300_000
  */
 export const MAIN_POS_POLL_INTERVAL_DEGRADED_MS = 15_000
 /**
- * items_json 없는 head 폴링 (Realtime 실패 시).
- * 3s는 Active CPU 폭증 → 10s로 완화 (태블릿→메인 체감은 Realtime 복구가 1차).
+ * items_json 없는 head 폴링 (Realtime 실패 시만).
+ * heavy(15s)와 겹치므로 30s — 변경 감지 가속만, 상시 폭주 금지.
  */
-export const MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS = 10_000
+export const MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS = 30_000
 /**
- * Realtime 정상인데 이벤트 누락(필터·tenant_id) 대비 초경량 안전망.
- * 6s 상시 폴링은 매장×단말 수만큼 getPosOrders를 돌려 Fluid Active CPU를 2배로 올림 → 90s.
+ * Realtime 정상일 때는 head API를 치지 않음 (7/27 Fluid CPU 기준).
+ * 스케줄러는 이 간격으로 채널 상태만 재평가.
  */
-export const MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS = 90_000
+export const MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS = 60_000
 /** Realtime 이벤트 없이 이 시간이 지나면 보조 폴링을 degraded 로 간주 */
 export const MAIN_POS_REALTIME_STALE_MS = 90_000
 /** 채널 오류 시 전체 재구독 최소 간격 (6/12 Realtime 활성화 후 alias 오류 폭주 방지) */
@@ -35,12 +36,26 @@ export const MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS = 15_000
 /** Realtime 이벤트·채널 오류로 즉시 poll 호출 시 최소 간격 */
 export const MAIN_POS_TRIGGER_POLL_MIN_MS = 5_000
 
+/**
+ * head 폴링 스케줄.
+ * - healthy: fetch=false (API 호출 없음), 60s 후 채널 상태만 재평가
+ * - degraded: fetch=true, 30s마다 pollHeads
+ */
+export function resolveMainPosHeadPollSchedule(opts: {
+  realtimeChannelHealthy: boolean
+}): { delayMs: number; fetch: boolean } {
+  if (opts.realtimeChannelHealthy) {
+    return { delayMs: MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS, fetch: false }
+  }
+  return { delayMs: MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS, fetch: true }
+}
+
+/** @deprecated use resolveMainPosHeadPollSchedule — healthy 시 null(미호출) */
 export function resolveMainPosHeadPollIntervalMs(opts: {
   realtimeChannelHealthy: boolean
-}): number {
-  return opts.realtimeChannelHealthy
-    ? MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_MS
-    : MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS
+}): number | null {
+  const s = resolveMainPosHeadPollSchedule(opts)
+  return s.fetch ? s.delayMs : null
 }
 
 export function mainPosPrimaryInsertChannelKey(storeCode: string): string {

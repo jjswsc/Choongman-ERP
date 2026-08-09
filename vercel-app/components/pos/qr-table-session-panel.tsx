@@ -102,7 +102,8 @@ export function QrTableSessionPanel(props: {
 
   React.useEffect(() => {
     if (!session) return
-    const id = window.setInterval(() => void reload(), 5000)
+    /** 5s는 Fluid CPU·요청 폭증 — 홀 배지(15s)와 맞춤 */
+    const id = window.setInterval(() => void reload(), 15_000)
     return () => window.clearInterval(id)
   }, [session, reload])
 

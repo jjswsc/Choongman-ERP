@@ -8,7 +8,8 @@ export const POS_ORDER_POLL_MINIMAL_SELECT =
 
 /**
  * 신규·변경 감지용 초경량 select (items_json 없음).
- * Realtime 누락 시 3~6초 head 폴링 → 변경 있을 때만 pollMinimal 풀 조회.
+ * Realtime 장애 시에만 head 폴링 → 변경 있을 때만 pollMinimal 풀 조회.
+ * (Realtime 정상 시 head 미호출 — Fluid Active CPU / 7월 말 요금대)
  */
 export const POS_ORDER_POLL_HEADS_SELECT =
   'id,store_code,order_type,table_name,status,created_at,updated_at,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app'

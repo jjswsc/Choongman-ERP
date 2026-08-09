@@ -32,7 +32,7 @@ import {
   MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS,
   MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS,
   MAIN_POS_TRIGGER_POLL_MIN_MS,
-  resolveMainPosHeadPollIntervalMs,
+  resolveMainPosHeadPollSchedule,
   resolveMainPosPollIntervalMs,
   shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
@@ -1778,7 +1778,7 @@ export function usePosMainDeviceSyncHost(): void {
     notifyGrabCancelFromHost,
   ])
 
-  /** items_json 없는 head 폴링 — Realtime 누락 시 degraded~10s / healthy~90s 안전망 */
+  /** items_json 없는 head 폴링 — Realtime 장애 시에만 (정상 시 API 미호출 → Fluid CPU 절감) */
   useEffect(() => {
     if (!isMainPosDevice || !storeCode) return
     /** 터미널이 열려 있으면 터미널 head poll만 사용 (중복 Edge 요청 방지) */
@@ -1795,12 +1795,13 @@ export function usePosMainDeviceSyncHost(): void {
         timerId = window.setTimeout(() => scheduleNext(), 15_000)
         return
       }
-      const delayMs = resolveMainPosHeadPollIntervalMs({
+      const { delayMs, fetch: shouldFetch } = resolveMainPosHeadPollSchedule({
         realtimeChannelHealthy: realtimeChannelHealthyRef.current,
       })
       timerId = window.setTimeout(() => {
         void (async () => {
           try {
+            if (!shouldFetch) return
             if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
             if (isPosTerminalLocalAutoprintActive()) return
             const heads = await getPosOrders({

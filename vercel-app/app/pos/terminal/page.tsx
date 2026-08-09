@@ -290,7 +290,7 @@ import {
   MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS,
   MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS,
   MAIN_POS_TRIGGER_POLL_MIN_MS,
-  resolveMainPosHeadPollIntervalMs,
+  resolveMainPosHeadPollSchedule,
   resolveMainPosPollIntervalMs,
   shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
@@ -5899,7 +5899,7 @@ export default function PosTerminalPage() {
     mapPosOrderItemForKitchenDelta,
   ])
 
-  /** items_json 없는 head 폴링 — Realtime 누락·tenant 필터 미스 안전망 (degraded~10s / healthy~90s) */
+  /** items_json 없는 head 폴링 — Realtime 장애 시에만 (정상 시 API 미호출 → Fluid CPU 절감) */
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) return
     let cancelled = false
@@ -5910,12 +5910,13 @@ export default function PosTerminalPage() {
 
     const scheduleNext = () => {
       if (cancelled) return
-      const delayMs = resolveMainPosHeadPollIntervalMs({
+      const { delayMs, fetch: shouldFetch } = resolveMainPosHeadPollSchedule({
         realtimeChannelHealthy: realtimeChannelHealthyRef.current,
       })
       timerId = window.setTimeout(() => {
         void (async () => {
           try {
+            if (!shouldFetch) return
             if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
             const heads = await getPosOrders({
               startStr: today,
