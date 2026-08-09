@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS,
   MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS,
+  MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS,
   MAIN_POS_POLL_INTERVAL_DEGRADED_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_MS,
@@ -59,20 +60,48 @@ describe('pos-main-poll-interval', () => {
     ).toBe(MAIN_POS_POLL_INTERVAL_DEGRADED_MS)
   })
 
-  it('skips head API when realtime healthy; fetches only when degraded', () => {
-    expect(MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS).toBeGreaterThanOrEqual(30_000)
-    expect(resolveMainPosHeadPollSchedule({ realtimeChannelHealthy: true })).toEqual({
+  it('skips head API when realtime active; sparse/degraded fetch otherwise', () => {
+    expect(MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS).toBe(15_000)
+    expect(MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS).toBe(45_000)
+    expect(
+      resolveMainPosHeadPollSchedule({
+        realtimeChannelHealthy: true,
+        realtimeRecentlyActive: true,
+      })
+    ).toEqual({
       delayMs: MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS,
       fetch: false,
     })
-    expect(resolveMainPosHeadPollSchedule({ realtimeChannelHealthy: false })).toEqual({
+    expect(
+      resolveMainPosHeadPollSchedule({
+        realtimeChannelHealthy: true,
+        realtimeRecentlyActive: false,
+      })
+    ).toEqual({
+      delayMs: MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS,
+      fetch: true,
+    })
+    expect(
+      resolveMainPosHeadPollSchedule({
+        realtimeChannelHealthy: false,
+        realtimeRecentlyActive: false,
+      })
+    ).toEqual({
       delayMs: MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS,
       fetch: true,
     })
-    expect(resolveMainPosHeadPollIntervalMs({ realtimeChannelHealthy: true })).toBeNull()
-    expect(resolveMainPosHeadPollIntervalMs({ realtimeChannelHealthy: false })).toBe(
-      MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS
-    )
+    expect(
+      resolveMainPosHeadPollIntervalMs({
+        realtimeChannelHealthy: true,
+        realtimeRecentlyActive: true,
+      })
+    ).toBeNull()
+    expect(
+      resolveMainPosHeadPollIntervalMs({
+        realtimeChannelHealthy: true,
+        realtimeRecentlyActive: false,
+      })
+    ).toBe(MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS)
   })
 
   it('detects stale realtime by last event time', () => {

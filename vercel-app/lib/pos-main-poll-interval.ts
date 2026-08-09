@@ -2,13 +2,13 @@
  * 메인 POS 보조 폴링 간격 — Realtime이 1차, 폴링은 안전망(fallback)만 담당.
  *
  * 안전 우선 규칙:
- * - HEALTHY: Realtime INSERT 채널이 SUBSCRIBED 이면 heavy 180s (조용한 매장도 가속하지 않음).
- * - DEGRADED: Realtime 미연결 시 heavy(items_json) 15s + head(초경량) 30s.
- * - HEAD: items_json 없는 초경량 폴링으로 신규 id·updated_at 만 감시 → 변경 시 heavy 즉시 트리거.
- * - 2026-08-04 head(healthy 6s / degraded 3s)는 전 매장 getPosOrders 폭증으로 Fluid Active CPU가
- *   약 2배가 되어, 8/6에 healthy 90s·degraded 10s로 완화.
- * - 그래도 7/27 대비 높음 → **Realtime 정상 시 head 폴링 완전 중지**(null). 7월 말은 head 자체가 없었음.
- * - `realtimeRecentlyActive`는 폴링 간격이 아니라 limit=800 풀 스캔 폴백(`shouldUseMainPosHeavyOrderScanFallback`)에만 사용.
+ * - HEALTHY + 최근 Realtime 이벤트: head API 없음 (요금 절감). Realtime이 즉시 반영.
+ * - HEALTHY + 이벤트 공백(≥90s): 초경량 head 45s — Realtime 무음·누락 시 조회 지연 방지.
+ * - DEGRADED: heavy 15s + head 15s.
+ * - 2026-08-04 head(healthy 6s) → Fluid Active CPU 약 2배.
+ * - 8/6 90s 완화, 8/9 healthy head 전면 중지 → 현장 조회 체감이 너무 느려져
+ *   “최근 이벤트 있을 때만 중지”로 재조정 (상시 6s 폭주는 유지 금지).
+ * - `realtimeRecentlyActive`는 heavy 간격·head fetch 여부·limit=800 폴백에 사용.
  */
 export const MAIN_POS_POLL_INTERVAL_HEALTHY_MS = 180_000
 /** Realtime 정상 + 최근 이벤트 있음 → HTTP 폴링은 안전망만 (Edge Request 절감) */
@@ -19,16 +19,20 @@ export const MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS = 300_000
  */
 export const MAIN_POS_POLL_INTERVAL_DEGRADED_MS = 15_000
 /**
- * items_json 없는 head 폴링 (Realtime 실패 시만).
- * heavy(15s)와 겹치므로 30s — 변경 감지 가속만, 상시 폭주 금지.
+ * items_json 없는 head 폴링 (Realtime 실패 시).
+ * heavy와 같은 15s — 변경 감지 후 즉시 heavy 트리거.
  */
-export const MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS = 30_000
+export const MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS = 15_000
 /**
- * Realtime 정상일 때는 head API를 치지 않음 (7/27 Fluid CPU 기준).
- * 스케줄러는 이 간격으로 채널 상태만 재평가.
+ * Realtime 채널은 정상인데 최근 이벤트가 없을 때(무음·필터 누락) 초경량 안전망.
+ * 6s는 요금 폭주, 완전 중지는 조회 지연 → 45s.
+ */
+export const MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS = 45_000
+/**
+ * Realtime이 활발할 때 head API를 치지 않음. 스케줄러만 이 간격으로 상태 재평가.
  */
 export const MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS = 60_000
-/** Realtime 이벤트 없이 이 시간이 지나면 보조 폴링을 degraded 로 간주 */
+/** Realtime 이벤트 없이 이 시간이 지나면 보조 폴링을 degraded/sparse 로 간주 */
 export const MAIN_POS_REALTIME_STALE_MS = 90_000
 /** 채널 오류 시 전체 재구독 최소 간격 (6/12 Realtime 활성화 후 alias 오류 폭주 방지) */
 export const MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS = 60_000
@@ -38,21 +42,27 @@ export const MAIN_POS_TRIGGER_POLL_MIN_MS = 5_000
 
 /**
  * head 폴링 스케줄.
- * - healthy: fetch=false (API 호출 없음), 60s 후 채널 상태만 재평가
- * - degraded: fetch=true, 30s마다 pollHeads
+ * - healthy + recent: fetch=false (API 없음)
+ * - healthy + stale: fetch=true, 45s (누락 안전망)
+ * - degraded: fetch=true, 15s
  */
 export function resolveMainPosHeadPollSchedule(opts: {
   realtimeChannelHealthy: boolean
+  realtimeRecentlyActive?: boolean
 }): { delayMs: number; fetch: boolean } {
-  if (opts.realtimeChannelHealthy) {
+  if (!opts.realtimeChannelHealthy) {
+    return { delayMs: MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS, fetch: true }
+  }
+  if (opts.realtimeRecentlyActive) {
     return { delayMs: MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS, fetch: false }
   }
-  return { delayMs: MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS, fetch: true }
+  return { delayMs: MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS, fetch: true }
 }
 
-/** @deprecated use resolveMainPosHeadPollSchedule — healthy 시 null(미호출) */
+/** @deprecated use resolveMainPosHeadPollSchedule — active healthy 시 null(미호출) */
 export function resolveMainPosHeadPollIntervalMs(opts: {
   realtimeChannelHealthy: boolean
+  realtimeRecentlyActive?: boolean
 }): number | null {
   const s = resolveMainPosHeadPollSchedule(opts)
   return s.fetch ? s.delayMs : null

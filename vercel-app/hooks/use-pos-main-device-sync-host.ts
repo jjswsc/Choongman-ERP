@@ -1778,7 +1778,7 @@ export function usePosMainDeviceSyncHost(): void {
     notifyGrabCancelFromHost,
   ])
 
-  /** items_json 없는 head 폴링 — Realtime 장애 시에만 (정상 시 API 미호출 → Fluid CPU 절감) */
+  /** items_json 없는 head 폴링 — Realtime 활발 시 미호출, 무음·장애 시 안전망 */
   useEffect(() => {
     if (!isMainPosDevice || !storeCode) return
     /** 터미널이 열려 있으면 터미널 head poll만 사용 (중복 Edge 요청 방지) */
@@ -1797,6 +1797,7 @@ export function usePosMainDeviceSyncHost(): void {
       }
       const { delayMs, fetch: shouldFetch } = resolveMainPosHeadPollSchedule({
         realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+        realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(lastRealtimeOrderEventAtRef.current),
       })
       timerId = window.setTimeout(() => {
         void (async () => {
