@@ -224,9 +224,11 @@ export function assemblePosMenuCostIndexEntries(params: {
   return out
 }
 
-/** menuId|optionId → 홀/배달·음식/포장 단위 원가 (재료별 loss_rate + 가산형 합성 포함) */
+/** menuId|optionId → 홀/배달·음식/포장 단위 원가 (재료별 loss_rate + 가산형 합성 포함)
+ * 원가분석 목록과 동일: items + sauces(소스 레시피) 단가를 반영한 뒤 × 판매수량에 씀.
+ */
 export async function buildPosMenuCostIndex(): Promise<Map<string, PosMenuCostIndexEntry>> {
-  const [ingRows, itemRows, optRows] = await Promise.all([
+  const [ingRows, itemRows, optRows, sauceRows, sauceIngRows] = await Promise.all([
     supabaseSelectAllPages('pos_menu_ingredients', {
       order: 'menu_id.asc,id.asc',
       select: 'menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
@@ -239,6 +241,25 @@ export async function buildPosMenuCostIndex(): Promise<Map<string, PosMenuCostIn
       order: 'id.asc',
       select: 'id,menu_id,option_type,item_code,additive_source_menu_id,quantity',
     }).catch(() => []) as Promise<OptRow[]>,
+    supabaseSelectAllPages('sauces', {
+      order: 'id.asc',
+      select: 'id,code,name,cost_per_unit,unit,overhead_percent',
+    }).catch(() => []) as Promise<
+      {
+        id?: number
+        code?: string
+        name?: string
+        cost_per_unit?: number
+        unit?: string
+        overhead_percent?: number
+      }[]
+    >,
+    supabaseSelectAllPages('sauce_ingredients', {
+      order: 'sauce_id.asc',
+      select: 'sauce_id,item_code,quantity,loss_rate',
+    }).catch(() => []) as Promise<
+      { sauce_id?: number; item_code?: string; quantity?: number; loss_rate?: number }[]
+    >,
   ])
 
   const itemMap: Record<string, ItemRow> = {}
@@ -246,7 +267,85 @@ export async function buildPosMenuCostIndex(): Promise<Map<string, PosMenuCostIn
     const k = effectiveItemCodeKey(r)
     if (k) itemMap[k] = r
   }
-  const itemLookup = buildItemLookup(itemMap)
+  let itemLookup = buildItemLookup(itemMap)
+
+  // 원가분석 목록과 동일: 소스(sauce) 단가 계산 후 itemLookup에 주입 (S025·S026 등)
+  const sauceCostComputed: Record<string, number> = {}
+  const sauceByCode: Record<
+    string,
+    { id?: number; cost_per_unit?: number; overhead_percent?: number }
+  > = {}
+  for (const s of sauceRows || []) {
+    const c = String(s.code ?? '').trim()
+    if (c) sauceByCode[c] = s
+  }
+  const ingBySauce: Record<number, { item_code?: string; quantity?: number; loss_rate?: number }[]> =
+    {}
+  for (const si of sauceIngRows || []) {
+    const sid = Number(si.sauce_id ?? 0)
+    if (!ingBySauce[sid]) ingBySauce[sid] = []
+    ingBySauce[sid].push(si)
+  }
+  const resolveSauceSubCost = (icode: string): number | undefined => {
+    const item = resolveItem(icode, itemLookup)
+    if (item) return getItemCostPerUnit(item, false)
+    if (sauceByCode[icode]) {
+      const n =
+        sauceCostComputed[icode] ?? Number(sauceByCode[icode].cost_per_unit ?? 0)
+      return n > 0 ? n : undefined
+    }
+    return undefined
+  }
+  for (let pass = 0; pass < 5; pass++) {
+    let changed = false
+    for (const s of sauceRows || []) {
+      const code = String(s.code ?? '').trim()
+      if (!code || Number(s.cost_per_unit ?? 0) > 0) continue
+      const ings = ingBySauce[Number(s.id ?? 0)] || []
+      let totalCost = 0
+      let totalQty = 0
+      let ok = true
+      for (const ing of ings) {
+        const icode = String(ing.item_code ?? '').trim()
+        const qty = Number(ing.quantity ?? 1)
+        const lossRate = Number(ing.loss_rate ?? 0)
+        const subCost = resolveSauceSubCost(icode)
+        if (subCost === undefined) {
+          ok = false
+          break
+        }
+        totalCost += subCost * qty * (1 + lossRate / 100)
+        totalQty += qty
+      }
+      if (ok && totalQty > 0) {
+        const oh = Number(s.overhead_percent ?? 5)
+        const cost = (totalCost * (1 + oh / 100)) / totalQty
+        if (Math.abs((sauceCostComputed[code] ?? 0) - cost) > 1e-9) {
+          sauceCostComputed[code] = cost
+          changed = true
+        }
+      }
+    }
+    if (!changed) break
+  }
+  for (const r of sauceRows || []) {
+    const code = String(r.code ?? '').trim()
+    if (!code || itemMap[code]) continue
+    const unitCost =
+      Number(r.cost_per_unit ?? 0) > 0
+        ? Number(r.cost_per_unit ?? 0)
+        : (sauceCostComputed[code] ?? 0)
+    // getItemCostPerUnit: price/total_quantity — 이미 g당이면 total_quantity=1
+    itemMap[code] = {
+      code,
+      cost: unitCost,
+      price: unitCost,
+      total_quantity: 1,
+      unit: String(r.unit ?? 'g'),
+      purchase_source: 'hq',
+    }
+  }
+  itemLookup = buildItemLookup(itemMap)
 
   const ingredientPartsByKey = new Map<string, CostParts>()
   for (const ing of ingRows || []) {

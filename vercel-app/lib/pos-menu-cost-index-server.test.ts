@@ -88,6 +88,20 @@ describe('assemblePosMenuCostIndexEntries', () => {
     expect(out.get(costIndexKey(10, 4))?.packagingCost).toBe(1)
   })
 
+  it('sauce 코드가 itemLookup에 있으면 재료 줄에 원가가 잡힌다 (목록과 동일 전제)', () => {
+    // assemble 단계는 parts 합만 — sauce 주입은 buildPosMenuCostIndex에서 수행.
+    // 여기서는 sauce 단가가 이미 parts에 반영된 키를 검증.
+    const ingredientPartsByKey = new Map([
+      [costIndexKey(29, null), { food: 41.7, packaging: 10.4 }],
+    ])
+    const out = assemblePosMenuCostIndexEntries({
+      ingredientPartsByKey,
+      options: [],
+    })
+    expect(out.get(costIndexKey(29, null))?.foodCost).toBe(41.7)
+    expect(out.get(costIndexKey(29, null))?.costHall).toBe(41.7)
+  })
+
   it('가산형: source null BOM 비어 있으면 소스 메뉴 base entry 폴백', () => {
     const ingredientPartsByKey = new Map([
       [costIndexKey(10, null), { food: 40, packaging: 0 }],

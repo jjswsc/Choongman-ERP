@@ -3000,7 +3000,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostActualByChannel: '채널별 실적 원가율',
     posCostActualByCategory: '대분류별 판매 가중 실적 원가율',
     posCostActualByCategoryHint:
-      '원가분석과 동일: 분모=카탈로그 정가(공급가)×판매수량, 분자=BOM 이론원가. 세트는 구성품 각자 정가. 할인·실판매가는 분모에 넣지 않습니다. BOM 미매칭은 제외. 합계 원가율=합÷합.',
+      '원가분석 목록과 동일: 분자=목록 단위원가(홀/배달)×판매수량, 분모=정가(공급가)×수량. 세트는 구성품 각자. BOM 미매칭은 제외. 합계 원가율=합÷합.',
     posCostActualUnmatchedTitle: 'BOM 미매칭 주문 라인 (원가율 합계 제외)',
     posCostActualUnmatchedReason: '사유',
     posCostActualUnmatchedNoMenu: '메뉴 ID 없음',
@@ -3016,7 +3016,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostActualTopMenusHint: '행을 클릭하면 해당 대분류 매출 상위 메뉴(옵션)별 실적 원가율을 봅니다.',
     posCostActualBaseFallbackBadge: '기본BOM폴백',
     posCostActualFormulaHint:
-      '완료 주문 판매수량 × 원가분석 BOM. 원가율 분모=메뉴 정가(VAT 제외), 목록 원가율과 같은 기준입니다. 실판매가·결제할인은 분모에 넣지 않습니다. 미매칭은 제외.',
+      '원가분석 목록에 나온 단위원가 × 실제 판매수량. 분모는 정가(VAT 제외)×수량. 미매칭은 제외.',
     posCostActualCostPctNetHint: '정가(공급가)×수량 대비',
     posCostActualExactBomPct: '정확 BOM {pct}%',
     posCostActualMatchedSalesSub: 'POS 실매출 ฿{pos} · 커버리지 {coverage}%',
@@ -6193,7 +6193,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostActualByChannel: 'Actual cost % by channel',
     posCostActualByCategory: 'Sales-weighted actual cost % by category',
     posCostActualByCategoryHint:
-      'Same as list cost analysis: denom = catalog regular price (excl. VAT) × qty; numer = BOM theoretical cost. Sets use each component catalog price. Discounts/actual sell price are not in the denom. Unmatched BOM excluded. Footer = total÷total.',
+      'Same as cost-analysis list: numer = list unit cost (hall/delivery) × sold qty; denom = catalog price (excl. VAT) × qty. Sets use each component. Unmatched BOM excluded. Footer = total÷total.',
     posCostActualUnmatchedTitle: 'BOM unmatched order lines (excluded from cost% totals)',
     posCostActualUnmatchedReason: 'Reason',
     posCostActualUnmatchedNoMenu: 'Missing menu ID',
@@ -6209,7 +6209,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostActualTopMenusHint: 'Click a row to see top menus (options) by sales for that category.',
     posCostActualBaseFallbackBadge: 'base BOM fallback',
     posCostActualFormulaHint:
-      'Sold qty × list BOM. Cost% denom = menu catalog price (excl. VAT), same basis as list cost analysis. Actual sell price and payment discounts are not in the denom. Unmatched excluded.',
+      'List cost-analysis unit cost × sold qty. Denom = catalog price (excl. VAT) × qty. Unmatched excluded.',
     posCostActualCostPctNetHint: 'vs catalog price (excl. VAT) × qty',
     posCostActualExactBomPct: 'Exact BOM {pct}%',
     posCostActualMatchedSalesSub: 'POS actual sales ฿{pos} · coverage {coverage}%',
