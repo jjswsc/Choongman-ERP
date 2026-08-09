@@ -33,6 +33,17 @@ export function isOrderRelatedNotice(title: string, content: string): boolean {
   return false
 }
 
+/**
+ * 업무일지 자동알림 — 직원 수신함에는 남길 수 있으나
+ * 공지사항 관리「발송 내역」·발송자 목록·수신 통계에는 포함하지 않음.
+ */
+export function isWorkLogRelatedNotice(title: string, sender?: string): boolean {
+  const t = String(title || '').trim()
+  if (t.startsWith('[업무일지]')) return true
+  if (String(sender || '').trim() === '업무일지') return true
+  return false
+}
+
 const empKey = (store: string, name: string) => `${String(store).trim()}|${String(name).trim()}`
 
 const readKey = (noticeId: number, store: string, name: string) =>
@@ -88,6 +99,7 @@ export function aggregateNoticeReadStats(
   }
 
   for (const n of notices) {
+    if (isWorkLogRelatedNotice(n.title || '')) continue
     if (opts.searchType === 'order' && !isOrderRelatedNotice(n.title || '', n.content || '')) continue
     if (opts.searchType === 'notice' && isOrderRelatedNotice(n.title || '', n.content || '')) continue
 

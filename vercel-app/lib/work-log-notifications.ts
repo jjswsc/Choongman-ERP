@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sendFcmToRecipients } from '@/lib/firebase-admin'
 import { getNotificationSettings } from '@/lib/notification-settings-server'
-import { sendNoticeToRecipients, getManagersByStore, type NoticeRecipient } from '@/lib/send-notice-util'
+import { getManagersByStore, type NoticeRecipient } from '@/lib/send-notice-util'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
 
@@ -24,7 +24,7 @@ export async function resolveWorkLogNoticeRecipient(
   return null
 }
 
-/** 관리자 검토 결과 → 작성자에게 앱 공지 + (설정 시) FCM */
+/** 관리자 검토 결과 → 작성자에게 FCM(푸시 설정 ON일 때). notices에는 넣지 않음(발송 내역 제외). */
 export async function notifyWorkLogReviewResult(params: {
   employeeId?: number | null
   employeeName: string
@@ -57,13 +57,6 @@ export async function notifyWorkLogReviewResult(params: {
     .filter(Boolean)
     .join('\n')
 
-  await sendNoticeToRecipients({
-    title: `[업무일지] 검토 결과 — ${statusLabel}`,
-    content: body,
-    recipients: [recipient],
-    sender: params.sender || '업무일지',
-  })
-
   const settings = await getNotificationSettings()
   if (!settings.pushNoticeEnabled) return
 
@@ -95,13 +88,7 @@ export async function notifyWorkLogMissingDaily(params: {
     (r, i, arr) => arr.findIndex((x) => x.store === r.store && x.name === r.name) === i
   )
 
-  await sendNoticeToRecipients({
-    title: '[업무일지] 오늘 업무일지를 작성해 주세요',
-    content: `${params.logDate} 업무일지가 아직 없습니다. 퇴근 전「업무 마감」까지 작성·저장해 주세요.`,
-    recipients: unique,
-    sender: '업무일지',
-  })
-
+  // notices에는 넣지 않음(공지「발송 내역」제외). FCM만.
   const settings = await getNotificationSettings()
   if (!settings.pushNoticeEnabled) return
   sendFcmToRecipients({

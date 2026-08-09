@@ -3,7 +3,7 @@ import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
 import { NOTICE_LIST_COLS, NOTICE_LIST_COLS_LEGACY } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
-import { isOrderRelatedNotice } from '@/lib/notice-read-aggregation'
+import { isOrderRelatedNotice, isWorkLogRelatedNotice } from '@/lib/notice-read-aggregation'
 import { employeeReceivesBroadcast } from '@/lib/broadcast-notice-target'
 import { parseNoticeAttachments } from '@/lib/notice-recipient-estimate'
 import { bangkokYmdRangeToIsoBounds } from '@/lib/bangkok-date'
@@ -219,6 +219,8 @@ export async function GET(request: NextRequest) {
     for (const row of rows || []) {
       const title = row.title || ''
       const content = row.content || ''
+      const senderName = String(row.sender || '').trim()
+      if (isWorkLogRelatedNotice(title, senderName)) continue
       const orderRel = isOrderRelatedNotice(title, content)
       if (searchType === 'order' && !orderRel) continue
       if (searchType === 'notice' && orderRel) continue
@@ -287,7 +289,7 @@ export async function GET(request: NextRequest) {
 
       list.push({
         id: String(row.id),
-        sender: String(row.sender || '').trim(),
+        sender: senderName,
         title,
         date: toDateStr(row.created_at),
         recipients,

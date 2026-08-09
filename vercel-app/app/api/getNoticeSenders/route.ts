@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { isWorkLogRelatedNotice } from '@/lib/notice-read-aggregation'
 
 /** 공지 발송자 목록 (notices.sender 기준 distinct) - 기간 필터可选 */
 export async function GET(request: NextRequest) {
@@ -21,15 +22,17 @@ export async function GET(request: NextRequest) {
 
     const effectiveFilter = filter || 'id=gte.0'
     const rows = (await supabaseSelectFilter('notices', effectiveFilter, {
-      select: 'sender',
+      select: 'sender,title',
       order: 'created_at.desc',
       limit: 500,
-    })) as { sender?: string }[]
+    })) as { sender?: string; title?: string }[]
 
     const set = new Set<string>()
     for (const r of rows || []) {
       const s = String(r?.sender || '').trim()
-      if (s) set.add(s)
+      if (!s) continue
+      if (isWorkLogRelatedNotice(String(r?.title || ''), s)) continue
+      set.add(s)
     }
     const senders = Array.from(set).sort((a, b) => a.localeCompare(b))
     return NextResponse.json({ senders }, { headers })
