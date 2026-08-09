@@ -292,4 +292,53 @@ describe('aggregatePosCostWeightedByCategory', () => {
     expect(exact.totalCost).toBe(0)
     expect(exact.costPctOfNet).toBe(0)
   })
+
+  it('composed With Rice name without optionId uses additive BOM (not base-only)', () => {
+    const costIndex = new Map([
+      ['4|', { costHall: 12, costDelivery: 12, foodCost: 12, packagingCost: 0 }],
+      ['4|7', { costHall: 52, costDelivery: 52, foodCost: 52, packagingCost: 0 }],
+    ])
+    const menus = [{ id: '4', name: 'KIMCHI SOUP', category_main: 'Korean' }]
+    const catalog = {
+      menus: [
+        { id: '4', name: 'KIMCHI SOUP', price: 199 },
+        { id: '999', name: 'KIMCHI SOUP With Rice', price: 219 },
+      ],
+      optionsByMenuId: {
+        '4': [{ id: '7', name: 'With Rice', priceModifier: 20 }],
+      },
+      promoMetaById: new Map(),
+      promoItemsByPromoId: new Map(),
+      promoIdByMirrorMenuId: new Map<string, string>(),
+    }
+    const orderRows = [
+      {
+        order_type: 'dine_in',
+        items_json: JSON.stringify([
+          {
+            menuId: '4',
+            optionId: null,
+            name: 'KIMCHI SOUP With Rice',
+            price: 219,
+            quantity: 2,
+          },
+        ]),
+      },
+    ]
+    const { rows } = aggregatePosCostWeightedByCategory({
+      orderRows,
+      menus,
+      costIndex,
+      catalog,
+      miseRatePercent: 0,
+    })
+    const korean = rows.find((r) => r.categoryMain === 'Korean')
+    // 정가 (199+20)*2 = 438 → excl VAT; cost 52*2
+    const denom = toPosCostSalesExclVat(438)
+    expect(korean?.totalCost).toBe(104)
+    expect(korean?.netSales).toBe(denom)
+    expect(korean?.costPctOfNet).toBe(Math.round((104 / denom) * 10000) / 100)
+    expect(korean?.costPctOfNet).toBeGreaterThan(20)
+    expect(korean?.topMenus[0]?.optionId).toBe('7')
+  })
 })

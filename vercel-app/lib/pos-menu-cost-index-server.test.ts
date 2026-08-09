@@ -33,7 +33,8 @@ describe('assemblePosMenuCostIndexEntries', () => {
     })
     expect(out.get(costIndexKey(10, null))?.foodCost).toBe(80)
     expect(out.get(costIndexKey(10, 1))?.foodCost).toBe(90)
-    expect(out.get(costIndexKey(10, 2))?.foodCost).toBe(80)
+    // 옵션 전용 BOM 없으면 키 미등록 → lookup 시 baseFallback
+    expect(out.get(costIndexKey(10, 2))).toBeUndefined()
     expect(out.get(costIndexKey(10, 1))?.costDelivery).toBe(95)
   })
 
@@ -85,5 +86,28 @@ describe('assemblePosMenuCostIndexEntries', () => {
     // 50 + 7*2 + 3 = 67 food, 1 pack
     expect(out.get(costIndexKey(10, 4))?.foodCost).toBe(67)
     expect(out.get(costIndexKey(10, 4))?.packagingCost).toBe(1)
+  })
+
+  it('가산형: source null BOM 비어 있으면 소스 메뉴 base entry 폴백', () => {
+    const ingredientPartsByKey = new Map([
+      [costIndexKey(10, null), { food: 40, packaging: 0 }],
+      // source 20: null BOM 없음, 옵션 전용만 1건
+      [costIndexKey(20, 99), { food: 12, packaging: 0 }],
+    ])
+    const out = assemblePosMenuCostIndexEntries({
+      ingredientPartsByKey,
+      options: [
+        {
+          id: 5,
+          menuId: 10,
+          optionType: 'additive',
+          itemCode: null,
+          additiveSourceMenuId: 20,
+          quantity: 1,
+        },
+      ],
+    })
+    // 40 + 12(source fallback) = 52
+    expect(out.get(costIndexKey(10, 5))?.foodCost).toBe(52)
   })
 })

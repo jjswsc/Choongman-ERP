@@ -10,6 +10,7 @@ function buildOptionsByMenuId(
   rows: {
     id?: number | string
     menu_id?: number | string
+    name?: string | null
     price_modifier?: number | null
     price_modifier_delivery?: number | null
   }[]
@@ -24,8 +25,10 @@ function buildOptionsByMenuId(
       row.price_modifier_delivery != null && Number.isFinite(Number(row.price_modifier_delivery))
         ? Number(row.price_modifier_delivery)
         : hall
+    const name = String(row.name ?? '').trim() || undefined
     const opt: PromoOptionLike = {
       id,
+      ...(name ? { name } : {}),
       priceModifier: hall,
       priceModifierDelivery: del,
     }
@@ -52,10 +55,14 @@ export async function loadPosSalesPromoPricingCatalog(): Promise<PromoPricingCat
   let optionRows: {
     id?: number | string
     menu_id?: number | string
+    name?: string | null
     price_modifier?: number | null
     price_modifier_delivery?: number | null
   }[] = []
   for (const select of [
+    'id,menu_id,name,price_modifier,price_modifier_delivery',
+    'id,menu_id,name,price_modifier',
+    'id,menu_id,name',
     'id,menu_id,price_modifier,price_modifier_delivery',
     'id,menu_id,price_modifier',
     'id,menu_id',

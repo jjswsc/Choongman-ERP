@@ -1,7 +1,7 @@
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import { parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
 import type { PosMenuCostIndexEntry } from '@/lib/pos-menu-cost-index-server'
-import type { PromoLineLike, PromoMenuLike } from '@/lib/promo-economics'
+import type { PromoLineLike, PromoMenuLike, PromoOptionLike } from '@/lib/promo-economics'
 import type { PromoPricingCatalog } from '@/lib/pos-order-promo-regular-price'
 
 /** 전역 미즈 미사용 — BOM 재료별 loss_rate만 반영 */
@@ -102,6 +102,13 @@ function normalizeLookupName(raw: string): string {
 export type TheoreticalCostResolveContext = {
   knownMenuIds: Set<string>
   menuIdByNormalizedName: Map<string, string>
+  /** menuId → 옵션 목록(이름 포함) */
+  optionsByMenuId: Record<string, PromoOptionLike[]>
+  /**
+   * normalize(menu.name + ' ' + option.name) → { menuId, optionId }
+   * 긴 옵션명 우선(등록 순서에서 나중에 오는 짧은 이름이 덮어쓰지 않도록 길이 내림차순 등록).
+   */
+  composedMenuOptionByNormalizedName: Map<string, { menuId: string; optionId: string }>
   promoItemsByPromoId?: Map<string, PromoLineLike[]>
   /** POS 세트 미러 메뉴 id → promo id */
   promoIdByMirrorMenuId?: Map<string, string>
@@ -115,7 +122,7 @@ export function buildTheoreticalCostResolveContext(params: {
   costIndex: Map<string, PosMenuCostIndexEntry>
   catalog?: Pick<
     PromoPricingCatalog,
-    'menus' | 'promoItemsByPromoId' | 'promoMetaById' | 'promoIdByMirrorMenuId'
+    'menus' | 'optionsByMenuId' | 'promoItemsByPromoId' | 'promoMetaById' | 'promoIdByMirrorMenuId'
   >
 }): TheoreticalCostResolveContext {
   const knownMenuIds = new Set<string>()
@@ -126,12 +133,14 @@ export function buildTheoreticalCostResolveContext(params: {
   const menuIdByNormalizedName = new Map<string, string>()
   const promoIdByNormalizedName = new Map<string, string>()
   const promoIdByCode = new Map<string, string>()
+  const menuNameById = new Map<string, string>()
   for (const menu of params.catalog?.menus ?? []) {
     const id = str(menu.id)
     const name = str((menu as PromoMenuLike).name)
     if (id) knownMenuIds.add(id)
     if (!id || !name) continue
     menuIdByNormalizedName.set(normalizeLookupName(name), id)
+    menuNameById.set(id, name)
   }
   for (const [promoId, meta] of params.catalog?.promoMetaById ?? []) {
     const name = str(meta.name)
@@ -139,9 +148,36 @@ export function buildTheoreticalCostResolveContext(params: {
     if (name) promoIdByNormalizedName.set(normalizeLookupName(name), promoId)
     if (code) promoIdByCode.set(code, promoId)
   }
+
+  const optionsByMenuId = params.catalog?.optionsByMenuId ?? {}
+  const composedCandidates: { key: string; menuId: string; optionId: string; optLen: number }[] = []
+  for (const [menuId, opts] of Object.entries(optionsByMenuId)) {
+    const menuName = menuNameById.get(menuId)
+    if (!menuName) continue
+    for (const opt of opts || []) {
+      const optionId = str(opt.id)
+      const optName = str(opt.name)
+      if (!optionId || !optName) continue
+      composedCandidates.push({
+        key: normalizeLookupName(`${menuName} ${optName}`),
+        menuId,
+        optionId,
+        optLen: optName.length,
+      })
+    }
+  }
+  composedCandidates.sort((a, b) => b.optLen - a.optLen || a.key.localeCompare(b.key))
+  const composedMenuOptionByNormalizedName = new Map<string, { menuId: string; optionId: string }>()
+  for (const c of composedCandidates) {
+    if (!c.key || composedMenuOptionByNormalizedName.has(c.key)) continue
+    composedMenuOptionByNormalizedName.set(c.key, { menuId: c.menuId, optionId: c.optionId })
+  }
+
   return {
     knownMenuIds,
     menuIdByNormalizedName,
+    optionsByMenuId,
+    composedMenuOptionByNormalizedName,
     promoItemsByPromoId: params.catalog?.promoItemsByPromoId,
     promoIdByMirrorMenuId: params.catalog?.promoIdByMirrorMenuId,
     promoIdByNormalizedName,
@@ -153,6 +189,50 @@ function lookupMenuIdByName(name: string, ctx?: TheoreticalCostResolveContext): 
   const key = normalizeLookupName(name)
   if (!key || !ctx) return ''
   return ctx.menuIdByNormalizedName.get(key) ?? ''
+}
+
+function lookupComposedMenuOption(
+  name: string,
+  ctx?: TheoreticalCostResolveContext
+): { menuId: string; optionId: string } | null {
+  const key = normalizeLookupName(name)
+  if (!key || !ctx) return null
+  return ctx.composedMenuOptionByNormalizedName.get(key) ?? null
+}
+
+/** 라인명·옵션명이 해당 메뉴 옵션명과 일치/접미하면 optionId 복원 */
+function inferOptionIdFromNames(params: {
+  menuId: string
+  lineName: string
+  optionName: string
+  ctx?: TheoreticalCostResolveContext
+}): string {
+  const menuId = str(params.menuId)
+  if (!menuId || !params.ctx) return ''
+  const opts = params.ctx.optionsByMenuId[menuId] || []
+  if (!opts.length) return ''
+
+  const optionNameKey = normalizeLookupName(params.optionName)
+  if (optionNameKey) {
+    for (const opt of opts) {
+      const on = normalizeLookupName(str(opt.name))
+      if (on && on === optionNameKey) return str(opt.id)
+    }
+  }
+
+  const lineKey = normalizeLookupName(params.lineName)
+  if (!lineKey) return ''
+
+  const ranked = [...opts]
+    .map((opt) => ({ id: str(opt.id), name: str(opt.name), key: normalizeLookupName(str(opt.name)) }))
+    .filter((o) => o.id && o.key)
+    .sort((a, b) => b.key.length - a.key.length)
+
+  for (const opt of ranked) {
+    if (lineKey === opt.key) return opt.id
+    if (lineKey.endsWith(` ${opt.key}`) || lineKey.endsWith(opt.key)) return opt.id
+  }
+  return ''
 }
 
 function resolveMenuIdFromLineId(id: string, knownMenuIds: Set<string>): string {
@@ -241,17 +321,31 @@ function resolveMenuAndOptionForCostLine(
   let menuId = resolveLineMenuId(row)
   let optionId = resolveLineOptionId(row)
   const knownMenuIds = ctx?.knownMenuIds ?? new Set<string>()
+  const lineName = resolveLineMenuName(row)
+  const optionName = resolveLineOptionName(row)
+  const grabParsed = parseGrabSetChildLineName(lineName)
+  const lookupName = grabParsed?.childName || lineName
 
   if (!menuId) {
     menuId = resolveMenuIdFromLineId(str(row.id), knownMenuIds)
     if (menuId && !optionId) optionId = resolveOptionIdFromLineId(str(row.id), menuId)
   }
 
-  if (!menuId) {
-    const lineName = resolveLineMenuName(row)
-    const grabParsed = parseGrabSetChildLineName(lineName)
-    const lookupName = grabParsed?.childName || lineName
+  // optionId가 비어 있고 합성명(기본+옵션)이 맞으면 전용 SKU menuId보다 가산 BOM 쪽을 우선
+  if (!optionId && lookupName) {
+    const composed = lookupComposedMenuOption(lookupName, ctx)
+    if (composed) {
+      menuId = composed.menuId
+      optionId = composed.optionId
+    }
+  }
+
+  if (!menuId && lookupName) {
     menuId = lookupMenuIdByName(lookupName, ctx)
+  }
+
+  if (menuId && !optionId) {
+    optionId = inferOptionIdFromNames({ menuId, lineName: lookupName, optionName, ctx })
   }
 
   return { menuId, optionId }
@@ -291,12 +385,26 @@ function promoChildCostLines(
     if (childQty <= 0) continue
     const qty = parentQty * childQty
     if (qty <= 0) continue
-    let menuId = str(c.menuId ?? c.menu_id)
-    const optionId = str(c.optionId ?? c.option_id)
     const menuName = str(c.menuName ?? c.menu_name)
     const optionName = str(c.optionName ?? c.option_name)
-    if (!menuId && menuName) menuId = lookupMenuIdByName(menuName, ctx)
-    out.push({ menuId, optionId, menuName, optionName, qty })
+    const resolved = resolveMenuAndOptionForCostLine(
+      {
+        ...c,
+        menuId: c.menuId ?? c.menu_id,
+        optionId: c.optionId ?? c.option_id,
+        menuName,
+        optionName,
+        name: menuName || str(c.name),
+      },
+      ctx
+    )
+    out.push({
+      menuId: resolved.menuId,
+      optionId: resolved.optionId,
+      menuName,
+      optionName,
+      qty,
+    })
   }
   return out
 }

@@ -22,6 +22,9 @@ function ctxFixture() {
     ['8|', entry()],
     ['22|', entry()],
     ['20|', entry()],
+    ['4|', entry(12)],
+    ['4|7', entry(52)],
+    ['999|', entry(12)],
   ])
   return buildTheoreticalCostResolveContext({
     costIndex,
@@ -31,7 +34,12 @@ function ctxFixture() {
         { id: '22', name: 'Rice' },
         { id: '20', name: 'GOLDEN FRIED CHICKEN' },
         { id: '501', name: '[April] Set 2' },
+        { id: '4', name: 'KIMCHI SOUP' },
+        { id: '999', name: 'KIMCHI SOUP With Rice' },
       ],
+      optionsByMenuId: {
+        '4': [{ id: '7', name: 'With Rice', priceModifier: 20 }],
+      },
       promoMetaById: new Map([
         ['5', { code: 'SET-A2', name: '[April] Set 2', kind: 'set' }],
       ]),
@@ -134,6 +142,35 @@ describe('expandOrderLineToCostLines', () => {
       resolveContext: ctx,
     })
     expect(rows).toHaveLength(0)
+  })
+
+  it('infers With Rice optionId when menuId present but optionId null', () => {
+    const ctx = ctxFixture()
+    const lines = expandOrderLineToCostLines(
+      {
+        menuId: '4',
+        optionId: null,
+        name: 'KIMCHI SOUP With Rice',
+        quantity: 1,
+      },
+      ctx
+    )
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ menuId: '4', optionId: '7', qty: 1 })
+  })
+
+  it('prefers composed base+option over dedicated SKU with same display name', () => {
+    const ctx = ctxFixture()
+    const lines = expandOrderLineToCostLines(
+      {
+        menuId: '999',
+        optionId: null,
+        name: 'KIMCHI SOUP With Rice',
+        quantity: 2,
+      },
+      ctx
+    )
+    expect(lines[0]).toMatchObject({ menuId: '4', optionId: '7', qty: 2 })
   })
 })
 

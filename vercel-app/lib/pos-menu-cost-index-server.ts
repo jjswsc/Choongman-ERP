@@ -167,6 +167,29 @@ export function assemblePosMenuCostIndexEntries(params: {
     out.set(costIndexKey(mid, null), toEntry(base))
   }
 
+  const resolveAdditiveSourceParts = (srcMenuId: number): CostParts => {
+    const nullParts = getParts(srcMenuId, null)
+    if (nullParts.food > 0 || nullParts.packaging > 0) return nullParts
+    const fromOut = out.get(costIndexKey(srcMenuId, null))
+    if (fromOut && (fromOut.foodCost > 0 || fromOut.packagingCost > 0)) {
+      return { food: fromOut.foodCost, packaging: fromOut.packagingCost }
+    }
+    // null BOM 없고 옵션 전용 원가만 1건이면 그 값을 소스 폴백(목록 srcBaseRow 의도와 유사)
+    let found: CostParts | null = null
+    let hits = 0
+    for (const [key, parts] of partsByKey) {
+      const [midStr, optStr] = key.split('|')
+      if (Number(midStr) !== srcMenuId) continue
+      if (!optStr) continue
+      if (parts.food > 0 || parts.packaging > 0) {
+        found = parts
+        hits++
+      }
+    }
+    if (hits === 1 && found) return found
+    return emptyParts()
+  }
+
   for (const opt of params.options) {
     const mid = opt.menuId
     const oid = opt.id
@@ -176,16 +199,17 @@ export function assemblePosMenuCostIndexEntries(params: {
     const isAdditive = (opt.optionType || 'substitution') === 'additive'
 
     if (!isAdditive) {
-      const use =
-        optOwn.food > 0 || optOwn.packaging > 0 ? optOwn : base
-      out.set(costIndexKey(mid, oid), toEntry(use))
+      // 옵션 전용 BOM이 없으면 키를 넣지 않음 → lookup 시 baseFallback=true
+      if (optOwn.food > 0 || optOwn.packaging > 0) {
+        out.set(costIndexKey(mid, oid), toEntry(optOwn))
+      }
       continue
     }
 
     let merged = addParts(emptyParts(), base)
     const qty = Number(opt.quantity) > 0 ? Number(opt.quantity) : 1
     if (opt.additiveSourceMenuId && opt.additiveSourceMenuId > 0) {
-      merged = addParts(merged, getParts(opt.additiveSourceMenuId, null), qty)
+      merged = addParts(merged, resolveAdditiveSourceParts(opt.additiveSourceMenuId), qty)
     } else if (opt.itemCode) {
       const unit = params.itemFoodCostByCode?.[opt.itemCode] ?? 0
       merged = {

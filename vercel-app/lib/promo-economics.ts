@@ -20,6 +20,8 @@ export type PromoMenuLike = {
 
 export type PromoOptionLike = {
   id: string
+  /** 옵션명 — 주문 스냅샷에 optionId 없을 때 합성명(With Rice 등) 역매칭 */
+  name?: string
   priceModifier?: number
   /** 옵션 배달 추가금. 없으면 홀 추가금과 동일하게 계산 */
   priceModifierDelivery?: number | null
