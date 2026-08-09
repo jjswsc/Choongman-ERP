@@ -13,6 +13,8 @@ import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-serv
 import { mapAnalyticsAggToStoreResults } from '@/lib/pos-sales-analytics-rpc-map'
 import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
 
+export const maxDuration = 60
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

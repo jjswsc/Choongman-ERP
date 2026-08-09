@@ -1039,6 +1039,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         "매장을 하나 이상 선택한 뒤「조회」를 눌러 주세요. 「전체 선택」으로 여러 매장·전체를 볼 수 있습니다."
       )
     }
+    if (loading) {
+      return tr("salesQueryLoading", "집계 조회 중… 잠시만 기다려 주세요.")
+    }
     if (!showSalesResults) {
       return tr(
         "salesPressQueryToLoad",
@@ -1046,7 +1049,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       )
     }
     return null
-  }, [hasData, canMultiStorePicker, selectedStores.length, showSalesResults, tr])
+  }, [hasData, canMultiStorePicker, selectedStores.length, loading, showSalesResults, tr])
 
   /** 상단(현재·직전동일·전주) — 기간/매장×기간 탐색 주제만 3칸 비교, 그 외 금액 위주는 현재만, 메뉴·채널·배달은 생략 */
   const summaryRowShowFull =
@@ -2191,8 +2194,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "store" ||
       selectedView === "store-category" ||
       selectedView === "store-period" ||
-      selectedView === "overview" ||
-      (selectedView === "period" && (selectedStoresParam?.length ?? 0) > 0)
+      selectedView === "overview"
     const needYoyCompare = selectedView === "yoy-compare"
     const needMomCompare = selectedView === "mom-compare"
     const needForecast = selectedView === "forecast"
@@ -2536,11 +2538,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       const storeSummaryFetcher = offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore
       const sumScopedStoreTotal = (rows: { total?: number }[]): number =>
         rows.reduce((s, r) => s + (Number(r.total) || 0), 0)
-      // 당월 합계는 period 응답에서 채움 — store RPC는 전기·직전7일만 (중복 스캔 제거)
-      // 요일 필터 시 store API는 요일을 모름 → period 일별 합으로 맞춘다
-      if (periodDaysOfWeekParam?.length) {
-        tasks.push(
-          Promise.all([
+      // 당월 합계는 period 응답에서 채움. 전기·전주 카드는 메인 Promise.all 밖에서 채워
+      // 차트 표시를 막지 않음 (70일×12매장 요약이 1분+ hang 하던 원인).
+      const fillPrevSummary = () => {
+        if (periodDaysOfWeekParam?.length) {
+          return Promise.all([
             periodRun({
               startStr: prevStart,
               endStr: prevEnd,
@@ -2570,39 +2572,37 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               if (loadIdRef.current !== id) return
               setSummaryCards((prev) => ({ current: prev.current, prevRange: 0, prevWeek: 0 }))
             })
-        )
-      } else {
-        tasks.push(
-          Promise.all([
-            storeSummaryFetcher({
-              startStr: prevStart,
-              endStr: prevEnd,
-              stores: salesFetchStoresParam,
-              orderTypes: orderTypesParam,
-            }),
-            storeSummaryFetcher({
-              startStr: weekStart,
-              endStr: weekEnd,
-              stores: salesFetchStoresParam,
-              orderTypes: orderTypesParam,
-            }),
-          ])
-            .then(([prevRows, weekRows]) => {
-              if (loadIdRef.current !== id) return
-              const scope = (rows: { total?: number; storeName: string }[]) =>
-                filterStoreRowsBySalesSelection(rows, salesFetchStoresParam)
-              setSummaryCards((prev) => ({
-                current: prev.current,
-                prevRange: sumScopedStoreTotal(scope(prevRows)),
-                prevWeek: sumScopedStoreTotal(scope(weekRows)),
-              }))
-            })
-            .catch(() => {
-              if (loadIdRef.current !== id) return
-              setSummaryCards((prev) => ({ current: prev.current, prevRange: 0, prevWeek: 0 }))
-            })
-        )
+        }
+        return Promise.all([
+          storeSummaryFetcher({
+            startStr: prevStart,
+            endStr: prevEnd,
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+          storeSummaryFetcher({
+            startStr: weekStart,
+            endStr: weekEnd,
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+        ])
+          .then(([prevRows, weekRows]) => {
+            if (loadIdRef.current !== id) return
+            const scope = (rows: { total?: number; storeName: string }[]) =>
+              filterStoreRowsBySalesSelection(rows, salesFetchStoresParam)
+            setSummaryCards((prev) => ({
+              current: prev.current,
+              prevRange: sumScopedStoreTotal(scope(prevRows)),
+              prevWeek: sumScopedStoreTotal(scope(weekRows)),
+            }))
+          })
+          .catch(() => {
+            if (loadIdRef.current !== id) return
+            setSummaryCards((prev) => ({ current: prev.current, prevRange: 0, prevWeek: 0 }))
+          })
       }
+      void fillPrevSummary()
     }
     // 취소사유는 스피너를 막지 않음 — 메인 집계와 병렬이지만 Promise.all 밖
     if (needCancelReason) {

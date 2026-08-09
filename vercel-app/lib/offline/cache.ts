@@ -50,6 +50,8 @@ export function cacheKeyAnalytics(
     stores?: string
     splitByStore?: string
     searchMode?: string
+    /** 요일 필터 `0,5,6` */
+    daysOfWeek?: string
   }
 ): string {
   const {
@@ -62,8 +64,9 @@ export function cacheKeyAnalytics(
     stores = '',
     splitByStore = '',
     searchMode = '',
+    daysOfWeek = '',
   } = params
-  return `analytics:${type}:${startStr}:${endStr}:${pos}:${groupBy}:${search}:${orderTypes}:${stores}:${splitByStore}:${searchMode}`
+  return `analytics:${type}:${startStr}:${endStr}:${pos}:${groupBy}:${search}:${orderTypes}:${stores}:${splitByStore}:${searchMode}:${daysOfWeek}`
 }
 
 export async function getFromCache<T>(

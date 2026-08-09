@@ -26,6 +26,9 @@ import {
 import { canonicalizePeriodSeriesKeys } from '@/lib/pos-sales-analytics-rpc-map'
 import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
 
+/** 다매장·장기 조회 시 fetch 폴백이 길어질 수 있음 */
+export const maxDuration = 60
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
