@@ -2980,7 +2980,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostOpenItems: '품목 관리',
     posCostActualNeedList: '먼저 목록 탭에서 [조회]로 원가 데이터를 불러오세요.',
     posCostActualNeedListForExtras:
-      '레시피 마스터 평균·What-if 시뮬레이션은 목록 탭에서 [조회] 후 사용할 수 있습니다. 판매 가중 실적·목표 대비는 위 [실적 조회]만으로 확인하세요.',
+      '원가분석(목록) 기준 대분류 목표 대비·What-if는 목록 탭에서 [조회] 후 사용할 수 있습니다. 위 판매 가중 실적은 [실적 조회]로 확인하세요.',
     posCostActualFiltersTitle: '실적 조회 조건',
     posCostActualPeriodStart: '시작일',
     posCostActualPeriodEnd: '종료일',
@@ -3032,17 +3032,18 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostActualExactBomCompare:
       '판매 가중 {weighted}% vs 정확 BOM(폴백 제외) {exact}%',
     posCostActualCategoryWeightedHint:
-      '위 대분류 표와 같은 판매 가중 실적 원가율입니다. 목표와 비교하세요.',
-    posCostActualCategoryMasterTitle: '메뉴 마스터 홀 원가율 단순평균 (진단)',
+      '판매 비중으로 합산한 실적입니다. 목표 대비는 아래「원가분석」평균을 기준으로 보세요.',
+    posCostActualCategoryMasterTitle: '원가분석 홀 원가율 vs 목표',
     posCostActualCategoryMasterHint:
-      '판매중 기본 메뉴의 홀 원가율%를 행마다 같은 비중으로 평균한 레시피 지표입니다. 판매 비중이 없어 위 판매 가중 실적과 숫자가 달라도 정상입니다. 직접 비교하지 마세요.',
+      '목록 원가분석(판매중·기본 메뉴 BOM) 홀 원가율의 단순평균입니다. 목표 대비는 이 숫자를 기준으로 합니다. 위 판매 가중 실적과 달라도 정상입니다(판매 믹스·할인·옵션 폴백).',
     posCostActualMasterSampleHint: '기본 메뉴·판매중만',
+    posCostActualWeightedCompare: '판매가중 {pct}%',
     posCostWeightedRatioTitle: '판매 가중 실적 원가율',
     posCostWeightedMenuCount: '매칭 메뉴',
     posCostWeightedHint: '실적 조회로 기간·매장·채널별 계산 · 분모=VAT 제외·BOM 매칭 매출',
     posCostWeightedLoad: '판매 연동 계산',
     posCostOpenManagementMargin: '관리마진 보기',
-    posCostCategoryTargetTitle: '대분류별 판매 가중 원가율 vs 목표',
+    posCostCategoryTargetTitle: '원가분석 대분류 원가율 vs 목표',
     posCostCategoryTargetsEdit: '대분류별 원가율 목표 (%)',
     posCostTarget: '목표',
     posCostWhatIfTitle: '품목 단가 What-if',
@@ -6172,7 +6173,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostOpenItems: 'Item master',
     posCostActualNeedList: 'Load cost data from the List tab first.',
     posCostActualNeedListForExtras:
-      'Master recipe average and What-if need List tab [Query] first. Sales-weighted actuals and vs-target use [Query actuals] above only.',
+      'Cost-analysis (list) vs-target and What-if need List tab [Query] first. Sales-weighted actuals use [Query actuals] above.',
     posCostActualFiltersTitle: 'Actual query filters',
     posCostActualPeriodStart: 'Start date',
     posCostActualPeriodEnd: 'End date',
@@ -6224,17 +6225,18 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostActualExactBomCompare:
       'Sales-weighted {weighted}% vs exact BOM (no fallback) {exact}%',
     posCostActualCategoryWeightedHint:
-      'Same sales-weighted actual cost % as the category table above. Compare with targets.',
-    posCostActualCategoryMasterTitle: 'Master hall cost % simple average (diagnostic)',
+      'Sales-mix actuals. Use the cost-analysis average below as the target baseline.',
+    posCostActualCategoryMasterTitle: 'Cost-analysis hall % vs target',
     posCostActualCategoryMasterHint:
-      'Unweighted mean of hall cost % for active base menus only. No sales mix — it is normal if this differs from sales-weighted actuals above. Do not compare them directly.',
+      'Simple average of hall cost % from list cost analysis (active base menus). Targets use this figure. Differing from sales-weighted actuals above is normal (sales mix, discounts, option BOM fallback).',
     posCostActualMasterSampleHint: 'active base menus only',
+    posCostActualWeightedCompare: 'sales-weighted {pct}%',
     posCostWeightedRatioTitle: 'Sales-weighted actual cost %',
     posCostWeightedMenuCount: 'Matched menus',
     posCostWeightedHint: 'Query by period, store, and channel · denom = excl. VAT matched sales',
     posCostWeightedLoad: 'Calculate with sales',
     posCostOpenManagementMargin: 'Management margin',
-    posCostCategoryTargetTitle: 'Sales-weighted cost % by category vs target',
+    posCostCategoryTargetTitle: 'Cost-analysis category % vs target',
     posCostCategoryTargetsEdit: 'Cost % target by main category (%)',
     posCostTarget: 'Target',
     posCostWhatIfTitle: 'Item price what-if',

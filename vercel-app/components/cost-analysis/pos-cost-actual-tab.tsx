@@ -3,7 +3,7 @@
 import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
-import { BarChart3, ChevronDown, ChevronRight, ExternalLink, Loader2, Search, TrendingUp } from "lucide-react"
+import { BarChart3, ExternalLink, Loader2, Search, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -106,7 +106,6 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
 
   const [itemCode, setItemCode] = React.useState("")
   const [whatIfPct, setWhatIfPct] = React.useState(10)
-  const [masterAvgOpen, setMasterAvgOpen] = React.useState(false)
 
   React.useEffect(() => {
     setStoreFilter((prev) => {
@@ -125,27 +124,9 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
     [rows, itemCode, whatIfPct, settings.misePercent]
   )
 
-  /** 목표 대비 바 — 대분류 표와 동일(판매 가중 costPctOfNet) */
-  const weightedCategoryTargetStats = React.useMemo(() => {
-    if (!result?.byCategory?.length) return [] as Array<{
-      cat: string
-      ratio: number
-      netSales: number
-      target?: number
-    }>
-    return result.byCategory
-      .map((row) => ({
-        cat: row.categoryMain,
-        ratio: row.costPctOfNet,
-        netSales: row.netSales,
-        target: settings.categoryTargets[row.categoryMain],
-      }))
-      .sort((a, b) => b.ratio - a.ratio)
-  }, [result, settings.categoryTargets])
-
   /**
-   * 레시피 진단용 마스터 단순평균 — 기본 메뉴·판매중만.
-   * 판매 비중 없음 → 위 가중 실적과 직접 비교하지 않음.
+   * 목표 대비 기준 = 원가분석(목록 BOM) 홀 원가율 단순평균.
+   * 판매중·기본 메뉴만. 판매 가중 실적(30%대)과 다를 수 있으며, 목표는 이쪽을 본다.
    */
   const masterRecipeAvgStats = React.useMemo(() => {
     const map = new Map<string, { sumRatio: number; n: number; target?: number }>()
@@ -166,9 +147,10 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
         avgRatio: v.n > 0 ? v.sumRatio / v.n : 0,
         n: v.n,
         target: settings.categoryTargets[cat],
+        weightedRatio: result?.byCategory.find((r) => r.categoryMain === cat)?.costPctOfNet,
       }))
       .sort((a, b) => b.avgRatio - a.avgRatio)
-  }, [rows, settings, t])
+  }, [rows, settings, t, result])
 
   React.useEffect(() => {
     if (queryToken <= 0) return
@@ -700,18 +682,35 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
               </table>
             </div>
           ) : null}
+        </>
+      ) : queryToken === 0 ? (
+        <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+          {t("posCostActualClickQuery")}
+        </div>
+      ) : null}
 
-          {weightedCategoryTargetStats.length > 0 ? (
+      {listQueried ? (
+        <>
+          <PosCostSettingsPanel
+            settings={settings}
+            rows={rows}
+            canEdit={canEdit}
+            onSaved={onSettingsSaved}
+          />
+
+          {masterRecipeAvgStats.length > 0 ? (
             <div className="rounded-xl border bg-card p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-semibold">{t("posCostCategoryTargetTitle")}</h3>
               </div>
-              <p className="text-xs text-muted-foreground">{t("posCostActualCategoryWeightedHint")}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {t("posCostActualCategoryMasterHint")}
+              </p>
               <div className="space-y-3">
-                {weightedCategoryTargetStats.slice(0, 12).map((c) => {
+                {masterRecipeAvgStats.slice(0, 12).map((c) => {
                   const target = c.target ?? settings.costRatioGoodMax
-                  const over = c.ratio > target
+                  const over = c.avgRatio > target
                   return (
                     <div key={c.cat} className="space-y-1">
                       <div className="flex justify-between items-center gap-2 text-xs">
@@ -722,7 +721,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
                             over ? "text-rose-600" : "text-emerald-600"
                           )}
                         >
-                          {c.ratio.toFixed(1)}% / {t("posCostTarget")}{" "}
+                          {c.avgRatio.toFixed(1)}% / {t("posCostTarget")}{" "}
                           {canEdit ? (
                             <button
                               type="button"
@@ -744,93 +743,23 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
                         <div
                           className={cn("h-full rounded-full", over ? "bg-rose-500" : "bg-emerald-500")}
                           style={{
-                            width: `${Math.min(100, (c.ratio / Math.max(target, 1)) * 100)}%`,
+                            width: `${Math.min(100, (c.avgRatio / Math.max(target, 1)) * 100)}%`,
                           }}
                         />
                       </div>
-                      <p className="text-[10px] text-muted-foreground tabular-nums">
-                        {t("posCostActualNetSales")}: ฿{formatBaht(c.netSales)}
+                      <p className="text-[10px] text-muted-foreground">
+                        {c.n}
+                        {t("posCostItemsUnit")} · {t("posCostActualMasterSampleHint")}
+                        {c.weightedRatio != null ? (
+                          <span className="ml-1 tabular-nums text-muted-foreground/90">
+                            · {t("posCostActualWeightedCompare").replace("{pct}", c.weightedRatio.toFixed(1))}
+                          </span>
+                        ) : null}
                       </p>
                     </div>
                   )
                 })}
               </div>
-            </div>
-          ) : null}
-        </>
-      ) : queryToken === 0 ? (
-        <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-          {t("posCostActualClickQuery")}
-        </div>
-      ) : null}
-
-      {listQueried ? (
-        <>
-          <PosCostSettingsPanel
-            settings={settings}
-            rows={rows}
-            canEdit={canEdit}
-            onSaved={onSettingsSaved}
-          />
-
-          {masterRecipeAvgStats.length > 0 ? (
-            <div className="rounded-xl border bg-card overflow-hidden">
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-5 py-3 text-left hover:bg-muted/30"
-                onClick={() => setMasterAvgOpen((v) => !v)}
-                aria-expanded={masterAvgOpen}
-              >
-                {masterAvgOpen ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                )}
-                <span className="text-sm font-semibold">{t("posCostActualCategoryMasterTitle")}</span>
-              </button>
-              {masterAvgOpen ? (
-                <div className="space-y-4 border-t px-5 py-4">
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {t("posCostActualCategoryMasterHint")}
-                  </p>
-                  <div className="space-y-3">
-                    {masterRecipeAvgStats.slice(0, 12).map((c) => {
-                      const target = c.target ?? settings.costRatioGoodMax
-                      const over = c.avgRatio > target
-                      return (
-                        <div key={c.cat} className="space-y-1">
-                          <div className="flex justify-between items-center gap-2 text-xs">
-                            <span className="font-medium">{c.cat}</span>
-                            <span
-                              className={cn(
-                                "tabular-nums shrink-0",
-                                over ? "text-rose-600" : "text-emerald-600"
-                              )}
-                            >
-                              {c.avgRatio.toFixed(1)}% / {t("posCostTarget")} {target}%
-                            </span>
-                          </div>
-                          <div className="h-2 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={cn(
-                                "h-full rounded-full opacity-70",
-                                over ? "bg-rose-400" : "bg-emerald-400"
-                              )}
-                              style={{
-                                width: `${Math.min(100, (c.avgRatio / Math.max(target, 1)) * 100)}%`,
-                              }}
-                            />
-                          </div>
-                          <p className="text-[10px] text-muted-foreground">
-                            {c.n}
-                            {t("posCostItemsUnit")} · {t("posCostActualMasterSampleHint")}
-                          </p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : null}
 
