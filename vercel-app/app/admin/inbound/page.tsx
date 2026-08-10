@@ -1106,10 +1106,8 @@ export default function InboundPage() {
   }, [allowInboundUrlSync, searchParams, pageActiveRef])
 
   React.useEffect(() => {
+    // remount 직후 초기 has*Queried=false로 clear하면 복원 스냅샷이 사라짐 — 미조회 시 저장만 생략
     if (!historyHasQueried && !summaryHasQueried) {
-      lastFetchedHistRef.current = null
-      lastFetchedSummaryRef.current = null
-      inboundViewCache.clear()
       return
     }
 

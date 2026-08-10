@@ -111,7 +111,6 @@ import {
 } from "@/lib/bank-quick-memos"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import {
-  clearBankQueryViewCache,
   readBankQueryViewCache,
   saveBankQueryViewCache,
 } from "@/lib/bank-query-view-cache"
@@ -811,8 +810,8 @@ export function BankTransactionsTab() {
     } catch {}
   }, [allowBankUrlSync, searchParams, queryDraftStorageKey])
 
-  /** remount 시 메모리 스냅샷으로 조회 조건·결과 즉시 복구 (검색 재클릭 불필요) */
-  React.useEffect(() => {
+  /** remount 시 메모리 스냅샷으로 조회 조건·결과 즉시 복구 (검색 재클릭 불필요). paint 전 복원해 빈 화면 깜빡임 완화 */
+  React.useLayoutEffect(() => {
     if (viewCacheRestoredRef.current) return
     // 숨김 keep-alive면 스킵 — allowBankUrlSync가 true로 바뀌며 복귀 시 다시 시도
     if (!pageActiveRef.current || !allowBankUrlSync) return
@@ -928,12 +927,18 @@ export function BankTransactionsTab() {
     startStr,
   ])
 
+  const prevHadBankQueryDraftRef = React.useRef(false)
   React.useEffect(() => {
     try {
       if (!hasBankQueryDraft) {
-        sessionStorage.removeItem(queryDraftStorageKey)
+        // remount 직후 hasBankQueryDraft=false인데 setState 복원 전이면 초안을 지우면 안 됨
+        if (prevHadBankQueryDraftRef.current) {
+          sessionStorage.removeItem(queryDraftStorageKey)
+        }
+        prevHadBankQueryDraftRef.current = false
         return
       }
+      prevHadBankQueryDraftRef.current = true
       const draft: BankQueryDraft = {
         accountId,
         startStr,
@@ -972,11 +977,9 @@ export function BankTransactionsTab() {
   ])
 
   React.useEffect(() => {
-    if (!hasSearched) {
-      lastFetchedQueryRef.current = null
-      clearBankQueryViewCache()
-      return
-    }
+    // remount 시 초기 hasSearched=false로 캐시를 clear하면 복원 effect가 읽은 직후/직전에
+    // 스냅샷이 사라져 조회 결과가 빈 화면으로 남는다. 미조회 상태에서는 저장만 생략.
+    if (!hasSearched) return
     const fetched = lastFetchedQueryRef.current
     if (!fetched) return
     const sameQuery =
@@ -1038,7 +1041,6 @@ export function BankTransactionsTab() {
     startStr,
     summary,
   ])
-
   React.useEffect(() => {
     getBankAccounts({
       userStore: auth?.store,
@@ -1164,8 +1166,12 @@ export function BankTransactionsTab() {
     loadData()
   }, [accountId, loadData])
 
+  const hasSearchedRef = React.useRef(hasSearched)
+  hasSearchedRef.current = hasSearched
   useErpRefetchOnActivate(() => {
-    if (accountId) void loadData()
+    // 조회한 적 있을 때만 복귀 시 갱신 — 빈 화면에서 불필요 호출·레이스 방지
+    if (!hasSearchedRef.current || !accountId) return
+    void loadData()
   })
 
   React.useEffect(() => {

@@ -8,7 +8,6 @@ import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import {
-  clearOutboundViewCache,
   readOutboundViewCache,
   saveOutboundViewCache,
 } from "@/lib/outbound-view-cache"
@@ -431,11 +430,8 @@ export default function OutboundPage() {
   }, [searchParams, allowOutboundUrlSync, pageActiveRef])
 
   React.useEffect(() => {
+    // remount 직후 초기 has*Queried=false로 clear하면 복원 스냅샷이 사라짐 — 미조회 시 저장만 생략
     if (!historyHasQueried && !summaryHasQueried && !whHasQueried) {
-      lastFetchedHistRef.current = null
-      lastFetchedSummaryRef.current = null
-      lastFetchedWhRef.current = null
-      clearOutboundViewCache()
       return
     }
 

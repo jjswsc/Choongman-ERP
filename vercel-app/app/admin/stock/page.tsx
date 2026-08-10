@@ -37,7 +37,6 @@ import { dedupeOfficeStoreOptions, isOfficeStoreVariant } from "@/lib/office-sto
 import { collectCategoryOptions } from "@/lib/stock-history-filter"
 import { useItemCategoryOptions } from "@/lib/use-item-category-options"
 import {
-  clearStockStatusViewCache,
   readStockStatusViewCache,
   saveStockStatusViewCache,
 } from "@/lib/stock-status-view-cache"
@@ -190,8 +189,7 @@ export default function StockPage() {
 
   React.useEffect(() => {
     if (!hasSearched) {
-      lastFetchedRef.current = null
-      clearStockStatusViewCache()
+      // remount 직후 초기 hasSearched=false로 clear하면 복원 스냅샷이 사라짐 — 미조회 시 저장만 생략
       return
     }
     const fetched = lastFetchedRef.current

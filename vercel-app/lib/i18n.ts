@@ -4272,7 +4272,7 @@ export const i18n = {
     expensePlanStatusPlanned: '대기',
     expensePlanStatusPartial: '부분',
     expensePlanPickEmptyForBankLink:
-      '해당 일자·매장에 연결 가능한 지급예정이 없습니다. 지출검색에서 같은 금액 건이 「지급예정만」·상태 paid 로 보이면 통장 미연결 고아입니다. 배포 후 다시 연결하거나 관리자에게 상태 복구를 요청하세요.',
+      '연결 가능한 지급예정이 없습니다. 지출등록의 발생일·지급예정일이 통장 출금일과 ±14일 이내인지, 잔액이 같은지 확인하세요. 지출검색에 「지급예정만」·paid(통장 미연결)면 배포 후 다시 연결하거나 본사에 승인 상태 복구를 요청하세요.',
     expensePlanPickPlannedNeedsApproval:
       '선택한 건이 아직 승인 대기입니다. 저장 시 자동 승인됩니다. 본사(Office·HQ) 건은 Director·CEO·HR·Secretary 승인 권한이 필요합니다.',
     expensePlanDeletedCount: '{count}건 삭제되었습니다.',
@@ -12088,7 +12088,7 @@ Only matters the employee must handle personally on a working day:
     expensePlanStatusPlanned: 'Pending',
     expensePlanStatusPartial: 'Partial',
     expensePlanPickEmptyForBankLink:
-      'No linkable payment plan for this date/store. If Expense Search shows a matching “plan only” row already marked paid, it is an orphan (paid without bank link)—retry after deploy or ask HQ to reset status to approved.',
+      'No linkable payment plan found. Check that the expense date or due date is within ±14 days of the bank withdrawal and the balance matches. If Expense Search shows “plan only” already paid (no bank link), retry after deploy or ask HQ to reset status to approved.',
     expensePlanPickPlannedNeedsApproval:
       'Selected item is still pending approval. Saving will auto-approve. HQ/Office items require Director·CEO·HR·Secretary approval rights.',
     expensePlanDeletedCount: '{count} item(s) deleted.',
@@ -19375,7 +19375,7 @@ orderItemQty: 'จำนวน',
     expensePlanStatusPlanned: 'รอ',
     expensePlanStatusPartial: 'บางส่วน',
     expensePlanPickEmptyForBankLink:
-      'ไม่มีแผนจ่ายที่เชื่อมได้สำหรับวัน/ร้านนี้ หากในค้นหาค่าใช้จ่ายมีแถว “แผนจ่ายเท่านั้น” สถานะ paid อยู่แล้ว แปลว่าระบบติดสถานะจ่ายแล้วแต่ยังไม่ผูกธนาคาร — หลังอัปเดตระบบลองเชื่อมอีกครั้ง หรือให้สำนักงานรีเซ็ตสถานะเป็น approved',
+      'ไม่พบแผนจ่ายที่เชื่อมได้ กรุณาตรวจว่าวันที่เกิดรายการหรือวันกำหนดจ่ายอยู่ในช่วง ±14 วันจากวันถอน และยอดคงเหลือตรงกัน หากในค้นหาค่าใช้จ่ายมีแถว “แผนจ่ายเท่านั้น” สถานะ paid (ยังไม่ผูกธนาคาร) หลังอัปเดตระบบลองเชื่อมอีกครั้ง หรือให้สำนักงานรีเซ็ตเป็น approved',
     expensePlanPickPlannedNeedsApproval:
       'รายการที่เลือกยังรออนุมัติ การบันทึกจะอนุมัติอัตโนมัติ รายการสำนักงานใหญ่ต้องมีสิทธิ์ Director·CEO·HR·Secretary',
     expensePlanDeletedCount: 'ลบแล้ว {count} รายการ',

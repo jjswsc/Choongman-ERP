@@ -280,9 +280,8 @@ export function ExpenseRegisterSearchTab() {
   }, [allowExpenseUrlSync, pageActiveRef])
 
   React.useEffect(() => {
+    // remount 직후 초기 loadedOnce=false로 clear하면 복원 스냅샷이 사라짐 — 미조회 시 저장만 생략
     if (!loadedOnce) {
-      lastFetchedQueryRef.current = null
-      expenseSearchViewCache.clear()
       return
     }
     const fetched = lastFetchedQueryRef.current

@@ -3,6 +3,12 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch, type PayeeMemoMatchQuality } from '@/lib/expense-accrual-bank-memo-match'
 import { isSettledExpensePayment } from '@/lib/expense-accrual-settlement'
+import {
+  accrualDateMatchesBankDate,
+  buildExpenseAccrualBankLinkAmountFilters,
+  buildExpenseAccrualBankLinkDateFilters,
+  chunkIdsForInFilter,
+} from '@/lib/expense-accrual-bank-link-candidates'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { roundMoney2 } from '@/lib/invoice-vat-total'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
@@ -60,12 +66,26 @@ const MEMO_MATCH_ORDER: Record<PayeeMemoMatchQuality, number> = {
 /** paid/done 포함 — 통장·패티 미정산(고아 paid)도 잔액이 있으면 연결 후보 */
 const LINKABLE_ACCRUAL_STATUSES = ['planned', 'approved', 'partial', 'paid', 'done'] as const
 
+const ACCRUAL_SELECT =
+  'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by'
+
 function accrualMatchesStore(rowStore: string, storeFilter: string): boolean {
   const row = String(rowStore || '').trim()
   const filter = String(storeFilter || '').trim()
   if (!filter) return true
   if (!row) return true
   return storesMatchForGradeLookup(row, filter)
+}
+
+function mergeAccrualRows(...batches: ExpenseAccrualRow[][]): ExpenseAccrualRow[] {
+  const byId = new Map<number, ExpenseAccrualRow>()
+  for (const batch of batches) {
+    for (const r of batch || []) {
+      const id = Number(r.id || 0)
+      if (id > 0) byId.set(id, r)
+    }
+  }
+  return [...byId.values()]
 }
 
 export async function GET(request: NextRequest) {
@@ -109,26 +129,56 @@ export async function GET(request: NextRequest) {
     const bankDate = String(bankRow.trans_date || '').slice(0, 10)
     const bankMemo = String(bankRow.memo || '')
     const bankNote = String(bankRow.note || '')
-    const [accrualRows, payableRows] = await Promise.all([
-      supabaseSelectFilter('expense_accruals', 'status=in.(planned,approved,partial,paid,done)', {
-        select: 'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by',
-        order: 'expense_date.asc,id.asc',
-        limit: 5000,
-      }) as Promise<ExpenseAccrualRow[]>,
-      supabaseSelectFilter('payable_transactions', 'id=gt.0', {
-        select: 'amount,expense_accrual_id,bank_transaction_id,petty_cash_transaction_id',
-        limit: 20000,
-      }) as Promise<PayableTxRow[]>,
-    ])
 
+    // 날짜 창 2회(발생일·만기일) 병합 — nested or=(and()) 금지, paid/done 전량 limit 잘림 방지
+    const dateBatches = await Promise.all(
+      buildExpenseAccrualBankLinkDateFilters(bankDate).map(
+        (filter) =>
+          supabaseSelectFilter('expense_accruals', filter, {
+            select: ACCRUAL_SELECT,
+            order: 'expense_date.desc,id.desc',
+            limit: 2000,
+          }) as Promise<ExpenseAccrualRow[]>
+      )
+    )
+    let accrualRows = mergeAccrualRows(...dateBatches)
+
+    // 등록일 불일치·WHT(순지급=통장) 대비 금액 보강
+    if (bankAmount > 0) {
+      const amountLimit = (accrualRows || []).length === 0 ? 300 : 100
+      const amountBatches = await Promise.all(
+        buildExpenseAccrualBankLinkAmountFilters(bankAmount).map(
+          (filter) =>
+            supabaseSelectFilter('expense_accruals', filter, {
+              select: ACCRUAL_SELECT,
+              order: 'id.desc',
+              limit: amountLimit,
+            }) as Promise<ExpenseAccrualRow[]>
+        )
+      )
+      accrualRows = mergeAccrualRows(accrualRows || [], ...amountBatches)
+    }
+
+    const accrualIds = (accrualRows || []).map((r) => Number(r.id || 0)).filter((n) => n > 0)
     const paidByAccrual = new Map<number, number>()
-    for (const tx of payableRows || []) {
-      const accrualId = Number(tx.expense_accrual_id || 0)
-      if (!accrualId) continue
-      // 통장·패티 미연결 Payment(고아)는 잔액 차감에서 제외 → 재연결 가능
-      if (!isSettledExpensePayment(tx)) continue
-      const amt = Number(tx.amount || 0)
-      paidByAccrual.set(accrualId, (paidByAccrual.get(accrualId) || 0) + Math.abs(amt))
+    for (const chunk of chunkIdsForInFilter(accrualIds)) {
+      if (chunk.length === 0) continue
+      const payableRows = (await supabaseSelectFilter(
+        'payable_transactions',
+        `expense_accrual_id=in.(${chunk.join(',')})`,
+        {
+          select: 'amount,expense_accrual_id,bank_transaction_id,petty_cash_transaction_id',
+          limit: 10000,
+        }
+      )) as PayableTxRow[] | null
+      for (const tx of payableRows || []) {
+        const accrualId = Number(tx.expense_accrual_id || 0)
+        if (!accrualId) continue
+        // 통장·패티 미연결 Payment(고아)는 잔액 차감에서 제외 → 재연결 가능
+        if (!isSettledExpensePayment(tx)) continue
+        const amt = Number(tx.amount || 0)
+        paidByAccrual.set(accrualId, (paidByAccrual.get(accrualId) || 0) + Math.abs(amt))
+      }
     }
 
     const rawList = (accrualRows || [])
@@ -143,6 +193,8 @@ export async function GET(request: NextRequest) {
         // UI/선택용: 고아 paid 는 approved 로 노출해 연결 가능하게 함
         const status =
           (rawStatus === 'paid' || rawStatus === 'done') && paidAmount <= 0.009 ? 'approved' : rawStatus
+        const expenseDate = r.expense_date ? String(r.expense_date).slice(0, 10) : ''
+        const dueDate = r.due_date ? String(r.due_date).slice(0, 10) : ''
         return {
           id,
           payeeCode: decoded.payeeCode,
@@ -151,24 +203,23 @@ export async function GET(request: NextRequest) {
           plannedAmount,
           paidAmount,
           remainingAmount,
-          expenseDate: r.expense_date ? String(r.expense_date).slice(0, 10) : '',
-          dueDate: r.due_date ? String(r.due_date).slice(0, 10) : '',
+          expenseDate,
+          dueDate,
           memo: r.memo || '',
           accountSubjectId: r.account_subject_id || null,
           storeName: r.store_name || '',
           status,
           approvedAt: r.approved_at ? String(r.approved_at) : '',
           approvedBy: r.approved_by || '',
+          dateExactMatch: accrualDateMatchesBankDate(expenseDate, dueDate, bankDate),
         }
       })
-      .filter((r) => {
-        // due_date 우선이면 발생일과 통장일이 같아도 누락됨 → 둘 중 하나 일치면 허용
-        const due = String(r.dueDate || '').slice(0, 10)
-        const exp = String(r.expenseDate || '').slice(0, 10)
-        return due === bankDate || exp === bankDate
-      })
-      .filter((r) => LINKABLE_ACCRUAL_STATUSES.includes(String(r.status || '').toLowerCase() as (typeof LINKABLE_ACCRUAL_STATUSES)[number]))
+      .filter((r) =>
+        LINKABLE_ACCRUAL_STATUSES.includes(String(r.status || '').toLowerCase() as (typeof LINKABLE_ACCRUAL_STATUSES)[number])
+      )
       .filter((r) => (r.remainingAmount || 0) > 0)
+      // 날짜 창·금액 보강 후보만 유지(잔액 일치 또는 날짜 일치)
+      .filter((r) => r.dateExactMatch || moneyEqual(r.remainingAmount, bankAmount) || moneyEqual(r.plannedAmount, bankAmount))
 
     let storeScopedList = rawList
     if (storeFilter) {
@@ -214,16 +265,20 @@ export async function GET(request: NextRequest) {
           vendorGpsName: vn?.gps,
         })
         const amountMatch = moneyEqual(r.remainingAmount, bankAmount)
+        const { dateExactMatch: _dateExactMatch, ...rest } = r
         return {
-          ...r,
+          ...rest,
           payeeMemoMatchQuality: ev.quality,
           payeeMemoMatchDetail: ev.detail,
           amountMatch,
+          dateExactMatch: r.dateExactMatch,
         }
       })
       .sort((a, b) => {
         const amountDiff = Number(b.amountMatch ? 1 : 0) - Number(a.amountMatch ? 1 : 0)
         if (amountDiff !== 0) return amountDiff
+        const dateDiff = Number(b.dateExactMatch ? 1 : 0) - Number(a.dateExactMatch ? 1 : 0)
+        if (dateDiff !== 0) return dateDiff
         const statusOrder = (s: string) => (s === 'approved' || s === 'partial' ? 0 : 1)
         const sd = statusOrder(String(a.status || '')) - statusOrder(String(b.status || ''))
         if (sd !== 0) return sd
@@ -233,6 +288,7 @@ export async function GET(request: NextRequest) {
         if (qd !== 0) return qd
         return a.id - b.id
       })
+      .map(({ dateExactMatch: _d, ...row }) => row)
 
     return NextResponse.json({
       success: true,
@@ -253,4 +309,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

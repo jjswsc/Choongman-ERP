@@ -374,6 +374,7 @@ export default function PosOrdersPage() {
     startStr: string
     endStr: string
     storeFilter: string
+    statusFilter: string
     orders: PosOrder[]
   } | null>(null)
 
@@ -397,14 +398,14 @@ export default function PosOrdersPage() {
       startStr: snap.startStr || "",
       endStr: snap.endStr || "",
       storeFilter: snap.storeFilter || "All",
+      statusFilter: snap.statusFilter || "all",
       orders: snap.orders || [],
     }
   }, [allowPosOrdersUrlSync, pageActiveRef])
 
   React.useEffect(() => {
     if (!hasSearchedOrders) {
-      lastFetchedOrdersQueryRef.current = null
-      posOrdersViewCache.clear()
+      // remount 직후 초기 hasSearchedOrders=false로 clear하면 복원 스냅샷이 사라짐 — 미조회 시 저장만 생략
       return
     }
     const fetched = lastFetchedOrdersQueryRef.current
@@ -412,13 +413,15 @@ export default function PosOrdersPage() {
       !!fetched &&
       fetched.startStr === startStr &&
       fetched.endStr === endStr &&
-      fetched.storeFilter === storeFilter
+      fetched.storeFilter === storeFilter &&
+      fetched.statusFilter === statusFilter
     const ordersToSave = sameQuery ? orders : fetched?.orders || orders
     if (sameQuery) {
       lastFetchedOrdersQueryRef.current = {
         startStr,
         endStr,
         storeFilter,
+        statusFilter,
         orders: ordersToSave,
       }
     }
@@ -428,7 +431,7 @@ export default function PosOrdersPage() {
       endStr: sameQuery || !fetched ? endStr : fetched.endStr,
       storeFilter: sameQuery || !fetched ? storeFilter : fetched.storeFilter,
       searchTerm,
-      statusFilter,
+      statusFilter: sameQuery || !fetched ? statusFilter : fetched.statusFilter || statusFilter,
       cancelScopeFilter,
       cancelReasonFilter,
       orders: ordersToSave,
@@ -1102,6 +1105,7 @@ export default function PosOrdersPage() {
     const fetchStart = startStr
     const fetchEnd = endStr
     const fetchStore = storeFilter
+    const fetchStatus = statusFilter
     getPosOrders({
       startStr,
       endStr,
@@ -1114,6 +1118,7 @@ export default function PosOrdersPage() {
           startStr: fetchStart,
           endStr: fetchEnd,
           storeFilter: fetchStore,
+          statusFilter: fetchStatus,
           orders: rows,
         }
       })
@@ -1123,6 +1128,7 @@ export default function PosOrdersPage() {
           startStr: fetchStart,
           endStr: fetchEnd,
           storeFilter: fetchStore,
+          statusFilter: fetchStatus,
           orders: [],
         }
       })
