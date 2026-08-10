@@ -134,6 +134,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
+import { posOrdersViewCache } from "@/lib/pos-orders-view-cache"
 
 type CookCompareKey = "unset" | "ok" | "warn" | "late"
 
@@ -368,6 +369,52 @@ export default function PosOrdersPage() {
   const [hasSearchedGrab, setHasSearchedGrab] = React.useState(false)
   const [hasSearchedAudit, setHasSearchedAudit] = React.useState(false)
   const urlDrilldownSearchedRef = React.useRef(false)
+  const viewCacheRestoredRef = React.useRef(false)
+
+  React.useEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowPosOrdersUrlSync) return
+    viewCacheRestoredRef.current = true
+    const snap = posOrdersViewCache.read()
+    if (!snap?.hasSearchedOrders) return
+    if (snap.activeTab) setActiveTab(snap.activeTab)
+    if (snap.startStr) setStartStr(snap.startStr)
+    if (snap.endStr) setEndStr(snap.endStr)
+    setSearchTerm(snap.searchTerm || "")
+    setStatusFilter(snap.statusFilter || "all")
+    setCancelScopeFilter(snap.cancelScopeFilter || "all")
+    setCancelReasonFilter(snap.cancelReasonFilter || "all")
+    setOrders(snap.orders || [])
+    setHasSearchedOrders(true)
+  }, [allowPosOrdersUrlSync, pageActiveRef])
+
+  React.useEffect(() => {
+    if (!hasSearchedOrders) {
+      posOrdersViewCache.clear()
+      return
+    }
+    posOrdersViewCache.save({
+      activeTab,
+      startStr,
+      endStr,
+      searchTerm,
+      statusFilter,
+      cancelScopeFilter,
+      cancelReasonFilter,
+      orders,
+      hasSearchedOrders: true,
+    })
+  }, [
+    activeTab,
+    cancelReasonFilter,
+    cancelScopeFilter,
+    endStr,
+    hasSearchedOrders,
+    orders,
+    searchTerm,
+    startStr,
+    statusFilter,
+  ])
 
   React.useEffect(() => {
     if (!allowPosOrdersUrlSync) return

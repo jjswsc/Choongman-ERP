@@ -13,6 +13,8 @@ import {
 } from "@/lib/franchisee-multi-store"
 import { useStoreView } from "@/lib/store-view-context"
 import { useSearchParams } from "next/navigation"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
+import { totalSalesViewCache } from "@/lib/total-sales-view-cache"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -132,24 +134,10 @@ export function TotalSalesTab() {
 
   const { viewStore } = useStoreView()
   const searchParams = useSearchParams()
+  const allowTotalSalesUrlSync = useErpAllowUrlSync("/admin/total-sales")
+  const pageActiveRef = useErpPageActiveRef()
   const urlHydratedRef = React.useRef(false)
-  React.useEffect(() => {
-    if (urlHydratedRef.current) return
-    const qStart = searchParams.get("start")
-    const qEnd = searchParams.get("end")
-    const qStores = searchParams.get("stores")
-    if (!qStart && !qEnd && !qStores) return
-    urlHydratedRef.current = true
-    if (qStart) {
-      setStartStr(qStart.slice(0, 10))
-      setPeriodPreset("custom")
-    }
-    if (qEnd) setEndStr(qEnd.slice(0, 10))
-    if (qStores) {
-      const parts = qStores.split(",").map((s) => s.trim()).filter(Boolean)
-      if (parts.length) setSelectedStores(parts)
-    }
-  }, [searchParams])
+  const viewCacheRestoredRef = React.useRef(false)
 
   const canSearchAll = canSelectAllStoresForPosSalesManagement(
     auth?.role || "",
@@ -176,6 +164,7 @@ export function TotalSalesTab() {
   const [loading, setLoading] = React.useState(false)
   const [exporting, setExporting] = React.useState(false)
   const [truncated, setTruncated] = React.useState(false)
+  const [hasQueried, setHasQueried] = React.useState(false)
   const [levelsData, setLevelsData] = React.useState<
     Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]> | null
   >(null)
@@ -197,6 +186,87 @@ export function TotalSalesTab() {
   const defaultStoresHydratedRef = React.useRef(false)
   const storePickerListId = React.useId()
   const storePickerBtnId = React.useId()
+
+  React.useEffect(() => {
+    if (urlHydratedRef.current) return
+    if (!allowTotalSalesUrlSync) return
+    const qStart = searchParams.get("start")
+    const qEnd = searchParams.get("end")
+    const qStores = searchParams.get("stores")
+    if (!qStart && !qEnd && !qStores) return
+    urlHydratedRef.current = true
+    if (qStart) {
+      setStartStr(qStart.slice(0, 10))
+      setPeriodPreset("custom")
+    }
+    if (qEnd) setEndStr(qEnd.slice(0, 10))
+    if (qStores) {
+      const parts = qStores.split(",").map((s) => s.trim()).filter(Boolean)
+      if (parts.length) setSelectedStores(parts)
+    }
+  }, [allowTotalSalesUrlSync, searchParams])
+
+  React.useEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowTotalSalesUrlSync) return
+    viewCacheRestoredRef.current = true
+    const snap = totalSalesViewCache.read()
+    if (!snap?.hasQueried) return
+    if (snap.startStr) setStartStr(snap.startStr)
+    if (snap.endStr) setEndStr(snap.endStr)
+    if (snap.periodPreset) setPeriodPreset(snap.periodPreset as PeriodPreset)
+    setSelectedStores(Array.isArray(snap.selectedStores) ? snap.selectedStores : [])
+    // 캐시 복원 시 기본「전체 매장 자동선택」이 덮어쓰지 않게
+    defaultStoresHydratedRef.current = true
+    skipDefaultStoreAutoSelectRef.current = true
+    setSearch(snap.search || "")
+    setSearchAnd(Boolean(snap.searchAnd))
+    setOrderTypesKey(snap.orderTypesKey || "")
+    setCompareChannels(Boolean(snap.compareChannels))
+    if (snap.level) setLevel(snap.level)
+    setDrillFilter(snap.drillFilter || {})
+    setLevelsData(
+      (snap.levelsData as Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]> | null) || null
+    )
+    setTruncated(Boolean(snap.truncated))
+    setHasQueried(true)
+  }, [allowTotalSalesUrlSync, pageActiveRef])
+
+  React.useEffect(() => {
+    if (!hasQueried) {
+      totalSalesViewCache.clear()
+      return
+    }
+    totalSalesViewCache.save({
+      startStr,
+      endStr,
+      periodPreset,
+      selectedStores,
+      search,
+      searchAnd,
+      orderTypesKey,
+      compareChannels,
+      level,
+      drillFilter,
+      levelsData,
+      truncated,
+      hasQueried: true,
+    })
+  }, [
+    compareChannels,
+    drillFilter,
+    endStr,
+    hasQueried,
+    level,
+    levelsData,
+    orderTypesKey,
+    periodPreset,
+    search,
+    searchAnd,
+    selectedStores,
+    startStr,
+    truncated,
+  ])
 
   const [posStoreNameLookup, setPosStoreNameLookup] = React.useState<Map<string, string>>(() => new Map())
 
@@ -500,12 +570,14 @@ export function TotalSalesTab() {
       setTruncated(!!mainRes.truncated)
       setSnapshotToday(sumHierarchyRows(todayRes.levels.menu))
       setSnapshotMonth(sumHierarchyRows(monthRes.levels.menu))
+      setHasQueried(true)
     } catch {
       setLevelsData(null)
       setByOrderTypeLevels(null)
       setSnapshotToday(null)
       setSnapshotMonth(null)
       setTruncated(false)
+      setHasQueried(true)
     } finally {
       setLoading(false)
     }

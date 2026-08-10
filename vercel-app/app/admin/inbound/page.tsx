@@ -7,6 +7,7 @@ import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
 import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
+import { inboundViewCache } from "@/lib/inbound-view-cache"
 import { ArrowDownToLine, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -138,6 +139,7 @@ export default function InboundPage() {
   const [itemsForVendor, setItemsForVendor] = React.useState<AdminItem[]>([])
   const [historyLoading, setHistoryLoading] = React.useState(false)
   const [historyList, setHistoryList] = React.useState<InboundHistoryItem[]>([])
+  const [historyHasQueried, setHistoryHasQueried] = React.useState(false)
 
   const [inDate, setInDate] = React.useState("")
   /** 입고 매장: 본사는 CM Office(저장 location=입고등록), 매니저는 자기 매장 고정 */
@@ -170,6 +172,7 @@ export default function InboundPage() {
   const [summaryMonthDraft, setSummaryMonthDraft] = React.useState("")
   const [summaryLoading, setSummaryLoading] = React.useState(false)
   const [summaryList, setSummaryList] = React.useState<InboundHistoryItem[]>([])
+  const [summaryHasQueried, setSummaryHasQueried] = React.useState(false)
   const [summaryVendorFilter, setSummaryVendorFilter] = React.useState("")
   const [summaryCategoryFilter, setSummaryCategoryFilter] = React.useState("")
   const [summaryItemSearch, setSummaryItemSearch] = React.useState("")
@@ -195,6 +198,7 @@ export default function InboundPage() {
   const pageActiveRef = useErpPageActiveRef()
   const fromPoAppliedRef = React.useRef<number | null>(null)
   const filtersHydratedOnceRef = React.useRef(false)
+  const viewCacheRestoredRef = React.useRef(false)
   const { posStores: storeList } = useStoreList()
 
   const isOffice = React.useMemo(() => {
@@ -341,18 +345,6 @@ export default function InboundPage() {
       setInStore(auth.store)
     }
   }, [isOffice, auth?.store])
-
-  React.useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    setHistStart(today)
-    setHistEnd(today)
-  }, [])
-
-  React.useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    setSummaryStart(today)
-    setSummaryEnd(today)
-  }, [])
 
   React.useEffect(() => {
     Promise.all([getAdminItems(), getAdminVendors()])
@@ -654,8 +646,10 @@ export default function InboundPage() {
         })
         setHistoryList(Array.isArray(list) ? list : [])
       }
+      setHistoryHasQueried(true)
     } catch {
       setHistoryList([])
+      setHistoryHasQueried(true)
     } finally {
       setHistoryLoading(false)
     }
@@ -743,8 +737,10 @@ export default function InboundPage() {
         })
         setSummaryList(Array.isArray(list) ? list : [])
       }
+      setSummaryHasQueried(true)
     } catch {
       setSummaryList([])
+      setSummaryHasQueried(true)
     } finally {
       setSummaryLoading(false)
     }
@@ -999,6 +995,88 @@ export default function InboundPage() {
   const [filtersHydrated, setFiltersHydrated] = React.useState(false)
 
   React.useEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowInboundUrlSync) return
+    if (parsePurchaseDrillNav(searchParams).fromPlDrill) {
+      viewCacheRestoredRef.current = true
+      return
+    }
+    viewCacheRestoredRef.current = true
+    const snap = inboundViewCache.read()
+    if (!snap) return
+    setTabValue(snap.tabValue || "new")
+    if (snap.histStart) setHistStart(snap.histStart)
+    if (snap.histEnd) setHistEnd(snap.histEnd)
+    setHistMonth(snap.histMonth || "")
+    setHistVendor(snap.histVendor || "")
+    setHistVendorSearch(snap.histVendorSearch || "")
+    setHistItemSearch(snap.histItemSearch || "")
+    setHistStore(snap.histStore || "")
+    setHistPurchaseSource(snap.histPurchaseSource || "")
+    setHistoryList(snap.historyList || [])
+    setHistoryHasQueried(Boolean(snap.historyHasQueried))
+    if (snap.summaryStart) setSummaryStart(snap.summaryStart)
+    if (snap.summaryEnd) setSummaryEnd(snap.summaryEnd)
+    setSummaryMonth(snap.summaryMonth || "")
+    setSummaryList(snap.summaryList || [])
+    setSummaryHasQueried(Boolean(snap.summaryHasQueried))
+    setSummaryVendorFilter(snap.summaryVendorFilter || "")
+    setSummaryCategoryFilter(snap.summaryCategoryFilter || "")
+    setSummaryItemSearch(snap.summaryItemSearch || "")
+    setSummaryStoreFilter(snap.summaryStoreFilter || "")
+  }, [allowInboundUrlSync, searchParams, pageActiveRef])
+
+  React.useEffect(() => {
+    if (!historyHasQueried && !summaryHasQueried) {
+      inboundViewCache.clear()
+      return
+    }
+    inboundViewCache.save({
+      tabValue,
+      histStart,
+      histEnd,
+      histMonth,
+      histVendor,
+      histVendorSearch,
+      histItemSearch,
+      histStore,
+      histPurchaseSource,
+      historyList,
+      historyHasQueried,
+      summaryStart,
+      summaryEnd,
+      summaryMonth,
+      summaryList,
+      summaryHasQueried,
+      summaryVendorFilter,
+      summaryCategoryFilter,
+      summaryItemSearch,
+      summaryStoreFilter,
+    })
+  }, [
+    histEnd,
+    histItemSearch,
+    histMonth,
+    histPurchaseSource,
+    histStart,
+    histStore,
+    histVendor,
+    histVendorSearch,
+    historyHasQueried,
+    historyList,
+    summaryCategoryFilter,
+    summaryEnd,
+    summaryHasQueried,
+    summaryItemSearch,
+    summaryList,
+    summaryMonth,
+    summaryStart,
+    summaryStoreFilter,
+    summaryVendorFilter,
+    tabValue,
+  ])
+
+  React.useEffect(() => {
     if (!pageActiveRef.current) return
     const plNav = parsePurchaseDrillNav(searchParams)
     if (plNav.fromPlDrill) {
@@ -1142,16 +1220,21 @@ export default function InboundPage() {
     } catch {}
   }, [filtersHydrated, tabValue])
 
-  /** 내역 탭으로 들어오면 현재 필터로 조회 (본사·매장 공통) */
+  /** 내역 탭으로 들어오면 현재 필터로 조회 (본사·매장 공통). 캐시 복원 시 재조회 금지 */
   React.useEffect(() => {
     if (tabValue !== "hist") return
+    if (historyHasQueried) return
     void fetchHistory()
-  }, [tabValue])
+    // tab 진입 시에만 — 필터 변경으로 fetchHistory 항등성이 바뀌어도 자동 재조회하지 않음
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [tabValue, historyHasQueried])
 
   React.useEffect(() => {
     if (tabValue !== "summary") return
+    if (summaryHasQueried) return
     void fetchSummaryHistory()
-  }, [tabValue])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [tabValue, summaryHasQueried])
 
   const handleEditRow = React.useCallback(
     async (row: InboundTableRow) => {

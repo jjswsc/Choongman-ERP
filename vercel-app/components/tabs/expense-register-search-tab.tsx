@@ -43,6 +43,7 @@ import { compressImageForUpload, cn } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
+import { expenseSearchViewCache } from "@/lib/expense-search-view-cache"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import {
   canDeleteExpenseAccrual,
@@ -130,6 +131,7 @@ export function ExpenseRegisterSearchTab() {
   const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
   const [loadedOnce, setLoadedOnce] = React.useState(false)
+  const viewCacheRestoredRef = React.useRef(false)
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const invoicePhotoTargetRowRef = React.useRef<ExpenseSearchOverviewRow | null>(null)
@@ -218,10 +220,57 @@ export function ExpenseRegisterSearchTab() {
   }, [allowExpenseUrlSync, searchParams])
 
   React.useEffect(() => {
-    setLoadedOnce(false)
-    setList([])
-    setSummary({ planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 })
-  }, [storeFilter, accountId, startStr, endStr, categoryFilter, vendorFilter, documentNoFilter])
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowExpenseUrlSync) return
+    viewCacheRestoredRef.current = true
+    const snap = expenseSearchViewCache.read()
+    if (!snap?.loadedOnce) return
+    setStoreFilter(snap.storeFilter || "__all__")
+    setAccountId(snap.accountId || "__all__")
+    if (snap.startStr) setStartStr(snap.startStr)
+    if (snap.endStr) setEndStr(snap.endStr)
+    setCategoryFilter(snap.categoryFilter || "__all__")
+    setVendorFilter(snap.vendorFilter || "")
+    setDocumentNoFilter(snap.documentNoFilter || "")
+    setRelationFilter(snap.relationFilter || "__all__")
+    setList(snap.list || [])
+    setSummary(
+      snap.summary || { planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 }
+    )
+    setLoadedOnce(true)
+  }, [allowExpenseUrlSync, pageActiveRef])
+
+  React.useEffect(() => {
+    if (!loadedOnce) {
+      expenseSearchViewCache.clear()
+      return
+    }
+    expenseSearchViewCache.save({
+      storeFilter,
+      accountId,
+      startStr,
+      endStr,
+      categoryFilter,
+      vendorFilter,
+      documentNoFilter,
+      relationFilter,
+      list,
+      summary,
+      loadedOnce: true,
+    })
+  }, [
+    accountId,
+    categoryFilter,
+    documentNoFilter,
+    endStr,
+    list,
+    loadedOnce,
+    relationFilter,
+    startStr,
+    storeFilter,
+    summary,
+    vendorFilter,
+  ])
 
   const handledSearchRefreshRef = React.useRef<string | null>(null)
 

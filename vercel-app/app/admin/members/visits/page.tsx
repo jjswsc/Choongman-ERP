@@ -29,7 +29,8 @@ import { apiFetch } from "@/lib/api/fetch"
 import { getMemberVisits, getMembers, useStoreList } from "@/lib/api-client"
 import { appAlert } from "@/lib/app-message"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
-import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { useErpAllowUrlSync, useErpPageActiveRef, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { memberVisitsViewCache } from "@/lib/member-visits-view-cache"
 import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -155,6 +156,8 @@ async function loadVisitAnalysis(params: {
 
 export default function MemberVisitsPage() {
   const searchParams = useSearchParams()
+  const allowMemberVisitsUrlSync = useErpAllowUrlSync("/admin/members/visits")
+  const pageActiveRef = useErpPageActiveRef()
   const { lang } = useLang()
   const t = useT(lang)
   const { stores: storeKeys } = useStoreList()
@@ -171,6 +174,7 @@ export default function MemberVisitsPage() {
   const [loading, setLoading] = React.useState(false)
   const [rfmRows, setRfmRows] = React.useState<RfmRow[]>([])
   const [rfmLoading, setRfmLoading] = React.useState(false)
+  const viewCacheRestoredRef = React.useRef(false)
   const storeOptions = React.useMemo(() => ["All", ...storeKeys.filter((s) => s !== "All")], [storeKeys])
   const kpi = React.useMemo(() => {
     const memberCount = analysisRows.length
@@ -254,10 +258,46 @@ export default function MemberVisitsPage() {
   }, [])
 
   React.useEffect(() => {
+    if (!allowMemberVisitsUrlSync) return
     if (searchParams.get("tab") === "rfm") setTab("rfm")
     const mid = Number(searchParams.get("memberId") || 0)
     if (mid) setMemberId(String(mid))
-  }, [searchParams])
+  }, [allowMemberVisitsUrlSync, searchParams, setTab])
+
+  React.useEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowMemberVisitsUrlSync) return
+    viewCacheRestoredRef.current = true
+    const snap = memberVisitsViewCache.read()
+    if (!snap?.hasSearched) return
+    if (snap.tab === "history" || snap.tab === "analysis" || snap.tab === "rfm") setTab(snap.tab)
+    if (snap.startDate) setStartDate(snap.startDate)
+    if (snap.endDate) setEndDate(snap.endDate)
+    setStoreCode(snap.storeCode || "All")
+    setMemberId(snap.memberId || "")
+    setMemberSearch(snap.memberSearch || "")
+    setRows((snap.rows || []) as VisitRow[])
+    setAnalysisRows((snap.analysisRows || []) as MemberVisitAnalysisRow[])
+    setHasSearched(true)
+  }, [allowMemberVisitsUrlSync, pageActiveRef, setTab])
+
+  React.useEffect(() => {
+    if (!hasSearched) {
+      memberVisitsViewCache.clear()
+      return
+    }
+    memberVisitsViewCache.save({
+      tab,
+      startDate,
+      endDate,
+      storeCode,
+      memberId,
+      memberSearch,
+      rows,
+      analysisRows,
+      hasSearched: true,
+    })
+  }, [analysisRows, endDate, hasSearched, memberId, memberSearch, rows, startDate, storeCode, tab])
 
   React.useEffect(() => {
     if (tab === "rfm") loadRfm().catch(() => {})

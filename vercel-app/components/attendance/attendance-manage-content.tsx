@@ -6,6 +6,7 @@ import { appAlert } from "@/lib/app-message"
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
+import { attendanceViewCache } from "@/lib/attendance-view-cache"
 import { CheckCircle2, Clock, Save, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
@@ -206,11 +207,45 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
   const [, setOtMinutesByRow] = React.useState<Record<number | string, string>>({})
   /** 조정값 반영 완료한 행 — 숫자 변경 시 해제 → 회색(다시 반영) */
   const [adjustSavedKeys, setAdjustSavedKeys] = React.useState<Set<string>>(() => new Set())
+  const viewCacheRestoredRef = React.useRef(false)
 
   const isOffice = React.useMemo(
     () => hasOfficeStaffScope(auth?.role || "", auth?.store),
     [auth?.role, auth?.store]
   )
+
+  React.useEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowAttendanceUrlSync) return
+    viewCacheRestoredRef.current = true
+    const snap = attendanceViewCache.read()
+    if (!snap?.hasSearched) return
+    if (snap.startDate) setStartDate(snap.startDate)
+    if (snap.endDate) setEndDate(snap.endDate)
+    setStoreFilter(snap.storeFilter || "All")
+    setEmployeeFilter(snap.employeeFilter || "All")
+    setStatusFilter(snap.statusFilter || "all")
+    if (snap.attTab) setAttTab(snap.attTab)
+    setList((snap.list || []) as AttendanceDailyRow[])
+    setHasSearched(true)
+  }, [allowAttendanceUrlSync, pageActiveRef])
+
+  React.useEffect(() => {
+    if (!hasSearched) {
+      attendanceViewCache.clear()
+      return
+    }
+    attendanceViewCache.save({
+      startDate,
+      endDate,
+      storeFilter,
+      employeeFilter,
+      statusFilter,
+      attTab,
+      list,
+      hasSearched: true,
+    })
+  }, [attTab, employeeFilter, endDate, hasSearched, list, startDate, statusFilter, storeFilter])
 
   /** 당일·주간 스케줄: 운영 매장만(본사 Office 제외). 출퇴근 기록 탭은 pos 전체도 쓸 수 있으나 기본 목록은 동일 기준 */
   const { posStores, users: usersMap, staffByStore } = useStoreList()

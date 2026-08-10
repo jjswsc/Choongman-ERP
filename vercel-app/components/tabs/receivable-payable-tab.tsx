@@ -78,7 +78,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { useErpAllowUrlSync, useErpPageActiveRef, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import {
   isManagerOrFranchiseeRole,
   isManagerRole,
@@ -221,6 +221,8 @@ export function ReceivablePayableTab() {
   const { auth } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
+  const allowReceivableUrlSync = useErpAllowUrlSync("/admin/receivable-payable")
+  const pageActiveRef = useErpPageActiveRef()
   const { posStores: storeList, formatStoreLabel, resolveStoreKey } = useStoreList()
   const formatAttributedStoreLabel = React.useCallback(
     (raw: string | undefined | null) => {
@@ -948,6 +950,7 @@ export function ReceivablePayableTab() {
   )
 
   React.useEffect(() => {
+    if (!pageActiveRef.current || !allowReceivableUrlSync) return
     if (urlDeepLinkAppliedRef.current) return
     const typeParam = searchParams.get("type")
     const storeParam = searchParams.get("storeFilter") || searchParams.get("store")
@@ -973,7 +976,7 @@ export function ReceivablePayableTab() {
       setHighlightBankTxId(Number(bankTxParam))
     }
     setPendingDeepLinkSearch(true)
-  }, [searchParams, resolveSalesOutletFilterFromStoreName, applyTab])
+  }, [searchParams, resolveSalesOutletFilterFromStoreName, applyTab, allowReceivableUrlSync, pageActiveRef])
 
   const restoreReceivablePayableQueryDraft = React.useCallback(
     (data: ReceivablePayableQueryDraft | null | undefined) => {
@@ -1026,6 +1029,7 @@ export function ReceivablePayableTab() {
 
   React.useEffect(() => {
     if (draftHydratedRef.current) return
+    if (!pageActiveRef.current) return
     draftHydratedRef.current = true
     const typeParam = searchParams.get("type")
     const storeParam = searchParams.get("storeFilter") || searchParams.get("store")
@@ -1055,7 +1059,7 @@ export function ReceivablePayableTab() {
       }
     }
     setQueryDraftReady(true)
-  }, [queryDraftStorageKey, restoreReceivablePayableQueryDraft, searchParams])
+  }, [queryDraftStorageKey, restoreReceivablePayableQueryDraft, searchParams, pageActiveRef, allowReceivableUrlSync])
 
   React.useEffect(() => {
     if (!restoreQueryListRef.current) return
