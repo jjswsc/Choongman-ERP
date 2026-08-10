@@ -1131,7 +1131,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   ])
 
   const activeSummaryCurrent = React.useMemo(() => {
-    if (scopedStoreSalesTotal != null && (selectedStoresParam?.length ?? 0) > 0) {
+    // posSalesByStore 는 요일 필터(dows)를 반영하지 않음 → 요일 선택 시 period 요약 사용
+    if (
+      !dowsKey &&
+      scopedStoreSalesTotal != null &&
+      (selectedStoresParam?.length ?? 0) > 0
+    ) {
       return scopedStoreSalesTotal
     }
     if (
@@ -1147,6 +1152,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (selectedView === "forecast" && forecastSummary) return forecastSummary.expectedTotal
     return summaryCards.current
   }, [
+    dowsKey,
     scopedStoreSalesTotal,
     selectedStoresParam,
     selectedView,
@@ -1158,11 +1164,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   ])
 
   const summaryCardsCurrentDisplay = React.useMemo(() => {
-    if (scopedStoreSalesTotal != null && (selectedStoresParam?.length ?? 0) > 0) {
+    if (
+      !dowsKey &&
+      scopedStoreSalesTotal != null &&
+      (selectedStoresParam?.length ?? 0) > 0
+    ) {
       return scopedStoreSalesTotal
     }
     return summaryCards.current
-  }, [scopedStoreSalesTotal, selectedStoresParam, summaryCards.current])
+  }, [dowsKey, scopedStoreSalesTotal, selectedStoresParam, summaryCards.current])
 
   const insightTopMenus = React.useMemo(
     () => [...menuData].sort((a, b) => b.sales - a.sales).slice(0, 3),

@@ -66,11 +66,16 @@ export function defaultWhtCertificateLabels(lang: string): WhtCertificateLabels 
   }
 }
 
-export function buildWhtCertificateDocumentHtml(items: WhtCertificateData[], _lang?: string): string {
-  const bodies = (items || [])
+/** 양식 본문만 (시트 HTML). 미리보기·문서 조립용 */
+export function buildWhtCertificateBodiesHtml(items: WhtCertificateData[]): string {
+  return (items || [])
     .filter((d) => d.whtAmount > 0)
     .map((d) => buildWht50TawiCertificateHtmlBothCopies(d))
     .join('\n')
+}
+
+export function buildWhtCertificateDocumentHtml(items: WhtCertificateData[], _lang?: string): string {
+  const bodies = buildWhtCertificateBodiesHtml(items)
   const title = 'หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)'
   return `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>${esc(title)}</title><style>${WHT_50_TAWI_STYLES}</style></head><body>${bodies || '<p>—</p>'}</body></html>`
 }

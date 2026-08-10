@@ -370,6 +370,12 @@ export default function PosOrdersPage() {
   const [hasSearchedAudit, setHasSearchedAudit] = React.useState(false)
   const urlDrilldownSearchedRef = React.useRef(false)
   const viewCacheRestoredRef = React.useRef(false)
+  const lastFetchedOrdersQueryRef = React.useRef<{
+    startStr: string
+    endStr: string
+    storeFilter: string
+    orders: PosOrder[]
+  } | null>(null)
 
   React.useEffect(() => {
     if (viewCacheRestoredRef.current) return
@@ -380,28 +386,52 @@ export default function PosOrdersPage() {
     if (snap.activeTab) setActiveTab(snap.activeTab)
     if (snap.startStr) setStartStr(snap.startStr)
     if (snap.endStr) setEndStr(snap.endStr)
+    if (snap.storeFilter) setStoreFilter(snap.storeFilter)
     setSearchTerm(snap.searchTerm || "")
     setStatusFilter(snap.statusFilter || "all")
     setCancelScopeFilter(snap.cancelScopeFilter || "all")
     setCancelReasonFilter(snap.cancelReasonFilter || "all")
     setOrders(snap.orders || [])
     setHasSearchedOrders(true)
+    lastFetchedOrdersQueryRef.current = {
+      startStr: snap.startStr || "",
+      endStr: snap.endStr || "",
+      storeFilter: snap.storeFilter || "All",
+      orders: snap.orders || [],
+    }
   }, [allowPosOrdersUrlSync, pageActiveRef])
 
   React.useEffect(() => {
     if (!hasSearchedOrders) {
+      lastFetchedOrdersQueryRef.current = null
       posOrdersViewCache.clear()
       return
     }
+    const fetched = lastFetchedOrdersQueryRef.current
+    const sameQuery =
+      !!fetched &&
+      fetched.startStr === startStr &&
+      fetched.endStr === endStr &&
+      fetched.storeFilter === storeFilter
+    const ordersToSave = sameQuery ? orders : fetched?.orders || orders
+    if (sameQuery) {
+      lastFetchedOrdersQueryRef.current = {
+        startStr,
+        endStr,
+        storeFilter,
+        orders: ordersToSave,
+      }
+    }
     posOrdersViewCache.save({
       activeTab,
-      startStr,
-      endStr,
+      startStr: sameQuery || !fetched ? startStr : fetched.startStr,
+      endStr: sameQuery || !fetched ? endStr : fetched.endStr,
+      storeFilter: sameQuery || !fetched ? storeFilter : fetched.storeFilter,
       searchTerm,
       statusFilter,
       cancelScopeFilter,
       cancelReasonFilter,
-      orders,
+      orders: ordersToSave,
       hasSearchedOrders: true,
     })
   }, [
@@ -414,6 +444,7 @@ export default function PosOrdersPage() {
     searchTerm,
     startStr,
     statusFilter,
+    storeFilter,
   ])
 
   React.useEffect(() => {
@@ -1068,16 +1099,35 @@ export default function PosOrdersPage() {
 
   const loadOrders = React.useCallback(() => {
     setLoading(true)
+    const fetchStart = startStr
+    const fetchEnd = endStr
+    const fetchStore = storeFilter
     getPosOrders({
       startStr,
       endStr,
       storeCode: orderListStoreCode,
       status: statusFilter !== 'all' ? statusFilter : undefined,
     })
-      .then(setOrders)
-      .catch(() => setOrders([]))
+      .then((rows) => {
+        setOrders(rows)
+        lastFetchedOrdersQueryRef.current = {
+          startStr: fetchStart,
+          endStr: fetchEnd,
+          storeFilter: fetchStore,
+          orders: rows,
+        }
+      })
+      .catch(() => {
+        setOrders([])
+        lastFetchedOrdersQueryRef.current = {
+          startStr: fetchStart,
+          endStr: fetchEnd,
+          storeFilter: fetchStore,
+          orders: [],
+        }
+      })
       .finally(() => setLoading(false))
-  }, [startStr, endStr, orderListStoreCode, statusFilter])
+  }, [startStr, endStr, orderListStoreCode, statusFilter, storeFilter])
 
   const loadAttempts = React.useCallback(() => {
     setAttemptsLoading(true)

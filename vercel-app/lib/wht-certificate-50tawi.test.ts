@@ -123,12 +123,21 @@ describe('resolveWht50Tawi', () => {
   it('prints each copy as its own A4 page (like original PDF)', () => {
     const both = buildWht50TawiCertificateHtmlBothCopies(base)
     expect((both.match(/class="wht50-sheet"/g) || []).length).toBe(2)
-    expect(both).toContain('wht50-pagebreak')
+    expect(both).not.toContain('wht50-pagebreak')
     expect(both).not.toMatch(/class="wht50-page"/)
     expect(both).toContain('data-copy="1"')
     expect(both).toContain('data-copy="2"')
     const doc = buildWhtCertificateDocumentHtml([base])
     expect((doc.match(/class="wht50-sheet"/g) || []).length).toBe(2)
     expect(doc).toContain('page-break-after: always')
+    expect(doc).toContain('min-height: 285mm')
+    expect(doc).toContain('break-before: page')
+  })
+
+  it('keeps one A4 sheet per certificate copy when printing multiple payees', () => {
+    const second = { ...base, payeeName: 'บริษัท ทดสอบ จำกัด', certNo: '2' }
+    const doc = buildWhtCertificateDocumentHtml([base, second])
+    expect((doc.match(/class="wht50-sheet"/g) || []).length).toBe(4)
+    expect(doc).toContain('@page { size: A4 portrait')
   })
 })

@@ -386,12 +386,15 @@ export function buildWht50TawiCertificateHtml(
 export function buildWht50TawiCertificateHtmlBothCopies(data: WhtCertificateData): string {
   return [1, 2]
     .map((n) => buildWht50TawiCertificateHtml(data, n as Wht50TawiCopyNo))
-    .join('\n<div class="wht50-pagebreak" aria-hidden="true"></div>\n')
+    .join('\n')
 }
 
-/** 원본 กรมสรรพากร 50 ทวิ — A4 1장에 양식 1장(넘침 없이, 가독성 유지) */
+/**
+ * 원본 กรมสรรพากร 50 ทวิ — A4 1장 = 양식 1장.
+ * 시트마다 강제 page-break + A4 인쇄영역 높이로 여러 건이 한 장에 붙지 않게 함.
+ */
 export const WHT_50_TAWI_STYLES = `
-  @page { size: A4 portrait; margin: 4mm; }
+  @page { size: A4 portrait; margin: 6mm; }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; width: 100%;
@@ -401,64 +404,78 @@ export const WHT_50_TAWI_STYLES = `
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .wht50-sheet {
-    width: 100%; max-width: 202mm; margin: 0 auto;
+    display: block;
+    width: 198mm;
+    max-width: 100%;
+    min-height: 285mm;
+    height: 285mm;
+    margin: 0 auto;
+    overflow: hidden;
     page-break-after: always;
+    break-after: page;
     page-break-inside: avoid;
-    break-after: page;
     break-inside: avoid;
+    page-break-before: auto;
+    break-before: auto;
   }
-  .wht50-pagebreak {
-    display: none;
-    height: 0; margin: 0; padding: 0; border: 0;
-    page-break-after: always;
-    break-after: page;
+  .wht50-sheet + .wht50-sheet {
+    page-break-before: always;
+    break-before: page;
   }
-  .wht50-sheet:last-of-type { page-break-after: auto; break-after: auto; }
+  .wht50-sheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
 
   .wht-form {
     border: 1.4px solid #000;
-    padding: 2mm 2.2mm 1.6mm;
+    padding: 2.2mm 2.4mm 1.8mm;
+    height: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   /* —— Header (원본: 좌 ฉบับ / 중 제목 / 우 เล่ม·เลข) —— */
-  .wht-head { display: table; width: 100%; table-layout: fixed; margin-bottom: 1.4mm; }
+  .wht-head { display: table; width: 100%; table-layout: fixed; margin-bottom: 1.6mm; flex: 0 0 auto; }
   .wht-head-l, .wht-head-c, .wht-head-r { display: table-cell; vertical-align: top; }
-  .wht-head-l { width: 34%; font-size: 9px; line-height: 1.2; padding-right: 1.2mm; }
+  .wht-head-l { width: 34%; font-size: 9.5px; line-height: 1.25; padding-right: 1.2mm; }
   .wht-copy { margin: 0; }
   .wht-copy.wht-on { font-weight: 700; text-decoration: underline; }
   .wht-head-c { width: 42%; text-align: center; }
-  .wht-ttl { font-size: 17px; font-weight: 700; line-height: 1.1; }
-  .wht-sub { font-size: 11.5px; margin-top: 0.3mm; }
-  .wht-head-r { width: 24%; text-align: right; font-size: 12.5px; padding-top: 0.6mm; line-height: 1.4; }
+  .wht-ttl { font-size: 18px; font-weight: 700; line-height: 1.1; }
+  .wht-sub { font-size: 12px; margin-top: 0.4mm; }
+  .wht-head-r { width: 24%; text-align: right; font-size: 13px; padding-top: 0.6mm; line-height: 1.4; }
 
   .wht-uline { display: inline-block; min-width: 78%; border-bottom: 1px dotted #000; }
   .wht-uline-sm { display: inline-block; min-width: 30px; border-bottom: 1px dotted #000; text-align: center; font-weight: 600; }
   .wht-fill { font-weight: 600; border-bottom: 1px dotted #000; }
 
   /* —— Party boxes —— */
-  .wht-party { border: 1px solid #000; border-bottom: none; padding: 1.2mm 1.6mm; }
+  .wht-party { border: 1px solid #000; border-bottom: none; padding: 1.4mm 1.8mm; flex: 0 0 auto; }
   .wht-party-tbl { width: 100%; border-collapse: collapse; }
   .wht-party-l { width: 60%; vertical-align: top; padding-right: 1.5mm; }
   .wht-party-r { width: 40%; vertical-align: top; text-align: right; }
-  .wht-party-h { font-weight: 700; font-size: 12.5px; margin-bottom: 0.4mm; }
-  .wht-fl { margin: 0.25mm 0; font-size: 12.5px; line-height: 1.2; }
+  .wht-party-h { font-weight: 700; font-size: 13px; margin-bottom: 0.5mm; }
+  .wht-fl { margin: 0.35mm 0; font-size: 12.5px; line-height: 1.25; }
   .wht-k { white-space: nowrap; }
-  .wht-note { font-size: 8px; color: #222; line-height: 1.1; }
-  .wht-tin-lab { font-size: 9px; margin-bottom: 0.6mm; }
+  .wht-note { font-size: 8.5px; color: #222; line-height: 1.15; }
+  .wht-tin-lab { font-size: 9.5px; margin-bottom: 0.7mm; }
   .wht-tin { border-collapse: collapse; margin-left: auto; }
   .wht-tin-cell {
-    width: 12.5px; height: 15px; border: 1px solid #000;
-    text-align: center; font-size: 11.5px; font-weight: 700;
-    padding: 0; line-height: 15px;
+    width: 13px; height: 16px; border: 1px solid #000;
+    text-align: center; font-size: 12px; font-weight: 700;
+    padding: 0; line-height: 16px;
   }
   .wht-tin-dash { width: 7px; border: none; text-align: center; font-size: 11px; vertical-align: middle; }
 
   /* —— PND row —— */
   .wht-pnd {
     border: 1px solid #000; border-bottom: none;
-    padding: 1.1mm 1.6mm; font-size: 10.5px; line-height: 1.28;
+    padding: 1.2mm 1.8mm; font-size: 11px; line-height: 1.3;
+    flex: 0 0 auto;
   }
-  .wht-pnd-note { font-size: 8px; margin-top: 0.3mm; }
+  .wht-pnd-note { font-size: 8.5px; margin-top: 0.4mm; }
   .chk {
     display: inline-block; width: 11px; height: 11px; border: 1px solid #000;
     text-align: center; font-size: 9.5px; font-weight: 700; line-height: 10px;
@@ -466,75 +483,97 @@ export const WHT_50_TAWI_STYLES = `
   }
 
   /* —— Income table —— */
-  .wht-tbl { width: 100%; border-collapse: collapse; font-size: 10px; }
-  .wht-tbl th, .wht-tbl td { border: 1px solid #000; padding: 0.55mm 1.1mm; vertical-align: top; }
-  .wht-tbl th { text-align: center; font-weight: 700; font-size: 10px; }
+  .wht-tbl { width: 100%; border-collapse: collapse; font-size: 10.5px; flex: 0 0 auto; }
+  .wht-tbl th, .wht-tbl td { border: 1px solid #000; padding: 0.7mm 1.2mm; vertical-align: top; }
+  .wht-tbl th { text-align: center; font-weight: 700; font-size: 10.5px; }
   .c-type { width: 56%; }
   .c-date { width: 14%; }
   .c-amt { width: 15%; }
-  .wht-tbl td { font-size: 9.8px; line-height: 1.15; }
-  .tiny { font-size: 8.5px !important; line-height: 1.12 !important; padding-top: 0.35mm !important; padding-bottom: 0.35mm !important; }
+  .wht-tbl td { font-size: 10.2px; line-height: 1.18; }
+  .tiny { font-size: 8.8px !important; line-height: 1.15 !important; padding-top: 0.45mm !important; padding-bottom: 0.45mm !important; }
   .pad-l { padding-left: 3mm !important; }
-  .wht-date-col { text-align: center; font-size: 10.5px; white-space: nowrap; }
+  .wht-date-col { text-align: center; font-size: 11px; white-space: nowrap; }
   .wht-amt-col {
     text-align: right; font-variant-numeric: tabular-nums;
-    white-space: nowrap; font-size: 10.5px;
+    white-space: nowrap; font-size: 11px;
   }
   .sum td { font-weight: 700; }
   .sum-l { text-align: center; }
-  .sum-words td { background: #d9d9d9; font-size: 11.5px; font-weight: 500; }
+  .sum-words td { background: #d9d9d9; font-size: 12px; font-weight: 500; }
 
   .wht-fund, .wht-paymode {
     border: 1px solid #000; border-top: none;
-    padding: 1mm 1.6mm; font-size: 10.5px; line-height: 1.28;
+    padding: 1.2mm 1.8mm; font-size: 11px; line-height: 1.3;
+    flex: 0 0 auto;
   }
 
-  .wht-foot { width: 100%; border-collapse: collapse; border: 1px solid #000; border-top: none; }
+  .wht-foot {
+    width: 100%; border-collapse: collapse; border: 1px solid #000; border-top: none;
+    margin-top: auto; flex: 0 0 auto;
+  }
   .wht-warn {
-    width: 38%; font-size: 8.5px; line-height: 1.2;
-    border-right: 1px solid #000; padding: 1.5mm; vertical-align: top;
+    width: 38%; font-size: 9px; line-height: 1.25;
+    border-right: 1px solid #000; padding: 2mm; vertical-align: top;
   }
   .wht-sign {
-    width: 62%; padding: 1.8mm 15mm 1.5mm 2mm; vertical-align: top;
-    position: relative; min-height: 24mm; text-align: center;
+    width: 62%; padding: 2.2mm 16mm 2mm 2mm; vertical-align: top;
+    position: relative; min-height: 28mm; text-align: center;
   }
-  .wht-cert { font-size: 11.5px; font-weight: 600; margin-bottom: 1.5mm; }
-  .wht-sign-ln { font-size: 12.5px; margin: 2mm 0 0.8mm; }
-  .wht-sign-dt { font-size: 12.5px; }
-  .wht-sign-cap { font-size: 9px; }
+  .wht-cert { font-size: 12px; font-weight: 600; margin-bottom: 1.8mm; }
+  .wht-sign-ln { font-size: 13px; margin: 2.5mm 0 1mm; }
+  .wht-sign-dt { font-size: 13px; }
+  .wht-sign-cap { font-size: 9.5px; }
   .wht-seal {
-    position: absolute; right: 2mm; top: 1.5mm;
-    width: 15mm; height: 15mm; border: 1px dashed #444; border-radius: 50%;
-    font-size: 8px; display: flex; align-items: center; justify-content: center;
+    position: absolute; right: 2mm; top: 2mm;
+    width: 16mm; height: 16mm; border: 1px dashed #444; border-radius: 50%;
+    font-size: 8.5px; display: flex; align-items: center; justify-content: center;
     text-align: center; line-height: 1.1;
   }
-  .wht-fn { font-size: 8px; margin-top: 1mm; line-height: 1.15; padding: 0 0.4mm; }
+  .wht-fn { font-size: 8.5px; margin-top: 1.2mm; line-height: 1.2; padding: 0 0.4mm; flex: 0 0 auto; }
 
   @media print {
-    html, body { background: #fff !important; overflow: visible !important; height: auto !important; }
+    html, body {
+      background: #fff !important;
+      overflow: visible !important;
+      height: auto !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
     .wht50-sheet {
-      max-width: none;
-      width: 100%;
+      display: block !important;
+      width: 100% !important;
+      max-width: none !important;
+      min-height: 285mm !important;
+      height: 285mm !important;
+      margin: 0 !important;
+      overflow: hidden !important;
       page-break-after: always !important;
       break-after: page !important;
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
-    /* 브라우저 인쇄 여백·폰트 차이로 넘칠 때 A4 1장에 맞춤 */
-    .wht-form { zoom: 0.96; }
-    .wht50-pagebreak {
-      display: block !important;
-      page-break-after: always !important;
-      break-after: page !important;
+    .wht50-sheet + .wht50-sheet {
+      page-break-before: always !important;
+      break-before: page !important;
     }
-    .wht50-sheet:last-of-type { page-break-after: auto !important; break-after: auto !important; }
+    .wht50-sheet:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    .wht-form {
+      height: 100% !important;
+      min-height: 100% !important;
+    }
   }
   @media screen {
     body { padding: 12px; background: #cfcfcf; }
     .wht50-sheet {
-      background: #fff; box-shadow: 0 1px 8px rgba(0,0,0,.2);
+      background: #fff;
+      box-shadow: 0 1px 8px rgba(0,0,0,.2);
       margin-bottom: 16px;
+      height: auto;
+      min-height: 285mm;
     }
-    .wht50-pagebreak { display: none; }
   }
 `

@@ -8,6 +8,7 @@ export type AttendanceViewCache = {
   statusFilter: string
   attTab: string
   list: unknown[]
+  noRecordList: unknown[]
   hasSearched: boolean
 }
 

@@ -227,6 +227,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
     setStatusFilter(snap.statusFilter || "all")
     if (snap.attTab) setAttTab(snap.attTab)
     setList((snap.list || []) as AttendanceDailyRow[])
+    setNoRecordList((snap.noRecordList || []) as AttendanceNoRecordRow[])
     setHasSearched(true)
   }, [allowAttendanceUrlSync, pageActiveRef])
 
@@ -243,9 +244,20 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
       statusFilter,
       attTab,
       list,
+      noRecordList,
       hasSearched: true,
     })
-  }, [attTab, employeeFilter, endDate, hasSearched, list, startDate, statusFilter, storeFilter])
+  }, [
+    attTab,
+    employeeFilter,
+    endDate,
+    hasSearched,
+    list,
+    noRecordList,
+    startDate,
+    statusFilter,
+    storeFilter,
+  ])
 
   /** 당일·주간 스케줄: 운영 매장만(본사 Office 제외). 출퇴근 기록 탭은 pos 전체도 쓸 수 있으나 기본 목록은 동일 기준 */
   const { posStores, users: usersMap, staffByStore } = useStoreList()

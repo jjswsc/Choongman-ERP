@@ -66,6 +66,17 @@ describe('mergePeriodSeriesToAggregated', () => {
   it('returns empty when no series', () => {
     expect(mergePeriodSeriesToAggregated({})).toEqual([])
   })
+
+  it('unions period keys across stores (DOW filter residual days)', () => {
+    const series = {
+      S1: [row('2025-01-03', 100, 1)],
+      S2: [row('2025-01-10', 50, 1)],
+    }
+    const merged = mergePeriodSeriesToAggregated(series, ['S1', 'S2'])
+    expect(merged.map((r) => r.key)).toEqual(['2025-01-03', '2025-01-10'])
+    expect(merged[0]?.total).toBe(100)
+    expect(merged[1]?.total).toBe(50)
+  })
 })
 
 describe('groupPosSalesRowsByCanonicalStore', () => {

@@ -207,6 +207,7 @@ import {
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import { downloadAuthenticatedFile } from "@/lib/download-authenticated-file"
 import { whtCertificateFromLedgerRow, resolveVendorPayeeForWht, resolveWhtWithholdingAgentCompany, type HeadOfficeCompany } from "@/lib/wht-certificate-data"
+import { whtLedgerRowMatchesFocusMode } from "@/lib/withholding-tax-csv"
 import {
   downloadThaiSsoSps110FromPayrollXlsx,
   type Sps110EmployerInfo,
@@ -3306,31 +3307,45 @@ export function AdminAccountingCompliance({
   const outputSummaryVat = vatSettlement.outputVat
   const outputSummaryPayable = vatSettlement.payableVat
   const whtRowsFiltered = React.useMemo(
-    () => whtRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
-    [whtRows, ledgerStatusFilter]
+    () =>
+      whtRows.filter((r) => {
+        if (ledgerStatusFilter !== "all" && r.filing_status !== ledgerStatusFilter) return false
+        return whtLedgerRowMatchesFocusMode(r, whtFocusMode)
+      }),
+    [whtRows, ledgerStatusFilter, whtFocusMode]
   )
   const whtRowsPnd53Display = React.useMemo(() => {
-    if (!isPnd5354CompactList) return whtRowsFiltered
-    return whtRowsFiltered.filter((r) => {
-      const hint = String(r.form_hint || "").toUpperCase()
-      if (!hint) return true
-      if (hint.includes("53")) return true
-      if (hint.includes("3") && !hint.includes("53")) return false
-      return true
-    })
-  }, [isPnd5354CompactList, whtRowsFiltered])
+    // pnd53 탭·구 pnd5354 뷰: PND53만 (PND1/PND3 제외)
+    if (whtFocusMode === "pnd53" || whtFocusMode === "pnd5354" || isPnd5354CompactList) {
+      return whtRowsFiltered.filter((r) => whtLedgerRowMatchesFocusMode(r, "pnd53"))
+    }
+    return whtRowsFiltered
+  }, [isPnd5354CompactList, whtFocusMode, whtRowsFiltered])
   const pnd54RowsFiltered = React.useMemo(
     () => pnd54Rows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
     [pnd54Rows, ledgerStatusFilter]
   )
   const pnd53Summary = React.useMemo(() => {
-    const rows = isPnd5354CompactList ? whtRowsPnd53Display : whtRowsFiltered
+    const rows =
+      whtFocusMode === "pnd53" || whtFocusMode === "pnd5354" || isPnd5354CompactList
+        ? whtRowsPnd53Display
+        : whtRowsFiltered
     return {
       gross: rows.reduce((s, r) => s + (Number(r.gross_amount) || 0), 0),
       withheld: rows.reduce((s, r) => s + (Number(r.wht_amount) || 0), 0),
       count: rows.length,
     }
-  }, [isPnd5354CompactList, whtRowsFiltered, whtRowsPnd53Display])
+  }, [isPnd5354CompactList, whtFocusMode, whtRowsFiltered, whtRowsPnd53Display])
+  const whtFocusSummary = React.useMemo(() => {
+    const rows = whtRowsFiltered
+    return {
+      totalGross: rows.reduce((s, r) => s + (Number(r.gross_amount) || 0), 0),
+      totalWithheld: rows.reduce((s, r) => s + (Number(r.wht_amount) || 0), 0),
+      rowCount: rows.length,
+      missingTaxIdCount: rows.filter((r) => !String(r.payee_tax_id || "").trim()).length,
+      missingCertificateCount: rows.filter((r) => !String(r.certificate_no || "").trim()).length,
+    }
+  }, [whtRowsFiltered])
   const pnd54Summary = React.useMemo(
     () => ({
       gross: pnd54RowsFiltered.reduce((s, r) => s + (Number(r.gross_amount) || 0), 0),
@@ -4935,6 +4950,8 @@ export function AdminAccountingCompliance({
             nonPosOutputCount={nonPosOutputCount}
             vatFilteredStats={vatFilteredStats}
             taxSummary={taxSummary}
+            whtFocusSummary={whtFocusSummary}
+            whtFocusMode={whtFocusMode}
             vatRows={vatRows}
             setVatRows={setVatRows}
             vatExportUrl={vatExportUrl}

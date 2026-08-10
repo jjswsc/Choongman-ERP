@@ -4,6 +4,7 @@ import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { validatePnd1Rows, type Pnd1SourceRow } from '@/lib/pnd1-rd-prep-txt'
+import { matchesPnd1FilingForm } from '@/lib/withholding-tax-csv'
 import { requireAuth } from '@/lib/verify-auth'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
@@ -21,17 +22,6 @@ function normalizeForm(v: unknown): 'pnd1' | 'pnd1a' | 'all' {
   if (raw === 'all') return 'all'
   if (raw === 'pnd1a' || raw === 'ภ.ง.ด.1ก') return 'pnd1a'
   return 'pnd1'
-}
-
-function normalizeRowFormHint(v: unknown): 'pnd1' | 'pnd1a' | 'other' {
-  const raw = String(v || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '')
-  if (!raw) return 'other'
-  if (raw.includes('1ก') || raw.includes('pnd1a') || raw.includes('ภ.ง.ด.1ก')) return 'pnd1a'
-  if (raw.includes('pnd1') || raw.includes('ภ.ง.ด.1') || raw === '1') return 'pnd1'
-  return 'other'
 }
 
 export async function GET(request: NextRequest) {
@@ -80,8 +70,8 @@ export async function GET(request: NextRequest) {
       const statusOk =
         filingStatus === '' || normalizeLedgerFilingStatus(row.filing_status) === filingStatus
       if (!statusOk) return false
-      if (filingForm === 'all') return true
-      return normalizeRowFormHint(row.form_hint) === filingForm
+      // all = PND1+1ก 만. PND3/53·미분류 제외
+      return matchesPnd1FilingForm(row.form_hint, filingForm)
     })
 
     const summary = validatePnd1Rows(filteredRows)

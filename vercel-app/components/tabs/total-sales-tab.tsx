@@ -210,6 +210,11 @@ export function TotalSalesTab() {
     if (viewCacheRestoredRef.current) return
     if (!pageActiveRef.current || !allowTotalSalesUrlSync) return
     viewCacheRestoredRef.current = true
+    // URL 딥링크(기간·매장)가 있으면 캐시가 덮어쓰지 않음
+    const qStart = String(searchParams.get("start") || "").trim()
+    const qEnd = String(searchParams.get("end") || "").trim()
+    const qStores = String(searchParams.get("stores") || "").trim()
+    if (qStart || qEnd || qStores) return
     const snap = totalSalesViewCache.read()
     if (!snap?.hasQueried) return
     if (snap.startStr) setStartStr(snap.startStr)
@@ -230,7 +235,7 @@ export function TotalSalesTab() {
     )
     setTruncated(Boolean(snap.truncated))
     setHasQueried(true)
-  }, [allowTotalSalesUrlSync, pageActiveRef])
+  }, [allowTotalSalesUrlSync, pageActiveRef, searchParams])
 
   React.useEffect(() => {
     if (!hasQueried) {

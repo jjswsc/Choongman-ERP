@@ -3,7 +3,7 @@
  * RD Prep 가져오기 → .rdx 생성 → efiling.rd.go.th 업로드
  */
 import type { WithholdingTaxLedgerRow } from '@/lib/withholding-tax-csv'
-import { normalizePndFormHint, type PndFormHint } from '@/lib/withholding-tax-csv'
+import { effectivePnd353FormHint, type PndFormHint } from '@/lib/withholding-tax-csv'
 import {
   isoToRdBeDate8,
   payeeTin10,
@@ -47,9 +47,11 @@ type DetailGroup = {
 
 function filterPnd53Rows(rows: WithholdingTaxLedgerRow[], formHint: PndFormHint): WithholdingTaxLedgerRow[] {
   return (rows || []).filter((r) => {
-    if (formHint === 'ALL') return normalizePndFormHint(r.form_hint) !== 'PND3'
-    if (formHint === 'PND3') return false
-    return normalizePndFormHint(r.form_hint) !== 'PND3'
+    const effective = effectivePnd353FormHint(r)
+    if (!effective) return false
+    if (formHint === 'PND3') return effective === 'PND3'
+    if (formHint === 'PND53') return effective === 'PND53'
+    return effective === 'PND3' || effective === 'PND53'
   })
 }
 

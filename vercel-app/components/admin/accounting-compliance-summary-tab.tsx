@@ -167,6 +167,15 @@ export interface AccountingComplianceSummaryTabProps {
   nonPosOutputCount: number
   vatFilteredStats: { rowCount: number; missingTaxIdCount: number; missingInvoiceCount: number }
   taxSummary: ThaiTaxFilingSummary | null
+  /** 탭(pnd1/pnd3/pnd53) 포커스에 맞춘 원장 합계 — 전체 taxSummary.wht 대신 사용 */
+  whtFocusSummary?: {
+    totalGross: number
+    totalWithheld: number
+    rowCount: number
+    missingTaxIdCount: number
+    missingCertificateCount: number
+  }
+  whtFocusMode?: string
   vatRows: VatDraft[]
   setVatRows: React.Dispatch<React.SetStateAction<VatDraft[]>>
   vatExportUrl: string
@@ -386,6 +395,14 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     nonPosOutputCount,
     vatFilteredStats,
     taxSummary,
+    whtFocusSummary = {
+      totalGross: 0,
+      totalWithheld: 0,
+      rowCount: 0,
+      missingTaxIdCount: 0,
+      missingCertificateCount: 0,
+    },
+    whtFocusMode = "all",
     vatRows,
     setVatRows,
     vatExportUrl,
@@ -670,7 +687,9 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd1")}
                 />
               </>
-            ) : isPnd5354CompactList && pnd5354SubView === "pnd53" ? (
+            ) : showPnd353Tools &&
+              (whtFocusMode === "pnd3" ||
+                (isPnd5354CompactList && pnd5354SubView === "pnd53")) ? (
               <>
                 <Button
                   type="button"
@@ -1844,19 +1863,19 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 {!isPnd5354CompactList ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                   <div>
-                    {t("accCompWhtGrossShort")}: {(taxSummary?.wht.totalGross || 0).toLocaleString()}
+                    {t("accCompWhtGrossShort")}: {whtFocusSummary.totalGross.toLocaleString()}
                   </div>
                   <div>
-                    {t("accCompWhtWithheldShort")}: {(taxSummary?.wht.totalWithheld || 0).toLocaleString()}
+                    {t("accCompWhtWithheldShort")}: {whtFocusSummary.totalWithheld.toLocaleString()}
                   </div>
                   <div>
-                    {t("accCompWhtRowsShort")}: {(taxSummary?.wht.rowCount || 0).toLocaleString()}
+                    {t("accCompWhtRowsShort")}: {whtFocusSummary.rowCount.toLocaleString()}
                   </div>
                   <div>
-                    {t("accCompMissingTin")}: {(taxSummary?.wht.missingTaxIdCount || 0).toLocaleString()}
+                    {t("accCompMissingTin")}: {whtFocusSummary.missingTaxIdCount.toLocaleString()}
                   </div>
                   <div>
-                    {t("accCompMissingCertNo")}: {(taxSummary?.wht.missingCertificateCount || 0).toLocaleString()}
+                    {t("accCompMissingCertNo")}: {whtFocusSummary.missingCertificateCount.toLocaleString()}
                   </div>
                 </div>
                 ) : null}
@@ -1919,7 +1938,17 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   onClick={() =>
                     setWhtRows((prev) => [
                       ...prev,
-                      emptyWht(taxMonth, storeTb !== "All" ? storeTb : ""),
+                      {
+                        ...emptyWht(taxMonth, storeTb !== "All" ? storeTb : ""),
+                        form_hint:
+                          whtFocusMode === "pnd1"
+                            ? "PND1"
+                            : whtFocusMode === "pnd3"
+                              ? "PND3"
+                              : whtFocusMode === "pnd53"
+                                ? "PND53"
+                                : "",
+                      },
                     ])
                   }
                 >
@@ -2507,6 +2536,8 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 <>
                 {whtRows.map((row, idx) => {
                   if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
+                  // 탭별 form_hint 필터 — 이미 계산된 whtRowsFiltered 기준(참조 동일)
+                  if (!whtRowsFiltered.includes(row)) return null
                   return (
                   <div
                     key={row.id ?? `wht-${idx}`}

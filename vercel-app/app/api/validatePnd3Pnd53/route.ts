@@ -3,7 +3,11 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
-import { normalizePndFormHint, type WithholdingTaxLedgerRow } from '@/lib/withholding-tax-csv'
+import {
+  effectivePnd353FormHint,
+  normalizePndFormHint,
+  type WithholdingTaxLedgerRow,
+} from '@/lib/withholding-tax-csv'
 import { requireAuth } from '@/lib/verify-auth'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
@@ -84,8 +88,10 @@ export async function GET(request: NextRequest) {
       const statusOk =
         filingStatus === '' || normalizeLedgerFilingStatus(row.filing_status) === filingStatus
       if (!statusOk) return false
+      const effective = effectivePnd353FormHint(row)
+      if (!effective) return false
       if (formHint === 'ALL') return true
-      return normalizePndFormHint(row.form_hint) === formHint
+      return effective === formHint
     })
 
     const warningCounts = {

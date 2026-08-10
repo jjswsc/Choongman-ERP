@@ -11,6 +11,7 @@ import {
   syncTaxWithholdingLedgersFromPurchaseOrders,
 } from '@/lib/tax-ledger-auto-sync'
 import { enrichVatLedgerRowsStoreNames } from '@/lib/pos-ledger-drafts'
+import { resolveWhtSummaryFormKey } from '@/lib/withholding-tax-csv'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
@@ -36,6 +37,8 @@ type WhtRow = {
   payee_tax_id?: string | null
   certificate_no?: string | null
   store_name?: string | null
+  payee_name?: string | null
+  income_type?: string | null
 }
 
 type RpcSummaryRow = {
@@ -223,7 +226,7 @@ export async function GET(request: NextRequest) {
         'withholding_tax_ledger_entries',
         [monthBase, storeNameDbFilter].filter(Boolean).join('&'),
         {
-          select: 'form_hint,gross_amount,wht_amount,payee_tax_id,certificate_no,store_name',
+          select: 'form_hint,gross_amount,wht_amount,payee_tax_id,certificate_no,store_name,payee_name,income_type',
           order: 'id.asc',
           pageSize: 4000,
           maxRows: 100000,
@@ -274,7 +277,8 @@ export async function GET(request: NextRequest) {
     }
     for (const row of whtRows || []) {
       if (!storeScope.matches(String(row.store_name || ''))) continue
-      const form = String(row.form_hint || 'PND53').trim().toUpperCase()
+      // 빈 form_hint 를 PND53으로 강제하지 않음 — 거래처/TIN으로 PND3·53 추정
+      const form = resolveWhtSummaryFormKey(row)
       const gross = Number(row.gross_amount) || 0
       const withheld = Number(row.wht_amount) || 0
       if (!whtByForm[form]) whtByForm[form] = { gross: 0, withheld: 0, rows: 0 }

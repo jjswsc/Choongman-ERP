@@ -5,6 +5,7 @@ export type PosOrdersViewCache = {
   activeTab: "orders" | "cookTime" | "linkposFailed" | "grabIntegration" | "auditTrail"
   startStr: string
   endStr: string
+  storeFilter: string
   searchTerm: string
   statusFilter: string
   cancelScopeFilter: "all" | "line" | "order"

@@ -415,13 +415,26 @@ export function mergePeriodSeriesToAggregated(
     storeOrder?.filter((c) => (series[c]?.length ?? 0) > 0) ?? Object.keys(series).sort()
   if (orderedCodes.length === 0) return []
   const storeCodes = orderedCodes
-  const baseRows = series[storeCodes[0]]
-  if (!baseRows?.length) return []
+
+  // 요일 필터 등으로 매장별 잔여 일자가 달라도, 전 매장 키를 합집합으로 합산
+  const keyOrder: string[] = []
+  const seenKeys = new Set<string>()
+  const labelByKey = new Map<string, string>()
+  for (const sc of storeCodes) {
+    for (const row of series[sc] || []) {
+      const k = String(row.key || '')
+      if (!k || seenKeys.has(k)) continue
+      seenKeys.add(k)
+      keyOrder.push(k)
+      labelByKey.set(k, String(row.label || k))
+    }
+  }
+  if (keyOrder.length === 0) return []
 
   const sumForKey = (key: string): PeriodAggRow => {
     const merged: PeriodAggRow = {
       key,
-      label: key,
+      label: labelByKey.get(key) || key,
       sales: 0,
       count: 0,
       subtotal: 0,
@@ -475,7 +488,7 @@ export function mergePeriodSeriesToAggregated(
     return merged
   }
 
-  return baseRows.map((r) => sumForKey(r.key))
+  return keyOrder.map((k) => sumForKey(k))
 }
 
 /** split 시리즈 객체에서 UI 매장 코드에 해당하는 키 (canonical·별칭 매칭) */
