@@ -153,13 +153,12 @@ function translateCacheKey(text: string, lang: string) {
 export async function translateTexts(
   texts: string[],
   targetLang: string,
-  opts?: { force?: boolean; quality?: 'high' | 'fast' }
+  opts?: { force?: boolean }
 ): Promise<string[]> {
   const filtered = texts.filter((s) => s && String(s).trim()).map((s) => String(s).trim())
   if (filtered.length === 0) return []
   if (!opts?.force && !readAutoTranslateEnabled()) return filtered
   const tl = String(targetLang || 'ko').toLowerCase().slice(0, 2)
-  const quality = opts?.quality === 'high' ? 'high' : 'fast'
 
   const results = new Array<string>(filtered.length)
   const missingIdx: number[] = []
@@ -180,7 +179,7 @@ export async function translateTexts(
     const res = await apiFetch('/api/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texts: missingTexts, targetLang: tl, quality }),
+      body: JSON.stringify({ texts: missingTexts, targetLang: tl }),
     })
     if (!res.ok) {
       console.warn('translateTexts http', res.status)
