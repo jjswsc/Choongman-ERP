@@ -2,6 +2,7 @@
  * 패티캐시 API (api-client.ts에서 분리 — move only)
  */
 import { apiFetchWithOffline } from '../api/fetch-offline'
+import { apiFetch } from '../api/fetch'
 import { jsonAsArray } from '../safe-api-json'
 import { getPettyCashListWithCache } from '../offline/erp-offline'
 import { readAutoTranslateEnabled } from '../auto-translate'
@@ -174,11 +175,16 @@ export async function translateTexts(
   if (missingTexts.length === 0) return results
 
   try {
-    const res = await apiFetchWithOffline('/api/translate', {
+    // 번역은 오프라인 큐 대상이 아님 — 실패 시 원문 유지, 큐로 위장 성공 금지
+    const res = await apiFetch('/api/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ texts: missingTexts, targetLang: tl }),
     })
+    if (!res.ok) {
+      console.warn('translateTexts http', res.status)
+      return filtered
+    }
     const data = (await res.json()) as { translated?: string[] }
     const translated = Array.isArray(data?.translated) ? data.translated : []
     if (translated.length !== missingTexts.length) {
@@ -191,6 +197,8 @@ export async function translateTexts(
       const src = missingTexts[j]!
       const out = (translated[j] == null ? '' : String(translated[j])).trim() || src
       results[idx] = out
+      // 원문 그대로면 캐시하지 않음(다음 언어 전환·재시도 기회 유지)
+      if (out === src) return
       const key = translateCacheKey(src, tl)
       if (translateClientCache.has(key)) translateClientCache.delete(key)
       translateClientCache.set(key, out)
@@ -201,7 +209,8 @@ export async function translateTexts(
       }
     })
     return results.map((v, i) => v ?? filtered[i]!)
-  } catch {
+  } catch (e) {
+    console.warn('translateTexts', e)
     return filtered
   }
 }
