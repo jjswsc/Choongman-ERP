@@ -22,9 +22,10 @@ function stableKey(texts: string[]) {
 export function useTranslatedTextMap(
   texts: string[],
   lang: string,
-  opts?: { force?: boolean }
+  opts?: { force?: boolean; quality?: 'high' | 'fast' }
 ) {
   const force = opts?.force === true
+  const quality = opts?.quality === 'high' || force ? 'high' : 'fast'
   const key = stableKey(texts)
   const [map, setMap] = useState<Record<string, string>>({})
   const { enabled } = useAutoTranslate()
@@ -37,7 +38,10 @@ export function useTranslatedTextMap(
     }
     const unique = key.split(SEP)
     let cancelled = false
-    translateTexts(unique, lang, force ? { force: true } : undefined)
+    translateTexts(unique, lang, {
+      ...(force ? { force: true } : {}),
+      quality,
+    })
       .then((translated) => {
         if (cancelled) return
         const m: Record<string, string> = {}
@@ -52,7 +56,7 @@ export function useTranslatedTextMap(
     return () => {
       cancelled = true
     }
-  }, [shouldTranslate, force, key, lang])
+  }, [shouldTranslate, force, quality, key, lang])
 
   return useCallback(
     (s: string) => {

@@ -1,10 +1,11 @@
 /**
  * 사용자 입력 텍스트 번역 API (내용/memo 등)
- * POST body: { texts: string[], targetLang: string } → { translated: string[] }
- * targetLang: ko, en, th, mm, la (mm→my, la→lo 변환)
- * 원문 언어 자동 감지 (sl=auto). ko(한국어 UI)도 태·영 등 원문을 번역해 표시한다.
+ * POST body: { texts: string[], targetLang: string, quality?: 'high'|'fast' }
+ *   → { translated: string[] }
+ * targetLang: ko, en, th, mm, la, kh, vi, ms (mm→my, la→lo, kh→km)
  *
- * Google gtx가 데이터센터 IP에서 원문을 그대로 돌려줄 수 있어 MyMemory 폴백을 둔다.
+ * quality=high (공지 등): OpenAI(있으면) → Google → MyMemory
+ * quality=fast (기본): Google → MyMemory
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
@@ -19,7 +20,16 @@ const LANG_MAP: Record<string, string> = {
   vi: 'vi',
   ms: 'ms',
 }
-/** MyMemory langpair 용 (Google tl 코드와 다를 수 있음) */
+const LANG_NAME: Record<string, string> = {
+  ko: 'Korean',
+  en: 'English',
+  th: 'Thai',
+  my: 'Burmese (Myanmar)',
+  lo: 'Lao',
+  km: 'Khmer',
+  vi: 'Vietnamese',
+  ms: 'Malay',
+}
 const MYMEMORY_LANG: Record<string, string> = {
   ko: 'ko',
   en: 'en',
@@ -35,6 +45,7 @@ const CONCURRENCY = 4
 const CACHE_MAX = 800
 const GOOGLE_CHUNK = 4500
 const MYMEMORY_CHUNK = 450
+const OPENAI_BATCH_MAX = 24
 
 const translateCache = new Map<string, string>()
 
@@ -75,7 +86,6 @@ function hasKhmer(s: string) {
   return /[\u1780-\u17FF]/.test(s)
 }
 
-/** 원문이 이미 목표 언어처럼 보이면 번역 불필요 */
 function alreadyTargetLang(text: string, tl: string): boolean {
   if (tl === 'ko') return hasHangul(text) && !hasThai(text) && !hasMyanmar(text) && !hasLao(text) && !hasKhmer(text)
   if (tl === 'th') return hasThai(text)
@@ -87,21 +97,21 @@ function alreadyTargetLang(text: string, tl: string): boolean {
   return false
 }
 
-/** 번역 결과가 실패(원문 유지)인지 — 목표 언어 글자가 없고 이질 스크립트가 남은 경우 */
 function translationLooksFailed(src: string, out: string, tl: string): boolean {
   const a = src.trim()
   const b = out.trim()
   if (!b) return true
   if (alreadyTargetLang(a, tl)) return false
   if (b !== a) {
-    // 바뀌었더라도 목표 언어 신호가 전혀 없고 태국어 등이 그대로면 실패로 본다
     if (tl === 'ko' && !hasHangul(b) && (hasThai(b) || hasMyanmar(b) || hasLao(b) || hasKhmer(b))) return true
+    if (tl === 'my' && !hasMyanmar(b) && (hasThai(b) || hasHangul(b))) return true
+    if (tl === 'th' && !hasThai(b) && (hasHangul(b) || hasMyanmar(b))) return true
     return false
   }
-  // 원문과 동일 — 태·미얀마·라오·크메르 등 이질 스크립트가 있으면 실패
   if (tl === 'ko') return hasThai(a) || hasMyanmar(a) || hasLao(a) || hasKhmer(a)
-  if (tl === 'th') return hasHangul(a)
-  if (tl === 'en') return hasHangul(a) || hasThai(a)
+  if (tl === 'my') return hasThai(a) || hasHangul(a) || hasLao(a) || hasKhmer(a)
+  if (tl === 'th') return hasHangul(a) || hasMyanmar(a)
+  if (tl === 'en') return hasHangul(a) || hasThai(a) || hasMyanmar(a)
   return hasHangul(a) || hasThai(a)
 }
 
@@ -136,11 +146,27 @@ async function translateGoogleChunk(text: string, tl: string): Promise<string | 
   return null
 }
 
+function detectMyMemorySourceLang(text: string): string {
+  if (hasThai(text)) return 'th'
+  if (hasHangul(text)) return 'ko'
+  if (hasMyanmar(text)) return 'my'
+  if (hasLao(text)) return 'lo'
+  if (hasKhmer(text)) return 'km'
+  if (hasLatinLetters(text)) return 'en'
+  return 'auto'
+}
+
 async function translateMyMemoryChunk(text: string, tl: string): Promise<string | null> {
   const pairTl = MYMEMORY_LANG[tl] || tl || 'en'
   try {
-    // langpair=auto|xx 는 미지원인 경우가 많아 태→목표를 우선 시도 후 en→목표
-    const pairs = [`th|${pairTl}`, `auto|${pairTl}`, `en|${pairTl}`]
+    const detected = detectMyMemorySourceLang(text)
+    const pairs = [
+      `${detected}|${pairTl}`,
+      `th|${pairTl}`,
+      `ko|${pairTl}`,
+      `en|${pairTl}`,
+      `auto|${pairTl}`,
+    ].filter((p, i, arr) => arr.indexOf(p) === i)
     for (const pair of pairs) {
       const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(pair)}`
       const resp = await fetch(url, { headers: { 'User-Agent': UA } })
@@ -151,7 +177,6 @@ async function translateMyMemoryChunk(text: string, tl: string): Promise<string 
       }
       const out = String(data?.responseData?.translatedText || '').trim()
       if (!out) continue
-      // 쿼터/에러 문구 스킵
       if (/^MYMEMORY WARNING/i.test(out) || /^QUERY LENGTH LIMIT/i.test(out)) continue
       if (Number(data?.responseStatus) === 200 || out !== text) return out
     }
@@ -178,6 +203,77 @@ async function translateViaProvider(
   return outs.join('')
 }
 
+/** 공지 등 고품질: OpenAI 일괄 번역 (키 없으면 null) */
+async function translateBatchOpenAI(texts: string[], tl: string): Promise<(string | null)[] | null> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  if (!apiKey || texts.length === 0) return null
+  const model =
+    process.env.OPENAI_TRANSLATE_MODEL?.trim() ||
+    process.env.OPENAI_ERP_AI_MODEL?.trim() ||
+    'gpt-4o-mini'
+  const langName = LANG_NAME[tl] || tl
+  const maxTokens = Math.min(8000, Math.max(800, texts.reduce((n, t) => n + Math.ceil(t.length / 2), 0) + 200))
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.1,
+        max_tokens: maxTokens,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              `You are a professional translator for a Thai restaurant franchise (workplace notices, HR policies, short ERP memos). ` +
+              `Translate each input string into ${langName}. ` +
+              `Preserve meaning, formal workplace tone, numbers, dates, currency, and proper nouns (store/menu/brand names) when appropriate. ` +
+              `Do not add explanations. Return JSON only: {"translations":["..."]} with the same length and order as input texts.`,
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({ texts }),
+          },
+        ],
+      }),
+    })
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '')
+      console.warn('translate openai status:', res.status, bodyText.slice(0, 200))
+      return null
+    }
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[]
+    }
+    const raw = String(data?.choices?.[0]?.message?.content || '').trim()
+    if (!raw) return null
+    let parsed: { translations?: unknown } = {}
+    try {
+      parsed = JSON.parse(raw) as { translations?: unknown }
+    } catch {
+      console.warn('translate openai json parse fail', raw.slice(0, 120))
+      return null
+    }
+    const arr = Array.isArray(parsed.translations) ? parsed.translations : null
+    if (!arr || arr.length !== texts.length) {
+      console.warn('translate openai length mismatch', { expect: texts.length, got: arr?.length })
+      return null
+    }
+    return arr.map((v) => {
+      const s = String(v ?? '').trim()
+      return s || null
+    })
+  } catch (e) {
+    console.warn('translate openai:', e)
+    return null
+  }
+}
+
 async function translateOne(text: string, targetLang: string): Promise<string> {
   const trimmed = String(text || '').trim()
   if (!trimmed) return ''
@@ -199,7 +295,6 @@ async function translateOne(text: string, targetLang: string): Promise<string> {
   }
 
   const finalOut = (out && out.trim()) || trimmed
-  // 실패(원문 유지)는 캐시하지 않아 다음 요청에서 재시도
   if (!translationLooksFailed(trimmed, finalOut, tl)) {
     cacheSet(cacheKey, finalOut)
   } else {
@@ -232,21 +327,69 @@ export async function POST(request: NextRequest) {
     res.headers.set('Access-Control-Allow-Origin', '*')
     return res
   }
-  let body: { texts?: unknown[]; text?: unknown; targetLang?: string } = {}
+  let body: { texts?: unknown[]; text?: unknown; targetLang?: string; quality?: string } = {}
   try {
     body = (await request.json().catch(() => ({}))) as typeof body
     const targetLang = String(body.targetLang || 'ko').toLowerCase().slice(0, 2)
+    const quality = String(body.quality || 'fast').toLowerCase() === 'high' ? 'high' : 'fast'
     const texts = Array.isArray(body.texts) ? body.texts : [body.text]
 
     if (!texts.length) {
       return NextResponse.json({ translated: [] }, { headers })
     }
 
+    const tl = LANG_MAP[targetLang] || targetLang || 'en'
     const sources = texts.map((t) => String(t ?? '').trim())
-    const results = await mapPool(sources, CONCURRENCY, async (src) => {
-      const t = await translateOne(src, targetLang)
-      return (t && t.trim()) || src
+    const results = sources.map((src) => (src ? '' : ''))
+    const needIdx: number[] = []
+    const needTexts: string[] = []
+
+    sources.forEach((src, i) => {
+      if (!src) {
+        results[i] = ''
+        return
+      }
+      if (alreadyTargetLang(src, tl)) {
+        results[i] = src
+        return
+      }
+      const hit = cacheGet(`${tl}\0${src}`)
+      if (hit !== undefined) {
+        results[i] = hit
+        return
+      }
+      needIdx.push(i)
+      needTexts.push(src)
     })
+
+    if (needTexts.length > 0 && quality === 'high') {
+      for (let offset = 0; offset < needTexts.length; offset += OPENAI_BATCH_MAX) {
+        const slice = needTexts.slice(offset, offset + OPENAI_BATCH_MAX)
+        const openaiOut = await translateBatchOpenAI(slice, tl)
+        if (!openaiOut) continue
+        openaiOut.forEach((out, j) => {
+          const src = slice[j]!
+          const idx = needIdx[offset + j]!
+          if (out && !translationLooksFailed(src, out, tl)) {
+            results[idx] = out
+            cacheSet(`${tl}\0${src}`, out)
+          }
+        })
+      }
+    }
+
+    const remainIdx = needIdx.filter((idx) => !results[idx])
+    if (remainIdx.length > 0) {
+      const filled = await mapPool(remainIdx, CONCURRENCY, async (idx) => {
+        const src = sources[idx]!
+        const t = await translateOne(src, targetLang)
+        return { idx, t: (t && t.trim()) || src }
+      })
+      filled.forEach(({ idx, t }) => {
+        results[idx] = t
+      })
+    }
+
     return NextResponse.json({ translated: results }, { headers })
   } catch (e) {
     console.error('translate:', e)
