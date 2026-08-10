@@ -26,6 +26,10 @@ import { registerExpenseFromBankTransaction, type AccountSubjectItem } from "@/l
 import { filterExpenseWithdrawAccountSubjects } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import type { BankTransactionRow } from "./bank-transactions-tab-utils"
+import {
+  QuickAddVendorDialog,
+  QuickAddVendorTriggerButton,
+} from "@/components/erp/quick-add-vendor-dialog"
 
 /* ------------------------------------------------------------------ */
 /*  BankQuickMemoChipBar (presentational, used in multiple places)    */
@@ -354,7 +358,17 @@ function RegisterExpenseDialog({
   | "vendorOptions" | "accountSubjectOptions" | "getAccountSubjectLabel"
   | "auth" | "loadData" | "t" | "tt"
 >) {
+  const [quickAddOpen, setQuickAddOpen] = React.useState(false)
+  const [extraVendors, setExtraVendors] = React.useState<{ code: string; name: string }[]>([])
+  const allVendors = React.useMemo(() => {
+    const map = new Map<string, { code: string; name: string }>()
+    for (const v of vendorOptions) map.set(v.code, v)
+    for (const v of extraVendors) map.set(v.code, v)
+    return Array.from(map.values())
+  }, [vendorOptions, extraVendors])
+
   return (
+    <>
     <Dialog open={!!registerExpenseRow} onOpenChange={(open) => !open && (setRegisterExpenseRow(null), setRegisterEditMode(false))}>
       <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
         <DialogHeader>
@@ -366,18 +380,43 @@ function RegisterExpenseDialog({
         <div className="space-y-3">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">{t("vendor") || "지급처"}</label>
-            <Select value={registerPayeeManual ? "__manual__" : (registerPayeeCode || "__none__")} onValueChange={(v) => { setRegisterPayeeManual(v === "__manual__"); if (v !== "__manual__" && v !== "__none__") { setRegisterPayeeCode(v); setRegisterPayeeName(vendorOptions.find((x) => x.code === v)?.name || v) } else if (v === "__manual__") { setRegisterPayeeCode(""); setRegisterPayeeName("") } }}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("vendor") || "거래처 선택 또는 직접 입력"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__manual__">{t("bankRegisterPayeeManual") || "직접 입력"}</SelectItem>
-                <SelectItem value="__none__">—</SelectItem>
-                {vendorOptions.map((v) => (
-                  <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-2">
+              <Select
+                value={registerPayeeManual ? "__manual__" : (registerPayeeCode || "__none__")}
+                onValueChange={(v) => {
+                  if (v === "__add_vendor__") {
+                    setQuickAddOpen(true)
+                    return
+                  }
+                  setRegisterPayeeManual(v === "__manual__")
+                  if (v !== "__manual__" && v !== "__none__") {
+                    setRegisterPayeeCode(v)
+                    setRegisterPayeeName(allVendors.find((x) => x.code === v)?.name || v)
+                  } else if (v === "__manual__") {
+                    setRegisterPayeeCode("")
+                    setRegisterPayeeName("")
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full min-w-0 flex-1">
+                  <SelectValue placeholder={t("vendor") || "거래처 선택 또는 직접 입력"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__add_vendor__" className="text-primary font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Plus className="h-3.5 w-3.5" />
+                      {tt("vendorQuickAdd", "Add vendor")}
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="__manual__">{t("bankRegisterPayeeManual") || "직접 입력"}</SelectItem>
+                  <SelectItem value="__none__">—</SelectItem>
+                  {allVendors.map((v) => (
+                    <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <QuickAddVendorTriggerButton onClick={() => setQuickAddOpen(true)} />
+            </div>
             {registerPayeeManual ? (
               <div className="flex gap-2 mt-2">
                 <Input placeholder={t("expensePayeeCode") || "지급처 코드"} value={registerPayeeCode} onChange={(e) => setRegisterPayeeCode(e.target.value)} className="flex-1" />
@@ -438,5 +477,18 @@ function RegisterExpenseDialog({
         </div>
       </DialogContent>
     </Dialog>
+    <QuickAddVendorDialog
+      open={quickAddOpen}
+      onOpenChange={setQuickAddOpen}
+      existingCodes={allVendors.map((v) => v.code)}
+      initialName={registerPayeeName}
+      onSaved={(v) => {
+        setExtraVendors((prev) => [...prev.filter((x) => x.code !== v.code), { code: v.code, name: v.name }])
+        setRegisterPayeeManual(false)
+        setRegisterPayeeCode(v.code)
+        setRegisterPayeeName(v.name)
+      }}
+    />
+    </>
   )
 }

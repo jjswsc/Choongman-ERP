@@ -4391,7 +4391,7 @@ export const i18n = {
     helpSum_admin_expense_management:
       '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 지급대기의 「은행이체」보기로 예금주·계좌·은행·금액을 엑셀처럼 확인·복사·인쇄할 수 있습니다. 문서번호는 EXPyyyymm000x로 자동 발급됩니다.',
     helpHow_admin_expense_management:
-      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택 시 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(거래처 마스터에도 동일).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영되며, 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다.',
+      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영되며, 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다.',
     helpSum_admin_depreciation:
       '지출로 등록된 고정자산 목록·수정, 월 감가상각 실행, 처분을 처리합니다. 신규 취득은 지출 관리에서 합니다.',
     helpHow_admin_depreciation:
@@ -7831,6 +7831,12 @@ export const i18n = {
     vendorFormEditDesc: '거래처 정보를 수정합니다.',
     vendorFormNewDesc: '새로운 거래처를 등록합니다.',
     vendorBtnNewRegister: '신규 등록',
+    vendorQuickAdd: '거래처 추가',
+    vendorQuickAddTitle: '거래처 바로 등록',
+    vendorQuickAddDesc: '로지스틱스 화면 없이 여기서 등록하면, 지출 폼에 바로 선택·은행 정보가 채워집니다.',
+    vendorQuickAddSave: '저장 후 선택',
+    vendorQuickAddSectionBasic: '기본 정보',
+    vendorQuickAddSectionBank: '이체용 은행',
     vendorCode: '코드',
     vendorCodePh: '예: V001',
     vendorName: '거래처명',
@@ -12207,7 +12213,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_expense_management:
       'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use EXPyyyymm000x.',
     helpHow_admin_expense_management:
-      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store’s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use Revenue Department (กรมสรรพากร) search to fill tax ID and name (also on Vendors master).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management; you can attach invoice/receipt and enter VAT like Expense/Purchase.\n⑧ On Expense Register, pick a WHT rate (%) to auto-fill (total−VAT)×rate. Enable “Auto-create 50 ทวิ” to open the certificate print window after save.\n⑨ When attaching evidence (Expense/Purchase/Fixed Asset), choose document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 input VAT.\n⑩ Office (HQ) payroll appears as one “Payroll — store” aggregate line, not per-employee amounts. Use Payroll for individual detail.\n⑪ HQ and Accounting can delete request/rejected/approved (unpaid, unlinked) payment plans. HQ-named accruals need director-level approval rights; partial/paid/linked plans cannot be deleted.',
+      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management; attach invoice/receipt and VAT like expense/purchase.\n⑧ Choosing a WHT rate (%) fills withholding as (gross−VAT)×%; with "Auto-create 50 ทวิ" on, the certificate print window opens right after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 purchase VAT.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows.',
     helpSum_admin_depreciation:
       'List, edit, monthly depreciation, and disposal for fixed assets from expense payments. New acquisitions go through Expense Management.',
     helpHow_admin_depreciation:
@@ -15648,6 +15654,12 @@ orderItemQty: 'Qty',
     vendorFormEditDesc: 'Edit vendor information.',
     vendorFormNewDesc: 'Register a new vendor.',
     vendorBtnNewRegister: 'New Register',
+    vendorQuickAdd: 'Add vendor',
+    vendorQuickAddTitle: 'Quick add vendor',
+    vendorQuickAddDesc: 'Register here without opening Logistics — then select and auto-fill bank details on the expense form.',
+    vendorQuickAddSave: 'Save & select',
+    vendorQuickAddSectionBasic: 'Basic',
+    vendorQuickAddSectionBank: 'Bank (for transfers)',
     vendorCode: 'Code',
     vendorCodePh: 'e.g. V001',
     vendorName: 'Vendor Name',
@@ -21587,6 +21599,12 @@ orderItemQty: 'จำนวน',
     vendorFormEditDesc: 'แก้ไขข้อมูลผู้ขาย',
     vendorFormNewDesc: 'ลงทะเบียนผู้ขายใหม่',
     vendorBtnNewRegister: 'ลงทะเบียนใหม่',
+    vendorQuickAdd: 'เพิ่มผู้ค้า',
+    vendorQuickAddTitle: 'เพิ่มผู้ค้าด่วน',
+    vendorQuickAddDesc: 'ลงทะเบียนที่นี่ได้เลย ไม่ต้องเข้าหน้าโลจิสติกส์ — เลือกใช้และเติมข้อมูลธนาคารในฟอร์มรายจ่ายทันที',
+    vendorQuickAddSave: 'บันทึกแล้วเลือก',
+    vendorQuickAddSectionBasic: 'ข้อมูลพื้นฐาน',
+    vendorQuickAddSectionBank: 'ธนาคาร (สำหรับโอน)',
     vendorCode: 'รหัส',
     vendorCodePh: 'เช่น V001',
     vendorName: 'ชื่อผู้ขาย',

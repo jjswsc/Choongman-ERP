@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Wallet, ArrowLeft } from "lucide-react"
+import { Wallet, ArrowLeft, Plus } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
@@ -65,6 +65,11 @@ import { moneyInputStringFromAmount, normalizeMoneyInputString, parseMoneyAmount
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import { encodeCardPayeeCode, parseCardAccountIdFromPayeeCode } from "@/lib/prepayment-accrual-categories"
 import { VendorRdSearchButton } from "@/components/erp/vendor-rd-search"
+import {
+  QuickAddVendorDialog,
+  QuickAddVendorTriggerButton,
+  type QuickAddVendorResult,
+} from "@/components/erp/quick-add-vendor-dialog"
 import {
   resolveExpenseFeeAmounts,
   type ExpenseFeeVatMode,
@@ -175,6 +180,13 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [payeeCode, setPayeeCode] = React.useState("")
   const [payeeName, setPayeeName] = React.useState("")
   const [payeeManual, setPayeeManual] = React.useState(false)
+  const [quickAddVendorOpen, setQuickAddVendorOpen] = React.useState(false)
+  const [quickAddVendorSeed, setQuickAddVendorSeed] = React.useState<{
+    name: string
+    taxId: string
+    bankName: string
+    bankAccountNo: string
+  }>({ name: "", taxId: "", bankName: "", bankAccountNo: "" })
   const [payeeAccountHolder, setPayeeAccountHolder] = React.useState("")
   const [payeeBankName, setPayeeBankName] = React.useState("")
   const [payeeBankAccountNo, setPayeeBankAccountNo] = React.useState("")
@@ -837,6 +849,53 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       setPayeeBankAccountNo((prev) => prev || found.bankAccountNo || "")
     },
     [vendors, isEditAccrualMode]
+  )
+
+  const openQuickAddVendor = React.useCallback(
+    (seed?: Partial<{ name: string; taxId: string; bankName: string; bankAccountNo: string }>) => {
+      setQuickAddVendorSeed({
+        name: (seed?.name ?? payeeName).trim(),
+        taxId: (seed?.taxId ?? "").trim(),
+        bankName: (seed?.bankName ?? payeeBankName).trim(),
+        bankAccountNo: (seed?.bankAccountNo ?? payeeBankAccountNo).trim(),
+      })
+      setQuickAddVendorOpen(true)
+    },
+    [payeeName, payeeBankName, payeeBankAccountNo]
+  )
+
+  const handleQuickAddVendorSaved = React.useCallback(
+    async (v: QuickAddVendorResult) => {
+      const next = {
+        code: v.code,
+        name: v.name,
+        bankAccountNo: v.bankAccountNo ?? null,
+        bankName: v.bankName ?? null,
+        taxId: v.taxId,
+        address: v.address,
+      }
+      setVendors((prev) => {
+        if (prev.some((x) => x.code === v.code)) {
+          return prev.map((x) => (x.code === v.code ? { ...x, ...next } : x))
+        }
+        return [...prev, next].sort((a, b) =>
+          (a.name || a.code).localeCompare(b.name || b.code, undefined, { sensitivity: "base" })
+        )
+      })
+      // 온라인 캐시 갱신 (다음 진입 시 목록에 반영)
+      void getVendorsForPurchase().then(setVendors).catch(() => {})
+      setPayeeManual(false)
+      if (categoryMain === "purchase") {
+        setVendorCode(v.code)
+      }
+      setPayeeCode(v.code)
+      setPayeeName(v.name)
+      lastBankAutofillCodeRef.current = v.code
+      setPayeeAccountHolder(v.name || "")
+      setPayeeBankName(v.bankName || "")
+      setPayeeBankAccountNo(v.bankAccountNo || "")
+    },
+    [categoryMain]
   )
 
   React.useEffect(() => {
@@ -2413,6 +2472,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       <Select
                         value={vendorCode}
                         onValueChange={(v) => {
+                          if (v === "__add_vendor__") {
+                            openQuickAddVendor()
+                            return
+                          }
                           setVendorCode(v)
                           const resolved = resolvePurchaseVendorPayee(v)
                           if (resolved.code) {
@@ -2426,6 +2489,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                           <SelectValue placeholder={tt("vendor", "Select Vendor")} />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__add_vendor__" className="text-primary font-medium">
+                            <span className="inline-flex items-center gap-1.5">
+                              <Plus className="h-3.5 w-3.5" />
+                              {tt("vendorQuickAdd", "Add vendor")}
+                            </span>
+                          </SelectItem>
                           {vendors.map((v) => (
                             <SelectItem key={v.code} value={v.code}>
                               {v.name} ({v.code})
@@ -2433,6 +2502,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                           ))}
                         </SelectContent>
                       </Select>
+                      <QuickAddVendorTriggerButton onClick={() => openQuickAddVendor()} />
                       <VendorRdSearchButton
                         triggerSize="sm"
                         triggerVariant="outline"
@@ -2450,12 +2520,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                             setPayeeName(matched.name)
                             setPayeeManual(false)
                           } else {
-                            void appAlert(
-                              tt(
-                                "vendorRdPickSaveVendorFirst",
-                                "Save this company in Vendors first, then select it here."
-                              ) + `\n${c.name} (${c.taxId})`
-                            )
+                            openQuickAddVendor({ name: c.name, taxId: c.taxId })
                           }
                         }}
                       />
@@ -2578,6 +2643,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       <Select
                         value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
                         onValueChange={(v) => {
+                          if (v === "__add_vendor__") {
+                            openQuickAddVendor()
+                            return
+                          }
                           if (v === "__manual__") {
                             setPayeeManual(true)
                             setPayeeCode("")
@@ -2594,6 +2663,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                           <SelectValue placeholder={tt("vendor", "Payee")} />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__add_vendor__" className="text-primary font-medium">
+                            <span className="inline-flex items-center gap-1.5">
+                              <Plus className="h-3.5 w-3.5" />
+                              {tt("vendorQuickAdd", "Add vendor")}
+                            </span>
+                          </SelectItem>
                           <SelectItem value="__manual__">{tt("bankRegisterPayeeManual", "Enter Manually")}</SelectItem>
                           <SelectItem value="__none__">-</SelectItem>
                           {vendors.map((v) => (
@@ -2624,6 +2699,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                           placeholder={tt("expensePayeeName", "Payee Name")}
                         />
                       )}
+                      <QuickAddVendorTriggerButton onClick={() => openQuickAddVendor()} />
                       <VendorRdSearchButton
                         triggerSize="sm"
                         triggerVariant="outline"
@@ -2641,9 +2717,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                             setPayeeCode(matched.code)
                             setPayeeName(matched.name)
                           } else {
-                            setPayeeManual(true)
-                            setPayeeCode(c.taxId || "")
-                            setPayeeName(c.name)
+                            openQuickAddVendor({ name: c.name, taxId: c.taxId })
                           }
                         }}
                       />
@@ -2904,6 +2978,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   <Select
                     value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
                     onValueChange={(v) => {
+                      if (v === "__add_vendor__") {
+                        openQuickAddVendor()
+                        return
+                      }
                       if (v === "__manual__") {
                         setPayeeManual(true)
                         setPayeeCode("")
@@ -2924,6 +3002,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       <SelectValue placeholder={tt("vendor", "Payee")} />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__add_vendor__" className="text-primary font-medium">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Plus className="h-3.5 w-3.5" />
+                          {tt("vendorQuickAdd", "Add vendor")}
+                        </span>
+                      </SelectItem>
                       <SelectItem value="__manual__">{tt("bankRegisterPayeeManual", "Enter Manually")}</SelectItem>
                       <SelectItem value="__none__">-</SelectItem>
                       {vendors.map((v) => (
@@ -2954,6 +3038,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       placeholder={tt("expensePayeeName", "Payee Name")}
                     />
                   )}
+                  <QuickAddVendorTriggerButton onClick={() => openQuickAddVendor()} />
                   <VendorRdSearchButton
                     triggerSize="sm"
                     triggerVariant="outline"
@@ -2971,9 +3056,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                         setPayeeCode(matched.code)
                         setPayeeName(matched.name)
                       } else {
-                        setPayeeManual(true)
-                        setPayeeCode(c.taxId || "")
-                        setPayeeName(c.name)
+                        openQuickAddVendor({ name: c.name, taxId: c.taxId })
                       }
                     }}
                   />
@@ -3380,6 +3463,17 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           </div>
         </DialogContent>
       </Dialog>
+
+      <QuickAddVendorDialog
+        open={quickAddVendorOpen}
+        onOpenChange={setQuickAddVendorOpen}
+        existingCodes={vendors.map((v) => v.code)}
+        initialName={quickAddVendorSeed.name}
+        initialTaxId={quickAddVendorSeed.taxId}
+        initialBankName={quickAddVendorSeed.bankName}
+        initialBankAccountNo={quickAddVendorSeed.bankAccountNo}
+        onSaved={(v) => void handleQuickAddVendorSaved(v)}
+      />
     </div>
   )
 }
