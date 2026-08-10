@@ -60,6 +60,7 @@ export function NoticesPanel() {
         listMode: "unread_or_in_range",
         rangeStart: committedStart,
         rangeEnd: committedEnd,
+        lang,
       })
         .then((res) => {
           setNotices(res.items)
@@ -74,7 +75,7 @@ export function NoticesPanel() {
         })
         .finally(() => setLoading(false))
     },
-    [auth?.store, auth?.user, noticePageSize, committedStart, committedEnd]
+    [auth?.store, auth?.user, noticePageSize, committedStart, committedEnd, lang]
   )
 
   React.useEffect(() => {

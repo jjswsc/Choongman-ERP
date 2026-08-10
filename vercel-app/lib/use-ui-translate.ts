@@ -4,15 +4,13 @@ import { useState, useEffect, useCallback } from "react"
 import { translateTexts } from "@/lib/api-client"
 import { useAutoTranslate } from "@/lib/auto-translate"
 
-const SEP = "\u241e"
-
 function uniqueTrimmed(texts: string[]) {
   return [...new Set(texts.map((s) => String(s || "").trim()).filter(Boolean))].sort()
 }
 
 function stableKey(texts: string[]) {
   const u = uniqueTrimmed(texts)
-  return u.length ? u.join(SEP) : ""
+  return u.length ? JSON.stringify(u) : ""
 }
 
 /**
@@ -35,7 +33,17 @@ export function useTranslatedTextMap(
       setMap({})
       return
     }
-    const unique = key.split(SEP)
+    let unique: string[] = []
+    try {
+      unique = JSON.parse(key) as string[]
+      if (!Array.isArray(unique)) unique = []
+    } catch {
+      unique = []
+    }
+    if (unique.length === 0) {
+      setMap({})
+      return
+    }
     let cancelled = false
     translateTexts(unique, lang, force ? { force: true } : undefined)
       .then((translated) => {

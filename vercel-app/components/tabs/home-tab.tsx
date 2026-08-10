@@ -105,6 +105,7 @@ export function HomeTab() {
         status: statusParam,
         dateFrom,
         dateTo,
+        lang,
       })
         .then((res) => {
           setNotices(res.items)
@@ -119,7 +120,7 @@ export function HomeTab() {
         })
         .finally(() => setLoading(false))
     },
-    [auth?.store, auth?.user, noticePageSize, statusParam, dateFrom, dateTo]
+    [auth?.store, auth?.user, noticePageSize, statusParam, dateFrom, dateTo, lang]
   )
 
   const fetchHrPolicies = useCallback(

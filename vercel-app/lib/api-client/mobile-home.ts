@@ -35,6 +35,8 @@ export async function getMyNotices(params: {
   listMode?: 'default' | 'unread_or_in_range'
   rangeStart?: string
   rangeEnd?: string
+  /** UI 언어 — 서버에서 제목/본문 번역 */
+  lang?: string
 }): Promise<PaginatedList<NoticeItem>> {
   const q = new URLSearchParams({ store: params.store, name: params.name })
   if (params.page != null) q.set('page', String(params.page))
@@ -45,6 +47,7 @@ export async function getMyNotices(params: {
   if (params.listMode) q.set('listMode', params.listMode)
   if (params.rangeStart) q.set('rangeStart', params.rangeStart)
   if (params.rangeEnd) q.set('rangeEnd', params.rangeEnd)
+  if (params.lang) q.set('lang', params.lang)
   const res = await apiFetchWithOffline(`/api/getMyNotices?${q}`)
   const data = (await res.json()) as unknown
   if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray((data as PaginatedList<NoticeItem>).items)) {

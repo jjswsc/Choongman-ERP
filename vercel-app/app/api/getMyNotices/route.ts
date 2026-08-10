@@ -13,6 +13,7 @@ import {
   resolveSaasTenantScope,
   type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+import { translateTextsRuntime } from '@/lib/translate-runtime'
 
 export interface NoticeItem {
   id: number
@@ -51,6 +52,8 @@ async function getMyNoticesHandler(
     listMode: ListMode
     rangeStart?: string
     rangeEnd?: string
+    /** UI 언어 — 있으면 제목/본문을 서버에서 번역 */
+    lang?: string
   },
   tenantScope: SaasTenantScope
 ): Promise<MyNoticesPageResult> {
@@ -241,7 +244,26 @@ async function getMyNoticesHandler(
 
   const total = filtered.length
   const truncated = (rows || []).length >= DB_FETCH_LIMIT
-  const items = slicePage(filtered, opts.page, opts.pageSize)
+  let items = slicePage(filtered, opts.page, opts.pageSize)
+
+  const lang = String(opts.lang || '').trim()
+  if (lang && items.length > 0) {
+    try {
+      const titles = items.map((n) => n.title || '')
+      const contents = items.map((n) => n.content || '')
+      const [trTitles, trContents] = await Promise.all([
+        translateTextsRuntime(titles, lang),
+        translateTextsRuntime(contents, lang),
+      ])
+      items = items.map((n, i) => ({
+        ...n,
+        title: trTitles[i] || n.title,
+        content: trContents[i] || n.content,
+      }))
+    } catch (e) {
+      console.warn('getMyNotices translate:', e)
+    }
+  }
 
   return {
     items,
@@ -264,6 +286,7 @@ function parseMyNoticesQuery(
   listMode: ListMode
   rangeStart?: string
   rangeEnd?: string
+  lang?: string
 } {
   const { page, pageSize } = parseListPagination(searchParams, body, 15)
   const fromBody = (k: string): string | undefined => {
@@ -281,6 +304,7 @@ function parseMyNoticesQuery(
   const listMode: ListMode = listModeRaw === 'unread_or_in_range' ? 'unread_or_in_range' : 'default'
   const rangeStart = (searchParams.get('rangeStart') ?? fromBody('rangeStart') ?? '').trim()
   const rangeEnd = (searchParams.get('rangeEnd') ?? fromBody('rangeEnd') ?? '').trim()
+  const lang = (searchParams.get('lang') ?? fromBody('lang') ?? '').trim().toLowerCase().slice(0, 2)
   return {
     page,
     pageSize,
@@ -290,6 +314,7 @@ function parseMyNoticesQuery(
     listMode,
     rangeStart: rangeStart || undefined,
     rangeEnd: rangeEnd || undefined,
+    lang: lang || undefined,
   }
 }
 
