@@ -146,11 +146,17 @@ function translateCacheKey(text: string, lang: string) {
   return `${lang}\0${text}`
 }
 
-/** 사용자 입력 내용(memo 등) 번역 - 로그인 언어로 표시 */
-export async function translateTexts(texts: string[], targetLang: string): Promise<string[]> {
+/** 사용자 입력 내용(memo 등) 번역 - 로그인 언어로 표시
+ *  @param opts.force 공지·규정 등: 자동번역 OFF여도 선택 언어로 번역
+ */
+export async function translateTexts(
+  texts: string[],
+  targetLang: string,
+  opts?: { force?: boolean }
+): Promise<string[]> {
   const filtered = texts.filter((s) => s && String(s).trim()).map((s) => String(s).trim())
   if (filtered.length === 0) return []
-  if (!readAutoTranslateEnabled()) return filtered
+  if (!opts?.force && !readAutoTranslateEnabled()) return filtered
   const tl = String(targetLang || 'ko').toLowerCase().slice(0, 2)
 
   const results = new Array<string>(filtered.length)

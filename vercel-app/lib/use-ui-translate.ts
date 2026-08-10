@@ -17,20 +17,27 @@ function stableKey(texts: string[]) {
 
 /**
  * 고정 문자열 목록을 UI 언어로 번역해 lookup (제목·메모 목록 등)
+ * @param opts.force 공지·규정 등: 자동번역 OFF / 모바일 토글 없어도 선택 언어로 번역
  */
-export function useTranslatedTextMap(texts: string[], lang: string) {
+export function useTranslatedTextMap(
+  texts: string[],
+  lang: string,
+  opts?: { force?: boolean }
+) {
+  const force = opts?.force === true
   const key = stableKey(texts)
   const [map, setMap] = useState<Record<string, string>>({})
   const { enabled } = useAutoTranslate()
+  const shouldTranslate = force || enabled
 
   useEffect(() => {
-    if (!enabled || !key) {
+    if (!shouldTranslate || !key) {
       setMap({})
       return
     }
     const unique = key.split(SEP)
     let cancelled = false
-    translateTexts(unique, lang)
+    translateTexts(unique, lang, force ? { force: true } : undefined)
       .then((translated) => {
         if (cancelled) return
         const m: Record<string, string> = {}
@@ -45,7 +52,7 @@ export function useTranslatedTextMap(texts: string[], lang: string) {
     return () => {
       cancelled = true
     }
-  }, [enabled, key, lang])
+  }, [shouldTranslate, force, key, lang])
 
   return useCallback(
     (s: string) => {

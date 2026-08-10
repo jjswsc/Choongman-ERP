@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,10 +20,10 @@ import {
   getMyHrPolicies,
   confirmNoticeRead,
   confirmHrPolicyRead,
-  translateTexts,
   type NoticeItem,
   type HrPolicyListItem,
 } from "@/lib/api-client"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { bangkokTodayYmd } from "@/lib/bangkok-date"
 import { isNoticeReadStatus } from "@/lib/notice-read-status"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
@@ -53,7 +53,6 @@ export function HomeTab() {
   const [dateFrom, setDateFrom] = useState(() => bangkokTodayYmd())
   const [dateTo, setDateTo] = useState(() => bangkokTodayYmd())
   const [unreadTotal, setUnreadTotal] = useState<number | null>(null)
-  const [transMap, setTransMap] = useState<Record<string, string>>({})
   const [confirmingId, setConfirmingId] = useState<number | null>(null)
 
   const [hrPolicies, setHrPolicies] = useState<HrPolicyListItem[]>([])
@@ -65,7 +64,18 @@ export function HomeTab() {
   const [hrExpandedId, setHrExpandedId] = useState<number | null>(null)
   const [hrStatusFilter, setHrStatusFilter] = useState<'All' | 'Unread' | 'Read'>('Unread')
   const [hrConfirmingId, setHrConfirmingId] = useState<number | null>(null)
-  const [hrTransMap, setHrTransMap] = useState<Record<string, string>>({})
+
+  const noticeTexts = useMemo(
+    () => notices.flatMap((n) => [n.title, n.content]),
+    [notices]
+  )
+  const hrTexts = useMemo(
+    () => hrPolicies.flatMap((h) => [h.title, h.content]),
+    [hrPolicies]
+  )
+  /** 공지·규정은 선택 언어로 항상 번역 (모바일엔 자동번역 토글이 없음) */
+  const getTrans = useTranslatedTextMap(noticeTexts, lang, { force: true })
+  const getHrTrans = useTranslatedTextMap(hrTexts, lang, { force: true })
 
   const statusParam = statusFilter === 'Unread' ? 'unread' : statusFilter === 'Read' ? 'read' : 'all'
   const hrStatusParam = hrStatusFilter === 'Unread' ? 'unread' : hrStatusFilter === 'Read' ? 'read' : 'all'
@@ -152,47 +162,6 @@ export function HomeTab() {
   useEffect(() => {
     refreshUnreadCount()
   }, [refreshUnreadCount])
-
-  useEffect(() => {
-    const texts = [...new Set(notices.flatMap((n) => [n.title, n.content].filter(Boolean)))]
-    if (texts.length === 0) {
-      setTransMap({})
-      return
-    }
-    let cancelled = false
-    translateTexts(texts, lang).then((translated) => {
-      if (cancelled) return
-      const map: Record<string, string> = {}
-      texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
-      setTransMap(map)
-    }).catch(() => setTransMap({}))
-    return () => { cancelled = true }
-  }, [notices, lang])
-
-  useEffect(() => {
-    const texts = [...new Set(hrPolicies.flatMap((h) => [h.title, h.content].filter(Boolean)))]
-    if (texts.length === 0) {
-      setHrTransMap({})
-      return
-    }
-    let cancelled = false
-    translateTexts(texts, lang)
-      .then((translated) => {
-        if (cancelled) return
-        const map: Record<string, string> = {}
-        texts.forEach((txt, i) => {
-          map[txt] = translated[i] ?? txt
-        })
-        setHrTransMap(map)
-      })
-      .catch(() => setHrTransMap({}))
-    return () => {
-      cancelled = true
-    }
-  }, [hrPolicies, lang])
-
-  const getTrans = (text: string) => (text && transMap[text]) || text || ""
-  const getHrTrans = (text: string) => (text && hrTransMap[text]) || text || ""
 
   const handleHrPolicyAction = useCallback(
     async (policyId: number, action: '확인' | '다음에') => {

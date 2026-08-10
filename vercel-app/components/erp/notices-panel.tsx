@@ -8,7 +8,8 @@ import { useT } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
-import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem, type NoticeAttachment } from "@/lib/api-client"
+import { getMyNotices, confirmNoticeRead, type NoticeItem, type NoticeAttachment } from "@/lib/api-client"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 
 /** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
@@ -39,8 +40,13 @@ export function NoticesPanel() {
   const [committedEnd, setCommittedEnd] = React.useState(endDate)
   const [loading, setLoading] = React.useState(false)
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
-  const [transMap, setTransMap] = React.useState<Record<string, string>>({})
   const [confirmingId, setConfirmingId] = React.useState<number | null>(null)
+
+  const noticeTexts = React.useMemo(
+    () => notices.flatMap((n) => [n.title, n.content]),
+    [notices]
+  )
+  const getTrans = useTranslatedTextMap(noticeTexts, lang, { force: true })
 
   const runNoticeQuery = React.useCallback(
     (page: number) => {
@@ -81,24 +87,6 @@ export function NoticesPanel() {
     setCommittedEnd(endDate)
     setNoticePage(1)
   }, [startDate, endDate])
-
-  React.useEffect(() => {
-    const texts = [...new Set(notices.flatMap((n) => [n.title, n.content].filter(Boolean)))]
-    if (texts.length === 0) {
-      setTransMap({})
-      return
-    }
-    let cancelled = false
-    translateTexts(texts, lang).then((translated) => {
-      if (cancelled) return
-      const map: Record<string, string> = {}
-      texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
-      setTransMap(map)
-    }).catch(() => setTransMap({}))
-    return () => { cancelled = true }
-  }, [notices, lang])
-
-  const getTrans = (text: string) => (text && transMap[text]) || text || ""
 
   const handleNoticeAction = React.useCallback(
     async (noticeId: number, action: '확인' | '다음에') => {
