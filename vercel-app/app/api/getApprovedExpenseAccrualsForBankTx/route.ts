@@ -5,9 +5,12 @@ import { evaluatePayeeBankMemoMatch, type PayeeMemoMatchQuality } from '@/lib/ex
 import { isSettledExpensePayment } from '@/lib/expense-accrual-settlement'
 import {
   accrualDateMatchesBankDate,
+  accrualDateWithinBankWindow,
   buildExpenseAccrualBankLinkAmountFilters,
   buildExpenseAccrualBankLinkDateFilters,
+  buildExpenseAccrualBankLinkRecentFilter,
   chunkIdsForInFilter,
+  EXPENSE_BANK_LINK_DATE_WINDOW_DAYS,
 } from '@/lib/expense-accrual-bank-link-candidates'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { roundMoney2 } from '@/lib/invoice-vat-total'
@@ -68,6 +71,9 @@ const LINKABLE_ACCRUAL_STATUSES = ['planned', 'approved', 'partial', 'paid', 'do
 
 const ACCRUAL_SELECT =
   'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by'
+
+/** 드롭다운 과다 방지 — 금액·날짜 일치 우선 정렬 후 상한 */
+const MAX_LINK_CANDIDATES = 80
 
 function accrualMatchesStore(rowStore: string, storeFilter: string): boolean {
   const row = String(rowStore || '').trim()
@@ -130,7 +136,7 @@ export async function GET(request: NextRequest) {
     const bankMemo = String(bankRow.memo || '')
     const bankNote = String(bankRow.note || '')
 
-    // 날짜 창 2회(발생일·만기일) 병합 — nested or=(and()) 금지, paid/done 전량 limit 잘림 방지
+    // 날짜 창 2회(발생일·만기일) 병합 — nested or=(and()) 금지
     const dateBatches = await Promise.all(
       buildExpenseAccrualBankLinkDateFilters(bankDate).map(
         (filter) =>
@@ -143,9 +149,9 @@ export async function GET(request: NextRequest) {
     )
     let accrualRows = mergeAccrualRows(...dateBatches)
 
-    // 등록일 불일치·WHT(순지급=통장) 대비 금액 보강
+    // 등록일 불일치·WHT/VAT(순지급=통장) 대비 금액 보강
     if (bankAmount > 0) {
-      const amountLimit = (accrualRows || []).length === 0 ? 300 : 100
+      const amountLimit = (accrualRows || []).length === 0 ? 400 : 150
       const amountBatches = await Promise.all(
         buildExpenseAccrualBankLinkAmountFilters(bankAmount).map(
           (filter) =>
@@ -157,6 +163,20 @@ export async function GET(request: NextRequest) {
         )
       )
       accrualRows = mergeAccrualRows(accrualRows || [], ...amountBatches)
+    }
+
+    // 그래도 적으면 최근 건 보강 후 JS에서 잔액≈통장 또는 날짜창만 채택
+    if ((accrualRows || []).length < 20) {
+      const recentRows = (await supabaseSelectFilter(
+        'expense_accruals',
+        buildExpenseAccrualBankLinkRecentFilter(),
+        {
+          select: ACCRUAL_SELECT,
+          order: 'id.desc',
+          limit: 800,
+        }
+      )) as ExpenseAccrualRow[]
+      accrualRows = mergeAccrualRows(accrualRows || [], recentRows || [])
     }
 
     const accrualIds = (accrualRows || []).map((r) => Number(r.id || 0)).filter((n) => n > 0)
@@ -174,7 +194,6 @@ export async function GET(request: NextRequest) {
       for (const tx of payableRows || []) {
         const accrualId = Number(tx.expense_accrual_id || 0)
         if (!accrualId) continue
-        // 통장·패티 미연결 Payment(고아)는 잔액 차감에서 제외 → 재연결 가능
         if (!isSettledExpensePayment(tx)) continue
         const amt = Number(tx.amount || 0)
         paidByAccrual.set(accrualId, (paidByAccrual.get(accrualId) || 0) + Math.abs(amt))
@@ -185,16 +204,27 @@ export async function GET(request: NextRequest) {
       .map((r) => {
         const id = Number(r.id || 0)
         const wht = Math.max(0, Math.abs(Number(r.withholding_tax_amount ?? 0) || 0))
-        const plannedAmount = expenseAccrualNetPayable(parseMoneyAmount(r.amount), wht)
+        const grossAmount = parseMoneyAmount(r.amount)
+        const plannedAmount = expenseAccrualNetPayable(grossAmount, wht)
         const paidAmount = paidByAccrual.get(id) || 0
         const remainingAmount = Math.max(0, roundMoney2(plannedAmount - paidAmount))
         const decoded = decodePayeeCode(r.payee_code)
         const rawStatus = String(r.status || '').toLowerCase() || 'approved'
-        // UI/선택용: 고아 paid 는 approved 로 노출해 연결 가능하게 함
         const status =
           (rawStatus === 'paid' || rawStatus === 'done') && paidAmount <= 0.009 ? 'approved' : rawStatus
         const expenseDate = r.expense_date ? String(r.expense_date).slice(0, 10) : ''
         const dueDate = r.due_date ? String(r.due_date).slice(0, 10) : ''
+        const dateExactMatch = accrualDateMatchesBankDate(expenseDate, dueDate, bankDate)
+        const dateInWindow = accrualDateWithinBankWindow(
+          expenseDate,
+          dueDate,
+          bankDate,
+          EXPENSE_BANK_LINK_DATE_WINDOW_DAYS
+        )
+        const amountClose =
+          moneyEqual(remainingAmount, bankAmount) ||
+          moneyEqual(plannedAmount, bankAmount) ||
+          moneyEqual(grossAmount, bankAmount)
         return {
           id,
           payeeCode: decoded.payeeCode,
@@ -211,20 +241,27 @@ export async function GET(request: NextRequest) {
           status,
           approvedAt: r.approved_at ? String(r.approved_at) : '',
           approvedBy: r.approved_by || '',
-          dateExactMatch: accrualDateMatchesBankDate(expenseDate, dueDate, bankDate),
+          dateExactMatch,
+          dateInWindow,
+          amountClose,
         }
       })
       .filter((r) =>
         LINKABLE_ACCRUAL_STATUSES.includes(String(r.status || '').toLowerCase() as (typeof LINKABLE_ACCRUAL_STATUSES)[number])
       )
       .filter((r) => (r.remainingAmount || 0) > 0)
-      // 날짜 창·금액 보강 후보만 유지(잔액 일치 또는 날짜 일치)
-      .filter((r) => r.dateExactMatch || moneyEqual(r.remainingAmount, bankAmount) || moneyEqual(r.plannedAmount, bankAmount))
+      // 날짜 창 안이면 금액 불일치여도 후보에 표시(저장 시 UI가 금액 가드). 창 밖은 금액 근접만.
+      .filter((r) => r.dateInWindow || r.amountClose)
 
     let storeScopedList = rawList
     if (storeFilter) {
       const matched = rawList.filter((r) => accrualMatchesStore(r.storeName, storeFilter))
-      storeScopedList = matched.length > 0 ? matched : rawList
+      // 매장 일치가 있어도, 금액이 맞는 다른 매장 건은 함께 노출(등록 매장명 불일치 대비)
+      const amountHits = rawList.filter((r) => r.amountClose)
+      const byId = new Map<number, (typeof rawList)[0]>()
+      for (const r of matched) byId.set(r.id, r)
+      for (const r of amountHits) byId.set(r.id, r)
+      storeScopedList = byId.size > 0 ? [...byId.values()] : rawList
     }
 
     const codesForVendor = new Set(
@@ -265,13 +302,27 @@ export async function GET(request: NextRequest) {
           vendorGpsName: vn?.gps,
         })
         const amountMatch = moneyEqual(r.remainingAmount, bankAmount)
-        const { dateExactMatch: _dateExactMatch, ...rest } = r
         return {
-          ...rest,
+          id: r.id,
+          payeeCode: r.payeeCode,
+          payeeName: r.payeeName,
+          withdrawalCategory: r.withdrawalCategory,
+          plannedAmount: r.plannedAmount,
+          paidAmount: r.paidAmount,
+          remainingAmount: r.remainingAmount,
+          expenseDate: r.expenseDate,
+          dueDate: r.dueDate,
+          memo: r.memo,
+          accountSubjectId: r.accountSubjectId,
+          storeName: r.storeName,
+          status: r.status,
+          approvedAt: r.approvedAt,
+          approvedBy: r.approvedBy,
           payeeMemoMatchQuality: ev.quality,
           payeeMemoMatchDetail: ev.detail,
           amountMatch,
           dateExactMatch: r.dateExactMatch,
+          dateInWindow: r.dateInWindow,
         }
       })
       .sort((a, b) => {
@@ -279,6 +330,8 @@ export async function GET(request: NextRequest) {
         if (amountDiff !== 0) return amountDiff
         const dateDiff = Number(b.dateExactMatch ? 1 : 0) - Number(a.dateExactMatch ? 1 : 0)
         if (dateDiff !== 0) return dateDiff
+        const winDiff = Number(b.dateInWindow ? 1 : 0) - Number(a.dateInWindow ? 1 : 0)
+        if (winDiff !== 0) return winDiff
         const statusOrder = (s: string) => (s === 'approved' || s === 'partial' ? 0 : 1)
         const sd = statusOrder(String(a.status || '')) - statusOrder(String(b.status || ''))
         if (sd !== 0) return sd
@@ -286,9 +339,10 @@ export async function GET(request: NextRequest) {
           (MEMO_MATCH_ORDER[a.payeeMemoMatchQuality] ?? 9) -
           (MEMO_MATCH_ORDER[b.payeeMemoMatchQuality] ?? 9)
         if (qd !== 0) return qd
-        return a.id - b.id
+        return b.id - a.id
       })
-      .map(({ dateExactMatch: _d, ...row }) => row)
+      .slice(0, MAX_LINK_CANDIDATES)
+      .map(({ dateExactMatch: _e, dateInWindow: _w, ...row }) => row)
 
     return NextResponse.json({
       success: true,
@@ -300,6 +354,11 @@ export async function GET(request: NextRequest) {
         note: bankNote,
       },
       list,
+      meta: {
+        candidateCount: list.length,
+        dateWindowDays: EXPENSE_BANK_LINK_DATE_WINDOW_DAYS,
+        scannedAccruals: accrualIds.length,
+      },
     }, { headers })
   } catch (e) {
     console.error('getApprovedExpenseAccrualsForBankTx:', e)

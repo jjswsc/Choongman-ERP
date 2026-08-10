@@ -563,14 +563,21 @@ export function BankTransactionsTab() {
       })
       const listRows = res.list || []
       setApprovedPickList(listRows)
+      if (!res.success) {
+        setApprovedPickRow(null)
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        return
+      }
       // 이미 연결된 통장은 list=[] + message 만 옴 → 「연결 가능한 지급예정 없음」으로 오인되지 않게 안내
       if (listRows.length === 0 && res.message) {
         const msg = translateApiMessage(res.message, t) || res.message
         setApprovedPickRow(null)
         await appAlert(msg)
       }
-    } catch {
+    } catch (e) {
       setApprovedPickList([])
+      setApprovedPickRow(null)
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setApprovedPickLoading(false)
     }

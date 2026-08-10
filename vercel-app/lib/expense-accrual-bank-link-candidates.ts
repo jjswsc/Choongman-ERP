@@ -4,8 +4,8 @@
  */
 import { addDaysYmd } from '@/lib/pos-business-day'
 
-/** 통장일 기준 지급예정 후보 조회 일수 (±) — 등록일을 통장일과 다르게 넣은 경우 대비 */
-export const EXPENSE_BANK_LINK_DATE_WINDOW_DAYS = 14
+/** 통장일 기준 지급예정 후보 조회 일수 (±). 등록일을 통장일과 다르게 넣는 현장 대응 */
+export const EXPENSE_BANK_LINK_DATE_WINDOW_DAYS = 45
 
 const LINKABLE_STATUS_IN = 'planned,approved,partial,paid,done'
 
@@ -30,20 +30,25 @@ export function buildExpenseAccrualBankLinkDateFilters(
 /**
  * 금액 보강 필터(2회).
  * 1) 총액 ≈ 통장금액
- * 2) 총액이 통장(순지급)보다 큰 구간 — WHT 차감 후 net ≈ 통장인 경우
+ * 2) 총액이 통장(순지급)보다 큰 구간 — WHT·VAT 차감 후 net ≈ 통장인 경우(최대 ~15%)
  */
 export function buildExpenseAccrualBankLinkAmountFilters(bankAmount: number): string[] {
   const amt = Math.round(Math.abs(Number(bankAmount) || 0) * 100) / 100
   if (!(amt > 0)) return []
   const lo = Math.max(0, Math.round((amt - 0.02) * 100) / 100)
   const hiExact = Math.round((amt + 0.02) * 100) / 100
-  // 원천세 최대 ~5% 가정: net=amt → gross ≤ amt/0.95
-  const hiWht = Math.round((amt / 0.95 + 0.02) * 100) / 100
+  // net=amt → gross ≤ amt/0.85 (WHT·기타 공제 여유)
+  const hiGross = Math.round((amt / 0.85 + 0.02) * 100) / 100
   const status = `status=in.(${LINKABLE_STATUS_IN})`
   return [
     `${status}&amount=gte.${lo}&amount=lte.${hiExact}`,
-    `${status}&amount=gte.${amt}&amount=lte.${hiWht}`,
+    `${status}&amount=gte.${amt}&amount=lte.${hiGross}`,
   ]
+}
+
+/** 최근 미정산 후보 보강(날짜·총액 필터에 안 걸린 경우) */
+export function buildExpenseAccrualBankLinkRecentFilter(): string {
+  return `status=in.(${LINKABLE_STATUS_IN})`
 }
 
 export function accrualDateMatchesBankDate(
@@ -55,6 +60,22 @@ export function accrualDateMatchesBankDate(
   const due = String(dueDate || '').slice(0, 10)
   const exp = String(expenseDate || '').slice(0, 10)
   return !!bank && (due === bank || exp === bank)
+}
+
+export function accrualDateWithinBankWindow(
+  expenseDate: string,
+  dueDate: string,
+  bankDateYmd: string,
+  windowDays = EXPENSE_BANK_LINK_DATE_WINDOW_DAYS
+): boolean {
+  const bank = String(bankDateYmd || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(bank)) return false
+  const from = addDaysYmd(bank, -Math.abs(windowDays))
+  const to = addDaysYmd(bank, Math.abs(windowDays))
+  const due = String(dueDate || '').slice(0, 10)
+  const exp = String(expenseDate || '').slice(0, 10)
+  const inRange = (d: string) => !!d && d >= from && d <= to
+  return inRange(exp) || inRange(due)
 }
 
 /** id 목록을 PostgREST in.() 청크로 나눔 (URL 길이 한도) */

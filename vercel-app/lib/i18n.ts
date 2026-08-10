@@ -4272,7 +4272,7 @@ export const i18n = {
     expensePlanStatusPlanned: '대기',
     expensePlanStatusPartial: '부분',
     expensePlanPickEmptyForBankLink:
-      '연결 가능한 지급예정이 없습니다. 지출등록의 발생일·지급예정일이 통장 출금일과 ±14일 이내인지, 잔액이 같은지 확인하세요. 지출검색에 「지급예정만」·paid(통장 미연결)면 배포 후 다시 연결하거나 본사에 승인 상태 복구를 요청하세요.',
+      '연결 가능한 지급예정이 없습니다. 지출관리에 등록·승인(또는 대기)된 건인지, 이미 다른 통장에 연결·지급 완료인지 확인하세요. 발생일을 통장 출금일과 같게 맞추면 찾기 쉽습니다.',
     expensePlanPickPlannedNeedsApproval:
       '선택한 건이 아직 승인 대기입니다. 저장 시 자동 승인됩니다. 본사(Office·HQ) 건은 Director·CEO·HR·Secretary 승인 권한이 필요합니다.',
     expensePlanDeletedCount: '{count}건 삭제되었습니다.',
@@ -12094,7 +12094,7 @@ Only matters the employee must handle personally on a working day:
     expensePlanStatusPlanned: 'Pending',
     expensePlanStatusPartial: 'Partial',
     expensePlanPickEmptyForBankLink:
-      'No linkable payment plan found. Check that the expense date or due date is within ±14 days of the bank withdrawal and the balance matches. If Expense Search shows “plan only” already paid (no bank link), retry after deploy or ask HQ to reset status to approved.',
+      'No linkable payment plan found. Confirm the expense is registered/approved (or pending) in Expense Management and not already paid/linked to another bank row. Matching the expense date to the withdrawal date helps.',
     expensePlanPickPlannedNeedsApproval:
       'Selected item is still pending approval. Saving will auto-approve. HQ/Office items require Director·CEO·HR·Secretary approval rights.',
     expensePlanDeletedCount: '{count} item(s) deleted.',
@@ -19387,7 +19387,7 @@ orderItemQty: 'จำนวน',
     expensePlanStatusPlanned: 'รอ',
     expensePlanStatusPartial: 'บางส่วน',
     expensePlanPickEmptyForBankLink:
-      'ไม่พบแผนจ่ายที่เชื่อมได้ กรุณาตรวจว่าวันที่เกิดรายการหรือวันกำหนดจ่ายอยู่ในช่วง ±14 วันจากวันถอน และยอดคงเหลือตรงกัน หากในค้นหาค่าใช้จ่ายมีแถว “แผนจ่ายเท่านั้น” สถานะ paid (ยังไม่ผูกธนาคาร) หลังอัปเดตระบบลองเชื่อมอีกครั้ง หรือให้สำนักงานรีเซ็ตเป็น approved',
+      'ไม่พบแผนจ่ายที่เชื่อมได้ กรุณาตรวจว่าได้ลงทะเบียน/อนุมัติ (หรือรออนุมัติ) ในจัดการค่าใช้จ่ายแล้ว และยังไม่ได้จ่าย/เชื่อมกับรายการธนาคารอื่น การตั้งวันที่เกิดรายการให้ตรงวันถอนจะค้นหาง่ายขึ้นครับ',
     expensePlanPickPlannedNeedsApproval:
       'รายการที่เลือกยังรออนุมัติ การบันทึกจะอนุมัติอัตโนมัติ รายการสำนักงานใหญ่ต้องมีสิทธิ์ Director·CEO·HR·Secretary',
     expensePlanDeletedCount: 'ลบแล้ว {count} รายการ',
