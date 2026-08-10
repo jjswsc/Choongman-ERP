@@ -199,6 +199,24 @@ export default function InboundPage() {
   const fromPoAppliedRef = React.useRef<number | null>(null)
   const filtersHydratedOnceRef = React.useRef(false)
   const viewCacheRestoredRef = React.useRef(false)
+  const lastFetchedHistRef = React.useRef<{
+    histStart: string
+    histEnd: string
+    histMonth: string
+    histVendor: string
+    histVendorSearch: string
+    histItemSearch: string
+    histStore: string
+    historyList: InboundHistoryItem[]
+  } | null>(null)
+  const lastFetchedSummaryRef = React.useRef<{
+    summaryStart: string
+    summaryEnd: string
+    summaryMonth: string
+    summaryStoreFilter: string
+    summaryItemSearch: string
+    summaryList: InboundHistoryItem[]
+  } | null>(null)
   const { posStores: storeList } = useStoreList()
 
   const isOffice = React.useMemo(() => {
@@ -624,6 +642,15 @@ export default function InboundPage() {
       e = e || today
     }
     setHistoryLoading(true)
+    const snapKeys = {
+      histStart,
+      histEnd,
+      histMonth,
+      histVendor,
+      histVendorSearch,
+      histItemSearch,
+      histStore,
+    }
     try {
       if (isOffice) {
         const list = await getInboundHistory({
@@ -634,7 +661,9 @@ export default function InboundPage() {
           itemSearch: histItemSearch.trim() || undefined,
           storeFilter: histStore || undefined,
         })
-        setHistoryList(Array.isArray(list) ? list : [])
+        const rows = Array.isArray(list) ? list : []
+        setHistoryList(rows)
+        lastFetchedHistRef.current = { ...snapKeys, historyList: rows }
       } else {
         const list = await getInboundForStore({
           storeName: auth?.store || "",
@@ -644,12 +673,15 @@ export default function InboundPage() {
           vendorSearch: !histVendor.trim() && histVendorSearch.trim() ? histVendorSearch.trim() : undefined,
           itemSearch: histItemSearch.trim() || undefined,
         })
-        setHistoryList(Array.isArray(list) ? list : [])
+        const rows = Array.isArray(list) ? list : []
+        setHistoryList(rows)
+        lastFetchedHistRef.current = { ...snapKeys, historyList: rows }
       }
       setHistoryHasQueried(true)
     } catch {
       setHistoryList([])
       setHistoryHasQueried(true)
+      lastFetchedHistRef.current = { ...snapKeys, historyList: [] }
     } finally {
       setHistoryLoading(false)
     }
@@ -719,6 +751,13 @@ export default function InboundPage() {
     }
     if (!s || !e) return
     setSummaryLoading(true)
+    const snapKeys = {
+      summaryStart,
+      summaryEnd,
+      summaryMonth,
+      summaryStoreFilter,
+      summaryItemSearch,
+    }
     try {
       if (isOffice) {
         const list = await getInboundHistory({
@@ -727,7 +766,9 @@ export default function InboundPage() {
           storeFilter: summaryStoreFilter || undefined,
           itemSearch: summaryItemSearch.trim() || undefined,
         })
-        setSummaryList(Array.isArray(list) ? list : [])
+        const rows = Array.isArray(list) ? list : []
+        setSummaryList(rows)
+        lastFetchedSummaryRef.current = { ...snapKeys, summaryList: rows }
       } else {
         const list = await getInboundForStore({
           storeName: auth?.store || "",
@@ -735,16 +776,27 @@ export default function InboundPage() {
           endStr: e,
           itemSearch: summaryItemSearch.trim() || undefined,
         })
-        setSummaryList(Array.isArray(list) ? list : [])
+        const rows = Array.isArray(list) ? list : []
+        setSummaryList(rows)
+        lastFetchedSummaryRef.current = { ...snapKeys, summaryList: rows }
       }
       setSummaryHasQueried(true)
     } catch {
       setSummaryList([])
       setSummaryHasQueried(true)
+      lastFetchedSummaryRef.current = { ...snapKeys, summaryList: [] }
     } finally {
       setSummaryLoading(false)
     }
-  }, [summaryStart, summaryEnd, summaryMonth, summaryStoreFilter, summaryItemSearch, isOffice, auth?.store])
+  }, [
+    summaryStart,
+    summaryEnd,
+    summaryMonth,
+    summaryStoreFilter,
+    summaryItemSearch,
+    isOffice,
+    auth?.store,
+  ])
 
   const itemCategoryMap = React.useMemo(() => {
     const map = new Map<string, string>()
@@ -1024,34 +1076,96 @@ export default function InboundPage() {
     setSummaryCategoryFilter(snap.summaryCategoryFilter || "")
     setSummaryItemSearch(snap.summaryItemSearch || "")
     setSummaryStoreFilter(snap.summaryStoreFilter || "")
+    if (snap.historyHasQueried) {
+      lastFetchedHistRef.current = {
+        histStart: snap.histStart || "",
+        histEnd: snap.histEnd || "",
+        histMonth: snap.histMonth || "",
+        histVendor: snap.histVendor || "",
+        histVendorSearch: snap.histVendorSearch || "",
+        histItemSearch: snap.histItemSearch || "",
+        histStore: snap.histStore || "",
+        historyList: snap.historyList || [],
+      }
+      // 뷰 캐시로 결과 복원 시 sessionStorage 필터가 덮지 않게
+      filtersHydratedOnceRef.current = true
+      setFiltersHydrated(true)
+    }
+    if (snap.summaryHasQueried) {
+      lastFetchedSummaryRef.current = {
+        summaryStart: snap.summaryStart || "",
+        summaryEnd: snap.summaryEnd || "",
+        summaryMonth: snap.summaryMonth || "",
+        summaryStoreFilter: snap.summaryStoreFilter || "",
+        summaryItemSearch: snap.summaryItemSearch || "",
+        summaryList: snap.summaryList || [],
+      }
+      filtersHydratedOnceRef.current = true
+      setFiltersHydrated(true)
+    }
   }, [allowInboundUrlSync, searchParams, pageActiveRef])
 
   React.useEffect(() => {
     if (!historyHasQueried && !summaryHasQueried) {
+      lastFetchedHistRef.current = null
+      lastFetchedSummaryRef.current = null
       inboundViewCache.clear()
       return
     }
+
+    const histFetched = lastFetchedHistRef.current
+    const histSame =
+      !!histFetched &&
+      histFetched.histStart === histStart &&
+      histFetched.histEnd === histEnd &&
+      histFetched.histMonth === histMonth &&
+      histFetched.histVendor === histVendor &&
+      histFetched.histVendorSearch === histVendorSearch &&
+      histFetched.histItemSearch === histItemSearch &&
+      histFetched.histStore === histStore
+    const historyListToSave = histSame ? historyList : histFetched?.historyList || historyList
+    if (histSame && histFetched) {
+      lastFetchedHistRef.current = { ...histFetched, historyList: historyListToSave }
+    }
+
+    const summaryFetched = lastFetchedSummaryRef.current
+    const summarySame =
+      !!summaryFetched &&
+      summaryFetched.summaryStart === summaryStart &&
+      summaryFetched.summaryEnd === summaryEnd &&
+      summaryFetched.summaryMonth === summaryMonth &&
+      summaryFetched.summaryStoreFilter === summaryStoreFilter &&
+      summaryFetched.summaryItemSearch === summaryItemSearch
+    const summaryListToSave = summarySame
+      ? summaryList
+      : summaryFetched?.summaryList || summaryList
+    if (summarySame && summaryFetched) {
+      lastFetchedSummaryRef.current = { ...summaryFetched, summaryList: summaryListToSave }
+    }
+
     inboundViewCache.save({
       tabValue,
-      histStart,
-      histEnd,
-      histMonth,
-      histVendor,
-      histVendorSearch,
-      histItemSearch,
-      histStore,
+      histStart: histSame || !histFetched ? histStart : histFetched.histStart,
+      histEnd: histSame || !histFetched ? histEnd : histFetched.histEnd,
+      histMonth: histSame || !histFetched ? histMonth : histFetched.histMonth,
+      histVendor: histSame || !histFetched ? histVendor : histFetched.histVendor,
+      histVendorSearch: histSame || !histFetched ? histVendorSearch : histFetched.histVendorSearch,
+      histItemSearch: histSame || !histFetched ? histItemSearch : histFetched.histItemSearch,
+      histStore: histSame || !histFetched ? histStore : histFetched.histStore,
       histPurchaseSource,
-      historyList,
+      historyList: historyListToSave,
       historyHasQueried,
-      summaryStart,
-      summaryEnd,
-      summaryMonth,
-      summaryList,
+      summaryStart: summarySame || !summaryFetched ? summaryStart : summaryFetched.summaryStart,
+      summaryEnd: summarySame || !summaryFetched ? summaryEnd : summaryFetched.summaryEnd,
+      summaryMonth: summarySame || !summaryFetched ? summaryMonth : summaryFetched.summaryMonth,
+      summaryList: summaryListToSave,
       summaryHasQueried,
       summaryVendorFilter,
       summaryCategoryFilter,
-      summaryItemSearch,
-      summaryStoreFilter,
+      summaryItemSearch:
+        summarySame || !summaryFetched ? summaryItemSearch : summaryFetched.summaryItemSearch,
+      summaryStoreFilter:
+        summarySame || !summaryFetched ? summaryStoreFilter : summaryFetched.summaryStoreFilter,
     })
   }, [
     histEnd,

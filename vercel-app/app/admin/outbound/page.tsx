@@ -308,6 +308,30 @@ export default function OutboundPage() {
   const plDrillNavAppliedRef = React.useRef(false)
   const plDrillAutoFetchRef = React.useRef(false)
   const viewCacheRestoredRef = React.useRef(false)
+  const lastFetchedHistRef = React.useRef<{
+    histStart: string
+    histEnd: string
+    histMonth: string
+    histStore: string
+    histTargetType: "" | "store" | "sales"
+    histType: string
+    itemSearch: string
+    historyList: OutboundHistoryItem[]
+    usageList: UsageHistoryItem[]
+  } | null>(null)
+  const lastFetchedSummaryRef = React.useRef<{
+    histStart: string
+    histEnd: string
+    histMonth: string
+    summaryMenuSearch: string
+    summaryList: OutboundHistoryItem[]
+  } | null>(null)
+  const lastFetchedWhRef = React.useRef<{
+    whStart: string
+    whEnd: string
+    whFilterBy: "order" | "delivery"
+    whData: GetOutboundByWarehouseResult | null
+  } | null>(null)
 
   React.useEffect(() => {
     const today = getBangkokTodayDateString()
@@ -351,6 +375,36 @@ export default function OutboundPage() {
     setWhWarehouseFilter(snap.whWarehouseFilter || "")
     setWhStoreFilter(snap.whStoreFilter || "")
     setWhItemFilter(snap.whItemFilter || "")
+    if (snap.historyHasQueried) {
+      lastFetchedHistRef.current = {
+        histStart: snap.histStart || "",
+        histEnd: snap.histEnd || "",
+        histMonth: snap.histMonth || "",
+        histStore: snap.histStore || "",
+        histTargetType: snap.histTargetType || "",
+        histType: snap.histType || "",
+        itemSearch: snap.itemSearch || "",
+        historyList: snap.historyList || [],
+        usageList: snap.usageList || [],
+      }
+    }
+    if (snap.summaryHasQueried) {
+      lastFetchedSummaryRef.current = {
+        histStart: snap.histStart || "",
+        histEnd: snap.histEnd || "",
+        histMonth: snap.histMonth || "",
+        summaryMenuSearch: snap.summaryMenuSearch || "",
+        summaryList: snap.summaryList || [],
+      }
+    }
+    if (snap.whHasQueried) {
+      lastFetchedWhRef.current = {
+        whStart: snap.whStart || "",
+        whEnd: snap.whEnd || "",
+        whFilterBy: snap.whFilterBy || "delivery",
+        whData: snap.whData || null,
+      }
+    }
   }, [allowOutboundUrlSync, searchParams, pageActiveRef])
 
   React.useEffect(() => {
@@ -378,33 +432,85 @@ export default function OutboundPage() {
 
   React.useEffect(() => {
     if (!historyHasQueried && !summaryHasQueried && !whHasQueried) {
+      lastFetchedHistRef.current = null
+      lastFetchedSummaryRef.current = null
+      lastFetchedWhRef.current = null
       clearOutboundViewCache()
       return
     }
+
+    const histFetched = lastFetchedHistRef.current
+    const histSame =
+      !!histFetched &&
+      histFetched.histStart === histStart &&
+      histFetched.histEnd === histEnd &&
+      histFetched.histMonth === histMonth &&
+      histFetched.histStore === histStore &&
+      histFetched.histTargetType === histTargetType &&
+      histFetched.histType === histType &&
+      histFetched.itemSearch === itemSearch
+    const historyListToSave = histSame ? historyList : histFetched?.historyList || historyList
+    const usageListToSave = histSame ? usageList : histFetched?.usageList || usageList
+    if (histSame && histFetched) {
+      lastFetchedHistRef.current = {
+        ...histFetched,
+        historyList: historyListToSave,
+        usageList: usageListToSave,
+      }
+    }
+
+    const summaryFetched = lastFetchedSummaryRef.current
+    const summarySame =
+      !!summaryFetched &&
+      summaryFetched.histStart === histStart &&
+      summaryFetched.histEnd === histEnd &&
+      summaryFetched.histMonth === histMonth &&
+      summaryFetched.summaryMenuSearch === summaryMenuSearch
+    const summaryListToSave = summarySame
+      ? summaryList
+      : summaryFetched?.summaryList || summaryList
+    if (summarySame && summaryFetched) {
+      lastFetchedSummaryRef.current = { ...summaryFetched, summaryList: summaryListToSave }
+    }
+
+    const whFetched = lastFetchedWhRef.current
+    const whSame =
+      !!whFetched &&
+      whFetched.whStart === whStart &&
+      whFetched.whEnd === whEnd &&
+      whFetched.whFilterBy === whFilterBy
+    const whDataToSave = whSame ? whData : whFetched?.whData ?? whData
+    if (whSame && whFetched) {
+      lastFetchedWhRef.current = { ...whFetched, whData: whDataToSave }
+    }
+
     saveOutboundViewCache({
       tabValue,
-      histStart,
-      histEnd,
-      histMonth,
-      histStore,
-      histTargetType,
-      histType,
+      histStart:
+        histSame || summarySame || !histFetched ? histStart : histFetched.histStart,
+      histEnd: histSame || summarySame || !histFetched ? histEnd : histFetched.histEnd,
+      histMonth:
+        histSame || summarySame || !histFetched ? histMonth : histFetched.histMonth,
+      histStore: histSame || !histFetched ? histStore : histFetched.histStore,
+      histTargetType: histSame || !histFetched ? histTargetType : histFetched.histTargetType,
+      histType: histSame || !histFetched ? histType : histFetched.histType,
       histDeliveryStatus,
       invoiceSearch,
-      itemSearch,
-      historyList,
-      usageList,
+      itemSearch: histSame || !histFetched ? itemSearch : histFetched.itemSearch,
+      historyList: historyListToSave,
+      usageList: usageListToSave,
       historyHasQueried,
-      summaryList,
+      summaryList: summaryListToSave,
       summaryHasQueried,
       summaryVendorFilter,
       summaryCategoryFilter,
-      summaryMenuSearch,
+      summaryMenuSearch:
+        summarySame || !summaryFetched ? summaryMenuSearch : summaryFetched.summaryMenuSearch,
       summaryStoreFilter,
-      whStart,
-      whEnd,
-      whFilterBy,
-      whData,
+      whStart: whSame || !whFetched ? whStart : whFetched.whStart,
+      whEnd: whSame || !whFetched ? whEnd : whFetched.whEnd,
+      whFilterBy: whSame || !whFetched ? whFilterBy : whFetched.whFilterBy,
+      whData: whDataToSave,
       whHasQueried,
       whWarehouseFilter,
       whStoreFilter,
@@ -600,22 +706,42 @@ export default function OutboundPage() {
     }
     setWhLoading(true)
     setWhData(null)
+    const fetchStart = whStart
+    const fetchEnd = whEnd
+    const fetchBy = whFilterBy
     try {
       const res = await getOutboundByWarehouse({
         startStr: whStart,
         endStr: whEnd,
         filterBy: whFilterBy,
       })
-      if (res && typeof res === "object" && ("byWarehouse" in res || "warehouseOrder" in res)) {
-        setWhData(res)
-      } else {
-        setWhData({ byWarehouse: {}, warehouseOrder: [], period: { start: whStart, end: whEnd }, filterBy: whFilterBy })
-      }
+      const next =
+        res && typeof res === "object" && ("byWarehouse" in res || "warehouseOrder" in res)
+          ? res
+          : {
+              byWarehouse: {},
+              warehouseOrder: [],
+              period: { start: whStart, end: whEnd },
+              filterBy: whFilterBy,
+            }
+      setWhData(next)
       setWhHasQueried(true)
+      lastFetchedWhRef.current = {
+        whStart: fetchStart,
+        whEnd: fetchEnd,
+        whFilterBy: fetchBy,
+        whData: next,
+      }
     } catch (err) {
       console.error("getOutboundByWarehouse:", err)
       setWhData(null)
       setWhHasQueried(true)
+      lastFetchedWhRef.current = {
+        whStart: fetchStart,
+        whEnd: fetchEnd,
+        whFilterBy: fetchBy,
+        whData: null,
+      }
       const msg = err instanceof Error ? err.message : String(err)
       await appAlert(t("orderNoData") + "\n\n" + t("msg_error_prefix") + msg)
     } finally {
@@ -933,6 +1059,15 @@ export default function OutboundPage() {
     }
     setHistoryLoading(true)
     setSelectedForPrint(new Set())
+    const snapKeys = {
+      histStart,
+      histEnd,
+      histMonth: effectiveHistMonth || "",
+      histStore: effectiveHistStore || "",
+      histTargetType,
+      histType,
+      itemSearch,
+    }
     try {
       if (isOffice) {
         const list = await getCombinedOutboundHistory({
@@ -942,9 +1077,15 @@ export default function OutboundPage() {
           typeFilter: histType || undefined,
           itemSearch: itemSearch.trim() || undefined,
         })
-        setHistoryList(Array.isArray(list) ? list : [])
+        const historyRows = Array.isArray(list) ? list : []
+        setHistoryList(historyRows)
         setUsageList([])
         setHistoryHasQueried(true)
+        lastFetchedHistRef.current = {
+          ...snapKeys,
+          historyList: historyRows,
+          usageList: [],
+        }
       } else {
         const list = await getCombinedOutboundHistory({
           startStr: s,
@@ -953,25 +1094,48 @@ export default function OutboundPage() {
           typeFilter: histType || undefined,
           itemSearch: itemSearch.trim() || undefined,
         })
-        setHistoryList(Array.isArray(list) ? list : [])
+        const historyRows = Array.isArray(list) ? list : []
+        setHistoryList(historyRows)
         const usageListRes = await getMyUsageHistory({
           store: auth?.store || "",
           startStr: s,
           endStr: e,
         })
-        setUsageList(Array.isArray(usageListRes) ? usageListRes : [])
+        const usageRows = Array.isArray(usageListRes) ? usageListRes : []
+        setUsageList(usageRows)
         setHistoryHasQueried(true)
+        lastFetchedHistRef.current = {
+          ...snapKeys,
+          historyList: historyRows,
+          usageList: usageRows,
+        }
       }
     } catch (err) {
       setHistoryList([])
       setUsageList([])
       setHistoryHasQueried(true)
+      lastFetchedHistRef.current = {
+        ...snapKeys,
+        historyList: [],
+        usageList: [],
+      }
       const msg = err instanceof Error ? err.message : String(err)
       await appAlert(`${t("outNoData")}\n\n${t("msg_error_prefix") || ""}${msg}`)
     } finally {
       setHistoryLoading(false)
     }
-  }, [histStart, histEnd, histMonth, histStore, histType, itemSearch, isOffice, auth?.store, t])
+  }, [
+    histStart,
+    histEnd,
+    histMonth,
+    histStore,
+    histTargetType,
+    histType,
+    itemSearch,
+    isOffice,
+    auth?.store,
+    t,
+  ])
 
   const handleStoreMonthDrill = React.useCallback(
     (params: { store: string; yearMonth: string }) => {
@@ -1013,6 +1177,12 @@ export default function OutboundPage() {
       return
     }
     setSummaryLoading(true)
+    const snapKeys = {
+      histStart,
+      histEnd,
+      histMonth: effectiveHistMonth || "",
+      summaryMenuSearch,
+    }
     try {
       // 집계 탭: 매장 입고(From HQ)·ForcePush 기준 — HQ Outbound만 세면 직접정산·누락으로 과소집계됨
       const list = await getOutboundStoreItemSummary({
@@ -1022,16 +1192,16 @@ export default function OutboundPage() {
       })
       const rows = Array.isArray(list) ? list : []
       setSummaryHasQueried(true)
-      if (!isOffice && auth?.store) {
-        setSummaryList(
-          rows.filter((r) => storeMatchesHistoryFilterClient(String(r.target || ""), auth.store || ""))
-        )
-      } else {
-        setSummaryList(rows)
-      }
+      const nextList =
+        !isOffice && auth?.store
+          ? rows.filter((r) => storeMatchesHistoryFilterClient(String(r.target || ""), auth.store || ""))
+          : rows
+      setSummaryList(nextList)
+      lastFetchedSummaryRef.current = { ...snapKeys, summaryList: nextList }
     } catch (err) {
       setSummaryHasQueried(true)
       setSummaryList([])
+      lastFetchedSummaryRef.current = { ...snapKeys, summaryList: [] }
       const msg = err instanceof Error ? err.message : String(err)
       await appAlert(`${t("outNoData")}\n\n${t("msg_error_prefix") || ""}${msg}`)
     } finally {

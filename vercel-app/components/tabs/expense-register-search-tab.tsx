@@ -132,6 +132,17 @@ export function ExpenseRegisterSearchTab() {
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
   const [loadedOnce, setLoadedOnce] = React.useState(false)
   const viewCacheRestoredRef = React.useRef(false)
+  const lastFetchedQueryRef = React.useRef<{
+    storeFilter: string
+    accountId: string
+    startStr: string
+    endStr: string
+    categoryFilter: string
+    vendorFilter: string
+    documentNoFilter: string
+    list: ExpenseSearchOverviewRow[]
+    summary: ExpenseSearchOverviewSummary
+  } | null>(null)
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const invoicePhotoTargetRowRef = React.useRef<ExpenseSearchOverviewRow | null>(null)
@@ -190,6 +201,15 @@ export function ExpenseRegisterSearchTab() {
     const queryStart = overrides?.startStr ?? startStr
     const queryEnd = overrides?.endStr ?? endStr
     setLoading(true)
+    const snapKeys = {
+      storeFilter,
+      accountId,
+      startStr: queryStart,
+      endStr: queryEnd,
+      categoryFilter,
+      vendorFilter,
+      documentNoFilter,
+    }
     try {
       const res = await getExpenseSearchOverview({
         startStr: queryStart,
@@ -200,12 +220,20 @@ export function ExpenseRegisterSearchTab() {
         vendorFilter: vendorFilter.trim() || undefined,
         documentNo: documentNoFilter.trim() || undefined,
       })
-      setList(res.list || [])
-      setSummary(res.summary || { planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 })
+      const nextList = res.list || []
+      const nextSummary = res.summary || { planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 }
+      setList(nextList)
+      setSummary(nextSummary)
       setLoadedOnce(true)
+      lastFetchedQueryRef.current = { ...snapKeys, list: nextList, summary: nextSummary }
     } catch {
       setList([])
       setSummary({ planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 })
+      lastFetchedQueryRef.current = {
+        ...snapKeys,
+        list: [],
+        summary: { planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 },
+      }
     } finally {
       setLoading(false)
     }
@@ -238,24 +266,51 @@ export function ExpenseRegisterSearchTab() {
       snap.summary || { planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 }
     )
     setLoadedOnce(true)
+    lastFetchedQueryRef.current = {
+      storeFilter: snap.storeFilter || "__all__",
+      accountId: snap.accountId || "__all__",
+      startStr: snap.startStr || "",
+      endStr: snap.endStr || "",
+      categoryFilter: snap.categoryFilter || "__all__",
+      vendorFilter: snap.vendorFilter || "",
+      documentNoFilter: snap.documentNoFilter || "",
+      list: snap.list || [],
+      summary: snap.summary || { planOnly: 0, approvedUnpaid: 0, paid: 0, bankOnly: 0, rejected: 0 },
+    }
   }, [allowExpenseUrlSync, pageActiveRef])
 
   React.useEffect(() => {
     if (!loadedOnce) {
+      lastFetchedQueryRef.current = null
       expenseSearchViewCache.clear()
       return
     }
+    const fetched = lastFetchedQueryRef.current
+    if (!fetched) return
+    const sameQuery =
+      fetched.storeFilter === storeFilter &&
+      fetched.accountId === accountId &&
+      fetched.startStr === startStr &&
+      fetched.endStr === endStr &&
+      fetched.categoryFilter === categoryFilter &&
+      fetched.vendorFilter === vendorFilter &&
+      fetched.documentNoFilter === documentNoFilter
+    const listToSave = sameQuery ? list : fetched.list
+    const summaryToSave = sameQuery ? summary : fetched.summary
+    if (sameQuery) {
+      lastFetchedQueryRef.current = { ...fetched, list: listToSave, summary: summaryToSave }
+    }
     expenseSearchViewCache.save({
-      storeFilter,
-      accountId,
-      startStr,
-      endStr,
-      categoryFilter,
-      vendorFilter,
-      documentNoFilter,
+      storeFilter: sameQuery ? storeFilter : fetched.storeFilter,
+      accountId: sameQuery ? accountId : fetched.accountId,
+      startStr: sameQuery ? startStr : fetched.startStr,
+      endStr: sameQuery ? endStr : fetched.endStr,
+      categoryFilter: sameQuery ? categoryFilter : fetched.categoryFilter,
+      vendorFilter: sameQuery ? vendorFilter : fetched.vendorFilter,
+      documentNoFilter: sameQuery ? documentNoFilter : fetched.documentNoFilter,
       relationFilter,
-      list,
-      summary,
+      list: listToSave,
+      summary: summaryToSave,
       loadedOnce: true,
     })
   }, [
