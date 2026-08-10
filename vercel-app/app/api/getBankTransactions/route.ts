@@ -112,10 +112,12 @@ export async function GET(request: NextRequest) {
         // 입금 1건에 인보이스 수금(Receive)이 여러 행일 수 있음 — limit=chunk.length 이면
         // isReceivableLinked 가 잘려 false 로 나와 「미연결」 배지가 유지됨.
         const receivableLinkLimit = Math.min(Math.max(chunk.length * 50, 500), 5000)
+        // 통장 1건에 payable 이 여러 행일 수 있음 — limit=chunk.length 이면 isLinked 누락 → 「미연동」 오표시
+        const payableLinkLimit = Math.min(Math.max(chunk.length * 10, 500), 5000)
         const [ptRows, recvRows, settleRows, cardRows] = await Promise.all([
           supabaseSelectFilter('payable_transactions', `bank_transaction_id=in.(${idList})`, {
             select: 'bank_transaction_id',
-            limit: chunk.length,
+            limit: payableLinkLimit,
           }) as Promise<{ bank_transaction_id?: number }[] | null>,
           supabaseSelectFilter(
             'receivable_transactions',

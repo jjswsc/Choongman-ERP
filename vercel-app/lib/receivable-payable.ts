@@ -552,12 +552,14 @@ export async function upsertPayableFromBankPurchasePayment(params: {
   expenseDate?: string | null
   dueDate?: string | null
   accountSubjectId?: number | null
-}): Promise<void> {
+}): Promise<boolean> {
   const bankId = Number(params.bankTransactionId || 0)
-  const vendorCode = String(params.vendorCode || '').trim()
-  if (!bankId || !vendorCode || !params.amountAbs) return
-
   const accrualId = Number(params.expenseAccrualId || 0)
+  // 전도금 등 거래처 코드가 비어도 지급예정 연동 Payment 는 만들어야 고아 paid 를 막음
+  const vendorCode =
+    String(params.vendorCode || '').trim() || (accrualId > 0 ? `accrual:${accrualId}` : '')
+  if (!bankId || !vendorCode || !params.amountAbs) return false
+
   // 지출관리 연동 시 통장 매입대금 분류만으로 생긴 orphan Payment 제거
   if (accrualId > 0) {
     await supabaseDeleteByFilter(
@@ -592,10 +594,11 @@ export async function upsertPayableFromBankPurchasePayment(params: {
   if (keeperId) {
     await supabaseUpdate('payable_transactions', keeperId, row)
     await dedupePayablePaymentsForBankTransaction(bankId)
-    return
+    return true
   }
 
   await supabaseInsert('payable_transactions', row)
+  return true
 }
 
 /**

@@ -80,6 +80,8 @@ export type BankQueryDraft = {
   endStr?: string
   actualBalance?: string
   activeBankTab?: string
+  /** 조회 버튼을 누른 적이 있으면 탭을 바꿔도 초안을 유지 */
+  hasSearched?: boolean
   filterTransType?: string
   filterCategory?: string
   filterVendorCode?: string

@@ -116,6 +116,54 @@ type PayableLinkRow = {
 const ACCRUAL_SELECT =
   'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,invoice_received,invoice_no,invoice_photo_url,document_no'
 
+const PAYABLE_LINK_SELECT =
+  'bank_transaction_id,expense_accrual_id,petty_cash_transaction_id,amount'
+
+const PAYABLE_ID_CHUNK = 150
+
+async function fetchPayableLinksForAccrualAndBankIds(
+  accrualIds: number[],
+  bankIds: number[]
+): Promise<PayableLinkRow[]> {
+  const byKey = new Map<string, PayableLinkRow>()
+  const merge = (rows: PayableLinkRow[] | null | undefined) => {
+    for (const r of rows || []) {
+      const key = [
+        Number(r.expense_accrual_id || 0),
+        Number(r.bank_transaction_id || 0),
+        Number(r.petty_cash_transaction_id || 0),
+        Number(r.amount || 0),
+      ].join(':')
+      byKey.set(key, r)
+    }
+  }
+
+  const uniqueAccruals = [...new Set(accrualIds.filter((id) => id > 0))]
+  const uniqueBanks = [...new Set(bankIds.filter((id) => id > 0))]
+
+  for (let i = 0; i < uniqueAccruals.length; i += PAYABLE_ID_CHUNK) {
+    const chunk = uniqueAccruals.slice(i, i + PAYABLE_ID_CHUNK)
+    const rows = (await supabaseSelectFilter(
+      'payable_transactions',
+      `expense_accrual_id=in.(${chunk.join(',')})`,
+      { select: PAYABLE_LINK_SELECT, limit: Math.max(chunk.length * 5, 500) }
+    )) as PayableLinkRow[]
+    merge(rows)
+  }
+
+  for (let i = 0; i < uniqueBanks.length; i += PAYABLE_ID_CHUNK) {
+    const chunk = uniqueBanks.slice(i, i + PAYABLE_ID_CHUNK)
+    const rows = (await supabaseSelectFilter(
+      'payable_transactions',
+      `bank_transaction_id=in.(${chunk.join(',')})`,
+      { select: PAYABLE_LINK_SELECT, limit: Math.max(chunk.length * 3, 300) }
+    )) as PayableLinkRow[]
+    merge(rows)
+  }
+
+  return [...byKey.values()]
+}
+
 function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdrawalCategory: string } {
   const src = String(raw || '').trim()
   const marker = '::wm::'
@@ -154,11 +202,15 @@ function storeAllowedForAuth(storeName: string, scopedAllowedStores: string[]): 
 
 function resolvePlanStatus(
   rawStatus: string | undefined,
-  remaining: number
+  remaining: number,
+  hasSettledPayment = false
 ): 'planned' | 'approved' | 'paid' | 'rejected' {
   const raw = String(rawStatus || '').toLowerCase()
   if (raw === 'rejected') return 'rejected'
-  // DB status paid/done 은 remaining 과 무관하게 지급완료로 표시 (오표시 plan_only 방지)
+  // paid/done 이지만 통장·패티 정산이 없으면 고아 상태 → 미지급(승인)으로 표시해 재연결 유도
+  if ((raw === 'paid' || raw === 'done') && !hasSettledPayment) {
+    return 'approved'
+  }
   if (raw === 'paid' || raw === 'done') return 'paid'
   if (remaining <= 0) return 'paid'
   if (raw === 'approved' || raw === 'partial') return 'approved'
@@ -351,17 +403,19 @@ export async function buildExpenseSearchOverview(params: {
     }
   }
 
-  const [accrualRows, bankRowsInRange, accountStoreMap, payableLinks, cardRows, cardStoreMap] = await Promise.all([
+  const [accrualRows, bankRowsInRange, accountStoreMap, cardRows, cardStoreMap] = await Promise.all([
     fetchAccrualsForRange(startStr, endStr),
     fetchBankRegisterRows(startStr, endStr, accountId || undefined),
     fetchAccountStoreMap(),
-    supabaseSelectFilter('payable_transactions', 'expense_accrual_id=not.is.null', {
-      select: 'bank_transaction_id,expense_accrual_id,petty_cash_transaction_id,amount',
-      limit: 20000,
-    }) as Promise<PayableLinkRow[]>,
     fetchCardExpenseRows(startStr, endStr),
     fetchCardAccountStoreMap(),
   ])
+
+  // 전체 payable 2만 건 limit 은 최근 연결을 놓쳐 bank_only/plan_only 로 오표시함 → 기간 내 ID 기준으로 조회
+  const payableLinks = await fetchPayableLinksForAccrualAndBankIds(
+    (accrualRows || []).map((r) => Number(r.id || 0)),
+    (bankRowsInRange || []).map((b) => Number(b.id || 0))
+  )
 
   const paymentByAccrual = new Map<number, number>()
   const bankByAccrual = new Map<number, number>()
@@ -374,7 +428,8 @@ export async function buildExpenseSearchOverview(params: {
     const bankId = Number(p.bank_transaction_id || 0)
     const pettyId = Number(p.petty_cash_transaction_id || 0)
     const amt = Number(p.amount || 0)
-    if (accrualId > 0 && amt < 0) {
+    // 통장·패티 없는 고아 Payment 는 잔액·연결 집계에서 제외
+    if (accrualId > 0 && amt < 0 && (bankId > 0 || pettyId > 0)) {
       paymentByAccrual.set(accrualId, (paymentByAccrual.get(accrualId) || 0) + Math.abs(amt))
     }
     if (accrualId > 0 && bankId > 0) {
@@ -421,7 +476,8 @@ export async function buildExpenseSearchOverview(params: {
     const planned = expenseAccrualNetPayable(gross, wht)
     const paid = paymentByAccrual.get(id) || 0
     const remaining = Math.max(0, planned - paid)
-    const planStatus = resolvePlanStatus(r.status, remaining)
+    const hasSettledPayment = bankByAccrual.has(id) || pettyAccrualSet.has(id) || paid > 0
+    const planStatus = resolvePlanStatus(r.status, remaining, hasSettledPayment)
 
     mappedAccruals.push({ row: r, decoded, gross, vatAmt, wht, paid, planned, remaining, planStatus })
   }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch, type PayeeMemoMatchQuality } from '@/lib/expense-accrual-bank-memo-match'
+import { isSettledExpensePayment } from '@/lib/expense-accrual-settlement'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { roundMoney2 } from '@/lib/invoice-vat-total'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
@@ -36,6 +37,7 @@ type PayableTxRow = {
   amount?: number
   expense_accrual_id?: number
   bank_transaction_id?: number | null
+  petty_cash_transaction_id?: number | null
 }
 
 function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdrawalCategory: string } {
@@ -55,7 +57,8 @@ const MEMO_MATCH_ORDER: Record<PayeeMemoMatchQuality, number> = {
   mismatch: 3,
 }
 
-const LINKABLE_ACCRUAL_STATUSES = ['planned', 'approved', 'partial'] as const
+/** paid/done 포함 — 통장·패티 미정산(고아 paid)도 잔액이 있으면 연결 후보 */
+const LINKABLE_ACCRUAL_STATUSES = ['planned', 'approved', 'partial', 'paid', 'done'] as const
 
 function accrualMatchesStore(rowStore: string, storeFilter: string): boolean {
   const row = String(rowStore || '').trim()
@@ -107,13 +110,13 @@ export async function GET(request: NextRequest) {
     const bankMemo = String(bankRow.memo || '')
     const bankNote = String(bankRow.note || '')
     const [accrualRows, payableRows] = await Promise.all([
-      supabaseSelectFilter('expense_accruals', 'status=in.(planned,approved,partial)', {
+      supabaseSelectFilter('expense_accruals', 'status=in.(planned,approved,partial,paid,done)', {
         select: 'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by',
         order: 'expense_date.asc,id.asc',
         limit: 5000,
       }) as Promise<ExpenseAccrualRow[]>,
       supabaseSelectFilter('payable_transactions', 'id=gt.0', {
-        select: 'amount,expense_accrual_id,bank_transaction_id',
+        select: 'amount,expense_accrual_id,bank_transaction_id,petty_cash_transaction_id',
         limit: 20000,
       }) as Promise<PayableTxRow[]>,
     ])
@@ -122,8 +125,10 @@ export async function GET(request: NextRequest) {
     for (const tx of payableRows || []) {
       const accrualId = Number(tx.expense_accrual_id || 0)
       if (!accrualId) continue
+      // 통장·패티 미연결 Payment(고아)는 잔액 차감에서 제외 → 재연결 가능
+      if (!isSettledExpensePayment(tx)) continue
       const amt = Number(tx.amount || 0)
-      if (amt < 0) paidByAccrual.set(accrualId, (paidByAccrual.get(accrualId) || 0) + Math.abs(amt))
+      paidByAccrual.set(accrualId, (paidByAccrual.get(accrualId) || 0) + Math.abs(amt))
     }
 
     const rawList = (accrualRows || [])
@@ -134,6 +139,10 @@ export async function GET(request: NextRequest) {
         const paidAmount = paidByAccrual.get(id) || 0
         const remainingAmount = Math.max(0, roundMoney2(plannedAmount - paidAmount))
         const decoded = decodePayeeCode(r.payee_code)
+        const rawStatus = String(r.status || '').toLowerCase() || 'approved'
+        // UI/선택용: 고아 paid 는 approved 로 노출해 연결 가능하게 함
+        const status =
+          (rawStatus === 'paid' || rawStatus === 'done') && paidAmount <= 0.009 ? 'approved' : rawStatus
         return {
           id,
           payeeCode: decoded.payeeCode,
@@ -147,14 +156,16 @@ export async function GET(request: NextRequest) {
           memo: r.memo || '',
           accountSubjectId: r.account_subject_id || null,
           storeName: r.store_name || '',
-          status: String(r.status || '').toLowerCase() || 'approved',
+          status,
           approvedAt: r.approved_at ? String(r.approved_at) : '',
           approvedBy: r.approved_by || '',
         }
       })
       .filter((r) => {
-        const d = String(r.dueDate || r.expenseDate || '').slice(0, 10)
-        return d === bankDate
+        // due_date 우선이면 발생일과 통장일이 같아도 누락됨 → 둘 중 하나 일치면 허용
+        const due = String(r.dueDate || '').slice(0, 10)
+        const exp = String(r.expenseDate || '').slice(0, 10)
+        return due === bankDate || exp === bankDate
       })
       .filter((r) => LINKABLE_ACCRUAL_STATUSES.includes(String(r.status || '').toLowerCase() as (typeof LINKABLE_ACCRUAL_STATUSES)[number]))
       .filter((r) => (r.remainingAmount || 0) > 0)

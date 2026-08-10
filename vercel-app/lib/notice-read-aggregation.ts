@@ -128,16 +128,20 @@ export function aggregateNoticeReadStats(
     { store: string; name: string; job: string; targeted: number; confirmed: number }
   >()
 
+  const minUnreadDays = Math.max(0, Math.floor(Number(opts.minUnreadDays) || 0))
+  const asOfYmd = String(opts.asOfYmd || '').trim().slice(0, 10)
+  // 퇴사일이 기준일(또는 방콕 오늘) 이전·당일인 경우만 제외 — 미래 퇴사 예정은 재직으로 집계
+  const asOfForResign =
+    asOfYmd || new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+
   const byKey = new Map<string, EmpRow>()
   for (const e of employees) {
     if (!e.name) continue
-    if (e.resignDate && e.resignDate !== '') continue
+    const resign = String(e.resignDate || '').trim().slice(0, 10)
+    if (resign && resign <= asOfForResign) continue
     if (!e.store || e.store === '매장명' || e.store === 'Store') continue
     byKey.set(empKey(e.store, e.name), e)
   }
-
-  const minUnreadDays = Math.max(0, Math.floor(Number(opts.minUnreadDays) || 0))
-  const asOfYmd = String(opts.asOfYmd || '').trim().slice(0, 10)
 
   const getAgg = (store: string, name: string, requireRoster: boolean) => {
     const k0 = empKey(store, name)

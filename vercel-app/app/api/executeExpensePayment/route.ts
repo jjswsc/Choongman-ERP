@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch } from '@/lib/expense-accrual-bank-memo-match'
+import {
+  isOrphanPaidExpenseAccrualStatus,
+  isSettledExpensePayment,
+  settledPaidAbsFromPayableRows,
+} from '@/lib/expense-accrual-settlement'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 import { propagateExpenseAccrualInvoiceToLinkedBank } from '@/lib/expense-accrual-invoice-sync'
 import { propagateExpenseAccrualInvoiceToLinkedPetty } from '@/lib/petty-cash-invoice-sync'
@@ -214,38 +219,52 @@ export async function POST(request: NextRequest) {
     if (accrualStatus === 'planned') {
       return NextResponse.json({ success: false, message: '관리자 승인 후 집행할 수 있습니다.' }, { status: 400, headers })
     }
-    if (accrualStatus === 'paid' || accrualStatus === 'done') {
-      return NextResponse.json({ success: false, message: '이미 지급 완료된 건입니다.' }, { status: 400, headers })
-    }
-    if (accrualStatus !== 'approved' && accrualStatus !== 'partial') {
-      return NextResponse.json({ success: false, message: '승인 상태를 확인할 수 없습니다.' }, { status: 400, headers })
-    }
 
     const existingPaymentRows = (await supabaseSelectFilter(
       'payable_transactions',
       `expense_accrual_id=eq.${expenseAccrualId}&ref_type=eq.Payment`,
-      { select: 'id,amount,bank_transaction_id', limit: 20 }
-    )) as { id?: number; amount?: number; bank_transaction_id?: number | null }[] | null
-    const existingPaymentAbs = (existingPaymentRows || []).reduce(
-      (sum, row) => sum + Math.abs(Number(row.amount) || 0),
-      0
-    )
-    if (existingPaymentAbs > 0.01) {
+      { select: 'id,amount,bank_transaction_id,petty_cash_transaction_id', limit: 50 }
+    )) as {
+      id?: number
+      amount?: number
+      bank_transaction_id?: number | null
+      petty_cash_transaction_id?: number | null
+    }[] | null
+
+    const settledExisting = (existingPaymentRows || []).filter((row) => isSettledExpensePayment(row))
+    if (settledExisting.length > 0) {
       return NextResponse.json(
         { success: false, message: '이미 미지급에 지급(Payment) 행이 등록된 지급예정입니다. 중복 집행할 수 없습니다.' },
         { status: 400, headers }
       )
     }
 
+    // 통장·패티 없이 paid 만 찍힌 고아 건은 재연결 허용. 고아 Payment 행은 정리.
+    if (accrualStatus === 'paid' || accrualStatus === 'done') {
+      if (!isOrphanPaidExpenseAccrualStatus(accrualStatus, settledExisting.length > 0)) {
+        return NextResponse.json({ success: false, message: '이미 지급 완료된 건입니다.' }, { status: 400, headers })
+      }
+    } else if (accrualStatus !== 'approved' && accrualStatus !== 'partial') {
+      return NextResponse.json({ success: false, message: '승인 상태를 확인할 수 없습니다.' }, { status: 400, headers })
+    }
+
+    for (const row of existingPaymentRows || []) {
+      const id = Number(row.id || 0)
+      if (id <= 0 || isSettledExpensePayment(row)) continue
+      await supabaseDeleteByFilter('payable_transactions', `id=eq.${id}`)
+    }
+
     const paidRows = (await supabaseSelectFilter(
       'payable_transactions',
       `expense_accrual_id=eq.${expenseAccrualId}`,
-      { select: 'amount,expense_accrual_id', limit: 5000 }
-    )) as PayableTxRow[] | null
-    const paidAmount = (paidRows || []).reduce((sum, r) => {
-      const a = Number(r.amount || 0)
-      return sum + (a < 0 ? Math.abs(a) : 0)
-    }, 0)
+      { select: 'amount,expense_accrual_id,bank_transaction_id,petty_cash_transaction_id', limit: 5000 }
+    )) as {
+      amount?: number
+      expense_accrual_id?: number
+      bank_transaction_id?: number | null
+      petty_cash_transaction_id?: number | null
+    }[] | null
+    const paidAmount = settledPaidAbsFromPayableRows(paidRows || [])
     const wht = Math.max(0, Math.abs(Number(source.withholding_tax_amount ?? 0) || 0))
     const plannedAmount = expenseAccrualNetPayable(parseMoneyAmount(source.amount), wht)
     const remaining = Math.max(0, plannedAmount - paidAmount)
@@ -634,7 +653,7 @@ export async function POST(request: NextRequest) {
         })
       : buildPettyLinkedPayablePaymentMemo(paymentMemo)
     if (bankId) {
-      await upsertPayableFromBankPurchasePayment({
+      const upserted = await upsertPayableFromBankPurchasePayment({
         bankTransactionId: bankId,
         vendorCode,
         amountAbs: amount,
@@ -645,6 +664,23 @@ export async function POST(request: NextRequest) {
         dueDate: source.due_date || null,
         accountSubjectId: accrualAccountSubjectId,
       })
+      const linkedCheck = upserted
+        ? ((await supabaseSelectFilter(
+            'payable_transactions',
+            `bank_transaction_id=eq.${bankId}&expense_accrual_id=eq.${expenseAccrualId}&ref_type=eq.Payment`,
+            { select: 'id', limit: 1 }
+          )) as { id?: number }[] | null)
+        : null
+      if (!linkedCheck?.length) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              '통장 연결 Payment 생성에 실패했습니다. 지급예정 상태가 paid 로만 남지 않도록 중단했습니다. 거래처 코드·금액을 확인 후 다시 연결해 주세요.',
+          },
+          { status: 500, headers }
+        )
+      }
     } else {
       await supabaseInsert('payable_transactions', {
         vendor_code: vendorCode,

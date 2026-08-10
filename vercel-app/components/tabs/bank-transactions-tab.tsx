@@ -110,6 +110,11 @@ import {
   saveBankQuickMemos,
 } from "@/lib/bank-quick-memos"
 import { parsePurchaseDrillNav } from "@/lib/income-statement-purchase-drill-nav"
+import {
+  clearBankQueryViewCache,
+  readBankQueryViewCache,
+  saveBankQueryViewCache,
+} from "@/lib/bank-query-view-cache"
 import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlement-dialog"
 import { formatBahtAmountForField, formatBahtInputDisplay, parseBahtAmount } from "@/lib/baht-input-format"
 import {
@@ -236,6 +241,8 @@ export function BankTransactionsTab() {
     calculatedBalance: number
   } | null>(null)
   const [actualBalance, setActualBalance] = React.useState("")
+  /** 조회 버튼(또는 복원)으로 목록을 불러온 적 있음 — 탭 전환 후에도 유지 */
+  const [hasSearched, setHasSearched] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
 
   const [accountSubjectOptions, setAccountSubjectOptions] = React.useState<AccountSubjectItem[]>([])
@@ -555,13 +562,20 @@ export function BankTransactionsTab() {
         userRole: auth?.role,
         storeFilter: selectedAccountStore || undefined,
       })
-      setApprovedPickList(res.list || [])
+      const listRows = res.list || []
+      setApprovedPickList(listRows)
+      // 이미 연결된 통장은 list=[] + message 만 옴 → 「연결 가능한 지급예정 없음」으로 오인되지 않게 안내
+      if (listRows.length === 0 && res.message) {
+        const msg = translateApiMessage(res.message, t) || res.message
+        setApprovedPickRow(null)
+        await appAlert(msg)
+      }
     } catch {
       setApprovedPickList([])
     } finally {
       setApprovedPickLoading(false)
     }
-  }, [auth?.role, selectedAccountStore])
+  }, [auth?.role, selectedAccountStore, t])
 
   const openReceivableLinkedView = React.useCallback(async (row: (typeof list)[0]) => {
     if (!row?.id) return
@@ -658,6 +672,7 @@ export function BankTransactionsTab() {
     tabParam === "input" ? "input" : tabParam === "query" ? "query" : "input"
   )
   const hasBankQueryDraft = Boolean(
+    hasSearched ||
     activeBankTab === "query" ||
     Object.keys(queryRowEdits).length > 0 ||
     actualBalance.trim() ||
@@ -679,11 +694,28 @@ export function BankTransactionsTab() {
     openRegisterTxIdParam && Number(openRegisterTxIdParam) > 0 ? Number(openRegisterTxIdParam) : null
   )
   const restoreListLoadedRef = React.useRef(false)
+  const viewCacheRestoredRef = React.useRef(false)
+  const queryDraftRestoredRef = React.useRef(false)
+  /** loadData로 가져온 list/summary에 대응하는 계좌·기간 (필터만 바꾼 뒤 캐시가 어긋나지 않게) */
+  const lastFetchedQueryRef = React.useRef<{
+    accountId: string
+    startStr: string
+    endStr: string
+    list: BankTransactionRow[]
+    summary: {
+      openingBalance: number
+      beginningBalance: number
+      periodDeposits: number
+      periodWithdrawals: number
+      calculatedBalance: number
+    } | null
+  } | null>(null)
   const [restoredHighlightTxId, setRestoredHighlightTxId] = React.useState<number | null>(null)
 
   const restoreBankQueryDraft = React.useCallback((data: BankQueryDraft | null | undefined) => {
     if (!data) return false
     const hasDraft =
+      data.hasSearched === true ||
       data.activeBankTab === "query" ||
       Boolean(data.actualBalance?.trim()) ||
       Boolean(data.filterTransType) ||
@@ -708,8 +740,13 @@ export function BankTransactionsTab() {
     if (typeof data.filterKeyword === "string") setFilterKeyword(data.filterKeyword)
     // filterVendorCode · filterPlExpenseOnly — 손익/매입 드릴다운 전용(URL). 세션 복원 시 입금이 숨겨져 혼란을 줌.
     setQueryRowEdits((data.queryRowEdits || {}) as Record<number, QueryRowEdit>)
-    setActiveBankTab("query")
-    restoreQueryListRef.current = true
+    setActiveBankTab(data.activeBankTab === "input" || data.activeBankTab === "explanation" ? data.activeBankTab : "query")
+    if (data.hasSearched) {
+      setHasSearched(true)
+      restoreQueryListRef.current = true
+    } else if (data.activeBankTab === "query" || !data.activeBankTab) {
+      restoreQueryListRef.current = true
+    }
     return true
   }, [])
   React.useEffect(() => {
@@ -774,25 +811,81 @@ export function BankTransactionsTab() {
     } catch {}
   }, [allowBankUrlSync, searchParams, queryDraftStorageKey])
 
+  /** remount 시 메모리 스냅샷으로 조회 조건·결과 즉시 복구 (검색 재클릭 불필요) */
+  React.useEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    // 숨김 keep-alive면 스킵 — allowBankUrlSync가 true로 바뀌며 복귀 시 다시 시도
+    if (!pageActiveRef.current || !allowBankUrlSync) return
+    viewCacheRestoredRef.current = true
+    if (parsePurchaseDrillNav(searchParams).fromPlDrill) return
+    const snap = readBankQueryViewCache()
+    if (!snap || !snap.hasSearched) return
+    if (snap.accountId) setAccountId(snap.accountId)
+    if (snap.startStr && /^\d{4}-\d{2}-\d{2}$/.test(snap.startStr)) setStartStr(snap.startStr)
+    if (snap.endStr && /^\d{4}-\d{2}-\d{2}$/.test(snap.endStr)) setEndStr(snap.endStr)
+    setActualBalance(snap.actualBalance || "")
+    setFilterTransType(snap.filterTransType || "")
+    setFilterCategory(snap.filterCategory || "")
+    setFilterVendorCode(snap.filterVendorCode || "")
+    setFilterAccountSubjectId(snap.filterAccountSubjectId || "")
+    setFilterAccountSubjectEmpty(Boolean(snap.filterAccountSubjectEmpty))
+    setFilterPlExpenseOnly(Boolean(snap.filterPlExpenseOnly))
+    setFilterNeedsAttention(Boolean(snap.filterNeedsAttention))
+    setFilterInvoiceNotReceived(Boolean(snap.filterInvoiceNotReceived))
+    setFilterAmount(snap.filterAmount || "")
+    setFilterKeyword(snap.filterKeyword || "")
+    const edits: Record<number, QueryRowEdit> = {}
+    for (const [k, v] of Object.entries(snap.queryRowEdits || {})) {
+      const id = Number(k)
+      if (Number.isFinite(id) && v) edits[id] = v as QueryRowEdit
+    }
+    setQueryRowEdits(edits)
+    setList(snap.list || [])
+    setSummary(snap.summary || null)
+    setHasSearched(true)
+    lastFetchedQueryRef.current = {
+      accountId: snap.accountId || "",
+      startStr: snap.startStr,
+      endStr: snap.endStr,
+      list: snap.list || [],
+      summary: snap.summary || null,
+    }
+    setActiveBankTab(
+      snap.activeBankTab === "input" || snap.activeBankTab === "explanation"
+        ? snap.activeBankTab
+        : "query"
+    )
+    queryDraftRestoredRef.current = true
+  }, [allowBankUrlSync, searchParams, pageActiveRef])
+
   React.useEffect(() => {
     if (!pageActiveRef.current) return
+    if (queryDraftRestoredRef.current) return
     try {
       const draftRaw = sessionStorage.getItem(importDraftStorageKey)
       if (draftRaw) {
         const data = JSON.parse(draftRaw) as BankImportDraft
-        if (restoreBankImportDraft(data)) return
+        if (restoreBankImportDraft(data)) {
+          queryDraftRestoredRef.current = true
+          return
+        }
         sessionStorage.removeItem(importDraftStorageKey)
       }
       const raw = sessionStorage.getItem(importRestoreKey)
       if (raw) {
         const data = JSON.parse(raw) as BankImportDraft
         sessionStorage.removeItem(importRestoreKey)
-        if (restoreBankImportDraft(data)) return
+        if (restoreBankImportDraft(data)) {
+          queryDraftRestoredRef.current = true
+          return
+        }
       }
-      if (searchParams.toString()) return
+      // URL에 tab=query 등만 있어도 초안 복원은 허용 (예전엔 searchParams가 있으면 통째로 skip)
+      if (parsePurchaseDrillNav(searchParams).fromPlDrill) return
       const queryDraftRaw = sessionStorage.getItem(queryDraftStorageKey)
       if (!queryDraftRaw) return
       const queryDraft = JSON.parse(queryDraftRaw) as BankQueryDraft
+      queryDraftRestoredRef.current = true
       if (!restoreBankQueryDraft(queryDraft)) {
         sessionStorage.removeItem(queryDraftStorageKey)
       }
@@ -847,6 +940,7 @@ export function BankTransactionsTab() {
         endStr,
         actualBalance,
         activeBankTab,
+        hasSearched,
         filterTransType,
         filterCategory,
         filterAccountSubjectId,
@@ -871,9 +965,78 @@ export function BankTransactionsTab() {
     filterKeyword,
     filterTransType,
     hasBankQueryDraft,
+    hasSearched,
     queryDraftStorageKey,
     queryRowEdits,
     startStr,
+  ])
+
+  React.useEffect(() => {
+    if (!hasSearched) {
+      lastFetchedQueryRef.current = null
+      clearBankQueryViewCache()
+      return
+    }
+    const fetched = lastFetchedQueryRef.current
+    if (!fetched) return
+    const sameQuery =
+      fetched.accountId === accountId &&
+      fetched.startStr === startStr &&
+      fetched.endStr === endStr
+    const listToSave = sameQuery ? (list as BankTransactionRow[]) : fetched.list
+    const summaryToSave = sameQuery ? summary : fetched.summary
+    if (sameQuery) {
+      lastFetchedQueryRef.current = {
+        ...fetched,
+        list: listToSave,
+        summary: summaryToSave,
+      }
+    }
+    const edits: Record<string, Record<string, string | undefined>> = {}
+    for (const [k, v] of Object.entries(queryRowEdits)) {
+      edits[k] = { ...(v as QueryRowEdit) }
+    }
+    saveBankQueryViewCache({
+      accountId: sameQuery ? accountId : fetched.accountId,
+      startStr: sameQuery ? startStr : fetched.startStr,
+      endStr: sameQuery ? endStr : fetched.endStr,
+      actualBalance,
+      activeBankTab,
+      filterTransType,
+      filterCategory,
+      filterVendorCode,
+      filterAccountSubjectId,
+      filterAccountSubjectEmpty,
+      filterPlExpenseOnly,
+      filterNeedsAttention,
+      filterInvoiceNotReceived,
+      filterAmount,
+      filterKeyword,
+      queryRowEdits: edits,
+      list: listToSave,
+      summary: summaryToSave,
+      hasSearched: true,
+    })
+  }, [
+    accountId,
+    activeBankTab,
+    actualBalance,
+    endStr,
+    filterAccountSubjectEmpty,
+    filterAccountSubjectId,
+    filterAmount,
+    filterCategory,
+    filterInvoiceNotReceived,
+    filterKeyword,
+    filterNeedsAttention,
+    filterPlExpenseOnly,
+    filterTransType,
+    filterVendorCode,
+    hasSearched,
+    list,
+    queryRowEdits,
+    startStr,
+    summary,
   ])
 
   React.useEffect(() => {
@@ -920,12 +1083,30 @@ export function BankTransactionsTab() {
       endStr,
     })
       .then((r) => {
-        setList(r.list || [])
-        setSummary(r.summary || null)
+        const nextList = (r.list || []) as BankTransactionRow[]
+        const nextSummary = r.summary || null
+        setList(nextList)
+        setSummary(nextSummary)
+        setHasSearched(true)
+        lastFetchedQueryRef.current = {
+          accountId,
+          startStr,
+          endStr,
+          list: nextList,
+          summary: nextSummary,
+        }
       })
       .catch(() => {
         setList([])
         setSummary(null)
+        setHasSearched(true)
+        lastFetchedQueryRef.current = {
+          accountId,
+          startStr,
+          endStr,
+          list: [],
+          summary: null,
+        }
       })
       .finally(() => setLoading(false))
   }, [accountId, startStr, endStr])
@@ -2060,6 +2241,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         })
         setList(fresh.list || [])
         setSummary(fresh.summary || null)
+        setHasSearched(true)
+        lastFetchedQueryRef.current = {
+          accountId: String(accountId),
+          startStr: refreshStart,
+          endStr: refreshEnd,
+          list: (fresh.list || []) as BankTransactionRow[],
+          summary: fresh.summary || null,
+        }
         setActiveBankTab("query")
         const importMessage =
           (res.policySkipped ?? 0) > 0 || (res.policyAdjusted ?? 0) > 0
