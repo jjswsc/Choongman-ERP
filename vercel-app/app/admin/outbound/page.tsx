@@ -7,6 +7,11 @@ import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtm
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
+import {
+  clearOutboundViewCache,
+  readOutboundViewCache,
+  saveOutboundViewCache,
+} from "@/lib/outbound-view-cache"
 import { ArrowUpFromLine, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -219,6 +224,7 @@ export default function OutboundPage() {
   const [loading, setLoading] = React.useState(true)
   const [historyLoading, setHistoryLoading] = React.useState(false)
   const [historyList, setHistoryList] = React.useState<OutboundHistoryItem[]>([])
+  const [historyHasQueried, setHistoryHasQueried] = React.useState(false)
   const [summaryLoading, setSummaryLoading] = React.useState(false)
   const [summaryList, setSummaryList] = React.useState<OutboundHistoryItem[]>([])
   const [summaryHasQueried, setSummaryHasQueried] = React.useState(false)
@@ -270,6 +276,7 @@ export default function OutboundPage() {
   const [whFilterBy, setWhFilterBy] = React.useState<"order" | "delivery">("delivery")
   const [whLoading, setWhLoading] = React.useState(false)
   const [whData, setWhData] = React.useState<GetOutboundByWarehouseResult | null>(null)
+  const [whHasQueried, setWhHasQueried] = React.useState(false)
   const [whWarehouseFilter, setWhWarehouseFilter] = React.useState("")
   const [whStoreFilter, setWhStoreFilter] = React.useState("")
   const [whItemFilter, setWhItemFilter] = React.useState("")
@@ -300,11 +307,51 @@ export default function OutboundPage() {
   const pageActiveRef = useErpPageActiveRef()
   const plDrillNavAppliedRef = React.useRef(false)
   const plDrillAutoFetchRef = React.useRef(false)
+  const viewCacheRestoredRef = React.useRef(false)
 
   React.useEffect(() => {
     const today = getBangkokTodayDateString()
     setOutDate(today)
   }, [])
+
+  React.useEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowOutboundUrlSync) return
+    if (parsePurchaseDrillNav(searchParams).fromPlDrill) {
+      viewCacheRestoredRef.current = true
+      return
+    }
+    viewCacheRestoredRef.current = true
+    const snap = readOutboundViewCache()
+    if (!snap) return
+    setTabValue(snap.tabValue || "hist")
+    if (snap.histStart) setHistStart(snap.histStart)
+    if (snap.histEnd) setHistEnd(snap.histEnd)
+    setHistMonth(snap.histMonth || "")
+    setHistStore(snap.histStore || "")
+    setHistTargetType(snap.histTargetType || "")
+    setHistType(snap.histType || "")
+    setHistDeliveryStatus(snap.histDeliveryStatus || "")
+    setInvoiceSearch(snap.invoiceSearch || "")
+    setItemSearch(snap.itemSearch || "")
+    setHistoryList(snap.historyList || [])
+    setUsageList(snap.usageList || [])
+    setHistoryHasQueried(Boolean(snap.historyHasQueried))
+    setSummaryList(snap.summaryList || [])
+    setSummaryHasQueried(Boolean(snap.summaryHasQueried))
+    setSummaryVendorFilter(snap.summaryVendorFilter || "")
+    setSummaryCategoryFilter(snap.summaryCategoryFilter || "")
+    setSummaryMenuSearch(snap.summaryMenuSearch || "")
+    setSummaryStoreFilter(snap.summaryStoreFilter || "")
+    if (snap.whStart) setWhStart(snap.whStart)
+    if (snap.whEnd) setWhEnd(snap.whEnd)
+    setWhFilterBy(snap.whFilterBy || "delivery")
+    setWhData(snap.whData || null)
+    setWhHasQueried(Boolean(snap.whHasQueried))
+    setWhWarehouseFilter(snap.whWarehouseFilter || "")
+    setWhStoreFilter(snap.whStoreFilter || "")
+    setWhItemFilter(snap.whItemFilter || "")
+  }, [allowOutboundUrlSync, searchParams, pageActiveRef])
 
   React.useEffect(() => {
     if (!pageActiveRef.current) return
@@ -325,13 +372,73 @@ export default function OutboundPage() {
       plDrillNavAppliedRef.current = true
       return
     }
-    // keep-alive: 다른 메뉴 URL일 때 히스토리 기간을 오늘로 덮지 않음
+    // keep-alive: 숨김 중·복귀 시 기간을 오늘로 덮지 않음 (초기값은 당월)
     if (!allowOutboundUrlSync) return
-    if (plDrillNavAppliedRef.current) return
-    const today = getBangkokTodayDateString()
-    setHistStart(today)
-    setHistEnd(today)
   }, [searchParams, allowOutboundUrlSync, pageActiveRef])
+
+  React.useEffect(() => {
+    if (!historyHasQueried && !summaryHasQueried && !whHasQueried) {
+      clearOutboundViewCache()
+      return
+    }
+    saveOutboundViewCache({
+      tabValue,
+      histStart,
+      histEnd,
+      histMonth,
+      histStore,
+      histTargetType,
+      histType,
+      histDeliveryStatus,
+      invoiceSearch,
+      itemSearch,
+      historyList,
+      usageList,
+      historyHasQueried,
+      summaryList,
+      summaryHasQueried,
+      summaryVendorFilter,
+      summaryCategoryFilter,
+      summaryMenuSearch,
+      summaryStoreFilter,
+      whStart,
+      whEnd,
+      whFilterBy,
+      whData,
+      whHasQueried,
+      whWarehouseFilter,
+      whStoreFilter,
+      whItemFilter,
+    })
+  }, [
+    histDeliveryStatus,
+    histEnd,
+    histMonth,
+    histStart,
+    histStore,
+    histTargetType,
+    histType,
+    historyHasQueried,
+    historyList,
+    invoiceSearch,
+    itemSearch,
+    summaryCategoryFilter,
+    summaryHasQueried,
+    summaryList,
+    summaryMenuSearch,
+    summaryStoreFilter,
+    summaryVendorFilter,
+    tabValue,
+    usageList,
+    whData,
+    whEnd,
+    whFilterBy,
+    whHasQueried,
+    whItemFilter,
+    whStart,
+    whStoreFilter,
+    whWarehouseFilter,
+  ])
 
   const handleHistStartChange = React.useCallback((next: string) => {
     setHistStart(next)
@@ -504,9 +611,11 @@ export default function OutboundPage() {
       } else {
         setWhData({ byWarehouse: {}, warehouseOrder: [], period: { start: whStart, end: whEnd }, filterBy: whFilterBy })
       }
+      setWhHasQueried(true)
     } catch (err) {
       console.error("getOutboundByWarehouse:", err)
       setWhData(null)
+      setWhHasQueried(true)
       const msg = err instanceof Error ? err.message : String(err)
       await appAlert(t("orderNoData") + "\n\n" + t("msg_error_prefix") + msg)
     } finally {
@@ -835,6 +944,7 @@ export default function OutboundPage() {
         })
         setHistoryList(Array.isArray(list) ? list : [])
         setUsageList([])
+        setHistoryHasQueried(true)
       } else {
         const list = await getCombinedOutboundHistory({
           startStr: s,
@@ -850,10 +960,12 @@ export default function OutboundPage() {
           endStr: e,
         })
         setUsageList(Array.isArray(usageListRes) ? usageListRes : [])
+        setHistoryHasQueried(true)
       }
     } catch (err) {
       setHistoryList([])
       setUsageList([])
+      setHistoryHasQueried(true)
       const msg = err instanceof Error ? err.message : String(err)
       await appAlert(`${t("outNoData")}\n\n${t("msg_error_prefix") || ""}${msg}`)
     } finally {

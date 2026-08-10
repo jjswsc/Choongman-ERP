@@ -36,6 +36,12 @@ import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { dedupeOfficeStoreOptions, isOfficeStoreVariant } from "@/lib/office-store-canonical"
 import { collectCategoryOptions } from "@/lib/stock-history-filter"
 import { useItemCategoryOptions } from "@/lib/use-item-category-options"
+import {
+  clearStockStatusViewCache,
+  readStockStatusViewCache,
+  saveStockStatusViewCache,
+} from "@/lib/stock-status-view-cache"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 
 /** 본사/오피스/본점/CM Office 등 → CM Office 로 통일 (중복 제거) */
 function normalizeStoreList(stores: string[]): string[] {
@@ -57,6 +63,16 @@ export default function StockPage() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [adjustItem, setAdjustItem] = React.useState<StockStatusItem | null>(null)
   const [adjustOpen, setAdjustOpen] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
+  const [activeTab, setActiveTab] = React.useState("list")
+  const allowStockUrlSync = useErpAllowUrlSync("/admin/stock")
+  const pageActiveRef = useErpPageActiveRef()
+  const viewCacheRestoredRef = React.useRef(false)
+  const lastFetchedRef = React.useRef<{
+    storeFilter: string
+    stockDateFilter: string
+    list: StockStatusItem[]
+  } | null>(null)
 
   const isManager = React.useMemo(() => isManagerOrFranchiseeRole(auth?.role || ""), [auth?.role])
   const userStore = (auth?.store || "").trim()
@@ -123,22 +139,90 @@ export default function StockPage() {
         standardUnits: i.standardUnits,
       }))
       setList(mapped)
+      setHasSearched(true)
+      lastFetchedRef.current = {
+        storeFilter: store,
+        stockDateFilter: stockDateFilter.trim(),
+        list: mapped,
+      }
     } catch {
       setList([])
+      setHasSearched(true)
+      lastFetchedRef.current = {
+        storeFilter: store,
+        stockDateFilter: stockDateFilter.trim(),
+        list: [],
+      }
     } finally {
       setLoading(false)
     }
   }, [storeFilter, stockDateFilter])
 
   React.useEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowStockUrlSync) return
+    viewCacheRestoredRef.current = true
+    const snap = readStockStatusViewCache()
+    if (snap?.hasSearched) {
+      setStoreFilter(snap.storeFilter || "")
+      setStockDateFilter(snap.stockDateFilter || getBangkokTodayDateString())
+      setCategoryFilter(snap.categoryFilter || "")
+      setPurchaseSourceFilter(snap.purchaseSourceFilter || "")
+      setSearchTerm(snap.searchTerm || "")
+      setList(snap.list || [])
+      setHasSearched(true)
+      lastFetchedRef.current = {
+        storeFilter: snap.storeFilter || "",
+        stockDateFilter: snap.stockDateFilter || "",
+        list: snap.list || [],
+      }
+      if (snap.activeTab) setActiveTab(snap.activeTab)
+      return
+    }
     setStockDateFilter(getBangkokTodayDateString())
-  }, [])
+  }, [allowStockUrlSync, pageActiveRef])
 
   React.useEffect(() => {
     if (isManager && userStore) {
       setStoreFilter(userStore)
     }
   }, [isManager, userStore])
+
+  React.useEffect(() => {
+    if (!hasSearched) {
+      lastFetchedRef.current = null
+      clearStockStatusViewCache()
+      return
+    }
+    const fetched = lastFetchedRef.current
+    if (!fetched) return
+    const sameQuery =
+      fetched.storeFilter === storeFilter.trim() &&
+      fetched.stockDateFilter === stockDateFilter.trim()
+    const listToSave = sameQuery ? list : fetched.list
+    if (sameQuery) {
+      lastFetchedRef.current = { ...fetched, list: listToSave }
+    }
+    saveStockStatusViewCache({
+      storeFilter: sameQuery ? storeFilter.trim() : fetched.storeFilter,
+      stockDateFilter: sameQuery ? stockDateFilter.trim() : fetched.stockDateFilter,
+      categoryFilter,
+      purchaseSourceFilter,
+      searchTerm,
+      list: listToSave,
+      hasSearched: true,
+      activeTab,
+    })
+  }, [
+    activeTab,
+    categoryFilter,
+    hasSearched,
+    list,
+    purchaseSourceFilter,
+    searchTerm,
+    stockDateFilter,
+    storeFilter,
+  ])
 
   const handleAdjust = (item: StockStatusItem) => {
     setAdjustItem(item)
@@ -217,7 +301,7 @@ export default function StockPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="list" className={adminTabsRootCn}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
