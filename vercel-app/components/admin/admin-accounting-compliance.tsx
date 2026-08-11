@@ -4983,6 +4983,7 @@ export function AdminAccountingCompliance({
             vatInputVendorSummaries={vatInputVendorSummaries}
             vatInputVendorTotals={vatInputVendorTotals}
             loadVat={loadVat}
+            loadWht={loadWht}
             vatSettlementHeadline={vatSettlementHeadline}
             showWhtLedger={showWhtLedger}
             showPp36Ledger={showPp36Ledger}

@@ -224,6 +224,8 @@ export interface AccountingComplianceSummaryTabProps {
   vatInputVendorSummaries: { name: string; count: number; net: number; vat: number; total: number }[]
   vatInputVendorTotals: { count: number; net: number; vat: number; total: number }
   loadVat: (opts?: { forceSync?: boolean }) => Promise<void>
+  /** WHT 전용 탭에서 원장 재조회(서버 자동동기화 포함) */
+  loadWht?: () => Promise<void>
 
   // VAT settlement
   vatSettlementHeadline: { className: string; tone: string }
@@ -424,6 +426,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     vatInputVendorSummaries,
     vatInputVendorTotals,
     loadVat,
+    loadWht,
     vatSettlementHeadline,
     showWhtLedger,
     showPp36Ledger,
@@ -603,10 +606,20 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               variant="outline"
               className="h-9"
               disabled={loading || summaryLoading}
-              title={t("accCompVatForceSyncHint")}
+              title={
+                pp30Mode === "wht_only" || pp30SubView === "wht"
+                  ? t("accCompWhtForceSyncHint")
+                  : t("accCompVatForceSyncHint")
+              }
               onClick={() => {
                 setPp30Queried(true)
-                void loadVat({ forceSync: true })
+                if (pp30Mode === "wht_only" || pp30SubView === "wht") {
+                  setPp30SearchSeq((prev) => prev + 1)
+                  if (loadWht) void loadWht()
+                  else onFilingSearch?.()
+                } else {
+                  void loadVat({ forceSync: true })
+                }
               }}
             >
               {t("accCompVatForceSync")}
@@ -2719,7 +2732,21 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   )
                 })}
                 {!whtRowsFiltered.length ? (
-                  <div className="p-6 text-center text-muted-foreground text-sm">{t("emp_result_empty")}</div>
+                  <div className="p-6 text-center text-muted-foreground text-sm space-y-1">
+                    <div>{t("emp_result_empty")}</div>
+                    {showPnd1Area && whtRows.length > 0 ? (
+                      <p className="text-xs max-w-xl mx-auto leading-relaxed">
+                        {t("accCompPnd1EmptyFilteredHint").replace(
+                          "{{n}}",
+                          String(whtRows.length)
+                        )}
+                      </p>
+                    ) : showPnd1Area ? (
+                      <p className="text-xs max-w-xl mx-auto leading-relaxed">
+                        {t("accCompPnd1EmptyLedgerHint")}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 </>
                 )}

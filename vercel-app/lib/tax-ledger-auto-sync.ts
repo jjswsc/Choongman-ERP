@@ -1033,7 +1033,15 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
   const payrollMonthFilter = buildPayrollMonthPostgrestFilter(validMonths)
   const taxMonthFilter = buildTaxMonthPostgrestFilter(validMonths)
   const storeFilter = normalizeStoreFilter(params.storeFilter)
-  const payrollFilter = appendStoreNameFilter(payrollMonthFilter, storeFilter).replace(/store_name=eq\./g, 'store=eq.')
+  const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined)
+  // exact store=eq 만 쓰면 표기 차이(True Digital vs CM True Digital)로 0건 → 별칭 in.() + JS matches
+  let payrollFilter = payrollMonthFilter
+  if (storeFilter && storeScope.dbStoreNameValues.length > 0) {
+    const inList = storeScope.dbStoreNameValues
+      .map((v) => encodeURIComponent(v))
+      .join(',')
+    payrollFilter = `${payrollMonthFilter}&store=in.(${inList})`
+  }
   const payrollRows = (await supabaseSelectFilterAllPages('payroll_records', payrollFilter, {
     select:
       'id,month,store,name,employee_id,status,salary,pos_allow,haz_allow,diligence_allow,birth_bonus,holiday_pay,spl_bonus,ot_amt,sso,tax,other_ded,net_pay',
@@ -1079,9 +1087,15 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
 
   // withholding_tax_ledger_entries uses tax_month (not payroll_records.month)
   const autoBase = `${taxMonthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:PAYROLL_RECORD_WHT:%')}`
-  const autoFilter = appendStoreNameFilter(autoBase, storeFilter)
+  let autoFilter = autoBase
+  if (storeFilter && storeScope.dbStoreNameValues.length > 0) {
+    const inList = storeScope.dbStoreNameValues
+      .map((v) => encodeURIComponent(v))
+      .join(',')
+    autoFilter = `${autoBase}&store_name=in.(${inList})`
+  }
   const existingAutoRows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', autoFilter, {
-    select: 'id,memo,filing_status',
+    select: 'id,memo,filing_status,store_name',
     order: 'id.asc',
     pageSize: 3000,
     maxRows: 30000,
@@ -1091,6 +1105,7 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     const id = Math.floor(Number(row.id) || 0)
     const payrollId = parsePayrollRecordIdFromMemo(String(row.memo || ''))
     if (id <= 0 || payrollId <= 0) continue
+    if (storeFilter && !storeScope.matches(String(row.store_name || ''))) continue
     existingByPayrollId.set(payrollId, {
       id,
       filingStatus: String(row.filing_status || '').trim().toLowerCase(),
@@ -1105,7 +1120,7 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     const taxMonth = String(p.month || '').slice(0, 7)
     if (!validMonths.includes(taxMonth)) continue
     const store = String(p.store || '').trim()
-    if (storeFilter && !storesMatchForGradeLookup(store, storeFilter)) continue
+    if (storeFilter && !storeScope.matches(store)) continue
     const employeeName = String(p.name || '').trim()
     if (!employeeName) continue
     const employeeId = Math.floor(Number(p.employee_id) || 0)

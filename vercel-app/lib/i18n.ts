@@ -3693,6 +3693,12 @@ export const i18n = {
     accCompVatForceSync: '원장 동기화',
     accCompVatForceSyncHint:
       '선택 매장·월의 POS 매출 + 입고·지출 매입 VAT를 원장에 맞춥니다. 매장 지정 후 실행하세요.',
+    accCompWhtForceSyncHint:
+      '선택 매장·월의 급여·지출·통장 원천세를 원장에 다시 맞춘 뒤 조회합니다.',
+    accCompPnd1EmptyLedgerHint:
+      '이 매장·월에 원천세(tax)>0인 급여 확정 건이 없거나, 아직 원장에 반영되지 않았을 수 있습니다. 「원장 동기화」 후 다시 검색하거나, SSO 미적용(3%) 직원은 PND.3 탭을 확인하세요.',
+    accCompPnd1EmptyFilteredHint:
+      '원장 {{n}}건이 있으나 PND.1(ภ.ง.ด.1) 서식이 아닙니다. PND.3 / PND.53 탭에서 확인하세요.',
     accCompVatSyncOk: '원장 동기화 완료 (POS {n}건 반영). 매입 탭도 함께 확인해 주세요.',
     accCompVatSyncPosFail: 'POS 동기화 중 오류가 있었습니다. 잠시 후 다시 시도하세요.',
     accCompVatSyncTimeout: '원장 동기화 시간이 초과되었습니다. 매장을 지정한 뒤 다시 눌러 주세요.',
@@ -11521,6 +11527,12 @@ Only matters the employee must handle personally on a working day:
     accCompVatForceSync: 'Sync ledger',
     accCompVatForceSyncHint:
       'Resyncs POS sales plus inbound/expense purchase VAT for the selected store and month. Pick a store first.',
+    accCompWhtForceSyncHint:
+      'Re-syncs payroll/expense/bank withholding into the ledger for the selected store and month, then reloads.',
+    accCompPnd1EmptyLedgerHint:
+      'No payroll rows with tax>0 for this store/month, or they are not in the ledger yet. Click Sync ledger and search again, or check the PND.3 tab for SSO-exempt (3%) staff.',
+    accCompPnd1EmptyFilteredHint:
+      '{{n}} ledger row(s) exist but are not PND.1 (ภ.ง.ด.1). Check the PND.3 / PND.53 tabs.',
     accCompVatSyncOk: 'Ledger sync done (POS {n} rows). Also check the purchase tab.',
     accCompVatSyncPosFail: 'POS sync failed. Please try again shortly.',
     accCompVatSyncTimeout: 'Ledger sync timed out. Pick a single store and try again.',
@@ -18266,6 +18278,12 @@ orderItemQty: 'จำนวน',
     accCompVatCalcDisclaimer:
       'หักได้เฉพาะหลักฐานที่ได้รับแล้ว / ไม่ต้องมี รายการรอและหาไม่ได้จะไม่หัก และยอดยื่นจริงอาจต่างหลังปรับ',
     accCompVatForceSyncHint: 'ซิงก์ใหม่: ยอดขาย POS + VAT ซื้อจากรับเข้า/ค่าใช้จ่าย ของสาขาและเดือนที่เลือก เลือกสาขาก่อน',
+    accCompWhtForceSyncHint:
+      'ซิงก์ภาษีหัก ณ ที่จ่ายจากเงินเดือน/ค่าใช้จ่าย/บัญชีธนาคาร ของสาขาและเดือนที่เลือก แล้วโหลดใหม่',
+    accCompPnd1EmptyLedgerHint:
+      'เดือน/สาขานี้อาจไม่มีเงินเดือนที่ยืนยันแล้วและ tax>0 หรือยังไม่ลงบัญชี — กดซิงค์บัญชีแล้วค้นหาใหม่ หรือดูแท็บ PND.3 สำหรับพนักงานไม่มี SSO (3%)',
+    accCompPnd1EmptyFilteredHint:
+      'มี {{n}} รายการในบัญชี แต่ไม่ใช่แบบ ภ.ง.ด.1 — ตรวจแท็บ PND.3 / PND.53',
     accCompVatInputSourcesHint:
       'รายการซื้อมาจาก (1) รับเข้า HQ→สาขาที่จับคู่ใบส่งออก และ (2) ค่าใช้จ่ายที่มี VAT (ยกเว้นหมวดชำระ/สำรองซื้อ) ถ้าเห็นผู้ขายแค่รายเดียว ให้ดูรายบรรทัด รัน backfill ซื้อ และตรวจกระทบยอด HQ↔สาขาในเครื่องมือปฏิบัติการ',
     accCompVatPeriodLockHint: 'เมื่อปิดงวดแล้ว จะแก้บัญชี VAT ของสาขา/เดือนนั้นไม่ได้ การปิดแบบ All จะล็อกทุกสาขาในเดือนนั้น',
