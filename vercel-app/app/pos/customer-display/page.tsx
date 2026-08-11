@@ -198,18 +198,52 @@ export default function PosCustomerDisplayPage() {
 
   const rootClass =
     theme === "light"
-      ? "bg-white text-slate-900"
+      ? "bg-zinc-100 text-zinc-900"
       : theme === "brand"
-        ? "bg-gradient-to-br from-emerald-800 to-emerald-500 text-white"
-        : "bg-slate-950 text-white"
+        ? "bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 text-white"
+        : "bg-zinc-950 text-zinc-50"
+
+  const surfaceClass =
+    theme === "light"
+      ? "border-zinc-200/90 bg-white shadow-[0_12px_40px_-16px_rgba(24,24,27,0.35)]"
+      : theme === "brand"
+        ? "border-white/15 bg-white/10 shadow-[0_16px_48px_-20px_rgba(0,0,0,0.45)] backdrop-blur-md"
+        : "border-zinc-700/80 bg-zinc-900/90 shadow-[0_16px_48px_-20px_rgba(0,0,0,0.65)]"
+
+  const mutedClass = theme === "light" ? "text-zinc-500" : "text-zinc-400"
+  const hairlineClass = theme === "light" ? "border-zinc-100" : "border-white/10"
+  const totalAccentClass =
+    theme === "light"
+      ? "bg-zinc-900 text-white"
+      : theme === "brand"
+        ? "bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-300/30"
+        : "bg-amber-400/15 text-amber-50 ring-1 ring-amber-300/25"
+
+  const hasQrOrderItems =
+    showOrderSummary &&
+    state?.showOrderSummary !== false &&
+    Array.isArray(state?.items) &&
+    state.items.length > 0
+  const hasQrPaymentLines = Array.isArray(state?.paymentLines) && (state?.paymentLines?.length ?? 0) > 0
+  const qrTotalBaht = Number(state?.totalAmount || 0)
 
   return (
     <div className={`flex h-full min-h-0 w-full flex-col overflow-hidden ${rootClass}`}>
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden p-6 md:p-8">
-        <div className="mb-4 flex shrink-0 items-center justify-between border-b border-white/20 pb-3">
-          <h1 className="text-2xl font-bold">{t("posCustomerDisplayTitle") || "Customer Display"}</h1>
-          <span className="text-sm opacity-80">{storeCode || "-"}</span>
-        </div>
+      <div
+        className={`mx-auto flex h-full min-h-0 w-full flex-col overflow-hidden p-5 md:p-8 ${
+          current === "qr" ? "max-w-7xl" : "max-w-6xl"
+        }`}
+      >
+        {current !== "qr" ? (
+          <div
+            className={`mb-4 flex shrink-0 items-center justify-between border-b pb-3 ${
+              theme === "light" ? "border-zinc-200" : "border-white/20"
+            }`}
+          >
+            <h1 className="text-2xl font-bold">{t("posCustomerDisplayTitle") || "Customer Display"}</h1>
+            <span className={`text-sm ${mutedClass}`}>{storeCode || "-"}</span>
+          </div>
+        ) : null}
 
         {current === "idle" ? (
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl">
@@ -362,36 +396,159 @@ export default function PosCustomerDisplayPage() {
         ) : null}
 
         {current === "qr" ? (
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto text-center">
-            {resolvedBrandLogo ? (
-               
-              <img
-                src={resolvedBrandLogo}
-                alt=""
-                className="mb-4 h-16 max-w-[min(100%,280px)] object-contain"
-              />
-            ) : null}
-            <h2 className="mb-2 text-3xl font-semibold">{state?.title || (t("posCustomerQrTitle") || "QR 코드")}</h2>
-            {state?.message ? <p className="mb-4 max-w-lg text-lg text-white/85">{state.message}</p> : null}
-            {qrPayloadText ? (
-              <div className="w-full max-w-[520px] rounded-xl bg-white p-3">
-                <div className="overflow-hidden rounded-lg border bg-white">
-                  {qrPayloadText.startsWith("000201") ? (
-                    <PosQrGuidelineCard
-                      payload={qrPayloadText}
-                      kind={resolvedQrType}
-                      qrClassName="h-[280px] w-[280px]"
-                    />
-                  ) : (
-                    <div className="p-6 text-center text-lg text-black/60">
-                      {t("posCustomerQrEmpty") || "QR 데이터가 없습니다."}
-                    </div>
-                  )}
-                </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="mb-4 flex shrink-0 items-center justify-between gap-3 md:mb-5">
+              <div className="min-w-0">
+                {resolvedBrandLogo ? (
+                  <img
+                    src={resolvedBrandLogo}
+                    alt=""
+                    className="mb-2 h-10 max-w-[180px] object-contain object-left md:h-12 md:max-w-[220px]"
+                  />
+                ) : null}
+                <p className={`text-xs font-medium uppercase tracking-[0.14em] ${mutedClass}`}>
+                  {storeCode || "POS"}
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight md:text-3xl">
+                  {state?.title || (t("posCustomerQrTitle") || "QR 코드")}
+                </h2>
+                <p className={`mt-1 max-w-xl text-sm md:text-base ${mutedClass}`}>
+                  {state?.message || (t("posScanToPayHint") || "스캔 후 결제해 주세요.")}
+                </p>
               </div>
-            ) : (
-              <p className="text-xl opacity-80">{t("posCustomerQrEmpty") || "QR 데이터가 없습니다."}</p>
-            )}
+              {showOrderTotal && state?.showOrderTotal !== false && qrTotalBaht > 0 ? (
+                <div
+                  className={`hidden shrink-0 rounded-2xl px-5 py-3 text-right sm:block ${totalAccentClass}`}
+                >
+                  <p className="text-[11px] font-medium uppercase tracking-wider opacity-80">
+                    {t("posTotal") || "합계"}
+                  </p>
+                  <p className="mt-0.5 text-3xl font-bold tabular-nums tracking-tight md:text-4xl">
+                    {formatBahtNum(qrTotalBaht)}
+                    <span className="ml-1 text-lg font-semibold opacity-80">฿</span>
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:gap-6">
+              <section className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl border ${surfaceClass}`}>
+                <div className={`shrink-0 border-b px-5 py-3 md:px-6 ${hairlineClass}`}>
+                  <p className="text-sm font-semibold tracking-tight md:text-base">
+                    {t("posCustomerOrdering") || "주문 확인"}
+                  </p>
+                </div>
+
+                {hasQrPaymentLines ? (
+                  <div className={`shrink-0 space-y-2 border-b px-5 py-3 md:px-6 ${hairlineClass}`}>
+                    {(state?.paymentLines ?? []).map((row, i) => (
+                      <div key={i} className="flex items-center justify-between gap-3 text-sm md:text-base">
+                        <span className={mutedClass}>{row.label}</span>
+                        <span className="tabular-nums font-semibold">
+                          {formatBahtNum(row.amount)} ฿
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {hasQrOrderItems ? (
+                  <div className="min-h-0 flex-1 space-y-0 overflow-y-auto px-2 py-2 md:px-3">
+                    {state!.items!.map((it, idx) => (
+                      <div
+                        key={`${it.name}-${idx}`}
+                        className={`flex items-start justify-between gap-3 px-3 py-3 md:px-4 md:py-3.5 ${
+                          idx > 0 ? `border-t ${hairlineClass}` : ""
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-base font-medium leading-snug md:text-lg">{it.name}</p>
+                          <p className={`mt-0.5 text-sm tabular-nums ${mutedClass}`}>× {it.qty}</p>
+                        </div>
+                        <p className="shrink-0 text-base font-semibold tabular-nums md:text-lg">
+                          {formatBahtNum(it.amount)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`flex min-h-0 flex-1 items-center justify-center px-6 text-center text-base ${mutedClass}`}>
+                    {t("posScanToPayHint") || "스캔 후 결제해 주세요."}
+                  </div>
+                )}
+
+                {showOrderTotal && state?.showOrderTotal !== false ? (
+                  <div className={`shrink-0 border-t px-5 py-4 md:px-6 md:py-5 ${hairlineClass}`}>
+                    {state?.breakdown &&
+                    (Number(state.breakdown.discountAmt || 0) > 0 ||
+                      resolveReceiptVatPrintAmount({
+                        vatFeeAmt: state.breakdown.vatFeeAmt,
+                        receiptVatDisplayAmt: state.breakdown.receiptVatDisplayAmt,
+                      }) > 0) ? (
+                      <div className={`mb-3 space-y-1 text-sm ${mutedClass}`}>
+                        {Number(state.breakdown.discountAmt || 0) > 0 ? (
+                          <div className="flex justify-between gap-3">
+                            <span>{t("posDiscount") || "할인"}</span>
+                            <span className="tabular-nums">
+                              -{formatBahtNum(state.breakdown.discountAmt)}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="flex items-end justify-between gap-3">
+                      <span className={`text-sm font-medium md:text-base ${mutedClass}`}>
+                        {t("posTotal") || "합계"}
+                      </span>
+                      <span className="text-3xl font-bold tabular-nums tracking-tight md:text-4xl">
+                        {formatBahtNum(qrTotalBaht)}
+                        <span className={`ml-1 text-lg font-semibold ${mutedClass}`}>฿</span>
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+
+              <section
+                className={`flex min-h-0 min-w-0 flex-col items-center justify-center overflow-auto rounded-3xl border px-4 py-5 md:px-6 md:py-6 ${surfaceClass}`}
+              >
+                <p className={`mb-4 text-center text-sm font-medium md:text-base ${mutedClass}`}>
+                  {t("posScanToPayHint") || "스캔 후 결제해 주세요."}
+                </p>
+                {qrPayloadText ? (
+                  <div className="w-full max-w-[320px] rounded-2xl bg-white p-3 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.35)] ring-1 ring-black/5 md:max-w-[340px] md:p-4">
+                    <div className="overflow-hidden rounded-xl">
+                      {qrPayloadText.startsWith("000201") ? (
+                        <PosQrGuidelineCard
+                          payload={qrPayloadText}
+                          kind={resolvedQrType}
+                          qrClassName="h-[260px] w-[260px] md:h-[280px] md:w-[280px]"
+                        />
+                      ) : (
+                        <div className="p-8 text-center text-base text-zinc-500">
+                          {t("posCustomerQrEmpty") || "QR 데이터가 없습니다."}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className={`text-lg ${mutedClass}`}>
+                    {t("posCustomerQrEmpty") || "QR 데이터가 없습니다."}
+                  </p>
+                )}
+                {showOrderTotal && state?.showOrderTotal !== false && qrTotalBaht > 0 ? (
+                  <div className="mt-5 text-center sm:hidden">
+                    <p className={`text-xs uppercase tracking-wider ${mutedClass}`}>
+                      {t("posTotal") || "합계"}
+                    </p>
+                    <p className="mt-1 text-3xl font-bold tabular-nums">
+                      {formatBahtNum(qrTotalBaht)}
+                      <span className={`ml-1 text-base ${mutedClass}`}>฿</span>
+                    </p>
+                  </div>
+                ) : null}
+              </section>
+            </div>
           </div>
         ) : null}
       </div>

@@ -3461,10 +3461,13 @@ export default function PosTerminalPage() {
               '스캔 후 결제해 주세요.',
             qrPayload: effectiveCustomerDisplayQrPayload,
             qrType: effectiveCustomerDisplayQrType,
+            items: customerDisplayOrderItems,
             totalAmount:
               effectiveStaffKbankQrAmount > 0
                 ? effectiveStaffKbankQrAmount
                 : customerDisplayBreakdown.total,
+            breakdown: customerDisplayBreakdown,
+            paymentLines: buildCustomerDisplayPaymentLines(customerDisplayPaymentDraft, customerDisplayT),
           }
         : hasPendingPaymentFlow
           ? {
