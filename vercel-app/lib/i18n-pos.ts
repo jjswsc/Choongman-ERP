@@ -668,6 +668,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posKbankMidTitle: 'KBank QR (매장 MID)',
     posKbankMidHint:
       '은행에서 개통한 매장별 Merchant ID·Partner Shop ID입니다. 충만은 SaaS가 아니라 이 화면에서 확인·저장합니다.',
+    posKbankSkipApiForQrLabel: 'KBank API 없이 QR 금액만 반영',
+    posKbankSkipApiForQrHint:
+      '켜면(수기) Generate QR을 호출하지 않고 금액만 반영합니다. 은행 MID 개통 후 끄면 API·콜백을 사용합니다.',
     posKbankMerchantId: 'Merchant ID',
     posKbankPartnerShopId: 'Partner Shop ID',
     posKbankTerminalId: 'Terminal ID (선택)',
@@ -3754,6 +3757,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posKbankMidTitle: 'KBank QR (store MID)',
     posKbankMidHint:
       'Per-store Merchant ID and Partner Shop ID from the bank. For Choongman, confirm and save here (not in SaaS).',
+    posKbankSkipApiForQrLabel: 'Record QR amount only (no KBank API)',
+    posKbankSkipApiForQrHint:
+      'On (manual): do not call Generate QR — amount only. Off after bank MID is live: use API and callbacks.',
     posKbankMerchantId: 'Merchant ID',
     posKbankPartnerShopId: 'Partner Shop ID',
     posKbankTerminalId: 'Terminal ID (optional)',
@@ -8165,6 +8171,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posKbankMidTitle: 'KBank QR (MID สาขา)',
     posKbankMidHint:
       'Merchant ID และ Partner Shop ID ต่อสาขาจากธนาคาร ครับ สำหรับ Choongman ให้ตรวจและบันทึกที่หน้านี้ ไม่ใช่ SaaS',
+    posKbankSkipApiForQrLabel: 'บันทึกยอด QR ใน POS เท่านั้น (ไม่เรียก KBank API)',
+    posKbankSkipApiForQrHint:
+      'เปิด (กรอกมือ) = ไม่เรียก Generate QR บันทึกยอดอย่างเดียว ครับ ปิดหลังธนาคารเปิด MID แล้ว = ใช้ API และ callback',
     posKbankMerchantId: 'Merchant ID',
     posKbankPartnerShopId: 'Partner Shop ID',
     posKbankTerminalId: 'Terminal ID (ไม่บังคับ)',

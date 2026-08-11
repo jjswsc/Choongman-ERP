@@ -238,6 +238,7 @@ export async function POST(req: NextRequest) {
     const kbankMerchantId = String(body?.kbankMerchantId ?? '').trim()
     const kbankPartnerShopId = String(body?.kbankPartnerShopId ?? '').trim()
     const kbankTerminalId = String(body?.kbankTerminalId ?? '').trim()
+    const kbankSkipApiForQr = parseBoolParam(body?.kbankSkipApiForQr, true)
     const drawerOpt = String(body?.drawerOpenOption || 'reason_only')
     const drawerOpenOption = ['password_and_reason', 'reason_only', 'force'].includes(drawerOpt) ? drawerOpt : 'reason_only'
     const logoPrint = Boolean(body?.logoPrint)
@@ -448,6 +449,7 @@ export async function POST(req: NextRequest) {
       card_auto_open: cardAutoOpen,
       check_auto_open: checkAutoOpen,
       linkpos_skip_terminal_for_card: linkposSkipTerminalForCard,
+      kbank_skip_api_for_qr: kbankSkipApiForQr,
       kbank_merchant_id: kbankMerchantId || null,
       kbank_partner_shop_id: kbankPartnerShopId || null,
       kbank_terminal_id: kbankTerminalId || null,

@@ -141,6 +141,7 @@ export async function GET(request: NextRequest) {
     cardAutoOpen: false,
     checkAutoOpen: false,
     linkposSkipTerminalForCard: shouldSkipLinkposTerminalForCard(null),
+    kbankSkipApiForQr: true,
     kbankMerchantId: '',
     kbankPartnerShopId: '',
     kbankTerminalId: '',
@@ -275,6 +276,7 @@ export async function GET(request: NextRequest) {
       card_auto_open?: boolean
       check_auto_open?: boolean
       linkpos_skip_terminal_for_card?: boolean
+      kbank_skip_api_for_qr?: boolean
       kbank_merchant_id?: string | null
       kbank_partner_shop_id?: string | null
       kbank_terminal_id?: string | null
@@ -433,6 +435,7 @@ export async function GET(request: NextRequest) {
           ? raw.linkpos_skip_terminal_for_card
           : null
       ),
+      kbankSkipApiForQr: raw?.kbank_skip_api_for_qr !== false,
       ...fillKbankMidFromChoongmanDefaults(storeCode, {
         kbankMerchantId: String(raw?.kbank_merchant_id ?? '').trim(),
         kbankPartnerShopId: String(raw?.kbank_partner_shop_id ?? '').trim(),

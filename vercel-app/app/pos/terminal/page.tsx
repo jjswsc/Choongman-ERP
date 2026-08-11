@@ -77,6 +77,7 @@ import {
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import { isLinkposCardApiEnabled, shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
+import { shouldSkipKbankApiForQr } from '@/lib/kbank-qr-api-enabled'
 import { isKbankQrEnabledForStore } from '@/lib/kbank-pilot-stores'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import {
@@ -6467,6 +6468,9 @@ export default function PosTerminalPage() {
       }
 
       if (!isKbankPilotStore) return { ok: true as const }
+      if (shouldSkipKbankApiForQr(posPrinterSettingsRef.current?.kbankSkipApiForQr)) {
+        return { ok: true as const }
+      }
       if (!currentStoreId) {
         const msg = t('posStoreRequired') || '매장 정보가 필요합니다.'
         await appAlert(msg)

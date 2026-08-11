@@ -39,6 +39,7 @@ import {
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isKbankQrEnabledForStore } from '@/lib/kbank-pilot-stores'
+import { shouldSkipKbankApiForQr } from '@/lib/kbank-qr-api-enabled'
 import type { CartPanelPaymentPayload } from '@/components/pos/cart-panel'
 import type { LangCode } from '@/lib/lang-context'
 
@@ -55,6 +56,8 @@ export interface UsePosKbankPaymentParams {
   tourPaymentQrAmount: number
   customerDisplayQrPayload: string
   customerDisplayPaymentDraft: { paymentQrType?: string } | null
+  /** true면 generate-qr 생략(수기). 미설정 시 수기 기본 */
+  kbankSkipApiForQr?: boolean | null
   t: (key: string) => string
   lang: LangCode
   setCustomerDisplayPaymentMessage: (msg: string) => void
@@ -138,6 +141,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
     tourPaymentQrAmount,
     customerDisplayQrPayload,
     customerDisplayPaymentDraft,
+    kbankSkipApiForQr,
     t,
     lang,
     setCustomerDisplayPaymentMessage,
@@ -582,6 +586,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       const qrAmount = Math.max(0, Number(payment?.paymentQr || 0))
       if (qrAmount <= 0) return { ok: true }
       if (!isKbankPilotStore) return { ok: true }
+      if (shouldSkipKbankApiForQr(kbankSkipApiForQr)) return { ok: true }
       if (!currentStoreId) {
         const msg = t('posStoreRequired') || '매장 정보가 필요합니다.'
         await appAlert(msg)
@@ -914,6 +919,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       isPosDemo,
       isKbankPilotStore,
       currentStoreId,
+      kbankSkipApiForQr,
       kbankOpsTerminalId,
       t,
       sleepMs,

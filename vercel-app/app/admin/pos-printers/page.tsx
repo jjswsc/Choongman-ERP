@@ -439,6 +439,7 @@ export default function PosPrintersPage() {
 
   const [drawerOpenOption, setDrawerOpenOption] = React.useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
   const [linkposSkipTerminalForCard, setLinkposSkipTerminalForCard] = React.useState(true)
+  const [kbankSkipApiForQr, setKbankSkipApiForQr] = React.useState(true)
   const [kbankMerchantId, setKbankMerchantId] = React.useState('')
   const [kbankPartnerShopId, setKbankPartnerShopId] = React.useState('')
   const [kbankTerminalId, setKbankTerminalId] = React.useState('')
@@ -718,6 +719,7 @@ export default function PosPrintersPage() {
     setLinkposSkipTerminalForCard(
       LINKPOS_FORCE_MANUAL_CARD || settings.linkposSkipTerminalForCard !== false
     )
+    setKbankSkipApiForQr(settings.kbankSkipApiForQr !== false)
     setKbankMerchantId(String(settings.kbankMerchantId ?? '').trim())
     setKbankPartnerShopId(String(settings.kbankPartnerShopId ?? '').trim())
     setKbankTerminalId(String(settings.kbankTerminalId ?? '').trim())
@@ -970,6 +972,7 @@ export default function PosPrintersPage() {
         cardAutoOpen: false,
         checkAutoOpen: false,
         linkposSkipTerminalForCard,
+        kbankSkipApiForQr,
         kbankMerchantId: String(kbankMerchantId || '').trim(),
         kbankPartnerShopId: String(kbankPartnerShopId || '').trim(),
         kbankTerminalId: String(kbankTerminalId || '').trim(),
@@ -1289,6 +1292,7 @@ export default function PosPrintersPage() {
         copyKeys([
           "drawerOpenOption",
           "linkposSkipTerminalForCard",
+          "kbankSkipApiForQr",
           "kbankMerchantId",
           "kbankPartnerShopId",
           "kbankTerminalId",
@@ -2629,6 +2633,18 @@ export default function PosPrintersPage() {
                       {tr(
                         "posKbankMidHint",
                         "은행에서 개통한 매장별 Merchant ID·Partner Shop ID입니다. 충만은 SaaS가 아니라 이 화면에서 확인·저장합니다."
+                      )}
+                    </p>
+                    <ToggleRow
+                      label={tr("posKbankSkipApiForQrLabel", "KBank API 없이 QR 금액만 반영")}
+                      value={kbankSkipApiForQr}
+                      onChange={setKbankSkipApiForQr}
+                      t={t}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1.5 mb-2">
+                      {tr(
+                        "posKbankSkipApiForQrHint",
+                        "켜면(수기) Generate QR을 호출하지 않고 금액만 반영합니다. 은행 MID 개통 후 끄면 API·콜백을 사용합니다."
                       )}
                     </p>
                   </div>
