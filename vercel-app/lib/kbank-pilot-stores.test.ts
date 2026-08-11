@@ -1,4 +1,5 @@
 import { isKbankQrEnabledForStore, isKbankQrPilotStoreLabel } from '@/lib/kbank-pilot-stores'
+import { lookupChoongmanKbankStoreDefaults } from '@/lib/kbank-store-merchant-defaults'
 import {
   applyStoreKbankConfig,
   emptyKbankRuntime,
@@ -25,6 +26,19 @@ describe('isKbankQrEnabledForStore', () => {
     expect(isKbankQrEnabledForStore({ storeId: 'CM Silom' })).toBe(false)
     expect(isKbankQrPilotStoreLabel('jayle')).toBe(false)
     expect(isKbankQrPilotStoreLabel('huama')).toBe(false)
+  })
+})
+
+describe('choongman kbank store MID defaults', () => {
+  it('maps Huamak / Seacon codes to bank MIDs', () => {
+    expect(lookupChoongmanKbankStoreDefaults('CM Huamak')?.merchantId).toBe('KB000002340300')
+    expect(lookupChoongmanKbankStoreDefaults('CM Huamak')?.partnerShopId).toBe('SJGLB00007')
+    expect(lookupChoongmanKbankStoreDefaults('CM Seacon Srinakarin')?.merchantId).toBe(
+      'KB000002340299'
+    )
+    expect(lookupChoongmanKbankStoreDefaults('CM Seacon Srinakarin')?.partnerShopId).toBe(
+      'SJGLB00006'
+    )
   })
 })
 
