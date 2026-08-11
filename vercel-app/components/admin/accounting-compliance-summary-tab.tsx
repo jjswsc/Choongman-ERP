@@ -790,9 +790,19 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
         {!isEmbeddedPp36Section ? (
         <Collapsible open={pp30OpsOpen} onOpenChange={setPp30OpsOpen}>
           <CollapsibleTrigger asChild>
-            <Button type="button" variant="ghost" size="sm" className="w-full justify-between px-2 h-9 font-normal">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn(
+                "w-full justify-between px-3 h-10 font-medium",
+                "border-border/80 bg-muted/50 text-foreground shadow-sm",
+                "hover:bg-muted hover:border-border",
+                "dark:bg-muted/40 dark:hover:bg-muted/60"
+              )}
+            >
               <span>{t("accCompPp30OpsSectionTitle")}</span>
-              <ChevronDown className={cn("h-4 w-4 transition-transform", pp30OpsOpen && "rotate-180")} aria-hidden />
+              <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", pp30OpsOpen && "rotate-180")} aria-hidden />
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-3 pt-2">
@@ -945,7 +955,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
           </Button>
         </div>
         ) : null}
-        {!isEmbeddedPp36Section && !isPnd5354CompactList ? (
+        {!isEmbeddedPp36Section && !isPnd5354CompactList && pp30Mode !== "wht_only" && allowedPp30Views.length > 1 ? (
         <div className="flex flex-wrap gap-2 border-b border-border/60 pb-3">
           {allowedPp30Views.includes("output") && (
             <Button
