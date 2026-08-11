@@ -23,6 +23,8 @@ import {
   isKbankInquiryResponseApproved,
   isKbankQrSessionTxnNo,
   isKbankRateLimitError,
+  KBANK_API_PAUSE_STORAGE_KEY,
+  KBANK_GENERATE_MIN_INTERVAL_MS,
   KBANK_RATE_LIMIT_BACKOFF_MS,
   resolveKbankInquiryTxnNoForRequest,
   resolveKbankVoidTxnNoForRequest,
@@ -171,6 +173,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
   const kbankOutcomeLastKeyRef = useRef('')
   const kbankManualCancelPendingRef = useRef(false)
   const kbankGenerateLastAtRef = useRef(0)
+  const kbankGenerateInFlightRef = useRef(false)
   const kbankInquiryLastAtRef = useRef(0)
   const kbankFollowupLastAtRef = useRef(0)
   const kbankCcInquiryTriggeredRef = useRef('')
@@ -329,18 +332,54 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
     const until = Date.now() + KBANK_RATE_LIMIT_BACKOFF_MS
     kbankApiPausedUntilRef.current = until
     setKbankApiPausedUntilMs(until)
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(KBANK_API_PAUSE_STORAGE_KEY, String(until))
+      }
+    } catch {
+      /* ignore */
+    }
     return true
   }, [])
 
   const clearKbankApiPause = useCallback(() => {
     kbankApiPausedUntilRef.current = 0
     setKbankApiPausedUntilMs(0)
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(KBANK_API_PAUSE_STORAGE_KEY)
+      }
+    } catch {
+      /* ignore */
+    }
   }, [])
 
-  const isKbankApiPaused = useCallback(
-    () => Date.now() < kbankApiPausedUntilRef.current,
-    []
-  )
+  const isKbankApiPaused = useCallback(() => {
+    let until = kbankApiPausedUntilRef.current
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        const stored = Number(sessionStorage.getItem(KBANK_API_PAUSE_STORAGE_KEY) || 0)
+        if (Number.isFinite(stored) && stored > until) {
+          until = stored
+          kbankApiPausedUntilRef.current = stored
+          setKbankApiPausedUntilMs(stored)
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    if (until > 0 && Date.now() >= until) {
+      kbankApiPausedUntilRef.current = 0
+      setKbankApiPausedUntilMs(0)
+      try {
+        sessionStorage.removeItem(KBANK_API_PAUSE_STORAGE_KEY)
+      } catch {
+        /* ignore */
+      }
+      return false
+    }
+    return Date.now() < until
+  }, [])
 
   const alertIfKbankApiPaused = useCallback(
     async (label: string): Promise<boolean> => {
@@ -375,6 +414,13 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       const remainingMs = minIntervalMs - elapsed
       if (remainingMs > 0) {
         const waitSec = Math.ceil(remainingMs / 1000)
+        if (bucket === 'generate') {
+          await appAlert(
+            t('posKbankGenerateWaitTap') ||
+              `Please wait about ${waitSec}s (avoid double-tap).`
+          )
+          return false
+        }
         await appAlert(
           `KBank rate-limit protection: wait about ${waitSec}s before ${label}.`
         )
@@ -383,7 +429,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       targetRef.current = now
       return true
     },
-    []
+    [t]
   )
 
   const openKbankOutcomeModal = useCallback(
@@ -592,10 +638,6 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         await appAlert(msg)
         return { ok: false, message: msg }
       }
-      const canGenerate = await enforceKbankCooldown('generate', 5000, 'Generate QR')
-      if (!canGenerate) {
-        return { ok: false, message: 'kbank_generate_cooldown' }
-      }
       const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
       const preferEdcDisplay = Boolean(payment?.paymentQrShowOnEdc)
       const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
@@ -627,6 +669,25 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         return { ok: false, message: 'kbank_rate_limit_paused' }
       }
 
+      if (kbankGenerateInFlightRef.current) {
+        await appAlert(
+          t('posKbankGenerateInFlight') ||
+            'QR is already being generated. Please wait a moment.'
+        )
+        return { ok: false, message: 'kbank_generate_in_flight' }
+      }
+
+      const canGenerate = await enforceKbankCooldown(
+        'generate',
+        KBANK_GENERATE_MIN_INTERVAL_MS,
+        'Generate QR'
+      )
+      if (!canGenerate) {
+        return { ok: false, message: 'kbank_generate_cooldown' }
+      }
+
+      kbankGenerateInFlightRef.current = true
+      try {
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
 
       const terminalId = String(kbankOpsTerminalId || '').trim()
@@ -913,6 +974,9 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         partnerTransactionId,
         qrAmount,
         qrType: requestedQrType,
+      }
+      } finally {
+        kbankGenerateInFlightRef.current = false
       }
     },
     [

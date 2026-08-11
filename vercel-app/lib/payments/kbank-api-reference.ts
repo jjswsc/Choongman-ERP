@@ -162,7 +162,16 @@ export function formatKbankHttpErrorMessage(
 }
 
 /** After rate-limit response, pause client-side KBank follow-up calls (ms). */
-export const KBANK_RATE_LIMIT_BACKOFF_MS = 180_000
+export const KBANK_RATE_LIMIT_BACKOFF_MS = 300_000
+
+/**
+ * Anti double-tap only (same cashier rapid re-click).
+ * Do NOT use a long gap here — busy stores need back-to-back customer QR payments.
+ */
+export const KBANK_GENERATE_MIN_INTERVAL_MS = 2_000
+
+/** sessionStorage key — survives modal remount within the same tab */
+export const KBANK_API_PAUSE_STORAGE_KEY = 'cm_kbank_api_paused_until_ms'
 
 /** KBank Open API rate-limit / quota exceeded (English message from bank). */
 export function isKbankRateLimitError(message: unknown): boolean {

@@ -1910,6 +1910,8 @@ export const I18N_POS_KO: Record<string, string> = {
       'Inquiry로 txnNo를 가져오지 못했습니다. 아래 KBank 응답을 확인하세요.',
     posKbankRateLimitAlert:
       'KBank API 호출 한도 초과입니다. 약 {minutes}분 후 {label}을(를) 한 번만 눌러 주세요. (연속 클릭 금지)',
+    posKbankGenerateWaitTap: '잠시만 기다려 주세요. (같은 버튼을 연속으로 누르지 마세요)',
+    posKbankGenerateInFlight: 'QR을 만드는 중입니다. 잠시만 기다려 주세요.',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
     posKbankPartnerTxnUidLabel: 'partnerTxnUid',
     posKbankOrigTxnUidLabel: 'origPartnerTxnUid',
@@ -5256,6 +5258,8 @@ export const I18N_POS_EN: Record<string, string> = {
       'Could not obtain txnNo from Inquiry. Check the KBank response below.',
     posKbankRateLimitAlert:
       'KBank API rate limit exceeded. Wait about {minutes} minute(s), then tap {label} once (do not tap repeatedly).',
+    posKbankGenerateWaitTap: 'Please wait a moment (avoid double-tapping).',
+    posKbankGenerateInFlight: 'QR is already being generated. Please wait a moment.',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
     posKbankPartnerTxnUidLabel: 'partnerTxnUid',
     posKbankOrigTxnUidLabel: 'origPartnerTxnUid',
@@ -7225,6 +7229,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posKbankStatusCancelled: 'ยกเลิกแล้ว',
     posKbankRateLimitAlert:
       'KBank จำกัดจำนวนครั้ง — รอประมาณ {minutes} นาที แล้วกด {label} ครั้งเดียว (ห้ามกดซ้ำ)',
+    posKbankGenerateWaitTap: 'รอสักครู่ครับ (อย่ากดปุ่มซ้ำเร็วเกินไป)',
+    posKbankGenerateInFlight: 'กำลังสร้าง QR อยู่ครับ รอสักครู่',
     posKbankCallbackWaitingHint:
       'หากลูกค้าชำระแล้ว กดสอบถาม (Inquiry) เพื่อยืนยัน — รอ Callback',
     posKbankSettlement: 'Settlement',
