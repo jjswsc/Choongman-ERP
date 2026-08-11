@@ -3704,6 +3704,8 @@ export const i18n = {
       '원장 {{n}}건이 있으나 PND.1(ภ.ง.ด.1) 서식이 아닙니다. PND.3 / PND.53 탭에서 확인하세요.',
     accCompPnd3EmptyStoreHint:
       '이 매장명과 맞는 원장 행이 없습니다. 「매장 전체」로 검색해 보시고, 행의 매장명이 비어 있거나 다르면 원장 동기화·지출 매장명을 확인하세요.',
+    accCompPnd3ScopePayrollHint:
+      'PND.3는 개인 용역·수수료(지출 등)입니다. 급여(เงินเดือน) 원천은 PND.1 탭에서 전체·법인 검색하세요. 법인 선택 시 같은 사업자번호 매장이 함께 포함됩니다.',
     accCompVatSyncOk: '원장 동기화 완료 (POS {n}건 반영). 매입 탭도 함께 확인해 주세요.',
     accCompVatSyncPosFail: 'POS 동기화 중 오류가 있었습니다. 잠시 후 다시 시도하세요.',
     accCompVatSyncTimeout: '원장 동기화 시간이 초과되었습니다. 매장을 지정한 뒤 다시 눌러 주세요.',
@@ -11543,6 +11545,8 @@ Only matters the employee must handle personally on a working day:
       '{{n}} ledger row(s) exist but are not PND.1 (ภ.ง.ด.1). Check the PND.3 / PND.53 tabs.',
     accCompPnd3EmptyStoreHint:
       'No ledger rows match this store name. Try Store = All; if rows have blank/other store names, sync the ledger or fix expense store names.',
+    accCompPnd3ScopePayrollHint:
+      'PND.3 is for personal service fees (expenses). Salary withholding is on the PND.1 tab. When an entity is selected, stores sharing the same tax ID are included.',
     accCompVatSyncOk: 'Ledger sync done (POS {n} rows). Also check the purchase tab.',
     accCompVatSyncPosFail: 'POS sync failed. Please try again shortly.',
     accCompVatSyncTimeout: 'Ledger sync timed out. Pick a single store and try again.',
@@ -18297,6 +18301,8 @@ orderItemQty: 'จำนวน',
       'มี {{n}} รายการในบัญชี แต่ไม่ใช่แบบ ภ.ง.ด.1 — ตรวจแท็บ PND.3 / PND.53',
     accCompPnd3EmptyStoreHint:
       'ไม่พบรายการที่ตรงชื่อสาขา — ลองค้นหาแบบสาขาทั้งหมด และตรวจว่าแถวบัญชีมี store_name ว่างหรือต่างชื่อหรือไม่',
+    accCompPnd3ScopePayrollHint:
+      'แท็บ PND.3 สำหรับค่าจ้าง/ค่าบริการบุคคล (รายจ่าย) ครับ เงินเดือนดูที่แท็บ PND.1 เมื่อเลือกนิติบุคคล ระบบรวมสาขาที่เลขผู้เสียภาษีเดียวกันด้วยครับ',
     accCompVatInputSourcesHint:
       'รายการซื้อมาจาก (1) รับเข้า HQ→สาขาที่จับคู่ใบส่งออก และ (2) ค่าใช้จ่ายที่มี VAT (ยกเว้นหมวดชำระ/สำรองซื้อ) ถ้าเห็นผู้ขายแค่รายเดียว ให้ดูรายบรรทัด รัน backfill ซื้อ และตรวจกระทบยอด HQ↔สาขาในเครื่องมือปฏิบัติการ',
     accCompVatPeriodLockHint: 'เมื่อปิดงวดแล้ว จะแก้บัญชี VAT ของสาขา/เดือนนั้นไม่ได้ การปิดแบบ All จะล็อกทุกสาขาในเดือนนั้น',

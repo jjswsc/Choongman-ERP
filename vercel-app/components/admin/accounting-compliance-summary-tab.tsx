@@ -1852,6 +1852,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             ) : null}
             {showWhtLedger ? (
               <>
+                {whtFocusMode === "pnd3" ? (
+                  <div className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+                    {t("accCompPnd3ScopePayrollHint")}
+                  </div>
+                ) : null}
                 {isPnd5354CompactList && pnd5354SubView === "pnd53" ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                     <div>

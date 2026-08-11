@@ -36,34 +36,60 @@ function parseTaxScopeFilter(filter: string): { kind: 'all' | 'store' | 'taxid' 
   return { kind: 'store', value: raw }
 }
 
+async function loadEntityTaxId(entityCode: string): Promise<string> {
+  if (!entityCode) return ''
+  try {
+    const rows = (await supabaseSelectFilter(
+      'tax_entities',
+      `entity_code=eq.${encodeURIComponent(entityCode)}`,
+      { select: 'tax_id', limit: 1 }
+    )) as { tax_id?: string | null }[] | null
+    return normalizeStoreTaxId(rows?.[0]?.tax_id)
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 법인에 매핑된 매장 + (법인 tax_id가 있으면) 같은 사업자번호 프로필 매장.
+ * tax_entity_stores에 본사만 있어도 지점이 같은 TIN이면 합산에 포함.
+ */
 async function loadEntityStoreCodes(entityCode: string): Promise<Set<string>> {
   if (!entityCode) return new Set<string>()
+  const out = new Set<string>()
   try {
     const rows = (await supabaseSelectFilter(
       'tax_entity_stores',
       `entity_code=eq.${encodeURIComponent(entityCode)}`,
       { select: 'entity_code,store_code', limit: 5000 }
     )) as TaxEntityStoreRow[] | null
-    return new Set(
-      (rows || [])
-        .map((r) => String(r.store_code || '').trim())
-        .filter(Boolean)
-    )
+    for (const r of rows || []) {
+      const store = String(r.store_code || '').trim()
+      if (store) out.add(store)
+    }
   } catch {
-    return new Set<string>()
+    /* ignore */
   }
+  const taxId = await loadEntityTaxId(entityCode)
+  if (taxId.length === 13) {
+    const byTin = await loadStoreCodesByTaxId(taxId)
+    for (const code of byTin) out.add(code)
+  }
+  return out
 }
 
 async function loadStoreCodesByTaxId(taxId: string): Promise<Set<string>> {
-  if (!taxId) return new Set<string>()
+  const want = normalizeStoreTaxId(taxId)
+  if (want.length !== 13) return new Set<string>()
   try {
-    const rows = (await supabaseSelectFilter(
-      'store_tax_filing_profiles',
-      `tax_id=eq.${encodeURIComponent(taxId)}`,
-      { select: 'store_code,tax_id', limit: 5000 }
-    )) as StoreTaxProfileRow[] | null
+    // 저장 형식이 숫자만/하이픈 혼재할 수 있어 넓게 가져온 뒤 정규화 비교
+    const rows = (await supabaseSelectFilter('store_tax_filing_profiles', '', {
+      select: 'store_code,tax_id',
+      limit: 5000,
+    })) as StoreTaxProfileRow[] | null
     return new Set(
       (rows || [])
+        .filter((r) => normalizeStoreTaxId(r.tax_id) === want)
         .map((r) => String(r.store_code || '').trim())
         .filter(Boolean)
     )

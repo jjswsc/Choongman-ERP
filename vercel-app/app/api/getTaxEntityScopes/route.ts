@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { formatTaxEntityScopeLabel } from '@/lib/tax-entity-scope'
+import { normalizeStoreTaxId } from '@/lib/store-tax-filing-profile'
 
 type TaxEntityRow = {
   entity_code?: string | null
@@ -14,6 +15,11 @@ type TaxEntityRow = {
 type TaxEntityStoreRow = {
   entity_code?: string | null
   store_code?: string | null
+}
+
+type StoreTaxProfileRow = {
+  store_code?: string | null
+  tax_id?: string | null
 }
 
 export async function GET(request: NextRequest) {
@@ -44,6 +50,20 @@ export async function GET(request: NextRequest) {
       select: 'entity_code,store_code',
       limit: 10000,
     })) as TaxEntityStoreRow[] | null
+    const profiles = (await supabaseSelectFilter('store_tax_filing_profiles', '', {
+      select: 'store_code,tax_id',
+      limit: 5000,
+    })) as StoreTaxProfileRow[] | null
+
+    const storesByTaxId = new Map<string, Set<string>>()
+    for (const p of profiles || []) {
+      const tin = normalizeStoreTaxId(p.tax_id)
+      const store = String(p.store_code || '').trim()
+      if (tin.length !== 13 || !store) continue
+      const set = storesByTaxId.get(tin) || new Set<string>()
+      set.add(store)
+      storesByTaxId.set(tin, set)
+    }
 
     const active = (entities || []).filter((e) => e.is_active !== false)
     const storesByEntity: Record<string, string[]> = {}
@@ -64,9 +84,14 @@ export async function GET(request: NextRequest) {
         const code = String(e.entity_code || '').trim()
         if (!code) return null
         const name = String(e.entity_name || '').trim()
-        const taxId = String(e.tax_id || '').trim()
-        const storeCount = countByEntity[code] || 0
-        const stores = Array.from(new Set(storesByEntity[code] || [])).sort((a, b) => a.localeCompare(b))
+        const taxId = normalizeStoreTaxId(e.tax_id)
+        const linked = new Set(storesByEntity[code] || [])
+        // 법인 TIN과 같은 세무 프로필 매장도 포함 (본사만 링크돼도 지점 합산)
+        if (taxId.length === 13) {
+          for (const s of storesByTaxId.get(taxId) || []) linked.add(s)
+        }
+        const stores = Array.from(linked).sort((a, b) => a.localeCompare(b))
+        const storeCount = Math.max(countByEntity[code] || 0, stores.length)
         return {
           value: `entity:${code}`,
           label: formatTaxEntityScopeLabel({
