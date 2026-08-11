@@ -1,5 +1,7 @@
 import { parseBanbanFlavorsFromName } from '@/lib/pos-banban-utils'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
+import type { PromoEconomicsLineInput } from '@/lib/promo-economics'
+import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 export type PosSalesHierarchyLevel = 'main' | 'category' | 'menu' | 'option'
 
@@ -26,6 +28,13 @@ export type PosOptionCatalogRow = {
   name?: string
   option_code?: string
   option_step_values?: Record<string, string> | null
+}
+
+/** 주문 promoItems 없을 때 DB 세트 구성으로 풀어 집계하기 위한 카탈로그 */
+export type PosSalesPromoExpandCatalog = {
+  promoItemsByPromoId: Map<string, PromoEconomicsLineInput[]>
+  promoIdByMirrorMenuId?: Map<string, string>
+  promoMetaById?: Map<string, { code: string; name: string }>
 }
 
 type Bucket = { qty: number; sales: number }
@@ -392,7 +401,7 @@ export function orderLineMatchesMenuSearch(
     parsePromoBracketName(str(row.name)),
   ]
 
-  for (const child of promoChildLines(row)) {
+  for (const child of promoChildLines(row, menuCatalog).children) {
     parts.push(child.menuName)
     const meta = resolveMenuMeta(child.menuId, child.menuName, menuCatalog)
     if (meta?.name) parts.push(str(meta.name))
@@ -406,11 +415,150 @@ export function orderLineMatchesMenuSearch(
     : searchTokens.some((t) => haystack.includes(t))
 }
 
-function promoChildLines(row: Record<string, unknown>): LineContribution[] {
-  const raw = row.promoItems ?? row.promo_items
-  if (!Array.isArray(raw) || raw.length === 0) return []
+function normalizePromoLookupText(raw: string): string {
+  return str(raw)
+    .toLowerCase()
+    .replace(/[\[\]()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function looksLikePromoSetLine(row: Record<string, unknown>): boolean {
+  if (str(row.promoId ?? row.promo_id)) return true
+  if (str(row.promoCode ?? row.promo_code)) return true
+  const lineId = str(row.id).toLowerCase()
+  if (lineId.startsWith('promo-')) return true
+  const lineName = str(row.name)
+  if (parsePromoBracketName(lineName)) return true
+  if (/\b(set|promo|bundle|campaign)\b/i.test(lineName)) return true
+  const main = normalizePromotionCategoryMain(
+    str(row.category_main ?? row.categoryMain)
+  )
+  if (main === PROMOTION_MAIN_CATEGORY) return true
+  return false
+}
+
+function resolvePromoIdForHierarchyExpand(
+  row: Record<string, unknown>,
+  catalog: PosSalesPromoExpandCatalog | undefined
+): string {
+  if (!catalog) return ''
+  const direct = str(row.promoId ?? row.promo_id)
+  if (direct) return direct
+
+  const code = str(row.promoCode ?? row.promo_code).toUpperCase()
+  if (code && catalog.promoMetaById) {
+    for (const [id, meta] of catalog.promoMetaById.entries()) {
+      if (str(meta.code).toUpperCase() === code) return id
+    }
+  }
+
+  const lineId = str(row.id)
+  if (lineId.toLowerCase().startsWith('promo-') && catalog.promoItemsByPromoId.size > 0) {
+    const rest = lineId.slice('promo-'.length)
+    let best = ''
+    for (const key of catalog.promoItemsByPromoId.keys()) {
+      if (!key) continue
+      if (rest === key || rest.startsWith(`${key}-`)) {
+        if (key.length > best.length) best = key
+      }
+    }
+    if (best) return best
+  }
+
+  const menuId = resolveLineMenuId(row)
+  if (menuId && catalog.promoIdByMirrorMenuId?.has(menuId)) {
+    return catalog.promoIdByMirrorMenuId.get(menuId) ?? ''
+  }
+
+  const lineNameKey = normalizePromoLookupText(str(row.name))
+  if (lineNameKey && catalog.promoMetaById?.size) {
+    let bestId = ''
+    let bestScore = 0
+    for (const [id, meta] of catalog.promoMetaById.entries()) {
+      const nameKey = normalizePromoLookupText(meta.name)
+      const codeKey = normalizePromoLookupText(meta.code)
+      let score = 0
+      if (nameKey && lineNameKey === nameKey) score = 100
+      else if (codeKey && lineNameKey === codeKey) score = 95
+      else if (nameKey && lineNameKey.startsWith(`${nameKey} `)) score = 80 + Math.min(15, nameKey.length)
+      if (score > bestScore) {
+        bestScore = score
+        bestId = id
+      } else if (score > 0 && score === bestScore && id !== bestId) {
+        // 동점이면 이름 매칭 포기(오인식 방지)
+        bestId = ''
+      }
+    }
+    if (bestId) return bestId
+  }
+
+  return ''
+}
+
+function filterCatalogTemplateForExpand(
+  template: PromoEconomicsLineInput[],
+  lineName: string,
+  menuCatalog: ReturnType<typeof buildMenuCatalog>
+): PromoEconomicsLineInput[] {
+  const fixed: PromoEconomicsLineInput[] = []
+  const byChoiceGroup = new Map<string, PromoEconomicsLineInput[]>()
+
+  for (const item of template) {
+    const cg = str((item as { choiceGroup?: string | null }).choiceGroup)
+    if (cg) {
+      const list = byChoiceGroup.get(cg) ?? []
+      list.push(item)
+      byChoiceGroup.set(cg, list)
+      continue
+    }
+    fixed.push(item)
+  }
+
+  // 레거시: choice_group 없이 동일 menuId·수량에 옵션만 여러 개면 선택형으로 보고 제외
+  const optionKeysByMenuQty = new Map<string, Set<string>>()
+  for (const item of fixed) {
+    const key = `${str(item.menuId)}::${Math.max(1, Number(item.quantity) || 1)}`
+    const bucket = optionKeysByMenuQty.get(key) ?? new Set<string>()
+    const opt = str(item.optionId)
+    if (opt) bucket.add(opt)
+    optionKeysByMenuQty.set(key, bucket)
+  }
+  const implicitChoiceKeys = new Set<string>()
+  for (const [key, opts] of optionKeysByMenuQty.entries()) {
+    if (opts.size > 1) implicitChoiceKeys.add(key)
+  }
+  const fixedOnly = fixed.filter((item) => {
+    const key = `${str(item.menuId)}::${Math.max(1, Number(item.quantity) || 1)}`
+    return !implicitChoiceKeys.has(key)
+  })
+
+  const lineKey = normalizePromoLookupText(lineName)
+  const chosen: PromoEconomicsLineInput[] = []
+  for (const options of byChoiceGroup.values()) {
+    let best: PromoEconomicsLineInput | null = null
+    let bestLen = 0
+    for (const opt of options) {
+      const meta = resolveMenuMeta(str(opt.menuId), '', menuCatalog)
+      const menuName = str(meta?.name)
+      if (!menuName || !lineKey) continue
+      const nameKey = normalizePromoLookupText(menuName)
+      if (!nameKey) continue
+      if (lineKey.includes(nameKey) && nameKey.length > bestLen) {
+        best = opt
+        bestLen = nameKey.length
+      }
+    }
+    if (best) chosen.push(best)
+  }
+
+  return [...fixedOnly, ...chosen]
+}
+
+function mapPromoRawToChildren(raw: unknown[]): LineContribution[] {
   const out: LineContribution[] = []
   for (const child of raw) {
+    if (!child || typeof child !== 'object') continue
     const c = child as Record<string, unknown>
     const menuId = str(c.menuId ?? c.menu_id)
     const optionId = str(c.optionId ?? c.option_id)
@@ -434,14 +582,46 @@ function promoChildLines(row: Record<string, unknown>): LineContribution[] {
   return out
 }
 
+function promoChildLines(
+  row: Record<string, unknown>,
+  menuCatalog: ReturnType<typeof buildMenuCatalog>,
+  promoCatalog?: PosSalesPromoExpandCatalog
+): { children: LineContribution[]; fromCatalog: boolean } {
+  const raw = row.promoItems ?? row.promo_items
+  if (Array.isArray(raw) && raw.length > 0) {
+    return { children: mapPromoRawToChildren(raw), fromCatalog: false }
+  }
+
+  if (!promoCatalog || !looksLikePromoSetLine(row)) {
+    return { children: [], fromCatalog: false }
+  }
+
+  const promoId = resolvePromoIdForHierarchyExpand(row, promoCatalog)
+  if (!promoId) return { children: [], fromCatalog: false }
+  const template = promoCatalog.promoItemsByPromoId.get(promoId)
+  if (!template?.length) return { children: [], fromCatalog: false }
+
+  const filtered = filterCatalogTemplateForExpand(template, str(row.name), menuCatalog)
+  if (!filtered.length) return { children: [], fromCatalog: false }
+
+  const synthetic = filtered.map((item) => ({
+    menuId: str(item.menuId),
+    optionId: item.optionId != null ? str(item.optionId) : '',
+    quantity: Math.max(1, Number(item.quantity) || 1),
+    menuName: '',
+  }))
+  return { children: mapPromoRawToChildren(synthetic), fromCatalog: true }
+}
+
 function lineToContributions(
   row: Record<string, unknown>,
   menuCatalog: ReturnType<typeof buildMenuCatalog>,
   optionCatalog: ReturnType<typeof buildOptionCatalog>,
   searchTokens: string[] = [],
-  searchAnd = false
+  searchAnd = false,
+  promoCatalog?: PosSalesPromoExpandCatalog
 ): LineContribution[] {
-  const promoChildren = promoChildLines(row)
+  const { children: promoChildren, fromCatalog } = promoChildLines(row, menuCatalog, promoCatalog)
   const qty = resolveItemsJsonLineQty(row)
   if (qty <= 0) return []
 
@@ -454,7 +634,7 @@ function lineToContributions(
     const lineName = str(row.name) || EMPTY_MENU
     const promoGroup = parsePromoBracketName(lineName)
     const sales = resolveLineSales(row, qty)
-    const promoId = str(row.promoId ?? row.promo_id)
+    const promoId = str(row.promoId ?? row.promo_id) || resolvePromoIdForHierarchyExpand(row, promoCatalog)
     return [
       {
         menuId: promoId ? `promo:${promoId}` : '',
@@ -473,7 +653,16 @@ function lineToContributions(
   if (promoChildren.length > 0) {
     const parentSales = resolveLineSales(row, qty)
     const childQtySum = promoChildren.reduce((s, c) => s + c.qty, 0)
-    const promoRaw = (row.promoItems ?? row.promo_items) as unknown[]
+    const promoRaw = fromCatalog
+      ? promoChildren.map((c) => ({
+          menuId: c.menuId,
+          optionId: c.optionId,
+          optionCode: c.optionCode,
+          menuName: c.menuName,
+          optionName: c.optionName,
+          quantity: c.qty,
+        }))
+      : ((row.promoItems ?? row.promo_items) as unknown[])
     return promoChildren.map((child, idx) => {
       const rawChild =
         Array.isArray(promoRaw) && promoRaw[idx] && typeof promoRaw[idx] === 'object'
@@ -579,6 +768,8 @@ export function aggregatePosSalesMenuHierarchy(params: {
   /** 검색 시 프로모 세트명·구성 메뉴명으로 주문 줄 선별 */
   searchTokens?: string[]
   searchAnd?: boolean
+  /** promoItems 스냅샷 없을 때 DB 세트 구성으로 분해 */
+  promoCatalog?: PosSalesPromoExpandCatalog
 }): {
   levels: Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]>
   totals: { qty: number; sales: number }
@@ -590,6 +781,7 @@ export function aggregatePosSalesMenuHierarchy(params: {
   const searchAnd = params.searchAnd ?? false
   const menuCatalog = buildMenuCatalog(params.menus)
   const optionCatalog = buildOptionCatalog(params.options)
+  const promoCatalog = params.promoCatalog
 
   const mainMap = new Map<string, Bucket & { label: string }>()
   const categoryMap = new Map<string, Bucket & { label: string; meta?: Partial<PosSalesHierarchyRow> }>()
@@ -622,7 +814,8 @@ export function aggregatePosSalesMenuHierarchy(params: {
         menuCatalog,
         optionCatalog,
         searchTokens,
-        searchAnd
+        searchAnd,
+        promoCatalog
       )
       for (const c of contributions) {
         totalQty += c.qty

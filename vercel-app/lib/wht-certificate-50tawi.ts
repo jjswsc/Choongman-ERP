@@ -337,7 +337,7 @@ function buildWht50TawiCertificateBody(data: WhtCertificateData, copyNo: Wht50Ta
     &nbsp;(7) ภ.ง.ด.53 <span class="chk">${pndMark(r.pndChecks.pnd53)}</span>
     <div class="wht-pnd-note">(ให้สามารถอ้างอิงหรือสอบยันกันได้ระหว่างลำดับที่ตามหนังสือรับรองฯ กับแบบยื่นรายการภาษีหักที่จ่าย)</div>
   </div>
-  ${incomeTable}
+  <div class="wht-tbl-slot">${incomeTable}</div>
   <div class="wht-fund">
     เงินที่จ่ายเข้า กบข. / กสจ. / กองทุนสงเคราะห์ครูโรงเรียนเอกชน <span class="wht-uline-sm">............</span> บาท
     &nbsp; กองทุนประกันสังคม <span class="wht-uline-sm">............</span> บาท
@@ -391,7 +391,8 @@ export function buildWht50TawiCertificateHtmlBothCopies(data: WhtCertificateData
 
 /**
  * 원본 กรมสรรพากร 50 ทวิ — A4 1장 = 양식 1장.
- * 시트마다 강제 page-break + A4 인쇄영역 높이로 여러 건이 한 장에 붙지 않게 함.
+ * 시트·테두리 양식을 A4 인쇄영역(285mm)에 고정 높이로 꽉 채우고,
+ * 남는 세로 공간은 소득유형 표가 흡수한다. (미리보기 height:auto 금지)
  */
 export const WHT_50_TAWI_STYLES = `
   @page { size: A4 portrait; margin: 6mm; }
@@ -404,11 +405,14 @@ export const WHT_50_TAWI_STYLES = `
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .wht50-sheet {
-    display: block;
+    display: flex;
+    flex-direction: column;
     width: 198mm;
     max-width: 100%;
-    min-height: 285mm;
+    /* A4 297mm − @page 상하 margin 6mm×2 */
     height: 285mm;
+    min-height: 285mm;
+    max-height: 285mm;
     margin: 0 auto;
     overflow: hidden;
     page-break-after: always;
@@ -430,10 +434,14 @@ export const WHT_50_TAWI_STYLES = `
   .wht-form {
     border: 1.4px solid #000;
     padding: 2.2mm 2.4mm 1.8mm;
+    flex: 1 1 auto;
+    width: 100%;
     height: 100%;
     min-height: 100%;
+    max-height: 100%;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   /* —— Header (원본: 좌 ฉบับ / 중 제목 / 우 เล่ม·เลข) —— */
@@ -482,15 +490,34 @@ export const WHT_50_TAWI_STYLES = `
     vertical-align: middle; margin: 0 1px;
   }
 
-  /* —— Income table —— */
-  .wht-tbl { width: 100%; border-collapse: collapse; font-size: 10.5px; flex: 0 0 auto; }
-  .wht-tbl th, .wht-tbl td { border: 1px solid #000; padding: 0.7mm 1.2mm; vertical-align: top; }
-  .wht-tbl th { text-align: center; font-weight: 700; font-size: 10.5px; }
+  /* —— Income table: A4 남는 세로 공간을 표가 채움 —— */
+  .wht-tbl-slot {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .wht-tbl {
+    width: 100%;
+    height: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    flex: 1 1 auto;
+    table-layout: fixed;
+  }
+  .wht-tbl th, .wht-tbl td { border: 1px solid #000; padding: 1.1mm 1.2mm; vertical-align: middle; }
+  .wht-tbl th { text-align: center; font-weight: 700; font-size: 10.5px; height: 8mm; }
   .c-type { width: 56%; }
   .c-date { width: 14%; }
   .c-amt { width: 15%; }
   .wht-tbl td { font-size: 10.2px; line-height: 1.18; }
-  .tiny { font-size: 8.8px !important; line-height: 1.15 !important; padding-top: 0.45mm !important; padding-bottom: 0.45mm !important; }
+  .wht-tbl tbody tr { height: 6.2%; }
+  .tiny {
+    font-size: 8.8px !important; line-height: 1.15 !important;
+    padding-top: 0.35mm !important; padding-bottom: 0.35mm !important;
+    vertical-align: top !important;
+  }
+  .wht-tbl tbody tr:has(td.tiny) { height: 3.2%; }
   .pad-l { padding-left: 3mm !important; }
   .wht-date-col { text-align: center; font-size: 11px; white-space: nowrap; }
   .wht-amt-col {
@@ -500,6 +527,8 @@ export const WHT_50_TAWI_STYLES = `
   .sum td { font-weight: 700; }
   .sum-l { text-align: center; }
   .sum-words td { background: #d9d9d9; font-size: 12px; font-weight: 500; }
+  .wht-tbl tbody tr.sum,
+  .wht-tbl tbody tr.sum-words { height: 5%; }
 
   .wht-fund, .wht-paymode {
     border: 1px solid #000; border-top: none;
@@ -509,7 +538,7 @@ export const WHT_50_TAWI_STYLES = `
 
   .wht-foot {
     width: 100%; border-collapse: collapse; border: 1px solid #000; border-top: none;
-    margin-top: auto; flex: 0 0 auto;
+    flex: 0 0 auto;
   }
   .wht-warn {
     width: 38%; font-size: 9px; line-height: 1.25;
@@ -517,7 +546,7 @@ export const WHT_50_TAWI_STYLES = `
   }
   .wht-sign {
     width: 62%; padding: 2.2mm 16mm 2mm 2mm; vertical-align: top;
-    position: relative; min-height: 28mm; text-align: center;
+    position: relative; min-height: 30mm; text-align: center;
   }
   .wht-cert { font-size: 12px; font-weight: 600; margin-bottom: 1.8mm; }
   .wht-sign-ln { font-size: 13px; margin: 2.5mm 0 1mm; }
@@ -541,11 +570,13 @@ export const WHT_50_TAWI_STYLES = `
       padding: 0 !important;
     }
     .wht50-sheet {
-      display: block !important;
+      display: flex !important;
+      flex-direction: column !important;
       width: 100% !important;
       max-width: none !important;
-      min-height: 285mm !important;
       height: 285mm !important;
+      min-height: 285mm !important;
+      max-height: 285mm !important;
       margin: 0 !important;
       overflow: hidden !important;
       page-break-after: always !important;
@@ -562,9 +593,13 @@ export const WHT_50_TAWI_STYLES = `
       break-after: auto !important;
     }
     .wht-form {
+      flex: 1 1 auto !important;
       height: 100% !important;
       min-height: 100% !important;
+      max-height: 100% !important;
     }
+    .wht-tbl-slot { flex: 1 1 auto !important; min-height: 0 !important; }
+    .wht-tbl { height: 100% !important; }
   }
   @media screen {
     body { padding: 12px; background: #cfcfcf; }
@@ -572,8 +607,10 @@ export const WHT_50_TAWI_STYLES = `
       background: #fff;
       box-shadow: 0 1px 8px rgba(0,0,0,.2);
       margin-bottom: 16px;
-      height: auto;
-      min-height: 285mm;
+      /* preview must keep fixed A4 height (do not use auto) */
+      height: 285mm !important;
+      min-height: 285mm !important;
+      max-height: 285mm !important;
     }
   }
 `

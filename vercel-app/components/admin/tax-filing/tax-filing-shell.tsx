@@ -37,6 +37,7 @@ type FilingTabKey =
   | "pp30"
   | "pp36"
   | "pnd1"
+  | "pnd91"
   | "pnd3"
   | "pnd5051"
   | "pnd53"
@@ -82,6 +83,7 @@ function useFilingTabFilters(
   const pp30 = useYmStoreFilter(defaultYm, defaultStore)
   const pp36 = useYmStoreFilter(defaultYm, defaultStore)
   const pnd1 = useYmStoreFilter(defaultYm, defaultStore)
+  const pnd91 = useYmStoreFilter(defaultYm, defaultStore)
   const pnd3 = useYmStoreFilter(defaultYm, defaultStore)
   const pnd5051 = useYmStoreFilter(defaultYm, defaultStore)
   const pnd53 = useYmStoreFilter(defaultYm, defaultStore)
@@ -94,6 +96,7 @@ function useFilingTabFilters(
       pp30.setStore(managerStore)
       pp36.setStore(managerStore)
       pnd1.setStore(managerStore)
+      pnd91.setStore(managerStore)
       pnd3.setStore(managerStore)
       pnd5051.setStore(managerStore)
       pnd53.setStore(managerStore)
@@ -186,6 +189,7 @@ function useFilingTabFilters(
       pp30: pick(pp30),
       pp36: pick(pp36),
       pnd1: pick(pnd1),
+      pnd91: pick(pnd91),
       pnd3: pick(pnd3),
       pnd5051: pick(pnd5051),
       pnd53: pick(pnd53),
@@ -200,6 +204,8 @@ function useFilingTabFilters(
       pp36.filingStoreFilter,
       pnd1.filingYearMonth,
       pnd1.filingStoreFilter,
+      pnd91.filingYearMonth,
+      pnd91.filingStoreFilter,
       pnd3.filingYearMonth,
       pnd3.filingStoreFilter,
       pnd5051.filingYearMonth,
@@ -248,6 +254,7 @@ export function TaxFilingShell() {
       q === "pp30" ||
       q === "pp36" ||
       q === "pnd1" ||
+      q === "pnd91" ||
       q === "pnd3" ||
       q === "pnd5051" ||
       q === "pnd53" ||
@@ -362,6 +369,9 @@ export function TaxFilingShell() {
             <TabsTrigger value="pnd1" className={adminTabsTriggerCn}>
               {t("taxFilingTabPnd1")}
             </TabsTrigger>
+            <TabsTrigger value="pnd91" className={adminTabsTriggerCn}>
+              {t("taxFilingTabPnd91")}
+            </TabsTrigger>
             <TabsTrigger value="pnd3" className={adminTabsTriggerCn}>
               {t("taxFilingTabPnd3")}
             </TabsTrigger>
@@ -411,6 +421,16 @@ export function TaxFilingShell() {
             initialWhtSubmissionFormHint="ALL"
             onOpenStoreProfiles={() =>
               openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pnd1.filingStoreFilter)
+            }
+          />
+        </TabsContent>
+        <TabsContent value="pnd91" className={cn(adminTabsContentCn, "space-y-3")}>
+          <TaxFilingWhtTab
+            {...tabProps.pnd91}
+            whtFocusMode="pnd91"
+            initialWhtSubmissionFormHint="ALL"
+            onOpenStoreProfiles={() =>
+              openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pnd91.filingStoreFilter)
             }
           />
         </TabsContent>

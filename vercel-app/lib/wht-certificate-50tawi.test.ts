@@ -131,7 +131,12 @@ describe('resolveWht50Tawi', () => {
     expect((doc.match(/class="wht50-sheet"/g) || []).length).toBe(2)
     expect(doc).toContain('page-break-after: always')
     expect(doc).toContain('min-height: 285mm')
+    expect(doc).toContain('height: 285mm')
+    expect(doc).toContain('max-height: 285mm')
+    expect(doc).toContain('wht-tbl-slot')
     expect(doc).toContain('break-before: page')
+    // screen 미리보기도 고정 높이(auto 로 줄이면 테두리가 A4를 못 채움)
+    expect(doc).toMatch(/@media screen[\s\S]*?\.wht50-sheet\s*\{[\s\S]*?height:\s*285mm\s*!important/)
   })
 
   it('keeps one A4 sheet per certificate copy when printing multiple payees', () => {

@@ -46,8 +46,14 @@ const WHT_PRINT_HOST_STYLES = `
     background: #fff;
     box-shadow: 0 1px 8px rgba(0,0,0,.2);
     margin-bottom: 16px;
-    height: auto;
-    min-height: 285mm;
+    /* height:auto 금지 — 양식 테두리가 A4(파란선)까지 안 늘어나는 원인 */
+    height: 285mm !important;
+    min-height: 285mm !important;
+    max-height: 285mm !important;
+  }
+  #wht-certificate-print-root .wht-form {
+    height: 100% !important;
+    min-height: 100% !important;
   }
 }
 `

@@ -24,6 +24,15 @@ describe('classifyWhtLedgerFormFamily', () => {
     expect(classifyWhtLedgerFormFamily('PND1')).not.toBe('PND3')
     expect(classifyWhtLedgerFormFamily('PND1')).not.toBe('PND53')
   })
+
+  it('does not treat PND91 / PND50 / PND51 as PND1', () => {
+    expect(classifyWhtLedgerFormFamily('PND91')).toBe('OTHER')
+    expect(classifyWhtLedgerFormFamily('ภ.ง.ด.91')).toBe('OTHER')
+    expect(classifyWhtLedgerFormFamily('PND50')).toBe('OTHER')
+    expect(classifyWhtLedgerFormFamily('PND51')).toBe('OTHER')
+    expect(classifyWhtLedgerFormFamily('PND1')).toBe('PND1')
+    expect(classifyWhtLedgerFormFamily('P.N.D.1')).toBe('PND1')
+  })
 })
 
 describe('normalizePndFormHint', () => {
@@ -86,6 +95,8 @@ describe('whtLedgerRowMatchesFocusMode', () => {
     expect(whtLedgerRowMatchesFocusMode(pnd1, 'pnd53')).toBe(false)
     expect(whtLedgerRowMatchesFocusMode(pnd3, 'pnd53')).toBe(false)
     expect(whtLedgerRowMatchesFocusMode(pnd53, 'pnd53')).toBe(true)
+
+    expect(whtLedgerRowMatchesFocusMode(pnd1, 'pnd91')).toBe(false)
   })
 
   it('resolves empty form_hint via payee for PND3/53 tabs only', () => {

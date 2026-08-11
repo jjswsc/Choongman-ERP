@@ -568,8 +568,14 @@ export async function getPosSalesByMenuHierarchy(params: {
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   if (params.splitByOrderType) q.set('splitByOrderType', '1')
   const res = await apiFetchWithOffline(`/api/posSalesByMenuHierarchy?${q}`)
+  if (!res.ok) {
+    throw new Error(`posSalesByMenuHierarchy ${res.status}`)
+  }
   const truncated = res.headers.get('X-Sales-Truncated') === '1'
-  const json = (await res.json()) as Partial<PosSalesByMenuHierarchyResult>
+  const json = (await res.json()) as Partial<PosSalesByMenuHierarchyResult> & { success?: boolean; message?: string }
+  if (json && json.success === false) {
+    throw new Error(String(json.message || 'posSalesByMenuHierarchy failed'))
+  }
   const emptyLevels: PosSalesByMenuHierarchyResult['levels'] = {
     main: [],
     category: [],

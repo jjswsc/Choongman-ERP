@@ -233,6 +233,7 @@ export type AdminAccountingComplianceProps = {
     | "pnd5354"
     | "pp36"
     | "pnd1"
+    | "pnd91"
     | "pnd3"
     | "pnd53"
     | "pnd54"

@@ -373,6 +373,124 @@ describe('aggregatePosSalesMenuHierarchy', () => {
     expect(filterHierarchyRows(result.levels.menu, ['super deal'], false)).toHaveLength(0)
   })
 
+  it('expands missing promoItems from catalog by promoId', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [
+        { id: '1', name: 'Rice', category_main: 'Side', category: 'SIDE DISH' },
+        { id: '2', name: 'CURRY Bar.B.Q FRIED CHICKEN', category_main: 'Chicken', category: 'Series A' },
+      ],
+      options: [],
+      promoCatalog: {
+        promoItemsByPromoId: new Map([
+          [
+            '99',
+            [
+              { menuId: '1', optionId: null, quantity: 1 },
+              { menuId: '2', optionId: null, quantity: 1 },
+            ],
+          ],
+        ]),
+        promoMetaById: new Map([['99', { code: 'SD3', name: '[Super Deal] Set 3' }]]),
+      },
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            {
+              id: 'set-line',
+              name: '[Super Deal] Set 3',
+              price: 333,
+              qty: 1,
+              promoId: '99',
+              category_main: 'Promotion',
+              category: 'Set',
+            },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.levels.menu.map((r) => r.label).sort()).toEqual([
+      'CURRY Bar.B.Q FRIED CHICKEN',
+      'Rice',
+    ])
+    expect(result.levels.menu.some((r) => r.categoryMain === 'Promotion')).toBe(false)
+  })
+
+  it('expands missing promoItems via mirror menu id and picks choice from line name', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [
+        { id: '10', name: 'Rice', category_main: 'Side', category: 'SIDE DISH' },
+        { id: '20', name: 'Soy Sauce Chicken', category_main: 'Chicken', category: 'Series A' },
+        { id: '21', name: 'Red Hot Chicken', category_main: 'Chicken', category: 'Series A' },
+      ],
+      options: [],
+      promoCatalog: {
+        promoItemsByPromoId: new Map([
+          [
+            '111',
+            [
+              { menuId: '10', optionId: null, quantity: 1 },
+              { menuId: '20', optionId: null, quantity: 1, choiceGroup: 'chicken' },
+              { menuId: '21', optionId: null, quantity: 1, choiceGroup: 'chicken' },
+            ],
+          ],
+        ]),
+        promoIdByMirrorMenuId: new Map([['900', '111']]),
+        promoMetaById: new Map([['111', { code: '111-S2', name: '[111] Set 2' }]]),
+      },
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            {
+              id: '900',
+              menuId1: '900',
+              name: '[111] Set 2 Soy Sauce Chicken',
+              price: 111,
+              qty: 1,
+              category_main: 'Promotion',
+              category: 'Set',
+            },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.levels.menu.map((r) => r.label).sort()).toEqual(['Rice', 'Soy Sauce Chicken'])
+    expect(result.levels.menu.find((r) => r.label === 'Soy Sauce Chicken')?.categoryMain).toBe('Chicken')
+  })
+
+  it('keeps promotion line when catalog cannot resolve composition', () => {
+    const result = aggregatePosSalesMenuHierarchy({
+      menus: [{ id: '900', name: '[111] Set 2', category_main: 'Promotion', category: 'Set' }],
+      options: [],
+      promoCatalog: {
+        promoItemsByPromoId: new Map(),
+        promoMetaById: new Map(),
+      },
+      orderRows: [
+        {
+          status: 'completed',
+          items_json: JSON.stringify([
+            {
+              menuId1: '900',
+              name: '[111] Set 2',
+              price: 111,
+              qty: 1,
+              category_main: 'Promotion',
+              category: 'Set',
+            },
+          ]),
+        },
+      ],
+    })
+
+    expect(result.levels.menu).toHaveLength(1)
+    expect(result.levels.menu[0]?.label).toBe('[111] Set 2')
+    expect(result.levels.menu[0]?.categoryMain).toBe('Promotion')
+  })
+
   it('parsePromoBracketName extracts group label', () => {
     expect(parsePromoBracketName('[Super Deal] Set 3')).toBe('Super Deal')
     expect(parsePromoBracketName('Snow Onion')).toBe('')

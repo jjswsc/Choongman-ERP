@@ -233,6 +233,8 @@ export interface AccountingComplianceSummaryTabProps {
   showPp36Ledger: boolean
   showPnd54Ledger: boolean
   showPnd1Area: boolean
+  /** 연간 PND91 체크리스트 (PND1 월별 신고와 분리) */
+  showPnd91Area: boolean
   showPnd353Tools: boolean
   pnd53Summary: { gross: number; withheld: number; count: number }
   pnd54Summary: { gross: number; withheld: number; count: number }
@@ -427,6 +429,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     showPp36Ledger,
     showPnd54Ledger,
     showPnd1Area,
+    showPnd91Area,
     showPnd353Tools,
     pnd53Summary,
     pnd54Summary,
@@ -843,9 +846,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               ? t("accCompPp36EmbeddedSearchHint")
               : isPnd5354CompactList
                 ? t("accCompPnd5354EmptySearchHint")
-                : showPp36Ledger && pp30Mode === "wht_only"
-                  ? t("accCompPp36EmptySearchHint")
-                  : t("accCompPp30EmptySearchHint")}
+                : showPnd91Area && !showPnd1Area && !showWhtLedger
+                  ? t("accCompPnd91EmptySearchHint")
+                  : showPp36Ledger && pp30Mode === "wht_only"
+                    ? t("accCompPp36EmptySearchHint")
+                    : t("accCompPp30EmptySearchHint")}
           </AccountingEmptyState>
         ) : (
           <>
@@ -2173,7 +2178,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               </a>
             </div>
             ) : null}
-            {showPnd1Area ? (
+            {showPnd91Area ? (
               <div className="rounded-md border border-border/70 bg-muted/10 p-3 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1 min-w-0">
@@ -2191,12 +2196,19 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                     >
                       {pnd91Loading ? t("loading") : t("accCompPnd91Load")}
                     </Button>
-                    <Button type="button" size="sm" variant="outline" asChild disabled={pnd91Year == null}>
-                      <a href={pnd91ExportUrl} target="_blank" rel="noopener noreferrer">
+                    {pnd91Year == null ? (
+                      <Button type="button" size="sm" variant="outline" disabled>
                         <Download className="h-3 w-3 mr-1" />
                         {t("accCompPnd91ExportCsv")}
-                      </a>
-                    </Button>
+                      </Button>
+                    ) : (
+                      <Button type="button" size="sm" variant="outline" asChild>
+                        <a href={pnd91ExportUrl} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-3 w-3 mr-1" />
+                          {t("accCompPnd91ExportCsv")}
+                        </a>
+                      </Button>
+                    )}
                   </div>
                 </div>
                 {pnd91Year != null ? (

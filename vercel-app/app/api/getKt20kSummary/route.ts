@@ -120,7 +120,16 @@ function normalizeFormHint(v: unknown): 'pnd1' | 'pnd1a' | 'other' {
     .replace(/\s+/g, '')
   if (!raw) return 'other'
   if (raw.includes('1ก') || raw.includes('pnd1a') || raw.includes('ภ.ง.ด.1ก')) return 'pnd1a'
-  if (raw.includes('pnd1') || raw.includes('ภ.ง.ด.1') || raw === '1') return 'pnd1'
+  const compact = raw.replace(/[^a-z0-9ก-๙.]/g, '')
+  if (compact.includes('pnd91') || raw.includes('ภ.ง.ด.91') || raw.includes('ภงด91')) return 'other'
+  if (
+    compact === 'pnd1' ||
+    /^pnd1(?![0-9])/.test(compact.replace(/\./g, '')) ||
+    raw.includes('ภ.ง.ด.1') ||
+    raw === '1'
+  ) {
+    return 'pnd1'
+  }
   return 'other'
 }
 

@@ -10,7 +10,10 @@ import {
   buildExpenseAccrualBankLinkDateFilters,
   buildExpenseAccrualBankLinkRecentFilter,
   chunkIdsForInFilter,
+  EXPENSE_BANK_LINK_AMOUNT_LIMITS,
   EXPENSE_BANK_LINK_DATE_WINDOW_DAYS,
+  filterExpenseAccrualsByBankStore,
+  isPayrollExpenseAccrualForBankLink,
 } from '@/lib/expense-accrual-bank-link-candidates'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { roundMoney2 } from '@/lib/invoice-vat-total'
@@ -19,11 +22,13 @@ import { requireAuth } from '@/lib/verify-auth'
 
 type BankTxRow = {
   id?: number
+  account_id?: number | null
   trans_type?: string
   amount?: number
   trans_date?: string
   memo?: string
   note?: string
+  store_name?: string | null
 }
 
 type ExpenseAccrualRow = {
@@ -75,14 +80,6 @@ const ACCRUAL_SELECT =
 /** 드롭다운 과다 방지 — 금액·날짜 일치 우선 정렬 후 상한 */
 const MAX_LINK_CANDIDATES = 80
 
-function accrualMatchesStore(rowStore: string, storeFilter: string): boolean {
-  const row = String(rowStore || '').trim()
-  const filter = String(storeFilter || '').trim()
-  if (!filter) return true
-  if (!row) return true
-  return storesMatchForGradeLookup(row, filter)
-}
-
 function mergeAccrualRows(...batches: ExpenseAccrualRow[][]): ExpenseAccrualRow[] {
   const byId = new Map<number, ExpenseAccrualRow>()
   for (const batch of batches) {
@@ -111,7 +108,7 @@ export async function GET(request: NextRequest) {
     }
 
     const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
-      select: 'id,trans_type,amount,trans_date,memo,note',
+      select: 'id,account_id,trans_type,amount,trans_date,memo,note,store_name',
       limit: 1,
     })) as BankTxRow[] | null
     const bankRow = bankRows?.[0]
@@ -120,6 +117,22 @@ export async function GET(request: NextRequest) {
     }
     if (String(bankRow.trans_type || '').toLowerCase() !== 'withdraw') {
       return NextResponse.json({ success: false, message: '출금 거래만 매칭할 수 있습니다.', list: [] }, { status: 400, headers })
+    }
+
+    // 통장 계좌·거래 매장 → 지급예정도 같은 매장만 (클라이언트 storeFilter 누락 대비)
+    let effectiveStoreFilter = storeFilter
+    if (!effectiveStoreFilter) {
+      effectiveStoreFilter = String(bankRow.store_name || '').trim()
+    }
+    if (!effectiveStoreFilter) {
+      const accountId = Number(bankRow.account_id || 0)
+      if (accountId > 0) {
+        const accRows = (await supabaseSelectFilter('bank_accounts', `id=eq.${accountId}`, {
+          select: 'store',
+          limit: 1,
+        })) as { store?: string | null }[] | null
+        effectiveStoreFilter = String(accRows?.[0]?.store || '').trim()
+      }
     }
 
     const linkedRows = (await supabaseSelectFilter(
@@ -149,24 +162,24 @@ export async function GET(request: NextRequest) {
     )
     let accrualRows = mergeAccrualRows(...dateBatches)
 
-    // 등록일 불일치·WHT/VAT(순지급=통장) 대비 금액 보강
+    // 금액 일치가 본연결 조건 — 날짜창과 별도로 항상 보강(paid 이력 limit 밀림 방지)
     if (bankAmount > 0) {
-      const amountLimit = (accrualRows || []).length === 0 ? 400 : 150
+      const amountFilters = buildExpenseAccrualBankLinkAmountFilters(bankAmount)
       const amountBatches = await Promise.all(
-        buildExpenseAccrualBankLinkAmountFilters(bankAmount).map(
-          (filter) =>
+        amountFilters.map(
+          (filter, i) =>
             supabaseSelectFilter('expense_accruals', filter, {
               select: ACCRUAL_SELECT,
               order: 'id.desc',
-              limit: amountLimit,
+              limit: EXPENSE_BANK_LINK_AMOUNT_LIMITS[i] ?? 400,
             }) as Promise<ExpenseAccrualRow[]>
         )
       )
       accrualRows = mergeAccrualRows(accrualRows || [], ...amountBatches)
     }
 
-    // 그래도 적으면 최근 건 보강 후 JS에서 잔액≈통장 또는 날짜창만 채택
-    if ((accrualRows || []).length < 20) {
+    // 그래도 잔액 일치 후보가 없을 수 있어 최근 미정산 보강(부분지급 잔액=통장 케이스)
+    if ((accrualRows || []).length < 40) {
       const recentRows = (await supabaseSelectFilter(
         'expense_accruals',
         buildExpenseAccrualBankLinkRecentFilter(),
@@ -225,6 +238,7 @@ export async function GET(request: NextRequest) {
           moneyEqual(remainingAmount, bankAmount) ||
           moneyEqual(plannedAmount, bankAmount) ||
           moneyEqual(grossAmount, bankAmount)
+        const amountMatch = moneyEqual(remainingAmount, bankAmount)
         return {
           id,
           payeeCode: decoded.payeeCode,
@@ -244,25 +258,30 @@ export async function GET(request: NextRequest) {
           dateExactMatch,
           dateInWindow,
           amountClose,
+          amountMatch,
         }
       })
       .filter((r) =>
         LINKABLE_ACCRUAL_STATUSES.includes(String(r.status || '').toLowerCase() as (typeof LINKABLE_ACCRUAL_STATUSES)[number])
       )
       .filter((r) => (r.remainingAmount || 0) > 0)
-      // 날짜 창 안이면 금액 불일치여도 후보에 표시(저장 시 UI가 금액 가드). 창 밖은 금액 근접만.
-      .filter((r) => r.dateInWindow || r.amountClose)
+      // 저장 시 잔액=통장 필수 → 연결 불가한 ≠ 후보로 목록을 채우지 않음
+      .filter((r) => r.amountMatch)
+      .filter(
+        (r) =>
+          !isPayrollExpenseAccrualForBankLink({
+            payeeCode: r.payeeCode,
+            memo: r.memo,
+            payeeName: r.payeeName,
+          })
+      )
 
-    let storeScopedList = rawList
-    if (storeFilter) {
-      const matched = rawList.filter((r) => accrualMatchesStore(r.storeName, storeFilter))
-      // 매장 일치가 있어도, 금액이 맞는 다른 매장 건은 함께 노출(등록 매장명 불일치 대비)
-      const amountHits = rawList.filter((r) => r.amountClose)
-      const byId = new Map<number, (typeof rawList)[0]>()
-      for (const r of matched) byId.set(r.id, r)
-      for (const r of amountHits) byId.set(r.id, r)
-      storeScopedList = byId.size > 0 ? [...byId.values()] : rawList
-    }
+    // 통장 매장과 같은 지급예정만 (금액 일치만으로 타 매장·본사 건 노출 금지)
+    const storeScopedList = filterExpenseAccrualsByBankStore(
+      rawList,
+      effectiveStoreFilter,
+      storesMatchForGradeLookup
+    )
 
     const codesForVendor = new Set(
       storeScopedList
@@ -358,6 +377,7 @@ export async function GET(request: NextRequest) {
         candidateCount: list.length,
         dateWindowDays: EXPENSE_BANK_LINK_DATE_WINDOW_DAYS,
         scannedAccruals: accrualIds.length,
+        storeFilter: effectiveStoreFilter || '',
       },
     }, { headers })
   } catch (e) {

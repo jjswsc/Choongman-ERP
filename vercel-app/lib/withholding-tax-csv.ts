@@ -35,19 +35,35 @@ export function classifyWhtLedgerFormFamily(v: unknown): WhtLedgerFormFamily {
     .replace(/\s+/g, '')
   if (!raw) return 'OTHER'
   const upper = raw.toUpperCase()
+  const compact = upper.replace(/[^A-Z0-9]/g, '')
   // 1ก / PND1A 를 PND1·PND3보다 먼저
   if (
     raw.includes('1ก') ||
     upper.includes('1K') ||
-    upper.includes('PND1A') ||
+    compact.startsWith('PND1A') ||
+    compact.includes('PND1A') ||
     raw.includes('ภ.ง.ด.1ก') ||
     raw.includes('ภงด.1ก') ||
     raw.includes('ภงด1ก')
   ) {
     return 'PND1A'
   }
+  // PND91/50/51 등이 PND1 부분일치로 오인되지 않게 제외
   if (
-    upper.includes('PND1') ||
+    compact.includes('PND91') ||
+    compact.includes('PND50') ||
+    compact.includes('PND51') ||
+    raw.includes('ภ.ง.ด.91') ||
+    raw.includes('ภงด.91') ||
+    raw.includes('ภงด91') ||
+    raw.includes('ภ.ง.ด.50') ||
+    raw.includes('ภ.ง.ด.51')
+  ) {
+    return 'OTHER'
+  }
+  if (
+    compact === 'PND1' ||
+    /^PND1(?![0-9])/.test(compact) ||
     raw.includes('ภ.ง.ด.1') ||
     raw.includes('ภงด.1') ||
     raw.includes('ภงด1') ||
@@ -121,6 +137,9 @@ export function whtLedgerRowMatchesFocusMode(
   if (mode === 'pnd1' || mode === 'pnd1391') {
     return matchesPnd1FilingForm(row.form_hint, 'all')
   }
+
+  // PND91은 연간 체크리스트 전용 — 월별 원장 행과 섞지 않음
+  if (mode === 'pnd91') return false
 
   const effective = effectivePnd353FormHint(row)
   if (mode === 'pnd3') return effective === 'PND3'

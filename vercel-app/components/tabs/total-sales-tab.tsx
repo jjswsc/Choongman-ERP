@@ -165,9 +165,12 @@ export function TotalSalesTab() {
   const [exporting, setExporting] = React.useState(false)
   const [truncated, setTruncated] = React.useState(false)
   const [hasQueried, setHasQueried] = React.useState(false)
+  const [queryError, setQueryError] = React.useState<string | null>(null)
   const [levelsData, setLevelsData] = React.useState<
     Record<PosSalesHierarchyLevel, PosSalesHierarchyRow[]> | null
   >(null)
+  const loadIdRef = React.useRef(0)
+  const deepLinkQueriedRef = React.useRef(false)
   const [byOrderTypeLevels, setByOrderTypeLevels] = React.useState<HierarchyLevelsByOrderType | null>(
     null
   )
@@ -560,31 +563,45 @@ export function TotalSalesTab() {
 
   const loadData = React.useCallback(async () => {
     if (!canQuery || !startStr || !endStr) return
+    const id = ++loadIdRef.current
     setLoading(true)
+    setQueryError(null)
     try {
-      const [mainRes, todayRes, monthRes] = await Promise.all([
-        fetchHierarchy({ startStr, endStr }, compareChannels),
-        fetchHierarchy({ startStr: today, endStr: today }, false),
-        fetchHierarchy({ startStr: monthRange.startStr, endStr: today }, false),
-      ])
+      // 본문 집계가 핵심 — 오늘/월 스냅샷 실패로 전체가 비지 않게 분리
+      const mainRes = await fetchHierarchy({ startStr, endStr }, compareChannels)
+      if (loadIdRef.current !== id) return
       setLevelsData(mainRes.levels)
       setByOrderTypeLevels(
         compareChannels && mainRes.byOrderType ? mapByOrderTypeLevels(mainRes.byOrderType) : null
       )
       setDrillFilter({})
       setTruncated(!!mainRes.truncated)
-      setSnapshotToday(sumHierarchyRows(todayRes.levels.menu))
-      setSnapshotMonth(sumHierarchyRows(monthRes.levels.menu))
       setHasQueried(true)
+
+      const [todaySettled, monthSettled] = await Promise.allSettled([
+        fetchHierarchy({ startStr: today, endStr: today }, false),
+        fetchHierarchy({ startStr: monthRange.startStr, endStr: today }, false),
+      ])
+      if (loadIdRef.current !== id) return
+      if (todaySettled.status === "fulfilled") {
+        setSnapshotToday(sumHierarchyRows(todaySettled.value.levels.menu))
+      }
+      if (monthSettled.status === "fulfilled") {
+        setSnapshotMonth(sumHierarchyRows(monthSettled.value.levels.menu))
+      }
     } catch {
+      if (loadIdRef.current !== id) return
       setLevelsData(null)
       setByOrderTypeLevels(null)
       setSnapshotToday(null)
       setSnapshotMonth(null)
       setTruncated(false)
       setHasQueried(true)
+      setQueryError(
+        tr("salesQueryFailed", "조회에 실패했습니다. 잠시 후 다시 「조회」를 눌러 주세요.")
+      )
     } finally {
-      setLoading(false)
+      if (loadIdRef.current === id) setLoading(false)
     }
   }, [
     canQuery,
@@ -595,6 +612,7 @@ export function TotalSalesTab() {
     mapByOrderTypeLevels,
     today,
     monthRange.startStr,
+    tr,
   ])
 
   const loadDataRef = React.useRef(loadData)
@@ -633,21 +651,34 @@ export function TotalSalesTab() {
     [level]
   )
 
+  /** 매출관리 등에서 ?start&end&stores 딥링크로 들어온 경우만 1회 자동 조회 */
   React.useEffect(() => {
-    if (!canQuery) return
-    const tid = window.setTimeout(() => {
-      void loadDataRef.current()
-    }, periodPreset === "custom" ? 400 : 0)
-    return () => window.clearTimeout(tid)
-  }, [canQuery, periodPreset, startStr, endStr, selectedStoresKey])
+    if (deepLinkQueriedRef.current) return
+    if (!allowTotalSalesUrlSync || !pageActiveRef.current) return
+    if (!canQuery || !startStr || !endStr) return
+    const qStart = String(searchParams.get("start") || "").trim()
+    const qEnd = String(searchParams.get("end") || "").trim()
+    const qStores = String(searchParams.get("stores") || "").trim()
+    if (!qStart && !qEnd && !qStores) return
+    deepLinkQueriedRef.current = true
+    void loadDataRef.current()
+  }, [
+    allowTotalSalesUrlSync,
+    pageActiveRef,
+    canQuery,
+    startStr,
+    endStr,
+    selectedStoresKey,
+    searchParams,
+  ])
 
   const prevCompareChannelsRef = React.useRef(compareChannels)
   React.useEffect(() => {
     if (prevCompareChannelsRef.current === compareChannels) return
     prevCompareChannelsRef.current = compareChannels
-    if (!levelsData || !canQuery || !startStr || !endStr) return
+    if (!hasQueried || !canQuery || !startStr || !endStr) return
     void loadDataRef.current()
-  }, [compareChannels, levelsData, canQuery, startStr, endStr])
+  }, [compareChannels, hasQueried, canQuery, startStr, endStr])
 
   const activeRows = React.useMemo(() => {
     const rows = levelsData?.[level] ?? []
@@ -1017,13 +1048,28 @@ export function TotalSalesTab() {
               placeholder={tr("totalSalesSearchPh", "예: Snow Onion")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  if (canQuery && !loading) void loadData()
+                }
+              }}
               aria-label={tr("totalSalesSearch", "메뉴 검색")}
             />
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <Checkbox checked={searchAnd} onCheckedChange={(c) => setSearchAnd(c === true)} />
               <span>{tr("salesMenuSearchAndMode", "검색어 모두 포함 (AND)")}</span>
             </label>
-            <Button type="button" onClick={() => void loadData()} disabled={!canQuery || loading}>
+            <Button
+              type="button"
+              onClick={() => void loadData()}
+              disabled={!canQuery || loading}
+              title={
+                canMultiStorePicker && selectedStores.length === 0
+                  ? tr("salesQueryNeedStore", "매장을 선택해 주세요.")
+                  : undefined
+              }
+            >
               {tr("salesQuery", "조회")}
             </Button>
             <Button
@@ -1050,6 +1096,28 @@ export function TotalSalesTab() {
             </p>
           ) : null}
 
+          {queryError ? (
+            <p className={`text-sm ${ADMIN_PANEL_WARNING_CN}`} role="alert">
+              {queryError}
+            </p>
+          ) : null}
+
+          {!hasQueried && !loading ? (
+            <p className="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+              {canMultiStorePicker && selectedStores.length === 0
+                ? tr(
+                    "salesSelectStoreBeforeQuery",
+                    "매장을 하나 이상 선택한 뒤「조회」를 눌러 주세요. 「전체 선택」으로 여러 매장·전체를 볼 수 있습니다."
+                  )
+                : tr(
+                    "salesPressQueryToLoad",
+                    "위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다."
+                  )}
+            </p>
+          ) : null}
+
+          {hasQueried || loading ? (
+          <>
           {snapshotToday && snapshotMonth ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border bg-muted/30 p-3">
@@ -1430,6 +1498,8 @@ export function TotalSalesTab() {
               </tbody>
             </table>
           </div>
+          </>
+          ) : null}
         </CardContent>
       </Card>
     </div>

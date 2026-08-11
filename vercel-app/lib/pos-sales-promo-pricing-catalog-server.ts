@@ -127,17 +127,21 @@ export async function loadPosSalesPromoPricingCatalog(): Promise<PromoPricingCat
     menu_id?: number | string
     option_id?: number | string | null
     quantity?: number | null
+    choice_group?: string | null
   }[] = []
-  try {
-    promoItemRows =
-      ((await supabaseSelectAllPages('pos_promo_items', {
-        order: 'promo_id.asc,id.asc',
-        pageSize: 3000,
-        maxRows: 200000,
-        select: 'promo_id,menu_id,option_id,quantity',
-      })) as typeof promoItemRows) ?? []
-  } catch {
-    promoItemRows = []
+  for (const select of ['promo_id,menu_id,option_id,quantity,choice_group', 'promo_id,menu_id,option_id,quantity']) {
+    try {
+      promoItemRows =
+        ((await supabaseSelectAllPages('pos_promo_items', {
+          order: 'promo_id.asc,id.asc',
+          pageSize: 3000,
+          maxRows: 200000,
+          select,
+        })) as typeof promoItemRows) ?? []
+      break
+    } catch {
+      if (select === 'promo_id,menu_id,option_id,quantity') promoItemRows = []
+    }
   }
 
   const promoItemsByPromoId = new Map<string, PromoLineLike[]>()
@@ -151,6 +155,7 @@ export async function loadPosSalesPromoPricingCatalog(): Promise<PromoPricingCat
           menuId: row.menu_id,
           optionId: row.option_id,
           quantity: row.quantity,
+          choiceGroup: row.choice_group,
         },
       ])
     )

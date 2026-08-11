@@ -559,7 +559,7 @@ export function BankTransactionsTab() {
       const res = await getApprovedExpenseAccrualsForBankTx({
         bankTransactionId: Number(row.id),
         userRole: auth?.role,
-        storeFilter: selectedAccountStore || undefined,
+        storeFilter: (row.storeName || "").trim() || selectedAccountStore || undefined,
       })
       const listRows = res.list || []
       setApprovedPickList(listRows)

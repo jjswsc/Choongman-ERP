@@ -77,6 +77,7 @@ import {
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import { isLinkposCardApiEnabled, shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
+import { isKbankQrEnabledForStore } from '@/lib/kbank-pilot-stores'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import {
   consumeSuppressMainPosAutoPrintForQueuedSync,
@@ -3240,14 +3241,11 @@ export default function PosTerminalPage() {
   )
 
   const isKbankPilotStore = useMemo(() => {
-    const values = [
-      String(currentStoreId || '').trim(),
-      String(currentStore?.name || '').trim(),
-      String(formatStoreLabel(currentStoreId || '') || '').trim(),
-    ]
-      .filter(Boolean)
-      .map((value) => value.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim())
-    return values.includes('cm office')
+    return isKbankQrEnabledForStore({
+      storeId: currentStoreId,
+      storeName: currentStore?.name,
+      storeLabel: formatStoreLabel(currentStoreId || ''),
+    })
   }, [currentStoreId, currentStore?.name, formatStoreLabel])
 
   useEffect(() => {

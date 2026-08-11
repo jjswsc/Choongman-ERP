@@ -22,6 +22,8 @@ import {
   type PosSalesHierarchyLevel,
 } from '@/lib/pos-sales-menu-hierarchy-aggregate'
 import { loadPosSalesOptionCatalog } from '@/lib/pos-sales-option-catalog-server'
+import { loadPosSalesPromoPricingCatalog } from '@/lib/pos-sales-promo-pricing-catalog-server'
+import type { PosSalesPromoExpandCatalog } from '@/lib/pos-sales-menu-hierarchy-aggregate'
 
 const HIERARCHY_LEVELS: PosSalesHierarchyLevel[] = ['main', 'category', 'menu', 'option']
 
@@ -107,6 +109,19 @@ export async function GET(request: NextRequest) {
     } catch (catalogErr) {
       console.error('loadPosSalesOptionCatalog:', catalogErr)
     }
+
+    let promoCatalog: PosSalesPromoExpandCatalog | undefined
+    try {
+      const pricing = await loadPosSalesPromoPricingCatalog()
+      promoCatalog = {
+        promoItemsByPromoId: pricing.promoItemsByPromoId,
+        promoIdByMirrorMenuId: pricing.promoIdByMirrorMenuId,
+        promoMetaById: pricing.promoMetaById,
+      }
+    } catch (promoErr) {
+      console.error('loadPosSalesPromoPricingCatalog:', promoErr)
+    }
+
     const menuList = Array.isArray(menus) ? menus : []
     const sliceLimit = 500
 
@@ -116,6 +131,7 @@ export async function GET(request: NextRequest) {
       options: Array.isArray(options) ? options : [],
       searchTokens,
       searchAnd,
+      promoCatalog,
     })
 
     const levels = applySearchSliceLevels(
@@ -146,6 +162,7 @@ export async function GET(request: NextRequest) {
           options: Array.isArray(options) ? options : [],
           searchTokens,
           searchAnd,
+          promoCatalog,
         })
         byOrderType[ch] = {
           levels: applySearchSliceLevels({ ...chAgg.levels }, searchTokens, searchAnd, sliceLimit),

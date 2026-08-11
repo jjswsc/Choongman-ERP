@@ -38,6 +38,7 @@ import {
 } from '@/lib/pos-terminal-kbank-helpers'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
+import { isKbankQrEnabledForStore } from '@/lib/kbank-pilot-stores'
 import type { CartPanelPaymentPayload } from '@/components/pos/cart-panel'
 import type { LangCode } from '@/lib/lang-context'
 
@@ -188,14 +189,11 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
   // -------------------------------------------------------------------------
 
   const isKbankPilotStore = useMemo(() => {
-    const values = [
-      String(currentStoreId || '').trim(),
-      String(currentStoreName || '').trim(),
-      String(formatStoreLabel(currentStoreId || '') || '').trim(),
-    ]
-      .filter(Boolean)
-      .map((value) => value.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim())
-    return values.includes('cm office')
+    return isKbankQrEnabledForStore({
+      storeId: currentStoreId,
+      storeName: currentStoreName,
+      storeLabel: formatStoreLabel(currentStoreId || ''),
+    })
   }, [currentStoreId, currentStoreName, formatStoreLabel])
 
   // Reset kbank state when switching away from pilot store

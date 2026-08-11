@@ -18,6 +18,8 @@ export type KbankRuntimeEnv = {
   voidPath?: string
   settlementPath?: string
   terminalId?: string
+  /** Partner Shop ID (매장별, 선택) */
+  partnerShopId?: string
   qrTypeThai?: string
 }
 
@@ -44,6 +46,7 @@ export function kbankRuntimeField(runtime: KbankRuntimeEnv | undefined, envName:
     KBANK_SETTLEMENT_PATH: 'settlementPath',
     KBANK_QR_SETTLEMENT_PATH: 'settlementPath',
     KBANK_TERMINAL_ID: 'terminalId',
+    KBANK_PARTNER_SHOP_ID: 'partnerShopId',
     KBANK_QR_TYPE_THAI: 'qrTypeThai',
   }
   const key = map[envName]

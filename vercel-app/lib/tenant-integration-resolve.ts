@@ -22,6 +22,7 @@ import {
   parseGrabPartnerApiMenuMerchantMap,
   parseGrabStoreMap,
 } from '@/lib/grab-store-map-env'
+import { lookupChoongmanKbankStoreDefaults } from '@/lib/kbank-store-merchant-defaults'
 
 function pickStr(...values: unknown[]): string {
   for (const v of values) {
@@ -55,6 +56,7 @@ export function kbankRuntimeFromProcessEnv(): KbankRuntimeEnv {
     voidPath: readEnv('KBANK_VOID_PATH') || readEnv('KBANK_QR_VOID_PATH'),
     settlementPath: readEnv('KBANK_SETTLEMENT_PATH') || readEnv('KBANK_QR_SETTLEMENT_PATH'),
     terminalId: readEnv('KBANK_TERMINAL_ID'),
+    partnerShopId: readEnv('KBANK_PARTNER_SHOP_ID'),
     qrTypeThai: readEnv('KBANK_QR_TYPE_THAI'),
   }
 }
@@ -79,6 +81,7 @@ export function emptyKbankRuntime(cacheKey = 'tenant-empty'): KbankRuntimeEnv {
     voidPath: '',
     settlementPath: '',
     terminalId: '',
+    partnerShopId: '',
     qrTypeThai: '',
   }
 }
@@ -102,13 +105,16 @@ export function mergeKbankTenantConfig(base: KbankRuntimeEnv, cfg: TenantKbankCo
     voidPath: pickStr(cfg.voidPath, base.voidPath),
     settlementPath: pickStr(cfg.settlementPath, base.settlementPath),
     terminalId: base.terminalId,
+    partnerShopId: base.partnerShopId,
     qrTypeThai: base.qrTypeThai,
   }
 }
 
-function applyStoreKbankConfig(base: KbankRuntimeEnv, cfg: StoreKbankConfig): KbankRuntimeEnv {
+export function applyStoreKbankConfig(base: KbankRuntimeEnv, cfg: StoreKbankConfig): KbankRuntimeEnv {
   return {
     ...base,
+    merchantId: pickStr(cfg.merchantId, base.merchantId),
+    partnerShopId: pickStr(cfg.partnerShopId, base.partnerShopId),
     terminalId: pickStr(cfg.terminalId, base.terminalId),
   }
 }
@@ -130,6 +136,21 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
     } else if (isolate) {
       /** Omni: DB 자격 없으면 env 폴백 금지 */
       return emptyKbankRuntime(`tenant:${tenantId}:missing`)
+    }
+  }
+
+  // 충만 매장별 MID 기본값 (Huamak / Seacon). 아래 DB store 설정이 있으면 그 값이 우선.
+  if (storeCode) {
+    const defaults = lookupChoongmanKbankStoreDefaults(storeCode)
+    if (defaults) {
+      runtime = applyStoreKbankConfig(runtime, {
+        merchantId: defaults.merchantId,
+        partnerShopId: defaults.partnerShopId,
+        terminalId: defaults.terminalId,
+      })
+      if (!runtime.cacheKey.includes('|store:')) {
+        runtime = { ...runtime, cacheKey: `${runtime.cacheKey}|store:${storeCode}` }
+      }
     }
   }
 

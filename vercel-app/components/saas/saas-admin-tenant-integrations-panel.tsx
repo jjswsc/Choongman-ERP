@@ -50,6 +50,8 @@ const EMPTY_GRAB_TENANT = {
 }
 
 const EMPTY_KBANK_STORE = {
+  merchantId: "",
+  partnerShopId: "",
   terminalId: "",
   qrEnabled: true,
 }
@@ -136,6 +138,8 @@ export function SaasAdminTenantIntegrationsPanel(props: {
           const c = kbankS.config || {}
           setKbankStore({
             isEnabled: kbankS.isEnabled !== false,
+            merchantId: readStr(c, "merchantId"),
+            partnerShopId: readStr(c, "partnerShopId"),
             terminalId: readStr(c, "terminalId"),
             qrEnabled: c.qrEnabled !== false,
           })
@@ -239,6 +243,8 @@ export function SaasAdminTenantIntegrationsPanel(props: {
               provider,
               isEnabled: kbankStore.isEnabled,
               config: {
+                merchantId: kbankStore.merchantId,
+                partnerShopId: kbankStore.partnerShopId,
                 terminalId: kbankStore.terminalId,
                 qrEnabled: kbankStore.qrEnabled,
               },
@@ -419,6 +425,24 @@ export function SaasAdminTenantIntegrationsPanel(props: {
                     onCheckedChange={(v) => setKbankStore((s) => ({ ...s, isEnabled: v === true }))}
                   />
                   <Label>{t("saasAdminInt_enabled")}</Label>
+                </div>
+                <div className="space-y-1">
+                  <Label>Merchant ID</Label>
+                  <Input
+                    value={kbankStore.merchantId}
+                    onChange={(e) => setKbankStore((s) => ({ ...s, merchantId: e.target.value }))}
+                    placeholder="KB00000…"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Partner Shop ID</Label>
+                  <Input
+                    value={kbankStore.partnerShopId}
+                    onChange={(e) => setKbankStore((s) => ({ ...s, partnerShopId: e.target.value }))}
+                    placeholder="SJGLB…"
+                    autoComplete="off"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label>Terminal ID</Label>

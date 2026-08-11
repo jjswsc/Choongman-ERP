@@ -666,8 +666,12 @@ export function AdminAccountingCompliance({
   const [whtSubmissionFormHint, setWhtSubmissionFormHint] = React.useState<"PND3" | "PND53" | "ALL">(
     initialWhtSubmissionFormHint
   )
+  /** 월별 ภ.ง.ด.1 / 1ก 신고 도구·원장 (PND91과 분리) */
   const showPnd1Area =
     whtFocusMode === "all" || whtFocusMode === "pnd1391" || whtFocusMode === "pnd1"
+  /** 연간 ภ.ง.ด.91 체크리스트 — pnd1 탭과 결과·신고를 섞지 않음 */
+  const showPnd91Area =
+    whtFocusMode === "all" || whtFocusMode === "pnd1391" || whtFocusMode === "pnd91"
   const showPnd353Tools =
     whtFocusMode === "all" ||
     whtFocusMode === "pnd1391" ||
@@ -677,7 +681,8 @@ export function AdminAccountingCompliance({
   const showPp36Ledger = whtFocusMode === "all" || whtFocusMode === "pp36"
   const showPnd54Ledger =
     whtFocusMode === "all" || whtFocusMode === "pnd5354" || whtFocusMode === "pnd54"
-  const showWhtLedger = whtFocusMode !== "pp36" && whtFocusMode !== "pnd54"
+  const showWhtLedger =
+    whtFocusMode !== "pp36" && whtFocusMode !== "pnd54" && whtFocusMode !== "pnd91"
   const isPnd5354CompactList =
     whtFocusMode === "pnd5354" || whtFocusMode === "pnd53" || whtFocusMode === "pnd54"
   /** 탭이 이미 53/54로 분리된 경우 하위 토글 숨김 */
@@ -2293,14 +2298,19 @@ export function AdminAccountingCompliance({
     let cancelled = false
     void (async () => {
       if (pp30SubView === "wht") {
-        await Promise.all([loadWhtRef.current(), loadPp36Ref.current(), loadPnd54Ref.current()])
+        // PND91 전용 탭은 월별 원장 조회 없이 연간 체크리스트만(별도 effect)
+        if (whtFocusMode !== "pnd91") {
+          await Promise.all([loadWhtRef.current(), loadPp36Ref.current(), loadPnd54Ref.current()])
+        }
       } else {
         await loadVatRef.current()
       }
       if (cancelled) {
         return
       }
-      void loadTaxSummaryRef.current()
+      if (whtFocusMode !== "pnd91") {
+        void loadTaxSummaryRef.current()
+      }
     })()
     return () => {
       cancelled = true
@@ -2315,6 +2325,7 @@ export function AdminAccountingCompliance({
     periodType,
     ledgerStatusFilter,
     pp30SearchSeq,
+    whtFocusMode,
   ])
 
   React.useEffect(() => {
@@ -3360,6 +3371,7 @@ export function AdminAccountingCompliance({
     if (whtFocusMode === "pnd54") return t("taxFilingTabPnd54")
     if (isPnd5354CompactList) return t("taxFilingTabPnd5354")
     if (whtFocusMode === "pnd1") return t("taxFilingTabPnd1")
+    if (whtFocusMode === "pnd91") return t("taxFilingTabPnd91")
     if (whtFocusMode === "pnd3") return t("taxFilingTabPnd3")
     if (whtFocusMode === "pnd1391") return t("taxFilingTabPnd1391")
     return t("accCompTabPp30")
@@ -4225,7 +4237,7 @@ export function AdminAccountingCompliance({
   }, [taxMonth])
 
   const loadPnd91 = React.useCallback(async () => {
-    if (!canUse || !showPnd1Area || pnd91Year == null) return
+    if (!canUse || !showPnd91Area || pnd91Year == null) return
     setPnd91Loading(true)
     try {
       const data = await getPnd91AnnualSummary({ year: pnd91Year, storeFilter: storeFilterForApi })
@@ -4237,7 +4249,7 @@ export function AdminAccountingCompliance({
     } finally {
       setPnd91Loading(false)
     }
-  }, [canUse, showPnd1Area, pnd91Year, storeFilterForApi, t, formatLoadFailMessage])
+  }, [canUse, showPnd91Area, pnd91Year, storeFilterForApi, t, formatLoadFailMessage])
 
   const pnd91ExportUrl = React.useMemo(() => {
     if (pnd91Year == null) return "#"
@@ -4254,14 +4266,14 @@ export function AdminAccountingCompliance({
   }, [pnd91Year, storeFilterForApi, pnd91ChecklistTick])
 
   React.useEffect(() => {
-    if (!canUse || tab !== "summary" || !pp30Queried || pp30SubView !== "wht" || !showPnd1Area) return
+    if (!canUse || tab !== "summary" || !pp30Queried || pp30SubView !== "wht" || !showPnd91Area) return
     void loadPnd91()
   }, [
     canUse,
     tab,
     pp30Queried,
     pp30SubView,
-    showPnd1Area,
+    showPnd91Area,
     taxMonth,
     storeFilterForApi,
     pp30SearchSeq,
@@ -4976,6 +4988,7 @@ export function AdminAccountingCompliance({
             showPp36Ledger={showPp36Ledger}
             showPnd54Ledger={showPnd54Ledger}
             showPnd1Area={showPnd1Area}
+            showPnd91Area={showPnd91Area}
             showPnd353Tools={showPnd353Tools}
             pnd53Summary={pnd53Summary}
             pnd54Summary={pnd54Summary}
