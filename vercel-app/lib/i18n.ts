@@ -3696,7 +3696,7 @@ export const i18n = {
     accCompWhtForceSyncHint:
       '선택 매장·월의 급여·지출·통장 원천세를 원장에 다시 맞춘 뒤 조회합니다.',
     accCompPnd1EmptyLedgerHint:
-      '이 매장·월에 원천세(tax)>0인 급여 확정 건이 없거나, 아직 원장에 반영되지 않았을 수 있습니다. 「원장 동기화」 후 다시 검색하거나, SSO 미적용(3%) 직원은 PND.3 탭을 확인하세요.',
+      '이 매장·월에 확정 급여(지급액>0)가 없거나 아직 원장에 반영되지 않았을 수 있습니다. 「원장 동기화」 후 다시 검색하세요. SSO 미적용(3%) 직원은 PND.3 탭입니다.',
     accCompPnd1EmptyFilteredHint:
       '원장 {{n}}건이 있으나 PND.1(ภ.ง.ด.1) 서식이 아닙니다. PND.3 / PND.53 탭에서 확인하세요.',
     accCompVatSyncOk: '원장 동기화 완료 (POS {n}건 반영). 매입 탭도 함께 확인해 주세요.',
@@ -3821,7 +3821,7 @@ export const i18n = {
     accCompPnd1Issue_missing_payment_date: '지급일 누락',
     accCompPnd1Issue_invalid_payment_date: '지급일 형식 오류',
     accCompPnd1Issue_missing_income_type: '소득유형 누락',
-    accCompPnd1Issue_non_positive_withheld_amount: '원천세 금액 0 이하',
+    accCompPnd1Issue_non_positive_withheld_amount: '원천세 금액이 음수임',
     accCompKt20kTag_missing_in_pnd1a: 'PND1A 미기록',
     accCompKt20kTag_missing_in_kt20k: 'KT20K 미기록',
     accCompKt20kTag_amount_mismatch: '금액 불일치',
@@ -11530,7 +11530,7 @@ Only matters the employee must handle personally on a working day:
     accCompWhtForceSyncHint:
       'Re-syncs payroll/expense/bank withholding into the ledger for the selected store and month, then reloads.',
     accCompPnd1EmptyLedgerHint:
-      'No payroll rows with tax>0 for this store/month, or they are not in the ledger yet. Click Sync ledger and search again, or check the PND.3 tab for SSO-exempt (3%) staff.',
+      'No confirmed payroll with gross>0 for this store/month, or not yet in the ledger. Click Sync ledger and search again. SSO-exempt (3%) staff are on the PND.3 tab.',
     accCompPnd1EmptyFilteredHint:
       '{{n}} ledger row(s) exist but are not PND.1 (ภ.ง.ด.1). Check the PND.3 / PND.53 tabs.',
     accCompVatSyncOk: 'Ledger sync done (POS {n} rows). Also check the purchase tab.',
@@ -11654,7 +11654,7 @@ Only matters the employee must handle personally on a working day:
     accCompPnd1Issue_missing_payment_date: 'Missing payment date',
     accCompPnd1Issue_invalid_payment_date: 'Invalid payment date',
     accCompPnd1Issue_missing_income_type: 'Missing income type',
-    accCompPnd1Issue_non_positive_withheld_amount: 'Withheld amount ≤ 0',
+    accCompPnd1Issue_non_positive_withheld_amount: 'Withheld amount is negative',
     accCompKt20kTag_missing_in_pnd1a: 'Missing in PND1A',
     accCompKt20kTag_missing_in_kt20k: 'Missing in KT20K',
     accCompKt20kTag_amount_mismatch: 'Amount mismatch',
@@ -18281,7 +18281,7 @@ orderItemQty: 'จำนวน',
     accCompWhtForceSyncHint:
       'ซิงก์ภาษีหัก ณ ที่จ่ายจากเงินเดือน/ค่าใช้จ่าย/บัญชีธนาคาร ของสาขาและเดือนที่เลือก แล้วโหลดใหม่',
     accCompPnd1EmptyLedgerHint:
-      'เดือน/สาขานี้อาจไม่มีเงินเดือนที่ยืนยันแล้วและ tax>0 หรือยังไม่ลงบัญชี — กดซิงค์บัญชีแล้วค้นหาใหม่ หรือดูแท็บ PND.3 สำหรับพนักงานไม่มี SSO (3%)',
+      'เดือน/สาขานี้อาจไม่มีเงินเดือนที่ยืนยันแล้ว (ยอดจ่าย>0) หรือยังไม่ลงบัญชี — กดซิงค์บัญชีแล้วค้นหาใหม่ พนักงานไม่มี SSO (3%) อยู่แท็บ PND.3',
     accCompPnd1EmptyFilteredHint:
       'มี {{n}} รายการในบัญชี แต่ไม่ใช่แบบ ภ.ง.ด.1 — ตรวจแท็บ PND.3 / PND.53',
     accCompVatInputSourcesHint:
@@ -19026,7 +19026,7 @@ orderItemQty: 'จำนวน',
     accCompPnd1Issue_missing_payment_date: 'ขาดวันที่จ่าย',
     accCompPnd1Issue_invalid_payment_date: 'รูปแบบวันที่จ่ายไม่ถูกต้อง',
     accCompPnd1Issue_missing_income_type: 'ขาดประเภทเงินได้',
-    accCompPnd1Issue_non_positive_withheld_amount: 'ภาษีหัก ณ ที่จ่าย ≤ 0',
+    accCompPnd1Issue_non_positive_withheld_amount: 'ภาษีหัก ณ ที่จ่ายติดลบ',
     accCompKt20kTag_missing_in_pnd1a: 'ไม่มีใน PND1A',
     accCompKt20kTag_missing_in_kt20k: 'ไม่มีใน KT20K',
     accCompKt20kTag_amount_mismatch: 'ยอดไม่ตรง',

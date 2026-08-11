@@ -1133,7 +1133,6 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     if (st === 'cancel' || st === 'cancelled' || st === 'canceled' || st === 'rejected' || st === '반려') continue
 
     const whtAmount = round2(Math.max(0, Number(p.tax) || 0))
-    if (whtAmount <= 0) continue
 
     const ssoAmount = round2(Math.max(0, Number(p.sso) || 0))
     const isPnd3Payroll = ssoAmount <= 0
@@ -1163,6 +1162,9 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
             : grossFallback
       )
     )
+    // PND1 신고 목록: 원천세 0이어도 지급(총액)>0 이면 포함
+    if (grossAmount <= 0 && whtAmount <= 0) continue
+
     const rate = grossAmount > 0 ? round2((whtAmount / grossAmount) * 100) : null
     const paymentDate = monthEndYmd(taxMonth)
     const memoTag = `[AUTO:PAYROLL_RECORD_WHT:${payrollId}]`

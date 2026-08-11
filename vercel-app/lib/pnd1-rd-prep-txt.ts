@@ -154,10 +154,11 @@ export function validatePnd1Rows(rows: Pnd1SourceRow[]): Pnd1ValidationSummary {
       pushSample(`line ${lineNo}: missing income_type`)
       pushIssue(row, lineNo, 'missing_income_type', 'Missing income type')
     }
-    if (!Number.isFinite(whtAmount) || whtAmount <= 0) {
+    // 원천세 0은 PND1 신고 목록에 정상 포함 — 음수만 오류
+    if (!Number.isFinite(whtAmount) || whtAmount < 0) {
       warningCounts.nonPositiveWithheldAmount += 1
-      pushSample(`line ${lineNo}: wht_amount must be > 0`)
-      pushIssue(row, lineNo, 'non_positive_withheld_amount', 'Withheld amount must be greater than 0')
+      pushSample(`line ${lineNo}: wht_amount must be >= 0`)
+      pushIssue(row, lineNo, 'non_positive_withheld_amount', 'Withheld amount must be 0 or greater')
     }
   })
 
