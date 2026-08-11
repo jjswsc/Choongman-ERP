@@ -77,6 +77,8 @@ export interface OutboundHistoryItem {
    * 행 상세·ลูกหนี้ 맞춤용이며 기간 총액/요약에서는 제외한다.
    */
   outsidePeriodRange?: boolean
+  /** stock_logs.reference_no — 강제출고 시 입력한 세금계산서/참조번호 */
+  referenceNo?: string
 }
 
 export async function GET(request: NextRequest) {
@@ -196,6 +198,7 @@ export async function GET(request: NextRequest) {
         order_id?: number
         delivery_status?: string
         invoice_unit_price?: number | string | null
+        reference_no?: string | null
       }[]),
       ...((forceLogs || []) as {
         id?: number
@@ -208,6 +211,7 @@ export async function GET(request: NextRequest) {
         order_id?: number
         delivery_status?: string
         invoice_unit_price?: number | string | null
+        reference_no?: string | null
       }[]),
     ]
 
@@ -436,6 +440,7 @@ export async function GET(request: NextRequest) {
         code,
         String(row.item_name || '').trim()
       )
+      const refNo = String(row.reference_no || '').trim()
       list.push({
         date: dateStr,
         target,
@@ -453,6 +458,7 @@ export async function GET(request: NextRequest) {
         frozenUnitPrice: frozen,
         ...(allowOutsideRange ? { outsidePeriodRange: true } : {}),
         ...(fromCartLr ? { lineRemarks: fromCartLr } : {}),
+        ...(refNo ? { referenceNo: refNo } : {}),
       })
     }
 

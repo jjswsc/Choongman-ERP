@@ -50,6 +50,8 @@ export async function GET(request: NextRequest) {
     let withholdingTaxRate: number | undefined
     let poBillTo: PoInvoiceBillToVendor | undefined
 
+    let forceOutboundReferenceNo = ''
+
     if (refType === 'Order') {
       const outbound = await buildPayableItemsFromOrderOutbound(refId)
       if (outbound.items.length > 0) {
@@ -215,7 +217,7 @@ export async function GET(request: NextRequest) {
         'stock_logs',
         `id=eq.${refId}&log_type=eq.ForceOutbound`,
         {
-          select: 'id,item_code,item_name,qty,invoice_unit_price',
+          select: 'id,item_code,item_name,qty,invoice_unit_price,reference_no',
           limit: 1,
         }
       )) as
@@ -225,6 +227,7 @@ export async function GET(request: NextRequest) {
             item_name?: string
             qty?: number
             invoice_unit_price?: number | string | null
+            reference_no?: string | null
           }[]
         | null
       const log = logRows?.[0]
@@ -257,6 +260,7 @@ export async function GET(request: NextRequest) {
           unitCost: unitPrice,
           amount: rawLine,
         })
+        forceOutboundReferenceNo = String(log.reference_no || '').trim()
       }
     }
 
@@ -264,6 +268,7 @@ export async function GET(request: NextRequest) {
       {
         items,
         orderInvoiceTotals,
+        ...(forceOutboundReferenceNo ? { referenceNo: forceOutboundReferenceNo } : {}),
         ...(poBillTo ? { poBillTo } : {}),
         ...(withholdingTaxAmount != null && withholdingTaxAmount > 0
           ? {

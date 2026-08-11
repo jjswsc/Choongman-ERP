@@ -308,6 +308,8 @@ export interface OrderInvoiceTotals {
 export type PayableTransactionItemsResponse = {
   items: PayableTransactionItem[]
   orderInvoiceTotals?: OrderInvoiceTotals
+  /** ForceOutbound: stock_logs.reference_no */
+  referenceNo?: string
   withholdingTaxAmount?: number
   withholdingTaxRate?: number
   poBillTo?: {

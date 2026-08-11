@@ -150,10 +150,22 @@ function InvoicePrintPageInner() {
                     documentNo = ovDocNo
                   }
                 }
-                const mergedReferenceNo = ov.referenceNo || d.referenceNo
+                const ovRef = String(ov.referenceNo || "").trim()
+                const dataRef = String(d.referenceNo || "").trim()
+                const ovRefLooksLikeOutboundInv =
+                  /^IVF?\d{8}-\d+$/i.test(ovRef) ||
+                  (ovRef && documentNo && ovRef === String(documentNo).trim()) ||
+                  (ovRef && d.documentNo && ovRef === String(d.documentNo).trim())
+                // 구버전 override에 Document No(IV/IVF…)가 Reference로 저장된 경우 → ERP 입력값 우선
+                const mergedReferenceNo =
+                  ovRef && !ovRefLooksLikeOutboundInv
+                    ? ovRef
+                    : dataRef && dataRef !== "-"
+                      ? dataRef
+                      : ovRef || dataRef
                 const referenceNo = taxDoc
                   ? normalizeTaxInvoiceReferenceNo(mergedReferenceNo, documentNo)
-                  : mergedReferenceNo
+                  : mergedReferenceNo || dataRef || "-"
                 return {
                   ...d,
                   issueDate: ov.issueDate || d.issueDate,

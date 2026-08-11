@@ -143,7 +143,7 @@ import {
   resolveTaxInvoiceClientFromPoBillTo,
 } from "./receivable-payable-tab-utils"
 import { subscribeReceivablePayableListInvalidated, publishReceivablePayableListInvalidated } from "@/lib/receivable-payable-list-sync"
-import { buildTaxInvoiceDocNo, normalizeTaxInvoiceReferenceNo } from "@/lib/tax-invoice-doc-no"
+import { buildTaxInvoiceDocNo, isTaxInvoiceDocumentNo, normalizeTaxInvoiceReferenceNo } from "@/lib/tax-invoice-doc-no"
 import { resolveReceivableOrderNoDisplay, resolveReceivableTaxInvoiceDocNoDisplay } from "@/lib/receivable-invoice-format"
 
 function renderReceivableLedgerDateCell(
@@ -405,7 +405,7 @@ export function ReceivablePayableTab() {
       setTaxInvoiceLoadingKey(loadKey)
       try {
         const targetLabel = String(recItem.storeName || recItem.vendorName || "").trim()
-        const [{ items, orderInvoiceTotals, withholdingTaxAmount, withholdingTaxRate, poBillTo }, invoiceDataRes, invSettings, billToCandRes] =
+        const [{ items, orderInvoiceTotals, withholdingTaxAmount, withholdingTaxRate, poBillTo, referenceNo: stockReferenceNo }, invoiceDataRes, invSettings, billToCandRes] =
           await Promise.all([
           getPayableTransactionItems({ refType, refId }),
           getInvoiceData(),
@@ -512,6 +512,14 @@ export function ReceivablePayableTab() {
           }
         }
         let docNo = ""
+        const erpStockRef = String(stockReferenceNo || "").trim()
+        // override에 IVF/IV 출고번호만 저장된 경우(구버전) → ERP 입력 reference_no 우선
+        const overrideRefLooksLikeOutboundInv =
+          /^IVF?\d{8}-\d+$/i.test(savedReferenceNo) || isTaxInvoiceDocumentNo(savedReferenceNo)
+        const preferredReferenceNo =
+          (savedReferenceNo && !overrideRefLooksLikeOutboundInv
+            ? savedReferenceNo
+            : erpStockRef || savedReferenceNo || (outboundRef !== "-" ? outboundRef : "")) || ""
         if (refType && refId > 0) {
           const seqRes = await getTaxInvoiceDepositSeq({
             accrualId: accrualId > 0 ? accrualId : undefined,
@@ -519,9 +527,7 @@ export function ReceivablePayableTab() {
             refType,
             refId,
             existingDocumentNo: savedDocumentNo || undefined,
-            referenceNo:
-              savedReferenceNo ||
-              (outboundRef !== "-" ? outboundRef : undefined),
+            referenceNo: preferredReferenceNo || undefined,
             dueDate: dueDateStr,
             reserve: true,
           })
@@ -534,10 +540,7 @@ export function ReceivablePayableTab() {
         if (!docNo) {
           docNo = savedDocumentNo || buildTaxInvoiceDocNo(dateStr, 1)
         }
-        const referenceNo = normalizeTaxInvoiceReferenceNo(
-          savedReferenceNo || (outboundRef !== "-" ? outboundRef : ""),
-          docNo
-        )
+        const referenceNo = normalizeTaxInvoiceReferenceNo(preferredReferenceNo, docNo)
         const data: InvoiceData = {
           ...buildThaiSalesInvoiceData({
             documentType: "Tax Invoice/Receipt",

@@ -52,4 +52,4 @@ export const PETTY_CASH_LIST_COLS =
 
 /** 출고 통합 이력: Outbound / ForceOutbound 로그 */
 export const STOCK_LOG_OUTBOUND_HISTORY_COLS =
-  'id,log_type,log_date,vendor_target,item_code,item_name,qty,order_id,delivery_status,invoice_unit_price'
+  'id,log_type,log_date,vendor_target,item_code,item_name,qty,order_id,delivery_status,invoice_unit_price,reference_no'

@@ -70,18 +70,22 @@ export async function openStockDailyMatrixInvoicePrint(
 
   const docNo = (group.invoiceNo || `IV-${(group.date || '').replace(/\D/g, '')}`).trim()
   const dateStr = (group.date || '').split(' ')[0] || inv.ymd
+  const erpReferenceNo =
+    (group.items || []).map((it) => String(it.referenceNo || '').trim()).find(Boolean) || ''
+  const forceStockLogId = Number((group.items || [])[0]?.stockLogId || 0)
+  const isForce = !(oid > 0) && Number.isFinite(forceStockLogId) && forceStockLogId > 0
 
   const invoiceData: InvoiceData = buildThaiSalesInvoiceData({
     documentType: 'Invoice',
     documentNo: docNo,
     issueDate: dateStr,
     dueDate: dateStr,
-    referenceNo: group.invoiceNo || '-',
+    referenceNo: erpReferenceNo || '-',
     company,
     client,
     invSettings: settings,
-    sourceRefType: oid > 0 ? 'Order' : undefined,
-    sourceRefId: oid > 0 ? oid : undefined,
+    sourceRefType: oid > 0 ? 'Order' : isForce ? 'ForceOutbound' : undefined,
+    sourceRefId: oid > 0 ? oid : isForce ? forceStockLogId : undefined,
     lines: (group.items || []).map((it) => ({
       code: it.code,
       name: it.name,

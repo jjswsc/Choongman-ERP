@@ -252,6 +252,8 @@ export interface OrderInvoiceTotals {
 export type PayableTransactionItemsResponse = {
   items: PayableTransactionItem[]
   orderInvoiceTotals?: OrderInvoiceTotals
+  /** ForceOutbound: stock_logs.reference_no */
+  referenceNo?: string
   withholdingTaxAmount?: number
   withholdingTaxRate?: number
   /** 회계 PO(refType=PO) Tax Invoice BILL TO — 발주 인쇄와 동일 */

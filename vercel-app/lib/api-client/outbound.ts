@@ -38,6 +38,8 @@ export interface OutboundHistoryItem {
   billPlacedAt?: string
   /** 주문 보강으로 조회 기간 밖 출고가 포함된 줄 — 기간 총액/요약 제외 */
   outsidePeriodRange?: boolean
+  /** stock_logs.reference_no — 강제출고 시 입력한 세금계산서/참조번호 */
+  referenceNo?: string
 }
 
 export type DeleteOutboundPreview = {

@@ -64,6 +64,7 @@ import {
   getInvoiceData,
   getInvoiceOrderBillToCandidates,
   getInvoiceSettings,
+  getPayableTransactionItems,
   updateInvoiceSettings,
   getOutboundByWarehouse,
   getWarehouseLocations,
@@ -2191,17 +2192,40 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       (opts?.issueDate || dateFromIv || group.date || "").split(" ")[0] ||
       new Date().toISOString().slice(0, 10)
     const maybeOrderId = Number((group.items || [])[0]?.orderRowId || 0)
+    const forceStockLogId = Number(
+      (printItems[0] || (group.items || [])[0])?.stockLogId || 0
+    )
+    const isForce =
+      String(group.type || "").trim() === "Force" ||
+      ((!(Number.isFinite(maybeOrderId) && maybeOrderId > 0) &&
+        Number.isFinite(forceStockLogId) &&
+        forceStockLogId > 0))
+    const erpReferenceNo =
+      printItems.map((it) => String(it.referenceNo || "").trim()).find(Boolean) ||
+      (group.items || []).map((it) => String(it.referenceNo || "").trim()).find(Boolean) ||
+      ""
     return buildThaiSalesInvoiceData({
       documentType: "Invoice",
       documentNo: docNo,
       issueDate: dateStr,
       dueDate: dateStr,
-      referenceNo: docNo || "-",
+      // Document No(IV/IVF…)와 별도 — ERP 입력 reference_no. 없으면 Document No로 채우지 않음.
+      referenceNo: erpReferenceNo || "-",
       company,
       client,
       invSettings,
-      sourceRefType: Number.isFinite(maybeOrderId) && maybeOrderId > 0 ? "Order" : undefined,
-      sourceRefId: Number.isFinite(maybeOrderId) && maybeOrderId > 0 ? maybeOrderId : undefined,
+      sourceRefType:
+        Number.isFinite(maybeOrderId) && maybeOrderId > 0
+          ? "Order"
+          : isForce
+            ? "ForceOutbound"
+            : undefined,
+      sourceRefId:
+        Number.isFinite(maybeOrderId) && maybeOrderId > 0
+          ? maybeOrderId
+          : isForce
+            ? forceStockLogId
+            : undefined,
       lines: printItems.map((it) => ({
         code: it.code,
         name: it.name,
@@ -2240,6 +2264,48 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         billToCandRes?.taxInvoiceClientMap && typeof billToCandRes.taxInvoiceClientMap === "object"
           ? billToCandRes.taxInvoiceClientMap
           : {}
+
+      // 강제출고: 이력에 referenceNo가 비어 있으면 stock_logs에서 보강
+      const forceIdsNeedingRef = [
+        ...new Set(
+          checked.flatMap((g) =>
+            (g.items || [])
+              .filter(
+                (it) =>
+                  String(g.type || "").trim() === "Force" &&
+                  !String(it.referenceNo || "").trim() &&
+                  Number(it.stockLogId || 0) > 0
+              )
+              .map((it) => Math.floor(Number(it.stockLogId)))
+          )
+        ),
+      ]
+      const forceRefById = new Map<number, string>()
+      await Promise.all(
+        forceIdsNeedingRef.map(async (sid) => {
+          try {
+            const res = await getPayableTransactionItems({
+              refType: "ForceOutbound",
+              refId: sid,
+            })
+            const ref = String(res?.referenceNo || "").trim()
+            if (ref) forceRefById.set(sid, ref)
+          } catch {
+            // ignore — 인쇄는 Document No 대신 "-"
+          }
+        })
+      )
+      if (forceRefById.size > 0) {
+        for (const g of checked) {
+          for (const it of g.items || []) {
+            if (String(it.referenceNo || "").trim()) continue
+            const sid = Math.floor(Number(it.stockLogId || 0))
+            const ref = forceRefById.get(sid)
+            if (ref) it.referenceNo = ref
+          }
+        }
+      }
+
       const invoiceDatas: InvoiceData[] = []
       for (const g of checked) {
         const oid = Math.floor(Number((g.items || [])[0]?.orderRowId || 0))
