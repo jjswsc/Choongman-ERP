@@ -5,7 +5,7 @@ import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { normalizePndFormHint, type WithholdingTaxLedgerRow } from '@/lib/withholding-tax-csv'
 import { buildRdFilingTxtFilename, rdDigitsOnly } from '@/lib/rd-filing-common'
-import { pnd53LedgerToRdFilingTxt } from '@/lib/pnd53-rd-filing-txt'
+import { pnd53LedgerToRdFilingTxt, pnd53LedgerToRdPrepSoftTxt } from '@/lib/pnd53-rd-filing-txt'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -41,6 +41,10 @@ export async function GET(request: NextRequest) {
   const payerBranchNo = String(searchParams.get('payerBranchNo') || '').trim()
   const rdUserId = String(searchParams.get('rdUserId') || '').trim()
   const deptName = String(searchParams.get('deptName') || '').trim()
+  /** soft(기본)=빈칸 소프트 매핑, official=Format กลาง H/D */
+  const layoutRaw = String(searchParams.get('layout') || 'soft').trim().toLowerCase()
+  const layout = layoutRaw === 'official' || layoutRaw === 'format' ? 'official' : 'soft'
+  const includeHeader = String(searchParams.get('includeHeader') || '').trim() === '1'
   const allowedStores =
     (Array.isArray(authResult.auth.allowedStores) ? authResult.auth.allowedStores : [])
       .map((s) => String(s || '').trim())
@@ -74,7 +78,7 @@ export async function GET(request: NextRequest) {
   if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
     return NextResponse.json({ error: 'INVALID_YEAR_MONTH' }, { status: 400, headers })
   }
-  if (rdDigitsOnly(payerTaxId).length !== 13) {
+  if (layout === 'official' && rdDigitsOnly(payerTaxId).length !== 13) {
     return NextResponse.json({ error: 'INVALID_PAYER_TAX_ID' }, { status: 400, headers })
   }
 
@@ -94,23 +98,29 @@ export async function GET(request: NextRequest) {
         ? scopedRows
         : scopedRows.filter((row) => normalizeLedgerFilingStatus(row.filing_status) === filingStatus)
 
-    const txt = pnd53LedgerToRdFilingTxt(
-      filteredRows,
-      {
-        payerTaxId,
-        payerBranchNo,
-        deptName,
-        rdUserId,
-        taxMonth: yearMonth,
-      },
-      formHint
-    )
-    const filename = buildRdFilingTxtFilename({
-      taxType: 'PND53',
-      taxId13: payerTaxId,
-      taxMonth: yearMonth,
-      branchNo6: payerBranchNo,
-    })
+    const txt =
+      layout === 'official'
+        ? pnd53LedgerToRdFilingTxt(
+            filteredRows,
+            {
+              payerTaxId,
+              payerBranchNo,
+              deptName,
+              rdUserId,
+              taxMonth: yearMonth,
+            },
+            formHint
+          )
+        : pnd53LedgerToRdPrepSoftTxt(filteredRows, formHint, { includeHeader })
+    const filename =
+      layout === 'official'
+        ? buildRdFilingTxtFilename({
+            taxType: 'PND53',
+            taxId13: payerTaxId,
+            taxMonth: yearMonth,
+            branchNo6: payerBranchNo,
+          })
+        : `pnd53-rd-prep-soft-${String(formHint || 'PND53').toLowerCase()}-${period.periodKey}.txt`
     return new NextResponse(txt, {
       status: 200,
       headers: {

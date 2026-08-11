@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildRdFilingRdxFilename } from '@/lib/rd-filing-common'
-import { pnd53LedgerToRdFilingTxt } from '@/lib/pnd53-rd-filing-txt'
+import { pnd53LedgerToRdFilingTxt, pnd53LedgerToRdPrepSoftTxt } from '@/lib/pnd53-rd-filing-txt'
 
 describe('pnd53-rd-filing-txt', () => {
   it('builds header and detail with pipe delimiter', () => {
@@ -80,6 +80,27 @@ describe('pnd53-rd-filing-txt', () => {
     expect(pnd53).toContain('Polonext')
     expect(pnd53).not.toContain('สมชาย ใจดี')
     expect(pnd53).not.toContain('พนักงาน A')
+  })
+
+  it('builds soft RD Prep attachment with empty slots', () => {
+    const soft = pnd53LedgerToRdPrepSoftTxt(
+      [
+        {
+          payment_date: '2026-06-19',
+          payee_name: 'บริษัท วัฒนะ โกลด์ จำกัด',
+          payee_tax_id: '0105560154864',
+          income_type: 'ค่าเช่า',
+          gross_amount: 500000,
+          wht_rate: 5,
+          wht_amount: 25000,
+          form_hint: 'PND53',
+        },
+      ],
+      'PND53'
+    )
+    expect(soft).toBe(
+      '|1|0105560154864||บริษัท วัฒนะ โกลด์ จำกัด||||||||19/06/2026|ค่าเช่า 5%|5.0|500000.00|25000.00|1'
+    )
   })
 })
 

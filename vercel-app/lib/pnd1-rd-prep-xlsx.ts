@@ -13,14 +13,14 @@ function digitsOnly(v: unknown): string {
   return String(v ?? '').replace(/\D/g, '')
 }
 
-function toBuddhistDdMmYyyy(v: unknown): string {
+function toChristianDdMmYyyy(v: unknown): string {
   const s = String(v ?? '').trim().slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''
   const y = Number(s.slice(0, 4))
   const m = s.slice(5, 7)
   const d = s.slice(8, 10)
   if (!Number.isFinite(y)) return ''
-  return `${d}/${m}/${String(y + 543)}`
+  return `${d}/${m}/${String(y)}`
 }
 
 export function buildPnd1RdPrepReviewWorkbook(
@@ -43,14 +43,13 @@ export function buildPnd1RdPrepReviewWorkbook(
 
   const detailHeader = [
     'seq',
-    'payer_tax_id',
-    'payer_branch_no',
-    'payer_name',
     'payee_tax_id',
     'payee_name',
+    'payee_address',
     'payment_date',
-    'payment_date_be',
+    'payment_date_txt',
     'income_type',
+    'wht_rate',
     'gross_amount',
     'withheld_amount',
     'certificate_no',
@@ -58,17 +57,19 @@ export function buildPnd1RdPrepReviewWorkbook(
     'store_name',
     'form_hint',
     'memo',
+    'payer_tax_id',
+    'payer_branch_no',
+    'payer_name',
   ]
   const detailBody = (rows || []).map((r, i) => [
     i + 1,
-    payerTaxId,
-    payerBranchNo,
-    payerName,
     digitsOnly(r.payee_tax_id).slice(0, 13),
     String(r.payee_name || '').trim(),
+    String(r.payee_address || '').trim(),
     String(r.payment_date || '').trim().slice(0, 10),
-    toBuddhistDdMmYyyy(r.payment_date),
+    toChristianDdMmYyyy(r.payment_date),
     String(r.income_type || '').trim(),
+    Number(r.wht_rate) || 0,
     Number(r.gross_amount) || 0,
     Number(r.wht_amount) || 0,
     String(r.certificate_no || '').trim(),
@@ -76,6 +77,9 @@ export function buildPnd1RdPrepReviewWorkbook(
     String(r.store_name || '').trim(),
     String((r as { form_hint?: string | null }).form_hint || '').trim(),
     String(r.memo || '').trim(),
+    payerTaxId,
+    payerBranchNo,
+    payerName,
   ])
 
   const pipePreview = pnd1LedgerToRdPrepTxt(rows, { ...opts, includeHeader: true })

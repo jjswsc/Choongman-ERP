@@ -131,6 +131,9 @@ export function getExportPnd53RdFilingTxtUrl(params: {
   payerBranchNo?: string
   rdUserId?: string
   deptName?: string
+  /** soft=빈칸 매핑(기본), official=Format กลาง */
+  layout?: 'soft' | 'official'
+  includeHeader?: boolean
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
@@ -142,6 +145,8 @@ export function getExportPnd53RdFilingTxtUrl(params: {
   if (params.payerBranchNo) q.set('payerBranchNo', params.payerBranchNo)
   if (params.rdUserId) q.set('rdUserId', params.rdUserId)
   if (params.deptName) q.set('deptName', params.deptName)
+  if (params.layout) q.set('layout', params.layout)
+  if (params.includeHeader) q.set('includeHeader', '1')
   if (typeof window !== 'undefined') {
     return `${window.location.origin}/api/exportPnd53RdFilingTxt?${q}`
   }

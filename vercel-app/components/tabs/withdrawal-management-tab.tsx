@@ -158,7 +158,23 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [accrualWithholdingTax, setAccrualWithholdingTax] = React.useState("")
   /** 선택 시 (총액−VAT)×% 로 WHT 자동 계산. null = 미선택 */
   const [accrualWhtRate, setAccrualWhtRate] = React.useState<number | null>(null)
-  const [autoCreateWhtCert, setAutoCreateWhtCert] = React.useState(false)
+  /** ออกใบ50ทวิ — 브라우저에 기억해 수정·재진입 후에도 유지 */
+  const [autoCreateWhtCert, setAutoCreateWhtCertState] = React.useState(false)
+  React.useEffect(() => {
+    try {
+      setAutoCreateWhtCertState(window.localStorage.getItem("cm_erp_expense_auto_wht_cert") === "1")
+    } catch {
+      /* ignore */
+    }
+  }, [])
+  const setAutoCreateWhtCert = React.useCallback((next: boolean) => {
+    setAutoCreateWhtCertState(next)
+    try {
+      window.localStorage.setItem("cm_erp_expense_auto_wht_cert", next ? "1" : "0")
+    } catch {
+      /* ignore */
+    }
+  }, [])
   const [saving, setSaving] = React.useState(false)
   const [deliveryFeeSaving, setDeliveryFeeSaving] = React.useState(false)
   const [deliveryFeeMonth, setDeliveryFeeMonth] = React.useState(() => todayStrBkk().slice(0, 7))
@@ -1137,7 +1153,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
         setAccrualWhtRate(null)
-        setAutoCreateWhtCert(false)
         setInvoiceReceived(false)
         setDocumentType("")
         setInvoiceNo("")
@@ -1219,7 +1234,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setAccrualVatAmount("")
         setAccrualWithholdingTax("")
         setAccrualWhtRate(null)
-        setAutoCreateWhtCert(false)
         setInvoiceReceived(false)
         setDocumentType("")
         setInvoiceNo("")
@@ -1638,7 +1652,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       setAccrualVatAmount("")
       setAccrualWithholdingTax("")
       setAccrualWhtRate(null)
-      setAutoCreateWhtCert(false)
       setActiveFeeVatMode(null)
       setInvoiceReceived(false)
       setDocumentType("")

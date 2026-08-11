@@ -3766,6 +3766,7 @@ export function AdminAccountingCompliance({
       .replace(/\D/g, "")
       .trim()
     let payerBranchNo = String(pnd1PayerBranchNo || "").trim() || "00000"
+    // soft TXT에는 납부자 TIN이 없어도 됨 — 있으면 파일명·참고용으로만 채움
     if (payerTaxId.length !== 13) {
       const fromStore = await loadRdPayerFromStoreSources()
       if (payerTaxId.length !== 13) payerTaxId = fromStore.payerTaxId
@@ -3776,14 +3777,6 @@ export function AdminAccountingCompliance({
       if (payerTaxId) setPnd1PayerTaxId(payerTaxId)
       if (payerBranchNo) setPnd1PayerBranchNo(payerBranchNo)
     }
-    if (payerTaxId.length !== 13) {
-      appAlert(
-        tr(t, "accCompPp30ExportRequiredMissing", {
-          fields: t("accCompPp30ExportField_companyTaxId13"),
-        })
-      )
-      return
-    }
     const url = getExportPnd53RdFilingTxtUrl({
       userRole: role,
       taxMonth,
@@ -3792,11 +3785,15 @@ export function AdminAccountingCompliance({
       filingStatus: ledgerStatusFilter,
       storeFilter: storeFilterForApi,
       formHint: whtSubmissionFormHint,
-      payerTaxId,
+      payerTaxId: payerTaxId.length === 13 ? payerTaxId : undefined,
       payerBranchNo,
+      layout: "soft",
     })
     try {
-      await downloadAuthenticatedFile(url, `PND53_${payerTaxId}_${taxMonth}.txt`)
+      await downloadAuthenticatedFile(
+        url,
+        `PND53_rd_prep_${payerTaxId || "soft"}_${taxMonth}.txt`
+      )
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e || "")
       appAlert(
@@ -3816,7 +3813,6 @@ export function AdminAccountingCompliance({
     storeFilterForApi,
     whtSubmissionFormHint,
     t,
-    tr,
   ])
   const pp36ExportUrl = React.useMemo(
     () =>

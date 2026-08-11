@@ -13,6 +13,7 @@ import {
   splitThaiPayeeName,
   taxMonthToRdParts,
 } from '@/lib/rd-filing-common'
+import { ledgerRowsToRdPrepSoftAttachmentTxt } from '@/lib/rd-prep-soft-attachment-txt'
 
 export type Pnd53RdFilingTxtOptions = {
   payerTaxId: string
@@ -52,6 +53,17 @@ function filterPnd53Rows(rows: WithholdingTaxLedgerRow[], formHint: PndFormHint)
     if (formHint === 'PND3') return effective === 'PND3'
     if (formHint === 'PND53') return effective === 'PND53'
     return effective === 'PND3' || effective === 'PND53'
+  })
+}
+
+/** RD Prep 소프트 매핑(빈 칸 `|` 유지) — 샘플 레이아웃 */
+export function pnd53LedgerToRdPrepSoftTxt(
+  rows: WithholdingTaxLedgerRow[],
+  formHint: PndFormHint = 'PND53',
+  opts?: { includeHeader?: boolean }
+): string {
+  return ledgerRowsToRdPrepSoftAttachmentTxt(filterPnd53Rows(rows, formHint), {
+    includeHeader: opts?.includeHeader === true,
   })
 }
 

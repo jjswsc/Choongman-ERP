@@ -4,7 +4,10 @@ export type Pnd1SourceRow = {
   store_name?: string | null
   payee_name?: string | null
   payee_tax_id?: string | null
+  /** 선택 — 있으면 주소 3칸으로 나눔 (없으면 빈 칸 ||||) */
+  payee_address?: string | null
   income_type?: string | null
+  wht_rate?: number | string | null
   gross_amount?: number | string | null
   wht_amount?: number | string | null
   certificate_no?: string | null
@@ -52,6 +55,13 @@ export type Pnd1ValidationIssue = {
   certificateNo: string
 }
 
+import {
+  ledgerRowsToRdPrepSoftAttachmentTxt,
+  splitPayeeAddressParts,
+} from '@/lib/rd-prep-soft-attachment-txt'
+
+export { splitPayeeAddressParts }
+
 function pipeSafe(v: unknown): string {
   return String(v ?? '')
     .replace(/\r\n/g, ' ')
@@ -62,22 +72,6 @@ function pipeSafe(v: unknown): string {
 
 function digitsOnly(v: unknown): string {
   return String(v ?? '').replace(/\D/g, '')
-}
-
-function formatAmount(v: unknown): string {
-  const n = Number(v)
-  if (!Number.isFinite(n)) return '0.00'
-  return n.toFixed(2)
-}
-
-function toBuddhistDdMmYyyy(v: unknown): string {
-  const s = String(v ?? '').trim().slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''
-  const y = Number(s.slice(0, 4))
-  const m = s.slice(5, 7)
-  const d = s.slice(8, 10)
-  if (!Number.isFinite(y)) return ''
-  return `${d}/${m}/${String(y + 543)}`
 }
 
 function hasIsoDate(v: unknown): boolean {
@@ -173,50 +167,7 @@ export function validatePnd1Rows(rows: Pnd1SourceRow[]): Pnd1ValidationSummary {
   }
 }
 
+/** RD Prep 소프트 매핑용 — 빈 칸 `|` 유지 (PND1/PND53 공통 레이아웃) */
 export function pnd1LedgerToRdPrepTxt(rows: Pnd1SourceRow[], opts: Pnd1RdPrepTxtOptions = {}): string {
-  const payerTaxId = digitsOnly(opts.payerTaxId).slice(0, 13)
-  const payerBranchNo = digitsOnly(opts.payerBranchNo).slice(0, 5) || '00000'
-  const payerName = pipeSafe(opts.payerName)
-  const includeHeader = opts.includeHeader === true
-
-  const header = [
-    'payer_tax_id',
-    'payer_branch_no',
-    'payer_name',
-    'payee_tax_id',
-    'payee_name',
-    'payment_date_be',
-    'income_type',
-    'gross_amount',
-    'withheld_amount',
-    'certificate_no',
-    'tax_month',
-    'store_name',
-    'memo',
-  ]
-
-  const lines: string[] = []
-  if (includeHeader) lines.push(header.join('|'))
-
-  for (const row of rows || []) {
-    lines.push(
-      [
-        payerTaxId,
-        payerBranchNo,
-        payerName,
-        digitsOnly(row.payee_tax_id).slice(0, 13),
-        pipeSafe(row.payee_name),
-        toBuddhistDdMmYyyy(row.payment_date),
-        pipeSafe(row.income_type),
-        formatAmount(row.gross_amount),
-        formatAmount(row.wht_amount),
-        pipeSafe(row.certificate_no),
-        pipeSafe(row.tax_month),
-        pipeSafe(row.store_name),
-        pipeSafe(row.memo),
-      ].join('|')
-    )
-  }
-
-  return lines.join('\r\n')
+  return ledgerRowsToRdPrepSoftAttachmentTxt(rows, { includeHeader: opts.includeHeader === true })
 }

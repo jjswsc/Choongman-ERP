@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildPnd1RdPrepReviewWorkbook } from './pnd1-rd-prep-xlsx'
-import { pnd1LedgerToRdPrepTxt } from './pnd1-rd-prep-txt'
+import { pnd1LedgerToRdPrepTxt, splitPayeeAddressParts } from './pnd1-rd-prep-txt'
 
 describe('pnd1 rd prep exports', () => {
   const rows = [
@@ -11,6 +11,7 @@ describe('pnd1 rd prep exports', () => {
       payee_name: 'Test Employee',
       payee_tax_id: '1234567890123',
       income_type: '급여',
+      wht_rate: 3,
       gross_amount: 15000,
       wht_amount: 450,
       certificate_no: 'PR1-202607-1',
@@ -19,15 +20,40 @@ describe('pnd1 rd prep exports', () => {
     },
   ]
 
-  it('builds pipe TXT with at least one data line', () => {
-    const txt = pnd1LedgerToRdPrepTxt(rows, {
-      payerTaxId: '0105566228126',
-      payerBranchNo: '00000',
-      payerName: 'Jinwon',
-      includeHeader: true,
-    })
-    expect(txt.split(/\r?\n/).filter(Boolean).length).toBeGreaterThanOrEqual(2)
-    expect(txt).toContain('Test Employee')
+  it('builds soft RD Prep pipe with empty address slots', () => {
+    const txt = pnd1LedgerToRdPrepTxt(rows, { includeHeader: false })
+    // |seq|tin||name|a1|a2|a3||||date|desc|rate|gross|wht|1
+    expect(txt).toBe(
+      '|1|1234567890123||Test Employee||||||||31/07/2026|급여 3%|3.0|15000.00|450.00|1'
+    )
+  })
+
+  it('keeps address parts and four empty slots before date', () => {
+    const txt = pnd1LedgerToRdPrepTxt(
+      [
+        {
+          payment_date: '2026-06-19',
+          payee_name: 'บริษัท วัฒนะ โกลด์ จำกัด',
+          payee_tax_id: '0105560154864',
+          payee_address: '12 ซอยสุขุมวิท 4 ถนนสุขุมวิท4 แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร',
+          income_type: 'ค่าเช่า',
+          wht_rate: 5,
+          gross_amount: 500000,
+          wht_amount: 25000,
+        },
+      ],
+      { includeHeader: false }
+    )
+    expect(txt.startsWith('|1|0105560154864||บริษัท วัฒนะ โกลด์ จำกัด|')).toBe(true)
+    expect(txt).toContain('|||||19/06/2026|ค่าเช่า 5%|5.0|500000.00|25000.00|1')
+  })
+
+  it('splits long address into up to 3 parts', () => {
+    const [a1, a2, a3] = splitPayeeAddressParts(
+      '12 ซอยสุขุมวิท 4 ถนนสุขุมวิท4 แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร'
+    )
+    expect(a1.length).toBeGreaterThan(0)
+    expect(`${a1}${a2}${a3}`.replace(/\s/g, '').length).toBeGreaterThan(20)
   })
 
   it('builds review workbook sheets', () => {

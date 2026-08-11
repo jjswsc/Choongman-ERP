@@ -2047,13 +2047,21 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   </a>
                 </Button>
               ) : null}
-              {showWhtLedger && !isPnd5354CompactList ? (
+              {showWhtLedger && (!isPnd5354CompactList || pnd5354SubView === "pnd53") ? (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => void printWhtCertificates(whtRowsFiltered)}
-                  disabled={!whtRowsFiltered.some((r) => Number(r.wht_amount) > 0)}
+                  onClick={() =>
+                    void printWhtCertificates(
+                      isPnd5354CompactList ? whtRowsPnd53Display : whtRowsFiltered
+                    )
+                  }
+                  disabled={
+                    !(isPnd5354CompactList ? whtRowsPnd53Display : whtRowsFiltered).some(
+                      (r) => Number(r.wht_amount) > 0
+                    )
+                  }
                 >
                   <Printer className="h-4 w-4 mr-1" />
                   {t("whtCertPrintBulk")}
@@ -2563,7 +2571,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               ) : null}
               <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "p-2 overflow-x-auto"}>
                 {isPnd5354CompactList ? (
-                  <table className="w-full text-sm border-collapse min-w-[880px]">
+                  <table className="w-full text-sm border-collapse min-w-[960px]">
                     <thead>
                       <tr className="border-b bg-muted/30">
                         <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColYearMonth")}</th>
@@ -2574,6 +2582,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                         <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtWithheldShort")}</th>
                         <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhFormHint")}</th>
                         <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColStatus")}</th>
+                        <th className="text-left p-2 font-medium whitespace-nowrap">{t("whtCertPrint")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2587,11 +2596,24 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                           <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.wht_amount || 0).toLocaleString()}</td>
                           <td className="p-2 whitespace-nowrap">{row.form_hint || "-"}</td>
                           <td className="p-2 whitespace-nowrap">{filingStatusLabel(row.filing_status)}</td>
+                          <td className="p-2 whitespace-nowrap">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2"
+                              title={t("whtCertPrint")}
+                              disabled={!(Number(row.wht_amount) > 0)}
+                              onClick={() => void printWhtCertificates([row])}
+                            >
+                              <Printer className="h-3 w-3" />
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                       {!whtRowsPnd53Display.length ? (
                         <tr>
-                          <td colSpan={8} className="p-6 text-center text-muted-foreground">{t("emp_result_empty")}</td>
+                          <td colSpan={9} className="p-6 text-center text-muted-foreground">{t("emp_result_empty")}</td>
                         </tr>
                       ) : null}
                     </tbody>
