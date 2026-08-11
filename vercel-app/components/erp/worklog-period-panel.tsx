@@ -10,6 +10,11 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getWorkLogPeriodSummary, type WorkLogPeriodDay } from "@/lib/api-client"
 import { getBangkokMonthRangeWithOffset } from "@/lib/bangkok-time"
+import {
+  isWorklogDraftDate,
+  useWorklogQueryDraftPersistence,
+  worklogQueryDraftKey,
+} from "@/lib/worklog-query-draft"
 import { WorklogKpiCard } from "./worklog-shared-ui"
 import { workLogProgressBarClass } from "@/lib/work-log-shared"
 
@@ -18,6 +23,12 @@ type Props = {
   employeeName: string
   onDatePick?: (dateStr: string) => void
   embedded?: boolean
+}
+
+type PeriodQueryDraft = {
+  startStr?: string
+  endStr?: string
+  hasSearched?: boolean
 }
 
 export function WorklogPeriodPanel({ employeeId, employeeName, onDatePick, embedded }: Props) {
@@ -47,6 +58,43 @@ export function WorklogPeriodPanel({ employeeId, employeeName, onDatePick, embed
       setLoading(false)
     }
   }, [startStr, endStr, employeeId, employeeName])
+
+  const queryDraft = React.useMemo<PeriodQueryDraft>(
+    () => ({ startStr, endStr, hasSearched }),
+    [startStr, endStr, hasSearched]
+  )
+  const shouldPersistQueryDraft =
+    hasSearched || startStr !== monthRange.start || endStr !== monthRange.end
+
+  const applyQueryDraft = React.useCallback(
+    (d: PeriodQueryDraft) => {
+      const meaningful =
+        d.hasSearched === true ||
+        (isWorklogDraftDate(d.startStr) && d.startStr !== monthRange.start) ||
+        (isWorklogDraftDate(d.endStr) && d.endStr !== monthRange.end)
+      if (!meaningful) return false
+      if (isWorklogDraftDate(d.startStr)) setStartStr(d.startStr)
+      if (isWorklogDraftDate(d.endStr)) setEndStr(d.endStr)
+      if (d.hasSearched) setHasSearched(true)
+      return true
+    },
+    [monthRange.start, monthRange.end]
+  )
+
+  const { restoreEpoch } = useWorklogQueryDraftPersistence({
+    storageKey: worklogQueryDraftKey(`period:${employeeName || "anon"}`, employeeName || ""),
+    draft: queryDraft,
+    shouldPersist: shouldPersistQueryDraft,
+    applyDraft: applyQueryDraft,
+  })
+
+  const restoredFetchEpochRef = React.useRef(0)
+  React.useEffect(() => {
+    if (restoreEpoch === 0 || !hasSearched) return
+    if (restoredFetchEpochRef.current === restoreEpoch) return
+    restoredFetchEpochRef.current = restoreEpoch
+    void loadData()
+  }, [restoreEpoch, hasSearched, loadData])
 
   const totals = React.useMemo(() => {
     let totalTasks = 0

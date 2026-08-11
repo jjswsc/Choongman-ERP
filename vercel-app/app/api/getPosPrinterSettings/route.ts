@@ -10,6 +10,7 @@ import { canPickPosTerminalStore } from '@/lib/permissions'
 import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
 import { coerceMembershipQrLinkUrl } from '@/lib/pos-membership-qr-defaults'
 import { shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
+import { lookupChoongmanKbankStoreDefaults } from '@/lib/kbank-store-merchant-defaults'
 
 type VendorBizInfo = {
   name?: string
@@ -28,6 +29,20 @@ function normalizeKitchenSlipOptionGroupPrintMap(raw: unknown): Record<string, b
     out[key] = v !== false
   }
   return out
+}
+
+function fillKbankMidFromChoongmanDefaults(
+  storeCode: string,
+  fields: { kbankMerchantId: string; kbankPartnerShopId: string; kbankTerminalId: string }
+) {
+  if (fields.kbankMerchantId || fields.kbankPartnerShopId || fields.kbankTerminalId) return fields
+  const d = lookupChoongmanKbankStoreDefaults(storeCode)
+  if (!d) return fields
+  return {
+    kbankMerchantId: String(d.merchantId ?? '').trim(),
+    kbankPartnerShopId: String(d.partnerShopId ?? '').trim(),
+    kbankTerminalId: String(d.terminalId ?? '').trim(),
+  }
 }
 
 async function getStoreReceiptBizFallback(storeCode: string): Promise<{
@@ -126,6 +141,9 @@ export async function GET(request: NextRequest) {
     cardAutoOpen: false,
     checkAutoOpen: false,
     linkposSkipTerminalForCard: shouldSkipLinkposTerminalForCard(null),
+    kbankMerchantId: '',
+    kbankPartnerShopId: '',
+    kbankTerminalId: '',
     drawerOpenOption: 'reason_only' as const,
     logoPrint: false,
     receiptPrintTiming: 'per_payment' as const,
@@ -224,6 +242,14 @@ export async function GET(request: NextRequest) {
   if (!storeCode) {
     return NextResponse.json(defaultRes, { headers })
   }
+  Object.assign(
+    defaultRes,
+    fillKbankMidFromChoongmanDefaults(storeCode, {
+      kbankMerchantId: '',
+      kbankPartnerShopId: '',
+      kbankTerminalId: '',
+    })
+  )
 
   try {
     const rows = (await supabaseSelectFilter(
@@ -249,6 +275,9 @@ export async function GET(request: NextRequest) {
       card_auto_open?: boolean
       check_auto_open?: boolean
       linkpos_skip_terminal_for_card?: boolean
+      kbank_merchant_id?: string | null
+      kbank_partner_shop_id?: string | null
+      kbank_terminal_id?: string | null
       drawer_open_option?: string
       drawer_pin_hash?: string | null
       logo_print?: boolean
@@ -404,6 +433,11 @@ export async function GET(request: NextRequest) {
           ? raw.linkpos_skip_terminal_for_card
           : null
       ),
+      ...fillKbankMidFromChoongmanDefaults(storeCode, {
+        kbankMerchantId: String(raw?.kbank_merchant_id ?? '').trim(),
+        kbankPartnerShopId: String(raw?.kbank_partner_shop_id ?? '').trim(),
+        kbankTerminalId: String(raw?.kbank_terminal_id ?? '').trim(),
+      }),
       drawerOpenOption: String(raw?.drawer_open_option || 'reason_only') === 'password_and_reason'
         ? 'password_and_reason'
         : String(raw?.drawer_open_option || 'reason_only') === 'force'

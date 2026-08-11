@@ -1,7 +1,8 @@
 /**
  * 충만(Choongman) 매장별 KBank Merchant ID 기본값.
  * 은행 개통(2026-08): HUAMAK / SEACON SQUARE
- * SaaS Admin·tenant_store_integrations 가 있으면 그 값이 우선(resolve에서 DB를 뒤에 적용).
+ * 확인·저장은 SaaS가 아니라 관리자 > POS 프린터 설정 > 결제·돈통 탭.
+ * resolve 우선순위: 코드 기본값 < SaaS store 설정 < pos_printer_settings(관리자).
  */
 import type { StoreKbankConfig } from '@/lib/tenant-integration-types'
 

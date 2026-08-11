@@ -23,6 +23,41 @@ import {
   parseGrabStoreMap,
 } from '@/lib/grab-store-map-env'
 import { lookupChoongmanKbankStoreDefaults } from '@/lib/kbank-store-merchant-defaults'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+
+/** 관리자 POS 프린터 설정에 저장된 매장별 KBank MID */
+async function loadPosPrinterKbankConfig(storeCode: string): Promise<StoreKbankConfig | null> {
+  const code = String(storeCode || '').trim()
+  if (!code) return null
+  try {
+    const rows = (await supabaseSelectFilter(
+      'pos_printer_settings',
+      `store_code=eq.${encodeURIComponent(code)}`,
+      {
+        limit: 1,
+        select: 'kbank_merchant_id,kbank_partner_shop_id,kbank_terminal_id',
+      }
+    )) as Array<{
+      kbank_merchant_id?: string | null
+      kbank_partner_shop_id?: string | null
+      kbank_terminal_id?: string | null
+    }>
+    const raw = rows?.[0]
+    if (!raw) return null
+    const merchantId = String(raw.kbank_merchant_id ?? '').trim()
+    const partnerShopId = String(raw.kbank_partner_shop_id ?? '').trim()
+    const terminalId = String(raw.kbank_terminal_id ?? '').trim()
+    if (!merchantId && !partnerShopId && !terminalId) return null
+    return {
+      ...(merchantId ? { merchantId } : {}),
+      ...(partnerShopId ? { partnerShopId } : {}),
+      ...(terminalId ? { terminalId } : {}),
+    }
+  } catch {
+    // 컬럼 미배포·조회 실패 시 무시 (코드 기본값/SaaS 설정으로 폴백)
+    return null
+  }
+}
 
 function pickStr(...values: unknown[]): string {
   for (const v of values) {
@@ -139,7 +174,7 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
     }
   }
 
-  // 충만 매장별 MID 기본값 (Huamak / Seacon). 아래 DB store 설정이 있으면 그 값이 우선.
+  // 충만 매장별 MID 기본값 (Huamak / Seacon). 아래 관리자·SaaS DB가 있으면 그 값이 우선.
   if (storeCode) {
     const defaults = lookupChoongmanKbankStoreDefaults(storeCode)
     if (defaults) {
@@ -159,6 +194,17 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
     if (storeRow) {
       runtime = applyStoreKbankConfig(runtime, storeRow.config as StoreKbankConfig)
       runtime = { ...runtime, cacheKey: `${runtime.cacheKey}|store:${storeCode}` }
+    }
+  }
+
+  // 충만 관리자 POS 프린터 설정(매장별 MID) — SaaS onboarding 대신 여기서 확인·저장. 최우선.
+  if (storeCode) {
+    const fromPrinter = await loadPosPrinterKbankConfig(storeCode)
+    if (fromPrinter) {
+      runtime = applyStoreKbankConfig(runtime, fromPrinter)
+      if (!runtime.cacheKey.includes('|store:')) {
+        runtime = { ...runtime, cacheKey: `${runtime.cacheKey}|store:${storeCode}` }
+      }
     }
   }
 

@@ -266,7 +266,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posPrinterQuickTestDone: '원클릭 테스트를 완료했습니다. (주방 → 홀 주문서 → 결제 영수증)',
     posPrinterCopySettings: '설정 복사',
     posPrinterCopySettingsDesc:
-      '다른 매장에 저장된 POS 프린터·영수증·돈통 등 출력 설정을 현재 매장으로 가져옵니다. 메인 POS 기기 등록은 매장별로 별도이며 이 기능으로 바뀌지 않습니다.',
+      '다른 매장에 저장된 POS 프린터·영수증·결제·돈통 등 출력 설정을 현재 매장으로 가져옵니다. 메인 POS 기기 등록은 매장별로 별도이며 이 기능으로 바뀌지 않습니다.',
     posPrinterCopyFromStore: '복사할 매장',
     posPrinterCopyToCurrent: '적용 대상: {{store}}',
     posPrinterCopyKeepBizFees: '사업자 정보·배달/포장 요금은 현재 매장 값 유지',
@@ -382,7 +382,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posReceiptTabAutoPrint: '영수증/자동인쇄',
     posReceiptAutoPrintSection: '자동 인쇄',
     posReceiptAutoPrintSectionHint: '영수증/주방 주문서 자동 인쇄 시점을 선택합니다.',
-    posDrawerTab: '돈통',
+    posDrawerTab: '결제·돈통',
     posReceiptOptionsHint: '영수증·고객 주문서 출력 시 포함할 항목을 설정합니다.',
     posReceiptPrintLang: '주문·영수증 인쇄 언어',
     posReceiptPrintLangHint: '설정 시 주문·카운터 영수증 등(결제 전·결제 후) 출력 언어에 적용됩니다. 미설정 시 화면 언어를 따릅니다.',
@@ -644,9 +644,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posMerchantReceiptPrint: '가맹점 영수증 출력',
     posActualOrderDetails: '실 주문 내역 출력',
     posToppingOptionsPrint: '토핑메뉴 추가옵션',
-    posDrawerHint: '결제 유형별 돈통 자동 열림 및 수동 열기 시 인증 옵션을 설정합니다.',
+    posDrawerHint: '돈통 열기, 카드(LINKPOS), KBank QR(MID) 등 결제·시재 관련 설정을 합니다.',
     posDrawerHintV2:
-      '현금 결제가 포함된 주문에서 자동으로 열립니다. POS 시재「시재 입금」등록·영업 시작 시제 저장·POS 홈「영업 시작」「영업 마감」진입 시에도 열려 실물 현금을 맞출 수 있습니다. 수동/강제 열기는 별도입니다.',
+      '이 탭에서 돈통 열기·카드(LINKPOS)·KBank QR(매장 MID)을 설정합니다. 돈통은 현금 결제가 포함된 주문에서 자동으로 열리며, POS 시재「시재 입금」등록·영업 시작 시제 저장·POS 홈「영업 시작」「영업 마감」진입 시에도 열려 실물 현금을 맞출 수 있습니다. 수동/강제 열기는 별도입니다.',
     posCardAutoOpen: '카드결제 자동열기',
     posCheckAutoOpen: '체크결제 자동열기',
     posDrawerOpenOption: '돈통열기 옵션',
@@ -665,6 +665,12 @@ export const I18N_POS_KO: Record<string, string> = {
       '끄면(권장) 카드 결제 시 EDC 단말로 승인합니다. 단말 없이 금액만 넣을 매장만 켜세요.',
     posLinkposSkipTerminalCardForcedHint:
       '현재 전 매장 수기 모드입니다. 카드 금액만 POS에 입력하며 단말/릴레이 승인을 호출하지 않습니다. 브리지 준비 후 코드 플래그를 해제하면 매장별로 단말 연동을 켤 수 있습니다.',
+    posKbankMidTitle: 'KBank QR (매장 MID)',
+    posKbankMidHint:
+      '은행에서 개통한 매장별 Merchant ID·Partner Shop ID입니다. 충만은 SaaS가 아니라 이 화면에서 확인·저장합니다.',
+    posKbankMerchantId: 'Merchant ID',
+    posKbankPartnerShopId: 'Partner Shop ID',
+    posKbankTerminalId: 'Terminal ID (선택)',
     posPromoCostSummary: '원가·할인·마진',
     posPromoRegularSum: '정가 합계',
     posPromoCostSum: '원가 합계',
@@ -3605,7 +3611,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posPrinterQuickTestDone: 'One-click test completed. (Kitchen -> Hall order slip -> Payment receipt)',
     posPrinterCopySettings: 'Copy settings',
     posPrinterCopySettingsDesc:
-      'Load another store’s saved POS printer, receipt, drawer, and related options into the editor for the current store. Main POS device registration is per store and is not changed here.',
+      'Load another store’s saved POS printer, receipt, payment & drawer, and related options into the editor for the current store. Main POS device registration is per store and is not changed here.',
     posPrinterCopyFromStore: 'Copy from store',
     posPrinterCopyToCurrent: 'Apply to: {{store}}',
     posPrinterCopyKeepBizFees: 'Keep this store’s business info and delivery/packaging fees',
@@ -3719,7 +3725,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posReceiptTabAutoPrint: 'Receipt / auto print',
     posReceiptAutoPrintSection: 'Auto print',
     posReceiptAutoPrintSectionHint: 'Choose when receipts/kitchen slips auto-print.',
-    posDrawerTab: 'Drawer',
+    posDrawerTab: 'Payment & drawer',
     posActualOrderDetails: 'Actual order details print',
     posCardAutoOpen: 'Card auto-open',
     posCashPaymentReceipt: 'Cash payment receipt',
@@ -3727,9 +3733,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posCustomerReceiptOrderDetails: 'Customer receipt order details',
     posDiscountSeparatePrint: 'Discount separate print',
     posDrawerForceOpen: 'Force open',
-    posDrawerHint: 'Drawer settings',
+    posDrawerHint: 'Cash drawer, card (LINKPOS), and KBank QR (MID) settings.',
     posDrawerHintV2:
-      'Auto-opens when a sale includes cash. Also opens when you register Cash in (till deposit) on POS cash management, save opening drawer cash at business open, or tap Business open / Business close on the POS home screen. Manual / force open are separate.',
+      'This tab covers cash drawer open rules, card (LINKPOS), and KBank QR (store MID). The drawer auto-opens when a sale includes cash. It also opens when you register Cash in (till deposit) on POS cash management, save opening drawer cash at business open, or tap Business open / Business close on the POS home screen. Manual / force open are separate.',
     posDrawerOpenOption: 'Drawer open option',
     posDrawerOpenOptionHint: 'Requirement when opening drawer manually',
     posDrawerPasswordAndReason: 'Password and reason',
@@ -3745,6 +3751,12 @@ export const I18N_POS_EN: Record<string, string> = {
       'Turn off (recommended) to approve cards on the EDC. Turn on only for stores that enter card amounts without a terminal.',
     posLinkposSkipTerminalCardForcedHint:
       'All stores are in manual card mode for now. Card amounts are entered in POS only; terminal/relay approval is not called. After the bridge is ready, turn off the code flag to enable per-store terminal linking.',
+    posKbankMidTitle: 'KBank QR (store MID)',
+    posKbankMidHint:
+      'Per-store Merchant ID and Partner Shop ID from the bank. For Choongman, confirm and save here (not in SaaS).',
+    posKbankMerchantId: 'Merchant ID',
+    posKbankPartnerShopId: 'Partner Shop ID',
+    posKbankTerminalId: 'Terminal ID (optional)',
     posKitchenOptionsHint: 'Configure kitchen slip output mode, category routing, and auto print.',
     posKitchenAutoPrintOnOrder: 'Auto print kitchen slip when order is completed',
     posItemBarcode: 'Item barcode',
@@ -8132,9 +8144,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posDeliveryPaymentConfirmVerify: 'ตรวจแพลตฟอร์มและเลขออเดอร์',
     posDiscountSeparatePrint: 'พิมพ์ส่วนลดแยก',
     posDrawerForceOpen: 'บังคับเปิด',
-    posDrawerHint: 'ตั้งค่าการเปิดลิ้นชักเงินอัตโนมัติตามประเภทการชำระ และตัวเลือกเมื่อเปิดด้วยมือ',
+    posDrawerHint: 'ตั้งค่าลิ้นชักเงิน การ์ด (LINKPOS) และ KBank QR (MID) ครับ',
     posDrawerHintV2:
-      'เปิดอัตโนมัติเมื่อมีชำระเงินสด เมื่อบันทึกนำเงินเข้า(สาส์ด)หรือบันทึกเงินสดเปิดร้าน และเมื่อกดเปิดร้าน/ปิดร้านจากหน้าแรก POS การเปิดด้วยมือ/บังคับเปิดเป็นอีกคำสั่ง',
+      'แท็บนี้ตั้งค่าการเปิดลิ้นชัก บัตร (LINKPOS) และ KBank QR (MID ร้าน) ครับ ลิ้นชักเปิดอัตโนมัติเมื่อมีชำระเงินสด เมื่อบันทึกนำเงินเข้า(สาส์ด)หรือบันทึกเงินสดเปิดร้าน และเมื่อกดเปิดร้าน/ปิดร้านจากหน้าแรก POS การเปิดด้วยมือ/บังคับเปิดเป็นอีกคำสั่ง',
     posDrawerOpenOption: 'ตัวเลือกการเปิดลิ้นชัก',
     posDrawerOpenOptionHint: 'เงื่อนไขเมื่อเปิดลิ้นชักด้วยมือ',
     posDrawerPasswordAndReason: 'รหัสผ่านและเหตุผล',
@@ -8150,7 +8162,13 @@ export const I18N_POS_TH: Record<string, string> = {
       'ปิด (แนะนำ) = ชำระบัตรผ่านเครื่อง EDC เปิดเฉพาะร้านที่กรอกยอดบัตรเองโดยไม่ใช้เครื่อง',
     posLinkposSkipTerminalCardForcedHint:
       'ขณะนี้ทุกสาขาใช้โหมดกรอกยอดบัตรเอง ไม่เรียกเครื่อง EDC/relay อนุมัติ เมื่อ bridge พร้อมแล้วค่อยปิด flag ในโค้ดเพื่อเปิดเชื่อมเครื่องรายสาขาได้ครับ',
-    posDrawerTab: 'ลิ้นชักเงิน',
+    posKbankMidTitle: 'KBank QR (MID สาขา)',
+    posKbankMidHint:
+      'Merchant ID และ Partner Shop ID ต่อสาขาจากธนาคาร ครับ สำหรับ Choongman ให้ตรวจและบันทึกที่หน้านี้ ไม่ใช่ SaaS',
+    posKbankMerchantId: 'Merchant ID',
+    posKbankPartnerShopId: 'Partner Shop ID',
+    posKbankTerminalId: 'Terminal ID (ไม่บังคับ)',
+    posDrawerTab: 'ชำระเงิน·ลิ้นชัก',
     posEditOrderNo: 'แก้ไข',
     posEditOrderNoDialogTitle: 'แก้ไขเลขที่ออเดอร์',
     posItemBarcode: 'บาร์โค้ดรายการ',
@@ -10940,7 +10958,7 @@ export const I18N_POS_MM: Record<string, string> = {
     posDrawerReasonOnly: 'အကြောင်းပြချက်သာ',
     posDrawerBridgeHint:
       '※ အလိုအလျောက်ဖွင့်ရန် POS စက်တွင် ဒိုင်ဘရစ်ချ် (127.0.0.1) လိုအပ်သည်။ ဘရစ်ချ်မရှိလျှင် ဆက်တင်သိမ်းမည်၊ စက်ပစ္စည်းမဖွင့်ပါ။',
-    posDrawerTab: 'ငွေသေတ္တာ',
+    posDrawerTab: 'ငွေပေးချေမှု·ငွေသေတ္တာ',
     posEditOrderNo: 'ပြင်ရန်',
     posEditOrderNoDialogTitle: 'အော်ဒါနံပါတ် ပြင်ရန်',
     posItemBarcode: 'ပစ္စည်း ဘားကုဒ်',
@@ -13793,7 +13811,7 @@ export const I18N_POS_LA: Record<string, string> = {
     posDrawerReasonOnly: 'ເຫດຜົນເທົ່ານັ້ນ',
     posDrawerBridgeHint:
       '※ ການເປີດອັດຕະໂນມັດຕ້ອງໃຊ້ drawer bridge ແບບໂລຄອນ (127.0.0.1) ຢູ່ເຄື່ອງ POS. ບໍ່ມີ bridge ກໍ່ບັນທຶກການຕັ້ງຄ່າໄດ້ ແຕ່ຮາດແວຈະບໍ່ເປີດ',
-    posDrawerTab: 'ລິ້ນຊັກເງິນ',
+    posDrawerTab: 'ຊຳລະ·ລິ້ນຊັກເງິນ',
     posEditOrderNo: 'Edit',
     posEditOrderNoDialogTitle: 'Edit order no.',
     posItemBarcode: 'Item barcode',
@@ -16759,7 +16777,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posDrawerReasonOnly: 'មូលហេតុតែប៉ុណ្ណោះ',
     posDrawerBridgeHint:
       '※ ការបើកដោយស្វ័យប្រវត្តិត្រូវការ drawer bridge មូលដ្ឋាន (127.0.0.1) នៅលើកុំព្យូទ័រ POS។ ប្រសិនបើគ្មាន bridge ការកំណត់នឹងត្រូវបានរក្សាទុក ប៉ុន្តែឧបករណ៍នឹងមិនបើកទេ។',
-    posDrawerTab: 'ថតដាក់ប្រាក់',
+    posDrawerTab: 'ទូទាត់·ថតដាក់ប្រាក់',
     posItemBarcode: 'បាកូដទំនិញ',
     posLogoPrint: 'បោះពុម្ពឡូហ្គោ',
     posMerchantReceiptOrderDetails: 'ព័ត៌មានលម្អិតការកម្មង់នៅលើបង្កាន់ដៃឈ្មួញ',
@@ -19698,7 +19716,7 @@ export const I18N_POS_VI: Record<string, string> = {
     posDrawerReasonOnly: 'Chỉ lý do',
     posDrawerBridgeHint:
       '※ Để mở tự động cần bridge ngăn kéo cục bộ (127.0.0.1) trên máy POS. Không có bridge thì vẫn lưu được cài đặt nhưng phần cứng sẽ không mở.',
-    posDrawerTab: 'Ngăn kéo tiền',
+    posDrawerTab: 'Thanh toán·ngăn kéo',
     posItemBarcode: 'Mã vạch món',
     posLogoPrint: 'In logo',
     posMerchantReceiptOrderDetails: 'Chi tiết đơn hàng trên biên lai cửa hàng',
@@ -22587,7 +22605,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posDrawerReasonOnly: 'Sebab sahaja',
     posDrawerBridgeHint:
       '※ Pembukaan automatik memerlukan bridge laci setempat (127.0.0.1) pada PC POS. Tanpa bridge, tetapan akan disimpan tetapi perkakasan tidak akan dibuka.',
-    posDrawerTab: 'Laci tunai',
+    posDrawerTab: 'Bayar·laci',
     posItemBarcode: 'Kod bar item',
     posLogoPrint: 'Cetak logo',
     posMerchantReceiptOrderDetails: 'Butiran pesanan pada resit peniaga',

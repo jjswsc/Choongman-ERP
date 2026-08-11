@@ -24,6 +24,23 @@ import { canViewWorkLogApprovalTab, canReviewWorkLog } from "@/lib/permissions"
 import { getWorkLogManagerReport } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { cn } from "@/lib/utils"
+import {
+  readWorklogQueryDraft,
+  useWorklogQueryDraftPersistence,
+  worklogQueryDraftKey,
+} from "@/lib/worklog-query-draft"
+
+const WORKLOG_TABS = new Set(["my", "approval", "weekly", "insights", "audit"])
+
+type WorklogTabDraft = { tab?: string }
+
+function readInitialWorklogTab(searchParams: URLSearchParams, user: string): string {
+  const fromUrl = searchParams.get("tab") || ""
+  if (WORKLOG_TABS.has(fromUrl)) return fromUrl
+  const saved = readWorklogQueryDraft<WorklogTabDraft>(worklogQueryDraftKey("page-tab", user))
+  if (saved?.tab && WORKLOG_TABS.has(saved.tab)) return saved.tab
+  return "my"
+}
 
 export function WorklogPage() {
   const { auth } = useAuth()
@@ -33,8 +50,34 @@ export function WorklogPage() {
   const role = auth?.role || ""
   const showApproval = canViewWorkLogApprovalTab(role)
   const showOfficeTabs = canReviewWorkLog(role)
-  const [tab, setTab] = React.useState(() => searchParams.get("tab") || "my")
+  const [tab, setTab] = React.useState(() => readInitialWorklogTab(searchParams, auth?.user || ""))
   const [pendingCount, setPendingCount] = React.useState(0)
+  const tabHydratedForUserRef = React.useRef(auth?.user || "")
+
+  const tabDraft = React.useMemo<WorklogTabDraft>(() => ({ tab }), [tab])
+  useWorklogQueryDraftPersistence({
+    storageKey: worklogQueryDraftKey("page-tab", auth?.user || ""),
+    draft: tabDraft,
+    shouldPersist: tab !== "my",
+    // 초기 state / auth hydrate에서 복원. 여기서 다시 apply하면 URL ?tab= 을 덮어쓸 수 있음.
+    applyDraft: () => "skip",
+  })
+
+  // 첫 렌더에 auth가 비어 있으면 page-tab 초안을 못 읽음 → 사용자 확정 후 1회 보정
+  React.useEffect(() => {
+    const user = auth?.user || ""
+    if (!user || tabHydratedForUserRef.current === user) return
+    tabHydratedForUserRef.current = user
+    const fromUrl = searchParams.get("tab") || ""
+    if (WORKLOG_TABS.has(fromUrl)) return
+    const saved = readWorklogQueryDraft<WorklogTabDraft>(worklogQueryDraftKey("page-tab", user))
+    if (saved?.tab && WORKLOG_TABS.has(saved.tab)) setTab(saved.tab)
+  }, [auth?.user, searchParams])
+
+  React.useEffect(() => {
+    if (tab === "approval" && !showApproval) setTab("my")
+    if ((tab === "insights" || tab === "audit") && !showOfficeTabs) setTab("my")
+  }, [tab, showApproval, showOfficeTabs])
 
   const refreshPendingCount = React.useCallback(async () => {
     if (!showApproval) return

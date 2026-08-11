@@ -80,6 +80,10 @@ export interface PosPrinterSettings {
   checkAutoOpen?: boolean
   /** true면 카드 금액만 반영하고 LINKPOS 단말/릴레이 승인 호출을 하지 않음 */
   linkposSkipTerminalForCard?: boolean
+  /** 매장별 KBank Merchant ID (관리자 POS 프린터 설정) */
+  kbankMerchantId?: string
+  kbankPartnerShopId?: string
+  kbankTerminalId?: string
   drawerOpenOption?: 'password_and_reason' | 'reason_only' | 'force'
   drawerPinConfigured?: boolean
   logoPrint?: boolean
@@ -286,6 +290,9 @@ export async function savePosPrinterSettings(params: {
   cardAutoOpen?: boolean
   checkAutoOpen?: boolean
   linkposSkipTerminalForCard?: boolean
+  kbankMerchantId?: string
+  kbankPartnerShopId?: string
+  kbankTerminalId?: string
   drawerOpenOption?: 'password_and_reason' | 'reason_only' | 'force'
   drawerPinConfigured?: boolean
   logoPrint?: boolean

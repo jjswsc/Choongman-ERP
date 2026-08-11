@@ -29,11 +29,26 @@ import {
 } from "@/lib/api-client"
 import { getBangkokMonthRangeWithOffset } from "@/lib/bangkok-time"
 import { formatWorkLogStaffSelectLabel } from "@/lib/work-log-name"
+import { useAuth } from "@/lib/auth-context"
+import {
+  isWorklogDraftDate,
+  useWorklogQueryDraftPersistence,
+  worklogQueryDraftKey,
+} from "@/lib/worklog-query-draft"
 import { WorklogKpiCard } from "./worklog-shared-ui"
 
 type WorkLogStaffOpt = { id: number; name: string; displayName: string; store?: string }
 
+type InsightsQueryDraft = {
+  startStr?: string
+  endStr?: string
+  employeeFilter?: string
+  storeFilter?: string
+  hasSearched?: boolean
+}
+
 export function WorklogInsightsPanel() {
+  const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const monthRange = React.useMemo(() => getBangkokMonthRangeWithOffset(0), [])
@@ -78,6 +93,51 @@ export function WorklogInsightsPanel() {
       setLoading(false)
     }
   }, [startStr, endStr, employeeFilter, storeFilter])
+
+  const queryDraft = React.useMemo<InsightsQueryDraft>(
+    () => ({ startStr, endStr, employeeFilter, storeFilter, hasSearched }),
+    [startStr, endStr, employeeFilter, storeFilter, hasSearched]
+  )
+  const shouldPersistQueryDraft =
+    hasSearched ||
+    startStr !== monthRange.start ||
+    endStr !== monthRange.end ||
+    employeeFilter !== "all" ||
+    storeFilter !== "all"
+
+  const applyQueryDraft = React.useCallback(
+    (d: InsightsQueryDraft) => {
+      const meaningful =
+        d.hasSearched === true ||
+        (isWorklogDraftDate(d.startStr) && d.startStr !== monthRange.start) ||
+        (isWorklogDraftDate(d.endStr) && d.endStr !== monthRange.end) ||
+        (typeof d.employeeFilter === "string" && d.employeeFilter !== "all") ||
+        (typeof d.storeFilter === "string" && d.storeFilter !== "all")
+      if (!meaningful) return false
+      if (isWorklogDraftDate(d.startStr)) setStartStr(d.startStr)
+      if (isWorklogDraftDate(d.endStr)) setEndStr(d.endStr)
+      if (typeof d.employeeFilter === "string") setEmployeeFilter(d.employeeFilter)
+      if (typeof d.storeFilter === "string") setStoreFilter(d.storeFilter)
+      if (d.hasSearched) setHasSearched(true)
+      return true
+    },
+    [monthRange.start, monthRange.end]
+  )
+
+  const { restoreEpoch } = useWorklogQueryDraftPersistence({
+    storageKey: worklogQueryDraftKey("insights", auth?.user || ""),
+    draft: queryDraft,
+    shouldPersist: shouldPersistQueryDraft,
+    applyDraft: applyQueryDraft,
+  })
+
+  const restoredFetchEpochRef = React.useRef(0)
+  React.useEffect(() => {
+    if (restoreEpoch === 0 || !hasSearched) return
+    if (restoredFetchEpochRef.current === restoreEpoch) return
+    restoredFetchEpochRef.current = restoreEpoch
+    void loadData()
+  }, [restoreEpoch, hasSearched, loadData])
 
   const handleSearch = () => {
     setHasSearched(true)

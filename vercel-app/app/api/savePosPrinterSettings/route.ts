@@ -235,6 +235,9 @@ export async function POST(req: NextRequest) {
     const linkposSkipTerminalForCard = LINKPOS_FORCE_MANUAL_CARD
       ? true
       : parseBoolParam(body?.linkposSkipTerminalForCard, !isLinkposCardApiEnabled())
+    const kbankMerchantId = String(body?.kbankMerchantId ?? '').trim()
+    const kbankPartnerShopId = String(body?.kbankPartnerShopId ?? '').trim()
+    const kbankTerminalId = String(body?.kbankTerminalId ?? '').trim()
     const drawerOpt = String(body?.drawerOpenOption || 'reason_only')
     const drawerOpenOption = ['password_and_reason', 'reason_only', 'force'].includes(drawerOpt) ? drawerOpt : 'reason_only'
     const logoPrint = Boolean(body?.logoPrint)
@@ -445,6 +448,9 @@ export async function POST(req: NextRequest) {
       card_auto_open: cardAutoOpen,
       check_auto_open: checkAutoOpen,
       linkpos_skip_terminal_for_card: linkposSkipTerminalForCard,
+      kbank_merchant_id: kbankMerchantId || null,
+      kbank_partner_shop_id: kbankPartnerShopId || null,
+      kbank_terminal_id: kbankTerminalId || null,
       drawer_open_option: drawerOpenOption,
       logo_print: logoPrint,
       receipt_print_timing: receiptPrintTiming,

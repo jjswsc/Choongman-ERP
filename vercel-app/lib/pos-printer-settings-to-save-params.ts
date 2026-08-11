@@ -107,6 +107,9 @@ export function posPrinterSettingsToSaveParams(
     cardAutoOpen: false,
     checkAutoOpen: false,
     linkposSkipTerminalForCard: Boolean(s.linkposSkipTerminalForCard),
+    kbankMerchantId: String(s.kbankMerchantId ?? '').trim(),
+    kbankPartnerShopId: String(s.kbankPartnerShopId ?? '').trim(),
+    kbankTerminalId: String(s.kbankTerminalId ?? '').trim(),
     drawerOpenOption,
     logoPrint: Boolean(s.logoPrint),
     receiptPrintTiming: (String(s.receiptPrintTiming || "per_payment") === "final_payment"

@@ -439,6 +439,9 @@ export default function PosPrintersPage() {
 
   const [drawerOpenOption, setDrawerOpenOption] = React.useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
   const [linkposSkipTerminalForCard, setLinkposSkipTerminalForCard] = React.useState(true)
+  const [kbankMerchantId, setKbankMerchantId] = React.useState('')
+  const [kbankPartnerShopId, setKbankPartnerShopId] = React.useState('')
+  const [kbankTerminalId, setKbankTerminalId] = React.useState('')
 
   const [logoPrint, setLogoPrint] = React.useState(false)
   const [receiptPrintTiming, setReceiptPrintTiming] = React.useState<'per_payment' | 'final_payment'>('per_payment')
@@ -715,6 +718,9 @@ export default function PosPrintersPage() {
     setLinkposSkipTerminalForCard(
       LINKPOS_FORCE_MANUAL_CARD || settings.linkposSkipTerminalForCard !== false
     )
+    setKbankMerchantId(String(settings.kbankMerchantId ?? '').trim())
+    setKbankPartnerShopId(String(settings.kbankPartnerShopId ?? '').trim())
+    setKbankTerminalId(String(settings.kbankTerminalId ?? '').trim())
     setLogoPrint(Boolean(settings.logoPrint))
     setReceiptPrintTiming(settings.receiptPrintTiming === "final_payment" ? "final_payment" : "per_payment")
     setSignatureLine(Boolean(settings.signatureLine))
@@ -964,6 +970,9 @@ export default function PosPrintersPage() {
         cardAutoOpen: false,
         checkAutoOpen: false,
         linkposSkipTerminalForCard,
+        kbankMerchantId: String(kbankMerchantId || '').trim(),
+        kbankPartnerShopId: String(kbankPartnerShopId || '').trim(),
+        kbankTerminalId: String(kbankTerminalId || '').trim(),
         drawerOpenOption,
         logoPrint,
         receiptPrintTiming,
@@ -1277,7 +1286,13 @@ export default function PosPrintersPage() {
         ])
       }
       if (copyTabDrawer) {
-        copyKeys(["drawerOpenOption", "linkposSkipTerminalForCard"])
+        copyKeys([
+          "drawerOpenOption",
+          "linkposSkipTerminalForCard",
+          "kbankMerchantId",
+          "kbankPartnerShopId",
+          "kbankTerminalId",
+        ])
       }
       applyFromPosSettings(merged)
       if (copySaveImmediately) {
@@ -1853,7 +1868,7 @@ export default function PosPrintersPage() {
                   </TabsTrigger>
                   <TabsTrigger value="drawer" className={adminTabsTriggerCn}>
                     <Wallet className={adminTabsIconCn} aria-hidden />
-                    {tr("posDrawerTab", "돈통")}
+                    {tr("posDrawerTab", "결제·돈통")}
                   </TabsTrigger>
                 </TabsList>
           </AdminTabsBarWithHelp>
@@ -2605,6 +2620,49 @@ export default function PosPrintersPage() {
                     t={t}
                   />
                 </div>
+                <div className="pt-2 border-t border-border/60 space-y-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground mb-1">
+                      {tr("posKbankMidTitle", "KBank QR (매장 MID)")}
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {tr(
+                        "posKbankMidHint",
+                        "은행에서 개통한 매장별 Merchant ID·Partner Shop ID입니다. 충만은 SaaS가 아니라 이 화면에서 확인·저장합니다."
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">{tr("posKbankMerchantId", "Merchant ID")}</label>
+                    <Input
+                      className="mt-1 font-mono text-sm"
+                      value={kbankMerchantId}
+                      onChange={(e) => setKbankMerchantId(e.target.value)}
+                      placeholder="KB000002340299"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">{tr("posKbankPartnerShopId", "Partner Shop ID")}</label>
+                    <Input
+                      className="mt-1 font-mono text-sm"
+                      value={kbankPartnerShopId}
+                      onChange={(e) => setKbankPartnerShopId(e.target.value)}
+                      placeholder="SJGLB00006"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">{tr("posKbankTerminalId", "Terminal ID (선택)")}</label>
+                    <Input
+                      className="mt-1 font-mono text-sm"
+                      value={kbankTerminalId}
+                      onChange={(e) => setKbankTerminalId(e.target.value)}
+                      placeholder=""
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
               </div>
             </TabsContent>
           </Tabs>
@@ -2628,7 +2686,7 @@ export default function PosPrintersPage() {
           <DialogHeader>
             <DialogTitle>{tr("posPrinterCopySettings", "설정 복사")}</DialogTitle>
             <DialogDescription className="text-left">
-              {tr("posPrinterCopySettingsDesc", "다른 매장의 POS 프린터·영수증·돈통 등 저장값을 현재 매장으로 가져옵니다. 메인 POS 기기 등록은 매장별로 따로 관리됩니다.")}
+              {tr("posPrinterCopySettingsDesc", "다른 매장의 POS 프린터·영수증·결제·돈통 등 저장값을 현재 매장으로 가져옵니다. 메인 POS 기기 등록은 매장별로 따로 관리됩니다.")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -2672,7 +2730,7 @@ export default function PosPrintersPage() {
               </label>
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <input type="checkbox" className="h-4 w-4 rounded border-input" checked={copyTabDrawer} onChange={(e) => setCopyTabDrawer(e.target.checked)} />
-                <span>{tr("posDrawerTab", "돈통")}</span>
+                <span>{tr("posDrawerTab", "결제·돈통")}</span>
               </label>
               <p className="text-[11px] text-muted-foreground">
                 {tr(

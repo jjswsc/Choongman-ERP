@@ -28,6 +28,11 @@ import { getWorkLogWeekly, getWorkLogOfficeOptions, type WorkLogWeeklySummary } 
 import { formatWorkLogStaffSelectLabel } from "@/lib/work-log-name"
 import { getBangkokWeekRange, getBangkokMonthRangeWithOffset } from "@/lib/bangkok-time"
 import { downloadCsv, workLogProgressBarClass } from "@/lib/work-log-shared"
+import { useAuth } from "@/lib/auth-context"
+import {
+  useWorklogQueryDraftPersistence,
+  worklogQueryDraftKey,
+} from "@/lib/worklog-query-draft"
 import { WorklogKpiCard } from "./worklog-shared-ui"
 import {
   Bar,
@@ -43,7 +48,18 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 type WorkLogStaffOpt = { id: number; name: string; displayName: string; store?: string; job?: string }
 type SortKey = "avg" | "carried" | "completed" | "name"
 
+type WeeklyQueryDraft = {
+  periodType?: "week" | "month"
+  periodOffset?: number
+  deptFilter?: string
+  employeeFilter?: string
+  storeFilter?: string
+  sortKey?: SortKey
+  hasSearched?: boolean
+}
+
 export function WorklogWeekly() {
+  const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const [periodType, setPeriodType] = React.useState<"week" | "month">("week")
@@ -107,6 +123,66 @@ export function WorklogWeekly() {
       setLoading(false)
     }
   }, [dateRange.start, dateRange.end, deptFilter, employeeFilter, storeFilter])
+
+  const queryDraft = React.useMemo<WeeklyQueryDraft>(
+    () => ({
+      periodType,
+      periodOffset,
+      deptFilter,
+      employeeFilter,
+      storeFilter,
+      sortKey,
+      hasSearched,
+    }),
+    [periodType, periodOffset, deptFilter, employeeFilter, storeFilter, sortKey, hasSearched]
+  )
+  const shouldPersistQueryDraft =
+    hasSearched ||
+    periodType !== "week" ||
+    periodOffset !== 0 ||
+    deptFilter !== "all" ||
+    employeeFilter !== "all" ||
+    storeFilter !== "all" ||
+    sortKey !== "avg"
+
+  const applyQueryDraft = React.useCallback((d: WeeklyQueryDraft) => {
+    const meaningful =
+      d.hasSearched === true ||
+      d.periodType === "month" ||
+      (typeof d.periodOffset === "number" && d.periodOffset !== 0) ||
+      (typeof d.deptFilter === "string" && d.deptFilter !== "all") ||
+      (typeof d.employeeFilter === "string" && d.employeeFilter !== "all") ||
+      (typeof d.storeFilter === "string" && d.storeFilter !== "all") ||
+      (d.sortKey != null && d.sortKey !== "avg")
+    if (!meaningful) return false
+    if (d.periodType === "week" || d.periodType === "month") setPeriodType(d.periodType)
+    if (typeof d.periodOffset === "number" && Number.isFinite(d.periodOffset)) {
+      setPeriodOffset(Math.trunc(d.periodOffset))
+    }
+    if (typeof d.deptFilter === "string") setDeptFilter(d.deptFilter)
+    if (typeof d.employeeFilter === "string") setEmployeeFilter(d.employeeFilter)
+    if (typeof d.storeFilter === "string") setStoreFilter(d.storeFilter)
+    if (d.sortKey === "avg" || d.sortKey === "carried" || d.sortKey === "completed" || d.sortKey === "name") {
+      setSortKey(d.sortKey)
+    }
+    if (d.hasSearched) setHasSearched(true)
+    return true
+  }, [])
+
+  const { restoreEpoch } = useWorklogQueryDraftPersistence({
+    storageKey: worklogQueryDraftKey("weekly", auth?.user || ""),
+    draft: queryDraft,
+    shouldPersist: shouldPersistQueryDraft,
+    applyDraft: applyQueryDraft,
+  })
+
+  const restoredFetchEpochRef = React.useRef(0)
+  React.useEffect(() => {
+    if (restoreEpoch === 0 || !hasSearched) return
+    if (restoredFetchEpochRef.current === restoreEpoch) return
+    restoredFetchEpochRef.current = restoreEpoch
+    void loadData()
+  }, [restoreEpoch, hasSearched, loadData])
 
   const handleSearch = () => {
     setHasSearched(true)

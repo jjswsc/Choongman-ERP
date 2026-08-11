@@ -50,8 +50,25 @@ import {
   workLogWorkTypeBadgeClass,
   workLogWorkTypeSortRank,
 } from "@/lib/work-log-shared"
+import {
+  isWorklogDraftDate,
+  useWorklogQueryDraftPersistence,
+  worklogQueryDraftKey,
+} from "@/lib/worklog-query-draft"
 
 type WorkLogStaffOpt = { id: number; name: string; displayName: string; store?: string; job?: string }
+
+type ApprovalQueryDraft = {
+  startStr?: string
+  endStr?: string
+  deptFilter?: string
+  employeeFilter?: string
+  storeFilter?: string
+  statusFilter?: string
+  workTypeFilter?: string
+  contentSearch?: string
+  hasSearched?: boolean
+}
 
 type Props = {
   onPendingChange?: (count: number) => void
@@ -122,6 +139,81 @@ export function WorklogApproval({ onPendingChange }: Props) {
       setLoading(false)
     }
   }, [startStr, endStr, deptFilter, employeeFilter, statusFilter, storeFilter, onPendingChange])
+
+  const queryDraft = React.useMemo<ApprovalQueryDraft>(
+    () => ({
+      startStr,
+      endStr,
+      deptFilter,
+      employeeFilter,
+      storeFilter,
+      statusFilter,
+      workTypeFilter,
+      contentSearch,
+      hasSearched,
+    }),
+    [
+      startStr,
+      endStr,
+      deptFilter,
+      employeeFilter,
+      storeFilter,
+      statusFilter,
+      workTypeFilter,
+      contentSearch,
+      hasSearched,
+    ]
+  )
+  const todayStr = React.useMemo(() => getBangkokTodayDateString(), [])
+  const shouldPersistQueryDraft =
+    hasSearched ||
+    startStr !== todayStr ||
+    endStr !== todayStr ||
+    deptFilter !== "all" ||
+    employeeFilter !== "all" ||
+    storeFilter !== "all" ||
+    statusFilter !== "all" ||
+    workTypeFilter !== "all" ||
+    contentSearch.trim() !== ""
+
+  const applyQueryDraft = React.useCallback((d: ApprovalQueryDraft) => {
+    const meaningful =
+      d.hasSearched === true ||
+      (isWorklogDraftDate(d.startStr) && d.startStr !== getBangkokTodayDateString()) ||
+      (isWorklogDraftDate(d.endStr) && d.endStr !== getBangkokTodayDateString()) ||
+      (typeof d.deptFilter === "string" && d.deptFilter !== "all") ||
+      (typeof d.employeeFilter === "string" && d.employeeFilter !== "all") ||
+      (typeof d.storeFilter === "string" && d.storeFilter !== "all") ||
+      (typeof d.statusFilter === "string" && d.statusFilter !== "all") ||
+      (typeof d.workTypeFilter === "string" && d.workTypeFilter !== "all") ||
+      (typeof d.contentSearch === "string" && d.contentSearch.trim() !== "")
+    if (!meaningful) return false
+    if (isWorklogDraftDate(d.startStr)) setStartStr(d.startStr)
+    if (isWorklogDraftDate(d.endStr)) setEndStr(d.endStr)
+    if (typeof d.deptFilter === "string") setDeptFilter(d.deptFilter)
+    if (typeof d.employeeFilter === "string") setEmployeeFilter(d.employeeFilter)
+    if (typeof d.storeFilter === "string") setStoreFilter(d.storeFilter)
+    if (typeof d.statusFilter === "string") setStatusFilter(d.statusFilter)
+    if (typeof d.workTypeFilter === "string") setWorkTypeFilter(d.workTypeFilter)
+    if (typeof d.contentSearch === "string") setContentSearch(d.contentSearch)
+    if (d.hasSearched) setHasSearched(true)
+    return true
+  }, [])
+
+  const { restoreEpoch } = useWorklogQueryDraftPersistence({
+    storageKey: worklogQueryDraftKey("approval", auth?.user || ""),
+    draft: queryDraft,
+    shouldPersist: shouldPersistQueryDraft,
+    applyDraft: applyQueryDraft,
+  })
+
+  const restoredFetchEpochRef = React.useRef(0)
+  React.useEffect(() => {
+    if (restoreEpoch === 0 || !hasSearched) return
+    if (restoredFetchEpochRef.current === restoreEpoch) return
+    restoredFetchEpochRef.current = restoreEpoch
+    void loadData()
+  }, [restoreEpoch, hasSearched, loadData])
 
   const handleSearch = () => {
     setHasSearched(true)

@@ -50,6 +50,11 @@ import {
 } from "@/lib/work-log-dedupe"
 import { WORK_LOG_PRIORITIES } from "@/lib/work-log-shared"
 import {
+  isWorklogDraftDate,
+  useWorklogQueryDraftPersistence,
+  worklogQueryDraftKey,
+} from "@/lib/worklog-query-draft"
+import {
   WorklogKpiCard,
   WorklogManagerFeedback,
   WorklogPriorityChip,
@@ -58,6 +63,13 @@ import {
 import { WorklogPeriodPanel } from "./worklog-period-panel"
 
 const PROGRESS_AUTO_SAVE_MS = 700
+
+type MyQueryDraft = {
+  dateStr?: string
+  selectedStaff?: string
+  viewMode?: "day" | "period"
+  hasSearched?: boolean
+}
 
 function mergeEphemeralDrafts(serverItems: WorkLogItem[], localItems: WorkLogItem[]): WorkLogItem[] {
   const drafts = localItems.filter((it) => isEphemeralWorkLogId(it.id))
@@ -238,8 +250,13 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
 
   React.useEffect(() => () => cancelPendingAutoSave(), [cancelPendingAutoSave])
 
+  const prevUserNameRef = React.useRef(userName)
   React.useEffect(() => {
-    if (userName) setSelectedStaff(userName)
+    // 로그인 사용자 변경 시에만 기본 직원을 맞춤 (마운트·조회 초안 복원을 덮어쓰지 않음)
+    if (userName && userName !== prevUserNameRef.current) {
+      setSelectedStaff(userName)
+    }
+    prevUserNameRef.current = userName
   }, [userName])
 
   React.useEffect(() => {
@@ -280,6 +297,49 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     },
     [dateStr, selectedStaff, employeeId, cancelPendingAutoSave]
   )
+
+  const queryDraft = React.useMemo<MyQueryDraft>(
+    () => ({ dateStr, selectedStaff, viewMode, hasSearched }),
+    [dateStr, selectedStaff, viewMode, hasSearched]
+  )
+  const todayStr = React.useMemo(() => getBangkokTodayDateString(), [])
+  const shouldPersistQueryDraft =
+    hasSearched ||
+    dateStr !== todayStr ||
+    selectedStaff !== userName ||
+    viewMode !== "day"
+
+  const applyQueryDraft = React.useCallback(
+    (d: MyQueryDraft) => {
+      const meaningful =
+        d.hasSearched === true ||
+        (isWorklogDraftDate(d.dateStr) && d.dateStr !== todayStr) ||
+        (typeof d.selectedStaff === "string" && d.selectedStaff.trim() !== "" && d.selectedStaff !== userName) ||
+        d.viewMode === "period"
+      if (!meaningful) return false
+      if (isWorklogDraftDate(d.dateStr)) setDateStr(d.dateStr)
+      if (typeof d.selectedStaff === "string" && d.selectedStaff.trim()) setSelectedStaff(d.selectedStaff)
+      if (d.viewMode === "day" || d.viewMode === "period") setViewMode(d.viewMode)
+      if (d.hasSearched) setHasSearched(true)
+      return true
+    },
+    [todayStr, userName]
+  )
+
+  const { restoreEpoch } = useWorklogQueryDraftPersistence({
+    storageKey: worklogQueryDraftKey("my", userName || ""),
+    draft: queryDraft,
+    shouldPersist: shouldPersistQueryDraft,
+    applyDraft: applyQueryDraft,
+  })
+
+  const restoredFetchEpochRef = React.useRef(0)
+  React.useEffect(() => {
+    if (restoreEpoch === 0 || !hasSearched || viewMode !== "day") return
+    if (restoredFetchEpochRef.current === restoreEpoch) return
+    restoredFetchEpochRef.current = restoreEpoch
+    void loadData()
+  }, [restoreEpoch, hasSearched, viewMode, loadData])
 
   const buildTodayLogsForSave = React.useCallback((): WorkLogItem[] => {
     const draftMap = draftPersistedIdRef.current
