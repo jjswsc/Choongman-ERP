@@ -217,12 +217,6 @@ export function HomeTab() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      {/* Welcome Banner */}
-      <div className="overflow-hidden rounded-xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-5">
-        <h2 className="text-xl font-bold text-foreground">{t('welcome')}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{t('welcomeSub')}</p>
-      </div>
-
       {/* 앱 설치 안내 - 휴대폰 알림 설정에 CM ERP 별도 표시됨 */}
       <PwaInstallBanner />
 
