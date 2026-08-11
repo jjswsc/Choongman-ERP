@@ -99,6 +99,8 @@ export function getExportPnd1RdPrepTxtUrl(params: {
   payerBranchNo?: string
   payerName?: string
   includeHeader?: boolean
+  /** txt = RD Prep pipe, xlsx = 검수용 엑셀 */
+  format?: 'txt' | 'xlsx' | 'excel'
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
@@ -110,6 +112,7 @@ export function getExportPnd1RdPrepTxtUrl(params: {
   if (params.payerBranchNo) q.set('payerBranchNo', params.payerBranchNo)
   if (params.payerName) q.set('payerName', params.payerName)
   if (params.includeHeader) q.set('includeHeader', '1')
+  if (params.format) q.set('format', params.format)
   if (typeof window !== 'undefined') {
     return `${window.location.origin}/api/exportPnd1RdPrepTxt?${q}`
   }

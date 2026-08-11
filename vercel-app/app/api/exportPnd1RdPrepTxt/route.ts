@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { pnd1LedgerToRdPrepTxt, type Pnd1SourceRow } from '@/lib/pnd1-rd-prep-txt'
+import { buildPnd1RdPrepReviewWorkbook, buildPnd1RdPrepXlsxFilename } from '@/lib/pnd1-rd-prep-xlsx'
+import { writeErpXlsxWorkbookToBuffer } from '@/lib/erp-excel-export'
 import { matchesPnd1FilingForm } from '@/lib/withholding-tax-csv'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -43,6 +48,8 @@ export async function GET(request: NextRequest) {
   const filingStatus = parseFilingStatus(searchParams.get('filingStatus'))
   const requestedStoreFilter = String(searchParams.get('storeFilter') || '').trim()
   const filingForm = normalizeForm(searchParams.get('filingForm'))
+  const formatRaw = String(searchParams.get('format') || 'txt').trim().toLowerCase()
+  const format = formatRaw === 'xlsx' || formatRaw === 'excel' ? 'xlsx' : 'txt'
   const payerTaxId = String(searchParams.get('payerTaxId') || '').trim()
   const payerBranchNo = String(searchParams.get('payerBranchNo') || '').trim()
   const payerName = String(searchParams.get('payerName') || '').trim()
@@ -84,27 +91,60 @@ export async function GET(request: NextRequest) {
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
-    const filter = appendStoreNameFilter(monthFilter, storeFilter)
-    const rows = (await supabaseSelectFilter('withholding_tax_ledger_entries', filter, {
+    // entity:/taxid: 는 store_name=eq 가 아니라 스코프 매처로 필터 (빈 TXT 원인)
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const rows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', monthFilter, {
       select: '*',
-      limit: 20000,
+      pageSize: 4000,
+      maxRows: 100000,
       order: 'payment_date.asc,id.asc',
-    })) as (Pnd1SourceRow & { filing_status?: string | null; form_hint?: string | null })[] | null
+    })) as (Pnd1SourceRow & {
+      filing_status?: string | null
+      form_hint?: string | null
+      store_name?: string | null
+    })[] | null
 
     const filteredRows = (rows || []).filter((row) => {
+      if (!storeScope.matches(String(row.store_name || ''))) return false
       const statusOk =
         filingStatus === '' || normalizeLedgerFilingStatus(row.filing_status) === filingStatus
       if (!statusOk) return false
-      // all = PND1+1ก 만 (급여 원천). PND3/53·미분류는 제외
       return matchesPnd1FilingForm(row.form_hint, filingForm)
     })
 
-    const txt = pnd1LedgerToRdPrepTxt(filteredRows, {
+    if (!filteredRows.length) {
+      return NextResponse.json(
+        {
+          error: 'NO_PND1_ROWS',
+          message:
+            'No PND1 ledger rows for this scope. Search/sync ledger first, or check entity/store filter.',
+        },
+        { status: 404, headers }
+      )
+    }
+
+    const exportOpts = {
       payerTaxId,
       payerBranchNo,
       payerName,
       includeHeader,
-    })
+    }
+
+    if (format === 'xlsx') {
+      const wb = buildPnd1RdPrepReviewWorkbook(filteredRows, exportOpts)
+      const buf = await writeErpXlsxWorkbookToBuffer(wb)
+      const filename = buildPnd1RdPrepXlsxFilename(period.periodKey, filingForm)
+      return new NextResponse(new Uint8Array(buf), {
+        status: 200,
+        headers: {
+          ...Object.fromEntries(headers.entries()),
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+        },
+      })
+    }
+
+    const txt = pnd1LedgerToRdPrepTxt(filteredRows, exportOpts)
     return new NextResponse(txt, {
       status: 200,
       headers: {

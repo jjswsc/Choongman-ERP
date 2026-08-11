@@ -3860,13 +3860,43 @@ export function AdminAccountingCompliance({
         payerBranchNo: pnd1PayerBranchNo,
         payerName: pnd1PayerName,
         includeHeader: pnd1IncludeHeader,
+        format: "txt",
       }),
     [
       role,
       taxMonth,
       periodType,
       ledgerStatusFilter,
-      storeFilterForLedger,
+      storeFilterForApi,
+      pnd1FilingForm,
+      pnd1PayerTaxId,
+      pnd1PayerBranchNo,
+      pnd1PayerName,
+      pnd1IncludeHeader,
+    ]
+  )
+  const pnd1RdPrepExcelUrl = React.useMemo(
+    () =>
+      getExportPnd1RdPrepTxtUrl({
+        userRole: role,
+        taxMonth,
+        yearMonth: taxMonth,
+        periodType,
+        filingStatus: ledgerStatusFilter,
+        storeFilter: storeFilterForApi,
+        filingForm: pnd1FilingForm,
+        payerTaxId: pnd1PayerTaxId,
+        payerBranchNo: pnd1PayerBranchNo,
+        payerName: pnd1PayerName,
+        includeHeader: pnd1IncludeHeader,
+        format: "xlsx",
+      }),
+    [
+      role,
+      taxMonth,
+      periodType,
+      ledgerStatusFilter,
+      storeFilterForApi,
       pnd1FilingForm,
       pnd1PayerTaxId,
       pnd1PayerBranchNo,
@@ -3947,8 +3977,7 @@ export function AdminAccountingCompliance({
     [auth?.user]
   )
   const pnd1RdPrepBtnLabel = t("accCompPnd1ExportTxt")
-  const pnd1RdPrepGuideTitle = t("accCompPnd1GuideTitle")
-  const pnd1RdPrepGuideNote = t("accCompPnd1GuideNotePipe")
+  const pnd1RdPrepExcelBtnLabel = t("accCompPnd1ExportExcel")
   const pnd1ValidateBtnLabel = t("accCompPnd1ValidateBeforeExport")
   const pnd1FormLabel = t("accCompPnd1FilingForm")
   const pnd1PayerBoxTitle = t("accCompPnd1PayerInfoBox")
@@ -5019,8 +5048,8 @@ export function AdminAccountingCompliance({
             pnd1FormLabel={pnd1FormLabel}
             pnd1RdPrepUrl={pnd1RdPrepUrl}
             pnd1RdPrepBtnLabel={pnd1RdPrepBtnLabel}
-            pnd1RdPrepGuideTitle={pnd1RdPrepGuideTitle}
-            pnd1RdPrepGuideNote={pnd1RdPrepGuideNote}
+            pnd1RdPrepExcelUrl={pnd1RdPrepExcelUrl}
+            pnd1RdPrepExcelBtnLabel={pnd1RdPrepExcelBtnLabel}
             pnd1Validating={pnd1Validating}
             runPnd1Validation={runPnd1Validation}
             pnd1ValidateBtnLabel={pnd1ValidateBtnLabel}

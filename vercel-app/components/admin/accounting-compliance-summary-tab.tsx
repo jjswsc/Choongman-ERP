@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ExternalLink, Save, Plus, Trash2, Download, ChevronDown, Printer } from "lucide-react"
+import { Save, Plus, Trash2, Download, ChevronDown, Printer } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { tr } from "@/lib/i18n"
 import { apiFetch } from "@/lib/api-client"
@@ -272,8 +272,8 @@ export interface AccountingComplianceSummaryTabProps {
   pnd1FormLabel: string
   pnd1RdPrepUrl: string
   pnd1RdPrepBtnLabel: string
-  pnd1RdPrepGuideTitle: string
-  pnd1RdPrepGuideNote: string
+  pnd1RdPrepExcelUrl: string
+  pnd1RdPrepExcelBtnLabel: string
   pnd1Validating: boolean
   runPnd1Validation: () => Promise<void>
   pnd1ValidateBtnLabel: string
@@ -466,8 +466,8 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     pnd1FormLabel,
     pnd1RdPrepUrl,
     pnd1RdPrepBtnLabel,
-    pnd1RdPrepGuideTitle,
-    pnd1RdPrepGuideNote,
+    pnd1RdPrepExcelUrl,
+    pnd1RdPrepExcelBtnLabel,
     pnd1Validating,
     runPnd1Validation,
     pnd1ValidateBtnLabel,
@@ -711,11 +711,37 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
                   {pnd1RdPrepBtnLabel}
                 </Button>
-                <RdPrepFilingHelper
-                  t={t}
-                  variant="compact"
-                  mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd1")}
-                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-9 font-medium shadow-sm transition-[transform,box-shadow,background-color,color,opacity] duration-200 ease-out",
+                    "hover:-translate-y-px hover:shadow-md hover:brightness-[1.06] dark:hover:brightness-110",
+                    "active:translate-y-0 active:scale-[0.97] active:shadow-inner active:brightness-[0.96] dark:active:brightness-95",
+                    "motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
+                  )}
+                  disabled={loading || summaryLoading}
+                  onClick={() => {
+                    if (!pp30Queried) {
+                      appAlert(t("accCompPp30ExportNeedSearch"))
+                      return
+                    }
+                    void downloadAuthenticatedFile(
+                      pnd1RdPrepExcelUrl,
+                      `PND1_${taxMonth}.xlsx`
+                    ).catch((e) => {
+                      const detail = e instanceof Error ? e.message : String(e || "")
+                      appAlert(
+                        detail
+                          ? `${t("accCompPp30RdPrepDownloadFail")}\n(${detail.slice(0, 220)})`
+                          : t("accCompPp30RdPrepDownloadFail")
+                      )
+                    })
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
+                  {pnd1RdPrepExcelBtnLabel}
+                </Button>
               </>
             ) : showPnd353Tools &&
               (whtFocusMode === "pnd3" ||
@@ -2192,22 +2218,6 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 </CardContent>
               </Card>
               ) : null}
-            </div>
-            ) : null}
-            {showPnd1Area ? (
-            <div className="rounded-md border border-dashed border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground space-y-1">
-              <div className="font-medium text-foreground/90">{pnd1RdPrepGuideTitle}</div>
-              <p>{pnd1RdPrepGuideNote}</p>
-              <RdPrepFilingHelper t={t} mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd1")} />
-              <a
-                href="https://flowaccount.com/blog/rd-prep-pnd1/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary underline"
-              >
-                {t("accCompFlowRdPrepExample")}
-                <ExternalLink className="h-3 w-3" />
-              </a>
             </div>
             ) : null}
             {showPnd91Area ? (

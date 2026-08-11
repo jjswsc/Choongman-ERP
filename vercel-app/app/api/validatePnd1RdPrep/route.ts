@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { appendStoreNameFilter } from '@/lib/accounting-ledger-store-filter'
+import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { validatePnd1Rows, type Pnd1SourceRow } from '@/lib/pnd1-rd-prep-txt'
 import { matchesPnd1FilingForm } from '@/lib/withholding-tax-csv'
@@ -59,18 +59,23 @@ export async function GET(request: NextRequest) {
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
-    const filter = appendStoreNameFilter(monthFilter, storeFilter)
-    const rows = (await supabaseSelectFilter('withholding_tax_ledger_entries', filter, {
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const rows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', monthFilter, {
       select: '*',
-      limit: 20000,
+      pageSize: 4000,
+      maxRows: 100000,
       order: 'payment_date.asc,id.asc',
-    })) as (Pnd1SourceRow & { filing_status?: string | null; form_hint?: string | null })[] | null
+    })) as (Pnd1SourceRow & {
+      filing_status?: string | null
+      form_hint?: string | null
+      store_name?: string | null
+    })[] | null
 
     const filteredRows = (rows || []).filter((row) => {
+      if (!storeScope.matches(String(row.store_name || ''))) return false
       const statusOk =
         filingStatus === '' || normalizeLedgerFilingStatus(row.filing_status) === filingStatus
       if (!statusOk) return false
-      // all = PND1+1ก 만. PND3/53·미분류 제외
       return matchesPnd1FilingForm(row.form_hint, filingForm)
     })
 
