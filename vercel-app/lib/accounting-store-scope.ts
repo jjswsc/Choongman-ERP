@@ -267,6 +267,44 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
     masters = []
   }
 
+  // 법인(entity:)·TIN(taxid:) 스코프 — 매장 코드 묶음으로 매칭
+  const requestedLower = requested.toLowerCase()
+  if (requestedLower.startsWith('entity:') || requestedLower.startsWith('taxid:')) {
+    const { resolveTaxScopeStoreCodes } = await import('@/lib/tax-entity-scope')
+    const resolved = await resolveTaxScopeStoreCodes(requested)
+    const codes = (resolved.storeCodes || []).map((c) => String(c || '').trim()).filter(Boolean)
+    if (!codes.length) {
+      return {
+        requested,
+        requestedCanonical: '',
+        dbStoreNameValues: [] as string[],
+        matches: (_storeName: string) => false,
+      }
+    }
+    const dbStoreNameValues = new Set<string>()
+    for (const code of codes) {
+      const id = resolveErpStoreIdentitySync(code, masters, legacyToCanonical)
+      for (const v of [
+        code,
+        id.storeCode,
+        id.displayName,
+        ...buildStoreScopeAliasKeys(id.storeCode || code, masters, legacyToCanonical),
+      ]) {
+        const t = String(v || '').trim()
+        if (t) dbStoreNameValues.add(t)
+      }
+    }
+    return {
+      requested,
+      requestedCanonical: codes[0] || '',
+      dbStoreNameValues: Array.from(dbStoreNameValues),
+      matches: (storeName: string): boolean =>
+        codes.some((code) =>
+          matchesAccountingStoreScopeRow(storeName, code, masters, legacyToCanonical)
+        ),
+    }
+  }
+
   const scopeIdentity = resolveErpStoreIdentitySync(requested, masters, legacyToCanonical)
   const scopeStoreCode = scopeIdentity.storeCode
   const aliasKeys = buildStoreScopeAliasKeys(scopeStoreCode || requested, masters, legacyToCanonical)

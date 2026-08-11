@@ -3699,6 +3699,8 @@ export const i18n = {
       '이 매장·월에 확정 급여(지급액>0)가 없거나 아직 원장에 반영되지 않았을 수 있습니다. 「원장 동기화」 후 다시 검색하세요. SSO 미적용(3%) 직원은 PND.3 탭입니다.',
     accCompPnd1EmptyFilteredHint:
       '원장 {{n}}건이 있으나 PND.1(ภ.ง.ด.1) 서식이 아닙니다. PND.3 / PND.53 탭에서 확인하세요.',
+    accCompPnd3EmptyStoreHint:
+      '이 매장명과 맞는 원장 행이 없습니다. 「매장 전체」로 검색해 보시고, 행의 매장명이 비어 있거나 다르면 원장 동기화·지출 매장명을 확인하세요.',
     accCompVatSyncOk: '원장 동기화 완료 (POS {n}건 반영). 매입 탭도 함께 확인해 주세요.',
     accCompVatSyncPosFail: 'POS 동기화 중 오류가 있었습니다. 잠시 후 다시 시도하세요.',
     accCompVatSyncTimeout: '원장 동기화 시간이 초과되었습니다. 매장을 지정한 뒤 다시 눌러 주세요.',
@@ -11533,6 +11535,8 @@ Only matters the employee must handle personally on a working day:
       'No confirmed payroll with gross>0 for this store/month, or not yet in the ledger. Click Sync ledger and search again. SSO-exempt (3%) staff are on the PND.3 tab.',
     accCompPnd1EmptyFilteredHint:
       '{{n}} ledger row(s) exist but are not PND.1 (ภ.ง.ด.1). Check the PND.3 / PND.53 tabs.',
+    accCompPnd3EmptyStoreHint:
+      'No ledger rows match this store name. Try Store = All; if rows have blank/other store names, sync the ledger or fix expense store names.',
     accCompVatSyncOk: 'Ledger sync done (POS {n} rows). Also check the purchase tab.',
     accCompVatSyncPosFail: 'POS sync failed. Please try again shortly.',
     accCompVatSyncTimeout: 'Ledger sync timed out. Pick a single store and try again.',

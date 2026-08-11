@@ -2745,6 +2745,10 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                       <p className="text-xs max-w-xl mx-auto leading-relaxed">
                         {t("accCompPnd1EmptyLedgerHint")}
                       </p>
+                    ) : showPnd353Tools && !whtRows.length ? (
+                      <p className="text-xs max-w-xl mx-auto leading-relaxed">
+                        {t("accCompPnd3EmptyStoreHint")}
+                      </p>
                     ) : null}
                   </div>
                 ) : null}

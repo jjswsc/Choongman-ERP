@@ -725,6 +725,7 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
   if (validMonths.length === 0) return { upserted: 0, deleted: 0 }
 
   const storeFilter = normalizeStoreFilter(params.storeFilter)
+  const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined)
   const startYmd = monthStartYmd(validMonths[0])
   const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
   const expParts = [
@@ -732,7 +733,11 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
     `expense_date=lte.${encodeURIComponent(endYmd)}`,
     'withholding_tax_amount=gt.0',
   ]
-  if (storeFilter) expParts.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
+  // exact store_name=eq 는 표기 차이로 0건 → 별칭 in.() 후 JS matches
+  if (storeFilter && storeScope.dbStoreNameValues.length > 0) {
+    const inList = storeScope.dbStoreNameValues.map((v) => encodeURIComponent(v)).join(',')
+    expParts.push(`store_name=in.(${inList})`)
+  }
   const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
     select: 'id,status,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,memo,store_name',
     order: 'id.asc',
@@ -757,9 +762,13 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
 
   const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
   const autoBase = `${monthFilter}&memo=ilike.${encodeURIComponent('%[AUTO:EXPENSE_ACCRUAL_WHT:%')}`
-  const autoFilter = appendStoreNameFilter(autoBase, storeFilter)
+  let autoFilter = autoBase
+  if (storeFilter && storeScope.dbStoreNameValues.length > 0) {
+    const inList = storeScope.dbStoreNameValues.map((v) => encodeURIComponent(v)).join(',')
+    autoFilter = `${autoBase}&store_name=in.(${inList})`
+  }
   const existingAutoRows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', autoFilter, {
-    select: 'id,memo,filing_status',
+    select: 'id,memo,filing_status,store_name',
     order: 'id.asc',
     pageSize: 3000,
     maxRows: 30000,
@@ -769,6 +778,7 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
     const id = Math.floor(Number(row.id) || 0)
     const expId = parseExpenseAccrualWhtIdFromMemo(String(row.memo || ''))
     if (id <= 0 || expId <= 0) continue
+    if (storeFilter && !storeScope.matches(String(row.store_name || ''))) continue
     existingByExpenseId.set(expId, {
       id,
       filingStatus: String(row.filing_status || '').trim().toLowerCase(),
@@ -783,6 +793,9 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
     const status = String(row.status || '').trim().toLowerCase()
     const wht = round2(Math.max(0, Math.abs(Number(row.withholding_tax_amount) || 0)))
     if (status === 'rejected' || wht <= 0) continue
+
+    const rowStore = String(row.store_name || '').trim()
+    if (storeFilter && !storeScope.matches(rowStore)) continue
 
     const expenseDate = String(row.expense_date || '').slice(0, 10)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) continue
@@ -816,7 +829,7 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
       filing_status: 'draft',
       submitted_at: null,
       submitted_by: null,
-      store_name: String(row.store_name || '').trim() || null,
+      store_name: rowStore || null,
       updated_at: new Date().toISOString(),
     }
 
