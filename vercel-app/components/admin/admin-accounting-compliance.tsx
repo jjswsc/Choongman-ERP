@@ -705,7 +705,7 @@ export function AdminAccountingCompliance({
   const [pnd91Loading, setPnd91Loading] = React.useState(false)
   const [pnd91Summary, setPnd91Summary] = React.useState<Pnd91AnnualSummaryResult | null>(null)
   const [pnd91ChecklistTick, setPnd91ChecklistTick] = React.useState(0)
-  const whtRowRefs = React.useRef<Record<number, HTMLDivElement | null>>({})
+  const whtRowRefs = React.useRef<Record<number, HTMLElement | null>>({})
   const [kt20kYear, setKt20kYear] = React.useState(() => getBangkokRecentYearMonths(1)[0].slice(0, 4))
   const [kt20kLoading, setKt20kLoading] = React.useState(false)
   const [kt20kSettingsSaving, setKt20kSettingsSaving] = React.useState(false)

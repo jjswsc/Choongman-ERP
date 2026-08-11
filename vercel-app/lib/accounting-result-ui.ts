@@ -25,6 +25,9 @@ export const accountingResultTfootRowCn = "border-t bg-muted/40 font-medium"
 export const accountingLedgerEntryGridCn =
   "rounded-lg border border-border/70 bg-background/80 p-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5 text-sm shadow-sm transition-shadow hover:shadow-md"
 
+/** 원천세 등 원장 1행 밀집 편집용 */
+export const accountingLedgerCompactInputCn = "h-8 text-xs px-2 min-w-0 w-full"
+
 export const accountingStatGridCn = "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2"
 
 export const accountingStatCardCn =

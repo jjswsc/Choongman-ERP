@@ -32,7 +32,7 @@ export interface AdminEmployeeItem {
   idCardPhoto: string
   taxId: string
   ssoNumber: string
-  /** true면 급여 SSO 공제 0 + PND3용 3% 원천세 대상 */
+  /** true면 급여 SSO 공제 0 + 원천세 3%(급여 ภ.ง.ด.1 신고) */
   ssoExempt?: boolean
   /** 오피스(본사) 급여 조회·계산·확정 담당 */
   canManageOfficePayroll?: boolean

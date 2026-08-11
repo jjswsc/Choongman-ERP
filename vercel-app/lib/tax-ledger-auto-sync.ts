@@ -1148,7 +1148,8 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     const whtAmount = round2(Math.max(0, Number(p.tax) || 0))
 
     const ssoAmount = round2(Math.max(0, Number(p.sso) || 0))
-    const isPnd3Payroll = ssoAmount <= 0
+    // SSO 미적용(3% 원천) 직원도 급여 지급 → ภ.ง.ด.1. 개인 용역(지출 EAW)만 PND3.
+    const usePaidGrossForSsoExempt = ssoAmount <= 0
     const grossFromPayroll =
       Number(p.salary || 0) +
       Number(p.pos_allow || 0) +
@@ -1164,7 +1165,7 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     const grossAmount = round2(
       Math.max(
         0,
-        isPnd3Payroll
+        usePaidGrossForSsoExempt
           ? grossPaidBeforeWithholding > 0
             ? grossPaidBeforeWithholding
             : grossFromPayroll > 0
@@ -1181,18 +1182,18 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     const rate = grossAmount > 0 ? round2((whtAmount / grossAmount) * 100) : null
     const paymentDate = monthEndYmd(taxMonth)
     const memoTag = `[AUTO:PAYROLL_RECORD_WHT:${payrollId}]`
-    const formHint = isPnd3Payroll ? 'PND3' : 'PND1'
+    const formHint = 'PND1'
     const saveRow = {
       payment_date: paymentDate,
       tax_month: taxMonth,
       payee_name: employeeName.slice(0, 500),
       payee_tax_id: payeeTaxId,
-      income_type: isPnd3Payroll ? '용역/3% 원천' : '급여',
+      income_type: '급여',
       gross_amount: grossAmount,
       wht_rate: rate,
       wht_amount: whtAmount,
       form_hint: formHint,
-      certificate_no: `${isPnd3Payroll ? 'PR3' : 'PR1'}-${taxMonth.replace('-', '')}-${payrollId}`.slice(0, 128),
+      certificate_no: `PR1-${taxMonth.replace('-', '')}-${payrollId}`.slice(0, 128),
       memo: `${memoTag} ${formHint} 급여 원천세 자동`.slice(0, 2000),
       filing_status: 'draft',
       submitted_at: null,

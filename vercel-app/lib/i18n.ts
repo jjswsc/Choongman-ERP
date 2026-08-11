@@ -1818,8 +1818,9 @@ export const i18n = {
     emp_id_card_download: '다운로드',
     emp_tax_id: 'Tax ID (세금)',
     emp_sso_number: 'SSO 번호 (사회보험)',
-    emp_sso_exempt_label: 'SSO 제외 + PND3 3% 공제',
-    emp_sso_exempt_hint: '미가입·프리랜서·서류 미비 시 체크. 급여 계산에서 SSO를 0으로 하고 원천세 3%를 공제해 PND3 대상에 넣습니다.',
+    emp_sso_exempt_label: 'SSO 제외 + 원천세 3%(PND1)',
+    emp_sso_exempt_hint:
+      '미가입·프리랜서·서류 미비 시 체크. 급여 계산에서 SSO를 0으로 하고 원천세 3%를 공제합니다. 급여 원천은 ภ.ง.ด.1(PND1)로 신고합니다. 개인 용역비(지출)만 PND3입니다.',
     emp_can_manage_office_payroll_label: '오피스 급여 담당',
     emp_can_manage_office_payroll_hint: '체크한 직원만 본사(오피스) 급여 조회·계산·확정이 가능합니다. Director는 항상 접근·지정할 수 있습니다.',
     emp_office_payroll_hidden_hint: '오피스(본사) 직원의 급여·계좌 정보는 급여 담당자 또는 Director만 조회·수정할 수 있습니다.',
@@ -3374,6 +3375,8 @@ export const i18n = {
     accCompPhWhtAmt: '원천징수액',
     accCompPhFormHint: '서식(PND3/53 등)',
     accCompPhCertNo: '증명번호',
+    accCompWhtRowDetails: '상세',
+    accCompWhtRowDirection: '방향·출처',
     accCompWhtExportCsv: 'WHT CSV보내기',
     accCompCitPackageCsv: 'CIT 패키지 CSV',
     accCompCitPackagePdf: '신고양식 PDF',
@@ -3696,7 +3699,7 @@ export const i18n = {
     accCompWhtForceSyncHint:
       '선택 매장·월의 급여·지출·통장 원천세를 원장에 다시 맞춘 뒤 조회합니다.',
     accCompPnd1EmptyLedgerHint:
-      '이 매장·월에 확정 급여(지급액>0)가 없거나 아직 원장에 반영되지 않았을 수 있습니다. 「원장 동기화」 후 다시 검색하세요. SSO 미적용(3%) 직원은 PND.3 탭입니다.',
+      '이 매장·월에 확정 급여(지급액>0)가 없거나 아직 원장에 반영되지 않았을 수 있습니다. 「원장 동기화」 후 다시 검색하세요. 개인 용역(지출) 원천은 PND.3 탭입니다.',
     accCompPnd1EmptyFilteredHint:
       '원장 {{n}}건이 있으나 PND.1(ภ.ง.ด.1) 서식이 아닙니다. PND.3 / PND.53 탭에서 확인하세요.',
     accCompPnd3EmptyStoreHint:
@@ -9650,8 +9653,9 @@ Only matters the employee must handle personally on a working day:
     emp_id_card_download: 'Download',
     emp_tax_id: 'Tax ID',
     emp_sso_number: 'SSO No. (Social Security)',
-    emp_sso_exempt_label: 'No SSO + 3% PND3 withholding',
-    emp_sso_exempt_hint: 'Check for not-yet-registered, freelance, or document-pending staff. Payroll sets SSO to 0, withholds 3%, and includes the row in PND3.',
+    emp_sso_exempt_label: 'No SSO + 3% WHT (PND1)',
+    emp_sso_exempt_hint:
+      'Check for not-yet-registered, freelance, or document-pending staff. Payroll sets SSO to 0 and withholds 3%. Salary withholding files under ภ.ง.ด.1 (PND1). Personal service fees (expense) use PND3.',
     emp_can_manage_office_payroll_label: 'Office payroll manager',
     emp_can_manage_office_payroll_hint: 'Only checked staff can view, calculate, and confirm HQ (office) payroll. Directors can always access and assign this.',
     emp_office_payroll_hidden_hint: 'Payroll and bank details for HQ (office) staff can only be viewed or edited by payroll managers or Directors.',
@@ -11207,6 +11211,8 @@ Only matters the employee must handle personally on a working day:
     accCompPhWhtAmt: 'WHT amount',
     accCompPhFormHint: 'Form (PND3/53…)',
     accCompPhCertNo: 'Certificate no.',
+    accCompWhtRowDetails: 'Details',
+    accCompWhtRowDirection: 'Direction / source',
     accCompWhtExportCsv: 'Export WHT CSV',
     accCompCitPackageCsv: 'CIT package CSV',
     accCompCitPackagePdf: 'Filing PDF',
@@ -11532,7 +11538,7 @@ Only matters the employee must handle personally on a working day:
     accCompWhtForceSyncHint:
       'Re-syncs payroll/expense/bank withholding into the ledger for the selected store and month, then reloads.',
     accCompPnd1EmptyLedgerHint:
-      'No confirmed payroll with gross>0 for this store/month, or not yet in the ledger. Click Sync ledger and search again. SSO-exempt (3%) staff are on the PND.3 tab.',
+      'No confirmed payroll with gross>0 for this store/month, or not yet in the ledger. Click Sync ledger and search again. Personal service (expense) withholding is on the PND.3 tab.',
     accCompPnd1EmptyFilteredHint:
       '{{n}} ledger row(s) exist but are not PND.1 (ภ.ง.ด.1). Check the PND.3 / PND.53 tabs.',
     accCompPnd3EmptyStoreHint:
@@ -17318,8 +17324,9 @@ orderItemQty: 'จำนวน',
     emp_id_card_download: 'ดาวน์โหลด',
     emp_tax_id: 'หมายเลขประจำตัวผู้เสียภาษี',
     emp_sso_number: 'เลขประกันสังคม',
-    emp_sso_exempt_label: 'ยกเว้น SSO + หัก PND3 3%',
-    emp_sso_exempt_hint: 'ติ๊กสำหรับผู้ที่ยังไม่สมัคร ฟรีแลนซ์ หรือเอกสารยังไม่ครบ ระบบจะคิด SSO เป็น 0 หักภาษี ณ ที่จ่าย 3% และเข้า PND3 อัตโนมัติ',
+    emp_sso_exempt_label: 'ยกเว้น SSO + หัก ภาษี 3% (PND1)',
+    emp_sso_exempt_hint:
+      'ติ๊กสำหรับผู้ที่ยังไม่สมัคร ฟรีแลนซ์ หรือเอกสารยังไม่ครบ ระบบจะคิด SSO เป็น 0 และหักภาษี ณ ที่จ่าย 3% ครับ เงินเดือนยื่น ภ.ง.ด.1 (PND1) ส่วนค่าจ้าง/ค่าบริการบุคคลจากรายจ่ายอยู่ PND3',
     emp_can_manage_office_payroll_label: 'ผู้ดูแลเงินเดือนสำนักงาน',
     emp_can_manage_office_payroll_hint: 'เฉพาะพนักงานที่ติ๊กเท่านั้นที่ดู คำนวณ และยืนยันเงินเดือนสำนักงานใหญ่ได้ Director เข้าถึงและกำหนดสิทธิ์นี้ได้เสมอ',
     emp_section_basic: 'ข้อมูลพื้นฐาน',
@@ -18285,7 +18292,7 @@ orderItemQty: 'จำนวน',
     accCompWhtForceSyncHint:
       'ซิงก์ภาษีหัก ณ ที่จ่ายจากเงินเดือน/ค่าใช้จ่าย/บัญชีธนาคาร ของสาขาและเดือนที่เลือก แล้วโหลดใหม่',
     accCompPnd1EmptyLedgerHint:
-      'เดือน/สาขานี้อาจไม่มีเงินเดือนที่ยืนยันแล้ว (ยอดจ่าย>0) หรือยังไม่ลงบัญชี — กดซิงค์บัญชีแล้วค้นหาใหม่ พนักงานไม่มี SSO (3%) อยู่แท็บ PND.3',
+      'เดือน/สาขานี้อาจไม่มีเงินเดือนที่ยืนยันแล้ว (ยอดจ่าย>0) หรือยังไม่ลงบัญชี — กดซิงค์บัญชีแล้วค้นหาใหม่ครับ ค่าจ้างบุคคลจากรายจ่ายอยู่แท็บ PND.3',
     accCompPnd1EmptyFilteredHint:
       'มี {{n}} รายการในบัญชี แต่ไม่ใช่แบบ ภ.ง.ด.1 — ตรวจแท็บ PND.3 / PND.53',
     accCompPnd3EmptyStoreHint:
@@ -18629,6 +18636,8 @@ orderItemQty: 'จำนวน',
     accCompPhWhtAmt: 'ภาษีหัก ณ ที่จ่าย',
     accCompPhFormHint: 'แบบ (ภ.ง.ด.3/53 ฯลฯ)',
     accCompPhCertNo: 'เลขหนังสือรับรอง',
+    accCompWhtRowDetails: 'รายละเอียด',
+    accCompWhtRowDirection: 'ทิศทาง·ที่มา',
     accCompWhtExportCsv: 'ส่งออก CSV WHT',
     accCompCitPackageCsv: 'แพ็กเกจ CSV CIT',
     accCompCitPackagePdf: 'PDF แบบยื่น',

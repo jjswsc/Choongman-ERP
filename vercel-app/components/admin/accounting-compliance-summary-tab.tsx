@@ -40,11 +40,15 @@ import {
   AccountingTableShell,
 } from "@/components/admin/accounting-result-primitives"
 import {
+  accountingLedgerCompactInputCn,
   accountingLedgerEntryGridCn,
+  accountingResultTableCn,
+  accountingResultTbodyRowCn,
   accountingResultTdCn,
   accountingResultTdRightCn,
   accountingResultThCn,
   accountingResultThRightCn,
+  accountingResultTheadRowCn,
 } from "@/lib/accounting-result-ui"
 import { appAlert } from "@/lib/app-message"
 import { downloadAuthenticatedFile } from "@/lib/download-authenticated-file"
@@ -245,7 +249,7 @@ export interface AccountingComplianceSummaryTabProps {
   whtRows: WhtDraft[]
   setWhtRows: React.Dispatch<React.SetStateAction<WhtDraft[]>>
   whtRowsFiltered: WhtDraft[]
-  whtRowRefs: React.MutableRefObject<Record<number, HTMLDivElement | null>>
+  whtRowRefs: React.MutableRefObject<Record<number, HTMLElement | null>>
   whtExportUrl: string
   whtSubmissionFormHint: "PND3" | "PND53" | "ALL"
   setWhtSubmissionFormHint: (v: "PND3" | "PND53" | "ALL") => void
@@ -514,6 +518,16 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
   const [salesAdjResult, setSalesAdjResult] = React.useState<Pp30AdjustedOutput | null>(null)
   const onSalesAdjustmentResult = React.useCallback((r: Pp30AdjustedOutput | null) => {
     setSalesAdjResult(r)
+  }, [])
+  const [whtRowExpanded, setWhtRowExpanded] = React.useState<Record<string, boolean>>({})
+  const patchWhtRow = React.useCallback(
+    (idx: number, patch: Partial<WhtDraft>) => {
+      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, ...patch } : x)))
+    },
+    [setWhtRows]
+  )
+  const toggleWhtRowExpanded = React.useCallback((key: string) => {
+    setWhtRowExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
   return (
@@ -2522,7 +2536,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <CardTitle className="text-sm">{t("accCompPnd5354SubPnd53")}</CardTitle>
                 </CardHeader>
               ) : null}
-              <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "p-2 overflow-x-auto space-y-3"}>
+              <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "p-2 overflow-x-auto"}>
                 {isPnd5354CompactList ? (
                   <table className="w-full text-sm border-collapse min-w-[880px]">
                     <thead>
@@ -2559,199 +2573,251 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   </table>
                 ) : (
                 <>
-                {whtRows.map((row, idx) => {
-                  if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
-                  // 탭별 form_hint 필터 — 이미 계산된 whtRowsFiltered 기준(참조 동일)
-                  if (!whtRowsFiltered.includes(row)) return null
-                  return (
-                  <div
-                    key={row.id ?? `wht-${idx}`}
-                    ref={(el) => {
-                      if (row.id) whtRowRefs.current[row.id] = el
-                    }}
-                    className={accountingLedgerEntryGridCn}
-                  >
-                    <Input
-                      type="date"
-                      value={row.payment_date}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, payment_date: e.target.value } : x))
+                <AdminTableScroll className="rounded-md border border-border/60">
+                  <table className={cn(accountingResultTableCn, "min-w-[1180px]")}>
+                    <thead>
+                      <tr className={accountingResultTheadRowCn}>
+                        <th className={cn(accountingResultThCn, "w-8 p-1.5")} aria-label={t("accCompWhtRowDetails")} />
+                        <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompColYearMonth")}</th>
+                        <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompStore")}</th>
+                        <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompPhPayee")}</th>
+                        <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompPhPayeeTin")}</th>
+                        <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompPhIncomeType")}</th>
+                        <th className={cn(accountingResultThRightCn, "p-1.5")}>{t("accCompWhtGrossShort")}</th>
+                        <th className={cn(accountingResultThRightCn, "p-1.5")}>{t("accCompPhWhtRate")}</th>
+                        <th className={cn(accountingResultThRightCn, "p-1.5")}>{t("accCompWhtWithheldShort")}</th>
+                        <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompPhFormHint")}</th>
+                        <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompColStatus")}</th>
+                        <th className={cn(accountingResultThCn, "p-1.5 whitespace-nowrap")}>{t("accCompSave")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {whtRows.map((row, idx) => {
+                        if (ledgerStatusFilter !== "all" && row.filing_status !== ledgerStatusFilter) return null
+                        if (!whtRowsFiltered.includes(row)) return null
+                        const expandKey = row.id != null ? `id-${row.id}` : `idx-${idx}`
+                        const expanded = Boolean(whtRowExpanded[expandKey])
+                        return (
+                          <React.Fragment key={row.id ?? `wht-${idx}`}>
+                            <tr
+                              ref={(el) => {
+                                if (row.id) whtRowRefs.current[row.id] = el
+                              }}
+                              className={accountingResultTbodyRowCn}
+                            >
+                              <td className={cn(accountingResultTdCn, "p-1 w-8")}>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0"
+                                  title={t("accCompWhtRowDetails")}
+                                  aria-expanded={expanded}
+                                  onClick={() => toggleWhtRowExpanded(expandKey)}
+                                >
+                                  <ChevronDown
+                                    className={cn("h-3.5 w-3.5 transition-transform", expanded ? "rotate-0" : "-rotate-90")}
+                                  />
+                                </Button>
+                              </td>
+                              <td className={cn(accountingResultTdCn, "p-1")}>
+                                <Input
+                                  type="date"
+                                  className={cn(accountingLedgerCompactInputCn, "min-w-[8.5rem]")}
+                                  value={row.payment_date}
+                                  onChange={(e) => patchWhtRow(idx, { payment_date: e.target.value })}
+                                />
+                              </td>
+                              <td className={cn(accountingResultTdCn, "p-1")}>
+                                <Input
+                                  className={cn(accountingLedgerCompactInputCn, "min-w-[6.5rem]")}
+                                  placeholder={t("accCompStore")}
+                                  value={row.store_name}
+                                  onChange={(e) => patchWhtRow(idx, { store_name: e.target.value })}
+                                />
+                              </td>
+                              <td className={cn(accountingResultTdCn, "p-1")}>
+                                <Input
+                                  className={cn(accountingLedgerCompactInputCn, "min-w-[8rem]")}
+                                  placeholder={t("accCompPhPayee")}
+                                  value={row.payee_name}
+                                  onChange={(e) => patchWhtRow(idx, { payee_name: e.target.value })}
+                                />
+                              </td>
+                              <td className={cn(accountingResultTdCn, "p-1")}>
+                                <Input
+                                  className={cn(accountingLedgerCompactInputCn, "min-w-[7.5rem] font-mono")}
+                                  placeholder={t("accCompPhPayeeTin")}
+                                  value={row.payee_tax_id}
+                                  onChange={(e) => patchWhtRow(idx, { payee_tax_id: e.target.value })}
+                                />
+                              </td>
+                              <td className={cn(accountingResultTdCn, "p-1")}>
+                                <Input
+                                  className={cn(accountingLedgerCompactInputCn, "min-w-[4.5rem]")}
+                                  placeholder={t("accCompPhIncomeType")}
+                                  value={row.income_type}
+                                  onChange={(e) => patchWhtRow(idx, { income_type: e.target.value })}
+                                />
+                              </td>
+                              <td className={cn(accountingResultTdRightCn, "p-1")}>
+                                <Input
+                                  className={cn(accountingLedgerCompactInputCn, "min-w-[5rem] text-right tabular-nums")}
+                                  placeholder={t("accCompPhGross")}
+                                  value={row.gross_amount}
+                                  onChange={(e) => patchWhtRow(idx, { gross_amount: e.target.value })}
+                                />
+                              </td>
+                              <td className={cn(accountingResultTdRightCn, "p-1")}>
+                                <Input
+                                  className={cn(accountingLedgerCompactInputCn, "min-w-[3.5rem] text-right tabular-nums")}
+                                  placeholder={t("accCompPhWhtRate")}
+                                  value={row.wht_rate}
+                                  onChange={(e) => patchWhtRow(idx, { wht_rate: e.target.value })}
+                                />
+                              </td>
+                              <td className={cn(accountingResultTdRightCn, "p-1")}>
+                                <Input
+                                  className={cn(accountingLedgerCompactInputCn, "min-w-[4.5rem] text-right tabular-nums")}
+                                  placeholder={t("accCompPhWhtAmt")}
+                                  value={row.wht_amount}
+                                  onChange={(e) => patchWhtRow(idx, { wht_amount: e.target.value })}
+                                />
+                              </td>
+                              <td className={cn(accountingResultTdCn, "p-1")}>
+                                <Input
+                                  className={cn(accountingLedgerCompactInputCn, "min-w-[4rem]")}
+                                  placeholder={t("accCompPhFormHint")}
+                                  value={row.form_hint}
+                                  onChange={(e) => patchWhtRow(idx, { form_hint: e.target.value })}
+                                />
+                              </td>
+                              <td className={cn(accountingResultTdCn, "p-1")}>
+                                <Select
+                                  value={row.filing_status}
+                                  onValueChange={(v) =>
+                                    patchWhtRow(idx, { filing_status: v as "draft" | "submitted" })
+                                  }
+                                >
+                                  <SelectTrigger className={cn(accountingLedgerCompactInputCn, "min-w-[5.5rem]")}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="draft">{filingStatusLabel("draft")}</SelectItem>
+                                    <SelectItem value="submitted">{filingStatusLabel("submitted")}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className={cn(accountingResultTdCn, "p-1")}>
+                                <div className="flex items-center gap-0.5 whitespace-nowrap">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-7 px-2"
+                                    title={t("accCompSave")}
+                                    onClick={() => void saveWhtRow(row)}
+                                  >
+                                    <Save className="h-3 w-3 mr-1" />
+                                    <span className="text-xs">{t("accCompSave")}</span>
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2"
+                                    title={t("whtCertPrint")}
+                                    disabled={!(Number(row.wht_amount) > 0)}
+                                    onClick={() => void printWhtCertificates([row])}
+                                  >
+                                    <Printer className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-7 px-2"
+                                    title={t("accCompDelete")}
+                                    onClick={() => void removeWht(row)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                            {expanded ? (
+                              <tr className="border-b border-border/50 bg-muted/15">
+                                <td colSpan={12} className="p-2">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                                    <div className="flex flex-col gap-0.5 text-muted-foreground justify-center px-1">
+                                      <span className="font-medium text-foreground/80">{t("accCompWhtRowDirection")}</span>
+                                      <span>
+                                        {row.direction === "inbound"
+                                          ? t("whtDirectionInbound")
+                                          : t("whtDirectionOutbound")}
+                                      </span>
+                                      {row.source_type ? (
+                                        <span className="truncate" title={row.source_type}>
+                                          {row.source_type}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <div>
+                                      <div className="mb-0.5 text-[10px] text-muted-foreground">{t("accCompPhCertNo")}</div>
+                                      <Input
+                                        className={accountingLedgerCompactInputCn}
+                                        placeholder={t("accCompPhCertNo")}
+                                        value={row.certificate_no}
+                                        onChange={(e) => patchWhtRow(idx, { certificate_no: e.target.value })}
+                                      />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                      <div className="mb-0.5 text-[10px] text-muted-foreground">{t("accCompPhMemo")}</div>
+                                      <Input
+                                        className={accountingLedgerCompactInputCn}
+                                        placeholder={t("accCompPhMemo")}
+                                        value={row.memo}
+                                        onChange={(e) => patchWhtRow(idx, { memo: e.target.value })}
+                                      />
+                                    </div>
+                                    {row.filing_status === "submitted" ? (
+                                      <div className="md:col-span-4 text-[11px] text-muted-foreground px-1">
+                                        {t("accCompSubmittedAt")}: {formatBangkokDateTime(row.submitted_at)}
+                                        {row.submitted_by ? ` · ${t("accCompSubmittedBy")}: ${row.submitted_by}` : ""}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </React.Fragment>
                         )
-                      }
-                    />
-                    <Input
-                      placeholder={t("accCompStore")}
-                      value={row.store_name}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, store_name: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <Input
-                      placeholder={t("accCompPhPayee")}
-                      value={row.payee_name}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, payee_name: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <div className="flex flex-col gap-0.5 text-[10px] text-muted-foreground justify-center">
-                      <span>
-                        {row.direction === "inbound"
-                          ? t("whtDirectionInbound")
-                          : t("whtDirectionOutbound")}
-                      </span>
-                      {row.source_type ? (
-                        <span className="truncate" title={row.source_type}>
-                          {row.source_type}
-                        </span>
+                      })}
+                      {!whtRowsFiltered.length ? (
+                        <tr>
+                          <td colSpan={12} className="p-6 text-center text-muted-foreground text-sm space-y-1">
+                            <div>{t("emp_result_empty")}</div>
+                            {showPnd1Area && whtRows.length > 0 ? (
+                              <p className="text-xs max-w-xl mx-auto leading-relaxed">
+                                {t("accCompPnd1EmptyFilteredHint").replace(
+                                  "{{n}}",
+                                  String(whtRows.length)
+                                )}
+                              </p>
+                            ) : showPnd1Area ? (
+                              <p className="text-xs max-w-xl mx-auto leading-relaxed">
+                                {t("accCompPnd1EmptyLedgerHint")}
+                              </p>
+                            ) : showPnd353Tools && !whtRows.length ? (
+                              <p className="text-xs max-w-xl mx-auto leading-relaxed">
+                                {t("accCompPnd3EmptyStoreHint")}
+                              </p>
+                            ) : null}
+                          </td>
+                        </tr>
                       ) : null}
-                    </div>
-                    <Input
-                      placeholder={t("accCompPhPayeeTin")}
-                      value={row.payee_tax_id}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, payee_tax_id: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <Input
-                      placeholder={t("accCompPhIncomeType")}
-                      value={row.income_type}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, income_type: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <Input
-                      placeholder={t("accCompPhGross")}
-                      value={row.gross_amount}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, gross_amount: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <Input
-                      placeholder={t("accCompPhWhtRate")}
-                      value={row.wht_rate}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, wht_rate: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <Input
-                      placeholder={t("accCompPhWhtAmt")}
-                      value={row.wht_amount}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, wht_amount: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <Input
-                      placeholder={t("accCompPhFormHint")}
-                      value={row.form_hint}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, form_hint: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <Input
-                      className="md:col-span-2"
-                      placeholder={t("accCompPhCertNo")}
-                      value={row.certificate_no}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, certificate_no: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <Input
-                      className="md:col-span-2"
-                      placeholder={t("accCompPhMemo")}
-                      value={row.memo}
-                      onChange={(e) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x))
-                        )
-                      }
-                    />
-                    <Select
-                      value={row.filing_status}
-                      onValueChange={(v) =>
-                        setWhtRows((prev) =>
-                          prev.map((x, i) =>
-                            i === idx ? { ...x, filing_status: v as "draft" | "submitted" } : x
-                          )
-                        )
-                      }
-                    >
-                      <SelectTrigger className="md:col-span-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="draft">{filingStatusLabel("draft")}</SelectItem>
-                        <SelectItem value="submitted">{filingStatusLabel("submitted")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {row.filing_status === "submitted" ? (
-                      <div className="md:col-span-4 text-[11px] text-muted-foreground">
-                        {t("accCompSubmittedAt")}: {formatBangkokDateTime(row.submitted_at)}
-                        {row.submitted_by ? ` · ${t("accCompSubmittedBy")}: ${row.submitted_by}` : ""}
-                      </div>
-                    ) : null}
-                    <div className="flex gap-2 md:col-span-4">
-                      <Button type="button" size="sm" onClick={() => void saveWhtRow(row)}>
-                        <Save className="h-3 w-3 mr-1" />
-                        {t("accCompSave")}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={!(Number(row.wht_amount) > 0)}
-                        onClick={() => void printWhtCertificates([row])}
-                      >
-                        <Printer className="h-3 w-3 mr-1" />
-                        {t("whtCertPrint")}
-                      </Button>
-                      <Button type="button" size="sm" variant="destructive" onClick={() => void removeWht(row)}>
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        {t("accCompDelete")}
-                      </Button>
-                    </div>
-                  </div>
-                  )
-                })}
-                {!whtRowsFiltered.length ? (
-                  <div className="p-6 text-center text-muted-foreground text-sm space-y-1">
-                    <div>{t("emp_result_empty")}</div>
-                    {showPnd1Area && whtRows.length > 0 ? (
-                      <p className="text-xs max-w-xl mx-auto leading-relaxed">
-                        {t("accCompPnd1EmptyFilteredHint").replace(
-                          "{{n}}",
-                          String(whtRows.length)
-                        )}
-                      </p>
-                    ) : showPnd1Area ? (
-                      <p className="text-xs max-w-xl mx-auto leading-relaxed">
-                        {t("accCompPnd1EmptyLedgerHint")}
-                      </p>
-                    ) : showPnd353Tools && !whtRows.length ? (
-                      <p className="text-xs max-w-xl mx-auto leading-relaxed">
-                        {t("accCompPnd3EmptyStoreHint")}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
+                    </tbody>
+                  </table>
+                </AdminTableScroll>
                 </>
                 )}
               </CardContent>
