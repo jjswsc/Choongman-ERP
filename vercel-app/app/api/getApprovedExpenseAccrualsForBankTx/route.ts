@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch, type PayeeMemoMatchQuality } from '@/lib/expense-accrual-bank-memo-match'
-import { isSettledExpensePayment } from '@/lib/expense-accrual-settlement'
+import { settledPaidAbsFromPayableRows, storesMatchForExpenseBankLink } from '@/lib/expense-accrual-settlement'
+import { isOfficeStore } from '@/lib/permissions'
 import {
   accrualDateMatchesBankDate,
   accrualDateWithinBankWindow,
@@ -134,14 +135,27 @@ export async function GET(request: NextRequest) {
         effectiveStoreFilter = String(accRows?.[0]?.store || '').trim()
       }
     }
+    if (!effectiveStoreFilter) {
+      return NextResponse.json(
+        {
+          success: true,
+          list: [],
+          message: '통장 거래·계좌에 매장이 없어 지급예정 후보를 좁힐 수 없습니다. 통장 행 매장 또는 계좌 매장을 지정해 주세요.',
+        },
+        { headers }
+      )
+    }
 
     const linkedRows = (await supabaseSelectFilter(
       'payable_transactions',
       `bank_transaction_id=eq.${bankTransactionId}`,
-      { select: 'expense_accrual_id', limit: 1 }
-    )) as { expense_accrual_id?: number | null }[] | null
-    if ((linkedRows || []).some((r) => Number(r.expense_accrual_id || 0) > 0)) {
-      return NextResponse.json({ success: true, list: [], message: '이미 지급예정과 연결된 통장 거래입니다.' }, { headers })
+      { select: 'id,expense_accrual_id', limit: 5 }
+    )) as { id?: number; expense_accrual_id?: number | null }[] | null
+    if ((linkedRows || []).length > 0) {
+      return NextResponse.json(
+        { success: true, list: [], message: '이미 지출·매입과 연결된 통장 거래입니다.' },
+        { headers }
+      )
     }
 
     const bankAmount = parseMoneyAmount(bankRow.amount)
@@ -193,7 +207,7 @@ export async function GET(request: NextRequest) {
     }
 
     const accrualIds = (accrualRows || []).map((r) => Number(r.id || 0)).filter((n) => n > 0)
-    const paidByAccrual = new Map<number, number>()
+    const payableByAccrual: PayableTxRow[] = []
     for (const chunk of chunkIdsForInFilter(accrualIds)) {
       if (chunk.length === 0) continue
       const payableRows = (await supabaseSelectFilter(
@@ -204,13 +218,40 @@ export async function GET(request: NextRequest) {
           limit: 10000,
         }
       )) as PayableTxRow[] | null
-      for (const tx of payableRows || []) {
-        const accrualId = Number(tx.expense_accrual_id || 0)
-        if (!accrualId) continue
-        if (!isSettledExpensePayment(tx)) continue
-        const amt = Number(tx.amount || 0)
-        paidByAccrual.set(accrualId, (paidByAccrual.get(accrualId) || 0) + Math.abs(amt))
+      for (const tx of payableRows || []) payableByAccrual.push(tx)
+    }
+
+    // 그림자(internal) 통장 note 조회 — 실거래 연결 잔액 계산에서 제외
+    const linkedBankIds = [
+      ...new Set(
+        payableByAccrual
+          .map((tx) => Number(tx.bank_transaction_id || 0))
+          .filter((id) => id > 0)
+      ),
+    ]
+    const bankNoteById = new Map<number, string>()
+    for (const chunk of chunkIdsForInFilter(linkedBankIds)) {
+      if (chunk.length === 0) continue
+      const noteRows = (await supabaseSelectFilter('bank_transactions', `id=in.(${chunk.join(',')})`, {
+        select: 'id,note',
+        limit: 5000,
+      })) as { id?: number; note?: string | null }[] | null
+      for (const b of noteRows || []) {
+        const id = Number(b.id || 0)
+        if (id > 0) bankNoteById.set(id, String(b.note || ''))
       }
+    }
+
+    const paidByAccrual = new Map<number, number>()
+    for (const tx of payableByAccrual) {
+      const accrualId = Number(tx.expense_accrual_id || 0)
+      if (!accrualId) continue
+      const add = settledPaidAbsFromPayableRows([tx], {
+        bankNoteById,
+        excludeInternalBank: true,
+      })
+      if (add <= 0) continue
+      paidByAccrual.set(accrualId, (paidByAccrual.get(accrualId) || 0) + add)
     }
 
     const rawList = (accrualRows || [])
@@ -276,11 +317,11 @@ export async function GET(request: NextRequest) {
           })
       )
 
-    // 통장 매장과 같은 지급예정만 (금액 일치만으로 타 매장·본사 건 노출 금지)
+    // 통장 매장과 같은 지급예정만 (오피스 계열 HQ↔CM Office 는 동일 취급)
     const storeScopedList = filterExpenseAccrualsByBankStore(
       rawList,
       effectiveStoreFilter,
-      storesMatchForGradeLookup
+      (a, b) => storesMatchForExpenseBankLink(a, b, storesMatchForGradeLookup, isOfficeStore)
     )
 
     const codesForVendor = new Set(

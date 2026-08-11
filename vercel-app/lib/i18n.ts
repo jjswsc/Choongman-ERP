@@ -4275,7 +4275,7 @@ export const i18n = {
     expensePlanStatusPlanned: '대기',
     expensePlanStatusPartial: '부분',
     expensePlanPickEmptyForBankLink:
-      '통장 금액과 잔액이 같은 지급예정이 없습니다. 지출검색에서 같은 금액·매장 건이 있는지 확인하세요. 없으면 「신규 지출 등록」으로 만들고, 이미 paid·다른 통장 연결이면 연결할 수 없습니다.',
+      '통장 금액과 잔액이 같은 지급예정이 없습니다. 지출검색에서 같은 금액·매장 건이 있는지 확인하세요. 지출관리에서 이미 「완료」여도 그림자 통장만 붙어 있으면 여기서 실거래 통장으로 다시 연결할 수 있습니다. 없으면 「신규 지출 등록」을 쓰세요.',
     expensePlanPickPlannedNeedsApproval:
       '선택한 건이 아직 승인 대기입니다. 저장 시 자동 승인됩니다. 본사(Office·HQ) 건은 Director·CEO·HR·Secretary 승인 권한이 필요합니다.',
     expensePlanDeletedCount: '{count}건 삭제되었습니다.',
@@ -4290,6 +4290,8 @@ export const i18n = {
     bankTxNotFound: '통장 거래를 찾을 수 없습니다.',
     withdrawOnlyAllowed: '출금 거래만 처리할 수 있습니다.',
     bankTxAlreadyLinked: '이미 연결된 통장 거래입니다.',
+    bankTxStoreRequiredForExpenseLink:
+      '통장 거래·계좌에 매장이 없어 지급예정 후보를 좁힐 수 없습니다. 통장 행 매장 또는 계좌 매장을 지정해 주세요.',
     bankTxInvalid: '통장 거래 정보가 올바르지 않습니다.',
     expenseAccrualCreateFailed: '지출 발생 등록에 실패했습니다.',
     expenseAccrualRegistered: '지출 발생으로 등록되었습니다.',
@@ -12100,7 +12102,7 @@ Only matters the employee must handle personally on a working day:
     expensePlanStatusPlanned: 'Pending',
     expensePlanStatusPartial: 'Partial',
     expensePlanPickEmptyForBankLink:
-      'No payment plan with the same remaining balance as this withdrawal. Check Expense Search for the same amount/store, use “Register new expense” if missing, or note that paid/already-linked plans cannot be linked again.',
+      'No payment plan with the same remaining balance. Check Expense Search for the same amount/store. If Expense shows Done but only an internal shadow bank was attached, you can still link the real bank row here. Otherwise use “Register new expense”.',
     expensePlanPickPlannedNeedsApproval:
       'Selected item is still pending approval. Saving will auto-approve. HQ/Office items require Director·CEO·HR·Secretary approval rights.',
     expensePlanDeletedCount: '{count} item(s) deleted.',
@@ -12115,6 +12117,8 @@ Only matters the employee must handle personally on a working day:
     bankTxNotFound: 'Bank transaction not found.',
     withdrawOnlyAllowed: 'Only withdraw transactions can be processed.',
     bankTxAlreadyLinked: 'This bank transaction is already linked.',
+    bankTxStoreRequiredForExpenseLink:
+      'Store is missing on this bank row/account, so payment-plan candidates cannot be scoped. Set the store on the bank row or account first.',
     bankTxInvalid: 'Invalid bank transaction data.',
     expenseAccrualCreateFailed: 'Failed to register expense accrual.',
     expenseAccrualRegistered: 'Registered as expense accrual.',
@@ -19396,7 +19400,7 @@ orderItemQty: 'จำนวน',
     expensePlanStatusPlanned: 'รอ',
     expensePlanStatusPartial: 'บางส่วน',
     expensePlanPickEmptyForBankLink:
-      'ไม่พบแผนจ่ายที่ยอดคงเหลือตรงกับรายการถอนนี้ ตรวจในค้นหาค่าใช้จ่ายว่ามียอด/สาขาเดียวกันหรือยัง ถ้าไม่มีให้ใช้「ลงทะเบียนค่าใช้จ่ายใหม่」 รายการที่จ่ายแล้วหรือเชื่อมธนาคารอื่นแล้วจะเชื่อมซ้ำไม่ได้ครับ',
+      'ไม่พบแผนจ่ายที่ยอดคงเหลือตรงกับรายการถอนนี้ ตรวจในค้นหาค่าใช้จ่ายว่ามียอด/สาขาเดียวกันหรือยัง แม้สถานะในจัดการค่าใช้จ่ายเป็นเสร็จแล้ว ถ้าผูกแค่บัญชีเงา (internal) ยังเชื่อมบัญชีจริงได้ที่นี่ ถ้าไม่มีให้ใช้「ลงทะเบียนค่าใช้จ่ายใหม่」ครับ',
     expensePlanPickPlannedNeedsApproval:
       'รายการที่เลือกยังรออนุมัติ การบันทึกจะอนุมัติอัตโนมัติ รายการสำนักงานใหญ่ต้องมีสิทธิ์ Director·CEO·HR·Secretary',
     expensePlanDeletedCount: 'ลบแล้ว {count} รายการ',
@@ -19411,6 +19415,8 @@ orderItemQty: 'จำนวน',
     bankTxNotFound: 'ไม่พบรายการธนาคาร',
     withdrawOnlyAllowed: 'ดำเนินการได้เฉพาะรายการถอนเงิน',
     bankTxAlreadyLinked: 'รายการธนาคารนี้ถูกเชื่อมโยงแล้ว',
+    bankTxStoreRequiredForExpenseLink:
+      'รายการ/บัญชีธนาคารยังไม่มีสาขา จึงจำกัดรายการแผนจ่ายไม่ได้ กรุณาระบุสาขาในรายการหรือบัญชีธนาคารก่อนครับ',
     bankTxInvalid: 'ข้อมูลรายการธนาคารไม่ถูกต้อง',
     expenseAccrualCreateFailed: 'สร้างรายการค้างจ่ายไม่สำเร็จ',
     expenseAccrualRegistered: 'ลงทะเบียนเป็นรายการค้างจ่ายแล้ว',

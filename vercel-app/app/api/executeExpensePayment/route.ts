@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { postPayableSettlementJournal } from '@/lib/accounting-posting'
+import { deleteJournalEntriesBySource, postPayableSettlementJournal } from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch } from '@/lib/expense-accrual-bank-memo-match'
 import {
-  isOrphanPaidExpenseAccrualStatus,
+  isRealBankOrPettySettlement,
   isSettledExpensePayment,
   settledPaidAbsFromPayableRows,
 } from '@/lib/expense-accrual-settlement'
@@ -28,6 +28,7 @@ import {
   INTERNAL_BANK_SOURCE_MARKER,
   bankCategoryForWithdrawalCategory,
   composeBankNoteForExpenseAccrualLink,
+  isExpenseInternalBankNote,
 } from '@/lib/bank-transaction-note-meta'
 import { allocateExpenseDocumentNo } from '@/lib/expense-document-no-server'
 
@@ -232,39 +233,33 @@ export async function POST(request: NextRequest) {
     }[] | null
 
     const settledExisting = (existingPaymentRows || []).filter((row) => isSettledExpensePayment(row))
-    if (settledExisting.length > 0) {
-      return NextResponse.json(
-        { success: false, message: '이미 미지급에 지급(Payment) 행이 등록된 지급예정입니다. 중복 집행할 수 없습니다.' },
-        { status: 400, headers }
-      )
-    }
-
-    // 통장·패티 없이 paid 만 찍힌 고아 건은 재연결 허용. 고아 Payment 행은 정리.
-    if (accrualStatus === 'paid' || accrualStatus === 'done') {
-      if (!isOrphanPaidExpenseAccrualStatus(accrualStatus, settledExisting.length > 0)) {
-        return NextResponse.json({ success: false, message: '이미 지급 완료된 건입니다.' }, { status: 400, headers })
+    const settledBankIds = [
+      ...new Set(settledExisting.map((r) => Number(r.bank_transaction_id || 0)).filter((id) => id > 0)),
+    ]
+    const bankNoteById = new Map<number, string>()
+    if (settledBankIds.length > 0) {
+      const noteRows = (await supabaseSelectFilter(
+        'bank_transactions',
+        `id=in.(${settledBankIds.join(',')})`,
+        { select: 'id,note', limit: 100 }
+      )) as { id?: number; note?: string | null }[] | null
+      for (const b of noteRows || []) {
+        const id = Number(b.id || 0)
+        if (id > 0) bankNoteById.set(id, String(b.note || ''))
       }
+    }
+    // 그림자(internal) 통장만 있으면 재연결 허용. 실정산이 있어도 잔액=요청액이면 잔액분 집행 허용.
+    if (accrualStatus === 'paid' || accrualStatus === 'done') {
+      /* orphan / internal-only / remaining left → continue; 잔액 가드에서 차단 */
     } else if (accrualStatus !== 'approved' && accrualStatus !== 'partial') {
       return NextResponse.json({ success: false, message: '승인 상태를 확인할 수 없습니다.' }, { status: 400, headers })
     }
 
-    for (const row of existingPaymentRows || []) {
-      const id = Number(row.id || 0)
-      if (id <= 0 || isSettledExpensePayment(row)) continue
-      await supabaseDeleteByFilter('payable_transactions', `id=eq.${id}`)
-    }
-
-    const paidRows = (await supabaseSelectFilter(
-      'payable_transactions',
-      `expense_accrual_id=eq.${expenseAccrualId}`,
-      { select: 'amount,expense_accrual_id,bank_transaction_id,petty_cash_transaction_id', limit: 5000 }
-    )) as {
-      amount?: number
-      expense_accrual_id?: number
-      bank_transaction_id?: number | null
-      petty_cash_transaction_id?: number | null
-    }[] | null
-    const paidAmount = settledPaidAbsFromPayableRows(paidRows || [])
+    // 잔액은 실거래 정산만 차감(그림자 통장 제외). cleanup은 검증 통과 후로 미룸(실패 시 데이터 손실 방지).
+    const paidAmount = settledPaidAbsFromPayableRows(existingPaymentRows || [], {
+      bankNoteById,
+      excludeInternalBank: true,
+    })
     const wht = Math.max(0, Math.abs(Number(source.withholding_tax_amount ?? 0) || 0))
     const plannedAmount = expenseAccrualNetPayable(parseMoneyAmount(source.amount), wht)
     const remaining = Math.max(0, plannedAmount - paidAmount)
@@ -277,6 +272,8 @@ export async function POST(request: NextRequest) {
 
     let bankId: number | null = null
     let pettyId: number | null = null
+    /** 실거래(기존) 통장 연결 시에만 그림자 Payment cleanup */
+    let linkedExistingBankId: number | null = null
 
     const decoded = decodePayeeCode(source.payee_code)
     const payeeCode = decoded.payeeCode
@@ -318,6 +315,7 @@ export async function POST(request: NextRequest) {
 
     if (paymentMethod === 'bank') {
       const existingBankId = bankTransactionId != null ? Number(bankTransactionId) : null
+      if (existingBankId && !isNaN(existingBankId)) linkedExistingBankId = existingBankId
 
       if (withdrawalCategory === 'transfer_to_petty') {
         const pettyStore = store || String(source.store_name || '').trim()
@@ -642,6 +640,35 @@ export async function POST(request: NextRequest) {
           })
         } catch (postingErr) {
           console.error('executeExpensePayment petty posting:', postingErr)
+        }
+      }
+    }
+
+    // 실거래 통장·패티 연결이 확정된 뒤에만 고아·그림자(internal) Payment 정리
+    const shouldClearShadow =
+      (linkedExistingBankId != null && Number(bankId || 0) === linkedExistingBankId) || Number(pettyId || 0) > 0
+    if (shouldClearShadow) {
+      for (const row of existingPaymentRows || []) {
+        const id = Number(row.id || 0)
+        if (id <= 0) continue
+        if (isSettledExpensePayment(row) && isRealBankOrPettySettlement(row, bankNoteById)) continue
+        const internalBankId = Number(row.bank_transaction_id || 0)
+        await supabaseDeleteByFilter('payable_transactions', `id=eq.${id}`)
+        if (
+          internalBankId > 0 &&
+          isExpenseInternalBankNote(bankNoteById.get(internalBankId) || '') &&
+          internalBankId !== Number(bankId || 0)
+        ) {
+          try {
+            await deleteJournalEntriesBySource('bank_transaction', internalBankId)
+          } catch (e) {
+            console.warn('executeExpensePayment clear internal bank journal:', e)
+          }
+          try {
+            await supabaseDeleteByFilter('bank_transactions', `id=eq.${internalBankId}`)
+          } catch (e) {
+            console.warn('executeExpensePayment clear internal bank row:', e)
+          }
         }
       }
     }

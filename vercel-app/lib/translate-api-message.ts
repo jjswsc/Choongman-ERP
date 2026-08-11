@@ -148,6 +148,9 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "출금 거래만 연결할 수 있습니다.": "cardApiWithdrawOnly",
   "이미 연결된 통장 거래입니다.": "bankTxAlreadyLinked",
   "이미 지급예정과 연결된 통장 거래입니다.": "bankTxAlreadyLinked",
+  "이미 지출·매입과 연결된 통장 거래입니다.": "bankTxAlreadyLinked",
+  "통장 거래·계좌에 매장이 없어 지급예정 후보를 좁힐 수 없습니다. 통장 행 매장 또는 계좌 매장을 지정해 주세요.":
+    "bankTxStoreRequiredForExpenseLink",
   "통장 거래 정보가 올바르지 않습니다.": "bankTxInvalid",
   "지출 발생 등록에 실패했습니다.": "expenseAccrualCreateFailed",
   "지출 발생으로 등록되었습니다.": "expenseAccrualRegistered",

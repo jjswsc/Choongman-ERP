@@ -75,9 +75,16 @@ settled AS (
     pt.expense_accrual_id,
     sum(abs(pt.amount::numeric)) AS settled_abs
   FROM payable_transactions pt
+  LEFT JOIN bank_transactions bt ON bt.id = pt.bank_transaction_id
   WHERE pt.expense_accrual_id IN (SELECT id FROM amount_hits)
     AND pt.amount < 0
-    AND (coalesce(pt.bank_transaction_id, 0) > 0 OR coalesce(pt.petty_cash_transaction_id, 0) > 0)
+    AND (
+      coalesce(pt.petty_cash_transaction_id, 0) > 0
+      OR (
+        coalesce(pt.bank_transaction_id, 0) > 0
+        AND coalesce(bt.note, '') NOT ILIKE '%source:expense_internal%'
+      )
+    )
   GROUP BY pt.expense_accrual_id
 ),
 with_remaining AS (

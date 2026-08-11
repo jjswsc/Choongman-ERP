@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
+import { settledPaidAbsFromPayableRows } from '@/lib/expense-accrual-settlement'
+import { chunkIdsForInFilter } from '@/lib/expense-accrual-bank-link-candidates'
 import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { buildExpenseAccrualPlanDateFilters } from '@/lib/expense-accrual-plan-filters'
@@ -71,6 +73,8 @@ type PayableTxRow = {
   trans_date?: string
   memo?: string
   expense_accrual_id?: number
+  bank_transaction_id?: number | null
+  petty_cash_transaction_id?: number | null
 }
 
 function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdrawalCategory: string } {
@@ -262,18 +266,42 @@ export async function GET(request: NextRequest) {
     const [accrualRows, payableRows] = await Promise.all([
       fetchExpenseAccrualsForPlanRange(startStr, endStr, tenantScope),
       supabaseSelectFilter('payable_transactions', appendSaasTenantFilter('id=gt.0', tenantScope, 'payable_transactions'), {
-        select: 'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,expense_accrual_id',
+        select: 'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,expense_accrual_id,bank_transaction_id,petty_cash_transaction_id',
         order: 'trans_date.desc',
         limit: 10000,
       }) as Promise<PayableTxRow[]>,
     ])
 
+    const bankIds = [
+      ...new Set(
+        (payableRows || [])
+          .map((tx) => Number(tx.bank_transaction_id || 0))
+          .filter((id) => id > 0)
+      ),
+    ]
+    const bankNoteById = new Map<number, string>()
+    for (const chunk of chunkIdsForInFilter(bankIds, 80)) {
+      if (chunk.length === 0) continue
+      const noteRows = (await supabaseSelectFilter('bank_transactions', `id=in.(${chunk.join(',')})`, {
+        select: 'id,note',
+        limit: 5000,
+      })) as { id?: number; note?: string | null }[] | null
+      for (const b of noteRows || []) {
+        const id = Number(b.id || 0)
+        if (id > 0) bankNoteById.set(id, String(b.note || ''))
+      }
+    }
+
     const paymentByAccrual = new Map<number, number>()
     for (const tx of payableRows || []) {
       const accrualId = Number(tx.expense_accrual_id || 0)
       if (!accrualId) continue
-      const amt = Number(tx.amount || 0)
-      if (amt < 0) paymentByAccrual.set(accrualId, (paymentByAccrual.get(accrualId) || 0) + Math.abs(amt))
+      const add = settledPaidAbsFromPayableRows([tx], {
+        bankNoteById,
+        excludeInternalBank: true,
+      })
+      if (add <= 0) continue
+      paymentByAccrual.set(accrualId, (paymentByAccrual.get(accrualId) || 0) + add)
     }
 
     const scopedAccruals = (accrualRows || []).filter((r) => {
@@ -337,7 +365,9 @@ export async function GET(request: NextRequest) {
             })()
             if (status === 'rejected') return 'rejected'
             if (remaining <= 0) return 'paid'
-            return status === 'approved' ? 'approved' : 'planned'
+            // paid 이지만 그림자(internal) 통장만 있으면 잔액 남음 → 지급대기로 표시
+            if (status === 'planned') return 'planned'
+            return 'approved'
           })(),
           approvedBy: r.approved_by || null,
           approvedAt: r.approved_at || null,
