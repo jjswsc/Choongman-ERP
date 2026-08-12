@@ -1,10 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import { MapPin } from "lucide-react"
 import {
   adminTabsContentCn,
   adminTabsListRowCn,
-  adminTabsRootCn,
+  adminTabsRootScrollableCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
@@ -20,10 +21,12 @@ import { VisitTodayTab } from "@/components/visit-stats/visit-today-tab"
 export default function Page() {
   const { lang } = useLang()
   const t = useT(lang)
+  /** 제어 탭: 당일 탭 활성 여부를 ErpTabActive에 전달 → 숨은 탭에서 Recharts 0폭 측정 방지 */
+  const [tab, setTab] = useState("list")
 
   return (
     <StorePageShell icon={MapPin} title={t("adminStoreVisit")} subtitle={t("visit_page_title")}>
-      <Tabs defaultValue="list" className={adminTabsRootCn}>
+      <Tabs value={tab} onValueChange={setTab} className={adminTabsRootScrollableCn}>
         <AdminTabsBarWithHelp>
           <TabsList className={adminTabsListRowCn}>
             <TabsTrigger value="list" className={adminTabsTriggerCn}>

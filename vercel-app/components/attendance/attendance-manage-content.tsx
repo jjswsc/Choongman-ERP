@@ -260,22 +260,29 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
   ])
 
   /** 당일·주간 스케줄: 운영 매장만(본사 Office 제외). 출퇴근 기록 탭은 pos 전체도 쓸 수 있으나 기본 목록은 동일 기준 */
-  const { posStores, users: usersMap, staffByStore } = useStoreList()
+  const { posStores, users: usersMap, staffByStore, resolveStoreKey } = useStoreList()
   React.useEffect(() => {
     const st = filterOperationalStorePickerOptions(
       (posStores || []).filter((s) => s && String(s).trim() && s !== "All")
     )
     setStores(isOffice ? ["All", ...st] : ["All", auth?.store || ""].filter(Boolean))
     if (!isOffice && auth?.store) {
-      setStoreFilter(auth.store)
-      setTodayStore(auth.store)
-      setScheduleStore(auth.store)
+      const resolved = resolveStoreKey(auth.store) || auth.store
+      setStoreFilter(resolved)
+      setTodayStore(resolved)
+      setScheduleStore(resolved)
     } else if (isOffice && st.length > 0) {
       const firstStore = st[0]
-      setTodayStore((prev) => (prev && st.includes(prev) ? prev : firstStore))
+      setTodayStore((prev) => {
+        if (prev === "All") return prev
+        if (prev && st.includes(prev)) return prev
+        const resolved = prev ? resolveStoreKey(prev) : ""
+        if (resolved && st.includes(resolved)) return resolved
+        return firstStore
+      })
       setScheduleStore((prev) => (prev && st.includes(prev) ? prev : firstStore))
     }
-  }, [auth?.store, isOffice, posStores])
+  }, [auth?.store, isOffice, posStores, resolveStoreKey])
 
   React.useEffect(() => {
     if (storeFilter === "All" || !storeFilter) {
@@ -1230,20 +1237,23 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
           </TabsContent>
 
           <TabsContent value="today" className={cn(adminTabsContentFlushCn, "space-y-3")}>
-            <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3">
               <label className="text-xs font-semibold">{t("stockFilterStore")}</label>
-              <Select value={todayStore} onValueChange={setTodayStore}>
-                <SelectTrigger className="h-9 w-40 text-xs">
+              <Select value={todayStore || undefined} onValueChange={setTodayStore}>
+                <SelectTrigger className="h-9 w-full max-w-[220px] text-xs sm:w-40">
                   <SelectValue placeholder={t("scheduleStorePlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
+                  {isOffice ? (
+                    <SelectItem value="All">{t("store_all_stores") || "All"}</SelectItem>
+                  ) : null}
                   {stores.filter((s) => s !== "All").map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="max-w-4xl">
+            <div className="w-full max-w-4xl">
               <RealtimeWork
                 storeFilter={todayStore || stores.find((s) => s !== "All") || ""}
                 storeList={stores.filter((s) => s !== "All")}

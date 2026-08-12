@@ -22,9 +22,11 @@ import {
   getTodayMyVisits,
   checkUserVisitStatus,
   submitStoreVisit,
+  getStoreVisitTodaySnapshot,
   type TodayVisitItem,
+  type StoreVisitTodaySnapshotActive,
 } from "@/lib/api-client"
-import { translateVisitType } from "@/lib/visit-i18n"
+import { translateVisitType, translateVisitPurpose } from "@/lib/visit-i18n"
 import { isOfficeRole, isOfficeStore, isSupervisorRole } from "@/lib/permissions"
 import { AttendanceQrScannerDialog } from "@/components/attendance/attendance-qr-scanner-dialog"
 import { MapPin, Building2, Target, LogIn, LogOut } from "lucide-react"
@@ -48,7 +50,10 @@ export function VisitTab() {
   const [purposeEtcReason, setPurposeEtcReason] = useState("")
   const [activeVisit, setActiveVisit] = useState<{ storeName: string; purpose?: string } | null>(null)
   const [visitLog, setVisitLog] = useState<TodayVisitItem[]>([])
-  const [loading] = useState(false)
+  const [teamActive, setTeamActive] = useState<StoreVisitTodaySnapshotActive[]>([])
+  const [teamTodayYmd, setTeamTodayYmd] = useState("")
+  const [teamLoading, setTeamLoading] = useState(false)
+  const [logLoading, setLogLoading] = useState(false)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const pendingVisitTypeRef = useRef<"방문시작" | "방문종료" | null>(null)
   const [qrScanOpen, setQrScanOpen] = useState(false)
@@ -91,8 +96,27 @@ export function VisitTab() {
         setActiveVisit(null)
       }
     })
-    getTodayMyVisits({ userName: auth.user }).then(setVisitLog)
-  }, [auth?.user])
+    setLogLoading(true)
+    getTodayMyVisits({ userName: auth.user })
+      .then(setVisitLog)
+      .catch(() => setVisitLog([]))
+      .finally(() => setLogLoading(false))
+
+    setTeamLoading(true)
+    getStoreVisitTodaySnapshot({
+      userStore: auth.store || "",
+      userRole: auth.role || "",
+    })
+      .then((data) => {
+        setTeamTodayYmd(data.today || "")
+        setTeamActive(Array.isArray(data.active) ? data.active : [])
+      })
+      .catch(() => {
+        setTeamActive([])
+        setTeamTodayYmd("")
+      })
+      .finally(() => setTeamLoading(false))
+  }, [auth?.user, auth?.store, auth?.role])
 
   useEffect(() => {
     if (auth?.user) loadStatusAndLog()
@@ -301,11 +325,54 @@ export function VisitTab() {
       <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center gap-2 pb-3">
           <CardTitle className="text-base font-semibold">
+            {t("tab_visit_today") || t("todayVisitLog") || "Today"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {teamTodayYmd ? (
+            <p className="text-[11px] text-muted-foreground">
+              {t("visit_today_date_label")}: <span className="font-medium text-foreground">{teamTodayYmd}</span>
+            </p>
+          ) : null}
+          {teamLoading ? (
+            <div className="py-4 text-center text-sm text-muted-foreground">{t("loading")}</div>
+          ) : teamActive.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-1">{t("visit_today_active_empty")}</p>
+          ) : (
+            <div className="divide-y divide-border/60 rounded-lg border border-border/60">
+              {teamActive.map((a) => (
+                <div key={`${a.name}-${a.store}-${a.startedAt}`} className="space-y-0.5 px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold">{a.name}</p>
+                    <span className="text-[11px] text-primary font-medium">{a.store}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {translateVisitPurpose(a.purpose, t) || "-"}
+                    {" · "}
+                    {a.startedAt
+                      ? new Date(a.startedAt).toLocaleTimeString(undefined, {
+                          timeZone: "Asia/Bangkok",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: false,
+                        })
+                      : "-"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-sm">
+        <CardHeader className="flex flex-row items-center gap-2 pb-3">
+          <CardTitle className="text-base font-semibold">
             {t("todayVisitLog") || "Today's Visit Log"}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {logLoading ? (
             <div className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
           ) : visitLog.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border py-8 text-center">
@@ -314,7 +381,7 @@ export function VisitTab() {
               </p>
             </div>
           ) : (
-            <AdminTableScroll hint={false}>
+            <AdminTableScroll hint={false} lockViewport={false}>
               <table className="w-full min-w-[280px] border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">

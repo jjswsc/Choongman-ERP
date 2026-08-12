@@ -1,10 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { Megaphone, Send, History, UserX } from "lucide-react"
+import { Megaphone, Send, History, UserX, BellRing } from "lucide-react"
 import { AdminNoticeCompose } from "@/components/erp/admin-notice-compose"
 import { AdminNoticeHistory } from "@/components/erp/admin-notice-history"
 import { AdminNoticeUnread } from "@/components/erp/admin-notice-unread"
+import { AdminNoticeAuto } from "@/components/erp/admin-notice-auto"
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import {
   adminTabsContentCn,
@@ -18,7 +19,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 
-const NOTICE_TABS = ["compose", "history", "unread"] as const
+const NOTICE_TABS = ["compose", "history", "unread", "auto"] as const
 
 export function NoticeAdminWorkspace() {
   const { lang } = useLang()
@@ -45,6 +46,10 @@ export function NoticeAdminWorkspace() {
             <UserX className={adminTabsIconCn} aria-hidden />
             {t("noticeUnreadTabTitle")}
           </TabsTrigger>
+          <TabsTrigger value="auto" className={adminTabsTriggerCn}>
+            <BellRing className={adminTabsIconCn} aria-hidden />
+            {t("noticeAutoTabTitle")}
+          </TabsTrigger>
         </TabsList>
       </AdminTabsBarWithHelp>
       <TabsContent value="compose" className={adminTabsContentCn}>
@@ -57,6 +62,9 @@ export function NoticeAdminWorkspace() {
       </TabsContent>
       <TabsContent value="unread" className={adminTabsContentCn}>
         <AdminNoticeUnread />
+      </TabsContent>
+      <TabsContent value="auto" className={adminTabsContentCn}>
+        <AdminNoticeAuto />
       </TabsContent>
     </Tabs>
   )

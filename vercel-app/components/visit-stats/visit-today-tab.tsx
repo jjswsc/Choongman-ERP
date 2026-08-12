@@ -21,7 +21,7 @@ import {
   AdminTableScroll,
 } from "@/components/erp/admin-responsive-list"
 import { attendanceBusinessDayBoundsMs } from "@/lib/attendance-utils"
-import { useErpPolling } from "@/lib/erp-page-visibility"
+import { useErpPolling, useErpTabActive } from "@/lib/erp-page-visibility"
 
 const TZ = "Asia/Bangkok"
 const POLL_MS = 60_000
@@ -65,6 +65,7 @@ export function VisitTodayTab() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const tabActive = useErpTabActive()
   const [tick, setTick] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +74,8 @@ export function VisitTodayTab() {
   const [segments, setSegments] = useState<StoreVisitTodaySnapshotSegment[]>([])
   const [byStore, setByStore] = useState<{ store: string; activeCount: number; segmentsTodayCount: number }[]>([])
   const [autoRefresh, setAutoRefresh] = useState(false)
+  /** 탭이 보인 뒤에만 차트 마운트 — 숨은 탭(display:none)에서 Recharts 폭 0 고착 방지(폰에서 특히) */
+  const [chartsReady, setChartsReady] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -100,6 +103,15 @@ export function VisitTodayTab() {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (!tabActive) {
+      setChartsReady(false)
+      return
+    }
+    const id = window.requestAnimationFrame(() => setChartsReady(true))
+    return () => window.cancelAnimationFrame(id)
+  }, [tabActive])
 
   useErpPolling(load, POLL_MS, { enabled: autoRefresh, refetchOnActivate: true })
 
@@ -252,8 +264,9 @@ export function VisitTodayTab() {
         </Card>
       ) : null}
 
-      {!loading && storeChartData.length > 0 ? (
+      {!loading && chartsReady && storeChartData.length > 0 ? (
         <RankedBarChart
+          key={`store-chart-${todayYmd}-${storeChartData.length}`}
           title={t("visit_today_store_chart_title")}
           color="#2563eb"
           data={storeChartData}
@@ -272,7 +285,7 @@ export function VisitTodayTab() {
           ) : (
             <>
             <AdminDesktopOnly>
-            <AdminTableScroll hint={false}>
+            <AdminTableScroll hint={false} lockViewport={false}>
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="border-b bg-muted/50">
@@ -359,47 +372,71 @@ export function VisitTodayTab() {
             <p className="text-sm text-muted-foreground py-2">{t("visit_today_segments_empty")}</p>
           ) : (
             <>
-              <div className="overflow-x-auto pb-1">
-                <div className="min-w-[720px] flex h-6 items-end justify-between border-b border-border/80 px-1 text-[10px] text-muted-foreground">
-                  {businessWindowTickLabels.map((lb, i) => (
-                    <span key={i} className="tabular-nums">
-                      {lb}
-                    </span>
-                  ))}
+              <AdminMobileOnly className="divide-y divide-border/60 rounded-lg border border-border/60">
+                {segments.map((seg, idx) => (
+                  <div key={`m-${seg.name}-${seg.startAt}-${idx}`} className="space-y-1 px-3 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold">{seg.name}</p>
+                      {seg.ongoing ? (
+                        <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                          {t("visit_today_ongoing")}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {seg.store} · {translateVisitPurpose(seg.purpose, t) || "-"}
+                    </p>
+                    <p className="text-[11px] tabular-nums text-muted-foreground">
+                      {formatTimeBangkok(seg.startAt)}
+                      {" – "}
+                      {seg.ongoing ? t("visit_today_ongoing") : seg.endAt ? formatTimeBangkok(seg.endAt) : "-"}
+                    </p>
+                  </div>
+                ))}
+              </AdminMobileOnly>
+              <AdminDesktopOnly className="space-y-3">
+                <div className="overflow-x-auto pb-1">
+                  <div className="min-w-[720px] flex h-6 items-end justify-between border-b border-border/80 px-1 text-[10px] text-muted-foreground">
+                    {businessWindowTickLabels.map((lb, i) => (
+                      <span key={i} className="tabular-nums">
+                        {lb}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-2 overflow-x-auto">
-                <div className="min-w-[720px] space-y-2">
-                  {segments.map((seg, idx) => {
-                    const bar = todayYmd ? clipSegmentToBusinessWindow(seg, todayYmd, now) : null
-                    return (
-                      <div key={`${seg.name}-${seg.startAt}-${idx}`} className="grid grid-cols-[160px_1fr] gap-2 items-center text-xs">
-                        <div className="min-w-0 truncate pr-1" title={`${seg.name} · ${seg.store} · ${seg.purpose}`}>
-                          <span className="font-medium">{seg.name}</span>
-                          <span className="text-muted-foreground block truncate text-[10px]">{seg.store}</span>
-                          <span className="text-foreground/90 block truncate text-[10px] font-medium">
-                            {translateVisitPurpose(seg.purpose, t) || "-"}
-                          </span>
+                <div className="space-y-2 overflow-x-auto">
+                  <div className="min-w-[720px] space-y-2">
+                    {segments.map((seg, idx) => {
+                      const bar = todayYmd ? clipSegmentToBusinessWindow(seg, todayYmd, now) : null
+                      return (
+                        <div key={`${seg.name}-${seg.startAt}-${idx}`} className="grid grid-cols-[160px_1fr] gap-2 items-center text-xs">
+                          <div className="min-w-0 truncate pr-1" title={`${seg.name} · ${seg.store} · ${seg.purpose}`}>
+                            <span className="font-medium">{seg.name}</span>
+                            <span className="text-muted-foreground block truncate text-[10px]">{seg.store}</span>
+                            <span className="text-foreground/90 block truncate text-[10px] font-medium">
+                              {translateVisitPurpose(seg.purpose, t) || "-"}
+                            </span>
+                          </div>
+                          <div className="relative h-7 rounded bg-muted/50 overflow-hidden">
+                            {bar ? (
+                              <div
+                                className={`absolute top-1 bottom-1 rounded ${seg.ongoing ? "bg-primary/80" : "bg-primary/50"}`}
+                                style={{ left: `${bar.leftPct}%`, width: `${bar.widthPct}%`, minWidth: 2 }}
+                                title={`${formatTimeBangkok(seg.startAt)} – ${seg.ongoing ? t("visit_today_ongoing") : seg.endAt ? formatTimeBangkok(seg.endAt) : ""}`}
+                              />
+                            ) : null}
+                          </div>
+                          <div className="col-span-2 text-[10px] text-muted-foreground pl-0.5 -mt-1 tabular-nums">
+                            {formatTimeBangkok(seg.startAt)}
+                            {" – "}
+                            {seg.ongoing ? t("visit_today_ongoing") : seg.endAt ? formatTimeBangkok(seg.endAt) : "-"}
+                          </div>
                         </div>
-                        <div className="relative h-7 rounded bg-muted/50 overflow-hidden">
-                          {bar ? (
-                            <div
-                              className={`absolute top-1 bottom-1 rounded ${seg.ongoing ? "bg-primary/80" : "bg-primary/50"}`}
-                              style={{ left: `${bar.leftPct}%`, width: `${bar.widthPct}%`, minWidth: 2 }}
-                              title={`${formatTimeBangkok(seg.startAt)} – ${seg.ongoing ? t("visit_today_ongoing") : seg.endAt ? formatTimeBangkok(seg.endAt) : ""}`}
-                            />
-                          ) : null}
-                        </div>
-                        <div className="col-span-2 text-[10px] text-muted-foreground pl-0.5 -mt-1 tabular-nums">
-                          {formatTimeBangkok(seg.startAt)}
-                          {" – "}
-                          {seg.ongoing ? t("visit_today_ongoing") : seg.endAt ? formatTimeBangkok(seg.endAt) : "-"}
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              </AdminDesktopOnly>
             </>
           )}
         </CardContent>

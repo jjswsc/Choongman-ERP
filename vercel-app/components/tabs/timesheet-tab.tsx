@@ -46,15 +46,25 @@ export function TimesheetTab() {
     if (!isOffice) return resolveStoreKey(auth.store) || auth.store
     const raw = String(viewStore || "").trim()
     if (!raw || isOfficeStore(raw)) {
-      return operationalStores[0] || ALL_STORE_VALUE
+      // 상단바가 All로 오기 전에도 빈 조회를 피함 — All이면 전체 스케줄
+      return ALL_STORE_VALUE
     }
     if (raw === ALL_STORE_VALUE) return ALL_STORE_VALUE
     const resolved = resolveStoreKey(raw) || raw
     if (isOfficeStore(resolved)) {
-      return operationalStores[0] || ALL_STORE_VALUE
+      return ALL_STORE_VALUE
     }
     return resolved
-  }, [auth?.store, isOffice, viewStore, operationalStores, resolveStoreKey])
+  }, [auth?.store, isOffice, viewStore, resolveStoreKey])
+
+  /** Select value가 옵션에 없으면 Radix가 빈 값처럼 보임 → 목록에 맞춰 보정 */
+  const selectStoreValue = React.useMemo(() => {
+    if (!storeFilter) return undefined
+    if (storeList.includes(storeFilter)) return storeFilter
+    if (storeFilter === ALL_STORE_VALUE) return ALL_STORE_VALUE
+    const hit = storeList.find((s) => resolveStoreKey(s) === storeFilter || s === storeFilter)
+    return hit || storeFilter
+  }, [storeFilter, storeList, resolveStoreKey])
 
   const onStoreChange = React.useCallback(
     (next: string) => {
@@ -83,7 +93,7 @@ export function TimesheetTab() {
               <label className="text-[11px] font-medium text-muted-foreground block mb-1.5">
                 {t("store") || "Store"}
               </label>
-              <Select value={storeFilter || undefined} onValueChange={onStoreChange}>
+              <Select value={selectStoreValue} onValueChange={onStoreChange}>
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder={t("scheduleStorePlaceholder")} />
                 </SelectTrigger>

@@ -81,6 +81,31 @@ export function getBangkokTodayDateString(base: Date = new Date()): string {
   return base.toLocaleDateString('en-CA', { timeZone: BANGKOK_TIMEZONE })
 }
 
+/** 방콕 벽시계 시 (0–23) */
+export function getBangkokHourOfDay(base: Date = new Date()): number {
+  const s = getBangkokDateTimeString(base)
+  const hh = Number(s.slice(11, 13))
+  return Number.isFinite(hh) ? ((hh % 24) + 24) % 24 : 0
+}
+
+/** 방콕 ISO 요일: 1=월 … 7=일 */
+export function getBangkokIsoWeekday(base: Date = new Date()): number {
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: BANGKOK_TIMEZONE,
+    weekday: 'short',
+  }).format(base)
+  const dayMap: Record<string, number> = {
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+    Sun: 7,
+  }
+  return dayMap[weekday] ?? 1
+}
+
 /** 방콕 기준 ISO 주(월요일~일요일). `offsetWeeks` 0=이번 주, -1=지난 주 */
 export function getBangkokWeekRange(offsetWeeks = 0, base: Date = new Date()): {
   start: string

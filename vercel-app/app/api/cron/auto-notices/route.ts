@@ -3,8 +3,8 @@ import { runAutoNotices } from '@/lib/auto-notice-runner'
 import { cronAuthErrorResponse, isCronAuthorized } from '@/lib/verify-cron-auth'
 
 /**
- * 호환용 thin wrapper — 본 로직은 `/api/cron/auto-notices` 와 동일.
- * vercel.json 스케줄은 auto-notices 로 이전됨.
+ * 자동 알림 cron — 매시 정각.
+ * 실제 발송은 system_settings 규칙(방콕 시·월말 N일 전 등)으로 판정.
  */
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -18,18 +18,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await runAutoNotices()
-    return NextResponse.json(
-      {
-        success: true,
-        date: result.date,
-        reminded: result.workLog.reminded,
-        workLog: result.workLog,
-        stockTake: result.stockTake,
-      },
-      { headers }
-    )
+    return NextResponse.json({ success: true, ...result }, { headers })
   } catch (e) {
-    console.error('work-log-reminders cron:', e)
+    console.error('auto-notices cron:', e)
     return NextResponse.json({ success: false, message: (e as Error).message }, { status: 500, headers })
   }
 }

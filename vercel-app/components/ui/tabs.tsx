@@ -22,10 +22,12 @@ export type ErpTabsRootProps = React.ComponentProps<typeof TabsPrimitive.Root> &
 function Tabs({ value, preserveInactiveTabs = true, ...props }: ErpTabsRootProps) {
   const inErp = useErpNavigationOptional() != null
   const preserve = inErp && preserveInactiveTabs !== false
+  /** value={undefined}를 넘기면 Radix가 제어 모드로 깨질 수 있어, 있을 때만 전달 */
+  const controlled = value !== undefined
   return (
     <ErpTabsPreserveInactiveContext.Provider value={preserve}>
       <ErpTabsValueContext.Provider value={value}>
-        <TabsPrimitive.Root value={value} {...props} />
+        <TabsPrimitive.Root {...(controlled ? { value } : {})} {...props} />
       </ErpTabsValueContext.Provider>
     </ErpTabsPreserveInactiveContext.Provider>
   )

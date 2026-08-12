@@ -3,7 +3,7 @@
  * - 주문 승인/보류/반려, 강제 출고 등 변동 시 발주 직원·매장 매니저에게 알림
  * - FCM 푸시 알림(휴대폰)도 함께 발송 (Firebase Admin 설정 시, push_order_approval_enabled일 때)
  */
-import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { sendFcmToRecipients } from '@/lib/firebase-admin'
 import { getNotificationSettings } from '@/lib/notification-settings-server'
 
@@ -21,8 +21,10 @@ export async function sendNoticeToRecipients(params: {
   content: string
   recipients: NoticeRecipient[]
   sender?: string
+  /** 기본 order(주문/승인 푸시). notice=일반 공지 푸시 게이트 */
+  pushGate?: 'order' | 'notice'
 }): Promise<void> {
-  const { title, content, recipients, sender = '시스템' } = params
+  const { title, content, recipients, sender = '시스템', pushGate = 'order' } = params
   if (!title?.trim()) return
   const list = recipients
     .filter((r) => r.store?.trim() && r.name?.trim())
@@ -42,9 +44,10 @@ export async function sendNoticeToRecipients(params: {
     attachments: '[]',
   })
 
-  // FCM 푸시 알림 (시스템 설정 > 알림 > 주문/승인 상태 푸시가 활성일 때)
   const settings = await getNotificationSettings()
-  if (!settings.pushOrderApprovalEnabled) return
+  const pushOk =
+    pushGate === 'notice' ? settings.pushNoticeEnabled : settings.pushOrderApprovalEnabled
+  if (!pushOk) return
 
   const recipientsList = unique.map((s) => {
     const [store, name] = s.split('|')
@@ -55,6 +58,18 @@ export async function sendNoticeToRecipients(params: {
     body: (content || '').trim().slice(0, 100),
     recipients: recipientsList,
   }).catch((e) => console.error('FCM sendNotice:', e))
+}
+
+/** role에 manager 포함인 전 직원 (재고조사 자동 알림 등) */
+export async function getAllManagers(): Promise<NoticeRecipient[]> {
+  const rows = (await supabaseSelect('employees', {
+    select: 'store,name,role',
+    limit: 5000,
+  })) as { store?: string; name?: string; role?: string }[] | null
+  return (rows || [])
+    .filter((r) => String(r.role || '').toLowerCase().includes('manager'))
+    .map((r) => ({ store: String(r.store || '').trim(), name: String(r.name || '').trim() }))
+    .filter((r) => r.store && r.name)
 }
 
 /**

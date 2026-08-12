@@ -383,3 +383,60 @@ export async function deleteNoticeTemplate(params: { id: number }) {
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
+
+export type AutoNoticeWorkLogClient = {
+  enabled: boolean
+  hourBangkok: number
+  notifyManager: boolean
+}
+
+export type AutoNoticeStockTakeClient = {
+  enabled: boolean
+  daysBeforeMonthEnd: number
+  hourBangkok: number
+  title: string
+  body: string
+  target: 'managers'
+}
+
+export type AutoNoticeCustomRuleClient = {
+  id: string
+  enabled: boolean
+  title: string
+  body: string
+  hourBangkok: number
+  schedule:
+    | { kind: 'daily' }
+    | { kind: 'weekly'; weekday: number }
+    | { kind: 'monthly'; dayOfMonth: number }
+    | { kind: 'before_month_end'; daysBefore: number }
+  audience:
+    | { kind: 'managers' }
+    | { kind: 'all' }
+    | { kind: 'store_role'; store: string; role: string }
+}
+
+export type AutoNoticeSettingsClient = {
+  workLog: AutoNoticeWorkLogClient
+  stockTake: AutoNoticeStockTakeClient
+  customRules: AutoNoticeCustomRuleClient[]
+  lastRun: { work_log: string; stock_take: string; custom?: Record<string, string> }
+}
+
+export async function getAutoNoticeSettings() {
+  const res = await apiFetchWithOffline('/api/autoNoticeSettings')
+  return res.json() as Promise<AutoNoticeSettingsClient>
+}
+
+export async function updateAutoNoticeSettings(params: {
+  workLog?: Partial<AutoNoticeWorkLogClient>
+  stockTake?: Partial<AutoNoticeStockTakeClient>
+  customRules?: AutoNoticeCustomRuleClient[]
+}) {
+  const res = await apiFetchWithOffline('/api/autoNoticeSettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string } & Partial<AutoNoticeSettingsClient>>
+}

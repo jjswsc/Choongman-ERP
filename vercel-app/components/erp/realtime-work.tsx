@@ -1,7 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+} from "@/components/erp/admin-responsive-list"
 import { Search, Radio, CalendarDays } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,7 +20,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList, getTodaySchedule, getTodayAttendanceSummary, type TodayScheduleItem, type TodayAttendanceItem } from "@/lib/api-client"
-import { todayStrBangkok } from "@/lib/attendance-utils"
+import { attendanceBusinessDateStrBangkok, todayStrBangkok } from "@/lib/attendance-utils"
 import {
   collectRealtimeLinearHourIndices,
   formatRealtimeLinearHourLabel,
@@ -29,12 +33,13 @@ import {
   canonicalStoreSegmentForJoinKey,
   findAttendanceForRealtimeScheduleRow,
 } from "@/lib/today-realtime-join"
-import { useErpPolling } from "@/lib/erp-page-visibility"
+import { useErpPolling, useErpTabActive } from "@/lib/erp-page-visibility"
 import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import { cn } from "@/lib/utils"
 
+/** 기본 조회일 = 근태 근무일(방콕 00~07시는 전날) */
 function todayStr() {
-  return todayStrBangkok()
+  return attendanceBusinessDateStrBangkok(Date.now())
 }
 
 function parseTimeToDecimal(s: string | null | undefined): number | null {
@@ -188,6 +193,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const tabActive = useErpTabActive()
   const [, setStoreList] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
   const storeFilterFinal = storeFilterProp || storeFilter
@@ -197,8 +203,10 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   const [attendance, setAttendance] = React.useState<TodayAttendanceItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [queriedStore, setQueriedStore] = React.useState("")
 
-  const { posStores: storeListFromHook, resolveStoreKey } = useStoreList()
+  const { posStores: storeListFromHook, resolveStoreKey, formatStoreLabel } = useStoreList()
   React.useEffect(() => {
     if (auth?.store && storeListProp.length === 0 && storeListFromHook.length > 0) {
       setStoreFilter(auth.store)
@@ -211,6 +219,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
     let store = storeFilterFinal || auth?.store
     if (!store) return
     setHasSearched(true)
+    setLoadError(null)
     // "All" / 전체 / i18n 라벨 — t를 deps에 넣지 않아 언어 함수 참조 변경으로 재조회가 반복되지 않게 함
     const allLabel = String(t("scheduleStoreAll") || "").trim()
     store =
@@ -218,15 +227,28 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
     if (store !== "All") {
       store = resolveStoreKey(store) || store
     }
+    setQueriedStore(store)
     setLoading(true)
-    Promise.all([getTodaySchedule({ store, date }), getTodayAttendanceSummary({ store, date })])
-      .then(([sch, att]) => {
-        setSchedule(sch || [])
-        setAttendance(att || [])
-      })
-      .catch(() => {
-        setSchedule([])
-        setAttendance([])
+    // 한쪽만 실패해도 스케줄은 유지 (이전엔 Promise.all로 전부 빈 화면)
+    Promise.allSettled([
+      getTodaySchedule({ store, date }),
+      getTodayAttendanceSummary({ store, date }),
+    ])
+      .then(([schRes, attRes]) => {
+        const errors: string[] = []
+        if (schRes.status === "fulfilled") {
+          setSchedule(schRes.value || [])
+        } else {
+          setSchedule([])
+          errors.push(schRes.reason instanceof Error ? schRes.reason.message : String(schRes.reason || "schedule"))
+        }
+        if (attRes.status === "fulfilled") {
+          setAttendance(attRes.value || [])
+        } else {
+          setAttendance([])
+          errors.push(attRes.reason instanceof Error ? attRes.reason.message : String(attRes.reason || "attendance"))
+        }
+        setLoadError(errors.length > 0 ? errors.join(" · ") : null)
       })
       .finally(() => setLoading(false))
   }, [storeFilterFinal, auth?.store, date, t, resolveStoreKey])
@@ -237,8 +259,17 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
     loadTodayData()
   }, [loadTodayData, storeFilterFinal, auth?.store])
 
+  // 관리자 숨은 탭 → 당일 탭으로 돌아올 때 강제 재조회(폰 keep-alive)
+  const wasTabActiveRef = React.useRef(tabActive)
+  React.useEffect(() => {
+    if (tabActive && !wasTabActiveRef.current && (storeFilterFinal || auth?.store)) {
+      loadTodayData()
+    }
+    wasTabActiveRef.current = tabActive
+  }, [tabActive, loadTodayData, storeFilterFinal, auth?.store])
+
   // 당일 조회 중일 때 실시간 반영: 60초마다 출퇴근 데이터 재조회(관리자 트래픽 절감)
-  const isViewingToday = date === todayStr()
+  const isViewingToday = date === todayStr() || date === todayStrBangkok()
   useErpPolling(loadTodayData, 60 * 1000, {
     enabled: hasSearched && isViewingToday,
     refetchOnActivate: true,
@@ -409,8 +440,25 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         </Button>
       </div>
 
-      {/* 테이블 - 구역 | 이름 | 9시~21시 */}
+      {/* 테이블 / 모바일 카드 */}
       <div className="px-4 pb-4">
+        {queriedStore ? (
+          <p className="mb-2 text-[10px] text-muted-foreground">
+            {t("store")}:{" "}
+            <span className="font-medium text-foreground">
+              {queriedStore === "All"
+                ? t("store_all_stores") || t("scheduleStoreAll") || "All"
+                : formatStoreLabel(queriedStore) || queriedStore}
+            </span>
+            {" · "}
+            {date}
+          </p>
+        ) : null}
+        {loadError ? (
+          <div className="mb-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {loadError}
+          </div>
+        ) : null}
         {!hasSearched ? (
           <div className="rounded-xl border border-dashed border-border py-8 text-center">
             <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground/30" />
@@ -422,8 +470,100 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
           <div className="rounded-xl border border-dashed border-border py-8 text-center">
             <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground/30" />
             <p className="mt-2 text-xs text-muted-foreground">{t("scheduleTodayEmpty")}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="mt-3 h-8 text-xs"
+              onClick={loadTodayData}
+            >
+              {t("search")}
+            </Button>
           </div>
         ) : (
+          <>
+            <AdminMobileOnly className="divide-y divide-border/60 rounded-xl border border-border/60">
+              {personKeys.map((key) => {
+                const p = byPerson[key]
+                const isLeave = !!p.leaveType
+                const att = findAttendanceForRealtimeScheduleRow(attendance, attLookup, {
+                  joinKey: p.joinKey,
+                  store: p.store,
+                  employeeCode: p.employeeCode,
+                  employeeId: p.employeeId,
+                  scheduleName: p.scheduleName,
+                  nick: p.nick,
+                  displayLabel: p.name,
+                })
+                const inDec = parseTimeToDecimal(p.pIn)
+                const dateKey = String(date ?? "").trim().slice(0, 10)
+                const todayKey = todayStrBangkok().trim().slice(0, 10)
+                const nowH =
+                  dateKey === todayKey ? nowDecimalHoursSinceBangkokDateMidnight(dateKey) : null
+                const hasProblem = !isLeave && !!att && attendanceSummaryIndicatesProblem(att)
+                const noShow =
+                  !isLeave && !att && inDec != null && nowH != null && nowH >= inDec
+                const statusTone = isLeave
+                  ? "leave"
+                  : hasProblem || noShow
+                    ? "problem"
+                    : att
+                      ? "normal"
+                      : "pending"
+                return (
+                  <div key={key} className="space-y-1.5 px-3 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{p.name}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {p.store}
+                          {" · "}
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold",
+                              zoneStyle[p.area] || "bg-muted text-muted-foreground"
+                            )}
+                          >
+                            {areaLabel(p.area)}
+                          </span>
+                        </p>
+                      </div>
+                      {isLeave ? (
+                        <span className="shrink-0 rounded bg-violet-200 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-800 dark:text-violet-200">
+                          {t("scheduleLeave")}
+                        </span>
+                      ) : (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                            statusTone === "problem" && "bg-red-500/15 text-red-700 dark:text-red-300",
+                            statusTone === "normal" && "bg-blue-500/15 text-blue-700 dark:text-blue-300",
+                            statusTone === "pending" && "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {statusTone === "problem"
+                            ? t("scheduleTodayProblem")
+                            : statusTone === "normal"
+                              ? t("scheduleTodayNormal")
+                              : t("scheduleTodayPending")}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] tabular-nums text-muted-foreground">
+                      {p.pIn || "-"} – {p.pOut || "-"}
+                      {p.pBS && p.pBE ? ` · ${t("scheduleBreak")} ${p.pBS}–${p.pBE}` : ""}
+                    </p>
+                    {att ? (
+                      <p className="text-[11px] tabular-nums text-foreground/90">
+                        {att.inTimeStr || "-"}
+                        {att.outTimeStr ? ` → ${att.outTimeStr}` : ""}
+                      </p>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </AdminMobileOnly>
+            <AdminDesktopOnly>
           <AdminTableScroll
             className="overscroll-x-contain rounded-xl border"
             hint={false}
@@ -560,6 +700,8 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
               </tbody>
             </table>
           </AdminTableScroll>
+            </AdminDesktopOnly>
+          </>
         )}
       </div>
 
