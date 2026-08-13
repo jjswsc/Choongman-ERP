@@ -539,6 +539,8 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       const alreadyNotified = kbankCallbackNotifiedTxRef.current === refId
       if (!alreadyNotified) {
         clearKbankQrFromLinkpos()
+        setLiveKbankQrPayload('')
+        setCustomerDisplayPaymentMessage('')
         if (currentStoreId) {
           releaseKbankInquiryLoop(currentStoreId, kbankInquiryTabIdRef.current, refId)
         }

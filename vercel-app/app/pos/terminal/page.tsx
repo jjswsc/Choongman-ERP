@@ -168,6 +168,7 @@ import {
   resolveDineInKitchenLinesForAddSubmit,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
+import { shouldSkipHallAutoprintForQrGuestAddon } from '@/lib/qr-table-types'
 import {
   isPosDineInTableNameOnlyUpdate,
   isPosOrderItemsJsonPackagingOnlyUpdate,
@@ -3673,6 +3674,8 @@ export default function PosTerminalPage() {
     promoCode?: string
     promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
     lineDiscountAmt?: number
+    source?: string
+    isBuffetEntry?: boolean
   }
 
   const mapPosOrderItemForKitchenDelta = useCallback(
@@ -5305,6 +5308,10 @@ export default function PosTerminalPage() {
         ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
       }))
       const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
+      const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
+        hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
+      )
+      const printHallAddon = shouldAutoPrintReceipt && !skipQrGuestHall
 
       const storeCode = String(row.store_code ?? currentStoreId)
       const orderNoStr = String(row.order_no ?? '')
@@ -5359,11 +5366,11 @@ export default function PosTerminalPage() {
         })
       }
 
-      if (shouldAutoPrintReceipt) {
+      if (printHallAddon) {
         void printReceiptNow(receiptPayloadRemote, null, false, undefined, true)
       }
       if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
-        const kitchenDelayMs = shouldAutoPrintReceipt
+        const kitchenDelayMs = printHallAddon
           ? typeof window !== 'undefined' && window.cmPosShell
             ? resolveAfterReceiptToKitchenDelayMs()
             : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
@@ -5767,6 +5774,10 @@ export default function PosTerminalPage() {
                   ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
                 }))
                 const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
+                const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
+                  hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
+                )
+                const printHallAddon = wantMetaDineInAddonReceipt && !skipQrGuestHall
                 const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
                 const discountAmt = Number(o.discountAmt ?? 0)
                 const couponDiscountAmt = Number(o.couponDiscountAmt ?? 0)
@@ -5810,11 +5821,11 @@ export default function PosTerminalPage() {
                   orderId: oid,
                   changedCount: changedIds.length,
                 })
-                if (wantMetaDineInAddonReceipt) {
+                if (printHallAddon) {
                   void printReceiptNow(receiptPayloadRemote, undefined, false, undefined, true)
                 }
                 if (wantMetaDineInAddonKitchen && kitchenCartLines.length > 0) {
-                  const kitchenDelayMs = wantMetaDineInAddonReceipt
+                  const kitchenDelayMs = printHallAddon
                     ? typeof window !== 'undefined' && window.cmPosShell
                       ? resolveAfterReceiptToKitchenDelayMs()
                       : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
@@ -6360,6 +6371,9 @@ export default function PosTerminalPage() {
       // QR 대기 결제: 승인되면 등록된 후처리(주문 paid 마감·영수증). 콜백이 먼저 오면 deferred 후 등록 시 실행.
       if (!alreadyNotified) {
         clearKbankQrFromLinkpos()
+        // Hide QR on staff + customer display; keep partnerTxnUid/txnNo so Void still works.
+        setLiveKbankQrPayload('')
+        setCustomerDisplayPaymentMessage('')
         if (currentStoreId) {
           releaseKbankInquiryLoop(currentStoreId, kbankInquiryTabIdRef.current, refId)
         }
@@ -7024,6 +7038,7 @@ export default function PosTerminalPage() {
             kbankManualCancelPendingRef.current = true
             purgeKbankPendingFinalize(origPartnerTxnUid || partnerTxnUid)
             clearKbankQrFromLinkpos()
+            setLiveKbankQrPayload('')
             setKbankCallbackState('failed')
             openKbankOutcomeModal(
               {
@@ -7099,6 +7114,7 @@ export default function PosTerminalPage() {
             if (nextTxnNo) setKbankOpsTxnNo(nextTxnNo)
             purgeKbankPendingFinalize(origPartnerTxnUid || partnerTxnUid)
             clearKbankQrFromLinkpos()
+            setLiveKbankQrPayload('')
             setKbankCallbackState('failed')
             openKbankOutcomeModal(
               {
