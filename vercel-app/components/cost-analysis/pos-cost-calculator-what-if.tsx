@@ -25,6 +25,7 @@ import {
   simulateRecipeLineCostDelta,
 } from "@/lib/pos-cost-analysis-shared"
 import { toPosCostSalesDenom, type PosCostVatView } from "@/lib/pos-cost-vat"
+import { cn } from "@/lib/utils"
 
 type Props = {
   foodItems: RecipeItem[]

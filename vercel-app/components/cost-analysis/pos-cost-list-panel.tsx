@@ -474,6 +474,8 @@ export function PosCostListPanel({
         </div>
       </div>
       <p className="text-[11px] text-muted-foreground">{t("posCostVatViewHint")}</p>
+
+      {loading ? (
         <div className="rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
           {t("loading")}
         </div>
