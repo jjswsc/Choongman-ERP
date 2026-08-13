@@ -17,6 +17,15 @@ export type DeliveryAppBankDepositInput = {
   note?: string | null
   category?: string | null
   storeName?: string | null
+  accountSubjectCode?: string | null
+  accountSubjectName?: string | null
+}
+
+/** 통장 계정과목 4111/4112/4113 — 적요에 grab이 없어도 앱을 식별 */
+export const DELIVERY_APP_GL_CODES: Record<string, DeliveryAppBankApp> = {
+  '4111': 'grab',
+  '4112': 'lineman',
+  '4113': 'shopee',
 }
 
 const SKIP_DEPOSIT_CATEGORIES = new Set([
@@ -45,7 +54,7 @@ function addDaysToYmd(ymd: string, deltaDays: number): string {
 export function bankDepositQueryTransDateWindow(startStr: string, endStr: string): { from: string; to: string } {
   const start = String(startStr || '').slice(0, 10)
   const end = String(endStr || '').slice(0, 10)
-  return { from: addDaysToYmd(start, -1), to: addDaysToYmd(end, 2) }
+  return { from: addDaysToYmd(start, -1), to: addDaysToYmd(end, 7) }
 }
 
 function round2(n: number): number {
@@ -56,15 +65,23 @@ export function deliveryAppBankDepositKey(storeCode: string, appCode: string): s
   return `${storeCode}\t${appCode}`
 }
 
-/** 적요·비고에서 Grab / LINE MAN / Shopee만 식별. 카드·QR·일반 배달은 비움. */
+/** 적요·비고에서 Grab / LINE MAN / Shopee만 식별. GRABFOOD처럼 붙여 쓴 표기도 포함. */
 export function inferDeliveryAppCodeFromBankText(text: string): DeliveryAppBankApp | '' {
   const raw = String(text || '')
   const m = raw.toLowerCase()
   if (!m.trim()) return ''
-  if (/\b(grabtaxi|grab)\b/i.test(m) || /그랩/.test(raw)) return 'grab'
+  if (/grabfood|grabtaxi|\bgrab\b|그랩|แกร็บ/i.test(raw)) return 'grab'
   if (/\b(line\s*man|lineman)\b/i.test(m)) return 'lineman'
-  if (/\b(shopeefood|shopee\s*food|shopee)\b/i.test(m)) return 'shopee'
+  if (/shopeefood|shopee\s*food|\bshopee\b/i.test(m)) return 'shopee'
   return ''
+}
+
+export function resolveDeliveryAppFromBankRow(row: DeliveryAppBankDepositInput): DeliveryAppBankApp | '' {
+  const gl = String(row.accountSubjectCode || '').trim()
+  if (gl && DELIVERY_APP_GL_CODES[gl]) return DELIVERY_APP_GL_CODES[gl]
+  return inferDeliveryAppCodeFromBankText(
+    `${row.memo || ''} ${row.note || ''} ${row.accountSubjectName || ''}`
+  )
 }
 
 /** 통장 매출일. 없으면 입금일 전날(익일 정산). */
@@ -84,7 +101,7 @@ export function isDeliveryAppBankDepositRow(row: DeliveryAppBankDepositInput): b
   if (isExpenseInternalBankNote(row.note)) return false
   const cat = String(row.category || '').trim().toLowerCase()
   if (cat && SKIP_DEPOSIT_CATEGORIES.has(cat)) return false
-  const app = inferDeliveryAppCodeFromBankText(`${row.memo || ''} ${row.note || ''}`)
+  const app = resolveDeliveryAppFromBankRow(row)
   return (DELIVERY_APP_BANK_APPS as readonly string[]).includes(app)
 }
 
@@ -93,6 +110,8 @@ export function aggregateDeliveryAppBankDeposits(params: {
   startStr: string
   endStr: string
   storeCodes?: string[]
+  /** 매장 1곳만 조회 중인데 통장 행에 매장이 비어 있으면 이 매장으로 귀속 */
+  fallbackStoreCode?: string
 }): Map<string, number> {
   const start = String(params.startStr || '').slice(0, 10)
   const end = String(params.endStr || '').slice(0, 10)
@@ -100,17 +119,19 @@ export function aggregateDeliveryAppBankDeposits(params: {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return map
 
   const storeCodes = (params.storeCodes || []).map((s) => String(s || '').trim()).filter(Boolean)
+  const fallbackStore = String(params.fallbackStoreCode || '').trim()
 
   for (const row of params.rows) {
     if (!isDeliveryAppBankDepositRow(row)) continue
-    const storeRaw = String(row.storeName || '').trim()
+    let storeRaw = String(row.storeName || '').trim()
+    if (!storeRaw && fallbackStore) storeRaw = fallbackStore
     if (!storeRaw) continue
     if (storeCodes.length > 0 && !rowMatchesAnySalesStoreSelection(storeRaw, storeCodes)) continue
 
     const date = attributedSalesDateForBankDeposit(row)
     if (!date || date < start || date > end) continue
 
-    const app = inferDeliveryAppCodeFromBankText(`${row.memo || ''} ${row.note || ''}`)
+    const app = resolveDeliveryAppFromBankRow(row)
     if (!app) continue
 
     const amt = Math.abs(Number(row.amount) || 0)

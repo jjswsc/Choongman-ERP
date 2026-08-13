@@ -4,6 +4,7 @@ import {
   attributedSalesDateForBankDeposit,
   inferDeliveryAppCodeFromBankText,
   isDeliveryAppBankDepositRow,
+  resolveDeliveryAppFromBankRow,
 } from '@/lib/pos-delivery-app-bank-deposit'
 import {
   aggregateDeliveryAppReconcileRows,
@@ -15,6 +16,7 @@ import {
 describe('inferDeliveryAppCodeFromBankText', () => {
   it('classifies Grab / LINE MAN / Shopee from memo', () => {
     expect(inferDeliveryAppCodeFromBankText('GRABTAXI (THAILAND)')).toBe('grab')
+    expect(inferDeliveryAppCodeFromBankText('이체입금 | X3812 GRABFOOD')).toBe('grab')
     expect(inferDeliveryAppCodeFromBankText('LINE MAN settlement')).toBe('lineman')
     expect(inferDeliveryAppCodeFromBankText('SHOPEEFOOD UNION')).toBe('shopee')
   })
@@ -62,6 +64,25 @@ describe('isDeliveryAppBankDepositRow', () => {
       })
     ).toBe(false)
   })
+
+  it('keeps 배달앱정산 (revenue_delivery) classified by 4111 even without grab in memo', () => {
+    expect(
+      isDeliveryAppBankDepositRow({
+        transType: 'deposit',
+        category: 'revenue_delivery',
+        memo: '이체입금 | X3812',
+        accountSubjectCode: '4111',
+        amount: 422.41,
+        storeName: 'CM Future Park',
+      })
+    ).toBe(true)
+    expect(
+      resolveDeliveryAppFromBankRow({
+        memo: '이체입금 | X3812',
+        accountSubjectCode: '4111',
+      })
+    ).toBe('grab')
+  })
 })
 
 describe('aggregateDeliveryAppBankDeposits', () => {
@@ -98,6 +119,28 @@ describe('aggregateDeliveryAppBankDeposits', () => {
     const amt = [...map.values()][0]
     expect(map.size).toBe(1)
     expect(amt).toBe(1000)
+  })
+
+  it('uses fallback store and 4111 when memo has no grab word', () => {
+    const map = aggregateDeliveryAppBankDeposits({
+      startStr: '2026-08-01',
+      endStr: '2026-08-13',
+      storeCodes: ['CM Future Park'],
+      fallbackStoreCode: 'CM Future Park',
+      rows: [
+        {
+          transType: 'deposit',
+          transDate: '2026-08-07',
+          salesDate: '2026-08-06',
+          category: 'revenue_delivery',
+          memo: '이체입금 | X3812 GRABFOOD',
+          accountSubjectCode: '4111',
+          amount: 422.41,
+          storeName: '',
+        },
+      ],
+    })
+    expect(map.get('CM Future Park\tgrab')).toBe(422.41)
   })
 })
 

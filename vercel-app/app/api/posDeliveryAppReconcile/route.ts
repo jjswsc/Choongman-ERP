@@ -35,6 +35,7 @@ import {
   lookupDeliveryPlatformSettlementFeePct,
 } from '@/lib/pos-delivery-platform-settlement'
 import { supabaseSelectFilterAllPagesStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import {
   appendSaasTenantFilter,
   isSaasTenantQueryBlocked,
@@ -97,9 +98,29 @@ type BankTxRow = {
   note?: string | null
   category?: string | null
   store_name?: string | null
+  account_subject_id?: number | null
 }
 
-function mapBankTxRow(r: BankTxRow): DeliveryAppBankDepositInput {
+async function loadDeliveryAppGlCodeBySubjectId(): Promise<Map<number, string>> {
+  const map = new Map<number, string>()
+  try {
+    const rows = (await supabaseSelectFilter('account_subjects', 'code=in.(4111,4112,4113)', {
+      select: 'id,code',
+      limit: 50,
+    })) as { id?: number; code?: string }[] | null
+    for (const r of rows || []) {
+      const id = Number(r.id) || 0
+      const code = String(r.code || '').trim()
+      if (id && code) map.set(id, code)
+    }
+  } catch {
+    /* 계정과목 조회 실패 시 적요만으로 분류 */
+  }
+  return map
+}
+
+function mapBankTxRow(r: BankTxRow, glById: Map<number, string>): DeliveryAppBankDepositInput {
+  const sid = Number(r.account_subject_id) || 0
   return {
     transDate: r.trans_date,
     salesDate: r.sales_date,
@@ -109,6 +130,7 @@ function mapBankTxRow(r: BankTxRow): DeliveryAppBankDepositInput {
     note: r.note,
     category: r.category,
     storeName: r.store_name,
+    accountSubjectCode: sid ? glById.get(sid) || null : null,
   }
 }
 
@@ -127,14 +149,11 @@ async function fetchDeliveryAppBankDeposits(params: {
   if (isSaasTenantQueryBlocked(tenantScope, 'bank_transactions')) return empty
 
   const window = bankDepositQueryTransDateWindow(start, end)
-  let base = `trans_type=eq.deposit&or=(category.eq.receivable_receive,category.eq.revenue_delivery)`
+  let base = `trans_type=eq.deposit&category=in.(receivable_receive,revenue_delivery)`
   base = appendSaasTenantFilter(base, tenantScope, 'bank_transactions')
-  const select = 'id,trans_date,sales_date,trans_type,amount,memo,note,category,store_name'
+  const select = 'id,trans_date,sales_date,trans_type,amount,memo,note,category,store_name,account_subject_id'
   const bySalesDate = `${base}&sales_date=gte.${encodeURIComponent(start)}&sales_date=lte.${encodeURIComponent(end)}`
-  const byTransDate =
-    `${base}&sales_date=is.null&trans_date=gte.${encodeURIComponent(window.from)}&trans_date=lte.${encodeURIComponent(window.to)}`
-  const fallbackTrans =
-    `${base}&trans_date=gte.${encodeURIComponent(window.from)}&trans_date=lte.${encodeURIComponent(window.to)}`
+  const byTransDate = `${base}&trans_date=gte.${encodeURIComponent(window.from)}&trans_date=lte.${encodeURIComponent(window.to)}`
 
   const load = async (filter: string) =>
     (await supabaseSelectFilterAllPagesStrippingUnknownColumns(
@@ -145,6 +164,7 @@ async function fetchDeliveryAppBankDeposits(params: {
     )) as BankTxRow[]
 
   try {
+    const glById = await loadDeliveryAppGlCodeBySubjectId()
     let rows: BankTxRow[] = []
     try {
       const [a, b] = await Promise.all([load(bySalesDate), load(byTransDate)])
@@ -156,13 +176,14 @@ async function fetchDeliveryAppBankDeposits(params: {
         rows.push(r)
       }
     } catch {
-      rows = (await load(fallbackTrans)) || []
+      rows = (await load(byTransDate)) || []
     }
     return aggregateDeliveryAppBankDeposits({
-      rows: rows.map(mapBankTxRow),
+      rows: rows.map((r) => mapBankTxRow(r, glById)),
       startStr: start,
       endStr: end,
       storeCodes: params.storeCodes,
+      fallbackStoreCode: params.storeCodes.length === 1 ? params.storeCodes[0] : undefined,
     })
   } catch (e) {
     if (isMissingSaasTenantColumnError(e)) markSaasTenantColumnMissing('bank_transactions')
@@ -230,24 +251,18 @@ export async function GET(request: NextRequest) {
     })
 
     const settledStoreCodes = stores.length > 0 ? stores : storeKeys
-    const emptyBank = new Map<string, number>()
     const [settled, bankMap] = await Promise.all([
       fetchSettledFeeNetByStoreApp({
         storeCodes: settledStoreCodes,
         startStr,
         endStr,
       }),
-      Promise.race([
-        fetchDeliveryAppBankDeposits({
-          request,
-          storeCodes: stores,
-          startStr,
-          endStr,
-        }),
-        new Promise<Map<string, number>>((resolve) => {
-          setTimeout(() => resolve(emptyBank), 12_000)
-        }),
-      ]),
+      fetchDeliveryAppBankDeposits({
+        request,
+        storeCodes: stores,
+        startStr,
+        endStr,
+      }),
     ])
     const withSettled = applySettledAmountsToReconcileRows(withFees, (storeCode, appCode) => {
       return settled.get(`${storeCode}\t${appCode}`) ?? null
