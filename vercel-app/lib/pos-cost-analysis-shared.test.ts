@@ -52,13 +52,19 @@ describe("pos-cost-analysis-shared", () => {
     expect(m.issues).not.toContain("no_bom")
   })
 
-  it("원가율 분모는 VAT 제외 매출(계산기와 동일)이다", () => {
+  it("원가율 분모는 기본 VAT 제외 매출(계산기와 동일)이다", () => {
     const m = computePosCostRowMetrics({ ...baseRow, costHall: 30, costDelivery: 30 }, 0)
     // 판매가 107(In VAT) → 공급가 100, 원가 30 → 30%
     expect(m.netSalesH).toBe(100)
     expect(m.costRatioH).toBeCloseTo(30, 5)
-    // VAT 포함 분모면 ~28%로 과소 — 회귀 방지
+    // VAT 포함 분모면 ~28%로 과소 — 제외 보기 회귀 방지
     expect(m.costRatioH).toBeGreaterThan(28.5)
+  })
+
+  it("VAT 포함 보기면 판매가 그대로 분모가 된다", () => {
+    const m = computePosCostRowMetrics({ ...baseRow, costHall: 30, costDelivery: 30 }, 0, 42, "included")
+    expect(m.netSalesH).toBe(107)
+    expect(m.costRatioH).toBeCloseTo((30 / 107) * 100, 5)
   })
 
   it("배달 원가율·마진 분모에서 배달앱 수수료를 차감하지 않는다", () => {

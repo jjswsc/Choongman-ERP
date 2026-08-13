@@ -20,7 +20,9 @@ import {
   type CostAnalysisMenuRow,
   type CostAnalysisOptRow,
 } from '@/lib/pos-menu-cost-analysis-load'
+import { applyPromoMirrorCostsFromItems } from '@/lib/pos-cost-analysis-promo-compose'
 import { requireAuth } from '@/lib/verify-auth'
+import { canAccessPosCostAnalysis } from '@/lib/permissions'
 
 /** 메뉴·재료·옵션 페이지 반복 조회 시 서버리스 타임아웃 완화 (플랜별 상한 적용) */
 export const maxDuration = 120
@@ -50,6 +52,8 @@ type PromoItemRow = {
   menu_id?: number
   option_id?: number | null
   quantity?: number
+  choice_group?: string | null
+  choice_pick_count?: number | null
 }
 
 /** 품목 관리 getItems와 동일: code 없으면 매장 전용 등만 `_local_${id}` 키로 노출 */
@@ -138,10 +142,20 @@ export async function GET(request: NextRequest) {
     'X-CM-Pos-Cost-Analysis-Rows, X-CM-Pos-Cost-Analysis-Error, X-CM-Pos-Cost-Analysis-Active-Menus, X-CM-Pos-Cost-Analysis-Inactive-Menus'
   )
 
-  const authRes = await requireAuth(request, 'office')
+  const authRes = await requireAuth(request, 'any')
   if (authRes.errorResponse) {
     authRes.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return authRes.errorResponse
+  }
+  if (!canAccessPosCostAnalysis(String(authRes.auth.role || ''))) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: '원가 분석 조회 권한이 없습니다.',
+        msg: '원가 분석 조회 권한이 없습니다.',
+      },
+      { status: 403, headers }
+    )
   }
   const catalogScope = await resolvePosMenuBomTenantScope(authRes.auth)
   const inventoryScope = await resolveInventoryTenantScope({ auth: authRes.auth })
@@ -171,24 +185,36 @@ export async function GET(request: NextRequest) {
     const promoItemsByPromoId: Record<number, PromoItemRow[]> = {}
     const promoIds = Array.from(
       new Set(
-        (activeMenuRows || [])
+        (menuRows || [])
           .map((m) => Number(m.promo_id ?? 0))
           .filter((n) => Number.isFinite(n) && n > 0)
       )
     )
     if (promoIds.length > 0) {
       const chunkSize = 300
+      const promoItemSelects = [
+        'promo_id,menu_id,option_id,quantity,choice_group,choice_pick_count',
+        'promo_id,menu_id,option_id,quantity',
+      ]
       for (let i = 0; i < promoIds.length; i += chunkSize) {
         const chunk = promoIds.slice(i, i + chunkSize)
-        const rows = (await supabaseSelectFilter(
-          'pos_promo_items',
-          `promo_id=in.(${chunk.join(',')})`,
-          {
-            order: 'sort_order.asc,id.asc',
-            limit: 10000,
-            select: 'promo_id,menu_id,option_id,quantity',
+        let rows: PromoItemRow[] = []
+        for (const select of promoItemSelects) {
+          try {
+            rows = (await supabaseSelectFilter(
+              'pos_promo_items',
+              `promo_id=in.(${chunk.join(',')})`,
+              {
+                order: 'sort_order.asc,id.asc',
+                limit: 10000,
+                select,
+              }
+            )) as PromoItemRow[]
+            break
+          } catch {
+            rows = []
           }
-        ).catch(() => [])) as PromoItemRow[]
+        }
         for (const r of rows || []) {
           const pid = Number(r.promo_id ?? 0)
           const mid = Number(r.menu_id ?? 0)
@@ -373,6 +399,8 @@ export async function GET(request: NextRequest) {
       deliveryAppFeePercent?: number | null
       /** pos_menus.is_active — false면 미판매(비활성) */
       isActive: boolean
+      costFromPromoItems?: boolean
+      hasBom?: boolean
     }
 
     const result: MenuCostRow[] = []
@@ -382,6 +410,39 @@ export async function GET(request: NextRequest) {
       if (!Number.isFinite(mid) || mid <= 0) continue
       const priceHall = Number(menu.price ?? 0)
       const priceDelivery = menu.price_delivery != null ? Number(menu.price_delivery) : null
+      const categoryMain = normalizePromotionCategoryMain(menu.category_main)
+      const cookingTimeMin = menu.cooking_time_min != null && Number.isFinite(menu.cooking_time_min) ? menu.cooking_time_min : null
+      const vatIncluded = menu.vat_included !== false
+      const deliveryAppFeePercent =
+        menu.delivery_app_fee_percent != null && Number.isFinite(Number(menu.delivery_app_fee_percent))
+          ? Number(menu.delivery_app_fee_percent)
+          : null
+      const isActive = menu.is_active !== false
+      const promoIdOfMenu = Number(menu.promo_id ?? 0)
+      /** 프로모 미러는 잔여 BOM/옵션을 쓰지 않고 구성 합성만 한다. */
+      if (Number.isFinite(promoIdOfMenu) && promoIdOfMenu > 0) {
+        result.push({
+          menuId: String(menu.id ?? ''),
+          menuCode: String(menu.code ?? ''),
+          menuName: String(menu.name ?? ''),
+          category: String(menu.category ?? ''),
+          categoryMain,
+          priceHall,
+          priceDelivery,
+          vatIncluded,
+          deliveryAppFeePercent,
+          optionId: null,
+          optionCode: null,
+          optionName: null,
+          optionType: null,
+          costHall: 0,
+          costDelivery: 0,
+          breakdown: [],
+          cookingTimeMin,
+          isActive,
+        })
+        continue
+      }
       const opts = optsByMenu[mid] || []
       const sortOpt = (a: { sort_order?: number; id?: number }, b: { sort_order?: number; id?: number }) =>
         (a.sort_order ?? 999) - (b.sort_order ?? 999) || (a.id ?? 0) - (b.id ?? 0)
@@ -591,14 +652,6 @@ export async function GET(request: NextRequest) {
         rollupIncBreakdown.push(...v.incBreakdown)
       }
 
-      const categoryMain = normalizePromotionCategoryMain(menu.category_main)
-      const cookingTimeMin = menu.cooking_time_min != null && Number.isFinite(menu.cooking_time_min) ? menu.cooking_time_min : null
-      const vatIncluded = menu.vat_included !== false
-      const deliveryAppFeePercent =
-        menu.delivery_app_fee_percent != null && Number.isFinite(Number(menu.delivery_app_fee_percent))
-          ? Number(menu.delivery_app_fee_percent)
-          : null
-      const isActive = menu.is_active !== false
       result.push({
         menuId: String(menu.id ?? ''),
         menuCode: String(menu.code ?? ''),
@@ -689,43 +742,14 @@ export async function GET(request: NextRequest) {
     }
 
     /**
-     * 프로모션 미러 메뉴(pos_menus.promo_id)는 BOM 대신 pos_promo_items 합성으로 원가를 잡는다.
-     * 기본 계산에서 0으로 남은 미러 메뉴(base row)에만 구성 메뉴 원가를 합산해 채운다.
+     * 프로모션 미러 메뉴(pos_menus.promo_id)는 BOM 대신 pos_promo_items 합성.
+     * 선택 그룹은 프로모션 세트 조회와 같이 pickCount만큼만 합산하고, 잔여 BOM은 덮어쓴다.
      */
-    const rowMapByKey = new Map<string, MenuCostRow>()
-    for (const r of result) {
-      const optSeg =
-        r.optionId == null || String(r.optionId).trim() === '' ? 'null' : normalizeMenuIngredientOptionKeySeg(r.optionId)
-      rowMapByKey.set(`${r.menuId}:${optSeg}`, r)
-    }
-    for (const r of result) {
-      if (r.optionId != null) continue
-      if (r.costHall > 0 || r.costDelivery > 0 || (r.breakdown?.length ?? 0) > 0) continue
-      const mid = Number(r.menuId)
-      if (!Number.isFinite(mid) || mid <= 0) continue
-      const promoId = Number(menusById[mid]?.promo_id ?? 0)
-      if (!Number.isFinite(promoId) || promoId <= 0) continue
-      const comp = promoItemsByPromoId[promoId] || []
-      if (comp.length === 0) continue
-      let hall = 0
-      let del = 0
-      for (const c of comp) {
-        const cMid = Number(c.menu_id ?? 0)
-        if (!Number.isFinite(cMid) || cMid <= 0) continue
-        const cOptSeg = normalizeMenuIngredientOptionKeySeg(c.option_id)
-        const qty = Number(c.quantity ?? 1)
-        const child =
-          rowMapByKey.get(`${cMid}:${cOptSeg}`) ??
-          rowMapByKey.get(`${cMid}:null`)
-        if (!child) continue
-        hall += Number(child.costHall ?? 0) * qty
-        del += Number(child.costDelivery ?? child.costHall ?? 0) * qty
-      }
-      if (hall > 0 || del > 0) {
-        r.costHall = Math.round(hall * 10) / 10
-        r.costDelivery = Math.round(del * 10) / 10
-      }
-    }
+    applyPromoMirrorCostsFromItems({
+      rows: result,
+      menusById,
+      promoItemsByPromoId,
+    })
 
     /**
      * summary=1: breakdown 제거 + 목록에 필요한 필드만 → 응답 축소
@@ -751,7 +775,8 @@ export async function GET(request: NextRequest) {
           costDelivery: r.costDelivery,
           cookingTimeMin: r.cookingTimeMin,
           isActive: r.isActive,
-          hasBom: (r.breakdown?.length ?? 0) > 0,
+          costFromPromoItems: r.costFromPromoItems === true,
+          hasBom: r.costFromPromoItems === true || (r.breakdown?.length ?? 0) > 0,
           breakdown: [] as typeof r.breakdown,
         }))
       : result

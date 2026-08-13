@@ -2964,7 +2964,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostQty: '수량',
     posCostQtyG: '수량 (g)',
     posCostNoData: '검색 조건에 맞는 데이터가 없습니다.',
-    posCostClickSearchToLoad: '위에서 [조회] 버튼을 눌러 원가 분석 목록을 불러오세요.',
+    posCostClickSearchToLoad: '원가 분석 목록을 불러오는 중입니다.',
     posCostEmptyAfterLoad:
       '표시할 행이 없습니다. 서버가 0건을 돌려줬거나 응답 파싱에 실패했을 수 있습니다.',
     posCostEmptyHintDev:
@@ -2972,7 +2972,10 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostLoadTimeout: '조회 시간이 초과되었습니다. Wi‑Fi에서 다시 검색해 주세요.',
     posCostLoadFailed: '원가 분석 목록을 불러오지 못했습니다.',
     posCostLoadRetryHint:
-      '대분류를 「전체」로 두고 다시 검색해 보세요. 폰은 PC처럼 이전 조회 캐시가 없어 목록을 새로 받습니다. 브라우저 번역(Translate)이 켜져 있으면 잠시 끄고 재시도해 보세요.',
+      '네트워크가 불안정하면 Wi‑Fi에서 다시 검색해 보세요. 브라우저 번역(Translate)이 켜져 있으면 잠시 끄고 재시도해 주세요.',
+    posCostAuthReloginHint:
+      '세션이 만료되었거나 로그인 정보가 없습니다. 다시 로그인한 뒤 이 화면을 열어 주세요.',
+    posCostGoLogin: '다시 로그인',
     posCostFood: '음식',
     posCostPackaging: '포장',
     posCostExportCsv: 'CSV 내보내기',
@@ -2988,8 +2991,10 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostAvgExcludeZeroRatio:
       '원가율이 0%인 메뉴는 홀·배달 각각 객가·원가·원가율 평균에서 제외되었습니다.',
     posCostNoBomExpandHint: '재료 내역이 없습니다. 원가 계산기에서 BOM을 등록하세요.',
+    posCostPromoComposeHint:
+      '프로모션 세트는 구성 메뉴 원가를 합산합니다(선택 그룹은 실제로 고르는 개수만). 재료 내역은 구성 메뉴에서 확인하세요.',
     posCostOpenItems: '품목 관리',
-    posCostActualNeedList: '먼저 목록 탭에서 [조회]로 원가 데이터를 불러오세요.',
+    posCostActualNeedList: '목록 탭에서 원가 데이터가 불러와질 때까지 기다려 주세요.',
     posCostActualNeedListForExtras:
       '원가분석(목록) 기준 대분류 목표 대비·What-if는 목록 탭에서 [조회] 후 사용할 수 있습니다. 위 판매 가중 실적은 [실적 조회]로 확인하세요.',
     posCostActualFiltersTitle: '실적 조회 조건',
@@ -6169,7 +6174,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostQty: 'Qty',
     posCostQtyG: 'Qty (g)',
     posCostNoData: 'No data to display.',
-    posCostClickSearchToLoad: 'Click [Search] above to load the cost analysis list.',
+    posCostClickSearchToLoad: 'Loading the cost analysis list.',
     posCostEmptyAfterLoad:
       'No rows to show. The server may have returned zero rows or response parsing may have failed.',
     posCostEmptyHintDev:
@@ -6177,7 +6182,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostLoadTimeout: 'The request timed out. Please retry on Wi‑Fi.',
     posCostLoadFailed: 'Failed to load the cost analysis list.',
     posCostLoadRetryHint:
-      'Set the main category to All and search again. Phones do not keep the same session cache as PC. If browser Translate is on, turn it off and retry.',
+      'If the network is unstable, retry on Wi‑Fi. If browser Translate is on, turn it off and try again.',
+    posCostAuthReloginHint: 'Your session expired or login data is missing. Sign in again, then open this screen.',
+    posCostGoLogin: 'Sign in again',
     posCostFood: 'Food',
     posCostPackaging: 'Packaging',
     posCostExportCsv: 'Export CSV',
@@ -6192,6 +6199,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostIssueFilter: 'Issue filter',
     posCostAvgExcludeZeroRatio: 'Items with 0% cost ratio are excluded from hall/delivery averages.',
     posCostNoBomExpandHint: 'No ingredient breakdown. Register BOM in the cost calculator.',
+    posCostPromoComposeHint:
+      'Promotion sets use composed menu costs (choice groups count only the picks). Check ingredient lines on the component menus.',
     posCostOpenItems: 'Item master',
     posCostActualNeedList: 'Load cost data from the List tab first.',
     posCostActualNeedListForExtras:
@@ -6927,6 +6936,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posCostIssueFilter: 'ตัวกรองสถานะ',
     posCostAvgExcludeZeroRatio: 'เมนูที่อัตราต้นทุน 0% ถูกยกเว้นจากค่าเฉลี่ยหน้าร้าน/เดลิvery',
     posCostNoBomExpandHint: 'ไม่มีรายการวัตถุดิบ — ลงทะเบียน BOM ในเครื่องคำนวณต้นทุน',
+    posCostPromoComposeHint:
+      'ชุดโปรโมชันรวมต้นทุนเมนูที่ประกอบ (กลุ่มตัวเลือกนับเฉพาะจำนวนที่เลือกจริง) ดูรายการวัตถุดิบที่เมนูย่อย',
     posCostOpenItems: 'จัดการสินค้า',
     posCostInsightsNeedList: 'โหลดข้อมูลต้นทุนจากแท็บรายการก่อน',
     posCostWeightedRatioTitle: '%ต้นทุนถ่วงน้ำหนักยอดขาย (หน้าร้าน)',
@@ -10068,6 +10079,8 @@ export const I18N_POS_MM: Record<string, string> = {
     posCostIssueFilter: 'အခြေအနေစစ်ထုတ်',
     posCostAvgExcludeZeroRatio: 'ကုန်ကျ% 0% ရှိသော မီနူးများကို ပျမ်းမျှတွင် မပါဝင်ပါ',
     posCostNoBomExpandHint: 'ချက်ပြုတ်ပစ္စည်းစာရင်းမရှိ — ကုန်ကျတွက်စက်တွင် BOM ထည့်ပါ',
+    posCostPromoComposeHint:
+      'Promotion sets use composed menu costs (choice groups count only the picks). Check ingredient lines on the component menus.',
     posCostOpenItems: 'ပစ္စည်းစီမံခန့်ခွဲမှု',
     posCostInsightsNeedList: 'စာရင်းတက်ဘ်မှ ဒေတာကို အရင် [ရှာဖွေ] ဖြင့် ဖွင့်ပါ',
     posCostWeightedRatioTitle: 'ရောင်းအားအလေးချိန် ကုန်ကျ% (ဆိုင်တွင်း)',
@@ -12970,6 +12983,8 @@ export const I18N_POS_LA: Record<string, string> = {
     posCostIssueFilter: 'ຕົວກອງສະຖານະ',
     posCostAvgExcludeZeroRatio: 'ເມນູ %ຕົ້ນທຶນ 0% ຖືກຍົກເວັ້ນຈາກຄ່າສະເລ່ຍ',
     posCostNoBomExpandHint: 'ບໍ່ມີລາຍການວັດຖຸດິບ — ລົງທະບຽນ BOM ໃນເຄື່ອງຄິດໄລ່ຕົ້ນທຶນ',
+    posCostPromoComposeHint:
+      'Promotion sets use composed menu costs (choice groups count only the picks). Check ingredient lines on the component menus.',
     posCostOpenItems: 'ຈັດການສິນຄ້າ',
     posCostInsightsNeedList: 'ໂຫຼດຂໍ້ມູນຈາກແຖບລາຍການກ່ອນ',
     posCostWeightedRatioTitle: '%ຕົ້ນທຶນຖົວນ້ຳໜັກຍອດຂາຍ (ນັ່ງກິນ)',
@@ -16002,7 +16017,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posCostCategoryItems: 'Items',
     posCostCategorySauce: 'Blend',
     posCostChangeMenu: 'Change Menu',
-    posCostClickSearchToLoad: 'Click [Search] above to load the cost analysis list.',
+    posCostClickSearchToLoad: 'Loading the cost analysis list.',
     posCostEmptyAfterLoad:
       'No rows to show. The server may have returned zero rows or response parsing may have failed.',
     posCostEmptyHintDev:
@@ -16030,6 +16045,8 @@ export const I18N_POS_KH: Record<string, string> = {
     posCostIssueFilter: 'តម្រងស្ថានភាព',
     posCostAvgExcludeZeroRatio: 'ម៉ឺនុយ %ថ្លៃដើម 0% ត្រូវបានដកចេញពីមធ្យម',
     posCostNoBomExpandHint: 'គ្មានរូបមន្តគ្រឿង — ចុះ BOM ក្នុងឧបករណ៍គណនាថ្លៃដើម',
+    posCostPromoComposeHint:
+      'Promotion sets use composed menu costs (choice groups count only the picks). Check ingredient lines on the component menus.',
     posCostOpenItems: 'គ្រប់គ្រងធាតុ',
     posCostInsightsNeedList: 'ផ្ទុកទិន្នន័យពីផ្ទាំងបញ្ជីជាមុន',
     posCostWeightedRatioTitle: '%ថ្លៃដើមធ្ងន់ទម្ងន់លក់ (ញ៉ាំ)',
@@ -19347,6 +19364,8 @@ export const I18N_POS_VI: Record<string, string> = {
     posCostIssueFilter: 'Bộ lọc trạng thái',
     posCostAvgExcludeZeroRatio: 'Menu có tỷ lệ giá vốn 0% được loại khỏi trung bình',
     posCostNoBomExpandHint: 'Không có nguyên liệu — đăng ký BOM trong máy tính giá vốn',
+    posCostPromoComposeHint:
+      'Promotion sets use composed menu costs (choice groups count only the picks). Check ingredient lines on the component menus.',
     posCostOpenItems: 'Quản lý hàng hóa',
     posCostInsightsNeedList: 'Tải dữ liệu từ tab Danh sách trước',
     posCostWeightedRatioTitle: 'Tỷ lệ giá vốn có trọng số bán hàng (tại quán)',
@@ -22239,6 +22258,8 @@ export const I18N_POS_MS: Record<string, string> = {
     posCostIssueFilter: 'Penapis status',
     posCostAvgExcludeZeroRatio: 'Menu dengan nisbah kos 0% dikecualikan daripada purata',
     posCostNoBomExpandHint: 'Tiada pecahan bahan — daftar BOM dalam kalkulator kos',
+    posCostPromoComposeHint:
+      'Promotion sets use composed menu costs (choice groups count only the picks). Check ingredient lines on the component menus.',
     posCostOpenItems: 'Urus item',
     posCostInsightsNeedList: 'Muat data dari tab Senarai dahulu',
     posCostWeightedRatioTitle: 'Nisbah kos berwajaran jualan (dine-in)',

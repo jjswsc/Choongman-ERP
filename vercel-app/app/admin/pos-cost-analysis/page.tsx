@@ -35,6 +35,7 @@ import { useT } from "@/lib/i18n"
 import {
   getCostSettings,
   getPosMenuCostAnalysis,
+  PosMenuCostAnalysisLoadError,
   useStoreList,
   type PosMenuCostAnalysisRow,
 } from "@/lib/api-client"
@@ -82,10 +83,12 @@ export default function PosCostAnalysisPage() {
   }, [isManager, userStore])
 
   const [rows, setRows] = React.useState<PosMenuCostAnalysisRow[]>([])
-  const [loading, setLoading] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
   const [listQueried, setListQueried] = React.useState(false)
   const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [loadErrorAuth, setLoadErrorAuth] = React.useState(false)
   const [lastLoadedAt, setLastLoadedAt] = React.useState<string | null>(null)
+  const initialListLoadRef = React.useRef(false)
   const [activeTab, setActiveTab] = React.useState(() => {
     const tab = (searchParams.get("tab") || "").trim()
     if (tab === "actual" || tab === "insights") return "actual"
@@ -95,7 +98,6 @@ export default function PosCostAnalysisPage() {
   })
   const [selectedForCalculator, setSelectedForCalculator] = React.useState<PosMenuCostAnalysisRow | null>(null)
   const [settings, setSettings] = React.useState<PosCostListSettings>(DEFAULT_POS_COST_LIST_SETTINGS)
-  const initialDeepLinkHandledRef = React.useRef(false)
 
   React.useEffect(() => {
     void getCostSettings()
@@ -112,22 +114,13 @@ export default function PosCostAnalysisPage() {
       })
   }, [])
 
-  React.useEffect(() => {
-    if (!allowed || listQueried) return
-    const cached = readPosCostSessionCache()
-    if (cached?.rows?.length) {
-      setRows(cached.rows)
-      setListQueried(true)
-      setLastLoadedAt(cached.at)
-    }
-  }, [allowed, listQueried])
-
   const refreshRows = React.useCallback(
-    async (opts?: { summary?: boolean }): Promise<PosMenuCostAnalysisRow[] | null> => {
+    async (opts?: { summary?: boolean; silent?: boolean }): Promise<PosMenuCostAnalysisRow[] | null> => {
       if (!allowed) return null
       const seq = ++posCostAnalysisLoadSeq
-      setLoading(true)
+      if (!opts?.silent) setLoading(true)
       setLoadError(null)
+      setLoadErrorAuth(false)
       const timeoutMs = process.env.NODE_ENV === "development" ? 600000 : 180000
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("timeout")), timeoutMs)
@@ -142,6 +135,7 @@ export default function PosCostAnalysisPage() {
         setRows(next)
         setListQueried(true)
         setLoadError(null)
+        setLoadErrorAuth(false)
         const at = new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok", hour12: false })
         setLastLoadedAt(at)
         writePosCostSessionCache(next)
@@ -149,6 +143,9 @@ export default function PosCostAnalysisPage() {
       } catch (e) {
         if (seq !== posCostAnalysisLoadSeq) return null
         console.error("getPosMenuCostAnalysis:", e)
+        const isAuth =
+          (e instanceof PosMenuCostAnalysisLoadError && e.status === 401) ||
+          (e instanceof Error && /인증이 필요합니다/.test(e.message))
         const msg =
           e instanceof Error && e.message === "timeout"
             ? t("posCostLoadTimeout") ||
@@ -156,9 +153,12 @@ export default function PosCostAnalysisPage() {
             : e instanceof Error && e.message
               ? e.message
               : t("posCostLoadFailed") || "원가 분석 목록을 불러오지 못했습니다."
-        setRows([])
+        if (!opts?.silent || isAuth) {
+          setRows([])
+        }
         setListQueried(true)
         setLoadError(msg)
+        setLoadErrorAuth(isAuth)
         return []
       } finally {
         if (seq === posCostAnalysisLoadSeq) setLoading(false)
@@ -172,29 +172,42 @@ export default function PosCostAnalysisPage() {
   }, [refreshRows])
 
   React.useEffect(() => {
-    if (initialDeepLinkHandledRef.current) return
-    if (!allowed) return
-    const focusMenuId = (searchParams.get("menuId") || "").trim()
-    const focusMenuCode = (searchParams.get("menuCode") || "").trim().toLowerCase()
-    if (!focusMenuId && !focusMenuCode) {
-      initialDeepLinkHandledRef.current = true
+    if (!allowed) {
+      setLoading(false)
       return
     }
-    initialDeepLinkHandledRef.current = true
-    void refreshRows({ summary: false }).then((arr) => {
-      const source = Array.isArray(arr) ? arr : []
-      const baseRow = source.find((r) => {
-        if (!isCostAnalysisBaseRow(r)) return false
-        if (focusMenuId && String(r.menuId) === focusMenuId) return true
-        return focusMenuCode ? String(r.menuCode || "").trim().toLowerCase() === focusMenuCode : false
+    if (initialListLoadRef.current) return
+    initialListLoadRef.current = true
+
+    const focusMenuId = (searchParams.get("menuId") || "").trim()
+    const focusMenuCode = (searchParams.get("menuCode") || "").trim().toLowerCase()
+    if (focusMenuId || focusMenuCode) {
+      void refreshRows({ summary: false }).then((arr) => {
+        const source = Array.isArray(arr) ? arr : []
+        const baseRow = source.find((r) => {
+          if (!isCostAnalysisBaseRow(r)) return false
+          if (focusMenuId && String(r.menuId) === focusMenuId) return true
+          return focusMenuCode ? String(r.menuCode || "").trim().toLowerCase() === focusMenuCode : false
+        })
+        if (!baseRow) return
+        setSelectedForCalculator({
+          ...baseRow,
+          breakdown: Array.isArray(baseRow.breakdown) ? baseRow.breakdown : [],
+        })
+        setActiveTab("calculator")
       })
-      if (!baseRow) return
-      setSelectedForCalculator({
-        ...baseRow,
-        breakdown: Array.isArray(baseRow.breakdown) ? baseRow.breakdown : [],
-      })
-      setActiveTab("calculator")
-    })
+      return
+    }
+
+    const cached = readPosCostSessionCache()
+    if (cached?.rows?.length) {
+      setRows(cached.rows)
+      setListQueried(true)
+      setLastLoadedAt(cached.at)
+      void refreshRows({ summary: true, silent: true })
+      return
+    }
+    void refreshRows({ summary: true })
   }, [allowed, refreshRows, searchParams])
 
   const fullFlatList = React.useMemo((): RowWithDisplayCode[] => {
@@ -279,6 +292,7 @@ export default function PosCostAnalysisPage() {
               loading={loading}
               listQueried={listQueried}
               loadError={loadError}
+              loadErrorAuth={loadErrorAuth}
               settings={settings}
               lastLoadedAt={lastLoadedAt}
               onLoad={loadList}

@@ -84,6 +84,7 @@ import { cn, roundErp3, formatErpCostInputString, formatErpNum } from "@/lib/uti
 import { buildItemTaxMapFromRows, computeInboundBatchAmounts } from "@/lib/inbound-payable-amount"
 import {
   type InboundSourceCurrency,
+  formatInboundFxRateInput,
   parseInboundFxRate,
   thbUnitCostFromKrw,
   validateInboundFxHeader,
@@ -1409,7 +1410,7 @@ export default function InboundPage() {
         setInStore(storeValue)
         setSourceCurrency(String(b.sourceCurrency || "").toUpperCase() === "KRW" ? "KRW" : "THB")
         setFxRate(
-          b.fxRate != null && Number(b.fxRate) > 0 ? formatErpCostInputString(Number(b.fxRate)) : ""
+          b.fxRate != null && Number(b.fxRate) > 0 ? formatInboundFxRateInput(Number(b.fxRate)) : ""
         )
         setSelectedItem(null)
         setInQty("")

@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useCallback } from 'react'
 import { isOfficeStore } from '@/lib/permissions'
 import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 
+export { filterHrAttendanceStorePickerOptions } from '@/lib/timesheet-store-filter'
+
 export interface StoreViewContextValue {
   /** 모바일에서 오피스 직원이 선택한 "조회 기준 매장" (없으면 null) */
   viewStore: string | null

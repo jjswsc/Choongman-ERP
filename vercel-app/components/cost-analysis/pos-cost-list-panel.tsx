@@ -48,6 +48,7 @@ import {
   type PosCostSaleFilter,
 } from "@/lib/pos-cost-analysis-shared"
 import { PosCostListKpi } from "@/components/cost-analysis/pos-cost-list-kpi"
+import { PosCostVatViewSelect, usePosCostVatView } from "@/components/cost-analysis/pos-cost-vat-view-select"
 import { getMenuCost } from "@/lib/api-client"
 
 export type RowWithDisplayCode = PosMenuCostAnalysisRow & { displayCode: string }
@@ -80,6 +81,8 @@ type Props = {
   listQueried: boolean
   /** 조회 실패 메시지 — 있으면 빈 목록 대신 표시 */
   loadError?: string | null
+  /** 401 등 재로그인 필요 */
+  loadErrorAuth?: boolean
   settings: PosCostListSettings
   lastLoadedAt: string | null
   onLoad: () => void
@@ -93,6 +96,7 @@ export function PosCostListPanel({
   loading,
   listQueried,
   loadError = null,
+  loadErrorAuth = false,
   settings,
   lastLoadedAt,
   onLoad,
@@ -112,6 +116,7 @@ export function PosCostListPanel({
   const [listSort, setListSort] = React.useState<{ key: PosCostListSortKey; dir: "asc" | "desc" } | null>(
     null
   )
+  const [vatView, setVatView] = usePosCostVatView()
 
   const setListSortKey = React.useCallback((key: PosCostListSortKey) => {
     setListSort((prev) => {
@@ -156,11 +161,17 @@ export function PosCostListPanel({
       const matchCat = categoryFilter === "all" || r.category === categoryFilter
       const matchMainCat =
         mainCategoryFilter === "all" || mainCategoryMatches(mainCategoryFilter, r.categoryMain, r.menuCode)
-      const matchIssue = rowMatchesIssueFilter(r, issueFilter, settings.misePercent, settings.costRatioCautionMax)
+      const matchIssue = rowMatchesIssueFilter(
+        r,
+        issueFilter,
+        settings.misePercent,
+        settings.costRatioCautionMax,
+        vatView
+      )
       const matchSale = rowMatchesSaleFilter(r, saleFilter)
       return matchTerm && matchCat && matchMainCat && matchIssue && matchSale
     })
-  }, [rows, searchTerm, saleFilter, categoryFilter, mainCategoryFilter, issueFilter, settings.misePercent])
+  }, [rows, searchTerm, saleFilter, categoryFilter, mainCategoryFilter, issueFilter, settings.misePercent, settings.costRatioCautionMax, vatView])
 
   const flatList = React.useMemo((): RowWithDisplayCode[] => {
     const order = [...new Set(filtered.map((r) => costAnalysisMenuIdKey(r.menuId)))]
@@ -195,8 +206,8 @@ export function PosCostListPanel({
     const nameKey = (r: RowWithDisplayCode) => `${r.menuName ?? ""}\0${r.optionName ?? ""}`
     return [...flatList].sort((a, b) => {
       const cmp = (n: number) => dir * n
-      const ma = computePosCostRowMetrics(a, settings.misePercent, settings.costRatioCautionMax)
-      const mb = computePosCostRowMetrics(b, settings.misePercent, settings.costRatioCautionMax)
+      const ma = computePosCostRowMetrics(a, settings.misePercent, settings.costRatioCautionMax, vatView)
+      const mb = computePosCostRowMetrics(b, settings.misePercent, settings.costRatioCautionMax, vatView)
       switch (listSort.key) {
         case "code":
           return cmp(a.displayCode.localeCompare(b.displayCode, "ko", { numeric: true }))
@@ -230,11 +241,11 @@ export function PosCostListPanel({
           return 0
       }
     })
-  }, [flatList, listSort, settings.misePercent])
+  }, [flatList, listSort, settings.misePercent, settings.costRatioCautionMax, vatView])
 
   const listSummary = React.useMemo(
-    () => summarizePosCostRows(flatList, settings.misePercent, settings.costRatioCautionMax),
-    [flatList, settings.misePercent, settings.costRatioCautionMax]
+    () => summarizePosCostRows(flatList, settings.misePercent, settings.costRatioCautionMax, vatView),
+    [flatList, settings.misePercent, settings.costRatioCautionMax, vatView]
   )
 
   const rowKey = (r: RowWithDisplayCode) =>
@@ -255,6 +266,7 @@ export function PosCostListPanel({
     }
     setExpandedIds((prev) => new Set(prev).add(key))
     if ((r.breakdown ?? []).length > 0) return
+    if (r.costFromPromoItems) return
 
     setBreakdownLoading((prev) => new Set(prev).add(key))
     try {
@@ -331,8 +343,11 @@ export function PosCostListPanel({
   )
 
   const handleExportCsv = () => {
-    const csv = exportPosCostListCsv(sortedFlatList, settings.misePercent)
-    downloadCsv(`pos-cost-analysis-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    const csv = exportPosCostListCsv(sortedFlatList, settings.misePercent, vatView)
+    downloadCsv(
+      `pos-cost-analysis-vat-${vatView}-${new Date().toISOString().slice(0, 10)}.csv`,
+      csv
+    )
   }
 
   return (
@@ -402,6 +417,7 @@ export function PosCostListPanel({
             <SelectItem value="high_ratio">{t("posCostIssueHighRatio")}</SelectItem>
           </SelectContent>
         </Select>
+        <PosCostVatViewSelect value={vatView} onChange={setVatView} />
         <div className="relative flex-1 min-w-[200px] max-w-sm flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -457,8 +473,7 @@ export function PosCostListPanel({
           </Button>
         </div>
       </div>
-
-      {loading ? (
+      <p className="text-[11px] text-muted-foreground">{t("posCostVatViewHint")}</p>
         <div className="rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
           {t("loading")}
         </div>
@@ -513,7 +528,7 @@ export function PosCostListPanel({
                     const expanded = expandedIds.has(key)
                     const hasBreakdown = (r.breakdown ?? []).length > 0
                     const loadingBd = breakdownLoading.has(key)
-                    const m = computePosCostRowMetrics(r, settings.misePercent, settings.costRatioCautionMax)
+                    const m = computePosCostRowMetrics(r, settings.misePercent, settings.costRatioCautionMax, vatView)
                     const menuLabel =
                       (r.menuName ?? "—") +
                       (r.optionName ? ` (${translatePosMenuLineForReceipt(r.optionName, t)})` : "")
@@ -629,9 +644,12 @@ export function PosCostListPanel({
                                     </span>
                                   </div>
                                 </div>
+                              ) : r.costFromPromoItems ? (
+                                <p className="text-xs text-muted-foreground">{t("posCostPromoComposeHint")}</p>
                               ) : (
                                 <p className="text-xs text-muted-foreground">{t("posCostNoBomExpandHint")}</p>
                               )}
+                              {!r.costFromPromoItems ? (
                               <Link
                                 href={`/admin/items?search=${encodeURIComponent((r.breakdown ?? [])[0]?.itemCode ?? "")}`}
                                 className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
@@ -640,6 +658,7 @@ export function PosCostListPanel({
                                 {t("posCostOpenItems")}
                                 <ExternalLink className="h-3 w-3" />
                               </Link>
+                              ) : null}
                             </td>
                           </tr>
                         ) : null}
@@ -653,7 +672,7 @@ export function PosCostListPanel({
             <AdminMobileOnly className="max-h-[min(70vh,900px)] overflow-y-auto divide-y divide-border/60">
               {sortedFlatList.map((r) => {
                 const key = rowKey(r)
-                const m = computePosCostRowMetrics(r, settings.misePercent, settings.costRatioCautionMax)
+                const m = computePosCostRowMetrics(r, settings.misePercent, settings.costRatioCautionMax, vatView)
                 const menuLabel =
                   (r.menuName ?? "—") +
                   (r.optionName ? ` (${translatePosMenuLineForReceipt(r.optionName, t)})` : "")
@@ -709,13 +728,33 @@ export function PosCostListPanel({
                 {loadError ? (
                   <>
                     <p className="text-rose-700 dark:text-rose-400">{loadError}</p>
-                    <p className="text-xs">
-                      {t("posCostLoadRetryHint") ||
-                        "대분류를 「전체」로 두고 다시 검색해 보세요. PC와 달리 폰은 캐시가 없어 전체 목록을 새로 받습니다."}
-                    </p>
-                    <Button size="sm" className="mt-1" onClick={onLoad} disabled={loading}>
-                      {t("posCostBtnQuery")}
-                    </Button>
+                    {loadErrorAuth ? (
+                      <>
+                        <p className="text-xs">
+                          {t("posCostAuthReloginHint") ||
+                            "세션이 만료되었거나 로그인 정보가 없습니다. 다시 로그인한 뒤 이 화면을 열어 주세요."}
+                        </p>
+                        <Button
+                          size="sm"
+                          className="mt-1"
+                          onClick={() => {
+                            window.location.href = "/admin/login"
+                          }}
+                        >
+                          {t("posCostGoLogin") || "로그인"}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs">
+                          {t("posCostLoadRetryHint") ||
+                            "네트워크가 불안정하면 Wi‑Fi에서 다시 검색해 보세요. 브라우저 번역(Translate)이 켜져 있으면 잠시 끄고 재시도해 주세요."}
+                        </p>
+                        <Button size="sm" className="mt-1" onClick={onLoad} disabled={loading}>
+                          {t("posCostBtnQuery")}
+                        </Button>
+                      </>
+                    )}
                   </>
                 ) : (
                   <>

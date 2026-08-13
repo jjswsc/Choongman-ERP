@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestVariantsFilter } from '@/lib/attendance-utils'
 import {
   findStaffForScheduleSlotName,
@@ -131,20 +131,31 @@ export async function GET(request: NextRequest) {
       ? dateFilter
       : `${dateFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
     const scheduleFilter = appendSaasTenantFilter(scheduleBaseFilter, tenantScope, 'schedules')
+    const scheduleOrder = 'schedule_date.asc,store_name.asc,name.asc,id.asc'
     try {
-      scheduleRows = (await supabaseSelectFilter('schedules', scheduleFilter, {
-        order: 'schedule_date.asc',
-        limit: 500,
+      scheduleRows = (await supabaseSelectFilterAllPages('schedules', scheduleFilter, {
+        order: scheduleOrder,
+        maxRows: 20000,
       })) as SchRow[]
     } catch (e) {
       if (isMissingSaasTenantColumnError(e)) {
         markSaasTenantColumnMissing('schedules')
-        scheduleRows = (await supabaseSelectFilter('schedules', scheduleBaseFilter, {
-          order: 'schedule_date.asc',
-          limit: 500,
-        })) as SchRow[]
+        try {
+          scheduleRows = (await supabaseSelectFilterAllPages('schedules', scheduleBaseFilter, {
+            order: scheduleOrder,
+            maxRows: 20000,
+          })) as SchRow[]
+        } catch {
+          scheduleRows = (await supabaseSelectFilter('schedules', scheduleBaseFilter, {
+            order: 'schedule_date.asc',
+            limit: 2000,
+          })) as SchRow[]
+        }
       } else {
-        throw e
+        scheduleRows = (await supabaseSelectFilter('schedules', scheduleFilter, {
+          order: 'schedule_date.asc',
+          limit: 2000,
+        })) as SchRow[]
       }
     }
 
@@ -233,21 +244,25 @@ export async function GET(request: NextRequest) {
     const leaveFilter = appendSaasTenantFilter(leaveBaseFilter, tenantScope, 'leave_requests')
     let leaveRows: { store?: string; name?: string; leave_date?: string; type?: string }[] = []
     try {
-      leaveRows = (await supabaseSelectFilter('leave_requests', leaveFilter, {
-        order: 'leave_date.asc',
-        limit: 200,
+      leaveRows = (await supabaseSelectFilterAllPages('leave_requests', leaveFilter, {
+        order: 'leave_date.asc,store.asc,name.asc',
         select: 'store,name,leave_date,type',
+        maxRows: 5000,
       })) as typeof leaveRows
     } catch (e) {
       if (isMissingSaasTenantColumnError(e)) {
         markSaasTenantColumnMissing('leave_requests')
-        leaveRows = (await supabaseSelectFilter('leave_requests', leaveBaseFilter, {
-          order: 'leave_date.asc',
-          limit: 200,
+        leaveRows = (await supabaseSelectFilterAllPages('leave_requests', leaveBaseFilter, {
+          order: 'leave_date.asc,store.asc,name.asc',
           select: 'store,name,leave_date,type',
+          maxRows: 5000,
         })) as typeof leaveRows
       } else {
-        throw e
+        leaveRows = (await supabaseSelectFilter('leave_requests', leaveFilter, {
+          order: 'leave_date.asc',
+          limit: 2000,
+          select: 'store,name,leave_date,type',
+        })) as typeof leaveRows
       }
     }
     const leaveMerged: { date: string; store: string; name: string; nick: string; pIn: string; pOut: string; pBS: string; pBE: string; area: string; plan_in_prev_day: boolean; leaveType?: string }[] = []

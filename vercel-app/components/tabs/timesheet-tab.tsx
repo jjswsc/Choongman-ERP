@@ -10,71 +10,88 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
 import { hasOfficeStaffScope, isOfficeStore } from "@/lib/permissions"
+import { useStoreView } from "@/lib/store-view-context"
 import {
-  useStoreView,
-  filterOperationalStorePickerOptions,
-} from "@/lib/store-view-context"
-
-const ALL_STORE_VALUE = "All"
+  TIMESHEET_ALL_STORE,
+  filterHrAttendanceStorePickerOptions,
+  resolveTimesheetQueryStore,
+  timesheetPickedStoreFromViewStore,
+} from "@/lib/timesheet-store-filter"
 
 export function TimesheetTab() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  /** 상단 MobileStoreSelectorBar 와 동일 소스(`stores`) — posStores 와 키가 어긋나면 조회가 빈 화면이 됨 */
-  const { stores, formatStoreLabel, resolveStoreKey } = useStoreList()
+  /** 근태·시간표는 posStores (CM Office 포함). 매출용 `stores`는 오피스가 빠져 조회가 빈다. */
+  const { posStores, formatStoreLabel, resolveStoreKey } = useStoreList()
   const { viewStore, setViewStore } = useStoreView()
   const isOffice = hasOfficeStaffScope(auth?.role || "", auth?.store)
 
-  const operationalStores = React.useMemo(
-    () => filterOperationalStorePickerOptions(stores),
-    [stores]
+  const hrStores = React.useMemo(
+    () => filterHrAttendanceStorePickerOptions(posStores),
+    [posStores]
   )
 
   const storeList = React.useMemo(() => {
     if (!auth?.store) return [] as string[]
-    if (isOffice) return [ALL_STORE_VALUE, ...operationalStores]
+    if (isOffice) return [TIMESHEET_ALL_STORE, ...hrStores]
     return [resolveStoreKey(auth.store) || auth.store]
-  }, [auth?.store, isOffice, operationalStores, resolveStoreKey])
+  }, [auth?.store, isOffice, hrStores, resolveStoreKey])
 
   /**
-   * 본사 모바일: 상단 매장바(viewStore)를 그대로 조회에 씀.
-   * 목록 exact match 실패 시 다른 매장으로 silent fallback 하지 않음(PC 관리자와 결과 불일치 원인).
+   * 시간표 전용 선택값. 상단 매장바는 매출용이라 오피스를 All로 바꾸므로
+   * 여기서 오피스·지점 조회를 유지한다.
    */
-  const storeFilter = React.useMemo(() => {
-    if (!auth?.store) return ""
-    if (!isOffice) return resolveStoreKey(auth.store) || auth.store
-    const raw = String(viewStore || "").trim()
-    if (!raw || isOfficeStore(raw)) {
-      // 상단바가 All로 오기 전에도 빈 조회를 피함 — All이면 전체 스케줄
-      return ALL_STORE_VALUE
+  const [pickedStore, setPickedStore] = React.useState("")
+  const initedRef = React.useRef(false)
+
+  React.useEffect(() => {
+    if (!isOffice || initedRef.current) return
+    if (hrStores.length === 0 && !String(viewStore || "").trim()) return
+    initedRef.current = true
+    const fromBar = timesheetPickedStoreFromViewStore(viewStore)
+    if (fromBar !== TIMESHEET_ALL_STORE) {
+      const resolved = resolveStoreKey(fromBar) || fromBar
+      setPickedStore(hrStores.includes(resolved) ? resolved : fromBar)
+      return
     }
-    if (raw === ALL_STORE_VALUE) return ALL_STORE_VALUE
-    const resolved = resolveStoreKey(raw) || raw
-    if (isOfficeStore(resolved)) {
-      return ALL_STORE_VALUE
-    }
-    return resolved
-  }, [auth?.store, isOffice, viewStore, resolveStoreKey])
+    setPickedStore(TIMESHEET_ALL_STORE)
+  }, [isOffice, viewStore, hrStores, resolveStoreKey])
+
+  const storeFilter = React.useMemo(
+    () =>
+      resolveTimesheetQueryStore({
+        authStore: auth?.store,
+        isOfficeStaff: isOffice,
+        pickedStore: pickedStore || TIMESHEET_ALL_STORE,
+        resolveStoreKey,
+      }),
+    [auth?.store, isOffice, pickedStore, resolveStoreKey]
+  )
 
   /** Select value가 옵션에 없으면 Radix가 빈 값처럼 보임 → 목록에 맞춰 보정 */
   const selectStoreValue = React.useMemo(() => {
     if (!storeFilter) return undefined
     if (storeList.includes(storeFilter)) return storeFilter
-    if (storeFilter === ALL_STORE_VALUE) return ALL_STORE_VALUE
+    if (storeFilter === TIMESHEET_ALL_STORE) return TIMESHEET_ALL_STORE
     const hit = storeList.find((s) => resolveStoreKey(s) === storeFilter || s === storeFilter)
     return hit || storeFilter
   }, [storeFilter, storeList, resolveStoreKey])
 
   const onStoreChange = React.useCallback(
     (next: string) => {
-      if (isOffice) setViewStore(next)
+      setPickedStore(next)
+      if (!isOffice) return
+      // 상단 매출바는 오피스를 All로 리셋하므로 지점·전체만 동기화
+      if (next === TIMESHEET_ALL_STORE || !isOfficeStore(next)) {
+        setViewStore(next)
+      }
     },
     [isOffice, setViewStore]
   )
 
   const branchStoreList = React.useMemo(
-    () => storeList.filter((s) => s !== ALL_STORE_VALUE),
+    () => storeList.filter((s) => s !== TIMESHEET_ALL_STORE),
     [storeList]
   )
 
@@ -87,7 +104,7 @@ export function TimesheetTab() {
           <p className="text-[11px] text-muted-foreground">
             {t("scheduleToday")}, {t("scheduleWeek")}, {t("scheduleMyPunch")}
           </p>
-          {/* 매장 검색 - 당일 실시간 근무 & 주간 시간표 공통 (본사는 상단 매장바와 동기) */}
+          {/* 매장 검색 - 당일 실시간 근무 & 주간 시간표 공통 (오피스 포함) */}
           {storeList.length > 0 && (
             <div className="mt-3">
               <label className="text-[11px] font-medium text-muted-foreground block mb-1.5">
@@ -100,7 +117,7 @@ export function TimesheetTab() {
                 <SelectContent>
                   {storeList.map((st) => (
                     <SelectItem key={st} value={st}>
-                      {st === ALL_STORE_VALUE ? t("store_all_stores") : formatStoreLabel(st)}
+                      {st === TIMESHEET_ALL_STORE ? t("store_all_stores") : formatStoreLabel(st)}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -146,6 +146,8 @@ export interface PosMenuCostAnalysisRow {
    * 없으면 breakdown.length 로 판정.
    */
   hasBom?: boolean
+  /** 프로모션 세트 구성(pos_promo_items) 합성 원가 — leftover BOM이 아님 */
+  costFromPromoItems?: boolean
   breakdown: {
     itemCode: string
     itemName: string

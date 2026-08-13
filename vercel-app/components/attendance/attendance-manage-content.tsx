@@ -51,7 +51,7 @@ import { AdminScheduleEdit } from "@/components/admin/admin-schedule-edit"
 import { cn } from "@/lib/utils"
 import { isAttendanceOutApproved, todayStrBangkok } from "@/lib/attendance-utils"
 import { hasOfficeStaffScope } from "@/lib/permissions"
-import { filterOperationalStorePickerOptions } from "@/lib/store-view-context"
+import { filterHrAttendanceStorePickerOptions } from "@/lib/timesheet-store-filter"
 
 function todayStr() {
   return todayStrBangkok()
@@ -259,10 +259,10 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
     storeFilter,
   ])
 
-  /** 당일·주간 스케줄: 운영 매장만(본사 Office 제외). 출퇴근 기록 탭은 pos 전체도 쓸 수 있으나 기본 목록은 동일 기준 */
-  const { posStores, users: usersMap, staffByStore, resolveStoreKey } = useStoreList()
+  /** 당일·주간 스케줄: 지점 + CM Office (매출용 operational 필터는 오피스를 빼서 근태 조회가 빔) */
+  const { posStores, users: usersMap, staffByStore, resolveStoreKey, formatStoreLabel } = useStoreList()
   React.useEffect(() => {
-    const st = filterOperationalStorePickerOptions(
+    const st = filterHrAttendanceStorePickerOptions(
       (posStores || []).filter((s) => s && String(s).trim() && s !== "All")
     )
     setStores(isOffice ? ["All", ...st] : ["All", auth?.store || ""].filter(Boolean))
@@ -1248,7 +1248,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                     <SelectItem value="All">{t("store_all_stores") || "All"}</SelectItem>
                   ) : null}
                   {stores.filter((s) => s !== "All").map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                    <SelectItem key={s} value={s}>{formatStoreLabel(s) || s}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1283,7 +1283,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                     <SelectContent>
                       {stores.filter((s) => s !== "All").map((s) => (
                         <SelectItem key={s} value={s}>
-                          {s}
+                          {formatStoreLabel(s) || s}
                         </SelectItem>
                       ))}
                     </SelectContent>

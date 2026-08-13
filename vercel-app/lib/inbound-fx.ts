@@ -2,6 +2,9 @@ import { roundErp3 } from '@/lib/utils'
 
 export type InboundSourceCurrency = 'THB' | 'KRW'
 
+/** inbound_batches.fx_rate numeric(18, 6) 과 맞춤 */
+export const INBOUND_FX_RATE_DECIMALS = 6
+
 /** body/UI 통화 문자열 정규화 — 그 외는 THB */
 export function normalizeInboundSourceCurrency(raw: unknown): InboundSourceCurrency {
   const v = String(raw ?? '').trim().toUpperCase()
@@ -19,11 +22,73 @@ export function parseInboundFxRate(raw: unknown): number | null {
   return n
 }
 
+export function roundInboundFxRate(value: number): number {
+  const factor = 10 ** INBOUND_FX_RATE_DECIMALS
+  return Math.round(value * factor) / factor
+}
+
+/** 환율 입력란 표시 — 소수 6자리까지, trailing 0 제거 */
+export function formatInboundFxRateInput(n: number | string | null | undefined): string {
+  const parsed = parseInboundFxRate(n)
+  if (parsed == null) return ''
+  const r = roundInboundFxRate(parsed)
+  return r.toFixed(INBOUND_FX_RATE_DECIMALS).replace(/\.?0+$/, '')
+}
+
+/** 환율 입력 — 숫자·소수점만, 소수 6자리까지 */
+export function normalizeInboundFxRateInput(raw: string): string {
+  const cleaned = String(raw || '').replace(/,/g, '').replace(/[^\d.]/g, '')
+  if (cleaned === '') return ''
+  const firstDot = cleaned.indexOf('.')
+  let intRaw: string
+  let fracRaw: string
+  if (firstDot === -1) {
+    intRaw = cleaned
+    fracRaw = ''
+  } else {
+    intRaw = cleaned.slice(0, firstDot)
+    fracRaw = cleaned.slice(firstDot + 1).replace(/\./g, '')
+  }
+  fracRaw = fracRaw.slice(0, INBOUND_FX_RATE_DECIMALS)
+  const endsWithDot = cleaned.endsWith('.') && fracRaw === '' && cleaned.includes('.')
+  if (intRaw === '' && fracRaw === '') return endsWithDot ? '0.' : ''
+  if (intRaw === '' && fracRaw !== '') return `0.${fracRaw}`
+  if (fracRaw !== '') return `${intRaw}.${fracRaw}`
+  if (endsWithDot) return `${intRaw}.`
+  return intRaw
+}
+
 /** 원화 단가 → THB 단가 (ERP 소수 3자리) */
 export function thbUnitCostFromKrw(sourceUnitCostKrw: number, fxRateKrwPerThb: number): number {
   if (!Number.isFinite(sourceUnitCostKrw) || sourceUnitCostKrw < 0) return 0
   if (!Number.isFinite(fxRateKrwPerThb) || fxRateKrwPerThb <= 0) return 0
   return roundErp3(sourceUnitCostKrw / fxRateKrwPerThb)
+}
+
+/**
+ * 원화 단가 + 바트 단가 → 환율(1 THB당 KRW).
+ * 둘 다 양수일 때만 계산.
+ */
+export function fxRateFromKrwAndThb(sourceUnitCostKrw: number, thbUnitCost: number): number | null {
+  if (!Number.isFinite(sourceUnitCostKrw) || sourceUnitCostKrw <= 0) return null
+  if (!Number.isFinite(thbUnitCost) || thbUnitCost <= 0) return null
+  const rate = sourceUnitCostKrw / thbUnitCost
+  if (!Number.isFinite(rate) || rate <= 0) return null
+  return roundInboundFxRate(rate)
+}
+
+/**
+ * 원화 단가·수량 + 바트 줄 금액 → 환율.
+ * 바트 단가 = 바트 금액 ÷ 수량.
+ */
+export function fxRateFromKrwQtyAndThbAmount(
+  sourceUnitCostKrw: number,
+  qty: number,
+  thbAmount: number
+): number | null {
+  if (!Number.isFinite(qty) || qty <= 0) return null
+  if (!Number.isFinite(thbAmount) || thbAmount <= 0) return null
+  return fxRateFromKrwAndThb(sourceUnitCostKrw, thbAmount / qty)
 }
 
 export type ResolveInboundLineCostResult =

@@ -1,4 +1,5 @@
 import type { PosPromoWithItems } from '@/lib/api-client'
+import { toPosCostSalesDenom, type PosCostVatView } from '@/lib/pos-cost-vat'
 import {
   aggregatePromoChoiceAwareTotals,
   buildCostAnalysisLookups,
@@ -22,7 +23,8 @@ export type InquiryPromoEconomics = {
 
 export function buildInquiryEconomicsByPromoId(
   withItems: PosPromoWithItems[],
-  costAnalysisRows: unknown[]
+  costAnalysisRows: unknown[],
+  vatView: PosCostVatView = 'included'
 ): Record<string, InquiryPromoEconomics> {
   const { byMenuKey, byCodeKey } = buildCostAnalysisLookups(costAnalysisRows)
   const out: Record<string, InquiryPromoEconomics> = {}
@@ -54,8 +56,10 @@ export function buildInquiryEconomicsByPromoId(
       regularPriceSum: 0,
       costTotalHall: costHall,
       costTotalDelivery: costDel,
-      salePriceHall: saleHall,
-      salePriceDelivery: hasExplicitDel ? Number(pd) : undefined,
+      salePriceHall: toPosCostSalesDenom(saleHall, p.vatIncluded !== false, vatView),
+      salePriceDelivery: hasExplicitDel
+        ? toPosCostSalesDenom(Number(pd), p.vatIncluded !== false, vatView)
+        : undefined,
     })
 
     out[p.id] = {

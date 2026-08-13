@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import {
   attendanceStoreNamePostgrestVariantsFilter,
   employeeStorePostgrestVariantsFilter,
@@ -108,21 +108,33 @@ export async function GET(request: NextRequest) {
     const scheduleSelectLegacy =
       'schedule_date,store_name,name,plan_in,plan_out,break_start,break_end,memo,plan_in_prev_day'
 
+    const scheduleOrder = 'schedule_date.asc,store_name.asc,name.asc,id.asc'
     const fetchScheduleChunk = async (filter: string): Promise<SchRow[]> => {
-      try {
-        return (await supabaseSelectFilter('schedules', filter, {
-          order: 'schedule_date.asc',
-          limit: 500,
-          select: scheduleSelectWithEid,
+      const pullAll = async (select: string) =>
+        (await supabaseSelectFilterAllPages('schedules', filter, {
+          order: scheduleOrder,
+          select,
+          maxRows: 20000,
         })) as SchRow[]
+      const pullLimited = async (select: string) =>
+        (await supabaseSelectFilter('schedules', filter, {
+          order: 'schedule_date.asc',
+          limit: 2000,
+          select,
+        })) as SchRow[]
+      const pull = async (select: string) => {
+        try {
+          return await pullAll(select)
+        } catch {
+          return await pullLimited(select)
+        }
+      }
+      try {
+        return await pull(scheduleSelectWithEid)
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (/employee_id|42703|column/i.test(em)) {
-          return (await supabaseSelectFilter('schedules', filter, {
-            order: 'schedule_date.asc',
-            limit: 500,
-            select: scheduleSelectLegacy,
-          })) as SchRow[]
+          return await pull(scheduleSelectLegacy)
         }
         throw e
       }
@@ -192,11 +204,20 @@ export async function GET(request: NextRequest) {
     if (!isAll && store) {
       leaveFilter += `&${employeeStorePostgrestVariantsFilter(store)}`
     }
-    const leaveRows = (await supabaseSelectFilter(
-      'leave_requests',
-      leaveFilter,
-      { order: 'leave_date.asc', limit: 100, select: 'store,name,leave_date,type' }
-    )) as { store?: string; name?: string; leave_date?: string; type?: string }[]
+    let leaveRows: { store?: string; name?: string; leave_date?: string; type?: string }[] = []
+    try {
+      leaveRows = (await supabaseSelectFilterAllPages('leave_requests', leaveFilter, {
+        order: 'leave_date.asc,store.asc,name.asc',
+        select: 'store,name,leave_date,type',
+        maxRows: 5000,
+      })) as typeof leaveRows
+    } catch {
+      leaveRows = (await supabaseSelectFilter('leave_requests', leaveFilter, {
+        order: 'leave_date.asc',
+        limit: 2000,
+        select: 'store,name,leave_date,type',
+      })) as typeof leaveRows
+    }
     const leaveMerged: TodayScheduleOutRow[] = []
     for (const lr of leaveRows || []) {
       const storeVal = String(lr.store || '').trim()

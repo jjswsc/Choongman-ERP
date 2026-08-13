@@ -1,5 +1,5 @@
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
-import { toPosCostSalesExclVat } from "@/lib/pos-cost-vat"
+import { toPosCostSalesDenom, type PosCostVatView } from "@/lib/pos-cost-vat"
 
 /** 목록·KPI 공통 — 원가율 구간 (%) */
 export const COST_RATIO_GOOD_MAX = 35
@@ -82,7 +82,8 @@ export type PosCostRowMetrics = {
 export function computePosCostRowMetrics(
   r: PosMenuCostAnalysisRow,
   _misePercent: number = 0,
-  cautionMax: number = COST_RATIO_CAUTION_MAX
+  cautionMax: number = COST_RATIO_CAUTION_MAX,
+  vatView: PosCostVatView = "excluded"
 ): PosCostRowMetrics {
   const roundCost = (c: number) => Math.round(c * 10) / 10
   const priceH = Number(r.priceHall ?? 0)
@@ -91,15 +92,15 @@ export function computePosCostRowMetrics(
   const costDMise = roundCost(r.costDelivery ?? 0)
   const vatIncluded = r.vatIncluded !== false
 
-  const netHall = toPosCostSalesExclVat(priceH, vatIncluded)
-  const netDel = toPosCostSalesExclVat(priceD, vatIncluded)
+  const netHall = toPosCostSalesDenom(priceH, vatIncluded, vatView)
+  const netDel = toPosCostSalesDenom(priceD, vatIncluded, vatView)
 
   const marginH = netHall - costHMise
   const marginD = netDel - costDMise
   const marginPctH = netHall > 0 ? (marginH / netHall) * 100 : 0
   const marginPctD = netDel > 0 ? (marginD / netDel) * 100 : 0
 
-  /** 원가율 = 원가(공급가) ÷ 매출(부가세 제외) — 배달앱 수수료는 분모에서 제외 */
+  /** 원가율 = 원가(공급가) ÷ 매출(VAT 보기 기준) — 배달앱 수수료는 분모에서 제외 */
   const costRatioH = netHall > 0 ? (costHMise / netHall) * 100 : 0
   const costRatioD = netDel > 0 ? (costDMise / netDel) * 100 : 0
 
@@ -156,10 +157,11 @@ export type PosCostListSummary = {
 export function summarizePosCostRows(
   rows: PosMenuCostAnalysisRow[],
   misePercent: number = 0,
-  cautionMax: number = COST_RATIO_CAUTION_MAX
+  cautionMax: number = COST_RATIO_CAUTION_MAX,
+  vatView: PosCostVatView = "excluded"
 ): PosCostListSummary | null {
   if (rows.length === 0) return null
-  const metrics = rows.map((r) => computePosCostRowMetrics(r, misePercent, cautionMax))
+  const metrics = rows.map((r) => computePosCostRowMetrics(r, misePercent, cautionMax, vatView))
   const rowsH = metrics.filter((m) => m.costRatioH > 0)
   const rowsD = metrics.filter((m) => m.costRatioD > 0)
   const nH = rowsH.length
@@ -245,10 +247,11 @@ export function rowMatchesIssueFilter(
   r: PosMenuCostAnalysisRow,
   filter: PosCostIssueFilter,
   misePercent: number = 0,
-  cautionMax: number = COST_RATIO_CAUTION_MAX
+  cautionMax: number = COST_RATIO_CAUTION_MAX,
+  vatView: PosCostVatView = "excluded"
 ): boolean {
   if (filter === "all") return true
-  return computePosCostRowMetrics(r, misePercent, cautionMax).issues.includes(filter)
+  return computePosCostRowMetrics(r, misePercent, cautionMax, vatView).issues.includes(filter)
 }
 
 /** 품목 코드 → 사용 메뉴 수 (breakdown 필요) */
@@ -303,7 +306,7 @@ export function simulateItemPriceDelta(
       addedCost += base * (mult - 1)
     }
     const afterCostH = before.costHMise + addedCost
-    const afterRatioH = before.priceH > 0 ? (afterCostH / before.priceH) * 100 : 0
+    const afterRatioH = before.netSalesH > 0 ? (afterCostH / before.netSalesH) * 100 : 0
     out.push({
       row: r,
       beforeRatioH: before.costRatioH,
@@ -316,7 +319,8 @@ export function simulateItemPriceDelta(
 
 export function exportPosCostListCsv(
   rows: Array<PosMenuCostAnalysisRow & { displayCode?: string }>,
-  _misePercent: number = 0
+  _misePercent: number = 0,
+  vatView: PosCostVatView = "excluded"
 ): string {
   const header = [
     "code",
@@ -336,7 +340,7 @@ export function exportPosCostListCsv(
   ]
   const lines = [header.join(",")]
   for (const r of rows) {
-    const m = computePosCostRowMetrics(r, _misePercent)
+    const m = computePosCostRowMetrics(r, _misePercent, COST_RATIO_CAUTION_MAX, vatView)
     const displayCode = (r as { displayCode?: string }).displayCode ?? r.menuCode ?? ""
     const cells = [
       displayCode,

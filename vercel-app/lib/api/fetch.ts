@@ -1,14 +1,21 @@
+import { getMemoryAuthToken } from '@/lib/auth-token-memory'
+
 /**
  * API fetch 핵심 - 인증 토큰 자동 첨부, 401 시 로그인 리다이렉트
  */
 function getAuthHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {}
   try {
+    const mem = getMemoryAuthToken()
+    if (mem) return { Authorization: `Bearer ${mem}` }
     let token: string | null = null
     try {
-      token = sessionStorage.getItem('cm_token') || localStorage.getItem('cm_token')
-    } catch {
       token = sessionStorage.getItem('cm_token')
+    } catch {}
+    if (!token) {
+      try {
+        token = localStorage.getItem('cm_token')
+      } catch {}
     }
     if (token) return { Authorization: `Bearer ${token}` }
   } catch {}

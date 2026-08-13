@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { canAccessPosOrder } from '@/lib/permissions'
 import { readJwtCanManageOfficePayroll } from '@/lib/jwt-payload-client'
+import { setMemoryAuthToken } from '@/lib/auth-token-memory'
 
 export interface AuthState {
   company?: string
@@ -234,6 +235,7 @@ export function enrichOfflinePosAuth(partial: AuthState): AuthState {
 }
 
 function saveAuth(auth: AuthState) {
+  setMemoryAuthToken(auth.token)
   try {
     sessionStorage.setItem('cm_store', auth.store)
     sessionStorage.setItem('cm_user', auth.user)
@@ -287,6 +289,7 @@ function saveAuth(auth: AuthState) {
 
 /** 세션·토큰·마지막 로그인 스냅샷 제거. 스냅샷을 남기면 로그인 URL에서 전역 auth가 복구되어 곧바로 앱으로 튕김(로그아웃 무력화). 오프라인 재진입은 로그인 화면에서 스냅샷을 읽는 CTA로만 사용. */
 function clearAuth() {
+  setMemoryAuthToken(null)
   try {
     sessionStorage.removeItem('cm_store')
     sessionStorage.removeItem('cm_user')

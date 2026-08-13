@@ -10,8 +10,14 @@ import { Badge } from "@/components/ui/badge"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
 import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN, ADMIN_TABLE_SCROLL_PANEL_SM_CN } from "@/lib/admin-ui-standards"
 import { formatErpNum, normalizeErpDecimalInput, roundErp3, formatErpCostInputString } from "@/lib/utils"
-import type { InboundSourceCurrency } from "@/lib/inbound-fx"
-import { parseInboundFxRate, thbUnitCostFromKrw } from "@/lib/inbound-fx"
+import {
+  type InboundSourceCurrency,
+  formatInboundFxRateInput,
+  fxRateFromKrwQtyAndThbAmount,
+  normalizeInboundFxRateInput,
+  parseInboundFxRate,
+  thbUnitCostFromKrw,
+} from "@/lib/inbound-fx"
 
 export type InboundCartLine = {
   date: string
@@ -63,6 +69,84 @@ export function InboundCartTable({
   const isEdit = !!editingBatchId
   const isKrw = sourceCurrency === "KRW"
   const fxNum = parseInboundFxRate(fxRate)
+  const [thbAmountDrafts, setThbAmountDrafts] = React.useState<Record<number, string>>({})
+  const [thbAmountFocusIdx, setThbAmountFocusIdx] = React.useState<number | null>(null)
+  const [thbAmountAnchor, setThbAmountAnchor] = React.useState(false)
+
+  React.useEffect(() => {
+    if (isKrw) return
+    setThbAmountDrafts({})
+    setThbAmountFocusIdx(null)
+    setThbAmountAnchor(false)
+  }, [isKrw])
+
+  const applyFxFromLine = React.useCallback(
+    (krwCost: string, qty: string, thbAmount: string) => {
+      if (!onFxRateChange) return
+      const krwNum = parseFloat(String(krwCost).replace(/,/g, "")) || 0
+      const qtyNum = parseFloat(String(qty).replace(/,/g, "")) || 0
+      const thbNum = parseFloat(String(thbAmount).replace(/,/g, "")) || 0
+      const rate = fxRateFromKrwQtyAndThbAmount(krwNum, qtyNum, thbNum)
+      if (rate == null) return
+      setThbAmountAnchor(true)
+      onFxRateChange(formatInboundFxRateInput(rate))
+    },
+    [onFxRateChange]
+  )
+
+  const handleFxRateFieldChange = (next: string) => {
+    setThbAmountAnchor(false)
+    setThbAmountDrafts({})
+    onFxRateChange?.(normalizeInboundFxRateInput(next))
+  }
+
+  const handleCostChange = (idx: number, cost: string) => {
+    onUpdateCost(idx, cost)
+    const thbDraft = thbAmountDrafts[idx]
+    if (thbAmountAnchor && thbDraft) {
+      applyFxFromLine(cost, cart[idx]?.qty ?? "", thbDraft)
+    }
+  }
+
+  const handleQtyChange = (idx: number, qty: string) => {
+    onUpdateQty?.(idx, qty)
+    if (!thbAmountAnchor) {
+      setThbAmountDrafts((prev) => {
+        if (!(idx in prev)) return prev
+        const next = { ...prev }
+        delete next[idx]
+        return next
+      })
+      return
+    }
+    const thbDraft = thbAmountDrafts[idx]
+    if (thbDraft) applyFxFromLine(cart[idx]?.cost ?? "", qty, thbDraft)
+  }
+
+  const handleThbAmountChange = (idx: number, raw: string) => {
+    const next = normalizeErpDecimalInput(raw)
+    setThbAmountDrafts((prev) => ({ ...prev, [idx]: next }))
+    setThbAmountAnchor(true)
+    applyFxFromLine(cart[idx]?.cost ?? "", cart[idx]?.qty ?? "", next)
+  }
+
+  const handleRemoveLine = (idx: number) => {
+    setThbAmountDrafts((prev) => {
+      const next: Record<number, string> = {}
+      for (const [k, v] of Object.entries(prev)) {
+        const i = Number(k)
+        if (i === idx) continue
+        next[i > idx ? i - 1 : i] = v
+      }
+      return next
+    })
+    setThbAmountFocusIdx((cur) => {
+      if (cur == null) return null
+      if (cur === idx) return null
+      return cur > idx ? cur - 1 : cur
+    })
+    onRemove(idx)
+  }
 
   return (
     <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
@@ -130,7 +214,11 @@ export function InboundCartTable({
                   type="text"
                   inputMode="decimal"
                   value={fxRate}
-                  onChange={(e) => onFxRateChange(normalizeErpDecimalInput(e.target.value))}
+                  onChange={(e) => handleFxRateFieldChange(e.target.value)}
+                  onBlur={() => {
+                    const formatted = formatInboundFxRateInput(fxRate)
+                    if (formatted && formatted !== fxRate) onFxRateChange?.(formatted)
+                  }}
                   placeholder={t("inFxRatePlaceholder")}
                   className="mt-1 h-8 text-right text-sm"
                   disabled={saving}
@@ -157,7 +245,7 @@ export function InboundCartTable({
               <th className="px-3 py-2.5 text-right text-[11px] font-bold text-muted-foreground w-28">
                 {isKrw ? t("inColCostKrw") : t("inColCost")}
               </th>
-              <th className="px-3 py-2.5 text-right text-[11px] font-bold text-muted-foreground w-24">
+              <th className="px-3 py-2.5 text-right text-[11px] font-bold text-muted-foreground w-28">
                 {t("inColAmount")}
                 {isKrw ? " (THB)" : ""}
               </th>
@@ -194,7 +282,7 @@ export function InboundCartTable({
                           type="text"
                           inputMode="decimal"
                           value={c.qty}
-                          onChange={(e) => onUpdateQty(idx, normalizeErpDecimalInput(e.target.value))}
+                          onChange={(e) => handleQtyChange(idx, normalizeErpDecimalInput(e.target.value))}
                           className="h-8 w-full min-w-[64px] text-right text-sm"
                         />
                       ) : (
@@ -206,24 +294,55 @@ export function InboundCartTable({
                         type="text"
                         inputMode="decimal"
                         value={c.cost}
-                        onChange={(e) => onUpdateCost(idx, normalizeErpDecimalInput(e.target.value))}
+                        onChange={(e) => handleCostChange(idx, normalizeErpDecimalInput(e.target.value))}
                         onBlur={() => {
                           const normalized = formatErpCostInputString(c.cost)
-                          if (normalized !== c.cost) onUpdateCost(idx, normalized)
+                          if (normalized !== c.cost) handleCostChange(idx, normalized)
                         }}
                         className="h-8 w-full min-w-[80px] text-right text-sm"
                       />
                     </td>
-                    <td className={cnAmount()}>
-                      {formatErpNum(amount)}
-                      {lang === "th" ? " THB" : ""}
+                    <td className={isKrw && onFxRateChange ? "px-3 py-2.5" : cnAmount()}>
+                      {isKrw && onFxRateChange ? (
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          value={
+                            thbAmountDrafts[idx] != null &&
+                            (thbAmountFocusIdx === idx || thbAmountAnchor)
+                              ? thbAmountDrafts[idx]
+                              : amount === 0 && !fxNum
+                                ? ""
+                                : formatErpCostInputString(amount)
+                          }
+                          onFocus={() => setThbAmountFocusIdx(idx)}
+                          onChange={(e) => handleThbAmountChange(idx, e.target.value)}
+                          onBlur={() => {
+                            const draft = thbAmountDrafts[idx]
+                            if (draft) {
+                              const normalized = formatErpCostInputString(draft)
+                              setThbAmountDrafts((prev) => ({ ...prev, [idx]: normalized }))
+                              if (normalized) applyFxFromLine(c.cost, c.qty, normalized)
+                            }
+                            setThbAmountFocusIdx(null)
+                          }}
+                          placeholder="THB"
+                          className="h-8 w-full min-w-[80px] text-right text-sm"
+                          disabled={saving}
+                        />
+                      ) : (
+                        <>
+                          {formatErpNum(amount)}
+                          {lang === "th" ? " THB" : ""}
+                        </>
+                      )}
                     </td>
                     <td className="px-2 py-2.5">
                       <Button
                         size="sm"
                         variant="ghost"
                         className={`${ADMIN_BTN_XS_CN} text-destructive hover:text-destructive`}
-                        onClick={() => onRemove(idx)}
+                        onClick={() => handleRemoveLine(idx)}
                       >
                         <Trash2 className="h-3.5 w-3.5" aria-hidden />
                         <span className="sr-only">{t("delete")}</span>
