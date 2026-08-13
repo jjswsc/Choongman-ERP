@@ -531,7 +531,7 @@ export function PosTerminalDialogs({
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs"
-                  disabled={km.opsBusy || km.callbackState === 'received'}
+                  disabled={km.opsBusy}
                   onClick={() => void km.onFollowupAction('inquiry')}
                 >
                   {t('posKbankInquiry') || 'Inquiry'}
@@ -541,7 +541,7 @@ export function PosTerminalDialogs({
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs"
-                  disabled={km.opsBusy || km.callbackState === 'received'}
+                  disabled={km.opsBusy}
                   onClick={() => void km.onFollowupAction('settlement')}
                 >
                   {t('posKbankSettlement') || 'Settlement'}
@@ -561,7 +561,7 @@ export function PosTerminalDialogs({
                   size="sm"
                   variant="outline"
                   className="h-8 text-xs"
-                  disabled={km.opsBusy || km.callbackState === 'received'}
+                  disabled={km.opsBusy}
                   title={
                     !String(km.opsTxnNo || '').trim()
                       ? t('posKbankVoidNeedsTxnNo') || 'Void runs Inquiry first when txnNo is empty.'

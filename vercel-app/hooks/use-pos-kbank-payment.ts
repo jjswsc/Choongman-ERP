@@ -100,6 +100,13 @@ export interface UsePosKbankPaymentReturn {
   kbankOpsLastResult: string
   kbankOpsCardBrands: string[]
   kbankCallbackState: 'idle' | 'waiting' | 'received' | 'failed'
+  kbankPaidVoidSnapshot: {
+    partnerTxnUid: string
+    txnNo: string
+    terminalId: string
+    qrType: 'THAI_QR' | 'CREDIT_CARD'
+    amount: number
+  } | null
   kbankOutcomeState: KbankOutcomeState | null
   setKbankOutcomeState: (v: KbankOutcomeState | null) => void
   kbankApiPausedUntilMs: number
@@ -175,6 +182,14 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
   const [kbankOpsLastResult, setKbankOpsLastResult] = useState('')
   const [kbankOpsCardBrands, setKbankOpsCardBrands] = useState<string[]>([])
   const [kbankCallbackState, setKbankCallbackState] = useState<'idle' | 'waiting' | 'received' | 'failed'>('idle')
+  /** After paid: keep ids for Void even if staff closes the QR panel (receipt Void). Cleared on new Generate / Void success. */
+  const [kbankPaidVoidSnapshot, setKbankPaidVoidSnapshot] = useState<{
+    partnerTxnUid: string
+    txnNo: string
+    terminalId: string
+    qrType: 'THAI_QR' | 'CREDIT_CARD'
+    amount: number
+  } | null>(null)
   const [kbankOutcomeState, setKbankOutcomeState] = useState<KbankOutcomeState | null>(null)
   const [kbankQrSessionStartedAtMs, setKbankQrSessionStartedAtMs] = useState(0)
   const kbankQrSessionStartedAtRef = useRef(0)
@@ -552,14 +567,23 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       setKbankCallbackState('received')
       clearKbankApiPause()
       setCustomerDisplayPaymentMessage('')
+      const paidAmount =
+        input.amount != null && Number.isFinite(input.amount)
+          ? input.amount
+          : Math.max(0, Number(liveKbankQrAmount || 0))
+      const paidTxnNo = String(input.approvalCode || '').trim().slice(0, 20)
+      setKbankPaidVoidSnapshot((prev) => ({
+        partnerTxnUid: refId,
+        txnNo: paidTxnNo || String(prev?.txnNo || '').trim(),
+        terminalId: String(kbankOpsTerminalId || prev?.terminalId || '').trim(),
+        qrType: liveKbankQrType,
+        amount: paidAmount,
+      }))
       if (alreadyNotified) return
       openKbankOutcomeModal(
         {
           kind: 'success',
-          amount:
-            input.amount != null && Number.isFinite(input.amount)
-              ? input.amount
-              : Math.max(0, Number(liveKbankQrAmount || 0)),
+          amount: paidAmount,
           refId,
           paymentMethod:
             input.paymentMethod ||
@@ -573,6 +597,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
     },
     [
       kbankOpsCardBrands,
+      kbankOpsTerminalId,
       liveKbankQrAmount,
       liveKbankQrType,
       openKbankOutcomeModal,
@@ -600,7 +625,14 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       const stData = (st.data || {}) as Record<string, unknown>
       if (!isKbankInquiryResponseApproved(st.status, stData, st.statusCode)) return false
       const stTxnNo = extractKbankPaymentTxnNo(stData).slice(0, 20)
-      if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
+      if (stTxnNo) {
+        setKbankOpsTxnNo(stTxnNo)
+        setKbankPaidVoidSnapshot((prev) =>
+          prev && (prev.partnerTxnUid === partnerTxnUid || !prev.txnNo)
+            ? { ...prev, partnerTxnUid: prev.partnerTxnUid || partnerTxnUid, txnNo: stTxnNo }
+            : prev
+        )
+      }
       const inquiryMeta = extractKbankQrResponseMeta(stData)
       const brands = resolveKbankCreditCardBrandLabels({
         sof: inquiryMeta.sof,
@@ -712,6 +744,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       kbankGenerateInFlightRef.current = true
       try {
       clearKbankQrSession()
+      setKbankPaidVoidSnapshot(null)
       const sessionGen = ++kbankQrSessionGenRef.current
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
 
@@ -1050,27 +1083,44 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         await appAlert(t('posStoreRequired') || '매장 정보가 필요합니다.')
         return
       }
-      const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
+      const snap = kbankPaidVoidSnapshot
+      const partnerTxnUid = String(
+        (action === 'void' ? kbankOpsTxnUid || snap?.partnerTxnUid : kbankOpsTxnUid) || ''
+      ).trim()
       if (!partnerTxnUid) {
         await appAlert(t('posKbankGenerateFirstAlert') || 'Please run QR Generate first.')
         return
       }
       const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
-      const terminalId = String(kbankOpsTerminalId || '').trim()
-      const txnNoRaw = String(kbankOpsTxnNo || '').trim()
+      const terminalId = String(
+        (action === 'void' ? kbankOpsTerminalId || snap?.terminalId : kbankOpsTerminalId) || ''
+      ).trim()
+      const txnNoRaw = String(
+        (action === 'void' ? kbankOpsTxnNo || snap?.txnNo : kbankOpsTxnNo) || ''
+      ).trim()
+      const followupQrType =
+        action === 'void' && !String(kbankOpsTxnUid || '').trim() && snap?.qrType
+          ? snap.qrType
+          : liveKbankQrType
+      const followupAmount =
+        action === 'void' && !String(kbankOpsTxnUid || '').trim() && snap
+          ? Math.max(0, Number(snap.amount || 0))
+          : Math.max(0, Number(liveKbankQrAmount || 0))
       const txnAlreadyPaid =
         kbankCallbackState === 'received' ||
+        Boolean(snap && snap.partnerTxnUid === partnerTxnUid) ||
         kbankCallbackNotifiedTxRef.current === partnerTxnUid ||
         kbankCallbackNotifiedTxRef.current === origPartnerTxnUid
-      if (txnAlreadyPaid && (action === 'void' || action === 'cancel' || action === 'inquiry')) {
+      // Cancel is for unpaid QR only. Void is for paid — do not block Void here.
+      if (txnAlreadyPaid && action === 'cancel') {
         await appAlert(
           t('posKbankAlreadyPaidNoVoid') ||
-            'This transaction is already paid. Void/Cancel/Inquiry is not needed — check order close and receipt.'
+            'This transaction is already paid. Use Void instead of Cancel.'
         )
         return
       }
       const inquiryTxnNo = resolveKbankInquiryTxnNoForRequest(txnNoRaw, {
-        qrType: liveKbankQrType,
+        qrType: followupQrType,
       })
       if (!(await alertIfKbankApiPaused(action))) return
       if (action === 'inquiry') {
@@ -1160,14 +1210,21 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
               terminalId: terminalId || undefined,
               payload: {
                 origPartnerTxnUid,
-                qrType: liveKbankQrType,
+                qrType: followupQrType,
                 ...(terminalId ? { terminalId } : {}),
               },
             })
             if (inq.success) {
               const inqData = (inq.data || {}) as Record<string, unknown>
               voidTxnNo = extractKbankPaymentTxnNo(inqData).slice(0, 20)
-              if (voidTxnNo) setKbankOpsTxnNo(voidTxnNo)
+              if (voidTxnNo) {
+                setKbankOpsTxnNo(voidTxnNo)
+                setKbankPaidVoidSnapshot((prev) =>
+                  prev && prev.partnerTxnUid === partnerTxnUid
+                    ? { ...prev, txnNo: voidTxnNo }
+                    : prev
+                )
+              }
             }
             if (!voidTxnNo) {
               const inqErr = String(
@@ -1210,12 +1267,13 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
             purgeKbankPendingFinalize(origPartnerTxnUid || partnerTxnUid)
             clearKbankQrFromLinkpos()
             setKbankCallbackState('failed')
+            setKbankPaidVoidSnapshot(null)
             openKbankOutcomeModal(
               {
                 kind: 'voided',
-                amount: Math.max(0, Number(liveKbankQrAmount || 0)),
+                amount: followupAmount,
                 refId: origPartnerTxnUid || partnerTxnUid,
-                paymentMethod: liveKbankQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
+                paymentMethod: followupQrType === 'CREDIT_CARD' ? 'Credit Card QR' : 'PromptPay QR',
                 approvalCode: nextTxnNo || voidTxnNo || undefined,
                 timeLabel: formatPosDateTimeMedium(new Date(), lang),
               },
@@ -1277,6 +1335,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       kbankOpsOrigTxnUid,
       kbankOpsTerminalId,
       kbankOpsTxnNo,
+      kbankPaidVoidSnapshot,
       liveKbankQrType,
       kbankCallbackState,
       t,
@@ -1626,6 +1685,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
     kbankOpsLastResult,
     kbankOpsCardBrands,
     kbankCallbackState,
+    kbankPaidVoidSnapshot,
     kbankOutcomeState,
     setKbankOutcomeState,
     kbankApiPausedUntilMs,
