@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
     let poBillTo: PoInvoiceBillToVendor | undefined
 
     let forceOutboundReferenceNo = ''
+    let poReferenceNo = ''
 
     if (refType === 'Order') {
       const outbound = await buildPayableItemsFromOrderOutbound(refId)
@@ -125,7 +126,7 @@ export async function GET(request: NextRequest) {
       }
     } else if (refType === 'PO') {
       const poRows = (await supabaseSelectFilter('purchase_orders', `id=eq.${refId}`, {
-        select: 'cart_json,withholding_tax_amount,withholding_tax_rate,vendor_code,vendor_name',
+        select: 'cart_json,withholding_tax_amount,withholding_tax_rate,vendor_code,vendor_name,po_no',
         limit: 1,
       })) as
         | {
@@ -134,10 +135,12 @@ export async function GET(request: NextRequest) {
             withholding_tax_rate?: number | string | null
             vendor_code?: string | null
             vendor_name?: string | null
+            po_no?: string | null
           }[]
         | null
       const poRow = poRows?.[0]
       if (poRow) {
+        poReferenceNo = String(poRow.po_no || '').trim()
         const vendorCode = String(poRow.vendor_code || '').trim()
         const vendorName = String(poRow.vendor_name || '').trim()
         let vendorRows: NonNullable<ReturnType<typeof mapDbVendorRowToPoBillTo>>[] = []
@@ -268,7 +271,9 @@ export async function GET(request: NextRequest) {
       {
         items,
         orderInvoiceTotals,
-        ...(forceOutboundReferenceNo ? { referenceNo: forceOutboundReferenceNo } : {}),
+        ...(forceOutboundReferenceNo || poReferenceNo
+          ? { referenceNo: forceOutboundReferenceNo || poReferenceNo }
+          : {}),
         ...(poBillTo ? { poBillTo } : {}),
         ...(withholdingTaxAmount != null && withholdingTaxAmount > 0
           ? {

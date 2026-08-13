@@ -252,7 +252,7 @@ export interface OrderInvoiceTotals {
 export type PayableTransactionItemsResponse = {
   items: PayableTransactionItem[]
   orderInvoiceTotals?: OrderInvoiceTotals
-  /** ForceOutbound: stock_logs.reference_no */
+  /** ForceOutbound: stock_logs.reference_no / 회계 PO: purchase_orders.po_no (Invoice 인쇄 번호) */
   referenceNo?: string
   withholdingTaxAmount?: number
   withholdingTaxRate?: number

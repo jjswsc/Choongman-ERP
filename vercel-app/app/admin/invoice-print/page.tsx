@@ -22,6 +22,7 @@ import {
   isOutboundReceivableInvoiceNo,
   isTaxInvoiceDocumentNo,
   normalizeTaxInvoiceReferenceNo,
+  resolveTaxInvoiceSourceReferenceNo,
 } from "@/lib/tax-invoice-doc-no"
 
 const STORAGE_KEY = "invoice-print-data"
@@ -152,17 +153,13 @@ function InvoicePrintPageInner() {
                 }
                 const ovRef = String(ov.referenceNo || "").trim()
                 const dataRef = String(d.referenceNo || "").trim()
-                const ovRefLooksLikeOutboundInv =
-                  /^IVF?\d{8}-\d+$/i.test(ovRef) ||
-                  (ovRef && documentNo && ovRef === String(documentNo).trim()) ||
-                  (ovRef && d.documentNo && ovRef === String(d.documentNo).trim())
-                // 구버전 override에 Document No(IV/IVF…)가 Reference로 저장된 경우 → ERP 입력값 우선
-                const mergedReferenceNo =
-                  ovRef && !ovRefLooksLikeOutboundInv
-                    ? ovRef
-                    : dataRef && dataRef !== "-"
-                      ? dataRef
-                      : ovRef || dataRef
+                // 구버전 override에 APO/IVF/Document No가 Reference로 저장된 경우 → Invoice 원본 번호(PO-… 등) 우선
+                const mergedReferenceNo = resolveTaxInvoiceSourceReferenceNo({
+                  savedReferenceNo: ovRef,
+                  businessDocumentNo: dataRef,
+                  ledgerInvoiceNo: ovRef,
+                  documentNo,
+                })
                 const referenceNo = taxDoc
                   ? normalizeTaxInvoiceReferenceNo(mergedReferenceNo, documentNo)
                   : mergedReferenceNo || dataRef || "-"

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { buildTaxInvoiceDocNo, isOutboundReceivableInvoiceNo, isTaxInvoiceDocumentNo, parseTaxInvoiceDocNoSuffix } from '@/lib/tax-invoice-doc-no'
+import {
+  buildTaxInvoiceDocNo,
+  extractPurchaseOrderNoFromText,
+  isAccountingPoReceivableInvoiceNo,
+  isOutboundReceivableInvoiceNo,
+  isTaxInvoiceDocumentNo,
+  isUnsuitableTaxInvoiceReferenceNo,
+  parseTaxInvoiceDocNoSuffix,
+  resolveTaxInvoiceSourceReferenceNo,
+} from '@/lib/tax-invoice-doc-no'
 
 describe('buildTaxInvoiceDocNo', () => {
   it('shows full YYYYMMDD and zero-padded seq', () => {
@@ -29,5 +38,49 @@ describe('invoice no format helpers', () => {
     expect(isTaxInvoiceDocumentNo('IV20260629-1830')).toBe(false)
     expect(isTaxInvoiceDocumentNo('IV.20260629-003')).toBe(true)
     expect(isOutboundReceivableInvoiceNo('IV.20260629-003')).toBe(false)
+  })
+
+  it('detects accounting PO receivable numbers', () => {
+    expect(isAccountingPoReceivableInvoiceNo('APO20260807-205')).toBe(true)
+    expect(isAccountingPoReceivableInvoiceNo('APO#205')).toBe(true)
+    expect(isAccountingPoReceivableInvoiceNo('PO-20260807-4180')).toBe(false)
+  })
+})
+
+describe('resolveTaxInvoiceSourceReferenceNo', () => {
+  it('uses PO invoice number instead of APO ledger number', () => {
+    expect(
+      resolveTaxInvoiceSourceReferenceNo({
+        savedReferenceNo: 'APO20260807-205',
+        businessDocumentNo: 'PO-20260807-4180',
+        ledgerInvoiceNo: 'APO20260807-205',
+        documentNo: 'IV.20260807-002',
+      })
+    ).toBe('PO-20260807-4180')
+  })
+
+  it('keeps a user-saved custom reference', () => {
+    expect(
+      resolveTaxInvoiceSourceReferenceNo({
+        savedReferenceNo: 'CUSTOM-REF-1',
+        businessDocumentNo: 'PO-20260807-4180',
+        ledgerInvoiceNo: 'APO20260807-205',
+      })
+    ).toBe('CUSTOM-REF-1')
+  })
+
+  it('falls back to APO when PO number is missing', () => {
+    expect(
+      resolveTaxInvoiceSourceReferenceNo({
+        savedReferenceNo: 'APO20260807-205',
+        businessDocumentNo: '',
+        ledgerInvoiceNo: 'APO20260807-205',
+      })
+    ).toBe('APO20260807-205')
+  })
+
+  it('treats tax document no copied into reference as unsuitable', () => {
+    expect(isUnsuitableTaxInvoiceReferenceNo('IV.20260807-002', 'IV.20260807-002')).toBe(true)
+    expect(extractPurchaseOrderNoFromText('회계발주 PO-20260807-4180')).toBe('PO-20260807-4180')
   })
 })
