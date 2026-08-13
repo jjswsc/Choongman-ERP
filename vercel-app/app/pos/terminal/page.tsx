@@ -343,7 +343,9 @@ import { usePosBusinessOpenGate } from '@/lib/use-pos-business-open-gate'
 import { ensurePosBusinessOpenForOrder } from '@/lib/pos-business-open-gate-client'
 import {
   buildCustomerDisplayPaymentLines,
+  mapLinesToCustomerDisplayItems,
   resolveCardPaymentAmountForPricing,
+  type KbankQrPaymentDisplayContext,
 } from '@/lib/pos-terminal-customer-display'
 import {
   buildKbankGenerateAuditPaste,
@@ -928,6 +930,9 @@ export default function PosTerminalPage() {
   const [kbankQrDisplayItems, setKbankQrDisplayItems] = useState<
     Array<{ name: string; qty: number; amount: number }>
   >([])
+  const kbankQrDisplayItemsRef = useRef(kbankQrDisplayItems)
+  kbankQrDisplayItemsRef.current = kbankQrDisplayItems
+  const lastCustomerDisplayItemsRef = useRef<Array<{ name: string; qty: number; amount: number }>>([])
   const terminalCartLinesRef = useRef<OrderItem[]>([])
   terminalCartLinesRef.current = terminalCartLines
   const kbankActiveOrderIdRef = useRef(0)
@@ -2200,22 +2205,7 @@ export default function PosTerminalPage() {
     if (String(liveKbankQrPayload || '').trim() && kbankQrDisplayItems.length > 0) {
       return kbankQrDisplayItems
     }
-    return terminalCartLines.map((line) => {
-      const qty = Math.max(
-        1,
-        Number(
-          (line as unknown as { quantity?: number; qty?: number }).quantity ??
-            (line as unknown as { qty?: number }).qty ??
-            1
-        )
-      )
-      const price = Math.max(0, Number((line as unknown as { price?: number }).price ?? 0))
-      return {
-        name: String((line as unknown as { name?: string }).name || ''),
-        qty,
-        amount: qty * price,
-      }
-    })
+    return mapLinesToCustomerDisplayItems(terminalCartLines)
   }, [terminalCartLines, liveKbankQrPayload, kbankQrDisplayItems])
   const customerDisplayOrderTotal = useMemo(
     () => customerDisplayOrderItems.reduce((sum, it) => sum + it.amount, 0),
@@ -3475,6 +3465,16 @@ export default function PosTerminalPage() {
     const showPostPayChange =
       postPaymentCashChangeBaht != null && Number.isFinite(postPaymentCashChangeBaht)
 
+    if (customerDisplayOrderItems.length > 0) {
+      lastCustomerDisplayItemsRef.current = customerDisplayOrderItems
+    } else if (!showLiveKbankQr && !showPostPayQr && !hasPendingPaymentFlow) {
+      lastCustomerDisplayItemsRef.current = []
+    }
+    const itemsForGuestScreen =
+      customerDisplayOrderItems.length > 0
+        ? customerDisplayOrderItems
+        : lastCustomerDisplayItemsRef.current
+
     const payload: PosCustomerDisplayPayload = showPostPayChange
       ? {
           ...base,
@@ -3493,6 +3493,11 @@ export default function PosTerminalPage() {
           message: customerDisplayT('posCustomerPostPaymentQrHint') || '아래 QR을 이용해 주세요.',
           qrPayload: effectiveCustomerDisplayQrPayload,
           qrType: effectiveCustomerDisplayQrType,
+          items: itemsForGuestScreen,
+          totalAmount:
+            effectiveStaffKbankQrAmount > 0
+              ? effectiveStaffKbankQrAmount
+              : customerDisplayBreakdown.total,
         }
       : showLiveKbankQr
         ? {
@@ -3505,7 +3510,7 @@ export default function PosTerminalPage() {
               '스캔 후 결제해 주세요.',
             qrPayload: effectiveCustomerDisplayQrPayload,
             qrType: effectiveCustomerDisplayQrType,
-            items: customerDisplayOrderItems,
+            items: itemsForGuestScreen,
             totalAmount:
               effectiveStaffKbankQrAmount > 0
                 ? effectiveStaffKbankQrAmount
@@ -3519,7 +3524,7 @@ export default function PosTerminalPage() {
               kind: 'payment',
               title: customerDisplayT('posCustomerPayment') || '결제 진행 중',
               message: customerDisplayPaymentMessage || undefined,
-              items: customerDisplayOrderItems,
+              items: itemsForGuestScreen,
               totalAmount: customerDisplayBreakdown.total,
               breakdown: customerDisplayBreakdown,
               paymentLines: buildCustomerDisplayPaymentLines(customerDisplayPaymentDraft, customerDisplayT),
@@ -3583,10 +3588,21 @@ export default function PosTerminalPage() {
   ])
 
   useEffect(() => {
-    if (activeTab === 'tables' && !selectedTableId) {
-      clearCartFromTerminal()
-    }
-  }, [activeTab, selectedTableId, clearCartFromTerminal])
+    if (activeTab !== 'tables' || selectedTableId) return
+    /** 서빙 테이블 결제·QR 대기 중에는 카트를 비우지 않음 — 손님 모니터 품목 유지 */
+    if (hasPendingPaymentFlow || tourPaymentModalOpen) return
+    if (String(liveKbankQrPayload || '').trim()) return
+    if (postPaymentCashChangeBaht != null) return
+    clearCartFromTerminal()
+  }, [
+    activeTab,
+    selectedTableId,
+    clearCartFromTerminal,
+    hasPendingPaymentFlow,
+    tourPaymentModalOpen,
+    liveKbankQrPayload,
+    postPaymentCashChangeBaht,
+  ])
 
   const hasInitializedMainPosPollRef = useRef(false)
   const lastSeenOrderIdRef = useRef<number>(0)
@@ -6478,6 +6494,7 @@ export default function PosTerminalPage() {
         clearKbankQrFromLinkpos()
         // Hide QR on staff + customer display; keep partnerTxnUid/txnNo so Void still works.
         setLiveKbankQrPayload('')
+        kbankQrDisplayItemsRef.current = []
         setKbankQrDisplayItems([])
         setCustomerDisplayPaymentMessage('')
         if (currentStoreId) {
@@ -6588,6 +6605,7 @@ export default function PosTerminalPage() {
     kbankQrSessionStartedAtRef.current = 0
     setLiveKbankQrPayload('')
     setLiveKbankQrType('THAI_QR')
+    kbankQrDisplayItemsRef.current = []
     setKbankQrDisplayItems([])
     setKbankOpsTxnUid('')
     setKbankOpsOrigTxnUid('')
@@ -6603,12 +6621,27 @@ export default function PosTerminalPage() {
   const runKbankQrPaymentIfNeeded = useCallback(
     async (
       payment: CartPanelPaymentPayload | null | undefined,
-      context?: { orderType?: string; orderLabel?: string; orderId?: number }
+      context?: KbankQrPaymentDisplayContext
     ) => {
       if (isPosDemo) return { ok: true as const }
       kbankManualCancelPendingRef.current = false
       const qrAmount = Math.max(0, Number(payment?.paymentQr || 0))
       if (qrAmount <= 0) return { ok: true as const }
+
+      const fromPayload = mapLinesToCustomerDisplayItems(context?.items)
+      const fromCart = mapLinesToCustomerDisplayItems(terminalCartLinesRef.current)
+      const qrDisplayItems =
+        fromPayload.length > 0
+          ? fromPayload
+          : fromCart.length > 0
+            ? fromCart
+            : kbankQrDisplayItemsRef.current
+      const rememberQrDisplayItems = () => {
+        if (qrDisplayItems.length === 0) return
+        kbankQrDisplayItemsRef.current = qrDisplayItems
+        setKbankQrDisplayItems(qrDisplayItems)
+      }
+      rememberQrDisplayItems()
 
       const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
       const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
@@ -6700,6 +6733,7 @@ export default function PosTerminalPage() {
         liveKbankQrType === requestedQrType
 
       if (canReuseLiveQr) {
+        rememberQrDisplayItems()
         setCustomerDisplayPaymentMessage(
           (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
         )
@@ -6738,6 +6772,7 @@ export default function PosTerminalPage() {
       try {
       // Stop previous QR session timers/inquiry before starting a new Generate.
       clearKbankQrSession()
+      rememberQrDisplayItems()
       setKbankPaidVoidSnapshot(null)
       const sessionGen = ++kbankQrSessionGenRef.current
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
@@ -6839,25 +6874,7 @@ export default function PosTerminalPage() {
       }
       setLiveKbankQrPayload(generatedQrPayload)
       setLiveKbankQrAmount(qrAmount)
-      {
-        const snap = terminalCartLinesRef.current.map((line) => {
-          const qty = Math.max(
-            1,
-            Number(
-              (line as unknown as { quantity?: number; qty?: number }).quantity ??
-                (line as unknown as { qty?: number }).qty ??
-                1
-            )
-          )
-          const price = Math.max(0, Number((line as unknown as { price?: number }).price ?? 0))
-          return {
-            name: String((line as unknown as { name?: string }).name || ''),
-            qty,
-            amount: qty * price,
-          }
-        })
-        setKbankQrDisplayItems(snap.filter((it) => it.name || it.amount > 0))
-      }
+      rememberQrDisplayItems()
       const activeOid = Number(context?.orderId || 0)
       if (activeOid > 0) kbankActiveOrderIdRef.current = activeOid
       const bankQrMeta = extractKbankQrResponseMeta(data)
@@ -8750,6 +8767,7 @@ export default function PosTerminalPage() {
                     orderType: 'delivery',
                     orderLabel: payload.orderLabel,
                     orderId: existingOrderId,
+                    items: payload.items,
                   })
                   kbankQrPending = !kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending === true
                   if (!kbankQr.ok && !kbankQrPending) return false
@@ -8934,6 +8952,7 @@ export default function PosTerminalPage() {
                     orderType: 'takeout',
                     orderLabel: payload.orderLabel,
                     orderId: existingOrderId,
+                    items: payload.items,
                   })
                   kbankQrPending = !kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending === true
                   if (!kbankQr.ok && !kbankQrPending) return false
@@ -9949,6 +9968,7 @@ export default function PosTerminalPage() {
                       orderType: 'dine_in',
                       orderLabel: payload.tableName,
                       orderId: existingOrderId ?? undefined,
+                      items: payload.items,
                     })
                   : { ok: true as const }
                 const kbankQrPending =
@@ -10505,6 +10525,7 @@ export default function PosTerminalPage() {
                   kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
                     orderType: payload.orderType,
                     orderLabel: payload.orderLabel,
+                    items: payload.items,
                   })
                   if (!kbankQr.ok && (kbankQr as { qrPending?: boolean }).qrPending !== true) return false
                 }

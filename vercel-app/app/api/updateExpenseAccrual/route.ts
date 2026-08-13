@@ -214,7 +214,9 @@ export async function POST(request: NextRequest) {
     const memo = String(body.memo || '').trim()
     const payeeCodeInput = String(body.payeeCode || body.payee_code || '').trim()
     let payeeName = String(body.payeeName || body.payee_name || '').trim()
-    const storeName = String(body.storeName || body.store_name || '').trim()
+    const storeName = paidLocked
+      ? String(row.store_name || '').trim()
+      : String(body.storeName || body.store_name || '').trim()
     const accountSubjectIdRaw = body.accountSubjectId ?? body.account_subject_id
     const accountSubjectId = accountSubjectIdRaw != null && !isNaN(Number(accountSubjectIdRaw))
       ? Number(accountSubjectIdRaw)
@@ -371,52 +373,58 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const bankIdsToSync = new Set<number>()
-    for (const p of payableForEdit || []) {
-      if (!p.id) continue
-      const a = Number(p.amount || 0)
-      const bankId = Number(p.bank_transaction_id || 0)
-      if (bankId > 0) bankIdsToSync.add(bankId)
-      if (a > 0) {
-        if (!paidLocked) {
-          await supabaseUpdate('payable_transactions', p.id, {
-            vendor_code: payeeCode || null,
-            amount: netPayable,
-            trans_date: expenseDate,
-            memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
-            account_subject_id: accountSubjectId,
-            expense_date: expenseDate,
-            due_date: dueDate,
-          })
+    try {
+      const bankIdsToSync = new Set<number>()
+      for (const p of payableForEdit || []) {
+        if (!p.id) continue
+        const a = Number(p.amount || 0)
+        const bankId = Number(p.bank_transaction_id || 0)
+        if (bankId > 0) bankIdsToSync.add(bankId)
+        if (a > 0) {
+          if (!paidLocked) {
+            await supabaseUpdate('payable_transactions', p.id, {
+              vendor_code: payeeCode || null,
+              amount: netPayable,
+              trans_date: expenseDate,
+              memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
+              account_subject_id: accountSubjectId,
+              expense_date: expenseDate,
+              due_date: dueDate,
+            })
+          } else {
+            await supabaseUpdate('payable_transactions', p.id, {
+              vendor_code: payeeCode || null,
+              account_subject_id: accountSubjectId,
+              memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
+            })
+          }
         } else {
           await supabaseUpdate('payable_transactions', p.id, {
             vendor_code: payeeCode || null,
             account_subject_id: accountSubjectId,
-            memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
           })
         }
-      } else {
-        await supabaseUpdate('payable_transactions', p.id, {
+      }
+
+      const bankCategoryFromWithdrawal =
+        withdrawalCategory === 'purchase_payment' || withdrawalCategory === 'purchase_advance'
+          ? 'purchase_payment'
+          : withdrawalCategory === 'expense' || withdrawalCategory === 'expense_advance' || withdrawalCategory === 'fixed_asset'
+            ? 'expense'
+            : null
+      for (const bankId of bankIdsToSync) {
+        const bankPatch: Record<string, unknown> = {
           vendor_code: payeeCode || null,
           account_subject_id: accountSubjectId,
-        })
+        }
+        // 지급 완료 건은 통장 적요 메타(withdrawal_category 등)를 덮어쓰지 않음
+        if (!paidLocked) bankPatch.note = memo || null
+        if (bankCategoryFromWithdrawal) bankPatch.category = bankCategoryFromWithdrawal
+        await supabaseUpdate('bank_transactions', bankId, bankPatch)
       }
-    }
-
-    const bankCategoryFromWithdrawal =
-      withdrawalCategory === 'purchase_payment' || withdrawalCategory === 'purchase_advance'
-        ? 'purchase_payment'
-        : withdrawalCategory === 'expense' || withdrawalCategory === 'expense_advance' || withdrawalCategory === 'fixed_asset'
-          ? 'expense'
-          : null
-    for (const bankId of bankIdsToSync) {
-      const bankPatch: Record<string, unknown> = {
-        vendor_code: payeeCode || null,
-        account_subject_id: accountSubjectId,
-        note: memo || null,
-      }
-      if (bankCategoryFromWithdrawal) bankPatch.category = bankCategoryFromWithdrawal
-      await supabaseUpdate('bank_transactions', bankId, bankPatch)
+    } catch (linkSyncErr) {
+      console.error('updateExpenseAccrual linked payment sync:', linkSyncErr)
+      if (!paidLocked) throw linkSyncErr
     }
 
     let subjectCode = withdrawalCategory === 'fixed_asset' ? '1490' : '5520'

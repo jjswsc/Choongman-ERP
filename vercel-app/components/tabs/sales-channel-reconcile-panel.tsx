@@ -4,19 +4,22 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type {
+  PosCashReconcileResult,
   PosDeliveryAppReconcileResult,
   PosKbankQrReconcileResult,
 } from "@/lib/api-client"
 import { SalesDeliveryAppReconcilePanel } from "@/components/tabs/sales-delivery-app-reconcile-panel"
 import { SalesKbankQrReconcilePanel } from "@/components/tabs/sales-kbank-qr-reconcile-panel"
+import { SalesCashReconcilePanel } from "@/components/tabs/sales-cash-reconcile-panel"
 
-export type ChannelReconcileSection = "delivery" | "kbank-qr"
+export type ChannelReconcileSection = "delivery" | "kbank-qr" | "cash"
 
 export function SalesChannelReconcilePanel(props: {
   section: ChannelReconcileSection
   onSectionChange: (section: ChannelReconcileSection) => void
   deliveryData: PosDeliveryAppReconcileResult
   kbankQrData: PosKbankQrReconcileResult
+  cashData: PosCashReconcileResult
   placeholder?: string | null
   tr: (key: string, fallback: string) => string
   formatAmount: (n: number) => string
@@ -27,6 +30,7 @@ export function SalesChannelReconcilePanel(props: {
     onSectionChange,
     deliveryData,
     kbankQrData,
+    cashData,
     placeholder,
     tr,
     formatAmount,
@@ -62,6 +66,17 @@ export function SalesChannelReconcilePanel(props: {
         >
           {tr("salesChannelReconcileKbankQr", "KBank QR")}
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={section === "cash" ? "default" : "outline"}
+          className={cn(section === "cash" && "pointer-events-none")}
+          role="tab"
+          aria-selected={section === "cash"}
+          onClick={() => onSectionChange("cash")}
+        >
+          {tr("salesChannelReconcileCash", "현금")}
+        </Button>
       </div>
 
       {section === "delivery" ? (
@@ -72,9 +87,17 @@ export function SalesChannelReconcilePanel(props: {
           formatAmount={formatAmount}
           storeDisplayName={storeDisplayName}
         />
-      ) : (
+      ) : section === "kbank-qr" ? (
         <SalesKbankQrReconcilePanel
           data={kbankQrData}
+          placeholder={placeholder ?? null}
+          tr={tr}
+          formatAmount={formatAmount}
+          storeDisplayName={storeDisplayName}
+        />
+      ) : (
+        <SalesCashReconcilePanel
+          data={cashData}
           placeholder={placeholder ?? null}
           tr={tr}
           formatAmount={formatAmount}

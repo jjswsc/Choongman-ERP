@@ -29,6 +29,11 @@ describe('canEditExpenseAccrualClassification', () => {
     expect(canEditExpenseAccrualClassification({ status: 'approved' })).toBe(true)
     expect(canEditExpenseAccrualClassification({ status: 'partial' })).toBe(true)
   })
+
+  it('trims status before matching', () => {
+    expect(canEditExpenseAccrualClassification({ status: ' paid ' })).toBe(true)
+    expect(shouldLockExpenseAccrualAmounts({ status: ' paid ', paidAmount: 0 })).toBe(true)
+  })
 })
 
 describe('shouldLockExpenseAccrualAmounts', () => {

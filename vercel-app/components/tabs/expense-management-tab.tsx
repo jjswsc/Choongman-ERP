@@ -59,6 +59,7 @@ import {
   canDeleteExpenseAccrual,
   canEditExpenseAccrualClassification,
   canMutateExpenseAccrualRecord,
+  shouldLockExpenseAccrualAmounts,
 } from "@/lib/expense-accrual-approve-policy"
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
 import { ExpenseRegisterSearchTab } from "@/components/tabs/expense-register-search-tab"
@@ -694,6 +695,14 @@ export function ExpenseManagementTab() {
       q.set("payeeAccountHolder", String(row.payeeAccountHolder || "").trim())
       q.set("payeeBankName", String(row.payeeBankName || "").trim())
       q.set("payeeBankAccountNo", String(row.payeeBankAccountNo || "").trim())
+      if (
+        shouldLockExpenseAccrualAmounts({
+          status: row.status,
+          paidAmount: row.paidAmount,
+        })
+      ) {
+        q.set("lockAmounts", "1")
+      }
       router.push(`/admin/expense-management?${q.toString()}`)
     },
     [router]

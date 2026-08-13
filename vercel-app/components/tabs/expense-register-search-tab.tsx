@@ -48,6 +48,7 @@ import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import {
   canDeleteExpenseAccrual,
   canEditExpenseAccrualClassification,
+  shouldLockExpenseAccrualAmounts,
 } from "@/lib/expense-accrual-approve-policy"
 
 function getCategoryLabel(cat: string, t: (k: string) => string): string {
@@ -515,6 +516,15 @@ export function ExpenseRegisterSearchTab() {
       if (r.memo) q.set("memo", r.memo)
       if (r.invoiceReceived) q.set("invoiceReceived", "1")
       if (r.invoiceNo) q.set("invoiceNo", r.invoiceNo)
+      if (
+        shouldLockExpenseAccrualAmounts({
+          status: r.accrualStatus ?? r.planStatus,
+          paidAmount: r.paidAmount,
+          hasPaymentLink: Boolean(r.bankLinked || r.pettyLinked || r.bankTransactionId),
+        })
+      ) {
+        q.set("lockAmounts", "1")
+      }
       router.push(`/admin/expense-management?${q.toString()}`)
     },
     [endStr, router, startStr]

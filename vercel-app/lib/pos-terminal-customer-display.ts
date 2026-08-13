@@ -1,6 +1,43 @@
 import type { CartPanelPaymentPayload } from '@/components/pos/cart-panel-types'
 import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 
+export type CustomerDisplayOrderItem = { name: string; qty: number; amount: number }
+
+export type CustomerDisplayOrderLineInput = {
+  name?: string | null
+  qty?: number | null
+  quantity?: number | null
+  price?: number | null
+  amount?: number | null
+}
+
+/** 카트·결제 payload 줄을 손님 모니터 품목 행으로 변환 */
+export function mapLinesToCustomerDisplayItems(
+  lines: CustomerDisplayOrderLineInput[] | null | undefined
+): CustomerDisplayOrderItem[] {
+  if (!Array.isArray(lines) || lines.length === 0) return []
+  return lines
+    .map((line) => {
+      const qty = Math.max(1, Number(line.quantity ?? line.qty ?? 1) || 1)
+      const price = Math.max(0, Number(line.price ?? 0) || 0)
+      const rawAmount = Number(line.amount)
+      const amount = Number.isFinite(rawAmount) && rawAmount > 0 ? rawAmount : qty * price
+      return {
+        name: String(line.name || '').trim(),
+        qty,
+        amount,
+      }
+    })
+    .filter((it) => it.name.length > 0 || it.amount > 0)
+}
+
+export type KbankQrPaymentDisplayContext = {
+  orderType?: string
+  orderLabel?: string
+  orderId?: number
+  items?: CustomerDisplayOrderLineInput[]
+}
+
 export function buildCustomerDisplayPaymentLines(
   draft: CartPanelPaymentPayload | null,
   t: (k: string) => string

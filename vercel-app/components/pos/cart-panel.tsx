@@ -859,6 +859,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const instanceIdRef = useRef(`cart-${Math.random().toString(36).slice(2, 10)}`)
   const cartItemsRef = useRef<CartItem[]>(cartItems)
   cartItemsRef.current = cartItems
+  /** 기존 주문 결제 모달: setCartItems 직후·플로어 복귀 effect로 카트가 비어도 제출 품목 유지 */
+  const checkoutItemsSnapshotRef = useRef<CartItem[]>([])
+  const captureCheckoutItemsSnapshot = (lines: CartItem[]) => {
+    if (Array.isArray(lines) && lines.length > 0) {
+      checkoutItemsSnapshotRef.current = lines
+    }
+  }
+  const resolveCheckoutItemsForSubmit = (): CartItem[] => {
+    if (cartItems.length > 0) return cartItems
+    return checkoutItemsSnapshotRef.current
+  }
 
   useEffect(() => {
     if (!showPaymentModal) return
@@ -3286,6 +3297,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
   ) => {
     if (amount <= 0) return
+    captureCheckoutItemsSnapshot(
+      (receiptOpts?.receiptLines as CartItem[] | undefined) ?? cartItems
+    )
     if (receiptOpts?.orderMemo != null) {
       const seed = cartPanelTaxInvoiceUiSeedFromOrderMemo(receiptOpts.orderMemo)
       if (seed) {
@@ -3526,7 +3540,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       orderLabel: orderType === 'delivery'
         ? (deliveryLabel || t('posOrderTypeDelivery') || '배달')
         : (takeoutLabelProp?.trim() || (t('posOrderTypeTakeout') || '포장')),
-      items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
+      items: resolveCheckoutItemsForSubmit().map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
       memo: buildOrderMemo(customerMemo),
       discountAmt: discount,
       discountReason: paymentDiscountReason,
@@ -3635,7 +3649,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       paymentOk =
         (await onDineInOrderComplete(
         {
-          items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
+          items: resolveCheckoutItemsForSubmit().map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
           tableName: dineInTableName,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
@@ -3671,7 +3685,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       paymentOk =
         (await onDeliveryOrderComplete(
         {
-          items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
+          items: resolveCheckoutItemsForSubmit().map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
           orderLabel: paymentTableNameOverride,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
@@ -3705,7 +3719,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       paymentOk =
         (await onTakeoutOrderComplete(
         {
-          items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
+          items: resolveCheckoutItemsForSubmit().map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
           orderLabel: paymentTableNameOverride,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
@@ -4352,6 +4366,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
     setPaymentTableNameOverride(payload.tableName)
     setCartItems(normalized)
+    captureCheckoutItemsSnapshot(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
     void openPaymentModalWithAmount(amount, {
       receiptLines: normalized,
@@ -4435,6 +4450,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
+    captureCheckoutItemsSnapshot(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
     void openPaymentModalWithAmount(amount, {
       receiptLines: normalized,
@@ -4516,6 +4532,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
     setPaymentTableNameOverride(payload.orderLabel)
     setCartItems(normalized)
+    captureCheckoutItemsSnapshot(normalized)
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
     void openPaymentModalWithAmount(amount, {
       receiptLines: normalized,
@@ -4542,7 +4559,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const ok =
       (await onDeliveryOrderComplete(
       {
-        items: cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
+        items: resolveCheckoutItemsForSubmit().map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx)),
         orderLabel: (paymentTableNameOverride ?? '').trim() || '',
         memo: buildOrderMemo(customerMemo),
         discountAmt: discount,
@@ -4581,6 +4598,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const handleClearCart = () => {
     resetTaxInvoiceUiState()
+    checkoutItemsSnapshotRef.current = []
     setCartItems([])
     setLineDiscountModeByItemId({})
     setGuestCount(0)

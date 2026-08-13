@@ -41,7 +41,7 @@ export function isExpenseAccrualDeletableByPaymentState(input: {
   if (input.hasPaymentLink) return false
   const paid = Math.max(0, Number(input.paidAmount) || 0)
   if (paid > 0.005) return false
-  const status = String(input.status || '').toLowerCase()
+  const status = String(input.status || '').trim().toLowerCase()
   return (
     status === 'planned' ||
     status === 'rejected' ||
@@ -82,7 +82,7 @@ export function canEditExpenseAccrualPlan(input: {
   status?: string
   paidAmount?: number
 }): boolean {
-  const status = String(input.status || '').toLowerCase()
+  const status = String(input.status || '').trim().toLowerCase()
   if (status === 'paid' || status === 'done') return false
   const paid = Math.max(0, Number(input.paidAmount) || 0)
   if (paid > 0.005) return false
@@ -96,7 +96,7 @@ export function canEditExpenseAccrualPlan(input: {
 export function canEditExpenseAccrualClassification(input: {
   status?: string
 }): boolean {
-  const status = String(input.status || '').toLowerCase()
+  const status = String(input.status || '').trim().toLowerCase()
   return (
     status === 'planned' ||
     status === 'approved' ||

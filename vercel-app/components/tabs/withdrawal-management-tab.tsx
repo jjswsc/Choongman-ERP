@@ -241,6 +241,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const bankTransactionIdParam = searchParams.get("bankTransactionId")
   const editAccrualIdParam = searchParams.get("editAccrualId")
   const isEditAccrualMode = !!editAccrualIdParam && !!Number(editAccrualIdParam)
+  const isAccrualAmountsLocked = isEditAccrualMode && searchParams.get("lockAmounts") === "1"
   const isEditMode = searchParams.get("editMode") === "1" && !!bankTransactionIdParam && !!Number(bankTransactionIdParam)
   const isBankLinkMode = !isEditMode && !!bankTransactionIdParam && !!Number(bankTransactionIdParam)
   /** 기존 통장 출금 건 수정·연동 — 지급예정(나중 지급) UI와 분리 */
@@ -1166,21 +1167,23 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         if ((res as { bankFieldsSkipped?: boolean }).bankFieldsSkipped && res.message) {
           await appAlert(translateApiMessage(res.message, t) || res.message)
         }
-        await openExpenseWhtCertificateIfNeeded({
-          certificateNo: `EAW-${editAccrualIdParam}`,
-          payeeName: name || code,
-          ...(() => {
-            const p = resolvePayeeForWht(code, name)
-            return { payeeTaxId: p.taxId, payeeAddress: p.address }
-          })(),
-          grossInclVat: amt,
-          vatAmount: vatV,
-          whtAmount: whtV,
-          whtRate: accrualWhtRate,
-          paymentDate: transDate,
-          memo: memo.trim() || undefined,
-          storeName: storeName || undefined,
-        })
+        if (!isAccrualAmountsLocked) {
+          await openExpenseWhtCertificateIfNeeded({
+            certificateNo: `EAW-${editAccrualIdParam}`,
+            payeeName: name || code,
+            ...(() => {
+              const p = resolvePayeeForWht(code, name)
+              return { payeeTaxId: p.taxId, payeeAddress: p.address }
+            })(),
+            grossInclVat: amt,
+            vatAmount: vatV,
+            whtAmount: whtV,
+            whtRate: accrualWhtRate,
+            paymentDate: transDate,
+            memo: memo.trim() || undefined,
+            storeName: storeName || undefined,
+          })
+        }
         setAmount("")
         setMemo("")
         setPayeeCode("")
@@ -2391,6 +2394,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 bankLinkStorePinned.current = true
                 setStoreName(v)
               }}
+              disabled={isAccrualAmountsLocked}
             >
               <SelectTrigger className="w-full h-9">
                 <SelectValue placeholder={tt("expenseStoreSelect", "Select Store")} />
@@ -2402,6 +2406,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               </SelectContent>
             </Select>
           </ExpenseRegisterField>
+          {isAccrualAmountsLocked ? (
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              {tt(
+                "expenseAccrualPaidLockHint",
+                "This item is already paid (bank-linked). You can change account, type, payee, and memo. Amount and date stay locked."
+              )}
+            </p>
+          ) : null}
 
           <div className="space-y-2.5">
             <div className="text-xs font-semibold tracking-tight text-foreground/80">{tt("wm_title", "Withdrawal Type")}</div>
@@ -2551,6 +2563,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     variant="outline"
                     size="sm"
                     className="h-9"
+                    disabled={isAccrualAmountsLocked}
                     onClick={() => setDeliveryFeeDialogOpen(true)}
                   >
                     {tt("pL_expenseSourceDeliveryApps", "배달앱 수수료")}
@@ -2560,6 +2573,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     variant="outline"
                     size="sm"
                     className="h-9"
+                    disabled={isAccrualAmountsLocked}
                     onClick={() => setCardFeeDialogOpen(true)}
                   >
                     {tt("pL_expenseSourceCardFees", "카드 수수료")}
@@ -3238,8 +3252,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   type="text"
                   inputMode="decimal"
                   placeholder="0"
-                  className={`w-full max-w-[160px] h-9 ${isBankLinkMode ? "bg-muted/50 cursor-default" : ""}`}
-                  readOnly={isBankLinkMode}
+                  className={`w-full max-w-[160px] h-9 ${isBankLinkMode || isAccrualAmountsLocked ? "bg-muted/50 cursor-default" : ""}`}
+                  readOnly={isBankLinkMode || isAccrualAmountsLocked}
                 />
               </ExpenseRegisterField>
               <ExpenseRegisterField label={tt("date", "Date")}>
@@ -3247,8 +3261,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   type="date"
                   value={transDate}
                   onChange={(e) => setTransDate(e.target.value)}
-                  className={`w-full max-w-[180px] h-9 ${isBankLinkMode ? "bg-muted/50 cursor-default" : ""}`}
-                  readOnly={isBankLinkMode}
+                  className={`w-full max-w-[180px] h-9 ${isBankLinkMode || isAccrualAmountsLocked ? "bg-muted/50 cursor-default" : ""}`}
+                  readOnly={isBankLinkMode || isAccrualAmountsLocked}
                 />
               </ExpenseRegisterField>
               <ExpenseRegisterField label={tt("memo", "Memo")} className="sm:col-span-2 lg:col-span-1 xl:col-span-1">
@@ -3274,7 +3288,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     type="text"
                     inputMode="decimal"
                     placeholder="0"
-                    className="h-9 w-full"
+                    className={`h-9 w-full ${isAccrualAmountsLocked ? "bg-muted/50 cursor-default" : ""}`}
+                    readOnly={isAccrualAmountsLocked}
                   />
                 </ExpenseRegisterField>
                 <ExpenseRegisterField label={tt("expenseAccrualWhtRate", "WHT rate")}>
@@ -3288,6 +3303,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                       const n = Number(v)
                       setAccrualWhtRate(Number.isFinite(n) && n > 0 ? n : null)
                     }}
+                    disabled={isAccrualAmountsLocked}
                   >
                     <SelectTrigger className="h-9 w-full">
                       <SelectValue placeholder={tt("expenseAccrualWhtRateNone", "Select")} />
@@ -3309,7 +3325,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     type="text"
                     inputMode="decimal"
                     placeholder="0"
-                    className="h-9 w-full"
+                    className={`h-9 w-full ${isAccrualAmountsLocked ? "bg-muted/50 cursor-default" : ""}`}
+                    readOnly={isAccrualAmountsLocked}
                   />
                 </ExpenseRegisterField>
                 <ExpenseRegisterField label={tt("expenseAccrualNetPayableLabel", "Net Payable")}>

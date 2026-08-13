@@ -355,6 +355,60 @@ export async function getPosKbankQrReconcile(params: {
   return json
 }
 
+export type PosCashReconcileDayRow = {
+  date: string
+  orderCount: number
+  cashSales: number
+  bankDepositAmt: number | null
+}
+
+export type PosCashReconcileRow = {
+  storeCode: string
+  orderCount: number
+  cashSales: number
+  bankDepositAmt: number | null
+  days: PosCashReconcileDayRow[]
+}
+
+export type PosCashReconcileKpi = {
+  orderCount: number
+  cashSales: number
+  bankDepositAmt: number
+  storeCount: number
+}
+
+export type PosCashReconcileResult = {
+  success?: boolean
+  rows: PosCashReconcileRow[]
+  kpi: PosCashReconcileKpi
+  truncated?: boolean
+  message?: string
+}
+
+export async function getPosCashReconcile(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  fresh?: boolean
+}): Promise<PosCashReconcileResult> {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  appendPosSalesFreshParam(q, params.fresh)
+  const res = await posSalesApiFetch(`/api/posCashReconcile?${q}`, params.fresh)
+  const json = (await res.json()) as PosCashReconcileResult
+  if (!json || !Array.isArray(json.rows)) {
+    return {
+      success: false,
+      rows: [],
+      kpi: { orderCount: 0, cashSales: 0, bankDepositAmt: 0, storeCount: 0 },
+      message: json?.message,
+    }
+  }
+  return json
+}
+
 export async function getPosSalesByStoreChannel(params: {
   startStr: string
   endStr: string
