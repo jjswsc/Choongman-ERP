@@ -85,6 +85,25 @@ export function isQrTableCreatedBy(createdBy: string | null | undefined): boolea
   return String(createdBy || '').startsWith(QR_TABLE_CREATED_BY_PREFIX)
 }
 
+/** 손님 폰 QR로 넣은 줄(패키지 입장료·메뉴). POS 직원이 담은 줄은 해당 없음. */
+export function isQrTableGuestOrderLine(it: { source?: unknown; id?: unknown } | null | undefined): boolean {
+  if (!it) return false
+  if (String(it.source ?? '').trim().toLowerCase() === 'qr_table') return true
+  const id = String(it.id ?? '').trim().toLowerCase()
+  return id.startsWith('qr-') || id.startsWith('buffet-entry-')
+}
+
+/**
+ * 손님 폰 QR 추가주문은 홀 체크빌을 찍지 않고 주방만 출력.
+ * 델타가 비었거나 POS 직원이 담은 줄이 섞이면 false.
+ */
+export function shouldSkipHallAutoprintForQrGuestAddon(
+  deltaLines: Array<{ source?: unknown; id?: unknown }> | null | undefined
+): boolean {
+  if (!Array.isArray(deltaLines) || deltaLines.length === 0) return false
+  return deltaLines.every(isQrTableGuestOrderLine)
+}
+
 export function buffetTierDisplayName(
   tier: Pick<QrBuffetTier, 'nameTh' | 'nameEn' | 'nameKo' | 'code'>,
   lang?: string

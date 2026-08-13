@@ -5,6 +5,7 @@ import { generateMemberPortalKbankQr } from '@/lib/member-portal-kbank-qr'
 import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
 import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
 import { computePosPricing } from '@/lib/pos-pricing'
+import { loadPosPricingAdjustmentsForStore } from '@/lib/pos-pricing-adjustments-server'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
@@ -254,6 +255,20 @@ function lineUnitPrice(it: Record<string, unknown>): number {
 
 function computeItemsSubtotal(items: Array<Record<string, unknown>>): number {
   return items.reduce((sum, it) => sum + lineQty(it) * lineUnitPrice(it), 0)
+}
+
+/** 매장 봉사료·VAT·반올림을 POS와 같게 적용 (첫 체크빌 금액 어긋남 방지) */
+async function computeQrTableOrderFinancials(storeCode: string, items: Array<Record<string, unknown>>) {
+  const subtotal = computeItemsSubtotal(items)
+  const adjustments = await loadPosPricingAdjustmentsForStore(storeCode)
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt: 0,
+    deliveryFee: 0,
+    packagingFee: 0,
+    adjustments,
+  })
+  return { subtotal, pricing }
 }
 
 export async function loadQrOrderStoreSettings(storeCode: string): Promise<QrOrderStoreSettings> {
@@ -1067,13 +1082,7 @@ async function createOrEnsurePosOrderForSession(
     })
   }
 
-  const subtotal = computeItemsSubtotal(items)
-  const pricing = computePosPricing({
-    subtotal,
-    discountAmt: 0,
-    deliveryFee: 0,
-    packagingFee: 0,
-  })
+  const { subtotal, pricing } = await computeQrTableOrderFinancials(session.storeCode, items)
   /** Omni Realtime은 tenant_id 필터 — 비우면 메인 POS가 폴링(5~15s)까지 메뉴를 못 봄 */
   const tenantId = (await resolveTenantIdForStoreCode(session.storeCode)) || ''
   const orderNo = await allocateNextPosOrderNo(session.storeCode, { tenantId })
@@ -1091,7 +1100,7 @@ async function createOrEnsurePosOrderForSession(
       memo,
       discount_amt: 0,
       discount_reason: null,
-      service_amt: 0,
+      service_amt: pricing.serviceFeeAmt,
       service_reason: null,
       delivery_fee: 0,
       packaging_fee: 0,
@@ -1460,19 +1469,14 @@ export async function submitQrCart(params: {
   }
 
   const nextItems = [...prevItems, ...newLines]
-  const subtotal = computeItemsSubtotal(nextItems)
-  const pricing = computePosPricing({
-    subtotal,
-    discountAmt: 0,
-    deliveryFee: 0,
-    packagingFee: 0,
-  })
+  const { subtotal, pricing } = await computeQrTableOrderFinancials(session.storeCode, nextItems)
   const now = getBangkokDateTimeString()
 
   await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     items_json: JSON.stringify(nextItems),
     subtotal,
     vat: pricing.vatFeeAmt,
+    service_amt: pricing.serviceFeeAmt,
     total: pricing.finalTotal,
     updated_at: now,
   })
@@ -1590,18 +1594,13 @@ export async function adjustQrSessionGuestCount(params: {
     })
   }
 
-  const subtotal = computeItemsSubtotal(items)
-  const pricing = computePosPricing({
-    subtotal,
-    discountAmt: 0,
-    deliveryFee: 0,
-    packagingFee: 0,
-  })
+  const { subtotal, pricing } = await computeQrTableOrderFinancials(session.storeCode, items)
   const now = getBangkokDateTimeString()
   await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     items_json: JSON.stringify(items),
     subtotal,
     vat: pricing.vatFeeAmt,
+    service_amt: pricing.serviceFeeAmt,
     total: pricing.finalTotal,
     guest_count: nextCount,
     updated_at: now,

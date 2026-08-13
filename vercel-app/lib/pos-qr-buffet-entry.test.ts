@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
+import { shouldSkipHallAutoprintForQrGuestAddon } from '@/lib/qr-table-types'
 
 describe('isQrBuffetPackageKitchenSkipLine', () => {
   it('skips synthetic buffet-entry id', () => {
@@ -21,5 +22,29 @@ describe('isQrBuffetPackageKitchenSkipLine', () => {
         buffetIncluded: true,
       })
     ).toBe(false)
+  })
+})
+
+describe('shouldSkipHallAutoprintForQrGuestAddon', () => {
+  it('skips hall check-bill when all new lines are from the guest phone', () => {
+    expect(
+      shouldSkipHallAutoprintForQrGuestAddon([
+        { id: 'qr-12-99-1', source: 'qr_table', name: 'Chicken' },
+        { id: 'qr-12-88-1', source: 'qr_table', name: 'Marinated' },
+      ])
+    ).toBe(true)
+  })
+
+  it('does not skip when staff POS add-on is in the delta', () => {
+    expect(
+      shouldSkipHallAutoprintForQrGuestAddon([
+        { id: 'cart-1', name: 'Chicken' },
+        { id: 'qr-12-99-1', source: 'qr_table' },
+      ])
+    ).toBe(false)
+  })
+
+  it('does not skip empty delta', () => {
+    expect(shouldSkipHallAutoprintForQrGuestAddon([])).toBe(false)
   })
 })

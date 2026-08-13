@@ -136,6 +136,7 @@ import {
   collectDineInSnapshotIncreasedKeys,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
+import { shouldSkipHallAutoprintForQrGuestAddon } from '@/lib/qr-table-types'
 import { syncGrabCancelWatchSnapshot, applyGrabCancelWatchRealtimeRow } from '@/lib/pos-grab-cancel-watch'
 import {
   hasGrabCancelUiHandler,
@@ -161,6 +162,7 @@ type RealtimeParsedPosOrderItem = {
   note?: string
   menuId?: string
   optionCode?: string
+  source?: string
   promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
 }
 
@@ -195,6 +197,7 @@ function parseRealtimePosOrderRowItemsJson(
         option_code1?: string
         optionCode?: string
         promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+        source?: string
       }) => {
         const note = String(it.note ?? '').trim()
         const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
@@ -204,6 +207,7 @@ function parseRealtimePosOrderRowItemsJson(
           name: String(it.name ?? ''),
           menuId,
         })
+        const source = String(it.source ?? '').trim()
         return {
           id: String(it.id ?? ''),
           name: displayName,
@@ -212,6 +216,7 @@ function parseRealtimePosOrderRowItemsJson(
           ...(menuId ? { menuId } : {}),
           ...(optionCode ? { optionCode } : {}),
           ...(note ? { note } : {}),
+          ...(source ? { source } : {}),
           ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItems(it.promoItems) } : {}),
         }
       }
@@ -1215,6 +1220,7 @@ export function usePosMainDeviceSyncHost(): void {
         qty: it.qty,
         ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
         ...(it.menuId ? { menuId: it.menuId } : {}),
+        ...(it.source ? { source: it.source } : {}),
         ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
       }))
       const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
@@ -1236,6 +1242,11 @@ export function usePosMainDeviceSyncHost(): void {
         ...it,
         ...(changedSet.has(resolveDineInKitchenSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
       }))
+      const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
+      const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
+        hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
+      )
+      const printHallAddon = shouldAutoPrintReceipt && !skipQrGuestHall
       const receiptPayloadRemote: HallReceiptPrintPayload = {
         orderNo: String(row.order_no ?? ''),
         storeCode: storeCodeForSkip,
@@ -1261,11 +1272,11 @@ export function usePosMainDeviceSyncHost(): void {
         ...posGuestCountSpread(row.guest_count),
       }
       dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-      if (shouldAutoPrintReceipt) {
+      if (printHallAddon) {
         void printHallReceiptPayload(receiptPayloadRemote, autoprintCtx)
       }
       if (autoPrint.kitchenOnOrder && kitchenCartLines.length > 0) {
-        const kitchenDelayMs = shouldAutoPrintReceipt
+        const kitchenDelayMs = printHallAddon
           ? typeof window !== 'undefined' && window.cmPosShell
             ? resolveAfterReceiptToKitchenDelayMs()
             : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
@@ -1558,6 +1569,7 @@ export function usePosMainDeviceSyncHost(): void {
                       menuId,
                     })
                     const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
+                    const source = String((it as { source?: unknown }).source ?? '').trim()
                     return {
                       id: String(it.id ?? ''),
                       name: displayName,
@@ -1567,6 +1579,7 @@ export function usePosMainDeviceSyncHost(): void {
                       ...(optionCode ? { optionCode } : {}),
                       ...(note ? { note: formatLineNoteForPrint(note) } : {}),
                       ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
+                      ...(source ? { source } : {}),
                       ...(Array.isArray(it.promoItems)
                         ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) }
                         : {}),
@@ -1614,6 +1627,7 @@ export function usePosMainDeviceSyncHost(): void {
                     qty: it.qty,
                     ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
                     ...(it.menuId ? { menuId: it.menuId } : {}),
+                    ...(it.source ? { source: it.source } : {}),
                     ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
                   }))
                   const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
@@ -1628,6 +1642,11 @@ export function usePosMainDeviceSyncHost(): void {
                     ...it,
                     ...(changedSet.has(resolveDineInKitchenSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
                   }))
+                  const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
+                  const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
+                    hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
+                  )
+                  const printHallAddon = wantMetaDineInAddonReceipt && !skipQrGuestHall
                   const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
                   const discountAmt = Number(o.discountAmt ?? 0)
                   const couponDiscountAmt = Number(o.couponDiscountAmt ?? 0)
@@ -1661,11 +1680,11 @@ export function usePosMainDeviceSyncHost(): void {
                     otherFeeMode: pricing.otherFeeMode,
                     ...posGuestCountSpread(o.guestCount),
                   }
-                  if (wantMetaDineInAddonReceipt) {
+                  if (printHallAddon) {
                     void printHallReceiptPayload(receiptPayloadRemote, autoprintCtx)
                   }
                   if (wantMetaDineInAddonKitchen && kitchenCartLines.length > 0) {
-                    const kitchenDelayMs = wantMetaDineInAddonReceipt
+                    const kitchenDelayMs = printHallAddon
                       ? typeof window !== 'undefined' && window.cmPosShell
                         ? resolveAfterReceiptToKitchenDelayMs()
                         : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS

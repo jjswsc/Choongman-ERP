@@ -148,6 +148,7 @@ export function mapPosOrderRowForKitchenPrint(
     ...(kitchenPrinter === 0 || kitchenPrinter === 1 || kitchenPrinter === 2 || kitchenPrinter === 3
       ? { kitchenPrinter }
       : {}),
+    ...(String(it.source ?? '').trim() ? { source: String(it.source).trim() } : {}),
   }
 }
 

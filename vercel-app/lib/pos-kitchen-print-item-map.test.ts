@@ -53,11 +53,13 @@ describe('mapPosOrderRowForKitchenPrint', () => {
       qty: 2,
       isBuffetEntry: true,
       kitchenPrinter: 0,
+      source: 'qr_table',
       promoId: '99',
       promoItems: [{ menuId: '1', optionId: null, quantity: 1 }],
     })
     expect(row.isBuffetEntry).toBe(true)
     expect(row.kitchenPrinter).toBe(0)
+    expect(row.source).toBe('qr_table')
     expect(row.promoItems).toBeUndefined()
     expect(row.promoId).toBeUndefined()
   })
