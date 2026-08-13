@@ -48,6 +48,36 @@ export interface BankTransactionsSummary {
   difference?: number | null
 }
 
+export async function lookupBankTransaction(id: number): Promise<{
+  id: number
+  accountId: number
+  transDate?: string
+  storeName?: string
+} | null> {
+  const txId = Math.floor(Number(id) || 0)
+  if (txId <= 0) return null
+  try {
+    const res = await apiFetch(`/api/lookupBankTransaction?id=${txId}`)
+    if (!res.ok) return null
+    const data = (await res.json()) as {
+      id?: number
+      accountId?: number
+      transDate?: string
+      storeName?: string
+    }
+    const accountId = Number(data?.accountId || 0)
+    if (!Number.isFinite(accountId) || accountId <= 0) return null
+    return {
+      id: Number(data.id) || txId,
+      accountId,
+      transDate: data.transDate ? String(data.transDate).slice(0, 10) : undefined,
+      storeName: data.storeName ? String(data.storeName) : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function getBankAccounts(params?: { store?: string; userStore?: string; userRole?: string }) {
   const q = new URLSearchParams()
   if (params?.store) q.set('store', params.store)

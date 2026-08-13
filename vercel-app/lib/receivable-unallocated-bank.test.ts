@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyBankAccountMetaToReceivableGroups,
+  buildBankTransactionDeepLink,
   canManuallyToggleReceivableReceiveCheck,
+  collectBankTransactionIdsFromReceivableGroups,
   isConsolidatedBankReceiveRow,
   listUnallocatedBankReceives,
   sumUnallocatedBankReceiveByStoreGroup,
@@ -105,5 +108,53 @@ describe('canManuallyToggleReceivableReceiveCheck', () => {
         unallocatedBankReceiveTotal: 5000,
       })
     ).toEqual({ allowed: true })
+  })
+})
+
+describe('bank account meta on receivable groups', () => {
+  it('collects ids from deposits and linked rows', () => {
+    expect(
+      collectBankTransactionIdsFromReceivableGroups([
+        {
+          unallocatedBankDeposits: [{ bankTransactionId: 4106, transDate: '2026-04-24', amountAbs: 100 }],
+          items: [{ bank_transaction_id: 3078 }, { bank_transaction_id: 4106 }],
+        },
+      ])
+    ).toEqual(expect.arrayContaining([4106, 3078]))
+  })
+
+  it('attaches the deposit account so deep links do not reuse another store account', () => {
+    const [item] = applyBankAccountMetaToReceivableGroups(
+      [
+        {
+          unallocatedBankDeposits: [{ bankTransactionId: 11039, transDate: '2026-08-09', amountAbs: 11905.17 }],
+          items: [{ bank_transaction_id: 11039 }],
+        },
+      ],
+      { 11039: { accountId: 12, accountName: 'HQ KBank', accountStore: 'CM Office' } }
+    )
+    expect(item?.unallocatedBankDeposits?.[0]?.bankAccountId).toBe(12)
+    expect(item?.unallocatedBankDeposits?.[0]?.bankAccountName).toBe('HQ KBank')
+    expect(item?.items?.[0]?.bank_account_id).toBe(12)
+  })
+})
+
+describe('buildBankTransactionDeepLink', () => {
+  it('includes accountId so bank query opens the deposit account', () => {
+    expect(
+      buildBankTransactionDeepLink({
+        bankTransactionId: 11039,
+        transDate: '2026-08-09',
+        accountId: 12,
+      })
+    ).toBe(
+      '/admin/bank-transactions?tab=query&openRegisterTxId=11039&startStr=2026-08-09&endStr=2026-08-09&accountId=12'
+    )
+  })
+
+  it('omits accountId when unknown', () => {
+    expect(buildBankTransactionDeepLink({ bankTransactionId: 7 })).toBe(
+      '/admin/bank-transactions?tab=query&openRegisterTxId=7'
+    )
   })
 })

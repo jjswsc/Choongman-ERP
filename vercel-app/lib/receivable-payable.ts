@@ -393,7 +393,47 @@ export async function dedupePayablePaymentsForExpenseAccrual(expenseAccrualId: n
   return keeperId
 }
 
-/** 통장 출금 1건에 연결된 Payment 행 중복 제거 — bank_transaction_id당 1행 */
+/**
+ * 통장 출금 1건의 Payment 중복 제거.
+ * 지급예정(고지서)이 다르면 같은 이체라도 행을 유지한다. (예: 전기 6월+7월을 한 번에 송금)
+ * 같은 지급예정이 두 줄이거나, 지급예정 없이 남은 레거시 행만 정리한다.
+ */
+export function payablePaymentIdsToDeleteForBankDedupe(rows: PayablePaymentLinkRow[]): number[] {
+  const linked = (rows || []).filter((r) => Number(r.expense_accrual_id || 0) > 0)
+  const orphans = (rows || []).filter((r) => Number(r.expense_accrual_id || 0) <= 0)
+  const toDelete: number[] = []
+
+  const byAccrual = new Map<number, PayablePaymentLinkRow[]>()
+  for (const r of linked) {
+    const key = Number(r.expense_accrual_id)
+    const list = byAccrual.get(key) || []
+    list.push(r)
+    byAccrual.set(key, list)
+  }
+  for (const group of byAccrual.values()) {
+    if (group.length < 2) continue
+    const keeperId = pickPayablePaymentKeeperId(group)
+    for (const r of group) {
+      const id = Number(r.id || 0)
+      if (id > 0 && id !== keeperId) toDelete.push(id)
+    }
+  }
+
+  if (linked.length > 0) {
+    for (const r of orphans) {
+      const id = Number(r.id || 0)
+      if (id > 0) toDelete.push(id)
+    }
+  } else if (orphans.length > 1) {
+    const keeperId = pickPayablePaymentKeeperId(orphans)
+    for (const r of orphans) {
+      const id = Number(r.id || 0)
+      if (id > 0 && id !== keeperId) toDelete.push(id)
+    }
+  }
+  return toDelete
+}
+
 export async function dedupePayablePaymentsForBankTransaction(bankTransactionId: number): Promise<number | null> {
   const bankId = Number(bankTransactionId || 0)
   if (!bankId) return null
@@ -403,15 +443,33 @@ export async function dedupePayablePaymentsForBankTransaction(bankTransactionId:
     { order: 'id.asc', limit: 50, select: 'id,expense_accrual_id' }
   )) as PayablePaymentLinkRow[]
   if (!rows?.length) return null
-  const keeperId = pickPayablePaymentKeeperId(rows)
-  if (!keeperId) return null
-  for (const r of rows) {
-    const id = Number(r.id || 0)
-    if (id > 0 && id !== keeperId) {
-      await supabaseDeleteByFilter('payable_transactions', `id=eq.${id}`)
-    }
+  const toDelete = payablePaymentIdsToDeleteForBankDedupe(rows)
+  for (const id of toDelete) {
+    await supabaseDeleteByFilter('payable_transactions', `id=eq.${id}`)
   }
-  return keeperId
+  const remaining = rows
+    .map((r) => Number(r.id || 0))
+    .filter((id) => id > 0 && !toDelete.includes(id))
+  return remaining.length ? Math.max(...remaining) : null
+}
+
+/** 통장 매입대금 재저장 시 Payment 패치. 고지서가 여러 건이면 금액을 덮지 않는다. */
+export function payablePatchFromBankPurchasePayment(params: {
+  vendorCode: string
+  transDate: string
+  memo: string
+  amountAbs: number
+  linkedPaymentCount: number
+}): { vendor_code: string; trans_date: string; memo: string; amount?: number } {
+  const patch: { vendor_code: string; trans_date: string; memo: string; amount?: number } = {
+    vendor_code: String(params.vendorCode || '').trim(),
+    trans_date: String(params.transDate || '').slice(0, 10),
+    memo: String(params.memo || '').slice(0, 240),
+  }
+  if (params.linkedPaymentCount <= 1) {
+    patch.amount = -Math.abs(Number(params.amountAbs) || 0)
+  }
+  return patch
 }
 
 /**
@@ -448,24 +506,29 @@ export async function syncPayableLedgerFromBankPurchasePayment(params: {
   const vc = String(vendorCode || '').trim()
   if (!bankTransactionId || !vc || !amountAbs) return
 
-  const keeperId = await dedupePayablePaymentsForBankTransaction(bankTransactionId)
-  if (!keeperId) return
+  await dedupePayablePaymentsForBankTransaction(bankTransactionId)
+  const remainingRows = (await supabaseSelectFilter(
+    'payable_transactions',
+    `bank_transaction_id=eq.${bankTransactionId}&ref_type=eq.Payment`,
+    { order: 'id.asc', limit: 50, select: 'id,expense_accrual_id' }
+  )) as PayablePaymentLinkRow[]
+  if (!remainingRows?.length) return
 
   const paymentMemo = memo.slice(0, 240)
-  const paymentPatch = {
-    vendor_code: vc,
-    amount: -Math.abs(amountAbs),
-    trans_date: transDate.slice(0, 10),
+  const paymentPatch = payablePatchFromBankPurchasePayment({
+    vendorCode: vc,
+    transDate,
     memo: paymentMemo,
-  }
+    amountAbs,
+    linkedPaymentCount: remainingRows.length,
+  })
 
-  await supabaseUpdate('payable_transactions', keeperId, paymentPatch)
-  const keeperRows = (await supabaseSelectFilter('payable_transactions', `id=eq.${keeperId}`, {
-    limit: 1,
-    select: 'expense_accrual_id',
-  })) as { expense_accrual_id?: number | null }[]
-  const accrualId = Number(keeperRows?.[0]?.expense_accrual_id || 0)
-  if (accrualId > 0) {
+  for (const remaining of remainingRows) {
+    const rowId = Number(remaining.id || 0)
+    if (rowId <= 0) continue
+    await supabaseUpdate('payable_transactions', rowId, paymentPatch)
+    const accrualId = Number(remaining.expense_accrual_id || 0)
+    if (accrualId <= 0) continue
     const accrualRows = (await supabaseSelectFilter('expense_accruals', `id=eq.${accrualId}`, {
       limit: 1,
       select: 'payee_code',
@@ -481,7 +544,7 @@ export async function syncPayableLedgerFromBankPurchasePayment(params: {
       { limit: 20, select: 'id' }
     )) as { id?: number }[]
     for (const p of siblingPayables || []) {
-      if (p.id && Number(p.id) !== keeperId) {
+      if (p.id && Number(p.id) !== rowId) {
         await supabaseUpdate('payable_transactions', p.id, { vendor_code: vc })
       }
     }
@@ -539,8 +602,8 @@ export async function syncPayableLedgerAfterBankWithdrawCategoryChange(params: {
 }
 
 /**
- * 통장 출금 1건당 Payment 1행 유지 (지출관리 지급·통장→지출등록 등).
- * bank_transaction_id 기준으로 통합한다.
+ * 통장 출금에 Payment 를 붙인다 (지출관리 지급·통장→지출등록 등).
+ * 같은 지급예정만 1행으로 맞추고, 고지서가 다르면 이체 1건에 Payment 여러 행을 둔다.
  */
 export async function upsertPayableFromBankPurchasePayment(params: {
   bankTransactionId: number
@@ -590,7 +653,12 @@ export async function upsertPayableFromBankPurchasePayment(params: {
     { order: 'id.asc', limit: 50, select: 'id,expense_accrual_id' }
   )) as PayablePaymentLinkRow[]
 
-  const keeperId = pickPayablePaymentKeeperId(existing || [])
+  const existingForUpsert =
+    accrualId > 0
+      ? (existing || []).filter((r) => Number(r.expense_accrual_id || 0) === accrualId)
+      : existing || []
+
+  const keeperId = pickPayablePaymentKeeperId(existingForUpsert)
   if (keeperId) {
     await supabaseUpdate('payable_transactions', keeperId, row)
     await dedupePayablePaymentsForBankTransaction(bankId)
@@ -598,6 +666,7 @@ export async function upsertPayableFromBankPurchasePayment(params: {
   }
 
   await supabaseInsert('payable_transactions', row)
+  await dedupePayablePaymentsForBankTransaction(bankId)
   return true
 }
 

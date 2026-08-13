@@ -29,6 +29,11 @@ import {
   buildReceivableListForInvoiceFilter,
   scopeReceivableLedger,
 } from '@/lib/receivable-ledger-scope'
+import { fetchBankAccountMetaByTransactionIds } from '@/lib/receivable-unallocated-bank-server'
+import {
+  applyBankAccountMetaToReceivableGroups,
+  collectBankTransactionIdsFromReceivableGroups,
+} from '@/lib/receivable-unallocated-bank'
 import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 
 function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
@@ -231,8 +236,21 @@ export async function GET(request: NextRequest) {
           cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup,
         })
 
+    let listWithBankAccounts = list
+    try {
+      const bankIds = collectBankTransactionIdsFromReceivableGroups(list)
+      const meta = await fetchBankAccountMetaByTransactionIds(bankIds)
+      listWithBankAccounts = applyBankAccountMetaToReceivableGroups(list, meta)
+    } catch {
+      listWithBankAccounts = list
+    }
+
     return NextResponse.json(
-      { type: 'receivable', list, cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup },
+      {
+        type: 'receivable',
+        list: listWithBankAccounts,
+        cumulativeByStoreGroup: receivableScoped.cumulativeByStoreGroup,
+      },
       { headers }
     )
   } catch (e) {

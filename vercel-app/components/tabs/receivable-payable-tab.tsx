@@ -72,7 +72,11 @@ import {
   isPayableLinkablePaymentRow,
   payableRowLinkStatus,
 } from "@/lib/payable-settlement-link"
-import { canManuallyToggleReceivableReceiveCheck } from "@/lib/receivable-unallocated-bank"
+import {
+  buildBankTransactionDeepLink,
+  canManuallyToggleReceivableReceiveCheck,
+} from "@/lib/receivable-unallocated-bank"
+import { receivablePayableViewCache } from "@/lib/receivable-payable-view-cache"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -330,9 +334,18 @@ export function ReceivablePayableTab() {
   }, [auth?.user])
   const restoreQueryListRef = React.useRef(false)
   const skipNextTabClearRef = React.useRef(false)
+  const skipTabClearOnMountRef = React.useRef(true)
   const draftHydratedRef = React.useRef(false)
+  const viewCacheRestoredRef = React.useRef(false)
   const [listRestoreTick, setListRestoreTick] = React.useState(0)
   const [queryDraftReady, setQueryDraftReady] = React.useState(false)
+  const lastFetchedListRef = React.useRef<{
+    tab: "receivable" | "payable"
+    startStr: string
+    endStr: string
+    listData: ReceivablePayableItem[]
+    cumulativeSummary: { totalAmount: number; byKey: Record<string, number> }
+  } | null>(null)
 
   const showReceivableManualActions = !(tab === "receivable" && isManagerOnly)
   const showPayableManualActions = canSelectStores
@@ -377,7 +390,7 @@ export function ReceivablePayableTab() {
       if (row.ref_type === "Order") {
         const orderId = orderIdFromReceivableOrderRow(row)
         if (orderId == null) {
-          await appAlert(tt("recTaxInvoiceNoOrderId", "Cannot identify the order."))
+          await appAlert(tt("recTaxInvoiceNoOrderId", "주문을 식별할 수 없습니다."))
           return
         }
         refType = "Order"
@@ -385,7 +398,7 @@ export function ReceivablePayableTab() {
       } else if (row.ref_type === "ForceOutbound") {
         const sid = Number(row.ref_id)
         if (!Number.isFinite(sid) || sid <= 0) {
-          await appAlert(t("recTaxInvoiceNoForceLog") || tt("recTaxInvoiceNoForceLog", "Cannot identify forced outbound log."))
+          await appAlert(tt("recTaxInvoiceNoForceLog", "강제출고 내역을 식별할 수 없습니다."))
           return
         }
         refType = "ForceOutbound"
@@ -393,7 +406,7 @@ export function ReceivablePayableTab() {
       } else if (row.ref_type === "AccountingPO") {
         const poId = Number(row.ref_id)
         if (!Number.isFinite(poId) || poId <= 0) {
-          await appAlert(t("recTaxInvoiceNoPoId") || tt("recTaxInvoiceNoPoId", "Cannot identify accounting PO."))
+          await appAlert(tt("recTaxInvoiceNoPoId", "회계 발주를 식별할 수 없습니다."))
           return
         }
         refType = "PO"
@@ -420,7 +433,7 @@ export function ReceivablePayableTab() {
             : Promise.resolve({ map: {} as Record<string, string[]>, taxInvoiceClientMap: {} as Record<string, InvoiceDataClient> }),
         ])
         if (!items.length) {
-          await appAlert(tt("recTaxInvoiceNoLines", "No line items to display, cannot create tax invoice."))
+          await appAlert(tt("recTaxInvoiceNoLines", "주문 품목이 없어 세금계산서를 만들 수 없습니다."))
           return
         }
         const { company, clients } = invoiceDataRes
@@ -583,7 +596,7 @@ export function ReceivablePayableTab() {
         sessionStorage.setItem("invoice-print-data", JSON.stringify([data]))
         const printWindow = window.open("/admin/invoice-print", "_blank")
         if (!printWindow) {
-          await appAlert(tt("recTaxInvoicePopupBlocked", "Popup may be blocked. Allow popups and try again."))
+          await appAlert(tt("recTaxInvoicePopupBlocked", "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
           return
         }
         printWindow.focus()
@@ -801,10 +814,15 @@ export function ReceivablePayableTab() {
             effectiveTab === "receivable" ? listRes.cumulativeByStoreGroup : undefined,
         })
         const totalAmount = Object.values(byKey).reduce((sum, v) => sum + v, 0)
-        setCumulativeSummary({
-          totalAmount,
-          byKey,
-        })
+        const nextSummary = { totalAmount, byKey }
+        setCumulativeSummary(nextSummary)
+        lastFetchedListRef.current = {
+          tab: effectiveTab,
+          startStr,
+          endStr,
+          listData: listRes.list || [],
+          cumulativeSummary: nextSummary,
+        }
         if (opts?.fresh && !opts?.skipCrossTabNotify) {
           publishReceivablePayableListInvalidated()
         }
@@ -1036,6 +1054,42 @@ export function ReceivablePayableTab() {
     [canSelectStores]
   )
 
+  React.useLayoutEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowReceivableUrlSync) return
+    viewCacheRestoredRef.current = true
+    const typeParam = searchParams.get("type")
+    const storeParam = searchParams.get("storeFilter") || searchParams.get("store")
+    const startParam = searchParams.get("startStr") || searchParams.get("start")
+    const endParam = searchParams.get("endStr") || searchParams.get("end")
+    const bankTxParam = searchParams.get("bankTransactionId")
+    const hasDeepLink =
+      typeParam === "receivable" ||
+      typeParam === "payable" ||
+      Boolean(storeParam) ||
+      Boolean(startParam) ||
+      Boolean(endParam) ||
+      Boolean(bankTxParam)
+    if (hasDeepLink) return
+    const snap = receivablePayableViewCache.read()
+    if (!snap || !snap.hasSearchedList) return
+    skipNextTabClearRef.current = true
+    restoreReceivablePayableQueryDraft(snap)
+    setListData(snap.listData || [])
+    setCumulativeSummary(snap.cumulativeSummary || { totalAmount: 0, byKey: {} })
+    setHasSearchedList(true)
+    lastFetchedListRef.current = {
+      tab: snap.tab === "payable" ? "payable" : "receivable",
+      startStr: snap.startStr || "",
+      endStr: snap.endStr || "",
+      listData: snap.listData || [],
+      cumulativeSummary: snap.cumulativeSummary || { totalAmount: 0, byKey: {} },
+    }
+    restoreQueryListRef.current = false
+    draftHydratedRef.current = true
+    setQueryDraftReady(true)
+  }, [allowReceivableUrlSync, pageActiveRef, restoreReceivablePayableQueryDraft, searchParams])
+
   React.useEffect(() => {
     if (draftHydratedRef.current) return
     if (!pageActiveRef.current) return
@@ -1085,6 +1139,10 @@ export function ReceivablePayableTab() {
   }, [pendingDeepLinkSearch, loadList])
 
   React.useEffect(() => {
+    if (skipTabClearOnMountRef.current) {
+      skipTabClearOnMountRef.current = false
+      return
+    }
     if (skipNextTabClearRef.current) {
       skipNextTabClearRef.current = false
       return
@@ -1148,6 +1206,43 @@ export function ReceivablePayableTab() {
     vendorFilter,
   ])
 
+  React.useEffect(() => {
+    if (!queryDraftReady || !hasSearchedList) return
+    const fetched = lastFetchedListRef.current
+    if (!fetched) return
+    const sameQuery = fetched.tab === tab && fetched.startStr === startStr && fetched.endStr === endStr
+    const listToSave = sameQuery ? listData : fetched.listData
+    const summaryToSave = sameQuery ? cumulativeSummary : fetched.cumulativeSummary
+    receivablePayableViewCache.save({
+      tab: sameQuery ? tab : fetched.tab,
+      startStr: sameQuery ? startStr : fetched.startStr,
+      endStr: sameQuery ? endStr : fetched.endStr,
+      salesOutletFilter,
+      payableStoreFilter,
+      vendorFilter,
+      invoiceSearch,
+      filterUnpaidOnly,
+      ledgerViewMode,
+      hasSearchedList: true,
+      listData: listToSave,
+      cumulativeSummary: summaryToSave,
+    })
+  }, [
+    cumulativeSummary,
+    endStr,
+    filterUnpaidOnly,
+    hasSearchedList,
+    invoiceSearch,
+    ledgerViewMode,
+    listData,
+    payableStoreFilter,
+    queryDraftReady,
+    salesOutletFilter,
+    startStr,
+    tab,
+    vendorFilter,
+  ])
+
   const bankTxLinkedAccrualIds = React.useMemo(() => {
     const byBank = new Map<number, Set<number>>()
     for (const item of listData) {
@@ -1186,14 +1281,14 @@ export function ReceivablePayableTab() {
   )
 
   const openBankTransactionFromReceivable = React.useCallback(
-    (bankTransactionId: number, transDate?: string) => {
-      const q = new URLSearchParams({ tab: "query", openRegisterTxId: String(bankTransactionId) })
-      const d = String(transDate || "").slice(0, 10)
-      if (d) {
-        q.set("startStr", d)
-        q.set("endStr", d)
-      }
-      router.push(`/admin/bank-transactions?${q.toString()}`)
+    (bankTransactionId: number, transDate?: string, accountId?: number | string | null) => {
+      router.push(
+        buildBankTransactionDeepLink({
+          bankTransactionId,
+          transDate,
+          accountId,
+        })
+      )
     },
     [router]
   )
@@ -1531,8 +1626,8 @@ export function ReceivablePayableTab() {
           entityCol,
           t("date") || "Date",
           t("type") || "Type",
-          t("recColInvoiceNo") || t("recColOrderNo") || "Invoice No",
-          t("recColTaxInvoiceDocNo") || "Tax-Invoice/Receipt No",
+          tt("recColInvoiceNo", "인보이스번호"),
+          tt("recColTaxInvoiceDocNo", "세금계산서번호"),
           t("recColReceiveStatus") || "Receive Status",
           t("recColReceiveCheck") || "Collection Check",
           t("amount") || "Amount",
@@ -1716,12 +1811,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         <th className="text-center py-1 px-2 w-[95px]">{t("type") || "Type"}</th>
                         {isRec && (
                           <th className="text-center py-1 px-2 w-[150px] whitespace-nowrap">
-                            {t("recColInvoiceNo") || t("recColOrderNo") || "Invoice No"}
+                            {tt("recColInvoiceNo", "인보이스번호")}
                           </th>
                         )}
                         {isRec && (
                           <th className="text-center py-1 px-2 w-[160px] whitespace-nowrap">
-                            {t("recColTaxInvoiceDocNo") || "Tax-Invoice/Receipt No"}
+                            {tt("recColTaxInvoiceDocNo", "세금계산서번호")}
                           </th>
                         )}
                         {!isRec && <th className="text-center py-1 px-2 w-[100px]">{t("poInvoice") || "Invoice"}</th>}
@@ -2032,32 +2127,56 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             <AccordionContent className="px-4">
                               {unallocatedTotal > 0.009 ? (
                                 <div className="mb-3 rounded-md border border-amber-200/80 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 px-3 py-2 text-xs leading-snug space-y-1.5">
+                                  <p className="font-semibold text-amber-950 dark:text-amber-50">
+                                    {tt("recUnallocatedBankStoreTitle", "미배분 통장 입금 (조회 기간과 별개)")}
+                                  </p>
                                   <p>
                                     {tt(
                                       "recUnallocatedBankStoreHint",
-                                      "매장 잔액에는 반영됐지만 아래 인보이스에 아직 배분되지 않은 통장 입금입니다. 통장 거래에서 「미수 연결」로 배분하면 수금확인이 자동 반영됩니다."
+                                      "매장 잔액에는 이미 반영됐지만 아래 인보이스에는 아직 배분되지 않은 입금입니다. 날짜가 아래 표와 달라도 정상입니다. 버튼을 누르면 그 입금이 들어 있는 통장으로 이동합니다."
                                     )}
                                   </p>
                                   <div className="flex flex-wrap gap-2">
-                                    {(item.unallocatedBankDeposits || []).map((dep) => (
+                                    {(item.unallocatedBankDeposits || []).map((dep) => {
+                                      const accountLabel =
+                                        String(dep.bankAccountName || "").trim() ||
+                                        String(dep.bankAccountStore || "").trim()
+                                      return (
                                       <Button
                                         key={dep.bankTransactionId}
                                         type="button"
                                         size="sm"
                                         variant="outline"
-                                        className="h-7 text-[11px] tabular-nums"
+                                        className="h-auto min-h-7 py-1 text-[11px] tabular-nums whitespace-normal text-left"
+                                        title={tt(
+                                          "recUnallocatedBankOpenHint",
+                                          "이 입금이 들어 있는 통장으로 이동합니다"
+                                        )}
                                         onClick={() =>
-                                          openBankTransactionFromReceivable(dep.bankTransactionId, dep.transDate)
+                                          openBankTransactionFromReceivable(
+                                            dep.bankTransactionId,
+                                            dep.transDate,
+                                            dep.bankAccountId
+                                          )
                                         }
                                       >
-                                        {dep.transDate} · ฿{dep.amountAbs.toLocaleString()} · #{dep.bankTransactionId}
+                                        {dep.transDate} · ฿{dep.amountAbs.toLocaleString()}
+                                        {accountLabel ? ` · ${accountLabel}` : ""} · #{dep.bankTransactionId}
                                       </Button>
-                                    ))}
+                                      )
+                                    })}
                                   </div>
                                 </div>
                               ) : null}
                               {tableItems.length === 0 ? (
-                                <p className="text-sm text-muted-foreground py-4 text-center">{ledgerNoPeriodRowsHint}</p>
+                                <p className="text-sm text-muted-foreground py-4 text-center">
+                                  {unallocatedTotal > 0.009
+                                    ? tt(
+                                        "recLedgerNoPeriodWithUnallocated",
+                                        "이 기간의 인보이스·거래는 없습니다. 위 버튼은 과거 미배분 통장 입금입니다."
+                                      )
+                                    : ledgerNoPeriodRowsHint}
+                                </p>
                               ) : ledgerViewMode === "paired" ? (
                                 <ReceivablePairedLedgerList
                                   groups={receivablePairGroups}
@@ -2091,10 +2210,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
                                     <th className="text-center py-2 px-3 w-[150px] min-w-[150px] font-semibold whitespace-nowrap">
-                                      {t("recColInvoiceNo") || t("recColOrderNo") || "Invoice No"}
+                                      {tt("recColInvoiceNo", "인보이스번호")}
                                     </th>
                                     <th className="text-center py-2 px-3 w-[160px] min-w-[160px] font-semibold whitespace-nowrap">
-                                      {t("recColTaxInvoiceDocNo") || "Tax-Invoice/Receipt No"}
+                                      {tt("recColTaxInvoiceDocNo", "세금계산서번호")}
                                     </th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("recColReceiveStatus") || "수령여부"}</th>
                                     <th className="text-center py-2 px-2 w-[108px] font-semibold whitespace-nowrap" title={tt("recColReceiveCheckHint", "통장 수금은 「미수 연결」로 처리합니다. 체크는 통장 없는 수금(현금 등) 또는 연동 결과 표시용입니다.")}>
@@ -2104,7 +2223,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       {t("acct_rec_bank_link") || tt("acct_rec_bank_link", "통장")}
                                     </th>
                                     <th className="text-center py-2 px-1 w-[72px] text-sm font-bold whitespace-nowrap">
-                                      {t("recColTaxInvoicePrint") || t("recColTaxInvoice") || "Print"}
+                                      {tt("recColTaxInvoicePrint", "인쇄")}
                                     </th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
@@ -2194,6 +2313,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         if (recv?.bank_transaction_id) return Number(recv.bank_transaction_id)
                                       }
                                       return 0
+                                    })()
+                                    const linkedBankAccountId = (() => {
+                                      if (!linkedBankTxId) return undefined
+                                      const fromRow = (item.items || []).find(
+                                        (r) => Number(r.bank_transaction_id || 0) === linkedBankTxId
+                                      )
+                                      const rowAid = Number(fromRow?.bank_account_id || 0)
+                                      if (rowAid > 0) return rowAid
+                                      const dep = (item.unallocatedBankDeposits || []).find(
+                                        (d) => Number(d.bankTransactionId) === linkedBankTxId
+                                      )
+                                      const depAid = Number(dep?.bankAccountId || 0)
+                                      return depAid > 0 ? depAid : undefined
                                     })()
                                     const isBankHighlight = rowHighlightsBankTx(row)
                                     const receiveCheckPolicy = canManuallyToggleReceivableReceiveCheck({
@@ -2377,7 +2509,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                 e.stopPropagation()
                                                 openBankTransactionFromReceivable(
                                                   linkedBankTxId,
-                                                  row.trans_date
+                                                  row.trans_date,
+                                                  linkedBankAccountId
                                                 )
                                               }}
                                             >
@@ -2398,8 +2531,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                             size="sm"
                                             className="h-8 w-8 p-0 shrink-0"
                                             disabled={taxInvoiceLoadingKey != null}
-                                            title={tt("recTaxInvoicePrintTitle", "Tax Invoice/Receipt 인쇄")}
-                                            aria-label={tt("recTaxInvoicePrintTitle", "Tax Invoice/Receipt 인쇄")}
+                                            title={tt("recTaxInvoicePrintTitle", "세금계산서 인쇄")}
+                                            aria-label={tt("recTaxInvoicePrintTitle", "세금계산서 인쇄")}
                                             onClick={(e) => {
                                               e.stopPropagation()
                                               void handleTaxInvoicePrint(row, item)

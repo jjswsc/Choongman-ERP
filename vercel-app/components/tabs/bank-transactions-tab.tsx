@@ -50,6 +50,7 @@ import {
   getApprovedExpenseAccrualsForBankTx,
   getBankAccounts,
   getBankTransactions,
+  lookupBankTransaction,
   addBankTransactionsBulk,
   registerExpenseFromBankTransaction,
   getOpenReceivablesForBankTx,
@@ -765,6 +766,69 @@ export function BankTransactionsTab() {
     else if (tabParam === "query") setActiveBankTab("query")
     if (openRegisterTxIdParam && Number(openRegisterTxIdParam) > 0) setActiveBankTab("query")
   }, [allowBankUrlSync, tabParam, openRegisterTxIdParam, router])
+
+  const lastAppliedOpenTxIdRef = React.useRef<number | null>(null)
+  const pendingOpenTxAccountLookupRef = React.useRef(false)
+  const openRegisterAccountIdParam = searchParams.get("accountId")
+  const openRegisterStartParam = searchParams.get("startStr") || searchParams.get("start")
+  const openRegisterEndParam = searchParams.get("endStr") || searchParams.get("end")
+  React.useEffect(() => {
+    if (!allowBankUrlSync) return
+    const txId =
+      openRegisterTxIdParam && Number(openRegisterTxIdParam) > 0 ? Number(openRegisterTxIdParam) : null
+    if (!txId) {
+      lastAppliedOpenTxIdRef.current = null
+      pendingOpenTxAccountLookupRef.current = false
+      return
+    }
+    setActiveBankTab("query")
+    const start = openRegisterStartParam
+    const end = openRegisterEndParam
+    if (start && /^\d{4}-\d{2}-\d{2}$/.test(start.slice(0, 10))) setStartStr(start.slice(0, 10))
+    if (end && /^\d{4}-\d{2}-\d{2}$/.test(end.slice(0, 10))) setEndStr(end.slice(0, 10))
+    restoreOpenRegisterTxIdRef.current = txId
+    restoreListLoadedRef.current = false
+    const aid = openRegisterAccountIdParam
+    if (aid && Number(aid) > 0) {
+      pendingOpenTxAccountLookupRef.current = false
+      if (lastAppliedOpenTxIdRef.current !== txId) {
+        lastAppliedOpenTxIdRef.current = txId
+        setAccountId(String(aid))
+      }
+      return
+    }
+    if (lastAppliedOpenTxIdRef.current === txId) return
+    lastAppliedOpenTxIdRef.current = txId
+    pendingOpenTxAccountLookupRef.current = true
+    let cancelled = false
+    lookupBankTransaction(txId)
+      .then((row) => {
+        if (cancelled) return
+        pendingOpenTxAccountLookupRef.current = false
+        if (row?.accountId) {
+          setAccountId(String(row.accountId))
+          if (row.transDate && /^\d{4}-\d{2}-\d{2}$/.test(row.transDate)) {
+            setStartStr(row.transDate)
+            setEndStr(row.transDate)
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) pendingOpenTxAccountLookupRef.current = false
+      })
+    return () => {
+      cancelled = true
+      pendingOpenTxAccountLookupRef.current = false
+      lastAppliedOpenTxIdRef.current = null
+    }
+  }, [
+    allowBankUrlSync,
+    openRegisterAccountIdParam,
+    openRegisterEndParam,
+    openRegisterStartParam,
+    openRegisterTxIdParam,
+  ])
+
   React.useEffect(() => {
     if (!pageActiveRef.current) return
     if (urlParamsApplied.current) return
@@ -824,6 +888,12 @@ export function BankTransactionsTab() {
     if (!pageActiveRef.current || !allowBankUrlSync) return
     viewCacheRestoredRef.current = true
     if (parsePurchaseDrillNav(searchParams).fromPlDrill) return
+    const openTxId = searchParams.get("openRegisterTxId")
+    if (openTxId && Number(openTxId) > 0) {
+      // 미수금 등에서 연 딥링크 — 이전 조회 계좌로 덮지 않음
+      queryDraftRestoredRef.current = true
+      return
+    }
     const snap = readBankQueryViewCache()
     if (!snap || !snap.hasSearched) return
     if (snap.accountId) setAccountId(snap.accountId)
@@ -1072,6 +1142,7 @@ export function BankTransactionsTab() {
 
   React.useEffect(() => {
     if (accounts.length > 0 && !accountId) {
+      if (pendingOpenTxAccountLookupRef.current) return
       setAccountId(String(accounts[0].id))
     }
   }, [accounts, accountId])

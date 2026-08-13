@@ -25,6 +25,83 @@ export type UnallocatedBankReceiveItem = {
   transDate: string
   amountAbs: number
   memo?: string
+  /** 해당 입금이 들어 있는 통장 계좌 — 클릭 시 이 계좌로 이동 */
+  bankAccountId?: number
+  bankAccountName?: string
+  bankAccountStore?: string
+}
+
+export type BankTxAccountMeta = {
+  accountId: number
+  accountName?: string
+  accountStore?: string
+}
+
+export function collectBankTransactionIdsFromReceivableGroups(
+  groups: Array<{
+    unallocatedBankDeposits?: UnallocatedBankReceiveItem[]
+    items?: Array<{ bank_transaction_id?: number | null }>
+  }>
+): number[] {
+  const ids = new Set<number>()
+  for (const g of groups) {
+    for (const dep of g.unallocatedBankDeposits || []) {
+      const id = Number(dep.bankTransactionId)
+      if (id > 0) ids.add(id)
+    }
+    for (const row of g.items || []) {
+      const id = Number(row.bank_transaction_id)
+      if (id > 0) ids.add(id)
+    }
+  }
+  return [...ids]
+}
+
+export function applyBankAccountMetaToReceivableGroups<
+  T extends {
+    unallocatedBankDeposits?: UnallocatedBankReceiveItem[]
+    items?: Array<{ bank_transaction_id?: number | null; bank_account_id?: number | null }>
+  },
+>(groups: T[], metaByTxId: Record<number, BankTxAccountMeta>): T[] {
+  if (Object.keys(metaByTxId).length === 0) return groups
+  return groups.map((g) => ({
+    ...g,
+    unallocatedBankDeposits: (g.unallocatedBankDeposits || []).map((dep) => {
+      const meta = metaByTxId[Number(dep.bankTransactionId)]
+      if (!meta) return dep
+      return {
+        ...dep,
+        bankAccountId: meta.accountId,
+        bankAccountName: meta.accountName,
+        bankAccountStore: meta.accountStore,
+      }
+    }),
+    items: (g.items || []).map((row) => {
+      const meta = metaByTxId[Number(row.bank_transaction_id)]
+      if (!meta) return row
+      return { ...row, bank_account_id: meta.accountId }
+    }),
+  }))
+}
+
+/** 미수금 화면 → 통장 조회 딥링크. accountId가 있어야 다른 매장 통장으로 열리지 않는다. */
+export function buildBankTransactionDeepLink(params: {
+  bankTransactionId: number
+  transDate?: string | null
+  accountId?: number | string | null
+}): string {
+  const q = new URLSearchParams({
+    tab: "query",
+    openRegisterTxId: String(params.bankTransactionId),
+  })
+  const d = String(params.transDate || "").slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    q.set("startStr", d)
+    q.set("endStr", d)
+  }
+  const aid = Number(params.accountId || 0)
+  if (Number.isFinite(aid) && aid > 0) q.set("accountId", String(Math.floor(aid)))
+  return `/admin/bank-transactions?${q.toString()}`
 }
 
 export function listUnallocatedBankReceives(

@@ -19,6 +19,9 @@ export interface ReceivablePayableItem {
     transDate: string
     amountAbs: number
     memo?: string
+    bankAccountId?: number
+    bankAccountName?: string
+    bankAccountStore?: string
   }[]
   items: {
     id?: number
@@ -31,6 +34,7 @@ export interface ReceivablePayableItem {
     invoice_received?: boolean
     receive_checked?: boolean
     bank_transaction_id?: number | null
+    bank_account_id?: number | null
     expense_accrual_id?: number | null
     petty_cash_transaction_id?: number | null
     /** 미지급: 입고·발주·지출·통장·패티에서 해석한 귀속 매장 */
