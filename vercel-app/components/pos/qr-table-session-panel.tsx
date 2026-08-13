@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { QrCode } from 'lucide-react'
+import { Printer, QrCode } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  qrTableAdminAction,
   qrTableAdminGet,
   qrTableStaffAckCall,
   qrTableStaffAdjustGuests,
@@ -19,7 +20,9 @@ import {
   qrTableStaffOpenSession,
   qrTableStaffSessionByTable,
 } from '@/lib/api-client/qr-table'
-import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession } from '@/lib/qr-table-types'
+import { printQrTableThermalSlip } from '@/lib/print-qr-table-thermal-slip'
+import { pickQrTokenForTable, resolveQrTableGuestUrl } from '@/lib/qr-table-thermal-slip-html'
+import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession, QrTableToken } from '@/lib/qr-table-types'
 import { buffetTierDisplayName, defaultQrOrderStoreSettings } from '@/lib/qr-table-types'
 import { appAlert } from '@/lib/app-message'
 import { useLang } from '@/lib/lang-context'
@@ -58,9 +61,11 @@ function playCallBeep() {
 export function QrTableSessionPanel(props: {
   storeCode: string
   tableName: string
+  /** 슬립 상단 매장명. 없으면 storeCode */
+  storeLabel?: string
   onChanged?: () => void
 }) {
-  const { storeCode, tableName, onChanged } = props
+  const { storeCode, tableName, storeLabel, onChanged } = props
   const { lang } = useLang()
   const t = useT(lang)
   const tr = (k: string, fb: string) => tOr(t, k, fb)
@@ -70,7 +75,9 @@ export function QrTableSessionPanel(props: {
   const [settings, setSettings] = React.useState<QrOrderStoreSettings>(defaultQrOrderStoreSettings(''))
   const [guestCount, setGuestCount] = React.useState(2)
   const [tierId, setTierId] = React.useState('')
+  const [tokens, setTokens] = React.useState<QrTableToken[]>([])
   const [busy, setBusy] = React.useState(false)
+  const [printing, setPrinting] = React.useState(false)
   const [loaded, setLoaded] = React.useState(false)
   const lastCallAtRef = React.useRef<string | null>(null)
 
@@ -92,6 +99,7 @@ export function QrTableSessionPanel(props: {
     setOrderBalance(sessRes.orderBalance || null)
     if (adminRes.settings) setSettings(adminRes.settings)
     setTiers((adminRes.tiers || []).filter((x) => x.active))
+    setTokens(adminRes.tokens || [])
     setLoaded(true)
   }, [storeCode, tableName])
 
@@ -183,6 +191,45 @@ export function QrTableSessionPanel(props: {
     }
   }
 
+  async function printTableQr() {
+    if (printing) return
+    setPrinting(true)
+    try {
+      let token = pickQrTokenForTable(tokens, tableName)
+      if (!token) {
+        const gen = await qrTableAdminAction({
+          action: 'generateTokens',
+          storeCode,
+          tableNames: [tableName],
+        })
+        if (gen.success && gen.tokens?.length) {
+          setTokens(gen.tokens)
+          token = pickQrTokenForTable(gen.tokens, tableName)
+        }
+      }
+      if (!token?.token) {
+        await appAlert(tr('qrTablePrintNoToken', '이 테이블 QR이 없습니다. 관리자 화면에서 레이아웃 기준 생성을 먼저 해 주세요.'))
+        return
+      }
+      await printQrTableThermalSlip({
+        tableName,
+        url: resolveQrTableGuestUrl(token),
+        storeLabel: String(storeLabel || '').trim() || storeCode,
+        scanTh: tr('qrTableScanTh', 'สแกนเพื่อสั่งอาหาร'),
+        scanEn: tr('qrTableScanEn', 'Scan to order from your phone'),
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ''
+      await appAlert(msg && msg !== 'qr_print_required' ? msg : tr('qrTablePrintFailed', 'QR 인쇄에 실패했습니다.'))
+    } finally {
+      setPrinting(false)
+    }
+  }
+
+  const printQrLabel = tr('qrTableSessionPrintQr', 'QR 인쇄')
+  const printQrHint = tr('qrTableSessionPrintQrHint', '영수증 프린터로 테이블 QR을 출력합니다. 손님이 스캔해 주문합니다.')
+  const printBusy = busy || printing
+
   const badge =
     !session
       ? null
@@ -216,19 +263,21 @@ export function QrTableSessionPanel(props: {
       {/* 한 줄 툴바 */}
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 px-2.5 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white"
-            title={
-              session
-                ? tr('qrTableSessionCloseHint', 'POS에서 결제·취소하면 QR 세션이 자동 종료됩니다.')
-                : undefined
-            }
+          <button
+            type="button"
+            className="flex min-w-0 items-center gap-1.5 rounded-lg text-left transition hover:opacity-90 disabled:opacity-50"
+            disabled={printBusy}
+            title={printQrHint}
+            aria-label={printQrLabel}
+            onClick={() => void printTableQr()}
           >
-            <QrCode className="h-3.5 w-3.5" aria-hidden />
-          </span>
-          <span className="truncate text-xs font-semibold tracking-tight text-slate-800">
-            {tr('qrTableSessionTitle', 'QR 테이블오더')}
-          </span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
+              <QrCode className="h-3.5 w-3.5" aria-hidden />
+            </span>
+            <span className="truncate text-xs font-semibold tracking-tight text-slate-800">
+              {tr('qrTableSessionTitle', 'QR 테이블오더')}
+            </span>
+          </button>
           {badge ? (
             <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>
               {badge.label}
@@ -296,6 +345,17 @@ export function QrTableSessionPanel(props: {
             ) : null}
 
             <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs"
+                disabled={printBusy}
+                title={printQrHint}
+                onClick={() => void printTableQr()}
+              >
+                <Printer className="mr-1 h-3.5 w-3.5" aria-hidden />
+                {printQrLabel}
+              </Button>
               {session.staffCallAt ? (
                 <Button size="sm" variant="destructive" className="h-8 px-3 text-xs" disabled={busy} onClick={() => void ackCall()}>
                   {tr('qrTableSessionAckCall', '호출 확인')}
@@ -353,14 +413,27 @@ export function QrTableSessionPanel(props: {
               )}
             </div>
 
-            <Button
-              size="sm"
-              className="ml-auto h-8 shrink-0 bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800"
-              disabled={busy || (!isAlaCarte && !tierId)}
-              onClick={() => void openSession()}
-            >
-              {tr('qrTableSessionOpen', 'QR 세션 오픈')}
-            </Button>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs font-semibold"
+                disabled={printBusy}
+                title={printQrHint}
+                onClick={() => void printTableQr()}
+              >
+                <Printer className="mr-1 h-3.5 w-3.5" aria-hidden />
+                {printQrLabel}
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 bg-slate-900 px-3.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800"
+                disabled={busy || (!isAlaCarte && !tierId)}
+                onClick={() => void openSession()}
+              >
+                {tr('qrTableSessionOpen', 'QR 세션 오픈')}
+              </Button>
+            </div>
           </>
         )}
       </div>

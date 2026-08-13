@@ -56,6 +56,7 @@ import {
 } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { bankNoteUserDisplayText } from "@/lib/bank-transaction-note-meta"
+import { expenseSearchViewCache } from "@/lib/expense-search-view-cache"
 import { PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE } from "@/lib/bank-purchase-payment-via-expense"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -1127,6 +1128,15 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           return
         }
+        if ((res as { queued?: boolean }).queued === true) {
+          await appAlert(
+            tt(
+              "expenseAccrualQueuedOffline",
+              "Saved to this device offline queue. It will appear in the payment plan tab after the network syncs."
+            )
+          )
+          return
+        }
         if ((res as { bankFieldsSkipped?: boolean }).bankFieldsSkipped && res.message) {
           await appAlert(translateApiMessage(res.message, t) || res.message)
         }
@@ -1158,9 +1168,22 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setInvoiceNo("")
         setActiveFeeVatMode(null)
         hasAppliedParams.current = false
-        onAccrualSaved?.({ expenseDate: transDate })
         if (!(res as { bankFieldsSkipped?: boolean }).bankFieldsSkipped) {
-          await appAlert(tt("wm_accrualUpdateSuccess", "Updated. Please check in the payment plan tab."))
+          await appAlert(
+            returnTabParam === "expenseSearch"
+              ? tt("msg_saved", "Saved.")
+              : tt("wm_accrualUpdateSuccess", "Updated. Please check in the payment plan tab.")
+          )
+        }
+        expenseSearchViewCache.clear()
+        if (returnTabParam === "expenseSearch") {
+          const q = new URLSearchParams({ tab: "expenseSearch" })
+          if (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) q.set("startStr", startStrParam)
+          if (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) q.set("endStr", endStrParam)
+          q.set("searchRefresh", String(Date.now()))
+          router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
+        } else {
+          onAccrualSaved?.({ expenseDate: transDate })
         }
       } else {
         const res = await addExpenseAccrual({
@@ -1250,6 +1273,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         onAccrualSaved?.({ expenseDate: transDate })
         await appAlert(tt("wm_accrualSuccess", "Saved. Please check in the payment plan tab."))
       }
+    } catch (e) {
+      await appAlert(
+        translateApiMessage(e instanceof Error ? e.message : String(e), t) || t("processFail")
+      )
     } finally {
       setSaving(false)
     }
@@ -1326,6 +1353,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           return
         }
         await appAlert(res.message || tt("saved", "Saved."))
+        if (returnTabParam === "expenseSearch") {
+          expenseSearchViewCache.clear()
+          const q = new URLSearchParams({ tab: "expenseSearch" })
+          if (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) q.set("startStr", startStrParam)
+          if (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) q.set("endStr", endStrParam)
+          q.set("searchRefresh", String(Date.now()))
+          router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
+        }
         return
       }
 
@@ -1361,6 +1396,18 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         return
       }
       await appAlert(tt("saved", "Saved."))
+      if (returnTabParam === "expenseSearch") {
+        expenseSearchViewCache.clear()
+        const q = new URLSearchParams({ tab: "expenseSearch" })
+        if (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) q.set("startStr", startStrParam)
+        if (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) q.set("endStr", endStrParam)
+        q.set("searchRefresh", String(Date.now()))
+        router.replace(`/admin/expense-management?${q.toString()}`, { scroll: false })
+      }
+    } catch (e) {
+      await appAlert(
+        translateApiMessage(e instanceof Error ? e.message : String(e), t) || t("processFail")
+      )
     } finally {
       setSaving(false)
     }
@@ -3246,6 +3293,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 </label>
               ) : null}
               <Button
+                type="button"
                 onClick={handleSubmit}
                 disabled={
                   saving ||

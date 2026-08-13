@@ -4369,6 +4369,7 @@ export const i18n = {
     expensePlanNotFound: '지급 예정 데이터를 찾을 수 없습니다.',
     planEditableOnlyBeforeApproval: '승인 전(요청) 상태에서만 수정/삭제할 수 있습니다.',
     planEditablePaidBlocked: '이미 지급된 금액이 있어 수정할 수 없습니다.',
+    accountingPeriodClosed: '마감된 회계기간의 거래는 수정할 수 없습니다.',
     planDeletableOnlyBeforeApproval:
       '요청(미승인) 또는 반려 상태에서만 삭제할 수 있습니다. 승인된 건은 지출 검색에서 삭제해 주세요.',
     alreadyPaid: '이미 지급 완료된 건입니다.',
@@ -12267,6 +12268,7 @@ Only matters the employee must handle personally on a working day:
     expensePlanNotFound: 'Payment plan not found.',
     planEditableOnlyBeforeApproval: 'Edit/Delete is allowed only before approval (requested status).',
     planEditablePaidBlocked: 'Cannot edit: a payment has already been recorded.',
+    accountingPeriodClosed: 'Transactions in a closed accounting period cannot be edited.',
     planDeletableOnlyBeforeApproval:
       'Delete is allowed only for requested (unapproved) or rejected items. For approved items, use Expense Search.',
     alreadyPaid: 'This item is already paid.',
@@ -19632,6 +19634,7 @@ orderItemQty: 'จำนวน',
     expensePlanNotFound: 'ไม่พบข้อมูลแผนจ่าย',
     planEditableOnlyBeforeApproval: 'แก้ไข/ลบได้เฉพาะก่อนอนุมัติ (สถานะคำขอ)',
     planEditablePaidBlocked: 'ไม่สามารถแก้ไขได้: มีการจ่ายเงินแล้ว',
+    accountingPeriodClosed: 'ไม่สามารถแก้ไขรายการในช่วงบัญชีที่ปิดแล้ว',
     planDeletableOnlyBeforeApproval:
       'ลบได้เฉพาะสถานะคำขอหรือปฏิเสธ รายการที่อนุมัติแล้วให้ลบจากค้นหารายจ่าย',
     alreadyPaid: 'รายการนี้จ่ายแล้ว',

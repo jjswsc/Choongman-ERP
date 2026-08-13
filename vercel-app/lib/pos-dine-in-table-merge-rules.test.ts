@@ -3,6 +3,8 @@ import {
   consolidatePosOrderLinesAfterMerge,
   posMergeLineIdentityKey,
   posMergeLineIsUnserved,
+  computePosOrderMergeFinancials,
+  computePosOrderDueTotalFromLines,
 } from '@/lib/pos-dine-in-table-merge-rules'
 
 describe('posMergeLineIsUnserved', () => {
@@ -60,5 +62,70 @@ describe('consolidatePosOrderLinesAfterMerge', () => {
     const k1 = posMergeLineIdentityKey({ name: 'A', price: 10, qty: 1, promoId: 'p1' })
     const k2 = posMergeLineIdentityKey({ name: 'A', price: 10, qty: 1, promoId: 'p2' })
     expect(k1).not.toBe(k2)
+  })
+})
+
+describe('computePosOrderMergeFinancials', () => {
+  it('empty adjustments total equals item subtotal minus discount', () => {
+    const r = computePosOrderMergeFinancials({
+      mergedItems: [
+        { name: 'A', price: 500, qty: 1 },
+        { name: 'B', price: 618, qty: 1 },
+      ],
+      discountAmt: 0,
+      couponDiscountAmt: 0,
+      adjustments: { paymentTotalRoundingMode: 'none', vatRate: 0, serviceRate: 0 },
+    })
+    expect(r.subtotal).toBe(1118)
+    expect(r.total).toBe(1118)
+  })
+
+  it('applies store service rate so checkout total is not lower than POS modal', () => {
+    const items = [
+      { name: 'A', price: 500, qty: 1 },
+      { name: 'B', price: 618, qty: 1 },
+    ]
+    const withoutFee = computePosOrderMergeFinancials({
+      mergedItems: items,
+      discountAmt: 0,
+      couponDiscountAmt: 0,
+      adjustments: { paymentTotalRoundingMode: 'none', vatRate: 0, serviceRate: 0 },
+    })
+    const withService = computePosOrderMergeFinancials({
+      mergedItems: items,
+      discountAmt: 0,
+      couponDiscountAmt: 0,
+      adjustments: {
+        paymentTotalRoundingMode: 'none',
+        vatRate: 0,
+        serviceRate: 10,
+        serviceMode: 'separate',
+      },
+    })
+    expect(withoutFee.total).toBe(1118)
+    expect(withService.total).toBe(1229.8)
+    expect(withService.serviceAmt).toBe(111.8)
+  })
+})
+
+describe('computePosOrderDueTotalFromLines', () => {
+  it('matches cart: discount + points come off subtotal before store fees', () => {
+    const due = computePosOrderDueTotalFromLines({
+      items: [{ name: 'A', price: 200, qty: 1 }],
+      discountAmt: 20,
+      pointUsed: 10,
+      adjustments: { paymentTotalRoundingMode: 'none', vatRate: 0, serviceRate: 0 },
+    })
+    expect(due.total).toBe(170)
+  })
+
+  it('applies coupon when it is not already inside discountAmt', () => {
+    const due = computePosOrderDueTotalFromLines({
+      items: [{ name: 'A', price: 200, qty: 1 }],
+      discountAmt: 0,
+      couponDiscountAmt: 30,
+      adjustments: { paymentTotalRoundingMode: 'none', vatRate: 0, serviceRate: 0 },
+    })
+    expect(due.total).toBe(170)
   })
 })

@@ -106,3 +106,19 @@ export function canEditExpenseAccrualClassification(input: {
     status === 'done'
   )
 }
+
+/**
+ * 금액·발생일 잠금 — 실지급·통장/패티 연결 후, 또는 지급예정 전면 수정이 불가한 상태
+ * (분류 수정은 canEditExpenseAccrualClassification)
+ */
+export function shouldLockExpenseAccrualAmounts(input: {
+  status?: string
+  paidAmount?: number
+  hasPaymentLink?: boolean
+}): boolean {
+  if (input.hasPaymentLink) return true
+  return !canEditExpenseAccrualPlan({
+    status: input.status,
+    paidAmount: input.paidAmount,
+  })
+}

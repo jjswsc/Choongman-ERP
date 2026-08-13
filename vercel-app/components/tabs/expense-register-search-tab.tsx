@@ -498,8 +498,11 @@ export function ExpenseRegisterSearchTab() {
       if (!r.accrualId) return
       const q = new URLSearchParams()
       q.set("tab", "expenseRegister")
+      q.set("returnTab", "expenseSearch")
       q.set("editAccrualId", String(r.accrualId))
       q.set("amount", String(r.grossAmount ?? r.plannedAmount ?? 0))
+      if (startStr) q.set("startStr", startStr)
+      if (endStr) q.set("endStr", endStr)
       if (Number(r.vatAmount || 0) > 0) q.set("accrualVat", String(r.vatAmount))
       if (Number(r.withholdingTaxAmount || 0) > 0) q.set("accrualWht", String(r.withholdingTaxAmount))
       if (r.expenseDate) q.set("transDate", r.expenseDate)
@@ -514,7 +517,7 @@ export function ExpenseRegisterSearchTab() {
       if (r.invoiceNo) q.set("invoiceNo", r.invoiceNo)
       router.push(`/admin/expense-management?${q.toString()}`)
     },
-    [router]
+    [endStr, router, startStr]
   )
 
   const renderPlanCell = (r: ExpenseSearchOverviewRow) => {
@@ -888,6 +891,7 @@ export function ExpenseRegisterSearchTab() {
                                 onClick={() => {
                                   const q = new URLSearchParams()
                                   q.set("tab", "expenseRegister")
+                                  q.set("returnTab", "expenseSearch")
                                   q.set("editMode", "1")
                                   q.set("bankTransactionId", String(r.bankTransactionId))
                                   if (r.accountId) q.set("accountId", String(r.accountId))

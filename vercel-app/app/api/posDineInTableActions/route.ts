@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { supabaseUpdateByFilterWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
-import { computePosPricing } from '@/lib/pos-pricing'
+import { computePosOrderMergeFinancials, consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
+import { loadPosPricingAdjustmentsForStore } from '@/lib/pos-pricing-adjustments-server'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { isDineInOrderTypeForGuestCount } from '@/lib/pos-sales-order-type-filter'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
-import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
 import {
   appendPosOrderMergedAbsorbStamp,
   appendPosOrderMergedKeepStamp,
@@ -407,13 +407,6 @@ export async function POST(req: NextRequest) {
       )
       const mergedItems = consolidatePosOrderLinesAfterMerge([...keepItems, ...absorbItems])
 
-      let subtotal = 0
-      for (const it of mergedItems) {
-        const price = Number(it.price ?? 0) || 0
-        const qty = Number(it.qty ?? 1) || 1
-        subtotal += price * qty
-      }
-
       const discountAmt =
         Math.max(0, Number(keep.discount_amt) || 0) + Math.max(0, Number(absorb.discount_amt) || 0)
       const couponDiscountAmt =
@@ -425,13 +418,13 @@ export async function POST(req: NextRequest) {
       const paymentCard =
         Math.max(0, Number(keep.payment_card) || 0) + Math.max(0, Number(absorb.payment_card) || 0)
 
-      const pricing = computePosPricing({
-        subtotal,
+      const pricingAdjustments = await loadPosPricingAdjustmentsForStore(storeKeep)
+      const financials = computePosOrderMergeFinancials({
+        mergedItems,
         discountAmt,
-        deliveryFee: 0,
-        packagingFee: 0,
+        couponDiscountAmt,
         cardPaymentAmount: paymentCard,
-        adjustments: {},
+        adjustments: pricingAdjustments,
       })
 
       let guestCount = Math.max(0, Math.trunc(Number(keep.guest_count) || 0))
@@ -463,9 +456,10 @@ export async function POST(req: NextRequest) {
 
       const patch: Record<string, unknown> = {
         items_json: JSON.stringify(mergedItems),
-        subtotal,
-        vat: pricing.vatFeeAmt,
-        total: pricing.finalTotal,
+        subtotal: financials.subtotal,
+        vat: financials.vat,
+        total: financials.total,
+        service_amt: financials.serviceAmt,
         discount_amt: discountAmt,
         discount_reason: discountReason,
         coupon_code: couponCode || null,

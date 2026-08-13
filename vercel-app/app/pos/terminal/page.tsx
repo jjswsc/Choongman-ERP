@@ -11172,6 +11172,7 @@ export default function PosTerminalPage() {
                       <QrTableSessionPanel
                         storeCode={currentStoreId}
                         tableName={String(selectedTable?.name || '').trim()}
+                        storeLabel={formatStoreLabel(currentStoreId || '')}
                         onChanged={() => {
                           const openedFromEmpty = selectedTableId
                           void Promise.resolve(refetchCurrentStore()).then(() => {
@@ -11461,6 +11462,7 @@ export default function PosTerminalPage() {
               tableName={servingTable.name}
               order={servingTable.order}
               storeCode={currentStoreId}
+              storeLabel={formatStoreLabel(currentStoreId || '')}
               menus={menus}
               allTables={currentStore?.tables ?? []}
               takeoutMergePeers={takeoutMergePeerTables}

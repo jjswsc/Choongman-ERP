@@ -4,7 +4,7 @@
  * 재고·분개·적립·쿠폰 소진은 이어지는 updatePosOrderStatus 에 맡긴다.
  */
 import { NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
   extractAnyMissingColumn,
   supabaseSelectFilterStrippingUnknownColumns,
@@ -40,6 +40,8 @@ import {
 } from '@/lib/pos-order-payment-reconcile'
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
 import { releaseRequestIdempotencyKey, reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import { computePosOrderDueTotalFromLines } from '@/lib/pos-dine-in-table-merge-rules'
+import { loadPosPricingAdjustmentsForStore } from '@/lib/pos-pricing-adjustments-server'
 import type { JwtPayload } from '@/lib/jwt-auth'
 
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
@@ -65,6 +67,72 @@ async function updatePosOrderSettleFastPatch(id: number, patch: Record<string, u
     }
   }
   throw new Error('settlePosOrderPaymentFast: too many missing-column retries')
+}
+
+function parseItemsJsonForSettleFast(raw: unknown): Record<string, unknown>[] {
+  if (Array.isArray(raw)) return raw as Record<string, unknown>[]
+  if (typeof raw !== 'string' || !raw.trim()) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * 합석 등 DB total이 매장 요금(봉사료·VAT) 없이 저장된 경우,
+ * 결제 모달 합계와 맞으면 통과하고 total을 맞춘다. 불일치 결제만 거부.
+ */
+async function alignSettleFastTotalIfPaymentMatchesRecomputedDue(params: {
+  orderId: number
+  storeCode: string
+  body: Record<string, unknown>
+  paymentCard: number
+  nextPaymentSum: number
+}): Promise<{ total: number; vat: number; serviceAmt: number } | null> {
+  try {
+    const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${params.orderId}`, {
+      limit: 1,
+      select: 'items_json,discount_amt,coupon_discount_amt,point_used',
+    })) as {
+      items_json?: unknown
+      discount_amt?: number
+      coupon_discount_amt?: number
+      point_used?: number
+    }[] | null
+    const row = rows?.[0]
+    const items = parseItemsJsonForSettleFast(row?.items_json)
+    if (!items.length) return null
+    const adjustments = await loadPosPricingAdjustmentsForStore(params.storeCode)
+    const discountAmt = Math.max(
+      0,
+      Number(params.body?.discountAmt ?? params.body?.discount_amt ?? row?.discount_amt ?? 0) || 0
+    )
+    const pointUsed = Math.max(
+      0,
+      Number(params.body?.pointUsed ?? params.body?.point_used ?? row?.point_used ?? 0) || 0
+    )
+    const couponDiscountAmt = Math.max(
+      0,
+      Number(
+        params.body?.couponDiscountAmt ?? params.body?.coupon_discount_amt ?? row?.coupon_discount_amt ?? 0
+      ) || 0
+    )
+    const due = computePosOrderDueTotalFromLines({
+      items,
+      discountAmt,
+      couponDiscountAmt,
+      pointUsed,
+      cardPaymentAmount: params.paymentCard,
+      adjustments,
+    })
+    if (params.nextPaymentSum > due.total + 0.02) return null
+    return due
+  } catch (e) {
+    console.warn('settlePosOrderPaymentFast align total:', e)
+    return null
+  }
 }
 
 export async function settlePosOrderPaymentFast(params: {
@@ -245,7 +313,7 @@ async function settlePosOrderPaymentFastBody(params: {
     return NextResponse.json({ success: false, message: closedMsg }, { headers })
   }
 
-  const total = Math.max(0, Number(current?.total ?? 0))
+  let total = Math.max(0, Number(current?.total ?? 0))
   const serviceAmt = Math.max(0, Number(current?.service_amt ?? body?.serviceAmt ?? 0))
   let paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
     paymentDeliveryApp,
@@ -308,12 +376,25 @@ async function settlePosOrderPaymentFastBody(params: {
     }
   }
 
+  let settleFastAlignedDue: { total: number; vat: number; serviceAmt: number } | null = null
   if (total > 0.02 && nextPaymentSum > total + 0.02) {
-    await releaseIdempotencyOnFailure()
-    return NextResponse.json(
-      { success: false, message: 'payment_exceeds_total' },
-      { headers }
-    )
+    const aligned = await alignSettleFastTotalIfPaymentMatchesRecomputedDue({
+      orderId: id,
+      storeCode: String(current?.store_code ?? ''),
+      body,
+      paymentCard,
+      nextPaymentSum,
+    })
+    if (aligned && nextPaymentSum <= aligned.total + 0.02) {
+      settleFastAlignedDue = aligned
+      total = aligned.total
+    } else {
+      await releaseIdempotencyOnFailure()
+      return NextResponse.json(
+        { success: false, message: 'payment_exceeds_total' },
+        { headers }
+      )
+    }
   }
 
   const linkposPayment =
@@ -418,7 +499,13 @@ async function settlePosOrderPaymentFastBody(params: {
    * body.items 는 무시한다.
    * 결제 UI는 항상 items 를 보내지만, enrich·total 재계산 없이 items_json 만 덮으면
    * 결제액/재고와 불일치가 난다. 품목은 주문·추가주문 저장 시점에 이미 DB에 있어야 한다.
+   * 합석 직후 DB total이 결제 모달보다 낮으면 위에서 재계산한 due로 total만 맞춘다.
    */
+  if (settleFastAlignedDue) {
+    patch.total = settleFastAlignedDue.total
+    patch.vat = settleFastAlignedDue.vat
+    patch.service_amt = settleFastAlignedDue.serviceAmt
+  }
 
   await updatePosOrderSettleFastPatch(id, patch)
 

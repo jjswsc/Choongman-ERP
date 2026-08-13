@@ -5,6 +5,7 @@ import {
   canEditExpenseAccrualPlan,
   canMutateExpenseAccrualRecord,
   isExpenseAccrualDeletableByPaymentState,
+  shouldLockExpenseAccrualAmounts,
 } from '@/lib/expense-accrual-approve-policy'
 
 describe('canEditExpenseAccrualPlan', () => {
@@ -26,6 +27,23 @@ describe('canEditExpenseAccrualClassification', () => {
     expect(canEditExpenseAccrualClassification({ status: 'paid' })).toBe(true)
     expect(canEditExpenseAccrualClassification({ status: 'done' })).toBe(true)
     expect(canEditExpenseAccrualClassification({ status: 'approved' })).toBe(true)
+    expect(canEditExpenseAccrualClassification({ status: 'partial' })).toBe(true)
+  })
+})
+
+describe('shouldLockExpenseAccrualAmounts', () => {
+  it('keeps planned/approved unpaid unlocked', () => {
+    expect(shouldLockExpenseAccrualAmounts({ status: 'planned', paidAmount: 0 })).toBe(false)
+    expect(shouldLockExpenseAccrualAmounts({ status: 'approved', paidAmount: 0 })).toBe(false)
+  })
+
+  it('locks paid, linked, or partially paid rows', () => {
+    expect(shouldLockExpenseAccrualAmounts({ status: 'paid', paidAmount: 0 })).toBe(true)
+    expect(shouldLockExpenseAccrualAmounts({ status: 'approved', paidAmount: 100 })).toBe(true)
+    expect(
+      shouldLockExpenseAccrualAmounts({ status: 'approved', paidAmount: 0, hasPaymentLink: true })
+    ).toBe(true)
+    expect(shouldLockExpenseAccrualAmounts({ status: 'partial', paidAmount: 0 })).toBe(true)
   })
 })
 

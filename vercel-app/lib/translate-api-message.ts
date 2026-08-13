@@ -160,6 +160,8 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "지급예정과 연결된 거래는 삭제할 수 없습니다. 지급예정 탭에서 처리해 주세요.": "planEditableOnlyBeforeApproval",
   "승인 전(요청) 상태에서만 수정/삭제할 수 있습니다.": "planEditableOnlyBeforeApproval",
   "승인 전(요청) 상태에서만 수정할 수 있습니다.": "planEditableOnlyBeforeApproval",
+  ACCOUNTING_PERIOD_CLOSED: "accountingPeriodClosed",
+  "마감된 회계기간의 거래는 수정할 수 없습니다.": "accountingPeriodClosed",
   "이미 지급된 금액이 있어 수정할 수 없습니다.": "planEditablePaidBlocked",
   "요청(미승인) 또는 반려 상태에서만 삭제할 수 있습니다. 승인된 건은 지출 검색에서 삭제해 주세요.":
     "planDeletableOnlyBeforeApproval",

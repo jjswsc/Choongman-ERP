@@ -188,6 +188,45 @@ export function posPricingAdjustmentsFromPrinterSettings(
   }
 }
 
+/** `pos_printer_settings` snake_case 행 → 결제 요금 조정 (합석·Omni settleFast 공통) */
+export function posPricingAdjustmentsFromPrinterSettingsDbRow(
+  raw:
+    | {
+        vat_rate?: number | null
+        vat_mode?: string | null
+        service_rate?: number | null
+        service_mode?: string | null
+        card_rate?: number | null
+        card_mode?: string | null
+        card_base_mode?: string | null
+        other_rate?: number | null
+        other_mode?: string | null
+        fee_stack_mode?: string | null
+        fee_stack_order?: unknown
+        payment_total_rounding_mode?: string | null
+        round_payment_total_to_whole_baht?: boolean | null
+      }
+    | null
+    | undefined
+): PosPricingAdjustments {
+  const s = raw ?? {}
+  return posPricingAdjustmentsFromPrinterSettings({
+    vatRate: s.vat_rate,
+    vatMode: s.vat_mode,
+    serviceRate: s.service_rate,
+    serviceMode: s.service_mode,
+    cardRate: s.card_rate,
+    cardMode: s.card_mode,
+    cardBaseMode: s.card_base_mode,
+    otherRate: s.other_rate,
+    otherMode: s.other_mode,
+    feeStackMode: s.fee_stack_mode,
+    feeStackOrder: s.fee_stack_order,
+    paymentTotalRoundingMode: s.payment_total_rounding_mode,
+    roundPaymentTotalToWholeBaht: s.round_payment_total_to_whole_baht,
+  })
+}
+
 export function normalizeFeeStackOrder(v: unknown): PosFeeStackKey[] {
   const allowed = new Set<PosFeeStackKey>(['vat', 'service', 'other'])
   let raw: unknown[] = []

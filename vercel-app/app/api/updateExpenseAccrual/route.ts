@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import {
   assertAccountingDateOpen,
@@ -11,8 +12,10 @@ import { deleteExpenseAccrualInputVatLedger, syncExpenseAccrualInputVatLedger } 
 import { normalizeExpenseAttachmentUrlsInput } from '@/lib/expense-attachment-urls'
 import {
   canDeleteExpenseAccrual,
+  canEditExpenseAccrualClassification,
   canEditExpenseAccrualPlan,
   canMutateExpenseAccrualRecord,
+  shouldLockExpenseAccrualAmounts,
 } from '@/lib/expense-accrual-approve-policy'
 import { requireAuth } from '@/lib/verify-auth'
 import {
@@ -120,7 +123,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '지급 예정 데이터를 찾을 수 없습니다.' }, { status: 404, headers })
     }
     const status = String(row.status || '').toLowerCase()
-    await assertAccountingDateOpen(String(row.expense_date || '').slice(0, 10))
     const rowStoreName = String(row.store_name ?? '').trim()
 
     const payableForEdit = (await supabaseSelectFilter('payable_transactions', `expense_accrual_id=eq.${expenseAccrualId}`, {
@@ -157,14 +159,23 @@ export async function POST(request: NextRequest) {
         )
       }
     } else if (!canEditExpenseAccrualPlan({ status, paidAmount: paidAmountForEdit })) {
-      if (!(status === 'paid' || status === 'done' || paidAmountForEdit > 0.005)) {
+      // 이미 지급·연결된 건: 금액·일자는 잠그고 계정과목·유형·지급처·메모만 허용
+      if (!canEditExpenseAccrualClassification({ status })) {
         return NextResponse.json({ success: false, message: '승인 전(요청) 상태에서만 수정할 수 있습니다.' }, { status: 400, headers })
       }
-      // 이미 지급된 건: 금액·일자는 잠그고 계정과목·유형·지급처·메모만 허용 (지급예정↔지출검색 수정 루프 해소)
     }
 
     const paidLocked =
-      status === 'paid' || status === 'done' || paidAmountForEdit > 0.005
+      action !== 'delete' &&
+      shouldLockExpenseAccrualAmounts({
+        status,
+        paidAmount: paidAmountForEdit,
+        hasPaymentLink,
+      })
+
+    if (action === 'delete' || !paidLocked) {
+      await assertAccountingDateOpen(String(row.expense_date || '').slice(0, 10))
+    }
 
     if (action === 'delete') {
       await deleteExpenseAccrualInputVatLedger(expenseAccrualId)
@@ -231,7 +242,9 @@ export async function POST(request: NextRequest) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) {
       return NextResponse.json({ success: false, message: '비용 발생일 형식이 올바르지 않습니다.' }, { status: 400, headers })
     }
-    await assertAccountingDateOpen(expenseDate)
+    if (!paidLocked) {
+      await assertAccountingDateOpen(expenseDate)
+    }
     if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       return NextResponse.json({ success: false, message: '지급예정일 형식이 올바르지 않습니다.' }, { status: 400, headers })
     }
@@ -345,18 +358,16 @@ export async function POST(request: NextRequest) {
     }
 
     let bankFieldsSkipped = false
-    try {
-      await supabaseUpdate('expense_accruals', expenseAccrualId, accrualPatch)
-    } catch (updErr) {
-      const msg = updErr instanceof Error ? updErr.message : String(updErr)
-      if (/payee_bank|payee_account|column/i.test(msg) && hasPayeeBankField) {
-        delete accrualPatch.payee_account_holder
-        delete accrualPatch.payee_bank_name
-        delete accrualPatch.payee_bank_account_no
-        bankFieldsSkipped = true
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
         await supabaseUpdate('expense_accruals', expenseAccrualId, accrualPatch)
-      } else {
-        throw updErr
+        break
+      } catch (updErr) {
+        const missing = extractAnyMissingColumn(updErr)
+        if (!missing || !(missing in accrualPatch)) throw updErr
+        delete accrualPatch[missing]
+        if (missing.startsWith('payee_')) bankFieldsSkipped = true
+        if (attempt === 7) throw updErr
       }
     }
 
@@ -419,26 +430,34 @@ export async function POST(request: NextRequest) {
       if (subjectRows?.[0]?.code) subjectCode = String(subjectRows[0].code)
       if (subjectRows?.[0]?.name) subjectName = String(subjectRows[0].name)
     }
-    const finalAmount = Number(amount || row.amount || 0)
-    try {
-      await deleteJournalEntriesBySource('expense_accrual', expenseAccrualId)
-      await postExpenseAccrualJournal({
-        expenseAccrualId,
-        accountingDate: expenseDate,
-        amountAbs: Math.abs(finalAmount),
-        expenseAccountCode: subjectCode,
-        expenseAccountName: subjectName,
-        expenseAccountSubjectId: accountSubjectId,
-        memo: memo || String(row.memo || '') || `지출 발생 ${payeeName || row.payee_name || payeeCode}`,
-        storeName: storeName || String(row.store_name || '') || undefined,
-        postedBy: String(row.created_by || '').trim() || undefined,
-      })
-    } catch (postingErr) {
-      console.error('updateExpenseAccrual reposting:', postingErr)
-      return NextResponse.json(
-        { success: false, message: postingErr instanceof Error ? postingErr.message : '분개 재처리 실패' },
-        { status: 500, headers }
-      )
+    // 지급 완료·연결 건은 발생 분개를 다시 지우지 않음(마감·정산 분개와 충돌 → 저장 실패)
+    if (!paidLocked) {
+      const finalAmount = Number(amount || row.amount || 0)
+      try {
+        await deleteJournalEntriesBySource('expense_accrual', expenseAccrualId)
+        await postExpenseAccrualJournal({
+          expenseAccrualId,
+          accountingDate: expenseDate,
+          amountAbs: Math.abs(finalAmount),
+          expenseAccountCode: subjectCode,
+          expenseAccountName: subjectName,
+          expenseAccountSubjectId: accountSubjectId,
+          memo: memo || String(row.memo || '') || `지출 발생 ${payeeName || row.payee_name || payeeCode}`,
+          storeName: storeName || String(row.store_name || '') || undefined,
+          postedBy: String(row.created_by || '').trim() || undefined,
+        })
+      } catch (postingErr) {
+        console.error('updateExpenseAccrual reposting:', postingErr)
+        const postingMsg = postingErr instanceof Error ? postingErr.message : '분개 재처리 실패'
+        const closed = postingMsg === 'ACCOUNTING_PERIOD_CLOSED'
+        return NextResponse.json(
+          {
+            success: false,
+            message: closed ? '마감된 회계기간의 거래는 수정할 수 없습니다.' : postingMsg,
+          },
+          { status: closed ? 400 : 500, headers }
+        )
+      }
     }
 
     try {
@@ -481,9 +500,14 @@ export async function POST(request: NextRequest) {
     )
   } catch (e) {
     console.error('updateExpenseAccrual:', e)
+    const raw = e instanceof Error ? e.message : '처리 실패'
+    const closed = raw === 'ACCOUNTING_PERIOD_CLOSED'
     return NextResponse.json(
-      { success: false, message: e instanceof Error ? e.message : '처리 실패' },
-      { status: 500, headers }
+      {
+        success: false,
+        message: closed ? '마감된 회계기간의 거래는 수정할 수 없습니다.' : raw,
+      },
+      { status: closed ? 400 : 500, headers }
     )
   }
 }

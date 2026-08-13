@@ -107,6 +107,8 @@ export interface TableOrderPanelProps {
   onClose?: () => void
   t?: (key: string) => string
   storeCode?: string
+  /** QR 슬립 상단 매장명 */
+  storeLabel?: string
   /** 데모: 서빙 API 없이 부모 state만 갱신 */
   isDemo?: boolean
   onDemoOrderReplace?: (order: Order) => void
@@ -136,6 +138,7 @@ export function TableOrderPanel({
   onClose,
   t: tProp,
   storeCode = '',
+  storeLabel,
   isDemo,
   onDemoOrderReplace,
   takeoutMergePeers = [],
@@ -770,6 +773,7 @@ export function TableOrderPanel({
             <QrTableSessionPanel
               storeCode={storeCode}
               tableName={String(tableName || '').trim()}
+              storeLabel={storeLabel}
               onChanged={onServed}
             />
           ) : null}
@@ -780,6 +784,7 @@ export function TableOrderPanel({
             <QrTableSessionPanel
               storeCode={storeCode}
               tableName={String(tableName || '').trim()}
+              storeLabel={storeLabel}
               onChanged={onServed}
             />
           ) : null}

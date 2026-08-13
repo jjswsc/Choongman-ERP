@@ -22,6 +22,8 @@
  * - 같은 `store_code`, 둘 다 완료/취소 아님.
  * - **양쪽 모두 결제 합계 0**(현금·카드·QR·기타)일 때만. 한쪽이라도 결제 반영 시 합석 불가 → 이동만.
  * - `keep` 주문 한 건에 품목·할인·쿠폰할인·손님 수·메모·회원·포인트 사용 등을 합침.
+ * - `total`/`vat`/`service_amt`는 매장 `pos_printer_settings`(VAT·봉사료·반올림)로 다시 계산한다.
+ *   빈 adjustments로 저장하면 Omni settleFast가 DB total만 보고 `payment_exceeds_total`이 난다.
  * - `absorb` 주문은 `cancelled` + memo `[ORDER_MERGED … keep_id=…]` 스탬프(실제 취소·매출 집계와 구분).
  * - `keep` 주문 memo에 `[ORDER_MERGE_KEEP … absorb_id=…]` 스탬프를 남겨 Realtime/폴링이 추가주문으로 오인·재인쇄하지 않게 한다.
  * - 쿠폰 코드가 서로 다르면 keep 우선, 상대 코드는 메모에 `[합석] 보조 쿠폰: …` 로 남김.
@@ -37,6 +39,9 @@
  * 5. 합친 줄의 `id`는 **먼저 남은 줄(앞쪽)** 의 id를 유지한다.
  * 6. 자동 주방/영수증 재출력은 하지 않는다(필요 시 POS에서 수동).
  */
+
+import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
+import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 
 function stableStringify(value: unknown): string {
   if (value == null) return ''
@@ -112,4 +117,83 @@ export function consolidatePosOrderLinesAfterMerge(
     out.push(cloneLineForOutput(line))
   }
   return out
+}
+
+function lineSubtotal(line: Record<string, unknown>): number {
+  const price = Number(line.price ?? 0) || 0
+  return price * lineQty(line)
+}
+
+/** 합석 후 keep 주문의 소계·부가세·봉사료·청구 합계 (매장 프린터 요금 설정 적용) */
+export function computePosOrderMergeFinancials(params: {
+  mergedItems: Record<string, unknown>[]
+  discountAmt: number
+  couponDiscountAmt: number
+  cardPaymentAmount?: number
+  adjustments?: PosPricingAdjustments
+}): {
+  subtotal: number
+  vat: number
+  serviceAmt: number
+  total: number
+  discountAmtForPricing: number
+} {
+  let subtotal = 0
+  for (const it of params.mergedItems) {
+    subtotal += lineSubtotal(it)
+  }
+  subtotal = Math.round(subtotal * 1000) / 1000
+  const discountAmtForPricing = Math.min(
+    subtotal,
+    Math.max(
+      0,
+      resolvePosSalesDiscountAmount(
+        Math.max(0, Number(params.discountAmt) || 0),
+        Math.max(0, Number(params.couponDiscountAmt) || 0)
+      )
+    )
+  )
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt: discountAmtForPricing,
+    deliveryFee: 0,
+    packagingFee: 0,
+    cardPaymentAmount: Math.max(0, Number(params.cardPaymentAmount) || 0),
+    adjustments: params.adjustments ?? {},
+  })
+  return {
+    subtotal,
+    vat: pricing.vatFeeAmt,
+    serviceAmt: pricing.serviceFeeAmt,
+    total: pricing.finalTotal,
+    discountAmtForPricing,
+  }
+}
+
+/**
+ * POS 결제 모달과 동일: 품목 소계 − (할인+포인트) + 매장 VAT/봉사료/반올림.
+ * Omni settleFast가 DB total만 볼 때 합석 직후 불일치를 재계산하는 데 쓴다.
+ */
+export function computePosOrderDueTotalFromLines(params: {
+  items: Record<string, unknown>[]
+  discountAmt: number
+  couponDiscountAmt?: number
+  pointUsed?: number
+  cardPaymentAmount?: number
+  adjustments?: PosPricingAdjustments
+}): { subtotal: number; vat: number; serviceAmt: number; total: number } {
+  const financials = computePosOrderMergeFinancials({
+    mergedItems: params.items,
+    discountAmt:
+      Math.max(0, Number(params.discountAmt) || 0) + Math.max(0, Number(params.pointUsed) || 0),
+    couponDiscountAmt: Math.max(0, Number(params.couponDiscountAmt) || 0),
+    cardPaymentAmount: params.cardPaymentAmount,
+    adjustments: params.adjustments,
+  })
+  return {
+    subtotal: financials.subtotal,
+    vat: financials.vat,
+    serviceAmt: financials.serviceAmt,
+    total: financials.total,
+  }
 }
