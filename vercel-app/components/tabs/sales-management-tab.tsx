@@ -67,6 +67,8 @@ import {
   getPosSalesByDeliveryApp,
   getPosDeliveryAppReconcile,
   type PosDeliveryAppReconcileResult,
+  getPosKbankQrReconcile,
+  type PosKbankQrReconcileResult,
   getPosSalesByChannel,
   getPosSalesByMenu,
   getPosSalesByPromo,
@@ -128,9 +130,13 @@ import {
 } from "@/components/tabs/sales-management-ia"
 import { SalesOverviewPanel } from "@/components/tabs/sales-overview-panel"
 import {
+  SalesChannelReconcilePanel,
+  type ChannelReconcileSection,
+} from "@/components/tabs/sales-channel-reconcile-panel"
+import {
   EMPTY_POS_DELIVERY_APP_RECONCILE,
-  SalesDeliveryAppReconcilePanel,
 } from "@/components/tabs/sales-delivery-app-reconcile-panel"
+import { EMPTY_POS_KBANK_QR_RECONCILE } from "@/components/tabs/sales-kbank-qr-reconcile-panel"
 import {
   EMPTY_POS_SALES_BY_PROMO,
   formatSalesAmount,
@@ -328,6 +334,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }>({ items: [], total: 0 })
   const [deliveryAppReconcileData, setDeliveryAppReconcileData] =
     React.useState<PosDeliveryAppReconcileResult>(EMPTY_POS_DELIVERY_APP_RECONCILE)
+  const [kbankQrReconcileData, setKbankQrReconcileData] =
+    React.useState<PosKbankQrReconcileResult>(EMPTY_POS_KBANK_QR_RECONCILE)
+  const [channelReconcileSection, setChannelReconcileSection] =
+    React.useState<ChannelReconcileSection>("delivery")
   const [channelData, setChannelData] = React.useState<{ channelKey: string; sales: number }[]>([])
   const [menuData, setMenuData] = React.useState<{ name: string; qty: number; sales: number }[]>([])
   const [promoBundleData, setPromoBundleData] = React.useState<PosSalesByPromoResult>(EMPTY_POS_SALES_BY_PROMO)
@@ -731,7 +741,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     selectedView != null &&
     PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView) &&
     selectedView !== "overview"
-  const hideOrderTypeFilter = selectedView === "app-reconcile"
+  const hideOrderTypeFilter =
+    selectedView === "channel-reconcile" || selectedView === "app-reconcile"
 
   const storesForCompareChart = React.useMemo(
     () => selectedStoresParam ?? [],
@@ -1005,6 +1016,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       periodTruncated,
       deliveryAppData,
       deliveryAppReconcileData,
+      kbankQrReconcileData,
       channelData,
       menuData,
       promoBundleData,
@@ -1027,6 +1039,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     periodTruncated,
     deliveryAppData,
     deliveryAppReconcileData,
+    kbankQrReconcileData,
     channelData,
     menuData,
     promoBundleData,
@@ -1207,6 +1220,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setPeriodTruncated(false)
     setDeliveryAppData({ items: [], total: 0 })
     setDeliveryAppReconcileData(EMPTY_POS_DELIVERY_APP_RECONCILE)
+    setKbankQrReconcileData(EMPTY_POS_KBANK_QR_RECONCILE)
     setChannelData([])
     setMenuData([])
     setPromoBundleData(EMPTY_POS_SALES_BY_PROMO)
@@ -1242,6 +1256,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setPeriodTruncated(snap.periodTruncated)
     setDeliveryAppData(snap.deliveryAppData)
     setDeliveryAppReconcileData(snap.deliveryAppReconcileData ?? EMPTY_POS_DELIVERY_APP_RECONCILE)
+    setKbankQrReconcileData(snap.kbankQrReconcileData ?? EMPTY_POS_KBANK_QR_RECONCILE)
     setChannelData(snap.channelData)
     setMenuData(snap.menuData)
     setPromoBundleData(snap.promoBundleData)
@@ -1350,8 +1365,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         return (promoBundleData.combined?.byKind.length ?? 0) > 0
       case "delivery":
         return deliveryPieRows.length > 0
+      case "channel-reconcile":
       case "app-reconcile":
-        return deliveryAppReconcileData.rows.length > 0
+        return (
+          deliveryAppReconcileData.rows.length > 0 || kbankQrReconcileData.rows.length > 0
+        )
       case "payment":
         return (
           deliveryPaymentChannelRows.length > 0 ||
@@ -1381,6 +1399,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     promoBundleData.rows.length,
     deliveryPieRows.length,
     deliveryAppReconcileData.rows.length,
+    kbankQrReconcileData.rows.length,
     deliveryPaymentChannelRows.length,
     creditPaymentChannelRows.length,
     paymentChartRows.length,
@@ -1701,57 +1720,80 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         rows: deliveryPieRows.map((r) => [r.axisLabel, numCell(r.sales), r.pct / 100]),
         colFormats: [salesExcelCol.text, salesExcelCol.money, salesExcelCol.pct],
       })
-    } else if (selectedView === "app-reconcile" && deliveryAppReconcileData.rows.length > 0) {
-      sheets.push({
-        name: tr("salesManagementSubmenuAppReconcile", "배달앱 확인"),
-        headers: [
-          tr("salesStoreName", "매장명"),
-          tr("salesDeliveryChannel", "배달앱/채널"),
-          tr("salesAppReconcileColDeliverySales", "배달 순매출"),
-          tr("salesAppReconcileColDeliveryCount", "배달 건수"),
-          tr("salesAppReconcileColInStoreSales", "매장앱결제"),
-          tr("salesAppReconcileColInStoreCount", "매장앱 건수"),
-          tr("salesAppReconcileColAppNet", "앱 합계 순매출"),
-          tr("salesAppReconcileColFeePct", "수수료%"),
-          tr("salesAppReconcileColSuggestedFee", "예상 수수료"),
-          tr("salesAppReconcileColSuggestedPayout", "예상 입금"),
-          tr("salesAppReconcileColSettledNet", "통장 입금"),
-          tr("salesAppReconcileCsvDiff", "차이"),
-          tr("salesAppReconcileColSettledFee", "결산 수수료"),
-        ],
-        rows: deliveryAppReconcileData.rows.map((r) => [
-          posStoreDisplayName(r.storeCode),
-          translateDeliveryAppCode(r.appCode, tr),
-          numCell(r.deliverySales),
-          r.deliveryCount,
-          numCell(r.inStoreSales),
-          r.inStoreCount,
-          numCell(r.appNetSales),
-          r.feeSource === "none" ? "" : r.feePct / 100,
-          numCell(r.suggestedFee),
-          numCell(r.suggestedPayout),
-          r.bankDepositAmt == null && r.settledNet == null ? "" : numCell(r.bankDepositAmt ?? r.settledNet ?? 0),
-          r.bankDepositAmt == null && r.settledNet == null
-            ? ""
-            : numCell((r.bankDepositAmt ?? r.settledNet ?? 0) - r.suggestedPayout),
-          r.settledFee == null ? "" : numCell(r.settledFee),
-        ]),
-        colFormats: [
-          salesExcelCol.text,
-          salesExcelCol.text,
-          salesExcelCol.money,
-          salesExcelCol.int,
-          salesExcelCol.money,
-          salesExcelCol.int,
-          salesExcelCol.money,
-          salesExcelCol.pct,
-          salesExcelCol.money,
-          salesExcelCol.money,
-          salesExcelCol.money,
-          salesExcelCol.money,
-          salesExcelCol.money,
-        ],
-      })
+    } else if (
+      (selectedView === "channel-reconcile" || selectedView === "app-reconcile") &&
+      (deliveryAppReconcileData.rows.length > 0 || kbankQrReconcileData.rows.length > 0)
+    ) {
+      if (deliveryAppReconcileData.rows.length > 0) {
+        sheets.push({
+          name: tr("salesChannelReconcileDelivery", "배달앱"),
+          headers: [
+            tr("salesStoreName", "매장명"),
+            tr("salesDeliveryChannel", "배달앱/채널"),
+            tr("salesAppReconcileColDeliverySales", "배달 순매출"),
+            tr("salesAppReconcileColDeliveryCount", "배달 건수"),
+            tr("salesAppReconcileColInStoreSales", "매장앱결제"),
+            tr("salesAppReconcileColInStoreCount", "매장앱 건수"),
+            tr("salesAppReconcileColAppNet", "앱 합계 순매출"),
+            tr("salesAppReconcileColFeePct", "수수료%"),
+            tr("salesAppReconcileColSuggestedFee", "예상 수수료"),
+            tr("salesAppReconcileColSuggestedPayout", "예상 입금"),
+            tr("salesAppReconcileColSettledNet", "통장 입금"),
+            tr("salesAppReconcileCsvDiff", "차이"),
+            tr("salesAppReconcileColSettledFee", "결산 수수료"),
+          ],
+          rows: deliveryAppReconcileData.rows.map((r) => [
+            posStoreDisplayName(r.storeCode),
+            translateDeliveryAppCode(r.appCode, tr),
+            numCell(r.deliverySales),
+            r.deliveryCount,
+            numCell(r.inStoreSales),
+            r.inStoreCount,
+            numCell(r.appNetSales),
+            r.feeSource === "none" ? "" : r.feePct / 100,
+            numCell(r.suggestedFee),
+            numCell(r.suggestedPayout),
+            r.bankDepositAmt == null && r.settledNet == null
+              ? ""
+              : numCell(r.bankDepositAmt ?? r.settledNet ?? 0),
+            r.bankDepositAmt == null && r.settledNet == null
+              ? ""
+              : numCell((r.bankDepositAmt ?? r.settledNet ?? 0) - r.suggestedPayout),
+            r.settledFee == null ? "" : numCell(r.settledFee),
+          ]),
+          colFormats: [
+            salesExcelCol.text,
+            salesExcelCol.text,
+            salesExcelCol.money,
+            salesExcelCol.int,
+            salesExcelCol.money,
+            salesExcelCol.int,
+            salesExcelCol.money,
+            salesExcelCol.pct,
+            salesExcelCol.money,
+            salesExcelCol.money,
+            salesExcelCol.money,
+            salesExcelCol.money,
+            salesExcelCol.money,
+          ],
+        })
+      }
+      if (kbankQrReconcileData.rows.length > 0) {
+        sheets.push({
+          name: tr("salesChannelReconcileKbankQr", "KBank QR"),
+          headers: [
+            tr("salesStoreName", "매장명"),
+            tr("salesKbankQrColCount", "건수"),
+            tr("salesKbankQrColSales", "QR 합계"),
+          ],
+          rows: kbankQrReconcileData.rows.map((r) => [
+            posStoreDisplayName(r.storeCode),
+            r.orderCount,
+            numCell(r.qrSales),
+          ]),
+          colFormats: [salesExcelCol.text, salesExcelCol.int, salesExcelCol.money],
+        })
+      }
     } else if (selectedView === "payment") {
       if (deliveryPaymentChannelRows.length > 0) {
         sheets.push({
@@ -1926,8 +1968,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   React.useEffect(() => {
     if (!allowSalesUrlSync) return
-    const qMenu = searchParams.get("menu")
-    const qTopic = searchParams.get("topic")
+    const qMenuRaw = searchParams.get("menu")
+    const qTopicRaw = searchParams.get("topic")
+    const qMenu =
+      qMenuRaw === "sales-app-reconcile" ? "sales-channel-reconcile" : qMenuRaw
+    const qTopic = qTopicRaw === "app-reconcile" ? "channel-reconcile" : qTopicRaw
     const qGroup = searchParams.get("group")
     const qCompare = searchParams.get("compare") === "1"
     const qStores = normalizeStoreCodes(
@@ -2261,7 +2306,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const promoBundleFetcher = offlineAware ? getPosSalesByPromoWithCache : getPosSalesByPromo
     const channelFetcher = offlineAware ? getPosSalesByChannelWithCache : getPosSalesByChannel
     const needDelivery = selectedView === "delivery"
-    const needAppReconcile = selectedView === "app-reconcile"
+    const needChannelReconcile =
+      selectedView === "channel-reconcile" || selectedView === "app-reconcile"
     const needChannel = selectedView === "channel" || selectedView === "overview"
     const needMenu = selectedView === "menu"
     const needDiscountAnalytics =
@@ -2305,6 +2351,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       }
     const gDelivery = guarded(setDeliveryAppData)
     const gAppReconcile = guarded(setDeliveryAppReconcileData)
+    const gKbankQrReconcile = guarded(setKbankQrReconcileData)
     const gChannel = guarded(setChannelData)
     const gPayment = guarded(setPaymentData)
     const gPaymentBreakdown = guarded(setPaymentBreakdownData)
@@ -2520,7 +2567,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           .catch(() => gDelivery({ items: [], total: 0 }))
       )
     }
-    if (needAppReconcile) {
+    if (needChannelReconcile) {
       tasks.push(
         getPosDeliveryAppReconcile({
           startStr,
@@ -2529,6 +2576,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         })
           .then(gAppReconcile)
           .catch(() => gAppReconcile(EMPTY_POS_DELIVERY_APP_RECONCILE))
+      )
+      tasks.push(
+        getPosKbankQrReconcile({
+          startStr,
+          endStr,
+          stores: salesFetchStoresParam,
+        })
+          .then(gKbankQrReconcile)
+          .catch(() => gKbankQrReconcile(EMPTY_POS_KBANK_QR_RECONCILE))
       )
     }
     if (needChannel) {
@@ -3473,7 +3529,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           </>
           ) : null}
 
-          {showSalesResults && periodTruncated && selectedView !== "app-reconcile" ? (
+          {showSalesResults &&
+          periodTruncated &&
+          selectedView !== "channel-reconcile" &&
+          selectedView !== "app-reconcile" ? (
             <p className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
               {tr(
                 "salesDataTruncatedDailyWarning",
@@ -3987,9 +4046,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               )
             )}
 
-            {selectedView === "app-reconcile" && (
-              <SalesDeliveryAppReconcilePanel
-                data={deliveryAppReconcileData}
+            {(selectedView === "channel-reconcile" || selectedView === "app-reconcile") && (
+              <SalesChannelReconcilePanel
+                section={channelReconcileSection}
+                onSectionChange={setChannelReconcileSection}
+                deliveryData={deliveryAppReconcileData}
+                kbankQrData={kbankQrReconcileData}
                 placeholder={salesAnalyticsPlaceholder}
                 tr={tr}
                 formatAmount={formatSalesAmount}

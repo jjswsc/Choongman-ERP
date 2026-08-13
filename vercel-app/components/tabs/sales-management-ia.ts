@@ -14,6 +14,7 @@ export type AnalyticsView =
   | "mom-compare"
   | "forecast"
   | "overview"
+  | "channel-reconcile"
   | "app-reconcile"
   | null
 
@@ -164,15 +165,15 @@ export const SALES_IA: SalesSubMenuConfig[] = [
     ],
   },
   {
-    id: "sales-app-reconcile",
-    labelKey: "salesManagementSubmenuAppReconcile",
-    fallbackLabel: "배달앱 확인",
+    id: "sales-channel-reconcile",
+    labelKey: "salesManagementSubmenuChannelReconcile",
+    fallbackLabel: "채널 확인",
     topics: [
       {
-        id: "app-reconcile",
-        labelKey: "salesTopicAppReconcile",
-        hintKey: "salesTopicAppReconcileHint",
-        view: "app-reconcile",
+        id: "channel-reconcile",
+        labelKey: "salesTopicChannelReconcile",
+        hintKey: "salesTopicChannelReconcileHint",
+        view: "channel-reconcile",
       },
     ],
   },

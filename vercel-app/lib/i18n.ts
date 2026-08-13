@@ -4651,10 +4651,30 @@ export const i18n = {
     salesManagementTabSalesGrouped: '매출집계(유형별)',
     salesManagementTabPivotAnalysis: '집계/분석',
     salesManagementTabForecast: '예상 매출',
-    salesManagementSubmenuAppReconcile: '배달앱 확인',
-    salesTopicAppReconcile: '배달앱 확인',
+    salesManagementSubmenuAppReconcile: '채널 확인',
+    salesManagementSubmenuChannelReconcile: '채널 확인',
+    salesTopicAppReconcile: '채널 확인',
+    salesTopicChannelReconcile: '채널 확인',
     salesTopicAppReconcileHint:
-      '앱 순매출·배달 건수·매장앱결제(dine)·예상 입금과 통장 실입금 비교. Grab·LINE MAN·Shopee 동일 형식. 홀 현금·카드와 비교하지 마세요.',
+      '배달앱 정산·통장 입금과 KBank QR(당일 POS)를 한곳에서 확인. 홀 현금·카드와 비교하지 마세요.',
+    salesTopicChannelReconcileHint:
+      '배달앱 정산·통장 입금과 KBank QR(당일 POS)를 한곳에서 확인. 홀 현금·카드와 비교하지 마세요.',
+    salesChannelReconcileSectionsAria: '채널 확인 구분',
+    salesChannelReconcileDelivery: '배달앱',
+    salesChannelReconcileKbankQr: 'KBank QR',
+    salesKbankQrReconcileIntro:
+      '당일 마감은 POS QR(PromptPay) 합계를 기준으로 하세요. K Merchant Report는 보통 익일에 반영되므로, 익일 오전 은행 리포트·입금과 2차 대사합니다.',
+    salesKbankQrKpiSales: 'POS QR 합계',
+    salesKbankQrKpiSalesHint: '완료 주문의 payment_qr (영업일)',
+    salesKbankQrKpiCount: 'QR 결제 건수',
+    salesKbankQrKpiCountHint: 'payment_qr > 0 인 완료 주문',
+    salesKbankQrKpiStores: '매장 수',
+    salesKbankQrKpiStoresHint: 'QR 매출이 있는 매장',
+    salesKbankQrReconcileNextDayNote:
+      'K Merchant / 계좌 입금 대조는 익일 작업입니다. 당일 매장에서는 위 POS 금액을 결산 QR 칸에 맞추면 됩니다.',
+    salesKbankQrReconcileEmpty: '선택 기간에 POS QR 결제가 없습니다.',
+    salesKbankQrColCount: '건수',
+    salesKbankQrColSales: 'QR 합계',
     salesAppReconcileIntro:
       'Grab·LINE MAN·Shopee를 같은 형식으로 봅니다. 합계는 배달+매장앱결제(dine)이고, 배달 건수에는 dine을 넣지 않습니다. 홀 현금·카드는 제외합니다. 예상 입금은 설정 수수료% 기준이며, 통장 입금은 통장 거래에 등록한 Grab·LINE MAN·Shopee 입금(매출일, 없으면 입금일 전날)입니다. 앱 รายได้는 WHT·프로모 때문에 다를 수 있습니다.',
     salesAppReconcileKpiNet: '앱 순매출',
@@ -5334,6 +5354,12 @@ export const i18n = {
     dep_restoreConfirmQuestion: '을(를) 운용 중 자산으로 복구하시겠습니까?',
     dep_restore: '복구',
     dep_restoreFailed: '자산 복구에 실패했습니다.',
+    dep_delete: '삭제',
+    dep_deleteConfirmTitle: '자산 삭제',
+    dep_deleteConfirmDesc:
+      '중복·오등록 자산을 삭제합니다. 감가상각이 있는 자산은 삭제할 수 없고 처분을 쓰세요. 이미 나간 통장 출금은 자동으로 취소되지 않습니다.',
+    dep_deleteFailed: '자산 삭제에 실패했습니다.',
+    dep_deleteDenied: '본사·회계만 자산을 삭제할 수 있습니다.',
     dep_runResultPosted: '감가상각 분개 {count}건이 완료되었습니다.',
     dep_runResultPreview: '감가상각 미리보기가 완료되었습니다.',
     adminStoreCheck: '매장 점검',
@@ -7462,9 +7488,9 @@ export const i18n = {
     helpHow_admin_total_sales:
       '① 매장(본사)·기간(오늘/이번 달/지정)을 정한 뒤 「주문 유형」(전체·홀·포장·배달)으로 범위를 맞추고, 필요하면 메뉴 검색어를 입력한 뒤 「조회」합니다.\n② 「채널별 비교」를 켜면 같은 품목을 홀·포장·배달 열로 나란히 비교합니다(주문 유형 선택 시 해당 채널만).\n③ 상단 탭으로 대분류·카테고리·메인 메뉴·옵션 집계를 바꿉니다.\n④ 검색 시 상단 카드에 오늘·이번 달 메인 메뉴 합계가 함께 표시됩니다(방콕 영업일).\n⑤ 주문이 많으면 일부만 반영될 수 있으니 기간을 나누어 조회하세요.',
     helpSum_admin_sales_management:
-      '기간·매장·채널·메뉴·할인·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다. 배달앱 확인 탭에서는 앱 순매출·배달 건수·매장앱결제(GrabPay)·예상 입금과 통장에 등록한 실입금을 비교하며, 홀 매출과 비교하지 않습니다.',
+      '기간·매장·채널·메뉴·할인·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다. 「채널 확인」에서는 배달앱 순매출·예상 입금·통장 실입금과 KBank QR(당일 POS)를 확인하며, 홀 매출과 비교하지 않습니다.',
     helpHow_admin_sales_management:
-      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측·배달앱 확인)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「일자/시간 추이」·「매장·기간 목록」에서는 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n④ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑤ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑥ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑦ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑧ 배달앱 확인: 앱 캡처의 ยอดขายสุทธิ / คำสั่งซื้อ / GrabPay / รายได้(예상)와 같은 칸만 비교합니다. 통장 입금은 통장 거래에 등록한 Grab·LINE MAN·Shopee 입금(매출일 기준)입니다. 전체 매출·홀 매출 화면은 쓰지 않습니다.',
+      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측·채널 확인)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「일자/시간 추이」·「매장·기간 목록」에서는 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n④ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑤ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑥ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑦ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑧ 채널 확인 → 배달앱: 앱 캡처의 ยอดขายสุทธิ / คำสั่งซื้อ / GrabPay / รายได้(예상)와 통장 입금(Grab·LINE MAN·Shopee, 매출일)을 비교합니다.\n⑨ 채널 확인 → KBank QR: 당일 마감은 POS QR 합계를 쓰고, K Merchant/입금은 익일 대조합니다.',
     salesSubnavAria: '매출 관리 메뉴',
     salesTopicHintLabel: '이 리포트',
     salesOverviewIntro:
@@ -12613,10 +12639,30 @@ Only matters the employee must handle personally on a working day:
     salesManagementTabSalesGrouped: 'Sales Grouped',
     salesManagementTabPivotAnalysis: 'Aggregate/Analysis',
     salesManagementTabForecast: 'Forecast Sales',
-    salesManagementSubmenuAppReconcile: 'Delivery app check',
-    salesTopicAppReconcile: 'Delivery app check',
+    salesManagementSubmenuAppReconcile: 'Channel check',
+    salesManagementSubmenuChannelReconcile: 'Channel check',
+    salesTopicAppReconcile: 'Channel check',
+    salesTopicChannelReconcile: 'Channel check',
     salesTopicAppReconcileHint:
-      'App net sales, delivery orders, in-store app pay (dine), estimated payout vs bank deposits. Same layout for Grab, LINE MAN, and Shopee. Do not compare with dine-in cash/card sales.',
+      'Delivery-app payout vs bank deposits and same-day KBank QR (POS) in one place. Do not compare with dine-in cash/card.',
+    salesTopicChannelReconcileHint:
+      'Delivery-app payout vs bank deposits and same-day KBank QR (POS) in one place. Do not compare with dine-in cash/card.',
+    salesChannelReconcileSectionsAria: 'Channel check sections',
+    salesChannelReconcileDelivery: 'Delivery apps',
+    salesChannelReconcileKbankQr: 'KBank QR',
+    salesKbankQrReconcileIntro:
+      'For same-day close, use POS QR (PromptPay) totals. K Merchant Report usually posts next day — do bank/report matching the next morning.',
+    salesKbankQrKpiSales: 'POS QR total',
+    salesKbankQrKpiSalesHint: 'Completed orders payment_qr (business day)',
+    salesKbankQrKpiCount: 'QR payment count',
+    salesKbankQrKpiCountHint: 'Completed orders with payment_qr > 0',
+    salesKbankQrKpiStores: 'Stores',
+    salesKbankQrKpiStoresHint: 'Stores with QR sales',
+    salesKbankQrReconcileNextDayNote:
+      'K Merchant / bank deposit matching is a next-day task. On the sales day, align settlement QR with the POS total above.',
+    salesKbankQrReconcileEmpty: 'No POS QR payments in the selected period.',
+    salesKbankQrColCount: 'Count',
+    salesKbankQrColSales: 'QR total',
     salesAppReconcileIntro:
       'Grab, LINE MAN, and Shopee use the same layout. Combined = delivery + in-store app pay (dine). Dine is not counted as delivery orders. Cash/card dine-in is excluded. Estimated payout uses the configured fee %. Bank deposit is Grab/LINE MAN/Shopee amounts registered on the bank ledger (sales date, or deposit date minus one day). Merchant-app รายได้ can differ due to WHT and promos.',
     salesAppReconcileKpiNet: 'App net sales',
@@ -13296,6 +13342,12 @@ Only matters the employee must handle personally on a working day:
     dep_restoreConfirmQuestion: ' — restore to active assets?',
     dep_restore: 'Restore',
     dep_restoreFailed: 'Failed to restore asset.',
+    dep_delete: 'Delete',
+    dep_deleteConfirmTitle: 'Delete asset',
+    dep_deleteConfirmDesc:
+      'Delete this duplicate or mistaken register? Assets with depreciation cannot be deleted (use Dispose). Bank payments are not reversed.',
+    dep_deleteFailed: 'Failed to delete asset.',
+    dep_deleteDenied: 'Only HQ/Accounting can delete assets.',
     dep_runResultPosted: 'Depreciation posted: {count} journal(s).',
     dep_runResultPreview: 'Depreciation preview completed.',
     adminStoreCheck: 'Store Check',
@@ -15424,9 +15476,9 @@ orderItemQty: 'Qty',
     helpHow_admin_total_sales:
       '① Choose store (HQ), period, and order type; optional menu search, then Query.\n② Turn on Compare channels to see dine-in, takeout, and delivery side by side for the same items.\n③ Switch tabs for main category, category, main menu, or option breakdown.\n④ With a search term, cards show today vs this-month totals (Bangkok business day).\n⑤ If orders are truncated, split the date range and query again.',
     helpSum_admin_sales_management:
-      'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. The Delivery app check tab shows app net sales, delivery orders, in-store app pay (GrabPay), estimated payout vs bank-registered deposits — do not compare with dine-in sales.',
+      'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. Channel check covers delivery-app payout vs bank deposits and same-day KBank QR (POS) — do not compare with dine-in sales.',
     helpHow_admin_sales_management:
-      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, delivery app check) and a report topic; read the hint under the topic buttons.\n③ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n④ Reuse filters via URL or Save preset.\n⑤ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑥ Business hours tab adjusts POS business-day boundaries.\n⑦ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑧ Delivery app check: compare only ยอดขายสุทธิ / คำสั่งซื้อ / GrabPay / รายได้ (estimated) with the merchant app. Bank deposit is Grab/LINE MAN/Shopee amounts registered on the bank ledger (sales date). Do not use total sales or dine-in reports for this.',
+      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic; read the hint under the topic buttons.\n③ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n④ Reuse filters via URL or Save preset.\n⑤ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑥ Business hours tab adjusts POS business-day boundaries.\n⑦ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑧ Channel check → Delivery apps: compare ยอดขายสุทธิ / คำสั่งซื้อ / GrabPay / รายได้ (estimated) with bank deposits (Grab/LINE MAN/Shopee, sales date).\n⑨ Channel check → KBank QR: same-day close uses POS QR totals; match K Merchant / bank deposit the next day.',
     salesSubnavAria: 'Sales menu',
     salesTopicHintLabel: 'This report',
     salesOverviewIntro:
@@ -19950,10 +20002,30 @@ orderItemQty: 'จำนวน',
     salesManagementTabSalesGrouped: 'สรุปยอดขาย(ตามประเภท)',
     salesManagementTabPivotAnalysis: 'สรุป/วิเคราะห์',
     salesManagementTabForecast: 'คาดการณ์ยอดขาย',
-    salesManagementSubmenuAppReconcile: 'ตรวจยอดแอปเดลิเวอรี',
-    salesTopicAppReconcile: 'ตรวจยอดแอปเดลิเวอรี',
+    salesManagementSubmenuAppReconcile: 'ตรวจยอดช่องทาง',
+    salesManagementSubmenuChannelReconcile: 'ตรวจยอดช่องทาง',
+    salesTopicAppReconcile: 'ตรวจยอดช่องทาง',
+    salesTopicChannelReconcile: 'ตรวจยอดช่องทาง',
     salesTopicAppReconcileHint:
-      'ยอดขายสุทธิ จำนวนคำสั่งซื้อ ยอดชำระในร้าน (dine) รายได้โดยประมาณ เทียบกับเงินเข้าบัญชี รูปแบบเดียวกันสำหรับ Grab LINE MAN และ Shopee อย่าเทียบกับยอดขายหน้าร้านเงินสด/บัตรครับ',
+      'ดูยอดแอปเดลิเวอรีกับเงินเข้าบัญชี และ KBank QR (POS วันเดียวกัน) ในที่เดียว อย่าเทียบกับเงินสด/บัตรหน้าร้านครับ',
+    salesTopicChannelReconcileHint:
+      'ดูยอดแอปเดลิเวอรีกับเงินเข้าบัญชี และ KBank QR (POS วันเดียวกัน) ในที่เดียว อย่าเทียบกับเงินสด/บัตรหน้าร้านครับ',
+    salesChannelReconcileSectionsAria: 'ส่วนตรวจยอดช่องทาง',
+    salesChannelReconcileDelivery: 'แอปเดลิเวอรี',
+    salesChannelReconcileKbankQr: 'KBank QR',
+    salesKbankQrReconcileIntro:
+      'ปิดยอดวันเดียวกันให้ใช้ยอด QR ใน POS (PromptPay) เป็นหลักครับ K Merchant Report มักขึ้นวันถัดไป — ให้เทียบกับรายงานธนาคาร/เงินเข้าในเช้าวันถัดไปครับ',
+    salesKbankQrKpiSales: 'ยอด QR ใน POS',
+    salesKbankQrKpiSalesHint: 'payment_qr ของออเดอร์ที่ชำระแล้ว (วันทำการ)',
+    salesKbankQrKpiCount: 'จำนวนรายการ QR',
+    salesKbankQrKpiCountHint: 'ออเดอร์ที่ชำระแล้วและมี payment_qr > 0',
+    salesKbankQrKpiStores: 'จำนวนร้าน',
+    salesKbankQrKpiStoresHint: 'ร้านที่มียอด QR',
+    salesKbankQrReconcileNextDayNote:
+      'การเทียบ K Merchant / เงินเข้าบัญชีเป็นงานวันถัดไปครับ วันขายให้จับยอด QR ใน POS กับช่อง QR ตอนปิดยอดครับ',
+    salesKbankQrReconcileEmpty: 'ไม่มีรายการชำระ QR ใน POS ตามช่วงที่เลือกครับ',
+    salesKbankQrColCount: 'จำนวน',
+    salesKbankQrColSales: 'ยอด QR',
     salesAppReconcileIntro:
       'ดู Grab LINE MAN และ Shopee ในรูปแบบเดียวกันครับ ยอดรวม = เดลิเวอรี + ชำระในร้าน (dine) จำนวนคำสั่งซื้อไม่นับ dine ไม่รวมเงินสด/บัตรหน้าร้าน รายได้โดยประมาณใช้ % ค่าธรรมเนียมที่ตั้งไว้ เงินเข้าบัญชีคือยอดที่ลงในรายการบัญชีสำหรับ Grab LINE MAN Shopee (วันที่ขาย หรือวันก่อนวันเงินเข้า) รายได้ในแอปอาจต่างเพราะ WHT และโปรโมครับ',
     salesAppReconcileKpiNet: 'ยอดขายสุทธิแอป',
