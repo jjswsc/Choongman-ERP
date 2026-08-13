@@ -23,6 +23,7 @@ const emptySnap = (key: string): SalesManagementViewCache =>
         inStoreSales: 0,
         suggestedFee: 0,
         suggestedPayout: 0,
+        bankDepositAmt: 0,
       },
     },
     channelData: [],

@@ -248,6 +248,7 @@ export type PosDeliveryAppReconcileRow = {
   suggestedPayout: number
   settledFee: number | null
   settledNet: number | null
+  bankDepositAmt: number | null
   days: PosDeliveryAppReconcileDayRow[]
 }
 
@@ -259,6 +260,7 @@ export type PosDeliveryAppReconcileKpi = {
   inStoreSales: number
   suggestedFee: number
   suggestedPayout: number
+  bankDepositAmt: number
 }
 
 export type PosDeliveryAppReconcileResult = {
@@ -294,6 +296,7 @@ export async function getPosDeliveryAppReconcile(params: {
         inStoreSales: 0,
         suggestedFee: 0,
         suggestedPayout: 0,
+        bankDepositAmt: 0,
       },
       message: json?.message,
     }

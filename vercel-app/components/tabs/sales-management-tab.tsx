@@ -1715,8 +1715,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           tr("salesAppReconcileColFeePct", "수수료%"),
           tr("salesAppReconcileColSuggestedFee", "예상 수수료"),
           tr("salesAppReconcileColSuggestedPayout", "예상 입금"),
+          tr("salesAppReconcileColSettledNet", "통장 입금"),
+          tr("salesAppReconcileCsvDiff", "차이"),
           tr("salesAppReconcileColSettledFee", "결산 수수료"),
-          tr("salesAppReconcileColSettledNet", "결산 입금"),
         ],
         rows: deliveryAppReconcileData.rows.map((r) => [
           posStoreDisplayName(r.storeCode),
@@ -1729,8 +1730,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           r.feeSource === "none" ? "" : r.feePct / 100,
           numCell(r.suggestedFee),
           numCell(r.suggestedPayout),
+          r.bankDepositAmt == null && r.settledNet == null ? "" : numCell(r.bankDepositAmt ?? r.settledNet ?? 0),
+          r.bankDepositAmt == null && r.settledNet == null
+            ? ""
+            : numCell((r.bankDepositAmt ?? r.settledNet ?? 0) - r.suggestedPayout),
           r.settledFee == null ? "" : numCell(r.settledFee),
-          r.settledNet == null ? "" : numCell(r.settledNet),
         ]),
         colFormats: [
           salesExcelCol.text,
@@ -1741,6 +1745,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           salesExcelCol.int,
           salesExcelCol.money,
           salesExcelCol.pct,
+          salesExcelCol.money,
           salesExcelCol.money,
           salesExcelCol.money,
           salesExcelCol.money,

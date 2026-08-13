@@ -4654,9 +4654,9 @@ export const i18n = {
     salesManagementSubmenuAppReconcile: '배달앱 확인',
     salesTopicAppReconcile: '배달앱 확인',
     salesTopicAppReconcileHint:
-      '앱 순매출·배달 건수·매장앱결제(dine)·예상 입금. Grab·LINE MAN·Shopee 동일 형식. 홀 현금·카드와 비교하지 마세요.',
+      '앱 순매출·배달 건수·매장앱결제(dine)·예상 입금과 통장 실입금 비교. Grab·LINE MAN·Shopee 동일 형식. 홀 현금·카드와 비교하지 마세요.',
     salesAppReconcileIntro:
-      'Grab·LINE MAN·Shopee를 같은 형식으로 봅니다. 합계는 배달+매장앱결제(dine)이고, 배달 건수에는 dine을 넣지 않습니다. 홀 현금·카드는 제외합니다. 예상 입금은 설정 수수료% 기준이며, 앱 รายได้는 WHT·프로모 때문에 다를 수 있습니다.',
+      'Grab·LINE MAN·Shopee를 같은 형식으로 봅니다. 합계는 배달+매장앱결제(dine)이고, 배달 건수에는 dine을 넣지 않습니다. 홀 현금·카드는 제외합니다. 예상 입금은 설정 수수료% 기준이며, 통장 입금은 통장 거래에 등록한 Grab·LINE MAN·Shopee 입금(매출일, 없으면 입금일 전날)입니다. 앱 รายได้는 WHT·프로모 때문에 다를 수 있습니다.',
     salesAppReconcileKpiNet: '앱 순매출',
     salesAppReconcileKpiNetHint: '{app} ยอดขายสุทธิ',
     salesAppReconcileKpiDeliveryCount: '배달 건수',
@@ -4689,7 +4689,8 @@ export const i18n = {
     salesAppReconcileColSuggestedFee: '예상 수수료',
     salesAppReconcileColSuggestedPayout: '예상 입금',
     salesAppReconcileColSettledFee: '결산 수수료',
-    salesAppReconcileColSettledNet: '결산 입금',
+    salesAppReconcileColSettledNet: '통장 입금',
+    salesAppReconcileKpiBankDeposit: '통장 입금',
     salesAppReconcileDailyTitle: '일별 (배달 / 매장앱결제)',
     salesAppReconcileCsvTitle: '앱 명세서 일자 대조',
     salesAppReconcileCsvHint:
@@ -7461,9 +7462,9 @@ export const i18n = {
     helpHow_admin_total_sales:
       '① 매장(본사)·기간(오늘/이번 달/지정)을 정한 뒤 「주문 유형」(전체·홀·포장·배달)으로 범위를 맞추고, 필요하면 메뉴 검색어를 입력한 뒤 「조회」합니다.\n② 「채널별 비교」를 켜면 같은 품목을 홀·포장·배달 열로 나란히 비교합니다(주문 유형 선택 시 해당 채널만).\n③ 상단 탭으로 대분류·카테고리·메인 메뉴·옵션 집계를 바꿉니다.\n④ 검색 시 상단 카드에 오늘·이번 달 메인 메뉴 합계가 함께 표시됩니다(방콕 영업일).\n⑤ 주문이 많으면 일부만 반영될 수 있으니 기간을 나누어 조회하세요.',
     helpSum_admin_sales_management:
-      '기간·매장·채널·메뉴·할인·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다. 배달앱 확인 탭에서는 앱 순매출·배달 건수·매장앱결제(GrabPay)·예상 입금만 보며, 홀 매출과 비교하지 않습니다.',
+      '기간·매장·채널·메뉴·할인·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다. 배달앱 확인 탭에서는 앱 순매출·배달 건수·매장앱결제(GrabPay)·예상 입금과 통장에 등록한 실입금을 비교하며, 홀 매출과 비교하지 않습니다.',
     helpHow_admin_sales_management:
-      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측·배달앱 확인)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「일자/시간 추이」·「매장·기간 목록」에서는 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n④ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑤ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑥ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑦ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑧ 배달앱 확인: 앱 캡처의 ยอดขายสุทธิ / คำสั่งซื้อ / GrabPay / รายได้(예상)와 같은 칸만 비교합니다. 전체 매출·홀 매출 화면은 쓰지 않습니다.',
+      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측·배달앱 확인)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「일자/시간 추이」·「매장·기간 목록」에서는 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n④ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑤ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑥ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑦ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑧ 배달앱 확인: 앱 캡처의 ยอดขายสุทธิ / คำสั่งซื้อ / GrabPay / รายได้(예상)와 같은 칸만 비교합니다. 통장 입금은 통장 거래에 등록한 Grab·LINE MAN·Shopee 입금(매출일 기준)입니다. 전체 매출·홀 매출 화면은 쓰지 않습니다.',
     salesSubnavAria: '매출 관리 메뉴',
     salesTopicHintLabel: '이 리포트',
     salesOverviewIntro:
@@ -12615,9 +12616,9 @@ Only matters the employee must handle personally on a working day:
     salesManagementSubmenuAppReconcile: 'Delivery app check',
     salesTopicAppReconcile: 'Delivery app check',
     salesTopicAppReconcileHint:
-      'App net sales, delivery orders, in-store app pay (dine), and estimated payout. Same layout for Grab, LINE MAN, and Shopee. Do not compare with dine-in cash/card sales.',
+      'App net sales, delivery orders, in-store app pay (dine), estimated payout vs bank deposits. Same layout for Grab, LINE MAN, and Shopee. Do not compare with dine-in cash/card sales.',
     salesAppReconcileIntro:
-      'Grab, LINE MAN, and Shopee use the same layout. Combined = delivery + in-store app pay (dine). Dine is not counted as delivery orders. Cash/card dine-in is excluded. Estimated payout uses the configured fee %; merchant-app รายได้ can differ due to WHT and promos.',
+      'Grab, LINE MAN, and Shopee use the same layout. Combined = delivery + in-store app pay (dine). Dine is not counted as delivery orders. Cash/card dine-in is excluded. Estimated payout uses the configured fee %. Bank deposit is Grab/LINE MAN/Shopee amounts registered on the bank ledger (sales date, or deposit date minus one day). Merchant-app รายได้ can differ due to WHT and promos.',
     salesAppReconcileKpiNet: 'App net sales',
     salesAppReconcileKpiNetHint: '{app} ยอดขายสุทธิ',
     salesAppReconcileKpiDeliveryCount: 'Delivery orders',
@@ -12650,7 +12651,8 @@ Only matters the employee must handle personally on a working day:
     salesAppReconcileColSuggestedFee: 'Est. fee',
     salesAppReconcileColSuggestedPayout: 'Est. payout',
     salesAppReconcileColSettledFee: 'Settled fee',
-    salesAppReconcileColSettledNet: 'Settled payout',
+    salesAppReconcileColSettledNet: 'Bank deposit',
+    salesAppReconcileKpiBankDeposit: 'Bank deposit',
     salesAppReconcileDailyTitle: 'By day (delivery / in-store app pay)',
     salesAppReconcileCsvTitle: 'Statement vs ERP by day',
     salesAppReconcileCsvHint:
@@ -15422,9 +15424,9 @@ orderItemQty: 'Qty',
     helpHow_admin_total_sales:
       '① Choose store (HQ), period, and order type; optional menu search, then Query.\n② Turn on Compare channels to see dine-in, takeout, and delivery side by side for the same items.\n③ Switch tabs for main category, category, main menu, or option breakdown.\n④ With a search term, cards show today vs this-month totals (Bangkok business day).\n⑤ If orders are truncated, split the date range and query again.',
     helpSum_admin_sales_management:
-      'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. The Delivery app check tab shows app net sales, delivery orders, in-store app pay (GrabPay), and estimated payout only — do not compare with dine-in sales.',
+      'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. The Delivery app check tab shows app net sales, delivery orders, in-store app pay (GrabPay), estimated payout vs bank-registered deposits — do not compare with dine-in sales.',
     helpHow_admin_sales_management:
-      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, delivery app check) and a report topic; read the hint under the topic buttons.\n③ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n④ Reuse filters via URL or Save preset.\n⑤ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑥ Business hours tab adjusts POS business-day boundaries.\n⑦ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑧ Delivery app check: compare only ยอดขายสุทธิ / คำสั่งซื้อ / GrabPay / รายได้ (estimated) with the merchant app. Do not use total sales or dine-in reports for this.',
+      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, delivery app check) and a report topic; read the hint under the topic buttons.\n③ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n④ Reuse filters via URL or Save preset.\n⑤ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑥ Business hours tab adjusts POS business-day boundaries.\n⑦ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑧ Delivery app check: compare only ยอดขายสุทธิ / คำสั่งซื้อ / GrabPay / รายได้ (estimated) with the merchant app. Bank deposit is Grab/LINE MAN/Shopee amounts registered on the bank ledger (sales date). Do not use total sales or dine-in reports for this.',
     salesSubnavAria: 'Sales menu',
     salesTopicHintLabel: 'This report',
     salesOverviewIntro:
@@ -19951,9 +19953,9 @@ orderItemQty: 'จำนวน',
     salesManagementSubmenuAppReconcile: 'ตรวจยอดแอปเดลิเวอรี',
     salesTopicAppReconcile: 'ตรวจยอดแอปเดลิเวอรี',
     salesTopicAppReconcileHint:
-      'ยอดขายสุทธิ จำนวนคำสั่งซื้อ ยอดชำระในร้าน (dine) และรายได้โดยประมาณ รูปแบบเดียวกันสำหรับ Grab LINE MAN และ Shopee อย่าเทียบกับยอดขายหน้าร้านเงินสด/บัตรครับ',
+      'ยอดขายสุทธิ จำนวนคำสั่งซื้อ ยอดชำระในร้าน (dine) รายได้โดยประมาณ เทียบกับเงินเข้าบัญชี รูปแบบเดียวกันสำหรับ Grab LINE MAN และ Shopee อย่าเทียบกับยอดขายหน้าร้านเงินสด/บัตรครับ',
     salesAppReconcileIntro:
-      'ดู Grab LINE MAN และ Shopee ในรูปแบบเดียวกันครับ ยอดรวม = เดลิเวอรี + ชำระในร้าน (dine) จำนวนคำสั่งซื้อไม่นับ dine ไม่รวมเงินสด/บัตรหน้าร้าน รายได้โดยประมาณใช้ % ค่าธรรมเนียมที่ตั้งไว้ รายได้ในแอปอาจต่างเพราะ WHT และโปรโมครับ',
+      'ดู Grab LINE MAN และ Shopee ในรูปแบบเดียวกันครับ ยอดรวม = เดลิเวอรี + ชำระในร้าน (dine) จำนวนคำสั่งซื้อไม่นับ dine ไม่รวมเงินสด/บัตรหน้าร้าน รายได้โดยประมาณใช้ % ค่าธรรมเนียมที่ตั้งไว้ เงินเข้าบัญชีคือยอดที่ลงในรายการบัญชีสำหรับ Grab LINE MAN Shopee (วันที่ขาย หรือวันก่อนวันเงินเข้า) รายได้ในแอปอาจต่างเพราะ WHT และโปรโมครับ',
     salesAppReconcileKpiNet: 'ยอดขายสุทธิแอป',
     salesAppReconcileKpiNetHint: '{app} ยอดขายสุทธิ',
     salesAppReconcileKpiDeliveryCount: 'จำนวนคำสั่งซื้อเดลิเวอรี',
@@ -19986,7 +19988,8 @@ orderItemQty: 'จำนวน',
     salesAppReconcileColSuggestedFee: 'ค่าธรรมเนียมโดยประมาณ',
     salesAppReconcileColSuggestedPayout: 'รายได้โดยประมาณ',
     salesAppReconcileColSettledFee: 'ค่าธรรมเนียมที่ยืนยัน',
-    salesAppReconcileColSettledNet: 'รายได้ที่ยืนยัน',
+    salesAppReconcileColSettledNet: 'เงินเข้าบัญชี',
+    salesAppReconcileKpiBankDeposit: 'เงินเข้าบัญชี',
     salesAppReconcileDailyTitle: 'รายวัน (เดลิเวอรี / ชำระในร้าน)',
     salesAppReconcileCsvTitle: 'เทียบสเตทเมนต์กับ ERP รายวัน',
     salesAppReconcileCsvHint:

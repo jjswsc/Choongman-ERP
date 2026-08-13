@@ -21,6 +21,7 @@ export const EMPTY_POS_DELIVERY_APP_RECONCILE: PosDeliveryAppReconcileResult = {
     inStoreSales: 0,
     suggestedFee: 0,
     suggestedPayout: 0,
+    bankDepositAmt: 0,
   },
 }
 
@@ -57,6 +58,28 @@ function merchantHint(
     return tr("salesAppReconcileHintDine", "{app} ชำระในร้าน").replace("{app}", name)
   }
   return tr("salesAppReconcileHintPayout", "{app} รายได้").replace("{app}", name)
+}
+
+function payoutDiffClass(diff: number): string {
+  if (Math.abs(diff) < 1) return "text-emerald-700 dark:text-emerald-400"
+  return "text-destructive"
+}
+
+function formatSignedAmount(n: number, formatAmount: (n: number) => string): string {
+  if (n > 0.005) return `+${formatAmount(n)}`
+  return formatAmount(n)
+}
+
+function DiffAmount(props: {
+  bank: number | null
+  suggested: number
+  formatAmount: (n: number) => string
+}) {
+  if (props.bank == null) return <span>—</span>
+  const diff = Math.round((props.bank - props.suggested) * 100) / 100
+  return (
+    <span className={payoutDiffClass(diff)}>{formatSignedAmount(diff, props.formatAmount)}</span>
+  )
 }
 
 function KpiCard(props: {
@@ -105,6 +128,7 @@ export function SalesDeliveryAppReconcilePanel(props: {
         inStoreSales: acc.inStoreSales + r.inStoreSales,
         suggestedFee: acc.suggestedFee + r.suggestedFee,
         suggestedPayout: acc.suggestedPayout + r.suggestedPayout,
+        bankDepositAmt: acc.bankDepositAmt + (r.bankDepositAmt ?? 0),
       }),
       {
         appNetSales: 0,
@@ -114,12 +138,17 @@ export function SalesDeliveryAppReconcilePanel(props: {
         inStoreSales: 0,
         suggestedFee: 0,
         suggestedPayout: 0,
+        bankDepositAmt: 0,
       }
     )
   }, [appFilter, data.kpi, filteredRows])
 
   const deliveryPayout = Math.round((kpi.appNetSales - kpi.inStoreSales - kpi.suggestedFee) * 100) / 100
   const selectedApp = appName(appFilter, tr)
+  const hasBank = filteredRows.some((r) => r.bankDepositAmt != null)
+  const kpiBank = hasBank ? kpi.bankDepositAmt ?? 0 : null
+  const kpiDiff =
+    kpiBank == null ? null : Math.round((kpiBank - kpi.suggestedPayout) * 100) / 100
 
   if (placeholder) {
     return <p className="py-8 text-center text-sm text-muted-foreground">{placeholder}</p>
@@ -135,7 +164,7 @@ export function SalesDeliveryAppReconcilePanel(props: {
       <p className="text-xs text-muted-foreground leading-relaxed">
         {tr(
           "salesAppReconcileIntro",
-          "Grab·LINE MAN·Shopee를 같은 형식으로 봅니다. 합계는 배달+매장앱결제(dine)이고, 배달 건수에는 dine을 넣지 않습니다. 홀 현금·카드는 제외합니다. 예상 입금은 설정 수수료% 기준이며, 앱 รายได้는 WHT·프로모 때문에 다를 수 있습니다."
+          "Grab·LINE MAN·Shopee를 같은 형식으로 봅니다. 합계는 배달+매장앱결제(dine)이고, 배달 건수에는 dine을 넣지 않습니다. 홀 현금·카드는 제외합니다. 예상 입금은 설정 수수료% 기준이며, 통장 입금은 통장 거래에 등록한 Grab·LINE MAN·Shopee 입금(매출일, 없으면 입금일 전날)입니다. 앱 รายได้는 WHT·프로모 때문에 다를 수 있습니다."
         )}
       </p>
 
@@ -200,6 +229,21 @@ export function SalesDeliveryAppReconcilePanel(props: {
           >
             <p className="mt-1 text-lg font-semibold font-erp-numeric">
               {formatAmount(kpi.suggestedPayout)}
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              {tr("salesAppReconcileKpiBankDeposit", "통장 입금")}{" "}
+              <span className="font-erp-numeric font-medium text-foreground">
+                {kpiBank == null ? "—" : formatAmount(kpiBank)}
+              </span>
+              {kpiDiff != null ? (
+                <>
+                  {" · "}
+                  {tr("salesAppReconcileCsvDiff", "차이")}{" "}
+                  <span className={`font-erp-numeric font-medium ${payoutDiffClass(kpiDiff)}`}>
+                    {formatSignedAmount(kpiDiff, formatAmount)}
+                  </span>
+                </>
+              ) : null}
             </p>
           </KpiCard>
         </div>
@@ -277,7 +321,7 @@ export function SalesDeliveryAppReconcilePanel(props: {
 
       {tableLayout === "split" ? (
         <AdminTableScroll>
-          <table className="w-full min-w-[880px] text-sm">
+          <table className="w-full min-w-[980px] text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
                 <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
@@ -288,8 +332,9 @@ export function SalesDeliveryAppReconcilePanel(props: {
                 <th className="px-3 py-2 text-right">{tr("salesAppReconcileColFeePct", "수수료%")}</th>
                 <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSuggestedFee", "예상 수수료")}</th>
                 <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSuggestedPayout", "예상 입금")}</th>
+                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledNet", "통장 입금")}</th>
+                <th className="px-3 py-2 text-right">{tr("salesAppReconcileCsvDiff", "차이")}</th>
                 <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledFee", "결산 수수료")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledNet", "결산 입금")}</th>
               </tr>
             </thead>
             <tbody>
@@ -304,8 +349,8 @@ export function SalesDeliveryAppReconcilePanel(props: {
                   fee: string
                   suggestedFee: number | null
                   suggestedPayout: number
+                  bankDepositAmt: number | null
                   settledFee: number | null
-                  settledNet: number | null
                   emphasize?: boolean
                 }[] = [
                   {
@@ -315,8 +360,8 @@ export function SalesDeliveryAppReconcilePanel(props: {
                     fee: feeLabel,
                     suggestedFee: r.suggestedFee,
                     suggestedPayout: r.suggestedNet,
+                    bankDepositAmt: null,
                     settledFee: null,
-                    settledNet: null,
                   },
                   {
                     kind: kindDine,
@@ -325,8 +370,8 @@ export function SalesDeliveryAppReconcilePanel(props: {
                     fee: "—",
                     suggestedFee: null,
                     suggestedPayout: r.inStoreSales,
+                    bankDepositAmt: null,
                     settledFee: null,
-                    settledNet: null,
                   },
                   {
                     kind: kindTotal,
@@ -335,8 +380,8 @@ export function SalesDeliveryAppReconcilePanel(props: {
                     fee: feeLabel,
                     suggestedFee: r.suggestedFee,
                     suggestedPayout: r.suggestedPayout,
+                    bankDepositAmt: r.bankDepositAmt ?? r.settledNet,
                     settledFee: r.settledFee,
-                    settledNet: r.settledNet,
                     emphasize: true,
                   },
                 ]
@@ -370,16 +415,23 @@ export function SalesDeliveryAppReconcilePanel(props: {
                           {formatAmount(sr.suggestedPayout)}
                         </td>
                         <td className="px-3 py-1.5 text-right font-erp-numeric">
-                          {sr.settledFee == null ? "—" : formatAmount(sr.settledFee)}
+                          {sr.bankDepositAmt == null ? "—" : formatAmount(sr.bankDepositAmt)}
                         </td>
                         <td className="px-3 py-1.5 text-right font-erp-numeric">
-                          {sr.settledNet == null ? "—" : formatAmount(sr.settledNet)}
+                          <DiffAmount
+                            bank={sr.bankDepositAmt}
+                            suggested={sr.suggestedPayout}
+                            formatAmount={formatAmount}
+                          />
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-erp-numeric">
+                          {sr.settledFee == null ? "—" : formatAmount(sr.settledFee)}
                         </td>
                       </tr>
                     ))}
                     {open ? (
                       <tr className="border-b bg-muted/20">
-                        <td colSpan={10} className="px-3 py-2">
+                        <td colSpan={11} className="px-3 py-2">
                           <DailySplitTable row={r} tr={tr} formatAmount={formatAmount} />
                         </td>
                       </tr>
@@ -392,7 +444,7 @@ export function SalesDeliveryAppReconcilePanel(props: {
         </AdminTableScroll>
       ) : (
         <AdminTableScroll>
-          <table className="w-full min-w-[980px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
                 <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
@@ -417,8 +469,9 @@ export function SalesDeliveryAppReconcilePanel(props: {
                 <th className="px-3 py-2 text-right">
                   {tr("salesAppReconcileColSuggestedPayout", "예상 입금")}
                 </th>
+                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledNet", "통장 입금")}</th>
+                <th className="px-3 py-2 text-right">{tr("salesAppReconcileCsvDiff", "차이")}</th>
                 <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledFee", "결산 수수료")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledNet", "결산 입금")}</th>
               </tr>
             </thead>
             <tbody>
@@ -458,15 +511,24 @@ export function SalesDeliveryAppReconcilePanel(props: {
                         {formatAmount(r.suggestedPayout)}
                       </td>
                       <td className="px-3 py-1.5 text-right font-erp-numeric">
-                        {r.settledFee == null ? "—" : formatAmount(r.settledFee)}
+                        {(r.bankDepositAmt ?? r.settledNet) == null
+                          ? "—"
+                          : formatAmount(r.bankDepositAmt ?? r.settledNet ?? 0)}
                       </td>
                       <td className="px-3 py-1.5 text-right font-erp-numeric">
-                        {r.settledNet == null ? "—" : formatAmount(r.settledNet)}
+                        <DiffAmount
+                          bank={r.bankDepositAmt ?? r.settledNet}
+                          suggested={r.suggestedPayout}
+                          formatAmount={formatAmount}
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-erp-numeric">
+                        {r.settledFee == null ? "—" : formatAmount(r.settledFee)}
                       </td>
                     </tr>
                     {open ? (
                       <tr className="border-b bg-muted/20">
-                        <td colSpan={12} className="px-3 py-2">
+                        <td colSpan={13} className="px-3 py-2">
                           <DailySplitTable row={r} tr={tr} formatAmount={formatAmount} />
                         </td>
                       </tr>

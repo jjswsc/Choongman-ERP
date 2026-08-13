@@ -144,6 +144,7 @@ export async function getPosPaymentAttempts(params?: {
   endStr?: string
   storeCode?: string
   localTxId?: string
+  orderId?: number
   status?: 'all' | 'approved' | 'declined' | 'failed'
   limit?: number
 }) {
@@ -152,6 +153,7 @@ export async function getPosPaymentAttempts(params?: {
   if (params?.endStr) q.set('endStr', params.endStr)
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.localTxId) q.set('localTxId', params.localTxId)
+  if (params?.orderId != null && Number(params.orderId) > 0) q.set('orderId', String(Math.trunc(Number(params.orderId))))
   if (params?.status) q.set('status', params.status)
   if (params?.limit != null) q.set('limit', String(params.limit))
   const res = await apiFetchWithOffline('/api/getPosPaymentAttempts?' + q.toString())

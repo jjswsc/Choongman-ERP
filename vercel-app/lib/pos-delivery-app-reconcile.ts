@@ -66,6 +66,8 @@ export type DeliveryAppReconcileRow = {
   suggestedPayout: number
   settledFee: number | null
   settledNet: number | null
+  /** 통장 거래에 등록한 배달앱 입금(매출일 기준). 없으면 null */
+  bankDepositAmt: number | null
   days: DeliveryAppReconcileDayRow[]
 }
 
@@ -77,6 +79,7 @@ export type DeliveryAppReconcileKpi = {
   inStoreSales: number
   suggestedFee: number
   suggestedPayout: number
+  bankDepositAmt: number
 }
 
 export type DeliveryAppReconcileResult = {
@@ -207,6 +210,7 @@ function finalizeRow(
     suggestedPayout,
     settledFee: null,
     settledNet: null,
+    bankDepositAmt: null,
     days: [...bucket.days.values()]
       .sort((x, y) => x.date.localeCompare(y.date))
       .map((d) => ({
@@ -228,6 +232,7 @@ export function emptyDeliveryAppReconcileKpi(): DeliveryAppReconcileKpi {
     inStoreSales: 0,
     suggestedFee: 0,
     suggestedPayout: 0,
+    bankDepositAmt: 0,
   }
 }
 
@@ -241,6 +246,7 @@ export function sumDeliveryAppReconcileKpi(rows: DeliveryAppReconcileRow[]): Del
     kpi.inStoreSales = round2(kpi.inStoreSales + r.inStoreSales)
     kpi.suggestedFee = round2(kpi.suggestedFee + r.suggestedFee)
     kpi.suggestedPayout = round2(kpi.suggestedPayout + r.suggestedPayout)
+    kpi.bankDepositAmt = round2(kpi.bankDepositAmt + (r.bankDepositAmt ?? 0))
   }
   return kpi
 }
@@ -353,6 +359,60 @@ export function applySettledAmountsToReconcileRows(
       settledNet: round2(found.net),
     }
   })
+}
+
+/** 통장 실입금을 붙이고, 결산 입금이 비어 있으면 통장 금액으로 채운다. 둘 다 있으면 통장 금액을 결산 입금에 쓴다. */
+export function applyBankDepositsToReconcileRows(
+  rows: DeliveryAppReconcileRow[],
+  lookup: (storeCode: string, appCode: string) => number | null
+): DeliveryAppReconcileRow[] {
+  return rows.map((row) => {
+    const found = lookup(row.storeCode, row.appCode)
+    const bankDepositAmt = found == null ? null : round2(found)
+    return {
+      ...row,
+      bankDepositAmt,
+      settledNet: bankDepositAmt ?? row.settledNet,
+    }
+  })
+}
+
+/** POS 매출은 없는데 통장에만 배달앱 입금이 있는 매장×앱 행을 추가한다. */
+export function appendBankOnlyReconcileRows(
+  rows: DeliveryAppReconcileRow[],
+  bankMap: Map<string, number>
+): DeliveryAppReconcileRow[] {
+  const have = new Set(rows.map((r) => `${r.storeCode}\t${r.appCode}`))
+  const extra: DeliveryAppReconcileRow[] = []
+  for (const [key, amt] of bankMap) {
+    if (have.has(key)) continue
+    const amount = round2(amt)
+    if (amount <= 0.005) continue
+    const [storeCode, appCode] = key.split('\t')
+    if (!storeCode || !appCode) continue
+    extra.push({
+      storeCode,
+      appCode,
+      deliveryCount: 0,
+      deliverySales: 0,
+      inStoreCount: 0,
+      inStoreSales: 0,
+      appNetSales: 0,
+      feePct: 0,
+      feeSource: 'none',
+      suggestedFee: 0,
+      suggestedNet: 0,
+      suggestedPayout: 0,
+      settledFee: null,
+      settledNet: amount,
+      bankDepositAmt: amount,
+      days: [],
+    })
+  }
+  if (extra.length === 0) return rows
+  return [...rows, ...extra].sort(
+    (a, b) => a.storeCode.localeCompare(b.storeCode) || sortAppCodes(a.appCode, b.appCode)
+  )
 }
 
 export function buildDeliveryAppReconcileResult(rows: DeliveryAppReconcileRow[]): DeliveryAppReconcileResult {

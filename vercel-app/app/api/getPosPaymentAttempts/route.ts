@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   const requestedStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
   const localTxId = String(searchParams.get('localTxId') || '').trim()
+  const orderId = Math.trunc(Number(searchParams.get('orderId') || searchParams.get('order_id') || 0) || 0)
   const caller = await resolveBearerCaller(request)
   let effectiveStoreCode = requestedStore
   if (caller && !isOfficeRole(caller.role)) {
@@ -55,7 +56,10 @@ export async function GET(request: NextRequest) {
     }
     effectiveStoreCode = own
   }
-  const status = String(searchParams.get('status') || 'failed').trim().toLowerCase()
+  const statusRaw = String(searchParams.get('status') || '').trim().toLowerCase()
+  const status =
+    statusRaw ||
+    (localTxId || orderId > 0 ? 'all' : 'failed')
   const limit = Math.max(1, Math.min(5000, Number(searchParams.get('limit') || 1000)))
 
   const startDate = startStr ? startStr.slice(0, 10) : ''
@@ -77,6 +81,9 @@ export async function GET(request: NextRequest) {
     }
     if (localTxId) {
       filters.push(`local_tx_id=eq.${encodeURIComponent(localTxId)}`)
+    }
+    if (orderId > 0) {
+      filters.push(`order_id=eq.${orderId}`)
     }
 
     const selectFields =
@@ -147,11 +154,22 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // localTxId lookup: order may be unlinked (order_id null) — do not drop row on empty store_code.
-    const filteredByStore =
-      localTxId || !effectiveStoreCode || effectiveStoreCode === 'All'
-        ? mapped
-        : mapped.filter((x) => storeCodesLooselyEqual(effectiveStoreCode, String(x.storeCode || '')))
+    // localTxId / orderId lookup: do not drop rows just because the order join is empty.
+    const filteredByStore = (() => {
+      if (localTxId) return mapped
+      if (orderId > 0) {
+        if (caller && !isOfficeRole(caller.role) && effectiveStoreCode) {
+          return mapped.filter(
+            (x) =>
+              !String(x.storeCode || '').trim() ||
+              storeCodesLooselyEqual(effectiveStoreCode, String(x.storeCode || ''))
+          )
+        }
+        return mapped
+      }
+      if (!effectiveStoreCode || effectiveStoreCode === 'All') return mapped
+      return mapped.filter((x) => storeCodesLooselyEqual(effectiveStoreCode, String(x.storeCode || '')))
+    })()
 
     return NextResponse.json(filteredByStore, { headers })
   } catch (e) {

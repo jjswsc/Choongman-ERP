@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Search, ChevronDown, Printer, PencilLine, Banknote, CreditCard, QrCode, Bike, Wallet, Copy } from 'lucide-react'
+import { Search, ChevronDown, Printer, PencilLine, Banknote, CreditCard, QrCode, Bike, Wallet, Copy, Ban } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -36,6 +36,9 @@ import {
   correctPosOrderPayment,
   updatePosOrder,
   updatePosOrderStatus,
+  getPosPaymentAttempts,
+  executeKbankCheckStatus,
+  executeKbankVoidPayment,
   type PosOrder,
   type PosMenu,
   type PosPromoWithItems,
@@ -127,6 +130,15 @@ import {
   paymentOtherBreakdownSearchTokens,
   type PosPaymentOtherBreakdown,
 } from '@/lib/pos-payment-other-breakdown'
+import { isKbankQrEnabledForStore } from '@/lib/kbank-pilot-stores'
+import {
+  pickKbankVoidRefsFromAttempts,
+  type KbankVoidOrderRefs,
+} from '@/lib/payments/kbank-void-from-order'
+import {
+  extractKbankPaymentTxnNo,
+  resolveKbankVoidTxnNoForRequest,
+} from '@/lib/payments/kbank-api-reference'
 
 function formatBangkokDateTime(value: string | null | undefined) {
   if (!value) return '-'
@@ -298,6 +310,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   /** 주문 합계(정정 시 결제 분할 합과 일치) */
   const [pcOrderTotal, setPcOrderTotal] = React.useState('')
   const [payCorrectSaving, setPayCorrectSaving] = React.useState(false)
+  const [pcKbankVoidRefs, setPcKbankVoidRefs] = React.useState<KbankVoidOrderRefs | null>(null)
+  const [pcKbankVoidLoading, setPcKbankVoidLoading] = React.useState(false)
+  const [pcKbankVoidBusy, setPcKbankVoidBusy] = React.useState(false)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [promosWithItems, setPromosWithItems] = React.useState<PosPromoWithItems[]>([])
   const [deliveryAppsCatalog, setDeliveryAppsCatalog] = React.useState<PosDeliveryApp[]>([])
@@ -1135,6 +1150,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     }
     setPayCorrectOrder(o)
     setPayCorrectReason('')
+    setPcKbankVoidRefs(null)
+    setPcKbankVoidBusy(false)
     setPcOrderTotal(String(Math.round(Math.max(0, Number(o.total ?? 0) || 0) * 100) / 100))
     setPcCash(String(Math.max(0, Number(o.paymentCash ?? 0) || 0)))
     setPcCard(String(Math.max(0, Number(o.paymentCard ?? 0) || 0)))
@@ -1178,6 +1195,41 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       setPcOtherDetailKey('misc')
     }
   }
+
+  React.useEffect(() => {
+    const order = payCorrectOrder
+    if (!order) {
+      setPcKbankVoidRefs(null)
+      setPcKbankVoidLoading(false)
+      return
+    }
+    if (!isKbankQrEnabledForStore({ storeId: order.storeCode })) {
+      setPcKbankVoidRefs(null)
+      setPcKbankVoidLoading(false)
+      return
+    }
+    let cancelled = false
+    setPcKbankVoidLoading(true)
+    void (async () => {
+      try {
+        const rows = await getPosPaymentAttempts({
+          orderId: order.id,
+          storeCode: String(order.storeCode || '').trim() || undefined,
+          status: 'all',
+          limit: 50,
+        })
+        if (cancelled) return
+        setPcKbankVoidRefs(pickKbankVoidRefsFromAttempts(rows))
+      } catch {
+        if (!cancelled) setPcKbankVoidRefs(null)
+      } finally {
+        if (!cancelled) setPcKbankVoidLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [payCorrectOrder])
 
   const applyTaxInvoiceProfile = React.useCallback((profile: PosTaxInvoiceData) => {
     setTiCustomerType(profile.customerType === 'company' ? 'company' : 'person')
@@ -1622,6 +1674,103 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       setPayCorrectSaving(false)
     }
   }
+
+  const handleKbankVoidFromPayCorrect = async () => {
+    if (!payCorrectOrder) return
+    if (!online) {
+      await appAlert(t('posReceiptPayCorrectOffline'))
+      return
+    }
+    if (pcKbankVoidRefs?.alreadyVoided) {
+      await appAlert(t('posReceiptPayCorrectKbankVoidAlready') || 'This KBank payment was already voided.')
+      return
+    }
+    const partnerTxnUid = String(pcKbankVoidRefs?.partnerTxnUid || '').trim()
+    if (!partnerTxnUid) {
+      await appAlert(
+        t('posReceiptPayCorrectKbankVoidNoAttempt') ||
+          'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.'
+      )
+      return
+    }
+    const ok = await appConfirm(
+      t('posReceiptPayCorrectKbankVoidConfirm') ||
+        'Void will reverse the KBank QR payment at the bank. It does not cancel the POS bill. Continue?'
+    )
+    if (!ok) return
+    const storeCode = String(payCorrectOrder.storeCode || '').trim()
+    const terminalId = String(pcKbankVoidRefs?.terminalId || '').trim()
+    const qrType = String(payCorrectOrder.paymentQrType || '').trim() || 'THAI_QR'
+    setPcKbankVoidBusy(true)
+    try {
+      let voidTxnNo = resolveKbankVoidTxnNoForRequest(pcKbankVoidRefs?.txnNo) || ''
+      if (!voidTxnNo) {
+        const inq = await executeKbankCheckStatus({
+          orderId: payCorrectOrder.id,
+          storeCode,
+          partnerTransactionId: partnerTxnUid,
+          originalTransactionId: partnerTxnUid,
+          terminalId: terminalId || undefined,
+          payload: {
+            origPartnerTxnUid: partnerTxnUid,
+            qrType,
+            ...(terminalId ? { terminalId } : {}),
+          },
+        })
+        if (inq.success) {
+          voidTxnNo = extractKbankPaymentTxnNo(inq.data).slice(0, 20)
+        }
+        if (!voidTxnNo) {
+          await appAlert(
+            t('posKbankVoidInquiryFailed') ||
+              'Could not obtain txnNo from Inquiry. Check the KBank response and try again.'
+          )
+          return
+        }
+      }
+      const voidPartnerTxnUid = `VOD${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
+      const out = await executeKbankVoidPayment({
+        orderId: payCorrectOrder.id,
+        storeCode,
+        origPartnerTxnUid: partnerTxnUid,
+        originalTransactionId: partnerTxnUid,
+        partnerTxnUid: voidPartnerTxnUid,
+        terminalId: terminalId || undefined,
+        txnNo: voidTxnNo || undefined,
+        payload: {
+          partnerTxnUid: voidPartnerTxnUid,
+          origPartnerTxnUid: partnerTxnUid,
+          ...(terminalId ? { terminalId } : {}),
+          ...(voidTxnNo ? { txnNo: voidTxnNo } : {}),
+        },
+      })
+      if (!out.success) {
+        await appAlert(
+          String(out.statusMessage || out.message || '').trim() ||
+            t('posKbankVoidFailedAlert') ||
+            'Void payment failed.'
+        )
+        return
+      }
+      setPcKbankVoidRefs((prev) =>
+        prev ? { ...prev, txnNo: voidTxnNo || prev.txnNo, alreadyVoided: true } : prev
+      )
+      await appAlert(
+        t('posReceiptPayCorrectKbankVoidSuccess') ||
+          'KBank Void succeeded. Cancel the POS bill if needed.'
+      )
+    } catch (e) {
+      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setPcKbankVoidBusy(false)
+    }
+  }
+
+  const showPayCorrectKbankVoid = Boolean(
+    payCorrectOrder &&
+      isKbankQrEnabledForStore({ storeId: payCorrectOrder.storeCode }) &&
+      (Number(payCorrectOrder.paymentQr ?? 0) > 0.005 || pcKbankVoidRefs)
+  )
 
   return (
     <div className="space-y-4">
@@ -2311,6 +2460,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           if (!open) {
             setPayCorrectOrder(null)
             setPayCorrectSaving(false)
+            setPcKbankVoidRefs(null)
+            setPcKbankVoidBusy(false)
             setPcOrderTotal('')
           }
         }}
@@ -2546,20 +2697,52 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
             </div>
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between sm:gap-2">
-            <Button
-              type="button"
-              variant="destructive"
-              className="w-full sm:w-auto"
-              disabled={payCorrectSaving || payCorrectReason.trim().length < 2}
-              onClick={() => void handleCancelOrderFromPayCorrect()}
-            >
-              {t('posReceiptPayCorrectCancelOrder')}
-            </Button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              {showPayCorrectKbankVoid ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="w-full sm:w-auto"
+                  disabled={
+                    payCorrectSaving ||
+                    pcKbankVoidBusy ||
+                    pcKbankVoidLoading ||
+                    Boolean(pcKbankVoidRefs?.alreadyVoided)
+                  }
+                  title={
+                    pcKbankVoidRefs?.alreadyVoided
+                      ? t('posReceiptPayCorrectKbankVoidAlready') || 'Already voided'
+                      : !String(pcKbankVoidRefs?.txnNo || '').trim()
+                        ? t('posKbankVoidNeedsTxnNo') || 'Void runs Inquiry first when txnNo is empty.'
+                        : undefined
+                  }
+                  onClick={() => void handleKbankVoidFromPayCorrect()}
+                >
+                  <Ban className="mr-1 h-3.5 w-3.5" />
+                  {t('posKbankVoid') || 'Void'}
+                </Button>
+              ) : null}
+              {showPayCorrectKbankVoid ? (
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  {t('posReceiptPayCorrectKbankVoidHint') ||
+                    'Void = reverse KBank QR at the bank. Cancel bill = cancel the POS order.'}
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-rose-300 text-rose-700 hover:bg-rose-50 sm:w-auto dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                disabled={payCorrectSaving || pcKbankVoidBusy || payCorrectReason.trim().length < 2}
+                onClick={() => void handleCancelOrderFromPayCorrect()}
+              >
+                {t('posReceiptPayCorrectCancelOrder')}
+              </Button>
+            </div>
             <div className="flex w-full justify-end gap-2 sm:w-auto">
               <Button
                 type="button"
                 variant="outline"
-                disabled={payCorrectSaving}
+                disabled={payCorrectSaving || pcKbankVoidBusy}
                 onClick={() => setPayCorrectOrder(null)}
               >
                 {t('btnClose') || '닫기'}
@@ -2568,6 +2751,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                 type="button"
                 disabled={
                   payCorrectSaving ||
+                  pcKbankVoidBusy ||
                   !payCorrectSumOk ||
                   payCorrectReason.trim().length < 2
                 }
