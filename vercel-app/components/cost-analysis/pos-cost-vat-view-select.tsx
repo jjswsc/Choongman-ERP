@@ -20,7 +20,14 @@ import {
 export function usePosCostVatView(): [PosCostVatView, (view: PosCostVatView) => void] {
   const [view, setView] = React.useState<PosCostVatView>(DEFAULT_POS_COST_VAT_VIEW)
   React.useEffect(() => {
-    setView(readPosCostVatView())
+    const sync = () => setView(readPosCostVatView())
+    sync()
+    window.addEventListener("cm-pos-cost-vat-view-changed", sync)
+    window.addEventListener("storage", sync)
+    return () => {
+      window.removeEventListener("cm-pos-cost-vat-view-changed", sync)
+      window.removeEventListener("storage", sync)
+    }
   }, [])
   const set = React.useCallback((next: PosCostVatView) => {
     setView(next)

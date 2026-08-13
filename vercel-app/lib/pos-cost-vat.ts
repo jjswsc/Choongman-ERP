@@ -40,6 +40,9 @@ export function writePosCostVatView(view: PosCostVatView) {
   } catch {
     /* ignore quota */
   }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('cm-pos-cost-vat-view-changed'))
+  }
 }
 
 /** VAT 포함 금액 → 공급가 (태국 7%). vatIncluded=false면 그대로. */

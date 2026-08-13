@@ -277,7 +277,8 @@ export function simulateItemPriceDelta(
   rows: PosMenuCostAnalysisRow[],
   itemCode: string,
   deltaPct: number,
-  _misePercent: number = 0
+  _misePercent: number = 0,
+  vatView: PosCostVatView = "excluded"
 ): Array<{
   row: PosMenuCostAnalysisRow
   beforeRatioH: number
@@ -299,7 +300,7 @@ export function simulateItemPriceDelta(
     const lines = breakdown.filter((b) => String(b.itemCode ?? "").trim().toLowerCase() === code)
     if (lines.length === 0) continue
 
-    const before = computePosCostRowMetrics(r, _misePercent)
+    const before = computePosCostRowMetrics(r, _misePercent, COST_RATIO_CAUTION_MAX, vatView)
     let addedCost = 0
     for (const line of lines) {
       const base = Number(line.costTotal ?? 0)

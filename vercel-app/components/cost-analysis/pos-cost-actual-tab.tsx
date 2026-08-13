@@ -39,6 +39,7 @@ import {
 import { cn } from "@/lib/utils"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import { PosCostSettingsPanel } from "@/components/cost-analysis/pos-cost-settings-panel"
+import { usePosCostVatView } from "@/components/cost-analysis/pos-cost-vat-view-select"
 import { FinancialStatementStorePicker } from "@/components/financial-statements/financial-statement-store-picker"
 import {
   buildFinancialStatementFranchiseStoreOptions,
@@ -78,6 +79,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const [vatView] = usePosCostVatView()
   const { stores, storeLabels } = useStoreList()
 
   const franchiseStoreOptions = React.useMemo(
@@ -120,8 +122,8 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
   )
 
   const whatIfRows = React.useMemo(
-    () => simulateItemPriceDelta(rows, itemCode, whatIfPct, settings.misePercent).slice(0, 15),
-    [rows, itemCode, whatIfPct, settings.misePercent]
+    () => simulateItemPriceDelta(rows, itemCode, whatIfPct, settings.misePercent, vatView).slice(0, 15),
+    [rows, itemCode, whatIfPct, settings.misePercent, vatView]
   )
 
   /**
@@ -134,7 +136,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
       if (!isCostAnalysisBaseRow(r)) continue
       if (r.isActive === false) continue
       const cat = String(r.categoryMain ?? r.category ?? t("posMenuCategoryAll")).trim() || "—"
-      const m = computePosCostRowMetrics(r, settings.misePercent)
+      const m = computePosCostRowMetrics(r, settings.misePercent, settings.costRatioCautionMax, vatView)
       if (m.costRatioH <= 0) continue
       const prev = map.get(cat) ?? { sumRatio: 0, n: 0, target: settings.categoryTargets[cat] }
       prev.sumRatio += m.costRatioH
@@ -150,7 +152,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
         weightedRatio: result?.byCategory.find((r) => r.categoryMain === cat)?.costPctOfNet,
       }))
       .sort((a, b) => b.avgRatio - a.avgRatio)
-  }, [rows, settings, t, result])
+  }, [rows, settings, t, result, vatView])
 
   React.useEffect(() => {
     if (queryToken <= 0) return
@@ -816,7 +818,7 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
                         <td
                           className={cn(
                             "px-3 py-2 text-right tabular-nums",
-                            costRatioTierClass(computePosCostRowMetrics(w.row).tierH)
+                            costRatioTierClass(computePosCostRowMetrics(w.row, 0, settings.costRatioCautionMax, vatView).tierH)
                           )}
                         >
                           {w.beforeRatioH.toFixed(1)}%
