@@ -1023,6 +1023,7 @@ export function ExpenseManagementTab() {
     getPayeeLine,
     getMemo,
     renderWithdrawalType,
+    accountSubjectLabel,
     renderPayAmount: (r: ExpenseAccrualPlanItem) => renderPlanPayAmountCell(r, tt),
     planRowEditable,
     canApproveByPolicy,

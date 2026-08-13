@@ -58,6 +58,7 @@ export function shouldExcludeBankWithdrawFromPlExpense(
 ): boolean {
   const wCat = extractWithdrawalCategoryFromNote(String(row.note || ''))
   if (wCat && isTaxSettlementWithdrawalCategory(wCat)) return true
+  if (wCat === 'fixed_asset') return true
   if (looksLikeTaxAuthorityRemittanceMemo(row.memo)) return true
   if (!isExpenseInternalBankNote(row.note)) return false
 

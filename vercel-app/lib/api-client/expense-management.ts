@@ -128,6 +128,9 @@ export async function addExpenseAccrual(params: {
   storeName?: string
   userName?: string
   userRole?: string
+  assetName?: string
+  assetCode?: string
+  usefulLifeMonths?: number
   /** 인보이스·영수증 등 (data URL 또는 https) */
   attachmentUrls?: string[]
   /** 세금계산서(텍스 인보이스) 수령 여부 */

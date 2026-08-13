@@ -419,8 +419,8 @@ export async function POST(request: NextRequest) {
       await supabaseUpdate('bank_transactions', bankId, bankPatch)
     }
 
-    let subjectCode = '5520'
-    let subjectName = '기타경비'
+    let subjectCode = withdrawalCategory === 'fixed_asset' ? '1490' : '5520'
+    let subjectName = withdrawalCategory === 'fixed_asset' ? '기타유형자산' : '기타경비'
     if (accountSubjectId && Number(accountSubjectId) > 0) {
       const subjectRows = (await supabaseSelectFilter(
         'account_subjects',

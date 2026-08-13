@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  supabaseDeleteByFilter,
+  supabaseInsert,
+  supabaseSelectFilter,
+  supabaseUpdate,
+  supabaseUpdateByFilter,
+} from '@/lib/supabase-server'
 import { deleteJournalEntriesBySource, postJournalEntry } from '@/lib/accounting-posting'
 import { accountLine } from '@/lib/chart-of-accounts-mapping'
 import { requireAuth } from '@/lib/verify-auth'
@@ -85,6 +91,50 @@ export async function POST(request: NextRequest) {
       body.depreciationExpenseAccountCode || body.depreciation_expense_account_code,
       '5500'
     )
+
+    if (action === 'delete') {
+      if (!hasOfficeStaffScope(authRole, authStore)) {
+        return NextResponse.json(
+          { success: false, message: '본사·회계만 자산을 삭제할 수 있습니다.' },
+          { status: 403, headers }
+        )
+      }
+      if (!id || id <= 0) {
+        return NextResponse.json({ success: false, message: '자산 ID가 필요합니다.' }, { status: 400, headers })
+      }
+      const existing = (await supabaseSelectFilter('fixed_assets', `id=eq.${id}`, { select: '*', limit: 1 })) as
+        | Record<string, unknown>[]
+        | null
+      if (!existing?.length) {
+        return NextResponse.json({ success: false, message: '해당 자산이 없습니다.' }, { status: 404, headers })
+      }
+      const row = existing[0] || {}
+      const status = String(row.status || '').trim().toLowerCase()
+      if (status === 'disposed') {
+        return NextResponse.json(
+          { success: false, message: '처분된 자산은 삭제할 수 없습니다. 복구 후 삭제하거나 처분 상태를 유지하세요.' },
+          { status: 400, headers }
+        )
+      }
+      const depRows = (await supabaseSelectFilter(
+        'depreciation_entries',
+        `fixed_asset_id=eq.${id}`,
+        { select: 'id', limit: 1 }
+      )) as { id?: number }[] | null
+      if (depRows?.length) {
+        return NextResponse.json(
+          { success: false, message: '감가상각 실적이 있는 자산은 삭제할 수 없습니다. 처분을 사용하세요.' },
+          { status: 400, headers }
+        )
+      }
+      try {
+        await supabaseUpdateByFilter('bank_transactions', `fixed_asset_id=eq.${id}`, { fixed_asset_id: null })
+      } catch (unlinkErr) {
+        console.warn('saveFixedAsset delete unlink bank:', unlinkErr)
+      }
+      await supabaseDeleteByFilter('fixed_assets', `id=eq.${id}`)
+      return NextResponse.json({ success: true, message: '자산이 삭제되었습니다.' }, { headers })
+    }
 
     if (action === 'dispose' || action === 'restore') {
       if (!id || id <= 0) {

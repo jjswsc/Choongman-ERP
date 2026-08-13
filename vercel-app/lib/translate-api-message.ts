@@ -198,6 +198,10 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "자산이 처분 처리되었습니다.": "fixedAssetDisposedSuccess",
   "자산이 복구되었습니다.": "fixedAssetRestoredSuccess",
   "동일한 자산코드가 이미 있습니다.": "fixedAssetCodeDuplicate",
+  "자산이 삭제되었습니다.": "fixedAssetDeletedSuccess",
+  "감가상각 실적이 있는 자산은 삭제할 수 없습니다. 처분을 사용하세요.": "fixedAssetDeleteHasDepreciation",
+  "처분된 자산은 삭제할 수 없습니다. 복구 후 삭제하거나 처분 상태를 유지하세요.": "fixedAssetDeleteDisposed",
+  "본사·회계만 자산을 삭제할 수 있습니다.": "fixedAssetDeleteDenied",
 
   // 매장 수리 사진 Storage
   "수리 사진 저장소가 설정되지 않았습니다.": "repair_photo_storage_not_configured",

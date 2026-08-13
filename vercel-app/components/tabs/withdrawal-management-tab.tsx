@@ -51,8 +51,10 @@ import {
 } from "@/lib/api-client"
 import {
   EXPENSE_WITHDRAW_SUBJECT_FETCH,
+  FIXED_ASSET_WITHDRAW_SUBJECT_FETCH,
   TRANSFER_WITHDRAW_SUBJECT_FETCH,
   filterExpenseWithdrawAccountSubjects,
+  filterFixedAssetAccountSubjects,
 } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { bankNoteUserDisplayText } from "@/lib/bank-transaction-note-meta"
@@ -229,6 +231,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [cardAccounts, setCardAccounts] = React.useState<CardAccount[]>([])
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
   const [transferSubjects, setTransferSubjects] = React.useState<AccountSubjectItem[]>([])
+  const [assetSubjects, setAssetSubjects] = React.useState<AccountSubjectItem[]>([])
   const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
 
   const searchParams = useSearchParams()
@@ -254,6 +257,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   React.useEffect(() => {
     if (isExistingBankTxMode) return
     if (categoryMain === "purchase") setExpensePayMode("later")
+    if (categoryMain === "fixed_asset") setExpensePayMode("later")
   }, [categoryMain, isExistingBankTxMode])
 
   const mapCategoryToMainSub = React.useCallback((catRaw: string): { main: string; sub: string } => {
@@ -565,6 +569,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     const reloadSubjects = () => {
       getAccountSubjects(EXPENSE_WITHDRAW_SUBJECT_FETCH).catch(() => []).then(setSubjects)
       getAccountSubjects(TRANSFER_WITHDRAW_SUBJECT_FETCH).catch(() => []).then(setTransferSubjects)
+      getAccountSubjects(FIXED_ASSET_WITHDRAW_SUBJECT_FETCH).catch(() => []).then(setAssetSubjects)
     }
     reloadSubjects()
     if (!withdrawalPageActive || !withdrawalTabActive) return
@@ -579,6 +584,20 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     () => filterExpenseWithdrawAccountSubjects(subjects),
     [subjects]
   )
+  const assetSubjectOptions = React.useMemo(
+    () => filterFixedAssetAccountSubjects(assetSubjects),
+    [assetSubjects]
+  )
+
+  React.useEffect(() => {
+    if (categoryMain !== "fixed_asset") return
+    if (accountSubjectId && assetSubjectOptions.some((s) => String(s.id) === accountSubjectId)) return
+    const preferred =
+      assetSubjectOptions.find((s) => String(s.code || "").trim() === "1490") ||
+      assetSubjectOptions.find((s) => String(s.code || "").trim() === "1460") ||
+      assetSubjectOptions[0]
+    if (preferred?.id != null) setAccountSubjectId(String(preferred.id))
+  }, [categoryMain, assetSubjectOptions, accountSubjectId])
 
   React.useEffect(() => {
     getVendorsForPurchase().catch(() => []).then(setVendors)
@@ -586,7 +605,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   }, [])
 
   React.useEffect(() => {
-    const candidates = [...subjects, ...transferSubjects].filter((s) => !s.nameEn && (s.name || "").trim())
+    const candidates = [...subjects, ...transferSubjects, ...assetSubjects].filter((s) => !s.nameEn && (s.name || "").trim())
     if (candidates.length === 0) {
       setSubjectEnglishNames({})
       return
@@ -609,7 +628,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     return () => {
       cancelled = true
     }
-  }, [subjects, transferSubjects])
+  }, [subjects, transferSubjects, assetSubjects])
 
   const getSubjectLabel = React.useCallback((s: AccountSubjectItem) => {
     return s.nameEn || (s.id != null ? subjectEnglishNames[s.id] : undefined) || s.name
@@ -657,7 +676,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const isLaterPayment =
     !isExistingBankTxMode &&
     (isTransferPrepaymentAccrual ||
-      ((categoryMain === "purchase" || categoryMain === "expense") && expensePayMode === "later"))
+      ((categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset") &&
+        expensePayMode === "later"))
 
   const resolveAccountIdForSave = React.useCallback((): number => {
     const fromState = Number(accountId || 0)
@@ -1038,6 +1058,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("expenseStoreSelect", "Please select a store."))
       return
     }
+    if (categoryMain === "fixed_asset" && !assetName.trim() && !memo.trim()) {
+      await appAlert(tt("wm_fixedAssetNameOrMemoRequired", "자산명 또는 적요를 입력해 주세요."))
+      return
+    }
     const feeResolved =
       categoryMain === "expense" ? resolveFeeSubmitAmounts(amt, activeFeeVatMode) : null
     let submitInvoiceReceived = invoiceReceived
@@ -1097,7 +1121,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           payeeCode: code || undefined,
           payeeName: name || undefined,
           accountSubjectId:
-            categoryMain === "expense" && accountSubjectId && accountSubjectId !== "__none__"
+            (categoryMain === "expense" || categoryMain === "fixed_asset") &&
+            accountSubjectId &&
+            accountSubjectId !== "__none__"
               ? Number(accountSubjectId)
               : categoryMain === "transfer" && transferKind === "bank_general" && accountSubjectId
                 ? Number(accountSubjectId)
@@ -1198,10 +1224,22 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           expenseDate: transDate,
           dueDate: transDate,
           memo: memo.trim() || undefined,
-          accountSubjectId: categoryMain === "expense" && accountSubjectId ? Number(accountSubjectId) : null,
+          accountSubjectId:
+            (categoryMain === "expense" || categoryMain === "fixed_asset") && accountSubjectId
+              ? Number(accountSubjectId)
+              : categoryMain === "transfer" && transferKind === "bank_general" && accountSubjectId
+                ? Number(accountSubjectId)
+                : null,
           storeName: storeName || undefined,
           userName: auth?.user,
           userRole: auth?.role,
+          ...(categoryMain === "fixed_asset"
+            ? {
+                assetName: assetName.trim() || undefined,
+                assetCode: assetCode.trim() || undefined,
+                usefulLifeMonths: Number(usefulLifeMonths) || 60,
+              }
+            : {}),
           ...(payeeAccountHolder.trim()
             ? { payeeAccountHolder: payeeAccountHolder.trim() }
             : {}),
@@ -1549,7 +1587,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               ? payeeCode.trim()
               : undefined,
         accountSubjectId:
-          categoryMain === "expense" && accountSubjectId
+          (categoryMain === "expense" || categoryMain === "fixed_asset") && accountSubjectId
             ? Number(accountSubjectId)
             : categoryMain === "transfer" &&
                 transferKind === "bank_general" &&
@@ -1560,6 +1598,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         accountSubjectCode:
           categoryMain === "expense"
             ? subjects.find((s) => String(s.id) === accountSubjectId)?.code
+            : categoryMain === "fixed_asset"
+              ? assetSubjectOptions.find((s) => String(s.id) === accountSubjectId)?.code
             : categoryMain === "transfer" &&
                 transferKind === "bank_general" &&
                 !(transferBankAccountNo.trim() && transferBankRecipientName.trim())
@@ -1571,6 +1611,11 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 const subject = subjects.find((s) => String(s.id) === accountSubjectId)
                 return subject ? getSubjectLabel(subject) : undefined
               })()
+            : categoryMain === "fixed_asset"
+              ? (() => {
+                  const subject = assetSubjectOptions.find((s) => String(s.id) === accountSubjectId)
+                  return subject ? getSubjectLabel(subject) : undefined
+                })()
             : categoryMain === "transfer" &&
                 transferKind === "bank_general" &&
                 !(transferBankAccountNo.trim() && transferBankRecipientName.trim())
@@ -2372,6 +2417,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     setCategoryMain(opt.value)
                     setCategorySub(opt.sub[0] || "normal")
                     if (opt.value === "transfer") setTransferKind("bank_to_petty")
+                    if (opt.value !== categoryMain) setAccountSubjectId("")
                   }}
                 >
                   {t(opt.labelKey) || opt.value}
@@ -2380,7 +2426,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
           </div>
 
-          {categoryMain && !isBankLinkMode && !isEditMode && (categoryMain === "purchase" || categoryMain === "expense") && (
+          {categoryMain && !isBankLinkMode && !isEditMode && (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset") && (
             <ExpenseRegisterField label={tt("wm_payMode", "Payment Mode")}>
               <div className="flex flex-wrap gap-2">
                 {categoryMain !== "purchase" ? (
@@ -3121,6 +3167,23 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     }}
                   />
                 </div>
+              </ExpenseRegisterField>
+              <ExpenseRegisterField label={tt("wm_accountSubject", "Account Subject")}>
+                <Select
+                  value={accountSubjectId || "__none__"}
+                  onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assetSubjectOptions.map((s) => (
+                      <SelectItem key={s.id} value={String(s.id)}>
+                        {s.code} {getSubjectLabel(s)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </ExpenseRegisterField>
               </ExpenseRegisterFieldRow>
             </ExpenseRegisterSection>

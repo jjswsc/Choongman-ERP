@@ -33,6 +33,7 @@ import { hasOfficeStaffScope, isOfficeRole } from "@/lib/permissions"
 import {
   getFixedAssets,
   saveFixedAsset,
+  deleteFixedAsset,
   setFixedAssetStatus,
   getDepreciationEntries,
   runDepreciation,
@@ -430,6 +431,40 @@ export function DepreciationTab() {
     }
   }
 
+  const handleDeleteAsset = async (asset: FixedAssetRow) => {
+    const id = Number(asset.id || 0)
+    if (!id) return
+    if (!canLegacyCreate) {
+      await appAlert(tt("dep_deleteDenied", "Only HQ/Accounting can delete assets."))
+      return
+    }
+    const ok = await appConfirm({
+      title: tt("dep_deleteConfirmTitle", "Delete asset"),
+      description: tt(
+        "dep_deleteConfirmDesc",
+        "Delete this duplicate or mistaken register? Depreciation posted assets cannot be deleted (use Dispose). Bank payments are not reversed."
+      ) + `\n${asset.asset_code || ""} ${asset.name || ""}`,
+      confirmText: tt("dep_delete", "Delete"),
+      cancelText: t("cancel"),
+    })
+    if (!ok) return
+    setStatusUpdating(true)
+    try {
+      const res = await deleteFixedAsset({ id })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("dep_deleteFailed", "Failed to delete asset."))
+        return
+      }
+      if (editingId === id) resetAssetForm()
+      loadAssets()
+      loadDisposedAssets()
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setStatusUpdating(false)
+    }
+  }
+
   const formatBaht = (n: number) => `฿${(n ?? 0).toLocaleString()}`
 
   return (
@@ -593,9 +628,23 @@ export function DepreciationTab() {
                           </div>
                         </td>
                         <td className="py-2 px-2 text-center">
-                          <Button size="sm" variant="ghost" onClick={() => fillFormFromAsset(a)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          <div className="inline-flex items-center justify-center gap-0.5">
+                            <Button size="sm" variant="ghost" onClick={() => fillFormFromAsset(a)}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            {canLegacyCreate && a.listStatus === "active" ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive"
+                                disabled={statusUpdating}
+                                onClick={() => void handleDeleteAsset(a)}
+                                title={tt("dep_delete", "Delete")}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))}

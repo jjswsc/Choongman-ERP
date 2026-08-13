@@ -26,6 +26,7 @@ export type ExpensePlanDesktopListProps = {
   getPayeeLine: (name: string, codeLabel: string) => string
   getMemo: (memo: string | undefined) => string
   renderWithdrawalType: (category?: string) => ReactNode
+  accountSubjectLabel?: (id?: number | null) => string
   renderPayAmount: (r: ExpenseAccrualPlanItem) => ReactNode
   planRowEditable: (r: ExpenseAccrualPlanItem) => boolean
   canApproveByPolicy: (r: ExpenseAccrualPlanItem) => boolean
@@ -52,6 +53,7 @@ export function ExpensePlanDesktopList({
   getPayeeLine,
   getMemo,
   renderWithdrawalType,
+  accountSubjectLabel,
   renderPayAmount,
   planRowEditable,
   canApproveByPolicy,
@@ -133,7 +135,12 @@ export function ExpensePlanDesktopList({
                           {r.documentNo || "—"}
                         </td>
                         <td className="px-2 py-2 text-center align-middle">
-                          {renderWithdrawalType(r.withdrawalCategory)}
+                          <div>{renderWithdrawalType(r.withdrawalCategory)}</div>
+                          {accountSubjectLabel?.(r.accountSubjectId) ? (
+                            <div className="mt-0.5 truncate text-[11px] text-muted-foreground" title={accountSubjectLabel(r.accountSubjectId)}>
+                              {accountSubjectLabel(r.accountSubjectId)}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="max-w-[200px] px-2 py-2 align-middle">
                           <button

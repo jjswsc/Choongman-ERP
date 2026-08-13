@@ -14,6 +14,11 @@ export const TRANSFER_WITHDRAW_SUBJECT_FETCH = {
   excludeHeaders: true,
 } as const
 
+export const FIXED_ASSET_WITHDRAW_SUBJECT_FETCH = {
+  type: 'asset' as const,
+  excludeHeaders: true,
+}
+
 export function filterExpenseWithdrawAccountSubjects(
   items: AccountSubjectItem[]
 ): AccountSubjectItem[] {
@@ -24,4 +29,11 @@ export function filterTransferWithdrawAccountSubjects(
   items: AccountSubjectItem[]
 ): AccountSubjectItem[] {
   return items.filter((x) => x.type === 'transfer')
+}
+
+/** 고정자산 취득 — BS 자산 계정만 (손익 비용 계정 제외) */
+export function filterFixedAssetAccountSubjects(
+  items: AccountSubjectItem[]
+): AccountSubjectItem[] {
+  return items.filter((x) => String(x.type || '').toLowerCase() === 'asset')
 }

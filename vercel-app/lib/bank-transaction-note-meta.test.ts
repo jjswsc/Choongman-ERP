@@ -123,6 +123,16 @@ describe('shouldExcludeBankWithdrawFromPlExpense', () => {
     ).toBe(true)
   })
 
+  it('excludes fixed_asset withdrawals from P&L expense', () => {
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense({
+        note: 'withdrawal_category:fixed_asset',
+        memo: 'Pizza oven',
+        category: 'expense',
+      })
+    ).toBe(true)
+  })
+
   it('excludes revenue-department remittance memos', () => {
     expect(
       looksLikeTaxAuthorityRemittanceMemo('Payment | Paid for Ref X8126 REVENUE DEPARTMENT')

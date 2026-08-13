@@ -37,6 +37,15 @@ export async function saveFixedAsset(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function deleteFixedAsset(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/saveFixedAsset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: params.id, action: 'delete' }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function setFixedAssetStatus(params: {
   id: number
   action: 'dispose' | 'restore'

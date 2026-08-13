@@ -4466,11 +4466,11 @@ export const i18n = {
     helpSum_admin_expense_management:
       '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 지급대기의 「은행이체」보기로 예금주·계좌·은행·금액을 엑셀처럼 확인·복사·인쇄할 수 있습니다. 문서번호는 EXPyyyymm000x로 자동 발급됩니다.',
     helpHow_admin_expense_management:
-      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영되며, 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다.',
+      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다. 계정과목은 자산 계정(예: 1490 유형자산)을 고르며, 나중에 송금해도 경비(손익)가 아니라 그 자산 계정으로 표시·분개됩니다. 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다.',
     helpSum_admin_depreciation:
       '지출로 등록된 고정자산 목록·수정, 월 감가상각 실행, 처분을 처리합니다. 신규 취득은 지출 관리에서 합니다.',
     helpHow_admin_depreciation:
-      '① 자산 목록 탭에서 매장·상태·검색으로 조회합니다.\n② 내용연수·계정 매핑 수정은 행의 수정(✎)을 누릅니다.\n③ 감가상각 실행 탭에서 월별 미리보기 후 분개를 실행합니다.\n④ 처분은 자산 처분 탭에서 처리합니다. 기초잔액 등 예외 등록은 본사·회계만 가능합니다.',
+      '① 자산 목록 탭에서 매장·상태·검색으로 조회합니다.\n② 내용연수·계정 매핑 수정은 행의 수정(✎)을 누릅니다. 중복·오등록은 본사·회계가 삭제(휴지통)할 수 있습니다(감가상각 실적이 있으면 처분만 가능).\n③ 감가상각 실행 탭에서 월별 미리보기 후 분개를 실행합니다.\n④ 처분은 자산 처분 탭에서 처리합니다. 기초잔액 등 예외 등록은 본사·회계만 가능합니다.',
     bankManualScreenFixedExpenses: '고정비: 월별 고정 지출 항목 관리',
     bankManualScreenExplanation: '설명: 이 매뉴얼 및 적요 키워드 규칙 설정',
     bankManualS1Title: '1. 입력 탭 – CSV 업로드',
@@ -5360,6 +5360,10 @@ export const i18n = {
       '중복·오등록 자산을 삭제합니다. 감가상각이 있는 자산은 삭제할 수 없고 처분을 쓰세요. 이미 나간 통장 출금은 자동으로 취소되지 않습니다.',
     dep_deleteFailed: '자산 삭제에 실패했습니다.',
     dep_deleteDenied: '본사·회계만 자산을 삭제할 수 있습니다.',
+    fixedAssetDeletedSuccess: '자산이 삭제되었습니다.',
+    fixedAssetDeleteHasDepreciation: '감가상각 실적이 있는 자산은 삭제할 수 없습니다. 처분을 사용하세요.',
+    fixedAssetDeleteDisposed: '처분된 자산은 삭제할 수 없습니다. 복구 후 삭제하거나 처분 상태를 유지하세요.',
+    fixedAssetDeleteDenied: '본사·회계만 자산을 삭제할 수 있습니다.',
     dep_runResultPosted: '감가상각 분개 {count}건이 완료되었습니다.',
     dep_runResultPreview: '감가상각 미리보기가 완료되었습니다.',
     adminStoreCheck: '매장 점검',
@@ -12454,11 +12458,11 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_expense_management:
       'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use EXPyyyymm000x.',
     helpHow_admin_expense_management:
-      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management; attach invoice/receipt and VAT like expense/purchase.\n⑧ Choosing a WHT rate (%) fills withholding as (gross−VAT)×%; with "Auto-create 50 ทวิ" on, the certificate print window opens right after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 purchase VAT.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows.',
+      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management. Pick an asset account (e.g. 1490 PPE); later bank transfer posts to that asset account, not P&L expense. Attach invoice/receipt and VAT like expense/purchase.\n⑧ Choosing a WHT rate (%) fills withholding as (gross−VAT)×%; with "Auto-create 50 ทวิ" on, the certificate print window opens right after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 purchase VAT.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows.',
     helpSum_admin_depreciation:
       'List, edit, monthly depreciation, and disposal for fixed assets from expense payments. New acquisitions go through Expense Management.',
     helpHow_admin_depreciation:
-      '① Use Asset List: filter by store, status, and search.\n② Click edit (✎) to change useful life or account mapping.\n③ Run monthly depreciation on the Depreciation tab.\n④ Dispose assets on the Disposal tab. Exception direct register is HQ/Accounting only.',
+      '① Use Asset List: filter by store, status, and search.\n② Click edit (✎) to change useful life or account mapping. HQ/Accounting can delete (trash) duplicate/mistaken rows; if depreciation exists, use Dispose instead.\n③ Run monthly depreciation on the Depreciation tab.\n④ Dispose assets on the Disposal tab. Exception direct register is HQ/Accounting only.',
     bankManualScreenFixedExpenses: 'Fixed expenses: Manage monthly fixed expense items',
     bankManualScreenExplanation: 'Guide: This manual and memo keyword rules',
     bankManualS1Title: '1. Input Tab – CSV Upload',
@@ -13348,6 +13352,10 @@ Only matters the employee must handle personally on a working day:
       'Delete this duplicate or mistaken register? Assets with depreciation cannot be deleted (use Dispose). Bank payments are not reversed.',
     dep_deleteFailed: 'Failed to delete asset.',
     dep_deleteDenied: 'Only HQ/Accounting can delete assets.',
+    fixedAssetDeletedSuccess: 'Asset deleted.',
+    fixedAssetDeleteHasDepreciation: 'Assets with depreciation cannot be deleted. Use Dispose instead.',
+    fixedAssetDeleteDisposed: 'Disposed assets cannot be deleted. Restore first or keep as disposed.',
+    fixedAssetDeleteDenied: 'Only HQ/Accounting can delete assets.',
     dep_runResultPosted: 'Depreciation posted: {count} journal(s).',
     dep_runResultPreview: 'Depreciation preview completed.',
     adminStoreCheck: 'Store Check',
@@ -20536,6 +20544,16 @@ orderItemQty: 'จำนวน',
     dep_restoreConfirmQuestion: ' — กู้คืนเป็นสินทรัพย์ที่ใช้งานหรือไม่?',
     dep_restore: 'กู้คืน',
     dep_restoreFailed: 'กู้คืนสินทรัพย์ไม่สำเร็จ',
+    dep_delete: 'ลบ',
+    dep_deleteConfirmTitle: 'ลบสินทรัพย์',
+    dep_deleteConfirmDesc:
+      'ลบรายการที่ลงทะเบียนซ้ำหรือผิดพลาด ถ้ามีค่าเสื่อมแล้วจะลบไม่ได้ (ใช้จำหน่าย) การโอนเงินที่ออกไปแล้วจะไม่ถูกยกเลิกอัตโนมัติ',
+    dep_deleteFailed: 'ลบสินทรัพย์ไม่สำเร็จ',
+    dep_deleteDenied: 'สำนักงานใหญ่/บัญชีเท่านั้นที่ลบสินทรัพย์ได้',
+    fixedAssetDeletedSuccess: 'ลบสินทรัพย์แล้ว',
+    fixedAssetDeleteHasDepreciation: 'มีค่าเสื่อมแล้ว ลบไม่ได้ ใช้จำหน่ายแทน',
+    fixedAssetDeleteDisposed: 'สินทรัพย์ที่จำหน่ายแล้วลบไม่ได้ กู้คืนก่อนหรือคงสถานะจำหน่าย',
+    fixedAssetDeleteDenied: 'สำนักงานใหญ่/บัญชีเท่านั้นที่ลบสินทรัพย์ได้',
     dep_runResultPosted: 'ลงบัญชีค่าเสื่อมแล้ว {count} รายการ',
     dep_runResultPreview: 'แสดงตัวอย่างค่าเสื่อมเสร็จแล้ว',
     adminStoreCheck: 'ตรวจสอบร้าน',

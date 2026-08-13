@@ -13,6 +13,11 @@ import { requireAuth } from '@/lib/verify-auth'
 import { INTERNAL_BANK_SOURCE_MARKER, bankCategoryForWithdrawalCategory } from '@/lib/bank-transaction-note-meta'
 import { allocateExpenseDocumentNo, resolveDocumentNoForAccrualId } from '@/lib/expense-document-no-server'
 import {
+  DEFAULT_FIXED_ASSET_ACCOUNT_CODES,
+  insertFixedAssetFromExpense,
+  resolveAccountSubjectByCodes,
+} from '@/lib/fixed-asset-from-expense'
+import {
   invoiceReceivedFromDocumentType,
   parseExpenseDocumentTypeInput,
 } from '@/lib/expense-document-type'
@@ -115,7 +120,7 @@ export async function POST(request: NextRequest) {
     }
 
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
-    const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
+    let accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
     const documentTypeParsed = parseExpenseDocumentTypeInput(
       (body as { documentType?: unknown; document_type?: unknown }).documentType ??
@@ -155,8 +160,8 @@ export async function POST(request: NextRequest) {
       const urls = attachmentUrlsRaw.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 3)
       if (urls.length > 0) attachmentUrlsJson = JSON.stringify(urls)
     }
-    const accountSubjectCode = String(body.accountSubjectCode || '').trim()
-    const accountSubjectName = String(body.accountSubjectName || '').trim()
+    let accountSubjectCode = String(body.accountSubjectCode || '').trim()
+    let accountSubjectName = String(body.accountSubjectName || '').trim()
     const transferToAccountId = body.transferToAccountId ?? body.transfer_to_account_id
     const transferToAccountNo = String(body.transferToAccountNo || body.transfer_to_account_no || '').trim()
     const transferBankAccountNo = String(body.transferBankAccountNo || body.transfer_bank_account_no || '').trim()
@@ -217,6 +222,17 @@ export async function POST(request: NextRequest) {
     }
     if (category === 'fixed_asset' && !assetName && !memo) {
       return NextResponse.json({ success: false, message: '자산명 또는 적요를 입력해 주세요.' }, { status: 400, headers })
+    }
+    if (category === 'fixed_asset' && (accountSubjectId == null || isNaN(Number(accountSubjectId))) && !accountSubjectCode) {
+      const resolvedAsset = await resolveAccountSubjectByCodes(DEFAULT_FIXED_ASSET_ACCOUNT_CODES)
+      if (resolvedAsset) {
+        accountSubjectId = resolvedAsset.id
+        accountSubjectCode = resolvedAsset.code
+        accountSubjectName = resolvedAsset.name
+      } else {
+        accountSubjectCode = accountSubjectCode || '1490'
+        accountSubjectName = accountSubjectName || '기타유형자산'
+      }
     }
 
     if (accountSubjectId != null && !isNaN(Number(accountSubjectId))) {
@@ -405,38 +421,32 @@ export async function POST(request: NextRequest) {
       }
 
       if (category === 'fixed_asset') {
-        const faCode = assetCode || `FA-${Date.now()}`
-        const faInserted = (await supabaseInsert('fixed_assets', {
-          asset_code: faCode,
+        fixedAssetId = await insertFixedAssetFromExpense({
+          assetCode,
           name: assetName || memo || '고정자산',
-          store_name: store,
-          acquisition_date: transDate,
-          acquisition_cost: amount,
-          residual_rate: residualRate,
-          useful_life_months: usefulLifeMonths,
-          depreciation_method: 'straight_line',
-          status: 'active',
+          storeName: store,
+          acquisitionDate: transDate,
+          acquisitionCost: amount,
+          residualRate,
+          usefulLifeMonths,
           memo: memo || null,
-        })) as { id?: number }[]
-        fixedAssetId = Number(faInserted?.[0]?.id || 0) || null
+          assetAccountCode: accountSubjectCode || '1490',
+        })
       }
     }
 
     if (category === 'fixed_asset' && !fixedAssetId) {
-      const faCode = assetCode || `FA-${Date.now()}`
-      const faInserted = (await supabaseInsert('fixed_assets', {
-        asset_code: faCode,
+      fixedAssetId = await insertFixedAssetFromExpense({
+        assetCode,
         name: assetName || memo || '고정자산',
-        store_name: store,
-        acquisition_date: transDate,
-        acquisition_cost: amount,
-        residual_rate: residualRate,
-        useful_life_months: usefulLifeMonths,
-        depreciation_method: 'straight_line',
-        status: 'active',
+        storeName: store,
+        acquisitionDate: transDate,
+        acquisitionCost: amount,
+        residualRate,
+        usefulLifeMonths,
         memo: memo || null,
-      })) as { id?: number }[]
-      fixedAssetId = Number(faInserted?.[0]?.id || 0) || null
+        assetAccountCode: accountSubjectCode || '1490',
+      })
       if (fixedAssetId && bankTransactionId) {
         await supabaseUpdate('bank_transactions', bankTransactionId, { fixed_asset_id: fixedAssetId })
       }

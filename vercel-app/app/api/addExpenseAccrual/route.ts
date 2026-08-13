@@ -28,6 +28,11 @@ import {
   loadVendorBankByCode,
   syncVendorBankFromExpense,
 } from '@/lib/expense-vendor-bank-sync'
+import {
+  DEFAULT_FIXED_ASSET_ACCOUNT_CODES,
+  insertFixedAssetFromExpense,
+  resolveAccountSubjectByCodes,
+} from '@/lib/fixed-asset-from-expense'
 
 function callerSeesAllAccrualStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
@@ -139,7 +144,9 @@ export async function POST(request: NextRequest) {
     const dueDate = dueDateRaw ? dueDateRaw.slice(0, 10) : null
     const memo = String(body.memo || '').trim()
     const storeName = canonicalOfficeStore(String(body.storeName || body.store_name || '').trim())
-    const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
+    const accountSubjectIdRaw = body.accountSubjectId ?? body.account_subject_id
+    let accountSubjectId =
+      accountSubjectIdRaw != null && !isNaN(Number(accountSubjectIdRaw)) ? Number(accountSubjectIdRaw) : null
     const userRole = String(auth.role || '').trim()
     const callerStore = String(auth.store || '').trim()
     const allowedStores = (
@@ -198,6 +205,9 @@ export async function POST(request: NextRequest) {
       if (!hdr.ok) {
         return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
       }
+    } else if (withdrawalCategory === 'fixed_asset') {
+      const resolvedAsset = await resolveAccountSubjectByCodes(DEFAULT_FIXED_ASSET_ACCOUNT_CODES)
+      if (resolvedAsset) accountSubjectId = resolvedAsset.id
     }
 
     const attachmentRaw = (body as { attachmentUrls?: unknown; attachment_urls?: unknown }).attachmentUrls
@@ -289,9 +299,9 @@ export async function POST(request: NextRequest) {
     if (payeeAccountHolder) accrualRow.payee_account_holder = payeeAccountHolder
     if (payeeBankName) accrualRow.payee_bank_name = payeeBankName
     if (payeeBankAccountNo) accrualRow.payee_bank_account_no = payeeBankAccountNo
-    let subjectCode = '5520'
-    let subjectName = '기타경비'
-    if (accountSubjectId != null && !isNaN(Number(accountSubjectId))) {
+    let subjectCode = withdrawalCategory === 'fixed_asset' ? '1490' : '5520'
+    let subjectName = withdrawalCategory === 'fixed_asset' ? '기타유형자산' : '기타경비'
+    if (accountSubjectId != null && Number(accountSubjectId) > 0) {
       const asId = Number(accountSubjectId)
       accrualRow.account_subject_id = asId
       const subject = (await supabaseSelectFilter(
@@ -323,6 +333,26 @@ export async function POST(request: NextRequest) {
     const expenseAccrualId = Number(inserted?.[0]?.id || 0)
     if (!expenseAccrualId) {
       return NextResponse.json({ success: false, message: '지출 발생 등록에 실패했습니다.' }, { status: 500, headers })
+    }
+
+    if (withdrawalCategory === 'fixed_asset') {
+      const assetName = String(body.assetName || body.asset_name || memo || payeeName || '고정자산').trim()
+      const assetCode = String(body.assetCode || body.asset_code || '').trim()
+      const usefulLifeMonths = Math.max(1, Math.min(600, Number(body.usefulLifeMonths || body.useful_life_months) || 60))
+      try {
+        await insertFixedAssetFromExpense({
+          assetCode,
+          name: assetName,
+          storeName: storeName || 'All',
+          acquisitionDate: expenseDate,
+          acquisitionCost: amount,
+          usefulLifeMonths,
+          memo: memo || null,
+          assetAccountCode: subjectCode || '1490',
+        })
+      } catch (faErr) {
+        console.error('addExpenseAccrual fixed_assets:', faErr)
+      }
     }
 
     const prepaymentAccrual = isPrepaymentAccrualCategory(withdrawalCategory)
