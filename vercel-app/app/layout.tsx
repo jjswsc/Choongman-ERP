@@ -1,7 +1,7 @@
 import React from "react"
 import type { Metadata, Viewport } from "next"
 import localFont from "next/font/local"
-import { Geist_Mono, Inter, Noto_Sans_Thai, Orbitron } from "next/font/google"
+import { Geist_Mono, Inter, Noto_Sans_Thai } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 import { AppMessageProvider } from "@/components/app-message-provider"
@@ -36,10 +36,31 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   preload: false,
 })
-const orbitron = Orbitron({
-  subsets: ["latin"],
+const orbitron = localFont({
+  src: [
+    {
+      path: "../node_modules/@fontsource/orbitron/files/orbitron-latin-400-normal.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../node_modules/@fontsource/orbitron/files/orbitron-latin-500-normal.woff2",
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "../node_modules/@fontsource/orbitron/files/orbitron-latin-600-normal.woff2",
+      weight: "600",
+      style: "normal",
+    },
+    {
+      path: "../node_modules/@fontsource/orbitron/files/orbitron-latin-700-normal.woff2",
+      weight: "700",
+      style: "normal",
+    },
+  ],
   variable: "--font-orbitron",
-  weight: ["400", "500", "600", "700"],
+  display: "swap",
   preload: false,
 })
 
