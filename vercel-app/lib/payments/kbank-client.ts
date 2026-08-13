@@ -287,7 +287,7 @@ async function requestKbankAccessTokenFromBank(
       }
       const message = `${detail}${buildProxyHint(ctx, tokenUrl, res.status)}`
       logKbankTokenMetric({
-        event: res.status === 429 || isKbankRateLimitError(message) ? 'token_endpoint_error' : 'token_endpoint_error',
+        event: 'token_endpoint_error',
         cacheKey: key,
         reason,
         httpStatus: res.status,
@@ -334,6 +334,29 @@ async function requestKbankAccessTokenFromBank(
       api: 'oauth_token',
     })
     return { token, expiresAtMs: safeExpiresAtMs }
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err)
+    const lower = raw.toLowerCase()
+    if (
+      lower === 'fetch failed' ||
+      lower.includes('connect timeout') ||
+      lower.includes('und_err_connect') ||
+      lower.includes('econnrefused') ||
+      lower.includes('enotfound') ||
+      lower.includes('network')
+    ) {
+      logKbankTokenMetric({
+        event: 'token_endpoint_error',
+        cacheKey: key,
+        reason: 'proxy_unreachable',
+        detail: raw.slice(0, 180),
+        api: 'oauth_token',
+      })
+      throw new Error(
+        `KBank proxy unreachable (${tokenUrl}). Check Lightsail/nginx kbank-proxy. Detail: ${raw.slice(0, 120)}`
+      )
+    }
+    throw err instanceof Error ? err : new Error(raw)
   } finally {
     clear()
   }
