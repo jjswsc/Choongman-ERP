@@ -283,6 +283,13 @@ import {
   type KbankDisplayQrTypeSource,
 } from '@/lib/payments/kbank-api-reference'
 import {
+  claimKbankInquiryLoop,
+  createKbankInquiryTabId,
+  isKbankQrSessionExpired,
+  msUntilKbankQrSessionExpiry,
+  releaseKbankInquiryLoop,
+} from '@/lib/payments/kbank-inquiry-session'
+import {
   subscribePosOrdersInsert,
   subscribePosOrdersUpdate,
   type PosRealtimeSubscribeStatus,
@@ -929,12 +936,17 @@ export default function PosTerminalPage() {
   const [kbankOpsCardBrands, setKbankOpsCardBrands] = useState<string[]>([])
   const [kbankCallbackState, setKbankCallbackState] = useState<'idle' | 'waiting' | 'received' | 'failed'>('idle')
   const [kbankOutcomeState, setKbankOutcomeState] = useState<KbankOutcomeState | null>(null)
+  const [kbankQrSessionStartedAtMs, setKbankQrSessionStartedAtMs] = useState(0)
+  const kbankQrSessionStartedAtRef = useRef(0)
   const kbankCallbackNotifiedTxRef = useRef('')
   const kbankOutcomeLastKeyRef = useRef('')
   const kbankManualCancelPendingRef = useRef(false)
   const kbankGenerateLastAtRef = useRef(0)
   /** Prevents concurrent double Generate while the first fetch is in flight */
   const kbankGenerateInFlightRef = useRef(false)
+  /** Bumped on each new Generate / clear so stale +10s inquiry closures abort */
+  const kbankQrSessionGenRef = useRef(0)
+  const kbankInquiryTabIdRef = useRef(createKbankInquiryTabId())
   const kbankInquiryLastAtRef = useRef(0)
   const kbankFollowupLastAtRef = useRef(0)
   const kbankCcInquiryTriggeredRef = useRef('')
@@ -6348,6 +6360,9 @@ export default function PosTerminalPage() {
       // QR 대기 결제: 승인되면 등록된 후처리(주문 paid 마감·영수증). 콜백이 먼저 오면 deferred 후 등록 시 실행.
       if (!alreadyNotified) {
         clearKbankQrFromLinkpos()
+        if (currentStoreId) {
+          releaseKbankInquiryLoop(currentStoreId, kbankInquiryTabIdRef.current, refId)
+        }
         if (!tryRunKbankPendingFinalize(refId, approval)) {
           deferredKbankApprovalRef.current[refId] = approval
         }
@@ -6379,6 +6394,7 @@ export default function PosTerminalPage() {
       kbankOpsCardBrands,
       liveKbankQrAmount,
       liveKbankQrType,
+      currentStoreId,
       openKbankOutcomeModal,
       lang,
       tryRunKbankPendingFinalize,
@@ -6425,8 +6441,14 @@ export default function PosTerminalPage() {
 
   /** KBank QR 직원 모니터 세션 정리 (QR 이미지·후속 처리 ID·상태 초기화) */
   const clearKbankQrSession = useCallback(() => {
-    purgeKbankPendingFinalize(kbankOpsTxnUidRef.current)
+    const prevTxn = kbankOpsTxnUidRef.current
+    purgeKbankPendingFinalize(prevTxn)
     clearKbankQrFromLinkpos()
+    if (currentStoreId) {
+      releaseKbankInquiryLoop(currentStoreId, kbankInquiryTabIdRef.current, prevTxn || undefined)
+    }
+    kbankQrSessionGenRef.current += 1
+    kbankQrSessionStartedAtRef.current = 0
     setLiveKbankQrPayload('')
     setLiveKbankQrType('THAI_QR')
     setKbankOpsTxnUid('')
@@ -6434,9 +6456,10 @@ export default function PosTerminalPage() {
     setKbankOpsTxnNo('')
     setCustomerDisplayPaymentMessage('')
     setKbankCallbackState('idle')
+    setKbankQrSessionStartedAtMs(0)
     kbankManualCancelPendingRef.current = false
     kbankCcInquiryTriggeredRef.current = ''
-  }, [purgeKbankPendingFinalize, clearKbankQrFromLinkpos])
+  }, [purgeKbankPendingFinalize, clearKbankQrFromLinkpos, currentStoreId])
 
   const runKbankQrPaymentIfNeeded = useCallback(
     async (
@@ -6574,6 +6597,9 @@ export default function PosTerminalPage() {
 
       kbankGenerateInFlightRef.current = true
       try {
+      // Stop previous QR session timers/inquiry before starting a new Generate.
+      clearKbankQrSession()
+      const sessionGen = ++kbankQrSessionGenRef.current
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
 
       const terminalId = String(kbankOpsTerminalId || '').trim()
@@ -6651,6 +6677,12 @@ export default function PosTerminalPage() {
         setKbankOpsTxnNo('')
       }
       setKbankCallbackState('waiting')
+      const sessionStartedAt = Date.now()
+      kbankQrSessionStartedAtRef.current = sessionStartedAt
+      setKbankQrSessionStartedAtMs(sessionStartedAt)
+      if (currentStoreId) {
+        claimKbankInquiryLoop(currentStoreId, partnerTransactionId, kbankInquiryTabIdRef.current)
+      }
       const generatedQrPayload = String(generatedInfo.qrPayload || '').trim()
       const generatedCardBrands = resolveKbankCreditCardBrandLabels({
         sof: generatedInfo.sof,
@@ -6753,8 +6785,12 @@ export default function PosTerminalPage() {
       // and can trigger rate-limit pause before staff tap Inquiry.
       if (requestedQrType !== 'CREDIT_CARD') {
         await sleepMs(10_000)
-        if (kbankManualCancelPendingRef.current) {
+        if (sessionGen !== kbankQrSessionGenRef.current || kbankManualCancelPendingRef.current) {
           return { ok: false as const, message: 'kbank_qr_cancelled' }
+        }
+        if (isKbankQrSessionExpired(kbankQrSessionStartedAtRef.current)) {
+          setKbankCallbackState('failed')
+          return { ok: false as const, message: 'kbank_qr_expired' }
         }
         if (!isKbankApiPaused()) {
           kbankInquiryLastAtRef.current = Date.now()
@@ -6769,6 +6805,9 @@ export default function PosTerminalPage() {
               qrType: requestedQrType,
             },
           })
+          if (sessionGen !== kbankQrSessionGenRef.current || kbankManualCancelPendingRef.current) {
+            return { ok: false as const, message: 'kbank_qr_cancelled' }
+          }
           const stData = (st.data || {}) as Record<string, unknown>
           const stTxnNo = extractKbankPaymentTxnNo(stData).slice(0, 20)
           if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
@@ -7272,10 +7311,27 @@ export default function PosTerminalPage() {
     const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
     const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
     if (!partnerTxnUid || kbankCallbackState !== 'waiting') return
+    if (isKbankQrSessionExpired(kbankQrSessionStartedAtRef.current)) {
+      setKbankCallbackState('failed')
+      setCustomerDisplayPaymentMessage('')
+      releaseKbankInquiryLoop(currentStoreId, kbankInquiryTabIdRef.current, partnerTxnUid)
+      return
+    }
+    if (!claimKbankInquiryLoop(currentStoreId, partnerTxnUid, kbankInquiryTabIdRef.current)) {
+      return
+    }
 
     let cancelled = false
     const pollApprovedViaInquiry = async () => {
       if (cancelled || kbankCallbackNotifiedTxRef.current === partnerTxnUid) return
+      if (kbankCallbackState !== 'waiting') return
+      if (isKbankQrSessionExpired(kbankQrSessionStartedAtRef.current)) {
+        setKbankCallbackState('failed')
+        setCustomerDisplayPaymentMessage('')
+        releaseKbankInquiryLoop(currentStoreId, kbankInquiryTabIdRef.current, partnerTxnUid)
+        return
+      }
+      if (!claimKbankInquiryLoop(currentStoreId, partnerTxnUid, kbankInquiryTabIdRef.current)) return
       if (isKbankApiPaused()) return
       const inquiryCooldownMs = liveKbankQrType === 'CREDIT_CARD' ? 20_000 : 60_000
       if (Date.now() - kbankInquiryLastAtRef.current < inquiryCooldownMs) return
@@ -7341,6 +7397,43 @@ export default function PosTerminalPage() {
     isKbankApiPaused,
     noteKbankRateLimitResponse,
     liveKbankQrType,
+    kbankQrSessionStartedAtMs,
+  ])
+
+  /** Hard-stop inquiry/callback waiting after QR session max (10 minutes). */
+  useEffect(() => {
+    if (!isKbankPilotStore || kbankCallbackState !== 'waiting') return
+    const remaining = msUntilKbankQrSessionExpiry(kbankQrSessionStartedAtRef.current)
+    if (remaining <= 0) {
+      setKbankCallbackState('failed')
+      setCustomerDisplayPaymentMessage('')
+      if (currentStoreId) {
+        releaseKbankInquiryLoop(
+          currentStoreId,
+          kbankInquiryTabIdRef.current,
+          String(kbankOpsTxnUid || '').trim() || undefined
+        )
+      }
+      return
+    }
+    const timerId = window.setTimeout(() => {
+      setKbankCallbackState('failed')
+      setCustomerDisplayPaymentMessage('')
+      if (currentStoreId) {
+        releaseKbankInquiryLoop(
+          currentStoreId,
+          kbankInquiryTabIdRef.current,
+          String(kbankOpsTxnUid || '').trim() || undefined
+        )
+      }
+    }, remaining)
+    return () => window.clearTimeout(timerId)
+  }, [
+    isKbankPilotStore,
+    kbankCallbackState,
+    kbankQrSessionStartedAtMs,
+    currentStoreId,
+    kbankOpsTxnUid,
   ])
 
   /** Credit Card QR: txnNo(숫자) 수신 즉시 Inquiry → 승인 팝업 (콜백 지연 대비). */

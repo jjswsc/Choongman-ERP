@@ -18,6 +18,8 @@ import {
   isKbankAccessTokenAuthError,
   isKbankAccessTokenExpiredError,
   isKbankBusinessSuccess,
+  isKbankRateLimitError,
+  KBANK_TOKEN_EXPIRY_SKEW_MS,
   maskKbankMessageForLog,
   readKbankResponseStatusCode,
   resolveKbankInquiryTxnNoForRequest,
@@ -26,6 +28,18 @@ import {
 } from '@/lib/payments/kbank-api-reference'
 import type { KbankRuntimeEnv } from '@/lib/payments/kbank-runtime-env'
 import { kbankRuntimeField, mustKbankRuntimeField } from '@/lib/payments/kbank-runtime-env'
+import {
+  clearSharedKbankAccessToken,
+  readSharedKbankAccessToken,
+  releaseKbankTokenLock,
+  tryAcquireKbankTokenLock,
+  waitForSharedKbankAccessToken,
+  writeSharedKbankAccessToken,
+} from '@/lib/payments/kbank-shared-token'
+import {
+  logKbankTokenMetric,
+  maskKbankPartnerTxnUid,
+} from '@/lib/payments/kbank-token-metrics'
 
 export type { KbankRuntimeEnv } from '@/lib/payments/kbank-runtime-env'
 
@@ -175,6 +189,7 @@ type CachedKbankToken = {
   expiresAtMs: number
 }
 
+/** L1 only — shared Supabase cache is the source of truth across instances. */
 const cachedKbankTokens = new Map<string, CachedKbankToken>()
 const inFlightKbankTokenPromises = new Map<string, Promise<KbankTokenResponse>>()
 
@@ -182,10 +197,27 @@ function tokenCacheKey(ctx: KbankCtx): string {
   return ctx.runtime?.cacheKey || 'env-default'
 }
 
+function setLocalKbankTokenCache(key: string, token: KbankTokenResponse, expiresAtMs: number): void {
+  cachedKbankTokens.set(key, { token, expiresAtMs })
+}
+
 export function clearKbankAccessTokenCache(cacheKey?: string): void {
   if (cacheKey) {
     cachedKbankTokens.delete(cacheKey)
     inFlightKbankTokenPromises.delete(cacheKey)
+    void clearSharedKbankAccessToken(cacheKey)
+    return
+  }
+  cachedKbankTokens.clear()
+  inFlightKbankTokenPromises.clear()
+}
+
+/** Await shared clear when forcing refresh after 401 (best-effort). */
+export async function clearKbankAccessTokenCacheAsync(cacheKey?: string): Promise<void> {
+  if (cacheKey) {
+    cachedKbankTokens.delete(cacheKey)
+    inFlightKbankTokenPromises.delete(cacheKey)
+    await clearSharedKbankAccessToken(cacheKey)
     return
   }
   cachedKbankTokens.clear()
@@ -199,88 +231,183 @@ function isUsableCachedToken(entry: CachedKbankToken | undefined, nowMs: number)
   return entry.expiresAtMs > nowMs
 }
 
+export type FetchKbankAccessTokenOpts = Pick<KbankClientOpts, 'runtime'> & {
+  /** Skip caches and request a new token (after 401). Uses distributed lock. */
+  forceRefresh?: boolean
+  /** Metric reason — never include secrets. */
+  reason?: string
+}
+
+async function requestKbankAccessTokenFromBank(
+  ctx: KbankCtx,
+  timeoutMs: number,
+  reason: string
+): Promise<{ token: KbankTokenResponse; expiresAtMs: number }> {
+  const consumerId = mustEnvCtx(ctx, 'KBANK_CONSUMER_ID')
+  const consumerSecret = mustEnvCtx(ctx, 'KBANK_CONSUMER_SECRET')
+  const tokenUrl = buildTokenUrl(ctx, '/v2/oauth/token')
+  const scope = kbankRuntimeField(ctx.runtime, 'KBANK_TOKEN_SCOPE')
+  const key = tokenCacheKey(ctx)
+
+  const form = new URLSearchParams()
+  form.set('grant_type', 'client_credentials')
+  if (scope) form.set('scope', scope)
+
+  const basic = Buffer.from(`${consumerId}:${consumerSecret}`).toString('base64')
+  logKbankTokenMetric({
+    event: 'token_endpoint_request',
+    cacheKey: key,
+    reason,
+    api: 'oauth_token',
+  })
+  const { signal, clear } = timeoutSignal(timeoutMs)
+  try {
+    const res = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: withProxySecret(
+        ctx,
+        {
+          Authorization: `Basic ${basic}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        tokenUrl
+      ),
+      body: form.toString(),
+      cache: 'no-store',
+      signal,
+    })
+    const text = await res.text()
+    if (!res.ok) {
+      let detail = text.slice(0, 300)
+      try {
+        const errJson = text ? (JSON.parse(text) as Record<string, unknown>) : {}
+        detail = extractKbankErrorMessage(errJson, detail, res.status)
+      } catch {
+        /* keep raw */
+      }
+      const message = `${detail}${buildProxyHint(ctx, tokenUrl, res.status)}`
+      logKbankTokenMetric({
+        event: res.status === 429 || isKbankRateLimitError(message) ? 'token_endpoint_error' : 'token_endpoint_error',
+        cacheKey: key,
+        reason,
+        httpStatus: res.status,
+        detail: message.slice(0, 180),
+      })
+      if (res.status === 429 || isKbankRateLimitError(message)) {
+        logKbankTokenMetric({
+          event: 'kbank_api_429_no_retry',
+          cacheKey: key,
+          reason: 'token_endpoint',
+          httpStatus: 429,
+          api: 'oauth_token',
+        })
+      }
+      throw new Error(message)
+    }
+    let json: Record<string, unknown>
+    try {
+      json = JSON.parse(text) as Record<string, unknown>
+    } catch {
+      throw new Error('KBank token response is not valid JSON.')
+    }
+    const accessToken = String(json.access_token || '').trim()
+    if (!accessToken) {
+      throw new Error(`KBank token response missing access_token: ${text.slice(0, 300)}`)
+    }
+    const tokenStatus = String(json.status || '').trim().toLowerCase()
+    if (tokenStatus && tokenStatus !== 'approved') {
+      throw new Error(`KBank token status not approved (status=${tokenStatus}): ${text.slice(0, 300)}`)
+    }
+    const expiresInSec = Number(json.expires_in || 0) || 0
+    const token: KbankTokenResponse = {
+      access_token: accessToken,
+      token_type: String(json.token_type || '').trim() || undefined,
+      expires_in: expiresInSec || undefined,
+      scope: String(json.scope || '').trim() || undefined,
+    }
+    const ttlMs = Math.max(60_000, (expiresInSec > 0 ? expiresInSec : 300) * 1000)
+    const safeExpiresAtMs = Date.now() + ttlMs - KBANK_TOKEN_EXPIRY_SKEW_MS
+    logKbankTokenMetric({
+      event: 'token_endpoint_ok',
+      cacheKey: key,
+      reason,
+      api: 'oauth_token',
+    })
+    return { token, expiresAtMs: safeExpiresAtMs }
+  } finally {
+    clear()
+  }
+}
+
 export async function fetchKbankAccessToken(
   timeoutMs = 12000,
-  opts?: Pick<KbankClientOpts, 'runtime'>
+  opts?: FetchKbankAccessTokenOpts
 ): Promise<KbankTokenResponse> {
   const ctx: KbankCtx = { runtime: opts?.runtime }
   const key = tokenCacheKey(ctx)
+  const reason = String(opts?.reason || (opts?.forceRefresh ? 'force_refresh' : 'reuse')).trim()
   const nowMs = Date.now()
-  const cached = cachedKbankTokens.get(key)
-  if (isUsableCachedToken(cached, nowMs)) {
-    return cached!.token
+
+  if (!opts?.forceRefresh) {
+    const local = cachedKbankTokens.get(key)
+    if (isUsableCachedToken(local, nowMs)) {
+      logKbankTokenMetric({ event: 'token_cache_hit', cacheKey: key, reason: 'l1_memory' })
+      return local!.token
+    }
+    const shared = await readSharedKbankAccessToken(key)
+    if (shared) {
+      setLocalKbankTokenCache(key, shared.token, shared.expiresAtMs)
+      return shared.token
+    }
+  } else {
+    await clearKbankAccessTokenCacheAsync(key)
   }
+
   const inflight = inFlightKbankTokenPromises.get(key)
   if (inflight) return inflight
 
   const promise = (async () => {
-    const consumerId = mustEnvCtx(ctx, 'KBANK_CONSUMER_ID')
-    const consumerSecret = mustEnvCtx(ctx, 'KBANK_CONSUMER_SECRET')
-    const tokenUrl = buildTokenUrl(ctx, '/v2/oauth/token')
-    const scope = kbankRuntimeField(ctx.runtime, 'KBANK_TOKEN_SCOPE')
-
-    const form = new URLSearchParams()
-    form.set('grant_type', 'client_credentials')
-    if (scope) form.set('scope', scope)
-
-    const basic = Buffer.from(`${consumerId}:${consumerSecret}`).toString('base64')
-    const { signal, clear } = timeoutSignal(timeoutMs)
-    try {
-      const res = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: withProxySecret(
-          ctx,
-          {
-            Authorization: `Basic ${basic}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          tokenUrl
-        ),
-        body: form.toString(),
-        cache: 'no-store',
-        signal,
-      })
-      const text = await res.text()
-      if (!res.ok) {
-        let detail = text.slice(0, 300)
-        try {
-          const errJson = text ? (JSON.parse(text) as Record<string, unknown>) : {}
-          detail = extractKbankErrorMessage(errJson, detail, res.status)
-        } catch {
-          /* keep raw */
-        }
-        throw new Error(`${detail}${buildProxyHint(ctx, tokenUrl, res.status)}`)
+    const lockHolder = await tryAcquireKbankTokenLock(key, 20)
+    if (!lockHolder) {
+      const waited = await waitForSharedKbankAccessToken(key, Math.min(timeoutMs, 12_000))
+      if (waited) {
+        setLocalKbankTokenCache(key, waited.token, waited.expiresAtMs)
+        return waited.token
       }
-      let json: Record<string, unknown>
+      // Last resort: another instance may have failed — try lock once more then fetch.
+      const retryHolder = await tryAcquireKbankTokenLock(key, 20)
+      if (!retryHolder) {
+        throw new Error('KBank token refresh lock busy. Retry shortly.')
+      }
       try {
-        json = JSON.parse(text) as Record<string, unknown>
-      } catch {
-        throw new Error('KBank token response is not valid JSON.')
+        const sharedAgain = await readSharedKbankAccessToken(key)
+        if (sharedAgain && !opts?.forceRefresh) {
+          setLocalKbankTokenCache(key, sharedAgain.token, sharedAgain.expiresAtMs)
+          return sharedAgain.token
+        }
+        const fetched = await requestKbankAccessTokenFromBank(ctx, timeoutMs, reason || 'lock_retry')
+        setLocalKbankTokenCache(key, fetched.token, fetched.expiresAtMs)
+        await writeSharedKbankAccessToken(key, fetched.token, fetched.expiresAtMs)
+        return fetched.token
+      } finally {
+        await releaseKbankTokenLock(key, retryHolder)
       }
-      const accessToken = String(json.access_token || '').trim()
-      if (!accessToken) {
-        throw new Error(`KBank token response missing access_token: ${text.slice(0, 300)}`)
+    }
+
+    try {
+      if (!opts?.forceRefresh) {
+        const sharedAfterLock = await readSharedKbankAccessToken(key)
+        if (sharedAfterLock) {
+          setLocalKbankTokenCache(key, sharedAfterLock.token, sharedAfterLock.expiresAtMs)
+          return sharedAfterLock.token
+        }
       }
-      const tokenStatus = String(json.status || '').trim().toLowerCase()
-      if (tokenStatus && tokenStatus !== 'approved') {
-        throw new Error(`KBank token status not approved (status=${tokenStatus}): ${text.slice(0, 300)}`)
-      }
-      const expiresInSec = Number(json.expires_in || 0) || 0
-      const token: KbankTokenResponse = {
-        access_token: accessToken,
-        token_type: String(json.token_type || '').trim() || undefined,
-        expires_in: expiresInSec || undefined,
-        scope: String(json.scope || '').trim() || undefined,
-      }
-      const ttlMs = Math.max(60_000, (expiresInSec > 0 ? expiresInSec : 300) * 1000)
-      const safeExpiresAtMs = Date.now() + ttlMs - 30_000
-      cachedKbankTokens.set(key, {
-        token,
-        expiresAtMs: safeExpiresAtMs,
-      })
-      return token
+      const fetched = await requestKbankAccessTokenFromBank(ctx, timeoutMs, reason || 'miss')
+      setLocalKbankTokenCache(key, fetched.token, fetched.expiresAtMs)
+      await writeSharedKbankAccessToken(key, fetched.token, fetched.expiresAtMs)
+      return fetched.token
     } finally {
-      clear()
+      await releaseKbankTokenLock(key, lockHolder)
     }
   })()
 
@@ -331,7 +458,10 @@ export async function generateKbankQr(
 ): Promise<KbankGenerateQrResult> {
   const ctx: KbankCtx = { runtime: opts?.runtime }
   const timeoutMs = opts?.timeoutMs ?? 12000
-  const token = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
+  const token = await fetchKbankAccessToken(timeoutMs, {
+    runtime: ctx.runtime,
+    reason: 'generate_qr',
+  })
   const qrUrl = buildUrl(ctx, 'KBANK_QR_GENERATE_PATH', '/v1/qrpayment/request')
   const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
   const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
@@ -368,9 +498,30 @@ export async function generateKbankQr(
       throw new Error(`KBank QR response is not valid JSON. status=${res.status}`)
     }
 
-    if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
-      clearKbankAccessTokenCache(tokenCacheKey(ctx))
-      activeToken = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
+    if (res.status === 429 || isKbankRateLimitError(extractKbankErrorMessage(json, '', res.status))) {
+      logKbankTokenMetric({
+        event: 'kbank_api_429_no_retry',
+        cacheKey: tokenCacheKey(ctx),
+        reason: 'generate_qr',
+        httpStatus: res.status,
+        api: 'generate_qr',
+        partnerTxnUidMasked: maskKbankPartnerTxnUid(req.partnerTransactionId),
+      })
+    } else if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
+      logKbankTokenMetric({
+        event: 'kbank_api_401_refresh',
+        cacheKey: tokenCacheKey(ctx),
+        reason: 'generate_qr',
+        httpStatus: 401,
+        api: 'generate_qr',
+        partnerTxnUidMasked: maskKbankPartnerTxnUid(req.partnerTransactionId),
+      })
+      await clearKbankAccessTokenCacheAsync(tokenCacheKey(ctx))
+      activeToken = await fetchKbankAccessToken(timeoutMs, {
+        runtime: ctx.runtime,
+        forceRefresh: true,
+        reason: 'http_401_generate_qr',
+      })
       res = await fetch(qrUrl, {
         method: 'POST',
         headers: withProxySecret(
@@ -472,7 +623,10 @@ export async function checkKbankQrStatus(
 ): Promise<KbankCheckStatusResult> {
   const ctx: KbankCtx = { runtime: opts?.runtime }
   const timeoutMs = opts?.timeoutMs ?? 12000
-  const token = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
+  const token = await fetchKbankAccessToken(timeoutMs, {
+    runtime: ctx.runtime,
+    reason: 'inquiry',
+  })
   const statusUrl = buildUrl(ctx, 'KBANK_QR_STATUS_PATH', '/v1/qrpayment/v5/inquiry')
   const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
   const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
@@ -488,14 +642,25 @@ export async function checkKbankQrStatus(
     : ''
   const body = buildCheckStatusPayload(ctx, req, requestId, inferredOrigTxnUid)
 
+  logKbankTokenMetric({
+    event: 'inquiry_request',
+    cacheKey: tokenCacheKey(ctx),
+    reason: 'check_status',
+    api: 'inquiry',
+    partnerTxnUidMasked: maskKbankPartnerTxnUid(
+      inferredOrigTxnUid || req.partnerTransactionId || req.originalTransactionId
+    ),
+  })
+
   const { signal, clear } = timeoutSignal(timeoutMs)
   try {
-    const res = await fetch(statusUrl, {
+    let activeToken = token
+    let res = await fetch(statusUrl, {
       method: 'POST',
       headers: withProxySecret(
         ctx,
         {
-          Authorization: `Bearer ${token.access_token}`,
+          Authorization: `Bearer ${activeToken.access_token}`,
           'Content-Type': 'application/json',
           'X-Partner-Id': partnerId,
           'X-Partner-Secret': partnerSecret,
@@ -507,12 +672,56 @@ export async function checkKbankQrStatus(
       cache: 'no-store',
       signal,
     })
-    const text = await res.text()
+    let text = await res.text()
     let json: Record<string, unknown>
     try {
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     } catch {
       throw new Error(`KBank inquiry response is not valid JSON. status=${res.status}`)
+    }
+
+    if (res.status === 429 || isKbankRateLimitError(extractKbankErrorMessage(json, '', res.status))) {
+      logKbankTokenMetric({
+        event: 'kbank_api_429_no_retry',
+        cacheKey: tokenCacheKey(ctx),
+        reason: 'inquiry',
+        httpStatus: res.status,
+        api: 'inquiry',
+        partnerTxnUidMasked: maskKbankPartnerTxnUid(inferredOrigTxnUid || req.partnerTransactionId),
+      })
+    } else if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
+      logKbankTokenMetric({
+        event: 'kbank_api_401_refresh',
+        cacheKey: tokenCacheKey(ctx),
+        reason: 'inquiry',
+        httpStatus: 401,
+        api: 'inquiry',
+      })
+      await clearKbankAccessTokenCacheAsync(tokenCacheKey(ctx))
+      activeToken = await fetchKbankAccessToken(timeoutMs, {
+        runtime: ctx.runtime,
+        forceRefresh: true,
+        reason: 'http_401_inquiry',
+      })
+      res = await fetch(statusUrl, {
+        method: 'POST',
+        headers: withProxySecret(
+          ctx,
+          {
+            Authorization: `Bearer ${activeToken.access_token}`,
+            'Content-Type': 'application/json',
+            'X-Partner-Id': partnerId,
+            'X-Partner-Secret': partnerSecret,
+            'X-Merchant-Id': merchantId,
+          },
+          statusUrl
+        ),
+        body: JSON.stringify(body),
+        cache: 'no-store',
+        signal,
+      })
+      text = await res.text()
+      json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     }
 
     const statusCode = readKbankResponseStatusCode(json, res.status)
@@ -644,7 +853,10 @@ async function callKbankActionApi(
   statusMessage?: string
   response: Record<string, unknown>
 }> {
-  const token = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
+  const token = await fetchKbankAccessToken(timeoutMs, {
+    runtime: ctx.runtime,
+    reason: `action_${fallbackRequestPrefix}`,
+  })
   const url = buildUrl(ctx, pathEnvName, defaultPath)
   const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
   const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
@@ -684,9 +896,28 @@ async function callKbankActionApi(
       throw new Error(`KBank API response is not valid JSON. status=${res.status}`)
     }
 
-    if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
-      clearKbankAccessTokenCache(tokenCacheKey(ctx))
-      activeToken = await fetchKbankAccessToken(timeoutMs, { runtime: ctx.runtime })
+    if (res.status === 429 || isKbankRateLimitError(extractKbankErrorMessage(json, '', res.status))) {
+      logKbankTokenMetric({
+        event: 'kbank_api_429_no_retry',
+        cacheKey: tokenCacheKey(ctx),
+        reason: pathEnvName,
+        httpStatus: res.status,
+        api: 'action',
+      })
+    } else if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
+      logKbankTokenMetric({
+        event: 'kbank_api_401_refresh',
+        cacheKey: tokenCacheKey(ctx),
+        reason: pathEnvName,
+        httpStatus: 401,
+        api: 'action',
+      })
+      await clearKbankAccessTokenCacheAsync(tokenCacheKey(ctx))
+      activeToken = await fetchKbankAccessToken(timeoutMs, {
+        runtime: ctx.runtime,
+        forceRefresh: true,
+        reason: `http_401_${fallbackRequestPrefix}`,
+      })
       res = await fetch(url, {
         method: 'POST',
         headers: withProxySecret(

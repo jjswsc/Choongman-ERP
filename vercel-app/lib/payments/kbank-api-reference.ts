@@ -170,6 +170,12 @@ export const KBANK_RATE_LIMIT_BACKOFF_MS = 300_000
  */
 export const KBANK_GENERATE_MIN_INTERVAL_MS = 2_000
 
+/** Refresh access token this many ms before bank expires_in elapses. */
+export const KBANK_TOKEN_EXPIRY_SKEW_MS = 30_000
+
+/** Stop QR inquiry/callback polls after this age even if still waiting. */
+export const KBANK_QR_SESSION_MAX_MS = 10 * 60 * 1000
+
 /** sessionStorage key — survives modal remount within the same tab */
 export const KBANK_API_PAUSE_STORAGE_KEY = 'cm_kbank_api_paused_until_ms'
 
