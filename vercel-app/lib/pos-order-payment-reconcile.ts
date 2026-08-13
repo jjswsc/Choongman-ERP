@@ -26,6 +26,9 @@ export function shouldPreserveExistingPosOrderPayment(params: {
   currentPaymentSum: number
   incomingPaymentSum: number
 }): boolean {
+  if (params.body?.clearPaymentTender === true || params.body?.clear_payment_tender === true) {
+    return false
+  }
   if (params.currentPaymentSum <= EPS) return false
   if (params.incomingPaymentSum > EPS) return false
   const closeRaw = String(params.body?.closeStatus ?? params.body?.close_status ?? '').trim().toLowerCase()

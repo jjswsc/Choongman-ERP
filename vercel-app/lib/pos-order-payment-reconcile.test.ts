@@ -28,6 +28,13 @@ describe('pos-order-payment-reconcile', () => {
         incomingPaymentSum: 100,
       })
     ).toBe(false)
+    expect(
+      shouldPreserveExistingPosOrderPayment({
+        body: { clearPaymentTender: true, paymentCash: 0, paymentQr: 0 },
+        currentPaymentSum: 500,
+        incomingPaymentSum: 0,
+      })
+    ).toBe(false)
   })
 
   it('reads preserved payment amounts from current row', () => {
