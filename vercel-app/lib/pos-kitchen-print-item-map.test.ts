@@ -44,6 +44,23 @@ describe('mapPosOrderRowForKitchenPrint', () => {
     expect(row.menuId1).toBe('6')
     expect(row.menuId2).toBe('12')
   })
+
+  it('preserves QR buffet package skip flags and does not attach promo', () => {
+    const row = mapPosOrderRowForKitchenPrint({
+      id: 'buffet-entry-12',
+      name: '[Buffet] Buffet 499 × 2',
+      price: 499,
+      qty: 2,
+      isBuffetEntry: true,
+      kitchenPrinter: 0,
+      promoId: '99',
+      promoItems: [{ menuId: '1', optionId: null, quantity: 1 }],
+    })
+    expect(row.isBuffetEntry).toBe(true)
+    expect(row.kitchenPrinter).toBe(0)
+    expect(row.promoItems).toBeUndefined()
+    expect(row.promoId).toBeUndefined()
+  })
 })
 
 describe('mapDineInAddonCartLineForKitchenPrint', () => {

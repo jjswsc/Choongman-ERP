@@ -102,6 +102,9 @@ export async function POST(req: NextRequest) {
         includedMenuIds: Array.isArray(body.includedMenuIds)
           ? (body.includedMenuIds as unknown[]).map((x) => Number(x))
           : undefined,
+        extraMenuIds: Array.isArray(body.extraMenuIds)
+          ? (body.extraMenuIds as unknown[]).map((x) => Number(x))
+          : undefined,
       })
       return applyPosApiCors(NextResponse.json({ success: true, tier }, { headers }))
     }

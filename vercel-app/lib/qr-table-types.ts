@@ -35,6 +35,8 @@ export type QrBuffetTier = {
   validFrom?: string | null
   validTo?: string | null
   includedMenuIds?: number[]
+  /** Extra 탭 허용 메뉴. 비어 있으면 포함 메뉴를 뺀 전체 */
+  extraMenuIds?: number[]
 }
 
 export type QrTableToken = {

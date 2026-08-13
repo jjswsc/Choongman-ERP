@@ -52,6 +52,9 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     invalidToken: 'QR ไม่ถูกต้องหรือหมดอายุ',
     alaCarteOnly: 'สั่งเมนูทั่วไป (ไม่ใช่บุฟเฟต์)',
     menuTab: 'เมนู',
+    orderHistory: 'ออเดอร์ที่สั่งแล้ว',
+    orderHistoryEmpty: 'ยังไม่มีรายการที่ส่งครัว',
+    close: 'ปิด',
   },
   en: {
     loading: 'Loading…',
@@ -102,6 +105,9 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     invalidToken: 'Invalid or expired QR',
     alaCarteOnly: 'Order menu only (no package)',
     menuTab: 'Menu',
+    orderHistory: 'Ordered',
+    orderHistoryEmpty: 'Nothing sent to kitchen yet',
+    close: 'Close',
   },
   ko: {
     loading: '불러오는 중…',
@@ -152,6 +158,9 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     invalidToken: 'QR이 올바르지 않거나 만료되었습니다',
     alaCarteOnly: '메뉴만 주문 (패키지 없음)',
     menuTab: '메뉴',
+    orderHistory: '주문 내역',
+    orderHistoryEmpty: '주방으로 보낸 내역이 없습니다',
+    close: '닫기',
   },
 }
 

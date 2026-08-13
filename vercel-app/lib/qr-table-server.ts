@@ -150,7 +150,7 @@ function mapSettings(row: DbSettings | null | undefined, storeCode: string): QrO
   }
 }
 
-function mapTier(row: DbTier, includedMenuIds?: number[]): QrBuffetTier {
+function mapTier(row: DbTier, includedMenuIds?: number[], extraMenuIds?: number[]): QrBuffetTier {
   return {
     id: Number(row.id || 0),
     storeCode: String(row.store_code || '').trim(),
@@ -164,6 +164,7 @@ function mapTier(row: DbTier, includedMenuIds?: number[]): QrBuffetTier {
     validFrom: row.valid_from ?? null,
     validTo: row.valid_to ?? null,
     includedMenuIds,
+    extraMenuIds,
   }
 }
 
@@ -326,7 +327,28 @@ export async function loadBuffetTiersForStore(
     arr.push(mid)
     byTier.set(tid, arr)
   }
-  return tiers.map((r) => mapTier(r, byTier.get(Number(r.id || 0)) || []))
+  const extraByTier = new Map<number, number[]>()
+  try {
+    const extraRows = (await supabaseSelectFilter(
+      'pos_buffet_tier_extra_menus',
+      `tier_id=in.(${ids.join(',')})`,
+      { limit: 5000 }
+    )) as Array<{ tier_id?: number; menu_id?: number }>
+    for (const m of extraRows || []) {
+      const tid = Number(m.tier_id || 0)
+      const mid = Number(m.menu_id || 0)
+      if (!tid || !mid) continue
+      const arr = extraByTier.get(tid) || []
+      arr.push(mid)
+      extraByTier.set(tid, arr)
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!/pgrst205|pos_buffet_tier_extra_menus|could not find the table/i.test(msg)) throw e
+  }
+  return tiers.map((r) =>
+    mapTier(r, byTier.get(Number(r.id || 0)) || [], extraByTier.get(Number(r.id || 0)) || [])
+  )
 }
 
 export async function saveBuffetTier(input: {
@@ -342,6 +364,7 @@ export async function saveBuffetTier(input: {
   validFrom?: string | null
   validTo?: string | null
   includedMenuIds?: number[]
+  extraMenuIds?: number[]
 }): Promise<QrBuffetTier> {
   const storeCode = String(input.storeCode || '').trim()
   const code = String(input.code || '').trim().toUpperCase()
@@ -391,6 +414,21 @@ export async function saveBuffetTier(input: {
       } catch {
         // 컬럼 미배포 시 무시 — 티어 메뉴 연결만으로도 손님 앱 포함 동작
       }
+    }
+  }
+
+  if (Array.isArray(input.extraMenuIds)) {
+    const extraIds = [
+      ...new Set(input.extraMenuIds.map((x) => Math.floor(Number(x))).filter((x) => x > 0)),
+    ].filter((id) => !new Set(input.includedMenuIds || []).has(id))
+    try {
+      await supabaseDeleteByFilter('pos_buffet_tier_extra_menus', `tier_id=eq.${tierId}`)
+      for (const menu_id of extraIds) {
+        await supabaseInsert('pos_buffet_tier_extra_menus', { tier_id: tierId, menu_id })
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (!/pgrst205|pos_buffet_tier_extra_menus|could not find the table|column/i.test(msg)) throw e
     }
   }
 
@@ -729,6 +767,19 @@ async function loadIncludedMenuIdSet(tierId: number): Promise<Set<number>> {
     limit: 5000,
   })) as Array<{ menu_id?: number }>
   return new Set((rows || []).map((r) => Number(r.menu_id || 0)).filter(Boolean))
+}
+
+async function loadExtraMenuIdSet(tierId: number): Promise<Set<number>> {
+  try {
+    const rows = (await supabaseSelectFilter('pos_buffet_tier_extra_menus', `tier_id=eq.${tierId}`, {
+      limit: 5000,
+    })) as Array<{ menu_id?: number }>
+    return new Set((rows || []).map((r) => Number(r.menu_id || 0)).filter(Boolean))
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/pgrst205|pos_buffet_tier_extra_menus|could not find the table/i.test(msg)) return new Set()
+    throw e
+  }
 }
 
 async function loadPosMenusByIds(menuIds: number[]): Promise<DbMenu[]> {
@@ -1228,7 +1279,11 @@ export async function loadQrMenusForSession(session: QrTableSession) {
     throw new Error('entry_not_ready')
   }
   const tierId = Number(session.tierId || 0)
-  const included = tierId > 0 ? await loadIncludedMenuIdSet(tierId) : new Set<number>()
+  const [included, extraAllow] = await Promise.all([
+    tierId > 0 ? loadIncludedMenuIdSet(tierId) : Promise.resolve(new Set<number>()),
+    tierId > 0 ? loadExtraMenuIdSet(tierId) : Promise.resolve(new Set<number>()),
+  ])
+  const limitExtras = extraAllow.size > 0
   const menus = await loadHallMenusForStore(session.storeCode)
   menus.sort((a, b) => {
     const mainA = normalizePromotionCategoryMain(a.category_main)
@@ -1274,7 +1329,7 @@ export async function loadQrMenusForSession(session: QrTableSession) {
       kitchenPrinter: m.kitchen_printer ?? null,
     }
     if (tierId > 0 && isIncluded) includedMenus.push(item)
-    else extraMenus.push(item)
+    else if (!limitExtras || extraAllow.has(id)) extraMenus.push(item)
   }
   return { includedMenus, extraMenus, mode: tierId > 0 ? 'buffet' : 'a_la_carte' }
 }
@@ -1330,8 +1385,9 @@ export async function submitQrCart(params: {
     .map((line) => Math.floor(Number(line.menuId) || 0))
     .filter((id) => id > 0)
 
-  const [included, byId, orderRows] = await Promise.all([
+  const [included, extraAllow, byId, orderRows] = await Promise.all([
     tierId > 0 ? loadIncludedMenuIdSet(tierId) : Promise.resolve(new Set<number>()),
+    tierId > 0 ? loadExtraMenuIdSet(tierId) : Promise.resolve(new Set<number>()),
     loadCartMenusByIdsForStore(session.storeCode, requestedIds),
     supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
       limit: 1,
@@ -1371,6 +1427,9 @@ export async function submitQrCart(params: {
     if (!menu) throw new Error(`menu_not_found:${menuId}`)
     if (isMenuSoldOutToday(menu.sold_out_date)) throw new Error(`menu_sold_out:${menuId}`)
     const isIncluded = included.has(menuId)
+    if (!isIncluded && extraAllow.size > 0 && !extraAllow.has(menuId)) {
+      throw new Error(`menu_not_in_extras:${menuId}`)
+    }
     const unitPrice = isIncluded ? 0 : asNum(menu.price)
     if (!isIncluded) extrasSubtotal += unitPrice * qty
     const kitchenTag = isIncluded ? 'Buffet' : 'Extra'

@@ -55,6 +55,7 @@ const EMPTY_TIER_FORM = {
   validFrom: '',
   validTo: '',
   includedMenuIds: [] as number[],
+  extraMenuIds: [] as number[],
 }
 
 function autoTierCode(form: typeof EMPTY_TIER_FORM, existingCodes: string[]): string {
@@ -186,6 +187,7 @@ export function PosQrTableOrderContent() {
       validFrom: String(tier.validFrom || '').slice(0, 10),
       validTo: String(tier.validTo || '').slice(0, 10),
       includedMenuIds: [...(tier.includedMenuIds || [])],
+      extraMenuIds: [...(tier.extraMenuIds || [])],
     })
     setMenuSearch('')
     setEditing(true)
@@ -215,6 +217,7 @@ export function PosQrTableOrderContent() {
       validFrom: tierForm.validFrom || null,
       validTo: tierForm.validTo || null,
       includedMenuIds: tierForm.includedMenuIds,
+      extraMenuIds: tierForm.extraMenuIds,
     })
     if (!res.success) {
       await alertApiError(res.message || 'tier_save_failed')
@@ -269,6 +272,18 @@ export function PosQrTableOrderContent() {
       return {
         ...prev,
         includedMenuIds: has ? prev.includedMenuIds.filter((x) => x !== id) : [...prev.includedMenuIds, id],
+        extraMenuIds: has ? prev.extraMenuIds : prev.extraMenuIds.filter((x) => x !== id),
+      }
+    })
+  }
+
+  function toggleExtraMenu(id: number) {
+    setTierForm((prev) => {
+      const has = prev.extraMenuIds.includes(id)
+      return {
+        ...prev,
+        extraMenuIds: has ? prev.extraMenuIds.filter((x) => x !== id) : [...prev.extraMenuIds, id],
+        includedMenuIds: has ? prev.includedMenuIds : prev.includedMenuIds.filter((x) => x !== id),
       }
     })
   }
@@ -570,6 +585,12 @@ export function PosQrTableOrderContent() {
                         </div>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {menusCountLabel((tier.includedMenuIds || []).length)}
+                          {(tier.extraMenuIds || []).length > 0
+                            ? ` · ${tr('qrTableExtraMenusCount', 'Extra {n}개').replace(
+                                '{n}',
+                                String((tier.extraMenuIds || []).length)
+                              )}`
+                            : ''}
                           {tier.code ? ` · ${tier.code}` : ''}
                         </p>
                       </div>
@@ -713,6 +734,59 @@ export function PosQrTableOrderContent() {
                                 type="checkbox"
                                 checked={checked}
                                 onChange={() => toggleMenu(id)}
+                              />
+                              <span className="min-w-0 truncate">
+                                <span className="text-muted-foreground">{m.code}</span> {m.name}
+                              </span>
+                            </label>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-md border bg-background p-2">
+                  <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-medium">{tr('qrTableExtraMenus', 'Extra 메뉴 (유료)')}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {tr(
+                          'qrTableExtraMenusHint',
+                          '체크한 메뉴만 Extra 탭에 표시됩니다. 비우면 포함 메뉴를 뺀 전체가 나갑니다. 299/399/499마다 다르게 고를 수 있습니다.'
+                        )}
+                      </p>
+                    </div>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {tr('qrTableExtraMenusCount', 'Extra {n}개').replace(
+                        '{n}',
+                        String(tierForm.extraMenuIds.length)
+                      )}
+                    </span>
+                  </div>
+                  <div className="max-h-56 overflow-auto">
+                    <div className="grid gap-1 sm:grid-cols-2">
+                      {filteredMenus.length === 0 ? (
+                        <p className="col-span-full px-1 py-3 text-sm text-muted-foreground">
+                          {tr('qrTableMenuSearchEmpty', '검색 결과가 없습니다.')}
+                        </p>
+                      ) : (
+                        filteredMenus.map((m) => {
+                          const id = Number(m.id)
+                          const checked = tierForm.extraMenuIds.includes(id)
+                          const included = tierForm.includedMenuIds.includes(id)
+                          return (
+                            <label
+                              key={`ex-${m.id}`}
+                              className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60 ${
+                                checked ? 'bg-amber-500/10' : included ? 'opacity-50' : ''
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={included}
+                                onChange={() => toggleExtraMenu(id)}
                               />
                               <span className="min-w-0 truncate">
                                 <span className="text-muted-foreground">{m.code}</span> {m.name}

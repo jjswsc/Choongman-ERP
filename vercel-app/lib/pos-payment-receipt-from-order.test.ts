@@ -194,4 +194,29 @@ describe('enrichPosOrderLikeItemsWithPromoSnapshot partial set', () => {
     )
     expect((enriched[0] as { promoItems?: unknown[] }).promoItems).toHaveLength(3)
   })
+
+  it('does not attach promo snapshot to QR buffet package entry', () => {
+    const promoCatalogById = new Map<string, PosPromoWithItems>([
+      [
+        'buffet',
+        {
+          id: 'buffet',
+          code: 'BUFFET',
+          name: 'Buffet',
+          items: [{ menuId: '1', optionId: null, quantity: 1, menuName: 'Chicken' }],
+        } as PosPromoWithItems,
+      ],
+    ])
+    const enriched = enrichPosOrderLikeItemsWithPromoSnapshot(
+      [
+        {
+          id: 'buffet-entry-12',
+          name: '[Buffet] Buffet 499 × 2',
+          isBuffetEntry: true,
+        },
+      ],
+      { promoCatalogById, menus: [] }
+    )
+    expect((enriched[0] as { promoItems?: unknown[] }).promoItems).toBeUndefined()
+  })
 })

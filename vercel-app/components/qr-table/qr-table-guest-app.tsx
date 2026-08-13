@@ -16,6 +16,7 @@ import {
 } from '@/lib/api-client/qr-table'
 import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession } from '@/lib/qr-table-types'
 import { buffetTierDisplayName } from '@/lib/qr-table-types'
+import { aggregateQrGuestSentLines } from '@/lib/qr-table-guest-menu'
 import { normalizeQrGuestLang, qrGuestT, type QrGuestLang } from '@/lib/i18n-qr-table-guest'
 
 type MenuItem = {
@@ -70,6 +71,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [qrAmount, setQrAmount] = React.useState(0)
   const [busy, setBusy] = React.useState(false)
   const [callOpen, setCallOpen] = React.useState(false)
+  const [historyOpen, setHistoryOpen] = React.useState(false)
   const [orderSummary, setOrderSummary] = React.useState<{
     total: number
     paymentQr: number
@@ -378,6 +380,10 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const selectedTier = tiers.filter((t) => t.active !== false)
   const listRaw = tab === 'included' ? includedMenus : extraMenus
   const uncategorizedLabel = g('uncategorized')
+  const sentLines = React.useMemo(
+    () => aggregateQrGuestSentLines(orderSummary?.items),
+    [orderSummary]
+  )
 
   const mainCategories = React.useMemo(() => {
     const set = new Set<string>()
@@ -477,6 +483,16 @@ export function QrTableGuestApp({ token }: { token: string }) {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {step === 'menu' && sessionAuth ? (
+              <button
+                type="button"
+                className="rounded-full border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold"
+                onClick={() => setHistoryOpen(true)}
+              >
+                {g('orderHistory')}
+                {sentLines.length > 0 ? ` (${sentLines.reduce((n, l) => n + l.qty, 0)})` : ''}
+              </button>
+            ) : null}
             {(step === 'menu' || step === 'wait_staff' || step === 'pay_entry') && sessionAuth ? (
               <button
                 type="button"
@@ -515,6 +531,47 @@ export function QrTableGuestApp({ token }: { token: string }) {
       {toast ? (
         <div className="fixed left-1/2 top-16 z-20 -translate-x-1/2 rounded-full bg-emerald-700 px-4 py-2 text-sm font-medium text-white shadow-lg">
           {toast}
+        </div>
+      ) : null}
+
+      {historyOpen ? (
+        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/40" onClick={() => setHistoryOpen(false)}>
+          <div
+            className="max-h-[75dvh] w-full max-w-lg overflow-auto rounded-t-3xl bg-white p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-base font-semibold">{g('orderHistory')}</p>
+              <button type="button" className="rounded-full bg-stone-100 px-3 py-1 text-sm" onClick={() => setHistoryOpen(false)}>
+                {g('close')}
+              </button>
+            </div>
+            {sentLines.length === 0 ? (
+              <p className="py-8 text-center text-sm text-stone-500">{g('orderHistoryEmpty')}</p>
+            ) : (
+              <ul className="divide-y divide-stone-100">
+                {sentLines.map((line) => (
+                  <li
+                    key={`h-${line.buffetIncluded ? 'in' : 'ex'}-${line.name}-${line.price}`}
+                    className="flex items-start justify-between gap-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium">{line.name}</p>
+                      <p className="text-xs text-stone-500">
+                        {line.buffetIncluded ? g('included') : `฿${line.price.toLocaleString()}`}
+                      </p>
+                    </div>
+                    <p className="shrink-0 tabular-nums font-semibold">×{line.qty}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {orderSummary ? (
+              <p className="mt-3 border-t border-stone-100 pt-3 text-sm font-semibold">
+                {g('total')} ฿{Number(orderSummary.total || 0).toLocaleString()}
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -763,7 +820,25 @@ export function QrTableGuestApp({ token }: { token: string }) {
           {orderSummary ? (
             <div className="mx-4 mt-4 rounded-2xl border border-stone-200 bg-white p-3.5 text-sm shadow-sm">
               <p className="font-medium">{g('currentOrder')}</p>
-              <p>
+              {sentLines.length > 0 ? (
+                <ul className="mt-2 space-y-1 text-stone-700">
+                  {sentLines.map((line) => (
+                    <li key={`${line.buffetIncluded ? 'in' : 'ex'}-${line.name}-${line.price}`} className="flex justify-between gap-2">
+                      <span className="min-w-0 truncate">
+                        {line.name}
+                        {line.buffetIncluded ? ` · ${g('included')}` : ''}
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        ×{line.qty}
+                        {line.buffetIncluded ? '' : ` · ฿${(line.price * line.qty).toLocaleString()}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-xs text-stone-500">{g('orderHistoryEmpty')}</p>
+              )}
+              <p className="mt-2">
                 {g('total')} ฿{Number(orderSummary.total || 0).toLocaleString()}
               </p>
               <p>

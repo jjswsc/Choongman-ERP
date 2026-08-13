@@ -248,3 +248,52 @@ describe('preparePosOrderItemsForKitchenSlip banban reprint', () => {
     expect(prepared[0]?.name).toContain('/')
   })
 })
+
+describe('QR buffet package entry is not a kitchen item', () => {
+  it('prints nothing when the order only has the buffet package line', () => {
+    const items: KitchenSlipRoutingItem[] = [
+      {
+        id: 'buffet-entry-88',
+        name: '[Buffet] Buffet 499 × 2',
+        qty: 2,
+        isBuffetEntry: true,
+        kitchenPrinter: 0,
+      },
+    ]
+    expect(buildKitchenSlipGroups(items, baseOpts())).toEqual([])
+  })
+
+  it('keeps real food and drops the buffet package line', () => {
+    const items: KitchenSlipRoutingItem[] = [
+      {
+        id: 'buffet-entry-88',
+        name: '[Buffet] Buffet 499 × 2',
+        qty: 2,
+        isBuffetEntry: true,
+      },
+      { id: 'line-2', name: 'Chicken', qty: 1, menuId: 'midChicken' },
+    ]
+    const slips = buildKitchenSlipGroups(items, baseOpts())
+    expect(slips).toHaveLength(1)
+    expect(slips[0].items.map((x) => x.name)).toEqual(['[C001] Chicken'])
+  })
+
+  it('does not treat buffet-entry id as a printable menu via name [Buffet]', () => {
+    const items: KitchenSlipRoutingItem[] = [
+      {
+        id: 'buffet-entry-88',
+        name: '[Buffet] Buffet 499 × 2',
+        qty: 2,
+      },
+    ]
+    const slips = buildKitchenSlipGroups(items, {
+      ...baseOpts({
+        kitchenPrinterByMenuId: { buffet: 1, midBuffet: 1 },
+        menuNameByMenuId: { midBuffet: 'Buffet' },
+        menuCodeByMenuId: { midBuffet: 'Buffet' },
+        categoryByMenuId: { midBuffet: 'Buffet' },
+      }),
+    })
+    expect(slips).toEqual([])
+  })
+})

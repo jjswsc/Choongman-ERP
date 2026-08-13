@@ -2,6 +2,7 @@ import type { PosMenu } from '@/lib/api-client'
 import { resolveGrabItemPrintNote } from '@/lib/grab-pos-order-enrich'
 import { flattenPosOrderItemOptionCodes } from '@/lib/pos-option-code-enrich'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
+import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 
 export type KitchenPrintPromoItem = {
   menuId: string
@@ -27,6 +28,10 @@ export type KitchenPrintMappedItem = {
   promoId?: string
   promoCode?: string
   promoItems?: KitchenPrintPromoItem[]
+  isBuffetEntry?: boolean
+  kitchenPrinter?: number | null
+  source?: string
+  buffetTierId?: unknown
 }
 
 type PromoEnricher = (items: KitchenPrintPromoItem[]) => KitchenPrintPromoItem[]
@@ -109,10 +114,19 @@ export function mapPosOrderRowForKitchenPrint(
     optionCodes: optionCodesMerged.length > 0 ? optionCodesMerged : undefined,
   })
   const rawPromoItems = Array.isArray(pit.promoItems) ? pit.promoItems : undefined
+  const skipKitchenPackage = isQrBuffetPackageKitchenSkipLine(it)
   const promoItems =
-    rawPromoItems && rawPromoItems.length > 0 && opts?.enrichPromoItems
-      ? opts.enrichPromoItems(rawPromoItems)
-      : rawPromoItems
+    skipKitchenPackage
+      ? undefined
+      : rawPromoItems && rawPromoItems.length > 0 && opts?.enrichPromoItems
+        ? opts.enrichPromoItems(rawPromoItems)
+        : rawPromoItems
+  const isBuffetEntry = it.isBuffetEntry === true || skipKitchenPackage
+  const kitchenPrinterRaw = Number(it.kitchenPrinter ?? it.kitchen_printer)
+  const kitchenPrinter =
+    kitchenPrinterRaw === 0 || kitchenPrinterRaw === 1 || kitchenPrinterRaw === 2 || kitchenPrinterRaw === 3
+      ? (kitchenPrinterRaw as 0 | 1 | 2 | 3)
+      : undefined
 
   return {
     id: String(it.id ?? ''),
@@ -127,9 +141,13 @@ export function mapPosOrderRowForKitchenPrint(
     ...(optionCodesMerged.length > 0 ? { optionCodes: optionCodesMerged } : {}),
     ...(mergedNote ? { note: mergedNote } : {}),
     ...(deliveryAppCode ? { deliveryAppCode } : {}),
-    ...(promoId ? { promoId } : {}),
-    ...(promoCode ? { promoCode } : {}),
+    ...(promoId && !skipKitchenPackage ? { promoId } : {}),
+    ...(promoCode && !skipKitchenPackage ? { promoCode } : {}),
     ...(promoItems && promoItems.length > 0 ? { promoItems } : {}),
+    ...(isBuffetEntry ? { isBuffetEntry: true } : {}),
+    ...(kitchenPrinter === 0 || kitchenPrinter === 1 || kitchenPrinter === 2 || kitchenPrinter === 3
+      ? { kitchenPrinter }
+      : {}),
   }
 }
 

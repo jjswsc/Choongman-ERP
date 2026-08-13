@@ -26,6 +26,7 @@ import {
   buildKitchenMenuNameLookup,
   resolveKitchenMenuNameFromLookup,
 } from '@/lib/pos-kitchen-menu-display-name'
+import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 
 export type PosOrderReceiptLineOptions = {
   /**
@@ -549,6 +550,7 @@ export function enrichPosOrderLikeItemsWithPromoSnapshot<T extends Record<string
   const menus = opts?.menus
   if (!items?.length || (!catalog?.size && !menus?.length)) return items
   return items.map((it) => {
+    if (isQrBuffetPackageKitchenSkipLine(it)) return it
     const note = String(it.note ?? it.line_note ?? '').trim()
     const applyPromoEnrich = (promo: ReceiptPromoLine[] | null | undefined): ReceiptPromoLine[] | undefined => {
       if (!promo?.length) return undefined

@@ -38,6 +38,10 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTableIncludedMenus: '포함 메뉴',
   qrTableIncludedMenusHint: '체크한 메뉴는 손님 앱에서 0฿. 이 화면에서만 고르면 됩니다.',
   qrTableIncludedMenusEmpty: '이 매장에 등록된 메뉴가 없습니다.',
+  qrTableExtraMenus: 'Extra 메뉴 (유료)',
+  qrTableExtraMenusHint:
+    '체크한 메뉴만 Extra 탭에 표시됩니다. 비우면 포함 메뉴를 뺀 전체가 나갑니다. 299/399/499마다 다르게 고를 수 있습니다.',
+  qrTableExtraMenusCount: 'Extra {n}개',
   qrTableTokens: '테이블 QR',
   qrTableTokensHint: '테이블 레이아웃 기준으로 QR을 만든 뒤 인쇄·부착합니다.',
   qrTableGenerateTokens: '레이아웃 기준 생성',
@@ -146,6 +150,10 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTableIncludedMenus: 'Included menus',
   qrTableIncludedMenusHint: 'Checked menus are ฿0 on the guest app. Set them here only.',
   qrTableIncludedMenusEmpty: 'No menus for this store.',
+  qrTableExtraMenus: 'Extras (paid)',
+  qrTableExtraMenusHint:
+    'Only checked menus appear on the Extra tab. Leave empty to show all menus except included. Set this per 299/399/499 package.',
+  qrTableExtraMenusCount: '{n} extras',
   qrTableTokens: 'Table QR',
   qrTableTokensHint: 'Generate QR from the table layout, then print and place on tables.',
   qrTableGenerateTokens: 'Generate from layout',
@@ -253,6 +261,10 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTableIncludedMenus: 'เมนูรวม',
   qrTableIncludedMenusHint: 'เมนูที่ติ๊ก = ฿0 ในแอปลูกค้า ตั้งค่าที่หน้านี้พอครับ',
   qrTableIncludedMenusEmpty: 'สาขานี้ยังไม่มีเมนู',
+  qrTableExtraMenus: 'เมนู Extra (คิดเงิน)',
+  qrTableExtraMenusHint:
+    'ติ๊กเฉพาะเมนูที่อยากให้ขึ้นแท็บ Extra ถ้าไม่ติ๊กจะโชว์ทุกเมนูนอกชุดรวม ตั้งคนละแบบได้ตามแพ็กเกจ 299/399/499 ครับ',
+  qrTableExtraMenusCount: 'Extra {n} รายการ',
   qrTableTokens: 'QR โต๊ะ',
   qrTableTokensHint: 'สร้าง QR จากผังโต๊ะ แล้วพิมพ์ติดโต๊ะ',
   qrTableGenerateTokens: 'สร้างจากผังโต๊ะ',

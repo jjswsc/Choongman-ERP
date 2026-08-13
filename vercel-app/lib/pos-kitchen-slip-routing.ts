@@ -16,6 +16,7 @@ import {
   type PosOrderReceiptLineOptions,
 } from "@/lib/pos-payment-receipt-from-order"
 import type { OrderItem } from "@/lib/pos-types"
+import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 
 /**
  * 주방 주문서 분할
@@ -48,6 +49,9 @@ export type KitchenSlipRoutingItem = {
   }[]
   promoId?: string
   promoCode?: string
+  /** QR 뷔페 패키지 입장료 — 홀 계산용, 주방 미출력 */
+  isBuffetEntry?: boolean
+  kitchenPrinter?: number | null
 }
 
 /** 0 = 주방으로 출력 안 함, 1~3 = 해당 주방 프린터 */
@@ -304,6 +308,9 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
   if (!enabled) return items
   const out: T[] = []
   for (const it of items) {
+    if (isQrBuffetPackageKitchenSkipLine(it)) {
+      continue
+    }
     const pi = it.promoItems
     if (Array.isArray(pi) && pi.length > 0) {
       const parentQty = resolveCartLineQuantityForSave(it as { qty?: unknown; quantity?: unknown })
@@ -372,7 +379,8 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
       code: codeMap[id],
     }))
   )
-  const expanded = expandPromoLinesForKitchenRouting(items, menuLookup, splitPromo) as T[]
+  const kitchenItems = items.filter((it) => !isQrBuffetPackageKitchenSkipLine(it))
+  const expanded = expandPromoLinesForKitchenRouting(kitchenItems, menuLookup, splitPromo) as T[]
 
   const catMap = opts.categoryByMenuId || {}
   const kpMap = opts.kitchenPrinterByMenuId || {}
@@ -475,7 +483,7 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
      * - Grab 등 연동 줄(id가 grab:…)은 POS 메뉴 UUID와 무관하여 이름 매칭이 오판만 만든다 → 이름 매칭 생략(주방=기본 출력).
      */
     const idStr = String((it as KitchenSlipRoutingItem).id ?? '').trim()
-    if (/^grab:/i.test(idStr)) {
+    if (/^grab:/i.test(idStr) || isQrBuffetPackageKitchenSkipLine(it)) {
       return ''
     }
 
@@ -508,6 +516,7 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
   }
   /** 0 = 스킵, 1~3 = 주방 번호 */
   const resolveRoute = (it: T): KitchenRouteValue => {
+    if (isQrBuffetPackageKitchenSkipLine(it)) return 0
     const mid = menuIdOf(it)
     const overlay = mid ? resolveKitchenRouteOverlayForMenuId(mid, routeOverlayCtx) : null
     if (overlay !== null) return overlay
@@ -586,6 +595,7 @@ export function kitchenRoutingItemFromOrderItem(it: OrderItem, displayName: stri
     ...(note ? { note } : {}),
     ...(menuId1 ? { menuId1 } : {}),
     ...(menuId2 ? { menuId2 } : {}),
+    ...((it as { isBuffetEntry?: boolean }).isBuffetEntry === true ? { isBuffetEntry: true } : {}),
   }
   if (Array.isArray(it.promoItems) && it.promoItems.length > 0) {
     row.promoItems = it.promoItems
