@@ -4,6 +4,8 @@ import { voidKbankPayment } from '@/lib/payments/kbank-client'
 import { supabaseInsert } from '@/lib/supabase-server'
 import type { KbankVoidPaymentRequest } from '@/lib/payments/kbank-types'
 import { resolveKbankVoidTxnNoForRequest } from '@/lib/payments/kbank-api-reference'
+import { integrationScopeFromAuth } from '@/lib/integration-scope-from-auth'
+import { resolveKbankRuntime } from '@/lib/tenant-integration-resolve'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,12 +37,16 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
     const orderId = Number(body.orderId || 0)
     const storeCode = String(body.storeCode || '').trim()
-    const terminalId = String(body.terminalId || '').trim()
-    const txnNo = String(body.txnNo || '').trim()
     const rawPayload =
       body.payload && typeof body.payload === 'object'
         ? (body.payload as Record<string, unknown>)
         : undefined
+    const scope = integrationScopeFromAuth(authResult.auth, storeCode)
+    const kbankRuntime = await resolveKbankRuntime(scope)
+    const terminalId = String(
+      body.terminalId || rawPayload?.terminalId || kbankRuntime.terminalId || process.env.KBANK_TERMINAL_ID || ''
+    ).trim()
+    const txnNo = String(body.txnNo || '').trim()
     const origPartnerTxnUid = String(
       body.origPartnerTxnUid ||
         body.originalTransactionId ||
@@ -95,7 +101,7 @@ export async function POST(req: NextRequest) {
       },
     }
 
-    const result = await voidKbankPayment(payload)
+    const result = await voidKbankPayment(payload, { runtime: kbankRuntime })
     const responseData =
       result.response && typeof result.response === 'object'
         ? (result.response as Record<string, unknown>)

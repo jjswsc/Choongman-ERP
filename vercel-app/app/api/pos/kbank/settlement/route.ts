@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/verify-auth'
 import { settleKbankPayment } from '@/lib/payments/kbank-client'
 import { supabaseInsert } from '@/lib/supabase-server'
 import type { KbankSettlementRequest } from '@/lib/payments/kbank-types'
+import { integrationScopeFromAuth } from '@/lib/integration-scope-from-auth'
+import { resolveKbankRuntime } from '@/lib/tenant-integration-resolve'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,8 +62,10 @@ export async function POST(req: NextRequest) {
       body.payload && typeof body.payload === 'object'
         ? (body.payload as Record<string, unknown>)
         : undefined
+    const scope = integrationScopeFromAuth(authResult.auth, storeCode)
+    const kbankRuntime = await resolveKbankRuntime(scope)
     const terminalId = String(
-      body.terminalId || rawPayload?.terminalId || process.env.KBANK_TERMINAL_ID || ''
+      body.terminalId || rawPayload?.terminalId || kbankRuntime.terminalId || process.env.KBANK_TERMINAL_ID || ''
     ).trim()
     const qrTypeInfo = normalizeSettlementQrType(body.qrType || rawPayload?.qrType)
     const qrType = qrTypeInfo || 'THAI_QR'
@@ -109,7 +113,7 @@ export async function POST(req: NextRequest) {
       },
     }
 
-    const result = await settleKbankPayment(payload)
+    const result = await settleKbankPayment(payload, { runtime: kbankRuntime })
     const responseData =
       result.response && typeof result.response === 'object'
         ? (result.response as Record<string, unknown>)

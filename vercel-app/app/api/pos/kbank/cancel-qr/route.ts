@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/verify-auth'
 import { cancelKbankQr } from '@/lib/payments/kbank-client'
 import { supabaseInsert } from '@/lib/supabase-server'
 import type { KbankCancelQrRequest } from '@/lib/payments/kbank-types'
+import { integrationScopeFromAuth } from '@/lib/integration-scope-from-auth'
+import { resolveKbankRuntime } from '@/lib/tenant-integration-resolve'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,11 +36,15 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
     const orderId = Number(body.orderId || 0)
     const storeCode = String(body.storeCode || '').trim()
-    const terminalId = String(body.terminalId || '').trim()
     const rawPayload =
       body.payload && typeof body.payload === 'object'
         ? (body.payload as Record<string, unknown>)
         : undefined
+    const scope = integrationScopeFromAuth(authResult.auth, storeCode)
+    const kbankRuntime = await resolveKbankRuntime(scope)
+    const terminalId = String(
+      body.terminalId || rawPayload?.terminalId || kbankRuntime.terminalId || process.env.KBANK_TERMINAL_ID || ''
+    ).trim()
     const origPartnerTxnUid = String(
       body.origPartnerTxnUid ||
         body.originalTransactionId ||
@@ -76,7 +82,8 @@ export async function POST(req: NextRequest) {
       },
     }
 
-    const result = await cancelKbankQr(payload)
+    // Same store Merchant ID as Generate (pos_printer_settings / store defaults) — not env-only.
+    const result = await cancelKbankQr(payload, { runtime: kbankRuntime })
 
     try {
       await supabaseInsert('pos_payment_attempts', {
@@ -107,6 +114,7 @@ export async function POST(req: NextRequest) {
           origPartnerTxnUid,
           orderId: orderId > 0 ? orderId : null,
           storeCode: storeCode || null,
+          merchantIdUsed: kbankRuntime.merchantId || null,
           statusCode: result.statusCode || null,
           statusMessage: result.statusMessage || null,
           data: result.response,
