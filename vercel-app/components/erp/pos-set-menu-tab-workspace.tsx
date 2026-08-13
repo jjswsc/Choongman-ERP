@@ -57,6 +57,8 @@ import {
 } from "@/lib/promo-economics"
 import { getPromoChoiceSlotLabel } from "@/lib/pos-promo-choice"
 import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from "@/lib/pos-print-translate"
+import { toPosCostSalesDenom } from "@/lib/pos-cost-vat"
+import { PosCostVatViewSelect, usePosCostVatView } from "@/components/cost-analysis/pos-cost-vat-view-select"
 import {
   findNonPreferredChickenComposeLines,
   resolvePreferredChickenSetOptionId,
@@ -264,6 +266,7 @@ export function PosSetMenuTabWorkspace({
   const [priceAnalysisSubsidyStr, setPriceAnalysisSubsidyStr] = React.useState("")
   /** 가격 분석: 홀·배달 채널 모두 켜진 경우 전환 */
   const [priceAnalysisChannel, setPriceAnalysisChannel] = React.useState<"hall" | "delivery">("hall")
+  const [vatView, setVatView] = usePosCostVatView()
 
   const [costMap, setCostMap] = React.useState<Record<string, CostEntry>>({})
   const [costAnalysisMap, setCostAnalysisMap] = React.useState<Record<string, CostEntry>>({})
@@ -538,10 +541,13 @@ export function PosSetMenuTabWorkspace({
         regularPriceSum: regularSum,
         costTotalHall: costHallTotal,
         costTotalDelivery: costDelTotal,
-        salePriceHall: saleHall,
-        salePriceDelivery: form.priceDelivery.trim() !== "" ? saleDel : undefined,
+        salePriceHall: toPosCostSalesDenom(saleHall, form.vatIncluded !== false, vatView),
+        salePriceDelivery:
+          form.priceDelivery.trim() !== ""
+            ? toPosCostSalesDenom(saleDel, form.vatIncluded !== false, vatView)
+            : undefined,
       }),
-    [regularSum, costHallTotal, costDelTotal, saleHall, saleDel, form.priceDelivery]
+    [regularSum, costHallTotal, costDelTotal, saleHall, saleDel, form.priceDelivery, form.vatIncluded, vatView]
   )
 
   const salesSetCount = Math.max(0, Number(salesSetCountStr.replace(/,/g, "")) || 0)
@@ -1805,6 +1811,7 @@ export function PosSetMenuTabWorkspace({
                         <span className="font-mono tabular-nums">
                           {t("posMenuBundleCostRate")} {economics.costRateHall.toFixed(1)}%
                         </span>
+                        <PosCostVatViewSelect value={vatView} onChange={setVatView} className="h-8 w-[148px] text-[11px]" />
                         <span className="text-border">·</span>
                         <span
                           className={cn(

@@ -11,6 +11,7 @@ import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
 import { CostSummary } from "@/components/cost-analysis/cost-summary"
 import { CostChart } from "@/components/cost-analysis/cost-chart"
 import { PosCostCalculatorWhatIf } from "@/components/cost-analysis/pos-cost-calculator-what-if"
+import { PosCostVatViewSelect, usePosCostVatView } from "@/components/cost-analysis/pos-cost-vat-view-select"
 import {
   emptyMenuItem,
   emptyFoodRecipe,
@@ -206,6 +207,7 @@ function savePayloadOptionId(row: PosMenuCostAnalysisRow): number | null {
 export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearLoad, onSaveSuccess, onReloadMenu, menuRows = [], onMenuSelect, listMisePercent = MISE_DEFAULT }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const [vatView, setVatView] = usePosCostVatView()
   const [menuItem, setMenuItem] = useState<MenuItem>(emptyMenuItem)
   const [foodItems, setFoodItems] = useState<RecipeItem[]>(emptyFoodRecipe)
   const [packagingItems, setPackagingItems] = useState<RecipeItem[]>(emptyPackagingRecipe)
@@ -622,12 +624,16 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
         </div>
 
         <div className="space-y-6 self-start">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <PosCostVatViewSelect value={vatView} onChange={setVatView} />
+          </div>
           <CostSummary
             foodSubTotal={foodSubTotal}
             packagingSubTotal={packagingSubTotal}
             misePercent={0}
             inclVat={menuItem.inclVat}
             vatIncluded={menuItem.vatIncluded !== false}
+            vatView={vatView}
             serviceType={menuItem.serviceType}
             deliveryPercent={menuItem.deliveryPercent}
             onDeliveryPercentChange={
@@ -674,6 +680,7 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
               priceHall={menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0}
               priceDelivery={menuItem.priceDelivery ?? initialLoadFromRow.priceDelivery}
               vatIncluded={menuItem.vatIncluded !== false}
+              vatView={vatView}
               deliveryFeePercent={menuItem.deliveryPercent}
               serviceType={menuItem.serviceType}
             />

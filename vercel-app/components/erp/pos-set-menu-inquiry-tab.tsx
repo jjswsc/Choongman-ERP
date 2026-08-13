@@ -42,6 +42,7 @@ import {
   type PosPromo,
 } from "@/lib/api-client"
 import { buildInquiryEconomicsByPromoId, type InquiryPromoEconomics } from "@/lib/pos-promo-inquiry-economics"
+import { PosCostVatViewSelect, usePosCostVatView } from "@/components/cost-analysis/pos-cost-vat-view-select"
 import { PROMOTION_DEFAULT_SUBCATEGORIES } from "@/lib/pos-promo-constants"
 import { PROMOTION_MAIN_CATEGORY } from "@/lib/pos-promo-constants"
 import { cn } from "@/lib/utils"
@@ -132,9 +133,20 @@ export function PosSetMenuInquiryTab({
   const [linkCampaignId, setLinkCampaignId] = React.useState("")
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
   const [campaignsLoading, setCampaignsLoading] = React.useState(false)
-  const [economicsByPromoId, setEconomicsByPromoId] = React.useState<Record<string, InquiryPromoEconomics>>({})
+  const [econSource, setEconSource] = React.useState<{
+    withItems: Parameters<typeof buildInquiryEconomicsByPromoId>[0]
+    rows: unknown[]
+  } | null>(null)
   const [economicsLoading, setEconomicsLoading] = React.useState(false)
   const [menuNameById, setMenuNameById] = React.useState<Record<string, string>>({})
+  const [vatView, setVatView] = usePosCostVatView()
+  const economicsByPromoId = React.useMemo(
+    () =>
+      econSource
+        ? buildInquiryEconomicsByPromoId(econSource.withItems, econSource.rows, vatView)
+        : {},
+    [econSource, vatView]
+  )
 
   React.useEffect(() => {
     if (!linkTarget) {
@@ -181,7 +193,7 @@ export function PosSetMenuInquiryTab({
 
   React.useEffect(() => {
     if (!promos.length) {
-      setEconomicsByPromoId({})
+      setEconSource(null)
       return
     }
     let cancelled = false
@@ -194,9 +206,12 @@ export function PosSetMenuInquiryTab({
           getPosPromosWithItems({ campaignId: cid, includeInactive: true }),
         ])
         if (cancelled) return
-        setEconomicsByPromoId(buildInquiryEconomicsByPromoId(Array.isArray(withItems) ? withItems : [], rows))
+        setEconSource({
+          withItems: Array.isArray(withItems) ? withItems : [],
+          rows,
+        })
       } catch {
-        if (!cancelled) setEconomicsByPromoId({})
+        if (!cancelled) setEconSource(null)
       } finally {
         if (!cancelled) setEconomicsLoading(false)
       }
@@ -484,6 +499,7 @@ export function PosSetMenuInquiryTab({
             <Checkbox checked={showInactive} onCheckedChange={(c) => setShowInactive(c === true)} />
             {t("posSetInquiryShowInactive")}
           </label>
+          <PosCostVatViewSelect value={vatView} onChange={setVatView} />
         </div>
 
         {inquiryMode === "campaign" ? (

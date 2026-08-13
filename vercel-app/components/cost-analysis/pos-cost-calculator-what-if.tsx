@@ -24,7 +24,7 @@ import {
   costRatioTier,
   simulateRecipeLineCostDelta,
 } from "@/lib/pos-cost-analysis-shared"
-import { cn } from "@/lib/utils"
+import { toPosCostSalesDenom, type PosCostVatView } from "@/lib/pos-cost-vat"
 
 type Props = {
   foodItems: RecipeItem[]
@@ -32,6 +32,7 @@ type Props = {
   priceHall: number
   priceDelivery: number | null | undefined
   vatIncluded: boolean
+  vatView?: PosCostVatView
   deliveryFeePercent: number
   serviceType: "Dine-In" | "Delivery"
 }
@@ -42,6 +43,7 @@ export function PosCostCalculatorWhatIf({
   priceHall,
   priceDelivery,
   vatIncluded,
+  vatView = "excluded",
   deliveryFeePercent: _deliveryFeePercent,
   serviceType,
 }: Props) {
@@ -88,8 +90,7 @@ export function PosCostCalculatorWhatIf({
   const afterTotal = baseTotal + deltaCost
 
   const price = serviceType === "Delivery" ? (priceDelivery ?? priceHall) : priceHall
-  const vatIncl = vatIncluded !== false
-  const net = vatIncl ? price / 1.07 : price
+  const net = toPosCostSalesDenom(price, vatIncluded !== false, vatView)
 
   const beforeRatio = net > 0 ? (baseTotal / net) * 100 : 0
   const afterRatio = net > 0 ? (afterTotal / net) * 100 : 0

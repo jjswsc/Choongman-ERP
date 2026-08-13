@@ -5,6 +5,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { Input } from "@/components/ui/input"
 import { TrendingUp, TrendingDown, DollarSign, Percent, Package, ChefHat } from "lucide-react"
+import { toPosCostSalesDenom, type PosCostVatView } from "@/lib/pos-cost-vat"
 
 interface CostSummaryProps {
   foodSubTotal: number
@@ -13,6 +14,8 @@ interface CostSummaryProps {
   inclVat: number
   /** 가격이 VAT 포함인지 (false면 inclVat이 이미 VAT 제외, 기본 true) */
   vatIncluded?: boolean
+  /** 원가율 분모 VAT 보기 (목록·세트와 동일 저장값) */
+  vatView?: PosCostVatView
   serviceType: "Dine-In" | "Delivery"
   deliveryPercent: number
   /** 앱 수수료(%) 변경 시 (원가 내역에서 직접 조정) */
@@ -37,6 +40,7 @@ export function CostSummary({
   misePercent,
   inclVat,
   vatIncluded = true,
+  vatView = "excluded",
   serviceType,
   deliveryPercent,
   onDeliveryPercentChange,
@@ -75,12 +79,12 @@ export function CostSummary({
       ? totalFoodCost + deliveryPackageCost
       : totalFoodCost
 
-  const exclVat = vatIncluded ? inclVat / 1.07 : inclVat
+  const salesDenom = toPosCostSalesDenom(inclVat, vatIncluded, vatView)
   const deliveryFee = serviceType === "Delivery" ? inclVat * (deliveryPercent / 100) : 0
-  /** 원가율·마진 분모는 VAT 제외 매출만 — 배달앱 수수료는 참고 표시만 */
-  const margin = exclVat - totalCost
-  const marginPercent = exclVat > 0 ? (margin / exclVat) * 100 : 0
-  const costPercent = exclVat > 0 ? (totalCost / exclVat) * 100 : 0
+  /** 원가율·마진 분모는 VAT 보기 기준 매출 — 배달앱 수수료는 참고 표시만 */
+  const margin = salesDenom - totalCost
+  const marginPercent = salesDenom > 0 ? (margin / salesDenom) * 100 : 0
+  const costPercent = salesDenom > 0 ? (totalCost / salesDenom) * 100 : 0
 
   const isHealthyMargin = marginPercent >= 60
 
