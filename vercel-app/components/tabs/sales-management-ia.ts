@@ -14,6 +14,7 @@ export type AnalyticsView =
   | "mom-compare"
   | "forecast"
   | "overview"
+  | "app-reconcile"
   | null
 
 export type PeriodGroupValue = "year" | "month" | "week" | "day" | "hour" | "dow"
@@ -159,6 +160,19 @@ export const SALES_IA: SalesSubMenuConfig[] = [
         labelKey: "salesTopicOverviewReport",
         hintKey: "salesTopicOverviewReportHint",
         view: "overview",
+      },
+    ],
+  },
+  {
+    id: "sales-app-reconcile",
+    labelKey: "salesManagementSubmenuAppReconcile",
+    fallbackLabel: "배달앱 확인",
+    topics: [
+      {
+        id: "app-reconcile",
+        labelKey: "salesTopicAppReconcile",
+        hintKey: "salesTopicAppReconcileHint",
+        view: "app-reconcile",
       },
     ],
   },

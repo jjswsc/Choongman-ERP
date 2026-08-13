@@ -7,6 +7,7 @@ import type {
   PosSalesByPromoResult,
   PosSalesPaymentBreakdown,
   PosSalesPeriodRow,
+  PosDeliveryAppReconcileResult,
 } from "@/lib/api-client"
 import type {
   MomDayCompareRow,
@@ -50,6 +51,7 @@ export type SalesManagementViewCache = {
     }[]
     total: number
   }
+  deliveryAppReconcileData: PosDeliveryAppReconcileResult
   channelData: { channelKey: string; sales: number }[]
   menuData: { name: string; qty: number; sales: number }[]
   promoBundleData: PosSalesByPromoResult

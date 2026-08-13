@@ -13,6 +13,18 @@ const emptySnap = (key: string): SalesManagementViewCache =>
     periodSplitSeries: null,
     periodTruncated: false,
     deliveryAppData: { items: [], total: 0 },
+    deliveryAppReconcileData: {
+      rows: [],
+      kpi: {
+        appNetSales: 0,
+        deliveryCount: 0,
+        inStoreCount: 0,
+        deliverySales: 0,
+        inStoreSales: 0,
+        suggestedFee: 0,
+        suggestedPayout: 0,
+      },
+    },
     channelData: [],
     menuData: [],
     promoBundleData: {

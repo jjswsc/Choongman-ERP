@@ -65,6 +65,8 @@ import {
   getPosSalesFilterOptions,
   getPosSalesByPeriod,
   getPosSalesByDeliveryApp,
+  getPosDeliveryAppReconcile,
+  type PosDeliveryAppReconcileResult,
   getPosSalesByChannel,
   getPosSalesByMenu,
   getPosSalesByPromo,
@@ -125,6 +127,10 @@ import {
   type PeriodGroupValue,
 } from "@/components/tabs/sales-management-ia"
 import { SalesOverviewPanel } from "@/components/tabs/sales-overview-panel"
+import {
+  EMPTY_POS_DELIVERY_APP_RECONCILE,
+  SalesDeliveryAppReconcilePanel,
+} from "@/components/tabs/sales-delivery-app-reconcile-panel"
 import {
   EMPTY_POS_SALES_BY_PROMO,
   formatSalesAmount,
@@ -320,6 +326,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }[]
     total: number
   }>({ items: [], total: 0 })
+  const [deliveryAppReconcileData, setDeliveryAppReconcileData] =
+    React.useState<PosDeliveryAppReconcileResult>(EMPTY_POS_DELIVERY_APP_RECONCILE)
   const [channelData, setChannelData] = React.useState<{ channelKey: string; sales: number }[]>([])
   const [menuData, setMenuData] = React.useState<{ name: string; qty: number; sales: number }[]>([])
   const [promoBundleData, setPromoBundleData] = React.useState<PosSalesByPromoResult>(EMPTY_POS_SALES_BY_PROMO)
@@ -723,6 +731,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     selectedView != null &&
     PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView) &&
     selectedView !== "overview"
+  const hideOrderTypeFilter = selectedView === "app-reconcile"
 
   const storesForCompareChart = React.useMemo(
     () => selectedStoresParam ?? [],
@@ -995,6 +1004,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       periodSplitSeries,
       periodTruncated,
       deliveryAppData,
+      deliveryAppReconcileData,
       channelData,
       menuData,
       promoBundleData,
@@ -1016,6 +1026,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     periodSplitSeries,
     periodTruncated,
     deliveryAppData,
+    deliveryAppReconcileData,
     channelData,
     menuData,
     promoBundleData,
@@ -1195,6 +1206,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setPeriodSplitSeries(null)
     setPeriodTruncated(false)
     setDeliveryAppData({ items: [], total: 0 })
+    setDeliveryAppReconcileData(EMPTY_POS_DELIVERY_APP_RECONCILE)
     setChannelData([])
     setMenuData([])
     setPromoBundleData(EMPTY_POS_SALES_BY_PROMO)
@@ -1229,6 +1241,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setPeriodSplitSeries(snap.periodSplitSeries)
     setPeriodTruncated(snap.periodTruncated)
     setDeliveryAppData(snap.deliveryAppData)
+    setDeliveryAppReconcileData(snap.deliveryAppReconcileData ?? EMPTY_POS_DELIVERY_APP_RECONCILE)
     setChannelData(snap.channelData)
     setMenuData(snap.menuData)
     setPromoBundleData(snap.promoBundleData)
@@ -1337,6 +1350,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         return (promoBundleData.combined?.byKind.length ?? 0) > 0
       case "delivery":
         return deliveryPieRows.length > 0
+      case "app-reconcile":
+        return deliveryAppReconcileData.rows.length > 0
       case "payment":
         return (
           deliveryPaymentChannelRows.length > 0 ||
@@ -1365,6 +1380,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     menuData.length,
     promoBundleData.rows.length,
     deliveryPieRows.length,
+    deliveryAppReconcileData.rows.length,
     deliveryPaymentChannelRows.length,
     creditPaymentChannelRows.length,
     paymentChartRows.length,
@@ -1685,6 +1701,52 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         rows: deliveryPieRows.map((r) => [r.axisLabel, numCell(r.sales), r.pct / 100]),
         colFormats: [salesExcelCol.text, salesExcelCol.money, salesExcelCol.pct],
       })
+    } else if (selectedView === "app-reconcile" && deliveryAppReconcileData.rows.length > 0) {
+      sheets.push({
+        name: tr("salesManagementSubmenuAppReconcile", "배달앱 확인"),
+        headers: [
+          tr("salesStoreName", "매장명"),
+          tr("salesDeliveryChannel", "배달앱/채널"),
+          tr("salesAppReconcileColDeliverySales", "배달 순매출"),
+          tr("salesAppReconcileColDeliveryCount", "배달 건수"),
+          tr("salesAppReconcileColInStoreSales", "매장앱결제"),
+          tr("salesAppReconcileColInStoreCount", "매장앱 건수"),
+          tr("salesAppReconcileColAppNet", "앱 합계 순매출"),
+          tr("salesAppReconcileColFeePct", "수수료%"),
+          tr("salesAppReconcileColSuggestedFee", "예상 수수료"),
+          tr("salesAppReconcileColSuggestedPayout", "예상 입금"),
+          tr("salesAppReconcileColSettledFee", "결산 수수료"),
+          tr("salesAppReconcileColSettledNet", "결산 입금"),
+        ],
+        rows: deliveryAppReconcileData.rows.map((r) => [
+          posStoreDisplayName(r.storeCode),
+          translateDeliveryAppCode(r.appCode, tr),
+          numCell(r.deliverySales),
+          r.deliveryCount,
+          numCell(r.inStoreSales),
+          r.inStoreCount,
+          numCell(r.appNetSales),
+          r.feeSource === "none" ? "" : r.feePct / 100,
+          numCell(r.suggestedFee),
+          numCell(r.suggestedPayout),
+          r.settledFee == null ? "" : numCell(r.settledFee),
+          r.settledNet == null ? "" : numCell(r.settledNet),
+        ]),
+        colFormats: [
+          salesExcelCol.text,
+          salesExcelCol.text,
+          salesExcelCol.money,
+          salesExcelCol.int,
+          salesExcelCol.money,
+          salesExcelCol.int,
+          salesExcelCol.money,
+          salesExcelCol.pct,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+        ],
+      })
     } else if (selectedView === "payment") {
       if (deliveryPaymentChannelRows.length > 0) {
         sheets.push({
@@ -1784,6 +1846,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     menuData,
     promoBundleData,
     deliveryPieRows,
+    deliveryAppReconcileData,
     deliveryPaymentChannelRows,
     creditPaymentChannelRows,
     storeChartRows,
@@ -2193,6 +2256,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const promoBundleFetcher = offlineAware ? getPosSalesByPromoWithCache : getPosSalesByPromo
     const channelFetcher = offlineAware ? getPosSalesByChannelWithCache : getPosSalesByChannel
     const needDelivery = selectedView === "delivery"
+    const needAppReconcile = selectedView === "app-reconcile"
     const needChannel = selectedView === "channel" || selectedView === "overview"
     const needMenu = selectedView === "menu"
     const needDiscountAnalytics =
@@ -2235,6 +2299,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         if (loadIdRef.current === id) setter(v)
       }
     const gDelivery = guarded(setDeliveryAppData)
+    const gAppReconcile = guarded(setDeliveryAppReconcileData)
     const gChannel = guarded(setChannelData)
     const gPayment = guarded(setPaymentData)
     const gPaymentBreakdown = guarded(setPaymentBreakdownData)
@@ -2448,6 +2513,17 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         })
           .then(gDelivery)
           .catch(() => gDelivery({ items: [], total: 0 }))
+      )
+    }
+    if (needAppReconcile) {
+      tasks.push(
+        getPosDeliveryAppReconcile({
+          startStr,
+          endStr,
+          stores: salesFetchStoresParam,
+        })
+          .then(gAppReconcile)
+          .catch(() => gAppReconcile(EMPTY_POS_DELIVERY_APP_RECONCILE))
       )
     }
     if (needChannel) {
@@ -3077,7 +3153,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </p>
           ) : null}
 
+            {!hideOrderTypeFilter || needsPeriodGroup || showDowFilter ? (
             <div className="mb-3 space-y-4 rounded-lg border bg-muted/20 p-3 md:hidden">
+              {!hideOrderTypeFilter ? (
               <div className="space-y-2">
                 <span className="text-sm font-medium">{tr("salesAmountKindLabel", "매출액 종류")}</span>
                 <div className="relative" ref={orderTypesPickerRef}>
@@ -3175,6 +3253,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   ) : null}
                 </div>
               </div>
+              ) : null}
               {needsPeriodGroup ? (
                 <div className="space-y-2">
                   <span className="text-sm font-medium">{tr("salesPeriodGranularityLabel", "집계 기간")}</span>
@@ -3287,9 +3366,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </div>
               ) : null}
             </div>
+            ) : null}
 
+            {!hideOrderTypeFilter || needsPeriodGroup || showDowFilter ? (
             <div className="mb-3 hidden rounded-lg border bg-muted/20 p-3 md:block">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                {!hideOrderTypeFilter ? (
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="shrink-0 text-sm font-medium">
                     {tr("salesAmountKindLabel", "매출액 종류")}
@@ -3319,6 +3401,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     })}
                   </div>
                 </div>
+                ) : null}
                 {needsPeriodGroup ? (
                   <>
                     <span className="hidden h-4 w-px shrink-0 bg-border sm:inline-block" aria-hidden />
@@ -3381,10 +3464,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 ) : null}
               </div>
             </div>
+            ) : null}
           </>
           ) : null}
 
-          {showSalesResults && periodTruncated ? (
+          {showSalesResults && periodTruncated && selectedView !== "app-reconcile" ? (
             <p className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
               {tr(
                 "salesDataTruncatedDailyWarning",
@@ -3896,6 +3980,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </div>
                 </>
               )
+            )}
+
+            {selectedView === "app-reconcile" && (
+              <SalesDeliveryAppReconcilePanel
+                data={deliveryAppReconcileData}
+                placeholder={salesAnalyticsPlaceholder}
+                tr={tr}
+                formatAmount={formatSalesAmount}
+                storeDisplayName={posStoreDisplayName}
+              />
             )}
 
             {selectedView === "overview" && (

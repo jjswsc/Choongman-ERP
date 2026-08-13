@@ -284,6 +284,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/importPos", module: "pos_base" },
   { prefix: "/api/clearPos", module: "pos_base" },
   { prefix: "/api/posSales", module: "pos_base" },
+  { prefix: "/api/posDelivery", module: "pos_base" },
   { prefix: "/api/claimKitchen", module: "pos_base" },
   { prefix: "/api/markKitchen", module: "pos_base" },
   { prefix: "/api/applyPosMenu", module: "pos_base" },

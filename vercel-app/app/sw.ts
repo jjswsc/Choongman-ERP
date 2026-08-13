@@ -26,6 +26,7 @@ function isPosLiveOpsGetApi(pathname: string): boolean {
     pathname.startsWith("/api/posSalesByStoreChannel") ||
     pathname.startsWith("/api/posSalesByChannel") ||
     pathname.startsWith("/api/posSalesByDeliveryApp") ||
+    pathname.startsWith("/api/posDeliveryAppReconcile") ||
     pathname.startsWith("/api/posSalesByPeriod")
   )
 }

@@ -225,6 +225,82 @@ export async function getPosSalesByDeliveryApp(params: {
   }>
 }
 
+export type PosDeliveryAppReconcileDayRow = {
+  date: string
+  deliveryCount: number
+  deliverySales: number
+  inStoreCount: number
+  inStoreSales: number
+}
+
+export type PosDeliveryAppReconcileRow = {
+  storeCode: string
+  appCode: string
+  deliveryCount: number
+  deliverySales: number
+  inStoreCount: number
+  inStoreSales: number
+  appNetSales: number
+  feePct: number
+  feeSource: 'policy' | 'default' | 'none'
+  suggestedFee: number
+  suggestedNet: number
+  suggestedPayout: number
+  settledFee: number | null
+  settledNet: number | null
+  days: PosDeliveryAppReconcileDayRow[]
+}
+
+export type PosDeliveryAppReconcileKpi = {
+  appNetSales: number
+  deliveryCount: number
+  inStoreCount: number
+  deliverySales: number
+  inStoreSales: number
+  suggestedFee: number
+  suggestedPayout: number
+}
+
+export type PosDeliveryAppReconcileResult = {
+  success?: boolean
+  rows: PosDeliveryAppReconcileRow[]
+  kpi: PosDeliveryAppReconcileKpi
+  truncated?: boolean
+  message?: string
+}
+
+export async function getPosDeliveryAppReconcile(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  fresh?: boolean
+}): Promise<PosDeliveryAppReconcileResult> {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  appendPosSalesFreshParam(q, params.fresh)
+  const res = await posSalesApiFetch(`/api/posDeliveryAppReconcile?${q}`, params.fresh)
+  const json = (await res.json()) as PosDeliveryAppReconcileResult
+  if (!json || !Array.isArray(json.rows)) {
+    return {
+      success: false,
+      rows: [],
+      kpi: {
+        appNetSales: 0,
+        deliveryCount: 0,
+        inStoreCount: 0,
+        deliverySales: 0,
+        inStoreSales: 0,
+        suggestedFee: 0,
+        suggestedPayout: 0,
+      },
+      message: json?.message,
+    }
+  }
+  return json
+}
+
 export async function getPosSalesByStoreChannel(params: {
   startStr: string
   endStr: string
