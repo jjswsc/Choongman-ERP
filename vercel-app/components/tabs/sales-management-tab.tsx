@@ -1894,6 +1894,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     promoBundleData,
     deliveryPieRows,
     deliveryAppReconcileData,
+    kbankQrReconcileData,
     deliveryPaymentChannelRows,
     creditPaymentChannelRows,
     storeChartRows,
