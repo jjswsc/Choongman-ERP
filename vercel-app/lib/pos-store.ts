@@ -1218,6 +1218,33 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
     })
   }, [])
 
+  /** QR Cancel 등: 결제 tender만 로컬에서 즉시 0으로 (Pay 버튼 재활성) */
+  const clearTerminalOrderPaymentTenders = useCallback((storeCode: string, orderId: number | string) => {
+    const code = String(storeCode || '').trim()
+    const id = String(orderId ?? '').trim()
+    if (!code || !id) return
+    const businessDate = getPosBusinessDateStr()
+    setOrdersByStoreId((prev) => {
+      const list = Array.isArray(prev[code]) ? [...prev[code]] : []
+      const idx = list.findIndex((row) => String(row.id ?? '').trim() === id)
+      if (idx < 0) return prev
+      const next = [...list]
+      next[idx] = {
+        ...next[idx],
+        paymentCash: 0,
+        paymentCashTendered: undefined,
+        paymentCard: 0,
+        paymentQr: 0,
+        paymentOther: 0,
+        paymentDeliveryApp: 0,
+      }
+      const merged = { ...prev, [code]: next }
+      persistActiveTerminalOrders(code, businessDate, next)
+      ordersByStoreIdRef.current = merged
+      return merged
+    })
+  }, [])
+
   const upsertOptimisticOrder = useCallback((input: OptimisticOrderInput) => {
     const storeCode = String(input.storeCode || '').trim()
     if (!storeCode) return
@@ -1398,6 +1425,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
     updateOrderStatus,
     upsertOptimisticOrder,
     upsertOrderFromServer,
+    clearTerminalOrderPaymentTenders,
     loadingTables: loading,
     refetchStores,
   }

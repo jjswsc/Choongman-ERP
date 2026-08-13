@@ -543,6 +543,14 @@ export const I18N_POS_KO: Record<string, string> = {
       '이 주문을 취소합니다. 매출·재고 역처리 등이 진행될 수 있으며 되돌리기 어렵습니다. 계속할까요?',
     posReceiptPayCorrectCanceled: '주문이 취소되었습니다.',
     posReceiptPayCorrectCanceledPrinted: '주문이 취소되었으며 취소 영수증을 인쇄했습니다.',
+    posReceiptPayCorrectKbankVoidConfirm:
+      'KBank QR 결제를 은행에서 무효(Void) 처리합니다. POS 주문 취소와는 다릅니다. Void 성공 후 주문도 취소하려면 「주문 취소」를 누르세요. 계속할까요?',
+    posReceiptPayCorrectKbankVoidHint: 'Void = KBank QR 은행 무효. 주문 취소 = POS 빌 취소.',
+    posReceiptPayCorrectKbankVoidSuccess:
+      'KBank Void가 완료되었습니다. 은행 결제가 취소되었습니다. 필요하면 POS 주문을 취소하세요.',
+    posReceiptPayCorrectKbankVoidNoAttempt:
+      '이 빌에 KBank QR 거래가 없습니다. Void는 KBank QR API로 결제한 건만 가능합니다.',
+    posReceiptPayCorrectKbankVoidAlready: '이미 Void된 KBank 결제입니다.',
     posReceiptPayCorrectTotalInvalid: '주문 합계는 0보다 큰 숫자여야 합니다.',
     posReceiptPayCorrectTotalFixBlocked: '원래 주문 합계가 0이면 금액만 수정할 수 없습니다.',
     posMoveAmount: '이동',
@@ -1927,6 +1935,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posKbankStatusCancelled: '취소됨',
     posKbankAlreadyPaidNoVoid:
       '이미 결제 승인된 건입니다. Cancel은 불가 — Void로 무효 처리하세요. 패널을 닫은 뒤에는 결제 영수증 인쇄 창의 Void를 사용하세요.',
+    posKbankCancelClearPaymentFail:
+      'QR 취소는 됐지만 주문 결제금액 초기화에 실패했습니다. 새로고침 후 다시 결제를 시도해 주세요.',
     posKbankVoidFailedAlert:
       'Void 결제에 실패했습니다. 아래 KBank 패널의 응답을 확인하거나 Inquiry 후 다시 시도해 주세요.',
     posKbankSettlement: '정산 (Settlement)',
@@ -3923,6 +3933,14 @@ export const I18N_POS_EN: Record<string, string> = {
       'This will cancel the order. Sales/stock reversals may run and this is hard to undo. Continue?',
     posReceiptPayCorrectCanceled: 'The order was cancelled.',
     posReceiptPayCorrectCanceledPrinted: 'Order cancelled. Cancellation receipt sent to printer.',
+    posReceiptPayCorrectKbankVoidConfirm:
+      'Void will reverse the KBank QR payment at the bank. It does not cancel the POS bill. After Void succeeds, tap Cancel order if you also need to void the bill. Continue?',
+    posReceiptPayCorrectKbankVoidHint: 'Void = reverse KBank QR at the bank. Cancel order = cancel the POS bill.',
+    posReceiptPayCorrectKbankVoidSuccess:
+      'KBank Void succeeded. The bank payment was reversed. Cancel the POS bill if needed.',
+    posReceiptPayCorrectKbankVoidNoAttempt:
+      'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
+    posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posMoveAmount: 'Move',
@@ -5282,6 +5300,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posKbankStatusCancelled: 'CANCELLED',
     posKbankAlreadyPaidNoVoid:
       'This transaction is already paid. Cancel is not available — use Void. After closing the panel, use Void on the payment receipt print dialog.',
+    posKbankCancelClearPaymentFail:
+      'QR was cancelled but clearing payment amounts on the order failed. Refresh and try payment again.',
     posKbankVoidFailedAlert:
       'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',
     posKbankSettlement: 'Settlement',
@@ -7246,6 +7266,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posKbankStatusCancelled: 'ยกเลิกแล้ว',
     posKbankAlreadyPaidNoVoid:
       'รายการนี้ชำระเงินแล้วครับ Cancel ใช้ไม่ได้ — ให้กด Void แทน หากปิดแผง QR ไปแล้ว ให้ Void จากหน้าต่างพิมพ์ใบเสร็จชำระเงินครับ',
+    posKbankCancelClearPaymentFail:
+      'ยกเลิก QR แล้ว แต่ล้างยอดชำระในออเดอร์ไม่สำเร็จครับ รีเฟรชแล้วลองชำระใหม่ครับ',
     posKbankRateLimitAlert:
       'KBank จำกัดจำนวนครั้ง — รอประมาณ {minutes} นาที แล้วกด {label} ครั้งเดียว (ห้ามกดซ้ำ)',
     posKbankGenerateWaitTap: 'รอสักครู่ครับ (อย่ากดปุ่มซ้ำเร็วเกินไป)',
@@ -8366,6 +8388,15 @@ export const I18N_POS_TH: Record<string, string> = {
       'จะยกเลิกบิลนี้ อาจมีการย้อนรายการขาย/สต็อก และย้อนกลับได้ยาก ต้องการดำเนินการต่อหรือไม่?',
     posReceiptPayCorrectCanceled: 'ยกเลิกบิลแล้ว',
     posReceiptPayCorrectCanceledPrinted: 'ยกเลิกบิลแล้ว และพิมพ์ใบเสร็จยกเลิกแล้ว',
+    posReceiptPayCorrectKbankVoidConfirm:
+      'Void จะยกเลิกรายการชำระ QR ที่ธนาคาร (KBank) ไม่ใช่การยกเลิกบิลใน POS หลัง Void สำเร็จ หากต้องการยกเลิกออเดอร์ด้วย ให้กด「ยกเลิกบิล」 ดำเนินการต่อไหมครับ?',
+    posReceiptPayCorrectKbankVoidHint:
+      'Void = ยกเลิกที่ธนาคาร (KBank QR) · ยกเลิกบิล = ยกเลิกออเดอร์ใน POS',
+    posReceiptPayCorrectKbankVoidSuccess:
+      'Void สำเร็จแล้ว ธนาคารยกเลิกรายการชำระแล้วครับ หากต้องการยกเลิกบิลใน POS ให้กด「ยกเลิกบิล」',
+    posReceiptPayCorrectKbankVoidNoAttempt:
+      'ไม่พบรายการ KBank QR ของบิลนี้ ปุ่ม Void ใช้ได้เฉพาะชำระด้วย KBank QR ครับ',
+    posReceiptPayCorrectKbankVoidAlready: 'รายการ KBank นี้ Void ไปแล้วครับ',
     posReceiptPayCorrectTotalInvalid: 'ยอดรวมบิลต้องมากกว่า 0',
     posReceiptPayCorrectTotalFixBlocked: 'ยอดรวมบิลเดิมเป็น 0 จึงแก้ยอดอย่างเดียวไม่ได้',
     posMoveAmount: 'ย้าย',
@@ -12255,6 +12286,14 @@ export const I18N_POS_MM: Record<string, string> = {
     posReceiptPayCorrectCancelOrder: 'Cancel order',
     posReceiptPayCorrectCanceled: 'The order was cancelled.',
     posReceiptPayCorrectCanceledPrinted: 'Order cancelled. Cancellation receipt sent to printer.',
+    posReceiptPayCorrectKbankVoidConfirm:
+      'Void will reverse the KBank QR payment at the bank. It does not cancel the POS bill. After Void succeeds, tap Cancel order if you also need to void the bill. Continue?',
+    posReceiptPayCorrectKbankVoidHint: 'Void = reverse KBank QR at the bank. Cancel order = cancel the POS bill.',
+    posReceiptPayCorrectKbankVoidSuccess:
+      'KBank Void succeeded. The bank payment was reversed. Cancel the POS bill if needed.',
+    posReceiptPayCorrectKbankVoidNoAttempt:
+      'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
+    posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
@@ -15198,6 +15237,14 @@ export const I18N_POS_LA: Record<string, string> = {
     posReceiptPayCorrectCancelOrder: 'Cancel order',
     posReceiptPayCorrectCanceled: 'The order was cancelled.',
     posReceiptPayCorrectCanceledPrinted: 'Order cancelled. Cancellation receipt sent to printer.',
+    posReceiptPayCorrectKbankVoidConfirm:
+      'Void will reverse the KBank QR payment at the bank. It does not cancel the POS bill. After Void succeeds, tap Cancel order if you also need to void the bill. Continue?',
+    posReceiptPayCorrectKbankVoidHint: 'Void = reverse KBank QR at the bank. Cancel order = cancel the POS bill.',
+    posReceiptPayCorrectKbankVoidSuccess:
+      'KBank Void succeeded. The bank payment was reversed. Cancel the POS bill if needed.',
+    posReceiptPayCorrectKbankVoidNoAttempt:
+      'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
+    posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
@@ -18193,6 +18240,14 @@ export const I18N_POS_KH: Record<string, string> = {
     posReceiptPayCorrectCancelOrder: 'Cancel order',
     posReceiptPayCorrectCanceled: 'The order was cancelled.',
     posReceiptPayCorrectCanceledPrinted: 'Order cancelled. Cancellation receipt sent to printer.',
+    posReceiptPayCorrectKbankVoidConfirm:
+      'Void will reverse the KBank QR payment at the bank. It does not cancel the POS bill. After Void succeeds, tap Cancel order if you also need to void the bill. Continue?',
+    posReceiptPayCorrectKbankVoidHint: 'Void = reverse KBank QR at the bank. Cancel order = cancel the POS bill.',
+    posReceiptPayCorrectKbankVoidSuccess:
+      'KBank Void succeeded. The bank payment was reversed. Cancel the POS bill if needed.',
+    posReceiptPayCorrectKbankVoidNoAttempt:
+      'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
+    posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
@@ -21121,6 +21176,14 @@ export const I18N_POS_VI: Record<string, string> = {
     posReceiptPayCorrectCancelOrder: 'Cancel order',
     posReceiptPayCorrectCanceled: 'The order was cancelled.',
     posReceiptPayCorrectCanceledPrinted: 'Order cancelled. Cancellation receipt sent to printer.',
+    posReceiptPayCorrectKbankVoidConfirm:
+      'Void will reverse the KBank QR payment at the bank. It does not cancel the POS bill. After Void succeeds, tap Cancel order if you also need to void the bill. Continue?',
+    posReceiptPayCorrectKbankVoidHint: 'Void = reverse KBank QR at the bank. Cancel order = cancel the POS bill.',
+    posReceiptPayCorrectKbankVoidSuccess:
+      'KBank Void succeeded. The bank payment was reversed. Cancel the POS bill if needed.',
+    posReceiptPayCorrectKbankVoidNoAttempt:
+      'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
+    posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
@@ -24071,6 +24134,14 @@ export const I18N_POS_MS: Record<string, string> = {
     posReceiptPayCorrectCancelOrder: 'Cancel order',
     posReceiptPayCorrectCanceled: 'The order was cancelled.',
     posReceiptPayCorrectCanceledPrinted: 'Order cancelled. Cancellation receipt sent to printer.',
+    posReceiptPayCorrectKbankVoidConfirm:
+      'Void will reverse the KBank QR payment at the bank. It does not cancel the POS bill. After Void succeeds, tap Cancel order if you also need to void the bill. Continue?',
+    posReceiptPayCorrectKbankVoidHint: 'Void = reverse KBank QR at the bank. Cancel order = cancel the POS bill.',
+    posReceiptPayCorrectKbankVoidSuccess:
+      'KBank Void succeeded. The bank payment was reversed. Cancel the POS bill if needed.',
+    posReceiptPayCorrectKbankVoidNoAttempt:
+      'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
+    posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',

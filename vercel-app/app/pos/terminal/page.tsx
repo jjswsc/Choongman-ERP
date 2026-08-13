@@ -507,6 +507,7 @@ export default function PosTerminalPage() {
     removeTerminalOrder,
     upsertOptimisticOrder,
     upsertOrderFromServer,
+    clearTerminalOrderPaymentTenders,
     loadingTables,
   } = usePosStore()
   const { getQrSessionMarker } = useQrFloorSessionHints(isPosDemo ? null : currentStoreId)
@@ -923,6 +924,13 @@ export default function PosTerminalPage() {
   const [liveKbankQrPayload, setLiveKbankQrPayload] = useState('')
   const [liveKbankQrAmount, setLiveKbankQrAmount] = useState(0)
   const [liveKbankQrType, setLiveKbankQrType] = useState<'THAI_QR' | 'CREDIT_CARD'>('THAI_QR')
+  /** QR 대기 중 카트가 비워져도 고객 화면에 품목 유지 */
+  const [kbankQrDisplayItems, setKbankQrDisplayItems] = useState<
+    Array<{ name: string; qty: number; amount: number }>
+  >([])
+  const terminalCartLinesRef = useRef<OrderItem[]>([])
+  terminalCartLinesRef.current = terminalCartLines
+  const kbankActiveOrderIdRef = useRef(0)
   const [liveKbankQrTypeSource, setLiveKbankQrTypeSource] =
     useState<KbankDisplayQrTypeSource>('requested')
   const [kbankSentQrTypeCode, setKbankSentQrTypeCode] = useState('')
@@ -2188,19 +2196,27 @@ export default function PosTerminalPage() {
    */
   const isIncomingDeliveryFocusLockedRef = useRef(isIncomingDeliveryFocusLocked)
   isIncomingDeliveryFocusLockedRef.current = isIncomingDeliveryFocusLocked
-  const customerDisplayOrderItems = useMemo(
-    () =>
-      terminalCartLines.map((line) => {
-        const qty = Math.max(1, Number((line as unknown as { quantity?: number; qty?: number }).quantity ?? (line as unknown as { qty?: number }).qty ?? 1))
-        const price = Math.max(0, Number((line as unknown as { price?: number }).price ?? 0))
-        return {
-          name: String((line as unknown as { name?: string }).name || ''),
-          qty,
-          amount: qty * price,
-        }
-      }),
-    [terminalCartLines]
-  )
+  const customerDisplayOrderItems = useMemo(() => {
+    if (String(liveKbankQrPayload || '').trim() && kbankQrDisplayItems.length > 0) {
+      return kbankQrDisplayItems
+    }
+    return terminalCartLines.map((line) => {
+      const qty = Math.max(
+        1,
+        Number(
+          (line as unknown as { quantity?: number; qty?: number }).quantity ??
+            (line as unknown as { qty?: number }).qty ??
+            1
+        )
+      )
+      const price = Math.max(0, Number((line as unknown as { price?: number }).price ?? 0))
+      return {
+        name: String((line as unknown as { name?: string }).name || ''),
+        qty,
+        amount: qty * price,
+      }
+    })
+  }, [terminalCartLines, liveKbankQrPayload, kbankQrDisplayItems])
   const customerDisplayOrderTotal = useMemo(
     () => customerDisplayOrderItems.reduce((sum, it) => sum + it.amount, 0),
     [customerDisplayOrderItems]
@@ -6344,12 +6360,15 @@ export default function PosTerminalPage() {
       const key = String(partnerTxnId || '').trim()
       const orderId =
         (key ? kbankPendingOrderIdRef.current[key] : 0) ||
+        Number(kbankActiveOrderIdRef.current || 0) ||
         Number(pendingTakeoutOrderId || 0) ||
         Number(pendingDineInOrderId || 0) ||
         Number(pendingDeliveryOrderId || 0) ||
         0
       if (key) delete kbankPendingOrderIdRef.current[key]
       if (!(orderId > 0) || !currentStoreId) return
+      // UI 즉시 반영 — Pay(ชำระที่ร้าน) 잠금 해제
+      clearTerminalOrderPaymentTenders(currentStoreId, orderId)
       try {
         const res = await updatePosOrder({
           id: orderId,
@@ -6364,10 +6383,36 @@ export default function PosTerminalPage() {
         })
         if (!res.success) {
           console.warn('clear unpaid QR payment fields failed:', res.message)
+          await appAlert(
+            localizeApiMessage(
+              res.message,
+              t,
+              t('posKbankCancelClearPaymentFail') ||
+                'QR 취소는 됐지만 주문 결제금액 초기화에 실패했습니다. 새로고침 후 다시 결제를 시도해 주세요.',
+              lang
+            )
+          )
+        } else {
+          try {
+            const rows = await getPosOrders({
+              orderId,
+              storeCode: currentStoreId,
+              limit: 1,
+            })
+            const hit = Array.isArray(rows) ? rows[0] : null
+            if (hit) upsertOrderFromServer(hit)
+          } catch {
+            /* local clear already applied */
+          }
         }
       } catch (e) {
         console.warn('clear unpaid QR payment fields error:', e)
+        await appAlert(
+          t('posKbankCancelClearPaymentFail') ||
+            'QR 취소는 됐지만 주문 결제금액 초기화에 실패했습니다. 새로고침 후 다시 결제를 시도해 주세요.'
+        )
       }
+      kbankActiveOrderIdRef.current = 0
       void refetchStores({ scope: 'current', immediate: true })
     },
     [
@@ -6376,6 +6421,10 @@ export default function PosTerminalPage() {
       pendingDineInOrderId,
       pendingDeliveryOrderId,
       refetchStores,
+      clearTerminalOrderPaymentTenders,
+      upsertOrderFromServer,
+      t,
+      lang,
     ]
   )
 
@@ -6429,6 +6478,7 @@ export default function PosTerminalPage() {
         clearKbankQrFromLinkpos()
         // Hide QR on staff + customer display; keep partnerTxnUid/txnNo so Void still works.
         setLiveKbankQrPayload('')
+        setKbankQrDisplayItems([])
         setCustomerDisplayPaymentMessage('')
         if (currentStoreId) {
           releaseKbankInquiryLoop(currentStoreId, kbankInquiryTabIdRef.current, refId)
@@ -6538,6 +6588,7 @@ export default function PosTerminalPage() {
     kbankQrSessionStartedAtRef.current = 0
     setLiveKbankQrPayload('')
     setLiveKbankQrType('THAI_QR')
+    setKbankQrDisplayItems([])
     setKbankOpsTxnUid('')
     setKbankOpsOrigTxnUid('')
     setKbankOpsTxnNo('')
@@ -6546,6 +6597,7 @@ export default function PosTerminalPage() {
     setKbankQrSessionStartedAtMs(0)
     kbankManualCancelPendingRef.current = false
     kbankCcInquiryTriggeredRef.current = ''
+    kbankActiveOrderIdRef.current = 0
   }, [purgeKbankPendingFinalize, clearKbankQrFromLinkpos, currentStoreId])
 
   const runKbankQrPaymentIfNeeded = useCallback(
@@ -6787,6 +6839,27 @@ export default function PosTerminalPage() {
       }
       setLiveKbankQrPayload(generatedQrPayload)
       setLiveKbankQrAmount(qrAmount)
+      {
+        const snap = terminalCartLinesRef.current.map((line) => {
+          const qty = Math.max(
+            1,
+            Number(
+              (line as unknown as { quantity?: number; qty?: number }).quantity ??
+                (line as unknown as { qty?: number }).qty ??
+                1
+            )
+          )
+          const price = Math.max(0, Number((line as unknown as { price?: number }).price ?? 0))
+          return {
+            name: String((line as unknown as { name?: string }).name || ''),
+            qty,
+            amount: qty * price,
+          }
+        })
+        setKbankQrDisplayItems(snap.filter((it) => it.name || it.amount > 0))
+      }
+      const activeOid = Number(context?.orderId || 0)
+      if (activeOid > 0) kbankActiveOrderIdRef.current = activeOid
       const bankQrMeta = extractKbankQrResponseMeta(data)
       const qrTypeDetails = resolveKbankDisplayQrTypeDetails({
         qrType: String(generate.bankQrTypeCode || bankQrMeta.qrTypeCode || '').trim(),
@@ -6838,77 +6911,40 @@ export default function PosTerminalPage() {
       setCustomerDisplayPaymentMessage(
         (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
       )
-      let originalTransactionId = String(generatedInfo.originalTxnId || '').trim()
-      let refId = String(generatedInfo.referenceId || '').trim()
 
-      const finalizeKbankQrFailureWithManualOption = async (
-        failureHint: string
-      ): Promise<
-        | { ok: true; partnerTransactionId: string; pending: true }
-        | { ok: false; message: string }
-      > => {
-        const manualMsg =
-          (t('posPaymentQr') || 'QR') +
-          ' ' +
-          failureHint +
-          '. ' +
-          (t('posProceedQuestion') || '수동 처리로 주문 저장을 계속할까요?')
-        const proceed = await appConfirm(manualMsg)
-        if (!proceed) {
-          setLiveKbankQrPayload('')
-          setLiveKbankQrType('THAI_QR')
-          setKbankCallbackState('idle')
-          setKbankOpsTxnUid('')
-          setKbankOpsOrigTxnUid('')
-          setKbankOpsTxnNo('')
-          setCustomerDisplayPaymentMessage('')
-          return { ok: false as const, message: failureHint }
-        }
-        setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posManual') || '수동 처리'))
-        return { ok: true as const, partnerTransactionId, pending: true as const }
-      }
-
-      // Thai QR only: one optional inquiry after 10s (auto-poll handles later sync).
-      // Credit Card QR skips this — CC needs numeric payment txnNo; silent auto-inquiry burns UAT quota
-      // and can trigger rate-limit pause before staff tap Inquiry.
+      // Thai QR: optional inquiry after 10s in background (do not block — otherwise cart clears
+      // ~10s later and customer display loses line items while QR stays). Auto-poll also syncs.
+      // Credit Card QR skips silent inquiry (numeric txnNo / UAT quota).
       if (requestedQrType !== 'CREDIT_CARD') {
-        await sleepMs(10_000)
-        if (sessionGen !== kbankQrSessionGenRef.current || kbankManualCancelPendingRef.current) {
-          return { ok: false as const, message: 'kbank_qr_cancelled' }
-        }
-        if (isKbankQrSessionExpired(kbankQrSessionStartedAtRef.current)) {
-          setKbankCallbackState('failed')
-          return { ok: false as const, message: 'kbank_qr_expired' }
-        }
-        if (!isKbankApiPaused()) {
+        void (async () => {
+          await sleepMs(10_000)
+          if (sessionGen !== kbankQrSessionGenRef.current || kbankManualCancelPendingRef.current) return
+          if (isKbankQrSessionExpired(kbankQrSessionStartedAtRef.current)) return
+          if (isKbankApiPaused()) return
           kbankInquiryLastAtRef.current = Date.now()
           const st = await executeKbankCheckStatus({
             storeCode: currentStoreId,
             orderId: context?.orderId,
             partnerTransactionId,
             originalTransactionId: partnerTransactionId,
-            refId: refId || undefined,
             payload: {
               origPartnerTxnUid: partnerTransactionId,
               qrType: requestedQrType,
             },
           })
-          if (sessionGen !== kbankQrSessionGenRef.current || kbankManualCancelPendingRef.current) {
-            return { ok: false as const, message: 'kbank_qr_cancelled' }
-          }
+          if (sessionGen !== kbankQrSessionGenRef.current || kbankManualCancelPendingRef.current) return
           const stData = (st.data || {}) as Record<string, unknown>
           const stTxnNo = extractKbankPaymentTxnNo(stData).slice(0, 20)
           if (stTxnNo) setKbankOpsTxnNo(stTxnNo)
-          if (!st.success && noteKbankRateLimitResponse(st.statusMessage || st.message)) {
-            /* stay pending; staff can Inquiry after backoff */
-          } else if (st.success) {
+          if (!st.success && noteKbankRateLimitResponse(st.statusMessage || st.message)) return
+          if (st.success) {
             if (
               presentKbankApprovedFromInquiry(partnerTransactionId, st, 'success', {
                 amount: qrAmount,
                 paymentMethod: 'PromptPay QR',
               })
             ) {
-              return { ok: true as const, partnerTransactionId }
+              return
             }
             const s = String(st.status || '').trim().toLowerCase()
             if (s === 'declined' || s === 'failed') {
@@ -6938,44 +6974,24 @@ export default function PosTerminalPage() {
                   },
                   `cancelled-by-inquiry:${partnerTransactionId}`
                 )
-                return { ok: false as const, message: 'kbank_qr_cancelled' }
               }
-              setKbankCallbackState('failed')
-              const failureHint =
-                s === 'failed'
-                  ? String(st.statusMessage || st.message || t('processFail') || '결제 실패').trim()
-                  : t('posPaymentDeclined') || '결제가 거절되었습니다.'
-              return finalizeKbankQrFailureWithManualOption(failureHint)
             }
-          } else if (!st.success) {
-            const failureHint = String(
-              st.statusMessage || st.message || t('processFail') || 'kbank_check_status_failed'
-            ).trim()
-            if (!noteKbankRateLimitResponse(failureHint)) {
-              return finalizeKbankQrFailureWithManualOption(failureHint)
+            const inquiryMeta = extractKbankQrResponseMeta(stData)
+            if (inquiryMeta.qrTypeCode || inquiryMeta.sof) {
+              const inquiryDetails = resolveKbankDisplayQrTypeDetails({
+                qrType: inquiryMeta.qrTypeCode,
+                sof: inquiryMeta.sof,
+                requested: requestedQrType,
+                emvPayload: generatedQrPayload,
+              })
+              setLiveKbankQrType(inquiryDetails.displayType)
+              setLiveKbankQrTypeSource(inquiryDetails.source)
             }
           }
-          const inquiryMeta = extractKbankQrResponseMeta(stData)
-          if (inquiryMeta.qrTypeCode || inquiryMeta.sof) {
-            const inquiryDetails = resolveKbankDisplayQrTypeDetails({
-              qrType: inquiryMeta.qrTypeCode,
-              sof: inquiryMeta.sof,
-              requested: requestedQrType,
-              emvPayload: String(liveKbankQrPayload || '').trim(),
-            })
-            setLiveKbankQrType(inquiryDetails.displayType)
-            setLiveKbankQrTypeSource(inquiryDetails.source)
-          }
-          if (!originalTransactionId) originalTransactionId = String(st.originalTransactionId || '').trim()
-          if (!refId) refId = String(st.refId || '').trim()
-        }
+        })()
       }
 
-      if (kbankManualCancelPendingRef.current) {
-        return { ok: false as const, message: 'kbank_qr_cancelled' }
-      }
-
-      // Still pending after inquiry: keep QR visible and wait for callback / manual Inquiry.
+      // Return immediately so payment path can save pending paymentQr without waiting 10s.
       setCustomerDisplayPaymentMessage(
         (t('posPaymentQr') || 'QR') +
           ' ' +
