@@ -16,7 +16,7 @@ import {
 } from '@/lib/api-client/qr-table'
 import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession } from '@/lib/qr-table-types'
 import { buffetTierDisplayName } from '@/lib/qr-table-types'
-import { aggregateQrGuestSentLines } from '@/lib/qr-table-guest-menu'
+import { aggregateQrGuestSentLines, groupQrGuestSentLinesByTime } from '@/lib/qr-table-guest-menu'
 import { normalizeQrGuestLang, qrGuestT, type QrGuestLang } from '@/lib/i18n-qr-table-guest'
 
 type MenuItem = {
@@ -30,6 +30,48 @@ type MenuItem = {
   description: string
   category: string
   categoryMain: string
+}
+
+type OrderSummaryItem = {
+  id?: string
+  name?: string
+  qty?: number
+  quantity?: number
+  price?: number
+  buffetIncluded?: boolean
+  cancelled?: boolean
+  addedAt?: string
+  isBuffetEntry?: boolean
+}
+
+type OrderSummaryState = {
+  total: number
+  paymentQr: number
+  balanceDue: number
+  items: OrderSummaryItem[]
+}
+
+function toOrderSummary(order: {
+  total?: number
+  paymentQr?: number
+  balanceDue?: number
+  items?: unknown
+}): OrderSummaryState {
+  return {
+    total: Number(order.total || 0),
+    paymentQr: Number(order.paymentQr || 0),
+    balanceDue: Number(order.balanceDue || 0),
+    items: (Array.isArray(order.items) ? order.items : []) as OrderSummaryItem[],
+  }
+}
+
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M12 7.75V12l3 1.75" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
 }
 
 type Step = 'boot' | 'tier' | 'pay_entry' | 'wait_staff' | 'menu' | 'error'
@@ -72,12 +114,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [busy, setBusy] = React.useState(false)
   const [callOpen, setCallOpen] = React.useState(false)
   const [historyOpen, setHistoryOpen] = React.useState(false)
-  const [orderSummary, setOrderSummary] = React.useState<{
-    total: number
-    paymentQr: number
-    balanceDue: number
-    items: Array<{ name?: string; qty?: number; quantity?: number; price?: number; buffetIncluded?: boolean }>
-  } | null>(null)
+  const [orderSummary, setOrderSummary] = React.useState<OrderSummaryState | null>(null)
   const [lang, setLang] = React.useState<QrGuestLang>('th')
   const extrasPayPollRef = React.useRef<number | null>(null)
 
@@ -184,24 +221,26 @@ export function QrTableGuestApp({ token }: { token: string }) {
       if (!(menus.includedMenus || []).length) setTab('extras')
       const order = await qrTableGetOrder(sessionAuth)
       if (order?.success && order.order) {
-        setOrderSummary({
-          total: Number(order.order.total || 0),
-          paymentQr: Number(order.order.paymentQr || 0),
-          balanceDue: Number(order.order.balanceDue || 0),
-          items: (order.order.items || []) as Array<{
-            name?: string
-            qty?: number
-            quantity?: number
-            price?: number
-            buffetIncluded?: boolean
-          }>,
-        })
+        setOrderSummary(toOrderSummary(order.order))
       }
     })()
     return () => {
       cancelled = true
     }
   }, [step, sessionAuth, g])
+
+  React.useEffect(() => {
+    if (!historyOpen || !sessionAuth) return
+    let cancelled = false
+    ;(async () => {
+      const order = await qrTableGetOrder(sessionAuth)
+      if (cancelled || !order?.success || !order.order) return
+      setOrderSummary(toOrderSummary(order.order))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [historyOpen, sessionAuth])
 
   React.useEffect(() => {
     if (step !== 'pay_entry' || !sessionAuth || !qrPayload) return
@@ -306,18 +345,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       setCart({})
       showToast(g('sentKitchen'))
       if (res.order) {
-        setOrderSummary({
-          total: Number(res.order.total || 0),
-          paymentQr: Number(res.order.paymentQr || 0),
-          balanceDue: Number(res.order.balanceDue || 0),
-          items: (res.order.items || []) as Array<{
-            name?: string
-            qty?: number
-            quantity?: number
-            price?: number
-            buffetIncluded?: boolean
-          }>,
-        })
+        setOrderSummary(toOrderSummary(res.order))
       }
       if (session?.extrasPaymentModeResolved === 'prepay' || extrasChoice === 'prepay') {
         const extrasTotal = lines.reduce((sum, l) => {
@@ -337,18 +365,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
                 setQrPayload('')
                 const order = await qrTableGetOrder(sessionAuth)
                 if (order?.success && order.order) {
-                  setOrderSummary({
-                    total: Number(order.order.total || 0),
-                    paymentQr: Number(order.order.paymentQr || 0),
-                    balanceDue: Number(order.order.balanceDue || 0),
-                    items: (order.order.items || []) as Array<{
-                      name?: string
-                      qty?: number
-                      quantity?: number
-                      price?: number
-                      buffetIncluded?: boolean
-                    }>,
-                  })
+                  setOrderSummary(toOrderSummary(order.order))
                 }
               }
             }, 3000)
@@ -383,6 +400,10 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const sentLines = React.useMemo(
     () => aggregateQrGuestSentLines(orderSummary?.items),
     [orderSummary]
+  )
+  const sentGroups = React.useMemo(
+    () => groupQrGuestSentLinesByTime(orderSummary?.items, session?.createdAt),
+    [orderSummary, session?.createdAt]
   )
 
   const mainCategories = React.useMemo(() => {
@@ -535,41 +556,96 @@ export function QrTableGuestApp({ token }: { token: string }) {
       ) : null}
 
       {historyOpen ? (
-        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/40" onClick={() => setHistoryOpen(false)}>
+        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/45" onClick={() => setHistoryOpen(false)}>
           <div
-            className="max-h-[75dvh] w-full max-w-lg overflow-auto rounded-t-3xl bg-white p-4 shadow-2xl"
+            className="flex max-h-[82dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-base font-semibold">{g('orderHistory')}</p>
-              <button type="button" className="rounded-full bg-stone-100 px-3 py-1 text-sm" onClick={() => setHistoryOpen(false)}>
+            <div className="flex justify-center pt-2.5">
+              <span className="h-1.5 w-10 rounded-full bg-stone-200" />
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-1">
+              <div>
+                <p className="text-base font-semibold">{g('orderHistory')}</p>
+                {sentLines.length > 0 ? (
+                  <p className="text-xs text-stone-500">
+                    {g('orderHistoryItemCount').replace(
+                      '{n}',
+                      String(sentLines.reduce((n, l) => n + l.qty, 0))
+                    )}
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="rounded-full bg-stone-100 px-3 py-1.5 text-sm font-medium text-stone-700"
+                onClick={() => setHistoryOpen(false)}
+              >
                 {g('close')}
               </button>
             </div>
-            {sentLines.length === 0 ? (
-              <p className="py-8 text-center text-sm text-stone-500">{g('orderHistoryEmpty')}</p>
-            ) : (
-              <ul className="divide-y divide-stone-100">
-                {sentLines.map((line) => (
-                  <li
-                    key={`h-${line.buffetIncluded ? 'in' : 'ex'}-${line.name}-${line.price}`}
-                    className="flex items-start justify-between gap-3 py-2.5"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium">{line.name}</p>
-                      <p className="text-xs text-stone-500">
-                        {line.buffetIncluded ? g('included') : `฿${line.price.toLocaleString()}`}
-                      </p>
-                    </div>
-                    <p className="shrink-0 tabular-nums font-semibold">×{line.qty}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {orderSummary ? (
-              <p className="mt-3 border-t border-stone-100 pt-3 text-sm font-semibold">
-                {g('total')} ฿{Number(orderSummary.total || 0).toLocaleString()}
-              </p>
+            <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
+              {sentGroups.length === 0 ? (
+                <p className="py-10 text-center text-sm text-stone-500">{g('orderHistoryEmpty')}</p>
+              ) : (
+                <div className="space-y-3">
+                  {sentGroups.map((group, gi) => {
+                    const timedIndex = sentGroups.slice(0, gi + 1).filter((x) => x.timeLabel).length
+                    const itemCount = group.lines.reduce((n, l) => n + l.qty, 0)
+                    return (
+                      <section
+                        key={group.key}
+                        className="overflow-hidden rounded-2xl border border-stone-100 bg-stone-50/90"
+                      >
+                        <div className="flex items-center gap-2 border-b border-stone-100 bg-white/90 px-3 py-2">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--qr-brand,#b45309)]/10 text-[var(--qr-brand,#b45309)]">
+                            <ClockIcon className="h-3.5 w-3.5" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-semibold tabular-nums tracking-wide text-stone-800">
+                              {group.timeLabel || g('orderHistoryNoTime')}
+                            </p>
+                            <p className="text-[11px] text-stone-500">
+                              {group.timeLabel
+                                ? `${g('orderRound').replace('{n}', String(timedIndex))} · `
+                                : ''}
+                              {g('orderHistoryItemCount').replace('{n}', String(itemCount))}
+                            </p>
+                          </div>
+                        </div>
+                        <ul>
+                          {group.lines.map((line, li) => (
+                            <li
+                              key={`${group.key}-${line.buffetIncluded ? 'in' : 'ex'}-${line.name}-${line.price}-${li}`}
+                              className={`flex items-start justify-between gap-3 px-3 py-2.5 ${
+                                li > 0 ? 'border-t border-stone-100' : ''
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <p className="font-medium leading-snug">{line.name}</p>
+                                <p className="mt-0.5 text-xs text-stone-500">
+                                  {line.buffetIncluded ? g('included') : `฿${line.price.toLocaleString()}`}
+                                </p>
+                              </div>
+                              <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-semibold tabular-nums text-stone-800 shadow-sm ring-1 ring-stone-200">
+                                ×{line.qty}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            {orderSummary && sentGroups.length > 0 ? (
+              <div className="border-t border-stone-200 bg-white px-4 py-3">
+                <p className="flex items-center justify-between text-sm font-semibold">
+                  <span>{g('total')}</span>
+                  <span className="tabular-nums">฿{Number(orderSummary.total || 0).toLocaleString()}</span>
+                </p>
+              </div>
             ) : null}
           </div>
         </div>

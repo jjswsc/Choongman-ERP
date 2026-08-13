@@ -95,12 +95,16 @@ server {
   ssl_certificate     /etc/letsencrypt/live/kbank-proxy.예시도메인.com/fullchain.pem;
   ssl_certificate_key /etc/letsencrypt/live/kbank-proxy.예시도메인.com/privkey.pem;
 
-  location / {
+    location / {
     if ($kbank_allowed = 0) { return 403; }
 
-    proxy_pass https://openapi-sandbox.kasikornbank.com;
+    # 부팅 직후 DNS 미준비 시 `host not found in upstream` 로 nginx 기동 실패하는 것을 방지.
+    # proxy_pass에 변수를 쓰면 upstream을 설정 로드 시점이 아니라 요청 시 resolve 한다.
+    resolver 8.8.8.8 1.1.1.1 valid=300s ipv6=off;
+    set $kbank_upstream https://openapi.kasikornbank.com;
+    proxy_pass $kbank_upstream;
     proxy_ssl_server_name on;
-    proxy_set_header Host openapi-sandbox.kasikornbank.com;
+    proxy_set_header Host openapi.kasikornbank.com;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
@@ -111,8 +115,39 @@ server {
 }
 ```
 
-- PROD 전환 시 `proxy_pass` 대상 호스트를 **운영 Open API 베이스 URL**로 변경합니다.  
+- PROD: `openapi.kasikornbank.com` (위 예). UAT만 쓸 때는 upstream/Host를 sandbox로 바꾼다.  
 - Certbot 등으로 **TLS**를 꼭 적용합니다.
+- nginx 실패 자동 재시도: `sudo systemctl edit nginx` 로 `Restart=on-failure` 권장 (아래 §4.2).
+
+---
+
+## 4.1a 부팅 시 DNS 실패 방지 (운영 필수)
+
+증상: 재부팅 후 `nginx.service` 가 `failed`, 로그에 `host not found in upstream "openapi...."`.  
+원인: `proxy_pass https://hostname;` 은 **설정 로드 시 DNS 해석**이 필요하고, 부팅 직후 DNS가 없으면 `nginx -t` 자체가 실패한다.
+
+**조치:** `resolver` + `set $upstream ...; proxy_pass $upstream;` (위 예시).  
+적용 후 `sudo nginx -t && sudo systemctl restart nginx`.
+
+### 4.2 nginx 실패 시 자동 재시도 (systemd)
+
+```bash
+sudo mkdir -p /etc/systemd/system/nginx.service.d
+sudo tee /etc/systemd/system/nginx.service.d/override.conf >/dev/null <<'EOF'
+[Unit]
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Restart=on-failure
+RestartSec=10
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart nginx
+```
+
+부팅 직후 DNS가 잠깐 실패해도 10초 뒤 재시도로 올라올 수 있다.  
+근본 대책은 여전히 §4.1a 의 `resolver` + 변수 `proxy_pass` 이다.
 
 ---
 

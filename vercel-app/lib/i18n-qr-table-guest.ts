@@ -55,6 +55,9 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     orderHistory: 'ออเดอร์ที่สั่งแล้ว',
     orderHistoryEmpty: 'ยังไม่มีรายการที่ส่งครัว',
     close: 'ปิด',
+    orderRound: 'รอบที่ {n}',
+    orderHistoryNoTime: 'รายการก่อนหน้า',
+    orderHistoryItemCount: '{n} รายการ',
   },
   en: {
     loading: 'Loading…',
@@ -108,6 +111,9 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     orderHistory: 'Ordered',
     orderHistoryEmpty: 'Nothing sent to kitchen yet',
     close: 'Close',
+    orderRound: 'Round {n}',
+    orderHistoryNoTime: 'Earlier',
+    orderHistoryItemCount: '{n} items',
   },
   ko: {
     loading: '불러오는 중…',
@@ -161,6 +167,9 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     orderHistory: '주문 내역',
     orderHistoryEmpty: '주방으로 보낸 내역이 없습니다',
     close: '닫기',
+    orderRound: '{n}번째 주문',
+    orderHistoryNoTime: '이전 주문',
+    orderHistoryItemCount: '{n}개',
   },
 }
 

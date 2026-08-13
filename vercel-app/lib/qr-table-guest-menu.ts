@@ -1,5 +1,7 @@
 /** QR 손님 앱 — 이미 주방으로 보낸 라인 집계 (표시용). */
 
+import { getBangkokDateTimeString, normalizeBangkokDateTimeCompareKey } from '@/lib/bangkok-time'
+
 export type QrGuestSentLine = {
   name: string
   qty: number
@@ -7,30 +9,164 @@ export type QrGuestSentLine = {
   buffetIncluded: boolean
 }
 
+export type QrGuestSentLineInput = {
+  id?: unknown
+  name?: string
+  qty?: number
+  quantity?: number
+  price?: number
+  buffetIncluded?: boolean
+  cancelled?: boolean
+  addedAt?: unknown
+  isBuffetEntry?: boolean
+}
+
+export type QrGuestSentTimeGroup = {
+  key: string
+  addedAt: string | null
+  timeLabel: string
+  lines: QrGuestSentLine[]
+}
+
+/** 같은 전송(주방 슬립 1장)으로 묶을 허용 오차 — 레거시 QR id의 Date.now() 드리프트 대비 */
+const QR_GUEST_ORDER_CLUSTER_MS = 2500
+const QR_LINE_ID_MS_RE = /^qr-\d+-\d+-(\d{12,13})-[a-z0-9]+$/i
+
+function lineQty(raw: QrGuestSentLineInput): number {
+  return Math.max(0, Math.floor(Number(raw.qty ?? raw.quantity ?? 0) || 0))
+}
+
+function toSentLine(raw: QrGuestSentLineInput): QrGuestSentLine | null {
+  if (raw?.cancelled === true) return null
+  const qty = lineQty(raw)
+  if (!qty) return null
+  return {
+    name: String(raw.name || '').trim() || '—',
+    qty,
+    price: Math.max(0, Number(raw.price) || 0),
+    buffetIncluded: raw.buffetIncluded === true,
+  }
+}
+
+function sentLineKey(line: QrGuestSentLine): string {
+  return `${line.buffetIncluded ? 'in' : 'ex'}|${line.name}|${line.price}`
+}
+
+function mergeSentLine(into: QrGuestSentLine[], line: QrGuestSentLine) {
+  const key = sentLineKey(line)
+  const prev = into.find((row) => sentLineKey(row) === key)
+  if (prev) prev.qty += line.qty
+  else into.push({ ...line })
+}
+
 export function aggregateQrGuestSentLines(
-  items: Array<{
-    name?: string
-    qty?: number
-    quantity?: number
-    price?: number
-    buffetIncluded?: boolean
-    cancelled?: boolean
-  }> | null | undefined
+  items: QrGuestSentLineInput[] | null | undefined
 ): QrGuestSentLine[] {
   const map = new Map<string, QrGuestSentLine>()
   for (const raw of items || []) {
-    if (raw?.cancelled === true) continue
-    const qty = Math.max(0, Math.floor(Number(raw.qty ?? raw.quantity ?? 0) || 0))
-    if (!qty) continue
-    const name = String(raw.name || '').trim() || '—'
-    const buffetIncluded = raw.buffetIncluded === true
-    const price = Math.max(0, Number(raw.price) || 0)
-    const key = `${buffetIncluded ? 'in' : 'ex'}|${name}|${price}`
+    const line = toSentLine(raw)
+    if (!line) continue
+    const key = sentLineKey(line)
     const prev = map.get(key)
-    if (prev) prev.qty += qty
-    else map.set(key, { name, qty, price, buffetIncluded })
+    if (prev) prev.qty += line.qty
+    else map.set(key, { ...line })
   }
   return [...map.values()]
+}
+
+function bangkokWallToMs(raw: string | null | undefined): number | null {
+  const v = String(raw || '').trim()
+  if (!v) return null
+  const hasExplicitTz = /[zZ]$/.test(v) || /[+-]\d{2}:?\d{2}$/.test(v)
+  if (hasExplicitTz) {
+    const d = new Date(v)
+    return Number.isNaN(d.getTime()) ? null : d.getTime()
+  }
+  const m = v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/)
+  if (m) {
+    const d = new Date(`${m[1]}T${m[2]}+07:00`)
+    return Number.isNaN(d.getTime()) ? null : d.getTime()
+  }
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d.getTime()
+}
+
+function isBuffetEntryLine(raw: QrGuestSentLineInput): boolean {
+  if (raw.isBuffetEntry === true) return true
+  return String(raw.id || '').trim().toLowerCase().startsWith('buffet-entry-')
+}
+
+/** 줄의 주문 시각(ms). addedAt → QR id epoch → 뷔페 입장 폴백. */
+export function resolveQrGuestLineAddedAtMs(
+  raw: QrGuestSentLineInput,
+  fallbackCreatedAt?: string | null
+): number | null {
+  const fromField = bangkokWallToMs(String(raw.addedAt || '').trim())
+  if (fromField != null) return fromField
+  const id = String(raw.id || '').trim()
+  const m = id.match(QR_LINE_ID_MS_RE)
+  if (m) {
+    const n = Number(m[1])
+    if (Number.isFinite(n) && n > 1e12) return n
+  }
+  if (isBuffetEntryLine(raw)) return bangkokWallToMs(fallbackCreatedAt)
+  return null
+}
+
+export function formatQrGuestOrderClock(addedAt: string | null | undefined): string {
+  const key = normalizeBangkokDateTimeCompareKey(addedAt)
+  const m = key.match(/ (\d{2}:\d{2}:\d{2})$/)
+  return m?.[1] || ''
+}
+
+/**
+ * 주방으로 보낸 시각별로 묶는다. 같은 전송(수 초 이내)은 한 블록.
+ * 시각을 모르는 줄은 맨 앞 ‘이전’ 그룹.
+ */
+export function groupQrGuestSentLinesByTime(
+  items: QrGuestSentLineInput[] | null | undefined,
+  fallbackCreatedAt?: string | null
+): QrGuestSentTimeGroup[] {
+  const rows = (items || [])
+    .map((raw) => {
+      const line = toSentLine(raw)
+      if (!line) return null
+      return { line, ms: resolveQrGuestLineAddedAtMs(raw, fallbackCreatedAt) }
+    })
+    .filter((row): row is { line: QrGuestSentLine; ms: number | null } => row != null)
+
+  rows.sort((a, b) => {
+    if (a.ms == null && b.ms == null) return 0
+    if (a.ms == null) return -1
+    if (b.ms == null) return 1
+    return a.ms - b.ms
+  })
+
+  const buckets: Array<{ startMs: number | null; lines: QrGuestSentLine[] }> = []
+  for (const row of rows) {
+    const last = buckets[buckets.length - 1]
+    const sameUnknown = last != null && last.startMs == null && row.ms == null
+    const sameCluster =
+      last != null &&
+      last.startMs != null &&
+      row.ms != null &&
+      row.ms - last.startMs <= QR_GUEST_ORDER_CLUSTER_MS
+    if (last && (sameUnknown || sameCluster)) {
+      mergeSentLine(last.lines, row.line)
+      continue
+    }
+    buckets.push({ startMs: row.ms, lines: [{ ...row.line }] })
+  }
+
+  return buckets.map((bucket, index) => {
+    const addedAt = bucket.startMs != null ? getBangkokDateTimeString(new Date(bucket.startMs)) : null
+    return {
+      key: addedAt || `none-${index}`,
+      addedAt,
+      timeLabel: formatQrGuestOrderClock(addedAt),
+      lines: bucket.lines,
+    }
+  })
 }
 
 /**

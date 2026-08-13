@@ -41,7 +41,7 @@ import {
   type MarketingCampaign,
   type PosPromo,
 } from "@/lib/api-client"
-import { buildInquiryEconomicsByPromoId, type InquiryPromoEconomics } from "@/lib/pos-promo-inquiry-economics"
+import { buildInquiryEconomicsByPromoId } from "@/lib/pos-promo-inquiry-economics"
 import { PosCostVatViewSelect, usePosCostVatView } from "@/components/cost-analysis/pos-cost-vat-view-select"
 import { PROMOTION_DEFAULT_SUBCATEGORIES } from "@/lib/pos-promo-constants"
 import { PROMOTION_MAIN_CATEGORY } from "@/lib/pos-promo-constants"

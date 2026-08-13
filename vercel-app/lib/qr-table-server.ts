@@ -1066,6 +1066,7 @@ async function createOrEnsurePosOrderForSession(
 ): Promise<number> {
   if (session.posOrderId) return session.posOrderId
 
+  const now = getBangkokDateTimeString()
   const items: Array<Record<string, unknown>> = []
   if (tier && session.tierId) {
     items.push({
@@ -1079,6 +1080,7 @@ async function createOrEnsurePosOrderForSession(
       buffetTierId: tier.id,
       source: 'qr_table',
       kitchenPrinter: 0,
+      addedAt: now,
     })
   }
 
@@ -1086,7 +1088,6 @@ async function createOrEnsurePosOrderForSession(
   /** Omni Realtime은 tenant_id 필터 — 비우면 메인 POS가 폴링(5~15s)까지 메뉴를 못 봄 */
   const tenantId = (await resolveTenantIdForStoreCode(session.storeCode)) || ''
   const orderNo = await allocateNextPosOrderNo(session.storeCode, { tenantId })
-  const now = getBangkokDateTimeString()
   const memo = tier
     ? `[QR테이블] ${buffetTierDisplayName(tier)} / ${session.guestCount}pax`
     : `[QR테이블] à la carte / ${session.guestCount}pax`
@@ -1427,6 +1428,7 @@ export async function submitQrCart(params: {
   const prevItems = parseItemsJson(order.items_json)
   const newLines: Array<Record<string, unknown>> = []
   let extrasSubtotal = 0
+  const addedAt = getBangkokDateTimeString()
 
   for (const line of params.lines || []) {
     const menuId = Math.floor(Number(line.menuId) || 0)
@@ -1455,6 +1457,7 @@ export async function submitQrCart(params: {
       source: 'qr_table',
       kitchenPrinter: menu.kitchen_printer ?? null,
       qrPrepaid: false,
+      addedAt,
     })
   }
   if (!newLines.length) throw new Error('empty_cart')
@@ -1470,7 +1473,7 @@ export async function submitQrCart(params: {
 
   const nextItems = [...prevItems, ...newLines]
   const { subtotal, pricing } = await computeQrTableOrderFinancials(session.storeCode, nextItems)
-  const now = getBangkokDateTimeString()
+  const now = addedAt
 
   await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     items_json: JSON.stringify(nextItems),
@@ -1591,6 +1594,7 @@ export async function adjustQrSessionGuestCount(params: {
       buffetTierId: session.tierId,
       source: 'qr_table',
       kitchenPrinter: 0,
+      addedAt: getBangkokDateTimeString(),
     })
   }
 

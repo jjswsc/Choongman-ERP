@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateQrGuestSentLines, splitQrGuestMenusByTier } from '@/lib/qr-table-guest-menu'
+import { aggregateQrGuestSentLines, groupQrGuestSentLinesByTime, splitQrGuestMenusByTier } from '@/lib/qr-table-guest-menu'
 
 describe('aggregateQrGuestSentLines', () => {
   it('sums qty for the same name and skips cancelled', () => {
@@ -13,6 +13,50 @@ describe('aggregateQrGuestSentLines', () => {
       { name: 'Beef', qty: 3, price: 0, buffetIncluded: true },
       { name: 'Coke', qty: 1, price: 40, buffetIncluded: false },
     ])
+  })
+})
+
+describe('groupQrGuestSentLinesByTime', () => {
+  it('groups by addedAt and keeps separate rounds', () => {
+    const groups = groupQrGuestSentLinesByTime([
+      { name: '[Buffet] Buffet 299 × 2', qty: 2, price: 299, addedAt: '2026-08-13 13:30:07', isBuffetEntry: true },
+      { name: 'Chicken สันในไก่', qty: 1, price: 0, buffetIncluded: true, addedAt: '2026-08-13 13:36:04' },
+      { name: 'Chicken ไก่หมัก', qty: 1, price: 0, buffetIncluded: true, addedAt: '2026-08-13 13:36:04' },
+      { name: 'coke', qty: 1, price: 30, buffetIncluded: false, addedAt: '2026-08-13 13:42:53' },
+    ])
+    expect(groups.map((g) => g.timeLabel)).toEqual(['13:30:07', '13:36:04', '13:42:53'])
+    expect(groups[1].lines.map((l) => l.name)).toEqual(['Chicken สันในไก่', 'Chicken ไก่หมัก'])
+    expect(groups[2].lines).toEqual([{ name: 'coke', qty: 1, price: 30, buffetIncluded: false }])
+  })
+
+  it('clusters nearby QR id timestamps from the same send', () => {
+    const t0 = Date.parse('2026-08-13T13:36:04+07:00')
+    const groups = groupQrGuestSentLinesByTime([
+      { id: `qr-9-10-${t0}-abc12`, name: 'Chicken สันในไก่', qty: 1, price: 0, buffetIncluded: true },
+      { id: `qr-9-11-${t0 + 80}-def34`, name: 'Chicken ไก่หมัก', qty: 1, price: 0, buffetIncluded: true },
+      { id: `qr-9-20-${t0 + 6 * 60 * 1000 + 49000}-ghi56`, name: 'coke', qty: 1, price: 30, buffetIncluded: false },
+    ])
+    expect(groups).toHaveLength(2)
+    expect(groups[0].timeLabel).toBe('13:36:04')
+    expect(groups[0].lines.map((l) => l.name)).toEqual(['Chicken สันในไก่', 'Chicken ไก่หมัก'])
+    expect(groups[1].timeLabel).toBe('13:42:53')
+  })
+
+  it('uses session createdAt for buffet-entry without addedAt', () => {
+    const groups = groupQrGuestSentLinesByTime(
+      [{ id: 'buffet-entry-9', name: '[Buffet] Buffet 299 × 2', qty: 2, price: 299, isBuffetEntry: true }],
+      '2026-08-13 13:30:07'
+    )
+    expect(groups).toHaveLength(1)
+    expect(groups[0].timeLabel).toBe('13:30:07')
+  })
+
+  it('converts UTC ISO fallback to Bangkok clock', () => {
+    const groups = groupQrGuestSentLinesByTime(
+      [{ id: 'buffet-entry-9', name: '[Buffet] Buffet 299 × 2', qty: 2, price: 299, isBuffetEntry: true }],
+      '2026-08-13T06:30:07.000Z'
+    )
+    expect(groups[0].timeLabel).toBe('13:30:07')
   })
 })
 
