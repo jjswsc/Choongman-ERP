@@ -81,4 +81,26 @@ describe('resolvePosOrderReceiptPrintTotal', () => {
       })
     ).toBe(905)
   })
+
+  it('prefers computed when unpaid QR total is missing service/VAT (598 → 704)', () => {
+    expect(
+      resolvePosOrderReceiptPrintTotal({
+        storedTotal: 598,
+        pricingFinalTotal: 704,
+        effectiveDiscountAmt: 0,
+        paymentSum: 0,
+      })
+    ).toBe(704)
+  })
+
+  it('keeps higher unpaid stored total when computed is lower', () => {
+    expect(
+      resolvePosOrderReceiptPrintTotal({
+        storedTotal: 800,
+        pricingFinalTotal: 704,
+        effectiveDiscountAmt: 0,
+        paymentSum: 0,
+      })
+    ).toBe(800)
+  })
 })

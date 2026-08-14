@@ -22,7 +22,11 @@ export function resolveManualDiscountNetForOrderSave(params: {
 }
 
 /**
- * 영수증·홀 주문서 합계 — DB total이 할인·결제와 어긋나면 pricing 재계산값 우선.
+ * 영수증·홀 주문서 합계 — DB total이 할인·결제·봉사료/VAT와 어긋나면 pricing 재계산값 우선.
+ *
+ * QR 테이블 개설 등에서 DB total이 소계(예: 598)만 저장된 채
+ * 인쇄만 Service/VAT를 붙이면 Rounding이 -105.85처럼 잔차를 흡수한다.
+ * 미결제(또는 결제액=재계산)이면 computed(예: 704, Rounding +0.15)를 쓴다.
  */
 export function resolvePosOrderReceiptPrintTotal(params: {
   storedTotal: number
@@ -38,8 +42,11 @@ export function resolvePosOrderReceiptPrintTotal(params: {
   if (stored <= 0.005) return computed
   if (Math.abs(stored - computed) <= 0.02) return stored
 
+  /** 미결제: DB가 소계만 있고 매장 요율 재계산이 더 크면(봉사료·VAT 누락) 재계산 우선 */
+  if (paySum <= 0.005 && computed > stored + 0.02) return computed
+
   if (discount > 0.02 && stored > computed + 0.02) return computed
-  if (paySum > 0.005 && Math.abs(paySum - computed) <= 0.02 && stored > computed + 0.02) {
+  if (paySum > 0.005 && Math.abs(paySum - computed) <= 0.02 && Math.abs(stored - computed) > 0.02) {
     return computed
   }
 

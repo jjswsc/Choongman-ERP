@@ -57,6 +57,24 @@ describe('pos-receipt-totals-print', () => {
     expect(formatPosReceiptRoundingAmtText(-0.21)).toBe('-0.21')
   })
 
+  it('QR buffet 299×2: TOTAL 704 → Rounding +0.15 (not −105.85 from stored 598)', () => {
+    expect(
+      resolvePosReceiptRoundingAmt({
+        total: 704,
+        amountBeforeVat: 657.8,
+        vatPrint: 46.05,
+      })
+    ).toBe(0.15)
+    expect(formatPosReceiptRoundingAmtText(0.15)).toBe('+0.15')
+    expect(
+      resolvePosReceiptRoundingAmt({
+        total: 598,
+        amountBeforeVat: 657.8,
+        vatPrint: 46.05,
+      })
+    ).toBe(-105.85)
+  })
+
   it('included service is not added into Amount Before VAT', () => {
     expect(
       resolvePosReceiptSeparateServiceAmtForPrint({
