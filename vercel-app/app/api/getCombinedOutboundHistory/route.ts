@@ -31,6 +31,10 @@ import {
   resolveInventoryTenantScope,
 } from '@/lib/inventory-tenant-scope'
 import { postgrestQuotedInList } from '@/lib/office-store-canonical'
+import {
+  applyOutboundBillPlacedStatus,
+  unmatchedOutboundBillLookupIds,
+} from '@/lib/outbound-invoice-print-status'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,30 +108,31 @@ export async function GET(request: NextRequest) {
   try {
     const attachBillPlacedStatus = async (rows: OutboundHistoryItem[]) => {
       const invoiceNos = [...new Set(rows.map((r) => String(r.invoiceNo || '').trim()).filter(Boolean))]
-      if (invoiceNos.length === 0) return rows
-      const inList = postgrestQuotedInList(invoiceNos)
-      if (!inList) return rows
+      const statusSelect = { select: 'invoice_no,printed,printed_at', limit: 10000 } as const
       try {
-        const statusRows = (await supabaseSelectFilter(
-          'outbound_invoice_print_status',
-          `invoice_no=in.(${inList})`,
-          {
-            select: 'invoice_no,printed,printed_at',
-            limit: Math.min(invoiceNos.length + 20, 10000),
+        if (invoiceNos.length > 0) {
+          const inList = postgrestQuotedInList(invoiceNos)
+          if (inList) {
+            const statusRows = (await supabaseSelectFilter(
+              'outbound_invoice_print_status',
+              `invoice_no=in.(${inList})`,
+              { ...statusSelect, limit: Math.min(invoiceNos.length + 20, 10000) }
+            )) as { invoice_no?: string; printed?: boolean; printed_at?: string }[]
+            applyOutboundBillPlacedStatus(rows, statusRows || [])
           }
-        )) as { invoice_no?: string; printed?: boolean; printed_at?: string }[]
-        const statusMap = new Map<string, { printed: boolean; printedAt?: string }>()
-        for (const s of statusRows || []) {
-          const key = String(s.invoice_no || '').trim()
-          if (!key) continue
-          statusMap.set(key, { printed: Boolean(s.printed), printedAt: String(s.printed_at || '').trim() || undefined })
         }
-        for (const row of rows) {
-          const key = String(row.invoiceNo || '').trim()
-          const status = statusMap.get(key)
-          if (!status?.printed) continue
-          row.billPlaced = true
-          row.billPlacedAt = status.printedAt
+        const unmatched = unmatchedOutboundBillLookupIds(rows)
+        const suffixIds = [...unmatched.orderIds, ...unmatched.forceStockLogIds]
+        const CHUNK = 40
+        for (let i = 0; i < suffixIds.length; i += CHUNK) {
+          const chunk = suffixIds.slice(i, i + CHUNK)
+          const orFilter = chunk.map((id) => `invoice_no.like.*-${id}`).join(',')
+          const extra = (await supabaseSelectFilter(
+            'outbound_invoice_print_status',
+            `or=(${orFilter})`,
+            statusSelect
+          )) as { invoice_no?: string; printed?: boolean; printed_at?: string }[]
+          if (extra?.length) applyOutboundBillPlacedStatus(rows, extra)
         }
       } catch (statusErr) {
         console.error('getCombinedOutboundHistory: print status join failed', statusErr)

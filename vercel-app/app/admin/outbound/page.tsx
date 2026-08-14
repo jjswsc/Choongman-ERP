@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils"
 import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
+import { collectOutboundInvoiceNosForPrintStatus } from "@/lib/outbound-invoice-print-status"
 import {
   resolveInvoiceClientForTarget,
   resolveInvoiceClientFromBillToCandidates,
@@ -64,6 +65,7 @@ import {
   getInvoiceData,
   getInvoiceOrderBillToCandidates,
   getInvoiceSettings,
+  markOutboundInvoicesPrinted,
   getPayableTransactionItems,
   updateInvoiceSettings,
   getOutboundByWarehouse,
@@ -2364,6 +2366,12 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         return
       }
       printWindow.focus()
+      const billedInvoiceNos = collectOutboundInvoiceNosForPrintStatus(invoiceDatas)
+      if (billedInvoiceNos.length > 0) {
+        void markOutboundInvoicesPrinted({ invoiceNos: billedInvoiceNos }).catch((e) => {
+          console.error("markOutboundInvoicesPrinted failed:", e)
+        })
+      }
     } catch (e) {
       console.error(e)
       await appAlert(t("invLoadFailed"))

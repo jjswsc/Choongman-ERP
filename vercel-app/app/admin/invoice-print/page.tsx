@@ -24,6 +24,7 @@ import {
   normalizeTaxInvoiceReferenceNo,
   resolveTaxInvoiceSourceReferenceNo,
 } from "@/lib/tax-invoice-doc-no"
+import { collectOutboundInvoiceNosForPrintStatus } from "@/lib/outbound-invoice-print-status"
 
 const STORAGE_KEY = "invoice-print-data"
 
@@ -241,11 +242,7 @@ function InvoicePrintPageInner() {
       console.error("persist tax invoice doc no on print failed:", e)
     }
     try {
-      const invoiceNos = [...new Set(
-        editDatas
-          .map((d) => String(d.referenceNo || '').trim())
-          .filter((s) => /^IVF?\d{8}-/i.test(s))
-      )]
+      const invoiceNos = collectOutboundInvoiceNosForPrintStatus(editDatas)
       if (invoiceNos.length > 0) {
         await markOutboundInvoicesPrinted({ invoiceNos })
       }
