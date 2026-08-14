@@ -23,17 +23,13 @@ import {
 import {
   aggregateCashBankDeposits,
   cashBankDepositQueryTransDateWindow,
-  CASH_BANK_GL_CODE,
-  type CashBankDepositInput,
 } from '@/lib/pos-cash-bank-deposit'
-import { supabaseSelectFilterAllPagesStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
 import {
-  appendSaasTenantFilter,
-  isSaasTenantQueryBlocked,
-  markSaasTenantColumnMissing,
-  isMissingSaasTenantColumnError,
-} from '@/lib/saas-tenant-scope'
+  CHANNEL_BANK_GL_CODES,
+  fetchStoreAccountDeposits,
+  ledgerRowToBankDepositInput,
+} from '@/lib/pos-channel-bank-ledger'
+import { isMissingSaasTenantColumnError, markSaasTenantColumnMissing } from '@/lib/saas-tenant-scope'
 
 export const maxDuration = 60
 
@@ -52,47 +48,6 @@ function withTimeoutFallback<T>(p: Promise<T>, ms: number, fallback: T): Promise
   })
 }
 
-type BankTxRow = {
-  id?: number
-  trans_date?: string
-  sales_date?: string | null
-  trans_type?: string
-  amount?: number
-  memo?: string | null
-  note?: string | null
-  category?: string | null
-  store_name?: string | null
-  account_subject_id?: number | null
-}
-
-async function loadCashGlSubjectId(): Promise<number | null> {
-  try {
-    const rows = (await supabaseSelectFilter('account_subjects', `code=eq.${CASH_BANK_GL_CODE}`, {
-      select: 'id,code',
-      limit: 5,
-    })) as { id?: number; code?: string }[] | null
-    const id = Number(rows?.[0]?.id) || 0
-    return id || null
-  } catch {
-    return null
-  }
-}
-
-function mapBankTxRow(r: BankTxRow, cashSubjectId: number | null): CashBankDepositInput {
-  const sid = Number(r.account_subject_id) || 0
-  return {
-    transDate: r.trans_date,
-    salesDate: r.sales_date,
-    transType: r.trans_type,
-    amount: r.amount,
-    memo: r.memo,
-    note: r.note,
-    category: r.category,
-    storeName: r.store_name,
-    accountSubjectCode: cashSubjectId && sid === cashSubjectId ? CASH_BANK_GL_CODE : null,
-  }
-}
-
 async function fetchCashBankDeposits(params: {
   request: NextRequest
   storeCodes: string[]
@@ -104,65 +59,22 @@ async function fetchCashBankDeposits(params: {
   const end = params.endStr.slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return empty
 
-  const tenantScope = await resolvePosSalesTenantScopeFromRequest(params.request)
-  if (isSaasTenantQueryBlocked(tenantScope, 'bank_transactions')) return empty
-
-  const window = cashBankDepositQueryTransDateWindow(start, end)
-  const select =
-    'id,trans_date,sales_date,trans_type,amount,memo,note,category,store_name,account_subject_id'
-
-  const load = async (filter: string) =>
-    (await supabaseSelectFilterAllPagesStrippingUnknownColumns(
-      'bank_transactions',
-      appendSaasTenantFilter(filter, tenantScope, 'bank_transactions'),
-      { select, order: 'id.asc', maxRows: 20_000 },
-      'posCashReconcile.bankDeposits'
-    )) as BankTxRow[]
-
   try {
-    const cashSubjectId = await loadCashGlSubjectId()
-    const catBase = `trans_type=eq.deposit&category=eq.revenue_cash`
-    const bySalesDate = `${catBase}&sales_date=gte.${encodeURIComponent(start)}&sales_date=lte.${encodeURIComponent(end)}`
-    const byTransDate = `${catBase}&trans_date=gte.${encodeURIComponent(window.from)}&trans_date=lte.${encodeURIComponent(window.to)}`
-
-    const seen = new Set<number>()
-    const rows: BankTxRow[] = []
-    const pushUnique = (list: BankTxRow[] | null | undefined) => {
-      for (const r of list || []) {
-        const id = Number(r.id) || 0
-        if (id && seen.has(id)) continue
-        if (id) seen.add(id)
-        rows.push(r)
-      }
-    }
-
-    try {
-      const [a, b] = await Promise.all([load(bySalesDate), load(byTransDate)])
-      pushUnique(a)
-      pushUnique(b)
-    } catch {
-      pushUnique(await load(byTransDate))
-    }
-
-    if (cashSubjectId) {
-      const glBase = `trans_type=eq.deposit&account_subject_id=eq.${cashSubjectId}`
-      const glBySales = `${glBase}&sales_date=gte.${encodeURIComponent(start)}&sales_date=lte.${encodeURIComponent(end)}`
-      const glByTrans = `${glBase}&trans_date=gte.${encodeURIComponent(window.from)}&trans_date=lte.${encodeURIComponent(window.to)}`
-      try {
-        const [c, d] = await Promise.all([load(glBySales), load(glByTrans)])
-        pushUnique(c)
-        pushUnique(d)
-      } catch {
-        /* GL 보조 조회 실패 시 category 행만 사용 */
-      }
-    }
-
+    const tenantScope = await resolvePosSalesTenantScopeFromRequest(params.request)
+    const rows = await fetchStoreAccountDeposits({
+      tenantScope,
+      storeCodes: params.storeCodes,
+      startStr: start,
+      endStr: end,
+      transDateWindow: cashBankDepositQueryTransDateWindow(start, end),
+      glCodes: [CHANNEL_BANK_GL_CODES.cash],
+      queryLabel: 'posCashReconcile.bankDeposits',
+    })
     return aggregateCashBankDeposits({
-      rows: rows.map((r) => mapBankTxRow(r, cashSubjectId)),
+      rows: rows.map(ledgerRowToBankDepositInput),
       startStr: start,
       endStr: end,
       storeCodes: params.storeCodes,
-      fallbackStoreCode: params.storeCodes.length === 1 ? params.storeCodes[0] : undefined,
     })
   } catch (e) {
     if (isMissingSaasTenantColumnError(e)) markSaasTenantColumnMissing('bank_transactions')

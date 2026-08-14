@@ -5,6 +5,7 @@ import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retr
 import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
+import { resolveAlignedDueTotal } from '@/lib/pos-order-payment-due-align'
 import { coercePosOrderTypeForDb, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
 import { parseDeliveryAppCodeFromItemsJson } from '@/lib/pos-delivery-order-meta'
 import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipients-server'
@@ -401,7 +402,7 @@ export async function POST(req: NextRequest) {
       adjustments: pricingAdjustments,
     })
     const vat = pricing.vatFeeAmt
-    const total = pricing.finalTotal
+    let total = pricing.finalTotal
     let paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
       paymentDeliveryApp,
       paymentCash,
@@ -480,10 +481,14 @@ export async function POST(req: NextRequest) {
       paymentSumForStatus > total + 0.02 &&
       (closeStatus === 'paid' || closeStatus === 'completed')
     ) {
-      return NextResponse.json(
-        { success: false, message: 'payment_exceeds_total' },
-        { headers }
-      )
+      const roundedFit = resolveAlignedDueTotal(paymentSumForStatus, total)
+      if (roundedFit == null) {
+        return NextResponse.json(
+          { success: false, message: 'payment_exceeds_total' },
+          { headers }
+        )
+      }
+      total = roundedFit
     }
     let orderStatus = 'pending'
     if (total > 0 && paymentSumForStatus >= total - 0.02) {

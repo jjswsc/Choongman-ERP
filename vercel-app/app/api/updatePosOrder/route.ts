@@ -16,6 +16,7 @@ import {
   posOrderPaymentSumFromAmounts,
 } from '@/lib/pos-order-paid-at'
 import { computePosPricing } from '@/lib/pos-pricing'
+import { resolveAlignedDueTotal } from '@/lib/pos-order-payment-due-align'
 import { isDineInOrderTypeForGuestCount, normalizePosOrderTypeKey, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
 import {
   coercePaymentOtherBreakdownForSave,
@@ -403,7 +404,7 @@ export async function POST(req: NextRequest) {
       adjustments: pricingAdjustments,
     })
     const vat = pricing.vatFeeAmt
-    const total = pricing.finalTotal
+    let total = pricing.finalTotal
     let paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
       paymentDeliveryApp,
       paymentCash,
@@ -483,10 +484,14 @@ export async function POST(req: NextRequest) {
       nextPaymentSum >= dbTotal - 0.02 &&
       nextPaymentSum <= dbTotal + 0.02
     if (total > 0.02 && nextPaymentSum > total + 0.02 && !settledPaymentCoversDbTotal) {
-      return NextResponse.json(
-        { success: false, message: 'payment_exceeds_total' },
-        { headers }
-      )
+      const roundedFit = resolveAlignedDueTotal(nextPaymentSum, total)
+      if (roundedFit == null) {
+        return NextResponse.json(
+          { success: false, message: 'payment_exceeds_total' },
+          { headers }
+        )
+      }
+      total = roundedFit
     }
     const preserveDbFinancials =
       settledPaymentCoversDbTotal && Math.abs(total - dbTotal) > 0.02

@@ -1791,6 +1791,46 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             salesExcelCol.money,
           ],
         })
+        const deliveryDayRows = deliveryAppReconcileData.rows.flatMap((r) =>
+          r.days.map((d) => [
+            posStoreDisplayName(r.storeCode),
+            translateDeliveryAppCode(r.appCode, tr),
+            d.date,
+            numCell(d.deliverySales),
+            numCell(d.inStoreSales),
+            numCell(d.suggestedPayout ?? 0),
+            d.bankDepositAmt == null ? "" : numCell(d.bankDepositAmt),
+            d.bankDepositAmt == null
+              ? ""
+              : numCell((d.bankDepositAmt ?? 0) - (d.suggestedPayout ?? 0)),
+          ])
+        )
+        if (deliveryDayRows.length > 0) {
+          sheets.push({
+            name: tr("salesChannelReconcileDeliveryDays", "배달앱 일자"),
+            headers: [
+              tr("salesStoreName", "매장명"),
+              tr("salesDeliveryChannel", "배달앱/채널"),
+              tr("salesPeriodDay", "일별"),
+              tr("salesAppReconcileColDeliverySales", "배달 순매출"),
+              tr("salesAppReconcileColInStoreSales", "매장앱결제"),
+              tr("salesAppReconcileColSuggestedPayout", "예상 입금"),
+              tr("salesAppReconcileColSettledNet", "통장 입금"),
+              tr("salesAppReconcileCsvDiff", "차이"),
+            ],
+            rows: deliveryDayRows,
+            colFormats: [
+              salesExcelCol.text,
+              salesExcelCol.text,
+              salesExcelCol.text,
+              salesExcelCol.money,
+              salesExcelCol.money,
+              salesExcelCol.money,
+              salesExcelCol.money,
+              salesExcelCol.money,
+            ],
+          })
+        }
       }
       if (kbankQrReconcileData.rows.length > 0) {
         sheets.push({
@@ -1798,15 +1838,57 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           headers: [
             tr("salesStoreName", "매장명"),
             tr("salesKbankQrColCount", "건수"),
-            tr("salesKbankQrColSales", "QR 합계"),
+            tr("salesKbankQrColSales", "POS QR"),
+            tr("salesKbankQrColBank", "통장 QR"),
+            tr("salesKbankQrColDiff", "차이"),
           ],
           rows: kbankQrReconcileData.rows.map((r) => [
             posStoreDisplayName(r.storeCode),
             r.orderCount,
             numCell(r.qrSales),
+            r.bankDepositAmt == null ? "" : numCell(r.bankDepositAmt),
+            r.bankDepositAmt == null ? "" : numCell(r.bankDepositAmt - r.qrSales),
           ]),
-          colFormats: [salesExcelCol.text, salesExcelCol.int, salesExcelCol.money],
+          colFormats: [
+            salesExcelCol.text,
+            salesExcelCol.int,
+            salesExcelCol.money,
+            salesExcelCol.money,
+            salesExcelCol.money,
+          ],
         })
+        const qrDayRows = kbankQrReconcileData.rows.flatMap((r) =>
+          r.days.map((d) => [
+            posStoreDisplayName(r.storeCode),
+            d.date,
+            d.orderCount,
+            numCell(d.qrSales),
+            d.bankDepositAmt == null ? "" : numCell(d.bankDepositAmt),
+            d.bankDepositAmt == null ? "" : numCell(d.bankDepositAmt - d.qrSales),
+          ])
+        )
+        if (qrDayRows.length > 0) {
+          sheets.push({
+            name: tr("salesChannelReconcileKbankQrDays", "KBank QR 일자"),
+            headers: [
+              tr("salesStoreName", "매장명"),
+              tr("salesPeriodDay", "일별"),
+              tr("salesKbankQrColCount", "건수"),
+              tr("salesKbankQrColSales", "POS QR"),
+              tr("salesKbankQrColBank", "통장 QR"),
+              tr("salesKbankQrColDiff", "차이"),
+            ],
+            rows: qrDayRows,
+            colFormats: [
+              salesExcelCol.text,
+              salesExcelCol.text,
+              salesExcelCol.int,
+              salesExcelCol.money,
+              salesExcelCol.money,
+              salesExcelCol.money,
+            ],
+          })
+        }
       }
       if (cashReconcileData.rows.length > 0) {
         sheets.push({
@@ -1833,6 +1915,38 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             salesExcelCol.money,
           ],
         })
+        const cashDayRows = cashReconcileData.rows.flatMap((r) =>
+          r.days.map((d) => [
+            posStoreDisplayName(r.storeCode),
+            d.date,
+            d.orderCount,
+            numCell(d.cashSales),
+            d.bankDepositAmt == null ? "" : numCell(d.bankDepositAmt),
+            d.bankDepositAmt == null ? "" : numCell(d.bankDepositAmt - d.cashSales),
+          ])
+        )
+        if (cashDayRows.length > 0) {
+          sheets.push({
+            name: tr("salesChannelReconcileCashDays", "현금 일자"),
+            headers: [
+              tr("salesStoreName", "매장명"),
+              tr("salesPeriodDay", "일별"),
+              tr("salesCashColCount", "건수"),
+              tr("salesCashColPos", "POS 현금"),
+              tr("salesCashColBank", "통장 현금입금"),
+              tr("salesCashColDiff", "차이"),
+            ],
+            rows: cashDayRows,
+            colFormats: [
+              salesExcelCol.text,
+              salesExcelCol.text,
+              salesExcelCol.int,
+              salesExcelCol.money,
+              salesExcelCol.money,
+              salesExcelCol.money,
+            ],
+          })
+        }
       }
     } else if (selectedView === "payment") {
       if (deliveryPaymentChannelRows.length > 0) {

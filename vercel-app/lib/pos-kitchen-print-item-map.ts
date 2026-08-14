@@ -31,6 +31,7 @@ export type KitchenPrintMappedItem = {
   isBuffetEntry?: boolean
   kitchenPrinter?: number | null
   source?: string
+  addedAt?: string
   buffetTierId?: unknown
 }
 
@@ -149,6 +150,9 @@ export function mapPosOrderRowForKitchenPrint(
       ? { kitchenPrinter }
       : {}),
     ...(String(it.source ?? '').trim() ? { source: String(it.source).trim() } : {}),
+    ...(String(it.addedAt ?? it.added_at ?? '').trim()
+      ? { addedAt: String(it.addedAt ?? it.added_at).trim() }
+      : {}),
   }
 }
 

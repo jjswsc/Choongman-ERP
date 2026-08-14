@@ -106,6 +106,27 @@ describe('computePosOrderMergeFinancials', () => {
     expect(withService.total).toBe(1229.8)
     expect(withService.serviceAmt).toBe(111.8)
   })
+
+  it('rounds buffet 299×2 sequential VAT+service to 704 like POS pay modal', () => {
+    const r = computePosOrderMergeFinancials({
+      mergedItems: [{ name: 'Buffet 299', price: 299, qty: 2 }],
+      discountAmt: 0,
+      couponDiscountAmt: 0,
+      adjustments: {
+        vatRate: 7,
+        vatMode: 'separate',
+        serviceRate: 10,
+        serviceMode: 'separate',
+        feeStackMode: 'sequential',
+        feeStackOrder: ['service', 'vat', 'other'],
+        paymentTotalRoundingMode: 'round',
+      },
+    })
+    expect(r.subtotal).toBe(598)
+    expect(r.serviceAmt).toBe(59.8)
+    expect(r.vat).toBe(46.05)
+    expect(r.total).toBe(704)
+  })
 })
 
 describe('computePosOrderDueTotalFromLines', () => {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
-import { shouldSkipHallAutoprintForQrGuestAddon } from '@/lib/qr-table-types'
+import {
+  inferPrevQtySnapshotExcludingRecentQrGuestLines,
+  shouldSkipHallAutoprintForQrGuestAddon,
+} from '@/lib/qr-table-types'
 
 describe('isQrBuffetPackageKitchenSkipLine', () => {
   it('skips synthetic buffet-entry id', () => {
@@ -46,5 +49,42 @@ describe('shouldSkipHallAutoprintForQrGuestAddon', () => {
 
   it('does not skip empty delta', () => {
     expect(shouldSkipHallAutoprintForQrGuestAddon([])).toBe(false)
+  })
+})
+
+describe('inferPrevQtySnapshotExcludingRecentQrGuestLines', () => {
+  it('treats recent QR guest lines as the addon delta when snapshot is missing', () => {
+    const nowMs = 1_776_000_000_000
+    const staffKey = 'staff-1'
+    const qrKey = `qr-12-99-${nowMs - 3_000}-abc`
+    const items = [
+      { id: staffKey, name: 'Buffet', qty: 2 },
+      { id: qrKey, name: 'Chicken', qty: 1, source: 'qr_table' as const },
+    ]
+    const newQtyById = new Map([
+      [staffKey, 2],
+      [qrKey, 1],
+    ])
+    const prev = inferPrevQtySnapshotExcludingRecentQrGuestLines({
+      items,
+      newQtyById,
+      resolveKey: (it) => String(it.id || ''),
+      nowMs,
+    })
+    expect(prev).not.toBeNull()
+    expect(prev?.get(staffKey)).toBe(2)
+    expect(prev?.has(qrKey)).toBe(false)
+  })
+
+  it('returns null when there is no recent QR guest line', () => {
+    const items = [{ id: 'staff-1', name: 'Chicken', qty: 1 }]
+    const newQtyById = new Map([['staff-1', 1]])
+    expect(
+      inferPrevQtySnapshotExcludingRecentQrGuestLines({
+        items,
+        newQtyById,
+        resolveKey: (it) => String(it.id || ''),
+      })
+    ).toBeNull()
   })
 })

@@ -24,6 +24,7 @@
  * - `keep` 주문 한 건에 품목·할인·쿠폰할인·손님 수·메모·회원·포인트 사용 등을 합침.
  * - `total`/`vat`/`service_amt`는 매장 `pos_printer_settings`(VAT·봉사료·반올림)로 다시 계산한다.
  *   빈 adjustments로 저장하면 Omni settleFast가 DB total만 보고 `payment_exceeds_total`이 난다.
+ *   결제 저장은 `pos-order-payment-due-align`으로 POS 화면 합계(정수 바트 반올림 포함)와 맞춘다.
  * - `absorb` 주문은 `cancelled` + memo `[ORDER_MERGED … keep_id=…]` 스탬프(실제 취소·매출 집계와 구분).
  * - `keep` 주문 memo에 `[ORDER_MERGE_KEEP … absorb_id=…]` 스탬프를 남겨 Realtime/폴링이 추가주문으로 오인·재인쇄하지 않게 한다.
  * - 쿠폰 코드가 서로 다르면 keep 우선, 상대 코드는 메모에 `[합석] 보조 쿠폰: …` 로 남김.

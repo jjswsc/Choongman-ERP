@@ -414,12 +414,13 @@ export async function updatePosOrder(params: {
     otherMode?: 'included' | 'separate'
     feeStackMode?: 'parallel' | 'sequential'
     feeStackOrder?: Array<'vat' | 'service' | 'other'>
+    paymentTotalRoundingMode?: 'round' | 'floor' | 'none'
   }
 }) {
   const body: Record<string, unknown> = { ...params }
   if (params.skipPostPaymentSideEffects) {
+    /** Omni settleFast는 items를 무시. pricingAdjustments는 QR·합석 합계 재계산에 필요. */
     delete body.items
-    delete body.pricingAdjustments
   }
   const res = await apiFetchWithOffline('/api/updatePosOrder', {
     method: 'POST',

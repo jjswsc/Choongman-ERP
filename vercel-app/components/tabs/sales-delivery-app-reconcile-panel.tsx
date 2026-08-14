@@ -10,6 +10,10 @@ import type {
 } from "@/lib/api-client"
 import { translateDeliveryAppCode } from "@/lib/sales-analytics-labels"
 import { SalesDeliveryAppStatementCompare } from "@/components/tabs/sales-delivery-app-statement-compare"
+import {
+  channelReconcileMismatchDates,
+  isChannelReconcileDayMismatch,
+} from "@/lib/pos-channel-reconcile-match"
 
 export const EMPTY_POS_DELIVERY_APP_RECONCILE: PosDeliveryAppReconcileResult = {
   rows: [],
@@ -82,6 +86,28 @@ function DiffAmount(props: {
   )
 }
 
+function deliveryMismatchDates(row: PosDeliveryAppReconcileRow): string[] {
+  return channelReconcileMismatchDates(
+    row.days.map((d) => ({
+      date: d.date,
+      posAmt: d.suggestedPayout ?? 0,
+      bankAmt: d.bankDepositAmt,
+    }))
+  )
+}
+
+function MismatchCountLabel(props: {
+  dates: string[]
+  tr: (key: string, fallback: string) => string
+}) {
+  if (props.dates.length === 0) return null
+  return (
+    <span className="ml-1 text-[11px] font-normal text-destructive">
+      {props.tr("salesChannelReconcileMismatchDays", "틀린 날")} {props.dates.length}
+    </span>
+  )
+}
+
 function KpiCard(props: {
   title: string
   hint?: string
@@ -149,6 +175,10 @@ export function SalesDeliveryAppReconcilePanel(props: {
   const kpiBank = hasBank ? kpi.bankDepositAmt ?? 0 : null
   const kpiDiff =
     kpiBank == null ? null : Math.round((kpiBank - kpi.suggestedPayout) * 100) / 100
+  const mismatchDayCount = React.useMemo(
+    () => filteredRows.reduce((n, r) => n + deliveryMismatchDates(r).length, 0),
+    [filteredRows]
+  )
 
   if (placeholder) {
     return <p className="py-8 text-center text-sm text-muted-foreground">{placeholder}</p>
@@ -164,7 +194,7 @@ export function SalesDeliveryAppReconcilePanel(props: {
       <p className="text-xs text-muted-foreground leading-relaxed">
         {tr(
           "salesAppReconcileIntro",
-          "Grab·LINE MAN·Shopee를 같은 형식으로 봅니다. 합계는 배달+매장앱결제(dine)이고, 배달 건수에는 dine을 넣지 않습니다. 홀 현금·카드는 제외합니다. 예상 입금은 설정 수수료% 기준이며, 통장 입금은 통장 거래에 등록한 Grab·LINE MAN·Shopee 입금(매출일, 없으면 입금일 전날)입니다. 앱 รายได้는 WHT·프로모 때문에 다를 수 있습니다."
+          "Grab·LINE MAN·Shopee를 같은 형식으로 봅니다. 합계는 배달+매장앱결제(dine)이고, 배달 건수에는 dine을 넣지 않습니다. 홀 현금·카드는 제외합니다. 예상 입금은 설정 수수료% 기준이며, 통장 입금은 해당 매장 통장 계정과목(4111 Grab·4112 LINE MAN·4113 Shopee)입니다. 행을 펼치면 같은 날짜끼리 POS 예상입금과 통장을 맞춰 틀린 날을 찾습니다."
         )}
       </p>
 
@@ -194,7 +224,7 @@ export function SalesDeliveryAppReconcilePanel(props: {
           {tr("salesAppReconcileSectionCombined", "합계 (배달 + 매장앱결제)")}
           <span className="ml-2 text-xs font-normal text-muted-foreground">{selectedApp}</span>
         </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <KpiCard
             title={tr("salesAppReconcileKpiNet", "앱 순매출")}
             hint={merchantHint(appFilter, "net", tr)}
@@ -244,6 +274,21 @@ export function SalesDeliveryAppReconcilePanel(props: {
                   </span>
                 </>
               ) : null}
+            </p>
+          </KpiCard>
+          <KpiCard
+            title={tr("salesChannelReconcileMismatchDays", "틀린 날")}
+            hint={tr(
+              "salesChannelReconcileMismatchDaysHint",
+              "같은 날짜의 POS 예상입금과 통장 차이가 1바트 이상인 날"
+            )}
+          >
+            <p
+              className={`mt-1 text-lg font-semibold font-erp-numeric ${
+                mismatchDayCount > 0 ? "text-destructive" : "text-emerald-700 dark:text-emerald-400"
+              }`}
+            >
+              {mismatchDayCount.toLocaleString()}
             </p>
           </KpiCard>
         </div>
@@ -396,7 +441,16 @@ export function SalesDeliveryAppReconcilePanel(props: {
                         }
                         onClick={() => setOpenKey(open ? null : k)}
                       >
-                        <td className="px-3 py-1.5">{idx === 0 ? storeDisplayName(r.storeCode) : ""}</td>
+                        <td className="px-3 py-1.5">
+                          {idx === 0 ? (
+                            <>
+                              {storeDisplayName(r.storeCode)}
+                              <MismatchCountLabel dates={deliveryMismatchDates(r)} tr={tr} />
+                            </>
+                          ) : (
+                            ""
+                          )}
+                        </td>
                         <td className="px-3 py-1.5">
                           {idx === 0 ? translateDeliveryAppCode(r.appCode, tr) : ""}
                         </td>
@@ -484,7 +538,10 @@ export function SalesDeliveryAppReconcilePanel(props: {
                       className="cursor-pointer border-b hover:bg-muted/40"
                       onClick={() => setOpenKey(open ? null : k)}
                     >
-                      <td className="px-3 py-1.5 font-medium">{storeDisplayName(r.storeCode)}</td>
+                      <td className="px-3 py-1.5 font-medium">
+                        {storeDisplayName(r.storeCode)}
+                        <MismatchCountLabel dates={deliveryMismatchDates(r)} tr={tr} />
+                      </td>
                       <td className="px-3 py-1.5">{translateDeliveryAppCode(r.appCode, tr)}</td>
                       <td className="px-3 py-1.5 text-right font-erp-numeric">
                         {formatAmount(r.deliverySales)}
@@ -558,45 +615,92 @@ function DailySplitTable(props: {
   formatAmount: (n: number) => string
 }) {
   const { row, tr, formatAmount } = props
-  const kindDelivery = tr("salesAppReconcileKindDelivery", "배달")
-  const kindDine = tr("salesAppReconcileKindDine", "매장앱결제")
+  const [mismatchOnly, setMismatchOnly] = React.useState(true)
+  const mismatchDates = deliveryMismatchDates(row)
+  const visibleDays = mismatchOnly
+    ? row.days.filter((d) =>
+        isChannelReconcileDayMismatch(d.suggestedPayout ?? 0, d.bankDepositAmt)
+      )
+    : row.days
+
   return (
-    <>
-      <p className="mb-2 text-xs font-medium text-muted-foreground">
-        {tr("salesAppReconcileDailyTitle", "일별 (배달 / 매장앱결제)")}
-      </p>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-muted-foreground">
-            <th className="py-1 text-left">{tr("salesPeriodDay", "일별")}</th>
-            <th className="py-1 text-left">{tr("salesAppReconcileKind", "구분")}</th>
-            <th className="py-1 text-right">{tr("pL_sales", "매출")}</th>
-            <th className="py-1 text-right">{tr("salesOccupancy", "주문건수")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {row.days.map((d) => (
-            <React.Fragment key={d.date}>
-              <tr>
-                <td className="py-0.5">{d.date}</td>
-                <td className="py-0.5">{kindDelivery}</td>
-                <td className="py-0.5 text-right font-erp-numeric">
-                  {formatAmount(d.deliverySales)}
-                </td>
-                <td className="py-0.5 text-right font-erp-numeric">{d.deliveryCount}</td>
-              </tr>
-              <tr>
-                <td className="py-0.5" />
-                <td className="py-0.5">{kindDine}</td>
-                <td className="py-0.5 text-right font-erp-numeric">
-                  {formatAmount(d.inStoreSales)}
-                </td>
-                <td className="py-0.5 text-right font-erp-numeric">{d.inStoreCount}</td>
-              </tr>
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
-    </>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">
+          {tr("salesAppReconcileDailyTitle", "일별 대조 (POS 예상입금 vs 통장)")}
+        </p>
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={mismatchOnly}
+            onChange={(e) => setMismatchOnly(e.target.checked)}
+          />
+          {tr("salesAppReconcileCsvMismatchOnly", "틀린 날짜만")}
+        </label>
+      </div>
+      {mismatchDates.length > 0 ? (
+        <p className="text-xs text-destructive">
+          {tr("salesChannelReconcileMismatchDates", "틀린 날짜")}:{" "}
+          <span className="font-erp-numeric font-medium">{mismatchDates.join(", ")}</span>
+        </p>
+      ) : (
+        <p className="text-xs text-emerald-700 dark:text-emerald-400">
+          {tr("salesChannelReconcileAllDaysMatch", "조회 기간 일자가 모두 맞습니다.")}
+        </p>
+      )}
+      {visibleDays.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {tr("salesChannelReconcileAllDaysMatch", "조회 기간 일자가 모두 맞습니다.")}
+        </p>
+      ) : (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-muted-foreground">
+              <th className="py-1 text-left">{tr("salesPeriodDay", "일별")}</th>
+              <th className="py-1 text-right">{tr("salesAppReconcileKindDelivery", "배달")}</th>
+              <th className="py-1 text-right">{tr("salesAppReconcileKindDine", "매장앱결제")}</th>
+              <th className="py-1 text-right">{tr("salesAppReconcileColSuggestedPayout", "예상 입금")}</th>
+              <th className="py-1 text-right">{tr("salesAppReconcileColSettledNet", "통장 입금")}</th>
+              <th className="py-1 text-right">{tr("salesAppReconcileCsvDiff", "차이")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleDays.map((d) => {
+              const mismatch = isChannelReconcileDayMismatch(
+                d.suggestedPayout ?? 0,
+                d.bankDepositAmt
+              )
+              return (
+                <tr
+                  key={d.date}
+                  className={mismatch ? "bg-destructive/10 text-destructive" : undefined}
+                >
+                  <td className="py-0.5 font-erp-numeric">{d.date}</td>
+                  <td className="py-0.5 text-right font-erp-numeric">
+                    {formatAmount(d.deliverySales)}
+                  </td>
+                  <td className="py-0.5 text-right font-erp-numeric">
+                    {formatAmount(d.inStoreSales)}
+                  </td>
+                  <td className="py-0.5 text-right font-erp-numeric">
+                    {formatAmount(d.suggestedPayout ?? 0)}
+                  </td>
+                  <td className="py-0.5 text-right font-erp-numeric">
+                    {d.bankDepositAmt == null ? "—" : formatAmount(d.bankDepositAmt)}
+                  </td>
+                  <td className="py-0.5 text-right font-erp-numeric">
+                    <DiffAmount
+                      bank={d.bankDepositAmt}
+                      suggested={d.suggestedPayout ?? 0}
+                      formatAmount={formatAmount}
+                    />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
   )
 }

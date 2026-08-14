@@ -3,7 +3,11 @@
  * 배달앱(입금일-1)과 달리 현금은 당일 입금이 흔하므로, 매출일이 없으면 입금일을 쓴다.
  */
 import { isExpenseInternalBankNote } from '@/lib/bank-transaction-note-meta'
-import { canonicalSalesStoreRowKey, rowMatchesAnySalesStoreSelection } from '@/lib/pos-sales-store-filter'
+import {
+  canonicalSalesStoreRowKey,
+  resolveBankRowStoreName,
+  rowMatchesAnySalesStoreSelection,
+} from '@/lib/pos-sales-store-filter'
 
 export const CASH_BANK_GL_CODE = '4140'
 
@@ -16,6 +20,9 @@ export type CashBankDepositInput = {
   note?: string | null
   category?: string | null
   storeName?: string | null
+  store?: string | null
+  /** 매장 통장 bank_accounts.store — 있으면 행 매장명보다 우선 */
+  accountStore?: string | null
   accountSubjectCode?: string | null
 }
 
@@ -80,10 +87,10 @@ function looksLikeCashMemo(row: CashBankDepositInput): boolean {
 export function isCashBankDepositRow(row: CashBankDepositInput): boolean {
   if (String(row.transType || '').trim().toLowerCase() !== 'deposit') return false
   if (isExpenseInternalBankNote(row.note)) return false
+  if (String(row.accountSubjectCode || '').trim() === CASH_BANK_GL_CODE) return true
   const cat = String(row.category || '').trim().toLowerCase()
   if (cat && SKIP_DEPOSIT_CATEGORIES.has(cat)) return false
   if (cat === 'revenue_cash') return true
-  if (String(row.accountSubjectCode || '').trim() === CASH_BANK_GL_CODE) return true
   return looksLikeCashMemo(row)
 }
 
@@ -97,8 +104,6 @@ export function aggregateCashBankDeposits(params: {
   startStr: string
   endStr: string
   storeCodes?: string[]
-  /** 매장 1곳만 조회 중인데 통장 행에 매장이 비어 있으면 이 매장으로 귀속 */
-  fallbackStoreCode?: string
 }): CashBankDepositAgg {
   const start = String(params.startStr || '').slice(0, 10)
   const end = String(params.endStr || '').slice(0, 10)
@@ -109,12 +114,18 @@ export function aggregateCashBankDeposits(params: {
   }
 
   const storeCodes = (params.storeCodes || []).map((s) => String(s || '').trim()).filter(Boolean)
-  const fallbackStore = String(params.fallbackStoreCode || '').trim()
 
   for (const row of params.rows) {
     if (!isCashBankDepositRow(row)) continue
-    let storeRaw = String(row.storeName || '').trim()
-    if (!storeRaw && fallbackStore) storeRaw = fallbackStore
+    const storeRaw =
+      String(row.accountStore || '').trim() ||
+      resolveBankRowStoreName({
+        storeName: row.storeName,
+        store: row.store,
+        memo: row.memo,
+        note: row.note,
+        storeCodes,
+      })
     if (!storeRaw) continue
     if (storeCodes.length > 0 && !rowMatchesAnySalesStoreSelection(storeRaw, storeCodes)) continue
 

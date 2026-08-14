@@ -36,7 +36,9 @@ export const paymentReceiptScanSeededRef = { current: false }
 export const grabCancelWatchSeededRef = { current: false }
 export const promptedGrabCustomerCancelIdsRef = { current: new Set<number>() }
 export const lastTriggerMainPosPollAtRef = { current: 0 }
-export const triggerMainPosPollNowRef = { current: null as (() => void) | null }
+export const triggerMainPosPollNowRef = {
+  current: null as ((opts?: { force?: boolean }) => void) | null,
+}
 
 export function resetPosMainDeviceSyncStateForStore(storeCode: string): void {
   const persistedLastSeen = readMainPosLastSeenOrderId(storeCode)

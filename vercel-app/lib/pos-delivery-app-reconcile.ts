@@ -18,6 +18,7 @@ import { POS_SALES_COMPLETED_STATUSES } from '@/lib/pos-sales-period-aggregate'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 import { canonicalSalesStoreRowKey } from '@/lib/pos-sales-store-filter'
 import { roundSettlementMoney } from '@/lib/pos-channel-settlement'
+import { deliveryAppBankDepositDateKey } from '@/lib/pos-delivery-app-bank-deposit'
 
 export const DELIVERY_APP_RECONCILE_FEE_APPS = ['grab', 'lineman', 'shopee'] as const
 export type DeliveryAppReconcileFeeApp = (typeof DELIVERY_APP_RECONCILE_FEE_APPS)[number]
@@ -47,6 +48,8 @@ export type DeliveryAppReconcileDayRow = {
   deliverySales: number
   inStoreCount: number
   inStoreSales: number
+  suggestedPayout: number
+  bankDepositAmt: number | null
 }
 
 export type DeliveryAppReconcileFeeSource = 'policy' | 'default' | 'none'
@@ -104,7 +107,24 @@ function isCompleted(status: string | null | undefined): boolean {
 }
 
 function emptyDay(date: string): DeliveryAppReconcileDayRow {
-  return { date, deliveryCount: 0, deliverySales: 0, inStoreCount: 0, inStoreSales: 0 }
+  return {
+    date,
+    deliveryCount: 0,
+    deliverySales: 0,
+    inStoreCount: 0,
+    inStoreSales: 0,
+    suggestedPayout: 0,
+    bankDepositAmt: null,
+  }
+}
+
+export function suggestedPayoutForDeliveryDay(
+  d: Pick<DeliveryAppReconcileDayRow, 'deliverySales' | 'inStoreSales'>,
+  feePct: number,
+  feeSource: DeliveryAppReconcileFeeSource
+): number {
+  const fee = feeSource === 'none' ? 0 : computeSuggestedDeliveryFee(d.deliverySales, feePct)
+  return round2(Math.max(0, d.deliverySales - fee) + d.inStoreSales)
 }
 
 function emptyBucket(): Bucket {
@@ -213,13 +233,23 @@ function finalizeRow(
     bankDepositAmt: null,
     days: [...bucket.days.values()]
       .sort((x, y) => x.date.localeCompare(y.date))
-      .map((d) => ({
-        date: d.date,
-        deliveryCount: d.deliveryCount,
-        deliverySales: round2(d.deliverySales),
-        inStoreCount: d.inStoreCount,
-        inStoreSales: round2(d.inStoreSales),
-      })),
+      .map((d) => {
+        const deliverySales = round2(d.deliverySales)
+        const inStoreSales = round2(d.inStoreSales)
+        return {
+          date: d.date,
+          deliveryCount: d.deliveryCount,
+          deliverySales,
+          inStoreCount: d.inStoreCount,
+          inStoreSales,
+          suggestedPayout: suggestedPayoutForDeliveryDay(
+            { deliverySales, inStoreSales },
+            fee.pct,
+            fee.source
+          ),
+          bankDepositAmt: d.bankDepositAmt,
+        }
+      }),
   }
 }
 
@@ -342,6 +372,10 @@ export function applyFeePctToReconcileRows(
       suggestedFee,
       suggestedNet,
       suggestedPayout,
+      days: row.days.map((d) => ({
+        ...d,
+        suggestedPayout: suggestedPayoutForDeliveryDay(d, pct, source),
+      })),
     }
   })
 }
@@ -361,10 +395,65 @@ export function applySettledAmountsToReconcileRows(
   })
 }
 
+function takeBankForStoreAppDate(
+  remaining: Map<string, number>,
+  storeCode: string,
+  appCode: string,
+  date: string
+): number | null {
+  const directKey = deliveryAppBankDepositDateKey(storeCode, appCode, date)
+  const direct = remaining.get(directKey)
+  if (direct != null) {
+    remaining.delete(directKey)
+    return direct
+  }
+  for (const [k, v] of remaining) {
+    const parts = k.split('\t')
+    if (parts.length !== 3) continue
+    const [s, a, d] = parts
+    if (a === appCode && d === date && canonicalSalesStoreRowKey(s) === storeCode) {
+      remaining.delete(k)
+      return v
+    }
+  }
+  return null
+}
+
+export function mergeDeliveryDaysWithBank(
+  days: DeliveryAppReconcileDayRow[],
+  storeCode: string,
+  appCode: string,
+  remainingByDate: Map<string, number>,
+  feePct: number,
+  feeSource: DeliveryAppReconcileFeeSource
+): DeliveryAppReconcileDayRow[] {
+  const byDate = new Map(days.map((d) => [d.date, { ...d }]))
+  const dates = new Set(byDate.keys())
+  for (const k of remainingByDate.keys()) {
+    const parts = k.split('\t')
+    if (parts.length !== 3) continue
+    const [s, a, d] = parts
+    if (a !== appCode || !/^\d{4}-\d{2}-\d{2}$/.test(d)) continue
+    if (s === storeCode || canonicalSalesStoreRowKey(s) === storeCode) dates.add(d)
+  }
+  return [...dates]
+    .sort((a, b) => a.localeCompare(b))
+    .map((date) => {
+      const pos = byDate.get(date) || emptyDay(date)
+      const bank = takeBankForStoreAppDate(remainingByDate, storeCode, appCode, date)
+      return {
+        ...pos,
+        suggestedPayout: suggestedPayoutForDeliveryDay(pos, feePct, feeSource),
+        bankDepositAmt: bank == null ? pos.bankDepositAmt : round2(bank),
+      }
+    })
+}
+
 /** 통장 실입금을 붙이고, 결산 입금이 비어 있으면 통장 금액으로 채운다. 둘 다 있으면 통장 금액을 결산 입금에 쓴다. */
 export function applyBankDepositsToReconcileRows(
   rows: DeliveryAppReconcileRow[],
-  lookup: (storeCode: string, appCode: string) => number | null
+  lookup: (storeCode: string, appCode: string) => number | null,
+  remainingByStoreAppDate?: Map<string, number>
 ): DeliveryAppReconcileRow[] {
   return rows.map((row) => {
     const found = lookup(row.storeCode, row.appCode)
@@ -373,6 +462,16 @@ export function applyBankDepositsToReconcileRows(
       ...row,
       bankDepositAmt,
       settledNet: bankDepositAmt ?? row.settledNet,
+      days: remainingByStoreAppDate
+        ? mergeDeliveryDaysWithBank(
+            row.days,
+            row.storeCode,
+            row.appCode,
+            remainingByStoreAppDate,
+            row.feePct,
+            row.feeSource
+          )
+        : row.days,
     }
   })
 }
@@ -380,7 +479,8 @@ export function applyBankDepositsToReconcileRows(
 /** POS 매출은 없는데 통장에만 배달앱 입금이 있는 매장×앱 행을 추가한다. */
 export function appendBankOnlyReconcileRows(
   rows: DeliveryAppReconcileRow[],
-  bankMap: Map<string, number>
+  bankMap: Map<string, number>,
+  remainingByStoreAppDate?: Map<string, number>
 ): DeliveryAppReconcileRow[] {
   const have = new Set(rows.map((r) => `${r.storeCode}\t${r.appCode}`))
   const extra: DeliveryAppReconcileRow[] = []
@@ -406,7 +506,9 @@ export function appendBankOnlyReconcileRows(
       settledFee: null,
       settledNet: amount,
       bankDepositAmt: amount,
-      days: [],
+      days: remainingByStoreAppDate
+        ? mergeDeliveryDaysWithBank([], storeCode, appCode, remainingByStoreAppDate, 0, 'none')
+        : [],
     })
   }
   if (extra.length === 0) return rows

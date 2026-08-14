@@ -60,8 +60,8 @@ describe('aggregateKbankQrReconcileRows', () => {
       }
     )
     expect(rows[0]?.days).toEqual([
-      { date: '2026-08-12', orderCount: 1, qrSales: 10 },
-      { date: '2026-08-13', orderCount: 1, qrSales: 20 },
+      { date: '2026-08-12', orderCount: 1, qrSales: 10, bankDepositAmt: null },
+      { date: '2026-08-13', orderCount: 1, qrSales: 20, bankDepositAmt: null },
     ])
   })
 })
@@ -69,9 +69,9 @@ describe('aggregateKbankQrReconcileRows', () => {
 describe('buildKbankQrReconcileResult', () => {
   it('builds kpi', () => {
     const kpi = buildKbankQrReconcileResult([
-      { storeCode: 'A', orderCount: 2, qrSales: 100, days: [] },
-      { storeCode: 'B', orderCount: 1, qrSales: 50, days: [] },
+      { storeCode: 'A', orderCount: 2, qrSales: 100, bankDepositAmt: null, days: [] },
+      { storeCode: 'B', orderCount: 1, qrSales: 50, bankDepositAmt: null, days: [] },
     ]).kpi
-    expect(kpi).toEqual({ orderCount: 3, qrSales: 150, storeCount: 2 })
+    expect(kpi).toEqual({ orderCount: 3, qrSales: 150, bankDepositAmt: 0, storeCount: 2 })
   })
 })

@@ -104,6 +104,61 @@ export function shouldSkipHallAutoprintForQrGuestAddon(
   return deltaLines.every(isQrTableGuestOrderLine)
 }
 
+/**
+ * Realtime UPDATE 는 old.items_json 이 비는 경우가 많다.
+ * 이전 스냅샷이 없을 때, 방금 들어온 QR 손님 줄만 델타로 본다.
+ */
+export const QR_GUEST_ADDON_AUTOPRINT_WINDOW_MS = 90_000
+
+const QR_LINE_ID_MS_RE = /^qr-\d+-\d+-(\d{12,13})-[a-z0-9]+$/i
+
+function qrGuestLineAddedAtMs(it: { id?: unknown; addedAt?: unknown }): number | null {
+  const rawAdded = String(it.addedAt ?? '').trim()
+  const wall = rawAdded.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/)
+  if (wall) {
+    const d = new Date(`${wall[1]}T${wall[2]}+07:00`)
+    if (!Number.isNaN(d.getTime())) return d.getTime()
+  }
+  const id = String(it.id ?? '').trim()
+  const m = id.match(QR_LINE_ID_MS_RE)
+  if (!m) return null
+  const n = Number(m[1])
+  return Number.isFinite(n) && n > 1e12 ? n : null
+}
+
+export function isRecentQrGuestAddonLine(
+  it: { source?: unknown; id?: unknown; addedAt?: unknown } | null | undefined,
+  nowMs: number = Date.now(),
+  windowMs: number = QR_GUEST_ADDON_AUTOPRINT_WINDOW_MS
+): boolean {
+  if (!it || !isQrTableGuestOrderLine(it)) return false
+  const addedMs = qrGuestLineAddedAtMs(it)
+  if (addedMs == null) return false
+  const age = nowMs - addedMs
+  return age >= 0 && age <= windowMs
+}
+
+export function inferPrevQtySnapshotExcludingRecentQrGuestLines<
+  T extends { id?: string; name?: string; qty?: number; source?: unknown; addedAt?: unknown },
+>(opts: {
+  items: T[]
+  newQtyById: Map<string, number>
+  resolveKey: (item: T) => string
+  nowMs?: number
+  windowMs?: number
+}): Map<string, number> | null {
+  const recentKeys = new Set<string>()
+  for (const it of opts.items) {
+    if (!isRecentQrGuestAddonLine(it, opts.nowMs, opts.windowMs)) continue
+    const key = String(opts.resolveKey(it) || '').trim()
+    if (key) recentKeys.add(key)
+  }
+  if (recentKeys.size === 0) return null
+  const prev = new Map(opts.newQtyById)
+  for (const key of recentKeys) prev.delete(key)
+  return prev
+}
+
 export function buffetTierDisplayName(
   tier: Pick<QrBuffetTier, 'nameTh' | 'nameEn' | 'nameKo' | 'code'>,
   lang?: string

@@ -1,4 +1,4 @@
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import {
   posPricingAdjustmentsFromPrinterSettingsDbRow,
   type PosPricingAdjustments,
@@ -9,6 +9,8 @@ const PRINTER_PRICING_SELECT =
 
 /**
  * 매장 POS 프린터 설정의 VAT·봉사료·반올림 → 합석 total / Omni settleFast 재계산용.
+ * 없는 컬럼(반올림 등 미배포)은 빼고 재시도 — 컬럼 하나 때문에 VAT/봉사료가 통째로 기본값 되면
+ * QR·합석 후 결제액(704)이 DB 합계(598)를 넘는 `payment_exceeds_total`이 난다.
  */
 export async function loadPosPricingAdjustmentsForStore(
   storeCode: string
@@ -16,10 +18,11 @@ export async function loadPosPricingAdjustmentsForStore(
   const code = String(storeCode ?? '').trim()
   if (!code) return posPricingAdjustmentsFromPrinterSettingsDbRow(null)
   try {
-    const rows = (await supabaseSelectFilter(
+    const rows = (await supabaseSelectFilterStrippingUnknownColumns(
       'pos_printer_settings',
       `store_code=eq.${encodeURIComponent(code)}`,
-      { limit: 1, select: PRINTER_PRICING_SELECT }
+      { limit: 1, select: PRINTER_PRICING_SELECT },
+      'loadPosPricingAdjustmentsForStore'
     )) as Record<string, unknown>[] | null
     return posPricingAdjustmentsFromPrinterSettingsDbRow(
       (rows?.[0] as Parameters<typeof posPricingAdjustmentsFromPrinterSettingsDbRow>[0]) ?? null

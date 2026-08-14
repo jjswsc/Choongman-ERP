@@ -11,6 +11,7 @@ import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate"
+import { PosMainDeviceSyncHost } from "@/components/pos/pos-main-device-sync-host"
 
 import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
 import { PosStoreProvider } from "@/lib/pos-store-provider"
@@ -457,6 +458,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
       <PosStoreProvider>
       <PosDrawerPinProvider>
       <PosBusinessDayHydrate />
+      <PosMainDeviceSyncHost />
       {topBarRevealStrip}
       {showTopChrome(effectiveShowPosHeader) ? (
         <header

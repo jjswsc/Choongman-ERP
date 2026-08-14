@@ -172,4 +172,67 @@ describe('applyCashBankDepositsToRows', () => {
     expect(b?.bankDepositAmt).toBe(40)
     expect(buildCashReconcileResult(rows).kpi.bankDepositAmt).toBe(130)
   })
+
+  it('compares POS and bank on the same sales date, not the period total', () => {
+    const pos = aggregateCashReconcileRows([
+      {
+        store_code: 'CM Ekkamai',
+        status: 'paid',
+        payment_cash: 100,
+        created_at: '2026-08-06T10:00:00+07:00',
+      },
+      {
+        store_code: 'CM Ekkamai',
+        status: 'paid',
+        payment_cash: 50,
+        created_at: '2026-08-07T10:00:00+07:00',
+      },
+    ])
+    const bank = aggregateCashBankDeposits({
+      rows: [
+        {
+          transType: 'deposit',
+          category: 'revenue_cash',
+          transDate: '2026-08-06',
+          amount: 100,
+          storeName: 'CM Ekkamai',
+        },
+        {
+          transType: 'deposit',
+          category: 'revenue_cash',
+          transDate: '2026-08-08',
+          salesDate: '2026-08-08',
+          amount: 40,
+          storeName: 'CM Ekkamai',
+        },
+      ],
+      startStr: '2026-08-06',
+      endStr: '2026-08-08',
+    })
+    const rows = applyCashBankDepositsToRows(pos, bank)
+    const store = rows.find((r) => r.storeCode.includes('Ekkamai'))
+    expect(store?.days.map((d) => d.date)).toEqual(['2026-08-06', '2026-08-07', '2026-08-08'])
+    expect(store?.days[0]).toMatchObject({ date: '2026-08-06', cashSales: 100, bankDepositAmt: 100 })
+    expect(store?.days[1]).toMatchObject({ date: '2026-08-07', cashSales: 50, bankDepositAmt: null })
+    expect(store?.days[2]).toMatchObject({ date: '2026-08-08', cashSales: 0, bankDepositAmt: 40 })
+  })
+
+  it('does not dump empty-store cash deposits onto the selected store', () => {
+    const bank = aggregateCashBankDeposits({
+      rows: [
+        {
+          transType: 'deposit',
+          category: 'revenue_cash',
+          transDate: '2026-08-13',
+          memo: '현금입금',
+          amount: 9000,
+          storeName: '',
+        },
+      ],
+      startStr: '2026-08-13',
+      endStr: '2026-08-13',
+      storeCodes: ['CM Ekkamai'],
+    })
+    expect(bank.byStore.size).toBe(0)
+  })
 })

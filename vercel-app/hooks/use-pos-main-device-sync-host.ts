@@ -44,13 +44,12 @@ import {
   isPosPrintDebugEnabledInBrowser,
   KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS,
   MAIN_POS_META_SCAN_INTERVAL_MS,
-  MAIN_POS_STARTUP_CATCHUP_WINDOW_MS,
   posGuestCountSpread,
   storeAutoPrintFlagsFromSettings,
   DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS,
   type StoreAutoPrintFlags,
 } from '@/lib/pos-terminal-auto-print'
-import { activatePosMainDeviceLayoutSync } from '@/lib/pos-main-device-sync-owner'
+import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
 import {
   shouldSyncHostSkipDineInAddonMetaScan,
   shouldSyncHostSkipLocalKitchenAutoprint,
@@ -69,7 +68,6 @@ import {
   hasInitializedMainPosPollRef,
   lastMetaScanAtRef,
   lastRealtimeOrderEventAtRef,
-  lastSeenOrderIdPersistedRef,
   lastSeenOrderIdRef,
   lastTriggerMainPosPollAtRef,
   mainPosPollInFlightRef,
@@ -85,7 +83,6 @@ import {
   resetPosMainDeviceSessionStartedAt,
   shouldTreatAsMainPosIncomingOrder,
   seenOrderIdsRef,
-  startupCatchupUntilRef,
   triggerMainPosPollNowRef,
 } from '@/lib/pos-main-device-sync-state'
 import {
@@ -136,7 +133,10 @@ import {
   collectDineInSnapshotIncreasedKeys,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
-import { shouldSkipHallAutoprintForQrGuestAddon } from '@/lib/qr-table-types'
+import {
+  inferPrevQtySnapshotExcludingRecentQrGuestLines,
+  shouldSkipHallAutoprintForQrGuestAddon,
+} from '@/lib/qr-table-types'
 import { syncGrabCancelWatchSnapshot, applyGrabCancelWatchRealtimeRow } from '@/lib/pos-grab-cancel-watch'
 import {
   hasGrabCancelUiHandler,
@@ -163,6 +163,7 @@ type RealtimeParsedPosOrderItem = {
   menuId?: string
   optionCode?: string
   source?: string
+  addedAt?: string
   promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
 }
 
@@ -198,6 +199,7 @@ function parseRealtimePosOrderRowItemsJson(
         optionCode?: string
         promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
         source?: string
+        addedAt?: string
       }) => {
         const note = String(it.note ?? '').trim()
         const menuId = String(it.menuId1 ?? it.menu_id1 ?? it.menuId ?? '').trim()
@@ -208,6 +210,7 @@ function parseRealtimePosOrderRowItemsJson(
           menuId,
         })
         const source = String(it.source ?? '').trim()
+        const addedAt = String(it.addedAt ?? '').trim()
         return {
           id: String(it.id ?? ''),
           name: displayName,
@@ -217,6 +220,7 @@ function parseRealtimePosOrderRowItemsJson(
           ...(optionCode ? { optionCode } : {}),
           ...(note ? { note } : {}),
           ...(source ? { source } : {}),
+          ...(addedAt ? { addedAt } : {}),
           ...(Array.isArray(it.promoItems) ? { promoItems: enrichPromoItems(it.promoItems) } : {}),
         }
       }
@@ -654,10 +658,6 @@ export function usePosMainDeviceSyncHost(): void {
     [autoprintCtx, autoPrint, logPosPrintDebug]
   )
 
-  useEffect(() => {
-    return activatePosMainDeviceLayoutSync()
-  }, [])
-
   const seedPaymentReceiptIdsForStore = useCallback(async (code: string) => {
     if (paymentReceiptScanSeededRef.current || !code) return
     try {
@@ -811,6 +811,17 @@ export function usePosMainDeviceSyncHost(): void {
       pendingEmptyItemsOrderIdsRef.current.delete(orderId)
       /** 터미널 savePosOrder 진행 중 — seenOrderIds 선등록 시 터미널 주방 인쇄가 skipLocalAutoPrint에 막힘 */
       if (isPosTerminalLocalAutoprintActive() && isPosTerminalOrderSubmitInFlight()) {
+        const inferredOrderTypeForSnap = inferPosOrderTypeFromRow({
+          order_type: String(row.order_type ?? ''),
+          memo: String(row.memo ?? ''),
+          table_name: String(row.table_name ?? ''),
+          delivery_payment_channel: String(row.delivery_payment_channel ?? ''),
+          items_json: row.items_json,
+        })
+        if (inferredOrderTypeForSnap === 'dine_in') {
+          const snap = buildDineInQtySnapshotForStore(items)
+          if (snap.size > 0) dineInRemoteItemQtySnapshotRef.current.set(orderId, snap)
+        }
         logPosPrintDebug('realtime_insert_defer_terminal_submit', { orderId })
         return
       }
@@ -983,6 +994,7 @@ export function usePosMainDeviceSyncHost(): void {
     auth?.tenantId,
     printPaymentReceiptIfEnabled,
     skipLocalKitchenAutoprintForOrder,
+    buildDineInQtySnapshotForStore,
   ])
 
   // Realtime UPDATE — 홀 UI 갱신은 항상, 자동인쇄만 설정에 따름 (인쇄 OFF여도 태블릿/QR 메뉴 즉시 반영)
@@ -1174,7 +1186,10 @@ export function usePosMainDeviceSyncHost(): void {
       }
 
       const parsed = parseRealtimePosOrderRowItemsJson(row, resolveOrderItemDisplayName, enrichPromoItemsWithOptionName)
-      if (!parsed.ok || parsed.items.length === 0) return
+      if (!parsed.ok || parsed.items.length === 0) {
+        triggerMainPosPollNowRef.current?.({ force: true })
+        return
+      }
       const items = parsed.items
       let prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(orderId)
       const newQtyById = buildDineInQtySnapshotForStore(items)
@@ -1186,8 +1201,17 @@ export function usePosMainDeviceSyncHost(): void {
         }
       }
       if (!prevQtyById) {
+        prevQtyById =
+          inferPrevQtySnapshotExcludingRecentQrGuestLines({
+            items,
+            newQtyById,
+            resolveKey: (it) => resolveDineInKitchenSnapshotItemKey(it, { formatNote: formatLineNoteForPrint }),
+          }) ?? undefined
+      }
+      if (!prevQtyById) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
         refetchStores({ scope: 'current' })
+        triggerMainPosPollNowRef.current?.({ force: true })
         return
       }
       const changedSet = collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
@@ -1334,6 +1358,8 @@ export function usePosMainDeviceSyncHost(): void {
     reserveKitchenAutoPrintKey,
     releaseKitchenAutoPrintKey,
     clearTableOrder,
+    formatLineNoteForPrint,
+    buildDineInQtySnapshotForStore,
   ])
 
   // Main POS poll loop
@@ -1741,9 +1767,9 @@ export function usePosMainDeviceSyncHost(): void {
       }
     }
 
-    triggerMainPosPollNowRef.current = () => {
+    triggerMainPosPollNowRef.current = (opts) => {
       const now = Date.now()
-      if (now - lastTriggerMainPosPollAtRef.current < MAIN_POS_TRIGGER_POLL_MIN_MS) return
+      if (!opts?.force && now - lastTriggerMainPosPollAtRef.current < MAIN_POS_TRIGGER_POLL_MIN_MS) return
       if (mainPosPollInFlightRef.current) return
       lastTriggerMainPosPollAtRef.current = now
       void poll()
@@ -1800,8 +1826,8 @@ export function usePosMainDeviceSyncHost(): void {
   /** items_json 없는 head 폴링 — Realtime 활발 시 미호출, 무음·장애 시 안전망 */
   useEffect(() => {
     if (!isMainPosDevice || !storeCode) return
-    /** 터미널이 열려 있으면 터미널 head poll만 사용 (중복 Edge 요청 방지) */
-    if (isPosTerminalLocalAutoprintActive()) return
+    /** 터미널이 자체 head poll 할 때만 호스트는 쉼. 레이아웃 호스트가 담당하면 터미널이 열려도 여기서 돈다. */
+    if (isPosTerminalLocalAutoprintActive() && !isPosMainDeviceSyncOwnedByLayout()) return
     let cancelled = false
     let timerId = 0
     let seeded = false
@@ -1810,7 +1836,7 @@ export function usePosMainDeviceSyncHost(): void {
 
     const scheduleNext = () => {
       if (cancelled) return
-      if (isPosTerminalLocalAutoprintActive()) {
+      if (isPosTerminalLocalAutoprintActive() && !isPosMainDeviceSyncOwnedByLayout()) {
         timerId = window.setTimeout(() => scheduleNext(), 15_000)
         return
       }
@@ -1823,7 +1849,7 @@ export function usePosMainDeviceSyncHost(): void {
           try {
             if (!shouldFetch) return
             if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-            if (isPosTerminalLocalAutoprintActive()) return
+            if (isPosTerminalLocalAutoprintActive() && !isPosMainDeviceSyncOwnedByLayout()) return
             const heads = await getPosOrders({
               startStr: today,
               endStr: today,

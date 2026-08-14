@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   appendStoreCodeFilter,
   parseStoreList,
+  resolveBankRowStoreName,
   resolveStoresFromParams,
 } from '@/lib/pos-sales-store-filter'
 
@@ -37,5 +38,44 @@ describe('appendStoreCodeFilter', () => {
     expect(out).toContain('store_code=')
     const decoded = decodeURIComponent(out.split('store_code=')[1] ?? '')
     expect(decoded).toBe('in.(A,CM A,B,CM B)')
+  })
+})
+
+describe('resolveBankRowStoreName', () => {
+  it('does not assign empty rows to a selected store without a memo mention', () => {
+    expect(
+      resolveBankRowStoreName({
+        storeName: '',
+        memo: '이체입금 | X3812 GRABFOOD',
+        storeCodes: ['CM Ekkamai'],
+      })
+    ).toBe('')
+  })
+
+  it('prefers store_name, then store, then unique memo mention', () => {
+    expect(
+      resolveBankRowStoreName({
+        storeName: 'CM Ekkamai',
+        store: 'CM Union Mall',
+        memo: 'GRABFOOD UNION MALL',
+        storeCodes: ['CM Ekkamai'],
+      })
+    ).toBe('CM Ekkamai')
+    expect(
+      resolveBankRowStoreName({
+        storeName: '',
+        store: 'CM Future Park',
+        memo: 'GRABFOOD',
+        storeCodes: ['CM Ekkamai'],
+      })
+    ).toBe('CM Future Park')
+    expect(
+      resolveBankRowStoreName({
+        storeName: '',
+        store: 'CM Office',
+        memo: 'GRABFOOD EKKAMAI',
+        storeCodes: ['CM Ekkamai', 'CM Union Mall'],
+      })
+    ).toBe('CM Ekkamai')
   })
 })

@@ -1,6 +1,7 @@
 /** POS 터미널 페이지 마운트 시 로컬 주문·주방 인쇄 — layout sync host와 중복 방지 */
 
 import { hasRecentPosAutoPrintKey } from '@/lib/pos-auto-print-dedupe'
+import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
 
 let terminalLocalAutoprintActive = false
 let orderSubmitInFlightUntilMs = 0
@@ -45,8 +46,9 @@ export function shouldSyncHostSkipLocalKitchenAutoprint(opts: {
   return false
 }
 
-/** 홀 추가주문 meta scan — 터미널이 열려 있으면 터미널 submit 경로만 사용 */
+/** 홀 추가주문 meta scan — 레이아웃 호스트가 담당하면 터미널이 열려도 호스트가 스캔 */
 export function shouldSyncHostSkipDineInAddonMetaScan(): boolean {
+  if (isPosMainDeviceSyncOwnedByLayout()) return false
   return terminalLocalAutoprintActive
 }
 

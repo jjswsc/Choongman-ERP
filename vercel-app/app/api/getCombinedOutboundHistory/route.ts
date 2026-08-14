@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { escapeIlikePattern } from '@/lib/postgrest-ilike'
 import { ORDERS_COMBINED_PENDING_COLS, STOCK_LOG_OUTBOUND_HISTORY_COLS } from '@/lib/postgrest-narrow-select'
 import { getDirectSettlementMap } from '@/lib/direct-settlement-server'

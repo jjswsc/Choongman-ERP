@@ -40,8 +40,12 @@ import {
 } from '@/lib/pos-order-payment-reconcile'
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
 import { releaseRequestIdempotencyKey, reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
-import { computePosOrderDueTotalFromLines } from '@/lib/pos-dine-in-table-merge-rules'
 import { loadPosPricingAdjustmentsForStore } from '@/lib/pos-pricing-adjustments-server'
+import {
+  alignPaymentToRecomputedDue,
+  coercePosPricingAdjustmentsFromBody,
+  resolveAlignedDueTotal,
+} from '@/lib/pos-order-payment-due-align'
 import type { JwtPayload } from '@/lib/jwt-auth'
 
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
@@ -81,7 +85,7 @@ function parseItemsJsonForSettleFast(raw: unknown): Record<string, unknown>[] {
 }
 
 /**
- * 합석 등 DB total이 매장 요금(봉사료·VAT) 없이 저장된 경우,
+ * 합석·QR 등 DB total이 매장 요금(봉사료·VAT·정수 바트)과 다를 때,
  * 결제 모달 합계와 맞으면 통과하고 total을 맞춘다. 불일치 결제만 거부.
  */
 async function alignSettleFastTotalIfPaymentMatchesRecomputedDue(params: {
@@ -90,8 +94,12 @@ async function alignSettleFastTotalIfPaymentMatchesRecomputedDue(params: {
   body: Record<string, unknown>
   paymentCard: number
   nextPaymentSum: number
+  dbTotal: number
+  dbVat?: number
+  dbServiceAmt?: number
 }): Promise<{ total: number; vat: number; serviceAmt: number } | null> {
   try {
+    const roundedDb = resolveAlignedDueTotal(params.nextPaymentSum, params.dbTotal)
     const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${params.orderId}`, {
       limit: 1,
       select: 'items_json,discount_amt,coupon_discount_amt,point_used',
@@ -103,8 +111,6 @@ async function alignSettleFastTotalIfPaymentMatchesRecomputedDue(params: {
     }[] | null
     const row = rows?.[0]
     const items = parseItemsJsonForSettleFast(row?.items_json)
-    if (!items.length) return null
-    const adjustments = await loadPosPricingAdjustmentsForStore(params.storeCode)
     const discountAmt = Math.max(
       0,
       Number(params.body?.discountAmt ?? params.body?.discount_amt ?? row?.discount_amt ?? 0) || 0
@@ -119,16 +125,31 @@ async function alignSettleFastTotalIfPaymentMatchesRecomputedDue(params: {
         params.body?.couponDiscountAmt ?? params.body?.coupon_discount_amt ?? row?.coupon_discount_amt ?? 0
       ) || 0
     )
-    const due = computePosOrderDueTotalFromLines({
-      items,
-      discountAmt,
-      couponDiscountAmt,
-      pointUsed,
-      cardPaymentAmount: params.paymentCard,
-      adjustments,
-    })
-    if (params.nextPaymentSum > due.total + 0.02) return null
-    return due
+    const fromBody = coercePosPricingAdjustmentsFromBody(params.body?.pricingAdjustments)
+    const fromStore = await loadPosPricingAdjustmentsForStore(params.storeCode)
+    const attempts = fromBody ? [fromBody, fromStore] : [fromStore]
+    if (items.length) {
+      for (const adjustments of attempts) {
+        const aligned = alignPaymentToRecomputedDue({
+          items,
+          paymentSum: params.nextPaymentSum,
+          paymentCard: params.paymentCard,
+          discountAmt,
+          couponDiscountAmt,
+          pointUsed,
+          adjustments,
+        })
+        if (aligned) return aligned
+      }
+    }
+    if (roundedDb != null) {
+      return {
+        total: roundedDb,
+        vat: Math.max(0, Number(params.dbVat ?? 0) || 0),
+        serviceAmt: Math.max(0, Number(params.dbServiceAmt ?? 0) || 0),
+      }
+    }
+    return null
   } catch (e) {
     console.warn('settlePosOrderPaymentFast align total:', e)
     return null
@@ -208,7 +229,7 @@ async function settlePosOrderPaymentFastBody(params: {
     {
       limit: 1,
       select:
-        'id,order_no,store_code,status,order_type,table_name,memo,total,service_amt,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,paid_at',
+        'id,order_no,store_code,status,order_type,table_name,memo,total,vat,service_amt,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,paid_at',
     },
     'settlePosOrderPaymentFast'
   )) as {
@@ -220,6 +241,7 @@ async function settlePosOrderPaymentFastBody(params: {
     table_name?: string
     memo?: string
     total?: number
+    vat?: number
     service_amt?: number
     payment_cash?: number
     payment_card?: number
@@ -384,6 +406,9 @@ async function settlePosOrderPaymentFastBody(params: {
       body,
       paymentCard,
       nextPaymentSum,
+      dbTotal: total,
+      dbVat: Math.max(0, Number(current?.vat ?? 0) || 0),
+      dbServiceAmt: serviceAmt,
     })
     if (aligned && nextPaymentSum <= aligned.total + 0.02) {
       settleFastAlignedDue = aligned

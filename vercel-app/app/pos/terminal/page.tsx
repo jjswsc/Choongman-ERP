@@ -169,6 +169,18 @@ import {
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
 import { shouldSkipHallAutoprintForQrGuestAddon } from '@/lib/qr-table-types'
+import { usePosMainDeviceSyncOwnedByLayout } from '@/hooks/use-pos-main-device-sync-owned-by-layout'
+import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
+import {
+  dineInRemoteItemQtySnapshotRef,
+  mainPosSelfDineInUpdateSuppressUntilRef,
+} from '@/lib/pos-main-device-sync-state'
+import { setIncomingDeliveryUiHandler } from '@/lib/pos-main-device-incoming-delivery-ui'
+import { setGrabCancelUiHandler } from '@/lib/pos-main-device-grab-cancel-ui'
+import {
+  markPosTerminalOrderSubmitInFlight,
+  setPosTerminalLocalAutoprintActive,
+} from '@/lib/pos-terminal-local-autoprint-ui'
 import {
   isPosDineInTableNameOnlyUpdate,
   isPosOrderItemsJsonPackagingOnlyUpdate,
@@ -2290,6 +2302,7 @@ export default function PosTerminalPage() {
     Boolean(servingTable?.order)
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice, mainDeviceMeta] = usePosMainDevice(currentStoreId || null)
+  const layoutOwnsMainPosSync = usePosMainDeviceSyncOwnedByLayout()
   const posSessionStartedAtRef = useRef<number>(Date.now())
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
@@ -2310,14 +2323,6 @@ export default function PosTerminalPage() {
   const grabCancelWatchSeededRef = useRef(false)
   /** 첫 폴링에서 당일 기결제 건을 시드해 페이지 로드 시 영수증 대량 재인쇄 방지 */
   const paymentReceiptScanSeededRef = useRef(false)
-  /**
-   * 메인 포스: dine_in 품목 수량 스냅샷(다른 단말 UPDATE 시 id 추가 + 수량 증가를 모두 감지)
-   * - key: orderId
-   * - value: (itemId -> qty)
-   */
-  const dineInRemoteItemQtySnapshotRef = useRef<Map<number, Map<string, number>>>(new Map())
-  /** 메인 포스가 updatePosOrder(추가주문) 직후 수신하는 Realtime UPDATE로 이중 인쇄 방지 */
-  const mainPosSelfDineInUpdateSuppressUntilRef = useRef<Map<number, number>>(new Map())
   useEffect(() => {
     printedPaymentReceiptIdsRef.current = new Set()
     printedKitchenSlipKeysRef.current = new Map()
@@ -2325,9 +2330,12 @@ export default function PosTerminalPage() {
     deferredIncomingDeliveryQueueRef.current = []
     setDeferredIncomingDeliveryCount(0)
     paymentReceiptScanSeededRef.current = false
-    dineInRemoteItemQtySnapshotRef.current = new Map()
-    mainPosSelfDineInUpdateSuppressUntilRef.current = new Map()
   }, [currentStoreId])
+
+  useEffect(() => {
+    setPosTerminalLocalAutoprintActive(true)
+    return () => setPosTerminalLocalAutoprintActive(false)
+  }, [])
 
   const normalizeKitchenAutoPrintDedupeKeys = useCallback((rawKeyOrKeys: string | string[]) => {
     return Array.from(
@@ -3232,6 +3240,22 @@ export default function PosTerminalPage() {
     [playIncomingOrderBeep, refetchCurrentStore, t]
   )
 
+  useEffect(() => {
+    setIncomingDeliveryUiHandler((params) => {
+      autoFocusIncomingDeliveryOrderRef.current(params)
+    })
+    return () => setIncomingDeliveryUiHandler(null)
+  }, [])
+
+  const notifyGrabCustomerCancelledOrderRef = useRef(notifyGrabCustomerCancelledOrder)
+  notifyGrabCustomerCancelledOrderRef.current = notifyGrabCustomerCancelledOrder
+  useEffect(() => {
+    setGrabCancelUiHandler((params) => {
+      notifyGrabCustomerCancelledOrderRef.current(params)
+    })
+    return () => setGrabCancelUiHandler(null)
+  }, [])
+
   const runGrabCancelWatchOnOrders = useCallback(
     (
       orders: Array<{ id?: number; status?: string; memo?: string; orderType?: string; tableName?: string; orderNo?: string }>,
@@ -3719,6 +3743,7 @@ export default function PosTerminalPage() {
     lineDiscountAmt?: number
     source?: string
     isBuffetEntry?: boolean
+    addedAt?: string
   }
 
   const mapPosOrderItemForKitchenDelta = useCallback(
@@ -4663,6 +4688,7 @@ export default function PosTerminalPage() {
   }
 
   useEffect(() => {
+    if (layoutOwnsMainPosSync || isPosMainDeviceSyncOwnedByLayout()) return
     if (!isMainPosDevice || !currentStoreId) return
     const onInsert = (payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
@@ -4885,6 +4911,7 @@ export default function PosTerminalPage() {
       }
     }
   }, [
+    layoutOwnsMainPosSync,
     isMainPosDevice,
     currentStoreId,
     currentStoreCodeVariants,
@@ -4981,6 +5008,7 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     if (!currentStoreId) return
+    if (isMainPosDevice && (layoutOwnsMainPosSync || isPosMainDeviceSyncOwnedByLayout())) return
 
     const handleUpdate = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
@@ -5039,6 +5067,8 @@ export default function PosTerminalPage() {
       channels.forEach((channel) => channel?.unsubscribe())
     }
   }, [
+    layoutOwnsMainPosSync,
+    isMainPosDevice,
     currentStoreCodeVariants,
     currentStoreId,
     isCurrentStoreOrder,
@@ -5048,6 +5078,7 @@ export default function PosTerminalPage() {
   ])
 
   useEffect(() => {
+    if (layoutOwnsMainPosSync || isPosMainDeviceSyncOwnedByLayout()) return
     if (!isMainPosDevice || !currentStoreId) return
     const wantPayment = autoPrintReceiptOnPayment
     const wantRemoteDineInAdd =
@@ -5457,9 +5488,14 @@ export default function PosTerminalPage() {
     printKitchenFromPosOrder,
     reserveKitchenAutoPrintKey,
     playIncomingOrderBeep,
+    layoutOwnsMainPosSync,
   ])
 
   useEffect(() => {
+    if (layoutOwnsMainPosSync || isPosMainDeviceSyncOwnedByLayout()) {
+      triggerMainPosPollNowRef.current = null
+      return
+    }
     if (!isMainPosDevice || !currentStoreId) {
       if (!isMainPosDevice) {
         hasInitializedMainPosPollRef.current = false
@@ -5969,10 +6005,12 @@ export default function PosTerminalPage() {
     dispatchDineInAddonKitchenPrint,
     formatLineNoteForPrint,
     mapPosOrderItemForKitchenDelta,
+    layoutOwnsMainPosSync,
   ])
 
   /** items_json 없는 head 폴링 — Realtime 활발 시 미호출, 무음·장애 시 안전망 */
   useEffect(() => {
+    if (layoutOwnsMainPosSync || isPosMainDeviceSyncOwnedByLayout()) return
     if (!isMainPosDevice || !currentStoreId) return
     let cancelled = false
     let timerId = 0
@@ -6027,10 +6065,11 @@ export default function PosTerminalPage() {
       cancelled = true
       window.clearTimeout(timerId)
     }
-  }, [isMainPosDevice, currentStoreId, logPosPrintDebug, refetchCurrentStore])
+  }, [layoutOwnsMainPosSync, isMainPosDevice, currentStoreId, logPosPrintDebug, refetchCurrentStore])
 
   /** 절전·탭 복귀·온라인 복구 시 Realtime 재구독 + 즉시 증분 폴링 */
   useEffect(() => {
+    if (layoutOwnsMainPosSync || isPosMainDeviceSyncOwnedByLayout()) return
     if (!isMainPosDevice || !currentStoreId) return
     const onResume = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
@@ -6046,7 +6085,7 @@ export default function PosTerminalPage() {
       document.removeEventListener('visibilitychange', onResume)
       window.removeEventListener('online', onResume)
     }
-  }, [isMainPosDevice, currentStoreId, logPosPrintDebug])
+  }, [layoutOwnsMainPosSync, isMainPosDevice, currentStoreId, logPosPrintDebug])
 
   useEffect(() => {
     if (selectedTableId) {
@@ -8794,7 +8833,7 @@ export default function PosTerminalPage() {
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
                     ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
-                    ...(isOmniPaymentFastPath ? {} : { pricingAdjustments }),
+                    pricingAdjustments,
                   })
                   if (!updateRes.success) {
                     await appAlert(
@@ -8979,7 +9018,7 @@ export default function PosTerminalPage() {
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
                     ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
-                    ...(isOmniPaymentFastPath ? {} : { pricingAdjustments }),
+                    pricingAdjustments,
                   })
                   if (!updateRes.success) {
                     await appAlert(
@@ -9369,6 +9408,7 @@ export default function PosTerminalPage() {
                       existingOrderId,
                       Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
                     )
+                    markPosTerminalOrderSubmitInFlight()
                   }
                   const addonMemberFields = resolvePosOrderMemberFieldsForAddonUpdate(
                     {
@@ -9634,6 +9674,7 @@ export default function PosTerminalPage() {
                       savedOrderId,
                       Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
                     )
+                    markPosTerminalOrderSubmitInFlight()
                   }
                 }
                 const scheduleKitchenAfterDineInSubmit = () => {
@@ -10008,7 +10049,7 @@ export default function PosTerminalPage() {
                     ...posOrderPaymentFieldsFromSnapshot(pay),
                     linkposPayment: linkpos.linkposPayment,
                     ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
-                    ...(isOmniPaymentFastPath ? {} : { pricingAdjustments }),
+                    pricingAdjustments,
                   })
                   if (!updateRes.success) {
                     await appAlert(
@@ -10335,6 +10376,7 @@ export default function PosTerminalPage() {
                       existingTakeoutId,
                       Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
                     )
+                    markPosTerminalOrderSubmitInFlight()
                   }
                   const updateRes = await updatePosOrder({
                     id: existingTakeoutId,
@@ -11771,6 +11813,7 @@ export default function PosTerminalPage() {
                         keepOrderId,
                         Date.now() + 45_000
                       )
+                      markPosTerminalOrderSubmitInFlight()
                     }
               }
               onBeforeTableMove={
@@ -11781,6 +11824,7 @@ export default function PosTerminalPage() {
                         orderId,
                         Date.now() + 15_000
                       )
+                      markPosTerminalOrderSubmitInFlight()
                     }
               }
               onTableMovedFrom={
@@ -11990,6 +12034,7 @@ export default function PosTerminalPage() {
                         orderId,
                         Date.now() + 20_000
                       )
+                      markPosTerminalOrderSubmitInFlight()
                     }
               }
               onAfterTakeoutToTable={

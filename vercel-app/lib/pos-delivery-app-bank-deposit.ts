@@ -3,7 +3,11 @@
  * 채널 정산(pos_channel_settlements)을 안 넣어도, 통장에 등록한 실입금을 비교할 수 있게 한다.
  */
 import { isExpenseInternalBankNote } from '@/lib/bank-transaction-note-meta'
-import { canonicalSalesStoreRowKey, rowMatchesAnySalesStoreSelection } from '@/lib/pos-sales-store-filter'
+import {
+  canonicalSalesStoreRowKey,
+  resolveBankRowStoreName,
+  rowMatchesAnySalesStoreSelection,
+} from '@/lib/pos-sales-store-filter'
 
 const DELIVERY_APP_BANK_APPS = ['grab', 'lineman', 'shopee'] as const
 export type DeliveryAppBankApp = (typeof DELIVERY_APP_BANK_APPS)[number]
@@ -17,6 +21,9 @@ export type DeliveryAppBankDepositInput = {
   note?: string | null
   category?: string | null
   storeName?: string | null
+  store?: string | null
+  /** 매장 통장 bank_accounts.store — 있으면 행 매장명보다 우선 */
+  accountStore?: string | null
   accountSubjectCode?: string | null
   accountSubjectName?: string | null
 }
@@ -65,6 +72,19 @@ export function deliveryAppBankDepositKey(storeCode: string, appCode: string): s
   return `${storeCode}\t${appCode}`
 }
 
+export function deliveryAppBankDepositDateKey(storeCode: string, appCode: string, date: string): string {
+  return `${storeCode}\t${appCode}\t${date}`
+}
+
+export type DeliveryAppBankDepositAgg = {
+  byStoreApp: Map<string, number>
+  byStoreAppDate: Map<string, number>
+}
+
+export function emptyDeliveryAppBankDepositAgg(): DeliveryAppBankDepositAgg {
+  return { byStoreApp: new Map(), byStoreAppDate: new Map() }
+}
+
 /** 적요·비고에서 Grab / LINE MAN / Shopee만 식별. GRABFOOD처럼 붙여 쓴 표기도 포함. */
 export function inferDeliveryAppCodeFromBankText(text: string): DeliveryAppBankApp | '' {
   const raw = String(text || '')
@@ -99,6 +119,8 @@ export function attributedSalesDateForBankDeposit(row: {
 export function isDeliveryAppBankDepositRow(row: DeliveryAppBankDepositInput): boolean {
   if (String(row.transType || '').trim().toLowerCase() !== 'deposit') return false
   if (isExpenseInternalBankNote(row.note)) return false
+  const gl = String(row.accountSubjectCode || '').trim()
+  if (gl && DELIVERY_APP_GL_CODES[gl]) return true
   const cat = String(row.category || '').trim().toLowerCase()
   if (cat && SKIP_DEPOSIT_CATEGORIES.has(cat)) return false
   const app = resolveDeliveryAppFromBankRow(row)
@@ -110,21 +132,28 @@ export function aggregateDeliveryAppBankDeposits(params: {
   startStr: string
   endStr: string
   storeCodes?: string[]
-  /** 매장 1곳만 조회 중인데 통장 행에 매장이 비어 있으면 이 매장으로 귀속 */
-  fallbackStoreCode?: string
-}): Map<string, number> {
+}): DeliveryAppBankDepositAgg {
   const start = String(params.startStr || '').slice(0, 10)
   const end = String(params.endStr || '').slice(0, 10)
-  const map = new Map<string, number>()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return map
+  const byStoreApp = new Map<string, number>()
+  const byStoreAppDate = new Map<string, number>()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+    return { byStoreApp, byStoreAppDate }
+  }
 
   const storeCodes = (params.storeCodes || []).map((s) => String(s || '').trim()).filter(Boolean)
-  const fallbackStore = String(params.fallbackStoreCode || '').trim()
 
   for (const row of params.rows) {
     if (!isDeliveryAppBankDepositRow(row)) continue
-    let storeRaw = String(row.storeName || '').trim()
-    if (!storeRaw && fallbackStore) storeRaw = fallbackStore
+    const storeRaw =
+      String(row.accountStore || '').trim() ||
+      resolveBankRowStoreName({
+        storeName: row.storeName,
+        store: row.store,
+        memo: row.memo,
+        note: row.note,
+        storeCodes,
+      })
     if (!storeRaw) continue
     if (storeCodes.length > 0 && !rowMatchesAnySalesStoreSelection(storeRaw, storeCodes)) continue
 
@@ -137,8 +166,11 @@ export function aggregateDeliveryAppBankDeposits(params: {
     const amt = Math.abs(Number(row.amount) || 0)
     if (amt <= 0.005) continue
 
-    const key = deliveryAppBankDepositKey(canonicalSalesStoreRowKey(storeRaw), app)
-    map.set(key, round2((map.get(key) || 0) + amt))
+    const store = canonicalSalesStoreRowKey(storeRaw)
+    const key = deliveryAppBankDepositKey(store, app)
+    byStoreApp.set(key, round2((byStoreApp.get(key) || 0) + amt))
+    const dayKey = deliveryAppBankDepositDateKey(store, app, date)
+    byStoreAppDate.set(dayKey, round2((byStoreAppDate.get(dayKey) || 0) + amt))
   }
-  return map
+  return { byStoreApp, byStoreAppDate }
 }

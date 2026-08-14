@@ -3,6 +3,8 @@
  * - 0개: 필터 없음
  * - 1개 이상: erp_stores 별칭·Grab ID·CM 접두 등을 펼친 뒤 `in.(...)` 정확 일치(동일 주문 이중집계 없음)
  */
+import { isOfficeStoreVariant } from '@/lib/office-store-canonical'
+
 export function parseStoreList(raw: string | null): string[] {
   return String(raw ?? '')
     .split(',')
@@ -142,4 +144,54 @@ export function canonicalSalesStoreRowKey(storeCode: string): string {
   const withCm = variants.filter((v) => /^CM\s+/i.test(v))
   const pool = withCm.length > 0 ? withCm : variants
   return pool.slice().sort((a, b) => a.localeCompare(b))[0] ?? raw
+}
+
+const MIN_BANK_STORE_TOKEN_LEN = 3
+
+function normalizeBankStoreHaystack(text: string): string {
+  return ` ${String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0e00-\u0e7f가-힣]+/gi, ' ')
+    .trim()} `
+}
+
+/** 적요에 매장명(CM 접두 제외, 3글자 이상)이 단어로 들어 있으면 true */
+export function salesStoreMentionedInText(text: string, storeCode: string): boolean {
+  const hay = normalizeBankStoreHaystack(text)
+  if (hay === '  ') return false
+  const seen = new Set<string>()
+  for (const variant of storeCodeSearchVariants(storeCode)) {
+    const token = String(variant || '')
+      .replace(/^CM\s+/i, '')
+      .trim()
+      .toLowerCase()
+    if (token.length < MIN_BANK_STORE_TOKEN_LEN || seen.has(token)) continue
+    seen.add(token)
+    if (hay.includes(` ${token} `)) return true
+  }
+  return false
+}
+
+/** 적요가 후보 매장 중 정확히 1곳만 가리키면 그 매장. 아니면 빈 문자열 */
+export function inferSalesStoreFromBankText(text: string, storeCodes: string[]): string {
+  const codes = [...new Set((storeCodes || []).map((s) => String(s || '').trim()).filter(Boolean))]
+  if (codes.length === 0) return ''
+  const hits = codes.filter((s) => salesStoreMentionedInText(text, s))
+  return hits.length === 1 ? hits[0]! : ''
+}
+
+/** 통장 행 매장: store_name → store → (선택 매장 후보 중) 적요 유일 매칭. 추측 귀속 없음 */
+export function resolveBankRowStoreName(params: {
+  storeName?: string | null
+  store?: string | null
+  memo?: string | null
+  note?: string | null
+  storeCodes?: string[]
+}): string {
+  const named = String(params.storeName || '').trim() || String(params.store || '').trim()
+  if (named && !isOfficeStoreVariant(named)) return named
+  return inferSalesStoreFromBankText(
+    `${params.memo || ''} ${params.note || ''}`,
+    params.storeCodes || []
+  )
 }

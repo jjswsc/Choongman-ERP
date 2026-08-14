@@ -231,6 +231,8 @@ export type PosDeliveryAppReconcileDayRow = {
   deliverySales: number
   inStoreCount: number
   inStoreSales: number
+  suggestedPayout: number
+  bankDepositAmt: number | null
 }
 
 export type PosDeliveryAppReconcileRow = {
@@ -308,18 +310,21 @@ export type PosKbankQrReconcileDayRow = {
   date: string
   orderCount: number
   qrSales: number
+  bankDepositAmt: number | null
 }
 
 export type PosKbankQrReconcileRow = {
   storeCode: string
   orderCount: number
   qrSales: number
+  bankDepositAmt: number | null
   days: PosKbankQrReconcileDayRow[]
 }
 
 export type PosKbankQrReconcileKpi = {
   orderCount: number
   qrSales: number
+  bankDepositAmt: number
   storeCount: number
 }
 
@@ -348,7 +353,7 @@ export async function getPosKbankQrReconcile(params: {
     return {
       success: false,
       rows: [],
-      kpi: { orderCount: 0, qrSales: 0, storeCount: 0 },
+      kpi: { orderCount: 0, qrSales: 0, bankDepositAmt: 0, storeCount: 0 },
       message: json?.message,
     }
   }

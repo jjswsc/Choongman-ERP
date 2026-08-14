@@ -1,9 +1,12 @@
 /**
- * 채널 확인 — KBank QR(PromptPay) 당일 POS payment_qr 합계.
+ * 채널 확인 — KBank QR(PromptPay) 당일 POS payment_qr vs 매장 통장 계정과목 4130.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
-import { resolvePosSalesStoresFromRequest } from '@/lib/pos-sales-request-scope'
+import {
+  resolvePosSalesStoresFromRequest,
+  resolvePosSalesTenantScopeFromRequest,
+} from '@/lib/pos-sales-request-scope'
 import {
   fetchPosSalesOrdersForBusinessRange,
   POS_SALES_PAYMENT_ROW_SELECT,
@@ -13,9 +16,17 @@ import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-serve
 import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
 import {
   aggregateKbankQrReconcileRows,
+  aggregateQrBankDeposits,
+  applyQrBankDepositsToRows,
   buildKbankQrReconcileResult,
   type KbankQrReconcileOrderRow,
 } from '@/lib/pos-kbank-qr-reconcile'
+import { bankDepositQueryTransDateWindow } from '@/lib/pos-delivery-app-bank-deposit'
+import {
+  CHANNEL_BANK_GL_CODES,
+  fetchStoreAccountDeposits,
+  ledgerRowToBankDepositInput,
+} from '@/lib/pos-channel-bank-ledger'
 
 export const maxDuration = 60
 
@@ -38,14 +49,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    const { rows, truncated, bizCtx } = await fetchPosSalesOrdersForBusinessRange({
-      request,
-      startStr,
-      endStr,
-      storeCodes: stores.length > 0 ? stores : undefined,
-      select: POS_SALES_PAYMENT_ROW_SELECT,
-      queryLabel: 'posKbankQrReconcile',
-    })
+    const tenantScope = await resolvePosSalesTenantScopeFromRequest(request)
+    const [{ rows, truncated, bizCtx }, ledgerRows] = await Promise.all([
+      fetchPosSalesOrdersForBusinessRange({
+        request,
+        startStr,
+        endStr,
+        storeCodes: stores.length > 0 ? stores : undefined,
+        select: POS_SALES_PAYMENT_ROW_SELECT,
+        queryLabel: 'posKbankQrReconcile',
+      }),
+      fetchStoreAccountDeposits({
+        tenantScope,
+        storeCodes: stores,
+        startStr,
+        endStr,
+        transDateWindow: bankDepositQueryTransDateWindow(startStr, endStr),
+        glCodes: [CHANNEL_BANK_GL_CODES.qr],
+        queryLabel: 'posKbankQrReconcile.bankDeposits',
+      }),
+    ])
 
     if (truncated) headers.set('X-Sales-Truncated', '1')
     headers.set('X-Pos-Sales-Source', 'fetch')
@@ -63,7 +86,14 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const result = buildKbankQrReconcileResult(aggregated)
+    const bankAgg = aggregateQrBankDeposits({
+      rows: ledgerRows.map(ledgerRowToBankDepositInput),
+      startStr,
+      endStr,
+      storeCodes: stores,
+    })
+    const withBank = applyQrBankDepositsToRows(aggregated, bankAgg)
+    const result = buildKbankQrReconcileResult(withBank)
     return NextResponse.json({ success: true, ...result, truncated }, { headers })
   } catch (e) {
     console.error('posKbankQrReconcile:', e)
@@ -72,7 +102,7 @@ export async function GET(request: NextRequest) {
         success: false,
         message: e instanceof Error ? e.message : 'pos_kbank_qr_reconcile_error',
         rows: [],
-        kpi: { orderCount: 0, qrSales: 0, storeCount: 0 },
+        kpi: { orderCount: 0, qrSales: 0, bankDepositAmt: 0, storeCount: 0 },
       },
       { status: 500, headers }
     )
