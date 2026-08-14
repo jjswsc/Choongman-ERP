@@ -4472,9 +4472,9 @@ export const i18n = {
     helpHow_admin_expense_management:
       '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다. 계정과목은 자산 계정(예: 1490 유형자산)을 고르며, 나중에 송금해도 경비(손익)가 아니라 그 자산 계정으로 표시·분개됩니다. 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다.',
     helpSum_admin_depreciation:
-      '지출로 등록된 고정자산 목록·수정, 월 감가상각 실행, 처분을 처리합니다. 신규 취득은 지출 관리에서 합니다.',
+      '고정자산 목록·수정, 월 감가상각, 처분. 신규는 지출등록(고정자산) 또는 예외등록(지급예정 자동)·목록의 지급예정 만들기 후 통장 연결.',
     helpHow_admin_depreciation:
-      '① 자산 목록 탭에서 매장·상태·검색으로 조회합니다.\n② 내용연수·계정 매핑 수정은 행의 수정(✎)을 누릅니다. 중복·오등록은 본사·회계가 삭제(휴지통)할 수 있습니다(감가상각 실적이 있으면 처분만 가능).\n③ 감가상각 실행 탭에서 월별 미리보기 후 분개를 실행합니다.\n④ 처분은 자산 처분 탭에서 처리합니다. 기초잔액 등 예외 등록은 본사·회계만 가능합니다.',
+      '① 자산 목록에서 매장·상태·검색으로 조회합니다.\n② 행의 수정(✎)·삭제(휴지통), 지급예정이 없으면 링크(🔗)로 지급예정을 만듭니다(매장은 통장 계좌와 같아야 함).\n③ 감가상각 실행 탭에서 월별 미리보기 후 분개합니다.\n④ 처분은 자산 처분 탭에서 합니다. 예외 등록 기본은 지급예정 생성(기초잔액만 체크 시 생략).',
     bankManualScreenFixedExpenses: '고정비: 월별 고정 지출 항목 관리',
     bankManualScreenExplanation: '설명: 이 매뉴얼 및 적요 키워드 규칙 설정',
     bankManualS1Title: '1. 입력 탭 – CSV 업로드',
@@ -5348,8 +5348,17 @@ export const i18n = {
       '신규 취득은 지출 관리 → 발생등록(유형: 고정자산)에서 등록하세요. 이 화면에서는 목록 조회·수정·감가상각·처분만 합니다.',
     dep_legacyCreateBtn: '예외 등록 (본사·회계)',
     dep_legacyCreateHint:
-      '본사·회계 전용: 기초잔액·ERP 도입 전 자산 등 예외만 직접 등록합니다. 통장 거래·취득 분개는 생성되지 않습니다.',
-    dep_legacyCreateFormTitle: '예외 등록 (기초잔액·레거시)',
+      '본사·회계: 기본으로 자산과 함께 지급예정(취득 분개)을 만들어 통장 연결이 가능합니다. 기초잔액만 체크하면 지급예정을 만들지 않습니다.',
+    dep_legacyCreateFormTitle: '예외 등록 (취득·기초잔액)',
+    dep_openingBalanceOnly: '기초잔액만 (지급예정·취득분개 없음)',
+    dep_paymentPlanNeedsStore:
+      '지급예정을 만들려면 매장을 선택하세요(All 불가). 기초잔액만이면 해당 옵션을 체크하세요.',
+    dep_paymentPlanNeedsStoreEdit:
+      '먼저 자산 매장을 수정한 뒤 지급예정을 만드세요. 통장 계좌 매장과 같아야 연결됩니다.',
+    dep_createPaymentPlan: '지급예정 만들기',
+    dep_createPaymentPlanTitle: '지급예정 만들기',
+    dep_createPaymentPlanConfirm:
+      '이 자산에 대해 지출관리 지급예정을 만들까요? 같은 금액·매장의 통장 출금과 연결할 수 있습니다.',
     dep_editFormTitle: '자산 수정',
     dep_createBlockedUseExpense:
       '고정자산 신규 등록은 지출 관리 → 발생등록(유형: 고정자산)에서 하세요.',
@@ -12499,9 +12508,9 @@ Only matters the employee must handle personally on a working day:
     helpHow_admin_expense_management:
       '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management. Pick an asset account (e.g. 1490 PPE); later bank transfer posts to that asset account, not P&L expense. Attach invoice/receipt and VAT like expense/purchase.\n⑧ Choosing a WHT rate (%) fills withholding as (gross−VAT)×%; with "Auto-create 50 ทวิ" on, the certificate print window opens right after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 purchase VAT.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows.',
     helpSum_admin_depreciation:
-      'List, edit, monthly depreciation, and disposal for fixed assets from expense payments. New acquisitions go through Expense Management.',
+      'Fixed assets list/edit, monthly depreciation, disposal. New buys via Expense Register or exception register (auto payment plan) / Create payment plan, then bank link.',
     helpHow_admin_depreciation:
-      '① Use Asset List: filter by store, status, and search.\n② Click edit (✎) to change useful life or account mapping. HQ/Accounting can delete (trash) duplicate/mistaken rows; if depreciation exists, use Dispose instead.\n③ Run monthly depreciation on the Depreciation tab.\n④ Dispose assets on the Disposal tab. Exception direct register is HQ/Accounting only.',
+      '① Filter Asset List by store, status, search.\n② Edit (✎), delete (trash), or Create payment plan (link icon) when missing—store must match the bank account.\n③ Run monthly depreciation on the Depreciation tab.\n④ Dispose on the Disposal tab. Exception register creates a payment plan by default (uncheck via Opening balance only).',
     bankManualScreenFixedExpenses: 'Fixed expenses: Manage monthly fixed expense items',
     bankManualScreenExplanation: 'Guide: This manual and memo keyword rules',
     bankManualS1Title: '1. Input Tab – CSV Upload',
@@ -13375,8 +13384,17 @@ Only matters the employee must handle personally on a working day:
       'Register new acquisitions in Expense Management → Expense Register (type: Fixed Asset). This screen is for list, edit, depreciation, and disposal.',
     dep_legacyCreateBtn: 'Exception register (HQ/Accounting)',
     dep_legacyCreateHint:
-      'HQ/Accounting only: opening balances or pre-ERP assets. No bank transaction or acquisition journal is created.',
-    dep_legacyCreateFormTitle: 'Exception register (opening balance / legacy)',
+      'HQ/Accounting: by default creates a payment plan (acquisition journal) so you can link the bank withdrawal. Check Opening balance only to skip the payment plan.',
+    dep_legacyCreateFormTitle: 'Exception register (acquisition / opening balance)',
+    dep_openingBalanceOnly: 'Opening balance only (no payment plan / acquisition journal)',
+    dep_paymentPlanNeedsStore:
+      'Select a store to create a payment plan (not All). Or check Opening balance only.',
+    dep_paymentPlanNeedsStoreEdit:
+      'Edit the asset store first, then create the payment plan. It must match the bank account store.',
+    dep_createPaymentPlan: 'Create payment plan',
+    dep_createPaymentPlanTitle: 'Create payment plan',
+    dep_createPaymentPlanConfirm:
+      'Create an expense payment plan for this asset so you can link a matching bank withdrawal?',
     dep_editFormTitle: 'Edit asset',
     dep_createBlockedUseExpense:
       'Register new fixed assets in Expense Management → Expense Register (type: Fixed Asset).',
@@ -20620,7 +20638,26 @@ orderItemQty: 'จำนวน',
     dep_assetLedgerTab: 'ทะเบียนสินทรัพย์',
     dep_disposalTab: 'จำหน่ายสินทรัพย์',
     dep_assetLedgerDesc:
-      'ลงทะเบียนหรือแก้ไขสินทรัพย์ บัญชีสมุดรายวันควบคุมด้วยการแมปสินทรัพย์/ค่าเสื่อมสะสม/ค่าใช้จ่ายค่าเสื่อม',
+      'ดูและแก้ไขสินทรัพย์จากลงทะเบียนค่าใช้จ่าย (ประเภทสินทรัพย์ถาวร) หรือสร้างแผนจ่ายจากปุ่มลิงก์',
+    dep_acquireViaExpenseHint:
+      'การซื้อใหม่แนะนำลงทะเบียนค่าใช้จ่าย → ประเภทสินทรัพย์ถาวร หากลงที่นี่แล้ว ให้กดสร้างแผนจ่ายเพื่อเชื่อมถอนธนาคาร',
+    dep_legacyCreateBtn: 'ลงทะเบียนพิเศษ (สำนักงานใหญ่/บัญชี)',
+    dep_legacyCreateHint:
+      'สำนักงานใหญ่/บัญชี: ค่าเริ่มต้นสร้างแผนจ่ายพร้อมสินทรัพย์เพื่อเชื่อมถอนธนาคารได้ ติ๊กเฉพาะยอดยกมาหากไม่ต้องการแผนจ่าย',
+    dep_legacyCreateFormTitle: 'ลงทะเบียนพิเศษ (ซื้อใหม่ / ยอดยกมา)',
+    dep_openingBalanceOnly: 'เฉพาะยอดยกมา (ไม่สร้างแผนจ่าย/บัญชีซื้อ)',
+    dep_paymentPlanNeedsStore:
+      'ต้องเลือกสาขาเพื่อสร้างแผนจ่าย (ห้าม All) หรือติ๊กเฉพาะยอดยกมา',
+    dep_paymentPlanNeedsStoreEdit:
+      'แก้สาขาของสินทรัพย์ก่อน แล้วค่อยสร้างแผนจ่าย สาขาต้องตรงกับบัญชีธนาคาร',
+    dep_createPaymentPlan: 'สร้างแผนจ่าย',
+    dep_createPaymentPlanTitle: 'สร้างแผนจ่าย',
+    dep_createPaymentPlanConfirm:
+      'สร้างแผนจ่ายในจัดการค่าใช้จ่ายให้สินทรัพย์นี้เพื่อเชื่อมรายการถอนธนาคารที่ยอด/สาขาตรงกันไหมครับ',
+    dep_editFormTitle: 'แก้ไขสินทรัพย์',
+    dep_createBlockedUseExpense:
+      'ลงทะเบียนสินทรัพย์ใหม่ที่จัดการค่าใช้จ่าย → ลงทะเบียน (ประเภทสินทรัพย์ถาวร)',
+    dep_goExpenseRegister: 'จัดการค่าใช้จ่าย → ลงทะเบียน',
     dep_assetAccountCode: 'บัญชีสินทรัพย์',
     dep_accumDepAccountCode: 'บัญชีค่าเสื่อมสะสม',
     dep_expenseAccountCode: 'บัญชีค่าใช้จ่ายค่าเสื่อม',

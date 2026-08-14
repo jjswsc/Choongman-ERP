@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
-import { Search, Plus, Pencil, Calculator, Trash2, RotateCcw, ExternalLink } from "lucide-react"
+import { Search, Plus, Pencil, Calculator, Trash2, RotateCcw, ExternalLink, Link2 } from "lucide-react"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
@@ -35,6 +35,7 @@ import {
   saveFixedAsset,
   deleteFixedAsset,
   setFixedAssetStatus,
+  createFixedAssetPaymentPlan,
   getDepreciationEntries,
   runDepreciation,
   getAccountSubjects,
@@ -59,6 +60,7 @@ const EMPTY_ASSET_FORM = {
   accumulatedDepreciationAccountCode: "1470",
   depreciationExpenseAccountCode: "5500",
   memo: "",
+  openingBalanceOnly: false,
 }
 
 type FixedAssetRow = {
@@ -78,6 +80,7 @@ type FixedAssetRow = {
   disposed_proceeds?: number | null
   disposal_gain_loss_amount?: number | null
   disposal_journal_entry_id?: number | null
+  expense_accrual_id?: number | null
 }
 
 type DepreciationEntryRow = {
@@ -150,6 +153,7 @@ export function DepreciationTab() {
       accumulatedDepreciationAccountCode: String(a.accumulated_depreciation_account_code || "1470"),
       depreciationExpenseAccountCode: String(a.depreciation_expense_account_code || "5500"),
       memo: a.memo || "",
+      openingBalanceOnly: false,
     })
   }, [])
 
@@ -342,6 +346,18 @@ export function DepreciationTab() {
       await appAlert(tt("deprAcquisitionCostRequired", "Please enter acquisition cost."))
       return
     }
+    if (!editingId && !form.openingBalanceOnly) {
+      const store = String(form.storeName || "").trim()
+      if (!store || store.toLowerCase() === "all") {
+        await appAlert(
+          tt(
+            "dep_paymentPlanNeedsStore",
+            "To create a payment plan, select a store (not All). Or check Opening balance only."
+          )
+        )
+        return
+      }
+    }
     setSaving(true)
     try {
       const res = await saveFixedAsset({
@@ -357,8 +373,12 @@ export function DepreciationTab() {
         accumulatedDepreciationAccountCode: form.accumulatedDepreciationAccountCode,
         depreciationExpenseAccountCode: form.depreciationExpenseAccountCode,
         memo: form.memo.trim() || undefined,
+        openingBalanceOnly: !editingId ? !!form.openingBalanceOnly : undefined,
       })
       if (res.success) {
+        if (res.message) {
+          await appAlert(translateApiMessage(res.message, t) || res.message)
+        }
         resetAssetForm()
         loadAssets()
         loadDisposedAssets()
@@ -369,6 +389,44 @@ export function DepreciationTab() {
       await appAlert(String(e))
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleCreatePaymentPlan = async (asset: FixedAssetRow) => {
+    const id = Number(asset.id || 0)
+    if (!id || !canLegacyCreate) return
+    const store = String(asset.store_name || "").trim()
+    if (!store || store.toLowerCase() === "all") {
+      await appAlert(
+        tt(
+          "dep_paymentPlanNeedsStoreEdit",
+          "Set the asset store first (edit), then create the payment plan. Store must match the bank account store."
+        )
+      )
+      return
+    }
+    const ok = await appConfirm({
+      title: tt("dep_createPaymentPlanTitle", "Create payment plan"),
+      description: tt(
+        "dep_createPaymentPlanConfirm",
+        "Create an expense payment plan for this asset so you can link the bank withdrawal? Amount and store must match."
+      ),
+      confirmText: tt("dep_createPaymentPlan", "Create payment plan"),
+      cancelText: t("cancel"),
+    })
+    if (!ok) return
+    setStatusUpdating(true)
+    try {
+      const res = await createFixedAssetPaymentPlan({ id })
+      await appAlert(translateApiMessage(res.message, t) || res.message || (res.success ? "OK" : tt("msg_error_prefix", "Error")))
+      if (res.success) {
+        loadAssets()
+        loadDisposedAssets()
+      }
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setStatusUpdating(false)
     }
   }
 
@@ -632,6 +690,19 @@ export function DepreciationTab() {
                             <Button size="sm" variant="ghost" onClick={() => fillFormFromAsset(a)}>
                               <Pencil className="h-4 w-4" />
                             </Button>
+                            {canLegacyCreate &&
+                            a.listStatus === "active" &&
+                            !(Number(a.expense_accrual_id || 0) > 0) ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={statusUpdating}
+                                onClick={() => void handleCreatePaymentPlan(a)}
+                                title={tt("dep_createPaymentPlan", "Create payment plan")}
+                              >
+                                <Link2 className="h-4 w-4" />
+                              </Button>
+                            ) : null}
                             {canLegacyCreate && a.listStatus === "active" ? (
                               <Button
                                 size="sm"
@@ -666,9 +737,27 @@ export function DepreciationTab() {
                     <p className="text-xs text-amber-700 dark:text-amber-300">
                       {tt(
                         "dep_legacyCreateHint",
-                        "HQ/Accounting only: for opening balances or pre-ERP assets. No bank transaction or acquisition journal is created."
+                        "HQ/Accounting: registers the asset and creates a payment plan for bank link by default. Check Opening balance only to skip the payment plan."
                       )}
                     </p>
+                  ) : null}
+                  {!editingId && canLegacyCreate ? (
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={!!form.openingBalanceOnly}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, openingBalanceOnly: e.target.checked }))
+                        }
+                      />
+                      <span>
+                        {tt(
+                          "dep_openingBalanceOnly",
+                          "Opening balance only (no payment plan / acquisition journal)"
+                        )}
+                      </span>
+                    </label>
                   ) : null}
                   <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
                     <Input

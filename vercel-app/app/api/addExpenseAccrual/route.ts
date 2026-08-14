@@ -33,6 +33,7 @@ import {
   insertFixedAssetFromExpense,
   resolveAccountSubjectByCodes,
 } from '@/lib/fixed-asset-from-expense'
+import { linkFixedAssetToExpenseAccrual } from '@/lib/fixed-asset-expense-accrual'
 
 function callerSeesAllAccrualStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
@@ -340,7 +341,7 @@ export async function POST(request: NextRequest) {
       const assetCode = String(body.assetCode || body.asset_code || '').trim()
       const usefulLifeMonths = Math.max(1, Math.min(600, Number(body.usefulLifeMonths || body.useful_life_months) || 60))
       try {
-        await insertFixedAssetFromExpense({
+        const faId = await insertFixedAssetFromExpense({
           assetCode,
           name: assetName,
           storeName: storeName || 'All',
@@ -350,6 +351,9 @@ export async function POST(request: NextRequest) {
           memo: memo || null,
           assetAccountCode: subjectCode || '1490',
         })
+        if (faId) {
+          await linkFixedAssetToExpenseAccrual(faId, expenseAccrualId)
+        }
       } catch (faErr) {
         console.error('addExpenseAccrual fixed_assets:', faErr)
       }

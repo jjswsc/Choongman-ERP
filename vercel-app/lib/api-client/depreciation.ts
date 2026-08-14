@@ -28,13 +28,33 @@ export async function saveFixedAsset(params: {
   assetAccountCode?: string
   accumulatedDepreciationAccountCode?: string
   depreciationExpenseAccountCode?: string
+  /** true = 기초잔액 전용(지급예정·취득분개 없음) */
+  openingBalanceOnly?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/saveFixedAsset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    id?: number
+    expenseAccrualId?: number | null
+  }>
+}
+
+export async function createFixedAssetPaymentPlan(params: { id: number }) {
+  const res = await apiFetchWithOffline('/api/saveFixedAsset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: params.id, action: 'create_payment_plan' }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    expenseAccrualId?: number
+  }>
 }
 
 export async function deleteFixedAsset(params: { id: number }) {
