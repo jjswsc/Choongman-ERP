@@ -6345,6 +6345,14 @@ export default function PosTerminalPage() {
           )
           return false
         }
+        // Inquiry / followup: short anti-double-tap only (not bank rate-limit wording).
+        if (bucket === 'inquiry' || bucket === 'followup') {
+          await appAlert(
+            t('posKbankGenerateWaitTap') ||
+              `Please wait about ${waitSec}s (avoid double-tap).`
+          )
+          return false
+        }
         await appAlert(
           `KBank rate-limit protection: wait about ${waitSec}s before ${label}.`
         )
@@ -7141,7 +7149,9 @@ export default function PosTerminalPage() {
       })
       if (!(await alertIfKbankApiPaused(action))) return
       if (action === 'inquiry') {
-        const canInquiry = await enforceKbankCooldown('inquiry', 30_000, 'Inquiry')
+        // Manual Inquiry: no long cooldown (auto-inquiry spacing is separate).
+        // Only block rapid double-taps so staff can confirm right after the customer pays.
+        const canInquiry = await enforceKbankCooldown('inquiry', 1_500, 'Inquiry')
         if (!canInquiry) return
       } else {
         const canFollowup = await enforceKbankCooldown('followup', 5000, action)
