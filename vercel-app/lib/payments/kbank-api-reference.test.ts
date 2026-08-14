@@ -18,6 +18,7 @@ import {
   isKbankQrSessionTxnNo,
   isKbankPaymentTxnNo,
   extractKbankPaymentTxnNo,
+  formatKbankVoidInquiryFailureMessage,
   resolveKbankInquiryTxnNoForRequest,
   resolveKbankVoidTxnNoForRequest,
   isKbankInquiryResponseApproved,
@@ -90,6 +91,23 @@ describe('kbank-api-reference', () => {
     expect(extractKbankPaymentTxnNo({ txnNo: 'APIC1780542865020JY5', data: { txnNo: '26440008' } })).toBe(
       '26440008'
     )
+    expect(extractKbankPaymentTxnNo({ data: { payment_txn_no: '12345678' } })).toBe('12345678')
+  })
+
+  it('formats Void Inquiry failure with bank detail', () => {
+    const msg = formatKbankVoidInquiryFailureMessage({
+      fallback: 'Could not obtain txnNo',
+      inquiry: {
+        success: true,
+        statusCode: '00',
+        status: 'approved',
+        statusMessage: 'Success',
+        data: { txnNo: 'APIC1780542865020JY5' },
+      },
+    })
+    expect(msg).toContain('Could not obtain txnNo')
+    expect(msg).toContain('APIC1780542865020JY5')
+    expect(msg).toContain('numeric payment txnNo')
   })
 
   it('detects rate limit quota messages', () => {

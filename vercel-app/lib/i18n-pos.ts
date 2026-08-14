@@ -1915,7 +1915,7 @@ export const I18N_POS_KO: Record<string, string> = {
       '고객 결제가 끝났다면 「조회(Inquiry)」로 승인을 확인하세요. Callback 대기 중입니다.',
     posKbankVoidNeedsTxnNo: 'txnNo 없음 — Void 시 Inquiry를 먼저 실행합니다.',
     posKbankVoidInquiryFailed:
-      'Inquiry로 txnNo를 가져오지 못했습니다. 아래 KBank 응답을 확인하세요.',
+      'Inquiry로 결제 txnNo(숫자)를 가져오지 못했습니다. 아래 은행 응답을 확인하세요. (APIC…는 QR 세션 ID라 Void에 쓸 수 없습니다)',
     posKbankRateLimitAlert:
       'KBank API 호출 한도 초과입니다. 약 {minutes}분 후 {label}을(를) 한 번만 눌러 주세요. (연속 클릭 금지)',
     posKbankGenerateWaitTap: '잠시만 기다려 주세요. (같은 버튼을 연속으로 누르지 마세요)',
@@ -5280,7 +5280,7 @@ export const I18N_POS_EN: Record<string, string> = {
       'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.',
     posKbankVoidNeedsTxnNo: 'No txnNo — Void runs Inquiry automatically first.',
     posKbankVoidInquiryFailed:
-      'Could not obtain txnNo from Inquiry. Check the KBank response below.',
+      'Could not obtain numeric payment txnNo from Inquiry. See bank response below. (APIC… is QR session id — not valid for Void)',
     posKbankRateLimitAlert:
       'KBank API rate limit exceeded. Wait about {minutes} minute(s), then tap {label} once (do not tap repeatedly).',
     posKbankGenerateWaitTap: 'Please wait a moment (avoid double-tapping).',
@@ -9774,7 +9774,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posDeliveryOpsBulkSellNoMenus: 'No menus to apply.',
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posKbankVoidFailedAlert: 'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',
-    posKbankVoidInquiryFailed: 'Could not obtain txnNo from Inquiry. Check the KBank response below.',
+    posKbankVoidInquiryFailed:
+      'Inquiry ไม่พบเลข txnNo ตัวเลขจากธนาคาร ดูรายละเอียดด้านล่าง (APIC… คือรหัส QR session ใช้ Void ไม่ได้)',
     posKbankVoidNeedsTxnNo: 'No txnNo — Void runs Inquiry automatically first.',
     posDeliveryOpsStoreRequired: 'Please select a store first.',
     posGrabCampaignDiscount: 'Discount',

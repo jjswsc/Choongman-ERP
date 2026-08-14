@@ -3,7 +3,10 @@ import { requireAuth } from '@/lib/verify-auth'
 import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
 import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import type { KbankCheckStatusRequest } from '@/lib/payments/kbank-types'
-import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
+import {
+  extractKbankPaymentTxnNo,
+  normalizeKbankTxnStatusToPos,
+} from '@/lib/payments/kbank-api-reference'
 import { integrationScopeFromAuth } from '@/lib/integration-scope-from-auth'
 import { resolveKbankRuntime } from '@/lib/tenant-integration-resolve'
 
@@ -134,6 +137,13 @@ export async function POST(req: NextRequest) {
     const result = await checkKbankQrStatus(payload, { runtime: kbankRuntime })
     const statusLabel = extractTxnStatus(result.response)
     const approvedAmount = statusLabel === 'approved' ? extractApprovedAmount(result.response) : 0
+    const paymentTxnNo = extractKbankPaymentTxnNo(result.response).slice(0, 20)
+    const paymentTxnNoFields = paymentTxnNo
+      ? {
+          trace_no: paymentTxnNo.slice(0, 40),
+          approval_code: paymentTxnNo.slice(0, 20),
+        }
+      : {}
 
     try {
       await supabaseInsert('pos_payment_attempts', {
@@ -150,6 +160,7 @@ export async function POST(req: NextRequest) {
         response_text: result.statusMessage || null,
         status: result.ok ? statusLabel : 'failed',
         error_reason: result.ok ? null : result.statusMessage || 'check_status_failed',
+        ...paymentTxnNoFields,
         created_at: requestedAt,
       })
     } catch (insertErr) {
@@ -167,6 +178,7 @@ export async function POST(req: NextRequest) {
             response_code: result.statusCode || null,
             response_text: result.statusMessage || null,
             approved_amount: approvedAmount,
+            ...paymentTxnNoFields,
           }
         )
       } catch (updateErr) {

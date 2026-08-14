@@ -287,11 +287,23 @@ function pickKbankTxnNoFromObject(obj: Record<string, unknown> | null): string[]
   if (!obj) return []
   const keys = [
     'txnNo',
+    'txn_no',
     'transactionNo',
+    'transaction_no',
     'bankTxnNo',
+    'bank_txn_no',
     'paymentTxnNo',
+    'payment_txn_no',
     'kbankTxnNo',
     'approvalTxnNo',
+    'txnRef',
+    'txn_ref',
+    'paymentRef',
+    'payment_ref',
+    'invoiceNo',
+    'invoice_no',
+    'referenceNo',
+    'reference_no',
   ]
   const out: string[] = []
   for (const key of keys) {
@@ -316,6 +328,51 @@ export function extractKbankPaymentTxnNo(raw: unknown): string {
   if (payment.length > 0) return payment[0]
   const nonSession = candidates.filter((c) => !isKbankQrSessionTxnNo(c))
   return nonSession[0] || ''
+}
+
+/** Alert text when Void cannot resolve numeric payment txnNo after Inquiry. */
+export function formatKbankVoidInquiryFailureMessage(params: {
+  fallback: string
+  inquiry?: {
+    success?: boolean
+    status?: string | null
+    statusCode?: string | null
+    statusMessage?: string | null
+    message?: string | null
+    data?: unknown
+  } | null
+}): string {
+  const lines: string[] = [String(params.fallback || '').trim() || 'Could not obtain txnNo from Inquiry.']
+  const inq = params.inquiry
+  if (!inq) return lines.join('\n')
+
+  const detailBits = [
+    inq.statusCode != null && String(inq.statusCode).trim()
+      ? `statusCode=${String(inq.statusCode).trim()}`
+      : '',
+    inq.status != null && String(inq.status).trim() ? `status=${String(inq.status).trim()}` : '',
+    String(inq.statusMessage || inq.message || '').trim(),
+  ].filter(Boolean)
+  if (detailBits.length) lines.push(detailBits.join(' · '))
+
+  const root = asKbankPlainObject(inq.data) || asKbankPlainObject(inq)
+  const candidates = root ? [...new Set(pickKbankTxnNoFromObject(root))].slice(0, 5) : []
+  if (candidates.length > 0) {
+    lines.push(`bank txnNo: ${candidates.join(', ')}`)
+    if (!candidates.some((c) => isKbankPaymentTxnNo(c))) {
+      lines.push('(Void needs numeric payment txnNo e.g. 26440008 — APIC… is QR session id only)')
+    }
+  }
+
+  try {
+    const raw = JSON.stringify(inq.data != null ? inq.data : { statusCode: inq.statusCode, status: inq.status })
+    if (raw && raw !== '{}' && raw !== 'null') {
+      lines.push(raw.length > 400 ? `${raw.slice(0, 400)}…` : raw)
+    }
+  } catch {
+    /* ignore */
+  }
+  return lines.join('\n')
 }
 
 /**

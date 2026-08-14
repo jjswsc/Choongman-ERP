@@ -137,6 +137,7 @@ import {
 } from '@/lib/payments/kbank-void-from-order'
 import {
   extractKbankPaymentTxnNo,
+  formatKbankVoidInquiryFailureMessage,
   resolveKbankVoidTxnNoForRequest,
 } from '@/lib/payments/kbank-api-reference'
 
@@ -1722,8 +1723,12 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         }
         if (!voidTxnNo) {
           await appAlert(
-            t('posKbankVoidInquiryFailed') ||
-              'Could not obtain txnNo from Inquiry. Check the KBank response and try again.'
+            formatKbankVoidInquiryFailureMessage({
+              fallback:
+                t('posKbankVoidInquiryFailed') ||
+                'Could not obtain txnNo from Inquiry. Check the KBank response and try again.',
+              inquiry: inq,
+            })
           )
           return
         }

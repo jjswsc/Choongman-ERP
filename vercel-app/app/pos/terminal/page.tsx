@@ -280,6 +280,7 @@ import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import {
   extractKbankQrResponseMeta,
   extractKbankPaymentTxnNo,
+  formatKbankVoidInquiryFailureMessage,
   isKbankCreditCardQrUnavailableError,
   isKbankPaymentTxnNo,
   isKbankPaymentAttemptApproved,
@@ -7259,13 +7260,13 @@ export default function PosTerminalPage() {
               }
             }
             if (!voidTxnNo) {
-              const inqErr = String(
-                inq.statusMessage ||
-                  inq.message ||
-                  t('posKbankVoidInquiryFailed') ||
-                  'Could not obtain txnNo from Inquiry. Check KBank response below.'
-              ).trim()
-              const rateLimited = noteKbankRateLimitResponse(inqErr)
+              const fallback =
+                t('posKbankVoidInquiryFailed') ||
+                'Could not obtain txnNo from Inquiry. Check KBank response below.'
+              const inqErr = formatKbankVoidInquiryFailureMessage({ fallback, inquiry: inq })
+              const rateLimited = noteKbankRateLimitResponse(
+                String(inq.statusMessage || inq.message || inqErr)
+              )
               await appAlert(
                 rateLimited
                   ? String(t('posKbankRateLimitAlert') || inqErr)
