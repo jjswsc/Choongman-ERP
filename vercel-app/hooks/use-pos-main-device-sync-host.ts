@@ -70,6 +70,7 @@ import {
   lastRealtimeOrderEventAtRef,
   lastSeenOrderIdRef,
   lastTriggerMainPosPollAtRef,
+  pendingForcePollRef,
   mainPosPollInFlightRef,
   mainPosSelfDineInUpdateSuppressUntilRef,
   paymentReceiptScanSeededRef,
@@ -281,6 +282,7 @@ export function usePosMainDeviceSyncHost(): void {
   const realtimeResubscribeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastRealtimeResubscribeAtRef = useRef(0)
   const prevMainPosStoreCodeRef = useRef<string | null>(null)
+  const dineInAddonFetchInFlightRef = useRef<Set<number>>(new Set())
 
   const skipLocalKitchenAutoprintForOrder = useCallback(
     (orderId: number, row?: Record<string, unknown>) => {
@@ -1186,144 +1188,202 @@ export function usePosMainDeviceSyncHost(): void {
       }
 
       const parsed = parseRealtimePosOrderRowItemsJson(row, resolveOrderItemDisplayName, enrichPromoItemsWithOptionName)
-      if (!parsed.ok || parsed.items.length === 0) {
-        triggerMainPosPollNowRef.current?.({ force: true })
-        return
-      }
-      const items = parsed.items
-      let prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(orderId)
-      const newQtyById = buildDineInQtySnapshotForStore(items)
-      if (newQtyById.size === 0) return
-      if (!prevQtyById && oldRow) {
-        const parsedOld = parseRealtimePosOrderRowItemsJson(oldRow, resolveOrderItemDisplayName, enrichPromoItemsWithOptionName)
-        if (parsedOld.ok && parsedOld.items.length > 0) {
-          prevQtyById = buildDineInQtySnapshotForStore(parsedOld.items)
+      const runDineInAddonAutoprint = (
+        addonOrderId: number,
+        addonRow: Record<string, unknown>,
+        items: RealtimeParsedPosOrderItem[],
+        addonOldRow?: Record<string, unknown>
+      ) => {
+        let prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(addonOrderId)
+        const newQtyById = buildDineInQtySnapshotForStore(items)
+        if (newQtyById.size === 0) return
+        if (!prevQtyById && addonOldRow) {
+          const parsedOld = parseRealtimePosOrderRowItemsJson(
+            addonOldRow,
+            resolveOrderItemDisplayName,
+            enrichPromoItemsWithOptionName
+          )
+          if (parsedOld.ok && parsedOld.items.length > 0) {
+            prevQtyById = buildDineInQtySnapshotForStore(parsedOld.items)
+          }
+        }
+        if (!prevQtyById) {
+          prevQtyById =
+            inferPrevQtySnapshotExcludingRecentQrGuestLines({
+              items,
+              newQtyById,
+              resolveKey: (it) => resolveDineInKitchenSnapshotItemKey(it, { formatNote: formatLineNoteForPrint }),
+            }) ?? undefined
+        }
+        if (!prevQtyById) {
+          dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
+          refetchStores({ scope: 'current' })
+          triggerMainPosPollNowRef.current?.({ force: true })
+          return
+        }
+        const changedSet = collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
+        if (changedSet.size === 0) {
+          dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
+          return
+        }
+        const storeCodeForSkip = String(addonRow.store_code ?? storeCode)
+        if (shouldSkipDineInRemoteAddAutoprint(addonOrderId, storeCodeForSkip, prevQtyById, newQtyById, changedSet)) {
+          dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
+          return
+        }
+        refetchStores({
+          scope: skipLocalKitchenAutoprintForOrder(addonOrderId, addonRow) ? 'current' : 'all',
+        })
+        if (!wantRemoteDineInAdd) {
+          dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
+          return
+        }
+        const shouldAutoPrintReceipt = autoPrint.receiptOnAddOrder || autoPrint.receiptOnOrder
+        if (!shouldAutoPrintReceipt && !autoPrint.kitchenOnOrder) {
+          dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
+          return
+        }
+        const cartLikeNew = items.map((it) => ({
+          id: resolveDineInKitchenSnapshotItemKey(it),
+          name: it.name,
+          price: it.price,
+          quantity: it.qty,
+          qty: it.qty,
+          ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
+          ...(it.menuId ? { menuId: it.menuId } : {}),
+          ...(it.source ? { source: it.source } : {}),
+          ...(it.addedAt ? { addedAt: it.addedAt } : {}),
+          ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
+        }))
+        const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
+          cartLikeNew,
+          prevQtyById,
+          newQtyById,
+          (line) => resolveDineInKitchenSnapshotItemKey(line)
+        )
+        const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
+        const discountAmt = Number(addonRow.discount_amt ?? 0)
+        const couponDiscountAmt = Number(addonRow.coupon_discount_amt ?? 0)
+        const pricing = computePosPricing({
+          subtotal: mergeSubtotal,
+          discountAmt,
+          cardPaymentAmount: 0,
+          adjustments: pricingAdjustments,
+        })
+        const receiptPrintItemsRemote = items.map((it) => ({
+          ...it,
+          ...(changedSet.has(resolveDineInKitchenSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
+        }))
+        const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
+        const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
+          hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
+        )
+        const printHallAddon = shouldAutoPrintReceipt && !skipQrGuestHall
+        const receiptPayloadRemote: HallReceiptPrintPayload = {
+          orderNo: String(addonRow.order_no ?? ''),
+          storeCode: storeCodeForSkip,
+          orderType: t('posOrderTypeDineIn') || '매장',
+          tableName: String(addonRow.table_name ?? ''),
+          memo: String(addonRow.memo ?? ''),
+          items: receiptPrintItemsRemote,
+          subtotal: mergeSubtotal,
+          discountAmt,
+          couponDiscountAmt,
+          discountReason: String(addonRow.discount_reason ?? '').trim() || undefined,
+          total: pricing.finalTotal,
+          _autoPrintDedupeKey: `order:${addonOrderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
+          vatFeeAmt: pricing.vatFeeAmt,
+          vatFeeMode: pricing.vatFeeMode,
+          ...receiptTaxDisplayFieldsFromPricing(pricing),
+          serviceFeeAmt: pricing.serviceFeeAmt,
+          serviceFeeMode: pricing.serviceFeeMode,
+          cardFeeAmt: pricing.cardFeeAmt,
+          cardFeeMode: pricing.cardFeeMode,
+          otherFeeAmt: pricing.otherFeeAmt,
+          otherFeeMode: pricing.otherFeeMode,
+          ...posGuestCountSpread(addonRow.guest_count),
+        }
+        dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
+        if (printHallAddon) {
+          void printHallReceiptPayload(receiptPayloadRemote, autoprintCtx)
+        }
+        if (autoPrint.kitchenOnOrder && kitchenCartLines.length > 0) {
+          const kitchenDelayMs = printHallAddon
+            ? typeof window !== 'undefined' && window.cmPosShell
+              ? resolveAfterReceiptToKitchenDelayMs()
+              : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+            : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
+          setTimeout(() => {
+            const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(addonOrderId, kitchenCartLines)
+            if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
+            const orderForKitchen = {
+              id: addonOrderId,
+              orderNo: String(addonRow.order_no ?? ''),
+              storeCode: storeCodeForSkip,
+              orderType: 'dine_in',
+              tableName: String(addonRow.table_name ?? ''),
+              memo: String(addonRow.memo ?? ''),
+              items: kitchenCartLines as PosOrder['items'],
+              guestCount: Number(addonRow.guest_count ?? 0) || undefined,
+            } as PosOrder
+            void printKitchenForOrder(orderForKitchen, autoprintCtx, {
+              kitchenLines: kitchenCartLines as Array<Record<string, unknown>>,
+              dedupeKey: kitchenDedupeKey,
+            }).catch(() => releaseKitchenAutoPrintKey(kitchenDedupeKey))
+          }, kitchenDelayMs)
         }
       }
-      if (!prevQtyById) {
-        prevQtyById =
-          inferPrevQtySnapshotExcludingRecentQrGuestLines({
-            items,
-            newQtyById,
-            resolveKey: (it) => resolveDineInKitchenSnapshotItemKey(it, { formatNote: formatLineNoteForPrint }),
-          }) ?? undefined
-      }
-      if (!prevQtyById) {
-        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-        refetchStores({ scope: 'current' })
-        triggerMainPosPollNowRef.current?.({ force: true })
+
+      if (!parsed.ok || parsed.items.length === 0) {
+        if (!dineInAddonFetchInFlightRef.current.has(orderId)) {
+          dineInAddonFetchInFlightRef.current.add(orderId)
+          logPosPrintDebug('realtime_update_fetch_dine_in_addon', { orderId })
+          void getPosOrders({
+            orderId,
+            storeCode: String(row.store_code ?? storeCode).trim() || storeCode,
+          })
+            .then((list) => {
+              const order = list[0]
+              if (!order?.items?.length) {
+                triggerMainPosPollNowRef.current?.({ force: true })
+                return
+              }
+              const parsedFull = parseRealtimePosOrderRowItemsJson(
+                { items_json: JSON.stringify(order.items) },
+                resolveOrderItemDisplayName,
+                enrichPromoItemsWithOptionName
+              )
+              if (!parsedFull.ok || parsedFull.items.length === 0) {
+                triggerMainPosPollNowRef.current?.({ force: true })
+                return
+              }
+              runDineInAddonAutoprint(
+                orderId,
+                {
+                  ...row,
+                  items_json: JSON.stringify(order.items),
+                  order_no: order.orderNo ?? row.order_no,
+                  table_name: order.tableName ?? row.table_name,
+                  memo: order.memo ?? row.memo,
+                  store_code: order.storeCode ?? row.store_code,
+                  guest_count: order.guestCount ?? row.guest_count,
+                  discount_amt: order.discountAmt ?? row.discount_amt,
+                  coupon_discount_amt: order.couponDiscountAmt ?? row.coupon_discount_amt,
+                  discount_reason: order.discountReason ?? row.discount_reason,
+                },
+                parsedFull.items
+              )
+            })
+            .catch(() => {
+              triggerMainPosPollNowRef.current?.({ force: true })
+            })
+            .finally(() => {
+              dineInAddonFetchInFlightRef.current.delete(orderId)
+            })
+        }
         return
       }
-      const changedSet = collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
-      if (changedSet.size === 0) {
-        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-        return
-      }
-      const storeCodeForSkip = String(row.store_code ?? storeCode)
-      if (shouldSkipDineInRemoteAddAutoprint(orderId, storeCodeForSkip, prevQtyById, newQtyById, changedSet)) {
-        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-        return
-      }
-      refetchStores({
-        scope: skipLocalKitchenAutoprintForOrder(orderId, row) ? 'current' : 'all',
-      })
-      if (!wantRemoteDineInAdd) {
-        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-        return
-      }
-      const shouldAutoPrintReceipt = autoPrint.receiptOnAddOrder || autoPrint.receiptOnOrder
-      if (!shouldAutoPrintReceipt && !autoPrint.kitchenOnOrder) {
-        dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-        return
-      }
-      const cartLikeNew = items.map((it) => ({
-        id: resolveDineInKitchenSnapshotItemKey(it),
-        name: it.name,
-        price: it.price,
-        quantity: it.qty,
-        qty: it.qty,
-        ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
-        ...(it.menuId ? { menuId: it.menuId } : {}),
-        ...(it.source ? { source: it.source } : {}),
-        ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
-      }))
-      const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
-        cartLikeNew,
-        prevQtyById,
-        newQtyById,
-        (line) => resolveDineInKitchenSnapshotItemKey(line)
-      )
-      const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
-      const discountAmt = Number(row.discount_amt ?? 0)
-      const couponDiscountAmt = Number(row.coupon_discount_amt ?? 0)
-      const pricing = computePosPricing({
-        subtotal: mergeSubtotal,
-        discountAmt,
-        cardPaymentAmount: 0,
-        adjustments: pricingAdjustments,
-      })
-      const receiptPrintItemsRemote = items.map((it) => ({
-        ...it,
-        ...(changedSet.has(resolveDineInKitchenSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
-      }))
-      const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
-      const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
-        hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
-      )
-      const printHallAddon = shouldAutoPrintReceipt && !skipQrGuestHall
-      const receiptPayloadRemote: HallReceiptPrintPayload = {
-        orderNo: String(row.order_no ?? ''),
-        storeCode: storeCodeForSkip,
-        orderType: t('posOrderTypeDineIn') || '매장',
-        tableName: String(row.table_name ?? ''),
-        memo: String(row.memo ?? ''),
-        items: receiptPrintItemsRemote,
-        subtotal: mergeSubtotal,
-        discountAmt,
-        couponDiscountAmt,
-        discountReason: String(row.discount_reason ?? '').trim() || undefined,
-        total: pricing.finalTotal,
-        _autoPrintDedupeKey: `order:${orderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
-        vatFeeAmt: pricing.vatFeeAmt,
-        vatFeeMode: pricing.vatFeeMode,
-        ...receiptTaxDisplayFieldsFromPricing(pricing),
-        serviceFeeAmt: pricing.serviceFeeAmt,
-        serviceFeeMode: pricing.serviceFeeMode,
-        cardFeeAmt: pricing.cardFeeAmt,
-        cardFeeMode: pricing.cardFeeMode,
-        otherFeeAmt: pricing.otherFeeAmt,
-        otherFeeMode: pricing.otherFeeMode,
-        ...posGuestCountSpread(row.guest_count),
-      }
-      dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
-      if (printHallAddon) {
-        void printHallReceiptPayload(receiptPayloadRemote, autoprintCtx)
-      }
-      if (autoPrint.kitchenOnOrder && kitchenCartLines.length > 0) {
-        const kitchenDelayMs = printHallAddon
-          ? typeof window !== 'undefined' && window.cmPosShell
-            ? resolveAfterReceiptToKitchenDelayMs()
-            : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-          : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
-        setTimeout(() => {
-          const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(orderId, kitchenCartLines)
-          if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
-          const orderForKitchen = {
-            id: orderId,
-            orderNo: String(row.order_no ?? ''),
-            storeCode: storeCodeForSkip,
-            orderType: 'dine_in',
-            tableName: String(row.table_name ?? ''),
-            memo: String(row.memo ?? ''),
-            items: kitchenCartLines as PosOrder['items'],
-            guestCount: Number(row.guest_count ?? 0) || undefined,
-          } as PosOrder
-          void printKitchenForOrder(orderForKitchen, autoprintCtx, {
-            kitchenLines: kitchenCartLines as Array<Record<string, unknown>>,
-            dedupeKey: kitchenDedupeKey,
-          }).catch(() => releaseKitchenAutoPrintKey(kitchenDedupeKey))
-        }, kitchenDelayMs)
-      }
+      runDineInAddonAutoprint(orderId, row, parsed.items, oldRow)
     }
 
     const channels = currentStoreCodeVariants
@@ -1360,6 +1420,7 @@ export function usePosMainDeviceSyncHost(): void {
     clearTableOrder,
     formatLineNoteForPrint,
     buildDineInQtySnapshotForStore,
+    logPosPrintDebug,
   ])
 
   // Main POS poll loop
@@ -1375,9 +1436,15 @@ export function usePosMainDeviceSyncHost(): void {
     }
 
     const today = getPosBusinessDateStr()
-    const poll = async () => {
-      if (mainPosPollInFlightRef.current) return
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+    const poll = async (opts?: { forceAddonScan?: boolean }) => {
+      if (mainPosPollInFlightRef.current) {
+        if (opts?.forceAddonScan) pendingForcePollRef.current = true
+        return
+      }
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        if (opts?.forceAddonScan) pendingForcePollRef.current = true
+        return
+      }
       mainPosPollInFlightRef.current = true
       try {
         const runPaymentReceiptScan = async () => {
@@ -1550,6 +1617,7 @@ export function usePosMainDeviceSyncHost(): void {
 
         const nowMs = Date.now()
         const shouldRunMetaScan =
+          Boolean(opts?.forceAddonScan) ||
           !lastMetaScanAtRef.current ||
           nowMs - lastMetaScanAtRef.current >= MAIN_POS_META_SCAN_INTERVAL_MS ||
           nowMs - lastRealtimeOrderEventAtRef.current >= MAIN_POS_META_SCAN_INTERVAL_MS
@@ -1596,6 +1664,7 @@ export function usePosMainDeviceSyncHost(): void {
                     })
                     const lineDiscountAmt = coercePosReceiptLineDiscountAmt(it)
                     const source = String((it as { source?: unknown }).source ?? '').trim()
+                    const addedAt = String((it as { addedAt?: unknown }).addedAt ?? '').trim()
                     return {
                       id: String(it.id ?? ''),
                       name: displayName,
@@ -1606,13 +1675,14 @@ export function usePosMainDeviceSyncHost(): void {
                       ...(note ? { note: formatLineNoteForPrint(note) } : {}),
                       ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
                       ...(source ? { source } : {}),
+                      ...(addedAt ? { addedAt } : {}),
                       ...(Array.isArray(it.promoItems)
                         ? { promoItems: enrichPromoItemsWithOptionName(it.promoItems) }
                         : {}),
                     }
                   })
                   if (!items.length) continue
-                  const prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(oid)
+                  let prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(oid)
                   const newQtyById = buildDineInQtySnapshotForStore(items)
                   if (newQtyById.size === 0) continue
                   const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(oid)
@@ -1622,6 +1692,15 @@ export function usePosMainDeviceSyncHost(): void {
                       continue
                     }
                     mainPosSelfDineInUpdateSuppressUntilRef.current.delete(oid)
+                  }
+                  if (!prevQtyById) {
+                    prevQtyById =
+                      inferPrevQtySnapshotExcludingRecentQrGuestLines({
+                        items,
+                        newQtyById,
+                        resolveKey: (it) =>
+                          resolveDineInKitchenSnapshotItemKey(it, { formatNote: formatLineNoteForPrint }),
+                      }) ?? undefined
                   }
                   if (!prevQtyById) {
                     dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
@@ -1764,15 +1843,22 @@ export function usePosMainDeviceSyncHost(): void {
         /* poll errors */
       } finally {
         mainPosPollInFlightRef.current = false
+        if (pendingForcePollRef.current) {
+          pendingForcePollRef.current = false
+          void poll({ forceAddonScan: true })
+        }
       }
     }
 
     triggerMainPosPollNowRef.current = (opts) => {
       const now = Date.now()
       if (!opts?.force && now - lastTriggerMainPosPollAtRef.current < MAIN_POS_TRIGGER_POLL_MIN_MS) return
-      if (mainPosPollInFlightRef.current) return
+      if (mainPosPollInFlightRef.current) {
+        if (opts?.force) pendingForcePollRef.current = true
+        return
+      }
       lastTriggerMainPosPollAtRef.current = now
-      void poll()
+      void poll({ forceAddonScan: Boolean(opts?.force) })
     }
 
     let pollLoopCancelled = false

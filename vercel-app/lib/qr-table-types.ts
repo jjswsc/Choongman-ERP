@@ -110,7 +110,8 @@ export function shouldSkipHallAutoprintForQrGuestAddon(
  */
 export const QR_GUEST_ADDON_AUTOPRINT_WINDOW_MS = 90_000
 
-const QR_LINE_ID_MS_RE = /^qr-\d+-\d+-(\d{12,13})-[a-z0-9]+$/i
+/** `qr-{session}-{menuId}-{epochMs}-{rand}` — menuId는 숫자만이 아닐 수 있음 */
+const QR_LINE_ID_MS_RE = /^qr-.+-(\d{12,13})-[a-z0-9]+$/i
 
 function qrGuestLineAddedAtMs(it: { id?: unknown; addedAt?: unknown }): number | null {
   const rawAdded = String(it.addedAt ?? '').trim()
@@ -135,7 +136,10 @@ export function isRecentQrGuestAddonLine(
   const addedMs = qrGuestLineAddedAtMs(it)
   if (addedMs == null) return false
   const age = nowMs - addedMs
-  return age >= 0 && age <= windowMs
+  if (age > windowMs) return false
+  /** POS 시계가 서버보다 조금 느리면 addedAt이 미래로 보임 */
+  if (age < -5_000) return false
+  return true
 }
 
 export function inferPrevQtySnapshotExcludingRecentQrGuestLines<

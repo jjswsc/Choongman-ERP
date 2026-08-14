@@ -76,6 +76,44 @@ describe('inferPrevQtySnapshotExcludingRecentQrGuestLines', () => {
     expect(prev?.has(qrKey)).toBe(false)
   })
 
+  it('still infers when POS clock is a few seconds behind addedAt', () => {
+    const nowMs = 1_776_000_000_000
+    const qrKey = `qr-12-99-${nowMs + 2_000}-abc`
+    const items = [{ id: qrKey, name: 'Chicken', qty: 1, source: 'qr_table' as const }]
+    const newQtyById = new Map([[qrKey, 1]])
+    const prev = inferPrevQtySnapshotExcludingRecentQrGuestLines({
+      items,
+      newQtyById,
+      resolveKey: (it) => String(it.id || ''),
+      nowMs,
+    })
+    expect(prev).not.toBeNull()
+    expect(prev?.has(qrKey)).toBe(false)
+  })
+
+  it('infers from addedAt when QR id is not only digits', () => {
+    const nowMs = 1_776_000_000_000
+    const qrKey = `qr-12-menuA-${nowMs - 1_000}-x9k`
+    const items = [
+      {
+        id: qrKey,
+        name: 'Chicken',
+        qty: 1,
+        source: 'qr_table' as const,
+        addedAt: '2026-02-10 12:00:00',
+      },
+    ]
+    const newQtyById = new Map([[qrKey, 1]])
+    const prev = inferPrevQtySnapshotExcludingRecentQrGuestLines({
+      items,
+      newQtyById,
+      resolveKey: (it) => String(it.id || ''),
+      nowMs: Date.parse('2026-02-10T12:00:01+07:00'),
+    })
+    expect(prev).not.toBeNull()
+    expect(prev?.has(qrKey)).toBe(false)
+  })
+
   it('returns null when there is no recent QR guest line', () => {
     const items = [{ id: 'staff-1', name: 'Chicken', qty: 1 }]
     const newQtyById = new Map([['staff-1', 1]])

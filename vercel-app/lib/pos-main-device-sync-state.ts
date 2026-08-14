@@ -36,6 +36,7 @@ export const paymentReceiptScanSeededRef = { current: false }
 export const grabCancelWatchSeededRef = { current: false }
 export const promptedGrabCustomerCancelIdsRef = { current: new Set<number>() }
 export const lastTriggerMainPosPollAtRef = { current: 0 }
+export const pendingForcePollRef = { current: false }
 export const triggerMainPosPollNowRef = {
   current: null as ((opts?: { force?: boolean }) => void) | null,
 }
@@ -52,6 +53,7 @@ export function resetPosMainDeviceSyncStateForStore(storeCode: string): void {
   lastMetaScanAtRef.current = 0
   printedHallDiscountReprintKeysRef.current.clear()
   paymentReceiptScanSeededRef.current = false
+  pendingForcePollRef.current = false
 }
 
 export function clearPosMainDeviceSyncStateOnNonMain(): void {
