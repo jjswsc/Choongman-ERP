@@ -31,6 +31,16 @@ export function isTransferPrepaymentKind(kind: TransferKind): boolean {
   return kind === "bank_to_petty" || kind === "bank_to_card"
 }
 
+/** 계정과목 선택란을 쓰는 유형 — 전환 시 기존 값을 지우면 고정자산 자동선택과 충돌해 React #185가 난다. */
+export function categoryUsesAccountSubjectPicker(
+  categoryMain: string,
+  transferKind?: string
+): boolean {
+  if (categoryMain === "expense" || categoryMain === "fixed_asset") return true
+  if (categoryMain === "transfer" && transferKind === "bank_general") return true
+  return false
+}
+
 export const CATEGORY_MAIN_OPTIONS = [
   { value: "purchase", labelKey: "wm_purchase", sub: ["normal", "advance"] },
   { value: "expense", labelKey: "wm_expense", sub: ["normal", "advance"] },

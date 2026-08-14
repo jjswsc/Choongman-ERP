@@ -110,6 +110,7 @@ import {
   withdrawalCategoryFromTransferKind,
   transferKindFromWithdrawalCategory,
   isTransferPrepaymentKind,
+  categoryUsesAccountSubjectPicker,
   CATEGORY_MAIN_OPTIONS,
   DELIVERY_APP_FEE_PRESETS,
   CARD_FEE_PRESETS,
@@ -445,13 +446,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   }, [vendors, searchParams, isBankLinkMode, payeeCode, payeeName])
 
   React.useEffect(() => {
-    if (
-      categoryMain !== "expense" &&
-      !(categoryMain === "transfer" && transferKind === "bank_general") &&
-      accountSubjectId
-    ) {
-      setAccountSubjectId("")
-    }
+    if (categoryUsesAccountSubjectPicker(categoryMain, transferKind)) return
+    if (accountSubjectId) setAccountSubjectId("")
   }, [categoryMain, transferKind, accountSubjectId])
 
   React.useEffect(() => {
