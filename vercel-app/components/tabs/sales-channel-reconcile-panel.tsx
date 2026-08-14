@@ -4,21 +4,24 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type {
+  PosCardReconcileResult,
   PosCashReconcileResult,
   PosDeliveryAppReconcileResult,
   PosKbankQrReconcileResult,
 } from "@/lib/api-client"
 import { SalesDeliveryAppReconcilePanel } from "@/components/tabs/sales-delivery-app-reconcile-panel"
 import { SalesKbankQrReconcilePanel } from "@/components/tabs/sales-kbank-qr-reconcile-panel"
+import { SalesCardReconcilePanel } from "@/components/tabs/sales-card-reconcile-panel"
 import { SalesCashReconcilePanel } from "@/components/tabs/sales-cash-reconcile-panel"
 
-export type ChannelReconcileSection = "delivery" | "kbank-qr" | "cash"
+export type ChannelReconcileSection = "delivery" | "kbank-qr" | "card" | "cash"
 
 export function SalesChannelReconcilePanel(props: {
   section: ChannelReconcileSection
   onSectionChange: (section: ChannelReconcileSection) => void
   deliveryData: PosDeliveryAppReconcileResult
   kbankQrData: PosKbankQrReconcileResult
+  cardData: PosCardReconcileResult
   cashData: PosCashReconcileResult
   placeholder?: string | null
   tr: (key: string, fallback: string) => string
@@ -30,6 +33,7 @@ export function SalesChannelReconcilePanel(props: {
     onSectionChange,
     deliveryData,
     kbankQrData,
+    cardData,
     cashData,
     placeholder,
     tr,
@@ -69,6 +73,17 @@ export function SalesChannelReconcilePanel(props: {
         <Button
           type="button"
           size="sm"
+          variant={section === "card" ? "default" : "outline"}
+          className={cn(section === "card" && "pointer-events-none")}
+          role="tab"
+          aria-selected={section === "card"}
+          onClick={() => onSectionChange("card")}
+        >
+          {tr("salesChannelReconcileCard", "카드")}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
           variant={section === "cash" ? "default" : "outline"}
           className={cn(section === "cash" && "pointer-events-none")}
           role="tab"
@@ -90,6 +105,14 @@ export function SalesChannelReconcilePanel(props: {
       ) : section === "kbank-qr" ? (
         <SalesKbankQrReconcilePanel
           data={kbankQrData}
+          placeholder={placeholder ?? null}
+          tr={tr}
+          formatAmount={formatAmount}
+          storeDisplayName={storeDisplayName}
+        />
+      ) : section === "card" ? (
+        <SalesCardReconcilePanel
+          data={cardData}
           placeholder={placeholder ?? null}
           tr={tr}
           formatAmount={formatAmount}

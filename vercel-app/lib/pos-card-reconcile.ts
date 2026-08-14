@@ -1,6 +1,6 @@
 /**
- * 채널 확인 — KBank QR(PromptPay) 당일 POS 합계.
- * K Merchant는 익일 반영이 일반적. 통장은 인식일(없으면 입금일 전날)로 POS 영업일과 대조.
+ * 채널 확인 — 당일 POS payment_card vs 매장 통장 계정과목 4120~4124.
+ * 카드 정산은 익일 입금이 흔하므로, 통장은 인식일(없으면 입금일 전날)로 일자 대조.
  */
 import { POS_SALES_COMPLETED_STATUSES } from '@/lib/pos-sales-period-aggregate'
 import { canonicalSalesStoreRowKey, rowMatchesAnySalesStoreSelection } from '@/lib/pos-sales-store-filter'
@@ -14,43 +14,44 @@ import {
   type CashBankDepositAgg,
 } from '@/lib/pos-cash-bank-deposit'
 import { attributedSalesDateForBankDeposit } from '@/lib/pos-delivery-app-bank-deposit'
-import { CHANNEL_BANK_GL_CODES } from '@/lib/pos-channel-bank-ledger'
+import { CARD_BANK_GL_CODES } from '@/lib/pos-channel-bank-ledger'
 
-export type KbankQrReconcileOrderRow = {
+export type CardReconcileOrderRow = {
   created_at?: string | null
   store_code?: string | null
   status?: string | null
-  payment_qr?: number | null
+  payment_card?: number | null
 }
 
-export type KbankQrReconcileDayRow = {
+export type CardReconcileDayRow = {
   date: string
   orderCount: number
-  qrSales: number
+  cardSales: number
   bankDepositAmt: number | null
 }
 
-export type KbankQrReconcileRow = {
+export type CardReconcileRow = {
   storeCode: string
   orderCount: number
-  qrSales: number
+  cardSales: number
   bankDepositAmt: number | null
-  days: KbankQrReconcileDayRow[]
+  days: CardReconcileDayRow[]
 }
 
-export type KbankQrReconcileKpi = {
+export type CardReconcileKpi = {
   orderCount: number
-  qrSales: number
+  cardSales: number
   bankDepositAmt: number
   storeCount: number
 }
 
-export type KbankQrReconcileResult = {
-  rows: KbankQrReconcileRow[]
-  kpi: KbankQrReconcileKpi
+export type CardReconcileResult = {
+  rows: CardReconcileRow[]
+  kpi: CardReconcileKpi
 }
 
 const EPS = 0.005
+const CARD_GL = new Set<string>(CARD_BANK_GL_CODES)
 
 function isCompletedStatus(status: string | null | undefined): boolean {
   const s = String(status ?? '')
@@ -59,21 +60,21 @@ function isCompletedStatus(status: string | null | undefined): boolean {
   return (POS_SALES_COMPLETED_STATUSES as readonly string[]).includes(s)
 }
 
-export function aggregateKbankQrReconcileRows(
-  orders: KbankQrReconcileOrderRow[],
-  options?: { businessDateForRow?: (row: KbankQrReconcileOrderRow) => string }
-): KbankQrReconcileRow[] {
+export function aggregateCardReconcileRows(
+  orders: CardReconcileOrderRow[],
+  options?: { businessDateForRow?: (row: CardReconcileOrderRow) => string }
+): CardReconcileRow[] {
   type Acc = {
     orderCount: number
-    qrSales: number
-    days: Map<string, { orderCount: number; qrSales: number }>
+    cardSales: number
+    days: Map<string, { orderCount: number; cardSales: number }>
   }
   const byStore = new Map<string, Acc>()
 
   for (const row of orders) {
     if (!isCompletedStatus(row.status)) continue
-    const qr = Math.max(0, Number(row.payment_qr) || 0)
-    if (qr <= EPS) continue
+    const card = Math.max(0, Number(row.payment_card) || 0)
+    if (card <= EPS) continue
     const store = canonicalSalesStoreRowKey(String(row.store_code ?? '').trim())
     if (!store) continue
     const dateRaw = options?.businessDateForRow?.(row) || String(row.created_at ?? '').slice(0, 10)
@@ -82,57 +83,57 @@ export function aggregateKbankQrReconcileRows(
 
     let acc = byStore.get(store)
     if (!acc) {
-      acc = { orderCount: 0, qrSales: 0, days: new Map() }
+      acc = { orderCount: 0, cardSales: 0, days: new Map() }
       byStore.set(store, acc)
     }
     acc.orderCount += 1
-    acc.qrSales = roundSettlementMoney(acc.qrSales + qr)
-    const day = acc.days.get(date) || { orderCount: 0, qrSales: 0 }
+    acc.cardSales = roundSettlementMoney(acc.cardSales + card)
+    const day = acc.days.get(date) || { orderCount: 0, cardSales: 0 }
     day.orderCount += 1
-    day.qrSales = roundSettlementMoney(day.qrSales + qr)
+    day.cardSales = roundSettlementMoney(day.cardSales + card)
     acc.days.set(date, day)
   }
 
-  const rows: KbankQrReconcileRow[] = [...byStore.entries()].map(([storeCode, acc]) => ({
+  const rows: CardReconcileRow[] = [...byStore.entries()].map(([storeCode, acc]) => ({
     storeCode,
     orderCount: acc.orderCount,
-    qrSales: roundSettlementMoney(acc.qrSales),
+    cardSales: roundSettlementMoney(acc.cardSales),
     bankDepositAmt: null,
     days: [...acc.days.entries()]
       .map(([date, d]) => ({
         date,
         orderCount: d.orderCount,
-        qrSales: roundSettlementMoney(d.qrSales),
+        cardSales: roundSettlementMoney(d.cardSales),
         bankDepositAmt: null,
       }))
       .sort((a, b) => a.date.localeCompare(b.date)),
   }))
 
-  rows.sort((a, b) => a.storeCode.localeCompare(b.storeCode) || b.qrSales - a.qrSales)
+  rows.sort((a, b) => a.storeCode.localeCompare(b.storeCode) || b.cardSales - a.cardSales)
   return rows
 }
 
-export function buildKbankQrReconcileResult(rows: KbankQrReconcileRow[]): KbankQrReconcileResult {
+export function buildCardReconcileResult(rows: CardReconcileRow[]): CardReconcileResult {
   let orderCount = 0
-  let qrSales = 0
+  let cardSales = 0
   let bankDepositAmt = 0
   for (const r of rows) {
     orderCount += r.orderCount
-    qrSales = roundSettlementMoney(qrSales + r.qrSales)
+    cardSales = roundSettlementMoney(cardSales + r.cardSales)
     bankDepositAmt = Math.round((bankDepositAmt + (r.bankDepositAmt ?? 0)) * 100) / 100
   }
   return {
     rows,
     kpi: {
       orderCount,
-      qrSales,
+      cardSales,
       bankDepositAmt,
       storeCount: rows.length,
     },
   }
 }
 
-export function aggregateQrBankDeposits(params: {
+export function aggregateCardBankDeposits(params: {
   rows: Array<{
     accountStore?: string | null
     transDate?: string | null
@@ -157,14 +158,14 @@ export function aggregateQrBankDeposits(params: {
 
   for (const row of params.rows) {
     if (String(row.transType || '').trim().toLowerCase() !== 'deposit') continue
-    if (String(row.accountSubjectCode || '').trim() !== CHANNEL_BANK_GL_CODES.qr) continue
+    if (!CARD_GL.has(String(row.accountSubjectCode || '').trim())) continue
     const storeRaw = String(row.accountStore || '').trim()
     if (!storeRaw) continue
     if (storeCodes.length > 0 && !rowMatchesAnySalesStoreSelection(storeRaw, storeCodes)) continue
     const date = attributedSalesDateForBankDeposit(row)
     if (!date || date < start || date > end) continue
     const amt = Math.abs(Number(row.amount) || 0)
-    if (amt <= 0.005) continue
+    if (amt <= EPS) continue
     const store = canonicalSalesStoreRowKey(storeRaw)
     byStore.set(store, round2((byStore.get(store) || 0) + amt))
     const dayKey = cashBankDepositStoreDateKey(store, date)
@@ -173,44 +174,44 @@ export function aggregateQrBankDeposits(params: {
   return { byStore, byStoreDate }
 }
 
-function qrRowToCashRow(row: KbankQrReconcileRow): CashReconcileRow {
+function cardRowToCashRow(row: CardReconcileRow): CashReconcileRow {
   return {
     storeCode: row.storeCode,
     orderCount: row.orderCount,
-    cashSales: row.qrSales,
+    cashSales: row.cardSales,
     bankDepositAmt: row.bankDepositAmt,
     days: row.days.map((d) => ({
       date: d.date,
       orderCount: d.orderCount,
-      cashSales: d.qrSales,
+      cashSales: d.cardSales,
       bankDepositAmt: d.bankDepositAmt,
     })),
   }
 }
 
-function cashRowToQrRow(row: CashReconcileRow): KbankQrReconcileRow {
+function cashRowToCardRow(row: CashReconcileRow): CardReconcileRow {
   return {
     storeCode: row.storeCode,
     orderCount: row.orderCount,
-    qrSales: row.cashSales,
+    cardSales: row.cashSales,
     bankDepositAmt: row.bankDepositAmt,
     days: row.days.map((d) => ({
       date: d.date,
       orderCount: d.orderCount,
-      qrSales: d.cashSales,
+      cardSales: d.cashSales,
       bankDepositAmt: d.bankDepositAmt,
     })),
   }
 }
 
-export function applyQrBankDepositsToRows(
-  rows: KbankQrReconcileRow[],
+export function applyCardBankDepositsToRows(
+  rows: CardReconcileRow[],
   agg: CashBankDepositAgg
-): KbankQrReconcileRow[] {
-  return applyCashBankDepositsToRows(rows.map(qrRowToCashRow), agg).map(cashRowToQrRow)
+): CardReconcileRow[] {
+  return applyCashBankDepositsToRows(rows.map(cardRowToCashRow), agg).map(cashRowToCardRow)
 }
 
-export const EMPTY_KBANK_QR_RECONCILE: KbankQrReconcileResult = {
+export const EMPTY_CARD_RECONCILE: CardReconcileResult = {
   rows: [],
-  kpi: { orderCount: 0, qrSales: 0, bankDepositAmt: 0, storeCount: 0 },
+  kpi: { orderCount: 0, cardSales: 0, bankDepositAmt: 0, storeCount: 0 },
 }

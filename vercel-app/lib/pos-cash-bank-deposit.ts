@@ -1,6 +1,6 @@
 /**
- * 채널 확인 — 통장 현금입금(revenue_cash / 4140)을 매출일 기준으로 매장 합산.
- * 배달앱(입금일-1)과 달리 현금은 당일 입금이 흔하므로, 매출일이 없으면 입금일을 쓴다.
+ * 채널 확인 — 통장 현금입금(revenue_cash / 4140)을 인식일 기준으로 매장 합산.
+ * 배달앱·QR·카드와 같이 인식일(없으면 입금일 전날)을 쓴다.
  */
 import { isExpenseInternalBankNote } from '@/lib/bank-transaction-note-meta'
 import {
@@ -8,6 +8,7 @@ import {
   resolveBankRowStoreName,
   rowMatchesAnySalesStoreSelection,
 } from '@/lib/pos-sales-store-filter'
+import { bankDepositRecognitionDate } from '@/lib/pos-channel-reconcile-match'
 
 export const CASH_BANK_GL_CODE = '4140'
 
@@ -49,14 +50,14 @@ function addDaysToYmd(ymd: string, deltaDays: number): string {
   return `${yy}-${mm}-${dd}`
 }
 
-/** 통장 조회 창: 매출일 있는 행 + 익일 아침 입금(매출일 없음)을 담기 위한 trans_date 버퍼 */
+/** 통장 조회 창: 인식일 있는 행 + 인식일 없는 행(입금일-1)을 담기 위한 trans_date 버퍼 */
 export function cashBankDepositQueryTransDateWindow(
   startStr: string,
   endStr: string
 ): { from: string; to: string } {
   const start = String(startStr || '').slice(0, 10)
   const end = String(endStr || '').slice(0, 10)
-  return { from: addDaysToYmd(start, -1), to: addDaysToYmd(end, 2) }
+  return { from: addDaysToYmd(start, -1), to: addDaysToYmd(end, 7) }
 }
 
 function round2(n: number): number {
@@ -67,16 +68,12 @@ export function cashBankDepositStoreDateKey(storeCode: string, date: string): st
   return `${storeCode}\t${date}`
 }
 
-/** 통장 매출일. 없으면 입금일(당일). */
+/** 통장 인식일. 없으면 입금일 전날(통장 화면 인식일 기본과 동일). */
 export function attributedSalesDateForCashBankDeposit(row: {
   transDate?: string | null
   salesDate?: string | null
 }): string {
-  const sales = String(row.salesDate || '').trim().slice(0, 10)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(sales)) return sales
-  const trans = String(row.transDate || '').trim().slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trans)) return ''
-  return trans
+  return bankDepositRecognitionDate(row)
 }
 
 function looksLikeCashMemo(row: CashBankDepositInput): boolean {

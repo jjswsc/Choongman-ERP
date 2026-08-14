@@ -1275,7 +1275,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
               <div className="flex gap-1">
                 <Button
                   type="button"
-                  variant={manualLinePriceMode === "vat_excluded" ? "secondary" : "outline"}
+                  variant={manualLinePriceMode === "vat_excluded" ? "default" : "outline"}
                   size="sm"
                   className="h-9 flex-1 px-2 text-xs"
                   onClick={() => setManualLinePriceMode("vat_excluded")}
@@ -1284,7 +1284,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 </Button>
                 <Button
                   type="button"
-                  variant={manualLinePriceMode === "vat_included" ? "secondary" : "outline"}
+                  variant={manualLinePriceMode === "vat_included" ? "default" : "outline"}
                   size="sm"
                   className="h-9 flex-1 px-2 text-xs"
                   onClick={() => setManualLinePriceMode("vat_included")}
@@ -1309,7 +1309,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
               <div className="flex gap-1">
                 <Button
                   type="button"
-                  variant={manualLineTaxType === "taxable" ? "secondary" : "outline"}
+                  variant={manualLineTaxType === "taxable" ? "default" : "outline"}
                   size="sm"
                   className="h-9 flex-1 px-2 text-xs"
                   onClick={() => setManualLineTaxType("taxable")}
@@ -1318,7 +1318,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                 </Button>
                 <Button
                   type="button"
-                  variant={manualLineTaxType === "exempt" ? "secondary" : "outline"}
+                  variant={manualLineTaxType === "exempt" ? "default" : "outline"}
                   size="sm"
                   className="h-9 flex-1 px-2 text-xs"
                   onClick={() => setManualLineTaxType("exempt")}
@@ -1668,7 +1668,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                             <div className="flex flex-col gap-1 sm:flex-row sm:justify-end">
                               <Button
                                 type="button"
-                                variant={!poLineIsVatExempt(c.taxType) ? "secondary" : "outline"}
+                                variant={!poLineIsVatExempt(c.taxType) ? "default" : "outline"}
                                 size="sm"
                                 className="h-7 px-2 text-[11px] shrink-0"
                                 onClick={() => setCartLineTaxType(idx, "taxable")}
@@ -1677,7 +1677,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
                               </Button>
                               <Button
                                 type="button"
-                                variant={poLineIsVatExempt(c.taxType) ? "secondary" : "outline"}
+                                variant={poLineIsVatExempt(c.taxType) ? "default" : "outline"}
                                 size="sm"
                                 className="h-7 px-2 text-[11px] shrink-0"
                                 onClick={() => setCartLineTaxType(idx, "exempt")}

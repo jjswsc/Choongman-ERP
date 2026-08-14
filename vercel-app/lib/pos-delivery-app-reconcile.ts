@@ -69,7 +69,7 @@ export type DeliveryAppReconcileRow = {
   suggestedPayout: number
   settledFee: number | null
   settledNet: number | null
-  /** 통장 거래에 등록한 배달앱 입금(매출일 기준). 없으면 null */
+  /** 통장 거래에 등록한 배달앱 입금(인식일 기준). 없으면 null */
   bankDepositAmt: number | null
   days: DeliveryAppReconcileDayRow[]
 }

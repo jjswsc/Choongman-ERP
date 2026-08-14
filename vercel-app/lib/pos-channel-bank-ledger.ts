@@ -1,6 +1,6 @@
 /**
  * 채널 확인 — 매장 통장(bank_accounts.store) × 계정과목으로 입금 조회.
- * 행의 store_name이 비어도, 그 매장 계좌에 찍힌 4111/4112/4113/4130/4140을 그 매장 분으로 본다.
+ * 행의 store_name이 비어도, 그 매장 계좌에 찍힌 4111/4112/4113/4120~4124/4130/4140을 그 매장 분으로 본다.
  */
 import { isExpenseInternalBankNote } from '@/lib/bank-transaction-note-meta'
 import { rowMatchesAnySalesStoreSelection } from '@/lib/pos-sales-store-filter'
@@ -18,6 +18,7 @@ export const CHANNEL_BANK_GL_CODES = {
   grab: '4111',
   lineman: '4112',
   shopee: '4113',
+  card: '4120',
   qr: '4130',
   cash: '4140',
 } as const
@@ -29,6 +30,9 @@ export const DELIVERY_APP_BANK_GL_CODES = [
   CHANNEL_BANK_GL_CODES.lineman,
   CHANNEL_BANK_GL_CODES.shopee,
 ] as const
+
+/** Visa/Master/UnionPay/JCB 포함 — 카드 채널 확인은 4120~4124 합산 */
+export const CARD_BANK_GL_CODES = ['4120', '4121', '4122', '4123', '4124'] as const
 
 export type ChannelBankAccountRef = { id: number; store: string }
 

@@ -6,7 +6,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, Calculator, ClipboardList, Download, Upload, Search, Copy, Megaphone, Truck } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, Ban, FolderTree, History, Calculator, ClipboardList, Download, Upload, Search, Copy, Megaphone, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -62,7 +62,6 @@ import {
   savePosMenuOptionGroupLinks,
   savePosOptionGroup,
   savePosMenuIngredient,
-  deletePosMenu,
   deletePosMenuOption,
   deletePosMenuIngredient,
   updatePosMenuSoldOut,
@@ -1070,14 +1069,6 @@ export default function PosMenusPage() {
     []
   )
 
-  const handlePackagingChecklistRowRemove = React.useCallback((localId: string) => {
-    setPackagingChecklistRows((prev) =>
-      prev
-        .filter((row) => row.localId !== localId)
-        .map((row, idx) => ({ ...row, sortOrder: idx }))
-    )
-  }, [])
-
   const handleSavePackagingChecklist = React.useCallback(async () => {
     if (!editingId) return
     setPackagingChecklistSaving(true)
@@ -1504,16 +1495,6 @@ export default function PosMenusPage() {
     }
   }
 
-  const handleDeleteOption = async (opt: PosMenuOption) => {
-    if (!await appConfirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
-    const res = await deletePosMenuOption({ id: opt.id })
-    if (res.success) {
-      setMenuOptions((prev) => prev.filter((o) => o.id !== opt.id))
-    } else {
-      await appAlert(res.message)
-    }
-  }
-
   /** 설명 탭 하단「저장」과 함께 호출 — 캐시 재조회 없이 로컬 상태만 갱신(즉시 사라짐 방지) */
   const saveSelectedOptionDescriptionIfAny = async (): Promise<boolean> => {
     if (!editingId || !selectedOptionDescId) return true
@@ -1567,20 +1548,6 @@ export default function PosMenusPage() {
       )
     )
     return true
-  }
-
-  /** 메뉴 목록 펼침에서 옵션 삭제 시 DB 반영 및 화면 갱신 */
-  const handleDeleteOptionInList = async (opt: PosMenuOption, menuId: string) => {
-    if (!await appConfirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
-    const res = await deletePosMenuOption({ id: opt.id })
-    if (res.success) {
-      const opts = await getPosMenuOptions({ menuId })
-      setExpandedMenuData(opts && opts.length > 0 ? { options: opts } : null)
-      if (!opts || opts.length === 0) setExpandedMenuId(null)
-      getPosMenus({ fresh: true }).then(setMenus)
-    } else {
-      await appAlert(res.message)
-    }
   }
 
   /** 메뉴 목록 펼침에서 옵션 수정 → 옵션 구성 탭으로 이동 */
@@ -2334,50 +2301,6 @@ export default function PosMenusPage() {
     [optionsConfigPanelStepGroups, optionsConfigSelectedMenu?.code]
   )
 
-  const handleRemoveOptionGroup = React.useCallback(
-    async (groupKey: string) => {
-      if (!optionsConfigSelectedMenu) return
-      const promoId = optionsConfigSelectedMenu.promoId?.trim()
-      if (promoId) {
-        await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
-        return
-      }
-      const current = [...optionsConfigPanelStepGroups]
-      if (!current.includes(groupKey)) return
-      if (isChickenMenu(optionsConfigSelectedMenu.code) && groupKey === "part") {
-        await appAlert(
-          t("posOptionRemovePartBlocked") || "치킨 메뉴에서는 부위(part) 단계를 제거할 수 없습니다."
-        )
-        return
-      }
-      if (isChickenMenu(optionsConfigSelectedMenu.code) && current.length <= 1) {
-        await appAlert(
-          t("posOptionGroupDeleteChickenMin") ||
-            "치킨 메뉴는 옵션 선택 단계를 최소 1개(part) 유지해야 합니다."
-        )
-        return
-      }
-      const ok = await appConfirm(
-        (t("posOptionStepRemoveGroupConfirm") || '단계 "{step}"을(를) 목록에서 제거할까요? [단계 저장] 후 서버에 반영됩니다.').replace(
-          "{step}",
-          groupKey
-        )
-      )
-      if (!ok) return
-      const next = current.filter((k) => k !== groupKey)
-      setOptionsConfigGroupsDraft(next.length > 0 ? next.join(", ") : "")
-      setOptionsConfigGroupRulesDraft((prev) => {
-        const normalized = normalizeOptionSelectionConfig(next, prev)
-        return applyChickenDeliveryRulesToConfig(next, normalized, optionsConfigSelectedMenu.code, t)
-      })
-      setOptionsConfigSelectedGroupKey((prev) => {
-        if (prev !== groupKey) return prev
-        return next[0] ?? ""
-      })
-    },
-    [optionsConfigSelectedMenu, optionsConfigPanelStepGroups, t]
-  )
-
   const handleAppendOptionStepKey = React.useCallback(async () => {
     if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) {
       await appAlert(t("posMenuOptionsConfigNoSelect") || "메뉴를 먼저 선택해 주세요.")
@@ -3038,34 +2961,21 @@ export default function PosMenusPage() {
     }
   }
 
-  const handleDeleteOptionForConfig = async (opt: PosMenuOption) => {
-    if (!await appConfirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
-    if (!/^\d+$/.test(String(opt.id ?? ""))) {
-      setOptionsConfigMenuOptions((prev) => prev.filter((o) => o.id !== opt.id))
-      return
+  const handleMarkUnused = async (menu: PosMenu) => {
+    const nextActive = !menu.isActive
+    if (menu.isActive) {
+      if (!await appConfirm(`"${menu.name}" ${t("posMenuConfirmUnused")}`)) return
     }
-    const res = await deletePosMenuOption({ id: opt.id })
-    if (res.success) {
-      setOptionsConfigMenuOptions((prev) => prev.filter((o) => o.id !== opt.id))
-      setOptionsConfigOriginalOptions((prev) => prev.filter((o) => o.id !== opt.id))
-    } else {
-      await appAlert(res.message)
-    }
-  }
-
-  const handleDelete = async (menu: PosMenu) => {
-    if (!await appConfirm(`"${menu.name}" ${t("posMenuConfirmDelete")}`)) return
-    const res = await deletePosMenu({ id: menu.id })
+    const res = await savePosMenu({ id: menu.id, isActive: nextActive })
     if (!res.success) {
-      await appAlert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
       return
     }
-    setMenus((prev) => prev.filter((m) => m.id !== menu.id))
+    setMenus((prev) => prev.map((m) => (m.id === menu.id ? { ...m, isActive: nextActive } : m)))
     if (editingId === menu.id) {
-      setFormData(emptyForm)
-      setEditingId(null)
+      setFormData((p) => ({ ...p, isActive: nextActive }))
     }
-    await appAlert(t("itemsAlertDeleted"))
+    await appAlert(nextActive ? t("posMenuUseAgainDone") : t("posMenuUnusedDone"))
   }
 
   const todayStr = new Date().toISOString().slice(0, 10)
@@ -4494,7 +4404,6 @@ export default function PosMenusPage() {
                               {(o.priceModifier ?? 0) !== 0 || (o.priceModifierDelivery ?? o.priceModifier ?? 0) !== 0
                                 ? ` (홀 ${(o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifier ?? 0} / 배달 ${(o.priceModifierDelivery ?? o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifierDelivery ?? o.priceModifier ?? 0})` : ""}
                             </span>
-                            <Button size="sm" variant="ghost" className="h-5 px-1 text-destructive hover:text-destructive" onClick={() => handleDeleteOption(o)}><Trash2 className="h-3 w-3" /></Button>
                           </li>
                         ))}
                       </ul>
@@ -4909,16 +4818,6 @@ export default function PosMenusPage() {
                                     <span>{t("use") || "사용"}</span>
                                   </label>
                                 </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 px-2 text-destructive hover:text-destructive"
-                                  onClick={() => handlePackagingChecklistRowRemove(row.localId)}
-                                  title={t("delete") || "삭제"}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
                               </div>
                             </div>
                           ))}
@@ -5274,7 +5173,12 @@ export default function PosMenusPage() {
                                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{optCode}</span>
                               </td>
                               <td className="px-5 py-2 min-w-[140px] pl-8">
-                                <span className="text-sm">{optionPartLabel(opt.name)}</span>
+                                <span className={cn("text-sm", isOptSoldOut && "text-muted-foreground line-through")}>{optionPartLabel(opt.name)}</span>
+                                {isOptSoldOut ? (
+                                  <span className="ml-1.5 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                    {t("posMenuUnused")}
+                                  </span>
+                                ) : null}
                               </td>
                               <td className="px-5 py-2 text-center text-muted-foreground text-xs w-20">{m.categoryMain || "-"}</td>
                               <td className="px-5 py-2 text-center text-muted-foreground w-24">
@@ -5311,17 +5215,8 @@ export default function PosMenusPage() {
                                     onClick={() => handleEditOptionInList(m.id)}
                                     title={t("itemsBtnEdit")}
                                   >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                                    onClick={() => handleDeleteOptionInList(opt, m.id)}
-                                    title={t("itemsBtnDelete")}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
                                 </div>
                               </td>
                             </tr>
@@ -5337,7 +5232,8 @@ export default function PosMenusPage() {
                           isEditingRow
                             ? "bg-primary/20 hover:bg-primary/25 border-l-4 border-l-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.2)]"
                             : "hover:bg-muted/20",
-                          !isEditingRow && idx % 2 === 1 && "bg-muted/5"
+                          !isEditingRow && idx % 2 === 1 && "bg-muted/5",
+                          !m.isActive && !isEditingRow && "bg-muted/40"
                         )}
                         onClick={() => handleExpandMenu(m.id)}
                       >
@@ -5351,7 +5247,14 @@ export default function PosMenusPage() {
                             {m.code}
                           </span>
                         </td>
-                        <td className="px-5 py-3">{m.name}</td>
+                        <td className="px-5 py-3">
+                          <span className={cn(!m.isActive && "text-muted-foreground line-through")}>{m.name}</span>
+                          {!m.isActive ? (
+                            <span className="ml-1.5 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                              {t("posMenuUnused")}
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="px-5 py-3 text-center text-muted-foreground text-xs">{m.categoryMain || "-"}</td>
                         <td className="px-5 py-3 text-center text-muted-foreground">
                           {m.category ? translatePosMenuCategoryLabel(m.category, t) : "-"}
@@ -5394,11 +5297,20 @@ export default function PosMenusPage() {
                             <Button
                               variant="outline"
                               size="icon"
-                              className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => handleDelete(m)}
-                              title={t("itemsBtnDelete")}
+                              className={cn(
+                                "h-7 w-7",
+                                !m.isActive
+                                  ? "text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/40"
+                                  : "text-muted-foreground border-muted hover:bg-muted/50"
+                              )}
+                              onClick={() => handleMarkUnused(m)}
+                              title={!m.isActive ? t("posMenuUseAgain") : t("posMenuUnused")}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              {!m.isActive ? (
+                                <PlayCircle className="h-3.5 w-3.5" />
+                              ) : (
+                                <Ban className="h-3.5 w-3.5" />
+                              )}
                             </Button>
                           </div>
                         </td>
@@ -5548,14 +5460,6 @@ export default function PosMenusPage() {
                   isMoveUpDisabled={isOptionStepMoveUpDisabled}
                   isMoveDownDisabled={isOptionStepMoveDownDisabled}
                   onMoveGroup={handleMoveOptionGroup}
-                  onRemoveGroup={handleRemoveOptionGroup}
-                  removeGroupLabel={t("posOptionStepRemoveGroup")}
-                  removeGroupDisabled={
-                    !!optionsConfigSelectedMenu?.promoId?.trim() ||
-                    (optionsConfigSelectedMenu
-                      ? isChickenMenu(optionsConfigSelectedMenu.code) && optionsConfigPanelStepGroups.length <= 1
-                      : false)
-                  }
                   hallLabel={t("posOptionSellHall") || "홀"}
                   deliveryLabel={t("posOptionSellDelivery") || "배달"}
                 />
@@ -6298,7 +6202,6 @@ export default function PosMenusPage() {
                                   sellDelivery: checked,
                                 })
                               }
-                              onDelete={() => handleDeleteOptionForConfig(o)}
                               draggable={true}
                               onDragStart={() => setOptionsConfigDraggingOptionId(String(o.id))}
                               onDragOver={() => undefined}

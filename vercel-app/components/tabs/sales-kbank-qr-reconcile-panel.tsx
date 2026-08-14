@@ -81,7 +81,7 @@ export function SalesKbankQrReconcilePanel(props: {
       <p className="text-sm text-muted-foreground">
         {tr(
           "salesKbankQrReconcileIntro",
-          "당일 마감은 POS QR(PromptPay) 합계를 기준으로 하세요. 통장 QR은 해당 매장 통장의 계정과목 4130 합계입니다. 행을 펼치면 같은 날짜끼리 POS와 통장을 맞춰 틀린 날을 찾습니다. K Merchant Report는 보통 익일에 반영됩니다."
+          "당일 마감은 POS QR(PromptPay) 합계를 기준으로 하세요. 통장 QR은 해당 매장 통장의 계정과목 4130 합계입니다. 행을 펼치면 POS 영업일과 통장 인식일을 맞춰 틀린 날을 찾습니다. K Merchant Report는 보통 익일에 반영됩니다."
         )}
       </p>
 
@@ -140,7 +140,7 @@ export function SalesKbankQrReconcilePanel(props: {
       <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
         {tr(
           "salesKbankQrReconcileNextDayNote",
-          "K Merchant는 익일 반영이 많습니다. 통장 4130은 매출일(없으면 입금일 전날)로 비교합니다."
+          "K Merchant는 익일 반영이 많습니다. 통장 4130은 통장 인식일(없으면 입금일 전날)로 비교합니다."
         )}
       </p>
 

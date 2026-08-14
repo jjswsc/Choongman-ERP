@@ -414,6 +414,60 @@ export async function getPosCashReconcile(params: {
   return json
 }
 
+export type PosCardReconcileDayRow = {
+  date: string
+  orderCount: number
+  cardSales: number
+  bankDepositAmt: number | null
+}
+
+export type PosCardReconcileRow = {
+  storeCode: string
+  orderCount: number
+  cardSales: number
+  bankDepositAmt: number | null
+  days: PosCardReconcileDayRow[]
+}
+
+export type PosCardReconcileKpi = {
+  orderCount: number
+  cardSales: number
+  bankDepositAmt: number
+  storeCount: number
+}
+
+export type PosCardReconcileResult = {
+  success?: boolean
+  rows: PosCardReconcileRow[]
+  kpi: PosCardReconcileKpi
+  truncated?: boolean
+  message?: string
+}
+
+export async function getPosCardReconcile(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  fresh?: boolean
+}): Promise<PosCardReconcileResult> {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  appendPosSalesFreshParam(q, params.fresh)
+  const res = await posSalesApiFetch(`/api/posCardReconcile?${q}`, params.fresh)
+  const json = (await res.json()) as PosCardReconcileResult
+  if (!json || !Array.isArray(json.rows)) {
+    return {
+      success: false,
+      rows: [],
+      kpi: { orderCount: 0, cardSales: 0, bankDepositAmt: 0, storeCount: 0 },
+      message: json?.message,
+    }
+  }
+  return json
+}
+
 export async function getPosSalesByStoreChannel(params: {
   startStr: string
   endStr: string

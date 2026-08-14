@@ -40,7 +40,23 @@ import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { AccountingPageShell } from "@/components/erp/accounting-page-shell"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
-import { useErpPageActive } from "@/lib/erp-page-visibility"
+import { useErpPageActive, useErpPageActiveRef } from "@/lib/erp-page-visibility"
+import {
+  type FinancialStatementsTabId,
+  financialStatementsPageViewCache,
+} from "@/lib/financial-statements-view-cache"
+
+const FS_TABS = ["income", "balance", "reconcile", "margin"] as const
+
+function readFsPageCache(): ReturnType<typeof financialStatementsPageViewCache.read> {
+  const snap = financialStatementsPageViewCache.read()
+  if (!snap || snap.queryToken <= 0) return null
+  if (!/^\d{4}-\d{2}$/.test(snap.yearMonthStart) || !/^\d{4}-\d{2}$/.test(snap.yearMonthEnd)) {
+    return null
+  }
+  if (!FS_TABS.includes(snap.tab)) return null
+  return snap
+}
 
 export default function FinancialStatementsPage() {
   const { auth } = useAuth()
@@ -70,24 +86,29 @@ export default function FinancialStatementsPage() {
   }, [auth?.allowedStores, managerStore])
 
   const defaultYm = getBangkokRecentYearMonths(1)[0]
-  const [yearMonthStart, setYearMonthStart] = React.useState(() => defaultYm)
-  const [yearMonthEnd, setYearMonthEnd] = React.useState(() => defaultYm)
-  const [storeFilter, setStoreFilter] = React.useState(() =>
-    canFranchiseeMultiStore
+  const cachedPage = React.useMemo(() => readFsPageCache(), [])
+  const [yearMonthStart, setYearMonthStart] = React.useState(
+    () => cachedPage?.yearMonthStart ?? defaultYm
+  )
+  const [yearMonthEnd, setYearMonthEnd] = React.useState(
+    () => cachedPage?.yearMonthEnd ?? defaultYm
+  )
+  const [storeFilter, setStoreFilter] = React.useState(() => {
+    if (cachedPage?.storeFilter) return cachedPage.storeFilter
+    return canFranchiseeMultiStore
       ? "All"
       : isManager && scopedStoreChoices[0]
         ? scopedStoreChoices[0]
         : "All"
-  )
-  const [tab, setTab] = useAdminUrlTab(
-    "tab",
-    ["income", "balance", "reconcile", "margin"] as const,
-    "income"
-  )
-  const [queryToken, setQueryToken] = React.useState(0)
+  })
+  const [tab, setTab] = useAdminUrlTab("tab", FS_TABS, "income")
+  const [queryToken, setQueryToken] = React.useState(() => cachedPage?.queryToken ?? 0)
   const searchParams = useSearchParams()
   const pageActive = useErpPageActive()
+  const pageActiveRef = useErpPageActiveRef()
   const urlAppliedRef = React.useRef(false)
+  const tabRestoredRef = React.useRef(false)
+  const storeSyncedFromViewRef = React.useRef(false)
 
   React.useEffect(() => {
     if (!pageActive) return
@@ -101,8 +122,25 @@ export default function FinancialStatementsPage() {
     if (store) setStoreFilter(store)
   }, [pageActive, searchParams])
 
+  // URL에 tab이 없으면 캐시된 하위 탭 복원 (remount 시 default=income으로 떨어지지 않게)
+  React.useLayoutEffect(() => {
+    if (tabRestoredRef.current) return
+    if (!pageActiveRef.current) return
+    tabRestoredRef.current = true
+    const raw = searchParams.get("tab")
+    if (raw && FS_TABS.includes(raw as FinancialStatementsTabId)) return
+    const snap = readFsPageCache()
+    if (snap?.tab && snap.tab !== tab) setTab(snap.tab)
+  }, [pageActiveRef, searchParams, setTab, tab])
+
+  // pageActive를 deps에 넣으면 다른 메뉴 복귀 시 매장 필터가 덮여 조회가 어긋날 수 있음
   React.useEffect(() => {
-    if (!pageActive) return
+    if (!pageActiveRef.current) return
+    if (cachedPage && !storeSyncedFromViewRef.current) {
+      storeSyncedFromViewRef.current = true
+      return
+    }
+    storeSyncedFromViewRef.current = true
     if (!canFranchiseeMultiStore) {
       if (isManager && scopedStoreChoices[0]) setStoreFilter(scopedStoreChoices[0])
       return
@@ -113,7 +151,26 @@ export default function FinancialStatementsPage() {
       return
     }
     if (scopedStoreChoices.includes(v)) setStoreFilter(v)
-  }, [pageActive, canFranchiseeMultiStore, isManager, scopedStoreChoices, viewStore])
+  }, [
+    cachedPage,
+    canFranchiseeMultiStore,
+    isManager,
+    pageActiveRef,
+    scopedStoreChoices,
+    viewStore,
+  ])
+
+  React.useEffect(() => {
+    // remount 직후 queryToken=0으로 캐시를 지우면 복원 전에 스냅샷이 사라짐
+    if (queryToken <= 0) return
+    financialStatementsPageViewCache.save({
+      yearMonthStart,
+      yearMonthEnd,
+      storeFilter,
+      queryToken,
+      tab,
+    })
+  }, [yearMonthStart, yearMonthEnd, storeFilter, queryToken, tab])
 
   const franchiseStoreOptions = React.useMemo(
     () => buildFinancialStatementFranchiseStoreOptions(storeList, storeLabels),
@@ -244,7 +301,7 @@ export default function FinancialStatementsPage() {
 
         <Tabs
           value={tab}
-          onValueChange={(v) => setTab(v as "income" | "balance" | "reconcile" | "margin")}
+          onValueChange={(v) => setTab(v as FinancialStatementsTabId)}
           className={adminTabsRootScrollableCn}
         >
           <AdminTabsBarWithHelp>

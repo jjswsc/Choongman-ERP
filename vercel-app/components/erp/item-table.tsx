@@ -6,7 +6,6 @@ import { useT } from "@/lib/i18n"
 import {
   Search,
   Pencil,
-  Trash2,
   PauseCircle,
   PlayCircle,
   ImageIcon,
@@ -55,7 +54,6 @@ export interface ItemTableProps {
   setOutboundFilter: (v: string) => void
   onSearch: () => void
   onEdit: (product: Product) => void
-  onDelete: (product: Product) => void
   onToggleOrderDisabled?: (product: Product) => void | Promise<void>
 }
 
@@ -73,7 +71,6 @@ export function ItemTable({
   setOutboundFilter,
   onSearch,
   onEdit,
-  onDelete,
   onToggleOrderDisabled,
 }: ItemTableProps) {
   const { lang } = useLang()
@@ -184,7 +181,8 @@ export function ItemTable({
                   key={product.code}
                   className={cn(
                     "border-b last:border-b-0 transition-colors hover:bg-muted/20",
-                    idx % 2 === 1 && "bg-muted/5"
+                    idx % 2 === 1 && "bg-muted/5",
+                    product.orderDisabled && "bg-muted/40 text-muted-foreground"
                   )}
                 >
                   <td className="px-5 py-3">
@@ -211,7 +209,14 @@ export function ItemTable({
                     )}
                   </td>
                   <td className="px-5 py-3 min-w-[120px]">
-                    <span className="text-sm font-medium text-foreground">{product.name}</span>
+                    <span className={cn("text-sm font-medium", product.orderDisabled ? "text-muted-foreground line-through" : "text-foreground")}>
+                      {product.name}
+                    </span>
+                    {product.orderDisabled ? (
+                      <span className="ml-1.5 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        {t("itemsUnusedBadge")}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-5 py-3 min-w-[160px]">
                     <span className="text-[11px] text-muted-foreground">{product.spec}</span>
@@ -234,7 +239,7 @@ export function ItemTable({
                               : "text-amber-600 border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-950/40"
                           )}
                           onClick={() => onToggleOrderDisabled(product)}
-                          title={product.orderDisabled ? t("itemsOrderResume") : t("itemsOrderDisabled")}
+                          title={product.orderDisabled ? t("itemsOrderResume") : t("itemsUnusedBadge")}
                         >
                           {product.orderDisabled ? (
                             <PlayCircle className="h-3.5 w-3.5" />
@@ -251,15 +256,6 @@ export function ItemTable({
                         title={t("itemsBtnEdit")}
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => onDelete(product)}
-                        title={t("itemsBtnDelete")}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </td>

@@ -69,6 +69,8 @@ import {
   type PosDeliveryAppReconcileResult,
   getPosKbankQrReconcile,
   type PosKbankQrReconcileResult,
+  getPosCardReconcile,
+  type PosCardReconcileResult,
   getPosCashReconcile,
   type PosCashReconcileResult,
   getPosSalesByChannel,
@@ -139,6 +141,7 @@ import {
   EMPTY_POS_DELIVERY_APP_RECONCILE,
 } from "@/components/tabs/sales-delivery-app-reconcile-panel"
 import { EMPTY_POS_KBANK_QR_RECONCILE } from "@/components/tabs/sales-kbank-qr-reconcile-panel"
+import { EMPTY_POS_CARD_RECONCILE } from "@/components/tabs/sales-card-reconcile-panel"
 import { EMPTY_POS_CASH_RECONCILE } from "@/components/tabs/sales-cash-reconcile-panel"
 import {
   EMPTY_POS_SALES_BY_PROMO,
@@ -339,6 +342,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     React.useState<PosDeliveryAppReconcileResult>(EMPTY_POS_DELIVERY_APP_RECONCILE)
   const [kbankQrReconcileData, setKbankQrReconcileData] =
     React.useState<PosKbankQrReconcileResult>(EMPTY_POS_KBANK_QR_RECONCILE)
+  const [cardReconcileData, setCardReconcileData] =
+    React.useState<PosCardReconcileResult>(EMPTY_POS_CARD_RECONCILE)
   const [cashReconcileData, setCashReconcileData] =
     React.useState<PosCashReconcileResult>(EMPTY_POS_CASH_RECONCILE)
   const [channelReconcileSection, setChannelReconcileSection] =
@@ -1022,6 +1027,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       deliveryAppData,
       deliveryAppReconcileData,
       kbankQrReconcileData,
+      cardReconcileData,
       cashReconcileData,
       channelData,
       menuData,
@@ -1046,6 +1052,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     deliveryAppData,
     deliveryAppReconcileData,
     kbankQrReconcileData,
+    cardReconcileData,
     cashReconcileData,
     channelData,
     menuData,
@@ -1228,6 +1235,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setDeliveryAppData({ items: [], total: 0 })
     setDeliveryAppReconcileData(EMPTY_POS_DELIVERY_APP_RECONCILE)
     setKbankQrReconcileData(EMPTY_POS_KBANK_QR_RECONCILE)
+    setCardReconcileData(EMPTY_POS_CARD_RECONCILE)
     setCashReconcileData(EMPTY_POS_CASH_RECONCILE)
     setChannelData([])
     setMenuData([])
@@ -1265,6 +1273,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setDeliveryAppData(snap.deliveryAppData)
     setDeliveryAppReconcileData(snap.deliveryAppReconcileData ?? EMPTY_POS_DELIVERY_APP_RECONCILE)
     setKbankQrReconcileData(snap.kbankQrReconcileData ?? EMPTY_POS_KBANK_QR_RECONCILE)
+    setCardReconcileData(snap.cardReconcileData ?? EMPTY_POS_CARD_RECONCILE)
     setCashReconcileData(snap.cashReconcileData ?? EMPTY_POS_CASH_RECONCILE)
     setChannelData(snap.channelData)
     setMenuData(snap.menuData)
@@ -1379,6 +1388,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         return (
           deliveryAppReconcileData.rows.length > 0 ||
           kbankQrReconcileData.rows.length > 0 ||
+          cardReconcileData.rows.length > 0 ||
           cashReconcileData.rows.length > 0
         )
       case "payment":
@@ -1411,6 +1421,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     deliveryPieRows.length,
     deliveryAppReconcileData.rows.length,
     kbankQrReconcileData.rows.length,
+    cardReconcileData.rows.length,
     cashReconcileData.rows.length,
     deliveryPaymentChannelRows.length,
     creditPaymentChannelRows.length,
@@ -1736,6 +1747,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       (selectedView === "channel-reconcile" || selectedView === "app-reconcile") &&
       (deliveryAppReconcileData.rows.length > 0 ||
         kbankQrReconcileData.rows.length > 0 ||
+        cardReconcileData.rows.length > 0 ||
         cashReconcileData.rows.length > 0)
     ) {
       if (deliveryAppReconcileData.rows.length > 0) {
@@ -1879,6 +1891,64 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               tr("salesKbankQrColDiff", "차이"),
             ],
             rows: qrDayRows,
+            colFormats: [
+              salesExcelCol.text,
+              salesExcelCol.text,
+              salesExcelCol.int,
+              salesExcelCol.money,
+              salesExcelCol.money,
+              salesExcelCol.money,
+            ],
+          })
+        }
+      }
+      if (cardReconcileData.rows.length > 0) {
+        sheets.push({
+          name: tr("salesChannelReconcileCard", "카드"),
+          headers: [
+            tr("salesStoreName", "매장명"),
+            tr("salesCardColCount", "건수"),
+            tr("salesCardColSales", "POS 카드"),
+            tr("salesCardColBank", "통장 카드"),
+            tr("salesCardColDiff", "차이"),
+          ],
+          rows: cardReconcileData.rows.map((r) => [
+            posStoreDisplayName(r.storeCode),
+            r.orderCount,
+            numCell(r.cardSales),
+            r.bankDepositAmt == null ? "" : numCell(r.bankDepositAmt),
+            r.bankDepositAmt == null ? "" : numCell(r.bankDepositAmt - r.cardSales),
+          ]),
+          colFormats: [
+            salesExcelCol.text,
+            salesExcelCol.int,
+            salesExcelCol.money,
+            salesExcelCol.money,
+            salesExcelCol.money,
+          ],
+        })
+        const cardDayRows = cardReconcileData.rows.flatMap((r) =>
+          r.days.map((d) => [
+            posStoreDisplayName(r.storeCode),
+            d.date,
+            d.orderCount,
+            numCell(d.cardSales),
+            d.bankDepositAmt == null ? "" : numCell(d.bankDepositAmt),
+            d.bankDepositAmt == null ? "" : numCell(d.bankDepositAmt - d.cardSales),
+          ])
+        )
+        if (cardDayRows.length > 0) {
+          sheets.push({
+            name: tr("salesChannelReconcileCardDays", "카드 일자"),
+            headers: [
+              tr("salesStoreName", "매장명"),
+              tr("salesPeriodDay", "일별"),
+              tr("salesCardColCount", "건수"),
+              tr("salesCardColSales", "POS 카드"),
+              tr("salesCardColBank", "통장 카드"),
+              tr("salesCardColDiff", "차이"),
+            ],
+            rows: cardDayRows,
             colFormats: [
               salesExcelCol.text,
               salesExcelCol.text,
@@ -2049,6 +2119,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     deliveryPieRows,
     deliveryAppReconcileData,
     kbankQrReconcileData,
+    cardReconcileData,
     cashReconcileData,
     deliveryPaymentChannelRows,
     creditPaymentChannelRows,
@@ -2508,6 +2579,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gDelivery = guarded(setDeliveryAppData)
     const gAppReconcile = guarded(setDeliveryAppReconcileData)
     const gKbankQrReconcile = guarded(setKbankQrReconcileData)
+    const gCardReconcile = guarded(setCardReconcileData)
     const gCashReconcile = guarded(setCashReconcileData)
     const gChannel = guarded(setChannelData)
     const gPayment = guarded(setPaymentData)
@@ -2742,6 +2814,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         })
           .then(gKbankQrReconcile)
           .catch(() => gKbankQrReconcile(EMPTY_POS_KBANK_QR_RECONCILE))
+      )
+      tasks.push(
+        getPosCardReconcile({
+          startStr,
+          endStr,
+          stores: salesFetchStoresParam,
+        })
+          .then(gCardReconcile)
+          .catch(() => gCardReconcile(EMPTY_POS_CARD_RECONCILE))
       )
       tasks.push(
         getPosCashReconcile({
@@ -4218,6 +4299,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 onSectionChange={setChannelReconcileSection}
                 deliveryData={deliveryAppReconcileData}
                 kbankQrData={kbankQrReconcileData}
+                cardData={cardReconcileData}
                 cashData={cashReconcileData}
                 placeholder={salesAnalyticsPlaceholder}
                 tr={tr}

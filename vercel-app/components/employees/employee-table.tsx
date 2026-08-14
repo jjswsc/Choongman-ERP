@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { CalendarClock, Pencil, Palmtree, Trash2, Wallet } from "lucide-react"
+import { CalendarClock, Pencil, Palmtree, Wallet } from "lucide-react"
 import { displayLabelShort } from "@/lib/utils"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
@@ -108,7 +108,6 @@ interface EmployeeTableProps {
   rows: EmployeeTableRow[]
   loading?: boolean
   onEdit: (idx: number) => void
-  onDelete: (rowId: number) => void
   t: (k: string) => string
   /** 전체 조회 시 퇴사일이 지난 경우에만 퇴사자 행 빨간색 표시 */
   statusFilter?: string
@@ -122,7 +121,6 @@ export function EmployeeTable({
   rows,
   loading,
   onEdit,
-  onDelete,
   t,
   statusFilter,
   selectedRowId = 0,
@@ -304,14 +302,6 @@ export function EmployeeTable({
                           className="rounded-md p-1.5 text-primary hover:bg-primary/10 transition-colors"
                         >
                           <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onDelete(e.row)}
-                          title={t("emp_status_resigned")}
-                          className="rounded-md p-1.5 text-destructive hover:bg-destructive/10 transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </td>

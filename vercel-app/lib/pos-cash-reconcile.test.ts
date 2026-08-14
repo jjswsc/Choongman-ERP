@@ -79,8 +79,8 @@ describe('attributedSalesDateForCashBankDeposit', () => {
     ).toBe('2026-08-12')
   })
 
-  it('falls back to deposit date (same day), not minus one', () => {
-    expect(attributedSalesDateForCashBankDeposit({ transDate: '2026-08-13' })).toBe('2026-08-13')
+  it('falls back to deposit date minus one calendar day (인식일 기본)', () => {
+    expect(attributedSalesDateForCashBankDeposit({ transDate: '2026-08-13' })).toBe('2026-08-12')
   })
 })
 
@@ -148,6 +148,7 @@ describe('applyCashBankDepositsToRows', () => {
           transType: 'deposit',
           category: 'revenue_cash',
           transDate: '2026-08-13',
+          salesDate: '2026-08-13',
           amount: 90,
           storeName: 'A',
         },
@@ -155,6 +156,7 @@ describe('applyCashBankDepositsToRows', () => {
           transType: 'deposit',
           category: 'revenue_cash',
           transDate: '2026-08-13',
+          salesDate: '2026-08-13',
           amount: 40,
           storeName: 'B',
         },
@@ -194,6 +196,7 @@ describe('applyCashBankDepositsToRows', () => {
           transType: 'deposit',
           category: 'revenue_cash',
           transDate: '2026-08-06',
+          salesDate: '2026-08-06',
           amount: 100,
           storeName: 'CM Ekkamai',
         },
@@ -234,5 +237,37 @@ describe('applyCashBankDepositsToRows', () => {
       storeCodes: ['CM Ekkamai'],
     })
     expect(bank.byStore.size).toBe(0)
+  })
+
+  it('compares POS to bank 인식일 even when the deposit posts next month', () => {
+    const pos = aggregateCashReconcileRows([
+      {
+        store_code: 'CM Ekkamai',
+        status: 'paid',
+        payment_cash: 15412.33,
+        created_at: '2026-07-31T10:00:00+07:00',
+      },
+    ])
+    const bank = aggregateCashBankDeposits({
+      rows: [
+        {
+          transType: 'deposit',
+          category: 'revenue_cash',
+          transDate: '2026-08-01',
+          salesDate: '2026-07-31',
+          amount: 15412.33,
+          storeName: 'CM Ekkamai',
+        },
+      ],
+      startStr: '2026-07-31',
+      endStr: '2026-08-01',
+    })
+    const rows = applyCashBankDepositsToRows(pos, bank)
+    const store = rows.find((r) => r.storeCode.includes('Ekkamai'))
+    expect(store?.days[0]).toMatchObject({
+      date: '2026-07-31',
+      cashSales: 15412.33,
+      bankDepositAmt: 15412.33,
+    })
   })
 })

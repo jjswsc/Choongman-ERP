@@ -1,5 +1,5 @@
 /**
- * 배달앱 확인 — 통장 입금(Grab/LINE MAN/Shopee)을 매출일 기준으로 매장×앱 합산.
+ * 배달앱 확인 — 통장 입금(Grab/LINE MAN/Shopee)을 인식일 기준으로 매장×앱 합산.
  * 채널 정산(pos_channel_settlements)을 안 넣어도, 통장에 등록한 실입금을 비교할 수 있게 한다.
  */
 import { isExpenseInternalBankNote } from '@/lib/bank-transaction-note-meta'
@@ -8,6 +8,7 @@ import {
   resolveBankRowStoreName,
   rowMatchesAnySalesStoreSelection,
 } from '@/lib/pos-sales-store-filter'
+import { bankDepositRecognitionDate } from '@/lib/pos-channel-reconcile-match'
 
 const DELIVERY_APP_BANK_APPS = ['grab', 'lineman', 'shopee'] as const
 export type DeliveryAppBankApp = (typeof DELIVERY_APP_BANK_APPS)[number]
@@ -57,7 +58,7 @@ function addDaysToYmd(ymd: string, deltaDays: number): string {
   return `${yy}-${mm}-${dd}`
 }
 
-/** 통장 조회 창: 매출일 있는 행 + 매출일 없는 행(입금일-1)을 모두 담기 위한 trans_date 버퍼 */
+/** 통장 조회 창: 인식일 있는 행 + 인식일 없는 행(입금일-1)을 모두 담기 위한 trans_date 버퍼 */
 export function bankDepositQueryTransDateWindow(startStr: string, endStr: string): { from: string; to: string } {
   const start = String(startStr || '').slice(0, 10)
   const end = String(endStr || '').slice(0, 10)
@@ -104,16 +105,12 @@ export function resolveDeliveryAppFromBankRow(row: DeliveryAppBankDepositInput):
   )
 }
 
-/** 통장 매출일. 없으면 입금일 전날(익일 정산). */
+/** 통장 인식일. 없으면 입금일 전날(통장 화면 인식일 기본과 동일). */
 export function attributedSalesDateForBankDeposit(row: {
   transDate?: string | null
   salesDate?: string | null
 }): string {
-  const sales = String(row.salesDate || '').trim().slice(0, 10)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(sales)) return sales
-  const trans = String(row.transDate || '').trim().slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trans)) return ''
-  return addDaysToYmd(trans, -1)
+  return bankDepositRecognitionDate(row)
 }
 
 export function isDeliveryAppBankDepositRow(row: DeliveryAppBankDepositInput): boolean {

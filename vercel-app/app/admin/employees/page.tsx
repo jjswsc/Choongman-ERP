@@ -1,7 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { appAlert, appConfirm } from "@/lib/app-message"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -44,7 +44,6 @@ import {
   getEmployeeLatestGrades,
   getFranchiseeMultiStoreSettings,
   saveAdminEmployee,
-  deleteAdminEmployee,
   useStoreList,
   type AdminEmployeeItem,
   type FranchiseeMultiStoreSettings,
@@ -532,20 +531,6 @@ export default function EmployeesPage() {
     if (e) openEmployeeForm(e)
   }
 
-  const handleDelete = async (rowId: number) => {
-    if (!await appConfirm(t("adminEmployeeConfirmDeactivate"))) return
-    setLoading(true)
-    try {
-      const res = await deleteAdminEmployee({ r: rowId, userStore, userRole })
-      await appAlert(translateApiMessage(res.message ?? (res as { message?: string }).message, t) || t("msg_delete_ok"))
-      await loadEmployeeList({ updateDisplay: true })
-    } catch (e) {
-      console.error(e)
-      await appAlert(t("emp_result_empty") || t("msg_empty_result"))
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleSave = async () => {
     if (!form.name) return
@@ -739,7 +724,6 @@ export default function EmployeesPage() {
                   rows={filteredRows}
                   loading={loading || (hasSearched && !displayListLoaded)}
                   onEdit={handleEdit}
-                  onDelete={handleDelete}
                   t={t}
                   statusFilter={statusFilter}
                   selectedRowId={form.row}

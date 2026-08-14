@@ -1,8 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { GripVertical, Trash2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { GripVertical } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import type { PosMenuOption } from "@/lib/api-client"
@@ -23,7 +22,6 @@ type OptionItemRowCardProps = {
   onChangePrice: (field: "priceModifier" | "priceModifierDelivery", value: string) => void
   onToggleBaseChannel: (checked: boolean) => void
   onToggleDeliveryChannel: (checked: boolean) => void
-  onDelete: () => void
   draggable?: boolean
   onDragStart?: () => void
   onDragOver?: () => void
@@ -46,7 +44,6 @@ export function OptionItemRowCard({
   onChangePrice,
   onToggleBaseChannel,
   onToggleDeliveryChannel,
-  onDelete,
   draggable,
   onDragStart,
   onDragOver,
@@ -93,16 +90,6 @@ export function OptionItemRowCard({
             <p className="truncate text-sm font-medium">{displayName}</p>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
-          onClick={onDelete}
-          type="button"
-          aria-label="Delete option"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">

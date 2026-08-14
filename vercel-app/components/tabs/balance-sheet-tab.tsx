@@ -35,6 +35,11 @@ import {
   FINANCIAL_COMPARE_MAX_MONTHS,
   pickBalanceSheetLastMonthPerYear,
 } from "@/lib/financial-statements-compare"
+import {
+  balanceSheetViewCache,
+  buildBalanceSheetCacheKey,
+} from "@/lib/financial-statements-view-cache"
+import { useErpPageActive } from "@/lib/erp-page-visibility"
 import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
 import {
   accountingBsBalanceCheckOkCn,
@@ -156,6 +161,9 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   const [compareGranularity, setCompareGranularity] = React.useState<"month" | "year">("month")
   const [balanceCompareFetchId, setBalanceCompareFetchId] = React.useState(0)
   const balanceFetchSeqRef = React.useRef(0)
+  const pageActive = useErpPageActive()
+  const viewCacheRestoredRef = React.useRef(false)
+  const skipNextTokenFetchRef = React.useRef(false)
 
   const periodMonthsFull = React.useMemo(
     () => expandBangkokYearMonthsInclusive(queryYearMonthStart, queryYearMonthEnd),
@@ -167,6 +175,26 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
   }, [periodMonthsFull])
   const periodRangeTruncated = periodMonthsFull.length > periodMonths.length
   const isRangeCompare = periodMonths.length > 1
+
+  const balanceViewCacheKey = React.useMemo(
+    () => buildBalanceSheetCacheKey(queryYearMonthStart, queryYearMonthEnd, queryStoreFilter),
+    [queryYearMonthStart, queryYearMonthEnd, queryStoreFilter]
+  )
+
+  React.useLayoutEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!props.hideControls) return
+    if ((props.queryToken ?? 0) <= 0) return
+    if (!pageActive) return
+    viewCacheRestoredRef.current = true
+    const snap = balanceSheetViewCache.read()
+    if (!snap || snap.cacheKey !== balanceViewCacheKey) return
+    setData(snap.data)
+    setCompareBalanceRows(snap.compareBalanceRows || [])
+    setFetchError(snap.fetchError)
+    setLoading(false)
+    skipNextTokenFetchRef.current = true
+  }, [balanceViewCacheKey, pageActive, props.hideControls, props.queryToken])
 
   const withdrawals = data?.unpostedBankWithdrawals || []
   React.useEffect(() => {
@@ -325,8 +353,33 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
     if (!props.hideControls) return
     // 부모(재무제표) queryToken: 0=미검색. 검색 버튼으로만 조회.
     if (props.queryToken == null || props.queryToken <= 0) return
+    if (skipNextTokenFetchRef.current) {
+      skipNextTokenFetchRef.current = false
+      return
+    }
     runBalanceFetchRef.current()
   }, [props.hideControls, props.queryToken])
+
+  React.useEffect(() => {
+    if (!props.hideControls) return
+    if ((props.queryToken ?? 0) <= 0) return
+    if (loading) return
+    if (!data && compareBalanceRows.length === 0 && !fetchError) return
+    balanceSheetViewCache.save({
+      cacheKey: balanceViewCacheKey,
+      data,
+      compareBalanceRows,
+      fetchError,
+    })
+  }, [
+    props.hideControls,
+    props.queryToken,
+    loading,
+    data,
+    compareBalanceRows,
+    fetchError,
+    balanceViewCacheKey,
+  ])
 
   const loadData = React.useCallback(() => {
     runBalanceFetch()

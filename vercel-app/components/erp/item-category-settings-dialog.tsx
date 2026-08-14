@@ -1,5 +1,5 @@
 "use client"
-import { appAlert, appConfirm } from "@/lib/app-message"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
@@ -15,10 +15,9 @@ import {
 import {
   getItemCategorySettings,
   saveItemCategory,
-  deleteItemCategory,
   type ItemCategory,
 } from "@/lib/api-client"
-import { Pencil, Trash2, Tags } from "lucide-react"
+import { Pencil, Tags } from "lucide-react"
 
 export interface ItemCategorySettingsDialogProps {
   open: boolean
@@ -38,7 +37,6 @@ export function ItemCategorySettingsDialog({
   const [editing, setEditing] = React.useState<ItemCategory | null>(null)
   const [form, setForm] = React.useState({ name: "", sort_order: 0 })
   const [saving, setSaving] = React.useState(false)
-  const [deleting, setDeleting] = React.useState<number | null>(null)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -111,33 +109,6 @@ export function ItemCategorySettingsDialog({
       await appAlert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handleDelete = async (item: ItemCategory) => {
-    if (!await appConfirm(`"${item.name}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
-    setDeleting(item.id ?? 0)
-    try {
-      const res = await deleteItemCategory({ id: item.id, name: item.name })
-      if (res.success) {
-        if (res.queued) {
-          await appAlert(t("posPrinterSavedQueued"))
-          setList((prev) =>
-            prev.filter((row) =>
-              item.id != null && item.id > 0 ? row.id !== item.id : row.name !== item.name
-            )
-          )
-        } else {
-          await refreshListFromServer()
-        }
-        onSaved?.()
-      } else {
-        await appAlert(res.message || t("msg_delete_fail_detail"))
-      }
-    } catch (e) {
-      await appAlert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
-    } finally {
-      setDeleting(null)
     }
   }
 
@@ -231,16 +202,6 @@ export function ItemCategorySettingsDialog({
                         onClick={() => startEdit(item)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(item)}
-                        disabled={deleting === item.id}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </li>

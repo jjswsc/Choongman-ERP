@@ -3,7 +3,7 @@
 import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
-import { ExternalLink, RefreshCw, ClipboardCopy, Pencil, Play, Ban, Trash2, Link2 } from "lucide-react"
+import { ExternalLink, RefreshCw, ClipboardCopy, Pencil, Play, Ban, Link2 } from "lucide-react"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,7 +29,6 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import {
-  deletePosPromo,
   getPosMenus,
   getMarketingCampaigns,
   getNextPosPromoCode,
@@ -300,18 +299,6 @@ export function PosSetMenuInquiryTab({
         return
       }
       await appAlert(t("posSetInquiryDeactivated"))
-      onRefresh()
-    })
-
-  const handleDelete = (p: PosPromo) =>
-    runBusy(p.id, async () => {
-      if (!(await appConfirm(t("posSetInquiryDeleteConfirm").replace("{{name}}", p.name || p.code)))) return
-      const res = await deletePosPromo({ id: p.id })
-      if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail_detail"))
-        return
-      }
-      await appAlert(t("posSetInquiryDeleted"))
       onRefresh()
     })
 
@@ -674,17 +661,6 @@ export function PosSetMenuInquiryTab({
                             <Ban className="h-3 w-3" />
                             {t("posSetInquirySuspend")}
                           </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 gap-1 px-2 text-[11px] text-destructive hover:text-destructive"
-                            disabled={b}
-                            onClick={() => void handleDelete(p)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            {t("posSetInquiryDelete")}
-                          </Button>
                         </>
                       ) : (
                         <Button
@@ -868,17 +844,6 @@ export function PosSetMenuInquiryTab({
                               >
                                 <Ban className="h-3 w-3" />
                                 {t("posSetInquirySuspend")}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 gap-1 px-2 text-[11px] text-destructive hover:text-destructive"
-                                disabled={b}
-                                onClick={() => void handleDelete(p)}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                                {t("posSetInquiryDelete")}
                               </Button>
                             </>
                           ) : (

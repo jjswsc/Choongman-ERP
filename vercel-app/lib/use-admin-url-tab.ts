@@ -40,11 +40,14 @@ export function useAdminUrlTab<T extends string>(
 
   React.useEffect(() => {
     // pageActive를 deps에 넣으면 복귀 시 effect가 돌며 URL에 탭이 없을 때 default로 덮일 수 있음.
-    // 활성일 때만 searchParams 변화를 반영한다.
+    // 활성일 때만, 그리고 URL에 유효 탭이 **명시**된 경우에만 맞춤.
+    // (없으면 local 유지 — 캐시 복원·default 제거 URL과 충돌 방지)
     if (!pageActiveRef.current) return
-    const next = readTabFromSearchParams(searchParams, paramKey, validValues, defaultValue)
+    const raw = searchParams.get(paramKey)
+    if (!raw || !validValues.includes(raw as T)) return
+    const next = raw as T
     setTabState((prev) => (prev === next ? prev : next))
-  }, [searchParams, paramKey, validValues, defaultValue, pageActiveRef])
+  }, [searchParams, paramKey, validValues, pageActiveRef])
 
   const setTab = React.useCallback(
     (value: T) => {

@@ -1,7 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { appAlert, appConfirm } from "@/lib/app-message"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getPosMenuCategoriesConfig, savePosMenuCategoriesConfig, type PosMenuCategoriesConfig } from "@/lib/api-client"
-import { Pencil, Trash2, FolderTree, ArrowUp, ArrowDown } from "lucide-react"
+import { Pencil, FolderTree, ArrowUp, ArrowDown } from "lucide-react"
 import {
   adminTabsBarCn,
   adminTabsContentFlushCn,
@@ -54,8 +54,6 @@ export function PosMenuCategorySettingsDialog({
   const [editingSub, setEditingSub] = React.useState<{ main: string; sub: string } | null>(null)
   const [formMain, setFormMain] = React.useState("")
   const [formSub, setFormSub] = React.useState({ main: "", name: "" })
-  const [deletingMain, setDeletingMain] = React.useState<string | null>(null)
-  const [deletingSub, setDeletingSub] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -130,40 +128,6 @@ export function PosMenuCategorySettingsDialog({
     }
   }
 
-  const handleDeleteMain = async (main: string) => {
-    if (!await appConfirm(`"${main}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
-    if (!config) {
-      await appAlert(t("msg_delete_fail_detail") || "삭제에 실패했습니다.")
-      return
-    }
-    setDeletingMain(main)
-    try {
-      const newMains = config.mainCategories.filter((c) => c !== main)
-      const newCategoriesByMain = { ...config.categoriesByMain }
-      delete newCategoriesByMain[main]
-      const res = await savePosMenuCategoriesConfig({
-        mainCategories: newMains,
-        categoriesByMain: newCategoriesByMain,
-        applyToMenus: false,
-      })
-      if (res?.success) {
-        if ((res as { queued?: boolean }).queued) {
-          await appAlert(t("posPrinterSavedQueued"))
-          setConfig({ mainCategories: newMains, categoriesByMain: newCategoriesByMain })
-        } else {
-          await refreshConfigFromServer()
-        }
-        onSaved?.()
-      } else {
-        await appAlert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
-      }
-    } catch (e) {
-      await appAlert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
-    } finally {
-      setDeletingMain(null)
-    }
-  }
-
   const handleSaveSub = async () => {
     const mains = config?.mainCategories || []
     const mainResolved =
@@ -213,42 +177,6 @@ export function PosMenuCategorySettingsDialog({
       await appAlert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handleDeleteSub = async (main: string, sub: string) => {
-    if (!await appConfirm(`"${main} > ${sub}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
-    if (!config) {
-      await appAlert(t("msg_delete_fail_detail") || "삭제에 실패했습니다.")
-      return
-    }
-    setDeletingSub(`${main}|${sub}`)
-    try {
-      const subs = (config.categoriesByMain[main] || []).filter((c) => c !== sub)
-      const newCategoriesByMain = {
-        ...config.categoriesByMain,
-        [main]: subs,
-      }
-      const res = await savePosMenuCategoriesConfig({
-        mainCategories: config.mainCategories,
-        categoriesByMain: newCategoriesByMain,
-        applyToMenus: false,
-      })
-      if (res?.success) {
-        if ((res as { queued?: boolean }).queued) {
-          await appAlert(t("posPrinterSavedQueued"))
-          setConfig({ ...config, categoriesByMain: newCategoriesByMain })
-        } else {
-          await refreshConfigFromServer()
-        }
-        onSaved?.()
-      } else {
-        await appAlert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
-      }
-    } catch (e) {
-      await appAlert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
-    } finally {
-      setDeletingSub(null)
     }
   }
 
@@ -413,16 +341,6 @@ export function PosMenuCategorySettingsDialog({
                         <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEditMain(m)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => handleDeleteMain(m)}
-                          disabled={deletingMain === m}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
                       </div>
                     </li>
                   ))}
@@ -533,16 +451,6 @@ export function PosMenuCategorySettingsDialog({
                             onClick={() => startEditSub(main, sub)}
                           >
                             <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteSub(main, sub)}
-                            disabled={deletingSub === `${main}|${sub}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       </li>

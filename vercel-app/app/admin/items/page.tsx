@@ -1,7 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { appAlert, appConfirm } from "@/lib/app-message"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -28,7 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr as i18nTr } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, updateItemOrderDisabled, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
+import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, updateItemOrderDisabled, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
 import { compareByCode } from "@/lib/sort-utils"
 import { useAuth } from "@/lib/auth-context"
 import { canToggleItemOrderDisabled } from "@/lib/permissions"
@@ -346,21 +346,6 @@ export default function ItemsPage() {
     )
   }
 
-  const handleDelete = async (product: Product) => {
-    if (!await appConfirm(`"${product.name}" ${t("itemsConfirmDelete")}`)) return
-    const res = await deleteItem({ code: product.code })
-    if (!res.success) {
-      await appAlert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
-      return
-    }
-    setProducts((prev) => prev.filter((p) => p.code !== product.code))
-    if (editingCode === product.code) {
-      setFormData(emptyForm)
-      setEditingCode(null)
-    }
-    await appAlert(t("itemsAlertDeleted"))
-  }
-
   const handleSearch = () => {
     setHasSearched(true)
   }
@@ -632,7 +617,6 @@ export default function ItemsPage() {
             setOutboundFilter={setOutboundFilter}
             onSearch={handleSearch}
             onEdit={handleEdit}
-            onDelete={handleDelete}
             onToggleOrderDisabled={canToggleOrderPaused ? handleToggleOrderDisabled : undefined}
           />
         </div>

@@ -9,6 +9,7 @@ import type {
   PosSalesPeriodRow,
   PosDeliveryAppReconcileResult,
   PosKbankQrReconcileResult,
+  PosCardReconcileResult,
   PosCashReconcileResult,
 } from "@/lib/api-client"
 import type {
@@ -55,6 +56,7 @@ export type SalesManagementViewCache = {
   }
   deliveryAppReconcileData: PosDeliveryAppReconcileResult
   kbankQrReconcileData?: PosKbankQrReconcileResult
+  cardReconcileData?: PosCardReconcileResult
   cashReconcileData?: PosCashReconcileResult
   channelData: { channelKey: string; sales: number }[]
   menuData: { name: string; qty: number; sales: number }[]

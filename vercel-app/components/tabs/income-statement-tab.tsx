@@ -61,6 +61,17 @@ import {
   parseSalesOverrideInput,
 } from "@/lib/income-statement-sales-override"
 import {
+  emptyIncomeStatementMonthOverrides,
+  monthOverridesFromSharedRow,
+  readLocalIncomeStatementMonthOverrides,
+  type IncomeStatementMonthManualOverrides,
+} from "@/lib/income-statement-month-overrides"
+import {
+  buildIncomeStatementCacheKey,
+  incomeStatementViewCache,
+} from "@/lib/financial-statements-view-cache"
+import { useErpPageActive } from "@/lib/erp-page-visibility"
+import {
   downloadIncomeStatementXlsx,
   sanitizeFilenamePart,
   type IncomeStatementXlsxRow,
@@ -120,21 +131,44 @@ function formatOverrideSavedClockBangkok(ms: number, lang: string): string {
   })
 }
 
+type IncomeCompareRow = {
+  ym: string
+  data: IncomeStatementData
+} & IncomeStatementMonthManualOverrides
+
 function incomeMetricsForCompare(
   d: IncomeStatementData | undefined,
-  vatMode: IncomeStatementVatDisplayMode
+  vatMode: IncomeStatementVatDisplayMode,
+  overrides?: IncomeStatementMonthManualOverrides | null
 ) {
   if (!isIncomeStatementData(d) || d.error) return null
-  const v = buildIncomeStatementViewNumbers({ data: d, vatMode })
+  const v = buildIncomeStatementViewNumbers({
+    data: d,
+    vatMode,
+    manualSales: overrides?.manualSales ?? null,
+    manualBeginningInventory: overrides?.manualBeginningInventory ?? null,
+  })
   return {
     sales: v.sales,
     purchases: v.purchases,
+    beginningInventory: v.beginningInventory,
+    endingInventory: v.endingInventory,
     cogs: v.cogs,
     grossProfit: v.grossProfit,
     expenses: v.expenses,
     netProfit: v.netProfit,
     ebitda: v.ebitda,
   }
+}
+
+function incomeMetricsForCompareRow(
+  row: Pick<IncomeCompareRow, "data" | "manualSales" | "manualBeginningInventory">,
+  vatMode: IncomeStatementVatDisplayMode
+) {
+  return incomeMetricsForCompare(row.data, vatMode, {
+    manualSales: row.manualSales,
+    manualBeginningInventory: row.manualBeginningInventory,
+  })
 }
 
 type IncomeStatementTabProps = {
@@ -201,7 +235,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     parentControlsQuery && props.storeFilter != null ? props.storeFilter : storeFilter
   const [data, setData] = React.useState<IncomeStatementData | null>(null)
   const [loading, setLoading] = React.useState(false)
-  const [showExpenseDetails, setShowExpenseDetails] = React.useState(false)
+  const [showExpenseDetails, setShowExpenseDetails] = React.useState(() => {
+    if (!props.hideControls) return false
+    const snap = incomeStatementViewCache.read()
+    return Boolean(snap?.showExpenseDetails)
+  })
   const [displayPrefs, setDisplayPrefs] = React.useState(() => readIncomeStatementDisplayPrefs())
   const vatDisplayMode = displayPrefs.vatMode
   const showEbitda = displayPrefs.showEbitda
@@ -437,19 +475,71 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
   const periodRangeTruncated = periodMonthsFull.length > periodMonths.length
   const isRangeCompare = periodMonths.length > 1
 
-  const [compareIncomeRows, setCompareIncomeRows] = React.useState<
-    { ym: string; data: IncomeStatementData }[]
-  >([])
+  const [compareIncomeRows, setCompareIncomeRows] = React.useState<IncomeCompareRow[]>([])
   const [compareFetchError, setCompareFetchError] = React.useState<string | null>(null)
   const [compareGranularity, setCompareGranularity] = React.useState<"month" | "year">("month")
   const [incomeCompareFetchId, setIncomeCompareFetchId] = React.useState(0)
   const incomeFetchSeqRef = React.useRef(0)
+  const pageActive = useErpPageActive()
+  const viewCacheRestoredRef = React.useRef(false)
+  const skipNextTokenFetchRef = React.useRef(false)
+
+  const incomeViewCacheKey = React.useMemo(
+    () =>
+      buildIncomeStatementCacheKey(
+        queryYearMonthStart,
+        queryYearMonthEnd,
+        queryStoreFilter,
+        showExpenseDetails
+      ),
+    [queryYearMonthStart, queryYearMonthEnd, queryStoreFilter, showExpenseDetails]
+  )
+
+  /** remount 시 조회 결과 즉시 복구 — queryToken effect의 재조회를 한 번 건너뜀 */
+  React.useLayoutEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!props.hideControls) return
+    if ((props.queryToken ?? 0) <= 0) return
+    if (!pageActive) return
+    viewCacheRestoredRef.current = true
+    const snap = incomeStatementViewCache.read()
+    if (!snap || snap.cacheKey !== incomeViewCacheKey) return
+    setData(snap.data)
+    setCompareIncomeRows(snap.compareIncomeRows || [])
+    setCompareFetchError(snap.compareFetchError)
+    if (typeof snap.showExpenseDetails === "boolean") {
+      setShowExpenseDetails(snap.showExpenseDetails)
+    }
+    setLoading(false)
+    skipNextTokenFetchRef.current = true
+  }, [incomeViewCacheKey, pageActive, props.hideControls, props.queryToken])
 
   React.useEffect(() => {
     setCompareUnifiedExpandSales(false)
     setCompareUnifiedExpandPurchases(false)
     setCompareUnifiedExpandExpenses(false)
   }, [incomeCompareFetchId])
+
+  const resolveMonthOverrides = React.useCallback(
+    async (ym: string, storeKey: string): Promise<IncomeStatementMonthManualOverrides> => {
+      if (overrideSource === "local") {
+        return readLocalIncomeStatementMonthOverrides(ym, storeKey)
+      }
+      try {
+        const r = await fetchIncomeStatementOverrides({
+          yearMonth: ym,
+          storeFilter: storeKey,
+          userStore: auth?.store,
+          userRole: auth?.role,
+        })
+        if (!r.success) return emptyIncomeStatementMonthOverrides()
+        return monthOverridesFromSharedRow(r.row)
+      } catch {
+        return emptyIncomeStatementMonthOverrides()
+      }
+    },
+    [overrideSource, auth?.store, auth?.role]
+  )
 
   const runIncomeFetch = React.useCallback(() => {
     const fetchSeq = ++incomeFetchSeqRef.current
@@ -461,6 +551,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       return
     }
     const sf = queryStoreFilter !== "All" ? queryStoreFilter : undefined
+    const storeKeyForOverride = queryStoreFilter || "All"
     const months = periodMonths
     setCompareFetchError(null)
 
@@ -513,21 +604,28 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     Promise.all(
       months.map(async (ym) => {
         try {
-          const row = await getIncomeStatement({
-            yearMonth: ym,
-            storeFilter: sf,
-            userStore: auth?.store,
-            userRole: auth?.role,
-            includeDebug: showExpenseDetails,
-          })
-          return { ym, data: row }
+          const [row, overrides] = await Promise.all([
+            getIncomeStatement({
+              yearMonth: ym,
+              storeFilter: sf,
+              userStore: auth?.store,
+              userRole: auth?.role,
+              includeDebug: showExpenseDetails,
+            }),
+            resolveMonthOverrides(ym, storeKeyForOverride),
+          ])
+          return { ym, data: row, ...overrides }
         } catch (e) {
+          const overrides = await resolveMonthOverrides(ym, storeKeyForOverride).catch(() =>
+            emptyIncomeStatementMonthOverrides()
+          )
           return {
             ym,
             data: emptyIncomeOnFetchError(
               ym,
               e instanceof Error ? e.message : String(e || "FETCH_FAILED")
             ),
+            ...overrides,
           }
         }
       })
@@ -558,6 +656,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     auth?.role,
     showExpenseDetails,
     queryYearMonthEnd,
+    resolveMonthOverrides,
     t,
   ])
 
@@ -568,8 +667,36 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     if (!props.hideControls) return
     // 부모(재무제표) queryToken: 0=미검색. 검색 버튼으로만 조회.
     if (props.queryToken == null || props.queryToken <= 0) return
+    if (skipNextTokenFetchRef.current) {
+      skipNextTokenFetchRef.current = false
+      return
+    }
     runIncomeFetchRef.current()
   }, [props.hideControls, props.queryToken])
+
+  React.useEffect(() => {
+    if (!props.hideControls) return
+    if ((props.queryToken ?? 0) <= 0) return
+    if (loading) return
+    // 미조회 상태에서 빈 스냅샷으로 덮어쓰지 않음
+    if (!data && compareIncomeRows.length === 0 && !compareFetchError) return
+    incomeStatementViewCache.save({
+      cacheKey: incomeViewCacheKey,
+      data,
+      compareIncomeRows,
+      compareFetchError,
+      showExpenseDetails,
+    })
+  }, [
+    props.hideControls,
+    props.queryToken,
+    loading,
+    data,
+    compareIncomeRows,
+    compareFetchError,
+    incomeViewCacheKey,
+    showExpenseDetails,
+  ])
 
   const loadData = React.useCallback(() => {
     runIncomeFetch()
@@ -607,10 +734,10 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
 
   const incomeCompareCols = React.useMemo(() => {
     if (compareGranularity === "month") {
-      return compareIncomeRows.map(({ ym, data }) => ({
-        key: ym,
-        label: ym,
-        metrics: incomeMetricsForCompare(data, vatDisplayMode),
+      return compareIncomeRows.map((row) => ({
+        key: row.ym,
+        label: row.ym,
+        metrics: incomeMetricsForCompareRow(row, vatDisplayMode),
       }))
     }
     const years = [...new Set(compareIncomeRows.map((r) => r.ym.slice(0, 4)))].sort()
@@ -619,6 +746,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       const agg = {
         sales: 0,
         purchases: 0,
+        beginningInventory: 0,
+        endingInventory: 0,
         cogs: 0,
         grossProfit: 0,
         expenses: 0,
@@ -626,11 +755,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
         ebitda: 0,
       }
       let hasEbitda = false
-      for (const { data: rowData } of rows) {
-        const m = incomeMetricsForCompare(rowData, vatDisplayMode)
+      for (const row of rows) {
+        const m = incomeMetricsForCompareRow(row, vatDisplayMode)
         if (!m) continue
         agg.sales += m.sales
         agg.purchases += m.purchases
+        agg.beginningInventory += m.beginningInventory
+        agg.endingInventory += m.endingInventory
         agg.cogs += m.cogs
         agg.grossProfit += m.grossProfit
         agg.expenses += m.expenses
@@ -1342,6 +1473,26 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                     </p>
                   ) : (
                     <>
+                      <div className="flex flex-wrap items-center gap-2 rounded border bg-muted/20 px-3 py-2">
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {t("pL_overrideStorageLabel")}
+                        </span>
+                        <Select
+                          value={overrideSource}
+                          onValueChange={(v) => setOverrideSource(v as IncomeStatementOverrideSource)}
+                        >
+                          <SelectTrigger className="w-[220px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="local">{t("pL_overrideSourceLocal")}</SelectItem>
+                            <SelectItem value="shared">{t("pL_overrideSourceShared")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground w-full sm:w-auto sm:flex-1 min-w-[16rem] leading-relaxed">
+                          {t("fs_multiPeriodManualOverridesNote")}
+                        </p>
+                      </div>
                       {showExpenseDetails && compareMergedWarnings.length > 0 && (
                         <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                           {compareMergedWarnings.join(" / ")}
@@ -1894,15 +2045,15 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                         {t("pL_sales")}
                                       </span>
                                     </td>
-                                    {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                    {compareIncomeRows.map((row) => (
                                       <td
-                                        key={ym}
+                                        key={row.ym}
                                         className="p-2 text-right font-mono whitespace-nowrap"
                                       >
-                                        {rowData.error
+                                        {row.data.error
                                           ? "—"
                                           : formatBath(
-                                              incomeMetricsForCompare(rowData, vatDisplayMode)?.sales ?? 0
+                                              incomeMetricsForCompareRow(row, vatDisplayMode)?.sales ?? 0
                                             )}
                                       </td>
                                     ))}
@@ -1912,15 +2063,15 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                     <td className="p-2 font-medium sticky left-0 z-10 bg-background shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
                                       {t("pL_sales")}
                                     </td>
-                                    {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                    {compareIncomeRows.map((row) => (
                                       <td
-                                        key={ym}
+                                        key={row.ym}
                                         className="p-2 text-right font-mono whitespace-nowrap"
                                       >
-                                        {rowData.error
+                                        {row.data.error
                                           ? "—"
                                           : formatBath(
-                                              incomeMetricsForCompare(rowData, vatDisplayMode)?.sales ?? 0
+                                              incomeMetricsForCompareRow(row, vatDisplayMode)?.sales ?? 0
                                             )}
                                       </td>
                                     ))}
@@ -1953,14 +2104,17 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                   <td className="p-2 text-muted-foreground pl-4 sticky left-0 z-10 bg-background shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
                                     + {t("pL_beginningInv")}
                                   </td>
-                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                  {compareIncomeRows.map((row) => (
                                     <td
-                                      key={ym}
+                                      key={row.ym}
                                       className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
                                     >
-                                      {rowData.error
+                                      {row.data.error
                                         ? "—"
-                                        : formatBath(Number(rowData.beginningInventory) || 0)}
+                                        : formatBath(
+                                            incomeMetricsForCompareRow(row, vatDisplayMode)
+                                              ?.beginningInventory ?? 0
+                                          )}
                                     </td>
                                   ))}
                                 </tr>
@@ -2049,15 +2203,15 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                   <td className="p-2 text-muted-foreground sticky left-0 z-10 bg-background shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
                                     = {t("pL_cogs")}
                                   </td>
-                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                  {compareIncomeRows.map((row) => (
                                     <td
-                                      key={ym}
+                                      key={row.ym}
                                       className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
                                     >
-                                      {rowData.error
+                                      {row.data.error
                                         ? "—"
                                         : formatBath(
-                                            incomeMetricsForCompare(rowData, vatDisplayMode)?.cogs ?? 0
+                                            incomeMetricsForCompareRow(row, vatDisplayMode)?.cogs ?? 0
                                           )}
                                     </td>
                                   ))}
@@ -2066,12 +2220,12 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                   <td className="p-2 font-medium text-primary sticky left-0 z-10 bg-background shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
                                     {t("pL_grossProfit")}
                                   </td>
-                                  {compareIncomeRows.map(({ ym, data: rowData }) => {
-                                    const m = incomeMetricsForCompare(rowData, vatDisplayMode)
+                                  {compareIncomeRows.map((row) => {
+                                    const m = incomeMetricsForCompareRow(row, vatDisplayMode)
                                     const v = m?.grossProfit ?? null
                                     return (
                                       <td
-                                        key={ym}
+                                        key={row.ym}
                                         className={`p-2 text-right font-mono font-medium whitespace-nowrap ${
                                           v != null && v < 0 ? "text-destructive" : "text-primary"
                                         }`}
@@ -2268,12 +2422,12 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                   <td className="p-2 font-bold sticky left-0 z-10 bg-background shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
                                     {t("pL_netProfit")}
                                   </td>
-                                  {compareIncomeRows.map(({ ym, data: rowData }) => {
-                                    const m = incomeMetricsForCompare(rowData, vatDisplayMode)
+                                  {compareIncomeRows.map((row) => {
+                                    const m = incomeMetricsForCompareRow(row, vatDisplayMode)
                                     const v = m?.netProfit ?? null
                                     return (
                                       <td
-                                        key={ym}
+                                        key={row.ym}
                                         className={`p-2 text-right font-mono font-bold whitespace-nowrap ${
                                           v != null && v < 0 ? "text-destructive" : ""
                                         } ${v != null && v >= 0 ? "text-primary" : ""}`}
