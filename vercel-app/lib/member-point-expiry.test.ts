@@ -68,7 +68,7 @@ describe('buildMembersWithPointsBatchFilter', () => {
   it('커서 이후 회원만 조회', async () => {
     const { buildMembersWithPointsBatchFilter } = await import('@/lib/member-point-expiry-batch')
     expect(buildMembersWithPointsBatchFilter(42)).toBe(
-      'and=(or=(point_balance.gt.0,tier_points.gt.0),id.gt.42)'
+      'or=(point_balance.gt.0,tier_points.gt.0)&id=gt.42'
     )
   })
 })
