@@ -27,12 +27,12 @@ export function isPosTerminalOrderSubmitInFlight(): boolean {
 /**
  * layout sync host — 터미널이 열려 있으면 **이 기기가 방금 저장한** 주문 autoprint는 터미널에 위임.
  * seenOrderIds 는 INSERT/Poll 핸들러가 이미 add한 뒤 호출되므로 항상 true → 원격 주문까지 차단됨.
- * 따라서 submitInFlight / suppressUntilMs / createdBy 세 가지로만 판정한다.
+ * 따라서 submitInFlight / suppressUntilMs 만 본다.
+ * createdBy===currentUser 는 쓰면 안 됨: 태블릿·메인이 같은 로그인(manager)이면
+ * 원격 홀 영수증까지 건너뛰고 주방 폴백만 나간다.
  */
 export function shouldSyncHostSkipLocalKitchenAutoprint(opts: {
   orderId: number
-  createdBy?: string | null
-  currentUser?: string | null
   isApiInboundDelivery?: boolean
   suppressUntilMs?: number | null
 }): boolean {
@@ -40,9 +40,6 @@ export function shouldSyncHostSkipLocalKitchenAutoprint(opts: {
   if (opts.isApiInboundDelivery) return false
   if (isPosTerminalOrderSubmitInFlight()) return true
   if (opts.suppressUntilMs != null && Date.now() < opts.suppressUntilMs) return true
-  const createdBy = String(opts.createdBy ?? '').trim()
-  const currentUser = String(opts.currentUser ?? '').trim()
-  if (createdBy && currentUser && createdBy === currentUser) return true
   return false
 }
 

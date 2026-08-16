@@ -244,7 +244,6 @@ function buildDineInQtySnapshot(
 export function usePosMainDeviceSyncHost(): void {
   const { auth } = useAuth()
   const storeCode = String(auth?.store ?? '').trim()
-  const posTerminalUser = String(auth?.user ?? '').trim()
   const [isMainPosDevice] = usePosMainDevice(storeCode || null)
   const { lang } = useLang()
   const t = useT(lang)
@@ -292,13 +291,11 @@ export function usePosMainDeviceSyncHost(): void {
         isApiInboundDeliveryOrderMemo(memo)
       return shouldSyncHostSkipLocalKitchenAutoprint({
         orderId,
-        createdBy: String(row?.created_by ?? ''),
-        currentUser: posTerminalUser,
         isApiInboundDelivery: isApiInbound,
         suppressUntilMs: mainPosSelfDineInUpdateSuppressUntilRef.current.get(orderId) ?? null,
       })
     },
-    [posTerminalUser]
+    []
   )
 
   const currentStoreCodeVariants = useMemo(() => {
