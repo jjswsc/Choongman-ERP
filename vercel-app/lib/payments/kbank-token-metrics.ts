@@ -14,6 +14,8 @@ export type KbankTokenMetricEvent =
   | 'inquiry_skip_rate_limit'
   | 'kbank_api_401_refresh'
   | 'kbank_api_429_no_retry'
+  | 'kbank_api_request'
+  | 'kbank_api_timeout'
 
 export type KbankTokenMetricPayload = {
   event: KbankTokenMetricEvent

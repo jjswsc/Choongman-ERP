@@ -1,15 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
-import { displayPosCancelReasonKey } from "@/lib/pos-cancel-reason-key"
 import { formatSalesAmount } from "./sales-management-shared"
 
 type InsightMenuRow = { name: string; sales: number }
 type InsightChannelRow = { channelKey: string; axisLabel: string; sales: number }
-type CancelReasonRow = { reason: string; count: number; amount: number }
 
 export type SalesManagementSummaryInsightsProps = {
   tr: (key: string, fallback: string) => string
@@ -30,18 +27,7 @@ export type SalesManagementSummaryInsightsProps = {
   insightTopMenus: InsightMenuRow[]
   insightBottomMenus: InsightMenuRow[]
   insightTopChannels: InsightChannelRow[]
-  cancelReasonSummary: {
-    lineRows: CancelReasonRow[]
-    orderRows: CancelReasonRow[]
-    lineTotalCount: number
-    lineTotalAmount: number
-    orderTotalCount: number
-    orderTotalAmount: number
-    truncated: boolean
-  }
-  cancelReasonLoading?: boolean
   showInsightPanel: boolean
-  onCancelReasonDrilldown: (reason: string, kind: "line" | "order") => void
 }
 
 export function SalesManagementSummaryInsights({
@@ -58,10 +44,7 @@ export function SalesManagementSummaryInsights({
   insightTopMenus,
   insightBottomMenus,
   insightTopChannels,
-  cancelReasonSummary,
-  cancelReasonLoading = false,
   showInsightPanel,
-  onCancelReasonDrilldown,
 }: SalesManagementSummaryInsightsProps) {
   return (
     <>
@@ -111,13 +94,7 @@ export function SalesManagementSummaryInsights({
         </Card>
       ) : null}
 
-      {showInsightPanel &&
-      (insightShowTotals ||
-        insightShowMenu ||
-        insightShowChannel ||
-        cancelReasonLoading ||
-        cancelReasonSummary.lineRows.length > 0 ||
-        cancelReasonSummary.orderRows.length > 0) ? (
+      {showInsightPanel && (insightShowTotals || insightShowMenu || insightShowChannel) ? (
         <div className="mb-3 grid gap-3 lg:grid-cols-2">
           {insightShowTotals ? (
             <Card>
@@ -220,85 +197,6 @@ export function SalesManagementSummaryInsights({
                     ))}
                   </ul>
                 )}
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {cancelReasonLoading &&
-          cancelReasonSummary.lineRows.length === 0 &&
-          cancelReasonSummary.orderRows.length === 0 ? (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">
-                  {tr("salesCancelReasonTopLine", "품목 취소 사유 TOP")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">{tr("loading", "불러오는 중…")}</p>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {cancelReasonSummary.lineRows.length > 0 ? (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">
-                  {tr("salesCancelReasonTopLine", "품목 취소 사유 TOP")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-1 text-sm">
-                  {cancelReasonSummary.lineRows.slice(0, 5).map((row) => (
-                    <li key={`line-${row.reason}`}>
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left hover:bg-muted/50"
-                        onClick={() => onCancelReasonDrilldown(row.reason, "line")}
-                      >
-                        <span className="truncate">
-                          {displayPosCancelReasonKey(row.reason, tr("posCancelReasonNotSet", "사유 미입력"))} (
-                          {row.count}
-                          {tr("posCount", "건")})
-                        </span>
-                        <span className={`shrink-0 font-medium ${ADMIN_NUMERIC_CN}`}>
-                          {formatSalesAmount(row.amount)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {cancelReasonSummary.orderRows.length > 0 ? (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">
-                  {tr("salesCancelReasonTopOrder", "주문 전체 취소 사유 TOP")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-1 text-sm">
-                  {cancelReasonSummary.orderRows.slice(0, 5).map((row) => (
-                    <li key={`order-${row.reason}`}>
-                      <button
-                        type="button"
-                        className="flex w-full items-center justify-between gap-2 rounded px-1 py-0.5 text-left hover:bg-muted/50"
-                        onClick={() => onCancelReasonDrilldown(row.reason, "order")}
-                      >
-                        <span className="truncate">
-                          {displayPosCancelReasonKey(row.reason, tr("posCancelReasonNotSet", "사유 미입력"))} (
-                          {row.count}
-                          {tr("posCount", "건")})
-                        </span>
-                        <span className={`shrink-0 font-medium ${ADMIN_NUMERIC_CN}`}>
-                          {formatSalesAmount(row.amount)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
               </CardContent>
             </Card>
           ) : null}

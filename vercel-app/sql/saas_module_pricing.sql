@@ -66,6 +66,7 @@ insert into public.saas_module_price_catalog (module_key, monthly_price, yearly_
 values
   ('pos_base', 300, 3000, false, false, 10),
   ('pos_device', 100, 1000, true, false, 20),
+  ('store_ops', 50, 500, false, false, 25),
   ('kbank', 300, 3000, false, false, 30),
   ('grab', 300, 3000, false, false, 40),
   ('member_mgmt', 100, 1000, false, false, 50),

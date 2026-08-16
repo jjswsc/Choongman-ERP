@@ -32,6 +32,7 @@ import {
   type ErpNavHelpItem,
 } from "@/lib/erp-nav-registry"
 import { useErpNavAccess } from "@/lib/use-erp-nav-access"
+import { isSaasModuleEnabled } from "@/lib/use-saas-enabled-modules"
 import { useErpNavFavorites } from "@/lib/erp-nav-favorites-context"
 import { useErpNavigationOptional } from "@/lib/erp-navigation"
 import {
@@ -154,7 +155,7 @@ export function ErpSidebar() {
   const [storeOpsTotals, setStoreOpsTotals] = React.useState<StoreOpsAlertSummary | null>(null)
   const { stats: dashboardStats } = useAdminDashboardStats()
   const isLogisticsStaff = isLogisticsStaffRole(auth?.role || "")
-  const { mainItems, sections, isNavItemVisible } = useErpNavAccess()
+  const { mainItems, sections, isNavItemVisible, saasModules } = useErpNavAccess()
   const { favoriteHrefs } = useErpNavFavorites()
   const navItemByHref = React.useMemo(() => buildErpNavItemByHrefMap(), [])
 
@@ -167,6 +168,10 @@ export function ErpSidebar() {
   )
 
   React.useEffect(() => {
+    if (!isSaasModuleEnabled(saasModules, "logistics")) {
+      setInteriorDashTotals(null)
+      return
+    }
     let cancelled = false
     getInteriorDashboardSummary()
       .then((s) => {
@@ -178,10 +183,13 @@ export function ErpSidebar() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [saasModules])
 
   React.useEffect(() => {
-    if (!hasManagerScope) return
+    if (!hasManagerScope || !isSaasModuleEnabled(saasModules, "store_ops")) {
+      setStoreOpsTotals(null)
+      return
+    }
     let cancelled = false
     getStoreOpsAlertSummary()
       .then((s) => {
@@ -193,7 +201,7 @@ export function ErpSidebar() {
     return () => {
       cancelled = true
     }
-  }, [hasManagerScope])
+  }, [hasManagerScope, saasModules])
 
   React.useEffect(() => {
     try {

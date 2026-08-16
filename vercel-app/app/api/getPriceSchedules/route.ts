@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseSelectFilter } from "@/lib/supabase-server"
 import { requireAuth } from "@/lib/verify-auth"
-import { runDuePriceSchedules } from "@/lib/price-schedule"
+import { isMissingPriceSchedulesTableError, runDuePriceSchedules } from "@/lib/price-schedule"
 
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -35,8 +35,7 @@ export async function GET(req: NextRequest) {
     })) as unknown[]
     return NextResponse.json(Array.isArray(rows) ? rows : [], { headers })
   } catch (e) {
-    const msg = String(e)
-    if (/does not exist|42P01/i.test(msg)) {
+    if (isMissingPriceSchedulesTableError(e)) {
       return NextResponse.json([], { headers })
     }
     console.error("getPriceSchedules:", e)

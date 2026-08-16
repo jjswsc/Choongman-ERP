@@ -48,15 +48,6 @@ const emptySnap = (key: string): SalesManagementViewCache =>
     forecastLookbackRows: [],
     forecastActualRows: [],
     summaryCards: { current: 100, prevRange: 0, prevWeek: 0 },
-    cancelReasonSummary: {
-      lineRows: [],
-      orderRows: [],
-      lineTotalCount: 0,
-      lineTotalAmount: 0,
-      orderTotalCount: 0,
-      orderTotalAmount: 0,
-      truncated: false,
-    },
   }) as SalesManagementViewCache
 
 describe("sales-management-view-cache", () => {

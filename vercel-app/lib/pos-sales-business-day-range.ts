@@ -3,7 +3,7 @@
  * getPosTodaySales / getPosOrders(posBizDayScope) 와 동일한 영업일 구간으로 맞춘다.
  */
 import { iterBangkokYmdInclusive } from '@/lib/attendance-utils'
-import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
+import { addDaysYmd, getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
 import {
   type PosBusinessDaySettingsContext,
   posBusinessDayUtcEnvelopeBangkokYmd,
@@ -59,6 +59,37 @@ export function posSalesBusinessDateRangeUtcEnvelope(
   return {
     startISO: new Date(minMs).toISOString(),
     endISOExclusive: new Date(maxMs).toISOString(),
+  }
+}
+
+/**
+ * 방콕 달력일 start~end(포함)의 UTC 봉투.
+ * padDays>0 이면 양쪽으로 하루씩 넓혀, 전날 생성·당일 결제 주문을 created_at 조회로 담는다.
+ */
+export function posSalesBangkokCalendarRangeUtcEnvelope(
+  startYmd: string,
+  endYmd: string,
+  padDays = 0
+): { startISO: string; endISOExclusive: string } {
+  const pad = Math.max(0, Math.trunc(Number(padDays) || 0))
+  const lo = normalizeYmd(startYmd)
+  const hi = normalizeYmd(endYmd)
+  const start = addDaysYmd(lo, -pad)
+  const end = addDaysYmd(hi, pad)
+  const startMs = Date.parse(`${start}T00:00:00+07:00`)
+  const endExclusive = addDaysYmd(end, 1)
+  const endMs = Date.parse(`${endExclusive}T00:00:00+07:00`)
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+    const fbStart = Date.parse(`${lo}T00:00:00+07:00`)
+    const fbEnd = Date.parse(`${addDaysYmd(hi, 1)}T00:00:00+07:00`)
+    return {
+      startISO: new Date(Number.isFinite(fbStart) ? fbStart : Date.now()).toISOString(),
+      endISOExclusive: new Date(Number.isFinite(fbEnd) ? fbEnd : Date.now()).toISOString(),
+    }
+  }
+  return {
+    startISO: new Date(startMs).toISOString(),
+    endISOExclusive: new Date(endMs).toISOString(),
   }
 }
 

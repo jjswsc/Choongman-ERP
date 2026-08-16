@@ -455,6 +455,8 @@ export const I18N_SAAS_ADMIN_KO: Record<string, string> = {
   saasAdminCust_moduleBillingActive: "예상 청구: 기능별 합산",
   saasAdminCust_stageBillingActive: "예상 청구: 선택한 영업 단계 패키지",
   saasAdminCust_moduleLoadCatalog: "글로벌 단가 불러오기",
+  saasAdminCust_modulePosOnlyPreset: "POS만 사용",
+  saasAdminCust_modulePosOnlyPresetHint: "매출·POS·설정·직원 계정과 KBank·Grab은 켜고, 나머지 ERP 메뉴를 끕니다.",
   saasAdminCust_moduleCatalogLoaded: "글로벌 기본 단가를 불러왔습니다.",
   saasAdminCust_globalPricingLink: "기능별 기본 요금 관리",
   saasAdminCust_planChargeSummary: "현재 청구 예상",
@@ -544,6 +546,7 @@ export const I18N_SAAS_ADMIN_KO: Record<string, string> = {
 
   saasAdminMod_pos_base: "POS 기본",
   saasAdminMod_pos_device: "POS 단말 (대당)",
+  saasAdminMod_store_ops: "매장 운영 (점검·방문·수리·컴플레인)",
   saasAdminMod_kbank: "KBank 결제",
   saasAdminMod_grab: "Grab 배달",
   saasAdminMod_member_mgmt: "회원 CRM",
@@ -1174,6 +1177,7 @@ export const I18N_SAAS_ADMIN_EN: Record<string, string> = {
 
   saasAdminMod_pos_base: "POS base",
   saasAdminMod_pos_device: "POS terminal (each)",
+  saasAdminMod_store_ops: "Store ops (check, visit, repairs, complaints)",
   saasAdminMod_kbank: "KBank payments",
   saasAdminMod_grab: "Grab delivery",
   saasAdminMod_member_mgmt: "Member CRM",
@@ -1188,6 +1192,8 @@ export const I18N_SAAS_ADMIN_EN: Record<string, string> = {
   saasAdminMod_ai_center: "AI Center",
 
   saasAdminCust_moduleLoadCatalog: "Load global prices",
+  saasAdminCust_modulePosOnlyPreset: "POS only",
+  saasAdminCust_modulePosOnlyPresetHint: "Keeps sales, POS, settings, staff accounts, KBank, and Grab. Turns off other ERP menus.",
   saasAdminCust_moduleCatalogLoaded: "Global default prices loaded.",
   saasAdminCust_globalPricingLink: "Global module pricing",
   saasAdminCust_planChargeSummary: "Estimated charge",
@@ -1889,6 +1895,7 @@ export const I18N_SAAS_ADMIN_TH: Record<string, string> = {
 
   saasAdminMod_pos_base: "POS พื้นฐาน",
   saasAdminMod_pos_device: "เครื่อง POS (ต่อเครื่อง)",
+  saasAdminMod_store_ops: "ปฏิบัติการร้าน (ตรวจ เยี่ยม ซ่อม คำร้อง)",
   saasAdminMod_kbank: "KBank ชำระเงิน",
   saasAdminMod_grab: "Grab เดลิเวอรี่",
   saasAdminMod_member_mgmt: "จัดการสมาชิก",
@@ -1903,6 +1910,8 @@ export const I18N_SAAS_ADMIN_TH: Record<string, string> = {
   saasAdminMod_ai_center: "ศูนย์ AI",
 
   saasAdminCust_moduleLoadCatalog: "โหลดราคามาตรฐาน",
+  saasAdminCust_modulePosOnlyPreset: "ใช้เฉพาะ POS",
+  saasAdminCust_modulePosOnlyPresetHint: "เหลือยอดขาย POS การตั้งค่า บัญชีพนักงาน KBank และ Grab ปิดเมนู ERP อื่น",
   saasAdminCust_moduleCatalogLoaded: "โหลดราคามาตรฐานแล้ว",
   saasAdminCust_globalPricingLink: "จัดการราคามาตรฐานต่อโมดูล",
   saasAdminCust_planChargeSummary: "คาดเรียกเก็บปัจจุบัน",

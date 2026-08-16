@@ -1,5 +1,6 @@
 /**
- * 채널 확인 — KBank QR(PromptPay) 당일 POS payment_qr vs 매장 통장 계정과목 4130.
+ * 채널 확인 — KBank QR(PromptPay) POS payment_qr vs 매장 통장 계정과목 4130.
+ * POS는 방콕 달력일(결제일), 통장은 입금일.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
@@ -11,9 +12,8 @@ import {
   fetchPosSalesOrdersForBusinessRange,
   POS_SALES_PAYMENT_ROW_SELECT,
 } from '@/lib/pos-sales-fetch-rows'
-import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
-import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
 import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
+import { channelReconcilePosCalendarDate } from '@/lib/pos-channel-reconcile-match'
 import {
   aggregateKbankQrReconcileRows,
   aggregateQrBankDeposits,
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tenantScope = await resolvePosSalesTenantScopeFromRequest(request)
-    const [{ rows, truncated, bizCtx }, ledgerRows] = await Promise.all([
+    const [{ rows, truncated }, ledgerRows] = await Promise.all([
       fetchPosSalesOrdersForBusinessRange({
         request,
         startStr,
@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
         storeCodes: stores.length > 0 ? stores : undefined,
         select: POS_SALES_PAYMENT_ROW_SELECT,
         queryLabel: 'posKbankQrReconcile',
+        dateBucket: 'calendar',
       }),
       fetchStoreAccountDeposits({
         tenantScope,
@@ -74,16 +75,7 @@ export async function GET(request: NextRequest) {
     headers.set('X-Pos-Sales-Source', 'fetch')
 
     const aggregated = aggregateKbankQrReconcileRows(rows as KbankQrReconcileOrderRow[], {
-      businessDateForRow: (row) => {
-        const raw = String(row.created_at ?? '').trim()
-        if (!raw) return ''
-        const d = new Date(
-          raw.includes('T') || /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : raw.replace(' ', 'T')
-        )
-        if (Number.isNaN(d.getTime())) return String(raw).slice(0, 10)
-        const hours = resolvePosBusinessHoursFromContext(bizCtx, String(row.store_code ?? '').trim())
-        return getPosBusinessDateStrFromConfig(d, hours)
-      },
+      businessDateForRow: channelReconcilePosCalendarDate,
     })
 
     const bankAgg = aggregateQrBankDeposits({

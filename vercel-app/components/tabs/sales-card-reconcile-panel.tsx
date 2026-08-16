@@ -81,14 +81,14 @@ export function SalesCardReconcilePanel(props: {
       <p className="text-sm text-muted-foreground">
         {tr(
           "salesCardReconcileIntro",
-          "당일 마감은 POS 카드 합계를 기준으로 하세요. 통장 카드는 해당 매장 통장 계정과목 4120~4124 합계입니다. 행을 펼치면 POS 영업일과 통장 인식일을 맞춰 틀린 날을 찾습니다. 카드 정산은 보통 익일 입금입니다."
+          "당일 마감은 POS 카드 합계를 기준으로 하세요. 통장 카드는 해당 매장 통장 계정과목 4120~4124 합계입니다. 행을 펼치면 방콕 달력일과 통장 인식일(익일 입금)을 맞춰 틀린 날을 찾습니다."
         )}
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
           title={tr("salesCardKpiSales", "POS 카드 합계")}
-          hint={tr("salesCardKpiSalesHint", "완료 주문의 payment_card (영업일)")}
+          hint={tr("salesCardKpiSalesHint", "완료 주문의 payment_card (방콕 달력일)")}
         >
           <p className="mt-1 text-2xl font-semibold tabular-nums">{formatAmount(kpi.cardSales)}</p>
         </KpiCard>
@@ -140,7 +140,7 @@ export function SalesCardReconcilePanel(props: {
       <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
         {tr(
           "salesCardReconcileNextDayNote",
-          "카드 정산은 익일 입금이 많습니다. 통장 4120~4124는 통장 인식일(없으면 입금일 전날)로 비교합니다. Visa·Master 등 세부 계정은 합쳐서 봅니다."
+          "카드 정산은 익일 입금이 많습니다. 통장 4120~4124는 통장 인식일(없으면 입금일 전날)로 비교합니다. POS는 방콕 달력일이라 자정 이후 매출은 영업일 마감과 날짜가 하루 다를 수 있습니다. Visa·Master 등 세부 계정은 합쳐서 봅니다."
         )}
       </p>
 

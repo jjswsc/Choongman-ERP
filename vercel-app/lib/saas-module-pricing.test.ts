@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import { resolveBillablePosDevices } from "./saas-module-billing"
 import {
+  applyPosOnlyModuleEnabled,
   cloneDefaultModulePrices,
+  POS_ONLY_SAAS_MODULES,
   resolveModuleChargeAmount,
   syncModuleEnabledFromFeatures,
 } from "./saas-module-pricing"
@@ -17,13 +19,41 @@ describe("syncModuleEnabledFromFeatures", () => {
     expect(out.pos_device.isEnabled).toBe(true)
   })
 
-  it("keeps notices and documents always on", () => {
+  it("does not force notices and documents on", () => {
     const modules = cloneDefaultModulePrices()
     modules.notices.isEnabled = false
     modules.documents.isEnabled = false
     const out = syncModuleEnabledFromFeatures(modules, { ...DEFAULT_FEATURE_FLAGS, pos: false })
-    expect(out.notices.isEnabled).toBe(true)
-    expect(out.documents.isEnabled).toBe(true)
+    expect(out.notices.isEnabled).toBe(false)
+    expect(out.documents.isEnabled).toBe(false)
+  })
+
+  it("does not turn on store_ops from the POS feature flag", () => {
+    const modules = cloneDefaultModulePrices()
+    modules.store_ops.isEnabled = false
+    const out = syncModuleEnabledFromFeatures(modules, { ...DEFAULT_FEATURE_FLAGS, pos: true })
+    expect(out.store_ops.isEnabled).toBe(false)
+  })
+})
+
+describe("applyPosOnlyModuleEnabled", () => {
+  it("keeps POS, devices, KBank, and Grab on and turns off ERP modules", () => {
+    const modules = cloneDefaultModulePrices()
+    modules.notices.isEnabled = true
+    modules.store_ops.isEnabled = true
+    modules.accounting.isEnabled = true
+    modules.kbank.isEnabled = false
+    modules.grab.isEnabled = false
+    const out = applyPosOnlyModuleEnabled(modules)
+    expect(out.pos_base.isEnabled).toBe(true)
+    expect(out.pos_device.isEnabled).toBe(true)
+    expect(out.kbank.isEnabled).toBe(true)
+    expect(out.grab.isEnabled).toBe(true)
+    expect(out.store_ops.isEnabled).toBe(false)
+    expect(out.accounting.isEnabled).toBe(false)
+    for (const key of Object.keys(out) as Array<keyof typeof out>) {
+      expect(out[key].isEnabled).toBe(POS_ONLY_SAAS_MODULES.includes(key))
+    }
   })
 })
 

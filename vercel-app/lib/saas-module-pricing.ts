@@ -4,6 +4,7 @@ import type { BillingCycle, FeatureFlags, TenantUsage } from "./saas-admin-contr
 export const SAAS_MODULE_KEYS = [
   "pos_base",
   "pos_device",
+  "store_ops",
   "kbank",
   "grab",
   "member_mgmt",
@@ -54,6 +55,7 @@ export type ModuleChargeResult = {
 export const DEFAULT_SAAS_MODULE_PRICES: Record<SaasModuleKey, SaasModulePriceRow> = {
   pos_base: { monthly: 300, yearly: 3000, isEnabled: true },
   pos_device: { monthly: 100, yearly: 1000, isEnabled: true, isPerUnit: true },
+  store_ops: { monthly: 50, yearly: 500, isEnabled: false },
   kbank: { monthly: 300, yearly: 3000, isEnabled: false },
   grab: { monthly: 300, yearly: 3000, isEnabled: false },
   member_mgmt: { monthly: 100, yearly: 1000, isEnabled: false },
@@ -72,6 +74,7 @@ export const DEFAULT_SAAS_MODULE_PRICES: Record<SaasModuleKey, SaasModulePriceRo
 export const SAAS_MODULE_LABEL_KEY: Record<SaasModuleKey, string> = {
   pos_base: "saasAdminMod_pos_base",
   pos_device: "saasAdminMod_pos_device",
+  store_ops: "saasAdminMod_store_ops",
   kbank: "saasAdminMod_kbank",
   grab: "saasAdminMod_grab",
   member_mgmt: "saasAdminMod_member_mgmt",
@@ -277,8 +280,6 @@ export function inferModuleEnabledFromFeatures(features: FeatureFlags): Partial<
     attendance: features.payroll,
     cost_analysis: features.analytics,
     work_log: features.analytics,
-    notices: true,
-    documents: true,
     marketing: features.marketing,
     logistics: features.inventory,
     accounting: features.accounting,
@@ -364,8 +365,30 @@ export type SaasModuleCatalogRow = {
   sortOrder: number
 }
 
-/** ERP 기본 포함 — 기능 토글과 무관하게 SaaS 기본 과금 대상 */
-export const ALWAYS_ON_SAAS_MODULES: SaasModuleKey[] = ["notices", "documents"]
+/**
+ * 런타임에 끌 수 없는 모듈. POS-only 고객은 공지·회사문서를 숨겨야 하므로 비워 둔다.
+ * (충만은 tenantId 없음 → 전 모듈 허용)
+ */
+export const ALWAYS_ON_SAAS_MODULES: SaasModuleKey[] = []
+
+/** Omni POS-only 패키지 — 매출·POS·단말·직원 계정 + 결제(KBank)·배달(Grab) */
+export const POS_ONLY_SAAS_MODULES: readonly SaasModuleKey[] = [
+  "pos_base",
+  "pos_device",
+  "kbank",
+  "grab",
+]
+
+export function applyPosOnlyModuleEnabled(
+  modules: Record<SaasModuleKey, SaasModulePriceRow>
+): Record<SaasModuleKey, SaasModulePriceRow> {
+  const out = {} as Record<SaasModuleKey, SaasModulePriceRow>
+  const keep = new Set<SaasModuleKey>(POS_ONLY_SAAS_MODULES)
+  for (const key of SAAS_MODULE_KEYS) {
+    out[key] = { ...modules[key], isEnabled: keep.has(key) }
+  }
+  return out
+}
 
 export function modulePricesFromCatalog(rows: SaasModuleCatalogRow[]): Record<SaasModuleKey, SaasModulePriceRow> {
   const base = cloneDefaultModulePrices()

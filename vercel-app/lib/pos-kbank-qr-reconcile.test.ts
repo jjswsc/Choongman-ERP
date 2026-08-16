@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   aggregateKbankQrReconcileRows,
+  aggregateQrBankDeposits,
+  applyQrBankDepositsToRows,
   buildKbankQrReconcileResult,
 } from '@/lib/pos-kbank-qr-reconcile'
+import { channelReconcilePosCalendarDate } from '@/lib/pos-channel-reconcile-match'
 
 describe('aggregateKbankQrReconcileRows', () => {
   it('sums payment_qr by store for completed orders only', () => {
@@ -73,5 +76,60 @@ describe('buildKbankQrReconcileResult', () => {
       { storeCode: 'B', orderCount: 1, qrSales: 50, bankDepositAmt: null, days: [] },
     ]).kpi
     expect(kpi).toEqual({ orderCount: 3, qrSales: 150, bankDepositAmt: 0, storeCount: 2 })
+  })
+})
+
+describe('aggregateQrBankDeposits', () => {
+  it('matches POS calendar day to bank deposit date, ignoring sales_date T-1', () => {
+    const pos = aggregateKbankQrReconcileRows(
+      [
+        {
+          store_code: 'CM Union Mall',
+          status: 'paid',
+          payment_qr: 17010,
+          paid_at: '2026-07-03T21:00:00+07:00',
+          created_at: '2026-07-03T20:00:00+07:00',
+        },
+      ],
+      { businessDateForRow: channelReconcilePosCalendarDate }
+    )
+    const bank = aggregateQrBankDeposits({
+      startStr: '2026-07-02',
+      endStr: '2026-07-03',
+      storeCodes: ['CM Union Mall'],
+      rows: [
+        {
+          transType: 'deposit',
+          transDate: '2026-07-03',
+          salesDate: '2026-07-02',
+          accountSubjectCode: '4130',
+          amount: 17010,
+          accountStore: 'CM Union Mall',
+        },
+      ],
+    })
+    const rows = applyQrBankDepositsToRows(pos, bank)
+    const store = rows.find((r) => r.storeCode.includes('Union Mall'))
+    expect(store?.days).toEqual([
+      { date: '2026-07-03', orderCount: 1, qrSales: 17010, bankDepositAmt: 17010 },
+    ])
+  })
+
+  it('puts after-midnight QR on the calendar payment day', () => {
+    const rows = aggregateKbankQrReconcileRows(
+      [
+        {
+          store_code: 'CM Union Mall',
+          status: 'paid',
+          payment_qr: 13,
+          paid_at: '2026-07-04T00:40:00+07:00',
+          created_at: '2026-07-03T23:50:00+07:00',
+        },
+      ],
+      { businessDateForRow: channelReconcilePosCalendarDate }
+    )
+    expect(rows[0]?.days).toEqual([
+      { date: '2026-07-04', orderCount: 1, qrSales: 13, bankDepositAmt: null },
+    ])
   })
 })

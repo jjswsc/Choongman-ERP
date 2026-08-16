@@ -6,6 +6,8 @@ import {
   isKbankBusinessSuccess,
   isKbankCreditCardQrUnavailableError,
   isKbankRateLimitError,
+  isKbankTimeoutError,
+  isKbankFetchAbortError,
   readKbankResponseStatusCode,
   normalizeKbankTxnStatusToPos,
   resolveKbankCreditCardBrandLabels,
@@ -116,6 +118,19 @@ describe('kbank-api-reference', () => {
         'Rate limit quota violation. Quota limit exceeded. Identifier : ChoongmanTest-UAT3.1.70.209'
       )
     ).toBe(true)
+  })
+
+  it('detects fetch abort / timeout as KBank timeout', () => {
+    expect(isKbankTimeoutError('TIMEOUT', '')).toBe(true)
+    expect(isKbankTimeoutError('', 'This operation was aborted')).toBe(true)
+    expect(isKbankTimeoutError('', 'KBank QR generate timed out after 20s. Check proxy/bank and retry.')).toBe(
+      true
+    )
+    expect(isKbankTimeoutError('00', 'Success')).toBe(false)
+    const abort = new DOMException('This operation was aborted', 'AbortError')
+    expect(isKbankFetchAbortError(abort)).toBe(true)
+    expect(isKbankFetchAbortError({ name: 'AbortError', code: 20 })).toBe(true)
+    expect(isKbankFetchAbortError(new Error('fetch failed'))).toBe(false)
   })
 
   it('resolves display qr type from bank qrType or sof', () => {

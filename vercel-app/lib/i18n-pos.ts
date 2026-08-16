@@ -1918,6 +1918,8 @@ export const I18N_POS_KO: Record<string, string> = {
       'Inquiry로 결제 txnNo(숫자)를 가져오지 못했습니다. 아래 은행 응답을 확인하세요. (APIC…는 QR 세션 ID라 Void에 쓸 수 없습니다)',
     posKbankRateLimitAlert:
       'KBank API 호출 한도 초과입니다. 약 {minutes}분 후 {label}을(를) 한 번만 눌러 주세요. (연속 클릭 금지)',
+    posKbankGenerateTimeoutAlert:
+      'KBank QR 생성이 지연되어 중단되었습니다. 잠시 후 한 번만 다시 눌러 주세요.',
     posKbankGenerateWaitTap: '잠시만 기다려 주세요. (같은 버튼을 연속으로 누르지 마세요)',
     posKbankGenerateInFlight: 'QR을 만드는 중입니다. 잠시만 기다려 주세요.',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
@@ -5288,6 +5290,8 @@ export const I18N_POS_EN: Record<string, string> = {
       'Could not obtain numeric payment txnNo from Inquiry. See bank response below. (APIC… is QR session id — not valid for Void)',
     posKbankRateLimitAlert:
       'KBank API rate limit exceeded. Wait about {minutes} minute(s), then tap {label} once (do not tap repeatedly).',
+    posKbankGenerateTimeoutAlert:
+      'KBank QR generate timed out. Please wait a moment, then tap Generate QR once.',
     posKbankGenerateWaitTap: 'Please wait a moment (avoid double-tapping).',
     posKbankGenerateInFlight: 'QR is already being generated. Please wait a moment.',
     posKbankGenerateFirstAlert: 'Please run QR Generate first.',
@@ -7285,6 +7289,8 @@ export const I18N_POS_TH: Record<string, string> = {
       'ยกเลิก QR แล้ว แต่ล้างยอดชำระในออเดอร์ไม่สำเร็จครับ รีเฟรชแล้วลองชำระใหม่ครับ',
     posKbankRateLimitAlert:
       'KBank จำกัดจำนวนครั้ง — รอประมาณ {minutes} นาที แล้วกด {label} ครั้งเดียว (ห้ามกดซ้ำ)',
+    posKbankGenerateTimeoutAlert:
+      'KBank สร้าง QR ช้าเกินไปครับ รอสักครู่แล้วกดสร้าง QR อีกครั้งเดียว (ห้ามกดซ้ำ)',
     posKbankGenerateWaitTap: 'รอสักครู่ครับ (อย่ากดปุ่มซ้ำเร็วเกินไป)',
     posKbankGenerateInFlight: 'กำลังสร้าง QR อยู่ครับ รอสักครู่',
     posKbankCallbackWaitingHint:
@@ -12630,6 +12636,7 @@ export const I18N_POS_MM: Record<string, string> = {
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posKbankCallbackWaitingHint: 'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.',
     posKbankRateLimitAlert: 'KBank API rate limit exceeded. Wait about {minutes} minute(s), then tap {label} once (do not tap repeatedly).',
+    posKbankGenerateTimeoutAlert: 'KBank QR generate timed out. Please wait a moment, then tap Generate QR once.',
     posKbankVoidFailedAlert: 'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',
     posKbankVoidInquiryFailed: 'Could not obtain txnNo from Inquiry. Check the KBank response below.',
     posKbankVoidNeedsTxnNo: 'No txnNo — Void runs Inquiry automatically first.',
@@ -15586,6 +15593,7 @@ export const I18N_POS_LA: Record<string, string> = {
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posKbankCallbackWaitingHint: 'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.',
     posKbankRateLimitAlert: 'KBank API rate limit exceeded. Wait about {minutes} minute(s), then tap {label} once (do not tap repeatedly).',
+    posKbankGenerateTimeoutAlert: 'KBank QR generate timed out. Please wait a moment, then tap Generate QR once.',
     posKbankVoidFailedAlert: 'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',
     posKbankVoidInquiryFailed: 'Could not obtain txnNo from Inquiry. Check the KBank response below.',
     posKbankVoidNeedsTxnNo: 'No txnNo — Void runs Inquiry automatically first.',
@@ -18580,6 +18588,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posKbankCallbackWaitingHint: 'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.',
     posKbankRateLimitAlert: 'KBank API rate limit exceeded. Wait about {minutes} minute(s), then tap {label} once (do not tap repeatedly).',
+    posKbankGenerateTimeoutAlert: 'KBank QR generate timed out. Please wait a moment, then tap Generate QR once.',
     posKbankVoidFailedAlert: 'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',
     posKbankVoidInquiryFailed: 'Could not obtain txnNo from Inquiry. Check the KBank response below.',
     posKbankVoidNeedsTxnNo: 'No txnNo — Void runs Inquiry automatically first.',
@@ -21536,6 +21545,7 @@ export const I18N_POS_VI: Record<string, string> = {
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posKbankCallbackWaitingHint: 'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.',
     posKbankRateLimitAlert: 'KBank API rate limit exceeded. Wait about {minutes} minute(s), then tap {label} once (do not tap repeatedly).',
+    posKbankGenerateTimeoutAlert: 'KBank QR generate timed out. Please wait a moment, then tap Generate QR once.',
     posKbankVoidFailedAlert: 'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',
     posKbankVoidInquiryFailed: 'Could not obtain txnNo from Inquiry. Check the KBank response below.',
     posKbankVoidNeedsTxnNo: 'No txnNo — Void runs Inquiry automatically first.',
@@ -24500,6 +24510,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posKbankCallbackWaitingHint: 'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.',
     posKbankRateLimitAlert: 'KBank API rate limit exceeded. Wait about {minutes} minute(s), then tap {label} once (do not tap repeatedly).',
+    posKbankGenerateTimeoutAlert: 'KBank QR generate timed out. Please wait a moment, then tap Generate QR once.',
     posKbankVoidFailedAlert: 'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',
     posKbankVoidInquiryFailed: 'Could not obtain txnNo from Inquiry. Check the KBank response below.',
     posKbankVoidNeedsTxnNo: 'No txnNo — Void runs Inquiry automatically first.',

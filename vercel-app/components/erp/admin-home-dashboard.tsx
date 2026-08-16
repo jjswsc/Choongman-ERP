@@ -13,6 +13,7 @@ import { AdminDashboardPendingOrdersAlert } from "@/components/erp/admin-dashboa
 import { AdminOperationsDashboardPanel } from "@/components/erp/admin-operations-dashboard-panel"
 import { ErpNavFavoritesEditor } from "@/components/erp/erp-nav-favorites-editor"
 import { useErpNavFavorites } from "@/lib/erp-nav-favorites-context"
+import { useErpNavAccess } from "@/lib/use-erp-nav-access"
 import { buildErpNavItemByHrefMap, ERP_NAV_DASHBOARD_DESC } from "@/lib/erp-nav-registry"
 import { Button } from "@/components/ui/button"
 
@@ -28,6 +29,7 @@ export function AdminHomeDashboard() {
   const isLogisticsHome = prefersLogisticsOperationsDashboard(role)
   const { stats: dashboardStats } = useAdminDashboardStats()
   const { dashboardQuickHrefs } = useErpNavFavorites()
+  const { isNavItemVisible } = useErpNavAccess()
   const [editorOpen, setEditorOpen] = React.useState(false)
   const navItemByHref = React.useMemo(() => buildErpNavItemByHrefMap(), [])
 
@@ -36,7 +38,7 @@ export function AdminHomeDashboard() {
       dashboardQuickHrefs
         .map((href, index) => {
           const item = navItemByHref.get(href)
-          if (!item) return null
+          if (!item || !isNavItemVisible(href)) return null
           const desc = ERP_NAV_DASHBOARD_DESC[href]
           return {
             href,
@@ -49,7 +51,7 @@ export function AdminHomeDashboard() {
           }
         })
         .filter((link): link is NonNullable<typeof link> => Boolean(link)),
-    [dashboardQuickHrefs, navItemByHref, tr]
+    [dashboardQuickHrefs, isNavItemVisible, navItemByHref, tr]
   )
 
   return (

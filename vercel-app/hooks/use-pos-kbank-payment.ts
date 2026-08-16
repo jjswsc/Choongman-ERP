@@ -24,6 +24,7 @@ import {
   isKbankInquiryResponseApproved,
   isKbankQrSessionTxnNo,
   isKbankRateLimitError,
+  isKbankTimeoutError,
   KBANK_API_PAUSE_STORAGE_KEY,
   KBANK_GENERATE_MIN_INTERVAL_MS,
   KBANK_RATE_LIMIT_BACKOFF_MS,
@@ -796,13 +797,17 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         setKbankOpsTxnNo('')
         setCustomerDisplayPaymentMessage('')
         const rateLimited = isKbankRateLimitError(generate.message || generate.statusMessage)
+        const timedOut = isKbankTimeoutError(generate.statusCode, generate.message || generate.statusMessage)
         if (rateLimited) {
           noteKbankRateLimitResponse(generate.message || generate.statusMessage)
         }
         const msg =
           rateLimited
             ? 'KBank rate limit exceeded. Wait 2–5 minutes, then try Generate QR again (do not tap repeatedly).'
-            : requestedQrType === 'CREDIT_CARD' &&
+            : timedOut
+              ? t('posKbankGenerateTimeoutAlert') ||
+                'KBank QR generate timed out. Please wait a moment, then tap Generate QR once.'
+              : requestedQrType === 'CREDIT_CARD' &&
                 isKbankCreditCardQrUnavailableError(generate.statusCode, generate.message)
               ? t('posKbankCreditCardQrNotRegisteredAlert') ||
                 'This store is not registered for Credit Card QR with KBank. Use Thai QR, or ask KBank to enable Credit Card QR for the merchant.'

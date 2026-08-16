@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth } from "@/lib/verify-auth"
+import { isMissingPriceSchedulesTableError } from "@/lib/price-schedule"
 import { supabaseUpdateByFilter } from "@/lib/supabase-server"
 
 export async function POST(req: NextRequest) {
@@ -21,8 +22,7 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
-    const msg = String(e)
-    if (/does not exist|42P01/i.test(msg)) {
+    if (isMissingPriceSchedulesTableError(e)) {
       return NextResponse.json({ success: false, message: "price_schedules 테이블이 없습니다." }, { status: 400, headers })
     }
     console.error("cancelPriceSchedule:", e)

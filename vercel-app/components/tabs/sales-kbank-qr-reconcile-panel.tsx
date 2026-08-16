@@ -81,14 +81,14 @@ export function SalesKbankQrReconcilePanel(props: {
       <p className="text-sm text-muted-foreground">
         {tr(
           "salesKbankQrReconcileIntro",
-          "당일 마감은 POS QR(PromptPay) 합계를 기준으로 하세요. 통장 QR은 해당 매장 통장의 계정과목 4130 합계입니다. 행을 펼치면 POS 영업일과 통장 인식일을 맞춰 틀린 날을 찾습니다. K Merchant Report는 보통 익일에 반영됩니다."
+          "당일 마감은 POS QR(PromptPay) 합계를 기준으로 하세요. 통장 QR은 해당 매장 통장의 계정과목 4130 합계입니다. 행을 펼치면 방콕 달력일(결제일)과 통장 입금일을 맞춰 틀린 날을 찾습니다. 자정 이후 매출은 영업일 마감과 날짜가 하루 다를 수 있고, 월 합계는 같습니다."
         )}
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
           title={tr("salesKbankQrKpiSales", "POS QR 합계")}
-          hint={tr("salesKbankQrKpiSalesHint", "완료 주문의 payment_qr (영업일)")}
+          hint={tr("salesKbankQrKpiSalesHint", "완료 주문의 payment_qr (방콕 달력일)")}
         >
           <p className="mt-1 text-2xl font-semibold tabular-nums">{formatAmount(kpi.qrSales)}</p>
         </KpiCard>
@@ -140,7 +140,7 @@ export function SalesKbankQrReconcilePanel(props: {
       <p className="rounded-md border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
         {tr(
           "salesKbankQrReconcileNextDayNote",
-          "K Merchant는 익일 반영이 많습니다. 통장 4130은 통장 인식일(없으면 입금일 전날)로 비교합니다."
+          "채널 확인 QR은 방콕 달력일(결제일)과 통장 입금일(4130)을 맞춥니다. K Merchant 리포트는 익일 반영이 많아 통장 입금일과 다를 수 있습니다. 자정 이후 매출은 영업일 마감과 날짜가 하루 다를 수 있고, 월 합계는 같습니다."
         )}
       </p>
 

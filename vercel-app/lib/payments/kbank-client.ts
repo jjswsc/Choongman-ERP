@@ -18,6 +18,7 @@ import {
   isKbankAccessTokenAuthError,
   isKbankAccessTokenExpiredError,
   isKbankBusinessSuccess,
+  isKbankFetchAbortError,
   isKbankRateLimitError,
   KBANK_TOKEN_EXPIRY_SKEW_MS,
   maskKbankMessageForLog,
@@ -47,6 +48,10 @@ export type KbankClientOpts = {
   timeoutMs?: number
   runtime?: KbankRuntimeEnv
 }
+
+const KBANK_DEFAULT_TIMEOUT_MS = 12_000
+/** QR generate: Vercel → Lightsail proxy → KBank. 12s aborted slow bank/proxy replies. */
+const KBANK_QR_GENERATE_TIMEOUT_MS = 20_000
 
 type KbankCtx = { runtime?: KbankRuntimeEnv }
 
@@ -184,6 +189,24 @@ function timeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => v
   }
 }
 
+function kbankTimeoutMessage(api: string, timeoutMs: number): string {
+  const sec = Math.max(1, Math.round(timeoutMs / 1000))
+  return `KBank ${api} timed out after ${sec}s. Check proxy/bank and retry.`
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const { signal, clear } = timeoutSignal(timeoutMs)
+  try {
+    return await fetch(url, { ...init, cache: init.cache ?? 'no-store', signal })
+  } finally {
+    clear()
+  }
+}
+
 type CachedKbankToken = {
   token: KbankTokenResponse
   expiresAtMs: number
@@ -260,22 +283,23 @@ async function requestKbankAccessTokenFromBank(
     reason,
     api: 'oauth_token',
   })
-  const { signal, clear } = timeoutSignal(timeoutMs)
   try {
-    const res = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: withProxySecret(
-        ctx,
-        {
-          Authorization: `Basic ${basic}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        tokenUrl
-      ),
-      body: form.toString(),
-      cache: 'no-store',
-      signal,
-    })
+    const res = await fetchWithTimeout(
+      tokenUrl,
+      {
+        method: 'POST',
+        headers: withProxySecret(
+          ctx,
+          {
+            Authorization: `Basic ${basic}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          tokenUrl
+        ),
+        body: form.toString(),
+      },
+      timeoutMs
+    )
     const text = await res.text()
     if (!res.ok) {
       let detail = text.slice(0, 300)
@@ -335,6 +359,16 @@ async function requestKbankAccessTokenFromBank(
     })
     return { token, expiresAtMs: safeExpiresAtMs }
   } catch (err) {
+    if (isKbankFetchAbortError(err)) {
+      logKbankTokenMetric({
+        event: 'kbank_api_timeout',
+        cacheKey: key,
+        reason,
+        api: 'oauth_token',
+        detail: `${timeoutMs}ms`,
+      })
+      throw new Error(kbankTimeoutMessage('OAuth token', timeoutMs))
+    }
     const raw = err instanceof Error ? err.message : String(err)
     const lower = raw.toLowerCase()
     if (
@@ -357,13 +391,11 @@ async function requestKbankAccessTokenFromBank(
       )
     }
     throw err instanceof Error ? err : new Error(raw)
-  } finally {
-    clear()
   }
 }
 
 export async function fetchKbankAccessToken(
-  timeoutMs = 12000,
+  timeoutMs = KBANK_DEFAULT_TIMEOUT_MS,
   opts?: FetchKbankAccessTokenOpts
 ): Promise<KbankTokenResponse> {
   const ctx: KbankCtx = { runtime: opts?.runtime }
@@ -392,7 +424,7 @@ export async function fetchKbankAccessToken(
   const promise = (async () => {
     const lockHolder = await tryAcquireKbankTokenLock(key, 20)
     if (!lockHolder) {
-      const waited = await waitForSharedKbankAccessToken(key, Math.min(timeoutMs, 12_000))
+      const waited = await waitForSharedKbankAccessToken(key, Math.min(timeoutMs, KBANK_DEFAULT_TIMEOUT_MS))
       if (waited) {
         setLocalKbankTokenCache(key, waited.token, waited.expiresAtMs)
         return waited.token
@@ -480,7 +512,7 @@ export async function generateKbankQr(
   opts?: KbankClientOpts
 ): Promise<KbankGenerateQrResult> {
   const ctx: KbankCtx = { runtime: opts?.runtime }
-  const timeoutMs = opts?.timeoutMs ?? 12000
+  const timeoutMs = opts?.timeoutMs ?? KBANK_QR_GENERATE_TIMEOUT_MS
   const token = await fetchKbankAccessToken(timeoutMs, {
     runtime: ctx.runtime,
     reason: 'generate_qr',
@@ -492,27 +524,40 @@ export async function generateKbankQr(
   const body = buildQrPayload(ctx, req)
   const sentQrTypeCode = String(body.qrType || '').trim()
   const requestBodyMasked = maskKbankMessageForLog(body) as Record<string, unknown>
+  const cacheKey = tokenCacheKey(ctx)
 
-  const { signal, clear } = timeoutSignal(timeoutMs)
+  const qrHeaders = (accessToken: string) =>
+    withProxySecret(
+      ctx,
+      {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Partner-Id': partnerId,
+        'X-Partner-Secret': partnerSecret,
+        'X-Merchant-Id': merchantId,
+      },
+      qrUrl
+    )
+
+  logKbankTokenMetric({
+    event: 'kbank_api_request',
+    cacheKey,
+    reason: 'generate_qr',
+    api: 'generate_qr',
+    partnerTxnUidMasked: maskKbankPartnerTxnUid(req.partnerTransactionId),
+  })
+
   try {
     let activeToken = token
-    let res = await fetch(qrUrl, {
-      method: 'POST',
-      headers: withProxySecret(
-        ctx,
-        {
-          Authorization: `Bearer ${activeToken.access_token}`,
-          'Content-Type': 'application/json',
-          'X-Partner-Id': partnerId,
-          'X-Partner-Secret': partnerSecret,
-          'X-Merchant-Id': merchantId,
-        },
-        qrUrl
-      ),
-      body: JSON.stringify(body),
-      cache: 'no-store',
-      signal,
-    })
+    let res = await fetchWithTimeout(
+      qrUrl,
+      {
+        method: 'POST',
+        headers: qrHeaders(activeToken.access_token),
+        body: JSON.stringify(body),
+      },
+      timeoutMs
+    )
     let text = await res.text()
     let json: Record<string, unknown>
     try {
@@ -524,7 +569,7 @@ export async function generateKbankQr(
     if (res.status === 429 || isKbankRateLimitError(extractKbankErrorMessage(json, '', res.status))) {
       logKbankTokenMetric({
         event: 'kbank_api_429_no_retry',
-        cacheKey: tokenCacheKey(ctx),
+        cacheKey,
         reason: 'generate_qr',
         httpStatus: res.status,
         api: 'generate_qr',
@@ -533,35 +578,27 @@ export async function generateKbankQr(
     } else if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
       logKbankTokenMetric({
         event: 'kbank_api_401_refresh',
-        cacheKey: tokenCacheKey(ctx),
+        cacheKey,
         reason: 'generate_qr',
         httpStatus: 401,
         api: 'generate_qr',
         partnerTxnUidMasked: maskKbankPartnerTxnUid(req.partnerTransactionId),
       })
-      await clearKbankAccessTokenCacheAsync(tokenCacheKey(ctx))
+      await clearKbankAccessTokenCacheAsync(cacheKey)
       activeToken = await fetchKbankAccessToken(timeoutMs, {
         runtime: ctx.runtime,
         forceRefresh: true,
         reason: 'http_401_generate_qr',
       })
-      res = await fetch(qrUrl, {
-        method: 'POST',
-        headers: withProxySecret(
-          ctx,
-          {
-            Authorization: `Bearer ${activeToken.access_token}`,
-            'Content-Type': 'application/json',
-            'X-Partner-Id': partnerId,
-            'X-Partner-Secret': partnerSecret,
-            'X-Merchant-Id': merchantId,
-          },
-          qrUrl
-        ),
-        body: JSON.stringify(body),
-        cache: 'no-store',
-        signal,
-      })
+      res = await fetchWithTimeout(
+        qrUrl,
+        {
+          method: 'POST',
+          headers: qrHeaders(activeToken.access_token),
+          body: JSON.stringify(body),
+        },
+        timeoutMs
+      )
       text = await res.text()
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     }
@@ -598,8 +635,27 @@ export async function generateKbankQr(
       responseBodyMasked,
       sentQrTypeCode,
     }
-  } finally {
-    clear()
+  } catch (err) {
+    if (isKbankFetchAbortError(err)) {
+      logKbankTokenMetric({
+        event: 'kbank_api_timeout',
+        cacheKey,
+        reason: 'generate_qr',
+        api: 'generate_qr',
+        detail: `${timeoutMs}ms`,
+        partnerTxnUidMasked: maskKbankPartnerTxnUid(req.partnerTransactionId),
+      })
+      return {
+        ok: false,
+        requestId: req.partnerTransactionId,
+        statusCode: 'TIMEOUT',
+        statusMessage: kbankTimeoutMessage('QR generate', timeoutMs),
+        response: {},
+        requestBodyMasked,
+        sentQrTypeCode,
+      }
+    }
+    throw err
   }
 }
 
@@ -645,7 +701,7 @@ export async function checkKbankQrStatus(
   opts?: KbankClientOpts
 ): Promise<KbankCheckStatusResult> {
   const ctx: KbankCtx = { runtime: opts?.runtime }
-  const timeoutMs = opts?.timeoutMs ?? 12000
+  const timeoutMs = opts?.timeoutMs ?? KBANK_DEFAULT_TIMEOUT_MS
   const token = await fetchKbankAccessToken(timeoutMs, {
     runtime: ctx.runtime,
     reason: 'inquiry',
@@ -664,10 +720,11 @@ export async function checkKbankQrStatus(
     ? normalizePartnerTxnUid(inferredOrigSource, 'ORIG')
     : ''
   const body = buildCheckStatusPayload(ctx, req, requestId, inferredOrigTxnUid)
+  const cacheKey = tokenCacheKey(ctx)
 
   logKbankTokenMetric({
     event: 'inquiry_request',
-    cacheKey: tokenCacheKey(ctx),
+    cacheKey,
     reason: 'check_status',
     api: 'inquiry',
     partnerTxnUidMasked: maskKbankPartnerTxnUid(
@@ -675,26 +732,30 @@ export async function checkKbankQrStatus(
     ),
   })
 
-  const { signal, clear } = timeoutSignal(timeoutMs)
+  const inquiryHeaders = (accessToken: string) =>
+    withProxySecret(
+      ctx,
+      {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Partner-Id': partnerId,
+        'X-Partner-Secret': partnerSecret,
+        'X-Merchant-Id': merchantId,
+      },
+      statusUrl
+    )
+
   try {
     let activeToken = token
-    let res = await fetch(statusUrl, {
-      method: 'POST',
-      headers: withProxySecret(
-        ctx,
-        {
-          Authorization: `Bearer ${activeToken.access_token}`,
-          'Content-Type': 'application/json',
-          'X-Partner-Id': partnerId,
-          'X-Partner-Secret': partnerSecret,
-          'X-Merchant-Id': merchantId,
-        },
-        statusUrl
-      ),
-      body: JSON.stringify(body),
-      cache: 'no-store',
-      signal,
-    })
+    let res = await fetchWithTimeout(
+      statusUrl,
+      {
+        method: 'POST',
+        headers: inquiryHeaders(activeToken.access_token),
+        body: JSON.stringify(body),
+      },
+      timeoutMs
+    )
     let text = await res.text()
     let json: Record<string, unknown>
     try {
@@ -706,7 +767,7 @@ export async function checkKbankQrStatus(
     if (res.status === 429 || isKbankRateLimitError(extractKbankErrorMessage(json, '', res.status))) {
       logKbankTokenMetric({
         event: 'kbank_api_429_no_retry',
-        cacheKey: tokenCacheKey(ctx),
+        cacheKey,
         reason: 'inquiry',
         httpStatus: res.status,
         api: 'inquiry',
@@ -715,34 +776,26 @@ export async function checkKbankQrStatus(
     } else if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
       logKbankTokenMetric({
         event: 'kbank_api_401_refresh',
-        cacheKey: tokenCacheKey(ctx),
+        cacheKey,
         reason: 'inquiry',
         httpStatus: 401,
         api: 'inquiry',
       })
-      await clearKbankAccessTokenCacheAsync(tokenCacheKey(ctx))
+      await clearKbankAccessTokenCacheAsync(cacheKey)
       activeToken = await fetchKbankAccessToken(timeoutMs, {
         runtime: ctx.runtime,
         forceRefresh: true,
         reason: 'http_401_inquiry',
       })
-      res = await fetch(statusUrl, {
-        method: 'POST',
-        headers: withProxySecret(
-          ctx,
-          {
-            Authorization: `Bearer ${activeToken.access_token}`,
-            'Content-Type': 'application/json',
-            'X-Partner-Id': partnerId,
-            'X-Partner-Secret': partnerSecret,
-            'X-Merchant-Id': merchantId,
-          },
-          statusUrl
-        ),
-        body: JSON.stringify(body),
-        cache: 'no-store',
-        signal,
-      })
+      res = await fetchWithTimeout(
+        statusUrl,
+        {
+          method: 'POST',
+          headers: inquiryHeaders(activeToken.access_token),
+          body: JSON.stringify(body),
+        },
+        timeoutMs
+      )
       text = await res.text()
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     }
@@ -771,8 +824,25 @@ export async function checkKbankQrStatus(
       statusMessage: successMessage || 'ok',
       response: json,
     }
-  } finally {
-    clear()
+  } catch (err) {
+    if (isKbankFetchAbortError(err)) {
+      logKbankTokenMetric({
+        event: 'kbank_api_timeout',
+        cacheKey,
+        reason: 'inquiry',
+        api: 'inquiry',
+        detail: `${timeoutMs}ms`,
+        partnerTxnUidMasked: maskKbankPartnerTxnUid(inferredOrigTxnUid || req.partnerTransactionId),
+      })
+      return {
+        ok: false,
+        requestId,
+        statusCode: 'TIMEOUT',
+        statusMessage: kbankTimeoutMessage('inquiry', timeoutMs),
+        response: {},
+      }
+    }
+    throw err
   }
 }
 
@@ -861,7 +931,7 @@ async function callKbankActionApi(
     | KbankVoidPaymentRequest
     | KbankSettlementRequest,
   fallbackRequestPrefix: string,
-  timeoutMs = 12000,
+  timeoutMs = KBANK_DEFAULT_TIMEOUT_MS,
   payloadOptions?: {
     includeOrigPartnerTxnUid?: boolean
     requireOrigPartnerTxnUid?: boolean
@@ -891,26 +961,30 @@ async function callKbankActionApi(
   const requestId = normalizePartnerTxnUid(payloadPartnerTxnUid || undefined, fallbackRequestPrefix)
 
   const requestBody = buildTxnPayload(ctx, req, requestId, payloadOptions)
-  const { signal, clear } = timeoutSignal(timeoutMs)
+  const cacheKey = tokenCacheKey(ctx)
+  const actionHeaders = (accessToken: string) =>
+    withProxySecret(
+      ctx,
+      {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Partner-Id': partnerId,
+        'X-Partner-Secret': partnerSecret,
+        'X-Merchant-Id': merchantId,
+      },
+      url
+    )
   try {
     let activeToken = token
-    let res = await fetch(url, {
-      method: 'POST',
-      headers: withProxySecret(
-        ctx,
-        {
-          Authorization: `Bearer ${activeToken.access_token}`,
-          'Content-Type': 'application/json',
-          'X-Partner-Id': partnerId,
-          'X-Partner-Secret': partnerSecret,
-          'X-Merchant-Id': merchantId,
-        },
-        url
-      ),
-      body: JSON.stringify(requestBody),
-      cache: 'no-store',
-      signal,
-    })
+    let res = await fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: actionHeaders(activeToken.access_token),
+        body: JSON.stringify(requestBody),
+      },
+      timeoutMs
+    )
     let text = await res.text()
     let json: Record<string, unknown>
     try {
@@ -922,7 +996,7 @@ async function callKbankActionApi(
     if (res.status === 429 || isKbankRateLimitError(extractKbankErrorMessage(json, '', res.status))) {
       logKbankTokenMetric({
         event: 'kbank_api_429_no_retry',
-        cacheKey: tokenCacheKey(ctx),
+        cacheKey,
         reason: pathEnvName,
         httpStatus: res.status,
         api: 'action',
@@ -930,34 +1004,26 @@ async function callKbankActionApi(
     } else if (!res.ok && shouldRetryKbankAuth(res.status, json)) {
       logKbankTokenMetric({
         event: 'kbank_api_401_refresh',
-        cacheKey: tokenCacheKey(ctx),
+        cacheKey,
         reason: pathEnvName,
         httpStatus: 401,
         api: 'action',
       })
-      await clearKbankAccessTokenCacheAsync(tokenCacheKey(ctx))
+      await clearKbankAccessTokenCacheAsync(cacheKey)
       activeToken = await fetchKbankAccessToken(timeoutMs, {
         runtime: ctx.runtime,
         forceRefresh: true,
         reason: `http_401_${fallbackRequestPrefix}`,
       })
-      res = await fetch(url, {
-        method: 'POST',
-        headers: withProxySecret(
-          ctx,
-          {
-            Authorization: `Bearer ${activeToken.access_token}`,
-            'Content-Type': 'application/json',
-            'X-Partner-Id': partnerId,
-            'X-Partner-Secret': partnerSecret,
-            'X-Merchant-Id': merchantId,
-          },
-          url
-        ),
-        body: JSON.stringify(requestBody),
-        cache: 'no-store',
-        signal,
-      })
+      res = await fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          headers: actionHeaders(activeToken.access_token),
+          body: JSON.stringify(requestBody),
+        },
+        timeoutMs
+      )
       text = await res.text()
       json = text ? (JSON.parse(text) as Record<string, unknown>) : {}
     }
@@ -985,8 +1051,24 @@ async function callKbankActionApi(
       statusMessage: statusMessage || 'ok',
       response: json,
     }
-  } finally {
-    clear()
+  } catch (err) {
+    if (isKbankFetchAbortError(err)) {
+      logKbankTokenMetric({
+        event: 'kbank_api_timeout',
+        cacheKey,
+        reason: pathEnvName,
+        api: 'action',
+        detail: `${timeoutMs}ms`,
+      })
+      return {
+        ok: false,
+        requestId,
+        statusCode: 'TIMEOUT',
+        statusMessage: kbankTimeoutMessage(fallbackRequestPrefix, timeoutMs),
+        response: {},
+      }
+    }
+    throw err
   }
 }
 
@@ -1001,7 +1083,7 @@ export async function cancelKbankQr(
     '/v1/qrpayment/cancel',
     req,
     'CCH',
-    opts?.timeoutMs ?? 12000,
+    opts?.timeoutMs ?? KBANK_DEFAULT_TIMEOUT_MS,
     { includeOrigPartnerTxnUid: true, requireOrigPartnerTxnUid: true, requireTerminalId: false }
   )
 }
@@ -1017,7 +1099,7 @@ export async function voidKbankPayment(
     '/v1/qrpayment/void',
     req,
     'VOD',
-    opts?.timeoutMs ?? 12000,
+    opts?.timeoutMs ?? KBANK_DEFAULT_TIMEOUT_MS,
     {
       includeOrigPartnerTxnUid: true,
       requireOrigPartnerTxnUid: true,
@@ -1051,7 +1133,7 @@ export async function settleKbankPayment(
     '/v1/qrpayment/settlement',
     req,
     'STM',
-    opts?.timeoutMs ?? 12000,
+    opts?.timeoutMs ?? KBANK_DEFAULT_TIMEOUT_MS,
     { requireTerminalId: true, includeQrType: true }
   )
 }

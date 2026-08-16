@@ -12,10 +12,16 @@ describe("erp-route-modules", () => {
     expect(resolveAdminPathSaasModule("/admin/settings")).toBeNull()
   })
 
-  it("maps store ops paths to pos_base", () => {
-    expect(resolveAdminPathSaasModule("/admin/store-ops")).toBe("pos_base")
-    expect(resolveAdminPathSaasModule("/admin/store-check")).toBe("pos_base")
-    expect(resolveAdminPathSaasModule("/admin/complaints")).toBe("pos_base")
+  it("maps store ops paths to store_ops, not pos_base", () => {
+    expect(resolveAdminPathSaasModule("/admin/store-ops")).toBe("store_ops")
+    expect(resolveAdminPathSaasModule("/admin/store-check")).toBe("store_ops")
+    expect(resolveAdminPathSaasModule("/admin/complaints")).toBe("store_ops")
+  })
+
+  it("keeps employee accounts on pos_base for POS-only tenants", () => {
+    expect(resolveAdminPathSaasModule("/admin/employees")).toBe("pos_base")
+    expect(resolveAdminPathSaasModule("/admin/attendance")).toBe("attendance")
+    expect(resolveAdminPathSaasModule("/admin/hr")).toBe("attendance")
   })
 
   it("maps interior and sales analytics paths", () => {
@@ -49,6 +55,12 @@ describe("erp-route-modules", () => {
 
   it("maps kbank API to kbank module", () => {
     expect(resolveApiPathSaasModule("/api/pos/kbank/generate-qr")).toBe("kbank")
+  })
+
+  it("maps store-ops APIs away from pos_base", () => {
+    expect(resolveApiPathSaasModule("/api/getStoreCheck")).toBe("store_ops")
+    expect(resolveApiPathSaasModule("/api/getStoreOpsAlertSummary")).toBe("store_ops")
+    expect(resolveApiPathSaasModule("/api/getAdminEmployee")).toBe("pos_base")
   })
 
   it("exempts login and saas admin APIs", () => {

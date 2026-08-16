@@ -7,12 +7,14 @@ import { integrationScopeFromAuth } from '@/lib/integration-scope-from-auth'
 import { resolveKbankRuntime } from '@/lib/tenant-integration-resolve'
 import {
   extractKbankQrResponseMeta,
+  isKbankFetchAbortError,
   maskKbankMessageForLog,
   resolveKbankDisplayQrTypeDetails,
   resolveKbankQrTypeCode,
 } from '@/lib/payments/kbank-api-reference'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 function withCorsHeaders(res: NextResponse): NextResponse {
   res.headers.set('Access-Control-Allow-Origin', '*')
@@ -164,7 +166,7 @@ export async function POST(req: NextRequest) {
     const requestedAt = new Date().toISOString()
     const result = await generateKbankQr(payload, { runtime: kbankRuntime })
 
-    const status = result.ok ? 200 : 422
+    const status = result.ok ? 200 : result.statusCode === 'TIMEOUT' ? 504 : 422
     const responseData = result.response && typeof result.response === 'object'
       ? (result.response as Record<string, unknown>)
       : {}
@@ -289,14 +291,21 @@ export async function POST(req: NextRequest) {
       )
     )
   } catch (e) {
-    console.error('pos/kbank/generate-qr:', e)
+    const aborted = isKbankFetchAbortError(e)
+    const message = aborted
+      ? 'KBank QR generate timed out. Please retry.'
+      : e instanceof Error
+        ? e.message
+        : 'kbank_generate_qr_error'
+    console.error('pos/kbank/generate-qr:', aborted ? message : e)
     return withCorsHeaders(
       NextResponse.json(
         {
           success: false,
-          message: e instanceof Error ? e.message : 'kbank_generate_qr_error',
+          message,
+          statusCode: aborted ? 'TIMEOUT' : null,
         },
-        { status: 500 }
+        { status: aborted ? 504 : 500 }
       )
     )
   }

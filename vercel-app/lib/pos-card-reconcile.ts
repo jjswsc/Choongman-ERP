@@ -1,6 +1,6 @@
 /**
  * 채널 확인 — 당일 POS payment_card vs 매장 통장 계정과목 4120~4124.
- * 카드 정산은 익일 입금이 흔하므로, 통장은 인식일(없으면 입금일 전날)로 일자 대조.
+ * POS는 방콕 달력일(결제일). 카드 정산은 익일 입금이 흔하므로 통장은 인식일(없으면 입금일 전날).
  */
 import { POS_SALES_COMPLETED_STATUSES } from '@/lib/pos-sales-period-aggregate'
 import { canonicalSalesStoreRowKey, rowMatchesAnySalesStoreSelection } from '@/lib/pos-sales-store-filter'
@@ -14,10 +14,12 @@ import {
   type CashBankDepositAgg,
 } from '@/lib/pos-cash-bank-deposit'
 import { attributedSalesDateForBankDeposit } from '@/lib/pos-delivery-app-bank-deposit'
+import { channelReconcilePosCalendarDate } from '@/lib/pos-channel-reconcile-match'
 import { CARD_BANK_GL_CODES } from '@/lib/pos-channel-bank-ledger'
 
 export type CardReconcileOrderRow = {
   created_at?: string | null
+  paid_at?: string | null
   store_code?: string | null
   status?: string | null
   payment_card?: number | null
@@ -77,7 +79,8 @@ export function aggregateCardReconcileRows(
     if (card <= EPS) continue
     const store = canonicalSalesStoreRowKey(String(row.store_code ?? '').trim())
     if (!store) continue
-    const dateRaw = options?.businessDateForRow?.(row) || String(row.created_at ?? '').slice(0, 10)
+    const dateRaw =
+      options?.businessDateForRow?.(row) || channelReconcilePosCalendarDate(row)
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : String(dateRaw).slice(0, 10)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
 

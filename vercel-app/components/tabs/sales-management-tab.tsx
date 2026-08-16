@@ -81,7 +81,6 @@ import {
   getPosSalesByPaymentBreakdown,
   type PosSalesPaymentBreakdown,
   getPosSalesByStore,
-  getPosCancelReasonSummary,
   type PosSalesPeriodRow,
 } from "@/lib/api-client"
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
@@ -129,7 +128,6 @@ import {
 import {
   SALES_IA,
   PERIOD_GROUP_TOPIC_VIEWS,
-  type AnalyticsView,
   type PeriodGroupValue,
 } from "@/components/tabs/sales-management-ia"
 import { SalesOverviewPanel } from "@/components/tabs/sales-overview-panel"
@@ -156,6 +154,10 @@ import {
   PERIOD_PAYMENT_COLUMNS,
   periodPaymentAmount,
   resolveDefaultSalesLanding,
+  resolveSalesPeriodGroupForFastQuery,
+  isSalesHeavyTopicSkippedOnLongRange,
+  isSalesLongRangeQuery,
+  isSalesPeriodGroupAllowedOnLongRange,
   SALES_FILTER_PRESET_STORAGE_KEY,
   SALES_ORDER_TYPE_TOGGLES,
   salesWaterfallGross,
@@ -261,6 +263,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   /** 마지막으로「조회」로 성공 적용된 필터 키(자동 로드 없음; 키가 바뀌면 결과 비움) */
   const [fetchedAnalyticsKey, setFetchedAnalyticsKey] = React.useState("")
   const [periodGroup, setPeriodGroup] = React.useState<PeriodGroupValue>(defaultLanding.periodGroup)
+  const isLongRangeSalesQuery = React.useMemo(
+    () => isSalesLongRangeQuery(startStr, endStr),
+    [startStr, endStr]
+  )
+  const periodGroupUi = React.useMemo(
+    () => resolveSalesPeriodGroupForFastQuery(periodGroup, isLongRangeSalesQuery),
+    [periodGroup, isLongRangeSalesQuery]
+  )
   const [menuSearch, setMenuSearch] = React.useState("")
   const [storeSearch, setStoreSearch] = React.useState("")
   const [storePickerOpen, setStorePickerOpen] = React.useState(false)
@@ -389,24 +399,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     prevRange: number
     prevWeek: number
   }>({ current: 0, prevRange: 0, prevWeek: 0 })
-  const [cancelReasonSummary, setCancelReasonSummary] = React.useState<{
-    lineRows: { reason: string; count: number; amount: number }[]
-    orderRows: { reason: string; count: number; amount: number }[]
-    lineTotalCount: number
-    lineTotalAmount: number
-    orderTotalCount: number
-    orderTotalAmount: number
-    truncated: boolean
-  }>({
-    lineRows: [],
-    orderRows: [],
-    lineTotalCount: 0,
-    lineTotalAmount: 0,
-    orderTotalCount: 0,
-    orderTotalAmount: 0,
-    truncated: false,
-  })
-  const [cancelReasonLoading, setCancelReasonLoading] = React.useState(false)
 
   const tr = React.useCallback((key: string, fallback: string) => tOr(t, key, fallback), [t])
 
@@ -676,14 +668,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   /** 구버전·캐시 행에 누락된 집계 필드 보정 — 홀 전용 지표와 조회 건당 분리 */
   const periodChartRows = React.useMemo(
-    () => periodData.map((r) => mapPosSalesPeriodRowToChartRow(r, periodGroup, tr)),
-    [periodData, periodGroup, tr]
+    () => periodData.map((r) => mapPosSalesPeriodRowToChartRow(r, periodGroupUi, tr)),
+    [periodData, periodGroupUi, tr]
   )
 
   /** 기간 막대차트가 시간대(24슬롯)일 때 라벨 겹침 완화 */
   const periodBarXAxisProps = React.useMemo(
     () =>
-      periodGroup === "hour"
+      periodGroupUi === "hour"
         ? {
             angle: -55,
             textAnchor: "end" as const,
@@ -692,7 +684,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             interval: 0,
           }
         : { tick: { fontSize: 11, ...ERP_NUMERIC_CHART_TICK } },
-    [periodGroup]
+    [periodGroupUi]
   )
 
   const periodChartYAxisProps = React.useMemo(
@@ -745,7 +737,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "store" ||
       selectedView === "store-category" ||
       selectedView === "payment")
-  const insightShowMenu = selectedView === "menu"
+  const insightShowMenu = selectedView === "menu" && !isLongRangeSalesQuery
   const insightShowChannel = selectedView === "channel"
   const needsPeriodGroup =
     selectedView != null &&
@@ -767,7 +759,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     return base.map((r) => {
       const row: Record<string, string | number> = {
         key: r.key,
-        axisLabel: translatePeriodAxisLabel({ key: r.key, label: r.label }, periodGroup, tr),
+        axisLabel: translatePeriodAxisLabel({ key: r.key, label: r.label }, periodGroupUi, tr),
       }
       for (const s of storesForCompareChart) {
         const sk = resolvePeriodSeriesStoreKey(periodSplitSeries, s)
@@ -776,7 +768,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       }
       return row
     })
-  }, [periodSplitSeries, storesForCompareChart, periodGroup, tr])
+  }, [periodSplitSeries, storesForCompareChart, periodGroupUi, tr])
 
   /** 매장·기간 목록 — 단일 매장은 periodData(일별)와 동일, 복수 매장은 split 시리즈 */
   const storeByPeriodFlatRows = React.useMemo(() => {
@@ -822,7 +814,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         out.push({
           storeCode: code,
           storeDisplay: posStoreDisplayName(code),
-          ...mapPosSalesPeriodRowToChartRow(pr, periodGroup, tr),
+          ...mapPosSalesPeriodRowToChartRow(pr, periodGroupUi, tr),
         })
       }
     }
@@ -832,7 +824,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     selectedStoresParam,
     periodChartRows,
     periodSplitSeries,
-    periodGroup,
+    periodGroupUi,
     tr,
     posStoreDisplayName,
     salesFetchStoresParam,
@@ -970,18 +962,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     tr
   )
 
-  const handleCancelReasonDrilldown = React.useCallback(
-    (reason: string, scope: "line" | "order") => {
-      const q = new URLSearchParams()
-      q.set("start", startStr)
-      q.set("end", endStr)
-      q.set("cancelScope", scope)
-      q.set("cancelReason", reason)
-      router.push(`/admin/pos-orders?${q.toString()}`)
-    },
-    [router, startStr, endStr]
-  )
-
   const dataFilterKey = React.useMemo(
     () =>
       [
@@ -1041,7 +1021,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       forecastLookbackRows,
       forecastActualRows,
       summaryCards,
-      cancelReasonSummary,
     })
   }, [
     fetchedAnalyticsKey,
@@ -1066,7 +1045,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     forecastLookbackRows,
     forecastActualRows,
     summaryCards,
-    cancelReasonSummary,
   ])
 
   const salesAnalyticsPlaceholder = React.useMemo(() => {
@@ -1089,10 +1067,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     return null
   }, [hasData, canMultiStorePicker, selectedStores.length, loading, showSalesResults, tr])
 
-  /** 상단(현재·직전동일·전주) — 기간/매장×기간 탐색 주제만 3칸 비교, 그 외 금액 위주는 현재만, 메뉴·채널·배달은 생략 */
+  /** 상단(현재·직전동일·전주) — 31일 이내 기간/매장×기간만 3칸 비교. 긴 기간·그 외 금액 위주는 현재만 */
   const summaryRowShowFull =
     showSalesResults &&
     !isHoursPanel &&
+    !isLongRangeSalesQuery &&
     selectedView != null &&
     (selectedView === "period" || selectedView === "store-period")
   const summaryRowShowCurrentOnly =
@@ -1107,17 +1086,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "discount-all" ||
       selectedView === "yoy-compare" ||
       selectedView === "mom-compare" ||
-      selectedView === "forecast")
+      selectedView === "forecast" ||
+      (isLongRangeSalesQuery && (selectedView === "period" || selectedView === "store-period")))
 
   const showInsightPanel =
-    !isHoursPanel &&
-    showSalesResults &&
-    (insightShowTotals ||
-      insightShowMenu ||
-      insightShowChannel ||
-      cancelReasonLoading ||
-      cancelReasonSummary.lineRows.length > 0 ||
-      cancelReasonSummary.orderRows.length > 0)
+    !isHoursPanel && showSalesResults && (insightShowTotals || insightShowMenu || insightShowChannel)
 
   const totalsSummary = React.useMemo(() => {
     const subtotal = periodChartRows.reduce((a, x) => a + Number(x.subtotal ?? 0), 0)
@@ -1287,7 +1260,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setForecastLookbackRows(snap.forecastLookbackRows)
     setForecastActualRows(snap.forecastActualRows)
     setSummaryCards(snap.summaryCards)
-    setCancelReasonSummary(snap.cancelReasonSummary)
     setFetchedAnalyticsKey(snap.analyticsParamKey)
   }, [analyticsParamKey, fetchedAnalyticsKey, isHoursPanel])
 
@@ -1436,7 +1408,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (!canExportExcel) return
     const numCell = (n: number) => Math.round(Number(n || 0) * 100) / 100
     const periodCol =
-      periodGroup === "hour" ? tr("salesPeriodHourColumn", "시간대") : tr("salesPeriod", "기간")
+      periodGroupUi === "hour" ? tr("salesPeriodHourColumn", "시간대") : tr("salesPeriod", "기간")
     const paymentColFormats = PERIOD_PAYMENT_COLUMNS.map(() => salesExcelCol.money)
     const sheets: SalesExcelSheet[] = []
 
@@ -2552,9 +2524,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const needForecast = selectedView === "forecast"
     const needPeriodChart =
       selectedView != null &&
-      (PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView) || selectedView === "overview")
+      (PERIOD_GROUP_TOPIC_VIEWS.includes(selectedView) || selectedView === "overview") &&
+      !(isLongRangeSalesQuery && isSalesHeavyTopicSkippedOnLongRange(selectedView))
     const effectivePeriodGroup: PeriodGroupValue =
-      selectedView === "overview" ? "day" : periodGroup
+      selectedView === "overview"
+        ? isLongRangeSalesQuery
+          ? "month"
+          : "day"
+        : resolveSalesPeriodGroupForFastQuery(periodGroup, isLongRangeSalesQuery)
     const needFullSummary =
       selectedView === "period" ||
       selectedView === "store-period" ||
@@ -2565,12 +2542,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const needCurrentSummaryOnly =
       !needFullSummary &&
       (selectedView === "store" || selectedView === "store-category" || selectedView === "payment")
-    const needCancelReason =
-      selectedView === "period" ||
-      selectedView === "store-period" ||
-      selectedView === "store" ||
-      selectedView === "store-category" ||
-      selectedView === "payment"
     const guarded =
       <T,>(setter: React.Dispatch<React.SetStateAction<T>>) =>
       (v: T) => {
@@ -2593,8 +2564,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gForecastLookback = guarded(setForecastLookbackRows)
     const gForecastActual = guarded(setForecastActualRows)
     const gSummary = guarded(setSummaryCards)
-    const gCancelReasonSummary = guarded(setCancelReasonSummary)
     setLoading(true)
+    if (isLongRangeSalesQuery && isSalesHeavyTopicSkippedOnLongRange(selectedView)) {
+      setPeriodSplitSeries(null)
+      setPeriodData([])
+      setPeriodTruncated(false)
+    }
     if (
       needFullSummary &&
       (selectedView === "period" || selectedView === "store-period" || selectedView === "overview")
@@ -2797,6 +2772,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       )
     }
     if (needChannelReconcile) {
+      if (isLongRangeSalesQuery) {
+        gAppReconcile(EMPTY_POS_DELIVERY_APP_RECONCILE)
+        gKbankQrReconcile(EMPTY_POS_KBANK_QR_RECONCILE)
+        gCardReconcile(EMPTY_POS_CARD_RECONCILE)
+        gCashReconcile(EMPTY_POS_CASH_RECONCILE)
+      } else {
       tasks.push(
         getPosDeliveryAppReconcile({
           startStr,
@@ -2833,6 +2814,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           .then(gCashReconcile)
           .catch(() => gCashReconcile(EMPTY_POS_CASH_RECONCILE))
       )
+      }
     }
     if (needChannel) {
       tasks.push(
@@ -2901,6 +2883,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       )
     }
     if (needMenu) {
+      if (isLongRangeSalesQuery) {
+        gMenu([])
+      } else {
       tasks.push(
         menuFetcher({
           startStr,
@@ -2913,6 +2898,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           .then(gMenu)
           .catch(() => gMenu([]))
       )
+      }
     }
     if (needDiscountAnalytics) {
       tasks.push(
@@ -2928,7 +2914,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           .catch(() => gPromoBundle(EMPTY_POS_SALES_BY_PROMO))
       )
     }
-    if (needFullSummary && (selectedView === "period" || selectedView === "store-period" || selectedView === "overview")) {
+    if (
+      !isLongRangeSalesQuery &&
+      needFullSummary &&
+      (selectedView === "period" || selectedView === "store-period" || selectedView === "overview")
+    ) {
       const storeSummaryFetcher = offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore
       const sumScopedStoreTotal = (rows: { total?: number }[]): number =>
         rows.reduce((s, r) => s + (Number(r.total) || 0), 0)
@@ -2998,63 +2988,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       }
       void fillPrevSummary()
     }
-    // 취소사유는 스피너를 막지 않음 — 메인 집계와 병렬이지만 Promise.all 밖
-    if (needCancelReason) {
-      setCancelReasonLoading(true)
-      gCancelReasonSummary({
-        lineRows: [],
-        orderRows: [],
-        lineTotalCount: 0,
-        lineTotalAmount: 0,
-        orderTotalCount: 0,
-        orderTotalAmount: 0,
-        truncated: false,
-      })
-      void getPosCancelReasonSummary({
-        startStr,
-        endStr,
-        stores: salesFetchStoresParam,
-        orderTypes: orderTypesParam,
-      })
-        .then((res) => {
-          if (loadIdRef.current !== id) return
-          gCancelReasonSummary({
-            lineRows: res.lineRows,
-            orderRows: res.orderRows,
-            lineTotalCount: res.lineTotalCount,
-            lineTotalAmount: res.lineTotalAmount,
-            orderTotalCount: res.orderTotalCount,
-            orderTotalAmount: res.orderTotalAmount,
-            truncated: res.truncated === true,
-          })
-        })
-        .catch(() => {
-          if (loadIdRef.current !== id) return
-          gCancelReasonSummary({
-            lineRows: [],
-            orderRows: [],
-            lineTotalCount: 0,
-            lineTotalAmount: 0,
-            orderTotalCount: 0,
-            orderTotalAmount: 0,
-            truncated: false,
-          })
-        })
-        .finally(() => {
-          if (loadIdRef.current === id) setCancelReasonLoading(false)
-        })
-    } else {
-      setCancelReasonLoading(false)
-      gCancelReasonSummary({
-        lineRows: [],
-        orderRows: [],
-        lineTotalCount: 0,
-        lineTotalAmount: 0,
-        orderTotalCount: 0,
-        orderTotalAmount: 0,
-        truncated: false,
-      })
-    }
     Promise.all(tasks).finally(() => {
       if (loadIdRef.current === id) {
         setLoading(false)
@@ -3079,6 +3012,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     canSearchAll,
     selectedStores.length,
     forecastHorizon,
+    isLongRangeSalesQuery,
   ])
 
   useErpRefetchOnActivate(() => {
@@ -3585,7 +3519,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       }}
                     >
                       <span className="min-w-0 truncate text-left text-sm font-medium">
-                        {periodPickerFlatRows.find((r) => r.value === periodGroup)?.label ?? periodGroup}
+                        {periodPickerFlatRows.find((r) => r.value === periodGroupUi)?.label ?? periodGroupUi}
                       </span>
                       <span className="shrink-0 text-xs text-muted-foreground">{periodPickerOpen ? "▲" : "▼"}</span>
                     </Button>
@@ -3613,18 +3547,22 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             </li>
                           ) : (
                             filteredPeriodPickerRows.map((row) => {
-                              const active = periodGroup === row.value
+                              const lockedOut =
+                                isLongRangeSalesQuery && !isSalesPeriodGroupAllowedOnLongRange(row.value)
+                              const active = periodGroupUi === row.value
                               return (
                                 <li key={row.value} role="presentation">
                                   <button
                                     type="button"
                                     role="option"
                                     aria-selected={active}
+                                    disabled={lockedOut}
                                     className={
-                                      "flex w-full px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/80 " +
+                                      "flex w-full px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50 " +
                                       (active ? "bg-muted" : "")
                                     }
                                     onClick={() => {
+                                      if (lockedOut) return
                                       userSelectedRef.current.periodGroup = row.value
                                       setPeriodGroup(row.value)
                                       setPeriodPickerOpen(false)
@@ -3718,19 +3656,25 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         {tr("salesPeriodGranularityLabel", "집계 기간")}
                       </span>
                       <div className="flex flex-wrap gap-2">
-                        {PERIOD_GROUP.map((g) => (
+                        {PERIOD_GROUP.map((g) => {
+                          const lockedOut =
+                            isLongRangeSalesQuery && !isSalesPeriodGroupAllowedOnLongRange(g.value)
+                          return (
                           <Button
                             key={g.value}
                             size="sm"
-                            variant={periodGroup === g.value ? "default" : "outline"}
+                            variant={periodGroupUi === g.value ? "default" : "outline"}
+                            disabled={lockedOut}
                             onClick={() => {
+                              if (lockedOut) return
                               userSelectedRef.current.periodGroup = g.value
                               setPeriodGroup(g.value)
                             }}
                           >
                             {tr(g.labelKey, I18N_KO[g.labelKey] ?? g.labelKey)}
                           </Button>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   </>
@@ -3776,6 +3720,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           </>
           ) : null}
 
+          {showSalesResults && isLongRangeSalesQuery ? (
+            <p className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
+              {tr(
+                "salesLongRangeFastQueryHint",
+                "31일을 넘는 조회는 월별만 집계하고, 직전 동일기간·전주 동기간 비교는 생략합니다. 시간대·메뉴·채널 확인은 기간을 한 달 이내로 나눠 주세요."
+              )}
+            </p>
+          ) : null}
+
           {showSalesResults &&
           periodTruncated &&
           selectedView !== "channel-reconcile" &&
@@ -3802,10 +3755,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             insightTopMenus={insightTopMenus}
             insightBottomMenus={insightBottomMenus}
             insightTopChannels={insightTopChannels}
-            cancelReasonSummary={cancelReasonSummary}
-            cancelReasonLoading={cancelReasonLoading}
             showInsightPanel={showInsightPanel}
-            onCancelReasonDrilldown={handleCancelReasonDrilldown}
           />
 
           <div className="mt-6 overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-lg border p-4">
@@ -3883,7 +3833,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <thead>
                       <tr className="border-b text-muted-foreground">
                         <th className="py-2 text-left">
-                          {periodGroup === "hour"
+                          {periodGroupUi === "hour"
                             ? tr("salesPeriodHourColumn", "시간대")
                             : tr("salesPeriod", "기간")}
                         </th>
@@ -4055,7 +4005,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           <tr className="border-b bg-muted/40 text-muted-foreground">
                             <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
                             <th className="px-3 py-2 text-left">
-                              {periodGroup === "hour"
+                              {periodGroupUi === "hour"
                                 ? tr("salesPeriodHourColumn", "시간대")
                                 : tr("salesPeriod", "기간")}
                             </th>
@@ -4318,6 +4268,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   startStr={startStr}
                   endStr={endStr}
                   storesQuery={selectedStoresKey || undefined}
+                  showCompareCards={!isLongRangeSalesQuery}
                   currentTotal={summaryCards.current}
                   prevRangeTotal={summaryCards.prevRange}
                   prevWeekTotal={summaryCards.prevWeek}

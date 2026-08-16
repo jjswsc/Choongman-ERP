@@ -25,6 +25,7 @@ export type DeliveryAppReconcileFeeApp = (typeof DELIVERY_APP_RECONCILE_FEE_APPS
 
 export type DeliveryAppReconcileOrderRow = {
   created_at?: string | null
+  paid_at?: string | null
   store_code?: string | null
   status?: string | null
   order_type?: string | null
@@ -69,7 +70,7 @@ export type DeliveryAppReconcileRow = {
   suggestedPayout: number
   settledFee: number | null
   settledNet: number | null
-  /** 통장 거래에 등록한 배달앱 입금(인식일 기준). 없으면 null */
+  /** 통장 거래에 등록한 배달앱 입금(인식일, 익일 입금). 없으면 null */
   bankDepositAmt: number | null
   days: DeliveryAppReconcileDayRow[]
 }

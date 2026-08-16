@@ -28,6 +28,7 @@ function labelsFromLang(lang: string): Record<string, string> {
     return {
       saasAdminMod_pos_base: "POS 기본",
       saasAdminMod_pos_device: "POS 단말",
+      saasAdminMod_store_ops: "매장 운영",
       saasAdminMod_kbank: "KBank",
       saasAdminMod_grab: "Grab",
       saasAdminMod_member_mgmt: "회원 CRM",

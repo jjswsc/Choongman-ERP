@@ -19,6 +19,7 @@ import { SaasPricingBreakdownVisual, SaasPricingColumnHead } from "@/components/
 import { SAAS_PRICING_TONE } from "@/components/saas/saas-pricing-visual"
 import {
   applyCatalogWholesaleToModules,
+  applyPosOnlyModuleEnabled,
   cloneDefaultModulePrices,
   normalizeModulePrices,
   syncFeaturesFromModules,
@@ -243,6 +244,23 @@ export function SaasModulePricingPanel({ tenant, onChange, syncFeaturesOnModuleC
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" disabled={loadingCatalog} onClick={() => void loadGlobalCatalog()}>
           {t("saasAdminCust_moduleLoadCatalog")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          title={t("saasAdminCust_modulePosOnlyPresetHint")}
+          onClick={() => {
+            const modules = applyPosOnlyModuleEnabled(modulePrices)
+            applyModules(
+              modules,
+              syncFeaturesOnModuleChange && pricingMode === "module"
+                ? syncFeaturesFromModules(tenant.features, modules)
+                : undefined
+            )
+          }}
+        >
+          {t("saasAdminCust_modulePosOnlyPreset")}
         </Button>
         {scope.isPlatform ? (
           <Button type="button" variant="secondary" size="sm" asChild>

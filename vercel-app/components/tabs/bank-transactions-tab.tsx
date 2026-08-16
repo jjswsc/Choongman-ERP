@@ -89,6 +89,7 @@ import {
   coercePosStoreImportDepositCategory,
   isPosRevenueDepositCategory,
 } from "@/lib/bank-import-deposit-category"
+import { defaultBankDepositSalesDateForRow } from "@/lib/pos-channel-reconcile-match"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 import { useRouter, useSearchParams } from "next/navigation"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -2251,7 +2252,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       const note = edit?.note?.trim() || undefined
       const salesDate =
         r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)
-          ? edit?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()
+          ? edit?.salesDate ||
+            defaultBankDepositSalesDateForRow({
+              transDate: r.transDate,
+              category,
+              accountSubjectCode: revenueAccountOptions.find((s) => Number(s.id) === Number(accountSubjectId))?.code,
+            })
           : undefined
       const expenseDate =
         r.transType === "withdraw" && category === "expense"
@@ -3036,7 +3042,23 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
                                   <Input
                                     type="date"
-                                    value={edits?.salesDate ?? r.salesDate ?? (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()}
+                                    value={
+                                      edits?.salesDate ??
+                                      r.salesDate ??
+                                      defaultBankDepositSalesDateForRow({
+                                        transDate: r.transDate,
+                                        category: cat,
+                                        accountSubjectCode: revenueAccountOptions.find(
+                                          (s) =>
+                                            Number(s.id) ===
+                                            Number(
+                                              edits?.accountSubjectId !== undefined
+                                                ? edits.accountSubjectId
+                                                : r.accountSubjectId
+                                            )
+                                        )?.code,
+                                      })
+                                    }
                                     onChange={(e) => r.id && setQueryRowEdit(r.id, "salesDate", e.target.value)}
                                     className="h-8 text-xs min-w-[112px] w-full max-w-[112px] mx-auto"
                                   />
@@ -3711,7 +3733,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(impCat) ? (
                             <Input
                               type="date"
-                              value={importRowEdits[idx]?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()}
+                              value={
+                                importRowEdits[idx]?.salesDate ||
+                                defaultBankDepositSalesDateForRow({
+                                  transDate: r.transDate,
+                                  category: impCat,
+                                  accountSubjectCode: revenueAccountOptions.find(
+                                    (s) => Number(s.id) === Number(importRowEdits[idx]?.accountSubjectId)
+                                  )?.code,
+                                })
+                              }
                               onChange={(e) => setImportRowEdit(idx, "salesDate", e.target.value)}
                               className="h-8 text-xs w-[110px]"
                             />

@@ -326,6 +326,14 @@ export function AdminSalesDashboardCharts({
       .sort((a, b) => b.sales - a.sales)
   }, [deliveryData.items, tr])
 
+  /** 배달 채널 합계만. API `total`은 홀+포장+배달 전체라 쓰면 안 됨. */
+  const deliveryPlatformTotal = React.useMemo(() => {
+    const deliveryItem = deliveryData.items.find((x) => x.channelKey === "delivery")
+    const fromItem = Number(deliveryItem?.sales ?? 0) || 0
+    if (fromItem > 0) return fromItem
+    return deliveryPlatformRows.reduce((sum, r) => sum + r.sales, 0)
+  }, [deliveryData.items, deliveryPlatformRows])
+
   const salesMgmtHref = React.useMemo(() => {
     const q = new URLSearchParams()
     q.set("menu", "sales-compare")
@@ -546,7 +554,7 @@ export function AdminSalesDashboardCharts({
                         const pct =
                           payload?.pct != null && Number.isFinite(payload.pct)
                             ? `${Number(payload.pct).toFixed(1)}%`
-                            : formatSharePercent(v, deliveryData.total)
+                            : formatSharePercent(v, deliveryPlatformTotal)
                         return [pct, tr("salesRatio", "비율")]
                       }}
                     />
@@ -577,7 +585,7 @@ export function AdminSalesDashboardCharts({
                   </tbody>
                 </table>
                 <p className="border-t px-3 py-2 text-[11px] text-muted-foreground">
-                  {tr("salesTotal", "총")} {formatSalesAmount(deliveryData.total)} ({tr("salesAmountKindDelivery", "배달")})
+                  {tr("salesTotal", "총")} {formatSalesAmount(deliveryPlatformTotal)} ({tr("salesAmountKindDelivery", "배달")})
                 </p>
               </div>
             </div>

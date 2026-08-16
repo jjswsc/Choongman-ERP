@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { salesWaterfallGross } from "@/components/tabs/sales-management-shared"
+import {
+  isSalesHeavyTopicSkippedOnLongRange,
+  isSalesLongRangeQuery,
+  isSalesPeriodGroupAllowedOnLongRange,
+  resolveSalesPeriodGroupForFastQuery,
+  salesWaterfallGross,
+} from "@/components/tabs/sales-management-shared"
 
 describe("salesWaterfallGross", () => {
   it("equals net sales after subtracting discount and service (VAT-included identity)", () => {
@@ -24,5 +30,29 @@ describe("salesWaterfallGross", () => {
     })
     expect(correct).toBe(inclusiveSubtotal)
     expect(correct).not.toBe(wrongGross)
+  })
+})
+
+describe("sales long-range fast query", () => {
+  it("treats 31 inclusive days as short and 32 as long", () => {
+    expect(isSalesLongRangeQuery("2026-07-01", "2026-07-31")).toBe(false)
+    expect(isSalesLongRangeQuery("2026-07-01", "2026-08-01")).toBe(true)
+    expect(isSalesLongRangeQuery("2026-06-01", "2026-08-16")).toBe(true)
+  })
+
+  it("keeps year/month and coerces hour/day/week/dow to month on long range", () => {
+    expect(isSalesPeriodGroupAllowedOnLongRange("month")).toBe(true)
+    expect(isSalesPeriodGroupAllowedOnLongRange("hour")).toBe(false)
+    expect(resolveSalesPeriodGroupForFastQuery("hour", true)).toBe("month")
+    expect(resolveSalesPeriodGroupForFastQuery("day", true)).toBe("month")
+    expect(resolveSalesPeriodGroupForFastQuery("year", true)).toBe("year")
+    expect(resolveSalesPeriodGroupForFastQuery("hour", false)).toBe("hour")
+  })
+
+  it("skips menu and channel-check topics on long range, not period", () => {
+    expect(isSalesHeavyTopicSkippedOnLongRange("menu")).toBe(true)
+    expect(isSalesHeavyTopicSkippedOnLongRange("channel-reconcile")).toBe(true)
+    expect(isSalesHeavyTopicSkippedOnLongRange("app-reconcile")).toBe(true)
+    expect(isSalesHeavyTopicSkippedOnLongRange("period")).toBe(false)
   })
 })

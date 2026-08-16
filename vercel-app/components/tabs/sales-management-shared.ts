@@ -3,7 +3,8 @@ import type { PosSalesByPromoResult, PosSalesPeriodRow, PosSalesPromoAggregateTo
 import { translatePeriodAxisLabel } from "@/lib/sales-analytics-labels"
 import { rowMatchesSalesStoreSelection } from "@/lib/pos-sales-store-filter"
 import type { PosOrderTypeValue } from "@/lib/pos-sales-order-type-filter"
-import type { PeriodGroupValue } from "./sales-management-ia"
+import { diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
+import type { AnalyticsView, PeriodGroupValue } from "./sales-management-ia"
 
 /** 번역 누락 시 주제·힌트 라벨 폴백 (ko 기준) */
 export const I18N_KO = i18n.ko as Record<string, string>
@@ -18,6 +19,30 @@ export const PERIOD_GROUP = [
 ] as const
 
 export const PERIOD_GROUP_VALUES = new Set(PERIOD_GROUP.map((g) => g.value))
+
+/** 포함 일수가 이 값을 넘으면 비교 카드·시간대/메뉴/채널확인을 생략하고 월별만 집계 */
+export const SALES_FAST_QUERY_MAX_DAYS = 31
+
+export function isSalesLongRangeQuery(startStr: string, endStr: string): boolean {
+  return diffDaysInclusiveBangkok(startStr, endStr) > SALES_FAST_QUERY_MAX_DAYS
+}
+
+export function isSalesPeriodGroupAllowedOnLongRange(group: PeriodGroupValue): boolean {
+  return group === "year" || group === "month"
+}
+
+/** 긴 기간은 연·월만. 주·일·시간대·요일은 월별로 강제 */
+export function resolveSalesPeriodGroupForFastQuery(
+  group: PeriodGroupValue,
+  longRange: boolean
+): PeriodGroupValue {
+  if (!longRange || isSalesPeriodGroupAllowedOnLongRange(group)) return group
+  return "month"
+}
+
+export function isSalesHeavyTopicSkippedOnLongRange(view: AnalyticsView): boolean {
+  return view === "menu" || view === "channel-reconcile" || view === "app-reconcile"
+}
 
 export type PeriodPaymentField =
   | "cashSales"

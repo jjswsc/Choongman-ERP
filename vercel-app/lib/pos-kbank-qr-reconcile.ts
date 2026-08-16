@@ -1,6 +1,6 @@
 /**
  * 채널 확인 — KBank QR(PromptPay) 당일 POS 합계.
- * K Merchant는 익일 반영이 일반적. 통장은 인식일(없으면 입금일 전날)로 POS 영업일과 대조.
+ * POS는 방콕 달력일(결제일). 통장 4130은 입금일(당일 입금이 많아 인식일 T-1을 쓰지 않음).
  */
 import { POS_SALES_COMPLETED_STATUSES } from '@/lib/pos-sales-period-aggregate'
 import { canonicalSalesStoreRowKey, rowMatchesAnySalesStoreSelection } from '@/lib/pos-sales-store-filter'
@@ -13,11 +13,12 @@ import {
   cashBankDepositStoreDateKey,
   type CashBankDepositAgg,
 } from '@/lib/pos-cash-bank-deposit'
-import { attributedSalesDateForBankDeposit } from '@/lib/pos-delivery-app-bank-deposit'
+import { bankQrDepositDate, channelReconcilePosCalendarDate } from '@/lib/pos-channel-reconcile-match'
 import { CHANNEL_BANK_GL_CODES } from '@/lib/pos-channel-bank-ledger'
 
 export type KbankQrReconcileOrderRow = {
   created_at?: string | null
+  paid_at?: string | null
   store_code?: string | null
   status?: string | null
   payment_qr?: number | null
@@ -76,7 +77,8 @@ export function aggregateKbankQrReconcileRows(
     if (qr <= EPS) continue
     const store = canonicalSalesStoreRowKey(String(row.store_code ?? '').trim())
     if (!store) continue
-    const dateRaw = options?.businessDateForRow?.(row) || String(row.created_at ?? '').slice(0, 10)
+    const dateRaw =
+      options?.businessDateForRow?.(row) || channelReconcilePosCalendarDate(row)
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : String(dateRaw).slice(0, 10)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
 
@@ -161,7 +163,7 @@ export function aggregateQrBankDeposits(params: {
     const storeRaw = String(row.accountStore || '').trim()
     if (!storeRaw) continue
     if (storeCodes.length > 0 && !rowMatchesAnySalesStoreSelection(storeRaw, storeCodes)) continue
-    const date = attributedSalesDateForBankDeposit(row)
+    const date = bankQrDepositDate(row)
     if (!date || date < start || date > end) continue
     const amt = Math.abs(Number(row.amount) || 0)
     if (amt <= 0.005) continue

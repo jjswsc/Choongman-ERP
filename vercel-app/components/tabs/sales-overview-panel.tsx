@@ -30,6 +30,7 @@ export type SalesOverviewPanelProps = {
   currentTotal: number
   prevRangeTotal: number
   prevWeekTotal: number
+  showCompareCards?: boolean
   channelRows: ChannelRow[]
   storeRows: StoreRow[]
   paymentBreakdown: PosSalesPaymentBreakdown
@@ -75,6 +76,7 @@ export function SalesOverviewPanel({
   currentTotal,
   prevRangeTotal,
   prevWeekTotal,
+  showCompareCards = true,
   channelRows,
   storeRows,
   paymentBreakdown,
@@ -137,7 +139,7 @@ export function SalesOverviewPanel({
         )}
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={`grid gap-3 sm:grid-cols-2 ${showCompareCards ? "lg:grid-cols-4" : "lg:grid-cols-2"}`}>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
@@ -148,6 +150,7 @@ export function SalesOverviewPanel({
             {formatAmount(currentTotal)}
           </CardContent>
         </Card>
+        {showCompareCards ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
@@ -161,6 +164,8 @@ export function SalesOverviewPanel({
             </p>
           </CardContent>
         </Card>
+        ) : null}
+        {showCompareCards ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
@@ -171,6 +176,7 @@ export function SalesOverviewPanel({
             {formatAmount(prevWeekTotal)}
           </CardContent>
         </Card>
+        ) : null}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
@@ -215,7 +221,7 @@ export function SalesOverviewPanel({
         {periodDayRows.length > 0 ? (
           <div className="rounded-lg border p-3">
             <h3 className="mb-2 text-sm font-semibold">
-              {tr("salesOverviewDailyTrend", "일별 매출 추이")}
+              {tr("salesPeriodTrendChartLabel", "매출 추이 (집계 기간)")}
             </h3>
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">

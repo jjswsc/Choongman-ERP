@@ -85,15 +85,6 @@ export type SalesManagementViewCache = {
   forecastLookbackRows: PosSalesPeriodRow[]
   forecastActualRows: PosSalesPeriodRow[]
   summaryCards: { current: number; prevRange: number; prevWeek: number }
-  cancelReasonSummary: {
-    lineRows: { reason: string; count: number; amount: number }[]
-    orderRows: { reason: string; count: number; amount: number }[]
-    lineTotalCount: number
-    lineTotalAmount: number
-    orderTotalCount: number
-    orderTotalAmount: number
-    truncated: boolean
-  }
 }
 
 let viewCache: SalesManagementViewCache | null = null

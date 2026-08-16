@@ -194,7 +194,7 @@ export function SalesDeliveryAppReconcilePanel(props: {
       <p className="text-xs text-muted-foreground leading-relaxed">
         {tr(
           "salesAppReconcileIntro",
-          "Grab·LINE MAN·Shopee를 같은 형식으로 봅니다. 합계는 배달+매장앱결제(dine)이고, 배달 건수에는 dine을 넣지 않습니다. 홀 현금·카드는 제외합니다. 예상 입금은 설정 수수료% 기준이며, 통장 입금은 해당 매장 통장 계정과목(4111 Grab·4112 LINE MAN·4113 Shopee)입니다. 행을 펼치면 POS 영업일과 통장 인식일을 맞춰 틀린 날을 찾습니다."
+          "Grab·LINE MAN·Shopee를 같은 형식으로 봅니다. 합계는 배달+매장앱결제(dine)이고, 배달 건수에는 dine을 넣지 않습니다. 홀 현금·카드는 제외합니다. 예상 입금은 설정 수수료% 기준이며, 통장 입금은 해당 매장 통장 계정과목(4111 Grab·4112 LINE MAN·4113 Shopee)입니다. 행을 펼치면 방콕 달력일과 통장 인식일(익일 입금)을 맞춰 틀린 날을 찾습니다."
         )}
       </p>
 

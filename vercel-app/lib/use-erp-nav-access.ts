@@ -44,5 +44,6 @@ export function useErpNavAccess() {
     mainItems,
     sections,
     isNavItemVisible,
+    saasModules,
   }
 }

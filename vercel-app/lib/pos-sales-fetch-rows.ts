@@ -3,8 +3,10 @@ import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import {
   supabaseSelectFilterAllPagesStrippingUnknownColumns,
 } from '@/lib/supabase-pgrst204-retry'
+import { filterRowsByChannelReconcileCalendarRange } from '@/lib/pos-channel-reconcile-match'
 import {
   filterRowsByPosSalesBusinessDateRange,
+  posSalesBangkokCalendarRangeUtcEnvelope,
   posSalesBusinessDateRangeUtcEnvelope,
 } from '@/lib/pos-sales-business-day-range'
 import type { PeriodOrderRow } from '@/lib/pos-sales-period-aggregate'
@@ -37,7 +39,7 @@ export const POS_SALES_DELIVERY_ROW_SELECT =
   `${POS_SALES_ORDER_ROW_SELECT},delivery_app_code,items_json`
 
 export const POS_SALES_PAYMENT_ROW_SELECT =
-  `${POS_SALES_ORDER_ROW_SELECT},id,linkpos_response_code,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,items_json`
+  `${POS_SALES_ORDER_ROW_SELECT},id,linkpos_response_code,paid_at,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,items_json`
 
 /** 단일 select 상한(레거시). 실제 조회는 페이지 반복으로 수집 */
 export const POS_SALES_BY_STORE_FETCH_LIMIT = 50_000
@@ -73,13 +75,18 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
   tenantScope?: SaasTenantScope
   /** tenantScope 미지정 시 Omni JWT 에서 자동 resolve */
   request?: NextRequest
+  /**
+   * business(기본): POS 영업일 라벨로 조회·필터.
+   * calendar: 방콕 달력일(paid_at 우선). 채널 확인 QR·카드·배달앱.
+   */
+  dateBucket?: 'business' | 'calendar'
 }): Promise<PosSalesFetchedRows> {
   const bizCtx = await loadPosBusinessDaySettingsContext()
-  const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(
-    bizCtx,
-    params.startStr,
-    params.endStr
-  )
+  const dateBucket = params.dateBucket === 'calendar' ? 'calendar' : 'business'
+  const { startISO, endISOExclusive } =
+    dateBucket === 'calendar'
+      ? posSalesBangkokCalendarRangeUtcEnvelope(params.startStr, params.endStr, 1)
+      : posSalesBusinessDateRangeUtcEnvelope(bizCtx, params.startStr, params.endStr)
   const expanded =
     params.storeCodes && params.storeCodes.length > 0
       ? await expandSalesStoreCodesForFilterAsync(params.storeCodes)
@@ -147,7 +154,10 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
 
   const truncated = rowsRaw.length >= maxRows
 
-  let rows = filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, params.startStr, params.endStr)
+  let rows =
+    dateBucket === 'calendar'
+      ? filterRowsByChannelReconcileCalendarRange(rowsRaw, params.startStr, params.endStr)
+      : filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, params.startStr, params.endStr)
 
   if (params.storeCodes && params.storeCodes.length > 0) {
     rows = rows.filter((r) =>

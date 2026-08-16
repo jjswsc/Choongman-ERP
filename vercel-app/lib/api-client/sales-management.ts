@@ -64,64 +64,6 @@ export async function getPosSalesByStore(params: {
   >
 }
 
-export async function getPosCancelReasonSummary(params: {
-  startStr: string
-  endStr: string
-  pos?: string
-  stores?: string[]
-  orderTypes?: string[]
-}): Promise<{
-  lineRows: { reason: string; count: number; amount: number }[]
-  orderRows: { reason: string; count: number; amount: number }[]
-  lineTotalCount: number
-  lineTotalAmount: number
-  orderTotalCount: number
-  orderTotalAmount: number
-  truncated?: boolean
-}> {
-  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
-  if (params.stores?.length) q.set('stores', params.stores.join(','))
-  else if (params.pos) q.set('pos', params.pos)
-  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
-  const res = await apiFetchWithOffline(`/api/posCancelReasonSummary?${q}`)
-  const json = (await res.json()) as {
-    lineRows?: { reason?: string; count?: number; amount?: number }[]
-    orderRows?: { reason?: string; count?: number; amount?: number }[]
-    rows?: { reason?: string; count?: number; amount?: number }[]
-    lineTotalCount?: number
-    lineTotalAmount?: number
-    orderTotalCount?: number
-    orderTotalAmount?: number
-    totalCount?: number
-    totalAmount?: number
-    truncated?: boolean
-  }
-  const mapRow = (r: { reason?: string; count?: number; amount?: number }) => ({
-    reason: String(r.reason ?? '').trim(),
-    count: Math.max(0, Number(r.count ?? 0) || 0),
-    amount: Math.max(0, Number(r.amount ?? 0) || 0),
-  })
-  const lineRows = Array.isArray(json.lineRows)
-    ? json.lineRows.map(mapRow)
-    : Array.isArray(json.rows)
-      ? json.rows.map(mapRow)
-      : []
-  const orderRows = Array.isArray(json.orderRows) ? json.orderRows.map(mapRow) : []
-  const lineTotalCount = Math.max(0, Number(json.lineTotalCount ?? 0) || 0)
-  const lineTotalAmount = Math.max(0, Number(json.lineTotalAmount ?? 0) || 0)
-  const orderTotalCount = Math.max(0, Number(json.orderTotalCount ?? 0) || 0)
-  const orderTotalAmount = Math.max(0, Number(json.orderTotalAmount ?? 0) || 0)
-  return {
-    lineRows,
-    orderRows,
-    lineTotalCount: lineTotalCount || lineRows.reduce((s, r) => s + r.count, 0),
-    lineTotalAmount: lineTotalAmount || lineRows.reduce((s, r) => s + r.amount, 0),
-    orderTotalCount: orderTotalCount || orderRows.reduce((s, r) => s + r.count, 0),
-    orderTotalAmount: orderTotalAmount || orderRows.reduce((s, r) => s + r.amount, 0),
-    truncated: json.truncated === true,
-  }
-}
-
 export async function getPosSalesFilterOptions(params: { startStr: string; endStr: string }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   const res = await apiFetchWithOffline(`/api/posSalesFilterOptions?${q}`)

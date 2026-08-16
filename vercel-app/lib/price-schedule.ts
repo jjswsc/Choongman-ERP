@@ -28,8 +28,16 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
-function isMissingTableError(e: unknown): boolean {
-  return /does not exist|42P01/i.test(String(e))
+/** PostgREST: 테이블 없음(42P01) 또는 스키마 캐시 미스(PGRST205). Omni 등 미배포 DB에서 cron 500 방지. */
+export function isMissingPriceSchedulesTableError(e: unknown): boolean {
+  const msg = String(e ?? "")
+  return (
+    /42P01/i.test(msg) ||
+    /PGRST205/i.test(msg) ||
+    /Could not find the table/i.test(msg) ||
+    /relation ["']?public\.price_schedules["']? does not exist/i.test(msg) ||
+    /does not exist/i.test(msg)
+  )
 }
 
 function allowedFieldNames(entityType: PriceScheduleEntityType): string[] {
@@ -122,7 +130,7 @@ export async function createPriceSchedule(params: {
     })
     return { success: true }
   } catch (e) {
-    if (isMissingTableError(e)) {
+    if (isMissingPriceSchedulesTableError(e)) {
       return { success: false, message: "price_schedules 테이블이 없어 저장할 수 없습니다." }
     }
     return { success: false, message: e instanceof Error ? e.message : "예약 저장 실패" }
@@ -144,7 +152,8 @@ export async function runDuePriceSchedules(now: Date = new Date()): Promise<{
       { limit: 300, order: "effective_at.asc,id.asc" }
     )) as PriceScheduleRow[] | null || []
   } catch (e) {
-    if (isMissingTableError(e)) {
+    if (isMissingPriceSchedulesTableError(e)) {
+      console.warn("runDuePriceSchedules: price_schedules table missing, skip")
       return { success: true, appliedCount: 0, failedCount: 0, message: "price_schedules 테이블 없음 (건너뜀)" }
     }
     return { success: false, appliedCount: 0, failedCount: 0, message: e instanceof Error ? e.message : "조회 실패" }

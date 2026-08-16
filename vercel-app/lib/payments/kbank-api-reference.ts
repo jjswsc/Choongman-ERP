@@ -193,6 +193,30 @@ export function isKbankRateLimitError(message: unknown): boolean {
   )
 }
 
+/** Our fetch abort / bank-proxy hang (not a KBank business statusCode). */
+export function isKbankTimeoutError(statusCode?: unknown, message?: unknown): boolean {
+  const code = String(statusCode || '').trim().toUpperCase()
+  if (code === 'TIMEOUT' || code === 'ABORT_ERR') return true
+  const key = String(message || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+  return (
+    key.includes('timed out') ||
+    key.includes('this operation was aborted') ||
+    key === 'aborterror' ||
+    key.includes('the operation was aborted')
+  )
+}
+
+/** Node fetch AbortError / DOMException from AbortController.abort(). */
+export function isKbankFetchAbortError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const name = String((err as { name?: unknown }).name || '')
+  const code = (err as { code?: unknown }).code
+  return name === 'AbortError' || code === 20 || code === 'ABORT_ERR'
+}
+
 /** Credit Card QR 미등록·미사용(EMQRNCC 등) — Thai QR로 안내 가능 */
 export function isKbankCreditCardQrUnavailableError(
   errorCode: unknown,
