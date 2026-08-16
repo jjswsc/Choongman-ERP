@@ -1,5 +1,6 @@
 import {
   supabaseInsert,
+  supabaseSelect,
   supabaseSelectFilter,
   supabaseSelectFilterAllPages,
   supabaseUpdateByFilter,
@@ -91,6 +92,34 @@ export async function supabaseUpsertMergeWithPgrst204Fallback(
     }
   }
   throw new Error(`${logLabel}: too many missing-column retries`)
+}
+
+/**
+ * `supabaseSelect` + 컬럼 미존재 시 select에서 해당 컬럼만 제거 후 재시도
+ */
+export async function supabaseSelectStrippingUnknownColumns(
+  table: string,
+  opts: { limit?: number; order?: string; offset?: number; select: string },
+  logLabel: string
+): Promise<unknown> {
+  const cols = opts.select
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  let use = [...cols]
+  for (let i = 0; i < 40; i++) {
+    try {
+      return await supabaseSelect(table, { ...opts, select: use.join(',') })
+    } catch (e) {
+      const missingCol = extractAnyMissingColumn(e)
+      if (!missingCol) throw e
+      const next = use.filter((c) => c !== missingCol)
+      if (next.length === use.length) throw e
+      use = next
+      console.warn(`${logLabel}: select omit missing column '${missingCol}'`)
+    }
+  }
+  throw new Error(`${logLabel}: too many select column retries`)
 }
 
 /**

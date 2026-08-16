@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
-import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { isEmployedAsOf } from '@/lib/employee-headcount-utils'
+import { loadEmployedEmployeesForWorkLog } from '@/lib/work-log-store-scope'
 
 /** 업무일지 직원 선택용 - name, nick 반환 (퇴사일 지난 직원 제외) */
 export async function GET() {
@@ -9,27 +7,8 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const todayBkk = getBangkokTodayDateString()
-    const list =
-      (await supabaseSelect('employees', {
-        order: 'name.asc',
-        select: 'id,name,nick,join_date,resign_date',
-        limit: 2000,
-      })) || []
-    const staff = (list as {
-      id?: number
-      name?: string
-      nick?: string
-      join_date?: unknown
-      resign_date?: unknown
-    }[])
-      .filter((e) =>
-        isEmployedAsOf(
-          e.join_date != null ? String(e.join_date) : '',
-          e.resign_date != null ? String(e.resign_date) : '',
-          todayBkk
-        )
-      )
+    const employed = await loadEmployedEmployeesForWorkLog()
+    const staff = employed
       .map((e) => {
         const id = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
         const n = String(e.name || '').trim()

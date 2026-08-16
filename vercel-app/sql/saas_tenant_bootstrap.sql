@@ -19,6 +19,7 @@ alter table if exists public.erp_stores add column if not exists store_name text
 alter table if exists public.vendors add column if not exists tenant_id text;
 alter table if exists public.pos_orders add column if not exists tenant_id text;
 alter table if exists public.employees add column if not exists nick text;
+alter table if exists public.employees add column if not exists join_date date;
 
 do $$
 begin

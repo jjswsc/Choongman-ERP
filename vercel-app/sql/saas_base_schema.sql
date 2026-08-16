@@ -33,6 +33,7 @@ create table if not exists public.employees (
   job text,
   employee_code text,
   extra_stores jsonb,
+  join_date date,
   resign_date date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -63,6 +64,7 @@ create table if not exists public.pos_orders (
 alter table if exists public.employees add column if not exists tenant_id text;
 alter table if exists public.employees add column if not exists company text;
 alter table if exists public.employees add column if not exists nick text;
+alter table if exists public.employees add column if not exists join_date date;
 alter table if exists public.erp_stores add column if not exists tenant_id text;
 alter table if exists public.vendors add column if not exists tenant_id text;
 alter table if exists public.pos_orders add column if not exists tenant_id text;

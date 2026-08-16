@@ -59,9 +59,18 @@ export async function runAutoNotices(base: Date = new Date()): Promise<AutoNotic
   } else if (lastRun.work_log === today) {
     result.workLog.skippedReason = 'already_sent_today'
   } else {
-    const reminded = await runWorkLogReminders(today, wl.notifyManager)
-    result.workLog = { ran: true, reminded }
-    await saveAutoNoticeLastRun({ work_log: today })
+    try {
+      const reminded = await runWorkLogReminders(today, wl.notifyManager)
+      result.workLog = { ran: true, reminded }
+      await saveAutoNoticeLastRun({ work_log: today })
+    } catch (e) {
+      console.error('auto-notices workLog:', e)
+      result.workLog = {
+        ran: false,
+        reminded: 0,
+        skippedReason: `error:${e instanceof Error ? e.message : String(e)}`,
+      }
+    }
   }
 
   // —— 월말 재고조사 ——

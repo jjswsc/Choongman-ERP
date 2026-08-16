@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { isEmployedAsOf } from '@/lib/employee-headcount-utils'
 import { isOfficeRole, isManagerRole, isFranchiseeRole } from '@/lib/permissions'
@@ -41,11 +41,15 @@ export async function loadEmployedEmployeesForWorkLog(): Promise<
 > {
   const todayBkk = getBangkokTodayDateString()
   const list =
-    ((await supabaseSelect('employees', {
-      order: 'name.asc',
-      select: 'id,name,nick,job,store,join_date,resign_date',
-      limit: 5000,
-    })) || []) as {
+    ((await supabaseSelectStrippingUnknownColumns(
+      'employees',
+      {
+        order: 'name.asc',
+        select: 'id,name,nick,job,store,join_date,resign_date',
+        limit: 5000,
+      },
+      'loadEmployedEmployeesForWorkLog'
+    )) || []) as {
       id?: number
       name?: string
       nick?: string
