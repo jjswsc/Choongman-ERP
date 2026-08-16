@@ -6148,22 +6148,15 @@ export default function PosTerminalPage() {
         return
       }
       /**
-       * 서랍 킥과 영수증 무인쇄가 같은 프린터 RAW/스풀을 두고 경쟁하면
-       * Windows에서 인쇄가 수 초~10초 밀릴 수 있음 → 하이브리드는 영수증이 먼저 잡도록 짧게 지연.
+       * 하이브리드: 결제 영수증 HTML 무인쇄와 서랍 RAW 킥이 같은 프린터를 쓰면
+       * 인쇄 중에 킥이 스풀에만 들어가고 펄스는 무시된다(에러 팝업 없음, 수동 열기는 됨).
+       * 영수증보다 서랍을 먼저 연다.
        */
-      void (async () => {
-        try {
-          const hybrid =
-            typeof window !== 'undefined' &&
-            typeof window.cmPosShell?.printHtml === 'function'
-          if (hybrid) {
-            await new Promise<void>((r) => setTimeout(r, 900))
-          }
-          await tryOpenDrawerForPayment(payment)
-        } catch (e) {
-          console.error('tryOpenDrawerForPayment:', e)
-        }
-      })()
+      try {
+        await tryOpenDrawerForPayment(payment)
+      } catch (e) {
+        console.error('tryOpenDrawerForPayment:', e)
+      }
     },
     [tryOpenDrawerForPayment]
   )
@@ -8876,7 +8869,7 @@ export default function PosTerminalPage() {
                     })
                     if (!completedOk) return false
                   }
-                  void tryOpenDrawerOnOrderComplete(payload.payment, {
+                  await tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
                   const receiptPayload = buildCheckoutPaymentReceiptModalData({
@@ -9061,7 +9054,7 @@ export default function PosTerminalPage() {
                     })
                     if (!completedOk) return false
                   }
-                  void tryOpenDrawerOnOrderComplete(payload.payment, {
+                  await tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
                   const receiptPayload = buildCheckoutPaymentReceiptModalData({
@@ -10193,7 +10186,7 @@ export default function PosTerminalPage() {
                     /** 오프라인 등 orderId 없이 저장만 한 후불 완료 시 테이블 비움 */
                     clearTableOrder(currentStoreId, payload.tableName)
                   }
-                  void tryOpenDrawerOnOrderComplete(payload.payment, {
+                  await tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
                   const receiptPayload = buildCheckoutPaymentReceiptModalData({
