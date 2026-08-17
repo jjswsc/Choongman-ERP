@@ -56,7 +56,7 @@
     "harness:marketing-flow": "vitest run harness/marketing-campaign-harness.test.ts",
     "harness:payable-flow": "vitest run harness/payable-flow-harness.test.ts",
     "harness:rls-scope": "vitest run harness/rls-scope-harness.test.ts",
-    "harness:flows": "vitest run harness/attendance-adjustment-harness.test.ts harness/hr-flow-harness.test.ts harness/menu-cost-flow-harness.test.ts harness/marketing-campaign-harness.test.ts harness/payable-flow-harness.test.ts harness/rls-scope-harness.test.ts",
+    "harness:flows": "vitest run harness/attendance-adjustment-harness.test.ts harness/hr-flow-harness.test.ts harness/menu-cost-flow-harness.test.ts harness/marketing-campaign-harness.test.ts harness/payable-flow-harness.test.ts harness/rls-scope-harness.test.ts harness/sql-supabase-paste-harness.test.ts",
     "harness:all": "vitest run harness",
     "windows:pos:build": "npm run windows:pos:build:internal",
     "windows:pos:build:internal": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-pos.ps1 -Brand choongman -PosUrl \"https://choongman-erp.vercel.app/pos/login\"",
