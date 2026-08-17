@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   kitchenLinesFromPrintJobPayload,
+  kitchenPrintJobClaimCreatedAtGteIso,
   kitchenPrintJobOrderFieldsFromPayload,
   resolveKitchenPrintJobDedupeKey,
 } from '@/lib/pos-kitchen-print-job-worker'
 import { posOrdersRealtimeChannelName } from '@/lib/supabase-client'
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
+
+describe('kitchenPrintJobClaimCreatedAtGteIso', () => {
+  it('excludes jobs older than 8 minutes', () => {
+    const now = Date.parse('2026-08-17T11:20:00+07:00')
+    expect(kitchenPrintJobClaimCreatedAtGteIso(now)).toBe(new Date(now - 8 * 60 * 1000).toISOString())
+  })
+})
 
 describe('kitchenLinesFromPrintJobPayload', () => {
   it('returns kitchenLines objects only', () => {

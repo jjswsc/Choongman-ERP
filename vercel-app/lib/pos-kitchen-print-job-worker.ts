@@ -5,6 +5,12 @@ export const MAIN_POS_KITCHEN_JOB_POLL_MS = 2_000
 /** QR enqueue와 주문 UPDATE 레이스를 흡수 */
 export const MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS = [0, 280, 800] as const
 export const MAIN_POS_KITCHEN_JOB_DRAIN_MAX = 5
+/** 이보다 오래된 queued 잡은 claim 하지 않음(과거 백로그 일괄 인쇄 방지) */
+export const MAIN_POS_KITCHEN_JOB_MAX_AGE_MS = 8 * 60 * 1000
+
+export function kitchenPrintJobClaimCreatedAtGteIso(nowMs = Date.now()): string {
+  return new Date(nowMs - MAIN_POS_KITCHEN_JOB_MAX_AGE_MS).toISOString()
+}
 
 const WORKER_ID_STORAGE_KEY = 'cm_pos_kitchen_print_worker_id'
 

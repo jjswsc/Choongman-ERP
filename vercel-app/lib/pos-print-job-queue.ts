@@ -4,7 +4,7 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
-import { kitchenLinesFromPrintJobPayload } from '@/lib/pos-kitchen-print-job-worker'
+import { kitchenLinesFromPrintJobPayload, kitchenPrintJobClaimCreatedAtGteIso } from '@/lib/pos-kitchen-print-job-worker'
 
 type EnqueueKitchenPrintJobInput = {
   storeCode: string
@@ -100,12 +100,13 @@ export async function claimQueuedKitchenPrintJob(params: {
   const workerId = String(params.workerId ?? '').trim()
   if (!storeCode || !workerId) return null
   try {
+    const createdGte = kitchenPrintJobClaimCreatedAtGteIso()
     const rows = (await supabaseSelectFilter(
       'pos_print_jobs',
-      `store_code=eq.${encodeURIComponent(storeCode)}&status=eq.queued&job_type=eq.kitchen`,
+      `store_code=eq.${encodeURIComponent(storeCode)}&status=eq.queued&job_type=eq.kitchen&created_at=gte.${encodeURIComponent(createdGte)}`,
       {
         limit: 25,
-        order: 'created_at.asc',
+        order: 'created_at.desc',
         select: 'id,order_id,payload_json',
       }
     )) as { id?: number; order_id?: number; payload_json?: Record<string, unknown> | null }[] | null
