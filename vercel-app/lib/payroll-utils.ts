@@ -257,12 +257,68 @@ export function isEmployeePayrollEligibleForMonth(params: {
   return hasAttendanceInMonth || hasScheduleInMonth
 }
 
-/** 방콕 기준 YYYY-MM — 매월 5일 지급·전월 1일~말일 산정 시 기본 귀속월(전월) */
-export function defaultPayrollAttributionMonthBangkok(now = new Date()): string {
-  const cur = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }).slice(0, 7)
-  const [y, m] = cur.split('-').map(Number)
-  const total = y * 12 + (m - 1) - 1
+/** 급여 실지급일 — 귀속월 근태 합산 후 익월 이 날 */
+export const PAYROLL_PAY_DAY_OF_MONTH = 5
+
+/** 익월 지급이 주말·공휴일로 밀려도 같은 귀속월로 보는 말일(1~15일) */
+export const PAYROLL_PAY_WINDOW_LAST_DAY = 15
+
+export function shiftYearMonth(yearMonth: string, deltaMonths: number): string {
+  const m = String(yearMonth || '').slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(m)) return ''
+  const [y, mo] = m.split('-').map(Number)
+  const total = y * 12 + (mo - 1) + deltaMonths
   const ny = Math.floor(total / 12)
   const nm = (total % 12) + 1
   return `${ny}-${String(nm).padStart(2, '0')}`
+}
+
+/** 방콕 기준 YYYY-MM — 매월 5일 지급·전월 1일~말일 산정 시 기본 귀속월(전월) */
+export function defaultPayrollAttributionMonthBangkok(now = new Date()): string {
+  const cur = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }).slice(0, 7)
+  return shiftYearMonth(cur, -1)
+}
+
+/** 귀속월 YYYY-MM → 실제 지급일(익월 5일). 예: 2026-07 → 2026-08-05 */
+export function payrollPayYmdFromAttributionMonth(monthStr: string): string {
+  const next = shiftYearMonth(monthStr, 1)
+  if (!next) return ''
+  return `${next}-${String(PAYROLL_PAY_DAY_OF_MONTH).padStart(2, '0')}`
+}
+
+/** 지급일 → 근태 귀속월. 예: 2026-08-05 → 2026-07 (1~15일은 전월, 그 이후는 당월) */
+export function payrollAttributionMonthFromPayYmd(ymd: string): string {
+  const d = String(ymd || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return ''
+  const month = d.slice(0, 7)
+  const day = Number(d.slice(8, 10))
+  if (!Number.isFinite(day) || day < 1) return ''
+  if (day <= PAYROLL_PAY_WINDOW_LAST_DAY) return shiftYearMonth(month, -1)
+  return month
+}
+
+export function isPayrollOrSsoExpensePayeeCode(payeeCode: string | null | undefined): boolean {
+  const c = String(payeeCode || '').trim().toLowerCase()
+  return c.startsWith('payroll-') || c.startsWith('sso-')
+}
+
+/** 급여·SSO 지급예정 연결 시 통장 expense_date = 발생일(귀속월), 지급일이 아님 */
+export function bankExpenseDateWhenPayingPayrollAccrual(
+  payeeCode: string | null | undefined,
+  accrualExpenseDate: string | null | undefined,
+  paymentDate: string
+): string {
+  const pay = String(paymentDate || '').slice(0, 10)
+  const exp = String(accrualExpenseDate || '').slice(0, 10)
+  if (isPayrollOrSsoExpensePayeeCode(payeeCode) && /^\d{4}-\d{2}-\d{2}$/.test(exp)) return exp
+  return /^\d{4}-\d{2}-\d{2}$/.test(pay) ? pay : exp
+}
+
+/** 손익 조회월 말일 → 익월 지급창 말일(15일). 7/31 → 8/15 */
+export function plFetchEndStrWithPayrollPayWindow(plEndStr: string): string {
+  const end = String(plEndStr || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end)) return end
+  const next = shiftYearMonth(end.slice(0, 7), 1)
+  if (!next) return end
+  return `${next}-${String(PAYROLL_PAY_WINDOW_LAST_DAY).padStart(2, '0')}`
 }

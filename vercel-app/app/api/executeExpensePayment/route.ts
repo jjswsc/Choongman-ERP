@@ -31,6 +31,7 @@ import {
   isExpenseInternalBankNote,
 } from '@/lib/bank-transaction-note-meta'
 import { allocateExpenseDocumentNo } from '@/lib/expense-document-no-server'
+import { bankExpenseDateWhenPayingPayrollAccrual } from '@/lib/payroll-utils'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -204,6 +205,11 @@ export async function POST(request: NextRequest) {
     if (!source?.id) {
       return NextResponse.json({ success: false, message: '지출 발생 데이터를 찾을 수 없습니다.' }, { status: 404, headers })
     }
+    const bankExpenseDate = bankExpenseDateWhenPayingPayrollAccrual(
+      source.payee_code,
+      source.expense_date,
+      transDate
+    )
     let documentNo = String(source.document_no || '').trim() || null
     if (!documentNo) {
       try {
@@ -381,7 +387,7 @@ export async function POST(request: NextRequest) {
             user_employee_id: userEmployeeId,
             user_employee_code: userEmployeeCode,
             category: bankCategory,
-            expense_date: transDate,
+            expense_date: bankExpenseDate,
             ...(documentNo ? { document_no: documentNo } : {}),
           })) as { id?: number }[]
           bankId = Number(inserted?.[0]?.id || 0) || null
@@ -453,7 +459,7 @@ export async function POST(request: NextRequest) {
             ),
             category: bankCategory,
             store: store || source.store_name || null,
-            expense_date: transDate,
+            expense_date: bankExpenseDate,
             ...(documentNo ? { document_no: documentNo } : {}),
           })
         } else {
@@ -473,7 +479,7 @@ export async function POST(request: NextRequest) {
             user_employee_id: userEmployeeId,
             user_employee_code: userEmployeeCode,
             category: bankCategory,
-            expense_date: transDate,
+            expense_date: bankExpenseDate,
             ...(documentNo ? { document_no: documentNo } : {}),
           })) as { id?: number }[]
           bankId = Number(inserted?.[0]?.id || 0) || null
@@ -545,7 +551,7 @@ export async function POST(request: NextRequest) {
           ),
           category: bankCategory,
           vendor_code: vendorCode,
-          expense_date: transDate,
+          expense_date: bankExpenseDate,
           store: store || source.store_name || null,
           account_subject_id: accrualAccountSubjectId,
           user_employee_id: userEmployeeId,
@@ -586,7 +592,7 @@ export async function POST(request: NextRequest) {
           user_employee_code: userEmployeeCode,
           category: bankCategory,
           vendor_code: vendorCode,
-          expense_date: transDate,
+          expense_date: bankExpenseDate,
           account_subject_id: accrualAccountSubjectId,
           ...invoiceFieldsFromAccrual(source),
           ...(documentNo ? { document_no: documentNo } : {}),

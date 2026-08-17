@@ -16,6 +16,7 @@ import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
+import { payrollPayYmdFromAttributionMonth } from '@/lib/payroll-utils'
 import { normalizeMachineCode } from '@/lib/vendor-code-policy'
 import {
   appendSaasTenantFilter,
@@ -398,7 +399,7 @@ export async function POST(request: NextRequest) {
       }
     }
     const expenseDate = toMonthDate(monthStr, false)
-    const dueDate = toMonthDate(monthStr, true)
+    const dueDate = payrollPayYmdFromAttributionMonth(monthStr) || toMonthDate(monthStr, true)
     const monthlyPrefix = `payroll-${monthStr}-`
     const existingAccrualRows = (await supabaseSelectFilter(
       'expense_accruals',

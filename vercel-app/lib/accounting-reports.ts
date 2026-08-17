@@ -85,7 +85,9 @@ import { loadItemTaxTypeMap } from '@/lib/income-statement-item-vat-server'
 import {
   isSalaryLikePlExpenseRow,
   loadPayrollAggregateForIncomeStatement,
+  resolveSalaryCashPlDecision,
 } from '@/lib/accounting-payroll-pl'
+import { plFetchEndStrWithPayrollPayWindow } from '@/lib/payroll-utils'
 import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
 import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from '@/lib/income-statement-purchase-drill-nav'
 import { resolveBankPlCashVat, safePlCashVat } from '@/lib/income-statement-cash-vat'
@@ -1648,6 +1650,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     payrollExpense = payrollAgg.total
     addToSubjectMap(expenseBySubjectMap, payrollAgg.preferredSubjectId, payrollAgg.total)
   }
+  const payrollPayWindowEndStr = plFetchEndStrWithPayrollPayWindow(endStr)
 
   const feeAccrualPl = await loadDeliveryCardFeeAccrualsForPl({
     startStr,
@@ -1682,24 +1685,29 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   const franchiseExpense: FranchiseBillingPlSlice = franchiseBillingPl.expense
   const franchiseRevenue: FranchiseBillingPlSlice = franchiseBillingPl.revenue
 
-  const shouldSkipSalaryCashBecausePayroll = (row: {
+  const classifySalaryCashForPl = (row: {
     account_subject_id?: number | null
     memo?: string | null
     amount?: number
-  }): boolean => {
-    if (payrollExpense <= 0) return false
-    if (
-      !isSalaryLikePlExpenseRow({
+    trans_date?: string | null
+    expense_date?: string | null
+  }) => {
+    const decision = resolveSalaryCashPlDecision({
+      isSalaryLike: isSalaryLikePlExpenseRow({
         accountSubjectId: row.account_subject_id,
         memo: row.memo,
         subjectMeta,
         salarySubjectIds: payrollAgg.salarySubjectIds,
-      })
-    ) {
-      return false
+      }),
+      payrollExpenseThisMonth: payrollExpense,
+      transDate: row.trans_date,
+      expenseDate: row.expense_date,
+      plYearMonth: yearMonth,
+    })
+    if (decision === 'skip-payroll-dup') {
+      payrollCashDeduped += Math.abs(Number(row.amount) || 0)
     }
-    payrollCashDeduped += Math.abs(Number(row.amount) || 0)
-    return true
+    return decision
   }
 
   let ordersPurchaseSubtotal = 0
@@ -1790,9 +1798,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
 
     const pettyAll = (await supabaseSelectFilterAllPages(
       'petty_cash_transactions',
-      `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`,
+      `trans_date=gte.${startStr}&trans_date=lte.${payrollPayWindowEndStr}&trans_type=eq.expense`,
       {
-        select: 'store,amount,vat_amount,trans_type,account_subject_id,vendor_code,memo',
+        select: 'store,amount,vat_amount,trans_type,account_subject_id,vendor_code,memo,trans_date',
         order: 'id.asc',
         pageSize: 8000,
         maxRows: ACCOUNTING_ROWS_MAX,
@@ -1805,11 +1813,17 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       account_subject_id?: number | null
       vendor_code?: string | null
       memo?: string | null
+      trans_date?: string | null
     }[]
     for (const r of pettyAll || []) {
       const st = String(r.store || '').trim()
       if (!isHqAccountingStoreRow(st)) continue
-      if (shouldSkipSalaryCashBecausePayroll(r)) continue
+      const salaryDecision = classifySalaryCashForPl(r)
+      if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+      if (salaryDecision === 'not-salary') {
+        const td = String(r.trans_date || '').slice(0, 10)
+        if (td < startStr || td > endStr) continue
+      }
       addPettyCashRowToPl({
         row: r,
         subjectMeta,
@@ -1850,7 +1864,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         const { rows: btRows, fetched, truncated } = await fetchBankWithdrawRowsForPl(
           hqAccountIds,
           startStr,
-          endStr,
+          payrollPayWindowEndStr,
           { feeAccountSubjectIds }
         )
         const accrualVatByBank = await loadExpenseAccrualVatByBankIds(
@@ -1861,9 +1875,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           if (bankId > 0 && feeAccrualLinkedBankIds.has(bankId)) continue
           const cat = String(r.category || 'expense').toLowerCase()
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
-          if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
+          const salaryDecision = classifySalaryCashForPl(r)
+          if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+          if (salaryDecision === 'not-salary') {
+            if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
+          }
           if (cat === 'fixed') bankCategoryFixedExpense += Math.abs(Number(r.amount) || 0)
-          if (shouldSkipSalaryCashBecausePayroll(r)) continue
           const accrual = bankId > 0 ? accrualVatByBank.get(bankId) : undefined
           const resolved = resolveBankPlCashVat({
             bankAmount: Number(r.amount) || 0,
@@ -2112,12 +2129,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     mergeExpenseSubjectMaps(expenseBySubjectMap, inboundStore.expenseBySubject)
     stockInboundExpense += sumExpenseSubjectAmounts(inboundStore.expenseBySubject)
 
-    let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
+    let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${payrollPayWindowEndStr}&trans_type=eq.expense`
     if (storeFilter !== 'All') {
       pettyFilter += `&${buildStoreFieldOrIlikeFragment('store', storeFilter)}`
     }
     const pettyRows = (await supabaseSelectFilterAllPages('petty_cash_transactions', pettyFilter, {
-      select: 'amount,vat_amount,trans_type,account_subject_id,vendor_code,memo',
+      select: 'amount,vat_amount,trans_type,account_subject_id,vendor_code,memo,trans_date',
       order: 'id.asc',
       pageSize: 8000,
       maxRows: ACCOUNTING_ROWS_MAX,
@@ -2128,9 +2145,15 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       account_subject_id?: number | null
       vendor_code?: string | null
       memo?: string | null
+      trans_date?: string | null
     }[]
     for (const r of pettyRows || []) {
-      if (shouldSkipSalaryCashBecausePayroll(r)) continue
+      const salaryDecision = classifySalaryCashForPl(r)
+      if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+      if (salaryDecision === 'not-salary') {
+        const td = String(r.trans_date || '').slice(0, 10)
+        if (td < startStr || td > endStr) continue
+      }
       addPettyCashRowToPl({
         row: r,
         subjectMeta,
@@ -2174,7 +2197,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         const { rows: btRows, fetched, truncated } = await fetchBankWithdrawRowsForPl(
           accountIds,
           startStr,
-          endStr,
+          payrollPayWindowEndStr,
           { feeAccountSubjectIds }
         )
         const accrualVatByBank = await loadExpenseAccrualVatByBankIds(
@@ -2185,9 +2208,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           if (bankId > 0 && feeAccrualLinkedBankIds.has(bankId)) continue
           const cat = String(r.category || 'expense').toLowerCase()
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
-          if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
+          const salaryDecision = classifySalaryCashForPl(r)
+          if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+          if (salaryDecision === 'not-salary') {
+            if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
+          }
           if (cat === 'fixed') bankCategoryFixedExpense += Math.abs(Number(r.amount) || 0)
-          if (shouldSkipSalaryCashBecausePayroll(r)) continue
           const accrual = bankId > 0 ? accrualVatByBank.get(bankId) : undefined
           const resolved = resolveBankPlCashVat({
             bankAmount: Number(r.amount) || 0,
@@ -2298,7 +2324,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
 
   if (payrollCashDeduped > 0) {
     warnings.push(
-      `확정 급여가 손익에 반영되어, 통장·패티 급여성 출금 약 ฿${Math.round(payrollCashDeduped).toLocaleString('en-US')}은 이중 방지를 위해 제외했습니다.`
+      `확정 급여(근태 귀속월)가 손익에 반영되어, 익월 지급분 통장·패티 급여성 출금 약 ฿${Math.round(payrollCashDeduped).toLocaleString('en-US')}은 이중 방지를 위해 제외했습니다.`
     )
   }
   if (skippedNonPlExpense > 0) {
@@ -3346,7 +3372,27 @@ export async function computeIncomeStatementExpenseDrillDown(
       : payrollAgg.preferredSubjectId === wantSubjectId ||
         payrollAgg.salarySubjectIds.has(wantSubjectId))
 
-  let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`
+  const payrollPayWindowEndStr = plFetchEndStrWithPayrollPayWindow(endStr)
+  const salaryDrillDecision = (row: {
+    account_subject_id?: number | null
+    memo?: string | null
+    trans_date?: string | null
+    expense_date?: string | null
+  }) =>
+    resolveSalaryCashPlDecision({
+      isSalaryLike: isSalaryLikePlExpenseRow({
+        accountSubjectId: row.account_subject_id,
+        memo: row.memo,
+        subjectMeta,
+        salarySubjectIds: payrollAgg.salarySubjectIds,
+      }),
+      payrollExpenseThisMonth: payrollAgg.total,
+      transDate: row.trans_date,
+      expenseDate: row.expense_date,
+      plYearMonth: yearMonth,
+    })
+
+  let pettyFilter = `trans_date=gte.${startStr}&trans_date=lte.${payrollPayWindowEndStr}&trans_type=eq.expense`
   if (!isHQ && storeFilter !== 'All') {
     pettyFilter += `&${buildStoreFieldOrIlikeFragment('store', storeFilter)}`
   }
@@ -3372,16 +3418,11 @@ export async function computeIncomeStatementExpenseDrillDown(
     }
     if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
     if (!isPlExpenseAccountSubject(r.account_subject_id, subjectMeta)) continue
-    if (
-      payrollAgg.total > 0 &&
-      isSalaryLikePlExpenseRow({
-        accountSubjectId: r.account_subject_id,
-        memo: r.memo,
-        subjectMeta,
-        salarySubjectIds: payrollAgg.salarySubjectIds,
-      })
-    ) {
-      continue
+    const salaryDecision = salaryDrillDecision(r)
+    if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+    if (salaryDecision === 'not-salary') {
+      const td = String(r.trans_date || '').slice(0, 10)
+      if (td < startStr || td > endStr) continue
     }
     const pid = Number(r.id)
     if (!pid) continue
@@ -3410,26 +3451,24 @@ export async function computeIncomeStatementExpenseDrillDown(
   })
   const feeAccountSubjectIds = new Set(feeAccountSubjectIdsFromMeta(subjectMeta).allIds)
   if (accountIds.length > 0) {
-    const { rows: btRows, truncated } = await fetchBankWithdrawRowsForPl(accountIds, startStr, endStr, {
-      feeAccountSubjectIds,
-    })
+    const { rows: btRows, truncated } = await fetchBankWithdrawRowsForPl(
+      accountIds,
+      startStr,
+      payrollPayWindowEndStr,
+      {
+        feeAccountSubjectIds,
+      }
+    )
     bankFetchTruncated = truncated
     for (const r of btRows) {
       if (!bankWithdrawCountsTowardPlExpense(r.category)) continue
-      if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
+      const salaryDecision = salaryDrillDecision(r)
+      if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+      if (salaryDecision === 'not-salary') {
+        if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
+      }
       if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
       if (!isPlExpenseAccountSubject(r.account_subject_id, subjectMeta)) continue
-      if (
-        payrollAgg.total > 0 &&
-        isSalaryLikePlExpenseRow({
-          accountSubjectId: r.account_subject_id,
-          memo: r.memo,
-          subjectMeta,
-          salarySubjectIds: payrollAgg.salarySubjectIds,
-        })
-      ) {
-        continue
-      }
       const bid = Number(r.id)
       if (!bid) continue
       // 손익 본표와 동일: 수수료 지급예정에 연결된 통장은 이중 표시 제외

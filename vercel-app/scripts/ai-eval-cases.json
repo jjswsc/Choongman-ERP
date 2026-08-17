@@ -38,5 +38,18 @@
       "확실합니다"
     ],
     "minLength": 50
+  },
+  {
+    "id": "sql-supabase-one-paste-at-a-time",
+    "query": "Supabase SQL Editor에 붙여넣을 조회를 2개 알려줘. 첫 번째는 매장명 확인, 두 번째는 잔액 조회. 내가 하나씩 복사해서 실행할 수 있게 작성해 주세요.",
+    "mustInclude": [
+      "```sql",
+      "SELECT"
+    ],
+    "mustNotInclude": [
+      "파일을 열어 복사",
+      "경로만"
+    ],
+    "minLength": 80
   }
 ]

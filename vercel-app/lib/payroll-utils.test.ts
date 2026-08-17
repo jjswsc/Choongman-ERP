@@ -15,6 +15,12 @@ import {
   ssoContributableWageBaht,
   ssoContributionBaseWage,
   resolveSsoFilingWageBaht,
+  bankExpenseDateWhenPayingPayrollAccrual,
+  defaultPayrollAttributionMonthBangkok,
+  payrollAttributionMonthFromPayYmd,
+  payrollPayYmdFromAttributionMonth,
+  plFetchEndStrWithPayrollPayWindow,
+  shiftYearMonth,
 } from './payroll-utils'
 
 describe('payroll-utils', () => {
@@ -268,6 +274,41 @@ describe('payroll-utils', () => {
       })
       expect(r.form).toBe('PND1')
       expect(r.tax).toBe(calcPayrollWithholdingTaxPnd1Monthly(50_000, 875))
+    })
+  })
+
+  describe('payroll pay-day attribution', () => {
+    it('shifts year-month across year boundary', () => {
+      expect(shiftYearMonth('2026-01', -1)).toBe('2025-12')
+      expect(shiftYearMonth('2025-12', 1)).toBe('2026-01')
+    })
+
+    it('maps 귀속월 to 익월 5일 지급일', () => {
+      expect(payrollPayYmdFromAttributionMonth('2026-07')).toBe('2026-08-05')
+    })
+
+    it('maps 8월 5일 지급 to 7월 귀속', () => {
+      expect(payrollAttributionMonthFromPayYmd('2026-08-05')).toBe('2026-07')
+      expect(payrollAttributionMonthFromPayYmd('2026-08-15')).toBe('2026-07')
+    })
+
+    it('keeps mid/late-month cash in the same month', () => {
+      expect(payrollAttributionMonthFromPayYmd('2026-08-16')).toBe('2026-08')
+    })
+
+    it('uses accrual expense_date when paying payroll/SSO', () => {
+      expect(
+        bankExpenseDateWhenPayingPayrollAccrual('payroll-2026-07-silom-a::wm::expense', '2026-07-01', '2026-08-05')
+      ).toBe('2026-07-01')
+      expect(bankExpenseDateWhenPayingPayrollAccrual('rent-vendor', '2026-07-01', '2026-08-05')).toBe('2026-08-05')
+    })
+
+    it('extends P&L fetch through next-month pay window', () => {
+      expect(plFetchEndStrWithPayrollPayWindow('2026-07-31')).toBe('2026-08-15')
+    })
+
+    it('defaults attribution month to Bangkok previous month', () => {
+      expect(defaultPayrollAttributionMonthBangkok(new Date('2026-08-17T12:00:00+07:00'))).toBe('2026-07')
     })
   })
 

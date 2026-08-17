@@ -30,6 +30,7 @@ npm run harness:flows
   - 청구/수금 처리 후 잔액 일관성
   - 동일 이벤트 재전송(idempotency) 중복 반영 방지
   - 과수금(잔액 음수) 방지 불변식
+  - Supabase SQL 붙여넣기: 한 블록 = 실행 단위 1문 (`sql-supabase-paste-harness`)
 
 ## 파일
 
@@ -41,6 +42,7 @@ npm run harness:flows
   - `harness/marketing-campaign-harness.test.ts`
   - `harness/payable-flow-harness.test.ts`
   - `harness/rls-scope-harness.test.ts`
+  - `harness/sql-supabase-paste-harness.test.ts` (Supabase 붙여넣기 = 실행 단위 1문)
 - 실행 스크립트:
   - `harness:erp-data` (기본 직원/거래처 불변식)
   - `harness:flows` (인사/메뉴원가/마케팅 + payable + RLS 스코프)

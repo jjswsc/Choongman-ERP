@@ -15,6 +15,7 @@ import {
   postExpenseAccrualJournal,
 } from '@/lib/accounting-posting'
 import { isOfficeStore } from '@/lib/permissions'
+import { payrollPayYmdFromAttributionMonth } from '@/lib/payroll-utils'
 import { normalizeMachineCode } from '@/lib/vendor-code-policy'
 import {
   aggregateOfficeNetPayByStore,
@@ -84,7 +85,7 @@ async function upsertOfficeAggregateAccrual(params: {
   }
 
   const expenseDate = toMonthDate(monthStr, false)
-  const dueDate = toMonthDate(monthStr, true)
+  const dueDate = payrollPayYmdFromAttributionMonth(monthStr) || toMonthDate(monthStr, true)
   const payeeCode = buildOfficePayrollAggregatePayeeCode(monthStr, store)
   const payeeName = `Payroll — ${store}`.slice(0, 200)
   const memo =

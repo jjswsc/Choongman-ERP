@@ -1,11 +1,13 @@
 /**
  * 손익계산서 ← 급여(payroll_records) 자연 연동.
  * - 인건비 = net_pay + sso + tax (귀속월 총근로비용, 원천·근로자 SSO 포함)
+ * - 귀속월 = 근태월(1일~말일). 실지급은 익월 5일 → 지급월 손익에 넣지 않음
  * - 같은 스코프에 확정 급여가 있으면 통장/패티의 급여성 출금은 이중 방지를 위해 제외
  */
 import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
+import { payrollAttributionMonthFromPayYmd } from '@/lib/payroll-utils'
 import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 function isHqPayrollStore(store: string): boolean {
@@ -92,6 +94,49 @@ export function isSalaryLikePlExpenseRow(params: {
   if (sid != null && isSalaryAccountMeta(params.subjectMeta.get(sid))) return true
   if (params.memo && SALARY_MEMO_RE.test(String(params.memo))) return true
   return false
+}
+
+/**
+ * 급여성 현금 출금의 손익 귀속월.
+ * - 발생일(expense_date)이 지급일(trans_date)과 다른 달이면 발생일 월(이미 귀속 처리된 행)
+ * - 같으면 익월 5일 지급 규칙: 1~15일 지급 → 전월
+ */
+export function salaryCashAttributionYearMonth(params: {
+  transDate?: string | null
+  expenseDate?: string | null
+}): string {
+  const exp = String(params.expenseDate || '').slice(0, 10)
+  const td = String(params.transDate || '').slice(0, 10)
+  const expOk = /^\d{4}-\d{2}-\d{2}$/.test(exp)
+  const tdOk = /^\d{4}-\d{2}-\d{2}$/.test(td)
+  if (expOk && tdOk && exp.slice(0, 7) !== td.slice(0, 7)) return exp.slice(0, 7)
+  const ymd = expOk ? exp : td
+  return payrollAttributionMonthFromPayYmd(ymd)
+}
+
+export function salaryCashBelongsToPlMonth(params: {
+  transDate?: string | null
+  expenseDate?: string | null
+  plYearMonth: string
+}): boolean {
+  const pl = String(params.plYearMonth || '').slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(pl)) return false
+  return salaryCashAttributionYearMonth(params) === pl
+}
+
+export type SalaryCashPlDecision = 'not-salary' | 'include' | 'skip-payroll-dup' | 'skip-other-month'
+
+export function resolveSalaryCashPlDecision(params: {
+  isSalaryLike: boolean
+  payrollExpenseThisMonth: number
+  transDate?: string | null
+  expenseDate?: string | null
+  plYearMonth: string
+}): SalaryCashPlDecision {
+  if (!params.isSalaryLike) return 'not-salary'
+  if (!salaryCashBelongsToPlMonth(params)) return 'skip-other-month'
+  if (params.payrollExpenseThisMonth > 0) return 'skip-payroll-dup'
+  return 'include'
 }
 
 export function payrollStoreInIncomeScope(params: {

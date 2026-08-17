@@ -1826,7 +1826,7 @@ export const i18n = {
     helpSum_admin_payroll:
       '급여 계산·DB 저장, 명세서 조회·공지, 급여 변경 이력, 공휴일·규칙, 도움말을 한 화면에서 다룹니다.',
     helpHow_admin_payroll:
-      '① [급여 계산]: 귀속월 선택 → 계산 실행 → 확인 후 DB 저장.\n② [명세서]: 저장된 급여 조회·직원 공지·엑셀 내보내기.\n③ [도움말] 탭에서 지각·조퇴·OT·공휴일 반영 규칙을 확인합니다.\n④ 오피스(본사) 급여를 확정 저장하면 지출관리에는 직원별이 아니라 매장·월 합산 1건만 올라갑니다(개인 명세는 급여 화면·오피스 급여 담당만).',
+      '① [급여 계산]: 귀속월=근태월(1일~말일)을 선택 → 계산 실행 → 확인 후 DB 저장. 지급은 익월 5일이며 손익 인건비도 귀속월 기준입니다.\n② [명세서]: 저장된 급여 조회·직원 공지·엑셀 내보내기.\n③ [도움말] 탭에서 지각·조퇴·OT·공휴일 반영 규칙을 확인합니다.\n④ 오피스(본사) 급여를 확정 저장하면 지출관리에는 직원별이 아니라 매장·월 합산 1건만 올라갑니다(개인 명세는 급여 화면·오피스 급여 담당만).',
     adminHrCalendar: '인사 캘린더',
     hrCalHint:
       '재직 직원의 생일·입사 N년(1년, 2년, 3년…)·당해 입사일, 퇴사일을 월별로 표시합니다. 이름은 닉네임 기준이며, 칸에 마우스를 올리면 전체 문구를 볼 수 있습니다.',
@@ -2504,7 +2504,7 @@ export const i18n = {
     pay_help_haz_grade:
       '주방 위험수당: [급여 규칙] 탭의 평가등급 기준을 만족할 때만 지급(기본 B 이상). 인사 카드의 등급 필드를 사용합니다.',
     pay_help_flow_title: '흐름',
-    pay_help_flow: '근태 관리자에서 조퇴/지각 조정 반영 → [급여 계산] 탭에서 [계산 실행] → 확인 후 [DB 저장].',
+    pay_help_flow: '근태 관리자에서 조퇴/지각 조정 반영 → [급여 계산] 탭에서 귀속월(근태월) 선택 후 [계산 실행] → 확인 후 [DB 저장]. 지급은 익월 5일, 손익 인건비는 귀속월입니다.',
     pay_save: '저장',
     pay_save_success: '저장되었습니다.',
     pay_save_fail: '저장 실패',
@@ -3039,9 +3039,9 @@ export const i18n = {
     adminBalanceSheet: '재무상태표',
     adminFinancialStatements: '재무제표',
     helpSum_admin_financial_statements:
-      '손익·재무상태표·마진 등을 매장·기간으로 조회합니다. 승인된 회계 PO(로열티·배달 GP·Grab GP)는 매장 비용·본사(발행) 매출에 반영되며, VAT 포함/제외 토글에 맞춰 청구 total/subtotal을 씁니다.',
+      '손익·재무상태표·마진 등을 매장·기간으로 조회합니다. 급여(5310)는 지급일(익월 5일)이 아니라 근태 귀속월(전월 1일~말일)에 반영됩니다. 승인된 회계 PO(로열티·배달 GP·Grab GP)는 매장 비용·본사(발행) 매출에 반영되며, VAT 포함/제외 토글에 맞춰 청구 total/subtotal을 씁니다.',
     helpHow_admin_financial_statements:
-      '① 매장·조회월을 고른 뒤 검색합니다.\n② 손익에서 VAT 포함/제외를 전환하면 매출·매입·재고와 함께 가맹 청구(승인 PO) 금액도 맞춰집니다.\n③ 로열티·배달/Grab GP는 PO 관리에서 비율 입력 후 회계 PO를 승인해야 손익에 전기됩니다(Draft·플랫폼 5528 수수료와 별개).\n④ 수동 매출·기초재고는 한 달만 선택해 입력·저장하고, 여러 달 보기에서는 월별로 저장된 값이 반영됩니다.\n⑤ 다른 메뉴·하위 탭을 갔다 와도 검색 조건·결과는 유지됩니다.',
+      '① 매장·조회월을 고른 뒤 검색합니다.\n② 손익에서 VAT 포함/제외를 전환하면 매출·매입·재고와 함께 가맹 청구(승인 PO) 금액도 맞춰집니다.\n③ 로열티·배달/Grab GP는 PO 관리에서 비율 입력 후 회계 PO를 승인해야 손익에 전기됩니다(Draft·플랫폼 5528 수수료와 별개).\n④ 수동 매출·기초재고는 한 달만 선택해 입력·저장하고, 여러 달 보기에서는 월별로 저장된 값이 반영됩니다.\n⑤ 다른 메뉴·하위 탭을 갔다 와도 검색 조건·결과는 유지됩니다.\n⑥ 급여는 7월 근태분→8월 5일 지급이어도 7월 손익에 들어갑니다. 확정 급여가 있으면 통장·패티 급여성 출금은 이중 방지로 제외합니다.',
     adminChartOfAccounts: '계정과목표(COA)',
     adminAccountingCompliance: '회계·태국 신고',
     adminTaxFiling: '세무 신고',
@@ -4451,7 +4451,7 @@ export const i18n = {
     helpSum_admin_bank_transactions:
       '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급과 맞물립니다. 통장 변경 시 계좌 추가(삭제 금지), 삭제·등록 이력은 본사·회계가 계좌 관리에서 확인합니다.',
     helpHow_admin_bank_transactions:
-      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, revenue_* 입금 분류는 쓰지 마세요(매출 이중 위험). 수수료 분개는 POS 결산에서 처리하거나, 통장 조회에서 해당 입금 행의 「채널 정산」을 사용하세요.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다.',
+      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, revenue_* 입금 분류는 쓰지 마세요(매출 이중 위험). 수수료 분개는 POS 결산에서 처리하거나, 통장 조회에서 해당 입금 행의 「채널 정산」을 사용하세요.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
     bankManualS3PosReceivable:
       'POS 자동분개 매장: 카드·배달앱·QR 입금은 「매출 수령」+ 매장. revenue_delivery/revenue_card는 4110 이중 인식 위험.',
     bankPosReceivableDepositTitle: 'POS 자동분개 매장 — 입금 분류',
@@ -9889,7 +9889,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_payroll:
       'Calculate and save payroll, view statements, salary change history, holidays, rules, and help in one place.',
     helpHow_admin_payroll:
-      '① Payroll calc: pick month → Calculate → review → Save to DB.\n② Records: view saved payroll, notify staff, export Excel.\n③ Help tab: late, early, OT, and holiday rules.\n④ Confirming office (HQ) payroll posts one store/month total to Expense Management—not per-employee lines (individual detail stays in Payroll for office payroll managers).',
+      '① Payroll calc: pick the attendance month (1st–last day) → Calculate → review → Save to DB. Pay day is the 5th of the next month; P&L salary follows the attendance month.\n② Records: view saved payroll, notify staff, export Excel.\n③ Help tab: late, early, OT, and holiday rules.\n④ Confirming office (HQ) payroll posts one store/month total to Expense Management—not per-employee lines (individual detail stays in Payroll for office payroll managers).',
     adminHrCalendar: 'HR calendar',
     hrCalHint:
       'Shows birthdays, hire milestones (Year 1, 2, 3…), hire dates in the join year, and resignations by month. Labels use nickname; hover a cell for the full text.',
@@ -10569,7 +10569,7 @@ Only matters the employee must handle personally on a working day:
     pay_help_haz_grade:
       'Kitchen hazard pay: only when the evaluation grade rule on the Payroll rules tab is met (default B or better). Uses the employee record grade.',
     pay_help_flow_title: 'Flow',
-    pay_help_flow: 'Apply early/late adjustment in Attendance admin → [Calculate] in Payroll tab → Review and [Save to DB].',
+    pay_help_flow: 'Apply early/late adjustment in Attendance admin → pick attendance month in Payroll → [Calculate] → Review and [Save to DB]. Paid on the 5th of the next month; P&L salary uses the attendance month.',
     pay_save: 'Save',
     pay_save_success: 'Saved.',
     pay_save_fail: 'Save failed',
@@ -11101,9 +11101,9 @@ Only matters the employee must handle personally on a working day:
     adminBalanceSheet: 'Balance Sheet',
     adminFinancialStatements: 'Financial statements',
     helpSum_admin_financial_statements:
-      'View P&L, balance sheet, and margin by store and period. Approved accounting POs (royalty, delivery GP, Grab GP) post to store expenses and HQ (issuer) sales; amounts follow the VAT included/excluded toggle (PO total vs subtotal).',
+      'View P&L, balance sheet, and margin by store and period. Salary (5310) posts to the attendance month (1st–last day), not the pay date (5th of the following month). Approved accounting POs (royalty, delivery GP, Grab GP) post to store expenses and HQ (issuer) sales; amounts follow the VAT included/excluded toggle (PO total vs subtotal).',
     helpHow_admin_financial_statements:
-      '① Choose store and month, then search.\n② Switching VAT included/excluded adjusts sales, purchases, inventory, and approved franchise-billing PO amounts together.\n③ Royalty / delivery / Grab GP hit the P&L only after the accounting PO is Approved (Draft and platform fee 5528 are separate).\n④ Enter and save manual sales / beginning inventory on a single-month query; multi-month view applies each month’s saved values.\n⑤ Search filters and results stay when you switch menus or sub-tabs.',
+      '① Choose store and month, then search.\n② Switching VAT included/excluded adjusts sales, purchases, inventory, and approved franchise-billing PO amounts together.\n③ Royalty / delivery / Grab GP hit the P&L only after the accounting PO is Approved (Draft and platform fee 5528 are separate).\n④ Enter and save manual sales / beginning inventory on a single-month query; multi-month view applies each month’s saved values.\n⑤ Search filters and results stay when you switch menus or sub-tabs.\n⑥ July attendance paid on 5 Aug still hits July P&L. Confirmed payroll excludes salary-like bank/petty cash to avoid double counting.',
     adminChartOfAccounts: 'Chart of accounts',
     adminAccountingCompliance: 'Accounting & Thailand filing',
     adminTaxFiling: 'Tax filing',
@@ -12517,7 +12517,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_bank_transactions:
       'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables. When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
     helpHow_admin_bank_transactions:
-      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_* (double revenue risk). Post fees on POS settlement or use Channel settlement on the deposit row in Bank.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories.\n⑥ If balances disagree, check period, duplicates, and category mistakes.',
+      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_* (double revenue risk). Post fees on POS settlement or use Channel settlement on the deposit row in Bank.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
     bankManualS3PosReceivable:
       'POS auto-journal stores: card/delivery/QR deposits → Sales collection + store. Avoid revenue_* categories (double 4110).',
     bankPosReceivableDepositTitle: 'POS auto-journal — deposit category',
@@ -18414,7 +18414,7 @@ orderItemQty: 'จำนวน',
     pay_help_haz_grade:
       'ค่าเสี่ยงภัยครัว: จ่ายเมื่อผ่านเกรดตามแท็บกฎเงินเดือน (ค่าเริ่มต้น B ขึ้นไป) ใช้เกรดในข้อมูลพนักงาน',
     pay_help_flow_title: 'ขั้นตอน',
-    pay_help_flow: 'ปรับค่ากลับก่อน/มาสายในหน้าเวร → กด [คำนวณ] ในแท็บเงินเดือน → ตรวจสอบแล้ว [บันทึกลง DB]',
+    pay_help_flow: 'ปรับค่ากลับก่อน/มาสายในหน้าเวร → เลือกเดือนที่ทำงานในแท็บเงินเดือน แล้วกด [คำนวณ] → ตรวจสอบแล้ว [บันทึกลง DB] จ่ายวันที่ 5 ของเดือนถัดไป กำไรขาดทุนใช้เดือนที่ทำงานครับ',
     pay_save: 'บันทึก',
     pay_save_success: 'บันทึกแล้ว',
     pay_save_fail: 'บันทึกล้มเหลว',

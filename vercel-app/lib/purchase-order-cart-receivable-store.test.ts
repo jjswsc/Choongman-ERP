@@ -15,6 +15,7 @@ describe('isHqWarehouseReceivableStoreName', () => {
     expect(isHqWarehouseReceivableStoreName('S&J')).toBe(true)
     expect(isHqWarehouseReceivableStoreName('CM Office')).toBe(true)
     expect(isHqWarehouseReceivableStoreName('입고등록')).toBe(true)
+    expect(isHqWarehouseReceivableStoreName('สาขาซื้อเอง')).toBe(true)
   })
 
   it('allows franchise stores', () => {

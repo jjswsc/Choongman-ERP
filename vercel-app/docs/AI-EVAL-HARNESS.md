@@ -43,3 +43,7 @@ npm run ai:harness:strict
   "minLength": 60
 }
 ```
+
+## SQL 붙여넣기 케이스
+
+`sql-supabase-one-paste-at-a-time`: Supabase SQL Editor는 붙여넣은 내용을 한 번에 실행한다. 독립 조회는 **별도 `sql` 펜스**(복사 1회 = Run 1회)로 안내해야 한다. 코드 불변식은 `harness/sql-supabase-paste-harness.test.ts`.

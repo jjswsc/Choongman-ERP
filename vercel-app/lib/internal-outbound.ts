@@ -44,5 +44,8 @@ export function isHqWarehouseReceivableStoreName(storeName: string): boolean {
   if (isHeadOfficeLikeStoreName(raw)) return true
   if (isSjHqWarehouseName(raw)) return true
   const compact = raw.toLowerCase().replace(/[\s_\-]+/g, "")
-  return compact === "입고등록" || compact === "입고등록(본사)" || compact === "cmoffice"
+  if (compact === "입고등록" || compact === "입고등록(본사)" || compact === "cmoffice") return true
+  // สาขาซื้อเอง = 직접구매 지점(내부 창고 라벨). 가맹 미수 거래처가 아님.
+  if (raw.includes("ซื้อเอง") || compact.includes("selfpurchase")) return true
+  return false
 }

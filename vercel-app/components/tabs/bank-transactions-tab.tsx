@@ -2517,7 +2517,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           variant="primary"
                           label={t("acct_kpi_bank_balance")}
                           value={fmt(summary.calculatedBalance)}
-                          subLabel={`${t("bankOpeningBalance")} ${fmt(summary.openingBalance)}`}
+                          subLabel={`${t("bankOpeningBalance")} ${fmt(summary.beginningBalance ?? summary.openingBalance)}`}
                         />
                         <MetricCard
                           size="sm"

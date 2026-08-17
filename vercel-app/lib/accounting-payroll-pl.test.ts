@@ -5,6 +5,8 @@ import {
   isSalaryLikePlExpenseRow,
   payrollRecordGrossExpenseBaht,
   resolveSalaryAccountSubjects,
+  resolveSalaryCashPlDecision,
+  salaryCashAttributionYearMonth,
 } from '@/lib/accounting-payroll-pl'
 
 describe('payrollRecordGrossExpenseBaht', () => {
@@ -83,5 +85,79 @@ describe('aggregatePayrollRecordsForPl', () => {
     })
     expect(agg.rowCount).toBe(1)
     expect(agg.total).toBe(10500)
+  })
+})
+
+describe('salary cash P&L attribution', () => {
+  it('puts Aug 5 payment into July', () => {
+    expect(salaryCashAttributionYearMonth({ transDate: '2026-08-05', expenseDate: '2026-08-05' })).toBe(
+      '2026-07'
+    )
+  })
+
+  it('keeps accrual expense_date month when it differs from pay date', () => {
+    expect(salaryCashAttributionYearMonth({ transDate: '2026-08-05', expenseDate: '2026-07-01' })).toBe(
+      '2026-07'
+    )
+  })
+
+  it('does not treat July pay (Aug 5) as an August payroll duplicate', () => {
+    expect(
+      resolveSalaryCashPlDecision({
+        isSalaryLike: true,
+        payrollExpenseThisMonth: 100,
+        transDate: '2026-08-05',
+        expenseDate: '2026-08-05',
+        plYearMonth: '2026-08',
+      })
+    ).toBe('skip-other-month')
+  })
+
+  it('skips same-month salary cash when that month has confirmed payroll', () => {
+    expect(
+      resolveSalaryCashPlDecision({
+        isSalaryLike: true,
+        payrollExpenseThisMonth: 100,
+        transDate: '2026-08-20',
+        expenseDate: '2026-08-20',
+        plYearMonth: '2026-08',
+      })
+    ).toBe('skip-payroll-dup')
+  })
+
+  it('excludes Aug 5 cash from August when no August payroll (귀속은 7월)', () => {
+    expect(
+      resolveSalaryCashPlDecision({
+        isSalaryLike: true,
+        payrollExpenseThisMonth: 0,
+        transDate: '2026-08-05',
+        expenseDate: '2026-08-05',
+        plYearMonth: '2026-08',
+      })
+    ).toBe('skip-other-month')
+  })
+
+  it('includes Aug 5 cash in July when July payroll is not saved', () => {
+    expect(
+      resolveSalaryCashPlDecision({
+        isSalaryLike: true,
+        payrollExpenseThisMonth: 0,
+        transDate: '2026-08-05',
+        expenseDate: '2026-08-05',
+        plYearMonth: '2026-07',
+      })
+    ).toBe('include')
+  })
+
+  it('skips July cash when July payroll records exist (이중 방지)', () => {
+    expect(
+      resolveSalaryCashPlDecision({
+        isSalaryLike: true,
+        payrollExpenseThisMonth: 50_000,
+        transDate: '2026-08-05',
+        expenseDate: '2026-07-01',
+        plYearMonth: '2026-07',
+      })
+    ).toBe('skip-payroll-dup')
   })
 })
