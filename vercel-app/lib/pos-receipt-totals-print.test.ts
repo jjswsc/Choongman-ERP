@@ -11,6 +11,7 @@ import { buildPosHallOrderReceiptDocumentHtml } from '@/lib/pos-hall-order-recei
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
 import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
+import { computePosPricing, receiptTaxDisplayFieldsFromPricing } from '@/lib/pos-pricing'
 
 describe('pos-receipt-totals-print', () => {
   it('formats rate suffix in parentheses', () => {
@@ -73,6 +74,38 @@ describe('pos-receipt-totals-print', () => {
         vatPrint: 46.05,
       })
     ).toBe(-105.85)
+  })
+
+  it('VAT included + discount: Amount Before VAT is exclusive so Rounding is not −VAT', () => {
+    // 고추장불고기비빔밥 199 − 협업할인 99, 포함가 100 → 공급가 93 + VAT 7
+    expect(
+      resolvePosReceiptAmountBeforeVat({
+        subtotalPrint: 199,
+        discountAmtForPrint: 99,
+        vatFeeMode: 'included',
+        vatPrint: 7,
+        receiptExclusiveSubtotalDisplay: 93,
+        receiptTaxableGrossForDisplay: 100,
+      })
+    ).toBe(93)
+    expect(
+      resolvePosReceiptRoundingAmt({
+        total: 100,
+        amountBeforeVat: 93,
+        vatPrint: 7,
+      })
+    ).toBe(0)
+  })
+
+  it('VAT included + discount without exclusive snapshot still strips VAT from Before VAT', () => {
+    expect(
+      resolvePosReceiptAmountBeforeVat({
+        subtotalPrint: 199,
+        discountAmtForPrint: 99,
+        vatFeeMode: 'included',
+        vatPrint: 6.54,
+      })
+    ).toBe(93.46)
   })
 
   it('included service is not added into Amount Before VAT', () => {
@@ -249,5 +282,42 @@ describe('receipt totals layout with Rounding', () => {
     expect(html).toContain('110.00')
     expect(html).toContain('Rounding')
     expect(html).toContain('+0.30')
+  })
+
+  it('VAT included + 99 collab discount: Amount Before VAT 93, no Rounding −7.00', () => {
+    const pricing = computePosPricing({
+      subtotal: 199,
+      discountAmt: 99,
+      adjustments: { vatRate: 7, vatMode: 'included' },
+    })
+    const taxFields = receiptTaxDisplayFieldsFromPricing(pricing)
+    const receiptData: ReceiptModalData = {
+      orderNo: '017',
+      items: [{ id: '1', name: 'GOCHUJANG BULGOGI BIBIMBAP', price: 199, qty: 1 }],
+      subtotal: 199,
+      discountAmt: 99,
+      total: pricing.finalTotal,
+      storeCode: 'ST01',
+      orderType: 'dine-in',
+      vatFeeAmt: pricing.vatFeeAmt,
+      vatFeeMode: pricing.vatFeeMode,
+      ...taxFields,
+      vatRate: 7,
+      receiptAutoPrintContext: 'payment',
+    }
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData,
+      menus: [],
+      orderTypeLabels: {},
+      t: (k) => k,
+      lang: 'en',
+      origin: '',
+      printerSettings: { vatRate: 7 } as never,
+      forceSimpleTextMode: true,
+    })
+    expect(html).toMatch(/Amount Before VAT<\/td><td class="simple-v">93\.00/)
+    expect(html).toContain('7.00')
+    expect(html).not.toContain('-7.00')
+    expect(html).not.toContain('Rounding')
   })
 })

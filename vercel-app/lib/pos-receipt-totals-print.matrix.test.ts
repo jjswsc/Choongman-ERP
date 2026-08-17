@@ -22,6 +22,7 @@ type MatrixCase = {
   name: string
   subtotal: number
   discountAmt?: number
+  deliveryFee?: number
   vatRate: number
   vatMode: PosFeeMode
   serviceRate: number
@@ -35,6 +36,7 @@ function simulatePrint(c: MatrixCase) {
   const pricing = computePosPricing({
     subtotal: c.subtotal,
     discountAmt: c.discountAmt ?? 0,
+    deliveryFee: c.deliveryFee ?? 0,
     adjustments: {
       vatRate: c.vatRate,
       vatMode: c.vatMode,
@@ -63,6 +65,10 @@ function simulatePrint(c: MatrixCase) {
     packagingFee: pricing.packagingFee,
     serviceFeeAmt: pricing.serviceFeeAmt,
     serviceFeeMode: pricing.serviceFeeMode,
+    vatFeeMode: pricing.vatFeeMode,
+    vatPrint,
+    receiptExclusiveSubtotalDisplay: taxFields.receiptExclusiveSubtotalDisplay,
+    receiptTaxableGrossForDisplay: taxFields.receiptTaxableGrossForDisplay,
   })
   const rounding = resolvePosReceiptRoundingAmt({
     total: pricing.finalTotal,
@@ -146,6 +152,24 @@ describe('receipt Amount Before VAT + Rounding vs fee modes', () => {
       serviceRate: 10,
       serviceMode: 'included',
     },
+    {
+      name: 'VAT included + 99 discount on 199 (bibimbap)',
+      subtotal: 199,
+      discountAmt: 99,
+      vatRate: 7,
+      vatMode: 'included',
+      serviceRate: 0,
+      serviceMode: 'separate',
+    },
+    {
+      name: 'VAT included + delivery (subtotal stays item gross)',
+      subtotal: 2500,
+      vatRate: 7,
+      vatMode: 'included',
+      serviceRate: 0,
+      serviceMode: 'separate',
+      deliveryFee: 100,
+    },
   ]
 
   it('Before VAT + VAT + Rounding = TOTAL for every mode', () => {
@@ -189,5 +213,40 @@ describe('receipt Amount Before VAT + Rounding vs fee modes', () => {
     expect(r.vatPrint).toBe(5.31)
     expect(r.total).toBe(81)
     expect(r.rounding).toBe(-0.21)
+  })
+
+  it('VAT included + discount: Before VAT 93, Rounding 0 (not −7)', () => {
+    const r = simulatePrint({
+      name: 'included discount bibimbap',
+      subtotal: 199,
+      discountAmt: 99,
+      vatRate: 7,
+      vatMode: 'included',
+      serviceRate: 0,
+      serviceMode: 'separate',
+    })
+    expect(r.subtotalPrint).toBe(199)
+    expect(r.amountBeforeVat).toBe(93)
+    expect(r.vatPrint).toBe(7)
+    expect(r.total).toBe(100)
+    expect(r.rounding).toBe(0)
+    expect(r.identityOk).toBe(true)
+  })
+
+  it('VAT included + delivery: Before VAT is exclusive of 2600, Rounding 0', () => {
+    const r = simulatePrint({
+      name: 'included delivery',
+      subtotal: 2500,
+      deliveryFee: 100,
+      vatRate: 7,
+      vatMode: 'included',
+      serviceRate: 0,
+      serviceMode: 'separate',
+    })
+    expect(r.subtotalPrint).toBe(2500)
+    expect(r.amountBeforeVat).toBe(2430)
+    expect(r.vatPrint).toBe(170)
+    expect(r.total).toBe(2600)
+    expect(r.rounding).toBe(0)
   })
 })

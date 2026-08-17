@@ -32,6 +32,7 @@ import {
 } from '@/lib/pos-delivery-platform'
 import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { lineNoteDuplicatesOptions, normalizePosLineNote } from '@/lib/pos-line-note'
+import { applyGuestBillBuffetPrint } from '@/lib/pos-guest-bill-buffet-print'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { resolvePosPrintLayoutCalibration } from '@/lib/pos-print-layout-calibration'
 import {
@@ -633,6 +634,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     return value && value !== key ? value : fallback
   }
   const esc = (value: string) => escapeHtml(String(value || ''))
+  const guestBillItems = applyGuestBillBuffetPrint(receiptData.items || [], printerSettings)
   const discountReceiptLabel = resolveDiscountReceiptLabel(receiptData, tr)
   const couponDiscountTotal = (receiptData.appliedCoupons ?? []).reduce(
     (sum, row) => sum + Math.max(0, Number(row.discountAmt ?? 0) || 0),
@@ -697,7 +699,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       ? `<div class="receipt-meta-row${extraClass ? ` ${extraClass}` : ''}"><span class="receipt-meta-label receipt-muted">${labelInnerHtml}</span><span class="receipt-meta-value">${valueInnerHtml}</span></div>`
       : `<div class="receipt-pay-meta${extraClass ? ` ${extraClass}` : ''}"><div class="receipt-pay-meta-l receipt-muted">${labelInnerHtml}</div><div class="receipt-pay-meta-v">${valueInnerHtml}</div></div>`
   const lineDiscountAlloc = resolveLineDiscountsForReceipt(
-    receiptData.items || [],
+    guestBillItems,
     receiptData.discountAmt,
     isPaymentReceipt,
     receiptData.discountReason
@@ -832,6 +834,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     serviceFeeAmt: serviceFeeAmtPrint,
     serviceFeeMode: receiptData.serviceFeeMode,
     isTaxInvoice: taxInvoiceUsesGrossSplitFallback,
+    vatFeeMode: receiptData.vatFeeMode,
+    vatPrint,
+    receiptExclusiveSubtotalDisplay: receiptData.receiptExclusiveSubtotalDisplay,
+    receiptTaxableGrossForDisplay: receiptData.receiptTaxableGrossForDisplay,
   })
   const roundingPrint = resolvePosReceiptRoundingAmt({
     total: receiptData.total,
@@ -868,7 +874,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const receiptTotalsEqRuleHtml = `<div class="receipt-total-eq-rule">${POS_RECEIPT_TOTAL_EQ_RULE}</div>`
   if (forceSimple) {
     const lineDiscountAllocSimple = resolveLineDiscountsForReceipt(
-      receiptData.items || [],
+      guestBillItems,
       receiptData.discountAmt,
       isPaymentReceipt,
       receiptData.discountReason
@@ -883,7 +889,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
       items: receiptData.items,
     })
     const mergedItems = mergeSetChildrenForReceipt(
-      receiptData.items as Parameters<typeof mergeSetChildrenForReceipt>[0],
+      guestBillItems as Parameters<typeof mergeSetChildrenForReceipt>[0],
       { grabInbound, optionNameByCode }
     )
     const itemRows = (mergedItems || [])
@@ -1224,7 +1230,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             items: receiptData.items,
           })
           const mergedLegacyItems = mergeSetChildrenForReceipt(
-            receiptData.items as Parameters<typeof mergeSetChildrenForReceipt>[0],
+            guestBillItems as Parameters<typeof mergeSetChildrenForReceipt>[0],
             { grabInbound, optionNameByCode }
           )
           const itemsHtml = mergedLegacyItems

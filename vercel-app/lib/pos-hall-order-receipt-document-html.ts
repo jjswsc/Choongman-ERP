@@ -29,6 +29,7 @@ import {
 } from '@/lib/grab-pos-order-enrich'
 import { mergeGrabSetChildAncillaryNoteIntoParent } from '@/lib/grab-set-pos-lines'
 import { lineNoteDuplicatesOptions, normalizePosLineNote } from '@/lib/pos-line-note'
+import { applyGuestBillBuffetPrint } from '@/lib/pos-guest-bill-buffet-print'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import {
@@ -71,6 +72,10 @@ export type HallOrderItem = {
   optionCode?: string | null
   optionCode1?: string | null
   optionCodes?: string[] | null
+  /** QR 뷔페 포함 메뉴 — 손님 전표 숨김 판정용 */
+  buffetIncluded?: boolean
+  /** QR 뷔페 패키지(입장료) 줄 — 손님 전표에 유지 */
+  isBuffetEntry?: boolean
   /** 추가 주문(테이블 merge)으로 새로 들어온 줄 — 영수증 품목명 앞 `>` 표시 */
   isAddon?: boolean
   promoId?: string
@@ -634,10 +639,13 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     '</span>'
   const voidMode = Boolean(payload.voidReceiptMode)
   const grabInbound = isGrabInboundPosOrder({ memo: payload.memo, items: payload.items })
-  const receiptItems = mergeSetChildrenForReceipt(payload.items || [], {
-    grabInbound,
-    optionNameByCode,
-  })
+  const receiptItems = applyGuestBillBuffetPrint(
+    mergeSetChildrenForReceipt(payload.items || [], {
+      grabInbound,
+      optionNameByCode,
+    }),
+    printerSettings
+  )
   const explicitOrderDisc = resolvePosSalesDiscountAmount(
     Math.max(0, Number(payload.discountAmt) || 0),
     Math.max(0, Number(payload.couponDiscountAmt) || 0)
@@ -860,6 +868,10 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     packagingFee: payload.packagingFee,
     serviceFeeAmt: serviceFeeAmtPrint,
     serviceFeeMode: payload.serviceFeeMode,
+    vatFeeMode: payload.vatFeeMode,
+    vatPrint,
+    receiptExclusiveSubtotalDisplay: payload.receiptExclusiveSubtotalDisplay,
+    receiptTaxableGrossForDisplay: payload.receiptTaxableGrossForDisplay,
   })
   const roundingPrint = resolvePosReceiptRoundingAmt({
     total: voidMode ? Math.abs(Number(payload.total) || 0) : payload.total,

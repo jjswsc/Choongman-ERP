@@ -4,9 +4,11 @@
  * 인쇄 항등식:
  *   Amount Before VAT + VAT + Rounding + (별도 카드) + (별도 기타) = TOTAL
  *
- * Amount Before VAT = Sub Total − 할인 + 배달/포장 + (별도 서비스만)
- *   → 정수 바트 반올림(Rounding)은 여기에 넣지 않는다.
- * Rounding = TOTAL − (Before VAT + VAT + 별도 카드/기타)
+ * Amount Before VAT (VAT 별도) = Sub Total − 할인 + 배달/포장 + (별도 서비스만)
+ * Amount Before VAT (VAT 포함) = 세전 공급가액.
+ *   할인·배달 때문에 Sub Total이 세포함 품목합으로 남으면, 포함가 순액에서 VAT를 뺀다.
+ *   (안 그러면 Rounding이 VAT 전체를 상쇄함: 199−99, VAT 7.00 → Rounding −7.00)
+ * Rounding = TOTAL − (Before VAT + VAT + 별도 카드/기타) — 정수 바트 맞춤 잔차만.
  */
 
 import type { PosFeeMode } from '@/lib/pos-pricing'
@@ -143,6 +145,7 @@ function separateFeeAmt(amt: number | undefined, mode: PosFeeMode | undefined): 
 /**
  * Amount Before VAT — 반올림 제외.
  * Tax Invoice fallback(`total − VAT`)일 때만 subtotalPrint가 이미 세전 합계이므로 그대로 사용.
+ * VAT 포함 + 할인/배달이면 Sub Total은 세포함 품목합을 유지하고, 이 값이 공급가액이 된다.
  */
 export function resolvePosReceiptAmountBeforeVat(params: {
   subtotalPrint: number
@@ -153,6 +156,10 @@ export function resolvePosReceiptAmountBeforeVat(params: {
   serviceFeeMode?: PosFeeMode
   /** true: subtotalPrint가 이미 세전 합계(서비스 포함, Rounding 제외 실패 시 Rounding 포함 가능) */
   isTaxInvoice?: boolean
+  vatFeeMode?: PosFeeMode
+  vatPrint?: number
+  receiptExclusiveSubtotalDisplay?: number
+  receiptTaxableGrossForDisplay?: number
 }): number {
   const sub = Math.max(0, Number(params.subtotalPrint) || 0)
   if (params.isTaxInvoice) return round2(sub)
@@ -163,6 +170,33 @@ export function resolvePosReceiptAmountBeforeVat(params: {
     serviceFeeAmt: params.serviceFeeAmt,
     serviceFeeMode: params.serviceFeeMode,
   })
+  const vatPrint = Math.max(0, Number(params.vatPrint ?? 0) || 0)
+  const exclusiveRaw = params.receiptExclusiveSubtotalDisplay
+  const exclusive =
+    typeof exclusiveRaw === 'number' && Number.isFinite(exclusiveRaw) ? exclusiveRaw : undefined
+  const taxableRaw = params.receiptTaxableGrossForDisplay
+  const taxableGross =
+    typeof taxableRaw === 'number' && Number.isFinite(taxableRaw) ? taxableRaw : undefined
+  const vatIncluded = String(params.vatFeeMode ?? '') === 'included'
+
+  if (vatIncluded && vatPrint > 0.0001) {
+    // Sub Total이 이미 공급가액(할인 없음 등 exclusive 치환)이면 기존 식 유지
+    if (exclusive != null && Math.abs(sub - exclusive) < 0.02) {
+      return round2(sub - discount + delivery + packaging + service)
+    }
+    const inclusiveNet = round2(sub - discount + delivery + packaging)
+    if (exclusive != null) {
+      const exclusivePlusVat = round2(exclusive + vatPrint)
+      if (
+        Math.abs(exclusivePlusVat - inclusiveNet) < 0.05 ||
+        (taxableGross != null && Math.abs(inclusiveNet - taxableGross) < 0.05)
+      ) {
+        return round2(exclusive + service)
+      }
+    }
+    return round2(Math.max(0, inclusiveNet - vatPrint) + service)
+  }
+
   return round2(sub - discount + delivery + packaging + service)
 }
 
