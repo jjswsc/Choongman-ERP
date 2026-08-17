@@ -38,6 +38,16 @@ describe('resolveKitchenPrintJobDedupeKey', () => {
   it('uses create key when there are no kitchen lines', () => {
     expect(resolveKitchenPrintJobDedupeKey(12, { action: 'create_order' })).toBe('order:12:kitchen')
   })
+
+  it('uses create key for create_order even when kitchenLines exist', () => {
+    const lines = [{ menuId: '90', name: 'GOLDEN FRIED CHICKEN', qty: 1, quantity: 1 }]
+    expect(resolveKitchenPrintJobDedupeKey(12, { action: 'create_order', kitchenLines: lines })).toBe(
+      'order:12:kitchen'
+    )
+    expect(resolveKitchenPrintJobDedupeKey(12, { action: 'create_order', kitchenLines: lines })).not.toBe(
+      buildDineInAddKitchenAutoPrintDedupeKey(12, lines)
+    )
+  })
 })
 
 describe('kitchenPrintJobOrderFieldsFromPayload', () => {
@@ -49,7 +59,23 @@ describe('kitchenPrintJobOrderFieldsFromPayload', () => {
         memo: 'QR',
         guestCount: 3,
       })
-    ).toEqual({ orderNo: 'POS-1', tableName: 'A2', memo: 'QR', guestCount: 3 })
+    ).toEqual({ orderNo: 'POS-1', tableName: 'A2', memo: 'QR', orderType: 'dine_in', guestCount: 3 })
+  })
+
+  it('keeps takeout/delivery labels instead of defaulting to dine_in', () => {
+    expect(
+      kitchenPrintJobOrderFieldsFromPayload({
+        orderNo: '066',
+        orderType: 'takeout',
+      })
+    ).toMatchObject({ orderNo: '066', orderType: 'takeout' })
+    expect(
+      kitchenPrintJobOrderFieldsFromPayload({
+        orderNo: 'GF-1',
+        order_type: 'delivery',
+        deliveryAppCode: 'grab',
+      })
+    ).toMatchObject({ orderType: 'delivery', deliveryAppCode: 'grab' })
   })
 })
 

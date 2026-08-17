@@ -17,7 +17,12 @@ import {
 } from '@/lib/pos-order-paid-at'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { resolveAlignedDueTotal } from '@/lib/pos-order-payment-due-align'
-import { isDineInOrderTypeForGuestCount, normalizePosOrderTypeKey, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
+import {
+  coercePosOrderTypeForDb,
+  isDineInOrderTypeForGuestCount,
+  normalizePosOrderTypeKey,
+  sanitizePosOrderTableNameForDb,
+} from '@/lib/pos-sales-order-type-filter'
 import {
   coercePaymentOtherBreakdownForSave,
   paymentOtherBreakdownForDb,
@@ -858,11 +863,15 @@ export async function POST(req: NextRequest) {
         payload: {
           action: 'update_order',
           status,
+          orderType: coercePosOrderTypeForDb(
+            String(current?.order_type ?? body?.orderType ?? body?.order_type ?? '')
+          ),
           kitchenLines: kitchenDeltaLines,
           orderNo: String(current?.order_no || `POS-${id}`),
           tableName: String(current?.table_name || '').trim(),
           memo: String(current?.memo || '').trim(),
           guestCount: Number(current?.guest_count || 0) || undefined,
+          ...(deliveryAppCode ? { deliveryAppCode } : {}),
         },
       })
       if (deferUnpaidSideEffects) {

@@ -1,4 +1,5 @@
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
+import { coercePosOrderTypeForDb, type PosOrderTypeValue } from '@/lib/pos-sales-order-type-filter'
 
 /** 인쇄 큐 claim 안전망 — Realtime poke가 놓치면 이 간격으로 재시도 */
 export const MAIN_POS_KITCHEN_JOB_POLL_MS = 2_000
@@ -26,10 +27,12 @@ export function resolveKitchenPrintJobDedupeKey(
   orderId: number,
   payload: Record<string, unknown> | null | undefined
 ): string {
+  const action = String(payload?.action ?? '').trim()
+  // savePosOrder create jobs always include kitchenLines. If we keyed those as
+  // add:… the job worker printed again 1s after local/Realtime (`order:{id}:kitchen`).
+  if (action === 'create_order') return `order:${orderId}:kitchen`
   const lines = kitchenLinesFromPrintJobPayload(payload)
   if (lines.length > 0) return buildDineInAddKitchenAutoPrintDedupeKey(orderId, lines)
-  const action = String(payload?.action ?? '').trim()
-  if (action === 'create_order') return `order:${orderId}:kitchen`
   return `order:${orderId}:kitchen:job:${action || 'unknown'}`
 }
 
@@ -54,13 +57,22 @@ export function kitchenPrintJobOrderFieldsFromPayload(
   orderNo: string
   tableName: string
   memo: string
+  orderType: PosOrderTypeValue
+  deliveryAppCode?: string
   guestCount?: number
 } {
   const guestCount = Math.floor(Number(payload?.guestCount ?? 0) || 0)
+  const deliveryAppCode = String(payload?.deliveryAppCode ?? payload?.delivery_app_code ?? '')
+    .trim()
+    .toLowerCase()
   return {
     orderNo: String(payload?.orderNo ?? '').trim(),
     tableName: String(payload?.tableName ?? '').trim(),
     memo: String(payload?.memo ?? '').trim(),
+    orderType: coercePosOrderTypeForDb(
+      String(payload?.orderType ?? payload?.order_type ?? '')
+    ),
+    ...(deliveryAppCode ? { deliveryAppCode } : {}),
     ...(guestCount > 0 ? { guestCount } : {}),
   }
 }

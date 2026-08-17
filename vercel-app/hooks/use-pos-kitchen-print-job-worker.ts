@@ -53,11 +53,12 @@ async function printClaimedKitchenJob(
       id: orderId,
       orderNo: header.orderNo,
       storeCode: ctx.storeCode,
-      orderType: 'dine_in',
+      orderType: header.orderType,
       tableName: header.tableName,
       memo: header.memo,
       items: kitchenLines as unknown as PosOrder['items'],
       guestCount: header.guestCount,
+      deliveryAppCode: header.deliveryAppCode,
     } as PosOrder
     await printKitchenForOrder(orderForKitchen, ctx, { kitchenLines, dedupeKey })
     await markKitchenPrintJob({ jobId: job.id, status: 'printed' })

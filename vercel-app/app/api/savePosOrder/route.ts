@@ -866,11 +866,13 @@ export async function POST(req: NextRequest) {
         payload: {
           action: 'create_order',
           status: orderStatus,
+          orderType,
           kitchenLines: kitchenLinesOnCreate,
           orderNo,
           tableName,
           memo,
           guestCount: guest_count,
+          ...(delivery_app_code ? { deliveryAppCode: delivery_app_code } : {}),
         },
       })
       if (deferNonCriticalAck) {
