@@ -74,7 +74,7 @@ async function printClaimedKitchenJob(
 
 /**
  * QR/원격 주문의 pos_print_jobs 를 메인 POS가 바로 claim·인쇄.
- * enqueue만 되고 워커가 없던 구멍 + Realtime UPDATE 채널 충돌 시 8초 메타스캔 대기를 줄인다.
+ * Realtime poke가 1차. 상시 폴링은 15s 안전망(2s는 Edge Request 폭주).
  */
 export function usePosKitchenPrintJobWorker(opts: {
   enabled: boolean

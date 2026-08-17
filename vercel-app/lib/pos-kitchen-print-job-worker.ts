@@ -1,8 +1,12 @@
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
 import { coercePosOrderTypeForDb, type PosOrderTypeValue } from '@/lib/pos-sales-order-type-filter'
 
-/** 인쇄 큐 claim 안전망 — Realtime poke가 놓치면 이 간격으로 재시도 */
-export const MAIN_POS_KITCHEN_JOB_POLL_MS = 2_000
+/**
+ * 인쇄 큐 claim 안전망 — Realtime poke가 놓치면 이 간격으로 재시도.
+ * 2s 상시 폴링은 Edge Request·Function 요금 폭주(매장당 빈 손 POST).
+ * 주문 도착은 poke(0/280/800ms)가 1차, 여기 15s는 Realtime 끊김 보험만.
+ */
+export const MAIN_POS_KITCHEN_JOB_POLL_MS = 15_000
 /** QR enqueue와 주문 UPDATE 레이스를 흡수 */
 export const MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS = [0, 280, 800] as const
 export const MAIN_POS_KITCHEN_JOB_DRAIN_MAX = 5
