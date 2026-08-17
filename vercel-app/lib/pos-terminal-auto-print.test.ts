@@ -3,6 +3,8 @@ import {
   coercePosOrderIdFromRealtime,
   isSessionNewOrder,
   mergeStoreAutoPrintFlags,
+  scheduleHallThenKitchenAutoprint,
+  shouldEnqueueKitchenPrintOnOrderCreate,
   storeAutoPrintFlagsFromSettings,
 } from "@/lib/pos-terminal-auto-print"
 import { extractAmountFromEmvQrPayload } from "@/lib/pos-terminal-kbank-helpers"
@@ -32,6 +34,43 @@ describe("pos-terminal-auto-print", () => {
     const now = Date.now()
     expect(isSessionNewOrder(new Date(now).toISOString(), now - 1000, 5000)).toBe(true)
     expect(isSessionNewOrder(new Date(now - 60_000).toISOString(), now, 5000)).toBe(false)
+  })
+
+  it("dispatches kitchen even when hall is also on (does not wait for hall callback)", () => {
+    const calls: string[] = []
+    scheduleHallThenKitchenAutoprint({
+      printHall: true,
+      printKitchen: true,
+      runHall: () => calls.push("hall"),
+      runKitchen: () => calls.push("kitchen"),
+      kitchenDelayMs: 40,
+      schedule: (fn) => fn(),
+    })
+    expect(calls).toEqual(["hall", "kitchen"])
+  })
+
+  it("enqueues kitchen on dine-in create, not on pending delivery", () => {
+    expect(
+      shouldEnqueueKitchenPrintOnOrderCreate({
+        orderType: "dine_in",
+        status: "ready",
+        kitchenLineCount: 2,
+      })
+    ).toBe(true)
+    expect(
+      shouldEnqueueKitchenPrintOnOrderCreate({
+        orderType: "delivery",
+        status: "pending",
+        kitchenLineCount: 2,
+      })
+    ).toBe(false)
+    expect(
+      shouldEnqueueKitchenPrintOnOrderCreate({
+        orderType: "dine_in",
+        status: "ready",
+        kitchenLineCount: 0,
+      })
+    ).toBe(false)
   })
 })
 

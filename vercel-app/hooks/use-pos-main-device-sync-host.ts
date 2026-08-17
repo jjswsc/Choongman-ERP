@@ -45,6 +45,7 @@ import {
   KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS,
   MAIN_POS_META_SCAN_INTERVAL_MS,
   posGuestCountSpread,
+  scheduleHallThenKitchenAutoprint,
   storeAutoPrintFlagsFromSettings,
   DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS,
   type StoreAutoPrintFlags,
@@ -654,13 +655,25 @@ export function usePosMainDeviceSyncHost(): void {
         if (!orderForKitchen || !autoPrint.kitchenOnOrder) return
         runKitchenAutoprintForOrder(orderForKitchen, autoprintCtx, flow)
       }
-      if (autoPrint.receiptOnOrder && autoPrint.kitchenOnOrder) {
-        void printHallReceiptPayload(hallPayload, autoprintCtx, { onAfterDirectPrint: runKitchen })
-      } else if (autoPrint.receiptOnOrder) {
-        void printHallReceiptPayload(hallPayload, autoprintCtx)
-      } else if (autoPrint.kitchenOnOrder) {
-        setTimeout(runKitchen, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
-      }
+      const kitchenDelayMs = autoPrint.receiptOnOrder
+        ? typeof window !== 'undefined' && window.cmPosShell
+          ? resolveAfterReceiptToKitchenDelayMs()
+          : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+        : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
+      scheduleHallThenKitchenAutoprint({
+        printHall: autoPrint.receiptOnOrder,
+        printKitchen: Boolean(autoPrint.kitchenOnOrder && orderForKitchen),
+        runHall: () => {
+          void printHallReceiptPayload(hallPayload, autoprintCtx).catch((e) => {
+            logPosPrintDebug(`${flow}_hall_autoprint_error`, {
+              orderId,
+              message: e instanceof Error ? e.message : String(e || 'hall_print_failed'),
+            })
+          })
+        },
+        runKitchen,
+        kitchenDelayMs,
+      })
     },
     [autoprintCtx, autoPrint, logPosPrintDebug]
   )

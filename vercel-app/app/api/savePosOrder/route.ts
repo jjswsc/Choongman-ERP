@@ -28,6 +28,8 @@ import { nullableTimestamptz, resolvePosOrderPaidAtStampIso } from '@/lib/pos-or
 import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { buildKitchenJobCreateDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
+import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
+import { shouldEnqueueKitchenPrintOnOrderCreate } from '@/lib/pos-terminal-auto-print'
 import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 import {
   parseAppliedCouponsFromBody,
@@ -843,8 +845,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (Number(created?.id) > 0 && isPosCompletionStatus(orderStatus)) {
-      await enqueueKitchenPrintJob({
+    const kitchenLinesOnCreate = filterKitchenCartLinesForDineInAdd(
+      items as Parameters<typeof filterKitchenCartLinesForDineInAdd>[0],
+      []
+    )
+    if (
+      Number(created?.id) > 0 &&
+      shouldEnqueueKitchenPrintOnOrderCreate({
+        orderType,
+        status: orderStatus,
+        kitchenLineCount: kitchenLinesOnCreate.length,
+      })
+    ) {
+      const kitchenEnqueuePromise = enqueueKitchenPrintJob({
         storeCode,
         orderId: Number(created.id),
         orderNo,
@@ -853,8 +866,18 @@ export async function POST(req: NextRequest) {
         payload: {
           action: 'create_order',
           status: orderStatus,
+          kitchenLines: kitchenLinesOnCreate,
+          orderNo,
+          tableName,
+          memo,
+          guestCount: guest_count,
         },
       })
+      if (deferNonCriticalAck) {
+        void kitchenEnqueuePromise.catch((e) => console.error('savePosOrder kitchen enqueue:', e))
+      } else {
+        await kitchenEnqueuePromise
+      }
     }
 
     const totalElapsedMs = Date.now() - startedAtMs

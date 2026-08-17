@@ -18,8 +18,6 @@ import {
 } from '@/lib/pos-order-policy'
 import { resolvePosBusinessAccountingDateForStore } from '@/lib/pos-order-policy-server'
 import { upsertPosVatLedgerDraft } from '@/lib/pos-ledger-drafts'
-import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
-import { buildKitchenJobStatusDedupeKey } from '@/lib/pos-kitchen-print-dedupe-key'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import {
   extractGrabOrderIdFromMemo,
@@ -228,21 +226,6 @@ export async function POST(req: NextRequest) {
             console.error('updatePosOrderStatus vat draft(retry):', vatErr)
           }
         }
-        try {
-          await enqueueKitchenPrintJob({
-            storeCode,
-            orderId: id,
-            orderNo: String(prev?.order_no || `POS-${id}`),
-            source: 'updatePosOrderStatus_retry',
-            dedupeKey: buildKitchenJobStatusDedupeKey(id, nextStatus),
-            payload: {
-              action: 'retry_side_effects',
-              status: nextStatus,
-            },
-          })
-        } catch (queueErr) {
-          console.error('updatePosOrderStatus enqueueKitchenPrintJob(retry):', queueErr)
-        }
       } else if (isPosReversalStatus(nextStatus)) {
         const storeCode = String(prev?.store_code ?? '').trim()
         const salesDate = await resolvePosBusinessAccountingDateForStore(
@@ -441,21 +424,6 @@ export async function POST(req: NextRequest) {
           pushFailedStep(failedSideEffects, 'vat_draft')
           console.error('updatePosOrderStatus vat draft:', vatErr)
         }
-      }
-      try {
-        await enqueueKitchenPrintJob({
-          storeCode,
-          orderId: id,
-          orderNo: String(prev?.order_no || `POS-${id}`),
-          source: fromOfflineQueueSync ? 'offline_queue' : 'updatePosOrderStatus',
-          dedupeKey: buildKitchenJobStatusDedupeKey(id, nextStatus),
-          payload: {
-            action: 'update_status',
-            status: nextStatus,
-          },
-        })
-      } catch (queueErr) {
-        console.error('updatePosOrderStatus enqueueKitchenPrintJob:', queueErr)
       }
     } else if (isPosReversalStatus(nextStatus) && isPosPaidLikeStatus(prevStatus)) {
       try {

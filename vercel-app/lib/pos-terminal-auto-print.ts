@@ -77,6 +77,38 @@ export const MAIN_POS_META_SCAN_INTERVAL_MS = 8_000
 export const KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS = 80
 export const DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS = 45_000
 
+/**
+ * 태블릿·QR 등 원격 신규 주문: 홀 출력 콜백을 기다리지 않고 주방을 따로 보낸다.
+ * 홀 프린터가 Offline/대기면 주방이 같이 멈추던 문제를 막는다.
+ */
+export function scheduleHallThenKitchenAutoprint(opts: {
+  printHall: boolean
+  printKitchen: boolean
+  runHall: () => void
+  runKitchen: () => void
+  kitchenDelayMs: number
+  schedule?: (fn: () => void, ms: number) => void
+}): void {
+  if (opts.printHall) opts.runHall()
+  if (!opts.printKitchen) return
+  const delay = Math.max(0, Number(opts.kitchenDelayMs) || 0)
+  const schedule = opts.schedule ?? ((fn, ms) => setTimeout(fn, ms))
+  schedule(opts.runKitchen, delay)
+}
+
+/** 미수락 배달은 수락 전에 주방 큐에 넣지 않는다. 홀/포장은 생성 즉시 넣는다. */
+export function shouldEnqueueKitchenPrintOnOrderCreate(input: {
+  orderType?: string | null
+  status?: string | null
+  kitchenLineCount: number
+}): boolean {
+  if (!Number.isFinite(input.kitchenLineCount) || input.kitchenLineCount <= 0) return false
+  const type = String(input.orderType ?? '').trim().toLowerCase()
+  const status = String(input.status ?? '').trim().toLowerCase()
+  if (type === 'delivery' && (status === 'pending' || status === '')) return false
+  return true
+}
+
 export function readMainPosLastSeenOrderId(storeCodeRaw: unknown): number {
   const storeCode = String(storeCodeRaw ?? '').trim()
   if (!storeCode || typeof window === 'undefined') return 0

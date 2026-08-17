@@ -848,22 +848,28 @@ export async function POST(req: NextRequest) {
       prevOrderItems as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1],
       { formatNote: (note: string) => formatGrabLineNoteForKitchenPrint(note) }
     )
-    const kitchenEnqueuePromise = enqueueKitchenPrintJob({
-      storeCode: String(current?.store_code || '').trim(),
-      orderId: id,
-      orderNo: String(current?.order_no || `POS-${id}`),
-      source: fromOfflineQueueSync ? 'offline_queue_update' : 'updatePosOrder',
-      dedupeKey: buildKitchenJobUpdateDedupeKey(id, items),
-      payload: {
-        action: 'update_order',
-        status,
-        ...(kitchenDeltaLines.length > 0 ? { kitchenLines: kitchenDeltaLines } : {}),
-      },
-    })
-    if (deferUnpaidSideEffects) {
-      void kitchenEnqueuePromise.catch((e) => console.error('updatePosOrder kitchen enqueue:', e))
-    } else {
-      await kitchenEnqueuePromise
+    if (kitchenDeltaLines.length > 0) {
+      const kitchenEnqueuePromise = enqueueKitchenPrintJob({
+        storeCode: String(current?.store_code || '').trim(),
+        orderId: id,
+        orderNo: String(current?.order_no || `POS-${id}`),
+        source: fromOfflineQueueSync ? 'offline_queue_update' : 'updatePosOrder',
+        dedupeKey: buildKitchenJobUpdateDedupeKey(id, kitchenDeltaLines),
+        payload: {
+          action: 'update_order',
+          status,
+          kitchenLines: kitchenDeltaLines,
+          orderNo: String(current?.order_no || `POS-${id}`),
+          tableName: String(current?.table_name || '').trim(),
+          memo: String(current?.memo || '').trim(),
+          guestCount: Number(current?.guest_count || 0) || undefined,
+        },
+      })
+      if (deferUnpaidSideEffects) {
+        void kitchenEnqueuePromise.catch((e) => console.error('updatePosOrder kitchen enqueue:', e))
+      } else {
+        await kitchenEnqueuePromise
+      }
     }
 
     let memberReceipt: Awaited<
