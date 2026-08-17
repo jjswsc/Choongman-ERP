@@ -137,7 +137,7 @@ describe('pos-main-poll-interval', () => {
     ).toBe(true)
   })
 
-  it('pauses interval polling before open and after settlement close', () => {
+  it('pauses interval polling only after settlement close or next-day before open', () => {
     expect(
       shouldPauseMainPosIntervalPolling({
         loading: true,
@@ -157,6 +157,22 @@ describe('pos-main-poll-interval', () => {
         loading: false,
         businessOpenAllowed: false,
         settlementClosed: false,
+        blockReason: 'never_opened',
+      })
+    ).toBe(false)
+    expect(
+      shouldPauseMainPosIntervalPolling({
+        loading: false,
+        businessOpenAllowed: false,
+        settlementClosed: false,
+      })
+    ).toBe(false)
+    expect(
+      shouldPauseMainPosIntervalPolling({
+        loading: false,
+        businessOpenAllowed: false,
+        settlementClosed: false,
+        blockReason: 'new_business_day',
       })
     ).toBe(true)
     expect(

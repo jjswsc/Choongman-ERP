@@ -256,6 +256,7 @@ export function usePosMainDeviceSyncHost(): void {
     loading: businessOpenGate.loading,
     businessOpenAllowed: businessOpenGate.allowed,
     settlementClosed: businessOpenGate.settlementClosed,
+    blockReason: businessOpenGate.blockReason,
   })
   const pauseIntervalPollRef = useRef(pauseIntervalPoll)
   pauseIntervalPollRef.current = pauseIntervalPoll
@@ -565,8 +566,18 @@ export function usePosMainDeviceSyncHost(): void {
     kitchenOnOrder: autoPrint.kitchenOnOrder,
     autoprintCtxRef,
     realtimeHealthyRef: realtimeChannelHealthyRef,
+    lastRealtimeEventAtRef: lastRealtimeOrderEventAtRef,
     pauseIntervalPollRef,
   })
+
+  const prevPauseIntervalPollRef = useRef(pauseIntervalPoll)
+  useEffect(() => {
+    const wasPaused = prevPauseIntervalPollRef.current
+    prevPauseIntervalPollRef.current = pauseIntervalPoll
+    if (!wasPaused || pauseIntervalPoll) return
+    pokeKitchenPrintJobs()
+    triggerMainPosPollNowRef.current?.({ force: true })
+  }, [pauseIntervalPoll, pokeKitchenPrintJobs])
 
   const shouldTreatAsIncomingOrder = shouldTreatAsMainPosIncomingOrder
 

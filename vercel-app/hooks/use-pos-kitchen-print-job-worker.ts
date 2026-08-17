@@ -21,6 +21,7 @@ import {
   resolveKitchenPrintJobDedupeKey,
   resolveKitchenPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
+import { isMainPosRealtimeRecentlyActive } from '@/lib/pos-main-poll-interval'
 
 async function printClaimedKitchenJob(
   job: PosKitchenPrintJobClaim,
@@ -75,7 +76,7 @@ async function printClaimedKitchenJob(
 
 /**
  * QR/원격 주문의 pos_print_jobs 를 메인 POS가 바로 claim·인쇄.
- * Realtime poke가 1차. 인터벌 claim은 끊김 15s / 정상 60s. 오픈 전·마감 후면 인터벌만 쉼.
+ * Realtime poke가 1차. 인터벌 claim은 끊김·무음 15s / 구독+최근이벤트 60s. 오픈 전·마감 후면 인터벌만 쉼.
  */
 export function usePosKitchenPrintJobWorker(opts: {
   enabled: boolean
@@ -83,6 +84,7 @@ export function usePosKitchenPrintJobWorker(opts: {
   kitchenOnOrder: boolean
   autoprintCtxRef: MutableRefObject<PosMainDeviceAutoprintCtx | null>
   realtimeHealthyRef?: MutableRefObject<boolean>
+  lastRealtimeEventAtRef?: MutableRefObject<number>
   pauseIntervalPollRef?: MutableRefObject<boolean>
 }): () => void {
   const drainNowRef = useRef<() => void>(() => {})
@@ -152,7 +154,12 @@ export function usePosKitchenPrintJobWorker(opts: {
       const paused = Boolean(opts.pauseIntervalPollRef?.current)
       const delayMs = paused
         ? MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS
-        : resolveKitchenPrintJobPollMs(Boolean(opts.realtimeHealthyRef?.current))
+        : resolveKitchenPrintJobPollMs({
+            realtimeChannelHealthy: Boolean(opts.realtimeHealthyRef?.current),
+            realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(
+              Number(opts.lastRealtimeEventAtRef?.current || 0)
+            ),
+          })
       pollTimer = window.setTimeout(() => {
         if (!cancelled && !opts.pauseIntervalPollRef?.current) void drain()
         scheduleNextPoll()
@@ -172,6 +179,7 @@ export function usePosKitchenPrintJobWorker(opts: {
     opts.kitchenOnOrder,
     opts.autoprintCtxRef,
     opts.realtimeHealthyRef,
+    opts.lastRealtimeEventAtRef,
     opts.pauseIntervalPollRef,
   ])
 

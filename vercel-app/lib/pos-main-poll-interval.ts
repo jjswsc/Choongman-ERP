@@ -42,15 +42,17 @@ export const MAIN_POS_TRIGGER_POLL_MIN_MS = 5_000
 /** 오픈 전·마감 후 인터벌 폴링을 멈춘 뒤 게이트만 재확인 */
 export const MAIN_POS_POLL_INTERVAL_PAUSED_MS = 60_000
 
-/** 시재 미등록(오픈 전) 또는 당일 마감 후면 HTTP 폴링을 쉰다. Realtime poke는 유지. */
+/** 당일 마감, 또는 어제 시재 있고 오늘 오픈 전. API 실패(never_opened)로 영업 중 폴링을 끄지 않는다. */
 export function shouldPauseMainPosIntervalPolling(opts: {
   loading: boolean
   businessOpenAllowed: boolean
   settlementClosed: boolean
+  blockReason?: 'none' | 'never_opened' | 'new_business_day'
 }): boolean {
   if (opts.loading) return false
-  if (!opts.businessOpenAllowed) return true
-  return opts.settlementClosed
+  if (opts.settlementClosed) return true
+  if (!opts.businessOpenAllowed && opts.blockReason === 'new_business_day') return true
+  return false
 }
 
 /**

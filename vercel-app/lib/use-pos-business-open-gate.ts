@@ -75,10 +75,12 @@ export function usePosBusinessOpenGate(
       }
       setPrevBusinessDateYmd(result.prevBusinessDateYmd)
     } catch {
-      setAllowed(false)
-      setSettlementClosed(false)
-      setBlockReason('never_opened')
-      setPrevBusinessDateYmd(undefined)
+      if (!opts?.quiet) {
+        setAllowed(false)
+        setSettlementClosed(false)
+        setBlockReason('never_opened')
+        setPrevBusinessDateYmd(undefined)
+      }
     } finally {
       setLoading(false)
     }

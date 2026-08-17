@@ -12,11 +12,21 @@ import { posOrdersRealtimeChannelName } from '@/lib/supabase-client'
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
 
 describe('MAIN_POS_KITCHEN_JOB_POLL_MS', () => {
-  it('uses 15s when realtime is down and 60s when subscribed', () => {
+  it('uses 15s unless realtime is subscribed and recently active', () => {
     expect(MAIN_POS_KITCHEN_JOB_POLL_MS).toBe(15_000)
     expect(MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS).toBe(60_000)
-    expect(resolveKitchenPrintJobPollMs(false)).toBe(15_000)
-    expect(resolveKitchenPrintJobPollMs(true)).toBe(60_000)
+    expect(
+      resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: false, realtimeRecentlyActive: false })
+    ).toBe(15_000)
+    expect(
+      resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: false, realtimeRecentlyActive: true })
+    ).toBe(15_000)
+    expect(
+      resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: true, realtimeRecentlyActive: false })
+    ).toBe(15_000)
+    expect(
+      resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: true, realtimeRecentlyActive: true })
+    ).toBe(60_000)
   })
 })
 
