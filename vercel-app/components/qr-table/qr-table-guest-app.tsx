@@ -347,12 +347,19 @@ export function QrTableGuestApp({ token }: { token: string }) {
       if (res.order) {
         setOrderSummary(toOrderSummary(res.order))
       }
-      if (session?.extrasPaymentModeResolved === 'prepay' || extrasChoice === 'prepay') {
-        const extrasTotal = lines.reduce((sum, l) => {
-          const m = extraMenus.find((x) => x.menuId === l.menuId)
-          return sum + (m ? m.listPrice * l.qty : 0)
-        }, 0)
-        if (extrasTotal >= 1) {
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'submit_failed')
+      return
+    } finally {
+      setBusy(false)
+    }
+    if (session?.extrasPaymentModeResolved === 'prepay' || extrasChoice === 'prepay') {
+      const extrasTotal = lines.reduce((sum, l) => {
+        const m = extraMenus.find((x) => x.menuId === l.menuId)
+        return sum + (m ? m.listPrice * l.qty : 0)
+      }, 0)
+      if (extrasTotal >= 1) {
+        try {
           const qr = await qrTableIssueExtrasQr(sessionAuth)
           if (qr?.success) {
             setQrPayload(String(qr.qrPayload || ''))
@@ -370,10 +377,10 @@ export function QrTableGuestApp({ token }: { token: string }) {
               }
             }, 3000)
           }
+        } catch {
+          /* extras QR is not on the kitchen-send path */
         }
       }
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -947,8 +954,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
               onClick={handleSubmit}
               className={`w-full rounded-2xl py-3.5 font-semibold disabled:opacity-50 ${brandBtn}`}
             >
-              {g('sendKitchen')}
-              {Object.keys(cart).length > 0
+              {busy ? g('sendingKitchen') : g('sendKitchen')}
+              {!busy && Object.keys(cart).length > 0
                 ? ` · ${Object.values(cart).reduce((a, b) => a + b, 0)}`
                 : ''}
             </button>

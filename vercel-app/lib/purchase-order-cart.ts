@@ -3,6 +3,7 @@
  */
 
 import { roundMoney2 } from "@/lib/invoice-vat-total"
+import { isHqWarehouseReceivableStoreName } from "@/lib/internal-outbound"
 
 export type PoCartLine = {
   code?: string
@@ -258,8 +259,9 @@ export function formatPoDisplayDate(
 }
 
 /**
- * 회계 PO 승인 → 미수금 귀속 매장명.
+ * 회계 PO 승인 → 미수금 귀속 매장명(표시·손익 후보).
  * meta.relatedStore → 품목 줄 store → 발주 수령처(location_name)
+ * 미수 원장 생성은 `resolveAccountingPoReceivableDebtorStoreName` 을 쓴다.
  */
 export function resolveAccountingPoReceivableStoreName(po: { cart_json?: unknown; location_name?: string }): string {
   const { meta, items } = parsePurchaseOrderCart(po.cart_json)
@@ -268,4 +270,21 @@ export function resolveAccountingPoReceivableStoreName(po: { cart_json?: unknown
   const fromLine = items.map((i) => String(i.store ?? "").trim()).find(Boolean)
   if (fromLine) return fromLine
   return String(po.location_name ?? "").trim()
+}
+
+/**
+ * 회계 PO 미수 채무자(가맹 청구 대상).
+ * 청구매장·품목 store 만 사용. 수령처(본사·S&J 창고)로 떨어지지 않음.
+ */
+export function resolveAccountingPoReceivableDebtorStoreName(po: {
+  cart_json?: unknown
+  location_name?: string
+}): string {
+  const { meta, items } = parsePurchaseOrderCart(po.cart_json)
+  const fromMeta = String(meta?.relatedStore ?? "").trim()
+  const fromLine = items.map((i) => String(i.store ?? "").trim()).find(Boolean) || ""
+  const debtor = fromMeta || fromLine
+  if (!debtor) return ""
+  if (isHqWarehouseReceivableStoreName(debtor)) return ""
+  return debtor
 }

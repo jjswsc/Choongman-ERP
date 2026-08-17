@@ -37,7 +37,7 @@ import {
   isAccountingPurchaseOrderByCartJson,
   purchaseOrderMetaOrderDate,
   resolveAccountingPoIssuerStore,
-  resolveAccountingPoReceivableStoreName,
+  resolveAccountingPoReceivableDebtorStoreName,
 } from './purchase-order-cart'
 
 export { formatReceivableInvoiceNo }
@@ -173,7 +173,8 @@ export async function syncReceivableFromApprovedAccountingPo(poId: number): Prom
   const overrideTransDate = await readTaxInvoiceIssueDateOverride('AccountingPO', poId)
   const transDate = overrideTransDate || fallbackTransDate
 
-  const storeName = resolveAccountingPoReceivableStoreName(po)
+  // 청구 매장만 미수 채무자. 수령처(본사·S&J)로 떨어지면 매입 PO인데 본사 미수가 생김.
+  const storeName = resolveAccountingPoReceivableDebtorStoreName(po)
   const issuerStore = resolveAccountingPoIssuerStore(po)
 
   if (!storeName || net <= 0) {

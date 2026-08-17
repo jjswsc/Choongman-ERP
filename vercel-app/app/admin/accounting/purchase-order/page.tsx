@@ -18,16 +18,45 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { resolvePoIssuerStoreFromAuth } from "@/lib/po-issuer-scope"
 import { AccountingPageShell } from "@/components/erp/accounting-page-shell"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
+import {
+  patchPurchaseOrderViewCache,
+  readPurchaseOrderViewCache,
+  type PurchaseOrderPageTab,
+} from "@/lib/purchase-order-view-cache"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
+
+const PO_TABS = ["hq", "billing_settings", "history"] as const
 
 export default function AccountingPurchaseOrderPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
-  const [tab, setTab] = useAdminUrlTab(
-    "tab",
-    ["hq", "billing_settings", "history"] as const,
-    "hq"
+  const [tab, setTab] = useAdminUrlTab("tab", PO_TABS, "hq")
+  const allowPoUrlSync = useErpAllowUrlSync("/admin/accounting/purchase-order")
+  const pageActiveRef = useErpPageActiveRef()
+  const tabCacheRestoredRef = React.useRef(false)
+
+  React.useEffect(() => {
+    if (tabCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowPoUrlSync) return
+    tabCacheRestoredRef.current = true
+    const snap = readPurchaseOrderViewCache()
+    const cached = snap?.tab
+    if (cached && PO_TABS.includes(cached) && cached !== tab) {
+      setTab(cached)
+      return
+    }
+    patchPurchaseOrderViewCache({ tab: tab as PurchaseOrderPageTab })
+  }, [allowPoUrlSync, pageActiveRef, setTab, tab])
+
+  const selectTab = React.useCallback(
+    (value: string) => {
+      const next = value as PurchaseOrderPageTab
+      setTab(next)
+      patchPurchaseOrderViewCache({ tab: next })
+    },
+    [setTab]
   )
   const isStoreIssuer = Boolean(
     auth && resolvePoIssuerStoreFromAuth({ role: auth.role, store: auth.store })
@@ -43,7 +72,7 @@ export default function AccountingPurchaseOrderPage() {
     >
       <Tabs
         value={tab}
-        onValueChange={(v) => setTab(v as "hq" | "billing_settings" | "history")}
+        onValueChange={selectTab}
         className={adminTabsRootCn}
       >
         <AdminTabsBarWithHelp>

@@ -40,11 +40,13 @@ describe("sales long-range fast query", () => {
     expect(isSalesLongRangeQuery("2026-06-01", "2026-08-16")).toBe(true)
   })
 
-  it("keeps year/month and coerces hour/day/week/dow to month on long range", () => {
+  it("keeps year/month/week/day/hour/dow on long range", () => {
     expect(isSalesPeriodGroupAllowedOnLongRange("month")).toBe(true)
-    expect(isSalesPeriodGroupAllowedOnLongRange("hour")).toBe(false)
-    expect(resolveSalesPeriodGroupForFastQuery("hour", true)).toBe("month")
-    expect(resolveSalesPeriodGroupForFastQuery("day", true)).toBe("month")
+    expect(isSalesPeriodGroupAllowedOnLongRange("hour")).toBe(true)
+    expect(resolveSalesPeriodGroupForFastQuery("hour", true)).toBe("hour")
+    expect(resolveSalesPeriodGroupForFastQuery("day", true)).toBe("day")
+    expect(resolveSalesPeriodGroupForFastQuery("week", true)).toBe("week")
+    expect(resolveSalesPeriodGroupForFastQuery("dow", true)).toBe("dow")
     expect(resolveSalesPeriodGroupForFastQuery("year", true)).toBe("year")
     expect(resolveSalesPeriodGroupForFastQuery("hour", false)).toBe("hour")
   })

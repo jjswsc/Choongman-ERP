@@ -24,3 +24,25 @@ export function isHeadOfficeLikeStoreName(storeName: string): boolean {
 export function isInternalForceOutboundTarget(storeName: string): boolean {
   return isHeadOfficeLikeStoreName(storeName)
 }
+
+/** 본사 창고 코드(S&J) — 가맹 매장명이 아님 */
+function isSjHqWarehouseName(storeName: string): boolean {
+  const compact = String(storeName || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-]+/g, "")
+  return compact === "s&j"
+}
+
+/**
+ * 회계발주 미수 채무자로 쓰면 안 되는 이름.
+ * 본사·오피스·입고등록·S&J 창고 — 매입이 들어오는 곳이지 가맹 미수 거래처가 아님.
+ */
+export function isHqWarehouseReceivableStoreName(storeName: string): boolean {
+  const raw = String(storeName || "").trim()
+  if (!raw) return false
+  if (isHeadOfficeLikeStoreName(raw)) return true
+  if (isSjHqWarehouseName(raw)) return true
+  const compact = raw.toLowerCase().replace(/[\s_\-]+/g, "")
+  return compact === "입고등록" || compact === "입고등록(본사)" || compact === "cmoffice"
+}

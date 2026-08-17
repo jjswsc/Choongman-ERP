@@ -20,7 +20,7 @@ export const PERIOD_GROUP = [
 
 export const PERIOD_GROUP_VALUES = new Set(PERIOD_GROUP.map((g) => g.value))
 
-/** 포함 일수가 이 값을 넘으면 비교 카드·시간대/메뉴/채널확인을 생략하고 월별만 집계 */
+/** 포함 일수가 이 값을 넘으면 비교 카드·메뉴/채널확인을 생략. 집계 기간(연·월·주·일·시간대·요일)은 제한하지 않음 */
 export const SALES_FAST_QUERY_MAX_DAYS = 31
 
 export function isSalesLongRangeQuery(startStr: string, endStr: string): boolean {
@@ -28,16 +28,15 @@ export function isSalesLongRangeQuery(startStr: string, endStr: string): boolean
 }
 
 export function isSalesPeriodGroupAllowedOnLongRange(group: PeriodGroupValue): boolean {
-  return group === "year" || group === "month"
+  return PERIOD_GROUP_VALUES.has(group)
 }
 
-/** 긴 기간은 연·월만. 주·일·시간대·요일은 월별로 강제 */
+/** 긴 기간도 선택한 집계 단위를 유지 */
 export function resolveSalesPeriodGroupForFastQuery(
   group: PeriodGroupValue,
-  longRange: boolean
+  _longRange: boolean
 ): PeriodGroupValue {
-  if (!longRange || isSalesPeriodGroupAllowedOnLongRange(group)) return group
-  return "month"
+  return group
 }
 
 export function isSalesHeavyTopicSkippedOnLongRange(view: AnalyticsView): boolean {

@@ -4068,6 +4068,8 @@ export const i18n = {
     wm_transferTo: '이체할 계좌',
     wm_selectCategory: '출금 유형을 선택해 주세요.',
     wm_execute: '출금 등록',
+    wm_newWithdrawHiddenOnBankHint:
+      '「출금 등록」은 통장 CSV와 잔액이 겹치지 않도록 통장 조회에 나오지 않습니다. 통장에 보이게 하려면 CSV를 먼저 가져온 뒤, 그 출금 줄에서 「저장」하세요.',
     wm_successWithAsset: '등록되었습니다. 감가상각 메뉴에서 자동 연동 확인하세요.',
     wm_fixedAssetNameOrMemoRequired: '자산명 또는 적요를 입력해 주세요.',
     wm_title: '출금 유형',
@@ -4470,7 +4472,7 @@ export const i18n = {
     helpSum_admin_expense_management:
       '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 지급대기의 「은행이체」보기로 예금주·계좌·은행·금액을 엑셀처럼 확인·복사·인쇄할 수 있습니다. 문서번호는 EXPyyyymm000x로 자동 발급됩니다.',
     helpHow_admin_expense_management:
-      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다. 계정과목은 자산 계정(예: 1490 유형자산)을 고르며, 나중에 송금해도 경비(손익)가 아니라 그 자산 계정으로 표시·분개됩니다. 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다. 본사(Office) 명의 건은 임원, 또는 오피스 급여 권한이 있는 회계가 삭제할 수 있습니다.',
+      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다. 계정과목은 자산 계정(예: 1490 유형자산)을 고르며, 나중에 송금해도 경비(손익)가 아니라 그 자산 계정으로 표시·분개됩니다. 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다. 본사(Office) 명의 건은 임원, 또는 오피스 급여 권한이 있는 회계가 삭제할 수 있습니다.\n⑪ 「출금 등록」은 통장 CSV와 잔액이 겹치지 않도록 통장 조회 목록에 나오지 않습니다. 통장 페이지에 보이게 하려면 CSV를 먼저 가져온 뒤 그 출금 줄에서 「저장」하세요.',
     helpSum_admin_depreciation:
       '고정자산 목록·수정, 월 감가상각, 처분. 신규는 지출등록(고정자산) 또는 예외등록(지급예정 자동)·목록의 지급예정 만들기 후 통장 연결.',
     helpHow_admin_depreciation:
@@ -5051,7 +5053,7 @@ export const i18n = {
     salesPressQueryToLoad: '위에서 조건을 맞춘 뒤「조회」를 누르면 집계가 표시됩니다.',
     salesQueryLoading: '집계 조회 중… 잠시만 기다려 주세요.',
     salesLongRangeFastQueryHint:
-      '31일을 넘는 조회는 월별만 집계하고, 직전 동일기간·전주 동기간 비교는 생략합니다. 시간대·메뉴·채널 확인은 기간을 한 달 이내로 나눠 주세요.',
+      '31일을 넘는 조회는 직전 동일기간·전주 동기간 비교를 생략합니다. 메뉴·채널 확인은 기간을 한 달 이내로 나눠 주세요.',
     salesSelectTopic: '주제를 선택하세요',
     salesAmountKindLabel: '매출액 종류',
     salesReportTopicLabel: '리포트(주제)',
@@ -7561,7 +7563,7 @@ export const i18n = {
     helpSum_admin_sales_management:
       '기간·매장·채널·메뉴·할인·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다. 「채널 확인」에서 배달앱·QR·카드는 방콕 달력일로 맞추고, QR은 통장 입금일·배달/카드는 인식일(익일 입금)로 틀린 날을 찾습니다.',
     helpHow_admin_sales_management:
-      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측·채널 확인)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「일자/시간 추이」·「매장·기간 목록」에서는 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n④ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑤ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑥ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑦ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑧ 채널 확인 → 배달앱: 행을 펼쳐 방콕 달력일과 통장 인식일(익일 입금)의 POS 예상입금 vs 매장 통장 4111/4112/4113을 비교하고, 「틀린 날짜만」으로 차이를 찾습니다.\n⑨ 채널 확인 → KBank QR: 당일 마감은 POS QR, 통장은 매장 통장 4130을 입금일(달력)로 맞춰 틀린 날을 찾습니다. 자정 이후는 영업일 마감과 날짜가 다를 수 있습니다.\n⑩ 채널 확인 → 카드: POS 카드와 매장 통장 4120~4124를 방콕 달력일 vs 통장 인식일로 비교합니다(정산은 보통 익일).\n⑪ 채널 확인 → 현금: POS 현금을 시재와 맞추고, 매장 통장 4140을 영업일·인식일로 비교합니다.\n⑫ 기간이 31일을 넘으면 월별만 집계하고 직전·전주 비교와 메뉴·채널 확인·시간대 조회는 생략합니다. 그 리포트는 한 달 이내로 나눠 조회하세요.',
+      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측·채널 확인)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「일자/시간 추이」·「매장·기간 목록」에서는 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n④ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑤ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑥ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑦ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑧ 채널 확인 → 배달앱: 행을 펼쳐 방콕 달력일과 통장 인식일(익일 입금)의 POS 예상입금 vs 매장 통장 4111/4112/4113을 비교하고, 「틀린 날짜만」으로 차이를 찾습니다.\n⑨ 채널 확인 → KBank QR: 당일 마감은 POS QR, 통장은 매장 통장 4130을 입금일(달력)로 맞춰 틀린 날을 찾습니다. 자정 이후는 영업일 마감과 날짜가 다를 수 있습니다.\n⑩ 채널 확인 → 카드: POS 카드와 매장 통장 4120~4124를 방콕 달력일 vs 통장 인식일로 비교합니다(정산은 보통 익일).\n⑪ 채널 확인 → 현금: POS 현금을 시재와 맞추고, 매장 통장 4140을 영업일·인식일로 비교합니다.\n⑫ 기간이 31일을 넘어도 연·월·주·일·시간대·요일 집계는 선택할 수 있습니다. 직전·전주 비교와 메뉴·채널 확인은 생략하니, 그 리포트는 한 달 이내로 나눠 조회하세요.',
     salesSubnavAria: '매출 관리 메뉴',
     salesTopicHintLabel: '이 리포트',
     salesOverviewIntro:
@@ -12132,6 +12134,8 @@ Only matters the employee must handle personally on a working day:
     wm_transferTo: 'Transfer To Account',
     wm_selectCategory: 'Select withdrawal type.',
     wm_execute: 'Register Withdrawal',
+    wm_newWithdrawHiddenOnBankHint:
+      'Register Withdrawal does not appear on the bank page (to avoid double-counting K-Bank CSV). Import the CSV first, then Save from the real withdrawal row.',
     wm_successWithAsset: 'Registered. Check depreciation menu for auto link.',
     wm_fixedAssetNameOrMemoRequired: 'Enter an asset name or memo.',
     wm_title: 'Withdrawal Type',
@@ -12534,7 +12538,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_expense_management:
       'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use EXPyyyymm000x.',
     helpHow_admin_expense_management:
-      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management. Pick an asset account (e.g. 1490 PPE); later bank transfer posts to that asset account, not P&L expense. Attach invoice/receipt and VAT like expense/purchase.\n⑧ Choosing a WHT rate (%) fills withholding as (gross−VAT)×%; with "Auto-create 50 ทวิ" on, the certificate print window opens right after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 purchase VAT.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows. HQ-named (Office) rows can be deleted by directors, or by accounting staff with office payroll authority.',
+      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management. Pick an asset account (e.g. 1490 PPE); later bank transfer posts to that asset account, not P&L expense. Attach invoice/receipt and VAT like expense/purchase.\n⑧ Choosing a WHT rate (%) fills withholding as (gross−VAT)×%; with "Auto-create 50 ทวิ" on, the certificate print window opens right after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 purchase VAT.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows. HQ-named (Office) rows can be deleted by directors, or by accounting staff with office payroll authority.\n⑪ Register Withdrawal does not appear on the bank query list (avoids double-counting CSV). Import CSV first, then Save from that withdrawal row.',
     helpSum_admin_depreciation:
       'Fixed assets list/edit, monthly depreciation, disposal. New buys via Expense Register or exception register (auto payment plan) / Create payment plan, then bank link.',
     helpHow_admin_depreciation:
@@ -13112,7 +13116,7 @@ Only matters the employee must handle personally on a working day:
     salesPressQueryToLoad: 'Set filters above, then tap Query to load aggregates.',
     salesQueryLoading: 'Loading aggregates… please wait.',
     salesLongRangeFastQueryHint:
-      'Ranges longer than 31 days use monthly totals only and skip prior-period / prior-week comparison. For hourly, menu, or channel-check reports, split the range into one month or less.',
+      'Ranges longer than 31 days skip prior-period / prior-week comparison. For menu or channel-check reports, split the range into one month or less.',
     salesSelectTopic: 'Select topic',
     salesAmountKindLabel: 'Sales amount type',
     salesReportTopicLabel: 'Report (topic)',
@@ -15625,7 +15629,7 @@ orderItemQty: 'Qty',
     helpSum_admin_sales_management:
       'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. Channel check matches delivery apps, QR, and card on Bangkok calendar dates (QR uses bank deposit date; delivery/card use recognition date for next-day payout) so you can find mismatched days.',
     helpHow_admin_sales_management:
-      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic; read the hint under the topic buttons.\n③ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n④ Reuse filters via URL or Save preset.\n⑤ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑥ Business hours tab adjusts POS business-day boundaries.\n⑦ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑧ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑨ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑩ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑪ Channel check → Cash: match POS cash to the drawer vs store account subject 4140 on POS business day and bank recognition date.\n⑫ Ranges longer than 31 days use monthly totals only and skip prior-period / prior-week comparison, menu, channel check, and hourly reports. Split those into one month or less.',
+      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic; read the hint under the topic buttons.\n③ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n④ Reuse filters via URL or Save preset.\n⑤ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑥ Business hours tab adjusts POS business-day boundaries.\n⑦ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑧ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑨ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑩ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑪ Channel check → Cash: match POS cash to the drawer vs store account subject 4140 on POS business day and bank recognition date.\n⑫ Ranges longer than 31 days still allow year/month/week/day/hour/weekday aggregation. Prior-period / prior-week comparison, menu, and channel check are skipped — split those into one month or less.',
     salesSubnavAria: 'Sales menu',
     salesTopicHintLabel: 'This report',
     salesOverviewIntro:
@@ -19639,6 +19643,8 @@ orderItemQty: 'จำนวน',
     wm_usefulLife: 'อายุใช้งาน (เดือน)',
     wm_selectCategory: 'กรุณาเลือกประเภทถอน',
     wm_execute: 'ลงทะเบียนถอน',
+    wm_newWithdrawHiddenOnBankHint:
+      'ปุ่มลงทะเบียนถอน จะไม่ขึ้นหน้าธนาคารครับ เพื่อไม่ให้ยอดซ้ำกับไฟล์ K-Bank — ให้นำเข้า CSV ก่อน แล้วกดบันทึกจากบรรทัดถอนจริงครับ',
     wm_successWithAsset: 'ลงทะเบียนแล้ว ตรวจสอบเมนูค่าเสื่อมราคาสำหรับการเชื่อมโยงอัตโนมัติ',
     wm_fixedAssetNameOrMemoRequired: 'กรุณาใส่ชื่อสินทรัพย์หรือหมายเหตุ',
     bankRegisterPayeeManual: 'ป้อนเอง',
@@ -20518,7 +20524,7 @@ orderItemQty: 'จำนวน',
     salesSelectMyFranchiseStoresAll: 'ทุกสาขาของฉัน',
     salesPressQueryToLoad: 'ตั้งค่าด้านบนแล้วกดค้นหาเพื่อโหลดข้อมูลสรุป',
     salesLongRangeFastQueryHint:
-      'ช่วงเกิน 31 วันจะสรุปเป็นรายเดือนเท่านั้น และไม่เทียบช่วงก่อนหน้าหรือสัปดาห์ก่อน เมนู ตรวจสอบช่องทาง และรายชั่วโมงให้แบ่งไม่เกินหนึ่งเดือนครับ',
+      'ช่วงเกิน 31 วันจะไม่เทียบช่วงก่อนหน้าหรือสัปดาห์ก่อน เมนูและตรวจสอบช่องทางให้แบ่งไม่เกินหนึ่งเดือนครับ',
     salesSelectTopic: 'เลือกหัวข้อ',
     salesAmountKindLabel: 'ประเภทยอดขาย',
     salesReportTopicLabel: 'รายงาน (หัวข้อ)',
@@ -25258,6 +25264,8 @@ orderItemQty: 'အရေအတွက်',
     wm_usefulLife: 'သက်တမ်း (လ)',
     wm_selectCategory: 'ငွေထုတ်အမျိုးအစား ရွေးပါ',
     wm_execute: 'ငွေထုတ်မှတ်ပုံတင်',
+    wm_newWithdrawHiddenOnBankHint:
+      'Register Withdrawal does not appear on the bank page (to avoid double-counting K-Bank CSV). Import the CSV first, then Save from the real withdrawal row.',
     wm_successWithAsset: 'မှတ်ပုံတင်ပြီး။ တန်ဖိုးလျော့သွားမှုမှတ်ပုံတင်တွင်စစ်ဆေးပါ။',
     bankRegisterPayeeManual: 'ကိုယ်တိုင်ထည့်ပါ',
     inv_account_no: 'အကောင့်နံပါတ်',
@@ -25673,7 +25681,7 @@ orderItemQty: 'အရေအတွက်',
     salesPressQueryToLoad: 'Set filters above, then tap Query to load aggregates.',
     salesQueryLoading: 'Loading aggregates… please wait.',
     salesLongRangeFastQueryHint:
-      'Ranges longer than 31 days use monthly totals only and skip prior-period / prior-week comparison. For hourly, menu, or channel-check reports, split the range into one month or less.',
+      'Ranges longer than 31 days skip prior-period / prior-week comparison. For menu or channel-check reports, split the range into one month or less.',
     salesSelectTopic: 'ခေါင်းစဉ်ရွေးပါ',
     salesAmountKindLabel: 'အရောင်းအမျိုးအစား',
     salesReportTopicLabel: 'အစီရင်ခံစာ (ခေါင်းစဉ်)',
@@ -30105,6 +30113,8 @@ orderItemQty: 'ຈຳນວນ',
     wm_usefulLife: 'ອາຍຸໃຊ້ງານ (ເດືອນ)',
     wm_selectCategory: 'ກະລຸນາເລືອກປະເພດຖ່ອມ',
     wm_execute: 'ລົງທະບຽນຖ່ອມ',
+    wm_newWithdrawHiddenOnBankHint:
+      'Register Withdrawal does not appear on the bank page (to avoid double-counting K-Bank CSV). Import the CSV first, then Save from the real withdrawal row.',
     wm_successWithAsset: 'ລົງທະບຽນແລ້ວ ກວດໃນເມນູຄ່າເຊື່ອມໂຊມສຳລັບເຊື່ອມອັດຕະໂນມັດ',
     bankRegisterPayeeManual: 'ປ້ອນເອງ',
     inv_account_no: 'ເລກບັນຊີ',
@@ -30520,7 +30530,7 @@ orderItemQty: 'ຈຳນວນ',
     salesPressQueryToLoad: 'Set filters above, then tap Query to load aggregates.',
     salesQueryLoading: 'Loading aggregates… please wait.',
     salesLongRangeFastQueryHint:
-      'Ranges longer than 31 days use monthly totals only and skip prior-period / prior-week comparison. For hourly, menu, or channel-check reports, split the range into one month or less.',
+      'Ranges longer than 31 days skip prior-period / prior-week comparison. For menu or channel-check reports, split the range into one month or less.',
     salesSelectTopic: 'ເລືອກຫົວຂໍ້',
     salesAmountKindLabel: 'ປະເພດຍອດຂາຍ',
     salesReportTopicLabel: 'ລາຍງານ (ຫົວຂໍ້)',
@@ -33076,6 +33086,8 @@ orderItemQty: 'ຈຳນວນ',
     wm_usefulLife: 'អាយុកាល (ខែ)',
     wm_selectCategory: 'សូមជ្រើសរើសប្រភេទដកប្រាក់',
     wm_execute: 'ចុះឈ្មោះដកប្រាក់',
+    wm_newWithdrawHiddenOnBankHint:
+      'Register Withdrawal does not appear on the bank page (to avoid double-counting K-Bank CSV). Import the CSV first, then Save from the real withdrawal row.',
     wm_successWithAsset: 'ចុះឈ្មោះរួច។ ពិនិត្យម៉ឺនុយរំលោះចំពោះការភ្ជាប់ស្វ័យប្រវត្តិ។',
     bankRegisterPayeeManual: 'បញ្ចូលដោយខ្លួនឯង',
     bankRegisterLabel: 'ភ្ជាប់ការចុះឈ្មោះចំណាយ',
@@ -33506,7 +33518,7 @@ orderItemQty: 'ຈຳນວນ',
     salesPressQueryToLoad: 'Set filters above, then tap Query to load aggregates.',
     salesQueryLoading: 'Loading aggregates… please wait.',
     salesLongRangeFastQueryHint:
-      'Ranges longer than 31 days use monthly totals only and skip prior-period / prior-week comparison. For hourly, menu, or channel-check reports, split the range into one month or less.',
+      'Ranges longer than 31 days skip prior-period / prior-week comparison. For menu or channel-check reports, split the range into one month or less.',
     salesSelectTopic: 'ជ្រើសរើសប្រធានបទ',
     salesAmountKindLabel: 'ប្រភេទរលក់',
     salesReportTopicLabel: 'របាយការណ៍ (ប្រធានបទ)',
@@ -34863,6 +34875,8 @@ orderItemQty: 'ຈຳນວນ',
     wm_usefulLife: 'Tuổi thọ (tháng)',
     wm_selectCategory: 'Vui lòng chọn loại rút tiền',
     wm_execute: 'Đăng ký rút tiền',
+    wm_newWithdrawHiddenOnBankHint:
+      'Register Withdrawal does not appear on the bank page (to avoid double-counting K-Bank CSV). Import the CSV first, then Save from the real withdrawal row.',
     wm_successWithAsset: 'Đã đăng ký. Kiểm tra menu khấu hao để liên kết tự động.',
     bankRegisterPayeeManual: 'Nhập thủ công',
     bankRegisterLabel: 'Liên kết đăng ký chi phí',
@@ -35257,7 +35271,7 @@ orderItemQty: 'ຈຳນວນ',
     salesQuery: 'Tìm kiếm',
     salesPressQueryToLoad: 'Chọn bộ lọc phía trên, rồi nhấn Tìm kiếm để tải số liệu.',
     salesLongRangeFastQueryHint:
-      'Khoảng trên 31 ngày chỉ gom theo tháng và bỏ so sánh kỳ trước / tuần trước. Báo cáo theo giờ, món, đối soát kênh hãy chia trong một tháng.',
+      'Khoảng trên 31 ngày bỏ so sánh kỳ trước / tuần trước. Báo cáo món, đối soát kênh hãy chia trong một tháng.',
     salesSelectTopic: 'Chọn chủ đề',
     salesAmountKindLabel: 'Loại doanh thu',
     salesReportTopicLabel: 'Báo cáo (chủ đề)',
@@ -36612,6 +36626,8 @@ orderItemQty: 'ຈຳນວນ',
     wm_usefulLife: 'Jangka hayat berguna (bulan)',
     wm_selectCategory: 'Sila pilih jenis pengeluaran',
     wm_execute: 'Daftar Pengeluaran',
+    wm_newWithdrawHiddenOnBankHint:
+      'Register Withdrawal does not appear on the bank page (to avoid double-counting K-Bank CSV). Import the CSV first, then Save from the real withdrawal row.',
     wm_successWithAsset: 'Didaftarkan. Semak menu susut nilai untuk pautan auto.',
     bankRegisterPayeeManual: 'Masuk secara manual',
     bankRegisterLabel: 'Pautan daftar perbelanjaan',
@@ -37029,7 +37045,7 @@ orderItemQty: 'ຈຳນວນ',
     salesPressQueryToLoad: 'Set filters above, then tap Query to load aggregates.',
     salesQueryLoading: 'Loading aggregates… please wait.',
     salesLongRangeFastQueryHint:
-      'Ranges longer than 31 days use monthly totals only and skip prior-period / prior-week comparison. For hourly, menu, or channel-check reports, split the range into one month or less.',
+      'Ranges longer than 31 days skip prior-period / prior-week comparison. For menu or channel-check reports, split the range into one month or less.',
     salesSelectTopic: 'Pilih topik',
     salesAmountKindLabel: 'Jenis jualan',
     salesReportTopicLabel: 'Laporan (topik)',

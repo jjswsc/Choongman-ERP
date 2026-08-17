@@ -257,10 +257,22 @@ function computeItemsSubtotal(items: Array<Record<string, unknown>>): number {
   return items.reduce((sum, it) => sum + lineQty(it) * lineUnitPrice(it), 0)
 }
 
+const QR_PRICING_ADJ_CACHE_MS = 60_000
+const qrPricingAdjCache = new Map<string, { at: number; adj: Awaited<ReturnType<typeof loadPosPricingAdjustmentsForStore>> }>()
+
 /** 매장 봉사료·VAT·반올림을 POS와 같게 적용 (첫 체크빌 금액 어긋남 방지) */
 async function computeQrTableOrderFinancials(storeCode: string, items: Array<Record<string, unknown>>) {
   const subtotal = computeItemsSubtotal(items)
-  const adjustments = await loadPosPricingAdjustmentsForStore(storeCode)
+  const code = String(storeCode || '').trim()
+  const now = Date.now()
+  const hit = qrPricingAdjCache.get(code)
+  const adjustments =
+    hit && now - hit.at < QR_PRICING_ADJ_CACHE_MS
+      ? hit.adj
+      : await loadPosPricingAdjustmentsForStore(code).then((adj) => {
+          qrPricingAdjCache.set(code, { at: Date.now(), adj })
+          return adj
+        })
   const pricing = computePosPricing({
     subtotal,
     discountAmt: 0,
@@ -596,6 +608,8 @@ function sessionAgeMinutes(createdAt: string): number {
 export async function expireSessionIfStale(session: QrTableSession): Promise<QrTableSession | null> {
   if (session.status === 'closed' || session.status === 'expired') return null
   try {
+    // max_open_minutes 하한은 30분 — 그 안이면 설정 조회 없이 통과 (카트 제출 핫패스)
+    if (sessionAgeMinutes(session.createdAt) < 30) return session
     const settings = await loadQrOrderStoreSettings(session.storeCode)
     const maxMin = Math.max(30, Math.floor(settings.maxOpenMinutes || 240))
     if (sessionAgeMinutes(session.createdAt) < maxMin) return session
@@ -777,17 +791,61 @@ export async function listActiveQrSessionsForStore(
   }
 }
 
-async function loadIncludedMenuIdSet(tierId: number): Promise<Set<number>> {
-  const rows = (await supabaseSelectFilter('pos_buffet_tier_menus', `tier_id=eq.${tierId}`, {
-    limit: 5000,
-  })) as Array<{ menu_id?: number }>
+function menuIdInFilter(ids: number[]): string {
+  const uniq = [...new Set(ids.map((n) => Math.floor(Number(n) || 0)).filter((n) => n > 0))]
+  if (!uniq.length) return ''
+  return `&menu_id=in.(${uniq.join(',')})`
+}
+
+async function loadIncludedMenuIdSet(tierId: number, onlyMenuIds?: number[]): Promise<Set<number>> {
+  const idFilter = menuIdInFilter(onlyMenuIds || [])
+  const rows = (await supabaseSelectFilter(
+    'pos_buffet_tier_menus',
+    `tier_id=eq.${tierId}${idFilter}`,
+    {
+      limit: onlyMenuIds?.length ? onlyMenuIds.length + 10 : 5000,
+      select: 'menu_id',
+    }
+  )) as Array<{ menu_id?: number }>
   return new Set((rows || []).map((r) => Number(r.menu_id || 0)).filter(Boolean))
+}
+
+async function loadExtraMenuAllowForCart(
+  tierId: number,
+  requestedIds: number[]
+): Promise<{ restricted: boolean; allowed: Set<number> }> {
+  try {
+    const idFilter = menuIdInFilter(requestedIds)
+    const [anyRow, rows] = await Promise.all([
+      supabaseSelectFilter('pos_buffet_tier_extra_menus', `tier_id=eq.${tierId}`, {
+        limit: 1,
+        select: 'menu_id',
+      }) as Promise<Array<{ menu_id?: number }>>,
+      idFilter
+        ? (supabaseSelectFilter('pos_buffet_tier_extra_menus', `tier_id=eq.${tierId}${idFilter}`, {
+            limit: requestedIds.length + 10,
+            select: 'menu_id',
+          }) as Promise<Array<{ menu_id?: number }>>)
+        : Promise.resolve([] as Array<{ menu_id?: number }>),
+    ])
+    return {
+      restricted: (anyRow || []).length > 0,
+      allowed: new Set((rows || []).map((r) => Number(r.menu_id || 0)).filter(Boolean)),
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/pgrst205|pos_buffet_tier_extra_menus|could not find the table/i.test(msg)) {
+      return { restricted: false, allowed: new Set() }
+    }
+    throw e
+  }
 }
 
 async function loadExtraMenuIdSet(tierId: number): Promise<Set<number>> {
   try {
     const rows = (await supabaseSelectFilter('pos_buffet_tier_extra_menus', `tier_id=eq.${tierId}`, {
       limit: 5000,
+      select: 'menu_id',
     })) as Array<{ menu_id?: number }>
     return new Set((rows || []).map((r) => Number(r.menu_id || 0)).filter(Boolean))
   } catch (e) {
@@ -1396,8 +1454,10 @@ export async function submitQrCart(params: {
     .filter((id) => id > 0)
 
   const [included, extraAllow, byId, orderRows] = await Promise.all([
-    tierId > 0 ? loadIncludedMenuIdSet(tierId) : Promise.resolve(new Set<number>()),
-    tierId > 0 ? loadExtraMenuIdSet(tierId) : Promise.resolve(new Set<number>()),
+    tierId > 0 ? loadIncludedMenuIdSet(tierId, requestedIds) : Promise.resolve(new Set<number>()),
+    tierId > 0
+      ? loadExtraMenuAllowForCart(tierId, requestedIds)
+      : Promise.resolve({ restricted: false, allowed: new Set<number>() }),
     loadCartMenusByIdsForStore(session.storeCode, requestedIds),
     supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
       limit: 1,
@@ -1443,7 +1503,7 @@ export async function submitQrCart(params: {
     if (!menu) throw new Error(`menu_not_found:${menuId}`)
     if (isMenuSoldOutToday(menu.sold_out_date)) throw new Error(`menu_sold_out:${menuId}`)
     const isIncluded = included.has(menuId)
-    if (!isIncluded && extraAllow.size > 0 && !extraAllow.has(menuId)) {
+    if (!isIncluded && extraAllow.restricted && !extraAllow.allowed.has(menuId)) {
       throw new Error(`menu_not_in_extras:${menuId}`)
     }
     const unitPrice = isIncluded ? 0 : asNum(menu.price)
@@ -1477,7 +1537,6 @@ export async function submitQrCart(params: {
   }
 
   const nextItems = [...prevItems, ...newLines]
-  const { subtotal, pricing } = await computeQrTableOrderFinancials(session.storeCode, nextItems)
   const now = addedAt
 
   const kitchenDelta = extrasPrepay
@@ -1495,7 +1554,7 @@ export async function submitQrCart(params: {
         }
       })
   if (kitchenDelta.length) {
-    // 주문 UPDATE보다 먼저 큐에 넣어, 메인 POS Realtime이 도착했을 때 claim 가능하게
+    // 합계 계산보다 먼저 큐에 넣어, 손님 버튼 대기와 무관하게 주방이 먼저 나가게
     void enqueueKitchenPrintJob({
       storeCode: session.storeCode,
       orderId: session.posOrderId,
@@ -1504,6 +1563,7 @@ export async function submitQrCart(params: {
       dedupeKey: `order:${session.posOrderId}:kitchen:qr:${Date.now()}`,
       payload: {
         action: 'update_order',
+        orderType: 'dine_in',
         kitchenLines: kitchenDelta,
         orderNo: String(order.order_no || '').trim(),
         tableName: String(session.tableName || order.table_name || '').trim(),
@@ -1512,6 +1572,8 @@ export async function submitQrCart(params: {
       },
     }).catch((e) => console.error('qr_table_submit kitchen enqueue:', e))
   }
+
+  const { subtotal, pricing } = await computeQrTableOrderFinancials(session.storeCode, nextItems)
 
   await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     items_json: JSON.stringify(nextItems),
@@ -1767,6 +1829,7 @@ async function finalizeExtrasPrepay(session: QrTableSession & { secretHash?: str
       dedupeKey: `order:${session.posOrderId}:kitchen:extras:${partnerDedupe(amount)}`,
       payload: {
         action: 'update_order',
+        orderType: 'dine_in',
         kitchenLines: toPrint,
         orderNo: String(order.order_no || '').trim(),
         tableName: String(session.tableName || order.table_name || '').trim(),

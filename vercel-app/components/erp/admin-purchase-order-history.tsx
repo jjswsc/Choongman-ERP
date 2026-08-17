@@ -68,6 +68,12 @@ import {
 import { resolvePoIssuerCompany } from "@/lib/po-issuer-company"
 import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
 import { todayStrBangkok } from "@/lib/attendance-utils"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
+import {
+  patchPurchaseOrderViewCache,
+  readPurchaseOrderViewCache,
+  type PurchaseOrderHistorySourceFilter,
+} from "@/lib/purchase-order-view-cache"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import {
   resolvePoWhtAgentStoreKey,
@@ -113,8 +119,14 @@ export function AdminPurchaseOrderHistory() {
   const [startDate, setStartDate] = React.useState(() => addCalendarMonthsBangkokYmd(todayStrBangkok(), -1))
   const [endDate, setEndDate] = React.useState(() => todayStrBangkok())
   const [vendorFilter, setVendorFilter] = React.useState<string>("All")
-  const [sourceFilter, setSourceFilter] = React.useState<"all" | "logistics" | "accounting">("all")
+  const [sourceFilter, setSourceFilter] = React.useState<PurchaseOrderHistorySourceFilter>("all")
   const [searchText, setSearchText] = React.useState("")
+  const allowPoUrlSync = useErpAllowUrlSync(
+    "/admin/accounting/purchase-order",
+    "/admin/order-create"
+  )
+  const pageActiveRef = useErpPageActiveRef()
+  const viewCacheRestoredRef = React.useRef(false)
 
   const poDateLocale = React.useMemo(
     () =>
@@ -130,6 +142,39 @@ export function AdminPurchaseOrderHistory() {
       }[lang] || "en-US"),
     [lang]
   )
+
+  React.useEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current || !allowPoUrlSync) return
+    viewCacheRestoredRef.current = true
+    const snap = readPurchaseOrderViewCache()
+    if (!snap?.hasSearched) return
+    if (snap.startDate) setStartDate(snap.startDate)
+    if (snap.endDate) setEndDate(snap.endDate)
+    setVendorFilter(snap.vendorFilter || "All")
+    if (snap.sourceFilter === "logistics" || snap.sourceFilter === "accounting" || snap.sourceFilter === "all") {
+      setSourceFilter(snap.sourceFilter)
+    }
+    setSearchText(snap.searchText || "")
+    setList(Array.isArray(snap.list) ? snap.list : [])
+    setHasSearched(true)
+  }, [allowPoUrlSync, pageActiveRef])
+
+  React.useEffect(() => {
+    if (!hasSearched) {
+      // remount 직후 초기 hasSearched=false로 clear하면 복원 스냅샷이 사라짐 — 미조회 시 저장만 생략
+      return
+    }
+    patchPurchaseOrderViewCache({
+      startDate,
+      endDate,
+      vendorFilter,
+      sourceFilter,
+      searchText,
+      hasSearched: true,
+      list,
+    })
+  }, [endDate, hasSearched, list, searchText, sourceFilter, startDate, vendorFilter])
 
   React.useEffect(() => {
     ;(async () => {
@@ -166,8 +211,14 @@ export function AdminPurchaseOrderHistory() {
       endDate,
       vendorCode: vendorFilter === "All" ? undefined : vendorFilter,
     })
-      .then((rows) => setList(Array.isArray(rows) ? rows : []))
-      .catch(() => setList([]))
+      .then((rows) => {
+        setList(Array.isArray(rows) ? rows : [])
+        setHasSearched(true)
+      })
+      .catch(() => {
+        setList([])
+        setHasSearched(true)
+      })
       .finally(() => setLoading(false))
   }, [startDate, endDate, vendorFilter])
 
@@ -218,7 +269,6 @@ export function AdminPurchaseOrderHistory() {
   )
 
   const handleSearch = React.useCallback(() => {
-    setHasSearched(true)
     load()
   }, [load])
 

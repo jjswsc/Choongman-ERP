@@ -157,7 +157,6 @@ import {
   resolveSalesPeriodGroupForFastQuery,
   isSalesHeavyTopicSkippedOnLongRange,
   isSalesLongRangeQuery,
-  isSalesPeriodGroupAllowedOnLongRange,
   SALES_FILTER_PRESET_STORAGE_KEY,
   SALES_ORDER_TYPE_TOGGLES,
   salesWaterfallGross,
@@ -3547,8 +3546,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             </li>
                           ) : (
                             filteredPeriodPickerRows.map((row) => {
-                              const lockedOut =
-                                isLongRangeSalesQuery && !isSalesPeriodGroupAllowedOnLongRange(row.value)
                               const active = periodGroupUi === row.value
                               return (
                                 <li key={row.value} role="presentation">
@@ -3556,13 +3553,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                                     type="button"
                                     role="option"
                                     aria-selected={active}
-                                    disabled={lockedOut}
                                     className={
-                                      "flex w-full px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50 " +
+                                      "flex w-full px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/80 " +
                                       (active ? "bg-muted" : "")
                                     }
                                     onClick={() => {
-                                      if (lockedOut) return
                                       userSelectedRef.current.periodGroup = row.value
                                       setPeriodGroup(row.value)
                                       setPeriodPickerOpen(false)
@@ -3656,25 +3651,19 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         {tr("salesPeriodGranularityLabel", "집계 기간")}
                       </span>
                       <div className="flex flex-wrap gap-2">
-                        {PERIOD_GROUP.map((g) => {
-                          const lockedOut =
-                            isLongRangeSalesQuery && !isSalesPeriodGroupAllowedOnLongRange(g.value)
-                          return (
+                        {PERIOD_GROUP.map((g) => (
                           <Button
                             key={g.value}
                             size="sm"
                             variant={periodGroupUi === g.value ? "default" : "outline"}
-                            disabled={lockedOut}
                             onClick={() => {
-                              if (lockedOut) return
                               userSelectedRef.current.periodGroup = g.value
                               setPeriodGroup(g.value)
                             }}
                           >
                             {tr(g.labelKey, I18N_KO[g.labelKey] ?? g.labelKey)}
                           </Button>
-                          )
-                        })}
+                        ))}
                       </div>
                     </div>
                   </>
@@ -3724,7 +3713,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             <p className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
               {tr(
                 "salesLongRangeFastQueryHint",
-                "31일을 넘는 조회는 월별만 집계하고, 직전 동일기간·전주 동기간 비교는 생략합니다. 시간대·메뉴·채널 확인은 기간을 한 달 이내로 나눠 주세요."
+                "31일을 넘는 조회는 직전 동일기간·전주 동기간 비교를 생략합니다. 메뉴·채널 확인은 기간을 한 달 이내로 나눠 주세요."
               )}
             </p>
           ) : null}

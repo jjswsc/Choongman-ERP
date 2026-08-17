@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Wallet, ArrowLeft, Plus } from "lucide-react"
+import { Wallet, ArrowLeft, Plus, AlertCircle } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
@@ -675,6 +675,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     (isTransferPrepaymentAccrual ||
       ((categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset") &&
         expensePayMode === "later"))
+
+  /** 「출금 등록」= 내부 통장 행 → 통장 조회 목록에서 숨김. 기존 통장 줄 저장(บันทึก)과 구분. */
+  const showNewWithdrawBankHiddenHint =
+    !!categoryMain && !isExistingBankTxMode && !isLaterPayment
 
   const resolveAccountIdForSave = React.useCallback((): number => {
     const fromState = Number(accountId || 0)
@@ -3350,6 +3354,18 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               onOcrFields={handleExpenseOcrFields}
               disabled={saving}
             />
+          ) : null}
+
+          {showNewWithdrawBankHiddenHint ? (
+            <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+              <span>
+                {tt(
+                  "wm_newWithdrawHiddenOnBankHint",
+                  "Register Withdrawal does not appear on the bank page (to avoid double-counting K-Bank CSV). Import the CSV first, then Save from the real withdrawal row."
+                )}
+              </span>
+            </p>
           ) : null}
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
