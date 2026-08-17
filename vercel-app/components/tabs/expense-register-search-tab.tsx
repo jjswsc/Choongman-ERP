@@ -748,6 +748,7 @@ export function ExpenseRegisterSearchTab() {
                           status: r.accrualStatus ?? r.planStatus,
                           paidAmount: r.paidAmount,
                           hasPaymentLink: Boolean(r.bankLinked || r.pettyLinked || r.bankTransactionId),
+                          canManageOfficePayroll: auth?.canManageOfficePayroll === true,
                         })
                     )
                     const showBankEdit = canEditBank && !r.accrualId

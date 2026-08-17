@@ -98,7 +98,7 @@ describe('canDeleteExpenseAccrual', () => {
     ).toBe(true)
   })
 
-  it('blocks accounting on HQ-named accruals', () => {
+  it('blocks accounting on HQ-named accruals without office payroll flag', () => {
     expect(
       canDeleteExpenseAccrual({
         userRole: 'accounting',
@@ -107,6 +107,80 @@ describe('canDeleteExpenseAccrual', () => {
         paidAmount: 0,
       })
     ).toBe(false)
+    expect(
+      canDeleteExpenseAccrual({
+        userRole: 'accounting',
+        storeName: 'CM Office',
+        status: 'approved',
+        paidAmount: 0,
+      })
+    ).toBe(false)
+  })
+
+  it('lets accounting with office payroll delete HQ-named unpaid accruals', () => {
+    expect(
+      canDeleteExpenseAccrual({
+        userRole: 'accounting',
+        storeName: 'Office',
+        status: 'planned',
+        paidAmount: 0,
+        canManageOfficePayroll: true,
+      })
+    ).toBe(true)
+    expect(
+      canDeleteExpenseAccrual({
+        userRole: 'accounting',
+        storeName: 'CM Office',
+        status: 'approved',
+        paidAmount: 0,
+        canManageOfficePayroll: true,
+      })
+    ).toBe(true)
+  })
+
+  it('still blocks office-payroll accounting on paid or linked HQ rows', () => {
+    expect(
+      canDeleteExpenseAccrual({
+        userRole: 'accounting',
+        storeName: 'CM Office',
+        status: 'approved',
+        paidAmount: 18125.13,
+        canManageOfficePayroll: true,
+      })
+    ).toBe(false)
+    expect(
+      canDeleteExpenseAccrual({
+        userRole: 'accounting',
+        storeName: 'CM Office',
+        status: 'approved',
+        paidAmount: 0,
+        hasPaymentLink: true,
+        canManageOfficePayroll: true,
+      })
+    ).toBe(false)
+  })
+
+  it('does not let officer with office payroll delete HQ-named accruals', () => {
+    expect(
+      canDeleteExpenseAccrual({
+        userRole: 'officer',
+        storeName: 'CM Office',
+        status: 'approved',
+        paidAmount: 0,
+        canManageOfficePayroll: true,
+      })
+    ).toBe(false)
+  })
+
+  it('lets director delete HQ-named accruals', () => {
+    expect(
+      canDeleteExpenseAccrual({
+        userRole: 'director',
+        storeName: 'CM Office',
+        status: 'approved',
+        paidAmount: 0,
+      })
+    ).toBe(true)
   })
 
   it('lets accounting clean no-store rows', () => {

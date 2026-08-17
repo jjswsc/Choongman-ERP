@@ -18,6 +18,7 @@ import {
   shouldLockExpenseAccrualAmounts,
 } from '@/lib/expense-accrual-approve-policy'
 import { requireAuth } from '@/lib/verify-auth'
+import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 import {
   invoiceReceivedFromDocumentType,
   parseExpenseDocumentTypeInput,
@@ -140,6 +141,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'delete') {
+      const payrollAuth = await resolveCanManageOfficePayrollAuth({
+        role: effectiveRole,
+        canManageOfficePayroll: authResult.auth.canManageOfficePayroll,
+        employeeId: authResult.auth.employeeId,
+      })
       if (
         !canDeleteExpenseAccrual({
           userRole: effectiveRole,
@@ -147,13 +153,14 @@ export async function POST(request: NextRequest) {
           status,
           paidAmount: paidAmountForEdit,
           hasPaymentLink,
+          canManageOfficePayroll: payrollAuth.canManageOfficePayroll === true,
         })
       ) {
         return NextResponse.json(
           {
             success: false,
             message:
-              '삭제할 수 없습니다. 통장·패티 연결 또는 실지급이 있으면 삭제할 수 없습니다. 매장 건은 승인 권한(본사·회계)이 필요합니다. 본사 명의 건은 임원만 삭제할 수 있습니다.',
+              '삭제할 수 없습니다. 통장·패티 연결 또는 실지급이 있으면 삭제할 수 없습니다. 매장 건은 승인 권한(본사·회계)이 필요합니다. 본사 명의 건은 임원 또는 오피스 급여 권한이 있는 회계만 삭제할 수 있습니다.',
           },
           { status: 403, headers }
         )

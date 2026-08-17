@@ -33,6 +33,7 @@ import { ExpensePlanStatusBadge } from "@/components/erp/expense-plan-status-bad
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
+import { useSyncOfficePayrollAccess } from "@/lib/use-office-payroll-access"
 import { useStoreList } from "@/lib/api-client"
 import { useErpPageActive, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import {
@@ -135,6 +136,7 @@ export function ExpenseManagementTab() {
     return v
   }, [t])
   const { auth } = useAuth()
+  useSyncOfficePayrollAccess()
   const { posStores: stores } = useStoreList()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -601,8 +603,9 @@ export function ExpenseManagementTab() {
         storeName: row.storeName,
         status: row.status,
         paidAmount: row.paidAmount,
+        canManageOfficePayroll: auth?.canManageOfficePayroll === true,
       }),
-    [auth?.role]
+    [auth?.role, auth?.canManageOfficePayroll]
   )
 
   const approvablePlansForDay = React.useMemo(() => {
@@ -804,6 +807,7 @@ export function ExpenseManagementTab() {
         storeName: row.storeName,
         status: row.status,
         paidAmount: row.paidAmount,
+        canManageOfficePayroll: auth?.canManageOfficePayroll === true,
       })
     ) {
       await appAlert(
@@ -837,7 +841,7 @@ export function ExpenseManagementTab() {
     } finally {
       setDeletingPlanId(null)
     }
-  }, [auth?.role, loadPlans, t, tt])
+  }, [auth?.role, auth?.canManageOfficePayroll, loadPlans, t, tt])
 
   const handleCleanNoStore = React.useCallback(async () => {
     const ok = await appConfirm(tt("expenseCleanNoStoreConfirm", "Delete all payment plans with no store selected?"))

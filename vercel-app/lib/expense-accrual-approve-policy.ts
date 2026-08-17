@@ -53,9 +53,22 @@ export function isExpenseAccrualDeletableByPaymentState(input: {
 }
 
 /**
+ * 본사(Office) 명의 지급예정 삭제 — 임원, 또는 오피스 급여 권한이 있는 회계
+ */
+export function canDeleteHqExpenseAccrual(
+  userRoleRaw: string | undefined,
+  canManageOfficePayroll?: boolean
+): boolean {
+  const role = String(userRoleRaw || '')
+  if (isDirectorRole(role)) return true
+  return isAccountingRole(role) && canManageOfficePayroll === true
+}
+
+/**
  * 지급예정 삭제 권한
  * - 매장 미선택: 본사·회계
- * - 그 외: 해당 건 승인 가능 역할과 동일 + 지급 상태 가드
+ * - 본사(Office) 명의: 임원, 또는 오피스 급여 권한이 있는 회계
+ * - 그 외 매장: 해당 건 승인 가능 역할과 동일 + 지급 상태 가드
  */
 export function canDeleteExpenseAccrual(input: {
   userRole?: string
@@ -63,12 +76,17 @@ export function canDeleteExpenseAccrual(input: {
   status?: string
   paidAmount?: number
   hasPaymentLink?: boolean
+  canManageOfficePayroll?: boolean
 }): boolean {
   const role = String(input.userRole || '')
   const isNoStore = !String(input.storeName || '').trim()
   if (!canMutateExpenseAccrualRecord(role)) return false
   if (isNoStore) return true
-  if (!canApproveExpenseAccrual(role, input.storeName)) return false
+  const hqNamed = isExpenseAccrualHqStoreName(input.storeName)
+  const roleOk = hqNamed
+    ? canDeleteHqExpenseAccrual(role, input.canManageOfficePayroll)
+    : canApproveExpenseAccrual(role, input.storeName)
+  if (!roleOk) return false
   return isExpenseAccrualDeletableByPaymentState({
     status: input.status,
     paidAmount: input.paidAmount,
