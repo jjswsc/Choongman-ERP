@@ -154,6 +154,7 @@ import {
 } from '@/lib/pos-auto-print-dedupe'
 import { POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS, resolveAfterReceiptToKitchenDelayMs } from '@/lib/pos-print-html'
 import { coercePosReceiptLineDiscountAmt } from '@/lib/pos-receipt-line-discount'
+import { usePosKitchenPrintJobWorker } from '@/hooks/use-pos-kitchen-print-job-worker'
 
 type RealtimeParsedPosOrderItem = {
   id: string
@@ -544,6 +545,13 @@ export function usePosMainDeviceSyncHost(): void {
 
   const autoprintCtxRef = useRef(autoprintCtx)
   autoprintCtxRef.current = autoprintCtx
+
+  const pokeKitchenPrintJobs = usePosKitchenPrintJobWorker({
+    enabled: isMainPosDevice,
+    storeCode,
+    kitchenOnOrder: autoPrint.kitchenOnOrder,
+    autoprintCtxRef,
+  })
 
   const shouldTreatAsIncomingOrder = shouldTreatAsMainPosIncomingOrder
 
@@ -957,6 +965,7 @@ export function usePosMainDeviceSyncHost(): void {
       if (chInsert) list.push(chInsert)
       const chUpdate = subscribePosOrdersUpdate(onUpdatePendingItems, {
         store: trimmed,
+        channelKey: 'pending-items',
         ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         onStatus: makeRealtimeStatusHandler(`insert-items:${trimmed}`),
       })
@@ -1018,6 +1027,13 @@ export function usePosMainDeviceSyncHost(): void {
         delivery_payment_channel: String(row.delivery_payment_channel ?? ''),
         items_json: row.items_json,
       })
+      if (
+        inferredOrderType === 'dine_in' &&
+        !isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
+        posOrderRowPaymentSum(row) <= 0
+      ) {
+        pokeKitchenPrintJobs()
+      }
       const packagingOnlyUpdate = oldRow != null && isPosOrderItemsJsonPackagingOnlyUpdate(oldRow, row)
 
       if (
@@ -1387,6 +1403,7 @@ export function usePosMainDeviceSyncHost(): void {
       .map((code) =>
         subscribePosOrdersUpdate(onUpdate, {
           store: code,
+          channelKey: 'dine-in-addon',
           ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         })
       )
@@ -1418,6 +1435,7 @@ export function usePosMainDeviceSyncHost(): void {
     formatLineNoteForPrint,
     buildDineInQtySnapshotForStore,
     logPosPrintDebug,
+    pokeKitchenPrintJobs,
   ])
 
   // Main POS poll loop
@@ -2005,6 +2023,7 @@ export function usePosMainDeviceSyncHost(): void {
       .map((code) =>
         subscribePosOrdersUpdate(handleUpdate, {
           store: code,
+          channelKey: 'grab-cancel',
           ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         })
       )

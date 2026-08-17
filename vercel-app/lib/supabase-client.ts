@@ -19,8 +19,23 @@ export type PosRealtimeSubscribeStatus =
 export type PosOrdersRealtimeSubscribeOptions = {
   store?: string
   tenantId?: string
+  /**
+   * 같은 store의 INSERT/UPDATE 구독이 여러 개일 때 채널명 충돌 방지.
+   * supabase-js는 동일 채널명을 재사용하므로, 키 없이 두 번 구독하면
+   * 한쪽 unsubscribe가 다른 핸들러까지 끊고 QR 주방 인쇄가 폴링(8초)으로 떨어진다.
+   */
+  channelKey?: string
   /** subscribe() 콜백 — SUBSCRIBED / CHANNEL_ERROR 등 */
   onStatus?: (status: PosRealtimeSubscribeStatus, err?: Error) => void
+}
+
+export function posOrdersRealtimeChannelName(
+  kind: 'insert' | 'update',
+  options?: PosOrdersRealtimeSubscribeOptions
+): string {
+  const scope = String(options?.tenantId || options?.store || 'all').trim() || 'all'
+  const extra = String(options?.channelKey || '').trim()
+  return extra ? `pos-orders-${kind}-${extra}-${scope}` : `pos-orders-${kind}-${scope}`
 }
 
 export function getSupabaseClient() {
@@ -83,7 +98,7 @@ export function subscribePosOrdersInsert(
   if (!supabase) return null
   const filter = buildPosOrdersChannelFilter(options)
   const channel = supabase
-    .channel(`pos-orders-insert-${options?.tenantId || options?.store || 'all'}`)
+    .channel(posOrdersRealtimeChannelName('insert', options))
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'pos_orders', ...(filter ? { filter } : {}) },
@@ -105,7 +120,7 @@ export function subscribePosOrdersUpdate(
   if (!supabase) return null
   const filter = buildPosOrdersChannelFilter(options)
   const channel = supabase
-    .channel(`pos-orders-update-${options?.tenantId || options?.store || 'all'}`)
+    .channel(posOrdersRealtimeChannelName('update', options))
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'pos_orders', ...(filter ? { filter } : {}) },

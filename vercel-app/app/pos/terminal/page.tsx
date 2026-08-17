@@ -4899,6 +4899,7 @@ export default function PosTerminalPage() {
       if (chInsert) list.push(chInsert)
       const chUpdate = subscribePosOrdersUpdate(onUpdatePendingItems, {
         store: code,
+        channelKey: 'pending-items',
         ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         onStatus: makeRealtimeStatusHandler(updateKey),
       })
@@ -5060,6 +5061,7 @@ export default function PosTerminalPage() {
       .map((storeCode) =>
         subscribePosOrdersUpdate(handleUpdate, {
           store: storeCode,
+          channelKey: 'grab-cancel',
           ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         })
       )
@@ -5458,6 +5460,7 @@ export default function PosTerminalPage() {
       .map((storeCode) =>
         subscribePosOrdersUpdate(onUpdate, {
           store: storeCode,
+          channelKey: 'dine-in-addon',
           ...(auth?.tenantId ? { tenantId: auth.tenantId } : {}),
         })
       )

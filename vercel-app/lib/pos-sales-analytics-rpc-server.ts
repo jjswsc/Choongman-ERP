@@ -1,12 +1,40 @@
 import 'server-only'
 
+import { NextResponse } from 'next/server'
 import type { PosOrderTypeValue } from '@/lib/pos-sales-order-type-filter'
 import { loadPosBusinessDaySettingsContext, type PosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { normStoreKey } from '@/lib/store-list-keys'
 import { expandSalesStoreCodesForFilterAsync } from '@/lib/pos-sales-store-filter'
 import { supabaseRpc } from '@/lib/supabase-server'
+import { isSupabaseStatementTimeoutError } from '@/lib/supabase-statement-timeout'
 import type { PeriodAggRow } from '@/lib/pos-sales-period-aggregate'
+
+/** RPC 57014 — 주문 전량 fetch 폴백 금지(그게 Vercel 60s 타임아웃의 원인). */
+export class PosSalesAnalyticsRpcTimeoutError extends Error {
+  readonly code = 'POS_SALES_ANALYTICS_RPC_TIMEOUT'
+  constructor(cause?: unknown) {
+    const msg = cause instanceof Error ? cause.message : String(cause ?? 'statement timeout')
+    super(msg)
+    this.name = 'PosSalesAnalyticsRpcTimeoutError'
+  }
+}
+
+export function isPosSalesAnalyticsRpcTimeoutError(err: unknown): boolean {
+  return err instanceof PosSalesAnalyticsRpcTimeoutError || isSupabaseStatementTimeoutError(err)
+}
+
+export function respondPosSalesAnalyticsTimeout(headers: Headers) {
+  headers.set('X-Pos-Sales-Source', 'rpc-timeout')
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'TIMEOUT',
+      message: '매출 집계가 시간 초과되었습니다. 조회 기간을 줄여 다시 시도해 주세요.',
+    },
+    { status: 504, headers }
+  )
+}
 
 export type PosSalesAnalyticsAggMode =
   | 'store'
@@ -147,7 +175,22 @@ export async function tryFetchPosSalesAnalyticsAgg(
     return await fetchPosSalesAnalyticsAgg(params)
   } catch (e) {
     console.warn('tryFetchPosSalesAnalyticsAgg:', e instanceof Error ? e.message : e)
+    if (isSupabaseStatementTimeoutError(e)) {
+      throw new PosSalesAnalyticsRpcTimeoutError(e)
+    }
     return null
+  }
+}
+
+/** 손익·AI 등: 타임아웃이어도 페이지 전체를 500으로 만들지 않음 */
+export async function tryFetchPosSalesAnalyticsAggIgnoreTimeout(
+  params: Parameters<typeof fetchPosSalesAnalyticsAgg>[0]
+): Promise<PosSalesAnalyticsAggRow[] | null> {
+  try {
+    return await tryFetchPosSalesAnalyticsAgg(params)
+  } catch (e) {
+    if (isPosSalesAnalyticsRpcTimeoutError(e)) return null
+    throw e
   }
 }
 

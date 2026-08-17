@@ -17,6 +17,7 @@ import "server-only"
 import https from "https"
 import { decodeHttpResponseBody } from '@/lib/supabase-http-body'
 import { resolveSupabaseProjectConfig } from '@/lib/supabase-project-resolver'
+import { isSupabaseStatementTimeoutError } from '@/lib/supabase-statement-timeout'
 import { SUPABASE_STORAGE_SINGLE_FILE_MAX_BYTES } from '@/lib/supabase-storage-limits'
 import type { TenantContext } from '@/lib/tenant-context'
 
@@ -145,7 +146,8 @@ export async function supabaseFetch(
       lastStatus = res.status
       resHeaders = res.headers
       resBody = res.body
-      if (!isRetriable(res.status, null)) {
+      // 57014: 같은 집계 RPC를 재시도하면 더 오래 걸리고 Vercel 60s에 닿는다.
+      if (!isRetriable(res.status, null) || isSupabaseStatementTimeoutError(res.body)) {
         const resHeadersObj = new Headers()
         Object.entries(resHeaders).forEach(([k, v]) => resHeadersObj.set(k, v))
         const nullBodyStatuses = [101, 204, 205, 304]

@@ -1401,7 +1401,8 @@ export async function submitQrCart(params: {
     loadCartMenusByIdsForStore(session.storeCode, requestedIds),
     supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
       limit: 1,
-      select: 'id,items_json,status,payment_qr,payment_cash,payment_card,payment_other,subtotal,total,store_code',
+      select:
+        'id,items_json,status,payment_qr,payment_cash,payment_card,payment_other,subtotal,total,store_code,order_no,table_name,guest_count,memo',
     }) as Promise<
       Array<{
         id?: number
@@ -1414,6 +1415,10 @@ export async function submitQrCart(params: {
         subtotal?: number
         total?: number
         store_code?: string
+        order_no?: string
+        table_name?: string
+        guest_count?: number
+        memo?: string
       }>
     >,
   ])
@@ -1475,6 +1480,39 @@ export async function submitQrCart(params: {
   const { subtotal, pricing } = await computeQrTableOrderFinancials(session.storeCode, nextItems)
   const now = addedAt
 
+  const kitchenDelta = extrasPrepay
+    ? []
+    : filterKitchenCartLinesForDineInAdd(
+        newLines as Parameters<typeof filterKitchenCartLinesForDineInAdd>[0],
+        [] as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1]
+      ).map((line) => {
+        const row = line as Record<string, unknown>
+        const includedLine = row.buffetIncluded === true
+        const baseName = String(row.name || '')
+        return {
+          ...row,
+          name: includedLine ? `[Buffet] ${baseName}` : `[Extra] ${baseName}`,
+        }
+      })
+  if (kitchenDelta.length) {
+    // 주문 UPDATE보다 먼저 큐에 넣어, 메인 POS Realtime이 도착했을 때 claim 가능하게
+    void enqueueKitchenPrintJob({
+      storeCode: session.storeCode,
+      orderId: session.posOrderId,
+      orderNo: String(order.order_no || '').trim() || null,
+      source: 'qr_table_submit',
+      dedupeKey: `order:${session.posOrderId}:kitchen:qr:${Date.now()}`,
+      payload: {
+        action: 'update_order',
+        kitchenLines: kitchenDelta,
+        orderNo: String(order.order_no || '').trim(),
+        tableName: String(session.tableName || order.table_name || '').trim(),
+        memo: String(order.memo || '').trim(),
+        guestCount: Number(session.guestCount ?? order.guest_count ?? 0) || undefined,
+      },
+    }).catch((e) => console.error('qr_table_submit kitchen enqueue:', e))
+  }
+
   await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     items_json: JSON.stringify(nextItems),
     subtotal,
@@ -1483,34 +1521,6 @@ export async function submitQrCart(params: {
     total: pricing.finalTotal,
     updated_at: now,
   })
-
-  if (!extrasPrepay) {
-    const kitchenDelta = filterKitchenCartLinesForDineInAdd(
-      newLines as Parameters<typeof filterKitchenCartLinesForDineInAdd>[0],
-      [] as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1]
-    ).map((line) => {
-      const row = line as Record<string, unknown>
-      const includedLine = row.buffetIncluded === true
-      const baseName = String(row.name || '')
-      return {
-        ...row,
-        name: includedLine ? `[Buffet] ${baseName}` : `[Extra] ${baseName}`,
-      }
-    })
-    if (kitchenDelta.length) {
-      // 게스트 RTT에서 인쇄 큐 대기 제거 — 실패해도 주문 저장은 이미 완료
-      void enqueueKitchenPrintJob({
-        storeCode: session.storeCode,
-        orderId: session.posOrderId,
-        source: 'qr_table_submit',
-        dedupeKey: `order:${session.posOrderId}:kitchen:qr:${Date.now()}`,
-        payload: {
-          action: 'update_order',
-          kitchenLines: kitchenDelta,
-        },
-      }).catch((e) => console.error('qr_table_submit kitchen enqueue:', e))
-    }
-  }
 
   const orderSummary = buildGuestOrderSummaryFromOrderRow({
     orderId: session.posOrderId,
@@ -1705,8 +1715,17 @@ async function finalizeExtrasPrepay(session: QrTableSession & { secretHash?: str
   if (!session.posOrderId) return
   const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     limit: 1,
-    select: 'id,items_json,payment_qr,status',
-  })) as Array<{ id?: number; items_json?: unknown; payment_qr?: number; status?: string }>
+    select: 'id,items_json,payment_qr,status,order_no,table_name,guest_count,memo',
+  })) as Array<{
+    id?: number
+    items_json?: unknown
+    payment_qr?: number
+    status?: string
+    order_no?: string
+    table_name?: string
+    guest_count?: number
+    memo?: string
+  }>
   const order = orderRows?.[0]
   if (!order?.id) return
   if (String(order.status || '').toLowerCase() === 'paid') return
@@ -1749,6 +1768,10 @@ async function finalizeExtrasPrepay(session: QrTableSession & { secretHash?: str
       payload: {
         action: 'update_order',
         kitchenLines: toPrint,
+        orderNo: String(order.order_no || '').trim(),
+        tableName: String(session.tableName || order.table_name || '').trim(),
+        memo: String(order.memo || '').trim(),
+        guestCount: Number(session.guestCount ?? order.guest_count ?? 0) || undefined,
       },
     })
   }

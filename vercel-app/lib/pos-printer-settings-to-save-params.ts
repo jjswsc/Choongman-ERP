@@ -127,6 +127,7 @@ export function posPrinterSettingsToSaveParams(
     merchantReceiptPrint: s.merchantReceiptPrint !== false,
     actualOrderDetails: s.actualOrderDetails !== false,
     toppingOptionsPrint: Boolean(s.toppingOptionsPrint),
+    hideBuffetIncludedOnGuestBill: Boolean(s.hideBuffetIncludedOnGuestBill),
     autoPrintReceiptOnOrder: Boolean(s.autoPrintReceiptOnOrder),
     autoPrintReceiptOnAddOrder: Boolean(s.autoPrintReceiptOnAddOrder),
     autoPrintReceiptOnPayment: Boolean(s.autoPrintReceiptOnPayment),

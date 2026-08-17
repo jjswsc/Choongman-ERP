@@ -652,6 +652,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posMerchantReceiptPrint: '가맹점 영수증 출력',
     posActualOrderDetails: '실 주문 내역 출력',
     posToppingOptionsPrint: '토핑메뉴 추가옵션',
+    posHideBuffetIncludedOnGuestBill: '체크빌·영수증에서 뷔페 포함 메뉴 숨김',
+    posHideBuffetIncludedOnGuestBillHint:
+      '포함 메뉴(0원)와 Item: Buffet / Extra 태그를 손님 전표에서 숨깁니다. 기본은 전부 표시이며, 켠 매장만 적용됩니다. 뷔페 패키지 요금·유료 Extra·주방 전표는 그대로입니다.',
     posDrawerHint: '돈통 열기, 카드(LINKPOS), KBank QR(MID) 등 결제·시재 관련 설정을 합니다.',
     posDrawerHintV2:
       '이 탭에서 돈통 열기·카드(LINKPOS)·KBank QR(매장 MID)을 설정합니다. 돈통은 현금 결제가 포함된 주문에서 자동으로 열리며, POS 시재「시재 입금」등록·영업 시작 시제 저장·POS 홈「영업 시작」「영업 마감」진입 시에도 열려 실물 현금을 맞출 수 있습니다. 수동/강제 열기는 별도입니다.',
@@ -4070,6 +4073,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posSignatureLine: 'Signature line',
     posSignature: 'Signature',
     posToppingOptionsPrint: 'Print topping options',
+    posHideBuffetIncludedOnGuestBill: 'Hide buffet-included items on check bill & receipt',
+    posHideBuffetIncludedOnGuestBillHint:
+      'Hides included (0฿) lines and Item: Buffet / Extra tags on guest bills. Off by default; turn on per store. Package fee, paid extras, and kitchen slips stay.',
     posPromoCostSum: 'Cost sum',
     posPromoCostSummary: 'Cost summary',
     posPromoDiscount: 'Discount',
@@ -8512,6 +8518,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posTablePayPlatform: 'แอปจัดส่ง (แพลตฟอร์ม)',
     posTablePayPlatformNote: 'ออเดอร์รับกลับบ้านผ่านแอปจัดส่ง (Grab / LINE MAN / Shopee) ชำระเงินแล้วบนแพลตฟอร์ม',
     posToppingOptionsPrint: 'พิมพ์ตัวเลือกท็อปปิ้ง',
+    posHideBuffetIncludedOnGuestBill: 'ซ่อนเมนูบุฟเฟต์ที่รวมในเช็คบิลและใบเสร็จ',
+    posHideBuffetIncludedOnGuestBillHint:
+      'ซ่อนรายการที่รวมในบุฟเฟต์ (0 บาท) และป้าย Item: Buffet / Extra ในบิลลูกค้าครับ ค่าเริ่มต้นคือแสดงทั้งหมด เปิดที่ตั้งค่าสาขาเมื่อต้องการซ่อน ราคาแพ็กเกจ เมนู Extra ที่คิดเงิน และใบครัวยังพิมพ์ตามเดิม',
     posMenuCategoryMainSelect: 'Select',
     posMenuEditBtnColor: 'Button Color',
     posMenuEditFontColor: 'Font Color',
@@ -11115,6 +11124,9 @@ export const I18N_POS_MM: Record<string, string> = {
     posTablePayPlatform: 'ပို့ဆောင်ရေးအက်ပ် (ပလပ်ဖောင်)',
     posTablePayPlatformNote: 'Grab / Line Man / Shopee စသော ပို့ဆောင်ရေးအက်ပ်များမှ အိမ်မှထုတ်ယူသောက်သောမှာစာများသည် ပလပ်ဖောင်းတွင် ငွေပေးချေပြီးဖြစ်ပါသည်။',
     posToppingOptionsPrint: 'ထပ်ထည့်ရွေးချယ်မှု ပုံနှိပ်',
+    posHideBuffetIncludedOnGuestBill: 'Hide buffet-included items on check bill & receipt',
+    posHideBuffetIncludedOnGuestBillHint:
+      'Hides included (0฿) lines and Item: Buffet / Extra tags on guest bills. Off by default; turn on per store. Package fee, paid extras, and kitchen slips stay.',
     posMenuCategoryMainSelect: 'Select',
     posMenuEditBtnColor: 'Button Color',
     posMenuEditFontColor: 'Font Color',
@@ -14037,6 +14049,9 @@ export const I18N_POS_LA: Record<string, string> = {
     posTablePayPlatform: 'ແອບຈັດສົ່ງ (ແພລດຟອມ)',
     posTablePayPlatformNote: 'ຄຳສັ່ງຊື້ຮັບກັບບ້ານຜ່ານແອບຈັດສົ່ງ (Grab / LINE MAN / Shopee) ຈ່າຍເງິນແລ້ວຢູ່ແພລດຟອມ',
     posToppingOptionsPrint: 'ພິມລາຍລະອຽດ topping',
+    posHideBuffetIncludedOnGuestBill: 'Hide buffet-included items on check bill & receipt',
+    posHideBuffetIncludedOnGuestBillHint:
+      'Hides included (0฿) lines and Item: Buffet / Extra tags on guest bills. Off by default; turn on per store. Package fee, paid extras, and kitchen slips stay.',
     posMenuCategoryMainSelect: 'Select',
     posMenuEditBtnColor: 'Button Color',
     posMenuEditFontColor: 'Font Color',
@@ -17054,6 +17069,9 @@ export const I18N_POS_KH: Record<string, string> = {
     posSignatureLine: 'បន្ទាត់ហត្ថលេខា',
     posSignature: 'ហត្ថលេខា',
     posToppingOptionsPrint: 'បោះពុម្ពជម្រើស topping',
+    posHideBuffetIncludedOnGuestBill: 'Hide buffet-included items on check bill & receipt',
+    posHideBuffetIncludedOnGuestBillHint:
+      'Hides included (0฿) lines and Item: Buffet / Extra tags on guest bills. Off by default; turn on per store. Package fee, paid extras, and kitchen slips stay.',
     posMenuCategoryMainSelect: 'Select',
     posMenuEditBtnColor: 'Button Color',
     posMenuEditFontColor: 'Font Color',
@@ -20062,6 +20080,9 @@ export const I18N_POS_VI: Record<string, string> = {
     posSignatureLine: 'Dòng chữ ký',
     posSignature: 'Chữ ký',
     posToppingOptionsPrint: 'In tùy chọn topping',
+    posHideBuffetIncludedOnGuestBill: 'Hide buffet-included items on check bill & receipt',
+    posHideBuffetIncludedOnGuestBillHint:
+      'Hides included (0฿) lines and Item: Buffet / Extra tags on guest bills. Off by default; turn on per store. Package fee, paid extras, and kitchen slips stay.',
     posMenuCategoryMainSelect: 'Select',
     posMenuEditBtnColor: 'Button Color',
     posMenuEditFontColor: 'Font Color',
@@ -23020,6 +23041,9 @@ export const I18N_POS_MS: Record<string, string> = {
     posSignatureLine: 'Ruang tandatangan',
     posSignature: 'Tandatangan',
     posToppingOptionsPrint: 'Cetak pilihan topping',
+    posHideBuffetIncludedOnGuestBill: 'Hide buffet-included items on check bill & receipt',
+    posHideBuffetIncludedOnGuestBillHint:
+      'Hides included (0฿) lines and Item: Buffet / Extra tags on guest bills. Off by default; turn on per store. Package fee, paid extras, and kitchen slips stay.',
     posMenuCategoryMainSelect: 'Select',
     posMenuEditBtnColor: 'Button Color',
     posMenuEditFontColor: 'Font Color',

@@ -6,7 +6,7 @@ import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 import { loadHqOutboundProcessedLines } from '@/lib/hq-outbound-income-total'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
-import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
+import { tryFetchPosSalesAnalyticsAggIgnoreTimeout } from '@/lib/pos-sales-analytics-rpc-server'
 import { rowMatchesSalesStoreSelection } from '@/lib/pos-sales-store-filter'
 import { isPosSalesTestOfficeStoreCode } from '@/lib/pos-sales-test-office'
 
@@ -109,7 +109,7 @@ export function parseOutboundMatrixYear(raw: string | number | null | undefined)
 }
 
 function accumulateSalesByStoreMonth(
-  salesRows: Awaited<ReturnType<typeof tryFetchPosSalesAnalyticsAgg>>,
+  salesRows: Awaited<ReturnType<typeof tryFetchPosSalesAnalyticsAggIgnoreTimeout>>,
   stores: string[],
   months: string[]
 ): Record<string, Record<string, number>> {
@@ -170,7 +170,7 @@ export async function buildOutboundStoreMonthMatrix(params: {
       endStr,
       storeFilter: storeFilter || null,
     }),
-    tryFetchPosSalesAnalyticsAgg({
+    tryFetchPosSalesAnalyticsAggIgnoreTimeout({
       startStr,
       endStr,
       storeCodes: storeFilter ? [storeFilter] : undefined,

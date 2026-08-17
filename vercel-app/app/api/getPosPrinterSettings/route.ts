@@ -159,6 +159,7 @@ export async function GET(request: NextRequest) {
     merchantReceiptPrint: true,
     actualOrderDetails: true,
     toppingOptionsPrint: false,
+    hideBuffetIncludedOnGuestBill: false,
     autoPrintReceiptOnOrder: false,
     autoPrintReceiptOnAddOrder: false,
     autoPrintReceiptOnPayment: false,
@@ -295,6 +296,7 @@ export async function GET(request: NextRequest) {
       merchant_receipt_print?: boolean
       actual_order_details?: boolean
       topping_options_print?: boolean
+      hide_buffet_included_on_guest_bill?: boolean
       auto_print_receipt_on_order?: boolean
       auto_print_receipt_on_add_order?: boolean
       auto_print_receipt_on_payment?: boolean
@@ -464,6 +466,7 @@ export async function GET(request: NextRequest) {
       merchantReceiptPrint: raw?.merchant_receipt_print !== false,
       actualOrderDetails: raw?.actual_order_details !== false,
       toppingOptionsPrint: Boolean(raw?.topping_options_print),
+      hideBuffetIncludedOnGuestBill: raw?.hide_buffet_included_on_guest_bill === true,
       autoPrintReceiptOnOrder: Boolean(raw?.auto_print_receipt_on_order),
       autoPrintReceiptOnAddOrder: Boolean(raw?.auto_print_receipt_on_add_order),
       autoPrintReceiptOnPayment: Boolean(raw?.auto_print_receipt_on_payment),

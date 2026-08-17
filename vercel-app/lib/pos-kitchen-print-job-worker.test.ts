@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest'
+import {
+  kitchenLinesFromPrintJobPayload,
+  kitchenPrintJobOrderFieldsFromPayload,
+  resolveKitchenPrintJobDedupeKey,
+} from '@/lib/pos-kitchen-print-job-worker'
+import { posOrdersRealtimeChannelName } from '@/lib/supabase-client'
+import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
+
+describe('kitchenLinesFromPrintJobPayload', () => {
+  it('returns kitchenLines objects only', () => {
+    expect(
+      kitchenLinesFromPrintJobPayload({
+        kitchenLines: [{ menuId: '1', name: 'A', qty: 1 }, null, 'x'],
+      })
+    ).toEqual([{ menuId: '1', name: 'A', qty: 1 }])
+    expect(kitchenLinesFromPrintJobPayload({})).toEqual([])
+    expect(kitchenLinesFromPrintJobPayload(null)).toEqual([])
+  })
+})
+
+describe('resolveKitchenPrintJobDedupeKey', () => {
+  it('matches dine-in add autoprint key when kitchenLines exist', () => {
+    const lines = [{ menuId: '90', name: '[Buffet] Soup', qty: 1, quantity: 1 }]
+    expect(resolveKitchenPrintJobDedupeKey(58, { action: 'update_order', kitchenLines: lines })).toBe(
+      buildDineInAddKitchenAutoPrintDedupeKey(58, lines)
+    )
+  })
+
+  it('uses create key when there are no kitchen lines', () => {
+    expect(resolveKitchenPrintJobDedupeKey(12, { action: 'create_order' })).toBe('order:12:kitchen')
+  })
+})
+
+describe('kitchenPrintJobOrderFieldsFromPayload', () => {
+  it('reads header fields for slip print without extra fetch', () => {
+    expect(
+      kitchenPrintJobOrderFieldsFromPayload({
+        orderNo: 'POS-1',
+        tableName: 'A2',
+        memo: 'QR',
+        guestCount: 3,
+      })
+    ).toEqual({ orderNo: 'POS-1', tableName: 'A2', memo: 'QR', guestCount: 3 })
+  })
+})
+
+describe('posOrdersRealtimeChannelName', () => {
+  it('keeps update subscriptions unique per purpose', () => {
+    expect(posOrdersRealtimeChannelName('update', { store: 'CM Silom', channelKey: 'dine-in-addon' })).toBe(
+      'pos-orders-update-dine-in-addon-CM Silom'
+    )
+    expect(posOrdersRealtimeChannelName('update', { store: 'CM Silom', channelKey: 'grab-cancel' })).toBe(
+      'pos-orders-update-grab-cancel-CM Silom'
+    )
+    expect(posOrdersRealtimeChannelName('update', { store: 'CM Silom', channelKey: 'pending-items' })).not.toBe(
+      posOrdersRealtimeChannelName('update', { store: 'CM Silom', channelKey: 'dine-in-addon' })
+    )
+  })
+})

@@ -12,7 +12,11 @@ import {
 } from '@/lib/pos-sales-fetch-rows'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
-import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
+import {
+  isPosSalesAnalyticsRpcTimeoutError,
+  respondPosSalesAnalyticsTimeout,
+  tryFetchPosSalesAnalyticsAgg,
+} from '@/lib/pos-sales-analytics-rpc-server'
 
 type PaymentOrderRow = {
   order_type?: string | null
@@ -132,6 +136,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result, { headers })
   } catch (e) {
+    if (isPosSalesAnalyticsRpcTimeoutError(e)) return respondPosSalesAnalyticsTimeout(headers)
     console.error('posSalesByPayment:', e)
     return NextResponse.json([], { headers })
   }

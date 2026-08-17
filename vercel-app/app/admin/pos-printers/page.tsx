@@ -452,6 +452,7 @@ export default function PosPrintersPage() {
   const [qrCodeOption, setQrCodeOption] = React.useState<'yes' | 'no'>('yes')
   const [discountSeparatePrint, setDiscountSeparatePrint] = React.useState(true)
   const [toppingOptionsPrint, setToppingOptionsPrint] = React.useState(false)
+  const [hideBuffetIncludedOnGuestBill, setHideBuffetIncludedOnGuestBill] = React.useState(false)
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = React.useState(false)
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = React.useState(false)
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = React.useState(false)
@@ -735,6 +736,7 @@ export default function PosPrintersPage() {
     )
     setDiscountSeparatePrint(settings.discountSeparatePrint !== false)
     setToppingOptionsPrint(Boolean(settings.toppingOptionsPrint))
+    setHideBuffetIncludedOnGuestBill(settings.hideBuffetIncludedOnGuestBill === true)
     setAutoPrintReceiptOnOrder(Boolean(settings.autoPrintReceiptOnOrder))
     setAutoPrintReceiptOnAddOrder(Boolean(settings.autoPrintReceiptOnAddOrder))
     setAutoPrintReceiptOnPayment(
@@ -985,6 +987,7 @@ export default function PosPrintersPage() {
         qrCodeOption,
         discountSeparatePrint,
         toppingOptionsPrint,
+        hideBuffetIncludedOnGuestBill,
         autoPrintReceiptOnOrder,
         autoPrintReceiptOnAddOrder,
         autoPrintReceiptOnPayment,
@@ -1248,6 +1251,7 @@ export default function PosPrintersPage() {
           "qrCodeOption",
           "discountSeparatePrint",
           "toppingOptionsPrint",
+          "hideBuffetIncludedOnGuestBill",
         ])
       }
       if (copyTabReceiptDesign) {
@@ -2196,6 +2200,20 @@ export default function PosPrintersPage() {
                 />
                 <ToggleRow label={tr("posDiscountSeparatePrint", "할인내역 별도출력")} value={discountSeparatePrint} onChange={setDiscountSeparatePrint} t={t} />
                 <ToggleRow label={tr("posToppingOptionsPrint", "토핑메뉴 추가옵션")} value={toppingOptionsPrint} onChange={setToppingOptionsPrint} t={t} />
+                <div className="space-y-1">
+                  <ToggleRow
+                    label={tr("posHideBuffetIncludedOnGuestBill", "체크빌·영수증에서 뷔페 포함 메뉴 숨김")}
+                    value={hideBuffetIncludedOnGuestBill}
+                    onChange={setHideBuffetIncludedOnGuestBill}
+                    t={t}
+                  />
+                  <p className="text-xs text-muted-foreground px-1">
+                    {tr(
+                      "posHideBuffetIncludedOnGuestBillHint",
+                      "포함 메뉴(0원)와 Item: Buffet / Extra 태그를 손님 전표에서 숨깁니다. 기본은 전부 표시이며, 켠 매장만 적용됩니다. 뷔페 패키지 요금·유료 Extra·주방 전표는 그대로입니다."
+                    )}
+                  </p>
+                </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   <span>{tr("posPrinterKioskPrintingHintBefore", "인쇄 확인 창 없이 바로 프린터로 출력하려면, 포스 PC에서 Chrome을")}</span>{" "}
                   <code className="rounded bg-muted px-1">--kiosk-printing</code>{" "}

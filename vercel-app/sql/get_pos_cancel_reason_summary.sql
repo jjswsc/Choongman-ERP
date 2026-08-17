@@ -1,8 +1,8 @@
 -- 매출 관리 취소사유 집계 RPC — pos_orders 전량+items_json Node 다운로드 없이 DB GROUP BY
 -- Supabase SQL Editor에서 실행 후 /api/posCancelReasonSummary 가 RPC 우선 사용.
 --
--- 선행: pos_sales_business_ymd / pos_sales_is_office_store / pos_sales_order_type_allowed
---       (get_pos_sales_analytics_agg.sql 과 동일 헬퍼)
+-- 선행: pos_sales_business_ymd_from_clock / pos_sales_is_office_store / pos_sales_order_type_allowed
+--       (get_pos_sales_analytics_agg.sql 을 먼저 실행)
 --
 -- 반환: bucket_kind = 'line' | 'order', reason, cancel_count, cancel_amount
 -- line = items_json 품목별 cancelledAt, order = 주문 취소·환불(합석 흡수 제외)
@@ -101,41 +101,61 @@ SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
-  WITH raw AS (
+  WITH hours_global AS MATERIALIZED (
     SELECT
-      o.created_at,
-      btrim(coalesce(o.store_code, '')) AS store_code,
-      coalesce(o.status, '') AS status,
-      coalesce(o.order_type, '') AS order_type,
-      coalesce(o.total, 0)::numeric AS total,
-      coalesce(o.memo, '') AS memo,
-      o.items_json
-    FROM public.pos_orders o
-    WHERE o.created_at >= p_start_utc
-      AND o.created_at < p_end_utc_exclusive
-      AND (
-        p_store_codes IS NULL
-        OR coalesce(array_length(p_store_codes, 1), 0) = 0
-        OR btrim(coalesce(o.store_code, '')) = ANY (p_store_codes)
-      )
-      AND (
-        coalesce(trim(p_tenant_id), '') = ''
-        OR coalesce(trim(o.tenant_id), '') = trim(p_tenant_id)
-      )
+      coalesce((p_biz_hours #>> '{global,startHour}')::int, 8) AS start_hour,
+      coalesce((p_biz_hours #>> '{global,startMinute}')::int, 0) AS start_minute,
+      coalesce((p_biz_hours #>> '{global,endHour}')::int, 8) AS end_hour,
+      coalesce((p_biz_hours #>> '{global,endMinute}')::int, 0) AS end_minute
   ),
-  filtered AS (
+  hours_store AS MATERIALIZED (
     SELECT
-      r.*,
-      public.pos_sales_business_ymd(r.created_at, r.store_code, p_biz_hours) AS biz_ymd
-    FROM raw r
-    WHERE NOT public.pos_sales_is_office_store(r.store_code)
-      AND public.pos_sales_order_type_allowed(r.order_type, p_order_types)
+      public.pos_sales_norm_store_key(kv.key) AS store_key,
+      coalesce((kv.value->>'startHour')::int, g.start_hour) AS start_hour,
+      coalesce((kv.value->>'startMinute')::int, g.start_minute) AS start_minute,
+      coalesce((kv.value->>'endHour')::int, g.end_hour) AS end_hour,
+      coalesce((kv.value->>'endMinute')::int, g.end_minute) AS end_minute
+    FROM hours_global g
+    CROSS JOIN LATERAL jsonb_each(coalesce(p_biz_hours->'stores', '{}'::jsonb)) AS kv(key, value)
   ),
-  in_range AS (
-    SELECT *
-    FROM filtered f
-    WHERE f.biz_ymd >= p_start_ymd::date
-      AND f.biz_ymd <= p_end_ymd::date
+  in_range AS MATERIALIZED (
+    SELECT s.*
+    FROM (
+      SELECT
+        o.created_at,
+        btrim(coalesce(o.store_code, '')) AS store_code,
+        coalesce(o.status, '') AS status,
+        coalesce(o.order_type, '') AS order_type,
+        coalesce(o.total, 0)::numeric AS total,
+        coalesce(o.memo, '') AS memo,
+        o.items_json,
+        public.pos_sales_business_ymd_from_clock(
+          o.created_at,
+          coalesce(hs.start_hour, hg.start_hour),
+          coalesce(hs.start_minute, hg.start_minute),
+          coalesce(hs.end_hour, hg.end_hour),
+          coalesce(hs.end_minute, hg.end_minute)
+        ) AS biz_ymd
+      FROM public.pos_orders o
+      CROSS JOIN hours_global hg
+      LEFT JOIN hours_store hs
+        ON hs.store_key = public.pos_sales_norm_store_key(btrim(coalesce(o.store_code, '')))
+      WHERE o.created_at >= p_start_utc
+        AND o.created_at < p_end_utc_exclusive
+        AND (
+          p_store_codes IS NULL
+          OR coalesce(array_length(p_store_codes, 1), 0) = 0
+          OR btrim(coalesce(o.store_code, '')) = ANY (p_store_codes)
+        )
+        AND (
+          coalesce(trim(p_tenant_id), '') = ''
+          OR coalesce(trim(o.tenant_id), '') = trim(p_tenant_id)
+        )
+        AND NOT public.pos_sales_is_office_store(btrim(coalesce(o.store_code, '')))
+        AND public.pos_sales_order_type_allowed(o.order_type, p_order_types)
+    ) s
+    WHERE s.biz_ymd >= p_start_ymd::date
+      AND s.biz_ymd <= p_end_ymd::date
   ),
   line_items AS (
     SELECT
@@ -158,7 +178,8 @@ BEGIN
         ELSE '[]'::jsonb
       END
     ) AS elem
-    WHERE btrim(coalesce(elem->>'cancelledAt', '')) <> ''
+    WHERE ir.items_json LIKE '%cancelledAt%'
+      AND btrim(coalesce(elem->>'cancelledAt', '')) <> ''
   ),
   line_agg AS (
     SELECT

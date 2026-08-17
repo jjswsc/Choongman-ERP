@@ -101,6 +101,8 @@ export interface PosPrinterSettings {
   merchantReceiptPrint?: boolean
   actualOrderDetails?: boolean
   toppingOptionsPrint?: boolean
+  /** true면 체크빌·결제 영수증에서 뷔페 포함 메뉴(0원)와 Item: Buffet/Extra 태그 숨김. 기본 false(전부 표시) */
+  hideBuffetIncludedOnGuestBill?: boolean
   autoPrintReceiptOnOrder?: boolean
   autoPrintReceiptOnAddOrder?: boolean
   autoPrintReceiptOnPayment?: boolean
@@ -311,6 +313,7 @@ export async function savePosPrinterSettings(params: {
   merchantReceiptPrint?: boolean
   actualOrderDetails?: boolean
   toppingOptionsPrint?: boolean
+  hideBuffetIncludedOnGuestBill?: boolean
   autoPrintReceiptOnOrder?: boolean
   autoPrintReceiptOnAddOrder?: boolean
   autoPrintReceiptOnPayment?: boolean

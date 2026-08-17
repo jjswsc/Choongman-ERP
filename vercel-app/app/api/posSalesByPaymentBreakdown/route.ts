@@ -38,7 +38,10 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { expandSalesStoreCodesForFilterAsync } from '@/lib/pos-sales-store-filter'
-import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
+import {
+  isPosSalesAnalyticsRpcTimeoutError,
+  tryFetchPosSalesAnalyticsAgg,
+} from '@/lib/pos-sales-analytics-rpc-server'
 
 function normalizeToken(s: string): string {
   return String(s || '').toLowerCase().replace(/\s+/g, '')
@@ -208,14 +211,19 @@ export async function GET(request: NextRequest) {
       headers.set('X-Pos-Sales-Delivery-Source', 'settlement')
       deliveryByChannel = bucketToChannelRows(deliveryFromSettlement)
     } else {
-      const deliveryRpc = await tryFetchPosSalesAnalyticsAgg({
-        request,
-        startStr,
-        endStr,
-        storeCodes: stores.length > 0 ? stores : undefined,
-        orderTypes: orderTypesAllowed,
-        aggMode: 'delivery_payment',
-      })
+      let deliveryRpc: Awaited<ReturnType<typeof tryFetchPosSalesAnalyticsAgg>> = null
+      try {
+        deliveryRpc = await tryFetchPosSalesAnalyticsAgg({
+          request,
+          startStr,
+          endStr,
+          storeCodes: stores.length > 0 ? stores : undefined,
+          orderTypes: orderTypesAllowed,
+          aggMode: 'delivery_payment',
+        })
+      } catch (e) {
+        if (!isPosSalesAnalyticsRpcTimeoutError(e)) throw e
+      }
       if (deliveryRpc && deliveryRpc.length > 0) {
         headers.set('X-Pos-Sales-Delivery-Source', 'rpc')
         deliveryByChannel = deliveryRpc
@@ -300,14 +308,19 @@ export async function GET(request: NextRequest) {
 
     const creditByChannel = creditPaymentBucketToRows(creditBucket)
 
-    const summaryRpc = await tryFetchPosSalesAnalyticsAgg({
-      request,
-      startStr,
-      endStr,
-      storeCodes: stores.length > 0 ? stores : undefined,
-      orderTypes: orderTypesAllowed,
-      aggMode: 'payment',
-    })
+    let summaryRpc: Awaited<ReturnType<typeof tryFetchPosSalesAnalyticsAgg>> = null
+    try {
+      summaryRpc = await tryFetchPosSalesAnalyticsAgg({
+        request,
+        startStr,
+        endStr,
+        storeCodes: stores.length > 0 ? stores : undefined,
+        orderTypes: orderTypesAllowed,
+        aggMode: 'payment',
+      })
+    } catch (e) {
+      if (!isPosSalesAnalyticsRpcTimeoutError(e)) throw e
+    }
 
     let summary: { paymentKey: string; sales: number }[]
     if (summaryRpc) {

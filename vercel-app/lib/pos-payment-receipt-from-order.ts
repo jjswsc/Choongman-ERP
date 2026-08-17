@@ -27,6 +27,7 @@ import {
   resolveKitchenMenuNameFromLookup,
 } from '@/lib/pos-kitchen-menu-display-name'
 import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
+import { pickBuffetIncludedFromOrderLine } from '@/lib/pos-guest-bill-buffet-print'
 
 export type PosOrderReceiptLineOptions = {
   /**
@@ -650,6 +651,7 @@ function posOrderItemsToReceiptLines(order: PosOrder, opts?: PosOrderReceiptLine
       ...(lineOptionId ? { optionId: lineOptionId } : {}),
       ...(lineOptionCode ? { optionCode: lineOptionCode } : {}),
       ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      ...pickBuffetIncludedFromOrderLine(row),
       ...grabOptionFields,
       ...(rowDelivery ? { deliveryAppCode: rowDelivery } : {}),
       ...(promo && promo.length > 0 ? { promoItems: promo } : {}),
@@ -821,6 +823,7 @@ function hallOrderItemsFromReceiptLines(
     qty: it.qty,
     ...(it.lineDiscountAmt > 0.0001 ? { lineDiscountAmt: it.lineDiscountAmt } : {}),
     ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+    ...pickBuffetIncludedFromOrderLine(it as unknown as Record<string, unknown>),
     ...((it as { isAddon?: boolean }).isAddon ? { isAddon: true as const } : {}),
     ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
     ...(it.menuId ? { menuId: it.menuId } : {}),
@@ -1007,6 +1010,7 @@ function checkoutPosItemsToReceiptLines(items: Array<Record<string, unknown>> | 
       ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
       ...(menuId ? { menuId } : {}),
       ...(note ? { note } : {}),
+      ...pickBuffetIncludedFromOrderLine(it),
       ...(promoId ? { promoId } : {}),
       ...(promoCode ? { promoCode } : {}),
       ...(optionId ? { optionId } : {}),

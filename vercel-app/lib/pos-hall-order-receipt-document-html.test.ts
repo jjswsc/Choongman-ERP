@@ -898,4 +898,55 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('+0.30')
     expect(html).not.toContain('+8.00')
   })
+
+  it('hides buffet-included 0฿ lines and Extra tags on check bill when the setting is on', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '100120260817001',
+        storeCode: '1001',
+        orderType: 'dine_in',
+        tableName: '1',
+        guestCount: 2,
+        items: [
+          { id: 'buffet-entry-1', name: '[Buffet] Buffet 299 × 2', price: 299, qty: 2, isBuffetEntry: true },
+          { id: 'c1', name: 'Chicken สันในไก่', price: 0, qty: 1, note: 'Buffet', buffetIncluded: true },
+          { id: 'e1', name: 'Mama', price: 69, qty: 1, note: 'Extra' },
+        ],
+        subtotal: 667,
+        discountAmt: 0,
+        total: 667,
+      },
+      t: (k) => (k === 'posLineNote' ? 'Item' : k),
+      lang: 'en',
+      printerSettings: { hideBuffetIncludedOnGuestBill: true } as never,
+    })
+    expect(html).toContain('[Buffet] Buffet 299')
+    expect(html).toContain('Mama')
+    expect(html).toContain('69.00')
+    expect(html).not.toContain('Chicken')
+    expect(html).not.toContain('Item: Buffet')
+    expect(html).not.toContain('Item: Extra')
+  })
+
+  it('keeps buffet-included lines when the setting is off', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '100120260817002',
+        storeCode: '1001',
+        orderType: 'dine_in',
+        tableName: '1',
+        items: [
+          { id: 'c1', name: 'Chicken สันในไก่', price: 0, qty: 1, note: 'Buffet', buffetIncluded: true },
+        ],
+        subtotal: 0,
+        discountAmt: 0,
+        total: 0,
+      },
+      t: (k) => (k === 'posLineNote' ? 'Item' : k),
+      lang: 'en',
+      printerSettings: { hideBuffetIncludedOnGuestBill: false } as never,
+    })
+    expect(html).toContain('Chicken')
+    expect(html).toContain('Item: Buffet')
+  })
 })

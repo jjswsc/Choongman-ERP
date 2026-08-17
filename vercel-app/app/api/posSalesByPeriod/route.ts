@@ -19,7 +19,9 @@ import { fetchPosSalesOrdersForBusinessRange, POS_SALES_PAYMENT_ROW_SELECT } fro
 import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
 import {
   buildPeriodSeriesFromAnalyticsAggRows,
+  isPosSalesAnalyticsRpcTimeoutError,
   mapAnalyticsAggRowToPeriodRow,
+  respondPosSalesAnalyticsTimeout,
   sortPeriodAggRows,
   tryFetchPosSalesAnalyticsAgg,
 } from '@/lib/pos-sales-analytics-rpc-server'
@@ -142,6 +144,7 @@ export async function GET(request: NextRequest) {
     )
     return NextResponse.json(result, { headers })
   } catch (e) {
+    if (isPosSalesAnalyticsRpcTimeoutError(e)) return respondPosSalesAnalyticsTimeout(headers)
     console.error('posSalesByPeriod:', e)
     return NextResponse.json([], { headers })
   }

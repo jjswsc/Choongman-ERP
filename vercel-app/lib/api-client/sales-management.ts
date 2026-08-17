@@ -12,6 +12,15 @@ function appendPosSalesFreshParam(q: URLSearchParams, fresh?: boolean) {
 /** 매출 집계 API — 장시간 hang 방지 (12매장·수개월 풀스캔 폴백 등) */
 const POS_SALES_CLIENT_TIMEOUT_MS = 45_000
 
+function throwIfPosSalesAggTimeout(res: Response, data: unknown) {
+  if (res.status !== 504) return
+  const msg =
+    data && typeof data === 'object' && data !== null && 'message' in data
+      ? String((data as { message?: unknown }).message || '')
+      : ''
+  throw new Error(msg || '매출 집계가 시간 초과되었습니다. 조회 기간을 줄여 다시 시도해 주세요.')
+}
+
 async function posSalesApiFetch(pathWithQuery: string, fresh?: boolean): Promise<Response> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), POS_SALES_CLIENT_TIMEOUT_MS)
@@ -41,27 +50,27 @@ export async function getPosSalesByStore(params: {
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   appendPosSalesFreshParam(q, params.fresh)
   const res = await posSalesApiFetch(`/api/posSalesByStore?${q}`, params.fresh)
-  return res.json() as Promise<
-    {
-      storeName: string
-      count: number
-      subtotal: number
-      vat: number
-      discount: number
-      service: number
-      total: number
-      guestSum: number
-      dineInOrderCount: number
-      dineInTotal: number
-      dineInGuestSum: number
-      /** 홀(dine_in) 매출 ÷ 홀 건수 — 테이블(건)당 */
-      salesPerDineInOrder: number
-      /** 홀 매출 ÷ 홀 손님 수 — 1인당 */
-      salesPerGuest: number
-      /** 조회에 포함된 전체 주문: 매출 ÷ 건수 */
-      salesPerOrder: number
-    }[]
-  >
+  const data: unknown = await res.json()
+  throwIfPosSalesAggTimeout(res, data)
+  return data as {
+    storeName: string
+    count: number
+    subtotal: number
+    vat: number
+    discount: number
+    service: number
+    total: number
+    guestSum: number
+    dineInOrderCount: number
+    dineInTotal: number
+    dineInGuestSum: number
+    /** 홀(dine_in) 매출 ÷ 홀 건수 — 테이블(건)당 */
+    salesPerDineInOrder: number
+    /** 홀 매출 ÷ 홀 손님 수 — 1인당 */
+    salesPerGuest: number
+    /** 조회에 포함된 전체 주문: 매출 ÷ 건수 */
+    salesPerOrder: number
+  }[]
 }
 
 export async function getPosSalesFilterOptions(params: { startStr: string; endStr: string }) {
@@ -126,6 +135,7 @@ export async function getPosSalesByPeriod(params: {
   const res = await posSalesApiFetch(`/api/posSalesByPeriod?${q}`, params.fresh)
   const truncated = res.headers.get('X-Sales-Truncated') === '1'
   const json: unknown = await res.json()
+  throwIfPosSalesAggTimeout(res, json)
   if (
     json &&
     typeof json === 'object' &&
@@ -156,7 +166,9 @@ export async function getPosSalesByDeliveryApp(params: {
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   appendPosSalesFreshParam(q, params.fresh)
   const res = await posSalesApiFetch(`/api/posSalesByDeliveryApp?${q}`, params.fresh)
-  return res.json() as Promise<{
+  const data: unknown = await res.json()
+  throwIfPosSalesAggTimeout(res, data)
+  return data as {
     items: {
       channelKey: string
       sales: number
@@ -164,7 +176,7 @@ export async function getPosSalesByDeliveryApp(params: {
       platforms?: { code: string; sales: number; pct: number }[]
     }[]
     total: number
-  }>
+  }
 }
 
 export type PosDeliveryAppReconcileDayRow = {
@@ -424,9 +436,9 @@ export async function getPosSalesByStoreChannel(params: {
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   appendPosSalesFreshParam(q, params.fresh)
   const res = await posSalesApiFetch(`/api/posSalesByStoreChannel?${q}`, params.fresh)
-  return res.json() as Promise<
-    { storeName: string; dineIn: number; takeout: number; delivery: number }[]
-  >
+  const data: unknown = await res.json()
+  throwIfPosSalesAggTimeout(res, data)
+  return data as { storeName: string; dineIn: number; takeout: number; delivery: number }[]
 }
 
 export async function getPosSalesByChannel(params: {
@@ -443,7 +455,9 @@ export async function getPosSalesByChannel(params: {
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   appendPosSalesFreshParam(q, params.fresh)
   const res = await posSalesApiFetch(`/api/posSalesByChannel?${q}`, params.fresh)
-  return jsonAsArray<{ channelKey: string; sales: number }>(await res.json())
+  const data: unknown = await res.json()
+  throwIfPosSalesAggTimeout(res, data)
+  return jsonAsArray<{ channelKey: string; sales: number }>(data)
 }
 
 export async function getPosSalesByMenu(params: {
@@ -462,8 +476,10 @@ export async function getPosSalesByMenu(params: {
   if (params.search) q.set('search', params.search)
   if (params.searchMode === 'and') q.set('searchMode', 'and')
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
-  const res = await apiFetchWithOffline(`/api/posSalesByMenu?${q}`)
-  return jsonAsArray<{ name: string; qty: number; sales: number }>(await res.json())
+  const res = await posSalesApiFetch(`/api/posSalesByMenu?${q}`)
+  const data: unknown = await res.json()
+  throwIfPosSalesAggTimeout(res, data)
+  return jsonAsArray<{ name: string; qty: number; sales: number }>(data)
 }
 
 export type PosSalesPromoRow = {
@@ -786,8 +802,10 @@ export async function getPosSalesByPayment(params: {
   if (params.stores?.length) q.set('stores', params.stores.join(','))
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
-  const res = await apiFetchWithOffline(`/api/posSalesByPayment?${q}`)
-  return jsonAsArray<{ paymentKey: string; sales: number }>(await res.json())
+  const res = await posSalesApiFetch(`/api/posSalesByPayment?${q}`)
+  const data: unknown = await res.json()
+  throwIfPosSalesAggTimeout(res, data)
+  return jsonAsArray<{ paymentKey: string; sales: number }>(data)
 }
 
 export type PosSalesPaymentBreakdown = {
@@ -816,8 +834,9 @@ export async function getPosSalesByPaymentBreakdown(params: {
   if (params.stores?.length) q.set('stores', params.stores.join(','))
   else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
-  const res = await apiFetchWithOffline(`/api/posSalesByPaymentBreakdown?${q}`)
+  const res = await posSalesApiFetch(`/api/posSalesByPaymentBreakdown?${q}`)
   const json = (await res.json()) as Partial<PosSalesPaymentBreakdown>
+  throwIfPosSalesAggTimeout(res, json)
   return {
     deliveryByChannel: Array.isArray(json.deliveryByChannel) ? json.deliveryByChannel : [],
     deliveryTotal: Number(json.deliveryTotal ?? 0) || 0,

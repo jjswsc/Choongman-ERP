@@ -26,6 +26,8 @@ DECLARE
     'get_stock_logs_purchase_agg',
     -- Linter 0011 (2025-06 Supabase Dashboard)
     'pos_sales_business_ymd',
+    'pos_sales_business_ymd_from_clock',
+    'pos_sales_analytics_base',
     'touch_pos_close_runs_updated_at',
     'get_pos_close_snapshot',
     'set_row_updated_at',

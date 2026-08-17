@@ -60,6 +60,8 @@ export type ReceiptModalData = {
     /** items_json menuId1·재인쇄 시 음료 제외 할인 배분 */
     menuId?: string
     note?: string
+    /** QR 뷔페 포함 메뉴 — 손님 전표 숨김 판정용 */
+    buffetIncluded?: boolean
     /** 추가 주문 줄 — 홀 주문 영수증에 `>` 접두 표시 */
     isAddon?: boolean
     promoId?: string
@@ -283,6 +285,7 @@ export function PosReceiptModal({
               price: Number(it.price ?? 0) || 0,
               qty: Number(it.qty ?? 0) || 0,
               note: String(it.note ?? ''),
+              ...(it.buffetIncluded ? { buffetIncluded: true as const } : {}),
               ...(it.isAddon ? { isAddon: true as const } : {}),
               ...(Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001
                 ? { lineDiscountAmt: Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) }

@@ -9,7 +9,11 @@ import { resolvePosSalesStoresFromRequest } from '@/lib/pos-sales-request-scope'
 import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import { groupPosSalesRowsByCanonicalStore } from '@/lib/pos-sales-period-aggregate'
-import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
+import {
+  isPosSalesAnalyticsRpcTimeoutError,
+  respondPosSalesAnalyticsTimeout,
+  tryFetchPosSalesAnalyticsAgg,
+} from '@/lib/pos-sales-analytics-rpc-server'
 import { mapAnalyticsAggToStoreResults } from '@/lib/pos-sales-analytics-rpc-map'
 import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
 
@@ -137,6 +141,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result, { headers })
   } catch (e) {
+    if (isPosSalesAnalyticsRpcTimeoutError(e)) return respondPosSalesAnalyticsTimeout(headers)
     console.error('posSalesByStore:', e)
     return NextResponse.json([], { headers })
   }

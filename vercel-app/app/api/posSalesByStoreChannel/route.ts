@@ -8,7 +8,11 @@ import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
 import { resolvePosSalesStoresFromRequest } from '@/lib/pos-sales-request-scope'
 import { fetchPosSalesOrdersForBusinessRange } from '@/lib/pos-sales-fetch-rows'
 import { groupPosSalesRowsByCanonicalStore } from '@/lib/pos-sales-period-aggregate'
-import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
+import {
+  isPosSalesAnalyticsRpcTimeoutError,
+  respondPosSalesAnalyticsTimeout,
+  tryFetchPosSalesAnalyticsAgg,
+} from '@/lib/pos-sales-analytics-rpc-server'
 import { mapAnalyticsAggToStoreChannelResults } from '@/lib/pos-sales-analytics-rpc-map'
 import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
 
@@ -80,6 +84,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result, { headers })
   } catch (e) {
+    if (isPosSalesAnalyticsRpcTimeoutError(e)) return respondPosSalesAnalyticsTimeout(headers)
     console.error('posSalesByStoreChannel:', e)
     return NextResponse.json([], { headers })
   }

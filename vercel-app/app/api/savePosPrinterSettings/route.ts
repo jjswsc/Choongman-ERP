@@ -256,6 +256,7 @@ export async function POST(req: NextRequest) {
     const merchantReceiptPrint = body?.merchantReceiptPrint !== false
     const actualOrderDetails = body?.actualOrderDetails !== false
     const toppingOptionsPrint = Boolean(body?.toppingOptionsPrint)
+    const hideBuffetIncludedOnGuestBill = parseBoolParam(body?.hideBuffetIncludedOnGuestBill, false)
     const autoPrintReceiptOnOrder = Boolean(body?.autoPrintReceiptOnOrder)
     const autoPrintReceiptOnAddOrder = Boolean(body?.autoPrintReceiptOnAddOrder)
     const autoPrintReceiptOnPayment = Boolean(body?.autoPrintReceiptOnPayment)
@@ -467,6 +468,7 @@ export async function POST(req: NextRequest) {
       merchant_receipt_print: merchantReceiptPrint,
       actual_order_details: actualOrderDetails,
       topping_options_print: toppingOptionsPrint,
+      hide_buffet_included_on_guest_bill: hideBuffetIncludedOnGuestBill,
       auto_print_receipt_on_order: autoPrintReceiptOnOrder,
       auto_print_receipt_on_add_order: autoPrintReceiptOnAddOrder,
       auto_print_receipt_on_payment: autoPrintReceiptOnPayment,

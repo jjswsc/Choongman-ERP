@@ -14,6 +14,8 @@ import {
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import { resolveOrderDeliveryAppCode } from '@/lib/pos-delivery-order-meta'
 import {
+  isPosSalesAnalyticsRpcTimeoutError,
+  respondPosSalesAnalyticsTimeout,
   tryFetchPosSalesAnalyticsAgg,
   type PosSalesAnalyticsAggRow,
 } from '@/lib/pos-sales-analytics-rpc-server'
@@ -226,6 +228,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ items: result, total }, { headers })
   } catch (e) {
+    if (isPosSalesAnalyticsRpcTimeoutError(e)) return respondPosSalesAnalyticsTimeout(headers)
     console.error('posSalesByDeliveryApp:', e)
     return NextResponse.json({ items: [], total: 0 }, { headers })
   }

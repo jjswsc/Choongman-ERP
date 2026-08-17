@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
+import { tryFetchPosSalesAnalyticsAggIgnoreTimeout } from '@/lib/pos-sales-analytics-rpc-server'
 import { loadHqOutboundProcessedLines } from '@/lib/hq-outbound-income-total'
 import { sumCompletedPosSalesTotal } from '@/lib/accounting-pos-sales'
 import { sumHqOutboundSubtotalMatchingOutboundManagement } from '@/lib/hq-outbound-income-total'
@@ -72,7 +72,7 @@ async function buildStoreBreakdown(
 ): Promise<StoreOpsStoreRow[]> {
   const maxStores = opts?.maxStores ?? 30
   const [salesRows, outbound] = await Promise.all([
-    tryFetchPosSalesAnalyticsAgg({
+    tryFetchPosSalesAnalyticsAggIgnoreTimeout({
       startStr: start,
       endStr: end,
       aggMode: 'store',

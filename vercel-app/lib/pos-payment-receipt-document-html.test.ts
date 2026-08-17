@@ -336,4 +336,35 @@ describe('buildPosPaymentReceiptDocumentHtmlAsync — Windows hybrid logo', () =
     expect(html).not.toContain('https://choongman-erp.vercel.app/company-stamp.png')
     expect(globalThis.fetch).toHaveBeenCalled()
   })
+
+  it('hides buffet-included 0฿ lines and Extra tags on payment receipt when the setting is on', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: {
+        orderNo: '100120260817001',
+        storeCode: '1001',
+        orderType: 'dine_in',
+        items: [
+          { id: 'buffet-entry-1', name: '[Buffet] Buffet 299 × 2', price: 299, qty: 2 },
+          { id: 'c1', name: 'Chicken สันในไก่', price: 0, qty: 1, note: 'Buffet', buffetIncluded: true },
+          { id: 'e1', name: 'Mama', price: 69, qty: 1, note: 'Extra' },
+        ],
+        subtotal: 667,
+        discountAmt: 0,
+        total: 667,
+        paymentCash: 667,
+        receiptAutoPrintContext: 'payment',
+      },
+      menus: [],
+      orderTypeLabels: { dine_in: 'Dine-in' },
+      t: (k) => (k === 'posLineNote' ? 'Item' : k),
+      lang: 'en',
+      origin: 'https://example.com',
+      printerSettings: { hideBuffetIncludedOnGuestBill: true } as never,
+    })
+    expect(html).toContain('Buffet 299')
+    expect(html).toContain('Mama')
+    expect(html).not.toContain('Chicken')
+    expect(html).not.toContain('Item: Buffet')
+    expect(html).not.toContain('Item: Extra')
+  })
 })

@@ -11,7 +11,11 @@ import {
   POS_SALES_MENU_ROW_SELECT,
 } from '@/lib/pos-sales-fetch-rows'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
-import { tryFetchPosSalesAnalyticsAgg } from '@/lib/pos-sales-analytics-rpc-server'
+import {
+  isPosSalesAnalyticsRpcTimeoutError,
+  respondPosSalesAnalyticsTimeout,
+  tryFetchPosSalesAnalyticsAgg,
+} from '@/lib/pos-sales-analytics-rpc-server'
 
 type PosOrderItem = {
   id?: string
@@ -124,6 +128,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result, { headers })
   } catch (e) {
+    if (isPosSalesAnalyticsRpcTimeoutError(e)) return respondPosSalesAnalyticsTimeout(headers)
     console.error('posSalesByMenu:', e)
     return NextResponse.json([], { headers })
   }

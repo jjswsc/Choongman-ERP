@@ -621,7 +621,7 @@ export async function claimKitchenPrintJob(params: {
   storeCode: string
   workerId?: string
 }): Promise<{ success: boolean; job: PosKitchenPrintJobClaim | null; message?: string }> {
-  const res = await apiFetchWithOffline('/api/posPrintJobs/claimKitchen', {
+  const res = await apiFetch('/api/posPrintJobs/claimKitchen', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -634,7 +634,7 @@ export async function markKitchenPrintJob(params: {
   status: 'printed' | 'failed'
   reason?: string
 }): Promise<{ success: boolean; message?: string }> {
-  const res = await apiFetchWithOffline('/api/posPrintJobs/markKitchen', {
+  const res = await apiFetch('/api/posPrintJobs/markKitchen', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),

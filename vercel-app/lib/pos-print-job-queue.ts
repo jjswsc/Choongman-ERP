@@ -4,6 +4,7 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { kitchenLinesFromPrintJobPayload } from '@/lib/pos-kitchen-print-job-worker'
 
 type EnqueueKitchenPrintJobInput = {
   storeCode: string
@@ -103,12 +104,34 @@ export async function claimQueuedKitchenPrintJob(params: {
       'pos_print_jobs',
       `store_code=eq.${encodeURIComponent(storeCode)}&status=eq.queued&job_type=eq.kitchen`,
       {
-        limit: 1,
+        limit: 25,
         order: 'created_at.asc',
         select: 'id,order_id,payload_json',
       }
     )) as { id?: number; order_id?: number; payload_json?: Record<string, unknown> | null }[] | null
-    const picked = rows?.[0]
+    const skipIds: number[] = []
+    let picked: { id?: number; order_id?: number; payload_json?: Record<string, unknown> | null } | undefined
+    for (const row of rows || []) {
+      const id = Number(row.id || 0)
+      if (!id) continue
+      if (kitchenLinesFromPrintJobPayload(row.payload_json).length === 0) {
+        skipIds.push(id)
+        continue
+      }
+      picked = row
+      break
+    }
+    if (skipIds.length) {
+      await supabaseUpdateByFilter(
+        'pos_print_jobs',
+        `id=in.(${skipIds.join(',')})&status=eq.queued`,
+        {
+          status: 'printed',
+          printed_at: new Date().toISOString(),
+          last_error: 'skipped_no_kitchen_lines',
+        }
+      )
+    }
     if (!picked?.id) return null
     await supabaseUpdateByFilter('pos_print_jobs', `id=eq.${Number(picked.id)}&status=eq.queued`, {
       status: 'claimed',

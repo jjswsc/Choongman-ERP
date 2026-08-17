@@ -9,6 +9,9 @@
 --   · pos_menu_ingredients.option_id
 --   · items.unit
 --   · erp_stores.photo_url (+ map_query, address)
+--   · employees.can_manage_office_payroll
+--   · pos_printer_settings.round_payment_total_to_whole_baht
+--     (+ payment_total_rounding_mode)
 --
 -- 출처: stock_logs_soft_delete_outbound / pos_menus_delivery_app_fee_percent
 --       / supabase_pos_menu_cost_and_options / erp_stores_member_portal_fields
@@ -112,6 +115,39 @@ BEGIN
   COMMENT ON COLUMN public.erp_stores.address IS '회원앱에 표시할 주소/위치 설명';
 END $$;
 
+-- 5) employees — 오피스 급여 담당 플래그 (loginCheck 42703)
+DO $$
+BEGIN
+  IF to_regclass('public.employees') IS NULL THEN
+    RAISE NOTICE 'skip §5: public.employees not found';
+    RETURN;
+  END IF;
+
+  ALTER TABLE public.employees
+    ADD COLUMN IF NOT EXISTS can_manage_office_payroll boolean NOT NULL DEFAULT false;
+
+  COMMENT ON COLUMN public.employees.can_manage_office_payroll IS
+    '오피스(본사) 급여 조회·계산·확정 권한. Director는 플래그 없이도 접근·지정 가능.';
+END $$;
+
+-- 6) pos_printer_settings — 결제 합계 반올림 (loadPosPricingAdjustmentsForStore 42703)
+DO $$
+BEGIN
+  IF to_regclass('public.pos_printer_settings') IS NULL THEN
+    RAISE NOTICE 'skip §6: public.pos_printer_settings not found';
+    RETURN;
+  END IF;
+
+  ALTER TABLE public.pos_printer_settings
+    ADD COLUMN IF NOT EXISTS payment_total_rounding_mode text DEFAULT 'round',
+    ADD COLUMN IF NOT EXISTS round_payment_total_to_whole_baht boolean DEFAULT true;
+
+  COMMENT ON COLUMN public.pos_printer_settings.payment_total_rounding_mode IS
+    'POS payment total rounding: round | floor | none';
+  COMMENT ON COLUMN public.pos_printer_settings.round_payment_total_to_whole_baht IS
+    'deprecated: payment_total_rounding_mode 사용. true=round, false=none';
+END $$;
+
 -- 확인
 SELECT
   EXISTS (
@@ -133,4 +169,13 @@ SELECT
   EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'erp_stores' AND column_name = 'photo_url'
-  ) AS erp_stores_has_photo_url;
+  ) AS erp_stores_has_photo_url,
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'employees' AND column_name = 'can_manage_office_payroll'
+  ) AS employees_has_can_manage_office_payroll,
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_printer_settings'
+      AND column_name = 'round_payment_total_to_whole_baht'
+  ) AS pos_printer_settings_has_round_payment_total;
