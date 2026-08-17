@@ -15,7 +15,7 @@ export type LineItemsCacheEntry = { items: PayableTransactionItem[]; orderInvoic
 
 /** 미수·미지급 조회 UI — 메뉴 이동 후 복원용 sessionStorage draft */
 export type ReceivablePayableQueryDraft = {
-  tab?: "receivable" | "payable"
+  tab?: "receivable" | "payable" | "borrowings"
   startStr?: string
   endStr?: string
   salesOutletFilter?: string

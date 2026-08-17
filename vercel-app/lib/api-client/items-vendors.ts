@@ -47,7 +47,7 @@ export interface AdminVendor {
   email: string
   address: string
   tax_no?: string
-  type: 'purchase' | 'sales' | 'both'
+  type: 'purchase' | 'sales' | 'both' | 'related'
   memo: string
   direct_settlement?: boolean
   bank_account_no?: string
@@ -136,6 +136,15 @@ export async function getItemCategories() {
 export async function getAdminVendors() {
   const res = await apiFetchWithOffline('/api/getVendors')
   return sortVendorsByDisplayName(jsonAsArray<AdminVendor>(await res.json()))
+}
+
+export async function getVendorsForRelated() {
+  const res = await apiFetchWithOffline('/api/getVendorsForRelated')
+  return sortVendorsByDisplayName(
+    jsonAsArray<{ code: string; name: string; bankAccountNo?: string | null; bankName?: string | null }>(
+      await res.json()
+    )
+  )
 }
 
 export async function saveVendor(params: {

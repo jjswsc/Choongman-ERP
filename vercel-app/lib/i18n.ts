@@ -2722,6 +2722,7 @@ export const i18n = {
     receivablePayableTitle: '미수금·미지급금 관리',
     receivableTab: '미수금 (매출)',
     payableTab: '미지급금 (매입)',
+    borrowingsTab: '차입금',
     recColSalesAmount: '매출금액',
     recColReceiveAmount: '수령금액',
     recColRemainingReceivable: '기간 순잔액',
@@ -3039,7 +3040,7 @@ export const i18n = {
     adminBalanceSheet: '재무상태표',
     adminFinancialStatements: '재무제표',
     helpSum_admin_financial_statements:
-      '손익·재무상태표·마진 등을 매장·기간으로 조회합니다. 급여(5310)는 지급일(익월 5일)이 아니라 근태 귀속월(전월 1일~말일)에 반영됩니다. 승인된 회계 PO(로열티·배달 GP·Grab GP)는 매장 비용·본사(발행) 매출에 반영되며, VAT 포함/제외 토글에 맞춰 청구 total/subtotal을 씁니다.',
+      '손익·재무상태표·마진 등을 매장·기간으로 조회합니다. 재무상태표 부채에 차입금(2150), 자산에 대여금(1150)이 포함됩니다. 급여(5310)는 지급일(익월 5일)이 아니라 근태 귀속월(전월 1일~말일)에 반영됩니다. 승인된 회계 PO(로열티·배달 GP·Grab GP)는 매장 비용·본사(발행) 매출에 반영되며, VAT 포함/제외 토글에 맞춰 청구 total/subtotal을 씁니다.',
     helpHow_admin_financial_statements:
       '① 매장·조회월을 고른 뒤 검색합니다.\n② 손익에서 VAT 포함/제외를 전환하면 매출·매입·재고와 함께 가맹 청구(승인 PO) 금액도 맞춰집니다.\n③ 로열티·배달/Grab GP는 PO 관리에서 비율 입력 후 회계 PO를 승인해야 손익에 전기됩니다(Draft·플랫폼 5528 수수료와 별개).\n④ 수동 매출·기초재고는 한 달만 선택해 입력·저장하고, 여러 달 보기에서는 월별로 저장된 값이 반영됩니다.\n⑤ 다른 메뉴·하위 탭을 갔다 와도 검색 조건·결과는 유지됩니다.\n⑥ 급여는 7월 근태분→8월 5일 지급이어도 7월 손익에 들어갑니다. 확정 급여가 있으면 통장·패티 급여성 출금은 이중 방지로 제외합니다.',
     adminChartOfAccounts: '계정과목표(COA)',
@@ -4040,6 +4041,10 @@ export const i18n = {
     wm_loan: '대출',
     wm_loan_repayment: '대출 상환',
     wm_loan_given: '대여',
+    wm_loan_party: '관련당사자',
+    wm_loan_party_required: '관련당사자(상대)를 선택해 주세요.',
+    wm_loan_not_receivable_hint:
+      '임원 차입은 가맹 미수금이 아닙니다. 거래처에서 유형 「관련당사자」로 등록하세요. 잔액 합계는 재무상태표 차입금(2150)과 같아야 합니다.',
     wm_paymentMethod: '지급 수단',
     wm_paymentMethodBank: '통장',
     wm_advanceInstallments: '분할 횟수',
@@ -4449,7 +4454,7 @@ export const i18n = {
     bankExpenseMgmtCoexistBody:
       '지출 관련 통장 출금(경비·매입 대금 등)은 통장에서 분류만 저장됩니다. 분개·미지급 반영은 조회 탭 「지출관리 연결」로 지급예정·지출등록과 연결한 뒤 완료됩니다.\n• 이체·대출·가수금·정산 수정·미분류: 통장에서 바로 분개 가능\n• 경비·매입 대금: 지출관리 연결 필수',
     helpSum_admin_bank_transactions:
-      '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급과 맞물립니다. 통장 변경 시 계좌 추가(삭제 금지), 삭제·등록 이력은 본사·회계가 계좌 관리에서 확인합니다.',
+      '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급·차입금과 맞물립니다. 임원이 회사에 빌려준 입금은 「차입 수령」+관련당사자(매출 4110 금지). 통장 변경 시 계좌 추가(삭제 금지), 삭제·등록 이력은 본사·회계가 계좌 관리에서 확인합니다.',
     helpHow_admin_bank_transactions:
       '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, revenue_* 입금 분류는 쓰지 마세요(매출 이중 위험). 수수료 분개는 POS 결산에서 처리하거나, 통장 조회에서 해당 입금 행의 「채널 정산」을 사용하세요.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
     bankManualS3PosReceivable:
@@ -4470,7 +4475,7 @@ export const i18n = {
     helpHow_admin_pos_settlement:
       '배달은 플랫폼이 GROSS에서 %를 빼고 익일 NET 입금합니다. 채널 정산에서 NET 입력 후 분개하세요. 앱별 %는 메뉴·배달앱 운영에서 설정. 본사 PO 배달 GP와 별도.',
     helpSum_admin_expense_management:
-      '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 지급대기의 「은행이체」보기로 예금주·계좌·은행·금액을 엑셀처럼 확인·복사·인쇄할 수 있습니다. 문서번호는 EXPyyyymm000x로 자동 발급됩니다.',
+      '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 대출 상환·대여는 관련당사자(임원 등)를 필수 선택하며 가맹 미수금과 섞이지 않습니다. 지급대기의 「은행이체」보기로 예금주·계좌·은행·금액을 엑셀처럼 확인·복사·인쇄할 수 있습니다. 문서번호는 EXPyyyymm000x로 자동 발급됩니다.',
     helpHow_admin_expense_management:
       '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다. 계정과목은 자산 계정(예: 1490 유형자산)을 고르며, 나중에 송금해도 경비(손익)가 아니라 그 자산 계정으로 표시·분개됩니다. 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수율(%) 선택 시 (총액−VAT)×%로 원천세가 채워지며, 「50 ทวิ 자동 생성」을 켜면 등록 직후 증명서 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice만 Tax Filing P.P.30 매입 VAT에 반영됩니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다. 본사(Office) 명의 건은 임원, 또는 오피스 급여 권한이 있는 회계가 삭제할 수 있습니다.\n⑪ 「출금 등록」은 통장 CSV와 잔액이 겹치지 않도록 통장 조회 목록에 나오지 않습니다. 통장 페이지에 보이게 하려면 CSV를 먼저 가져온 뒤 그 출금 줄에서 「저장」하세요.',
     helpSum_admin_depreciation:
@@ -4598,6 +4603,7 @@ export const i18n = {
     accountSubjectDeleteInUse: '통장거래·고정비·패티캐시·적요규칙에서 사용 중이면 삭제할 수 없습니다.',
     bankCategoryCorrection: '정정',
     bankCategoryLoan: '대여',
+    bankCategoryLoanBorrow: '차입 수령',
     bankCategoryAdvance: '전도금',
     bankCategoryUnclassified: '미분류',
     bankWithdrawImportHint: '미분류 (지출/매입 관리에서 연결)',
@@ -5300,13 +5306,19 @@ export const i18n = {
     bs_receivablesSubledger: '보조원장 미수 (가맹·출고)',
     bs_payablesGl2110: '미지급금 (분개 2110)',
     bs_payablesSubledger: '보조원장 미지급',
+    bs_loansReceivable: '대여금',
+    bs_borrowings: '차입금',
+    bs_borrowingsGl2150: '차입금 (분개 2150)',
+    bs_borrowingsSubledger: '보조원장 차입 (관련당사자)',
     bs_ledgerBreakdownHint: '재무상태표 합계는 분개 잔액 기준입니다. 보조원장은 거래처·인보이스 추적용이며 차이는 「장부 대사」 탭에서 확인하세요.',
     adminLedgerReconciliation: '장부 대사',
-    recon_hint: '보조원장(receivable/payable_transactions)과 분개(1130/2110) 차이·이중 위험 입금을 점검합니다. SOP:',
+    recon_hint: '보조원장(receivable/payable/borrowing_transactions)과 분개(1130/2110/2150) 차이·이중 위험 입금을 점검합니다. SOP:',
     recon_gl1130: '분개 1130',
     recon_gl2110: '분개 2110',
     recon_subledgerRecv: '보조원장 미수',
     recon_subledgerPay: '보조원장 미지급',
+    recon_gl2150: '분개 2150',
+    recon_subledgerBorrow: '보조원장 차입',
     recon_difference: '차이 (분개 − 보조)',
     recon_riskyRevenueDeposits: 'POS 이중 매출 위험 입금',
     recon_riskyRevenueDepositsHint: 'revenue_delivery/card/qr/cash 분류 — 채널 정산 또는 매출 수령으로 변경하세요.',
@@ -8103,6 +8115,7 @@ export const i18n = {
     vendorTypePurchase: '매입처',
     vendorTypeSales: '매출처',
     vendorTypeBoth: '둘 다',
+    vendorTypeRelated: '관련당사자',
     vendorMemo: '비고',
     vendorMemoPh: '비고 입력',
     vendorBtnSave: '저장',
@@ -10782,6 +10795,7 @@ Only matters the employee must handle personally on a working day:
     receivablePayableTitle: 'Receivables & Payables',
     receivableTab: 'Receivables (Sales)',
     payableTab: 'Payables (Purchases)',
+    borrowingsTab: 'Borrowings',
     recColSalesAmount: 'Sales Amount',
     recColReceiveAmount: 'Received',
     recColRemainingReceivable: 'Period Net',
@@ -11101,7 +11115,7 @@ Only matters the employee must handle personally on a working day:
     adminBalanceSheet: 'Balance Sheet',
     adminFinancialStatements: 'Financial statements',
     helpSum_admin_financial_statements:
-      'View P&L, balance sheet, and margin by store and period. Salary (5310) posts to the attendance month (1st–last day), not the pay date (5th of the following month). Approved accounting POs (royalty, delivery GP, Grab GP) post to store expenses and HQ (issuer) sales; amounts follow the VAT included/excluded toggle (PO total vs subtotal).',
+      'View P&L, balance sheet, and margin by store and period. The balance sheet includes borrowings (2150) and loans receivable (1150). Salary (5310) posts to the attendance month (1st–last day), not the pay date (5th of the following month). Approved accounting POs (royalty, delivery GP, Grab GP) post to store expenses and HQ (issuer) sales; amounts follow the VAT included/excluded toggle (PO total vs subtotal).',
     helpHow_admin_financial_statements:
       '① Choose store and month, then search.\n② Switching VAT included/excluded adjusts sales, purchases, inventory, and approved franchise-billing PO amounts together.\n③ Royalty / delivery / Grab GP hit the P&L only after the accounting PO is Approved (Draft and platform fee 5528 are separate).\n④ Enter and save manual sales / beginning inventory on a single-month query; multi-month view applies each month’s saved values.\n⑤ Search filters and results stay when you switch menus or sub-tabs.\n⑥ July attendance paid on 5 Aug still hits July P&L. Confirmed payroll excludes salary-like bank/petty cash to avoid double counting.',
     adminChartOfAccounts: 'Chart of accounts',
@@ -12106,6 +12120,10 @@ Only matters the employee must handle personally on a working day:
     wm_loan: 'Loan',
     wm_loan_repayment: 'Loan Repayment',
     wm_loan_given: 'Loan Given',
+    wm_loan_party: 'Related party',
+    wm_loan_party_required: 'Select a related party (officer/lender).',
+    wm_loan_not_receivable_hint:
+      'Officer loans are not franchise A/R. Register them as vendor type Related party. The total should match borrowings (2150) on the balance sheet.',
     wm_paymentMethod: 'Payment Method',
     wm_paymentMethodBank: 'Bank',
     wm_advanceInstallments: 'Installments',
@@ -12515,7 +12533,7 @@ Only matters the employee must handle personally on a working day:
     bankExpenseMgmtCoexistBody:
       'Expense-related bank withdrawals (expense, purchase payment, etc.) are classified on the bank side only. Post journals and payables after linking via Query tab → “Link expense mgmt”.\n• Transfer, loan, advance, correction, unclassified: bank auto-journal on save\n• Expense and purchase payment: expense management link required',
     helpSum_admin_bank_transactions:
-      'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables. When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
+      'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables/borrowings. Officer deposits to the company: Borrowing in + related party (do not post as sales 4110). When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
     helpHow_admin_bank_transactions:
       '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_* (double revenue risk). Post fees on POS settlement or use Channel settlement on the deposit row in Bank.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
     bankManualS3PosReceivable:
@@ -12536,7 +12554,7 @@ Only matters the employee must handle personally on a working day:
     helpHow_admin_pos_settlement:
       'After settlement entry, use Channel settlement for GROSS/NET/fee journals. Do not use revenue_* bank categories.',
     helpSum_admin_expense_management:
-      'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use EXPyyyymm000x.',
+      'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Loan repayment/lending requires a related party (officer) and is not franchise A/R. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use EXPyyyymm000x.',
     helpHow_admin_expense_management:
       '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management. Pick an asset account (e.g. 1490 PPE); later bank transfer posts to that asset account, not P&L expense. Attach invoice/receipt and VAT like expense/purchase.\n⑧ Choosing a WHT rate (%) fills withholding as (gross−VAT)×%; with "Auto-create 50 ทวิ" on, the certificate print window opens right after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Only Tax Invoice posts to Tax Filing P.P.30 purchase VAT.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows. HQ-named (Office) rows can be deleted by directors, or by accounting staff with office payroll authority.\n⑪ Register Withdrawal does not appear on the bank query list (avoids double-counting CSV). Import CSV first, then Save from that withdrawal row.',
     helpSum_admin_depreciation:
@@ -12664,6 +12682,7 @@ Only matters the employee must handle personally on a working day:
     accountSubjectDeleteInUse: 'Cannot delete if used in bank transactions, fixed expenses, petty cash, or memo rules.',
     bankCategoryCorrection: 'Correction',
     bankCategoryLoan: 'Loan',
+    bankCategoryLoanBorrow: 'Borrowing in',
     bankCategoryAdvance: 'Advance',
     bankCategoryUnclassified: 'Unclassified',
     bankWithdrawImportHint: 'Unclassified (link in Expense/Purchase)',
@@ -13363,14 +13382,20 @@ Only matters the employee must handle personally on a working day:
     bs_receivablesSubledger: 'Subledger receivables (B2B)',
     bs_payablesGl2110: 'Payables (GL 2110)',
     bs_payablesSubledger: 'Subledger payables',
+    bs_loansReceivable: 'Loans receivable',
+    bs_borrowings: 'Borrowings',
+    bs_borrowingsGl2150: 'Borrowings (GL 2150)',
+    bs_borrowingsSubledger: 'Subledger borrowings (related party)',
     bs_ledgerBreakdownHint:
       'Balance sheet totals use GL balances. Subledger is for vendor/invoice tracking; use Ledger reconciliation for differences.',
     adminLedgerReconciliation: 'Ledger reconciliation',
-    recon_hint: 'Compare subledger vs GL 1130/2110 and flag double-risk deposits. SOP:',
+    recon_hint: 'Compare subledger vs GL 1130/2110/2150 and flag double-risk deposits. SOP:',
     recon_gl1130: 'GL 1130',
     recon_gl2110: 'GL 2110',
     recon_subledgerRecv: 'Subledger AR',
     recon_subledgerPay: 'Subledger AP',
+    recon_gl2150: 'GL 2150',
+    recon_subledgerBorrow: 'Subledger borrowings',
     recon_difference: 'Difference (GL − subledger)',
     recon_riskyRevenueDeposits: 'Double-revenue risk deposits',
     recon_riskyRevenueDepositsHint: 'revenue_* categories — switch to channel settlement or Sales collection.',
@@ -16169,6 +16194,7 @@ orderItemQty: 'Qty',
     vendorTypePurchase: 'Supplier',
     vendorTypeSales: 'Buyer',
     vendorTypeBoth: 'Both',
+    vendorTypeRelated: 'Related party',
     vendorMemo: 'Memo',
     vendorMemoPh: 'Enter memo',
     vendorBtnSave: 'Save',

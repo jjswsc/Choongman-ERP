@@ -395,3 +395,38 @@ export async function getTaxInvoiceDepositSeq(params: {
     message?: string
   }>
 }
+
+export type BorrowingPartyBalance = {
+  partyCode: string
+  partyName: string
+  balance: number
+}
+
+export type BorrowingLedgerLine = {
+  id: number
+  transDate: string
+  refType: string
+  amount: number
+  memo: string | null
+  partyCode: string
+  bankTransactionId: number | null
+  storeName: string | null
+}
+
+export async function getBorrowingLedger(params: { endStr: string; startStr?: string; partyCode?: string }) {
+  const q = new URLSearchParams()
+  q.set('endStr', params.endStr)
+  if (params.startStr) q.set('startStr', params.startStr)
+  if (params.partyCode) q.set('partyCode', params.partyCode)
+  const res = await apiFetchWithOffline(`/api/getBorrowingLedger?${q}`)
+  const payload = (await res.json()) as {
+    lines?: BorrowingLedgerLine[]
+    byParty?: BorrowingPartyBalance[]
+    error?: string
+  }
+  if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`)
+  return {
+    lines: Array.isArray(payload.lines) ? payload.lines : [],
+    byParty: Array.isArray(payload.byParty) ? payload.byParty : [],
+  }
+}

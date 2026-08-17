@@ -67,6 +67,7 @@ import {
   type BankAccountAuditLogItem,
   getAccountSubjects,
   getVendorsForPurchase,
+  getVendorsForRelated,
   getVendorsForSales,
   getCardAccounts,
   updateBankTransactionInvoice,
@@ -250,6 +251,7 @@ export function BankTransactionsTab() {
   const [assetAccountOptions, setAssetAccountOptions] = React.useState<AccountSubjectItem[]>([])
   const [cardAccounts, setCardAccounts] = React.useState<{ id: number; name: string }[]>([])
   const [vendorOptions, setVendorOptions] = React.useState<{ code: string; name: string }[]>([])
+  const [relatedVendorOptions, setRelatedVendorOptions] = React.useState<{ code: string; name: string }[]>([])
   const [salesVendorOptions, setSalesVendorOptions] = React.useState<{ name: string }[]>([])
 
   const [newAccountName, setNewAccountName] = React.useState("")
@@ -1336,6 +1338,13 @@ export function BankTransactionsTab() {
   }, [normalizePurchaseVendorOptions])
   React.useEffect(() => {
     void loadPurchaseVendorOptions()
+    getVendorsForRelated()
+      .catch(() => [])
+      .then((rows) =>
+        setRelatedVendorOptions(
+          (rows || []).map((r) => ({ code: String(r.code), name: String(r.name || r.code) }))
+        )
+      )
   }, [loadPurchaseVendorOptions])
   const reloadAccountSubjectOptions = React.useCallback(() => {
     Promise.all([
@@ -2208,7 +2217,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
   const handleImportSave = async () => {
     if (!importPreview || !accountId) return
     const acc = accounts.find((a) => String(a.id) === accountId)
-    const depositCats = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "receivable_receive", "correction", "loan", "advance", "unclassified"] as const
+    const depositCats = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "receivable_receive", "correction", "loan", "loan_borrow", "advance", "unclassified"] as const
     const withdrawCats = ["transfer", "expense", "purchase_payment", "correction", "loan", "advance", "unclassified"] as const
     const items = importPreview.rows.map((r, idx) => {
       const edit = importRowEdits[idx]
@@ -2243,7 +2252,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       let accountSubjectId: number | undefined
       if (category === "advance" && prepaymentSubject?.id) {
         accountSubjectId = prepaymentSubject.id
-      } else if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {
+      } else if (r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
       } else if (r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
@@ -2251,7 +2260,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
 
       const note = edit?.note?.trim() || undefined
       const salesDate =
-        r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)
+        r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(category)
           ? edit?.salesDate ||
             defaultBankDepositSalesDateForRow({
               transDate: r.transDate,
@@ -2268,6 +2277,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           ? edit?.vendorCode?.trim() || undefined
           : r.transType === "withdraw" && category === "purchase_payment"
             ? edit?.vendorCode?.trim() || undefined
+            : r.transType === "deposit" && (category === "loan" || category === "loan_borrow")
+              ? edit?.vendorCode?.trim() || undefined
             : undefined
       const advanceStoreName =
         category === "advance" ? edit?.storeName?.trim() || undefined : undefined
@@ -2869,7 +2880,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                                       <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                                       <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                                      <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                              <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
+                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                                       <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                       <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                       <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
@@ -2878,7 +2890,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 )}
                               </td>
                               <td className="p-2 align-middle">
-                                {r.transType === "withdraw" && cat === "purchase_payment" ? (
+                                {(r.transType === "withdraw" && cat === "purchase_payment") ||
+                                (r.transType === "deposit" && (cat === "loan" || cat === "loan_borrow")) ? (
                                   <Select
                                     value={(edits?.vendorCode ?? r.vendorCode ?? "") || "__none__"}
                                     onValueChange={(v) => {
@@ -2910,7 +2923,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         />
                                       </div>
                                       <SelectItem value="__none__">—</SelectItem>
-                                      {vendorOptions
+                                      {(r.transType === "deposit" && (cat === "loan" || cat === "loan_borrow")
+                                        ? relatedVendorOptions
+                                        : vendorOptions)
                                         .filter((v) => !queryVendorSearch.trim() || (v.name || v.code || "").toLowerCase().includes(queryVendorSearch.trim().toLowerCase()))
                                         .map((v) => (
                                           <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
@@ -2999,7 +3014,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                ) : r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
+                                ) : r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
                                   <Select
                                     value={(edits?.accountSubjectId !== undefined ? edits.accountSubjectId : r.accountSubjectId != null ? String(r.accountSubjectId) : "__none__") || "__none__"}
                                     onValueChange={(v) => r.id && setQueryRowEdit(r.id, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -3039,7 +3054,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 {formatBankLedgerWithdrawCell(r.transType || "withdraw", r.amount)}
                               </td>
                               <td className="p-2 align-middle text-center">
-                                {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
+                                {r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
                                   <Input
                                     type="date"
                                     value={
@@ -3546,7 +3561,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                                   <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                                   <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                                  <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                              <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
+                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                                   <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                   <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                   <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
@@ -3588,6 +3604,50 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 </div>
                                 <SelectItem value="__none__">—</SelectItem>
                                 {vendorOptions
+                                  .filter((v) => !importVendorSearch.trim() || (v.name || v.code || "").toLowerCase().includes(importVendorSearch.trim().toLowerCase()))
+                                  .map((v) => (
+                                    <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          ) : r.transType === "deposit" && (impCat === "loan" || impCat === "loan_borrow") ? (
+                            <Select
+                              value={(importRowEdits[idx]?.vendorCode ?? "") || "__none__"}
+                              onValueChange={(v) => setImportRowEdit(idx, "vendorCode", v === "__none__" ? "" : v)}
+                              onOpenChange={(open) => {
+                                if (!open) {
+                                  setImportVendorSearch("")
+                                  return
+                                }
+                                if (relatedVendorOptions.length === 0) {
+                                  void getVendorsForRelated()
+                                    .catch(() => [])
+                                    .then((rows) =>
+                                      setRelatedVendorOptions(
+                                        (rows || []).map((x) => ({
+                                          code: String(x.code),
+                                          name: String(x.name || x.code),
+                                        }))
+                                      )
+                                    )
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-xs max-w-[140px]">
+                                <SelectValue placeholder={t("wm_loan_party") || "관련당사자"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                                  <Input
+                                    placeholder={t("search") || "검색"}
+                                    value={importVendorSearch}
+                                    onChange={(e) => setImportVendorSearch(e.target.value)}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    className="h-7 text-xs"
+                                  />
+                                </div>
+                                <SelectItem value="__none__">—</SelectItem>
+                                {relatedVendorOptions
                                   .filter((v) => !importVendorSearch.trim() || (v.name || v.code || "").toLowerCase().includes(importVendorSearch.trim().toLowerCase()))
                                   .map((v) => (
                                     <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
@@ -3674,7 +3734,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   ))}
                               </SelectContent>
                             </Select>
-                          ) : r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(impCat) ? (
+                          ) : r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(impCat) ? (
                             <Select
                               value={importRowEdits[idx]?.accountSubjectId || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -3730,7 +3790,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           />
                         </td>
                         <td className="p-2 whitespace-nowrap">
-                          {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(impCat) ? (
+                          {r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(impCat) ? (
                             <Input
                               type="date"
                               value={
@@ -3893,6 +3953,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                               <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                               <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
+                              <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
                               <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                               <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                               <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
@@ -3903,7 +3964,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
                               <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
                               <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
-                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                            <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                               <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                               <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                               <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
@@ -3987,7 +4048,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                             <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                                             <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                                             <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                                            <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                              <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
+                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                                             <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                             <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                             <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>

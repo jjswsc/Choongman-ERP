@@ -256,8 +256,8 @@ export function mergeBalanceSheetReports(
       endStr: meta.endStr,
       storeFilter: 'All',
       timezone: 'Asia/Bangkok',
-      assets: { cashAndBanks: 0, inventory: 0, receivables: 0, total: 0 },
-      liabilities: { payables: 0, total: 0 },
+      assets: { cashAndBanks: 0, inventory: 0, receivables: 0, loansReceivable: 0, total: 0 },
+      liabilities: { payables: 0, borrowings: 0, total: 0 },
       equity: {
         openingCapital: 0,
         retainedEarningsYtd: 0,
@@ -278,8 +278,10 @@ export function mergeBalanceSheetReports(
   const cashAndBanks = sum((r) => r.assets.cashAndBanks)
   const inventory = sum((r) => r.assets.inventory)
   const receivables = sum((r) => r.assets.receivables)
+  const loansReceivable = sum((r) => r.assets.loansReceivable || 0)
   const assetsTotal = sum((r) => r.assets.total)
   const payables = sum((r) => r.liabilities.payables)
+  const borrowings = sum((r) => r.liabilities.borrowings || 0)
   const liabilitiesTotal = sum((r) => r.liabilities.total)
   const openingCapital = sum((r) => r.equity.openingCapital)
   const retainedEarningsYtd = sum((r) => r.equity.retainedEarningsYtd)
@@ -291,6 +293,9 @@ export function mergeBalanceSheetReports(
   const subledgerReceivables = sum((r) => r.ledgerBreakdown?.subledgerReceivables ?? 0)
   const glAccount2110 = sum((r) => r.ledgerBreakdown?.glAccount2110 ?? 0)
   const subledgerPayables = sum((r) => r.ledgerBreakdown?.subledgerPayables ?? 0)
+  const glAccount2150 = sum((r) => r.ledgerBreakdown?.glAccount2150 ?? 0)
+  const subledgerBorrowings = sum((r) => r.ledgerBreakdown?.subledgerBorrowings ?? 0)
+  const glAccount1150 = sum((r) => r.ledgerBreakdown?.glAccount1150 ?? 0)
   const glAccount1010 = sum((r) => r.ledgerBreakdown?.glAccount1010 ?? 0)
 
   const unposted: UnpostedBankTransaction[] = []
@@ -304,13 +309,16 @@ export function mergeBalanceSheetReports(
     endStr: meta.endStr,
     storeFilter: 'All',
     timezone: 'Asia/Bangkok',
-    assets: { cashAndBanks, inventory, receivables, total: assetsTotal },
-    liabilities: { payables, total: liabilitiesTotal },
+    assets: { cashAndBanks, inventory, receivables, loansReceivable, total: assetsTotal },
+    liabilities: { payables, borrowings, total: liabilitiesTotal },
     ledgerBreakdown: {
       glAccount1130,
       subledgerReceivables,
       glAccount2110,
       subledgerPayables,
+      glAccount2150,
+      subledgerBorrowings,
+      glAccount1150,
       glAccount1010,
       glSource: reports[0]?.ledgerBreakdown?.glSource ?? 'select',
     },

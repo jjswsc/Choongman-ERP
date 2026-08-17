@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { sortVendorsByDisplayName } from '@/lib/vendor-sort'
-import { isPurchasePickerVendorType } from '@/lib/vendor-type'
 import {
   appendInventoryTenantFilter,
   isInventoryTenantQueryBlocked,
@@ -10,8 +9,9 @@ import {
   resolveInventoryTenantScope,
 } from '@/lib/inventory-tenant-scope'
 import { getVerifiedAuth } from '@/lib/verify-auth'
+import { isRelatedVendorType } from '@/lib/vendor-type'
 
-/** 본사 발주용 거래처 목록: 매입/둘다/본사 (매장→본사 전환 시 본사 거래처 포함) */
+/** 차입/대여 상대: vendors.type = related */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -28,12 +28,8 @@ export async function GET(request: NextRequest) {
       code?: string
       name?: string
       type?: string
-      addr?: string
-      tax_id?: string
-      phone?: string
       bank_account_no?: string
       bank_name?: string
-      sales_outlet?: string
     }[] | null
 
     try {
@@ -53,22 +49,17 @@ export async function GET(request: NextRequest) {
     }
 
     const list = (rows || [])
-      .filter((row) => row?.code)
-      .filter((row) => isPurchasePickerVendorType(row.type))
+      .filter((row) => row?.code && isRelatedVendorType(row.type))
       .map((row) => ({
         code: String(row.code),
         name: String(row.name || '').trim(),
-        address: String(row.addr || ''),
-        taxId: String((row as { tax_id?: string }).tax_id || '').trim(),
-        phone: String((row as { phone?: string }).phone || '').trim(),
-        bankAccountNo: String((row as { bank_account_no?: string }).bank_account_no || '').trim() || null,
-        bankName: String((row as { bank_name?: string }).bank_name || '').trim() || null,
-        salesOutlet: String(row.sales_outlet || '').trim() || null,
+        bankAccountNo: String(row.bank_account_no || '').trim() || null,
+        bankName: String(row.bank_name || '').trim() || null,
       }))
 
     return NextResponse.json(sortVendorsByDisplayName(list), { headers })
   } catch (e) {
-    console.error('getVendorsForPurchase:', e)
+    console.error('getVendorsForRelated:', e)
     return NextResponse.json([], { headers })
   }
 }

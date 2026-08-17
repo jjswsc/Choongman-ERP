@@ -42,7 +42,7 @@ export interface VendorFormData {
   email: string
   address: string
   tax_no: string
-  type: "purchase" | "sales" | "both"
+  type: "purchase" | "sales" | "both" | "related"
   memo: string
   direct_settlement: boolean
   bank_name: string
@@ -268,7 +268,7 @@ export function VendorForm({
 
         <div className="flex flex-col gap-2">
           <label className="text-xs font-semibold text-foreground">{t("vendorType")}</label>
-          <Select value={formData.type} onValueChange={(v) => update("type", v as "purchase" | "sales" | "both")}>
+          <Select value={formData.type} onValueChange={(v) => update("type", v as VendorFormData["type"])}>
             <SelectTrigger className="h-10 text-sm">
               <SelectValue />
             </SelectTrigger>
@@ -276,6 +276,7 @@ export function VendorForm({
               <SelectItem value="purchase">{t("vendorTypePurchase")}</SelectItem>
               <SelectItem value="sales">{t("vendorTypeSales")}</SelectItem>
               <SelectItem value="both">{t("vendorTypeBoth")}</SelectItem>
+              <SelectItem value="related">{t("vendorTypeRelated") || "관련당사자"}</SelectItem>
             </SelectContent>
           </Select>
         </div>

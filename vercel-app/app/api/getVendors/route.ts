@@ -10,12 +10,7 @@ import {
 } from '@/lib/inventory-tenant-scope'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 
-function mapVendorType(v: string): 'purchase' | 'sales' | 'both' {
-  const lower = String(v || '').toLowerCase().trim()
-  if (lower === 'sales' || lower === '매출' || lower === '매출처') return 'sales'
-  if (lower === 'both' || lower === '둘 다') return 'both'
-  return 'purchase'
-}
+import { mapVendorType } from '@/lib/vendor-type'
 
 /** 관리자 거래처 관리 - Supabase vendors 테이블 조회 (Omni: tenant 격리) */
 export async function GET(request: NextRequest) {

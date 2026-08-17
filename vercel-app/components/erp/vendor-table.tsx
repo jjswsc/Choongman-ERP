@@ -34,14 +34,14 @@ export interface Vendor {
   email: string
   address: string
   tax_no?: string
-  type: "purchase" | "sales" | "both"
+  type: "purchase" | "sales" | "both" | "related"
   memo: string
   direct_settlement?: boolean
   bank_account_no?: string
   bank_name?: string
 }
 
-export type VendorTypeFilter = "all" | "purchase" | "sales"
+export type VendorTypeFilter = "all" | "purchase" | "sales" | "related"
 
 export type VendorLinkedStore = {
   storeCode: string
@@ -109,6 +109,7 @@ export function VendorTable({
             <SelectItem value="all">{t("vendorTypeAll")}</SelectItem>
             <SelectItem value="purchase">{t("vendorTypePurchase")}</SelectItem>
             <SelectItem value="sales">{t("vendorTypeSales")}</SelectItem>
+            <SelectItem value="related">{t("vendorTypeRelated") || "관련당사자"}</SelectItem>
           </SelectContent>
         </Select>
         <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={onSearch}>
@@ -188,14 +189,17 @@ export function VendorTable({
                         "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium",
                         vendor.type === "purchase" && "bg-blue-500/15 text-blue-700 dark:text-blue-400",
                         vendor.type === "sales" && "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-                        vendor.type === "both" && "bg-violet-500/15 text-violet-700 dark:text-violet-400"
+                        vendor.type === "both" && "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+                        vendor.type === "related" && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
                       )}
                     >
                       {vendor.type === "purchase"
                         ? t("vendorTypePurchase")
                         : vendor.type === "sales"
                           ? t("vendorTypeSales")
-                          : t("vendorTypeBoth")}
+                          : vendor.type === "related"
+                            ? t("vendorTypeRelated") || "관련당사자"
+                            : t("vendorTypeBoth")}
                     </span>
                   </td>
                   <td className="px-4 py-3">

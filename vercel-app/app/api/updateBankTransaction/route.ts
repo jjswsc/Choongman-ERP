@@ -6,6 +6,8 @@ import {
   syncPayableLedgerAfterBankWithdrawCategoryChange,
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
+import { syncBorrowingFromBankDeposit } from '@/lib/borrowing-ledger'
+import { isLoanBorrowDepositCategory, withLoanBorrowDepositCategory } from '@/lib/bank-loan-categories'
 import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
     const transType = String(existing[0].trans_type || 'withdraw').toLowerCase()
     const transDate = String(existing[0].trans_date || '').slice(0, 10)
     await assertAccountingDateOpen(transDate)
-    const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
+    const depositCategories = withLoanBorrowDepositCategory(['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified'])
     const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
     const prevCategory = String(existing[0].category || '').toLowerCase()
 
@@ -151,6 +153,9 @@ export async function POST(request: NextRequest) {
       if (vendorCode !== undefined) {
         patch.vendor_code = String(vendorCode || '').trim() || null
       }
+    }
+    if (transType === 'deposit' && isLoanBorrowDepositCategory(finalCategoryLower) && vendorCode !== undefined) {
+      patch.vendor_code = String(vendorCode || '').trim() || null
     }
     if (refType !== undefined) {
       const rt = String(refType || '').trim()
@@ -236,6 +241,18 @@ export async function POST(request: NextRequest) {
           memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
         })
       }
+      await syncBorrowingFromBankDeposit({
+        bankTransactionId: bankTxId,
+        category: finalCategoryLower,
+        vendorCode:
+          patch.vendor_code !== undefined
+            ? String(patch.vendor_code || '').trim()
+            : String(existing[0].vendor_code || '').trim(),
+        amountAbs: amount,
+        transDate,
+        memo: memo || null,
+        storeName: String(existing[0].store || '').trim() || null,
+      })
     }
 
     // 매입 지급(미지급): 지출관리 연동 Payment만 거래처 동기화. purchase_payment 분류만으로는 Payment 미생성.

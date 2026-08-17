@@ -1,4 +1,5 @@
 import { sumPayablesBalance, sumReceivablesBalance } from '@/lib/accounting-balance-summaries'
+import { sumBorrowingsBalance } from '@/lib/borrowing-ledger'
 import { getGlBalancesAsOf, glBalanceForCode } from '@/lib/gl-balance-as-of'
 import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
 import { resolveAccountingRollupStores } from '@/lib/accounting-store-scope'
@@ -20,6 +21,13 @@ export type SubledgerGlReconciliationReport = {
   }
   payables: {
     glAccount2110: number
+    subledgerTotal: number
+    difference: number
+    glSource: 'rpc' | 'select'
+    subledgerSource: 'rpc' | 'select'
+  }
+  borrowings: {
+    glAccount2150: number
     subledgerTotal: number
     difference: number
     glSource: 'rpc' | 'select'
@@ -82,6 +90,13 @@ function mergeSubledgerGlReconciliationReports(
         glSource: 'select',
         subledgerSource: 'select',
       },
+      borrowings: {
+        glAccount2150: 0,
+        subledgerTotal: 0,
+        difference: 0,
+        glSource: 'select',
+        subledgerSource: 'select',
+      },
       cashGl1010: 0,
       riskyRevenueDeposits: [],
       pendingChannelSettlements: [],
@@ -96,6 +111,8 @@ function mergeSubledgerGlReconciliationReports(
   const subRecv = sum((r) => r.receivables.subledgerTotal)
   const gl2110 = sum((r) => r.payables.glAccount2110)
   const subPay = sum((r) => r.payables.subledgerTotal)
+  const gl2150 = sum((r) => r.borrowings.glAccount2150)
+  const subBorrow = sum((r) => r.borrowings.subledgerTotal)
   return {
     yearMonth: reports[0]!.yearMonth,
     endStr: reports[0]!.endStr,
@@ -114,6 +131,13 @@ function mergeSubledgerGlReconciliationReports(
       difference: round2(gl2110 - subPay),
       glSource: reports[0]!.payables.glSource,
       subledgerSource: reports[0]!.payables.subledgerSource,
+    },
+    borrowings: {
+      glAccount2150: gl2150,
+      subledgerTotal: subBorrow,
+      difference: round2(gl2150 - subBorrow),
+      glSource: reports[0]!.borrowings.glSource,
+      subledgerSource: reports[0]!.borrowings.subledgerSource,
     },
     cashGl1010: sum((r) => r.cashGl1010),
     riskyRevenueDeposits: reports.flatMap((r) => r.riskyRevenueDeposits),
@@ -142,10 +166,11 @@ export async function computeSubledgerGlReconciliation(
   const { yearMonth, endStr, storeFilter, isHQ } = scope
   const yearStart = `${yearMonth.slice(0, 4)}-01-01`
 
-  const [gl, recv, pay, receivableBankSubledgerGaps] = await Promise.all([
-    getGlBalancesAsOf({ endStr, storeFilter, accountCodes: ['1010', '1130', '2110'] }),
+  const [gl, recv, pay, borrow, receivableBankSubledgerGaps] = await Promise.all([
+    getGlBalancesAsOf({ endStr, storeFilter, accountCodes: ['1010', '1130', '2110', '2150'] }),
     sumReceivablesBalance({ endStr, storeFilter, isHQ }),
     sumPayablesBalance({ endStr, storeFilter, isHQ }),
+    sumBorrowingsBalance({ endStr, storeFilter, isHQ }),
     findReceivableBankSubledgerGaps({
       endStr,
       startStr: yearStart,
@@ -156,9 +181,11 @@ export async function computeSubledgerGlReconciliation(
 
   const gl1130 = glBalanceForCode(gl.rows, '1130')
   const gl2110 = glBalanceForCode(gl.rows, '2110')
+  const gl2150 = glBalanceForCode(gl.rows, '2150')
   const gl1010 = glBalanceForCode(gl.rows, '1010')
   const subRecv = recv.total
   const subPay = pay.total
+  const subBorrow = borrow.total
 
   const bankStoreFrag = storeFilter !== 'All' ? buildStoreFieldOrIlikeFragment('store', storeFilter) : ''
 
@@ -265,6 +292,13 @@ export async function computeSubledgerGlReconciliation(
       difference: round2(gl2110 - subPay),
       glSource: gl.source,
       subledgerSource: pay.source,
+    },
+    borrowings: {
+      glAccount2150: gl2150,
+      subledgerTotal: subBorrow,
+      difference: round2(gl2150 - subBorrow),
+      glSource: gl.source,
+      subledgerSource: borrow.source,
     },
     cashGl1010: gl1010,
     riskyRevenueDeposits: (riskyRows || []).map((r) => ({

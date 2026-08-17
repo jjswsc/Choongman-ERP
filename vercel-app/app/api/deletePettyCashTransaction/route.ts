@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
 import { deletePettyCashInputVatLedger } from '@/lib/petty-input-vat-ledger'
+import { deleteBorrowingFromPettyCashTransaction } from '@/lib/borrowing-ledger'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -79,6 +80,12 @@ export async function POST(request: NextRequest) {
       await deleteJournalEntriesBySource('bank_transaction', bankTxId, {})
     }
     await deletePettyCashInputVatLedger(id)
+
+    try {
+      await deleteBorrowingFromPettyCashTransaction(id)
+    } catch (e) {
+      console.warn('deletePettyCashTransaction borrowing ledger:', e)
+    }
 
     if ((payables || []).length > 0) {
       await supabaseDeleteByFilter('payable_transactions', `petty_cash_transaction_id=eq.${id}`)

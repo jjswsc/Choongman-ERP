@@ -21,6 +21,7 @@ import {
   invoiceReceivedFromDocumentType,
   parseExpenseDocumentTypeInput,
 } from '@/lib/expense-document-type'
+import { upsertBorrowingTransaction } from '@/lib/borrowing-ledger'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -196,6 +197,9 @@ export async function POST(request: NextRequest) {
 
     if (['purchase_payment', 'purchase_advance'].includes(category) && !vendorCode) {
       return NextResponse.json({ success: false, message: '거래처를 선택해 주세요.' }, { status: 400, headers })
+    }
+    if (['loan_repayment', 'loan_given'].includes(category) && !vendorCode) {
+      return NextResponse.json({ success: false, message: '관련당사자(상대)를 선택해 주세요.' }, { status: 400, headers })
     }
     if (['expense', 'expense_advance'].includes(category) && !accountSubjectId && !accountSubjectCode) {
       return NextResponse.json({ success: false, message: '계정과목을 선택해 주세요.' }, { status: 400, headers })
@@ -474,6 +478,23 @@ export async function POST(request: NextRequest) {
       })
     } catch (postingErr) {
       console.error('executeWithdrawal posting:', postingErr)
+    }
+
+    if (category === 'loan_repayment' && vendorCode) {
+      try {
+        await upsertBorrowingTransaction({
+          partyCode: vendorCode,
+          amountSigned: -Math.abs(netWithdrawAmount),
+          transDate,
+          memo: memo || '대출 상환',
+          refType: 'Repay',
+          bankTransactionId,
+          pettyCashTransactionId,
+          storeName: store,
+        })
+      } catch (borrowErr) {
+        console.error('executeWithdrawal borrowing ledger:', borrowErr)
+      }
     }
 
     if (withholdingTaxAmount > 0 && bankTransactionId) {

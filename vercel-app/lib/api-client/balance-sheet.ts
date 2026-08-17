@@ -21,6 +21,9 @@ export interface BalanceSheetLedgerBreakdown {
   subledgerReceivables: number
   glAccount2110: number
   subledgerPayables: number
+  glAccount2150?: number
+  subledgerBorrowings?: number
+  glAccount1150?: number
   glAccount1010: number
   glSource: 'rpc' | 'select'
 }
@@ -31,8 +34,14 @@ export interface BalanceSheetData {
   endStr: string
   storeFilter: string
   timezone: string
-  assets: { cashAndBanks: number; inventory: number; receivables: number; total: number }
-  liabilities: { payables: number; total: number }
+  assets: {
+    cashAndBanks: number
+    inventory: number
+    receivables: number
+    loansReceivable?: number
+    total: number
+  }
+  liabilities: { payables: number; borrowings?: number; total: number }
   equity: { openingCapital: number; retainedEarningsYtd: number; currentPeriodProfit: number; total: number }
   balanceCheckDiff: number
   unpostedBankWithdrawals?: UnpostedBankTransaction[]
@@ -53,6 +62,13 @@ export interface SubledgerGlReconciliationData {
   }
   payables: {
     glAccount2110: number
+    subledgerTotal: number
+    difference: number
+    glSource: 'rpc' | 'select'
+    subledgerSource: 'rpc' | 'select'
+  }
+  borrowings?: {
+    glAccount2150: number
     subledgerTotal: number
     difference: number
     glSource: 'rpc' | 'select'

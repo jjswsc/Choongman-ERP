@@ -11,7 +11,7 @@ export type GlBalanceRow = {
   balance: number
 }
 
-const DEFAULT_CODES = ['1010', '1130', '2110'] as const
+const DEFAULT_CODES = ['1010', '1130', '2110', '2150', '1150'] as const
 
 function isMissingGlBalanceRpc(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()

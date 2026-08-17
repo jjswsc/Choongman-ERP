@@ -9,13 +9,7 @@ import {
   resolveInventoryTenantScope,
 } from '@/lib/inventory-tenant-scope'
 import { getVerifiedAuth } from '@/lib/verify-auth'
-
-function mapVendorType(v: string): 'purchase' | 'sales' | 'both' {
-  const lower = String(v || '').toLowerCase().trim()
-  if (lower === 'sales' || lower === '매출' || lower === '매출처') return 'sales'
-  if (lower === 'both' || lower === '둘 다') return 'both'
-  return 'purchase'
-}
+import { mapVendorType } from '@/lib/vendor-type'
 
 /** 매출 수령처용 거래처 목록: type이 sales 또는 both인 거래처 (매장 + 판매처) */
 export async function GET(request: NextRequest) {

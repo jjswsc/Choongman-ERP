@@ -74,8 +74,10 @@ export function LedgerReconciliationTab({
 
   const diffRecv = data?.receivables.difference ?? 0
   const diffPay = data?.payables.difference ?? 0
+  const diffBorrow = data?.borrowings?.difference ?? 0
   const recvOk = Math.abs(diffRecv) < 1
   const payOk = Math.abs(diffPay) < 1
+  const borrowOk = Math.abs(diffBorrow) < 1
 
   if (queryToken <= 0) {
     return <AccountingEmptyState>{t("msg_click_query")}</AccountingEmptyState>
@@ -101,7 +103,7 @@ export function LedgerReconciliationTab({
         <span>{data.storeFilter}</span>
       </AccountingPeriodChip>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-3">
         <Card className="border-border/80 shadow-sm">
           <CardContent className="pt-4 space-y-2">
             <div className="text-sm font-semibold">{t("bs_receivables")}</div>
@@ -121,6 +123,17 @@ export function LedgerReconciliationTab({
             <Row label={t("recon_gl2110")} value={data.payables.glAccount2110} />
             <Row label={t("recon_subledgerPay")} value={data.payables.subledgerTotal} />
             <Row label={t("recon_difference")} value={diffPay} highlight={!payOk} ok={payOk} />
+          </CardContent>
+        </Card>
+        <Card className="border-border/80 shadow-sm">
+          <CardContent className="pt-4 space-y-2">
+            <div className="text-sm font-semibold">{t("bs_borrowings") || "차입금"}</div>
+            <Row label={t("recon_gl2150") || "분개 2150"} value={data.borrowings?.glAccount2150 ?? 0} />
+            <Row
+              label={t("recon_subledgerBorrow") || "보조원장 차입"}
+              value={data.borrowings?.subledgerTotal ?? 0}
+            />
+            <Row label={t("recon_difference")} value={diffBorrow} highlight={!borrowOk} ok={borrowOk} />
           </CardContent>
         </Card>
       </div>

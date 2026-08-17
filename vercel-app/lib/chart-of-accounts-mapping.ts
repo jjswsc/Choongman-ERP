@@ -201,6 +201,13 @@ export function linesForBankDeposit(
       { ...receivable, side: 'credit', amount },
     ]
   }
+  if (categoryLower === 'loan' || categoryLower === 'loan_borrow') {
+    const borrowings = accountLine('2150')
+    return [
+      { ...cash, side: 'debit', amount },
+      { ...borrowings, side: 'credit', amount },
+    ]
+  }
   return [
     { ...cash, side: 'debit', amount },
     { ...revenue, side: 'credit', amount },

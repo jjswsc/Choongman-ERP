@@ -9,7 +9,7 @@ import { createErpQueryViewCache } from "@/lib/erp-query-view-cache"
 import type { ReceivablePayableItem } from "@/lib/api-client"
 
 export type ReceivablePayableViewCache = {
-  tab?: "receivable" | "payable"
+  tab?: "receivable" | "payable" | "borrowings"
   startStr?: string
   endStr?: string
   salesOutletFilter?: string

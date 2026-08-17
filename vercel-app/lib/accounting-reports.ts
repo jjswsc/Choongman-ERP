@@ -22,6 +22,7 @@ import {
   sumPayablesBalance,
   sumReceivablesBalance,
 } from '@/lib/accounting-balance-summaries'
+import { sumBorrowingsBalance } from '@/lib/borrowing-ledger'
 import { getGlBalancesAsOf, glBalanceForCode } from '@/lib/gl-balance-as-of'
 import { sumCompletedPosSalesTotal } from '@/lib/accounting-pos-sales'
 import { fetchStockLogPurchaseAgg, resolvePurchaseLocationPatterns } from '@/lib/accounting-stock-purchase-agg'
@@ -42,7 +43,7 @@ import {
   mergeBalanceSheetReports,
   mergeIncomeStatementReports,
 } from '@/lib/accounting-income-statement-merge'
-import { shouldExcludeBankWithdrawFromPlExpense } from '@/lib/bank-transaction-note-meta'
+import { isExpenseInternalBankNote, shouldExcludeBankWithdrawFromPlExpense } from '@/lib/bank-transaction-note-meta'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import {
@@ -253,6 +254,12 @@ export type BalanceSheetLedgerBreakdown = {
   glAccount2110: number
   /** payable_transactions 보조원장 합 */
   subledgerPayables: number
+  /** 분개 2150 차입금 */
+  glAccount2150: number
+  /** borrowing_transactions 보조원장 합 */
+  subledgerBorrowings: number
+  /** 분개 1150 대여금 */
+  glAccount1150: number
   /** 분개 1010 (교차 검증용) */
   glAccount1010: number
   glSource: 'rpc' | 'select'
@@ -269,11 +276,15 @@ export type BalanceSheetReport = {
     inventory: number
     /** 재무상태표 표시용 — 분개 1130 기준 */
     receivables: number
+    /** 재무상태표 표시용 — 분개 1150 대여금 */
+    loansReceivable: number
     total: number
   }
   liabilities: {
     /** 재무상태표 표시용 — 분개 2110 기준 */
     payables: number
+    /** 재무상태표 표시용 — 분개 2150 차입금 */
+    borrowings: number
     total: number
   }
   ledgerBreakdown?: BalanceSheetLedgerBreakdown
@@ -3087,6 +3098,7 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
 
   let subledgerReceivables = 0
   let subledgerPayables = 0
+  let subledgerBorrowings = 0
   try {
     const recv = await sumReceivablesBalance({ endStr, storeFilter, isHQ })
     subledgerReceivables = recv.total
@@ -3099,21 +3111,39 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
   } catch {
     subledgerPayables = 0
   }
+  try {
+    const borrow = await sumBorrowingsBalance({ endStr, storeFilter, isHQ })
+    subledgerBorrowings = borrow.total
+  } catch {
+    subledgerBorrowings = 0
+  }
 
   let receivables = subledgerReceivables
   let payables = subledgerPayables
+  let borrowings = subledgerBorrowings
+  let loansReceivable = 0
   let glSource: 'rpc' | 'select' = 'select'
   let glAccount1130 = 0
   let glAccount2110 = 0
+  let glAccount2150 = 0
+  let glAccount1150 = 0
   let glAccount1010 = 0
   try {
-    const gl = await getGlBalancesAsOf({ endStr, storeFilter, accountCodes: ['1010', '1130', '2110'] })
+    const gl = await getGlBalancesAsOf({
+      endStr,
+      storeFilter,
+      accountCodes: ['1010', '1130', '2110', '2150', '1150'],
+    })
     glSource = gl.source
     glAccount1130 = glBalanceForCode(gl.rows, '1130')
     glAccount2110 = glBalanceForCode(gl.rows, '2110')
+    glAccount2150 = glBalanceForCode(gl.rows, '2150')
+    glAccount1150 = glBalanceForCode(gl.rows, '1150')
     glAccount1010 = glBalanceForCode(gl.rows, '1010')
     receivables = glAccount1130
     payables = glAccount2110
+    borrowings = glAccount2150
+    loansReceivable = glAccount1150
   } catch {
     /* RPC·select 폴백 실패 시 보조원장 유지 */
   }
@@ -3141,8 +3171,8 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
 
   const openingCapital = 0
   const equityTotal = openingCapital + retainedEarningsYtd
-  const assetsTotal = cashAndBanks + inventory + receivables
-  const liabilitiesTotal = payables
+  const assetsTotal = cashAndBanks + inventory + receivables + loansReceivable
+  const liabilitiesTotal = payables + borrowings
   const balanceCheckDiff = assetsTotal - (liabilitiesTotal + equityTotal)
 
   let unpostedBankWithdrawals: UnpostedBankTransaction[] = []
@@ -3151,7 +3181,7 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
     const catOr = UNPOSTED_WITHDRAW_CATEGORIES.map((c) => `category.eq.${c}`).join(',')
     const filter = `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&or=(${catOr})`
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
-      select: 'id,trans_date,amount,category,memo,store',
+      select: 'id,trans_date,amount,category,memo,store,note',
       order: 'trans_date.asc',
       limit: 2000,
     })) as {
@@ -3161,8 +3191,11 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
       category?: string
       memo?: string | null
       store?: string | null
+      note?: string | null
     }[]
-    unpostedBankWithdrawals = (rows || []).map((r) => ({
+    unpostedBankWithdrawals = (rows || [])
+      .filter((r) => !isExpenseInternalBankNote(r.note))
+      .map((r) => ({
       id: Number(r.id || 0),
       transDate: String(r.trans_date || '').slice(0, 10),
       amount: Math.abs(Number(r.amount) || 0),
@@ -3182,10 +3215,12 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
       cashAndBanks,
       inventory,
       receivables,
+      loansReceivable,
       total: assetsTotal,
     },
     liabilities: {
       payables,
+      borrowings,
       total: liabilitiesTotal,
     },
     equity: {
@@ -3201,6 +3236,9 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
       subledgerReceivables,
       glAccount2110,
       subledgerPayables,
+      glAccount2150,
+      subledgerBorrowings,
+      glAccount1150,
       glAccount1010,
       glSource,
     },

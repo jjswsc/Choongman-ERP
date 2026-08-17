@@ -38,13 +38,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, FileText, PencilLine, Trash2, Check, AlertCircle, Link2 } from "lucide-react"
+import { Search, Plus, Wallet, Building2, Landmark, Printer, FileSpreadsheet, ChevronDown, ChevronRight, FileText, PencilLine, Trash2, Check, AlertCircle, Link2 } from "lucide-react"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import { ReceivableAgingPanel } from "@/components/admin/receivable-aging-panel"
+import { BorrowingsLedgerPanel } from "@/components/admin/borrowings-ledger-panel"
 import {
   agingDaysBetween,
   agingRowToneClass,
   computeLedgerAging,
+  emptyAgingBuckets,
   isAccrualRefType,
 } from "@/lib/receivable-aging"
 import {
@@ -252,11 +254,11 @@ export function ReceivablePayableTab() {
   const canSelectStores = canManageReceivablePayableAllStores(auth?.role || "")
   const showStorePurchaseJournalCol = canDeleteStorePurchaseJournal(auth?.role || "")
 
-  const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
-  const [tabUi, setTabUi] = React.useState<"receivable" | "payable">("receivable")
+  const [tab, setTab] = React.useState<"receivable" | "payable" | "borrowings">("receivable")
+  const [tabUi, setTabUi] = React.useState<"receivable" | "payable" | "borrowings">("receivable")
   const [, startTabTransition] = React.useTransition()
   const contentTab = React.useDeferredValue(tab)
-  const applyTab = React.useCallback((next: "receivable" | "payable") => {
+  const applyTab = React.useCallback((next: "receivable" | "payable" | "borrowings") => {
     setTabUi(next)
     startTabTransition(() => {
       setTab(next)
@@ -340,7 +342,7 @@ export function ReceivablePayableTab() {
   const [listRestoreTick, setListRestoreTick] = React.useState(0)
   const [queryDraftReady, setQueryDraftReady] = React.useState(false)
   const lastFetchedListRef = React.useRef<{
-    tab: "receivable" | "payable"
+    tab: "receivable" | "payable" | "borrowings"
     startStr: string
     endStr: string
     listData: ReceivablePayableItem[]
@@ -732,7 +734,7 @@ export function ReceivablePayableTab() {
 
   // 매니저(회계권한 없을 때): 미지급금 탭 접근 불가 → receivable로 고정
   React.useEffect(() => {
-    if (!canSelectStores && isManager && tab === "payable") applyTab("receivable")
+    if (!canSelectStores && isManager && (tab === "payable" || tab === "borrowings")) applyTab("receivable")
   }, [canSelectStores, isManager, tab, applyTab])
 
   const loadList = React.useCallback(
@@ -744,6 +746,7 @@ export function ReceivablePayableTab() {
     }) => {
       const seq = ++listLoadSeqRef.current
       const effectiveTab = opts?.overrides?.type ?? tab
+      if (effectiveTab !== "receivable" && effectiveTab !== "payable") return
       const effectivePayableStore =
         opts?.overrides?.storeFilter !== undefined
           ? opts.overrides.storeFilter
@@ -987,13 +990,14 @@ export function ReceivablePayableTab() {
     const hasDeepLink =
       typeParam === "receivable" ||
       typeParam === "payable" ||
+      typeParam === "borrowings" ||
       Boolean(storeParam) ||
       Boolean(startParam) ||
       Boolean(endParam) ||
       Boolean(bankTxParam)
     if (!hasDeepLink) return
     urlDeepLinkAppliedRef.current = true
-    if (typeParam === "receivable" || typeParam === "payable") applyTab(typeParam)
+    if (typeParam === "receivable" || typeParam === "payable" || typeParam === "borrowings") applyTab(typeParam)
     if (startParam) setStartStr(startParam.slice(0, 10))
     if (endParam) setEndStr(endParam.slice(0, 10))
     if (storeParam && typeParam !== "payable") {
@@ -1066,6 +1070,7 @@ export function ReceivablePayableTab() {
     const hasDeepLink =
       typeParam === "receivable" ||
       typeParam === "payable" ||
+      typeParam === "borrowings" ||
       Boolean(storeParam) ||
       Boolean(startParam) ||
       Boolean(endParam) ||
@@ -1102,6 +1107,7 @@ export function ReceivablePayableTab() {
     const hasDeepLink =
       typeParam === "receivable" ||
       typeParam === "payable" ||
+      typeParam === "borrowings" ||
       Boolean(storeParam) ||
       Boolean(startParam) ||
       Boolean(endParam) ||
@@ -1366,6 +1372,7 @@ export function ReceivablePayableTab() {
         : tt("payableSelectVendor", "Please select vendor."))
       return
     }
+    if (tab !== "receivable" && tab !== "payable") return
     setAddSaving(true)
     try {
       const res = await addBalanceTransaction({
@@ -1438,6 +1445,11 @@ export function ReceivablePayableTab() {
 
   const getCumulativeBalanceForItem = React.useCallback(
     (item: ReceivablePayableItem) => {
+      if (tab !== "receivable" && tab !== "payable") {
+        return item.cumulativeBalance != null && Number.isFinite(item.cumulativeBalance)
+          ? item.cumulativeBalance
+          : undefined
+      }
       const key = cumulativeBalanceKey(tab, item)
       if (key) {
         const fromMap = cumulativeSummary.byKey[key]
@@ -1513,7 +1525,10 @@ export function ReceivablePayableTab() {
   )
 
   const ledgerAging = React.useMemo(
-    () => computeLedgerAging(listData, tab, endStr),
+    () =>
+      tab === "receivable" || tab === "payable"
+        ? computeLedgerAging(listData, tab, endStr)
+        : { buckets: emptyAgingBuckets(), total: 0, openLineCount: 0 },
     [listData, tab, endStr]
   )
 
@@ -1775,7 +1790,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
 
   return (
     <div className="space-y-4">
-      {hasSearchedList && !loading && ledgerAging.openLineCount > 0 ? (
+      {(tab === "receivable" || tab === "payable") && hasSearchedList && !loading && ledgerAging.openLineCount > 0 ? (
         <ReceivableAgingPanel
           ledger={tab}
           asOfDate={endStr}
@@ -1892,7 +1907,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
 
       <Tabs
         value={tabUi}
-        onValueChange={(v) => applyTab(v as "receivable" | "payable")}
+        onValueChange={(v) => applyTab(v as "receivable" | "payable" | "borrowings")}
         preserveInactiveTabs={false}
         className={adminTabsRootCn}
       >
@@ -1908,8 +1923,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   {t("payableTab") || "Payables (Purchase)"}
                 </TabsTrigger>
               )}
+              {canSelectStores && (
+                <TabsTrigger value="borrowings" className={adminTabsTriggerCn}>
+                  <Landmark className={adminTabsIconCn} aria-hidden />
+                  {t("borrowingsTab") || "차입금"}
+                </TabsTrigger>
+              )}
             </TabsList>
           </AdminTabsBarWithHelp>
+
+        <TabsContent value="borrowings" className={cn(adminTabsContentCn, "space-y-4")}>
+          <BorrowingsLedgerPanel />
+        </TabsContent>
 
         <TabsContent value="receivable" className={cn(adminTabsContentCn, "space-y-4")}>
           <Card>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
 import { deleteReceivableFromBankReceive } from '@/lib/receivable-payable'
+import { deleteBorrowingFromBankTransaction } from '@/lib/borrowing-ledger'
 import { requireAuth } from '@/lib/verify-auth'
 
 type LinkedPayableRow = {
@@ -197,6 +198,11 @@ export async function POST(request: NextRequest) {
         transDate: String(tx.trans_date || '').slice(0, 10),
         memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
       })
+    }
+    try {
+      await deleteBorrowingFromBankTransaction(bankTransactionId)
+    } catch (e) {
+      console.warn('deleteExpenseRegisterItem borrowing ledger:', e)
     }
     await deleteJournalEntriesBySource('bank_transaction', bankTransactionId, {
       memoIncludes: ['통장 거래 자동분개'],

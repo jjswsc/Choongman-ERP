@@ -10,12 +10,10 @@ import {
   stampInventoryTenantId,
 } from '@/lib/inventory-tenant-scope'
 import { getVerifiedAuth } from '@/lib/verify-auth'
+import { mapVendorTypeToDb } from '@/lib/vendor-type'
 
 function mapTypeToDb(type: string): string {
-  const t = String(type || '').toLowerCase()
-  if (t === 'sales') return 'sales'
-  if (t === 'both') return 'both'
-  return 'purchase'
+  return mapVendorTypeToDb(type)
 }
 
 export async function POST(request: NextRequest) {

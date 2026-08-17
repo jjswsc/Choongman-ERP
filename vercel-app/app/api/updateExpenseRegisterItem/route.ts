@@ -5,6 +5,7 @@ import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/ac
 import { bankCategoryForWithdrawalCategory, composeBankNoteWithCategoryAndOptionalAccrualPrefix } from '@/lib/bank-transaction-note-meta'
 import { assertPurchasePaymentViaExpenseOnly } from '@/lib/bank-purchase-payment-via-expense'
 import { syncPayableLedgerAfterBankWithdrawCategoryChange } from '@/lib/receivable-payable'
+import { deleteBorrowingFromBankTransaction } from '@/lib/borrowing-ledger'
 import { parseMoneyAmount } from '@/lib/money-amount'
 import { requireAuth } from '@/lib/verify-auth'
 import {
@@ -232,6 +233,11 @@ export async function POST(request: NextRequest) {
       await supabaseDeleteByFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`)
       if (transTypeLower === 'deposit') {
         await supabaseDeleteByFilter('receivable_transactions', `bank_transaction_id=eq.${bankTransactionId}`)
+      }
+      try {
+        await deleteBorrowingFromBankTransaction(bankTransactionId)
+      } catch (e) {
+        console.warn('updateExpenseRegisterItem borrowing ledger:', e)
       }
       await deleteJournalEntriesBySource('bank_transaction', bankTransactionId, {
         memoIncludes: ['통장 거래 자동분개'],

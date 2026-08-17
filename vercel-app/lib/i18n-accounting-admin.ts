@@ -355,7 +355,7 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   recCheckBankLinked: '통장연동',
   recCheckUseBankLink: '통장에서 배분',
   helpSum_admin_receivable_payable:
-    '매출처별 미수 잔액·수금·세금계산서. 통장 입금은 잔액에 먼저 반영되고, 노란 칸의 미배분 입금을 누르면 그 입금이 있는 통장에서 「미수 연결」합니다.',
+    '매출처별 미수 잔액·수금·세금계산서. 통장 입금은 잔액에 먼저 반영되고, 노란 칸의 미배분 입금을 누르면 그 입금이 있는 통장에서 「미수 연결」합니다. 임원 차입은 「차입금」 탭(2150)이며 가맹 미수와 섞지 않습니다.',
   helpHow_admin_receivable_payable:
     '① 매출처·기간·미수만을 정한 뒤 「검색」합니다. 다른 메뉴로 갔다가 돌아와도 조회 조건이 유지됩니다.\n② 노란 칸의 미배분 통장 입금은 조회 기간과 무관합니다. 버튼을 누르면 그 입금이 들어 있는 통장으로 이동합니다. 통장에서 「미수 연결」하면 수금확인이 자동 반영됩니다.\n③ 수금확인 체크는 통장 없는 수금(현금 등)만 사용합니다. 미배분 입금이 있으면 체크가 막힙니다.\n④ 통장 연동된 행의 해제는 통장 거래에서 합니다.',
   cardManagementBankLinkTitle: '통장 카드대금 연동',
@@ -599,7 +599,7 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   recCheckBankLinked: 'Bank',
   recCheckUseBankLink: 'Allocate on bank',
   helpSum_admin_receivable_payable:
-    'A/R by customer: balances, collections, tax invoices. Bank deposits hit the store balance first; tap a yellow unallocated deposit to open that deposit’s bank account and use Link receivable.',
+    'A/R by customer: balances, collections, tax invoices. Bank deposits hit the store balance first; tap a yellow unallocated deposit to open that deposit’s bank account and use Link receivable. Officer borrowings are the Borrowings tab (2150), not franchise A/R.',
   helpHow_admin_receivable_payable:
     '① Set customer, dates, and filters, then Search. Filters stay when you leave and return.\n② Yellow unallocated deposits are independent of the search period. The button opens the bank account that actually received that deposit. Link receivable there; checkboxes update automatically.\n③ Use the checkbox only for cash (no bank row). It is blocked while unallocated bank deposits exist.\n④ Unlink bank-linked rows from Bank transactions.',
   cardManagementBankLinkTitle: 'Link bank card bill payments',
@@ -843,7 +843,7 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   recCheckBankLinked: 'ธนาคาร',
   recCheckUseBankLink: 'จัดสรรที่ธนาคาร',
   helpSum_admin_receivable_payable:
-    'ลูกหนี้ตามร้าน: ยอดคงเหลือ รับเงิน ใบกำกับ เงินฝากเข้ายอดร้านก่อน กดปุ่มเหลืองเพื่อเปิดบัญชีธนาคารของรายการนั้นแล้วเชื่อมลูกหนี้',
+    'ลูกหนี้ตามร้าน: ยอดคงเหลือ รับเงิน ใบกำกับ เงินฝากเข้ายอดร้านก่อน กดปุ่มเหลืองเพื่อเปิดบัญชีธนาคารของรายการนั้นแล้วเชื่อมลูกหนี้ เงินกู้จากผู้บริหารอยู่แท็บเงินกู้ (2150) ไม่ปนกับลูกหนี้แฟรนไชส์ครับ',
   helpHow_admin_receivable_payable:
     '① เลือกลูกค้า วันที่ แล้วค้นหา กลับจากเมนูอื่นแล้วยังคงเงื่อนไข\n② เงินฝากที่ยังไม่จัดสรรไม่จำกัดช่วงค้นหา กดปุ่มเพื่อเปิดบัญชีที่รับเงินจริง แล้วเชื่อมลูกหนี้ที่ธนาคาร\n③ ช่องติ๊กใช้เงินสดเท่านั้น ถ้ามีเงินฝากค้างจะติ๊กไม่ได้\n④ ยกเลิกการเชื่อมที่หน้าธุรกรรมธนาคาร',
   cardManagementBankLinkTitle: 'เชื่อมค่าบัตรจากธนาคาร',

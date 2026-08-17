@@ -37,6 +37,7 @@ import {
   getBankAccounts,
   getCardAccounts,
   getVendorsForPurchase,
+  getVendorsForRelated,
   getInboundBatchesForLink,
   saveBankTransactionInboundLinks,
   markBankTransactionForCardBill,
@@ -227,6 +228,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       taxId?: string
       address?: string
     }[]
+  >([])
+  const [relatedVendors, setRelatedVendors] = React.useState<
+    { code: string; name: string; bankAccountNo?: string | null; bankName?: string | null }[]
   >([])
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([])
   const [cardAccounts, setCardAccounts] = React.useState<CardAccount[]>([])
@@ -598,6 +602,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
   React.useEffect(() => {
     getVendorsForPurchase().catch(() => []).then(setVendors)
+    getVendorsForRelated().catch(() => []).then(setRelatedVendors)
     getCardAccounts().catch(() => []).then((list) => setCardAccounts(list || []))
   }, [])
 
@@ -1343,6 +1348,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("inAlertSelectVendor", "Please select a vendor."))
       return
     }
+    if (categoryMain === "loan" && !vendorCode.trim()) {
+      await appAlert(tt("wm_loan_party_required", "관련당사자(상대)를 선택해 주세요."))
+      return
+    }
     if (categoryMain === "expense" && !accountSubjectId) {
       await appAlert(tt("wm_accountSubjectPlaceholder", "Please select an account subject."))
       return
@@ -1586,6 +1595,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         vendorCode:
           categoryMain === "purchase"
             ? vendorCode || undefined
+            : categoryMain === "loan"
+              ? vendorCode.trim() || undefined
             : (categoryMain === "expense" || categoryMain === "fixed_asset") && payeeCode.trim()
               ? payeeCode.trim()
               : undefined,
@@ -2528,6 +2539,42 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               </Select>
             </ExpenseRegisterField>
           )}
+          {categoryMain === "loan" ? (
+            <ExpenseRegisterField label={tt("wm_loan_party", "관련당사자")} className="min-w-[220px] max-w-[320px]">
+              <Select
+                value={vendorCode || "__none__"}
+                onValueChange={(v) => {
+                  if (v === "__none__") {
+                    setVendorCode("")
+                    return
+                  }
+                  setVendorCode(v)
+                  const party = relatedVendors.find((x) => x.code === v)
+                  if (party?.bankName) setPayeeBankName(party.bankName)
+                  if (party?.bankAccountNo) setPayeeBankAccountNo(party.bankAccountNo)
+                  if (party?.name) setPayeeAccountHolder(party.name)
+                }}
+              >
+                <SelectTrigger className="w-full h-9">
+                  <SelectValue placeholder={tt("wm_loan_party", "관련당사자")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">—</SelectItem>
+                  {relatedVendors.map((v) => (
+                    <SelectItem key={v.code} value={v.code}>
+                      {v.name} ({v.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {tt(
+                  "wm_loan_not_receivable_hint",
+                  "임원 차입은 가맹 미수금이 아닙니다. 거래처에서 유형 「관련당사자」로 등록하세요."
+                )}
+              </p>
+            </ExpenseRegisterField>
+          ) : null}
 
           <div className="space-y-4">
           {hasSub && !hasTaxSub && !hasLoanSub && (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "loan") && (

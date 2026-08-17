@@ -359,7 +359,8 @@ export default function VendorsPage() {
       const matchType =
         typeFilter === "all" ||
         (typeFilter === "purchase" && (v.type === "purchase" || v.type === "both")) ||
-        (typeFilter === "sales" && (v.type === "sales" || v.type === "both"))
+        (typeFilter === "sales" && (v.type === "sales" || v.type === "both")) ||
+        (typeFilter === "related" && v.type === "related")
       const matchTerm =
         !searchTerm ||
         v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
