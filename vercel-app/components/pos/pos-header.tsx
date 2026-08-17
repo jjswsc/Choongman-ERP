@@ -83,9 +83,9 @@ export function POSHeader({
   const sales = totalSales ?? totalAmount
   const showStoreSelect = canChangeStore && stores.length > 0 && currentStoreId && onStoreChange
 
-  /** POS 헤더 새로고침 — ghost보다 눈에 띄게 (테두리·포인트색·최소 터치 높이) */
+  /** POS 헤더 새로고침 — 다른 버튼과 높이를 맞추고, 좁은 폭에서는 아이콘만 */
   const refreshButtonClassName =
-    "h-9 min-h-[44px] shrink-0 gap-1.5 border-2 border-primary/45 bg-primary/5 px-2.5 font-semibold text-primary shadow-sm hover:bg-primary/15 dark:border-primary/55 dark:bg-primary/15 dark:hover:bg-primary/25 sm:h-8 sm:min-h-0 sm:px-3"
+    "h-9 shrink-0 gap-1.5 border border-primary/40 bg-primary/5 px-2.5 font-semibold text-primary shadow-sm hover:bg-primary/10 dark:border-primary/50 dark:bg-primary/15 dark:hover:bg-primary/25 sm:h-8 sm:px-3"
   const handleRefreshClick = () => {
     if (!onRefresh) {
       window.location.reload()
@@ -112,90 +112,90 @@ export function POSHeader({
     { value: 'ms', labelKey: 'posLangMs' }
   ]
 
+  const refreshLabelClassName = "hidden @min-[960px]/poshdr:inline"
+
   return (
     <header
       data-tour={dataTour}
       className={cn(
-        "grid min-h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 gap-y-1 border-b border-border bg-card px-2 py-2 sm:gap-x-2 sm:px-3 md:px-4 lg:h-14 lg:gap-x-3 lg:py-0",
+        "@container/poshdr isolate flex min-h-14 shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-card px-2 py-1.5 sm:gap-3 sm:px-3 md:px-4 lg:h-14 lg:py-0",
         className
       )}
     >
-      <div className="flex min-w-0 flex-nowrap items-center gap-x-1 overflow-x-auto sm:gap-x-1.5 md:gap-x-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0 sm:h-8 sm:w-8"
+          title={t('posHome') || '포스 첫 화면'}
+          onClick={() => navigatePosOfflineAware('/pos', (p) => router.push(p))}
+        >
+          <Home className="w-4 h-4" />
+        </Button>
+        {showAdminNavButton && onAdminNav ? (
           <Button
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0 gap-1.5 border-primary/30 px-2 text-primary hover:bg-primary/5 sm:h-8 sm:px-2.5"
             type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            title={t('posHome') || '포스 첫 화면'}
-            onClick={() => navigatePosOfflineAware('/pos', (p) => router.push(p))}
+            onClick={onAdminNav}
+            title={t("posNavAdmin") || "관리자"}
           >
-            <Home className="w-4 h-4" />
+            <LayoutDashboard className="w-4 h-4" />
+            <span className="hidden text-xs font-medium @min-[720px]/poshdr:inline">{t("posNavAdmin") || "관리자"}</span>
           </Button>
-          {showAdminNavButton && onAdminNav ? (
+        ) : (
+          showBackButton && (
             <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
               type="button"
-              onClick={onAdminNav}
-              title={t("posNavAdmin") || "관리자"}
+              variant="ghost"
+              size="sm"
+              className="h-9 shrink-0 gap-1 px-2 sm:h-8"
+              onClick={() => (onBack ? onBack() : router.back())}
+              title={t("posBack") || "뒤로가기"}
             >
-              <LayoutDashboard className="w-4 h-4" />
-              <span className="text-xs font-medium">{t("posNavAdmin") || "관리자"}</span>
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden @min-[720px]/poshdr:inline">{t("posBack") || "뒤로가기"}</span>
             </Button>
-          ) : (
-            showBackButton && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1"
-                onClick={() => (onBack ? onBack() : router.back())}
-                title={t("posBack") || "뒤로가기"}
-              >
-                <ArrowLeft className="w-4 h-4" />
-                {t("posBack") || "뒤로가기"}
-              </Button>
-            )
-          )}
-        </div>
+          )
+        )}
 
         {showStoreSelect && (
-          <div className="flex min-w-0 max-w-full items-center gap-1 sm:gap-2">
-            <Select value={currentStoreId} onValueChange={onStoreChange}>
-              <SelectTrigger className="h-8 w-[min(140px,28vw)] sm:w-[160px]">
-                <SelectValue placeholder={t('posStoreSelect')} />
-              </SelectTrigger>
-              <SelectContent>
-                {stores.map((store) => (
-                  <SelectItem key={store.id} value={store.id}>
-                    {store.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              title={t('posRefresh')}
-              aria-label={t('posRefresh')}
-              className={refreshButtonClassName}
-              onClick={handleRefreshClick}
-            >
-              <RefreshCw className="h-[1.125rem] w-[1.125rem] shrink-0 sm:mr-1" aria-hidden />
-              <span className="hidden min-[400px]:inline">{t('posRefresh')}</span>
-            </Button>
-          </div>
+          <Select value={currentStoreId} onValueChange={onStoreChange}>
+            <SelectTrigger className="h-9 w-[7.5rem] shrink-0 sm:h-8 sm:w-[9.5rem]">
+              <SelectValue placeholder={t('posStoreSelect')} />
+            </SelectTrigger>
+            <SelectContent>
+              {stores.map((store) => (
+                <SelectItem key={store.id} value={store.id}>
+                  {store.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
+
+        <Button
+          variant="outline"
+          size="sm"
+          type="button"
+          title={t('posRefresh')}
+          aria-label={t('posRefresh')}
+          className={refreshButtonClassName}
+          data-tour={dataTour ? 'pos-tour-header-refresh' : undefined}
+          onClick={handleRefreshClick}
+        >
+          <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+          <span className={refreshLabelClassName}>{t('posRefresh')}</span>
+        </Button>
 
         {typeof isMainPosDevice === 'boolean' &&
           (mainDeviceRoleLocked ? (
             <button
               type="button"
               className={cn(
-                'inline-flex h-8 shrink-0 cursor-default items-center gap-1 rounded-md border px-2 text-xs sm:gap-1.5 sm:px-3',
+                'inline-flex h-9 shrink-0 cursor-default items-center gap-1 rounded-md border px-2 text-xs sm:h-8 sm:gap-1.5 sm:px-2.5',
                 isMainPosDevice
                   ? 'border-primary/40 bg-primary/10 text-primary'
                   : 'border-border bg-muted/40 text-muted-foreground'
@@ -219,7 +219,7 @@ export function POSHeader({
               ) : (
                 <Smartphone className="h-3.5 w-3.5" />
               )}
-              <span className="hidden sm:inline">
+              <span className="hidden @min-[800px]/poshdr:inline">
                 {isMainPosDevice
                   ? t('posMainDevice') || '메인'
                   : t('posOrderTerminal') || '주문'}
@@ -231,7 +231,7 @@ export function POSHeader({
                 type="button"
                 variant={isMainPosDevice ? 'default' : 'outline'}
                 size="sm"
-                className="h-8 shrink-0 gap-1 sm:gap-1.5"
+                className="h-9 shrink-0 gap-1 px-2 sm:h-8 sm:gap-1.5 sm:px-2.5"
                 data-tour={dataTour ? 'pos-tour-main-device-toggle' : undefined}
                 onClick={() => onMainPosDeviceChange(!isMainPosDevice)}
                 title={
@@ -245,7 +245,7 @@ export function POSHeader({
                 ) : (
                   <Smartphone className="h-3.5 w-3.5" />
                 )}
-                <span className="hidden text-xs sm:inline">
+                <span className="hidden text-xs @min-[800px]/poshdr:inline">
                   {isMainPosDevice
                     ? t('posMainDevice') || '메인'
                     : t('posOrderTerminal') || '주문'}
@@ -253,32 +253,15 @@ export function POSHeader({
               </Button>
             )
           ))}
-
-        {/* 매장 선택기가 없을 때(단일 매장 등)에도 테이블·주문 데이터 새로고침 가능 */}
-        {!showStoreSelect && (
-          <Button
-            variant="outline"
-            size="sm"
-            className={refreshButtonClassName}
-            type="button"
-            title={t('posRefresh')}
-            aria-label={t('posRefresh')}
-            data-tour={dataTour ? 'pos-tour-header-refresh' : undefined}
-            onClick={handleRefreshClick}
-          >
-            <RefreshCw className="h-[1.125rem] w-[1.125rem] shrink-0 sm:mr-1" aria-hidden />
-            <span className="hidden min-[400px]:inline">{t('posRefresh')}</span>
-          </Button>
-        )}
       </div>
 
-      <h1 className="min-w-0 max-w-full justify-self-center truncate px-0.5 text-center text-xs font-bold leading-tight text-foreground sm:px-1 sm:text-sm md:text-base lg:text-lg">
+      <h1 className="hidden min-w-0 max-w-[9.5rem] truncate text-center text-sm font-bold leading-tight text-foreground @min-[880px]/poshdr:block md:max-w-[12rem] md:text-base lg:text-lg">
         {title}
       </h1>
 
-      <div className="flex min-w-0 shrink-0 items-center justify-end gap-1 overflow-x-auto sm:gap-1.5 md:gap-2 lg:gap-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex shrink-0 items-center justify-end gap-2 sm:gap-2.5 md:gap-3">
         <Select value={lang} onValueChange={(v) => setLang(v as typeof lang)}>
-          <SelectTrigger className="h-8 w-[7rem] shrink-0 sm:w-[8rem] md:w-[8.5rem]" aria-label={t('posLanguage')}>
+          <SelectTrigger className="h-9 w-[6.75rem] shrink-0 sm:h-8 sm:w-[8rem]" aria-label={t('posLanguage')}>
             <SelectValue placeholder={`🌐 ${t('posLanguage')}`} />
           </SelectTrigger>
           <SelectContent>
@@ -289,12 +272,12 @@ export function POSHeader({
             ))}
           </SelectContent>
         </Select>
-        <span className="shrink-0 whitespace-nowrap text-xs font-bold tabular-nums text-foreground sm:text-sm md:text-base lg:text-lg">
+        <span className="shrink-0 whitespace-nowrap text-xs font-bold tabular-nums text-foreground sm:text-sm md:text-base">
           {sales.toLocaleString()} ฿
         </span>
         {canAccessAdminProp && (
           <Link href="/admin/pos-screen-config">
-            <Button type="button" variant="ghost" size="icon" className="h-8 w-8">
+            <Button type="button" variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8">
               <Settings className="w-4 h-4" />
             </Button>
           </Link>
