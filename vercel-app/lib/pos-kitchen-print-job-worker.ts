@@ -3,10 +3,16 @@ import { coercePosOrderTypeForDb, type PosOrderTypeValue } from '@/lib/pos-sales
 
 /**
  * 인쇄 큐 claim 안전망 — Realtime poke가 놓치면 이 간격으로 재시도.
- * 2s 상시 폴링은 Edge Request·Function 요금 폭주(매장당 빈 손 POST).
- * 주문 도착은 poke(0/280/800ms)가 1차, 여기 15s는 Realtime 끊김 보험만.
+ * 주문 도착은 poke(0/280/800ms)가 1차.
+ * Realtime 끊김: 15s. 정상 구독: 60s (빈 손 POST·Edge Request 절감).
  */
 export const MAIN_POS_KITCHEN_JOB_POLL_MS = 15_000
+/** Realtime INSERT 채널이 SUBSCRIBED 일 때 claim 간격 */
+export const MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS = 60_000
+
+export function resolveKitchenPrintJobPollMs(realtimeChannelHealthy: boolean): number {
+  return realtimeChannelHealthy ? MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS : MAIN_POS_KITCHEN_JOB_POLL_MS
+}
 /** QR enqueue와 주문 UPDATE 레이스를 흡수 */
 export const MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS = [0, 280, 800] as const
 export const MAIN_POS_KITCHEN_JOB_DRAIN_MAX = 5

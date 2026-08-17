@@ -5,6 +5,7 @@ import {
   mergeStoreAutoPrintFlags,
   scheduleHallThenKitchenAutoprint,
   shouldEnqueueKitchenPrintOnOrderCreate,
+  shouldRunDineInAddonMetaScan,
   storeAutoPrintFlagsFromSettings,
 } from "@/lib/pos-terminal-auto-print"
 import { extractAmountFromEmvQrPayload } from "@/lib/pos-terminal-kbank-helpers"
@@ -69,6 +70,30 @@ describe("pos-terminal-auto-print", () => {
         orderType: "dine_in",
         status: "ready",
         kitchenLineCount: 0,
+      })
+    ).toBe(false)
+  })
+
+  it("runs dine-in addon meta scan for hall receipts only, not kitchen-on-order", () => {
+    expect(
+      shouldRunDineInAddonMetaScan({
+        skip: false,
+        receiptOnAddOrder: false,
+        receiptOnOrder: false,
+      })
+    ).toBe(false)
+    expect(
+      shouldRunDineInAddonMetaScan({
+        skip: false,
+        receiptOnAddOrder: false,
+        receiptOnOrder: true,
+      })
+    ).toBe(true)
+    expect(
+      shouldRunDineInAddonMetaScan({
+        skip: true,
+        receiptOnAddOrder: true,
+        receiptOnOrder: true,
       })
     ).toBe(false)
   })

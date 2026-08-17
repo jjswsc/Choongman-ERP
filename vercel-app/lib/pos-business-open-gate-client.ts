@@ -25,6 +25,8 @@ export type PosBusinessOpenCheckClientResult = {
   blockReason: PosBusinessOpenBlockReason
   /** 이전 영업일에 시재가 있었을 때 (새 영업일 미등록) */
   prevBusinessDateYmd?: string
+  /** 당일 결산 마감 — 메인 POS 인터벌 폴링 중지 */
+  settlementClosed: boolean
 }
 
 function normalizeSettlement(
@@ -127,6 +129,45 @@ async function isBusinessOpenForCandidates(
   return false
 }
 
+async function isSettlementClosedForStoreDate(storeCode: string, settleDate: string): Promise<boolean> {
+  for (const sc of settlementStoreCacheKeys(storeCode)) {
+    try {
+      const key = `settlement:${sc}:${settleDate}`
+      const cached = await getFromCache<{ settlement?: PosSettlement | PosSettlement[] | null }>(
+        'pos_sales_cache',
+        key
+      )
+      const row = normalizeSettlement(cached?.settlement)
+      if (row?.closed) return true
+    } catch {
+      /* next alias */
+    }
+  }
+  try {
+    const data = await getPosSettlementWithCache({ storeCode, settleDate })
+    if (normalizeSettlement(data.settlement)?.closed) return true
+  } catch {
+    /* fall through */
+  }
+  if (!isOnline() || shouldPreferOfflineCache()) return false
+  try {
+    const data = await getPosSettlement({ storeCode, settleDate })
+    return Boolean(normalizeSettlement(data.settlement)?.closed)
+  } catch {
+    return false
+  }
+}
+
+async function isSettlementClosedForCandidates(
+  storeCandidates: string[],
+  settleDate: string
+): Promise<boolean> {
+  for (const sc of storeCandidates) {
+    if (await isSettlementClosedForStoreDate(sc, settleDate)) return true
+  }
+  return false
+}
+
 async function loadStoreBusinessHours(storeCode: string): Promise<PosBusinessHoursConfig> {
   try {
     const j = await getPosBusinessDaySettings(storeCode)
@@ -152,7 +193,7 @@ export async function checkPosBusinessOpenClient(params: {
 }): Promise<PosBusinessOpenCheckClientResult> {
   const store = String(params.storeCode ?? '').trim()
   if (!store) {
-    return { allowed: false, businessDateYmd: '', blockReason: 'never_opened' }
+    return { allowed: false, businessDateYmd: '', blockReason: 'never_opened', settlementClosed: false }
   }
 
   const candidates = buildStoreLookupCandidates(store, params)
@@ -165,14 +206,21 @@ export async function checkPosBusinessOpenClient(params: {
   const calendarYmd = getBangkokDateStr()
   const todayDatesToCheck = uniqueStoreCandidates([businessDateYmd, calendarYmd])
   let allowedToday = false
+  let closedToday = false
   for (const probeDate of todayDatesToCheck) {
     if (await isBusinessOpenForCandidates(candidates, probeDate)) {
       allowedToday = true
+      if (await isSettlementClosedForCandidates(candidates, probeDate)) closedToday = true
       break
     }
   }
   if (allowedToday) {
-    return { allowed: true, businessDateYmd, blockReason: 'none' }
+    return {
+      allowed: true,
+      businessDateYmd,
+      blockReason: 'none',
+      settlementClosed: closedToday,
+    }
   }
 
   const prevBusinessDateYmd = addDaysYmd(businessDateYmd, -1)
@@ -183,10 +231,11 @@ export async function checkPosBusinessOpenClient(params: {
       businessDateYmd,
       blockReason: 'new_business_day',
       prevBusinessDateYmd,
+      settlementClosed: false,
     }
   }
 
-  return { allowed: false, businessDateYmd, blockReason: 'never_opened' }
+  return { allowed: false, businessDateYmd, blockReason: 'never_opened', settlementClosed: false }
 }
 
 export type EnsurePosBusinessOpenForOrderParams = {

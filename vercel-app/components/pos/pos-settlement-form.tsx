@@ -44,6 +44,7 @@ import {
 import { hydrateSettlementQrOtherBreakdowns } from '@/lib/pos-settlement-breakdown-hydrate'
 import { DEFAULT_OTHER_KEYS, DEFAULT_QR_KEYS } from '@/lib/pos-payment-default-keys'
 import {
+  dispatchPosBusinessOpenUpdated,
   getPosSettlementWithCache,
   persistPosBusinessOpenAfterSave,
   resolvePosBusinessOpenSettleDates,
@@ -1168,6 +1169,11 @@ ${footerStamp}
         }
       }
       if (res.success) {
+        dispatchPosBusinessOpenUpdated({
+          storeCode: effectiveStore,
+          settleDate: openMode ? openBusinessDate : settleDate,
+          closed,
+        })
         if (!canUnclose && closed) {
           setClosedSavedOnce(true)
         }

@@ -11,6 +11,7 @@ import {
   resolveMainPosHeadPollIntervalMs,
   resolveMainPosHeadPollSchedule,
   resolveMainPosPollIntervalMs,
+  shouldPauseMainPosIntervalPolling,
   shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
 
@@ -132,6 +133,37 @@ describe('pos-main-poll-interval', () => {
         realtimeChannelHealthy: true,
         lastRealtimeOrderEventAtMs: now - 120_000,
         nowMs: now,
+      })
+    ).toBe(true)
+  })
+
+  it('pauses interval polling before open and after settlement close', () => {
+    expect(
+      shouldPauseMainPosIntervalPolling({
+        loading: true,
+        businessOpenAllowed: false,
+        settlementClosed: false,
+      })
+    ).toBe(false)
+    expect(
+      shouldPauseMainPosIntervalPolling({
+        loading: false,
+        businessOpenAllowed: true,
+        settlementClosed: false,
+      })
+    ).toBe(false)
+    expect(
+      shouldPauseMainPosIntervalPolling({
+        loading: false,
+        businessOpenAllowed: false,
+        settlementClosed: false,
+      })
+    ).toBe(true)
+    expect(
+      shouldPauseMainPosIntervalPolling({
+        loading: false,
+        businessOpenAllowed: true,
+        settlementClosed: true,
       })
     ).toBe(true)
   })

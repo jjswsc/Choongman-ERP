@@ -3,15 +3,20 @@ import {
   kitchenLinesFromPrintJobPayload,
   kitchenPrintJobClaimCreatedAtGteIso,
   kitchenPrintJobOrderFieldsFromPayload,
+  MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS,
   MAIN_POS_KITCHEN_JOB_POLL_MS,
   resolveKitchenPrintJobDedupeKey,
+  resolveKitchenPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
 import { posOrdersRealtimeChannelName } from '@/lib/supabase-client'
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
 
 describe('MAIN_POS_KITCHEN_JOB_POLL_MS', () => {
-  it('stays a sparse safety net so empty claimKitchen does not dominate Edge Requests', () => {
+  it('uses 15s when realtime is down and 60s when subscribed', () => {
     expect(MAIN_POS_KITCHEN_JOB_POLL_MS).toBe(15_000)
+    expect(MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS).toBe(60_000)
+    expect(resolveKitchenPrintJobPollMs(false)).toBe(15_000)
+    expect(resolveKitchenPrintJobPollMs(true)).toBe(60_000)
   })
 })
 

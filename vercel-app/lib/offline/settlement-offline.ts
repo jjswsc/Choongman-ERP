@@ -95,6 +95,7 @@ const EMPTY_SETTLEMENT_RESPONSE = (): PosSettlementResponse => ({
 export function dispatchPosBusinessOpenUpdated(detail: {
   storeCode: string
   settleDate: string
+  closed?: boolean
 }): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(POS_BUSINESS_OPEN_UPDATED_EVENT, { detail }))

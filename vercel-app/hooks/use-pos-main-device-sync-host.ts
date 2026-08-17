@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
+import { usePosBusinessOpenGate } from '@/lib/use-pos-business-open-gate'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { usePosStore } from '@/hooks/use-pos-store'
 import { useStoreList } from '@/lib/use-store-list'
@@ -29,11 +30,13 @@ import {
   isMainPosRealtimeInsertChannelHealthy,
   isMainPosRealtimeRecentlyActive,
   mainPosPrimaryInsertChannelKey,
+  MAIN_POS_POLL_INTERVAL_PAUSED_MS,
   MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS,
   MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS,
   MAIN_POS_TRIGGER_POLL_MIN_MS,
   resolveMainPosHeadPollSchedule,
   resolveMainPosPollIntervalMs,
+  shouldPauseMainPosIntervalPolling,
   shouldUseMainPosHeavyOrderScanFallback,
 } from '@/lib/pos-main-poll-interval'
 import { detectMainPosHeadPollChanges } from '@/lib/pos-main-head-poll'
@@ -46,6 +49,7 @@ import {
   MAIN_POS_META_SCAN_INTERVAL_MS,
   posGuestCountSpread,
   scheduleHallThenKitchenAutoprint,
+  shouldRunDineInAddonMetaScan,
   storeAutoPrintFlagsFromSettings,
   DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS,
   type StoreAutoPrintFlags,
@@ -247,6 +251,14 @@ export function usePosMainDeviceSyncHost(): void {
   const { auth } = useAuth()
   const storeCode = String(auth?.store ?? '').trim()
   const [isMainPosDevice] = usePosMainDevice(storeCode || null)
+  const businessOpenGate = usePosBusinessOpenGate(storeCode || null)
+  const pauseIntervalPoll = shouldPauseMainPosIntervalPolling({
+    loading: businessOpenGate.loading,
+    businessOpenAllowed: businessOpenGate.allowed,
+    settlementClosed: businessOpenGate.settlementClosed,
+  })
+  const pauseIntervalPollRef = useRef(pauseIntervalPoll)
+  pauseIntervalPollRef.current = pauseIntervalPoll
   const { lang } = useLang()
   const t = useT(lang)
   const { refetchStores, clearTableOrder } = usePosStore()
@@ -552,6 +564,8 @@ export function usePosMainDeviceSyncHost(): void {
     storeCode,
     kitchenOnOrder: autoPrint.kitchenOnOrder,
     autoprintCtxRef,
+    realtimeHealthyRef: realtimeChannelHealthyRef,
+    pauseIntervalPollRef,
   })
 
   const shouldTreatAsIncomingOrder = shouldTreatAsMainPosIncomingOrder
@@ -1465,6 +1479,7 @@ export function usePosMainDeviceSyncHost(): void {
 
     const today = getPosBusinessDateStr()
     const poll = async (opts?: { forceAddonScan?: boolean }) => {
+      if (pauseIntervalPollRef.current && !opts?.forceAddonScan) return
       if (mainPosPollInFlightRef.current) {
         if (opts?.forceAddonScan) pendingForcePollRef.current = true
         return
@@ -1657,10 +1672,11 @@ export function usePosMainDeviceSyncHost(): void {
             lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
           })
           const wantMetaDineInAddonReceipt = autoPrint.receiptOnAddOrder || autoPrint.receiptOnOrder
-          const wantMetaDineInAddonKitchen = autoPrint.kitchenOnOrder
-          const wantDineInAddonMetaScan =
-            !shouldSyncHostSkipDineInAddonMetaScan() &&
-            (wantMetaDineInAddonReceipt || wantMetaDineInAddonKitchen)
+          const wantDineInAddonMetaScan = shouldRunDineInAddonMetaScan({
+            skip: shouldSyncHostSkipDineInAddonMetaScan(),
+            receiptOnAddOrder: autoPrint.receiptOnAddOrder,
+            receiptOnOrder: autoPrint.receiptOnOrder,
+          })
           if (needHeavyMetaScan || wantDineInAddonMetaScan) {
             try {
               const watchOrders = await getPosOrders({
@@ -1816,31 +1832,7 @@ export function usePosMainDeviceSyncHost(): void {
                   if (printHallAddon) {
                     void printHallReceiptPayload(receiptPayloadRemote, autoprintCtx)
                   }
-                  if (wantMetaDineInAddonKitchen && kitchenCartLines.length > 0) {
-                    const kitchenDelayMs = printHallAddon
-                      ? typeof window !== 'undefined' && window.cmPosShell
-                        ? resolveAfterReceiptToKitchenDelayMs()
-                        : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-                      : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
-                    setTimeout(() => {
-                      const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(oid, kitchenCartLines)
-                      if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
-                      const orderForKitchen = {
-                        id: oid,
-                        orderNo: String(o.orderNo ?? ''),
-                        storeCode: storeCodePoll,
-                        orderType: 'dine_in',
-                        tableName: String(o.tableName ?? ''),
-                        memo: String(o.memo ?? ''),
-                        items: kitchenCartLines as PosOrder['items'],
-                        guestCount: Number(o.guestCount ?? 0) || undefined,
-                      } as PosOrder
-                      void printKitchenForOrder(orderForKitchen, autoprintCtx, {
-                        kitchenLines: kitchenCartLines as Array<Record<string, unknown>>,
-                        dedupeKey: kitchenDedupeKey,
-                      }).catch(() => releaseKitchenAutoPrintKey(kitchenDedupeKey))
-                    }, kitchenDelayMs)
-                  }
+                  /* 주방 추가 전표는 pos_print_jobs claim 워커가 담당 — 여기 800건 스캔에서 찍지 않음 */
                 }
               }
               if (needHeavyMetaScan || wantDineInAddonMetaScan) {
@@ -1892,10 +1884,12 @@ export function usePosMainDeviceSyncHost(): void {
     let pollLoopCancelled = false
     const scheduleNextPoll = () => {
       if (pollLoopCancelled) return
-      const delayMs = resolveMainPosPollIntervalMs({
-        realtimeChannelHealthy: realtimeChannelHealthyRef.current,
-        realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(lastRealtimeOrderEventAtRef.current),
-      })
+      const delayMs = pauseIntervalPollRef.current
+        ? MAIN_POS_POLL_INTERVAL_PAUSED_MS
+        : resolveMainPosPollIntervalMs({
+            realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+            realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(lastRealtimeOrderEventAtRef.current),
+          })
       mainPosPollTimerRef.current = setTimeout(() => {
         void poll().finally(() => {
           if (!pollLoopCancelled) scheduleNextPoll()
@@ -1962,6 +1956,7 @@ export function usePosMainDeviceSyncHost(): void {
         void (async () => {
           try {
             if (!shouldFetch) return
+            if (pauseIntervalPollRef.current) return
             if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
             if (isPosTerminalLocalAutoprintActive() && !isPosMainDeviceSyncOwnedByLayout()) return
             const heads = await getPosOrders({

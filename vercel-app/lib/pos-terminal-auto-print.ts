@@ -70,10 +70,21 @@ export const MAIN_POS_STARTUP_CATCHUP_WINDOW_MS = 10 * 60 * 1000
 export const MAIN_POS_STARTUP_CATCHUP_DURATION_MS = 3 * 60 * 1000
 export const POS_PRINT_DEBUG_STORAGE_KEY = 'pos_print_debug'
 /**
- * 홀 추가메뉴·Grab 취소 메타 스캔(items_json) 간격.
- * head 폴링이 변경을 잡으면 즉시 heavy poll이 돌므로, 상시 스캔은 8s로 유지(기존 12s).
+ * 홀 추가 영수증 메타 스캔(items_json) 간격.
+ * 주방은 pos_print_jobs + Realtime poke가 담당. 홀 추가만 폴링 안전망(기존 8s는 CPU·전송 폭주).
  */
-export const MAIN_POS_META_SCAN_INTERVAL_MS = 8_000
+export const MAIN_POS_META_SCAN_INTERVAL_MS = 45_000
+
+/** 주방 큐가 있으므로 kitchenOnOrder 만으로는 800건 스캔하지 않는다. */
+export function shouldRunDineInAddonMetaScan(opts: {
+  skip: boolean
+  receiptOnAddOrder: boolean
+  receiptOnOrder: boolean
+}): boolean {
+  if (opts.skip) return false
+  return opts.receiptOnAddOrder || opts.receiptOnOrder
+}
+
 export const KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS = 80
 export const DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS = 45_000
 

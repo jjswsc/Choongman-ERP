@@ -39,6 +39,19 @@ export const MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS = 60_000
 export const MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS = 15_000
 /** Realtime 이벤트·채널 오류로 즉시 poll 호출 시 최소 간격 */
 export const MAIN_POS_TRIGGER_POLL_MIN_MS = 5_000
+/** 오픈 전·마감 후 인터벌 폴링을 멈춘 뒤 게이트만 재확인 */
+export const MAIN_POS_POLL_INTERVAL_PAUSED_MS = 60_000
+
+/** 시재 미등록(오픈 전) 또는 당일 마감 후면 HTTP 폴링을 쉰다. Realtime poke는 유지. */
+export function shouldPauseMainPosIntervalPolling(opts: {
+  loading: boolean
+  businessOpenAllowed: boolean
+  settlementClosed: boolean
+}): boolean {
+  if (opts.loading) return false
+  if (!opts.businessOpenAllowed) return true
+  return opts.settlementClosed
+}
 
 /**
  * head 폴링 스케줄.

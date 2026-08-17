@@ -16,9 +16,10 @@ import {
   kitchenLinesFromPrintJobPayload,
   kitchenPrintJobOrderFieldsFromPayload,
   MAIN_POS_KITCHEN_JOB_DRAIN_MAX,
-  MAIN_POS_KITCHEN_JOB_POLL_MS,
+  MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS,
   MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS,
   resolveKitchenPrintJobDedupeKey,
+  resolveKitchenPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
 
 async function printClaimedKitchenJob(
@@ -74,13 +75,15 @@ async function printClaimedKitchenJob(
 
 /**
  * QR/원격 주문의 pos_print_jobs 를 메인 POS가 바로 claim·인쇄.
- * Realtime poke가 1차. 상시 폴링은 15s 안전망(2s는 Edge Request 폭주).
+ * Realtime poke가 1차. 인터벌 claim은 끊김 15s / 정상 60s. 오픈 전·마감 후면 인터벌만 쉼.
  */
 export function usePosKitchenPrintJobWorker(opts: {
   enabled: boolean
   storeCode: string
   kitchenOnOrder: boolean
   autoprintCtxRef: MutableRefObject<PosMainDeviceAutoprintCtx | null>
+  realtimeHealthyRef?: MutableRefObject<boolean>
+  pauseIntervalPollRef?: MutableRefObject<boolean>
 }): () => void {
   const drainNowRef = useRef<() => void>(() => {})
   const inFlightRef = useRef(false)
@@ -143,17 +146,34 @@ export function usePosKitchenPrintJobWorker(opts: {
 
     drainNowRef.current = poke
     poke()
-    const pollId = window.setInterval(() => {
-      void drain()
-    }, MAIN_POS_KITCHEN_JOB_POLL_MS)
+    let pollTimer = 0
+    const scheduleNextPoll = () => {
+      if (cancelled) return
+      const paused = Boolean(opts.pauseIntervalPollRef?.current)
+      const delayMs = paused
+        ? MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS
+        : resolveKitchenPrintJobPollMs(Boolean(opts.realtimeHealthyRef?.current))
+      pollTimer = window.setTimeout(() => {
+        if (!cancelled && !opts.pauseIntervalPollRef?.current) void drain()
+        scheduleNextPoll()
+      }, delayMs)
+    }
+    scheduleNextPoll()
 
     return () => {
       cancelled = true
       drainNowRef.current = () => {}
-      window.clearInterval(pollId)
+      window.clearTimeout(pollTimer)
       clearPokeTimers()
     }
-  }, [opts.enabled, opts.storeCode, opts.kitchenOnOrder, opts.autoprintCtxRef])
+  }, [
+    opts.enabled,
+    opts.storeCode,
+    opts.kitchenOnOrder,
+    opts.autoprintCtxRef,
+    opts.realtimeHealthyRef,
+    opts.pauseIntervalPollRef,
+  ])
 
   return useCallback(() => {
     drainNowRef.current()
