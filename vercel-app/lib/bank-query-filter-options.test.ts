@@ -9,6 +9,7 @@ import {
 describe('bank-query-filter-options', () => {
   it('lists withdraw categories when trans type is withdraw', () => {
     expect(resolveBankQueryFilterCategories('withdraw')).toContain('expense')
+    expect(resolveBankQueryFilterCategories('withdraw')).toContain('tax')
     expect(resolveBankQueryFilterCategories('withdraw')).not.toContain('receivable_receive')
   })
 

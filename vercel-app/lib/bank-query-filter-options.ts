@@ -40,6 +40,7 @@ export const BANK_FILTER_WITHDRAW_CATEGORIES = [
   'transfer',
   'expense',
   'purchase_payment',
+  'tax',
   'loan',
   'advance',
   'unclassified',
@@ -84,7 +85,7 @@ export function resolveBankQueryFilterAccountSubjects(params: {
   if (cat === 'expense') {
     return filterExpenseWithdrawAccountSubjects(accountSubjectOptions)
   }
-  if (['purchase_payment', 'loan', 'correction', 'unclassified'].includes(cat)) {
+  if (['purchase_payment', 'loan', 'correction', 'unclassified', 'tax'].includes(cat)) {
     return []
   }
 

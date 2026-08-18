@@ -104,7 +104,9 @@ import {
 } from "@/lib/bank-transaction-note-meta"
 import {
   BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE,
+  BANK_WITHDRAW_UI_CATEGORIES,
   isBankExpenseRelatedWithdrawCategory,
+  isBankWithdrawCategoryWithoutSubject,
 } from "@/lib/bank-expense-via-expense-mgmt"
 import {
   BANK_QUICK_MEMO_DEFAULTS,
@@ -1962,6 +1964,7 @@ export function BankTransactionsTab() {
       expense: t("bankCategoryExpense") || "Expense",
       fixed: t("bankCategoryExpense") || "Expense",
       purchase_payment: t("bankCategoryPurchasePayment") || "Purchase Payment",
+      tax: t("bankCategoryTax") || t("wm_tax") || "Tax",
       loan: t("wm_loan_repayment") || t("bankCategoryLoan") || "Loan",
       advance: t("bankCategoryAdvance") || "Advance",
       unclassified: t("bankCategoryUnclassified") || "Unclassified",
@@ -2845,13 +2848,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
-                                      <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
-                                      <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
-                                      <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
-                                      <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                                      <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                                      <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                      {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (
+                                        <SelectItem key={value} value={value}>
+                                          {getCategoryLabel(value, "withdraw")}
+                                        </SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 ) : (
@@ -3000,7 +3001,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       void handleQueryRowSave(r, mergedEdits)
                                     }}
                                   />
-                                ) : r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(cat) ? (
+                                ) : r.transType === "withdraw" && !isBankWithdrawCategoryWithoutSubject(cat) ? (
                                   <Select
                                     value={(edits?.accountSubjectId !== undefined ? edits.accountSubjectId : r.accountSubjectId != null ? String(r.accountSubjectId) : "__none__") || "__none__"}
                                     onValueChange={(v) => r.id && setQueryRowEdit(r.id, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -3116,7 +3117,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       if (r.transDate) q.set("transDate", r.transDate)
                                       if (accountId) q.set("accountId", accountId)
                                       if (selectedAccountStore) q.set("storeName", selectedAccountStore)
-                                      if (r.category) q.set("category", r.category)
+                                      if (cat) q.set("category", cat)
                                       if (r.vendorCode) q.set("vendorCode", r.vendorCode)
                                       if (r.accountSubjectId != null) q.set("accountSubjectId", String(r.accountSubjectId))
                                       q.set("startStr", startStr)
@@ -3142,7 +3143,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         size="sm"
                                         variant="outline"
                                         className={ADMIN_BTN_XS_CN}
-                                        onClick={() => setRegisterActionRow(r)}
+                                        onClick={() => setRegisterActionRow({ ...r, category: cat })}
                                       >
                                         {t("bankRegisterLinkExpenseMgmt") || tt("bankRegisterLinkExpenseMgmt", "연결")}
                                       </Button>
@@ -3532,13 +3533,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <SelectValue />
                                 </SelectTrigger>
                                   <SelectContent>
-                                  <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
-                                  <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
-                                  <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
-                                  <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
-                                  <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                                  <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                                  <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                  {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (
+                                    <SelectItem key={value} value={value}>
+                                      {getCategoryLabel(value, "withdraw")}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                               {isAutoAssigned ? (
@@ -3689,7 +3688,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               }}
                             />
                           ) : r.transType === "withdraw" &&
-                            !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(impCat) ? (
+                            !isBankWithdrawCategoryWithoutSubject(impCat) ? (
                             <Select
                               value={
                                 (importRowEdits[idx]?.accountSubjectId !== undefined
@@ -3962,13 +3961,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             </>
                           ) : (
                             <>
-                              <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
-                              <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
-                              <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
-                                            <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
-                              <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                              <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                              <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                              {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (
+                                <SelectItem key={value} value={value}>
+                                  {getCategoryLabel(value, "withdraw")}
+                                </SelectItem>
+                              ))}
                             </>
                           )}
                         </SelectContent>
@@ -4055,13 +4052,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                           </>
                                         ) : (
                                           <>
-                                            <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
-                                            <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
-                                            <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
-                                            <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
-                                            <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                                            <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                                            <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                            {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (
+                                              <SelectItem key={value} value={value}>
+                                                {getCategoryLabel(value, "withdraw")}
+                                              </SelectItem>
+                                            ))}
                                           </>
                                         )}
                                       </SelectContent>

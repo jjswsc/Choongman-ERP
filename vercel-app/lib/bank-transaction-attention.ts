@@ -120,7 +120,7 @@ export function bankRowNeedsAttention(
   const needsSubject =
     row.transType === 'deposit'
       ? DEPOSIT_CATEGORIES_NEED_SUBJECT.has(cat)
-      : WITHDRAW_CATEGORIES_NEED_SUBJECT.has(cat)
+      : WITHDRAW_CATEGORIES_NEED_SUBJECT.has(cat) && cat !== 'tax'
 
   if (needsSubject && resolveBankRowAccountSubjectId(row, edits) == null) {
     return { needsAttention: true, reason: 'no_subject' }
@@ -137,6 +137,7 @@ export function bankRowShowsVatNotRegistered(
   if (row.transType !== 'withdraw') return false
   const cat = resolveBankRowCategory(row, edits)
   if (!isBankExpenseRelatedWithdrawCategory(cat)) return false
+  if (cat === 'tax') return false
   const hasInvoice =
     Boolean(row.invoiceReceived) ||
     Boolean(String(row.invoiceNo || '').trim()) ||

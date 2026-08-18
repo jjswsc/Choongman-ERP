@@ -29,6 +29,8 @@ import { useAuth } from "@/lib/auth-context"
 import { useStoreList } from "@/lib/api-client"
 import {
   addExpenseAccrual,
+  approveExpenseAccrual,
+  executeExpensePayment,
   executeWithdrawal,
   registerExpenseFromBankTransaction,
   updateExpenseRegisterItem,
@@ -280,6 +282,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     if (c === "tax_vat") return { main: "tax", sub: "vat" }
     if (c === "tax_withholding") return { main: "tax", sub: "withholding" }
     if (c === "tax_corporate") return { main: "tax", sub: "corporate" }
+    if (c === "tax") return { main: "tax", sub: "withholding" }
     if (c === "correction") return { main: "correction", sub: "" }
     if (c === "dividend") return { main: "dividend", sub: "" }
     return { main: "expense", sub: "normal" }
@@ -2345,6 +2348,76 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           return
         }
         await appAlert(res.message || t("success"))
+        redirectAfterBankLinkSuccess()
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
+    if (categoryMain === "tax") {
+      const amt = parseMoneyAmount(amount)
+      if (!amt || amt <= 0) {
+        await appAlert(tt("pettyAlertAmount", "Please enter amount."))
+        return
+      }
+      if (!storeName) {
+        await appAlert(tt("expenseStoreSelect", "Please select a store."))
+        return
+      }
+      const withdrawalCategory = resolveWithdrawalCategory(categoryMain, categorySub || "withholding")
+      const code = payeeCode.trim() || vendorCode.trim() || `auto_${withdrawalCategory}`
+      const name = payeeName.trim() || getAutoPayeeName(withdrawalCategory)
+      setSaving(true)
+      try {
+        const addRes = await addExpenseAccrual({
+          payeeCode: code,
+          payeeName: name,
+          withdrawalCategory,
+          categoryMain,
+          categorySub: categorySub || "withholding",
+          amount: amt,
+          expenseDate: transDate,
+          dueDate: transDate,
+          memo: memo.trim() || undefined,
+          storeName: storeName || undefined,
+          userName: auth?.user,
+          userRole: auth?.role,
+        })
+        if (!addRes.success) {
+          await appAlert(translateApiMessage(addRes.message, t) || addRes.message || t("processFail"))
+          return
+        }
+        const expenseAccrualId = Number(addRes.id || 0)
+        if (!expenseAccrualId) {
+          await appAlert(t("processFail"))
+          return
+        }
+        const approveRes = await approveExpenseAccrual({
+          expenseAccrualId,
+          action: "approve",
+          userName: auth?.user,
+          userRole: auth?.role,
+        })
+        if (!approveRes.success) {
+          await appAlert(translateApiMessage(approveRes.message, t) || approveRes.message || t("processFail"))
+          return
+        }
+        const payRes = await executeExpensePayment({
+          expenseAccrualId,
+          paymentMethod: "bank",
+          amount: amt,
+          transDate,
+          memo: memo.trim() || undefined,
+          bankTransactionId: bankTxId,
+          userName: auth?.user,
+          userRole: auth?.role,
+        })
+        if (!payRes.success) {
+          await appAlert(translateApiMessage(payRes.message, t) || payRes.message || t("processFail"))
+          return
+        }
+        await appAlert(payRes.message || t("success"))
         redirectAfterBankLinkSuccess()
       } finally {
         setSaving(false)

@@ -52,4 +52,15 @@ describe('bank-transaction-attention VAT badge', () => {
       })
     ).toBe(false)
   })
+
+  it('does not flag tax remittance as missing purchase VAT invoice', () => {
+    expect(
+      bankRowShowsVatNotRegistered({
+        transType: 'withdraw',
+        category: 'tax',
+        isLinked: false,
+        invoiceReceived: false,
+      })
+    ).toBe(false)
+  })
 })

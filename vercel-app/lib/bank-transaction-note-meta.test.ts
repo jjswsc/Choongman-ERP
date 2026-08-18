@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bankCategoryForWithdrawalCategory,
   bankNoteUserDisplayText,
   composeBankNoteForExpenseAccrualLink,
   composeBankNoteWithCategoryAndOptionalAccrualPrefix,
@@ -123,6 +124,16 @@ describe('shouldExcludeBankWithdrawFromPlExpense', () => {
     ).toBe(true)
   })
 
+  it('excludes bank category tax from P&L even without withdrawal_category tag', () => {
+    expect(
+      shouldExcludeBankWithdrawFromPlExpense({
+        note: null,
+        memo: 'RD remittance',
+        category: 'tax',
+      })
+    ).toBe(true)
+  })
+
   it('excludes fixed_asset withdrawals from P&L expense', () => {
     expect(
       shouldExcludeBankWithdrawFromPlExpense({
@@ -137,6 +148,7 @@ describe('shouldExcludeBankWithdrawFromPlExpense', () => {
     expect(
       looksLikeTaxAuthorityRemittanceMemo('Payment | Paid for Ref X8126 REVENUE DEPARTMENT')
     ).toBe(true)
+    expect(looksLikeTaxAuthorityRemittanceMemo('PND.53 08/2026')).toBe(true)
     expect(
       shouldExcludeBankWithdrawFromPlExpense({
         note: null,
@@ -156,16 +168,26 @@ describe('shouldExcludeBankWithdrawFromPlExpense', () => {
 })
 
 describe('suggestWithdrawFromMemo tax remittance', () => {
-  it('suggests unclassified for ภ.พ.30 / revenue dept', () => {
-    expect(suggestWithdrawFromMemo('ภ.พ.30 06/2026', []).category).toBe('unclassified')
+  it('suggests tax for ภ.พ.30 / revenue dept / PND.53', () => {
+    expect(suggestWithdrawFromMemo('ภ.พ.30 06/2026', []).category).toBe('tax')
     expect(
       suggestWithdrawFromMemo('Payment | Paid for Ref X8126 REVENUE DEPARTMENT', []).category
-    ).toBe('unclassified')
+    ).toBe('tax')
+    expect(suggestWithdrawFromMemo('PND.53 withholding Aug 2026', []).category).toBe('tax')
   })
 
   it('still suggests 5510 for generic tax fees', () => {
     expect(
       suggestWithdrawFromMemo('tax stamp fee', [{ id: 99, code: '5510' }])
     ).toEqual({ category: 'expense', accountSubjectId: 99 })
+  })
+})
+
+describe('bankCategoryForWithdrawalCategory', () => {
+  it('maps tax settlements to bank category tax so the expense-link button stays visible', () => {
+    expect(bankCategoryForWithdrawalCategory('tax_withholding')).toBe('tax')
+    expect(bankCategoryForWithdrawalCategory('tax_vat')).toBe('tax')
+    expect(bankCategoryForWithdrawalCategory('tax_corporate')).toBe('tax')
+    expect(bankCategoryForWithdrawalCategory('expense')).toBeNull()
   })
 })

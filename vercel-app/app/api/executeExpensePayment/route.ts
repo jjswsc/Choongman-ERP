@@ -29,6 +29,7 @@ import {
   bankCategoryForWithdrawalCategory,
   composeBankNoteForExpenseAccrualLink,
   isExpenseInternalBankNote,
+  isTaxSettlementWithdrawalCategory,
 } from '@/lib/bank-transaction-note-meta'
 import { allocateExpenseDocumentNo } from '@/lib/expense-document-no-server'
 import { bankExpenseDateWhenPayingPayrollAccrual } from '@/lib/payroll-utils'
@@ -302,14 +303,18 @@ export async function POST(request: NextRequest) {
           (await resolveVendorCodeLoose(source.payee_name))
       }
       if (!vendorCode) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
-          },
-          { status: 400, headers }
-        )
+        if (isTaxSettlementWithdrawalCategory(withdrawalCategory)) {
+          vendorCode = payeeCode || `tax_${withdrawalCategory}`
+        } else {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
+            },
+            { status: 400, headers }
+          )
+        }
       }
     } else {
       vendorCode = String(source.store_name || payeeCode || '').trim() || `prepay_${withdrawalCategory}`

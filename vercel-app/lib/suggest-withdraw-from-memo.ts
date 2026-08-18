@@ -5,7 +5,7 @@
 
 import { looksLikeTaxAuthorityRemittanceMemo } from '@/lib/bank-transaction-note-meta'
 
-export type WithdrawCategory = 'transfer' | 'expense' | 'correction' | 'loan' | 'advance' | 'unclassified'
+export type WithdrawCategory = 'transfer' | 'expense' | 'correction' | 'loan' | 'advance' | 'unclassified' | 'tax'
 
 /** 출금 시 적요 기반 용도·계정과목 추천 */
 export function suggestWithdrawFromMemo(
@@ -34,7 +34,7 @@ export function suggestWithdrawFromMemo(
 
   // VAT·원천 등 세무서 납부(BS) — 손익 5510으로 올리지 않음
   if (looksLikeTaxAuthorityRemittanceMemo(memo)) {
-    return { category: 'unclassified' }
+    return { category: 'tax' }
   }
 
   // 반복 경비(임대·공과 등) — 통장 용도는 경비(expense)로 통일

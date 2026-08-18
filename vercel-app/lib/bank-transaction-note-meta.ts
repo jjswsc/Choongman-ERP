@@ -22,10 +22,11 @@ export function isTaxSettlementWithdrawalCategory(cat: string | null | undefined
 
 /**
  * VAT·원천·법인세 납부(미지급세금 정산)는 손익 비용이 아님.
- * 통장 category를 unclassified 로 두면 손익 집계에서 제외된다.
+ * 통장 category는 tax 로 두고, P&L 집계에서 제외한다.
+ * (unclassified 로 두면 지출관리 연결 버튼이 사라져 PND.53 연결이 막힌다.)
  */
 export function bankCategoryForWithdrawalCategory(withdrawalCategory: string): string | null {
-  if (isTaxSettlementWithdrawalCategory(withdrawalCategory)) return 'unclassified'
+  if (isTaxSettlementWithdrawalCategory(withdrawalCategory)) return 'tax'
   return null
 }
 
@@ -34,6 +35,7 @@ export function looksLikeTaxAuthorityRemittanceMemo(memo: string | null | undefi
   const m = String(memo || '')
   if (!m.trim()) return false
   if (/ภ\.?\s*พ\.?\s*30|ภพ\.?\s*30|ภ\.?\s*ง\.?\s*ด|ภงด/i.test(m)) return true
+  if (/\bpnd\s*\.?\s*(1|3|53|54)\b/i.test(m)) return true
   if (/revenue\s*dep|สรรพากร|กรมสรรพากร/i.test(m)) return true
   if (/paid\s+for\s+ref[\s\S]{0,120}revenue/i.test(m)) return true
   return false
@@ -58,6 +60,7 @@ export function shouldExcludeBankWithdrawFromPlExpense(
 ): boolean {
   const wCat = extractWithdrawalCategoryFromNote(String(row.note || ''))
   if (wCat && isTaxSettlementWithdrawalCategory(wCat)) return true
+  if (String(row.category || '').toLowerCase() === 'tax') return true
   if (wCat === 'fixed_asset') return true
   if (looksLikeTaxAuthorityRemittanceMemo(row.memo)) return true
   if (!isExpenseInternalBankNote(row.note)) return false

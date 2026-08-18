@@ -9,12 +9,15 @@ describe('bank-expense-via-expense-mgmt', () => {
     expect(isBankExpenseRelatedWithdrawCategory('expense')).toBe(true)
     expect(isBankExpenseRelatedWithdrawCategory('fixed')).toBe(true)
     expect(isBankExpenseRelatedWithdrawCategory('purchase_payment')).toBe(true)
+    expect(isBankExpenseRelatedWithdrawCategory('tax')).toBe(true)
     expect(isBankExpenseRelatedWithdrawCategory('transfer')).toBe(false)
+    expect(isBankExpenseRelatedWithdrawCategory('unclassified')).toBe(false)
   })
 
   it('skips auto journal for expense-related withdraw only', () => {
     expect(shouldSkipBankAutoJournal('expense', 'withdraw')).toBe(true)
     expect(shouldSkipBankAutoJournal('purchase_payment', 'withdraw')).toBe(true)
+    expect(shouldSkipBankAutoJournal('tax', 'withdraw')).toBe(true)
     expect(shouldSkipBankAutoJournal('transfer', 'withdraw')).toBe(false)
     expect(shouldSkipBankAutoJournal('expense', 'deposit')).toBe(false)
   })

@@ -12,17 +12,34 @@ export const BANK_WITHDRAW_EXPENSE_RELATED_CATEGORIES = [
   'expense',
   'purchase_payment',
   'purchase_advance',
+  'tax',
 ] as const
 
 export const BANK_WITHDRAW_UI_CATEGORIES = [
   'transfer',
   'expense',
   'purchase_payment',
+  'tax',
   'loan',
   'advance',
   'unclassified',
   'correction',
 ] as const
+
+/** 통장 출금 행에서 계정과목(หมวด) 셀을 숨김 — 세금 납부는 BS 정산이라 손익 과목이 없다 */
+export const BANK_WITHDRAW_CATEGORIES_WITHOUT_SUBJECT = [
+  'correction',
+  'loan',
+  'advance',
+  'unclassified',
+  'purchase_payment',
+  'tax',
+] as const
+
+export function isBankWithdrawCategoryWithoutSubject(category: string | undefined | null): boolean {
+  const c = normalizeBankWithdrawCategory(category)
+  return (BANK_WITHDRAW_CATEGORIES_WITHOUT_SUBJECT as readonly string[]).includes(c)
+}
 
 export function normalizeBankWithdrawCategory(category: string | undefined | null): string {
   const c = String(category || '').trim().toLowerCase()

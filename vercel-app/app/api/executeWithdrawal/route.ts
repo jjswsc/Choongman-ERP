@@ -576,9 +576,9 @@ function mapToBankTransactionCategory(cat: WithdrawalCategory): string {
     transfer_from_petty: 'transfer',
     loan_repayment: 'loan',
     loan_given: 'advance',
-    tax_vat: 'unclassified',
-    tax_withholding: 'unclassified',
-    tax_corporate: 'unclassified',
+    tax_vat: 'tax',
+    tax_withholding: 'tax',
+    tax_corporate: 'tax',
     correction: 'correction',
     dividend: 'expense',
   }
