@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { deleteJournalEntriesBySource, postPayableSettlementJournal } from '@/lib/accounting-posting'
+import {
+  deleteJournalEntriesBySource,
+  postPayableSettlementJournal,
+  postWithdrawalJournal,
+  type WithdrawalCategory,
+} from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
 import { evaluatePayeeBankMemoMatch } from '@/lib/expense-accrual-bank-memo-match'
 import {
@@ -136,6 +141,48 @@ function mapWithdrawalCategoryToBankCategory(withdrawalCategory: string): string
 function resolveAccrualAccountSubjectId(source: ExpenseAccrualRow): number | null {
   const sid = source.account_subject_id != null ? Number(source.account_subject_id) : NaN
   return Number.isFinite(sid) && sid > 0 ? sid : null
+}
+
+/** 원천·VAT·법인세 납부는 미지급금(2100)이 아니라 미지급세금 정산 분개 */
+async function postExpensePaymentGlJournal(params: {
+  isPrepay: boolean
+  withdrawalCategory: string
+  sourceType: 'bank_transaction' | 'petty_cash'
+  sourceId?: number | null
+  accountingDate: string
+  amountAbs: number
+  memo?: string
+  storeName?: string
+  postedBy?: string
+  logLabel: string
+}): Promise<void> {
+  if (params.isPrepay) return
+  try {
+    if (isTaxSettlementWithdrawalCategory(params.withdrawalCategory)) {
+      await postWithdrawalJournal({
+        sourceType: params.sourceType,
+        sourceId: params.sourceId || undefined,
+        category: params.withdrawalCategory as WithdrawalCategory,
+        accountingDate: params.accountingDate,
+        amountAbs: params.amountAbs,
+        memo: params.memo,
+        storeName: params.storeName,
+        postedBy: params.postedBy,
+      })
+      return
+    }
+    await postPayableSettlementJournal({
+      sourceType: params.sourceType,
+      sourceId: params.sourceId || undefined,
+      accountingDate: params.accountingDate,
+      amountAbs: params.amountAbs,
+      memo: params.memo,
+      storeName: params.storeName,
+      postedBy: params.postedBy,
+    })
+  } catch (postingErr) {
+    console.error(params.logLabel, postingErr)
+  }
 }
 
 /** bank_transactions에는 vat_amount 컬럼 없음 — 패티만 includeVatAmount: true */
@@ -565,19 +612,18 @@ export async function POST(request: NextRequest) {
           ...(documentNo ? { document_no: documentNo } : {}),
         })
         if (!isPrepay) {
-          try {
-            await postPayableSettlementJournal({
-              sourceType: 'bank_transaction',
-              sourceId: bankId,
-              accountingDate: transDate,
-              amountAbs: amount,
-              memo: paymentMemo,
-              storeName: store || source.store_name || undefined,
-              postedBy: userName || undefined,
-            })
-          } catch (postingErr) {
-            console.error('executeExpensePayment bank link posting:', postingErr)
-          }
+          await postExpensePaymentGlJournal({
+            isPrepay,
+            withdrawalCategory,
+            sourceType: 'bank_transaction',
+            sourceId: bankId,
+            accountingDate: transDate,
+            amountAbs: amount,
+            memo: paymentMemo,
+            storeName: store || source.store_name || undefined,
+            postedBy: userName || undefined,
+            logLabel: 'executeExpensePayment bank link posting:',
+          })
         }
       } else {
         const accountId = Number(body.accountId || body.account_id || 0)
@@ -604,19 +650,18 @@ export async function POST(request: NextRequest) {
         })) as { id?: number }[]
         bankId = Number(inserted?.[0]?.id || 0) || null
         if (!isPrepay) {
-          try {
-            await postPayableSettlementJournal({
-              sourceType: 'bank_transaction',
-              sourceId: bankId || undefined,
-              accountingDate: transDate,
-              amountAbs: amount,
-              memo: paymentMemo,
-              storeName: store || source.store_name || undefined,
-              postedBy: userName || undefined,
-            })
-          } catch (postingErr) {
-            console.error('executeExpensePayment bank posting:', postingErr)
-          }
+          await postExpensePaymentGlJournal({
+            isPrepay,
+            withdrawalCategory,
+            sourceType: 'bank_transaction',
+            sourceId: bankId || undefined,
+            accountingDate: transDate,
+            amountAbs: amount,
+            memo: paymentMemo,
+            storeName: store || source.store_name || undefined,
+            postedBy: userName || undefined,
+            logLabel: 'executeExpensePayment bank posting:',
+          })
         }
       }
     } else {
@@ -639,19 +684,18 @@ export async function POST(request: NextRequest) {
       })) as { id?: number }[]
       pettyId = Number(inserted?.[0]?.id || 0) || null
       if (!isPrepay) {
-        try {
-          await postPayableSettlementJournal({
-            sourceType: 'petty_cash',
-            sourceId: pettyId || undefined,
-            accountingDate: transDate,
-            amountAbs: amount,
-            memo: paymentMemo,
-            storeName: pettyStore,
-            postedBy: userName || undefined,
-          })
-        } catch (postingErr) {
-          console.error('executeExpensePayment petty posting:', postingErr)
-        }
+        await postExpensePaymentGlJournal({
+          isPrepay,
+          withdrawalCategory,
+          sourceType: 'petty_cash',
+          sourceId: pettyId || undefined,
+          accountingDate: transDate,
+          amountAbs: amount,
+          memo: paymentMemo,
+          storeName: pettyStore,
+          postedBy: userName || undefined,
+          logLabel: 'executeExpensePayment petty posting:',
+        })
       }
     }
 

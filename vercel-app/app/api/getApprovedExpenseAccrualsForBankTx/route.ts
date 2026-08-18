@@ -360,6 +360,7 @@ export async function GET(request: NextRequest) {
           payeeCode: r.payeeCode,
           vendorName: vn?.name,
           vendorGpsName: vn?.gps,
+          withdrawalCategory: r.withdrawalCategory,
         })
         const amountMatch = moneyEqual(r.remainingAmount, bankAmount)
         return {

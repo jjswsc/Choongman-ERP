@@ -30,7 +30,19 @@ export function bankCategoryForWithdrawalCategory(withdrawalCategory: string): s
   return null
 }
 
-/** 세무서(กรมสรรพากร) 납부·ภ.พ.30 등 — BS 정산으로 보고 손익에서 제외 */
+/** 세무서(กรมสรรพากร) 납부·ภ.พ.30 등 — BS 정산으로 보고 손익에서 제외.
+ *  지급처 표시명은 통장 적요 REVENUE DEPARTMENT 와 맞추기 위해 กรมสรรพากร 사용.
+ */
+export const TAX_AUTHORITY_PAYEE_NAME_TH = 'กรมสรรพากร'
+
+export function defaultTaxRemittancePayeeName(
+  memo: string | null | undefined,
+  fallback: string
+): string {
+  if (looksLikeTaxAuthorityRemittanceMemo(memo)) return TAX_AUTHORITY_PAYEE_NAME_TH
+  return fallback
+}
+
 export function looksLikeTaxAuthorityRemittanceMemo(memo: string | null | undefined): boolean {
   const m = String(memo || '')
   if (!m.trim()) return false

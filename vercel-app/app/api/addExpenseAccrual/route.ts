@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
+import { deleteJournalEntriesBySource, postExpenseAccrualJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
-import { parseMoneyAmount } from '@/lib/money-amount'
+import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { isPrepaymentAccrualCategory, parseCardAccountIdFromPayeeCode } from '@/lib/prepayment-accrual-categories'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
@@ -34,6 +34,8 @@ import {
   resolveAccountSubjectByCodes,
 } from '@/lib/fixed-asset-from-expense'
 import { linkFixedAssetToExpenseAccrual } from '@/lib/fixed-asset-expense-accrual'
+import { isTaxSettlementWithdrawalCategory } from '@/lib/bank-transaction-note-meta'
+import { resolvePayableVendorCode } from '@/lib/payable-vendor-code'
 
 function callerSeesAllAccrualStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
@@ -93,6 +95,27 @@ function autoPayeeNameByCategory(withdrawalCategory: string): string {
     dividend: '배당/사유 인출',
   }
   return map[cat] || '지출'
+}
+
+async function rollbackNewExpenseAccrual(expenseAccrualId: number): Promise<void> {
+  const id = Number(expenseAccrualId || 0)
+  if (!id) return
+  try {
+    await supabaseDeleteByFilter('payable_transactions', `expense_accrual_id=eq.${id}`)
+  } catch {
+    /* payable 미생성일 수 있음 */
+  }
+  try {
+    await deleteJournalEntriesBySource('expense_accrual', id)
+  } catch {
+    /* 분개 미생성일 수 있음 */
+  }
+  await supabaseDeleteByFilter('expense_accruals', `id=eq.${id}`)
+}
+
+function isPayableNotNullError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /\b23502\b/.test(msg) || /null value in column "?vendor_code"?/i.test(msg)
 }
 
 export async function POST(request: NextRequest) {
@@ -230,6 +253,90 @@ export async function POST(request: NextRequest) {
     const invoiceNoRaw = body.invoiceNo ?? body.invoice_no
     const invoicePhotoRaw = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
 
+    const taxSettlement = isTaxSettlementWithdrawalCategory(withdrawalCategory)
+    if (taxSettlement && storeName) {
+      const reuseRows = (await supabaseSelectFilter(
+        'expense_accruals',
+        `expense_date=eq.${expenseDate}&status=eq.planned&store_name=eq.${encodeURIComponent(storeName)}`,
+        {
+          select: 'id,payee_code,amount,memo,document_no',
+          order: 'id.asc',
+          limit: 50,
+        }
+      )) as {
+        id?: number
+        payee_code?: string
+        amount?: number
+        memo?: string | null
+        document_no?: string | null
+      }[] | null
+      const reuse = (reuseRows || []).find((r) => {
+        if (Number(r.id || 0) <= 0) return false
+        if (String(r.payee_code || '').trim() !== encodedPayeeCode) return false
+        if (!moneyEqual(parseMoneyAmount(r.amount), amount)) return false
+        const existingMemo = String(r.memo || '').trim()
+        if (memo && existingMemo && existingMemo !== memo) return false
+        return true
+      })
+      const reuseId = Number(reuse?.id || 0)
+      if (reuseId) {
+        const existingPayables = (await supabaseSelectFilter(
+          'payable_transactions',
+          `expense_accrual_id=eq.${reuseId}`,
+          { select: 'id,bank_transaction_id', limit: 20 }
+        )) as { id?: number; bank_transaction_id?: number | null }[] | null
+        const alreadyLinked = (existingPayables || []).some((p) => Number(p.bank_transaction_id || 0) > 0)
+        if (!alreadyLinked) {
+          if (!(existingPayables || []).length) {
+            try {
+              await supabaseInsert(
+                'payable_transactions',
+                stampSaasTenantId(
+                  {
+                    vendor_code: resolvePayableVendorCode(payeeCode),
+                    amount: Math.abs(netPayable),
+                    ref_type: 'Expense',
+                    ref_id: null,
+                    trans_date: expenseDate,
+                    memo: memo ? `지출발생: ${memo.slice(0, 200)}` : '지출발생',
+                    expense_accrual_id: reuseId,
+                    account_subject_id:
+                      accountSubjectId != null && !isNaN(Number(accountSubjectId))
+                        ? Number(accountSubjectId)
+                        : null,
+                    expense_date: expenseDate,
+                    due_date: dueDate,
+                  },
+                  tenantScope,
+                  'payable_transactions'
+                )
+              )
+            } catch (payErr) {
+              console.error('addExpenseAccrual reuse payable:', payErr)
+              return NextResponse.json(
+                {
+                  success: false,
+                  message:
+                    payErr instanceof Error ? payErr.message : '미지급 등록에 실패했습니다.',
+                },
+                { status: 400, headers }
+              )
+            }
+          }
+          return NextResponse.json(
+            {
+              success: true,
+              message: '지출 발생이 등록되었습니다.',
+              id: reuseId,
+              documentNo: reuse?.document_no || null,
+              reused: true,
+            },
+            { headers }
+          )
+        }
+      }
+    }
+
     let documentNo: string | null = null
     try {
       documentNo = await allocateExpenseDocumentNo(expenseDate)
@@ -360,31 +467,62 @@ export async function POST(request: NextRequest) {
     }
 
     const prepaymentAccrual = isPrepaymentAccrualCategory(withdrawalCategory)
-
-    await supabaseInsert('payable_transactions', stampSaasTenantId({
-      vendor_code: payeeCode.startsWith('auto_') ? null : payeeCode,
-      amount: Math.abs(netPayable),
-      ref_type: 'Expense',
-      ref_id: null,
-      trans_date: expenseDate,
-      memo: prepaymentAccrual
-        ? withdrawalCategory === 'transfer_to_petty'
-          ? memo
-            ? `패티보충청구: ${memo.slice(0, 200)}`
-            : '패티보충청구'
-          : memo
-            ? `카드대금청구: ${memo.slice(0, 200)}`
-            : '카드대금청구'
+    const payableMemo = prepaymentAccrual
+      ? withdrawalCategory === 'transfer_to_petty'
+        ? memo
+          ? `패티보충청구: ${memo.slice(0, 200)}`
+          : '패티보충청구'
         : memo
-          ? `지출발생: ${memo.slice(0, 200)}`
-          : '지출발생',
-      expense_accrual_id: expenseAccrualId,
-      account_subject_id: accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
-      expense_date: expenseDate,
-      due_date: dueDate,
-    }, tenantScope, 'payable_transactions'))
+          ? `카드대금청구: ${memo.slice(0, 200)}`
+          : '카드대금청구'
+      : memo
+        ? `지출발생: ${memo.slice(0, 200)}`
+        : '지출발생'
 
-    if (!prepaymentAccrual) {
+    try {
+      await supabaseInsert(
+        'payable_transactions',
+        stampSaasTenantId(
+          {
+            vendor_code: resolvePayableVendorCode(payeeCode),
+            amount: Math.abs(netPayable),
+            ref_type: 'Expense',
+            ref_id: null,
+            trans_date: expenseDate,
+            memo: payableMemo,
+            expense_accrual_id: expenseAccrualId,
+            account_subject_id:
+              accountSubjectId != null && !isNaN(Number(accountSubjectId))
+                ? Number(accountSubjectId)
+                : null,
+            expense_date: expenseDate,
+            due_date: dueDate,
+          },
+          tenantScope,
+          'payable_transactions'
+        )
+      )
+    } catch (payErr) {
+      console.error('addExpenseAccrual payable:', payErr)
+      try {
+        await rollbackNewExpenseAccrual(expenseAccrualId)
+      } catch (rbErr) {
+        console.error('addExpenseAccrual rollback:', rbErr)
+      }
+      return NextResponse.json(
+        {
+          success: false,
+          message: isPayableNotNullError(payErr)
+            ? '미지급 거래처 코드가 비어 등록할 수 없습니다. 지급처를 확인한 뒤 다시 시도해 주세요.'
+            : payErr instanceof Error
+              ? payErr.message
+              : '미지급 등록에 실패했습니다.',
+        },
+        { status: 400, headers }
+      )
+    }
+
+    if (!prepaymentAccrual && !taxSettlement) {
       try {
         await postExpenseAccrualJournal({
           expenseAccrualId,
@@ -457,7 +595,7 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '처리 실패' },
-      { status: 500, headers }
+      { status: isPayableNotNullError(e) ? 400 : 500, headers }
     )
   }
 }

@@ -4,6 +4,7 @@
  */
 
 import { isNonRetryableBankBusinessErrorMessage } from '@/lib/bank-import-deposit-category'
+import { isNonRetryableExpenseAccrualErrorMessage } from '@/lib/payable-vendor-code'
 import { apiFetch } from './fetch'
 import { addToQueue } from '@/lib/offline/queue'
 import {
@@ -288,7 +289,12 @@ function shouldQueueHttpError(path: string, status: number, bodyText: string): b
     if (status >= 400 && status < 500 && BANK_NON_QUEUE_PATHS.has(path)) return false
     return status >= 500
   }
-  if (!BANK_NON_QUEUE_PATHS.has(path)) return true
+  if (!BANK_NON_QUEUE_PATHS.has(path)) {
+    if (path === '/api/addExpenseAccrual' && isNonRetryableExpenseAccrualErrorMessage(bodyText)) {
+      return false
+    }
+    return true
+  }
   try {
     const j = JSON.parse(bodyText) as { success?: boolean; message?: string }
     if (j?.success === false && isNonRetryableBankBusinessErrorMessage(j.message)) return false

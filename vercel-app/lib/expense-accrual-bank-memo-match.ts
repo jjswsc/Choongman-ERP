@@ -1,3 +1,8 @@
+import {
+  isTaxSettlementWithdrawalCategory,
+  looksLikeTaxAuthorityRemittanceMemo,
+} from '@/lib/bank-transaction-note-meta'
+
 /**
  * 통장 적요·note vs 지급예정(payee + 거래처) — 잘못된 지급 대상 연결을 줄이기 위한 느슨한 문구 일치
  * - mismatch: 적요에 나온 식별 토큰들이 지급처 정보와 뚜렷히 어긋날 때(충분히 긴 적요 기준)
@@ -46,11 +51,24 @@ export function evaluatePayeeBankMemoMatch(params: {
   payeeCode: string
   vendorName?: string
   vendorGpsName?: string
+  withdrawalCategory?: string
 }): { quality: PayeeMemoMatchQuality; detail?: string } {
   const bankText = [params.bankMemo, params.bankNote].map((s) => String(s || '')).join(' ').trim()
   const b = normalize(bankText)
   if (b.length < 8) {
     return { quality: 'trivial', detail: '짧은 적요' }
+  }
+
+  const payeeCodeRaw = String(params.payeeCode || '').trim()
+  const payeeNameRaw = String(params.payeeName || '').trim()
+  const taxPayee =
+    isTaxSettlementWithdrawalCategory(params.withdrawalCategory) ||
+    /^auto_tax_/i.test(payeeCodeRaw) ||
+    /withholding|원천|หัก\s*ณ\s*ที่จ่าย|vat|ภงด|pnd|สรรพากร|revenue\s*dep/i.test(
+      `${payeeNameRaw} ${payeeCodeRaw}`
+    )
+  if (taxPayee && looksLikeTaxAuthorityRemittanceMemo(bankText)) {
+    return { quality: 'ok', detail: '세무서 납부 적요' }
   }
 
   const payeeName = String(params.payeeName || '').trim()

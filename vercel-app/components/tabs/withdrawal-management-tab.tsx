@@ -60,7 +60,7 @@ import {
   filterFixedAssetAccountSubjects,
 } from "@/lib/account-subject-withdraw-options"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { bankNoteUserDisplayText } from "@/lib/bank-transaction-note-meta"
+import { bankNoteUserDisplayText, defaultTaxRemittancePayeeName } from "@/lib/bank-transaction-note-meta"
 import { expenseSearchViewCache } from "@/lib/expense-search-view-cache"
 import { PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE } from "@/lib/bank-purchase-payment-via-expense"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
@@ -1047,6 +1047,13 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         const subjectLabel = subject ? getSubjectLabel(subject) : accountSubjectId
         code = `transfer_${accountSubjectId}`
         name = subjectLabel || tt("wm_transferKindBankGeneral", "일반 이체")
+      }
+    } else if (categoryMain === "tax") {
+      code = code || `auto_${withdrawalCategory}`
+      const autoName = getAutoPayeeName(withdrawalCategory)
+      name = name || autoName
+      if (!payeeName.trim() || name === autoName) {
+        name = defaultTaxRemittancePayeeName(memo, name)
       }
     } else {
       code = code || `auto_${withdrawalCategory}`
@@ -2367,7 +2374,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       }
       const withdrawalCategory = resolveWithdrawalCategory(categoryMain, categorySub || "withholding")
       const code = payeeCode.trim() || vendorCode.trim() || `auto_${withdrawalCategory}`
-      const name = payeeName.trim() || getAutoPayeeName(withdrawalCategory)
+      const autoName = getAutoPayeeName(withdrawalCategory)
+      const name = defaultTaxRemittancePayeeName(memo, payeeName.trim() || autoName)
       setSaving(true)
       try {
         const addRes = await addExpenseAccrual({

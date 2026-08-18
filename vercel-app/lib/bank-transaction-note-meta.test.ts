@@ -4,6 +4,7 @@ import {
   bankNoteUserDisplayText,
   composeBankNoteForExpenseAccrualLink,
   composeBankNoteWithCategoryAndOptionalAccrualPrefix,
+  defaultTaxRemittancePayeeName,
   looksLikeTaxAuthorityRemittanceMemo,
   shouldExcludeBankWithdrawFromPlExpense,
   stripExpenseAccrualPrefix,
@@ -149,6 +150,8 @@ describe('shouldExcludeBankWithdrawFromPlExpense', () => {
       looksLikeTaxAuthorityRemittanceMemo('Payment | Paid for Ref X8126 REVENUE DEPARTMENT')
     ).toBe(true)
     expect(looksLikeTaxAuthorityRemittanceMemo('PND.53 08/2026')).toBe(true)
+    expect(defaultTaxRemittancePayeeName('PND.53', '원천세')).toBe('กรมสรรพากร')
+    expect(defaultTaxRemittancePayeeName('office rent', '원천세')).toBe('원천세')
     expect(
       shouldExcludeBankWithdrawFromPlExpense({
         note: null,
