@@ -1558,23 +1558,27 @@ export async function submitQrCart(params: {
         }
       })
   if (kitchenDelta.length) {
-    // 합계 계산보다 먼저 큐에 넣어, 손님 버튼 대기와 무관하게 주방이 먼저 나가게
-    void enqueueKitchenPrintJob({
-      storeCode: session.storeCode,
-      orderId: session.posOrderId,
-      orderNo: String(order.order_no || '').trim() || null,
-      source: 'qr_table_submit',
-      dedupeKey: `order:${session.posOrderId}:kitchen:qr:${Date.now()}`,
-      payload: {
-        action: 'update_order',
-        orderType: 'dine_in',
-        kitchenLines: kitchenDelta,
-        orderNo: String(order.order_no || '').trim(),
-        tableName: String(session.tableName || order.table_name || '').trim(),
-        memo: String(order.memo || '').trim(),
-        guestCount: Number(session.guestCount ?? order.guest_count ?? 0) || undefined,
-      },
-    }).catch((e) => console.error('qr_table_submit kitchen enqueue:', e))
+    // 합계 계산·pos_orders UPDATE 보다 먼저 큐에 넣어, 홀 화면보다 주방이 먼저 나가게
+    try {
+      await enqueueKitchenPrintJob({
+        storeCode: session.storeCode,
+        orderId: session.posOrderId,
+        orderNo: String(order.order_no || '').trim() || null,
+        source: 'qr_table_submit',
+        dedupeKey: `order:${session.posOrderId}:kitchen:qr:${Date.now()}`,
+        payload: {
+          action: 'update_order',
+          orderType: 'dine_in',
+          kitchenLines: kitchenDelta,
+          orderNo: String(order.order_no || '').trim(),
+          tableName: String(session.tableName || order.table_name || '').trim(),
+          memo: String(order.memo || '').trim(),
+          guestCount: Number(session.guestCount ?? order.guest_count ?? 0) || undefined,
+        },
+      })
+    } catch (e) {
+      console.error('qr_table_submit kitchen enqueue:', e)
+    }
   }
 
   const { subtotal, pricing } = await computeQrTableOrderFinancials(session.storeCode, nextItems)

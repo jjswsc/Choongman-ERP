@@ -140,27 +140,49 @@ export function posPrintJobsInsertChannelName(store: string): string {
   return `pos-print-jobs-insert-${String(store || '').trim()}`
 }
 
+function posPrintJobsStoreRealtimeFilter(store: string): string | undefined {
+  const s = String(store || '').trim()
+  if (!s) return undefined
+  // 공백·쉼표가 있으면 eq 필터가 이벤트를 놓친다. 그때는 테이블 전체 INSERT 후 클라이언트에서 매장 비교.
+  if (!/^[A-Za-z0-9._-]+$/.test(s)) return undefined
+  return `store_code=eq.${s}`
+}
+
 /** QR 주방 큐 INSERT — 주문 UI 갱신을 기다리지 않고 claim */
 export function subscribePosPrintJobsInsert(
   onInsert: () => void,
-  options?: { store?: string; onStatus?: PosOrdersRealtimeSubscribeOptions['onStatus'] }
+  options?: {
+    store?: string
+    storeCodes?: string[]
+    onStatus?: PosOrdersRealtimeSubscribeOptions['onStatus']
+  }
 ): RealtimeChannel | null {
   const supabase = getSupabaseClient()
   if (!supabase) return null
-  const store = String(options?.store || '').trim()
-  if (!store) return null
+  const stores = [
+    ...new Set(
+      [options?.store, ...(options?.storeCodes || [])]
+        .map((s) => String(s || '').trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ]
+  const primary = stores[0] || String(options?.store || '').trim()
+  if (!primary) return null
+  const filter = stores.length === 1 ? posPrintJobsStoreRealtimeFilter(primary) : undefined
   const channel = supabase
-    .channel(posPrintJobsInsertChannelName(store))
+    .channel(posPrintJobsInsertChannelName(primary))
     .on(
       'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
         table: 'pos_print_jobs',
-        filter: `store_code=eq.${store}`,
+        ...(filter ? { filter } : {}),
       },
       (payload) => {
         const row = (payload as { new?: Record<string, unknown> }).new
+        const rowStore = String(row?.store_code ?? '').trim().toLowerCase()
+        if (rowStore && stores.length > 0 && !stores.includes(rowStore)) return
         if (String(row?.job_type ?? '').trim() !== 'kitchen') return
         if (String(row?.status ?? '').trim() !== 'queued') return
         onInsert()

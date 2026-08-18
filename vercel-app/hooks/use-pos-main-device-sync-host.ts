@@ -566,10 +566,9 @@ export function usePosMainDeviceSyncHost(): void {
   const pokeKitchenPrintJobs = usePosKitchenPrintJobWorker({
     enabled: isMainPosDevice,
     storeCode,
+    storeCodes: currentStoreCodeVariants,
     kitchenOnOrder: autoPrint.kitchenOnOrder,
     autoprintCtxRef,
-    realtimeHealthyRef: realtimeChannelHealthyRef,
-    lastRealtimeEventAtRef: lastRealtimeOrderEventAtRef,
     pauseIntervalPollRef,
   })
 

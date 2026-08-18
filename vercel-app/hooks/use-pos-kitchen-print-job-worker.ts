@@ -16,12 +16,11 @@ import {
   kitchenLinesFromPrintJobPayload,
   kitchenPrintJobOrderFieldsFromPayload,
   MAIN_POS_KITCHEN_JOB_DRAIN_MAX,
-  MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS,
+  MAIN_POS_KITCHEN_JOB_POLL_MS,
+  MAIN_POS_KITCHEN_JOB_POLL_PAUSED_MS,
   MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS,
   resolveKitchenPrintJobDedupeKey,
-  resolveKitchenPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
-import { isMainPosRealtimeRecentlyActive } from '@/lib/pos-main-poll-interval'
 import { subscribePosPrintJobsInsert } from '@/lib/supabase-client'
 
 async function printClaimedKitchenJob(
@@ -77,20 +76,21 @@ async function printClaimedKitchenJob(
 
 /**
  * QR/원격 주문의 pos_print_jobs 를 메인 POS가 바로 claim·인쇄.
- * Realtime poke가 1차. 인터벌 claim은 끊김·무음 15s / 구독+최근이벤트 60s. 오픈 전·마감 후면 인터벌만 쉼.
+ * INSERT Realtime poke가 1차. 놓치면 2초마다 claim. 오픈 전·마감 후면 인터벌만 쉼.
  */
 export function usePosKitchenPrintJobWorker(opts: {
   enabled: boolean
   storeCode: string
+  storeCodes?: string[]
   kitchenOnOrder: boolean
   autoprintCtxRef: MutableRefObject<PosMainDeviceAutoprintCtx | null>
-  realtimeHealthyRef?: MutableRefObject<boolean>
-  lastRealtimeEventAtRef?: MutableRefObject<number>
   pauseIntervalPollRef?: MutableRefObject<boolean>
 }): () => void {
   const drainNowRef = useRef<() => void>(() => {})
   const inFlightRef = useRef(false)
   const pendingDrainRef = useRef(false)
+
+  const storeCodesKey = (opts.storeCodes || []).join('|')
 
   useEffect(() => {
     if (!opts.enabled || !opts.storeCode || !opts.kitchenOnOrder) {
@@ -149,21 +149,17 @@ export function usePosKitchenPrintJobWorker(opts: {
 
     drainNowRef.current = poke
     poke()
-    const jobsChannel = subscribePosPrintJobsInsert(() => {
-      if (!cancelled) poke()
-    }, { store: opts.storeCode })
+    const jobsChannel = subscribePosPrintJobsInsert(
+      () => {
+        if (!cancelled) poke()
+      },
+      { store: opts.storeCode, storeCodes: opts.storeCodes }
+    )
     let pollTimer = 0
     const scheduleNextPoll = () => {
       if (cancelled) return
       const paused = Boolean(opts.pauseIntervalPollRef?.current)
-      const delayMs = paused
-        ? MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS
-        : resolveKitchenPrintJobPollMs({
-            realtimeChannelHealthy: Boolean(opts.realtimeHealthyRef?.current),
-            realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(
-              Number(opts.lastRealtimeEventAtRef?.current || 0)
-            ),
-          })
+      const delayMs = paused ? MAIN_POS_KITCHEN_JOB_POLL_PAUSED_MS : MAIN_POS_KITCHEN_JOB_POLL_MS
       pollTimer = window.setTimeout(() => {
         if (!cancelled && !opts.pauseIntervalPollRef?.current) void drain()
         scheduleNextPoll()
@@ -181,10 +177,9 @@ export function usePosKitchenPrintJobWorker(opts: {
   }, [
     opts.enabled,
     opts.storeCode,
+    storeCodesKey,
     opts.kitchenOnOrder,
     opts.autoprintCtxRef,
-    opts.realtimeHealthyRef,
-    opts.lastRealtimeEventAtRef,
     opts.pauseIntervalPollRef,
   ])
 
