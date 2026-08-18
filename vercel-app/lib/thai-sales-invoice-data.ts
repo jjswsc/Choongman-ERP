@@ -16,7 +16,7 @@ export type ThaiSalesInvoiceLineInput = {
 
 /**
  * 태국 7% VAT 인보이스 HTML용 데이터 (출고 인쇄·미수금 Tax Invoice 공통).
- * documentType은 인쇄물 제목(영문 "Invoice" / "Tax Invoice/Receipt" 등)으로 넘긴다.
+ * documentType은 인쇄물 제목(영문 "Invoice/Tax invoice" / "Tax Invoice/Receipt" / "Receipt" 등)으로 넘긴다.
  */
 export function buildThaiSalesInvoiceData(params: {
   documentType: string
@@ -35,6 +35,8 @@ export function buildThaiSalesInvoiceData(params: {
   /** 인쇄 편집값 영구 저장용 source 식별자 */
   sourceRefType?: string
   sourceRefId?: number
+  /** 제목이 Receipt여도 Tax Invoice 순번을 유지할 때 "tax" */
+  docKind?: "invoice" | "tax"
   withholdingTaxAmount?: number
   withholdingTaxRate?: number | null
 }): InvoiceData {
@@ -117,6 +119,7 @@ export function buildThaiSalesInvoiceData(params: {
     stampImageUrl: stampBase ? `${stampBase}/company-stamp.png` : "/company-stamp.png",
     sourceRefType: params.sourceRefType,
     sourceRefId: params.sourceRefId,
+    ...(params.docKind ? { docKind: params.docKind } : {}),
     ...(Number(params.withholdingTaxAmount ?? 0) > 0
       ? {
           withholdingTaxAmount: Number(params.withholdingTaxAmount),

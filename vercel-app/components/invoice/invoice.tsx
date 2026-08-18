@@ -80,6 +80,11 @@ export interface InvoiceData {
   /** 인쇄 편집값 영구 저장용 source 식별자 */
   sourceRefType?: string
   sourceRefId?: number
+  /**
+   * 인쇄 override·문서번호 종류.
+   * 제목(documentType)이 Receipt여도 미수금 Tax Invoice 순번(IV.)을 유지하려면 "tax".
+   */
+  docKind?: "invoice" | "tax"
 }
 
 function formatCurrency(amount: number): string {

@@ -25,6 +25,7 @@ import {
   resolveTaxInvoiceSourceReferenceNo,
 } from "@/lib/tax-invoice-doc-no"
 import { collectOutboundInvoiceNosForPrintStatus } from "@/lib/outbound-invoice-print-status"
+import { isSalesTaxInvoicePrintDoc } from "@/lib/sales-tax-document-title"
 
 const STORAGE_KEY = "invoice-print-data"
 
@@ -80,7 +81,7 @@ function InvoicePrintLoadingLine() {
 }
 
 function isTaxInvoiceDoc(data: InvoiceData): boolean {
-  return /tax\s*invoice/i.test(data.documentType || "")
+  return isSalesTaxInvoicePrintDoc(data)
 }
 
 function normalizeDocKind(data: InvoiceData): "invoice" | "tax" {

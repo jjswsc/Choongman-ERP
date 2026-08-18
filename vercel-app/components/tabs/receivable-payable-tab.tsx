@@ -156,6 +156,10 @@ import {
   resolveTaxInvoiceSourceReferenceNo,
 } from "@/lib/tax-invoice-doc-no"
 import { resolveReceivableOrderNoDisplay, resolveReceivableTaxInvoiceDocNoDisplay } from "@/lib/receivable-invoice-format"
+import {
+  isReceivableAccrualCollected,
+  salesTaxPrintDocumentType,
+} from "@/lib/sales-tax-document-title"
 
 function renderReceivableLedgerDateCell(
   row: { ref_type?: string; trans_date?: string; amount?: number },
@@ -564,7 +568,9 @@ export function ReceivablePayableTab() {
         const referenceNo = normalizeTaxInvoiceReferenceNo(preferredReferenceNo, docNo)
         const data: InvoiceData = {
           ...buildThaiSalesInvoiceData({
-            documentType: "Tax Invoice/Receipt",
+            documentType: salesTaxPrintDocumentType(
+              isReceivableAccrualCollected(row, recItem.items || [])
+            ),
             documentNo: docNo,
             issueDate: dateStr,
             dueDate: dueDateStr,
@@ -574,6 +580,7 @@ export function ReceivablePayableTab() {
             invSettings: settings,
             sourceRefType: refType,
             sourceRefId: refId,
+            docKind: "tax",
             lines: items.map((it) => ({
               code: it.code,
               name: it.name,

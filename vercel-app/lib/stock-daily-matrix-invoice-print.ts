@@ -14,6 +14,7 @@ import {
   resolveInvoiceClientFromBillToCandidates,
 } from '@/lib/invoice-client-resolve'
 import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
+import { SALES_OUTBOUND_INVOICE_TITLE } from '@/lib/sales-tax-document-title'
 import type { InvoiceData } from '@/components/invoice'
 
 export async function openStockDailyMatrixInvoicePrint(
@@ -76,7 +77,7 @@ export async function openStockDailyMatrixInvoicePrint(
   const isForce = !(oid > 0) && Number.isFinite(forceStockLogId) && forceStockLogId > 0
 
   const invoiceData: InvoiceData = buildThaiSalesInvoiceData({
-    documentType: 'Invoice',
+    documentType: SALES_OUTBOUND_INVOICE_TITLE,
     documentNo: docNo,
     issueDate: dateStr,
     dueDate: dateStr,
@@ -84,6 +85,7 @@ export async function openStockDailyMatrixInvoicePrint(
     company,
     client,
     invSettings: settings,
+    docKind: 'invoice',
     sourceRefType: oid > 0 ? 'Order' : isForce ? 'ForceOutbound' : undefined,
     sourceRefId: oid > 0 ? oid : isForce ? forceStockLogId : undefined,
     lines: (group.items || []).map((it) => ({

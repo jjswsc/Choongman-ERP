@@ -29,6 +29,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
+import { SALES_OUTBOUND_INVOICE_TITLE } from "@/lib/sales-tax-document-title"
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
 import { collectOutboundInvoiceNosForPrintStatus } from "@/lib/outbound-invoice-print-status"
 import {
@@ -2207,7 +2208,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       (group.items || []).map((it) => String(it.referenceNo || "").trim()).find(Boolean) ||
       ""
     return buildThaiSalesInvoiceData({
-      documentType: "Invoice",
+      documentType: SALES_OUTBOUND_INVOICE_TITLE,
       documentNo: docNo,
       issueDate: dateStr,
       dueDate: dateStr,
@@ -2216,6 +2217,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       company,
       client,
       invSettings,
+      docKind: "invoice",
       sourceRefType:
         Number.isFinite(maybeOrderId) && maybeOrderId > 0
           ? "Order"
