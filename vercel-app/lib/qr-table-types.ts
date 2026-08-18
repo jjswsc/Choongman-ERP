@@ -1,5 +1,7 @@
 /** Shared types for QR table order + buffet (client + server). */
 
+import { parseBangkokWallClockToMs } from '@/lib/bangkok-time'
+
 export type QrOrderMode = 'buffet' | 'a_la_carte' | 'both'
 export type QrPaymentMode = 'prepay' | 'postpay' | 'guest_choice'
 export type QrResolvedPaymentMode = 'prepay' | 'postpay'
@@ -94,6 +96,27 @@ export function isQrTableGuestOrderLine(it: { source?: unknown; id?: unknown } |
 }
 
 /**
+ * 결제 금액이 있으면 주방 추가출력을 막는다(정산 UPDATE를 추가주문으로 오인 방지).
+ * QR 테이블은 입장료 선결제 후에도 주방에 음식을 보내야 하므로 예외.
+ */
+export function shouldSkipDineInKitchenAddonBecausePayment(
+  paymentSum: number,
+  createdBy?: string | null
+): boolean {
+  if (!(Number(paymentSum) > 0)) return false
+  return !isQrTableCreatedBy(createdBy)
+}
+
+export function orderLooksLikeQrTableGuestOrder(
+  createdBy?: string | null,
+  items?: Array<{ source?: unknown; id?: unknown }> | null
+): boolean {
+  if (isQrTableCreatedBy(createdBy)) return true
+  if (!Array.isArray(items) || items.length === 0) return false
+  return items.some(isQrTableGuestOrderLine)
+}
+
+/**
  * 손님 폰 QR 추가주문은 홀 체크빌을 찍지 않고 주방만 출력.
  * 델타가 비었거나 POS 직원이 담은 줄이 섞이면 false.
  */
@@ -114,12 +137,8 @@ export const QR_GUEST_ADDON_AUTOPRINT_WINDOW_MS = 90_000
 const QR_LINE_ID_MS_RE = /^qr-.+-(\d{12,13})-[a-z0-9]+$/i
 
 function qrGuestLineAddedAtMs(it: { id?: unknown; addedAt?: unknown }): number | null {
-  const rawAdded = String(it.addedAt ?? '').trim()
-  const wall = rawAdded.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/)
-  if (wall) {
-    const d = new Date(`${wall[1]}T${wall[2]}+07:00`)
-    if (!Number.isNaN(d.getTime())) return d.getTime()
-  }
+  const fromField = parseBangkokWallClockToMs(String(it.addedAt ?? '').trim())
+  if (fromField != null) return fromField
   const id = String(it.id ?? '').trim()
   const m = id.match(QR_LINE_ID_MS_RE)
   if (!m) return null

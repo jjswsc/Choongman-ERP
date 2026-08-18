@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 import {
   inferPrevQtySnapshotExcludingRecentQrGuestLines,
+  orderLooksLikeQrTableGuestOrder,
+  shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
 } from '@/lib/qr-table-types'
 
@@ -25,6 +27,26 @@ describe('isQrBuffetPackageKitchenSkipLine', () => {
         buffetIncluded: true,
       })
     ).toBe(false)
+  })
+})
+
+describe('shouldSkipDineInKitchenAddonBecausePayment', () => {
+  it('blocks kitchen addon when payment is already on a staff POS order', () => {
+    expect(shouldSkipDineInKitchenAddonBecausePayment(299, 'pos-cashier')).toBe(true)
+    expect(shouldSkipDineInKitchenAddonBecausePayment(299, '')).toBe(true)
+  })
+
+  it('allows kitchen addon after QR buffet entry is prepaid', () => {
+    expect(shouldSkipDineInKitchenAddonBecausePayment(598, 'qr_table:12')).toBe(false)
+    expect(shouldSkipDineInKitchenAddonBecausePayment(0, 'pos-cashier')).toBe(false)
+  })
+})
+
+describe('orderLooksLikeQrTableGuestOrder', () => {
+  it('detects QR table orders from createdBy or guest lines', () => {
+    expect(orderLooksLikeQrTableGuestOrder('qr_table:9', [])).toBe(true)
+    expect(orderLooksLikeQrTableGuestOrder(null, [{ id: 'qr-9-1-1', source: 'qr_table' }])).toBe(true)
+    expect(orderLooksLikeQrTableGuestOrder('pos', [{ id: 'cart-1' }])).toBe(false)
   })
 })
 

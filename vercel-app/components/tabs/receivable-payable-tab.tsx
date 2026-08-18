@@ -1933,7 +1933,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
               {canSelectStores && (
                 <TabsTrigger value="borrowings" className={adminTabsTriggerCn}>
                   <Landmark className={adminTabsIconCn} aria-hidden />
-                  {t("borrowingsTab") || "차입금"}
+                  {tt("borrowingsTab", "차입금")}
                 </TabsTrigger>
               )}
             </TabsList>
@@ -3290,7 +3290,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         </TabsContent>
       </Tabs>
 
-      {!(tab === "receivable" && isManagerOnly) && (
+      {tab !== "borrowings" && !(tab === "receivable" && isManagerOnly) && (
         <Card>
           <CardContent className="pt-4">
             <div className="flex flex-wrap items-center justify-between gap-4 mb-3">

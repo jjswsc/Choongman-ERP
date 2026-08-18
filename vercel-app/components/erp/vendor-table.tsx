@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tOr, useT } from "@/lib/i18n"
 import {
   Search,
   Pencil,
@@ -109,7 +109,7 @@ export function VendorTable({
             <SelectItem value="all">{t("vendorTypeAll")}</SelectItem>
             <SelectItem value="purchase">{t("vendorTypePurchase")}</SelectItem>
             <SelectItem value="sales">{t("vendorTypeSales")}</SelectItem>
-            <SelectItem value="related">{t("vendorTypeRelated") || "관련당사자"}</SelectItem>
+            <SelectItem value="related">{tOr(t, "vendorTypeRelated", "관련당사자")}</SelectItem>
           </SelectContent>
         </Select>
         <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={onSearch}>
@@ -198,7 +198,7 @@ export function VendorTable({
                         : vendor.type === "sales"
                           ? t("vendorTypeSales")
                           : vendor.type === "related"
-                            ? t("vendorTypeRelated") || "관련당사자"
+                            ? tOr(t, "vendorTypeRelated", "관련당사자")
                             : t("vendorTypeBoth")}
                     </span>
                   </td>

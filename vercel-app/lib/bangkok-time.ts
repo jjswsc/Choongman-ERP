@@ -19,6 +19,34 @@ export function getBangkokDateTimeString(base: Date = new Date()): string {
   return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
 }
 
+/**
+ * 시각 문자열 → epoch ms. 타임존 없는 `YYYY-MM-DD HH:mm:ss` 와
+ * timestamptz에 방콕 벽시계를 naive로 넣은 뒤 PostgREST가 돌려주는 `...Z` / `+00:00`
+ * 은 시계 숫자를 Asia/Bangkok 으로 본다(+7). `+07:00` 등 0이 아닌 오프셋은 그대로 파싱.
+ *
+ * QR 세션 `created_at`(timestamptz) 에 `getBangkokDateTimeString()` 을 넣는 경로와 맞춘다.
+ * 진짜 UTC instant(`02:31Z` = 방콕 09:31)를 이 함수에 넣으면 안 된다.
+ */
+export function parseBangkokWallClockToMs(raw: string | null | undefined): number | null {
+  const v = String(raw || '').trim()
+  if (!v) return null
+  const m = v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/)
+  if (m) {
+    const explicitOffset = v.match(/([+-])(\d{2}):?(\d{2})$/)
+    const isUtcZ =
+      /[zZ]$/.test(v) ||
+      (explicitOffset != null && explicitOffset[2] === '00' && explicitOffset[3] === '00')
+    if (!explicitOffset || isUtcZ) {
+      const d = new Date(`${m[1]}T${m[2]}+07:00`)
+      return Number.isNaN(d.getTime()) ? null : d.getTime()
+    }
+    const d = new Date(v)
+    return Number.isNaN(d.getTime()) ? null : d.getTime()
+  }
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d.getTime()
+}
+
 /** `YYYY-MM-DD HH:mm:ss`·ISO(+07:00) 등 혼재 입력을 문자열 비교용 키로 통일 */
 export function normalizeBangkokDateTimeCompareKey(raw: string | null | undefined): string {
   const v = String(raw || '').trim()

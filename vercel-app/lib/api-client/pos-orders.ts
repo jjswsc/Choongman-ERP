@@ -98,6 +98,7 @@ export interface PosOrder {
   vat: number
   total: number
   status: string
+  createdBy?: string
   createdAt: string
   /** 결제·수정 시각(DB updated_at). 결제 완료 시각 추정에 사용 */
   updatedAt?: string

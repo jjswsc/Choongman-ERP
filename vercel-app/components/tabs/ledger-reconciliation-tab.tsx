@@ -11,7 +11,7 @@ import {
   AccountingTableShell,
 } from "@/components/admin/accounting-result-primitives"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tOr, useT } from "@/lib/i18n"
 import { getSubledgerGlReconciliation, type SubledgerGlReconciliationData } from "@/lib/api-client"
 import {
   accountingResultTdCn,
@@ -127,10 +127,10 @@ export function LedgerReconciliationTab({
         </Card>
         <Card className="border-border/80 shadow-sm">
           <CardContent className="pt-4 space-y-2">
-            <div className="text-sm font-semibold">{t("bs_borrowings") || "차입금"}</div>
-            <Row label={t("recon_gl2150") || "분개 2150"} value={data.borrowings?.glAccount2150 ?? 0} />
+            <div className="text-sm font-semibold">{tOr(t, "bs_borrowings", "차입금")}</div>
+            <Row label={tOr(t, "recon_gl2150", "분개 2150")} value={data.borrowings?.glAccount2150 ?? 0} />
             <Row
-              label={t("recon_subledgerBorrow") || "보조원장 차입"}
+              label={tOr(t, "recon_subledgerBorrow", "보조원장 차입")}
               value={data.borrowings?.subledgerTotal ?? 0}
             />
             <Row label={t("recon_difference")} value={diffBorrow} highlight={!borrowOk} ok={borrowOk} />

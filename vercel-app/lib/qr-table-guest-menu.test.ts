@@ -51,12 +51,32 @@ describe('groupQrGuestSentLinesByTime', () => {
     expect(groups[0].timeLabel).toBe('13:30:07')
   })
 
-  it('converts UTC ISO fallback to Bangkok clock', () => {
+  it('treats timestamptz Z fallback as Bangkok wall clock (not UTC+7)', () => {
     const groups = groupQrGuestSentLinesByTime(
       [{ id: 'buffet-entry-9', name: '[Buffet] Buffet 299 × 2', qty: 2, price: 299, isBuffetEntry: true }],
-      '2026-08-13T06:30:07.000Z'
+      '2026-08-18T09:31:04.000Z'
     )
-    expect(groups[0].timeLabel).toBe('13:30:07')
+    expect(groups[0].timeLabel).toBe('09:31:04')
+  })
+
+  it('keeps buffet as round 1 when session createdAt comes back as Z', () => {
+    const groups = groupQrGuestSentLinesByTime(
+      [
+        { name: 'Chicken สันในไก่', qty: 4, price: 0, buffetIncluded: true, addedAt: '2026-08-18 09:34:19' },
+        { name: 'Chicken ไก่หมัก', qty: 2, price: 0, buffetIncluded: true, addedAt: '2026-08-18 09:38:50' },
+        { name: 'Coke Zero', qty: 2, price: 40, buffetIncluded: false, addedAt: '2026-08-18 09:40:18' },
+        {
+          id: 'buffet-entry-1',
+          name: '[Buffet] Buffet 299 x 2',
+          qty: 2,
+          price: 299,
+          isBuffetEntry: true,
+        },
+      ],
+      '2026-08-18T09:31:04.000Z'
+    )
+    expect(groups.map((g) => g.timeLabel)).toEqual(['09:31:04', '09:34:19', '09:38:50', '09:40:18'])
+    expect(groups[0].lines[0].name).toBe('[Buffet] Buffet 299 x 2')
   })
 })
 

@@ -1951,7 +1951,8 @@ export function BankTransactionsTab() {
       revenue_qr: t("bankRevenueQr") || "QR/Transfer",
       revenue_cash: t("bankRevenueCash") || "Cash",
       receivable_receive: t("bankCategoryReceivableReceive") || "Sales Collection",
-      loan: t("bankCategoryLoan") || "Loan",
+      loan: t("bankCategoryLoanBorrow") || "차입 수령",
+      loan_borrow: t("bankCategoryLoanBorrow") || "차입 수령",
       advance: t("bankCategoryAdvance") || "Advance",
       unclassified: t("bankCategoryUnclassified") || "Unclassified",
       correction: t("bankCategoryCorrection") || "Correction",
@@ -1961,7 +1962,7 @@ export function BankTransactionsTab() {
       expense: t("bankCategoryExpense") || "Expense",
       fixed: t("bankCategoryExpense") || "Expense",
       purchase_payment: t("bankCategoryPurchasePayment") || "Purchase Payment",
-      loan: t("bankCategoryLoan") || "Loan",
+      loan: t("wm_loan_repayment") || t("bankCategoryLoan") || "Loan",
       advance: t("bankCategoryAdvance") || "Advance",
       unclassified: t("bankCategoryUnclassified") || "Unclassified",
       correction: t("bankCategoryCorrection") || "Correction",
@@ -2881,7 +2882,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                                       <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
                               <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                              <SelectItem value="loan">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
                                       <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                       <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                       <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
@@ -3562,7 +3563,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                                   <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
                               <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                              <SelectItem value="loan">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
                                   <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                   <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                   <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
@@ -3954,7 +3955,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                               <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
                               <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                              <SelectItem value="loan">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
                               <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                               <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                               <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
@@ -4012,9 +4013,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         <tbody>
                           {memoRules.map((rule) => {
                             const isEditing = editingMemoRuleId === (rule.id ?? 0)
-                            const catLabel = rule.transType === "deposit"
-                              ? (rule.category === "revenue_delivery" ? (t("bankRevenueDelivery") || "배달앱") : rule.category === "revenue_card" ? (t("bankRevenueCard") || "카드") : rule.category === "revenue_qr" ? (t("bankRevenueQr") || "QR/이체") : rule.category === "revenue_cash" ? (t("bankRevenueCash") || "현금") : rule.category === "receivable_receive" ? (t("bankCategoryReceivableReceive") || "매출 수령") : rule.category)
-                              : (rule.category === "transfer" ? t("bankCategoryTransfer") : rule.category === "expense" || rule.category === "fixed" ? t("bankCategoryExpense") : rule.category === "purchase_payment" ? (t("bankCategoryPurchasePayment") || "매입 대금") : rule.category)
+                            const catLabel = getCategoryLabel(String(rule.category || ""), rule.transType)
                             const sub = (rule.transType === "deposit" ? revenueAccountOptions : accountSubjectOptions).find((a) => a.id === rule.accountSubjectId)
                             return (
                               <tr key={rule.id} className={`border-t ${isEditing ? "bg-primary/5" : ""}`}>
@@ -4049,7 +4048,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                             <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                                             <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
                               <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                              <SelectItem value="loan">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
                                             <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                             <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                             <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>

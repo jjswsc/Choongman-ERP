@@ -1,6 +1,10 @@
 /** QR 손님 앱 — 이미 주방으로 보낸 라인 집계 (표시용). */
 
-import { getBangkokDateTimeString, normalizeBangkokDateTimeCompareKey } from '@/lib/bangkok-time'
+import {
+  getBangkokDateTimeString,
+  normalizeBangkokDateTimeCompareKey,
+  parseBangkokWallClockToMs,
+} from '@/lib/bangkok-time'
 
 export type QrGuestSentLine = {
   name: string
@@ -74,23 +78,6 @@ export function aggregateQrGuestSentLines(
   return [...map.values()]
 }
 
-function bangkokWallToMs(raw: string | null | undefined): number | null {
-  const v = String(raw || '').trim()
-  if (!v) return null
-  const hasExplicitTz = /[zZ]$/.test(v) || /[+-]\d{2}:?\d{2}$/.test(v)
-  if (hasExplicitTz) {
-    const d = new Date(v)
-    return Number.isNaN(d.getTime()) ? null : d.getTime()
-  }
-  const m = v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/)
-  if (m) {
-    const d = new Date(`${m[1]}T${m[2]}+07:00`)
-    return Number.isNaN(d.getTime()) ? null : d.getTime()
-  }
-  const d = new Date(v)
-  return Number.isNaN(d.getTime()) ? null : d.getTime()
-}
-
 function isBuffetEntryLine(raw: QrGuestSentLineInput): boolean {
   if (raw.isBuffetEntry === true) return true
   return String(raw.id || '').trim().toLowerCase().startsWith('buffet-entry-')
@@ -101,7 +88,7 @@ export function resolveQrGuestLineAddedAtMs(
   raw: QrGuestSentLineInput,
   fallbackCreatedAt?: string | null
 ): number | null {
-  const fromField = bangkokWallToMs(String(raw.addedAt || '').trim())
+  const fromField = parseBangkokWallClockToMs(String(raw.addedAt || '').trim())
   if (fromField != null) return fromField
   const id = String(raw.id || '').trim()
   const m = id.match(QR_LINE_ID_MS_RE)
@@ -109,7 +96,7 @@ export function resolveQrGuestLineAddedAtMs(
     const n = Number(m[1])
     if (Number.isFinite(n) && n > 1e12) return n
   }
-  if (isBuffetEntryLine(raw)) return bangkokWallToMs(fallbackCreatedAt)
+  if (isBuffetEntryLine(raw)) return parseBangkokWallClockToMs(fallbackCreatedAt)
   return null
 }
 

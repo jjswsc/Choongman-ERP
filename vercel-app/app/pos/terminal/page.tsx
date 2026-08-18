@@ -168,7 +168,12 @@ import {
   resolveDineInKitchenLinesForAddSubmit,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
-import { shouldSkipHallAutoprintForQrGuestAddon } from '@/lib/qr-table-types'
+import {
+  inferPrevQtySnapshotExcludingRecentQrGuestLines,
+  orderLooksLikeQrTableGuestOrder,
+  shouldSkipDineInKitchenAddonBecausePayment,
+  shouldSkipHallAutoprintForQrGuestAddon,
+} from '@/lib/qr-table-types'
 import { usePosMainDeviceSyncOwnedByLayout } from '@/hooks/use-pos-main-device-sync-owned-by-layout'
 import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
 import {
@@ -5250,10 +5255,16 @@ export default function PosTerminalPage() {
       if (inferredOrderType !== 'dine_in') return
       /**
        * 결제(updatePosOrder + status 반영) UPDATE는 주방 추가주문 출력 대상이 아님.
-       * - 결제 직전 pending/cooking 상태에서도 payment_* 값이 먼저 반영될 수 있어
-       *   "추가 주문"으로 오인해 주방지가 한 번 더 나갈 수 있다.
+       * QR 테이블은 입장료 선결제(payment_qr > 0) 후에도 음식을 주방에 보내야 한다.
        */
-      if (posOrderRowPaymentSum(row) > 0) return
+      if (
+        shouldSkipDineInKitchenAddonBecausePayment(
+          posOrderRowPaymentSum(row),
+          String(row.created_by ?? '')
+        )
+      ) {
+        return
+      }
       if (isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
       const st = String(row.status ?? '').trim().toLowerCase()
       if (st === 'completed' || st === 'cancelled' || st === 'canceled') return
@@ -5303,6 +5314,14 @@ export default function PosTerminalPage() {
             logPosPrintDebug('realtime_update_dine_in_prev_from_old_row', { orderId })
           }
         }
+      }
+      if (!prevQtyById) {
+        prevQtyById =
+          inferPrevQtySnapshotExcludingRecentQrGuestLines({
+            items,
+            newQtyById,
+            resolveKey: (it) => resolveDineInSnapshotItemKey(it),
+          }) ?? undefined
       }
       if (!prevQtyById) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
@@ -5786,12 +5805,17 @@ export default function PosTerminalPage() {
                 const statusLower = String(o.status ?? '').trim().toLowerCase()
                 if (statusLower === 'completed' || statusLower === 'cancelled' || statusLower === 'canceled') continue
                 if (isPosOrderPaidLikeStatus(statusLower)) continue
-                if (posOrderPaymentSum(o) > 0) continue
+                if (
+                  posOrderPaymentSum(o) > 0 &&
+                  !orderLooksLikeQrTableGuestOrder(o.createdBy, o.items)
+                ) {
+                  continue
+                }
                 const items = (o.items || []).map((it) =>
                   mapPosOrderItemForKitchenDelta(it as unknown as Record<string, unknown>)
                 )
                 if (!items.length) continue
-                const prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(oid)
+                let prevQtyById = dineInRemoteItemQtySnapshotRef.current.get(oid)
                 const newQtyById = buildDineInQtySnapshot(items)
                 if (newQtyById.size === 0) continue
                 const suppressUntil = mainPosSelfDineInUpdateSuppressUntilRef.current.get(oid)
@@ -5802,6 +5826,14 @@ export default function PosTerminalPage() {
                     continue
                   }
                   mainPosSelfDineInUpdateSuppressUntilRef.current.delete(oid)
+                }
+                if (!prevQtyById) {
+                  prevQtyById =
+                    inferPrevQtySnapshotExcludingRecentQrGuestLines({
+                      items,
+                      newQtyById,
+                      resolveKey: (it) => resolveDineInSnapshotItemKey(it),
+                    }) ?? undefined
                 }
                 if (!prevQtyById) {
                   dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)

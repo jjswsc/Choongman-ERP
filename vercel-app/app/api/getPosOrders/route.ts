@@ -704,6 +704,7 @@ export async function GET(request: NextRequest) {
           vat: Number(r.vat) ?? 0,
           total: Number(r.total) ?? 0,
           status: String(r.status ?? 'pending'),
+          createdBy: String((r as { created_by?: string | null }).created_by ?? ''),
           createdAt: String(r.created_at ?? ''),
           updatedAt: String(r.updated_at ?? ''),
           paidAt: String(r.paid_at ?? ''),

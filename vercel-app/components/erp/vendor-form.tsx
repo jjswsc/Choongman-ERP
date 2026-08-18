@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tOr, useT } from "@/lib/i18n"
 import {
   Save,
   FilePlus,
@@ -276,7 +276,7 @@ export function VendorForm({
               <SelectItem value="purchase">{t("vendorTypePurchase")}</SelectItem>
               <SelectItem value="sales">{t("vendorTypeSales")}</SelectItem>
               <SelectItem value="both">{t("vendorTypeBoth")}</SelectItem>
-              <SelectItem value="related">{t("vendorTypeRelated") || "관련당사자"}</SelectItem>
+              <SelectItem value="related">{tOr(t, "vendorTypeRelated", "관련당사자")}</SelectItem>
             </SelectContent>
           </Select>
         </div>

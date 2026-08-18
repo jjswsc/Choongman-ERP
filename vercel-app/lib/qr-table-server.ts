@@ -1,6 +1,10 @@
 import 'server-only'
 
-import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
+import {
+  getBangkokDateTimeString,
+  getBangkokTodayDateString,
+  parseBangkokWallClockToMs,
+} from '@/lib/bangkok-time'
 import { generateMemberPortalKbankQr } from '@/lib/member-portal-kbank-qr'
 import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
 import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
@@ -599,7 +603,7 @@ export async function requireQrGuestSession(
 }
 
 function sessionAgeMinutes(createdAt: string): number {
-  const t = Date.parse(String(createdAt || ''))
+  const t = parseBangkokWallClockToMs(createdAt) ?? Date.parse(String(createdAt || ''))
   if (!Number.isFinite(t)) return 0
   return Math.max(0, (Date.now() - t) / 60000)
 }

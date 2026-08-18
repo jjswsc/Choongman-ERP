@@ -14,7 +14,7 @@ import {
 import { Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tOr, useT } from "@/lib/i18n"
 import {
   buildFinancialStatementFranchiseStoreOptions,
   isFinancialStatementStoreNone,
@@ -417,10 +417,10 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
       { key: "cash", label: t("bs_cashAndBanks"), pick: (m: BsMetrics) => m.cash },
       { key: "inv", label: t("bs_inventory"), pick: (m: BsMetrics) => m.inv },
       { key: "rec", label: t("bs_receivables"), pick: (m: BsMetrics) => m.rec },
-      { key: "loanRec", label: t("bs_loansReceivable") || "대여금", pick: (m: BsMetrics) => m.loanRec },
+      { key: "loanRec", label: tOr(t, "bs_loansReceivable", "대여금"), pick: (m: BsMetrics) => m.loanRec },
       { key: "assets", label: `${t("bs_assets")} (${t("bs_total")})`, pick: (m: BsMetrics) => m.assets },
       { key: "pay", label: t("bs_payables"), pick: (m: BsMetrics) => m.pay },
-      { key: "borrow", label: t("bs_borrowings") || "차입금", pick: (m: BsMetrics) => m.borrow },
+      { key: "borrow", label: tOr(t, "bs_borrowings", "차입금"), pick: (m: BsMetrics) => m.borrow },
       { key: "liab", label: `${t("bs_liabilities")} (${t("bs_total")})`, pick: (m: BsMetrics) => m.liab },
       { key: "eq", label: `${t("bs_equity")} (${t("bs_total")})`, pick: (m: BsMetrics) => m.eq },
       { key: "chk", label: t("bs_balanceCheck"), pick: (m: BsMetrics) => m.chk },
@@ -696,7 +696,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                             </>
                           ) : null}
                           <div className={accountingBsLineRowCn}>
-                            <span className={accountingBsLineLabelCn}>{t("bs_loansReceivable") || "대여금"}</span>
+                            <span className={accountingBsLineLabelCn}>{tOr(t, "bs_loansReceivable", "대여금")}</span>
                             <span className={accountingBsLineValueCn}>
                               {formatBaht(data.assets.loansReceivable ?? data.ledgerBreakdown?.glAccount1150 ?? 0)}
                             </span>
@@ -732,7 +732,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                             </>
                           ) : null}
                           <div className={accountingBsLineRowCn}>
-                            <span className={accountingBsLineLabelCn}>{t("bs_borrowings") || "차입금"}</span>
+                            <span className={accountingBsLineLabelCn}>{tOr(t, "bs_borrowings", "차입금")}</span>
                             <span className={accountingBsLineValueCn}>
                               {formatBaht(data.liabilities.borrowings ?? 0)}
                             </span>
@@ -741,7 +741,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                             <>
                               <div className={accountingBsSubLineRowCn}>
                                 <span className={accountingBsSubLineLabelCn}>
-                                  {t("bs_borrowingsGl2150") || "차입금 (분개 2150)"}
+                                  {tOr(t, "bs_borrowingsGl2150", "차입금 (분개 2150)")}
                                 </span>
                                 <span className={accountingBsSubLineValueCn}>
                                   {formatBaht(data.ledgerBreakdown.glAccount2150 ?? 0)}
@@ -749,7 +749,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                               </div>
                               <div className={accountingBsSubLineRowCn}>
                                 <span className={accountingBsSubLineLabelCn}>
-                                  {t("bs_borrowingsSubledger") || "보조원장 차입"}
+                                  {tOr(t, "bs_borrowingsSubledger", "보조원장 차입")}
                                 </span>
                                 <span className={accountingBsSubLineValueCn}>
                                   {formatBaht(data.ledgerBreakdown.subledgerBorrowings ?? 0)}

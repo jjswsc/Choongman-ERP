@@ -254,7 +254,7 @@ function mergeAccountingAdmin(
 }
 
 export const I18N_ACCOUNTING_ADMIN_KO = pack({
-  receivablePayableSub: '매장·거래처 미수·미지급 잔액 조회, 수금·지급 입력, 세금계산서·인보이스 발행',
+  receivablePayableSub: '매장·거래처 미수·미지급 잔액 조회, 수금·지급 입력, 임원 차입금, 세금계산서·인보이스 발행',
   bankTransactionsSub: '통장 입출금·CSV 가져오기·적요 규칙·분개·지출·미수 연동',
   expenseManagementSub: '지출 발생·승인·지급예정·은행 출금 연결·카드·지출 검색',
   pettyCashSub: '매장·본사 시재 입출금, 거래처·계정과목·VAT·증빙 관리',
@@ -498,7 +498,7 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
-  receivablePayableSub: 'Receivable/payable balances, collections, payments, tax invoices',
+  receivablePayableSub: 'Receivable/payable balances, collections, payments, officer borrowings, tax invoices',
   bankTransactionsSub: 'Bank deposits/withdrawals, CSV import, memo rules, journals, expense links',
   expenseManagementSub: 'Expense accrual, approval, payment plan, bank link, cards, search',
   pettyCashSub: 'Store/HQ petty cash, vendor, account subjects, VAT, receipts',
@@ -742,7 +742,7 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
-  receivablePayableSub: 'ลูกหนี้/เจ้าหนี้ รับชำระ จ่ายชำระ ใบกำกับภาษี',
+  receivablePayableSub: 'ลูกหนี้/เจ้าหนี้ รับชำระ จ่ายชำระ เงินกู้ยืมผู้บริหาร ใบกำกับภาษี',
   bankTransactionsSub: 'ธนาคาร ฝาก/ถอน CSV กฎบันทึก บัญชี',
   expenseManagementSub: 'ค่าใช้จ่าย อนุมัติ แผนจ่าย เชื่อมธนาคาร บัตร',
   pettyCashSub: 'เงินสดย่อย ซัพพลายเออร์ บัญชี VAT ใบเสร็จ',

@@ -141,6 +141,8 @@ import {
 } from '@/lib/pos-kitchen-dine-in-delta'
 import {
   inferPrevQtySnapshotExcludingRecentQrGuestLines,
+  orderLooksLikeQrTableGuestOrder,
+  shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
 } from '@/lib/qr-table-types'
 import { syncGrabCancelWatchSnapshot, applyGrabCancelWatchRealtimeRow } from '@/lib/pos-grab-cancel-watch'
@@ -1067,10 +1069,12 @@ export function usePosMainDeviceSyncHost(): void {
       })
       if (
         inferredOrderType === 'dine_in' &&
-        !isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
-        posOrderRowPaymentSum(row) <= 0
+        !isPosOrderPaidLikeStatus(String(row.status ?? ''))
       ) {
-        pokeKitchenPrintJobs()
+        const stPoke = String(row.status ?? '').trim().toLowerCase()
+        if (stPoke !== 'completed' && stPoke !== 'cancelled' && stPoke !== 'canceled') {
+          pokeKitchenPrintJobs()
+        }
       }
       const packagingOnlyUpdate = oldRow != null && isPosOrderItemsJsonPackagingOnlyUpdate(oldRow, row)
 
@@ -1201,7 +1205,14 @@ export function usePosMainDeviceSyncHost(): void {
       }
 
       if (packagingOnlyUpdate || inferredOrderType !== 'dine_in') return
-      if (posOrderRowPaymentSum(row) > 0) return
+      if (
+        shouldSkipDineInKitchenAddonBecausePayment(
+          posOrderRowPaymentSum(row),
+          String(row.created_by ?? '')
+        )
+      ) {
+        return
+      }
       if (isPosOrderPaidLikeStatus(String(row.status ?? ''))) return
       const st = String(row.status ?? '').trim().toLowerCase()
       if (st === 'completed' || st === 'cancelled' || st === 'canceled') return
@@ -1707,10 +1718,19 @@ export function usePosMainDeviceSyncHost(): void {
                   const statusLower = String(o.status ?? '').trim().toLowerCase()
                   if (statusLower === 'completed' || statusLower === 'cancelled' || statusLower === 'canceled') continue
                   if (isPosOrderPaidLikeStatus(statusLower)) continue
-                  if (posOrderPaymentSum(o) > 0) continue
+                  if (
+                    posOrderPaymentSum(o) > 0 &&
+                    !orderLooksLikeQrTableGuestOrder(o.createdBy, o.items)
+                  ) {
+                    continue
+                  }
                   const items = (o.items || []).map((it) => {
                     const note = String(it.note ?? '').trim()
-                    const menuId = String(it.menuId1 ?? '').trim()
+                    const menuId = String(
+                      (it as { menuId1?: string; menuId?: string }).menuId1 ??
+                        (it as { menuId?: string }).menuId ??
+                        ''
+                    ).trim()
                     const optionCode = String(it.optionCode1 ?? '').trim()
                     const displayName = resolveOrderItemDisplayName({
                       id: String(it.id ?? ''),
@@ -1843,7 +1863,7 @@ export function usePosMainDeviceSyncHost(): void {
                   if (printHallAddon) {
                     void printHallReceiptPayload(receiptPayloadRemote, autoprintCtx)
                   }
-                  /* 주방 추가 전표는 pos_print_jobs claim 워커가 담당 — 여기 800건 스캔에서 찍지 않음 */
+                  /* 주방 추가 전표는 pos_print_jobs + Realtime. 800건 스캔에서 찍지 않음(2026-08-17 폭주). */
                 }
               }
               if (needHeavyMetaScan || wantDineInAddonMetaScan) {
