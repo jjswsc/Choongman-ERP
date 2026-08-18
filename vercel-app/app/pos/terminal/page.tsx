@@ -7030,10 +7030,7 @@ export default function PosTerminalPage() {
         }
       }
       void (async () => {
-        const mirrorToEdc = shouldMirrorKbankQrToEdc(
-          qrDisplayMode,
-          Boolean(payment?.paymentQrShowOnEdc)
-        )
+        const mirrorToEdc = shouldMirrorKbankQrToEdc(qrDisplayMode)
         if (!mirrorToEdc) return
         const out = await pushKbankQrToLinkposDisplay({
           qrPayload: generatedQrPayload,
@@ -7043,10 +7040,14 @@ export default function PosTerminalPage() {
         })
         if (!out.success && out.message !== 'linkpos_card_api_disabled') {
           setLinkposQrBridgeStatus('failed')
+          await appAlert(
+            t('posQrShowOnEdcFallback') ||
+              'แสดงบนเครื่องไม่สำเร็จ — ใช้ QR บนจอแคชเชียร์ได้ครับ'
+          )
         }
       })()
       setCustomerDisplayPaymentMessage(
-        shouldMirrorKbankQrToEdc(qrDisplayMode, Boolean(payment?.paymentQrShowOnEdc))
+        shouldMirrorKbankQrToEdc(qrDisplayMode)
           ? t('posWaitingEdcQr') || 'กรุณาสแกน QR บนเครื่องรูดบัตรครับ'
           : (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
       )

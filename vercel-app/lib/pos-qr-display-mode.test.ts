@@ -15,15 +15,16 @@ describe('pos-qr-display-mode', () => {
 
   it('defaults pay tab by store mode on hybrid shell', () => {
     expect(defaultPayQrTypeForStore('cashier', true)).toBe('THAI_QR')
-    expect(defaultPayQrTypeForStore('edc_mirror', true)).toBe('EDC')
+    expect(defaultPayQrTypeForStore('edc_mirror', true)).toBe('THAI_QR')
+    expect(defaultPayQrTypeForStore('edc_native', true)).toBe('EDC')
     expect(defaultPayQrTypeForStore('edc_mirror', false)).toBe('THAI_QR')
   })
 
   it('gates native EDC QR vs KBank mirror', () => {
     expect(shouldUseLinkposNativeQr('edc_native', true)).toBe(true)
     expect(shouldUseLinkposNativeQr('edc_mirror', true)).toBe(false)
-    expect(shouldMirrorKbankQrToEdc('edc_mirror', false)).toBe(false)
-    expect(shouldMirrorKbankQrToEdc('edc_native', true)).toBe(true)
-    expect(shouldMirrorKbankQrToEdc('cashier', false)).toBe(false)
+    expect(shouldMirrorKbankQrToEdc('edc_mirror')).toBe(true)
+    expect(shouldMirrorKbankQrToEdc('edc_native')).toBe(false)
+    expect(shouldMirrorKbankQrToEdc('cashier')).toBe(false)
   })
 })

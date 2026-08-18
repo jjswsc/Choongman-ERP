@@ -897,13 +897,14 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         }
       }
       void (async () => {
+        if (!preferEdcDisplay) return
         const out = await pushKbankQrToLinkposDisplay({
           qrPayload: generatedQrPayload,
           amount: qrAmount,
           reference1: String(context?.orderType || '').slice(0, 20),
           reference2: String(context?.orderLabel || '').slice(0, 20),
         })
-        if (preferEdcDisplay && !out.success && out.message !== 'linkpos_card_api_disabled') {
+        if (!out.success && out.message !== 'linkpos_card_api_disabled') {
           await appAlert(
             t('posQrShowOnEdcFallback') ||
               'แสดงบนเครื่องไม่สำเร็จ — ใช้ QR บนจอแคชเชียร์ได้ครับ'

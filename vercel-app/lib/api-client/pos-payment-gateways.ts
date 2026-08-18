@@ -352,7 +352,7 @@ function normalizeLinkposQrPaymentSummary(
 }
 
 async function executeLinkposTransactionAction(
-  action: 'display_qr' | 'clear_qr',
+  action: 'display_qr' | 'display_qr_payload' | 'clear_qr',
   fields: Record<string, unknown>,
   timeoutMs: number
 ): Promise<{ success: boolean; source?: 'local'; message?: string }> {
@@ -384,7 +384,9 @@ async function executeLinkposTransactionAction(
   return {
     success: false,
     message:
-      action === 'display_qr' ? 'linkpos_display_qr_not_supported' : 'linkpos_clear_qr_not_supported',
+      action === 'display_qr' || action === 'display_qr_payload'
+        ? 'linkpos_display_qr_not_supported'
+        : 'linkpos_clear_qr_not_supported',
   }
 }
 
@@ -401,7 +403,8 @@ export async function executeLinkposDisplayQr(params: {
   // EDC 표시는 단말 응답이 늦을 수 있음
   const timeoutMs = Math.max(3000, Number(params.timeoutMs ?? 15000))
   return executeLinkposTransactionAction(
-    'display_qr',
+    // 구 Windows POS 브리지는 display_qr 가 tx70 폴백 → EDC Error -1. 신규 액션은 71만.
+    'display_qr_payload',
     {
       qrPayload,
       amount: Number(params.amount ?? 0),

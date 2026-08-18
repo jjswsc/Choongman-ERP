@@ -423,17 +423,17 @@ function createRuntime(userCfg) {
       return await sendTxAndParse('70', buildFrame({ txCode: '70', more: '1', fields }), timeoutMs)
     }
 
-    if (action === 'display_qr') {
+    if (action === 'display_qr' || action === 'display_qr_payload') {
       const qr = String(json.qrPayload || '').trim()
       if (!qr) return { success: false, error: 'qr_payload_required' }
       // KBank API QR 문자열을 단말에 표시 (펌웨어별 필드 지원이 다를 수 있어 순차 시도)
       const amountField = Number(json.amount) > 0
         ? [{ type: '40', data: normalizeAmount12(json.amount) }]
         : []
+      // tx70 은 단말 자체 QR 결제(Error Code -1 유발). KBank 문자열 표시는 71만 시도.
       const attempts = [
         { txCode: '71', fields: [{ type: 'QR', data: qr.slice(0, 900) }, ...amountField] },
         { txCode: '71', fields: [{ type: 'Q1', data: qr.slice(0, 900) }, ...amountField] },
-        { txCode: '70', fields: [{ type: 'QR', data: qr.slice(0, 900) }, ...amountField, { type: 'A1', data: '03' }] },
       ]
       let lastErr = 'display_qr_failed'
       for (const attempt of attempts) {
