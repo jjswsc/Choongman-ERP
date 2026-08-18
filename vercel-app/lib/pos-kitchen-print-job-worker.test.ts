@@ -8,7 +8,7 @@ import {
   resolveKitchenPrintJobDedupeKey,
   resolveKitchenPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
-import { posOrdersRealtimeChannelName } from '@/lib/supabase-client'
+import { posOrdersRealtimeChannelName, posPrintJobsInsertChannelName } from '@/lib/supabase-client'
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
 
 describe('MAIN_POS_KITCHEN_JOB_POLL_MS', () => {
@@ -98,6 +98,12 @@ describe('kitchenPrintJobOrderFieldsFromPayload', () => {
         deliveryAppCode: 'grab',
       })
     ).toMatchObject({ orderType: 'delivery', deliveryAppCode: 'grab' })
+  })
+})
+
+describe('posPrintJobsInsertChannelName', () => {
+  it('scopes the kitchen job channel per store', () => {
+    expect(posPrintJobsInsertChannelName('OMNI Rama 2')).toBe('pos-print-jobs-insert-OMNI Rama 2')
   })
 })
 

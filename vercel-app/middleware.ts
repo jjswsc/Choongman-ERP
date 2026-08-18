@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
+import { isOmniAppHost } from "@/lib/app-brand"
 
 const BRAND_HEADER = "x-app-brand"
 const BRAND_COOKIE = "__app_brand"
@@ -7,7 +8,7 @@ const BRAND_COOKIE = "__app_brand"
 /** Host 기준으로 판매(OmniFoodTech) vs 내부(충만) 구분 — env 없이도 도메인만으로 브랜드 적용 */
 function brandKeyFromHost(host: string): "omnifoodtech" | "choongman" {
   const h = host.trim().toLowerCase()
-  if (h.includes("omnifoodtech")) return "omnifoodtech"
+  if (isOmniAppHost(h)) return "omnifoodtech"
   const isLocal =
     h.startsWith("localhost") ||
     h.startsWith("127.0.0.1") ||

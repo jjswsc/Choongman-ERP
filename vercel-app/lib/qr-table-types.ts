@@ -127,6 +127,18 @@ export function shouldSkipHallAutoprintForQrGuestAddon(
   return deltaLines.every(isQrTableGuestOrderLine)
 }
 
+/** QR 손님 추가주문은 홀 전표·UI 깜빡임을 기다리지 않고 주방을 바로 보냄 */
+export function resolveDineInAddonKitchenDelayMs(opts: {
+  printHallAddon: boolean
+  skipQrGuestHall: boolean
+  afterReceiptToKitchenMs: number
+  kitchenOnlyDelayMs: number
+}): number {
+  if (opts.printHallAddon) return Math.max(0, opts.afterReceiptToKitchenMs)
+  if (opts.skipQrGuestHall) return 0
+  return Math.max(0, opts.kitchenOnlyDelayMs)
+}
+
 /**
  * Realtime UPDATE 는 old.items_json 이 비는 경우가 많다.
  * 이전 스냅샷이 없을 때, 방금 들어온 QR 손님 줄만 델타로 본다.

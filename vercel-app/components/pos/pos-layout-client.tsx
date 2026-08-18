@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth-context"
 import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate"
 import { PosMainDeviceSyncHost } from "@/components/pos/pos-main-device-sync-host"
 
@@ -165,6 +166,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   const { auth, initialized } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const brand = useAppBrandConfig()
   const isPosLoginPage = pathname === "/pos/login"
   const isFirstScreen = pathname === "/pos" || pathname === "/pos/"
   const isTerminalPage = pathname === "/pos/terminal"
@@ -177,6 +179,12 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   const [topBarHydrated, setTopBarHydrated] = useState(false)
   const [isTouchViewport, setIsTouchViewport] = useState(false)
   const saasModules = useSaasEnabledModules()
+
+  useEffect(() => {
+    const title = String(brand.posWindowTitle || "").trim()
+    if (!title || typeof document === "undefined") return
+    document.title = title
+  }, [brand.posWindowTitle])
 
   useEffect(() => {
     setShellUpdateAvailable(typeof window.cmPosShell?.checkForUpdates === "function")

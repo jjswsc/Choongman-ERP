@@ -171,6 +171,7 @@ import {
 import {
   inferPrevQtySnapshotExcludingRecentQrGuestLines,
   orderLooksLikeQrTableGuestOrder,
+  resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
 } from '@/lib/qr-table-types'
@@ -5363,16 +5364,16 @@ export default function PosTerminalPage() {
         return
       }
 
-      refetchCurrentStore()
-
       if (!wantRemoteDineInAdd) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        refetchCurrentStore()
         return
       }
 
       const shouldAutoPrintReceipt = autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
       if (!shouldAutoPrintReceipt && !autoPrintKitchenSlipOnOrder) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
+        refetchCurrentStore()
         return
       }
 
@@ -5463,16 +5464,22 @@ export default function PosTerminalPage() {
         })
       }
 
+      if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
+        const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
+          printHallAddon,
+          skipQrGuestHall,
+          afterReceiptToKitchenMs:
+            typeof window !== 'undefined' && window.cmPosShell
+              ? resolveAfterReceiptToKitchenDelayMs()
+              : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
+          kitchenOnlyDelayMs: KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS,
+        })
+        if (kitchenDelayMs <= 0) dispatchRemoteKitchen()
+        else setTimeout(dispatchRemoteKitchen, kitchenDelayMs)
+      }
+      refetchCurrentStore()
       if (printHallAddon) {
         void printReceiptNow(receiptPayloadRemote, null, false, undefined, true)
-      }
-      if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
-        const kitchenDelayMs = printHallAddon
-          ? typeof window !== 'undefined' && window.cmPosShell
-            ? resolveAfterReceiptToKitchenDelayMs()
-            : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-          : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
-        setTimeout(dispatchRemoteKitchen, kitchenDelayMs)
       }
     }
     const channels = currentStoreCodeVariants
@@ -5937,16 +5944,17 @@ export default function PosTerminalPage() {
                   orderId: oid,
                   changedCount: changedIds.length,
                 })
-                if (printHallAddon) {
-                  void printReceiptNow(receiptPayloadRemote, undefined, false, undefined, true)
-                }
                 if (wantMetaDineInAddonKitchen && kitchenCartLines.length > 0) {
-                  const kitchenDelayMs = printHallAddon
-                    ? typeof window !== 'undefined' && window.cmPosShell
-                      ? resolveAfterReceiptToKitchenDelayMs()
-                      : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-                    : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
-                  setTimeout(() => {
+                  const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
+                    printHallAddon,
+                    skipQrGuestHall,
+                    afterReceiptToKitchenMs:
+                      typeof window !== 'undefined' && window.cmPosShell
+                        ? resolveAfterReceiptToKitchenDelayMs()
+                        : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
+                    kitchenOnlyDelayMs: KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS,
+                  })
+                  const runPollKitchen = () => {
                     dispatchDineInAddonKitchenPrint({
                       kitchenCartLines,
                       dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(oid, kitchenCartLines, {
@@ -5959,7 +5967,12 @@ export default function PosTerminalPage() {
                       guestCount: Number(o.guestCount ?? 0) || undefined,
                       logEvent: 'poll_meta_remote_dine_in_add_kitchen',
                     })
-                  }, kitchenDelayMs)
+                  }
+                  if (kitchenDelayMs <= 0) runPollKitchen()
+                  else setTimeout(runPollKitchen, kitchenDelayMs)
+                }
+                if (printHallAddon) {
+                  void printReceiptNow(receiptPayloadRemote, undefined, false, undefined, true)
                 }
                 }
               }

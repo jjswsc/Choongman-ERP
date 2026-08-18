@@ -22,6 +22,7 @@ import {
   resolveKitchenPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
 import { isMainPosRealtimeRecentlyActive } from '@/lib/pos-main-poll-interval'
+import { subscribePosPrintJobsInsert } from '@/lib/supabase-client'
 
 async function printClaimedKitchenJob(
   job: PosKitchenPrintJobClaim,
@@ -148,6 +149,9 @@ export function usePosKitchenPrintJobWorker(opts: {
 
     drainNowRef.current = poke
     poke()
+    const jobsChannel = subscribePosPrintJobsInsert(() => {
+      if (!cancelled) poke()
+    }, { store: opts.storeCode })
     let pollTimer = 0
     const scheduleNextPoll = () => {
       if (cancelled) return
@@ -172,6 +176,7 @@ export function usePosKitchenPrintJobWorker(opts: {
       drainNowRef.current = () => {}
       window.clearTimeout(pollTimer)
       clearPokeTimers()
+      void jobsChannel?.unsubscribe()
     }
   }, [
     opts.enabled,

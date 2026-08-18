@@ -1,6 +1,7 @@
 import { headers } from "next/headers"
 import {
   getAppBrandConfigForKey,
+  isOmniAppHost,
   normalizeBrandKey,
   type AppBrandConfig,
   type AppBrandKey,
@@ -20,7 +21,7 @@ function brandKeyFromHost(raw: string | null): AppBrandKey | null {
   if (!raw) return null
   const v = raw.trim().toLowerCase()
   if (!v) return null
-  if (v.includes("omnifoodtech")) return "omnifoodtech"
+  if (isOmniAppHost(v)) return "omnifoodtech"
   const hostOnly = v.split(":")[0] || v
   const isLocal =
     hostOnly === "localhost" ||

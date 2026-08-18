@@ -11,6 +11,8 @@ export interface AppBrandConfig {
   /** 모바일 상단바 등 좁은 영역용 짧은 이름 (예: Omni, 충만치킨) */
   headerWordmark: string
   headerTitle: string
+  /** Windows 하이브리드·브라우저 탭 제목 */
+  posWindowTitle: string
   manifestPath: string
   iconPath: string
   domain: string
@@ -25,6 +27,15 @@ export function normalizeBrandKey(raw: string): AppBrandKey {
   const v = String(raw || "").trim().toLowerCase()
   if (v === "omnifoodtech" || v === "omni" || v === "saas") return "omnifoodtech"
   return "choongman"
+}
+
+/** Host 가 Omni 판매 도메인인지 (QR ifoodtech.com 포함) */
+export function isOmniAppHost(host: string | null | undefined): boolean {
+  const h = String(host || "").trim().toLowerCase()
+  if (!h) return false
+  if (h.includes("omnifoodtech")) return true
+  if (h.includes("ifoodtech.com")) return true
+  return false
 }
 
 function normalizeDomain(raw: string, key: AppBrandKey): string {
@@ -82,6 +93,7 @@ export function getAppBrandConfigForKey(key: AppBrandKey): AppBrandConfig {
       logoSymbolSrc: "/omnifoodtech-icon.svg",
       headerWordmark: "Omni",
       headerTitle: "OmniFoodTech SaaS",
+      posWindowTitle: "OMNI POS",
       manifestPath: "/manifest-omnifoodtech.json",
       iconPath: "/omnifoodtech-icon.svg",
       domain,
@@ -102,6 +114,7 @@ export function getAppBrandConfigForKey(key: AppBrandKey): AppBrandConfig {
     logoSymbolSrc: "/img/logo.png",
     headerWordmark: "충만치킨",
     headerTitle: "충만치킨 ERP",
+    posWindowTitle: "CHOONGMAN POS",
     manifestPath: "/manifest.json",
     iconPath: "/icon-192.png",
     domain,

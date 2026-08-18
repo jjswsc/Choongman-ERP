@@ -142,6 +142,7 @@ import {
 import {
   inferPrevQtySnapshotExcludingRecentQrGuestLines,
   orderLooksLikeQrTableGuestOrder,
+  resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
 } from '@/lib/qr-table-types'
@@ -1293,16 +1294,20 @@ export function usePosMainDeviceSyncHost(): void {
           dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
           return
         }
-        refetchStores({
-          scope: skipLocalKitchenAutoprintForOrder(addonOrderId, addonRow) ? 'current' : 'all',
-        })
+        const refetchAddonUi = () => {
+          refetchStores({
+            scope: skipLocalKitchenAutoprintForOrder(addonOrderId, addonRow) ? 'current' : 'all',
+          })
+        }
         if (!wantRemoteDineInAdd) {
           dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
+          refetchAddonUi()
           return
         }
         const shouldAutoPrintReceipt = autoPrint.receiptOnAddOrder || autoPrint.receiptOnOrder
         if (!shouldAutoPrintReceipt && !autoPrint.kitchenOnOrder) {
           dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
+          refetchAddonUi()
           return
         }
         const cartLikeNew = items.map((it) => ({
@@ -1366,16 +1371,17 @@ export function usePosMainDeviceSyncHost(): void {
           ...posGuestCountSpread(addonRow.guest_count),
         }
         dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
-        if (printHallAddon) {
-          void printHallReceiptPayload(receiptPayloadRemote, autoprintCtx)
-        }
         if (autoPrint.kitchenOnOrder && kitchenCartLines.length > 0) {
-          const kitchenDelayMs = printHallAddon
-            ? typeof window !== 'undefined' && window.cmPosShell
-              ? resolveAfterReceiptToKitchenDelayMs()
-              : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
-            : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
-          setTimeout(() => {
+          const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
+            printHallAddon,
+            skipQrGuestHall,
+            afterReceiptToKitchenMs:
+              typeof window !== 'undefined' && window.cmPosShell
+                ? resolveAfterReceiptToKitchenDelayMs()
+                : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
+            kitchenOnlyDelayMs: KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS,
+          })
+          const runKitchen = () => {
             const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(addonOrderId, kitchenCartLines)
             if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
             const orderForKitchen = {
@@ -1392,7 +1398,13 @@ export function usePosMainDeviceSyncHost(): void {
               kitchenLines: kitchenCartLines as Array<Record<string, unknown>>,
               dedupeKey: kitchenDedupeKey,
             }).catch(() => releaseKitchenAutoPrintKey(kitchenDedupeKey))
-          }, kitchenDelayMs)
+          }
+          if (kitchenDelayMs <= 0) runKitchen()
+          else setTimeout(runKitchen, kitchenDelayMs)
+        }
+        refetchAddonUi()
+        if (printHallAddon) {
+          void printHallReceiptPayload(receiptPayloadRemote, autoprintCtx)
         }
       }
 

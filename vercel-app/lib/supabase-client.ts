@@ -135,3 +135,36 @@ export function subscribePosOrdersUpdate(
     )
   return attachSubscribeStatus(channel, options?.onStatus)
 }
+
+export function posPrintJobsInsertChannelName(store: string): string {
+  return `pos-print-jobs-insert-${String(store || '').trim()}`
+}
+
+/** QR 주방 큐 INSERT — 주문 UI 갱신을 기다리지 않고 claim */
+export function subscribePosPrintJobsInsert(
+  onInsert: () => void,
+  options?: { store?: string; onStatus?: PosOrdersRealtimeSubscribeOptions['onStatus'] }
+): RealtimeChannel | null {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+  const store = String(options?.store || '').trim()
+  if (!store) return null
+  const channel = supabase
+    .channel(posPrintJobsInsertChannelName(store))
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'pos_print_jobs',
+        filter: `store_code=eq.${store}`,
+      },
+      (payload) => {
+        const row = (payload as { new?: Record<string, unknown> }).new
+        if (String(row?.job_type ?? '').trim() !== 'kitchen') return
+        if (String(row?.status ?? '').trim() !== 'queued') return
+        onInsert()
+      }
+    )
+  return attachSubscribeStatus(channel, options?.onStatus)
+}

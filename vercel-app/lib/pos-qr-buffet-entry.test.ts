@@ -3,6 +3,7 @@ import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 import {
   inferPrevQtySnapshotExcludingRecentQrGuestLines,
   orderLooksLikeQrTableGuestOrder,
+  resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
 } from '@/lib/qr-table-types'
@@ -71,6 +72,41 @@ describe('shouldSkipHallAutoprintForQrGuestAddon', () => {
 
   it('does not skip empty delta', () => {
     expect(shouldSkipHallAutoprintForQrGuestAddon([])).toBe(false)
+  })
+})
+
+describe('resolveDineInAddonKitchenDelayMs', () => {
+  it('prints QR kitchen immediately when hall check-bill is skipped', () => {
+    expect(
+      resolveDineInAddonKitchenDelayMs({
+        printHallAddon: false,
+        skipQrGuestHall: true,
+        afterReceiptToKitchenMs: 400,
+        kitchenOnlyDelayMs: 80,
+      })
+    ).toBe(0)
+  })
+
+  it('keeps staff addon delay after hall receipt', () => {
+    expect(
+      resolveDineInAddonKitchenDelayMs({
+        printHallAddon: true,
+        skipQrGuestHall: false,
+        afterReceiptToKitchenMs: 400,
+        kitchenOnlyDelayMs: 80,
+      })
+    ).toBe(400)
+  })
+
+  it('keeps kitchen-only delay for non-QR remote add', () => {
+    expect(
+      resolveDineInAddonKitchenDelayMs({
+        printHallAddon: false,
+        skipQrGuestHall: false,
+        afterReceiptToKitchenMs: 400,
+        kitchenOnlyDelayMs: 80,
+      })
+    ).toBe(80)
   })
 })
 

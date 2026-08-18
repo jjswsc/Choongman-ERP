@@ -1,6 +1,7 @@
 -- POS print jobs (kitchen/receipt) queue with state machine.
 -- Chungman·Omni 공통. Omni 는 이 테이블이 없으면 QR 주방이 enqueue 단계에서 조용히 스킵됩니다.
 -- Run in Supabase SQL editor (Omni 프로젝트에 아직 없으면 1회 실행).
+-- 테이블 만든 뒤 INSERT Realtime: pos_print_jobs_realtime_insert.sql 을 같은 프로젝트에서 1회 더 실행.
 
 create table if not exists public.pos_print_jobs (
   id bigserial primary key,
