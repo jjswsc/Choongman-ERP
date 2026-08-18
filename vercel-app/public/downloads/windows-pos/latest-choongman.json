@@ -1,30 +1,30 @@
 {
-    "version":  "0.1.15",
+    "version":  "0.1.16",
     "files":  [
                   {
                       "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
                       "name":  "cm-pos-windows-choongman-latest-setup.exe",
-                      "sha256":  "25dcbe4821342747d1585093647f7ef1e3d64da089538849e88a818020bc7af5"
+                      "sha256":  "6eef46c22705b906a892d74a4f9988276da633449dea22365288e184e7ff4ba6"
                   },
                   {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.15-setup.exe",
-                      "name":  "cm-pos-windows-choongman-0.1.15-setup.exe",
-                      "sha256":  "25dcbe4821342747d1585093647f7ef1e3d64da089538849e88a818020bc7af5"
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.16-setup.exe",
+                      "name":  "cm-pos-windows-choongman-0.1.16-setup.exe",
+                      "sha256":  "6eef46c22705b906a892d74a4f9988276da633449dea22365288e184e7ff4ba6"
                   },
                   {
                       "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-portable.exe",
                       "name":  "cm-pos-windows-choongman-latest-portable.exe",
-                      "sha256":  "089b14e38246fc00a334e9be04b57affad7810e44b7eafd02be4ced2848e7c4b"
+                      "sha256":  "a31db2b40f2d8e6faaef47cfce6d9b4e996d2a4c08955707f656e613d131dec5"
                   },
                   {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.15-portable.exe",
-                      "name":  "cm-pos-windows-choongman-0.1.15-portable.exe",
-                      "sha256":  "089b14e38246fc00a334e9be04b57affad7810e44b7eafd02be4ced2848e7c4b"
+                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.16-portable.exe",
+                      "name":  "cm-pos-windows-choongman-0.1.16-portable.exe",
+                      "sha256":  "a31db2b40f2d8e6faaef47cfce6d9b4e996d2a4c08955707f656e613d131dec5"
                   }
               ],
-    "publishedAtUtc":  "2026-07-27T04:30:56.1575661Z",
+    "publishedAtUtc":  "2026-08-18T13:29:48.6376875Z",
     "brand":  "choongman",
-    "installerSha256":  "25dcbe4821342747d1585093647f7ef1e3d64da089538849e88a818020bc7af5",
-    "notes":  "Cash drawer ESC/POS script packaging fix (0.1.15). Reinstall required for drawer open.",
+    "installerSha256":  "6eef46c22705b906a892d74a4f9988276da633449dea22365288e184e7ff4ba6",
+    "notes":  "KBank QR on EDC without Error Code -1 (skip native tx70). Refresh POS after install.",
     "installerUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe"
 }
