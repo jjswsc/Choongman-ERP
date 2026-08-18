@@ -297,12 +297,21 @@ import {
   KBANK_API_PAUSE_STORAGE_KEY,
   KBANK_GENERATE_MIN_INTERVAL_MS,
   KBANK_RATE_LIMIT_BACKOFF_MS,
+  KBANK_THAI_QR_INQUIRY_COOLDOWN_MS,
+  KBANK_THAI_QR_INQUIRY_POLL_FIRST_MS,
+  KBANK_THAI_QR_INQUIRY_POLL_INTERVAL_MS,
   resolveKbankInquiryTxnNoForRequest,
   resolveKbankVoidTxnNoForRequest,
   resolveKbankCreditCardBrandLabels,
   resolveKbankDisplayQrTypeDetails,
   type KbankDisplayQrTypeSource,
 } from '@/lib/payments/kbank-api-reference'
+import {
+  defaultPayQrTypeForStore,
+  normalizePosQrDisplayMode,
+  shouldMirrorKbankQrToEdc,
+  shouldUseLinkposNativeQr,
+} from '@/lib/pos-qr-display-mode'
 import {
   claimKbankInquiryLoop,
   createKbankInquiryTabId,
@@ -1485,7 +1494,19 @@ export default function PosTerminalPage() {
   const posPrinterSettingsInFlightStoreCodeRef = useRef("")
   const posPrinterSettingsInFlightRef = useRef<Promise<PosPrinterSettings> | null>(null)
   const storeSettingsLoadSeqRef = useRef(0)
+  const [storeQrDisplayMode, setStoreQrDisplayMode] = useState<
+    'cashier' | 'edc_mirror' | 'edc_native'
+  >('cashier')
   const saasModules = useSaasEnabledModules()
+
+  const defaultQrPayTypeForCart = useMemo(
+    () =>
+      defaultPayQrTypeForStore(
+        storeQrDisplayMode,
+        typeof window !== 'undefined' && window.cmPosShell?.platform === 'windows-electron'
+      ),
+    [storeQrDisplayMode]
+  )
 
   const getPrinterSettingsForStore = useCallback(async (targetStoreCode: string): Promise<PosPrinterSettings> => {
     const normalizedStoreCode = String(targetStoreCode || "").trim()
@@ -1740,6 +1761,7 @@ export default function PosTerminalPage() {
         if (seq !== storeSettingsLoadSeqRef.current) return
         posPrinterSettingsRef.current = s
         posPrinterSettingsStoreCodeRef.current = requestStoreCode
+        setStoreQrDisplayMode(normalizePosQrDisplayMode(s.posQrDisplayMode))
         const fresh = Math.max(1, Number(s.cookingFreshMaxMin ?? 10))
         const warning = Math.max(fresh + 1, Number(s.cookingWarningMaxMin ?? 15))
         const warnDiff = Math.max(0, Number(s.cookingRecipeWarningDiffMin ?? 0))
@@ -6735,9 +6757,9 @@ export default function PosTerminalPage() {
 
       const selectedQrType = String(payment?.paymentQrType || 'THAI_QR').trim().toUpperCase()
       const requestedQrType = selectedQrType === 'CREDIT_CARD' ? 'CREDIT_CARD' : 'THAI_QR'
-      // 「แสดงบนเครื่อง」명시 선택 + Thai QR 만 LinkPOS tx70. 실패 시 KBank/캐셔 QR로 폴백(결제 중단 금지).
+      const qrDisplayMode = normalizePosQrDisplayMode(posPrinterSettingsRef.current?.posQrDisplayMode)
       const preferEdcNativeQr =
-        Boolean(payment?.paymentQrShowOnEdc) &&
+        shouldUseLinkposNativeQr(qrDisplayMode, Boolean(payment?.paymentQrShowOnEdc)) &&
         requestedQrType !== 'CREDIT_CARD' &&
         isLinkposCardApiEnabled()
 
@@ -7008,19 +7030,25 @@ export default function PosTerminalPage() {
         }
       }
       void (async () => {
+        const mirrorToEdc = shouldMirrorKbankQrToEdc(
+          qrDisplayMode,
+          Boolean(payment?.paymentQrShowOnEdc)
+        )
+        if (!mirrorToEdc) return
         const out = await pushKbankQrToLinkposDisplay({
           qrPayload: generatedQrPayload,
           amount: qrAmount,
           reference1: String(context?.orderType || '').slice(0, 20),
           reference2: String(context?.orderLabel || '').slice(0, 20),
         })
-        // API QR → EDC 표시는 펌웨어 의존(best-effort). 실패해도 캐셔 QR 유지.
         if (!out.success && out.message !== 'linkpos_card_api_disabled') {
           setLinkposQrBridgeStatus('failed')
         }
       })()
       setCustomerDisplayPaymentMessage(
-        (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
+        shouldMirrorKbankQrToEdc(qrDisplayMode, Boolean(payment?.paymentQrShowOnEdc))
+          ? t('posWaitingEdcQr') || 'กรุณาสแกน QR บนเครื่องรูดบัตรครับ'
+          : (t('posPaymentQr') || 'QR') + ' ' + (t('posScanToPayHint') || '스캔 후 결제해 주세요.')
       )
 
       // Thai QR: optional inquiry after 10s in background (do not block — otherwise cart clears
@@ -7028,7 +7056,7 @@ export default function PosTerminalPage() {
       // Credit Card QR skips silent inquiry (numeric txnNo / UAT quota).
       if (requestedQrType !== 'CREDIT_CARD') {
         void (async () => {
-          await sleepMs(10_000)
+          await sleepMs(KBANK_THAI_QR_INQUIRY_POLL_FIRST_MS)
           if (sessionGen !== kbankQrSessionGenRef.current || kbankManualCancelPendingRef.current) return
           if (isKbankQrSessionExpired(kbankQrSessionStartedAtRef.current)) return
           if (isKbankApiPaused()) return
@@ -7589,7 +7617,8 @@ export default function PosTerminalPage() {
       }
       if (!claimKbankInquiryLoop(currentStoreId, partnerTxnUid, kbankInquiryTabIdRef.current)) return
       if (isKbankApiPaused()) return
-      const inquiryCooldownMs = liveKbankQrType === 'CREDIT_CARD' ? 20_000 : 60_000
+      const inquiryCooldownMs =
+        liveKbankQrType === 'CREDIT_CARD' ? 20_000 : KBANK_THAI_QR_INQUIRY_COOLDOWN_MS
       if (Date.now() - kbankInquiryLastAtRef.current < inquiryCooldownMs) return
 
       kbankInquiryLastAtRef.current = Date.now()
@@ -7626,8 +7655,10 @@ export default function PosTerminalPage() {
     }
 
     // CC: 콜백·txnNo 즉시 Inquiry가 먼저이고, 여기는 보조 폴백(쿼터 고려해 Thai보다 짧게만).
-    const pollFirstDelayMs = liveKbankQrType === 'CREDIT_CARD' ? 12_000 : 60_000
-    const pollIntervalMs = liveKbankQrType === 'CREDIT_CARD' ? 45_000 : 120_000
+    const pollFirstDelayMs =
+      liveKbankQrType === 'CREDIT_CARD' ? 12_000 : KBANK_THAI_QR_INQUIRY_POLL_FIRST_MS
+    const pollIntervalMs =
+      liveKbankQrType === 'CREDIT_CARD' ? 45_000 : KBANK_THAI_QR_INQUIRY_POLL_INTERVAL_MS
     const firstDelayMs = window.setTimeout(() => {
       void pollApprovedViaInquiry()
     }, pollFirstDelayMs)
@@ -8794,6 +8825,7 @@ export default function PosTerminalPage() {
               posMenus={menus}
               stores={stores}
             currentStoreId={currentStoreId}
+            defaultQrPayType={defaultQrPayTypeForCart}
             selectedTable={selectedTable}
             dineInMultiFloorLayout={dineInMultiFloorLayout}
             onStoreChange={() => {}}

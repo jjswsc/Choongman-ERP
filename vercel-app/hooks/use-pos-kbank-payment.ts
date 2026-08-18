@@ -942,9 +942,9 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         return { ok: true, partnerTransactionId, pending: true }
       }
 
-      // Thai QR only: one optional inquiry after 10s
+      // Thai QR: first silent inquiry ~5s (do not block the payment path).
       if (requestedQrType !== 'CREDIT_CARD') {
-        await sleepMs(10_000)
+        await sleepMs(KBANK_THAI_QR_INQUIRY_POLL_FIRST_MS)
         if (sessionGen !== kbankQrSessionGenRef.current || kbankManualCancelPendingRef.current) {
           return { ok: false, message: 'kbank_qr_cancelled' }
         }
