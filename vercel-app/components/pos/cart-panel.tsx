@@ -250,6 +250,8 @@ interface CartPanelProps {
   dineInMultiFloorLayout?: boolean
   /** 홀(테이블) 주문 시 플로어로 돌아가기 — 터미널에서 메뉴 상단과 중복 방지용 */
   onBackToTableSelection?: () => void
+  /** 매장 POS 설정 — Thai QR 기본 탭 (Windows 하이브리드) */
+  defaultQrPayType?: 'THAI_QR' | 'EDC'
   /** 부모에서 POS 저장 API 처리 중(중복 탭·이중 요청 방지) */
   posBackendActionInFlight?: boolean
   /** 홀 주문 전송 (주방 전달) - 부모에서 savePosOrder 호출 후 pendingOrderId 전달 */
@@ -446,6 +448,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   cartSessionTableId: cartSessionTableIdProp,
   dineInMultiFloorLayout = false,
   onBackToTableSelection,
+  defaultQrPayType,
   posBackendActionInFlight = false,
   onOrderSubmit,
   onTakeoutOrderComplete,
@@ -805,11 +808,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [payAlipay, setPayAlipay] = useState('')
   const [payUnionPay, setPayUnionPay] = useState('')
   const [payPromptPay, setPayPromptPay] = useState('')
-  const [payQrType, setPayQrType] = useState<'THAI_QR' | 'CREDIT_CARD' | 'EDC'>(() =>
-    typeof window !== 'undefined' && window.cmPosShell?.platform === 'windows-electron'
-      ? 'EDC'
-      : 'THAI_QR'
-  )
+  const [payQrType, setPayQrType] = useState<'THAI_QR' | 'CREDIT_CARD' | 'EDC'>(() => 'THAI_QR')
+  useEffect(() => {
+    if (defaultQrPayType === 'THAI_QR' || defaultQrPayType === 'EDC') {
+      setPayQrType(defaultQrPayType)
+    }
+  }, [defaultQrPayType, currentStoreId])
   const [payLinePay, setPayLinePay] = useState('')
   const [payShopeePay, setPayShopeePay] = useState('')
   const [payOther, setPayOther] = useState('')
@@ -6216,6 +6220,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           ? tr(
                               'posQrTypeShowOnEdcHint',
                               'ส่งยอดเข้าเครื่องรูดบัตร ให้ลูกค้าสแกน QR บนเครื่อง — เหมาะกับสาขาไม่มีจอลูกค้า'
+                            ) +
+                            ' · ' +
+                            tr(
+                              'posKbankStaffInquiryCancelHint',
+                              'หลังสแกน กด Inquiry ที่ POS · ยกเลิก QR กด ยกเลิก ที่ POS'
                             )
                           : payQrType === 'CREDIT_CARD'
                             ? tr(

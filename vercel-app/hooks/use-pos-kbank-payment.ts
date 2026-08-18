@@ -28,6 +28,9 @@ import {
   KBANK_API_PAUSE_STORAGE_KEY,
   KBANK_GENERATE_MIN_INTERVAL_MS,
   KBANK_RATE_LIMIT_BACKOFF_MS,
+  KBANK_THAI_QR_INQUIRY_COOLDOWN_MS,
+  KBANK_THAI_QR_INQUIRY_POLL_FIRST_MS,
+  KBANK_THAI_QR_INQUIRY_POLL_INTERVAL_MS,
   resolveKbankInquiryTxnNoForRequest,
   resolveKbankVoidTxnNoForRequest,
   resolveKbankCreditCardBrandLabels,
@@ -1182,6 +1185,11 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
           return
         }
         if (action === 'cancel') {
+          const okCancel = await appConfirm(
+            t('posKbankCancelConfirm') ||
+              'Cancel this QR on POS? The EDC screen will clear. Use this only if the customer has not paid yet.'
+          )
+          if (!okCancel) return
           const cancelPartnerTxnUid = `CCH${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
           const out = await executeKbankCancelQr({
             storeCode: currentStoreId,
@@ -1506,7 +1514,8 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       }
       if (!claimKbankInquiryLoop(currentStoreId, partnerTxnUid, kbankInquiryTabIdRef.current)) return
       if (isKbankApiPaused()) return
-      const inquiryCooldownMs = liveKbankQrType === 'CREDIT_CARD' ? 20_000 : 60_000
+      const inquiryCooldownMs =
+        liveKbankQrType === 'CREDIT_CARD' ? 20_000 : KBANK_THAI_QR_INQUIRY_COOLDOWN_MS
       if (Date.now() - kbankInquiryLastAtRef.current < inquiryCooldownMs) return
 
       kbankInquiryLastAtRef.current = Date.now()
@@ -1542,8 +1551,10 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       }
     }
 
-    const pollFirstDelayMs = liveKbankQrType === 'CREDIT_CARD' ? 12_000 : 60_000
-    const pollIntervalMs = liveKbankQrType === 'CREDIT_CARD' ? 45_000 : 120_000
+    const pollFirstDelayMs =
+      liveKbankQrType === 'CREDIT_CARD' ? 12_000 : KBANK_THAI_QR_INQUIRY_POLL_FIRST_MS
+    const pollIntervalMs =
+      liveKbankQrType === 'CREDIT_CARD' ? 45_000 : KBANK_THAI_QR_INQUIRY_POLL_INTERVAL_MS
     const firstDelayMs = window.setTimeout(() => {
       void pollApprovedViaInquiry()
     }, pollFirstDelayMs)

@@ -176,6 +176,11 @@ export const KBANK_TOKEN_EXPIRY_SKEW_MS = 30_000
 /** Stop QR inquiry/callback polls after this age even if still waiting. */
 export const KBANK_QR_SESSION_MAX_MS = 10 * 60 * 1000
 
+/** Thai QR auto-Inquiry on POS (staff manual Inquiry uses a shorter cooldown). */
+export const KBANK_THAI_QR_INQUIRY_POLL_FIRST_MS = 15_000
+export const KBANK_THAI_QR_INQUIRY_POLL_INTERVAL_MS = 30_000
+export const KBANK_THAI_QR_INQUIRY_COOLDOWN_MS = 12_000
+
 /** sessionStorage key — survives modal remount within the same tab */
 export const KBANK_API_PAUSE_STORAGE_KEY = 'cm_kbank_api_paused_until_ms'
 

@@ -11,6 +11,7 @@ import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
 import { coerceMembershipQrLinkUrl } from '@/lib/pos-membership-qr-defaults'
 import { shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
 import { lookupChoongmanKbankStoreDefaults } from '@/lib/kbank-store-merchant-defaults'
+import { normalizePosQrDisplayMode } from '@/lib/pos-qr-display-mode'
 
 type VendorBizInfo = {
   name?: string
@@ -142,6 +143,7 @@ export async function GET(request: NextRequest) {
     checkAutoOpen: false,
     linkposSkipTerminalForCard: shouldSkipLinkposTerminalForCard(null),
     kbankSkipApiForQr: true,
+    posQrDisplayMode: 'cashier' as const,
     kbankMerchantId: '',
     kbankPartnerShopId: '',
     kbankTerminalId: '',
@@ -438,6 +440,9 @@ export async function GET(request: NextRequest) {
           : null
       ),
       kbankSkipApiForQr: raw?.kbank_skip_api_for_qr !== false,
+      posQrDisplayMode: normalizePosQrDisplayMode(
+        (raw as Record<string, unknown> | null | undefined)?.pos_qr_display_mode
+      ),
       ...fillKbankMidFromChoongmanDefaults(storeCode, {
         kbankMerchantId: String(raw?.kbank_merchant_id ?? '').trim(),
         kbankPartnerShopId: String(raw?.kbank_partner_shop_id ?? '').trim(),

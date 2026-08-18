@@ -82,6 +82,8 @@ export interface PosPrinterSettings {
   linkposSkipTerminalForCard?: boolean
   /** true면 KBank generate-qr 없이 QR 금액만 반영(수기) */
   kbankSkipApiForQr?: boolean
+  /** Thai QR 표시: cashier | edc_mirror(EDC mirror+POS Inquiry) | edc_native(LinkPOS tx70) */
+  posQrDisplayMode?: 'cashier' | 'edc_mirror' | 'edc_native'
   /** 매장별 KBank Merchant ID (관리자 POS 프린터 설정) */
   kbankMerchantId?: string
   kbankPartnerShopId?: string

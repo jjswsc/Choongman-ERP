@@ -1931,6 +1931,10 @@ export const I18N_POS_KO: Record<string, string> = {
     posKbankTxnNoLabel: 'txnNo',
     posKbankInquiry: '조회 (Inquiry)',
     posKbankCancel: '취소 (Cancel)',
+    posKbankCancelConfirm:
+      '이 QR을 POS에서 취소할까요? EDC 화면도 꺼집니다. 고객이 아직 결제하지 않았을 때만 누르세요.',
+    posKbankStaffInquiryCancelHint:
+      '스캔 후 성공 확인은 POS 「조회」, QR 중단은 POS 「취소」입니다. (EDC에서 ตรวจสอบรายการ 불필요)',
     posKbankVoid: '무효 (Void)',
     posKbankCloseSession: '닫기 (세션 정리)',
     posLinkposQrDisplayOk: 'EDC 단말에 QR 표시됨',
@@ -5306,6 +5310,10 @@ export const I18N_POS_EN: Record<string, string> = {
     posKbankTxnNoLabel: 'txnNo',
     posKbankInquiry: 'Inquiry',
     posKbankCancel: 'Cancel',
+    posKbankCancelConfirm:
+      'Cancel this QR on POS? The EDC screen will clear. Use only if the customer has not paid yet.',
+    posKbankStaffInquiryCancelHint:
+      'After scan: Inquiry on POS to confirm. Cancel on POS to stop this QR (not the EDC check button).',
     posKbankVoid: 'Void',
     posKbankCloseSession: 'Close',
     posLinkposQrDisplayOk: 'QR shown on EDC terminal',
@@ -7285,6 +7293,10 @@ export const I18N_POS_TH: Record<string, string> = {
     posKbankTxnNoLabel: 'txnNo',
     posKbankInquiry: 'สอบถาม (Inquiry)',
     posKbankCancel: 'ยกเลิก (Cancel)',
+    posKbankCancelConfirm:
+      'ยกเลิก QR นี้ที่ POS ไหมครับ? จอเครื่องรูดจะปิดด้วย ใช้เมื่อลูกค้ายังไม่ได้จ่ายเท่านั้นครับ',
+    posKbankStaffInquiryCancelHint:
+      'ลูกค้าสแกนแล้ว: กด Inquiry ที่ POS เพื่อยืนยัน · อยากหยุด QR กด ยกเลิก ที่ POS (ไม่ต้องกดที่เครื่อง)',
     posKbankVoid: 'Void',
     posKbankCloseSession: 'ปิด (เคลียร์)',
     posKbankStatusPaid: 'ชำระแล้ว',

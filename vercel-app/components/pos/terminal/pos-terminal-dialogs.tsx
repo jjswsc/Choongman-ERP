@@ -463,6 +463,31 @@ export function PosTerminalDialogs({
               )}
             </div>
           </div>
+          {!isPosDemo && km.isPilotStore && km.opsTxnUid && km.callbackState !== 'received' ? (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                className="h-11 text-sm font-semibold"
+                disabled={km.opsBusy}
+                onClick={() => void km.onFollowupAction('inquiry')}
+              >
+                {t('posKbankInquiry') || 'Inquiry'}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="h-11 text-sm font-semibold"
+                disabled={km.opsBusy}
+                onClick={() => void km.onFollowupAction('cancel')}
+              >
+                {t('posKbankCancel') || 'Cancel'}
+              </Button>
+              <p className="col-span-2 text-[11px] leading-snug text-muted-foreground">
+                {t('posKbankStaffInquiryCancelHint') ||
+                  'After the customer scans, tap Inquiry on POS. To stop this QR, tap Cancel on POS — not on the EDC (mirror mode).'}
+              </p>
+            </div>
+          ) : null}
           {!isPosDemo && km.isPilotStore ? (
             <div className="mt-3 rounded-md border border-border/70 bg-card p-2">
               <p className="text-[11px] font-semibold text-muted-foreground">

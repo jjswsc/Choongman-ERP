@@ -7241,6 +7241,11 @@ export default function PosTerminalPage() {
           return
         }
         if (action === 'cancel') {
+          const okCancel = await appConfirm(
+            t('posKbankCancelConfirm') ||
+              'Cancel this QR on POS? The EDC screen will clear. Use this only if the customer has not paid yet.'
+          )
+          if (!okCancel) return
           const cancelPartnerTxnUid = `CCH${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
           const out = await executeKbankCancelQr({
             storeCode: currentStoreId,

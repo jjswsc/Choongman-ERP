@@ -1,5 +1,6 @@
 import type { PosPrinterSettings } from "@/lib/api-client"
 import { normalizeKitchenRouteMapInput } from "@/lib/pos-kitchen-slip-routing"
+import { normalizePosQrDisplayMode } from "@/lib/pos-qr-display-mode"
 import { normalizeKitchenOptionGroupKey } from "@/lib/pos-kitchen-slip-option-group-choices"
 import { normalizeFeeStackMode, normalizeFeeStackOrder, normalizePaymentTotalRoundingMode } from "@/lib/pos-pricing"
 
@@ -108,6 +109,7 @@ export function posPrinterSettingsToSaveParams(
     checkAutoOpen: false,
     linkposSkipTerminalForCard: Boolean(s.linkposSkipTerminalForCard),
     kbankSkipApiForQr: s.kbankSkipApiForQr !== false,
+    posQrDisplayMode: normalizePosQrDisplayMode(s.posQrDisplayMode),
     kbankMerchantId: String(s.kbankMerchantId ?? '').trim(),
     kbankPartnerShopId: String(s.kbankPartnerShopId ?? '').trim(),
     kbankTerminalId: String(s.kbankTerminalId ?? '').trim(),

@@ -18,6 +18,7 @@ import {
   normalizeMembershipQrLinkUrlForStorage,
 } from '@/lib/pos-membership-qr-defaults'
 import { LINKPOS_FORCE_MANUAL_CARD, isLinkposCardApiEnabled } from '@/lib/linkpos-card-api-enabled'
+import { normalizePosQrDisplayMode } from '@/lib/pos-qr-display-mode'
 
 /** POS 주문/결산 직원 등: 고객 화면·듀얼 모니터 컬럼만 갱신 (나머지는 DB 기존값 유지) */
 const CUSTOMER_DISPLAY_ONLY_DB_KEYS = new Set([
@@ -239,6 +240,7 @@ export async function POST(req: NextRequest) {
     const kbankPartnerShopId = String(body?.kbankPartnerShopId ?? '').trim()
     const kbankTerminalId = String(body?.kbankTerminalId ?? '').trim()
     const kbankSkipApiForQr = parseBoolParam(body?.kbankSkipApiForQr, true)
+    const posQrDisplayMode = normalizePosQrDisplayMode(body?.posQrDisplayMode)
     const drawerOpt = String(body?.drawerOpenOption || 'reason_only')
     const drawerOpenOption = ['password_and_reason', 'reason_only', 'force'].includes(drawerOpt) ? drawerOpt : 'reason_only'
     const logoPrint = Boolean(body?.logoPrint)
@@ -451,6 +453,7 @@ export async function POST(req: NextRequest) {
       check_auto_open: checkAutoOpen,
       linkpos_skip_terminal_for_card: linkposSkipTerminalForCard,
       kbank_skip_api_for_qr: kbankSkipApiForQr,
+      pos_qr_display_mode: posQrDisplayMode,
       kbank_merchant_id: kbankMerchantId || null,
       kbank_partner_shop_id: kbankPartnerShopId || null,
       kbank_terminal_id: kbankTerminalId || null,

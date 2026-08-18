@@ -440,6 +440,7 @@ export default function PosPrintersPage() {
   const [drawerOpenOption, setDrawerOpenOption] = React.useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
   const [linkposSkipTerminalForCard, setLinkposSkipTerminalForCard] = React.useState(true)
   const [kbankSkipApiForQr, setKbankSkipApiForQr] = React.useState(true)
+  const [posQrDisplayMode, setPosQrDisplayMode] = React.useState<'cashier' | 'edc_mirror' | 'edc_native'>('cashier')
   const [kbankMerchantId, setKbankMerchantId] = React.useState('')
   const [kbankPartnerShopId, setKbankPartnerShopId] = React.useState('')
   const [kbankTerminalId, setKbankTerminalId] = React.useState('')
@@ -721,6 +722,11 @@ export default function PosPrintersPage() {
       LINKPOS_FORCE_MANUAL_CARD || settings.linkposSkipTerminalForCard !== false
     )
     setKbankSkipApiForQr(settings.kbankSkipApiForQr !== false)
+    setPosQrDisplayMode(
+      settings.posQrDisplayMode === 'edc_mirror' || settings.posQrDisplayMode === 'edc_native'
+        ? settings.posQrDisplayMode
+        : 'cashier'
+    )
     setKbankMerchantId(String(settings.kbankMerchantId ?? '').trim())
     setKbankPartnerShopId(String(settings.kbankPartnerShopId ?? '').trim())
     setKbankTerminalId(String(settings.kbankTerminalId ?? '').trim())
@@ -975,6 +981,7 @@ export default function PosPrintersPage() {
         checkAutoOpen: false,
         linkposSkipTerminalForCard,
         kbankSkipApiForQr,
+        posQrDisplayMode,
         kbankMerchantId: String(kbankMerchantId || '').trim(),
         kbankPartnerShopId: String(kbankPartnerShopId || '').trim(),
         kbankTerminalId: String(kbankTerminalId || '').trim(),
@@ -1297,6 +1304,7 @@ export default function PosPrintersPage() {
           "drawerOpenOption",
           "linkposSkipTerminalForCard",
           "kbankSkipApiForQr",
+          "posQrDisplayMode",
           "kbankMerchantId",
           "kbankPartnerShopId",
           "kbankTerminalId",
@@ -2659,12 +2667,44 @@ export default function PosPrintersPage() {
                       onChange={setKbankSkipApiForQr}
                       t={t}
                     />
-                    <p className="text-xs text-muted-foreground mt-1.5 mb-2">
+                    <p className="text-xs text-muted-foreground mt-1.5 mb-3">
                       {tr(
                         "posKbankSkipApiForQrHint",
                         "켜면(수기) Generate QR을 호출하지 않고 금액만 반영합니다. 은행 MID 개통 후 끄면 API·콜백을 사용합니다."
                       )}
                     </p>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">
+                        {tr("posQrDisplayModeTitle", "Thai QR 표시 (매장별)")}
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        {tr(
+                          "posQrDisplayModeHint",
+                          "고객 모니터 없는 매장은 「EDC에 QR 표시」를 권장합니다. POS에서 자동 조회(Inquiry)로 승인 확인 — EDC에서 ตรวจสอบรายการ 누를 필요 없음."
+                        )}
+                      </p>
+                      <select
+                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={posQrDisplayMode}
+                        onChange={(e) =>
+                          setPosQrDisplayMode(
+                            e.target.value === 'edc_mirror' || e.target.value === 'edc_native'
+                              ? e.target.value
+                              : 'cashier'
+                          )
+                        }
+                      >
+                        <option value="cashier">
+                          {tr("posQrDisplayModeCashier", "캐셔/고객 모니터 (Thai QR + POS Inquiry)")}
+                        </option>
+                        <option value="edc_mirror">
+                          {tr("posQrDisplayModeEdcMirror", "EDC에 QR 표시 — 고객 모니터 없음 (권장)")}
+                        </option>
+                        <option value="edc_native">
+                          {tr("posQrDisplayModeEdcNative", "EDC 자체 QR (legacy — 기기에서 ตรวจสอบรายการ)")}
+                        </option>
+                      </select>
+                    </div>
                   </div>
                   <div>
                     <label className="text-sm font-medium">{tr("posKbankMerchantId", "Merchant ID")}</label>
