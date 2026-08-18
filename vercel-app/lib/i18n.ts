@@ -7626,9 +7626,9 @@ export const i18n = {
     helpHow_admin_pos_screen_config:
       '① 상단에서 매장을 고른 뒤 탭(테이블·단말·주문 동작·결제 등)을 선택합니다.\n② 테이블: 구역(층)을 고르고, 개수·모양을 지정한 뒤「일괄 생성」으로 N개를 화면에 맞게 배치하거나「자동 배치」로 기존 테이블을 재정렬합니다. 「전체 선택」후「색상」으로 빈 테이블 면 색을 일괄 지정할 수 있습니다(사용 중일 때는 조리시간 색이 우선).「일괄 이름」으로 접두사·시작번호·증가값(예: A-1…A-10)을 지정할 수 있습니다. 한 개씩 추가·드래그·정렬도 가능합니다.\n③ 주문 동작: 홀(테이블) 주문 시 손님 수 필수 여부를 매장별로 켭니다. 끄면 손님 수 없이도 주문할 수 있습니다.\n④ 변경 후「저장」을 눌러 POS 단말에 반영합니다. 다른 매장 배치는「복사」로 가져올 수 있습니다.\n⑤ 권한에 따라 일부 탭이 보이지 않을 수 있습니다.',
     helpSum_admin_pos_printers:
-      '매장별 주방 라우팅·영수증/체크빌 자동인쇄·손님 전표 항목(뷔페 포함 메뉴 숨김 등)을 설정하고 테스트 인쇄하는 화면입니다.',
+      '매장별 주방 라우팅·영수증/체크빌 자동인쇄·손님 전표 항목(뷔페 포함 메뉴 숨김 등)과 Thai QR 표시(캐셔/EDC)를 설정하고 테스트 인쇄하는 화면입니다.',
     helpHow_admin_pos_printers:
-      '① 상단에서 매장을 고른 뒤 탭(프린터·영수증/자동인쇄·디자인)을 선택합니다.\n② 영수증/자동인쇄에서「체크빌·영수증에서 뷔페 포함 메뉴 숨김」을 켜면 포함 메뉴(0원)와 Item: Buffet/Extra 태그가 손님 전표에서 빠집니다. 패키지 요금·유료 Extra·주방 전표는 그대로입니다.\n③ 변경 후「저장」하고 POS를 새로고침합니다. 미리보기·테스트 인쇄로 확인하세요.',
+      '① 상단에서 매장을 고른 뒤 탭(프린터·영수증/자동인쇄·디자인·결제·돈통)을 선택합니다.\n② 영수증/자동인쇄에서「체크빌·영수증에서 뷔페 포함 메뉴 숨김」을 켜면 포함 메뉴(0원)와 Item: Buffet/Extra 태그가 손님 전표에서 빠집니다. 패키지 요금·유료 Extra·주방 전표는 그대로입니다.\n③ 고객 모니터가 없는 매장 Thai QR: 탭「결제·돈통」→ KBank QR →「Thai QR 표시」에서「EDC에 QR 표시 — 고객 모니터 없음 (권장)」을 고른 뒤 저장합니다. POS 자동 Inquiry로 승인 확인하며 EDC「ตรวจสอบรายการ」는 필요 없습니다. 「단말 승인 없이 카드 금액만 반영」과 다른 항목입니다.\n④ 변경 후「저장」하고 POS를 새로고침합니다. 미리보기·테스트 인쇄로 확인하세요.',
     helpSum_admin_pos_menus:
       'POS 메뉴·옵션·세트, 가격 이력, 매장별 최종가, 배달앱 운영 정책, 포장 체크리스트를 등록·조회하는 화면입니다. 단말 주문은 유형(매장·포장·배달)에 맞게 홀 가격과 배달(앱) 가격이 자동으로 선택됩니다. Omni에서는 노출 매장(Store)을 저장해야 해당 매장 POS에 보입니다.',
     helpHow_admin_pos_menus:
@@ -15711,9 +15711,9 @@ orderItemQty: 'Qty',
     helpHow_admin_pos_screen_config:
       '① Pick a store at the top, then choose a tab (Tables, Terminal, Order behavior, Payments, etc.).\n② Tables: select a zone (floor), set count and shape, then Bulk create to place N tables to fit the floor, or Auto arrange to re-grid existing ones. Use Select all + Color for empty-table surface colors in bulk (cook-time colors still win when occupied). Batch name sets prefix, start number, and step (e.g. A-1…A-10). You can still add one-by-one, drag, and align.\n③ Order behavior: turn on/off requiring guest count for dine-in table orders per store. When off, orders are allowed without guest count.\n④ Press Save to apply to POS terminals. Copy can import another store’s layout.\n⑤ Some tabs may be hidden depending on your role.',
     helpSum_admin_pos_printers:
-      'Per-store kitchen routing, check-bill/receipt auto-print, and guest-bill options (hide buffet-included lines). Use test print from this screen.',
+      'Per-store kitchen routing, check-bill/receipt auto-print, guest-bill options (hide buffet-included lines), and Thai QR display (cashier vs EDC). Use test print from this screen.',
     helpHow_admin_pos_printers:
-      '① Pick a store, then open Printers, Receipt/auto-print, or Design.\n② On Receipt/auto-print, “Hide buffet-included items on check bill & receipt” removes included (0฿) lines and Item: Buffet/Extra tags from guest bills. Package fee, paid extras, and kitchen slips stay.\n③ Save, refresh POS, then preview or test-print.',
+      '① Pick a store, then open Printers, Receipt/auto-print, Design, or Payment & drawer.\n② On Receipt/auto-print, “Hide buffet-included items on check bill & receipt” removes included (0฿) lines and Item: Buffet/Extra tags from guest bills. Package fee, paid extras, and kitchen slips stay.\n③ Thai QR without a customer display: Payment & drawer → KBank QR → Thai QR display → “Show QR on EDC — no customer display (recommended)”, then Save. POS auto-Inquiry confirms payment; do not tap ตรวจสอบรายการ on the EDC. This is not “Record card amount only”.\n④ Save, refresh POS, then preview or test-print.',
     helpSum_admin_pos_menus:
       'Register and review POS menus, options, sets, price history, per-store final pricing, delivery-app policies, and packaging checklists. The POS picks hall vs delivery list prices by order type (dine-in / takeout / delivery). On Omni, store scope must be saved for the menu to appear on that store’s POS.',
     helpHow_admin_pos_menus:
@@ -21265,6 +21265,10 @@ orderItemQty: 'จำนวน',
     adminPosMenus: 'เมนู',
     adminPosScreenConfig: 'ตั้งค่า POS',
     adminPosPrinters: 'ตั้งค่าเครื่องพิมพ์',
+    helpSum_admin_pos_printers:
+      'ตั้งค่าเส้นทางครัว ใบเสร็จ/เช็คบิลพิมพ์อัตโนมัติ รายการในใบลูกค้า และวิธีแสดง Thai QR (จอแคชเชียร์หรือเครื่องรูด) ต่อสาขา พร้อมทดสอบพิมพ์ครับ',
+    helpHow_admin_pos_printers:
+      '① เลือกสาขาด้านบน แล้วเลือกแท็บ (เครื่องพิมพ์ · ใบเสร็จ/พิมพ์อัตโนมัติ · ออกแบบ · ชำระเงิน·ลิ้นชัก) ครับ\n② แท็บใบเสร็จ/พิมพ์อัตโนมัติ: เปิด「ซ่อนเมนูที่รวมในบุฟเฟต์บนเช็คบิลและใบเสร็จ」แล้วรายการรวม (0฿) และแท็ก Item: Buffet/Extra จะไม่ขึ้นในใบลูกค้า ค่าแพ็กเกจ Extra ที่คิดเงิน และใบครัวยังเหมือนเดิมครับ\n③ สาขาไม่มีจอลูกค้า: แท็บ「ชำระเงิน·ลิ้นชัก」→ KBank QR (MID สาขา) →「แสดง Thai QR (ตามสาขา)」เลือก「แสดง QR บนเครื่องรูด — ไม่มีจอลูกค้า (แนะนำ)」แล้วกดบันทึกครับ POS จะสอบถาม (Inquiry) อัตโนมัติ ไม่ต้องกด ตรวจสอบรายการ ที่เครื่อง EDC อย่าสับสนกับ「บันทึกยอดบัตรใน POS เท่านั้น」ครับ\n④ หลังบันทึก ให้รีเฟรช POS แล้วใช้ตัวอย่าง/พิมพ์ทดสอบได้ครับ',
     adminPosQrTableOrder: 'สั่งอาหารด้วย QR',
     adminPosCoupons: 'คูปอง',
     adminSectionSales: 'ยอดขาย',
