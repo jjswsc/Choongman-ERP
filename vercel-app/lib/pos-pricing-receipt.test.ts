@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   computePosPricing,
+  isPosPaymentTotalRoundingGap,
   resolveReceiptSubtotalPrintAmount,
   resolveReceiptVatPrintAmount,
   resolveTaxInvoiceReceiptVatBreakdown,
@@ -90,6 +91,19 @@ describe('resolveReceiptSubtotalPrintAmount', () => {
         receiptTaxableGrossForDisplay: 2600,
       })
     ).toBe(2500)
+  })
+})
+
+describe('isPosPaymentTotalRoundingGap', () => {
+  it('detects 310.30 → 310 as rounding, not a 0.30 discount', () => {
+    expect(isPosPaymentTotalRoundingGap(310.3, 310)).toBe(true)
+    expect(isPosPaymentTotalRoundingGap(117.7, 118)).toBe(true)
+    expect(isPosPaymentTotalRoundingGap(117.7, 117)).toBe(true)
+  })
+
+  it('does not treat a real platform discount as rounding', () => {
+    expect(isPosPaymentTotalRoundingGap(159, 129)).toBe(false)
+    expect(isPosPaymentTotalRoundingGap(100, 77)).toBe(false)
   })
 })
 

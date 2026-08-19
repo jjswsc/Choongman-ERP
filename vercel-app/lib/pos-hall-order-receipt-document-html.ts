@@ -37,6 +37,7 @@ import {
   sumPosReceiptLineDiscountAmt,
   type PosReceiptLineDiscountItem,
 } from '@/lib/pos-receipt-line-discount'
+import { isPosPaymentTotalRoundingGap } from '@/lib/pos-pricing'
 import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import {
@@ -197,6 +198,9 @@ export function resolveHallOrderReceiptDiscountAmt(payload: {
   const implied = Math.round((gross + vatForBalance - total) * 100) / 100
   if (implied <= 0.02 || total <= 0.005 || implied >= gross + vatForBalance + 0.01) return 0
   if (vat > 0.02 && Math.abs(implied - vat) < 0.03) return 0
+  const unrounded = Math.round((gross + vatForBalance) * 100) / 100
+  /** 정수 바트 Rounding 잔차를 플랫폼/수동 할인으로 오인하지 않음 (290+VAT20.30→310) */
+  if (isPosPaymentTotalRoundingGap(unrounded, total)) return 0
   return implied
 }
 

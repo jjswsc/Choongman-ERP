@@ -79,6 +79,45 @@ describe('receiptModalDataFromPosOrderReprint', () => {
     expect(reprint.suppressReceiptModalAutoPrint).toBe(true)
   })
 
+  it('does not treat whole-baht rounding as discount or recompute VAT on reprint (290 + 7%)', () => {
+    const order = {
+      id: 3,
+      orderNo: '1001-20260819-003',
+      storeCode: 'ST01',
+      orderType: 'dine_in',
+      tableName: '3',
+      status: 'pending',
+      items: [{ id: '1', name: 'Test Rounding', price: 290, quantity: 1 }],
+      subtotal: 290,
+      discountAmt: 0,
+      total: 310,
+      vat: 20.3,
+      paymentCash: 0,
+      paymentCard: 0,
+      paymentQr: 0,
+      paymentOther: 0,
+      paymentDeliveryApp: 0,
+    } as unknown as PosOrder
+
+    const adjustments = posPricingAdjustmentsFromPrinterSettings({
+      vatRate: 7,
+      vatMode: 'separate',
+      serviceRate: 0,
+      serviceMode: 'separate',
+      paymentTotalRoundingMode: 'round',
+    })
+    const first = receiptModalDataFromPosOrderForPayment(order, adjustments)
+    const reprint = receiptModalDataFromPosOrderReprint(order, undefined, adjustments)
+
+    expect(first.discountAmt).toBe(0)
+    expect(reprint.discountAmt).toBe(0)
+    expect(first.vatFeeAmt).toBe(20.3)
+    expect(reprint.vatFeeAmt).toBe(20.3)
+    expect(reprint.vatFeeAmt).not.toBe(20.28)
+    expect(reprint.total).toBe(310)
+    expect(reprint.subtotal).toBe(290)
+  })
+
   it('prints tax invoice box with same fee rows as first payment print (service + VAT + rounding)', () => {
     const memo = upsertPosOrderTaxInvoiceMemo('', {
       memberNo: '',

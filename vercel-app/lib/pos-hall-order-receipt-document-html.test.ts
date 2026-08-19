@@ -229,6 +229,55 @@ describe('resolveHallOrderReceiptDiscountAmt', () => {
       })
     ).toBe(0)
   })
+
+  it('does not treat whole-baht rounding residual as discount (290 + VAT 20.30 → 310)', () => {
+    expect(
+      resolveHallOrderReceiptDiscountAmt({
+        discountAmt: 0,
+        items: [{ price: 290, qty: 1 }],
+        subtotal: 290,
+        total: 310,
+        vatFeeAmt: 20.3,
+        vatFeeMode: 'separate',
+      })
+    ).toBe(0)
+  })
+})
+
+describe('buildPosHallOrderReceiptDocumentHtml — whole-baht rounding', () => {
+  it('prints Rounding below VAT, not Discount, and keeps Amount Before VAT at item price', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '003',
+        storeCode: 'CM The Street',
+        orderType: 'dine-in',
+        tableName: '3',
+        items: [{ id: '1', name: 'Test Menu', price: 290, qty: 1 }],
+        subtotal: 290,
+        discountAmt: 0,
+        total: 310,
+        vatFeeAmt: 20.3,
+        vatFeeMode: 'separate',
+        vatRate: 7,
+      },
+      t: (k) => k,
+      lang: 'en',
+    })
+    expect(html).not.toMatch(/Discount/)
+    expect(html).toContain('Amount Before VAT')
+    expect(html).toContain('290.00')
+    expect(html).not.toContain('289.70')
+    expect(html).toContain('VAT (7%)')
+    expect(html).toContain('20.30')
+    expect(html).toContain('Rounding')
+    expect(html).toContain('-0.30')
+    expect(html).not.toContain('+0.02')
+    const vatIdx = html.indexOf('VAT (7%)')
+    const roundIdx = html.indexOf('Rounding')
+    const totalIdx = html.indexOf('TOTAL')
+    expect(roundIdx).toBeGreaterThan(vatIdx)
+    expect(totalIdx).toBeGreaterThan(roundIdx)
+  })
 })
 
 describe('buildPosHallOrderReceiptDocumentHtml — discount row', () => {

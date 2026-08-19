@@ -22,6 +22,16 @@ describe('resolveEffectivePosOrderDiscountAmt', () => {
       })
     ).toBe(30)
   })
+
+  it('does not treat whole-baht rounding as checkout discount (290 + 7% VAT → 310)', () => {
+    expect(
+      resolveEffectivePosOrderDiscountAmt({
+        snapshot: { discountAmt: 0, total: 310, subtotal: 290 },
+        items: [{ price: 290, qty: 1 }],
+        adjustments: { vatRate: 7, vatMode: 'separate', paymentTotalRoundingMode: 'round' },
+      })
+    ).toBe(0)
+  })
 })
 
 describe('manualDiscountSeedFromCheckoutSnapshot', () => {

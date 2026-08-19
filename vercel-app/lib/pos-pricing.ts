@@ -118,6 +118,22 @@ export function applyPosPaymentTotalRounding(
   return roundPosPaymentTotalBaht(n)
 }
 
+/**
+ * 미할인 합계와 저장된 TOTAL 차이가 정수 바트 반올림/반내림 잔차인지.
+ * 예: 290 + VAT 20.30 = 310.30 → TOTAL 310 (차 0.30) 은 Rounding이지 Discount가 아님.
+ */
+export function isPosPaymentTotalRoundingGap(unrounded: number, storedTotal: number): boolean {
+  const u = round2(Number(unrounded) || 0)
+  const t = round2(Number(storedTotal) || 0)
+  if (!Number.isFinite(u) || !Number.isFinite(t) || u <= 0.005 || t <= 0.005) return false
+  const gap = round2(Math.abs(u - t))
+  if (gap <= 0.005 || gap >= 1) return false
+  return (
+    Math.abs(t - roundPosPaymentTotalBaht(u)) < 0.02 ||
+    Math.abs(t - floorPosPaymentTotalBaht(u)) < 0.02
+  )
+}
+
 function shouldApplyPaymentTotalRounding(adjustments?: PosPricingAdjustments): boolean {
   return resolvePaymentTotalRoundingMode(adjustments) !== 'none'
 }
