@@ -75,7 +75,7 @@ export function taxMonthFromDocDate(docDate: string): string {
 export function formatSellerBranch(raw: unknown): string {
   const s = String(raw || '').trim()
   if (!s) return SELLER_BRANCH_HQ
-  if (/สำนักงานใหญ่|head\s*office|\bhq\b|본사/i.test(s)) return SELLER_BRANCH_HQ
+  if (/สำนักงานใหญ่|head\s*office|\bhq\b|본사|본점/i.test(s) && !/\d/.test(s)) return SELLER_BRANCH_HQ
   const digits = s.replace(/\D/g, '')
   if (digits) {
     const padded = digits.padStart(5, '0').slice(-5)
@@ -83,6 +83,18 @@ export function formatSellerBranch(raw: unknown): string {
     return `สาขา ${padded}`
   }
   return s.slice(0, 80)
+}
+
+/** UI 표시용. 저장 값은 항상 formatSellerBranch (태국 양식). */
+export function displaySellerBranchForUi(
+  raw: unknown,
+  labels: { hq: string; branch: string }
+): string {
+  const formatted = formatSellerBranch(raw)
+  if (formatted === SELLER_BRANCH_HQ) return labels.hq
+  const m = formatted.match(/สาขา\s*(\d+)/)
+  if (m) return `${labels.branch} ${m[1]}`
+  return formatted
 }
 
 export function purchaseTaxInvoiceDedupeKey(
@@ -204,4 +216,166 @@ export function isLikelyTaxInvoiceCopy(raw: unknown): boolean {
   const s = String(raw || '').trim().toLowerCase()
   if (!s) return false
   return /สำเนา|สำเนาเอกสาร|copy\b|duplicate|true copy|สำเนาใบ/.test(s)
+}
+
+function sanitizeTaxInvoiceMoney(n: unknown): number | undefined {
+  if (n == null || n === '') return undefined
+  const v =
+    typeof n === 'number'
+      ? n
+      : Number(
+          String(n)
+            .replace(/,/g, '')
+            .replace(/[^\d.-]/g, '')
+        )
+  if (!Number.isFinite(v) || v < 0 || v >= 500_000_000) return undefined
+  return Math.round(v * 100) / 100
+}
+
+export function purchaseTaxInvoiceHasExtractedFields(row: ExtractedPurchaseTaxInvoiceFields): boolean {
+  return Boolean(
+    row.invoiceNo ||
+      row.sellerName ||
+      row.sellerTaxId ||
+      row.netAmount != null ||
+      row.vatAmount != null ||
+      row.totalAmount != null
+  )
+}
+
+function maybeGregorianDocDate(raw: unknown): string | undefined {
+  const s = String(raw || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined
+  const y = Number(s.slice(0, 4))
+  if (y >= 2400) {
+    const ce = y - 543
+    if (ce < 1990 || ce > 2100) return undefined
+    return `${String(ce).padStart(4, '0')}${s.slice(4)}`
+  }
+  return s
+}
+
+function normalizePurchaseTaxInvoiceVisionRow(parsed: Record<string, unknown>): ExtractedPurchaseTaxInvoiceFields {
+  const invoiceRaw = parsed.invoiceNo
+  const invoiceNo =
+    invoiceRaw == null || invoiceRaw === ''
+      ? undefined
+      : String(invoiceRaw).trim().slice(0, 80)
+  const sellerTaxId = String(parsed.sellerTaxId || '')
+    .replace(/\D/g, '')
+    .slice(0, 13)
+  const isCopy =
+    parsed.isCopy === true || /สำเนา|true copy|duplicate/i.test(String(parsed.isCopy || ''))
+  return {
+    docDate: maybeGregorianDocDate(parsed.docDate),
+    invoiceNo: invoiceNo || undefined,
+    sellerName: parsed.sellerName ? String(parsed.sellerName).trim().slice(0, 200) : undefined,
+    sellerTaxId: sellerTaxId.length === 13 ? sellerTaxId : undefined,
+    sellerBranch: parsed.sellerBranch ? String(parsed.sellerBranch).trim().slice(0, 80) : undefined,
+    netAmount: sanitizeTaxInvoiceMoney(parsed.netAmount),
+    vatAmount: sanitizeTaxInvoiceMoney(parsed.vatAmount),
+    totalAmount: sanitizeTaxInvoiceMoney(parsed.totalAmount),
+    isCopy,
+  }
+}
+
+/** Vision JSON → 페이지당 0~n건 (한 장에 세금계산서 2매 가능) */
+export function parsePurchaseTaxInvoiceVisionPayload(raw: string): ExtractedPurchaseTaxInvoiceFields[] {
+  const text = String(raw || '').trim()
+  const objMatch = text.match(/\{[\s\S]*\}/)
+  const arrMatch = !objMatch ? text.match(/\[[\s\S]*\]/) : null
+  const jsonText = objMatch?.[0] || arrMatch?.[0]
+  if (!jsonText) return []
+  try {
+    const parsed = JSON.parse(jsonText) as unknown
+    const list: unknown[] = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === 'object' && Array.isArray((parsed as { invoices?: unknown }).invoices)
+        ? (parsed as { invoices: unknown[] }).invoices
+        : parsed && typeof parsed === 'object'
+          ? [parsed]
+          : []
+    return list
+      .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row))
+      .map(normalizePurchaseTaxInvoiceVisionRow)
+      .filter(purchaseTaxInvoiceHasExtractedFields)
+  } catch {
+    return []
+  }
+}
+
+export const PURCHASE_TAX_VAT_MISMATCH_TOLERANCE = 0.05
+
+/** VAT가 있는 행만 7%와 비교. 0원은 면세·영세 가능이라 경고하지 않음. */
+export function purchaseTaxVatLooksWrong(net: unknown, vat: unknown): boolean {
+  const n = Number(net)
+  const v = Number(vat)
+  if (!Number.isFinite(n) || !Number.isFinite(v) || v <= 0) return false
+  return Math.abs(roundMoney2(n * 0.07) - roundMoney2(v)) > PURCHASE_TAX_VAT_MISMATCH_TOLERANCE
+}
+
+export function purchaseTaxDocMonthMismatch(docDate: unknown, taxMonth: string): boolean {
+  const month = taxMonthFromDocDate(String(docDate || ''))
+  const want = String(taxMonth || '').trim().slice(0, 7)
+  return Boolean(month && want && month !== want)
+}
+
+export type PurchaseTaxReviewFlag = 'vat' | 'month' | 'tin'
+
+export function purchaseTaxReviewFlags(
+  row: {
+    skip?: boolean
+    docDate?: string
+    sellerTaxId?: string
+    netAmount?: string | number
+    vatAmount?: string | number
+  },
+  taxMonth: string
+): PurchaseTaxReviewFlag[] {
+  const flags: PurchaseTaxReviewFlag[] = []
+  const tin = String(row.sellerTaxId || '').replace(/\D/g, '')
+  if (tin && tin.length !== 13) flags.push('tin')
+  if (!row.skip && purchaseTaxDocMonthMismatch(row.docDate, taxMonth)) flags.push('month')
+  if (!row.skip && purchaseTaxVatLooksWrong(row.netAmount, row.vatAmount)) flags.push('vat')
+  return flags
+}
+
+export function purchaseTaxReviewIsProblem(
+  row: {
+    skip?: boolean
+    invoiceNo?: string
+    sellerTaxId?: string
+    docDate?: string
+    netAmount?: string | number
+    vatAmount?: string | number
+  },
+  taxMonth: string
+): boolean {
+  if (row.skip) return true
+  if (!String(row.invoiceNo || '').trim()) return true
+  return purchaseTaxReviewFlags(row, taxMonth).length > 0
+}
+
+export function purchaseTaxPp30Compare(opts: {
+  registerVat: number
+  reviewKeepVat: number
+  pp30InputVat: number
+  pp30OutputVat: number
+}) {
+  const registerVat = roundMoney2(Number(opts.registerVat) || 0)
+  const reviewKeepVat = roundMoney2(Number(opts.reviewKeepVat) || 0)
+  const pp30InputVat = roundMoney2(Number(opts.pp30InputVat) || 0)
+  const pp30OutputVat = roundMoney2(Number(opts.pp30OutputVat) || 0)
+  const afterSaveVat = roundMoney2(registerVat + reviewKeepVat)
+  return {
+    registerVat,
+    reviewKeepVat,
+    afterSaveVat,
+    pp30InputVat,
+    pp30OutputVat,
+    ledgerGap: roundMoney2(registerVat - pp30InputVat),
+    payableNow: roundMoney2(pp30OutputVat - registerVat),
+    payableAfterReview: roundMoney2(pp30OutputVat - afterSaveVat),
+    inSync: Math.abs(registerVat - pp30InputVat) <= PURCHASE_TAX_VAT_MISMATCH_TOLERANCE,
+  }
 }

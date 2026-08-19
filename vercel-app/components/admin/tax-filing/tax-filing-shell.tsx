@@ -429,6 +429,7 @@ export function TaxFilingShell() {
             filingYearMonth={tabProps.purchaseTaxInv.filingYearMonth}
             filingStoreFilter={tabProps.purchaseTaxInv.filingStoreFilter}
             filingSearchTick={ptiSearchTick}
+            storeChoices={storeOptions.filter((s) => s !== "All")}
           />
         </TabsContent>
         <TabsContent value="pp36" className={cn(adminTabsContentCn, "space-y-3")}>

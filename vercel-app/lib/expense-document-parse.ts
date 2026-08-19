@@ -6,6 +6,10 @@ import {
   parseQuoteAmountFromText,
 } from '@/lib/interior-quote-amount-parse'
 import { parseVendorNameHintFromText } from '@/lib/expense-ocr-suggestions'
+import {
+  parsePurchaseTaxInvoiceVisionPayload,
+  type ExtractedPurchaseTaxInvoiceFields,
+} from '@/lib/purchase-tax-invoice-core'
 
 export type ParsedExpenseDocument = {
   amount?: number
@@ -529,31 +533,28 @@ export async function extractExpenseDocumentFromDataUrl(
   return { result: null, openaiUsed: false }
 }
 
-export type ParsedPurchaseTaxInvoice = {
-  docDate?: string
-  invoiceNo?: string
-  sellerName?: string
-  sellerTaxId?: string
-  sellerBranch?: string
-  netAmount?: number
-  vatAmount?: number
-  totalAmount?: number
-  isCopy?: boolean
-}
+export type ParsedPurchaseTaxInvoice = ExtractedPurchaseTaxInvoiceFields
 
-function sanitizeMoney(n: unknown): number | undefined {
-  const v = Number(n)
-  if (!Number.isFinite(v) || v < 0 || v >= 500_000_000) return undefined
-  return Math.round(v * 100) / 100
-}
+const TAX_INV_VISION_SYSTEM =
+  'Extract Thai ใบกำกับภาษี (tax invoice) seller-side fields from scanned pages. Reply JSON only: {"invoices":[{"docDate":"YYYY-MM-DD"|null,"invoiceNo":string|null,"sellerName":string|null,"sellerTaxId":string|null,"sellerBranch":"สำนักงานใหญ่"|"สาขา 00001"|null,"netAmount":number|null,"vatAmount":number|null,"totalAmount":number|null,"isCopy":boolean}]}. Images are usually TOP crop (seller, TIN, invoice no, date) then BOTTOM crop (มูลค่า / VAT / รวม). Rules: (1) One page may contain 1 or 2 invoices — return every distinct original ต้นฉบับ. (2) sellerName/sellerTaxId = ผู้ขาย/ผู้จำหน่าย NOT the buyer. TIN is 13 digits. (3) sellerBranch = สำนักงานใหญ่ if head office/00000, else สาขา + 5-digit code. (4) netAmount = มูลค่า/ฐานภาษี excluding VAT; if mixed VATable+exempt, use VATable base only. (5) vatAmount is baht not 7%. (6) docDate Gregorian; convert พ.ศ. (2569→2026). (7) isCopy=true for สำเนา/copy/true copy. (8) Platform/bank fee invoices: netAmount = fee before VAT, not GMV. (9) Numbers as JSON numbers not strings.'
 
 export async function extractPurchaseTaxInvoiceWithVision(
   dataUrl: string
 ): Promise<ParsedPurchaseTaxInvoice | null> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim()
-  if (!apiKey) return null
+  const { invoices } = await extractPurchaseTaxInvoicesFromImages([dataUrl])
+  return invoices[0] || null
+}
 
-  const model = process.env.OPENAI_ERP_AI_MODEL?.trim() || 'gpt-4o-mini'
+export async function extractPurchaseTaxInvoicesFromImages(
+  dataUrls: string[]
+): Promise<{ invoices: ParsedPurchaseTaxInvoice[]; openaiUsed: boolean; error?: string }> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  if (!apiKey) return { invoices: [], openaiUsed: false, error: 'no_openai_key' }
+
+  const urls = dataUrls.filter((u) => typeof u === 'string' && u.startsWith('data:image/')).slice(0, 4)
+  if (!urls.length) return { invoices: [], openaiUsed: false, error: 'no_image' }
+
+  const model = process.env.OPENAI_TAX_INVOICE_MODEL?.trim() || 'gpt-4o'
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -563,73 +564,46 @@ export async function extractPurchaseTaxInvoiceWithVision(
     body: JSON.stringify({
       model,
       temperature: 0,
-      max_tokens: 500,
+      max_tokens: 1200,
+      response_format: { type: 'json_object' },
       messages: [
-        {
-          role: 'system',
-          content:
-            'Extract Thai ใบกำกับภาษี (tax invoice) seller-side fields. Reply JSON only: {"docDate":"YYYY-MM-DD"|null,"invoiceNo":string|null,"sellerName":string|null,"sellerTaxId":string|null,"sellerBranch":"สำนักงานใหญ่"|"สาขา 00001"|null,"netAmount":number|null,"vatAmount":number|null,"totalAmount":number|null,"isCopy":boolean}. Rules: (1) sellerName/sellerTaxId = ผู้ขาย/ผู้จำหน่าย NOT the buyer. TIN is 13 digits. (2) sellerBranch = สำนักงานใหญ่ if head office/00000, else สาขา + 5-digit code. (3) netAmount = มูลค่า/ฐานภาษี excluding VAT; if mixed VATable+exempt, use VATable base only. (4) vatAmount is baht not 7%. (5) docDate Gregorian; convert พ.ศ. (2569→2026). (6) isCopy=true for สำเนา/copy/true copy. (7) Platform/bank fee invoices: netAmount = fee before VAT, not GMV.',
-        },
+        { role: 'system', content: TAX_INV_VISION_SYSTEM },
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: 'Extract purchase tax invoice fields for ภาษีซื้อ register.',
+              text: 'Read every ใบกำกับภาษี on these crops for the ภาษีซื้อ register. First image is the top of the page; last image is the totals.',
             },
-            { type: 'image_url', image_url: { url: dataUrl } },
+            ...urls.map((url) => ({
+              type: 'image_url' as const,
+              image_url: { url, detail: 'high' as const },
+            })),
           ],
         },
       ],
     }),
   })
-  if (!res.ok) return null
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    console.error('openai tax invoice', res.status, errText.slice(0, 400))
+    return { invoices: [], openaiUsed: false, error: `openai_${res.status}` }
+  }
   const json = (await res.json()) as { choices?: { message?: { content?: string } }[] }
   const raw = json.choices?.[0]?.message?.content?.trim() || ''
-  const match = raw.match(/\{[\s\S]*\}/)
-  if (!match) return null
-  try {
-    const parsed = JSON.parse(match[0]) as Record<string, unknown>
-    let docDate =
-      parsed.docDate && /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.docDate))
-        ? String(parsed.docDate)
-        : undefined
-    if (docDate) {
-      const y = Number(docDate.slice(0, 4))
-      if (y >= 2400) {
-        docDate = normalizeExpenseCalendarDate(
-          y,
-          Number(docDate.slice(5, 7)),
-          Number(docDate.slice(8, 10))
-        )
-      }
-    }
-    const sellerTaxId = String(parsed.sellerTaxId || '')
-      .replace(/\D/g, '')
-      .slice(0, 13)
-    const netAmount = sanitizeMoney(parsed.netAmount)
-    const vatAmount = sanitizeMoney(parsed.vatAmount)
-    const totalAmount = sanitizeMoney(parsed.totalAmount)
-    const isCopy = parsed.isCopy === true || /สำเนา|true copy|duplicate/i.test(String(parsed.isCopy || ''))
-    return {
-      docDate,
-      invoiceNo: parsed.invoiceNo ? String(parsed.invoiceNo).trim().slice(0, 80) : undefined,
-      sellerName: parsed.sellerName ? String(parsed.sellerName).trim().slice(0, 200) : undefined,
-      sellerTaxId: sellerTaxId.length === 13 ? sellerTaxId : undefined,
-      sellerBranch: parsed.sellerBranch ? String(parsed.sellerBranch).trim().slice(0, 80) : undefined,
-      netAmount,
-      vatAmount,
-      totalAmount,
-      isCopy,
-    }
-  } catch {
-    return null
-  }
+  const invoices = parsePurchaseTaxInvoiceVisionPayload(raw)
+  return { invoices, openaiUsed: true, error: invoices.length ? undefined : 'empty_extract' }
 }
 
 export async function extractPurchaseTaxInvoiceFromDataUrl(
   dataUrl: string
-): Promise<{ result: ParsedPurchaseTaxInvoice | null; openaiUsed: boolean }> {
-  const vision = await extractPurchaseTaxInvoiceWithVision(dataUrl)
-  return { result: vision, openaiUsed: Boolean(vision) }
+): Promise<{ result: ParsedPurchaseTaxInvoice | null; openaiUsed: boolean; error?: string }> {
+  const { invoices, openaiUsed, error } = await extractPurchaseTaxInvoicesFromImages([dataUrl])
+  return { result: invoices[0] || null, openaiUsed, error }
+}
+
+export async function extractPurchaseTaxInvoiceFromImageUrls(
+  dataUrls: string[]
+): Promise<{ invoices: ParsedPurchaseTaxInvoice[]; openaiUsed: boolean; error?: string }> {
+  return extractPurchaseTaxInvoicesFromImages(dataUrls)
 }

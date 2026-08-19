@@ -355,7 +355,7 @@ export function ExpenseDocumentAttachPanel({
           </div>
         ) : null}
         {showInvoice ? (
-          <p className="basis-full text-[11px] text-muted-foreground">{tt("expensePtiHint", "ภาษีซื้อ(PP.30 매입)는 세무 신고 → ใบกำกับภาษีซื้อ에서 등록합니다. 여기서는 비용 증빙만 첨부됩니다.")}</p>
+          <p className="basis-full text-[11px] text-muted-foreground">{tt("expensePtiHint", "PP.30 매입세는 세무 신고 → 매입 세금계산서에서 등록합니다. 여기서는 비용 증빙만 첨부됩니다.")}</p>
         ) : null}
 
         {showDocNo ? (

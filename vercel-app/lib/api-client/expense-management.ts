@@ -756,18 +756,27 @@ export async function extractExpenseDocument(params: {
   dataUrl: string
   fileName: string
   schema?: string
-}) {
+  imageUrls?: string[]
+}, init?: { signal?: AbortSignal }) {
   const res = await apiFetch('/api/extractExpenseDocument', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
+    signal: init?.signal,
   })
-  return res.json() as Promise<{
-    success: boolean
-    message?: string
-    fields?: ExtractedExpenseDocumentFields & Record<string, unknown>
-    confidence?: string
-    method?: string
-    openaiUsed?: boolean
-  }>
+  const text = await res.text()
+  try {
+    return JSON.parse(text) as {
+      success: boolean
+      message?: string
+      error?: string
+      fields?: ExtractedExpenseDocumentFields & Record<string, unknown>
+      invoices?: Array<Record<string, unknown>>
+      confidence?: string
+      method?: string
+      openaiUsed?: boolean
+    }
+  } catch {
+    return { success: false as const, message: `HTTP_${res.status}` }
+  }
 }
