@@ -370,3 +370,77 @@ export async function deletePnd54LedgerEntry(params: { userRole: string; id: num
   })
   return res.json() as Promise<{ success: boolean; error?: string }>
 }
+
+export type PurchaseTaxInvoiceDto = {
+  id: number
+  storeName: string
+  buyerTaxId: string
+  taxMonth: string
+  docDate: string
+  invoiceNo: string
+  sellerName: string
+  sellerTaxId: string
+  sellerBranch: string
+  netAmount: number
+  vatAmount: number
+  totalAmount: number
+  source: string
+  inboundBatchId: number | null
+  attachmentUrls: string[]
+  memo: string
+}
+
+export async function getPurchaseTaxInvoices(params: { taxMonth: string; storeFilter?: string }) {
+  const q = new URLSearchParams({ taxMonth: params.taxMonth })
+  q.set('storeFilter', params.storeFilter || 'All')
+  const res = await apiFetchWithOffline(`/api/purchaseTaxInvoices?${q}`)
+  const data = (await res.json()) as {
+    success?: boolean
+    rows?: PurchaseTaxInvoiceDto[]
+    error?: string
+    tableMissing?: boolean
+  }
+  if (!res.ok) return { rows: [] as PurchaseTaxInvoiceDto[], error: data?.error || `HTTP_${res.status}`, tableMissing: false }
+  return {
+    rows: Array.isArray(data.rows) ? data.rows : [],
+    error: data.error,
+    tableMissing: !!data.tableMissing,
+  }
+}
+
+export async function savePurchaseTaxInvoice(body: Record<string, unknown>) {
+  const res = await apiFetchWithOffline('/api/purchaseTaxInvoices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'save', ...body }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    row?: PurchaseTaxInvoiceDto
+    error?: string
+    existingId?: number
+  }>
+}
+
+export async function bulkSavePurchaseTaxInvoices(rows: Record<string, unknown>[]) {
+  const res = await apiFetchWithOffline('/api/purchaseTaxInvoices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'bulk', rows }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    saved?: { id: number; invoiceNo: string }[]
+    skipped?: { invoiceNo: string; reason: string }[]
+    error?: string
+  }>
+}
+
+export async function deletePurchaseTaxInvoice(id: number) {
+  const res = await apiFetchWithOffline('/api/purchaseTaxInvoices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'delete', id }),
+  })
+  return res.json() as Promise<{ success: boolean; error?: string }>
+}

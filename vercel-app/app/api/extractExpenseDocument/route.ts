@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
-import { extractExpenseDocumentFromDataUrl } from '@/lib/expense-document-parse'
+import {
+  extractExpenseDocumentFromDataUrl,
+  extractPurchaseTaxInvoiceFromDataUrl,
+} from '@/lib/expense-document-parse'
 
 /** 인보이스·영수증 이미지/PDF에서 금액·일자·VAT 등 추출 (휴리스틱 + OpenAI Vision) */
 export async function POST(request: NextRequest) {
@@ -16,9 +19,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { dataUrl?: string; fileName?: string }
+    const body = (await request.json()) as {
+      dataUrl?: string
+      fileName?: string
+      schema?: string
+    }
     const dataUrl = String(body.dataUrl || '').trim()
     const fileName = String(body.fileName || 'document.jpg').trim()
+    const schema = String(body.schema || '').trim().toLowerCase()
     if (!dataUrl.startsWith('data:')) {
       return NextResponse.json({ success: false, message: 'dataUrl이 필요합니다.' }, { status: 400, headers })
     }
@@ -33,6 +41,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: 'PDF 또는 이미지 파일만 인식할 수 있습니다.' },
         { status: 400, headers }
+      )
+    }
+
+    if (schema === 'purchase_tax_invoice' || schema === 'purchasetaxinvoice') {
+      const { result, openaiUsed } = await extractPurchaseTaxInvoiceFromDataUrl(dataUrl)
+      if (!result) {
+        const noKey = !process.env.OPENAI_API_KEY?.trim()
+        return NextResponse.json(
+          {
+            success: false,
+            message: noKey
+              ? '문서에서 항목을 찾지 못했습니다. OPENAI_API_KEY 설정 후 다시 시도하거나 직접 입력해 주세요.'
+              : '문서에서 항목을 찾지 못했습니다. 직접 입력해 주세요.',
+          },
+          { headers }
+        )
+      }
+      return NextResponse.json(
+        {
+          success: true,
+          fields: result,
+          openaiUsed,
+        },
+        { headers }
       )
     }
 

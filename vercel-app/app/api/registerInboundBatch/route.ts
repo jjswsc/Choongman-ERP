@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
     const purchaseOrderId = (typeof body === 'object' && body?.purchaseOrderId) ? Number(body.purchaseOrderId) : null
     const poNo = (typeof body === 'object' && body?.poNo) ? String(body.poNo).trim() || null : null
     const invoiceNo = (typeof body === 'object' && body?.invoiceNo) ? String(body.invoiceNo).trim() || null : null
+    const invoiceReceived = typeof body === 'object' && body?.invoiceReceived === true
     const sourceCurrency = normalizeInboundSourceCurrency(
       typeof body === 'object' ? body?.sourceCurrency ?? body?.source_currency : null
     )
@@ -174,6 +175,7 @@ export async function POST(request: NextRequest) {
     }
     if (poNo) batchRow.po_no = poNo
     if (invoiceNo) batchRow.invoice_no = invoiceNo
+    if (invoiceReceived) batchRow.invoice_received = true
     const batchInserted = (await supabaseInsert(
       'inbound_batches',
       stampInventoryTenantId(batchRow, tenantScope)
@@ -198,6 +200,16 @@ export async function POST(request: NextRequest) {
     // 발주 승인으로 쌓인 PO 미지급은 입고 확정 시 Inbound 행으로 대체(중복 잔액 방지)
     if (batchId && purchaseOrderId && !isNaN(purchaseOrderId)) {
       await deletePayableFromPO(purchaseOrderId)
+    }
+    if (batchId) {
+      try {
+        const { syncPurchaseTaxInvoiceFromInboundBatch } = await import(
+          '@/lib/purchase-tax-invoice-inbound-sync'
+        )
+        await syncPurchaseTaxInvoiceFromInboundBatch(batchId)
+      } catch (syncErr) {
+        console.warn('registerInboundBatch purchase tax invoice sync:', syncErr)
+      }
     }
     return NextResponse.json(
       { success: true, message: `✅ ${validRows.length}건 입고 완료!` },

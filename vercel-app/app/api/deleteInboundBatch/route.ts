@@ -40,6 +40,15 @@ export async function POST(request: NextRequest) {
     // 1. payable_transactions 삭제 (ref_type=Inbound, ref_id=batchId)
     await supabaseDeleteByFilter('payable_transactions', `ref_type=eq.Inbound&ref_id=eq.${batchId}`)
 
+    try {
+      const { deletePurchaseTaxInvoiceByInboundBatch } = await import(
+        '@/lib/purchase-tax-invoice-server'
+      )
+      await deletePurchaseTaxInvoiceByInboundBatch(batchId)
+    } catch (syncErr) {
+      console.warn('deleteInboundBatch purchase tax invoice:', syncErr)
+    }
+
     // 2. stock_logs 삭제 (재고 반영 제거)
     await supabaseDeleteByFilter(
       'stock_logs',

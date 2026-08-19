@@ -27,6 +27,7 @@ import { TaxFilingWhtTab } from "@/components/admin/tax-filing/tab-wht"
 import { TaxFilingCitTab } from "@/components/admin/tax-filing/tab-cit"
 import { TaxFilingSsoTab } from "@/components/admin/tax-filing/tab-sso"
 import { TaxFilingStoreProfilesTab } from "@/components/admin/tax-filing/tab-store-profiles"
+import { TaxFilingPurchaseTaxInvoicesTab } from "@/components/admin/tax-filing/tab-purchase-tax-invoices"
 import {
   TaxEntityStoreScopeFilters,
   type TaxEntityScopeOption,
@@ -35,6 +36,7 @@ import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope-label"
 
 type FilingTabKey =
   | "pp30"
+  | "purchaseTaxInv"
   | "pp36"
   | "pnd1"
   | "pnd91"
@@ -81,6 +83,7 @@ function useFilingTabFilters(
   )
 
   const pp30 = useYmStoreFilter(defaultYm, defaultStore)
+  const purchaseTaxInv = useYmStoreFilter(defaultYm, defaultStore)
   const pp36 = useYmStoreFilter(defaultYm, defaultStore)
   const pnd1 = useYmStoreFilter(defaultYm, defaultStore)
   const pnd91 = useYmStoreFilter(defaultYm, defaultStore)
@@ -94,6 +97,7 @@ function useFilingTabFilters(
   React.useEffect(() => {
     if (isManager && managerStore) {
       pp30.setStore(managerStore)
+      purchaseTaxInv.setStore(managerStore)
       pp36.setStore(managerStore)
       pnd1.setStore(managerStore)
       pnd91.setStore(managerStore)
@@ -187,6 +191,7 @@ function useFilingTabFilters(
   const tabProps = React.useMemo(
     () => ({
       pp30: pick(pp30),
+      purchaseTaxInv: pick(purchaseTaxInv),
       pp36: pick(pp36),
       pnd1: pick(pnd1),
       pnd91: pick(pnd91),
@@ -200,6 +205,8 @@ function useFilingTabFilters(
     [
       pp30.filingYearMonth,
       pp30.filingStoreFilter,
+      purchaseTaxInv.filingYearMonth,
+      purchaseTaxInv.filingStoreFilter,
       pp36.filingYearMonth,
       pp36.filingStoreFilter,
       pnd1.filingYearMonth,
@@ -252,6 +259,7 @@ export function TaxFilingShell() {
     if (
       q === "storeProfiles" ||
       q === "pp30" ||
+      q === "purchaseTaxInv" ||
       q === "pp36" ||
       q === "pnd1" ||
       q === "pnd91" ||
@@ -340,6 +348,7 @@ export function TaxFilingShell() {
   )
 
   const [ssoSearchTick, setSsoSearchTick] = React.useState(0)
+  const [ptiSearchTick, setPtiSearchTick] = React.useState(0)
 
   const { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore } = useFilingTabFilters(
     storeOptions,
@@ -362,6 +371,9 @@ export function TaxFilingShell() {
             </TabsTrigger>
             <TabsTrigger value="pp30" className={adminTabsTriggerCn}>
               {t("taxFilingTabPp30")}
+            </TabsTrigger>
+            <TabsTrigger value="purchaseTaxInv" className={adminTabsTriggerCn}>
+              {t("taxFilingTabPurchaseTaxInv")}
             </TabsTrigger>
             <TabsTrigger value="pp36" className={adminTabsTriggerCn}>
               {t("taxFilingTabPp36")}
@@ -402,6 +414,21 @@ export function TaxFilingShell() {
             onOpenStoreProfiles={() =>
               openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pp30.filingStoreFilter)
             }
+          />
+        </TabsContent>
+        <TabsContent value="purchaseTaxInv" className={cn(adminTabsContentCn, "space-y-3")}>
+          <FilingFiltersCard
+            tabKey="purchaseTaxInv"
+            yearMonth={tabProps.purchaseTaxInv.filingYearMonth}
+            onYearMonthChange={tabProps.purchaseTaxInv.onFilingYearMonthChange}
+            storeFilter={tabProps.purchaseTaxInv.filingStoreFilter}
+            onStoreFilterChange={tabProps.purchaseTaxInv.onFilingStoreFilterChange}
+            onSearch={() => setPtiSearchTick((n) => n + 1)}
+          />
+          <TaxFilingPurchaseTaxInvoicesTab
+            filingYearMonth={tabProps.purchaseTaxInv.filingYearMonth}
+            filingStoreFilter={tabProps.purchaseTaxInv.filingStoreFilter}
+            filingSearchTick={ptiSearchTick}
           />
         </TabsContent>
         <TabsContent value="pp36" className={cn(adminTabsContentCn, "space-y-3")}>

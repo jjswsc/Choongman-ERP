@@ -147,6 +147,14 @@ export async function POST(request: NextRequest) {
       } catch (syncErr) {
         console.warn('updateInboundBatch payable sync:', syncErr)
       }
+      try {
+        const { syncPurchaseTaxInvoiceFromInboundBatch } = await import(
+          '@/lib/purchase-tax-invoice-inbound-sync'
+        )
+        await syncPurchaseTaxInvoiceFromInboundBatch(batchId)
+      } catch (syncErr) {
+        console.warn('updateInboundBatch purchase tax invoice sync:', syncErr)
+      }
 
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
@@ -298,6 +306,15 @@ export async function POST(request: NextRequest) {
       } catch (syncErr) {
         console.warn('updateInboundBatch payable delete:', syncErr)
       }
+    }
+
+    try {
+      const { syncPurchaseTaxInvoiceFromInboundBatch } = await import(
+        '@/lib/purchase-tax-invoice-inbound-sync'
+      )
+      await syncPurchaseTaxInvoiceFromInboundBatch(batchId)
+    } catch (syncErr) {
+      console.warn('updateInboundBatch purchase tax invoice sync:', syncErr)
     }
 
     return NextResponse.json(

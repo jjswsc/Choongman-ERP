@@ -11,12 +11,9 @@ import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildPayrollMonthPostgrestFilter, buildTaxMonthPostgrestFilter } from '@/lib/thai-tax-period'
 import { formatDateBangkok, unitPriceFromOutboundLogSnapshot, type OrderCartLine } from '@/lib/outbound-order-line-match'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
-import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
-import { syncCardAllocationInputVatLedgers } from '@/lib/card-input-vat-ledger'
 import { backfillVatLedgerStoreNames, resolveStoreDisplayNameForVatLedger, syncPosOrdersOutputVatLedger } from '@/lib/pos-ledger-drafts'
-import { syncInvoiceBackedBankInputVatLedgers } from '@/lib/invoice-backed-input-vat-ledger'
-import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
-import { CANONICAL_OFFICE_STORE, canonicalOfficeStore, isOfficeStoreVariant } from '@/lib/office-store-canonical'
+import { syncInboundBatchPurchaseTaxInvoicesForMonths } from '@/lib/purchase-tax-invoice-inbound-sync'
+import { CANONICAL_OFFICE_STORE, canonicalOfficeStore } from '@/lib/office-store-canonical'
 import { normalizeItemTaxType } from '@/lib/income-statement-item-vat'
 import {
   isAccountingPurchaseOrderByCartJson,
@@ -260,8 +257,8 @@ function pickEmployeeTin(row?: EmployeeTaxRow | null): string | null {
 }
 
 /**
- * PP30 조회 시 항상 실행하는 경량 동기화 — 지출 발생·통장 인보이스 확인 건만 반영.
- * 입고(stock_logs) 전체 재동기화는 syncTaxVatLedgersFromStockAndExpenses(지연 실행)에 맡긴다.
+ * PP30 조회 시 경량 동기화 — 입고 배치 ภาษีซื้อ 등록함 + (매출은 지연 전체 동기화).
+ * 지출·통장·카드 자동 매입 VAT는 중단.
  */
 export async function syncIncrementalVatLedgersFromExpenseAndBank(params: {
   months: string[]
@@ -272,62 +269,20 @@ export async function syncIncrementalVatLedgersFromExpenseAndBank(params: {
     .filter((m) => /^\d{4}-\d{2}$/.test(m))
   if (validMonths.length === 0) return { expenseSynced: 0, bankInvoiceUpserted: 0, cardAllocationSynced: 0 }
 
-  const storeFilter = String(params.storeFilter || '').trim()
-  const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined)
-  const officeScope = !!storeFilter && storeFilter !== 'All' && isHeadOfficeLikeStoreName(storeFilter)
-  const startYmd = monthStartYmd(validMonths[0]!)
-  const endYmd = monthEndYmd(validMonths[validMonths.length - 1]!)
-
-  let expenseSynced = 0
-  const expParts = [
-    `expense_date=gte.${encodeURIComponent(startYmd)}`,
-    `expense_date=lte.${encodeURIComponent(endYmd)}`,
-    'vat_amount=gt.0',
-    'status=neq.rejected',
-  ]
-  const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
-    select: 'id,store_name',
-    order: 'id.asc',
-    pageSize: 2000,
-    maxRows: 30000,
-  })) as { id?: number; store_name?: string | null }[]
-  for (const row of expenseRows || []) {
-    const id = Math.floor(Number(row.id) || 0)
-    if (id <= 0) continue
-    const rowStore = String(row.store_name || '').trim()
-    if (storeFilter && storeFilter !== 'All' && !storeScope.matches(rowStore) && !(officeScope && !rowStore)) {
-      continue
+  try {
+    const inbound = await syncInboundBatchPurchaseTaxInvoicesForMonths({
+      months: validMonths,
+      storeFilter: params.storeFilter,
+    })
+    return {
+      expenseSynced: 0,
+      bankInvoiceUpserted: inbound.upserted,
+      cardAllocationSynced: 0,
     }
-    await syncExpenseAccrualInputVatLedger(
-      id,
-      officeScope && !rowStore ? { fallbackStoreName: storeFilter } : undefined
-    )
-    expenseSynced += 1
-  }
-
-  let bankInvoiceUpserted = 0
-  try {
-    const bankSync = await syncInvoiceBackedBankInputVatLedgers({
-      months: validMonths,
-      storeFilter: params.storeFilter,
-    })
-    bankInvoiceUpserted = bankSync.upserted
   } catch (e) {
-    console.warn('syncIncrementalVatLedgersFromExpenseAndBank bank sync:', e)
+    console.warn('syncIncrementalVatLedgersFromExpenseAndBank inbound PTI:', e)
+    return { expenseSynced: 0, bankInvoiceUpserted: 0, cardAllocationSynced: 0 }
   }
-
-  let cardAllocationSynced = 0
-  try {
-    const cardSync = await syncCardAllocationInputVatLedgers({
-      months: validMonths,
-      storeFilter: params.storeFilter,
-    })
-    cardAllocationSynced = cardSync.synced
-  } catch (e) {
-    console.warn('syncIncrementalVatLedgersFromExpenseAndBank card sync:', e)
-  }
-
-  return { expenseSynced, bankInvoiceUpserted, cardAllocationSynced }
 }
 
 export async function syncTaxVatLedgersFromStockAndExpenses(params: {
@@ -368,16 +323,6 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     } catch (e) {
       console.warn('syncTaxVatLedgersFromStockAndExpenses pos output sync:', e)
     }
-  }
-
-  try {
-    const bankSync = await syncInvoiceBackedBankInputVatLedgers({
-      months: validMonths,
-      storeFilter: params.storeFilter,
-    })
-    bankInvoiceUpserted = bankSync.upserted
-  } catch (e) {
-    console.warn('syncTaxVatLedgersFromStockAndExpenses bank invoice sync:', e)
   }
 
   const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
@@ -555,6 +500,8 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     const orderId = Math.floor(Number(log.order_id) || 0)
     const cartForPrice = orderId > 0 ? orderCartById[String(orderId)] : undefined
     const isInputLog = logType === 'Inbound' || logType === 'ForcePush'
+    // 매입 VAT는 입고 라인 단위가 아니라 purchase_tax_invoices(배치 1행)만.
+    if (isInputLog) continue
     const isInternalHqMove = isInputLog && (vendor === 'From HQ' || vendor === 'HQ')
     const hqMatch = isInternalHqMove ? findHqOutboundMatchForStoreInbound(log, hqOutboundIndexes) : null
     const issuedRef = isInternalHqMove
@@ -677,39 +624,16 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
     stockDeleted += 1
   }
 
-  const expParts = [
-    `expense_date=gte.${encodeURIComponent(startYmd)}`,
-    `expense_date=lte.${encodeURIComponent(endYmd)}`,
-    'vat_amount=gt.0',
-    'status=neq.rejected',
-  ]
-  const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
-    select: 'id,store_name',
-    order: 'id.asc',
-    pageSize: 4000,
-    maxRows: 30000,
-  })) as { id?: number; store_name?: string | null }[]
-  const officeScope = !!storeFilter && isHeadOfficeLikeStoreName(storeFilter)
   let expenseSynced = 0
-  for (const row of expenseRows || []) {
-    const id = Math.floor(Number(row.id) || 0)
-    if (id <= 0) continue
-    const rowStore = String(row.store_name || '').trim()
-    if (storeFilter && !storeScope.matches(rowStore) && !(officeScope && !rowStore)) continue
-    await syncExpenseAccrualInputVatLedger(
-      id,
-      officeScope && !rowStore ? { fallbackStoreName: storeFilter } : undefined
-    )
-    expenseSynced += 1
-  }
-
   try {
-    await syncCardAllocationInputVatLedgers({
+    const inboundSync = await syncInboundBatchPurchaseTaxInvoicesForMonths({
       months: validMonths,
       storeFilter: params.storeFilter,
     })
+    expenseSynced = inboundSync.upserted
+    bankInvoiceUpserted = inboundSync.upserted
   } catch (e) {
-    console.warn('syncTaxVatLedgersFromStockAndExpenses card sync:', e)
+    console.warn('syncTaxVatLedgersFromStockAndExpenses inbound PTI (post-stock):', e)
   }
 
   return { stockUpserted, stockDeleted, expenseSynced, posUpserted, bankInvoiceUpserted }

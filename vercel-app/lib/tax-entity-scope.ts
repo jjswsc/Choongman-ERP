@@ -23,7 +23,7 @@ function normalizeScopeToken(raw: string): string {
   return String(raw || '').trim()
 }
 
-function parseTaxScopeFilter(filter: string): { kind: 'all' | 'store' | 'taxid' | 'entity'; value: string } {
+export function parseTaxScopeFilter(filter: string): { kind: 'all' | 'store' | 'taxid' | 'entity'; value: string } {
   const raw = normalizeScopeToken(filter)
   if (!raw || raw === 'All' || raw === '*') return { kind: 'all', value: '' }
   const lower = raw.toLowerCase()

@@ -1,4 +1,4 @@
-/** Expense Register 첨부 문서 유형 — PP.30 매입 VAT는 Tax Invoice만 */
+/** Expense Register 첨부 문서 유형 — 비용 증빙. PP.30 매입은 세금계산서 등록함 */
 
 export const EXPENSE_DOCUMENT_TYPES = ['invoice', 'tax_invoice', 'receipt'] as const
 
@@ -25,19 +25,14 @@ export function documentTypeFromInvoiceReceived(received: boolean): ExpenseDocum
 }
 
 /**
- * Tax Filing P.P.30 매입 VAT 원장 반영 대상.
- * - tax_invoice → 반영
- * - invoice / receipt → 반영하지 않음
- * - 미설정(과거 데이터) → invoice_received=true 만 (세금계산서 수령으로 표시된 건)
+ * 지출 첨부는 더 이상 PP.30 매입 VAT를 만들지 않는다.
+ * ภาษีซื้อ는 세무 → ใบกำกับภาษีซื้อ 등록함(+입고 배치)만 반영.
  */
-export function expenseDocumentQualifiesForPp30(opts: {
+export function expenseDocumentQualifiesForPp30(_opts?: {
   documentType?: ExpenseDocumentType | null | ''
   invoiceReceived?: boolean | null
 }): boolean {
-  const dt = normalizeExpenseDocumentType(opts.documentType)
-  if (dt === 'tax_invoice') return true
-  if (dt === 'invoice' || dt === 'receipt') return false
-  return Boolean(opts.invoiceReceived)
+  return false
 }
 
 export function parseExpenseDocumentTypeInput(raw: unknown): ExpenseDocumentType | null | undefined {

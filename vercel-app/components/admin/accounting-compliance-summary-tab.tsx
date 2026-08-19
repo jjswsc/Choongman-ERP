@@ -28,6 +28,7 @@ import type {
 } from "@/lib/api-client"
 import type { StoreVendorLinkEvaluation } from "@/lib/store-vendor-tax-link"
 import { StoreVendorTaxLinkBanner } from "@/components/admin/tax-filing/store-vendor-tax-link-banner"
+import { formatPp30Amount2 } from "@/lib/purchase-tax-invoice-core"
 import { RdPrepFilingHelper } from "@/components/admin/tax-filing/rd-prep-filing-helper"
 import {
   AccountingEmptyState,
@@ -1397,15 +1398,15 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
             <AccountingStatGrid>
               <AccountingStatCard
                 label={t("accCompVatInputNet")}
-                value={Math.round(vatSettlement.inputNet).toLocaleString()}
+                value={formatPp30Amount2(vatSettlement.inputNet)}
               />
               <AccountingStatCard
                 label={t("accCompVatInputVat")}
-                value={Math.round(vatSettlement.inputVat).toLocaleString()}
+                value={formatPp30Amount2(vatSettlement.inputVat)}
               />
               <AccountingStatCard
                 label={t("accCompVatPayable")}
-                value={Math.round(vatSettlement.payableVat).toLocaleString()}
+                value={formatPp30Amount2(vatSettlement.payableVat)}
                 tone={vatSettlement.payableVat > 0 ? "warn" : "default"}
               />
               <AccountingStatCard
@@ -1414,9 +1415,9 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               />
             </AccountingStatGrid>
             <AccountingStatGrid>
-              <AccountingStatCard label={t("accCompVatClaimableInputVat")} value={Math.round(vatInputClaimable.claimableVat).toLocaleString()} tone="ok" />
-              <AccountingStatCard label={t("accCompVatPendingEvidenceVat")} value={Math.round(vatInputClaimable.pendingVat).toLocaleString()} tone="warn" />
-              <AccountingStatCard label={t("accCompVatExcludedVat")} value={Math.round(vatInputClaimable.unobtainableVat).toLocaleString()} />
+              <AccountingStatCard label={t("accCompVatClaimableInputVat")} value={formatPp30Amount2(vatInputClaimable.claimableVat)} tone="ok" />
+              <AccountingStatCard label={t("accCompVatPendingEvidenceVat")} value={formatPp30Amount2(vatInputClaimable.pendingVat)} tone="warn" />
+              <AccountingStatCard label={t("accCompVatExcludedVat")} value={formatPp30Amount2(vatInputClaimable.unobtainableVat)} />
               <AccountingStatCard
                 label={t("accCompVatEvidenceCheckCounts")}
                 value={`${vatInputClaimable.claimableCount}/${vatInputClaimable.pendingCount}/${vatInputClaimable.unobtainableCount}`}
@@ -1554,9 +1555,9 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                           <tr key={`vendor-input-sum-${row.name}`} className="border-b border-border/50">
                             <td className="p-2">{row.name}</td>
                             <td className="p-2 text-right tabular-nums">{row.count.toLocaleString()}</td>
-                            <td className="p-2 text-right tabular-nums">{Math.round(row.net).toLocaleString()}</td>
-                            <td className="p-2 text-right tabular-nums">{Math.round(row.vat).toLocaleString()}</td>
-                            <td className="p-2 text-right tabular-nums font-medium">{Math.round(row.total).toLocaleString()}</td>
+                            <td className="p-2 text-right tabular-nums">{formatPp30Amount2(row.net)}</td>
+                            <td className="p-2 text-right tabular-nums">{formatPp30Amount2(row.vat)}</td>
+                            <td className="p-2 text-right tabular-nums font-medium">{formatPp30Amount2(row.total)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1568,13 +1569,13 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                               {vatInputVendorTotals.count.toLocaleString()}
                             </td>
                             <td className="p-2 text-right tabular-nums">
-                              {Math.round(vatInputVendorTotals.net).toLocaleString()}
+                              {formatPp30Amount2(vatInputVendorTotals.net)}
                             </td>
                             <td className="p-2 text-right tabular-nums">
-                              {Math.round(vatInputVendorTotals.vat).toLocaleString()}
+                              {formatPp30Amount2(vatInputVendorTotals.vat)}
                             </td>
                             <td className="p-2 text-right tabular-nums">
-                              {Math.round(vatInputVendorTotals.total).toLocaleString()}
+                              {formatPp30Amount2(vatInputVendorTotals.total)}
                             </td>
                           </tr>
                         </tfoot>
@@ -1821,20 +1822,20 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               <div className="rounded-md border border-sky-300/40 bg-sky-50/40 dark:bg-sky-950/20 p-3">
                 <div className="text-xs text-muted-foreground">{t("accCompVatClaimableInputVatSumLabel")}</div>
                 <div className="text-lg font-semibold tabular-nums">
-                  {Math.round(vatSettlement.claimableInputVat).toLocaleString()}
+                  {formatPp30Amount2(vatSettlement.claimableInputVat)}
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-1">
                   {tr(t, "accCompVatNetAndRows", {
-                    net: Math.round(vatSettlement.claimableInputNet).toLocaleString(),
+                    net: formatPp30Amount2(vatSettlement.claimableInputNet),
                     count: vatSettlement.claimableInputCount.toLocaleString(),
                   })}
                 </div>
                 {vatSettlement.inputVat !== vatSettlement.claimableInputVat ? (
                   <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
                     {tr(t, "accCompVatInputTotalVsClaimableNote", {
-                      total: Math.round(vatSettlement.inputVat).toLocaleString(),
-                      pending: Math.round(vatInputClaimable.pendingVat).toLocaleString(),
-                      excluded: Math.round(vatInputClaimable.unobtainableVat).toLocaleString(),
+                      total: formatPp30Amount2(vatSettlement.inputVat),
+                      pending: formatPp30Amount2(vatInputClaimable.pendingVat),
+                      excluded: formatPp30Amount2(vatInputClaimable.unobtainableVat),
                     })}
                   </div>
                 ) : null}
@@ -1849,7 +1850,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               >
                 <div className="text-xs text-muted-foreground">{t("accCompVatExpectedPayableCreditLabel")}</div>
                 <div className="text-lg font-semibold tabular-nums">
-                  {Math.round(Math.abs(vatSettlement.payableVat)).toLocaleString()}
+                  {formatPp30Amount2(Math.abs(vatSettlement.payableVat))}
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-1">
                   {vatSettlement.payableVat >= 0 ? t("accCompVatPayableDueShort") : t("accCompVatCreditCarryoverShort")}
@@ -1862,8 +1863,8 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               <div className="tabular-nums">
                 {tr(t, "accCompVatCalcFormulaDetailClaimable", {
                   out: Math.round(vatSettlement.outputVat).toLocaleString(),
-                  inp: Math.round(vatSettlement.claimableInputVat).toLocaleString(),
-                  payable: Math.round(vatSettlement.payableVat).toLocaleString(),
+                  inp: formatPp30Amount2(vatSettlement.claimableInputVat),
+                  payable: formatPp30Amount2(vatSettlement.payableVat),
                 })}
               </div>
               <div className="text-muted-foreground">{t("accCompVatCalcDisclaimer")}</div>

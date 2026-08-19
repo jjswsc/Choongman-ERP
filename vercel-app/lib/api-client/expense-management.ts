@@ -752,7 +752,11 @@ export type ExtractedExpenseDocumentFields = {
   vendorNameHint?: string
 }
 
-export async function extractExpenseDocument(params: { dataUrl: string; fileName: string }) {
+export async function extractExpenseDocument(params: {
+  dataUrl: string
+  fileName: string
+  schema?: string
+}) {
   const res = await apiFetch('/api/extractExpenseDocument', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -761,7 +765,7 @@ export async function extractExpenseDocument(params: { dataUrl: string; fileName
   return res.json() as Promise<{
     success: boolean
     message?: string
-    fields?: ExtractedExpenseDocumentFields
+    fields?: ExtractedExpenseDocumentFields & Record<string, unknown>
     confidence?: string
     method?: string
     openaiUsed?: boolean

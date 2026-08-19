@@ -74,3 +74,43 @@ export function computeInboundBatchAmounts(
   const grossTotal = roundMoney2(netTotal + vatTotal)
   return { netTotal, grossTotal, vatTotal, batchDateYmd }
 }
+
+/**
+ * ใบกำกับภาษีซื้อ / PP.30 매입: 과세 품목만 มูลค่า·VAT.
+ * 면세·영세율은 มูลค่า에서 제외 (Freshket 혼합 인보이스와 동일).
+ */
+export function computeInboundBatchTaxableAmounts(
+  lines: InboundPayableLine[],
+  taxByCode: ReadonlyMap<string, ItemTaxType>
+): {
+  taxableNet: number
+  vatTotal: number
+  taxableGross: number
+  exemptNet: number
+  batchDateYmd: string
+} {
+  let taxableNet = 0
+  let vatTotal = 0
+  let exemptNet = 0
+  let batchDateYmd = ''
+  for (const line of lines) {
+    const code = String(line.code || '').trim()
+    const qty = Math.max(0, Number(line.qty) || 0)
+    const unit = Math.max(0, Number(line.unitCost) || 0)
+    if (!code || qty <= 0) continue
+    const net = roundErp3(qty * unit)
+    const taxType = taxByCode.get(code) ?? 'taxable'
+    if (isItemVatExempt(taxType)) {
+      exemptNet = roundMoney2(exemptNet + net)
+    } else {
+      const vat = roundMoney2(net * 0.07)
+      taxableNet = roundMoney2(taxableNet + net)
+      vatTotal = roundMoney2(vatTotal + vat)
+    }
+    const ymd = line.dateYmd ? parseInboundDateBangkokYmd(line.dateYmd) : ''
+    if (ymd && (!batchDateYmd || ymd > batchDateYmd)) batchDateYmd = ymd
+  }
+  if (!batchDateYmd) batchDateYmd = getBangkokTodayDateString()
+  const taxableGross = roundMoney2(taxableNet + vatTotal)
+  return { taxableNet, vatTotal, taxableGross, exemptNet, batchDateYmd }
+}

@@ -87,7 +87,7 @@ const DOC_TYPE_OPTIONS: {
     labelKey: "expenseDocTypeTaxInvoice",
     labelFb: "Tax Invoice",
     descKey: "expenseDocTypeTaxInvoiceDesc",
-    descFb: "ใบกำกับภาษี · PP.30",
+    descFb: "ใบกำกับภาษี (비용 증빙)",
     accent: "text-emerald-800",
     selected: "border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-400/60",
   },
@@ -349,15 +349,13 @@ export function ExpenseDocumentAttachPanel({
                 >
                   <Icon className={cn("h-3.5 w-3.5 shrink-0", selected ? opt.accent : "opacity-70")} />
                   {tt(opt.labelKey, opt.labelFb)}
-                  {opt.value === "tax_invoice" && selected ? (
-                    <span className="rounded bg-emerald-200/80 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-900">
-                      PP.30
-                    </span>
-                  ) : null}
                 </button>
               )
             })}
           </div>
+        ) : null}
+        {showInvoice ? (
+          <p className="basis-full text-[11px] text-muted-foreground">{tt("expensePtiHint", "ภาษีซื้อ(PP.30 매입)는 세무 신고 → ใบกำกับภาษีซื้อ에서 등록합니다. 여기서는 비용 증빙만 첨부됩니다.")}</p>
         ) : null}
 
         {showDocNo ? (
