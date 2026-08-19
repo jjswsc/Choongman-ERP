@@ -773,7 +773,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         {
           company: company.trim() || undefined,
           store: hideSaasPartnerStoreField
-            ? store.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT
+            ? SAAS_PARTNER_LOGIN_STORE_DEFAULT
             : store.trim() || undefined,
           user: user.trim() || undefined,
         },
@@ -851,7 +851,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       : company.trim()
     /** SaaS 대리점 로그인: 매장은 가상 키(Partner). UI 비노출·비워도 기본값 사용 */
     const effectiveStore = hideSaasPartnerStoreField
-      ? store.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT
+      ? SAAS_PARTNER_LOGIN_STORE_DEFAULT
       : store.trim()
     const effectiveUser = isSaasAdminLogin
       ? normalizeSaasLoginId(user) || user.trim()
@@ -1573,8 +1573,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                     isSaasAdminLogin &&
                     (!nextCompany.trim() || !isSaasPlatformDefaultLoginCompany(nextCompany.trim()))
                   if (nextPartnerFlow) {
-                    /** 대리점 — Partner 기본값 유지. 이름 입력은 유지(매 글자마다 지우지 않음) */
-                    setStore((prev) => prev.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT)
+                    /** 대리점 — 이전에 입력한 HQ 등이 남지 않게 Partner로 고정 */
+                    setStore(SAAS_PARTNER_LOGIN_STORE_DEFAULT)
                   } else if (isSaasAdminLogin) {
                     setStore("")
                   } else {
