@@ -49,6 +49,25 @@ describe('resolveKitchenPrintJobDedupeKey', () => {
     )
   })
 
+  it('uses unique QR line ids so two phones ordering the same menu both print', () => {
+    const a = [{ id: 'qr-12-90-1-aaa', menuId: '90', name: '[Buffet] Soup', qty: 1 }]
+    const b = [{ id: 'qr-12-90-1-bbb', menuId: '90', name: '[Buffet] Soup', qty: 1 }]
+    const keyA = resolveKitchenPrintJobDedupeKey(58, {
+      action: 'update_order',
+      source: 'qr_table_submit',
+      kitchenLines: a,
+    })
+    const keyB = resolveKitchenPrintJobDedupeKey(58, {
+      action: 'update_order',
+      source: 'qr_table_submit',
+      kitchenLines: b,
+    })
+    expect(keyA).toBe('order:58:kitchen:qr:qr-12-90-1-aaa')
+    expect(keyB).toBe('order:58:kitchen:qr:qr-12-90-1-bbb')
+    expect(keyA).not.toBe(keyB)
+    expect(keyA).not.toBe(buildDineInAddKitchenAutoPrintDedupeKey(58, a))
+  })
+
   it('uses create key when there are no kitchen lines', () => {
     expect(resolveKitchenPrintJobDedupeKey(12, { action: 'create_order' })).toBe('order:12:kitchen')
   })

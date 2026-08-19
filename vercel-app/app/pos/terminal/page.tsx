@@ -174,6 +174,7 @@ import {
   resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
+  shouldSkipRealtimeKitchenAutoprintForQrGuestAddon,
 } from '@/lib/qr-table-types'
 import { usePosMainDeviceSyncOwnedByLayout } from '@/hooks/use-pos-main-device-sync-owned-by-layout'
 import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
@@ -5487,17 +5488,21 @@ export default function PosTerminalPage() {
       }
 
       if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
-        const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
-          printHallAddon,
-          skipQrGuestHall,
-          afterReceiptToKitchenMs:
-            typeof window !== 'undefined' && window.cmPosShell
-              ? resolveAfterReceiptToKitchenDelayMs()
-              : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
-          kitchenOnlyDelayMs: KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS,
-        })
-        if (kitchenDelayMs <= 0) dispatchRemoteKitchen()
-        else setTimeout(dispatchRemoteKitchen, kitchenDelayMs)
+        if (shouldSkipRealtimeKitchenAutoprintForQrGuestAddon(kitchenCartLines)) {
+          logPosPrintDebug('remote_dine_in_add_kitchen_skip_qr_job', { orderId })
+        } else {
+          const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
+            printHallAddon,
+            skipQrGuestHall,
+            afterReceiptToKitchenMs:
+              typeof window !== 'undefined' && window.cmPosShell
+                ? resolveAfterReceiptToKitchenDelayMs()
+                : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
+            kitchenOnlyDelayMs: KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS,
+          })
+          if (kitchenDelayMs <= 0) dispatchRemoteKitchen()
+          else setTimeout(dispatchRemoteKitchen, kitchenDelayMs)
+        }
       }
       refetchCurrentStore()
       if (printHallAddon) {
@@ -5967,6 +5972,9 @@ export default function PosTerminalPage() {
                   changedCount: changedIds.length,
                 })
                 if (wantMetaDineInAddonKitchen && kitchenCartLines.length > 0) {
+                  if (shouldSkipRealtimeKitchenAutoprintForQrGuestAddon(kitchenCartLines)) {
+                    logPosPrintDebug('poll_meta_remote_dine_in_add_kitchen_skip_qr_job', { orderId: oid })
+                  } else {
                   const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
                     printHallAddon,
                     skipQrGuestHall,
@@ -5992,6 +6000,7 @@ export default function PosTerminalPage() {
                   }
                   if (kitchenDelayMs <= 0) runPollKitchen()
                   else setTimeout(runPollKitchen, kitchenDelayMs)
+                  }
                 }
                 if (printHallAddon) {
                   void printReceiptNow(receiptPayloadRemote, undefined, false, undefined, true)

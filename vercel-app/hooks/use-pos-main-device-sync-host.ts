@@ -145,6 +145,7 @@ import {
   resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
+  shouldSkipRealtimeKitchenAutoprintForQrGuestAddon,
 } from '@/lib/qr-table-types'
 import { syncGrabCancelWatchSnapshot, applyGrabCancelWatchRealtimeRow } from '@/lib/pos-grab-cancel-watch'
 import {
@@ -1371,6 +1372,9 @@ export function usePosMainDeviceSyncHost(): void {
         }
         dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
         if (autoPrint.kitchenOnOrder && kitchenCartLines.length > 0) {
+          if (shouldSkipRealtimeKitchenAutoprintForQrGuestAddon(kitchenCartLines)) {
+            logPosPrintDebug('realtime_dine_in_add_kitchen_skip_qr_job', { orderId: addonOrderId })
+          } else {
           const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
             printHallAddon,
             skipQrGuestHall,
@@ -1400,6 +1404,7 @@ export function usePosMainDeviceSyncHost(): void {
           }
           if (kitchenDelayMs <= 0) runKitchen()
           else setTimeout(runKitchen, kitchenDelayMs)
+          }
         }
         refetchAddonUi()
         if (printHallAddon) {

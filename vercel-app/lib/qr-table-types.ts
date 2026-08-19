@@ -127,6 +127,16 @@ export function shouldSkipHallAutoprintForQrGuestAddon(
   return deltaLines.every(isQrTableGuestOrderLine)
 }
 
+/**
+ * QR 손님 추가는 pos_print_jobs 가 주방을 찍는다.
+ * Realtime이 메뉴 내용 키로 찍으면, 같은 메뉴를 2대가 동시에 낼 때 한 장만 나간다.
+ */
+export function shouldSkipRealtimeKitchenAutoprintForQrGuestAddon(
+  deltaLines: Array<{ source?: unknown; id?: unknown }> | null | undefined
+): boolean {
+  return shouldSkipHallAutoprintForQrGuestAddon(deltaLines)
+}
+
 /** QR 손님 추가주문은 홀 전표·UI 깜빡임을 기다리지 않고 주방을 바로 보냄 */
 export function resolveDineInAddonKitchenDelayMs(opts: {
   printHallAddon: boolean

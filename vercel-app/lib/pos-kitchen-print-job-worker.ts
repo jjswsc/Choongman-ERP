@@ -39,6 +39,18 @@ export function kitchenLinesFromPrintJobPayload(
   return raw.filter((row) => row && typeof row === 'object') as Array<Record<string, unknown>>
 }
 
+export function resolveQrTableKitchenJobDedupeKey(
+  orderId: number,
+  lines: Array<{ id?: unknown }>
+): string {
+  const ids = lines
+    .map((line) => String(line.id ?? '').trim())
+    .filter(Boolean)
+    .sort()
+  if (ids.length > 0) return `order:${orderId}:kitchen:qr:${ids.join(',')}`
+  return `order:${orderId}:kitchen:qr:job`
+}
+
 export function resolveKitchenPrintJobDedupeKey(
   orderId: number,
   payload: Record<string, unknown> | null | undefined
@@ -47,7 +59,11 @@ export function resolveKitchenPrintJobDedupeKey(
   // savePosOrder create jobs always include kitchenLines. If we keyed those as
   // add:… the job worker printed again 1s after local/Realtime (`order:{id}:kitchen`).
   if (action === 'create_order') return `order:${orderId}:kitchen`
+  const source = String(payload?.source ?? '').trim()
   const lines = kitchenLinesFromPrintJobPayload(payload)
+  if (source === 'qr_table_submit' || source === 'qr_table_extras_paid') {
+    return resolveQrTableKitchenJobDedupeKey(orderId, lines)
+  }
   if (lines.length > 0) return buildDineInAddKitchenAutoPrintDedupeKey(orderId, lines)
   return `order:${orderId}:kitchen:job:${action || 'unknown'}`
 }

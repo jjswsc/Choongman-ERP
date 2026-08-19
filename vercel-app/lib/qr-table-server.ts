@@ -1522,7 +1522,6 @@ export async function submitQrCart(params: {
     throw new Error('order_closed')
   }
 
-  const prevItems = parseItemsJson(order.items_json)
   const newLines: Array<Record<string, unknown>> = []
   let extrasSubtotal = 0
   const addedAt = getBangkokDateTimeString()
@@ -1609,24 +1608,33 @@ export async function submitQrCart(params: {
 
   const cartOrderSelect =
     'id,items_json,status,payment_qr,payment_cash,payment_card,payment_other,subtotal,total,store_code,order_no,table_name,guest_count,memo,updated_at'
+  const myLineIds = new Set(newLines.map((line) => String(line.id || '').trim()).filter(Boolean))
+  const hasAllMyLines = (items: Array<Record<string, unknown>>) =>
+    newLines.every((nl) => items.some((row) => String(row.id || '').trim() === String(nl.id || '').trim()))
   let liveOrder = order
-  let nextItems = [...prevItems, ...newLines]
+  let nextItems: Array<Record<string, unknown>> = []
   let subtotal = 0
   let pricing = { vatFeeAmt: 0, serviceFeeAmt: 0, finalTotal: 0 }
-  const maxCartWriteAttempts = 4
+  const maxCartWriteAttempts = 5
   for (let attempt = 0; attempt < maxCartWriteAttempts; attempt++) {
-    if (attempt > 0) {
-      const again = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
-        limit: 1,
-        select: cartOrderSelect,
-      })) as typeof orderRows
-      const row = again?.[0]
-      if (!row?.id) throw new Error('order_missing')
-      const st = String(row.status || '').toLowerCase()
-      if (st === 'paid' || st === 'cancelled' || st === 'completed') throw new Error('order_closed')
-      liveOrder = row
-      nextItems = [...parseItemsJson(row.items_json), ...newLines]
+    const latestRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+      limit: 1,
+      select: cartOrderSelect,
+    })) as typeof orderRows
+    const row = latestRows?.[0] ?? (attempt === 0 ? order : null)
+    if (!row?.id) throw new Error('order_missing')
+    const st = String(row.status || '').toLowerCase()
+    if (st === 'paid' || st === 'cancelled' || st === 'completed') throw new Error('order_closed')
+    liveOrder = row
+    const latest = parseItemsJson(row.items_json)
+    if (hasAllMyLines(latest)) {
+      nextItems = latest
+      const financials = await computeQrTableOrderFinancials(session.storeCode, nextItems)
+      subtotal = financials.subtotal
+      pricing = financials.pricing
+      break
     }
+    nextItems = [...latest.filter((item) => !myLineIds.has(String(item.id || '').trim())), ...newLines]
     const financials = await computeQrTableOrderFinancials(session.storeCode, nextItems)
     subtotal = financials.subtotal
     pricing = financials.pricing
@@ -1639,15 +1647,15 @@ export async function submitQrCart(params: {
       total: pricing.finalTotal,
       updated_at: now,
     }
-    const prevUpdatedAt = String(liveOrder.updated_at || '').trim()
+    const prevUpdatedAt = String(row.updated_at || '').trim()
     if (prevUpdatedAt && attempt < maxCartWriteAttempts - 1) {
-      const rows = await supabaseUpdateByFilterReturning(
+      const casRows = await supabaseUpdateByFilterReturning(
         'pos_orders',
         `id=eq.${session.posOrderId}&updated_at=eq.${encodeURIComponent(prevUpdatedAt)}`,
         patch
       )
-      if (Array.isArray(rows) && rows.length > 0) break
-      continue
+      if (!Array.isArray(casRows) || casRows.length === 0) continue
+      break
     }
     await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, patch)
     break

@@ -6,6 +6,7 @@ import {
   resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
+  shouldSkipRealtimeKitchenAutoprintForQrGuestAddon,
 } from '@/lib/qr-table-types'
 
 describe('isQrBuffetPackageKitchenSkipLine', () => {
@@ -72,6 +73,25 @@ describe('shouldSkipHallAutoprintForQrGuestAddon', () => {
 
   it('does not skip empty delta', () => {
     expect(shouldSkipHallAutoprintForQrGuestAddon([])).toBe(false)
+  })
+})
+
+describe('shouldSkipRealtimeKitchenAutoprintForQrGuestAddon', () => {
+  it('skips realtime kitchen when every new line is from a guest phone', () => {
+    expect(
+      shouldSkipRealtimeKitchenAutoprintForQrGuestAddon([
+        { id: 'qr-12-90-1-aaa', source: 'qr_table', name: 'Chicken' },
+      ])
+    ).toBe(true)
+  })
+
+  it('keeps realtime kitchen when staff POS add-on is in the delta', () => {
+    expect(
+      shouldSkipRealtimeKitchenAutoprintForQrGuestAddon([
+        { id: 'cart-1', name: 'Chicken' },
+        { id: 'qr-12-90-1-aaa', source: 'qr_table' },
+      ])
+    ).toBe(false)
   })
 })
 
