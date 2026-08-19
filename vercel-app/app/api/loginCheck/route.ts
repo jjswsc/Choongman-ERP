@@ -5,6 +5,7 @@ import { signToken } from '@/lib/jwt-auth'
 import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
 import { isOfficeStore, resolveAuthRoleFromEmployeeRoleColumn } from '@/lib/permissions'
+import { saasLoginCompanyMatches } from '@/lib/saas-login-id'
 import { normalizeCompanyName, normalizeTenantId } from '@/lib/tenant-context'
 import { buildAllowedStoresForToken } from '@/lib/franchisee-multi-store'
 import { getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store-settings-server'
@@ -77,9 +78,8 @@ export async function POST(req: NextRequest) {
         ? fetchErpStoresMasterForTenant(resolvedTenant.tenantId, resolvedTenant.companyName || companyInput)
         : fetchErpStoresMaster(),
     ])
-    const companyNeedle = companyInput.toLowerCase()
     const byCompany = companyInput
-      ? (byName || []).filter((r) => normalizeCompanyName(r.company).toLowerCase() === companyNeedle)
+      ? (byName || []).filter((r) => saasLoginCompanyMatches(companyInput, normalizeCompanyName(r.company)))
       : []
     /**
      * 회사명을 보냈으면 반드시 회사로 좁힌다.

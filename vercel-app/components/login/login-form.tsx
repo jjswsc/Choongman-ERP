@@ -56,6 +56,7 @@ import {
 } from "@/lib/offline/network"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { canAccessSaasAdmin } from "@/lib/permissions"
+import { sanitizeSaasLoginIdTyping, normalizeSaasLoginId } from "@/lib/saas-login-id"
 import {
   isSaasPlatformDefaultLoginCompany,
   isSaasAdminLoginPath,
@@ -845,12 +846,16 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const effectiveCompany = company.trim()
+    const effectiveCompany = isSaasAdminLogin
+      ? normalizeSaasLoginId(company) || company.trim()
+      : company.trim()
     /** SaaS 대리점 로그인: 매장은 가상 키(Partner). UI 비노출·비워도 기본값 사용 */
     const effectiveStore = hideSaasPartnerStoreField
       ? store.trim() || SAAS_PARTNER_LOGIN_STORE_DEFAULT
       : store.trim()
-    const effectiveUser = user.trim()
+    const effectiveUser = isSaasAdminLogin
+      ? normalizeSaasLoginId(user) || user.trim()
+      : user.trim()
     if (!effectiveStore || !effectiveUser) {
       setErrorIsConnectivity(false)
       setError(tMsg("msg_select_store_name"))
@@ -1189,7 +1194,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "회사 선택",
       selectName: "이름 선택",
       typeCompany: "회사명 입력",
-      typePartnerCompany: "대리점명(회사명) 입력",
+      typePartnerCompany: "대리점 ID 입력 (예: jrinter)",
       companyRequired: "회사명을 입력하면 매장·이름 목록이 표시됩니다.",
       companyNotFound: "회사를 찾을 수 없습니다. 회사명을 확인해 주세요.",
       typeStore: "매장명 입력",
@@ -1226,7 +1231,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "Select Company",
       selectName: "Select Name",
       typeCompany: "Company name",
-      typePartnerCompany: "Partner / company name",
+      typePartnerCompany: "Partner ID (e.g. jrinter)",
       companyRequired: "Enter your company name to load stores and staff.",
       companyNotFound: "Company not found. Please check the company name.",
       typeStore: "Store name",
@@ -1262,7 +1267,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "เลือกบริษัท",
       selectName: "เลือกชื่อ",
       typeCompany: "ชื่อบริษัท",
-      typePartnerCompany: "ชื่อตัวแทน/บริษัท",
+      typePartnerCompany: "รหัสตัวแทน (เช่น jrinter)",
       companyRequired: "กรอกชื่อบริษัทเพื่อโหลดสาขาและพนักงานครับ",
       companyNotFound: "ไม่พบบริษัท กรุณาตรวจสอบชื่อบริษัทครับ",
       typeStore: "ชื่อสาขา",
@@ -1298,7 +1303,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "ကုမ္ပဏီရွေးပါ",
       selectName: "အမည်ရွေးပါ",
       typeCompany: "ကုမ္ပဏီအမည်",
-      typePartnerCompany: "ကိုယ်စားလှယ်/ကုမ္ပဏီအမည်",
+      typePartnerCompany: "Partner ID (e.g. jrinter)",
       companyRequired: "Enter company name to load stores.",
       companyNotFound: "Company not found.",
       typeStore: "ဆိုင်အမည်",
@@ -1334,7 +1339,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       selectCompany: "ເລືອກບໍລິສັດ",
       selectName: "ເລືອກຊື່",
       typeCompany: "ຊື່ບໍລິສັດ",
-      typePartnerCompany: "ຊື່ຕົວແທນ/ບໍລິສັດ",
+      typePartnerCompany: "Partner ID (e.g. jrinter)",
       companyRequired: "Enter company name to load stores.",
       companyNotFound: "Company not found.",
       typeStore: "ຊື່ຮ້ານ",
@@ -1560,7 +1565,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 type="text"
                 value={company}
                 onChange={(e) => {
-                  const nextCompany = e.target.value
+                  const nextCompany = isSaasAdminLogin
+                    ? sanitizeSaasLoginIdTyping(e.target.value)
+                    : e.target.value
                   setCompany(nextCompany)
                   const nextPartnerFlow =
                     isSaasAdminLogin &&
@@ -1635,7 +1642,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               <input
                 type="text"
                 value={user}
-                onChange={(e) => setUser(e.target.value)}
+                onChange={(e) =>
+                  setUser(isSaasAdminLogin ? sanitizeSaasLoginIdTyping(e.target.value) : e.target.value)
+                }
                 placeholder={t.typeName}
                 className="login-input-field"
                 autoComplete="username"

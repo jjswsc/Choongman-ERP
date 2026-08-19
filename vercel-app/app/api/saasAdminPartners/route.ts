@@ -12,6 +12,7 @@ import {
   supabaseUpsertMergeWithPgrst204Fallback,
 } from "@/lib/supabase-pgrst204-retry"
 import { createSaasPartnerAdminEmployee } from "@/lib/saas-partner-admin-account-server"
+import { isSaasLoginId, normalizeSaasLoginId } from "@/lib/saas-login-id"
 import {
   supabaseSelectFilter,
   supabaseSelectFilterRange,
@@ -353,13 +354,10 @@ export async function POST(req: NextRequest) {
     let createdLoginAccount: { company: string; store: string; name: string; employeeId: number } | null = null
 
     if (body.partner) {
-      const id = String(body.partner.id || "")
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]/g, "-")
+      const id = normalizeSaasLoginId(body.partner.id || "")
       const name = String(body.partner.name || "").trim()
-      if (!id || !name) {
-        return NextResponse.json({ success: false, message: "partner.id/name이 필요합니다." }, { status: 400, headers })
+      if (!id || !isSaasLoginId(id) || !name) {
+        return NextResponse.json({ success: false, message: "partner.id/name이 필요합니다. ID는 띄어쓰기 없이 영문·숫자·하이픈만 사용합니다." }, { status: 400, headers })
       }
       await supabaseUpsertMergeWithPgrst204Fallback(
         "saas_partners",
@@ -394,7 +392,7 @@ export async function POST(req: NextRequest) {
         const account = await createSaasPartnerAdminEmployee({
           name: loginName,
           password: loginPassword,
-          company: name,
+          company: id,
         })
         await supabaseUpsert(
           "saas_partner_users",

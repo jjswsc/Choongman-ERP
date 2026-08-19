@@ -14,6 +14,7 @@ import { useSaasScope } from "@/components/saas/saas-scope-context"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import { resolveSaasPartnerLoginStore } from "@/lib/saas-partner-login-defaults"
+import { isSaasLoginId, normalizeSaasLoginId, sanitizeSaasLoginIdTyping } from "@/lib/saas-login-id"
 
 type PartnerRow = {
   id: string
@@ -70,16 +71,16 @@ export default function SaasPartnersPage() {
   }, [load])
 
   const savePartner = async () => {
-    const id = partnerId.trim().toLowerCase()
+    const id = normalizeSaasLoginId(partnerId)
     const name = partnerName.trim()
-    const adminName = loginName.trim()
+    const adminName = normalizeSaasLoginId(loginName)
     const adminPassword = loginPassword.trim()
-    if (!id || !name) {
+    if (!id || !isSaasLoginId(id) || !name) {
       await appAlert(t("saasAdminPartners_errRequired"))
       return
     }
-    if (!adminName || !adminPassword) {
-      await appAlert(t("saasAdminPartners_errLoginRequired"))
+    if (!adminName || !isSaasLoginId(adminName) || !adminPassword) {
+      await appAlert(t("saasAdminPartners_errLoginId"))
       return
     }
     if (adminPassword.length < 4) {
@@ -221,8 +222,8 @@ export default function SaasPartnersPage() {
               <Label>{t("saasAdminPartners_idLabel")}</Label>
               <Input
                 value={partnerId}
-                onChange={(e) => setPartnerId(e.target.value)}
-                placeholder="partner-bkk-001"
+                onChange={(e) => setPartnerId(sanitizeSaasLoginIdTyping(e.target.value))}
+                placeholder="jrinter"
                 autoComplete="off"
               />
               <p className="text-xs text-muted-foreground">{t("saasAdminPartners_idHint")}</p>
@@ -242,14 +243,20 @@ export default function SaasPartnersPage() {
               <p className="text-sm font-medium">{t("saasAdminPartners_loginSectionTitle")}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {tr(t, "saasAdminPartners_loginSectionDesc", {
-                  company: partnerName.trim() || t("saasAdminPartners_nameLabel"),
+                  company: partnerId.trim() || t("saasAdminPartners_idLabel"),
                   store: loginStore,
                 })}
               </p>
             </div>
             <div className="space-y-2">
               <Label>{t("saasAdminPartners_loginNameLabel")}</Label>
-              <Input value={loginName} onChange={(e) => setLoginName(e.target.value)} autoComplete="off" />
+              <Input
+                value={loginName}
+                onChange={(e) => setLoginName(sanitizeSaasLoginIdTyping(e.target.value))}
+                autoComplete="off"
+                placeholder="admin"
+              />
+              <p className="text-xs text-muted-foreground">{t("saasAdminPartners_loginNameHint")}</p>
             </div>
             <div className="space-y-2">
               <Label>{t("saasAdminPartners_loginPasswordLabel")}</Label>

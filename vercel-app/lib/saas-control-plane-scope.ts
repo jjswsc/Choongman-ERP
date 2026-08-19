@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import type { JwtPayload } from "./jwt-auth"
 import { canAccessSaasAdmin } from "./permissions"
+import { normalizeSaasLoginId } from "./saas-login-id"
 import { isSaasPartnerLoginStore } from "./saas-partner-login-defaults"
 import { supabaseSelectFilter } from "./supabase-server"
 import { requireAuth } from "./verify-auth"
@@ -103,12 +104,24 @@ async function loadPartnerScopeByCompanyMatch(params: {
   if (!company || !store || !name || !isPartnerStoreKey(store)) return null
 
   try {
-    const partnerRows = (await supabaseSelectFilter(
-      "saas_partners",
-      `name=eq.${encodeURIComponent(company)}&is_active=eq.true`,
-      { limit: 1, select: "id,name,default_margin_pct,is_active" }
-    )) as PartnerRow[]
-    const partner = partnerRows?.[0]
+    const slug = normalizeSaasLoginId(company)
+    let partner: PartnerRow | undefined
+    if (slug) {
+      const byId = (await supabaseSelectFilter(
+        "saas_partners",
+        `id=eq.${encodeURIComponent(slug)}&is_active=eq.true`,
+        { limit: 1, select: "id,name,default_margin_pct,is_active" }
+      )) as PartnerRow[]
+      partner = byId?.[0]
+    }
+    if (!partner?.id) {
+      const byName = (await supabaseSelectFilter(
+        "saas_partners",
+        `name=eq.${encodeURIComponent(company)}&is_active=eq.true`,
+        { limit: 1, select: "id,name,default_margin_pct,is_active" }
+      )) as PartnerRow[]
+      partner = byName?.[0]
+    }
     if (!partner?.id) return null
 
     let employeeId = params.employeeId

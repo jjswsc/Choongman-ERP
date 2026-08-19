@@ -1,6 +1,7 @@
 import "server-only"
 
 import { hashPassword } from "./password"
+import { isSaasLoginId, normalizeSaasLoginId } from "./saas-login-id"
 import {
   resolveSaasPartnerLoginCompany,
   resolveSaasPartnerLoginStore,
@@ -17,19 +18,20 @@ export type SaasPartnerLoginAccount = {
 export async function createSaasPartnerAdminEmployee(params: {
   name: string
   password: string
-  /** 대리점명 — employees.company 및 /saas-admin/login 회사 입력값 */
+  /** 로그인 회사 — 대리점 ID 슬러그 (`jrinter`) */
   company?: string
   store?: string
 }): Promise<SaasPartnerLoginAccount> {
-  const name = String(params.name || "").trim()
+  const name = normalizeSaasLoginId(params.name)
   const rawPassword = String(params.password || "").trim()
-  const company = String(params.company || "").trim() || resolveSaasPartnerLoginCompany()
+  const company =
+    normalizeSaasLoginId(params.company || "") || resolveSaasPartnerLoginCompany()
   const store = String(params.store || "").trim() || resolveSaasPartnerLoginStore()
-  if (!name) {
-    throw new Error("로그인 이름을 입력해 주세요.")
+  if (!isSaasLoginId(name)) {
+    throw new Error("로그인 이름은 영문·숫자·하이픈만, 띄어쓰기 없이 입력해 주세요.")
   }
-  if (!company) {
-    throw new Error("대리점명(회사)이 필요합니다.")
+  if (!isSaasLoginId(company)) {
+    throw new Error("로그인 회사(대리점 ID)는 영문·숫자·하이픈만, 띄어쓰기 없이 입력해 주세요.")
   }
   if (rawPassword.length < 4) {
     throw new Error("비밀번호는 4자 이상 입력해 주세요.")
