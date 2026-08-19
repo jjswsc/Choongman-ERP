@@ -1,14 +1,14 @@
 import 'server-only'
 
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { QR_TABLE_SESSION_COOKIE } from '@/lib/qr-table-types'
+import { hashQrSessionSecret } from '@/lib/qr-table-session-secret-hashes'
+
+export { hashQrSessionSecret, verifyQrSessionSecret } from '@/lib/qr-table-session-secret-hashes'
+export { deriveQrTableJoinSecret, parseQrSessionSecretHashes, serializeQrSessionSecretHashes } from '@/lib/qr-table-session-secret-hashes'
 
 const SESSION_MAX_AGE_SEC = 60 * 60 * 8
-
-export function hashQrSessionSecret(raw: string): string {
-  return createHash('sha256').update(String(raw || '')).digest('hex')
-}
 
 export function generateQrSessionSecret(): { raw: string; hash: string } {
   const raw = randomBytes(32).toString('base64url')
@@ -30,11 +30,10 @@ export function clearQrSessionCookie(): string {
   return `${QR_TABLE_SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`
 }
 
-export function parseQrSessionCookie(
-  req: NextRequest
+export function parseQrSessionAuthValue(
+  raw: string | null | undefined
 ): { sessionId: number; rawSecret: string } | null {
-  const fromCookie = req.cookies.get(QR_TABLE_SESSION_COOKIE)?.value
-  const v = String(fromCookie || '').trim()
+  const v = String(raw || '').trim()
   if (!v) return null
   const dot = v.indexOf('.')
   if (dot <= 0) return null
@@ -44,15 +43,11 @@ export function parseQrSessionCookie(
   return { sessionId, rawSecret }
 }
 
-export function verifyQrSessionSecret(rawSecret: string, hash: string): boolean {
-  const a = Buffer.from(hashQrSessionSecret(rawSecret), 'hex')
-  const b = Buffer.from(String(hash || ''), 'hex')
-  if (a.length !== b.length || a.length === 0) return false
-  try {
-    return timingSafeEqual(a, b)
-  } catch {
-    return false
-  }
+export function parseQrSessionCookie(
+  req: NextRequest
+): { sessionId: number; rawSecret: string } | null {
+  const fromCookie = req.cookies.get(QR_TABLE_SESSION_COOKIE)?.value
+  return parseQrSessionAuthValue(fromCookie)
 }
 
 export function qrTableCorsHeaders(): Headers {
@@ -72,16 +67,9 @@ export function applyQrTableCors(res: NextResponse): NextResponse {
 export function parseQrSessionHeader(
   req: NextRequest
 ): { sessionId: number; rawSecret: string } | null {
-  const h = String(req.headers.get('x-qr-session') || '').trim()
-  if (!h) return null
-  const dot = h.indexOf('.')
-  if (dot <= 0) return null
-  const sessionId = Math.floor(Number(h.slice(0, dot)))
-  const rawSecret = h.slice(dot + 1)
-  if (!sessionId || !rawSecret) return null
-  return { sessionId, rawSecret }
+  return parseQrSessionAuthValue(req.headers.get('x-qr-session'))
 }
 
 export function resolveQrSessionAuth(req: NextRequest): { sessionId: number; rawSecret: string } | null {
-  return parseQrSessionCookie(req) || parseQrSessionHeader(req)
+  return parseQrSessionHeader(req) || parseQrSessionCookie(req)
 }

@@ -22,15 +22,21 @@ import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retr
 import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
+  supabaseUpdateByFilterReturning,
   supabaseUpsert,
   supabaseDeleteByFilter,
   supabaseInsert,
 } from '@/lib/supabase-server'
 import {
+  deriveQrTableJoinSecret,
   generateQrSessionSecret,
   generateQrTableTokenValue,
+  hashQrSessionSecret,
+  parseQrSessionSecretHashes,
+  serializeQrSessionSecretHashes,
   verifyQrSessionSecret,
 } from '@/lib/qr-table-session-auth'
+import { QR_TABLE_MAX_GUEST_DEVICE_HASHES } from '@/lib/qr-table-session-secret-hashes'
 import {
   QR_TABLE_CREATED_BY_PREFIX,
   buffetTierDisplayName,
@@ -998,24 +1004,45 @@ export async function getPublicSessionBootstrap(token: string, origin?: string) 
 
 export async function claimQrTableSession(params: {
   token: string
+  existingSessionId?: number
+  existingRawSecret?: string
 }): Promise<{ session: QrTableSession; rawSecret: string }> {
   const tok = await findQrTokenByValue(params.token)
   if (!tok) throw new Error('invalid_token')
   const settings = await loadQrOrderStoreSettings(tok.storeCode)
   if (!settings.enabled) throw new Error('store_disabled')
 
-  const existing = await loadActiveSessionForTable(tok.storeCode, tok.tableName)
-  if (!existing) throw new Error('session_not_found')
-  if (existing.status === 'closed' || existing.status === 'expired') throw new Error('session_closed')
+  const existingLite = await loadActiveSessionForTable(tok.storeCode, tok.tableName)
+  if (!existingLite) throw new Error('session_not_found')
+  if (existingLite.status === 'closed' || existingLite.status === 'expired') throw new Error('session_closed')
 
-  const { raw, hash } = generateQrSessionSecret()
-  await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${existing.id}`, {
-    session_secret_hash: hash,
-    updated_at: getBangkokDateTimeString(),
-  })
+  const existing = await loadSessionById(existingLite.id)
+  if (!existing) throw new Error('session_not_found')
+
+  const existingSecret = String(params.existingRawSecret || '').trim()
+  const existingSid = Math.floor(Number(params.existingSessionId) || 0)
+  if (
+    existingSid === existing.id &&
+    existingSecret &&
+    verifyQrSessionSecret(existingSecret, existing.secretHash)
+  ) {
+    return { session: existing, rawSecret: existingSecret }
+  }
+
+  const joinRaw = deriveQrTableJoinSecret(existing.id, tok.token)
+  const joinHash = hashQrSessionSecret(joinRaw)
+  const hashes = parseQrSessionSecretHashes(existing.secretHash)
+  if (!hashes.includes(joinHash)) {
+    if (hashes.length >= QR_TABLE_MAX_GUEST_DEVICE_HASHES) throw new Error('session_device_limit')
+    const nextHashes = [...hashes, joinHash]
+    await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${existing.id}`, {
+      session_secret_hash: serializeQrSessionSecretHashes(nextHashes),
+      updated_at: getBangkokDateTimeString(),
+    })
+  }
   const session = await loadSessionById(existing.id)
   if (!session) throw new Error('session_not_found')
-  return { session, rawSecret: raw }
+  return { session, rawSecret: joinRaw }
 }
 
 export async function openQrTableSession(params: {
@@ -1466,7 +1493,7 @@ export async function submitQrCart(params: {
     supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
       limit: 1,
       select:
-        'id,items_json,status,payment_qr,payment_cash,payment_card,payment_other,subtotal,total,store_code,order_no,table_name,guest_count,memo',
+        'id,items_json,status,payment_qr,payment_cash,payment_card,payment_other,subtotal,total,store_code,order_no,table_name,guest_count,memo,updated_at',
     }) as Promise<
       Array<{
         id?: number
@@ -1483,6 +1510,7 @@ export async function submitQrCart(params: {
         table_name?: string
         guest_count?: number
         memo?: string
+        updated_at?: string
       }>
     >,
   ])
@@ -1540,9 +1568,6 @@ export async function submitQrCart(params: {
     })
   }
 
-  const nextItems = [...prevItems, ...newLines]
-  const now = addedAt
-
   const kitchenDelta = extrasPrepay
     ? []
     : filterKitchenCartLinesForDineInAdd(
@@ -1560,12 +1585,13 @@ export async function submitQrCart(params: {
   if (kitchenDelta.length) {
     // 합계 계산·pos_orders UPDATE 보다 먼저 큐에 넣어, 홀 화면보다 주방이 먼저 나가게
     try {
+      const lineIds = newLines.map((line) => String(line.id || '')).filter(Boolean).join(',')
       await enqueueKitchenPrintJob({
         storeCode: session.storeCode,
         orderId: session.posOrderId,
         orderNo: String(order.order_no || '').trim() || null,
         source: 'qr_table_submit',
-        dedupeKey: `order:${session.posOrderId}:kitchen:qr:${Date.now()}`,
+        dedupeKey: `order:${session.posOrderId}:kitchen:qr:${lineIds || addedAt}`,
         payload: {
           action: 'update_order',
           orderType: 'dine_in',
@@ -1581,27 +1607,62 @@ export async function submitQrCart(params: {
     }
   }
 
-  const { subtotal, pricing } = await computeQrTableOrderFinancials(session.storeCode, nextItems)
-
-  await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
-    items_json: JSON.stringify(nextItems),
-    subtotal,
-    vat: pricing.vatFeeAmt,
-    service_amt: pricing.serviceFeeAmt,
-    total: pricing.finalTotal,
-    updated_at: now,
-  })
+  const cartOrderSelect =
+    'id,items_json,status,payment_qr,payment_cash,payment_card,payment_other,subtotal,total,store_code,order_no,table_name,guest_count,memo,updated_at'
+  let liveOrder = order
+  let nextItems = [...prevItems, ...newLines]
+  let subtotal = 0
+  let pricing = { vatFeeAmt: 0, serviceFeeAmt: 0, finalTotal: 0 }
+  const maxCartWriteAttempts = 4
+  for (let attempt = 0; attempt < maxCartWriteAttempts; attempt++) {
+    if (attempt > 0) {
+      const again = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+        limit: 1,
+        select: cartOrderSelect,
+      })) as typeof orderRows
+      const row = again?.[0]
+      if (!row?.id) throw new Error('order_missing')
+      const st = String(row.status || '').toLowerCase()
+      if (st === 'paid' || st === 'cancelled' || st === 'completed') throw new Error('order_closed')
+      liveOrder = row
+      nextItems = [...parseItemsJson(row.items_json), ...newLines]
+    }
+    const financials = await computeQrTableOrderFinancials(session.storeCode, nextItems)
+    subtotal = financials.subtotal
+    pricing = financials.pricing
+    const now = getBangkokDateTimeString()
+    const patch = {
+      items_json: JSON.stringify(nextItems),
+      subtotal,
+      vat: pricing.vatFeeAmt,
+      service_amt: pricing.serviceFeeAmt,
+      total: pricing.finalTotal,
+      updated_at: now,
+    }
+    const prevUpdatedAt = String(liveOrder.updated_at || '').trim()
+    if (prevUpdatedAt && attempt < maxCartWriteAttempts - 1) {
+      const rows = await supabaseUpdateByFilterReturning(
+        'pos_orders',
+        `id=eq.${session.posOrderId}&updated_at=eq.${encodeURIComponent(prevUpdatedAt)}`,
+        patch
+      )
+      if (Array.isArray(rows) && rows.length > 0) break
+      continue
+    }
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, patch)
+    break
+  }
 
   const orderSummary = buildGuestOrderSummaryFromOrderRow({
     orderId: session.posOrderId,
     items: nextItems,
     subtotal,
     total: pricing.finalTotal,
-    paymentQr: order.payment_qr,
-    paymentCash: order.payment_cash,
-    paymentCard: order.payment_card,
-    paymentOther: order.payment_other,
-    status: order.status,
+    paymentQr: liveOrder.payment_qr,
+    paymentCash: liveOrder.payment_cash,
+    paymentCard: liveOrder.payment_card,
+    paymentOther: liveOrder.payment_other,
+    status: liveOrder.status,
   })
 
   return { orderId: session.posOrderId, addedCount: newLines.length, order: orderSummary }

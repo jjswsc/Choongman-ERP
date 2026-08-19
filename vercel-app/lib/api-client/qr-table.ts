@@ -43,11 +43,11 @@ export async function qrTableOpenSession(body: {
   }>(res)
 }
 
-export async function qrTableClaimSession(token: string) {
+export async function qrTableClaimSession(token: string, sessionAuth?: string | null) {
   const res = await fetch('/api/qr-table/session/claim', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
+    headers: { 'Content-Type': 'application/json', ...sessionHeaders(sessionAuth) },
+    body: JSON.stringify({ token, sessionAuth: sessionAuth || undefined }),
   })
   return parseJson<{
     success: boolean

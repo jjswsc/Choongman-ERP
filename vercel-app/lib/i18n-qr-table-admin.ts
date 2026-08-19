@@ -106,9 +106,9 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTableScanEn: 'Scan to order from your phone',
   qrTableScanShortEn: 'Scan to order',
   helpSum_admin_pos_qr_table_order:
-    '손님 폰으로 QR 주문하고, 인당 패키지(입장가·포함 메뉴 0฿)를 매장별로 켭니다. 패키지·포함 메뉴는 이 화면에서만 설정하면 됩니다.',
+    '손님 폰으로 QR 주문하고, 인당 패키지(입장가·포함 메뉴 0฿)를 매장별로 켭니다. 같은 테이블 QR은 여러 대가 동시에 스캔해 주문할 수 있습니다. 패키지·포함 메뉴는 이 화면에서만 설정하면 됩니다.',
   helpHow_admin_pos_qr_table_order:
-    '① 매장을 고른 뒤「QR 테이블오더 사용」을 켭니다. Omni 파일럿은 직원 세션 오픈 필수·후불을 권장합니다.\n② 주문 방식에서「인당 패키지」를 고르고, 패키지를 추가합니다(이름·인당가·포함 메뉴 체크).\n③ 「레이아웃 기준 생성」후 PNG/PDF/인쇄로 테이블 카드를 부착합니다.\n④ POS에서「QR 인쇄」로 영수증 프린터에 테이블 QR을 찍거나,「QR 세션 오픈」후 손님이 /t/{token}으로 주문 → 퇴장 시 POS 결제.\n⑤ 선결제는 KBank PromptPay이며, 중간 입금 시에도 주문 status는 pending을 유지합니다.',
+    '① 매장을 고른 뒤「QR 테이블오더 사용」을 켭니다. Omni 파일럿은 직원 세션 오픈 필수·후불을 권장합니다.\n② 주문 방식에서「인당 패키지」를 고르고, 패키지를 추가합니다(이름·인당가·포함 메뉴 체크).\n③ 「레이아웃 기준 생성」후 PNG/PDF/인쇄로 테이블 카드를 부착합니다.\n④ POS에서「QR 인쇄」로 영수증 프린터에 테이블 QR을 찍거나,「QR 세션 오픈」후 손님이 /t/{token}으로 주문 → 퇴장 시 POS 결제. 한 테이블에서 여러 폰이 같이 주문할 수 있습니다.\n⑤ 선결제는 KBank PromptPay이며, 중간 입금 시에도 주문 status는 pending을 유지합니다.',
 }
 
 export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
@@ -217,9 +217,9 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTableScanEn: 'Scan to order from your phone',
   qrTableScanShortEn: 'Scan to order',
   helpSum_admin_pos_qr_table_order:
-    'Enable guest-phone QR ordering and per-person packages (entry price + included menus at ฿0) per store. Set packages and includes on this screen only.',
+    'Enable guest-phone QR ordering and per-person packages (entry price + included menus at ฿0) per store. Multiple phones can scan the same table QR and order together. Set packages and includes on this screen only.',
   helpHow_admin_pos_qr_table_order:
-    '① Pick a store and turn on QR table order. For Omni pilot, prefer require staff open + postpay.\n② Choose “Per-person package”, then add packages (name, price/pax, included menus).\n③ Generate QR from layout, then download PNG/PDF or print cards.\n④ On POS: Print QR to the receipt printer, or open QR session → guest orders via /t/{token} → close at POS.\n⑤ Prepay uses KBank PromptPay; keep order status pending until final close.',
+    '① Pick a store and turn on QR table order. For Omni pilot, prefer require staff open + postpay.\n② Choose “Per-person package”, then add packages (name, price/pax, included menus).\n③ Generate QR from layout, then download PNG/PDF or print cards.\n④ On POS: Print QR to the receipt printer, or open QR session → guest orders via /t/{token} → close at POS. Several phones at one table can order at the same time.\n⑤ Prepay uses KBank PromptPay; keep order status pending until final close.',
 }
 
 export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
@@ -328,7 +328,7 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTableScanEn: 'Scan to order from your phone',
   qrTableScanShortEn: 'Scan to order',
   helpSum_admin_pos_qr_table_order:
-    'เปิดให้ลูกค้าสั่งผ่าน QR และตั้งแพ็กเกจต่อคน (ค่าเข้า + เมนูรวม ฿0) ตามสาขา ตั้งแพ็กเกจและเมนูรวมที่หน้านี้พอครับ',
+    'เปิดให้ลูกค้าสั่งผ่าน QR และตั้งแพ็กเกจต่อคน (ค่าเข้า + เมนูรวม ฿0) ตามสาขา โทรศัพท์หลายเครื่องสแกน QR โต๊ะเดียวกันแล้วสั่งพร้อมกันได้ครับ ตั้งแพ็กเกจและเมนูรวมที่หน้านี้พอครับ',
   helpHow_admin_pos_qr_table_order:
-    '① เลือกสาขาแล้วเปิด「สั่งอาหารด้วย QR」 แนะนำให้พนักงานเปิดเซสชันก่อน + จ่ายทีหลังสำหรับไฟลอต Omni\n② เลือก「แพ็กเกจต่อคน」แล้วเพิ่มแพ็กเกจ (ชื่อ ราคา/คน ติ๊กเมนูรวม)\n③ สร้าง QR จากผังโต๊ะ แล้วดาวน์โหลด PNG/PDF หรือพิมพ์การ์ด\n④ ที่ POS: กด「พิมพ์ QR」ออกเครื่องพิมพ์ใบเสร็จ หรือเปิดเซสชัน QR → ลูกค้าสั่งผ่าน /t/{token} → ชำระที่ POS เมื่อออก\n⑤ ชำระล่วงหน้าใช้ KBank PromptPay และคงสถานะออเดอร์เป็น pending จนกว่าจะปิดบิล',
+    '① เลือกสาขาแล้วเปิด「สั่งอาหารด้วย QR」 แนะนำให้พนักงานเปิดเซสชันก่อน + จ่ายทีหลังสำหรับไฟลอต Omni\n② เลือก「แพ็กเกจต่อคน」แล้วเพิ่มแพ็กเกจ (ชื่อ ราคา/คน ติ๊กเมนูรวม)\n③ สร้าง QR จากผังโต๊ะ แล้วดาวน์โหลด PNG/PDF หรือพิมพ์การ์ด\n④ ที่ POS: กด「พิมพ์ QR」ออกเครื่องพิมพ์ใบเสร็จ หรือเปิดเซสชัน QR → ลูกค้าสั่งผ่าน /t/{token} → ชำระที่ POS เมื่อออก โต๊ะเดียวใช้มือถือหลายเครื่องสั่งพร้อมกันได้ครับ\n⑤ ชำระล่วงหน้าใช้ KBank PromptPay และคงสถานะออเดอร์เป็น pending จนกว่าจะปิดบิล',
 }

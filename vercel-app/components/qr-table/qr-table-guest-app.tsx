@@ -135,6 +135,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
     if (msg === 'store_disabled') return g('storeDisabled')
     if (msg === 'staff_open_required') return g('staffOpenRequired')
     if (msg === 'session_expired' || msg === 'session_closed' || msg.includes('expired')) return g('sessionExpired')
+    if (msg === 'session_forbidden' || msg === 'session_required') return g('sessionForbidden')
+    if (msg === 'session_device_limit') return g('sessionDeviceLimit')
     if (msg === 'invalid_token') return g('invalidToken')
     return msg
   }
@@ -168,7 +170,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         if (data.settings?.extrasPaymentMode === 'prepay') setExtrasChoice('prepay')
         const saved = typeof window !== 'undefined' ? sessionStorage.getItem(AUTH_KEY) : null
         if (data.activeSession) {
-          const claimed = await qrTableClaimSession(token)
+          const claimed = await qrTableClaimSession(token, saved)
           if (claimed.success && claimed.sessionAuth && claimed.session) {
             sessionStorage.setItem(AUTH_KEY, claimed.sessionAuth)
             setSessionAuth(claimed.sessionAuth)
@@ -212,6 +214,15 @@ export function QrTableGuestApp({ token }: { token: string }) {
         if (menus?.message === 'session_expired') {
           setError(g('sessionExpired'))
           setStep('error')
+        } else if (menus?.message === 'session_forbidden' || menus?.message === 'session_required') {
+          const claimed = await qrTableClaimSession(token, sessionAuth)
+          if (!cancelled && claimed.success && claimed.sessionAuth && claimed.sessionAuth !== sessionAuth) {
+            sessionStorage.setItem(AUTH_KEY, claimed.sessionAuth)
+            setSessionAuth(claimed.sessionAuth)
+            if (claimed.session) setSession(claimed.session)
+          } else if (!cancelled) {
+            setError(g('sessionForbidden'))
+          }
         }
         return
       }
@@ -227,7 +238,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
     return () => {
       cancelled = true
     }
-  }, [step, sessionAuth, g])
+  }, [step, sessionAuth, g, token])
 
   React.useEffect(() => {
     if (!historyOpen || !sessionAuth) return
@@ -336,10 +347,21 @@ export function QrTableGuestApp({ token }: { token: string }) {
     if (!lines.length) return
     setBusy(true)
     setError('')
+    let auth = sessionAuth
     try {
-      const res = await qrTableSubmitCart(sessionAuth, lines)
+      let res = await qrTableSubmitCart(auth, lines)
+      if (!res.success && (res.message === 'session_forbidden' || res.message === 'session_required')) {
+        const claimed = await qrTableClaimSession(token, auth)
+        if (claimed.success && claimed.sessionAuth) {
+          auth = claimed.sessionAuth
+          sessionStorage.setItem(AUTH_KEY, auth)
+          setSessionAuth(auth)
+          if (claimed.session) setSession(claimed.session)
+          res = await qrTableSubmitCart(auth, lines)
+        }
+      }
       if (!res.success) {
-        setError(res.message || 'submit_failed')
+        setError(humanizeApiError(res.message || 'submit_failed'))
         return
       }
       setCart({})
@@ -348,7 +370,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         setOrderSummary(toOrderSummary(res.order))
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'submit_failed')
+      setError(humanizeApiError(e instanceof Error ? e.message : 'submit_failed'))
       return
     } finally {
       setBusy(false)
@@ -360,17 +382,17 @@ export function QrTableGuestApp({ token }: { token: string }) {
       }, 0)
       if (extrasTotal >= 1) {
         try {
-          const qr = await qrTableIssueExtrasQr(sessionAuth)
+          const qr = await qrTableIssueExtrasQr(auth)
           if (qr?.success) {
             setQrPayload(String(qr.qrPayload || ''))
             setQrAmount(Number(qr.qrAmount || 0))
             clearExtrasPayPoll()
             extrasPayPollRef.current = window.setInterval(async () => {
-              const st = await qrTablePollExtrasPay(sessionAuth)
+              const st = await qrTablePollExtrasPay(auth)
               if (st?.paid) {
                 clearExtrasPayPoll()
                 setQrPayload('')
-                const order = await qrTableGetOrder(sessionAuth)
+                const order = await qrTableGetOrder(auth)
                 if (order?.success && order.order) {
                   setOrderSummary(toOrderSummary(order.order))
                 }
@@ -390,7 +412,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
     try {
       const res = await qrTableCallStaff(sessionAuth, note)
       if (!res.success) {
-        setError(res.message || 'call_failed')
+        setError(humanizeApiError(res.message || 'call_failed'))
         return
       }
       setSession(res.session || null)

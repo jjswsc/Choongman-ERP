@@ -18,7 +18,7 @@ export function mapQrError(e: unknown): NextResponse {
       ? 404
       : msg === 'session_forbidden' || msg === 'store_disabled'
         ? 403
-        : msg === 'table_busy' || msg === 'already_paid' || msg === 'order_closed'
+        : msg === 'table_busy' || msg === 'already_paid' || msg === 'order_closed' || msg === 'session_device_limit'
           ? 409
           : msg === 'staff_open_required' ||
               msg === 'entry_not_ready' ||
