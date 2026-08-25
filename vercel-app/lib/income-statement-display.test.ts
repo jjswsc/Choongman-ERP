@@ -129,6 +129,29 @@ describe('income-statement-display', () => {
     expect(excl.purchases).toBe(600)
   })
 
+  it('adds PP.30 remittance to expenses only in included mode', () => {
+    const data = stubData({
+      expenses: 200,
+      displayAmounts: {
+        salesGross: 1070,
+        salesNet: 1000,
+        purchasesGross: 535,
+        purchasesNet: 500,
+        beginningInventoryGross: 107,
+        beginningInventoryNet: 100,
+        endingInventoryGross: 214,
+        endingInventoryNet: 200,
+        pp30Remittance: 50,
+      },
+    })
+    const incl = buildIncomeStatementViewNumbers({ data, vatMode: 'included' })
+    const excl = buildIncomeStatementViewNumbers({ data, vatMode: 'excluded' })
+    expect(incl.expenses).toBe(250)
+    expect(excl.expenses).toBe(200)
+    expect(incl.netProfit).toBe(incl.grossProfit - 250)
+    expect(excl.netProfit).toBe(excl.grossProfit - 200)
+  })
+
   it('computes ebitda from bridge', () => {
     const data = stubData({
       ebitdaBridge: { depreciation: 50, interest: 10, incomeTax: 20 },

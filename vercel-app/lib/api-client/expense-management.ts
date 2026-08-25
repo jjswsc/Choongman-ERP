@@ -762,6 +762,9 @@ export async function extractExpenseDocument(params: {
   fileName: string
   schema?: string
   imageUrls?: string[]
+  buyerTaxId?: string
+  buyerName?: string
+  pageText?: string
 }, init?: { signal?: AbortSignal }) {
   const res = await apiFetch('/api/extractExpenseDocument', {
     method: 'POST',

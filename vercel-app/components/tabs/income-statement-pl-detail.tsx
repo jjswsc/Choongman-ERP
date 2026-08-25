@@ -48,11 +48,13 @@ import {
   salesBreakdownIsDaily,
   salesBreakdownIsHqOutbound,
   salesBreakdownRowLabel,
+  pp30ExpenseDisplayAmount,
 } from "./income-statement-tab-utils"
 import {
   isFranchiseBillingExpenseSubjectCode,
   PL_FRANCHISE_EXPENSE_SUBJECT_CODES,
 } from "@/lib/accounting-po-franchise-billing-pl-shared"
+import { isPp30PlExpenseSubjectCode } from "@/lib/pp30-pl-remittance"
 import { IncomePurchaseDrillDialog } from "./income-statement-purchase-drill-dialog"
 import { IncomeExpenseDrillDialog } from "./income-statement-expense-drill-dialog"
 
@@ -78,7 +80,11 @@ function expenseAccountRowLabel(
   t: (k: string) => string,
   lang: string
 ): string {
-  if (row.accountSubjectId == null) {
+  if (
+    row.accountSubjectId == null &&
+    !isFranchiseBillingExpenseSubjectCode(row.code) &&
+    !isPp30PlExpenseSubjectCode(row.code)
+  ) {
     return t("pL_accountUnclassified") || "Unclassified account"
   }
   return (
@@ -87,7 +93,7 @@ function expenseAccountRowLabel(
       name: row.name,
       nameEn: row.nameEn,
       nameTh: row.nameTh,
-    }) || (row.accountSubjectId != null ? `#${row.accountSubjectId}` : "")
+    }) || (row.accountSubjectId != null ? `#${row.accountSubjectId}` : `${row.code} ${row.name}`)
   )
 }
 
@@ -167,7 +173,7 @@ export function IncomePlDetailTableContent({
   const openExpenseDrill = React.useCallback(
     (row: NonNullable<IncomeStatementData["expenseByAccountSubject"]>[number]) => {
       if (!purchaseDrillContext?.yearMonth) return
-      if (isFranchiseBillingExpenseSubjectCode(row.code)) return
+      if (isFranchiseBillingExpenseSubjectCode(row.code) || isPp30PlExpenseSubjectCode(row.code)) return
       setExpenseDrillTitle(expenseAccountRowLabel(row, t, lang))
       setExpenseDrillOpen(true)
       setExpenseDrillLoading(true)
@@ -435,7 +441,8 @@ export function IncomePlDetailTableContent({
             (data.expenseByAccountSubject?.length || 0) > 0 &&
             data.expenseByAccountSubject!.map((row, idx) => {
               const isPoBilling = isFranchiseBillingExpenseSubjectCode(row.code)
-              const label = isPoBilling
+              const isPp30 = isPp30PlExpenseSubjectCode(row.code)
+              const label = isPoBilling || isPp30
                 ? formatAccountSubjectLabel(lang, {
                     code: row.code,
                     name: row.name,
@@ -468,22 +475,28 @@ export function IncomePlDetailTableContent({
                           : data.displayAmounts?.franchiseBillingCombinedNet,
                     vatMode
                   )
-                : convertExpenseSubjectAmount(row.amount, row.vatAmount, vatMode)
+                : isPp30
+                  ? pp30ExpenseDisplayAmount(data, vatMode)
+                  : convertExpenseSubjectAmount(row.amount, row.vatAmount, vatMode)
+              if (isPp30 && amount <= 0) return null
+              const noDrill = isPoBilling || isPp30
               return (
               <tr
                 key={`${row.code || "x"}-${row.accountSubjectId ?? "u"}-${idx}`}
                 className={
-                  purchaseDrillContext?.yearMonth && !isPoBilling
+                  purchaseDrillContext?.yearMonth && !noDrill
                     ? `${accountingPlSubRowCn} cursor-pointer hover:brightness-[1.03]`
                     : accountingPlSubRowCn
                 }
                 onClick={
-                  purchaseDrillContext?.yearMonth && !isPoBilling
+                  purchaseDrillContext?.yearMonth && !noDrill
                     ? () => openExpenseDrill(row)
                     : undefined
                 }
                 title={
-                  isPoBilling
+                  isPp30
+                    ? t("pL_expenseSourcePp30")
+                    : isPoBilling
                     ? row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.royalty
                       ? t("pL_expenseSourceFranchiseRoyalty")
                       : row.code === PL_FRANCHISE_EXPENSE_SUBJECT_CODES.deliveryGp
@@ -599,6 +612,17 @@ export function IncomePlDetailTableContent({
                 </td>
                 <td className={`${accountingPlTdPctCn}`}>
                   {view.pct(data.expenseBreakdown?.depreciationExpense ?? 0)}
+                </td>
+              </tr>
+              <tr className={accountingPlSubRowCn}>
+                <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
+                  - {t("pL_expenseSourcePp30")}
+                </td>
+                <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                  {formatBath(pp30ExpenseDisplayAmount(data, vatMode))}
+                </td>
+                <td className={`${accountingPlTdPctCn}`}>
+                  {view.pct(pp30ExpenseDisplayAmount(data, vatMode))}
                 </td>
               </tr>
             </>

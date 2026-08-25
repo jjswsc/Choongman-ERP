@@ -5,6 +5,7 @@ import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 import type { IncomeStatementData } from '@/lib/api-client'
 import { safePlCashVat } from '@/lib/income-statement-cash-vat'
 import { stockNetLineGrossAmount, type NetVatBuckets } from '@/lib/income-statement-item-vat'
+import { pp30PlAmountForVatMode } from '@/lib/pp30-pl-remittance'
 
 export type IncomeStatementVatDisplayMode = 'excluded' | 'included'
 
@@ -43,6 +44,11 @@ export type IncomeStatementDisplayAmounts = {
   expensesCashVat?: number
   /** 통장·패티 매입(cash) 명시 VAT — purchasesNet에 이미 반영됨(검증·디버그) */
   purchasesBankVat?: number
+  /**
+   * PP.30(ภ.พ.30) 납부액. 세금 귀속월 기준.
+   * VAT 포함 표시에서만 비용에 가산. 원천(data.expenses)에는 넣지 않음.
+   */
+  pp30Remittance?: number
 }
 
 export type IncomeStatementEbitdaBridge = {
@@ -194,12 +200,14 @@ export function buildIncomeStatementViewNumbers(input: {
   const fbG = Math.max(0, Number(b?.franchiseBillingGross) || 0)
   const fbN = Math.max(0, Number(b?.franchiseBillingNet) || 0)
   const cashVat = Math.max(0, Number(b?.expensesCashVat) || 0)
+  const pp30 = pp30PlAmountForVatMode(b?.pp30Remittance, input.vatMode)
   // report.expenses 는 franchise gross + cash gross 포함 — 제외 시 franchise net + cash vat 차감
+  // PP.30 납부는 원천 expenses에 없고, VAT 포함 보기에서만 가산
   const expensesGrossTotal = Math.max(0, Number(input.data.expenses) || 0)
   const expensesBase = Math.max(0, expensesGrossTotal - fbG)
   const expenses =
     input.vatMode === 'included'
-      ? expensesBase + fbG
+      ? expensesBase + fbG + pp30
       : Math.max(0, expensesBase - cashVat) + fbN
   const sales = resolveIncomeStatementSalesAmount(input.data, input.vatMode, input.manualSales)
   const purchases = resolveIncomeStatementPurchasesAmount(input.data, input.vatMode)

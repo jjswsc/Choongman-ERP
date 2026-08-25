@@ -30,6 +30,7 @@ function stubReport(storeFilter: string, sales: number): IncomeStatementReport {
       franchiseDeliveryGp: 0,
       franchiseGrabGp: 0,
       franchiseBillingCombined: 0,
+      pp30VatRemittance: 0,
       total: 4,
     },
   }

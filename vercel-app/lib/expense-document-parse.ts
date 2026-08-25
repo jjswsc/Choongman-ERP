@@ -8,8 +8,18 @@ import {
 import { parseVendorNameHintFromText } from '@/lib/expense-ocr-suggestions'
 import {
   parsePurchaseTaxInvoiceVisionPayload,
+  purchaseTaxInvoiceHasExtractedFields,
   type ExtractedPurchaseTaxInvoiceFields,
 } from '@/lib/purchase-tax-invoice-core'
+import {
+  buildTaxInvoiceVisionSystemPrompt,
+  buildTaxInvoiceVisionUserPrompt,
+  mergePurchaseTaxInvoiceExtract,
+  parsePurchaseTaxInvoiceFromPdfText,
+  purchaseTaxInvoiceTextExtractIsComplete,
+  repairExtractedPurchaseTaxInvoice,
+  type PurchaseTaxInvoiceScanHint,
+} from '@/lib/purchase-tax-invoice-scan'
 
 export type ParsedExpenseDocument = {
   amount?: number
@@ -535,24 +545,43 @@ export async function extractExpenseDocumentFromDataUrl(
 
 export type ParsedPurchaseTaxInvoice = ExtractedPurchaseTaxInvoiceFields
 
-const TAX_INV_VISION_SYSTEM =
-  'Extract Thai ใบกำกับภาษี (tax invoice) seller-side fields from scanned pages. Reply JSON only: {"invoices":[{"docDate":"YYYY-MM-DD"|null,"invoiceNo":string|null,"sellerName":string|null,"sellerTaxId":string|null,"sellerBranch":"สำนักงานใหญ่"|"สาขา 00001"|null,"netAmount":number|null,"vatAmount":number|null,"totalAmount":number|null,"isCopy":boolean}]}. Images are usually TOP crop (seller, TIN, invoice no, date) then BOTTOM crop (มูลค่า / VAT / รวม). Rules: (1) One page may contain 1 or 2 invoices — return every distinct original ต้นฉบับ. (2) sellerName/sellerTaxId = ผู้ขาย/ผู้จำหน่าย NOT the buyer. TIN is 13 digits. (3) sellerBranch = สำนักงานใหญ่ if head office/00000, else สาขา + 5-digit code. (4) netAmount = มูลค่า/ฐานภาษี excluding VAT; if mixed VATable+exempt, use VATable base only. (5) vatAmount is baht not 7%. (6) docDate Gregorian; convert พ.ศ. (2569→2026). (7) isCopy=true for สำเนา/copy/true copy. (8) Platform/bank fee invoices: netAmount = fee before VAT, not GMV. (9) Numbers as JSON numbers not strings.'
+function finalizePurchaseTaxInvoices(
+  invoices: ParsedPurchaseTaxInvoice[],
+  hint?: PurchaseTaxInvoiceScanHint
+): ParsedPurchaseTaxInvoice[] {
+  return invoices
+    .map((row) => repairExtractedPurchaseTaxInvoice(row, hint))
+    .filter(purchaseTaxInvoiceHasExtractedFields)
+}
 
 export async function extractPurchaseTaxInvoiceWithVision(
-  dataUrl: string
+  dataUrl: string,
+  hint?: PurchaseTaxInvoiceScanHint
 ): Promise<ParsedPurchaseTaxInvoice | null> {
-  const { invoices } = await extractPurchaseTaxInvoicesFromImages([dataUrl])
+  const { invoices } = await extractPurchaseTaxInvoicesFromImages([dataUrl], hint)
   return invoices[0] || null
 }
 
 export async function extractPurchaseTaxInvoicesFromImages(
-  dataUrls: string[]
+  dataUrls: string[],
+  hint?: PurchaseTaxInvoiceScanHint
 ): Promise<{ invoices: ParsedPurchaseTaxInvoice[]; openaiUsed: boolean; error?: string }> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim()
-  if (!apiKey) return { invoices: [], openaiUsed: false, error: 'no_openai_key' }
+  const fromText = hint?.pageText ? parsePurchaseTaxInvoiceFromPdfText(hint.pageText, hint) : null
+  if (purchaseTaxInvoiceTextExtractIsComplete(fromText, hint)) {
+    return { invoices: finalizePurchaseTaxInvoices([fromText!], hint), openaiUsed: false }
+  }
 
-  const urls = dataUrls.filter((u) => typeof u === 'string' && u.startsWith('data:image/')).slice(0, 4)
-  if (!urls.length) return { invoices: [], openaiUsed: false, error: 'no_image' }
+  const apiKey = process.env.OPENAI_API_KEY?.trim()
+  if (!apiKey) {
+    if (fromText) return { invoices: finalizePurchaseTaxInvoices([fromText], hint), openaiUsed: false }
+    return { invoices: [], openaiUsed: false, error: 'no_openai_key' }
+  }
+
+  const urls = dataUrls.filter((u) => typeof u === 'string' && u.startsWith('data:image/')).slice(0, 3)
+  if (!urls.length) {
+    if (fromText) return { invoices: finalizePurchaseTaxInvoices([fromText], hint), openaiUsed: false }
+    return { invoices: [], openaiUsed: false, error: 'no_image' }
+  }
 
   const model = process.env.OPENAI_TAX_INVOICE_MODEL?.trim() || 'gpt-4o'
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -564,17 +593,14 @@ export async function extractPurchaseTaxInvoicesFromImages(
     body: JSON.stringify({
       model,
       temperature: 0,
-      max_tokens: 1200,
+      max_tokens: 1600,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: TAX_INV_VISION_SYSTEM },
+        { role: 'system', content: buildTaxInvoiceVisionSystemPrompt() },
         {
           role: 'user',
           content: [
-            {
-              type: 'text',
-              text: 'Read every ใบกำกับภาษี on these crops for the ภาษีซื้อ register. First image is the top of the page; last image is the totals.',
-            },
+            { type: 'text', text: buildTaxInvoiceVisionUserPrompt(hint) },
             ...urls.map((url) => ({
               type: 'image_url' as const,
               image_url: { url, detail: 'high' as const },
@@ -587,23 +613,37 @@ export async function extractPurchaseTaxInvoicesFromImages(
   if (!res.ok) {
     const errText = await res.text().catch(() => '')
     console.error('openai tax invoice', res.status, errText.slice(0, 400))
+    if (fromText) return { invoices: finalizePurchaseTaxInvoices([fromText], hint), openaiUsed: false, error: `openai_${res.status}` }
     return { invoices: [], openaiUsed: false, error: `openai_${res.status}` }
   }
   const json = (await res.json()) as { choices?: { message?: { content?: string } }[] }
   const raw = json.choices?.[0]?.message?.content?.trim() || ''
-  const invoices = parsePurchaseTaxInvoiceVisionPayload(raw)
-  return { invoices, openaiUsed: true, error: invoices.length ? undefined : 'empty_extract' }
+  const visionRows = parsePurchaseTaxInvoiceVisionPayload(raw)
+  const invoices = (visionRows.length ? visionRows : fromText ? [fromText] : []).map((row, idx) =>
+    idx === 0 && fromText ? mergePurchaseTaxInvoiceExtract(row, fromText) || row : row
+  )
+  const finalized = finalizePurchaseTaxInvoices(
+    invoices.filter((row): row is ParsedPurchaseTaxInvoice => !!row),
+    hint
+  )
+  return {
+    invoices: finalized,
+    openaiUsed: true,
+    error: finalized.length ? undefined : 'empty_extract',
+  }
 }
 
 export async function extractPurchaseTaxInvoiceFromDataUrl(
-  dataUrl: string
+  dataUrl: string,
+  hint?: PurchaseTaxInvoiceScanHint
 ): Promise<{ result: ParsedPurchaseTaxInvoice | null; openaiUsed: boolean; error?: string }> {
-  const { invoices, openaiUsed, error } = await extractPurchaseTaxInvoicesFromImages([dataUrl])
+  const { invoices, openaiUsed, error } = await extractPurchaseTaxInvoicesFromImages([dataUrl], hint)
   return { result: invoices[0] || null, openaiUsed, error }
 }
 
 export async function extractPurchaseTaxInvoiceFromImageUrls(
-  dataUrls: string[]
+  dataUrls: string[],
+  hint?: PurchaseTaxInvoiceScanHint
 ): Promise<{ invoices: ParsedPurchaseTaxInvoice[]; openaiUsed: boolean; error?: string }> {
-  return extractPurchaseTaxInvoicesFromImages(dataUrls)
+  return extractPurchaseTaxInvoicesFromImages(dataUrls, hint)
 }

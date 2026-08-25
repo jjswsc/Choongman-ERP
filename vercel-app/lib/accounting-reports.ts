@@ -44,6 +44,12 @@ import {
   mergeIncomeStatementReports,
 } from '@/lib/accounting-income-statement-merge'
 import { isExpenseInternalBankNote, shouldExcludeBankWithdrawFromPlExpense } from '@/lib/bank-transaction-note-meta'
+import {
+  isPp30PlExpenseSubjectCode,
+  PL_PP30_EXPENSE_SUBJECT_CODE,
+  pp30PlPaymentWindowEnd,
+  sumPp30RemittanceForTaxPeriod,
+} from '@/lib/pp30-pl-remittance'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import {
@@ -192,6 +198,8 @@ export type IncomeStatementReport = {
     franchiseGrabGp: number
     /** billingKind=all 합산 */
     franchiseBillingCombined: number
+    /** PP.30 납부(세금 귀속월). 화면 VAT 포함 보기에서만 비용 합계에 가산 */
+    pp30VatRemittance: number
     total: number
   }
   /** 계정과목(세부)별 비용 — 현금시재·통장출금·고정비 합산 (표시명은 클라이언트에서 lang 반영) */
@@ -573,6 +581,93 @@ async function fetchBankWithdrawRowsForPl(
   )
   const fetched = raw.length
   return { rows, fetched, truncated: fetched >= ACCOUNTING_ROWS_MAX }
+}
+
+async function loadBankAccountIdsForPlScope(params: {
+  isHQ: boolean
+  storeFilter: string
+}): Promise<number[]> {
+  const { isHQ, storeFilter } = params
+  try {
+    if (isHQ) {
+      const bankAccRows = (await supabaseSelect('bank_accounts', {
+        select: 'id,store',
+        limit: 2000,
+      })) as { id?: number; store?: string }[] | null
+      return (bankAccRows || [])
+        .filter((a) => isHqAccountingStoreRow(String(a.store || '')))
+        .map((a) => Number(a.id))
+        .filter((id) => Number.isFinite(id) && id > 0)
+    }
+    if (storeFilter !== 'All') {
+      const bankAccRows = (await supabaseSelectFilter(
+        'bank_accounts',
+        buildStoreFieldOrIlikeFragment('store', storeFilter),
+        { select: 'id', limit: 2000 }
+      )) as { id?: number }[] | null
+      return (bankAccRows || []).map((a) => Number(a.id)).filter((id) => Number.isFinite(id) && id > 0)
+    }
+    const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id', limit: 2000 })) as {
+      id?: number
+    }[] | null
+    return (bankAccRows || []).map((a) => Number(a.id)).filter((id) => Number.isFinite(id) && id > 0)
+  } catch {
+    return []
+  }
+}
+
+/** VAT 포함 손익용 PP.30 납부 — 세금 귀속월. data.expenses에는 넣지 않음. */
+async function loadPp30VatRemittanceForIncomeStatement(params: {
+  startStr: string
+  endStr: string
+  storeFilter: string
+  isHQ: boolean
+}): Promise<number> {
+  const accountIds = await loadBankAccountIdsForPlScope(params)
+  if (accountIds.length === 0) return 0
+  const payEndStr = pp30PlPaymentWindowEnd(params.endStr)
+  const idList = accountIds.join(',')
+  const filter =
+    `account_id=in.(${idList})&trans_type=eq.withdraw&` +
+    buildBankWithdrawPlPeriodOrFilter(params.startStr, payEndStr)
+  try {
+    const raw = (await supabaseSelectFilterAllPages('bank_transactions', filter, {
+      select: 'id,amount,category,trans_date,expense_date,memo,note,store',
+      order: 'id.asc',
+      pageSize: 8000,
+      maxRows: ACCOUNTING_ROWS_MAX,
+    })) as BankWithdrawPlRow[]
+    const scoped = (raw || []).filter((r) => {
+      if (params.isHQ || params.storeFilter === 'All') return true
+      const st = String(r.store || '').trim()
+      if (!st) return true
+      return storeMatchesIncomeFilter(st, params.storeFilter)
+    })
+    return sumPp30RemittanceForTaxPeriod(scoped, params.startStr, params.endStr)
+  } catch {
+    return 0
+  }
+}
+
+function appendPp30ExpenseSubject(
+  rows: NonNullable<IncomeStatementReport['expenseByAccountSubject']> | undefined,
+  amount: number
+): NonNullable<IncomeStatementReport['expenseByAccountSubject']> {
+  const base = [...(rows || [])]
+  const amt = round2(Math.max(0, Number(amount) || 0))
+  if (amt <= 0) return base
+  if (base.some((r) => isPp30PlExpenseSubjectCode(r.code))) return base
+  return [
+    ...base,
+    {
+      accountSubjectId: null,
+      code: PL_PP30_EXPENSE_SUBJECT_CODE,
+      name: 'PP.30 부가세 납부 (세금 귀속월)',
+      nameEn: 'PP.30 VAT remittance (tax month)',
+      nameTh: 'ชำระ VAT PP.30 (เดือนภาษี)',
+      amount: amt,
+    },
+  ]
 }
 
 /**
@@ -2349,15 +2444,26 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     )
   }
 
-  const depAgg = await sumDepreciationForIncomeStatement(yearMonth, storeFilter, isHQ, subjectMeta)
+  const [depAgg, pp30VatRemittance] = await Promise.all([
+    sumDepreciationForIncomeStatement(yearMonth, storeFilter, isHQ, subjectMeta),
+    loadPp30VatRemittanceForIncomeStatement({
+      startStr,
+      endStr,
+      storeFilter,
+      isHQ,
+    }),
+  ])
   const depreciationExpense = depAgg.total
   if (depreciationExpense > 0) {
     mergeExpenseSubjectMaps(expenseBySubjectMap, depAgg.byAccountSubjectId)
   }
 
-  const expenseByAccountSubject = appendFranchiseBillingExpenseSubjects(
-    buildExpenseByAccountList(expenseBySubjectMap, subjectMeta, expenseVatBySubjectMap),
-    franchiseExpense
+  const expenseByAccountSubject = appendPp30ExpenseSubject(
+    appendFranchiseBillingExpenseSubjects(
+      buildExpenseByAccountList(expenseBySubjectMap, subjectMeta, expenseVatBySubjectMap),
+      franchiseExpense
+    ),
+    pp30VatRemittance
   )
   /** petty·통장·고정비·급여·감가상각·입고(비용 계정 품목) 등 + 승인 회계 PO 가맹 청구 */
   const expensesFromSubjects = sumExpenseSubjectAmounts(expenseBySubjectMap)
@@ -2480,6 +2586,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     franchiseRevenueNet: franchiseRevenue.totalNet,
     expensesCashVat: round2(cashExpenseVat),
     purchasesBankVat: purchasesBankVatRounded,
+    pp30Remittance: round2(pp30VatRemittance),
     ...(isHQ ? { salesStockVatBuckets } : {}),
     purchasesStockVatBuckets,
   }
@@ -2532,6 +2639,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       franchiseDeliveryGp: round2(franchiseDeliveryGpExpense),
       franchiseGrabGp: round2(franchiseGrabGpExpense),
       franchiseBillingCombined: round2(franchiseBillingCombinedExpense),
+      pp30VatRemittance: round2(pp30VatRemittance),
       total: expenses,
     },
     expenseByAccountSubject,

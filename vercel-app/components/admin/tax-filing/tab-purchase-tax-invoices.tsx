@@ -33,12 +33,20 @@ import {
   type PurchaseTaxReviewFlag,
 } from "@/lib/purchase-tax-invoice-core"
 import {
-  imageFileToTaxInvoiceCrops,
+  imageFileToTaxInvoiceScan,
   openPdfFile,
-  renderTaxInvoicePageCrops,
+  extractPdfPageText,
+  renderTaxInvoicePageForScan,
   renderTaxInvoicePagePreview,
   TAX_INV_MAX_PAGES,
 } from "@/lib/purchase-tax-invoice-pdf-client"
+import {
+  extractPurchaseTaxInvoiceFromScanText,
+  pdfPageTextLooksPrinted,
+  purchaseTaxInvoiceTextExtractIsComplete,
+  type PurchaseTaxInvoiceScanHint,
+} from "@/lib/purchase-tax-invoice-scan"
+import { createTaxInvoiceOcrSession, type TaxInvoiceOcrSession } from "@/lib/purchase-tax-invoice-ocr-client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
@@ -382,13 +390,22 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       })
     }
 
-    const ingestPageImages = async (images: string[], page: number, fileName: string) => {
+    const ingestPageImages = async (
+      images: string[],
+      page: number,
+      fileName: string,
+      pageText?: string,
+      local?: ExtractedPurchaseTaxInvoiceFields | null
+    ) => {
       const res = await extractExpenseDocument(
         {
           dataUrl: images[0] || "",
           imageUrls: images.slice(1),
           fileName: `${fileName}-p${page}.jpg`,
           schema: "purchase_tax_invoice",
+          buyerTaxId: rows[0]?.buyerTaxId || "",
+          buyerName: storeName,
+          pageText: pageText || "",
         },
         { signal: ac.signal }
       )
@@ -396,10 +413,29 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         res.invoices && res.invoices.length ? res.invoices : res.fields ? [res.fields] : []
       ) as ExtractedPurchaseTaxInvoiceFields[]
       if (!res.success || !invoices.length) {
+        if (local && purchaseTaxInvoiceHasExtractedFields(local)) {
+          pushFromParsed(local, page)
+          return
+        }
         pushFromParsed({}, page, res.message || t("ptiPdfEmptyPage"))
         return
       }
       for (const inv of invoices) pushFromParsed(inv, page)
+    }
+
+    const hint: PurchaseTaxInvoiceScanHint = {
+      buyerTaxId: rows[0]?.buyerTaxId || "",
+      buyerName: storeName,
+    }
+
+    let ocr: TaxInvoiceOcrSession | null = null
+    const textForPage = async (canvas: HTMLCanvasElement, printedText: string) => {
+      if (pdfPageTextLooksPrinted(printedText)) return printedText
+      if (!ocr) {
+        setPdfBusy(t("ptiOcrLoading"))
+        ocr = await createTaxInvoiceOcrSession()
+      }
+      return ocr.recognize(canvas)
     }
 
     try {
@@ -423,17 +459,46 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             if (ac.signal.aborted) break
             setPdfProgress({ n: i, total })
             setPdfBusy(tr(t, "ptiPdfPage", { n: String(i), total: String(total) }))
-            const images = await renderTaxInvoicePageCrops(pdf, i)
+            const { canvas, images } = await renderTaxInvoicePageForScan(pdf, i)
             if (ac.signal.aborted) break
-            await ingestPageImages(images, i, file.name)
+            const printed = await extractPdfPageText(pdf, i)
+            if (!pdfPageTextLooksPrinted(printed)) {
+              setPdfBusy(tr(t, "ptiOcrPage", { n: String(i), total: String(total) }))
+            }
+            let pageText = printed
+            try {
+              pageText = await textForPage(canvas, printed)
+            } catch {
+              pageText = printed
+            }
+            if (ac.signal.aborted) break
+            const local = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
+            if (purchaseTaxInvoiceTextExtractIsComplete(local, hint) && local) {
+              pushFromParsed(local, i)
+            } else {
+              await ingestPageImages(images, i, file.name, pageText, local)
+            }
             setReviewRows([...extracted])
           }
         } else {
           scanPdfRef.current = null
           setPdfBusy(tr(t, "ptiPdfPage", { n: "1", total: "1" }))
-          const images = await imageFileToTaxInvoiceCrops(file)
+          const { canvas, images } = await imageFileToTaxInvoiceScan(file)
           scanImagePreviewRef.current = images[0] || ""
-          await ingestPageImages(images, 1, file.name)
+          setPdfBusy(tr(t, "ptiOcrPage", { n: "1", total: "1" }))
+          let pageText = ""
+          try {
+            pageText = await textForPage(canvas, "")
+          } catch {
+            pageText = ""
+          }
+          if (ac.signal.aborted) break
+          const local = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
+          if (purchaseTaxInvoiceTextExtractIsComplete(local, hint) && local) {
+            pushFromParsed(local, 1)
+          } else {
+            await ingestPageImages(images, 1, file.name, pageText, local)
+          }
         }
       }
       setReviewRows(extracted)
@@ -445,6 +510,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       setError(e instanceof Error ? e.message : String(e))
       if (extracted.length) setReviewRows(extracted)
     } finally {
+      if (ocr) {
+        try {
+          await ocr.terminate()
+        } catch {
+          /* ignore */
+        }
+      }
       if (abortRef.current === ac) abortRef.current = null
       setPdfBusy("")
       setPdfProgress(null)

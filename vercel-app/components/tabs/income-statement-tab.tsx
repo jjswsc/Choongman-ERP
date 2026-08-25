@@ -31,6 +31,7 @@ import {
   isFranchiseBillingExpenseSubjectCode,
   PL_FRANCHISE_EXPENSE_SUBJECT_CODES,
 } from "@/lib/accounting-po-franchise-billing-pl-shared"
+import { isPp30PlExpenseSubjectCode } from "@/lib/pp30-pl-remittance"
 import { expandBangkokYearMonthsInclusive, getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import {
   aggregateIncomeStatementByYear,
@@ -107,6 +108,7 @@ import {
   yearlySalesBreakdownAmount,
   yearlyExpenseSubjectAmount,
   yearlyExpenseBreakdownField,
+  pp30ExpenseDisplayAmount,
 } from "./income-statement-tab-utils"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { IncomePlDetailTableContent } from "./income-statement-pl-detail"
@@ -796,10 +798,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     [compareIncomeRows]
   )
 
-  const compareMergedExpenseSubjects = React.useMemo(
-    () => mergeExpenseSubjectsForCompare(compareIncomeRows),
-    [compareIncomeRows]
-  )
+  const compareMergedExpenseSubjects = React.useMemo(() => {
+    const list = mergeExpenseSubjectsForCompare(compareIncomeRows)
+    if (vatDisplayMode === "included") return list
+    return list.filter((sub) => !isPp30PlExpenseSubjectCode(sub.code))
+  }, [compareIncomeRows, vatDisplayMode])
 
   const compareMergedOverlapKeys = React.useMemo(() => {
     const s = new Set<string>()
@@ -993,7 +996,8 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
     if ((data.expenseByAccountSubject?.length || 0) > 0) {
       for (const row of data.expenseByAccountSubject!) {
         const isPoBilling = isFranchiseBillingExpenseSubjectCode(row.code)
-        const label = isPoBilling
+        const isPp30 = isPp30PlExpenseSubjectCode(row.code)
+        const label = isPoBilling || isPp30
           ? formatAccountSubjectLabel(lang, {
               code: row.code,
               name: row.name,
@@ -1026,7 +1030,10 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                     : data.displayAmounts?.franchiseBillingCombinedNet,
               vatDisplayMode
             )
-          : convertExpenseSubjectAmount(row.amount, row.vatAmount, vatDisplayMode)
+          : isPp30
+            ? pp30ExpenseDisplayAmount(data, vatDisplayMode)
+            : convertExpenseSubjectAmount(row.amount, row.vatAmount, vatDisplayMode)
+        if (isPp30 && amount <= 0) continue
         rows.push({
           label: `      ${label}`,
           amount: q(amount),
@@ -1073,6 +1080,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       label: `    - ${t("pL_expenseSourceDepreciation") || "Depreciation"}`,
       amount: q(data.expenseBreakdown?.depreciationExpense ?? 0),
       pct: view.pct(data.expenseBreakdown?.depreciationExpense ?? 0),
+    })
+    rows.push({
+      label: `    - ${t("pL_expenseSourcePp30")}`,
+      amount: q(pp30ExpenseDisplayAmount(data, vatDisplayMode)),
+      pct: view.pct(pp30ExpenseDisplayAmount(data, vatDisplayMode)),
     })
     rows.push({
       label: t("pL_netProfit"),
@@ -1828,6 +1840,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                         >
                                           <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
                                             {isFranchiseBillingExpenseSubjectCode(sub.code) ||
+                                            isPp30PlExpenseSubjectCode(sub.code) ||
                                             sub.accountSubjectId != null
                                               ? formatAccountSubjectLabel(lang, {
                                                   code: sub.code,
@@ -2018,6 +2031,28 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                                     c.key,
                                                     "depreciationExpense"
                                                   )
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                          <tr className="border-b bg-muted/10 last:border-0">
+                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                                              - {t("pL_expenseSourcePp30")}
+                                            </td>
+                                            {incomeCompareCols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
+                                                title={t("fs_compareYearAggregateHint")}
+                                              >
+                                                {formatBath(
+                                                  vatDisplayMode === "included"
+                                                    ? yearlyExpenseBreakdownField(
+                                                        compareIncomeRows,
+                                                        c.key,
+                                                        "pp30VatRemittance"
+                                                      )
+                                                    : 0
                                                 )}
                                               </td>
                                             ))}
@@ -2270,6 +2305,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                     >
                                       <td className="p-1.5 pl-10 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
                                         {isFranchiseBillingExpenseSubjectCode(sub.code) ||
+                                        isPp30PlExpenseSubjectCode(sub.code) ||
                                         sub.accountSubjectId != null
                                           ? formatAccountSubjectLabel(lang, {
                                               code: sub.code,
@@ -2413,6 +2449,21 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           {rowData.error
                                             ? "—"
                                             : formatBath(rowData.expenseBreakdown?.depreciationExpense ?? 0)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                    <tr className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                                        - {t("pL_expenseSourcePp30")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(pp30ExpenseDisplayAmount(rowData, vatDisplayMode))}
                                         </td>
                                       ))}
                                     </tr>

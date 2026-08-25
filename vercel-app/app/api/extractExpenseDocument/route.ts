@@ -36,6 +36,9 @@ export async function POST(request: NextRequest) {
       imageUrls?: unknown
       fileName?: string
       schema?: string
+      buyerTaxId?: string
+      buyerName?: string
+      pageText?: string
     }
     const imageUrls = collectImageUrls(body)
     const dataUrl = imageUrls[0] || String(body.dataUrl || '').trim()
@@ -60,7 +63,12 @@ export async function POST(request: NextRequest) {
 
     if (schema === 'purchase_tax_invoice' || schema === 'purchasetaxinvoice') {
       const { invoices, openaiUsed, error } = await extractPurchaseTaxInvoiceFromImageUrls(
-        imageUrls.length ? imageUrls : [dataUrl]
+        imageUrls.length ? imageUrls : [dataUrl],
+        {
+          buyerTaxId: String(body.buyerTaxId || '').trim(),
+          buyerName: String(body.buyerName || '').trim(),
+          pageText: String(body.pageText || '').trim(),
+        }
       )
       if (!invoices.length) {
         const noKey = error === 'no_openai_key' || !process.env.OPENAI_API_KEY?.trim()

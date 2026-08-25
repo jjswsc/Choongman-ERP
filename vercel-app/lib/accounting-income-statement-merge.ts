@@ -88,6 +88,7 @@ export function mergeIncomeStatementReports(
         franchiseDeliveryGp: 0,
         franchiseGrabGp: 0,
         franchiseBillingCombined: 0,
+        pp30VatRemittance: 0,
         total: 0,
       },
     }
@@ -143,6 +144,7 @@ export function mergeIncomeStatementReports(
     franchiseDeliveryGp: sum((r) => r.expenseBreakdown.franchiseDeliveryGp ?? 0),
     franchiseGrabGp: sum((r) => r.expenseBreakdown.franchiseGrabGp ?? 0),
     franchiseBillingCombined: sum((r) => r.expenseBreakdown.franchiseBillingCombined ?? 0),
+    pp30VatRemittance: sum((r) => r.expenseBreakdown.pp30VatRemittance ?? 0),
     total: sum((r) => r.expenseBreakdown.total),
   }
 
@@ -187,6 +189,7 @@ export function mergeIncomeStatementReports(
     franchiseRevenueNet: sum((r) => r.displayAmounts?.franchiseRevenueNet ?? 0),
     expensesCashVat: sum((r) => r.displayAmounts?.expensesCashVat ?? 0),
     purchasesBankVat: sum((r) => r.displayAmounts?.purchasesBankVat ?? 0),
+    pp30Remittance: sum((r) => r.displayAmounts?.pp30Remittance ?? 0),
     ...(salesStockVatBuckets.taxableNet > 0 || salesStockVatBuckets.exemptNet > 0
       ? { salesStockVatBuckets }
       : {}),

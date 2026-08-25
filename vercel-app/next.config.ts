@@ -35,7 +35,7 @@ const withSerwist = withSerwistInit({
 });
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['sharp'],
+  serverExternalPackages: ['sharp', 'tesseract.js'],
   /**
    * Vercel Standard 빌드(8GB)에서 Next "Running TypeScript" 단계가 OOM(SIGKILL) 납니다.
    * Vercel에서는 타입체크를 건너뛰고, 로컬/`npx tsc`·GitHub Actions로 검증합니다.

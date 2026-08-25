@@ -35,6 +35,7 @@ export interface IncomeStatementData {
     franchiseDeliveryGp?: number
     franchiseGrabGp?: number
     franchiseBillingCombined?: number
+    pp30VatRemittance?: number
     total: number
   }
   diagnostics?: {
@@ -106,6 +107,7 @@ export interface IncomeStatementData {
     purchasesStockVatBuckets?: { taxableNet: number; exemptNet: number }
     expensesCashVat?: number
     purchasesBankVat?: number
+    pp30Remittance?: number
   }
   /** 손익 EBITDA 토글 — 순이익 가산 */
   ebitdaBridge?: {

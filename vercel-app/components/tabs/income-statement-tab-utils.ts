@@ -10,6 +10,7 @@ import {
   type IncomeStatementAmountBasisKind,
   type IncomeStatementVatDisplayMode,
 } from "@/lib/income-statement-display"
+import { pp30PlAmountForVatMode, isPp30PlExpenseSubjectCode } from "@/lib/pp30-pl-remittance"
 import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from "@/lib/income-statement-purchase-drill-nav"
 
 export function lineDisplayAmount(
@@ -186,6 +187,9 @@ export function expenseAmountForSubject(
   const key = plExpenseSubjectRowKey(subject)
   const r = data.expenseByAccountSubject.find((x) => plExpenseSubjectRowKey(x) === key)
   if (!r) return 0
+  if (isPp30PlExpenseSubjectCode(r.code)) {
+    return pp30PlAmountForVatMode(r.amount, vatMode)
+  }
   return convertExpenseSubjectAmount(Number(r.amount) || 0, r.vatAmount, vatMode)
 }
 
@@ -273,6 +277,16 @@ export function yearlyExpenseSubjectAmount(
   return s
 }
 
+export function pp30ExpenseDisplayAmount(
+  data: IncomeStatementData | undefined,
+  vatMode: IncomeStatementVatDisplayMode
+): number {
+  return pp30PlAmountForVatMode(
+    data?.displayAmounts?.pp30Remittance ?? data?.expenseBreakdown?.pp30VatRemittance,
+    vatMode
+  )
+}
+
 export function yearlyExpenseBreakdownField(
   rows: { ym: string; data: IncomeStatementData }[],
   year: string,
@@ -289,6 +303,7 @@ export function yearlyExpenseBreakdownField(
     | "franchiseDeliveryGp"
     | "franchiseGrabGp"
     | "franchiseBillingCombined"
+    | "pp30VatRemittance"
 ): number {
   let s = 0
   for (const { ym, data } of rows) {
