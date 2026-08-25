@@ -96,6 +96,30 @@ export function mergeCartPanelAddItem(prev: OrderItem[], item: MergeCartItemInpu
           : p
       )
     }
+    /** 테이블 기존 줄이 items_json에 promoId 없이 저장된 경우 — 같은 이름·가격이면 수량만 올림 (유니온몰 세트 추가가 새 줄이 되어 주방이 빈 delta로 스킵되던 문제) */
+    const existingByNamePrice = prev.find(
+      (p) =>
+        sameCartLineName(p.name, item.name) &&
+        sameCartLinePrice(p.price, item.price) &&
+        !String(p.promoId ?? '').trim() &&
+        canonicalPromoSignature(p.promoItems as MergeCartItemInput['promoItems']) === '[]'
+    )
+    if (existingByNamePrice) {
+      const prevQty = Math.max(1, lineQuantity(existingByNamePrice) || 1)
+      return prev.map((p) =>
+        p.id === existingByNamePrice.id
+          ? {
+              ...p,
+              quantity: prevQty + 1,
+              promoId: item.promoId,
+              ...(item.promoCode ? { promoCode: item.promoCode } : {}),
+              ...(Array.isArray(item.promoItems) && item.promoItems.length > 0
+                ? { promoItems: item.promoItems }
+                : {}),
+            }
+          : p
+      )
+    }
     const stableBaseId = `promo-cart-${pid}-${incomingSig}`
     return [
       ...prev,

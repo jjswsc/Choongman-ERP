@@ -49,7 +49,36 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
     expect(filterKitchenCartLinesForDineInAdd(cart, [{ id: 'a', quantity: 1 }])).toEqual([])
   })
 
-  it('merged save snapshot excludes stale cart duplicate but keeps new lines', () => {
+  it('emits qty 1 when the same combo is added as a new promo-cart line (Union Mall 012)', () => {
+    const existing = [
+      {
+        id: 'promo-cart-12-sig-aaa',
+        name: 'Gochujang Pork Bulgogi Combo',
+        price: 169,
+        quantity: 1,
+        qty: 1,
+      },
+    ]
+    const cart = [
+      ...existing,
+      {
+        id: 'promo-cart-12-sig-bbb',
+        name: 'Gochujang Pork Bulgogi Combo',
+        price: 169,
+        quantity: 1,
+      },
+    ]
+    expect(filterKitchenCartLinesForDineInAdd(cart, existing)).toEqual([
+      {
+        id: 'promo-cart-12-sig-bbb',
+        name: 'Gochujang Pork Bulgogi Combo',
+        price: 169,
+        quantity: 1,
+      },
+    ])
+  })
+
+  it('prints a second same-menu line (Union Mall add combo) and keeps other new lines', () => {
     const existing = [
       { id: 'db-set', name: 'SOY SAUCE BULGOGI SET', price: 250, quantity: 1, qty: 1, menuId: '44' },
     ]
@@ -59,6 +88,7 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
       { id: 'cart-soup', name: 'Kimchi Soup', price: 199, quantity: 2, menuId: '99' },
     ]
     expect(filterKitchenCartLinesForDineInAdd(mergedSave, existing)).toEqual([
+      { id: 'cart-stale-set', name: 'SOY SAUCE BULGOGI SET', price: 250, quantity: 1, menuId: '44' },
       { id: 'cart-soup', name: 'Kimchi Soup', price: 199, quantity: 2, menuId: '99' },
     ])
   })
@@ -149,7 +179,21 @@ describe('filterKitchenCartLinesForDineInAdd', () => {
       },
     ]
     expect(filterKitchenCartLinesForDineInAdd(mergedSave, existing)).toEqual([
-      { id: 'cart-soup', name: 'Kimchi Soup', price: 199, quantity: 1, menuId: '99' },
+      {
+        id: 'cart-stale',
+        name: 'Golden Fried Chicken',
+        price: 219,
+        quantity: 1,
+        note: 'M - Joint wings',
+        menuId: '26',
+      },
+      {
+        id: 'cart-soup',
+        name: 'Kimchi Soup',
+        price: 199,
+        quantity: 1,
+        menuId: '99',
+      },
     ])
   })
 

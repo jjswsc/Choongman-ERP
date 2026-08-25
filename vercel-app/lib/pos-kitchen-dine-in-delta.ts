@@ -272,30 +272,54 @@ export function filterKitchenCartLinesForDineInAdd<T extends KitchenComparableLi
   if (existingQtyById.size === 0) return cartLines
 
   if (existingHasQtyInfo(existingOrderItems)) {
+    /**
+     * 같은 세트를 새 줄로 추가하면(유니온몰 012) 홀은 줄 id로 `>` 표시하는데,
+     * 예전엔 신규 줄마다 기존 전체 수량과 비교해 delta=0 → 주방 잡이 안 만들어졌다.
+     * 내용이 같은 줄의 (카트 합 − 기존 합)만 추가분으로 보낸다.
+     */
+    const matchingQty = (line: KitchenComparableLine, pool: KitchenComparableLine[]): number => {
+      let n = 0
+      for (const other of pool) {
+        if (linesMatchByKitchenContent(line, other, formatNote)) n += lineQty(other)
+      }
+      return n
+    }
+    const takenByGroup = new Map<string, number>()
+    const groupKeyFor = (line: KitchenComparableLine): string => {
+      for (const ex of existingOrderItems) {
+        if (linesMatchByKitchenContent(line, ex, formatNote)) {
+          const id = resolveExistingId(ex)
+          return id ? `ex:${id}` : `ex:${lineContentSignature(ex, formatNote)}`
+        }
+      }
+      return `new:${lineContentSignature(line, formatNote)}`
+    }
+
     const deltaLines: T[] = []
     for (const line of cartLines) {
+      const extraTotal = Math.max(0, matchingQty(line, cartLines) - matchingQty(line, existingOrderItems))
+      const gKey = groupKeyFor(line)
+      const already = takenByGroup.get(gKey) ?? 0
+      const extraLeft = Math.max(0, extraTotal - already)
+
       const baseId = resolveExistingId(line)
       if (baseId && existingQtyById.has(baseId)) {
         const delta = lineQty(line) - (existingQtyById.get(baseId) ?? 0)
         if (delta > 0) {
-          deltaLines.push({ ...line, quantity: delta, qty: delta })
+          const take = Math.min(delta, extraLeft)
+          if (take > 0) {
+            deltaLines.push({ ...line, quantity: take, qty: take })
+            takenByGroup.set(gKey, already + take)
+          }
         }
         continue
       }
-      let matchedExistingQty = 0
-      for (const ex of existingOrderItems) {
-        if (linesMatchByKitchenContent(line, ex, formatNote)) {
-          matchedExistingQty += lineQty(ex)
-        }
-      }
-      if (matchedExistingQty > 0) {
-        const delta = lineQty(line) - matchedExistingQty
-        if (delta > 0) {
-          deltaLines.push({ ...line, quantity: delta, qty: delta })
-        }
-        continue
-      }
-      deltaLines.push(line)
+
+      if (extraLeft <= 0) continue
+      const take = Math.min(lineQty(line), extraLeft)
+      if (take <= 0) continue
+      deltaLines.push(take >= lineQty(line) ? line : { ...line, quantity: take, qty: take })
+      takenByGroup.set(gKey, already + take)
     }
     return deltaLines
   }
