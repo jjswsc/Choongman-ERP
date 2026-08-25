@@ -25,6 +25,7 @@ import {
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { withManualWhtAmountsTag, preserveAutoWhtMemoTags } from '@/lib/withholding-tax-ledger-core'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -225,7 +226,7 @@ export async function POST(request: NextRequest) {
       wht_amount: Number(body.whtAmount ?? body.wht_amount) || 0,
       form_hint: body.formHint != null ? String(body.formHint).slice(0, 64) : null,
       certificate_no: body.certificateNo != null ? String(body.certificateNo).slice(0, 128) : null,
-      memo: body.memo != null ? String(body.memo).slice(0, 2000) : null,
+      memo: withManualWhtAmountsTag(body.memo != null ? String(body.memo) : ''),
       filing_status: filingStatus,
       submitted_at: filingStatus === 'submitted' ? submittedAtRaw || new Date().toISOString() : null,
       submitted_by: filingStatus === 'submitted' ? submittedByRaw || null : null,
@@ -245,9 +246,9 @@ export async function POST(request: NextRequest) {
 
     if (id > 0) {
       const existingRows = (await supabaseSelectFilter('withholding_tax_ledger_entries', `id=eq.${id}`, {
-        select: 'id,store_name',
+        select: 'id,store_name,memo',
         limit: 1,
-      })) as { id?: number; store_name?: string | null }[] | null
+      })) as { id?: number; store_name?: string | null; memo?: string | null }[] | null
       const existing = existingRows?.[0]
       if (!existing?.id) {
         return NextResponse.json({ success: false, error: 'NOT_FOUND' }, { status: 404, headers })
@@ -259,6 +260,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ success: false, error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
         }
       }
+      row.memo = preserveAutoWhtMemoTags(existing.memo, String(row.memo || ''))
       try {
         await supabaseUpdate('withholding_tax_ledger_entries', id, row)
       } catch (e) {

@@ -8,6 +8,11 @@ import {
   postExpenseAccrualJournal,
 } from '@/lib/accounting-posting'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
+import {
+  parseExpenseWhtItemsFromBody,
+  serializeExpenseWhtItems,
+  sumExpenseWhtTax,
+} from '@/lib/expense-wht-items'
 import { deleteExpenseAccrualInputVatLedger, syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { normalizeExpenseAttachmentUrlsInput } from '@/lib/expense-attachment-urls'
 import {
@@ -198,6 +203,11 @@ export async function POST(request: NextRequest) {
       0,
       Math.abs(Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0)
     )
+    const parsedWhtItems = parseExpenseWhtItemsFromBody(
+      body as { withholdingTaxItems?: unknown; withholding_tax_items?: unknown }
+    )
+    const withholdingTaxFromItems =
+      parsedWhtItems && parsedWhtItems.length > 0 ? sumExpenseWhtTax(parsedWhtItems) : withholdingTaxAmountRaw
     const expenseDateRaw = String(body.expenseDate || body.expense_date || '').slice(0, 10)
     const dueDateRawInput = String(body.dueDate || body.due_date || '').trim()
     const dueDateRaw = dueDateRawInput ? dueDateRawInput.slice(0, 10) : null
@@ -209,7 +219,7 @@ export async function POST(request: NextRequest) {
       : vatAmountRaw
     const withholdingTaxAmount = paidLocked
       ? Math.max(0, Math.abs(Number(row.withholding_tax_amount || 0) || 0))
-      : withholdingTaxAmountRaw
+      : withholdingTaxFromItems
     const expenseDate = paidLocked
       ? String(row.expense_date || '').slice(0, 10)
       : expenseDateRaw
@@ -314,6 +324,9 @@ export async function POST(request: NextRequest) {
       store_name: storeName || null,
       account_subject_id: accountSubjectId,
       updated_at: new Date().toISOString(),
+    }
+    if (!paidLocked && parsedWhtItems !== undefined) {
+      accrualPatch.withholding_tax_items = serializeExpenseWhtItems(parsedWhtItems)
     }
     if (attachmentUrlsSerialized !== undefined) {
       accrualPatch.attachment_urls = attachmentUrlsSerialized

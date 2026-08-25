@@ -18,6 +18,15 @@ describe('parsePosOrderMemo', () => {
     expect(taxInvoice).toBeNull()
   })
 
+  it('strips MEMBER_ATTACH_AFTER_PAY stamps from plain memo', () => {
+    const memo =
+      'allergy note\n' +
+      '[MEMBER_ATTACH_AFTER_PAY 2026-08-25T08:51:00.000Z POS] member_id=12 member_no=CM000012'
+    const { plainMemo } = parsePosOrderMemo(memo)
+    expect(plainMemo).toBe('allergy note')
+    expect(plainMemo).not.toMatch(/MEMBER_ATTACH/)
+  })
+
   it('strips ORDER_MERGED and ORDER_MERGE_KEEP from plain memo (receipt/kitchen)', () => {
     const memo =
       'customer note\n' +

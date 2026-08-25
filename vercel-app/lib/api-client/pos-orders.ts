@@ -475,6 +475,23 @@ export async function correctPosOrderPayment(params: {
   }>
 }
 
+/** 결제 완료 주문에 회원을 나중에 연결하고 포인트를 소급 적립 */
+export async function attachPosOrderMember(params: { id: number; memberId: number }) {
+  const res = await apiFetchWithOffline('/api/attachPosOrderMember', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    pointEarned?: number
+    memberNo?: string
+    memberName?: string
+    alreadyApplied?: boolean
+  }>
+}
+
 /** 홀 주문: 빈 테이블로 이동 (table_name만 변경) */
 export async function posDineInTableMove(params: { orderId: number; targetTableName: string }) {
   const res = await apiFetchWithOffline('/api/posDineInTableActions', {

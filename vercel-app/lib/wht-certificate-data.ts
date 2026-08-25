@@ -1,5 +1,13 @@
 /** 원천징수 증명서(หนังสือรับรอง) 인쇄용 당사자·금액 */
 
+import {
+  concatExpenseWhtIncomeTypes,
+  expenseWhtItemsFromTotals,
+  primaryExpenseWhtRate,
+  sumExpenseWhtBase,
+  sumExpenseWhtTax,
+  type ExpenseWhtItem,
+} from '@/lib/expense-wht-items'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import {
@@ -13,6 +21,14 @@ export type WhtCertificateParty = {
   name: string
   taxId: string
   address?: string
+}
+
+export type WhtCertificateIncomeLine = {
+  incomeType: string
+  paymentDate: string
+  grossAmount: number
+  whtAmount: number
+  whtRate?: number | null
 }
 
 export type WhtCertificateData = {
@@ -29,6 +45,8 @@ export type WhtCertificateData = {
   incomeRecipient: WhtCertificateParty
   memo?: string
   storeName?: string
+  /** 50 ทวิ 표에 여러 행 (ค่าเช่า 5% + ค่าบริการ 3% 등) */
+  incomeLines?: WhtCertificateIncomeLine[]
 }
 
 export type HeadOfficeCompany = {
@@ -224,6 +242,72 @@ export function whtCertificateFromPurchaseOrder(
   )
 }
 
+function incomeLinesFromWhtItems(
+  items: ExpenseWhtItem[],
+  paymentDate: string
+): WhtCertificateIncomeLine[] | undefined {
+  if (items.length <= 1) return undefined
+  return items.map((it) => ({
+    incomeType: it.incomeType,
+    paymentDate,
+    grossAmount: it.baseAmount,
+    whtAmount: it.taxAmount,
+    whtRate: it.rate > 0 ? it.rate : null,
+  }))
+}
+
+/** 같은 증명서번호(또는 같은 지급일·거래처)의 원장 행을 50 ทวิ 한 장으로 합침 */
+export function mergeWhtCertificatesForPrint(items: WhtCertificateData[]): WhtCertificateData[] {
+  const list = (items || []).filter((d) => d && Number(d.whtAmount) > 0)
+  if (list.length <= 1) return list
+  const groups = new Map<string, WhtCertificateData[]>()
+  const order: string[] = []
+  for (const d of list) {
+    const cert = String(d.certificateNo || '').trim()
+    const key =
+      cert && cert !== '—'
+        ? `cert:${cert}`
+        : `payee:${String(d.incomeRecipient?.name || '').trim()}|${String(d.paymentDate || '').slice(0, 10)}|${String(d.storeName || '')}`
+    if (!groups.has(key)) {
+      groups.set(key, [])
+      order.push(key)
+    }
+    groups.get(key)!.push(d)
+  }
+  return order.map((key) => {
+    const g = groups.get(key) || []
+    if (g.length === 1) return g[0]
+    const first = g[0]
+    const lines: WhtCertificateIncomeLine[] = g.flatMap((row) =>
+      row.incomeLines && row.incomeLines.length > 0
+        ? row.incomeLines
+        : [
+            {
+              incomeType: row.incomeType,
+              paymentDate: row.paymentDate,
+              grossAmount: row.grossAmount,
+              whtAmount: row.whtAmount,
+              whtRate: row.whtRate,
+            },
+          ]
+    )
+    const itemsAsWht: ExpenseWhtItem[] = lines.map((ln) => ({
+      incomeType: ln.incomeType,
+      rate: Number(ln.whtRate) || 0,
+      baseAmount: ln.grossAmount,
+      taxAmount: ln.whtAmount,
+    }))
+    return {
+      ...first,
+      incomeType: concatExpenseWhtIncomeTypes(itemsAsWht) || first.incomeType,
+      grossAmount: sumExpenseWhtBase(itemsAsWht),
+      whtAmount: sumExpenseWhtTax(itemsAsWht),
+      whtRate: primaryExpenseWhtRate(itemsAsWht),
+      incomeLines: lines,
+    }
+  })
+}
+
 /** 지출 등록 직후 50 ทวิ형 증명서 — outbound(당사 원천징수) */
 export function whtCertificateFromExpenseRegister(
   params: {
@@ -239,26 +323,35 @@ export function whtCertificateFromExpenseRegister(
     memo?: string
     storeName?: string
     incomeType?: string
+    whtItems?: ExpenseWhtItem[] | unknown
   },
   headOffice: HeadOfficeCompany
 ): WhtCertificateData | null {
-  const wht = Math.max(0, Number(params.whtAmount) || 0)
-  if (wht <= 0) return null
   const paymentDate = String(params.paymentDate || '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) return null
   const grossIncl = Math.max(0, Number(params.grossInclVat) || 0)
   const vat = Math.max(0, Number(params.vatAmount) || 0)
   const grossExVat = Math.round(Math.max(0, grossIncl - vat) * 100) / 100
-  return whtCertificateFromLedgerRow(
+  const items = expenseWhtItemsFromTotals({
+    items: params.whtItems,
+    taxAmount: params.whtAmount,
+    baseAmount: grossExVat > 0 ? grossExVat : grossIncl,
+    rate: params.whtRate,
+    incomeType: params.incomeType,
+  })
+  const wht = sumExpenseWhtTax(items)
+  if (wht <= 0) return null
+  const baseSum = sumExpenseWhtBase(items)
+  const cert = whtCertificateFromLedgerRow(
     {
       payment_date: paymentDate,
       tax_month: paymentDate.slice(0, 7),
       payee_name: String(params.payeeName || '').trim(),
       payee_tax_id: String(params.payeeTaxId || '').trim(),
       payee_address: String(params.payeeAddress || '').trim(),
-      income_type: String(params.incomeType || '').trim() || 'ค่าบริการ',
-      gross_amount: grossExVat > 0 ? grossExVat : grossIncl,
-      wht_rate: params.whtRate,
+      income_type: concatExpenseWhtIncomeTypes(items) || String(params.incomeType || '').trim() || 'ค่าบริการ',
+      gross_amount: baseSum > 0 ? baseSum : grossExVat > 0 ? grossExVat : grossIncl,
+      wht_rate: primaryExpenseWhtRate(items) ?? params.whtRate,
       wht_amount: wht,
       certificate_no: String(params.certificateNo || '').trim() || undefined,
       memo: params.memo,
@@ -267,6 +360,8 @@ export function whtCertificateFromExpenseRegister(
     },
     headOffice
   )
+  const lines = incomeLinesFromWhtItems(items, paymentDate)
+  return lines ? { ...cert, incomeLines: lines } : cert
 }
 
 /** 거래처 마스터로 50 ทวิ 수취인 TIN·주소 보강 (장부/인쇄 공통) */

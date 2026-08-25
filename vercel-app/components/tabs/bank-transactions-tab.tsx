@@ -2356,10 +2356,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         }
         setActiveBankTab("query")
         const importMessage =
-          (res.policySkipped ?? 0) > 0 || (res.policyAdjusted ?? 0) > 0
+          (res.policySkipped ?? 0) > 0 || (res.policyAdjusted ?? 0) > 0 || (res.taxMerged ?? 0) > 0
             ? (() => {
                 const parts = [`${res.inserted ?? 0}건 등록`]
                 if ((res.duplicateSkipped ?? 0) > 0) parts.push(`중복 ${res.duplicateSkipped ?? 0}건 제외`)
+                if ((res.taxMerged ?? 0) > 0) {
+                  parts.push(
+                    (t("bankImportTaxMerged") || "세금 납부 {count}건 Statement와 합침").replace(
+                      "{count}",
+                      String(res.taxMerged ?? 0)
+                    )
+                  )
+                }
                 if ((res.policyAdjusted ?? 0) > 0) parts.push(`정책 ${res.policyAdjusted ?? 0}건 자동전환`)
                 if ((res.policySkipped ?? 0) > 0) parts.push(`정책 ${res.policySkipped ?? 0}건 제외`)
                 let detail = ""

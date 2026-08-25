@@ -37,6 +37,28 @@ export function emptyVat(taxMonth: string, defaultStoreName = ""): VatDraft {
   }
 }
 
+export function withheldFromGrossAndRate(grossRaw: string, rateRaw: string): string | null {
+  const grossText = String(grossRaw ?? "").replace(/,/g, "").trim()
+  const rateText = String(rateRaw ?? "").replace(/,/g, "").trim()
+  if (!grossText || !rateText) return null
+  const gross = Number(grossText)
+  const rate = Number(rateText)
+  if (!Number.isFinite(gross) || !Number.isFinite(rate)) return null
+  return String(Math.round(((gross * rate) / 100) * 100) / 100)
+}
+
+export function mergeWhtAmountPatch<T extends { gross_amount: string; wht_rate: string; wht_amount: string }>(
+  row: T,
+  patch: Partial<Pick<T, "gross_amount" | "wht_rate" | "wht_amount">> & Partial<T>
+): T {
+  const next = { ...row, ...patch }
+  if ("gross_amount" in patch || "wht_rate" in patch) {
+    const withheld = withheldFromGrossAndRate(next.gross_amount, next.wht_rate)
+    if (withheld != null) next.wht_amount = withheld as T["wht_amount"]
+  }
+  return next
+}
+
 export function emptyWht(taxMonth: string, defaultStoreName: string): WhtDraft {
   return {
     payment_date: `${taxMonth}-01`,
@@ -56,6 +78,7 @@ export function emptyWht(taxMonth: string, defaultStoreName: string): WhtDraft {
     store_name: defaultStoreName,
     direction: "outbound",
     source_type: "manual",
+    source_id: 0,
   }
 }
 

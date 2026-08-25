@@ -17,6 +17,7 @@ export interface ExpenseAccrualPlanItem {
   grossAmount?: number
   vatAmount?: number
   withholdingTaxAmount?: number
+  withholdingTaxItems?: { incomeType: string; rate: number; baseAmount: number; taxAmount: number }[]
   /** 실제 지급 대상(총액 − 원천징수) */
   plannedAmount: number
   paidAmount: number
@@ -121,6 +122,8 @@ export async function addExpenseAccrual(params: {
   vatAmount?: number
   /** 원천징수세 — 실지급액 = amount − 이 값 */
   withholdingTaxAmount?: number
+  /** 원천징수 여러 건 (ค่าเช่า 5% + ค่าบริการ 3% 등) */
+  withholdingTaxItems?: { incomeType: string; rate: number; baseAmount: number; taxAmount: number }[]
   expenseDate: string
   dueDate?: string
   memo?: string
@@ -209,6 +212,7 @@ export async function updateExpenseAccrual(params: {
   amount: number
   vatAmount?: number
   withholdingTaxAmount?: number
+  withholdingTaxItems?: { incomeType: string; rate: number; baseAmount: number; taxAmount: number }[]
   expenseDate: string
   dueDate?: string | null
   memo?: string
@@ -724,6 +728,7 @@ export async function executeWithdrawal(params: {
   vatAmount?: number
   withholdingTaxAmount?: number
   withholdingTaxRate?: number
+  withholdingTaxItems?: { incomeType: string; rate: number; baseAmount: number; taxAmount: number }[]
   attachmentUrls?: string[]
   userName?: string
   userRole?: string

@@ -38,6 +38,7 @@ export type WhtDraft = {
   store_name: string
   direction: "inbound" | "outbound"
   source_type: string
+  source_id?: number
 }
 
 export type Pp36Draft = {

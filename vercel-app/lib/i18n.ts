@@ -3489,6 +3489,7 @@ export const i18n = {
     accCompDirInput: '매입',
     accCompPhPayee: '수급인',
     accCompPhPayeeTin: '수급인 사업자번호',
+    accCompPhPayeeCountry: '수급인 국가',
     accCompPhIncomeType: '소득 유형',
     accCompPhGross: '총지급액',
     accCompPhWhtRate: '세율(%)',
@@ -3826,6 +3827,8 @@ export const i18n = {
       '이 매장명과 맞는 원장 행이 없습니다. 「매장 전체」로 검색해 보시고, 행의 매장명이 비어 있거나 다르면 원장 동기화·지출 매장명을 확인하세요.',
     accCompPnd3ScopePayrollHint:
       'PND.3는 개인 용역·수수료(지출 등)입니다. 급여(เงินเดือน) 원천은 PND.1 탭에서 전체·법인 검색하세요. 법인 선택 시 같은 사업자번호 매장이 함께 포함됩니다.',
+    accCompWhtAmountsEditableHint:
+      '과세표준·세율·원천징수액은 행에서 고친 뒤 「저장」하면 유지됩니다. PND.1·3·53·54 모두 같습니다. 저장한 금액은 이후 원장 동기화가 덮지 않습니다.',
     accCompVatSyncOk: '원장 동기화 완료 (POS {n}건 반영). 매입 탭도 함께 확인해 주세요.',
     accCompVatSyncPosFail: 'POS 동기화 중 오류가 있었습니다. 잠시 후 다시 시도하세요.',
     accCompVatSyncTimeout: '원장 동기화 시간이 초과되었습니다. 매장을 지정한 뒤 다시 눌러 주세요.',
@@ -4255,6 +4258,11 @@ export const i18n = {
     expenseAccrualWithholding: '원천징수세',
     expenseAccrualWhtRate: '원천징수율',
     expenseAccrualWhtRateNone: '선택',
+    expenseAccrualWhtItems: '원천징수 (여러 건)',
+    expenseAccrualWhtItemsHint:
+      '같은 지급에 임대료 5%와 용역 3%를 같이 넣으면 50 ทวิ에 두 줄로 나갑니다.',
+    expenseAccrualWhtIncomeType: '소득 유형',
+    expenseAccrualWhtBase: '지급액(VAT 제외)',
     expenseAccrualAutoWhtCert: '원천징수 증명서(50 ทวิ) 자동 생성',
     expenseAccrualNetPayableLabel: '실제 지급액',
     expenseAccrualNetPositiveRequired: '실제 지급액이 0보다 커야 합니다. 총액·원천징수를 확인해 주세요.',
@@ -4480,7 +4488,8 @@ export const i18n = {
     accountSubjectCodeNameRequired: '코드와 과목명을 입력하세요.',
     bankSaveFirstHint: '일괄저장 후 조회에서',
     bankImportDupHint:
-      '같은 계좌·날짜·입출금·금액이면, 이미 DB에 저장된 줄과만 비교해 중복을 제외합니다(적요가 같거나 한쪽만 적요 | 은행상세). 사용자 메모(메모 열)가 다르면 별개 건으로 저장됩니다. 한 번에 올린 CSV에 동일 적요·동일 메모가 여러 줄이면, DB에 없는 만큼은 모두 등록됩니다.',
+      '같은 계좌·날짜·입출금·금액이면, 이미 DB에 저장된 줄과만 비교해 중복을 제외합니다(적요가 같거나 한쪽만 적요 | 은행상세). 사용자 메모(메모 열)가 다르면 별개 건으로 저장됩니다. 한 번에 올린 CSV에 동일 적요·동일 메모가 여러 줄이면, DB에 없는 만큼은 모두 등록됩니다. 지출관리에서 먼저 등록한 세금 납부(ภาษี·PP.30 등)는 Statement와 같은 날짜·금액·적요이면 새 줄을 만들지 않고 기존 줄에 은행 적요를 합칩니다.',
+    bankImportTaxMerged: '세금 납부 {count}건 Statement와 합침',
     bankFilterLabel: '필터',
     bankFilterAmount: '금액',
     bankFilterAmountPh: '금액',
@@ -4517,7 +4526,7 @@ export const i18n = {
     helpSum_admin_bank_transactions:
       '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급·차입금과 맞물립니다. 임원이 회사에 빌려준 입금은 「차입 수령」+관련당사자(매출 4110 금지). 통장 변경 시 계좌 추가(삭제 금지), 삭제·등록 이력은 본사·회계가 계좌 관리에서 확인합니다.',
     helpHow_admin_bank_transactions:
-      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, revenue_* 입금 분류는 쓰지 마세요(매출 이중 위험). 수수료 분개는 POS 결산에서 처리하거나, 통장 조회에서 해당 입금 행의 「채널 정산」을 사용하세요.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘).\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
+      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, revenue_* 입금 분류는 쓰지 마세요(매출 이중 위험). 수수료 분개는 POS 결산에서 처리하거나, 통장 조회에서 해당 입금 행의 「채널 정산」을 사용하세요.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
     bankManualS3PosReceivable:
       'POS 자동분개 매장: 카드·배달앱·QR 입금은 「매출 수령」+ 매장. revenue_delivery/revenue_card는 4110 이중 인식 위험.',
     bankPosReceivableDepositTitle: 'POS 자동분개 매장 — 입금 분류',
@@ -7621,7 +7630,7 @@ export const i18n = {
     helpSum_admin_tax_filing:
       '태국 세무신고(부가세·원천세·법인세·SSO)와 매입 세금계산서를 기간/매장 기준으로 조회하고 신고용 자료를 내보내는 화면입니다.',
     helpHow_admin_tax_filing:
-      '① 상단 탭에서 신고 유형(납세자, PP.30, 매입 세금계산서, PP.36, PND, SSO)을 선택합니다.\n② 기준 월(또는 연도)과 매장을 정한 뒤 먼저 조회/검색으로 데이터를 확정합니다.\n③ RD Prep용 TXT는 탭에 맞는 버튼만 사용합니다(PND 탭≠PP30). e-Filing에는 .rdx만 업로드되며, TXT는 RD Prep에서 1회 매핑 저장 후 .rdx로 만듭니다.\n④ P.N.D.50/51은 세무조정 초안 저장 후 CSV/PDF를 내보냅니다. 경고가 있으면 수치·분개를 재검토합니다.\n⑤ 지출 등록의 Tax Invoice는 비용 증빙만입니다. PP.30 매입세는 「매입 세금계산서」탭에서 수기·입고 자동·스캔 PDF로 등록하고, 직원 템플릿 8열 엑셀로 내보냅니다. 복합기 스캔 PDF는 페이지 상·하단을 잘라 인식하므로 저장 전 검수에서 빈 칸·사본을 확인하고, 페이지 번호로 원본을 대조하며 PP.30 초안 합계와 맞는지 봅니다. 날짜는 세금계산서 일자 월입니다.',
+      '① 상단 탭에서 신고 유형(납세자, PP.30, 매입 세금계산서, PP.36, PND, SSO)을 선택합니다.\n② 기준 월(또는 연도)과 매장을 정한 뒤 먼저 조회/검색으로 데이터를 확정합니다.\n③ RD Prep용 TXT는 탭에 맞는 버튼만 사용합니다(PND 탭≠PP30). e-Filing에는 .rdx만 업로드되며, TXT는 RD Prep에서 1회 매핑 저장 후 .rdx로 만듭니다.\n④ P.N.D.50/51은 세무조정 초안 저장 후 CSV/PDF를 내보냅니다. 경고가 있으면 수치·분개를 재검토합니다.\n⑤ 지출 등록의 Tax Invoice는 비용 증빙만입니다. PP.30 매입세는 「매입 세금계산서」탭에서 수기·입고 자동·스캔 PDF로 등록하고, 직원 템플릿 8열 엑셀로 내보냅니다. 복합기 스캔 PDF는 페이지 상·하단을 잘라 인식하므로 저장 전 검수에서 빈 칸·사본을 확인하고, 페이지 번호로 원본을 대조하며 PP.30 초안 합계와 맞는지 봅니다. 날짜는 세금계산서 일자 월입니다.\n⑥ PND.1·3·53·54에서 과세표준·세율·원천징수액을 고친 뒤 그 행의 「저장」을 누르면 유지됩니다. 이후 원장 동기화가 저장한 금액을 덮지 않습니다.',
     helpSum_admin_work_log:
       '매일의 업무·진행률을 기록하고, 권한이 있으면 검토·피드백을 처리하며, 주·월 실적·HR 인사이트·변경 이력을 조회하는 화면입니다.',
     helpHow_admin_work_log:
@@ -11628,6 +11637,7 @@ Only matters the employee must handle personally on a working day:
     accCompDirInput: 'Input (purchase)',
     accCompPhPayee: 'Payee',
     accCompPhPayeeTin: 'Payee tax ID',
+    accCompPhPayeeCountry: 'Payee country',
     accCompPhIncomeType: 'Income type',
     accCompPhGross: 'Gross',
     accCompPhWhtRate: 'Rate (%)',
@@ -11968,6 +11978,8 @@ Only matters the employee must handle personally on a working day:
       'No ledger rows match this store name. Try Store = All; if rows have blank/other store names, sync the ledger or fix expense store names.',
     accCompPnd3ScopePayrollHint:
       'PND.3 is for personal service fees (expenses). Salary withholding is on the PND.1 tab. When an entity is selected, stores sharing the same tax ID are included.',
+    accCompWhtAmountsEditableHint:
+      'Edit tax base, rate, and withheld amount on the row, then Save. This works on PND.1, 3, 53, and 54. Saved amounts are not overwritten by later ledger sync.',
     accCompVatSyncOk: 'Ledger sync done (POS {n} rows). Also check the purchase tab.',
     accCompVatSyncPosFail: 'POS sync failed. Please try again shortly.',
     accCompVatSyncTimeout: 'Ledger sync timed out. Pick a single store and try again.',
@@ -12388,6 +12400,11 @@ Only matters the employee must handle personally on a working day:
     expenseAccrualWithholding: 'Withholding tax',
     expenseAccrualWhtRate: 'WHT rate',
     expenseAccrualWhtRateNone: 'Select',
+    expenseAccrualWhtItems: 'Withholding tax (multiple)',
+    expenseAccrualWhtItemsHint:
+      'Add rent 5% and service 3% on the same payment. The 50 ทวิ shows both lines.',
+    expenseAccrualWhtIncomeType: 'Income type',
+    expenseAccrualWhtBase: 'Amount paid (excl. VAT)',
     expenseAccrualAutoWhtCert: 'Auto-create withholding tax certificate (50 ทวิ)',
     expenseAccrualNetPayableLabel: 'Net payment',
     expenseAccrualNetPositiveRequired: 'Net payment must be greater than zero. Check total and withholding.',
@@ -12621,7 +12638,8 @@ Only matters the employee must handle personally on a working day:
     accountSubjectCodeNameRequired: 'Please enter code and account subject name.',
     bankSaveFirstHint: 'Save first, then Query',
     bankImportDupHint:
-      'Same account, date, type, and amount: we skip a row only when it matches a row already saved in the database (memo matches loosely, including memo vs memo | bank detail). If the user Memo column differs, it is treated as a separate transaction. Multiple identical lines in one import all save except for rows that still match remaining DB rows (re-upload dedupe).',
+      'Same account, date, type, and amount: we skip a row only when it matches a row already saved in the database (memo matches loosely, including memo vs memo | bank detail). If the user Memo column differs, it is treated as a separate transaction. Multiple identical lines in one import all save except for rows that still match remaining DB rows (re-upload dedupe). Tax remittances already registered in Expense Management (Tax / PP.30 etc.) are merged into the existing row when date, amount, and tax reference match—no second unclassified line.',
+    bankImportTaxMerged: 'Merged {count} tax remittance(s) with the statement',
     bankFilterLabel: 'Filter',
     bankFilterAmount: 'Amount',
     bankFilterAmountPh: 'Amount',
@@ -12658,7 +12676,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_bank_transactions:
       'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables/borrowings. Officer deposits to the company: Borrowing in + related party (do not post as sales 4110). When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
     helpHow_admin_bank_transactions:
-      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_* (double revenue risk). Post fees on POS settlement or use Channel settlement on the deposit row in Bank.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
+      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_* (double revenue risk). Post fees on POS settlement or use Channel settlement on the deposit row in Bank.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
     bankManualS3PosReceivable:
       'POS auto-journal stores: card/delivery/QR deposits → Sales collection + store. Avoid revenue_* categories (double 4110).',
     bankPosReceivableDepositTitle: 'POS auto-journal — deposit category',
@@ -15762,7 +15780,7 @@ orderItemQty: 'Qty',
     helpSum_admin_tax_filing:
       'Prepare Thai tax filings (VAT, WHT, CIT, SSO) and the purchase tax invoice register by period and store, then export filing-ready outputs.',
     helpHow_admin_tax_filing:
-      '① Select a filing tab (taxpayer, PP.30, Purchase tax invoices, PP.36, PND, SSO).\n② Set year-month (or fiscal year) and store, then Search.\n③ Use the RD Prep TXT button that matches the tab (PND ≠ PP30). e-Filing accepts .rdx only — import TXT in RD Prep once (save mapping) then save .rdx.\n④ In P.N.D.50/51, save tax adjustment draft first, then export CSV/PDF. Review warnings before filing.\n⑤ Expense Tax Invoice is cost evidence only. PP.30 input VAT is registered on the Purchase tax invoices tab (manual, inbound auto, or scanned PDF) and exported as the 8-column Thai Excel. Scanner PDFs are read from header/total crops — review blanks and copies, click the page number to compare the original, and check totals against the PP.30 draft. tax_month follows the invoice date.',
+      '① Select a filing tab (taxpayer, PP.30, Purchase tax invoices, PP.36, PND, SSO).\n② Set year-month (or fiscal year) and store, then Search.\n③ Use the RD Prep TXT button that matches the tab (PND ≠ PP30). e-Filing accepts .rdx only — import TXT in RD Prep once (save mapping) then save .rdx.\n④ In P.N.D.50/51, save tax adjustment draft first, then export CSV/PDF. Review warnings before filing.\n⑤ Expense Tax Invoice is cost evidence only. PP.30 input VAT is registered on the Purchase tax invoices tab (manual, inbound auto, or scanned PDF) and exported as the 8-column Thai Excel. Scanner PDFs are read from header/total crops — review blanks and copies, click the page number to compare the original, and check totals against the PP.30 draft. tax_month follows the invoice date.\n⑥ On PND.1/3/53/54, edit tax base, rate, and withheld amount, then Save on that row. Later ledger sync does not overwrite saved amounts.',
     helpSum_admin_work_log:
       'Record daily tasks and progress; handle review/feedback when permitted; view weekly/monthly rollups, HR insights, and change history.',
     helpHow_admin_work_log:
@@ -18962,6 +18980,8 @@ orderItemQty: 'จำนวน',
       'ไม่พบรายการที่ตรงชื่อสาขา — ลองค้นหาแบบสาขาทั้งหมด และตรวจว่าแถวบัญชีมี store_name ว่างหรือต่างชื่อหรือไม่',
     accCompPnd3ScopePayrollHint:
       'แท็บ PND.3 สำหรับค่าจ้าง/ค่าบริการบุคคล (รายจ่าย) ครับ เงินเดือนดูที่แท็บ PND.1 เมื่อเลือกนิติบุคคล ระบบรวมสาขาที่เลขผู้เสียภาษีเดียวกันด้วยครับ',
+    accCompWhtAmountsEditableHint:
+      'แก้ฐานภาษี อัตรา และยอดหัก ณ ที่จ่าย ในแถว แล้วกดบันทึกได้ครับ ใช้ได้ทุกแท็บ PND.1 / 3 / 53 / 54 ยอดที่บันทึกแล้ว ระบบซิงค์บัญชีจะไม่ทับครับ',
     accCompVatInputSourcesHint:
       'ภาษีซื้อมาจาก การยื่นภาษี → ใบกำกับภาษีซื้อ เท่านั้นครับ ทั้งบันทึกมือ รับสินค้าที่มีใบกำกับ และสแกน PDF การลงรายจ่าย บัญชีธนาคาร และบัตรเป็นค่าใช้จ่ายอย่างเดียว ไม่เข้า ภ.พ.30 อัตโนมัติครับ',
     accCompVatPeriodLockHint: 'เมื่อปิดงวดแล้ว จะแก้บัญชี VAT ของสาขา/เดือนนั้นไม่ได้ การปิดแบบ All จะล็อกทุกสาขาในเดือนนั้น',
@@ -18983,7 +19003,7 @@ orderItemQty: 'จำนวน',
     helpSum_admin_tax_filing:
       'เตรียมเอกสารยื่นภาษีไทย (VAT, หัก ณ ที่จ่าย, ภาษีนิติบุคคล, SSO) และทะเบียนใบกำกับภาษีซื้อ ตามงวดและสาขา แล้วส่งออกไฟล์สำหรับยื่นครับ',
     helpHow_admin_tax_filing:
-      '① เลือกแท็บยื่น (ผู้เสียภาษี, PP.30, ใบกำกับภาษีซื้อ, PP.36, PND, SSO) ครับ\n② ตั้งปี-เดือน (หรือปีบัญชี) และสาขา แล้วกดค้นหา\n③ ใช้ปุ่ม RD Prep TXT ให้ตรงแท็บ (PND ≠ PP30) e-Filing รับเฉพาะ .rdx — นำเข้า TXT ใน RD Prep ครั้งเดียว (บันทึก mapping) แล้วบันทึกเป็น .rdx\n④ ใน P.N.D.50/51 บันทึกร่างปรับปรุงภาษีก่อน แล้วส่งออก CSV/PDF ตรวจคำเตือนก่อนยื่น\n⑤ Tax Invoice ในรายจ่ายเป็นหลักฐานค่าใช้จ่ายเท่านั้นครับ ภาษีซื้อลงที่แท็บ ใบกำกับภาษีซื้อ (มือ / รับสินค้า / สแกน PDF) แล้วส่งออก Excel 8 คอลัมน์ เดือนภาษีตามวันที่ใบกำกับครับ',
+      '① เลือกแท็บยื่น (ผู้เสียภาษี, PP.30, ใบกำกับภาษีซื้อ, PP.36, PND, SSO) ครับ\n② ตั้งปี-เดือน (หรือปีบัญชี) และสาขา แล้วกดค้นหา\n③ ใช้ปุ่ม RD Prep TXT ให้ตรงแท็บ (PND ≠ PP30) e-Filing รับเฉพาะ .rdx — นำเข้า TXT ใน RD Prep ครั้งเดียว (บันทึก mapping) แล้วบันทึกเป็น .rdx\n④ ใน P.N.D.50/51 บันทึกร่างปรับปรุงภาษีก่อน แล้วส่งออก CSV/PDF ตรวจคำเตือนก่อนยื่น\n⑤ Tax Invoice ในรายจ่ายเป็นหลักฐานค่าใช้จ่ายเท่านั้นครับ ภาษีซื้อลงที่แท็บ ใบกำกับภาษีซื้อ (มือ / รับสินค้า / สแกน PDF) แล้วส่งออก Excel 8 คอลัมน์ เดือนภาษีตามวันที่ใบกำกับครับ\n⑥ ที่แท็บ PND.1 / 3 / 53 / 54 แก้ฐานภาษี อัตรา และยอดหัก แล้วกดบันทึกรายแถวได้ครับ ระบบซิงค์บัญชีจะไม่ทับยอดที่บันทึกแล้ว',
     accCompTabScope: 'ขอบเขตการยื่น',
     accCompTabChannels: 'ช่องทางราชการ',
     accCompTabResp: 'ผู้รับผิดชอบ',
@@ -19358,6 +19378,7 @@ orderItemQty: 'จำนวน',
     accCompDirInput: 'ซื้อ',
     accCompPhPayee: 'ผู้รับเงิน',
     accCompPhPayeeTin: 'เลขผู้รับเงิน',
+    accCompPhPayeeCountry: 'ประเทศผู้รับเงิน',
     accCompPhIncomeType: 'ประเภทเงินได้',
     accCompPhGross: 'ยอดรวมก่อนหัก',
     accCompPhWhtRate: 'อัตรา (%)',
@@ -19814,6 +19835,11 @@ orderItemQty: 'จำนวน',
     expenseAccrualWithholding: 'ภาษีหัก ณ ที่จ่าย',
     expenseAccrualWhtRate: 'อัตราหัก ณ ที่จ่าย',
     expenseAccrualWhtRateNone: 'เลือก',
+    expenseAccrualWhtItems: 'ภาษีหัก ณ ที่จ่าย (หลายรายการ)',
+    expenseAccrualWhtItemsHint:
+      'รายการเดียวกันใส่ค่าเช่า 5% กับค่าบริการ 3% ได้ ใบ 50 ทวิ จะแสดงสองบรรทัด',
+    expenseAccrualWhtIncomeType: 'ประเภทเงินได้',
+    expenseAccrualWhtBase: 'จำนวนเงินที่จ่าย (ไม่รวม VAT)',
     expenseAccrualAutoWhtCert: 'สร้างหนังสือรับรองการหัก ณ ที่จ่ายอัตโนมัติ (50 ทวิ)',
     expenseAccrualNetPayableLabel: 'ยอดจ่ายสุทธิ',
     expenseAccrualNetPositiveRequired: 'ยอดจ่ายสุทธิต้องมากกว่า 0 กรุณาตรวจสอบยอดรวมและภาษีหัก ณ ที่จ่าย',
@@ -20231,7 +20257,8 @@ orderItemQty: 'จำนวน',
     accountSubjectCodeNameRequired: 'กรุณากรอกรหัสและชื่อหมวดบัญชี',
     bankSaveFirstHint: 'บันทึกก่อน แล้วไปแท็บค้นหา',
     bankImportDupHint:
-      'บัญชี วันที่ ประเภท จำนวนเดียวกัน: ข้ามเฉพาะรายการที่ตรงกับรายการที่บันทึกในระบบแล้ว (หมายเหตุธนาคารตรงแบบหลวม รวมถึงหมายเหตุสั้น vs หมายเหตุ | รายละเอียด) ถ้าเมโมผู้ใช้คอลัมน์เมโมต่างกัน ถือเป็นรายการคนละรายการ หลายบรรทัดเหมือนกันในไฟล์เดียวจะบันทึกได้ตามจำนวนที่ยังไม่มีใน DB',
+      'บัญชี วันที่ ประเภท จำนวนเดียวกัน: ข้ามเฉพาะรายการที่ตรงกับรายการที่บันทึกในระบบแล้ว (หมายเหตุธนาคารตรงแบบหลวม รวมถึงหมายเหตุสั้น vs หมายเหตุ | รายละเอียด) ถ้าเมโมผู้ใช้คอลัมน์เมโมต่างกัน ถือเป็นรายการคนละรายการ หลายบรรทัดเหมือนกันในไฟล์เดียวจะบันทึกได้ตามจำนวนที่ยังไม่มีใน DB หากลงทะเบียนภาษีในจัดการค่าใช้จ่ายไว้ก่อน แล้วนำ Statement เข้า ระบบจะรวมเข้ากับรายการภาษีเดิมเมื่อวันที่ จำนวน และ PP.30 (หรืออ้างอิงภาษี) ตรงกัน จะไม่สร้างยอดยังไม่จำแนกซ้ำ',
+    bankImportTaxMerged: 'รวมรายการภาษีกับ Statement {count} รายการ',
     bankFilterLabel: 'ตัวกรอง',
     bankFilterAmount: 'ยอดเงิน',
     bankFilterAmountPh: 'ยอดเงิน',
@@ -25487,6 +25514,7 @@ orderItemQty: 'အရေအတွက်',
     accCompDirInput: 'Input (purchase)',
     accCompPhPayee: 'Payee',
     accCompPhPayeeTin: 'Payee tax ID',
+    accCompPhPayeeCountry: 'Payee country',
     accCompPhIncomeType: 'Income type',
     accCompPhGross: 'Gross',
     accCompPhWhtRate: 'Rate (%)',
@@ -30407,6 +30435,7 @@ orderItemQty: 'ຈຳນວນ',
     accCompDirInput: 'Input (purchase)',
     accCompPhPayee: 'Payee',
     accCompPhPayeeTin: 'Payee tax ID',
+    accCompPhPayeeCountry: 'Payee country',
     accCompPhIncomeType: 'Income type',
     accCompPhGross: 'Gross',
     accCompPhWhtRate: 'Rate (%)',
@@ -33447,6 +33476,7 @@ orderItemQty: 'ຈຳນວນ',
     accCompDirInput: 'Input (purchase)',
     accCompPhPayee: 'Payee',
     accCompPhPayeeTin: 'Payee tax ID',
+    accCompPhPayeeCountry: 'Payee country',
     accCompPhIncomeType: 'Income type',
     accCompPhGross: 'Gross',
     accCompPhWhtRate: 'Rate (%)',
@@ -35304,6 +35334,7 @@ orderItemQty: 'ຈຳນວນ',
     accCompDirInput: 'Input (purchase)',
     accCompPhPayee: 'Payee',
     accCompPhPayeeTin: 'Payee tax ID',
+    accCompPhPayeeCountry: 'Payee country',
     accCompPhIncomeType: 'Income type',
     accCompPhGross: 'Gross',
     accCompPhWhtRate: 'Rate (%)',
@@ -37123,6 +37154,7 @@ orderItemQty: 'ຈຳນວນ',
     accCompDirInput: 'Input (purchase)',
     accCompPhPayee: 'Payee',
     accCompPhPayeeTin: 'Payee tax ID',
+    accCompPhPayeeCountry: 'Payee country',
     accCompPhIncomeType: 'Income type',
     accCompPhGross: 'Gross',
     accCompPhWhtRate: 'Rate (%)',

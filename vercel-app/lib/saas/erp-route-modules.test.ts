@@ -37,6 +37,7 @@ describe("erp-route-modules", () => {
   it("maps POS catch-all prefixes", () => {
     expect(resolveApiPathSaasModule("/api/deletePosMenu")).toBe("pos_base")
     expect(resolveApiPathSaasModule("/api/getPosPrinterSettings")).toBe("pos_base")
+    expect(resolveApiPathSaasModule("/api/attachPosOrderMember")).toBe("pos_base")
   })
 
   it("maps marketing delete API", () => {

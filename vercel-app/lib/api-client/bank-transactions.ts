@@ -264,6 +264,7 @@ export async function addBankTransactionsBulk(params: {
     inserted?: number
     skipped?: number
     duplicateSkipped?: number
+    taxMerged?: number
     policySkipped?: number
     policyAdjusted?: number
     message?: string

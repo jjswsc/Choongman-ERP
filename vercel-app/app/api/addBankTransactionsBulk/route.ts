@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
+import { bankNoteUserDisplayText } from '@/lib/bank-transaction-note-meta'
+import {
+  composeMergedTaxBankFields,
+  findTaxStatementMergeIndex,
+  type TaxMergeCandidate,
+} from '@/lib/bank-statement-tax-match'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
@@ -43,8 +49,7 @@ function normMemoForDedup(memo: string): string {
 }
 
 function normNoteForDedup(note: string | null | undefined): string {
-  return String(note ?? '')
-    .trim()
+  return bankNoteUserDisplayText(String(note ?? ''))
     .replace(/\s+/g, ' ')
     .slice(0, 500)
 }
@@ -62,7 +67,7 @@ function isSameBankMemoLoose(existingMemo: string, incomingMemo: string): boolea
   return false
 }
 
-type DbDedupEntry = { memo: string; note: string }
+type DbDedupEntry = TaxMergeCandidate
 
 function findDuplicateDbEntryIndex(
   pool: DbDedupEntry[],
@@ -167,14 +172,16 @@ export async function POST(request: NextRequest) {
         'bank_transactions'
       )
       const existing = (await supabaseSelectFilter('bank_transactions', filter, {
-        select: 'trans_date,trans_type,amount,memo,note',
+        select: 'id,trans_date,trans_type,amount,memo,note,category',
         limit: EXISTING_FETCH_LIMIT,
       })) as {
+        id?: number
         trans_date?: string
         trans_type?: string
         amount?: number
         memo?: string
         note?: string
+        category?: string
       }[]
       for (const r of existing || []) {
         const d = String(r.trans_date || '').slice(0, 10)
@@ -184,13 +191,19 @@ export async function POST(request: NextRequest) {
         const n = String(r.note || '')
         const bk = bucketKey(d, t, a)
         if (!dbDedupPoolByBucket.has(bk)) dbDedupPoolByBucket.set(bk, [])
-        dbDedupPoolByBucket.get(bk)!.push({ memo: m, note: n })
+        dbDedupPoolByBucket.get(bk)!.push({
+          id: Number(r.id || 0) || 0,
+          memo: m,
+          note: n,
+          category: String(r.category || ''),
+        })
       }
     }
 
     let inserted = 0
     let skipped = 0
     let duplicateSkipped = 0
+    let taxMerged = 0
     let policySkipped = 0
     let policyAdjusted = 0
     for (const item of items) {
@@ -229,6 +242,25 @@ export async function POST(request: NextRequest) {
         duplicateSkipped++
         skipped++
         continue
+      }
+
+      if (transType === 'withdraw') {
+        const taxIdx = findTaxStatementMergeIndex(pool, memo, note)
+        if (taxIdx >= 0) {
+          const existingTax = pool[taxIdx]
+          if (existingTax.id > 0) {
+            const merged = composeMergedTaxBankFields(existingTax, { memo, note })
+            await supabaseUpdate('bank_transactions', existingTax.id, {
+              memo: merged.memo,
+              note: merged.note,
+              category: merged.category,
+            })
+            pool.splice(taxIdx, 1)
+            taxMerged++
+            skipped++
+            continue
+          }
+        }
       }
 
       const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
@@ -398,9 +430,10 @@ export async function POST(request: NextRequest) {
     }
 
     let msg = `${inserted}건 등록되었습니다.`
-    if (duplicateSkipped > 0 || policySkipped > 0 || policyAdjusted > 0) {
+    if (duplicateSkipped > 0 || taxMerged > 0 || policySkipped > 0 || policyAdjusted > 0) {
       const parts = [`${inserted}건 등록`]
       if (duplicateSkipped > 0) parts.push(`중복 ${duplicateSkipped}건 제외`)
+      if (taxMerged > 0) parts.push(`세금 납부 ${taxMerged}건 Statement와 합침`)
       if (policyAdjusted > 0) parts.push(`정책 ${policyAdjusted}건 자동전환`)
       if (policySkipped > 0) parts.push(`정책 ${policySkipped}건 제외`)
       msg = `${parts.join(', ')}.`
@@ -412,7 +445,7 @@ export async function POST(request: NextRequest) {
       }
     }
     return NextResponse.json(
-      { success: true, inserted, skipped, duplicateSkipped, policySkipped, policyAdjusted, message: msg },
+      { success: true, inserted, skipped, duplicateSkipped, taxMerged, policySkipped, policyAdjusted, message: msg },
       { headers }
     )
   } catch (e) {

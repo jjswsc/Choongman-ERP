@@ -260,6 +260,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/savePosPromo", module: "pos_base" },
   { prefix: "/api/markPosOrder", module: "pos_base" },
   { prefix: "/api/correctPosOrder", module: "pos_base" },
+  { prefix: "/api/attachPosOrderMember", module: "pos_base" },
   { prefix: "/api/finalizePosClose", module: "pos_base" },
   { prefix: "/api/validatePosClose", module: "pos_base" },
   { prefix: "/api/getPosChannel", module: "pos_base" },

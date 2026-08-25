@@ -1,9 +1,15 @@
-import type { WhtCertificateData } from '@/lib/wht-certificate-data'
+import type { WhtCertificateData, WhtCertificateIncomeLine } from '@/lib/wht-certificate-data'
 import { thaiBahtInWords } from '@/lib/thai-baht-text'
 import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
 
 export type Wht50TawiIncomeRowKey = 'r1' | 'r2' | 'r3' | 'r4a' | 'r4b' | 'r5' | 'r6'
 export type Wht50TawiCopyNo = 1 | 2
+
+export type Wht50TawiPlacedLine = {
+  date: string
+  gross: number
+  wht: number
+}
 
 export type Wht50TawiResolved = {
   bookNo: string
@@ -23,6 +29,8 @@ export type Wht50TawiResolved = {
   pndChecks: Record<string, boolean>
   payerMode: 'withhold' | 'forever' | 'once' | 'other'
   sequenceNo: string
+  /** 공식 표 행별 금액 (여러 건이면 r5·r6에 나눠 넣음) */
+  amountsByRow: Partial<Record<Wht50TawiIncomeRowKey, Wht50TawiPlacedLine[]>>
 }
 
 function esc(s: string): string {
@@ -78,7 +86,7 @@ function parseBookCertNo(certificateNo: string): { bookNo: string; certNo: strin
   return { bookNo: '', certNo: raw }
 }
 
-function resolveIncomeRow(data: WhtCertificateData): { row: Wht50TawiIncomeRowKey; otherText: string } {
+function resolveIncomeRow(data: { incomeType?: string; memo?: string }): { row: Wht50TawiIncomeRowKey; otherText: string } {
   const t = String(data.incomeType || '').toLowerCase()
   if (/เงินเดือน|salary|급여|40\s*\(\s*1\s*\)/i.test(t)) return { row: 'r1', otherText: '' }
   if (/ค่าธรรมเนียม|commission|40\s*\(\s*2\s*\)/i.test(t)) return { row: 'r2', otherText: '' }
@@ -86,12 +94,81 @@ function resolveIncomeRow(data: WhtCertificateData): { row: Wht50TawiIncomeRowKe
   if (/ดอกเบี้ย|interest|40\s*\(\s*4\s*\)\s*\(\s*ก\s*\)/i.test(t)) return { row: 'r4a', otherText: '' }
   if (/ปันผล|dividend|40\s*\(\s*4\s*\)\s*\(\s*ข\s*\)/i.test(t)) return { row: 'r4b', otherText: '' }
   if (
-    /ค่าบริการ|ค่าเช่า|ค่าโฆษณา|service|rent|용역|서비스|40\s*\(\s*5\s*\)|คำสั่งกรมสรรพากร/i.test(t)
+    /ค่าบริการ|ค่าเช่า|ค่าโฆษณา|ค่าขนส่ง|ค่าจ้าง|ค่าแสดง|service|rent|용역|서비스|40\s*\(\s*5\s*\)|คำสั่งกรมสรรพากร/i.test(t)
   ) {
     return { row: 'r5', otherText: '' }
   }
   const label = String(data.incomeType || data.memo || '').trim()
   return { row: 'r6', otherText: label || 'ค่าใช้จ่าย' }
+}
+
+function certificateIncomeLines(data: WhtCertificateData): WhtCertificateIncomeLine[] {
+  if (Array.isArray(data.incomeLines) && data.incomeLines.length > 0) {
+    return data.incomeLines.filter((ln) => Number(ln.whtAmount) > 0 || Number(ln.grossAmount) > 0)
+  }
+  return [
+    {
+      incomeType: data.incomeType,
+      paymentDate: data.paymentDate,
+      grossAmount: data.grossAmount,
+      whtAmount: data.whtAmount,
+      whtRate: data.whtRate,
+    },
+  ]
+}
+
+function placeIncomeLines(
+  data: WhtCertificateData
+): {
+  amountsByRow: Partial<Record<Wht50TawiIncomeRowKey, Wht50TawiPlacedLine[]>>
+  incomeRow: Wht50TawiIncomeRowKey
+  incomeOtherText: string
+} {
+  const lines = certificateIncomeLines(data)
+  const amountsByRow: Partial<Record<Wht50TawiIncomeRowKey, Wht50TawiPlacedLine[]>> = {}
+  const push = (row: Wht50TawiIncomeRowKey, line: WhtCertificateIncomeLine) => {
+    const date = formatThaiPaymentDate(line.paymentDate || data.paymentDate)
+    const placed: Wht50TawiPlacedLine = {
+      date,
+      gross: Number(line.grossAmount) || 0,
+      wht: Number(line.whtAmount) || 0,
+    }
+    const arr = amountsByRow[row] || []
+    arr.push(placed)
+    amountsByRow[row] = arr
+  }
+
+  if (lines.length <= 1) {
+    const only = lines[0]
+    const income = resolveIncomeRow({ incomeType: only?.incomeType || data.incomeType, memo: data.memo })
+    if (only) push(income.row, only)
+    return { amountsByRow, incomeRow: income.row, incomeOtherText: income.otherText }
+  }
+
+  const mapped = lines.map((ln) => ({ ln, ...resolveIncomeRow({ incomeType: ln.incomeType }) }))
+  const allR5 = mapped.every((m) => m.row === 'r5')
+  if (allR5) {
+    push('r5', mapped[0].ln)
+    for (let i = 1; i < mapped.length; i++) push('r6', mapped[i].ln)
+    const labels = [...new Set(mapped.map((m) => String(m.ln.incomeType || '').trim()).filter(Boolean))]
+    return {
+      amountsByRow,
+      incomeRow: 'r5',
+      incomeOtherText: labels.join(', ') || 'ค่าเช่า, ค่าบริการ',
+    }
+  }
+
+  for (const m of mapped) push(m.row, m.ln)
+  const r6Labels = mapped
+    .filter((m) => m.row === 'r6')
+    .map((m) => String(m.ln.incomeType || '').trim())
+    .filter(Boolean)
+  const fallback = resolveIncomeRow({ incomeType: data.incomeType, memo: data.memo })
+  return {
+    amountsByRow,
+    incomeRow: mapped[0]?.row || fallback.row,
+    incomeOtherText: r6Labels.join(', ') || fallback.otherText,
+  }
 }
 
 function resolvePndChecks(formHint: string): Record<string, boolean> {
@@ -109,7 +186,7 @@ function resolvePndChecks(formHint: string): Record<string, boolean> {
 
 export function resolveWht50Tawi(data: WhtCertificateData): Wht50TawiResolved {
   const { bookNo, certNo } = parseBookCertNo(data.certificateNo)
-  const income = resolveIncomeRow(data)
+  const placed = placeIncomeLines(data)
   const fromHint = resolvePndChecks(data.formHint)
   const pnd = {
     pnd1k: fromHint.pnd1k,
@@ -137,14 +214,15 @@ export function resolveWht50Tawi(data: WhtCertificateData): Wht50TawiResolved {
     recipientAddress: data.incomeRecipient.address || '',
     recipientTaxId: normalizeTaxId(data.incomeRecipient.taxId),
     paymentDateDisplay: formatThaiPaymentDate(data.paymentDate),
-    incomeRow: income.row,
-    incomeOtherText: income.otherText,
+    incomeRow: placed.incomeRow,
+    incomeOtherText: placed.incomeOtherText,
     grossAmount: data.grossAmount,
     whtAmount: data.whtAmount,
     whtAmountText: thaiBahtInWords(data.whtAmount),
     pndChecks: pnd,
     payerMode: 'withhold',
     sequenceNo: '',
+    amountsByRow: placed.amountsByRow,
   }
 }
 
@@ -154,15 +232,20 @@ function pndMark(on: boolean): string {
 
 function amountCells(
   rowKey: Wht50TawiIncomeRowKey,
-  active: Wht50TawiIncomeRowKey,
-  date: string,
-  gross: number,
-  wht: number
+  amountsByRow: Partial<Record<Wht50TawiIncomeRowKey, Wht50TawiPlacedLine[]>>
 ): string {
-  if (rowKey !== active) {
+  const lines = amountsByRow[rowKey] || []
+  if (lines.length === 0) {
     return '<td class="wht-date-col"></td><td class="wht-amt-col"></td><td class="wht-amt-col"></td>'
   }
-  return `<td class="wht-date-col">${esc(date)}</td><td class="wht-amt-col">${fmtNum(gross)}</td><td class="wht-amt-col">${fmtNum(wht)}</td>`
+  if (lines.length === 1) {
+    const ln = lines[0]
+    return `<td class="wht-date-col">${esc(ln.date)}</td><td class="wht-amt-col">${fmtNum(ln.gross)}</td><td class="wht-amt-col">${fmtNum(ln.wht)}</td>`
+  }
+  const dates = lines.map((ln) => `<div>${esc(ln.date)}</div>`).join('')
+  const gross = lines.map((ln) => `<div>${fmtNum(ln.gross)}</div>`).join('')
+  const wht = lines.map((ln) => `<div>${fmtNum(ln.wht)}</div>`).join('')
+  return `<td class="wht-date-col wht-stack">${dates}</td><td class="wht-amt-col wht-stack">${gross}</td><td class="wht-amt-col wht-stack">${wht}</td>`
 }
 
 function partyBlock(params: {
@@ -224,8 +307,9 @@ function headerBlock(params: { copyNo: Wht50TawiCopyNo; bookNo: string; certNo: 
 function buildWht50TawiCertificateBody(data: WhtCertificateData, copyNo: Wht50TawiCopyNo): string {
   const r = resolveWht50Tawi(data)
   const issueDate = r.paymentDateDisplay || '.... / .... / ........'
-  const a = r.incomeRow
-  const other = a === 'r6' ? esc(r.incomeOtherText) : '........................................................'
+  const other = r.incomeOtherText
+    ? esc(r.incomeOtherText)
+    : '........................................................'
 
   const incomeTable = `
 <table class="wht-tbl" cellspacing="0" cellpadding="0">
@@ -240,23 +324,23 @@ function buildWht50TawiCertificateBody(data: WhtCertificateData, copyNo: Wht50Ta
   <tbody>
     <tr>
       <td>1. เงินเดือน ค่าจ้าง เบี้ยเลี้ยง โบนัส ฯลฯ ตามมาตรา 40 (1)</td>
-      ${amountCells('r1', a, r.paymentDateDisplay, r.grossAmount, r.whtAmount)}
+      ${amountCells('r1', r.amountsByRow)}
     </tr>
     <tr>
       <td>2. ค่าธรรมเนียม ค่านายหน้า ฯลฯ ตามมาตรา 40 (2)</td>
-      ${amountCells('r2', a, r.paymentDateDisplay, r.grossAmount, r.whtAmount)}
+      ${amountCells('r2', r.amountsByRow)}
     </tr>
     <tr>
       <td>3. ค่าแห่งลิขสิทธิ์ ฯลฯ ตามมาตรา 40 (3)</td>
-      ${amountCells('r3', a, r.paymentDateDisplay, r.grossAmount, r.whtAmount)}
+      ${amountCells('r3', r.amountsByRow)}
     </tr>
     <tr>
       <td>4. (ก) ดอกเบี้ย ฯลฯ ตามมาตรา 40 (4) (ก)</td>
-      ${amountCells('r4a', a, r.paymentDateDisplay, r.grossAmount, r.whtAmount)}
+      ${amountCells('r4a', r.amountsByRow)}
     </tr>
     <tr>
       <td class="pad-l">&nbsp;&nbsp;(ข) เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ ตามมาตรา 40 (4) (ข)</td>
-      ${amountCells('r4b', a, r.paymentDateDisplay, r.grossAmount, r.whtAmount)}
+      ${amountCells('r4b', r.amountsByRow)}
     </tr>
     <tr>
       <td class="tiny" colspan="4">(1) กรณีผู้ได้รับเงินปันผลได้รับเครดิตภาษี โดยจ่ายจากกำไรสุทธิของกิจการที่ต้องเสียภาษีเงินได้นิติบุคคลในอัตราดังนี้</td>
@@ -294,11 +378,11 @@ function buildWht50TawiCertificateBody(data: WhtCertificateData, copyNo: Wht50Ta
         การชิงโชค ค่าแสดงของนักแสดงสาธารณะ ค่าจ้างทำของ ค่าโฆษณา ค่าเช่า ค่าขนส่ง ค่าบริการ
         ค่าเบี้ยประกันวินาศภัย ฯลฯ
       </td>
-      ${amountCells('r5', a, r.paymentDateDisplay, r.grossAmount, r.whtAmount)}
+      ${amountCells('r5', r.amountsByRow)}
     </tr>
     <tr>
       <td>6. อื่น ๆ (ระบุ) ${other}</td>
-      ${amountCells('r6', a, r.paymentDateDisplay, r.grossAmount, r.whtAmount)}
+      ${amountCells('r6', r.amountsByRow)}
     </tr>
     <tr class="sum">
       <td colspan="2" class="sum-l">รวมเงินที่จ่ายและภาษีที่หักนำส่ง</td>
@@ -524,6 +608,7 @@ export const WHT_50_TAWI_STYLES = `
     text-align: right; font-variant-numeric: tabular-nums;
     white-space: nowrap; font-size: 11px;
   }
+  .wht-stack div { line-height: 1.35; }
   .sum td { font-weight: 700; }
   .sum-l { text-align: center; }
   .sum-words td { background: #d9d9d9; font-size: 12px; font-weight: 500; }

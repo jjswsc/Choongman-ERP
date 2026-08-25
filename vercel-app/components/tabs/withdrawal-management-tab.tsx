@@ -81,9 +81,20 @@ import {
   type ExpenseFeeVatMode,
 } from "@/lib/expense-fee-vat"
 import {
-  EXPENSE_WHT_RATE_OPTIONS,
   expenseWhtAmountFromRate,
+  expenseWhtBaseExVat,
 } from "@/lib/expense-accrual-net"
+import {
+  expenseWhtItemsFromDrafts,
+  primaryExpenseWhtRate,
+  sumExpenseWhtTax,
+  type ExpenseWhtItem,
+} from "@/lib/expense-wht-items"
+import {
+  ExpenseWhtItemsEditor,
+  draftsFromExpenseWhtItems,
+  type ExpenseWhtItemDraft,
+} from "@/components/erp/expense-wht-items-editor"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import {
   resolveVendorPayeeForWht,
@@ -162,9 +173,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     setInvoiceReceived(invoiceReceivedFromDocumentType(next || null))
   }, [])
   const [accrualVatAmount, setAccrualVatAmount] = React.useState("")
-  const [accrualWithholdingTax, setAccrualWithholdingTax] = React.useState("")
-  /** 선택 시 (총액−VAT)×% 로 WHT 자동 계산. null = 미선택 */
-  const [accrualWhtRate, setAccrualWhtRate] = React.useState<number | null>(null)
+  const [accrualWhtItems, setAccrualWhtItems] = React.useState<ExpenseWhtItemDraft[]>([])
   /** ออกใบ50ทวิ — 브라우저에 기억해 수정·재진입 후에도 유지 */
   const [autoCreateWhtCert, setAutoCreateWhtCertState] = React.useState(false)
   React.useEffect(() => {
@@ -306,6 +315,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     const editAccrualId = searchParams.get("editAccrualId")
     const accrualVatParam = searchParams.get("accrualVat")
     const accrualWhtParam = searchParams.get("accrualWht")
+    const accrualWhtItemsParam = searchParams.get("accrualWhtItems")
     const invoiceReceivedParam = searchParams.get("invoiceReceived")
     const invoiceNoParam = searchParams.get("invoiceNo")
     const payeeAccountHolderParam = searchParams.get("payeeAccountHolder")
@@ -328,6 +338,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       editAccrualId ||
       accrualVatParam ||
       accrualWhtParam ||
+      accrualWhtItemsParam ||
       invoiceReceivedParam ||
       invoiceNoParam ||
       payeeAccountHolderParam ||
@@ -384,9 +395,25 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         const v = Math.max(0, Number(accrualVatParam) || 0)
         setAccrualVatAmount(v > 0 ? String(v) : "")
       }
-      if (accrualWhtParam != null && accrualWhtParam !== "") {
+      if (accrualWhtItemsParam) {
+        try {
+          const parsed = JSON.parse(accrualWhtItemsParam) as unknown
+          const items = draftsFromExpenseWhtItems(
+            Array.isArray(parsed) ? (parsed as ExpenseWhtItem[]) : []
+          )
+          if (items.length > 0) setAccrualWhtItems(items)
+        } catch {
+          /* ignore */
+        }
+      } else if (accrualWhtParam != null && accrualWhtParam !== "") {
         const w = Math.max(0, Number(accrualWhtParam) || 0)
-        setAccrualWithholdingTax(w > 0 ? String(w) : "")
+        if (w > 0) {
+          setAccrualWhtItems(
+            draftsFromExpenseWhtItems([
+              { incomeType: "ค่าบริการ", rate: 0, baseAmount: 0, taxAmount: w },
+            ])
+          )
+        }
       }
       if (invoiceReceivedParam === "1" || invoiceReceivedParam === "true") {
         applyDocumentType(documentTypeFromInvoiceReceived(true) || "tax_invoice")
@@ -704,8 +731,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       const force = meta?.force === true
       const amountEmpty = parseMoneyAmount(amount) <= 0
       const vatEmpty = Math.max(0, Math.abs(Number(String(accrualVatAmount).replace(/,/g, "")) || 0)) <= 0
-      const whtEmpty =
-        Math.max(0, Math.abs(Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0)) <= 0
+      const whtEmpty = sumExpenseWhtTax(expenseWhtItemsFromDrafts(accrualWhtItems)) <= 0
 
       // 업로드 자동기입: 이미 입력·은행에서 넘어온 금액은 유지. 「지금 인식」만 덮어쓰기.
       if (f.amount && f.amount > 0 && (force || amountEmpty)) {
@@ -715,7 +741,20 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setAccrualVatAmount(moneyInputStringFromAmount(f.vatAmount))
       }
       if (f.withholdingTaxAmount && f.withholdingTaxAmount > 0 && (force || whtEmpty)) {
-        setAccrualWithholdingTax(moneyInputStringFromAmount(f.withholdingTaxAmount))
+        const tax = f.withholdingTaxAmount
+        const g = parseMoneyAmount(amount)
+        const v = Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0)
+        const base = expenseWhtBaseExVat(g, v)
+        setAccrualWhtItems(
+          draftsFromExpenseWhtItems([
+            {
+              incomeType: "ค่าบริการ",
+              rate: 0,
+              baseAmount: base,
+              taxAmount: tax,
+            },
+          ])
+        )
       }
       // 일자는 기본값이 오늘이므로 빈칸 판정 대신: 금액이 이미 있으면(은행 연동 등) 유지, 아니면 OCR 반영
       if (
@@ -757,7 +796,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     [
       accountSubjectId,
       accrualVatAmount,
-      accrualWithholdingTax,
+      accrualWhtItems,
       amount,
       applyDocumentType,
       categoryMain,
@@ -771,6 +810,24 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     ]
   )
 
+  const accrualWhtNormalized = React.useMemo(
+    () => expenseWhtItemsFromDrafts(accrualWhtItems),
+    [accrualWhtItems]
+  )
+  const accrualWhtTotal = React.useMemo(
+    () => sumExpenseWhtTax(accrualWhtNormalized),
+    [accrualWhtNormalized]
+  )
+  const accrualWhtRate = React.useMemo(
+    () => primaryExpenseWhtRate(accrualWhtNormalized),
+    [accrualWhtNormalized]
+  )
+  const remainingWhtBase = React.useMemo(() => {
+    const g = parseMoneyAmount(amount)
+    const v = Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0)
+    return expenseWhtBaseExVat(g, v)
+  }, [amount, accrualVatAmount])
+
   const accrualNetPreview = React.useMemo(() => {
     if (
       categoryMain !== "purchase" &&
@@ -780,9 +837,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       return null
     }
     const g = parseMoneyAmount(amount)
-    const w = Math.max(0, Math.abs(Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0))
-    return Math.max(0, g - w)
-  }, [categoryMain, amount, accrualWithholdingTax])
+    return Math.max(0, g - accrualWhtTotal)
+  }, [categoryMain, amount, accrualWhtTotal])
 
   React.useEffect(() => {
     if (
@@ -792,12 +848,18 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     ) {
       return
     }
-    if (accrualWhtRate == null || accrualWhtRate <= 0) return
+    if (accrualWhtItems.length !== 1) return
+    const it = accrualWhtItems[0]
+    if (it.rate == null || it.rate <= 0) return
     const g = parseMoneyAmount(amount)
     const v = Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0)
-    const wht = expenseWhtAmountFromRate(g, v, accrualWhtRate)
-    setAccrualWithholdingTax(wht > 0 ? moneyInputStringFromAmount(wht) : "")
-  }, [categoryMain, amount, accrualVatAmount, accrualWhtRate])
+    const wht = expenseWhtAmountFromRate(g, v, it.rate)
+    const base = expenseWhtBaseExVat(g, v)
+    const nextBase = base > 0 ? moneyInputStringFromAmount(base) : ""
+    const nextTax = wht > 0 ? moneyInputStringFromAmount(wht) : ""
+    if (it.baseAmount === nextBase && it.taxAmount === nextTax) return
+    setAccrualWhtItems([{ ...it, baseAmount: nextBase, taxAmount: nextTax }])
+  }, [categoryMain, amount, accrualVatAmount, accrualWhtItems])
 
   const resolvePayeeForWht = React.useCallback(
     (codeRaw: string, nameRaw: string) => resolveVendorPayeeForWht(vendors, codeRaw, nameRaw),
@@ -817,6 +879,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       paymentDate: string
       memo?: string
       storeName?: string
+      whtItems?: ExpenseWhtItem[]
     }) => {
       if (!autoCreateWhtCert || params.whtAmount <= 0) return
       try {
@@ -849,6 +912,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             whtAmount: params.whtAmount,
             memo: params.memo,
             storeName: params.storeName,
+            whtItems: params.whtItems,
           },
           agent
         )
@@ -1094,7 +1158,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         : 0
     const whtV =
       categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset"
-        ? Math.max(0, Math.abs(Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0))
+        ? accrualWhtTotal
         : 0
     if (
       (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset") &&
@@ -1131,6 +1195,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           amount: amt,
           vatAmount: vatV,
           withholdingTaxAmount: whtV,
+          withholdingTaxItems: accrualWhtNormalized,
           expenseDate: transDate,
           dueDate: transDate,
           memo: memo.trim() || undefined,
@@ -1197,6 +1262,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             paymentDate: transDate,
             memo: memo.trim() || undefined,
             storeName: storeName || undefined,
+            whtItems: accrualWhtNormalized,
           })
         }
         setAmount("")
@@ -1205,8 +1271,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setPayeeName("")
         setExpenseAttachmentFiles([])
         setAccrualVatAmount("")
-        setAccrualWithholdingTax("")
-        setAccrualWhtRate(null)
+        setAccrualWhtItems([])
         setInvoiceReceived(false)
         setDocumentType("")
         setInvoiceNo("")
@@ -1239,6 +1304,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           amount: amt,
           vatAmount: vatV,
           withholdingTaxAmount: whtV,
+          withholdingTaxItems: accrualWhtNormalized,
           expenseDate: transDate,
           dueDate: transDate,
           memo: memo.trim() || undefined,
@@ -1299,6 +1365,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             paymentDate: transDate,
             memo: memo.trim() || undefined,
             storeName: storeName || undefined,
+            whtItems: accrualWhtNormalized,
           })
         }
         setAmount("")
@@ -1311,8 +1378,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setPayeeBankAccountNo("")
         setExpenseAttachmentFiles([])
         setAccrualVatAmount("")
-        setAccrualWithholdingTax("")
-        setAccrualWhtRate(null)
+        setAccrualWhtItems([])
         setInvoiceReceived(false)
         setDocumentType("")
         setInvoiceNo("")
@@ -1574,7 +1640,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         : 0
     const submitWht =
       categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset"
-        ? Math.max(0, Number(String(accrualWithholdingTax).replace(/,/g, "")) || 0)
+        ? accrualWhtTotal
         : 0
     if (
       (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset") &&
@@ -1704,6 +1770,11 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           accrualWhtRate > 0
             ? accrualWhtRate
             : undefined,
+        withholdingTaxItems:
+          (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset") &&
+          accrualWhtNormalized.length > 0
+            ? accrualWhtNormalized
+            : undefined,
         ...(attachmentUrls && attachmentUrls.length > 0 ? { attachmentUrls } : {}),
         userName: auth?.user,
         userRole: auth?.role,
@@ -1743,6 +1814,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           paymentDate: transDate,
           memo: memoText || undefined,
           storeName: storeName || undefined,
+          whtItems: accrualWhtNormalized,
         })
       }
       if (categoryMain === "purchase" && newBankTxId && effectivePaymentMethod === "bank") {
@@ -1766,8 +1838,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       setExpenseAttachmentFiles([])
       setInboundLinkAmounts({})
       setAccrualVatAmount("")
-      setAccrualWithholdingTax("")
-      setAccrualWhtRate(null)
+      setAccrualWhtItems([])
       setActiveFeeVatMode(null)
       setInvoiceReceived(false)
       setDocumentType("")
@@ -3420,43 +3491,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     readOnly={isAccrualAmountsLocked}
                   />
                 </ExpenseRegisterField>
-                <ExpenseRegisterField label={tt("expenseAccrualWhtRate", "WHT rate")}>
-                  <Select
-                    value={accrualWhtRate == null ? "__none__" : String(accrualWhtRate)}
-                    onValueChange={(v) => {
-                      if (!v || v === "__none__") {
-                        setAccrualWhtRate(null)
-                        return
-                      }
-                      const n = Number(v)
-                      setAccrualWhtRate(Number.isFinite(n) && n > 0 ? n : null)
-                    }}
-                    disabled={isAccrualAmountsLocked}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={tt("expenseAccrualWhtRateNone", "Select")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{tt("expenseAccrualWhtRateNone", "Select")}</SelectItem>
-                      {EXPENSE_WHT_RATE_OPTIONS.map((r) => (
-                        <SelectItem key={r} value={String(r)}>
-                          {r}%
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </ExpenseRegisterField>
-                <ExpenseRegisterField label={tt("expenseAccrualWithholding", "Withholding Tax")}>
-                  <Input
-                    value={accrualWithholdingTax}
-                    onChange={(e) => handleMoneyInputChange(e.target.value, setAccrualWithholdingTax)}
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0"
-                    className={`h-9 w-full ${isAccrualAmountsLocked ? "bg-muted/50 cursor-default" : ""}`}
-                    readOnly={isAccrualAmountsLocked}
-                  />
-                </ExpenseRegisterField>
                 <ExpenseRegisterField label={tt("expenseAccrualNetPayableLabel", "Net Payable")}>
                   <div className="flex h-9 items-center">
                     <span className="text-sm font-semibold tabular-nums">
@@ -3465,6 +3499,13 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   </div>
                 </ExpenseRegisterField>
                 </ExpenseRegisterFieldRow>
+                <ExpenseWhtItemsEditor
+                  items={accrualWhtItems}
+                  onChange={setAccrualWhtItems}
+                  remainingBase={remainingWhtBase}
+                  disabled={isAccrualAmountsLocked}
+                  tt={tt}
+                />
               </ExpenseRegisterSection>
             )}
           </div>

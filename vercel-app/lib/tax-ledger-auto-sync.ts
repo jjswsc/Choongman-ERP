@@ -23,7 +23,9 @@ import {
 import {
   deleteAutoWithholdingTaxLedgerEntries,
   loadAutoWhtLedgerIndex,
+  shouldSkipWhtAutoOverwrite,
   upsertAutoWithholdingTaxLedgerEntry,
+  type WhtAutoExistingRef,
   type WhtLedgerAutoSaveRow,
 } from '@/lib/withholding-tax-ledger-core'
 import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
@@ -697,15 +699,17 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
     pageSize: 3000,
     maxRows: 30000,
   })) as ExistingAutoRow[]
-  const existingByExpenseId = new Map<number, { id: number; filingStatus: string }>()
+  const existingByExpenseId = new Map<number, WhtAutoExistingRef>()
   for (const row of existingAutoRows || []) {
     const id = Math.floor(Number(row.id) || 0)
-    const expId = parseExpenseAccrualWhtIdFromMemo(String(row.memo || ''))
+    const memo = String(row.memo || '')
+    const expId = parseExpenseAccrualWhtIdFromMemo(memo)
     if (id <= 0 || expId <= 0) continue
     if (storeFilter && !storeScope.matches(String(row.store_name || ''))) continue
     existingByExpenseId.set(expId, {
       id,
       filingStatus: String(row.filing_status || '').trim().toLowerCase(),
+      memo,
     })
   }
 
@@ -758,7 +762,7 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
     }
 
     const existing = existingByExpenseId.get(expenseId)
-    if (existing?.id && existing.filingStatus === 'submitted') {
+    if (shouldSkipWhtAutoOverwrite(existing)) {
       seenExpenseIds.add(expenseId)
       continue
     }
@@ -796,7 +800,7 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
   let deleted = 0
   for (const [expenseId, ex] of existingByExpenseId.entries()) {
     if (seenExpenseIds.has(expenseId)) continue
-    if (ex.filingStatus === 'submitted') continue
+    if (shouldSkipWhtAutoOverwrite(ex)) continue
     await supabaseDeleteByFilter('withholding_tax_ledger_entries', `id=eq.${ex.id}`)
     deleted += 1
   }
@@ -1037,15 +1041,17 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     pageSize: 3000,
     maxRows: 30000,
   })) as ExistingAutoRow[]
-  const existingByPayrollId = new Map<number, { id: number; filingStatus: string }>()
+  const existingByPayrollId = new Map<number, WhtAutoExistingRef>()
   for (const row of existingAutoRows || []) {
     const id = Math.floor(Number(row.id) || 0)
-    const payrollId = parsePayrollRecordIdFromMemo(String(row.memo || ''))
+    const memo = String(row.memo || '')
+    const payrollId = parsePayrollRecordIdFromMemo(memo)
     if (id <= 0 || payrollId <= 0) continue
     if (storeFilter && !storeScope.matches(String(row.store_name || ''))) continue
     existingByPayrollId.set(payrollId, {
       id,
       filingStatus: String(row.filing_status || '').trim().toLowerCase(),
+      memo,
     })
   }
 
@@ -1127,7 +1133,7 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
     }
 
     const existing = existingByPayrollId.get(payrollId)
-    if (existing?.id && existing.filingStatus === 'submitted') {
+    if (shouldSkipWhtAutoOverwrite(existing)) {
       seenPayrollIds.add(payrollId)
       continue
     }
@@ -1165,7 +1171,7 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
   let deleted = 0
   for (const [payrollId, ex] of existingByPayrollId.entries()) {
     if (seenPayrollIds.has(payrollId)) continue
-    if (ex.filingStatus === 'submitted') continue
+    if (shouldSkipWhtAutoOverwrite(ex)) continue
     await supabaseDeleteByFilter('withholding_tax_ledger_entries', `id=eq.${ex.id}`)
     deleted += 1
   }

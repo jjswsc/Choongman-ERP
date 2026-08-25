@@ -40,6 +40,36 @@ describe('resolveWht50Tawi', () => {
     expect(r.paymentDateDisplay).toBe('16/7/2569')
   })
 
+  it('places rent and service as two amount rows like the official 50 ทวิ', () => {
+    const multi: WhtCertificateData = {
+      ...base,
+      incomeType: 'ค่าเช่า, ค่าบริการ',
+      grossAmount: 80000,
+      whtRate: null,
+      whtAmount: 3520,
+      incomeLines: [
+        { incomeType: 'ค่าเช่า', paymentDate: '2026-08-25', grossAmount: 56000, whtAmount: 2800, whtRate: 5 },
+        { incomeType: 'ค่าบริการ', paymentDate: '2026-08-25', grossAmount: 24000, whtAmount: 720, whtRate: 3 },
+      ],
+    }
+    const r = resolveWht50Tawi(multi)
+    expect(r.amountsByRow.r5).toEqual([
+      expect.objectContaining({ gross: 56000, wht: 2800 }),
+    ])
+    expect(r.amountsByRow.r6).toEqual([
+      expect.objectContaining({ gross: 24000, wht: 720 }),
+    ])
+    expect(r.incomeOtherText).toBe('ค่าเช่า, ค่าบริการ')
+    const html = buildWht50TawiCertificateHtml(multi, 1)
+    expect(html).toContain('56,000.00')
+    expect(html).toContain('24,000.00')
+    expect(html).toContain('2,800.00')
+    expect(html).toContain('720.00')
+    expect(html).toContain('80,000.00')
+    expect(html).toContain('3,520.00')
+    expect(html).toContain('6. อื่น ๆ (ระบุ) ค่าเช่า, ค่าบริการ')
+  })
+
   it('fills payee address and 13-digit tax id cells when provided', () => {
     const withPayee: WhtCertificateData = {
       ...base,

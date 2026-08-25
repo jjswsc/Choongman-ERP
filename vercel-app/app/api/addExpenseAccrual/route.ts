@@ -4,6 +4,12 @@ import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { deleteJournalEntriesBySource, postExpenseAccrualJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
+import {
+  isMissingWhtItemsColumnError,
+  parseExpenseWhtItemsFromBody,
+  serializeExpenseWhtItems,
+  sumExpenseWhtTax,
+} from '@/lib/expense-wht-items'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { isPrepaymentAccrualCategory, parseCardAccountIdFromPayeeCode } from '@/lib/prepayment-accrual-categories'
@@ -161,7 +167,11 @@ export async function POST(request: NextRequest) {
     const encodedPayeeCode = encodePayeeCode(payeeCode, withdrawalCategory)
     const amount = parseMoneyAmount(body.amount)
     const vatAmount = Math.max(0, parseMoneyAmount(body.vatAmount ?? body.vat_amount ?? 0))
-    const withholdingTaxAmount = Math.max(0, parseMoneyAmount(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0))
+    const parsedWhtItems = parseExpenseWhtItemsFromBody(body as { withholdingTaxItems?: unknown; withholding_tax_items?: unknown })
+    const withholdingTaxAmountRaw = Math.max(0, parseMoneyAmount(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0))
+    const withholdingTaxAmount =
+      parsedWhtItems && parsedWhtItems.length > 0 ? sumExpenseWhtTax(parsedWhtItems) : withholdingTaxAmountRaw
+    const withholdingTaxItemsJson = serializeExpenseWhtItems(parsedWhtItems || [])
     const netPayable = expenseAccrualNetPayable(amount, withholdingTaxAmount)
     const expenseDate = String(body.expenseDate || body.expense_date || getBangkokTodayDateString()).slice(0, 10)
     const dueDateRaw = String(body.dueDate || body.due_date || '').trim()
@@ -354,6 +364,7 @@ export async function POST(request: NextRequest) {
       amount,
       vat_amount: vatAmount > 0 ? vatAmount : null,
       withholding_tax_amount: withholdingTaxAmount > 0 ? withholdingTaxAmount : null,
+      withholding_tax_items: withholdingTaxItemsJson,
       expense_date: expenseDate,
       due_date: dueDate,
       memo: memo || null,
@@ -422,20 +433,34 @@ export async function POST(request: NextRequest) {
       if (first?.name) subjectName = String(first.name)
     }
 
-    let inserted: { id?: number }[]
+    let inserted: { id?: number }[] | undefined
     let bankFieldsSkipped = false
+    const insertAccrual = async () =>
+      (await supabaseInsert('expense_accruals', accrualRow)) as { id?: number }[]
     try {
-      inserted = (await supabaseInsert('expense_accruals', accrualRow)) as { id?: number }[]
+      inserted = await insertAccrual()
     } catch (insertErr) {
+      let lastErr: unknown = insertErr
       const msg = insertErr instanceof Error ? insertErr.message : String(insertErr)
-      if (/payee_bank|payee_account|column/i.test(msg)) {
-        delete accrualRow.payee_account_holder
-        delete accrualRow.payee_bank_name
-        delete accrualRow.payee_bank_account_no
-        bankFieldsSkipped = !!(payeeAccountHolder || payeeBankName || payeeBankAccountNo)
-        inserted = (await supabaseInsert('expense_accruals', accrualRow)) as { id?: number }[]
-      } else {
-        throw insertErr
+      if (isMissingWhtItemsColumnError(insertErr) || /withholding_tax_items/i.test(msg)) {
+        delete accrualRow.withholding_tax_items
+        try {
+          inserted = await insertAccrual()
+        } catch (retryErr) {
+          lastErr = retryErr
+        }
+      }
+      if (!inserted) {
+        const retryMsg = lastErr instanceof Error ? lastErr.message : String(lastErr)
+        if (/payee_bank|payee_account|column/i.test(retryMsg)) {
+          delete accrualRow.payee_account_holder
+          delete accrualRow.payee_bank_name
+          delete accrualRow.payee_bank_account_no
+          bankFieldsSkipped = !!(payeeAccountHolder || payeeBankName || payeeBankAccountNo)
+          inserted = await insertAccrual()
+        } else {
+          throw lastErr
+        }
       }
     }
     const expenseAccrualId = Number(inserted?.[0]?.id || 0)

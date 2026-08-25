@@ -19,6 +19,12 @@ describe('bankNoteUserDisplayText', () => {
     expect(bankNoteUserDisplayText('expense_accrual_id:99;withdrawal_category:expense')).toBe('')
     expect(bankNoteUserDisplayText('Office rent | withdrawal_category:fixed')).toBe('Office rent')
   })
+
+  it('strips expense_internal source marker', () => {
+    expect(
+      bankNoteUserDisplayText('PP.30 07.69 | withdrawal_category:tax_vat;source:expense_internal')
+    ).toBe('PP.30 07.69')
+  })
 })
 
 describe('composeBankNoteForExpenseAccrualLink', () => {
@@ -150,6 +156,7 @@ describe('shouldExcludeBankWithdrawFromPlExpense', () => {
       looksLikeTaxAuthorityRemittanceMemo('Payment | Paid for Ref X8126 REVENUE DEPARTMENT')
     ).toBe(true)
     expect(looksLikeTaxAuthorityRemittanceMemo('PND.53 08/2026')).toBe(true)
+    expect(looksLikeTaxAuthorityRemittanceMemo('PP.30 07.69')).toBe(true)
     expect(defaultTaxRemittancePayeeName('PND.53', '원천세')).toBe('กรมสรรพากร')
     expect(defaultTaxRemittancePayeeName('office rent', '원천세')).toBe('원천세')
     expect(
@@ -173,6 +180,7 @@ describe('shouldExcludeBankWithdrawFromPlExpense', () => {
 describe('suggestWithdrawFromMemo tax remittance', () => {
   it('suggests tax for ภ.พ.30 / revenue dept / PND.53', () => {
     expect(suggestWithdrawFromMemo('ภ.พ.30 06/2026', []).category).toBe('tax')
+    expect(suggestWithdrawFromMemo('PP.30 07.69', []).category).toBe('tax')
     expect(
       suggestWithdrawFromMemo('Payment | Paid for Ref X8126 REVENUE DEPARTMENT', []).category
     ).toBe('tax')

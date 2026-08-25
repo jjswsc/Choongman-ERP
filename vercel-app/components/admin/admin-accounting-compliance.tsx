@@ -683,8 +683,7 @@ export function AdminAccountingCompliance({
     whtFocusMode === "all" || whtFocusMode === "pnd5354" || whtFocusMode === "pnd54"
   const showWhtLedger =
     whtFocusMode !== "pp36" && whtFocusMode !== "pnd54" && whtFocusMode !== "pnd91"
-  const isPnd5354CompactList =
-    whtFocusMode === "pnd5354" || whtFocusMode === "pnd53" || whtFocusMode === "pnd54"
+  const isPnd5354CompactList = whtFocusMode === "pnd5354"
   /** 탭이 이미 53/54로 분리된 경우 하위 토글 숨김 */
   const showPnd5354SubToggle = whtFocusMode === "pnd5354"
   const lockWhtSubmissionFormHint = whtFocusMode === "pnd3" || whtFocusMode === "pnd53"
@@ -1184,6 +1183,7 @@ export function AdminAccountingCompliance({
         store_name: String(r.store_name || ""),
         direction: String(r.direction || "").toLowerCase() === "inbound" ? "inbound" : "outbound",
         source_type: String(r.source_type || ""),
+        source_id: r.source_id != null ? Number(r.source_id) || 0 : 0,
       })),
     [taxMonth]
   )
@@ -2825,8 +2825,8 @@ export function AdminAccountingCompliance({
         payeeName: row.payee_name || null,
         payeeTaxId: row.payee_tax_id || null,
         incomeType: row.income_type || null,
-        grossAmount: row.gross_amount ? Number(row.gross_amount) : null,
-        whtRate: row.wht_rate ? Number(row.wht_rate) : null,
+        grossAmount: String(row.gross_amount).trim() === "" ? null : Number(row.gross_amount),
+        whtRate: String(row.wht_rate).trim() === "" ? null : Number(row.wht_rate),
         whtAmount: Number(row.wht_amount) || 0,
         formHint: row.form_hint || null,
         certificateNo: row.certificate_no || null,
@@ -2837,6 +2837,7 @@ export function AdminAccountingCompliance({
         storeName: row.store_name?.trim() ? row.store_name.trim() : null,
         direction: row.direction,
         sourceType: row.source_type || "manual",
+        sourceId: row.source_id && row.source_id > 0 ? row.source_id : 0,
         createdBy: auth?.user,
       })
       if (!res.success) {

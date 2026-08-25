@@ -67,6 +67,7 @@ import {
   emptyPp36,
   emptyPnd54,
   formatBangkokDateTime,
+  mergeWhtAmountPatch,
 } from "./admin-accounting-compliance-utils"
 import { isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
@@ -523,9 +524,15 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
   const [whtRowExpanded, setWhtRowExpanded] = React.useState<Record<string, boolean>>({})
   const patchWhtRow = React.useCallback(
     (idx: number, patch: Partial<WhtDraft>) => {
-      setWhtRows((prev) => prev.map((x, i) => (i === idx ? { ...x, ...patch } : x)))
+      setWhtRows((prev) => prev.map((x, i) => (i === idx ? mergeWhtAmountPatch(x, patch) : x)))
     },
     [setWhtRows]
+  )
+  const patchPnd54Row = React.useCallback(
+    (idx: number, patch: Partial<Pnd54Draft>) => {
+      setPnd54Rows((prev) => prev.map((x, i) => (i === idx ? mergeWhtAmountPatch(x, patch) : x)))
+    },
+    [setPnd54Rows]
   )
   const toggleWhtRowExpanded = React.useCallback((key: string) => {
     setWhtRowExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -1894,6 +1901,11 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                     {t("accCompPnd3ScopePayrollHint")}
                   </div>
                 ) : null}
+                {showWhtLedger ? (
+                  <div className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+                    {t("accCompWhtAmountsEditableHint")}
+                  </div>
+                ) : null}
                 {isPnd5354CompactList && pnd5354SubView === "pnd53" ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                     <div>
@@ -2138,7 +2150,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               </div>
             ) : null}
             {(showPp36Ledger || (showPnd54Ledger && (!isPnd5354CompactList || pnd5354SubView === "pnd54"))) ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className={cn("grid grid-cols-1 gap-3", showPp36Ledger && showPnd54Ledger ? "lg:grid-cols-2" : "")}>
               {showPp36Ledger ? (
               <Card>
                 <CardHeader className="pb-2">
@@ -2174,66 +2186,165 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">{t("accCompPnd5354SubPnd54")}</CardTitle>
                 </CardHeader>
-                <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "space-y-2"}>
-                  <div className={cn("flex gap-2", isPnd5354CompactList ? "px-4 py-3 border-b border-border/60" : "")}>
-                    {!isPnd5354CompactList ? (
-                      <Button type="button" size="sm" variant="outline" onClick={() => setPnd54Rows((prev) => [...prev, emptyPnd54(taxMonth, storeTb !== "All" ? storeTb : "")])}>
-                        <Plus className="h-3 w-3 mr-1" /> {t("accCompVatAdd")}
-                      </Button>
-                    ) : null}
-                    {!isPnd5354CompactList ? (
-                      <Button type="button" size="sm" variant="outline" onClick={() => void loadPnd54()}>{t("search")}</Button>
-                    ) : null}
+                <CardContent className="p-2 overflow-x-auto space-y-2">
+                  <div className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+                    {t("accCompWhtAmountsEditableHint")}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setPnd54Rows((prev) => [...prev, emptyPnd54(taxMonth, storeTb !== "All" ? storeTb : "")])}>
+                      <Plus className="h-3 w-3 mr-1" /> {t("accCompVatAdd")}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void loadPnd54()}>{t("search")}</Button>
                     <Button type="button" size="sm" variant="outline" asChild>
                       <a href={pnd54ExportUrl} target="_blank" rel="noopener noreferrer">CSV</a>
                     </Button>
                   </div>
-                  {isPnd5354CompactList ? (
-                    <table className="w-full text-sm border-collapse min-w-[720px]">
+                  <AdminTableScroll className="rounded-md border border-border/60">
+                    <table className={cn(accountingResultTableCn, "min-w-[1180px]")}>
                       <thead>
-                        <tr className="border-b bg-muted/30">
-                          <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColYearMonth")}</th>
-                          <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompStore")}</th>
-                          <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhPayee")}</th>
-                          <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompPhIncomeType")}</th>
-                          <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtGrossShort")}</th>
-                          <th className="text-right p-2 font-medium whitespace-nowrap">{t("accCompWhtWithheldShort")}</th>
-                          <th className="text-left p-2 font-medium whitespace-nowrap">{t("accCompColStatus")}</th>
+                        <tr className={accountingResultTheadRowCn}>
+                          <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompColYearMonth")}</th>
+                          <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompStore")}</th>
+                          <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompPhPayee")}</th>
+                          <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompPhPayeeCountry")}</th>
+                          <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompPhPayeeTin")}</th>
+                          <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompPhIncomeType")}</th>
+                          <th className={cn(accountingResultThRightCn, "p-1.5")}>{t("accCompWhtGrossShort")}</th>
+                          <th className={cn(accountingResultThRightCn, "p-1.5")}>{t("accCompPhWhtRate")}</th>
+                          <th className={cn(accountingResultThRightCn, "p-1.5")}>{t("accCompWhtWithheldShort")}</th>
+                          <th className={cn(accountingResultThCn, "p-1.5")}>{t("accCompColStatus")}</th>
+                          <th className={cn(accountingResultThCn, "p-1.5 whitespace-nowrap")}>{t("accCompSave")}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {pnd54RowsFiltered.map((row, idx) => (
-                          <tr key={row.id ?? `pnd54-${idx}`} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
-                            <td className="p-2 whitespace-nowrap tabular-nums">{row.tax_month || row.payment_date}</td>
-                            <td className="p-2 whitespace-nowrap">{row.store_name || "-"}</td>
-                            <td className="p-2 max-w-[180px] truncate" title={row.payee_name}>{row.payee_name || "-"}</td>
-                            <td className="p-2 max-w-[140px] truncate" title={row.income_type}>{row.income_type || "-"}</td>
-                            <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.gross_amount || 0).toLocaleString()}</td>
-                            <td className="p-2 text-right tabular-nums whitespace-nowrap">{Number(row.wht_amount || 0).toLocaleString()}</td>
-                            <td className="p-2 whitespace-nowrap">{filingStatusLabel(row.filing_status)}</td>
+                        {pnd54RowsFiltered.map((row, idx) => {
+                          const sourceIdx = pnd54Rows.indexOf(row)
+                          const editIdx = sourceIdx >= 0 ? sourceIdx : idx
+                          return (
+                          <tr key={row.id ?? `pnd54-${idx}`} className={accountingResultTbodyRowCn}>
+                            <td className={cn(accountingResultTdCn, "p-1")}>
+                              <Input
+                                type="date"
+                                className={cn(accountingLedgerCompactInputCn, "min-w-[8.5rem]")}
+                                value={row.payment_date}
+                                onChange={(e) => patchPnd54Row(editIdx, { payment_date: e.target.value })}
+                              />
+                            </td>
+                            <td className={cn(accountingResultTdCn, "p-1")}>
+                              <Input
+                                className={cn(accountingLedgerCompactInputCn, "min-w-[6.5rem]")}
+                                placeholder={t("accCompStore")}
+                                value={row.store_name}
+                                onChange={(e) => patchPnd54Row(editIdx, { store_name: e.target.value })}
+                              />
+                            </td>
+                            <td className={cn(accountingResultTdCn, "p-1")}>
+                              <Input
+                                className={cn(accountingLedgerCompactInputCn, "min-w-[8rem]")}
+                                placeholder={t("accCompPhPayee")}
+                                value={row.payee_name}
+                                onChange={(e) => patchPnd54Row(editIdx, { payee_name: e.target.value })}
+                              />
+                            </td>
+                            <td className={cn(accountingResultTdCn, "p-1")}>
+                              <Input
+                                className={cn(accountingLedgerCompactInputCn, "min-w-[5rem]")}
+                                placeholder={t("accCompPhPayeeCountry")}
+                                value={row.payee_country}
+                                onChange={(e) => patchPnd54Row(editIdx, { payee_country: e.target.value })}
+                              />
+                            </td>
+                            <td className={cn(accountingResultTdCn, "p-1")}>
+                              <Input
+                                className={cn(accountingLedgerCompactInputCn, "min-w-[7.5rem] font-mono")}
+                                placeholder={t("accCompPhPayeeTin")}
+                                value={row.payee_tax_id}
+                                onChange={(e) => patchPnd54Row(editIdx, { payee_tax_id: e.target.value })}
+                              />
+                            </td>
+                            <td className={cn(accountingResultTdCn, "p-1")}>
+                              <Input
+                                className={cn(accountingLedgerCompactInputCn, "min-w-[4.5rem]")}
+                                placeholder={t("accCompPhIncomeType")}
+                                value={row.income_type}
+                                onChange={(e) => patchPnd54Row(editIdx, { income_type: e.target.value })}
+                              />
+                            </td>
+                            <td className={cn(accountingResultTdRightCn, "p-1")}>
+                              <Input
+                                className={cn(accountingLedgerCompactInputCn, "min-w-[5rem] text-right tabular-nums")}
+                                placeholder={t("accCompPhGross")}
+                                value={row.gross_amount}
+                                onChange={(e) => patchPnd54Row(editIdx, { gross_amount: e.target.value })}
+                              />
+                            </td>
+                            <td className={cn(accountingResultTdRightCn, "p-1")}>
+                              <Input
+                                className={cn(accountingLedgerCompactInputCn, "min-w-[3.5rem] text-right tabular-nums")}
+                                placeholder={t("accCompPhWhtRate")}
+                                value={row.wht_rate}
+                                onChange={(e) => patchPnd54Row(editIdx, { wht_rate: e.target.value })}
+                              />
+                            </td>
+                            <td className={cn(accountingResultTdRightCn, "p-1")}>
+                              <Input
+                                className={cn(accountingLedgerCompactInputCn, "min-w-[4.5rem] text-right tabular-nums")}
+                                placeholder={t("accCompPhWhtAmt")}
+                                value={row.wht_amount}
+                                onChange={(e) => patchPnd54Row(editIdx, { wht_amount: e.target.value })}
+                              />
+                            </td>
+                            <td className={cn(accountingResultTdCn, "p-1")}>
+                              <Select
+                                value={row.filing_status}
+                                onValueChange={(v) =>
+                                  patchPnd54Row(editIdx, { filing_status: v as "draft" | "submitted" })
+                                }
+                              >
+                                <SelectTrigger className={cn(accountingLedgerCompactInputCn, "min-w-[5.5rem]")}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="draft">{filingStatusLabel("draft")}</SelectItem>
+                                  <SelectItem value="submitted">{filingStatusLabel("submitted")}</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className={cn(accountingResultTdCn, "p-1")}>
+                              <div className="flex items-center gap-0.5 whitespace-nowrap">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-7 px-2"
+                                  title={t("accCompSave")}
+                                  onClick={() => void savePnd54Row(row)}
+                                >
+                                  <Save className="h-3 w-3 mr-1" />
+                                  <span className="text-xs">{t("accCompSave")}</span>
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-7 px-2"
+                                  title={t("accCompDelete")}
+                                  onClick={() => void removePnd54(row)}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                         {!pnd54RowsFiltered.length ? (
                           <tr>
-                            <td colSpan={7} className="p-6 text-center text-muted-foreground">{t("emp_result_empty")}</td>
+                            <td colSpan={11} className="p-6 text-center text-muted-foreground">{t("emp_result_empty")}</td>
                           </tr>
                         ) : null}
                       </tbody>
                     </table>
-                  ) : (
-                    (pnd54Rows || []).slice(0, 20).map((row, idx) => (
-                      <div key={row.id ?? `pnd54-${idx}`} className="grid grid-cols-2 gap-2 rounded border p-2">
-                        <Input type="date" value={row.payment_date} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payment_date: e.target.value } : x))} />
-                        <Input placeholder="Payee" value={row.payee_name} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, payee_name: e.target.value } : x))} />
-                        <Input placeholder="Gross" value={row.gross_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, gross_amount: e.target.value } : x))} />
-                        <Input placeholder="WHT" value={row.wht_amount} onChange={(e) => setPnd54Rows((prev) => prev.map((x, i) => i === idx ? { ...x, wht_amount: e.target.value } : x))} />
-                        <div className="col-span-2 flex gap-2 justify-end">
-                          <Button type="button" size="sm" onClick={() => void savePnd54Row(row)}>{t("accCompSave")}</Button>
-                          <Button type="button" size="sm" variant="destructive" onClick={() => void removePnd54(row)}>{t("accCompDelete")}</Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                  </AdminTableScroll>
                 </CardContent>
               </Card>
               ) : null}

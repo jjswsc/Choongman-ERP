@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Search, ChevronDown, Printer, PencilLine, Banknote, CreditCard, QrCode, Bike, Wallet, Copy, Ban } from 'lucide-react'
+import { PosReceiptAttachMemberBlock } from '@/components/pos/pos-receipt-attach-member'
 import {
   Select,
   SelectContent,
@@ -1881,7 +1882,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
               {t('posReceiptSearchBizDayHint') ||
                 '조회 날짜는 마감·결산과 같은 POS 영업일 기준입니다(매장 영업 시작 시각~익일 시작 전).'}{' '}
               {t('posReceiptListSortPaidHint') ||
-                '목록은 결제·완료 시각 기준 최신순이며, 접수 시각과 다를 수 있습니다.'}
+                '목록은 결제·완료 시각 기준 최신순이며, 접수 시각과 다를 수 있습니다.'}{' '}
+              {t('posReceiptAttachMemberListHint')}
             </p>
           </div>
 
@@ -2130,7 +2132,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                       </span>
                                     </div>
                                   ))}
-                                  <div className="flex flex-wrap gap-2 pt-2">
+                                  <div className="space-y-2 pt-2">
+                                  <PosReceiptAttachMemberBlock
+                                    order={o}
+                                    online={online}
+                                    onApplied={loadOrders}
+                                  />
+                                  <div className="flex flex-wrap gap-2">
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -2251,9 +2259,16 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                                       </Button>
                                     )}
                                   </div>
+                                  </div>
                                 </>
                               ) : (
-                                <span className="text-muted-foreground">-</span>
+                                <div className="space-y-2">
+                                  <PosReceiptAttachMemberBlock
+                                    order={o}
+                                    online={online}
+                                    onApplied={loadOrders}
+                                  />
+                                </div>
                               )}
                             </div>
                           </td>

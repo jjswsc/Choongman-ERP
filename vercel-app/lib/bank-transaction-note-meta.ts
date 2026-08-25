@@ -47,10 +47,22 @@ export function looksLikeTaxAuthorityRemittanceMemo(memo: string | null | undefi
   const m = String(memo || '')
   if (!m.trim()) return false
   if (/ภ\.?\s*พ\.?\s*30|ภพ\.?\s*30|ภ\.?\s*ง\.?\s*ด|ภงด/i.test(m)) return true
+  if (/\bpp\.?\s*[-.]?\s*30\b/i.test(m)) return true
   if (/\bpnd\s*\.?\s*(1|3|53|54)\b/i.test(m)) return true
   if (/revenue\s*dep|สรรพากร|กรมสรรพากร/i.test(m)) return true
   if (/paid\s+for\s+ref[\s\S]{0,120}revenue/i.test(m)) return true
   return false
+}
+
+/** 지출관리 그림자 통장 마커 제거. Statement와 합친 뒤에는 실거래로 보이도록 note에서 뺀다. */
+export function stripExpenseInternalSourceMarker(note: string): string {
+  let s = String(note || '')
+  s = s.replace(/[;|]?\s*source:expense_internal\b/gi, '')
+  s = s.replace(/\bsource:expense_internal\s*[;|]?\s*/gi, '')
+  s = s.replace(/\s*;\s*;+/g, ';')
+  s = s.replace(/\s*\|\s*\|+/g, ' | ')
+  s = s.replace(/^[;\s|]+|[;\s|]+$/g, '')
+  return s.replace(/\s+/g, ' ').trim()
 }
 
 /**
@@ -137,7 +149,9 @@ export function stripExpenseAccrualPrefix(note: string): string {
 
 /** 통장 화면 MEMO 입력·표시용 — 내부 연동 메타만 제거 */
 export function bankNoteUserDisplayText(note: string): string {
-  return stripWithdrawalCategoryMetaFromNote(stripExpenseAccrualPrefix(note)).trim()
+  return stripWithdrawalCategoryMetaFromNote(
+    stripExpenseAccrualPrefix(stripExpenseInternalSourceMarker(note))
+  ).trim()
 }
 
 export function mergeWithdrawalCategoryIntoBankNote(displayText: string, category: string): string {

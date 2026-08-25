@@ -145,6 +145,41 @@ async function updateWhtRow(id: number, row: Record<string, unknown>): Promise<v
   }
 }
 
+/** 세무 화면에서 금액·세율을 저장하면 붙는 표시. 자동동기화는 이 행의 금액을 덮지 않는다. */
+export const WHT_MANUAL_AMOUNTS_TAG = '[MANUAL_AMOUNTS]'
+
+export type WhtAutoExistingRef = {
+  id: number
+  filingStatus: string
+  memo?: string | null
+}
+
+export function hasManualWhtAmountsTag(memo: unknown): boolean {
+  return String(memo || '').includes(WHT_MANUAL_AMOUNTS_TAG)
+}
+
+export function withManualWhtAmountsTag(memo: unknown): string {
+  const s = String(memo || '').trim()
+  if (hasManualWhtAmountsTag(s)) return s.slice(0, 2000)
+  return `${s ? `${s} ` : ''}${WHT_MANUAL_AMOUNTS_TAG}`.trim().slice(0, 2000)
+}
+
+/** 수동 저장 시 AUTO 연동 태그가 지워지지 않게 유지 (중복 원장 행 방지). */
+export function preserveAutoWhtMemoTags(existingMemo: unknown, nextMemo: string): string {
+  const tags = String(existingMemo || '').match(/\[AUTO:[^\]]+\]/g) || []
+  let out = String(nextMemo || '').trim()
+  for (const tag of tags) {
+    if (!out.includes(tag)) out = `${tag} ${out}`.trim()
+  }
+  return out.slice(0, 2000)
+}
+
+export function shouldSkipWhtAutoOverwrite(existing: WhtAutoExistingRef | undefined): boolean {
+  if (!existing?.id) return false
+  if (String(existing.filingStatus || '').trim().toLowerCase() === 'submitted') return true
+  return hasManualWhtAmountsTag(existing.memo)
+}
+
 export function parseWhtMemoSourceId(memo: string, tag: string): number {
   const m = memo.match(new RegExp(`\\[AUTO:${tag}:(\\d+)\\]`))
   if (!m) return 0
@@ -156,7 +191,7 @@ export async function loadAutoWhtLedgerIndex(params: {
   memoTagPrefix: string
   storeFilter?: string
   appendStoreFilter: (filter: string, store: string) => string
-}): Promise<Map<number, { id: number; filingStatus: string }>> {
+}): Promise<Map<number, WhtAutoExistingRef>> {
   const { buildTaxMonthPostgrestFilter } = await import('@/lib/thai-tax-period')
   const monthFilter = buildTaxMonthPostgrestFilter(params.months)
   const autoBase = `${monthFilter}&memo=ilike.${encodeURIComponent(`%[AUTO:${params.memoTagPrefix}:%`)}`
@@ -181,7 +216,7 @@ export async function loadAutoWhtLedgerIndex(params: {
     source_id?: number | null
   }[]
 
-  const map = new Map<number, { id: number; filingStatus: string }>()
+  const map = new Map<number, WhtAutoExistingRef>()
   for (const row of existingAutoRows || []) {
     const id = Math.floor(Number(row.id) || 0)
     if (id <= 0) continue
@@ -194,21 +229,22 @@ export async function loadAutoWhtLedgerIndex(params: {
     map.set(key, {
       id,
       filingStatus: String(row.filing_status || '').trim().toLowerCase(),
+      memo: String(row.memo || ''),
     })
   }
   return map
 }
 
-/** 자동 원장 행 upsert. submitted 행은 건드리지 않음. */
+/** 자동 원장 행 upsert. submitted·수동 금액 잠금 행은 건드리지 않음. */
 export async function upsertAutoWithholdingTaxLedgerEntry(params: {
   sourceKey: number
-  existingBySource: Map<number, { id: number; filingStatus: string }>
+  existingBySource: Map<number, WhtAutoExistingRef>
   saveRow: WhtLedgerAutoSaveRow
 }): Promise<boolean> {
   const sourceKey = Math.floor(Number(params.sourceKey) || 0)
   if (sourceKey <= 0) return false
   const existing = params.existingBySource.get(sourceKey)
-  if (existing?.filingStatus === 'submitted') return false
+  if (shouldSkipWhtAutoOverwrite(existing)) return false
 
   if (existing?.id) {
     await updateWhtRow(existing.id, params.saveRow)
@@ -219,13 +255,13 @@ export async function upsertAutoWithholdingTaxLedgerEntry(params: {
 }
 
 export async function deleteAutoWithholdingTaxLedgerEntries(params: {
-  existingBySource: Map<number, { id: number; filingStatus: string }>
+  existingBySource: Map<number, WhtAutoExistingRef>
   seenSourceKeys: Set<number>
 }): Promise<number> {
   let deleted = 0
   for (const [key, ex] of params.existingBySource.entries()) {
     if (params.seenSourceKeys.has(key)) continue
-    if (ex.filingStatus === 'submitted') continue
+    if (shouldSkipWhtAutoOverwrite(ex)) continue
     await supabaseDeleteByFilter('withholding_tax_ledger_entries', `id=eq.${ex.id}`)
     deleted += 1
   }
