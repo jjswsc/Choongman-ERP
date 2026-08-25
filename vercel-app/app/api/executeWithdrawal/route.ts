@@ -22,6 +22,12 @@ import {
   parseExpenseDocumentTypeInput,
 } from '@/lib/expense-document-type'
 import { upsertBorrowingTransaction } from '@/lib/borrowing-ledger'
+import {
+  isMissingWhtItemsColumnError,
+  parseExpenseWhtItemsFromBody,
+  serializeExpenseWhtItems,
+  sumExpenseWhtTax,
+} from '@/lib/expense-wht-items'
 
 function isMissingIdentityColumnError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -50,9 +56,16 @@ function stripBankEvidenceColumns<T extends Record<string, unknown>>(row: T): T 
   return next
 }
 
+function stripWhtItemsColumn<T extends Record<string, unknown>>(row: T): T {
+  const next = { ...row }
+  delete next.withholding_tax_items
+  return next
+}
+
 async function insertBankTransactionWithIdentityFallback(row: Record<string, unknown>) {
   const attempts = [
     row,
+    stripWhtItemsColumn({ ...row }),
     stripIdentityColumns({ ...row }),
     stripBankEvidenceColumns(stripIdentityColumns({ ...row })),
     stripBankEvidenceColumns({ ...row }),
@@ -63,7 +76,13 @@ async function insertBankTransactionWithIdentityFallback(row: Record<string, unk
       return (await supabaseInsert('bank_transactions', attempt)) as { id?: number }[]
     } catch (e) {
       lastErr = e
-      if (!isMissingIdentityColumnError(e) && !isMissingBankEvidenceColumnError(e)) throw e
+      if (
+        !isMissingIdentityColumnError(e) &&
+        !isMissingBankEvidenceColumnError(e) &&
+        !isMissingWhtItemsColumnError(e)
+      ) {
+        throw e
+      }
     }
   }
   throw lastErr
@@ -142,10 +161,16 @@ export async function POST(request: NextRequest) {
     const invoiceNo = String(body.invoiceNo || body.invoice_no || '').trim()
     const invoicePhotoUrl = String(body.invoicePhotoUrl || body.invoice_photo_url || '').trim()
     const vatAmount = Math.max(0, Math.abs(Number(body.vatAmount ?? body.vat_amount ?? 0) || 0))
-    const withholdingTaxAmount = Math.max(
+    const parsedWhtItems = parseExpenseWhtItemsFromBody(
+      body as { withholdingTaxItems?: unknown; withholding_tax_items?: unknown }
+    )
+    const withholdingTaxAmountRaw = Math.max(
       0,
       Math.abs(Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0)
     )
+    const withholdingTaxAmount =
+      parsedWhtItems && parsedWhtItems.length > 0 ? sumExpenseWhtTax(parsedWhtItems) : withholdingTaxAmountRaw
+    const withholdingTaxItemsJson = serializeExpenseWhtItems(parsedWhtItems || [])
     const grossAmount = amount
     const netWithdrawAmount =
       withholdingTaxAmount > 0 ? Math.max(0, grossAmount - withholdingTaxAmount) : grossAmount
@@ -308,6 +333,7 @@ export async function POST(request: NextRequest) {
       if (withholdingTaxAmount > 0) row.withholding_tax_amount = withholdingTaxAmount
       const withholdingTaxRate = Math.max(0, Number(body.withholdingTaxRate ?? body.withholding_tax_rate ?? 0) || 0)
       if (withholdingTaxRate > 0) row.withholding_tax_rate = withholdingTaxRate
+      if (withholdingTaxItemsJson) row.withholding_tax_items = withholdingTaxItemsJson
       if (attachmentUrlsJson) row.attachment_urls = attachmentUrlsJson
       if (documentNo) row.document_no = documentNo
       if (category === 'transfer_external') {

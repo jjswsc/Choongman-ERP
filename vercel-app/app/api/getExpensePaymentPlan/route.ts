@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
+import { normalizeExpenseWhtItems } from '@/lib/expense-wht-items'
 import { settledPaidAbsFromPayableRows } from '@/lib/expense-accrual-settlement'
 import { chunkIdsForInFilter } from '@/lib/expense-accrual-bank-link-candidates'
 import { isAccountingRole, isFranchiseeRole, isManagerRole, isOfficeRole } from '@/lib/permissions'
@@ -37,6 +38,7 @@ type ExpenseAccrualRow = {
   amount?: number
   vat_amount?: number | null
   withholding_tax_amount?: number | null
+  withholding_tax_items?: unknown
   expense_date?: string
   due_date?: string
   memo?: string
@@ -110,6 +112,9 @@ function isPurchaseWithdrawalCategory(cat: string | undefined): boolean {
   return c === 'purchase_payment' || c === 'purchase_advance'
 }
 
+const ACCRUAL_PLAN_SELECT_WHT_ITEMS =
+  'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,withholding_tax_items,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls,invoice_received,invoice_no,invoice_photo_url,document_no,payee_account_holder,payee_bank_name,payee_bank_account_no'
+
 const ACCRUAL_PLAN_SELECT =
   'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,created_at,approved_by,approved_at,approval_note,rejected_by,rejected_at,rejection_note,attachment_urls,invoice_received,invoice_no,invoice_photo_url,document_no,payee_account_holder,payee_bank_name,payee_bank_account_no'
 
@@ -142,9 +147,20 @@ async function fetchExpenseAccrualsForPlanRange(
     return [...byId.values()]
   }
   try {
-    return await run(ACCRUAL_PLAN_SELECT)
+    return await run(ACCRUAL_PLAN_SELECT_WHT_ITEMS)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
+    if (/withholding_tax_items/i.test(msg)) {
+      try {
+        return await run(ACCRUAL_PLAN_SELECT)
+      } catch (e2) {
+        const msg2 = e2 instanceof Error ? e2.message : String(e2)
+        if (/payee_bank|payee_account|column/i.test(msg2)) {
+          return await run(ACCRUAL_PLAN_SELECT_LEGACY)
+        }
+        throw e2
+      }
+    }
     if (/payee_bank|payee_account|column/i.test(msg)) {
       return await run(ACCRUAL_PLAN_SELECT_LEGACY)
     }
@@ -344,6 +360,7 @@ export async function GET(request: NextRequest) {
           grossAmount: gross,
           vatAmount: vatAmt,
           withholdingTaxAmount: whtAmt,
+          withholdingTaxItems: normalizeExpenseWhtItems(r.withholding_tax_items),
           plannedAmount: planned,
           paidAmount: paid,
           remainingAmount: remaining,
