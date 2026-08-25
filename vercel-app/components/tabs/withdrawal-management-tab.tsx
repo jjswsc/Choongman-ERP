@@ -85,7 +85,7 @@ import {
   expenseWhtBaseExVat,
 } from "@/lib/expense-accrual-net"
 import {
-  expenseWhtItemsFromDrafts,
+  normalizeExpenseWhtItems,
   primaryExpenseWhtRate,
   sumExpenseWhtTax,
   type ExpenseWhtItem,
@@ -93,6 +93,7 @@ import {
 import {
   ExpenseWhtItemsEditor,
   draftsFromExpenseWhtItems,
+  expenseWhtItemsFromDrafts,
   type ExpenseWhtItemDraft,
 } from "@/components/erp/expense-wht-items-editor"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
@@ -398,9 +399,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       if (accrualWhtItemsParam) {
         try {
           const parsed = JSON.parse(accrualWhtItemsParam) as unknown
-          const items = draftsFromExpenseWhtItems(
-            Array.isArray(parsed) ? (parsed as ExpenseWhtItem[]) : []
-          )
+          const items = draftsFromExpenseWhtItems(normalizeExpenseWhtItems(parsed))
           if (items.length > 0) setAccrualWhtItems(items)
         } catch {
           /* ignore */
@@ -840,6 +839,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     return Math.max(0, g - accrualWhtTotal)
   }, [categoryMain, amount, accrualWhtTotal])
 
+  const singleWhtRate = accrualWhtItems.length === 1 ? accrualWhtItems[0]?.rate : null
+  const singleWhtKey = accrualWhtItems.length === 1 ? accrualWhtItems[0]?.key : null
   React.useEffect(() => {
     if (
       categoryMain !== "purchase" &&
@@ -850,7 +851,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     }
     if (accrualWhtItems.length !== 1) return
     const it = accrualWhtItems[0]
-    if (it.rate == null || it.rate <= 0) return
+    if (!it || it.rate == null || it.rate <= 0) return
     const g = parseMoneyAmount(amount)
     const v = Math.max(0, Number(String(accrualVatAmount).replace(/,/g, "")) || 0)
     const wht = expenseWhtAmountFromRate(g, v, it.rate)
@@ -859,7 +860,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     const nextTax = wht > 0 ? moneyInputStringFromAmount(wht) : ""
     if (it.baseAmount === nextBase && it.taxAmount === nextTax) return
     setAccrualWhtItems([{ ...it, baseAmount: nextBase, taxAmount: nextTax }])
-  }, [categoryMain, amount, accrualVatAmount, accrualWhtItems])
+    // amount·VAT·세율만 따라감. 세금 칸을 손으로 고친 직후 덮어쓰지 않음.
+  }, [categoryMain, amount, accrualVatAmount, singleWhtRate, singleWhtKey])
 
   const resolvePayeeForWht = React.useCallback(
     (codeRaw: string, nameRaw: string) => resolveVendorPayeeForWht(vendors, codeRaw, nameRaw),

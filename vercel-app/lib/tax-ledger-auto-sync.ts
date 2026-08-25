@@ -29,6 +29,7 @@ import {
   type WhtLedgerAutoSaveRow,
 } from '@/lib/withholding-tax-ledger-core'
 import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
+import { expenseWhtItemsFromTotals } from '@/lib/expense-wht-items'
 import {
   mergeEvidenceIntoVatLedgerRow,
   probeVatLedgerEvidenceColumns,
@@ -87,6 +88,7 @@ type ExpenseAccrualWhtRow = {
   amount?: number | null
   vat_amount?: number | null
   withholding_tax_amount?: number | null
+  withholding_tax_items?: unknown
   expense_date?: string | null
   memo?: string | null
   store_name?: string | null
@@ -165,10 +167,13 @@ function parseStockLogIdFromMemo(memo: string): number {
   return Math.floor(Number(m[1]) || 0)
 }
 
-function parseExpenseAccrualWhtIdFromMemo(memo: string): number {
-  const m = memo.match(/\[AUTO:EXPENSE_ACCRUAL_WHT:(\d+)\]/)
-  if (!m) return 0
-  return Math.floor(Number(m[1]) || 0)
+function parseExpenseAccrualWhtMemo(memo: string): { expenseId: number; line: number } | null {
+  const m = String(memo || '').match(/\[AUTO:EXPENSE_ACCRUAL_WHT:(\d+)(?::L(\d+))?\]/)
+  if (!m) return null
+  const expenseId = Math.floor(Number(m[1]) || 0)
+  if (expenseId <= 0) return null
+  const line = m[2] ? Math.max(1, Math.floor(Number(m[2]) || 1)) : 1
+  return { expenseId, line }
 }
 
 function parsePayrollRecordIdFromMemo(memo: string): number {
@@ -664,12 +669,25 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
     const inList = storeScope.dbStoreNameValues.map((v) => encodeURIComponent(v)).join(',')
     expParts.push(`store_name=in.(${inList})`)
   }
-  const expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
-    select: 'id,status,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,memo,store_name',
-    order: 'id.asc',
-    pageSize: 4000,
-    maxRows: 40000,
-  })) as ExpenseAccrualWhtRow[]
+  let expenseRows: ExpenseAccrualWhtRow[] = []
+  try {
+    expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
+      select:
+        'id,status,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,withholding_tax_items,expense_date,memo,store_name',
+      order: 'id.asc',
+      pageSize: 4000,
+      maxRows: 40000,
+    })) as ExpenseAccrualWhtRow[]
+  } catch (e) {
+    const msg = String(e || '').toLowerCase()
+    if (!msg.includes('withholding_tax_items')) throw e
+    expenseRows = (await supabaseSelectFilterAllPages('expense_accruals', expParts.join('&'), {
+      select: 'id,status,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,memo,store_name',
+      order: 'id.asc',
+      pageSize: 4000,
+      maxRows: 40000,
+    })) as ExpenseAccrualWhtRow[]
+  }
 
   const vendorRows = (await supabaseSelect('vendors', {
     select: 'code,tax_id',
@@ -699,14 +717,14 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
     pageSize: 3000,
     maxRows: 30000,
   })) as ExistingAutoRow[]
-  const existingByExpenseId = new Map<number, WhtAutoExistingRef>()
+  const existingByLine = new Map<string, WhtAutoExistingRef>()
   for (const row of existingAutoRows || []) {
     const id = Math.floor(Number(row.id) || 0)
     const memo = String(row.memo || '')
-    const expId = parseExpenseAccrualWhtIdFromMemo(memo)
-    if (id <= 0 || expId <= 0) continue
+    const parsed = parseExpenseAccrualWhtMemo(memo)
+    if (id <= 0 || !parsed) continue
     if (storeFilter && !storeScope.matches(String(row.store_name || ''))) continue
-    existingByExpenseId.set(expId, {
+    existingByLine.set(`${parsed.expenseId}:${parsed.line}`, {
       id,
       filingStatus: String(row.filing_status || '').trim().toLowerCase(),
       memo,
@@ -714,7 +732,7 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
   }
 
   let upserted = 0
-  const seenExpenseIds = new Set<number>()
+  const seenLineKeys = new Set<string>()
   for (const row of expenseRows || []) {
     const expenseId = Math.floor(Number(row.id) || 0)
     if (expenseId <= 0) continue
@@ -736,70 +754,86 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
     const { payeeCode } = decodePayeeCode(String(row.payee_code || ''))
     const payeeName = String(row.payee_name || payeeCode || `지출-${expenseId}`).trim()
     const payeeTaxId = payeeCode ? vendorTinByCode.get(payeeCode) || null : null
-    const whtRate = grossBase > 0 ? round2((wht / grossBase) * 100) : null
-    const memoTag = `[AUTO:EXPENSE_ACCRUAL_WHT:${expenseId}]`
-    const saveRow = {
-      payment_date: expenseDate,
-      tax_month: taxMonth,
-      payee_name: payeeName.slice(0, 500),
-      payee_tax_id: payeeTaxId,
-      income_type: 'ค่าบริการ',
-      gross_amount: grossBase > 0 ? grossBase : rawAmount,
-      wht_rate: whtRate,
-      wht_amount: wht,
-      form_hint: resolveWhtPndFormHint({
-        incomeType: 'ค่าบริการ',
-        payeeName,
-        payeeTaxId,
-      }),
-      certificate_no: `EAW-${expenseId}`.slice(0, 128),
-      memo: `${memoTag} 지출 원천세 자동`.slice(0, 2000),
-      filing_status: 'draft',
-      submitted_at: null,
-      submitted_by: null,
-      store_name: rowStore || null,
-      updated_at: new Date().toISOString(),
-    }
+    const lines = expenseWhtItemsFromTotals({
+      items: row.withholding_tax_items,
+      taxAmount: wht,
+      baseAmount: grossBase > 0 ? grossBase : rawAmount,
+      incomeType: 'ค่าบริการ',
+    })
+    if (lines.length === 0) continue
 
-    const existing = existingByExpenseId.get(expenseId)
-    if (shouldSkipWhtAutoOverwrite(existing)) {
-      seenExpenseIds.add(expenseId)
-      continue
-    }
-    if (existing?.id) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      const lineNo = i + 1
+      const lineKey = `${expenseId}:${lineNo}`
+      const memoTag =
+        lines.length === 1
+          ? `[AUTO:EXPENSE_ACCRUAL_WHT:${expenseId}]`
+          : `[AUTO:EXPENSE_ACCRUAL_WHT:${expenseId}:L${lineNo}]`
+      const incomeType = line.incomeType || 'ค่าบริการ'
+      const saveRow = {
+        payment_date: expenseDate,
+        tax_month: taxMonth,
+        payee_name: payeeName.slice(0, 500),
+        payee_tax_id: payeeTaxId,
+        income_type: incomeType,
+        gross_amount: line.baseAmount > 0 ? line.baseAmount : grossBase > 0 ? grossBase : rawAmount,
+        wht_rate: line.rate > 0 ? line.rate : null,
+        wht_amount: line.taxAmount,
+        form_hint: resolveWhtPndFormHint({
+          incomeType,
+          payeeName,
+          payeeTaxId,
+        }),
+        certificate_no: `EAW-${expenseId}`.slice(0, 128),
+        memo: `${memoTag} 지출 원천세 자동`.slice(0, 2000),
+        filing_status: 'draft' as const,
+        submitted_at: null,
+        submitted_by: null,
+        store_name: rowStore || null,
+        updated_at: new Date().toISOString(),
+      }
+
+      const existing = existingByLine.get(lineKey)
+      if (shouldSkipWhtAutoOverwrite(existing)) {
+        seenLineKeys.add(lineKey)
+        continue
+      }
+      if (existing?.id) {
+        try {
+          await supabaseUpdate('withholding_tax_ledger_entries', existing.id, saveRow)
+        } catch (e) {
+          if (!isMissingSubmissionColumnError(e)) throw e
+          await supabaseUpdate(
+            'withholding_tax_ledger_entries',
+            existing.id,
+            stripSubmissionAuditFields(saveRow)
+          )
+        }
+        upserted += 1
+        seenLineKeys.add(lineKey)
+        continue
+      }
+
+      const insertRow = {
+        ...saveRow,
+        created_by: 'system',
+        created_at: new Date().toISOString(),
+      }
       try {
-        await supabaseUpdate('withholding_tax_ledger_entries', existing.id, saveRow)
+        await supabaseInsert('withholding_tax_ledger_entries', insertRow)
       } catch (e) {
         if (!isMissingSubmissionColumnError(e)) throw e
-        await supabaseUpdate(
-          'withholding_tax_ledger_entries',
-          existing.id,
-          stripSubmissionAuditFields(saveRow)
-        )
+        await supabaseInsert('withholding_tax_ledger_entries', stripSubmissionAuditFields(insertRow))
       }
       upserted += 1
-      seenExpenseIds.add(expenseId)
-      continue
+      seenLineKeys.add(lineKey)
     }
-
-    const insertRow = {
-      ...saveRow,
-      created_by: 'system',
-      created_at: new Date().toISOString(),
-    }
-    try {
-      await supabaseInsert('withholding_tax_ledger_entries', insertRow)
-    } catch (e) {
-      if (!isMissingSubmissionColumnError(e)) throw e
-      await supabaseInsert('withholding_tax_ledger_entries', stripSubmissionAuditFields(insertRow))
-    }
-    upserted += 1
-    seenExpenseIds.add(expenseId)
   }
 
   let deleted = 0
-  for (const [expenseId, ex] of existingByExpenseId.entries()) {
-    if (seenExpenseIds.has(expenseId)) continue
+  for (const [lineKey, ex] of existingByLine.entries()) {
+    if (seenLineKeys.has(lineKey)) continue
     if (shouldSkipWhtAutoOverwrite(ex)) continue
     await supabaseDeleteByFilter('withholding_tax_ledger_entries', `id=eq.${ex.id}`)
     deleted += 1

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatWhtAgentDisplayName,
+  mergeWhtCertificatesForPrint,
   resolvePoWhtAgentStoreKey,
   resolveVendorPayeeForWht,
   resolveWhtCertificateParties,
@@ -287,5 +288,75 @@ describe('whtCertificateFromLedgerRow', () => {
     )
     expect(cert.incomeRecipient.address).toBe('18 True Tower')
     expect(cert.incomeRecipient.taxId).toBe('0105553045044')
+  })
+})
+
+describe('mergeWhtCertificatesForPrint', () => {
+  it('merges same certificate number into one 50 ทวิ with two income lines', () => {
+    const a = whtCertificateFromLedgerRow(
+      {
+        payment_date: '2026-08-25',
+        tax_month: '2026-08',
+        payee_name: 'Vendor',
+        income_type: 'ค่าเช่า',
+        gross_amount: 56000,
+        wht_rate: 5,
+        wht_amount: 2800,
+        certificate_no: 'EAW-9',
+        direction: 'outbound',
+      },
+      headOffice
+    )
+    const b = whtCertificateFromLedgerRow(
+      {
+        payment_date: '2026-08-25',
+        tax_month: '2026-08',
+        payee_name: 'Vendor',
+        income_type: 'ค่าบริการ',
+        gross_amount: 24000,
+        wht_rate: 3,
+        wht_amount: 720,
+        certificate_no: 'EAW-9',
+        direction: 'outbound',
+      },
+      headOffice
+    )
+    const merged = mergeWhtCertificatesForPrint([a, b])
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.incomeLines).toHaveLength(2)
+    expect(merged[0]?.whtAmount).toBe(3520)
+    expect(merged[0]?.grossAmount).toBe(80000)
+    expect(merged[0]?.incomeType).toBe('ค่าเช่า, ค่าบริการ')
+  })
+
+  it('does not merge rows that only share payee and date without a certificate number', () => {
+    const a = whtCertificateFromLedgerRow(
+      {
+        payment_date: '2026-08-25',
+        tax_month: '2026-08',
+        payee_name: 'Vendor',
+        income_type: 'ค่าเช่า',
+        gross_amount: 1000,
+        wht_amount: 50,
+        certificate_no: '',
+        direction: 'outbound',
+      },
+      headOffice
+    )
+    const b = whtCertificateFromLedgerRow(
+      {
+        payment_date: '2026-08-25',
+        tax_month: '2026-08',
+        payee_name: 'Vendor',
+        income_type: 'ค่าบริการ',
+        gross_amount: 2000,
+        wht_amount: 60,
+        certificate_no: '—',
+        direction: 'outbound',
+      },
+      headOffice
+    )
+    const merged = mergeWhtCertificatesForPrint([a, b])
+    expect(merged).toHaveLength(2)
   })
 })

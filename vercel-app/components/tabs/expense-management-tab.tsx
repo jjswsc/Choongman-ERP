@@ -682,6 +682,9 @@ export function ExpenseManagementTab() {
       q.set("amount", String(row.grossAmount ?? row.plannedAmount ?? 0))
       if (Number(row.vatAmount || 0) > 0) q.set("accrualVat", String(row.vatAmount))
       if (Number(row.withholdingTaxAmount || 0) > 0) q.set("accrualWht", String(row.withholdingTaxAmount))
+      if (Array.isArray(row.withholdingTaxItems) && row.withholdingTaxItems.length > 0) {
+        q.set("accrualWhtItems", JSON.stringify(row.withholdingTaxItems))
+      }
       q.set("transDate", String(row.expenseDate || "").slice(0, 10))
       q.set("payeeCode", row.payeeCode || "")
       q.set("payeeName", row.payeeName || "")

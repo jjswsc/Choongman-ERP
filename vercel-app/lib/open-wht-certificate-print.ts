@@ -1,11 +1,11 @@
-import type { WhtCertificateData } from '@/lib/wht-certificate-data'
+import { mergeWhtCertificatesForPrint, type WhtCertificateData } from '@/lib/wht-certificate-data'
 import { buildWhtCertificateDocumentHtml } from '@/lib/wht-certificate-html'
 
 export const WHT_CERT_PRINT_STORAGE_KEY = 'wht-certificate-print-data'
 
 export function openWhtCertificatePrintWindow(items: WhtCertificateData[], lang: string): boolean {
   if (typeof window === 'undefined') return false
-  const list = (items || []).filter((d) => d.whtAmount > 0)
+  const list = mergeWhtCertificatesForPrint((items || []).filter((d) => d.whtAmount > 0))
   if (!list.length) return false
   try {
     sessionStorage.setItem(
@@ -22,7 +22,7 @@ export function openWhtCertificatePrintWindow(items: WhtCertificateData[], lang:
 
 export function printWhtCertificatesInline(items: WhtCertificateData[], lang: string): boolean {
   if (typeof window === 'undefined') return false
-  const list = (items || []).filter((d) => d.whtAmount > 0)
+  const list = mergeWhtCertificatesForPrint((items || []).filter((d) => d.whtAmount > 0))
   if (!list.length) return false
   const html = buildWhtCertificateDocumentHtml(list, lang || 'ko')
   const w = window.open('', '_blank')

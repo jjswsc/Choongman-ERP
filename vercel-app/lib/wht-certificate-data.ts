@@ -267,7 +267,7 @@ export function mergeWhtCertificatesForPrint(items: WhtCertificateData[]): WhtCe
     const key =
       cert && cert !== '—'
         ? `cert:${cert}`
-        : `payee:${String(d.incomeRecipient?.name || '').trim()}|${String(d.paymentDate || '').slice(0, 10)}|${String(d.storeName || '')}`
+        : `row:${order.length}:${String(d.paymentDate || '')}:${String(d.incomeRecipient?.name || '')}:${d.whtAmount}`
     if (!groups.has(key)) {
       groups.set(key, [])
       order.push(key)
