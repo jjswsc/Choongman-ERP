@@ -47,9 +47,19 @@ is_meta_only_path() {
   case "$f" in
     docs/*|vercel-app/docs/*|*/docs/*)
       return 0 ;;
-    README.md|vercel-app/README.md|*/README.md)
+    README.md|vercel-app/README.md|*/README.md|*.md)
       return 0 ;;
     windows-pos/*|vercel-app/windows-pos/*|*/windows-pos/*)
+      return 0 ;;
+    windows-erp/*|vercel-app/windows-erp/*|*/windows-erp/*)
+      return 0 ;;
+    android/*|vercel-app/android/*|*/android/*)
+      return 0 ;;
+    harness/*|vercel-app/harness/*|*/harness/*)
+      return 0 ;;
+    .cursor/*|*/.cursor/*)
+      return 0 ;;
+    *.test.ts|*.test.tsx|*.spec.ts|*.spec.tsx)
       return 0 ;;
     sql/*|vercel-app/sql/*|*/sql/*)
       return 0 ;;
@@ -70,5 +80,5 @@ done <<EOF
 $CHANGED_FILES
 EOF
 
-echo "Only docs / windows-pos / sql / README changes. Skipping build."
+echo "Only docs / windows-pos / windows-erp / android / harness / sql / README / tests. Skipping build."
 exit 0

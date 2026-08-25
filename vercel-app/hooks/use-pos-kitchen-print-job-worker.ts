@@ -16,10 +16,10 @@ import {
   kitchenLinesFromPrintJobPayload,
   kitchenPrintJobOrderFieldsFromPayload,
   MAIN_POS_KITCHEN_JOB_DRAIN_MAX,
-  MAIN_POS_KITCHEN_JOB_POLL_MS,
   MAIN_POS_KITCHEN_JOB_POLL_PAUSED_MS,
   MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS,
   resolveKitchenPrintJobDedupeKey,
+  resolveKitchenPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
 import { subscribePosPrintJobsInsert } from '@/lib/supabase-client'
 
@@ -76,7 +76,8 @@ async function printClaimedKitchenJob(
 
 /**
  * QR/원격 주문의 pos_print_jobs 를 메인 POS가 바로 claim·인쇄.
- * INSERT Realtime poke가 1차. 놓치면 2초마다 claim. 오픈 전·마감 후면 인터벌만 쉼.
+ * INSERT Realtime poke가 1차. 놓치면 15초(채널 장애 시 5초)마다 claim.
+ * 오픈 전·마감 후·백그라운드 탭은 60초.
  */
 export function usePosKitchenPrintJobWorker(opts: {
   enabled: boolean
@@ -149,29 +150,52 @@ export function usePosKitchenPrintJobWorker(opts: {
 
     drainNowRef.current = poke
     poke()
+    let jobsInsertHealthy = true
     const jobsChannel = subscribePosPrintJobsInsert(
       () => {
         if (!cancelled) poke()
       },
-      { store: opts.storeCode, storeCodes: opts.storeCodes }
+      {
+        store: opts.storeCode,
+        storeCodes: opts.storeCodes,
+        onStatus: (status) => {
+          jobsInsertHealthy = status === 'SUBSCRIBED'
+        },
+      }
     )
+    if (!jobsChannel) jobsInsertHealthy = false
     let pollTimer = 0
     const scheduleNextPoll = () => {
       if (cancelled) return
-      const paused = Boolean(opts.pauseIntervalPollRef?.current)
-      const delayMs = paused ? MAIN_POS_KITCHEN_JOB_POLL_PAUSED_MS : MAIN_POS_KITCHEN_JOB_POLL_MS
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      const paused = Boolean(opts.pauseIntervalPollRef?.current) || hidden
+      const delayMs = paused
+        ? MAIN_POS_KITCHEN_JOB_POLL_PAUSED_MS
+        : resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: jobsInsertHealthy })
       pollTimer = window.setTimeout(() => {
         if (!cancelled && !opts.pauseIntervalPollRef?.current) void drain()
         scheduleNextPoll()
       }, delayMs)
     }
     scheduleNextPoll()
+    const onVisibility = () => {
+      if (cancelled) return
+      window.clearTimeout(pollTimer)
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') void drain()
+      scheduleNextPoll()
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility)
+    }
 
     return () => {
       cancelled = true
       drainNowRef.current = () => {}
       window.clearTimeout(pollTimer)
       clearPokeTimers()
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility)
+      }
       void jobsChannel?.unsubscribe()
     }
   }, [

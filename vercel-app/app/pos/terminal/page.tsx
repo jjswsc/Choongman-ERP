@@ -316,9 +316,11 @@ import {
 import {
   claimKbankInquiryLoop,
   createKbankInquiryTabId,
+  isDocumentVisible,
   isKbankQrSessionExpired,
   msUntilKbankQrSessionExpiry,
   releaseKbankInquiryLoop,
+  shouldRunKbankAutoInquiry,
 } from '@/lib/payments/kbank-inquiry-session'
 import {
   subscribePosOrdersInsert,
@@ -7604,7 +7606,15 @@ export default function PosTerminalPage() {
     if (!isKbankPilotStore || !currentStoreId) return
     const partnerTxnUid = String(kbankOpsTxnUid || '').trim()
     const origPartnerTxnUid = kbankOrigPartnerTxnUidForFollowup(partnerTxnUid)
-    if (!partnerTxnUid || kbankCallbackState !== 'waiting') return
+    if (!partnerTxnUid) return
+    if (
+      !shouldRunKbankAutoInquiry({
+        callbackState: kbankCallbackState,
+        liveQrPayload: liveKbankQrPayload,
+      })
+    ) {
+      return
+    }
     if (isKbankQrSessionExpired(kbankQrSessionStartedAtRef.current)) {
       setKbankCallbackState('failed')
       setCustomerDisplayPaymentMessage('')
@@ -7618,7 +7628,15 @@ export default function PosTerminalPage() {
     let cancelled = false
     const pollApprovedViaInquiry = async () => {
       if (cancelled || kbankCallbackNotifiedTxRef.current === partnerTxnUid) return
-      if (kbankCallbackState !== 'waiting') return
+      if (
+        !shouldRunKbankAutoInquiry({
+          callbackState: kbankCallbackState,
+          liveQrPayload: liveKbankQrPayload,
+          documentVisible: isDocumentVisible(),
+        })
+      ) {
+        return
+      }
       if (isKbankQrSessionExpired(kbankQrSessionStartedAtRef.current)) {
         setKbankCallbackState('failed')
         setCustomerDisplayPaymentMessage('')
@@ -7694,6 +7712,7 @@ export default function PosTerminalPage() {
     isKbankApiPaused,
     noteKbankRateLimitResponse,
     liveKbankQrType,
+    liveKbankQrPayload,
     kbankQrSessionStartedAtMs,
   ])
 

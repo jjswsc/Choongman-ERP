@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/applyDuePriceSchedules",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/member-portal/cron/expire-pending-payments",

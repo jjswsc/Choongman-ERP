@@ -2,21 +2,24 @@ import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-
 import { coercePosOrderTypeForDb, type PosOrderTypeValue } from '@/lib/pos-sales-order-type-filter'
 
 /**
- * 인쇄 큐 claim 안전망 — INSERT Realtime poke가 놓쳐도 이 간격으로 가져간다.
- * QR 주방은 주문 UPDATE(홀 화면)보다 먼저 나가야 하므로, 주문 Realtime이 살아 있어도 60s로 늘리지 않는다.
- * 오픈 전·마감 후면 인터벌만 쉼. 오래된 잡은 MAX_AGE·DRAIN_MAX 로 막는다.
+ * 인쇄 큐 claim 안전망 — INSERT Realtime poke(0/400/1200/2500ms)가 1차.
+ * 폴링은 Realtime이 놓친 잡만 건진다. 2초 고정은 Fluid Active CPU를 과도하게 쓴다.
+ * 오픈 전·마감 후·백그라운드 탭은 PAUSED 간격. 오래된 잡은 MAX_AGE·DRAIN_MAX 로 막는다.
  */
-export const MAIN_POS_KITCHEN_JOB_POLL_MS = 2_000
+export const MAIN_POS_KITCHEN_JOB_POLL_MS = 15_000
+/** print-jobs INSERT 채널이 죽으면 조금 촘촘히 (2초로 되돌리지는 않음) */
+export const MAIN_POS_KITCHEN_JOB_POLL_UNHEALTHY_MS = 5_000
 /** 오픈 전·마감 후 스케줄만 유지 (drain 은 pause 에서 건너뜀) */
 export const MAIN_POS_KITCHEN_JOB_POLL_PAUSED_MS = 60_000
-/** @deprecated 주문 Realtime 건강과 무관. POLL_MS 와 같음 */
+/** Realtime 정상 시 안전망 간격 — POLL_MS 와 같음 */
 export const MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS = MAIN_POS_KITCHEN_JOB_POLL_MS
 
-export function resolveKitchenPrintJobPollMs(_opts?: {
+export function resolveKitchenPrintJobPollMs(opts?: {
   realtimeChannelHealthy?: boolean
   realtimeRecentlyActive?: boolean
   jobsInsertChannelHealthy?: boolean
 }): number {
+  if (opts?.jobsInsertChannelHealthy === false) return MAIN_POS_KITCHEN_JOB_POLL_UNHEALTHY_MS
   return MAIN_POS_KITCHEN_JOB_POLL_MS
 }
 /** QR enqueue 직후·주문 UPDATE 레이스를 흡수 */

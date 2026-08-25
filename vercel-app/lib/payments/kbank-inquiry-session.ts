@@ -118,3 +118,24 @@ export function releaseKbankInquiryLoop(
     /* noop */
   }
 }
+
+/** True when the POS tab is in the foreground (SSR / missing document → true). */
+export function isDocumentVisible(): boolean {
+  if (typeof document === 'undefined') return true
+  return document.visibilityState === 'visible'
+}
+
+/**
+ * Auto-Inquiry 조건: 결제 QR이 화면에 있고 waiting 일 때만.
+ * 패널을 닫거나(페이로드 없음) 백그라운드 탭이면 은행 Inquiry를 돌리지 않는다.
+ */
+export function shouldRunKbankAutoInquiry(opts: {
+  callbackState: string
+  liveQrPayload?: string | null
+  documentVisible?: boolean
+}): boolean {
+  if (String(opts.callbackState || '').trim() !== 'waiting') return false
+  if (!String(opts.liveQrPayload || '').trim()) return false
+  if (opts.documentVisible === false) return false
+  return true
+}

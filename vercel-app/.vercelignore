@@ -33,3 +33,9 @@ docs
 *.xlsx
 *.csv
 *.zip
+
+# Installers must not ride Vercel Fast Data Transfer (publish to GitHub Releases / object storage)
+public/downloads/**/*.exe
+public/downloads/**/*.apk
+*.exe
+*.apk

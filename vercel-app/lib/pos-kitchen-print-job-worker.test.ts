@@ -12,13 +12,15 @@ import { posOrdersRealtimeChannelName, posPrintJobsInsertChannelName } from '@/l
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
 
 describe('MAIN_POS_KITCHEN_JOB_POLL_MS', () => {
-  it('claims every 2s so QR kitchen does not wait for slow order realtime', () => {
-    expect(MAIN_POS_KITCHEN_JOB_POLL_MS).toBe(2_000)
-    expect(MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS).toBe(2_000)
+  it('uses 15s safety-net poll; 5s only when print-jobs realtime is down', () => {
+    expect(MAIN_POS_KITCHEN_JOB_POLL_MS).toBe(15_000)
+    expect(MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS).toBe(15_000)
     expect(resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: false, realtimeRecentlyActive: false })).toBe(
-      2_000
+      15_000
     )
-    expect(resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: true, realtimeRecentlyActive: true })).toBe(2_000)
+    expect(resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: true, realtimeRecentlyActive: true })).toBe(15_000)
+    expect(resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(15_000)
+    expect(resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(5_000)
   })
 })
 

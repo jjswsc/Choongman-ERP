@@ -41,3 +41,4 @@ Set-Content -Path $hashPath -Value $hashText -Encoding UTF8
 Write-Host "Publish done."
 Write-Host "- APK: $targetApkPath"
 Write-Host "- SHA256: $hashPath"
+Write-Host "- BANDWIDTH: .apk is gitignored and .vercelignored. Host the APK outside Vercel (GitHub Releases / storage)."

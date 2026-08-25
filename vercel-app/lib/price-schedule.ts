@@ -159,6 +159,10 @@ export async function runDuePriceSchedules(now: Date = new Date()): Promise<{
     return { success: false, appliedCount: 0, failedCount: 0, message: e instanceof Error ? e.message : "조회 실패" }
   }
 
+  if (!rows.length) {
+    return { success: true, appliedCount: 0, failedCount: 0 }
+  }
+
   let appliedCount = 0
   let failedCount = 0
   for (const row of rows) {

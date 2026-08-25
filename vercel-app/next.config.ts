@@ -24,9 +24,6 @@ const withSerwist = withSerwistInit({
   additionalPrecacheEntries: [
     { url: "/login", revision },
     { url: "/admin/login", revision },
-    { url: "/admin", revision },
-    { url: "/admin/sales-management", revision },
-    { url: "/admin/live-store-sales", revision },
     { url: "/pos", revision },
     /** 터미널(매장·포장·배달) 직접 URL 오프라인 1회 진입 시 네트워크 실패 완화 */
     { url: "/pos/terminal", revision },

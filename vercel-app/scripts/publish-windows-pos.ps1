@@ -175,3 +175,5 @@ if ($Brand -eq "choongman") {
 } else {
   Write-Host "- NOTE: Choongman files (cm-pos-windows-choongman-* / latest-choongman.json) were NOT modified."
 }
+Write-Host "- BANDWIDTH: .exe is gitignored and .vercelignored. Do not Vercel-deploy binaries."
+Write-Host "  Point -BaseUrl / NEXT_PUBLIC_WINDOWS_POS_*_SETUP_URL at GitHub Releases or object storage."

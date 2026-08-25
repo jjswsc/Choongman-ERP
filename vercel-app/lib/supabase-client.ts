@@ -22,7 +22,7 @@ export type PosOrdersRealtimeSubscribeOptions = {
   /**
    * 같은 store의 INSERT/UPDATE 구독이 여러 개일 때 채널명 충돌 방지.
    * supabase-js는 동일 채널명을 재사용하므로, 키 없이 두 번 구독하면
-   * 한쪽 unsubscribe가 다른 핸들러까지 끊고 QR 주방 인쇄가 폴링(8초)으로 떨어진다.
+   * 한쪽 unsubscribe가 다른 핸들러까지 끊고 QR 주방 인쇄가 폴링 안전망으로 떨어진다.
    */
   channelKey?: string
   /** subscribe() 콜백 — SUBSCRIBED / CHANNEL_ERROR 등 */
