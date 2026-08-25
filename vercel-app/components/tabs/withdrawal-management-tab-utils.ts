@@ -46,7 +46,7 @@ export const CATEGORY_MAIN_OPTIONS = [
   { value: "expense", labelKey: "wm_expense", sub: ["normal", "advance"] },
   { value: "fixed_asset", labelKey: "wm_fixed_asset", sub: [] },
   { value: "transfer", labelKey: "wm_transfer", sub: [] },
-  { value: "tax", labelKey: "wm_tax", sub: ["vat", "withholding"] },
+  { value: "tax", labelKey: "wm_tax", sub: ["vat", "withholding", "corporate", "sso"] },
   { value: "loan", labelKey: "wm_loan", sub: ["repayment", "given"] },
   { value: "correction", labelKey: "wm_correction", sub: [] },
   { value: "dividend", labelKey: "wm_dividend", sub: [] },

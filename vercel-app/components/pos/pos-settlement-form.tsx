@@ -1,5 +1,5 @@
 'use client'
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -42,6 +42,13 @@ import {
   POS_SETTLEMENT_DINE_IN_CODE,
 } from '@/lib/pos-settlement-delivery-split'
 import { hydrateSettlementQrOtherBreakdowns } from '@/lib/pos-settlement-breakdown-hydrate'
+import {
+  classifySettlementCardMismatch,
+  countFilledSettlementBreakdownLines,
+  resolveSettlementCardAmount,
+  shouldApplyAutoCardBreakdown,
+  sumSettlementBreakdownAmounts,
+} from '@/lib/pos-settlement-card-amount'
 import { DEFAULT_OTHER_KEYS, DEFAULT_QR_KEYS } from '@/lib/pos-payment-default-keys'
 import {
   dispatchPosBusinessOpenUpdated,
@@ -621,11 +628,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           } else {
             setCashAmt(formatBahtAmountForField(autoCashTotal))
           }
-          const nextCardAmt = preferLiveAuto
-            ? cardAmtFallbackFromPos > 0
-              ? cardAmtFallbackFromPos
-              : Number(single.cardAmt ?? 0)
-            : Number(single.cardAmt ?? 0)
+          const nextCardAmt =
+            cardAmtFallbackFromPos > 0 ? cardAmtFallbackFromPos : Number(single.cardAmt ?? 0)
           const nextQrAmt = preferLiveAuto
             ? autoQrTotal > 0
               ? autoQrTotal
@@ -651,13 +655,15 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           })
           const autoCb = buildAutoBreakdown(autoCardMap, activeCardKeys, { allowExtra: false })
           const cardBreakdownEmpty = isBreakdownEmpty(cb)
-          const cardAutoApplied = (preferLiveAuto || cardBreakdownEmpty) && autoCardTotal > 0
+          const cardAutoApplied = shouldApplyAutoCardBreakdown({
+            preferLiveAuto,
+            savedBreakdownEmpty: cardBreakdownEmpty,
+            autoCardTotal,
+            posCardOrdersTotal,
+          })
           setCardBreakdown(
             mapBreakdownStringsToBahtDisplay(cardAutoApplied ? autoCb : cb)
           )
-          if ((Number(single.cardAmt ?? 0) || 0) <= 0 && cardAmtFallbackFromPos > 0) {
-            setCardAmt(formatBahtAmountForField(cardAmtFallbackFromPos))
-          }
           const hydrated = hydrateSettlementQrOtherBreakdowns(single, activeQrKeys, activeOtherKeys)
           const autoQb = buildAutoBreakdown(autoQrMap, activeQrKeys, { allowExtra: true })
           const qrBreakdownEmpty = isBreakdownEmpty(hydrated.qrBreakdown)
@@ -735,11 +741,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setOpeningCashActual(single.cashActual != null ? Number(single.cashActual) : null)
           const cashAutoApplied = (Number(single.cashAmt ?? 0) || 0) <= 0 && autoCashTotal > 0
           setAutoFilledFlags({
-            card:
-              cardAutoApplied ||
-              ((Number(single.cardAmt ?? 0) || 0) <= 0 &&
-                cardBreakdownEmpty &&
-                cardAmtFallbackFromPos > 0),
+            card: cardAutoApplied,
             qr: qrAutoApplied,
             delivery: deliveryAutoApplied || (dineInBreakdownEmpty && autoDineInTotal > 0),
             other: otherAutoApplied,
@@ -756,9 +758,17 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setQrAmt(formatBahtAmountForField(autoQrTotal || 0))
           setDeliveryAppAmt(formatBahtAmountForField(autoDeliveryTotal || 0))
           setOtherAmt(formatBahtAmountForField(autoOtherTotal || 0))
+          const newRowCardAuto = shouldApplyAutoCardBreakdown({
+            preferLiveAuto: true,
+            savedBreakdownEmpty: true,
+            autoCardTotal,
+            posCardOrdersTotal,
+          })
           setCardBreakdown(
             mapBreakdownStringsToBahtDisplay(
-              buildAutoBreakdown(autoCardMap, activeCardKeys, { allowExtra: false })
+              newRowCardAuto
+                ? buildAutoBreakdown(autoCardMap, activeCardKeys, { allowExtra: false })
+                : Object.fromEntries(activeCardKeys.map((k) => [k, '']))
             )
           )
           setQrBreakdown(
@@ -786,7 +796,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setClosedSavedOnce(false)
           setOpeningCashActual(null)
           setAutoFilledFlags({
-            card: autoCardTotal > 0 || posCardOrdersTotal > 0,
+            card: newRowCardAuto,
             qr: autoQrTotal > 0,
             delivery: autoDeliveryTotal > 0 || autoDineInTotal > 0,
             other: autoOtherTotal > 0,
@@ -913,9 +923,26 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   /** 돈통 시제: 영업시작·결산 모두 화폐 단위 입력 사용 */
   const cashActualNum = denomTotal
   const cashAmtNum = openMode ? parseBahtAmount(cashAmt) : systemCashFromOrders
-  const cardFromBreakdownLines = CARD_KEYS.reduce((s, k) => s + parseBahtAmount(cardBreakdown[k]), 0)
-  const cardNum =
-    cardFromBreakdownLines > 0.005 ? cardFromBreakdownLines : parseBahtAmount(cardAmt)
+  const cardFromBreakdownLines = sumSettlementBreakdownAmounts(
+    Object.fromEntries(CARD_KEYS.map((k) => [k, parseBahtAmount(cardBreakdown[k])]))
+  )
+  const filledCardBrandCount = countFilledSettlementBreakdownLines(
+    Object.fromEntries(CARD_KEYS.map((k) => [k, parseBahtAmount(cardBreakdown[k])]))
+  )
+  const posCardOrdersTotalLive = Number(linkposSummary?.cardReportedTotal ?? 0) || 0
+  const cardNum = resolveSettlementCardAmount({
+    brandSum: cardFromBreakdownLines,
+    posCardOrdersTotal: posCardOrdersTotalLive,
+    cardAmtFallback: parseBahtAmount(cardAmt),
+  })
+  const cardMismatch = classifySettlementCardMismatch({
+    brandSum: cardFromBreakdownLines,
+    posCardOrdersTotal: posCardOrdersTotalLive,
+    filledBrandCount: filledCardBrandCount,
+  })
+  React.useEffect(() => {
+    if (!openMode && cardMismatch.kind !== 'none') setCardExpanded(true)
+  }, [openMode, cardMismatch.kind])
   const qrFromLines = displayQrKeyList.reduce((s, k) => s + parseBahtAmount(qrBreakdown[k]), 0)
   const qrNum = qrFromLines > 0.005 ? qrFromLines : parseBahtAmount(qrAmt)
   const otherFromLines = displayOtherKeyList.reduce((s, k) => s + parseBahtAmount(otherBreakdown[k]), 0)
@@ -978,6 +1005,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     const footerStamp = `
       ${closed ? `<div class="text-center" style="margin-top:6px;font-weight:700">${escapeHtml(t('posClosed') || '마감')}</div>` : ''}
       <div class="text-xs text-center" style="margin-top:8px;color:#333">${escapeHtml(formatPosDateTimeMedium(new Date(), lang))}</div>`
+    const cardBreakdownPrintRows = CARD_KEYS
+      .map((k) => ({ key: k, amount: parseBahtAmount(cardBreakdown[k]) }))
+      .filter((row) => row.amount > 0.005)
+      .map((row) => amtIndent(`- ${row.key}`, formatBahtNum(row.amount)))
+      .join('')
     const platformBreakdownPrintRows = PLATFORM_DELIVERY_KEYS
       .map((k) => ({ key: k, amount: parseBahtAmount(deliveryAppBreakdown[k]) }))
       .filter((row) => row.amount > 0.005)
@@ -1026,6 +1058,8 @@ ${amt(t('posSystemTotal') || '시스템 매출', formatBahtNum(systemTotal), ' r
 ${amt(t('posCash') || '현금', formatBahtNum(cashAmtNum))}
 ${amt(t('posCashActual') || '돈통 시재', formatBahtNum(cashActualNum))}
 ${amt(t('posCard') || '카드', formatBahtNum(cardNum))}
+${cardBreakdownPrintRows}
+${posCardOrdersTotalLive > 0.005 ? amtIndent(t('posSettlementPosCardOrdersTotal') || 'POS 카드(주문 합계)', formatBahtNum(posCardOrdersTotalLive)) : ''}
 ${amt(t('posPaymentQrCode') || 'QR 코드', formatBahtNum(qrNum))}
 <div class="receipt-divider-strong"></div>
 ${amt(t('posPaymentDeliveryApp') || '배달앱', formatBahtNum(deliveryAppTotalNum))}
@@ -1087,6 +1121,26 @@ ${footerStamp}
     if (!canUnclose && (Boolean(settlement?.closed) || closedSavedOnce)) {
       await appAlert(t('posClosedByAdminOnly') || '마감 해제는 본사 관리자만 가능합니다.')
       return
+    }
+
+    if (!openMode && cardMismatch.kind === 'incomplete') {
+      await appAlert(
+        i18nTr(t, 'posSettlementCardIncompleteBlock', {
+          brand: formatBahtNum(cardFromBreakdownLines),
+          pos: formatBahtNum(posCardOrdersTotalLive),
+        })
+      )
+      return
+    }
+    if (!openMode && closed && cardMismatch.kind === 'edc_diff') {
+      const ok = await appConfirm(
+        i18nTr(t, 'posSettlementCardEdcDiffConfirm', {
+          brand: formatBahtNum(cardFromBreakdownLines),
+          pos: formatBahtNum(posCardOrdersTotalLive),
+          diff: formatBahtNum(cardMismatch.diff),
+        })
+      )
+      if (!ok) return
     }
 
     /**
@@ -1743,9 +1797,19 @@ ${footerStamp}
                     <div className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer">
                       <span className="font-medium flex items-center gap-2">
                         {t('posCard') || '카드'}
+                        {posCardOrdersTotalLive > 0 && (
+                          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-800 dark:bg-slate-700 dark:text-slate-100">
+                            {t('posSettlementCashFromPosBadge') || 'POS'}
+                          </span>
+                        )}
                         {autoFilledFlags.card && (
                           <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
                             AUTO
+                          </span>
+                        )}
+                        {cardMismatch.kind !== 'none' && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                            {t('posSettlementCardMismatchBadge') || '불일치'}
                           </span>
                         )}
                       </span>
@@ -1768,6 +1832,23 @@ ${footerStamp}
                         {t('posSettlementCardBrandEdcHint') ||
                           '결제 화면에는 카드 구분 없이 기록됩니다. EDC 단말 결산서를 보고 아래에 브랜드별 금액을 입력해 주세요.'}
                       </p>
+                      {cardMismatch.kind === 'incomplete' && (
+                        <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                          {i18nTr(t, 'posSettlementCardIncompleteBanner', {
+                            brand: formatBahtNum(cardFromBreakdownLines),
+                            pos: formatBahtNum(posCardOrdersTotalLive),
+                          })}
+                        </p>
+                      )}
+                      {cardMismatch.kind === 'edc_diff' && (
+                        <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                          {i18nTr(t, 'posSettlementCardEdcDiffBanner', {
+                            brand: formatBahtNum(cardFromBreakdownLines),
+                            pos: formatBahtNum(posCardOrdersTotalLive),
+                            diff: formatBahtNum(cardMismatch.diff),
+                          })}
+                        </p>
+                      )}
                       <div className="grid grid-cols-2 gap-2">
                         {CARD_KEYS.map((k) => (
                           <label key={k} className="flex items-center gap-2 text-xs">

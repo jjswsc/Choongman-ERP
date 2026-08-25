@@ -5,6 +5,7 @@ import {
   composeBankNoteForExpenseAccrualLink,
   composeBankNoteWithCategoryAndOptionalAccrualPrefix,
   defaultTaxRemittancePayeeName,
+  looksLikeSsoRemittanceMemo,
   looksLikeTaxAuthorityRemittanceMemo,
   shouldExcludeBankWithdrawFromPlExpense,
   stripExpenseAccrualPrefix,
@@ -159,6 +160,9 @@ describe('shouldExcludeBankWithdrawFromPlExpense', () => {
     expect(looksLikeTaxAuthorityRemittanceMemo('PP.30 07.69')).toBe(true)
     expect(defaultTaxRemittancePayeeName('PND.53', '원천세')).toBe('กรมสรรพากร')
     expect(defaultTaxRemittancePayeeName('office rent', '원천세')).toBe('원천세')
+    expect(looksLikeSsoRemittanceMemo('ประกันสังคม 08/2569')).toBe(true)
+    expect(looksLikeSsoRemittanceMemo('SSO 06/2026')).toBe(true)
+    expect(defaultTaxRemittancePayeeName('ประกันสังคม 08/2569', '사회보험')).toBe('สำนักงานประกันสังคม')
     expect(
       shouldExcludeBankWithdrawFromPlExpense({
         note: null,
@@ -185,6 +189,8 @@ describe('suggestWithdrawFromMemo tax remittance', () => {
       suggestWithdrawFromMemo('Payment | Paid for Ref X8126 REVENUE DEPARTMENT', []).category
     ).toBe('tax')
     expect(suggestWithdrawFromMemo('PND.53 withholding Aug 2026', []).category).toBe('tax')
+    expect(suggestWithdrawFromMemo('ประกันสังคม 08/2569', []).category).toBe('tax')
+    expect(suggestWithdrawFromMemo('SSO 06/2026', []).category).toBe('tax')
   })
 
   it('still suggests 5510 for generic tax fees', () => {
@@ -199,6 +205,7 @@ describe('bankCategoryForWithdrawalCategory', () => {
     expect(bankCategoryForWithdrawalCategory('tax_withholding')).toBe('tax')
     expect(bankCategoryForWithdrawalCategory('tax_vat')).toBe('tax')
     expect(bankCategoryForWithdrawalCategory('tax_corporate')).toBe('tax')
+    expect(bankCategoryForWithdrawalCategory('tax_sso')).toBe('tax')
     expect(bankCategoryForWithdrawalCategory('expense')).toBeNull()
   })
 })

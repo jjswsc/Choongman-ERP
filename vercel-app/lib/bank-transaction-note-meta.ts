@@ -10,6 +10,7 @@ const TAX_SETTLEMENT_WITHDRAWAL_CATEGORIES = new Set([
   'tax_vat',
   'tax_withholding',
   'tax_corporate',
+  'tax_sso',
 ])
 
 export function isExpenseInternalBankNote(note: string | null | undefined): boolean {
@@ -21,7 +22,7 @@ export function isTaxSettlementWithdrawalCategory(cat: string | null | undefined
 }
 
 /**
- * VAT·원천·법인세 납부(미지급세금 정산)는 손익 비용이 아님.
+ * VAT·원천·법인세·SSO 납부(미지급세금 정산)는 손익 비용이 아님.
  * 통장 category는 tax 로 두고, P&L 집계에서 제외한다.
  * (unclassified 로 두면 지출관리 연결 버튼이 사라져 PND.53 연결이 막힌다.)
  */
@@ -34,13 +35,24 @@ export function bankCategoryForWithdrawalCategory(withdrawalCategory: string): s
  *  지급처 표시명은 통장 적요 REVENUE DEPARTMENT 와 맞추기 위해 กรมสรรพากร 사용.
  */
 export const TAX_AUTHORITY_PAYEE_NAME_TH = 'กรมสรรพากร'
+export const SSO_OFFICE_PAYEE_NAME_TH = 'สำนักงานประกันสังคม'
 
 export function defaultTaxRemittancePayeeName(
   memo: string | null | undefined,
   fallback: string
 ): string {
+  if (looksLikeSsoRemittanceMemo(memo)) return SSO_OFFICE_PAYEE_NAME_TH
   if (looksLikeTaxAuthorityRemittanceMemo(memo)) return TAX_AUTHORITY_PAYEE_NAME_TH
   return fallback
+}
+
+export function looksLikeSsoRemittanceMemo(memo: string | null | undefined): boolean {
+  const m = String(memo || '')
+  if (!m.trim()) return false
+  if (/ประกันสังคม|สำนักงานประกันสังคม/i.test(m)) return true
+  if (/\bสปส\.?(\s|$)|สปส\.1-10/i.test(m)) return true
+  if (/\bsso\b|social\s*security/i.test(m)) return true
+  return false
 }
 
 export function looksLikeTaxAuthorityRemittanceMemo(memo: string | null | undefined): boolean {

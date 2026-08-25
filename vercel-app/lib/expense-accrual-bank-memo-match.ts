@@ -1,5 +1,6 @@
 import {
   isTaxSettlementWithdrawalCategory,
+  looksLikeSsoRemittanceMemo,
   looksLikeTaxAuthorityRemittanceMemo,
 } from '@/lib/bank-transaction-note-meta'
 
@@ -69,6 +70,12 @@ export function evaluatePayeeBankMemoMatch(params: {
     )
   if (taxPayee && looksLikeTaxAuthorityRemittanceMemo(bankText)) {
     return { quality: 'ok', detail: '세무서 납부 적요' }
+  }
+  if (
+    (params.withdrawalCategory === 'tax_sso' || /sso|ประกันสังคม|사회보험/i.test(`${payeeNameRaw} ${payeeCodeRaw}`)) &&
+    looksLikeSsoRemittanceMemo(bankText)
+  ) {
+    return { quality: 'ok', detail: 'SSO 납부 적요' }
   }
 
   const payeeName = String(params.payeeName || '').trim()

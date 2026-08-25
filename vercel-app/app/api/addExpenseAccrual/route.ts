@@ -66,6 +66,7 @@ function normalizeWithdrawalCategory(mainRaw: string, subRaw: string, explicitRa
   if (main === 'tax') {
     if (sub === 'vat') return 'tax_vat'
     if (sub === 'corporate') return 'tax_corporate'
+    if (sub === 'sso') return 'tax_sso'
     return 'tax_withholding'
   }
   if (main === 'correction') return 'correction'
@@ -97,6 +98,7 @@ function autoPayeeNameByCategory(withdrawalCategory: string): string {
     tax_vat: '부가세',
     tax_withholding: '원천세',
     tax_corporate: '법인세',
+    tax_sso: '사회보험(SSO)',
     correction: '정정',
     dividend: '배당/사유 인출',
   }

@@ -3,7 +3,10 @@
  * 이체, 고정비, 비용 등
  */
 
-import { looksLikeTaxAuthorityRemittanceMemo } from '@/lib/bank-transaction-note-meta'
+import {
+  looksLikeSsoRemittanceMemo,
+  looksLikeTaxAuthorityRemittanceMemo,
+} from '@/lib/bank-transaction-note-meta'
 
 export type WithdrawCategory = 'transfer' | 'expense' | 'correction' | 'loan' | 'advance' | 'unclassified' | 'tax'
 
@@ -33,7 +36,7 @@ export function suggestWithdrawFromMemo(
   }
 
   // VAT·원천 등 세무서 납부(BS) — 손익 5510으로 올리지 않음
-  if (looksLikeTaxAuthorityRemittanceMemo(memo)) {
+  if (looksLikeTaxAuthorityRemittanceMemo(memo) || looksLikeSsoRemittanceMemo(memo)) {
     return { category: 'tax' }
   }
 

@@ -797,6 +797,7 @@ export type WithdrawalCategory =
   | 'tax_vat'
   | 'tax_withholding'
   | 'tax_corporate'
+  | 'tax_sso'
   | 'correction'
   | 'dividend'
 
@@ -958,6 +959,14 @@ export async function postWithdrawalJournal(params: {
       const corporateTaxPayable = accountLine('2170')
       lines = [
         { ...corporateTaxPayable, side: 'debit', amount },
+        { ...cash, side: 'credit', amount },
+      ]
+      break
+    }
+    case 'tax_sso': {
+      const ssoPayable = accountLine('2195')
+      lines = [
+        { ...ssoPayable, side: 'debit', amount },
         { ...cash, side: 'credit', amount },
       ]
       break

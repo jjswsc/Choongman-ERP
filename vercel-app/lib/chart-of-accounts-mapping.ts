@@ -114,6 +114,14 @@ export const CHART_OF_ACCOUNTS_BY_CODE: Record<string, AccountMeta> = {
     normalSide: 'credit',
     whtRelated: true,
   },
+  '2195': {
+    code: '2195',
+    nameKo: '사회보험예수금',
+    nameEn: 'SSO payable',
+    tfrsNpaesGroupKo: '유동부채 — 사회보험(SSO)',
+    statement: 'bs',
+    normalSide: 'credit',
+  },
   '3110': {
     code: '3110',
     nameKo: '자본금',

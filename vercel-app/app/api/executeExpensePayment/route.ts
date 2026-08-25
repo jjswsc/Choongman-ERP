@@ -143,7 +143,7 @@ function resolveAccrualAccountSubjectId(source: ExpenseAccrualRow): number | nul
   return Number.isFinite(sid) && sid > 0 ? sid : null
 }
 
-/** 원천·VAT·법인세 납부는 미지급금(2100)이 아니라 미지급세금 정산 분개 */
+/** 원천·VAT·법인세·SSO 납부는 미지급금(2100)이 아니라 미지급세금 정산 분개 */
 async function postExpensePaymentGlJournal(params: {
   isPrepay: boolean
   withdrawalCategory: string

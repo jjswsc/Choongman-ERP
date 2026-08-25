@@ -4119,6 +4119,7 @@ export const i18n = {
     wm_tax_vat: '부가세 납부',
     wm_tax_withholding: '원천세 납부',
     wm_tax_corporate: '법인세 납부',
+    wm_tax_sso: '사회보험(SSO) 납부',
     wm_advanceInstallmentCurrent: '이번 회차',
     wm_transferToBank: '통장 계좌',
     wm_transferToPetty: '패티캐쉬 매장',
@@ -4546,11 +4547,11 @@ export const i18n = {
     helpSum_admin_pos_settlement:
       '일별 POS 결산·채널 정산(카드·배달 수수료). 통장 입금은 매출 수령, 수수료는 채널 정산 분개로 처리합니다.',
     helpHow_admin_pos_settlement:
-      '배달은 플랫폼이 GROSS에서 %를 빼고 익일 NET 입금합니다. 채널 정산에서 NET 입력 후 분개하세요. 앱별 %는 메뉴·배달앱 운영에서 설정. 본사 PO 배달 GP와 별도.',
+      '배달은 플랫폼이 GROSS에서 %를 빼고 익일 NET 입금합니다. 채널 정산에서 NET 입력 후 분개하세요. 앱별 %는 메뉴·배달앱 운영에서 설정. 본사 PO 배달 GP와 별도. 카드는 EDC 브랜드 합이 POS 주문 카드와 맞아야 하며, Other만 넣으면 카드 전체가 그 금액으로 저장됩니다.',
     helpSum_admin_expense_management:
       '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 대출 상환·대여는 관련당사자(임원 등)를 필수 선택하며 가맹 미수금과 섞이지 않습니다. 지급대기의 「은행이체」보기로 예금주·계좌·은행·금액을 엑셀처럼 확인·복사·인쇄할 수 있습니다. 문서번호는 EXPyyyymm000x로 자동 발급됩니다.',
     helpHow_admin_expense_management:
-      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다. 계정과목은 자산 계정(예: 1490 유형자산)을 고르며, 나중에 송금해도 경비(손익)가 아니라 그 자산 계정으로 표시·분개됩니다. 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수는 「항목 추가」로 여러 건(임대 5% + 용역 3% 등)을 넣을 수 있습니다. 50 ทวิ에 줄별로 나가고, 「50 ทวิ 자동 생성」을 켜면 등록 직후 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice는 비용 증빙입니다. PP.30 매입세는 세무 신고 → 매입 세금계산서에서 등록합니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다. 본사(Office) 명의 건은 임원, 또는 오피스 급여 권한이 있는 회계가 삭제할 수 있습니다.\n⑪ 「출금 등록」은 통장 CSV와 잔액이 겹치지 않도록 통장 조회 목록에 나오지 않습니다. 통장 페이지에 보이게 하려면 CSV를 먼저 가져온 뒤 그 출금 줄에서 「저장」하세요.',
+      '① 지출 예정 등록·승인 후 지급합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다. 계정과목은 자산 계정(예: 1490 유형자산)을 고르며, 나중에 송금해도 경비(손익)가 아니라 그 자산 계정으로 표시·분개됩니다. 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수는 「항목 추가」로 여러 건(임대 5% + 용역 3% 등)을 넣을 수 있습니다. 50 ทวิ에 줄별로 나가고, 「50 ทวิ 자동 생성」을 켜면 등록 직후 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice는 비용 증빙입니다. PP.30 매입세는 세무 신고 → 매입 세금계산서에서 등록합니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다. 본사(Office) 명의 건은 임원, 또는 오피스 급여 권한이 있는 회계가 삭제할 수 있습니다.\n⑪ 「출금 등록」은 통장 CSV와 잔액이 겹치지 않도록 통장 조회 목록에 나오지 않습니다. 통장 페이지에 보이게 하려면 CSV를 먼저 가져온 뒤 그 출금 줄에서 「저장」하세요.\n⑫ 세금 유형의 세부에서 VAT·원천세·법인세·사회보험(SSO)을 고르면 해당 미지급 계정으로 납부됩니다(SSO는 2195 사회보험예수금).',
     helpSum_admin_depreciation:
       '고정자산 목록·수정, 월 감가상각, 처분. 신규는 지출등록(고정자산) 또는 예외등록(지급예정 자동)·목록의 지급예정 만들기 후 통장 연결.',
     helpHow_admin_depreciation:
@@ -12272,6 +12273,7 @@ Only matters the employee must handle personally on a working day:
     wm_tax_vat: 'VAT Payment',
     wm_tax_withholding: 'Withholding Tax Payment',
     wm_tax_corporate: 'Corporate Tax Payment',
+    wm_tax_sso: 'Social Security (SSO)',
     wm_advanceInstallmentCurrent: 'Current Installment',
     wm_transferToBank: 'Bank Account',
     wm_transferToPetty: 'Petty Cash Store',
@@ -12699,11 +12701,11 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_pos_settlement:
       'Daily POS settlement and channel clearing (card/delivery fees). Bank: Sales collection; fees: channel settlement journal.',
     helpHow_admin_pos_settlement:
-      'After settlement entry, use Channel settlement for GROSS/NET/fee journals. Do not use revenue_* bank categories.',
+      'After settlement entry, use Channel settlement for GROSS/NET/fee journals. Do not use revenue_* bank categories. Card brand lines must match POS card orders; entering only Other saves that amount as the whole card total.',
     helpSum_admin_expense_management:
       'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Loan repayment/lending requires a related party (officer) and is not franchise A/R. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use EXPyyyymm000x.',
     helpHow_admin_expense_management:
-      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management. Pick an asset account (e.g. 1490 PPE); later bank transfer posts to that asset account, not P&L expense. Attach invoice/receipt and VAT like expense/purchase.\n⑧ Add multiple WHT lines (rent 5% + service 3%). The 50 ทวิ shows each line; with "Auto-create 50 ทวิ" on, the print window opens after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Tax Invoice is cost evidence only. Register PP.30 input VAT on Tax filing → Purchase tax invoices.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows. HQ-named (Office) rows can be deleted by directors, or by accounting staff with office payroll authority.\n⑪ Register Withdrawal does not appear on the bank query list (avoids double-counting CSV). Import CSV first, then Save from that withdrawal row.',
+      '① Register and approve accruals, then pay. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management. Pick an asset account (e.g. 1490 PPE); later bank transfer posts to that asset account, not P&L expense. Attach invoice/receipt and VAT like expense/purchase.\n⑧ Add multiple WHT lines (rent 5% + service 3%). The 50 ทวิ shows each line; with "Auto-create 50 ทวิ" on, the print window opens after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Tax Invoice is cost evidence only. Register PP.30 input VAT on Tax filing → Purchase tax invoices.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows. HQ-named (Office) rows can be deleted by directors, or by accounting staff with office payroll authority.\n⑪ Register Withdrawal does not appear on the bank query list (avoids double-counting CSV). Import CSV first, then Save from that withdrawal row.\n⑫ Under Tax details, pick VAT, withholding, corporate tax, or Social Security (SSO); payment posts to the matching payable (SSO uses 2195).',
     helpSum_admin_depreciation:
       'Fixed assets list/edit, monthly depreciation, disposal. New buys via Expense Register or exception register (auto payment plan) / Create payment plan, then bank link.',
     helpHow_admin_depreciation:
@@ -19005,7 +19007,7 @@ orderItemQty: 'จำนวน',
     helpSum_admin_expense_management:
       'ลงรายจ่าย อนุมัติ จ่ายเงิน (ธนาคาร/เงินสดย่อย/บัตร) และเชื่อมบัญชีธนาคารกับเจ้าหนี้ครับ การชำระหนี้/ให้กู้ต้องเลือกบุคคลที่เกี่ยวข้อง (ผู้บริหาร) ไม่ปนกับลูกหนี้แฟรนไชส์ ดูแผนจ่าย → มุมมองโอนธนาคาร เพื่อตรวจชื่อบัญชี·เลขบัญชี·ธนาคาร·จำนวนเงินแบบ Excel ได้ครับ เลขที่เอกสารเป็น EXPyyyymm000x',
     helpHow_admin_expense_management:
-      '① ลงรายจ่ายแล้วอนุมัติ จากนั้นจ่ายเงินครับ ตอนลงระบบจะออกเลขที่เอกสาร (EXP…) ใส่ชื่อบัญชี ธนาคาร เลขบัญชีถ้ามี\n② แท็บแผนจ่ายแบ่งเป็น รออนุมัติ / รอจ่าย / ทั้งหมด ในรอจ่ายใช้มุมมองโอนธนาคารเพื่อคัดลอก/พิมพ์แล้วโอนในแอปธนาคาร\n③ จ่ายรายรายการ ระบบเลือกบัญชีธนาคารของสาขานั้นให้อัตโนมัติ จ่ายหลายรายการก็ใช้บัญชีสาขาเดียวกันถ้ากรองสาขาไว้ ถ้าไม่มีเลขบัญชีจะถูกบล็อก เว้นแต่ติ๊กอนุญาต\n④ จ่ายผ่านธนาคารเลือกได้เฉพาะรายการถอนที่ยังไม่เชื่อม ค่าใช้จ่าย/ซื้อให้จบที่「เชื่อมจัดการรายจ่าย」\n⑤ ค้นหารายจ่ายด้วยชื่อคู่ค้าหรือเลขที่เอกสาร แล้วดูสถานะแผนจ่าย ธนาคาร บัตร\n⑥ เลือกคู่ค้าแล้วกด「เพิ่มคู่ค้า」หรือค้นหา กรมสรรพากร เพื่อเติมเลขผู้เสียภาษีและชื่อ (รายครั้งใช้กรอกเอง)\n⑦ สินทรัพย์ถาวรเลือกประเภทสินทรัพย์ถาวร แล้วเลือกบัญชีสินทรัพย์ เช่น 1490 ไม่ลงเป็นค่าใช้จ่ายในงบกำไรขาดทุน แนบใบแจ้งหนี้/ใบเสร็จและ VAT ได้เหมือนรายจ่าย\n⑧ หัก ณ ที่จ่ายเพิ่มได้หลายรายการ เช่น ค่าเช่า 5% + ค่าบริการ 3% ใบ 50 ทวิ แสดงทีละบรรทัด ถ้าเปิดสร้าง 50 ทวิ อัตโนมัติ จะเปิดหน้าพิมพ์หลังบันทึกครับ\n⑨ แนบเอกสารแล้วเลือกประเภท Invoice / Tax Invoice / Receipt ครับ Tax Invoice เป็นหลักฐานค่าใช้จ่ายเท่านั้น ภาษีซื้อลงที่ การยื่นภาษี → ใบกำกับภาษีซื้อ ครับ\n⑩ ลบแผนจ่ายได้เฉพาะสำนักงานใหญ่/บัญชี สำหรับรายการขอ/ปฏิเสธ/อนุมัติที่ยังไม่จ่ายและยังไม่เชื่อมธนาคาร รายการชื่อสำนักงานใหญ่ลบได้โดยผู้บริหาร หรือบัญชีที่มีสิทธิ์เงินเดือนออฟฟิศ\n⑪ 「ลงทะเบียนถอนเงิน」ไม่โชว์ในรายการค้นหาธนาคาร เพื่อไม่ให้ซ้ำกับ CSV ถ้าจะให้เห็นในหน้าธนาคาร ให้นำเข้า CSV ก่อนแล้วกดบันทึกที่แถวนั้นครับ',
+      '① ลงรายจ่ายแล้วอนุมัติ จากนั้นจ่ายเงินครับ ตอนลงระบบจะออกเลขที่เอกสาร (EXP…) ใส่ชื่อบัญชี ธนาคาร เลขบัญชีถ้ามี\n② แท็บแผนจ่ายแบ่งเป็น รออนุมัติ / รอจ่าย / ทั้งหมด ในรอจ่ายใช้มุมมองโอนธนาคารเพื่อคัดลอก/พิมพ์แล้วโอนในแอปธนาคาร\n③ จ่ายรายรายการ ระบบเลือกบัญชีธนาคารของสาขานั้นให้อัตโนมัติ จ่ายหลายรายการก็ใช้บัญชีสาขาเดียวกันถ้ากรองสาขาไว้ ถ้าไม่มีเลขบัญชีจะถูกบล็อก เว้นแต่ติ๊กอนุญาต\n④ จ่ายผ่านธนาคารเลือกได้เฉพาะรายการถอนที่ยังไม่เชื่อม ค่าใช้จ่าย/ซื้อให้จบที่「เชื่อมจัดการรายจ่าย」\n⑤ ค้นหารายจ่ายด้วยชื่อคู่ค้าหรือเลขที่เอกสาร แล้วดูสถานะแผนจ่าย ธนาคาร บัตร\n⑥ เลือกคู่ค้าแล้วกด「เพิ่มคู่ค้า」หรือค้นหา กรมสรรพากร เพื่อเติมเลขผู้เสียภาษีและชื่อ (รายครั้งใช้กรอกเอง)\n⑦ สินทรัพย์ถาวรเลือกประเภทสินทรัพย์ถาวร แล้วเลือกบัญชีสินทรัพย์ เช่น 1490 ไม่ลงเป็นค่าใช้จ่ายในงบกำไรขาดทุน แนบใบแจ้งหนี้/ใบเสร็จและ VAT ได้เหมือนรายจ่าย\n⑧ หัก ณ ที่จ่ายเพิ่มได้หลายรายการ เช่น ค่าเช่า 5% + ค่าบริการ 3% ใบ 50 ทวิ แสดงทีละบรรทัด ถ้าเปิดสร้าง 50 ทวิ อัตโนมัติ จะเปิดหน้าพิมพ์หลังบันทึกครับ\n⑨ แนบเอกสารแล้วเลือกประเภท Invoice / Tax Invoice / Receipt ครับ Tax Invoice เป็นหลักฐานค่าใช้จ่ายเท่านั้น ภาษีซื้อลงที่ การยื่นภาษี → ใบกำกับภาษีซื้อ ครับ\n⑩ ลบแผนจ่ายได้เฉพาะสำนักงานใหญ่/บัญชี สำหรับรายการขอ/ปฏิเสธ/อนุมัติที่ยังไม่จ่ายและยังไม่เชื่อมธนาคาร รายการชื่อสำนักงานใหญ่ลบได้โดยผู้บริหาร หรือบัญชีที่มีสิทธิ์เงินเดือนออฟฟิศ\n⑪ 「ลงทะเบียนถอนเงิน」ไม่โชว์ในรายการค้นหาธนาคาร เพื่อไม่ให้ซ้ำกับ CSV ถ้าจะให้เห็นในหน้าธนาคาร ให้นำเข้า CSV ก่อนแล้วกดบันทึกที่แถวนั้นครับ\n⑫ ประเภทภาษี เลือกรายละเอียด VAT / หัก ณ ที่จ่าย / ภาษีนิติบุคคล / ประกันสังคม ได้เลยครับ ระบบลงบัญชีเจ้าหนี้ที่ตรงกัน (ประกันสังคมใช้ 2195)',
     helpSum_admin_tax_filing:
       'เตรียมเอกสารยื่นภาษีไทย (VAT, หัก ณ ที่จ่าย, ภาษีนิติบุคคล, SSO) และทะเบียนใบกำกับภาษีซื้อ ตามงวดและสาขา แล้วส่งออกไฟล์สำหรับยื่นครับ',
     helpHow_admin_tax_filing:
@@ -19874,6 +19876,7 @@ orderItemQty: 'จำนวน',
     wm_tax_vat: 'ชำระ VAT',
     wm_tax_withholding: 'ชำระภาษีหัก ณ ที่จ่าย',
     wm_tax_corporate: 'ชำระภาษีนิติบุคคล',
+    wm_tax_sso: 'ประกันสังคม',
     wm_correction: 'แก้ไข',
     wm_dividend: 'ปันผล/ถอนเจ้าของ',
     wm_subType: 'รายละเอียด',
@@ -25574,6 +25577,7 @@ orderItemQty: 'အရေအတွက်',
     wm_tax_vat: 'VAT ပေးချေ',
     wm_tax_withholding: 'အခွန်ထုတ်နုတ်ပေးချေ',
     wm_tax_corporate: 'ကုမ္ပဏီအခွန်ပေးချေ',
+    wm_tax_sso: 'လူမှုဖူလုံရေး (SSO)',
     wm_correction: 'ပြင်ဆင်',
     wm_dividend: 'dividend/ပိုင်ရှင်ထုတ်ယူ',
     wm_subType: 'အသေးစိတ်',
@@ -30495,6 +30499,7 @@ orderItemQty: 'ຈຳນວນ',
     wm_tax_vat: 'ຊຳລະ VAT',
     wm_tax_withholding: 'ຊຳລະພາສີຫັກ ຢູ່ທີ່ຈ່າຍ',
     wm_tax_corporate: 'ຊຳລະພາສີນິຕິບຸກຄົນ',
+    wm_tax_sso: 'ປະກັນສັງຄົມ',
     wm_correction: 'ແກ້ໄຂ',
     wm_dividend: 'ປັນຜົນ/ຖອນເຈົ້າຂອງ',
     wm_subType: 'ລາຍລະອຽດ',
@@ -33536,6 +33541,7 @@ orderItemQty: 'ຈຳນວນ',
     wm_tax_vat: 'បង់ពន្ធ VAT',
     wm_tax_withholding: 'បង់ពន្ធកាត់ចេញ',
     wm_tax_corporate: 'បង់ពន្ធក្រុមហ៊ុន',
+    wm_tax_sso: 'សន្តិសុខសង្គម (SSO)',
     wm_correction: 'កែសម្រួល',
     wm_dividend: 'លាភ/ដកចេញអ្នកកាន់កាប់',
     wm_subType: 'ព័ត៌មានលម្អិត',
@@ -35394,6 +35400,7 @@ orderItemQty: 'ຈຳນວນ',
     wm_tax_vat: 'Nộp VAT',
     wm_tax_withholding: 'Nộp thuế khấu trừ',
     wm_tax_corporate: 'Nộp thuế doanh nghiệp',
+    wm_tax_sso: 'Bảo hiểm xã hội (SSO)',
     wm_correction: 'Sửa đổi',
     wm_dividend: 'Cổ tức/Rút chủ sở hữu',
     wm_subType: 'Chi tiết',
@@ -37214,6 +37221,7 @@ orderItemQty: 'ຈຳນວນ',
     wm_tax_vat: 'Bayaran VAT',
     wm_tax_withholding: 'Bayaran Cukai Potongan',
     wm_tax_corporate: 'Bayaran Cukai Syarikat',
+    wm_tax_sso: 'Keselamatan Sosial (SSO)',
     wm_correction: 'Pembetulan',
     wm_dividend: 'Dividen/Pengeluaran Pemilik',
     wm_subType: 'Butiran',

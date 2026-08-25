@@ -82,6 +82,7 @@ function mapMainSubToCategory(main: string, sub: string): string {
   if (m === 'tax') {
     if (s === 'vat') return 'tax_vat'
     if (s === 'corporate') return 'tax_corporate'
+    if (s === 'sso') return 'tax_sso'
     return 'tax_withholding'
   }
   if (m === 'correction') return 'correction'
@@ -287,7 +288,7 @@ export async function POST(request: NextRequest) {
     }
     if (!payeeName) payeeName = payeeCode
     const withdrawalCategory =
-      withdrawalCategoryInput && ['expense', 'expense_advance', 'purchase_payment', 'purchase_advance', 'fixed_asset', 'transfer', 'transfer_to_petty', 'bank_card_bill', 'loan_repayment', 'loan_given', 'tax_vat', 'tax_withholding', 'tax_corporate', 'correction', 'dividend'].includes(withdrawalCategoryInput)
+      withdrawalCategoryInput && ['expense', 'expense_advance', 'purchase_payment', 'purchase_advance', 'fixed_asset', 'transfer', 'transfer_to_petty', 'bank_card_bill', 'loan_repayment', 'loan_given', 'tax_vat', 'tax_withholding', 'tax_corporate', 'tax_sso', 'correction', 'dividend'].includes(withdrawalCategoryInput)
         ? withdrawalCategoryInput
         : decoded.withdrawalCategory
     const encodedPayeeCode = encodePayeeCode(payeeCode, withdrawalCategory)

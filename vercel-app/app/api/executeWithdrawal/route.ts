@@ -579,6 +579,7 @@ function mapToWithdrawalCategory(main: string, sub: string): WithdrawalCategory 
   if (m === 'tax' || m === '세금') {
     if (s === 'vat' || s === '부가세') return 'tax_vat'
     if (s === 'corporate' || s === '법인세') return 'tax_corporate'
+    if (s === 'sso' || s === '사회보험' || s === 'ประกันสังคม') return 'tax_sso'
     return 'tax_withholding'
   }
   if (m === 'correction' || m === '정정') return 'correction'
@@ -605,6 +606,7 @@ function mapToBankTransactionCategory(cat: WithdrawalCategory): string {
     tax_vat: 'tax',
     tax_withholding: 'tax',
     tax_corporate: 'tax',
+    tax_sso: 'tax',
     correction: 'correction',
     dividend: 'expense',
   }

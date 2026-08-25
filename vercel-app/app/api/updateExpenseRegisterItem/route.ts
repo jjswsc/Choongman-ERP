@@ -46,6 +46,7 @@ type WithdrawalCategory =
   | 'tax_vat'
   | 'tax_withholding'
   | 'tax_corporate'
+  | 'tax_sso'
   | 'correction'
   | 'dividend'
 
@@ -60,6 +61,7 @@ function mapToWithdrawalCategory(main: string, sub: string): WithdrawalCategory 
   if (m === 'tax') {
     if (s === 'vat') return 'tax_vat'
     if (s === 'corporate') return 'tax_corporate'
+    if (s === 'sso') return 'tax_sso'
     return 'tax_withholding'
   }
   if (m === 'correction') return 'correction'
@@ -86,6 +88,7 @@ function mapToBankTransactionCategory(cat: WithdrawalCategory): string {
     tax_vat: 'tax',
     tax_withholding: 'tax',
     tax_corporate: 'tax',
+    tax_sso: 'tax',
     correction: 'correction',
     dividend: 'expense',
   }

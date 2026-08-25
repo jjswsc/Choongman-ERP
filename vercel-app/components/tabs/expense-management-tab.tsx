@@ -479,6 +479,7 @@ export function ExpenseManagementTab() {
       tax_vat: tt("wm_tax_vat", "VAT"),
       tax_withholding: tt("wm_tax_withholding", "Withholding Tax"),
       tax_corporate: tt("wm_tax_corporate", "Corporate Tax"),
+      tax_sso: tt("wm_tax_sso", "Social Security"),
       loan_repayment: tt("wm_loan_repayment", "Loan Repayment"),
       loan_given: tt("wm_loan_given", "Loan Given"),
       correction: tt("wm_correction", "Correction"),

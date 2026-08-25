@@ -776,8 +776,10 @@ export const I18N_POS_KO: Record<string, string> = {
     posMenuLineUnit: '건',
     posManualDiscountScopeSelected: '할인적용 메뉴',
     posManualDiscountScopeAmount: '대상금액',
-    posManualDiscountScopeAll: '할인적용 메뉴 미선택: 서비스/취소 처리 제외 전체 메뉴에 적용',
+    posManualDiscountScopeAll: '메뉴를 고르지 않으면 주문 전체에 적용됩니다',
     posManualDiscountScopeClear: '할인 메뉴 해제',
+    posManualDiscountPickTitle: '할인할 메뉴 선택',
+    posManualDiscountPickHint: '할인할 메뉴만 누른 뒤 아래 %를 누르세요. 선택하지 않으면 주문 전체에 적용됩니다.',
     posManualDiscountExpected: '직접 할인 예상',
     posCollabDiscountExpected: '협업 할인 예상',
     posCollabQuantity: '적용 장수',
@@ -2009,6 +2011,15 @@ export const I18N_POS_KO: Record<string, string> = {
     posSettlementPosCardOrdersTotal: 'POS 카드(주문 합계)',
     posSettlementCardBrandEdcHint:
       '결제 화면에는 카드 구분 없이 기록됩니다. 마감 시 EDC 단말 결산서를 보고 아래에 브랜드별 금액을 입력해 주세요.',
+    posSettlementCardMismatchBadge: '불일치',
+    posSettlementCardIncompleteBanner:
+      '카드 브랜드 합({brand})이 POS 주문 카드({pos})보다 훨씬 작습니다. Visa/Master 등 나머지를 입력하거나, 브랜드 칸을 비워 POS 합계를 쓰세요.',
+    posSettlementCardIncompleteBlock:
+      '카드 브랜드를 일부만 넣으면 카드 전체가 그 금액으로 저장됩니다.\n브랜드 합: {brand} ฿\nPOS 주문 카드: {pos} ฿\nVisa/Master 등을 마저 입력하거나, 브랜드 칸을 모두 비운 뒤 저장하세요.',
+    posSettlementCardEdcDiffBanner:
+      'EDC 브랜드 합({brand})과 POS 주문 카드({pos})가 다릅니다. 차액 {diff} ฿. 마감 전 EDC 전표와 주문 결제를 확인하세요.',
+    posSettlementCardEdcDiffConfirm:
+      '카드 브랜드 합이 POS 주문 카드와 다릅니다.\n브랜드(EDC): {brand} ฿\nPOS 주문: {pos} ฿\n차액: {diff} ฿\n이 금액으로 마감할까요?',
     posSettlementCashFromPosReadOnly:
       '완료 주문의 현금 결제 합계입니다. POS 결제 수단과 맞추기 위해 이 금액은 수정할 수 없습니다.',
     posSettlementCashReconciledBanner:
@@ -4195,8 +4206,10 @@ export const I18N_POS_EN: Record<string, string> = {
     posMenuLineUnit: ' item(s)',
     posManualDiscountScopeSelected: 'Discount-target items',
     posManualDiscountScopeAmount: 'Scope amount',
-    posManualDiscountScopeAll: 'No discount-target items selected: applies to all menus except service/cancelled lines',
+    posManualDiscountScopeAll: 'If no items are selected, the discount applies to the whole order',
     posManualDiscountScopeClear: 'Clear item scope',
+    posManualDiscountPickTitle: 'Select items to discount',
+    posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
     posManualDiscountExpected: 'Estimated manual discount',
     posCollabDiscountExpected: 'Estimated collab discount',
     posCollabQuantity: 'Qty to apply',
@@ -5412,6 +5425,15 @@ export const I18N_POS_EN: Record<string, string> = {
     posSettlementPosCardOrdersTotal: 'POS card (orders total)',
     posSettlementCardBrandEdcHint:
       'Checkout records card as one amount. At close, use your EDC terminal settlement report and enter amounts by brand below.',
+    posSettlementCardMismatchBadge: 'Mismatch',
+    posSettlementCardIncompleteBanner:
+      'Card brand total ({brand}) is far below POS card orders ({pos}). Fill Visa/Master or clear brand fields to use the POS total.',
+    posSettlementCardIncompleteBlock:
+      'Filling only some card brands saves that amount as the entire card total.\nBrand total: {brand} ฿\nPOS card orders: {pos} ฿\nEnter the remaining brands, or clear all brand fields and save.',
+    posSettlementCardEdcDiffBanner:
+      'EDC brand total ({brand}) differs from POS card orders ({pos}) by {diff} ฿. Check the EDC report and order payments before close.',
+    posSettlementCardEdcDiffConfirm:
+      'Card brand total does not match POS card orders.\nBrands (EDC): {brand} ฿\nPOS orders: {pos} ฿\nDifference: {diff} ฿\nClose with this amount?',
     posSettlementCashFromPosReadOnly:
       'Total cash from completed orders. This amount cannot be edited so it stays aligned with POS.',
     posSettlementCashReconciledBanner:
@@ -7271,8 +7293,10 @@ export const I18N_POS_TH: Record<string, string> = {
     posMenuLineUnit: 'รายการ',
     posManualDiscountScopeSelected: 'เมนูที่ใช้ส่วนลด',
     posManualDiscountScopeAmount: 'ยอดที่ใช้คำนวณ',
-    posManualDiscountScopeAll: 'ยังไม่เลือกเมนูส่วนลด: จะใช้กับทุกเมนู ยกเว้นรายการบริการ/ยกเลิก',
+    posManualDiscountScopeAll: 'ถ้าไม่เลือกเมนู ส่วนลดจะใช้กับทั้งออเดอร์',
     posManualDiscountScopeClear: 'ล้างเมนูส่วนลด',
+    posManualDiscountPickTitle: 'เลือกเมนูที่จะลด',
+    posManualDiscountPickHint: 'แตะเฉพาะเมนูที่จะลด แล้วกด % ด้านล่าง ถ้าไม่เลือก จะใช้กับทั้งออเดอร์',
     posManualDiscountExpected: 'คาดการณ์ส่วนลดที่กรอกเอง',
     posCollabDiscountExpected: 'คาดการณ์ส่วนลดความร่วมมือ',
     posTotalDiscountExpected: 'คาดการณ์ส่วนลดรวม',
@@ -7392,6 +7416,15 @@ export const I18N_POS_TH: Record<string, string> = {
     posSettlementPosCardOrdersTotal: 'บัตร POS (ยอดรวมออเดอร์)',
     posSettlementCardBrandEdcHint:
       'หน้าชำระเงินบันทึกบัตรเป็นยอดรวมเดียว ตอนปิดร้านให้ดูรายงานจากเครื่อง EDC แล้วกรอกแยกตามแบรนด์ด้านล่าง',
+    posSettlementCardMismatchBadge: 'ไม่ตรงกัน',
+    posSettlementCardIncompleteBanner:
+      'ยอดรวมแบรนด์บัตร ({brand}) น้อยกว่ายอดบัตรในออเดอร์ POS ({pos}) มากครับ กรอก Visa/Master ให้ครบ หรือเว้นว่างทุกช่องเพื่อใช้ยอด POS',
+    posSettlementCardIncompleteBlock:
+      'ถ้ากรอกแบรนด์บัตรไม่ครบ ระบบจะบันทึกยอดบัตรทั้งก้อนเท่าจำนวนนั้นครับ\nยอดแบรนด์: {brand} ฿\nยอดบัตร POS: {pos} ฿\nกรอก Visa/Master ให้ครบ หรือล้างช่องแบรนด์ทั้งหมดแล้วบันทึกครับ',
+    posSettlementCardEdcDiffBanner:
+      'ยอดแบรนด์ EDC ({brand}) ไม่เท่ากับยอดบัตร POS ({pos}) ต่าง {diff} ฿ ก่อนปิดร้านให้เช็คสลิป EDC กับการชำระในออเดอร์ครับ',
+    posSettlementCardEdcDiffConfirm:
+      'ยอดแบรนด์บัตรไม่ตรงกับยอดบัตรในออเดอร์ POS ครับ\nแบรนด์ (EDC): {brand} ฿\nออเดอร์ POS: {pos} ฿\nส่วนต่าง: {diff} ฿\nจะปิดยอดด้วยตัวเลขนี้ไหมครับ',
     posSettlementCashFromPosReadOnly:
       'ยอดเงินสดจากออเดอร์ที่เสร็จแล้ว ตัวเลขนี้แก้ไม่ได้เพื่อให้ตรงกับ POS',
     posSettlementCashReconciledBanner:
@@ -13033,6 +13066,9 @@ export const I18N_POS_MM: Record<string, string> = {
     posKbankCancelClearPaymentFail: 'QR was cancelled but clearing payment amounts on the order failed. Refresh and try payment again.',
     posKbankCancelConfirm: 'Cancel this QR on POS? The EDC screen will clear. Use only if the customer has not paid yet.',
     posKbankStaffInquiryCancelHint: 'After scan: Inquiry on POS to confirm. Cancel on POS to stop this QR (not the EDC check button).',
+    posSettlementCardMismatchBadge: 'Mismatch',
+    posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
+    posManualDiscountPickTitle: 'Select items to discount',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -16020,6 +16056,9 @@ export const I18N_POS_LA: Record<string, string> = {
     posKbankCancelClearPaymentFail: 'QR was cancelled but clearing payment amounts on the order failed. Refresh and try payment again.',
     posKbankCancelConfirm: 'Cancel this QR on POS? The EDC screen will clear. Use only if the customer has not paid yet.',
     posKbankStaffInquiryCancelHint: 'After scan: Inquiry on POS to confirm. Cancel on POS to stop this QR (not the EDC check button).',
+    posSettlementCardMismatchBadge: 'Mismatch',
+    posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
+    posManualDiscountPickTitle: 'Select items to discount',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -19042,6 +19081,9 @@ export const I18N_POS_KH: Record<string, string> = {
     posKbankCancelClearPaymentFail: 'QR was cancelled but clearing payment amounts on the order failed. Refresh and try payment again.',
     posKbankCancelConfirm: 'Cancel this QR on POS? The EDC screen will clear. Use only if the customer has not paid yet.',
     posKbankStaffInquiryCancelHint: 'After scan: Inquiry on POS to confirm. Cancel on POS to stop this QR (not the EDC check button).',
+    posSettlementCardMismatchBadge: 'Mismatch',
+    posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
+    posManualDiscountPickTitle: 'Select items to discount',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -22033,6 +22075,9 @@ export const I18N_POS_VI: Record<string, string> = {
     posKbankCancelClearPaymentFail: 'QR was cancelled but clearing payment amounts on the order failed. Refresh and try payment again.',
     posKbankCancelConfirm: 'Cancel this QR on POS? The EDC screen will clear. Use only if the customer has not paid yet.',
     posKbankStaffInquiryCancelHint: 'After scan: Inquiry on POS to confirm. Cancel on POS to stop this QR (not the EDC check button).',
+    posSettlementCardMismatchBadge: 'Mismatch',
+    posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
+    posManualDiscountPickTitle: 'Select items to discount',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -25028,4 +25073,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posKbankCancelClearPaymentFail: 'QR was cancelled but clearing payment amounts on the order failed. Refresh and try payment again.',
     posKbankCancelConfirm: 'Cancel this QR on POS? The EDC screen will clear. Use only if the customer has not paid yet.',
     posKbankStaffInquiryCancelHint: 'After scan: Inquiry on POS to confirm. Cancel on POS to stop this QR (not the EDC check button).',
+    posSettlementCardMismatchBadge: 'Mismatch',
+    posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
+    posManualDiscountPickTitle: 'Select items to discount',
 }

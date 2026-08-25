@@ -190,6 +190,7 @@ import {
   PosPaymentModalAmountCard,
   type CartPanelMenuLineDiscountMode,
 } from '@/components/pos/cart-panel-payment-modal-amount-card'
+import { PosPaymentDiscountMenuPicker } from '@/components/pos/cart-panel-payment-discount-menu-picker'
 import { PosMemberResultsSection, PosPaymentMemberBlock } from '@/components/pos/pos-payment-member-block'
 import { buildPosMemberSearchOptionLabel } from '@/lib/pos-member-option-label'
 import {
@@ -4760,6 +4761,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         <p className="text-sm font-semibold">{t('posPaymentSectionManualDiscount')}</p>
       </div>
       <div className="grid gap-3">
+        <PosPaymentDiscountMenuPicker
+          cartItems={cartItems}
+          lineDiscountModeByItemId={lineDiscountModeByItemId}
+          onLineDiscountModeChange={setLineDiscountModeForItem}
+          t={t}
+        />
         <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
           <div className="flex items-center justify-between gap-2">
             <p className="min-w-0">
@@ -5102,7 +5109,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   return (
                   <div
                     key={item.id}
-                    className="bg-secondary/50 w-full min-w-0 max-w-full rounded-sm overflow-hidden"
+                    className={cn(
+                      'bg-secondary/50 w-full min-w-0 max-w-full rounded-sm overflow-hidden',
+                      lineDiscountMode === 'discount' &&
+                        'bg-amber-50/90 ring-1 ring-amber-400/70 dark:bg-amber-950/35 dark:ring-amber-500/50'
+                    )}
                   >
                     <div className="grid grid-cols-[1fr_auto] gap-2 items-start py-1.5 px-2">
                       <div className="min-w-0 overflow-hidden">
@@ -5165,7 +5176,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             ) : null}
                           </div>
                         ) : null}
-                        {lineDiscountMode !== 'none' ? (
+                        {lineDiscountMode === 'service' || lineDiscountMode === 'cancel' ? (
                           <div className="mt-1">
                             <Badge
                               variant="secondary"
@@ -5173,19 +5184,37 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                 'h-5 rounded-md px-1.5 text-[10px]',
                                 lineDiscountMode === 'service'
                                   ? 'border-emerald-400/50 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200'
-                                  : lineDiscountMode === 'cancel'
-                                    ? 'border-rose-400/50 bg-rose-50 text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200'
-                                    : 'border-amber-400/50 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200'
+                                  : 'border-rose-400/50 bg-rose-50 text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200'
                               )}
                             >
                               {lineDiscountMode === 'service'
                                 ? tr('posServiceHandled', '서비스처리')
-                                : lineDiscountMode === 'cancel'
-                                  ? tr('posLineCancelledShort', '취소처리')
-                                  : tr('posDiscountApplied', '할인적용')}
+                                : tr('posLineCancelledShort', '취소처리')}
                             </Badge>
                           </div>
-                        ) : null}
+                        ) : (
+                          <div className="mt-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={lineDiscountMode === 'discount' ? 'default' : 'outline'}
+                              className={cn(
+                                'h-6 rounded-md px-2 text-[10px] font-semibold touch-manipulation',
+                                lineDiscountMode === 'discount'
+                                  ? 'bg-amber-600 text-white hover:bg-amber-700'
+                                  : 'border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-950/40'
+                              )}
+                              onClick={() =>
+                                setLineDiscountModeForItem(
+                                  item.id,
+                                  lineDiscountMode === 'discount' ? 'none' : 'discount'
+                                )
+                              }
+                            >
+                              {tr('posDiscountApplied', '할인적용')}
+                            </Button>
+                          </div>
+                        )}
                         <p className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
                           {formatBahtNum(item.price)} ฿
                         </p>
@@ -5823,6 +5852,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               t={t}
             />
 
+            {manualDiscountCard}
+
             <PosPaymentMemberBlock
               memberKeyword={memberKeyword}
               onMemberKeywordChange={handleMemberKeywordInput}
@@ -5932,9 +5963,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   <p className="mt-2 text-[11px] text-amber-800 dark:text-amber-200">{t('posCollabNoMatchingLines')}</p>
                 ) : null}
               </div>
-
-              {/* 직접 할인 */}
-              {manualDiscountCard}
 
               {/* 쿠폰 코드 — 제목 옆 입력 (직접 할인 아래) */}
               <div className="rounded-2xl border border-sky-500/25 bg-gradient-to-br from-sky-50/80 via-card to-card p-3 shadow-sm dark:from-sky-950/20 dark:via-card dark:to-card">

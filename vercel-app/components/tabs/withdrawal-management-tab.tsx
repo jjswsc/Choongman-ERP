@@ -292,6 +292,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     if (c === "tax_vat") return { main: "tax", sub: "vat" }
     if (c === "tax_withholding") return { main: "tax", sub: "withholding" }
     if (c === "tax_corporate") return { main: "tax", sub: "corporate" }
+    if (c === "tax_sso") return { main: "tax", sub: "sso" }
     if (c === "tax") return { main: "tax", sub: "withholding" }
     if (c === "correction") return { main: "correction", sub: "" }
     if (c === "dividend") return { main: "dividend", sub: "" }
@@ -1027,6 +1028,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     if (main === "tax") {
       if (sub === "vat") return "tax_vat"
       if (sub === "corporate") return "tax_corporate"
+      if (sub === "sso") return "tax_sso"
       return "tax_withholding"
     }
     if (main === "correction") return "correction"
@@ -1045,6 +1047,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       tax_vat: tt("wm_tax_vat", "VAT"),
       tax_withholding: tt("wm_tax_withholding", "Withholding Tax"),
       tax_corporate: tt("wm_tax_corporate", "Corporate Tax"),
+      tax_sso: tt("wm_tax_sso", "Social Security"),
       loan_repayment: tt("wm_loan_repayment", "Loan Repayment"),
       loan_given: tt("wm_loan_given", "Loan Given"),
       correction: tt("wm_correction", "Correction"),
@@ -2676,6 +2679,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   <SelectItem value="vat">{tt("wm_tax_vat", "VAT Payment")}</SelectItem>
                   <SelectItem value="withholding">{tt("wm_tax_withholding", "Withholding Tax Payment")}</SelectItem>
                   <SelectItem value="corporate">{tt("wm_tax_corporate", "Corporate Tax Payment")}</SelectItem>
+                  <SelectItem value="sso">{tt("wm_tax_sso", "Social Security")}</SelectItem>
                 </SelectContent>
               </Select>
             </ExpenseRegisterField>
