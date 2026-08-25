@@ -100,8 +100,8 @@ export function parseHypercomFrame(frame: Uint8Array): {
   if (lrc !== check) throw new Error('invalid_lrc')
   const body = frame.slice(3, etxIndex)
   if (body.length < 16) throw new Error('invalid_body')
-  const txCode = Buffer.from(body.slice(11, 13)).toString('ascii')
-  const responseCode = Buffer.from(body.slice(13, 15)).toString('ascii')
+  const txCode = Buffer.from(body.slice(12, 14)).toString('ascii')
+  const responseCode = Buffer.from(body.slice(14, 16)).toString('ascii')
   const fsIndex = body.indexOf(FS, 0)
   const fieldsRaw = fsIndex >= 0 ? body.slice(fsIndex + 1) : new Uint8Array()
   const fields: Record<string, string> = {}

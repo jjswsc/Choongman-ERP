@@ -1,6 +1,6 @@
 {
   "name": "choongman-pos-windows",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "private": true,
   "author": "Choongman",
   "description": "Windows installed hybrid POS shell (Electron)",

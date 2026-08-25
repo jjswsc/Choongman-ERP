@@ -235,9 +235,25 @@ export async function executeLinkposPayment(params: {
   }
 }
 
+/** Hypercom R1/R2: ASCII printable 0x20–0x7E only, max 20. */
+export function sanitizeLinkposHypercomRef(value?: string, maxLen = 20): string {
+  const limit = Math.max(0, Number(maxLen) || 20)
+  const raw = String(value ?? '').trim()
+  let out = ''
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i)
+    if (code >= 0x20 && code <= 0x7e) {
+      out += raw.charAt(i)
+      if (out.length >= limit) break
+    }
+  }
+  return out.trim().slice(0, limit)
+}
+
 /**
  * LinkPOS native QR (Hypercom tx 70) — EDC가 금액 받아 단말 QR 표시·승인.
  * KBank Partner API 문자열을 단말에 “그려 넣는” display_qr 과 다름 (펌웨어 미지원인 경우 많음).
+ * KBTG field order: 40 → A1=03 → R1 → R2 → J6 (default 04 Kasikorn).
  */
 export async function executeLinkposQrPayment(params: {
   amount: number
@@ -263,10 +279,10 @@ export async function executeLinkposQrPayment(params: {
   const payload = {
     action: 'qr',
     amount: Number(params.amount),
-    bankId: String(params.bankId || ''),
+    bankId: String(params.bankId || '04').slice(0, 3),
     paymentIndicator: a1,
-    reference1: String(params.reference1 || '').slice(0, 20),
-    reference2: String(params.reference2 || '').slice(0, 20),
+    reference1: sanitizeLinkposHypercomRef(params.reference1) || `POSQR${Date.now().toString().slice(-14)}`.slice(0, 20),
+    reference2: sanitizeLinkposHypercomRef(params.reference2) || sanitizeLinkposHypercomRef(params.storeCode) || 'POS',
     storeCode: String(params.storeCode || ''),
     protocol: 'hypercom_v2',
     timeoutMs,

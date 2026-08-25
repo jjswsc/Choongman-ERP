@@ -90,22 +90,8 @@ function buildFrame(opts) {
   return Buffer.concat([Buffer.from([STX]), withoutStx, Buffer.from([lrc])])
 }
 
-function parseFrame(buf) {
-  if (!buf || buf.length === 0) throw new Error('empty_response')
-  if (buf.length === 1 && buf[0] === ACK) return { type: 'ACK', txCode: '', responseCode: '', fields: {} }
-  if (buf.length === 1 && buf[0] === NAK) return { type: 'NAK', txCode: '', responseCode: '', fields: {} }
-  if (buf.length < 6 || buf[0] !== STX) throw new Error('invalid_frame')
-  const etxIdx = buf.lastIndexOf(ETX)
-  if (etxIdx < 0 || etxIdx >= buf.length - 1) throw new Error('no_etx')
-  const expected = calcLrc(buf.slice(1, etxIdx + 1))
-  if (expected !== buf[etxIdx + 1]) throw new Error('invalid_lrc')
-  const body = buf.slice(3, etxIdx)
-  if (body.length < 16) throw new Error('body_too_short')
-  const txCode = body.slice(11, 13).toString('ascii')
-  const responseCode = body.slice(13, 15).toString('ascii')
-  const fsIdx = body.indexOf(FS, 0)
-  const fieldsRaw = fsIdx >= 0 ? body.slice(fsIdx + 1) : Buffer.alloc(0)
-  const fields = {}
+function parseFieldsInOrder(fieldsRaw) {
+  const list = []
   let i = 0
   while (i + 4 <= fieldsRaw.length) {
     if (fieldsRaw[i] === FS) { i += 1; continue }
@@ -115,16 +101,99 @@ function parseFrame(buf) {
     const len = (Math.floor(hi / 16) * 10 + (hi % 16)) * 100
       + Math.floor(lo / 16) * 10 + (lo % 16)
     i += 4
-    fields[type] = fieldsRaw.slice(i, i + len).toString('ascii')
+    const data = fieldsRaw.slice(i, i + len).toString('ascii')
     i += len
     if (i < fieldsRaw.length && fieldsRaw[i] === FS) i += 1
+    list.push({ type, data })
   }
-  return { type: 'Frame', txCode, responseCode, fields }
+  return list
+}
+
+function parseFrame(buf) {
+  if (!buf || buf.length === 0) throw new Error('empty_response')
+  if (buf.length === 1 && buf[0] === ACK) return { type: 'ACK', txCode: '', responseCode: '', fields: {}, fieldOrder: [] }
+  if (buf.length === 1 && buf[0] === NAK) return { type: 'NAK', txCode: '', responseCode: '', fields: {}, fieldOrder: [] }
+  if (buf.length < 6 || buf[0] !== STX) throw new Error('invalid_frame')
+  const etxIdx = buf.lastIndexOf(ETX)
+  if (etxIdx < 0 || etxIdx >= buf.length - 1) throw new Error('no_etx')
+  const expected = calcLrc(buf.slice(1, etxIdx + 1))
+  if (expected !== buf[etxIdx + 1]) throw new Error('invalid_lrc')
+  const body = buf.slice(3, etxIdx)
+  if (body.length < 16) throw new Error('body_too_short')
+  const txCode = body.slice(12, 14).toString('ascii')
+  const responseCode = body.slice(14, 16).toString('ascii')
+  const fsIdx = body.indexOf(FS, 0)
+  const fieldsRaw = fsIdx >= 0 ? body.slice(fsIdx + 1) : Buffer.alloc(0)
+  const fieldList = parseFieldsInOrder(fieldsRaw)
+  const fields = {}
+  for (const f of fieldList) fields[f.type] = f.data
+  return {
+    type: 'Frame',
+    txCode,
+    responseCode,
+    fields,
+    fieldOrder: fieldList.map((f) => f.type),
+    fieldList,
+  }
 }
 
 function normalizeAmount12(amount) {
   const cents = Math.round(Math.max(0, Number(amount)) * 100)
   return String(cents).padStart(12, '0')
+}
+
+const HYPERCOM_REF_MAX_LEN = 20
+const THAI_QR_PAYMENT_INDICATOR = '03'
+const DEFAULT_KASIKORN_BANK_ID = '04'
+const NATIVE_QR_FIELD_ORDER = ['40', 'A1', 'R1', 'R2', 'J6']
+
+/** Hypercom R1/R2: ASCII printable 0x20–0x7E only, max 20. Thai/Unicode is not supported. */
+function sanitizeHypercomText(value, maxLen = HYPERCOM_REF_MAX_LEN) {
+  const limit = Math.max(0, Number(maxLen) || HYPERCOM_REF_MAX_LEN)
+  const raw = String(value ?? '').trim()
+  let out = ''
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i)
+    if (code >= 0x20 && code <= 0x7e) {
+      out += raw.charAt(i)
+      if (out.length >= limit) break
+    }
+  }
+  return out.trim().slice(0, limit)
+}
+
+function normalizeThaiQrA1(value) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  if (!digits) return THAI_QR_PAYMENT_INDICATOR
+  return digits.padStart(2, '0').slice(-2)
+}
+
+function normalizeQrBankId(bankId) {
+  const id = sanitizeHypercomText(bankId, 3)
+  return id || DEFAULT_KASIKORN_BANK_ID
+}
+
+/**
+ * LinkPOS Native QR (tx 70) — KBTG: 40 → A1=03 → R1 → R2 → J6=04 (KBank default).
+ * Not the KBank Partner QR API.
+ */
+function buildNativeQrFields(json) {
+  const a1 = normalizeThaiQrA1(json && (json.paymentIndicator || json.qrType))
+  const fields = [
+    { type: '40', data: normalizeAmount12(json && json.amount) },
+    { type: 'A1', data: a1 },
+  ]
+  const ref1 = sanitizeHypercomText(json && json.reference1)
+  const ref2 = sanitizeHypercomText(json && json.reference2)
+    || sanitizeHypercomText(json && json.storeCode)
+  if (ref1) fields.push({ type: 'R1', data: ref1 })
+  if (ref2) fields.push({ type: 'R2', data: ref2 })
+  fields.push({ type: 'J6', data: normalizeQrBankId(json && json.bankId) })
+  return fields
+}
+
+function buildNativeQrRequestFrame(json) {
+  return buildFrame({ txCode: '70', more: '1', fields: buildNativeQrFields(json) })
 }
 
 function selfTestProtocol() {
@@ -138,6 +207,65 @@ function selfTestProtocol() {
   }).toString('hex').toUpperCase()
   const expectedSale = '02003536303030303030303030313032303030311C343000123030303030303030303130301C0315'
   if (sale !== expectedSale) throw new Error(`Sale mismatch expected ${expectedSale} actual ${sale}`)
+
+  const qrJson = {
+    amount: 1,
+    paymentIndicator: '03',
+    reference1: 'POSQR123',
+    reference2: 'TABLE1',
+  }
+  const qrFields = buildNativeQrFields(qrJson)
+  const qrOrder = qrFields.map((f) => f.type).join(',')
+  const expectedOrder = NATIVE_QR_FIELD_ORDER.join(',')
+  if (qrOrder !== expectedOrder) {
+    throw new Error(`QR field order mismatch expected ${expectedOrder} actual ${qrOrder}`)
+  }
+  if (qrFields[1].data !== THAI_QR_PAYMENT_INDICATOR) {
+    throw new Error(`QR A1 expected ${THAI_QR_PAYMENT_INDICATOR} actual ${qrFields[1].data}`)
+  }
+  if (qrFields[4].data !== DEFAULT_KASIKORN_BANK_ID) {
+    throw new Error(`QR J6 default expected ${DEFAULT_KASIKORN_BANK_ID} actual ${qrFields[4].data}`)
+  }
+
+  const stripped = buildNativeQrFields({
+    amount: 1,
+    reference1: 'โต๊ะPOSQR-1234567890XXXX',
+    reference2: '충만-โต๊ะ 5',
+    bankId: '',
+  })
+  if (stripped[2].data.length > HYPERCOM_REF_MAX_LEN) {
+    throw new Error(`QR R1 exceeds ${HYPERCOM_REF_MAX_LEN}`)
+  }
+  if (/[^\x20-\x7E]/.test(stripped[2].data + stripped[3].data)) {
+    throw new Error('QR R1/R2 must be ASCII printable 0x20-0x7E')
+  }
+  if (stripped[2].data.includes('โต๊ะ') || stripped[3].data.includes('โต๊ะ')) {
+    throw new Error('QR R1/R2 still contains Thai after sanitize')
+  }
+  if (stripped[4].data !== DEFAULT_KASIKORN_BANK_ID) {
+    throw new Error('QR J6 missing Kasikorn default 04')
+  }
+
+  const qrFrame = buildNativeQrRequestFrame(qrJson)
+  const parsedQr = parseFrame(qrFrame)
+  if (parsedQr.txCode !== '70') throw new Error(`QR txCode expected 70 actual ${parsedQr.txCode}`)
+  if (parsedQr.fieldOrder.join(',') !== expectedOrder) {
+    throw new Error(`QR frame field order mismatch expected ${expectedOrder} actual ${parsedQr.fieldOrder.join(',')}`)
+  }
+  const expectedQrHex = '02007336303030303030303030313037303030311C343000123030303030303030303130301C4131000230331C52310008504F5351523132331C523200065441424C45311C4A36000230341C0340'
+  const qrHex = qrFrame.toString('hex').toUpperCase()
+  if (qrHex !== expectedQrHex) throw new Error(`QR frame mismatch expected ${expectedQrHex} actual ${qrHex}`)
+
+  const parsedSale = parseFrame(Buffer.from(expectedSale, 'hex'))
+  if (parsedSale.txCode !== '20') throw new Error(`Sale txCode expected 20 actual ${parsedSale.txCode}`)
+  if (parsedSale.responseCode !== '00') throw new Error(`Sale responseCode expected 00 actual ${parsedSale.responseCode}`)
+  const parsedVoid = parseFrame(buildFrame({ txCode: '26', more: '1', fields: [{ type: '65', data: '000001' }] }))
+  if (parsedVoid.txCode !== '26') throw new Error(`Void txCode expected 26 actual ${parsedVoid.txCode}`)
+
+  const omittedR2 = buildNativeQrFields({ amount: 1, reference1: 'POSQR1', reference2: 'โต๊ะ' })
+  if (omittedR2.map((f) => f.type).join(',') !== '40,A1,R1,J6') {
+    throw new Error(`empty R2 should be omitted, got ${omittedR2.map((f) => f.type).join(',')}`)
+  }
 }
 
 /** @type {{ cfg: ReturnType<typeof defaultConfig>, server: import('http').Server|null, port: any, portReady: boolean, busy: boolean, queue: any[], SerialPort: any, log: Function, dbg: Function } | null} */
@@ -374,10 +502,10 @@ function createRuntime(userCfg) {
         { type: '40', data: normalizeAmount12(json.amount) },
         ...optionalBankField(json.bankId),
       ]
-      const ref1 = String(json.reference1 || '').trim()
-      const ref2 = String(json.reference2 || '').trim()
-      if (ref1) fields.splice(1, 0, { type: 'R1', data: ref1.slice(0, 20) })
-      if (ref2) fields.push({ type: 'R2', data: ref2.slice(0, 20) })
+      const ref1 = sanitizeHypercomText(json.reference1)
+      const ref2 = sanitizeHypercomText(json.reference2)
+      if (ref1) fields.splice(1, 0, { type: 'R1', data: ref1 })
+      if (ref2) fields.push({ type: 'R2', data: ref2 })
       return await sendTxAndParse('20', buildFrame({ txCode: '20', more: '1', fields }), timeoutMs)
     }
 
@@ -410,17 +538,7 @@ function createRuntime(userCfg) {
     }
 
     if (action === 'qr') {
-      const a1 = String(json.paymentIndicator || json.qrType || '03').replace(/\D/g, '').padStart(2, '0').slice(-2) || '03'
-      const fields = [
-        { type: '40', data: normalizeAmount12(json.amount) },
-        { type: 'A1', data: a1 },
-        ...optionalBankField(json.bankId),
-      ]
-      const ref1 = String(json.reference1 || '').trim()
-      const ref2 = String(json.reference2 || '').trim()
-      if (ref1) fields.splice(1, 0, { type: 'R1', data: ref1.slice(0, 20) })
-      if (ref2) fields.push({ type: 'R2', data: ref2.slice(0, 20) })
-      return await sendTxAndParse('70', buildFrame({ txCode: '70', more: '1', fields }), timeoutMs)
+      return await sendTxAndParse('70', buildNativeQrRequestFrame(json), timeoutMs)
     }
 
     if (action === 'display_qr') {
@@ -433,7 +551,6 @@ function createRuntime(userCfg) {
       const attempts = [
         { txCode: '71', fields: [{ type: 'QR', data: qr.slice(0, 900) }, ...amountField] },
         { txCode: '71', fields: [{ type: 'Q1', data: qr.slice(0, 900) }, ...amountField] },
-        { txCode: '70', fields: [{ type: 'QR', data: qr.slice(0, 900) }, ...amountField, { type: 'A1', data: '03' }] },
       ]
       let lastErr = 'display_qr_failed'
       for (const attempt of attempts) {
@@ -653,8 +770,16 @@ module.exports = {
   stopLinkposBridge,
   getStatus,
   buildFrame,
+  parseFrame,
   selfTestProtocol,
   defaultConfig,
+  sanitizeHypercomText,
+  buildNativeQrFields,
+  buildNativeQrRequestFrame,
+  HYPERCOM_REF_MAX_LEN,
+  THAI_QR_PAYMENT_INDICATOR,
+  DEFAULT_KASIKORN_BANK_ID,
+  NATIVE_QR_FIELD_ORDER,
 }
 
 if (require.main === module) {
