@@ -15,6 +15,10 @@ import { appAlert } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import {
+  SALES_OUTBOUND_INVOICE_TITLE,
+  SALES_TAX_INVOICE_TITLE,
+} from "@/lib/sales-tax-document-title"
 import { CheckCircle } from "lucide-react"
 
 const STORAGE_KEY = "po-print-data"
@@ -130,8 +134,8 @@ export default function PoPrintPage() {
     return {
       poTitle: acct
         ? taxMode
-          ? t("poAccountingPrintTitleTaxInvoice") || "TAX INVOICE/RECEIPT"
-          : t("poAccountingPrintTitleInvoice") || "INVOICE"
+          ? t("poAccountingPrintTitleTaxInvoice") || SALES_TAX_INVOICE_TITLE
+          : t("poAccountingPrintTitleInvoice") || SALES_OUTBOUND_INVOICE_TITLE
         : t("poTitle") || "PURCHASE ORDER",
       poNo: acct ? t("poAccountingInvoiceNoLabel") || "Invoice No." : t("poNo") || "PO No",
       poDate: t("poDate") || "Date",
@@ -160,7 +164,7 @@ export default function PoPrintPage() {
       poFormatBadgeExternal: t("poFormatBadgeExternal") || "External format",
       poHeaderBadge: acct
         ? taxMode
-          ? t("poAccountingPrintBadgeTaxInvoice") || "Tax Invoice/Receipt"
+          ? t("poAccountingPrintBadgeTaxInvoice") || SALES_TAX_INVOICE_TITLE
           : approved
             ? t("poAccountingPrintBadgeApproved") || "Approved"
             : t("poAccountingPrintBadgeDraft") || "Draft"
