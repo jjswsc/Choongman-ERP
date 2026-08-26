@@ -1915,7 +1915,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posQrTypeLabel: 'QR 타입',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: '신용카드 QR',
-    posQrTypeShowOnEdc: '단말에 표시',
+    posQrTypeShowOnEdc: 'EDC',
     posQrTypeShowOnEdcHint:
       '은행 QR을 생성한 뒤 카드 단말에 표시합니다. 고객 모니터가 없는 매장에 적합합니다.',
     posQrTypeThaiHint: '은행 앱 / PromptPay로 스캔',
@@ -5339,7 +5339,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posQrTypeLabel: 'QR Type',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
-    posQrTypeShowOnEdc: 'Show on terminal',
+    posQrTypeShowOnEdc: 'EDC',
     posQrTypeShowOnEdcHint:
       'Create bank QR via API, then show it on the EDC — for stores without a customer display.',
     posQrTypeThaiHint: 'Scan with a banking app / PromptPay',
@@ -7363,7 +7363,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posQrTypeLabel: 'ประเภท QR',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'QR บัตรเครดิต',
-    posQrTypeShowOnEdc: 'แสดงบนเครื่อง',
+    posQrTypeShowOnEdc: 'EDC',
     posQrTypeShowOnEdcHint:
       'สร้าง QR จากธนาคารแล้วแสดงบนเครื่องรูดบัตร — เหมาะกับสาขาไม่มีจอลูกค้า',
     posQrTypeThaiHint: 'สแกนด้วยแอปธนาคาร / PromptPay',
@@ -17831,7 +17831,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posQrTypeLabel: 'QR Type',
     posQrTypeThai: 'Thai QR',
     posQrTypeCredit: 'Credit Card QR',
-    posQrTypeShowOnEdc: 'Show on terminal',
+    posQrTypeShowOnEdc: 'EDC',
     posQrTypeShowOnEdcHint:
       'Create bank QR via API, then show it on the EDC — for stores without a customer display.',
     posQrTypeThaiHint: 'Scan with a banking app / PromptPay',

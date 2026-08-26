@@ -6240,7 +6240,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           className="h-9 rounded-lg text-xs"
                           onClick={() => setPayQrType('EDC')}
                         >
-                          {tr('posQrTypeShowOnEdc', 'แสดงบนเครื่อง')}
+                          {tr('posQrTypeShowOnEdc', 'EDC')}
                         </Button>
                       </div>
                       <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
