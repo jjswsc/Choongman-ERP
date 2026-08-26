@@ -132,6 +132,33 @@ describe('resolveWht50Tawi', () => {
     expect(tableIdx).toBeGreaterThan(recipientIdx)
   })
 
+  it('puts withholder name in the top box and withholdee in the bottom box', () => {
+    const html = buildWht50TawiCertificateHtml(
+      {
+        ...base,
+        direction: 'inbound',
+        withholdingAgent: {
+          name: 'Aisa Commerce & Trade Co., Ltd.',
+          taxId: '0105568080622',
+          address: 'No. 60/1 Silom Road',
+        },
+        incomeRecipient: {
+          name: 'S&J GLOBAL CO., LTD. (Head Office)',
+          taxId: '0105566137147',
+          address: '101 true digital park',
+        },
+      },
+      1
+    )
+    const agentIdx = html.indexOf('ผู้มีหน้าที่หักภาษี ณ ที่จ่าย : -')
+    const recipientIdx = html.indexOf('ผู้ถูกหักภาษี ณ ที่จ่าย : -')
+    const aisaIdx = html.indexOf('Aisa Commerce &amp; Trade Co., Ltd.')
+    const sjIdx = html.indexOf('S&amp;J GLOBAL CO., LTD. (Head Office)')
+    expect(aisaIdx).toBeGreaterThan(agentIdx)
+    expect(aisaIdx).toBeLessThan(recipientIdx)
+    expect(sjIdx).toBeGreaterThan(recipientIdx)
+  })
+
   it('marks active copy number in header legend', () => {
     const copy1 = buildWht50TawiCertificateHtml(base, 1)
     const copy2 = buildWht50TawiCertificateHtml(base, 2)

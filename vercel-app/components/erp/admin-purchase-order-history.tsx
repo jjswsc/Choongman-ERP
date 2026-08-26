@@ -338,7 +338,8 @@ export function AdminPurchaseOrderHistory({
         const ho = await getHeadOfficeInfo()
         const vendorCode = String(po.vendor_code || "").trim()
         const vendorResolved = vendors.find((v) => v.code === vendorCode)
-        // 상단 = 발행 주체(본사 또는 issuerStore). relatedStore(청구 매장)는 쓰지 않음.
+        // 당사 법인 블록 = 발행 주체(본사 또는 issuerStore). relatedStore(청구 매장)는 쓰지 않음.
+        // 회계 청구 PO는 inbound라 거래처가 상단(ผู้หักภาษี), 당사가 하단(ผู้ถูกหักภาษี).
         // 가맹 세무 프로필 TIN이 거래처와 같으면 본사로 폴백.
         const storeKey = resolvePoWhtAgentStoreKey(po)
         const profileRes = storeKey

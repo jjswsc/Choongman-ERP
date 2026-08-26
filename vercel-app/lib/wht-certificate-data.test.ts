@@ -3,6 +3,7 @@ import {
   formatWhtAgentDisplayName,
   mergeWhtCertificatesForPrint,
   resolvePoWhtAgentStoreKey,
+  resolvePoWhtCertificateDirection,
   resolveVendorPayeeForWht,
   resolveWhtCertificateParties,
   resolveWhtWithholdingAgentCompany,
@@ -41,6 +42,20 @@ describe('resolveWhtCertificateParties', () => {
     })
     expect(parties.withholdingAgent.name).toBe('S&J GLOBAL CO., LTD. (Head Office)')
     expect(parties.incomeRecipient.name).toBe('Jinwon f&b Co.,Ltd.')
+  })
+
+  it('puts counterparty on top as withholding agent for inbound (accounting fee PO)', () => {
+    const parties = resolveWhtCertificateParties({
+      direction: 'inbound',
+      payeeName: 'Aisa Commerce & Trade Co., Ltd.',
+      payeeTaxId: '0105568080622',
+      payeeAddress: 'No. 60/1 Silom Road',
+      headOffice,
+    })
+    expect(parties.withholdingAgent.name).toBe('Aisa Commerce & Trade Co., Ltd.')
+    expect(parties.withholdingAgent.address).toBe('No. 60/1 Silom Road')
+    expect(parties.incomeRecipient.name).toBe('S&J GLOBAL CO., LTD. (Head Office)')
+    expect(parties.incomeRecipient.taxId).toBe(headOffice.taxId)
   })
 })
 
@@ -173,8 +188,24 @@ describe('resolveVendorPayeeForWht', () => {
   })
 })
 
+describe('resolvePoWhtCertificateDirection', () => {
+  it('uses inbound for accounting billing PO', () => {
+    expect(
+      resolvePoWhtCertificateDirection({
+        v: 1,
+        items: [],
+        meta: { orderDate: '2026-08-26', relatedStore: 'CM Silom' },
+      })
+    ).toBe('inbound')
+  })
+
+  it('uses outbound for logistics purchase PO', () => {
+    expect(resolvePoWhtCertificateDirection([{ name: 'Item', qty: 1, price: 100 }])).toBe('outbound')
+  })
+})
+
 describe('whtCertificateFromPurchaseOrder', () => {
-  it('puts S&J (head office) on top when PO has no issuerStore (HQ issue)', () => {
+  it('puts franchise vendor on top (ผู้หักภาษี) and S&J at bottom (ผู้ถูกหักภาษี) for HQ accounting PO', () => {
     const cert = whtCertificateFromPurchaseOrder(
       {
         po_no: 'PO-20260807',
@@ -190,13 +221,15 @@ describe('whtCertificateFromPurchaseOrder', () => {
       '0105553119650',
       'No. 212/2-3, Sukhumvit Plaza'
     )
-    expect(cert?.withholdingAgent.name).toBe('S&J GLOBAL CO., LTD. (Head Office)')
-    expect(cert?.withholdingAgent.taxId).toBe(headOffice.taxId)
-    expect(cert?.incomeRecipient.name).toBe('Han Enterprise Co.,Ltd. (00001)')
-    expect(cert?.incomeRecipient.taxId).toBe('0105553119650')
+    expect(cert?.direction).toBe('inbound')
+    expect(cert?.withholdingAgent.name).toBe('Han Enterprise Co.,Ltd. (00001)')
+    expect(cert?.withholdingAgent.taxId).toBe('0105553119650')
+    expect(cert?.withholdingAgent.address).toBe('No. 212/2-3, Sukhumvit Plaza')
+    expect(cert?.incomeRecipient.name).toBe('S&J GLOBAL CO., LTD. (Head Office)')
+    expect(cert?.incomeRecipient.taxId).toBe(headOffice.taxId)
   })
 
-  it('puts selected issuer store agent on top when issuerStore is set', () => {
+  it('puts billed vendor on top and issuer store at bottom when issuerStore is set', () => {
     const storeAgent = resolveWhtWithholdingAgentCompany({
       headOffice,
       storeName: 'Union Mall',
@@ -225,8 +258,31 @@ describe('whtCertificateFromPurchaseOrder', () => {
       '0105553045044',
       '18 True Tower'
     )
-    expect(cert?.withholdingAgent.name).toBe('S&J GLOBAL CO., LTD. (สาขา Union Mall)')
-    expect(cert?.incomeRecipient.name).toBe('True Move H')
+    expect(cert?.direction).toBe('inbound')
+    expect(cert?.withholdingAgent.name).toBe('True Move H')
+    expect(cert?.incomeRecipient.name).toBe('S&J GLOBAL CO., LTD. (สาขา Union Mall)')
+    expect(cert?.incomeRecipient.address).toBe('Union Mall, Bangkok')
+  })
+
+  it('keeps S&J on top for logistics purchase PO (no accounting meta)', () => {
+    const cert = whtCertificateFromPurchaseOrder(
+      {
+        po_no: 'PO-20260826',
+        vendor_name: 'Office Supply Co.',
+        total: 1070,
+        vat: 70,
+        withholding_tax_amount: 30,
+        withholding_tax_rate: 3,
+        created_at: '2026-08-26T08:00:00.000Z',
+        cart_json: [{ name: 'Paper', qty: 1, price: 1000 }],
+      },
+      headOffice,
+      '0105550000001',
+      'Bangkok'
+    )
+    expect(cert?.direction).toBe('outbound')
+    expect(cert?.withholdingAgent.name).toBe('S&J GLOBAL CO., LTD. (Head Office)')
+    expect(cert?.incomeRecipient.name).toBe('Office Supply Co.')
   })
 })
 

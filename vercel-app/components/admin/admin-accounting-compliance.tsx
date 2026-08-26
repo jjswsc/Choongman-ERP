@@ -3430,11 +3430,10 @@ export function AdminAccountingCompliance({
           const fromVendor = resolveVendorPayeeForWht(vendors, "", payeeName, payeeTaxIdRaw)
           const payeeTaxId = payeeTaxIdRaw || fromVendor.taxId
           const payeeAddress = fromVendor.address
-          // 발주 자동분(레거시 inbound 포함)은 당사 발급 증명서 → 원천징수자 상단
+          // 원장 direction 그대로. 회계 청구 PO 자동분은 inbound(가맹 상단·당사 하단).
           const src = String(r.source_type || "").trim().toLowerCase()
           const dirRaw = String(r.direction || "").trim().toLowerCase()
-          const direction =
-            src === "purchase_order" ? "outbound" : dirRaw === "inbound" ? "inbound" : "outbound"
+          const direction = dirRaw === "inbound" ? "inbound" : "outbound"
           // 발주 원장 store_name은 relatedStore일 수 있음 → 직영(본사 TIN)만 매장 표기
           const agent = await resolveAgentForStore(String(r.store_name || ""), payeeTaxId, {
             hqEntityBranchesOnly: src === "purchase_order",

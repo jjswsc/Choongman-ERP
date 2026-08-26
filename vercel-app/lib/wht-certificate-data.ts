@@ -11,6 +11,7 @@ import {
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import {
+  isAccountingPurchaseOrderByCartJson,
   purchaseOrderMetaOrderDate,
   resolveAccountingPoIssuerStore,
 } from '@/lib/purchase-order-cart'
@@ -163,12 +164,21 @@ export function resolveWhtWithholdingAgentCompany(params: {
 }
 
 /**
- * 발주 50 ทวิ 상단(원천징수자) 매장 키.
- * 발행 주체(issuerStore)만 사용 — relatedStore(청구·귀속 매장)는 거래처 쪽이라 쓰면 안 됨.
+ * 발주 50 ทวิ에서 당사(발행 주체) 법인 블록을 만들 매장 키.
+ * 발행 주체(issuerStore)만 사용 — relatedStore(청구 매장)는 거래처 쪽이라 쓰면 안 됨.
  * 비어 있으면 본사(S&J).
+ * 회계 청구 PO에서는 이 법인이 하단(ผู้ถูกหักภาษี), 물류 매입 PO에서는 상단(ผู้หักภาษี).
  */
 export function resolvePoWhtAgentStoreKey(po: { cart_json?: unknown }): string {
   return resolveAccountingPoIssuerStore(po) || ''
+}
+
+/**
+ * 회계 청구 PO(로열티·용역 등): 가맹이 원천징수 → inbound (거래처 상단, 당사 하단).
+ * 물류 매입 PO: 당사가 원천징수 → outbound (당사 상단, 거래처 하단).
+ */
+export function resolvePoWhtCertificateDirection(cartJson: unknown): 'inbound' | 'outbound' {
+  return isAccountingPurchaseOrderByCartJson(cartJson) ? 'inbound' : 'outbound'
 }
 
 export function resolveWhtCertificateParties(params: {
@@ -224,6 +234,7 @@ export function whtCertificateFromPurchaseOrder(
         ? new Date(po.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
         : ''
   if (!docDate) return null
+  const isAccountingPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
   return whtCertificateFromLedgerRow(
     {
       payment_date: docDate,
@@ -231,13 +242,13 @@ export function whtCertificateFromPurchaseOrder(
       payee_name: String(po.vendor_name || po.vendor_code || ''),
       payee_tax_id: vendorTaxId || '',
       payee_address: vendorAddress || '',
-      income_type: '로열티·용역 수입',
+      income_type: isAccountingPo ? '로열티·용역 수입' : '서비스',
       gross_amount: gross > 0 ? gross : total,
       wht_rate: rateRaw,
       wht_amount: wht,
       certificate_no: po.po_no ? `PO-${po.po_no}` : undefined,
-      // 발주 WHT 증명서는 당사(본사)가 원천징수·발급 → S&J 상단(ผู้มีหน้าที่หักภาษี)
-      direction: 'outbound',
+      // 회계 청구: 가맹(거래처) 상단 ผู้หักภาษี, 당사 하단 ผู้ถูกหักภาษี
+      direction: resolvePoWhtCertificateDirection(po.cart_json),
     },
     headOffice
   )

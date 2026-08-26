@@ -954,8 +954,8 @@ export async function syncTaxWithholdingLedgersFromPurchaseOrders(params: {
       submitted_by: null,
       store_name: taxStoreName,
       updated_at: new Date().toISOString(),
-      // 발주 WHT(회계·물류) 모두 당사 원천징수 → 50 ทวิ 인쇄 시 본사(S&J)가 상단
-      direction: 'outbound',
+      // 회계 청구 PO: 가맹 원천징수(inbound). 물류 매입 PO: 당사 원천징수(outbound).
+      direction: isAccountingPo ? 'inbound' : 'outbound',
       source_type: 'purchase_order',
       source_id: poId,
     }
