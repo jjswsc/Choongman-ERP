@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { isOmniAppHost } from "@/lib/app-brand"
+import {
+  choongmanWindowsPosDownloadPath,
+  githubRawPublicFileUrl,
+} from "@/lib/windows-installer-github"
 
 const BRAND_HEADER = "x-app-brand"
 const BRAND_COOKIE = "__app_brand"
@@ -32,31 +36,22 @@ export function middleware(request: NextRequest) {
   /**
    * Windows POS: 공유 public/ 에 Omni용 latest.json·cm-pos-windows-latest-* 가 있어도
    * 충만 호스트에서는 충만 피드/설치본으로 rewrite (브랜드 혼선·잘못된 업데이트 방지).
-   * Set-Cookie 없이 반환해 CDN 캐시·대용량 exe 전송 비용을 유지한다.
+   * .exe 는 Vercel에 없음(.vercelignore) → GitHub raw 로 302 (대용량 Fast Data Transfer 회피).
    */
   if (brand === "choongman" && pathname.startsWith("/downloads/windows-pos/")) {
+    const resolved = choongmanWindowsPosDownloadPath(pathname)
     if (pathname === "/downloads/windows-pos/latest.json") {
-      return NextResponse.rewrite(new URL("/downloads/windows-pos/latest-choongman.json", request.url))
+      return NextResponse.rewrite(new URL(resolved, request.url))
     }
-    if (pathname === "/downloads/windows-pos/cm-pos-windows-latest-setup.exe") {
-      return NextResponse.rewrite(
-        new URL("/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe", request.url)
-      )
+    if (resolved.toLowerCase().endsWith(".exe")) {
+      const github = githubRawPublicFileUrl(resolved)
+      if (github) return NextResponse.redirect(github, 302)
     }
-    if (pathname === "/downloads/windows-pos/cm-pos-windows-latest-portable.exe") {
-      return NextResponse.rewrite(
-        new URL("/downloads/windows-pos/cm-pos-windows-choongman-latest-portable.exe", request.url)
-      )
-    }
-    const versioned = pathname.match(
-      /^\/downloads\/windows-pos\/cm-pos-windows-(\d+\.\d+\.\d+)-(setup|portable)\.exe$/
-    )
-    if (versioned) {
-      const [, ver, kind] = versioned
-      return NextResponse.rewrite(
-        new URL(`/downloads/windows-pos/cm-pos-windows-choongman-${ver}-${kind}.exe`, request.url)
-      )
-    }
+  }
+
+  if (pathname.startsWith("/downloads/") && pathname.toLowerCase().endsWith(".exe")) {
+    const github = githubRawPublicFileUrl(pathname)
+    if (github) return NextResponse.redirect(github, 302)
   }
 
   const reqHeaders = new Headers(request.headers)

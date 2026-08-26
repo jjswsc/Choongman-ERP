@@ -2,29 +2,19 @@
     "version":  "0.1.17",
     "files":  [
                   {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
+                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
                       "name":  "cm-pos-windows-choongman-latest-setup.exe",
                       "sha256":  "a87a8f62a48d1f26725114eb626469cf6db5fd6673b3338ab674a3f4b7c92081"
                   },
                   {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.17-setup.exe",
+                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.17-setup.exe",
                       "name":  "cm-pos-windows-choongman-0.1.17-setup.exe",
                       "sha256":  "a87a8f62a48d1f26725114eb626469cf6db5fd6673b3338ab674a3f4b7c92081"
-                  },
-                  {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-portable.exe",
-                      "name":  "cm-pos-windows-choongman-latest-portable.exe",
-                      "sha256":  "4196f81a83952d11dd9c052fa17d115c17391e9e3ee21fb0ee57f7ca28f2ebd8"
-                  },
-                  {
-                      "url":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-0.1.17-portable.exe",
-                      "name":  "cm-pos-windows-choongman-0.1.17-portable.exe",
-                      "sha256":  "4196f81a83952d11dd9c052fa17d115c17391e9e3ee21fb0ee57f7ca28f2ebd8"
                   }
               ],
     "publishedAtUtc":  "2026-08-25T15:08:10.5286777Z",
     "brand":  "choongman",
     "installerSha256":  "a87a8f62a48d1f26725114eb626469cf6db5fd6673b3338ab674a3f4b7c92081",
     "notes":  "Fix LinkPOS Native QR Error Code -1 (tx 70: 40→A1=03→R1→R2→J6=04). Reinstall Windows POS, then test Thai QR.",
-    "installerUrl":  "https://choongman-erp.vercel.app/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe"
+    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.17-setup.exe"
 }

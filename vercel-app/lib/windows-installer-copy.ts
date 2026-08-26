@@ -1,4 +1,5 @@
 import type { AppBrandKey } from "@/lib/app-brand"
+import { githubRawPublicFileUrl } from "@/lib/windows-installer-github"
 
 /** Omni(판매) Windows POS 설치본 — `cm-pos-windows-latest-setup.exe` */
 export const WINDOWS_POS_OMNI_SETUP_PATH = "/downloads/windows-pos/cm-pos-windows-latest-setup.exe"
@@ -31,7 +32,7 @@ export function isLocalDevHost(hostname?: string | null): boolean {
 
 /**
  * 클립보드에 넣을 최종 URL.
- * Vercel에 exe를 Git으로 안 올릴 때는 아래 env로 GitHub Releases·S3 등 절대 URL을 지정 (빌드 시 주입).
+ * Vercel은 .exe 를 배포하지 않음 — env 가 없으면 GitHub raw.
  */
 export function resolveWindowsInstallerUrl(path: string): string {
   if (path === WINDOWS_ERP_SETUP_PATH) {
@@ -47,6 +48,10 @@ export function resolveWindowsInstallerUrl(path: string): string {
   if (path === WINDOWS_POS_CHOONGMAN_SETUP_PATH) {
     const u = process.env.NEXT_PUBLIC_WINDOWS_POS_CHOONGMAN_SETUP_URL?.trim()
     if (u) return u
+  }
+  if (path.startsWith("/downloads/") && path.toLowerCase().endsWith(".exe")) {
+    const github = githubRawPublicFileUrl(path)
+    if (github) return github
   }
   if (typeof window !== "undefined") {
     return new URL(path, window.location.origin).href
