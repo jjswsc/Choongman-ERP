@@ -445,7 +445,6 @@ export async function executeConfirmedKbankVoidForOrder(
         partnerTxnUid: voidPartnerTxnUid,
         origPartnerTxnUid,
         txnNo,
-        qrType: ctx.eligibility.qrType || 'THAI_QR',
         ...(terminalId ? { terminalId } : {}),
       },
     },

@@ -26,6 +26,7 @@ import {
   isKbankInquiryResponseApproved,
   isKbankPaymentAttemptApproved,
   normalizeKbankWebhookPaymentStatus,
+  stripDisallowedKbankActionPayloadFields,
 } from './kbank-api-reference'
 
 describe('kbank-api-reference', () => {
@@ -33,6 +34,22 @@ describe('kbank-api-reference', () => {
     expect(resolveKbankQrTypeCode('THAI_QR')).toBe('3')
     expect(resolveKbankQrTypeCode('CREDIT_CARD')).toBe('4')
     expect(resolveKbankQrTypeCode('COMBO')).toBe('5')
+  })
+
+  it('strips UI qrType labels from Void payloads so bank does not get Invalid Request Format', () => {
+    const cleaned = stripDisallowedKbankActionPayloadFields(
+      {
+        partnerTxnUid: 'VOD123',
+        origPartnerTxnUid: 'POSQR17877320683801rz8h6',
+        txnNo: '26440008',
+        qrType: 'THAI_QR',
+        terminalId: '09000107',
+      },
+      { includeQrType: false, includeTxnNo: true }
+    )
+    expect(cleaned.qrType).toBeUndefined()
+    expect(cleaned.txnNo).toBe('26440008')
+    expect(cleaned.origPartnerTxnUid).toBe('POSQR17877320683801rz8h6')
   })
 
   it('maps txnStatus and statusCode', () => {

@@ -26,6 +26,7 @@ import {
   resolveKbankInquiryTxnNoForRequest,
   resolveKbankQrTypeCode,
   resolveKbankVoidTxnNoForRequest,
+  stripDisallowedKbankActionPayloadFields,
 } from '@/lib/payments/kbank-api-reference'
 import type { KbankRuntimeEnv } from '@/lib/payments/kbank-runtime-env'
 import { kbankRuntimeField, mustKbankRuntimeField } from '@/lib/payments/kbank-runtime-env'
@@ -864,7 +865,10 @@ function buildTxnPayload(
   const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
   const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
   const merchantId = mustEnvCtx(ctx, 'KBANK_MERCHANT_ID')
-  const payload = { ...(req.payload || {}) } as Record<string, unknown>
+  const payload = stripDisallowedKbankActionPayloadFields(
+    { ...(req.payload || {}) } as Record<string, unknown>,
+    { includeQrType: options?.includeQrType, includeTxnNo: options?.includeTxnNo }
+  )
   const reqTerminalId =
     'terminalId' in req ? String((req as { terminalId?: string }).terminalId || '').trim() : ''
   const reqQrType = 'qrType' in req ? String((req as { qrType?: string }).qrType || '').trim() : ''

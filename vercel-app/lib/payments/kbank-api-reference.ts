@@ -281,6 +281,23 @@ export function resolveKbankQrTypeCode(input: string | undefined): string {
   return raw
 }
 
+/**
+ * Drop client/UI fields that must not reach Void/Cancel bank bodies.
+ * Example: qrType "THAI_QR" (bank expects "3" or omit) causes Invalid Request Format.
+ */
+export function stripDisallowedKbankActionPayloadFields(
+  payload: Record<string, unknown>,
+  options?: { includeQrType?: boolean; includeTxnNo?: boolean }
+): Record<string, unknown> {
+  const out = { ...payload }
+  if (!options?.includeQrType) delete out.qrType
+  if (!options?.includeTxnNo) delete out.txnNo
+  delete out.partnerId
+  delete out.partnerSecret
+  delete out.merchantId
+  return out
+}
+
 export function isKbankBusinessSuccess(statusCode: unknown): boolean {
   return String(statusCode || '').trim() === KBANK_STATUS_CODE_SUCCESS
 }
