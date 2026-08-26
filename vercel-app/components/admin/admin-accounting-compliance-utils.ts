@@ -333,3 +333,19 @@ export function csvCell(v: unknown): string {
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
   return s
 }
+
+/** 세무 신고 필터 행에 ภ.ง.ด.3/53 RD Prep TXT 버튼을 둘지 */
+export function shouldShowPnd353RdPrepTxtDownload(params: {
+  pp30Mode: string
+  showPnd1Area: boolean
+  showPnd353Tools: boolean
+  whtFocusMode?: string
+  isPnd5354CompactList: boolean
+  pnd5354SubView: "pnd53" | "pnd54"
+}): boolean {
+  if (params.pp30Mode !== "wht_only") return false
+  if (params.showPnd1Area) return false
+  if (!params.showPnd353Tools) return false
+  if (params.whtFocusMode === "pnd3" || params.whtFocusMode === "pnd53") return true
+  return params.isPnd5354CompactList && params.pnd5354SubView === "pnd53"
+}

@@ -80,14 +80,22 @@ export function splitThaiPayeeName(payeeName: string): {
 } {
   const raw = rdPipeSafe(payeeName)
   if (!raw) return { titleName: '', firstName: '', surName: '' }
-  if (/บริษัท|ห้างหุ้นส่วน|จำกัด/i.test(raw)) {
-    return { titleName: 'บริษัท', firstName: raw, surName: '' }
+  const juristicTitle = /ห้างหุ้นส่วนจำกัด/i.test(raw)
+    ? 'ห้างหุ้นส่วนจำกัด'
+    : /ห้างหุ้นส่วน/i.test(raw)
+      ? 'ห้างหุ้นส่วน'
+      : /บริษัท|บจก\.?|บมจ\.?|จำกัด/i.test(raw)
+        ? 'บริษัท'
+        : null
+  if (juristicTitle) {
+    const stripped = raw.replace(/^(บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วน|บจก\.?|บมจ\.?)\s*/i, '').trim()
+    return { titleName: juristicTitle, firstName: (stripped || raw).slice(0, 100), surName: '' }
   }
   const titleMatch = raw.match(/^(นาย|นาง|นางสาว|น\.ส\.|Mr\.|Mrs\.|Ms\.)\s*(.+)$/i)
   if (titleMatch) {
-    return { titleName: titleMatch[1]!, firstName: titleMatch[2]!.trim(), surName: '' }
+    return { titleName: titleMatch[1]!, firstName: titleMatch[2]!.trim().slice(0, 100), surName: '' }
   }
-  return { titleName: '', firstName: raw, surName: '' }
+  return { titleName: '', firstName: raw.slice(0, 100), surName: '' }
 }
 
 export function payeeTin10(taxId13: string): string {

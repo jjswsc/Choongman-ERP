@@ -4,6 +4,7 @@ import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { pnd1LedgerToRdPrepTxt, type Pnd1SourceRow } from '@/lib/pnd1-rd-prep-txt'
+import { enrichRdPrepLedgerPayeeAddresses } from '@/lib/rd-prep-payee-address-server'
 import { buildPnd1RdPrepReviewWorkbook, buildPnd1RdPrepXlsxFilename } from '@/lib/pnd1-rd-prep-xlsx'
 import { writeErpXlsxWorkbookToBuffer } from '@/lib/erp-excel-export'
 import { matchesPnd1FilingForm } from '@/lib/withholding-tax-csv'
@@ -104,13 +105,19 @@ export async function GET(request: NextRequest) {
       store_name?: string | null
     })[] | null
 
-    const filteredRows = (rows || []).filter((row) => {
+    const scopedRows = (rows || []).filter((row) => {
       if (!storeScope.matches(String(row.store_name || ''))) return false
       const statusOk =
         filingStatus === '' || normalizeLedgerFilingStatus(row.filing_status) === filingStatus
       if (!statusOk) return false
       return matchesPnd1FilingForm(row.form_hint, filingForm)
     })
+    let filteredRows = scopedRows
+    try {
+      filteredRows = await enrichRdPrepLedgerPayeeAddresses(scopedRows)
+    } catch (e) {
+      console.warn('exportPnd1RdPrepTxt: payee address enrich skipped', e)
+    }
 
     if (!filteredRows.length) {
       return NextResponse.json(

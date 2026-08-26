@@ -68,6 +68,7 @@ import {
   emptyPnd54,
   formatBangkokDateTime,
   mergeWhtAmountPatch,
+  shouldShowPnd353RdPrepTxtDownload,
 } from "./admin-accounting-compliance-utils"
 import { isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
@@ -751,9 +752,14 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   {pnd1RdPrepExcelBtnLabel}
                 </Button>
               </>
-            ) : showPnd353Tools &&
-              (whtFocusMode === "pnd3" ||
-                (isPnd5354CompactList && pnd5354SubView === "pnd53")) ? (
+            ) : shouldShowPnd353RdPrepTxtDownload({
+                pp30Mode,
+                showPnd1Area,
+                showPnd353Tools,
+                whtFocusMode,
+                isPnd5354CompactList,
+                pnd5354SubView,
+              }) ? (
               <>
                 <Button
                   type="button"
@@ -768,12 +774,16 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   onClick={() => void handleDownloadPnd53RdFilingTxt()}
                 >
                   <Download className="h-4 w-4 mr-1 shrink-0" aria-hidden />
-                  {t("accCompPnd53RdFilingTxt")}
+                  {t(whtFocusMode === "pnd3" ? "accCompPnd3RdPrepTxt" : "accCompPnd53RdFilingTxt")}
                 </Button>
                 <RdPrepFilingHelper
                   t={t}
                   variant="compact"
-                  mappingGuideBody={t("accCompRdPrepMappingGuideBodyPnd53")}
+                  mappingGuideBody={t(
+                    whtFocusMode === "pnd3"
+                      ? "accCompRdPrepMappingGuideBodyPnd3"
+                      : "accCompRdPrepMappingGuideBodyPnd53"
+                  )}
                 />
               </>
             ) : null}

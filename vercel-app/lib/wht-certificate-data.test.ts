@@ -166,6 +166,11 @@ describe('resolveVendorPayeeForWht', () => {
     expect(found.taxId).toBe('0105553045044')
     expect(found.address).toContain('ทรู ทาวเวอร์')
   })
+
+  it('matches by tax ID when the payee name is incomplete', () => {
+    const found = resolveVendorPayeeForWht(vendors, '', 'ทรู', '0105553045044')
+    expect(found.address).toContain('ทรู ทาวเวอร์')
+  })
 })
 
 describe('whtCertificateFromPurchaseOrder', () => {

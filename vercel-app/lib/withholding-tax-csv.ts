@@ -6,6 +6,7 @@ export type WithholdingTaxLedgerRow = {
   tax_month?: string
   payee_name?: string | null
   payee_tax_id?: string | null
+  payee_address?: string | null
   income_type?: string | null
   gross_amount?: number | string | null
   wht_rate?: number | string | null

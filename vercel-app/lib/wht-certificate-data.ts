@@ -14,6 +14,7 @@ import {
   purchaseOrderMetaOrderDate,
   resolveAccountingPoIssuerStore,
 } from '@/lib/purchase-order-cart'
+import { findPayeeMaster } from '@/lib/rd-prep-payee-address'
 import { cleanTaxEntityDisplayName } from '@/lib/tax-entity-scope-label'
 import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
 
@@ -365,31 +366,17 @@ export function whtCertificateFromExpenseRegister(
 }
 
 /** 거래처 마스터로 50 ทวิ 수취인 TIN·주소 보강 (장부/인쇄 공통) */
-function normalizeVendorNameKey(raw: string): string {
-  return String(raw || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/บริษัท\s*/g, '')
-    .replace(/\s*จำกัด\s*$/g, '')
-    .replace(/\s*co\.?\s*,?\s*ltd\.?\s*$/g, '')
-    .trim()
-}
-
 export function resolveVendorPayeeForWht(
   vendors: { code?: string; name?: string; taxId?: string; address?: string }[],
   codeRaw: string,
-  nameRaw: string
+  nameRaw: string,
+  taxIdRaw?: string
 ): { taxId: string; address: string } {
-  const code = String(codeRaw || '').trim()
-  const name = String(nameRaw || '').trim()
-  const nameKey = normalizeVendorNameKey(name)
-  const found =
-    vendors.find((v) => code && String(v.code || '').trim() === code) ||
-    vendors.find((v) => name && String(v.name || '').trim() === name) ||
-    (nameKey
-      ? vendors.find((v) => normalizeVendorNameKey(String(v.name || '')) === nameKey)
-      : undefined)
+  const found = findPayeeMaster(vendors, {
+    code: codeRaw,
+    name: nameRaw,
+    taxId: taxIdRaw,
+  })
   return {
     taxId: String(found?.taxId || '').trim(),
     address: String(found?.address || '').trim(),

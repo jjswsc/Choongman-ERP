@@ -3426,8 +3426,9 @@ export function AdminAccountingCompliance({
       const items = await Promise.all(
         eligible.map(async (r) => {
           const payeeName = String(r.payee_name || "").trim()
-          const fromVendor = resolveVendorPayeeForWht(vendors, "", payeeName)
-          const payeeTaxId = String(r.payee_tax_id || "").trim() || fromVendor.taxId
+          const payeeTaxIdRaw = String(r.payee_tax_id || "").trim()
+          const fromVendor = resolveVendorPayeeForWht(vendors, "", payeeName, payeeTaxIdRaw)
+          const payeeTaxId = payeeTaxIdRaw || fromVendor.taxId
           const payeeAddress = fromVendor.address
           // 발주 자동분(레거시 inbound 포함)은 당사 발급 증명서 → 원천징수자 상단
           const src = String(r.source_type || "").trim().toLowerCase()
@@ -3737,37 +3738,12 @@ export function AdminAccountingCompliance({
       }),
     [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
   )
-  const pnd53RdFilingUrl = React.useMemo(
-    () =>
-      getExportPnd53RdFilingTxtUrl({
-        userRole: role,
-        taxMonth,
-        yearMonth: taxMonth,
-        periodType,
-        filingStatus: ledgerStatusFilter,
-        storeFilter: storeFilterForApi,
-        formHint: whtSubmissionFormHint,
-        payerTaxId: pnd1PayerTaxId,
-        payerBranchNo: pnd1PayerBranchNo,
-      }),
-    [
-      role,
-      taxMonth,
-      periodType,
-      ledgerStatusFilter,
-      storeFilterForApi,
-      whtSubmissionFormHint,
-      pnd1PayerTaxId,
-      pnd1PayerBranchNo,
-      pnd1PayerName,
-    ]
-  )
   const handleDownloadPnd53RdFilingTxt = React.useCallback(async () => {
+    const isPnd3Soft = String(whtSubmissionFormHint || "").toUpperCase() === "PND3"
     let payerTaxId = String(pnd1PayerTaxId || "")
       .replace(/\D/g, "")
       .trim()
     let payerBranchNo = String(pnd1PayerBranchNo || "").trim() || "00000"
-    // soft TXT에는 납부자 TIN이 없어도 됨 — 있으면 파일명·참고용으로만 채움
     if (payerTaxId.length !== 13) {
       const fromStore = await loadRdPayerFromStoreSources()
       if (payerTaxId.length !== 13) payerTaxId = fromStore.payerTaxId
@@ -3777,6 +3753,15 @@ export function AdminAccountingCompliance({
       if (fromStore.payerName) setPnd1PayerName(fromStore.payerName)
       if (payerTaxId) setPnd1PayerTaxId(payerTaxId)
       if (payerBranchNo) setPnd1PayerBranchNo(payerBranchNo)
+    }
+    // Format กลาง(PND53)만 납부자 TIN 필수. PND3 ใบแนบ 소프트 TXT는 TIN 없이 내려받을 수 있음.
+    if (!isPnd3Soft && payerTaxId.length !== 13) {
+      appAlert(
+        tr(t, "accCompPp30ExportRequiredMissing", {
+          fields: t("accCompPp30ExportField_companyTaxId13"),
+        })
+      )
+      return
     }
     const url = getExportPnd53RdFilingTxtUrl({
       userRole: role,
@@ -3788,12 +3773,14 @@ export function AdminAccountingCompliance({
       formHint: whtSubmissionFormHint,
       payerTaxId: payerTaxId.length === 13 ? payerTaxId : undefined,
       payerBranchNo,
-      layout: "soft",
+      layout: isPnd3Soft ? "soft" : "official",
     })
     try {
       await downloadAuthenticatedFile(
         url,
-        `PND53_rd_prep_${payerTaxId || "soft"}_${taxMonth}.txt`
+        isPnd3Soft
+          ? `PND3_rd_prep_${taxMonth}.txt`
+          : `PND53_${payerTaxId}_${taxMonth}.txt`
       )
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e || "")
@@ -3814,6 +3801,7 @@ export function AdminAccountingCompliance({
     storeFilterForApi,
     whtSubmissionFormHint,
     t,
+    tr,
   ])
   const pp36ExportUrl = React.useMemo(
     () =>

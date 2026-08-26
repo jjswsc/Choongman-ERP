@@ -3138,8 +3138,10 @@ export const i18n = {
       'ภ.พ.30: RD Prep에서 「ภ.พ.30」 선택 → 구분 기호 | → 매출/매입 컬럼 매핑 저장 → 「บันทึกและสร้างไฟล์」로 .rdx 생성',
     accCompRdPrepMappingGuideBodyPnd1:
       'ภ.ง.ด.1: RD Prep에서 「ภ.ง.ด.1」 선택 → 구분 기호 | → 지급일·수취인·TIN·금액 매핑 저장 → .rdx 생성\n(행이 1,000건 이하면 e-Filing 화면 직접 입력도 가능)',
+    accCompRdPrepMappingGuideBodyPnd3:
+      'ภ.ง.ด.3: RD Prep에서 「ภ.ง.ด.3」 선택 → 구분 기호 | → 수취인·ที่อยู่·금액 매핑 저장 → .rdx 생성\n(ที่อยู่는 거래처/직원 마스터 주소에서 채웁니다)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'ภ.ง.ด.53: RD Prep에서 「ภ.ง.ด.53」 선택 → 구분 기호 | → 매핑 저장 → .rdx 생성',
+      'ภ.ง.ด.53: RD Prep에서 「ภ.ง.ด.53」 → Format กลาง TXT 가져오기 → 「บันทึกและสร้างไฟล์」로 .rdx 생성 (컬럼 매핑 불필요)',
     accCompPp30ExportNeedSearch: '조건을 맞춘 뒤 검색을 누른 다음 다운로드할 수 있습니다.',
     accCompPp30ExportRequiredMissing:
       '필수 정보가 없어 파일을 만들 수 없습니다: {fields}. 「매장 납세자 정보」 탭에서 법인명·13자리 TIN을 저장하거나, KT20k/E-tax 전역 설정을 확인하세요.',
@@ -3784,7 +3786,8 @@ export const i18n = {
     accCompPnd5354SubPnd53: 'P.N.D.53 (법인 원천)',
     accCompPnd5354SubPnd54: 'P.N.D.54 (해외 지급)',
     accCompPnd53SubmissionCsv: 'P.N.D.53 신고 제출형 CSV',
-    accCompPnd53RdFilingTxt: 'PND53 RD Prep용 TXT (→ RD Prep에서 .rdx)',
+    accCompPnd3RdPrepTxt: 'PND3 RD Prep용 TXT (→ RD Prep에서 ใบแนบ)',
+    accCompPnd53RdFilingTxt: 'PND53 Format กลาง TXT (→ RD Prep에서 .rdx)',
     accCompPnd54ExportCsv: 'P.N.D.54 CSV보내기',
     accCompPnd53ValidateBtn: 'P.N.D.53 검증',
     accCompPp36EmbeddedSearchHint: '위 부가세(P.P.30)에서 검색을 누르면 이 영역도 함께 조회됩니다.',
@@ -11293,8 +11296,10 @@ Only matters the employee must handle personally on a working day:
       'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
     accCompRdPrepMappingGuideBodyPnd1:
       'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd3:
+      'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map payee, address, amounts → create .rdx\n(Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → import Format กลาง TXT → save .rdx (no column mapping)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing:
       'Cannot build the file — missing: {fields}. Save this store’s taxpayer profile (legal name + 13-digit TIN), or check KT20k / E-tax global settings.',
@@ -11942,7 +11947,8 @@ Only matters the employee must handle personally on a working day:
     accCompPnd5354SubPnd53: 'P.N.D.53 (domestic WHT)',
     accCompPnd5354SubPnd54: 'P.N.D.54 (overseas payments)',
     accCompPnd53SubmissionCsv: 'P.N.D.53 filing CSV',
-    accCompPnd53RdFilingTxt: 'P.N.D.53 RD Filing TXT (e-Filing · .rdx)',
+    accCompPnd3RdPrepTxt: 'P.N.D.3 RD Prep TXT (→ attachment in RD Prep)',
+    accCompPnd53RdFilingTxt: 'P.N.D.53 Format กลาง TXT (RD Prep → .rdx)',
     accCompPnd54ExportCsv: 'P.N.D.54 CSV export',
     accCompPnd53ValidateBtn: 'Validate P.N.D.53',
     accCompPp36EmbeddedSearchHint: 'Click Search in the P.P.30 section above to load this area too.',
@@ -19060,12 +19066,15 @@ orderItemQty: 'จำนวน',
       'ภ.พ.30: ใน RD Prep เลือก 「ภ.พ.30」 → ตัวคั่น | → จับคู่คอลัมน์ขาย/ซื้อ → กดบันทึกและสร้างไฟล์เป็น .rdx',
     accCompRdPrepMappingGuideBodyPnd1:
       'ภ.ง.ด.1: ใน RD Prep เลือก 「ภ.ง.ด.1」 → ตัวคั่น | → จับคู่ วันจ่าย·ผู้รับ·TIN·ยอด → สร้าง .rdx\n(ถ้าไม่เกิน 1,000 รายการ กรอกใบแนบบน e-Filing ได้โดยไม่ต้องใช้ RD Prep)',
+    accCompRdPrepMappingGuideBodyPnd3:
+      'ภ.ง.ด.3: ใน RD Prep เลือก 「ภ.ง.ด.3」 → ตัวคั่น | → จับคู่ ผู้รับ·ที่อยู่·ยอด → สร้าง .rdx\n(ที่อยู่ดึงจากข้อมูลผู้ขาย/พนักงานครับ)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'ภ.ง.ด.53: ใน RD Prep เลือก 「ภ.ง.ด.53」 → ตัวคั่น | → บันทึก mapping → สร้าง .rdx',
+      'ภ.ง.ด.53: ใน RD Prep เลือก 「ภ.ง.ด.53」 → นำเข้า TXT รูปแบบกลาง → บันทึกเป็น .rdx (ไม่ต้อง mapping คอลัมน์)',
     accCompPp30ExportNeedSearch: 'ตั้งค่าตัวกรองแล้วกดค้นหาก่อน จึงจะดาวน์โหลดได้',
     accCompPnd1ExportTxt: 'ดาวน์โหลด TXT ภ.ง.ด.1 สำหรับ RD Prep (ยังไม่ใช่ .rdx)',
     accCompPnd1ExportExcel: 'Excel ตรวจสอบ ภ.ง.ด.1',
-    accCompPnd53RdFilingTxt: 'ดาวน์โหลด TXT ภ.ง.ด.53 สำหรับ RD Prep (ยังไม่ใช่ .rdx)',
+    accCompPnd3RdPrepTxt: 'ดาวน์โหลด TXT ภ.ง.ด.3 สำหรับ RD Prep (ใบแนบ)',
+    accCompPnd53RdFilingTxt: 'ดาวน์โหลด TXT ภ.ง.ด.53 รูปแบบกลาง (ยังไม่ใช่ .rdx)',
     accCompPp30ExportRequiredMissing: 'สร้างไฟล์ไม่ได้ — ขาดข้อมูล: {fields} กรอกชื่อบริษัทและเลขประจำตัวผู้เสียภาษี 13 หลักใน KT20k หรือแท็บ E-tax',
     accCompPp30ExportOptionalGaps: 'หัวตาราง/คอลัมน์คู่ค้าให้ตรง Flowaccount — กรอกเองใน Excel: {fields}',
     accCompPp30ExportRowGapsNote:
@@ -25370,8 +25379,10 @@ orderItemQty: 'အရေအတွက်',
       'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
     accCompRdPrepMappingGuideBodyPnd1:
       'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd3:
+      'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map payee, address, amounts → create .rdx\n(Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → import Format กลาง TXT → save .rdx (no column mapping)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -30294,8 +30305,10 @@ orderItemQty: 'ຈຳນວນ',
       'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
     accCompRdPrepMappingGuideBodyPnd1:
       'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd3:
+      'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map payee, address, amounts → create .rdx\n(Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → import Format กลาง TXT → save .rdx (no column mapping)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -33338,8 +33351,10 @@ orderItemQty: 'ຈຳນວນ',
       'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
     accCompRdPrepMappingGuideBodyPnd1:
       'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd3:
+      'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map payee, address, amounts → create .rdx\n(Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → import Format กลาง TXT → save .rdx (no column mapping)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -35199,8 +35214,10 @@ orderItemQty: 'ຈຳນວນ',
       'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
     accCompRdPrepMappingGuideBodyPnd1:
       'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd3:
+      'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map payee, address, amounts → create .rdx\n(Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → import Format กลาง TXT → save .rdx (no column mapping)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -37022,8 +37039,10 @@ orderItemQty: 'ຈຳນວນ',
       'P.P.30: In RD Prep choose P.P.30 → delimiter | → map output/input columns → Save and create .rdx',
     accCompRdPrepMappingGuideBodyPnd1:
       'P.N.D.1: In RD Prep choose P.N.D.1 → delimiter | → map pay date, payee, TIN, amounts → create .rdx\n(If ≤1,000 rows you may also enter attachments online in e-Filing)',
+    accCompRdPrepMappingGuideBodyPnd3:
+      'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map payee, address, amounts → create .rdx\n(Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → save mapping → create .rdx',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → import Format กลาง TXT → save .rdx (no column mapping)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',

@@ -15,6 +15,10 @@ import {
 } from '@/lib/rd-filing-common'
 import { ledgerRowsToRdPrepSoftAttachmentTxt } from '@/lib/rd-prep-soft-attachment-txt'
 
+/** Format กลาง v2.0 — HEADER 25칸 / DETAIL 38칸 */
+export const PND53_RD_HEADER_FIELD_COUNT = 25
+export const PND53_RD_DETAIL_FIELD_COUNT = 38
+
 export type Pnd53RdFilingTxtOptions = {
   payerTaxId: string
   payerBranchNo?: string
@@ -67,38 +71,44 @@ export function pnd53LedgerToRdPrepSoftTxt(
   })
 }
 
+/** RD ใบแนบ ประเภทเงินได้ — 한글·영문 원장을 태국어 양식 문구로 */
+export function toPnd53IncomeTypeLabel(raw: unknown): string {
+  const s = rdPipeSafe(raw).slice(0, 100)
+  if (!s) return ''
+  if (/[\u0E00-\u0E7F]/.test(s)) return s
+  const lower = s.toLowerCase()
+  if (/royalt|로열티|ค่าสิทธิ/.test(lower) || s.includes('로열티')) return 'ค่าสิทธิ'
+  if (/rent|lease|임대|ค่าเช่า/.test(lower) || s.includes('임대')) return 'ค่าเช่า'
+  if (/interest|이자|ดอกเบี้ย/.test(lower) || s.includes('이자')) return 'ดอกเบี้ย'
+  if (/service|용역|서비스|ค่าบริการ/.test(lower) || s.includes('서비스') || s.includes('용역')) {
+    return 'ค่าบริการ'
+  }
+  return s
+}
+
 function groupRowsForDetail(rows: WithholdingTaxLedgerRow[]): DetailGroup[] {
-  const map = new Map<string, DetailGroup>()
+  const byPayee = new Map<string, DetailGroup[]>()
   for (const row of rows) {
     const payeeTaxId = rdDigitsOnly(row.payee_tax_id).slice(0, 13)
     const payeeName = rdPipeSafe(row.payee_name)
     const key = `${payeeTaxId}|${payeeName}`
-    let group = map.get(key)
-    if (!group) {
+    const list = byPayee.get(key) ?? []
+    let group = list[list.length - 1]
+    if (!group || group.slots.length >= 3) {
       group = { payeeTaxId, payeeName, slots: [] }
-      map.set(key, group)
+      list.push(group)
+      byPayee.set(key, list)
     }
-    if (group.slots.length >= 3) {
-      const newKey = `${key}#${group.slots.length}`
-      let overflow = map.get(newKey)
-      if (!overflow) {
-        overflow = { payeeTaxId, payeeName, slots: [] }
-        map.set(newKey, overflow)
-      }
-      group = overflow
-    }
-    if (group.slots.length < 3) {
-      group.slots.push({
-        paidDate: isoToRdBeDate8(row.payment_date),
-        taxRate: rdFormatAmount2(row.wht_rate),
-        paidAmt: rdFormatAmount2(row.gross_amount),
-        taxAmt: rdFormatAmount2(row.wht_amount),
-        incomeType: rdPipeSafe(row.income_type),
-        payCon: '1',
-      })
-    }
+    group.slots.push({
+      paidDate: isoToRdBeDate8(row.payment_date) || '00000000',
+      taxRate: rdFormatAmount2(row.wht_rate),
+      paidAmt: rdFormatAmount2(row.gross_amount),
+      taxAmt: rdFormatAmount2(row.wht_amount),
+      incomeType: toPnd53IncomeTypeLabel(row.income_type),
+      payCon: '1',
+    })
   }
-  return [...map.values()].filter((g) => g.slots.length > 0)
+  return [...byPayee.values()].flat().filter((g) => g.slots.length > 0)
 }
 
 function buildHeaderLine(opts: Pnd53RdFilingTxtOptions, groups: DetailGroup[]): string {
@@ -123,7 +133,7 @@ function buildHeaderLine(opts: Pnd53RdFilingTxtOptions, groups: DetailGroup[]): 
     'PND53',
     payerTaxId,
     payerBranch,
-    rdPipeSafe(opts.deptName || 'สำนักงานใหญ่'),
+    rdPipeSafe(opts.deptName || 'สำนักงานใหญ่').slice(0, 80),
     opts.section3 ?? '0',
     opts.section65 ?? '0',
     opts.section69 ?? '0',
@@ -138,14 +148,18 @@ function buildHeaderLine(opts: Pnd53RdFilingTxtOptions, groups: DetailGroup[]): 
     '0.00',
     rdFormatAmount2(totTax),
     '0.00',
-    rdPipeSafe(opts.rdUserId || ''),
-    opts.formFlag ?? '1',
+    rdPipeSafe(opts.rdUserId || '').slice(0, 20),
+    opts.formFlag ?? '2',
   ]
   return fields.join('|')
 }
 
 function slotField(slot: DetailIncomeSlot | undefined, key: keyof DetailIncomeSlot): string {
-  if (!slot) return key === 'paidDate' ? '' : key.startsWith('tax') || key.startsWith('paid') ? '0.00' : ''
+  if (!slot) {
+    if (key === 'paidDate') return '00000000'
+    if (key.startsWith('tax') || key.startsWith('paid')) return '0.00'
+    return ''
+  }
   return slot[key]
 }
 
@@ -181,7 +195,6 @@ function buildDetailLine(seqNo: number, payerBranch: string, group: DetailGroup)
     slotField(s3, 'taxAmt'),
     slotField(s3, 'incomeType'),
     slotField(s3, 'payCon'),
-    '',
     '',
     '',
     '',

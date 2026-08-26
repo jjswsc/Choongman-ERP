@@ -6,9 +6,13 @@ import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib
 import { normalizePndFormHint, type WithholdingTaxLedgerRow } from '@/lib/withholding-tax-csv'
 import { buildRdFilingTxtFilename, rdDigitsOnly } from '@/lib/rd-filing-common'
 import { pnd53LedgerToRdFilingTxt, pnd53LedgerToRdPrepSoftTxt } from '@/lib/pnd53-rd-filing-txt'
+import { enrichRdPrepLedgerPayeeAddresses } from '@/lib/rd-prep-payee-address-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -93,10 +97,19 @@ export async function GET(request: NextRequest) {
       order: 'payment_date.asc,id.asc',
     })) as WithholdingTaxLedgerRow[] | null
     const scopedRows = (rows || []).filter((row) => storeScope.matches(String(row.store_name || '')))
-    const filteredRows =
+    const statusFiltered =
       filingStatus === ''
         ? scopedRows
         : scopedRows.filter((row) => normalizeLedgerFilingStatus(row.filing_status) === filingStatus)
+    // Format กลาง에는 주소 칸이 없음. ใบแนบ(soft)만 거래처·직원 주소 보강.
+    let filteredRows = statusFiltered
+    if (layout !== 'official') {
+      try {
+        filteredRows = await enrichRdPrepLedgerPayeeAddresses(statusFiltered)
+      } catch (e) {
+        console.warn('exportPnd53RdFilingTxt: payee address enrich skipped', e)
+      }
+    }
 
     const txt =
       layout === 'official'
