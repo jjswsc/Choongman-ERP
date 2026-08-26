@@ -90,6 +90,7 @@ import {
   coercePosStoreImportDepositCategory,
   isPosRevenueDepositCategory,
 } from "@/lib/bank-import-deposit-category"
+import { bankDepositLoanCategorySelectValue } from "@/lib/bank-loan-categories"
 import { defaultBankDepositSalesDateForRow } from "@/lib/pos-channel-reconcile-match"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -2865,7 +2866,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   </Select>
                                 ) : (
                                   <Select
-                                    value={cat}
+                                    value={bankDepositLoanCategorySelectValue(cat)}
                                     onValueChange={(v) => {
                                       if (!r.id) return
                                       const mergedEdits = patchCategoryEditsForAdvance(
@@ -2890,8 +2891,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                                       <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                                       <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                              <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                              <SelectItem value="loan">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
+                                      <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
                                       <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                       <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                       <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
@@ -3557,7 +3557,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           ) : (
                             <div className="space-y-1">
                               <Select
-                                value={impRaw}
+                                value={bankDepositLoanCategorySelectValue(impRaw)}
                                 onValueChange={(v) => setImportRowEdit(idx, "category", v)}
                               >
                                 <SelectTrigger className="h-8 text-xs">
@@ -3569,8 +3569,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                                   <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                                   <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                              <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                              <SelectItem value="loan">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
+                                  <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
                                   <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                   <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                   <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
@@ -3949,7 +3948,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     </div>
                     <div>
                       <label className="text-xs text-muted-foreground block mb-1">{t("bankCategoryLabel") || "용도"}</label>
-                      <Select value={newRuleCategory} onValueChange={setNewRuleCategory}>
+                      <Select
+                        value={
+                          newRuleTransType === "deposit"
+                            ? bankDepositLoanCategorySelectValue(newRuleCategory)
+                            : newRuleCategory
+                        }
+                        onValueChange={setNewRuleCategory}
+                      >
                         <SelectTrigger className="w-[130px] h-9">
                           <SelectValue placeholder={t("optional")} />
                         </SelectTrigger>
@@ -3962,7 +3968,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                               <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
                               <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                              <SelectItem value="loan">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
                               <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                               <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                               <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
@@ -4040,7 +4045,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 </td>
                                 <td className="p-2">
                                   {isEditing ? (
-                                    <Select value={newRuleCategory} onValueChange={setNewRuleCategory}>
+                                    <Select
+                                      value={
+                                        newRuleTransType === "deposit"
+                                          ? bankDepositLoanCategorySelectValue(newRuleCategory)
+                                          : newRuleCategory
+                                      }
+                                      onValueChange={setNewRuleCategory}
+                                    >
                                       <SelectTrigger className="h-8 w-[130px]">
                                         <SelectValue placeholder={t("optional")} />
                                       </SelectTrigger>
@@ -4052,8 +4064,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                             <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                                             <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
                                             <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                              <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                              <SelectItem value="loan">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
+                                            <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
                                             <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                             <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                             <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
