@@ -125,7 +125,7 @@ import { roundMoney2 } from "@/lib/invoice-vat-total"
 import { formatMoneyBaht } from "@/lib/money-amount"
 import { resolveInvoiceClientForTarget, resolveInvoiceClientFromBillToCandidates } from "@/lib/invoice-client-resolve"
 import type { InvoiceData } from "@/components/invoice"
-import type { InvoiceDataClient } from "@/lib/api-client"
+import type { InvoiceDataClient, InvoiceDataCompany } from "@/lib/api-client"
 import { StorePurchaseJournalButton } from "@/components/erp/store-purchase-journal-dialog"
 import { useSearchParams, useRouter } from "next/navigation"
 import { useErpTabActive } from "@/lib/erp-page-visibility"
@@ -147,6 +147,11 @@ import {
   isOfficeLikeLabel,
   clientHasBillToAddress,
   resolveTaxInvoiceClientFromPoBillTo,
+  RECEIVABLE_TAX_INVOICE_PRINT_MAX_BATCH,
+  collectReceivableTaxInvoicePrintTargets,
+  printableReceivableTaxInvoiceKeys,
+  receivableTaxInvoicePrintSelectionKey,
+  resolveReceivableTaxInvoicePrintSource,
 } from "./receivable-payable-tab-utils"
 import { subscribeReceivablePayableListInvalidated, publishReceivablePayableListInvalidated } from "@/lib/receivable-payable-list-sync"
 import {
@@ -317,6 +322,13 @@ export function ReceivablePayableTab() {
     invoiceLabel: string
   } | null>(null)
   const [taxInvoiceLoadingKey, setTaxInvoiceLoadingKey] = React.useState<string | null>(null)
+  const [selectedTaxInvoicePrintKeys, setSelectedTaxInvoicePrintKeys] = React.useState<Set<string>>(
+    () => new Set()
+  )
+  const [taxInvoiceBulkProgress, setTaxInvoiceBulkProgress] = React.useState<{
+    current: number
+    total: number
+  } | null>(null)
   const [manualEdit, setManualEdit] = React.useState<{
     ledger: "receivable" | "payable"
     id: number
@@ -386,64 +398,83 @@ export function ReceivablePayableTab() {
     []
   )
 
-  const handleTaxInvoicePrint = React.useCallback(
+  const taxInvoicePrintSourceError = React.useCallback(
+    (row: NonNullable<ReceivablePayableItem["items"]>[number]) => {
+      if (row.ref_type === "ForceOutbound") {
+        return tt("recTaxInvoiceNoForceLog", "강제출고 내역을 식별할 수 없습니다.")
+      }
+      if (row.ref_type === "AccountingPO") {
+        return tt("recTaxInvoiceNoPoId", "회계 발주를 식별할 수 없습니다.")
+      }
+      return tt("recTaxInvoiceNoOrderId", "주문을 식별할 수 없습니다.")
+    },
+    [tt]
+  )
+
+  const openTaxInvoicePrintWindow = React.useCallback(
+    async (datas: InvoiceData[]) => {
+      if (datas.length === 0) return false
+      try {
+        sessionStorage.setItem("invoice-print-data", JSON.stringify(datas))
+      } catch (e) {
+        console.error(e)
+        await appAlert(
+          tt(
+            "recTaxInvoiceBulkStorageFail",
+            "인쇄 데이터가 너무 큽니다. 선택 건수를 줄인 뒤 다시 시도해 주세요."
+          )
+        )
+        return false
+      }
+      const printWindow = window.open("/admin/invoice-print", "_blank")
+      if (!printWindow) {
+        await appAlert(tt("recTaxInvoicePopupBlocked", "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
+        return false
+      }
+      printWindow.focus()
+      return true
+    },
+    [tt]
+  )
+
+  const buildTaxInvoicePrintData = React.useCallback(
     async (
       row: NonNullable<ReceivablePayableItem["items"]>[number],
-      recItem: ReceivablePayableItem
-    ) => {
-      let refType: "Order" | "ForceOutbound" | "PO" | null = null
-      let refId: number | null = null
-      if (row.ref_type === "Order") {
-        const orderId = orderIdFromReceivableOrderRow(row)
-        if (orderId == null) {
-          await appAlert(tt("recTaxInvoiceNoOrderId", "주문을 식별할 수 없습니다."))
-          return
-        }
-        refType = "Order"
-        refId = orderId
-      } else if (row.ref_type === "ForceOutbound") {
-        const sid = Number(row.ref_id)
-        if (!Number.isFinite(sid) || sid <= 0) {
-          await appAlert(tt("recTaxInvoiceNoForceLog", "강제출고 내역을 식별할 수 없습니다."))
-          return
-        }
-        refType = "ForceOutbound"
-        refId = sid
-      } else if (row.ref_type === "AccountingPO") {
-        const poId = Number(row.ref_id)
-        if (!Number.isFinite(poId) || poId <= 0) {
-          await appAlert(tt("recTaxInvoiceNoPoId", "회계 발주를 식별할 수 없습니다."))
-          return
-        }
-        refType = "PO"
-        refId = poId
-      } else {
-        return
+      recItem: ReceivablePayableItem,
+      shared?: {
+        company: InvoiceDataCompany
+        clients: Record<string, InvoiceDataClient>
+        settings: Record<string, string>
       }
-
-      const loadKey = refType === "Order"
-        ? `tax-${row.id ?? refId}`
-        : refType === "ForceOutbound"
-          ? `tax-fo-${row.id ?? refId}`
-          : `tax-apo-${row.id ?? refId}`
-      setTaxInvoiceLoadingKey(loadKey)
+    ): Promise<{ ok: true; data: InvoiceData } | { ok: false; message: string }> => {
+      const source = resolveReceivableTaxInvoicePrintSource(row)
+      if (!source) {
+        return { ok: false, message: taxInvoicePrintSourceError(row) }
+      }
+      const { refType, refId } = source
       try {
         const targetLabel = String(recItem.storeName || recItem.vendorName || "").trim()
-        const [{ items, orderInvoiceTotals, withholdingTaxAmount, withholdingTaxRate, poBillTo, referenceNo: stockReferenceNo }, invoiceDataRes, invSettings, billToCandRes] =
-          await Promise.all([
+        const [lineRes, invoiceDataRes, invSettings, billToCandRes] = await Promise.all([
           getPayableTransactionItems({ refType, refId }),
-          getInvoiceData(),
-          getInvoiceSettings(),
-          refType === "Order" && refId != null
+          shared ? Promise.resolve(null) : getInvoiceData(),
+          shared ? Promise.resolve(null) : getInvoiceSettings(),
+          refType === "Order"
             ? getInvoiceOrderBillToCandidates([refId])
-            : Promise.resolve({ map: {} as Record<string, string[]>, taxInvoiceClientMap: {} as Record<string, InvoiceDataClient> }),
+            : Promise.resolve({
+                map: {} as Record<string, string[]>,
+                taxInvoiceClientMap: {} as Record<string, InvoiceDataClient>,
+              }),
         ])
+        const { items, orderInvoiceTotals, withholdingTaxAmount, withholdingTaxRate, poBillTo, referenceNo: stockReferenceNo } =
+          lineRes
         if (!items.length) {
-          await appAlert(tt("recTaxInvoiceNoLines", "주문 품목이 없어 세금계산서를 만들 수 없습니다."))
-          return
+          return { ok: false, message: tt("recTaxInvoiceNoLines", "주문 품목이 없어 세금계산서를 만들 수 없습니다.") }
         }
-        const { company, clients } = invoiceDataRes
-        const settings = typeof invSettings === "object" && invSettings !== null ? invSettings : {}
+        const company = shared?.company ?? invoiceDataRes!.company
+        const clients = shared?.clients ?? invoiceDataRes!.clients
+        const settings =
+          shared?.settings ??
+          (typeof invSettings === "object" && invSettings !== null ? invSettings : {})
         const billToMap = billToCandRes?.map && typeof billToCandRes.map === "object" ? billToCandRes.map : {}
         const taxInvoiceClientMap =
           billToCandRes?.taxInvoiceClientMap && typeof billToCandRes.taxInvoiceClientMap === "object"
@@ -602,22 +633,134 @@ export function ReceivablePayableTab() {
           }),
           ...(savedShipTo ? { shipTo: savedShipTo } : {}),
         }
-        sessionStorage.setItem("invoice-print-data", JSON.stringify([data]))
-        const printWindow = window.open("/admin/invoice-print", "_blank")
-        if (!printWindow) {
-          await appAlert(tt("recTaxInvoicePopupBlocked", "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
-          return
-        }
-        printWindow.focus()
+        return { ok: true, data }
       } catch (e) {
         console.error(e)
-        await appAlert(t("invLoadFailed"))
+        return { ok: false, message: t("invLoadFailed") }
+      }
+    },
+    [t, tt, taxInvoicePrintSourceError]
+  )
+
+  const handleTaxInvoicePrint = React.useCallback(
+    async (
+      row: NonNullable<ReceivablePayableItem["items"]>[number],
+      recItem: ReceivablePayableItem
+    ) => {
+      const source = resolveReceivableTaxInvoicePrintSource(row)
+      if (!source) {
+        await appAlert(taxInvoicePrintSourceError(row))
+        return
+      }
+      setTaxInvoiceLoadingKey(source.loadKey)
+      try {
+        const result = await buildTaxInvoicePrintData(row, recItem)
+        if (!result.ok) {
+          await appAlert(result.message)
+          return
+        }
+        await openTaxInvoicePrintWindow([result.data])
       } finally {
         setTaxInvoiceLoadingKey(null)
       }
     },
-    [t, tt]
+    [buildTaxInvoicePrintData, openTaxInvoicePrintWindow, taxInvoicePrintSourceError]
   )
+
+  const handleBulkTaxInvoicePrint = React.useCallback(async () => {
+    const targets = collectReceivableTaxInvoicePrintTargets<
+      ReceivablePayableItem["items"][number],
+      ReceivablePayableItem
+    >(listData, selectedTaxInvoicePrintKeys)
+    if (targets.length === 0) {
+      await appAlert(
+        tt("recTaxInvoiceBulkNone", "인쇄할 출고 건을 선택해 주세요. 수금(Receive) 행은 선택할 수 없습니다.")
+      )
+      return
+    }
+    if (targets.length > RECEIVABLE_TAX_INVOICE_PRINT_MAX_BATCH) {
+      await appAlert(
+        tt("recTaxInvoiceBulkMax", "한 번에 최대 {n}건까지 인쇄할 수 있습니다. 선택을 줄여 주세요.").replace(
+          "{n}",
+          String(RECEIVABLE_TAX_INVOICE_PRINT_MAX_BATCH)
+        )
+      )
+      return
+    }
+    setTaxInvoiceLoadingKey("bulk")
+    setTaxInvoiceBulkProgress({ current: 0, total: targets.length })
+    try {
+      const [invoiceDataRes, invSettings] = await Promise.all([getInvoiceData(), getInvoiceSettings()])
+      const shared = {
+        company: invoiceDataRes.company,
+        clients: invoiceDataRes.clients,
+        settings: typeof invSettings === "object" && invSettings !== null ? invSettings : {},
+      }
+      const datas: InvoiceData[] = []
+      const failed: string[] = []
+      for (let i = 0; i < targets.length; i++) {
+        const target = targets[i]!
+        setTaxInvoiceBulkProgress({ current: i + 1, total: targets.length })
+        const result = await buildTaxInvoicePrintData(target.row, target.item, shared)
+        if (result.ok) datas.push(result.data)
+        else failed.push(result.message)
+      }
+      if (datas.length > 0) {
+        const opened = await openTaxInvoicePrintWindow(datas)
+        if (opened && failed.length === 0) {
+          setSelectedTaxInvoicePrintKeys(new Set())
+        }
+      }
+      if (failed.length > 0) {
+        const detail = [...new Set(failed)].slice(0, 3).join(" · ")
+        await appAlert(
+          tt("recTaxInvoiceBulkPartial", "{ok}건 준비, {fail}건은 건너뜀: {detail}")
+            .replace("{ok}", String(datas.length))
+            .replace("{fail}", String(failed.length))
+            .replace("{detail}", detail)
+        )
+      }
+    } catch (e) {
+      console.error(e)
+      await appAlert(t("invLoadFailed"))
+    } finally {
+      setTaxInvoiceLoadingKey(null)
+      setTaxInvoiceBulkProgress(null)
+    }
+  }, [
+    buildTaxInvoicePrintData,
+    listData,
+    openTaxInvoicePrintWindow,
+    selectedTaxInvoicePrintKeys,
+    t,
+    tt,
+  ])
+
+  React.useEffect(() => {
+    setSelectedTaxInvoicePrintKeys(new Set())
+  }, [listData])
+
+  React.useEffect(() => {
+    if (tab !== "receivable") setSelectedTaxInvoicePrintKeys(new Set())
+  }, [tab])
+
+  const toggleTaxInvoicePrintKey = React.useCallback((key: string, next: boolean) => {
+    setSelectedTaxInvoicePrintKeys((prev) => {
+      const n = new Set(prev)
+      if (next) n.add(key)
+      else n.delete(key)
+      return n
+    })
+  }, [])
+
+  const toggleTaxInvoicePrintKeys = React.useCallback((keys: string[], selectAll: boolean) => {
+    setSelectedTaxInvoicePrintKeys((prev) => {
+      const n = new Set(prev)
+      if (selectAll) keys.forEach((k) => n.add(k))
+      else keys.forEach((k) => n.delete(k))
+      return n
+    })
+  }, [])
 
   React.useEffect(() => {
     const rows = listData.flatMap((item) => item.items || [])
@@ -1543,7 +1686,7 @@ export function ReceivablePayableTab() {
     "grid grid-cols-[minmax(0,2fr)_repeat(4,minmax(6rem,1fr))] gap-x-2 sm:gap-x-3 gap-y-1 items-center w-full min-w-0"
   const ledgerSummaryHeaderCellCn = "text-center min-w-0 px-1 text-sm sm:text-sm leading-tight"
   /** table-fixed+w-full은 모바일에서 뒤쪽 금액 열이 0폭으로 잘림 → min-width + 가로 스크롤 */
-  const ledgerDetailTableCn = "min-w-[1150px] w-max max-w-none text-sm border-separate border-spacing-0"
+  const ledgerDetailTableCn = "min-w-[1190px] w-max max-w-none text-sm border-separate border-spacing-0"
 
   const cumulativeBalanceLabel = React.useMemo(() => {
     const base =
@@ -2017,6 +2160,51 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       {t("excelBtn")}
                     </Button>
                   </div>
+                  {selectedTaxInvoicePrintKeys.size > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2 mb-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2">
+                      <FileText className="h-4 w-4 text-primary shrink-0" aria-hidden />
+                      <span className="text-sm font-medium">
+                        {tt("recTaxInvoiceBulkBarCount", "{n}건 선택").replace(
+                          "{n}",
+                          String(selectedTaxInvoicePrintKeys.size)
+                        )}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground max-w-xl">
+                        {tt(
+                          "recTaxInvoiceBulkPrintHint",
+                          "출고 1건 = 세금계산서 1장. 여러 건을 한 장으로 합치지 않습니다."
+                        )}
+                      </span>
+                      <Button
+                        size="sm"
+                        className="h-8 sm:ml-auto"
+                        disabled={taxInvoiceLoadingKey != null}
+                        onClick={() => void handleBulkTaxInvoicePrint()}
+                      >
+                        {taxInvoiceLoadingKey === "bulk" && taxInvoiceBulkProgress
+                          ? tt("recTaxInvoiceBulkPreparing", "세금계산서 {current}/{total}건 준비 중…")
+                              .replace("{current}", String(taxInvoiceBulkProgress.current))
+                              .replace("{total}", String(taxInvoiceBulkProgress.total))
+                          : tt("recTaxInvoiceBulkPrintBtn", "선택 건 인쇄 (건별 1장)")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8"
+                        disabled={taxInvoiceLoadingKey != null}
+                        onClick={() => setSelectedTaxInvoicePrintKeys(new Set())}
+                      >
+                        {tt("recTaxInvoiceClearSelection", "선택 해제")}
+                      </Button>
+                    </div>
+                  ) : ledgerViewMode === "paired" && hasSearchedList ? (
+                    <p className="text-[11px] text-muted-foreground mb-2">
+                      {tt(
+                        "recTaxInvoiceSwitchLedgerToSelect",
+                        "여러 건 인쇄는 「전체 내역」 보기에서 출고 행을 선택합니다."
+                      )}
+                    </p>
+                  ) : null}
                   {ledgerSummaryMetrics}
                   {canSelectStores ? (
                     <p className="text-xs text-amber-900 dark:text-amber-100/90 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 rounded-md px-3 py-2 mb-3 leading-snug">
@@ -2104,6 +2292,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           const tableItems = filterRowsByLedgerPeriod(
                             displayItems.length > 0 ? displayItems : allItems
                           )
+                          const printableKeys = printableReceivableTaxInvoiceKeys(tableItems)
+                          const selectedPrintableCount = printableKeys.filter((k) =>
+                            selectedTaxInvoicePrintKeys.has(k)
+                          ).length
+                          const allPrintableSelected =
+                            printableKeys.length > 0 && selectedPrintableCount === printableKeys.length
+                          const somePrintableSelected =
+                            selectedPrintableCount > 0 && !allPrintableSelected
                           const period = sumReceivablePayablePeriodAmounts(allItems)
                           const receivableDatePairs = pairReceivableLedgerDates(allItems)
                           const receivableAllGroups = groupReceivableLedgerRows(allItems)
@@ -2234,6 +2430,28 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                 <thead>
                                   <tr className="border-b bg-muted/50">
                                     <th className="text-center py-2 px-2 w-[35px] font-semibold" aria-hidden />
+                                    <th className="text-center py-2 px-1 w-[36px] font-semibold">
+                                      <Checkbox
+                                        checked={
+                                          somePrintableSelected ? "indeterminate" : allPrintableSelected
+                                        }
+                                        disabled={
+                                          printableKeys.length === 0 || taxInvoiceLoadingKey != null
+                                        }
+                                        onCheckedChange={(v) => {
+                                          if (printableKeys.length === 0) return
+                                          toggleTaxInvoicePrintKeys(printableKeys, v === true)
+                                        }}
+                                        title={tt(
+                                          "recTaxInvoiceSelectAllHint",
+                                          "이 거래처의 출고 건을 모두 선택. 한 장으로 합치지 않습니다."
+                                        )}
+                                        aria-label={tt(
+                                          "recTaxInvoiceSelectAllHint",
+                                          "이 거래처의 출고 건을 모두 선택. 한 장으로 합치지 않습니다."
+                                        )}
+                                      />
+                                    </th>
                                     <th
                                       className="text-center py-2 px-4 w-[128px] min-w-[128px] font-semibold"
                                       title={tt("recLedgerDateColHint", "위: 매출(발생)일, 아래: 입금(수령)일")}
@@ -2297,9 +2515,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const recOrderTotals = recLineEntry?.orderInvoiceTotals
                                     const recLinesLoading = loadingItemsFor === recRowKey
                                     const recLineColSpan =
-                                      11 +
+                                      12 +
                                       (showReceivableManualActions ? 1 : 0) +
                                       (showStorePurchaseJournalCol ? 1 : 0)
+                                    const printSelectKey = receivableTaxInvoicePrintSelectionKey(row)
+                                    const printSource = resolveReceivableTaxInvoicePrintSource(row)
                                     const canEditManualRecRow =
                                       showReceivableManualActions &&
                                       isManualReceivableBalanceRow(row) &&
@@ -2416,6 +2636,30 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                             )
                                           ) : null}
                                         </div>
+                                      </td>
+                                      <td
+                                        className="py-1.5 px-1 w-[36px] text-center align-middle"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {printSelectKey ? (
+                                          <Checkbox
+                                            checked={selectedTaxInvoicePrintKeys.has(printSelectKey)}
+                                            disabled={taxInvoiceLoadingKey != null}
+                                            onCheckedChange={(v) =>
+                                              toggleTaxInvoicePrintKey(printSelectKey, v === true)
+                                            }
+                                            title={tt(
+                                              "recTaxInvoiceSelectRowHint",
+                                              "세금계산서 인쇄 대상 선택 (출고 1건 = 1장)"
+                                            )}
+                                            aria-label={tt(
+                                              "recTaxInvoiceSelectRowHint",
+                                              "세금계산서 인쇄 대상 선택 (출고 1건 = 1장)"
+                                            )}
+                                          />
+                                        ) : (
+                                          <span className="text-muted-foreground text-xs">—</span>
+                                        )}
                                       </td>
                                       <td className="py-1.5 px-4 w-[128px] min-w-[128px] align-top">
                                         {renderReceivableLedgerDateCell(
@@ -2570,12 +2814,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                               void handleTaxInvoicePrint(row, item)
                                             }}
                                           >
-                                            {taxInvoiceLoadingKey ===
-                                            (row.ref_type === "Order"
-                                              ? `tax-${row.id ?? rowOrderId}`
-                                              : row.ref_type === "ForceOutbound"
-                                                ? `tax-fo-${row.id ?? rowForceLogId}`
-                                                : `tax-apo-${row.id ?? row.ref_id}`) ? (
+                                            {taxInvoiceLoadingKey === printSource?.loadKey ? (
                                               <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                                             ) : (
                                               <FileText className="h-4 w-4" />
