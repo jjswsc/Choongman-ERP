@@ -1,7 +1,7 @@
 /**
  * 손익계산서 ← 급여(payroll_records) 자연 연동.
  * - 인건비 = net_pay + sso + tax (귀속월 총근로비용, 원천·근로자 SSO 포함)
- * - 귀속월 = 근태월(1일~말일). 실지급은 익월 5일 → 지급월 손익에 넣지 않음
+ * - 귀속월 = payroll_records.month(주기 라벨). 실지급일은 급여 주기 설정(기본 익월 5일)
  * - 같은 스코프에 확정 급여가 있으면 통장/패티의 급여성 출금은 이중 방지를 위해 제외
  */
 import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'

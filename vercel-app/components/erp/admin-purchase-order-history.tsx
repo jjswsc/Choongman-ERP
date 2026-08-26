@@ -52,6 +52,7 @@ import {
   FileText,
   Paperclip,
   Percent,
+  Pencil,
 } from "lucide-react"
 import {
   isPoApprovedStatus,
@@ -61,12 +62,14 @@ import {
   computePurchaseOrderMoneyTotals,
   formatPoDisplayDate,
   isAccountingPurchaseOrderByCartJson,
+  isPoDraftEditableStatus,
   parsePurchaseOrderCart,
   poQuotationFromMeta,
   resolveAccountingPoIssuerStore,
 } from "@/lib/purchase-order-cart"
 import { resolvePoIssuerCompany } from "@/lib/po-issuer-company"
 import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
+import { useOrderCreate } from "@/lib/order-create-context"
 import { todayStrBangkok } from "@/lib/attendance-utils"
 import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import {
@@ -74,6 +77,7 @@ import {
   readPurchaseOrderViewCache,
   type PurchaseOrderHistorySourceFilter,
 } from "@/lib/purchase-order-view-cache"
+import { requestPurchaseOrderEdit } from "@/lib/purchase-order-edit-request"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import {
   resolvePoWhtAgentStoreKey,
@@ -100,9 +104,14 @@ function addCalendarMonthsBangkokYmd(ymd: string, deltaMonth: number): string {
   return `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`
 }
 
-export function AdminPurchaseOrderHistory() {
+export function AdminPurchaseOrderHistory({
+  onEditDraft,
+}: {
+  onEditDraft?: (po: PurchaseOrderRow) => void
+} = {}) {
   const { lang } = useLang()
   const t = useT(lang)
+  const orderCreate = useOrderCreate()
   const [list, setList] = React.useState<PurchaseOrderRow[]>([])
   const [loading, setLoading] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
@@ -266,6 +275,16 @@ export function AdminPurchaseOrderHistory() {
       }
     },
     [load, t]
+  )
+
+  const handleEditDraft = React.useCallback(
+    (po: PurchaseOrderRow) => {
+      if (!po.id || !isPoDraftEditableStatus(po.status)) return
+      requestPurchaseOrderEdit(po)
+      onEditDraft?.(po)
+      orderCreate?.setActiveTab("hq")
+    },
+    [onEditDraft, orderCreate]
   )
 
   const handleSearch = React.useCallback(() => {
@@ -774,8 +793,8 @@ ${allRows.map((row, ri) => {
                         {formatPoAmount(po.total)}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
-                      <td className="w-[6.75rem] px-1 py-2">
-                        <div className="grid grid-cols-3 gap-0.5">
+                      <td className="min-w-[8.5rem] px-1 py-2">
+                        <div className="grid grid-cols-4 gap-0.5">
                           {isAcct && quotation && (
                             <Button
                               variant="ghost"
@@ -859,7 +878,18 @@ ${allRows.map((row, ri) => {
                               </Button>
                             </>
                           )}
-                          {!isPoApprovedStatus(po.status) && (
+                          {isPoDraftEditableStatus(po.status) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-amber-700 hover:bg-amber-500/15 dark:text-amber-400"
+                              onClick={() => handleEditDraft(po)}
+                              title={t("poHistoryEdit")}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {!isPoApprovedStatus(po.status) && po.status !== "Cancelled" && (
                             <Button
                               variant="ghost"
                               size="icon"

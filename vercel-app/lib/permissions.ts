@@ -551,6 +551,11 @@ export function canEditMemberPortalAdmin(role: string, store?: string): boolean 
   )
 }
 
+/** KBank QR Void (은행 무효) — 매니저·가맹점주·본사·회계. POS 캐셔만으로는 불가. */
+export function canVoidKbankQrPayment(role: string): boolean {
+  return isOfficeRole(role) || isAccountingRole(role) || isManagerOrFranchiseeRole(role)
+}
+
 /** POS 직원(주문만/결산만)이 해당 경로 접근 가능한지 */
 export function canPosStaffAccessPath(pathname: string, role: string): boolean {
   const p = String(pathname || "").trim()

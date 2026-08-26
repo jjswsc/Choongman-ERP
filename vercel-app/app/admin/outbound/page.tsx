@@ -1259,13 +1259,15 @@ export default function OutboundPage() {
       const type = String(i.type || "")
       const orderRowId = String(i.orderRowId || "").trim()
       const invoiceNo = String(i.invoiceNo || "").trim()
-      // 주문 출고: 주문당 1행(ลูกหนี้와 동일). 출고일마다 IV 문자열이 달라도 합쳐 전 품목·합계가 맞도록 함.
+      // 주문 출고: 주문당 1행(ลูกหนี้와 동일). 강제출고: 같은 IVF(출고일·출고처·참조번호)당 1행 → 인쇄도 한 장.
       const k =
         orderRowId && type !== "Force"
           ? `order_${type}_${orderRowId}`
-          : i.stockLogId
-            ? `force_${i.stockLogId}_${target}_${type}`
-            : `${i.date}_${target}_${type}_${orderRowId}`
+          : type === "Force" && invoiceNo
+            ? `force_inv_${invoiceNo}_${target}`
+            : i.stockLogId
+              ? `force_${i.stockLogId}_${target}_${type}`
+              : `${i.date}_${target}_${type}_${orderRowId}`
       if (!g[k]) {
         g[k] = {
           date: i.date,
@@ -2186,7 +2188,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       `IV-${(group.date || "").replace(/\D/g, "")}`
     ).trim()
     const dateFromIv = (() => {
-      const m = /^IV(\d{8})-/i.exec(docNo)
+      const m = /^IVF?(\d{8})-/i.exec(docNo)
       if (!m) return ""
       const d = m[1]
       return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
@@ -2195,9 +2197,10 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       (opts?.issueDate || dateFromIv || group.date || "").split(" ")[0] ||
       new Date().toISOString().slice(0, 10)
     const maybeOrderId = Number((group.items || [])[0]?.orderRowId || 0)
-    const forceStockLogId = Number(
-      (printItems[0] || (group.items || [])[0])?.stockLogId || 0
-    )
+    const forceStockLogIds = (printItems.length ? printItems : group.items || [])
+      .map((it) => Math.floor(Number(it.stockLogId || 0)))
+      .filter((n) => Number.isFinite(n) && n > 0)
+    const forceStockLogId = forceStockLogIds.length ? Math.min(...forceStockLogIds) : 0
     const isForce =
       String(group.type || "").trim() === "Force" ||
       ((!(Number.isFinite(maybeOrderId) && maybeOrderId > 0) &&

@@ -138,6 +138,7 @@ type ReceiptDialogsProps = {
   onPaymentVoidClick: () => void | Promise<void>
   paymentVoidEnabled: boolean
   paymentVoidBusy: boolean
+  paymentVoidLabel?: string
 }
 
 export type PosTerminalDialogsProps = {
@@ -669,6 +670,7 @@ export function PosTerminalDialogs({
         onPaymentVoidClick={() => void receipt.onPaymentVoidClick()}
         paymentVoidEnabled={receipt.paymentVoidEnabled}
         paymentVoidBusy={receipt.paymentVoidBusy}
+        paymentVoidLabel={receipt.paymentVoidLabel}
       />
       <DeliveryEditOrderNoDialog
         open={deliveryEditOrderNo.open}

@@ -163,11 +163,21 @@ function buildPayrollEmailHtml(p: Record<string, unknown>, monthStr: string): st
   const totalDed = lateDed + earlyDed + sso + tax + otherDed
   const yearMonth = formatMonthEn(monthStr)
   const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  const periodStart = String(p.period_start || p.periodStart || '').slice(0, 10)
+  const periodEnd = String(p.period_end || p.periodEnd || '').slice(0, 10)
+  const payDate = String(p.pay_date || p.payDate || '').slice(0, 10)
+  const periodLine =
+    periodStart && periodEnd
+      ? `<p style="color:#64748b;margin:0 0 8px;">Work period: ${periodStart} – ${periodEnd}${payDate ? ` · Pay date: ${payDate}` : ''}</p>`
+      : payDate
+        ? `<p style="color:#64748b;margin:0 0 8px;">Pay date: ${payDate}</p>`
+        : ''
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Inter','Pretendard','Noto Sans KR','Segoe UI',Arial,sans-serif;color:#1e293b;line-height:1.5;max-width:560px;margin:0 auto;">
 <div style="padding:20px;">
 <h2 style="color:#0f172a;margin-bottom:8px;">Payroll Statement</h2>
-<p style="color:#64748b;margin-bottom:20px;">${yearMonth} - ${p.name || ''} (${p.store || ''})</p>
+<p style="color:#64748b;margin-bottom:8px;">${yearMonth} - ${p.name || ''} (${p.store || ''})</p>
+${periodLine}
 <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;">
 <tr style="background:#f8fafc;"><td style="padding:8px;border:1px solid #e2e8f0;"><b>Earnings</b></td><td style="padding:8px;border:1px solid #e2e8f0;text-align:right;"></td></tr>
 <tr><td style="padding:8px;border:1px solid #e2e8f0;">Base Salary</td><td style="padding:8px;border:1px solid #e2e8f0;text-align:right;">${fmt(salary)} THB</td></tr>

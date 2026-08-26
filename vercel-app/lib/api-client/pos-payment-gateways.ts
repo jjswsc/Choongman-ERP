@@ -679,6 +679,67 @@ export async function executeKbankVoidPayment(params: {
   }
 }
 
+export type KbankVoidForOrderPreview = {
+  orderId: number
+  orderNo: string
+  amount: number
+  qrType: string
+  txnRef: string
+  txnNo: string
+  terminalId: string
+  allowVoid: string
+  alreadyVoided: boolean
+  paid: boolean
+  canVoid: boolean
+  reason: string
+}
+
+export type KbankVoidForOrderResult = {
+  success: boolean
+  alreadyVoided?: boolean
+  preview?: KbankVoidForOrderPreview | null
+  partnerTransactionId?: string
+  origPartnerTxnUid?: string
+  txnNo?: string
+  orderId?: number
+  storeCode?: string | null
+  statusCode?: string | null
+  statusMessage?: string | null
+  message?: string
+  data?: Record<string, unknown>
+}
+
+export async function executeKbankVoidForOrder(params: {
+  orderId: number
+  confirm: boolean
+}): Promise<KbankVoidForOrderResult> {
+  const orderId = Math.floor(Number(params.orderId) || 0)
+  const res = await apiFetch('/api/pos/kbank/void-for-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId, confirm: Boolean(params.confirm) }),
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  const preview =
+    data.preview && typeof data.preview === 'object'
+      ? (data.preview as KbankVoidForOrderPreview)
+      : null
+  return {
+    success: Boolean(data.success) && res.ok,
+    alreadyVoided: Boolean(data.alreadyVoided || preview?.alreadyVoided),
+    preview,
+    partnerTransactionId: String(data.partnerTransactionId || ''),
+    origPartnerTxnUid: String(data.origPartnerTxnUid || ''),
+    txnNo: String(data.txnNo || preview?.txnNo || ''),
+    orderId: Number(data.orderId || orderId) || orderId,
+    storeCode: data.storeCode != null ? String(data.storeCode) : null,
+    statusCode: data.statusCode != null ? String(data.statusCode) : null,
+    statusMessage: data.statusMessage != null ? String(data.statusMessage) : null,
+    message: String(data.message || data.statusMessage || (!res.ok ? `HTTP ${res.status}` : '')),
+    data: data.data && typeof data.data === 'object' ? (data.data as Record<string, unknown>) : undefined,
+  }
+}
+
 export async function executeKbankSettlement(params: {
   orderId?: number
   storeCode?: string

@@ -107,6 +107,9 @@ export interface MyPayrollData {
   tax: number
   other_ded: number
   net_pay: number
+  period_start?: string
+  period_end?: string
+  pay_date?: string
 }
 
 export async function getMyPayroll(params: {

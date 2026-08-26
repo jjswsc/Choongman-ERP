@@ -568,6 +568,16 @@ export const I18N_POS_KO: Record<string, string> = {
     posReceiptPayCorrectKbankVoidNoAttempt:
       '이 빌에 KBank QR 거래가 없습니다. Void는 KBank QR API로 결제한 건만 가능합니다.',
     posReceiptPayCorrectKbankVoidAlready: '이미 Void된 KBank 결제입니다.',
+    posKbankVoidForOrderConfirm:
+      '빌 번호: {orderNo}\n금액: {amount} ฿\nQR 유형: {qrType}\n거래 참조: {txnRef}\n\n은행 Void는 POS 주문 취소와 다릅니다. 계속할까요?',
+    posKbankVoidNoPaymentTxnNo:
+      '결제 거래번호(payment txnNo)를 찾지 못했습니다. APIC로 시작하는 QR 세션 ID는 Void에 사용할 수 없습니다.',
+    posKbankVoidNotAllowed: 'KBank가 이 결제의 Void를 허용하지 않습니다.',
+    posKbankVoidNotPaid: '아직 결제 완료되지 않아 Void할 수 없습니다.',
+    posKbankVoidNeedManager: 'KBank Void는 매니저 이상만 할 수 있습니다.',
+    posKbankVoided: 'Void 완료',
+    posKbankVoidStoreDenied: '이 매장의 결제를 Void할 권한이 없습니다.',
+    posKbankVoidOrderRequired: '저장된 빌을 연 다음 Void하세요.',
     posReceiptPayCorrectTotalInvalid: '주문 합계는 0보다 큰 숫자여야 합니다.',
     posReceiptPayCorrectTotalFixBlocked: '원래 주문 합계가 0이면 금액만 수정할 수 없습니다.',
     posMoveAmount: '이동',
@@ -4013,6 +4023,16 @@ export const I18N_POS_EN: Record<string, string> = {
     posReceiptPayCorrectKbankVoidNoAttempt:
       'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
     posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
+    posKbankVoidForOrderConfirm:
+      'Bill: {orderNo}\nAmount: {amount} ฿\nQR type: {qrType}\nTransaction reference: {txnRef}\n\nBank Void is not the same as cancelling the POS bill. Continue?',
+    posKbankVoidNoPaymentTxnNo:
+      'Payment transaction number was not found. APIC session ids cannot be sent to Void.',
+    posKbankVoidNotAllowed: 'KBank does not allow Void for this payment.',
+    posKbankVoidNotPaid: 'This payment is not settled yet, so it cannot be voided.',
+    posKbankVoidNeedManager: 'A manager must Void this KBank payment.',
+    posKbankVoided: 'Voided',
+    posKbankVoidStoreDenied: 'You cannot void a payment for this store.',
+    posKbankVoidOrderRequired: 'Open a saved bill before Void.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posMoveAmount: 'Move',
@@ -8540,6 +8560,16 @@ export const I18N_POS_TH: Record<string, string> = {
     posReceiptPayCorrectKbankVoidNoAttempt:
       'ไม่พบรายการ KBank QR ของบิลนี้ ปุ่ม Void ใช้ได้เฉพาะชำระด้วย KBank QR ครับ',
     posReceiptPayCorrectKbankVoidAlready: 'รายการ KBank นี้ Void ไปแล้วครับ',
+    posKbankVoidForOrderConfirm:
+      'เลขบิล: {orderNo}\nยอดเงิน: {amount} ฿\nประเภท QR: {qrType}\nTransaction reference: {txnRef}\n\nVoid ที่ธนาคารไม่เท่ากับยกเลิกบิล POS ครับ ดำเนินการต่อไหมครับ?',
+    posKbankVoidNoPaymentTxnNo:
+      'ไม่พบ payment transaction number ครับ รหัส APIC... เป็น QR session ID ใช้ทำ Void ไม่ได้',
+    posKbankVoidNotAllowed: 'KBank ไม่อนุญาตให้ Void รายการนี้ครับ',
+    posKbankVoidNotPaid: 'รายการนี้ยังไม่ชำระ จึงยังไม่สามารถ Void ได้ครับ',
+    posKbankVoidNeedManager: 'ต้องเป็นผู้จัดการขึ้นไปจึง Void ได้ครับ',
+    posKbankVoided: 'Void แล้ว',
+    posKbankVoidStoreDenied: 'ไม่มีสิทธิ์ Void รายการของสาขานี้ครับ',
+    posKbankVoidOrderRequired: 'เปิดบิลที่บันทึกแล้วก่อนกด Void ครับ',
     posReceiptPayCorrectTotalInvalid: 'ยอดรวมบิลต้องมากกว่า 0',
     posReceiptPayCorrectTotalFixBlocked: 'ยอดรวมบิลเดิมเป็น 0 จึงแก้ยอดอย่างเดียวไม่ได้',
     posMoveAmount: 'ย้าย',
@@ -12472,6 +12502,16 @@ export const I18N_POS_MM: Record<string, string> = {
     posReceiptPayCorrectKbankVoidNoAttempt:
       'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
     posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
+    posKbankVoidForOrderConfirm:
+      'Bill: {orderNo}\nAmount: {amount} ฿\nQR type: {qrType}\nTransaction reference: {txnRef}\n\nBank Void is not the same as cancelling the POS bill. Continue?',
+    posKbankVoidNoPaymentTxnNo:
+      'Payment transaction number was not found. APIC session ids cannot be sent to Void.',
+    posKbankVoidNotAllowed: 'KBank does not allow Void for this payment.',
+    posKbankVoidNotPaid: 'This payment is not settled yet, so it cannot be voided.',
+    posKbankVoidNeedManager: 'A manager must Void this KBank payment.',
+    posKbankVoided: 'Voided',
+    posKbankVoidStoreDenied: 'You cannot void a payment for this store.',
+    posKbankVoidOrderRequired: 'Open a saved bill before Void.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
@@ -15462,6 +15502,16 @@ export const I18N_POS_LA: Record<string, string> = {
     posReceiptPayCorrectKbankVoidNoAttempt:
       'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
     posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
+    posKbankVoidForOrderConfirm:
+      'Bill: {orderNo}\nAmount: {amount} ฿\nQR type: {qrType}\nTransaction reference: {txnRef}\n\nBank Void is not the same as cancelling the POS bill. Continue?',
+    posKbankVoidNoPaymentTxnNo:
+      'Payment transaction number was not found. APIC session ids cannot be sent to Void.',
+    posKbankVoidNotAllowed: 'KBank does not allow Void for this payment.',
+    posKbankVoidNotPaid: 'This payment is not settled yet, so it cannot be voided.',
+    posKbankVoidNeedManager: 'A manager must Void this KBank payment.',
+    posKbankVoided: 'Voided',
+    posKbankVoidStoreDenied: 'You cannot void a payment for this store.',
+    posKbankVoidOrderRequired: 'Open a saved bill before Void.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
@@ -18504,6 +18554,16 @@ export const I18N_POS_KH: Record<string, string> = {
     posReceiptPayCorrectKbankVoidNoAttempt:
       'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
     posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
+    posKbankVoidForOrderConfirm:
+      'Bill: {orderNo}\nAmount: {amount} ฿\nQR type: {qrType}\nTransaction reference: {txnRef}\n\nBank Void is not the same as cancelling the POS bill. Continue?',
+    posKbankVoidNoPaymentTxnNo:
+      'Payment transaction number was not found. APIC session ids cannot be sent to Void.',
+    posKbankVoidNotAllowed: 'KBank does not allow Void for this payment.',
+    posKbankVoidNotPaid: 'This payment is not settled yet, so it cannot be voided.',
+    posKbankVoidNeedManager: 'A manager must Void this KBank payment.',
+    posKbankVoided: 'Voided',
+    posKbankVoidStoreDenied: 'You cannot void a payment for this store.',
+    posKbankVoidOrderRequired: 'Open a saved bill before Void.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
@@ -21479,6 +21539,16 @@ export const I18N_POS_VI: Record<string, string> = {
     posReceiptPayCorrectKbankVoidNoAttempt:
       'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
     posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
+    posKbankVoidForOrderConfirm:
+      'Bill: {orderNo}\nAmount: {amount} ฿\nQR type: {qrType}\nTransaction reference: {txnRef}\n\nBank Void is not the same as cancelling the POS bill. Continue?',
+    posKbankVoidNoPaymentTxnNo:
+      'Payment transaction number was not found. APIC session ids cannot be sent to Void.',
+    posKbankVoidNotAllowed: 'KBank does not allow Void for this payment.',
+    posKbankVoidNotPaid: 'This payment is not settled yet, so it cannot be voided.',
+    posKbankVoidNeedManager: 'A manager must Void this KBank payment.',
+    posKbankVoided: 'Voided',
+    posKbankVoidStoreDenied: 'You cannot void a payment for this store.',
+    posKbankVoidOrderRequired: 'Open a saved bill before Void.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',
@@ -24476,6 +24546,16 @@ export const I18N_POS_MS: Record<string, string> = {
     posReceiptPayCorrectKbankVoidNoAttempt:
       'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.',
     posReceiptPayCorrectKbankVoidAlready: 'This KBank payment was already voided.',
+    posKbankVoidForOrderConfirm:
+      'Bill: {orderNo}\nAmount: {amount} ฿\nQR type: {qrType}\nTransaction reference: {txnRef}\n\nBank Void is not the same as cancelling the POS bill. Continue?',
+    posKbankVoidNoPaymentTxnNo:
+      'Payment transaction number was not found. APIC session ids cannot be sent to Void.',
+    posKbankVoidNotAllowed: 'KBank does not allow Void for this payment.',
+    posKbankVoidNotPaid: 'This payment is not settled yet, so it cannot be voided.',
+    posKbankVoidNeedManager: 'A manager must Void this KBank payment.',
+    posKbankVoided: 'Voided',
+    posKbankVoidStoreDenied: 'You cannot void a payment for this store.',
+    posKbankVoidOrderRequired: 'Open a saved bill before Void.',
     posReceiptPayCorrectOrderTotal: 'Order total',
     posReceiptPayCorrectTotalFixBlocked: 'Cannot change totals when the original order total was zero.',
     posReceiptPayCorrectTotalInvalid: 'Order total must be a number greater than zero.',

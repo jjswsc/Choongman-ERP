@@ -37,10 +37,12 @@ import {
   getBangkokHour,
   getDayOfWeekBangkok,
   addDayBangkok,
+  iterBangkokYmdInclusive,
   plannedWorkMinutesFromPlans,
   resolveScheduleForEmployeeDay,
   scheduleDateKey,
 } from '@/lib/attendance-utils'
+import { resolvePayrollPeriodForMonth } from '@/lib/payroll-cycle-settings'
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 import { employeeMeetsMinEvalLetterGrade, hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
@@ -78,19 +80,17 @@ function fmtMoney(n: number): string {
   return Math.floor(Number(n) || 0).toLocaleString('en-US')
 }
 
-/** 급여월 달력 기준 예정 근무일수(공휴일·매장/오피스 주말, 입사 이후만). resignCapInclusive 있으면 해당일까지(포함). */
-function countCalendarExpectedWorkDays(
-  year: number,
-  targetMonthJs: number,
-  daysInMonth: number,
+/** 급여 주기 start~end 예정 근무일수(공휴일·매장/오피스 주말, 입사 이후만). resignCapInclusive 있으면 해당일까지(포함). */
+function countExpectedWorkDaysInRange(
+  startStr: string,
+  endStr: string,
   holidaySet: Set<string>,
   store: string,
   joinDateStr: string,
   resignCapInclusive: string | null
 ): number {
   let n = 0
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${String(targetMonthJs + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  for (const dateStr of iterBangkokYmdInclusive(startStr, endStr)) {
     const dayOfWeek = getDayOfWeekBangkok(dateStr)
     if (joinDateStr && dateStr < joinDateStr) continue
     if (resignCapInclusive && dateStr > resignCapInclusive) continue
@@ -323,7 +323,8 @@ function buildResignByAttKey(
 
 /** getPayrollPreview 근태 집계와 동일: 방콕 날짜, 자정 넘김 병합, 완료 근무일만 지각·근무 반영 */
 function buildAttendanceSummary(
-  monthStr: string,
+  startStr: string,
+  endStr: string,
   attRows: {
     id?: number | null
     log_at?: string
@@ -343,10 +344,6 @@ function buildAttendanceSummary(
   resignByEmpId: Record<number, string> = {},
   adjustedEarlyLogIds: Set<number> = new Set()
 ): { summary: Record<string, AttSummary>; dayLines: Record<string, AttendanceDayLines> } {
-  const startStr = monthStr + '-01'
-  const lastDay = new Date(parseInt(monthStr.slice(0, 4), 10), parseInt(monthStr.slice(5, 7), 10), 0)
-  const endStr = lastDay.toISOString().slice(0, 10)
-
   const map: Record<string, AttSummary> = {}
   const dayLines: Record<string, AttendanceDayLines> = {}
   type DayV = {
@@ -387,7 +384,10 @@ function buildAttendanceSummary(
     const rowDate = toDateStrBangkok(r.log_at)
     const type = String(r.log_type || '').trim()
     const logAt = r.log_at || ''
-    if (!rowDate || rowDate < startStr) continue
+    if (!rowDate) continue
+    // 기간 시작일 07시 전 퇴근 = 직전 주기 야간근무. 새 주기에 넣으면 출근 없이 퇴근만 잡힘.
+    if (rowDate === startStr && type === '퇴근' && getBangkokHour(logAt) <= 7) continue
+    if (rowDate < startStr) continue
     if (rowDate > endStr) {
       const allowOvernightOut =
         type === '퇴근' && getBangkokHour(logAt) <= 7 && rowDate === addDayBangkok(endStr, 1)
@@ -773,12 +773,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const startStr = normMonth + '-01'
-    // 해당 달 말일: new Date(y, m, 0) 에서 m = 문자열 월(1~12) → JS month index m 가 아닌 «다음 달 day 0» = 이번 달 말일
-    const y = parseInt(normMonth.slice(0, 4), 10)
-    const mo = parseInt(normMonth.slice(5, 7), 10)
-    const lastDay = new Date(y, mo, 0)
-    const endStr = lastDay.toISOString().slice(0, 10)
+    const cyclePeriod = await resolvePayrollPeriodForMonth(normMonth, tenantScope)
+    const startStr = cyclePeriod.start || `${normMonth}-01`
+    const endStr = cyclePeriod.end || startStr
     const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
     const logEndISOExclusive = `${addDayBangkok(endStr, 1)}T00:00:00.000Z`
 
@@ -1015,9 +1012,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const holidayYears = [...new Set([
+      parseInt(startStr.slice(0, 4), 10),
+      parseInt(endStr.slice(0, 4), 10),
+    ])].filter((y) => Number.isFinite(y) && y > 0)
+    const holidayYearFilter =
+      holidayYears.length <= 1
+        ? `year=eq.${holidayYears[0] || parseInt(normMonth.slice(0, 4), 10)}`
+        : `year=in.(${holidayYears.join(',')})`
+
     const [attRows, phRows, leaveRows, scheduleRows] = await Promise.all([
       loadAttRows(),
-      supabaseSelectFilter('public_holidays', `year=eq.${parseInt(normMonth.slice(0, 4), 10)}`, { order: 'date.asc' }) as Promise<{ date?: string }[] | null>,
+      supabaseSelectFilter('public_holidays', holidayYearFilter, { order: 'date.asc' }) as Promise<{ date?: string }[] | null>,
       loadLeaveRows(),
       loadScheduleRows(),
     ])
@@ -1073,7 +1079,8 @@ export async function GET(request: NextRequest) {
     const resignByAttKey = buildResignByAttKey(empRows)
     const resignByEmpId = buildResignByEmpId(empRows)
     const { summary: attSummary, dayLines: attDayLines } = buildAttendanceSummary(
-      normMonth,
+      startStr,
+      endStr,
       attRows || [],
       scheduleMap,
       resignByAttKey,
@@ -1139,20 +1146,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 해당 월 평일 수 (공휴일 제외) - 결석 산정용
+    // 해당 주기 평일 수 (공휴일 제외) - 결석 산정용
     const holidaySet = new Set<string>()
     if (phRows && phRows.length > 0) {
-      const startStr = normMonth + '-01'
-      const lastDay = new Date(year, targetMonth + 1, 0)
-      const endStr = lastDay.toISOString().slice(0, 10)
       for (const r of phRows) {
         const d = toDateStr(r.date)
         if (d && d >= startStr && d <= endStr) holidaySet.add(d)
       }
     } else {
-      for (const h of DEFAULT_HOLIDAYS) {
-        const d = year + h.date
-        if (d >= normMonth + '-01' && d <= normMonth + '-31') holidaySet.add(d)
+      for (const y of holidayYears) {
+        for (const h of DEFAULT_HOLIDAYS) {
+          const d = `${y}${h.date}`
+          if (d >= startStr && d <= endStr) holidaySet.add(d)
+        }
       }
     }
 
@@ -1268,8 +1274,7 @@ export async function GET(request: NextRequest) {
       if (hasScheduleBasis) {
         expectedWorkDaysForEmp = scheduleExpectedDates.size
       } else {
-        for (let d = 1; d <= lastDay.getDate(); d++) {
-          const dateStr = `${year}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+        for (const dateStr of iterBangkokYmdInclusive(startStr, endStr)) {
           const dayOfWeek = getDayOfWeekBangkok(dateStr)
           if (joinDateStr && dateStr < joinDateStr) continue
           if (resignDateStr && dateStr > resignDateStr) continue
@@ -1281,11 +1286,9 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-      const daysInMonth = lastDay.getDate()
-      const calendarWorkDaysFullMonth = countCalendarExpectedWorkDays(
-        year,
-        targetMonth,
-        daysInMonth,
+      const calendarWorkDaysFullMonth = countExpectedWorkDaysInRange(
+        startStr,
+        endStr,
         holidaySet,
         store,
         joinDateStr,
@@ -1293,10 +1296,9 @@ export async function GET(request: NextRequest) {
       )
       const calendarWorkDaysThroughResign =
         resignDateStr && resignDateStr >= startStr && resignDateStr <= endStr
-          ? countCalendarExpectedWorkDays(
-              year,
-              targetMonth,
-              daysInMonth,
+          ? countExpectedWorkDaysInRange(
+              startStr,
+              endStr,
               holidaySet,
               store,
               joinDateStr,
@@ -1449,8 +1451,7 @@ export async function GET(request: NextRequest) {
       } else {
         const rawAbsenceDays = Math.max(0, expectedWorkDays - workDays - paidLeaveDaysFromEvents)
         if (rawAbsenceDays > 0) {
-          for (let d = 1; d <= lastDay.getDate(); d++) {
-            const ds = `${year}-${String(targetMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+          for (const ds of iterBangkokYmdInclusive(startStr, endStr)) {
             const dow = getDayOfWeekBangkok(ds)
             if (joinDateStr && ds < joinDateStr) continue
             if (resignDateStr && ds > resignDateStr) continue
@@ -1857,7 +1858,20 @@ export async function GET(request: NextRequest) {
     }
 
     list.sort((a, b) => (a.store !== b.store ? a.store.localeCompare(b.store) : a.name.localeCompare(b.name)))
-    return NextResponse.json({ success: true, list }, { headers })
+    return NextResponse.json(
+      {
+        success: true,
+        list,
+        period: {
+          start: startStr,
+          end: endStr,
+          payYmd: cyclePeriod.payYmd,
+          isTransitionShort: cyclePeriod.isTransitionShort,
+          isLegacy: cyclePeriod.isLegacy,
+        },
+      },
+      { headers }
+    )
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e)
     const errStack = e instanceof Error ? e.stack : ''

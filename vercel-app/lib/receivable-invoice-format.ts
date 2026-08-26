@@ -9,7 +9,7 @@ export function formatReceivableInvoiceNo(orderId: number, transDate: string): s
   return `IV${datePart}-${orderId}`
 }
 
-/** 강제출고 인보이스: IVF{yyyymmdd}-{stockLogId} */
+/** 강제출고 인보이스: IVF{yyyymmdd}-{stockLogId} (묶음이면 그룹 최소 id) */
 export function formatForceOutboundInvoiceNo(stockLogId: number, transDate: string): string {
   const datePart = String(transDate || '')
     .replace(/\D/g, '')

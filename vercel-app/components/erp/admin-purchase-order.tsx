@@ -38,14 +38,18 @@ import {
   type PurchaseLocation,
   type VendorForPurchase,
   type ItemByVendor,
+  type PurchaseOrderRow,
 } from "@/lib/api-client"
 import { useStoreList } from "@/lib/use-store-list"
 import { useOrderCreate } from "@/lib/order-create-context"
 import { todayStrBangkok } from "@/lib/attendance-utils"
 import {
   computePurchaseOrderMoneyTotals,
+  isPoDraftEditableStatus,
   normalizePoMoneyOverride,
+  parsePurchaseOrderCart,
   poLineIsVatExempt,
+  type PoBillingKind,
   type PoMoneyOverride,
 } from "@/lib/purchase-order-cart"
 import { vatExclusiveUnitFromInclusiveUnit } from "@/lib/invoice-vat-total"
@@ -53,6 +57,10 @@ import { resolvePoIssuerStoreFromAuth } from "@/lib/po-issuer-scope"
 import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown, Calculator, Paperclip, Pencil } from "lucide-react"
+import {
+  consumePurchaseOrderEditRequest,
+  subscribePurchaseOrderEditRequest,
+} from "@/lib/purchase-order-edit-request"
 
 /** 본사 화면: 발행 주체 선택 — 본사 로열티·GP vs 매장 간 청구 */
 const PO_ISSUER_HQ = "_hq"
@@ -143,6 +151,14 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   const [vendorDropdownOpen, setVendorDropdownOpen] = React.useState(false)
   const vendorInputRef = React.useRef<HTMLInputElement>(null)
   const vendorContainerRef = React.useRef<HTMLDivElement>(null)
+  const [editingPoId, setEditingPoId] = React.useState<number | null>(null)
+  const [editingPoNo, setEditingPoNo] = React.useState("")
+  const pendingEditPoRef = React.useRef<PurchaseOrderRow | null>(null)
+  const skipMoneyResetRef = React.useRef(false)
+  const pendingMoneyOverrideRef = React.useRef<PoMoneyOverride | null>(null)
+  const pendingBillingKindRef = React.useRef<PoBillingKind | null>(null)
+  const skipIssuerLocationEffectRef = React.useRef(false)
+  const skipRelatedVendorAutoRef = React.useRef(false)
 
   React.useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -182,6 +198,13 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     [cart]
   )
   React.useEffect(() => {
+    if (skipMoneyResetRef.current) {
+      skipMoneyResetRef.current = false
+      const ov = pendingMoneyOverrideRef.current
+      pendingMoneyOverrideRef.current = null
+      if (ov) setMoneyOverride(ov)
+      return
+    }
     setMoneyOverride(null)
     setMoneyEditOpen(false)
   }, [cartMoneyKey])
@@ -298,6 +321,11 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   )
 
   React.useEffect(() => {
+    if (pendingBillingKindRef.current != null) {
+      setBillingIntentMode(pendingBillingKindRef.current)
+      pendingBillingKindRef.current = null
+      return
+    }
     setBillingIntentMode(null)
   }, [billingMonthYm, relatedStore])
 
@@ -312,6 +340,10 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   React.useEffect(() => {
     if (!allowManualLines) return
     if (relatedStore === "_none") return
+    if (skipRelatedVendorAutoRef.current) {
+      skipRelatedVendorAutoRef.current = false
+      return
+    }
     const hit = vendorForSalesOutletStore(vendors, relatedStore)
     if (!hit) return
     setVendorSelect((prev) => (prev?.code === hit.code ? prev : hit))
@@ -409,6 +441,10 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
   }, [canPickIssuerStore, effectiveIssuerStore, relatedStore])
 
   React.useEffect(() => {
+    if (skipIssuerLocationEffectRef.current) {
+      skipIssuerLocationEffectRef.current = false
+      return
+    }
     if (!isStoreIssuerMode || !effectiveIssuerStore) {
       if (canPickIssuerStore && hqIssuerPick === PO_ISSUER_HQ) {
         const hq = locations.find(
@@ -466,6 +502,136 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
     }
     setTransferToPo?.(null)
   }, [transferToPo, vendors, locations, setTransferToPo, allowManualLines])
+
+  const applyDraftPoToForm = React.useCallback(
+    (po: PurchaseOrderRow) => {
+      if (!po.id || !isPoDraftEditableStatus(po.status)) return
+      const { items, meta } = parsePurchaseOrderCart(po.cart_json)
+      const cartItems: CartItem[] = items.map((ln, i) => ({
+        code: String(ln.code || `LINE-${i + 1}`),
+        name: String(ln.name || ""),
+        price: Number(ln.price ?? 0),
+        qty: Number(ln.qty ?? 0) || 0,
+        store: ln.store,
+        taxType: (ln.taxType as CartItem["taxType"]) || undefined,
+      }))
+      const vendorCode = String(po.vendor_code || "").trim()
+      const vendorName = String(po.vendor_name || "").trim()
+      const matched = vendors.find(
+        (v) =>
+          (vendorCode && v.code === vendorCode) ||
+          (vendorName && v.name === vendorName) ||
+          (vendorCode && v.code.toLowerCase() === vendorCode.toLowerCase()) ||
+          (vendorName && v.name.toLowerCase() === vendorName.toLowerCase())
+      )
+      const vendorToUse = matched ?? {
+        code: vendorCode || vendorName,
+        name: vendorName || vendorCode,
+        address: "",
+      }
+
+      skipIssuerLocationEffectRef.current = true
+      skipRelatedVendorAutoRef.current = true
+      skipMoneyResetRef.current = true
+      pendingMoneyOverrideRef.current = normalizePoMoneyOverride(meta?.moneyOverride)
+      if (meta?.billingKind) pendingBillingKindRef.current = meta.billingKind
+
+      setEditingPoId(po.id)
+      setEditingPoNo(String(po.po_no || `#${po.id}`))
+      pendingTransferCart.current = cartItems
+      appliedTransferRef.current = true
+      setHasSearched(true)
+      setVendorSelect(vendorToUse)
+      setVendorSearchQuery("")
+      if (!matched && vendorToUse.code) {
+        setVendors((prev) =>
+          prev.some((v) => v.code === vendorToUse.code || v.name === vendorToUse.name)
+            ? prev
+            : [...prev, vendorToUse]
+        )
+      }
+
+      const locCode = String(po.location_code || "").trim()
+      const locName = String(po.location_name || "").trim()
+      const locMatch =
+        locations.find(
+          (l) => (locCode && l.location_code === locCode) || (locName && l.name === locName)
+        ) ??
+        (locCode || locName
+          ? {
+              name: locName || locCode,
+              address: String(po.location_address || "").trim(),
+              location_code: locCode || locName,
+            }
+          : null)
+      if (locMatch) setLocationSelect(locMatch)
+
+      if (allowManualLines) {
+        const issuer = String(meta?.issuerStore || "").trim()
+        setHqIssuerPick(issuer || PO_ISSUER_HQ)
+        const rel = String(meta?.relatedStore || "").trim()
+        setRelatedStore(rel || "_none")
+        const orderDate = String(meta?.orderDate || "").trim().slice(0, 10)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(orderDate)) setPoOrderDate(orderDate)
+        setPoReferenceNo(String(meta?.referenceNo || "").trim())
+        const qUrl = String(meta?.quotationFileUrl || "").trim()
+        setPoQuotation(
+          qUrl
+            ? { url: qUrl, name: String(meta?.quotationFileName || "").trim() || "quotation" }
+            : null
+        )
+        const ym = String(meta?.billingMonthYm || "").trim()
+        if (ym.length === 7) {
+          const b = monthBoundsFromYm(ym)
+          setBillingStart(b.startStr)
+          setBillingEnd(b.endStr)
+        }
+        const whtAmt = Number(po.withholding_tax_amount) || 0
+        const whtRate = Number(po.withholding_tax_rate) || 0
+        if (whtAmt > 0) {
+          setApplyWithholding(true)
+          setPoWhtRatePct(whtRate > 0 ? String(whtRate) : "3")
+        } else {
+          setApplyWithholding(false)
+        }
+        setCartGroupByStore(cartItems.some((c) => Boolean(String(c.store || "").trim())))
+      }
+    },
+    [allowManualLines, vendors, locations]
+  )
+
+  const tryApplyPendingEdit = React.useCallback(() => {
+    const po = pendingEditPoRef.current
+    if (!po) return
+    if (locations.length === 0) return
+    pendingEditPoRef.current = null
+    applyDraftPoToForm(po)
+  }, [applyDraftPoToForm, locations.length])
+
+  React.useEffect(() => {
+    const onRequest = () => {
+      const po = consumePurchaseOrderEditRequest()
+      if (po) pendingEditPoRef.current = po
+      tryApplyPendingEdit()
+    }
+    onRequest()
+    return subscribePurchaseOrderEditRequest(onRequest)
+  }, [tryApplyPendingEdit])
+
+  const clearDraftEdit = React.useCallback(() => {
+    setEditingPoId(null)
+    setEditingPoNo("")
+    pendingTransferCart.current = null
+    pendingMoneyOverrideRef.current = null
+    pendingBillingKindRef.current = null
+    setCart([])
+    setMoneyOverride(null)
+    setMoneyEditOpen(false)
+    setPoReferenceNo("")
+    setPoQuotation(null)
+    setBillingIntentMode(null)
+    setApplyWithholding(false)
+  }, [])
 
   React.useEffect(() => {
     if (!locationSelect) {
@@ -825,24 +991,31 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         billingKind: passBillingUpsert ? billingIntentMode! : undefined,
         orderDate: allowManualLines && poOrderDate ? poOrderDate : undefined,
         referenceNo: poReferenceNo.trim() || undefined,
+        ...(editingPoId ? { poId: editingPoId } : {}),
         ...(allowManualLines && withholdingTaxAmount > 0
           ? { withholdingTaxAmount, withholdingTaxRate: poWhtRateNum }
           : {}),
         ...(allowManualLines && moneyOverride
           ? { moneyOverride }
-          : {}),
+          : allowManualLines && editingPoId
+            ? { moneyOverride: null }
+            : {}),
         ...(poQuotation
           ? { quotationFileUrl: poQuotation.url, quotationFileName: poQuotation.name }
-          : {}),
+          : editingPoId && allowManualLines
+            ? { quotationFileUrl: "", quotationFileName: "" }
+            : {}),
       })
       if (res.success) {
         void invalidatePurchaseOrdersListCache()
         setVendorSelect(vendorToUse)
         setVendorSearchQuery("")
         const msg =
-          res.updated === true
-            ? t("purchaseOrderSuccessUpdated")
-            : t("purchaseOrderSuccess")
+          editingPoId
+            ? t("purchaseOrderSuccessDraftSaved")
+            : res.updated === true
+              ? t("purchaseOrderSuccessUpdated")
+              : t("purchaseOrderSuccess")
         await appAlert(msg + (res.poNo ? ` (${res.poNo})` : ""))
         setCart([])
         setMoneyOverride(null)
@@ -850,6 +1023,9 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
         setPoReferenceNo("")
         setPoQuotation(null)
         setBillingIntentMode(null)
+        setEditingPoId(null)
+        setEditingPoNo("")
+        setApplyWithholding(false)
       } else {
         await appAlert(t("purchaseOrderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
       }
@@ -862,6 +1038,16 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
 
   return (
     <div className="space-y-4">
+      {editingPoId ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+          <p className="font-medium text-amber-900 dark:text-amber-200">
+            {t("poEditBanner")} {editingPoNo}
+          </p>
+          <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => clearDraftEdit()}>
+            {t("poEditCancel")}
+          </Button>
+        </div>
+      ) : null}
       <div className={`grid gap-4 ${allowManualLines ? "lg:grid-cols-3" : "sm:grid-cols-2"}`}>
         <Card>
           <CardHeader className="pb-2">
@@ -1930,6 +2116,11 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
       </Card>
 
       <div className="flex flex-wrap gap-2">
+        {editingPoId ? (
+          <Button type="button" variant="outline" className="sm:w-auto" onClick={() => clearDraftEdit()}>
+            {t("poEditCancel")}
+          </Button>
+        ) : null}
         <Button
           className="flex-1"
           onClick={() => void handleSave()}
@@ -1940,7 +2131,7 @@ export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOr
             (allowManualLines ? !accountingVendorRequirementMet : !vendorSelect && !vendorSearchQuery.trim())
           }
         >
-          {submitting ? t("loading") : t("purchaseOrderSave")}
+          {submitting ? t("loading") : editingPoId ? t("poEditSave") : t("purchaseOrderSave")}
         </Button>
       </div>
     </div>

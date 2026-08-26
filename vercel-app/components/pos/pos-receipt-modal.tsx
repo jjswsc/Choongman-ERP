@@ -182,6 +182,7 @@ interface PosReceiptModalProps {
   onPaymentVoidClick?: () => void | Promise<void>
   paymentVoidEnabled?: boolean
   paymentVoidBusy?: boolean
+  paymentVoidLabel?: string
 }
 
 export function PosReceiptModal({
@@ -225,6 +226,7 @@ export function PosReceiptModal({
   onPaymentVoidClick,
   paymentVoidEnabled = false,
   paymentVoidBusy = false,
+  paymentVoidLabel,
 }: PosReceiptModalProps) {
   const { lang } = useLang()
   const autoPrintedKeyRef = useRef<string>('')
@@ -689,7 +691,7 @@ export function PosReceiptModal({
                 disabled={paymentVoidBusy}
                 onClick={() => void onPaymentVoidClick?.()}
               >
-                {tr('posKbankVoid', 'Void')}
+                {paymentVoidLabel || tr('posKbankVoid', 'Void')}
               </Button>
             )}
             <Button

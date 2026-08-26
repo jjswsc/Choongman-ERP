@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import {
+  isPoDraftEditableStatus,
   normalizePoMoneyOverride,
   parsePurchaseOrderCart,
   resolvePurchaseOrderMoneyTotals,
@@ -19,7 +20,7 @@ import {
 } from '@/lib/po-billing-upsert'
 import { bangkokDateToUtcRange } from '@/lib/attendance-utils'
 import { syncTaxWithholdingLedgerForPurchaseOrder } from '@/lib/tax-ledger-auto-sync'
-import { resolvePoIssuerStoreFromAuth } from '@/lib/po-issuer-scope'
+import { canAccessAccountingPoForAuth, resolvePoIssuerStoreFromAuth } from '@/lib/po-issuer-scope'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -138,6 +139,10 @@ export async function POST(request: NextRequest) {
     const quotationIn = String(body.quotationFileUrl ?? body.quotation_file_url ?? '').trim().slice(0, 2000)
     const quotationNameIn = String(body.quotationFileName ?? body.quotation_file_name ?? '').trim().slice(0, 200)
 
+    const editPoIdRaw = Number(body.poId ?? body.po_id ?? 0)
+    const editPoId =
+      Number.isFinite(editPoIdRaw) && editPoIdRaw > 0 ? Math.floor(editPoIdRaw) : 0
+
     const moneyOverrideIn = normalizePoMoneyOverride(
       body.moneyOverride ?? body.money_override ?? null
     )
@@ -198,6 +203,118 @@ export async function POST(request: NextRequest) {
 
     let cartJson = serializePurchaseOrderCart(cart, meta)
 
+    const applyDraftPatch = async (
+      existing: {
+        id: number
+        po_no?: string
+        cart_json?: string
+      },
+      opts?: { mergePrevMeta?: boolean }
+    ) => {
+      const prevMeta = parsePurchaseOrderCart(existing.cart_json).meta
+      const merged: PoCartMeta = opts?.mergePrevMeta
+        ? { ...(prevMeta || {}), ...(meta || {}) }
+        : { ...(meta || {}) }
+      if (!hasQuotationKey) {
+        if (prevMeta?.quotationFileUrl) {
+          merged.quotationFileUrl = prevMeta.quotationFileUrl
+          merged.quotationFileName = prevMeta.quotationFileName
+        }
+      } else if (!quotationIn) {
+        delete (merged as Record<string, unknown>).quotationFileUrl
+        delete (merged as Record<string, unknown>).quotationFileName
+      }
+      const moneyOverrideKeyPresent =
+        Object.prototype.hasOwnProperty.call(body, 'moneyOverride') ||
+        Object.prototype.hasOwnProperty.call(body, 'money_override')
+      if (moneyOverrideKeyPresent) {
+        if (moneyOverrideIn) merged.moneyOverride = moneyOverrideIn
+        else delete (merged as Record<string, unknown>).moneyOverride
+      }
+      cartJson = serializePurchaseOrderCart(cart, merged)
+      const patch: Record<string, unknown> = {
+        cart_json: cartJson,
+        subtotal,
+        vat,
+        total,
+        user_name: userName,
+        vendor_code: vendorCode,
+        vendor_name: vendorName,
+        location_name: locationName,
+        location_address: locationAddress,
+        location_code: locationCode,
+      }
+      if (withholdingTaxAmount > 0) {
+        patch.withholding_tax_amount = withholdingTaxAmount
+        if (withholdingTaxRate != null) patch.withholding_tax_rate = Number(withholdingTaxRate) || null
+      } else {
+        patch.withholding_tax_amount = null
+        patch.withholding_tax_rate = null
+      }
+      if (orderDateNorm) {
+        patch.created_at = bangkokDateToUtcRange(orderDateNorm).startISO
+      }
+      await supabaseUpdate('purchase_orders', existing.id, patch)
+      await syncTaxWithholdingLedgerForPurchaseOrder(existing.id)
+      return NextResponse.json(
+        {
+          success: true,
+          id: existing.id,
+          poNo: existing.po_no,
+          updated: true,
+          message: '발주 초안이 최신 내용으로 갱신되었습니다.',
+        },
+        { headers }
+      )
+    }
+
+    if (editPoId) {
+      const rows = (await supabaseSelectFilter('purchase_orders', `id=eq.${editPoId}`, {
+        limit: 1,
+      })) as {
+        id?: number
+        po_no?: string
+        status?: string
+        cart_json?: string
+      }[]
+      const existing = rows?.[0]
+      if (!existing?.id) {
+        return NextResponse.json(
+          { success: false, message: '해당 발주가 없습니다.' },
+          { status: 404, headers }
+        )
+      }
+      if (!isPoDraftEditableStatus(existing.status)) {
+        return NextResponse.json(
+          { success: false, message: '승인·취소된 발주는 수정할 수 없습니다.' },
+          { status: 400, headers }
+        )
+      }
+      if (isScopedRole) {
+        const prevMeta = parsePurchaseOrderCart(existing.cart_json).meta
+        const allowed = canAccessAccountingPoForAuth({
+          role: userRole,
+          store: userStore,
+          issuerStore: prevMeta?.issuerStore ?? issuerStore,
+          relatedStore: prevMeta?.relatedStore ?? relatedStore,
+        })
+        if (!allowed) {
+          return NextResponse.json(
+            { success: false, message: '이 발주를 수정할 권한이 없습니다.' },
+            { status: 403, headers }
+          )
+        }
+      }
+      return applyDraftPatch(
+        {
+          id: Number(existing.id),
+          po_no: String(existing.po_no || ''),
+          cart_json: existing.cart_json,
+        },
+        { mergePrevMeta: true }
+      )
+    }
+
     if (billingUpsertEligible) {
       const existing = await findDraftPurchaseOrderForBillingUpsert({
         vendorCode,
@@ -208,50 +325,11 @@ export async function POST(request: NextRequest) {
         issuerStore: issuerStore || undefined,
       })
       if (existing) {
-        const prevMeta = parsePurchaseOrderCart(existing.cart_json).meta
-        const merged: PoCartMeta = { ...(meta || {}) }
-        if (!hasQuotationKey) {
-          if (prevMeta?.quotationFileUrl) {
-            merged.quotationFileUrl = prevMeta.quotationFileUrl
-            merged.quotationFileName = prevMeta.quotationFileName
-          }
-        } else if (!quotationIn) {
-          delete (merged as Record<string, unknown>).quotationFileUrl
-          delete (merged as Record<string, unknown>).quotationFileName
-        }
-        cartJson = serializePurchaseOrderCart(cart, merged)
-        const patch: Record<string, unknown> = {
-          cart_json: cartJson,
-          subtotal,
-          vat,
-          total,
-          user_name: userName,
-          vendor_name: vendorName,
-          location_name: locationName,
-          location_address: locationAddress,
-        }
-        if (withholdingTaxAmount > 0) {
-          patch.withholding_tax_amount = withholdingTaxAmount
-          if (withholdingTaxRate != null) patch.withholding_tax_rate = Number(withholdingTaxRate) || null
-        } else {
-          patch.withholding_tax_amount = null
-          patch.withholding_tax_rate = null
-        }
-        if (orderDateNorm) {
-          patch.created_at = bangkokDateToUtcRange(orderDateNorm).startISO
-        }
-        await supabaseUpdate('purchase_orders', existing.id, patch)
-        await syncTaxWithholdingLedgerForPurchaseOrder(existing.id)
-        return NextResponse.json(
-          {
-            success: true,
-            id: existing.id,
-            poNo: existing.po_no,
-            updated: true,
-            message: '발주 초안이 최신 내용으로 갱신되었습니다.',
-          },
-          { headers }
-        )
+        return applyDraftPatch({
+          id: existing.id,
+          po_no: existing.po_no,
+          cart_json: existing.cart_json,
+        })
       }
     }
 

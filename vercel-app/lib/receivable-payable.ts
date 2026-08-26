@@ -275,7 +275,7 @@ export async function upsertReceivableFromOrder(params: {
  *
  * 지원 refType:
  *  - 'Order'         → IV{YYYYMMDD}-{orderId}
- *  - 'ForceOutbound' → IVF{YYYYMMDD}-{stockLogId}
+ *  - 'ForceOutbound' → IVF{YYYYMMDD}-{anchorStockLogId} (같은 출고일·출고처·참조번호 묶음)
  *  - 'AccountingPO' / 'PO' → APO{YYYYMMDD}-{poId}
  */
 export async function applyTaxInvoiceOverrideToReceivable(params: {

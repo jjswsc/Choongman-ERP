@@ -6,6 +6,8 @@ import type { KbankVoidPaymentRequest } from '@/lib/payments/kbank-types'
 import { resolveKbankVoidTxnNoForRequest } from '@/lib/payments/kbank-api-reference'
 import { integrationScopeFromAuth } from '@/lib/integration-scope-from-auth'
 import { resolveKbankRuntime } from '@/lib/tenant-integration-resolve'
+import { loadKbankVoidOrderContext } from '@/lib/payments/kbank-void-for-order-server'
+import { authCanAccessPosStoreWrite } from '@/lib/pos-store-access-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,28 +38,80 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
     const orderId = Number(body.orderId || 0)
-    const storeCode = String(body.storeCode || '').trim()
+    let storeCode = String(body.storeCode || '').trim()
+    if (storeCode && !(await authCanAccessPosStoreWrite(authResult.auth, storeCode))) {
+      return withCorsHeaders(
+        NextResponse.json(
+          {
+            success: false,
+            statusCode: 'KBANK_VOID_STORE_DENIED',
+            message: 'You cannot void a payment for this store.',
+          },
+          { status: 403 }
+        )
+      )
+    }
     const rawPayload =
       body.payload && typeof body.payload === 'object'
         ? (body.payload as Record<string, unknown>)
         : undefined
-    const scope = integrationScopeFromAuth(authResult.auth, storeCode)
-    const kbankRuntime = await resolveKbankRuntime(scope)
-    const terminalId = String(
-      body.terminalId || rawPayload?.terminalId || kbankRuntime.terminalId || process.env.KBANK_TERMINAL_ID || ''
-    ).trim()
-    const txnNo = String(body.txnNo || '').trim()
-    const origPartnerTxnUid = String(
+    let origPartnerTxnUid = String(
       body.origPartnerTxnUid ||
         body.originalTransactionId ||
         rawPayload?.origPartnerTxnUid ||
         ''
     ).trim()
+    let txnNo = String(body.txnNo || rawPayload?.txnNo || '').trim()
+    if (orderId > 0) {
+      const bound = await loadKbankVoidOrderContext(orderId, authResult.auth)
+      if (!bound.ok) {
+        return withCorsHeaders(
+          NextResponse.json(
+            { success: false, statusCode: bound.code, message: bound.message },
+            { status: bound.httpStatus }
+          )
+        )
+      }
+      storeCode = bound.ctx.storeCode
+      const el = bound.ctx.eligibility
+      if (origPartnerTxnUid && el.partnerTxnUid && origPartnerTxnUid !== el.partnerTxnUid) {
+        return withCorsHeaders(
+          NextResponse.json(
+            {
+              success: false,
+              statusCode: 'KBANK_VOID_TXN_MISMATCH',
+              message: 'origPartnerTxnUid does not belong to this bill.',
+            },
+            { status: 409 }
+          )
+        )
+      }
+      origPartnerTxnUid = el.partnerTxnUid || origPartnerTxnUid
+      const boundTxnNo = resolveKbankVoidTxnNoForRequest(el.txnNo) || ''
+      const clientTxnNo = resolveKbankVoidTxnNoForRequest(txnNo) || ''
+      if (clientTxnNo && boundTxnNo && clientTxnNo !== boundTxnNo) {
+        return withCorsHeaders(
+          NextResponse.json(
+            {
+              success: false,
+              statusCode: 'KBANK_VOID_TXN_MISMATCH',
+              message: 'txnNo does not belong to this bill.',
+            },
+            { status: 409 }
+          )
+        )
+      }
+      txnNo = boundTxnNo || clientTxnNo
+    }
+    const scope = integrationScopeFromAuth(authResult.auth, storeCode)
+    const kbankRuntime = await resolveKbankRuntime(scope)
+    const terminalId = String(
+      body.terminalId || rawPayload?.terminalId || kbankRuntime.terminalId || process.env.KBANK_TERMINAL_ID || ''
+    ).trim()
     const voidPartnerTxnUid = buildVoidPartnerTxnUid(
       String(body.partnerTxnUid || rawPayload?.partnerTxnUid || '').trim()
     )
-    const resolvedTxnNo =
-      resolveKbankVoidTxnNoForRequest(String(txnNo || rawPayload?.txnNo || '').trim()) || ''
+    const resolvedTxnNo = resolveKbankVoidTxnNoForRequest(txnNo) || ''
 
     if (!origPartnerTxnUid) {
       return withCorsHeaders(

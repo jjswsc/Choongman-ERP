@@ -95,7 +95,12 @@ export default function AccountingPurchaseOrderPage() {
           <AdminPoBillingSettings />
         </TabsContent>
         <TabsContent value="history" className={adminTabsContentCn}>
-          <AdminPurchaseOrderHistory />
+          <AdminPurchaseOrderHistory
+            onEditDraft={() => {
+              setTab("hq")
+              patchPurchaseOrderViewCache({ tab: "hq" })
+            }}
+          />
         </TabsContent>
       </Tabs>
     </AccountingPageShell>

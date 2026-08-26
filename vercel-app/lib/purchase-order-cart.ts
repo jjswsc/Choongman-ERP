@@ -15,6 +15,12 @@ export type PoCartLine = {
   spec?: string
 }
 
+/** Draft(또는 빈 상태)만 수정 가능. 승인·취소 건은 불가 */
+export function isPoDraftEditableStatus(status?: string | null): boolean {
+  const s = String(status ?? "").trim().toLowerCase()
+  return !s || s === "draft"
+}
+
 /** 발주 줄 VAT 면세 여부 — `savePurchaseOrder`·화면 합계와 동일 규칙 */
 export function poLineIsVatExempt(taxType?: string | null): boolean {
   const t = String(taxType ?? '').trim()

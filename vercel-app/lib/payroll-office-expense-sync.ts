@@ -15,7 +15,8 @@ import {
   postExpenseAccrualJournal,
 } from '@/lib/accounting-posting'
 import { isOfficeStore } from '@/lib/permissions'
-import { payrollPayYmdFromAttributionMonth } from '@/lib/payroll-utils'
+import { payrollPayYmdForSavedMonth } from '@/lib/payroll-cycle-settings'
+import type { TenantSettingsScope } from '@/lib/tenant-system-settings'
 import { normalizeMachineCode } from '@/lib/vendor-code-policy'
 import {
   aggregateOfficeNetPayByStore,
@@ -75,8 +76,9 @@ async function upsertOfficeAggregateAccrual(params: {
   expenseSubject: AccountSubjectPick
   existing?: AccrualRow | null
   postedBy?: string
+  dueDate: string
 }): Promise<'created' | 'updated' | 'skipped_paid'> {
-  const { monthStr, store, totalBaht, employeeCount, expenseSubject, existing, postedBy } = params
+  const { monthStr, store, totalBaht, employeeCount, expenseSubject, existing, postedBy, dueDate } = params
   if (totalBaht <= 0) return 'skipped_paid'
 
   if (expenseSubject.id != null) {
@@ -85,7 +87,6 @@ async function upsertOfficeAggregateAccrual(params: {
   }
 
   const expenseDate = toMonthDate(monthStr, false)
-  const dueDate = payrollPayYmdFromAttributionMonth(monthStr) || toMonthDate(monthStr, true)
   const payeeCode = buildOfficePayrollAggregatePayeeCode(monthStr, store)
   const payeeName = `Payroll — ${store}`.slice(0, 200)
   const memo =
@@ -198,11 +199,13 @@ export async function syncOfficePayrollExpenseAccruals(params: {
   payrollRows: PayrollOfficeNetRow[]
   expenseSubject: AccountSubjectPick
   postedBy?: string
+  tenantScope?: TenantSettingsScope | null
 }): Promise<PayrollOfficeExpenseSyncResult> {
   const monthStr = String(params.month || '').trim().slice(0, 7)
   if (!/^\d{4}-\d{2}$/.test(monthStr)) {
     return { created: 0, updated: 0, skippedPaid: 0, deleted: 0, stores: [] }
   }
+  const dueDate = (await payrollPayYmdForSavedMonth(monthStr, params.tenantScope)) || toMonthDate(monthStr, true)
 
   const byStore = aggregateOfficeNetPayByStore(params.payrollRows || [], isOfficeStore)
   if (byStore.size === 0) {
@@ -258,6 +261,7 @@ export async function syncOfficePayrollExpenseAccruals(params: {
       expenseSubject: params.expenseSubject,
       existing: existingAgg,
       postedBy: params.postedBy,
+      dueDate,
     })
     if (result === 'created') created += 1
     else if (result === 'updated') updated += 1

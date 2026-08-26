@@ -16,7 +16,9 @@ import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
-import { payrollPayYmdFromAttributionMonth } from '@/lib/payroll-utils'
+import { shiftYearMonth } from '@/lib/payroll-utils'
+import { findOverlappingNeighborPeriod } from '@/lib/payroll-cycle'
+import { payrollPayYmdForSavedMonth, resolvePayrollPeriodForMonth } from '@/lib/payroll-cycle-settings'
 import { normalizeMachineCode } from '@/lib/vendor-code-policy'
 import {
   appendSaasTenantFilter,
@@ -70,6 +72,11 @@ export interface PayrollSaveRow {
   otherDed?: number
   netPay?: number
   status?: string
+}
+
+function withoutPeriodDateCols(row: Record<string, unknown>): Record<string, unknown> {
+  const { period_start: _s, period_end: _e, pay_date: _d, ...rest } = row
+  return rest
 }
 
 function toMonthDate(monthStr: string, useLastDay: boolean): string {
@@ -304,6 +311,55 @@ export async function POST(request: NextRequest) {
 
     const isDraft = String(body.mode || '').toLowerCase() === 'draft'
     const statusValue = isDraft ? '대기' : '확정'
+    const cyclePeriod = await resolvePayrollPeriodForMonth(monthStr, tenantScope)
+
+    const neighborMonths = [shiftYearMonth(monthStr, -1), shiftYearMonth(monthStr, 1)].filter(Boolean)
+    if (neighborMonths.length > 0 && list.length > 0) {
+      const neighborBase = `month=in.(${neighborMonths.map((m) => encodeURIComponent(m)).join(',')})`
+      const neighborFilter = appendSaasTenantFilter(neighborBase, tenantScope, 'payroll_records') || neighborBase
+      try {
+        const neighbors = (await supabaseSelectFilter('payroll_records', neighborFilter, {
+          select: 'month,store,name,employee_id,period_start,period_end',
+          limit: 10000,
+        })) as {
+          month?: string
+          store?: string
+          name?: string
+          employee_id?: number | null
+          period_start?: string | null
+          period_end?: string | null
+        }[] | null
+        const overlap = findOverlappingNeighborPeriod({
+          start: cyclePeriod.start,
+          end: cyclePeriod.end,
+          employees: list.map((r) => ({
+            store: String(r.store || ''),
+            name: String(r.name || ''),
+            employeeId: r.employeeId,
+          })),
+          neighbors: (neighbors || []).map((n) => ({
+            month: n.month,
+            store: String(n.store || ''),
+            name: String(n.name || ''),
+            employeeId: n.employee_id,
+            periodStart: n.period_start,
+            periodEnd: n.period_end,
+          })),
+        })
+        if (overlap) {
+          return NextResponse.json(
+            {
+              success: false,
+              msg: `${overlap.name}의 근무기간이 ${overlap.month} 급여와 겹칩니다. 주기를 확인한 뒤 다시 저장하세요.`,
+            },
+            { status: 409, headers }
+          )
+        }
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/period_start|period_end|42703|column/i.test(em)) throw e
+      }
+    }
 
     const rows: Record<string, unknown>[] = list.map((r) => ({
       month: monthStr,
@@ -339,6 +395,9 @@ export async function POST(request: NextRequest) {
       other_ded: Number(r.otherDed) || 0,
       net_pay: Number(r.netPay) || 0,
       status: statusValue,
+      period_start: cyclePeriod.start || null,
+      period_end: cyclePeriod.end || null,
+      pay_date: cyclePeriod.payYmd || null,
       // 저장·임시저장 시 직원 앱 공개 해제 → แจ้งประกาศ 다시 눌러야 보임
       published_at: null,
     })).map((r) => stampSaasTenantId(r, tenantScope, 'payroll_records'))
@@ -349,7 +408,7 @@ export async function POST(request: NextRequest) {
         await savePayrollRecordsChunk(monthStr, chunk, tenantScope)
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
-        if (/published_at|42703|column/i.test(em)) {
+        if (/published_at|period_start|period_end|pay_date|42703|column/i.test(em)) {
           const withoutPublished = chunk.map((r) => {
             const { published_at: _p, ...rest } = r
             return rest
@@ -358,7 +417,23 @@ export async function POST(request: NextRequest) {
             await savePayrollRecordsChunk(monthStr, withoutPublished, tenantScope)
           } catch (e2) {
             const em2 = e2 instanceof Error ? e2.message : String(e2)
-            if (/employee_id|employee_code|42703|column/i.test(em2)) {
+            if (/period_start|period_end|pay_date|42703|column/i.test(em2)) {
+              const withoutPeriod = withoutPublished.map(withoutPeriodDateCols)
+              try {
+                await savePayrollRecordsChunk(monthStr, withoutPeriod, tenantScope)
+              } catch (e3) {
+                const em3 = e3 instanceof Error ? e3.message : String(e3)
+                if (/employee_id|employee_code|42703|column/i.test(em3)) {
+                  const fallbackChunk = withoutPeriod.map((r) => {
+                    const { employee_id: _eid, employee_code: _ecode, ...rest } = r
+                    return rest
+                  })
+                  await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
+                } else {
+                  throw e3
+                }
+              }
+            } else if (/employee_id|employee_code|42703|column/i.test(em2)) {
               const fallbackChunk = withoutPublished.map((r) => {
                 const { employee_id: _eid, employee_code: _ecode, ...rest } = r
                 return rest
@@ -371,7 +446,7 @@ export async function POST(request: NextRequest) {
         } else if (/employee_id|employee_code|42703|column/i.test(em)) {
           const fallbackChunk = chunk.map((r) => {
             const { employee_id: _eid, employee_code: _ecode, published_at: _p, ...rest } = r
-            return rest
+            return withoutPeriodDateCols(rest)
           })
           await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
         } else {
@@ -399,7 +474,10 @@ export async function POST(request: NextRequest) {
       }
     }
     const expenseDate = toMonthDate(monthStr, false)
-    const dueDate = payrollPayYmdFromAttributionMonth(monthStr) || toMonthDate(monthStr, true)
+    const dueDate =
+      (await payrollPayYmdForSavedMonth(monthStr, tenantScope)) ||
+      cyclePeriod.payYmd ||
+      toMonthDate(monthStr, true)
     const monthlyPrefix = `payroll-${monthStr}-`
     const existingAccrualRows = (await supabaseSelectFilter(
       'expense_accruals',
@@ -531,6 +609,7 @@ export async function POST(request: NextRequest) {
         month: monthStr,
         postedBy: auth.name || undefined,
         expenseSubject,
+        tenantScope,
         payrollRows: list.map((r) => ({
           store: String(r.store || '').trim(),
           netPay: Number(r.netPay) || 0,

@@ -24,6 +24,8 @@ import {
   computePriorPeriodRange,
   pctChange,
 } from '@/lib/hq-warehouse-daily-stock-matrix-view'
+import { forceOutboundInvoiceAccKey } from '@/lib/force-outbound-invoice'
+import { formatForceOutboundInvoiceNo, formatReceivableInvoiceNo } from '@/lib/receivable-invoice-format'
 
 type RawStockLog = {
   id?: number
@@ -35,6 +37,7 @@ type RawStockLog = {
   qty?: number
   order_id?: number
   invoice_unit_price?: number | string | null
+  reference_no?: string | null
 }
 
 type ItemMeta = {
@@ -409,13 +412,11 @@ function invoiceNoFromLog(
   orderId: number | null,
   stockLogId: number
 ): string | null {
-  const datePart = ymd.replace(/\D/g, '').slice(0, 8)
-  if (datePart.length < 8) return null
   if (logType === 'Outbound' && orderId != null && orderId > 0) {
-    return `IV${datePart}-${orderId}`
+    return formatReceivableInvoiceNo(orderId, ymd) || null
   }
   if (logType === 'ForceOutbound' && stockLogId > 0) {
-    return `IVF${datePart}-${stockLogId}`
+    return formatForceOutboundInvoiceNo(stockLogId, ymd) || null
   }
   return null
 }
@@ -679,7 +680,12 @@ export async function buildHqWarehouseDailyStockMatrix(params: {
     const invKey =
       typeCode === 'Outbound' && orderId && orderId > 0
         ? `o|${ymd}|${target}|${orderId}`
-        : `f|${ymd}|${target}|${stockLogId}`
+        : forceOutboundInvoiceAccKey({
+            ymd,
+            target,
+            referenceNo: row.reference_no,
+            stockLogId,
+          })
     const invoiceNo = invoiceNoFromLog(ymd, logType, orderId, stockLogId) || ''
     let acc = invoiceAcc.get(invKey)
     if (!acc) {
@@ -695,7 +701,15 @@ export async function buildHqWarehouseDailyStockMatrix(params: {
       invoiceAcc.set(invKey, acc)
     }
     acc.subtotalRaw += lineAmount
-    if (!acc.invoiceNo && invoiceNo) acc.invoiceNo = invoiceNo
+    if (typeCode === 'Force' && stockLogId > 0) {
+      const prevId = Number(acc.stockLogId || 0)
+      if (!prevId || stockLogId < prevId) {
+        acc.stockLogId = stockLogId
+        acc.invoiceNo = formatForceOutboundInvoiceNo(stockLogId, ymd) || acc.invoiceNo
+      }
+    } else if (!acc.invoiceNo && invoiceNo) {
+      acc.invoiceNo = invoiceNo
+    }
   }
 
   for (const code of Object.keys(beginningMap)) itemCodes.add(code)

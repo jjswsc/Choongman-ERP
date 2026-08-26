@@ -62,6 +62,9 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "✅ 삭제되었습니다.": "msg_delete_ok",
   "추가되었습니다.": "msg_add_ok",
   "변경되었습니다.": "msg_updated",
+  "해당 발주가 없습니다.": "poEditNotFound",
+  "승인·취소된 발주는 수정할 수 없습니다.": "poEditNotDraft",
+  "이 발주를 수정할 권한이 없습니다.": "poEditForbidden",
   "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.": "posMenuPromoLinkedEdit",
 
   // POS 메뉴 노출 매장

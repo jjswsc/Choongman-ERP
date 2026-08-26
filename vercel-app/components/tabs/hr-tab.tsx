@@ -139,6 +139,9 @@ export function HrTab() {
     tax: number
     other_ded: number
     net_pay: number
+    period_start?: string
+    period_end?: string
+    pay_date?: string
   } | null>(null)
   const [companyName, setCompanyName] = useState("")
   const [payrollLoading, setPayrollLoading] = useState(false)
@@ -429,6 +432,8 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
 <div class="company">${displayCompany}</div>
 <dl class="meta">
 <dt>${t("payPrintMonth")}</dt><dd>${monthLabel}</dd>
+${payrollData.period_start && payrollData.period_end ? `<dt>${t("pay_period_label")}</dt><dd>${payrollData.period_start} ~ ${payrollData.period_end}</dd>` : ""}
+${payrollData.pay_date ? `<dt>${t("pay_pay_date_label")}</dt><dd>${payrollData.pay_date}</dd>` : ""}
 <dt>${t("payPrintStore")}</dt><dd>${payrollData.store}</dd>
 <dt>${t("payPrintRole")}</dt><dd>${payrollData.role || "-"}</dd>
 <dt>${t("payPrintDept")}</dt><dd>${payrollData.dept || "-"}</dd>
@@ -813,6 +818,18 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                 <div className="bg-muted/30 px-3 py-2 font-medium">
                   {formatMonthLabel(payrollData.month)} · {payrollData.store} · {payrollData.role || "-"}
                 </div>
+                {payrollData.period_start && payrollData.period_end ? (
+                  <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                    <span className="text-muted-foreground">{t("pay_period_label")}</span>
+                    <span>{payrollData.period_start} ~ {payrollData.period_end}</span>
+                  </div>
+                ) : null}
+                {payrollData.pay_date ? (
+                  <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                    <span className="text-muted-foreground">{t("pay_pay_date_label")}</span>
+                    <span>{payrollData.pay_date}</span>
+                  </div>
+                ) : null}
                 <div className="px-3 py-2 flex justify-between border-t border-border/40">
                   <span className="text-muted-foreground">{t("pay_salary")}</span>
                   <span className="font-medium">{fmt(payrollData.salary)} THB</span>

@@ -35,6 +35,8 @@ import {
   applyOutboundBillPlacedStatus,
   unmatchedOutboundBillLookupIds,
 } from '@/lib/outbound-invoice-print-status'
+import { assignForceOutboundInvoiceNos } from '@/lib/force-outbound-invoice'
+import { formatReceivableInvoiceNo } from '@/lib/receivable-invoice-format'
 
 export const dynamic = 'force-dynamic'
 
@@ -478,15 +480,15 @@ export async function GET(request: NextRequest) {
 
     // 인보이스 번호
     // - 주문 연동 출고: IV{yyyymmdd}-{orderId} (승인 주문·로그 Outbound, 미수금(주문)과 동일)
-    // - 강제출고(주문 없음): orderRowId 없음 → 강제출고 미수금(IVF…)과 맞추기 위해 IVF{yyyymmdd}-{stockLogId}
+    // - 강제출고: 같은 출고일·출고처·참조번호는 IVF{yyyymmdd}-{minStockLogId} 한 장
     for (const r of list) {
       const datePart = (r.date || "").replace(/\D/g, "").slice(0, 8)
-      if (r.orderRowId && datePart.length >= 8) {
-        r.invoiceNo = `IV${datePart}-${r.orderRowId}`
-      } else if (r.type === "Force" && r.stockLogId != null && r.stockLogId > 0 && datePart.length >= 8) {
-        r.invoiceNo = `IVF${datePart}-${r.stockLogId}`
+      const oid = Number(r.orderRowId)
+      if (r.orderRowId && Number.isFinite(oid) && oid > 0 && datePart.length >= 8) {
+        r.invoiceNo = formatReceivableInvoiceNo(oid, r.date || "")
       }
     }
+    assignForceOutboundInvoiceNos(list)
 
     const orderRowIds = list
       .map((r) => r.orderRowId)

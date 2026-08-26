@@ -13,6 +13,8 @@ import { getDirectSettlementMap } from './direct-settlement-server'
 import { thaiInvoiceTotalsFromRawSubtotal } from './invoice-vat-total'
 import { unitPriceFromOutboundLogSnapshot } from './outbound-order-line-match'
 import { isInternalForceOutboundTarget } from './internal-outbound'
+import { forceOutboundInvoiceAnchorId, forceOutboundInvoiceGroupKey } from './force-outbound-invoice'
+import { formatForceOutboundInvoiceNo } from './receivable-invoice-format'
 
 const TZ = 'Asia/Bangkok'
 
@@ -26,6 +28,7 @@ type ForceOutboundLog = {
   qty?: number
   invoice_unit_price?: number | string | null
   is_deleted?: boolean | null
+  reference_no?: string | null
 }
 
 function normalizeStoreKey(v: string): string {
@@ -71,10 +74,50 @@ async function loadItemMasterPrices(): Promise<Record<string, number>> {
   return priceByCode
 }
 
+function bangkokYmdFromLogDate(logDate?: string): string {
+  const d = logDate ? new Date(logDate) : new Date()
+  return !Number.isNaN(d.getTime())
+    ? d.toLocaleDateString('en-CA', { timeZone: TZ })
+    : new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+}
+
+function forceOutboundGroupKeyFromLog(log: ForceOutboundLog): string | null {
+  return forceOutboundInvoiceGroupKey({
+    date: bangkokYmdFromLogDate(log.log_date),
+    target: String(log.vendor_target || ''),
+    referenceNo: log.reference_no,
+  })
+}
+
+async function loadForceOutboundInvoiceSiblings(log: ForceOutboundLog): Promise<ForceOutboundLog[]> {
+  const store = String(log.vendor_target || '').trim()
+  const ref = String(log.reference_no || '').trim()
+  if (!store || !ref) return [log]
+  const rows = (await supabaseSelectFilter(
+    'stock_logs',
+    `log_type=eq.ForceOutbound&is_deleted=is.false&vendor_target=eq.${encodeURIComponent(store)}&reference_no=eq.${encodeURIComponent(ref)}`,
+    { select: 'id,log_date,vendor_target,reference_no', limit: 500, order: 'id.asc' }
+  )) as ForceOutboundLog[]
+  const key = forceOutboundGroupKeyFromLog(log)
+  if (!key) return [log]
+  const sameGroup = (rows || []).filter((r) => forceOutboundGroupKeyFromLog(r) === key)
+  return sameGroup.length ? sameGroup : [log]
+}
+
+function invoiceAnchorIdForForceLog(log: ForceOutboundLog, siblings: ForceOutboundLog[]): number {
+  const selfId = Number(log.id) || 0
+  const key = forceOutboundGroupKeyFromLog(log)
+  if (!key) return selfId
+  const ids = siblings
+    .filter((r) => forceOutboundGroupKeyFromLog(r) === key)
+    .map((r) => Number(r.id) || 0)
+  return forceOutboundInvoiceAnchorId(ids.length ? ids : [selfId])
+}
+
 /** 단일 강제출고(HQ) 로그 기준 미수금 upsert/삭제 */
 export async function syncReceivableFromForceOutboundStockLogRow(
   log: ForceOutboundLog,
-  options?: { priceByCode?: Record<string, number> }
+  options?: { priceByCode?: Record<string, number>; siblingLogs?: ForceOutboundLog[] }
 ): Promise<void> {
   const stockLogId = Number(log.id)
   if (!stockLogId || Number.isNaN(stockLogId)) return
@@ -116,8 +159,11 @@ export async function syncReceivableFromForceOutboundStockLogRow(
     ? d.toLocaleDateString('en-CA', { timeZone: TZ })
     : new Date().toLocaleDateString('en-CA', { timeZone: TZ })
 
-  const datePart = transDate.replace(/\D/g, '').slice(0, 8)
-  const invNo = `IVF${datePart}-${stockLogId}`
+  const siblings = options?.siblingLogs?.length ? options.siblingLogs : await loadForceOutboundInvoiceSiblings(log)
+  const anchorId = invoiceAnchorIdForForceLog(log, siblings)
+  const invNo =
+    formatForceOutboundInvoiceNo(anchorId || stockLogId, transDate) ||
+    formatForceOutboundInvoiceNo(stockLogId, transDate)
   const memo = `강제출고 ${invNo}`
 
   const existing = (await supabaseSelectFilter(
@@ -151,7 +197,7 @@ export async function syncReceivableFromForceOutboundStockLogById(stockLogId: nu
   if (!stockLogId || Number.isNaN(stockLogId)) return
   const rows = (await supabaseSelectFilter('stock_logs', `id=eq.${stockLogId}`, {
     limit: 1,
-    select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted',
+    select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted,reference_no',
   })) as ForceOutboundLog[]
   const log = rows?.[0]
   if (!log || String(log.log_type || '') !== 'ForceOutbound' || Boolean(log.is_deleted)) {
@@ -174,7 +220,7 @@ export async function repairForceOutboundReceivablesRecentDays(days: number): Pr
     {
       order: 'id.asc',
       limit: 8000,
-      select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted',
+      select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted,reference_no',
     }
   )) as ForceOutboundLog[]
   const priceByCode = await loadItemMasterPrices()
@@ -182,7 +228,7 @@ export async function repairForceOutboundReceivablesRecentDays(days: number): Pr
   let errors = 0
   for (const r of rows || []) {
     try {
-      await syncReceivableFromForceOutboundStockLogRow(r, { priceByCode })
+      await syncReceivableFromForceOutboundStockLogRow(r, { priceByCode, siblingLogs: rows || [] })
       processed++
     } catch {
       errors++
@@ -202,7 +248,7 @@ export async function reconcileAllForceOutboundReceivables(params: {
   const rows = (await supabaseSelectFilter('stock_logs', filter, {
     order: 'id.asc',
     limit: 8000,
-    select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted',
+    select: 'id,log_type,log_date,vendor_target,item_code,item_name,qty,invoice_unit_price,is_deleted,reference_no',
   })) as ForceOutboundLog[]
   let scopedRows = rows || []
   const normalizedStoreFilter = String(params.storeFilter || '').trim()
@@ -220,7 +266,7 @@ export async function reconcileAllForceOutboundReceivables(params: {
   let errors = 0
   for (const r of scopedRows) {
     try {
-      await syncReceivableFromForceOutboundStockLogRow(r, { priceByCode })
+      await syncReceivableFromForceOutboundStockLogRow(r, { priceByCode, siblingLogs: rows || [] })
       processed++
     } catch {
       errors++

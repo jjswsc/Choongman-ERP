@@ -79,6 +79,8 @@ import {
 import { isLinkposCardApiEnabled, shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
 import { shouldSkipKbankApiForQr } from '@/lib/kbank-qr-api-enabled'
 import { isKbankQrEnabledForStore } from '@/lib/kbank-pilot-stores'
+import { runKbankVoidBoundToOrder } from '@/lib/pos-kbank-void-for-order-client'
+import { canVoidKbankQrPayment } from '@/lib/permissions'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import {
   consumeSuppressMainPosAutoPrintForQueuedSync,
@@ -973,6 +975,8 @@ export default function PosTerminalPage() {
   const [kbankSentQrTypeCode, setKbankSentQrTypeCode] = useState('')
   const [kbankGenerateAuditText, setKbankGenerateAuditText] = useState('')
   const [kbankOpsBusy, setKbankOpsBusy] = useState(false)
+  const [kbankVoidForOrderBusy, setKbankVoidForOrderBusy] = useState(false)
+  const kbankVoidForOrderBusyRef = useRef(false)
   const [kbankOpsTxnUid, setKbankOpsTxnUid] = useState('')
   const kbankOpsTxnUidRef = useRef('')
   const [kbankOpsOrigTxnUid, setKbankOpsOrigTxnUid] = useState('')
@@ -7479,6 +7483,19 @@ export default function PosTerminalPage() {
     ]
   )
 
+  const handleReceiptKbankVoid = useCallback(async () => {
+    const orderId = Number(receiptData?.serverOrderId || 0)
+    if (kbankVoidForOrderBusyRef.current) return
+    kbankVoidForOrderBusyRef.current = true
+    setKbankVoidForOrderBusy(true)
+    try {
+      await runKbankVoidBoundToOrder({ orderId, t })
+    } finally {
+      kbankVoidForOrderBusyRef.current = false
+      setKbankVoidForOrderBusy(false)
+    }
+  }, [receiptData?.serverOrderId, t])
+
   const applyKbankManualMemoTag = useCallback(
     (
       memo: string | null | undefined,
@@ -12383,14 +12400,15 @@ export default function PosTerminalPage() {
           itemBarcode,
           printerSettingsRef: posPrinterSettingsRef,
           kitchenPromoLineEnrich: posReceiptLineOpts,
-          onPaymentVoidClick: () => void runKbankFollowupAction('void'),
+          onPaymentVoidClick: () => void handleReceiptKbankVoid(),
           paymentVoidEnabled: Boolean(
             isKbankPilotStore &&
               receiptData?.receiptAutoPrintContext === 'payment' &&
-              (String(kbankOpsTxnUid || '').trim() ||
-                String(kbankPaidVoidSnapshot?.partnerTxnUid || '').trim())
+              Number(receiptData?.serverOrderId || 0) > 0 &&
+              Number(receiptData?.paymentQr || 0) > 0.005 &&
+              canVoidKbankQrPayment(String(auth?.role || ''))
           ),
-          paymentVoidBusy: kbankOpsBusy,
+          paymentVoidBusy: kbankVoidForOrderBusy,
         }}
         deliveryEditOrderNo={{
           open: deliveryEditOrderNoOpen,

@@ -158,6 +158,56 @@ export async function savePayrollHazGradeRules(params: { requireEvalGrade: boole
   }>
 }
 
+export async function getPayrollCycle(month?: string) {
+  const q = month ? `?month=${encodeURIComponent(month)}` : ''
+  const res = await apiFetchWithOffline(`/api/payrollCycle${q}`)
+  const data = (await res.json().catch(() => ({}))) as {
+    settings?: { versions?: Array<{
+      effectiveMonth?: string
+      periodEndDay?: number
+      payDay?: number
+      payMonthOffset?: number
+    }> }
+    canEdit?: boolean
+    defaultMonth?: string
+    period?: { start?: string; end?: string; payYmd?: string; isTransitionShort?: boolean; isLegacy?: boolean }
+    preview?: Array<{ month?: string; start?: string; end?: string; payYmd?: string; isTransitionShort?: boolean }>
+    message?: string
+  }
+  if (!res.ok) {
+    throw new Error(data?.message || `급여 주기 조회 실패 (${res.status})`)
+  }
+  return {
+    settings: data.settings || { versions: [] },
+    canEdit: !!data.canEdit,
+    defaultMonth: String(data.defaultMonth || ''),
+    period: data.period || null,
+    preview: Array.isArray(data.preview) ? data.preview : [],
+  }
+}
+
+export async function savePayrollCycle(params: {
+  effectiveMonth: string
+  periodEndDay: number
+  payDay: number
+  payMonthOffset: number
+}) {
+  const res = await apiFetchWithOffline('/api/payrollCycle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    warning?: string
+    settings?: unknown
+    defaultMonth?: string
+    period?: { start?: string; end?: string; payYmd?: string }
+    preview?: Array<{ month?: string; start?: string; end?: string; payYmd?: string }>
+  }>
+}
+
 export async function getCostSettings() {
   const res = await apiFetchWithOffline('/api/costSettings')
   const data = await res.json().catch(() => ({})) as {

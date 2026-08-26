@@ -38,8 +38,6 @@ import {
   updatePosOrder,
   updatePosOrderStatus,
   getPosPaymentAttempts,
-  executeKbankCheckStatus,
-  executeKbankVoidPayment,
   type PosOrder,
   type PosMenu,
   type PosPromoWithItems,
@@ -52,7 +50,7 @@ import { useT, tr as i18nTr, tOr } from '@/lib/i18n'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useOnlineStatus, onSyncComplete } from '@/lib/offline'
-import { isFranchiseeRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
+import { canVoidKbankQrPayment, isFranchiseeRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { cn, formatBahtNum, escapeHtml } from '@/lib/utils'
 import {
   ADMIN_BADGE_BASE_CN,
@@ -133,14 +131,11 @@ import {
 } from '@/lib/pos-payment-other-breakdown'
 import { isKbankQrEnabledForStore } from '@/lib/kbank-pilot-stores'
 import {
+  evaluateKbankVoidEligibilityFromAttempts,
   pickKbankVoidRefsFromAttempts,
   type KbankVoidOrderRefs,
 } from '@/lib/payments/kbank-void-from-order'
-import {
-  extractKbankPaymentTxnNo,
-  formatKbankVoidInquiryFailureMessage,
-  resolveKbankVoidTxnNoForRequest,
-} from '@/lib/payments/kbank-api-reference'
+import { runKbankVoidBoundToOrder } from '@/lib/pos-kbank-void-for-order-client'
 
 function formatBangkokDateTime(value: string | null | undefined) {
   if (!value) return '-'
@@ -313,6 +308,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const [pcOrderTotal, setPcOrderTotal] = React.useState('')
   const [payCorrectSaving, setPayCorrectSaving] = React.useState(false)
   const [pcKbankVoidRefs, setPcKbankVoidRefs] = React.useState<KbankVoidOrderRefs | null>(null)
+  const [pcKbankAllowVoid, setPcKbankAllowVoid] = React.useState('')
   const [pcKbankVoidLoading, setPcKbankVoidLoading] = React.useState(false)
   const [pcKbankVoidBusy, setPcKbankVoidBusy] = React.useState(false)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
@@ -1202,11 +1198,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     const order = payCorrectOrder
     if (!order) {
       setPcKbankVoidRefs(null)
+      setPcKbankAllowVoid('')
       setPcKbankVoidLoading(false)
       return
     }
     if (!isKbankQrEnabledForStore({ storeId: order.storeCode })) {
       setPcKbankVoidRefs(null)
+      setPcKbankAllowVoid('')
       setPcKbankVoidLoading(false)
       return
     }
@@ -1220,10 +1218,15 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           status: 'all',
           limit: 50,
         })
+        const el = evaluateKbankVoidEligibilityFromAttempts(rows)
         if (cancelled) return
         setPcKbankVoidRefs(pickKbankVoidRefsFromAttempts(rows))
+        setPcKbankAllowVoid(el.allowVoid)
       } catch {
-        if (!cancelled) setPcKbankVoidRefs(null)
+        if (!cancelled) {
+          setPcKbankVoidRefs(null)
+          setPcKbankAllowVoid('')
+        }
       } finally {
         if (!cancelled) setPcKbankVoidLoading(false)
       }
@@ -1687,86 +1690,20 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       await appAlert(t('posReceiptPayCorrectKbankVoidAlready') || 'This KBank payment was already voided.')
       return
     }
-    const partnerTxnUid = String(pcKbankVoidRefs?.partnerTxnUid || '').trim()
-    if (!partnerTxnUid) {
-      await appAlert(
-        t('posReceiptPayCorrectKbankVoidNoAttempt') ||
-          'No KBank QR transaction was found for this bill. Void is only for payments made with KBank QR API.'
-      )
+    if (pcKbankAllowVoid === 'N') {
+      await appAlert(t('posKbankVoidNotAllowed') || 'KBank does not allow Void for this payment.')
       return
     }
-    const ok = await appConfirm(
-      t('posReceiptPayCorrectKbankVoidConfirm') ||
-        'Void will reverse the KBank QR payment at the bank. It does not cancel the POS bill. Continue?'
-    )
-    if (!ok) return
-    const storeCode = String(payCorrectOrder.storeCode || '').trim()
-    const terminalId = String(pcKbankVoidRefs?.terminalId || '').trim()
-    const qrType = String(payCorrectOrder.paymentQrType || '').trim() || 'THAI_QR'
+    if (!canVoidKbankQrPayment(String(auth?.role || ''))) {
+      await appAlert(t('posKbankVoidNeedManager') || 'A manager must Void this KBank payment.')
+      return
+    }
     setPcKbankVoidBusy(true)
     try {
-      let voidTxnNo = resolveKbankVoidTxnNoForRequest(pcKbankVoidRefs?.txnNo) || ''
-      if (!voidTxnNo) {
-        const inq = await executeKbankCheckStatus({
-          orderId: payCorrectOrder.id,
-          storeCode,
-          partnerTransactionId: partnerTxnUid,
-          originalTransactionId: partnerTxnUid,
-          terminalId: terminalId || undefined,
-          payload: {
-            origPartnerTxnUid: partnerTxnUid,
-            qrType,
-            ...(terminalId ? { terminalId } : {}),
-          },
-        })
-        if (inq.success) {
-          voidTxnNo = extractKbankPaymentTxnNo(inq.data).slice(0, 20)
-        }
-        if (!voidTxnNo) {
-          await appAlert(
-            formatKbankVoidInquiryFailureMessage({
-              fallback:
-                t('posKbankVoidInquiryFailed') ||
-                'Could not obtain txnNo from Inquiry. Check the KBank response and try again.',
-              inquiry: inq,
-            })
-          )
-          return
-        }
+      const result = await runKbankVoidBoundToOrder({ orderId: payCorrectOrder.id, t })
+      if (result === 'voided' || result === 'already') {
+        setPcKbankVoidRefs((prev) => (prev ? { ...prev, alreadyVoided: true } : prev))
       }
-      const voidPartnerTxnUid = `VOD${Date.now()}${Math.random().toString(36).slice(2, 8)}`.slice(0, 32)
-      const out = await executeKbankVoidPayment({
-        orderId: payCorrectOrder.id,
-        storeCode,
-        origPartnerTxnUid: partnerTxnUid,
-        originalTransactionId: partnerTxnUid,
-        partnerTxnUid: voidPartnerTxnUid,
-        terminalId: terminalId || undefined,
-        txnNo: voidTxnNo || undefined,
-        payload: {
-          partnerTxnUid: voidPartnerTxnUid,
-          origPartnerTxnUid: partnerTxnUid,
-          ...(terminalId ? { terminalId } : {}),
-          ...(voidTxnNo ? { txnNo: voidTxnNo } : {}),
-        },
-      })
-      if (!out.success) {
-        await appAlert(
-          String(out.statusMessage || out.message || '').trim() ||
-            t('posKbankVoidFailedAlert') ||
-            'Void payment failed.'
-        )
-        return
-      }
-      setPcKbankVoidRefs((prev) =>
-        prev ? { ...prev, txnNo: voidTxnNo || prev.txnNo, alreadyVoided: true } : prev
-      )
-      await appAlert(
-        t('posReceiptPayCorrectKbankVoidSuccess') ||
-          'KBank Void succeeded. Cancel the POS bill if needed.'
-      )
-    } catch (e) {
-      await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setPcKbankVoidBusy(false)
     }
@@ -2727,19 +2664,27 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                     payCorrectSaving ||
                     pcKbankVoidBusy ||
                     pcKbankVoidLoading ||
-                    Boolean(pcKbankVoidRefs?.alreadyVoided)
+                    Boolean(pcKbankVoidRefs?.alreadyVoided) ||
+                    pcKbankAllowVoid === 'N' ||
+                    !canVoidKbankQrPayment(String(auth?.role || ''))
                   }
                   title={
                     pcKbankVoidRefs?.alreadyVoided
                       ? t('posReceiptPayCorrectKbankVoidAlready') || 'Already voided'
-                      : !String(pcKbankVoidRefs?.txnNo || '').trim()
-                        ? t('posKbankVoidNeedsTxnNo') || 'Void runs Inquiry first when txnNo is empty.'
-                        : undefined
+                      : pcKbankAllowVoid === 'N'
+                        ? t('posKbankVoidNotAllowed') || 'KBank does not allow Void for this payment.'
+                        : !canVoidKbankQrPayment(String(auth?.role || ''))
+                          ? t('posKbankVoidNeedManager') || 'A manager must Void this KBank payment.'
+                          : !String(pcKbankVoidRefs?.txnNo || '').trim()
+                            ? t('posKbankVoidNeedsTxnNo') || 'Void runs Inquiry first when txnNo is empty.'
+                            : undefined
                   }
                   onClick={() => void handleKbankVoidFromPayCorrect()}
                 >
                   <Ban className="mr-1 h-3.5 w-3.5" />
-                  {t('posKbankVoid') || 'Void'}
+                  {pcKbankVoidRefs?.alreadyVoided
+                    ? t('posKbankVoided') || 'Voided'
+                    : t('posKbankVoid') || 'Void'}
                 </Button>
               ) : null}
               {showPayCorrectKbankVoid ? (

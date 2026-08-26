@@ -28,7 +28,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import { buildPayrollStoreSelectOptions } from "@/lib/office-payroll-access"
 import { useSyncOfficePayrollAccess } from "@/lib/use-office-payroll-access"
-import { apiFetch, useStoreList } from "@/lib/api-client"
+import { apiFetch, getPayrollCycle, useStoreList } from "@/lib/api-client"
 import {
   i18nVar,
   isPayrollExplainSumRow,
@@ -172,6 +172,12 @@ export function AdminPayrollCalc() {
   useSyncOfficePayrollAccess()
 
   const [monthStr, setMonthStr] = useState(toMonthStr())
+  const [periodHint, setPeriodHint] = useState<{
+    start: string
+    end: string
+    payYmd: string
+    isTransitionShort?: boolean
+  } | null>(null)
   const [storeFilter, setStoreFilter] = useState(isManager && userStore ? userStore : "All")
   const [stores, setStores] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -217,6 +223,40 @@ export function AdminPayrollCalc() {
   useEffect(() => {
     if (isManager && userStore) setStoreFilter(userStore)
   }, [isManager, userStore])
+
+  useEffect(() => {
+    let cancelled = false
+    getPayrollCycle()
+      .then((d) => {
+        if (cancelled) return
+        if (d.defaultMonth) setMonthStr(d.defaultMonth)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!monthStr || monthStr.length < 7) return
+    let cancelled = false
+    getPayrollCycle(monthStr)
+      .then((d) => {
+        if (cancelled) return
+        if (d.period?.start && d.period?.end) {
+          setPeriodHint({
+            start: d.period.start,
+            end: d.period.end,
+            payYmd: d.period.payYmd || "",
+            isTransitionShort: d.period.isTransitionShort,
+          })
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [monthStr])
 
   const handleLoad = async () => {
     setLoading(true)
@@ -299,6 +339,14 @@ export function AdminPayrollCalc() {
       })
       const res = await apiFetch(`/api/getPayrollCalc?${params}`)
       const data = await res.json()
+      if (data.period?.start && data.period?.end) {
+        setPeriodHint({
+          start: String(data.period.start),
+          end: String(data.period.end),
+          payYmd: String(data.period.payYmd || ""),
+          isTransitionShort: !!data.period.isTransitionShort,
+        })
+      }
       if (data.list && Array.isArray(data.list)) {
         setError(null)
         const rows: PayrollRow[] = data.list.map((r: Record<string, unknown>) => ({
@@ -692,6 +740,21 @@ export function AdminPayrollCalc() {
               onChange={(e) => setMonthStr(e.target.value)}
               className="h-9 text-xs"
             />
+            {periodHint ? (
+              <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                {i18nVar(t("pay_cycle_hint"), {
+                  start: periodHint.start,
+                  end: periodHint.end,
+                  pay: periodHint.payYmd,
+                })}
+                {periodHint.isTransitionShort
+                  ? ` · ${i18nVar(t("pay_cycle_short_note"), {
+                      start: periodHint.start,
+                      end: periodHint.end,
+                    })}`
+                  : ""}
+              </p>
+            ) : null}
           </div>
           {!isManager && (
             <div className="flex-1 min-w-[140px]">

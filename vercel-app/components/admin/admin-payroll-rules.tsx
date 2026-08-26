@@ -11,11 +11,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { appAlert } from "@/lib/app-message"
-import { getPayrollHazGradeRules, savePayrollHazGradeRules } from "@/lib/api-client"
+import { i18nVar } from "@/lib/payroll-explain-i18n"
+import {
+  getPayrollCycle,
+  getPayrollHazGradeRules,
+  savePayrollCycle,
+  savePayrollHazGradeRules,
+} from "@/lib/api-client"
 
 const POLICY_IDS = [1, 2, 3] as const
 
@@ -50,6 +57,221 @@ function PayrollPolicySections({ t }: { t: (k: string) => string }) {
         ))}
       </div>
     </div>
+  )
+}
+
+function dayOptions(max: number, eomLabel: string, dayLabel: (n: number) => string) {
+  return [
+    { value: "0", label: eomLabel },
+    ...Array.from({ length: max }, (_, i) => {
+      const n = i + 1
+      return { value: String(n), label: dayLabel(n) }
+    }),
+  ]
+}
+
+function PayrollCycleSection({ t }: { t: (k: string) => string }) {
+  const [loading, setLoading] = React.useState(true)
+  const [saving, setSaving] = React.useState(false)
+  const [canEdit, setCanEdit] = React.useState(false)
+  const [effectiveMonth, setEffectiveMonth] = React.useState("")
+  const [periodEndDay, setPeriodEndDay] = React.useState("0")
+  const [payDay, setPayDay] = React.useState("5")
+  const [payMonthOffset, setPayMonthOffset] = React.useState("1")
+  const [preview, setPreview] = React.useState<
+    Array<{ month?: string; start?: string; end?: string; payYmd?: string; isTransitionShort?: boolean }>
+  >([])
+
+  const load = React.useCallback(async () => {
+    setLoading(true)
+    try {
+      const d = await getPayrollCycle()
+      setCanEdit(!!d.canEdit)
+      const versions = d.settings?.versions || []
+      const latest = versions[versions.length - 1]
+      setEffectiveMonth(latest?.effectiveMonth || d.defaultMonth || "")
+      setPeriodEndDay(String(latest?.periodEndDay ?? 0))
+      setPayDay(String(latest?.payDay ?? 5))
+      setPayMonthOffset(String(latest?.payMonthOffset ?? 1))
+      setPreview(d.preview || [])
+    } catch {
+      setCanEdit(false)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    void load()
+  }, [load])
+
+  const applyPreset = (kind: "calendar" | "26_25") => {
+    if (kind === "calendar") {
+      setPeriodEndDay("0")
+      setPayDay("5")
+      setPayMonthOffset("1")
+    } else {
+      setPeriodEndDay("25")
+      setPayDay("0")
+      setPayMonthOffset("0")
+    }
+  }
+
+  const handleSave = async () => {
+    if (!canEdit) return
+    if (!/^\d{4}-\d{2}$/.test(effectiveMonth)) {
+      await appAlert(t("pay_month_select"))
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await savePayrollCycle({
+        effectiveMonth,
+        periodEndDay: Number(periodEndDay),
+        payDay: Number(payDay),
+        payMonthOffset: Number(payMonthOffset),
+      })
+      if (res.success) {
+        setPreview(res.preview || [])
+        await appAlert(
+          res.warning
+            ? `${t("pay_rules_saved")}\n${res.warning}`
+            : t("pay_rules_saved")
+        )
+        await load()
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || t("pay_save_fail"))
+      }
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : t("pay_save_fail"))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const dayLbl = (n: number) => i18nVar(t("pay_cycle_day_n"), { n })
+  const periodEndOpts = dayOptions(27, t("pay_cycle_period_end_eom"), dayLbl)
+  const payDayOpts = dayOptions(28, t("pay_cycle_pay_day_eom"), dayLbl)
+
+  return (
+    <Card>
+      <CardContent className="pt-6 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">{t("pay_cycle_heading")}</h2>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{t("pay_cycle_intro")}</p>
+        </div>
+        {loading ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">{t("loading")}</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                disabled={!canEdit}
+                onClick={() => applyPreset("calendar")}
+              >
+                {t("pay_cycle_preset_calendar")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                disabled={!canEdit}
+                onClick={() => applyPreset("26_25")}
+              >
+                {t("pay_cycle_preset_26_25")}
+              </Button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 max-w-xl">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold block">{t("pay_cycle_effective")}</label>
+                <Input
+                  type="month"
+                  value={effectiveMonth}
+                  onChange={(e) => setEffectiveMonth(e.target.value.slice(0, 7))}
+                  disabled={!canEdit}
+                  className="h-9 text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold block">{t("pay_cycle_period_end")}</label>
+                <Select value={periodEndDay} onValueChange={setPeriodEndDay} disabled={!canEdit}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {periodEndOpts.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold block">{t("pay_cycle_pay_day")}</label>
+                <Select value={payDay} onValueChange={setPayDay} disabled={!canEdit}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {payDayOpts.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold block">{t("pay_cycle_pay_offset")}</label>
+                <Select value={payMonthOffset} onValueChange={setPayMonthOffset} disabled={!canEdit}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">{t("pay_cycle_pay_offset_0")}</SelectItem>
+                    <SelectItem value="1">{t("pay_cycle_pay_offset_1")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">{t("pay_cycle_two_pay_note")}</p>
+            {preview.length > 0 ? (
+              <div className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-xs space-y-1">
+                <p className="font-medium">{t("pay_cycle_preview")}</p>
+                {preview.map((p) => (
+                  <p key={String(p.month)} className="text-muted-foreground">
+                    {p.month}:{" "}
+                    {i18nVar(t("pay_cycle_hint"), {
+                      start: p.start || "",
+                      end: p.end || "",
+                      pay: p.payYmd || "",
+                    })}
+                    {p.isTransitionShort
+                      ? ` · ${i18nVar(t("pay_cycle_short_note"), {
+                          start: p.start || "",
+                          end: p.end || "",
+                        })}`
+                      : ""}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <Button size="sm" className="h-8 text-xs" disabled={!canEdit || saving} onClick={() => void handleSave()}>
+                {saving ? t("loading") : t("pay_cycle_save")}
+              </Button>
+              {!canEdit ? <p className="text-[11px] text-muted-foreground">{t("pay_rules_readonly")}</p> : null}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -111,6 +333,8 @@ export function AdminPayrollRules() {
           <PayrollPolicySections t={t} />
         </CardContent>
       </Card>
+
+      <PayrollCycleSection t={t} />
 
       <Card>
         <CardContent className="pt-6 space-y-4">

@@ -164,11 +164,14 @@ export async function POST(request: NextRequest) {
       item_name?: string
       qty?: number
       invoice_unit_price?: number | string | null
+      reference_no?: string | null
     }[]
-    for (const r of inserted) {
-      if (String(r.log_type || '') !== 'ForceOutbound' || r.id == null) continue
+    const forceInserted = inserted
+      .filter((r) => String(r.log_type || '') === 'ForceOutbound' && r.id != null)
+      .map((r) => ({ ...r, reference_no: r.reference_no || referenceNoBatch }))
+    for (const r of forceInserted) {
       try {
-        await syncReceivableFromForceOutboundStockLogRow(r, { priceByCode })
+        await syncReceivableFromForceOutboundStockLogRow(r, { priceByCode, siblingLogs: forceInserted })
       } catch (recErr) {
         console.error('forceOutboundBatch receivable:', recErr)
       }

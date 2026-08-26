@@ -171,6 +171,9 @@ export async function GET(request: NextRequest) {
       tax: Number(r.tax) || 0,
       other_ded: Number(r.other_ded) || 0,
       net_pay: Number(r.net_pay) || 0,
+      period_start: r.period_start ? String(r.period_start).slice(0, 10) : undefined,
+      period_end: r.period_end ? String(r.period_end).slice(0, 10) : undefined,
+      pay_date: r.pay_date ? String(r.pay_date).slice(0, 10) : undefined,
     }
 
     return NextResponse.json({ success: true, data }, { headers })
