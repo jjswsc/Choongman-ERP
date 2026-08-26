@@ -2,15 +2,13 @@
 
 import * as React from 'react'
 import { qrTableStaffSessionsMap } from '@/lib/api-client/qr-table'
+import {
+  QR_FLOOR_SESSION_HINTS_DISABLED_POLL_MS,
+  QR_FLOOR_SESSION_HINTS_ERROR_POLL_MS,
+  QR_FLOOR_SESSION_HINTS_POLL_MS,
+} from '@/lib/qr-table-poll-interval'
 
 export type QrFloorMarker = 'awaiting' | 'active' | 'call' | null
-
-/** QR 켠 매장 — 홀 배지 폴링 (5s는 Fluid CPU·요청 폭증) */
-const QR_FLOOR_SESSION_HINTS_POLL_MS = 15_000
-/** QR 꺼진 매장 — 설정 변경만 가끔 재확인 */
-const QR_FLOOR_SESSION_HINTS_DISABLED_POLL_MS = 300_000
-/** API 실패 시 백오프 (인증 실패·일시 장애에서 15s 폭주 방지) */
-const QR_FLOOR_SESSION_HINTS_ERROR_POLL_MS = 60_000
 
 export function useQrFloorSessionHints(storeCode: string | null | undefined) {
   const [byTable, setByTable] = React.useState<Record<string, QrFloorMarker>>({})

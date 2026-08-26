@@ -1,15 +1,10 @@
 import type { NextConfig } from "next";
 import path from "path";
-import { randomUUID } from "crypto";
 import { RetryChunkLoadPlugin } from "webpack-retry-chunk-load-plugin";
 import withSerwistInit from "@serwist/next";
+import { PWA_SHELL_REVISION } from "./lib/pwa-shell-revision";
 
 const vercelAppDir = __dirname;
-
-const revision =
-  process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
-  process.env.COMMIT_SHA?.trim() ||
-  randomUUID();
 
 const withSerwist = withSerwistInit({
   swSrc: "app/sw.ts",
@@ -22,15 +17,12 @@ const withSerwist = withSerwistInit({
   scope: "/",
   maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
   additionalPrecacheEntries: [
-    { url: "/login", revision },
-    { url: "/admin/login", revision },
-    { url: "/pos", revision },
-    /** 터미널(매장·포장·배달) 직접 URL 오프라인 1회 진입 시 네트워크 실패 완화 */
-    { url: "/pos/terminal", revision },
-    /** POS PWA start_url·오프라인 폴백 — 없으면 /pos/login 요청이 캐시에 없어 빈 화면 */
-    { url: "/pos/login", revision },
-    /** 회원 라운지 PWA — 홈 화면 설치 start_url */
-    { url: "/m", revision },
+    { url: "/login", revision: PWA_SHELL_REVISION },
+    { url: "/admin/login", revision: PWA_SHELL_REVISION },
+    { url: "/pos", revision: PWA_SHELL_REVISION },
+    /** POS PWA start_url·오프라인 폴백. 터미널 HTML은 프리캐시하지 않음(배포마다 전 단말 FDT). 오프라인은 /pos 폴백. */
+    { url: "/pos/login", revision: PWA_SHELL_REVISION },
+    { url: "/m", revision: PWA_SHELL_REVISION },
   ],
 });
 

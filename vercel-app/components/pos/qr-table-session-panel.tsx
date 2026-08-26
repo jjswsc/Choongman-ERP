@@ -22,6 +22,7 @@ import {
 } from '@/lib/api-client/qr-table'
 import { printQrTableThermalSlip } from '@/lib/print-qr-table-thermal-slip'
 import { pickQrTokenForTable, resolveQrTableGuestUrl } from '@/lib/qr-table-thermal-slip-html'
+import { QR_FLOOR_SESSION_HINTS_POLL_MS } from '@/lib/qr-table-poll-interval'
 import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession, QrTableToken } from '@/lib/qr-table-types'
 import { buffetTierDisplayName, defaultQrOrderStoreSettings } from '@/lib/qr-table-types'
 import { appAlert } from '@/lib/app-message'
@@ -110,8 +111,7 @@ export function QrTableSessionPanel(props: {
 
   React.useEffect(() => {
     if (!session) return
-    /** 5s는 Fluid CPU·요청 폭증 — 홀 배지(15s)와 맞춤 */
-    const id = window.setInterval(() => void reload(), 15_000)
+    const id = window.setInterval(() => void reload(), QR_FLOOR_SESSION_HINTS_POLL_MS)
     return () => window.clearInterval(id)
   }, [session, reload])
 

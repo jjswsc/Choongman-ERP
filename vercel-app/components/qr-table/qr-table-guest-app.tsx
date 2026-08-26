@@ -18,6 +18,7 @@ import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession } from '@/lib/q
 import { buffetTierDisplayName } from '@/lib/qr-table-types'
 import { aggregateQrGuestSentLines, groupQrGuestSentLinesByTime } from '@/lib/qr-table-guest-menu'
 import { normalizeQrGuestLang, qrGuestT, type QrGuestLang } from '@/lib/i18n-qr-table-guest'
+import { QR_TABLE_GUEST_PAY_POLL_MS } from '@/lib/qr-table-poll-interval'
 
 type MenuItem = {
   menuId: number
@@ -261,7 +262,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         setQrPayload('')
         setStep('menu')
       }
-    }, 3000)
+    }, QR_TABLE_GUEST_PAY_POLL_MS)
     return () => window.clearInterval(t)
   }, [step, sessionAuth, qrPayload])
 
@@ -397,7 +398,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
                   setOrderSummary(toOrderSummary(order.order))
                 }
               }
-            }, 3000)
+            }, QR_TABLE_GUEST_PAY_POLL_MS)
           }
         } catch {
           /* extras QR is not on the kitchen-send path */

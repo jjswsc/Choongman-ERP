@@ -270,6 +270,38 @@ const authLoginPostNetworkOnly = {
   handler: new NetworkOnly(),
 }
 
+/**
+ * 터미널 HTML은 프리캐시하지 않음(배포마다 전 POS FDT).
+ * 온라인은 네트워크 우선, 실패 시에만 `/pos` 폴백.
+ */
+const posTerminalDocumentNetworkFirst = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    if (!sameOrigin || request.method !== "GET") return false
+    return pathname === "/pos/terminal" && request.destination === "document"
+  },
+  method: "GET" as const,
+  handler: new NetworkFirst({
+    cacheName: "pos-terminal-document",
+    networkTimeoutSeconds: 8,
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 4,
+        maxAgeSeconds: 24 * 60 * 60,
+        maxAgeFrom: "last-used",
+      }),
+    ],
+  }),
+}
+
 /** POS 로그인 문서 — 오프라인 cold start(하이브리드·PWA)에서 프리캐시·캐시 우선 */
 const posLoginDocumentNetworkFirst = {
   matcher({
@@ -413,6 +445,7 @@ const serwist = new Serwist({
     memberPortalApisNetworkOnly,
     authLoginPostNetworkOnly,
     posLoginDocumentNetworkFirst,
+    posTerminalDocumentNetworkFirst,
     loginPagesGetNetworkOnly,
     downloadsBinaryNetworkOnly,
     nextStaticBuildAssets,
