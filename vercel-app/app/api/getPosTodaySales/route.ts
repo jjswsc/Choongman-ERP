@@ -13,36 +13,18 @@ import {
   fetchPosSalesOrdersForBusinessRange,
   POS_SALES_ORDER_ROW_SELECT,
 } from '@/lib/pos-sales-fetch-rows'
-
-const COMPLETED_STATUSES = new Set(['completed', 'paid', 'ready'])
-const PENDING_STATUSES = new Set(['pending', 'cooking'])
+import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
+import {
+  aggregatePosTodaySalesFromRows,
+  emptyPosTodaySalesSummary,
+  groupPosTodaySalesByCanonicalStore,
+  groupPosTodaySalesByStoreCodes,
+} from '@/lib/pos-today-sales-aggregate'
 
 const TODAY_SALES_SELECT = `${POS_SALES_ORDER_ROW_SELECT},payment_cash`
 
 export const dynamic = 'force-dynamic'
-
-async function aggregateTodaySalesFromFetchedRows(
-  rows: Awaited<ReturnType<typeof fetchPosSalesOrdersForBusinessRange>>['rows']
-) {
-  let completedCount = 0
-  let completedTotal = 0
-  let completedCash = 0
-  let pendingCount = 0
-
-  for (const r of rows) {
-    const status = String(r.status ?? '').toLowerCase()
-    const total = Number(r.total) || 0
-    if (COMPLETED_STATUSES.has(status)) {
-      completedCount += 1
-      completedTotal += total
-      completedCash += Number((r as { payment_cash?: number }).payment_cash) || 0
-    } else if (PENDING_STATUSES.has(status)) {
-      pendingCount += 1
-    }
-  }
-
-  return { completedCount, completedTotal, completedCash, pendingCount }
-}
+export const maxDuration = 30
 
 /** POS 영업일 매출 요약 (완료 건수, 합계, 현금 매출) — posSalesByStore 와 동일 기준 */
 export async function GET(request: NextRequest) {
@@ -50,7 +32,11 @@ export async function GET(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Cache-Control', 'no-store, max-age=0')
   const { searchParams } = new URL(request.url)
-  const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
+  const storeCodes = resolveStoresFromParams(
+    searchParams.get('storeCode') || searchParams.get('store') || searchParams.get('pos'),
+    searchParams.get('stores')
+  )
+  const storeCode = storeCodes.length === 1 ? storeCodes[0]! : ''
   const startStrParam = String(searchParams.get('startStr') || '').trim()
   const endStrParam = String(searchParams.get('endStr') || '').trim()
   const forceFetch =
@@ -58,16 +44,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const bizCtx = await loadPosBusinessDaySettingsContext()
-    const hours = resolvePosBusinessHoursFromContext(
-      bizCtx,
-      storeCode && storeCode !== 'All' ? storeCode : ''
-    )
+    const hours = resolvePosBusinessHoursFromContext(bizCtx, storeCode)
     const todayYmd = getPosBusinessDateStrFromConfig(new Date(), hours)
     const startStr = startStrParam || todayYmd
     const endStr = endStrParam || startStr
 
     if (
       !forceFetch &&
+      storeCodes.length === 1 &&
       canUsePosSalesPeriodSummaryRpc({ startStr, endStr, storeCode })
     ) {
       const { startISO, endISOExclusive } = posSalesPeriodSummaryUtcEnvelopeForStore(
@@ -84,6 +68,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(
           {
             ...rpcSummary,
+            byStore: { [storeCode]: rpcSummary },
             source: 'rpc' as const,
             truncated: false,
           },
@@ -96,17 +81,31 @@ export async function GET(request: NextRequest) {
       request,
       startStr,
       endStr,
-      storeCodes: storeCode && storeCode !== 'All' ? [storeCode] : undefined,
+      storeCodes: storeCodes.length > 0 ? storeCodes : undefined,
       queryLabel: 'getPosTodaySales',
       select: TODAY_SALES_SELECT,
       excludeTestOfficePos: false,
     })
 
-    const totals = await aggregateTodaySalesFromFetchedRows(rows)
+    const byStore =
+      storeCodes.length > 0
+        ? groupPosTodaySalesByStoreCodes(rows, storeCodes)
+        : groupPosTodaySalesByCanonicalStore(rows)
+    const totals =
+      storeCodes.length > 0
+        ? aggregatePosTodaySalesFromRows(rows)
+        : Object.values(byStore).reduce((acc, row) => {
+            acc.completedCount += row.completedCount
+            acc.completedTotal += row.completedTotal
+            acc.completedCash += row.completedCash
+            acc.pendingCount += row.pendingCount
+            return acc
+          }, emptyPosTodaySalesSummary())
 
     return NextResponse.json(
       {
         ...totals,
+        byStore,
         source: 'posSalesFetchRows' as const,
         truncated,
       },
@@ -115,7 +114,7 @@ export async function GET(request: NextRequest) {
   } catch (e) {
     console.error('getPosTodaySales:', e)
     return NextResponse.json(
-      { completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0 },
+      { completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0, byStore: {} },
       { headers }
     )
   }

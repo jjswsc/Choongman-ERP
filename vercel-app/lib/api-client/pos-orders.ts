@@ -121,34 +121,54 @@ export interface PosOrder {
   linkposRespondedAt?: string
 }
 
+export type PosTodaySalesSummary = {
+  completedCount: number
+  completedTotal: number
+  completedCash: number
+  pendingCount: number
+  byStore?: Record<string, PosTodaySalesSummary>
+}
+
+/** 메뉴 카탈로그 4초 타임아웃과 분리 — 당일 집계는 전체 매장 한 번에 가져올 수 있음 */
+const POS_TODAY_SALES_FETCH_MS = 25_000
+
 export async function getPosTodaySales(params?: {
   storeCode?: string
+  /** 복수 매장 — 서버에서 한 번에 집계 (실시간 매출 전체 매장 검색) */
+  storeCodes?: string[]
   startStr?: string
   endStr?: string
   /** true면 IDB 즉시 반환 없이 네트워크 조회를 기다림(헤더 새로고침 등) */
   forceNetwork?: boolean
-}) {
+}): Promise<PosTodaySalesSummary> {
+  const storeCodes = (params?.storeCodes || [])
+    .map((c) => String(c || '').trim())
+    .filter(Boolean)
   const q = new URLSearchParams()
-  if (params?.storeCode) q.set('storeCode', params.storeCode)
+  if (storeCodes.length > 1) q.set('stores', storeCodes.join(','))
+  else if (storeCodes.length === 1) q.set('storeCode', storeCodes[0]!)
+  else if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
   /** 수동 새로고침 — 브라우저·중간 캐시가 동일 URL을 재사용하지 않도록 */
   if (params?.forceNetwork) q.set('_', String(Date.now()))
   const qs = q.toString()
   const url = '/api/getPosTodaySales' + (qs ? `?${qs}` : '')
-  const cacheKey = `erp:posTodaySales:${params?.storeCode?.trim() || ''}:${params?.startStr?.trim() || ''}:${params?.endStr?.trim() || ''}`
-  const fallback = {
+  const storeKey =
+    storeCodes.length > 0
+      ? [...storeCodes].sort().join(',')
+      : params?.storeCode?.trim() || ''
+  const cacheKey = `erp:posTodaySales:${storeKey}:${params?.startStr?.trim() || ''}:${params?.endStr?.trim() || ''}`
+  const fallback: PosTodaySalesSummary = {
     completedCount: 0,
     completedTotal: 0,
     completedCash: 0,
     pendingCount: 0,
   }
-  return fetchPosCatalogCached<{
-    completedCount: number
-    completedTotal: number
-    completedCash: number
-    pendingCount: number
-  }>(cacheKey, url, fallback, { forceNetwork: Boolean(params?.forceNetwork) })
+  return fetchPosCatalogCached<PosTodaySalesSummary>(cacheKey, url, fallback, {
+    forceNetwork: Boolean(params?.forceNetwork),
+    timeoutMs: POS_TODAY_SALES_FETCH_MS,
+  })
 }
 
 export async function getPosReversalJournals(params: {

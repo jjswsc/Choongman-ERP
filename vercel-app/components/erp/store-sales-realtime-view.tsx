@@ -21,7 +21,6 @@ import { getPosTodaySales } from "@/lib/api-client"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { useStoreList } from "@/lib/use-store-list"
 import {
-  aggregateTodaySalesByCanonical,
   computeRealtimeExpectedAddend,
   computeRealtimeTableTotal,
   mergeRealtimeStoreSalesRows,
@@ -122,6 +121,7 @@ export function StoreSalesRealtimeView({
   const [todaySales, setTodaySales] = useState<TodaySalesSummary | null>(null)
   const [storeSalesMap, setStoreSalesMap] = useState<Record<string, TodaySalesSummary>>({})
   const [tableSortMode, setTableSortMode] = useState<"amount" | "guests">("amount")
+  const [salesLoading, setSalesLoading] = useState(false)
 
   /** 테이블/주문만 바뀌고 매장 ID 집합이 같으면 동일 — `stores` 참조 변경으로 당일 매출 API가 반복 호출되는 것을 막음 */
   const allStoresCodesKey = useMemo(() => {
@@ -131,55 +131,57 @@ export function StoreSalesRealtimeView({
 
   const loadTodaySales = useCallback((opts?: { forceNetwork?: boolean }) => {
     const forceNetwork = Boolean(opts?.forceNetwork)
-    if (!effectiveStoreCode) return
+    if (!effectiveStoreCode) return Promise.resolve()
+    setSalesLoading(true)
+    const empty: TodaySalesSummary = {
+      completedCount: 0,
+      completedTotal: 0,
+      completedCash: 0,
+      pendingCount: 0,
+    }
+    const applyTotals = (data: TodaySalesSummary & { byStore?: Record<string, TodaySalesSummary> }) => {
+      setTodaySales({
+        completedCount: Number(data.completedCount ?? 0),
+        completedTotal: Number(data.completedTotal ?? 0),
+        completedCash: Number(data.completedCash ?? 0),
+        pendingCount: Number(data.pendingCount ?? 0),
+      })
+    }
+    const done = () => setSalesLoading(false)
+
     if (!isAllStoresSelected) {
-      getPosTodaySales({ storeCode: effectiveStoreCode, forceNetwork })
+      return getPosTodaySales({ storeCode: effectiveStoreCode, forceNetwork })
         .then((data) => {
-          setTodaySales(data)
+          applyTotals(data)
           setStoreSalesMap((prev) => ({ ...prev, [effectiveStoreCode]: data }))
         })
         .catch(() => setTodaySales(null))
-      return
+        .finally(done)
     }
     const storeCodes = allStoresCodesKey
       ? allStoresCodesKey.split(",").map((c) => c.trim()).filter(Boolean)
       : []
     if (!storeCodes.length) {
-      setTodaySales({ completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0 })
+      setTodaySales(empty)
       setStoreSalesMap({})
-      return
+      done()
+      return Promise.resolve()
     }
-    Promise.all(
-      storeCodes.map((code) =>
-        getPosTodaySales({ storeCode: code, forceNetwork }).then(
-          (data) => [code, data] as const,
-          () =>
-            [
-              code,
-              { completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0 },
-            ] as const
-        )
-      )
-    )
-      .then((rows) => {
-        const nextMap: Record<string, TodaySalesSummary> = {}
-        for (const [code, data] of rows) {
-          nextMap[code] = data
+    return getPosTodaySales({ storeCodes, forceNetwork })
+      .then((data) => {
+        const nextMap: Record<string, TodaySalesSummary> = { ...(data.byStore || {}) }
+        for (const code of storeCodes) {
+          if (!nextMap[code]) nextMap[code] = empty
         }
         setStoreSalesMap(nextMap)
-        setTodaySales(
-          aggregateTodaySalesByCanonical({
-            entries: rows,
-            storeCodes: storeListCodes,
-            legacyToCanonical,
-          })
-        )
+        applyTotals(data)
       })
       .catch(() => {
         setStoreSalesMap({})
         setTodaySales(null)
       })
-  }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey, storeListCodes, legacyToCanonical])
+      .finally(done)
+  }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey])
 
   const refreshRealtimeSection = useCallback(() => {
     loadTodaySales({ forceNetwork: true })
@@ -366,8 +368,9 @@ export function StoreSalesRealtimeView({
 
   useEffect(() => {
     if (refreshToken == null || refreshToken <= 0) return
-    refreshRealtimeSection()
-  }, [refreshToken, refreshRealtimeSection])
+    /** 부모 runRefresh 가 이미 refetchStores 함 — 여기서 다시 치면 전체 매장 주문 조회가 2배가 됨 */
+    void loadTodaySales({ forceNetwork: true })
+  }, [refreshToken, loadTodaySales])
 
   const refreshLatest = useRef(refreshRealtimeSection)
   refreshLatest.current = refreshRealtimeSection
@@ -398,10 +401,10 @@ export function StoreSalesRealtimeView({
               size="sm"
               className="shrink-0 gap-1.5"
               onClick={handleManualRefresh}
-              disabled={loadingTables}
+              disabled={salesLoading}
               title={t("mobileStoreSalesRefresh")}
             >
-              <Search className="h-4 w-4" />
+              <Search className={`h-4 w-4 ${salesLoading ? "animate-pulse" : ""}`} />
               {t("search")}
             </Button>
           </div>
@@ -413,10 +416,10 @@ export function StoreSalesRealtimeView({
               size="icon"
               className="shrink-0"
               onClick={handleManualRefresh}
-              disabled={loadingTables}
+              disabled={salesLoading}
               title={t("mobileStoreSalesRefresh")}
             >
-              <Search className="h-4 w-4" />
+              <Search className={`h-4 w-4 ${salesLoading ? "animate-pulse" : ""}`} />
             </Button>
           </div>
         )

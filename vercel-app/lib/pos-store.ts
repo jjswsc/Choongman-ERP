@@ -1027,11 +1027,11 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
           ? [currentStoreId]
           : effectiveStoreCodes
     if (!targetStoreCodes.length) return Promise.resolve()
-    /** Realtime·폴링 등 백그라운드 갱신: 테이블 플로어를 「로딩」으로 덮지 않음(인쇄·주문 UX) */
+    /** 이미 스냅샷이 있으면 로딩으로 화면을 비우지 않음(실시간 매출 검색 대기 체감 완화) */
     const backgroundRefresh =
       !options?.forceFullRefresh &&
       options?.scope === 'current' && stores.length > 0 && targetStoreCodes.length > 0
-    if (!backgroundRefresh) {
+    if (stores.length === 0) {
       setLoading(true)
     }
     const businessDate = getPosBusinessDateStr()

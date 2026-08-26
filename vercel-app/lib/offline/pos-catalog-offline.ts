@@ -48,12 +48,13 @@ export function posMenusCatalogCacheKey(storeCode?: string | null): string {
 /** Wi‑Fi만 연결·서버 무응답 시 fetch가 오래 걸리면 캐시 폴백이 늦아지므로 상한 둠 */
 const POS_CATALOG_FETCH_MS = 4_000
 
-function catalogFetchSignal(): AbortSignal | undefined {
+function catalogFetchSignal(timeoutMs = POS_CATALOG_FETCH_MS): AbortSignal | undefined {
+  const ms = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : POS_CATALOG_FETCH_MS
   try {
     const AS = AbortSignal as typeof AbortSignal & {
       timeout?: (ms: number) => AbortSignal
     }
-    if (typeof AS.timeout === 'function') return AS.timeout(POS_CATALOG_FETCH_MS)
+    if (typeof AS.timeout === 'function') return AS.timeout(ms)
   } catch {}
   return undefined
 }
@@ -99,42 +100,13 @@ async function fetchCatalogAndPersist<T>(
   relativeUrl: string,
   cacheKey: string,
   fallback: T,
-  options?: { cache?: RequestCache }
+  options?: { cache?: RequestCache; timeoutMs?: number }
 ): Promise<T> {
-  const signal = catalogFetchSignal()
-  let res: Response
-  try {
-    res = await apiFetch(relativeUrl, {
-      ...(signal ? { signal } : {}),
-      ...(options?.cache ? { cache: options.cache } : {}),
-    })
-  } catch (e) {
-    // #region agent log
-    if (
-      typeof window !== 'undefined' &&
-      e instanceof Error &&
-      e.name === 'AbortError' &&
-      relativeUrl.includes('getPosMenuOptions')
-    ) {
-      fetch('http://127.0.0.1:7510/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': 'd9674e',
-        },
-        body: JSON.stringify({
-          sessionId: 'd9674e',
-          hypothesisId: 'H-ABORT',
-          location: 'pos-catalog-offline.ts:fetchCatalogAndPersist',
-          message: 'catalog fetch aborted (likely AbortSignal.timeout)',
-          data: { relativeUrl: relativeUrl.slice(0, 80), cacheKey: cacheKey.slice(0, 48) },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-    }
-    // #endregion
-    throw e
-  }
+  const signal = catalogFetchSignal(options?.timeoutMs)
+  const res = await apiFetch(relativeUrl, {
+    ...(signal ? { signal } : {}),
+    ...(options?.cache ? { cache: options.cache } : {}),
+  })
   if (res.ok) reportNetworkSuccess()
   else if (res.status >= 500) reportNetworkFailure()
   if (!res.ok) {
@@ -184,16 +156,19 @@ export async function fetchPosCatalogCached<T>(
   cacheKey: string,
   relativeUrl: string,
   fallback: T,
-  options?: { forceNetwork?: boolean }
+  options?: { forceNetwork?: boolean; timeoutMs?: number }
 ): Promise<T> {
   const forceNetwork = Boolean(options?.forceNetwork)
   const fromIdb = await readCacheOrNull<T>(cacheKey)
-  const networkOpts = forceNetwork ? ({ cache: 'no-store' } as const) : undefined
+  const persistOpts = {
+    ...(forceNetwork ? { cache: 'no-store' as RequestCache } : {}),
+    ...(options?.timeoutMs != null ? { timeoutMs: options.timeoutMs } : {}),
+  }
 
   if (shouldPreferOfflineCache()) {
     if (!forceNetwork && fromIdb !== null) return fromIdb
     try {
-      return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback, networkOpts)
+      return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback, persistOpts)
     } catch {
       reportNetworkFailure()
       return fromIdb !== null ? fromIdb : fallback
@@ -202,12 +177,12 @@ export async function fetchPosCatalogCached<T>(
 
   /** 온라인 표시여도 IDB에 캐시가 있으면 즉시 표시하고 백그라운드 갱신 (서버 지연 시 메뉴 로딩 체감 개선) */
   if (!forceNetwork && fromIdb !== null) {
-    void fetchCatalogAndPersist(relativeUrl, cacheKey, fallback).catch(() => {})
+    void fetchCatalogAndPersist(relativeUrl, cacheKey, fallback, persistOpts).catch(() => {})
     return fromIdb
   }
 
   try {
-    return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback, networkOpts)
+    return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback, persistOpts)
   } catch {
     reportNetworkFailure()
     return readCache(cacheKey, fallback)
