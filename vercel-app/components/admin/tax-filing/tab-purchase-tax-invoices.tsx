@@ -68,6 +68,7 @@ import {
   prepareTaxInvoiceScanCanvas,
   type TaxInvoiceOcrSession,
 } from "@/lib/purchase-tax-invoice-ocr-client"
+import { startPurchaseTaxScanKeepAlive } from "@/lib/purchase-tax-invoice-scan-keepalive"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
@@ -116,8 +117,50 @@ function writeReviewDraft(rows: ReviewRow[]) {
   }
 }
 
-/** rAF는 백그라운드 탭에서 멈추므로 스캔 루프에는 쓰지 않음. */
+const SCAN_CHECKPOINT_KEY = "cm_pti_scan_checkpoint"
+
+type ScanCheckpoint = {
+  fileName: string
+  fileSize: number
+  nextPage: number
+  total: number
+  rows: ReviewRow[]
+}
+
+function readScanCheckpoint(): ScanCheckpoint | null {
+  if (typeof window === "undefined") return null
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(SCAN_CHECKPOINT_KEY) || "null") as unknown
+    if (!parsed || typeof parsed !== "object") return null
+    const c = parsed as ScanCheckpoint
+    if (!c.fileName || !Array.isArray(c.rows) || !(c.nextPage > 1)) return null
+    return c
+  } catch {
+    return null
+  }
+}
+
+function writeScanCheckpoint(cp: ScanCheckpoint) {
+  if (typeof window === "undefined") return
+  try {
+    sessionStorage.setItem(SCAN_CHECKPOINT_KEY, JSON.stringify(cp))
+  } catch {
+    /* quota */
+  }
+}
+
+function clearScanCheckpoint() {
+  if (typeof window === "undefined") return
+  try {
+    sessionStorage.removeItem(SCAN_CHECKPOINT_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/** rAF·숨은 탭의 1초 클램프를 피함. 백그라운드는 대기 없이 다음 페이지. */
 function yieldScanLoop(): Promise<void> {
+  if (typeof document !== "undefined" && document.hidden) return Promise.resolve()
   return new Promise((resolve) => {
     setTimeout(resolve, 0)
   })
@@ -450,6 +493,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     const hint: PurchaseTaxInvoiceScanHint = {
       buyerTaxId: rows[0]?.buyerTaxId || "",
       buyerName: storeName,
+      taxMonth: filingYearMonth,
     }
 
     let vendorProfiles: PurchaseTaxSellerProfile[] = []
@@ -515,13 +559,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       if (typeof document === "undefined") return
       document.title = `(${n}/${total}) ${pageTitleBase}`
     }
-    let wakeLock: { release: () => Promise<void> } | null = null
-    try {
-      const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } }) : null
-      wakeLock = (await nav?.wakeLock?.request("screen")) || null
-    } catch {
-      wakeLock = null
-    }
+    const keepAlive = startPurchaseTaxScanKeepAlive()
 
     try {
       setReviewRows([])
@@ -540,7 +578,32 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               return
             }
           }
-          for (let i = 1; i <= total; i += 1) {
+          let startPage = 1
+          const checkpoint = readScanCheckpoint()
+          if (
+            checkpoint &&
+            checkpoint.fileName === file.name &&
+            checkpoint.fileSize === file.size &&
+            checkpoint.nextPage > 1 &&
+            checkpoint.nextPage <= total + 1
+          ) {
+            const resume = window.confirm(
+              tr(t, "ptiScanResume", { n: String(checkpoint.nextPage - 1), total: String(checkpoint.total || total) })
+            )
+            if (resume) {
+              startPage = Math.min(checkpoint.nextPage, total)
+              extracted.push(...checkpoint.rows)
+              for (const row of checkpoint.rows) {
+                if (row.invoiceNo) {
+                  seen.add(purchaseTaxInvoiceDedupeKey("x", row.invoiceNo, row.sellerTaxId))
+                }
+              }
+              setReviewRows([...extracted])
+            } else {
+              clearScanCheckpoint()
+            }
+          }
+          for (let i = startPage; i <= total; i += 1) {
             if (ac.signal.aborted) break
             setPdfProgress({ n: i, total })
             setPdfBusy({ key: "ptiPdfPage", vars: { n: String(i), total: String(total) } })
@@ -568,6 +631,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               setReviewRows([...extracted])
             }
             writeReviewDraft(extracted)
+            writeScanCheckpoint({
+              fileName: file.name,
+              fileSize: file.size,
+              nextPage: i + 1,
+              total,
+              rows: extracted,
+            })
             await yieldUi()
           }
         } else {
@@ -642,6 +712,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         }
       }
       setReviewRows(extracted)
+      if (!ac.signal.aborted) clearScanCheckpoint()
     } catch (e) {
       if ((e instanceof DOMException && e.name === "AbortError") || (e instanceof Error && e.name === "AbortError")) {
         if (extracted.length) setReviewRows(extracted)
@@ -658,7 +729,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         }
       }
       try {
-        await wakeLock?.release()
+        keepAlive.stop()
       } catch {
         /* ignore */
       }

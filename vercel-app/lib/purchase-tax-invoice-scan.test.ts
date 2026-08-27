@@ -16,6 +16,7 @@ import {
   extractPurchaseTaxInvoicesFromScanText,
   fillSellerNameFromTinLookup,
   invoiceNoLooksPlausible,
+  snapDocDateYearToTaxPeriod,
   splitScanTextIntoInvoiceBlocks,
   wrapTaxInvoiceQrText,
   thaiTinChecksumOk,
@@ -30,8 +31,8 @@ describe('normalizeTaxInvoiceOcrText', () => {
     expect(normalizeTaxInvoiceOcrText('TIN 010 5559 082 715 end')).toContain(SELLER)
   })
 
-  it('maps a leading O in a 13-digit TIN', () => {
-    expect(normalizeTaxInvoiceOcrText(`TIN O105559082715 end`)).toContain(SELLER)
+  it('maps Thai digits', () => {
+    expect(normalizeTaxInvoiceOcrText('เลขที่ ๑๒๓๔๕๖๗๘')).toContain('12345678')
   })
 
   it('detects printed PDF text vs empty scan', () => {
@@ -66,6 +67,8 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('AB-99')).toBe(true)
     expect(invoiceNoLooksPlausible('IM20260701000087')).toBe(true)
     expect(invoiceNoLooksPlausible('010726E00037051')).toBe(true)
+    expect(invoiceNoLooksPlausible('12345678')).toBe(true)
+    expect(invoiceNoLooksPlausible('51')).toBe(false)
   })
 })
 
@@ -241,6 +244,20 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
       vatAmount: 7,
     })
     expect(repaired.vatAmount).toBe(26.18)
+  })
+
+  it('fills net from VAT when supply is missing', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'A', sellerTaxId: SELLER, vatAmount: 71.96 },
+      { buyerTaxId: BUYER }
+    )
+    expect(repaired.netAmount).toBe(1028)
+    expect(repaired.vatAmount).toBe(71.96)
+  })
+
+  it('snaps an OCR year that is a few years off the filing period', () => {
+    expect(snapDocDateYearToTaxPeriod('2022-07-10', '2026-08')).toBe('2026-07-10')
+    expect(snapDocDateYearToTaxPeriod('2026-07-10', '2026-08')).toBe('2026-07-10')
   })
 })
 

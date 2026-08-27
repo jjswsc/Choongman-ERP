@@ -10,6 +10,7 @@ export type PurchaseTaxInvoiceScanHint = {
   buyerTaxId?: string
   buyerName?: string
   pageText?: string
+  taxMonth?: string
 }
 
 const THAI_MONTH: Record<string, number> = {
@@ -72,6 +73,18 @@ function ymdFromParts(year: number, month: number, day: number): string | undefi
   if (y >= 2400) y -= 543
   if (y < 1990 || y > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return undefined
   return `${String(y).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+/** OCR이 2565/2022처럼 연도만 어긋난 경우 조회 연도로 맞춤. 월·일은 유지. */
+export function snapDocDateYearToTaxPeriod(ymd: string | undefined, taxMonth?: string): string | undefined {
+  const date = String(ymd || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return ymd
+  const wantY = Number(String(taxMonth || '').slice(0, 4))
+  const y = Number(date.slice(0, 4))
+  if (!Number.isFinite(wantY) || wantY < 1990 || wantY > 2100) return date
+  const delta = Math.abs(y - wantY)
+  if (delta >= 2 && delta <= 8) return `${String(wantY).padStart(4, '0')}${date.slice(4)}`
+  return date
 }
 
 export function parseTaxInvoiceDateFromText(text: string): string | undefined {
@@ -172,7 +185,7 @@ export function invoiceNoLooksPlausible(raw: unknown): boolean {
   if (/plzb/i.test(compact)) return false
   const hasLetter = /[A-Za-z]/.test(compact)
   const hasDigit = /\d/.test(compact)
-  if (!hasLetter && compact.length < 8) return false
+  if (!hasLetter && compact.length < 6) return false
   if (!hasDigit && compact.length < 12) return false
   return true
 }
@@ -210,6 +223,13 @@ function extractInvoiceNo(text: string, sellerTaxId?: string): string | undefine
   )
   if (labeled) {
     const inv = cleanInvoiceNo(labeled[1])
+    if (inv) return inv
+  }
+  const labeledNext = s.match(
+    /(?:เลขที่(?:ใบกำกับ(?:ภาษี)?)?|Invoice\s*No\.?)\s*[:#.\-]*\s*[\r\n]+\s*([A-Z0-9][A-Z0-9\-/]{2,40})/i
+  )
+  if (labeledNext) {
+    const inv = cleanInvoiceNo(labeledNext[1])
     if (inv) return inv
   }
   const common = s.match(/\b((?:INV|IV|TI|ABB)[\-/]?[A-Z0-9\-/ ]{2,40}|\d{8,}[A-Z]\d{2,})\b/i)
@@ -468,6 +488,7 @@ export function joinPdfTextItemsByLine(
 /** 복합기 OCR/Tesseract 잡음: 세금번호 사이 공백, 전각 숫자, 숫자 속 O/l */
 export function normalizeTaxInvoiceOcrText(text: string): string {
   let s = String(text || '').replace(/\u00a0/g, ' ')
+  s = s.replace(/[๐-๙]/g, (ch) => String('๐๑๒๓๔๕๖๗๘๙'.indexOf(ch)))
   s = s.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 48))
   s = s.replace(/(\d{1,3})\.(\d{3}),(\d{2})\b/g, '$1$2.$3')
   s = s.replace(/(\d)[Oo](\d)/g, '$10$2')
@@ -765,6 +786,14 @@ export function repairExtractedPurchaseTaxInvoice(
     }
   }
 
+  if ((netAmount == null || netAmount === 0) && vatAmount != null && vatAmount > 0.5 && Math.abs(vatAmount - 7) > 0.2) {
+    const inferredNet = roundMoney2(vatAmount / 0.07)
+    if (inferredNet >= 1 && inferredNet < 500_000_000) {
+      netAmount = inferredNet
+      if (totalAmount == null) totalAmount = roundMoney2(netAmount + vatAmount)
+    }
+  }
+
   if ((netAmount == null || netAmount === 0) && vatAmount != null && Math.abs(vatAmount - 7) < 0.001) {
     vatAmount = undefined
     if (totalAmount != null && Math.abs(totalAmount - 7) < 0.001) totalAmount = undefined
@@ -801,7 +830,10 @@ export function repairExtractedPurchaseTaxInvoice(
   const sellerBranch =
     sellerTaxId && KNOWN_TIN_SELLER_NAMES[sellerTaxId] ? 'สำนักงานใหญ่' : row.sellerBranch
 
-  const docDate = row.docDate || (invoiceNo ? inferDocDateFromInvoiceNo(invoiceNo) : undefined)
+  const docDate = snapDocDateYearToTaxPeriod(
+    row.docDate || (invoiceNo ? inferDocDateFromInvoiceNo(invoiceNo) : undefined),
+    hint?.taxMonth
+  )
 
   return {
     ...row,
