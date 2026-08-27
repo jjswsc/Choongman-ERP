@@ -184,33 +184,68 @@ export function fileToImageDataUrl(file: File): Promise<string> {
   })
 }
 
-export async function imageFileToTaxInvoiceScan(file: File): Promise<{ canvas: HTMLCanvasElement; images: string[] }> {
-  const dataUrl = await fileToImageDataUrl(file)
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const srcW = img.naturalWidth || img.width
-      const srcH = img.naturalHeight || img.height
-      const scale =
-        srcW < 1400
-          ? Math.min(2, TAX_INV_RENDER_TARGET_WIDTH_PX / Math.max(1, srcW))
-          : Math.min(1, TAX_INV_RENDER_TARGET_WIDTH_PX / Math.max(1, srcW))
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.max(1, Math.round(srcW * scale))
-      canvas.height = Math.max(1, Math.round(srcH * scale))
-      const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        resolve({ canvas, images: [dataUrl] })
-        return
+function canvasFromImageSource(
+  srcW: number,
+  srcH: number,
+  draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => void
+): HTMLCanvasElement {
+  const scale =
+    srcW < 1400
+      ? Math.min(2, TAX_INV_RENDER_TARGET_WIDTH_PX / Math.max(1, srcW))
+      : Math.min(1, TAX_INV_RENDER_TARGET_WIDTH_PX / Math.max(1, srcW))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(srcW * scale))
+  canvas.height = Math.max(1, Math.round(srcH * scale))
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    draw(ctx, canvas.width, canvas.height)
+  }
+  return canvas
+}
+
+async function loadImageWithExifOrientation(file: File): Promise<{
+  width: number
+  height: number
+  draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void
+  close?: () => void
+}> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions)
+      return {
+        width: bitmap.width,
+        height: bitmap.height,
+        draw: (ctx, w, h) => ctx.drawImage(bitmap, 0, 0, w, h),
+        close: () => bitmap.close(),
       }
-      ctx.imageSmoothingEnabled = true
-      ctx.imageSmoothingQuality = 'high'
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-      resolve({ canvas, images: visionImagesFromPageCanvas(canvas) })
+    } catch {
+      /* EXIF 미지원·코덱 실패 시 Image 폴백 */
     }
-    img.onerror = () => reject(new Error('image load failed'))
-    img.src = dataUrl
+  }
+  const dataUrl = await fileToImageDataUrl(file)
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image()
+    el.onload = () => resolve(el)
+    el.onerror = () => reject(new Error('image load failed'))
+    el.src = dataUrl
   })
+  return {
+    width: img.naturalWidth || img.width,
+    height: img.naturalHeight || img.height,
+    draw: (ctx, w, h) => ctx.drawImage(img, 0, 0, w, h),
+  }
+}
+
+export async function imageFileToTaxInvoiceScan(file: File): Promise<{ canvas: HTMLCanvasElement; images: string[] }> {
+  const loaded = await loadImageWithExifOrientation(file)
+  try {
+    const canvas = canvasFromImageSource(loaded.width, loaded.height, loaded.draw)
+    return { canvas, images: visionImagesFromPageCanvas(canvas) }
+  } finally {
+    loaded.close?.()
+  }
 }
 
 export async function imageFileToTaxInvoiceCrops(file: File): Promise<string[]> {

@@ -8,6 +8,7 @@ import {
   parsePurchaseTaxInvoiceQrPayload,
   parseTaxInvoiceDateFromText,
   pdfPageTextLooksPrinted,
+  pdfPageTextIsReliableForExtract,
   purchaseTaxInvoiceTextExtractIsComplete,
   repairExtractedPurchaseTaxInvoice,
   extractPurchaseTaxInvoiceFromScanText,
@@ -29,6 +30,14 @@ describe('normalizeTaxInvoiceOcrText', () => {
         'ใบกำกับภาษี เลขที่ INV-1 มูลค่าสินค้า 100.00 ภาษีมูลค่าเพิ่ม 7.00 รวมทั้งสิ้น 107.00 บริษัท ทดสอบ จำกัด'
       )
     ).toBe(true)
+  })
+
+  it('does not treat a junk scan text layer as reliable', () => {
+    expect(
+      pdfPageTextIsReliableForExtract(
+        'ใบกำกับภาษี เลขที่ ??? มูลค่าสินค้า abc ภาษีมูลค่าเพิ่ม xyz รวมทั้งสิ้น บริษัท ทดสอบ จำกัด extra padding text here'
+      )
+    ).toBe(false)
   })
 })
 
@@ -75,6 +84,7 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
     expect(row?.netAmount).toBe(1440.17)
     expect(row?.vatAmount).toBe(100.81)
     expect(purchaseTaxInvoiceTextExtractIsComplete(row, { buyerTaxId: BUYER })).toBe(true)
+    expect(pdfPageTextIsReliableForExtract(text, { buyerTaxId: BUYER })).toBe(true)
   })
 
   it('reads hyphenated seller TIN', () => {

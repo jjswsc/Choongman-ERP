@@ -42,7 +42,8 @@ import {
 } from "@/lib/purchase-tax-invoice-pdf-client"
 import {
   extractPurchaseTaxInvoiceFromScanText,
-  pdfPageTextLooksPrinted,
+  mergePurchaseTaxInvoiceExtract,
+  pdfPageTextIsReliableForExtract,
   purchaseTaxInvoiceTextExtractIsComplete,
   type PurchaseTaxInvoiceScanHint,
 } from "@/lib/purchase-tax-invoice-scan"
@@ -157,6 +158,12 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   React.useEffect(() => {
     writeReviewDraft(reviewRows)
   }, [reviewRows])
+
+  React.useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -420,7 +427,11 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         pushFromParsed({}, page, res.message || t("ptiPdfEmptyPage"))
         return
       }
-      for (const inv of invoices) pushFromParsed(inv, page)
+      invoices.forEach((inv, idx) => {
+        const row =
+          idx === 0 ? mergePurchaseTaxInvoiceExtract(inv, local) || inv : inv
+        pushFromParsed(row, page)
+      })
     }
 
     const hint: PurchaseTaxInvoiceScanHint = {
@@ -430,13 +441,20 @@ export function TaxFilingPurchaseTaxInvoicesTab({
 
     let ocr: TaxInvoiceOcrSession | null = null
     const textForPage = async (canvas: HTMLCanvasElement, printedText: string) => {
-      if (pdfPageTextLooksPrinted(printedText)) return printedText
+      if (pdfPageTextIsReliableForExtract(printedText, hint)) return printedText
       if (!ocr) {
         setPdfBusy(t("ptiOcrLoading"))
         ocr = await createTaxInvoiceOcrSession()
       }
-      return ocr.recognize(canvas)
+      const ocrText = await ocr.recognize(canvas)
+      return [printedText, ocrText].filter((s) => String(s || "").trim()).join("\n")
     }
+
+    const yieldUi = () =>
+      new Promise<void>((resolve) => {
+        if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve())
+        else setTimeout(resolve, 0)
+      })
 
     try {
       setReviewRows([])
@@ -462,7 +480,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             const { canvas, images } = await renderTaxInvoicePageForScan(pdf, i)
             if (ac.signal.aborted) break
             const printed = await extractPdfPageText(pdf, i)
-            if (!pdfPageTextLooksPrinted(printed)) {
+            if (!pdfPageTextIsReliableForExtract(printed, hint)) {
               setPdfBusy(tr(t, "ptiOcrPage", { n: String(i), total: String(total) }))
             }
             let pageText = printed
@@ -479,6 +497,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               await ingestPageImages(images, i, file.name, pageText, local)
             }
             setReviewRows([...extracted])
+            await yieldUi()
           }
         } else {
           scanPdfRef.current = null

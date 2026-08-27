@@ -33,19 +33,17 @@ import {
   type TaxEntityScopeOption,
 } from "@/components/admin/tax-filing/tax-entity-store-scope-filters"
 import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope-label"
+import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
+import {
+  TAX_FILING_DEFAULT_TAB,
+  TAX_FILING_TABS,
+  type TaxFilingTabKey,
+  readStoredTaxFilingTab,
+  resolveTaxFilingTab,
+  writeStoredTaxFilingTab,
+} from "@/lib/tax-filing-tabs"
 
-type FilingTabKey =
-  | "pp30"
-  | "purchaseTaxInv"
-  | "pp36"
-  | "pnd1"
-  | "pnd91"
-  | "pnd3"
-  | "pnd5051"
-  | "pnd53"
-  | "pnd54"
-  | "sso"
-  | "storeProfiles"
+type FilingTabKey = TaxFilingTabKey
 
 type FilingFilterProps = {
   filingYearMonth: string
@@ -230,7 +228,7 @@ function useFilingTabFilters(
 }
 
 function openStoreProfilesFrom(
-  setTab: (v: string) => void,
+  setTab: (v: FilingTabKey) => void,
   setStoreProfilesStore: (v: string) => void,
   storeFilter: string
 ) {
@@ -251,38 +249,30 @@ export function TaxFilingShell() {
 
   const searchParams = useSearchParams()
   const allowUrlSync = useErpAllowUrlSync("/admin/tax-filing", "/admin/accounting-compliance")
-  const [tab, setTab] = React.useState("pp30")
+  const [tab, setTabUrl] = useAdminUrlTab("tab", TAX_FILING_TABS, TAX_FILING_DEFAULT_TAB)
+  const setTab = React.useCallback(
+    (value: FilingTabKey) => {
+      writeStoredTaxFilingTab(value)
+      setTabUrl(value)
+    },
+    [setTabUrl]
+  )
 
   React.useEffect(() => {
     if (!allowUrlSync) return
-    const q = String(searchParams.get("tab") || "").trim()
-    if (
-      q === "storeProfiles" ||
-      q === "pp30" ||
-      q === "purchaseTaxInv" ||
-      q === "pp36" ||
-      q === "pnd1" ||
-      q === "pnd91" ||
-      q === "pnd3" ||
-      q === "pnd5051" ||
-      q === "pnd53" ||
-      q === "pnd54" ||
-      q === "sso"
-    ) {
-      setTab(q)
+    const raw = String(searchParams.get("tab") || "").trim()
+    const fromUrl = resolveTaxFilingTab(raw)
+    if (fromUrl) {
+      writeStoredTaxFilingTab(fromUrl)
+      if (fromUrl !== tab || raw !== fromUrl) setTab(fromUrl)
       return
     }
-    // 이전 링크 호환성
-    if (q === "vat" || q === "pp30pp36") {
-      setTab("pp30")
-    } else if (q === "wht" || q === "pnd1391") {
-      setTab("pnd1")
-    } else if (q === "cit") {
-      setTab("pnd5051")
-    } else if (q === "dbd" || q === "workflow" || q === "pnd5354") {
-      setTab("pnd53")
+    // remount 시 기본 탭(PP.30)으로 초기화된 경우만 세션 복원. 사용자가 PP.30을 고른 뒤에는 덮지 않음.
+    const saved = readStoredTaxFilingTab()
+    if (saved && saved !== TAX_FILING_DEFAULT_TAB && tab === TAX_FILING_DEFAULT_TAB) {
+      setTab(saved)
     }
-  }, [allowUrlSync, searchParams])
+  }, [allowUrlSync, searchParams, setTab, tab])
 
   const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<TaxEntityScopeOption[]>([])
 
@@ -363,7 +353,15 @@ export function TaxFilingShell() {
 
   return (
     <div className="space-y-3">
-      <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
+      <Tabs
+        value={tab}
+        onValueChange={(v) => {
+          const next = resolveTaxFilingTab(v)
+          if (next) setTab(next)
+        }}
+        preserveInactiveTabs={false}
+        className={adminTabsRootCn}
+      >
         <AdminTabsBarWithHelp>
           <TabsList className={adminTabsListRowCn}>
             <TabsTrigger value="storeProfiles" className={adminTabsTriggerCn}>

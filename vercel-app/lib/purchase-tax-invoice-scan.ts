@@ -312,6 +312,18 @@ export function pdfPageTextLooksPrinted(text: string): boolean {
   return hasThai && hasKeyword
 }
 
+/** 스캔 PDF의 깨진 OCR 글자층은 키워드만 있고 필드는 비어 있음 → Tesseract를 건너뛰면 안 됨 */
+export function pdfPageTextIsReliableForExtract(
+  text: string,
+  hint?: PurchaseTaxInvoiceScanHint
+): boolean {
+  if (!pdfPageTextLooksPrinted(text)) return false
+  return purchaseTaxInvoiceTextExtractIsComplete(
+    extractPurchaseTaxInvoiceFromScanText(text, hint),
+    hint
+  )
+}
+
 export function extractPurchaseTaxInvoiceFromScanText(
   text: string,
   hint?: PurchaseTaxInvoiceScanHint

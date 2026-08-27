@@ -5,7 +5,8 @@
 
 const TESS_JS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1'
 const TESS_CORE = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0'
-const TESS_LANG = 'https://tessdata.projectnaptha.com/4.0.0_best'
+/** fast: 최초 다운로드가 작고 태국 네트워크에서 실패가 적음. 필드 미완이면 Vision이 보완. */
+const TESS_LANG = 'https://tessdata.projectnaptha.com/4.0.0_fast'
 
 type TessWorker = {
   setParameters: (p: Record<string, string>) => Promise<void>
@@ -80,8 +81,8 @@ function otsuThreshold(hist: Uint32Array, total: number): number {
   return threshold
 }
 
-/** 회색조 + Otsu 이진화 — 복합기 스캔의 흐릿한 숫자를 또렷하게 */
-function preprocessForOcr(src: HTMLCanvasElement): HTMLCanvasElement {
+/** 회색조 + 대비 — 태국어 성조·모음은 Otsu 이진화하면 사라지는 경우가 많음 */
+function preprocessForThai(src: HTMLCanvasElement): HTMLCanvasElement {
   const maxW = 2200
   const scale = src.width > maxW ? maxW / src.width : 1
   const c = document.createElement('canvas')
@@ -89,11 +90,19 @@ function preprocessForOcr(src: HTMLCanvasElement): HTMLCanvasElement {
   c.height = Math.max(1, Math.round(src.height * scale))
   const ctx = c.getContext('2d')
   if (!ctx) return src
-  ctx.filter = 'grayscale(1) contrast(1.25)'
+  ctx.filter = 'grayscale(1) contrast(1.3) brightness(1.04)'
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(src, 0, 0, c.width, c.height)
   ctx.filter = 'none'
+  return c
+}
+
+/** 회색조 + Otsu 이진화 — 합계 숫자 전용 */
+function preprocessForOcr(src: HTMLCanvasElement): HTMLCanvasElement {
+  const c = preprocessForThai(src)
+  const ctx = c.getContext('2d')
+  if (!ctx) return src
   const img = ctx.getImageData(0, 0, c.width, c.height)
   const { data } = img
   const hist = new Uint32Array(256)
@@ -173,20 +182,21 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
   return {
     recognize: async (canvas) => {
       const qr = await decodeQrFromCanvas(canvas)
-      const prepared = preprocessForOcr(canvas)
+      const thaiImg = preprocessForThai(canvas)
+      const digitImg = preprocessForOcr(canvas)
       const parts: string[] = []
       if (qr) parts.push(`===QR===\n${qr}`)
-      parts.push(`===FULL===\n${await readThai(prepared)}`)
-      if (prepared.height > prepared.width * 1.05) {
-        parts.push(`===HEADER===\n${await readThai(cropRatio(prepared, 0, 0.42))}`)
-        const totals = cropRatio(prepared, 0.58, 1, 0.42, 1)
+      parts.push(`===FULL===\n${await readThai(thaiImg)}`)
+      if (thaiImg.height > thaiImg.width * 1.05) {
+        parts.push(`===HEADER===\n${await readThai(cropRatio(thaiImg, 0, 0.42))}`)
+        const totals = cropRatio(thaiImg, 0.58, 1, 0.42, 1)
         const totalsHi = scaleCanvas(totals, 1.55)
         parts.push(`===TOTALS===\n${await readThai(totalsHi)}`)
-        parts.push(`===TOTALS_DIGITS===\n${await readDigits(totalsHi)}`)
+        parts.push(`===TOTALS_DIGITS===\n${await readDigits(scaleCanvas(cropRatio(digitImg, 0.58, 1, 0.42, 1), 1.55))}`)
       } else {
-        const totalsHi = scaleCanvas(cropRatio(prepared, 0.55, 1), 1.4)
+        const totalsHi = scaleCanvas(cropRatio(thaiImg, 0.55, 1), 1.4)
         parts.push(`===TOTALS===\n${await readThai(totalsHi)}`)
-        parts.push(`===TOTALS_DIGITS===\n${await readDigits(totalsHi)}`)
+        parts.push(`===TOTALS_DIGITS===\n${await readDigits(scaleCanvas(cropRatio(digitImg, 0.55, 1), 1.4))}`)
       }
       return parts.filter((p) => !p.endsWith('===\n')).join('\n')
     },
