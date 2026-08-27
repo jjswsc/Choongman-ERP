@@ -77,7 +77,7 @@ function loadLang(): LangCode {
 const LangContext = createContext<{ lang: LangCode; setLang: (l: LangCode) => void } | null>(null)
 
 export function LangProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<LangCode>('ko')
+  const [lang, setLangState] = useState<LangCode>(() => loadLang())
 
   useEffect(() => {
     const loaded = loadLang()

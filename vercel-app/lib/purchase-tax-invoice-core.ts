@@ -206,7 +206,7 @@ export function validatePurchaseTaxInvoiceInput(
   if (!String(input.sellerName || '').trim()) return 'seller_name'
   if (!isTin13(input.sellerTaxId)) return 'seller_tax_id'
   const { netAmount, vatAmount } = roundPurchaseTaxAmounts(input.netAmount, input.vatAmount, input.totalAmount)
-  if (netAmount <= 0 && vatAmount <= 0) return 'amounts'
+  if (netAmount < 0 || vatAmount < 0) return 'amounts'
   return null
 }
 
@@ -226,6 +226,18 @@ export function isLikelyTaxInvoiceCopy(raw: unknown): boolean {
   const s = String(raw || '').trim().toLowerCase()
   if (!s) return false
   return /สำเนา|สำเนาเอกสาร|copy\b|duplicate|true copy|สำเนาใบ/.test(s)
+}
+
+/** OCR이 Seller ID·숫자만 읽은 상호는 거래처 기억으로 덮음 */
+export function looksLikeJunkSellerName(raw: unknown): boolean {
+  const s = String(raw || '').trim()
+  if (s.length < 4) return true
+  if (/^(id|seller\s*id|merchant\s*id|tax\s*id|tin|customer\s*id)\b/i.test(s)) return true
+  if (/^id\s*[|:.\/]/i.test(s)) return true
+  if (/^[\d\s|.:#\-/]{4,}$/.test(s)) return true
+  if (/[!|]/.test(s) && /\d{5,}/.test(s) && !/บริษัท|ห้าง|ร้าน|ทรัสต์/.test(s)) return true
+  if (/ซอย|แขวง|เขต|ถนน/.test(s) && !/บริษัท|ห้าง|ร้าน|ทรัสต์/.test(s)) return true
+  return false
 }
 
 function sanitizeTaxInvoiceMoney(n: unknown): number | undefined {

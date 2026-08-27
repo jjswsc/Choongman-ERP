@@ -27,7 +27,10 @@ type CreateWorkerFn = (
 ) => Promise<TessWorker>
 
 export type TaxInvoiceOcrSession = {
-  recognize: (canvas: HTMLCanvasElement, opts?: { skipQr?: boolean }) => Promise<string>
+  recognize: (
+    canvas: HTMLCanvasElement,
+    opts?: { skipQr?: boolean; enough?: (text: string) => boolean }
+  ) => Promise<string>
   recognizeSparseCrops: (canvas: HTMLCanvasElement) => Promise<string>
   terminate: () => Promise<void>
 }
@@ -270,20 +273,26 @@ export async function decodeTaxInvoiceQrsFromCanvas(src: HTMLCanvasElement): Pro
     const s = String(hit || '').trim()
     if (s && !found.includes(s)) found.push(s)
   }
-  const tryCrops = async (candidates: HTMLCanvasElement[]) => {
+  const tryCrops = async (candidates: HTMLCanvasElement[], allowZxing: boolean) => {
     const jsQR = await loadJsQr()
     if (jsQR) {
-      for (const c of candidates) add(decodeWithJsQr(jsQR, c))
+      for (const c of candidates) {
+        add(decodeWithJsQr(jsQR, c))
+        if (found.length >= 2) return
+      }
     }
-    if (found.length >= 2) return
+    if (found.length >= 1 || !allowZxing) return
     const reader = await loadZxingReader()
     if (reader) {
-      for (const c of candidates) add(decodeWithZxing(reader, c))
+      for (const c of candidates) {
+        add(decodeWithZxing(reader, c))
+        if (found.length >= 2) return
+      }
     }
   }
-  await tryCrops(qrCrops(src))
+  await tryCrops(qrCrops(src), true)
   if (found.length >= 1) return found.slice(0, 2)
-  await tryCrops(qrEnhanceCrops(src))
+  await tryCrops(qrEnhanceCrops(src), true)
   return found.slice(0, 2)
 }
 
@@ -389,14 +398,9 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
   }
   // 숫자 whitelist를 같은 워커에 넣으면 다음 페이지 태국어 인식이 깨질 수 있어 워커를 나눔.
   const thaiWorker = await make('tha+eng')
-  const digitWorker = await make('eng')
+  let digitWorker: TessWorker | null = null
   await thaiWorker.setParameters({
     tessedit_pageseg_mode: '6',
-    preserve_interword_spaces: '1',
-  })
-  await digitWorker.setParameters({
-    tessedit_pageseg_mode: '6',
-    tessedit_char_whitelist: '0123456789.,:-/',
     preserve_interword_spaces: '1',
   })
 
@@ -404,33 +408,54 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
     const r = await thaiWorker.recognize(image)
     return String(r.data.text || '').trim()
   }
+  const getDigitWorker = async () => {
+    if (!digitWorker) {
+      digitWorker = await make('eng')
+      await digitWorker.setParameters({
+        tessedit_pageseg_mode: '6',
+        tessedit_char_whitelist: '0123456789.,:-/',
+        preserve_interword_spaces: '1',
+      })
+    }
+    return digitWorker
+  }
   const readDigits = async (image: HTMLCanvasElement) => {
-    const r = await digitWorker.recognize(image)
+    const r = await (await getDigitWorker()).recognize(image)
     return String(r.data.text || '').trim()
   }
+  const joined = (parts: string[]) => parts.filter((p) => !p.endsWith('===\n')).join('\n')
 
   return {
     recognize: async (canvas, opts) => {
+      const enough = (parts: string[]) => (opts?.enough ? opts.enough(joined(parts)) : false)
       const qr = opts?.skipQr ? '' : await decodeTaxInvoiceQrFromCanvas(canvas)
       const thaiImg = preprocessForThai(canvas)
-      const digitImg = preprocessForOcr(canvas)
       const parts: string[] = []
       if (qr) parts.push(`===QR===\n${qr}`)
       parts.push(`===FULL===\n${await readThai(thaiImg)}`)
-      if (thaiImg.height > thaiImg.width * 1.05) {
-        parts.push(`===HEADER===\n${await readThai(cropRatio(thaiImg, 0, 0.42))}`)
-        parts.push(`===HEADER_DIGITS===\n${await readDigits(scaleCanvas(cropRatio(digitImg, 0, 0.38), 1.4))}`)
-        const totals = cropRatio(thaiImg, 0.58, 1, 0.42, 1)
-        const totalsHi = scaleCanvas(totals, 1.55)
-        parts.push(`===TOTALS===\n${await readThai(totalsHi)}`)
-        parts.push(`===TOTALS_DIGITS===\n${await readDigits(scaleCanvas(cropRatio(digitImg, 0.58, 1, 0.42, 1), 1.55))}`)
-      } else {
-        parts.push(`===HEADER_DIGITS===\n${await readDigits(scaleCanvas(cropRatio(digitImg, 0, 0.42), 1.4))}`)
-        const totalsHi = scaleCanvas(cropRatio(thaiImg, 0.55, 1), 1.4)
-        parts.push(`===TOTALS===\n${await readThai(totalsHi)}`)
-        parts.push(`===TOTALS_DIGITS===\n${await readDigits(scaleCanvas(cropRatio(digitImg, 0.55, 1), 1.4))}`)
-      }
-      return parts.filter((p) => !p.endsWith('===\n')).join('\n')
+      if (enough(parts)) return joined(parts)
+
+      const digitImg = preprocessForOcr(canvas)
+      const portrait = thaiImg.height > thaiImg.width * 1.05
+      const headerThai = cropRatio(thaiImg, 0, 0.42)
+      const totalsThai = portrait
+        ? scaleCanvas(cropRatio(thaiImg, 0.58, 1, 0.42, 1), 1.55)
+        : scaleCanvas(cropRatio(thaiImg, 0.55, 1), 1.4)
+      const headerDigits = scaleCanvas(cropRatio(digitImg, 0, portrait ? 0.38 : 0.42), 1.4)
+      const totalsDigits = scaleCanvas(
+        cropRatio(digitImg, portrait ? 0.58 : 0.55, 1, portrait ? 0.42 : 0, 1),
+        portrait ? 1.55 : 1.4
+      )
+
+      const [headerText, totalsDigitText] = await Promise.all([readThai(headerThai), readDigits(totalsDigits)])
+      parts.push(`===HEADER===\n${headerText}`)
+      parts.push(`===TOTALS_DIGITS===\n${totalsDigitText}`)
+      if (enough(parts)) return joined(parts)
+
+      const [headerDigitText, totalsText] = await Promise.all([readDigits(headerDigits), readThai(totalsThai)])
+      parts.push(`===HEADER_DIGITS===\n${headerDigitText}`)
+      parts.push(`===TOTALS===\n${totalsText}`)
+      return joined(parts)
     },
     recognizeSparseCrops: async (canvas) => {
       const thaiImg = preprocessForThai(canvas)
@@ -458,7 +483,7 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
       }
     },
     terminate: async () => {
-      await Promise.all([thaiWorker.terminate(), digitWorker.terminate()])
+      await Promise.all([thaiWorker.terminate(), digitWorker ? digitWorker.terminate() : Promise.resolve()])
     },
   }
 }

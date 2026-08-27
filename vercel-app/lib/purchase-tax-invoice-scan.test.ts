@@ -15,6 +15,7 @@ import {
   extractPurchaseTaxInvoiceFromScanText,
   extractPurchaseTaxInvoicesFromScanText,
   fillSellerNameFromTinLookup,
+  invoiceNoLooksPlausible,
   splitScanTextIntoInvoiceBlocks,
   wrapTaxInvoiceQrText,
   thaiTinChecksumOk,
@@ -51,10 +52,30 @@ describe('normalizeTaxInvoiceOcrText', () => {
   })
 })
 
+describe('invoiceNoLooksPlausible', () => {
+  it('rejects OCR titles and truncated numbers from July 2026 scans', () => {
+    expect(invoiceNoLooksPlausible('TaxInvoice')).toBe(false)
+    expect(invoiceNoLooksPlausible('TAXINVOICE')).toBe(false)
+    expect(invoiceNoLooksPlausible('TAXINVOICE/DELIVERYORDER')).toBe(false)
+    expect(invoiceNoLooksPlausible('PLZ')).toBe(false)
+    expect(invoiceNoLooksPlausible('PLZBSHP024A')).toBe(false)
+    expect(invoiceNoLooksPlausible('51')).toBe(false)
+    expect(invoiceNoLooksPlausible('94')).toBe(false)
+    expect(invoiceNoLooksPlausible('Hasan')).toBe(false)
+    expect(invoiceNoLooksPlausible('INV-20260531153')).toBe(true)
+    expect(invoiceNoLooksPlausible('AB-99')).toBe(true)
+    expect(invoiceNoLooksPlausible('IM20260701000087')).toBe(true)
+    expect(invoiceNoLooksPlausible('010726E00037051')).toBe(true)
+  })
+})
+
 describe('purchaseTaxInvoiceScanFailI18nKey', () => {
   it('maps local scan failures to copy keys', () => {
     expect(purchaseTaxInvoiceScanFailI18nKey('ocr_failed')).toBe('ptiOcrFailed')
     expect(purchaseTaxInvoiceScanFailI18nKey('empty_extract')).toBe('ptiPdfEmptyPage')
+    expect(purchaseTaxInvoiceScanFailI18nKey('tesseract_createWorker_missing', 'ptiOcrFailed')).toBe('ptiOcrFailed')
+    expect(purchaseTaxInvoiceScanFailI18nKey('pdf.js CDN load failed', 'ptiOcrFailed')).toBe('ptiOcrFailed')
+    expect(purchaseTaxInvoiceScanFailI18nKey('ptiOcrFailed')).toBe('ptiOcrFailed')
   })
 })
 

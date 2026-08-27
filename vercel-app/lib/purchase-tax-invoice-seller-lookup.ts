@@ -3,6 +3,7 @@
 import {
   digitsTin13,
   formatSellerBranch,
+  looksLikeJunkSellerName,
   thaiTinChecksumOk,
   type ExtractedPurchaseTaxInvoiceFields,
 } from '@/lib/purchase-tax-invoice-core'
@@ -128,9 +129,11 @@ export function fillSellerFromProfiles(
   if (tin.length !== 13) return row
   const hit = known.find((k) => digitsTin13(k.sellerTaxId) === tin && String(k.sellerName || '').trim())
   if (!hit) return row
+  const currentName = String(row.sellerName || '').trim()
+  const useProfileName = !currentName || looksLikeJunkSellerName(currentName)
   return {
     ...row,
-    sellerName: String(row.sellerName || '').trim() || String(hit.sellerName).trim().slice(0, 200),
+    sellerName: useProfileName ? String(hit.sellerName).trim().slice(0, 200) : currentName,
     sellerBranch: row.sellerBranch || (hit.sellerBranch ? formatSellerBranch(hit.sellerBranch) : undefined),
   }
 }

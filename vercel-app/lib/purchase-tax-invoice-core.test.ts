@@ -7,6 +7,7 @@ import {
   formatSellerBranch,
   gregorianYmdToBuddhistHint,
   isLikelyTaxInvoiceCopy,
+  looksLikeJunkSellerName,
   parsePurchaseTaxInvoiceVisionPayload,
   purchaseTaxDocMonthMismatch,
   purchaseTaxInvoiceDedupeKey,
@@ -145,6 +146,28 @@ describe('purchase tax invoice helpers', () => {
         vatAmount: 0.7,
       })
     ).toBe('seller_tax_id')
+  })
+
+  it('allows exempt invoices with 0 net and 0 VAT', () => {
+    expect(
+      validatePurchaseTaxInvoiceInput({
+        storeName: 'CM Office',
+        buyerTaxId: '0105566137147',
+        docDate: '2026-07-08',
+        invoiceNo: 'INV-20260546501',
+        sellerName: 'บริษัท โพลาร์ แบร์ มิชชั่น จำกัด',
+        sellerTaxId: '0105559082715',
+        netAmount: 0,
+        vatAmount: 0,
+      })
+    ).toBeNull()
+  })
+
+  it('treats Seller ID blobs as junk names', () => {
+    expect(looksLikeJunkSellerName('ID | 12964955')).toBe(true)
+    expect(looksLikeJunkSellerName('!) | 12964955')).toBe(true)
+    expect(looksLikeJunkSellerName('163/141 ซอยประชาอุทิศ11 แขวงดอนเมือง')).toBe(true)
+    expect(looksLikeJunkSellerName('บริษัท ช้อปปี้ (ประเทศไทย) จำกัด')).toBe(false)
   })
 
   it('detects invoice copies to skip', () => {

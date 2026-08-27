@@ -25,12 +25,14 @@ import {
   formatSellerBranch,
   displaySellerBranchForUi,
   isLikelyTaxInvoiceCopy,
+  purchaseTaxDocMonthMismatch,
   purchaseTaxInvoiceDedupeKey,
   purchaseTaxInvoiceHasExtractedFields,
   purchaseTaxPp30Compare,
   purchaseTaxReviewFlags,
   purchaseTaxReviewIsProblem,
   thaiTinChecksumOk,
+  taxMonthFromDocDate,
   type ExtractedPurchaseTaxInvoiceFields,
   type PurchaseTaxReviewFlag,
 } from "@/lib/purchase-tax-invoice-core"
@@ -45,6 +47,8 @@ import {
 import {
   extractPurchaseTaxInvoiceFromScanText,
   pdfPageTextIsReliableForExtract,
+  pdfPageTextLooksPrinted,
+  purchaseTaxInvoiceScanFailI18nKey,
   purchaseTaxInvoiceTextExtractIsComplete,
   splitScanTextIntoInvoiceBlocks,
   wrapTaxInvoiceQrText,
@@ -72,6 +76,7 @@ type Props = {
   filingStoreFilter: string
   filingSearchTick?: number
   storeChoices?: string[]
+  onFilingYearMonthChange?: (yearMonth: string) => void
 }
 
 type FormState = {
@@ -115,6 +120,21 @@ function reviewWarnClass(base: string, on: boolean) {
   return cn(base, on && "ring-1 ring-amber-500 bg-amber-50 dark:bg-amber-950/40")
 }
 
+const PTI_SKIP_REASON_KEYS = new Set(["ptiPdfEmptyPage", "ptiPdfSkipCopy", "ptiDupError"])
+
+type PdfBusyState = { key: string; vars?: Record<string, string | number> }
+
+function ptiSkipReasonText(reason: string, t: (k: string) => string): string {
+  const s = String(reason || "").trim()
+  if (!s) return ""
+  if (PTI_SKIP_REASON_KEYS.has(s) || /^pti[A-Z]/.test(s)) return t(s)
+  return s
+}
+
+function isPtiEmptyPageSkip(reason: string, t: (k: string) => string): boolean {
+  return reason === "ptiPdfEmptyPage" || reason === t("ptiPdfEmptyPage")
+}
+
 const emptyForm = (storeName: string, month: string): FormState => ({
   storeName,
   docDate: `${month}-01`,
@@ -138,6 +158,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   filingStoreFilter,
   filingSearchTick = 0,
   storeChoices = [],
+  onFilingYearMonthChange,
 }: Props) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -157,7 +178,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   )
   const [saving, setSaving] = React.useState(false)
   const [reviewRows, setReviewRows] = React.useState<ReviewRow[]>(readReviewDraft)
-  const [pdfBusy, setPdfBusy] = React.useState("")
+  const [pdfBusy, setPdfBusy] = React.useState<PdfBusyState | null>(null)
   const [pdfProgress, setPdfProgress] = React.useState<{ n: number; total: number } | null>(null)
   const [reviewFilter, setReviewFilter] = React.useState<"all" | "problems">("all")
   const [dropHover, setDropHover] = React.useState(false)
@@ -169,6 +190,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   const [previewUrl, setPreviewUrl] = React.useState("")
   const [previewBusy, setPreviewBusy] = React.useState(false)
   const [pp30Vat, setPp30Vat] = React.useState<{ outputVat: number; inputVat: number } | null>(null)
+  const [saveNotice, setSaveNotice] = React.useState("")
 
   const storeSelectOptions = React.useMemo(() => {
     const extra = [form.storeName, fallbackStore].map((s) => String(s || "").trim()).filter(Boolean)
@@ -200,7 +222,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           storeFilter: filingStoreFilter,
         }).catch(() => null),
       ])
-      if (res.error) setError(res.error)
+      if (res.error) setError("msg_load_fail")
       setTableMissing(!!res.tableMissing)
       setRows(res.rows)
       setPp30Vat(
@@ -208,8 +230,8 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           ? { outputVat: Number(summary.vat.outputVat) || 0, inputVat: Number(summary.vat.inputVat) || 0 }
           : null
       )
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+    } catch {
+      setError("msg_load_fail")
       setTableMissing(false)
       setRows([])
       setPp30Vat(null)
@@ -314,10 +336,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       if (!res.success) {
         setError(
           res.error === "DUPLICATE"
-            ? t("ptiDupError")
+            ? "ptiDupError"
             : res.error === "SUBMITTED"
-              ? t("ptiSubmittedLocked")
-              : res.error || "save failed"
+              ? "ptiSubmittedLocked"
+              : "msg_save_fail"
         )
         return
       }
@@ -333,7 +355,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     if (!window.confirm(t("ptiDeleteConfirm"))) return
     const res = await deletePurchaseTaxInvoice(id)
     if (!res.success) {
-      setError(res.error === "SUBMITTED" ? t("ptiSubmittedLocked") : res.error || "delete failed")
+      setError(res.error === "SUBMITTED" ? "ptiSubmittedLocked" : "msg_delete_fail")
       return
     }
     if (form.id === id) {
@@ -350,7 +372,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     })
     const res = await apiFetch(`/api/purchaseTaxInvoices?${q}`)
     if (!res.ok) {
-      setError(`HTTP_${res.status}`)
+      setError("msg_load_fail")
       return
     }
     const blob = await res.blob()
@@ -367,9 +389,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     abortRef.current?.abort()
     const ac = new AbortController()
     abortRef.current = ac
-    setPdfBusy(t("ptiPdfReading"))
+    setPdfBusy({ key: "ptiPdfReading" })
     setPdfProgress(null)
     setError("")
+    setSaveNotice("")
     const extracted: ReviewRow[] = []
     const seen = new Set(rows.map((r) => purchaseTaxInvoiceDedupeKey(r.buyerTaxId, r.invoiceNo, r.sellerTaxId)))
     const storeName = defaultStoreFromFilter(filingStoreFilter, form.storeName || fallbackStore)
@@ -383,13 +406,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       let skipReason = ""
       if (failReason || !purchaseTaxInvoiceHasExtractedFields(f)) {
         skip = true
-        skipReason = failReason || t("ptiPdfEmptyPage")
+        skipReason = failReason || "ptiPdfEmptyPage"
       } else if (isCopy) {
         skip = true
-        skipReason = t("ptiPdfSkipCopy")
+        skipReason = "ptiPdfSkipCopy"
       } else if (invoiceNo && seen.has(purchaseTaxInvoiceDedupeKey(rows[0]?.buyerTaxId || "x", invoiceNo, sellerTaxId))) {
         skip = true
-        skipReason = t("ptiDupError")
+        skipReason = "ptiDupError"
       } else if (
         invoiceNo &&
         extracted.some(
@@ -399,7 +422,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         )
       ) {
         skip = true
-        skipReason = t("ptiPdfSkipCopy")
+        skipReason = "ptiPdfSkipCopy"
       }
       if (invoiceNo) seen.add(key)
       extracted.push({
@@ -442,7 +465,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       if (blocks.length >= 2) {
         for (const block of blocks) {
           const local = fillSellerFromProfiles(extractPurchaseTaxInvoiceFromScanText(block, hint) || {}, known)
-          pushFromParsed(local, page, purchaseTaxInvoiceHasExtractedFields(local) ? undefined : t("ptiPdfEmptyPage"))
+          pushFromParsed(local, page, purchaseTaxInvoiceHasExtractedFields(local) ? undefined : "ptiPdfEmptyPage")
         }
         return
       }
@@ -451,22 +474,28 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         pushFromParsed(local, page)
         return
       }
-      pushFromParsed(local || {}, page, t("ptiPdfEmptyPage"))
+      pushFromParsed(local || {}, page, "ptiPdfEmptyPage")
     }
+
+    const extractIsComplete = (pageText: string) =>
+      purchaseTaxInvoiceTextExtractIsComplete(extractPurchaseTaxInvoiceFromScanText(pageText, hint), hint)
 
     let ocr: TaxInvoiceOcrSession | null = null
     const textForPage = async (canvas: HTMLCanvasElement, printedText: string) => {
-      const work = pdfPageTextIsReliableForExtract(printedText, hint) ? canvas : prepareTaxInvoiceScanCanvas(canvas)
+      const work = pdfPageTextLooksPrinted(printedText) ? canvas : prepareTaxInvoiceScanCanvas(canvas)
       const qrs = await decodeTaxInvoiceQrsFromCanvas(work)
       const withQr = [printedText, wrapTaxInvoiceQrText(qrs)].filter((s) => String(s || "").trim()).join("\n")
-      if (pdfPageTextIsReliableForExtract(printedText, hint)) return withQr
+      if (extractIsComplete(withQr)) return withQr
       if (!ocr) {
-        setPdfBusy(t("ptiOcrLoading"))
+        setPdfBusy({ key: "ptiOcrLoading" })
         ocr = await createTaxInvoiceOcrSession()
       }
-      const ocrText = await ocr.recognize(work, { skipQr: true })
+      const ocrText = await ocr.recognize(work, {
+        skipQr: true,
+        enough: (text) => extractIsComplete([withQr, text].filter(Boolean).join("\n")),
+      })
       let pageText = [withQr, ocrText].filter((s) => String(s || "").trim()).join("\n")
-      if (!purchaseTaxInvoiceTextExtractIsComplete(extractPurchaseTaxInvoiceFromScanText(pageText, hint), hint)) {
+      if (!extractIsComplete(pageText)) {
         const extra = await ocr.recognizeSparseCrops(work)
         pageText = [pageText, extra].filter((s) => String(s || "").trim()).join("\n")
       }
@@ -492,44 +521,48 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           if (total >= 40) {
             const ok = window.confirm(tr(t, "ptiPdfManyPages", { n: String(pdf.numPages) }))
             if (!ok) {
-              setPdfBusy("")
+              setPdfBusy(null)
               return
             }
           }
           for (let i = 1; i <= total; i += 1) {
             if (ac.signal.aborted) break
             setPdfProgress({ n: i, total })
-            setPdfBusy(tr(t, "ptiPdfPage", { n: String(i), total: String(total) }))
-            const { canvas } = await renderTaxInvoicePageForScan(pdf, i)
-            if (ac.signal.aborted) break
+            setPdfBusy({ key: "ptiPdfPage", vars: { n: String(i), total: String(total) } })
             const printed = await extractPdfPageText(pdf, i)
-            if (!pdfPageTextIsReliableForExtract(printed, hint)) {
-              setPdfBusy(tr(t, "ptiOcrPage", { n: String(i), total: String(total) }))
-            }
             let pageText = printed
-            try {
-              pageText = await textForPage(canvas, printed)
-            } catch {
-              pageText = printed
-              setError((prev) => prev || t("ptiOcrFailed"))
+            if (pdfPageTextIsReliableForExtract(printed, hint)) {
+              ingestLocalPage(i, pageText)
+            } else {
+              if (!pdfPageTextLooksPrinted(printed)) {
+                setPdfBusy({ key: "ptiOcrPage", vars: { n: String(i), total: String(total) } })
+              }
+              const { canvas } = await renderTaxInvoicePageForScan(pdf, i)
+              if (ac.signal.aborted) break
+              try {
+                pageText = await textForPage(canvas, printed)
+              } catch {
+                pageText = printed
+                setError((prev) => prev || "ptiOcrFailed")
+              }
+              if (ac.signal.aborted) break
+              ingestLocalPage(i, pageText)
             }
-            if (ac.signal.aborted) break
-            ingestLocalPage(i, pageText)
-            setReviewRows([...extracted])
+            if (i === total || i % 5 === 0) setReviewRows([...extracted])
             await yieldUi()
           }
         } else {
           scanPdfRef.current = null
-          setPdfBusy(tr(t, "ptiPdfPage", { n: "1", total: "1" }))
+          setPdfBusy({ key: "ptiPdfPage", vars: { n: "1", total: "1" } })
           const { canvas, images } = await imageFileToTaxInvoiceScan(file)
           scanImagePreviewRef.current = images[0] || ""
-          setPdfBusy(tr(t, "ptiOcrPage", { n: "1", total: "1" }))
+          setPdfBusy({ key: "ptiOcrPage", vars: { n: "1", total: "1" } })
           let pageText = ""
           try {
             pageText = await textForPage(canvas, "")
           } catch {
             pageText = ""
-            setError((prev) => prev || t("ptiOcrFailed"))
+            setError((prev) => prev || "ptiOcrFailed")
           }
           if (ac.signal.aborted) break
           ingestLocalPage(1, pageText)
@@ -545,7 +578,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           ),
         ].slice(0, 15)
         if (tins.length) {
-          setPdfBusy(t("ptiRdLookup"))
+          setPdfBusy({ key: "ptiRdLookup" })
           const rdProfiles: PurchaseTaxSellerProfile[] = []
           const queue = [...tins]
           const workerCount = Math.min(4, queue.length)
@@ -595,7 +628,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         if (extracted.length) setReviewRows(extracted)
         return
       }
-      setError(e instanceof Error ? e.message : String(e))
+      setError(purchaseTaxInvoiceScanFailI18nKey(e instanceof Error ? e.message : String(e), "ptiOcrFailed"))
       if (extracted.length) setReviewRows(extracted)
     } finally {
       if (ocr) {
@@ -606,7 +639,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         }
       }
       if (abortRef.current === ac) abortRef.current = null
-      setPdfBusy("")
+      setPdfBusy(null)
       setPdfProgress(null)
     }
   }
@@ -631,15 +664,41 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       }))
     if (!payload.length) return
     setSaving(true)
+    setSaveNotice("")
     try {
       rememberSellerProfiles(payload)
       const res = await bulkSavePurchaseTaxInvoices(payload)
       if (!res.success) {
-        setError(res.error || "save failed")
+        setError(res.error === "SUBMITTED" ? "ptiSubmittedLocked" : "msg_save_fail")
+        return
+      }
+      const savedCount = Array.isArray(res.saved) ? res.saved.length : payload.length
+      const skippedCount = Array.isArray(res.skipped) ? res.skipped.length : 0
+      if (savedCount <= 0) {
+        setError("ptiSaveNone")
+        return
+      }
+      const monthCounts = new Map<string, number>()
+      for (const r of payload) {
+        const month = taxMonthFromDocDate(String(r.docDate || ""))
+        if (!month) continue
+        monthCounts.set(month, (monthCounts.get(month) || 0) + 1)
+      }
+      const savedMonth =
+        [...monthCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || filingYearMonth
+      const parts = [tr(t, "ptiSaveOk", { n: String(savedCount) })]
+      if (skippedCount) parts.push(tr(t, "ptiSaveSkipped", { n: String(skippedCount) }))
+      if (savedMonth && savedMonth !== filingYearMonth) {
+        parts.push(tr(t, "ptiSaveSwitchedMonth", { month: savedMonth }))
+        setReviewRows([])
+        writeReviewDraft([])
+        setSaveNotice(parts.join(" "))
+        onFilingYearMonthChange?.(savedMonth)
         return
       }
       setReviewRows([])
       writeReviewDraft([])
+      setSaveNotice(parts.join(" "))
       await load()
     } finally {
       setSaving(false)
@@ -667,7 +726,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         setPreviewUrl(scanImagePreviewRef.current)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(purchaseTaxInvoiceScanFailI18nKey(e instanceof Error ? e.message : String(e), "ptiOcrFailed"))
     } finally {
       setPreviewBusy(false)
     }
@@ -767,7 +826,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         ) : null}
         {pdfBusy ? (
           <span className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{pdfBusy}</span>
+            <span>{tr(t, pdfBusy.key, pdfBusy.vars)}</span>
             {pdfProgress ? (
               <span className="inline-block h-1.5 w-28 overflow-hidden rounded bg-muted">
                 <span
@@ -787,7 +846,8 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           {totals.count} · {t("ptiColNet")} {formatPp30Amount2(totals.net)} · {t("ptiColVat")} {formatPp30Amount2(totals.vat)}
         </span>
       </div>
-      {error ? <div className="text-sm text-destructive">{error}</div> : null}
+      {error ? <div className="text-sm text-destructive">{t(error)}</div> : null}
+      {saveNotice ? <div className="text-sm text-emerald-700 dark:text-emerald-400">{saveNotice}</div> : null}
 
       {canWrite ? (
         <Card>
@@ -854,6 +914,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               <span className="text-xs tabular-nums text-muted-foreground">
                 {tr(t, "ptiReviewKeep", { n: String(reviewStats.keep) })} · {tr(t, "ptiReviewSkip", { n: String(reviewStats.skip) })} · {t("ptiColNet")} {formatPp30Amount2(reviewStats.net)} · {t("ptiColVat")} {formatPp30Amount2(reviewStats.vat)}
               </span>
+              {reviewRows.some((r) => !r.skip && purchaseTaxDocMonthMismatch(r.docDate, filingYearMonth)) ? (
+                <span className="text-xs text-amber-700 dark:text-amber-400">{t("ptiSaveSwitchedMonthHint")}</span>
+              ) : null}
               <div className="ml-auto flex flex-wrap items-center gap-1">
                 {storeSelectOptions.length ? (
                   <select
@@ -917,7 +980,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                     <td className="p-1">
                       <Input className="h-7 w-[120px]" value={r.invoiceNo} onChange={(e) => {
                         const invoiceNo = e.target.value
-                        const unskipEmpty = r.skip && r.skipReason === t("ptiPdfEmptyPage") && invoiceNo.trim()
+                        const unskipEmpty = r.skip && isPtiEmptyPageSkip(r.skipReason || "", t) && invoiceNo.trim()
                         patchReview(idx, { invoiceNo, skip: unskipEmpty ? false : r.skip, skipReason: unskipEmpty ? "" : r.skipReason })
                       }} />
                     </td>
@@ -945,7 +1008,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                           onChange={(e) => patchReview(idx, { skip: e.target.checked })}
                         />
                         <span>
-                          {r.skip ? r.skipReason : ""}
+                          {r.skip ? ptiSkipReasonText(r.skipReason || "", t) : ""}
                           {!r.skip && flags.length ? flags.map(flagLabel).join(" · ") : ""}
                         </span>
                       </label>
@@ -1044,7 +1107,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                     <Label className="text-[10px]">{t("ptiColInvoiceNo")}</Label>
                     <Input className="h-7" value={r.invoiceNo} onChange={(e) => {
                       const invoiceNo = e.target.value
-                      const unskipEmpty = r.skip && r.skipReason === t("ptiPdfEmptyPage") && invoiceNo.trim()
+                      const unskipEmpty = r.skip && isPtiEmptyPageSkip(r.skipReason || "", t) && invoiceNo.trim()
                       patchReview(idx, { invoiceNo, skip: unskipEmpty ? false : r.skip, skipReason: unskipEmpty ? "" : r.skipReason })
                     }} />
                   </div>
@@ -1070,7 +1133,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                       <Input className={reviewWarnClass("h-7", flags.includes("vat"))} value={r.vatAmount} onChange={(e) => patchReview(idx, { vatAmount: e.target.value })} />
                     </div>
                   </div>
-                  {r.skip ? <div className="text-muted-foreground">{r.skipReason}</div> : flags.length ? <div className="text-amber-700 dark:text-amber-400">{flags.map(flagLabel).join(" · ")}</div> : null}
+                  {r.skip ? <div className="text-muted-foreground">{ptiSkipReasonText(r.skipReason || "", t)}</div> : flags.length ? <div className="text-amber-700 dark:text-amber-400">{flags.map(flagLabel).join(" · ")}</div> : null}
                 </div>
                 )
               })}
