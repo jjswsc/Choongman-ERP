@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Wallet, ArrowLeft, Plus, AlertCircle } from "lucide-react"
+import { Wallet, ArrowLeft, Plus, AlertCircle, Link2 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
@@ -44,6 +44,8 @@ import {
   saveBankTransactionInboundLinks,
   markBankTransactionForCardBill,
   markBankTransactionForPettyCash,
+  getBankWithdrawalsForCardBillQueueMark,
+  registerCardExpenseFromBankTransaction,
   translateTexts,
   getHeadOfficeInfo,
   getStoreTaxFilingProfile,
@@ -51,6 +53,7 @@ import {
   type BankAccount,
   type CardAccount,
   type InboundBatchForLink,
+  type UnlinkedBankWithdrawalForCard,
 } from "@/lib/api-client"
 import {
   EXPENSE_WITHDRAW_SUBJECT_FETCH,
@@ -70,6 +73,8 @@ import { CANONICAL_OFFICE_STORE, canonicalOfficeStore } from "@/lib/office-store
 import { moneyInputStringFromAmount, normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import { encodeCardPayeeCode, parseCardAccountIdFromPayeeCode } from "@/lib/prepayment-accrual-categories"
+import { memoLooksLikeCardBill } from "@/lib/card-bill-memo"
+import { readLastCardAccountId, writeLastCardAccountId } from "@/lib/card-last-account"
 import { VendorRdSearchButton } from "@/components/erp/vendor-rd-search"
 import {
   QuickAddVendorDialog,
@@ -147,6 +152,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
   const [transferKind, setTransferKind] = React.useState<TransferKind>("bank_to_petty")
   const [transferToCardAccountId, setTransferToCardAccountId] = React.useState<string>("")
+  const [cardBillPickOpen, setCardBillPickOpen] = React.useState(false)
+  const [cardBillPickLoading, setCardBillPickLoading] = React.useState(false)
+  const [cardBillPickRows, setCardBillPickRows] = React.useState<UnlinkedBankWithdrawalForCard[]>([])
+  const [cardBillPickSavingId, setCardBillPickSavingId] = React.useState<number | null>(null)
+  const [cardBillPickQuery, setCardBillPickQuery] = React.useState("")
+  const [cardBillPickRangeText, setCardBillPickRangeText] = React.useState("")
   const [transferBankAccountNo, setTransferBankAccountNo] = React.useState("")
   const [transferBankRecipientName, setTransferBankRecipientName] = React.useState("")
   const [transferToPettyStore, setTransferToPettyStore] = React.useState("")
@@ -360,7 +371,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setCategoryMain(mapped.main)
         if (mapped.sub) setCategorySub(mapped.sub)
         if (mapped.main === "transfer") {
-          setTransferKind(transferKindFromWithdrawalCategory(categoryParam || ""))
+          const fromCat = transferKindFromWithdrawalCategory(categoryParam || "")
+          if (fromCat !== "bank_general") {
+            setTransferKind(fromCat)
+          } else if (memoLooksLikeCardBill(bankMemoParam || memoParam || "")) {
+            setTransferKind("bank_to_card")
+          } else {
+            setTransferKind(fromCat)
+          }
         }
         setExpensePayMode("immediate")
       }
@@ -382,7 +400,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setCategoryMain(mapped.main)
         if (mapped.sub) setCategorySub(mapped.sub)
         if (mapped.main === "transfer") {
-          setTransferKind(transferKindFromWithdrawalCategory(categoryParam))
+          const fromCat = transferKindFromWithdrawalCategory(categoryParam)
+          if (fromCat !== "bank_general") {
+            setTransferKind(fromCat)
+          } else if (memoLooksLikeCardBill(bankMemoParam || memoParam || "")) {
+            setTransferKind("bank_to_card")
+          } else {
+            setTransferKind(fromCat)
+          }
         }
       }
       if (payeeCodeParam) {
@@ -523,9 +548,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   React.useEffect(() => {
     if (categoryMain !== "transfer" || transferKind !== "bank_to_card") return
     setTransferToCardAccountId((prev) => {
-      if (!prev) return prev
-      const exists = transferCardAccountsForStore.some((a) => String(a.id) === prev)
-      return exists ? prev : ""
+      if (prev && transferCardAccountsForStore.some((a) => String(a.id) === prev)) return prev
+      const last = readLastCardAccountId()
+      if (last && transferCardAccountsForStore.some((a) => String(a.id) === last)) return last
+      return ""
     })
   }, [categoryMain, transferKind, transferCardAccountsForStore])
 
@@ -702,18 +728,18 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const supportsExpenseDocs =
     categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset"
 
-  const isTransferPrepaymentAccrual =
-    categoryMain === "transfer" && isTransferPrepaymentKind(transferKind)
-
   const isLaterPayment =
     !isExistingBankTxMode &&
-    (isTransferPrepaymentAccrual ||
+    ((categoryMain === "transfer" && transferKind === "bank_to_petty") ||
       ((categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset") &&
         expensePayMode === "later"))
 
   /** 「출금 등록」= 내부 통장 행 → 통장 조회 목록에서 숨김. 기존 통장 줄 저장(บันทึก)과 구분. */
   const showNewWithdrawBankHiddenHint =
-    !!categoryMain && !isExistingBankTxMode && !isLaterPayment
+    !!categoryMain &&
+    !isExistingBankTxMode &&
+    !isLaterPayment &&
+    !(categoryMain === "transfer" && transferKind === "bank_to_card")
 
   const resolveAccountIdForSave = React.useCallback((): number => {
     const fromState = Number(accountId || 0)
@@ -1099,7 +1125,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         name = `${transferToPettyStore.trim()} · ${tt("wm_transferKindBankToPetty", "통장 → 패티캐시")}`
       } else if (transferKind === "bank_to_card") {
         if (!transferToCardAccountId) {
-          await appAlert(tt("wm_transferCardRequired", "Please select a card to charge."))
+          await appAlert(tt("wm_transferCardRequired", "이미 나간 대금을 연결할 카드를 선택하세요."))
           return
         }
         code = encodeCardPayeeCode(Number(transferToCardAccountId))
@@ -1557,6 +1583,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await handleBankLinkSubmit()
       return
     }
+    if (categoryMain === "transfer" && transferKind === "bank_to_card") {
+      await openCardBillPicker()
+      return
+    }
     if (isLaterPayment) {
       await handleRegisterAccrual()
       return
@@ -1879,13 +1909,120 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return false
       }
-      await appAlert(
-        translateApiMessage(res.message, t) ||
-          tt("expenseRegisterCardBillQueued", "카드대금 연동 대기열에 등록되었습니다. 카드 관리 탭에서 연동하세요.")
-      )
       return true
     },
-    [auth?.role, auth?.user, t, tt]
+    [auth?.role, auth?.user, t]
+  )
+
+  const completeCardBillFromBankTx = React.useCallback(
+    async (bankTransactionId: number) => {
+      const cardId = Number(transferToCardAccountId || 0)
+      if (!(cardId > 0)) {
+        await appAlert(tt("wm_transferCardRequired", "이미 나간 대금을 연결할 카드를 선택하세요."))
+        return false
+      }
+      const marked = await handleMarkBankForCardBill(bankTransactionId)
+      if (!marked) return false
+      const res = await registerCardExpenseFromBankTransaction({
+        bankTransactionId,
+        cardAccountId: cardId,
+        memo: memo.trim() || undefined,
+        userName: auth?.user,
+        userRole: auth?.role,
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        return false
+      }
+      writeLastCardAccountId(String(cardId))
+      const q = new URLSearchParams({ tab: "card" })
+      if (res.id) q.set("allocateId", String(res.id))
+      router.push(`/admin/expense-management?${q.toString()}`)
+      return true
+    },
+    [auth?.role, auth?.user, handleMarkBankForCardBill, memo, router, t, transferToCardAccountId, tt]
+  )
+
+  const cardBillPickRange = React.useCallback(() => {
+    const startParam = startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam) ? startStrParam : ""
+    const endParam = endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam) ? endStrParam : ""
+    if (startParam && endParam) return { startStr: startParam, endStr: endParam }
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(transDate) ? transDate : todayStrBkk()
+    const ym = d.slice(0, 7)
+    const [yRaw, mRaw] = ym.split("-")
+    let y = Number(yRaw)
+    let m = Number(mRaw)
+    m -= 1
+    if (m < 1) {
+      m = 12
+      y -= 1
+    }
+    const prev = getBangkokMonthRange(`${y}-${String(m).padStart(2, "0")}`)
+    m = Number(mRaw) + 1
+    y = Number(yRaw)
+    if (m > 12) {
+      m = 1
+      y += 1
+    }
+    const next = getBangkokMonthRange(`${y}-${String(m).padStart(2, "0")}`)
+    return { startStr: prev.startStr, endStr: next.endStr }
+  }, [endStrParam, startStrParam, transDate])
+
+  const openCardBillPicker = React.useCallback(async () => {
+    if (!transferToCardAccountId) {
+      await appAlert(tt("wm_transferCardRequired", "이미 나간 대금을 연결할 카드를 선택하세요."))
+      return
+    }
+    if (transferCardAccountsForStore.length === 0) {
+      await appAlert(tt("cardManagementNoCardsHint", "연결할 카드가 없습니다. 위에서 카드를 먼저 등록하세요."))
+      return
+    }
+    const accountIdNum = Number(accountId || 0)
+    if (!accountIdNum) {
+      await appAlert(tt("expenseRegisterCardBillNeedAccount", "통장 계좌를 먼저 선택해 주세요."))
+      return
+    }
+    const range = cardBillPickRange()
+    setCardBillPickQuery("")
+    setCardBillPickRangeText(`${range.startStr} ~ ${range.endStr}`)
+    setCardBillPickOpen(true)
+    setCardBillPickLoading(true)
+    try {
+      const res = await getBankWithdrawalsForCardBillQueueMark({
+        accountId: accountIdNum,
+        startStr: range.startStr,
+        endStr: range.endStr,
+      })
+      const entered = parseMoneyAmount(amount)
+      const rows = [...(res.list || [])].sort((a, b) => {
+        if (a.likelyCardBill !== b.likelyCardBill) return a.likelyCardBill ? -1 : 1
+        if (entered > 0) {
+          const da = Math.abs(a.amount - entered)
+          const db = Math.abs(b.amount - entered)
+          if (da !== db) return da - db
+        }
+        return String(b.transDate).localeCompare(String(a.transDate))
+      })
+      setCardBillPickRows(rows)
+    } catch {
+      setCardBillPickRows([])
+    } finally {
+      setCardBillPickLoading(false)
+    }
+  }, [accountId, amount, cardBillPickRange, transferCardAccountsForStore.length, transferToCardAccountId, tt])
+
+  const handlePickCardBillWithdrawal = React.useCallback(
+    async (row: UnlinkedBankWithdrawalForCard) => {
+      if (!row.id) return
+      setCardBillPickSavingId(row.id)
+      try {
+        const ok = await completeCardBillFromBankTx(row.id)
+        if (ok) setCardBillPickOpen(false)
+      } finally {
+        setCardBillPickSavingId(null)
+      }
+    },
+    [completeCardBillFromBankTx]
   )
 
   const handleMarkBankForPetty = React.useCallback(
@@ -2377,8 +2514,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       if (transferKind === "bank_to_card") {
         setSaving(true)
         try {
-          const ok = await handleMarkBankForCardBill(bankTxId)
-          if (ok) router.push("/admin/expense-management?tab=card")
+          await completeCardBillFromBankTx(bankTxId)
         } finally {
           setSaving(false)
         }
@@ -3249,9 +3385,25 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 </>
               )}
 
-              {transferKind === "bank_to_card" && !isBankLinkMode && (
-                <ExpenseRegisterField label={tt("wm_transferToCardCharge", "Card")} className="max-w-md">
-                  <Select value={transferToCardAccountId || "__none__"} onValueChange={(v) => setTransferToCardAccountId(v === "__none__" ? "" : v)}>
+              {transferKind === "bank_to_card" && (
+                <>
+                <ExpenseRegisterField
+                  label={tt("wm_transferToCardCharge", "연결할 카드")}
+                  className="max-w-md"
+                  hint={
+                    transferCardAccountsForStore.length === 0
+                      ? tt("cardManagementNoCardsHint", "연결할 카드가 없습니다. 위에서 카드를 먼저 등록하세요.")
+                      : tt("wm_transferCardLinkAfterHint", "어느 카드로 쓴 지출인지 지정합니다. 출금 연결 후 계정과목·텍스인보이스를 맞춥니다.")
+                  }
+                >
+                  <Select
+                    value={transferToCardAccountId || "__none__"}
+                    onValueChange={(v) => {
+                      const id = v === "__none__" ? "" : v
+                      setTransferToCardAccountId(id)
+                      if (id) writeLastCardAccountId(id)
+                    }}
+                  >
                     <SelectTrigger className="h-9 w-full">
                       <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
                     </SelectTrigger>
@@ -3265,6 +3417,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     </SelectContent>
                   </Select>
                 </ExpenseRegisterField>
+                </>
               )}
             </div>
           )}
@@ -3565,21 +3718,32 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                 disabled={
                   saving ||
                   !categoryMain ||
+                  (categoryMain === "transfer" &&
+                    transferKind === "bank_to_card" &&
+                    (!transferToCardAccountId || transferCardAccountsForStore.length === 0)) ||
                   (isBankLinkMode &&
                     ((categoryMain === "purchase" && !vendorCode.trim()) ||
                       (categoryMain === "expense" &&
                         !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode))))
                 }
               >
-                <Wallet className="h-4 w-4 mr-1" />
+                {categoryMain === "transfer" && transferKind === "bank_to_card" ? (
+                  <Link2 className="h-4 w-4 mr-1" />
+                ) : (
+                  <Wallet className="h-4 w-4 mr-1" />
+                )}
                 {saving
                   ? tt("loading", "Processing...")
                   : isEditMode
                     ? tt("btnSave", "Save")
                     : isBankLinkMode
-                    ? categoryMain === "transfer" && isTransferPrepaymentKind(transferKind)
+                    ? categoryMain === "transfer" && transferKind === "bank_to_card"
+                      ? tt("wm_transferLinkThisBill", "이 출금을 카드에 연결")
+                      : categoryMain === "transfer" && isTransferPrepaymentKind(transferKind)
                       ? tt("wm_transferLinkBank", "통장 연동")
                       : tt("btnSave", "Save")
+                    : categoryMain === "transfer" && transferKind === "bank_to_card"
+                      ? tt("wm_transferLinkExistingBill", "이미 나간 출금 연결")
                     : isLaterPayment
                       ? isEditAccrualMode
                         ? tt("btnSave", "Save")
@@ -3609,6 +3773,83 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </div>
         </CardContent>
       </Card>
+
+      <Dialog open={cardBillPickOpen} onOpenChange={setCardBillPickOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{tt("expenseRegisterCardBillPickTitle", "카드대금 연동할 통장 출금 선택")}</DialogTitle>
+            <DialogDescription>
+              {tt(
+                "expenseRegisterCardBillPickHint",
+                "미연결 출금 중 카드 월 대금으로 처리할 건을 선택하세요."
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {cardBillPickRangeText ? (
+            <p className="text-xs text-muted-foreground">
+              {tt("cardManagementPickRangeHint", "선택한 통장에서 전후 1개월 미연결 출금입니다. 적요로 찾을 수 있습니다.")}
+              {" · "}
+              {cardBillPickRangeText}
+            </p>
+          ) : null}
+          <Input
+            className="h-9"
+            value={cardBillPickQuery}
+            onChange={(e) => setCardBillPickQuery(e.target.value)}
+            placeholder={tt("search", "Search")}
+          />
+          {cardBillPickLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">{t("loading")}</p>
+          ) : cardBillPickRows.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {tt("expenseRegisterCardBillPickEmpty", "연결할 통장 출금이 없습니다. 통장 계좌·기간을 확인하세요.")}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {cardBillPickRows
+                .filter((row) => {
+                  const q = cardBillPickQuery.trim().toLowerCase()
+                  if (!q) return true
+                  return `${row.memo || ""} ${row.transDate} ${row.amount}`.toLowerCase().includes(q)
+                })
+                .map((row) => {
+                  const entered = parseMoneyAmount(amount)
+                  const amountMatch = entered > 0 && Math.abs(row.amount - entered) < 0.01
+                  return (
+                <div key={row.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold tabular-nums">฿{row.amount.toLocaleString()}</p>
+                    <p className="text-[11px] text-muted-foreground">{row.transDate}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{row.memo || "—"}</p>
+                    {row.likelyCardBill ? (
+                      <p className="text-[10px] text-amber-800 mt-1">
+                        {tt("cardManagementLikelyCardBill", "카드대금 추정")}
+                      </p>
+                    ) : null}
+                    {amountMatch ? (
+                      <p className="text-[10px] text-green-700 mt-1">
+                        {tt("expenseRegisterCardBillAmountMatch", "입력 금액과 같음")}
+                      </p>
+                    ) : null}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 shrink-0"
+                    disabled={cardBillPickSavingId != null}
+                    onClick={() => void handlePickCardBillWithdrawal(row)}
+                  >
+                    {cardBillPickSavingId === row.id
+                      ? "..."
+                      : tt("expenseRegisterCardBillQueue", "통장 카드대금 연동")}
+                  </Button>
+                </div>
+                  )
+                })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deliveryFeeDialogOpen} onOpenChange={setDeliveryFeeDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

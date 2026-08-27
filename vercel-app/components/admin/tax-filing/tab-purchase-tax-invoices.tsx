@@ -12,7 +12,7 @@ import { canWriteAccountingCompliance } from "@/lib/accounting-auth"
 import {
   bulkSavePurchaseTaxInvoices,
   deletePurchaseTaxInvoice,
-  extractExpenseDocument,
+  getAdminVendors,
   getPurchaseTaxInvoices,
   getThaiTaxFilingSummary,
   savePurchaseTaxInvoice,
@@ -20,6 +20,7 @@ import {
   apiFetch,
 } from "@/lib/api-client"
 import {
+  digitsTin13,
   formatPp30Amount2,
   formatSellerBranch,
   displaySellerBranchForUi,
@@ -29,6 +30,7 @@ import {
   purchaseTaxPp30Compare,
   purchaseTaxReviewFlags,
   purchaseTaxReviewIsProblem,
+  thaiTinChecksumOk,
   type ExtractedPurchaseTaxInvoiceFields,
   type PurchaseTaxReviewFlag,
 } from "@/lib/purchase-tax-invoice-core"
@@ -42,12 +44,26 @@ import {
 } from "@/lib/purchase-tax-invoice-pdf-client"
 import {
   extractPurchaseTaxInvoiceFromScanText,
-  mergePurchaseTaxInvoiceExtract,
   pdfPageTextIsReliableForExtract,
   purchaseTaxInvoiceTextExtractIsComplete,
+  splitScanTextIntoInvoiceBlocks,
+  wrapTaxInvoiceQrText,
   type PurchaseTaxInvoiceScanHint,
 } from "@/lib/purchase-tax-invoice-scan"
-import { createTaxInvoiceOcrSession, type TaxInvoiceOcrSession } from "@/lib/purchase-tax-invoice-ocr-client"
+import {
+  fillSellerFromProfiles,
+  parseRdSellerList,
+  profilesFromVendors,
+  readLearnedSellerProfiles,
+  rememberSellerProfiles,
+  type PurchaseTaxSellerProfile,
+} from "@/lib/purchase-tax-invoice-seller-lookup"
+import {
+  createTaxInvoiceOcrSession,
+  decodeTaxInvoiceQrsFromCanvas,
+  prepareTaxInvoiceScanCanvas,
+  type TaxInvoiceOcrSession,
+} from "@/lib/purchase-tax-invoice-ocr-client"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
@@ -93,6 +109,10 @@ function writeReviewDraft(rows: ReviewRow[]) {
   } catch {
     /* quota */
   }
+}
+
+function reviewWarnClass(base: string, on: boolean) {
+  return cn(base, on && "ring-1 ring-amber-500 bg-amber-50 dark:bg-amber-950/40")
 }
 
 const emptyForm = (storeName: string, month: string): FormState => ({
@@ -397,57 +417,60 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       })
     }
 
-    const ingestPageImages = async (
-      images: string[],
-      page: number,
-      fileName: string,
-      pageText?: string,
-      local?: ExtractedPurchaseTaxInvoiceFields | null
-    ) => {
-      const res = await extractExpenseDocument(
-        {
-          dataUrl: images[0] || "",
-          imageUrls: images.slice(1),
-          fileName: `${fileName}-p${page}.jpg`,
-          schema: "purchase_tax_invoice",
-          buyerTaxId: rows[0]?.buyerTaxId || "",
-          buyerName: storeName,
-          pageText: pageText || "",
-        },
-        { signal: ac.signal }
-      )
-      const invoices = (
-        res.invoices && res.invoices.length ? res.invoices : res.fields ? [res.fields] : []
-      ) as ExtractedPurchaseTaxInvoiceFields[]
-      if (!res.success || !invoices.length) {
-        if (local && purchaseTaxInvoiceHasExtractedFields(local)) {
-          pushFromParsed(local, page)
-          return
-        }
-        pushFromParsed({}, page, res.message || t("ptiPdfEmptyPage"))
-        return
-      }
-      invoices.forEach((inv, idx) => {
-        const row =
-          idx === 0 ? mergePurchaseTaxInvoiceExtract(inv, local) || inv : inv
-        pushFromParsed(row, page)
-      })
-    }
-
     const hint: PurchaseTaxInvoiceScanHint = {
       buyerTaxId: rows[0]?.buyerTaxId || "",
       buyerName: storeName,
     }
 
+    let vendorProfiles: PurchaseTaxSellerProfile[] = []
+    try {
+      vendorProfiles = profilesFromVendors(await getAdminVendors())
+    } catch {
+      vendorProfiles = []
+    }
+    const learnedProfiles = readLearnedSellerProfiles()
+    const sellerKnown = (): Array<{ sellerTaxId?: string; sellerName?: string; sellerBranch?: string }> => [
+      ...learnedProfiles,
+      ...vendorProfiles,
+      ...rows,
+      ...extracted,
+    ]
+
+    const ingestLocalPage = (page: number, pageText: string) => {
+      const known = sellerKnown()
+      const blocks = splitScanTextIntoInvoiceBlocks(pageText)
+      if (blocks.length >= 2) {
+        for (const block of blocks) {
+          const local = fillSellerFromProfiles(extractPurchaseTaxInvoiceFromScanText(block, hint) || {}, known)
+          pushFromParsed(local, page, purchaseTaxInvoiceHasExtractedFields(local) ? undefined : t("ptiPdfEmptyPage"))
+        }
+        return
+      }
+      const local = fillSellerFromProfiles(extractPurchaseTaxInvoiceFromScanText(pageText, hint) || {}, known)
+      if (local && purchaseTaxInvoiceHasExtractedFields(local)) {
+        pushFromParsed(local, page)
+        return
+      }
+      pushFromParsed(local || {}, page, t("ptiPdfEmptyPage"))
+    }
+
     let ocr: TaxInvoiceOcrSession | null = null
     const textForPage = async (canvas: HTMLCanvasElement, printedText: string) => {
-      if (pdfPageTextIsReliableForExtract(printedText, hint)) return printedText
+      const work = pdfPageTextIsReliableForExtract(printedText, hint) ? canvas : prepareTaxInvoiceScanCanvas(canvas)
+      const qrs = await decodeTaxInvoiceQrsFromCanvas(work)
+      const withQr = [printedText, wrapTaxInvoiceQrText(qrs)].filter((s) => String(s || "").trim()).join("\n")
+      if (pdfPageTextIsReliableForExtract(printedText, hint)) return withQr
       if (!ocr) {
         setPdfBusy(t("ptiOcrLoading"))
         ocr = await createTaxInvoiceOcrSession()
       }
-      const ocrText = await ocr.recognize(canvas)
-      return [printedText, ocrText].filter((s) => String(s || "").trim()).join("\n")
+      const ocrText = await ocr.recognize(work, { skipQr: true })
+      let pageText = [withQr, ocrText].filter((s) => String(s || "").trim()).join("\n")
+      if (!purchaseTaxInvoiceTextExtractIsComplete(extractPurchaseTaxInvoiceFromScanText(pageText, hint), hint)) {
+        const extra = await ocr.recognizeSparseCrops(work)
+        pageText = [pageText, extra].filter((s) => String(s || "").trim()).join("\n")
+      }
+      return pageText
     }
 
     const yieldUi = () =>
@@ -477,7 +500,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             if (ac.signal.aborted) break
             setPdfProgress({ n: i, total })
             setPdfBusy(tr(t, "ptiPdfPage", { n: String(i), total: String(total) }))
-            const { canvas, images } = await renderTaxInvoicePageForScan(pdf, i)
+            const { canvas } = await renderTaxInvoicePageForScan(pdf, i)
             if (ac.signal.aborted) break
             const printed = await extractPdfPageText(pdf, i)
             if (!pdfPageTextIsReliableForExtract(printed, hint)) {
@@ -488,14 +511,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               pageText = await textForPage(canvas, printed)
             } catch {
               pageText = printed
+              setError((prev) => prev || t("ptiOcrFailed"))
             }
             if (ac.signal.aborted) break
-            const local = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
-            if (purchaseTaxInvoiceTextExtractIsComplete(local, hint) && local) {
-              pushFromParsed(local, i)
-            } else {
-              await ingestPageImages(images, i, file.name, pageText, local)
-            }
+            ingestLocalPage(i, pageText)
             setReviewRows([...extracted])
             await yieldUi()
           }
@@ -510,13 +529,63 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             pageText = await textForPage(canvas, "")
           } catch {
             pageText = ""
+            setError((prev) => prev || t("ptiOcrFailed"))
           }
           if (ac.signal.aborted) break
-          const local = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
-          if (purchaseTaxInvoiceTextExtractIsComplete(local, hint) && local) {
-            pushFromParsed(local, 1)
-          } else {
-            await ingestPageImages(images, 1, file.name, pageText, local)
+          ingestLocalPage(1, pageText)
+        }
+      }
+      if (!ac.signal.aborted) {
+        const tins = [
+          ...new Set(
+            extracted
+              .filter((r) => !String(r.sellerName || "").trim())
+              .map((r) => digitsTin13(r.sellerTaxId))
+              .filter((tin) => tin.length === 13 && thaiTinChecksumOk(tin))
+          ),
+        ].slice(0, 15)
+        if (tins.length) {
+          setPdfBusy(t("ptiRdLookup"))
+          const rdProfiles: PurchaseTaxSellerProfile[] = []
+          const queue = [...tins]
+          const workerCount = Math.min(4, queue.length)
+          await Promise.all(
+            Array.from({ length: workerCount }, async () => {
+              while (queue.length) {
+                if (ac.signal.aborted) return
+                const tin = queue.shift()
+                if (!tin) return
+                try {
+                  const res = await apiFetch(`/api/searchRdVatCompany?tin=${encodeURIComponent(tin)}`)
+                  const json: unknown = await res.json()
+                  const profile = parseRdSellerList(json, tin)
+                  if (profile) rdProfiles.push(profile)
+                } catch {
+                  /* lookup is best-effort */
+                }
+              }
+            })
+          )
+          if (rdProfiles.length) {
+            rememberSellerProfiles(rdProfiles)
+            for (let i = 0; i < extracted.length; i += 1) {
+              const row = extracted[i]
+              const filled = fillSellerFromProfiles(
+                {
+                  sellerTaxId: row.sellerTaxId,
+                  sellerName: row.sellerName,
+                  sellerBranch: row.sellerBranch,
+                },
+                rdProfiles
+              )
+              extracted[i] = {
+                ...row,
+                sellerName: String(filled.sellerName || row.sellerName).trim(),
+                sellerBranch: filled.sellerBranch
+                  ? displaySellerBranchForUi(formatSellerBranch(filled.sellerBranch), branchLabels)
+                  : row.sellerBranch,
+              }
+            }
           }
         }
       }
@@ -563,6 +632,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     if (!payload.length) return
     setSaving(true)
     try {
+      rememberSellerProfiles(payload)
       const res = await bulkSavePurchaseTaxInvoices(payload)
       if (!res.success) {
         setError(res.error || "save failed")
@@ -842,7 +912,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                       </button>
                     </td>
                     <td className="p-1">
-                      <Input className="h-7 w-[130px]" type="date" value={r.docDate} onChange={(e) => patchReview(idx, { docDate: e.target.value })} />
+                      <Input className={reviewWarnClass("h-7 w-[130px]", flags.includes("month"))} type="date" value={r.docDate} onChange={(e) => patchReview(idx, { docDate: e.target.value })} />
                     </td>
                     <td className="p-1">
                       <Input className="h-7 w-[120px]" value={r.invoiceNo} onChange={(e) => {
@@ -855,16 +925,16 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                       <Input className="h-7 min-w-[140px]" value={r.sellerName} onChange={(e) => patchReview(idx, { sellerName: e.target.value })} />
                     </td>
                     <td className="p-1">
-                      <Input className="h-7 w-[120px]" value={r.sellerTaxId} onChange={(e) => patchReview(idx, { sellerTaxId: e.target.value.replace(/\D/g, "").slice(0, 13) })} />
+                      <Input className={reviewWarnClass("h-7 w-[120px]", flags.includes("tin"))} value={r.sellerTaxId} onChange={(e) => patchReview(idx, { sellerTaxId: e.target.value.replace(/\D/g, "").slice(0, 13) })} />
                     </td>
                     <td className="p-1">
                       <Input className="h-7 w-[130px]" value={r.sellerBranch} onChange={(e) => patchReview(idx, { sellerBranch: e.target.value })} />
                     </td>
                     <td className="p-1">
-                      <Input className="h-7 w-[90px] text-right" value={r.netAmount} onChange={(e) => patchReview(idx, { netAmount: e.target.value })} />
+                      <Input className={reviewWarnClass("h-7 w-[90px] text-right", flags.includes("vat"))} value={r.netAmount} onChange={(e) => patchReview(idx, { netAmount: e.target.value })} />
                     </td>
                     <td className="p-1">
-                      <Input className="h-7 w-[90px] text-right" value={r.vatAmount} onChange={(e) => patchReview(idx, { vatAmount: e.target.value })} />
+                      <Input className={reviewWarnClass("h-7 w-[90px] text-right", flags.includes("vat"))} value={r.vatAmount} onChange={(e) => patchReview(idx, { vatAmount: e.target.value })} />
                     </td>
                     <td className="p-1 text-[10px]">
                       <label className="flex items-start gap-1">
@@ -954,6 +1024,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           <DialogHeader>
             <DialogTitle>{tr(t, "ptiPreviewTitle", { n: String(previewPage || "") })}</DialogTitle>
           </DialogHeader>
+          <p className="text-xs text-muted-foreground">{t("ptiPreviewHint")}</p>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="min-h-[200px] rounded border bg-muted/20 p-1">
               {previewBusy ? (
@@ -965,16 +1036,44 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               )}
             </div>
             <div className="space-y-2 text-xs">
-              {reviewRows.filter((r) => r.page === previewPage).map((r, i) => (
-                <div key={`${r.invoiceNo}-${i}`} className="rounded border p-2 space-y-1">
-                  <div>{t("ptiColInvoiceNo")}: {r.invoiceNo || "—"}</div>
-                  <div>{t("ptiColSeller")}: {r.sellerName || "—"}</div>
-                  <div>{t("ptiColSellerTaxId")}: {r.sellerTaxId || "—"}</div>
-                  <div>{t("ptiColDate")}: {r.docDate}</div>
-                  <div>{t("ptiColNet")}: {r.netAmount || "—"} · {t("ptiColVat")}: {r.vatAmount || "—"}</div>
-                  {r.skip ? <div className="text-muted-foreground">{r.skipReason}</div> : null}
+              {reviewRows.map((r, idx) => ({ r, idx })).filter(({ r }) => r.page === previewPage).map(({ r, idx }) => {
+                const flags = purchaseTaxReviewFlags(r, filingYearMonth)
+                return (
+                <div key={`${r.page}-${idx}`} className="rounded border p-2 space-y-2">
+                  <div>
+                    <Label className="text-[10px]">{t("ptiColInvoiceNo")}</Label>
+                    <Input className="h-7" value={r.invoiceNo} onChange={(e) => {
+                      const invoiceNo = e.target.value
+                      const unskipEmpty = r.skip && r.skipReason === t("ptiPdfEmptyPage") && invoiceNo.trim()
+                      patchReview(idx, { invoiceNo, skip: unskipEmpty ? false : r.skip, skipReason: unskipEmpty ? "" : r.skipReason })
+                    }} />
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">{t("ptiColSeller")}</Label>
+                    <Input className="h-7" value={r.sellerName} onChange={(e) => patchReview(idx, { sellerName: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">{t("ptiColSellerTaxId")}</Label>
+                    <Input className={reviewWarnClass("h-7", flags.includes("tin"))} value={r.sellerTaxId} onChange={(e) => patchReview(idx, { sellerTaxId: e.target.value.replace(/\D/g, "").slice(0, 13) })} />
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">{t("ptiColDate")}</Label>
+                    <Input className={reviewWarnClass("h-7", flags.includes("month"))} type="date" value={r.docDate} onChange={(e) => patchReview(idx, { docDate: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[10px]">{t("ptiColNet")}</Label>
+                      <Input className={reviewWarnClass("h-7", flags.includes("vat"))} value={r.netAmount} onChange={(e) => patchReview(idx, { netAmount: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label className="text-[10px]">{t("ptiColVat")}</Label>
+                      <Input className={reviewWarnClass("h-7", flags.includes("vat"))} value={r.vatAmount} onChange={(e) => patchReview(idx, { vatAmount: e.target.value })} />
+                    </div>
+                  </div>
+                  {r.skip ? <div className="text-muted-foreground">{r.skipReason}</div> : flags.length ? <div className="text-amber-700 dark:text-amber-400">{flags.map(flagLabel).join(" · ")}</div> : null}
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </DialogContent>

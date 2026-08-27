@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '계정과목을 선택해 주세요.' }, { status: 400, headers })
     }
     if (category === 'transfer_to_card' && !transferToCardAccountId) {
-      return NextResponse.json({ success: false, message: '충전할 카드를 선택해 주세요.' }, { status: 400, headers })
+      return NextResponse.json({ success: false, message: '연결할 카드를 선택해 주세요.' }, { status: 400, headers })
     }
     if (category === 'transfer_external' && (!transferBankAccountNo || !transferBankRecipientName)) {
       return NextResponse.json({ success: false, message: '계좌번호와 받는 사람을 입력해 주세요.' }, { status: 400, headers })

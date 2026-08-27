@@ -52,6 +52,8 @@ import {
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { formatBankAccountLabel } from "@/lib/bank-account-display"
 import { normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
+import { splitVatFromInclusiveGross } from "@/lib/expense-fee-vat"
+import { readLastCardAccountId, writeLastCardAccountId } from "@/lib/card-last-account"
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
@@ -66,6 +68,7 @@ type AllocationLineForm = {
   vatAmount: string
   invoiceReceived: boolean
   invoiceNo: string
+  vendorCode: string
 }
 
 function newAllocationLine(): AllocationLineForm {
@@ -77,6 +80,7 @@ function newAllocationLine(): AllocationLineForm {
     vatAmount: "",
     invoiceReceived: false,
     invoiceNo: "",
+    vendorCode: "",
   }
 }
 
@@ -231,9 +235,12 @@ export function CardManagementTab() {
   const openBankLinkDialog = (row: UnlinkedBankWithdrawalForCard) => {
     setBankLinkRow(row)
     setBankLinkMemo(row.memo || "")
+    const last = readLastCardAccountId()
     const defaultCard =
       filterCardId !== "__all__"
         ? filterCardId
+        : last && filteredCardAccounts.some((a) => String(a.id) === last)
+          ? last
         : filteredCardAccounts[0]?.id
           ? String(filteredCardAccounts[0].id)
           : ""
@@ -264,6 +271,7 @@ export function CardManagementTab() {
         return
       }
       setBankLinkRow(null)
+      writeLastCardAccountId(String(cardId))
       await loadTransactions()
       await loadUnlinkedBank()
       if (res.id) {
@@ -305,6 +313,7 @@ export function CardManagementTab() {
               vatAmount: l.vatAmount != null && l.vatAmount > 0 ? String(l.vatAmount) : "",
               invoiceReceived: Boolean(l.invoiceReceived),
               invoiceNo: l.invoiceNo || "",
+              vendorCode: l.vendorCode || "",
             }))
           : [newAllocationLine()]
       setAllocateLines(lines)
@@ -346,6 +355,7 @@ export function CardManagementTab() {
         vatAmount: parseMoneyAmount(l.vatAmount) || undefined,
         invoiceReceived: l.invoiceReceived,
         invoiceNo: l.invoiceReceived ? l.invoiceNo.trim() || undefined : undefined,
+        vendorCode: l.vendorCode && l.vendorCode !== "__none__" ? l.vendorCode.trim() : undefined,
       }))
       .filter((l) => l.accountSubjectId > 0 && l.amount > 0)
     if (lines.length === 0) {
@@ -439,14 +449,11 @@ export function CardManagementTab() {
   }, [])
 
   const summary = React.useMemo(() => {
-    let totalCharge = 0
-    let totalExpense = 0
-    for (const tx of transactions) {
-      if (tx.isBillHeader) continue
-      if (tx.transType === "charge") totalCharge += tx.amount
-      else totalExpense += tx.amount
-    }
-    return { totalCharge, totalExpense, balance: totalCharge - totalExpense }
+    const headers = transactions.filter((tx) => tx.isBillHeader)
+    const billTotal = headers.reduce((s, h) => s + (h.amount || 0), 0)
+    const allocated = headers.filter((h) => h.allocationComplete).reduce((s, h) => s + (h.amount || 0), 0)
+    const pending = headers.filter((h) => !h.allocationComplete).reduce((s, h) => s + (h.amount || 0), 0)
+    return { billTotal, allocated, pending }
   }, [transactions])
 
   const openAccountForm = (a?: CardAccount) => {
@@ -514,7 +521,16 @@ export function CardManagementTab() {
     const list = filterStore && filterStore !== "__all__"
       ? cardAccounts.filter((a) => (a.store || "") === filterStore)
       : cardAccounts
-    setTransFormCardId(tx ? String(tx.cardAccountId) : list[0] ? String(list[0].id) : "")
+    const last = readLastCardAccountId()
+    setTransFormCardId(
+      tx
+        ? String(tx.cardAccountId)
+        : last && list.some((a) => String(a.id) === last)
+          ? last
+          : list[0]
+            ? String(list[0].id)
+            : ""
+    )
     setTransFormDate(tx?.transDate || todayStrBkk())
     setTransFormType(tx?.transType || "expense")
     setTransFormAmount(tx ? String(tx.amount) : "")
@@ -546,6 +562,7 @@ export function CardManagementTab() {
         note: transFormType === "expense" ? transFormNote.trim() || undefined : undefined,
       })
       if (res.success) {
+        writeLastCardAccountId(String(cardId))
         setTransDialogOpen(false)
         loadTransactions()
       } else {
@@ -781,6 +798,9 @@ export function CardManagementTab() {
               {tt("cardManagementAddTransaction", "Add Transaction")}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            {tt("cardManagementManualTxnHint", "월 대금은 통장 출금 연결로 처리하세요. 여기는 예외 수동 입력용입니다.")}
+          </p>
 
           {pendingBillHeaders.length > 0 ? (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/30 p-3">
@@ -807,18 +827,18 @@ export function CardManagementTab() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{tt("cardManagementTotalCharge", "Total Charge")}</div>
-              <div className="text-lg font-semibold tabular-nums text-green-600">{fmt(summary.totalCharge)}</div>
+              <div className="text-xs text-muted-foreground">{tt("cardManagementKpiBillTotal", "월 대금")}</div>
+              <div className="text-lg font-semibold tabular-nums">{fmt(summary.billTotal)}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{tt("cardManagementTotalExpense", "Total Expense")}</div>
-              <div className="text-lg font-semibold tabular-nums text-orange-600">{fmt(summary.totalExpense)}</div>
+              <div className="text-xs text-muted-foreground">{tt("cardManagementKpiAllocated", "배분 완료")}</div>
+              <div className="text-lg font-semibold tabular-nums text-green-600">{fmt(summary.allocated)}</div>
             </div>
             <div className="rounded-lg border p-3 bg-primary/5">
-              <div className="text-xs text-muted-foreground">{tt("cardManagementBalance", "Unsettled Balance")}</div>
-              <div className={`text-lg font-bold tabular-nums ${summary.balance >= 0 ? "text-primary" : "text-destructive"}`}>{fmt(summary.balance)}</div>
+              <div className="text-xs text-muted-foreground">{tt("cardManagementKpiPending", "배분 대기")}</div>
+              <div className={`text-lg font-bold tabular-nums ${summary.pending > 0 ? "text-amber-700" : "text-primary"}`}>{fmt(summary.pending)}</div>
             </div>
           </div>
 
@@ -1108,7 +1128,10 @@ export function CardManagementTab() {
               </div>
               <div>
                 <label className="text-sm font-medium">{tt("cardManagementSelectCard", "Card")}</label>
-                <Select value={bankLinkCardId} onValueChange={setBankLinkCardId}>
+                <Select value={bankLinkCardId} onValueChange={(v) => {
+                  setBankLinkCardId(v)
+                  if (v) writeLastCardAccountId(v)
+                }}>
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
                   </SelectTrigger>
@@ -1148,8 +1171,10 @@ export function CardManagementTab() {
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">{tt("cardManagementAllocateRemaining", "Unallocated")}</span>
-                  <span className={`font-semibold tabular-nums ${Math.abs(allocateHeader.totalAmount - allocateSum) > 0.01 ? "text-amber-700" : "text-green-600"}`}>
-                    {fmt(Math.max(0, allocateHeader.totalAmount - allocateSum))}
+                  <span className={`font-semibold tabular-nums ${allocateHeader.totalAmount - allocateSum < -0.01 ? "text-destructive" : Math.abs(allocateHeader.totalAmount - allocateSum) > 0.01 ? "text-amber-700" : "text-green-600"}`}>
+                    {allocateHeader.totalAmount - allocateSum < -0.01
+                      ? `${tt("cardManagementAllocateOver", "초과")} ${fmt(Math.abs(allocateHeader.totalAmount - allocateSum))}`
+                      : fmt(Math.max(0, allocateHeader.totalAmount - allocateSum))}
                   </span>
                 </div>
                 {allocateHeader.memo ? (
@@ -1207,6 +1232,49 @@ export function CardManagementTab() {
                       </Button>
                     </div>
                     <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-xs text-muted-foreground">{tt("vendor", "Vendor")}</label>
+                        <VendorRdSearchButton
+                          triggerSize="sm"
+                          triggerVariant="ghost"
+                          triggerClassName="h-7 px-2 text-[11px]"
+                          onPick={(c) => {
+                            const matched = vendors.find((v) => v.name.trim() === c.name.trim())
+                            if (matched) {
+                              const next = [...allocateLines]
+                              next[idx] = { ...line, vendorCode: matched.code }
+                              setAllocateLines(next)
+                            } else {
+                              void appAlert(
+                                tt(
+                                  "vendorRdPickSaveVendorFirst",
+                                  "Save this company in Vendors first, then select it here."
+                                ) + `\n${c.name} (${c.taxId})`
+                              )
+                            }
+                          }}
+                        />
+                      </div>
+                      <Select
+                        value={line.vendorCode || "__none__"}
+                        onValueChange={(v) => {
+                          const next = [...allocateLines]
+                          next[idx] = { ...line, vendorCode: v === "__none__" ? "" : v }
+                          setAllocateLines(next)
+                        }}
+                      >
+                        <SelectTrigger className="mt-0.5 h-9">
+                          <SelectValue placeholder="—" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">—</SelectItem>
+                          {vendors.map((v) => (
+                            <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
                       <label className="text-xs text-muted-foreground">{tt("memo", "Memo")}</label>
                       <Input
                         className="mt-0.5 h-9"
@@ -1235,6 +1303,20 @@ export function CardManagementTab() {
                           }}
                         />
                       </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => {
+                          const { vat } = splitVatFromInclusiveGross(parseMoneyAmount(line.amount))
+                          const next = [...allocateLines]
+                          next[idx] = { ...line, vatAmount: vat > 0 ? String(vat) : "" }
+                          setAllocateLines(next)
+                        }}
+                      >
+                        {tt("cardManagementAllocateVat7", "VAT 7%")}
+                      </Button>
                       <label className="flex items-center gap-2 cursor-pointer pb-1.5">
                         <Checkbox
                           checked={line.invoiceReceived}

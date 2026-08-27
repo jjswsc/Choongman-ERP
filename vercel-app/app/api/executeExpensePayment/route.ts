@@ -14,6 +14,12 @@ import {
   isSettledExpensePayment,
   settledPaidAbsFromPayableRows,
 } from '@/lib/expense-accrual-settlement'
+import {
+  canBundleExpenseWithdrawalCategories,
+  EXPENSE_BANK_MULTI_LINK_MAX,
+  expensePlanPickTotalMatchesBank,
+  parseExpensePaymentAccrualIds,
+} from '@/lib/expense-accrual-bank-multi-link'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 import { propagateExpenseAccrualInvoiceToLinkedBank } from '@/lib/expense-accrual-invoice-sync'
 import { propagateExpenseAccrualInvoiceToLinkedPetty } from '@/lib/petty-cash-invoice-sync'
@@ -203,6 +209,368 @@ function invoiceFieldsFromAccrual(
   }
 }
 
+async function loadAccrualPaidMap(accrualIds: number[]): Promise<{
+  paidByAccrual: Map<number, number>
+  bankNoteById: Map<number, string>
+  paymentRowsByAccrual: Map<number, { id?: number; amount?: number; bank_transaction_id?: number | null; petty_cash_transaction_id?: number | null }[]>
+}> {
+  const paymentRowsByAccrual = new Map<
+    number,
+    { id?: number; amount?: number; bank_transaction_id?: number | null; petty_cash_transaction_id?: number | null }[]
+  >()
+  const payableByAccrual: {
+    amount?: number
+    expense_accrual_id?: number
+    bank_transaction_id?: number | null
+    petty_cash_transaction_id?: number | null
+    id?: number
+  }[] = []
+  if (accrualIds.length > 0) {
+    const payableRows = (await supabaseSelectFilter(
+      'payable_transactions',
+      `expense_accrual_id=in.(${accrualIds.join(',')})&ref_type=eq.Payment`,
+      { select: 'id,amount,expense_accrual_id,bank_transaction_id,petty_cash_transaction_id', limit: 200 }
+    )) as {
+      id?: number
+      amount?: number
+      expense_accrual_id?: number
+      bank_transaction_id?: number | null
+      petty_cash_transaction_id?: number | null
+    }[] | null
+    for (const tx of payableRows || []) {
+      payableByAccrual.push(tx)
+      const aid = Number(tx.expense_accrual_id || 0)
+      if (aid <= 0) continue
+      const list = paymentRowsByAccrual.get(aid) || []
+      list.push(tx)
+      paymentRowsByAccrual.set(aid, list)
+    }
+  }
+  const linkedBankIds = [
+    ...new Set(payableByAccrual.map((tx) => Number(tx.bank_transaction_id || 0)).filter((id) => id > 0)),
+  ]
+  const bankNoteById = new Map<number, string>()
+  if (linkedBankIds.length > 0) {
+    const noteRows = (await supabaseSelectFilter(
+      'bank_transactions',
+      `id=in.(${linkedBankIds.join(',')})`,
+      { select: 'id,note', limit: 200 }
+    )) as { id?: number; note?: string | null }[] | null
+    for (const b of noteRows || []) {
+      const id = Number(b.id || 0)
+      if (id > 0) bankNoteById.set(id, String(b.note || ''))
+    }
+  }
+  const paidByAccrual = new Map<number, number>()
+  for (const tx of payableByAccrual) {
+    const accrualId = Number(tx.expense_accrual_id || 0)
+    if (!accrualId) continue
+    const add = settledPaidAbsFromPayableRows([tx], { bankNoteById, excludeInternalBank: true })
+    if (add <= 0) continue
+    paidByAccrual.set(accrualId, (paidByAccrual.get(accrualId) || 0) + add)
+  }
+  return { paidByAccrual, bankNoteById, paymentRowsByAccrual }
+}
+
+async function linkMultipleExpenseAccrualsToExistingBank(params: {
+  headers: Headers
+  userName: string
+  userEmployeeId: number | null
+  userEmployeeCode: string | null
+  accrualIds: number[]
+  amount: number
+  transDate: string
+  memo: string
+  store: string
+  bankTransactionId: number
+}): Promise<NextResponse> {
+  const { headers, userName, userEmployeeId, userEmployeeCode, accrualIds, amount, transDate, memo, store } = params
+  const existingBankId = params.bankTransactionId
+  if (accrualIds.length > EXPENSE_BANK_MULTI_LINK_MAX) {
+    return NextResponse.json(
+      { success: false, message: `한 통장에 연결할 지급예정은 최대 ${EXPENSE_BANK_MULTI_LINK_MAX}건입니다.` },
+      { status: 400, headers }
+    )
+  }
+
+  const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${existingBankId}`, { limit: 1 })) as BankTxRow[] | null
+  const bankRow = bankRows?.[0]
+  if (!bankRow?.id) {
+    return NextResponse.json({ success: false, message: '선택한 통장 거래를 찾을 수 없습니다.' }, { status: 404, headers })
+  }
+  if (String(bankRow.trans_type || '').toLowerCase() !== 'withdraw') {
+    return NextResponse.json({ success: false, message: '출금 거래만 연결할 수 있습니다.' }, { status: 400, headers })
+  }
+  const bankAmount = parseMoneyAmount(bankRow.amount)
+  const bankDate = String(bankRow.trans_date || '').slice(0, 10)
+  if (!moneyEqual(bankAmount, amount)) {
+    return NextResponse.json(
+      { success: false, message: `금액이 일치하지 않습니다. (통장: ${bankAmount.toLocaleString()}, 지급: ${amount.toLocaleString()})` },
+      { status: 400, headers }
+    )
+  }
+  if (bankDate !== transDate) {
+    return NextResponse.json(
+      { success: false, message: `날짜가 일치하지 않습니다. (통장: ${bankDate}, 지급: ${transDate})` },
+      { status: 400, headers }
+    )
+  }
+  const linkedPayable = (await supabaseSelectFilter(
+    'payable_transactions',
+    `bank_transaction_id=eq.${existingBankId}`,
+    { limit: 1 }
+  )) as { id?: number }[] | null
+  if (linkedPayable?.length) {
+    return NextResponse.json({ success: false, message: '이미 다른 지출/매입과 연결된 통장 거래입니다.' }, { status: 400, headers })
+  }
+
+  const accrualRows = (await supabaseSelectFilter(
+    'expense_accruals',
+    `id=in.(${accrualIds.join(',')})`,
+    {
+      select:
+        'id,payee_code,payee_name,amount,withholding_tax_amount,vat_amount,expense_date,due_date,memo,store_name,account_subject_id,status,invoice_received,invoice_no,invoice_photo_url,document_no,document_type',
+      limit: accrualIds.length,
+    }
+  )) as ExpenseAccrualRow[] | null
+  const byId = new Map<number, ExpenseAccrualRow>()
+  for (const r of accrualRows || []) {
+    const id = Number(r.id || 0)
+    if (id > 0) byId.set(id, r)
+  }
+  const ordered: ExpenseAccrualRow[] = []
+  for (const id of accrualIds) {
+    const row = byId.get(id)
+    if (!row) {
+      return NextResponse.json({ success: false, message: '지출 발생 데이터를 찾을 수 없습니다.' }, { status: 404, headers })
+    }
+    ordered.push(row)
+  }
+
+  const { paidByAccrual, bankNoteById, paymentRowsByAccrual } = await loadAccrualPaidMap(accrualIds)
+  const remainingById = new Map<number, number>()
+  const categories: string[] = []
+  for (const source of ordered) {
+    const id = Number(source.id || 0)
+    const accrualStatus = String(source.status || '').toLowerCase()
+    if (accrualStatus === 'rejected') {
+      return NextResponse.json({ success: false, message: '반려된 지급 예정은 집행할 수 없습니다.' }, { status: 400, headers })
+    }
+    if (accrualStatus === 'planned') {
+      return NextResponse.json({ success: false, message: '관리자 승인 후 집행할 수 있습니다.' }, { status: 400, headers })
+    }
+    if (accrualStatus !== 'approved' && accrualStatus !== 'partial' && accrualStatus !== 'paid' && accrualStatus !== 'done') {
+      return NextResponse.json({ success: false, message: '승인 상태를 확인할 수 없습니다.' }, { status: 400, headers })
+    }
+    const paidAmount = paidByAccrual.get(id) || 0
+    const wht = Math.max(0, Math.abs(Number(source.withholding_tax_amount ?? 0) || 0))
+    const plannedAmount = expenseAccrualNetPayable(parseMoneyAmount(source.amount), wht)
+    const remaining = Math.max(0, plannedAmount - paidAmount)
+    if (!(remaining > 0)) {
+      return NextResponse.json({ success: false, message: '이미 지급 완료된 건입니다.' }, { status: 400, headers })
+    }
+    remainingById.set(id, remaining)
+    categories.push(decodePayeeCode(source.payee_code).withdrawalCategory)
+  }
+
+  const bundle = canBundleExpenseWithdrawalCategories(categories)
+  if (!bundle.ok) {
+    return NextResponse.json({ success: false, message: bundle.message }, { status: 400, headers })
+  }
+
+  const remainingSum = [...remainingById.values()].reduce((s, n) => s + n, 0)
+  if (!expensePlanPickTotalMatchesBank(bankAmount, remainingSum)) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: `여러 지급예정을 한 통장에 연결할 때는 합계가 통장 금액과 같아야 합니다. (통장: ${bankAmount.toLocaleString()}, 합계: ${remainingSum.toLocaleString()})`,
+      },
+      { status: 400, headers }
+    )
+  }
+
+  const first = ordered[0]!
+  const firstDecoded = decodePayeeCode(first.payee_code)
+  const firstCategory = firstDecoded.withdrawalCategory
+  const isPrepay = isPrepaymentAccrualCategory(firstCategory)
+  const bankCategory = mapWithdrawalCategoryToBankCategory(firstCategory)
+  const firstAccountSubjectId = resolveAccrualAccountSubjectId(first)
+  const bankExpenseDate = bankExpenseDateWhenPayingPayrollAccrual(
+    first.payee_code,
+    first.expense_date,
+    transDate
+  )
+  const paymentMemo = memo || `지출 지급(${ordered.length}건)`
+  const linkedBankMemo = String(bankRow.memo || '').trim()
+
+  let firstVendorCode =
+    firstDecoded.payeeCode && !firstDecoded.payeeCode.startsWith('auto_') && !firstDecoded.payeeCode.startsWith('card_')
+      ? firstDecoded.payeeCode.trim()
+      : ''
+  if (!firstVendorCode) {
+    firstVendorCode =
+      (await resolveVendorCodeLoose(firstDecoded.payeeCode)) ||
+      (await resolveVendorCodeLoose(first.payee_name)) ||
+      ''
+  }
+
+  await updateBankTransactionWithIdentityFallback(existingBankId, {
+    note: composeBankNoteForExpenseAccrualLink(String(bankRow.note || ''), Number(first.id || 0), firstCategory),
+    category: bankCategory,
+    vendor_code: firstVendorCode || null,
+    expense_date: bankExpenseDate,
+    store: store || first.store_name || null,
+    account_subject_id: firstAccountSubjectId,
+    user_employee_id: userEmployeeId,
+    user_employee_code: userEmployeeCode,
+    ...invoiceFieldsFromAccrual(first),
+  })
+
+  if (!isPrepay) {
+    await postExpensePaymentGlJournal({
+      isPrepay,
+      withdrawalCategory: firstCategory,
+      sourceType: 'bank_transaction',
+      sourceId: existingBankId,
+      accountingDate: transDate,
+      amountAbs: bankAmount,
+      memo: paymentMemo,
+      storeName: store || first.store_name || undefined,
+      postedBy: userName || undefined,
+      logLabel: 'executeExpensePayment bank multi-link posting:',
+    })
+  }
+
+  for (const source of ordered) {
+    const expenseAccrualId = Number(source.id || 0)
+    const remaining = remainingById.get(expenseAccrualId) || 0
+    const decoded = decodePayeeCode(source.payee_code)
+    const withdrawalCategory = decoded.withdrawalCategory
+    let vendorCode =
+      decoded.payeeCode && !decoded.payeeCode.startsWith('auto_') && !decoded.payeeCode.startsWith('card_')
+        ? decoded.payeeCode.trim()
+        : ''
+    if (!vendorCode) {
+      if (isTaxSettlementWithdrawalCategory(withdrawalCategory)) {
+        vendorCode = decoded.payeeCode || `tax_${withdrawalCategory}`
+      } else {
+        vendorCode =
+          (await resolveVendorCodeLoose(decoded.payeeCode)) ||
+          (await resolveVendorCodeLoose(source.payee_name)) ||
+          ''
+      }
+    }
+    if (!vendorCode) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
+        },
+        { status: 400, headers }
+      )
+    }
+
+    let documentNo = String(source.document_no || '').trim() || null
+    if (!documentNo) {
+      try {
+        documentNo = await allocateExpenseDocumentNo(source.expense_date || transDate)
+        await supabaseUpdate('expense_accruals', expenseAccrualId, { document_no: documentNo })
+      } catch (docErr) {
+        console.error('executeExpensePayment document_no:', docErr)
+      }
+    }
+
+    const existingPaymentRows = paymentRowsByAccrual.get(expenseAccrualId) || []
+    for (const row of existingPaymentRows) {
+      const id = Number(row.id || 0)
+      if (id <= 0) continue
+      if (isSettledExpensePayment(row) && isRealBankOrPettySettlement(row, bankNoteById)) continue
+      const internalBankId = Number(row.bank_transaction_id || 0)
+      await supabaseDeleteByFilter('payable_transactions', `id=eq.${id}`)
+      if (
+        internalBankId > 0 &&
+        isExpenseInternalBankNote(bankNoteById.get(internalBankId) || '') &&
+        internalBankId !== existingBankId
+      ) {
+        try {
+          await deleteJournalEntriesBySource('bank_transaction', internalBankId)
+        } catch (e) {
+          console.warn('executeExpensePayment clear internal bank journal:', e)
+        }
+        try {
+          await supabaseDeleteByFilter('bank_transactions', `id=eq.${internalBankId}`)
+        } catch (e) {
+          console.warn('executeExpensePayment clear internal bank row:', e)
+        }
+      }
+    }
+
+    const paymentMemoLine = buildBankLinkedPayablePaymentMemo({
+      bankMemo: linkedBankMemo,
+      fallbackDetail: memo || `지출 지급(${source.payee_name || decoded.payeeCode})`,
+    })
+    const upserted = await upsertPayableFromBankPurchasePayment({
+      bankTransactionId: existingBankId,
+      vendorCode,
+      amountAbs: remaining,
+      transDate,
+      memo: paymentMemoLine,
+      expenseAccrualId,
+      expenseDate: source.expense_date || transDate,
+      dueDate: source.due_date || null,
+      accountSubjectId: resolveAccrualAccountSubjectId(source),
+    })
+    const linkedCheck = upserted
+      ? ((await supabaseSelectFilter(
+          'payable_transactions',
+          `bank_transaction_id=eq.${existingBankId}&expense_accrual_id=eq.${expenseAccrualId}&ref_type=eq.Payment`,
+          { select: 'id', limit: 1 }
+        )) as { id?: number }[] | null)
+      : null
+    if (!linkedCheck?.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            '통장 연결 Payment 생성에 실패했습니다. 지급예정 상태가 paid 로만 남지 않도록 중단했습니다. 거래처 코드·금액을 확인 후 다시 연결해 주세요.',
+        },
+        { status: 500, headers }
+      )
+    }
+    await supabaseUpdate('expense_accruals', expenseAccrualId, {
+      status: 'paid',
+      updated_at: new Date().toISOString(),
+    })
+    try {
+      await dedupePayablePaymentsForExpenseAccrual(expenseAccrualId)
+    } catch (dedupeErr) {
+      console.warn('executeExpensePayment accrual payable dedupe:', dedupeErr)
+    }
+    try {
+      await propagateExpenseAccrualInvoiceToLinkedBank(expenseAccrualId)
+    } catch (propErr) {
+      console.error('executeExpensePayment invoice propagate bank:', propErr)
+    }
+  }
+
+  try {
+    await dedupePayablePaymentsForBankTransaction(existingBankId)
+  } catch (dedupeErr) {
+    console.warn('executeExpensePayment payable dedupe:', dedupeErr)
+  }
+
+  return NextResponse.json(
+    {
+      success: true,
+      message: '지급 처리되었습니다.',
+      bankTransactionId: existingBankId,
+      remainingAmount: 0,
+      linkedCount: ordered.length,
+    },
+    { headers }
+  )
+}
+
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -224,7 +592,8 @@ export async function POST(request: NextRequest) {
         : null
     const userEmployeeCode = String(auth.employeeCode || '').trim() || null
 
-    const expenseAccrualId = Number(body.expenseAccrualId || body.expense_accrual_id || 0)
+    const expenseAccrualIds = parseExpensePaymentAccrualIds(body)
+    const expenseAccrualId = expenseAccrualIds[0] || 0
     const paymentMethod = String(body.paymentMethod || body.payment_method || '').toLowerCase() // bank | petty
     const bankTransactionId = body.bankTransactionId ?? body.bank_transaction_id
     const amount = parseMoneyAmount(body.amount)
@@ -232,7 +601,7 @@ export async function POST(request: NextRequest) {
     const memo = String(body.memo || '').trim()
     const store = String(body.store || '').trim()
 
-    if (!expenseAccrualId) {
+    if (expenseAccrualIds.length === 0) {
       return NextResponse.json({ success: false, message: '지출 발생 ID가 필요합니다.' }, { status: 400, headers })
     }
     if (amount <= 0) {
@@ -243,6 +612,34 @@ export async function POST(request: NextRequest) {
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(transDate)) {
       return NextResponse.json({ success: false, message: '지급일 형식이 올바르지 않습니다.' }, { status: 400, headers })
+    }
+
+    if (expenseAccrualIds.length > 1) {
+      if (paymentMethod !== 'bank') {
+        return NextResponse.json(
+          { success: false, message: '여러 지급예정을 한 번에 연결할 때는 통장 출금만 사용할 수 있습니다.' },
+          { status: 400, headers }
+        )
+      }
+      const existingBankId = bankTransactionId != null ? Number(bankTransactionId) : 0
+      if (!existingBankId) {
+        return NextResponse.json(
+          { success: false, message: '여러 지급예정을 연결할 때는 통장 거래를 선택해 주세요.' },
+          { status: 400, headers }
+        )
+      }
+      return await linkMultipleExpenseAccrualsToExistingBank({
+        headers,
+        userName,
+        userEmployeeId,
+        userEmployeeCode,
+        accrualIds: expenseAccrualIds,
+        amount,
+        transDate,
+        memo,
+        store,
+        bankTransactionId: existingBankId,
+      })
     }
 
     const accrual = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {

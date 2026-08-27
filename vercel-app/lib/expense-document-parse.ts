@@ -7,16 +7,12 @@ import {
 } from '@/lib/interior-quote-amount-parse'
 import { parseVendorNameHintFromText } from '@/lib/expense-ocr-suggestions'
 import {
-  parsePurchaseTaxInvoiceVisionPayload,
   purchaseTaxInvoiceHasExtractedFields,
   type ExtractedPurchaseTaxInvoiceFields,
 } from '@/lib/purchase-tax-invoice-core'
 import {
-  buildTaxInvoiceVisionSystemPrompt,
-  buildTaxInvoiceVisionUserPrompt,
-  mergePurchaseTaxInvoiceExtract,
+  extractPurchaseTaxInvoiceFromScanText,
   parsePurchaseTaxInvoiceFromPdfText,
-  purchaseTaxInvoiceTextExtractIsComplete,
   repairExtractedPurchaseTaxInvoice,
   type PurchaseTaxInvoiceScanHint,
 } from '@/lib/purchase-tax-invoice-scan'
@@ -554,83 +550,18 @@ function finalizePurchaseTaxInvoices(
     .filter(purchaseTaxInvoiceHasExtractedFields)
 }
 
-export async function extractPurchaseTaxInvoiceWithVision(
-  dataUrl: string,
-  hint?: PurchaseTaxInvoiceScanHint
-): Promise<ParsedPurchaseTaxInvoice | null> {
-  const { invoices } = await extractPurchaseTaxInvoicesFromImages([dataUrl], hint)
-  return invoices[0] || null
-}
-
 export async function extractPurchaseTaxInvoicesFromImages(
-  dataUrls: string[],
+  _dataUrls: string[],
   hint?: PurchaseTaxInvoiceScanHint
 ): Promise<{ invoices: ParsedPurchaseTaxInvoice[]; openaiUsed: boolean; error?: string }> {
-  const fromText = hint?.pageText ? parsePurchaseTaxInvoiceFromPdfText(hint.pageText, hint) : null
-  if (purchaseTaxInvoiceTextExtractIsComplete(fromText, hint)) {
-    return { invoices: finalizePurchaseTaxInvoices([fromText!], hint), openaiUsed: false }
+  const pageText = String(hint?.pageText || '').trim()
+  const fromText = pageText
+    ? extractPurchaseTaxInvoiceFromScanText(pageText, hint) || parsePurchaseTaxInvoiceFromPdfText(pageText, hint)
+    : null
+  if (fromText && purchaseTaxInvoiceHasExtractedFields(fromText)) {
+    return { invoices: finalizePurchaseTaxInvoices([fromText], hint), openaiUsed: false }
   }
-
-  const apiKey = process.env.OPENAI_API_KEY?.trim()
-  if (!apiKey) {
-    if (fromText) return { invoices: finalizePurchaseTaxInvoices([fromText], hint), openaiUsed: false }
-    return { invoices: [], openaiUsed: false, error: 'no_openai_key' }
-  }
-
-  const urls = dataUrls.filter((u) => typeof u === 'string' && u.startsWith('data:image/')).slice(0, 3)
-  if (!urls.length) {
-    if (fromText) return { invoices: finalizePurchaseTaxInvoices([fromText], hint), openaiUsed: false }
-    return { invoices: [], openaiUsed: false, error: 'no_image' }
-  }
-
-  const model = process.env.OPENAI_TAX_INVOICE_MODEL?.trim() || 'gpt-4o'
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      max_tokens: 1600,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: buildTaxInvoiceVisionSystemPrompt() },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: buildTaxInvoiceVisionUserPrompt(hint) },
-            ...urls.map((url) => ({
-              type: 'image_url' as const,
-              image_url: { url, detail: 'high' as const },
-            })),
-          ],
-        },
-      ],
-    }),
-  })
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    console.error('openai tax invoice', res.status, errText.slice(0, 400))
-    if (fromText) return { invoices: finalizePurchaseTaxInvoices([fromText], hint), openaiUsed: false, error: `openai_${res.status}` }
-    return { invoices: [], openaiUsed: false, error: `openai_${res.status}` }
-  }
-  const json = (await res.json()) as { choices?: { message?: { content?: string } }[] }
-  const raw = json.choices?.[0]?.message?.content?.trim() || ''
-  const visionRows = parsePurchaseTaxInvoiceVisionPayload(raw)
-  const invoices = (visionRows.length ? visionRows : fromText ? [fromText] : []).map((row, idx) =>
-    idx === 0 && fromText ? mergePurchaseTaxInvoiceExtract(row, fromText) || row : row
-  )
-  const finalized = finalizePurchaseTaxInvoices(
-    invoices.filter((row): row is ParsedPurchaseTaxInvoice => !!row),
-    hint
-  )
-  return {
-    invoices: finalized,
-    openaiUsed: true,
-    error: finalized.length ? undefined : 'empty_extract',
-  }
+  return { invoices: [], openaiUsed: false, error: 'empty_extract' }
 }
 
 export async function extractPurchaseTaxInvoiceFromDataUrl(

@@ -11,6 +11,7 @@ import {
   purchaseTaxDocMonthMismatch,
   purchaseTaxInvoiceDedupeKey,
   purchaseTaxInvoiceHasExtractedFields,
+  purchaseTaxReviewFlags,
   purchaseTaxReviewIsProblem,
   purchaseTaxPp30Compare,
   purchaseTaxVatLooksWrong,
@@ -188,6 +189,23 @@ describe('purchase tax invoice helpers', () => {
     expect(parsePurchaseTaxInvoiceVisionPayload('{"invoices":[{}]}')).toEqual([])
     expect(parsePurchaseTaxInvoiceVisionPayload('not json')).toEqual([])
   })
+
+  it('parses snake_case vision fields and a nested invoice object', () => {
+    const rows = parsePurchaseTaxInvoiceVisionPayload(`{
+      "invoice": {
+        "invoice_no": "IV-9",
+        "seller_name": "ABC Co",
+        "seller_tax_id": "0105559082715",
+        "net_amount": 100,
+        "vat_amount": 7
+      }
+    }`)
+    expect(rows[0]?.invoiceNo).toBe('IV-9')
+    expect(rows[0]?.sellerName).toBe('ABC Co')
+    expect(rows[0]?.sellerTaxId).toBe('0105559082715')
+    expect(rows[0]?.netAmount).toBe(100)
+    expect(rows[0]?.vatAmount).toBe(7)
+  })
 })
 
 describe('purchase tax review flags', () => {
@@ -201,6 +219,21 @@ describe('purchase tax review flags', () => {
   it('flags invoice month different from filing month', () => {
     expect(purchaseTaxDocMonthMismatch('2026-07-01', '2026-08')).toBe(true)
     expect(purchaseTaxDocMonthMismatch('2026-08-19', '2026-08')).toBe(false)
+  })
+
+  it('flags a 13-digit TIN with a bad checksum', () => {
+    expect(
+      purchaseTaxReviewFlags(
+        { invoiceNo: 'A', sellerTaxId: '0105559082716', docDate: '2026-08-01', netAmount: 100, vatAmount: 7 },
+        '2026-08'
+      )
+    ).toContain('tin')
+    expect(
+      purchaseTaxReviewFlags(
+        { invoiceNo: 'A', sellerTaxId: '0105559082715', docDate: '2026-08-01', netAmount: 100, vatAmount: 7 },
+        '2026-08'
+      )
+    ).not.toContain('tin')
   })
 
   it('treats skipped and incomplete TIN rows as problems', () => {

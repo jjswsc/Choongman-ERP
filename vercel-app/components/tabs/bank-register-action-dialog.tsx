@@ -22,6 +22,7 @@ import { appAlert, appPrompt } from "@/lib/app-message"
 import {
   approveExpenseAccrual,
   executeExpensePayment,
+  getApprovedExpenseAccrualsForBankTx,
   linkReceivableFromBankTransaction,
   addReceivableStoreCredit,
   invalidateReceivablePayableListCache,
@@ -46,6 +47,13 @@ import {
   parseMoneyAmount,
 } from "@/lib/money-amount"
 import {
+  defaultExpenseBankComboPeriod,
+  expensePlanPickTotalMatchesBank,
+  isExpenseBankComboPeriodReady,
+  isExpenseBankComboSearchReady,
+  sumExpensePlanPickAmount,
+} from "@/lib/expense-accrual-bank-multi-link"
+import {
   canSaveReceivablePickWithMismatch,
   roundReceivableMoney,
   sumOpenReceivablePickAmount,
@@ -66,8 +74,8 @@ export interface BankRegisterActionDialogProps {
   setApprovedPickRow: (row: BankTransactionRow | null) => void
   approvedPickList: ExpenseAccrualPlanItem[]
   setApprovedPickList: (list: ExpenseAccrualPlanItem[]) => void
-  approvedPickId: string
-  setApprovedPickId: (id: string) => void
+  approvedPickIds: number[]
+  setApprovedPickIds: React.Dispatch<React.SetStateAction<number[]>>
   approvedPickLoading: boolean
   approvedPickSaving: boolean
   setApprovedPickSaving: (v: boolean) => void
@@ -116,7 +124,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
   const {
     registerActionRow, setRegisterActionRow, openApprovedPick,
     approvedPickRow, setApprovedPickRow, approvedPickList, setApprovedPickList,
-    approvedPickId, setApprovedPickId, approvedPickLoading,
+    approvedPickIds, setApprovedPickIds, approvedPickLoading,
     approvedPickSaving, setApprovedPickSaving,
     receivableLinkedRow, setReceivableLinkedRow,
     receivableLinkedList, setReceivableLinkedList,
@@ -136,6 +144,71 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
   } = props
 
   const router = useRouter()
+  const [comboOpen, setComboOpen] = React.useState(false)
+  const [comboQuery, setComboQuery] = React.useState("")
+  const [comboFrom, setComboFrom] = React.useState("")
+  const [comboTo, setComboTo] = React.useState("")
+  const [comboSearching, setComboSearching] = React.useState(false)
+  const [comboSearched, setComboSearched] = React.useState(false)
+
+  const applyDefaultComboPeriod = React.useCallback((bankDate?: string) => {
+    const d = defaultExpenseBankComboPeriod(bankDate || "")
+    setComboFrom(d.from)
+    setComboTo(d.to)
+  }, [])
+
+  React.useEffect(() => {
+    if (approvedPickRow) return
+    setComboOpen(false)
+    setComboQuery("")
+    setComboFrom("")
+    setComboTo("")
+    setComboSearching(false)
+    setComboSearched(false)
+  }, [approvedPickRow])
+
+  React.useEffect(() => {
+    if (!approvedPickRow || approvedPickLoading) return
+    if (approvedPickList.length === 0 && !comboSearched) {
+      setComboOpen(true)
+      applyDefaultComboPeriod(approvedPickRow.transDate)
+    }
+  }, [approvedPickRow, approvedPickLoading, approvedPickList.length, applyDefaultComboPeriod, comboSearched])
+
+  const runComboSearch = React.useCallback(async () => {
+    if (!approvedPickRow?.id) return
+    if (!isExpenseBankComboPeriodReady(comboFrom, comboTo)) {
+      await appAlert(tt("bankExpensePickComboNeedPeriod", "검색 기간(시작·종료일)을 넣고, 93일 이내로 해 주세요."))
+      return
+    }
+    if (!isExpenseBankComboSearchReady(comboQuery, { from: comboFrom, to: comboTo })) {
+      await appAlert(tt("bankExpensePickComboNeedQuery", "기간을 입력해 주세요. 거래처·문서번호·한쪽 금액은 선택입니다."))
+      return
+    }
+    setComboSearching(true)
+    try {
+      const res = await getApprovedExpenseAccrualsForBankTx({
+        bankTransactionId: Number(approvedPickRow.id),
+        userRole: auth?.role,
+        storeFilter: (approvedPickRow.storeName || "").trim() || selectedAccountStore || undefined,
+        combo: true,
+        q: comboQuery.trim(),
+        from: comboFrom,
+        to: comboTo,
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        return
+      }
+      const hits = res.list || []
+      const byId = new Map(approvedPickList.map((row) => [row.id, row]))
+      for (const h of hits) byId.set(h.id, h)
+      setApprovedPickList([...byId.values()])
+      setComboSearched(true)
+    } finally {
+      setComboSearching(false)
+    }
+  }, [approvedPickList, approvedPickRow, auth?.role, comboFrom, comboQuery, comboTo, selectedAccountStore, setApprovedPickList, t, tt])
 
   return (
     <>
@@ -201,11 +274,11 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
           if (!open) {
             setApprovedPickRow(null)
             setApprovedPickList([])
-            setApprovedPickId("")
+            setApprovedPickIds([])
           }
         }}
       >
-        <DialogContent className={`max-w-md ${ADMIN_DIALOG_SCROLL_CN}`}>
+        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
           <DialogHeader>
             <DialogTitle>{tt("expensePlanTab", "지급예정")} {tt("btnSelect", "선택")}</DialogTitle>
           </DialogHeader>
@@ -214,22 +287,24 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
           </p>
           {approvedPickLoading ? (
             <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
-          ) : approvedPickList.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">
-              {tt("expensePlanPickEmptyForBankLink", "No linkable payment plan for this date/store.")}
-            </p>
           ) : (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                {(t("date") || "날짜")}: {approvedPickRow?.transDate || "-"} / {(t("amount") || "금액")}: ฿{formatMoneyBaht(Math.abs(parseMoneyAmount(approvedPickRow?.amount || 0)))}
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground leading-snug">
+                {tt(
+                  "bankExpensePickExactHint",
+                  "금액이 같은 지급예정만 먼저 보여 줍니다. 영수증을 2건으로 나눈 경우에는 「두 건 합산 검색」에서 기간으로 찾으세요."
+                )}
               </p>
-              <Select value={approvedPickId || "__none__"} onValueChange={(v) => setApprovedPickId(v === "__none__" ? "" : v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={`${tt("expensePlanTab", "지급예정")} ${tt("btnSelect", "선택")}`} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">—</SelectItem>
+              {approvedPickList.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  {comboSearched
+                    ? tt("bankExpensePickComboEmpty", "검색 결과가 없습니다. 거래처명·문서번호·한쪽 금액을 바꿔 보세요.")
+                    : tt("expensePlanPickEmptyForBankLink", "No linkable payment plan for this date/store.")}
+                </p>
+              ) : (
+                <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md border border-border divide-y divide-border">
                   {approvedPickList.map((p) => {
+                    const checked = approvedPickIds.includes(p.id)
                     const tag =
                       p.payeeMemoMatchQuality === "mismatch"
                         ? "⚠"
@@ -244,83 +319,198 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                         : p.status === "partial"
                           ? tt("expensePlanStatusPartial", "부분")
                           : ""
-                    const amountHint = p.amountMatch === false ? " ≠" : ""
                     return (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {tag}{statusTag ? ` [${statusTag}]` : ""} {(p.dueDate || p.expenseDate || "-")} · {p.payeeName} ({p.payeeCode || "-"}) / ฿{formatMoneyBaht(p.remainingAmount || 0)}{amountHint}
-                    </SelectItem>
+                      <label
+                        key={p.id}
+                        className="flex items-start gap-2 px-3 py-2 cursor-pointer hover:bg-muted/40"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          className="mt-0.5"
+                          onCheckedChange={(v) => {
+                            setApprovedPickIds((prev) => {
+                              if (v) return prev.includes(p.id) ? prev : [...prev, p.id]
+                              return prev.filter((id) => id !== p.id)
+                            })
+                          }}
+                        />
+                        <span className="flex-1 min-w-0 text-sm leading-snug">
+                          <span className="font-medium">
+                            {tag}{statusTag ? ` [${statusTag}]` : ""} {(p.dueDate || p.expenseDate || "-")} · {p.payeeName}
+                          </span>
+                          <span className="block text-xs text-muted-foreground truncate">
+                            {p.documentNo ? `${p.documentNo} · ` : ""}
+                            {p.payeeCode || "-"}
+                            {p.amountMatch === false ? " ≠" : ""}
+                          </span>
+                        </span>
+                        <span className="text-sm font-medium tabular-nums whitespace-nowrap shrink-0">
+                          ฿{formatMoneyBaht(p.remainingAmount || 0)}
+                        </span>
+                      </label>
                     )
                   })}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
+              {comboOpen ? (
+                <div className="space-y-2 rounded-md border border-border p-2">
+                  <p className="text-xs text-muted-foreground leading-snug">
+                    {tt(
+                      "bankExpensePickComboHint",
+                      "기간이 기본입니다. 출금일이 속한 달이 미리 들어가 있으니, 필요하면 날짜를 바꾼 뒤 검색하세요. 거래처·문서번호·한쪽 금액은 더 좁힐 때만 넣습니다."
+                    )}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-0.5">
+                      <span className="text-[11px] text-muted-foreground">
+                        {tt("bankExpensePickComboFrom", "시작일")}
+                      </span>
+                      <Input
+                        type="date"
+                        value={comboFrom}
+                        onChange={(e) => setComboFrom(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </label>
+                    <label className="space-y-0.5">
+                      <span className="text-[11px] text-muted-foreground">
+                        {tt("bankExpensePickComboTo", "종료일")}
+                      </span>
+                      <Input
+                        type="date"
+                        value={comboTo}
+                        onChange={(e) => setComboTo(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={comboQuery}
+                      onChange={(e) => setComboQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return
+                        e.preventDefault()
+                        void runComboSearch()
+                      }}
+                      placeholder={tt("bankExpensePickComboPlaceholder", "거래처 / EXP번호 / 6,000 (선택)")}
+                      className="h-8 text-sm"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-8 shrink-0"
+                      disabled={comboSearching}
+                      onClick={() => void runComboSearch()}
+                    >
+                      {comboSearching ? "..." : (t("search") || "검색")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 w-full text-xs"
+                  onClick={() => {
+                    applyDefaultComboPeriod(approvedPickRow?.transDate)
+                    setComboOpen(true)
+                  }}
+                >
+                  {tt("bankExpensePickComboOpen", "두 건 합산 검색")}
+                </Button>
+              )}
               {(() => {
-                const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                if (selected && selected.payeeMemoMatchQuality) {
-                  const q = selected.payeeMemoMatchQuality
-                  if (q === "mismatch") {
-                    return (
-                      <p className="text-xs text-amber-700 dark:text-amber-400">
-                        {tt("bankPayeeMemoMismatchOverride", "적요와 지급처가 불일치로 추정됩니다. 금액이 일치하면 저장할 수 있습니다.")}
-                        {selected.payeeMemoMatchDetail ? ` — ${selected.payeeMemoMatchDetail}` : ""}
-                      </p>
-                    )
-                  }
-                  if (q === "uncertain") {
-                    return (
-                      <p className="text-xs text-muted-foreground">
-                        {tt("bankPayeeMemoUncertain", "적요와 지급처 일치를 확정할 수 없습니다. 내용을 확인하세요.")}
-                        {selected.payeeMemoMatchDetail ? ` — ${selected.payeeMemoMatchDetail}` : ""}
-                      </p>
-                    )
-                  }
+                const selected = approvedPickList.filter((x) => approvedPickIds.includes(x.id))
+                const mismatch = selected.find((x) => x.payeeMemoMatchQuality === "mismatch")
+                const uncertain = selected.find((x) => x.payeeMemoMatchQuality === "uncertain")
+                if (mismatch) {
+                  return (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      {tt("bankPayeeMemoMismatchOverride", "적요와 지급처가 불일치로 추정됩니다. 금액이 일치하면 저장할 수 있습니다.")}
+                      {mismatch.payeeMemoMatchDetail ? ` — ${mismatch.payeeMemoMatchDetail}` : ""}
+                    </p>
+                  )
+                }
+                if (uncertain) {
+                  return (
+                    <p className="text-xs text-muted-foreground">
+                      {tt("bankPayeeMemoUncertain", "적요와 지급처 일치를 확정할 수 없습니다. 내용을 확인하세요.")}
+                      {uncertain.payeeMemoMatchDetail ? ` — ${uncertain.payeeMemoMatchDetail}` : ""}
+                    </p>
+                  )
                 }
                 return null
               })()}
               {(() => {
-                const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                if (!selected || !approvedPickRow) return null
-                const bankAmt = parseMoneyAmount(approvedPickRow.amount || 0)
-                const remain = parseMoneyAmount(selected?.remainingAmount || 0)
-                if (moneyEqual(bankAmt, remain)) return null
+                const bankAmt = parseMoneyAmount(approvedPickRow?.amount || 0)
+                const selectedTotal = sumExpensePlanPickAmount(approvedPickList, approvedPickIds)
+                const matches = expensePlanPickTotalMatchesBank(bankAmt, selectedTotal)
                 return (
-                  <p className="text-xs text-destructive">
-                    {tt("bankPlanAmountMismatchDetail", "Bank amount differs from plan balance.")
-                      .replace("{bankAmount}", formatMoneyBaht(bankAmt))
-                      .replace("{remain}", formatMoneyBaht(remain))}
-                  </p>
-                )
-              })()}
-              {(() => {
-                const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                if (!selected || selected.status !== "planned") return null
-                return (
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
-                    {tt(
-                      "expensePlanPickPlannedNeedsApproval",
-                      "Selected item is pending approval. Saving will auto-approve; HQ items need Director/Secretary rights."
+                  <div
+                    className={cn(
+                      "rounded-md border px-3 py-2 text-sm space-y-1",
+                      approvedPickIds.length === 0
+                        ? "border-border bg-muted/30"
+                        : matches
+                          ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
+                          : "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
                     )}
-                  </p>
+                  >
+                    <div className="flex justify-between gap-2 tabular-nums">
+                      <span className="text-muted-foreground">
+                        {tt("bankExpensePickBankAmount", "통장 출금")}
+                      </span>
+                      <span className="font-medium">฿{formatMoneyBaht(bankAmt)}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 tabular-nums">
+                      <span className="text-muted-foreground">
+                        {tt("bankExpensePickSelectedTotal", "선택 합계")} ({approvedPickIds.length})
+                      </span>
+                      <span className="font-medium">฿{formatMoneyBaht(selectedTotal)}</span>
+                    </div>
+                    {approvedPickIds.length > 0 && matches ? (
+                      <p className="text-xs text-green-800 dark:text-green-300">
+                        {tt("bankExpensePickAmountOk", "금액이 일치합니다.")}
+                      </p>
+                    ) : approvedPickIds.length > 0 ? (
+                      <p className="text-xs text-destructive">
+                        {tt("bankPlanAmountMismatchDetail", "Bank amount differs from plan balance.")
+                          .replace("{bankAmount}", formatMoneyBaht(bankAmt))
+                          .replace("{remain}", formatMoneyBaht(selectedTotal))}
+                      </p>
+                    ) : null}
+                  </div>
                 )
               })()}
+              {approvedPickList.some((x) => approvedPickIds.includes(x.id) && x.status === "planned") ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  {tt(
+                    "expensePlanPickPlannedNeedsApproval",
+                    "Selected item is pending approval. Saving will auto-approve; HQ items need Director/Secretary rights."
+                  )}
+                </p>
+              ) : null}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setApprovedPickRow(null)}>
                   {t("cancel") || "취소"}
                 </Button>
                 <Button
                   onClick={async () => {
-                    if (!approvedPickRow?.id || !approvedPickId) return
-                    const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
+                    if (!approvedPickRow?.id || approvedPickIds.length === 0) return
+                    const selected = approvedPickList.filter((x) => approvedPickIds.includes(x.id))
                     const bankAmt = parseMoneyAmount(approvedPickRow.amount || 0)
-                    const remain = parseMoneyAmount(selected?.remainingAmount || 0)
-                    if (!selected || !moneyEqual(bankAmt, remain)) {
+                    const selectedTotal = sumExpensePlanPickAmount(approvedPickList, approvedPickIds)
+                    if (!expensePlanPickTotalMatchesBank(bankAmt, selectedTotal)) {
                       await appAlert(tt("bankPlanAmountMismatch", "통장 금액과 선택한 지급예정 잔액이 일치해야 합니다."))
                       return
                     }
                     setApprovedPickSaving(true)
                     try {
-                      if (selected.status === "planned") {
+                      for (const item of selected) {
+                        if (item.status !== "planned") continue
                         const approveRes = await approveExpenseAccrual({
-                          expenseAccrualId: Number(approvedPickId),
+                          expenseAccrualId: item.id,
                           action: "approve",
                           userName: auth?.user,
                           userRole: auth?.role,
@@ -330,9 +520,10 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                           return
                         }
                       }
-                      const basePayload = {
-                        expenseAccrualId: Number(approvedPickId),
-                        paymentMethod: "bank" as const,
+                      const res = await executeExpensePayment({
+                        expenseAccrualId: approvedPickIds[0],
+                        expenseAccrualIds: approvedPickIds,
+                        paymentMethod: "bank",
                         amount: bankAmt,
                         transDate: String(approvedPickRow.transDate || "").slice(0, 10),
                         memo: bankNoteUserDisplayText(
@@ -341,27 +532,27 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                         bankTransactionId: Number(approvedPickRow.id),
                         userName: auth?.user,
                         userRole: auth?.role,
-                      }
-                      const res = await executeExpensePayment(basePayload)
+                      })
                       if (!res.success) {
                         await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
                         return
                       }
                       setApprovedPickRow(null)
                       setApprovedPickList([])
-                      setApprovedPickId("")
+                      setApprovedPickIds([])
                       loadData()
                     } finally {
                       setApprovedPickSaving(false)
                     }
                   }}
-                  disabled={!approvedPickId || approvedPickSaving || (() => {
-                    const selected = approvedPickList.find((x) => String(x.id) === String(approvedPickId))
-                    const bankAmt = parseMoneyAmount(approvedPickRow?.amount || 0)
-                    const remain = parseMoneyAmount(selected?.remainingAmount || 0)
-                    if (!selected || !moneyEqual(bankAmt, remain)) return true
-                    return false
-                  })()}
+                  disabled={
+                    approvedPickIds.length === 0 ||
+                    approvedPickSaving ||
+                    !expensePlanPickTotalMatchesBank(
+                      parseMoneyAmount(approvedPickRow?.amount || 0),
+                      sumExpensePlanPickAmount(approvedPickList, approvedPickIds)
+                    )
+                  }
                 >
                   {approvedPickSaving ? "..." : (t("btnSave") || "저장")}
                 </Button>

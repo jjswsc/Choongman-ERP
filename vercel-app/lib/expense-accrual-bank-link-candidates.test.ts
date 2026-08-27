@@ -4,6 +4,7 @@ import {
   accrualDateWithinBankWindow,
   buildExpenseAccrualBankLinkAmountFilters,
   buildExpenseAccrualBankLinkDateFilters,
+  buildExpenseAccrualBankLinkPeriodFilters,
   chunkIdsForInFilter,
   filterExpenseAccrualsByBankStore,
   isPayrollExpenseAccrualForBankLink,
@@ -22,6 +23,15 @@ describe('expense-accrual-bank-link-candidates', () => {
       expect(f).not.toContain('or=(')
       expect(f).not.toContain('and(')
     }
+  })
+
+  it('builds explicit period filters for combo search', () => {
+    const filters = buildExpenseAccrualBankLinkPeriodFilters('2026-08-01', '2026-08-27')
+    expect(filters).toHaveLength(2)
+    expect(filters[0]).toContain('expense_date=gte.2026-08-01')
+    expect(filters[0]).toContain('expense_date=lte.2026-08-27')
+    expect(filters[1]).toContain('due_date=gte.2026-08-01')
+    expect(filters[1]).toContain('due_date=lte.2026-08-27')
   })
 
   it('builds amount filters: open exact, all exact, WHT headroom', () => {

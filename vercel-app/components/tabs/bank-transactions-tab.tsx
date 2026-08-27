@@ -136,6 +136,7 @@ import { BankAccountManageDialog } from "./bank-account-manage-dialog"
 import { BankRegisterActionDialog } from "./bank-register-action-dialog"
 import { BankQuickMemoChipBar, BankMiscDialogs } from "./bank-misc-dialogs"
 import { formatMoneyAmountParam, formatMoneyBaht, moneyEqual, normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
+import { bankWithdrawOpensCardBillRegister, memoLooksLikeCardBill } from "@/lib/card-bill-memo"
 import { MetricCard } from "@/components/cost-analysis/metric-card"
 import {
   AccountingDataTable,
@@ -325,7 +326,7 @@ export function BankTransactionsTab() {
   const [registerActionRow, setRegisterActionRow] = React.useState<(typeof list)[0] | null>(null)
   const [approvedPickRow, setApprovedPickRow] = React.useState<(typeof list)[0] | null>(null)
   const [approvedPickList, setApprovedPickList] = React.useState<ExpenseAccrualPlanItem[]>([])
-  const [approvedPickId, setApprovedPickId] = React.useState<string>("")
+  const [approvedPickIds, setApprovedPickIds] = React.useState<number[]>([])
   const [approvedPickLoading, setApprovedPickLoading] = React.useState(false)
   const [approvedPickSaving, setApprovedPickSaving] = React.useState(false)
   const [receivablePickRow, setReceivablePickRow] = React.useState<(typeof list)[0] | null>(null)
@@ -561,7 +562,7 @@ export function BankTransactionsTab() {
     if (!row?.id) return
     setApprovedPickRow(row)
     setApprovedPickLoading(true)
-    setApprovedPickId("")
+    setApprovedPickIds([])
     try {
       const res = await getApprovedExpenseAccrualsForBankTx({
         bankTransactionId: Number(row.id),
@@ -570,6 +571,8 @@ export function BankTransactionsTab() {
       })
       const listRows = res.list || []
       setApprovedPickList(listRows)
+      const exact = listRows.filter((p) => p.amountMatch)
+      if (exact.length === 1 && exact[0]) setApprovedPickIds([exact[0].id])
       if (!res.success) {
         setApprovedPickRow(null)
         await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
@@ -3100,7 +3103,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               </td>
                               <td className="p-2 align-middle">
                                 <div className="flex items-center justify-center gap-1 flex-wrap">
-                                {r.transType === "withdraw" && isBankExpenseRelatedWithdrawCategory(cat) ? (
+                                {r.transType === "withdraw" && isBankExpenseRelatedWithdrawCategory(cat) && !memoLooksLikeCardBill(r.memo || "") ? (
                                   r.isLinked ? (
                                     <>
                                       <span
@@ -3157,7 +3160,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       </Button>
                                     </>
                                   )
-                                ) : r.transType === "withdraw" && cat === "transfer" && r.id ? (
+                                ) : r.transType === "withdraw" && r.id && bankWithdrawOpensCardBillRegister(cat, r.memo || "") ? (
                                   r.isCardLinked ? (
                                     <span
                                       className="inline-flex rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-950/50 dark:text-green-400 whitespace-nowrap"
@@ -3176,7 +3179,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         const amt = Math.abs(r.amount ?? 0)
                                         const bankMemo = (r.memo || "").trim().slice(0, 500)
                                         const bankNote = bankNoteUserDisplayText((r.note || "").trim()).slice(0, 500)
-                                        const q = new URLSearchParams({ tab: "expenseRegister", category: "transfer" })
+                                        const cardBill = memoLooksLikeCardBill(bankMemo) || cat === "bank_card_bill"
+                                        const q = new URLSearchParams({
+                                          tab: "expenseRegister",
+                                          category: cardBill ? "bank_card_bill" : "transfer",
+                                        })
                                         q.set("bankTransactionId", String(r.id))
                                         if (amt > 0) q.set("amount", formatMoneyAmountParam(amt))
                                         if (bankMemo) q.set("bankMemo", bankMemo)
@@ -3191,7 +3198,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         router.push(`/admin/expense-management?${q.toString()}`)
                                       }}
                                     >
-                                      {t("bankRegisterLink") || "지출 등록"}
+                                      {memoLooksLikeCardBill(r.memo || "") || cat === "bank_card_bill"
+                                        ? tt("bankRegisterCardExpense", "카드 지출")
+                                        : t("bankRegisterLink") || "지출 등록"}
                                     </Button>
                                   )
                                 ) : r.transType === "deposit" && cat === "receivable_receive" && r.id ? (
@@ -4219,8 +4228,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         setApprovedPickRow={setApprovedPickRow}
         approvedPickList={approvedPickList}
         setApprovedPickList={setApprovedPickList}
-        approvedPickId={approvedPickId}
-        setApprovedPickId={setApprovedPickId}
+        approvedPickIds={approvedPickIds}
+        setApprovedPickIds={setApprovedPickIds}
         approvedPickLoading={approvedPickLoading}
         approvedPickSaving={approvedPickSaving}
         setApprovedPickSaving={setApprovedPickSaving}

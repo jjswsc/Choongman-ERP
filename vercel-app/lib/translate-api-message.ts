@@ -188,6 +188,12 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "패티캐시 매장을 선택해 주세요.": "pettyStoreRequired",
   "이미 연결된 통장 출금입니다.": "bankWithdrawAlreadyLinked",
   "이미 다른 지출/매입과 연결된 통장 거래입니다.": "bankTxLinkedOtherExpense",
+  "패티 보충·카드 대금은 통장 1건에 지급예정 1건만 연결할 수 있습니다.": "expenseBankMultiLinkPrepayOnly",
+  "세금 납부와 일반 지출을 한 통장 출금에 함께 연결할 수 없습니다.": "expenseBankMultiLinkTaxMix",
+  "세금 종류가 다른 지급예정은 한 통장에 함께 연결할 수 없습니다.": "expenseBankMultiLinkTaxKindMix",
+  "여러 지급예정을 한 번에 연결할 때는 통장 출금만 사용할 수 있습니다.": "expenseBankMultiLinkBankOnly",
+  "여러 지급예정을 연결할 때는 통장 거래를 선택해 주세요.": "expenseBankMultiLinkNeedBank",
+  "합산 검색 기간은 시작·종료일을 넣고 93일 이내로 해 주세요.": "bankExpensePickComboNeedPeriod",
   "통장 지급은 계좌를 선택해 주세요.": "bankPaymentAccountRequired",
   "통장 출금 등록에 실패했습니다.": "bankWithdrawRegisterFailed",
   "카드 정보가 없습니다. 지급예정을 다시 확인해 주세요.": "cardInfoMissingForPayment",
@@ -346,6 +352,15 @@ export function translateApiMessage(
     return t("dateMismatchDetail")
       .replace("{bankDate}", dateDetailMatch[1]!)
       .replace("{paymentDate}", dateDetailMatch[2]!)
+  const multiSumMatch = trimmed.match(
+    /^여러 지급예정을 한 통장에 연결할 때는 합계가 통장 금액과 같아야 합니다\. \(통장: ([\d,]+), 합계: ([\d,]+)\)$/
+  )
+  if (multiSumMatch)
+    return t("expenseBankMultiLinkSumMismatch")
+      .replace("{bankAmount}", multiSumMatch[1]!)
+      .replace("{sum}", multiSumMatch[2]!)
+  const multiMaxMatch = trimmed.match(/^한 통장에 연결할 지급예정은 최대 (\d+)건입니다\.$/)
+  if (multiMaxMatch) return t("expenseBankMultiLinkMax").replace("{max}", multiMaxMatch[1]!)
   if (trimmed.startsWith("금액이 일치하지 않습니다."))
     return t("amountMismatch")
   if (trimmed.startsWith("날짜가 일치하지 않습니다."))

@@ -1,14 +1,9 @@
 /**
- * ใบกำกับภาษีซื้อ 전용 스캔 파이프라인.
- * Cursor가 원본 전체를 보고 필드를 읽듯이: (1) PDF 텍스트층 (2) 전체 페이지 이미지 (3) 매수자 TIN 힌트 (4) 금액 교차검증.
+ * ใบกำกับภาษีซื้อ 전용 스캔 파이프라인 (GPT 없음).
+ * (1) PDF 글자층 (2) QR (jsQR·URL·파이프) (3) 브라우저 태국어 OCR (4) 매수자 TIN 힌트·금액 교차검증.
  */
 
-import {
-  digitsTin13,
-  purchaseTaxInvoiceHasExtractedFields,
-  purchaseTaxVatLooksWrong,
-  type ExtractedPurchaseTaxInvoiceFields,
-} from '@/lib/purchase-tax-invoice-core'
+import { formatSellerBranch, digitsTin13, purchaseTaxInvoiceHasExtractedFields, purchaseTaxVatLooksWrong, thaiTinChecksumOk, type ExtractedPurchaseTaxInvoiceFields } from '@/lib/purchase-tax-invoice-core'
 import { roundMoney2 } from '@/lib/invoice-vat-total'
 
 export type PurchaseTaxInvoiceScanHint = {
@@ -56,15 +51,7 @@ const THAI_MONTH: Record<string, number> = {
   ธันวาคม: 12,
 }
 
-/** 태국 13자리 TIN 체크디짓 (가중치 13→2, mod 11). */
-export function thaiTinChecksumOk(raw: unknown): boolean {
-  const d = digitsTin13(raw)
-  if (d.length !== 13) return false
-  let sum = 0
-  for (let i = 0; i < 12; i += 1) sum += Number(d[i]) * (13 - i)
-  const check = (11 - (sum % 11)) % 10
-  return check === Number(d[12])
-}
+export { thaiTinChecksumOk }
 
 function moneyFromFragment(raw: string): number | undefined {
   const s = String(raw || '')
@@ -107,15 +94,43 @@ export function parseTaxInvoiceDateFromText(text: string): string | undefined {
   return undefined
 }
 
+function mapOcrDigitChar(ch: string): string {
+  if (/[0-9]/.test(ch)) return ch
+  if (/[OoD]/.test(ch)) return '0'
+  if (/[Il|]/.test(ch)) return '1'
+  if (/[Zz]/.test(ch)) return '2'
+  if (/[Ss]/.test(ch)) return '5'
+  if (/[Gg]/.test(ch)) return '6'
+  if (/[Bb]/.test(ch)) return '8'
+  return ''
+}
+
+/** OCR이 O/l/I/S 로 읽은 13자리를 체크디짓이 맞는 TIN만 남김. 체크디짓만 임의로 고치지는 않음. */
+export function tinsFromOcrDigitBlob(raw: string): string[] {
+  let digits = ''
+  for (const ch of String(raw || '')) {
+    const d = mapOcrDigitChar(ch)
+    if (d) digits += d
+  }
+  const found: string[] = []
+  for (let i = 0; i + 13 <= digits.length; i += 1) {
+    const cand = digits.slice(i, i + 13)
+    if (thaiTinChecksumOk(cand) && !found.includes(cand)) found.push(cand)
+  }
+  return found
+}
+
 function extractTins(text: string): string[] {
   const found: string[] = []
   const add = (raw: string) => {
-    const d = digitsTin13(raw)
-    if (d.length !== 13 || found.includes(d)) return
-    if (thaiTinChecksumOk(d) || found.length === 0) found.push(d)
+    const cands = tinsFromOcrDigitBlob(raw)
+    for (const d of cands.length ? cands : [digitsTin13(raw)]) {
+      if (d.length !== 13 || found.includes(d) || !thaiTinChecksumOk(d)) continue
+      found.push(d)
+    }
   }
   const s = String(text || '')
-  for (const m of s.match(/เลขประจำตัวผู้เสียภาษี[^\d]{0,24}([\d][\d\-\s]{11,22}[\d])/g) || []) {
+  for (const m of s.match(/เลขประจำตัวผู้เสียภาษี[^\dA-Za-zOoIl|]{0,24}([\dA-Za-zOoIl|][\dA-Za-zOoIl|\-\s]{11,22}[\dA-Za-zOoIl|])/g) || []) {
     add(m)
   }
   for (const m of s.match(/\b\d{1,3}[- ]\d{3,4}[- ]\d{3,4}[- ]\d{1,4}\b/g) || []) {
@@ -124,24 +139,44 @@ function extractTins(text: string): string[] {
   for (const m of s.replace(/[^\d]/g, ' ').match(/\d{13}/g) || []) {
     add(m)
   }
-  const checksumFirst = found.filter(thaiTinChecksumOk)
-  return (checksumFirst.length ? checksumFirst : found).slice(0, 4)
+  for (const m of s.match(/[0-9A-Za-zOoIl|](?:[0-9A-Za-zOoIl|\-\s]{10,24})[0-9A-Za-zOoIl|]/g) || []) {
+    add(m)
+  }
+  return found.filter(thaiTinChecksumOk).slice(0, 4)
+}
+
+function cleanInvoiceNo(raw: string): string | undefined {
+  const inv = String(raw || '')
+    .replace(/\s*-\s*/g, '-')
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s+/g, '')
+    .trim()
+  if (!inv || digitsTin13(inv).length === 13) return undefined
+  if (parseTaxInvoiceDateFromText(inv)) return undefined
+  if (!/^[A-Z0-9][A-Z0-9\-/]{1,40}$/i.test(inv)) return undefined
+  return inv.slice(0, 80)
 }
 
 function extractInvoiceNo(text: string): string | undefined {
   const s = String(text || '')
   const labeled = s.match(
-    /(?:เลขที่(?:ใบกำกับ(?:ภาษี)?)?|No\.?|Invoice\s*No\.?|Tax\s*Invoice\s*No\.?)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-/]{2,40})/i
+    /(?:เลขที่(?:ใบกำกับ(?:ภาษี)?)?|เลขท[ีิ]|No\.?|Invoice\s*No\.?|Tax\s*Invoice\s*No\.?|Doc(?:ument)?\s*No\.?)\s*[:#.\-]*\s*([A-Z0-9][A-Z0-9\-/ ]{1,40})/i
   )
   if (labeled) {
-    const inv = labeled[1].trim()
-    if (digitsTin13(inv).length !== 13) return inv
+    const inv = cleanInvoiceNo(labeled[1])
+    if (inv) return inv
   }
-  const common = s.match(/\b((?:INV|IV|TI|TAX)[\-/]?[A-Z0-9\-/]{3,30}|\d{8,}[A-Z]\d{3,})\b/i)
+  const common = s.match(/\b((?:INV|IV|TI|TAX|ABB)[\-/]?[A-Z0-9\-/ ]{2,30}|\d{8,}[A-Z]\d{2,})\b/i)
   if (!common) return undefined
-  const inv = common[1].trim()
-  if (digitsTin13(inv).length === 13) return undefined
-  return inv
+  return cleanInvoiceNo(common[1])
+}
+
+function extractSellerBranchRaw(text: string): string | undefined {
+  const s = String(text || '')
+  if (/สำนักงานใหญ่|head\s*office|\bhq\b/i.test(s) && !/สาขา\s*\d/.test(s)) return 'สำนักงานใหญ่'
+  const branch = s.match(/สาขา\s*[:.\-]?\s*(\d{1,5})/i)
+  if (branch) return branch[1]
+  return undefined
 }
 
 function extractSellerName(text: string, buyerName?: string): string | undefined {
@@ -217,8 +252,12 @@ export function inferAmountsFromMoneySequence(text: string): {
 }
 
 function firstQueryValue(params: URLSearchParams, keys: string[]): string {
+  const lower = new Map<string, string>()
+  params.forEach((v, k) => {
+    if (v && !lower.has(k.toLowerCase())) lower.set(k.toLowerCase(), v)
+  })
   for (const k of keys) {
-    const v = params.get(k)
+    const v = lower.get(k.toLowerCase()) || params.get(k)
     if (v) return v
   }
   return ''
@@ -258,12 +297,12 @@ export function parsePurchaseTaxInvoiceQrPayload(raw: string): ExtractedPurchase
     const url = new URL(decoded)
     const q = url.searchParams
     const blob = [
-      `เลขที่ ${firstQueryValue(q, ['invoiceNo', 'inv', 'docno', 'number', 'no'])}`,
-      `เลขประจำตัวผู้เสียภาษี ${firstQueryValue(q, ['sellerTaxId', 'tin', 'taxId', 'nid', 'seller'])}`,
-      `วันที่ ${firstQueryValue(q, ['date', 'docDate', 'issueDate'])}`,
-      `มูลค่า ${firstQueryValue(q, ['net', 'base', 'amount', 'value'])}`,
-          `ภาษีมูลค่าเพิ่ม ${firstQueryValue(q, ['vat', 'vatAmount', 'tax'])}`,
-      `รวมทั้งสิ้น ${firstQueryValue(q, ['total', 'grand', 'sum'])}`,
+      `เลขที่ ${firstQueryValue(q, ['invoiceNo', 'invoice_no', 'inv', 'docno', 'number', 'no', 'invoicenumber', 'invoice'])}`,
+      `เลขประจำตัวผู้เสียภาษี ${firstQueryValue(q, ['sellerTaxId', 'seller_tax_id', 'tin', 'taxId', 'nid', 'seller', 'taxid', 'sellertin'])}`,
+      `วันที่ ${firstQueryValue(q, ['date', 'docDate', 'issueDate', 'issuedate', 'docdate'])}`,
+      `มูลค่า ${firstQueryValue(q, ['net', 'base', 'amount', 'value', 'baseamount', 'netAmount', 'netamount'])}`,
+      `ภาษีมูลค่าเพิ่ม ${firstQueryValue(q, ['vat', 'vatAmount', 'tax', 'vatamount'])}`,
+      `รวมทั้งสิ้น ${firstQueryValue(q, ['total', 'grand', 'sum', 'grandtotal', 'grandTotal'])}`,
       url.pathname,
     ].join('\n')
     const fromUrl = parsePurchaseTaxInvoiceFromPdfText(`${decoded}\n${blob}`)
@@ -275,7 +314,11 @@ export function parsePurchaseTaxInvoiceQrPayload(raw: string): ExtractedPurchase
   const parts = decoded.split(/[|;,\t]/).map((p) => p.trim()).filter(Boolean)
   if (parts.length >= 2) {
     const tins = parts.map((p) => digitsTin13(p)).filter((p) => p.length === 13 && thaiTinChecksumOk(p))
-    const invoice = parts.find((p) => /[A-Za-z]/.test(p) && digitsTin13(p).length !== 13)
+    const invoice = parts.find((p) => {
+      if (digitsTin13(p).length === 13) return false
+      if (/^\d{1,3}(?:,\d{3})+\.\d{2}$|^\d+\.\d{2}$/.test(p)) return false
+      return /^[A-Z0-9][A-Z0-9\-/]{2,40}$/i.test(p)
+    })
     const amounts = parts.map((p) => moneyFromFragment(p)).filter((n): n is number => n != null && n > 0)
     const date = parts.map((p) => parseTaxInvoiceDateFromText(p)).find(Boolean)
     const inferred = inferAmountsFromMoneySequence(parts.join(' '))
@@ -293,12 +336,46 @@ export function parsePurchaseTaxInvoiceQrPayload(raw: string): ExtractedPurchase
   return parsePurchaseTaxInvoiceFromPdfText(decoded)
 }
 
+/** pdf.js 글자 조각을 같은 줄끼리 붙여 มูลค่า/VAT가 라벨과 떨어지지 않게 함 */
+export function joinPdfTextItemsByLine(
+  items: Array<{ str?: string; transform?: number[] }>
+): string {
+  const rows = items
+    .map((item) => ({
+      str: String(item.str || '').trim(),
+      x: Number(item.transform?.[4]) || 0,
+      y: Number(item.transform?.[5]) || 0,
+    }))
+    .filter((r) => r.str)
+  if (!rows.length) return ''
+  rows.sort((a, b) => (Math.abs(a.y - b.y) > 3 ? b.y - a.y : a.x - b.x))
+  const lines: string[][] = []
+  let currentY = rows[0]?.y ?? 0
+  let current: string[] = []
+  for (const r of rows) {
+    if (current.length && Math.abs(r.y - currentY) > 4) {
+      lines.push(current)
+      current = [r.str]
+      currentY = r.y
+    } else {
+      current.push(r.str)
+    }
+  }
+  if (current.length) lines.push(current)
+  return lines.map((parts) => parts.join(' ')).join('\n')
+}
+
 /** 복합기 OCR/Tesseract 잡음: 세금번호 사이 공백, 전각 숫자, 숫자 속 O/l */
 export function normalizeTaxInvoiceOcrText(text: string): string {
   let s = String(text || '').replace(/\u00a0/g, ' ')
   s = s.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 48))
+  s = s.replace(/(\d{1,3})\.(\d{3}),(\d{2})\b/g, '$1$2.$3')
   s = s.replace(/(\d)[Oo](\d)/g, '$10$2')
   s = s.replace(/(\d)[Il|](\d)/g, '$11$2')
+  s = s.replace(/\b[Oo](\d{12})\b/g, '0$1')
+  s = s.replace(/\b[Il|](\d{12})\b/g, '1$1')
+  s = s.replace(/(\d{12})[Oo]\b/g, '$10')
+  s = s.replace(/(\d{12})[Il|]\b/g, '$11')
   s = s.replace(/\b(\d(?:[\s\-]*\d){12})\b/g, (m) => m.replace(/[^\d]/g, ''))
   return s.replace(/[ \t]{2,}/g, ' ').trim()
 }
@@ -324,17 +401,109 @@ export function pdfPageTextIsReliableForExtract(
   )
 }
 
+/** 검수 건너뛰기 문구용 i18n 키 — 로컬 스캔(글자층·QR·OCR) 실패 */
+export function purchaseTaxInvoiceScanFailI18nKey(error?: string): string {
+  switch (String(error || '').trim()) {
+    case 'ocr_failed':
+      return 'ptiOcrFailed'
+    default:
+      return 'ptiPdfEmptyPage'
+  }
+}
+
+function scanSection(raw: string, name: string): string {
+  const re = new RegExp(`===${name}===\\s*([\\s\\S]*?)(?====|$)`)
+  return raw.match(re)?.[1]?.trim() || ''
+}
+
+/** 글자층이 완전해도 QR은 따로 붙여 교차검증. 한 장 2매면 QR을 여러 개 붙임. */
+export function wrapTaxInvoiceQrText(qr: string | string[]): string {
+  const parts = (Array.isArray(qr) ? qr : [qr]).map((p) => String(p || '').trim()).filter(Boolean)
+  return parts.map((p) => `===QR===\n${p}`).join('\n')
+}
+
+export function splitScanTextIntoInvoiceBlocks(text: string): string[] {
+  const raw = String(text || '')
+  if (!raw.trim()) return []
+  const qrs = [...raw.matchAll(/===QR===\s*([\s\S]*?)(?====|$)/g)]
+    .map((m) => String(m[1] || '').trim())
+    .filter((s) => s.length >= 8)
+  const uniqueQrs = [...new Set(qrs)]
+  if (uniqueQrs.length >= 2) {
+    const rest = raw.replace(/===QR===\s*[\s\S]*?(?====|$)/g, '').trim()
+    const lines = rest.split(/\n/)
+    const mid = Math.max(1, Math.floor(lines.length / 2))
+    return uniqueQrs.slice(0, 2).map((q, i) => {
+      const half = i === 0 ? lines.slice(0, mid).join('\n') : lines.slice(mid).join('\n')
+      return `===QR===\n${q}\n${half}`
+    })
+  }
+  const markers: number[] = []
+  const re = /ใบกำกับภาษี|ต้นฉบับ/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(raw))) {
+    if (!markers.length || m.index - markers[markers.length - 1] > 120) markers.push(m.index)
+  }
+  const invoiceNos = [
+    ...raw.matchAll(/เลขที่\s*([A-Za-z0-9][A-Za-z0-9\-/]{2,40})/g),
+  ].map((hit) => hit[1].replace(/\s+/g, '').toUpperCase())
+  const uniqueInvoiceNos = new Set(invoiceNos)
+  if (markers.length >= 2 && uniqueInvoiceNos.size >= 2) {
+    return markers.slice(0, 2).map((start, i, arr) => raw.slice(start, i + 1 < arr.length ? arr[i + 1] : raw.length))
+  }
+  return [raw]
+}
+
+export function extractPurchaseTaxInvoicesFromScanText(
+  text: string,
+  hint?: PurchaseTaxInvoiceScanHint
+): ExtractedPurchaseTaxInvoiceFields[] {
+  const blocks = splitScanTextIntoInvoiceBlocks(text)
+  const rows: ExtractedPurchaseTaxInvoiceFields[] = []
+  const seen = new Set<string>()
+  for (const block of blocks.length ? blocks : [text]) {
+    const row = extractPurchaseTaxInvoiceFromScanText(block, hint)
+    if (!row || !purchaseTaxInvoiceHasExtractedFields(row)) continue
+    const key = `${String(row.invoiceNo || '').replace(/\s+/g, '').toUpperCase()}|${digitsTin13(row.sellerTaxId)}`
+    if (row.invoiceNo && seen.has(key)) continue
+    seen.add(key)
+    rows.push(row)
+  }
+  return rows
+}
+
+export function fillSellerNameFromTinLookup(
+  row: ExtractedPurchaseTaxInvoiceFields,
+  known: Array<{ sellerTaxId?: string; sellerName?: string }>
+): ExtractedPurchaseTaxInvoiceFields {
+  const tin = digitsTin13(row.sellerTaxId)
+  if (String(row.sellerName || '').trim() || tin.length !== 13) return row
+  const hit = known.find((k) => digitsTin13(k.sellerTaxId) === tin && String(k.sellerName || '').trim())
+  if (!hit?.sellerName) return row
+  return { ...row, sellerName: String(hit.sellerName).trim().slice(0, 200) }
+}
+
 export function extractPurchaseTaxInvoiceFromScanText(
   text: string,
   hint?: PurchaseTaxInvoiceScanHint
 ): ExtractedPurchaseTaxInvoiceFields | null {
   const raw = String(text || '')
   const qrMatch = raw.match(/===QR===\s*([\s\S]*?)(?:===|$)/)
-  const totalsMatch = raw.match(/===TOTALS[\s\S]*?===\s*([\s\S]*?)(?:===|$)/)
-  const fromQr = qrMatch ? parsePurchaseTaxInvoiceQrPayload(qrMatch[1]) : null
+  const headerText = [scanSection(raw, 'HEADER'), scanSection(raw, 'HEADER_PSM4'), scanSection(raw, 'HEADER_DIGITS')].filter(Boolean).join('\n')
+  const digitsBlock = scanSection(raw, 'TOTALS_DIGITS')
+  const totalsBlock = [scanSection(raw, 'TOTALS'), scanSection(raw, 'TOTALS_PSM4')].filter(Boolean).join('\n')
+  const urlMatch = raw.match(/https?:\/\/[^\s<>"']+/i)
+  const fromQr =
+    (qrMatch ? parsePurchaseTaxInvoiceQrPayload(qrMatch[1]) : null) ||
+    (urlMatch ? parsePurchaseTaxInvoiceQrPayload(urlMatch[0]) : null)
+  const fromHeader = headerText ? parsePurchaseTaxInvoiceFromPdfText(headerText, hint) : null
   const fromText = parsePurchaseTaxInvoiceFromPdfText(raw, hint)
-  const inferred = inferAmountsFromMoneySequence(totalsMatch?.[1] || raw)
-  let merged = mergePurchaseTaxInvoiceExtract(fromQr, fromText)
+  const inferred =
+    inferAmountsFromMoneySequence(digitsBlock) ||
+    inferAmountsFromMoneySequence(totalsBlock) ||
+    inferAmountsFromMoneySequence(raw)
+  let merged = mergePurchaseTaxInvoiceExtract(fromQr, fromHeader)
+  merged = mergePurchaseTaxInvoiceExtract(merged, fromText)
   if (inferred) {
     const amountsWeak =
       !merged ||
@@ -356,7 +525,7 @@ export function parsePurchaseTaxInvoiceFromPdfText(
   hint?: PurchaseTaxInvoiceScanHint
 ): ExtractedPurchaseTaxInvoiceFields | null {
   const raw = normalizeTaxInvoiceOcrText(text)
-  if (raw.length < 40) return null
+  if (raw.length < 12) return null
   const buyerTin = digitsTin13(hint?.buyerTaxId)
   const tins = extractTins(raw)
   const sellerTaxId = tins.find((tin) => tin !== buyerTin) || (tins[0] && tins[0] !== buyerTin ? tins[0] : undefined)
@@ -370,7 +539,8 @@ export function parsePurchaseTaxInvoiceFromPdfText(
     docDate: parseTaxInvoiceDateFromText(raw),
     invoiceNo: extractInvoiceNo(raw),
     sellerName: extractSellerName(raw, hint?.buyerName),
-    sellerTaxId: sellerTaxId && sellerTaxId.length === 13 ? sellerTaxId : undefined,
+    sellerTaxId: sellerTaxId && sellerTaxId.length === 13 && thaiTinChecksumOk(sellerTaxId) ? sellerTaxId : undefined,
+    sellerBranch: formatSellerBranch(extractSellerBranchRaw(raw)),
     netAmount: netAmount ?? inferred?.netAmount,
     vatAmount: vatAmount ?? inferred?.vatAmount,
     totalAmount: totalAmount ?? inferred?.totalAmount,
@@ -379,7 +549,7 @@ export function parsePurchaseTaxInvoiceFromPdfText(
   return purchaseTaxInvoiceHasExtractedFields(row) ? row : null
 }
 
-/** e-Tax/인쇄 PDF처럼 텍스트층이 충분하고 핵심 필드가 맞으면 Vision을 생략해도 됨. */
+/** e-Tax/인쇄 PDF처럼 글자층만으로 핵심 필드가 채워지면 브라우저 OCR을 생략해도 됨. */
 export function purchaseTaxInvoiceTextExtractIsComplete(
   row: ExtractedPurchaseTaxInvoiceFields | null | undefined,
   hint?: PurchaseTaxInvoiceScanHint
@@ -413,7 +583,7 @@ export function mergePurchaseTaxInvoiceExtract(
 }
 
 /**
- * Vision/텍스트 결과를 세금계산서 규칙으로 보정.
+ * 글자층·QR·OCR 결과를 세금계산서 규칙으로 보정.
  * 매수자 TIN을 판매자로 넣었거나, 부가세 포함액을 공급가로 넣은 경우를 바로잡음.
  */
 export function repairExtractedPurchaseTaxInvoice(
@@ -422,7 +592,7 @@ export function repairExtractedPurchaseTaxInvoice(
 ): ExtractedPurchaseTaxInvoiceFields {
   const buyerTin = digitsTin13(hint?.buyerTaxId)
   let sellerTaxId = row.sellerTaxId ? digitsTin13(row.sellerTaxId) : undefined
-  if (sellerTaxId?.length !== 13) sellerTaxId = undefined
+  if (sellerTaxId?.length !== 13 || !thaiTinChecksumOk(sellerTaxId)) sellerTaxId = undefined
   if (buyerTin && sellerTaxId === buyerTin) sellerTaxId = undefined
 
   let netAmount = row.netAmount
@@ -467,33 +637,3 @@ export function repairExtractedPurchaseTaxInvoice(
   }
 }
 
-export function buildTaxInvoiceVisionSystemPrompt(): string {
-  return [
-    'You are a dedicated Thai tax-invoice (ใบกำกับภาษี / ใบกำกับภาษีอย่างย่อ) extractor for the ภาษีซื้อ register.',
-    'Reply JSON only: {"invoices":[{"docDate":"YYYY-MM-DD"|null,"invoiceNo":string|null,"sellerName":string|null,"sellerTaxId":string|null,"sellerBranch":"สำนักงานใหญ่"|"สาขา 00001"|null,"netAmount":number|null,"vatAmount":number|null,"totalAmount":number|null,"isCopy":boolean}]}.',
-    'The FIRST image is the FULL page — that is the source of truth. Extra images are optional zooms of header or totals.',
-    'Seller (ผู้ขาย / ผู้จำหน่าย / ผู้ประกอบการ) issued the invoice (logo, top block). Buyer (ผู้ซื้อ / ลูกค้า) is our restaurant — NEVER put buyer TIN/name as seller.',
-    'Rules: (1) Return every distinct original ต้นฉบับ on the page (1 or 2). (2) TIN is 13 digits. (3) sellerBranch = สำนักงานใหญ่ if head office/00000, else สาขา + 5-digit code. (4) netAmount = มูลค่า/ฐานภาษี excluding VAT; mixed VATable+exempt → VATable base only. (5) vatAmount is baht not 7%. Cross-check vat ≈ round(net*0.07,2) unless exempt 0. (6) docDate Gregorian; พ.ศ. 2569→2026. (7) isCopy=true for สำเนา/copy. (8) Platform/bank fee invoices: net = fee before VAT, not GMV. (9) JSON numbers not strings. (10) Read every digit; prefer printed bottom totals over summing line items.',
-  ].join(' ')
-}
-
-export function buildTaxInvoiceVisionUserPrompt(hint?: PurchaseTaxInvoiceScanHint): string {
-  const parts = [
-    'Read every ใบกำกับภาษี on these images for the ภาษีซื้อ register. First image = full page.',
-  ]
-  const buyerTin = digitsTin13(hint?.buyerTaxId)
-  if (buyerTin.length === 13) {
-    parts.push(`Buyer TIN (ผู้ซื้อ, our company) is ${buyerTin}. If you see this TIN it is the buyer, never sellerTaxId.`)
-  }
-  const buyerName = String(hint?.buyerName || '').trim()
-  if (buyerName) {
-    parts.push(`Buyer / store name hint: ${buyerName.slice(0, 80)}. Do not use this as sellerName.`)
-  }
-  const pageText = String(hint?.pageText || '').trim().slice(0, 4000)
-  if (pageText.length >= 20) {
-    parts.push(
-      `PDF text layer (may be incomplete or wrong; image wins if they disagree):\n${pageText}`
-    )
-  }
-  return parts.join('\n')
-}

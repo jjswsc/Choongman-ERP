@@ -71,16 +71,13 @@ export async function POST(request: NextRequest) {
         }
       )
       if (!invoices.length) {
-        const noKey = error === 'no_openai_key' || !process.env.OPENAI_API_KEY?.trim()
         return NextResponse.json(
           {
             success: false,
             invoices: [],
-            openaiUsed,
+            openaiUsed: false,
             error,
-            message: noKey
-              ? '문서에서 항목을 찾지 못했습니다. OPENAI_API_KEY 설정 후 다시 시도하거나 직접 입력해 주세요.'
-              : '문서에서 항목을 찾지 못했습니다. 직접 입력해 주세요.',
+            message: '문서에서 항목을 찾지 못했습니다. 직접 입력해 주세요.',
           },
           { headers }
         )

@@ -67,6 +67,16 @@ export function isTin13(raw: unknown): boolean {
   return digitsTin13(raw).length === 13
 }
 
+/** 태국 13자리 TIN 체크디짓 (가중치 13→2, mod 11). */
+export function thaiTinChecksumOk(raw: unknown): boolean {
+  const d = digitsTin13(raw)
+  if (d.length !== 13) return false
+  let sum = 0
+  for (let i = 0; i < 12; i += 1) sum += Number(d[i]) * (13 - i)
+  const check = (11 - (sum % 11)) % 10
+  return check === Number(d[12])
+}
+
 export function taxMonthFromDocDate(docDate: string): string {
   const ymd = String(docDate || '').trim().slice(0, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd.slice(0, 7) : ''
@@ -255,28 +265,60 @@ function maybeGregorianDocDate(raw: unknown): string | undefined {
   return s
 }
 
+function visionField(parsed: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    const v = parsed[key]
+    if (v != null && v !== '') return v
+  }
+  return undefined
+}
+
 function normalizePurchaseTaxInvoiceVisionRow(parsed: Record<string, unknown>): ExtractedPurchaseTaxInvoiceFields {
-  const invoiceRaw = parsed.invoiceNo
+  const invoiceRaw = visionField(parsed, ['invoiceNo', 'invoice_no', 'docNo', 'doc_no', 'number', 'no'])
   const invoiceNo =
     invoiceRaw == null || invoiceRaw === ''
       ? undefined
       : String(invoiceRaw).trim().slice(0, 80)
-  const sellerTaxId = String(parsed.sellerTaxId || '')
+  const sellerTaxId = String(
+    visionField(parsed, ['sellerTaxId', 'seller_tax_id', 'taxId', 'tax_id', 'tin']) || ''
+  )
     .replace(/\D/g, '')
     .slice(0, 13)
+  const sellerName = visionField(parsed, ['sellerName', 'seller_name', 'vendorName', 'vendor'])
+  const sellerBranch = visionField(parsed, ['sellerBranch', 'seller_branch', 'branch'])
+  const isCopyRaw = visionField(parsed, ['isCopy', 'is_copy', 'copy'])
   const isCopy =
-    parsed.isCopy === true || /สำเนา|true copy|duplicate/i.test(String(parsed.isCopy || ''))
+    isCopyRaw === true || /สำเนา|true copy|duplicate/i.test(String(isCopyRaw || ''))
   return {
-    docDate: maybeGregorianDocDate(parsed.docDate),
+    docDate: maybeGregorianDocDate(
+      visionField(parsed, ['docDate', 'doc_date', 'date', 'issueDate', 'issue_date'])
+    ),
     invoiceNo: invoiceNo || undefined,
-    sellerName: parsed.sellerName ? String(parsed.sellerName).trim().slice(0, 200) : undefined,
+    sellerName: sellerName ? String(sellerName).trim().slice(0, 200) : undefined,
     sellerTaxId: sellerTaxId.length === 13 ? sellerTaxId : undefined,
-    sellerBranch: parsed.sellerBranch ? String(parsed.sellerBranch).trim().slice(0, 80) : undefined,
-    netAmount: sanitizeTaxInvoiceMoney(parsed.netAmount),
-    vatAmount: sanitizeTaxInvoiceMoney(parsed.vatAmount),
-    totalAmount: sanitizeTaxInvoiceMoney(parsed.totalAmount),
+    sellerBranch: sellerBranch ? String(sellerBranch).trim().slice(0, 80) : undefined,
+    netAmount: sanitizeTaxInvoiceMoney(
+      visionField(parsed, ['netAmount', 'net_amount', 'baseAmount', 'taxableAmount'])
+    ),
+    vatAmount: sanitizeTaxInvoiceMoney(visionField(parsed, ['vatAmount', 'vat_amount', 'vat'])),
+    totalAmount: sanitizeTaxInvoiceMoney(
+      visionField(parsed, ['totalAmount', 'total_amount', 'grandTotal', 'total'])
+    ),
     isCopy,
   }
+}
+
+function visionRowsFromParsed(parsed: unknown): unknown[] {
+  if (Array.isArray(parsed)) return parsed
+  if (!parsed || typeof parsed !== 'object') return []
+  const obj = parsed as Record<string, unknown>
+  for (const key of ['invoices', 'items', 'results', 'documents', 'taxInvoices', 'data']) {
+    if (Array.isArray(obj[key])) return obj[key] as unknown[]
+  }
+  if (obj.invoice && typeof obj.invoice === 'object' && !Array.isArray(obj.invoice)) {
+    return [obj.invoice]
+  }
+  return [obj]
 }
 
 /** Vision JSON → 페이지당 0~n건 (한 장에 세금계산서 2매 가능) */
@@ -288,14 +330,7 @@ export function parsePurchaseTaxInvoiceVisionPayload(raw: string): ExtractedPurc
   if (!jsonText) return []
   try {
     const parsed = JSON.parse(jsonText) as unknown
-    const list: unknown[] = Array.isArray(parsed)
-      ? parsed
-      : parsed && typeof parsed === 'object' && Array.isArray((parsed as { invoices?: unknown }).invoices)
-        ? (parsed as { invoices: unknown[] }).invoices
-        : parsed && typeof parsed === 'object'
-          ? [parsed]
-          : []
-    return list
+    return visionRowsFromParsed(parsed)
       .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row))
       .map(normalizePurchaseTaxInvoiceVisionRow)
       .filter(purchaseTaxInvoiceHasExtractedFields)
@@ -334,7 +369,7 @@ export function purchaseTaxReviewFlags(
 ): PurchaseTaxReviewFlag[] {
   const flags: PurchaseTaxReviewFlag[] = []
   const tin = String(row.sellerTaxId || '').replace(/\D/g, '')
-  if (tin && tin.length !== 13) flags.push('tin')
+  if (tin && (tin.length !== 13 || !thaiTinChecksumOk(tin))) flags.push('tin')
   if (!row.skip && purchaseTaxDocMonthMismatch(row.docDate, taxMonth)) flags.push('month')
   if (!row.skip && purchaseTaxVatLooksWrong(row.netAmount, row.vatAmount)) flags.push('vat')
   return flags

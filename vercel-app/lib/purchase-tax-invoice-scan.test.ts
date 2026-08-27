@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildTaxInvoiceVisionUserPrompt,
   inferAmountsFromMoneySequence,
+  joinPdfTextItemsByLine,
   mergePurchaseTaxInvoiceExtract,
   normalizeTaxInvoiceOcrText,
   parsePurchaseTaxInvoiceFromPdfText,
@@ -9,10 +9,16 @@ import {
   parseTaxInvoiceDateFromText,
   pdfPageTextLooksPrinted,
   pdfPageTextIsReliableForExtract,
+  purchaseTaxInvoiceScanFailI18nKey,
   purchaseTaxInvoiceTextExtractIsComplete,
   repairExtractedPurchaseTaxInvoice,
   extractPurchaseTaxInvoiceFromScanText,
+  extractPurchaseTaxInvoicesFromScanText,
+  fillSellerNameFromTinLookup,
+  splitScanTextIntoInvoiceBlocks,
+  wrapTaxInvoiceQrText,
   thaiTinChecksumOk,
+  tinsFromOcrDigitBlob,
 } from './purchase-tax-invoice-scan'
 
 const BUYER = '0105566137147'
@@ -21,6 +27,10 @@ const SELLER = '0105559082715'
 describe('normalizeTaxInvoiceOcrText', () => {
   it('collapses spaced TIN digits', () => {
     expect(normalizeTaxInvoiceOcrText('TIN 010 5559 082 715 end')).toContain(SELLER)
+  })
+
+  it('maps a leading O in a 13-digit TIN', () => {
+    expect(normalizeTaxInvoiceOcrText(`TIN O105559082715 end`)).toContain(SELLER)
   })
 
   it('detects printed PDF text vs empty scan', () => {
@@ -38,6 +48,13 @@ describe('normalizeTaxInvoiceOcrText', () => {
         'ใบกำกับภาษี เลขที่ ??? มูลค่าสินค้า abc ภาษีมูลค่าเพิ่ม xyz รวมทั้งสิ้น บริษัท ทดสอบ จำกัด extra padding text here'
       )
     ).toBe(false)
+  })
+})
+
+describe('purchaseTaxInvoiceScanFailI18nKey', () => {
+  it('maps local scan failures to copy keys', () => {
+    expect(purchaseTaxInvoiceScanFailI18nKey('ocr_failed')).toBe('ptiOcrFailed')
+    expect(purchaseTaxInvoiceScanFailI18nKey('empty_extract')).toBe('ptiPdfEmptyPage')
   })
 })
 
@@ -96,6 +113,43 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
     expect(row?.invoiceNo).toBe('AB-99')
     expect(row?.netAmount).toBe(100)
   })
+
+  it('drops a 13-digit TIN with a bad checksum', () => {
+    const row = parsePurchaseTaxInvoiceFromPdfText(
+      `ใบกำกับภาษี เลขประจำตัวผู้เสียภาษีอากร 0105559082716 เลขที่ AB-1 มูลค่าสินค้า 100.00 ภาษีมูลค่าเพิ่ม 7.00`
+    )
+    expect(row?.sellerTaxId).toBeUndefined()
+    expect(row?.invoiceNo).toBe('AB-1')
+    expect(row?.netAmount).toBe(100)
+  })
+
+  it('repairs a seller TIN that OCR read with O and l', () => {
+    const row = parsePurchaseTaxInvoiceFromPdfText(
+      `ใบกำกับภาษี เลขประจำตัวผู้เสียภาษีอากร O1055590827l5 เลขที่ AB-99 มูลค่าสินค้า 100.00 ภาษีมูลค่าเพิ่ม 7.00`,
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.sellerTaxId).toBe(SELLER)
+    expect(row?.invoiceNo).toBe('AB-99')
+  })
+
+  it('collapses spaces in a labeled invoice number', () => {
+    const row = parsePurchaseTaxInvoiceFromPdfText(
+      `ใบกำกับภาษี เลขที่ INV - 88 เลขประจำตัวผู้เสียภาษีอากร ${SELLER} มูลค่าสินค้า 100.00 ภาษีมูลค่าเพิ่ม 7.00`,
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.invoiceNo).toBe('INV-88')
+  })
+})
+
+describe('tinsFromOcrDigitBlob', () => {
+  it('maps O and l into a checksum-valid TIN', () => {
+    expect(tinsFromOcrDigitBlob('O1055590827l5')).toContain(SELLER)
+  })
+
+  it('does not invent a TIN by changing only the check digit', () => {
+    expect(tinsFromOcrDigitBlob('0105559082716')).not.toContain(SELLER)
+    expect(tinsFromOcrDigitBlob('0105559082716').some((tin) => thaiTinChecksumOk(tin))).toBe(false)
+  })
 })
 
 describe('repairExtractedPurchaseTaxInvoice', () => {
@@ -104,6 +158,16 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
       { invoiceNo: 'A', sellerTaxId: BUYER, netAmount: 100, vatAmount: 7 },
       { buyerTaxId: BUYER }
     )
+    expect(repaired.sellerTaxId).toBeUndefined()
+  })
+
+  it('drops a seller TIN with a bad checksum', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice({
+      invoiceNo: 'A',
+      sellerTaxId: '0105559082716',
+      netAmount: 100,
+      vatAmount: 7,
+    })
     expect(repaired.sellerTaxId).toBeUndefined()
   })
 
@@ -130,7 +194,7 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
 })
 
 describe('mergePurchaseTaxInvoiceExtract', () => {
-  it('fills vision gaps from PDF text', () => {
+  it('fills OCR gaps from PDF text', () => {
     const merged = mergePurchaseTaxInvoiceExtract(
       { invoiceNo: 'INV-1', sellerName: 'A Co', netAmount: 100 },
       { sellerTaxId: SELLER, vatAmount: 7, docDate: '2026-07-01' }
@@ -157,6 +221,29 @@ describe('parsePurchaseTaxInvoiceQrPayload', () => {
     expect(row?.netAmount).toBe(100)
     expect(row?.vatAmount).toBe(7)
   })
+
+  it('reads query params from an e-tax URL', () => {
+    const row = parsePurchaseTaxInvoiceQrPayload(
+      `https://service.rd.go.th/check?sellerTin=${SELLER}&invoiceNo=AB-9&netAmount=100.00&vatAmount=7.00`
+    )
+    expect(row?.sellerTaxId).toBe(SELLER)
+    expect(row?.invoiceNo).toBe('AB-9')
+    expect(row?.netAmount).toBe(100)
+    expect(row?.vatAmount).toBe(7)
+  })
+})
+
+describe('joinPdfTextItemsByLine', () => {
+  it('keeps มูลค่า and the amount on the same line', () => {
+    const text = joinPdfTextItemsByLine([
+      { str: 'มูลค่า', transform: [1, 0, 0, 1, 10, 200] },
+      { str: '1,440.17', transform: [1, 0, 0, 1, 120, 200] },
+      { str: 'VAT', transform: [1, 0, 0, 1, 10, 180] },
+      { str: '100.81', transform: [1, 0, 0, 1, 120, 180] },
+    ])
+    expect(text).toContain('มูลค่า 1,440.17')
+    expect(text).toContain('VAT 100.81')
+  })
 })
 
 describe('extractPurchaseTaxInvoiceFromScanText', () => {
@@ -170,12 +257,85 @@ describe('extractPurchaseTaxInvoiceFromScanText', () => {
     expect(row?.netAmount).toBe(200)
     expect(row?.vatAmount).toBe(14)
   })
+
+  it('reads a URL that is not wrapped in ===QR===', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      `garbage\nhttps://rd.go.th/e?sellerTin=${SELLER}&invoiceNo=ZX-2&netAmount=50.00&vatAmount=3.50\n`,
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.sellerTaxId).toBe(SELLER)
+    expect(row?.invoiceNo).toBe('ZX-2')
+    expect(row?.netAmount).toBe(50)
+  })
+
+  it('prefers TOTALS_DIGITS amounts over garbled Thai TOTALS', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      `===FULL===\nเลขที่ INV-9\n===TOTALS===\nxxx yyy zzz\n===TOTALS_DIGITS===\n100.00\n7.00\n107.00`,
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.invoiceNo).toBe('INV-9')
+    expect(row?.netAmount).toBe(100)
+    expect(row?.vatAmount).toBe(7)
+  })
+
+  it('lets QR overwrite a wrong invoice number in the text layer', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      `===QR===\n${SELLER}|RIGHT-1|50.00|3.50|53.50\n===FULL===\nใบกำกับภาษี เลขที่ WRONG-9 มูลค่าสินค้า 1.00 ภาษีมูลค่าเพิ่ม 0.07`,
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.invoiceNo).toBe('RIGHT-1')
+    expect(row?.sellerTaxId).toBe(SELLER)
+    expect(row?.netAmount).toBe(50)
+  })
 })
 
-describe('buildTaxInvoiceVisionUserPrompt', () => {
-  it('tells the model the buyer TIN', () => {
-    const p = buildTaxInvoiceVisionUserPrompt({ buyerTaxId: BUYER, pageText: 'เลขที่ INV-1 มูลค่า 100.00' })
-    expect(p).toContain(BUYER)
-    expect(p).toContain('INV-1')
+describe('fillSellerNameFromTinLookup', () => {
+  it('fills seller name from a known TIN', () => {
+    const filled = fillSellerNameFromTinLookup(
+      { sellerTaxId: SELLER, invoiceNo: 'A', netAmount: 100 },
+      [{ sellerTaxId: SELLER, sellerName: 'บริษัท ตัวอย่าง จำกัด' }]
+    )
+    expect(filled.sellerName).toContain('ตัวอย่าง')
+  })
+
+  it('does not overwrite an existing seller name', () => {
+    const filled = fillSellerNameFromTinLookup(
+      { sellerTaxId: SELLER, sellerName: 'Keep Me', invoiceNo: 'A' },
+      [{ sellerTaxId: SELLER, sellerName: 'Other' }]
+    )
+    expect(filled.sellerName).toBe('Keep Me')
+  })
+})
+
+const OTHER = '0107536000315'
+
+describe('splitScanTextIntoInvoiceBlocks', () => {
+  it('splits two unique QR payloads into two invoices', () => {
+    const text = wrapTaxInvoiceQrText([`${SELLER}|TOP-1|100.00|7.00|107.00`, `${OTHER}|BOT-2|200.00|14.00|214.00`])
+    const blocks = splitScanTextIntoInvoiceBlocks(text)
+    expect(blocks).toHaveLength(2)
+    const rows = extractPurchaseTaxInvoicesFromScanText(text, { buyerTaxId: BUYER })
+    expect(rows.map((r) => r.invoiceNo).sort()).toEqual(['BOT-2', 'TOP-1'])
+    expect(rows.map((r) => r.sellerTaxId).sort()).toEqual([OTHER, SELLER].sort())
+  })
+
+  it('splits two ใบกำกับภาษี markers on one page', () => {
+    const top = `ใบกำกับภาษี ต้นฉบับ\nเลขที่ A-1\nเลขประจำตัวผู้เสียภาษีอากร ${SELLER}\nมูลค่าสินค้า 100.00\nภาษีมูลค่าเพิ่ม 7.00\nรวมทั้งสิ้น 107.00\n${'x'.repeat(80)}\n`
+    const bot = `ใบกำกับภาษี ต้นฉบับ\nเลขที่ B-2\nเลขประจำตัวผู้เสียภาษีอากร ${OTHER}\nมูลค่าสินค้า 50.00\nภาษีมูลค่าเพิ่ม 3.50\nรวมทั้งสิ้น 53.50`
+    const rows = extractPurchaseTaxInvoicesFromScanText(top + bot, { buyerTaxId: BUYER })
+    expect(rows.map((r) => r.invoiceNo).sort()).toEqual(['A-1', 'B-2'])
+  })
+
+  it('does not split one invoice that repeats ใบกำกับภาษี', () => {
+    const text = `ใบกำกับภาษี / ใบเสร็จรับเงิน
+เลขที่ ONLY-1
+เลขประจำตัวผู้เสียภาษีอากร ${SELLER}
+มูลค่าสินค้า 100.00
+ภาษีมูลค่าเพิ่ม 7.00
+รวมทั้งสิ้น 107.00
+${'padding '.repeat(30)}
+สำเนาใบกำกับภาษี ONLY-1`
+    expect(splitScanTextIntoInvoiceBlocks(text)).toHaveLength(1)
+    expect(extractPurchaseTaxInvoicesFromScanText(text, { buyerTaxId: BUYER })).toHaveLength(1)
   })
 })

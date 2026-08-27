@@ -9,6 +9,7 @@ import {
   accrualDateWithinBankWindow,
   buildExpenseAccrualBankLinkAmountFilters,
   buildExpenseAccrualBankLinkDateFilters,
+  buildExpenseAccrualBankLinkPeriodFilters,
   buildExpenseAccrualBankLinkRecentFilter,
   chunkIdsForInFilter,
   EXPENSE_BANK_LINK_AMOUNT_LIMITS,
@@ -18,6 +19,15 @@ import {
 } from '@/lib/expense-accrual-bank-link-candidates'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { roundMoney2 } from '@/lib/invoice-vat-total'
+import {
+  isExpenseBankComboPeriodReady,
+  isExpenseBankComboSearchReady,
+  remainingFitsBankWithdrawal,
+  expenseAccrualMatchesComboSearch,
+  parseExpenseBankComboSearchQuery,
+  normalizeExpenseBankComboPeriod,
+  accrualDateInComboPeriod,
+} from '@/lib/expense-accrual-bank-multi-link'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -46,6 +56,7 @@ type ExpenseAccrualRow = {
   status?: string
   approved_at?: string
   approved_by?: string
+  document_no?: string | null
 }
 
 type PayableTxRow = {
@@ -76,10 +87,11 @@ const MEMO_MATCH_ORDER: Record<PayeeMemoMatchQuality, number> = {
 const LINKABLE_ACCRUAL_STATUSES = ['planned', 'approved', 'partial', 'paid', 'done'] as const
 
 const ACCRUAL_SELECT =
-  'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by'
+  'id,payee_code,payee_name,amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,approved_at,approved_by,document_no'
 
 /** 드롭다운 과다 방지 — 금액·날짜 일치 우선 정렬 후 상한 */
 const MAX_LINK_CANDIDATES = 80
+const MAX_COMBO_SEARCH_CANDIDATES = 30
 
 function mergeAccrualRows(...batches: ExpenseAccrualRow[][]): ExpenseAccrualRow[] {
   const byId = new Map<number, ExpenseAccrualRow>()
@@ -104,6 +116,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const bankTransactionId = Number(searchParams.get('bankTransactionId') || 0)
     const storeFilter = String(searchParams.get('storeFilter') || '').trim()
+    const comboMode =
+      searchParams.get('combo') === '1' || String(searchParams.get('combo') || '').toLowerCase() === 'true'
+    const comboQuery = String(searchParams.get('q') || '').trim()
+    const comboFromRaw = String(searchParams.get('from') || searchParams.get('start') || '').trim()
+    const comboToRaw = String(searchParams.get('to') || searchParams.get('end') || '').trim()
+    const comboPeriod = normalizeExpenseBankComboPeriod(comboFromRaw, comboToRaw)
     if (!bankTransactionId) {
       return NextResponse.json({ success: false, message: '통장 거래 ID가 필요합니다.', list: [] }, { status: 400, headers })
     }
@@ -163,9 +181,45 @@ export async function GET(request: NextRequest) {
     const bankMemo = String(bankRow.memo || '')
     const bankNote = String(bankRow.note || '')
 
+    if (comboMode && comboFromRaw && comboToRaw && !isExpenseBankComboPeriodReady(comboFromRaw, comboToRaw)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '합산 검색 기간은 시작·종료일을 넣고 93일 이내로 해 주세요.',
+          list: [],
+        },
+        { status: 400, headers }
+      )
+    }
+
+    if (
+      comboMode &&
+      !isExpenseBankComboSearchReady(comboQuery, { from: comboFromRaw, to: comboToRaw })
+    ) {
+      return NextResponse.json(
+        {
+          success: true,
+          list: [],
+          bankTransaction: {
+            id: Number(bankRow.id || 0),
+            amount: bankAmount,
+            transDate: bankDate,
+            memo: bankMemo,
+            note: bankNote,
+          },
+        },
+        { headers }
+      )
+    }
+
     // 날짜 창 2회(발생일·만기일) 병합 — nested or=(and()) 금지
+    const useComboPeriod = comboMode && isExpenseBankComboPeriodReady(comboFromRaw, comboToRaw)
+    const comboDateFilters =
+      useComboPeriod && comboPeriod
+        ? buildExpenseAccrualBankLinkPeriodFilters(comboPeriod.from, comboPeriod.to)
+        : buildExpenseAccrualBankLinkDateFilters(bankDate)
     const dateBatches = await Promise.all(
-      buildExpenseAccrualBankLinkDateFilters(bankDate).map(
+      comboDateFilters.map(
         (filter) =>
           supabaseSelectFilter('expense_accruals', filter, {
             select: ACCRUAL_SELECT,
@@ -176,8 +230,8 @@ export async function GET(request: NextRequest) {
     )
     let accrualRows = mergeAccrualRows(...dateBatches)
 
-    // 금액 일치가 본연결 조건 — 날짜창과 별도로 항상 보강(paid 이력 limit 밀림 방지)
-    if (bankAmount > 0) {
+    // 1:1은 금액 일치 보강. 합산 검색은 기간(또는 한쪽 금액)이 본연결.
+    if (!comboMode && bankAmount > 0) {
       const amountFilters = buildExpenseAccrualBankLinkAmountFilters(bankAmount)
       const amountBatches = await Promise.all(
         amountFilters.map(
@@ -192,8 +246,24 @@ export async function GET(request: NextRequest) {
       accrualRows = mergeAccrualRows(accrualRows || [], ...amountBatches)
     }
 
-    // 그래도 잔액 일치 후보가 없을 수 있어 최근 미정산 보강(부분지급 잔액=통장 케이스)
-    if ((accrualRows || []).length < 40) {
+    if (comboMode) {
+      const { amount: comboAmt } = parseExpenseBankComboSearchQuery(comboQuery)
+      if (comboAmt && comboAmt > 0) {
+        const comboAmtFilters = buildExpenseAccrualBankLinkAmountFilters(comboAmt)
+        const comboAmtBatches = await Promise.all(
+          comboAmtFilters.map(
+            (filter, i) =>
+              supabaseSelectFilter('expense_accruals', filter, {
+                select: ACCRUAL_SELECT,
+                order: 'id.desc',
+                limit: EXPENSE_BANK_LINK_AMOUNT_LIMITS[i] ?? 400,
+              }) as Promise<ExpenseAccrualRow[]>
+          )
+        )
+        accrualRows = mergeAccrualRows(accrualRows || [], ...comboAmtBatches)
+      }
+    } else if ((accrualRows || []).length < 40) {
+      // 그래도 잔액 일치 후보가 없을 수 있어 최근 미정산 보강(부분지급 잔액=통장 케이스)
       const recentRows = (await supabaseSelectFilter(
         'expense_accruals',
         buildExpenseAccrualBankLinkRecentFilter(),
@@ -300,14 +370,34 @@ export async function GET(request: NextRequest) {
           dateInWindow,
           amountClose,
           amountMatch,
+          documentNo: String(r.document_no || '').trim(),
         }
       })
       .filter((r) =>
         LINKABLE_ACCRUAL_STATUSES.includes(String(r.status || '').toLowerCase() as (typeof LINKABLE_ACCRUAL_STATUSES)[number])
       )
       .filter((r) => (r.remainingAmount || 0) > 0)
-      // 저장 시 잔액=통장 필수 → 연결 불가한 ≠ 후보로 목록을 채우지 않음
-      .filter((r) => r.amountMatch)
+      .filter((r) => remainingFitsBankWithdrawal(r.remainingAmount, bankAmount))
+      .filter((r) =>
+        comboMode
+          ? expenseAccrualMatchesComboSearch(
+              {
+                payeeName: r.payeeName,
+                payeeCode: r.payeeCode,
+                memo: r.memo,
+                documentNo: r.documentNo,
+                remainingAmount: r.remainingAmount,
+                plannedAmount: r.plannedAmount,
+              },
+              comboQuery
+            )
+          : r.amountMatch
+      )
+      .filter((r) =>
+        useComboPeriod && comboPeriod
+          ? accrualDateInComboPeriod(r.expenseDate, r.dueDate, comboPeriod.from, comboPeriod.to)
+          : true
+      )
       .filter(
         (r) =>
           !isPayrollExpenseAccrualForBankLink({
@@ -384,6 +474,7 @@ export async function GET(request: NextRequest) {
           amountMatch,
           dateExactMatch: r.dateExactMatch,
           dateInWindow: r.dateInWindow,
+          documentNo: r.documentNo || '',
         }
       })
       .sort((a, b) => {
@@ -393,6 +484,8 @@ export async function GET(request: NextRequest) {
         if (dateDiff !== 0) return dateDiff
         const winDiff = Number(b.dateInWindow ? 1 : 0) - Number(a.dateInWindow ? 1 : 0)
         if (winDiff !== 0) return winDiff
+        const remainDiff = (Number(b.remainingAmount) || 0) - (Number(a.remainingAmount) || 0)
+        if (remainDiff !== 0) return remainDiff
         const statusOrder = (s: string) => (s === 'approved' || s === 'partial' ? 0 : 1)
         const sd = statusOrder(String(a.status || '')) - statusOrder(String(b.status || ''))
         if (sd !== 0) return sd
@@ -402,7 +495,7 @@ export async function GET(request: NextRequest) {
         if (qd !== 0) return qd
         return b.id - a.id
       })
-      .slice(0, MAX_LINK_CANDIDATES)
+      .slice(0, comboMode ? MAX_COMBO_SEARCH_CANDIDATES : MAX_LINK_CANDIDATES)
       .map(({ dateExactMatch: _e, dateInWindow: _w, ...row }) => row)
 
     return NextResponse.json({

@@ -318,12 +318,21 @@ export async function getApprovedExpenseAccrualsForBankTx(params: {
   bankTransactionId: number
   userRole?: string
   storeFilter?: string
+  /** 두 건 합산: 기간 + (선택) 거래처·문서번호·한쪽 금액 */
+  combo?: boolean
+  q?: string
+  from?: string
+  to?: string
 }) {
   const q = new URLSearchParams({
     bankTransactionId: String(params.bankTransactionId),
   })
   if (params.userRole) q.set('userRole', params.userRole)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.combo) q.set('combo', '1')
+  if (params.q) q.set('q', params.q)
+  if (params.from) q.set('from', params.from)
+  if (params.to) q.set('to', params.to)
   const res = await apiFetchWithOffline(`/api/getApprovedExpenseAccrualsForBankTx?${q}`)
   return res.json() as Promise<{
     success: boolean
@@ -356,7 +365,8 @@ export async function getExpensePaymentPlan(params: {
 }
 
 export async function executeExpensePayment(params: {
-  expenseAccrualId: number
+  expenseAccrualId?: number
+  expenseAccrualIds?: number[]
   paymentMethod: 'bank' | 'petty'
   amount: number
   transDate: string
@@ -523,6 +533,7 @@ export async function getCardBillAllocation(parentId: number) {
       vatAmount?: number
       invoiceReceived?: boolean
       invoiceNo?: string | null
+      vendorCode?: string | null
     }[]
   }>
 }
@@ -537,6 +548,7 @@ export async function saveCardBillAllocation(params: {
     vatAmount?: number
     invoiceReceived?: boolean
     invoiceNo?: string
+    vendorCode?: string
   }[]
   userName?: string
   userRole?: string

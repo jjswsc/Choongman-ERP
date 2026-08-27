@@ -11,6 +11,23 @@ const LINKABLE_STATUS_IN = 'planned,approved,partial,paid,done'
 /** paid 이력에 밀리지 않도록 미정산 상태 우선 조회 */
 const OPEN_STATUS_IN = 'planned,approved,partial'
 
+/** 발생일·만기일 기간 조회 — 호출측에서 2회 조회 후 병합 */
+export function buildExpenseAccrualBankLinkPeriodFilters(fromYmd: string, toYmd: string): string[] {
+  const fromRaw = String(fromYmd || '').trim().slice(0, 10)
+  const toRaw = String(toYmd || '').trim().slice(0, 10)
+  const ymd = /^\d{4}-\d{2}-\d{2}$/
+  if (!ymd.test(fromRaw) || !ymd.test(toRaw)) {
+    return [`status=in.(${LINKABLE_STATUS_IN})`]
+  }
+  const from = fromRaw <= toRaw ? fromRaw : toRaw
+  const to = fromRaw <= toRaw ? toRaw : fromRaw
+  const status = `status=in.(${LINKABLE_STATUS_IN})`
+  return [
+    `${status}&expense_date=gte.${from}&expense_date=lte.${to}`,
+    `${status}&due_date=gte.${from}&due_date=lte.${to}`,
+  ]
+}
+
 /** expense_date 창 + due_date 창 — 호출측에서 2회 조회 후 병합 */
 export function buildExpenseAccrualBankLinkDateFilters(
   bankDateYmd: string,
@@ -22,11 +39,7 @@ export function buildExpenseAccrualBankLinkDateFilters(
   }
   const from = addDaysYmd(bankDate, -Math.abs(windowDays))
   const to = addDaysYmd(bankDate, Math.abs(windowDays))
-  const status = `status=in.(${LINKABLE_STATUS_IN})`
-  return [
-    `${status}&expense_date=gte.${from}&expense_date=lte.${to}`,
-    `${status}&due_date=gte.${from}&due_date=lte.${to}`,
-  ]
+  return buildExpenseAccrualBankLinkPeriodFilters(from, to)
 }
 
 /**

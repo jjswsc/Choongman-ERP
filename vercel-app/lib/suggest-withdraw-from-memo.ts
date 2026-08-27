@@ -7,6 +7,7 @@ import {
   looksLikeSsoRemittanceMemo,
   looksLikeTaxAuthorityRemittanceMemo,
 } from '@/lib/bank-transaction-note-meta'
+import { memoLooksLikeCardBill, memoLooksLikeCardMerchantFee } from '@/lib/card-bill-memo'
 
 export type WithdrawCategory = 'transfer' | 'expense' | 'correction' | 'loan' | 'advance' | 'unclassified' | 'tax'
 
@@ -19,6 +20,16 @@ export function suggestWithdrawFromMemo(
   if (!m) return null
 
   const byCode = Object.fromEntries((accountSubjects || []).map((s) => [s.code, s.id]).filter(([, id]) => id != null))
+
+  // 가맹점 카드수수료(경비) — 카드사 월 대금보다 먼저
+  if (memoLooksLikeCardMerchantFee(memo) || /\b(card fee|카드수수료|credit card fee|merchant fee)\b/i.test(m)) {
+    return { category: 'expense', accountSubjectId: byCode['5529'] }
+  }
+
+  // 신용카드 월 대금(통장에서 한 번에 출금) → 이체. 계정과목은 카드 탭 배분에서 지정
+  if (memoLooksLikeCardBill(memo)) {
+    return { category: 'transfer' }
+  }
 
   // 이체/보충
   if (/\b(보충|이체|정산|replenish|transfer|패티캐시|petty)\b/i.test(m)) {
@@ -64,9 +75,6 @@ export function suggestWithdrawFromMemo(
   if (/\b(sns|마케팅|marketing)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5527'] }
   if (/\b(grab|lineman|shopee|robinhood|delivery app|배달앱|delivery fee|platform fee)\b/i.test(m)) {
     return { category: 'expense', accountSubjectId: byCode['5528'] }
-  }
-  if (/\b(card fee|카드수수료|credit card fee|merchant fee)\b/i.test(m)) {
-    return { category: 'expense', accountSubjectId: byCode['5529'] }
   }
   if (/\b(용역|service)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5521'] }
   if (/\b(연구|rnd|r&d)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5522'] }

@@ -31,6 +31,7 @@ type ChildRow = {
   vat_amount?: number | null
   invoice_received?: boolean | null
   invoice_no?: string | null
+  vendor_code?: string | null
 }
 
 export type CardBillAllocationLine = {
@@ -41,6 +42,7 @@ export type CardBillAllocationLine = {
   vatAmount?: number
   invoiceReceived?: boolean
   invoiceNo?: string | null
+  vendorCode?: string | null
 }
 
 export async function getCardBillAllocation(parentId: number): Promise<
@@ -64,6 +66,7 @@ export async function getCardBillAllocation(parentId: number): Promise<
         vatAmount?: number
         invoiceReceived?: boolean
         invoiceNo?: string | null
+        vendorCode?: string | null
       }[]
     }
   | { ok: false; message: string; status?: number }
@@ -87,7 +90,7 @@ export async function getCardBillAllocation(parentId: number): Promise<
   const children = (await supabaseSelectFilter('card_transactions', `parent_id=eq.${pid}`, {
     order: 'id.asc',
     limit: 500,
-    select: 'id,amount,account_subject_id,memo,vat_amount,invoice_received,invoice_no',
+    select: 'id,amount,account_subject_id,memo,vat_amount,invoice_received,invoice_no,vendor_code',
   })) as ChildRow[] | null
 
   const totalAmount = Math.abs(Number(parent.amount) || 0)
@@ -99,6 +102,7 @@ export async function getCardBillAllocation(parentId: number): Promise<
     vatAmount: Math.max(0, Number(c.vat_amount) || 0) || undefined,
     invoiceReceived: Boolean(c.invoice_received),
     invoiceNo: c.invoice_no ? String(c.invoice_no).trim() : null,
+    vendorCode: c.vendor_code ? String(c.vendor_code).trim() : null,
   }))
   const allocatedAmount = lines.reduce((s, l) => s + l.amount, 0)
 
@@ -139,6 +143,7 @@ export async function saveCardBillAllocation(params: {
       vatAmount: Math.max(0, Number(l.vatAmount ?? 0) || 0),
       invoiceReceived: Boolean(l.invoiceReceived),
       invoiceNo: l.invoiceNo != null ? String(l.invoiceNo || '').trim() || null : null,
+      vendorCode: l.vendorCode != null ? String(l.vendorCode || '').trim() || null : null,
     }))
     .filter((l) => l.accountSubjectId > 0 && l.amount > 0)
 
@@ -194,6 +199,7 @@ export async function saveCardBillAllocation(params: {
       vat_amount: vatAmount > 0 ? vatAmount : null,
       invoice_received: invoiceReceived,
       invoice_no: invoiceNo,
+      vendor_code: line.vendorCode || null,
       updated_at: new Date().toISOString(),
     }
 

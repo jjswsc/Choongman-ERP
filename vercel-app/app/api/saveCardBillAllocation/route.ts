@@ -40,6 +40,10 @@ export async function POST(request: NextRequest) {
           l.invoiceNo != null || l.invoice_no != null
             ? String(l.invoiceNo ?? l.invoice_no ?? '')
             : undefined,
+        vendorCode:
+          l.vendorCode != null || l.vendor_code != null
+            ? String(l.vendorCode ?? l.vendor_code ?? '')
+            : undefined,
       })),
       postedBy: userName || null,
     })

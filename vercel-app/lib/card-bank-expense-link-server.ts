@@ -11,35 +11,9 @@ import {
 } from '@/lib/bank-transaction-note-meta'
 import { collectLinkedBankTransactionIds } from '@/lib/petty-bank-expense-link-server'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
+import { canQueueWithdrawCategoryForCardBill, memoLooksLikeCardBill } from '@/lib/card-bill-memo'
 
 const LINKED_BANK_SCAN_MAX_ROWS = 1_000_000
-
-/** 카드사·카드대금 키워드 (통장 적요 필터·힌트용) */
-export const CARD_BILL_MEMO_KEYWORDS = [
-  'card',
-  'credit',
-  'visa',
-  'master',
-  'kbank',
-  'k-bank',
-  'kasikorn',
-  'scb',
-  'bbl',
-  'ktb',
-  'tmb',
-  'ttb',
-  'uob',
-  'cimb',
-  'bay',
-  'krungthai',
-  '카드',
-  '신용',
-  '체크',
-  'creditcard',
-  'cr card',
-  'card payment',
-  'card pymt',
-] as const
 
 export type UnlinkedBankWithdrawalForCard = {
   id: number
@@ -49,9 +23,10 @@ export type UnlinkedBankWithdrawalForCard = {
   likelyCardBill: boolean
 }
 
-function memoLikelyCardBill(memo: string): boolean {
-  const lower = memo.toLowerCase()
-  return CARD_BILL_MEMO_KEYWORDS.some((kw) => lower.includes(kw.toLowerCase()))
+function resolvedWithdrawCategory(row: { category?: string; note?: string }): string {
+  const cat = String(row.category || '').trim().toLowerCase()
+  if (cat) return cat
+  return String(extractWithdrawalCategoryFromNote(String(row.note || '')) || '').trim().toLowerCase()
 }
 
 export async function getUnlinkedBankWithdrawalsForCard(params: {
@@ -86,7 +61,7 @@ export async function getUnlinkedBankWithdrawalsForCard(params: {
         transDate: String(r.trans_date || '').slice(0, 10),
         amount: Math.abs(Number(r.amount || 0)),
         memo,
-        likelyCardBill: memoLikelyCardBill(memo),
+        likelyCardBill: memoLooksLikeCardBill(memo),
       }
     })
     .filter((r) => r.id > 0 && r.amount > 0)
@@ -102,14 +77,7 @@ type BankTxRow = {
   category?: string
 }
 
-function isTransferBankWithdrawal(row: { category?: string; note?: string }): boolean {
-  const cat = String(row.category || '').trim().toLowerCase()
-  if (cat === 'transfer' || cat.startsWith('transfer_')) return true
-  const fromNote = extractWithdrawalCategoryFromNote(String(row.note || ''))
-  return fromNote === 'transfer' || (fromNote?.startsWith('transfer_') ?? false)
-}
-
-/** 지출등록(이체)에서 카드대금 연동 대기열에 넣을 이체 출금 후보 */
+/** 지출등록(이체)에서 카드대금 연동 대기열에 넣을 출금 후보 */
 export async function getBankWithdrawalsForCardBillQueueMark(params: {
   accountId: number
   startStr: string
@@ -137,7 +105,9 @@ export async function getBankWithdrawalsForCardBillQueueMark(params: {
 
   return (rows || [])
     .filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
-    .filter((r) => isTransferBankWithdrawal(r))
+    .filter((r) =>
+      canQueueWithdrawCategoryForCardBill(resolvedWithdrawCategory(r), String(r.memo || ''))
+    )
     .filter((r) => !hasCardBillQueueMarker(String(r.note || '')))
     .filter((r) => !linkedIds.has(Number(r.id || 0)))
     .map((r) => {
@@ -147,7 +117,7 @@ export async function getBankWithdrawalsForCardBillQueueMark(params: {
         transDate: String(r.trans_date || '').slice(0, 10),
         amount: parseMoneyAmount(r.amount),
         memo,
-        likelyCardBill: memoLikelyCardBill(memo),
+        likelyCardBill: memoLooksLikeCardBill(memo),
       }
     })
     .filter((r) => {
@@ -168,7 +138,7 @@ export async function markBankTransactionForCardBill(params: {
 
   const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
     limit: 1,
-    select: 'id,trans_type,note,category',
+    select: 'id,trans_type,note,category,memo',
   })) as BankTxRow[] | null
   const bankRow = bankRows?.[0]
   if (!bankRow?.id) {
@@ -177,7 +147,7 @@ export async function markBankTransactionForCardBill(params: {
   if (String(bankRow.trans_type || '').toLowerCase() !== 'withdraw') {
     return { ok: false, message: '출금 거래만 연결할 수 있습니다.', status: 400 }
   }
-  if (!isTransferBankWithdrawal(bankRow)) {
+  if (!canQueueWithdrawCategoryForCardBill(resolvedWithdrawCategory(bankRow), String(bankRow.memo || ''))) {
     return { ok: false, message: '이체(transfer) 구분 출금만 카드대금 연동 대기열에 넣을 수 있습니다.', status: 400 }
   }
 
