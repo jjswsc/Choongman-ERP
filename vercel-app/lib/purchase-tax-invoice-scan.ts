@@ -54,13 +54,14 @@ const THAI_MONTH: Record<string, number> = {
 export { thaiTinChecksumOk }
 
 function moneyFromFragment(raw: string): number | undefined {
-  const s = String(raw || '')
+  const s = String(raw || '').replace(/\b7(?:\.0+)?\s*%/g, ' ')
   const money = s.match(/\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2}/)
   const v = money
     ? Number(money[0].replace(/,/g, ''))
     : (() => {
         const n = s.match(/\d{1,7}(?!\d)/)
-        return n ? Number(n[0]) : NaN
+        if (!n || n[0] === '7') return NaN
+        return Number(n[0])
       })()
   if (!Number.isFinite(v) || v < 0 || v >= 500_000_000) return undefined
   return roundMoney2(v)
@@ -153,6 +154,11 @@ function compactInvoiceToken(raw: string): string {
     .trim()
 }
 
+/** OCR이 번호 끝의 ! 를 1로 읽은 경우. I→1 치환은 INV/IM 접두를 깨므로 하지 않음. */
+function ocrFixDigitsInInvoiceBlob(raw: string): string {
+  return String(raw || '').replace(/!/g, '1')
+}
+
 /** OCR이 제목(Tax Invoice)이나 주소 조각을 번호로 넣은 경우 */
 export function invoiceNoLooksPlausible(raw: unknown): boolean {
   const inv = compactInvoiceToken(String(raw || ''))
@@ -187,10 +193,10 @@ const PLATFORM_INVOICE_RE =
 
 function extractInvoiceNo(text: string, sellerTaxId?: string): string | undefined {
   const s = String(text || '')
-  const compact = s.replace(/\s+/g, '')
+  const compact = ocrFixDigitsInInvoiceBlob(s.replace(/\s+/g, ''))
   const platform = s.match(PLATFORM_INVOICE_RE) || compact.match(PLATFORM_INVOICE_RE)
   if (platform) {
-    const inv = cleanInvoiceNo(platform[1])
+    const inv = cleanInvoiceNo(ocrFixDigitsInInvoiceBlob(platform[1]))
     if (inv) return inv
   }
   if (sellerTaxId === '0105556090377' || compact.includes('0105556090377')) {
@@ -239,7 +245,7 @@ function preferPlausibleInvoiceNo(a?: string, b?: string): string | undefined {
 }
 
 export function inferSellerFromInvoiceNo(invoiceNo: string): { tin: string; name: string } | null {
-  const inv = String(invoiceNo || '').trim()
+  const inv = ocrFixDigitsInInvoiceBlob(String(invoiceNo || '').trim())
   if (!inv) return null
   for (const row of KNOWN_INVOICE_SELLERS) {
     if (row.re.test(inv)) return { tin: row.tin, name: row.name }
@@ -248,7 +254,7 @@ export function inferSellerFromInvoiceNo(invoiceNo: string): { tin: string; name
 }
 
 export function inferDocDateFromInvoiceNo(invoiceNo: string): string | undefined {
-  const s = String(invoiceNo || '').trim()
+  const s = ocrFixDigitsInInvoiceBlob(String(invoiceNo || '').trim())
   const im = s.match(/^IM(20\d{2})(\d{2})(\d{2})\d+$/i)
   if (im) return ymdFromParts(Number(im[1]), Number(im[2]), Number(im[3]))
   const lm = s.match(/^LMRN(20\d{2})(\d{2})(\d{2})/i)
@@ -288,17 +294,22 @@ function extractSellerName(text: string, buyerName?: string): string | undefined
 }
 
 function extractAmountNear(text: string, keywords: RegExp): number | undefined {
+  const isVat = /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i.test(keywords.source)
   const lines = String(text || '').split(/\r?\n/)
   for (const line of lines) {
     const idx = line.search(keywords)
     if (idx < 0) continue
-    const v = moneyFromFragment(line.slice(idx))
+    let frag = line.slice(idx)
+    if (isVat) frag = frag.split(/รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)[0]
+    const v = moneyFromFragment(frag)
     if (v != null) return v
   }
   const joined = String(text || '').replace(/\s+/g, ' ')
   const m = joined.match(keywords)
   if (!m || m.index == null) return undefined
-  return moneyFromFragment(joined.slice(m.index, m.index + 96))
+  let frag = joined.slice(m.index, m.index + 96)
+  if (isVat) frag = frag.split(/รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)[0]
+  return moneyFromFragment(frag)
 }
 
 function collectBahtAmounts(text: string): number[] {
@@ -544,6 +555,9 @@ export function splitScanTextIntoInvoiceBlocks(text: string): string[] {
     .filter((s) => s.length >= 8)
   const uniqueQrs = [...new Set(qrs)]
   if (uniqueQrs.length >= 2) {
+    const qrInvoiceNos = uniqueQrs.map((q) => extractInvoiceNo(q)?.toUpperCase()).filter((n): n is string => !!n)
+    const uniqueInv = [...new Set(qrInvoiceNos)]
+    if (uniqueInv.length === 1 && qrInvoiceNos.length === uniqueQrs.length) return [raw]
     const rest = raw.replace(/===QR===\s*[\s\S]*?(?====|$)/g, '').trim()
     const lines = rest.split(/\n/)
     const mid = Math.max(1, Math.floor(lines.length / 2))
@@ -558,11 +572,20 @@ export function splitScanTextIntoInvoiceBlocks(text: string): string[] {
   while ((m = re.exec(raw))) {
     if (!markers.length || m.index - markers[markers.length - 1] > 120) markers.push(m.index)
   }
+  const platformNos = [
+    ...new Set(
+      [...ocrFixDigitsInInvoiceBlob(raw.replace(/\s+/g, '')).matchAll(new RegExp(PLATFORM_INVOICE_RE.source, 'gi'))]
+        .map((hit) => cleanInvoiceNo(ocrFixDigitsInInvoiceBlob(hit[1]))?.toUpperCase())
+        .filter((n): n is string => !!n)
+    ),
+  ]
   const invoiceNos = [
     ...raw.matchAll(/เลขที่\s*([A-Za-z0-9][A-Za-z0-9\-/]{2,40})/g),
-  ].map((hit) => hit[1].replace(/\s+/g, '').toUpperCase())
-  const uniqueInvoiceNos = new Set(invoiceNos)
-  if (markers.length >= 2 && uniqueInvoiceNos.size >= 2) {
+  ]
+    .map((hit) => cleanInvoiceNo(hit[1])?.toUpperCase())
+    .filter((n): n is string => !!n)
+  const uniqueInvoiceNos = [...new Set(invoiceNos)]
+  if (markers.length >= 2 && (platformNos.length >= 2 || uniqueInvoiceNos.length >= 2)) {
     return markers.slice(0, 2).map((start, i, arr) => raw.slice(start, i + 1 < arr.length ? arr[i + 1] : raw.length))
   }
   return [raw]
@@ -742,12 +765,31 @@ export function repairExtractedPurchaseTaxInvoice(
     }
   }
 
+  if ((netAmount == null || netAmount === 0) && vatAmount != null && Math.abs(vatAmount - 7) < 0.001) {
+    vatAmount = undefined
+    if (totalAmount != null && Math.abs(totalAmount - 7) < 0.001) totalAmount = undefined
+  }
+  if (netAmount != null && vatAmount != null && vatAmount > 0 && purchaseTaxVatLooksWrong(netAmount, vatAmount)) {
+    if (Math.abs(vatAmount - 7) < 0.001 && netAmount > 20) {
+      vatAmount = roundMoney2(netAmount * 0.07)
+      totalAmount = roundMoney2(netAmount + vatAmount)
+    } else if (vatAmount > netAmount) {
+      vatAmount = undefined
+      totalAmount = undefined
+    }
+  }
+
   let invoiceNo = String(row.invoiceNo || '').trim() || undefined
   if (invoiceNo) invoiceNo = cleanInvoiceNo(invoiceNo) || (invoiceNoLooksPlausible(invoiceNo) ? compactInvoiceToken(invoiceNo) : undefined)
   const inferredSeller = invoiceNo ? inferSellerFromInvoiceNo(invoiceNo) : null
   if (inferredSeller) {
     if (!sellerTaxId) sellerTaxId = inferredSeller.tin
-    else if (sellerTaxId !== inferredSeller.tin && (!sellerTaxId.startsWith('0') || looksLikeJunkSellerName(row.sellerName))) {
+    else if (
+      sellerTaxId !== inferredSeller.tin &&
+      (sellerTaxId.slice(0, 12) === inferredSeller.tin.slice(0, 12) ||
+        !sellerTaxId.startsWith('0') ||
+        looksLikeJunkSellerName(row.sellerName))
+    ) {
       sellerTaxId = inferredSeller.tin
     }
   }
@@ -756,6 +798,8 @@ export function repairExtractedPurchaseTaxInvoice(
   const knownName = sellerTaxId ? KNOWN_TIN_SELLER_NAMES[sellerTaxId] : undefined
   if (knownName) sellerName = knownName
   else if (!sellerName && inferredSeller) sellerName = inferredSeller.name
+  const sellerBranch =
+    sellerTaxId && KNOWN_TIN_SELLER_NAMES[sellerTaxId] ? 'สำนักงานใหญ่' : row.sellerBranch
 
   const docDate = row.docDate || (invoiceNo ? inferDocDateFromInvoiceNo(invoiceNo) : undefined)
 
@@ -765,6 +809,7 @@ export function repairExtractedPurchaseTaxInvoice(
     docDate,
     sellerName: sellerName || undefined,
     sellerTaxId,
+    sellerBranch,
     netAmount,
     vatAmount,
     totalAmount,

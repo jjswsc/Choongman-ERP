@@ -72,6 +72,13 @@ describe('purchase tax invoice golden texts', () => {
     expect(kbank?.invoiceNo).toBe('010726E00037051')
     expect(kbank?.sellerTaxId).toBe('0107536000315')
     expect(kbank?.docDate).toBe('2026-07-01')
+
+    const grabBang = extractPurchaseTaxInvoiceFromScanText(
+      `ใบกำกับภาษี เลขที่ IM2026070100008!\nเลขประจำตัวผู้เสียภาษี 0105556090377\nมูลค่า 337.16 ภาษีมูลค่าเพิ่ม 23.60`,
+      { buyerTaxId: BUYER }
+    )
+    expect(grabBang?.invoiceNo).toBe('IM20260701000081')
+    expect(grabBang?.sellerBranch).toBe('สำนักงานใหญ่')
   })
 
   it('reads an electronic PDF text layer (Polar Bear style)', () => {

@@ -212,6 +212,36 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     })
     expect(repaired.vatAmount).toBe(7)
   })
+
+  it('does not treat a 7% rate as 7 baht VAT', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      `ใบกำกับภาษี เลขที่ INV-88 เลขประจำตัวผู้เสียภาษีอากร ${SELLER} มูลค่าสินค้า 43.50 ภาษีมูลค่าเพิ่ม 7% รวมทั้งสิ้น 46.54`,
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.netAmount).toBe(43.5)
+    expect(row?.vatAmount).toBe(3.04)
+  })
+
+  it('drops a VAT amount larger than net when 7% does not match', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice({
+      invoiceNo: 'A',
+      sellerTaxId: SELLER,
+      netAmount: 374,
+      vatAmount: 2623,
+    })
+    expect(repaired.netAmount).toBe(374)
+    expect(repaired.vatAmount).toBeUndefined()
+  })
+
+  it('turns a 7% rate read as 7 baht into 7% of net', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice({
+      invoiceNo: 'A',
+      sellerTaxId: SELLER,
+      netAmount: 374,
+      vatAmount: 7,
+    })
+    expect(repaired.vatAmount).toBe(26.18)
+  })
 })
 
 describe('mergePurchaseTaxInvoiceExtract', () => {
@@ -345,6 +375,15 @@ describe('splitScanTextIntoInvoiceBlocks', () => {
     const bot = `ใบกำกับภาษี ต้นฉบับ\nเลขที่ B-2\nเลขประจำตัวผู้เสียภาษีอากร ${OTHER}\nมูลค่าสินค้า 50.00\nภาษีมูลค่าเพิ่ม 3.50\nรวมทั้งสิ้น 53.50`
     const rows = extractPurchaseTaxInvoicesFromScanText(top + bot, { buyerTaxId: BUYER })
     expect(rows.map((r) => r.invoiceNo).sort()).toEqual(['A-1', 'B-2'])
+  })
+
+  it('does not split two QRs of the same invoice', () => {
+    const text = wrapTaxInvoiceQrText([
+      `${SELLER}|INV-88|100.00|7.00|107.00`,
+      `${SELLER}|INV-88|100.00|7.00|107.00`,
+    ])
+    expect(splitScanTextIntoInvoiceBlocks(text)).toHaveLength(1)
+    expect(extractPurchaseTaxInvoicesFromScanText(text, { buyerTaxId: BUYER })).toHaveLength(1)
   })
 
   it('does not split one invoice that repeats ใบกำกับภาษี', () => {

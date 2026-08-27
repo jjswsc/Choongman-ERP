@@ -116,6 +116,13 @@ function writeReviewDraft(rows: ReviewRow[]) {
   }
 }
 
+/** rAF는 백그라운드 탭에서 멈추므로 스캔 루프에는 쓰지 않음. */
+function yieldScanLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0)
+  })
+}
+
 function reviewWarnClass(base: string, on: boolean) {
   return cn(base, on && "ring-1 ring-amber-500 bg-amber-50 dark:bg-amber-950/40")
 }
@@ -502,11 +509,19 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       return pageText
     }
 
-    const yieldUi = () =>
-      new Promise<void>((resolve) => {
-        if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve())
-        else setTimeout(resolve, 0)
-      })
+    const yieldUi = () => yieldScanLoop()
+    const pageTitleBase = typeof document !== "undefined" ? document.title.replace(/^\(\d+\/\d+\)\s*/, "") : ""
+    const markScanTitle = (n: number, total: number) => {
+      if (typeof document === "undefined") return
+      document.title = `(${n}/${total}) ${pageTitleBase}`
+    }
+    let wakeLock: { release: () => Promise<void> } | null = null
+    try {
+      const nav = typeof navigator !== "undefined" ? (navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } }) : null
+      wakeLock = (await nav?.wakeLock?.request("screen")) || null
+    } catch {
+      wakeLock = null
+    }
 
     try {
       setReviewRows([])
@@ -529,6 +544,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             if (ac.signal.aborted) break
             setPdfProgress({ n: i, total })
             setPdfBusy({ key: "ptiPdfPage", vars: { n: String(i), total: String(total) } })
+            markScanTitle(i, total)
             const printed = await extractPdfPageText(pdf, i)
             let pageText = printed
             if (pdfPageTextIsReliableForExtract(printed, hint)) {
@@ -548,7 +564,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               if (ac.signal.aborted) break
               ingestLocalPage(i, pageText)
             }
-            if (i === total || i % 5 === 0) setReviewRows([...extracted])
+            if (i === total || i % 5 === 0 || (typeof document !== "undefined" && document.hidden)) {
+              setReviewRows([...extracted])
+            }
+            writeReviewDraft(extracted)
             await yieldUi()
           }
         } else {
@@ -638,6 +657,12 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           /* ignore */
         }
       }
+      try {
+        await wakeLock?.release()
+      } catch {
+        /* ignore */
+      }
+      if (typeof document !== "undefined" && pageTitleBase) document.title = pageTitleBase
       if (abortRef.current === ac) abortRef.current = null
       setPdfBusy(null)
       setPdfProgress(null)
@@ -835,6 +860,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 />
               </span>
             ) : null}
+            <span className="max-w-[14rem] text-[11px] leading-snug text-muted-foreground">{t("ptiScanBgHint")}</span>
             <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={cancelScan}>
               {t("ptiPdfCancel")}
             </Button>
