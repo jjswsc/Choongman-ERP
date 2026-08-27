@@ -10,6 +10,7 @@ export type VendorTaxLinkInput = {
   gps_name?: string
   salesOutlet?: string
   sales_outlet?: string
+  address?: string
 }
 
 export type StoreTaxProfileLinkInput = {

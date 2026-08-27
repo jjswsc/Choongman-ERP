@@ -1,4 +1,5 @@
 import { resolveErpStoreIdentity } from '@/lib/erp-store-identity'
+import { firstNonHeadOfficeAddress } from '@/lib/head-office-defaults'
 import {
   findExplicitVendorForStore,
   normalizeVendorCode,
@@ -106,33 +107,49 @@ type VendorTaxProfileRow = {
   tax_id?: string | null
   gps_name?: string | null
   sales_outlet?: string | null
+  addr?: string | null
 }
 
-async function loadVendorsForTaxLink(): Promise<VendorTaxLinkInput[]> {
-  try {
-    const rows = (await supabaseSelect('vendors', {
-      select: 'code,name,tax_id,gps_name,sales_outlet',
-      order: 'id.asc',
-      limit: 5000,
-    })) as VendorTaxProfileRow[] | null
-    return (rows || [])
+type VendorTaxProfileInput = VendorTaxLinkInput & { address?: string }
+
+async function loadVendorsForTaxLink(): Promise<VendorTaxProfileInput[]> {
+  const mapRows = (rows: VendorTaxProfileRow[] | null): VendorTaxProfileInput[] =>
+    (rows || [])
       .map((row) => ({
         code: String(row.code || '').trim(),
         name: String(row.name || '').trim(),
         taxId: normalizeStoreTaxId(row.tax_id),
         gps_name: String(row.gps_name || '').trim(),
         sales_outlet: String(row.sales_outlet || '').trim(),
+        address: String(row.addr || '').trim(),
       }))
       .filter((v) => v.code)
+
+  try {
+    const rows = (await supabaseSelect('vendors', {
+      select: 'code,name,tax_id,gps_name,sales_outlet,addr',
+      order: 'id.asc',
+      limit: 5000,
+    })) as VendorTaxProfileRow[] | null
+    return mapRows(rows)
   } catch {
-    return []
+    try {
+      const rows = (await supabaseSelect('vendors', {
+        select: 'code,name,tax_id,gps_name,sales_outlet',
+        order: 'id.asc',
+        limit: 5000,
+      })) as VendorTaxProfileRow[] | null
+      return mapRows(rows)
+    } catch {
+      return []
+    }
   }
 }
 
 async function resolveVendorTaxProfile(opts: {
   storeCode: string
   explicitVendorCode?: string
-}): Promise<{ code: string; name: string; taxId: string } | null> {
+}): Promise<{ code: string; name: string; taxId: string; address: string } | null> {
   const storeCode = String(opts.storeCode || '').trim()
   const vendors = await loadVendorsForTaxLink()
   const hit = findExplicitVendorForStore(storeCode, vendors, opts.explicitVendorCode)
@@ -141,7 +158,56 @@ async function resolveVendorTaxProfile(opts: {
     code: String(hit.code || '').trim(),
     name: String(hit.name || '').trim(),
     taxId: vendorTaxIdFromInput(hit),
+    address: String(hit.address || '').trim(),
   }
+}
+
+async function fetchBranchAddressFallbacks(storeCode: string): Promise<{
+  erpAddress: string
+  receiptAddress: string
+  warehouseAddress: string
+}> {
+  const code = String(storeCode || '').trim()
+  const empty = { erpAddress: '', receiptAddress: '', warehouseAddress: '' }
+  if (!code) return empty
+
+  const readFirst = async (
+    table: string,
+    filter: string,
+    select: string,
+    pick: (row: Record<string, unknown>) => string
+  ): Promise<string> => {
+    try {
+      const rows = (await supabaseSelectFilter(table, filter, { select, limit: 1 })) as
+        | Record<string, unknown>[]
+        | null
+      return pick(rows?.[0] || {})
+    } catch {
+      return ''
+    }
+  }
+
+  const [erpAddress, receiptAddress, warehouseAddress] = await Promise.all([
+    readFirst(
+      'erp_stores',
+      `store_code=eq.${encodeURIComponent(code)}`,
+      'address',
+      (row) => String(row.address || '').trim()
+    ),
+    readFirst(
+      'pos_printer_settings',
+      `store_code=eq.${encodeURIComponent(code)}`,
+      'receipt_biz_address',
+      (row) => String(row.receipt_biz_address || '').trim()
+    ),
+    readFirst(
+      'warehouse_locations',
+      `name=eq.${encodeURIComponent(code)}`,
+      'address',
+      (row) => String(row.address || '').trim()
+    ),
+  ])
+  return { erpAddress, receiptAddress, warehouseAddress }
 }
 
 function vendorTaxIdFromInput(v: VendorTaxLinkInput): string {
@@ -212,18 +278,29 @@ export async function resolveStoreTaxFilingProfile(
 ): Promise<StoreTaxFilingProfile> {
   const storeCode = await canonicalizeStoreCodeForTaxProfile(storeKey)
   const fromDb = storeCode ? await fetchStoreTaxFilingProfileByCode(storeCode) : null
-  const resolvedVendor = await resolveVendorTaxProfile({
-    storeCode: storeCode || String(storeKey || '').trim(),
-    explicitVendorCode: fromDb?.vendorCode || fallback?.vendorCode,
-  })
+  const resolvedKey = storeCode || String(storeKey || '').trim()
+  const [resolvedVendor, branchAddrs] = await Promise.all([
+    resolveVendorTaxProfile({
+      storeCode: resolvedKey,
+      explicitVendorCode: fromDb?.vendorCode || fallback?.vendorCode,
+    }),
+    fetchBranchAddressFallbacks(resolvedKey),
+  ])
   const fb = fallback || {}
   return {
-    storeCode: storeCode || String(storeKey || '').trim(),
+    storeCode: resolvedKey,
     vendorCode: normalizeVendorCode(fromDb?.vendorCode || resolvedVendor?.code || fb.vendorCode),
     taxpayerName: String(fromDb?.taxpayerName || resolvedVendor?.name || fb.taxpayerName || '').trim(),
     taxId: normalizeStoreTaxId(fromDb?.taxId || resolvedVendor?.taxId || fb.taxId),
     branchNo: normalizeBranchNo(fromDb?.branchNo || fb.branchNo),
-    placeOfBusiness: String(fromDb?.placeOfBusiness || fb.placeOfBusiness || '').trim(),
+    placeOfBusiness: firstNonHeadOfficeAddress([
+      fromDb?.placeOfBusiness,
+      resolvedVendor?.address,
+      branchAddrs.erpAddress,
+      branchAddrs.receiptAddress,
+      branchAddrs.warehouseAddress,
+      fb.placeOfBusiness,
+    ]),
     ssoAccountNo: String(fromDb?.ssoAccountNo || fb.ssoAccountNo || '').trim(),
     ssoBranchCode: String(fromDb?.ssoBranchCode || fb.ssoBranchCode || '').trim(),
     ssoOfficeAddress: String(fromDb?.ssoOfficeAddress || fb.ssoOfficeAddress || '').trim(),

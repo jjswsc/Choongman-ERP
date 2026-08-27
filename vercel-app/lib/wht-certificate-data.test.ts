@@ -86,15 +86,33 @@ describe('resolveWhtWithholdingAgentCompany', () => {
     expect(agent.taxId).toBe('0105566137147')
   })
 
-  it('falls back to HQ address/TIN when profile incomplete', () => {
+  it('falls back to HQ TIN but not HQ address when profile incomplete', () => {
     const agent = resolveWhtWithholdingAgentCompany({
       headOffice,
       storeName: 'EM District',
       profile: null,
     })
     expect(agent.companyName).toBe('S&J GLOBAL CO., LTD. (สาขา EM District)')
-    expect(agent.address).toBe(headOffice.address)
+    expect(agent.address).toBe('')
     expect(agent.taxId).toBe(headOffice.taxId)
+  })
+
+  it('does not copy True Digital Park HQ address onto a branch like CM MBK', () => {
+    const agent = resolveWhtWithholdingAgentCompany({
+      headOffice,
+      storeName: 'CM MBK',
+      profile: {
+        taxpayerName: 'Jinwon f&b Co.,Ltd.',
+        taxId: '0105566228126',
+        placeOfBusiness:
+          '101 true digital park pegasus building, floor 5, unit 545, Sukhumvit Rd. Khwang Bang Chak, Khet Phra Khanong, Bangkok 10260',
+      },
+      storeAddress: '444 MBK Center, Phayathai Rd, Wang Mai, Pathum Wan, Bangkok 10330',
+    })
+    expect(agent.companyName).toBe('Jinwon f&b Co.,Ltd. (สาขา CM MBK)')
+    expect(agent.taxId).toBe('0105566228126')
+    expect(agent.address).toBe('444 MBK Center, Phayathai Rd, Wang Mai, Pathum Wan, Bangkok 10330')
+    expect(agent.address).not.toContain('true digital park')
   })
 
   it('falls back to HQ when store profile TIN matches payee (franchise clash)', () => {

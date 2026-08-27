@@ -60,6 +60,14 @@ function filterPnd53Rows(rows: WithholdingTaxLedgerRow[], formHint: PndFormHint)
   })
 }
 
+/** RD Prep 소프트 매핑 파일명 — PND3 파일에 pnd53 접두사를 붙이지 않음 */
+export function buildPnd353RdPrepSoftFilename(formHint: PndFormHint, periodKey: string): string {
+  const period = String(periodKey || '').trim() || 'period'
+  if (formHint === 'PND3') return `pnd3-rd-prep-soft-${period}.txt`
+  if (formHint === 'PND53') return `pnd53-rd-prep-soft-${period}.txt`
+  return `pnd3-pnd53-rd-prep-soft-${period}.txt`
+}
+
 /** RD Prep 소프트 매핑(빈 칸 `|` 유지) — 샘플 레이아웃 */
 export function pnd53LedgerToRdPrepSoftTxt(
   rows: WithholdingTaxLedgerRow[],
@@ -68,6 +76,8 @@ export function pnd53LedgerToRdPrepSoftTxt(
 ): string {
   return ledgerRowsToRdPrepSoftAttachmentTxt(filterPnd53Rows(rows, formHint), {
     includeHeader: opts?.includeHeader === true,
+    /** ภ.ง.ด.3/53 RD Prep: คำนำหน้า / ชื่อ / ชื่อกลาง / ชื่อสกุล 칸을 나눔 */
+    splitNaturalPersonName: true,
   })
 }
 
@@ -164,7 +174,8 @@ function slotField(slot: DetailIncomeSlot | undefined, key: keyof DetailIncomeSl
 }
 
 function buildDetailLine(seqNo: number, payerBranch: string, group: DetailGroup): string {
-  const { titleName, firstName, surName } = splitThaiPayeeName(group.payeeName)
+  const { titleName, firstName, middleName, surName } = splitThaiPayeeName(group.payeeName)
+  const givenName = [firstName, middleName].filter(Boolean).join(' ')
   const s1 = group.slots[0]
   const s2 = group.slots[1]
   const s3 = group.slots[2]
@@ -175,7 +186,7 @@ function buildDetailLine(seqNo: number, payerBranch: string, group: DetailGroup)
     group.payeeTaxId,
     payeeTin10(group.payeeTaxId),
     titleName,
-    firstName,
+    givenName,
     surName,
     slotField(s1, 'paidDate'),
     slotField(s1, 'taxRate'),

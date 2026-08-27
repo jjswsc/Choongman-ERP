@@ -5,7 +5,11 @@ import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { normalizePndFormHint, type WithholdingTaxLedgerRow } from '@/lib/withholding-tax-csv'
 import { buildRdFilingTxtFilename, rdDigitsOnly } from '@/lib/rd-filing-common'
-import { pnd53LedgerToRdFilingTxt, pnd53LedgerToRdPrepSoftTxt } from '@/lib/pnd53-rd-filing-txt'
+import {
+  buildPnd353RdPrepSoftFilename,
+  pnd53LedgerToRdFilingTxt,
+  pnd53LedgerToRdPrepSoftTxt,
+} from '@/lib/pnd53-rd-filing-txt'
 import { enrichRdPrepLedgerPayeeAddresses } from '@/lib/rd-prep-payee-address-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
@@ -128,12 +132,12 @@ export async function GET(request: NextRequest) {
     const filename =
       layout === 'official'
         ? buildRdFilingTxtFilename({
-            taxType: 'PND53',
+            taxType: formHint === 'PND3' ? 'PND3' : 'PND53',
             taxId13: payerTaxId,
             taxMonth: yearMonth,
             branchNo6: payerBranchNo,
           })
-        : `pnd53-rd-prep-soft-${String(formHint || 'PND53').toLowerCase()}-${period.periodKey}.txt`
+        : buildPnd353RdPrepSoftFilename(formHint, period.periodKey)
     return new NextResponse(txt, {
       status: 200,
       headers: {

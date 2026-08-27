@@ -278,17 +278,17 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
           }
         }}
       >
-        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
-          <DialogHeader>
+        <DialogContent className="left-0 top-0 flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-3 overflow-hidden rounded-none border-0 p-4 sm:p-6">
+          <DialogHeader className="shrink-0 pr-8">
             <DialogTitle>{tt("expensePlanTab", "지급예정")} {tt("btnSelect", "선택")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-2">
+          <p className="mb-0 shrink-0 text-sm text-muted-foreground">
             {approvedPickRow ? `${approvedPickRow.transDate} · ฿${formatMoneyBaht(Math.abs(approvedPickRow.amount || 0))}` : ""}
           </p>
           {approvedPickLoading ? (
             <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
           ) : (
-            <div className="space-y-3">
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
               <p className="text-xs text-muted-foreground leading-snug">
                 {tt(
                   "bankExpensePickExactHint",
@@ -296,13 +296,13 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                 )}
               </p>
               {approvedPickList.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">
+                <p className="min-h-0 flex-1 py-2 text-sm text-muted-foreground">
                   {comboSearched
                     ? tt("bankExpensePickComboEmpty", "검색 결과가 없습니다. 거래처명·문서번호·한쪽 금액을 바꿔 보세요.")
                     : tt("expensePlanPickEmptyForBankLink", "No linkable payment plan for this date/store.")}
                 </p>
               ) : (
-                <div className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md border border-border divide-y divide-border">
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border divide-y divide-border">
                   {approvedPickList.map((p) => {
                     const checked = approvedPickIds.includes(p.id)
                     const tag =
@@ -353,7 +353,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                 </div>
               )}
               {comboOpen ? (
-                <div className="space-y-2 rounded-md border border-border p-2">
+                <div className="shrink-0 space-y-2 rounded-md border border-border p-2">
                   <p className="text-xs text-muted-foreground leading-snug">
                     {tt(
                       "bankExpensePickComboHint",
@@ -411,7 +411,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-8 w-full text-xs"
+                  className="h-8 w-full shrink-0 text-xs"
                   onClick={() => {
                     applyDefaultComboPeriod(approvedPickRow?.transDate)
                     setComboOpen(true)
@@ -449,7 +449,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                 return (
                   <div
                     className={cn(
-                      "rounded-md border px-3 py-2 text-sm space-y-1",
+                      "shrink-0 rounded-md border px-3 py-2 text-sm space-y-1",
                       approvedPickIds.length === 0
                         ? "border-border bg-muted/30"
                         : matches
@@ -484,14 +484,14 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                 )
               })()}
               {approvedPickList.some((x) => approvedPickIds.includes(x.id) && x.status === "planned") ? (
-                <p className="text-xs text-amber-700 dark:text-amber-400">
+                <p className="shrink-0 text-xs text-amber-700 dark:text-amber-400">
                   {tt(
                     "expensePlanPickPlannedNeedsApproval",
                     "Selected item is pending approval. Saving will auto-approve; HQ items need Director/Secretary rights."
                   )}
                 </p>
               ) : null}
-              <div className="flex justify-end gap-2">
+              <div className="flex shrink-0 justify-end gap-2">
                 <Button variant="outline" onClick={() => setApprovedPickRow(null)}>
                   {t("cancel") || "취소"}
                 </Button>

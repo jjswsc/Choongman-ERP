@@ -206,6 +206,7 @@ import {
 } from "./admin-accounting-compliance-utils"
 import { openWhtCertificatePrintWindow } from "@/lib/open-wht-certificate-print"
 import { downloadAuthenticatedFile } from "@/lib/download-authenticated-file"
+import { buildPnd353RdPrepSoftFilename } from "@/lib/pnd53-rd-filing-txt"
 import { whtCertificateFromLedgerRow, resolveVendorPayeeForWht, resolveWhtWithholdingAgentCompany, type HeadOfficeCompany } from "@/lib/wht-certificate-data"
 import { whtLedgerRowMatchesFocusMode } from "@/lib/withholding-tax-csv"
 import {
@@ -3738,30 +3739,6 @@ export function AdminAccountingCompliance({
     [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForLedger]
   )
   const handleDownloadPnd53RdFilingTxt = React.useCallback(async () => {
-    const isPnd3Soft = String(whtSubmissionFormHint || "").toUpperCase() === "PND3"
-    let payerTaxId = String(pnd1PayerTaxId || "")
-      .replace(/\D/g, "")
-      .trim()
-    let payerBranchNo = String(pnd1PayerBranchNo || "").trim() || "00000"
-    if (payerTaxId.length !== 13) {
-      const fromStore = await loadRdPayerFromStoreSources()
-      if (payerTaxId.length !== 13) payerTaxId = fromStore.payerTaxId
-      if (!payerBranchNo || payerBranchNo === "00000") {
-        payerBranchNo = fromStore.payerBranchNo || payerBranchNo
-      }
-      if (fromStore.payerName) setPnd1PayerName(fromStore.payerName)
-      if (payerTaxId) setPnd1PayerTaxId(payerTaxId)
-      if (payerBranchNo) setPnd1PayerBranchNo(payerBranchNo)
-    }
-    // Format กลาง(PND53)만 납부자 TIN 필수. PND3 ใบแนบ 소프트 TXT는 TIN 없이 내려받을 수 있음.
-    if (!isPnd3Soft && payerTaxId.length !== 13) {
-      appAlert(
-        tr(t, "accCompPp30ExportRequiredMissing", {
-          fields: t("accCompPp30ExportField_companyTaxId13"),
-        })
-      )
-      return
-    }
     const url = getExportPnd53RdFilingTxtUrl({
       userRole: role,
       taxMonth,
@@ -3770,16 +3747,12 @@ export function AdminAccountingCompliance({
       filingStatus: ledgerStatusFilter,
       storeFilter: storeFilterForApi,
       formHint: whtSubmissionFormHint,
-      payerTaxId: payerTaxId.length === 13 ? payerTaxId : undefined,
-      payerBranchNo,
-      layout: isPnd3Soft ? "soft" : "official",
+      layout: "soft",
     })
     try {
       await downloadAuthenticatedFile(
         url,
-        isPnd3Soft
-          ? `PND3_rd_prep_${taxMonth}.txt`
-          : `PND53_${payerTaxId}_${taxMonth}.txt`
+        buildPnd353RdPrepSoftFilename(whtSubmissionFormHint, taxMonth)
       )
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e || "")
@@ -3789,19 +3762,7 @@ export function AdminAccountingCompliance({
           : t("accCompPp30RdPrepDownloadFail")
       )
     }
-  }, [
-    pnd1PayerTaxId,
-    pnd1PayerBranchNo,
-    loadRdPayerFromStoreSources,
-    role,
-    taxMonth,
-    periodType,
-    ledgerStatusFilter,
-    storeFilterForApi,
-    whtSubmissionFormHint,
-    t,
-    tr,
-  ])
+  }, [role, taxMonth, periodType, ledgerStatusFilter, storeFilterForApi, whtSubmissionFormHint, t])
   const pp36ExportUrl = React.useMemo(
     () =>
       getExportPp36LedgerCsvUrl({

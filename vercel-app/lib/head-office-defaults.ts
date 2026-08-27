@@ -31,6 +31,38 @@ function isBlankOrDash(value: string): boolean {
   return !v || v === '-'
 }
 
+export function normalizeBusinessAddressKey(raw: unknown): string {
+  return String(raw || '')
+    .toLowerCase()
+    .replace(/[.,#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** S&J 본사(True Digital Park unit 545) 주소인지. 지점 50 ทวิ에 본사 주소를 복사하지 않기 위함. */
+export function isHeadOfficeAddress(raw: unknown, extraHqAddress?: string): boolean {
+  const n = normalizeBusinessAddressKey(raw)
+  if (!n) return false
+  const known = [HEAD_OFFICE_DEFAULTS.address, extraHqAddress]
+    .map((v) => normalizeBusinessAddressKey(v))
+    .filter(Boolean)
+  if (known.includes(n)) return true
+  return n.includes('true digital park') && (n.includes('unit 545') || n.includes('pegasus'))
+}
+
+export function firstNonHeadOfficeAddress(
+  addresses: Array<string | null | undefined>,
+  extraHqAddress?: string
+): string {
+  for (const item of addresses) {
+    const t = String(item || '').trim()
+    if (!t || t === '-') continue
+    if (isHeadOfficeAddress(t, extraHqAddress)) continue
+    return t
+  }
+  return ''
+}
+
 const LEGACY_HEAD_OFFICE_NAMES = new Set([
   'บริษัท เอสแอนด์เจ โกลบอล จำกัด',
   'บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)',

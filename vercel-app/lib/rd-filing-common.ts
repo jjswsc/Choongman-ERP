@@ -73,14 +73,45 @@ export function buildRdFilingTxtFilename(params: {
   return `${params.taxType}_${taxId}_${branch}_${yearBe}_${month}_${formType}_${sendNo}.txt`
 }
 
-export function splitThaiPayeeName(payeeName: string): {
+export type ThaiPayeeNameParts = {
   titleName: string
   firstName: string
+  middleName: string
   surName: string
-} {
+}
+
+function emptyThaiPayeeNameParts(): ThaiPayeeNameParts {
+  return { titleName: '', firstName: '', middleName: '', surName: '' }
+}
+
+/** 개인명 나머지: 마지막 토큰=ชื่อสกุล, 첫 토큰=ชื่อ, 가운데=ชื่อกลาง */
+function splitGivenAndSurname(rest: string): Pick<ThaiPayeeNameParts, 'firstName' | 'middleName' | 'surName'> {
+  const parts = rest.split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return { firstName: '', middleName: '', surName: '' }
+  if (parts.length === 1) return { firstName: parts[0]!.slice(0, 160), middleName: '', surName: '' }
+  if (parts.length === 2) {
+    return { firstName: parts[0]!.slice(0, 160), middleName: '', surName: parts[1]!.slice(0, 160) }
+  }
+  return {
+    firstName: parts[0]!.slice(0, 160),
+    middleName: parts.slice(1, -1).join(' ').slice(0, 160),
+    surName: parts[parts.length - 1]!.slice(0, 160),
+  }
+}
+
+function extractNaturalPersonTitle(raw: string): { titleName: string; rest: string } {
+  const khun = raw.match(/^คุณ\s+(.+)$/)
+  if (khun?.[1]?.trim()) return { titleName: 'คุณ', rest: khun[1].trim() }
+  // นางสาว before นาง, Miss before Ms. Glued titles (นายสมชาย / น.ส.ปิยวรรณ) allowed.
+  const m = raw.match(/^(นางสาว|นาง|นาย|น\.ส\.|นส\.|Miss\.?|Mrs\.?|Mr\.?|Ms\.?)\s*(.+)$/i)
+  if (m?.[2]?.trim()) return { titleName: m[1]!.trim(), rest: m[2].trim() }
+  return { titleName: '', rest: raw }
+}
+
+export function splitThaiPayeeName(payeeName: string): ThaiPayeeNameParts {
   const raw = rdPipeSafe(payeeName)
-  if (!raw) return { titleName: '', firstName: '', surName: '' }
-  const juristicTitle = /ห้างหุ้นส่วนจำกัด/i.test(raw)
+  if (!raw) return emptyThaiPayeeNameParts()
+  const juristicTitle = /ห้างหุ้นส่วนจำกัด|หจก\.?/i.test(raw)
     ? 'ห้างหุ้นส่วนจำกัด'
     : /ห้างหุ้นส่วน/i.test(raw)
       ? 'ห้างหุ้นส่วน'
@@ -88,14 +119,27 @@ export function splitThaiPayeeName(payeeName: string): {
         ? 'บริษัท'
         : null
   if (juristicTitle) {
-    const stripped = raw.replace(/^(บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วน|บจก\.?|บมจ\.?)\s*/i, '').trim()
-    return { titleName: juristicTitle, firstName: (stripped || raw).slice(0, 100), surName: '' }
+    const stripped = raw
+      .replace(/^(บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วน|บจก\.?|บมจ\.?|หจก\.?)\s*/i, '')
+      .trim()
+    return {
+      titleName: juristicTitle,
+      firstName: (stripped || raw).slice(0, 160),
+      middleName: '',
+      surName: '',
+    }
   }
-  const titleMatch = raw.match(/^(นาย|นาง|นางสาว|น\.ส\.|Mr\.|Mrs\.|Ms\.)\s*(.+)$/i)
-  if (titleMatch) {
-    return { titleName: titleMatch[1]!, firstName: titleMatch[2]!.trim().slice(0, 100), surName: '' }
+  if (
+    /\bco\.?\s*,?\s*ltd\.?\b/i.test(raw) ||
+    /\blimited\b/i.test(raw) ||
+    /\bcorp(?:oration)?\.?\b/i.test(raw) ||
+    /\binc\.?\b/i.test(raw) ||
+    /\bplc\b/i.test(raw)
+  ) {
+    return { titleName: '', firstName: raw.slice(0, 160), middleName: '', surName: '' }
   }
-  return { titleName: '', firstName: raw.slice(0, 100), surName: '' }
+  const { titleName, rest } = extractNaturalPersonTitle(raw)
+  return { titleName, ...splitGivenAndSurname(rest) }
 }
 
 export function payeeTin10(taxId13: string): string {

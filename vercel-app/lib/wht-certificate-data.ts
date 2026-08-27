@@ -15,6 +15,7 @@ import {
   purchaseOrderMetaOrderDate,
   resolveAccountingPoIssuerStore,
 } from '@/lib/purchase-order-cart'
+import { firstNonHeadOfficeAddress } from '@/lib/head-office-defaults'
 import { findPayeeMaster } from '@/lib/rd-prep-payee-address'
 import { cleanTaxEntityDisplayName } from '@/lib/tax-entity-scope-label'
 import { resolveWhtPndFormHint } from '@/lib/wht-pnd-form-hint'
@@ -108,7 +109,8 @@ export function formatWhtAgentDisplayName(params: {
 
 /**
  * 지출 등록 매장·세무 프로필로 원천징수자(상단) 회사 블록 결정.
- * Tax ID는 프로필 13자리 우선, 없으면 본사. 주소는 place_of_business 우선.
+ * Tax ID는 프로필 13자리 우선, 없으면 본사.
+ * 주소는 지점 place_of_business·storeAddress 우선. 본사(True Digital Park) 주소는 지점에 복사하지 않는다.
  * payeeTaxId가 넘어오고 프로필 TIN과 같으면(가맹점=거래처 오인) 본사로 둔다.
  * hqEntityBranchesOnly면 프로필 TIN이 본사와 다를 때(가맹 법인) 본사만 사용.
  */
@@ -120,6 +122,8 @@ export function resolveWhtWithholdingAgentCompany(params: {
   payeeTaxId?: string | null
   /** 발주 원장 등: 직영(본사와 동일 TIN) 지점만 매장 표기 */
   hqEntityBranchesOnly?: boolean
+  /** 매장 거래처·erp_stores·영수증 주소. 프로필 사업장이 비거나 본사 주소일 때 */
+  storeAddress?: string | null
 }): HeadOfficeCompany {
   const ho = params.headOffice
   const store = String(params.storeName || '').trim()
@@ -140,8 +144,10 @@ export function resolveWhtWithholdingAgentCompany(params: {
   }
 
   const taxId = profileTin.length === 13 ? profileTin : hoTin || String(ho.taxId || '')
-  const place = String(profile?.placeOfBusiness || '').trim()
-  const address = place || String(ho.address || '')
+  const address = firstNonHeadOfficeAddress(
+    [profile?.placeOfBusiness, params.storeAddress],
+    ho.address
+  )
   const phone =
     String(profile?.phone || profile?.ssoPhone || '').trim() || (ho.phone ? String(ho.phone) : undefined)
 

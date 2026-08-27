@@ -3,6 +3,7 @@ import { buildRdFilingRdxFilename, buildRdFilingTxtFilename, isoToRdBeDate8, spl
 import {
   PND53_RD_DETAIL_FIELD_COUNT,
   PND53_RD_HEADER_FIELD_COUNT,
+  buildPnd353RdPrepSoftFilename,
   pnd53LedgerToRdFilingTxt,
   pnd53LedgerToRdPrepSoftTxt,
   toPnd53IncomeTypeLabel,
@@ -39,6 +40,7 @@ describe('pnd53 Format กลาง v2.0', () => {
     expect(splitThaiPayeeName('บริษัท ทดสอบ จำกัด')).toEqual({
       titleName: 'บริษัท',
       firstName: 'ทดสอบ จำกัด',
+      middleName: '',
       surName: '',
     })
   })
@@ -149,11 +151,13 @@ describe('pnd53 Format กลาง v2.0', () => {
     ]
     const pnd3 = pnd53LedgerToRdFilingTxt(rows, payer, 'PND3')
     const pnd53 = pnd53LedgerToRdFilingTxt(rows, payer, 'PND53')
-    expect(pnd3).toContain('สมชาย ใจดี')
+    expect(pnd3).toContain('สมชาย')
+    expect(pnd3).toContain('ใจดี')
+    expect(pnd3).toMatch(/นาย\|สมชาย\|ใจดี/)
     expect(pnd3).not.toContain('Polonext')
     expect(pnd3).not.toContain('พนักงาน A')
     expect(pnd53).toContain('Polonext')
-    expect(pnd53).not.toContain('สมชาย ใจดี')
+    expect(pnd53).not.toContain('|สมชาย|')
     expect(pnd53).not.toContain('พนักงาน A')
   })
 
@@ -187,8 +191,44 @@ describe('pnd53-rd-prep-soft (mapping fallback)', () => {
       'PND53'
     )
     expect(soft).toBe(
-      '|1|0105560154864||บริษัท วัฒนะ โกลด์ จำกัด||||||||19/06/2026|ค่าเช่า 5%|5.0|500000.00|25000.00|1'
+      '|1|0105560154864||บริษัท|วัฒนะ โกลด์ จำกัด||||||||||19/06/2026|ค่าเช่า 5%|5.0|500000.00|25000.00|1'
     )
+  })
+
+  it('keeps PND3 people out of the PND53 soft file', () => {
+    const soft = pnd53LedgerToRdPrepSoftTxt(
+      [
+        {
+          payment_date: '2026-06-19',
+          payee_name: 'บริษัท วัฒนะ โกลด์ จำกัด',
+          payee_tax_id: '0105560154864',
+          income_type: 'ค่าเช่า',
+          gross_amount: 500000,
+          wht_rate: 5,
+          wht_amount: 25000,
+          form_hint: 'PND53',
+        },
+        {
+          payment_date: '2026-06-20',
+          payee_name: 'นายสมชาย ใจดี',
+          payee_tax_id: '3101800833583',
+          income_type: 'ค่าบริการ',
+          gross_amount: 1000,
+          wht_rate: 3,
+          wht_amount: 30,
+          form_hint: 'PND3',
+        },
+      ],
+      'PND53'
+    )
+    expect(soft).toContain('วัฒนะ โกลด์')
+    expect(soft).not.toContain('สมชาย')
+  })
+
+  it('names PND3 files without a pnd53 prefix', () => {
+    expect(buildPnd353RdPrepSoftFilename('PND3', '2026-08')).toBe('pnd3-rd-prep-soft-2026-08.txt')
+    expect(buildPnd353RdPrepSoftFilename('PND53', '2026-08')).toBe('pnd53-rd-prep-soft-2026-08.txt')
+    expect(buildPnd353RdPrepSoftFilename('ALL', '2026-08')).toBe('pnd3-pnd53-rd-prep-soft-2026-08.txt')
   })
 
   it('puts payee address into RD Prep soft attachment slots', () => {
@@ -208,10 +248,33 @@ describe('pnd53-rd-prep-soft (mapping fallback)', () => {
       ],
       'PND3'
     )
-    expect(soft).toContain('|รักษา วิจิตรโสภาพันธ์|')
+    expect(soft).toContain('|รักษา|')
+    expect(soft).toContain('|วิจิตรโสภาพันธ์|')
+    expect(soft).not.toContain('|รักษา วิจิตรโสภาพันธ์|')
     expect(soft).toContain('สุขุมวิท')
     expect(soft).toContain('06/08/2026')
     expect(soft.includes('||||||||06/08/2026')).toBe(false)
+  })
+
+  it('splits PND3 title, given name and surname into RD Prep columns', () => {
+    const soft = pnd53LedgerToRdPrepSoftTxt(
+      [
+        {
+          payment_date: '2026-08-06',
+          payee_name: 'น.ส.ปิยวรรณ แสนทวีสุข',
+          payee_tax_id: '1139900435246',
+          income_type: 'ค่าบริการ',
+          gross_amount: 10000,
+          wht_rate: 3,
+          wht_amount: 300,
+          form_hint: 'PND3',
+        },
+      ],
+      'PND3'
+    )
+    expect(soft).toBe(
+      '|1|1139900435246||น.ส.|ปิยวรรณ||แสนทวีสุข||||||||06/08/2026|ค่าบริการ 3%|3.0|10000.00|300.00|1'
+    )
   })
 })
 

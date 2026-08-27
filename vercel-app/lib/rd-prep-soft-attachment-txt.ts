@@ -1,9 +1,13 @@
 /**
  * RD Prep 소프트 매핑용 TXT (pipe `|`, UTF-8, CRLF)
  *
- * 샘플:
+ * PND1 샘플:
  * |seq|tin||name|addr1|addr2|addr3||||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
+ *
+ * PND3/PND53 샘플 (คำนำหน้า·ชื่อ 분리):
+ * |seq|tin||title|first|middle|last|addr1|addr2|addr3||||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
  */
+import { splitThaiPayeeName } from '@/lib/rd-filing-common'
 
 export type RdPrepSoftAttachmentRow = {
   payee_name?: string | null
@@ -18,6 +22,8 @@ export type RdPrepSoftAttachmentRow = {
 
 export type RdPrepSoftAttachmentTxtOptions = {
   includeHeader?: boolean
+  /** ภ.ง.ด.3/53: 단일 payee_name 대신 title/first/middle/last 4칸 */
+  splitNaturalPersonName?: boolean
 }
 
 function pipeSafe(v: unknown): string {
@@ -102,25 +108,49 @@ export function ledgerRowsToRdPrepSoftAttachmentTxt(
   opts: RdPrepSoftAttachmentTxtOptions = {}
 ): string {
   const includeHeader = opts.includeHeader === true
-  const headerFields = [
-    'seq',
-    'payee_tax_id',
-    'payee_branch',
-    'payee_name',
-    'address1',
-    'address2',
-    'address3',
-    'empty1',
-    'empty2',
-    'empty3',
-    'empty4',
-    'payment_date',
-    'income_desc',
-    'wht_rate',
-    'gross_amount',
-    'withheld_amount',
-    'pay_condition',
-  ]
+  const splitName = opts.splitNaturalPersonName === true
+  const headerFields = splitName
+    ? [
+        'seq',
+        'payee_tax_id',
+        'payee_branch',
+        'title_name',
+        'first_name',
+        'middle_name',
+        'last_name',
+        'address1',
+        'address2',
+        'address3',
+        'empty1',
+        'empty2',
+        'empty3',
+        'empty4',
+        'payment_date',
+        'income_desc',
+        'wht_rate',
+        'gross_amount',
+        'withheld_amount',
+        'pay_condition',
+      ]
+    : [
+        'seq',
+        'payee_tax_id',
+        'payee_branch',
+        'payee_name',
+        'address1',
+        'address2',
+        'address3',
+        'empty1',
+        'empty2',
+        'empty3',
+        'empty4',
+        'payment_date',
+        'income_desc',
+        'wht_rate',
+        'gross_amount',
+        'withheld_amount',
+        'pay_condition',
+      ]
 
   const lines: string[] = []
   if (includeHeader) lines.push('|' + headerFields.join('|'))
@@ -128,11 +158,18 @@ export function ledgerRowsToRdPrepSoftAttachmentTxt(
   ;(rows || []).forEach((row, idx) => {
     const rate = resolveWhtRatePercent(row)
     const [addr1, addr2, addr3] = splitPayeeAddressParts(row.payee_address)
+    let nameFields: string[]
+    if (splitName) {
+      const parts = splitThaiPayeeName(pipeSafe(row.payee_name))
+      nameFields = [parts.titleName, parts.firstName, parts.middleName, parts.surName]
+    } else {
+      nameFields = [pipeSafe(row.payee_name)]
+    }
     const fields = [
       String(idx + 1),
       digitsOnly(row.payee_tax_id).slice(0, 13),
       '',
-      pipeSafe(row.payee_name),
+      ...nameFields,
       addr1,
       addr2,
       addr3,
