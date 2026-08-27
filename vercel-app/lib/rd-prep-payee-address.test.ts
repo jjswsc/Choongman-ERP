@@ -86,4 +86,18 @@ describe('rd-prep-payee-address', () => {
     expect(enriched[0]?.payee_address).toContain('สุขุมวิท')
     expect(enriched[1]?.payee_address).toContain('สมุทรปราการ')
   })
+
+  it('matches 10-digit TIN prefix and Head Office name suffix', () => {
+    const found = findPayeeMaster(
+      [
+        {
+          name: 'Farwell Choongman Co.,Ltd. (Head Office)',
+          taxId: '0105567160614',
+          address: 'No. 55 Srinakarin Road',
+        },
+      ],
+      { name: 'Farwell Choongman Co.,Ltd. (00001)', taxId: '0105567160' }
+    )
+    expect(found?.address).toContain('Srinakarin')
+  })
 })

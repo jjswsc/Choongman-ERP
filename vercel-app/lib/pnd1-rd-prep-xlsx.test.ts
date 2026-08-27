@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildPnd1RdPrepReviewWorkbook } from './pnd1-rd-prep-xlsx'
 import { pnd1LedgerToRdPrepTxt, splitPayeeAddressParts } from './pnd1-rd-prep-txt'
+import { splitRdPrepGeoAddress } from './rd-prep-soft-attachment-txt'
 
 describe('pnd1 rd prep exports', () => {
   const rows = [
@@ -63,5 +64,31 @@ describe('pnd1 rd prep exports', () => {
       payerName: 'Jinwon',
     })
     expect(wb.SheetNames).toEqual(['Summary', 'PND1', 'PipePreview'])
+  })
+})
+
+describe('splitRdPrepGeoAddress', () => {
+  it('keeps the street in ที่อยู่ and splits แขวง/เขต/จังหวัด/zip', () => {
+    expect(
+      splitRdPrepGeoAddress(
+        '18 อาคารทรู ทาวเวอร์ ถนนรัชดาภิเษก แขวงห้วยขวาง เขตห้วยขวาง กรุงเทพมหานคร 10310'
+      )
+    ).toEqual({
+      line: '18 อาคารทรู ทาวเวอร์ ถนนรัชดาภิเษก',
+      tambon: 'ห้วยขวาง',
+      amphoe: 'ห้วยขวาง',
+      province: 'กรุงเทพมหานคร',
+      postcode: '10310',
+    })
+  })
+
+  it('puts the full English address in ที่อยู่ when there is no Thai geo suffix', () => {
+    expect(splitRdPrepGeoAddress('No. 55, 2nd Floor, Srinakarin Road')).toEqual({
+      line: 'No. 55, 2nd Floor, Srinakarin Road',
+      tambon: '',
+      amphoe: '',
+      province: '',
+      postcode: '',
+    })
   })
 })

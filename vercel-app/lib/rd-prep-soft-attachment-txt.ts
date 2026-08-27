@@ -4,8 +4,8 @@
  * PND1 샘플:
  * |seq|tin||name|addr1|addr2|addr3||||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
  *
- * PND3/PND53 샘플 (คำนำหน้า·ชื่อ 분리):
- * |seq|tin||title|first|middle|last|addr1|addr2|addr3||||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
+ * PND3/PND53 샘플 (คำนำหน้า·ชื่อ 분리, ที่อยู่·ตำบล·อำเภอ·จังหวัด·รหัส):
+ * |seq|tin||title|first|middle|last|address|tambon|amphoe|province|zip|||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
  */
 import { splitThaiPayeeName } from '@/lib/rd-filing-common'
 
@@ -103,6 +103,82 @@ export function splitPayeeAddressParts(address: unknown): [string, string, strin
   return [parts[0] || '', parts[1] || '', parts[2] || '']
 }
 
+export type RdPrepGeoAddressParts = {
+  /** RD Prep ที่อยู่ — 항상 원문(또는 지오 제거 후 나머지). 비우면 화면에 안 올라감 */
+  line: string
+  tambon: string
+  amphoe: string
+  province: string
+  postcode: string
+}
+
+function trimAddrTail(s: string): string {
+  return s.replace(/[,\s/]+$/g, '').trim()
+}
+
+/**
+ * ภ.ง.ด.3/53 RD Prep ที่อยู่ 칸:
+ * ที่อยู่ | ตำบล/แขวง | อำเภอ/เขต | จังหวัด | รหัสไปรษณีย์
+ * 파싱 실패 시 ที่อยู่에 전체 주소를 넣어 화면이 비지 않게 함.
+ */
+export function splitRdPrepGeoAddress(address: unknown): RdPrepGeoAddressParts {
+  const original = pipeSafe(address)
+  const empty: RdPrepGeoAddressParts = { line: '', tambon: '', amphoe: '', province: '', postcode: '' }
+  if (!original) return empty
+
+  let rest = original
+  let postcode = ''
+  const zipM = rest.match(/(\d{5})\s*$/)
+  if (zipM && zipM.index != null) {
+    postcode = zipM[1] || ''
+    rest = trimAddrTail(rest.slice(0, zipM.index))
+  }
+
+  let province = ''
+  const bkk = rest.match(/(กรุงเทพมหานคร|กรุงเทพฯ|กทม\.?)\s*$/)
+  if (bkk && bkk.index != null) {
+    province = 'กรุงเทพมหานคร'
+    rest = trimAddrTail(rest.slice(0, bkk.index))
+  } else {
+    const p = rest.match(/(?:จังหวัด|จ\.)\s*(\S+)\s*$/)
+    if (p && p.index != null) {
+      province = p[1] || ''
+      rest = trimAddrTail(rest.slice(0, p.index))
+    }
+  }
+
+  let amphoe = ''
+  const a = rest.match(/(?:เขต|อำเภอ|อ\.)\s*(\S+)\s*$/)
+  if (a && a.index != null) {
+    amphoe = a[1] || ''
+    rest = trimAddrTail(rest.slice(0, a.index))
+  }
+
+  let tambon = ''
+  const t = rest.match(/(?:แขวง|ตำบล|ต\.)\s*(\S+)\s*$/)
+  if (t && t.index != null) {
+    tambon = t[1] || ''
+    rest = trimAddrTail(rest.slice(0, t.index))
+  }
+
+  return {
+    line: rest || original,
+    tambon,
+    amphoe,
+    province,
+    postcode,
+  }
+}
+
+function addressFieldsForSoftRow(row: RdPrepSoftAttachmentRow, splitName: boolean): string[] {
+  if (splitName) {
+    const geo = splitRdPrepGeoAddress(row.payee_address)
+    return [geo.line, geo.tambon, geo.amphoe, geo.province, geo.postcode, '', '']
+  }
+  const [addr1, addr2, addr3] = splitPayeeAddressParts(row.payee_address)
+  return [addr1, addr2, addr3, '', '', '', '']
+}
+
 export function ledgerRowsToRdPrepSoftAttachmentTxt(
   rows: RdPrepSoftAttachmentRow[],
   opts: RdPrepSoftAttachmentTxtOptions = {}
@@ -118,13 +194,13 @@ export function ledgerRowsToRdPrepSoftAttachmentTxt(
         'first_name',
         'middle_name',
         'last_name',
-        'address1',
-        'address2',
-        'address3',
+        'address',
+        'tambon',
+        'amphoe',
+        'province',
+        'postcode',
         'empty1',
         'empty2',
-        'empty3',
-        'empty4',
         'payment_date',
         'income_desc',
         'wht_rate',
@@ -157,7 +233,7 @@ export function ledgerRowsToRdPrepSoftAttachmentTxt(
 
   ;(rows || []).forEach((row, idx) => {
     const rate = resolveWhtRatePercent(row)
-    const [addr1, addr2, addr3] = splitPayeeAddressParts(row.payee_address)
+    const addrFields = addressFieldsForSoftRow(row, splitName)
     let nameFields: string[]
     if (splitName) {
       const parts = splitThaiPayeeName(pipeSafe(row.payee_name))
@@ -170,13 +246,7 @@ export function ledgerRowsToRdPrepSoftAttachmentTxt(
       digitsOnly(row.payee_tax_id).slice(0, 13),
       '',
       ...nameFields,
-      addr1,
-      addr2,
-      addr3,
-      '',
-      '',
-      '',
-      '',
+      ...addrFields,
       toChristianDdMmYyyy(row.payment_date),
       formatIncomeDesc(String(row.income_type ?? ''), rate),
       formatRateField(rate),

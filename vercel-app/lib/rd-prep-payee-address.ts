@@ -26,14 +26,22 @@ function compactSpaces(v: unknown): string {
     .replace(/\s+/g, ' ')
 }
 
-/** 법인명 비교용: บริษัท / จำกัด / Co., Ltd. 제거 */
+/** 법인명 비교용: บริษัท / จำกัด / Co., Ltd. / (Head Office) 제거 */
 export function normalizeVendorNameKey(raw: string): string {
   return compactSpaces(raw)
     .toLowerCase()
+    .replace(/\s*\((?:head office|สำนักงานใหญ่|\d{5})\)\s*$/gi, '')
     .replace(/บริษัท\s*/g, '')
     .replace(/\s*จำกัด\s*$/g, '')
     .replace(/\s*co\.?\s*,?\s*ltd\.?\s*$/g, '')
     .trim()
+}
+
+function tinsMatch(a: string, b: string): boolean {
+  if (!a || !b) return false
+  if (a === b) return true
+  if (a.length >= 10 && b.length >= 10 && (a.startsWith(b) || b.startsWith(a))) return true
+  return false
 }
 
 /** 개인명 비교용: นาย/นางสาว 등 호칭 제거 */
@@ -63,11 +71,15 @@ export function findPayeeMaster(
   const vendorKey = normalizeVendorNameKey(name)
   const personKey = normalizePersonNameKey(name)
 
-  if (tin.length === 13) {
-    const byTin = list.find((m) => masterTin(m) === tin && masterAddress(m))
-    if (byTin) return byTin
-    const byTinAny = list.find((m) => masterTin(m) === tin)
-    if (byTinAny) return byTinAny
+  if (tin.length >= 10) {
+    const exactAddr = list.find((m) => masterTin(m) === tin && masterAddress(m))
+    if (exactAddr) return exactAddr
+    const prefixAddr = list.find((m) => tinsMatch(masterTin(m), tin) && masterAddress(m))
+    if (prefixAddr) return prefixAddr
+    const exactAny = list.find((m) => masterTin(m) === tin)
+    if (exactAny) return exactAny
+    const prefixAny = list.find((m) => tinsMatch(masterTin(m), tin))
+    if (prefixAny) return prefixAny
   }
   if (code) {
     const byCode = list.find((m) => compactSpaces(m.code) === code)
@@ -78,10 +90,18 @@ export function findPayeeMaster(
     if (exact) return exact
   }
   if (vendorKey) {
+    const byVendorAddr = list.find(
+      (m) => normalizeVendorNameKey(String(m.name || '')) === vendorKey && masterAddress(m)
+    )
+    if (byVendorAddr) return byVendorAddr
     const byVendor = list.find((m) => normalizeVendorNameKey(String(m.name || '')) === vendorKey)
     if (byVendor) return byVendor
   }
   if (personKey) {
+    const byPersonAddr = list.find(
+      (m) => normalizePersonNameKey(String(m.name || '')) === personKey && masterAddress(m)
+    )
+    if (byPersonAddr) return byPersonAddr
     const byPerson = list.find((m) => normalizePersonNameKey(String(m.name || '')) === personKey)
     if (byPerson) return byPerson
   }

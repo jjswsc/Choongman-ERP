@@ -231,6 +231,30 @@ describe('pnd53-rd-prep-soft (mapping fallback)', () => {
     expect(buildPnd353RdPrepSoftFilename('ALL', '2026-08')).toBe('pnd3-pnd53-rd-prep-soft-2026-08.txt')
   })
 
+  it('puts PND53 company address into the ที่อยู่ slot after the name', () => {
+    const soft = pnd53LedgerToRdPrepSoftTxt(
+      [
+        {
+          payment_date: '2026-08-06',
+          payee_name: 'บริษัท ทรู อินเทอร์เน็ต คอร์ปอเรชั่น จำกัด',
+          payee_tax_id: '0105549025026',
+          payee_address: '18 อาคารทรู ทาวเวอร์ ถนนรัชดาภิเษก แขวงห้วยขวาง เขตห้วยขวาง กรุงเทพมหานคร 10310',
+          income_type: 'ค่าบริการ',
+          gross_amount: 10000,
+          wht_rate: 3,
+          wht_amount: 300,
+          form_hint: 'PND53',
+        },
+      ],
+      'PND53'
+    )
+    expect(soft).toContain('|บริษัท|ทรู อินเทอร์เน็ต คอร์ปอเรชั่น จำกัด|')
+    expect(soft).not.toContain('|บริษัท ทรู อินเทอร์เน็ต คอร์ปอเรชั่น จำกัด|')
+    expect(soft).toContain('|18 อาคารทรู ทาวเวอร์ ถนนรัชดาภิเษก|')
+    expect(soft).toContain('|ห้วยขวาง|ห้วยขวาง|กรุงเทพมหานคร|10310|')
+    expect(soft.includes('||||||||||06/08/2026')).toBe(false)
+  })
+
   it('puts payee address into RD Prep soft attachment slots', () => {
     const soft = pnd53LedgerToRdPrepSoftTxt(
       [
@@ -252,6 +276,7 @@ describe('pnd53-rd-prep-soft (mapping fallback)', () => {
     expect(soft).toContain('|วิจิตรโสภาพันธ์|')
     expect(soft).not.toContain('|รักษา วิจิตรโสภาพันธ์|')
     expect(soft).toContain('สุขุมวิท')
+    expect(soft).toContain('|คลองเตย|คลองเตย|กรุงเทพมหานคร|')
     expect(soft).toContain('06/08/2026')
     expect(soft.includes('||||||||06/08/2026')).toBe(false)
   })
