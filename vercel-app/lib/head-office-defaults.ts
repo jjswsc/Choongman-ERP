@@ -63,6 +63,22 @@ export function firstNonHeadOfficeAddress(
   return ''
 }
 
+/** 본사 매장은 True Digital Park를 유지하고, 지점은 본사 주소 복사를 건너뛴다. */
+export function pickStoreBusinessAddress(params: {
+  isHeadOfficeStore: boolean
+  candidates: Array<string | null | undefined>
+  extraHqAddress?: string
+}): string {
+  if (params.isHeadOfficeStore) {
+    for (const item of params.candidates) {
+      const t = String(item || '').trim()
+      if (t && t !== '-') return t
+    }
+    return ''
+  }
+  return firstNonHeadOfficeAddress(params.candidates, params.extraHqAddress)
+}
+
 const LEGACY_HEAD_OFFICE_NAMES = new Set([
   'บริษัท เอสแอนด์เจ โกลบอล จำกัด',
   'บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)',

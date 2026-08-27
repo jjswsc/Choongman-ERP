@@ -1,5 +1,6 @@
 import { resolveErpStoreIdentity } from '@/lib/erp-store-identity'
-import { firstNonHeadOfficeAddress } from '@/lib/head-office-defaults'
+import { pickStoreBusinessAddress } from '@/lib/head-office-defaults'
+import { isOfficeStoreVariant } from '@/lib/office-store-canonical'
 import {
   findExplicitVendorForStore,
   normalizeVendorCode,
@@ -293,14 +294,17 @@ export async function resolveStoreTaxFilingProfile(
     taxpayerName: String(fromDb?.taxpayerName || resolvedVendor?.name || fb.taxpayerName || '').trim(),
     taxId: normalizeStoreTaxId(fromDb?.taxId || resolvedVendor?.taxId || fb.taxId),
     branchNo: normalizeBranchNo(fromDb?.branchNo || fb.branchNo),
-    placeOfBusiness: firstNonHeadOfficeAddress([
-      fromDb?.placeOfBusiness,
-      resolvedVendor?.address,
-      branchAddrs.erpAddress,
-      branchAddrs.receiptAddress,
-      branchAddrs.warehouseAddress,
-      fb.placeOfBusiness,
-    ]),
+    placeOfBusiness: pickStoreBusinessAddress({
+      isHeadOfficeStore: isOfficeStoreVariant(resolvedKey),
+      candidates: [
+        fromDb?.placeOfBusiness,
+        resolvedVendor?.address,
+        branchAddrs.erpAddress,
+        branchAddrs.receiptAddress,
+        branchAddrs.warehouseAddress,
+        fb.placeOfBusiness,
+      ],
+    }),
     ssoAccountNo: String(fromDb?.ssoAccountNo || fb.ssoAccountNo || '').trim(),
     ssoBranchCode: String(fromDb?.ssoBranchCode || fb.ssoBranchCode || '').trim(),
     ssoOfficeAddress: String(fromDb?.ssoOfficeAddress || fb.ssoOfficeAddress || '').trim(),

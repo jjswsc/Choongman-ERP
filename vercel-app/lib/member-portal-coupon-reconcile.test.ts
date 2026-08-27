@@ -10,8 +10,8 @@ describe('member-portal-coupon-reconcile timing', () => {
     expect(couponIssueEligibleForOrderTime('2026-06-30 13:08:00', '2026-06-30 13:06:00')).toBe(false)
   })
 
-  it('blocks matching when issue or order time is missing', () => {
-    expect(couponIssueEligibleForOrderTime('', '2026-06-30 13:06:00')).toBe(false)
+  it('blocks matching when order time is missing; allows when issue time is missing', () => {
+    expect(couponIssueEligibleForOrderTime('', '2026-06-30 13:06:00')).toBe(true)
     expect(couponIssueEligibleForOrderTime('2026-06-30 13:08:00', '')).toBe(false)
   })
 })

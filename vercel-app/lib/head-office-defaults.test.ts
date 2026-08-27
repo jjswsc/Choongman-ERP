@@ -3,6 +3,7 @@ import {
   HEAD_OFFICE_DEFAULTS,
   firstNonHeadOfficeAddress,
   isHeadOfficeAddress,
+  pickStoreBusinessAddress,
 } from '@/lib/head-office-defaults'
 
 describe('isHeadOfficeAddress', () => {
@@ -35,5 +36,25 @@ describe('firstNonHeadOfficeAddress', () => {
 
   it('returns empty when every candidate is HQ or blank', () => {
     expect(firstNonHeadOfficeAddress([HEAD_OFFICE_DEFAULTS.address, '  ', '-'])).toBe('')
+  })
+})
+
+describe('pickStoreBusinessAddress', () => {
+  it('keeps True Digital Park for head-office stores', () => {
+    expect(
+      pickStoreBusinessAddress({
+        isHeadOfficeStore: true,
+        candidates: [HEAD_OFFICE_DEFAULTS.address],
+      })
+    ).toBe(HEAD_OFFICE_DEFAULTS.address)
+  })
+
+  it('skips HQ copies for branch stores', () => {
+    expect(
+      pickStoreBusinessAddress({
+        isHeadOfficeStore: false,
+        candidates: [HEAD_OFFICE_DEFAULTS.address, '444 MBK Center'],
+      })
+    ).toBe('444 MBK Center')
   })
 })
