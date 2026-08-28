@@ -1,6 +1,6 @@
 /**
- * 회계·물류 PO Excel(.xls HTML) — A4 세로 바로 인쇄용 인보이스 양식.
- * 화면 인쇄(`/admin/po-print`)와 같은 당사자·금액 구조를 표로 옮긴다.
+ * 회계·물류 PO Excel(.xls HTML) — A4 세로 1장 인쇄용 인보이스 양식.
+ * 중첩 표는 Excel이 열 폭을 부풀려 여러 장으로 쪼개므로 쓰지 않는다.
  */
 
 import { erpExcelRichTableCss } from "@/lib/erp-excel-export"
@@ -70,12 +70,11 @@ export type PoExcelInput = {
 }
 
 const COLS = 6
-/** 품목이 적어도 A4 본문을 채울 빈 줄 수 (실제 줄이 이보다 많으면 추가하지 않음) */
-export const PO_EXCEL_MIN_ITEM_ROWS = 16
-const ITEM_ROW_HEIGHT_PT = 28
-const SIGN_BOX_HEIGHT_PT = 108
-const SECTION_GAP_PT = 16
-const ADDR_LINE_PT = 18
+/** 짧은 인보이스용 빈 품목 줄 — 너무 많으면 세로로 장이 갈라짐 */
+export const PO_EXCEL_MIN_ITEM_ROWS = 6
+const ITEM_ROW_HEIGHT_PT = 20
+const SIGN_BOX_HEIGHT_PT = 56
+const SECTION_GAP_PT = 8
 
 function escapeCell(v: string | number): string {
   return String(v ?? "")
@@ -97,9 +96,10 @@ function excelSheetName(raw: string): string {
   return (s || "Invoice").slice(0, 31)
 }
 
-function wrapAddressHtml(raw: string): { html: string; heightPt: number } {
+/** 반쪽 칸(3열)에 맞게 주소를 줄바꿈 */
+export function wrapAddressHtml(raw: string, maxLen = 32): { html: string; heightPt: number } {
   const s = String(raw || "").trim()
-  if (!s) return { html: escapeCell("—"), heightPt: 48 }
+  if (!s) return { html: escapeCell("—"), heightPt: 36 }
   const chunks = s
     .split(/,\s+/)
     .map((p) => p.trim())
@@ -110,7 +110,7 @@ function wrapAddressHtml(raw: string): { html: string; heightPt: number } {
     let cur = ""
     for (const w of words) {
       const next = cur ? `${cur} ${w}` : w
-      if (next.length > 42 && cur) {
+      if (next.length > maxLen && cur) {
         lines.push(cur)
         cur = w
       } else {
@@ -123,13 +123,24 @@ function wrapAddressHtml(raw: string): { html: string; heightPt: number } {
   else pushWrapped(s)
   const html = (lines.length ? lines : [s]).map(escapeCell).join("<br/>")
   const n = Math.max(1, (html.match(/<br\/>/g) || []).length + 1)
-  return { html, heightPt: Math.max(52, n * ADDR_LINE_PT + 14) }
+  return { html, heightPt: Math.min(72, Math.max(32, n * 16 + 8)) }
 }
 
-function textTd(value: string, extraClass = "", extraAttr = ""): string {
-  const v = String(value || "").trim() || "—"
-  const cls = extraClass ? `po-text ${extraClass}` : "po-text"
-  return `<td class="${cls}" x:str="${escapeCell(v)}"${extraAttr}>${escapeCell(v)}</td>`
+function pairTextRow(
+  leftLabel: string,
+  leftVal: string,
+  rightLabel: string,
+  rightVal: string,
+  heightPt: number
+): string {
+  const L = String(leftVal || "").trim() || "—"
+  const R = String(rightVal || "").trim() || "—"
+  return `<tr style="height:${heightPt}pt">
+<td class="po-k">${escapeCell(leftLabel)}</td>
+<td class="po-v po-text" colspan="2" x:str="${escapeCell(L)}">${escapeCell(L)}</td>
+<td class="po-k">${escapeCell(rightLabel)}</td>
+<td class="po-v po-text" colspan="2" x:str="${escapeCell(R)}">${escapeCell(R)}</td>
+</tr>`
 }
 
 function moneyCell(n: number, extraClass = ""): string {
@@ -155,66 +166,76 @@ function groupLinesByStore(lines: PoExcelLine[]): Map<string, PoExcelLine[]> | n
   return byStore
 }
 
-function partyInnerTable(party: PoExcelParty, sectionLabel: string, labels: PoExcelLabels): string {
-  const extras = (party.extraLines || [])
-    .filter((x) => String(x.value || "").trim())
-    .map((x) => {
-      const wrapped = wrapAddressHtml(x.value)
-      return `<tr><td class="po-k" style="height:${Math.max(28, wrapped.heightPt)}pt">${escapeCell(x.label)}</td><td class="po-v po-addr">${wrapped.html}</td></tr>`
-    })
-    .join("")
-  const addr = wrapAddressHtml(party.address || "")
-  return `<table class="po-inner" width="100%">
-<tr><td class="po-section" colspan="2" style="height:28pt">${escapeCell(sectionLabel)}</td></tr>
-<tr><td class="po-party-name" colspan="2" style="height:36pt">${escapeCell(party.name || "—")}</td></tr>
-<tr><td class="po-k" style="height:${addr.heightPt}pt">${escapeCell(labels.addressLabel)}</td><td class="po-v po-addr">${addr.html}</td></tr>
-<tr><td class="po-k" style="height:26pt">${escapeCell(labels.taxIdLabel)}</td>${textTd(party.taxId || "—", "po-v")}</tr>
-<tr><td class="po-k" style="height:26pt">${escapeCell(labels.phoneLabel)}</td>${textTd(party.phone || "—", "po-v")}</tr>
-${extras}
-</table>`
+function pairRow(leftLabel: string, leftHtml: string, rightLabel: string, rightHtml: string, heightPt: number): string {
+  return `<tr style="height:${heightPt}pt">
+<td class="po-k">${escapeCell(leftLabel)}</td>
+<td class="po-v po-addr" colspan="2">${leftHtml}</td>
+<td class="po-k">${escapeCell(rightLabel)}</td>
+<td class="po-v po-addr" colspan="2">${rightHtml}</td>
+</tr>`
+}
+
+function partyRows(from: PoExcelParty, billTo: PoExcelParty, labels: PoExcelLabels): string {
+  const fromAddr = wrapAddressHtml(from.address || "")
+  const toAddr = wrapAddressHtml(billTo.address || "")
+  const extras = Math.max(from.extraLines?.length || 0, billTo.extraLines?.length || 0)
+  const extraRows: string[] = []
+  for (let i = 0; i < extras; i++) {
+    const L = from.extraLines?.[i]
+    const R = billTo.extraLines?.[i]
+    extraRows.push(
+      pairRow(
+        L?.label || "",
+        L ? wrapAddressHtml(L.value).html : "&nbsp;",
+        R?.label || "",
+        R ? wrapAddressHtml(R.value).html : "&nbsp;",
+        28
+      )
+    )
+  }
+  return `${pairRow(labels.fromLabel, `<b>${escapeCell(from.name || "—")}</b>`, labels.billToLabel, `<b>${escapeCell(billTo.name || "—")}</b>`, 28)}
+${pairRow(labels.addressLabel, fromAddr.html, labels.addressLabel, toAddr.html, Math.max(fromAddr.heightPt, toAddr.heightPt))}
+${pairTextRow(labels.taxIdLabel, from.taxId || "—", labels.taxIdLabel, billTo.taxId || "—", 22)}
+${pairTextRow(labels.phoneLabel, from.phone || "—", labels.phoneLabel, billTo.phone || "—", 22)}
+${extraRows.join("")}`
 }
 
 function poExcelCss(): string {
   return `${erpExcelRichTableCss()}
-@page { size: A4 portrait; margin: 10mm; mso-page-orientation: portrait; mso-header-margin: 5mm; mso-footer-margin: 5mm; }
+@page { size: A4 portrait; margin: 10mm; mso-page-orientation: portrait; mso-header-margin: 6mm; mso-footer-margin: 6mm; }
 body { margin: 0; padding: 0; }
-table.xl.po-sheet { width: 190mm; max-width: 100%; table-layout: fixed; border-collapse: collapse; }
-table.xl.po-sheet td, table.xl.po-sheet th { white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; font-size: 12pt; padding: 8px 10px; }
-.po-band { background: #1e4d8c; color: #ffffff; font-size: 26pt; font-weight: 700; padding: 20px 16px; border-color: #1e4d8c; letter-spacing: -0.02em; height: 56pt; }
-.po-band-meta { background: #1e4d8c; color: #ffffff; font-size: 13pt; text-align: right; vertical-align: middle; padding: 16px 16px; border-color: #1e4d8c; line-height: 1.55; }
-.po-band-meta b { font-size: 16pt; }
-.po-badge { background: #e8eef6; color: #1e4d8c; font-size: 13pt; font-weight: 700; padding: 10px 12px; border-color: #c5d4e8; height: 26pt; }
-.po-format { background: #f8fafc; color: #334155; font-size: 12pt; padding: 8px 12px; border-color: #e2e8f0; }
-td.po-party { vertical-align: top; width: 50%; padding: 0 !important; border: none !important; }
-table.po-inner { width: 100%; border-collapse: collapse; font-family: inherit; font-size: 12pt; table-layout: fixed; }
-table.po-inner td { border: 1px solid #c5d4e8; padding: 8px 10px; vertical-align: top; font-size: 12pt; }
-.po-section { background: #e8eef6; color: #1e4d8c; font-weight: 700; font-size: 14pt; letter-spacing: 0.04em; }
-.po-party-name { font-weight: 700; font-size: 16pt; color: #0f172a; background: #ffffff; }
-.po-k { background: #f8fafc; font-weight: 600; color: #475569; width: 88px; font-size: 11pt; }
+table.xl.po-sheet { width: 640px; table-layout: fixed; border-collapse: collapse; }
+table.xl.po-sheet td, table.xl.po-sheet th { white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; font-size: 11pt; padding: 5px 7px; }
+.po-band { background: #1e4d8c; color: #ffffff; font-size: 20pt; font-weight: 700; padding: 12px 12px; border-color: #1e4d8c; height: 40pt; }
+.po-band-meta { background: #1e4d8c; color: #ffffff; font-size: 11pt; text-align: right; vertical-align: middle; padding: 10px 12px; border-color: #1e4d8c; line-height: 1.45; }
+.po-band-meta b { font-size: 13pt; }
+.po-badge { background: #e8eef6; color: #1e4d8c; font-size: 11pt; font-weight: 700; padding: 6px 10px; border-color: #c5d4e8; }
+.po-format { background: #f8fafc; color: #334155; font-size: 10pt; padding: 6px 10px; border-color: #e2e8f0; }
+.po-k { background: #e8eef6; font-weight: 700; color: #1e4d8c; font-size: 10pt; width: 72px; }
 .po-v { background: #ffffff; color: #0f172a; }
 .po-text { mso-number-format: "\\@"; }
-.po-addr { white-space: normal; line-height: 1.45; font-size: 11pt; mso-number-format: "\\@"; }
+.po-addr { white-space: normal; line-height: 1.4; font-size: 10pt; mso-number-format: "\\@"; }
 .po-wrap { white-space: normal; word-wrap: break-word; }
-.po-ship-k { background: #e8eef6; color: #1e4d8c; font-weight: 700; width: 18%; font-size: 14pt; }
-.po-ship-v { background: #ffffff; font-size: 12pt; line-height: 1.45; }
-.po-thead th { background: #1e4d8c; color: #ffffff; font-weight: 700; font-size: 13pt; border-color: #163a6b; padding: 12px 8px; height: 28pt; }
-.po-store td { background: #e8eef6; font-weight: 700; color: #1e4d8c; height: ${ITEM_ROW_HEIGHT_PT}pt; }
-.xl-body td { font-size: 12pt; height: ${ITEM_ROW_HEIGHT_PT}pt; }
-.po-blank td { height: ${ITEM_ROW_HEIGHT_PT}pt; border-color: #e2e8f0; }
+.po-ship-k { background: #e8eef6; color: #1e4d8c; font-weight: 700; font-size: 11pt; }
+.po-ship-v { background: #ffffff; font-size: 10pt; }
+.po-thead th { background: #1e4d8c; color: #ffffff; font-weight: 700; font-size: 11pt; border-color: #163a6b; padding: 7px 6px; }
+.po-store td { background: #e8eef6; font-weight: 700; color: #1e4d8c; }
+.xl-body td { font-size: 11pt; }
+.po-blank td { border-color: #e2e8f0; }
 .po-money { mso-number-format: "\\#\\,\\#\\#0\\.00"; text-align: right; white-space: nowrap; }
 .po-qty { text-align: center; }
-.po-total-lbl { text-align: right; font-weight: 700; color: #334155; background: #f8fafc; font-size: 13pt; height: 24pt; }
-.po-total-val { background: #f8fafc; font-weight: 700; font-size: 13pt; }
-.po-grand-lbl { text-align: right; font-weight: 700; color: #ffffff; background: #1e4d8c; border-color: #1e4d8c; font-size: 14pt; height: 28pt; }
-.po-grand-val { font-weight: 700; color: #ffffff; background: #1e4d8c; border-color: #1e4d8c; font-size: 14pt; }
-.po-wht-lbl { text-align: right; color: #9f1239; background: #fff1f2; font-size: 12pt; height: 24pt; }
+.po-total-lbl { text-align: right; font-weight: 700; color: #334155; background: #f8fafc; font-size: 11pt; }
+.po-total-val { background: #f8fafc; font-weight: 700; }
+.po-grand-lbl { text-align: right; font-weight: 700; color: #ffffff; background: #1e4d8c; border-color: #1e4d8c; font-size: 12pt; }
+.po-grand-val { font-weight: 700; color: #ffffff; background: #1e4d8c; border-color: #1e4d8c; font-size: 12pt; }
+.po-wht-lbl { text-align: right; color: #9f1239; background: #fff1f2; }
 .po-wht-val { color: #9f1239; background: #fff1f2; font-weight: 600; }
-.po-net-lbl { text-align: right; font-weight: 700; background: #f1f5f9; font-size: 13pt; height: 26pt; }
+.po-net-lbl { text-align: right; font-weight: 700; background: #f1f5f9; }
 .po-net-val { font-weight: 700; background: #f1f5f9; }
-.po-sign td { vertical-align: top; padding: 6px !important; }
-.po-sign-hint { font-size: 12pt; color: #334155; line-height: 1.55; }
+.po-sign { vertical-align: top; }
+.po-sign-hint { font-size: 10pt; color: #334155; }
 .po-gap td { height: ${SECTION_GAP_PT}pt; border: none !important; padding: 0 !important; background: transparent !important; }
-.po-foot { font-size: 8pt; color: #64748b; border: none !important; padding: 6px 4px 0 4px !important; }
+.po-foot { font-size: 8pt; color: #64748b; border: none !important; padding: 4px 2px 0 2px !important; }
 `
 }
 
@@ -228,16 +249,18 @@ function excelShell(inner: string, title: string): string {
   <x:ExcelWorksheet>
    <x:Name>${sheet}</x:Name>
    <x:WorksheetOptions>
+    <x:FitToPage/>
     <x:Print>
      <x:ValidPrinterInfo/>
      <x:PaperSizeIndex>9</x:PaperSizeIndex>
-     <x:Scale>100</x:Scale>
+     <x:FitWidth>1</x:FitWidth>
+     <x:FitHeight>1</x:FitHeight>
     </x:Print>
     <x:PageSetup>
      <x:Layout x:Orientation="Portrait"/>
-     <x:Header x:Margin="0.3"/>
-     <x:Footer x:Margin="0.3"/>
-     <x:PageMargins x:Bottom="0.4" x:Left="0.45" x:Right="0.45" x:Top="0.4"/>
+     <x:Header x:Margin="0.25"/>
+     <x:Footer x:Margin="0.25"/>
+     <x:PageMargins x:Bottom="0.4" x:Left="0.4" x:Right="0.4" x:Top="0.4"/>
     </x:PageSetup>
     <x:DoNotDisplayGridlines/>
    </x:WorksheetOptions>
@@ -319,13 +342,8 @@ export function buildPurchaseOrderExcelHtml(input: PoExcelInput): string {
 ${badge ? `<tr><td class="po-badge" colspan="${COLS}">${escapeCell(badge)}</td></tr>` : ""}
 ${formatLabel ? `<tr><td class="po-format" colspan="${COLS}">${escapeCell(formatLabel)}</td></tr>` : ""}`
 
-  const parties = `<tr>
-<td class="po-party" colspan="3">${partyInnerTable(input.from, labels.fromLabel, labels)}</td>
-<td class="po-party" colspan="3">${partyInnerTable(input.billTo, labels.billToLabel, labels)}</td>
-</tr>`
-
-  const shipAddr = wrapAddressHtml(input.shipToAddress || "")
-  const ship = `<tr style="height:${Math.max(56, shipAddr.heightPt + 22)}pt">
+  const shipAddr = wrapAddressHtml(input.shipToAddress || "", 56)
+  const ship = `<tr style="height:${shipAddr.heightPt + 16}pt">
 <td class="po-ship-k">${escapeCell(labels.shipToLabel)}</td>
 <td class="po-ship-v po-addr" colspan="5"><b>${escapeCell(input.shipToName || "—")}</b>${
     input.shipToAddress ? `<br/>${shipAddr.html}` : ""
@@ -333,12 +351,12 @@ ${formatLabel ? `<tr><td class="po-format" colspan="${COLS}">${escapeCell(format
 </tr>`
 
   const thead = `<tr class="po-thead">
-<th class="num-int" style="width:8%">${escapeCell(labels.no)}</th>
-<th style="width:40%">${escapeCell(labels.item)}</th>
-<th style="width:14%">${escapeCell(labels.spec)}</th>
-<th class="num" style="width:14%">${escapeCell(labels.unitPrice)}</th>
-<th class="num-int" style="width:10%">${escapeCell(labels.qty)}</th>
-<th class="num" style="width:14%">${escapeCell(labels.amount)}</th>
+<th class="num-int">${escapeCell(labels.no)}</th>
+<th>${escapeCell(labels.item)}</th>
+<th>${escapeCell(labels.spec)}</th>
+<th class="num">${escapeCell(labels.unitPrice)}</th>
+<th class="num-int">${escapeCell(labels.qty)}</th>
+<th class="num">${escapeCell(labels.amount)}</th>
 </tr>`
 
   const totals = `<tr>
@@ -371,29 +389,19 @@ ${moneyCell(netAfterWht, "po-net-val")}
       : ""
   }`
 
-  const sign = `<tr class="po-sign">
-<td colspan="3" class="po-sign">
-<table class="po-inner">
-<tr><td class="po-section" style="height:22pt">${escapeCell(input.billTo.name || "—")}</td></tr>
-<tr><td class="po-v po-sign-hint" style="height:${SIGN_BOX_HEIGHT_PT}pt">${escapeCell(labels.receivedBy)}<br/><br/>______________________________<br/><br/><br/>${escapeCell(labels.signatureDate)}<br/><br/>______________________________</td></tr>
-</table>
-</td>
-<td colspan="3" class="po-sign">
-<table class="po-inner">
-<tr><td class="po-section" style="height:22pt">${escapeCell(input.from.name || "—")}</td></tr>
-<tr><td class="po-v po-sign-hint" style="height:${SIGN_BOX_HEIGHT_PT}pt">${escapeCell(labels.authorizedStamp)}<br/><br/>______________________________<br/><br/><br/>${escapeCell(labels.preparedBy)}: ${escapeCell(input.preparedByName || "—")}</td></tr>
-</table>
-</td>
+  const sign = `<tr class="po-sign" style="height:${SIGN_BOX_HEIGHT_PT}pt">
+<td class="po-v po-sign-hint" colspan="3"><b>${escapeCell(input.billTo.name || "—")}</b><br/><br/>${escapeCell(labels.receivedBy)}<br/>________________________<br/><br/>${escapeCell(labels.signatureDate)}<br/>________________________</td>
+<td class="po-v po-sign-hint" colspan="3"><b>${escapeCell(input.from.name || "—")}</b><br/><br/>${escapeCell(labels.authorizedStamp)}<br/>________________________<br/><br/>${escapeCell(labels.preparedBy)}: ${escapeCell(input.preparedByName || "—")}</td>
 </tr>`
 
-  const table = `<table class="xl po-sheet" role="table" width="718" style="width:190mm">
+  const table = `<table class="xl po-sheet" role="table" border="0" cellspacing="0" cellpadding="0" width="640">
 <colgroup>
-<col style="width:8%"/><col style="width:40%"/><col style="width:14%"/>
-<col style="width:14%"/><col style="width:10%"/><col style="width:14%"/>
+<col width="48"/><col width="220"/><col width="90"/>
+<col width="90"/><col width="72"/><col width="90"/>
 </colgroup>
 ${header}
 ${gapRow()}
-${parties}
+${partyRows(input.from, input.billTo, labels)}
 ${gapRow()}
 ${ship}
 ${gapRow()}

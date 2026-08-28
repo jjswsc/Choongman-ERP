@@ -68,14 +68,14 @@ function sampleAccountingPo(overrides: Partial<PoExcelInput> = {}): PoExcelInput
 }
 
 describe("buildPurchaseOrderExcelHtml", () => {
-  it("sets A4 portrait print at 100% so Excel does not shrink the sheet", () => {
+  it("fits one A4 page (width and height) so Excel does not split into many sheets", () => {
     const html = buildPurchaseOrderExcelHtml(sampleAccountingPo())
     expect(html).toContain("<x:PaperSizeIndex>9</x:PaperSizeIndex>")
     expect(html).toContain('x:Orientation="Portrait"')
-    expect(html).toContain("<x:Scale>100</x:Scale>")
-    expect(html).not.toContain("<x:FitToPage/>")
-    expect(html).toContain("size: A4 portrait")
-    expect(html).toContain("width:190mm")
+    expect(html).toContain("<x:FitToPage/>")
+    expect(html).toContain("<x:FitWidth>1</x:FitWidth>")
+    expect(html).toContain("<x:FitHeight>1</x:FitHeight>")
+    expect(html).not.toContain('class="po-inner"')
     expect(html).toContain("<x:DoNotDisplayGridlines/>")
   })
 
@@ -134,9 +134,8 @@ describe("buildPurchaseOrderExcelHtml", () => {
     const html = buildPurchaseOrderExcelHtml(sampleAccountingPo())
     const blanks = (html.match(/class="xl-body po-blank"/g) || []).length
     expect(blanks).toBe(PO_EXCEL_MIN_ITEM_ROWS - 1)
-    expect(html).toContain("font-size: 26pt")
-    expect(html).toContain("font-size: 16pt")
-    expect(html).toContain(`height:${108}pt`)
+    expect(html).toContain("font-size: 20pt")
+    expect(html).toContain(`height:${56}pt`)
   })
 
   it("keeps 13-digit tax IDs as text so Excel does not show scientific notation", () => {
