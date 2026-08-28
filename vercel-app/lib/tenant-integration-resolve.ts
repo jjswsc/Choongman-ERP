@@ -174,7 +174,7 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
     }
   }
 
-  // 충만 매장별 MID 기본값 (Huamak / Seacon). 아래 관리자·SaaS DB가 있으면 그 값이 우선.
+  // 충만 매장별 MID 기본값 (Huamak / Seacon / Future Park / Ekkamai / Silom). 아래 관리자·SaaS DB가 있으면 그 값이 우선.
   if (storeCode) {
     const defaults = lookupChoongmanKbankStoreDefaults(storeCode)
     if (defaults) {
