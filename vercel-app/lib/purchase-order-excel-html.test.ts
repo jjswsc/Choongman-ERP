@@ -68,13 +68,14 @@ function sampleAccountingPo(overrides: Partial<PoExcelInput> = {}): PoExcelInput
 }
 
 describe("buildPurchaseOrderExcelHtml", () => {
-  it("sets A4 portrait print so Excel can print one page width", () => {
+  it("sets A4 portrait print at 100% so Excel does not shrink the sheet", () => {
     const html = buildPurchaseOrderExcelHtml(sampleAccountingPo())
     expect(html).toContain("<x:PaperSizeIndex>9</x:PaperSizeIndex>")
     expect(html).toContain('x:Orientation="Portrait"')
-    expect(html).toContain("<x:FitWidth>1</x:FitWidth>")
+    expect(html).toContain("<x:Scale>100</x:Scale>")
+    expect(html).not.toContain("<x:FitToPage/>")
     expect(html).toContain("size: A4 portrait")
-    expect(html).toContain("width: 100%")
+    expect(html).toContain("width:190mm")
     expect(html).toContain("<x:DoNotDisplayGridlines/>")
   })
 
@@ -103,7 +104,8 @@ describe("buildPurchaseOrderExcelHtml", () => {
     )
     expect(html).toContain("A &lt;B&gt; &amp; &quot;C&quot;")
     expect(html).not.toContain("A <B>")
-    expect(html).toContain("po-wrap")
+    expect(html).toContain("po-addr")
+    expect(html).toContain("<br/>")
   })
 
   it("omits WHT rows when withholding is zero", () => {
@@ -132,8 +134,15 @@ describe("buildPurchaseOrderExcelHtml", () => {
     const html = buildPurchaseOrderExcelHtml(sampleAccountingPo())
     const blanks = (html.match(/class="xl-body po-blank"/g) || []).length
     expect(blanks).toBe(PO_EXCEL_MIN_ITEM_ROWS - 1)
-    expect(html).toContain("font-size: 22pt")
-    expect(html).toContain("font-size: 12pt")
-    expect(html).toContain(`height:${96}pt`)
+    expect(html).toContain("font-size: 26pt")
+    expect(html).toContain("font-size: 16pt")
+    expect(html).toContain(`height:${108}pt`)
+  })
+
+  it("keeps 13-digit tax IDs as text so Excel does not show scientific notation", () => {
+    const html = buildPurchaseOrderExcelHtml(sampleAccountingPo())
+    expect(html).toContain('x:str="0105551234567"')
+    expect(html).toContain("po-text")
+    expect(html).not.toMatch(/1\.0555\d*E\+/i)
   })
 })

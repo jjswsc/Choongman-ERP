@@ -71,10 +71,11 @@ export type PoExcelInput = {
 
 const COLS = 6
 /** 품목이 적어도 A4 본문을 채울 빈 줄 수 (실제 줄이 이보다 많으면 추가하지 않음) */
-export const PO_EXCEL_MIN_ITEM_ROWS = 14
-const ITEM_ROW_HEIGHT_PT = 26
-const SIGN_BOX_HEIGHT_PT = 96
-const SECTION_GAP_PT = 14
+export const PO_EXCEL_MIN_ITEM_ROWS = 16
+const ITEM_ROW_HEIGHT_PT = 28
+const SIGN_BOX_HEIGHT_PT = 108
+const SECTION_GAP_PT = 16
+const ADDR_LINE_PT = 18
 
 function escapeCell(v: string | number): string {
   return String(v ?? "")
@@ -94,6 +95,41 @@ function excelSheetName(raw: string): string {
     .replace(/[[\]*?:/\\]/g, "-")
     .trim()
   return (s || "Invoice").slice(0, 31)
+}
+
+function wrapAddressHtml(raw: string): { html: string; heightPt: number } {
+  const s = String(raw || "").trim()
+  if (!s) return { html: escapeCell("—"), heightPt: 48 }
+  const chunks = s
+    .split(/,\s+/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+  const lines: string[] = []
+  const pushWrapped = (chunk: string) => {
+    const words = chunk.split(/\s+/).filter(Boolean)
+    let cur = ""
+    for (const w of words) {
+      const next = cur ? `${cur} ${w}` : w
+      if (next.length > 42 && cur) {
+        lines.push(cur)
+        cur = w
+      } else {
+        cur = next
+      }
+    }
+    if (cur) lines.push(cur)
+  }
+  if (chunks.length > 1) chunks.forEach(pushWrapped)
+  else pushWrapped(s)
+  const html = (lines.length ? lines : [s]).map(escapeCell).join("<br/>")
+  const n = Math.max(1, (html.match(/<br\/>/g) || []).length + 1)
+  return { html, heightPt: Math.max(52, n * ADDR_LINE_PT + 14) }
+}
+
+function textTd(value: string, extraClass = "", extraAttr = ""): string {
+  const v = String(value || "").trim() || "—"
+  const cls = extraClass ? `po-text ${extraClass}` : "po-text"
+  return `<td class="${cls}" x:str="${escapeCell(v)}"${extraAttr}>${escapeCell(v)}</td>`
 }
 
 function moneyCell(n: number, extraClass = ""): string {
@@ -122,58 +158,61 @@ function groupLinesByStore(lines: PoExcelLine[]): Map<string, PoExcelLine[]> | n
 function partyInnerTable(party: PoExcelParty, sectionLabel: string, labels: PoExcelLabels): string {
   const extras = (party.extraLines || [])
     .filter((x) => String(x.value || "").trim())
-    .map(
-      (x) =>
-        `<tr><td class="po-k" style="height:22pt">${escapeCell(x.label)}</td><td class="po-v po-wrap">${escapeCell(x.value)}</td></tr>`
-    )
+    .map((x) => {
+      const wrapped = wrapAddressHtml(x.value)
+      return `<tr><td class="po-k" style="height:${Math.max(28, wrapped.heightPt)}pt">${escapeCell(x.label)}</td><td class="po-v po-addr">${wrapped.html}</td></tr>`
+    })
     .join("")
-  return `<table class="po-inner">
-<tr><td class="po-section" colspan="2" style="height:22pt">${escapeCell(sectionLabel)}</td></tr>
-<tr><td class="po-party-name" colspan="2" style="height:28pt">${escapeCell(party.name || "—")}</td></tr>
-<tr><td class="po-k" style="height:36pt">${escapeCell(labels.addressLabel)}</td><td class="po-v po-wrap">${escapeCell(party.address || "—")}</td></tr>
-<tr><td class="po-k" style="height:22pt">${escapeCell(labels.taxIdLabel)}</td><td class="po-v">${escapeCell(party.taxId || "—")}</td></tr>
-<tr><td class="po-k" style="height:22pt">${escapeCell(labels.phoneLabel)}</td><td class="po-v">${escapeCell(party.phone || "—")}</td></tr>
+  const addr = wrapAddressHtml(party.address || "")
+  return `<table class="po-inner" width="100%">
+<tr><td class="po-section" colspan="2" style="height:28pt">${escapeCell(sectionLabel)}</td></tr>
+<tr><td class="po-party-name" colspan="2" style="height:36pt">${escapeCell(party.name || "—")}</td></tr>
+<tr><td class="po-k" style="height:${addr.heightPt}pt">${escapeCell(labels.addressLabel)}</td><td class="po-v po-addr">${addr.html}</td></tr>
+<tr><td class="po-k" style="height:26pt">${escapeCell(labels.taxIdLabel)}</td>${textTd(party.taxId || "—", "po-v")}</tr>
+<tr><td class="po-k" style="height:26pt">${escapeCell(labels.phoneLabel)}</td>${textTd(party.phone || "—", "po-v")}</tr>
 ${extras}
 </table>`
 }
 
 function poExcelCss(): string {
   return `${erpExcelRichTableCss()}
-@page { size: A4 portrait; margin: 10mm; mso-page-orientation: portrait; mso-header-margin: 6mm; mso-footer-margin: 6mm; }
+@page { size: A4 portrait; margin: 10mm; mso-page-orientation: portrait; mso-header-margin: 5mm; mso-footer-margin: 5mm; }
 body { margin: 0; padding: 0; }
-table.xl.po-sheet { width: 100%; table-layout: fixed; border-collapse: collapse; }
+table.xl.po-sheet { width: 190mm; max-width: 100%; table-layout: fixed; border-collapse: collapse; }
 table.xl.po-sheet td, table.xl.po-sheet th { white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; font-size: 12pt; padding: 8px 10px; }
-.po-band { background: #1e4d8c; color: #ffffff; font-size: 22pt; font-weight: 700; padding: 18px 16px; border-color: #1e4d8c; letter-spacing: -0.02em; height: 48pt; }
-.po-band-meta { background: #1e4d8c; color: #ffffff; font-size: 12pt; text-align: right; vertical-align: middle; padding: 14px 16px; border-color: #1e4d8c; line-height: 1.5; }
-.po-band-meta b { font-size: 14pt; }
-.po-badge { background: #e8eef6; color: #1e4d8c; font-size: 11pt; font-weight: 700; padding: 8px 12px; border-color: #c5d4e8; height: 22pt; }
-.po-format { background: #f8fafc; color: #334155; font-size: 11pt; padding: 8px 12px; border-color: #e2e8f0; }
+.po-band { background: #1e4d8c; color: #ffffff; font-size: 26pt; font-weight: 700; padding: 20px 16px; border-color: #1e4d8c; letter-spacing: -0.02em; height: 56pt; }
+.po-band-meta { background: #1e4d8c; color: #ffffff; font-size: 13pt; text-align: right; vertical-align: middle; padding: 16px 16px; border-color: #1e4d8c; line-height: 1.55; }
+.po-band-meta b { font-size: 16pt; }
+.po-badge { background: #e8eef6; color: #1e4d8c; font-size: 13pt; font-weight: 700; padding: 10px 12px; border-color: #c5d4e8; height: 26pt; }
+.po-format { background: #f8fafc; color: #334155; font-size: 12pt; padding: 8px 12px; border-color: #e2e8f0; }
 td.po-party { vertical-align: top; width: 50%; padding: 0 !important; border: none !important; }
-table.po-inner { width: 100%; border-collapse: collapse; font-family: inherit; font-size: 12pt; }
+table.po-inner { width: 100%; border-collapse: collapse; font-family: inherit; font-size: 12pt; table-layout: fixed; }
 table.po-inner td { border: 1px solid #c5d4e8; padding: 8px 10px; vertical-align: top; font-size: 12pt; }
-.po-section { background: #e8eef6; color: #1e4d8c; font-weight: 700; font-size: 12pt; letter-spacing: 0.04em; }
-.po-party-name { font-weight: 700; font-size: 14pt; color: #0f172a; background: #ffffff; }
-.po-k { background: #f8fafc; font-weight: 600; color: #475569; width: 96px; font-size: 11pt; }
+.po-section { background: #e8eef6; color: #1e4d8c; font-weight: 700; font-size: 14pt; letter-spacing: 0.04em; }
+.po-party-name { font-weight: 700; font-size: 16pt; color: #0f172a; background: #ffffff; }
+.po-k { background: #f8fafc; font-weight: 600; color: #475569; width: 88px; font-size: 11pt; }
 .po-v { background: #ffffff; color: #0f172a; }
+.po-text { mso-number-format: "\\@"; }
+.po-addr { white-space: normal; line-height: 1.45; font-size: 11pt; mso-number-format: "\\@"; }
 .po-wrap { white-space: normal; word-wrap: break-word; }
-.po-ship-k { background: #e8eef6; color: #1e4d8c; font-weight: 700; width: 18%; font-size: 12pt; }
-.po-ship-v { background: #ffffff; font-size: 12pt; }
-.po-thead th { background: #1e4d8c; color: #ffffff; font-weight: 700; font-size: 12pt; border-color: #163a6b; padding: 10px 8px; height: 24pt; }
+.po-ship-k { background: #e8eef6; color: #1e4d8c; font-weight: 700; width: 18%; font-size: 14pt; }
+.po-ship-v { background: #ffffff; font-size: 12pt; line-height: 1.45; }
+.po-thead th { background: #1e4d8c; color: #ffffff; font-weight: 700; font-size: 13pt; border-color: #163a6b; padding: 12px 8px; height: 28pt; }
 .po-store td { background: #e8eef6; font-weight: 700; color: #1e4d8c; height: ${ITEM_ROW_HEIGHT_PT}pt; }
 .xl-body td { font-size: 12pt; height: ${ITEM_ROW_HEIGHT_PT}pt; }
 .po-blank td { height: ${ITEM_ROW_HEIGHT_PT}pt; border-color: #e2e8f0; }
 .po-money { mso-number-format: "\\#\\,\\#\\#0\\.00"; text-align: right; white-space: nowrap; }
 .po-qty { text-align: center; }
-.po-total-lbl { text-align: right; font-weight: 600; color: #334155; background: #f8fafc; font-size: 12pt; height: 22pt; }
-.po-total-val { background: #f8fafc; font-weight: 600; font-size: 12pt; }
-.po-grand-lbl { text-align: right; font-weight: 700; color: #ffffff; background: #1e4d8c; border-color: #1e4d8c; font-size: 13pt; height: 26pt; }
-.po-grand-val { font-weight: 700; color: #ffffff; background: #1e4d8c; border-color: #1e4d8c; font-size: 13pt; }
-.po-wht-lbl { text-align: right; color: #9f1239; background: #fff1f2; font-size: 12pt; height: 22pt; }
+.po-total-lbl { text-align: right; font-weight: 700; color: #334155; background: #f8fafc; font-size: 13pt; height: 24pt; }
+.po-total-val { background: #f8fafc; font-weight: 700; font-size: 13pt; }
+.po-grand-lbl { text-align: right; font-weight: 700; color: #ffffff; background: #1e4d8c; border-color: #1e4d8c; font-size: 14pt; height: 28pt; }
+.po-grand-val { font-weight: 700; color: #ffffff; background: #1e4d8c; border-color: #1e4d8c; font-size: 14pt; }
+.po-wht-lbl { text-align: right; color: #9f1239; background: #fff1f2; font-size: 12pt; height: 24pt; }
 .po-wht-val { color: #9f1239; background: #fff1f2; font-weight: 600; }
-.po-net-lbl { text-align: right; font-weight: 700; background: #f1f5f9; font-size: 12pt; height: 24pt; }
+.po-net-lbl { text-align: right; font-weight: 700; background: #f1f5f9; font-size: 13pt; height: 26pt; }
 .po-net-val { font-weight: 700; background: #f1f5f9; }
 .po-sign td { vertical-align: top; padding: 6px !important; }
-.po-sign-hint { font-size: 11pt; color: #334155; line-height: 1.55; }
+.po-sign-hint { font-size: 12pt; color: #334155; line-height: 1.55; }
 .po-gap td { height: ${SECTION_GAP_PT}pt; border: none !important; padding: 0 !important; background: transparent !important; }
 .po-foot { font-size: 8pt; color: #64748b; border: none !important; padding: 6px 4px 0 4px !important; }
 `
@@ -189,12 +228,10 @@ function excelShell(inner: string, title: string): string {
   <x:ExcelWorksheet>
    <x:Name>${sheet}</x:Name>
    <x:WorksheetOptions>
-    <x:FitToPage/>
     <x:Print>
      <x:ValidPrinterInfo/>
      <x:PaperSizeIndex>9</x:PaperSizeIndex>
-     <x:FitWidth>1</x:FitWidth>
-     <x:FitHeight>0</x:FitHeight>
+     <x:Scale>100</x:Scale>
     </x:Print>
     <x:PageSetup>
      <x:Layout x:Orientation="Portrait"/>
@@ -287,10 +324,11 @@ ${formatLabel ? `<tr><td class="po-format" colspan="${COLS}">${escapeCell(format
 <td class="po-party" colspan="3">${partyInnerTable(input.billTo, labels.billToLabel, labels)}</td>
 </tr>`
 
-  const ship = `<tr style="height:36pt">
+  const shipAddr = wrapAddressHtml(input.shipToAddress || "")
+  const ship = `<tr style="height:${Math.max(56, shipAddr.heightPt + 22)}pt">
 <td class="po-ship-k">${escapeCell(labels.shipToLabel)}</td>
-<td class="po-ship-v po-wrap" colspan="5"><b>${escapeCell(input.shipToName || "—")}</b>${
-    input.shipToAddress ? `<br/>${escapeCell(input.shipToAddress)}` : ""
+<td class="po-ship-v po-addr" colspan="5"><b>${escapeCell(input.shipToName || "—")}</b>${
+    input.shipToAddress ? `<br/>${shipAddr.html}` : ""
   }</td>
 </tr>`
 
@@ -348,7 +386,7 @@ ${moneyCell(netAfterWht, "po-net-val")}
 </td>
 </tr>`
 
-  const table = `<table class="xl po-sheet" role="table">
+  const table = `<table class="xl po-sheet" role="table" width="718" style="width:190mm">
 <colgroup>
 <col style="width:8%"/><col style="width:40%"/><col style="width:14%"/>
 <col style="width:14%"/><col style="width:10%"/><col style="width:14%"/>
