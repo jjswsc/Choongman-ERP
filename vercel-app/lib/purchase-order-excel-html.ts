@@ -70,11 +70,22 @@ export type PoExcelInput = {
 }
 
 const COLS = 6
-/** 짧은 인보이스용 빈 품목 줄 — 너무 많으면 세로로 장이 갈라짐 */
-export const PO_EXCEL_MIN_ITEM_ROWS = 6
-const ITEM_ROW_HEIGHT_PT = 20
-const SIGN_BOX_HEIGHT_PT = 56
-const SECTION_GAP_PT = 8
+/**
+ * A4 세로 인쇄 가능 폭(여백 0.4" 제외 ≈ 190mm)보다 약간 좁게.
+ * Fit-to-page는 축소만 하고 확대는 안 하므로, 시트 자체를 A4 크기로 둔다.
+ */
+const SHEET_WIDTH_MM = 182
+/** 열 폭(pt). 합 520pt ≈ 183mm. HTML width는 px(pt×96/72). */
+const COL_WIDTH_PT = [40, 188, 78, 78, 52, 84] as const
+const COL_WIDTH_PX = COL_WIDTH_PT.map((pt) => Math.round((pt * 96) / 72))
+const SHEET_WIDTH_PX = COL_WIDTH_PX.reduce((a, b) => a + b, 0)
+
+/** 짧은 인보이스용 빈 품목 줄 */
+export const PO_EXCEL_MIN_ITEM_ROWS = 10
+const ITEM_ROW_HEIGHT_PT = 22
+const SIGN_BOX_HEIGHT_PT = 80
+const SECTION_GAP_PT = 12
+const MAX_ADDR_LINES = 5
 
 function escapeCell(v: string | number): string {
   return String(v ?? "")
@@ -96,10 +107,10 @@ function excelSheetName(raw: string): string {
   return (s || "Invoice").slice(0, 31)
 }
 
-/** 반쪽 칸(3열)에 맞게 주소를 줄바꿈 */
-export function wrapAddressHtml(raw: string, maxLen = 32): { html: string; heightPt: number } {
+/** 반쪽 칸(3열)에 맞게 주소를 줄바꿈. 너무 잘게 쪼개면 칸만 높고 글은 가늘게 보임. */
+export function wrapAddressHtml(raw: string, maxLen = 46): { html: string; heightPt: number } {
   const s = String(raw || "").trim()
-  if (!s) return { html: escapeCell("—"), heightPt: 36 }
+  if (!s) return { html: escapeCell("—"), heightPt: 40 }
   const chunks = s
     .split(/,\s+/)
     .map((p) => p.trim())
@@ -121,9 +132,15 @@ export function wrapAddressHtml(raw: string, maxLen = 32): { html: string; heigh
   }
   if (chunks.length > 1) chunks.forEach(pushWrapped)
   else pushWrapped(s)
+  if (lines.length > MAX_ADDR_LINES) {
+    const head = lines.slice(0, MAX_ADDR_LINES - 1)
+    const tail = lines.slice(MAX_ADDR_LINES - 1).join(" ")
+    lines.length = 0
+    lines.push(...head, tail)
+  }
   const html = (lines.length ? lines : [s]).map(escapeCell).join("<br/>")
   const n = Math.max(1, (html.match(/<br\/>/g) || []).length + 1)
-  return { html, heightPt: Math.min(72, Math.max(32, n * 16 + 8)) }
+  return { html, heightPt: Math.min(68, Math.max(40, n * 14 + 10)) }
 }
 
 function pairTextRow(
@@ -204,21 +221,21 @@ function poExcelCss(): string {
   return `${erpExcelRichTableCss()}
 @page { size: A4 portrait; margin: 10mm; mso-page-orientation: portrait; mso-header-margin: 6mm; mso-footer-margin: 6mm; }
 body { margin: 0; padding: 0; }
-table.xl.po-sheet { width: 640px; table-layout: fixed; border-collapse: collapse; }
-table.xl.po-sheet td, table.xl.po-sheet th { white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; font-size: 11pt; padding: 5px 7px; }
-.po-band { background: #1e4d8c; color: #ffffff; font-size: 20pt; font-weight: 700; padding: 12px 12px; border-color: #1e4d8c; height: 40pt; }
-.po-band-meta { background: #1e4d8c; color: #ffffff; font-size: 11pt; text-align: right; vertical-align: middle; padding: 10px 12px; border-color: #1e4d8c; line-height: 1.45; }
-.po-band-meta b { font-size: 13pt; }
-.po-badge { background: #e8eef6; color: #1e4d8c; font-size: 11pt; font-weight: 700; padding: 6px 10px; border-color: #c5d4e8; }
+table.xl.po-sheet { width: ${SHEET_WIDTH_MM}mm; max-width: ${SHEET_WIDTH_MM}mm; table-layout: fixed; border-collapse: collapse; }
+table.xl.po-sheet td, table.xl.po-sheet th { white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; font-size: 11pt; padding: 6px 8px; }
+.po-band { background: #1e4d8c; color: #ffffff; font-size: 22pt; font-weight: 700; padding: 14px 12px; border-color: #1e4d8c; height: 44pt; }
+.po-band-meta { background: #1e4d8c; color: #ffffff; font-size: 11pt; text-align: right; vertical-align: middle; padding: 12px 12px; border-color: #1e4d8c; line-height: 1.45; }
+.po-band-meta b { font-size: 14pt; }
+.po-badge { background: #e8eef6; color: #1e4d8c; font-size: 11pt; font-weight: 700; padding: 7px 10px; border-color: #c5d4e8; }
 .po-format { background: #f8fafc; color: #334155; font-size: 10pt; padding: 6px 10px; border-color: #e2e8f0; }
 .po-k { background: #e8eef6; font-weight: 700; color: #1e4d8c; font-size: 10pt; width: 72px; }
 .po-v { background: #ffffff; color: #0f172a; }
 .po-text { mso-number-format: "\\@"; }
-.po-addr { white-space: normal; line-height: 1.4; font-size: 10pt; mso-number-format: "\\@"; }
+.po-addr { white-space: normal; line-height: 1.45; font-size: 11pt; mso-number-format: "\\@"; }
 .po-wrap { white-space: normal; word-wrap: break-word; }
 .po-ship-k { background: #e8eef6; color: #1e4d8c; font-weight: 700; font-size: 11pt; }
-.po-ship-v { background: #ffffff; font-size: 10pt; }
-.po-thead th { background: #1e4d8c; color: #ffffff; font-weight: 700; font-size: 11pt; border-color: #163a6b; padding: 7px 6px; }
+.po-ship-v { background: #ffffff; font-size: 11pt; }
+.po-thead th { background: #1e4d8c; color: #ffffff; font-weight: 700; font-size: 11pt; border-color: #163a6b; padding: 8px 6px; }
 .po-store td { background: #e8eef6; font-weight: 700; color: #1e4d8c; }
 .xl-body td { font-size: 11pt; }
 .po-blank td { border-color: #e2e8f0; }
@@ -233,14 +250,20 @@ table.xl.po-sheet td, table.xl.po-sheet th { white-space: normal; word-wrap: bre
 .po-net-lbl { text-align: right; font-weight: 700; background: #f1f5f9; }
 .po-net-val { font-weight: 700; background: #f1f5f9; }
 .po-sign { vertical-align: top; }
-.po-sign-hint { font-size: 10pt; color: #334155; }
+.po-sign-hint { font-size: 11pt; color: #334155; }
 .po-gap td { height: ${SECTION_GAP_PT}pt; border: none !important; padding: 0 !important; background: transparent !important; }
 .po-foot { font-size: 8pt; color: #64748b; border: none !important; padding: 4px 2px 0 2px !important; }
 `
 }
 
-function excelShell(inner: string, title: string): string {
+function excelPrintAreaFormula(sheet: string, lastRow: number): string {
+  const q = `'${sheet.replace(/'/g, "''")}'`
+  return `=${q}!$A$1:$F$${Math.max(1, lastRow)}`
+}
+
+function excelShell(inner: string, title: string, lastRow: number): string {
   const sheet = xmlEscapeText(excelSheetName(title))
+  const printArea = xmlEscapeText(excelPrintAreaFormula(sheet, lastRow))
   return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head><meta charset="utf-8"/>
 <!--[if gte mso 9]><xml>
@@ -249,12 +272,11 @@ function excelShell(inner: string, title: string): string {
   <x:ExcelWorksheet>
    <x:Name>${sheet}</x:Name>
    <x:WorksheetOptions>
-    <x:FitToPage/>
+    <x:StandardWidth>2</x:StandardWidth>
     <x:Print>
      <x:ValidPrinterInfo/>
      <x:PaperSizeIndex>9</x:PaperSizeIndex>
-     <x:FitWidth>1</x:FitWidth>
-     <x:FitHeight>1</x:FitHeight>
+     <x:Scale>100</x:Scale>
     </x:Print>
     <x:PageSetup>
      <x:Layout x:Orientation="Portrait"/>
@@ -266,6 +288,11 @@ function excelShell(inner: string, title: string): string {
    </x:WorksheetOptions>
   </x:ExcelWorksheet>
  </x:ExcelWorksheets>
+ <x:ExcelName>
+  <x:Name>Print_Area</x:Name>
+  <x:SheetIndex>1</x:SheetIndex>
+  <x:Formula>${printArea}</x:Formula>
+ </x:ExcelName>
 </x:ExcelWorkbook>
 </xml><![endif]-->
 <style>${poExcelCss()}</style>
@@ -342,7 +369,7 @@ export function buildPurchaseOrderExcelHtml(input: PoExcelInput): string {
 ${badge ? `<tr><td class="po-badge" colspan="${COLS}">${escapeCell(badge)}</td></tr>` : ""}
 ${formatLabel ? `<tr><td class="po-format" colspan="${COLS}">${escapeCell(formatLabel)}</td></tr>` : ""}`
 
-  const shipAddr = wrapAddressHtml(input.shipToAddress || "", 56)
+  const shipAddr = wrapAddressHtml(input.shipToAddress || "", 72)
   const ship = `<tr style="height:${shipAddr.heightPt + 16}pt">
 <td class="po-ship-k">${escapeCell(labels.shipToLabel)}</td>
 <td class="po-ship-v po-addr" colspan="5"><b>${escapeCell(input.shipToName || "—")}</b>${
@@ -394,11 +421,12 @@ ${moneyCell(netAfterWht, "po-net-val")}
 <td class="po-v po-sign-hint" colspan="3"><b>${escapeCell(input.from.name || "—")}</b><br/><br/>${escapeCell(labels.authorizedStamp)}<br/>________________________<br/><br/>${escapeCell(labels.preparedBy)}: ${escapeCell(input.preparedByName || "—")}</td>
 </tr>`
 
-  const table = `<table class="xl po-sheet" role="table" border="0" cellspacing="0" cellpadding="0" width="640">
-<colgroup>
-<col width="48"/><col width="220"/><col width="90"/>
-<col width="90"/><col width="72"/><col width="90"/>
-</colgroup>
+  const colgroup = `<colgroup>${COL_WIDTH_PX.map(
+    (px, i) => `<col width="${px}" style="width:${COL_WIDTH_PT[i]}pt"/>`
+  ).join("")}</colgroup>`
+
+  const table = `<table class="xl po-sheet" role="table" border="0" cellspacing="0" cellpadding="0" width="${SHEET_WIDTH_PX}" style="width:${SHEET_WIDTH_MM}mm">
+${colgroup}
 ${header}
 ${gapRow()}
 ${partyRows(input.from, input.billTo, labels)}
@@ -414,5 +442,6 @@ ${sign}
 <tr><td class="po-foot" colspan="${COLS}">A4</td></tr>
 </table>`
 
-  return excelShell(table, labels.docTitle || input.poNo)
+  const lastRow = (table.match(/<tr\b/gi) || []).length
+  return excelShell(table, labels.docTitle || input.poNo, lastRow)
 }

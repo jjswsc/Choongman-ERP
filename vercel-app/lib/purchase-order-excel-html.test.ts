@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { buildPurchaseOrderExcelHtml, PO_EXCEL_MIN_ITEM_ROWS, type PoExcelInput } from "./purchase-order-excel-html"
+import {
+  buildPurchaseOrderExcelHtml,
+  PO_EXCEL_MIN_ITEM_ROWS,
+  wrapAddressHtml,
+  type PoExcelInput,
+} from "./purchase-order-excel-html"
 
 const labels: PoExcelInput["labels"] = {
   docTitle: "Invoice/Tax invoice",
@@ -68,13 +73,15 @@ function sampleAccountingPo(overrides: Partial<PoExcelInput> = {}): PoExcelInput
 }
 
 describe("buildPurchaseOrderExcelHtml", () => {
-  it("fits one A4 page (width and height) so Excel does not split into many sheets", () => {
+  it("prints A4 portrait at 100% using only columns A-F so the sheet is not shrunk to half", () => {
     const html = buildPurchaseOrderExcelHtml(sampleAccountingPo())
     expect(html).toContain("<x:PaperSizeIndex>9</x:PaperSizeIndex>")
     expect(html).toContain('x:Orientation="Portrait"')
-    expect(html).toContain("<x:FitToPage/>")
-    expect(html).toContain("<x:FitWidth>1</x:FitWidth>")
-    expect(html).toContain("<x:FitHeight>1</x:FitHeight>")
+    expect(html).toContain("<x:Scale>100</x:Scale>")
+    expect(html).not.toContain("<x:FitToPage/>")
+    expect(html).toContain("<x:Name>Print_Area</x:Name>")
+    expect(html).toMatch(/\$A\$1:\$F\$\d+/)
+    expect(html).toContain("width:182mm")
     expect(html).not.toContain('class="po-inner"')
     expect(html).toContain("<x:DoNotDisplayGridlines/>")
   })
@@ -134,8 +141,8 @@ describe("buildPurchaseOrderExcelHtml", () => {
     const html = buildPurchaseOrderExcelHtml(sampleAccountingPo())
     const blanks = (html.match(/class="xl-body po-blank"/g) || []).length
     expect(blanks).toBe(PO_EXCEL_MIN_ITEM_ROWS - 1)
-    expect(html).toContain("font-size: 20pt")
-    expect(html).toContain(`height:${56}pt`)
+    expect(html).toContain("font-size: 22pt")
+    expect(html).toContain(`height:${80}pt`)
   })
 
   it("keeps 13-digit tax IDs as text so Excel does not show scientific notation", () => {
@@ -143,5 +150,17 @@ describe("buildPurchaseOrderExcelHtml", () => {
     expect(html).toContain('x:str="0105551234567"')
     expect(html).toContain("po-text")
     expect(html).not.toMatch(/1\.0555\d*E\+/i)
+  })
+})
+
+describe("wrapAddressHtml", () => {
+  it("does not split Co.,Ltd. and keeps a long address to a few lines", () => {
+    const company = wrapAddressHtml("Jinwon f&b Co.,Ltd. (Head Office)")
+    expect(company.html).toContain("Co.,Ltd.")
+    expect(company.html).not.toContain("<br/>")
+    const wrapped = wrapAddressHtml(
+      "No. 101, True Digital Park (Retail Building) 2nd Floor, Room No. 225 Sukhumvit Road Bang Chak Subdistrict, Phra Khanong District Bangkok 10260 Thailand"
+    )
+    expect((wrapped.html.match(/<br\/>/g) || []).length).toBeLessThanOrEqual(4)
   })
 })
