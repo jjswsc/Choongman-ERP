@@ -1,6 +1,7 @@
 "use client"
 import { appAlert, appConfirm } from "@/lib/app-message"
-import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
+import { triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
+import { buildPurchaseOrderExcelHtml } from "@/lib/purchase-order-excel-html"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -59,13 +60,13 @@ import {
   isPoAccountingTaxInvoiceMode,
 } from "@/components/invoice/purchase-order-print"
 import {
-  computePurchaseOrderMoneyTotals,
   formatPoDisplayDate,
   isAccountingPurchaseOrderByCartJson,
   isPoDraftEditableStatus,
   parsePurchaseOrderCart,
   poQuotationFromMeta,
   resolveAccountingPoIssuerStore,
+  resolvePurchaseOrderMoneyTotals,
 } from "@/lib/purchase-order-cart"
 import { resolvePoIssuerCompany } from "@/lib/po-issuer-company"
 import { vendorForSalesOutletStore } from "@/lib/po-vendor-store-match"
@@ -421,168 +422,129 @@ export function AdminPurchaseOrderHistory({
     [load, t]
   )
 
-  const exportPoExcel = (po: PurchaseOrderRow) => {
+  const exportPoExcel = async (po: PurchaseOrderRow) => {
+    try {
     const { items: cart, meta } = parsePurchaseOrderCart(po.cart_json)
-    const totals = computePurchaseOrderMoneyTotals(cart)
+    const totals = resolvePurchaseOrderMoneyTotals(cart, meta?.moneyOverride)
     const isAcctPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
     const poNo = po.po_no || `PO-${po.id}`
     const dateStr = formatPoDisplayDate(po, poDateLocale)
-    const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
-
-    const hasStore = cart.some((c) => c.store && String(c.store).trim())
-    const colCount = hasStore ? 7 : 6
-    const headers = hasStore
-      ? [t("orderColStore"), "No", t("item"), t("orderItemSpec"), t("orderItemUnitPrice"), t("orderItemQty"), t("orderItemTotal")]
-      : ["No", t("item"), t("orderItemSpec"), t("orderItemUnitPrice"), t("orderItemQty"), t("orderItemTotal")]
-
-    let dataRows: (string | number)[][]
-    if (hasStore) {
-      const byStore = groupCartByStore(cart)
-      dataRows = []
-      for (const [storeName, items] of byStore.entries()) {
-        dataRows.push([`${t("orderColStore")}: ${storeName}`, "", "", "", "", "", ""])
-        items.forEach((c, i) => {
-          dataRows.push([
-            "",
-            i + 1,
-            c.name || "-",
-            "-",
-            c.price ?? 0,
-            c.qty ?? 0,
-            (c.price ?? 0) * (c.qty ?? 0),
-          ])
-        })
+    const relatedStore = String(meta?.relatedStore || "").trim()
+    const vendorResolved = findVendorForPo(po, relatedStore, vendors)
+    const fromCompany = await loadPoIssuerCompany(po, vendors)
+    const billToFranchise = Boolean(isAcctPo && relatedStore && String(po.vendor_name || "").trim())
+    const taxMode = isPoAccountingTaxInvoiceMode(isAcctPo, po.status, po.invoice_received)
+    const approved = isPoApprovedStatus(po.status)
+    const vat = Number(totals.vat) || 0
+    const subtotal = Number(totals.subtotal) || 0
+    const vatLine =
+      vat >= 0.005 ? `${t("vat") || "VAT"} (7%)` : subtotal >= 0.005 ? t("poCartVatLabelNone") : `${t("vat") || "VAT"} (7%)`
+    const whtAmt = Number(po.withholding_tax_amount) || 0
+    const whtRate = Number(po.withholding_tax_rate) || 0
+    const billToExtras: { label: string; value: string }[] = []
+    if (billToFranchise) {
+      billToExtras.push({ label: t("poPrintLegalEntity") || "Legal entity", value: po.vendor_name || "" })
+      const storeVendor = String(meta?.storeVendorName || "").trim()
+      if (storeVendor && storeVendor !== String(po.vendor_name || "").trim()) {
+        billToExtras.push({ label: t("poMetaStoreVendor") || "Store vendor", value: storeVendor })
       }
     } else {
-      dataRows = cart.map((c, i) => [
-        i + 1,
-        c.name || "-",
-        "-",
-        c.price ?? 0,
-        c.qty ?? 0,
-        (c.price ?? 0) * (c.qty ?? 0),
-      ])
-    }
-
-    const pad = (r: (string | number)[], n: number) => {
-      const arr = [...r]
-      while (arr.length < n) arr.push("")
-      return arr.slice(0, n).map((v) => String(v))
-    }
-    const excelDocTitle = isAcctPo
-      ? isPoAccountingTaxInvoiceMode(isAcctPo, po.status, po.invoice_received)
-        ? t("poAccountingPrintTitleTaxInvoice")
-        : t("poAccountingPrintTitleInvoice")
-      : t("poTitle")
-    const allRows = [
-      pad([excelDocTitle, poNo], colCount),
-      pad([t("poDate"), dateStr], colCount),
-      pad([t("poShipTo"), po.location_name || "", po.location_address || ""], colCount),
-      pad(
-        [
-          isAcctPo ? t("poPrintBillTo") : t("poVendor"),
-          isAcctPo && meta?.relatedStore
-            ? `${meta.relatedStore} / ${(po.vendor_name || "").trim()}`.replace(/\s*\/\s*$/, "").trim()
-            : po.vendor_name || "",
-        ],
-        colCount
-      ),
-      ...(meta?.relatedStore || meta?.storeVendorName
-        ? isAcctPo && meta?.relatedStore
-          ? meta?.storeVendorName &&
-            String(meta.storeVendorName).trim() &&
-            String(meta.storeVendorName).trim() !== String(po.vendor_name || "").trim()
-            ? [pad([t("poMetaStoreVendor"), String(meta.storeVendorName).trim(), ""], colCount)]
-            : []
-          : [
-              pad(
-                [
-                  t("poMetaStore"),
-                  meta?.relatedStore || "",
-                  meta?.storeVendorName ? `${t("poMetaStoreVendor")}: ${meta.storeVendorName}` : "",
-                ],
-                colCount
-              ),
-            ]
-        : []),
-      ...(meta?.poFormatLabel ? [pad([t("poFormPresetLabel"), meta.poFormatLabel], colCount)] : []),
-      pad([], colCount),
-      pad(headers, colCount),
-      ...dataRows.map((r) => pad(r.map((v) => String(v)), colCount)),
-      pad([], colCount),
-      pad([t("subtotal"), ...Array(colCount - 2).fill(""), String(totals.subtotal)], colCount),
-      pad([t("vat"), ...Array(colCount - 2).fill(""), String(totals.vat)], colCount),
-      pad([t("total"), ...Array(colCount - 2).fill(""), String(totals.total)], colCount),
-      ...(Number(po.withholding_tax_amount) > 0
-        ? [
-            pad(
-              [
-                t("poWht3LineLabel"),
-                ...Array(colCount - 2).fill(""),
-                String(-Math.abs(Number(po.withholding_tax_amount) || 0)),
-              ],
-              colCount
-            ),
-            pad(
-              [
-                t("poNetAfterWht"),
-                ...Array(colCount - 2).fill(""),
-                String(
-                  Math.max(
-                    0,
-                    Math.round(((Number(totals.total) || 0) - Math.abs(Number(po.withholding_tax_amount) || 0)) * 100) /
-                      100
-                  )
-                ),
-              ],
-              colCount
-            ),
-          ]
-        : []),
-    ]
-    const pxPerChar = 8
-    const minW = 50
-    const colWidths = Array.from({ length: colCount }, (_, c) => {
-      let maxLen = minW / pxPerChar
-      for (const row of allRows) {
-        const cell = row[c]
-        const len = String(cell ?? "").length
-        if (len > maxLen) maxLen = len
+      if (relatedStore) billToExtras.push({ label: t("poMetaStore") || "Store", value: relatedStore })
+      if (meta?.storeVendorName) {
+        billToExtras.push({ label: t("poMetaStoreVendor") || "Store vendor", value: String(meta.storeVendorName) })
       }
-      return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 400))
+    }
+    const html = buildPurchaseOrderExcelHtml({
+      poNo,
+      dateStr,
+      from: {
+        name: fromCompany.companyName,
+        address: fromCompany.address,
+        taxId: fromCompany.taxId,
+        phone: fromCompany.phone,
+      },
+      billTo: {
+        name: billToFranchise ? relatedStore : po.vendor_name || vendorResolved?.name || "-",
+        address: vendorResolved?.address,
+        taxId: vendorResolved?.taxId,
+        phone: vendorResolved?.phone,
+        extraLines: billToExtras,
+      },
+      shipToName: po.location_name || "-",
+      shipToAddress: po.location_address || "",
+      lines: cart.map((c) => ({
+        name: c.name || "-",
+        spec: c.spec,
+        code: c.code,
+        price: c.price ?? 0,
+        qty: c.qty ?? 0,
+        store: c.store,
+      })),
+      subtotal: totals.subtotal,
+      vat: totals.vat,
+      total: totals.total,
+      withholdingTaxAmount: whtAmt > 0 ? whtAmt : undefined,
+      preparedByName: po.user_name || "-",
+      labels: {
+        docTitle: isAcctPo
+          ? taxMode
+            ? t("poAccountingPrintTitleTaxInvoice")
+            : t("poAccountingPrintTitleInvoice")
+          : t("poTitle"),
+        docNoLabel: isAcctPo ? t("poAccountingInvoiceNoLabel") || "Invoice No." : t("poNo") || "PO No",
+        dateLabel: t("poDate") || "Date",
+        fromLabel: "FROM",
+        billToLabel: isAcctPo ? t("poPrintBillTo") || "BILL TO" : t("poVendor") || "SUPPLIER",
+        shipToLabel: t("poShipTo") || "SHIP TO",
+        taxIdLabel: t("posTaxIdLabel") || "Tax ID",
+        addressLabel: t("settings_address") || "Address",
+        phoneLabel: "Phone",
+        no: "No",
+        item: t("item") || "Item",
+        spec: t("orderItemSpec") || "Spec",
+        unitPrice: t("orderItemUnitPrice") || "Unit Price",
+        qty: t("orderItemQty") || "Qty",
+        amount: t("orderItemTotal") || "Amount",
+        subtotal: t("subtotal") || "Subtotal",
+        vatLine,
+        invoiceTotal: t("poPrintInvoiceTotal") || t("total") || "Total",
+        preparedBy: t("poPreparedBy") || "Prepared by",
+        receivedBy: t("inv_received_by") || "Received by",
+        signatureDate: t("inv_date") || "Date",
+        authorizedStamp: t("poAuthorizedSignatureStamp") || "Authorized Signature & Company Stamp",
+        storeLabel: t("orderColStore") || "Store",
+        headerBadge: meta?.poFormatLabel
+          ? t("poFormatBadgeExternal") || "External format"
+          : isAcctPo
+            ? taxMode
+              ? t("poAccountingPrintBadgeTaxInvoice")
+              : approved
+                ? t("poAccountingPrintBadgeApproved") || "Approved"
+                : t("poAccountingPrintBadgeDraft") || "Draft"
+            : undefined,
+        poFormatLabel: meta?.poFormatLabel,
+        whtLabel:
+          whtAmt > 0
+            ? whtRate > 0
+              ? `${t("poWht3LineLabel")} (${whtRate}%)`
+              : t("poWht3LineLabel")
+            : undefined,
+        netAfterWht: t("poNetAfterWht"),
+      },
     })
-    const headerPadded = pad(headers, colCount)
-    const isHeaderDataRow = (ri: number) =>
-      headerPadded.length > 0 &&
-      headerPadded.every((cell, i) => String(allRows[ri][i] ?? "") === String(cell))
-    const footerCount = 3 + (Number(po.withholding_tax_amount) > 0 ? 2 : 0)
-    const tableBody = `<table>
-<colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
-${allRows.map((row, ri) => {
-      const cells = row.map((c) => escapeXml(c))
-      const isHead = ri === 0 || isHeaderDataRow(ri) || ri >= allRows.length - footerCount
-      return `<tr${isHead ? ' class="head"' : ""}>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`
-    }).join("")}
-</table>`
-    const html = buildErpExcelHtmlDocument(tableBody, erpExcelSimpleTableStyle({ withHead: true, fullWidth: false }))
     triggerErpExcelHtmlDownload(html, `PO_${poNo}.xls`)
+    } catch (e) {
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    }
   }
 
   const printPo = async (po: PurchaseOrderRow) => {
     const { items: cart, meta } = parsePurchaseOrderCart(po.cart_json)
-    const totals = computePurchaseOrderMoneyTotals(cart)
+    const totals = resolvePurchaseOrderMoneyTotals(cart, meta?.moneyOverride)
     const poNo = po.po_no || `PO-${po.id}`
     const dateStr = formatPoDisplayDate(po, poDateLocale)
-
-    const vendor = vendors.find(
-      (v) => v.code === po.vendor_code || v.name === po.vendor_name
-    )
     const relStore = String(meta?.relatedStore || "").trim()
-    const vendorByOutlet =
-      relStore && relStore !== "_none"
-        ? vendorForSalesOutletStore(vendors, relStore)
-        : undefined
-    const vendorResolved = vendor || vendorByOutlet
+    const vendorResolved = findVendorForPo(po, relStore, vendors)
 
     const isAcctPo = isAccountingPurchaseOrderByCartJson(po.cart_json)
     const issuerStore = resolveAccountingPoIssuerStore(po)
@@ -927,7 +889,7 @@ ${allRows.map((row, ri) => {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-primary hover:bg-primary/10"
-                            onClick={() => exportPoExcel(po)}
+                            onClick={() => void exportPoExcel(po)}
                             title={t("purchaseOrderExcel")}
                           >
                             <FileSpreadsheet className="h-4 w-4" />
@@ -981,17 +943,41 @@ ${allRows.map((row, ri) => {
   )
 }
 
-type CartItem = { name?: string; price?: number; qty?: number; store?: string }
+type PoHistoryVendor = {
+  code: string
+  name: string
+  address?: string
+  taxId?: string
+  phone?: string
+  salesOutlet?: string | null
+  gpsName?: string | null
+}
 
-function groupCartByStore(cart: CartItem[]): Map<string, CartItem[]> {
-  const byStore = new Map<string, CartItem[]>()
-  for (const c of cart) {
-    const store = (c.store && String(c.store).trim()) || "-"
-    const arr = byStore.get(store) || []
-    arr.push(c)
-    byStore.set(store, arr)
+function findVendorForPo(po: PurchaseOrderRow, relatedStore: string, vendors: PoHistoryVendor[]) {
+  const vendor = vendors.find((v) => v.code === po.vendor_code || v.name === po.vendor_name)
+  const rel = String(relatedStore || "").trim()
+  const vendorByOutlet =
+    rel && rel !== "_none" ? vendorForSalesOutletStore(vendors, rel) : undefined
+  return vendor || vendorByOutlet
+}
+
+async function loadPoIssuerCompany(po: PurchaseOrderRow, vendors: PoHistoryVendor[]) {
+  const ho = await getHeadOfficeInfo().catch(() => ({
+    companyName: "",
+    taxId: "",
+    address: "",
+    phone: "",
+    bankInfo: "",
+  }))
+  const headOffice = {
+    companyName: ho.companyName || "S&J GLOBAL",
+    address: ho.address || "",
+    taxId: ho.taxId || "",
+    phone: ho.phone || "",
   }
-  return byStore
+  const issuerStore = resolveAccountingPoIssuerStore(po)
+  if (!issuerStore) return headOffice
+  return resolvePoIssuerCompany({ issuerStore, vendors, headOffice })
 }
 
 function formatPoAmount(n: number | null | undefined): string {

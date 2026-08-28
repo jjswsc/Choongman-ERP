@@ -191,7 +191,7 @@ describe('pnd53-rd-prep-soft (mapping fallback)', () => {
       'PND53'
     )
     expect(soft).toBe(
-      '|1|0105560154864||บริษัท|วัฒนะ โกลด์ จำกัด||||||||||19/06/2026|ค่าเช่า 5%|5.0|500000.00|25000.00|1'
+      '|1|0105560154864||บริษัท วัฒนะ โกลด์ จำกัด||||||||19/06/2026|ค่าเช่า 5%|5.0|500000.00|25000.00|1'
     )
   })
 
@@ -248,11 +248,72 @@ describe('pnd53-rd-prep-soft (mapping fallback)', () => {
       ],
       'PND53'
     )
-    expect(soft).toContain('|บริษัท|ทรู อินเทอร์เน็ต คอร์ปอเรชั่น จำกัด|')
-    expect(soft).not.toContain('|บริษัท ทรู อินเทอร์เน็ต คอร์ปอเรชั่น จำกัด|')
+    expect(soft).toContain('|บริษัท ทรู อินเทอร์เน็ต คอร์ปอเรชั่น จำกัด|')
+    expect(soft).not.toContain('|บริษัท|ทรู อินเทอร์เน็ต คอร์ปอเรชั่น จำกัด|')
     expect(soft).toContain('|18 อาคารทรู ทาวเวอร์ ถนนรัชดาภิเษก|')
     expect(soft).toContain('|ห้วยขวาง|ห้วยขวาง|กรุงเทพมหานคร|10310|')
     expect(soft.includes('||||||||||06/08/2026')).toBe(false)
+  })
+
+  it('keeps PND53 ถนน on Col6 so the company name is not used as the road', () => {
+    const soft = pnd53LedgerToRdPrepSoftTxt(
+      [
+        {
+          payment_date: '2026-08-06',
+          payee_name: 'บริษัท วันไลฟ์ กราฟฟิก จำกัด',
+          payee_tax_id: '0115559009368',
+          payee_address: '99/1 ถนนรัชดาภิเษก แขวงห้วยขวาง เขตห้วยขวาง กรุงเทพมหานคร 10310',
+          income_type: 'ค่าบริการ',
+          gross_amount: 10000,
+          wht_rate: 3,
+          wht_amount: 300,
+          form_hint: 'PND53',
+        },
+      ],
+      'PND53'
+    )
+    const cols = soft.split('|')
+    // RD Prep Col N = split[N-1] (leading `|` = Col1). ถนน=Col6, ตำบล=Col7, อำเภอ=Col8
+    expect(cols[4]).toBe('บริษัท วันไลฟ์ กราฟฟิก จำกัด')
+    expect(cols[5]).toBe('99/1 ถนนรัชดาภิเษก')
+    expect(cols[6]).toBe('ห้วยขวาง')
+    expect(cols[7]).toBe('ห้วยขวาง')
+    expect(cols[5]).not.toContain('วันไลฟ์')
+  })
+
+  it('does not put PND53 company names into the road column when formHint is ALL', () => {
+    const soft = pnd53LedgerToRdPrepSoftTxt(
+      [
+        {
+          payment_date: '2026-08-06',
+          payee_name: 'นายสมชาย ใจดี',
+          payee_tax_id: '3101800833583',
+          income_type: 'ค่าบริการ',
+          gross_amount: 1000,
+          wht_rate: 3,
+          wht_amount: 30,
+          form_hint: 'PND3',
+        },
+        {
+          payment_date: '2026-08-06',
+          payee_name: 'บริษัท วันไลฟ์ กราฟฟิก จำกัด',
+          payee_tax_id: '0115559009368',
+          payee_address: '99/1 ถนนรัชดาภิเษก แขวงห้วยขวาง เขตห้วยขวาง กรุงเทพมหานคร 10310',
+          income_type: 'ค่าบริการ',
+          gross_amount: 10000,
+          wht_rate: 3,
+          wht_amount: 300,
+          form_hint: 'PND53',
+        },
+      ],
+      'ALL'
+    )
+    const pnd53Line = soft.split('\r\n').find((l) => l.includes('0115559009368')) || ''
+    const cols = pnd53Line.split('|')
+    expect(cols[4]).toBe('บริษัท วันไลฟ์ กราฟฟิก จำกัด')
+    expect(cols[5]).toBe('99/1 ถนนรัชดาภิเษก')
+    expect(cols[5]).not.toContain('วันไลฟ์')
+    expect(soft).toContain('|นาย|สมชาย||ใจดี|')
   })
 
   it('puts payee address into RD Prep soft attachment slots', () => {

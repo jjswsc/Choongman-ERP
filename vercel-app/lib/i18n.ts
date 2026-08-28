@@ -2582,7 +2582,7 @@ export const i18n = {
     helpSum_admin_accounting_purchase_order:
       '매장 청구(로얄티·배달/Grab GP 등)를 PO 초안으로 만들고, 내역에서 승인·인쇄합니다. 승인 전 Draft는 연필 버튼으로 다시 열어 수정할 수 있습니다.',
     helpHow_admin_accounting_purchase_order:
-      '① 청구 비율을 저장한 뒤 본사 발주 탭에서 줄을 넣고 저장하면 Draft가 됩니다.\n② 발주 내역에서 Draft 행의 연필(수정)을 누르면 작성 탭으로 불러옵니다. 고친 뒤 「초안 수정 저장」하면 같은 PO 번호가 유지됩니다.\n③ 초록 체크로 승인합니다. 승인·취소된 PO는 수정할 수 없습니다.\n④ FlowAccount와 소수점이 다르면 합계 연필로 소계·VAT·합계를 맞춥니다.',
+      '① 청구 비율을 저장한 뒤 본사 발주 탭에서 줄을 넣고 저장하면 Draft가 됩니다.\n② 발주 내역에서 Draft 행의 연필(수정)을 누르면 작성 탭으로 불러옵니다. 고친 뒤 「초안 수정 저장」하면 같은 PO 번호가 유지됩니다.\n③ 초록 체크로 승인합니다. 승인·취소된 PO는 수정할 수 없습니다.\n④ FlowAccount와 소수점이 다르면 합계 연필로 소계·VAT·합계를 맞춥니다.\n⑤ 엑셀은 A4 세로 인쇄용 인보이스 양식으로 내려받습니다. Excel에서 바로 인쇄하면 됩니다.',
     helpSum_admin_order_create:
       '매장 발주와 본사 발주(PO)를 작성하고, 발주 내역에서 승인·인쇄합니다. 승인 전 Draft PO는 연필 버튼으로 수정할 수 있습니다.',
     helpHow_admin_order_create:
@@ -3174,7 +3174,7 @@ export const i18n = {
     accCompRdPrepMappingGuideBodyPnd3:
       'ภ.ง.ด.3: RD Prep에서 「ภ.ง.ด.3」 선택 → 구분 기호 | → คำนำหน้า·ชื่อ·ชื่อกลาง·ชื่อสกุล·ที่อยู่·금액 매핑 저장 → .rdx 생성\n(ชื่อ와 ชื่อสกุล은 TXT에서 이미 분리됩니다. ที่อยู่는 거래처/직원 마스터에서 채웁니다)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'ภ.ง.ด.53: RD Prep에서 「ภ.ง.ด.53」 선택 → 구분 기호 | → คำนำหน้า·ชื่อ·ที่อยู่·금액 매핑 저장 → .rdx 생성\n(บริษัท와 상호는 TXT에서 이미 분리됩니다. ที่อยู่는 거래처 마스터에서 채웁니다)',
+      'ภ.ง.ด.53: RD Prep에서 「ภ.ง.ด.53」 선택 → 구분 기호 | → ชื่อ·ถนน·ตำบล/แขวง·อำเภอ/เขต·จังหวัด·รหัสไปรษณีย์·금액 매핑 저장 → .rdx 생성\n(회사명 전체가 ชื่อ 칸입니다. ถนน은 도로/상세주소, ภ.ง.ด.3 이름 4칸을 쓰지 않습니다)',
     accCompPp30ExportNeedSearch: '조건을 맞춘 뒤 검색을 누른 다음 다운로드할 수 있습니다.',
     accCompPp30ExportRequiredMissing:
       '필수 정보가 없어 파일을 만들 수 없습니다: {fields}. 「매장 납세자 정보」 탭에서 법인명·13자리 TIN을 저장하거나, KT20k/E-tax 전역 설정을 확인하세요.',
@@ -10822,7 +10822,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_accounting_purchase_order:
       'Create store-billing POs (royalty, delivery/Grab GP) as drafts, then approve or print from history. Drafts can be reopened with the pencil before approval.',
     helpHow_admin_accounting_purchase_order:
-      '① Save billing rates, add lines on the HQ PO tab, then save as Draft.\n② In PO history, the pencil on a Draft row loads it back into the form. Saving keeps the same PO number.\n③ Use the green check to approve. Approved or cancelled POs cannot be edited.\n④ If FlowAccount decimals differ, use the totals pencil to override subtotal, VAT, and total.',
+      '① Save billing rates, add lines on the HQ PO tab, then save as Draft.\n② In PO history, the pencil on a Draft row loads it back into the form. Saving keeps the same PO number.\n③ Use the green check to approve. Approved or cancelled POs cannot be edited.\n④ If FlowAccount decimals differ, use the totals pencil to override subtotal, VAT, and total.\n⑤ Excel downloads as an A4 portrait invoice. Open it in Excel and print.',
     helpSum_admin_order_create:
       'Create store orders and HQ purchase orders, then approve or print from history. Draft POs can be edited with the pencil before approval.',
     helpHow_admin_order_create:
@@ -11412,7 +11412,7 @@ Only matters the employee must handle personally on a working day:
     accCompRdPrepMappingGuideBodyPnd3:
       'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map title, first name, middle name, last name, address, amounts → create .rdx\n(First and last name are already split in the TXT. Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map title, company name, address, amounts → create .rdx\n(Title and company name are already split in the TXT. Address is filled from vendor master)',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map company name, road, tambon, amphoe, province, postcode, amounts → create .rdx\n(Full company name is in the name column. Road/tambon/district are separate. Do not use P.N.D.3 middle/last-name columns)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing:
       'Cannot build the file — missing: {fields}. Save this store’s taxpayer profile (legal name + 13-digit TIN), or check KT20k / E-tax global settings.',
@@ -18847,7 +18847,7 @@ orderItemQty: 'จำนวน',
     helpSum_admin_accounting_purchase_order:
       'สร้างใบเรียกเก็บร้าน (รอยัลตี้ GP แอปส่ง/Grab) เป็นฉบับร่าง แล้วอนุมัติหรือพิมพ์จากประวัติ ใบ Draft กดดินสอเพื่อแก้ไขได้ก่อนอนุมัติ',
     helpHow_admin_accounting_purchase_order:
-      '① บันทึกอัตราเรียกเก็บ แล้วเพิ่มบรรทัดในแท็บ PO และบันทึกเป็น Draft\n② ในประวัติใบสั่งซื้อ กดดินสอที่แถว Draft เพื่อโหลดกลับไปแก้ไข บันทึกแล้วเลขที่ PO เดิมยังอยู่\n③ กดเครื่องหมายถูกสีเขียวเพื่ออนุมัติ ใบที่อนุมัติหรือยกเลิกแล้วแก้ไขไม่ได้\n④ หากทศนิยมไม่ตรง FlowAccount ให้แก้ยอดที่ไอคอนดินสอของสรุปยอด',
+      '① บันทึกอัตราเรียกเก็บ แล้วเพิ่มบรรทัดในแท็บ PO และบันทึกเป็น Draft\n② ในประวัติใบสั่งซื้อ กดดินสอที่แถว Draft เพื่อโหลดกลับไปแก้ไข บันทึกแล้วเลขที่ PO เดิมยังอยู่\n③ กดเครื่องหมายถูกสีเขียวเพื่ออนุมัติ ใบที่อนุมัติหรือยกเลิกแล้วแก้ไขไม่ได้\n④ หากทศนิยมไม่ตรง FlowAccount ให้แก้ยอดที่ไอคอนดินสอของสรุปยอด\n⑤ ไฟล์ Excel เป็นใบแจ้งหนี้ขนาด A4 แนวตั้ง พิมพ์จาก Excel ได้เลยครับ',
     helpSum_admin_order_create:
       'สร้างคำสั่งสาขาและใบสั่งซื้อ HQ แล้วอนุมัติหรือพิมพ์จากประวัติ ใบ Draft กดดินสอเพื่อแก้ไขได้ก่อนอนุมัติ',
     helpHow_admin_order_create:
@@ -19272,7 +19272,7 @@ orderItemQty: 'จำนวน',
     accCompRdPrepMappingGuideBodyPnd3:
       'ภ.ง.ด.3: ใน RD Prep เลือก 「ภ.ง.ด.3」 → ตัวคั่น | → จับคู่ คำนำหน้า·ชื่อ·ชื่อกลาง·ชื่อสกุล·ที่อยู่·ยอด → สร้าง .rdx\n(ชื่อกับชื่อสกุลแยกคอลัมน์ไว้แล้วในไฟล์ TXT ครับ ที่อยู่ดึงจากข้อมูลผู้ขาย/พนักงานครับ)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'ภ.ง.ด.53: ใน RD Prep เลือก 「ภ.ง.ด.53」 → ตัวคั่น | → จับคู่ คำนำหน้า·ชื่อ·ที่อยู่·ยอด → สร้าง .rdx\n(คำนำหน้ากับชื่อแยกคอลัมน์ไว้แล้วในไฟล์ TXT ครับ ที่อยู่ดึงจากข้อมูลผู้ขายครับ)',
+      'ภ.ง.ด.53: ใน RD Prep เลือก 「ภ.ง.ด.53」 → ตัวคั่น | → จับคู่ ชื่อ·ถนน·ตำบล/แขวง·อำเภอ/เขต·จังหวัด·รหัสไปรษณีย์·ยอด → สร้าง .rdx\n(ชื่อบริษัทอยู่คอลัมน์ชื่อครับ ถนน/ตำบล/อำเภอแยกคอลัมน์แล้ว ไม่ใช้ชื่อกลาง-ชื่อสกุลแบบ ภ.ง.ด.3 ครับ)',
     accCompPp30ExportNeedSearch: 'ตั้งค่าตัวกรองแล้วกดค้นหาก่อน จึงจะดาวน์โหลดได้',
     accCompPnd1ExportTxt: 'ดาวน์โหลด TXT ภ.ง.ด.1 สำหรับ RD Prep (ยังไม่ใช่ .rdx)',
     accCompPnd1ExportExcel: 'Excel ตรวจสอบ ภ.ง.ด.1',
@@ -25649,7 +25649,7 @@ orderItemQty: 'အရေအတွက်',
     accCompRdPrepMappingGuideBodyPnd3:
       'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map title, first name, middle name, last name, address, amounts → create .rdx\n(First and last name are already split in the TXT. Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map title, company name, address, amounts → create .rdx\n(Title and company name are already split in the TXT. Address is filled from vendor master)',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map company name, road, tambon, amphoe, province, postcode, amounts → create .rdx\n(Full company name is in the name column. Road/tambon/district are separate. Do not use P.N.D.3 middle/last-name columns)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -30600,7 +30600,7 @@ orderItemQty: 'ຈຳນວນ',
     accCompRdPrepMappingGuideBodyPnd3:
       'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map title, first name, middle name, last name, address, amounts → create .rdx\n(First and last name are already split in the TXT. Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map title, company name, address, amounts → create .rdx\n(Title and company name are already split in the TXT. Address is filled from vendor master)',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map company name, road, tambon, amphoe, province, postcode, amounts → create .rdx\n(Full company name is in the name column. Road/tambon/district are separate. Do not use P.N.D.3 middle/last-name columns)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -33661,7 +33661,7 @@ orderItemQty: 'ຈຳນວນ',
     accCompRdPrepMappingGuideBodyPnd3:
       'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map title, first name, middle name, last name, address, amounts → create .rdx\n(First and last name are already split in the TXT. Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map title, company name, address, amounts → create .rdx\n(Title and company name are already split in the TXT. Address is filled from vendor master)',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map company name, road, tambon, amphoe, province, postcode, amounts → create .rdx\n(Full company name is in the name column. Road/tambon/district are separate. Do not use P.N.D.3 middle/last-name columns)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -35539,7 +35539,7 @@ orderItemQty: 'ຈຳນວນ',
     accCompRdPrepMappingGuideBodyPnd3:
       'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map title, first name, middle name, last name, address, amounts → create .rdx\n(First and last name are already split in the TXT. Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map title, company name, address, amounts → create .rdx\n(Title and company name are already split in the TXT. Address is filled from vendor master)',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map company name, road, tambon, amphoe, province, postcode, amounts → create .rdx\n(Full company name is in the name column. Road/tambon/district are separate. Do not use P.N.D.3 middle/last-name columns)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',
@@ -37379,7 +37379,7 @@ orderItemQty: 'ຈຳນວນ',
     accCompRdPrepMappingGuideBodyPnd3:
       'P.N.D.3: In RD Prep choose P.N.D.3 → delimiter | → map title, first name, middle name, last name, address, amounts → create .rdx\n(First and last name are already split in the TXT. Address is filled from vendor/employee master)',
     accCompRdPrepMappingGuideBodyPnd53:
-      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map title, company name, address, amounts → create .rdx\n(Title and company name are already split in the TXT. Address is filled from vendor master)',
+      'P.N.D.53: In RD Prep choose P.N.D.53 → delimiter | → map company name, road, tambon, amphoe, province, postcode, amounts → create .rdx\n(Full company name is in the name column. Road/tambon/district are separate. Do not use P.N.D.3 middle/last-name columns)',
     accCompPp30ExportNeedSearch: 'Run Search with your filters first, then download.',
     accCompPp30ExportRequiredMissing: 'Cannot build the file — missing: {fields}. Fill company name and 13-digit tax ID in KT20k year settings or the E-tax tab.',
     accCompPp30ExportOptionalGaps: 'To match the Flowaccount header and partner columns, also fill manually: {fields}.',

@@ -68,17 +68,42 @@ export function buildPnd353RdPrepSoftFilename(formHint: PndFormHint, periodKey: 
   return `pnd3-pnd53-rd-prep-soft-${period}.txt`
 }
 
+function rdPrepSoftOpts(
+  isPnd3Layout: boolean,
+  includeHeader: boolean
+): Parameters<typeof ledgerRowsToRdPrepSoftAttachmentTxt>[1] {
+  return {
+    includeHeader,
+    /** ภ.ง.ด.3만 4칸 이름. ภ.ง.ด.53은 이름 1칸 + ถนน Col6 (ชื่อกลาง 없음) */
+    splitNaturalPersonName: isPnd3Layout,
+    splitGeoAddress: true,
+    roadMaxLen: isPnd3Layout ? undefined : 60,
+  }
+}
+
 /** RD Prep 소프트 매핑(빈 칸 `|` 유지) — 샘플 레이아웃 */
 export function pnd53LedgerToRdPrepSoftTxt(
   rows: WithholdingTaxLedgerRow[],
   formHint: PndFormHint = 'PND53',
   opts?: { includeHeader?: boolean }
 ): string {
-  return ledgerRowsToRdPrepSoftAttachmentTxt(filterPnd53Rows(rows, formHint), {
-    includeHeader: opts?.includeHeader === true,
-    /** ภ.ง.ด.3/53 RD Prep: คำนำหน้า / ชื่อ / ชื่อกลาง / ชื่อสกุล 칸을 나눔 */
-    splitNaturalPersonName: true,
-  })
+  const includeHeader = opts?.includeHeader === true
+  const filtered = filterPnd53Rows(rows, formHint)
+  if (formHint === 'ALL') {
+    const pnd3 = filtered.filter((r) => effectivePnd353FormHint(r) === 'PND3')
+    const pnd53 = filtered.filter((r) => effectivePnd353FormHint(r) === 'PND53')
+    const parts: string[] = []
+    if (pnd3.length > 0) {
+      parts.push(ledgerRowsToRdPrepSoftAttachmentTxt(pnd3, rdPrepSoftOpts(true, includeHeader)))
+    }
+    if (pnd53.length > 0) {
+      parts.push(
+        ledgerRowsToRdPrepSoftAttachmentTxt(pnd53, rdPrepSoftOpts(false, includeHeader && pnd3.length === 0))
+      )
+    }
+    return parts.join('\r\n')
+  }
+  return ledgerRowsToRdPrepSoftAttachmentTxt(filtered, rdPrepSoftOpts(formHint === 'PND3', includeHeader))
 }
 
 /** RD ใบแนบ ประเภทเงินได้ — 한글·영문 원장을 태국어 양식 문구로 */

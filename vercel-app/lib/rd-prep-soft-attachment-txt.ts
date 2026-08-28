@@ -4,8 +4,12 @@
  * PND1 샘플:
  * |seq|tin||name|addr1|addr2|addr3||||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
  *
- * PND3/PND53 샘플 (คำนำหน้า·ชื่อ 분리, ที่อยู่·ตำบล·อำเภอ·จังหวัด·รหัส):
+ * PND3 (개인 — คำนำหน้า/ชื่อ/ชื่อกลาง/ชื่อสกุล):
  * |seq|tin||title|first|middle|last|address|tambon|amphoe|province|zip|||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
+ *
+ * PND53 (법인 — 이름 1칸. RD Prep ถนน=Col6, ตำบล=Col7, อำเภอ=Col8):
+ * |seq|tin||companyName|road|tambon|amphoe|province|zip|||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
+ * ภ.ง.ด.53에는 ชื่อกลาง/ชื่อสกุล 칸이 없다. 4칸 분리는 상호가 ถนน으로 들어간다.
  */
 import { splitThaiPayeeName } from '@/lib/rd-filing-common'
 
@@ -22,8 +26,12 @@ export type RdPrepSoftAttachmentRow = {
 
 export type RdPrepSoftAttachmentTxtOptions = {
   includeHeader?: boolean
-  /** ภ.ง.ด.3/53: 단일 payee_name 대신 title/first/middle/last 4칸 */
+  /** ภ.ง.ด.3: 단일 payee_name 대신 title/first/middle/last 4칸 */
   splitNaturalPersonName?: boolean
+  /** ที่อยู่|ตำบล|อำเภอ|จังหวัด|รหัส — 이름 4칸 여부와 무관 */
+  splitGeoAddress?: boolean
+  /** RD Prep ถนน 칸 글자 수 (ภ.ง.ด.53 = 60) */
+  roadMaxLen?: number
 }
 
 function pipeSafe(v: unknown): string {
@@ -116,6 +124,15 @@ function trimAddrTail(s: string): string {
   return s.replace(/[,\s/]+$/g, '').trim()
 }
 
+function clipAddrField(s: string, maxLen: number): string {
+  const t = s.trim()
+  if (!maxLen || t.length <= maxLen) return t
+  const window = t.slice(0, maxLen + 1)
+  const sp = Math.max(window.lastIndexOf(' '), window.lastIndexOf('/'), window.lastIndexOf(','))
+  if (sp >= Math.min(12, Math.floor(maxLen / 2))) return t.slice(0, sp).trim()
+  return t.slice(0, maxLen).trim()
+}
+
 /**
  * ภ.ง.ด.3/53 RD Prep ที่อยู่ 칸:
  * ที่อยู่ | ตำบล/แขวง | อำเภอ/เขต | จังหวัด | รหัสไปรษณีย์
@@ -170,10 +187,22 @@ export function splitRdPrepGeoAddress(address: unknown): RdPrepGeoAddressParts {
   }
 }
 
-function addressFieldsForSoftRow(row: RdPrepSoftAttachmentRow, splitName: boolean): string[] {
-  if (splitName) {
+function addressFieldsForSoftRow(
+  row: RdPrepSoftAttachmentRow,
+  opts: { splitGeoAddress: boolean; roadMaxLen?: number }
+): string[] {
+  if (opts.splitGeoAddress) {
     const geo = splitRdPrepGeoAddress(row.payee_address)
-    return [geo.line, geo.tambon, geo.amphoe, geo.province, geo.postcode, '', '']
+    const roadMax = opts.roadMaxLen && opts.roadMaxLen > 0 ? opts.roadMaxLen : 0
+    return [
+      roadMax ? clipAddrField(geo.line, roadMax) : geo.line,
+      clipAddrField(geo.tambon, 100),
+      clipAddrField(geo.amphoe, 100),
+      geo.province,
+      geo.postcode,
+      '',
+      '',
+    ]
   }
   const [addr1, addr2, addr3] = splitPayeeAddressParts(row.payee_address)
   return [addr1, addr2, addr3, '', '', '', '']
@@ -185,6 +214,7 @@ export function ledgerRowsToRdPrepSoftAttachmentTxt(
 ): string {
   const includeHeader = opts.includeHeader === true
   const splitName = opts.splitNaturalPersonName === true
+  const splitGeo = opts.splitGeoAddress === true || splitName
   const headerFields = splitName
     ? [
         'seq',
@@ -208,32 +238,55 @@ export function ledgerRowsToRdPrepSoftAttachmentTxt(
         'withheld_amount',
         'pay_condition',
       ]
-    : [
-        'seq',
-        'payee_tax_id',
-        'payee_branch',
-        'payee_name',
-        'address1',
-        'address2',
-        'address3',
-        'empty1',
-        'empty2',
-        'empty3',
-        'empty4',
-        'payment_date',
-        'income_desc',
-        'wht_rate',
-        'gross_amount',
-        'withheld_amount',
-        'pay_condition',
-      ]
+    : splitGeo
+      ? [
+          'seq',
+          'payee_tax_id',
+          'payee_branch',
+          'payee_name',
+          'address',
+          'tambon',
+          'amphoe',
+          'province',
+          'postcode',
+          'empty1',
+          'empty2',
+          'payment_date',
+          'income_desc',
+          'wht_rate',
+          'gross_amount',
+          'withheld_amount',
+          'pay_condition',
+        ]
+      : [
+          'seq',
+          'payee_tax_id',
+          'payee_branch',
+          'payee_name',
+          'address1',
+          'address2',
+          'address3',
+          'empty1',
+          'empty2',
+          'empty3',
+          'empty4',
+          'payment_date',
+          'income_desc',
+          'wht_rate',
+          'gross_amount',
+          'withheld_amount',
+          'pay_condition',
+        ]
 
   const lines: string[] = []
   if (includeHeader) lines.push('|' + headerFields.join('|'))
 
   ;(rows || []).forEach((row, idx) => {
     const rate = resolveWhtRatePercent(row)
-    const addrFields = addressFieldsForSoftRow(row, splitName)
+    const addrFields = addressFieldsForSoftRow(row, {
+      splitGeoAddress: splitGeo,
+      roadMaxLen: opts.roadMaxLen,
+    })
     let nameFields: string[]
     if (splitName) {
       const parts = splitThaiPayeeName(pipeSafe(row.payee_name))
