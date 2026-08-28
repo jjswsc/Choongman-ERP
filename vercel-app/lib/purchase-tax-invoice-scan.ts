@@ -183,9 +183,12 @@ export function invoiceNoLooksPlausible(raw: unknown): boolean {
   if (/(tax)?invoice/.test(lower) && !/^inv-?\d/i.test(inv)) return false
   if (/^(deliveryorder|creditadvice|document|description|quantity|unitprice|amount|number|date)/.test(lower)) return false
   if (/plzb/i.test(compact)) return false
+  if (/^GD-\d{1,4}-\d{1,4}$/i.test(inv)) return false
+  if (/^TRS[A-Z0-9]{0,8}PF00-?$/i.test(inv)) return false
+  if (/^IM20\d{0,11}$/i.test(compact) && compact.length < 16) return false
   const hasLetter = /[A-Za-z]/.test(compact)
   const hasDigit = /\d/.test(compact)
-  if (!hasLetter && compact.length < 6) return false
+  if (!hasLetter && compact.length < 4) return false
   if (!hasDigit && compact.length < 12) return false
   return true
 }
@@ -202,21 +205,65 @@ function cleanInvoiceNo(raw: string): string | undefined {
 }
 
 const PLATFORM_INVOICE_RE =
-  /\b(TRS[A-Z]{0,8}\s*PF00\s*-\s*\d{5}\s*-\s*\d{6}\s*-\s*\d{5,8}|IM\s*20\d{2}\s*\d{10,12}|LMRN\s*[A-Z0-9]{8,20}|\d{6}\s*[A-EH]\s*\d{7,14}|INV\s*-\s*\d{8,14}(?:\s*-\s*\d{2,4})?)\b/i
+  /\b(TRS[A-Z]{0,8}\s*PF0[0CO]\s*-\s*\d{5}\s*-\s*\d{6}\s*-\s*\d{5,8}|IM\s*20\d{2}\s*\d{10,12}|LMRN\s*[A-Z0-9]{8,20}|\d{6}\s*[A-EFH]\s*\d{7,14}|INV\s*-\s*\d{8,14}(?:\s*-\s*\d{2,4})?)\b/i
+
+function platformInvoiceBlob(raw: string): string {
+  return ocrFixDigitsInInvoiceBlob(String(raw || '').replace(/\s+/g, '')).replace(/PF0[CO]/gi, 'PF00')
+}
+
+function formatRecoveredShopeeInvoice(compact: string): string | undefined {
+  const s = platformInvoiceBlob(compact)
+  const m = s.match(/TRS[A-Z]{2,8}PF00-?(\d{5})-?(\d{6})-?(\d{5,8})/i)
+  if (!m) return undefined
+  const prefix = s.match(/TRS[A-Z]{2,8}PF00/i)?.[0]
+  if (!prefix) return undefined
+  return cleanInvoiceNo(`${prefix.toUpperCase()}-${m[1]}-${m[2]}-${m[3]}`)
+}
+
+function recoverShopeeInvoiceNo(text: string): string | undefined {
+  const compact = platformInvoiceBlob(text)
+  const full = formatRecoveredShopeeInvoice(compact)
+  if (full) return full
+  const prefix = compact.match(/TRS[A-Z]{2,8}PF00-?/i)
+  const tail = compact.match(/(\d{5})-(\d{6})-(\d{5,8})/)
+  if (prefix && tail) {
+    return cleanInvoiceNo(`${prefix[0].replace(/-$/, '').toUpperCase()}-${tail[1]}-${tail[2]}-${tail[3]}`)
+  }
+  return undefined
+}
+
+function recoverGrabInvoiceNo(text: string, sellerTaxId?: string): string | undefined {
+  const compact = platformInvoiceBlob(text)
+  const full = compact.match(/IM20\d{12}/i)
+  if (full) return cleanInvoiceNo(full[0].toUpperCase())
+  const grabTin = sellerTaxId === '0105556090377' || compact.includes('0105556090377')
+  if (!grabTin) return undefined
+  const body = compact.match(/20\d{12}/)
+  if (body) return cleanInvoiceNo(`IM${body[0]}`)
+  const partial = compact.match(/IM(20\d{7,11})/i)
+  if (!partial) return undefined
+  const rest = compact.slice(compact.indexOf(partial[0]) + partial[0].length).replace(/\D/g, '')
+  const digits = (partial[1] + rest).slice(0, 14)
+  if (digits.length === 14) return cleanInvoiceNo(`IM${digits}`)
+  return undefined
+}
+
+function recoverKasikornInvoiceNo(text: string): string | undefined {
+  const compact = platformInvoiceBlob(text)
+  const m = compact.match(/\d{6}[EFH]\d{7,14}/i)
+  return m ? cleanInvoiceNo(m[0].toUpperCase()) : undefined
+}
 
 function extractInvoiceNo(text: string, sellerTaxId?: string): string | undefined {
   const s = String(text || '')
-  const compact = ocrFixDigitsInInvoiceBlob(s.replace(/\s+/g, ''))
+  const compact = platformInvoiceBlob(s)
+  const recovered =
+    recoverShopeeInvoiceNo(s) || recoverGrabInvoiceNo(s, sellerTaxId) || recoverKasikornInvoiceNo(s)
+  if (recovered) return recovered
   const platform = s.match(PLATFORM_INVOICE_RE) || compact.match(PLATFORM_INVOICE_RE)
   if (platform) {
-    const inv = cleanInvoiceNo(ocrFixDigitsInInvoiceBlob(platform[1]))
+    const inv = cleanInvoiceNo(platformInvoiceBlob(platform[1]))
     if (inv) return inv
-  }
-  if (sellerTaxId === '0105556090377' || compact.includes('0105556090377')) {
-    const im = compact.match(/IM20\d{12}/i)
-    if (im) return cleanInvoiceNo(im[0])
-    const body = compact.match(/20\d{12}/)
-    if (body) return cleanInvoiceNo(`IM${body[0]}`)
   }
   const labeled = s.match(
     /(?:เลขที่(?:ใบกำกับ(?:ภาษี)?)?|เลขท[ีิ]|No\.?|Invoice\s*No\.?|Tax\s*Invoice\s*No\.?|Doc(?:ument)?\s*No\.?)\s*[:#.\-]*\s*([A-Z0-9][A-Z0-9\-/ ]{1,64})/i
@@ -232,7 +279,7 @@ function extractInvoiceNo(text: string, sellerTaxId?: string): string | undefine
     const inv = cleanInvoiceNo(labeledNext[1])
     if (inv) return inv
   }
-  const common = s.match(/\b((?:INV|IV|TI|ABB)[\-/]?[A-Z0-9\-/ ]{2,40}|\d{8,}[A-Z]\d{2,})\b/i)
+  const common = s.match(/\b((?:INV|IV|TI|ABB|RT)[\-/]?[A-Z0-9\-/ ]{2,40}|\d{8,}[A-Z]\d{2,})\b/i)
   if (!common) return undefined
   return cleanInvoiceNo(common[1])
 }
@@ -241,15 +288,20 @@ const KNOWN_INVOICE_SELLERS: Array<{ re: RegExp; tin: string; name: string }> = 
   { re: /^TRS[A-Z]{0,8}PF00-/i, tin: '0105558019581', name: 'บริษัท ช้อปปี้ (ประเทศไทย) จำกัด' },
   { re: /^IM20\d{12}$/i, tin: '0105556090377', name: 'บริษัท แกร็บแท็กซี่ (ประเทศไทย) จำกัด' },
   { re: /^LMRN/i, tin: '0105562160721', name: 'บริษัท ไลน์แมน (ประเทศไทย) จำกัด' },
-  { re: /^\d{6}[EH]\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
+  { re: /^\d{6}[EFH]\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
   { re: /^370\d+W\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
   { re: /^INV-\d{11}$/i, tin: '0105559082715', name: 'บริษัท โพลาร์ แบร์ มิชชั่น จำกัด' },
   { re: /^INV-\d{8}-\d{2,4}$/i, tin: '0135564019457', name: 'บริษัท ไทย แอ็กโกร เฟรช จำกัด' },
+  { re: /^26\d{5,6}$/, tin: '0105550102497', name: 'JIDUBANG (ASIA) CO., LTD.' },
+  { re: /^69\d{5}$/, tin: '0105550102497', name: 'JIDUBANG (ASIA) CO., LTD.' },
+  { re: /^RT-\d{8}\d*$/i, tin: '0125569006965', name: 'บริษัท ร่ำรวย แพ็คเกจจิ้ง จำกัด' },
 ]
 
-const KNOWN_TIN_SELLER_NAMES: Record<string, string> = Object.fromEntries(
-  KNOWN_INVOICE_SELLERS.map((row) => [row.tin, row.name])
-)
+const KNOWN_TIN_SELLER_NAMES: Record<string, string> = {
+  ...Object.fromEntries(KNOWN_INVOICE_SELLERS.map((row) => [row.tin, row.name])),
+  '0105550102497': 'JIDUBANG (ASIA) CO., LTD.',
+  '0107567000414': 'บริษัท ซีพี แอ็กซ์ตร้า จำกัด (มหาชน)',
+}
 
 function preferPlausibleInvoiceNo(a?: string, b?: string): string | undefined {
   const norm = (s?: string) => {
@@ -265,7 +317,7 @@ function preferPlausibleInvoiceNo(a?: string, b?: string): string | undefined {
 }
 
 export function inferSellerFromInvoiceNo(invoiceNo: string): { tin: string; name: string } | null {
-  const inv = ocrFixDigitsInInvoiceBlob(String(invoiceNo || '').trim())
+  const inv = platformInvoiceBlob(String(invoiceNo || '').trim())
   if (!inv) return null
   for (const row of KNOWN_INVOICE_SELLERS) {
     if (row.re.test(inv)) return { tin: row.tin, name: row.name }
@@ -274,14 +326,14 @@ export function inferSellerFromInvoiceNo(invoiceNo: string): { tin: string; name
 }
 
 export function inferDocDateFromInvoiceNo(invoiceNo: string): string | undefined {
-  const s = ocrFixDigitsInInvoiceBlob(String(invoiceNo || '').trim())
+  const s = platformInvoiceBlob(String(invoiceNo || '').trim())
   const im = s.match(/^IM(20\d{2})(\d{2})(\d{2})\d+$/i)
   if (im) return ymdFromParts(Number(im[1]), Number(im[2]), Number(im[3]))
   const lm = s.match(/^LMRN(20\d{2})(\d{2})(\d{2})/i)
   if (lm) return ymdFromParts(Number(lm[1]), Number(lm[2]), Number(lm[3]))
   const shopee = s.match(/^TRS[A-Z]{0,8}PF00-\d{5}-(\d{2})(\d{2})(\d{2})-\d+$/i)
   if (shopee) return ymdFromParts(2000 + Number(shopee[1]), Number(shopee[2]), Number(shopee[3]))
-  const kb = s.match(/^(\d{2})(\d{2})(\d{2})[EH]\d+$/i)
+  const kb = s.match(/^(\d{2})(\d{2})(\d{2})[EFH]\d+$/i)
   if (kb) return ymdFromParts(2000 + Number(kb[3]), Number(kb[2]), Number(kb[1]))
   return undefined
 }
@@ -524,6 +576,7 @@ export function pdfPageTextIsReliableForExtract(
 
 const PTI_SCAN_I18N_KEYS = new Set([
   'ptiOcrFailed',
+  'ptiOcrPageTimeout',
   'ptiOcrLoading',
   'ptiPdfEmptyPage',
   'ptiPdfSkipCopy',
@@ -595,8 +648,8 @@ export function splitScanTextIntoInvoiceBlocks(text: string): string[] {
   }
   const platformNos = [
     ...new Set(
-      [...ocrFixDigitsInInvoiceBlob(raw.replace(/\s+/g, '')).matchAll(new RegExp(PLATFORM_INVOICE_RE.source, 'gi'))]
-        .map((hit) => cleanInvoiceNo(ocrFixDigitsInInvoiceBlob(hit[1]))?.toUpperCase())
+      [...platformInvoiceBlob(raw).matchAll(new RegExp(PLATFORM_INVOICE_RE.source, 'gi'))]
+        .map((hit) => cleanInvoiceNo(platformInvoiceBlob(hit[1]))?.toUpperCase())
         .filter((n): n is string => !!n)
     ),
   ]
@@ -809,7 +862,14 @@ export function repairExtractedPurchaseTaxInvoice(
   }
 
   let invoiceNo = String(row.invoiceNo || '').trim() || undefined
-  if (invoiceNo) invoiceNo = cleanInvoiceNo(invoiceNo) || (invoiceNoLooksPlausible(invoiceNo) ? compactInvoiceToken(invoiceNo) : undefined)
+  if (invoiceNo) {
+    invoiceNo =
+      recoverShopeeInvoiceNo(invoiceNo) ||
+      recoverGrabInvoiceNo(invoiceNo, sellerTaxId) ||
+      recoverKasikornInvoiceNo(invoiceNo) ||
+      cleanInvoiceNo(invoiceNo) ||
+      (invoiceNoLooksPlausible(invoiceNo) ? compactInvoiceToken(invoiceNo) : undefined)
+  }
   const inferredSeller = invoiceNo ? inferSellerFromInvoiceNo(invoiceNo) : null
   if (inferredSeller) {
     if (!sellerTaxId) sellerTaxId = inferredSeller.tin

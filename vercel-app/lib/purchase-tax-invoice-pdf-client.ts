@@ -91,6 +91,12 @@ export async function openPdfFile(file: File): Promise<PdfDoc> {
   return pdfjs.getDocument({ data }).promise
 }
 
+export function releaseTaxInvoiceScanCanvas(canvas?: HTMLCanvasElement | null) {
+  if (!canvas) return
+  canvas.width = 0
+  canvas.height = 0
+}
+
 export async function renderTaxInvoicePageForScan(
   pdf: PdfDoc,
   pageNumber: number

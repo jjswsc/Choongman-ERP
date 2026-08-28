@@ -452,7 +452,10 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
       parts.push(`===TOTALS_DIGITS===\n${totalsDigitText}`)
       if (enough(parts)) return joined(parts)
 
-      const [headerDigitText, totalsText] = await Promise.all([readDigits(headerDigits), readThai(totalsThai)])
+      const [headerDigitText, totalsText] = await Promise.all([
+        readThai(headerDigits),
+        readThai(totalsThai),
+      ])
       parts.push(`===HEADER_DIGITS===\n${headerDigitText}`)
       parts.push(`===TOTALS===\n${totalsText}`)
       return joined(parts)

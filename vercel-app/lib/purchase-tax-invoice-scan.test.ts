@@ -68,7 +68,12 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('IM20260701000087')).toBe(true)
     expect(invoiceNoLooksPlausible('010726E00037051')).toBe(true)
     expect(invoiceNoLooksPlausible('12345678')).toBe(true)
+    expect(invoiceNoLooksPlausible('2607074')).toBe(true)
+    expect(invoiceNoLooksPlausible('3763')).toBe(true)
     expect(invoiceNoLooksPlausible('51')).toBe(false)
+    expect(invoiceNoLooksPlausible('GD-18-20')).toBe(false)
+    expect(invoiceNoLooksPlausible('TRSPESPF00-')).toBe(false)
+    expect(invoiceNoLooksPlausible('IM202607040')).toBe(false)
   })
 })
 

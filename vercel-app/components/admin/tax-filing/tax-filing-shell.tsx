@@ -414,7 +414,11 @@ export function TaxFilingShell() {
             }
           />
         </TabsContent>
-        <TabsContent value="purchaseTaxInv" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent
+          value="purchaseTaxInv"
+          forceMount
+          className={cn(adminTabsContentCn, "space-y-3", "data-[state=inactive]:hidden")}
+        >
           <FilingFiltersCard
             tabKey="purchaseTaxInv"
             yearMonth={tabProps.purchaseTaxInv.filingYearMonth}

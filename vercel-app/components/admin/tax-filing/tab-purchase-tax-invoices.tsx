@@ -40,6 +40,7 @@ import {
   imageFileToTaxInvoiceScan,
   openPdfFile,
   extractPdfPageText,
+  releaseTaxInvoiceScanCanvas,
   renderTaxInvoicePageForScan,
   renderTaxInvoicePagePreview,
   TAX_INV_MAX_PAGES,
@@ -118,6 +119,8 @@ function writeReviewDraft(rows: ReviewRow[]) {
 }
 
 const SCAN_CHECKPOINT_KEY = "cm_pti_scan_checkpoint"
+const SCAN_PAGE_TIMEOUT_MS = 55_000
+const SCAN_CHECKPOINT_TTL_MS = 36 * 60 * 60 * 1000
 
 type ScanCheckpoint = {
   fileName: string
@@ -125,15 +128,34 @@ type ScanCheckpoint = {
   nextPage: number
   total: number
   rows: ReviewRow[]
+  savedAt?: number
+}
+
+function checkpointStorage(): Storage | null {
+  if (typeof window === "undefined") return null
+  try {
+    return window.localStorage
+  } catch {
+    try {
+      return window.sessionStorage
+    } catch {
+      return null
+    }
+  }
 }
 
 function readScanCheckpoint(): ScanCheckpoint | null {
-  if (typeof window === "undefined") return null
+  const store = checkpointStorage()
+  if (!store) return null
   try {
-    const parsed = JSON.parse(sessionStorage.getItem(SCAN_CHECKPOINT_KEY) || "null") as unknown
+    const parsed = JSON.parse(store.getItem(SCAN_CHECKPOINT_KEY) || "null") as unknown
     if (!parsed || typeof parsed !== "object") return null
     const c = parsed as ScanCheckpoint
     if (!c.fileName || !Array.isArray(c.rows) || !(c.nextPage > 1)) return null
+    if (c.savedAt && Date.now() - c.savedAt > SCAN_CHECKPOINT_TTL_MS) {
+      store.removeItem(SCAN_CHECKPOINT_KEY)
+      return null
+    }
     return c
   } catch {
     return null
@@ -141,16 +163,25 @@ function readScanCheckpoint(): ScanCheckpoint | null {
 }
 
 function writeScanCheckpoint(cp: ScanCheckpoint) {
-  if (typeof window === "undefined") return
+  const store = checkpointStorage()
+  if (!store) return
   try {
-    sessionStorage.setItem(SCAN_CHECKPOINT_KEY, JSON.stringify(cp))
+    store.setItem(SCAN_CHECKPOINT_KEY, JSON.stringify({ ...cp, savedAt: Date.now() }))
   } catch {
-    /* quota */
+    try {
+      sessionStorage.setItem(SCAN_CHECKPOINT_KEY, JSON.stringify({ ...cp, savedAt: Date.now() }))
+    } catch {
+      /* quota */
+    }
   }
 }
 
 function clearScanCheckpoint() {
-  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(SCAN_CHECKPOINT_KEY)
+  } catch {
+    /* ignore */
+  }
   try {
     sessionStorage.removeItem(SCAN_CHECKPOINT_KEY)
   } catch {
@@ -158,10 +189,31 @@ function clearScanCheckpoint() {
   }
 }
 
-/** rAF·숨은 탭의 1초 클램프를 피함. 백그라운드는 대기 없이 다음 페이지. */
+function withScanTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = window.setTimeout(() => reject(new Error("ptiOcrPageTimeout")), ms)
+    p.then(
+      (v) => {
+        window.clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        window.clearTimeout(t)
+        reject(e)
+      }
+    )
+  })
+}
+
+/** rAF·숨은 탭의 1초 클램프를 피함. MessageChannel은 백그라운드에서도 다음 태스크를 줌. */
 function yieldScanLoop(): Promise<void> {
-  if (typeof document !== "undefined" && document.hidden) return Promise.resolve()
   return new Promise((resolve) => {
+    if (typeof MessageChannel !== "undefined") {
+      const ch = new MessageChannel()
+      ch.port1.onmessage = () => resolve()
+      ch.port2.postMessage(0)
+      return
+    }
     setTimeout(resolve, 0)
   })
 }
@@ -250,6 +302,12 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   React.useEffect(() => {
     writeReviewDraft(reviewRows)
   }, [reviewRows])
+
+  React.useEffect(() => {
+    if (reviewRows.length) return
+    const cp = readScanCheckpoint()
+    if (cp?.rows?.length) setReviewRows(cp.rows)
+  }, [reviewRows.length])
 
   React.useEffect(() => {
     return () => {
@@ -531,16 +589,17 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     const extractIsComplete = (pageText: string) =>
       purchaseTaxInvoiceTextExtractIsComplete(extractPurchaseTaxInvoiceFromScanText(pageText, hint), hint)
 
-    let ocr: TaxInvoiceOcrSession | null = null
+    const ocrBox: { session: TaxInvoiceOcrSession | null } = { session: null }
     const textForPage = async (canvas: HTMLCanvasElement, printedText: string) => {
       const work = pdfPageTextLooksPrinted(printedText) ? canvas : prepareTaxInvoiceScanCanvas(canvas)
       const qrs = await decodeTaxInvoiceQrsFromCanvas(work)
       const withQr = [printedText, wrapTaxInvoiceQrText(qrs)].filter((s) => String(s || "").trim()).join("\n")
       if (extractIsComplete(withQr)) return withQr
-      if (!ocr) {
+      if (!ocrBox.session) {
         setPdfBusy({ key: "ptiOcrLoading" })
-        ocr = await createTaxInvoiceOcrSession()
+        ocrBox.session = await createTaxInvoiceOcrSession()
       }
+      const ocr = ocrBox.session
       const ocrText = await ocr.recognize(work, {
         skipQr: true,
         enough: (text) => extractIsComplete([withQr, text].filter(Boolean).join("\n")),
@@ -599,6 +658,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 }
               }
               setReviewRows([...extracted])
+              setPdfBusy({
+                key: "ptiScanResuming",
+                vars: { n: String(startPage), total: String(total) },
+              })
             } else {
               clearScanCheckpoint()
             }
@@ -617,12 +680,26 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 setPdfBusy({ key: "ptiOcrPage", vars: { n: String(i), total: String(total) } })
               }
               const { canvas } = await renderTaxInvoicePageForScan(pdf, i)
-              if (ac.signal.aborted) break
+              if (ac.signal.aborted) {
+                releaseTaxInvoiceScanCanvas(canvas)
+                break
+              }
               try {
-                pageText = await textForPage(canvas, printed)
-              } catch {
+                pageText = await withScanTimeout(textForPage(canvas, printed), SCAN_PAGE_TIMEOUT_MS)
+              } catch (e) {
                 pageText = printed
-                setError((prev) => prev || "ptiOcrFailed")
+                const timedOut = e instanceof Error && e.message === "ptiOcrPageTimeout"
+                setError((prev) => prev || (timedOut ? "ptiOcrPageTimeout" : "ptiOcrFailed"))
+                if (timedOut && ocrBox.session) {
+                  try {
+                    await ocrBox.session.terminate()
+                  } catch {
+                    /* ignore */
+                  }
+                  ocrBox.session = null
+                }
+              } finally {
+                releaseTaxInvoiceScanCanvas(canvas)
               }
               if (ac.signal.aborted) break
               ingestLocalPage(i, pageText)
@@ -648,10 +725,12 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           setPdfBusy({ key: "ptiOcrPage", vars: { n: "1", total: "1" } })
           let pageText = ""
           try {
-            pageText = await textForPage(canvas, "")
+            pageText = await withScanTimeout(textForPage(canvas, ""), SCAN_PAGE_TIMEOUT_MS)
           } catch {
             pageText = ""
             setError((prev) => prev || "ptiOcrFailed")
+          } finally {
+            releaseTaxInvoiceScanCanvas(canvas)
           }
           if (ac.signal.aborted) break
           ingestLocalPage(1, pageText)
@@ -721,12 +800,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       setError(purchaseTaxInvoiceScanFailI18nKey(e instanceof Error ? e.message : String(e), "ptiOcrFailed"))
       if (extracted.length) setReviewRows(extracted)
     } finally {
-      if (ocr) {
+      if (ocrBox.session) {
         try {
-          await ocr.terminate()
+          await ocrBox.session.terminate()
         } catch {
           /* ignore */
         }
+        ocrBox.session = null
       }
       try {
         keepAlive.stop()

@@ -81,6 +81,71 @@ describe('purchase tax invoice golden texts', () => {
     expect(grabBang?.sellerBranch).toBe('สำนักงานใหญ่')
   })
 
+  it('recovers July 2026 25040 invoice numbers that OCR truncates or splits', () => {
+    const shopeeSplit = extractPurchaseTaxInvoiceFromScanText(
+      `เลขที่ TRSPESPF00-\n00000-260701-017862\nเลขประจำตัวผู้เสียภาษี 0105558019581\nมูลค่าสินค้า 218.34\nภาษีมูลค่าเพิ่ม 15.28\nรวมทั้งสิ้น 233.62`,
+      { buyerTaxId: BUYER }
+    )
+    expect(shopeeSplit?.invoiceNo).toBe('TRSPESPF00-00000-260701-017862')
+    expect(shopeeSplit?.sellerTaxId).toBe('0105558019581')
+    expect(shopeeSplit?.netAmount).toBe(218.34)
+
+    const shopeeOcrC = extractPurchaseTaxInvoiceFromScanText(
+      `เลขที่ TRSPESPF0C-00000-260728-017950\nเลขประจำตัวผู้เสียภาษี 0105558019581\nมูลค่า 442.62 ภาษีมูลค่าเพิ่ม 30.98`,
+      { buyerTaxId: BUYER }
+    )
+    expect(shopeeOcrC?.invoiceNo).toBe('TRSPESPF00-00000-260728-017950')
+
+    const grabSplit = extractPurchaseTaxInvoiceFromScanText(
+      `เลขที่ IM20260704039284\nบริษัท แกร็บแท็กซี่ (ประเทศไทย) จำกัด\nเลขประจำตัวผู้เสียภาษี 0105556090377\nมูลค่า 1,148.36 ภาษีมูลค่าเพิ่ม 80.38 รวมทั้งสิ้น 1,228.74`,
+      { buyerTaxId: BUYER }
+    )
+    expect(grabSplit?.invoiceNo).toBe('IM20260704039284')
+
+    const grabDigitsOnly = extractPurchaseTaxInvoiceFromScanText(
+      `IM202607040\n39284\nเลขประจำตัวผู้เสียภาษี 0105556090377\nมูลค่า 1,148.36 ภาษีมูลค่าเพิ่ม 80.38`,
+      { buyerTaxId: BUYER }
+    )
+    expect(grabDigitsOnly?.invoiceNo).toBe('IM20260704039284')
+
+    const kbankF = extractPurchaseTaxInvoiceFromScanText(
+      `ใบกำกับภาษี เลขที่ 220726F00021905\nบริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)\nเลขประจำตัวผู้เสียภาษี 0107536000315\nมูลค่า 65.85 ภาษีมูลค่าเพิ่ม 4.61`,
+      { buyerTaxId: BUYER }
+    )
+    expect(kbankF?.invoiceNo).toBe('220726F00021905')
+    expect(kbankF?.sellerTaxId).toBe('0107536000315')
+    expect(kbankF?.docDate).toBe('2026-07-22')
+
+    const junkGd = extractPurchaseTaxInvoiceFromScanText(
+      `ใบกำกับภาษี เลขที่ GD-18-20\n010726E00021480\nเลขประจำตัวผู้เสียภาษี 0107536000315\nมูลค่า 146.36 ภาษีมูลค่าเพิ่ม 10.25`,
+      { buyerTaxId: BUYER }
+    )
+    expect(junkGd?.invoiceNo).toBe('010726E00021480')
+
+    const jidubang = extractPurchaseTaxInvoiceFromScanText(
+      `TAX INVOICE\nJIDUBANG (ASIA) CO., LTD.\nเลขประจำตัวผู้เสียภาษี 0105550102497\nเลขที่ 2607074\nวันที่ 02/07/2026\nมูลค่า 9,850.47\nภาษีมูลค่าเพิ่ม 689.53\nรวมทั้งสิ้น 10,540.00`,
+      { buyerTaxId: BUYER }
+    )
+    expect(jidubang?.invoiceNo).toBe('2607074')
+    expect(jidubang?.sellerTaxId).toBe('0105550102497')
+    expect(jidubang?.sellerName).toBe('JIDUBANG (ASIA) CO., LTD.')
+    expect(jidubang?.netAmount).toBe(9850.47)
+
+    const jidubangExempt = extractPurchaseTaxInvoiceFromScanText(
+      `เลขที่ 6907030\nเลขประจำตัวผู้เสียภาษี 0105550102497\nมูลค่าสินค้า 0.00 ภาษีมูลค่าเพิ่ม 0.00 รวมทั้งสิ้น 330.00`,
+      { buyerTaxId: BUYER }
+    )
+    expect(jidubangExempt?.invoiceNo).toBe('6907030')
+    expect(jidubangExempt?.sellerTaxId).toBe('0105550102497')
+
+    const tinAsInvoice = extractPurchaseTaxInvoiceFromScanText(
+      `เลขที่ 0105558019581\nTRSPESPF00-00000-260702-017827\nมูลค่า 137.05 ภาษีมูลค่าเพิ่ม 9.59`,
+      { buyerTaxId: BUYER }
+    )
+    expect(tinAsInvoice?.invoiceNo).toBe('TRSPESPF00-00000-260702-017827')
+    expect(tinAsInvoice?.sellerTaxId).toBe('0105558019581')
+  })
+
   it('reads an electronic PDF text layer (Polar Bear style)', () => {
     const row = parsePurchaseTaxInvoiceFromPdfText(POLAR_BEAR_PRINTED, { buyerTaxId: BUYER, buyerName: '충만' })
     expect(row?.invoiceNo).toBe('INV-20260524902')

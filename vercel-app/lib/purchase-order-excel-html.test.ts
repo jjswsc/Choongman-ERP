@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildPurchaseOrderExcelHtml, type PoExcelInput } from "./purchase-order-excel-html"
+import { buildPurchaseOrderExcelHtml, PO_EXCEL_MIN_ITEM_ROWS, type PoExcelInput } from "./purchase-order-excel-html"
 
 const labels: PoExcelInput["labels"] = {
   docTitle: "Invoice/Tax invoice",
@@ -126,5 +126,14 @@ describe("buildPurchaseOrderExcelHtml", () => {
     )
     expect(html).toContain("매장: Silom")
     expect(html).toContain("매장: MBK")
+  })
+
+  it("pads short invoices with blank item rows so A4 is filled", () => {
+    const html = buildPurchaseOrderExcelHtml(sampleAccountingPo())
+    const blanks = (html.match(/class="xl-body po-blank"/g) || []).length
+    expect(blanks).toBe(PO_EXCEL_MIN_ITEM_ROWS - 1)
+    expect(html).toContain("font-size: 22pt")
+    expect(html).toContain("font-size: 12pt")
+    expect(html).toContain(`height:${96}pt`)
   })
 })
