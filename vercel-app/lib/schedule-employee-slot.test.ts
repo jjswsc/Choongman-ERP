@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildScheduleEmployeeRoster,
+  buildScheduleHalfHourOptions,
   resolveScheduleRosterEntry,
   resolveScheduleSavePayloadFromSlot,
   scheduleBreakSlotKey,
@@ -58,5 +59,17 @@ describe('schedule-employee-slot', () => {
 
   it('휴식 슬롯 키 접두사', () => {
     expect(scheduleBreakSlotKey('M0020')).toBe('BRK_M0020')
+  })
+
+  it('기본 그리드 06~29는 주간·심야 휴게(24:00+)를 모두 포함한다', () => {
+    const opts = buildScheduleHalfHourOptions(6, 29)
+    expect(opts[0]).toBe('06:00')
+    expect(opts).toContain('12:00')
+    expect(opts).toContain('23:30')
+    expect(opts).toContain('24:00')
+    expect(opts).toContain('26:00')
+    expect(opts[opts.length - 1]).toBe('29:30')
+    expect(opts).not.toContain('05:30')
+    expect(opts).not.toContain('00:00')
   })
 })

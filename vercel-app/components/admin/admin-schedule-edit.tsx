@@ -38,6 +38,7 @@ import {
   scheduleWorkSlotKeyFromSlot,
   isScheduleBreakSlot,
   isScheduleLeaveSlot,
+  buildScheduleHalfHourOptions,
 } from "@/lib/schedule-employee-slot"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
@@ -627,6 +628,11 @@ export function AdminScheduleEdit({
   const timeOptions = Array.from({ length: 30 }, (_, i) =>
     ["00", "30"].map((m) => `${String(i).padStart(2, "0")}:${m}`)
   ).flat()
+  /** 휴게 시작: 그리드와 동일(기본 06:00~29:30). 자정 이후는 24:00=00:00, 26:00=02:00 */
+  const breakStartOptions = React.useMemo(
+    () => buildScheduleHalfHourOptions(startHour, endHour),
+    [startHour, endHour]
+  )
 
   type PersonSchedule = { name: string; area: string; workDays: string[]; breakDays: string[]; leaveType?: string }
   const scheduleForExport = React.useMemo(() => {
@@ -811,8 +817,8 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               <SelectTrigger className="h-8 w-24 text-xs">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                {timeOptions.slice(24, 48).map((tm) => (
+              <SelectContent className="max-h-72">
+                {breakStartOptions.map((tm) => (
                   <SelectItem key={tm} value={tm}>{tm}</SelectItem>
                 ))}
               </SelectContent>

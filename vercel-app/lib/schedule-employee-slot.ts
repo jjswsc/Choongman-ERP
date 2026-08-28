@@ -220,3 +220,25 @@ export function resolveScheduleDisplayNickFromMaps(
   if (hit) return hit.nick
   return maps.nameToNick[nm] || nm
 }
+
+const SCHEDULE_HOUR_MAX = 29
+
+function clampScheduleHour(n: number): number {
+  if (!Number.isFinite(n)) return 0
+  return Math.max(0, Math.min(SCHEDULE_HOUR_MAX, Math.trunc(n)))
+}
+
+/**
+ * 스케줄 그리드와 같은 30분 슬롯.
+ * 24 이상은 익일(예: 26:00 = 다음날 02:00). 24시간 매장 심야 휴게는 00:00이 아니라 24:00+ 를 쓴다.
+ */
+export function buildScheduleHalfHourOptions(startHour: number, endHour: number): string[] {
+  const lo = clampScheduleHour(startHour)
+  const hi = Math.max(lo, clampScheduleHour(endHour))
+  const out: string[] = []
+  for (let h = lo; h <= hi; h++) {
+    const hh = String(h).padStart(2, '0')
+    out.push(`${hh}:00`, `${hh}:30`)
+  }
+  return out
+}
