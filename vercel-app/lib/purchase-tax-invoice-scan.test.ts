@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   inferAmountsFromMoneySequence,
+  pickExclusiveVatAmounts,
   joinPdfTextItemsByLine,
   mergePurchaseTaxInvoiceExtract,
   normalizeTaxInvoiceOcrText,
@@ -82,6 +83,7 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('51')).toBe(false)
     expect(invoiceNoLooksPlausible('GD-18-20')).toBe(false)
     expect(invoiceNoLooksPlausible('TRSPESPF00-')).toBe(false)
+    expect(invoiceNoLooksPlausible('TRSPESPF00-00000-26')).toBe(false)
     expect(invoiceNoLooksPlausible('IM202607040')).toBe(false)
   })
 })
@@ -113,6 +115,8 @@ describe('parseTaxInvoiceDateFromText', () => {
   it('converts Buddhist dates', () => {
     expect(parseTaxInvoiceDateFromText('วันที่ 1/7/2569')).toBe('2026-07-01')
     expect(parseTaxInvoiceDateFromText('4 ส.ค. 2569')).toBe('2026-08-04')
+    expect(parseTaxInvoiceDateFromText('Date : 2-Jul-26')).toBe('2026-07-02')
+    expect(parseTaxInvoiceDateFromText('วันที่ 01/07/72026')).toBe('2026-07-01')
   })
 })
 
@@ -316,6 +320,57 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(repaired.sellerTaxId).toBe('0605565002677')
   })
 
+  it('does not invent a head-office branch just because the TIN is known', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice({
+      invoiceNo: '02190129442',
+      sellerTaxId: '0107567000414',
+      sellerBranch: 'สาขา 00022',
+      netAmount: 100,
+      vatAmount: 7,
+    })
+    expect(repaired.sellerBranch).toBe('สาขา 00022')
+    const noBranch = repairExtractedPurchaseTaxInvoice({
+      invoiceNo: 'INV-1',
+      sellerTaxId: SELLER,
+      netAmount: 100,
+      vatAmount: 7,
+    })
+    expect(noBranch.sellerBranch).toBeUndefined()
+  })
+
+  it('fills 7% VAT when the repeated page amount is already the supply but VAT is 0', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'IM20260703020505', sellerTaxId: '0105556090377', netAmount: 1678.7, vatAmount: 0 },
+      { buyerTaxId: BUYER, pageText: 'ใบกำกับภาษี\n1,678.70\n1,678.70\n1,678.70' }
+    )
+    expect(repaired.netAmount).toBe(1678.7)
+    expect(repaired.vatAmount).toBe(117.51)
+  })
+
+  it('fills 7% VAT when supply is missing and the page repeats one amount', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'IM20260709051887', sellerTaxId: '0105556090377' },
+      {
+        buyerTaxId: BUYER,
+        pageText: 'ใบกำกับภาษี\n917.29\n917.29',
+      }
+    )
+    expect(repaired.netAmount).toBe(917.29)
+    expect(repaired.vatAmount).toBe(64.21)
+  })
+
+  it('replaces a 7% pair that is not on the page with the repeated page amount', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'TRSPESPF00-00000-260702-017827', netAmount: 257.14, vatAmount: 18 },
+      {
+        buyerTaxId: BUYER,
+        pageText: 'ใบกำกับภาษี Shopee\n137.05\n137.05',
+      }
+    )
+    expect(repaired.netAmount).toBe(137.05)
+    expect(repaired.vatAmount).toBe(9.59)
+  })
+
   it('infers taxable net from shipping + service fee', () => {
     const inferred = inferAmountsFromMoneySequence(
       [
@@ -341,6 +396,11 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(repaired.vatAmount).toBe(71.96)
   })
 
+  it('drops a 1-baht supply that does not pass 7%', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice({ invoiceNo: 'A', netAmount: 1 })
+    expect(repaired.netAmount).toBeUndefined()
+  })
+
   it('snaps an OCR year that is a few years off the filing period', () => {
     expect(snapDocDateYearToTaxPeriod('2022-07-10', '2026-08')).toBe('2026-07-10')
     expect(snapDocDateYearToTaxPeriod('2026-07-10', '2026-08')).toBe('2026-07-10')
@@ -364,6 +424,19 @@ describe('inferAmountsFromMoneySequence', () => {
   it('picks net/vat/total when the last three amounts add up at 7%', () => {
     const inferred = inferAmountsFromMoneySequence('12.00 99.00 1,440.17 100.81 1,540.98')
     expect(inferred).toEqual({ netAmount: 1440.17, vatAmount: 100.81, totalAmount: 1540.98 })
+  })
+
+  it('uses net+total when VAT is missing and the difference is 7%', () => {
+    const inferred = inferAmountsFromMoneySequence('1,148.36 1,148.36 48.36 1,228.74')
+    expect(inferred).toEqual({ netAmount: 1148.36, vatAmount: 80.38, totalAmount: 1228.74 })
+  })
+
+  it('does not treat a larger figure whose 7% equals the real net as the supply amount', () => {
+    expect(pickExclusiveVatAmounts([19002.43, 1330.17, 1423.28])).toEqual({
+      netAmount: 1330.17,
+      vatAmount: 93.11,
+      totalAmount: 1423.28,
+    })
   })
 })
 

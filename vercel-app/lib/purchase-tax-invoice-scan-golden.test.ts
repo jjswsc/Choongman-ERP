@@ -73,6 +73,12 @@ describe('purchase tax invoice golden texts', () => {
     expect(kbank?.sellerTaxId).toBe('0107536000315')
     expect(kbank?.docDate).toBe('2026-07-01')
 
+    const grabWrongYearRef = extractPurchaseTaxInvoiceFromScanText(
+      `THMG20230716150023017236\nเลขที่ 420260702033636\nเลขประจำตัวผู้เสียภาษี 0105556090377\nมูลค่า 819.19 ภาษีมูลค่าเพิ่ม 57.34`,
+      { buyerTaxId: BUYER, taxMonth: '2026-07' }
+    )
+    expect(grabWrongYearRef?.invoiceNo).toBe('IM20260702033636')
+
     const grabBang = extractPurchaseTaxInvoiceFromScanText(
       `ใบกำกับภาษี เลขที่ IM2026070100008!\nเลขประจำตัวผู้เสียภาษี 0105556090377\nมูลค่า 337.16 ภาษีมูลค่าเพิ่ม 23.60`,
       { buyerTaxId: BUYER }
@@ -82,6 +88,27 @@ describe('purchase tax invoice golden texts', () => {
   })
 
   it('recovers July 2026 25040 invoice numbers that OCR truncates or splits', () => {
+    const shopeeExtraDay = extractPurchaseTaxInvoiceFromScanText(
+      `เลขที่ TRSPESPF00-00000-260708-01824008\nเลขประจำตัวผู้เสียภาษี 0105558019581\nมูลค่า 391.23 ภาษีมูลค่าเพิ่ม 27.39`,
+      { buyerTaxId: BUYER, taxMonth: '2026-07' }
+    )
+    expect(shopeeExtraDay?.invoiceNo).toBe('TRSPESPF00-00000-260708-018240')
+
+    const shopeeThaiSplit = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'เลขที่/ No. | TRSPESPF00-00000-26',
+        'ที่อยู่/ Address           เลขที่ 54 อาคารศูนย์การค้ายูเนี่ยนมอลล์ ห้องเลขที่ 60                        0701-017862',
+        '19-20 ขั้นที่ F-G',
+        'เลขประจำตัวผู้เสียภาษี 0105558019581',
+        'มูลค่าสินค้า 218.34',
+        'ภาษีมูลค่าเพิ่ม 15.28',
+        'รวมทั้งสิ้น 233.62',
+      ].join('\n'),
+      { buyerTaxId: BUYER }
+    )
+    expect(shopeeThaiSplit?.invoiceNo).toBe('TRSPESPF00-00000-260701-017862')
+    expect(shopeeThaiSplit?.netAmount).toBe(218.34)
+
     const shopeeSplit = extractPurchaseTaxInvoiceFromScanText(
       `เลขที่ TRSPESPF00-\n00000-260701-017862\nเลขประจำตัวผู้เสียภาษี 0105558019581\nมูลค่าสินค้า 218.34\nภาษีมูลค่าเพิ่ม 15.28\nรวมทั้งสิ้น 233.62`,
       { buyerTaxId: BUYER }
@@ -121,6 +148,13 @@ describe('purchase tax invoice golden texts', () => {
       { buyerTaxId: BUYER }
     )
     expect(junkGd?.invoiceNo).toBe('010726E00021480')
+
+    const jidubangEnDate = extractPurchaseTaxInvoiceFromScanText(
+      `TAX INVOICE\nJIDUBANG (ASIA) CO., LTD.\nเลขประจำตัวผู้เสียภาษี 0105550102497\nเลขที่ 2607074\nDate : 2-Jul-26\nมูลค่า 9,850.47\nภาษีมูลค่าเพิ่ม 689.53\nรวมทั้งสิ้น 10,540.00`,
+      { buyerTaxId: BUYER, taxMonth: '2026-07' }
+    )
+    expect(jidubangEnDate?.docDate).toBe('2026-07-02')
+    expect(jidubangEnDate?.netAmount).toBe(9850.47)
 
     const jidubang = extractPurchaseTaxInvoiceFromScanText(
       `TAX INVOICE\nJIDUBANG (ASIA) CO., LTD.\nเลขประจำตัวผู้เสียภาษี 0105550102497\nเลขที่ 2607074\nวันที่ 02/07/2026\nมูลค่า 9,850.47\nภาษีมูลค่าเพิ่ม 689.53\nรวมทั้งสิ้น 10,540.00`,

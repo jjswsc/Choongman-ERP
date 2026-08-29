@@ -103,6 +103,16 @@ describe('findLayoutInvoiceNo', () => {
     )
     expect(got?.value).toBe('INV2026070017')
   })
+
+  it('Shopee 번호가 다음 줄로 갈라져도 이어 붙인다', () => {
+    const got = findLayoutInvoiceNo(
+      page([
+        line(514, [['เลขที่', 1379], ['No.', 1459], ['TRSPESPF00-00000-26', 1545]]),
+        line(562, [['ที่อยู่', 311], ['Address', 388], ['เลขที่', 622], ['54', 690], ['0701-017862', 1546]]),
+      ])
+    )
+    expect(got?.value).toBe('TRSPESPF00-00000-260701-017862')
+  })
 })
 
 describe('거래처별 번호 꼴', () => {
@@ -257,6 +267,34 @@ describe('applyLayoutExtract', () => {
   it('좌표 판독이 없으면 원본을 그대로 둔다', () => {
     const got = applyLayoutExtract({ invoiceNo: 'A1', netAmount: 5 }, undefined)
     expect(got.fields).toEqual({ invoiceNo: 'A1', netAmount: 5 })
+  })
+
+  it('카시콘 정답을 GD-19-20 같은 좌표 쓰레기가 덮지 않는다', () => {
+    const got = applyLayoutExtract(
+      { invoiceNo: '010726E00021480' },
+      { invoiceNo: { value: 'GD-19-20', confidence: 82, source: 'bare-no-th' } }
+    )
+    expect(got.fields.invoiceNo).toBe('010726E00021480')
+  })
+
+  it('Grab IM 번호를 OCR이 TM으로 읽은 좌표가 덮지 않는다', () => {
+    const got = applyLayoutExtract(
+      { invoiceNo: 'IM20260701067378' },
+      { invoiceNo: { value: 'TM20260701067378', confidence: 88, source: 'invoice-no' } }
+    )
+    expect(got.fields.invoiceNo).toBe('IM20260701067378')
+  })
+
+  it('텍스트 금액이 7%를 통과하면 깨진 좌표 금액을 쓰지 않는다', () => {
+    const got = applyLayoutExtract(
+      { invoiceNo: 'IM20260704039284', netAmount: 1148.36, vatAmount: 80.38 },
+      {
+        netAmount: { value: 1, confidence: 90, source: 'amount-triple' },
+        vatAmount: { value: 48.36, confidence: 90, source: 'amount-triple' },
+      }
+    )
+    expect(got.fields.netAmount).toBe(1148.36)
+    expect(got.fields.vatAmount).toBe(80.38)
   })
 })
 

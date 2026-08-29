@@ -70,6 +70,11 @@ function moneyFromFragment(raw: string): number | undefined {
 
 function ymdFromParts(year: number, month: number, day: number): string | undefined {
   let y = year
+  if (y > 2100 && y < 100000) {
+    const last4 = y % 10000
+    if (last4 >= 2000 && last4 <= 2100) y = last4
+  }
+  if (y < 100) y += y > 60 ? 1900 : 2000
   if (y >= 2400) y -= 543
   if (y < 1990 || y > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return undefined
   return `${String(y).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -87,13 +92,35 @@ export function snapDocDateYearToTaxPeriod(ymd: string | undefined, taxMonth?: s
   return date
 }
 
+const EN_MONTH: Record<string, number> = {
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+}
+
 export function parseTaxInvoiceDateFromText(text: string): string | undefined {
   const s = String(text || '')
+  const en = s.match(
+    /\b(\d{1,2})[.\-/\s]+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[.\-/\s]+(\d{2,4})\b/i
+  )
+  if (en) {
+    const month = EN_MONTH[en[2].slice(0, 3).toLowerCase()]
+    if (month) return ymdFromParts(Number(en[3]), month, Number(en[1]))
+  }
   const iso = s.match(/\b(20\d{2}|25\d{2})[./-](\d{1,2})[./-](\d{1,2})\b/)
   if (iso) {
     return ymdFromParts(Number(iso[1]), Number(iso[2]), Number(iso[3]))
   }
-  const dmy = s.match(/\b(\d{1,2})[./-](\d{1,2})[./-](20\d{2}|25\d{2})\b/)
+  const dmy = s.match(/\b(\d{1,2})[./-](\d{1,2})[./-](\d{4,5})\b/)
   if (dmy) {
     return ymdFromParts(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]))
   }
@@ -189,6 +216,7 @@ export function invoiceNoLooksPlausible(raw: unknown): boolean {
   if (/plzb/i.test(compact)) return false
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(inv)) return false
   if (/^TRS[A-Z0-9]{0,8}PF00-?$/i.test(inv)) return false
+  if (/^TRS[A-Z]{2,8}PF00-\d{5}-\d{1,5}$/i.test(inv)) return false
   if (/^IM20\d{0,11}$/i.test(compact) && compact.length < 16) return false
   if (!/[A-Za-z]/.test(compact) && compact.length < 4) return false
   return true
@@ -214,7 +242,9 @@ function platformInvoiceBlob(raw: string): string {
 
 function formatRecoveredShopeeInvoice(compact: string): string | undefined {
   const s = platformInvoiceBlob(compact)
-  const m = s.match(/TRS[A-Z]{2,8}PF00-?(\d{5})-?(\d{6})-?(\d{5,8})/i)
+  const m =
+    s.match(/TRS[A-Z]{2,8}PF00-?(\d{5})-?(\d{6})-?(\d{6})/i) ||
+    s.match(/TRS[A-Z]{2,8}PF00-?(\d{5})-?(\d{6})-?(\d{5,8})/i)
   if (!m) return undefined
   const prefix = s.match(/TRS[A-Z]{2,8}PF00/i)?.[0]
   if (!prefix) return undefined
@@ -225,6 +255,32 @@ function recoverShopeeInvoiceNo(text: string): string | undefined {
   const compact = platformInvoiceBlob(text)
   const full = formatRecoveredShopeeInvoice(compact)
   if (full) return full
+
+  // OCR이 `TRSPESPF00-00000-26` 다음 줄에 `0701-017862` 를 찍고 사이에 태국어가 끼는 경우
+  const raw = String(text || '')
+  const head = raw.match(/TRS[A-Z]{2,8}PF0[0CO]-(\d{5})-(\d{2,6})/i)
+  if (head) {
+    const prefix = platformInvoiceBlob(head[0]).match(/TRS[A-Z]{2,8}PF00/i)?.[0]
+    const mid = head[2]
+    const after = raw.slice(raw.indexOf(head[0]) + head[0].length).slice(0, 800)
+    if (prefix && mid.length < 6) {
+      const tail = after.match(/(\d{4})-(\d{5,8})/)
+      if (tail && mid.length + tail[1].length === 6) {
+        const joined = formatRecoveredShopeeInvoice(
+          `${prefix.toUpperCase()}-${head[1]}-${mid}${tail[1]}-${tail[2]}`
+        )
+        if (joined) return joined
+      }
+    }
+    if (prefix && mid.length === 6) {
+      const last = after.match(/^\s*-?\s*(\d{5,8})\b/) || after.match(/\n\s*(\d{5,8})\b/)
+      if (last) {
+        const joined = formatRecoveredShopeeInvoice(`${prefix.toUpperCase()}-${head[1]}-${mid}-${last[1]}`)
+        if (joined) return joined
+      }
+    }
+  }
+
   const prefix = compact.match(/TRS[A-Z]{2,8}PF00-?/i)
   const tail = compact.match(/(\d{5})-(\d{6})-(\d{5,8})/)
   if (prefix && tail) {
@@ -233,15 +289,21 @@ function recoverShopeeInvoiceNo(text: string): string | undefined {
   return undefined
 }
 
-function recoverGrabInvoiceNo(text: string, sellerTaxId?: string): string | undefined {
+function grabYmFromTaxMonth(taxMonth?: string): string {
+  return String(taxMonth || '').replace(/-/g, '').slice(0, 6)
+}
+
+function recoverGrabInvoiceNo(text: string, sellerTaxId?: string, taxMonth?: string): string | undefined {
   const compact = platformInvoiceBlob(text)
-  const full = compact.match(/IM20\d{12}/i)
-  if (full) return cleanInvoiceNo(full[0].toUpperCase())
+  const ym = grabYmFromTaxMonth(taxMonth)
+  const prefixed = [...compact.matchAll(/[IT]M20\d{12}/gi)].map((m) => `IM${m[0].replace(/^[IT]M/i, '')}`)
   const grabTin = sellerTaxId === '0105556090377' || compact.includes('0105556090377')
+  const bodies = grabTin ? [...compact.matchAll(/20\d{12}/g)].map((m) => `IM${m[0]}`) : []
+  const all = [...prefixed, ...bodies]
+  const pick = (ym && all.find((n) => n.slice(2, 8) === ym)) || prefixed[0] || (grabTin ? bodies[0] : undefined)
+  if (pick) return cleanInvoiceNo(pick)
   if (!grabTin) return undefined
-  const body = compact.match(/20\d{12}/)
-  if (body) return cleanInvoiceNo(`IM${body[0]}`)
-  const partial = compact.match(/IM(20\d{7,11})/i)
+  const partial = compact.match(/[IT]M(20\d{7,11})/i)
   if (!partial) return undefined
   const rest = compact.slice(compact.indexOf(partial[0]) + partial[0].length).replace(/\D/g, '')
   const digits = (partial[1] + rest).slice(0, 14)
@@ -294,11 +356,13 @@ function firstOfficeInvoiceNo(s: string): string | undefined {
   return undefined
 }
 
-function extractInvoiceNo(text: string, sellerTaxId?: string): string | undefined {
+function extractInvoiceNo(text: string, sellerTaxId?: string, taxMonth?: string): string | undefined {
   const s = String(text || '')
   const compact = platformInvoiceBlob(s)
   const recovered =
-    recoverShopeeInvoiceNo(s) || recoverGrabInvoiceNo(s, sellerTaxId) || recoverKasikornInvoiceNo(s)
+    recoverShopeeInvoiceNo(s) ||
+    recoverGrabInvoiceNo(s, sellerTaxId, taxMonth) ||
+    recoverKasikornInvoiceNo(s)
   if (recovered) return recovered
   const platform = s.match(PLATFORM_INVOICE_RE) || compact.match(PLATFORM_INVOICE_RE)
   if (platform) {
@@ -445,6 +509,63 @@ function collectBahtAmounts(text: string): number[] {
   return out
 }
 
+/** `48.36` 이 `1,148.36` 의 앞자리만 떨어진 OCR 조각인지 */
+function amountLooksLikeOcrFragment(n: number, pool: number[]): boolean {
+  const token = n.toFixed(2)
+  return pool.some((b) => b > n + 0.05 && b >= n * 8 && b.toFixed(2).endsWith(token))
+}
+
+/**
+ * 페이지에 찍힌 숫자만으로 공급가·부가세를 고른다.
+ * 공급가+합계의 차가 7%이면 그걸 쓰고, 큰 숫자의 7%가 작은 숫자의 공급가인
+ * “바깥 쌍”(합계를 공급가로 오인)은 버린다.
+ */
+export function pickExclusiveVatAmounts(nums: number[]): {
+  netAmount: number
+  vatAmount: number
+  totalAmount: number
+} | null {
+  const pool = [...new Set(nums.map((n) => roundMoney2(n)).filter((n) => n > 0))]
+  type Cand = { netAmount: number; vatAmount: number; totalAmount: number; score: number; lastIdx: number }
+  const cands: Cand[] = []
+  for (const net of pool) {
+    if (amountLooksLikeOcrFragment(net, pool)) continue
+    for (const total of pool) {
+      if (total <= net) continue
+      const vatAmount = roundMoney2(total - net)
+      if (vatAmount < 0.01 || purchaseTaxVatLooksWrong(net, vatAmount)) continue
+      cands.push({
+        netAmount: net,
+        vatAmount,
+        totalAmount: total,
+        score: pool.includes(vatAmount) ? 6 : 4,
+        lastIdx: Math.max(nums.lastIndexOf(net), nums.lastIndexOf(total)),
+      })
+    }
+    for (const vatAmount of pool) {
+      if (vatAmount >= net || purchaseTaxVatLooksWrong(net, vatAmount)) continue
+      const totalAmount = roundMoney2(net + vatAmount)
+      cands.push({
+        netAmount: net,
+        vatAmount,
+        totalAmount,
+        score: pool.includes(totalAmount) ? 6 : 3,
+        lastIdx: Math.max(nums.lastIndexOf(net), nums.lastIndexOf(vatAmount)),
+      })
+    }
+  }
+  if (!cands.length) return null
+  for (const c of cands) {
+    if (cands.some((o) => o !== c && Math.abs(o.netAmount - c.vatAmount) < 0.02 && o.netAmount < c.netAmount - 0.05)) {
+      c.score -= 12
+    }
+  }
+  cands.sort((a, b) => b.score - a.score || b.lastIdx - a.lastIdx || a.netAmount - b.netAmount)
+  const top = cands[0]
+  if (top.score < 0) return null
+  return { netAmount: top.netAmount, vatAmount: top.vatAmount, totalAmount: top.totalAmount }
+}
+
 /**
  * 키워드가 깨져도 하단 금액 3개가 공급가+VAT=합계·VAT≈7%이면 그 값을 씀.
  * OCR이 태국어 라벨을 잃어도 숫자열은 남는 경우가 많음.
@@ -455,6 +576,8 @@ export function inferAmountsFromMoneySequence(text: string): {
   totalAmount: number
 } | null {
   const nums = collectBahtAmounts(text)
+  const picked = pickExclusiveVatAmounts(nums)
+  if (picked) return picked
   if (nums.length < 2) return null
   const window = nums.slice(-8)
   for (let i = window.length - 1; i >= 2; i -= 1) {
@@ -836,7 +959,7 @@ export function parsePurchaseTaxInvoiceFromPdfText(
   const inferred = inferAmountsFromMoneySequence(raw)
   const row: ExtractedPurchaseTaxInvoiceFields = {
     docDate: parseTaxInvoiceDateFromText(raw),
-    invoiceNo: extractInvoiceNo(raw, sellerTaxId),
+    invoiceNo: extractInvoiceNo(raw, sellerTaxId, hint?.taxMonth),
     sellerName: extractSellerName(raw, hint?.buyerName),
     sellerTaxId: sellerTaxId && sellerTaxId.length === 13 && thaiTinChecksumOk(sellerTaxId) ? sellerTaxId : undefined,
     sellerBranch: formatSellerBranch(extractSellerBranchRaw(raw)),
@@ -890,6 +1013,18 @@ export function mergePurchaseTaxInvoiceExtract(
     isCopy: primary?.isCopy === true || secondary?.isCopy === true,
   }
   return purchaseTaxInvoiceHasExtractedFields(row) ? row : null
+}
+
+function invoiceFromPageBeatsCurrent(fromPage: string, current?: string): boolean {
+  if (!current) return true
+  const page = String(fromPage || '').trim()
+  const cur = String(current || '').trim()
+  if (!page || page === cur) return false
+  if (/^TRS[A-Z]{2,8}PF00-\d{5}-\d{1,5}$/i.test(cur) && page.startsWith('TRS')) return page.length > cur.length
+  if (/^[IT]M20/i.test(page) && /^[IT1]M20/i.test(cur) && page.length >= cur.length) return true
+  if (/^\d{6}[EFH]/i.test(page) && !/^\d{6}[EFH]/i.test(cur)) return true
+  if (page.startsWith('TRS') && cur.startsWith('TRS') && page.length > cur.length + 4) return true
+  return false
 }
 
 /**
@@ -980,14 +1115,89 @@ export function repairExtractedPurchaseTaxInvoice(
     }
   }
 
+  const pageNums = collectBahtAmounts(hint?.pageText || '')
+  const fromPageAmt = pickExclusiveVatAmounts(pageNums)
+  const amountsBroken =
+    netAmount == null ||
+    vatAmount == null ||
+    vatAmount === 0 ||
+    (vatAmount > 0 && purchaseTaxVatLooksWrong(netAmount, vatAmount)) ||
+    (netAmount != null && amountLooksLikeOcrFragment(netAmount, pageNums))
+  if (fromPageAmt && amountsBroken) {
+    netAmount = fromPageAmt.netAmount
+    vatAmount = fromPageAmt.vatAmount
+    totalAmount = fromPageAmt.totalAmount
+  }
+  const pageTextRaw = hint?.pageText || ''
+  const netAmt = netAmount
+  const vatAmt = vatAmount
+  const netOnPage =
+    netAmt != null && pageNums.some((p) => Math.abs(p - netAmt) <= 0.05)
+  const repeatedPageNets = [...new Set(pageNums.filter((n) => n >= 1))].filter(
+    (n) => pageNums.filter((x) => Math.abs(x - n) < 0.02).length >= 2
+  )
+  const repeatedNet = repeatedPageNets.slice().sort((a, b) => b - a)[0]
+  const vatOk =
+    netAmt != null && vatAmt != null && vatAmt > 0 && !purchaseTaxVatLooksWrong(netAmt, vatAmt)
+  const vatOnPage = vatAmt != null && pageNums.some((p) => Math.abs(p - vatAmt) <= 0.05)
+  const keepDerivedPair = vatOk && vatOnPage
+  const shouldFillFromRepeated =
+    !keepDerivedPair &&
+    Boolean(repeatedNet) &&
+    /ภาษีมูลค่าเพิ่ม|VAT\s*7|ใบกำกับภาษี/i.test(pageTextRaw) &&
+    !/ยกเว้นภาษี|vat\s*exempt/i.test(pageTextRaw) &&
+    (netAmount == null || !netOnPage)
+  if (!fromPageAmt && shouldFillFromRepeated && repeatedNet) {
+    netAmount = repeatedNet
+    vatAmount = roundMoney2(repeatedNet * 0.07)
+    totalAmount = roundMoney2(netAmount + vatAmount)
+  } else if (
+    !fromPageAmt &&
+    netOnPage &&
+    netAmount != null &&
+    repeatedNet != null &&
+    Math.abs(repeatedNet - netAmount) < 0.05 &&
+    (vatAmount == null || vatAmount === 0) &&
+    /ภาษีมูลค่าเพิ่ม|VAT\s*7|ใบกำกับภาษี/i.test(pageTextRaw) &&
+    !/ยกเว้นภาษี|vat\s*exempt/i.test(pageTextRaw)
+  ) {
+    vatAmount = roundMoney2(netAmount * 0.07)
+    totalAmount = roundMoney2(netAmount + vatAmount)
+  }
+  if (
+    netAmount != null &&
+    netAmount < 5 &&
+    (vatAmount == null || vatAmount < 1 || purchaseTaxVatLooksWrong(netAmount, vatAmount))
+  ) {
+    netAmount = undefined
+    if (vatAmount != null && vatAmount < 1) vatAmount = undefined
+    totalAmount = undefined
+  }
+  if (
+    vatAmount === 0 &&
+    netAmount != null &&
+    netAmount > 20 &&
+    (totalAmount == null || Math.abs(totalAmount - netAmount) > 0.05)
+  ) {
+    vatAmount = undefined
+  }
+
   let invoiceNo = String(row.invoiceNo || '').trim() || undefined
   if (invoiceNo) {
     invoiceNo =
       recoverShopeeInvoiceNo(invoiceNo) ||
-      recoverGrabInvoiceNo(invoiceNo, sellerTaxId) ||
+      recoverGrabInvoiceNo(invoiceNo, sellerTaxId, hint?.taxMonth) ||
       recoverKasikornInvoiceNo(invoiceNo) ||
       cleanInvoiceNo(invoiceNo) ||
       (invoiceNoLooksPlausible(invoiceNo) ? compactInvoiceToken(invoiceNo) : undefined)
+  }
+  const pageText = hint?.pageText || ''
+  if (pageText) {
+    const fromPage =
+      recoverShopeeInvoiceNo(pageText) ||
+      recoverGrabInvoiceNo(pageText, sellerTaxId, hint?.taxMonth) ||
+      recoverKasikornInvoiceNo(pageText)
+    if (fromPage && invoiceFromPageBeatsCurrent(fromPage, invoiceNo)) invoiceNo = fromPage
   }
   // 세금번호 일부가 문서번호로 잡힌 경우 (`565002677` ⊂ `0605565002677`)
   if (invoiceNo && sellerTaxId) {
@@ -1011,8 +1221,7 @@ export function repairExtractedPurchaseTaxInvoice(
   const knownName = sellerTaxId ? KNOWN_TIN_SELLER_NAMES[sellerTaxId] : undefined
   if (knownName) sellerName = knownName
   else if (!sellerName && inferredSeller) sellerName = inferredSeller.name
-  const sellerBranch =
-    row.sellerBranch || (sellerTaxId && KNOWN_TIN_SELLER_NAMES[sellerTaxId] ? 'สำนักงานใหญ่' : undefined)
+  const sellerBranch = row.sellerBranch || undefined
 
   const docDate = snapDocDateYearToTaxPeriod(
     row.docDate || (invoiceNo ? inferDocDateFromInvoiceNo(invoiceNo) : undefined),

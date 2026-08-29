@@ -10,6 +10,7 @@
  */
 import {
   digitsTin13,
+  purchaseTaxVatLooksWrong,
   thaiTinChecksumOk,
   type ExtractedPurchaseTaxInvoiceFields,
 } from './purchase-tax-invoice-core'
@@ -207,14 +208,21 @@ function cleanLayoutInvoiceToken(raw: string): string {
 }
 
 function invoiceTokenLooksReal(token: string): boolean {
-  if (token.length < 4 || token.length > 40) return false
+  if (token.length < 4 || token.length > 48) return false
   if (!/\d/.test(token)) return false
   const digits = token.replace(/\D/g, '')
   if (digits.length < 3) return false
   // 13자리 숫자만 있으면 세금번호를 집은 것
   if (!/[A-Za-z]/.test(token) && digits.length === 13) return false
   if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(token)) return false
+  if (/^GD-\d{1,4}-\d{1,4}$/i.test(token)) return false
+  if (/^\d{0,2}-\d{2}-\d{2}$/.test(token)) return false
+  if (/^NO?\d{13}$/i.test(token)) return false
   return true
+}
+
+function isTruncatedShopeeToken(token: string): boolean {
+  return /^TRS[A-Z]{2,8}PF00-\d{5}-\d{1,5}$/i.test(token)
 }
 
 /** 단어 안에서 태국어를 빼고 남는 영숫자 토막들 */
@@ -241,9 +249,52 @@ function adjacent(a: OcrWordBox, b: OcrWordBox): boolean {
  * 붙어서 `1105100429022026` 이 된다. 다만 바로 앞에 `IV` 같은 머리글자가 떨어져 찍혀
  * 있으면 그것만 되붙인다.
  */
+/** Shopee 번호는 `TRSPESPF00-00000-26` / `0701-017862` 처럼 두 토막으로 찍힌다 */
+function extendShopeeToken(token: string, words: OcrWordBox[], fromIdx: number): string {
+  if (!isTruncatedShopeeToken(token)) return token
+  const head = token.match(/^(TRS[A-Z]{2,8}PF00-\d{5}-)(\d{2,5})$/i)
+  if (!head) return token
+  for (let i = fromIdx + 1; i < Math.min(words.length, fromIdx + 8); i += 1) {
+    const run = asciiRuns(words[i].text)[0] || cleanLayoutInvoiceToken(words[i].text)
+    const tail = run.match(/^(\d{4})-(\d{5,8})$/)
+    if (!tail) continue
+    if (head[2].length + tail[1].length !== 6) continue
+    const joined = `${head[1]}${head[2]}${tail[1]}-${tail[2]}`
+    if (invoiceTokenLooksReal(joined)) return joined
+  }
+  return token
+}
+
+function completeShopeeInvoiceToken(token: string, layout: OcrPageLayout): string {
+  if (!isTruncatedShopeeToken(token)) return token
+  const head = token.match(/^(TRS[A-Z]{2,8}PF00-\d{5}-)(\d{2,5})$/i)
+  if (!head) return token
+  let anchor: OcrWordBox | undefined
+  for (const line of layout.lines) {
+    for (const w of line.words) {
+      const run = asciiRuns(w.text)[0] || ''
+      if (run === token) anchor = w
+      else if (!anchor && run.startsWith('TRS')) anchor = w
+    }
+  }
+  let best: { token: string; dist: number } | undefined
+  for (const line of layout.lines) {
+    for (const w of line.words) {
+      if (anchor && w.y1 < anchor.y0 - 4) continue
+      const run = asciiRuns(w.text)[0] || cleanLayoutInvoiceToken(w.text)
+      const tail = run.match(/^(\d{4})-(\d{5,8})$/)
+      if (!tail || head[2].length + tail[1].length !== 6) continue
+      const joined = `${head[1]}${head[2]}${tail[1]}-${tail[2]}`
+      const dist = anchor ? Math.abs(w.x0 - anchor.x0) + Math.max(0, w.y0 - anchor.y1) : 0
+      if (!best || dist < best.dist) best = { token: joined, dist }
+    }
+  }
+  return best?.token || token
+}
+
 function invoiceValueFromWords(words: OcrWordBox[]): { token: string; conf: number } | undefined {
   const usable: OcrWordBox[] = []
-  for (const w of words.slice(0, 8)) {
+  for (const w of words.slice(0, 12)) {
     const t = String(w.text || '').trim()
     if (!t) continue
     if (INVOICE_VALUE_STOP_RE.test(normalizeLabelText(t))) break
@@ -263,10 +314,10 @@ function invoiceValueFromWords(words: OcrWordBox[]): { token: string; conf: numb
       ) {
         const joined = cleanLayoutInvoiceToken(`${prev.text}${run}`)
         if (invoiceTokenLooksReal(joined)) {
-          return { token: joined, conf: Math.round((prev.conf + w.conf) / 2) }
+          return { token: extendShopeeToken(joined, usable, i), conf: Math.round((prev.conf + w.conf) / 2) }
         }
       }
-      return { token: run, conf: w.conf }
+      return { token: extendShopeeToken(run, usable, i), conf: w.conf }
     }
   }
   for (let i = 0; i < usable.length - 1; i += 1) {
@@ -458,7 +509,7 @@ function collectInvoiceCandidates(layout: OcrPageLayout): InvoiceCandidate[] {
       }
       if (!value) continue
       out.push({
-        token: value.token,
+        token: completeShopeeInvoiceToken(value.token, layout),
         conf: value.conf,
         labelScore: label.score,
         labelName: label.name,
@@ -552,7 +603,8 @@ export function findLayoutInvoiceNo(
     best = { ...c, score }
   }
   if (!best) return undefined
-  const restored = hint ? restoreVendorPrefix(best.token, hint) : best.token
+  const completed = completeShopeeInvoiceToken(best.token, layout)
+  const restored = hint ? restoreVendorPrefix(completed, hint) : completed
   return {
     value: restored,
     confidence: Math.min(
@@ -814,7 +866,12 @@ export function findLayoutAmounts(layout: OcrPageLayout): {
   }
 
   if (!combos.length) return {}
-  combos.sort((a, b) => b.score - a.score || b.net - a.net)
+  for (const c of combos) {
+    if (combos.some((o) => o !== c && Math.abs(o.net - c.vat) < 0.02 && o.net < c.net - 0.05)) {
+      c.score -= 12
+    }
+  }
+  combos.sort((a, b) => b.score - a.score || a.net - b.net)
   const top = combos[0]
   const ambiguous = combos.some((c) => c !== top && c.score === top.score && Math.abs(c.net - top.net) > 0.01)
   const meanConf = top.observed.reduce((a, m) => a + m.conf, 0) / top.observed.length
@@ -847,6 +904,10 @@ const DUE_DATE_LABEL_RE = labelPattern(
 
 function toIsoDate(d: number, m: number, y: number): string | undefined {
   let year = y
+  if (year > 2100 && year < 100000) {
+    const last4 = year % 10000
+    if (last4 >= 2000 && last4 <= 2100) year = last4
+  }
   if (year < 100) year += year > 60 ? 1900 : 2000
   if (year >= 2400) year -= 543
   if (year < 2000 || year > 2100) return undefined
@@ -854,25 +915,51 @@ function toIsoDate(d: number, m: number, y: number): string | undefined {
   return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
+const EN_MONTH_NUM: Record<string, number> = {
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+}
+
 export function findLayoutDocDate(layout: OcrPageLayout): LayoutField<string> | undefined {
   const lines = compactLayoutLines(layout)
   let best: (LayoutField<string> & { score: number }) | undefined
+  const consider = (iso: string, conf: number, labeled: boolean, isDue: boolean) => {
+    const score = (labeled ? 10 : 0) - (isDue ? 8 : 0) + Math.round(conf / 25)
+    if (best && best.score >= score) return
+    best = {
+      value: iso,
+      confidence: Math.min(99, conf),
+      source: labeled ? 'date-labeled' : 'date-plain',
+      score,
+    }
+  }
   for (const cl of lines) {
     const isDue = DUE_DATE_LABEL_RE.test(cl.text)
     const labeled = DOC_DATE_LABEL_RE.test(cl.text)
+    const en = String(cl.text || '').match(
+      /\b(\d{1,2})[.\-/\s]+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[.\-/\s]+(\d{2,4})\b/i
+    )
+    if (en) {
+      const month = EN_MONTH_NUM[en[2].slice(0, 3).toLowerCase()]
+      const iso = month ? toIsoDate(Number(en[1]), month, Number(en[3])) : undefined
+      if (iso) consider(iso, cl.line.conf, labeled, isDue)
+    }
     for (const w of cl.line.words) {
-      const m = String(w.text || '').match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/)
+      const m = String(w.text || '').match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,5})$/)
       if (!m) continue
       const iso = toIsoDate(Number(m[1]), Number(m[2]), Number(m[3]))
       if (!iso) continue
-      const score = (labeled ? 10 : 0) - (isDue ? 8 : 0) + Math.round(w.conf / 25)
-      if (best && best.score >= score) continue
-      best = {
-        value: iso,
-        confidence: Math.min(99, w.conf),
-        source: labeled ? 'date-labeled' : 'date-plain',
-        score,
-      }
+      consider(iso, w.conf, labeled, isDue)
     }
   }
   if (!best) return undefined
@@ -933,7 +1020,35 @@ function invoiceNoQuality(raw?: string): number {
   return q
 }
 
-const WEAK_INVOICE_SOURCES = new Set(['header-unlabeled', 'vendor-pattern', 'bare-no-en'])
+const WEAK_INVOICE_SOURCES = new Set(['header-unlabeled', 'vendor-pattern', 'bare-no-en', 'bare-no-th'])
+
+function layoutInvoiceLooksJunk(token: string): boolean {
+  const t = String(token || '').trim()
+  if (!t) return true
+  if (/^GD-\d{1,4}-\d{1,4}$/i.test(t)) return true
+  if (/^\d{0,2}-\d{2}-\d{2}$/.test(t)) return true
+  if (/^NO?\d{13}$/i.test(t)) return true
+  if (isTruncatedShopeeToken(t)) return true
+  if (!/[A-Za-z]/.test(t) && t.replace(/\D/g, '').length === 13) return true
+  return false
+}
+
+/** 텍스트 번호가 좌표보다 거래처 꼴에 가깝거나, 좌표가 쓰레기면 텍스트를 지킨다 */
+function textInvoiceBeatsLayout(base: string, layout: string): boolean {
+  if (layoutInvoiceLooksJunk(layout) && !layoutInvoiceLooksJunk(base)) return true
+  const b = normToken(base)
+  const l = normToken(layout)
+  if (/^IM20\d/.test(b) && /^[T1]M20\d/.test(l)) return true
+  if (b.startsWith('TRS') && l.startsWith('TRS')) {
+    const baseOk = /^TRS[A-Z]{2,8}PF00-\d{5}-\d{6}-\d{6}$/i.test(base)
+    const layoutOk = /^TRS[A-Z]{2,8}PF00-\d{5}-\d{6}-\d{6}$/i.test(layout)
+    if (layoutOk && !baseOk) return false
+    if (baseOk && !layoutOk) return true
+    if (b.length > l.length + 2) return true
+  }
+  if (/^\d{6}[EFH]\d{7,14}$/i.test(b) && !/^\d{6}[EFH]\d{7,14}$/i.test(l)) return true
+  return invoiceNoQuality(base) > invoiceNoQuality(layout) + 8
+}
 
 /**
  * 좌표 판독이 텍스트 판독보다 믿을 만한 항목만 덮어쓴다.
@@ -954,12 +1069,13 @@ export function applyLayoutExtract(
   const no = usable(extract.invoiceNo)
   if (no) {
     const baseNo = fields.invoiceNo
-    const layoutWeak = WEAK_INVOICE_SOURCES.has(no.source.replace(/\+prefix$/, '')) || no.confidence < 70
+    const layoutWeak =
+      WEAK_INVOICE_SOURCES.has(no.source.replace(/\+prefix$/, '').replace(/-right$/, '')) || no.confidence < 70
     const keepBase =
       Boolean(baseNo) &&
       !sameNo(baseNo, no.value) &&
-      layoutWeak &&
-      invoiceNoQuality(baseNo) >= invoiceNoQuality(no.value)
+      (textInvoiceBeatsLayout(baseNo!, no.value) ||
+        (layoutWeak && invoiceNoQuality(baseNo) >= invoiceNoQuality(no.value)))
     if (!keepBase) {
       if (baseNo && !sameNo(baseNo, no.value)) disagreed.push('invoiceNo')
       if (baseNo !== no.value) usedLayout.push('invoiceNo')
@@ -978,14 +1094,24 @@ export function applyLayoutExtract(
   const net = usable(extract.netAmount)
   const vat = usable(extract.vatAmount)
   if (net && vat) {
+    const baseOk =
+      fields.netAmount != null &&
+      fields.vatAmount != null &&
+      fields.vatAmount > 0 &&
+      !purchaseTaxVatLooksWrong(fields.netAmount, fields.vatAmount)
+    const layoutOk = !purchaseTaxVatLooksWrong(net.value, vat.value)
     const changed =
       Math.abs((fields.netAmount ?? -1) - net.value) > 0.01 || Math.abs((fields.vatAmount ?? -1) - vat.value) > 0.01
-    if (fields.netAmount !== undefined && Math.abs(fields.netAmount - net.value) > 0.01) disagreed.push('netAmount')
-    if (changed) usedLayout.push('amounts')
-    fields.netAmount = net.value
-    fields.vatAmount = vat.value
-    const total = usable(extract.totalAmount)
-    if (total) fields.totalAmount = total.value
+    if (baseOk && !layoutOk && changed) {
+      // 텍스트 금액이 7%를 통과하는데 좌표가 깨진 숫자를 가져온 경우
+    } else {
+      if (fields.netAmount !== undefined && Math.abs(fields.netAmount - net.value) > 0.01) disagreed.push('netAmount')
+      if (changed) usedLayout.push('amounts')
+      fields.netAmount = net.value
+      fields.vatAmount = vat.value
+      const total = usable(extract.totalAmount)
+      if (total) fields.totalAmount = total.value
+    }
   }
 
   if (!fields.docDate && extract.docDate) fields.docDate = extract.docDate.value
