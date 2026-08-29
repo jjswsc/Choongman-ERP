@@ -472,9 +472,10 @@ function collectInvoiceCandidates(layout: OcrPageLayout): InvoiceCandidate[] {
 
 /**
  * 라벨 없이 머리말 구석에 번호만 찍는 양식이 있다 (`Menustyle Printing   IV-016119`).
- * 라벨 후보가 하나도 없을 때를 대비한 약한 후보 — 영문 머리글자 + 숫자 꼴만 받는다.
+ * 라벨 후보가 하나도 없을 때를 대비한 약한 후보 — 영문 머리글자 + 숫자 5자리 이상만 받는다.
+ * `ud2932` `nA2569` 같은 OCR 잔여물은 여기서 걸러진다.
  */
-const UNLABELED_INVOICE_RE = /^[A-Za-z]{1,5}[-/]?\d{4,14}$/
+const UNLABELED_INVOICE_RE = /^[A-Za-z]{1,5}[-/]?\d{5,14}([-/]\d{1,6})?$/
 
 function findUnlabeledHeaderTokens(layout: OcrPageLayout): InvoiceCandidate[] {
   const height = Math.max(1, layout.height)
@@ -681,6 +682,12 @@ const MONEY_SKIP_LINE_RE = labelPattern(
   'EXEMPT|WITHHOLD|DISCOUNT'
 )
 
+/** 마켓·배송형 — 배송비·수수료 합이 과세 공급가인 경우 */
+const TAXABLE_PART_RE = labelPattern(
+  ['ค่าจัดส่ง', 'ค่าบริการ', 'ค่าขนส่ง', 'ค่าธรรมเนียม'],
+  'SHIPPING|SERVICE\\s*FEE|DELIVERY\\s*FEE|HANDLING'
+)
+
 export function collectLayoutMoney(layout: OcrPageLayout): MoneyHit[] {
   const lines = compactLayoutLines(layout)
   const out: MoneyHit[] = []
@@ -774,6 +781,35 @@ export function findLayoutAmounts(layout: OcrPageLayout): {
         derived: 1,
         score: (vatLabel ? 4 : 0) + (totalLabel ? 3 : 0) + 4,
       })
+    }
+  }
+
+  /**
+   * Grab·Shopee 식 — 면세 품목과 배송·수수료가 나뉘어 있고, 과세 공급가는
+   * 배송비+수수료 합이다. 한 칸에 91.59 가 없고 73.83 + 17.76 만 찍혀 있어도
+   * 부가세 6.41(=91.59×7%) 로 되짚을 수 있다.
+   */
+  for (const vat of money) {
+    if (!lineHas(lines, vat.lineIdx, VAT_LABEL_RE)) continue
+    const wantNet = round2(vat.value / 0.07)
+    if (wantNet < 1) continue
+    if (money.some((m) => Math.abs(m.value - wantNet) <= 0.05)) continue
+    const parts = money.filter(
+      (m) => m !== vat && m.value < wantNet && lineHas(lines, m.lineIdx, TAXABLE_PART_RE)
+    )
+    for (let i = 0; i < parts.length; i += 1) {
+      for (let j = i + 1; j < parts.length; j += 1) {
+        const net = round2(parts[i].value + parts[j].value)
+        if (Math.abs(net - wantNet) > 0.05) continue
+        combos.push({
+          net,
+          vat: vat.value,
+          total: round2(net + vat.value),
+          observed: [vat, parts[i], parts[j]],
+          derived: 1,
+          score: 9,
+        })
+      }
     }
   }
 
@@ -885,10 +921,25 @@ function usable<T>(f: LayoutField<T> | undefined): LayoutField<T> | undefined {
 const sameNo = (a?: string, b?: string) =>
   normToken(String(a || '')) === normToken(String(b || '')) && Boolean(a) && Boolean(b)
 
+/** 번호 후보 품질 — 숫자 자릿수 + 영문 머리글자. 좌표 판독이 텍스트를 덮을지 판단할 때 쓴다. */
+function invoiceNoQuality(raw?: string): number {
+  const t = normToken(String(raw || ''))
+  if (!t) return 0
+  const digits = (t.match(/\d/g) || []).length
+  const hasAlpha = /[A-Za-z]/.test(t)
+  let q = digits * 2 + (hasAlpha ? 4 : 0) + Math.min(8, t.length)
+  if (digits < 5) q -= 20
+  if (/^[A-Z]{1,2}\d{1,4}$/i.test(t)) q -= 15
+  return q
+}
+
+const WEAK_INVOICE_SOURCES = new Set(['header-unlabeled', 'vendor-pattern', 'bare-no-en'])
+
 /**
  * 좌표 판독이 텍스트 판독보다 믿을 만한 항목만 덮어쓴다.
  *
- * 번호·세금번호·금액은 라벨 위치와 7% 검산으로 교차 확인되므로 좌표 쪽을 쓴다.
+ * 번호는 좌표 쪽이 약하면(머리말 무라벨·짧은 토큰) 텍스트 정답을 지워 버리지 않는다.
+ * 세금번호·금액은 라벨 위치와 7% 검산으로 교차 확인되므로 좌표 쪽을 쓴다.
  * 판매자명·지점·날짜는 태국어 문장을 통으로 봐야 해서 기존 텍스트 판독이 더 낫다.
  */
 export function applyLayoutExtract(
@@ -902,9 +953,18 @@ export function applyLayoutExtract(
 
   const no = usable(extract.invoiceNo)
   if (no) {
-    if (fields.invoiceNo && !sameNo(fields.invoiceNo, no.value)) disagreed.push('invoiceNo')
-    if (fields.invoiceNo !== no.value) usedLayout.push('invoiceNo')
-    fields.invoiceNo = no.value
+    const baseNo = fields.invoiceNo
+    const layoutWeak = WEAK_INVOICE_SOURCES.has(no.source.replace(/\+prefix$/, '')) || no.confidence < 70
+    const keepBase =
+      Boolean(baseNo) &&
+      !sameNo(baseNo, no.value) &&
+      layoutWeak &&
+      invoiceNoQuality(baseNo) >= invoiceNoQuality(no.value)
+    if (!keepBase) {
+      if (baseNo && !sameNo(baseNo, no.value)) disagreed.push('invoiceNo')
+      if (baseNo !== no.value) usedLayout.push('invoiceNo')
+      fields.invoiceNo = no.value
+    }
   }
 
   const tin = usable(extract.sellerTaxId)

@@ -52,6 +52,7 @@ import {
   purchaseTaxInvoiceNeedsSparseOcr,
   purchaseTaxInvoiceScanFailI18nKey,
   purchaseTaxInvoiceTextExtractIsComplete,
+  repairExtractedPurchaseTaxInvoice,
   splitScanTextIntoInvoiceBlocks,
   wrapTaxInvoiceQrText,
   type PurchaseTaxInvoiceScanHint,
@@ -595,10 +596,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         return
       }
       const textOnly = extractPurchaseTaxInvoiceFromScanText(pageText, hint) || {}
-      const merged = layout
+      const layoutFields = layout
         ? applyLayoutExtract(textOnly, extractFromLayout(layout, hint.buyerTaxId, vendorHints())).fields
         : textOnly
-      const local = fillSellerFromProfiles(merged, known)
+      const local = fillSellerFromProfiles(
+        repairExtractedPurchaseTaxInvoice(layoutFields, { ...hint, pageText }),
+        known
+      )
       if (local && purchaseTaxInvoiceHasExtractedFields(local)) {
         pushFromParsed(local, page)
         return

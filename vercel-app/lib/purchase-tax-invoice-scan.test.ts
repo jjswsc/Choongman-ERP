@@ -296,6 +296,40 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(repaired.vatAmount).toBe(6.41)
   })
 
+  it('does not leave net equal to VAT — reverse from 7%', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'INV-20260616066', sellerTaxId: SELLER, netAmount: 6.41, vatAmount: 6.41 },
+      { buyerTaxId: BUYER }
+    )
+    expect(repaired.netAmount).toBe(91.57)
+    expect(repaired.vatAmount).toBe(6.41)
+  })
+
+  it('drops an invoice number that is just a slice of the seller TIN', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice({
+      invoiceNo: '565002677',
+      sellerTaxId: '0605565002677',
+      netAmount: 100,
+      vatAmount: 7,
+    })
+    expect(repaired.invoiceNo).toBeUndefined()
+    expect(repaired.sellerTaxId).toBe('0605565002677')
+  })
+
+  it('infers taxable net from shipping + service fee', () => {
+    const inferred = inferAmountsFromMoneySequence(
+      [
+        'สินค้าเกษตรยกเว้น / TOTAL AMOUNT (VAT EXEMPTED ITEMS) 658.00',
+        'ค่าจัดส่ง / SHIPPING COST 73.83',
+        'ค่าบริการอื่น ๆ / SERVICE FEE 17.76',
+        'ภาษีมูลค่าเพิ่ม / VAT 7% 6.41',
+        'จำนวนเงินรวมทั้งสิ้น / SUBTOTAL 756.00',
+      ].join('\n')
+    )
+    expect(inferred?.netAmount).toBe(91.59)
+    expect(inferred?.vatAmount).toBe(6.41)
+  })
+
   it('unwraps a VAT-inclusive printed total 1100 to 1028.04', () => {
     const repaired = repairExtractedPurchaseTaxInvoice({
       invoiceNo: '2607064',

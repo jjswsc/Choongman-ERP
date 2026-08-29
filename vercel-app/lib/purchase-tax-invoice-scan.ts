@@ -481,7 +481,34 @@ export function inferAmountsFromMoneySequence(text: string): {
       return { netAmount, vatAmount, totalAmount: roundMoney2(netAmount + vatAmount) }
     }
   }
+  // Grab·Shopee: 배송비+수수료 합 = 과세 공급가 (한 칸에 합계가 안 찍힌 경우)
+  const shippingParts = collectLabeledBahtParts(text, /ค่าจัดส่ง|ค่าขนส่ง|SHIPPING|DELIVERY\s*FEE/i)
+  const serviceParts = collectLabeledBahtParts(text, /ค่าบริการ|SERVICE\s*FEE|HANDLING/i)
+  const vatLabeled = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
+  if (vatLabeled != null && vatLabeled > 0) {
+    const wantNet = roundMoney2(vatLabeled / 0.07)
+    for (const s of shippingParts) {
+      for (const f of serviceParts) {
+        const net = roundMoney2(s + f)
+        if (Math.abs(net - wantNet) <= 0.05) {
+          return { netAmount: net, vatAmount: vatLabeled, totalAmount: roundMoney2(net + vatLabeled) }
+        }
+      }
+    }
+  }
   return null
+}
+
+function collectLabeledBahtParts(text: string, label: RegExp): number[] {
+  const out: number[] = []
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!label.test(line) || lineLooksLikeWithholdingOrExempt(line)) continue
+    for (const m of line.matchAll(/\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2}/g)) {
+      const v = Number(m[0].replace(/,/g, ''))
+      if (Number.isFinite(v) && v > 0) out.push(roundMoney2(v))
+    }
+  }
+  return out
 }
 
 function firstQueryValue(params: URLSearchParams, keys: string[]): string {
@@ -906,6 +933,15 @@ export function repairExtractedPurchaseTaxInvoice(
       if (hit) {
         netAmount = hit
         totalAmount = roundMoney2(netAmount + vatAmount)
+      } else if (Math.abs(netAmount - vatAmount) < 0.02) {
+        // 공급가·부가세가 같은 숫자로 들어간 경우 — 부가세만 믿고 공급가는 7% 역산하거나 비운다
+        if (wantNet >= 1 && wantNet < 500_000_000) {
+          netAmount = wantNet
+          totalAmount = roundMoney2(netAmount + vatAmount)
+        } else {
+          netAmount = undefined
+          totalAmount = undefined
+        }
       } else if (vatAmount < netAmount && wantNet >= 1 && wantNet < netAmount) {
         netAmount = wantNet
         totalAmount = roundMoney2(netAmount + vatAmount)
@@ -952,6 +988,11 @@ export function repairExtractedPurchaseTaxInvoice(
       recoverKasikornInvoiceNo(invoiceNo) ||
       cleanInvoiceNo(invoiceNo) ||
       (invoiceNoLooksPlausible(invoiceNo) ? compactInvoiceToken(invoiceNo) : undefined)
+  }
+  // 세금번호 일부가 문서번호로 잡힌 경우 (`565002677` ⊂ `0605565002677`)
+  if (invoiceNo && sellerTaxId) {
+    const invDigits = invoiceNo.replace(/\D/g, '')
+    if (invDigits.length >= 8 && sellerTaxId.includes(invDigits)) invoiceNo = undefined
   }
   const inferredSeller = invoiceNo ? inferSellerFromInvoiceNo(invoiceNo, sellerTaxId) : null
   if (inferredSeller) {

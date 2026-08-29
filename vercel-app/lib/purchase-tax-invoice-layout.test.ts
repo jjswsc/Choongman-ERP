@@ -236,6 +236,15 @@ describe('applyLayoutExtract', () => {
     expect(got.disagreed).toContain('invoiceNo')
   })
 
+  it('약한 머리말 후보가 더 그럴듯한 텍스트 번호를 덮지 않는다', () => {
+    const got = applyLayoutExtract(
+      { invoiceNo: 'RV269070486' },
+      { invoiceNo: { value: 'ud2932', confidence: 60, source: 'header-unlabeled' } }
+    )
+    expect(got.fields.invoiceNo).toBe('RV269070486')
+    expect(got.usedLayout).toHaveLength(0)
+  })
+
   it('흐릿한 값은 덮어쓰지 않는다', () => {
     const got = applyLayoutExtract(
       { invoiceNo: 'INV2026070017' },
@@ -248,5 +257,20 @@ describe('applyLayoutExtract', () => {
   it('좌표 판독이 없으면 원본을 그대로 둔다', () => {
     const got = applyLayoutExtract({ invoiceNo: 'A1', netAmount: 5 }, undefined)
     expect(got.fields).toEqual({ invoiceNo: 'A1', netAmount: 5 })
+  })
+})
+
+describe('마켓형 금액', () => {
+  it('배송비+수수료 합이 부가세의 과세표준이면 공급가로 쓴다', () => {
+    const got = findLayoutAmounts(
+      page([
+        line(2880, [['ค่าจัดส่ง', 1400], ['SHIPPING', 1600], ['73.83', 2100]]),
+        line(2920, [['ค่าบริการ', 1400], ['SERVICE', 1600], ['FEE', 1750], ['17.76', 2100]]),
+        line(2960, [['ภาษีมูลค่าเพิ่ม', 1400], ['VAT', 1700], ['6.41', 2100]]),
+        line(3000, [['รวมทั้งสิ้น', 1400], ['756.00', 2100]]),
+      ])
+    )
+    expect(got.net?.value).toBe(91.59)
+    expect(got.vat?.value).toBe(6.41)
   })
 })
