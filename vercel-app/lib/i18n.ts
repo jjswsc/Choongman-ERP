@@ -7772,7 +7772,7 @@ export const i18n = {
     helpSum_admin_live_store_sales:
       '당일 실시간 매출 전용 화면입니다. 확정 매출·미결제 테이블·예상 총액을 구분해 보고, 차트·운영 KPI·테이블 현황을 확인합니다. 홈「대시보드」와 별도 메뉴입니다.',
     helpHow_admin_live_store_sales:
-      '① 본사(오피스)는 기본「전체 매장」입니다. 상단에서 지점만 골라 상세를 볼 수 있습니다.\n② 확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 결제 전 좌석(서빙완료 ready 포함)이며 홀에 더하지 않습니다. 예상 총액=확정+아직 확정에 없는 좌석(조리중 등).\n③ 당일 매출 차트: 시간대·매장별·홀/배달/포장·배달앱 —「검색」으로 갱신. 상세 분석은「매출 관리」.\n④ 운영 대시보드: 확정·미결제 테이블·예상·대기·지연·품절·취소율.\n⑤ 하단: 매장별 테이블·주문 실시간(지점·가맹 전체 선택 시).\n⑥ 모바일 전용 UI는 `/store-sales`를 이용하세요.',
+      '① 본사(오피스)는 기본「전체 매장」입니다. 상단에서 지점만 골라 상세를 볼 수 있습니다.\n② 확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 결제 전 좌석(서빙완료 ready 포함)이며 홀에 더하지 않습니다. 예상 총액=확정+아직 확정에 없는 좌석(조리중 등).\n③ 상단「검색」으로 당일 매출·테이블·차트·운영 KPI를 한꺼번에 다시 조회합니다(자동 갱신 없음). 탭 안「검색」은 해당 영역만 갱신합니다.\n④ 운영 대시보드: 확정·미결제 테이블·예상·대기·지연·품절·취소율.\n⑤ 하단: 매장별 테이블·주문 실시간(지점·가맹 전체 선택 시).\n⑥ 모바일 전용 UI는 `/store-sales`를 이용하세요.',
     helpSum_admin_ops_center:
       '주문·결제·인쇄·일마감 지표를 한 화면에서 모니터링하고, 임계치 경보를 빠르게 확인하는 운영 관제 화면입니다.',
     helpSum_admin_ai_center:
@@ -16018,7 +16018,7 @@ orderItemQty: 'Qty',
     helpSum_admin_live_store_sales:
       'Dedicated live sales screen: confirmed sales, unpaid tables, expected total, charts, ops KPIs, and live table status. Separate from the home Dashboard menu.',
     helpHow_admin_live_store_sales:
-      '① Head office defaults to All stores; pick a branch at the top for detail.\n② Treat Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid (includes ready/served) — do not add them into hall. Expected = confirmed + seats not yet in confirmed (e.g. cooking).\n③ Today’s charts: hourly, by store, hall/delivery/takeout, delivery apps — press Search to refresh. Use Sales management for deep dives.\n④ Ops block: confirmed, unpaid tables, expected, waiting/delay, stockout/cancel rates.\n⑤ Bottom: per-store live tables when a branch or franchise-all view is selected.\n⑥ Use `/store-sales` on mobile.',
+      '① Head office defaults to All stores; pick a branch at the top for detail.\n② Treat Confirmed sales as today’s revenue. Unpaid tables are seats not yet paid (includes ready/served) — do not add them into hall. Expected = confirmed + seats not yet in confirmed (e.g. cooking).\n③ Header Search reloads today’s sales, tables, charts, and ops KPIs together (no auto-refresh). In-tab Search refreshes that section only.\n④ Ops block: confirmed, unpaid tables, expected, waiting/delay, stockout/cancel rates.\n⑤ Bottom: per-store live tables when a branch or franchise-all view is selected.\n⑥ Use `/store-sales` on mobile.',
     helpSum_admin_ops_center:
       'Monitor order, payment, print, and day-close KPIs in one place and quickly triage threshold-based alerts.',
     helpSum_admin_ai_center:

@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { Radio, Search } from "lucide-react"
+import { Radio } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -26,8 +26,8 @@ import {
   mergeRealtimeStoreSalesRows,
 } from "@/lib/pos-realtime-store-rows"
 import type { Store } from "@/lib/pos-types"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { LiveSalesSearchButton } from "@/components/erp/live-sales-search-button"
 import { cn } from "@/lib/utils"
 import { ERP_NUMERIC_CHART_TICK, ADMIN_CHART_COLORS } from "@/lib/admin-ui-standards"
 
@@ -75,12 +75,12 @@ export type StoreSalesRealtimeViewProps = {
   /** `showInlineRefresh`일 때 배지+라벨 버튼 스타일 (관리자 페이지용) */
   showHeaderBadge?: boolean
   /** 모바일 등 외부 헤더 버튼에서 같은 갱신을 호출할 때 */
-  onRegisterRefresh?: (refresh: () => void) => void
+  onRegisterRefresh?: (refresh: () => void | Promise<void>) => void
   /** 관리자 대시보드: 실시간 합계·매장·테이블을 차트로 표시 */
   showSalesCharts?: boolean
   /** 관리자 전체 매장: 상단 `AdminSalesDashboardCharts` 매장별 표와 중복 방지 */
   hideByStoreSection?: boolean
-  /** 부모 자동 갱신 토큰 */
+  /** 부모「검색」토큰 — 당일 매출만 강제 재조회(테이블은 부모가 refetch) */
   refreshToken?: number
   className?: string
 }
@@ -121,7 +121,6 @@ export function StoreSalesRealtimeView({
   const [todaySales, setTodaySales] = useState<TodaySalesSummary | null>(null)
   const [storeSalesMap, setStoreSalesMap] = useState<Record<string, TodaySalesSummary>>({})
   const [tableSortMode, setTableSortMode] = useState<"amount" | "guests">("amount")
-  const [salesLoading, setSalesLoading] = useState(false)
 
   /** 테이블/주문만 바뀌고 매장 ID 집합이 같으면 동일 — `stores` 참조 변경으로 당일 매출 API가 반복 호출되는 것을 막음 */
   const allStoresCodesKey = useMemo(() => {
@@ -132,7 +131,6 @@ export function StoreSalesRealtimeView({
   const loadTodaySales = useCallback((opts?: { forceNetwork?: boolean }) => {
     const forceNetwork = Boolean(opts?.forceNetwork)
     if (!effectiveStoreCode) return Promise.resolve()
-    setSalesLoading(true)
     const empty: TodaySalesSummary = {
       completedCount: 0,
       completedTotal: 0,
@@ -147,7 +145,6 @@ export function StoreSalesRealtimeView({
         pendingCount: Number(data.pendingCount ?? 0),
       })
     }
-    const done = () => setSalesLoading(false)
 
     if (!isAllStoresSelected) {
       return getPosTodaySales({ storeCode: effectiveStoreCode, forceNetwork })
@@ -156,7 +153,6 @@ export function StoreSalesRealtimeView({
           setStoreSalesMap((prev) => ({ ...prev, [effectiveStoreCode]: data }))
         })
         .catch(() => setTodaySales(null))
-        .finally(done)
     }
     const storeCodes = allStoresCodesKey
       ? allStoresCodesKey.split(",").map((c) => c.trim()).filter(Boolean)
@@ -164,7 +160,6 @@ export function StoreSalesRealtimeView({
     if (!storeCodes.length) {
       setTodaySales(empty)
       setStoreSalesMap({})
-      done()
       return Promise.resolve()
     }
     return getPosTodaySales({ storeCodes, forceNetwork })
@@ -180,20 +175,19 @@ export function StoreSalesRealtimeView({
         setStoreSalesMap({})
         setTodaySales(null)
       })
-      .finally(done)
   }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey])
 
-  const refreshRealtimeSection = useCallback(() => {
-    loadTodaySales({ forceNetwork: true })
-    if (effectiveStoreCode && !isAllStoresSelected) {
-      void refetchStores({
-        storeCode: effectiveStoreCode,
-        immediate: true,
-        forceFullRefresh: true,
-      })
-      return
-    }
-    void refetchStores({ scope: "all", immediate: true, forceFullRefresh: true })
+  const refreshRealtimeSection = useCallback(async () => {
+    const salesTask = loadTodaySales({ forceNetwork: true })
+    const storesTask =
+      effectiveStoreCode && !isAllStoresSelected
+        ? refetchStores({
+            storeCode: effectiveStoreCode,
+            immediate: true,
+            forceFullRefresh: true,
+          })
+        : refetchStores({ scope: "all", immediate: true, forceFullRefresh: true })
+    await Promise.all([Promise.resolve(salesTask), Promise.resolve(storesTask)])
   }, [loadTodaySales, refetchStores, effectiveStoreCode, isAllStoresSelected])
 
   /** 당일 매출 숫자만 자동 갱신. 테이블/주문(getPosOrders)은 부모 usePosStore 초기 로드·수동 새로고침에만 맡김 — 중복 호출·전송량 절감 */
@@ -362,9 +356,17 @@ export function StoreSalesRealtimeView({
     [sortedTables]
   )
 
-  const handleManualRefresh = useCallback(() => {
-    refreshRealtimeSection()
-  }, [refreshRealtimeSection])
+  const [manualBusy, setManualBusy] = useState(false)
+
+  const handleManualRefresh = useCallback(async () => {
+    if (manualBusy) return
+    setManualBusy(true)
+    try {
+      await refreshRealtimeSection()
+    } finally {
+      setManualBusy(false)
+    }
+  }, [manualBusy, refreshRealtimeSection])
 
   useEffect(() => {
     if (refreshToken == null || refreshToken <= 0) return
@@ -379,7 +381,7 @@ export function StoreSalesRealtimeView({
     if (!onRegisterRefresh) return
     onRegisterRefresh(() => refreshLatest.current())
     return () => {
-      onRegisterRefresh(() => {})
+      onRegisterRefresh(() => Promise.resolve())
     }
   }, [onRegisterRefresh])
 
@@ -395,32 +397,21 @@ export function StoreSalesRealtimeView({
               <Radio className="h-3 w-3" aria-hidden />
               {t("mobileStoreSalesRealtimeBadge")}
             </Badge>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1.5"
+            <LiveSalesSearchButton
               onClick={handleManualRefresh}
-              disabled={salesLoading}
+              busy={manualBusy}
+              label={t("search")}
               title={t("mobileStoreSalesRefresh")}
-            >
-              <Search className={`h-4 w-4 ${salesLoading ? "animate-pulse" : ""}`} />
-              {t("search")}
-            </Button>
+            />
           </div>
         ) : (
           <div className="flex justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="shrink-0"
+            <LiveSalesSearchButton
               onClick={handleManualRefresh}
-              disabled={salesLoading}
+              busy={manualBusy}
+              label={t("search")}
               title={t("mobileStoreSalesRefresh")}
-            >
-              <Search className={`h-4 w-4 ${salesLoading ? "animate-pulse" : ""}`} />
-            </Button>
+            />
           </div>
         )
       ) : null}

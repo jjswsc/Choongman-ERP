@@ -21,6 +21,7 @@ import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-vi
 import { PosRevenueRealtimeDashboard } from "@/components/erp/pos-revenue-realtime-dashboard"
 import { AdminSalesDashboardCharts } from "@/components/erp/admin-sales-dashboard-charts"
 import { SalesPageHeader } from "@/components/erp/sales-page-header"
+import { LiveSalesSearchButton } from "@/components/erp/live-sales-search-button"
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { storeMatches } from "@/lib/admin-employee-store-access"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
@@ -37,13 +38,9 @@ import {
   adminTabsRootCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
 import { getBangkokDateTimeString } from "@/lib/bangkok-time"
-import { useErpPolling } from "@/lib/erp-page-visibility"
 
 const ALL_STORE_VALUE = "All"
-const AUTO_REFRESH_MS = 60_000
 
 export default function AdminLiveStoreSalesPage() {
   const { auth } = useAuth()
@@ -181,44 +178,42 @@ export default function AdminLiveStoreSalesPage() {
     return effectiveStoreCode || "—"
   }, [isOfficeSelector, effectiveStoreCode, showFranchiseAllRealtime, t])
 
-  const [autoRefresh, setAutoRefresh] = useState(false)
   const [refreshToken, setRefreshToken] = useState(0)
+  const [searchBusy, setSearchBusy] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const refreshInFlight = useRef(false)
 
-  const runRefresh = useCallback(() => {
+  const runSearch = useCallback(async () => {
     if (refreshInFlight.current) return
     refreshInFlight.current = true
+    setSearchBusy(true)
     setRefreshToken((n) => n + 1)
-    const refreshTask = refetchStores({
-      scope: isAllStoresTableTotal ? "all" : "current",
-      storeCode: isAllStoresTableTotal ? undefined : effectiveStoreCode,
-      immediate: true,
-      forceFullRefresh: true,
-    })
-    void Promise.resolve(refreshTask).finally(() => {
-      refreshInFlight.current = false
+    try {
+      await Promise.resolve(
+        refetchStores({
+          scope: isAllStoresTableTotal ? "all" : "current",
+          storeCode: isAllStoresTableTotal ? undefined : effectiveStoreCode,
+          immediate: true,
+          forceFullRefresh: true,
+        })
+      )
       setLastUpdated(new Date())
-    })
+    } finally {
+      refreshInFlight.current = false
+      setSearchBusy(false)
+    }
   }, [refetchStores, isAllStoresTableTotal, effectiveStoreCode])
-
-  useErpPolling(runRefresh, AUTO_REFRESH_MS, {
-    enabled: autoRefresh,
-    refetchOnActivate: true,
-  })
 
   const headerActions = (
     <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
       <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id="live-auto-refresh"
-          checked={autoRefresh}
-          onCheckedChange={(c) => setAutoRefresh(c === true)}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <LiveSalesSearchButton
+          onClick={runSearch}
+          busy={searchBusy}
+          label={t("search")}
+          title={t("search")}
         />
-        <Label htmlFor="live-auto-refresh" className="cursor-pointer text-xs text-muted-foreground">
-          {t("liveStoreSalesAutoRefresh")}
-        </Label>
       </div>
       {lastUpdated ? (
         <p className="text-[11px] text-muted-foreground">
@@ -269,8 +264,6 @@ export default function AdminLiveStoreSalesPage() {
                 currentStore={
                   showFranchiseAllRealtime || showOfficeAllRealtime ? undefined : currentStore
                 }
-                showInlineRefresh
-                showHeaderBadge
                 hideByStoreSection={hideDuplicateByStoreSection}
                 refreshToken={refreshToken}
               />

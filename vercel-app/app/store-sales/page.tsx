@@ -1,8 +1,8 @@
 "use client"
 
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Radio, Search } from "lucide-react"
+import { ArrowLeft, Radio } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -12,6 +12,7 @@ import { useStoreList } from "@/lib/use-store-list"
 import { StoreViewProvider, useStoreView } from "@/lib/store-view-context"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
 import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-view"
+import { LiveSalesSearchButton } from "@/components/erp/live-sales-search-button"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -33,7 +34,8 @@ function StoreSalesBody() {
   const { lang } = useLang()
   const t = useT(lang)
   const { viewStore } = useStoreView()
-  const realtimeRefreshRef = useRef<(() => void) | null>(null)
+  const realtimeRefreshRef = useRef<(() => void | Promise<void>) | null>(null)
+  const [searchBusy, setSearchBusy] = useState(false)
 
   const isOfficeSelector =
     Boolean(auth) && (isOfficeRole(auth?.role || "") || isOfficeStore(auth?.store || ""))
@@ -78,22 +80,30 @@ function StoreSalesBody() {
   }, [effectiveStoreCode, stores, setCurrentStoreId, allowed])
 
   useEffect(() => {
-    if (typeof document === 'undefined') return
+    if (typeof document === "undefined") return
     const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      realtimeRefreshRef.current?.()
+      if (document.visibilityState !== "visible") return
+      void realtimeRefreshRef.current?.()
     }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
   }, [])
 
-  const registerRealtimeRefresh = useCallback((fn: () => void) => {
+  const registerRealtimeRefresh = useCallback((fn: () => void | Promise<void>) => {
     realtimeRefreshRef.current = fn
   }, [])
 
-  const handleHeaderRefresh = useCallback(() => {
-    realtimeRefreshRef.current?.()
-  }, [])
+  const handleHeaderSearch = useCallback(async () => {
+    if (searchBusy) return
+    const refresh = realtimeRefreshRef.current
+    if (!refresh) return
+    setSearchBusy(true)
+    try {
+      await refresh()
+    } finally {
+      setSearchBusy(false)
+    }
+  }, [searchBusy])
 
   if (!initialized || !auth) {
     return (
@@ -132,18 +142,13 @@ function StoreSalesBody() {
           </div>
           <p className="truncate text-xs text-muted-foreground">{selectedStoreLabel}</p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 gap-1.5"
-          onClick={handleHeaderRefresh}
-          disabled={loadingTables}
+        <LiveSalesSearchButton
+          onClick={handleHeaderSearch}
+          busy={searchBusy}
+          label={t("search")}
           title={t("search")}
-        >
-          <Search className="h-4 w-4" />
-          {t("search")}
-        </Button>
+          className="shrink-0"
+        />
       </header>
 
       {isOfficeSelector ? <MobileStoreSelectorBar /> : null}

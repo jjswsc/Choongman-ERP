@@ -3,7 +3,7 @@
 import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
-import { BarChart3, RefreshCw } from "lucide-react"
+import { BarChart3 } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -18,6 +18,7 @@ import {
   YAxis,
 } from "recharts"
 import { Button } from "@/components/ui/button"
+import { LiveSalesSearchButton } from "@/components/erp/live-sales-search-button"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
 import {
@@ -367,10 +368,11 @@ export function AdminSalesDashboardCharts({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={handleSearch} disabled={loading}>
-            <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            {tr("search", "검색")}
-          </Button>
+          <LiveSalesSearchButton
+            onClick={handleSearch}
+            busy={loading}
+            label={tr("search", "검색")}
+          />
           <Button asChild size="sm" variant="secondary">
             <Link href={salesMgmtHref}>{tr("adminSalesManagement", "매출 관리")}</Link>
           </Button>

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
-import { Building2, RefreshCw } from "lucide-react"
+import { Building2 } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -16,7 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { Button } from "@/components/ui/button"
+import { LiveSalesSearchButton } from "@/components/erp/live-sales-search-button"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
 import { ERP_NUMERIC_CHART_TICK, ADMIN_CHART_COLORS } from "@/lib/admin-ui-standards"
@@ -239,10 +239,11 @@ export function PosRevenueRealtimeDashboard({
             )}
           </p>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={handleSearch} disabled={loading}>
-          <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          {tr("search", "검색")}
-        </Button>
+        <LiveSalesSearchButton
+          onClick={handleSearch}
+          busy={loading}
+          label={tr("search", "검색")}
+        />
       </div>
 
       {error ? (
