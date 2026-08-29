@@ -49,6 +49,7 @@ import {
   extractPurchaseTaxInvoiceFromScanText,
   pdfPageTextIsReliableForExtract,
   pdfPageTextLooksPrinted,
+  purchaseTaxInvoiceHiresRegionNames,
   purchaseTaxInvoiceNeedsSparseOcr,
   purchaseTaxInvoiceScanFailI18nKey,
   purchaseTaxInvoiceTextExtractIsComplete,
@@ -85,7 +86,22 @@ import {
   extractFromLayout,
   type OcrPageLayout,
 } from "@/lib/purchase-tax-invoice-layout"
-import { startPurchaseTaxScanKeepAlive } from "@/lib/purchase-tax-invoice-scan-keepalive"
+import {
+  isPurchaseTaxScanRunning,
+  startPurchaseTaxScanKeepAlive,
+  subscribePurchaseTaxScanForeground,
+} from "@/lib/purchase-tax-invoice-scan-keepalive"
+import {
+  clearPurchaseTaxScanFiles,
+  documentWasDiscarded,
+  isPurchaseTaxScanAbortError,
+  isPurchaseTaxScanSessionActive,
+  loadPurchaseTaxScanFiles,
+  markPurchaseTaxScanSession,
+  persistPurchaseTaxScanStorage,
+  savePurchaseTaxScanFiles,
+  shouldAutoResumePurchaseTaxScan,
+} from "@/lib/purchase-tax-invoice-scan-persist"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
@@ -302,6 +318,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   const [dropHover, setDropHover] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const abortRef = React.useRef<AbortController | null>(null)
+  const ingestingRef = React.useRef(false)
+  const ingestFilesRef = React.useRef<(files: File[], opts?: { quietResume?: boolean; fromAutoRetry?: boolean }) => Promise<void>>(
+    async () => undefined
+  )
   const scanPdfRef = React.useRef<Awaited<ReturnType<typeof openPdfFile>> | null>(null)
   const scanImagePreviewRef = React.useRef("")
   const [previewPage, setPreviewPage] = React.useState<number | null>(null)
@@ -324,6 +344,46 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     const cp = readScanCheckpoint()
     if (cp?.rows?.length) setReviewRows(cp.rows)
   }, [reviewRows.length])
+
+  React.useEffect(() => {
+    return subscribePurchaseTaxScanForeground(() => {
+      if (!isPurchaseTaxScanRunning()) return
+      void recycleSharedTaxInvoiceOcrSession()
+    })
+  }, [])
+
+  React.useEffect(() => {
+    if (!canWrite) return
+    let cancelled = false
+    const tryResume = async () => {
+      if (cancelled || ingestingRef.current || isPurchaseTaxScanRunning()) return
+      const files = await loadPurchaseTaxScanFiles()
+      if (cancelled || !files.length) return
+      const checkpoint = readScanCheckpoint()
+      if (
+        !shouldAutoResumePurchaseTaxScan({
+          sessionActive: isPurchaseTaxScanSessionActive(),
+          wasDiscarded: documentWasDiscarded(),
+          hasStoredFiles: files.length > 0,
+          hasCheckpoint: Boolean(checkpoint),
+        })
+      ) {
+        return
+      }
+      void ingestFilesRef.current(files, { quietResume: true })
+    }
+    void tryResume()
+    const onShow = () => {
+      if (document.visibilityState === "visible") void tryResume()
+    }
+    document.addEventListener("visibilitychange", onShow)
+    window.addEventListener("pageshow", onShow)
+    return () => {
+      cancelled = true
+      document.removeEventListener("visibilitychange", onShow)
+      window.removeEventListener("pageshow", onShow)
+    }
+  }, [canWrite])
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -508,8 +568,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     URL.revokeObjectURL(url)
   }
 
-  const ingestFiles = async (files: File[]) => {
+  const ingestFiles = async (files: File[], opts?: { quietResume?: boolean; fromAutoRetry?: boolean }) => {
     if (!files.length || !canWrite) return
+    if (opts?.quietResume && (ingestingRef.current || isPurchaseTaxScanRunning())) return
+    ingestingRef.current = true
     abortRef.current?.abort()
     const ac = new AbortController()
     abortRef.current = ac
@@ -624,14 +686,14 @@ export function TaxFilingPurchaseTaxInvoicesTab({
      * 스캔본은 지면 전체를 2200px 로 읽으면 A4 기준 150DPI 라, 작게 찍힌 번호·금액이
      * 아예 판독에서 빠지는 일이 잦다.
      */
-    const layoutLooksIncomplete = (layout: OcrPageLayout) => {
-      const x = extractFromLayout(layout, hint.buyerTaxId, vendorHints())
-      return (
-        !x.invoiceNo ||
-        x.invoiceNo.confidence < 70 ||
-        !x.sellerTaxId ||
-        x.netAmount === undefined ||
-        x.vatAmount === undefined
+    const mergePageExtract = (pageText: string, layout?: OcrPageLayout) => {
+      const textOnly = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
+      if (!layout) {
+        return textOnly ? repairExtractedPurchaseTaxInvoice(textOnly, { ...hint, pageText }) : textOnly
+      }
+      return repairExtractedPurchaseTaxInvoice(
+        applyLayoutExtract(textOnly || {}, extractFromLayout(layout, hint.buyerTaxId, vendorHints())).fields,
+        { ...hint, pageText }
       )
     }
 
@@ -649,24 +711,24 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       const page = await readTaxInvoicePageLayout(work, ocr)
       const layouts = [page.layout]
       let pageText = [withQr, page.text].filter((s) => String(s || "").trim()).join("\n")
-      if (source && layoutLooksIncomplete(page.layout)) {
-        setPdfBusy({
-          key: "ptiOcrPageHires",
-          vars: { n: String(source.pageNumber), total: String(source.total) },
-        })
-        const hires = await readTaxInvoicePageHires(source.pdf, source.pageNumber, ocr, { signal: ac.signal })
-        layouts.push(hires.layout)
-        pageText = [pageText, hires.text].filter((s) => String(s || "").trim()).join("\n")
+      let extractedRow = mergePageExtract(pageText, page.layout)
+      if (source && purchaseTaxInvoiceNeedsSparseOcr(extractedRow, hint)) {
+        const regionNames = purchaseTaxInvoiceHiresRegionNames(extractedRow, hint)
+        if (regionNames.length) {
+          setPdfBusy({
+            key: "ptiOcrPageHires",
+            vars: { n: String(source.pageNumber), total: String(source.total) },
+          })
+          const hires = await readTaxInvoicePageHires(source.pdf, source.pageNumber, ocr, {
+            signal: ac.signal,
+            regionNames,
+          })
+          layouts.push(hires.layout)
+          pageText = [pageText, hires.text].filter((s) => String(s || "").trim()).join("\n")
+          extractedRow = mergePageExtract(pageText, mergeTaxInvoiceLayouts(layouts))
+        }
       }
       const layout = mergeTaxInvoiceLayouts(layouts)
-
-      let extractedRow = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
-      if (layout) {
-        extractedRow = repairExtractedPurchaseTaxInvoice(
-          applyLayoutExtract(extractedRow || {}, extractFromLayout(layout, hint.buyerTaxId, vendorHints())).fields,
-          { ...hint, pageText }
-        )
-      }
       if (purchaseTaxInvoiceNeedsSparseOcr(extractedRow, hint)) {
         const extra = await ocr.recognizeSparseCrops(work)
         pageText = [pageText, extra].filter((s) => String(s || "").trim()).join("\n")
@@ -681,20 +743,25 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       document.title = `(${n}/${total}) ${pageTitleBase}`
     }
     const keepAlive = startPurchaseTaxScanKeepAlive()
+    markPurchaseTaxScanSession(true)
+    void persistPurchaseTaxScanStorage()
+    void savePurchaseTaxScanFiles(files)
 
     try {
-      setReviewRows([])
+      if (!opts?.quietResume) setReviewRows([])
       for (const file of files) {
         const lower = file.name.toLowerCase()
         const isPdf = lower.endsWith(".pdf") || file.type === "application/pdf"
         if (isPdf) {
-          const pdf = await openPdfFile(file)
+          let pdf = await openPdfFile(file)
           scanPdfRef.current = pdf
           scanImagePreviewRef.current = ""
           const total = Math.min(pdf.numPages, TAX_INV_MAX_PAGES)
-          if (total >= 40) {
+          if (total >= 40 && !opts?.quietResume) {
             const ok = window.confirm(tr(t, "ptiPdfManyPages", { n: String(pdf.numPages) }))
             if (!ok) {
+              markPurchaseTaxScanSession(false)
+              void clearPurchaseTaxScanFiles()
               setPdfBusy(null)
               return
             }
@@ -708,9 +775,11 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             checkpoint.nextPage > 1 &&
             checkpoint.nextPage <= total + 1
           ) {
-            const resume = window.confirm(
-              tr(t, "ptiScanResume", { n: String(checkpoint.nextPage - 1), total: String(checkpoint.total || total) })
-            )
+            const resume =
+              opts?.quietResume ||
+              window.confirm(
+                tr(t, "ptiScanResume", { n: String(checkpoint.nextPage - 1), total: String(checkpoint.total || total) })
+              )
             if (resume) {
               startPage = Math.min(checkpoint.nextPage, total)
               extracted.push(...checkpoint.rows)
@@ -728,42 +797,100 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               clearScanCheckpoint()
             }
           }
+          let prefetch:
+            | { page: number; work: Promise<{ canvas: HTMLCanvasElement; images: string[] }> }
+            | null = null
+          const dropPrefetch = () => {
+            if (!prefetch) return
+            const stale = prefetch
+            prefetch = null
+            stale.work
+              .then((r) => releaseTaxInvoiceScanCanvas(r.canvas))
+              .catch(() => undefined)
+          }
+          const takeRenderedPage = (pageNumber: number) => {
+            if (prefetch?.page === pageNumber) {
+              const work = prefetch.work
+              prefetch = null
+              return work
+            }
+            dropPrefetch()
+            return renderTaxInvoicePageForScan(pdf, pageNumber)
+          }
+          const armPrefetch = (pageNumber: number, printedText: string) => {
+            if (pageNumber > total || ac.signal.aborted) return
+            if (pdfPageTextIsReliableForExtract(printedText, hint)) return
+            if (prefetch?.page === pageNumber) return
+            dropPrefetch()
+            prefetch = { page: pageNumber, work: renderTaxInvoicePageForScan(pdf, pageNumber) }
+          }
+
           for (let i = startPage; i <= total; i += 1) {
             if (ac.signal.aborted) break
             setPdfProgress({ n: i, total })
             setPdfBusy({ key: "ptiPdfPage", vars: { n: String(i), total: String(total) } })
             markScanTitle(i, total)
-            const printed = await extractPdfPageText(pdf, i)
-            let pageText = printed
-            if (pdfPageTextIsReliableForExtract(printed, hint)) {
-              ingestLocalPage(i, pageText)
-            } else {
-              if (!pdfPageTextLooksPrinted(printed)) {
-                setPdfBusy({ key: "ptiOcrPage", vars: { n: String(i), total: String(total) } })
-              }
-              const renderP = renderTaxInvoicePageForScan(pdf, i)
-              const warmP = ensureOcrSession()
-              const [{ canvas }] = await Promise.all([renderP, warmP])
-              if (ac.signal.aborted) {
-                releaseTaxInvoiceScanCanvas(canvas)
-                break
-              }
-              let pageLayout: OcrPageLayout | undefined
+            let pageAttempt = 0
+            while (pageAttempt < 2) {
               try {
-                const read = await readPageOrRetry(
-                  () => textForPage(canvas, printed, { pdf, pageNumber: i, total }),
-                  printed
-                )
-                pageText = read.text
-                pageLayout = read.layout
-                const failKey = read.failKey
-                if (failKey) setError((prev) => prev || failKey)
-              } finally {
-                releaseTaxInvoiceScanCanvas(canvas)
+                const printed = await extractPdfPageText(pdf, i)
+                if (i < total) {
+                  void extractPdfPageText(pdf, i + 1)
+                    .then((nextPrinted) => armPrefetch(i + 1, nextPrinted))
+                    .catch(() => undefined)
+                }
+                let pageText = printed
+                if (pdfPageTextIsReliableForExtract(printed, hint)) {
+                  ingestLocalPage(i, pageText)
+                } else {
+                  if (!pdfPageTextLooksPrinted(printed)) {
+                    setPdfBusy({ key: "ptiOcrPage", vars: { n: String(i), total: String(total) } })
+                  }
+                  const [{ canvas }] = await Promise.all([takeRenderedPage(i), ensureOcrSession()])
+                  if (ac.signal.aborted) {
+                    releaseTaxInvoiceScanCanvas(canvas)
+                    dropPrefetch()
+                    break
+                  }
+                  let pageLayout: OcrPageLayout | undefined
+                  try {
+                    const read = await readPageOrRetry(
+                      () => textForPage(canvas, printed, { pdf, pageNumber: i, total }),
+                      printed
+                    )
+                    pageText = read.text
+                    pageLayout = read.layout
+                    const failKey = read.failKey
+                    if (failKey) setError((prev) => prev || failKey)
+                  } finally {
+                    releaseTaxInvoiceScanCanvas(canvas)
+                  }
+                  if (ac.signal.aborted) break
+                  ingestLocalPage(i, pageText, pageLayout)
+                }
+                break
+              } catch (pageErr) {
+                if (isPurchaseTaxScanAbortError(pageErr) || ac.signal.aborted) break
+                dropPrefetch()
+                pageAttempt += 1
+                if (pageAttempt >= 2) {
+                  ingestLocalPage(i, "", undefined)
+                  break
+                }
+                try {
+                  pdf = await openPdfFile(file)
+                  scanPdfRef.current = pdf
+                } catch {
+                  /* reopen is best-effort */
+                }
+                try {
+                  await recycleSharedTaxInvoiceOcrSession()
+                } catch {
+                  /* ignore */
+                }
               }
-              if (ac.signal.aborted) break
-              ingestLocalPage(i, pageText, pageLayout)
             }
+            if (ac.signal.aborted) break
             if (i === total || i % 5 === 0 || (typeof document !== "undefined" && document.hidden)) {
               setReviewRows([...extracted])
             }
@@ -777,6 +904,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             })
             await yieldUi()
           }
+          dropPrefetch()
         } else {
           scanPdfRef.current = null
           setPdfBusy({ key: "ptiPdfPage", vars: { n: "1", total: "1" } })
@@ -853,15 +981,26 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         }
       }
       setReviewRows(extracted)
-      if (!ac.signal.aborted) clearScanCheckpoint()
+      if (!ac.signal.aborted) {
+        clearScanCheckpoint()
+        markPurchaseTaxScanSession(false)
+        void clearPurchaseTaxScanFiles()
+      }
     } catch (e) {
-      if ((e instanceof DOMException && e.name === "AbortError") || (e instanceof Error && e.name === "AbortError")) {
+      if (isPurchaseTaxScanAbortError(e) || ac.signal.aborted) {
+        markPurchaseTaxScanSession(false)
         if (extracted.length) setReviewRows(extracted)
         return
       }
       setError(purchaseTaxInvoiceScanFailI18nKey(e instanceof Error ? e.message : String(e), "ptiOcrFailed"))
       if (extracted.length) setReviewRows(extracted)
+      if (!opts?.fromAutoRetry) {
+        window.setTimeout(() => {
+          void ingestFilesRef.current(files, { quietResume: true, fromAutoRetry: true })
+        }, 800)
+      }
     } finally {
+      ingestingRef.current = false
       try {
         await dropSharedTaxInvoiceOcrSession()
       } catch {
@@ -878,8 +1017,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       setPdfProgress(null)
     }
   }
+  ingestFilesRef.current = ingestFiles
 
   const cancelScan = () => {
+    markPurchaseTaxScanSession(false)
     abortRef.current?.abort()
   }
 

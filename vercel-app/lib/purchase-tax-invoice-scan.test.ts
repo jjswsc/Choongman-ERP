@@ -10,6 +10,7 @@ import {
   parseTaxInvoiceDateFromText,
   pdfPageTextLooksPrinted,
   pdfPageTextIsReliableForExtract,
+  purchaseTaxInvoiceHiresRegionNames,
   purchaseTaxInvoiceNeedsSparseOcr,
   purchaseTaxInvoiceScanFailI18nKey,
   purchaseTaxInvoiceTextExtractIsComplete,
@@ -171,6 +172,25 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
     expect(purchaseTaxInvoiceNeedsSparseOcr({ invoiceNo: 'NX-1', netAmount: 100, vatAmount: 7 }, { buyerTaxId: BUYER })).toBe(
       true
     )
+  })
+
+  it('asks for tail-only hires when only amounts are missing', () => {
+    expect(
+      purchaseTaxInvoiceHiresRegionNames(
+        { invoiceNo: 'NX2026-07-0177', sellerTaxId: '0105561016821' },
+        { buyerTaxId: BUYER }
+      )
+    ).toEqual(['tail'])
+    expect(
+      purchaseTaxInvoiceHiresRegionNames(
+        { invoiceNo: 'NX2026-07-0177', sellerTaxId: '0105561016821', netAmount: 8320, vatAmount: 582.4 },
+        { buyerTaxId: BUYER }
+      )
+    ).toEqual([])
+    expect(purchaseTaxInvoiceHiresRegionNames({ netAmount: 100, vatAmount: 7 }, { buyerTaxId: BUYER })).toEqual([
+      'head-left',
+      'head-right',
+    ])
   })
 
   it('reads hyphenated seller TIN', () => {

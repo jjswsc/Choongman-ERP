@@ -1003,6 +1003,24 @@ export function purchaseTaxInvoiceTextExtractIsComplete(
   return true
 }
 
+/** 1차 판독 뒤 고배율이 필요한 영역. 비면 고배율을 건너뛴다. */
+export function purchaseTaxInvoiceHiresRegionNames(
+  row: ExtractedPurchaseTaxInvoiceFields | null | undefined,
+  hint?: PurchaseTaxInvoiceScanHint
+): Array<'head-left' | 'head-right' | 'tail'> {
+  if (purchaseTaxInvoiceTextExtractIsComplete(row, hint)) return []
+  const needHead =
+    !row?.invoiceNo ||
+    !invoiceNoLooksPlausible(row.invoiceNo) ||
+    !row.sellerTaxId ||
+    row.sellerTaxId.length !== 13
+  const needTail = row?.netAmount == null || row?.vatAmount == null
+  const names: Array<'head-left' | 'head-right' | 'tail'> = []
+  if (needHead) names.push('head-left', 'head-right')
+  if (needTail) names.push('tail')
+  return names.length ? names : ['head-left', 'head-right', 'tail']
+}
+
 /** 번호·TIN만 있고 금액이 비면 합계 크롭을 한 번 더 돌린다. */
 export function purchaseTaxInvoiceNeedsSparseOcr(
   row: ExtractedPurchaseTaxInvoiceFields | null | undefined,

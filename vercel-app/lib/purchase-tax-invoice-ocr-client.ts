@@ -461,20 +461,13 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
       return createWorker(langs, 1, cdnOpts)
     }
   }
-  const [thaiWorker, digitWorkerReady] = await Promise.all([make('tha+eng'), make('eng')])
-  let digitWorker: TessWorker | null = digitWorkerReady
+  const thaiWorker = await make('tha+eng')
+  let digitWorker: TessWorker | null = null
   let headerAlnumWorker: TessWorker | null = null
-  await Promise.all([
-    thaiWorker.setParameters({
-      tessedit_pageseg_mode: '6',
-      preserve_interword_spaces: '1',
-    }),
-    digitWorker.setParameters({
-      tessedit_pageseg_mode: '6',
-      tessedit_char_whitelist: '0123456789.,:-/',
-      preserve_interword_spaces: '1',
-    }),
-  ])
+  await thaiWorker.setParameters({
+    tessedit_pageseg_mode: '6',
+    preserve_interword_spaces: '1',
+  })
 
   const readThai = async (image: HTMLCanvasElement) => {
     const r = await thaiWorker.recognize(image)

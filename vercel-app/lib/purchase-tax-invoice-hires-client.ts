@@ -31,11 +31,23 @@ export const TAX_INV_HIRES_PAGE_WIDTH_PX = 4960
  * 머리말은 좌·우로 나눈다 — 한 장에 담으면 캔버스가 15MP 를 넘고, 좌우 단이 붙어 있으면
  * PSM 6 이 줄을 잘못 묶는다. 경계는 겹쳐 두어 라벨과 값이 갈라지지 않게 한다.
  */
-export const TAX_INV_HIRES_REGIONS: { name: string; rect: TaxInvoiceRegionRect }[] = [
+export type TaxInvoiceHiresRegionName = 'head-left' | 'head-right' | 'tail'
+
+export const TAX_INV_HIRES_REGIONS: { name: TaxInvoiceHiresRegionName; rect: TaxInvoiceRegionRect }[] = [
   { name: 'head-left', rect: { x0: 0, y0: 0, x1: 0.58, y1: 0.42 } },
   { name: 'head-right', rect: { x0: 0.42, y0: 0, x1: 1, y1: 0.42 } },
   { name: 'tail', rect: { x0: 0.28, y0: 0.52, x1: 1, y1: 0.98 } },
 ]
+
+/** 필요한 영역만 고른다. 이름이 비거나 모르면 세 영역 전부. */
+export function selectTaxInvoiceHiresRegions(
+  names?: readonly TaxInvoiceHiresRegionName[]
+): typeof TAX_INV_HIRES_REGIONS {
+  if (!names?.length) return TAX_INV_HIRES_REGIONS
+  const want = new Set(names)
+  const picked = TAX_INV_HIRES_REGIONS.filter((r) => want.has(r.name))
+  return picked.length ? picked : TAX_INV_HIRES_REGIONS
+}
 
 function releaseCanvas(canvas: HTMLCanvasElement) {
   canvas.width = 0
@@ -85,13 +97,13 @@ export async function readTaxInvoicePageHires(
   pdf: PdfDocLike,
   pageNumber: number,
   session: TaxInvoiceOcrSession,
-  opts?: { signal?: AbortSignal; pageWidthPx?: number }
+  opts?: { signal?: AbortSignal; pageWidthPx?: number; regionNames?: readonly TaxInvoiceHiresRegionName[] }
 ): Promise<HiresLayoutResult> {
   const targetWidth = opts?.pageWidthPx || TAX_INV_HIRES_PAGE_WIDTH_PX
   const lines: OcrLineBox[] = []
   const texts: string[] = []
   let height = 0
-  for (const region of TAX_INV_HIRES_REGIONS) {
+  for (const region of selectTaxInvoiceHiresRegions(opts?.regionNames)) {
     if (opts?.signal?.aborted) break
     const rendered = await renderTaxInvoiceRegion(pdf, pageNumber, region.rect, targetWidth)
     try {

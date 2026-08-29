@@ -3349,7 +3349,7 @@ export const i18n = {
     ptiPdfManyPages: '이 PDF는 {n}페이지입니다. 페이지마다 인식하므로 시간이 걸립니다. 계속할까요?',
     ptiPdfCancel: '인식 중단',
     ptiPdfDropHint: 'PDF·이미지를 여기로 끌어다 놓아도 됩니다.',
-    ptiScanBgHint: '다른 탭·윈도우 작업을 해도 인식은 이어집니다. 이 브라우저 탭만 닫지 마세요. 중간에 끊기면 같은 파일을 다시 올리면 이어서 읽습니다.',
+    ptiScanBgHint: '다른 창을 써도 인식은 이어집니다. 이 브라우저 탭만 닫지 마세요. 탭이 쉬었다가 깨워도 자동으로 이어서 읽고, 완전히 멈추면 같은 파일을 다시 올리면 됩니다.',
     ptiScanResume: '이전에 {n} / {total} 페이지까지 읽었습니다. 이어서 할까요?',
     ptiScanResuming: '{n} / {total} 페이지부터 이어서 읽습니다…',
     ptiOcrPageTimeout: '이 페이지 인식이 오래 걸려 건너뛰고 다음으로 갑니다.',

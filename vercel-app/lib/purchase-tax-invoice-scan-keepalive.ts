@@ -15,6 +15,8 @@ export type PurchaseTaxScanKeepAlive = {
 
 let runningCount = 0
 const runningListeners = new Set<(running: boolean) => void>()
+const foregroundListeners = new Set<() => void>()
+const LONG_HIDDEN_MS = 3_000
 
 function setScanRunning(delta: 1 | -1) {
   const prev = runningCount > 0
@@ -32,6 +34,14 @@ export function subscribePurchaseTaxScanRunning(fn: (running: boolean) => void):
   runningListeners.add(fn)
   return () => {
     runningListeners.delete(fn)
+  }
+}
+
+/** 오래 숨었다가 다시 보이면 호출. 얼어 죽은 OCR 워커를 갈아끼울 때 쓴다. */
+export function subscribePurchaseTaxScanForeground(fn: () => void): () => void {
+  foregroundListeners.add(fn)
+  return () => {
+    foregroundListeners.delete(fn)
   }
 }
 
@@ -66,6 +76,7 @@ export function startPurchaseTaxScanKeepAlive(): PurchaseTaxScanKeepAlive {
   let wake: WakeLockSentinelLike | null = null
   let worker: Worker | null = null
   let stopped = false
+  let hiddenAt = typeof document !== 'undefined' && document.visibilityState === 'hidden' ? Date.now() : 0
 
   const requestWake = async () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
@@ -108,16 +119,33 @@ export function startPurchaseTaxScanKeepAlive(): PurchaseTaxScanKeepAlive {
   cleanups.push(() => window.clearInterval(tick))
 
   const onVis = () => {
+    if (document.visibilityState === 'hidden') {
+      hiddenAt = Date.now()
+      return
+    }
+    const slept = hiddenAt ? Date.now() - hiddenAt : 0
+    hiddenAt = 0
     void requestWake()
-    if (document.visibilityState === 'visible' && !worker) startWorker()
+    if (!worker) startWorker()
+    if (slept >= LONG_HIDDEN_MS) {
+      for (const fn of foregroundListeners) {
+        try {
+          fn()
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   }
   document.addEventListener('visibilitychange', onVis)
   window.addEventListener('focus', onVis)
   window.addEventListener('pageshow', onVis)
+  window.addEventListener('resume', onVis)
   cleanups.push(() => {
     document.removeEventListener('visibilitychange', onVis)
     window.removeEventListener('focus', onVis)
     window.removeEventListener('pageshow', onVis)
+    window.removeEventListener('resume', onVis)
   })
 
   return {
