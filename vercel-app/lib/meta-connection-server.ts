@@ -167,10 +167,10 @@ export async function syncMetaConnection(
     return empty(["not_connected"])
   }
 
-  let pageId = live.pageId
+  const pageId = live.pageId
   let pageName = live.pageName
   let adAccountId = live.adAccountId
-  let pageToken = live.pageToken
+  const pageToken = live.pageToken
   const userToken = live.userToken
 
   if (!pageId) {

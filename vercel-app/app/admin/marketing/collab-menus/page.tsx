@@ -9,7 +9,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
-import { MarketingEnterViaCampaignBanner } from "@/components/marketing/marketing-enter-via-campaign-banner"
 import { MarketingHubCampaignContextStrip } from "@/components/marketing/marketing-hub-campaign-context-strip"
 import {
   getMarketingCampaigns,
@@ -49,6 +48,10 @@ import { useT } from "@/lib/i18n"
 import { useSearchParams } from "next/navigation"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import { marketingCampaignWorkspaceHref } from "@/lib/marketing-campaign-create-ui"
+import {
+  readSelectedMarketingCampaignId,
+  writeSelectedMarketingCampaignId,
+} from "@/lib/marketing-selected-campaign"
 
 export default function MarketingCollabMenusPage() {
   const { lang } = useLang()
@@ -94,8 +97,18 @@ export default function MarketingCollabMenusPage() {
   }, [load])
 
   React.useEffect(() => {
-    if (urlCampaignId) setSelectedCampaignId(urlCampaignId)
+    if (urlCampaignId) {
+      setSelectedCampaignId(urlCampaignId)
+      writeSelectedMarketingCampaignId(urlCampaignId)
+      return
+    }
+    setSelectedCampaignId((prev) => prev || readSelectedMarketingCampaignId())
   }, [urlCampaignId])
+
+  const selectCampaign = React.useCallback((next: string) => {
+    setSelectedCampaignId(next)
+    writeSelectedMarketingCampaignId(next)
+  }, [])
 
   React.useEffect(() => {
     if (!selectedCampaignId) {
@@ -225,7 +238,6 @@ export default function MarketingCollabMenusPage() {
   return (
     <MarketingPageShell>
       <MarketingPageHero icon={Handshake} title={t("adminMarketingCollabMenus")} description={t("marketingHeroDescCollab")} />
-      <MarketingEnterViaCampaignBanner />
       <Tabs
         value={mainTab}
         onValueChange={(v) => {
@@ -270,7 +282,7 @@ export default function MarketingCollabMenusPage() {
             <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
               <MarketingHubCampaignContextStrip
                 value={selectedCampaignId}
-                onChange={setSelectedCampaignId}
+                onChange={selectCampaign}
                 campaigns={list}
                 hideHubLinkFilter
                 allowEmpty

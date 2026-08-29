@@ -37,6 +37,7 @@ import {
   Bot,
   Calendar,
   HandCoins,
+  Handshake,
   LayoutPanelTop,
   PackageSearch,
   UtensilsCrossed,
@@ -95,6 +96,10 @@ export const ERP_NAV_MENU_SECTIONS: ErpNavMenuSection[] = [
     items: [
       { titleKey: "marketingHomeTitle", icon: LayoutDashboard, href: "/admin/marketing" },
       { titleKey: "adminMarketingCampaigns", icon: Megaphone, href: "/admin/marketing/campaigns" },
+      { titleKey: "adminMarketingPromos", icon: Tag, href: "/admin/marketing/promos" },
+      { titleKey: "adminMarketingCollabMenus", icon: Handshake, href: "/admin/marketing/collab-menus" },
+      { titleKey: "adminMarketingTasks", icon: ClipboardList, href: "/admin/marketing/tasks" },
+      { titleKey: "adminMarketingResults", icon: BarChart3, href: "/admin/marketing/results" },
       { titleKey: "adminMarketingAds", icon: TrendingUp, href: "/admin/marketing/ads" },
       { titleKey: "adminMarketingCalendar", icon: CalendarDays, href: "/admin/marketing/calendar" },
       { titleKey: "adminMarketingReport", icon: FileText, href: "/admin/marketing/report" },

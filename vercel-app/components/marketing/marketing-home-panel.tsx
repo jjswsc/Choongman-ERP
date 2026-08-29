@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import {
   AlertTriangle,
+  BarChart3,
   CalendarDays,
   ClipboardList,
   Facebook,
@@ -419,6 +420,8 @@ export function MarketingHomePanel() {
             {(
               [
                 { href: "/admin/marketing/campaigns", label: t("adminMarketingCampaigns"), icon: Megaphone },
+                { href: "/admin/marketing/tasks", label: t("adminMarketingTasks"), icon: ClipboardList },
+                { href: "/admin/marketing/results", label: t("adminMarketingResults"), icon: BarChart3 },
                 { href: "/admin/marketing/ads?tab=meta", label: t("adminMarketingAds"), icon: TrendingUp },
                 { href: "/admin/marketing/calendar", label: t("adminMarketingCalendar"), icon: CalendarDays },
                 { href: "/admin/marketing/integrations", label: t("adminMarketingIntegrations"), icon: Facebook },

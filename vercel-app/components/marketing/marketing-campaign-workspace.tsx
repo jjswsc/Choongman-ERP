@@ -35,6 +35,7 @@ import {
   type MarketingCampaignWorkspaceTab,
 } from "@/lib/marketing-campaign-create-ui"
 import { getMarketingCampaign } from "@/lib/api-client"
+import { writeSelectedMarketingCampaignId } from "@/lib/marketing-selected-campaign"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 
 export function MarketingCampaignWorkspace({ campaignId }: { campaignId: string }) {
@@ -51,6 +52,7 @@ export function MarketingCampaignWorkspace({ campaignId }: { campaignId: string 
   const [campaignNo, setCampaignNo] = React.useState("")
 
   React.useEffect(() => {
+    writeSelectedMarketingCampaignId(campaignId)
     void getMarketingCampaign(campaignId).then((c) => {
       setTopic(c?.topic || "")
       setCampaignNo(c?.campaignNo || "")

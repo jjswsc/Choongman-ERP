@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
-/** 사이드바에서 뺀 예전 메뉴 북마크용 — 캠페인 카드로 들어가라고 안내 */
+/** 사이드바에서 뺀 예전 메뉴 북마크용 — 캠페인별로 다루는 「마케팅 작업」으로 안내 */
 export function MarketingEnterViaCampaignBanner() {
   const { lang } = useLang()
   const t = useT(lang)
@@ -17,7 +17,7 @@ export function MarketingEnterViaCampaignBanner() {
         {t("marketingEnterViaCampaign")}
       </p>
       <Button size="sm" variant="outline" className="h-8" asChild>
-        <Link href="/admin/marketing/campaigns">{t("marketingEnterViaCampaignCta")}</Link>
+        <Link href="/admin/marketing/tasks">{t("marketingEnterViaCampaignCta")}</Link>
       </Button>
     </div>
   )

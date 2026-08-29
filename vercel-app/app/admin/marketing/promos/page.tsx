@@ -36,7 +36,10 @@ import { MarketingPageHero } from '@/components/marketing/marketing-page-hero'
 import { MarketingPageShell } from '@/components/marketing/marketing-page-shell'
 import { MarketingStickyHubBar } from '@/components/marketing/marketing-sticky-hub-bar'
 import { MarketingEmptyState } from '@/components/marketing/marketing-empty-state'
-import { MarketingEnterViaCampaignBanner } from '@/components/marketing/marketing-enter-via-campaign-banner'
+import {
+  readSelectedMarketingCampaignId,
+  writeSelectedMarketingCampaignId,
+} from '@/lib/marketing-selected-campaign'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tag } from 'lucide-react'
 export default function MarketingPromosPage() {
@@ -80,8 +83,14 @@ export default function MarketingPromosPage() {
     if (pageLoading || !workspaceCampaignId.trim()) return
     if (!campaigns.some((c) => c.id === workspaceCampaignId)) {
       setWorkspaceCampaignId('')
+      writeSelectedMarketingCampaignId('')
     }
   }, [campaigns, workspaceCampaignId, pageLoading])
+
+  const selectCampaign = React.useCallback((next: string) => {
+    setWorkspaceCampaignId(next)
+    writeSelectedMarketingCampaignId(next)
+  }, [])
 
   const loadMenusAndMeta = React.useCallback(async () => {
     try {
@@ -156,7 +165,12 @@ export default function MarketingPromosPage() {
   }, [loadMenusAndMeta])
 
   React.useEffect(() => {
-    if (campaignIdFromQuery) setWorkspaceCampaignId(campaignIdFromQuery)
+    if (campaignIdFromQuery) {
+      setWorkspaceCampaignId(campaignIdFromQuery)
+      writeSelectedMarketingCampaignId(campaignIdFromQuery)
+      return
+    }
+    setWorkspaceCampaignId((prev) => prev || readSelectedMarketingCampaignId())
   }, [campaignIdFromQuery])
 
   React.useEffect(() => {
@@ -195,8 +209,6 @@ export default function MarketingPromosPage() {
             ) : null
           }
         />
-        <MarketingEnterViaCampaignBanner />
-
         {campaignIdFromQuery && (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs leading-relaxed">
             {t('marketingPromoCampaignQueryBanner')}
@@ -220,7 +232,7 @@ export default function MarketingPromosPage() {
 
             <MarketingHubCampaignContextStrip
               value={workspaceCampaignId}
-              onChange={setWorkspaceCampaignId}
+              onChange={selectCampaign}
               campaigns={campaigns}
               allowEmpty
               emptyOptionLabel={t('marketingPromoCampaignSelectRequiredOption')}
