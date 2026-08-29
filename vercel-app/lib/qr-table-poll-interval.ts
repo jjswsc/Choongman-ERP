@@ -4,7 +4,7 @@
  */
 
 /** 손님 폰 입점비·추가메뉴 선결제 상태 조회 (KBank Inquiry). */
-export const QR_TABLE_GUEST_PAY_POLL_MS = 5_000
+export const QR_TABLE_GUEST_PAY_POLL_MS = 8_000
 
 /** QR 켠 매장 — 홀 테이블 배지·세션 패널 */
 export const QR_FLOOR_SESSION_HINTS_POLL_MS = 30_000

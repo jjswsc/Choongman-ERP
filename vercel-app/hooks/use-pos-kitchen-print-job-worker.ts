@@ -76,7 +76,7 @@ async function printClaimedKitchenJob(
 
 /**
  * QR/원격 주문의 pos_print_jobs 를 메인 POS가 바로 claim·인쇄.
- * INSERT Realtime poke가 1차. 놓치면 15초(채널 장애 시 5초)마다 claim.
+ * INSERT Realtime poke가 1차. 놓치면 30초(채널 장애 시 5초)마다 claim.
  * 오픈 전·마감 후·백그라운드 탭은 60초.
  */
 export function usePosKitchenPrintJobWorker(opts: {

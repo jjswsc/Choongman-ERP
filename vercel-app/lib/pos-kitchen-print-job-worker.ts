@@ -6,7 +6,7 @@ import { coercePosOrderTypeForDb, type PosOrderTypeValue } from '@/lib/pos-sales
  * 폴링은 Realtime이 놓친 잡만 건진다. 2초 고정은 Fluid Active CPU를 과도하게 쓴다.
  * 오픈 전·마감 후·백그라운드 탭은 PAUSED 간격. 오래된 잡은 MAX_AGE·DRAIN_MAX 로 막는다.
  */
-export const MAIN_POS_KITCHEN_JOB_POLL_MS = 15_000
+export const MAIN_POS_KITCHEN_JOB_POLL_MS = 30_000
 /** print-jobs INSERT 채널이 죽으면 조금 촘촘히 (2초로 되돌리지는 않음) */
 export const MAIN_POS_KITCHEN_JOB_POLL_UNHEALTHY_MS = 5_000
 /** 오픈 전·마감 후 스케줄만 유지 (drain 은 pause 에서 건너뜀) */

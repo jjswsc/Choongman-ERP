@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { runDuePriceSchedules } from '@/lib/price-schedule'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import {
   type PosOptionGroupRow,
@@ -73,10 +72,6 @@ export async function GET(request: NextRequest) {
       }
       return NextResponse.json([], { headers })
     }
-    /** 가격 스케줄은 메뉴 GET을 막지 않음 — 백그라운드 적용 */
-    void runDuePriceSchedules(new Date()).catch((scheduleErr) => {
-      console.error('getPosMenus runDuePriceSchedules:', scheduleErr)
-    })
 
     let groupsById = new Map<number, PosOptionGroupRow>()
     let linksByMenuId = new Map<number, PosMenuOptionGroupLinkRow[]>()

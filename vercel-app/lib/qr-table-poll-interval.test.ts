@@ -7,8 +7,8 @@ import {
 } from '@/lib/qr-table-poll-interval'
 
 describe('qr-table poll intervals', () => {
-  it('spaces guest prepay Inquiry to 5s', () => {
-    expect(QR_TABLE_GUEST_PAY_POLL_MS).toBe(5_000)
+  it('spaces guest prepay Inquiry to 8s', () => {
+    expect(QR_TABLE_GUEST_PAY_POLL_MS).toBe(8_000)
   })
 
   it('polls hall QR badges every 30s when enabled', () => {

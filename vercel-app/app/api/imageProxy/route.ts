@@ -70,12 +70,16 @@ export async function GET(request: NextRequest) {
     }
 
     const contentType = res.headers.get('content-type') || 'image/jpeg'
-    const buffer = await res.arrayBuffer()
+    if (!res.body) {
+      return new NextResponse('Empty image', { status: 502 })
+    }
 
-    return new NextResponse(buffer, {
+    return new NextResponse(res.body, {
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        'CDN-Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
       },
     })
   } catch (e) {

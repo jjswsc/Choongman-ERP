@@ -4,6 +4,7 @@ import {
   normalizePosMenuImageUrl,
   toHybridProxiedMenuImageHref,
   toPosMenuDisplayImageHref,
+  toSupabaseStorageRenderHref,
 } from '@/lib/pos-menu-image-url'
 
 describe('canonicalPosMenuUpstreamUrl', () => {
@@ -12,6 +13,23 @@ describe('canonicalPosMenuUpstreamUrl', () => {
       'http://ABC.supabase.co/storage/v1/object/public/menu/a.png'
     )
     expect(out).toMatch(/^https:\/\/abc\.supabase\.co\//)
+  })
+})
+
+describe('toSupabaseStorageRenderHref', () => {
+  it('rewrites public object URLs to image transform', () => {
+    const out = toSupabaseStorageRenderHref(
+      'https://abc.supabase.co/storage/v1/object/public/pos-menu-images/123.jpg'
+    )
+    expect(out).toContain('/storage/v1/render/image/public/pos-menu-images/123.jpg')
+    expect(out).toContain('width=400')
+    expect(out).toContain('quality=70')
+  })
+
+  it('returns null for non-public object paths', () => {
+    expect(
+      toSupabaseStorageRenderHref('https://abc.supabase.co/storage/v1/object/sign/pos-menu-images/123.jpg')
+    ).toBeNull()
   })
 })
 
@@ -37,7 +55,15 @@ describe('toHybridProxiedMenuImageHref', () => {
 describe('toPosMenuDisplayImageHref', () => {
   const origin = 'https://erp.example.com'
 
-  it('routes Supabase storage through posMenuImageProxy', () => {
+  it('loads Supabase public images from transform URL (not Vercel proxy)', () => {
+    const url =
+      'https://abc.supabase.co/storage/v1/object/public/pos-menu-images/123.jpg'
+    const out = toPosMenuDisplayImageHref(url, { preferProxy: false, pageOrigin: origin })
+    expect(out).toContain('/storage/v1/render/image/public/')
+    expect(out).not.toContain('/api/posMenuImageProxy')
+  })
+
+  it('routes Supabase storage through posMenuImageProxy when preferProxy', () => {
     const url =
       'https://abc.supabase.co/storage/v1/object/public/pos-menu-images/123.jpg'
     const out = toPosMenuDisplayImageHref(url, { preferProxy: true, pageOrigin: origin })

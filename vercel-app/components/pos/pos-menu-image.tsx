@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { UtensilsCrossed } from "lucide-react"
 import {
   normalizePosMenuImageUrl,
   toPosMenuDisplayImageHref,
+  toSupabaseStorageRenderHref,
 } from "@/lib/pos-menu-image-url"
 
 export { normalizePosMenuImageUrl } from "@/lib/pos-menu-image-url"
@@ -16,6 +17,8 @@ type PosMenuFillImageProps = {
   variant?: "tile" | "preview"
   previewErrorLabel?: string
 }
+
+type LoadStage = "direct" | "original" | "proxy"
 
 function TilePlaceholder({ className = "" }: { className?: string }) {
   const base =
@@ -32,15 +35,16 @@ function cnAbsoluteFill(extra: string) {
   return extra ? `${base} ${extra}` : base
 }
 
-function resolveDisplayHref(href: string, httpsThumbnailProxy: boolean, skipProxy: boolean): string {
+function hrefForStage(href: string, stage: LoadStage): string {
   if (!href) return ""
-  if (skipProxy || !httpsThumbnailProxy) return href
-  return toPosMenuDisplayImageHref(href, { preferProxy: true })
+  if (stage === "proxy") return toPosMenuDisplayImageHref(href, { preferProxy: true })
+  if (stage === "original") return href
+  return toSupabaseStorageRenderHref(href) || href
 }
 
 /**
- * 메뉴 썸네일: https 환경에서는 Supabase URL을 동일 출처 프록시로 로드.
- * 프록시 실패 시 원본 URL로 1회 재시도한다.
+ * 메뉴 썸네일: 공개 Storage는 Vercel을 거치지 않고 로드.
+ * transform → 원본 URL → 동일 출처 프록시 순으로 1회씩만 재시도한다.
  */
 export function PosMenuFillImage({
   src,
@@ -50,30 +54,25 @@ export function PosMenuFillImage({
   previewErrorLabel,
 }: PosMenuFillImageProps) {
   const href = useMemo(() => normalizePosMenuImageUrl(src), [src])
-  const [httpsThumbnailProxy, setHttpsThumbnailProxy] = useState(false)
-  const [skipProxy, setSkipProxy] = useState(false)
+  const [stage, setStage] = useState<LoadStage>("direct")
   const [loadFailed, setLoadFailed] = useState(false)
 
-  useLayoutEffect(() => {
-    if (typeof window === "undefined") return
-    if (window.location.protocol !== "https:") return
-    setHttpsThumbnailProxy(true)
-  }, [])
-
   useEffect(() => {
-    setSkipProxy(false)
+    setStage("direct")
     setLoadFailed(false)
   }, [href])
 
-  const displayHref = useMemo(
-    () => resolveDisplayHref(href, httpsThumbnailProxy, skipProxy),
-    [href, httpsThumbnailProxy, skipProxy]
-  )
+  const displayHref = useMemo(() => hrefForStage(href, stage), [href, stage])
 
   const handleImageError = () => {
-    const proxied = href && httpsThumbnailProxy && !skipProxy && displayHref !== href
-    if (proxied) {
-      setSkipProxy(true)
+    const originalHref = hrefForStage(href, "original")
+    const proxyHref = hrefForStage(href, "proxy")
+    if (stage === "direct" && originalHref && originalHref !== displayHref) {
+      setStage("original")
+      return
+    }
+    if (stage !== "proxy" && proxyHref && proxyHref !== displayHref) {
+      setStage("proxy")
       return
     }
     setLoadFailed(true)

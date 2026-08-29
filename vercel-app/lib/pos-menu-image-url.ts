@@ -103,9 +103,44 @@ export function canonicalPosMenuUpstreamUrl(raw: string): string {
 /** CDN에 잘못 캐시된 구 응답(750px 등) 우회 — 배포 시 증가 */
 const POS_MENU_IMAGE_PROXY_RENDER_VERSION = 3
 
+/** POS 타일 표시 크기(높이 88~92px, 가로 ~180px) + 레티나 2x */
+export const POS_MENU_TILE_RENDER_WIDTH = 400
+export const POS_MENU_TILE_RENDER_QUALITY = 70
+
+/**
+ * Supabase 공개 객체 → Image Transformation URL.
+ * 브라우저가 이 URL을 직접 받으면 이미지 바이트가 Vercel Origin을 거치지 않는다
+ * (Fluid Active CPU·Fast Origin Transfer 절감). 변환 미지원이면 null.
+ */
+export function toSupabaseStorageRenderHref(
+  absoluteUrl: string,
+  opts?: { width?: number; quality?: number }
+): string | null {
+  try {
+    const parsed = new URL(canonicalPosMenuUpstreamUrl(absoluteUrl))
+    if (!/\/storage\/v1\/object\/public\//i.test(parsed.pathname)) return null
+    parsed.pathname = parsed.pathname.replace(
+      '/storage/v1/object/public/',
+      '/storage/v1/render/image/public/'
+    )
+    parsed.searchParams.set(
+      'width',
+      String(opts?.width ?? POS_MENU_TILE_RENDER_WIDTH)
+    )
+    parsed.searchParams.set(
+      'quality',
+      String(opts?.quality ?? POS_MENU_TILE_RENDER_QUALITY)
+    )
+    parsed.searchParams.set('resize', 'contain')
+    return parsed.href
+  } catch {
+    return null
+  }
+}
+
 export function toHybridProxiedMenuImageHref(absoluteUrl: string): string {
   const u = encodeURIComponent(canonicalPosMenuUpstreamUrl(absoluteUrl))
-  return `/api/posMenuImageProxy?u=${u}&w=400&q=70&v=${POS_MENU_IMAGE_PROXY_RENDER_VERSION}`
+  return `/api/posMenuImageProxy?u=${u}&w=${POS_MENU_TILE_RENDER_WIDTH}&q=${POS_MENU_TILE_RENDER_QUALITY}&v=${POS_MENU_IMAGE_PROXY_RENDER_VERSION}`
 }
 
 function toGeneralImageProxyHref(absoluteUrl: string): string {
@@ -114,8 +149,9 @@ function toGeneralImageProxyHref(absoluteUrl: string): string {
 
 /**
  * POS 타일·미리보기용 최종 img src.
- * - Supabase Storage → posMenuImageProxy (비공개 버킷·SW 호환)
- * - Google Drive 등 기타 http(s) → imageProxy (관리자 품목/재고 화면과 동일)
+ * - 기본(preferProxy false): Supabase 공개 이미지는 transform URL 직접 로드 (Vercel 우회)
+ * - preferProxy true: 비공개 버킷·Electron 폴백용 동일 출처 프록시
+ * - Google Drive 등: preferProxy true 일 때만 imageProxy
  */
 export function toPosMenuDisplayImageHref(
   normalizedUrl: string,
@@ -125,11 +161,7 @@ export function toPosMenuDisplayImageHref(
   if (!u) return ''
   if (u.startsWith('data:') || u.startsWith('blob:')) return u
 
-  const preferProxy =
-    opts?.preferProxy ??
-    (typeof window !== 'undefined' && window.location?.protocol === 'https:')
-  if (!preferProxy) return u
-
+  const preferProxy = opts?.preferProxy === true
   const pageOrigin =
     opts?.pageOrigin ??
     (typeof window !== 'undefined' ? window.location.origin : '')
@@ -139,6 +171,11 @@ export function toPosMenuDisplayImageHref(
     if (pageOrigin && parsed.origin === pageOrigin) {
       return parsed.href
     }
+    if (!preferProxy) {
+      const render = toSupabaseStorageRenderHref(parsed.href)
+      if (render) return render
+      return parsed.href
+    }
     if (shouldProxyPosMenuImageForHybrid(parsed.href)) {
       return toHybridProxiedMenuImageHref(parsed.href)
     }
@@ -146,7 +183,7 @@ export function toPosMenuDisplayImageHref(
       return toGeneralImageProxyHref(parsed.href)
     }
   } catch {
-    if (/^https?:\/\//i.test(u)) return toGeneralImageProxyHref(u)
+    if (preferProxy && /^https?:\/\//i.test(u)) return toGeneralImageProxyHref(u)
   }
   return u
 }

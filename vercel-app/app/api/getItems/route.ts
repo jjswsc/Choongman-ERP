@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { createVendorNameResolver } from '@/lib/vendor-name-normalizer'
-import { runDuePriceSchedules } from '@/lib/price-schedule'
 import {
   appendInventoryTenantFilter,
   isInventoryTenantQueryBlocked,
@@ -76,12 +75,6 @@ export async function GET(request: NextRequest) {
     const tenantScope = await resolveInventoryTenantScope({ auth })
     if (isInventoryTenantQueryBlocked(tenantScope)) {
       return NextResponse.json([], { headers })
-    }
-
-    try {
-      await runDuePriceSchedules(new Date())
-    } catch (scheduleErr) {
-      console.error('getItems runDuePriceSchedules:', scheduleErr)
     }
 
     const resolveVendorName = await createVendorNameResolver()
