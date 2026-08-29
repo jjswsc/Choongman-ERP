@@ -32,6 +32,7 @@ import {
   type PosOrderItem,
 } from '@/lib/api-client'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { useVisiblePolling } from '@/lib/use-visible-polling'
 import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
 import { CheckCircle2 } from 'lucide-react'
 
@@ -337,13 +338,7 @@ export function LiveMenuSearchDialog({
     void loadAll()
   }, [open, loadAll])
 
-  React.useEffect(() => {
-    if (!open) return
-    const timer = window.setInterval(() => {
-      void loadOrdersOnly()
-    }, ORDERS_POLL_MS)
-    return () => window.clearInterval(timer)
-  }, [open, loadOrdersOnly])
+  useVisiblePolling(loadOrdersOnly, ORDERS_POLL_MS, { enabled: open })
 
   const categoriesForMain = React.useMemo(() => {
     if (!selectedMain) return []

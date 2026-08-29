@@ -8,6 +8,7 @@ import {
 import { POS_BUSINESS_OPEN_UPDATED_EVENT } from '@/lib/offline/settlement-offline'
 import { useStoreList } from '@/lib/api-client'
 import { normStoreKey } from '@/lib/store-list-keys'
+import { isPollTargetVisible } from '@/lib/use-visible-polling'
 
 export const POS_BUSINESS_OPEN_RECHECK_MS = 5 * 60_000
 
@@ -124,7 +125,9 @@ export function usePosBusinessOpenGate(
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', onVisible)
     window.addEventListener(POS_BUSINESS_OPEN_UPDATED_EVENT, onBusinessOpenUpdated)
+    /** 숨김 탭은 위 onVisible 이 복귀 시 갱신하므로 주기 재확인을 건너뛴다 */
     const recheckId = window.setInterval(() => {
+      if (!isPollTargetVisible()) return
       void refresh({ quiet: true })
     }, POS_BUSINESS_OPEN_RECHECK_MS)
     return () => {

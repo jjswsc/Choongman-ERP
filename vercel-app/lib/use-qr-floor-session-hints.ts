@@ -7,6 +7,7 @@ import {
   QR_FLOOR_SESSION_HINTS_ERROR_POLL_MS,
   QR_FLOOR_SESSION_HINTS_POLL_MS,
 } from '@/lib/qr-table-poll-interval'
+import { useVisiblePolling } from '@/lib/use-visible-polling'
 
 export type QrFloorMarker = 'awaiting' | 'active' | 'call' | null
 
@@ -55,35 +56,16 @@ export function useQrFloorSessionHints(storeCode: string | null | undefined) {
   React.useEffect(() => {
     enabledRef.current = null
     lastOkRef.current = false
-    let cancelled = false
-    let timeoutId = 0
-
-    const nextDelayMs = () => {
-      if (!lastOkRef.current) return QR_FLOOR_SESSION_HINTS_ERROR_POLL_MS
-      if (enabledRef.current === false) return QR_FLOOR_SESSION_HINTS_DISABLED_POLL_MS
-      return QR_FLOOR_SESSION_HINTS_POLL_MS
-    }
-
-    const scheduleNext = () => {
-      if (cancelled) return
-      timeoutId = window.setTimeout(() => {
-        void (async () => {
-          await reload()
-          scheduleNext()
-        })()
-      }, nextDelayMs())
-    }
-
-    void (async () => {
-      await reload()
-      scheduleNext()
-    })()
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timeoutId)
-    }
+    void reload()
   }, [reload])
+
+  const nextDelayMs = React.useCallback(() => {
+    if (!lastOkRef.current) return QR_FLOOR_SESSION_HINTS_ERROR_POLL_MS
+    if (enabledRef.current === false) return QR_FLOOR_SESSION_HINTS_DISABLED_POLL_MS
+    return QR_FLOOR_SESSION_HINTS_POLL_MS
+  }, [])
+
+  useVisiblePolling(reload, nextDelayMs)
 
   const getMarker = React.useCallback(
     (_id: string, name: string): QrFloorMarker => {

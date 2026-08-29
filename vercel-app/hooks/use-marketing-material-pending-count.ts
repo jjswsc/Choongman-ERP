@@ -8,6 +8,7 @@ import {
 } from "@/lib/api-client"
 import { countPendingStoreMaterialTasks } from "@/lib/marketing-material-checklist-utils"
 import { useLang } from "@/lib/lang-context"
+import { useVisiblePolling } from "@/lib/use-visible-polling"
 
 const REFRESH_MS = 5 * 60 * 1000
 
@@ -47,9 +48,9 @@ export function useMarketingMaterialPendingCount(storeName: string): {
 
   React.useEffect(() => {
     void load()
-    const id = window.setInterval(() => void load(), REFRESH_MS)
-    return () => window.clearInterval(id)
   }, [load, tick])
+
+  useVisiblePolling(load, REFRESH_MS)
 
   return { count, reload }
 }

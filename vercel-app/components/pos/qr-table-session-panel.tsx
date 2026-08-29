@@ -23,6 +23,7 @@ import {
 import { printQrTableThermalSlip } from '@/lib/print-qr-table-thermal-slip'
 import { pickQrTokenForTable, resolveQrTableGuestUrl } from '@/lib/qr-table-thermal-slip-html'
 import { QR_FLOOR_SESSION_HINTS_POLL_MS } from '@/lib/qr-table-poll-interval'
+import { useVisiblePolling } from '@/lib/use-visible-polling'
 import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession, QrTableToken } from '@/lib/qr-table-types'
 import { buffetTierDisplayName, defaultQrOrderStoreSettings } from '@/lib/qr-table-types'
 import { appAlert } from '@/lib/app-message'
@@ -109,11 +110,7 @@ export function QrTableSessionPanel(props: {
     void reload()
   }, [reload])
 
-  React.useEffect(() => {
-    if (!session) return
-    const id = window.setInterval(() => void reload(), QR_FLOOR_SESSION_HINTS_POLL_MS)
-    return () => window.clearInterval(id)
-  }, [session, reload])
+  useVisiblePolling(reload, QR_FLOOR_SESSION_HINTS_POLL_MS, { enabled: Boolean(session) })
 
   async function openSession() {
     setBusy(true)
