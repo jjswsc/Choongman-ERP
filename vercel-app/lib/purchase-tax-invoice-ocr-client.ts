@@ -86,8 +86,7 @@ function otsuThreshold(hist: Uint32Array, total: number): number {
 }
 
 /** 회색조 + 대비 — 태국어 성조·모음은 Otsu 이진화하면 사라지는 경우가 많음 */
-function preprocessForThai(src: HTMLCanvasElement): HTMLCanvasElement {
-  const maxW = 2200
+function preprocessForThai(src: HTMLCanvasElement, maxW = 1800): HTMLCanvasElement {
   const scale = src.width > maxW ? maxW / src.width : 1
   const c = document.createElement('canvas')
   c.width = Math.max(1, Math.round(src.width * scale))
@@ -231,27 +230,28 @@ function qrEnhanceCrops(src: HTMLCanvasElement): HTMLCanvasElement[] {
   return out
 }
 
-function qrCrops(src: HTMLCanvasElement): HTMLCanvasElement[] {
-  const nativeCrops = [
+function qrCornerCrops(src: HTMLCanvasElement): HTMLCanvasElement[] {
+  const corners = [
     cropRatio(src, 0, 0.32, 0.68, 1),
     cropRatio(src, 0, 0.38, 0, 0.42),
     cropRatio(src, 0, 0.42, 0.55, 1),
     cropRatio(src, 0.58, 1, 0.55, 1),
   ]
-  const maxW = 1600
+  return corners.map((c) => (c.width > 720 ? scaleCanvas(c, 720 / c.width) : c))
+}
+
+function qrWideCrops(src: HTMLCanvasElement): HTMLCanvasElement[] {
+  const maxW = 1200
   const scale = Math.min(1, maxW / Math.max(1, src.width))
   const full = scale === 1 ? src : scaleCanvas(src, scale)
-  const scaledCrops = nativeCrops.map((c) => (c.width > 900 ? scaleCanvas(c, 900 / c.width) : c))
-  return [...nativeCrops, full, ...scaledCrops, cropRatio(src, 0, 0.52), cropRatio(src, 0.48, 1)]
+  return [cropRatio(full, 0, 0.52), cropRatio(full, 0.48, 1), full]
 }
 
 function decodeWithJsQr(jsQR: JsQrFn, canvas: HTMLCanvasElement): string {
   const ctx = canvas.getContext('2d')
   if (!ctx) return ''
   const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  const hit =
-    jsQR(image.data, canvas.width, canvas.height, { inversionAttempts: 'attemptBoth' }) ||
-    jsQR(image.data, canvas.width, canvas.height, { inversionAttempts: 'invertFirst' })
+  const hit = jsQR(image.data, canvas.width, canvas.height, { inversionAttempts: 'attemptBoth' })
   return String(hit?.data || '').trim()
 }
 
@@ -290,9 +290,12 @@ export async function decodeTaxInvoiceQrsFromCanvas(src: HTMLCanvasElement): Pro
       }
     }
   }
-  await tryCrops(qrCrops(src), true)
+  const corners = qrCornerCrops(src)
+  await tryCrops(corners, true)
   if (found.length >= 1) return found.slice(0, 2)
   await tryCrops(qrEnhanceCrops(src), true)
+  if (found.length >= 1) return found.slice(0, 2)
+  await tryCrops(qrWideCrops(src), true)
   return found.slice(0, 2)
 }
 
@@ -396,14 +399,20 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
       return createWorker(langs, 1, cdnOpts)
     }
   }
-  // 숫자 whitelist를 같은 워커에 넣으면 다음 페이지 태국어 인식이 깨질 수 있어 워커를 나눔.
-  const thaiWorker = await make('tha+eng')
-  let digitWorker: TessWorker | null = null
+  const [thaiWorker, digitWorkerReady] = await Promise.all([make('tha+eng'), make('eng')])
+  let digitWorker: TessWorker | null = digitWorkerReady
   let headerAlnumWorker: TessWorker | null = null
-  await thaiWorker.setParameters({
-    tessedit_pageseg_mode: '6',
-    preserve_interword_spaces: '1',
-  })
+  await Promise.all([
+    thaiWorker.setParameters({
+      tessedit_pageseg_mode: '6',
+      preserve_interword_spaces: '1',
+    }),
+    digitWorker.setParameters({
+      tessedit_pageseg_mode: '6',
+      tessedit_char_whitelist: '0123456789.,:-/',
+      preserve_interword_spaces: '1',
+    }),
+  ])
 
   const readThai = async (image: HTMLCanvasElement) => {
     const r = await thaiWorker.recognize(image)
@@ -445,55 +454,58 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
     recognize: async (canvas, opts) => {
       const enough = (parts: string[]) => (opts?.enough ? opts.enough(joined(parts)) : false)
       const qr = opts?.skipQr ? '' : await decodeTaxInvoiceQrFromCanvas(canvas)
-      const thaiImg = preprocessForThai(canvas)
       const parts: string[] = []
       if (qr) parts.push(`===QR===\n${qr}`)
-      parts.push(`===FULL===\n${await readThai(thaiImg)}`)
       if (enough(parts)) return joined(parts)
 
-      const digitImg = preprocessForOcr(canvas)
-      const portrait = thaiImg.height > thaiImg.width * 1.05
-      const headerThai = cropRatio(thaiImg, 0, 0.42)
-      const totalsThai = portrait
-        ? scaleCanvas(cropRatio(thaiImg, 0.58, 1, 0.42, 1), 1.55)
-        : scaleCanvas(cropRatio(thaiImg, 0.55, 1), 1.4)
-      const headerAlnum = scaleCanvas(cropRatio(thaiImg, 0, portrait ? 0.38 : 0.42), 1.4)
-      const totalsDigits = scaleCanvas(
-        cropRatio(digitImg, portrait ? 0.58 : 0.55, 1, portrait ? 0.42 : 0, 1),
+      const portrait = canvas.height > canvas.width * 1.05
+      const headerSrc = preprocessForThai(cropRatio(canvas, 0, 0.42))
+      const totalsBin = scaleCanvas(
+        preprocessForOcr(portrait ? cropRatio(canvas, 0.58, 1, 0.42, 1) : cropRatio(canvas, 0.55, 1)),
         portrait ? 1.55 : 1.4
       )
-
-      const [headerText, totalsDigitText] = await Promise.all([readThai(headerThai), readDigits(totalsDigits)])
+      const [headerText, totalsDigitText] = await Promise.all([readThai(headerSrc), readDigits(totalsBin)])
       parts.push(`===HEADER===\n${headerText}`)
       parts.push(`===TOTALS_DIGITS===\n${totalsDigitText}`)
       if (enough(parts)) return joined(parts)
 
-      const [headerDigitText, totalsText] = await Promise.all([
-        readHeaderAlnum(headerAlnum),
-        readThai(totalsThai),
-      ])
+      const headerAlnum = scaleCanvas(cropRatio(headerSrc, 0, 1), 1.4)
+      const totalsThai = scaleCanvas(
+        preprocessForThai(portrait ? cropRatio(canvas, 0.58, 1, 0.42, 1) : cropRatio(canvas, 0.55, 1)),
+        portrait ? 1.55 : 1.4
+      )
+      const [headerDigitText, totalsText] = await Promise.all([readHeaderAlnum(headerAlnum), readThai(totalsThai)])
       parts.push(`===HEADER_DIGITS===\n${headerDigitText}`)
       parts.push(`===TOTALS===\n${totalsText}`)
+      if (enough(parts)) return joined(parts)
+
+      parts.push(`===FULL===\n${await readThai(preprocessForThai(canvas))}`)
       return joined(parts)
     },
     recognizeSparseCrops: async (canvas) => {
-      const thaiImg = preprocessForThai(canvas)
+      const portrait = canvas.height > canvas.width * 1.05
+      const header = preprocessForThai(cropRatio(canvas, 0, 0.42))
+      const totals = scaleCanvas(
+        preprocessForThai(portrait ? cropRatio(canvas, 0.58, 1, 0.42, 1) : cropRatio(canvas, 0.55, 1)),
+        portrait ? 1.55 : 1.4
+      )
       await thaiWorker.setParameters({
         tessedit_pageseg_mode: '4',
         preserve_interword_spaces: '1',
       })
       try {
-        const header = cropRatio(thaiImg, 0, 0.42)
-        const totals =
-          thaiImg.height > thaiImg.width * 1.05
-            ? scaleCanvas(cropRatio(thaiImg, 0.58, 1, 0.42, 1), 1.55)
-            : scaleCanvas(cropRatio(thaiImg, 0.55, 1), 1.4)
-        const parts = [
-          `===HEADER_PSM4===\n${await readThai(header)}`,
-          `===HEADER_DIGITS===\n${await readHeaderAlnum(scaleCanvas(cropRatio(thaiImg, 0, 0.38), 1.4))}`,
-          `===TOTALS_PSM4===\n${await readThai(totals)}`,
+        const [headerText, headerAlnum] = await Promise.all([
+          readThai(header),
+          readHeaderAlnum(scaleCanvas(header, 1.4)),
+        ])
+        const totalsText = await readThai(totals)
+        return [
+          `===HEADER_PSM4===\n${headerText}`,
+          `===HEADER_DIGITS===\n${headerAlnum}`,
+          `===TOTALS_PSM4===\n${totalsText}`,
         ]
-        return parts.filter((p) => !p.endsWith('===\n')).join('\n')
+          .filter((p) => !p.endsWith('===\n'))
+          .join('\n')
       } finally {
         await thaiWorker.setParameters({
           tessedit_pageseg_mode: '6',

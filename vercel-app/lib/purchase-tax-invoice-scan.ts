@@ -835,6 +835,17 @@ export function purchaseTaxInvoiceTextExtractIsComplete(
   return true
 }
 
+/** 번호·TIN이 있으면 합계 크롭은 이미 돌렸으므로 느린 PSM4 추가패스를 생략 */
+export function purchaseTaxInvoiceNeedsSparseOcr(
+  row: ExtractedPurchaseTaxInvoiceFields | null | undefined,
+  hint?: PurchaseTaxInvoiceScanHint
+): boolean {
+  if (purchaseTaxInvoiceTextExtractIsComplete(row, hint)) return false
+  if (!row?.invoiceNo || !invoiceNoLooksPlausible(row.invoiceNo)) return true
+  if (!row.sellerTaxId || row.sellerTaxId.length !== 13) return true
+  return false
+}
+
 export function mergePurchaseTaxInvoiceExtract(
   primary: ExtractedPurchaseTaxInvoiceFields | null | undefined,
   secondary: ExtractedPurchaseTaxInvoiceFields | null | undefined

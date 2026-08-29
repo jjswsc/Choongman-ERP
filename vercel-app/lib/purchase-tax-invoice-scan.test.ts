@@ -9,6 +9,7 @@ import {
   parseTaxInvoiceDateFromText,
   pdfPageTextLooksPrinted,
   pdfPageTextIsReliableForExtract,
+  purchaseTaxInvoiceNeedsSparseOcr,
   purchaseTaxInvoiceScanFailI18nKey,
   purchaseTaxInvoiceTextExtractIsComplete,
   repairExtractedPurchaseTaxInvoice,
@@ -139,6 +140,24 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
     expect(row?.vatAmount).toBe(100.81)
     expect(purchaseTaxInvoiceTextExtractIsComplete(row, { buyerTaxId: BUYER })).toBe(true)
     expect(pdfPageTextIsReliableForExtract(text, { buyerTaxId: BUYER })).toBe(true)
+  })
+
+  it('skips the extra OCR pass once invoice number and TIN are present', () => {
+    expect(
+      purchaseTaxInvoiceNeedsSparseOcr(
+        { invoiceNo: 'NX2026-07-0177', sellerTaxId: '0105561016821' },
+        { buyerTaxId: BUYER }
+      )
+    ).toBe(false)
+    expect(
+      purchaseTaxInvoiceNeedsSparseOcr(
+        { invoiceNo: 'ContactBcust', sellerTaxId: '0105561016821', netAmount: 8320, vatAmount: 582.4 },
+        { buyerTaxId: BUYER }
+      )
+    ).toBe(true)
+    expect(purchaseTaxInvoiceNeedsSparseOcr({ invoiceNo: 'NX-1', netAmount: 100, vatAmount: 7 }, { buyerTaxId: BUYER })).toBe(
+      true
+    )
   })
 
   it('reads hyphenated seller TIN', () => {

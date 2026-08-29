@@ -49,6 +49,7 @@ import {
   extractPurchaseTaxInvoiceFromScanText,
   pdfPageTextIsReliableForExtract,
   pdfPageTextLooksPrinted,
+  purchaseTaxInvoiceNeedsSparseOcr,
   purchaseTaxInvoiceScanFailI18nKey,
   purchaseTaxInvoiceTextExtractIsComplete,
   splitScanTextIntoInvoiceBlocks,
@@ -589,23 +590,35 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     const extractIsComplete = (pageText: string) =>
       purchaseTaxInvoiceTextExtractIsComplete(extractPurchaseTaxInvoiceFromScanText(pageText, hint), hint)
 
-    const ocrBox: { session: TaxInvoiceOcrSession | null } = { session: null }
+    const ocrBox: { session: TaxInvoiceOcrSession | null; creating: Promise<TaxInvoiceOcrSession> | null } = {
+      session: null,
+      creating: null,
+    }
+    const ensureOcrSession = async () => {
+      if (ocrBox.session) return ocrBox.session
+      if (!ocrBox.creating) {
+        setPdfBusy({ key: "ptiOcrLoading" })
+        ocrBox.creating = createTaxInvoiceOcrSession().then((s) => {
+          ocrBox.session = s
+          ocrBox.creating = null
+          return s
+        })
+      }
+      return ocrBox.creating
+    }
     const textForPage = async (canvas: HTMLCanvasElement, printedText: string) => {
       const work = pdfPageTextLooksPrinted(printedText) ? canvas : prepareTaxInvoiceScanCanvas(canvas)
       const qrs = await decodeTaxInvoiceQrsFromCanvas(work)
       const withQr = [printedText, wrapTaxInvoiceQrText(qrs)].filter((s) => String(s || "").trim()).join("\n")
       if (extractIsComplete(withQr)) return withQr
-      if (!ocrBox.session) {
-        setPdfBusy({ key: "ptiOcrLoading" })
-        ocrBox.session = await createTaxInvoiceOcrSession()
-      }
-      const ocr = ocrBox.session
+      const ocr = await ensureOcrSession()
       const ocrText = await ocr.recognize(work, {
         skipQr: true,
         enough: (text) => extractIsComplete([withQr, text].filter(Boolean).join("\n")),
       })
       let pageText = [withQr, ocrText].filter((s) => String(s || "").trim()).join("\n")
-      if (!extractIsComplete(pageText)) {
+      const extractedRow = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
+      if (purchaseTaxInvoiceNeedsSparseOcr(extractedRow, hint)) {
         const extra = await ocr.recognizeSparseCrops(work)
         pageText = [pageText, extra].filter((s) => String(s || "").trim()).join("\n")
       }
@@ -679,7 +692,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               if (!pdfPageTextLooksPrinted(printed)) {
                 setPdfBusy({ key: "ptiOcrPage", vars: { n: String(i), total: String(total) } })
               }
-              const { canvas } = await renderTaxInvoicePageForScan(pdf, i)
+              const renderP = renderTaxInvoicePageForScan(pdf, i)
+              const warmP = ensureOcrSession()
+              const [{ canvas }] = await Promise.all([renderP, warmP])
               if (ac.signal.aborted) {
                 releaseTaxInvoiceScanCanvas(canvas)
                 break
