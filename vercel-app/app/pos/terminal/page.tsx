@@ -141,6 +141,8 @@ import { isBanbanKitchenLine } from '@/lib/pos-banban-utils'
 import {
   buildOptionNameByCodeFromMenus,
   formatGrabLineNoteForKitchenPrint,
+  isLikelyPosOptionCode,
+  isRawMenuOrPromoSkuToken,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 import {
@@ -1415,7 +1417,7 @@ export default function PosTerminalPage() {
       const requiredOptionCodes = new Set<string>()
       const addCode = (raw: unknown) => {
         const code = String(raw ?? '').trim().toUpperCase()
-        if (code) requiredOptionCodes.add(code)
+        if (code && isLikelyPosOptionCode(code)) requiredOptionCodes.add(code)
       }
       const addCodesFromNote = (rawNote: unknown) => {
         const note = String(rawNote ?? '')
@@ -1440,9 +1442,10 @@ export default function PosTerminalPage() {
           for (const p of promoItems) {
             addCode((p as { optionCode?: unknown }).optionCode)
             const mid = String((p as { menuId?: unknown }).menuId ?? '').trim()
+            const optName = String((p as { optionName?: unknown }).optionName ?? '').trim()
+            const optCode = String((p as { optionCode?: unknown }).optionCode ?? '').trim()
             const hasOpt =
-              String((p as { optionName?: unknown }).optionName ?? '').trim() ||
-              String((p as { optionCode?: unknown }).optionCode ?? '').trim()
+              (optName && !isRawMenuOrPromoSkuToken(optName)) || isLikelyPosOptionCode(optCode)
             if (mid && !hasOpt) needsGrabPromoSizeInference = true
           }
         }

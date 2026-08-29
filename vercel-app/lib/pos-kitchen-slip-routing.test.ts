@@ -181,6 +181,23 @@ describe('buildKitchenSlipGroups printer overlay', () => {
     )
     expect(prepared[0]?.note).toBe('M - Boneless')
   })
+
+  it('injects size from name when optionCode is a menu SKU not a real option', () => {
+    const menus = [{ id: '20', name: 'GUCHUJANG Bar.B.Q FRIED CHICKEN', code: 'C020' }]
+    const prepared = preparePosOrderItemsForKitchenSlip(
+      [
+        {
+          id: '20-base',
+          menuId: '20',
+          name: 'GUCHUJANG Bar.B.Q FRIED CHICKEN (S Boneless)',
+          qty: 1,
+          optionCode: 'C020',
+        },
+      ],
+      { menus }
+    )
+    expect(prepared[0]?.note).toBe('S Boneless')
+  })
 })
 
 describe('buildPartialCancelKitchenSlips', () => {

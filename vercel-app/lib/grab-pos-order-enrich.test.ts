@@ -51,6 +51,21 @@ describe('enrichGrabPromoItemsWithDefaultSizeFromCatalog', () => {
     expect(enriched?.[0]?.optionName).toBeUndefined()
     expect(enriched?.[1]?.optionName).toMatch(/s/i)
   })
+
+  it('does not overwrite a saved M size with default S', () => {
+    const catalog = buildGrabPosCatalog(
+      [{ id: 7, name: 'RED HOT CHICKEN', code: 'C007' }],
+      [
+        { optionCode: 'C007-1', name: 'S - Boneless' },
+        { optionCode: 'C007-3', name: 'M - Boneless' },
+      ]
+    )
+    const enriched = enrichGrabPromoItemsWithDefaultSizeFromCatalog(
+      [{ menuId: '7', menuName: 'RED HOT CHICKEN', quantity: 1, optionName: 'M - Boneless', optionCode: 'C007-3' }],
+      catalog
+    )
+    expect(enriched?.[0]?.optionName).toBe('M - Boneless')
+  })
 })
 
 describe('grabSelectionIncludesExplicitSize', () => {
@@ -245,6 +260,27 @@ describe('grab-pos-order-enrich', () => {
         optionCode: 'C023-1+C023-5',
       })
     ).toBe('optc:C023-1,C023-5')
+  })
+
+  it('resolveGrabItemPrintNote ignores menu SKU and promo SKU fields', () => {
+    expect(
+      resolveGrabItemPrintNote({
+        note: 'mods:S Boneless',
+        optionCode: 'C020',
+        optionCode1: 'C020',
+      })
+    ).toBe('mods:S Boneless')
+    expect(
+      resolveGrabItemPrintNote({
+        optionCode: '260612-S02',
+      })
+    ).toBe('')
+    expect(
+      resolveGrabItemPrintNote({
+        note: 'optc:C020,C011-1',
+        optionCode: '260612-S02',
+      })
+    ).toBe('optc:C011-1')
   })
 
   it('synthesizeGrabItemOptionNote rebuilds optc note from item fields', () => {

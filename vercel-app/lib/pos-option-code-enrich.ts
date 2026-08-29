@@ -1,3 +1,5 @@
+import { isLikelyPosOptionCode } from '@/lib/grab-pos-order-enrich'
+
 type AnyRow = Record<string, unknown>
 
 /** `C023-1+C023-3` 등 다단계 합성 옵션 코드 분리 */
@@ -30,13 +32,13 @@ export function flattenPosOrderItemOptionCodes(row: Record<string, unknown>): st
     if (Array.isArray(val)) {
       for (const entry of val) {
         for (const code of expandCombinedPosOptionCodeToken(String(entry ?? ''))) {
-          out.add(code.toUpperCase())
+          if (isLikelyPosOptionCode(code)) out.add(code.toUpperCase())
         }
       }
       continue
     }
     for (const code of expandCombinedPosOptionCodeToken(String(val ?? ''))) {
-      out.add(code.toUpperCase())
+      if (isLikelyPosOptionCode(code)) out.add(code.toUpperCase())
     }
   }
   return [...out]

@@ -1,5 +1,5 @@
 import type { PosMenu } from '@/lib/api-client'
-import { resolveGrabItemPrintNote } from '@/lib/grab-pos-order-enrich'
+import { isLikelyPosOptionCode, resolveGrabItemPrintNote } from '@/lib/grab-pos-order-enrich'
 import { flattenPosOrderItemOptionCodes } from '@/lib/pos-option-code-enrich'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
@@ -89,9 +89,10 @@ export function mapPosOrderRowForKitchenPrint(
   const optionCode2 = String(pit.optionCode2 ?? '').trim()
   const optionCodesMerged = [
     ...new Set([...optionCodes, ...flattenPosOrderItemOptionCodes(pit), optionCode1, optionCode2].filter(Boolean)),
-  ]
+  ].filter((c) => isLikelyPosOptionCode(c))
   const primaryOptionCode = optionCodesMerged[0] ?? ''
-  const secondaryOptionCode = optionCodesMerged[1] ?? optionCode2
+  const secondaryOptionCode =
+    optionCodesMerged[1] ?? (isLikelyPosOptionCode(optionCode2) ? optionCode2 : '')
   const displayName = resolvePosOrderItemMenuDisplayName(
     {
       id: String(it.id ?? ''),

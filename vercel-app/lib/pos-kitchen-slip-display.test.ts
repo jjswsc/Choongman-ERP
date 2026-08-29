@@ -435,4 +435,161 @@ describe('pos-kitchen-slip-display', () => {
     expect(lines[0].note).not.toContain('SNOW ONION')
     expect(lines[0].note).not.toContain('CURRY')
   })
+
+  it('member portal Super Deal kitchen compose shows Size S not promo SKU', () => {
+    const catalog = buildGrabPosCatalog(
+      [{ id: 11, name: 'GOLDEN FRIED CHICKEN', code: 'C011' }],
+      [
+        { optionCode: 'C011-1', name: 'Size S' },
+        { optionCode: 'C011-3', name: 'Size M' },
+      ]
+    )
+    const orderItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'mp-set-1',
+        name: '[Super Deal] Set 1',
+        qty: 1,
+        optionCode: '260612-S02',
+        promoItems: [
+          { menuId: '11', menuName: 'GOLDEN FRIED CHICKEN', optionId: null, quantity: 1 },
+        ],
+      },
+    ]
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'mp-set-1-k1',
+        name: '[[Super Deal] Set 1] GOLDEN FRIED CHICKEN (260612-S02)',
+        qty: 1,
+        optionCode: '260612-S02',
+        kitchenRouteMenuId: '11',
+        kitchenPromoGroupId: 'mp-set-1',
+        kitchenPromoParentName: '[Super Deal] Set 1',
+        kitchenPromoParentQty: 1,
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      orderItems,
+      grabInbound: false,
+      menuNameByMenuId: { '11': 'GOLDEN FRIED CHICKEN' },
+      menuCodeByMenuId: { '11': 'C011' },
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    const compose = (lines[0].promoComposeLines ?? []).join('\n')
+    expect(compose).toContain('GOLDEN FRIED CHICKEN')
+    expect(compose).toMatch(/size\s*s/i)
+    expect(compose).not.toContain('260612-S02')
+  })
+
+  it('member portal standalone kitchen keeps S Boneless instead of menu SKU C020', () => {
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: '20-base',
+        name: 'GUCHUJANG Bar.B.Q FRIED CHICKEN (S Boneless)',
+        qty: 1,
+        optionCode: 'C020',
+        optionCode1: 'C020',
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      grabInbound: false,
+      menuNameByMenuId: { '20': 'GUCHUJANG Bar.B.Q FRIED CHICKEN' },
+      menuCodeByMenuId: { '20': 'C020' },
+    })
+    expect(lines).toHaveLength(1)
+    const blob = `${lines[0].name} ${lines[0].note ?? ''}`
+    expect(blob).toContain('GUCHUJANG')
+    expect(blob).toMatch(/s\s*boneless/i)
+    expect(blob.replace(/guchujang/i, '')).not.toMatch(/\bC020\b/)
+  })
+
+  it('POS kitchen set keeps saved M and does not rewrite to S', () => {
+    const catalog = buildGrabPosCatalog(
+      [{ id: 11, name: 'GOLDEN FRIED CHICKEN', code: 'C011' }],
+      [
+        { optionCode: 'C011-1', name: 'Size S' },
+        { optionCode: 'C011-3', name: 'Size M' },
+      ]
+    )
+    const orderItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'pos-set-1',
+        name: '[Super Deal] Set 1',
+        qty: 1,
+        promoItems: [
+          {
+            menuId: '11',
+            menuName: 'GOLDEN FRIED CHICKEN',
+            optionId: null,
+            optionCode: 'C011-3',
+            optionName: 'Size M',
+            quantity: 1,
+          },
+        ],
+      },
+    ]
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'pos-set-1-k1',
+        name: '[[Super Deal] Set 1] GOLDEN FRIED CHICKEN (Size M)',
+        qty: 1,
+        kitchenRouteMenuId: '11',
+        kitchenPromoGroupId: 'pos-set-1',
+        kitchenPromoParentName: '[Super Deal] Set 1',
+        kitchenPromoParentQty: 1,
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      orderItems,
+      grabInbound: false,
+      menuNameByMenuId: { '11': 'GOLDEN FRIED CHICKEN' },
+      menuCodeByMenuId: { '11': 'C011' },
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    const compose = (lines[0].promoComposeLines ?? []).join('\n')
+    expect(compose).toMatch(/size\s*m/i)
+    expect(compose).not.toMatch(/size\s*s/i)
+  })
+
+  it('POS kitchen rice compose does not get a chicken size', () => {
+    const catalog = buildGrabPosCatalog(
+      [
+        { id: 22, name: 'Rice', code: 'S010' },
+        { id: 11, name: 'GOLDEN FRIED CHICKEN', code: 'C011' },
+      ],
+      [
+        { optionCode: 'C011-1', name: 'Size S' },
+        { optionCode: 'C011-3', name: 'Size M' },
+      ]
+    )
+    const orderItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'pos-set-rice',
+        name: '[Super Deal] Set 2',
+        qty: 1,
+        promoItems: [{ menuId: '22', menuName: 'Rice', optionId: null, quantity: 1 }],
+      },
+    ]
+    const slipItems: KitchenSlipRoutingItem[] = [
+      {
+        id: 'pos-set-rice-k1',
+        name: '[[Super Deal] Set 2] Rice',
+        qty: 1,
+        kitchenRouteMenuId: '22',
+        kitchenPromoGroupId: 'pos-set-rice',
+        kitchenPromoParentName: '[Super Deal] Set 2',
+        kitchenPromoParentQty: 1,
+      },
+    ]
+    const lines = buildKitchenHallStyleSlipLines(slipItems, {
+      orderItems,
+      grabInbound: false,
+      menuNameByMenuId: { '22': 'Rice', '11': 'GOLDEN FRIED CHICKEN' },
+      menuCodeByMenuId: { '22': 'S010', '11': 'C011' },
+      optionNameByCode: catalog.optionNameByCode,
+    })
+    const compose = (lines[0].promoComposeLines ?? []).join('\n')
+    expect(compose).toContain('Rice')
+    expect(compose).not.toMatch(/size\s*[sml]/i)
+    expect(compose).not.toMatch(/boneless/i)
+  })
 })

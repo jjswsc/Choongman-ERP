@@ -63,6 +63,35 @@ describe('mapPosOrderRowForKitchenPrint', () => {
     expect(row.promoItems).toBeUndefined()
     expect(row.promoId).toBeUndefined()
   })
+
+  it('does not copy menu SKU into optionCode for kitchen print', () => {
+    const row = mapPosOrderRowForKitchenPrint({
+      id: '20-base',
+      name: 'GUCHUJANG Bar.B.Q FRIED CHICKEN (S Boneless)',
+      qty: 1,
+      menuId: '20',
+      optionCode: 'C020',
+      optionCode1: 'C020',
+      optionCode2: 'C020',
+    })
+    expect(row.optionCode).toBeUndefined()
+    expect(row.optionCode1).toBeUndefined()
+    expect(row.optionCode2).toBeUndefined()
+    expect(row.optionCodes).toBeUndefined()
+    expect(String(row.note ?? '')).not.toMatch(/optc:C020\b/i)
+  })
+
+  it('still maps real option codes onto kitchen print lines', () => {
+    const row = mapPosOrderRowForKitchenPrint({
+      id: '20-opt',
+      name: 'GUCHUJANG Bar.B.Q FRIED CHICKEN (S Boneless)',
+      qty: 1,
+      menuId: '20',
+      optionCode: 'C020-1',
+    })
+    expect(row.optionCode).toBe('C020-1')
+    expect(String(row.note ?? '')).toContain('optc:C020-1')
+  })
 })
 
 describe('mapDineInAddonCartLineForKitchenPrint', () => {

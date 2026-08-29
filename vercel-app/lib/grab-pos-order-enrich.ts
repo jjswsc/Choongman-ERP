@@ -1,6 +1,7 @@
 import type { PosMenu, PosMenuOption, PosPromoWithItems } from '@/lib/api-client'
 import { parseBanbanFlavorsFromPersistedNote } from '@/lib/pos-banban-utils'
 import { normalizePosLineNote } from '@/lib/pos-line-note'
+import { isLikelyPosMenuSkuCode } from '@/lib/pos-print-item-line'
 
 export type GrabPosPromoCatalogRow = Pick<PosPromoWithItems, 'id' | 'name' | 'code' | 'items'>
 
@@ -35,6 +36,13 @@ function readFirstFinite(...values: unknown[]): number {
 /** POS `pos_menu_options.option_code` 형태 (예: C020-1, C009-5) */
 export function isLikelyPosOptionCode(raw: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9]*-\d+(?:-[A-Za-z0-9]+)*$/i.test(String(raw || '').trim())
+}
+
+/** 메뉴·프로모 SKU를 옵션 라벨로 쓰면 안 되는 토큰 (C020, 260612-S02) */
+export function isRawMenuOrPromoSkuToken(raw: string): boolean {
+  const s = String(raw || '').trim()
+  if (!s || isLikelyPosOptionCode(s)) return false
+  return looksLikeGrabCampaignSku(s) || isLikelyPosMenuSkuCode(s)
 }
 
 export function isMachineLikeGrabToken(raw: string): boolean {
@@ -1072,16 +1080,19 @@ export function enrichGrabPromoItemsForPrint<T extends GrabPromoPrintRow>(
   const map = toOptionNameByCodeMap(opts?.optionNameByCode)
   return items.map((p) => {
     let optionName = String(p.optionName ?? '').trim()
+    if (optionName && isRawMenuOrPromoSkuToken(optionName)) optionName = ''
     const optionCode = String(p.optionCode ?? '').trim()
-    if (!optionName && optionCode) {
-      const fromCode = formatGrabOrderLineNoteForPrint(`optc:${optionCode}`, map)
+    const usableOptionCode = isLikelyPosOptionCode(optionCode) ? optionCode : ''
+    if (!optionName && usableOptionCode) {
+      const fromCode = formatGrabOrderLineNoteForPrint(`optc:${usableOptionCode}`, map)
       if (fromCode && !fromCode.split(',').every((x) => isLikelyPosOptionCode(x.trim()))) {
         optionName = fromCode
       } else {
-        const direct = map.get(optionCode.toUpperCase())
+        const direct = map.get(usableOptionCode.toUpperCase())
         if (direct) optionName = String(direct).trim()
       }
     }
+    if (optionName && isRawMenuOrPromoSkuToken(optionName)) optionName = ''
     if (!optionName) {
       const inferred = inferGrabPromoDefaultSizeLabel(p.menuId, opts?.menuCodeByMenuId, map)
       if (inferred) optionName = inferred
@@ -1120,7 +1131,8 @@ export function formatGrabPromoComposeLinesForPrint(
 ): string[] {
   const menuName = String(p.menuName ?? '').trim()
   const qty = Math.max(1, Number(p.quantity) || 1)
-  const optName = String(p.optionName ?? '').trim()
+  const optNameRaw = String(p.optionName ?? '').trim()
+  const optName = isRawMenuOrPromoSkuToken(optNameRaw) ? '' : optNameRaw
   const optionParts = splitPromoOptionNameParts(optName)
   // 사이즈·파트(예: "Size S", "M - Boneless")는 메뉴명 없이 단독으로는 주방에서 의미가 없다.
   // 세트명이 메뉴명을 부분 포함하는 경우(예: "Set 1 Golden Fried Chicken" ⊃ "GOLDEN FRIED CHICKEN")
@@ -1176,6 +1188,7 @@ export function formatGrabOptionFragmentForPrint(
   const text = String(raw ?? '').trim()
   if (!text) return ''
   const map = toOptionNameByCodeMap(optionNameByCode)
+  if (isRawMenuOrPromoSkuToken(text)) return ''
   if (!/[A-Za-z0-9][A-Za-z0-9]*-\d+/.test(text) && !/(?:^|\s)(mods?:|optc:)/i.test(text)) {
     return text
   }
@@ -1219,7 +1232,8 @@ function collectGrabItemOptionCodeFields(item: {
       : [token]
     for (const code of parts) {
       const upper = code.toUpperCase()
-      if (upper) out.add(upper)
+      if (!upper || !isLikelyPosOptionCode(upper)) continue
+      out.add(upper)
     }
   }
   return Array.from(out)
@@ -1238,7 +1252,9 @@ export function resolveGrabItemPrintNote(item: {
 }): string {
   const existing = String(item.note ?? '').trim()
   const fieldCodes = collectGrabItemOptionCodeFields(item)
-  const noteCodes = parseOptcCodesFromNote(existing).map((c) => c.toUpperCase())
+  const noteCodes = parseOptcCodesFromNote(existing)
+    .map((c) => c.toUpperCase())
+    .filter((c) => isLikelyPosOptionCode(c))
   const mergedCodes = new Set<string>([...noteCodes, ...fieldCodes])
   if (mergedCodes.size === 0) return existing
 

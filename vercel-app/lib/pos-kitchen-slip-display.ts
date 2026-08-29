@@ -7,6 +7,7 @@ import {
   formatGrabPromoComposeLinesForPrint,
   isGrabInboundPosOrder,
   isLikelyPosOptionCode,
+  isRawMenuOrPromoSkuToken,
   resolveGrabItemPrintNote,
 } from '@/lib/grab-pos-order-enrich'
 import {
@@ -75,11 +76,11 @@ function resolvePromoOptionLabel(
   optionNameByCode?: Map<string, string> | Record<string, string>
 ): string {
   const direct = String((p as { optionName?: unknown }).optionName ?? '').trim()
-  if (direct) return direct
+  if (direct && !isRawMenuOrPromoSkuToken(direct)) return direct
   const optCode = String((p as { optionCode?: unknown }).optionCode ?? '').trim()
-  if (optCode) {
+  if (optCode && isLikelyPosOptionCode(optCode)) {
     const labels = formatGrabOrderLineNoteForPrint(`optc:${optCode}`, optionNameByCode)
-    if (labels) return labels
+    if (labels && !isRawMenuOrPromoSkuToken(labels)) return labels
   }
   return ''
 }
@@ -123,22 +124,19 @@ function formatPromoComposeLine(
     menuNameFromMenuIdOrCode ||
     preferredDirectMenuName ||
     (p.menuId ? `#${p.menuId}` : '')
-  const rows =
-    grabSplit && menuCodeByMenuId
-      ? enrichGrabPromoItemsForPrint(
-          [
-            {
-              menuId: String(p.menuId ?? ''),
-              optionId: (p as { optionId?: string | null }).optionId ?? null,
-              optionCode: (p as { optionCode?: string | null }).optionCode ?? null,
-              optionName: (p as { optionName?: string | null }).optionName ?? null,
-              menuName,
-              quantity: Math.max(1, Number(p.quantity) || 1),
-            },
-          ],
-          { optionNameByCode, menuCodeByMenuId }
-        )
-      : [{ optionName: resolvePromoOptionLabel(p, optionNameByCode) }]
+  const rows = enrichGrabPromoItemsForPrint(
+    [
+      {
+        menuId: String(p.menuId ?? ''),
+        optionId: (p as { optionId?: string | null }).optionId ?? null,
+        optionCode: (p as { optionCode?: string | null }).optionCode ?? null,
+        optionName: (p as { optionName?: string | null }).optionName ?? null,
+        menuName,
+        quantity: Math.max(1, Number(p.quantity) || 1),
+      },
+    ],
+    { optionNameByCode, menuCodeByMenuId }
+  )
   const optName = String(rows[0]?.optionName ?? resolvePromoOptionLabel(p, optionNameByCode)).trim()
   return formatGrabPromoComposeLinesForPrint(
     {
@@ -217,14 +215,19 @@ function promoComposeFromSplitChildren(
           resolvedOptName = fromNote
         }
       }
-      if (grabSplit && menuCodeByMenuId) {
+      if (resolvedOptName && isRawMenuOrPromoSkuToken(resolvedOptName)) resolvedOptName = ''
+      if (menuCodeByMenuId && routeMid) {
         const optcMatch = /optc:([^\s,]+)/i.exec(String(ch.note ?? ''))
+        const fieldCode = String((ch as { optionCode?: string | null }).optionCode ?? '').trim()
+        const optionCode =
+          (optcMatch?.[1] && isLikelyPosOptionCode(optcMatch[1]) ? optcMatch[1] : '') ||
+          (isLikelyPosOptionCode(fieldCode) ? fieldCode : '')
         const enriched = enrichGrabPromoItemsForPrint(
           [
             {
               menuId: routeMid,
               optionId: (ch as { optionId?: string | null }).optionId ?? null,
-              optionCode: optcMatch?.[1] ?? null,
+              optionCode: optionCode || null,
               optionName: resolvedOptName || null,
               menuName,
               quantity: componentQty,
@@ -233,7 +236,7 @@ function promoComposeFromSplitChildren(
           { optionNameByCode, menuCodeByMenuId }
         )
         const en = String(enriched[0]?.optionName ?? '').trim()
-        if (en) resolvedOptName = en
+        if (en && !isRawMenuOrPromoSkuToken(en)) resolvedOptName = en
       }
       lines.push(
         ...formatGrabPromoComposeLinesForPrint(
@@ -262,6 +265,7 @@ function promoComposeFromSplitChildren(
       (routeMid ? `#${routeMid}` : '')
     if (!menuName) continue
     let optName = optMatch ? formatGrabOptionFragmentForPrint(optMatch[2].trim(), optionNameByCode) : ''
+    if (optName && isRawMenuOrPromoSkuToken(optName)) optName = ''
     if (!optName) {
       if (grabSplit) {
         const chips = collectGrabPrintOptionLines({ note: ch.note, optionNameByCode })
@@ -273,15 +277,20 @@ function promoComposeFromSplitChildren(
         }
       }
     }
+    if (optName && isRawMenuOrPromoSkuToken(optName)) optName = ''
     let resolvedOptName = optName
-    if (grabSplit && menuCodeByMenuId && routeMid) {
+    if (menuCodeByMenuId && routeMid) {
       const optcMatch = /optc:([^\s,]+)/i.exec(String(ch.note ?? ''))
+      const fieldCode = String((ch as { optionCode?: string | null }).optionCode ?? '').trim()
+      const optionCode =
+        (optcMatch?.[1] && isLikelyPosOptionCode(optcMatch[1]) ? optcMatch[1] : '') ||
+        (isLikelyPosOptionCode(fieldCode) ? fieldCode : '')
       const enriched = enrichGrabPromoItemsForPrint(
         [
           {
             menuId: routeMid,
             optionId: (ch as { optionId?: string | null }).optionId ?? null,
-            optionCode: optcMatch?.[1] ?? null,
+            optionCode: optionCode || null,
             optionName: resolvedOptName || null,
             menuName,
             quantity: componentQty,
@@ -290,7 +299,7 @@ function promoComposeFromSplitChildren(
         { optionNameByCode, menuCodeByMenuId }
       )
       const en = String(enriched[0]?.optionName ?? '').trim()
-      if (en) resolvedOptName = en
+      if (en && !isRawMenuOrPromoSkuToken(en)) resolvedOptName = en
     }
     lines.push(
       ...formatGrabPromoComposeLinesForPrint(
@@ -672,8 +681,18 @@ export function buildKitchenHallStyleSlipLines(
     // 카탈로그 미수록 등으로 사이즈가 간헐적으로 사라지는 경우 포함) 이름에 이미 적힌
     // 옵션 텍스트로 폴백한다. 코드가 정상 해석되면 formattedNote를 그대로 쓰므로 중복 없음.
     // (이름에 있는 값을 쓰는 것이라 추론이 아니며 홀 영수증과 동일 값)
+    // 회원앱이 메뉴·프로모 SKU(C020, 260612-S02)를 optionCode 에 넣은 경우 그 코드를
+    // 사이즈 대신 찍지 않고, 이름 괄호의 S Boneless / Size S 를 쓴다.
+    const formattedIsSku = Boolean(
+      formattedNote &&
+        String(formattedNote)
+          .split(/[\n,]/)
+          .map((x) => x.trim())
+          .filter(Boolean)
+          .every((part) => isRawMenuOrPromoSkuToken(part) || isLikelyPosOptionCode(part))
+    )
     const optionLineFallback =
-      !formattedNote && lineSplit.optionLine
+      (!formattedNote || formattedIsSku) && lineSplit.optionLine
         ? String(lineSplit.optionLine).trim()
         : ''
     const hasBanbanFlavorsToken = /banbanFlavors:/i.test(String(resolvedNote ?? ''))
@@ -696,7 +715,9 @@ export function buildKitchenHallStyleSlipLines(
           ? formatGrabLineNoteForKitchenPrint(resolvedNote, optionNameByCode) ||
             formattedNote ||
             optionLineFallback
-          : formattedNote || optionLineFallback
+          : formattedIsSku
+            ? optionLineFallback || undefined
+            : formattedNote || optionLineFallback
     const dedupedNote =
       fallbackNameFromNote &&
       effectiveNote &&

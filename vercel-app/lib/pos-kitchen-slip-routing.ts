@@ -2,7 +2,7 @@ import { normalizePromotionCategoryMain } from "@/lib/pos-promo-constants"
 import { resolveCartLineQuantityForSave } from "@/lib/pos-order-item-map"
 import { enrichBanbanKitchenLineForPrint, isBanbanKitchenLine } from '@/lib/pos-banban-utils'
 import { resolvePosOrderItemMenuDisplayName } from "@/lib/pos-order-item-display-name"
-import { resolveGrabItemPrintNote } from "@/lib/grab-pos-order-enrich"
+import { isLikelyPosOptionCode, isRawMenuOrPromoSkuToken, resolveGrabItemPrintNote } from "@/lib/grab-pos-order-enrich"
 import { splitPosPrintItemLine } from "@/lib/pos-print-item-line"
 import {
   buildKitchenMenuNameLookup,
@@ -39,9 +39,13 @@ export type KitchenSlipRoutingItem = {
   name?: string
   qty?: number
   note?: string
+  optionCode?: string | null
+  optionCode1?: string | null
+  optionCodes?: string[]
   promoItems?: {
     menuId: string
     optionId: string | null
+    optionCode?: string | null
     optionName?: string | null
     /** 주문 저장 시점 메뉴명 스냅샷(매장 스코프·비활성 메뉴로 카탈로그에 없을 때 주방 표기용) */
     menuName?: string | null
@@ -329,8 +333,10 @@ function expandPromoLinesForKitchenRouting<T extends KitchenSlipRoutingItem>(
             String((p as { menuName?: string | null }).menuName ?? '').trim()
           )
         )
-        const optionName = String((p as { optionName?: string | null }).optionName ?? '').trim()
-        const optionCode = String((p as { optionCode?: string | null }).optionCode ?? '').trim()
+        const optionNameRaw = String((p as { optionName?: string | null }).optionName ?? '').trim()
+        const optionCodeRaw = String((p as { optionCode?: string | null }).optionCode ?? '').trim()
+        const optionName = optionNameRaw && !isRawMenuOrPromoSkuToken(optionNameRaw) ? optionNameRaw : ''
+        const optionCode = isLikelyPosOptionCode(optionCodeRaw) ? optionCodeRaw : ''
         const optionLabel = optionName
           ? ` (${optionName})`
           : optionCode
@@ -801,13 +807,15 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
     // 이름의 옵션을 note 로 주입한다. (표시 단계가 note 를 항상 출력 → 단품 사이즈/반반 맛 누락 방지.
     //  이름에 이미 있는 값이라 추론이 아니며, 모든 인쇄 경로(홀/포장/배달/재인쇄)에서 동일하게 보인다.)
     const existingNote = String((it as { note?: unknown }).note ?? '').trim()
-    const hasOptionCodeField = Boolean(
-      String((it as { optionCode?: unknown }).optionCode ?? '').trim() ||
-        String((it as { optionCode1?: unknown }).optionCode1 ?? '').trim() ||
-        String((it as { optionCode2?: unknown }).optionCode2 ?? '').trim() ||
-        (Array.isArray((it as { optionCodes?: unknown }).optionCodes) &&
-          ((it as { optionCodes?: unknown[] }).optionCodes ?? []).length > 0)
-    )
+    const hasOptionCodeField = [
+      String((it as { optionCode?: unknown }).optionCode ?? '').trim(),
+      String((it as { optionCode1?: unknown }).optionCode1 ?? '').trim(),
+      String((it as { optionCode2?: unknown }).optionCode2 ?? '').trim(),
+      ...((Array.isArray((it as { optionCodes?: unknown }).optionCodes)
+        ? ((it as { optionCodes?: unknown[] }).optionCodes ?? [])
+        : []) as unknown[]
+      ).map((c) => String(c ?? '').trim()),
+    ].some((code) => isLikelyPosOptionCode(code))
     const hasSplittableCombinedCode = ['optionCode', 'optionCode1', 'option_code', 'option_code1'].some(
       (key) => String((it as Record<string, unknown>)[key] ?? '').includes('+')
     )
