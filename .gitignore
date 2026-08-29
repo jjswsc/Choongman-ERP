@@ -14,6 +14,7 @@ credentials.json
 *.log
 .DS_Store
 .tmp-grab-err/
+.tmp-pti/
 
 # 백업 폴더 (선택)
 # backup_before_680/

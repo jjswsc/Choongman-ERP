@@ -6,7 +6,12 @@ type PdfTextItem = { str?: string; transform?: number[] }
 
 type PdfPage = {
   getViewport: (opts: { scale: number }) => { width: number; height: number }
-  render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => {
+  render: (opts: {
+    canvasContext: CanvasRenderingContext2D
+    viewport: { width: number; height: number }
+    /** [a,b,c,d,e,f] — 원점을 밀어 페이지 일부만 캔버스에 담을 때 쓴다 */
+    transform?: number[]
+  }) => {
     promise: Promise<void>
   }
   getTextContent?: () => Promise<{ items?: PdfTextItem[] }>
@@ -104,6 +109,49 @@ export async function renderTaxInvoicePageForScan(
   const page = await pdf.getPage(pageNumber)
   const canvas = await renderPageToCanvas(page)
   return { canvas, images: [] }
+}
+
+/**
+ * 지면 일부만 고배율로 다시 그린다.
+ *
+ * A4 전체를 600DPI 로 그리면 35MP 캔버스가 되어 모바일 사파리에서 그냥 실패한다.
+ * 필요한 영역만 그리면 10MP 안쪽이라 안전하면서, 스캔본에 들어 있는 300DPI 텍스트 마스크의
+ * 해상도를 그대로 살릴 수 있다. 2200px 로 그린 뒤 잘라 확대하는 것과는 결과가 전혀 다르다.
+ */
+export type TaxInvoiceRegionRect = { x0: number; y0: number; x1: number; y1: number }
+
+export type TaxInvoiceRegionRender = {
+  canvas: HTMLCanvasElement
+  /** 이 영역의 왼쪽 위가 페이지 픽셀 좌표계에서 어디였나 */
+  offsetX: number
+  offsetY: number
+  /** 이 배율에서 페이지 전체가 몇 픽셀이었나 — 좌표를 되돌릴 때 쓴다 */
+  pageWidth: number
+  pageHeight: number
+}
+
+export async function renderTaxInvoiceRegion(
+  pdf: PdfDoc,
+  pageNumber: number,
+  rect: TaxInvoiceRegionRect,
+  targetPageWidthPx: number
+): Promise<TaxInvoiceRegionRender> {
+  const page = await pdf.getPage(pageNumber)
+  const base = page.getViewport({ scale: 1 })
+  const viewport = page.getViewport({ scale: targetPageWidthPx / Math.max(1, base.width) })
+  const pageWidth = Math.ceil(viewport.width)
+  const pageHeight = Math.ceil(viewport.height)
+  const offsetX = Math.floor(pageWidth * rect.x0)
+  const offsetY = Math.floor(pageHeight * rect.y0)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.ceil(pageWidth * (rect.x1 - rect.x0)))
+  canvas.height = Math.max(1, Math.ceil(pageHeight * (rect.y1 - rect.y0)))
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('canvas 2d missing')
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  await page.render({ canvasContext: ctx, viewport, transform: [1, 0, 0, 1, -offsetX, -offsetY] }).promise
+  return { canvas, offsetX, offsetY, pageWidth, pageHeight }
 }
 
 export async function extractPdfPageText(pdf: PdfDoc, pageNumber: number): Promise<string> {

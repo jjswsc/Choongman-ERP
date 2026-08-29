@@ -70,6 +70,17 @@ import {
   prepareTaxInvoiceScanCanvas,
   type TaxInvoiceOcrSession,
 } from "@/lib/purchase-tax-invoice-ocr-client"
+import {
+  mergeTaxInvoiceLayouts,
+  readTaxInvoicePageHires,
+  readTaxInvoicePageLayout,
+} from "@/lib/purchase-tax-invoice-hires-client"
+import {
+  applyLayoutExtract,
+  buildVendorInvoiceHints,
+  extractFromLayout,
+  type OcrPageLayout,
+} from "@/lib/purchase-tax-invoice-layout"
 import { startPurchaseTaxScanKeepAlive } from "@/lib/purchase-tax-invoice-scan-keepalive"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
@@ -120,7 +131,8 @@ function writeReviewDraft(rows: ReviewRow[]) {
 }
 
 const SCAN_CHECKPOINT_KEY = "cm_pti_scan_checkpoint"
-const SCAN_PAGE_TIMEOUT_MS = 55_000
+/** 잘 안 읽히는 장은 영역을 600DPI로 다시 그려 판독하므로 한 장에 30초를 넘길 수 있다 */
+const SCAN_PAGE_TIMEOUT_MS = 95_000
 const SCAN_CHECKPOINT_TTL_MS = 36 * 60 * 60 * 1000
 
 type ScanCheckpoint = {
@@ -569,7 +581,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       ...extracted,
     ]
 
-    const ingestLocalPage = (page: number, pageText: string) => {
+    /** 저장된 행 + 이번 배치에서 이미 읽은 행 → 거래처별 번호 꼴 */
+    const vendorHints = () => buildVendorInvoiceHints([...rows, ...extracted])
+
+    const ingestLocalPage = (page: number, pageText: string, layout?: OcrPageLayout) => {
       const known = sellerKnown()
       const blocks = splitScanTextIntoInvoiceBlocks(pageText)
       if (blocks.length >= 2) {
@@ -579,7 +594,11 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         }
         return
       }
-      const local = fillSellerFromProfiles(extractPurchaseTaxInvoiceFromScanText(pageText, hint) || {}, known)
+      const textOnly = extractPurchaseTaxInvoiceFromScanText(pageText, hint) || {}
+      const merged = layout
+        ? applyLayoutExtract(textOnly, extractFromLayout(layout, hint.buyerTaxId, vendorHints())).fields
+        : textOnly
+      const local = fillSellerFromProfiles(merged, known)
       if (local && purchaseTaxInvoiceHasExtractedFields(local)) {
         pushFromParsed(local, page)
         return
@@ -606,23 +625,53 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       }
       return ocrBox.creating
     }
-    const textForPage = async (canvas: HTMLCanvasElement, printedText: string) => {
+    /**
+     * 좌표 판독이 더 필요한가. 번호·세금번호·금액 중 하나라도 비면 고배율로 다시 본다.
+     * 스캔본은 지면 전체를 2200px 로 읽으면 A4 기준 150DPI 라, 작게 찍힌 번호·금액이
+     * 아예 판독에서 빠지는 일이 잦다.
+     */
+    const layoutLooksIncomplete = (layout: OcrPageLayout) => {
+      const x = extractFromLayout(layout, hint.buyerTaxId, vendorHints())
+      return (
+        !x.invoiceNo ||
+        x.invoiceNo.confidence < 70 ||
+        !x.sellerTaxId ||
+        x.netAmount === undefined ||
+        x.vatAmount === undefined
+      )
+    }
+
+    const textForPage = async (
+      canvas: HTMLCanvasElement,
+      printedText: string,
+      source?: { pdf: Awaited<ReturnType<typeof openPdfFile>>; pageNumber: number; total: number }
+    ): Promise<{ text: string; layout?: OcrPageLayout }> => {
       const work = pdfPageTextLooksPrinted(printedText) ? canvas : prepareTaxInvoiceScanCanvas(canvas)
       const qrs = await decodeTaxInvoiceQrsFromCanvas(work)
       const withQr = [printedText, wrapTaxInvoiceQrText(qrs)].filter((s) => String(s || "").trim()).join("\n")
-      if (extractIsComplete(withQr)) return withQr
+      if (extractIsComplete(withQr)) return { text: withQr }
       const ocr = await ensureOcrSession()
-      const ocrText = await ocr.recognize(work, {
-        skipQr: true,
-        enough: (text) => extractIsComplete([withQr, text].filter(Boolean).join("\n")),
-      })
-      let pageText = [withQr, ocrText].filter((s) => String(s || "").trim()).join("\n")
+
+      const page = await readTaxInvoicePageLayout(work, ocr)
+      const layouts = [page.layout]
+      let pageText = [withQr, page.text].filter((s) => String(s || "").trim()).join("\n")
+      if (source && layoutLooksIncomplete(page.layout)) {
+        setPdfBusy({
+          key: "ptiOcrPageHires",
+          vars: { n: String(source.pageNumber), total: String(source.total) },
+        })
+        const hires = await readTaxInvoicePageHires(source.pdf, source.pageNumber, ocr, { signal: ac.signal })
+        layouts.push(hires.layout)
+        pageText = [pageText, hires.text].filter((s) => String(s || "").trim()).join("\n")
+      }
+      const layout = mergeTaxInvoiceLayouts(layouts)
+
       const extractedRow = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
       if (purchaseTaxInvoiceNeedsSparseOcr(extractedRow, hint)) {
         const extra = await ocr.recognizeSparseCrops(work)
         pageText = [pageText, extra].filter((s) => String(s || "").trim()).join("\n")
       }
-      return pageText
+      return { text: pageText, layout }
     }
 
     const yieldUi = () => yieldScanLoop()
@@ -699,8 +748,14 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 releaseTaxInvoiceScanCanvas(canvas)
                 break
               }
+              let pageLayout: OcrPageLayout | undefined
               try {
-                pageText = await withScanTimeout(textForPage(canvas, printed), SCAN_PAGE_TIMEOUT_MS)
+                const read = await withScanTimeout(
+                  textForPage(canvas, printed, { pdf, pageNumber: i, total }),
+                  SCAN_PAGE_TIMEOUT_MS
+                )
+                pageText = read.text
+                pageLayout = read.layout
               } catch (e) {
                 pageText = printed
                 const timedOut = e instanceof Error && e.message === "ptiOcrPageTimeout"
@@ -717,7 +772,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 releaseTaxInvoiceScanCanvas(canvas)
               }
               if (ac.signal.aborted) break
-              ingestLocalPage(i, pageText)
+              ingestLocalPage(i, pageText, pageLayout)
             }
             if (i === total || i % 5 === 0 || (typeof document !== "undefined" && document.hidden)) {
               setReviewRows([...extracted])
@@ -739,8 +794,11 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           scanImagePreviewRef.current = images[0] || ""
           setPdfBusy({ key: "ptiOcrPage", vars: { n: "1", total: "1" } })
           let pageText = ""
+          let pageLayout: OcrPageLayout | undefined
           try {
-            pageText = await withScanTimeout(textForPage(canvas, ""), SCAN_PAGE_TIMEOUT_MS)
+            const read = await withScanTimeout(textForPage(canvas, ""), SCAN_PAGE_TIMEOUT_MS)
+            pageText = read.text
+            pageLayout = read.layout
           } catch {
             pageText = ""
             setError((prev) => prev || "ptiOcrFailed")
@@ -748,7 +806,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             releaseTaxInvoiceScanCanvas(canvas)
           }
           if (ac.signal.aborted) break
-          ingestLocalPage(1, pageText)
+          ingestLocalPage(1, pageText, pageLayout)
         }
       }
       if (!ac.signal.aborted) {

@@ -3,14 +3,25 @@
  * 합계는 숫자 전용 OCR, QR이 있으면 페이로드를 함께 붙임.
  */
 
+import type { OcrLineBox, OcrWordBox } from './purchase-tax-invoice-layout'
+
 const TESS_JS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1'
 const TESS_CORE = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.0'
 /** best: GPT 없이 스캔본을 읽으므로 정확도 우선. 태국어 데이터는 최초 1회 다운로드. */
 const TESS_LANG = 'https://tessdata.projectnaptha.com/4.0.0_best'
 
+type TessBox = { x0: number; y0: number; x1: number; y1: number }
+type TessWord = { text?: string; confidence?: number; bbox?: TessBox }
+type TessLine = { text?: string; confidence?: number; bbox?: TessBox; words?: TessWord[] }
+type TessBlock = { paragraphs?: { lines?: TessLine[] }[] }
+
 type TessWorker = {
   setParameters: (p: Record<string, string>) => Promise<void>
-  recognize: (image: HTMLCanvasElement) => Promise<{ data: { text?: string } }>
+  recognize: (
+    image: HTMLCanvasElement,
+    options?: Record<string, unknown>,
+    output?: { text?: boolean; blocks?: boolean }
+  ) => Promise<{ data: { text?: string; blocks?: TessBlock[] } }>
   terminate: () => Promise<void>
 }
 
@@ -32,7 +43,58 @@ export type TaxInvoiceOcrSession = {
     opts?: { skipQr?: boolean; enough?: (text: string) => boolean }
   ) => Promise<string>
   recognizeSparseCrops: (canvas: HTMLCanvasElement) => Promise<string>
+  /** 글자 위치까지 돌려준다 — 라벨 옆 값을 좌표로 고르기 위한 판독 */
+  recognizeBoxes: (
+    canvas: HTMLCanvasElement,
+    opts?: { psm?: string; enhance?: boolean }
+  ) => Promise<{ text: string; lines: OcrLineBox[] }>
   terminate: () => Promise<void>
+}
+
+function scaleOcrLines(lines: OcrLineBox[], scale: number): OcrLineBox[] {
+  const s = (v: number) => Math.round(v * scale)
+  return lines.map((l) => ({
+    ...l,
+    x0: s(l.x0),
+    y0: s(l.y0),
+    x1: s(l.x1),
+    y1: s(l.y1),
+    words: l.words.map((w) => ({ ...w, x0: s(w.x0), y0: s(w.y0), x1: s(w.x1), y1: s(w.y1) })),
+  }))
+}
+
+function linesFromTesseractBlocks(blocks: TessBlock[] | undefined): OcrLineBox[] {
+  const out: OcrLineBox[] = []
+  for (const block of blocks || []) {
+    for (const para of block.paragraphs || []) {
+      for (const line of para.lines || []) {
+        const words: OcrWordBox[] = []
+        for (const w of line.words || []) {
+          const text = String(w.text || '').trim()
+          if (!text || !w.bbox) continue
+          words.push({
+            text,
+            conf: Math.round(Number(w.confidence) || 0),
+            x0: Math.round(w.bbox.x0),
+            y0: Math.round(w.bbox.y0),
+            x1: Math.round(w.bbox.x1),
+            y1: Math.round(w.bbox.y1),
+          })
+        }
+        if (!words.length || !line.bbox) continue
+        out.push({
+          text: String(line.text || '').trim(),
+          conf: Math.round(Number(line.confidence) || 0),
+          x0: Math.round(line.bbox.x0),
+          y0: Math.round(line.bbox.y0),
+          x1: Math.round(line.bbox.x1),
+          y1: Math.round(line.bbox.y1),
+          words: words.sort((a, b) => a.x0 - b.x0),
+        })
+      }
+    }
+  }
+  return out
 }
 
 function cropRatio(src: HTMLCanvasElement, y0: number, y1: number, x0 = 0, x1 = 1): HTMLCanvasElement {
@@ -481,6 +543,23 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
 
       parts.push(`===FULL===\n${await readThai(preprocessForThai(canvas))}`)
       return joined(parts)
+    },
+    recognizeBoxes: async (canvas, opts) => {
+      const psm = opts?.psm || '6'
+      // 축소는 절대 하지 않는다 — 줄이면 작게 찍힌 번호·금액이 다시 통째로 사라진다
+      const image = opts?.enhance ? preprocessForThai(canvas, canvas.width) : canvas
+      if (psm !== '6') await thaiWorker.setParameters({ tessedit_pageseg_mode: psm })
+      try {
+        const r = await thaiWorker.recognize(image, {}, { text: true, blocks: true })
+        const scale = canvas.width / Math.max(1, image.width)
+        const lines = linesFromTesseractBlocks(r.data.blocks)
+        return {
+          text: String(r.data.text || '').trim(),
+          lines: scale === 1 ? lines : scaleOcrLines(lines, scale),
+        }
+      } finally {
+        if (psm !== '6') await thaiWorker.setParameters({ tessedit_pageseg_mode: '6' })
+      }
     },
     recognizeSparseCrops: async (canvas) => {
       const portrait = canvas.height > canvas.width * 1.05
