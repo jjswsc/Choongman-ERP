@@ -546,7 +546,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
       </CardHeader>
       <CardContent className="space-y-4">
         {!isEmbeddedPp36Section ? (
-        <div className="flex max-w-full flex-nowrap items-end gap-2 overflow-x-auto pb-1">
+        <div className="relative z-0 flex max-w-full flex-nowrap items-end gap-2 overflow-x-auto pb-1">
           <div className="shrink-0">
             <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
             <Input

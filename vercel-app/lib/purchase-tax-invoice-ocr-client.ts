@@ -399,6 +399,7 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
   // 숫자 whitelist를 같은 워커에 넣으면 다음 페이지 태국어 인식이 깨질 수 있어 워커를 나눔.
   const thaiWorker = await make('tha+eng')
   let digitWorker: TessWorker | null = null
+  let headerAlnumWorker: TessWorker | null = null
   await thaiWorker.setParameters({
     tessedit_pageseg_mode: '6',
     preserve_interword_spaces: '1',
@@ -419,8 +420,23 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
     }
     return digitWorker
   }
+  const getHeaderAlnumWorker = async () => {
+    if (!headerAlnumWorker) {
+      headerAlnumWorker = await make('eng')
+      await headerAlnumWorker.setParameters({
+        tessedit_pageseg_mode: '6',
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-/.',
+        preserve_interword_spaces: '1',
+      })
+    }
+    return headerAlnumWorker
+  }
   const readDigits = async (image: HTMLCanvasElement) => {
     const r = await (await getDigitWorker()).recognize(image)
+    return String(r.data.text || '').trim()
+  }
+  const readHeaderAlnum = async (image: HTMLCanvasElement) => {
+    const r = await (await getHeaderAlnumWorker()).recognize(image)
     return String(r.data.text || '').trim()
   }
   const joined = (parts: string[]) => parts.filter((p) => !p.endsWith('===\n')).join('\n')
@@ -441,7 +457,7 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
       const totalsThai = portrait
         ? scaleCanvas(cropRatio(thaiImg, 0.58, 1, 0.42, 1), 1.55)
         : scaleCanvas(cropRatio(thaiImg, 0.55, 1), 1.4)
-      const headerDigits = scaleCanvas(cropRatio(digitImg, 0, portrait ? 0.38 : 0.42), 1.4)
+      const headerAlnum = scaleCanvas(cropRatio(thaiImg, 0, portrait ? 0.38 : 0.42), 1.4)
       const totalsDigits = scaleCanvas(
         cropRatio(digitImg, portrait ? 0.58 : 0.55, 1, portrait ? 0.42 : 0, 1),
         portrait ? 1.55 : 1.4
@@ -453,7 +469,7 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
       if (enough(parts)) return joined(parts)
 
       const [headerDigitText, totalsText] = await Promise.all([
-        readThai(headerDigits),
+        readHeaderAlnum(headerAlnum),
         readThai(totalsThai),
       ])
       parts.push(`===HEADER_DIGITS===\n${headerDigitText}`)
@@ -474,7 +490,7 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
             : scaleCanvas(cropRatio(thaiImg, 0.55, 1), 1.4)
         const parts = [
           `===HEADER_PSM4===\n${await readThai(header)}`,
-          `===HEADER_DIGITS===\n${await readDigits(scaleCanvas(cropRatio(preprocessForOcr(canvas), 0, 0.38), 1.4))}`,
+          `===HEADER_DIGITS===\n${await readHeaderAlnum(scaleCanvas(cropRatio(thaiImg, 0, 0.38), 1.4))}`,
           `===TOTALS_PSM4===\n${await readThai(totals)}`,
         ]
         return parts.filter((p) => !p.endsWith('===\n')).join('\n')
@@ -486,7 +502,11 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
       }
     },
     terminate: async () => {
-      await Promise.all([thaiWorker.terminate(), digitWorker ? digitWorker.terminate() : Promise.resolve()])
+      await Promise.all([
+        thaiWorker.terminate(),
+        digitWorker ? digitWorker.terminate() : Promise.resolve(),
+        headerAlnumWorker ? headerAlnumWorker.terminate() : Promise.resolve(),
+      ])
     },
   }
 }

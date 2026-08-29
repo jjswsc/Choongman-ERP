@@ -4301,7 +4301,12 @@ export function AdminAccountingCompliance({
 
   return (
     <div className="space-y-4">
-      <Tabs value={tab} onValueChange={setTab} className={tabsRootClass}>
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        className={tabsRootClass}
+        preserveInactiveTabs={hideTabBar ? false : undefined}
+      >
         {!hideTabBar && (
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>

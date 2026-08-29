@@ -223,9 +223,11 @@ export type ExtractedPurchaseTaxInvoiceFields = {
 }
 
 export function isLikelyTaxInvoiceCopy(raw: unknown): boolean {
-  const s = String(raw || '').trim().toLowerCase()
+  const s = String(raw || '').trim()
   if (!s) return false
-  return /สำเนา|สำเนาเอกสาร|copy\b|duplicate|true copy|สำเนาใบ/.test(s)
+  if (/ต้นฉบับ/.test(s)) return false
+  if (/สำหรับวางบิล/.test(s)) return false
+  return /สำเนา|สำเนาเอกสาร|copy\b|duplicate|true copy|สำเนาใบ/i.test(s)
 }
 
 /** OCR이 Seller ID·숫자만 읽은 상호는 거래처 기억으로 덮음 */
@@ -237,6 +239,12 @@ export function looksLikeJunkSellerName(raw: unknown): boolean {
   if (/^[\d\s|.:#\-/]{4,}$/.test(s)) return true
   if (/[!|]/.test(s) && /\d{5,}/.test(s) && !/บริษัท|ห้าง|ร้าน|ทรัสต์/.test(s)) return true
   if (/ซอย|แขวง|เขต|ถนน/.test(s) && !/บริษัท|ห้าง|ร้าน|ทรัสต์/.test(s)) return true
+  const hasEntity = /บริษัท|ห้าง|ร้าน|ทรัสต์|limited|l\.?t\.?d|co\.?\s*ltd|\bco\b|นาย|นางสาว|นาง/i.test(s)
+  if (!hasEntity) {
+    if (/จนกว่า/.test(s)) return true
+    if (/^(find|fad|contact|customer|taxrex)s?$/i.test(s)) return true
+    if (/^[A-Za-z]{2,16}$/.test(s)) return true
+  }
   return false
 }
 
@@ -398,9 +406,9 @@ export function purchaseTaxReviewIsProblem(
   },
   taxMonth: string
 ): boolean {
-  if (row.skip) return true
+  if (row.skip) return false
   if (!String(row.invoiceNo || '').trim()) return true
-  return purchaseTaxReviewFlags(row, taxMonth).length > 0
+  return purchaseTaxReviewFlags(row, taxMonth).some((flag) => flag !== 'month')
 }
 
 export function purchaseTaxPp30Compare(opts: {

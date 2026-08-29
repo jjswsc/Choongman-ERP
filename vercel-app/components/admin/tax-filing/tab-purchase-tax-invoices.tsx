@@ -508,7 +508,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     const pushFromParsed = (f: ExtractedPurchaseTaxInvoiceFields, page: number, failReason?: string) => {
       const invoiceNo = String(f.invoiceNo || "").trim()
       const sellerTaxId = String(f.sellerTaxId || "").replace(/\D/g, "")
-      const isCopy = f.isCopy === true || isLikelyTaxInvoiceCopy(String(f.sellerName || invoiceNo))
+      const isCopy = f.isCopy === true || isLikelyTaxInvoiceCopy(String(f.sellerName || ""))
       const key = purchaseTaxInvoiceDedupeKey("x", invoiceNo, sellerTaxId)
       let skip = false
       let skipReason = ""
@@ -1155,7 +1155,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                       <Input className={reviewWarnClass("h-7 w-[130px]", flags.includes("month"))} type="date" value={r.docDate} onChange={(e) => patchReview(idx, { docDate: e.target.value })} />
                     </td>
                     <td className="p-1">
-                      <Input className="h-7 w-[120px]" value={r.invoiceNo} onChange={(e) => {
+                      <Input className={reviewWarnClass("h-7 w-[120px]", !r.skip && !String(r.invoiceNo || "").trim())} value={r.invoiceNo} onChange={(e) => {
                         const invoiceNo = e.target.value
                         const unskipEmpty = r.skip && isPtiEmptyPageSkip(r.skipReason || "", t) && invoiceNo.trim()
                         patchReview(idx, { invoiceNo, skip: unskipEmpty ? false : r.skip, skipReason: unskipEmpty ? "" : r.skipReason })
@@ -1282,7 +1282,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 <div key={`${r.page}-${idx}`} className="rounded border p-2 space-y-2">
                   <div>
                     <Label className="text-[10px]">{t("ptiColInvoiceNo")}</Label>
-                    <Input className="h-7" value={r.invoiceNo} onChange={(e) => {
+                    <Input className={reviewWarnClass("h-7", !r.skip && !String(r.invoiceNo || "").trim())} value={r.invoiceNo} onChange={(e) => {
                       const invoiceNo = e.target.value
                       const unskipEmpty = r.skip && isPtiEmptyPageSkip(r.skipReason || "", t) && invoiceNo.trim()
                       patchReview(idx, { invoiceNo, skip: unskipEmpty ? false : r.skip, skipReason: unskipEmpty ? "" : r.skipReason })

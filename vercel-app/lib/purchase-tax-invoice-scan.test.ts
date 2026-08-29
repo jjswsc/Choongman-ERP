@@ -63,6 +63,14 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('51')).toBe(false)
     expect(invoiceNoLooksPlausible('94')).toBe(false)
     expect(invoiceNoLooksPlausible('Hasan')).toBe(false)
+    expect(invoiceNoLooksPlausible('ContactBcust')).toBe(false)
+    expect(invoiceNoLooksPlausible('ontactBcuston')).toBe(false)
+    expect(invoiceNoLooksPlausible('invpice/Taxrex')).toBe(false)
+    expect(invoiceNoLooksPlausible('NX2026-07-0177')).toBe(true)
+    expect(invoiceNoLooksPlausible('DCI-00-2607/0109')).toBe(true)
+    expect(invoiceNoLooksPlausible('TITKBK008072026000010005')).toBe(true)
+    expect(invoiceNoLooksPlausible('110510042902')).toBe(true)
+    expect(invoiceNoLooksPlausible('IV 6907772')).toBe(true)
     expect(invoiceNoLooksPlausible('INV-20260531153')).toBe(true)
     expect(invoiceNoLooksPlausible('AB-99')).toBe(true)
     expect(invoiceNoLooksPlausible('IM20260701000087')).toBe(true)
@@ -260,6 +268,26 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(repaired.vatAmount).toBe(71.96)
   })
 
+  it('repairs a line-item net that is not 7% of VAT', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'INV-20260616066', sellerTaxId: SELLER, netAmount: 756, vatAmount: 6.41 },
+      { buyerTaxId: BUYER, pageText: 'มูลค่า 756.00 ภาษีมูลค่าเพิ่ม 6.41 ค่าส่ง 91.59' }
+    )
+    expect(repaired.netAmount).toBe(91.59)
+    expect(repaired.vatAmount).toBe(6.41)
+  })
+
+  it('unwraps a VAT-inclusive printed total 1100 to 1028.04', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice({
+      invoiceNo: '2607064',
+      sellerTaxId: '0105550102497',
+      netAmount: 1100,
+      vatAmount: 71.96,
+    })
+    expect(repaired.netAmount).toBe(1028.04)
+    expect(repaired.vatAmount).toBe(71.96)
+  })
+
   it('snaps an OCR year that is a few years off the filing period', () => {
     expect(snapDocDateYearToTaxPeriod('2022-07-10', '2026-08')).toBe('2026-07-10')
     expect(snapDocDateYearToTaxPeriod('2026-07-10', '2026-08')).toBe('2026-07-10')
@@ -283,6 +311,33 @@ describe('inferAmountsFromMoneySequence', () => {
   it('picks net/vat/total when the last three amounts add up at 7%', () => {
     const inferred = inferAmountsFromMoneySequence('12.00 99.00 1,440.17 100.81 1,540.98')
     expect(inferred).toEqual({ netAmount: 1440.17, vatAmount: 100.81, totalAmount: 1540.98 })
+  })
+})
+
+describe('withholding and exempt lines', () => {
+  it('does not use หัก ณ ที่จ่าย as VAT', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบกำกับภาษี เลขที่ INV2026070017',
+        'เลขประจำตัวผู้เสียภาษี 0105562090693',
+        'มูลค่าสินค้า 10,411.22',
+        'หัก ณ ที่จ่าย 312.34',
+        'ภาษีมูลค่าเพิ่ม 728.79',
+        'รวมทั้งสิ้น 11,140.01',
+      ].join('\n'),
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.invoiceNo).toBe('INV2026070017')
+    expect(row?.netAmount).toBe(10411.22)
+    expect(row?.vatAmount).toBe(728.79)
+  })
+
+  it('ignores exempt produce when repairing Polar Bear 7% net', () => {
+    const inferred = inferAmountsFromMoneySequence(
+      'สินค้าเกษตรยกเว้น 658.00\n756.00\n6.41\n91.59'
+    )
+    expect(inferred?.netAmount).toBe(91.59)
+    expect(inferred?.vatAmount).toBe(6.41)
   })
 })
 
@@ -377,6 +432,14 @@ describe('fillSellerNameFromTinLookup', () => {
       [{ sellerTaxId: SELLER, sellerName: 'Other' }]
     )
     expect(filled.sellerName).toBe('Keep Me')
+  })
+
+  it('replaces a junk OCR seller name from TIN lookup', () => {
+    const filled = fillSellerNameFromTinLookup(
+      { sellerTaxId: SELLER, sellerName: 'find', invoiceNo: 'A' },
+      [{ sellerTaxId: SELLER, sellerName: 'บริษัท โพลาร์ แบร์ มิชชั่น จำกัด' }]
+    )
+    expect(filled.sellerName).toContain('โพลาร์')
   })
 })
 

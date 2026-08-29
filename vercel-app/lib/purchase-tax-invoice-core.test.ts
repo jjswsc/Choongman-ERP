@@ -168,12 +168,17 @@ describe('purchase tax invoice helpers', () => {
     expect(looksLikeJunkSellerName('!) | 12964955')).toBe(true)
     expect(looksLikeJunkSellerName('163/141 ซอยประชาอุทิศ11 แขวงดอนเมือง')).toBe(true)
     expect(looksLikeJunkSellerName('บริษัท ช้อปปี้ (ประเทศไทย) จำกัด')).toBe(false)
+    expect(looksLikeJunkSellerName('find')).toBe(true)
+    expect(looksLikeJunkSellerName('fad')).toBe(true)
+    expect(looksLikeJunkSellerName('จนกว่า')).toBe(true)
+    expect(looksLikeJunkSellerName('บริษัท จีดูบัง (เอเชีย) จำกัด')).toBe(false)
   })
 
   it('detects invoice copies to skip', () => {
     expect(isLikelyTaxInvoiceCopy('สำเนา')).toBe(true)
     expect(isLikelyTaxInvoiceCopy('True copy')).toBe(true)
     expect(isLikelyTaxInvoiceCopy('ต้นฉบับ')).toBe(false)
+    expect(isLikelyTaxInvoiceCopy('สำเนา สำหรับวางบิล เลขที่ DCI-00-2607/0109')).toBe(false)
   })
 
   it('explains Buddhist year conversion', () => {
@@ -259,8 +264,8 @@ describe('purchase tax review flags', () => {
     ).not.toContain('tin')
   })
 
-  it('treats skipped and incomplete TIN rows as problems', () => {
-    expect(purchaseTaxReviewIsProblem({ skip: true, invoiceNo: 'A', sellerTaxId: '0105559082715' }, '2026-08')).toBe(true)
+  it('treats incomplete TIN and empty invoice as problems, not skipped copies', () => {
+    expect(purchaseTaxReviewIsProblem({ skip: true, invoiceNo: 'A', sellerTaxId: '0105559082715' }, '2026-08')).toBe(false)
     expect(
       purchaseTaxReviewIsProblem(
         { invoiceNo: 'A', sellerTaxId: '123', docDate: '2026-08-01', netAmount: 100, vatAmount: 7 },
@@ -273,6 +278,24 @@ describe('purchase tax review flags', () => {
         '2026-08'
       )
     ).toBe(false)
+    expect(
+      purchaseTaxReviewIsProblem(
+        { invoiceNo: 'IVT-1', sellerTaxId: '0105559082715', docDate: '2026-07-01', netAmount: 100, vatAmount: 7 },
+        '2026-08'
+      )
+    ).toBe(false)
+    expect(
+      purchaseTaxReviewFlags(
+        { invoiceNo: 'IVT-1', sellerTaxId: '0105559082715', docDate: '2026-07-01', netAmount: 100, vatAmount: 7 },
+        '2026-08'
+      )
+    ).toEqual(['month'])
+    expect(
+      purchaseTaxReviewIsProblem(
+        { invoiceNo: '', sellerTaxId: '0105559082715', docDate: '2026-08-01', netAmount: 100, vatAmount: 7 },
+        '2026-08'
+      )
+    ).toBe(true)
   })
 
   it('compares register VAT with PP.30 draft', () => {

@@ -38,6 +38,7 @@ import {
   TAX_FILING_DEFAULT_TAB,
   TAX_FILING_TABS,
   type TaxFilingTabKey,
+  planTaxFilingTabSync,
   readStoredTaxFilingTab,
   resolveTaxFilingTab,
   writeStoredTaxFilingTab,
@@ -106,7 +107,6 @@ function useFilingTabFilters(
       sso.setStore(managerStore)
       setStoreProfilesStore(managerStore)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync manager store once when auth store changes
   }, [isManager, managerStore])
 
   const FilingFiltersCard = React.useCallback(
@@ -199,7 +199,6 @@ function useFilingTabFilters(
       pnd54: pick(pnd54),
       sso: pick(sso),
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- individual filter fields listed below
     [
       pp30.filingYearMonth,
       pp30.filingStoreFilter,
@@ -257,22 +256,20 @@ export function TaxFilingShell() {
     },
     [setTabUrl]
   )
+  const sessionTabRestoredRef = React.useRef(false)
 
   React.useEffect(() => {
     if (!allowUrlSync) return
-    const raw = String(searchParams.get("tab") || "").trim()
-    const fromUrl = resolveTaxFilingTab(raw)
-    if (fromUrl) {
-      writeStoredTaxFilingTab(fromUrl)
-      if (fromUrl !== tab || raw !== fromUrl) setTab(fromUrl)
-      return
-    }
-    // remount 시 기본 탭(PP.30)으로 초기화된 경우만 세션 복원. 사용자가 PP.30을 고른 뒤에는 덮지 않음.
-    const saved = readStoredTaxFilingTab()
-    if (saved && saved !== TAX_FILING_DEFAULT_TAB && tab === TAX_FILING_DEFAULT_TAB) {
-      setTab(saved)
-    }
-  }, [allowUrlSync, searchParams, setTab, tab])
+    const plan = planTaxFilingTabSync({
+      urlTabRaw: searchParams.get("tab"),
+      savedTab: readStoredTaxFilingTab(),
+      sessionAlreadyRestored: sessionTabRestoredRef.current,
+    })
+    if (plan.persist) writeStoredTaxFilingTab(plan.persist)
+    if (plan.markRestored) sessionTabRestoredRef.current = true
+    if (plan.apply) setTab(plan.apply)
+    // tab을 deps에 넣지 않음: 클릭 직후 낡은 ?tab=pnd3 로 되돌리면 탭이 고정됨.
+  }, [allowUrlSync, searchParams, setTab])
 
   const [taxEntityScopeOptions, setTaxEntityScopeOptions] = React.useState<TaxEntityScopeOption[]>([])
 
@@ -362,7 +359,7 @@ export function TaxFilingShell() {
         preserveInactiveTabs={false}
         className={adminTabsRootCn}
       >
-        <AdminTabsBarWithHelp>
+        <AdminTabsBarWithHelp className="relative z-30">
           <TabsList className={adminTabsListRowCn}>
             <TabsTrigger value="storeProfiles" className={adminTabsTriggerCn}>
               {t("taxFilingTabStoreProfiles")}
@@ -400,13 +397,13 @@ export function TaxFilingShell() {
           </TabsList>
         </AdminTabsBarWithHelp>
 
-        <TabsContent value="storeProfiles" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="storeProfiles" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingStoreProfilesTab
             filingStoreFilter={storeProfilesStore}
             onFilingStoreFilterChange={setStoreProfilesStore}
           />
         </TabsContent>
-        <TabsContent value="pp30" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pp30" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingVatTab
             {...tabProps.pp30}
             onOpenStoreProfiles={() =>
@@ -417,7 +414,7 @@ export function TaxFilingShell() {
         <TabsContent
           value="purchaseTaxInv"
           forceMount
-          className={cn(adminTabsContentCn, "space-y-3", "data-[state=inactive]:hidden")}
+          className={cn(adminTabsContentCn, "relative z-0 space-y-3", "data-[state=inactive]:hidden")}
         >
           <FilingFiltersCard
             tabKey="purchaseTaxInv"
@@ -435,7 +432,7 @@ export function TaxFilingShell() {
             onFilingYearMonthChange={tabProps.purchaseTaxInv.onFilingYearMonthChange}
           />
         </TabsContent>
-        <TabsContent value="pp36" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pp36" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingWhtTab
             {...tabProps.pp36}
             whtFocusMode="pp36"
@@ -445,7 +442,7 @@ export function TaxFilingShell() {
             }
           />
         </TabsContent>
-        <TabsContent value="pnd1" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pnd1" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingWhtTab
             {...tabProps.pnd1}
             whtFocusMode="pnd1"
@@ -455,7 +452,7 @@ export function TaxFilingShell() {
             }
           />
         </TabsContent>
-        <TabsContent value="pnd91" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pnd91" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingWhtTab
             {...tabProps.pnd91}
             whtFocusMode="pnd91"
@@ -465,7 +462,7 @@ export function TaxFilingShell() {
             }
           />
         </TabsContent>
-        <TabsContent value="pnd3" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pnd3" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingWhtTab
             {...tabProps.pnd3}
             whtFocusMode="pnd3"
@@ -475,7 +472,7 @@ export function TaxFilingShell() {
             }
           />
         </TabsContent>
-        <TabsContent value="pnd5051" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pnd5051" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingCitTab
             {...tabProps.pnd5051}
             onOpenStoreProfiles={() =>
@@ -483,7 +480,7 @@ export function TaxFilingShell() {
             }
           />
         </TabsContent>
-        <TabsContent value="pnd53" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pnd53" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingWhtTab
             {...tabProps.pnd53}
             whtFocusMode="pnd53"
@@ -493,7 +490,7 @@ export function TaxFilingShell() {
             }
           />
         </TabsContent>
-        <TabsContent value="pnd54" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="pnd54" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingWhtTab
             {...tabProps.pnd54}
             whtFocusMode="pnd54"
@@ -503,7 +500,7 @@ export function TaxFilingShell() {
             }
           />
         </TabsContent>
-        <TabsContent value="sso" className={cn(adminTabsContentCn, "space-y-3")}>
+        <TabsContent value="sso" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <FilingFiltersCard
             tabKey="sso"
             yearMonth={tabProps.sso.filingYearMonth}

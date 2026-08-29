@@ -3,7 +3,7 @@
  * (1) PDF 글자층 (2) QR (jsQR·URL·파이프) (3) 브라우저 태국어 OCR (4) 매수자 TIN 힌트·금액 교차검증.
  */
 
-import { formatSellerBranch, digitsTin13, looksLikeJunkSellerName, purchaseTaxInvoiceHasExtractedFields, purchaseTaxVatLooksWrong, thaiTinChecksumOk, type ExtractedPurchaseTaxInvoiceFields } from '@/lib/purchase-tax-invoice-core'
+import { formatSellerBranch, digitsTin13, isLikelyTaxInvoiceCopy, looksLikeJunkSellerName, purchaseTaxInvoiceHasExtractedFields, purchaseTaxVatLooksWrong, thaiTinChecksumOk, type ExtractedPurchaseTaxInvoiceFields } from '@/lib/purchase-tax-invoice-core'
 import { roundMoney2 } from '@/lib/invoice-vat-total'
 
 export type PurchaseTaxInvoiceScanHint = {
@@ -172,6 +172,8 @@ function ocrFixDigitsInInvoiceBlob(raw: string): string {
   return String(raw || '').replace(/!/g, '1')
 }
 
+const INVOICE_JUNK_TOKEN_RE = /contact|customer|taxrex|invpice|^nsee$|^find$|^fad$/i
+
 /** OCR이 제목(Tax Invoice)이나 주소 조각을 번호로 넣은 경우 */
 export function invoiceNoLooksPlausible(raw: unknown): boolean {
   const inv = compactInvoiceToken(String(raw || ''))
@@ -179,6 +181,8 @@ export function invoiceNoLooksPlausible(raw: unknown): boolean {
   const compact = inv.replace(/[^A-Za-z0-9]/g, '')
   if (compact.length < 2) return false
   const lower = compact.toLowerCase()
+  if (!/\d/.test(compact)) return false
+  if (INVOICE_JUNK_TOKEN_RE.test(lower)) return false
   if (/^(tax)?invoice/.test(lower)) return false
   if (/(tax)?invoice/.test(lower) && !/^inv-?\d/i.test(inv)) return false
   if (/^(deliveryorder|creditadvice|document|description|quantity|unitprice|amount|number|date)/.test(lower)) return false
@@ -186,10 +190,7 @@ export function invoiceNoLooksPlausible(raw: unknown): boolean {
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(inv)) return false
   if (/^TRS[A-Z0-9]{0,8}PF00-?$/i.test(inv)) return false
   if (/^IM20\d{0,11}$/i.test(compact) && compact.length < 16) return false
-  const hasLetter = /[A-Za-z]/.test(compact)
-  const hasDigit = /\d/.test(compact)
-  if (!hasLetter && compact.length < 4) return false
-  if (!hasDigit && compact.length < 12) return false
+  if (!/[A-Za-z]/.test(compact) && compact.length < 4) return false
   return true
 }
 
@@ -254,6 +255,45 @@ function recoverKasikornInvoiceNo(text: string): string | undefined {
   return m ? cleanInvoiceNo(m[0].toUpperCase()) : undefined
 }
 
+const INVOICE_LABEL_RE =
+  /(?:เลขที่(?:ใบกำกับ(?:ภาษี)?)?|เลขท[ีิ]|Invoice\s*No\.?|Tax\s*Invoice\s*No\.?|Doc(?:ument)?\s*No\.?|\bNo\.?(?=\s*[:#]?[A-Z0-9]))\s*[:#.\-]*/gi
+
+const INVOICE_LINE_STOP_RE =
+  /วันที่|บริษัท|ห้างหุ้น|ห้าง|เลขประจำ|มูลค่า|ภาษีมูลค่า|ผู้ซื้อ|ผู้ขาย|สำนักงาน|สาขา\s*\d|Tax\s*ID|\bTIN\b/i
+
+const OFFICE_INVOICE_RE =
+  /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|IV|TI|ABB|RT)[\-/]?[A-Z0-9\-/ ]{2,48}|\d{7,12})\b/gi
+
+function invoiceNoFromLabeledSlice(slice: string): string | undefined {
+  const sameLine = slice.split(/\r?\n/, 1)[0] || ''
+  const cut = sameLine.split(INVOICE_LINE_STOP_RE)[0]
+  const inv = cleanInvoiceNo(cut)
+  if (inv) return inv
+  const next = slice.match(/^(?:[^\S\r\n]*)\r?\n\s*([^\r\n]{2,80})/)
+  if (!next) return undefined
+  return cleanInvoiceNo(next[1].split(INVOICE_LINE_STOP_RE)[0])
+}
+
+function extractLabeledInvoiceNo(s: string): string | undefined {
+  INVOICE_LABEL_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = INVOICE_LABEL_RE.exec(s))) {
+    const inv = invoiceNoFromLabeledSlice(s.slice(m.index + m[0].length))
+    if (inv) return inv
+  }
+  return undefined
+}
+
+function firstOfficeInvoiceNo(s: string): string | undefined {
+  OFFICE_INVOICE_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = OFFICE_INVOICE_RE.exec(s))) {
+    const inv = cleanInvoiceNo(m[1])
+    if (inv) return inv
+  }
+  return undefined
+}
+
 function extractInvoiceNo(text: string, sellerTaxId?: string): string | undefined {
   const s = String(text || '')
   const compact = platformInvoiceBlob(s)
@@ -265,23 +305,7 @@ function extractInvoiceNo(text: string, sellerTaxId?: string): string | undefine
     const inv = cleanInvoiceNo(platformInvoiceBlob(platform[1]))
     if (inv) return inv
   }
-  const labeled = s.match(
-    /(?:เลขที่(?:ใบกำกับ(?:ภาษี)?)?|เลขท[ีิ]|No\.?|Invoice\s*No\.?|Tax\s*Invoice\s*No\.?|Doc(?:ument)?\s*No\.?)\s*[:#.\-]*\s*([A-Z0-9][A-Z0-9\-/ ]{1,64})/i
-  )
-  if (labeled) {
-    const inv = cleanInvoiceNo(labeled[1])
-    if (inv) return inv
-  }
-  const labeledNext = s.match(
-    /(?:เลขที่(?:ใบกำกับ(?:ภาษี)?)?|Invoice\s*No\.?)\s*[:#.\-]*\s*[\r\n]+\s*([A-Z0-9][A-Z0-9\-/]{2,40})/i
-  )
-  if (labeledNext) {
-    const inv = cleanInvoiceNo(labeledNext[1])
-    if (inv) return inv
-  }
-  const common = s.match(/\b((?:INV|IV|TI|ABB|RT)[\-/]?[A-Z0-9\-/ ]{2,40}|\d{8,}[A-Z]\d{2,})\b/i)
-  if (!common) return undefined
-  return cleanInvoiceNo(common[1])
+  return extractLabeledInvoiceNo(s) || firstOfficeInvoiceNo(s)
 }
 
 const KNOWN_INVOICE_SELLERS: Array<{ re: RegExp; tin: string; name: string }> = [
@@ -292,14 +316,28 @@ const KNOWN_INVOICE_SELLERS: Array<{ re: RegExp; tin: string; name: string }> = 
   { re: /^370\d+W\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
   { re: /^INV-\d{11}$/i, tin: '0105559082715', name: 'บริษัท โพลาร์ แบร์ มิชชั่น จำกัด' },
   { re: /^INV-\d{8}-\d{2,4}$/i, tin: '0135564019457', name: 'บริษัท ไทย แอ็กโกร เฟรช จำกัด' },
-  { re: /^26\d{5,6}$/, tin: '0105550102497', name: 'JIDUBANG (ASIA) CO., LTD.' },
-  { re: /^69\d{5}$/, tin: '0105550102497', name: 'JIDUBANG (ASIA) CO., LTD.' },
+  { re: /^26\d{5,6}$/, tin: '0105550102497', name: 'บริษัท จีดูบัง (เอเชีย) จำกัด' },
   { re: /^RT-\d{8}\d*$/i, tin: '0125569006965', name: 'บริษัท ร่ำรวย แพ็คเกจจิ้ง จำกัด' },
 ]
 
 const KNOWN_TIN_SELLER_NAMES: Record<string, string> = {
   ...Object.fromEntries(KNOWN_INVOICE_SELLERS.map((row) => [row.tin, row.name])),
-  '0105550102497': 'JIDUBANG (ASIA) CO., LTD.',
+  '0105533116116': 'บริษัท จี.ซี.เอส. เซลส์ แอนด์ เซอร์วิส จำกัด',
+  '0105550102497': 'บริษัท จีดูบัง (เอเชีย) จำกัด',
+  '0605565002677': 'บริษัท เคลฟเวอร์ กู๊ดส์ จำกัด',
+  '0105561016821': 'บริษัท โปโลเน็กซ์ จำกัด',
+  '0107561000374': 'บริษัท อาร์ แอนด์ บี ฟู้ด ซัพพลาย จำกัด (มหาชน)',
+  '0105563175048': 'บริษัท ไนซ์ชอยซ์ จำกัด',
+  '0105552129309': 'บริษัท ไอ สไตล์ พริ้นติ้ง จำกัด',
+  '0105549025026': 'บริษัท ทรู อินเทอร์เน็ต คอร์ปอเรชั่น จำกัด',
+  '0105560133760': 'บริษัท ทรู ดิจิทัล พาร์ค จำกัด',
+  '0105550095270': 'บริษัท นายทำถูก จำกัด',
+  '0115559009368': 'บริษัท วันไลฟ์ กราฟฟิก จำกัด',
+  '0105544080525': 'บริษัท แสงเจริญพริ้นต์ แอนด์ เพรส จำกัด',
+  '0105562090693': 'บริษัท มอร์แดนบรีท จำกัด',
+  '0105537143215': 'บริษัท ออฟฟิศเมท (ไทย) จำกัด',
+  '0105559082715': 'บริษัท โพลาร์ แบร์ มิชชั่น จำกัด',
+  '0105555033892': 'บริษัท บราเทอร์เจ จำกัด',
   '0107567000414': 'บริษัท ซีพี แอ็กซ์ตร้า จำกัด (มหาชน)',
 }
 
@@ -316,11 +354,17 @@ function preferPlausibleInvoiceNo(a?: string, b?: string): string | undefined {
   return aOk || bOk
 }
 
-export function inferSellerFromInvoiceNo(invoiceNo: string): { tin: string; name: string } | null {
+export function inferSellerFromInvoiceNo(
+  invoiceNo: string,
+  sellerTaxId?: string
+): { tin: string; name: string } | null {
   const inv = platformInvoiceBlob(String(invoiceNo || '').trim())
   if (!inv) return null
   for (const row of KNOWN_INVOICE_SELLERS) {
     if (row.re.test(inv)) return { tin: row.tin, name: row.name }
+  }
+  if (!digitsTin13(sellerTaxId) && /^69\d{5}$/.test(inv)) {
+    return { tin: '0105550102497', name: KNOWN_TIN_SELLER_NAMES['0105550102497'] }
   }
   return null
 }
@@ -365,10 +409,15 @@ function extractSellerName(text: string, buyerName?: string): string | undefined
   return undefined
 }
 
+function lineLooksLikeWithholdingOrExempt(line: string): boolean {
+  return /หัก\s*ณ\s*ที่จ่าย|withholding|\bwht\b|สินค้าเกษตรยกเว้น|ยกเว้นภาษี|vat\s*exempt/i.test(line)
+}
+
 function extractAmountNear(text: string, keywords: RegExp): number | undefined {
   const isVat = /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i.test(keywords.source)
   const lines = String(text || '').split(/\r?\n/)
   for (const line of lines) {
+    if (lineLooksLikeWithholdingOrExempt(line)) continue
     const idx = line.search(keywords)
     if (idx < 0) continue
     let frag = line.slice(idx)
@@ -376,19 +425,22 @@ function extractAmountNear(text: string, keywords: RegExp): number | undefined {
     const v = moneyFromFragment(frag)
     if (v != null) return v
   }
-  const joined = String(text || '').replace(/\s+/g, ' ')
-  const m = joined.match(keywords)
+  const usable = lines.filter((line) => !lineLooksLikeWithholdingOrExempt(line)).join(' ')
+  const m = usable.match(keywords)
   if (!m || m.index == null) return undefined
-  let frag = joined.slice(m.index, m.index + 96)
+  let frag = usable.slice(m.index, m.index + 96)
   if (isVat) frag = frag.split(/รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)[0]
   return moneyFromFragment(frag)
 }
 
 function collectBahtAmounts(text: string): number[] {
   const out: number[] = []
-  for (const m of String(text || '').matchAll(/\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2}/g)) {
-    const v = Number(m[0].replace(/,/g, ''))
-    if (Number.isFinite(v) && v > 0 && v < 500_000_000) out.push(roundMoney2(v))
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (lineLooksLikeWithholdingOrExempt(line)) continue
+    for (const m of line.matchAll(/\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2}/g)) {
+      const v = Number(m[0].replace(/,/g, ''))
+      if (Number.isFinite(v) && v > 0 && v < 500_000_000) out.push(roundMoney2(v))
+    }
   }
   return out
 }
@@ -417,6 +469,15 @@ export function inferAmountsFromMoneySequence(text: string): {
     const netAmount = window[i - 1]
     const vatAmount = window[i]
     if (vatAmount > 0 && !purchaseTaxVatLooksWrong(netAmount, vatAmount)) {
+      return { netAmount, vatAmount, totalAmount: roundMoney2(netAmount + vatAmount) }
+    }
+  }
+  for (let i = 0; i < nums.length; i += 1) {
+    const vatAmount = nums[i]
+    if (vatAmount < 0.5 || vatAmount > 100_000) continue
+    const wantNet = roundMoney2(vatAmount / 0.07)
+    const netAmount = nums.find((n, j) => j !== i && Math.abs(n - wantNet) <= 0.05)
+    if (netAmount != null && netAmount > vatAmount) {
       return { netAmount, vatAmount, totalAmount: roundMoney2(netAmount + vatAmount) }
     }
   }
@@ -653,9 +714,7 @@ export function splitScanTextIntoInvoiceBlocks(text: string): string[] {
         .filter((n): n is string => !!n)
     ),
   ]
-  const invoiceNos = [
-    ...raw.matchAll(/เลขที่\s*([A-Za-z0-9][A-Za-z0-9\-/]{2,40})/g),
-  ]
+  const invoiceNos = [...raw.matchAll(/เลขที่\s*([A-Za-z0-9][A-Za-z0-9\-/ ]{2,80})/g)]
     .map((hit) => cleanInvoiceNo(hit[1])?.toUpperCase())
     .filter((n): n is string => !!n)
   const uniqueInvoiceNos = [...new Set(invoiceNos)]
@@ -688,7 +747,9 @@ export function fillSellerNameFromTinLookup(
   known: Array<{ sellerTaxId?: string; sellerName?: string }>
 ): ExtractedPurchaseTaxInvoiceFields {
   const tin = digitsTin13(row.sellerTaxId)
-  if (String(row.sellerName || '').trim() || tin.length !== 13) return row
+  if (tin.length !== 13) return row
+  const current = String(row.sellerName || '').trim()
+  if (current && !looksLikeJunkSellerName(current)) return row
   const hit = known.find((k) => digitsTin13(k.sellerTaxId) === tin && String(k.sellerName || '').trim())
   if (!hit?.sellerName) return row
   return { ...row, sellerName: String(hit.sellerName).trim().slice(0, 200) }
@@ -728,7 +789,7 @@ export function extractPurchaseTaxInvoiceFromScanText(
       )
     }
   }
-  return merged ? repairExtractedPurchaseTaxInvoice(merged, hint) : null
+  return merged ? repairExtractedPurchaseTaxInvoice(merged, { ...hint, pageText: hint?.pageText || raw }) : null
 }
 
 export function parsePurchaseTaxInvoiceFromPdfText(
@@ -755,7 +816,7 @@ export function parsePurchaseTaxInvoiceFromPdfText(
     netAmount: netAmount ?? inferred?.netAmount,
     vatAmount: vatAmount ?? inferred?.vatAmount,
     totalAmount: totalAmount ?? inferred?.totalAmount,
-    isCopy: /สำเนา|true copy|duplicate/i.test(raw) && !/ต้นฉบับ/.test(raw),
+    isCopy: isLikelyTaxInvoiceCopy(raw),
   }
   return purchaseTaxInvoiceHasExtractedFields(row) ? row : null
 }
@@ -827,6 +888,17 @@ export function repairExtractedPurchaseTaxInvoice(
       if (totalAmount == null) totalAmount = roundMoney2(netAmount + vatAmount)
     } else if (totalAmount != null && !purchaseTaxVatLooksWrong(roundMoney2(totalAmount - vatAmount), vatAmount)) {
       netAmount = roundMoney2(totalAmount - vatAmount)
+    } else if (!(Math.abs(vatAmount - 7) < 0.2 && netAmount > 20)) {
+      const wantNet = roundMoney2(vatAmount / 0.07)
+      const pageNums = collectBahtAmounts(hint?.pageText || '')
+      const hit = pageNums.find((n) => Math.abs(n - wantNet) <= 0.05)
+      if (hit) {
+        netAmount = hit
+        totalAmount = roundMoney2(netAmount + vatAmount)
+      } else if (vatAmount < netAmount && wantNet >= 1 && wantNet < netAmount) {
+        netAmount = wantNet
+        totalAmount = roundMoney2(netAmount + vatAmount)
+      }
     }
   }
 
@@ -870,7 +942,7 @@ export function repairExtractedPurchaseTaxInvoice(
       cleanInvoiceNo(invoiceNo) ||
       (invoiceNoLooksPlausible(invoiceNo) ? compactInvoiceToken(invoiceNo) : undefined)
   }
-  const inferredSeller = invoiceNo ? inferSellerFromInvoiceNo(invoiceNo) : null
+  const inferredSeller = invoiceNo ? inferSellerFromInvoiceNo(invoiceNo, sellerTaxId) : null
   if (inferredSeller) {
     if (!sellerTaxId) sellerTaxId = inferredSeller.tin
     else if (
@@ -888,7 +960,7 @@ export function repairExtractedPurchaseTaxInvoice(
   if (knownName) sellerName = knownName
   else if (!sellerName && inferredSeller) sellerName = inferredSeller.name
   const sellerBranch =
-    sellerTaxId && KNOWN_TIN_SELLER_NAMES[sellerTaxId] ? 'สำนักงานใหญ่' : row.sellerBranch
+    row.sellerBranch || (sellerTaxId && KNOWN_TIN_SELLER_NAMES[sellerTaxId] ? 'สำนักงานใหญ่' : undefined)
 
   const docDate = snapDocDateYearToTaxPeriod(
     row.docDate || (invoiceNo ? inferDocDateFromInvoiceNo(invoiceNo) : undefined),
