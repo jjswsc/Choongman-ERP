@@ -6740,7 +6740,7 @@ export const i18n = {
     reset: '초기화',
     mobileStoreSalesTitle: '매장 실시간 매출',
     mobileStoreSalesSub:
-      '확정 매출은 매장·전체 선택 시 자동 조회됩니다. 미결제 테이블·좌석 반영은 상단 새로고침을 눌러 주세요. 확정에 미결제 테이블을 더하지 마세요.',
+      '확정 매출은 매장·전체 선택 시 자동 조회됩니다. 미결제 테이블·좌석을 최신으로 보려면 상단「검색」을 눌러 주세요. 확정에 미결제 테이블을 더하지 마세요.',
     mobileStoreSalesTodayTotal: '확정 매출',
     mobileStoreSalesConfirmedTotal: '확정 매출',
     mobileStoreSalesCompletedOrders: '완료 건수',
@@ -14985,7 +14985,7 @@ orderItemQty: 'Qty',
     reset: 'Reset',
     mobileStoreSalesTitle: 'Store live sales',
     mobileStoreSalesSub:
-      "Confirmed sales refresh when you pick a store or All. Use Refresh for unpaid tables. Do not add unpaid tables into confirmed sales.",
+      "Confirmed sales refresh when you pick a store or All. Press Search at the top for unpaid tables. Do not add unpaid tables into confirmed sales.",
     mobileStoreSalesTodayTotal: 'Confirmed sales',
     mobileStoreSalesConfirmedTotal: 'Confirmed sales',
     mobileStoreSalesCompletedOrders: 'Completed orders',

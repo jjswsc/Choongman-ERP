@@ -370,7 +370,7 @@ export function StoreSalesRealtimeView({
 
   useEffect(() => {
     if (refreshToken == null || refreshToken <= 0) return
-    /** 부모 runRefresh 가 이미 refetchStores 함 — 여기서 다시 치면 전체 매장 주문 조회가 2배가 됨 */
+    /** 부모 runRefresh/검색이 이미 refetchStores 함 — 여기서는 당일 매출만 강제 재조회 */
     void loadTodaySales({ forceNetwork: true })
   }, [refreshToken, loadTodaySales])
 

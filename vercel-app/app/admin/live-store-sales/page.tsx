@@ -181,26 +181,29 @@ export default function AdminLiveStoreSalesPage() {
   const [refreshToken, setRefreshToken] = useState(0)
   const [searchBusy, setSearchBusy] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const refreshInFlight = useRef(false)
+  const searchGenRef = useRef(0)
 
   const runSearch = useCallback(async () => {
-    if (refreshInFlight.current) return
-    refreshInFlight.current = true
+    const gen = ++searchGenRef.current
     setSearchBusy(true)
     setRefreshToken((n) => n + 1)
     try {
-      await Promise.resolve(
-        refetchStores({
-          scope: isAllStoresTableTotal ? "all" : "current",
-          storeCode: isAllStoresTableTotal ? undefined : effectiveStoreCode,
-          immediate: true,
-          forceFullRefresh: true,
-        })
-      )
-      setLastUpdated(new Date())
+      await Promise.race([
+        Promise.resolve(
+          refetchStores({
+            scope: isAllStoresTableTotal ? "all" : "current",
+            storeCode: isAllStoresTableTotal ? undefined : effectiveStoreCode,
+            immediate: true,
+            forceFullRefresh: true,
+          })
+        ),
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 40_000)
+        }),
+      ])
+      if (gen === searchGenRef.current) setLastUpdated(new Date())
     } finally {
-      refreshInFlight.current = false
-      setSearchBusy(false)
+      if (gen === searchGenRef.current) setSearchBusy(false)
     }
   }, [refetchStores, isAllStoresTableTotal, effectiveStoreCode])
 

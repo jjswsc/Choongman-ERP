@@ -1017,6 +1017,8 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
   }, [])
 
   const refetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 수동「검색」1매장 대기 상한 — 한 곳이 멈추면 검색이 영구 busy 되던 문제 방지 */
+  const FORCE_REFRESH_STORE_MS = 22_000
   const refetchStoresImmediate = useCallback(async (options?: RefetchStoresOptions) => {
     if (!effectiveStoreCodes?.length) return Promise.resolve()
     const requestedStore = String(options?.storeCode ?? '').trim()
@@ -1027,87 +1029,120 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
           ? [currentStoreId]
           : effectiveStoreCodes
     if (!targetStoreCodes.length) return Promise.resolve()
+    const forceFullRefresh = Boolean(options?.forceFullRefresh)
     /** 이미 스냅샷이 있으면 로딩으로 화면을 비우지 않음(실시간 매출 검색 대기 체감 완화) */
     const backgroundRefresh =
-      !options?.forceFullRefresh &&
+      !forceFullRefresh &&
       options?.scope === 'current' && stores.length > 0 && targetStoreCodes.length > 0
     if (stores.length === 0) {
       setLoading(true)
     }
     const businessDate = getPosBusinessDateStr()
-    return Promise.all(
-      targetStoreCodes.map((storeCode) =>
-        fetchStoreSnapshot(storeCode, businessDate, {
-          layoutFromCacheOnly: backgroundRefresh,
-          skipPollMinimalCache: !backgroundRefresh,
-        })
-      )
-    )
-      .then((results) => {
-        for (const code of targetStoreCodes) loadedPosStoreIdsRef.current.add(code)
-        const resultStoreMap = new Map(results.map((r) => [r.storeCode, r.store]))
-        const resultLayoutMap = new Map(results.map((r) => [r.storeCode, r.layout]))
-        const resultFloorLabelsMap = new Map(results.map((r) => [r.storeCode, r.floorLabels]))
-        const resultOrdersMap = new Map(results.map((r) => [r.storeCode, (r.activeOrders || []).map(posOrderToOrder)]))
 
-        const prevOrders = ordersByStoreIdRef.current
-        const nextOrdersByStore: Record<string, Order[]> = { ...prevOrders }
-        for (const code of targetStoreCodes) {
+    const fetchOne = async (storeCode: string): Promise<StoreSnapshot | null> => {
+      const snapPromise = fetchStoreSnapshot(storeCode, businessDate, {
+        layoutFromCacheOnly: backgroundRefresh,
+        skipPollMinimalCache: !backgroundRefresh,
+      })
+      try {
+        if (!forceFullRefresh) return await snapPromise
+        return await Promise.race([
+          snapPromise,
+          new Promise<null>((resolve) => {
+            window.setTimeout(() => resolve(null), FORCE_REFRESH_STORE_MS)
+          }),
+        ])
+      } catch {
+        return null
+      }
+    }
+
+    const settled = await Promise.all(targetStoreCodes.map((code) => fetchOne(code)))
+    const results = settled.filter((r): r is StoreSnapshot => r != null)
+    try {
+      if (results.length === 0) return
+      const okCodes = results.map((r) => r.storeCode)
+      for (const code of okCodes) loadedPosStoreIdsRef.current.add(code)
+      const resultStoreMap = new Map(results.map((r) => [r.storeCode, r.store]))
+      const resultLayoutMap = new Map(results.map((r) => [r.storeCode, r.layout]))
+      const resultFloorLabelsMap = new Map(results.map((r) => [r.storeCode, r.floorLabels]))
+      const resultOrdersMap = new Map(
+        results.map((r) => [r.storeCode, (r.activeOrders || []).map(posOrderToOrder)])
+      )
+
+      const prevOrders = ordersByStoreIdRef.current
+      const nextOrdersByStore: Record<string, Order[]> = { ...prevOrders }
+      for (const code of okCodes) {
+        const fetched = resultOrdersMap.get(code) ?? []
+        if (forceFullRefresh) {
+          /** 수동 검색: sessionStorage·구 스냅샷 합집합 생략(결제 후 미결제 잔존 방지). 오프라인 전용만 유지 */
+          const offlineOnly = (prevOrders[code] ?? []).filter(isLocalOfflineOrder)
+          nextOrdersByStore[code] =
+            offlineOnly.length > 0 ? mergeFetchedOrdersWithLocal(fetched, offlineOnly) : fetched
+          persistActiveTerminalOrders(code, businessDate, nextOrdersByStore[code] ?? [])
+        } else {
           nextOrdersByStore[code] = withPersistedTerminalOrders(
             code,
             businessDate,
-            resultOrdersMap.get(code) ?? [],
+            fetched,
             prevOrders[code] ?? []
           )
         }
-        ordersByStoreIdRef.current = nextOrdersByStore
+      }
+      ordersByStoreIdRef.current = nextOrdersByStore
 
-        setStores((prev) => {
-          const hydrate = (store: Store) =>
-            hydrateStoreTablesFromActiveOrders(store, nextOrdersByStore[store.id] ?? [])
-          if (targetStoreCodes.length === effectiveStoreCodes.length) {
-            return effectiveStoreCodes
-              .map((code) => {
-                const next = resultStoreMap.get(code)
-                if (!next) return null
-                const orders = nextOrdersByStore[code] ?? []
-                return hydrate(
-                  mergeStoreTablesWithLocalOrders(
-                    next,
-                    prev.find((p) => p.id === code),
-                    orders
-                  )
+      setStores((prev) => {
+        const hydrate = (store: Store) =>
+          hydrateStoreTablesFromActiveOrders(store, nextOrdersByStore[store.id] ?? [])
+        if (
+          okCodes.length === effectiveStoreCodes.length &&
+          targetStoreCodes.length === effectiveStoreCodes.length
+        ) {
+          return effectiveStoreCodes
+            .map((code) => {
+              const next = resultStoreMap.get(code)
+              if (!next) {
+                const keep = prev.find((p) => p.id === code)
+                return keep ? hydrate(keep) : null
+              }
+              const orders = nextOrdersByStore[code] ?? []
+              return hydrate(
+                mergeStoreTablesWithLocalOrders(
+                  next,
+                  forceFullRefresh ? undefined : prev.find((p) => p.id === code),
+                  orders
                 )
-              })
-              .filter(Boolean) as Store[]
-          }
-          return prev.map((store) => {
-            const next = resultStoreMap.get(store.id)
-            const orders = nextOrdersByStore[store.id] ?? []
-            if (!next) return hydrate(store)
-            return hydrate(
-              mergeStoreTablesWithLocalOrders(next, store, orders)
-            )
-          })
+              )
+            })
+            .filter(Boolean) as Store[]
+        }
+        return prev.map((store) => {
+          const next = resultStoreMap.get(store.id)
+          const orders = nextOrdersByStore[store.id] ?? []
+          if (!next) return hydrate(store)
+          return hydrate(
+            mergeStoreTablesWithLocalOrders(next, forceFullRefresh ? undefined : store, orders)
+          )
         })
-        setLayoutByStoreId((prev) => {
-          const next = { ...prev }
-          for (const code of targetStoreCodes) {
-            next[code] = resultLayoutMap.get(code) ?? []
-          }
-          return next
-        })
-        setFloorLabelsByStoreId((prev) => {
-          const next = { ...prev }
-          for (const code of targetStoreCodes) {
-            next[code] = resultFloorLabelsMap.get(code) ?? {}
-          }
-          return next
-        })
-        setOrdersByStoreId(nextOrdersByStore)
       })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+      setLayoutByStoreId((prev) => {
+        const next = { ...prev }
+        for (const code of okCodes) {
+          next[code] = resultLayoutMap.get(code) ?? []
+        }
+        return next
+      })
+      setFloorLabelsByStoreId((prev) => {
+        const next = { ...prev }
+        for (const code of okCodes) {
+          next[code] = resultFloorLabelsMap.get(code) ?? {}
+        }
+        return next
+      })
+      setOrdersByStoreId(nextOrdersByStore)
+    } finally {
+      setLoading(false)
+    }
   }, [effectiveStoreCodes.join(','), currentStoreId, fetchStoreSnapshot, stores.length])
 
   /** refetchStores 디바운스 (600ms) - 연속 호출 시 API 부하 감소. `immediate`면 즉시 실행하고 Promise 반환 */

@@ -18,6 +18,11 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SalesManagementTab } from "@/components/tabs/sales-management-tab"
 import { Skeleton } from "@/components/ui/skeleton"
+import { getBangkokDateTimeString } from "@/lib/bangkok-time"
+
+const ALL_STORE_VALUE = "All"
+/** 헤더 검색 busy 상한 — 네트워크가 일부 매장에서 걸려도 버튼이 다시 눌리게 */
+const SEARCH_BUSY_MAX_MS = 40_000
 
 function SalesTabFallback() {
   return (
@@ -34,8 +39,10 @@ function StoreSalesBody() {
   const { lang } = useLang()
   const t = useT(lang)
   const { viewStore } = useStoreView()
-  const realtimeRefreshRef = useRef<(() => void | Promise<void>) | null>(null)
   const [searchBusy, setSearchBusy] = useState(false)
+  const [refreshToken, setRefreshToken] = useState(0)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const searchGenRef = useRef(0)
 
   const isOfficeSelector =
     Boolean(auth) && (isOfficeRole(auth?.role || "") || isOfficeStore(auth?.store || ""))
@@ -54,12 +61,13 @@ function StoreSalesBody() {
     refetchStores,
   } = usePosStoreStandalone()
   const selectedStoreLabel = useMemo(() => {
-    if (effectiveStoreCode === "All") return t("store_all_stores")
+    if (effectiveStoreCode === ALL_STORE_VALUE) return t("store_all_stores")
     const code = effectiveStoreCode || currentStoreId
     return (code ? formatStoreLabel(code) : "") || t("store")
   }, [effectiveStoreCode, currentStoreId, formatStoreLabel, t])
 
   const allowed = Boolean(auth) && canViewMobileStoreSales(auth?.role || "")
+  const isAllStores = effectiveStoreCode === ALL_STORE_VALUE
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") return
@@ -75,35 +83,44 @@ function StoreSalesBody() {
 
   useEffect(() => {
     if (!effectiveStoreCode || !allowed) return
+    if (isAllStores) return
     if (!stores.some((s) => s.id === effectiveStoreCode)) return
     setCurrentStoreId(effectiveStoreCode)
-  }, [effectiveStoreCode, stores, setCurrentStoreId, allowed])
+  }, [effectiveStoreCode, isAllStores, stores, setCurrentStoreId, allowed])
+
+  const runSearch = useCallback(async () => {
+    const gen = ++searchGenRef.current
+    setSearchBusy(true)
+    setRefreshToken((n) => n + 1)
+    try {
+      await Promise.race([
+        Promise.resolve(
+          refetchStores({
+            scope: isAllStores ? "all" : "current",
+            storeCode: isAllStores ? undefined : effectiveStoreCode,
+            immediate: true,
+            forceFullRefresh: true,
+          })
+        ),
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, SEARCH_BUSY_MAX_MS)
+        }),
+      ])
+      if (gen === searchGenRef.current) setLastUpdated(new Date())
+    } finally {
+      if (gen === searchGenRef.current) setSearchBusy(false)
+    }
+  }, [refetchStores, isAllStores, effectiveStoreCode])
 
   useEffect(() => {
     if (typeof document === "undefined") return
     const onVisible = () => {
       if (document.visibilityState !== "visible") return
-      void realtimeRefreshRef.current?.()
+      void runSearch()
     }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
-  }, [])
-
-  const registerRealtimeRefresh = useCallback((fn: () => void | Promise<void>) => {
-    realtimeRefreshRef.current = fn
-  }, [])
-
-  const handleHeaderSearch = useCallback(async () => {
-    if (searchBusy) return
-    const refresh = realtimeRefreshRef.current
-    if (!refresh) return
-    setSearchBusy(true)
-    try {
-      await refresh()
-    } finally {
-      setSearchBusy(false)
-    }
-  }, [searchBusy])
+  }, [runSearch])
 
   if (!initialized || !auth) {
     return (
@@ -141,9 +158,14 @@ function StoreSalesBody() {
             </Badge>
           </div>
           <p className="truncate text-xs text-muted-foreground">{selectedStoreLabel}</p>
+          {lastUpdated ? (
+            <p className="truncate text-[10px] text-muted-foreground">
+              {t("liveStoreSalesLastUpdated")}: {getBangkokDateTimeString(lastUpdated)}
+            </p>
+          ) : null}
         </div>
         <LiveSalesSearchButton
-          onClick={handleHeaderSearch}
+          onClick={runSearch}
           busy={searchBusy}
           label={t("search")}
           title={t("search")}
@@ -154,7 +176,6 @@ function StoreSalesBody() {
       {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
 
       <main className="space-y-4 p-4 pb-10">
-        {/* 실시간 패널은 forceMount — 비활성 탭에서도 마운트 유지(헤더 조회 버튼이 동작). */}
         <Tabs defaultValue="realtime" className="space-y-4">
           <TabsList className="grid h-10 w-full grid-cols-2">
             <TabsTrigger value="realtime">{t("mobileStoreSalesMenuRealtime")}</TabsTrigger>
@@ -168,7 +189,7 @@ function StoreSalesBody() {
               loadingTables={loadingTables}
               refetchStores={refetchStores}
               currentStore={currentStore}
-              onRegisterRefresh={registerRealtimeRefresh}
+              refreshToken={refreshToken}
             />
           </TabsContent>
 
