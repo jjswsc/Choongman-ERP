@@ -12,7 +12,11 @@ const withSerwist = withSerwistInit({
   disable: process.env.NODE_ENV === "development",
   register: false,
   cacheOnNavigation: true,
-  reloadOnOnline: true,
+  /**
+   * 매장 Wi-Fi(AIS 등)가 잠깐 끊겼다 붙을 때마다 전체 새로고침되면
+   * 홀 태블릿이 /pos/login 스피너에 다시 갇힌다. 배포 갱신은 SwAutoUpdate가 처리.
+   */
+  reloadOnOnline: false,
   swUrl: "/sw.js",
   scope: "/",
   maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,

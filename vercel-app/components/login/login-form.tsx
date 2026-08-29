@@ -63,6 +63,15 @@ import {
   isSaasPartnerLoginStoreClient,
   SAAS_PARTNER_LOGIN_STORE_DEFAULT,
 } from "@/lib/saas-partner-login-defaults-client"
+import {
+  LOGIN_CONNECTING_WATCHDOG_MS,
+  LOGIN_SESSION_REDIRECT_BOUNCE_KEY,
+  LOGIN_SESSION_REDIRECT_HARD_NAV_MS,
+  isLoginSessionRedirectBounce,
+  loginListFetchTimeoutMs,
+  resolveLoginBootPhase,
+  shouldHardNavigateLoginSessionRedirect,
+} from "@/lib/login-connecting-watchdog"
 
 /** i18n 키 누락·손상 시 영어 (번들 문자열은 네트워크 없이 동작 — 이 폴백은 이중 안전장치) */
 const LOGIN_I18N_FALLBACK_EN: Record<string, string> = {
@@ -240,7 +249,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const pathname = usePathname() || ""
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { auth, setAuth } = useAuth()
+  const { auth, setAuth, initialized: authInitialized } = useAuth()
+  const [stayOnLoginForm, setStayOnLoginForm] = useState(false)
+  const [loadingStuck, setLoadingStuck] = useState(false)
   const [loginData, setLoginData] = useState<Record<string, string[]>>({})
   const [loginStoreLabels, setLoginStoreLabels] = useState<Record<string, string>>({})
   const [loginStoreCompanies, setLoginStoreCompanies] = useState<Record<string, string>>({})
@@ -531,7 +542,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     (companyOverride?: string) => {
       setLoadError(null)
       setLoginListProbeOk(null)
-      setLoading(true)
+      if (!stayOnLoginForm) setLoading(true)
       /** navigator.onLine 거짓 false 대비 프로브. 조기 종료하지 않음 — getLoginDataWithCache가 API를 직접 시도해 오탐을 복구함 */
       const run = async () => {
         const scopeCompany = String(companyOverride ?? company ?? "").trim()
@@ -565,7 +576,15 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           loginApp === "pos" &&
           !!loginSnapshot
 
-        let timeoutMs = 60_000
+        const kioskClient = shouldHardNavigateLoginSessionRedirect({
+          isHybridShell: isCmPosHybridShell(),
+          isStandaloneDisplay:
+            typeof window !== "undefined" &&
+            typeof window.matchMedia === "function" &&
+            window.matchMedia("(display-mode: standalone)").matches,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        })
+        let timeoutMs = loginListFetchTimeoutMs({ hybridOfflineFastPath: false, kioskClient })
         if (hybridFastBoot) {
           if (!isBrowserOnline()) {
             timeoutMs = 3_000
@@ -650,15 +669,45 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       }
       void run()
     },
-    [applyLoginDataResult, company, isOmniBrand, loginApp, needsScopedLoginData]
+    [applyLoginDataResult, company, isOmniBrand, loginApp, needsScopedLoginData, stayOnLoginForm]
   )
 
   useLayoutEffect(() => {
     if (skipLoginDataFetch || resolveSaasAdminLogin()) setLoading(false)
   }, [skipLoginDataFetch, resolveSaasAdminLogin])
 
+  /** /pos 로 보냈다가 로그인으로 되돌아온 태블릿 — 스피너만 보이는 루프 차단 */
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const stored = sessionStorage.getItem(LOGIN_SESSION_REDIRECT_BOUNCE_KEY)
+      if (isLoginSessionRedirectBounce(stored)) {
+        setStayOnLoginForm(true)
+        setLoading(false)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   useEffect(() => {
-    if (auth) {
+    if (!loading) {
+      setLoadingStuck(false)
+      return
+    }
+    const tid = window.setTimeout(() => setLoadingStuck(true), LOGIN_CONNECTING_WATCHDOG_MS)
+    return () => window.clearTimeout(tid)
+  }, [loading])
+
+  useEffect(() => {
+    const boot = resolveLoginBootPhase({
+      authInitialized,
+      hasSession: Boolean(auth),
+      stayOnLoginForm,
+    })
+    if (boot === "wait_auth") return
+
+    if (boot === "redirect_session" && auth) {
       const authCompany = String(auth.company || "").trim().toLowerCase()
       const authStore = String(auth.store || "").trim().toLowerCase()
       const authUser = String(auth.user || "").trim().toLowerCase()
@@ -699,8 +748,32 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         }).catch(() => {})
         return
       }
-      replacePosOfflineAware(effectiveRedirectTo, (p) => router.replace(p))
-      return
+      const dest = effectiveRedirectTo
+      try {
+        sessionStorage.setItem(LOGIN_SESSION_REDIRECT_BOUNCE_KEY, String(Date.now()))
+      } catch {
+        /* ignore */
+      }
+      const hard = shouldHardNavigateLoginSessionRedirect({
+        isHybridShell: isCmPosHybridShell(),
+        isStandaloneDisplay:
+          typeof window.matchMedia === "function" &&
+          window.matchMedia("(display-mode: standalone)").matches,
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+      })
+      if (hard) {
+        window.location.replace(dest)
+        return
+      }
+      replacePosOfflineAware(dest, (p) => router.replace(p))
+      const hardNavFallback = window.setTimeout(() => {
+        if (typeof window === "undefined") return
+        const path = (window.location.pathname || "").replace(/\/+$/, "") || "/"
+        if (path === "/login" || path === "/admin/login" || path === "/pos/login" || path === "/saas-admin/login") {
+          window.location.replace(dest)
+        }
+      }, LOGIN_SESSION_REDIRECT_HARD_NAV_MS)
+      return () => window.clearTimeout(hardNavFallback)
     }
     if (skipLoginDataFetch || resolveSaasAdminLogin()) {
       setLoading(false)
@@ -720,6 +793,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     }
   }, [
     auth,
+    authInitialized,
+    stayOnLoginForm,
     effectiveRedirectTo,
     router,
     fetchLoginData,
@@ -1215,6 +1290,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       connectingToServer: "서버에 연결 중...",
       connectingCanEnterOffline:
         "서버 연결을 시도하는 동안에도 아래 버튼으로 바로 오프라인 모드에 들어갈 수 있습니다.",
+      connectingDelayed: "연결이 지연되고 있습니다. 다시 시도하거나 화면을 새로고침해 주세요.",
+      continueSession: "저장된 로그인으로 계속",
+      showLoginForm: "다른 계정으로 로그인",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "모바일",
@@ -1252,6 +1330,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       connectingToServer: "Connecting to server...",
       connectingCanEnterOffline:
         "You can enter offline mode below while we try to reach the server.",
+      connectingDelayed: "This is taking longer than usual. Retry or refresh the screen.",
+      continueSession: "Continue with saved login",
+      showLoginForm: "Sign in with a different account",
       loginAppErp: "ERP (Admin)",
       loginAppPos: "POS",
       loginAppMobile: "Mobile",
@@ -1288,6 +1369,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       connectingToServer: "กำลังเชื่อมต่อเซิร์ฟเวอร์...",
       connectingCanEnterOffline:
         "ระหว่างเชื่อมต่อเซิร์ฟเวอร์ สามารถกดปุ่มด้านล่างเพื่อเข้าโหมดออฟไลน์ได้ทันที",
+      connectingDelayed: "การเชื่อมต่อช้ากว่าปกติ กรุณาลองใหม่หรือรีเฟรชหน้าจอครับ",
+      continueSession: "เข้าต่อด้วยบัญชีที่บันทึกไว้",
+      showLoginForm: "เข้าสู่ระบบด้วยบัญชีอื่น",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "มือถือ",
@@ -1324,6 +1408,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       connectingToServer: "ဆာဗာနှင့် ချိတ်ဆက်နေသည်...",
       connectingCanEnterOffline:
         "You can enter offline mode below while we try to reach the server.",
+      connectingDelayed: "This is taking longer than usual. Retry or refresh the screen.",
+      continueSession: "Continue with saved login",
+      showLoginForm: "Sign in with a different account",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "မိုဘိုင်း",
@@ -1360,6 +1447,9 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       connectingToServer: "ກຳລັງເຊື່ອມຕໍ່ເຊີບເວີ...",
       connectingCanEnterOffline:
         "You can enter offline mode below while we try to reach the server.",
+      connectingDelayed: "This is taking longer than usual. Retry or refresh the screen.",
+      continueSession: "Continue with saved login",
+      showLoginForm: "Sign in with a different account",
       loginAppErp: "ERP",
       loginAppPos: "POS",
       loginAppMobile: "ມືຖື",
@@ -1439,12 +1529,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             </div>
           ) : null}
 
-          {loading && !showOfflineEntryDuringLoad ? (
-            <div className="login-inline-loading">
-              <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
-              <p className="mt-4 text-center text-sm text-white/80">{t.connectingToServer}</p>
-            </div>
-          ) : offlineOnlyScreen ? (
+          {offlineOnlyScreen ? (
             <div className="space-y-3 py-4">
               {showOfflineEntryDuringLoad ? (
                 <p className="text-center text-xs leading-relaxed text-white/65">{t.connectingCanEnterOffline}</p>
@@ -1505,6 +1590,50 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               ) : null}
             </div>
           ) : (
+          <>
+          {loading ? (
+            <div className="mb-3 w-full max-w-sm space-y-2 rounded-lg border border-white/15 bg-black/25 px-3 py-3">
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-8 shrink-0 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
+                <p className="text-sm text-white/80">{t.connectingToServer}</p>
+              </div>
+              {loadingStuck ? (
+                <p className="text-xs leading-relaxed text-amber-100/90">{t.connectingDelayed}</p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fetchLoginData()}
+                  className="rounded-md bg-amber-500/30 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+                >
+                  {t.retry}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="rounded-md bg-amber-500/30 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+                >
+                  {t.refresh}
+                </button>
+                {auth ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem(LOGIN_SESSION_REDIRECT_BOUNCE_KEY, String(Date.now()))
+                      } catch {
+                        /* ignore */
+                      }
+                      window.location.replace(effectiveRedirectTo)
+                    }}
+                    className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                  >
+                    {t.continueSession}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <form onSubmit={handleSubmit}>
             <div className="mb-3 w-full max-w-sm" data-login-step="language">
               <Select
@@ -1805,6 +1934,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               {t.changePw}
             </button>
           </form>
+          </>
           )}
         </div>
       </div>

@@ -61,6 +61,16 @@ export const ADMIN_UI_LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: 'ms', label: 'Bahasa Melayu' },
 ]
 
+/** 저장된 언어가 없을 때 태블릿 OS 언어를 쓴다. 태국 매장 기본값이 한국어로 고정되지 않게. */
+export function guessLangFromNavigator(language: string | undefined | null): LangCode | null {
+  const short = String(language || '')
+    .trim()
+    .toLowerCase()
+    .split('-')[0]
+  if (isLangCode(short)) return short
+  return null
+}
+
 function loadLang(): LangCode {
   if (typeof window === 'undefined') return 'ko'
   try {
@@ -71,6 +81,8 @@ function loadLang(): LangCode {
     const s = localStorage.getItem('cm_lang')
     if (s && isLangCode(s)) return s
   } catch {}
+  const fromNav = guessLangFromNavigator(typeof navigator !== 'undefined' ? navigator.language : '')
+  if (fromNav) return fromNav
   return 'ko'
 }
 
