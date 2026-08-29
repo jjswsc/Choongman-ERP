@@ -66,11 +66,14 @@ import {
   type PurchaseTaxSellerProfile,
 } from "@/lib/purchase-tax-invoice-seller-lookup"
 import {
-  createTaxInvoiceOcrSession,
   decodeTaxInvoiceQrsFromCanvas,
+  dropSharedTaxInvoiceOcrSession,
+  getSharedTaxInvoiceOcrSession,
+  hasSharedTaxInvoiceOcrSession,
   prepareTaxInvoiceScanCanvas,
-  type TaxInvoiceOcrSession,
+  recycleSharedTaxInvoiceOcrSession,
 } from "@/lib/purchase-tax-invoice-ocr-client"
+import { withVisibleScanTimeout } from "@/lib/purchase-tax-invoice-scan-timeout"
 import {
   mergeTaxInvoiceLayouts,
   readTaxInvoicePageHires,
@@ -203,20 +206,23 @@ function clearScanCheckpoint() {
   }
 }
 
-function withScanTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = window.setTimeout(() => reject(new Error("ptiOcrPageTimeout")), ms)
-    p.then(
-      (v) => {
-        window.clearTimeout(t)
-        resolve(v)
-      },
-      (e) => {
-        window.clearTimeout(t)
-        reject(e)
-      }
-    )
-  })
+async function readPageOrRetry(
+  run: () => Promise<{ text: string; layout?: OcrPageLayout }>,
+  fallbackText: string
+): Promise<{ text: string; layout?: OcrPageLayout; failKey?: string }> {
+  try {
+    return await withVisibleScanTimeout(run(), SCAN_PAGE_TIMEOUT_MS)
+  } catch (e) {
+    try {
+      await recycleSharedTaxInvoiceOcrSession()
+      return await withVisibleScanTimeout(run(), SCAN_PAGE_TIMEOUT_MS)
+    } catch (e2) {
+      const timedOut =
+        (e2 instanceof Error && e2.message === "ptiOcrPageTimeout") ||
+        (e instanceof Error && e.message === "ptiOcrPageTimeout")
+      return { text: fallbackText, failKey: timedOut ? "ptiOcrPageTimeout" : "ptiOcrFailed" }
+    }
+  }
 }
 
 /** rAF·숨은 탭의 1초 클램프를 피함. MessageChannel은 백그라운드에서도 다음 태스크를 줌. */
@@ -609,21 +615,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     const extractIsComplete = (pageText: string) =>
       purchaseTaxInvoiceTextExtractIsComplete(extractPurchaseTaxInvoiceFromScanText(pageText, hint), hint)
 
-    const ocrBox: { session: TaxInvoiceOcrSession | null; creating: Promise<TaxInvoiceOcrSession> | null } = {
-      session: null,
-      creating: null,
-    }
     const ensureOcrSession = async () => {
-      if (ocrBox.session) return ocrBox.session
-      if (!ocrBox.creating) {
-        setPdfBusy({ key: "ptiOcrLoading" })
-        ocrBox.creating = createTaxInvoiceOcrSession().then((s) => {
-          ocrBox.session = s
-          ocrBox.creating = null
-          return s
-        })
-      }
-      return ocrBox.creating
+      if (!hasSharedTaxInvoiceOcrSession()) setPdfBusy({ key: "ptiOcrLoading" })
+      return getSharedTaxInvoiceOcrSession()
     }
     /**
      * 좌표 판독이 더 필요한가. 번호·세금번호·금액 중 하나라도 비면 고배율로 다시 본다.
@@ -756,24 +750,14 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               }
               let pageLayout: OcrPageLayout | undefined
               try {
-                const read = await withScanTimeout(
-                  textForPage(canvas, printed, { pdf, pageNumber: i, total }),
-                  SCAN_PAGE_TIMEOUT_MS
+                const read = await readPageOrRetry(
+                  () => textForPage(canvas, printed, { pdf, pageNumber: i, total }),
+                  printed
                 )
                 pageText = read.text
                 pageLayout = read.layout
-              } catch (e) {
-                pageText = printed
-                const timedOut = e instanceof Error && e.message === "ptiOcrPageTimeout"
-                setError((prev) => prev || (timedOut ? "ptiOcrPageTimeout" : "ptiOcrFailed"))
-                if (timedOut && ocrBox.session) {
-                  try {
-                    await ocrBox.session.terminate()
-                  } catch {
-                    /* ignore */
-                  }
-                  ocrBox.session = null
-                }
+                const failKey = read.failKey
+                if (failKey) setError((prev) => prev || failKey)
               } finally {
                 releaseTaxInvoiceScanCanvas(canvas)
               }
@@ -802,12 +786,11 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           let pageText = ""
           let pageLayout: OcrPageLayout | undefined
           try {
-            const read = await withScanTimeout(textForPage(canvas, ""), SCAN_PAGE_TIMEOUT_MS)
+            const read = await readPageOrRetry(() => textForPage(canvas, ""), "")
             pageText = read.text
             pageLayout = read.layout
-          } catch {
-            pageText = ""
-            setError((prev) => prev || "ptiOcrFailed")
+            const failKey = read.failKey
+            if (failKey) setError((prev) => prev || failKey)
           } finally {
             releaseTaxInvoiceScanCanvas(canvas)
           }
@@ -879,13 +862,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       setError(purchaseTaxInvoiceScanFailI18nKey(e instanceof Error ? e.message : String(e), "ptiOcrFailed"))
       if (extracted.length) setReviewRows(extracted)
     } finally {
-      if (ocrBox.session) {
-        try {
-          await ocrBox.session.terminate()
-        } catch {
-          /* ignore */
-        }
-        ocrBox.session = null
+      try {
+        await dropSharedTaxInvoiceOcrSession()
+      } catch {
+        /* ignore */
       }
       try {
         keepAlive.stop()

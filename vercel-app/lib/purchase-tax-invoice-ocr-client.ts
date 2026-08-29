@@ -601,3 +601,63 @@ export async function createTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession
     },
   }
 }
+
+let sharedSession: TaxInvoiceOcrSession | null = null
+let sharedCreating: Promise<TaxInvoiceOcrSession> | null = null
+
+export function hasSharedTaxInvoiceOcrSession(): boolean {
+  return Boolean(sharedSession || sharedCreating)
+}
+
+export async function getSharedTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession> {
+  if (sharedSession) return sharedSession
+  if (!sharedCreating) {
+    sharedCreating = createTaxInvoiceOcrSession()
+      .then((s) => {
+        sharedSession = s
+        sharedCreating = null
+        return s
+      })
+      .catch((err) => {
+        sharedCreating = null
+        throw err
+      })
+  }
+  return sharedCreating
+}
+
+/** 얼어 죽은 워커를 버리고 같은 탭에서 엔진을 다시 연다. */
+export async function recycleSharedTaxInvoiceOcrSession(): Promise<TaxInvoiceOcrSession> {
+  const old = sharedSession
+  sharedSession = null
+  sharedCreating = createTaxInvoiceOcrSession()
+    .then((s) => {
+      sharedSession = s
+      sharedCreating = null
+      return s
+    })
+    .catch((err) => {
+      sharedCreating = null
+      throw err
+    })
+  if (old) {
+    try {
+      await old.terminate()
+    } catch {
+      /* ignore */
+    }
+  }
+  return sharedCreating
+}
+
+export async function dropSharedTaxInvoiceOcrSession(): Promise<void> {
+  const old = sharedSession
+  sharedSession = null
+  sharedCreating = null
+  if (!old) return
+  try {
+    await old.terminate()
+  } catch {
+    /* ignore */
+  }
+}

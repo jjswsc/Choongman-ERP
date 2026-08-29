@@ -13,6 +13,28 @@ export type PurchaseTaxScanKeepAlive = {
   stop: () => void
 }
 
+let runningCount = 0
+const runningListeners = new Set<(running: boolean) => void>()
+
+function setScanRunning(delta: 1 | -1) {
+  const prev = runningCount > 0
+  runningCount = Math.max(0, runningCount + delta)
+  const next = runningCount > 0
+  if (prev === next) return
+  for (const fn of runningListeners) fn(next)
+}
+
+export function isPurchaseTaxScanRunning(): boolean {
+  return runningCount > 0
+}
+
+export function subscribePurchaseTaxScanRunning(fn: (running: boolean) => void): () => void {
+  runningListeners.add(fn)
+  return () => {
+    runningListeners.delete(fn)
+  }
+}
+
 const WORKER_SRC = `
 self.onmessage = function (e) {
   if (e.data === 'stop') {
@@ -28,11 +50,22 @@ setInterval(function () {
 `
 
 export function startPurchaseTaxScanKeepAlive(): PurchaseTaxScanKeepAlive {
-  if (typeof window === 'undefined') return { stop: () => undefined }
+  setScanRunning(1)
+  if (typeof window === 'undefined') {
+    let stopped = false
+    return {
+      stop: () => {
+        if (stopped) return
+        stopped = true
+        setScanRunning(-1)
+      },
+    }
+  }
 
   const cleanups: Array<() => void> = []
   let wake: WakeLockSentinelLike | null = null
   let worker: Worker | null = null
+  let stopped = false
 
   const requestWake = async () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
@@ -89,6 +122,8 @@ export function startPurchaseTaxScanKeepAlive(): PurchaseTaxScanKeepAlive {
 
   return {
     stop: () => {
+      if (stopped) return
+      stopped = true
       for (const fn of cleanups.splice(0).reverse()) {
         try {
           fn()
@@ -105,6 +140,7 @@ export function startPurchaseTaxScanKeepAlive(): PurchaseTaxScanKeepAlive {
       worker = null
       void wake?.release()
       wake = null
+      setScanRunning(-1)
     },
   }
 }

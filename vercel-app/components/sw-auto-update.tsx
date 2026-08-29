@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { isMemberPortalPath } from "@/lib/member-portal-path"
+import {
+  isPurchaseTaxScanRunning,
+  subscribePurchaseTaxScanRunning,
+} from "@/lib/purchase-tax-invoice-scan-keepalive"
 
 /**
  * POS·ERP 경로: 탭이 항상 전체 화면(키오스크)이라 visibilitychange → hidden이 발생하지 않는다.
@@ -108,14 +112,33 @@ export function SwAutoUpdate() {
     }
 
     if (isAdminPath(pathname)) {
+      let tid: number | undefined
+      const tryReload = () => {
+        if (isPurchaseTaxScanRunning()) return
+        reloadOnce()
+      }
+      const armTimer = () => {
+        if (tid != null) window.clearTimeout(tid)
+        tid = window.setTimeout(() => {
+          if (isPurchaseTaxScanRunning()) {
+            armTimer()
+            return
+          }
+          tryReload()
+        }, ERP_AUTO_RELOAD_DELAY_MS)
+      }
       const onHidden = () => {
-        if (document.visibilityState === "hidden") reloadOnce()
+        if (document.visibilityState === "hidden") tryReload()
       }
       document.addEventListener("visibilitychange", onHidden)
-      const tid = window.setTimeout(reloadOnce, ERP_AUTO_RELOAD_DELAY_MS)
+      const unsubScan = subscribePurchaseTaxScanRunning((running) => {
+        if (!running) armTimer()
+      })
+      armTimer()
       return () => {
         document.removeEventListener("visibilitychange", onHidden)
-        window.clearTimeout(tid)
+        unsubScan()
+        if (tid != null) window.clearTimeout(tid)
       }
     }
 
