@@ -3,6 +3,7 @@ import { computeInboundBatchTaxableAmounts } from './inbound-payable-amount'
 import type { ItemTaxType } from './income-statement-item-vat'
 import { expenseDocumentQualifiesForPp30 } from './expense-document-type'
 import {
+  displaySellerBranchForUi,
   formatPp30Amount2,
   formatSellerBranch,
   gregorianYmdToBuddhistHint,
@@ -86,6 +87,13 @@ describe('purchase tax invoice helpers', () => {
     expect(formatSellerBranch('지점 1')).toBe('สาขา 00001')
     expect(formatSellerBranch('1')).toBe('สาขา 00001')
     expect(formatSellerBranch('สาขา 00001')).toBe('สาขา 00001')
+  })
+
+  it('shows blank for head office and digits only for branch in the UI', () => {
+    expect(displaySellerBranchForUi('')).toBe('')
+    expect(displaySellerBranchForUi(SELLER_BRANCH_HQ)).toBe('')
+    expect(displaySellerBranchForUi('สาขา 00001')).toBe('00001')
+    expect(displaySellerBranchForUi('1')).toBe('00001')
   })
 
   it('takes tax_month from invoice date', () => {

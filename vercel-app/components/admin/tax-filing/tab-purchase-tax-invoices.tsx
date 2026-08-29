@@ -281,10 +281,6 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   const { auth } = useAuth()
   const canWrite = canWriteAccountingCompliance(String(auth?.role || ""))
   const fallbackStore = String(auth?.store || "").trim()
-  const branchLabels = React.useMemo(
-    () => ({ hq: t("ptiBranchHq"), branch: t("ptiBranchSite") }),
-    [t]
-  )
   const [rows, setRows] = React.useState<PurchaseTaxInvoiceDto[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
@@ -432,7 +428,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       invoiceNo: r.invoiceNo,
       sellerName: r.sellerName,
       sellerTaxId: r.sellerTaxId,
-      sellerBranch: displaySellerBranchForUi(r.sellerBranch, branchLabels),
+      sellerBranch: displaySellerBranchForUi(r.sellerBranch),
       netAmount: String(r.netAmount),
       vatAmount: String(r.vatAmount),
     })
@@ -553,7 +549,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         invoiceNo,
         sellerName: String(f.sellerName || "").trim(),
         sellerTaxId,
-        sellerBranch: displaySellerBranchForUi(formatSellerBranch(f.sellerBranch), branchLabels),
+        sellerBranch: displaySellerBranchForUi(formatSellerBranch(f.sellerBranch)),
         netAmount: f.netAmount != null ? String(f.netAmount) : "",
         vatAmount: f.vatAmount != null ? String(f.vatAmount) : "",
         skip,
@@ -860,7 +856,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 ...row,
                 sellerName: String(filled.sellerName || row.sellerName).trim(),
                 sellerBranch: filled.sellerBranch
-                  ? displaySellerBranchForUi(formatSellerBranch(filled.sellerBranch), branchLabels)
+                  ? displaySellerBranchForUi(formatSellerBranch(filled.sellerBranch))
                   : row.sellerBranch,
               }
             }
@@ -1130,7 +1126,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               </div>
               <div>
                 <Label className="text-xs">{t("ptiColBranch")}</Label>
-                <Input className="h-8" value={form.sellerBranch} onChange={(e) => setForm({ ...form, sellerBranch: e.target.value })} placeholder={t("ptiBranchHq")} />
+                <Input className="h-8" value={form.sellerBranch} onChange={(e) => setForm({ ...form, sellerBranch: e.target.value })} placeholder={t("ptiBranchBlankHq")} />
               </div>
               <div>
                 <Label className="text-xs">{t("ptiColNet")}</Label>
@@ -1202,14 +1198,14 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-muted-foreground">
-                  <th className="p-1">{t("ptiColPage")}</th>
-                  <th className="p-1">{t("ptiColDate")}</th>
-                  <th className="p-1">{t("ptiColInvoiceNo")}</th>
-                  <th className="p-1">{t("ptiColSeller")}</th>
-                  <th className="p-1">{t("ptiColSellerTaxId")}</th>
-                  <th className="p-1">{t("ptiColBranch")}</th>
-                  <th className="p-1 text-right">{t("ptiColNet")}</th>
-                  <th className="p-1 text-right">{t("ptiColVat")}</th>
+                  <th className="p-1 w-[4.5rem]">{t("ptiColPage")}</th>
+                  <th className="p-1 w-[8.5rem]">{t("ptiColDate")}</th>
+                  <th className="p-1 min-w-[10rem]">{t("ptiColInvoiceNo")}</th>
+                  <th className="p-1 min-w-[12rem]">{t("ptiColSeller")}</th>
+                  <th className="p-1 min-w-[9rem]">{t("ptiColSellerTaxId")}</th>
+                  <th className="p-1 w-[3.5rem]" title={t("ptiBranchBlankHq")}>{t("ptiColBranch")}</th>
+                  <th className="p-1 w-[6rem] text-right">{t("ptiColNet")}</th>
+                  <th className="p-1 w-[5.5rem] text-right">{t("ptiColVat")}</th>
                   <th className="p-1">{t("ptiSkip")}</th>
                 </tr>
               </thead>
@@ -1232,26 +1228,26 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                       <Input className={reviewWarnClass("h-7 w-[130px]", flags.includes("month"))} type="date" value={r.docDate} onChange={(e) => patchReview(idx, { docDate: e.target.value })} />
                     </td>
                     <td className="p-1">
-                      <Input className={reviewWarnClass("h-7 w-[120px]", !r.skip && !String(r.invoiceNo || "").trim())} value={r.invoiceNo} onChange={(e) => {
+                      <Input className={reviewWarnClass("h-7 w-full min-w-[10rem]", !r.skip && !String(r.invoiceNo || "").trim())} value={r.invoiceNo} onChange={(e) => {
                         const invoiceNo = e.target.value
                         const unskipEmpty = r.skip && isPtiEmptyPageSkip(r.skipReason || "", t) && invoiceNo.trim()
                         patchReview(idx, { invoiceNo, skip: unskipEmpty ? false : r.skip, skipReason: unskipEmpty ? "" : r.skipReason })
                       }} />
                     </td>
                     <td className="p-1">
-                      <Input className="h-7 min-w-[140px]" value={r.sellerName} onChange={(e) => patchReview(idx, { sellerName: e.target.value })} />
+                      <Input className="h-7 w-full min-w-[12rem]" value={r.sellerName} onChange={(e) => patchReview(idx, { sellerName: e.target.value })} />
                     </td>
                     <td className="p-1">
-                      <Input className={reviewWarnClass("h-7 w-[120px]", flags.includes("tin"))} value={r.sellerTaxId} onChange={(e) => patchReview(idx, { sellerTaxId: e.target.value.replace(/\D/g, "").slice(0, 13) })} />
+                      <Input className={reviewWarnClass("h-7 w-full min-w-[9rem] tabular-nums", flags.includes("tin"))} value={r.sellerTaxId} onChange={(e) => patchReview(idx, { sellerTaxId: e.target.value.replace(/\D/g, "").slice(0, 13) })} />
                     </td>
                     <td className="p-1">
-                      <Input className="h-7 w-[130px]" value={r.sellerBranch} onChange={(e) => patchReview(idx, { sellerBranch: e.target.value })} />
+                      <Input className="h-7 w-[3.25rem] px-1 text-center tabular-nums" value={r.sellerBranch} onChange={(e) => patchReview(idx, { sellerBranch: e.target.value })} placeholder="" title={t("ptiBranchBlankHq")} />
                     </td>
                     <td className="p-1">
-                      <Input className={reviewWarnClass("h-7 w-[90px] text-right", flags.includes("vat"))} value={r.netAmount} onChange={(e) => patchReview(idx, { netAmount: e.target.value })} />
+                      <Input className={reviewWarnClass("h-7 w-[5.75rem] text-right", flags.includes("vat"))} value={r.netAmount} onChange={(e) => patchReview(idx, { netAmount: e.target.value })} />
                     </td>
                     <td className="p-1">
-                      <Input className={reviewWarnClass("h-7 w-[90px] text-right", flags.includes("vat"))} value={r.vatAmount} onChange={(e) => patchReview(idx, { vatAmount: e.target.value })} />
+                      <Input className={reviewWarnClass("h-7 w-[5.25rem] text-right", flags.includes("vat"))} value={r.vatAmount} onChange={(e) => patchReview(idx, { vatAmount: e.target.value })} />
                     </td>
                     <td className="p-1 text-[10px]">
                       <label className="flex items-start gap-1">
@@ -1304,7 +1300,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                   <td className="p-2">{r.invoiceNo}</td>
                   <td className="p-2">{r.sellerName}</td>
                   <td className="p-2 tabular-nums">{r.sellerTaxId}</td>
-                  <td className="p-2">{displaySellerBranchForUi(r.sellerBranch, branchLabels)}</td>
+                  <td className="p-2 tabular-nums">{displaySellerBranchForUi(r.sellerBranch)}</td>
                   <td className="p-2 text-right tabular-nums">{formatPp30Amount2(r.netAmount)}</td>
                   <td className="p-2 text-right tabular-nums">{formatPp30Amount2(r.vatAmount)}</td>
                   <td className="p-2 text-xs text-muted-foreground">

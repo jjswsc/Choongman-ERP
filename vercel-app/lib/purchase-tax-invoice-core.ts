@@ -95,15 +95,15 @@ export function formatSellerBranch(raw: unknown): string {
   return s.slice(0, 80)
 }
 
-/** UI 표시용. 저장 값은 항상 formatSellerBranch (태국 양식). */
+/** UI 표시용. 본점은 빈칸, 지점은 번호만 — 저장 값은 항상 formatSellerBranch (태국 양식). */
 export function displaySellerBranchForUi(
   raw: unknown,
-  labels: { hq: string; branch: string }
+  _labels?: { hq: string; branch: string }
 ): string {
   const formatted = formatSellerBranch(raw)
-  if (formatted === SELLER_BRANCH_HQ) return labels.hq
+  if (formatted === SELLER_BRANCH_HQ) return ''
   const m = formatted.match(/สาขา\s*(\d+)/)
-  if (m) return `${labels.branch} ${m[1]}`
+  if (m) return m[1]
   return formatted
 }
 
