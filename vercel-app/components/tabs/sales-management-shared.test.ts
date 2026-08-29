@@ -3,6 +3,7 @@ import {
   isSalesHeavyTopicSkippedOnLongRange,
   isSalesLongRangeQuery,
   isSalesPeriodGroupAllowedOnLongRange,
+  resolveDefaultSalesLanding,
   resolveSalesPeriodGroupForFastQuery,
   salesWaterfallGross,
 } from "@/components/tabs/sales-management-shared"
@@ -56,5 +57,28 @@ describe("sales long-range fast query", () => {
     expect(isSalesHeavyTopicSkippedOnLongRange("channel-reconcile")).toBe(true)
     expect(isSalesHeavyTopicSkippedOnLongRange("app-reconcile")).toBe(true)
     expect(isSalesHeavyTopicSkippedOnLongRange("period")).toBe(false)
+  })
+})
+
+describe("resolveDefaultSalesLanding", () => {
+  it("defaults admin and mobile store-sales to store summary pivot", () => {
+    expect(resolveDefaultSalesLanding("/admin/sales-management")).toEqual({
+      menuId: "sales-compare",
+      topicId: "compare-store-summary",
+      periodGroup: "month",
+    })
+    expect(resolveDefaultSalesLanding("/store-sales")).toEqual({
+      menuId: "sales-compare",
+      topicId: "compare-store-summary",
+      periodGroup: "month",
+    })
+  })
+
+  it("keeps other paths on period analysis", () => {
+    expect(resolveDefaultSalesLanding("/pos/sales")).toEqual({
+      menuId: "sales-analysis",
+      topicId: "analysis-period",
+      periodGroup: "day",
+    })
   })
 })

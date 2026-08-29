@@ -2395,7 +2395,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [loadPosOptions, canSearchAll])
 
   React.useEffect(() => {
-    if (!allowSalesUrlSync) return
+    /** 관리자 URL 동기화 경로 또는 모바일 `/store-sales`(offlineAware)에서 기본「전체 매장」 */
+    if (!allowSalesUrlSync && !offlineAware) return
     if (defaultStoresHydratedRef.current) return
     if (!canMultiStorePicker) {
       defaultStoresHydratedRef.current = true
@@ -2425,6 +2426,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setSelectedStores(base)
   }, [
     allowSalesUrlSync,
+    offlineAware,
     canMultiStorePicker,
     canSearchAll,
     posOptions,

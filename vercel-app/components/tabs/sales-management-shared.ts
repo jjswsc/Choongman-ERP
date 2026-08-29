@@ -287,7 +287,8 @@ export function resolveDefaultSalesLanding(pathname: string): {
   periodGroup: PeriodGroupValue
 } {
   const p = String(pathname || "")
-  if (p.startsWith("/admin/")) {
+  /** 관리자 매출 관리·모바일 `/store-sales` 매출 탭 — 전체 매장 비교용 매장별 집계 */
+  if (p.startsWith("/admin/") || p.startsWith("/store-sales")) {
     return {
       menuId: "sales-compare",
       topicId: "compare-store-summary",
