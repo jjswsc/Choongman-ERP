@@ -295,12 +295,6 @@ export function StoreSalesRealtimeView({
           {expectedTotal == null || loadingTables ? "—" : formatBahtInt(expectedTotal)}
         </p>
       </div>
-      <p className="text-[10px] leading-relaxed text-muted-foreground">
-        {tr(
-          "mobileStoreSalesMetricSplitHint",
-          "확정 매출만「오늘 매출」로 보세요. 미결제 테이블은 결제 전 좌석(서빙완료 ready 포함)이며 홀(확정)에 더하지 않습니다. 예상 총액은 확정 + 아직 확정에 없는 좌석(조리중 등)만 합산합니다."
-        )}
-      </p>
     </div>
   )
 
@@ -415,8 +409,6 @@ export function StoreSalesRealtimeView({
           </div>
         )
       ) : null}
-
-      <p className="text-xs leading-relaxed text-muted-foreground">{t("mobileStoreSalesSub")}</p>
 
       <section className="rounded-xl border border-border/80 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-sm">
         <p className="text-xs font-medium text-muted-foreground">
