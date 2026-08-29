@@ -293,6 +293,18 @@ describe('purchase tax review flags', () => {
       )
     ).toBe(false)
     expect(
+      purchaseTaxReviewIsProblem(
+        { invoiceNo: 'IVT-1', sellerTaxId: '0105559082715', docDate: '2026-07-01', netAmount: '', vatAmount: '' },
+        '2026-08'
+      )
+    ).toBe(true)
+    expect(
+      purchaseTaxReviewIsProblem(
+        { invoiceNo: '6907030', sellerTaxId: '0105550102497', docDate: '2026-07-02', netAmount: 0, vatAmount: 0 },
+        '2026-07'
+      )
+    ).toBe(false)
+    expect(
       purchaseTaxReviewFlags(
         { invoiceNo: 'IVT-1', sellerTaxId: '0105559082715', docDate: '2026-07-01', netAmount: 100, vatAmount: 7 },
         '2026-08'

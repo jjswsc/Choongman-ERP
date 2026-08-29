@@ -375,7 +375,7 @@ export function purchaseTaxDocMonthMismatch(docDate: unknown, taxMonth: string):
   return Boolean(month && want && month !== want)
 }
 
-export type PurchaseTaxReviewFlag = 'vat' | 'month' | 'tin'
+export type PurchaseTaxReviewFlag = 'vat' | 'month' | 'tin' | 'amount'
 
 export function purchaseTaxReviewFlags(
   row: {
@@ -392,6 +392,12 @@ export function purchaseTaxReviewFlags(
   if (tin && (tin.length !== 13 || !thaiTinChecksumOk(tin))) flags.push('tin')
   if (!row.skip && purchaseTaxDocMonthMismatch(row.docDate, taxMonth)) flags.push('month')
   if (!row.skip && purchaseTaxVatLooksWrong(row.netAmount, row.vatAmount)) flags.push('vat')
+  const netRaw = String(row.netAmount ?? '').trim()
+  const vatRaw = String(row.vatAmount ?? '').trim()
+  const netEmpty = netRaw === '' || !Number.isFinite(Number(netRaw))
+  const vatEmpty = vatRaw === '' || !Number.isFinite(Number(vatRaw))
+  // 공급가·부가세가 둘 다 비면 검수 문제. 0/0(영세)은 숫자로 채워진 것이므로 통과.
+  if (!row.skip && netEmpty && vatEmpty) flags.push('amount')
   return flags
 }
 

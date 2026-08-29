@@ -985,15 +985,13 @@ export function purchaseTaxInvoiceTextExtractIsComplete(
   return true
 }
 
-/** 번호·TIN이 있으면 합계 크롭은 이미 돌렸으므로 느린 PSM4 추가패스를 생략 */
+/** 번호·TIN만 있고 금액이 비면 합계 크롭을 한 번 더 돌린다. */
 export function purchaseTaxInvoiceNeedsSparseOcr(
   row: ExtractedPurchaseTaxInvoiceFields | null | undefined,
   hint?: PurchaseTaxInvoiceScanHint
 ): boolean {
   if (purchaseTaxInvoiceTextExtractIsComplete(row, hint)) return false
-  if (!row?.invoiceNo || !invoiceNoLooksPlausible(row.invoiceNo)) return true
-  if (!row.sellerTaxId || row.sellerTaxId.length !== 13) return true
-  return false
+  return true
 }
 
 export function mergePurchaseTaxInvoiceExtract(

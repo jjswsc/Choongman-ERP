@@ -146,10 +146,16 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
     expect(pdfPageTextIsReliableForExtract(text, { buyerTaxId: BUYER })).toBe(true)
   })
 
-  it('skips the extra OCR pass once invoice number and TIN are present', () => {
+  it('runs sparse OCR when amounts are still missing even if invoice and TIN are present', () => {
     expect(
       purchaseTaxInvoiceNeedsSparseOcr(
         { invoiceNo: 'NX2026-07-0177', sellerTaxId: '0105561016821' },
+        { buyerTaxId: BUYER }
+      )
+    ).toBe(true)
+    expect(
+      purchaseTaxInvoiceNeedsSparseOcr(
+        { invoiceNo: 'NX2026-07-0177', sellerTaxId: '0105561016821', netAmount: 8320, vatAmount: 582.4 },
         { buyerTaxId: BUYER }
       )
     ).toBe(false)

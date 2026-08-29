@@ -319,12 +319,6 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     if (cp?.rows?.length) setReviewRows(cp.rows)
   }, [reviewRows.length])
 
-  React.useEffect(() => {
-    return () => {
-      abortRef.current?.abort()
-    }
-  }, [])
-
   const load = React.useCallback(async () => {
     setLoading(true)
     setError("")
@@ -407,7 +401,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   }, [reviewRows, reviewFilter, filingYearMonth])
 
   const flagLabel = (flag: PurchaseTaxReviewFlag) =>
-    flag === "vat" ? t("ptiReviewVatWarn") : flag === "month" ? t("ptiReviewMonthWarn") : t("ptiReviewTinWarn")
+    flag === "vat"
+      ? t("ptiReviewVatWarn")
+      : flag === "month"
+        ? t("ptiReviewMonthWarn")
+        : flag === "amount"
+          ? t("ptiReviewAmountWarn")
+          : t("ptiReviewTinWarn")
 
   const pp30Compare = React.useMemo(
     () =>
@@ -666,7 +666,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       }
       const layout = mergeTaxInvoiceLayouts(layouts)
 
-      const extractedRow = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
+      let extractedRow = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
+      if (layout) {
+        extractedRow = repairExtractedPurchaseTaxInvoice(
+          applyLayoutExtract(extractedRow || {}, extractFromLayout(layout, hint.buyerTaxId, vendorHints())).fields,
+          { ...hint, pageText }
+        )
+      }
       if (purchaseTaxInvoiceNeedsSparseOcr(extractedRow, hint)) {
         const extra = await ocr.recognizeSparseCrops(work)
         pageText = [pageText, extra].filter((s) => String(s || "").trim()).join("\n")
