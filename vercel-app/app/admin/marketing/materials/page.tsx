@@ -1565,7 +1565,7 @@ export default function MarketingMaterialsPage() {
                             className="shrink-0 gap-1 text-xs"
                             onClick={() =>
                               router.push(
-                                `/admin/marketing/campaigns?openCampaign=${material.campaignId}&tab=materials`
+                                `/admin/marketing/campaigns/${encodeURIComponent(String(material.campaignId))}?tab=tasks`
                               )
                             }
                           >
@@ -1715,7 +1715,7 @@ export default function MarketingMaterialsPage() {
                               className="shrink-0 gap-1 text-xs"
                               onClick={() =>
                                 router.push(
-                                  `/admin/marketing/campaigns?openCampaign=${mat.campaignId}&tab=materials`
+                                  `/admin/marketing/campaigns/${encodeURIComponent(String(mat.campaignId))}?tab=tasks`
                                 )
                               }
                             >
@@ -2019,7 +2019,7 @@ export default function MarketingMaterialsPage() {
                               className="h-8 gap-1 text-xs"
                               onClick={() =>
                                 router.push(
-                                  `/admin/marketing/campaigns?openCampaign=${mat.campaignId}&tab=materials`
+                                  `/admin/marketing/campaigns/${encodeURIComponent(String(mat.campaignId))}?tab=tasks`
                                 )
                               }
                             >

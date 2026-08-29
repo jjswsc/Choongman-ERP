@@ -47,6 +47,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useSearchParams } from "next/navigation"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
+import { marketingCampaignWorkspaceHref } from "@/lib/marketing-campaign-create-ui"
 
 export default function MarketingCollabMenusPage() {
   const { lang } = useLang()
@@ -387,7 +388,7 @@ export default function MarketingCollabMenusPage() {
                         />
                         <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-4">
                           <Button variant="secondary" size="sm" className="gap-1" asChild>
-                            <Link href={`/admin/marketing/campaigns?openCampaign=${encodeURIComponent(selectedCampaignId)}`}>
+                            <Link href={marketingCampaignWorkspaceHref(selectedCampaignId)}>
                               <ExternalLink className="h-3.5 w-3.5" />
                               {t("marketingCollabMenusEditCampaign")}
                             </Link>

@@ -529,7 +529,7 @@ export function CampaignAbComparePanel() {
                         </td>
                         <td className="py-2 px-3 text-right">
                           <Link
-                            href={`/admin/marketing/campaigns?openCampaign=${encodeURIComponent(r.id)}&tab=results`}
+                            href={`/admin/marketing/campaigns/${encodeURIComponent(r.id)}?tab=results`}
                             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                           >
                             <ExternalLink className="h-3 w-3" />

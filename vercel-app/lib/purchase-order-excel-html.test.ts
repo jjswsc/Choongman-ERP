@@ -81,7 +81,8 @@ describe("buildPurchaseOrderExcelHtml", () => {
     expect(html).not.toContain("<x:FitToPage/>")
     expect(html).toContain("<x:Name>Print_Area</x:Name>")
     expect(html).toMatch(/\$A\$1:\$F\$\d+/)
-    expect(html).toContain("width:182mm")
+    expect(html).toContain("width:168mm")
+    expect(html).toContain('x:Left="0.55"')
     expect(html).not.toContain('class="po-inner"')
     expect(html).toContain("<x:DoNotDisplayGridlines/>")
   })
@@ -137,12 +138,12 @@ describe("buildPurchaseOrderExcelHtml", () => {
     expect(html).toContain("매장: MBK")
   })
 
-  it("pads short invoices with blank item rows so A4 is filled", () => {
+  it("pads short invoices with a few blank item rows without stretching the page", () => {
     const html = buildPurchaseOrderExcelHtml(sampleAccountingPo())
     const blanks = (html.match(/class="xl-body po-blank"/g) || []).length
     expect(blanks).toBe(PO_EXCEL_MIN_ITEM_ROWS - 1)
     expect(html).toContain("font-size: 22pt")
-    expect(html).toContain(`height:${80}pt`)
+    expect(html).toContain(`height:${68}pt`)
   })
 
   it("keeps 13-digit tax IDs as text so Excel does not show scientific notation", () => {

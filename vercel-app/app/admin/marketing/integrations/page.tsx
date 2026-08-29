@@ -8,19 +8,46 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { getLineOaGroupV2List, getLineOaGroups, getLineOaSegments } from "@/lib/api-client"
+import { disconnectMeta, getMetaConnectionStatus, syncMetaAds } from "@/lib/api-client/marketing-meta"
 import { appAlert } from "@/lib/app-message"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 import { IntegrationEnvDocList } from "@/lib/marketing-integration-env-doc"
+import { useSearchParams } from "next/navigation"
+import type { MetaConnectionStatus } from "@/lib/api-client/marketing-meta"
 
 export default function MarketingIntegrationsPage() {
   const t = useT(useLang().lang)
+  const searchParams = useSearchParams()
   const [segmentLoading, setSegmentLoading] = React.useState(false)
   const [segmentPreview, setSegmentPreview] = React.useState<string | null>(null)
   const [groupLoading, setGroupLoading] = React.useState(false)
   const [groupPreview, setGroupPreview] = React.useState<string | null>(null)
   const [groupV2Loading, setGroupV2Loading] = React.useState(false)
   const [groupV2Preview, setGroupV2Preview] = React.useState<string | null>(null)
+  const [metaStatus, setMetaStatus] = React.useState<MetaConnectionStatus | null>(null)
+  const [metaBusy, setMetaBusy] = React.useState(false)
+
+  const loadMeta = React.useCallback(async () => {
+    try {
+      setMetaStatus(await getMetaConnectionStatus())
+    } catch {
+      setMetaStatus({ connected: false, source: "none" })
+    }
+  }, [])
+
+  React.useEffect(() => {
+    void loadMeta()
+  }, [loadMeta])
+
+  React.useEffect(() => {
+    const code = searchParams.get("meta")
+    if (!code) return
+    if (code === "ok") void appAlert(t("marketingMetaOauthOk"))
+    else if (code === "nopage") void appAlert(t("marketingMetaOauthNoPage"))
+    else if (code === "config") void appAlert(t("marketingMetaOauthConfig"))
+    else if (code !== "ok") void appAlert(t("marketingMetaOauthFail"))
+  }, [searchParams, t])
 
   const testSegmentList = async () => {
     setSegmentLoading(true)
@@ -187,22 +214,70 @@ export default function MarketingIntegrationsPage() {
                 <Facebook className="h-5 w-5 text-[#1877F2]" />
               </div>
               <div>
-                <h3 className="font-semibold">Meta Ads (Instagram / Facebook)</h3>
+                <h3 className="font-semibold">{t("marketingMetaAdsTitle")}</h3>
                 <p className="text-xs text-muted-foreground">{t("marketingIntegrationMetaSubtitle")}</p>
+                {metaStatus?.pageName ? (
+                  <p className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    {metaStatus.pageName} · {metaStatus.pageId}
+                  </p>
+                ) : null}
               </div>
               </div>
-              <Badge variant="secondary">{t("marketingIntegrationStatusUnknown")}</Badge>
+              <Badge
+                className={cn(
+                  "shrink-0",
+                  metaStatus?.connected ? "bg-amber-500 text-white" : "bg-muted text-muted-foreground"
+                )}
+              >
+                {metaStatus?.connected ? t("marketingMetaConnected") : t("marketingMetaDisconnected")}
+              </Badge>
             </div>
             <ul className="text-sm text-muted-foreground space-y-1 mb-3">
               <li>{t("marketingIntegrationMetaEnvLine1")}</li>
               <li>{t("marketingIntegrationMetaEnvLine2")}</li>
+              <li>{t("marketingIntegrationMetaEnvLine3")}</li>
             </ul>
-            <Button variant="outline" size="sm" asChild>
-              <a href="https://developers.facebook.com/" target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                {t("marketingIntegrationMetaDevBtn")}
-              </a>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" asChild>
+                <a href="/api/meta/oauth/start">{t("marketingMetaConnect")}</a>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={metaBusy}
+                onClick={() => {
+                  setMetaBusy(true)
+                  void syncMetaAds()
+                    .then(loadMeta)
+                    .finally(() => setMetaBusy(false))
+                }}
+              >
+                {metaBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                {t("marketingMetaSync")}
+              </Button>
+              {metaStatus?.connected && metaStatus.source === "oauth" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive"
+                  disabled={metaBusy}
+                  onClick={() => {
+                    setMetaBusy(true)
+                    void disconnectMeta()
+                      .then(loadMeta)
+                      .finally(() => setMetaBusy(false))
+                  }}
+                >
+                  {t("marketingMetaDisconnect")}
+                </Button>
+              ) : null}
+              <Button variant="outline" size="sm" asChild>
+                <a href="https://developers.facebook.com/" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                  {t("marketingIntegrationMetaDevBtn")}
+                </a>
+              </Button>
+            </div>
           </div>
 
           {/* TikTok */}

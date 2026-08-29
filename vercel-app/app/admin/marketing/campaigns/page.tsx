@@ -3,9 +3,9 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import {
-  Megaphone, Save, Plus, Trash2, RotateCw, Upload, Calculator, Copy,
+  Megaphone, Save, Plus, Trash2, RotateCw, Upload, Calculator,
   Users, Package, BarChart2, ExternalLink, Loader2, CheckCheck, X,
-  List, ClipboardPen, Search, Tag, TrendingUp, ChevronDown, ChevronUp,
+  List, ClipboardPen, Search, ChevronDown, ChevronUp,
   GitCompare, Filter, AlertTriangle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -50,8 +50,13 @@ import { getBangkokRolling30DayRangeYmd } from "@/lib/collab-overview-period"
 import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
 import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import { CampaignAbComparePanel } from "@/components/marketing/campaign-ab-compare-panel"
+import { MarketingCampaignCardGrid } from "@/components/marketing/marketing-campaign-card-grid"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
+import {
+  MARKETING_CAMPAIGN_CREATE_UI,
+  marketingCampaignWorkspaceHref,
+} from "@/lib/marketing-campaign-create-ui"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   adminTabsBarCn,
@@ -88,7 +93,6 @@ import { apiFetchWithOffline } from "@/lib/api/fetch-offline"
 import {
   CAMPAIGN_TYPE_OPTIONS,
   KPI_UNIT_OPTIONS,
-  getCampaignTypeLabel,
   toCampaignTypeFormState,
   toCampaignTypeStorageValue,
 } from "@/lib/marketing-campaign-type-utils"
@@ -96,7 +100,6 @@ import {
   type ChannelState,
   type CostFieldKey,
   type CampaignPhaseFormRow,
-  dedupeNames,
   parseCampaignFormat,
   serializeCampaignFormat,
   STATUS_OPTIONS,
@@ -272,8 +275,10 @@ export default function MarketingCampaignsPage() {
 
   // 허브: 등록·수정 / 목록 / A·B 비교
   const [hubTab, setHubTab] = React.useState<"form" | "list" | "compare">(() => {
-    if (typeof window === "undefined") return "form"
-    return new URLSearchParams(window.location.search).get("view") === "compare" ? "compare" : "form"
+    if (typeof window === "undefined") return MARKETING_CAMPAIGN_CREATE_UI ? "form" : "list"
+    const view = new URLSearchParams(window.location.search).get("view")
+    if (view === "compare") return "compare"
+    return MARKETING_CAMPAIGN_CREATE_UI ? "form" : "list"
   })
   const [listSearch, setListSearch] = React.useState("")
   const [listSearchScope, setListSearchScope] = React.useState<CampaignListSearchScope>("all")
@@ -436,6 +441,10 @@ export default function MarketingCampaignsPage() {
 
   const navigateHubTab = React.useCallback(
     (tab: "form" | "list" | "compare") => {
+      if (!MARKETING_CAMPAIGN_CREATE_UI && tab === "form") {
+        setHubTab("list")
+        return
+      }
       setHubTab(tab)
       const p = new URLSearchParams(searchParams.toString())
       if (tab === "compare") {
@@ -457,15 +466,9 @@ export default function MarketingCampaignsPage() {
   }, [searchParams])
 
   React.useEffect(() => {
-    if (openCampaignId && list.length > 0) {
-      const c = list.find((x) => x.id === openCampaignId)
-      if (c) {
-        setHubTab("form")
-        setEditingId(c.id)
-        setActiveTab(openTab === "materials" || openTab === "results" ? openTab : "influencers")
-      }
-    }
-  }, [openCampaignId, openTab, list])
+    if (!openCampaignId) return
+    router.replace(marketingCampaignWorkspaceHref(openCampaignId, openTab))
+  }, [openCampaignId, openTab, router])
 
   React.useEffect(() => {
     const nextFormat = serializeCampaignFormat(channelState)
@@ -606,19 +609,6 @@ export default function MarketingCampaignsPage() {
     setExpandedGiftMatId(null)
     setEditingGiftId(null)
     setGiftAddDraft({ ...defaultGiftDraft })
-  }
-
-  const handleEdit = (
-    c: MarketingCampaign,
-    tab: "influencers" | "materials" | "results" = "influencers",
-  ) => {
-    setHubTab("form")
-    const p = new URLSearchParams(searchParams.toString())
-    p.delete("view")
-    const qs = p.toString()
-    router.replace(qs ? `/admin/marketing/campaigns?${qs}` : "/admin/marketing/campaigns")
-    setEditingId(c.id)
-    setActiveTab(tab)
   }
 
   const listFiltersActive = React.useMemo(
@@ -1299,7 +1289,7 @@ export default function MarketingCampaignsPage() {
   const selectedKpiUnit = kpiUnitLabel(form.kpiUnit)
 
   return (
-    <MarketingPageShell maxWidthClass={hubTab === "compare" ? "max-w-7xl" : "max-w-4xl"}>
+    <MarketingPageShell maxWidthClass={hubTab === "form" ? "max-w-4xl" : "max-w-7xl"}>
         <MarketingPageHero
           icon={Megaphone}
           title={tr("캠페인 허브", "Campaign Hub", "ศูนย์กลางแคมเปญ")}
@@ -1312,10 +1302,12 @@ export default function MarketingCampaignsPage() {
             <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
             {tr("새로고침", "Refresh", "รีเฟรช")}
           </Button>
-          <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={handleNew}>
-            <Plus className="h-4 w-4" />
-            {tr("새 캠페인", "New Campaign", "แคมเปญใหม่")}
-          </Button>
+          {MARKETING_CAMPAIGN_CREATE_UI ? (
+            <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={handleNew}>
+              <Plus className="h-4 w-4" />
+              {tr("새 캠페인", "New Campaign", "แคมเปญใหม่")}
+            </Button>
+          ) : null}
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleExcelImport} />
           <Button variant="outline" size="sm" className="h-10 gap-1.5"
             onClick={() => fileInputRef.current?.click()} disabled={importing}>
@@ -1338,10 +1330,12 @@ export default function MarketingCampaignsPage() {
           <div className={cn(adminTabsBarCn, "px-2 py-2.5 sm:px-4")}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
-                <TabsTrigger value="form" className={adminTabsTriggerCn}>
-                  <ClipboardPen className="mr-1.5 h-4 w-4 shrink-0" />
-                  {tr("등록·수정", "Create / Edit", "สร้าง / แก้ไข")}
-                </TabsTrigger>
+                {MARKETING_CAMPAIGN_CREATE_UI ? (
+                  <TabsTrigger value="form" className={adminTabsTriggerCn}>
+                    <ClipboardPen className="mr-1.5 h-4 w-4 shrink-0" />
+                    {tr("등록·수정", "Create / Edit", "สร้าง / แก้ไข")}
+                  </TabsTrigger>
+                ) : null}
                 <TabsTrigger value="list" className={adminTabsTriggerCn}>
                   <List className="mr-1.5 h-4 w-4 shrink-0" />
                   {tr("목록", "List", "รายการ")}
@@ -2923,118 +2917,26 @@ export default function MarketingCampaignsPage() {
                   {tr("불러오는 중…", "Loading…", "กำลังโหลด…")}
                 </p>
               )}
-              {campaignListForDisplay.map((c) => (
-                <div
-                  key={c.id}
-                  className={cn(
-                    "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between",
-                    editingId === c.id && "bg-primary/5"
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {c.campaignNo && (
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                          {c.campaignNo}
-                        </span>
-                      )}
-                      <span className="font-semibold">{c.topic}</span>
-                      <span className="rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-800">
-                        {getCampaignTypeLabel(c.campaignType, lang)}
-                      </span>
-                      <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                        c.status === "ongoing" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" :
-                          c.status === "finish" ? "bg-gray-100 text-gray-600" :
-                            "bg-amber-100 text-amber-800")}>
-                        {statusLabel(c.status)}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0 text-xs text-muted-foreground mt-0.5">
-                      {c.format && <span>{c.format}</span>}
-                      {(c.startDate || c.endDate) && <span>{c.startDate || "~"} ~ {c.endDate || "~"}</span>}
-                      {(c.designStartDate || c.designEndDate) && (
-                        <span>
-                          {tr("디자인", "Design", "ดีไซน์")}: {c.designStartDate || "~"} ~ {c.designEndDate || "~"}
-                        </span>
-                      )}
-                      {(c.phasePeriods && c.phasePeriods.length > 0) && (
-                        <span className="max-w-full text-[11px] leading-snug" title={
-                          c.phasePeriods
-                            .map((p, i) => {
-                              const lb = (p.label ?? "").trim() || `${i + 1}차`
-                              return `${lb} ${p.startDate || "—"} ~ ${p.endDate || "—"}`
-                            })
-                            .join(" · ")
-                        }>
-                          {tr("차수", "Phases", "รอบ")}:{" "}
-                          {c.phasePeriods.map((p, i) => {
-                            const lb = (p.label ?? "").trim() || `${i + 1}차`
-                            return (
-                              <span key={i}>
-                                {i > 0 ? " · " : ""}
-                                {lb} {p.startDate || "—"}~{p.endDate || "—"}
-                              </span>
-                            )
-                          })}
-                        </span>
-                      )}
-                      {c.branches && c.branches.length > 0 ? (
-                        <span>
-                          {formatBranchList(c.branches.slice(0, 3))}
-                          {c.branches.length > 3 ? ` +${c.branches.length - 3}` : ""}
-                        </span>
-                      ) : (
-                        <span className="text-amber-800/90 dark:text-amber-200/90">
-                          {tr("전체 매장(기획)", "All stores (plan)", "ทุกสาขา (แผน)")}
-                        </span>
-                      )}
-                      {(c.discountPricePromotion ?? "").trim() && (
-                        <span className="max-w-[220px] truncate" title={c.discountPricePromotion}>
-                          {tr("요약", "Summary", "สรุป")}: {c.discountPricePromotion}
-                        </span>
-                      )}
-                      {(c.discountTargetAudience ?? "").trim() && (
-                        <span className="max-w-[200px] truncate" title={c.discountTargetAudience}>
-                          {tr("대상", "Audience", "กลุ่มเป้าหมาย")}: {c.discountTargetAudience}
-                        </span>
-                      )}
-                      {c.kpiTarget > 0 && <span>KPI: {c.kpiTarget.toLocaleString()} {kpiUnitLabel(c.kpiUnit)}</span>}
-                      {c.budgetTotal > 0 && <span>{tr("예산", "Budget", "งบประมาณ")}: ฿{c.budgetTotal.toLocaleString()}</span>}
-                    </div>
-                  </div>
-                  <div className="flex w-full max-w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto">
-                    <span className="mr-1 text-[10px] font-medium text-muted-foreground">{tr("연결", "Links", "ลิงก์")}:</span>
-                    <Button type="button" variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                      title={tr("프로모션 세트", "Promotion Sets", "ชุดโปรโมชัน")}
-                      onClick={() => router.push(`/admin/marketing/promos?campaignId=${c.id}`)}>
-                      <Tag className="h-3 w-3" /> {tr("세트", "Promos", "ชุดโปรโมชัน")}
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                      title={tr("광고", "Ads", "โฆษณา")}
-                      onClick={() => router.push(`/admin/marketing/ads?campaignId=${c.id}`)}>
-                      <TrendingUp className="h-3 w-3" /> {tr("광고", "Ads", "โฆษณา")}
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                      title={tr("인플루언서", "Influencers", "อินฟลูเอนเซอร์")}
-                      onClick={() => router.push(`/admin/marketing/influencers?campaignId=${c.id}`)}>
-                      <Users className="h-3 w-3" /> {tr("인플", "Influencers", "อินฟลูเอนเซอร์")}
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                      title={tr("매장 홍보물", "Store promo materials", "สื่อโปรโมชันที่สาขา")}
-                      onClick={() => router.push(`/admin/marketing/materials?campaignId=${c.id}`)}>
-                      <Package className="h-3 w-3" /> {tr("홍보물", "Materials", "สื่อโปรโมชัน")}
-                    </Button>
-                    <span className="mx-0.5 text-muted-foreground">|</span>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleCopyCampaign(c)} title={tr("복사", "Copy", "คัดลอก")}>
-                      <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs`} onClick={() => handleEdit(c)}>{tr("수정", "Edit", "แก้ไข")}</Button>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => handleDelete(c)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+              {campaignListForDisplay.length > 0 || loading ? (
+                <MarketingCampaignCardGrid
+                  campaigns={campaignListForDisplay}
+                  lang={lang}
+                  statusLabel={statusLabel}
+                  formatBranchCount={(c) =>
+                    c.branches && c.branches.length > 0
+                      ? String(c.branches.length)
+                      : tr("전체", "All", "ทั้งหมด")
+                  }
+                  hubLinkSets={hubLinkSets}
+                  onDelete={handleDelete}
+                  onCopy={MARKETING_CAMPAIGN_CREATE_UI ? handleCopyCampaign : undefined}
+                  openLabel={t("marketingCampaignOpenWorkspace")}
+                  budgetLabel={tr("예산", "Budget", "งบประมาณ")}
+                  loading={loading}
+                  loadingLabel={tr("불러오는 중…", "Loading…", "กำลังโหลด…")}
+                  empty={null}
+                />
+              ) : null}
             </div>
           </div>
           </TabsContent>

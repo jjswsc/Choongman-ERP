@@ -50,6 +50,7 @@ import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 import { MarketingHubCampaignContextStrip } from "@/components/marketing/marketing-hub-campaign-context-strip"
 import { MarketingAdsOverviewTab } from "@/components/marketing/marketing-ads-overview-tab"
+import { MarketingMetaInsightsPanel } from "@/components/marketing/marketing-meta-insights-panel"
 import { MarketingAdOptionsDialog } from "@/components/marketing/marketing-ad-options-dialog"
 import { MarketingLinkedCampaignStrip } from "@/components/marketing/marketing-linked-campaign-strip"
 import { MarketingHubRecordScheduleCard } from "@/components/marketing/marketing-hub-record-schedule-card"
@@ -88,7 +89,7 @@ function platformBadgeClass(platform: string) {
   return "border-border bg-muted/80 text-foreground"
 }
 
-type MainTab = "compose" | "inquiry"
+type MainTab = "compose" | "inquiry" | "meta"
 
 export default function MarketingAdsPage() {
   const searchParams = useSearchParams()
@@ -96,7 +97,7 @@ export default function MarketingAdsPage() {
   const t = useT(lang)
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
   const { auth } = useAuth()
-  const [mainTab, setMainTab] = useAdminUrlTab("tab", ["compose", "inquiry"] as const, "compose")
+  const [mainTab, setMainTab] = useAdminUrlTab("tab", ["compose", "inquiry", "meta"] as const, "compose")
   const [list, setList] = React.useState<MarketingAd[]>([])
   const [allAds, setAllAds] = React.useState<MarketingAd[]>([])
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
@@ -410,6 +411,9 @@ export default function MarketingAdsPage() {
                 </TabsTrigger>
                 <TabsTrigger value="inquiry" className={adminTabsTriggerCn}>
                   {t("marketingAdsTabInquiry")}
+                </TabsTrigger>
+                <TabsTrigger value="meta" className={adminTabsTriggerCn}>
+                  {t("marketingAdsTabMeta")}
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -755,6 +759,9 @@ export default function MarketingAdsPage() {
                 />
               </CardContent>
             </Card>
+          </TabsContent>
+          <TabsContent value="meta" className={adminTabsContentCn}>
+            <MarketingMetaInsightsPanel />
           </TabsContent>
         </Tabs>
     </MarketingPageShell>

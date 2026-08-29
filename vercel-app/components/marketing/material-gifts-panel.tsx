@@ -865,7 +865,7 @@ export function MarketingMaterialGiftsPanel({
                       {(g.campaignId ?? matLookup[g.materialId]?.campaignId) && (
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0" asChild>
                           <Link
-                            href={`/admin/marketing/campaigns?openCampaign=${g.campaignId ?? matLookup[g.materialId]?.campaignId}&tab=materials`}
+                            href={`/admin/marketing/campaigns/${encodeURIComponent(String(g.campaignId ?? matLookup[g.materialId]?.campaignId ?? ""))}?tab=tasks`}
                           >
                             <ExternalLink className="h-3 w-3" />
                           </Link>

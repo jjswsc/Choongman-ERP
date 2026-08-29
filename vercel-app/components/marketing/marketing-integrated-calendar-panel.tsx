@@ -557,7 +557,7 @@ export function MarketingIntegratedCalendarPanel({
                     )}
                     {ev.campaignId && layerOfEvent(ev) !== "collab" && (
                       <Link
-                        href={`/admin/marketing/campaigns?openCampaign=${encodeURIComponent(ev.campaignId)}`}
+                        href={`/admin/marketing/campaigns/${encodeURIComponent(ev.campaignId)}`}
                         className="mt-2 inline-block text-xs text-primary hover:underline"
                       >
                         {t("marketingCalGoCampaignHub")}

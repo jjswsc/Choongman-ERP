@@ -71,20 +71,21 @@ export type PoExcelInput = {
 
 const COLS = 6
 /**
- * A4 세로 인쇄 가능 폭(여백 0.4" 제외 ≈ 190mm)보다 약간 좁게.
- * Fit-to-page는 축소만 하고 확대는 안 하므로, 시트 자체를 A4 크기로 둔다.
+ * 확정 인쇄 밀도: A4 한 장 · 좌우 여백 있게 · 본문은 페이지 상단~중반.
+ * 가로를 용지 끝까지 붙이거나, 빈 줄로 세로를 억지로 채우지 않는다.
  */
-const SHEET_WIDTH_MM = 182
-/** 열 폭(pt). 합 520pt ≈ 183mm. HTML width는 px(pt×96/72). */
-const COL_WIDTH_PT = [40, 188, 78, 78, 52, 84] as const
+const SHEET_WIDTH_MM = 168
+/** 열 폭(pt). 합 480pt ≈ 169mm. HTML width는 px(pt×96/72). */
+const COL_WIDTH_PT = [36, 176, 72, 72, 48, 76] as const
 const COL_WIDTH_PX = COL_WIDTH_PT.map((pt) => Math.round((pt * 96) / 72))
 const SHEET_WIDTH_PX = COL_WIDTH_PX.reduce((a, b) => a + b, 0)
+const PAGE_MARGIN_IN = "0.55"
 
-/** 짧은 인보이스용 빈 품목 줄 */
-export const PO_EXCEL_MIN_ITEM_ROWS = 10
-const ITEM_ROW_HEIGHT_PT = 22
-const SIGN_BOX_HEIGHT_PT = 80
-const SECTION_GAP_PT = 12
+/** 짧은 인보이스용 빈 품목 줄 — 너무 많으면 표만 길어짐 */
+export const PO_EXCEL_MIN_ITEM_ROWS = 6
+const ITEM_ROW_HEIGHT_PT = 24
+const SIGN_BOX_HEIGHT_PT = 68
+const SECTION_GAP_PT = 14
 const MAX_ADDR_LINES = 5
 
 function escapeCell(v: string | number): string {
@@ -140,7 +141,7 @@ export function wrapAddressHtml(raw: string, maxLen = 46): { html: string; heigh
   }
   const html = (lines.length ? lines : [s]).map(escapeCell).join("<br/>")
   const n = Math.max(1, (html.match(/<br\/>/g) || []).length + 1)
-  return { html, heightPt: Math.min(68, Math.max(40, n * 14 + 10)) }
+  return { html, heightPt: Math.min(72, Math.max(42, n * 16 + 12)) }
 }
 
 function pairTextRow(
@@ -206,36 +207,36 @@ function partyRows(from: PoExcelParty, billTo: PoExcelParty, labels: PoExcelLabe
         L ? wrapAddressHtml(L.value).html : "&nbsp;",
         R?.label || "",
         R ? wrapAddressHtml(R.value).html : "&nbsp;",
-        28
+        30
       )
     )
   }
-  return `${pairRow(labels.fromLabel, `<b>${escapeCell(from.name || "—")}</b>`, labels.billToLabel, `<b>${escapeCell(billTo.name || "—")}</b>`, 28)}
+  return `${pairRow(labels.fromLabel, `<b>${escapeCell(from.name || "—")}</b>`, labels.billToLabel, `<b>${escapeCell(billTo.name || "—")}</b>`, 30)}
 ${pairRow(labels.addressLabel, fromAddr.html, labels.addressLabel, toAddr.html, Math.max(fromAddr.heightPt, toAddr.heightPt))}
-${pairTextRow(labels.taxIdLabel, from.taxId || "—", labels.taxIdLabel, billTo.taxId || "—", 22)}
-${pairTextRow(labels.phoneLabel, from.phone || "—", labels.phoneLabel, billTo.phone || "—", 22)}
+${pairTextRow(labels.taxIdLabel, from.taxId || "—", labels.taxIdLabel, billTo.taxId || "—", 24)}
+${pairTextRow(labels.phoneLabel, from.phone || "—", labels.phoneLabel, billTo.phone || "—", 24)}
 ${extraRows.join("")}`
 }
 
 function poExcelCss(): string {
   return `${erpExcelRichTableCss()}
-@page { size: A4 portrait; margin: 10mm; mso-page-orientation: portrait; mso-header-margin: 6mm; mso-footer-margin: 6mm; }
+@page { size: A4 portrait; margin: 12mm; mso-page-orientation: portrait; mso-header-margin: 8mm; mso-footer-margin: 8mm; }
 body { margin: 0; padding: 0; }
 table.xl.po-sheet { width: ${SHEET_WIDTH_MM}mm; max-width: ${SHEET_WIDTH_MM}mm; table-layout: fixed; border-collapse: collapse; }
-table.xl.po-sheet td, table.xl.po-sheet th { white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; font-size: 11pt; padding: 6px 8px; }
-.po-band { background: #1e4d8c; color: #ffffff; font-size: 22pt; font-weight: 700; padding: 14px 12px; border-color: #1e4d8c; height: 44pt; }
-.po-band-meta { background: #1e4d8c; color: #ffffff; font-size: 11pt; text-align: right; vertical-align: middle; padding: 12px 12px; border-color: #1e4d8c; line-height: 1.45; }
+table.xl.po-sheet td, table.xl.po-sheet th { white-space: normal; word-wrap: break-word; overflow-wrap: anywhere; font-size: 11pt; padding: 8px 10px; }
+.po-band { background: #1e4d8c; color: #ffffff; font-size: 22pt; font-weight: 700; padding: 14px 14px; border-color: #1e4d8c; height: 44pt; }
+.po-band-meta { background: #1e4d8c; color: #ffffff; font-size: 11pt; text-align: right; vertical-align: middle; padding: 12px 14px; border-color: #1e4d8c; line-height: 1.5; }
 .po-band-meta b { font-size: 14pt; }
-.po-badge { background: #e8eef6; color: #1e4d8c; font-size: 11pt; font-weight: 700; padding: 7px 10px; border-color: #c5d4e8; }
-.po-format { background: #f8fafc; color: #334155; font-size: 10pt; padding: 6px 10px; border-color: #e2e8f0; }
-.po-k { background: #e8eef6; font-weight: 700; color: #1e4d8c; font-size: 10pt; width: 72px; }
+.po-badge { background: #e8eef6; color: #1e4d8c; font-size: 11pt; font-weight: 700; padding: 8px 12px; border-color: #c5d4e8; }
+.po-format { background: #f8fafc; color: #334155; font-size: 10pt; padding: 7px 12px; border-color: #e2e8f0; }
+.po-k { background: #e8eef6; font-weight: 700; color: #1e4d8c; font-size: 10pt; width: 76px; }
 .po-v { background: #ffffff; color: #0f172a; }
 .po-text { mso-number-format: "\\@"; }
-.po-addr { white-space: normal; line-height: 1.45; font-size: 11pt; mso-number-format: "\\@"; }
+.po-addr { white-space: normal; line-height: 1.5; font-size: 11pt; mso-number-format: "\\@"; }
 .po-wrap { white-space: normal; word-wrap: break-word; }
 .po-ship-k { background: #e8eef6; color: #1e4d8c; font-weight: 700; font-size: 11pt; }
 .po-ship-v { background: #ffffff; font-size: 11pt; }
-.po-thead th { background: #1e4d8c; color: #ffffff; font-weight: 700; font-size: 11pt; border-color: #163a6b; padding: 8px 6px; }
+.po-thead th { background: #1e4d8c; color: #ffffff; font-weight: 700; font-size: 11pt; border-color: #163a6b; padding: 9px 8px; }
 .po-store td { background: #e8eef6; font-weight: 700; color: #1e4d8c; }
 .xl-body td { font-size: 11pt; }
 .po-blank td { border-color: #e2e8f0; }
@@ -280,9 +281,9 @@ function excelShell(inner: string, title: string, lastRow: number): string {
     </x:Print>
     <x:PageSetup>
      <x:Layout x:Orientation="Portrait"/>
-     <x:Header x:Margin="0.25"/>
-     <x:Footer x:Margin="0.25"/>
-     <x:PageMargins x:Bottom="0.4" x:Left="0.4" x:Right="0.4" x:Top="0.4"/>
+     <x:Header x:Margin="0.3"/>
+     <x:Footer x:Margin="0.3"/>
+     <x:PageMargins x:Bottom="${PAGE_MARGIN_IN}" x:Left="${PAGE_MARGIN_IN}" x:Right="${PAGE_MARGIN_IN}" x:Top="${PAGE_MARGIN_IN}"/>
     </x:PageSetup>
     <x:DoNotDisplayGridlines/>
    </x:WorksheetOptions>
