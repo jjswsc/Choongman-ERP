@@ -35,6 +35,8 @@ export interface MarketingCampaign {
   collabManagement?: boolean
   /** 목록 API에 포함(협업 관리 매장별 조회 등) */
   collabDetail?: MarketingCollabDetail
+  metaCampaignId?: string
+  metaCampaignName?: string
 }
 
 export type { MarketingCollabDetail } from '../marketing-collab-detail'
@@ -151,6 +153,8 @@ export async function saveMarketingCampaign(params: {
   conclusion?: string
   collabManagement?: boolean
   phasePeriods?: MarketingCampaignPhasePeriod[]
+  metaCampaignId?: string
+  metaCampaignName?: string
   userRole?: string
   userStore?: string
 }) {

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Facebook, Loader2, RotateCw } from "lucide-react"
+import { Facebook, Instagram, Loader2, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useLang } from "@/lib/lang-context"
@@ -13,6 +13,7 @@ import {
   type MetaConnectionStatus,
   type MetaSyncPayload,
 } from "@/lib/api-client/marketing-meta"
+import { filterAdsForCampaign } from "@/lib/marketing-meta-match"
 
 function diagnoseLabel(code: string, t: (k: string) => string): string {
   if (code === "not_connected") return t("marketingMetaDiagNotConnected")
@@ -21,11 +22,27 @@ function diagnoseLabel(code: string, t: (k: string) => string): string {
   if (code === "page_insights_need_page_token") return t("marketingMetaDiagNeedPageToken")
   if (code === "no_ad_account_id") return t("marketingMetaDiagNoAdAccount")
   if (code === "page_insights_all_zero" || code === "ads_insights_all_zero") return t("marketingMetaDiagZero")
-  if (code.startsWith("ads_insights:") || code.startsWith("page_insights:")) return code
+  if (code === "instagram_not_linked") return t("marketingMetaDiagIgNotLinked")
+  if (code === "meta_not_mapped") return t("marketingMetaDiagNotMapped")
+  if (code.startsWith("ads_insights:") || code.startsWith("page_insights:") || code.startsWith("instagram_link:")) return code
   return code
 }
 
-export function MarketingMetaInsightsPanel({ compact }: { compact?: boolean }) {
+export function MarketingMetaInsightsPanel({
+  compact,
+  since,
+  until,
+  matchTopic,
+  metaCampaignId,
+  metaCampaignName,
+}: {
+  compact?: boolean
+  since?: string
+  until?: string
+  matchTopic?: string
+  metaCampaignId?: string
+  metaCampaignName?: string
+}) {
   const { lang } = useLang()
   const t = useT(lang)
   const [status, setStatus] = React.useState<MetaConnectionStatus | null>(null)
@@ -60,7 +77,7 @@ export function MarketingMetaInsightsPanel({ compact }: { compact?: boolean }) {
   const sync = async () => {
     setSyncing(true)
     try {
-      const r = await syncMetaAds()
+      const r = await syncMetaAds({ since, until })
       if (r.payload) setPayload(r.payload)
       await load()
     } finally {
@@ -68,9 +85,33 @@ export function MarketingMetaInsightsPanel({ compact }: { compact?: boolean }) {
     }
   }
 
-  const totals = payload?.adsTotals
-  const ads = payload?.ads || []
-  const diagnostics = payload?.diagnostics?.length ? payload.diagnostics : status?.diagnostics || []
+  const ig = payload?.instagram || status?.instagram || status?.lastSync?.instagram
+  const allAds = payload?.ads || []
+  const campaignFilterOn = Boolean(matchTopic || metaCampaignId || metaCampaignName)
+  const ads = campaignFilterOn
+    ? filterAdsForCampaign(allAds, {
+        topic: matchTopic,
+        metaCampaignId,
+        metaCampaignName,
+      })
+    : allAds
+  const totals = campaignFilterOn
+    ? ads.reduce(
+        (acc, a) => {
+          acc.ads += 1
+          acc.impressions += a.impressions
+          acc.reach += a.reach
+          acc.spend += a.spend
+          return acc
+        },
+        { ads: 0, impressions: 0, reach: 0, spend: 0 }
+      )
+    : payload?.adsTotals
+  const diagnostics = [
+    ...(payload?.diagnostics?.length ? payload.diagnostics : status?.diagnostics || []),
+    ...(campaignFilterOn && allAds.length > 0 && ads.length === 0 ? ["meta_not_mapped"] : []),
+  ]
+  const plat = payload?.platformSpend
 
   return (
     <div className="rounded-xl border bg-card p-4">
@@ -79,7 +120,7 @@ export function MarketingMetaInsightsPanel({ compact }: { compact?: boolean }) {
           <Facebook className="h-4 w-4 text-[#1877F2]" />
           <div>
             <h3 className="text-sm font-semibold">{t("marketingMetaAdsTitle")}</h3>
-            <p className="text-[11px] text-muted-foreground">{t("marketingMetaAdsSubtitle")}</p>
+            <p className="text-[11px] text-muted-foreground">{t("marketingMetaOneConnectHint")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -94,10 +135,37 @@ export function MarketingMetaInsightsPanel({ compact }: { compact?: boolean }) {
       </div>
 
       {status?.pageName || status?.pageId ? (
-        <p className="mb-3 text-xs text-muted-foreground">
-          {status.pageName || "—"} · {status.pageId}
+        <p className="mb-2 text-xs text-muted-foreground">
+          Facebook: {status.pageName || "—"} · {status.pageId}
           {status.lastSyncedAt ? ` · ${String(status.lastSyncedAt).slice(0, 16).replace("T", " ")}` : ""}
         </p>
+      ) : null}
+      {ig?.id ? (
+        <p className="mb-3 flex items-center gap-1 text-xs text-muted-foreground">
+          <Instagram className="h-3.5 w-3.5" />
+          Instagram: {ig.username ? `@${ig.username}` : ig.id}
+        </p>
+      ) : status?.connected ? (
+        <p className="mb-3 text-xs text-amber-800 dark:text-amber-200">{t("marketingMetaDiagIgNotLinked")}</p>
+      ) : null}
+
+      {plat && (plat.facebook > 0 || plat.instagram > 0 || plat.other > 0) ? (
+        <div className="mb-3 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-lg border bg-muted/20 px-3 py-2">
+            <div className="text-[10px] text-muted-foreground">Facebook</div>
+            <div className="font-semibold tabular-nums">฿{plat.facebook.toLocaleString()}</div>
+          </div>
+          <div className="rounded-lg border bg-muted/20 px-3 py-2">
+            <div className="text-[10px] text-muted-foreground">Instagram</div>
+            <div className="font-semibold tabular-nums">฿{plat.instagram.toLocaleString()}</div>
+          </div>
+          {plat.other > 0 ? (
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+              <div className="text-[10px] text-muted-foreground">{t("marketingMetaStatOtherPlat")}</div>
+              <div className="font-semibold tabular-nums">฿{plat.other.toLocaleString()}</div>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {!status?.connected ? (

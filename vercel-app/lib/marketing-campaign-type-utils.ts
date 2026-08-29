@@ -15,24 +15,32 @@ export const CAMPAIGN_TYPE_OPTIONS = [
 export const CAMPAIGN_TYPE_OTHER_PREFIX = "other:"
 
 export const KPI_UNIT_OPTIONS = [
-  { value: "order", label: "주문" },
-  { value: "sales", label: "매출" },
-  { value: "customer", label: "고객수" },
-  { value: "new_customer", label: "신규고객" },
-  { value: "repeat_customer", label: "재방문고객" },
-  { value: "coupon", label: "쿠폰사용" },
-  { value: "member", label: "회원가입" },
-  { value: "impression", label: "노출수" },
-  { value: "reach", label: "도달수" },
-  { value: "click", label: "클릭수" },
-  { value: "ctr", label: "클릭률(CTR)" },
-  { value: "conversion", label: "전환수" },
-  { value: "cvr", label: "전환율(CVR)" },
-  { value: "roas", label: "ROAS" },
-  { value: "aov", label: "객단가(AOV)" },
-  { value: "followers", label: "팔로워증가" },
-  { value: "engagement", label: "참여수" },
+  { value: "order", label: "주문", en: "Orders", th: "ออเดอร์" },
+  { value: "sales", label: "매출", en: "Sales", th: "ยอดขาย" },
+  { value: "customer", label: "고객수", en: "Customers", th: "จำนวนลูกค้า" },
+  { value: "new_customer", label: "신규고객", en: "New customers", th: "ลูกค้าใหม่" },
+  { value: "repeat_customer", label: "재방문고객", en: "Returning customers", th: "ลูกค้ากลับมาซื้อ" },
+  { value: "coupon", label: "쿠폰사용", en: "Coupon uses", th: "การใช้คูปอง" },
+  { value: "member", label: "회원가입", en: "Sign-ups", th: "การสมัครสมาชิก" },
+  { value: "impression", label: "노출수", en: "Impressions", th: "การแสดงผล" },
+  { value: "reach", label: "도달수", en: "Reach", th: "การเข้าถึง" },
+  { value: "click", label: "클릭수", en: "Clicks", th: "คลิก" },
+  { value: "ctr", label: "클릭률(CTR)", en: "CTR", th: "CTR" },
+  { value: "conversion", label: "전환수", en: "Conversions", th: "คอนเวอร์ชัน" },
+  { value: "cvr", label: "전환율(CVR)", en: "CVR", th: "CVR" },
+  { value: "roas", label: "ROAS", en: "ROAS", th: "ROAS" },
+  { value: "aov", label: "객단가(AOV)", en: "AOV", th: "ยอดต่อบิล" },
+  { value: "followers", label: "팔로워증가", en: "Followers", th: "ผู้ติดตามเพิ่ม" },
+  { value: "engagement", label: "참여수", en: "Engagement", th: "การมีส่วนร่วม" },
 ] as const
+
+export function getKpiUnitLabel(value: string, lang: string): string {
+  const option = KPI_UNIT_OPTIONS.find((x) => x.value === value)
+  if (!option) return value
+  if (lang === "th") return option.th
+  if (lang === "en") return option.en
+  return option.label
+}
 
 export function normalizeCampaignTypeInput(value: string) {
   return value.trim().replace(/\s+/g, " ")

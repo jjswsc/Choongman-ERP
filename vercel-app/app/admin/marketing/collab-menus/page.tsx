@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
+import { MarketingEnterViaCampaignBanner } from "@/components/marketing/marketing-enter-via-campaign-banner"
 import { MarketingHubCampaignContextStrip } from "@/components/marketing/marketing-hub-campaign-context-strip"
 import {
   getMarketingCampaigns,
@@ -224,6 +225,7 @@ export default function MarketingCollabMenusPage() {
   return (
     <MarketingPageShell>
       <MarketingPageHero icon={Handshake} title={t("adminMarketingCollabMenus")} description={t("marketingHeroDescCollab")} />
+      <MarketingEnterViaCampaignBanner />
       <Tabs
         value={mainTab}
         onValueChange={(v) => {

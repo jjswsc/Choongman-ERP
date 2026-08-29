@@ -50,6 +50,7 @@ import { getBangkokRolling30DayRangeYmd } from "@/lib/collab-overview-period"
 import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
 import { useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
 import { CampaignAbComparePanel } from "@/components/marketing/campaign-ab-compare-panel"
+import { MarketingCampaignBrowsePanel } from "@/components/marketing/marketing-campaign-browse-panel"
 import { MarketingCampaignCardGrid } from "@/components/marketing/marketing-campaign-card-grid"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
@@ -115,6 +116,13 @@ import {
 
 // ─── 페이지 ──────────────────────────────────────────────────────────────────
 export default function MarketingCampaignsPage() {
+  if (!MARKETING_CAMPAIGN_CREATE_UI) {
+    return <MarketingCampaignBrowsePanel />
+  }
+  return <MarketingCampaignsLegacyPage />
+}
+
+function MarketingCampaignsLegacyPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { lang } = useLang()
@@ -2830,7 +2838,7 @@ export default function MarketingCampaignsPage() {
                         <option value="_any">{tr("전체", "All", "ทั้งหมด")}</option>
                         {KPI_UNIT_OPTIONS.map((u) => (
                           <option key={u.value} value={u.value}>
-                            {u.label}
+                            {kpiUnitLabel(u.value)}
                           </option>
                         ))}
                       </select>

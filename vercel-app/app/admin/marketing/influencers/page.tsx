@@ -38,6 +38,7 @@ import {
 } from "@/lib/admin-tab-styles"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
+import { MarketingEnterViaCampaignBanner } from "@/components/marketing/marketing-enter-via-campaign-banner"
 import { MarketingHubCampaignContextStrip } from "@/components/marketing/marketing-hub-campaign-context-strip"
 import { MarketingInfluencersOverviewTab } from "@/components/marketing/marketing-influencers-overview-tab"
 import { MarketingInfluencersDirectoryTab } from "@/components/marketing/marketing-influencers-directory-tab"
@@ -561,6 +562,7 @@ export default function MarketingInfluencersPage() {
   return (
     <MarketingPageShell maxWidthClass="max-w-6xl">
         <MarketingPageHero icon={Users} title={t("adminMarketingInfluencers")} description={t("marketingHeroDescInfluencers")} />
+        <MarketingEnterViaCampaignBanner />
         {campaignIdFromQuery && (
           <div className="mb-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-foreground/90">
             {t("marketingHubFilteredAutoLinkNew")}

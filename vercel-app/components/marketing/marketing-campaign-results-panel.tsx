@@ -3,7 +3,7 @@
 import * as React from "react"
 import { BarChart2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { getMarketingCampaignCosts, getMarketingCampaignResults } from "@/lib/api-client"
+import { getMarketingCampaign, getMarketingCampaignCosts, getMarketingCampaignResults } from "@/lib/api-client"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { MarketingMetaInsightsPanel } from "@/components/marketing/marketing-meta-insights-panel"
@@ -12,6 +12,11 @@ export function MarketingCampaignResultsPanel({ campaignId }: { campaignId: stri
   const { lang } = useLang()
   const t = useT(lang)
   const [loading, setLoading] = React.useState(false)
+  const [since, setSince] = React.useState("")
+  const [until, setUntil] = React.useState("")
+  const [matchTopic, setMatchTopic] = React.useState("")
+  const [metaCampaignId, setMetaCampaignId] = React.useState("")
+  const [metaCampaignName, setMetaCampaignName] = React.useState("")
   const [cost, setCost] = React.useState<{
     bankCosts: number
     pettyCosts: number
@@ -37,9 +42,10 @@ export function MarketingCampaignResultsPanel({ campaignId }: { campaignId: stri
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
-      const [costsRes, posRes] = await Promise.allSettled([
+      const [costsRes, posRes, camp] = await Promise.allSettled([
         getMarketingCampaignCosts(campaignId),
         getMarketingCampaignResults({ campaignId }),
+        getMarketingCampaign(campaignId),
       ])
       if (costsRes.status === "fulfilled" && costsRes.value.success) {
         const r = costsRes.value
@@ -67,6 +73,14 @@ export function MarketingCampaignResultsPanel({ campaignId }: { campaignId: stri
           linkedOrders: r.linkedOrders,
           fallbackOrders: r.fallbackOrders,
         })
+      }
+      if (camp.status === "fulfilled" && camp.value) {
+        const c = camp.value
+        setSince((c.startDate || "").slice(0, 10))
+        setUntil((c.endDate || "").slice(0, 10))
+        setMatchTopic(c.topic || "")
+        setMetaCampaignId(c.metaCampaignId || "")
+        setMetaCampaignName(c.metaCampaignName || "")
       }
     } finally {
       setLoading(false)
@@ -125,7 +139,14 @@ export function MarketingCampaignResultsPanel({ campaignId }: { campaignId: stri
         </div>
       ) : null}
 
-      <MarketingMetaInsightsPanel compact />
+      <MarketingMetaInsightsPanel
+        compact
+        since={since || undefined}
+        until={until || undefined}
+        matchTopic={matchTopic}
+        metaCampaignId={metaCampaignId}
+        metaCampaignName={metaCampaignName}
+      />
     </div>
   )
 }

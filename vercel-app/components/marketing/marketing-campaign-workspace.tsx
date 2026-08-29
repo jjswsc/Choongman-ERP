@@ -34,6 +34,7 @@ import {
   parseMarketingCampaignWorkspaceTab,
   type MarketingCampaignWorkspaceTab,
 } from "@/lib/marketing-campaign-create-ui"
+import { getMarketingCampaign } from "@/lib/api-client"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 
 export function MarketingCampaignWorkspace({ campaignId }: { campaignId: string }) {
@@ -46,6 +47,15 @@ export function MarketingCampaignWorkspace({ campaignId }: { campaignId: string 
     MARKETING_CAMPAIGN_WORKSPACE_TABS,
     "overview"
   )
+  const [topic, setTopic] = React.useState("")
+  const [campaignNo, setCampaignNo] = React.useState("")
+
+  React.useEffect(() => {
+    void getMarketingCampaign(campaignId).then((c) => {
+      setTopic(c?.topic || "")
+      setCampaignNo(c?.campaignNo || "")
+    })
+  }, [campaignId])
 
   React.useEffect(() => {
     const parsed = parseMarketingCampaignWorkspaceTab(searchParams.get("tab") || tab)
@@ -64,15 +74,22 @@ export function MarketingCampaignWorkspace({ campaignId }: { campaignId: string 
     <MarketingPageShell maxWidthClass="max-w-7xl">
       <MarketingPageHero
         icon={Megaphone}
-        title={t("adminMarketingCampaigns")}
-        description={t("marketingHeroDescCampaigns")}
+        title={topic || t("adminMarketingCampaigns")}
+        description={t("marketingWsHeroDesc")}
+        badge={
+          campaignNo ? (
+            <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+              {campaignNo}
+            </span>
+          ) : null
+        }
       />
       <Tabs
         value={tab}
         onValueChange={(v) => setTab(parseMarketingCampaignWorkspaceTab(v))}
         className={adminTabsRootCn}
       >
-        <div className={cn(adminTabsBarCn, "px-2 py-2.5 sm:px-4")}>
+        <div className={cn(adminTabsBarCn, "sticky top-0 z-10 px-2 py-2.5 sm:px-4")}>
           <div className={adminTabsScrollCn}>
             <TabsList className={adminTabsListRowCn}>
               {items.map((item) => (

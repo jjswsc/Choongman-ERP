@@ -6,6 +6,7 @@ import {
   campaignTouchesToday,
   influencerTaskColumn,
   listPendingDeliveries,
+  listDispatchLines,
   materialTaskColumn,
 } from "@/lib/marketing-ops-board"
 
@@ -73,6 +74,66 @@ describe("marketing ops board", () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]?.pendingStores[0]?.store).toBe("CM Asoke")
     expect(rows[0]?.pendingStores[0]?.phase).toBe("receive")
+  })
+
+  it("explodes pending deliveries into store rows for the ops board", () => {
+    const lines = listDispatchLines({
+      campaigns: [campaign({ id: "1", topic: "Rice promo" })],
+      materials: [
+        material({
+          id: "10",
+          producedOn: "2026-08-20",
+          branches: ["CM Asoke", "CM Thonglor"],
+          quantity: 10,
+        }),
+      ],
+      checks: [],
+      hqLabel: "HQ",
+      today: "2026-08-28",
+      inProgressOnly: true,
+    })
+    expect(lines).toHaveLength(2)
+    expect(lines.map((l) => l.store).sort()).toEqual(["CM Asoke", "CM Thonglor"])
+    expect(lines.find((l) => l.store === "CM Asoke")?.quantity).toBe(5)
+    expect(lines.find((l) => l.store === "CM Thonglor")?.quantity).toBe(5)
+    expect(lines[0]?.quantityEstimated).toBe(true)
+    expect(lines[0]?.pendingStoreCount).toBe(2)
+  })
+
+  it("uses recorded per-store quantity when a check exists", () => {
+    const lines = listDispatchLines({
+      campaigns: [campaign({ id: "1", topic: "Rice promo" })],
+      materials: [
+        material({
+          id: "10",
+          producedOn: "2026-08-20",
+          branches: ["CM Asoke", "CM Thonglor"],
+          quantity: 10,
+        }),
+      ],
+      checks: [
+        {
+          id: "c1",
+          materialId: "10",
+          campaignId: "1",
+          storeName: "CM Asoke",
+          receivedOn: null,
+          receivedBy: "",
+          installedOn: null,
+          installedBy: "",
+          installedPlacementSpot: null,
+          installedPhotoUrl: "",
+          note: "",
+          quantity: 7,
+          updatedAt: null,
+        },
+      ],
+      hqLabel: "HQ",
+      today: "2026-08-28",
+      inProgressOnly: true,
+    })
+    expect(lines.find((l) => l.store === "CM Asoke")?.quantity).toBe(7)
+    expect(lines.find((l) => l.store === "CM Asoke")?.quantityEstimated).toBe(false)
   })
 
   it("maps material/influencer statuses onto kanban columns", () => {

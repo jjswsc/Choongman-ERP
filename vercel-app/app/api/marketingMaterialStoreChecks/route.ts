@@ -35,6 +35,18 @@ function isStoreScopedRole(role: string): boolean {
   return isMarketingMaterialStoreScopedRole(role)
 }
 
+function parseQty(val: unknown): number | null {
+  if (val == null || val === '') return null
+  const n = Number(val)
+  if (!Number.isFinite(n) || n < 0) return null
+  return Math.round(n)
+}
+
+function isMissingQtyColumn(err: unknown): boolean {
+  const s = String(err)
+  return /quantity/i.test(s) && /42703|PGRST204|does not exist|Could not find/i.test(s)
+}
+
 function mapRow(row: Record<string, unknown>) {
   return {
     id: String(row.id ?? ''),
@@ -49,6 +61,7 @@ function mapRow(row: Record<string, unknown>) {
       row.installed_placement_spot != null ? String(row.installed_placement_spot) : null,
     installedPhotoUrl: String(row.installed_photo_url ?? '').trim(),
     note: String(row.note ?? ''),
+    quantity: parseQty(row.quantity),
     updatedAt: row.updated_at ? String(row.updated_at) : null,
   }
 }
@@ -164,6 +177,7 @@ export async function POST(req: NextRequest) {
       installedPhotoUrl?: string | null
       note?: string
       materialType?: string | null
+      quantity?: number | null
     }
 
     const editingId = String(body.id ?? '').trim()
@@ -266,6 +280,8 @@ export async function POST(req: NextRequest) {
 
     const note =
       body.note !== undefined ? String(body.note ?? '').trim() : String(priorRow?.note ?? '').trim()
+    const hasQtyField = body.quantity !== undefined
+    const quantity = hasQtyField ? parseQty(body.quantity) : parseQty(priorRow?.quantity)
 
     if (installedOn && !receivedOn) {
       return NextResponse.json(
@@ -297,28 +313,49 @@ export async function POST(req: NextRequest) {
       note,
       updated_at: new Date().toISOString(),
     }
+    if (hasQtyField || quantity != null) {
+      row.quantity = quantity
+    }
 
-    let recordId = editingId
-    if (editingId) {
-      const existing = (await supabaseSelectFilter(
-        'marketing_material_store_checks',
-        `id=eq.${encodeURIComponent(editingId)}`,
-        { limit: 1 }
-      )) as { id?: number }[] | null
-      if (!existing?.length) {
-        return NextResponse.json({ success: false, message: '수정할 항목을 찾을 수 없습니다.' }, { headers })
+    const writeRow = async (
+      payload: Record<string, unknown>
+    ): Promise<{ ok: true; id: string } | { ok: false; missing: true }> => {
+      if (editingId) {
+        const existing = (await supabaseSelectFilter(
+          'marketing_material_store_checks',
+          `id=eq.${encodeURIComponent(editingId)}`,
+          { limit: 1 }
+        )) as { id?: number }[] | null
+        if (!existing?.length) {
+          return { ok: false, missing: true }
+        }
+        await supabaseUpdateByFilter('marketing_material_store_checks', `id=eq.${editingId}`, payload)
+        return { ok: true, id: editingId }
       }
-      await supabaseUpdateByFilter('marketing_material_store_checks', `id=eq.${editingId}`, row)
-    } else if (priorRow?.id != null) {
-      recordId = String(priorRow.id)
-      await supabaseUpdateByFilter('marketing_material_store_checks', `id=eq.${recordId}`, row)
-    } else {
-      const inserted = (await supabaseInsert('marketing_material_store_checks', row)) as {
+      if (priorRow?.id != null) {
+        const id = String(priorRow.id)
+        await supabaseUpdateByFilter('marketing_material_store_checks', `id=eq.${id}`, payload)
+        return { ok: true, id }
+      }
+      const inserted = (await supabaseInsert('marketing_material_store_checks', payload)) as {
         id?: number
       }[]
       const created = Array.isArray(inserted) ? inserted[0] : inserted
-      recordId = created?.id != null ? String(created.id) : ''
+      return { ok: true, id: created?.id != null ? String(created.id) : '' }
     }
+
+    let written: { ok: true; id: string } | { ok: false; missing: true }
+    try {
+      written = await writeRow(row)
+    } catch (err) {
+      if (!isMissingQtyColumn(err) || !('quantity' in row)) throw err
+      const { quantity: _qty, ...rest } = row
+      written = await writeRow(rest)
+    }
+    if (!written.ok) {
+      return NextResponse.json({ success: false, message: '수정할 항목을 찾을 수 없습니다.' }, { headers })
+    }
+    const recordId = written.id
 
     if (!recordId) {
       return NextResponse.json(

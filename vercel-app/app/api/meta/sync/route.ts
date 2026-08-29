@@ -13,7 +13,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, message: "tenant_blocked" }, { status: 403 })
   }
   try {
-    const payload = await syncMetaConnection(tenantScope)
+    const body = (await req.json().catch(() => ({}))) as { since?: string; until?: string }
+    const payload = await syncMetaConnection(tenantScope, {
+      since: String(body.since || "").trim() || undefined,
+      until: String(body.until || "").trim() || undefined,
+    })
     return NextResponse.json({ success: true, payload })
   } catch (e) {
     return NextResponse.json(

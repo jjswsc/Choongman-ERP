@@ -56,6 +56,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
+import { MarketingEnterViaCampaignBanner } from "@/components/marketing/marketing-enter-via-campaign-banner"
 import { MarketingHubCampaignContextStrip } from "@/components/marketing/marketing-hub-campaign-context-strip"
 import { MarketingLinkedCampaignStrip } from "@/components/marketing/marketing-linked-campaign-strip"
 import { MarketingMaterialPicklistsDialog } from "@/components/marketing/marketing-material-picklists-dialog"
@@ -824,6 +825,7 @@ export default function MarketingMaterialsPage() {
   return (
     <MarketingPageShell>
         <MarketingPageHero icon={Package} title={t("adminMarketingMaterials")} description={t("marketingHeroDescMaterials")} />
+        <MarketingEnterViaCampaignBanner />
         <div className="mb-4 flex rounded-lg border border-input bg-muted/30 p-1 text-sm font-medium">
           <button
             type="button"

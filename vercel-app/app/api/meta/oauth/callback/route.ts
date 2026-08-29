@@ -72,8 +72,9 @@ export async function GET(req: NextRequest) {
     )
     const envPage = metaEnvFallback().pageId
     const pages = accounts.json?.data || []
-    const picked = pages.find((p) => envPage && String(p.id) === envPage) || pages[0]
-    if (!picked?.id || !picked.access_token) {
+    const envMatch = pages.find((p) => envPage && String(p.id) === envPage)
+    const picked = envMatch || (pages.length === 1 ? pages[0] : null)
+    if (pages.length === 0) {
       return integrationsRedirect(req, { meta: "nopage" })
     }
 
@@ -84,6 +85,20 @@ export async function GET(req: NextRequest) {
     const adAccountId = metaEnvFallback().adAccountId || String(acts.json?.data?.[0]?.id || "")
 
     const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
+    if (!picked?.id || !picked.access_token) {
+      await upsertMetaConnection(tenantScope, {
+        pageId: "",
+        pageName: "",
+        adAccountId,
+        pageToken: userToken,
+        userToken,
+        tokenKind: "page",
+        grantedScopes: granted.join(","),
+        lastSync: null,
+      })
+      return integrationsRedirect(req, { meta: "pick" })
+    }
+
     await upsertMetaConnection(tenantScope, {
       pageId: String(picked.id),
       pageName: String(picked.name || ""),

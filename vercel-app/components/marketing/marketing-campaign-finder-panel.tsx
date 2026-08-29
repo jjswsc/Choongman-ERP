@@ -18,9 +18,8 @@ import {
   type MarketingCampaignHubLinkSets,
 } from "@/lib/marketing-campaign-list-query"
 import { fetchMarketingCampaignHubLinkSets } from "@/lib/marketing-campaign-hub-link-data"
-import { CAMPAIGN_TYPE_OPTIONS, KPI_UNIT_OPTIONS } from "@/lib/marketing-campaign-type-utils"
+import { CAMPAIGN_TYPE_OPTIONS, KPI_UNIT_OPTIONS, getCampaignTypeLabel, getKpiUnitLabel } from "@/lib/marketing-campaign-type-utils"
 import type { CampaignHubLinkFilterValue } from "@/lib/marketing-campaign-filters"
-import { getCampaignTypeLabel } from "@/lib/marketing-campaign-type-utils"
 import { getBangkokRolling30DayRangeYmd } from "@/lib/collab-overview-period"
 
 /** 마케팅 허브 캠페인 목록 — 약 7행(52vh·30rem cap, 최소 ~4행) */
@@ -565,7 +564,7 @@ export function MarketingCampaignFinderPanel({
                   <option value="_any">{tr("전체", "All", "ทั้งหมด")}</option>
                   {KPI_UNIT_OPTIONS.map((u) => (
                     <option key={u.value} value={u.value}>
-                      {u.label}
+                      {getKpiUnitLabel(u.value, lang)}
                     </option>
                   ))}
                 </select>

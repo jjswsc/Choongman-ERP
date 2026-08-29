@@ -97,7 +97,7 @@ export default function MarketingAdsPage() {
   const t = useT(lang)
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
   const { auth } = useAuth()
-  const [mainTab, setMainTab] = useAdminUrlTab("tab", ["compose", "inquiry", "meta"] as const, "compose")
+  const [mainTab, setMainTab] = useAdminUrlTab("tab", ["compose", "inquiry", "meta"] as const, "meta")
   const [list, setList] = React.useState<MarketingAd[]>([])
   const [allAds, setAllAds] = React.useState<MarketingAd[]>([])
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])

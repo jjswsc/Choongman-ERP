@@ -36,6 +36,7 @@ import { MarketingPageHero } from '@/components/marketing/marketing-page-hero'
 import { MarketingPageShell } from '@/components/marketing/marketing-page-shell'
 import { MarketingStickyHubBar } from '@/components/marketing/marketing-sticky-hub-bar'
 import { MarketingEmptyState } from '@/components/marketing/marketing-empty-state'
+import { MarketingEnterViaCampaignBanner } from '@/components/marketing/marketing-enter-via-campaign-banner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tag } from 'lucide-react'
 export default function MarketingPromosPage() {
@@ -194,6 +195,7 @@ export default function MarketingPromosPage() {
             ) : null
           }
         />
+        <MarketingEnterViaCampaignBanner />
 
         {campaignIdFromQuery && (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs leading-relaxed">

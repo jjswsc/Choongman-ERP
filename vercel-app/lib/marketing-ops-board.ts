@@ -9,6 +9,7 @@ import {
   findStoreCheckForBranch,
   type StoreMaterialTaskPhase,
 } from "@/lib/marketing-material-checklist-utils"
+import { storeDispatchQuantity } from "@/lib/marketing-store-qty"
 
 export type MarketingTaskColumn = "todo" | "doing" | "done"
 
@@ -47,6 +48,21 @@ export type PendingDeliveryRow = {
   materialStatus: string
   displayStartDate: string | null
   pendingStores: PendingStorePhase[]
+  quantity?: number
+}
+
+export type DispatchLine = {
+  materialId: string
+  campaignId: string
+  campaignTopic: string
+  campaignNo?: string
+  materialName: string
+  materialType: string
+  store: string
+  phase: StoreMaterialTaskPhase
+  quantity?: number
+  quantityEstimated?: boolean
+  pendingStoreCount: number
 }
 
 export function listPendingDeliveries(params: {
@@ -90,6 +106,7 @@ export function listPendingDeliveries(params: {
       materialStatus: material.status,
       displayStartDate: material.displayStartDate,
       pendingStores,
+      quantity: material.quantity,
     })
   }
 
@@ -100,6 +117,41 @@ export function listPendingDeliveries(params: {
     return a.materialName.localeCompare(b.materialName)
   })
   return rows
+}
+
+/** 센터 출고용: 품목×매장 한 행. 수량은 매장 기록값, 없으면 총수량 균등 배분. */
+export function listDispatchLines(params: Parameters<typeof listPendingDeliveries>[0]): DispatchLine[] {
+  const rows = listPendingDeliveries(params)
+  const matById = new Map(params.materials.map((m) => [String(m.id), m]))
+  const lines: DispatchLine[] = []
+  for (const row of rows) {
+    const material = matById.get(row.materialId)
+    const allStores = material ? materialTargetStores(material, params.hqLabel) : row.pendingStores.map((s) => s.store)
+    for (const s of row.pendingStores) {
+      const check = findStoreCheckForBranch(params.checks, row.materialId, s.store)
+      const storeIndex = Math.max(0, allStores.findIndex((name) => name === s.store))
+      const qty = storeDispatchQuantity({
+        checkQuantity: check?.quantity,
+        materialQuantity: material?.quantity ?? row.quantity,
+        storeCount: allStores.length || row.pendingStores.length,
+        storeIndex,
+      })
+      lines.push({
+        materialId: row.materialId,
+        campaignId: row.campaignId,
+        campaignTopic: row.campaignTopic,
+        campaignNo: row.campaignNo,
+        materialName: row.materialName,
+        materialType: row.materialType,
+        store: s.store,
+        phase: s.phase,
+        quantity: qty.qty,
+        quantityEstimated: qty.estimated,
+        pendingStoreCount: row.pendingStores.length,
+      })
+    }
+  }
+  return lines
 }
 
 export function countPendingInstallStores(rows: PendingDeliveryRow[]): number {

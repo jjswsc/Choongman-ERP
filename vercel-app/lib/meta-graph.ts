@@ -5,6 +5,8 @@ export const META_OAUTH_SCOPES = [
   "pages_read_user_content",
   "read_insights",
   "ads_read",
+  "instagram_basic",
+  "instagram_manage_insights",
 ].join(",")
 
 export type MetaGraphError = { message: string; type?: string; code?: number }
@@ -60,6 +62,7 @@ export function metaEnvFallback(): {
 export type MetaAdInsightRow = {
   adId: string
   adName: string
+  campaignId?: string
   campaignName: string
   impressions: number
   reach: number
@@ -74,6 +77,17 @@ export type MetaPageInsightTotals = {
   pageViews: number
 }
 
+export type MetaInstagramAccount = {
+  id: string
+  username: string
+}
+
+export type MetaPlatformSpend = {
+  facebook: number
+  instagram: number
+  other: number
+}
+
 export type MetaSyncPayload = {
   syncedAt: string
   tokenKind: "page" | "user" | "env" | "unknown"
@@ -84,6 +98,9 @@ export type MetaSyncPayload = {
   ads: MetaAdInsightRow[]
   adsTotals: { ads: number; impressions: number; reach: number; spend: number }
   pageInsights: MetaPageInsightTotals
+  instagram: MetaInstagramAccount | null
+  platformSpend: MetaPlatformSpend
+  dateRange: { since?: string; until?: string; preset?: string }
   diagnostics: string[]
 }
 
@@ -100,11 +117,20 @@ export async function fetchMetaAdsAndPageInsights(params: {
   adAccountId: string
   tokenKind: MetaSyncPayload["tokenKind"]
   grantedScopes: string[]
+  since?: string
+  until?: string
 }): Promise<MetaSyncPayload> {
   const diagnostics: string[] = []
   const ads: MetaAdInsightRow[] = []
   const pageInsights: MetaPageInsightTotals = { postEngagement: 0, newFollows: 0, pageViews: 0 }
   const adsToken = params.userToken || params.pageToken
+  const since = String(params.since || "").trim()
+  const until = String(params.until || "").trim()
+  const dateQuery: Record<string, string> =
+    since && until
+      ? { time_range: JSON.stringify({ since, until }) }
+      : { date_preset: "last_28d" }
+  const dateRange = since && until ? { since, until } : { preset: "last_28d" }
 
   if (!params.grantedScopes.includes("read_insights") && params.tokenKind !== "env") {
     diagnostics.push("missing_scope:read_insights")
@@ -116,6 +142,26 @@ export async function fetchMetaAdsAndPageInsights(params: {
     diagnostics.push("page_insights_need_page_token")
   }
 
+  let instagram: MetaInstagramAccount | null = null
+  if (params.pageId && params.pageToken) {
+    const ig = await metaGraphGet<{
+      instagram_business_account?: { id?: string; username?: string }
+    }>(params.pageId, params.pageToken, {
+      fields: "instagram_business_account{id,username}",
+    })
+    if (ig.ok && ig.json?.instagram_business_account?.id) {
+      instagram = {
+        id: String(ig.json.instagram_business_account.id),
+        username: String(ig.json.instagram_business_account.username || ""),
+      }
+    } else if (!ig.ok) {
+      diagnostics.push(`instagram_link:${ig.error?.message || "error"}`)
+    } else {
+      diagnostics.push("instagram_not_linked")
+    }
+  }
+
+  const platformSpend: MetaPlatformSpend = { facebook: 0, instagram: 0, other: 0 }
   const act = normalizeAdAccountId(params.adAccountId)
   if (act) {
     const insights = await metaGraphGet<{ data?: Record<string, unknown>[] }>(
@@ -123,8 +169,8 @@ export async function fetchMetaAdsAndPageInsights(params: {
       adsToken,
       {
         level: "ad",
-        date_preset: "last_28d",
-        fields: "ad_id,ad_name,campaign_name,impressions,reach,clicks,ctr,spend",
+        ...dateQuery,
+        fields: "ad_id,ad_name,campaign_id,campaign_name,impressions,reach,clicks,ctr,spend",
         limit: "200",
       }
     )
@@ -135,6 +181,7 @@ export async function fetchMetaAdsAndPageInsights(params: {
         ads.push({
           adId: String(row.ad_id || ""),
           adName: String(row.ad_name || ""),
+          campaignId: String(row.campaign_id || ""),
           campaignName: String(row.campaign_name || ""),
           impressions: num(row.impressions),
           reach: num(row.reach),
@@ -142,6 +189,25 @@ export async function fetchMetaAdsAndPageInsights(params: {
           ctr: num(row.ctr),
           spend: num(row.spend),
         })
+      }
+    }
+    const plat = await metaGraphGet<{ data?: { publisher_platform?: string; spend?: unknown }[] }>(
+      `${act}/insights`,
+      adsToken,
+      {
+        ...dateQuery,
+        fields: "spend",
+        breakdowns: "publisher_platform",
+        limit: "20",
+      }
+    )
+    if (plat.ok) {
+      for (const row of plat.json?.data || []) {
+        const p = String(row.publisher_platform || "").toLowerCase()
+        const spend = num(row.spend)
+        if (p === "instagram") platformSpend.instagram += spend
+        else if (p === "facebook") platformSpend.facebook += spend
+        else platformSpend.other += spend
       }
     }
   } else {
@@ -155,7 +221,7 @@ export async function fetchMetaAdsAndPageInsights(params: {
       {
         metric: "page_post_engagements,page_impressions,page_follows",
         period: "day",
-        date_preset: "last_28d",
+        ...dateQuery,
       }
     )
     if (!pi.ok) {
@@ -204,6 +270,9 @@ export async function fetchMetaAdsAndPageInsights(params: {
     ads,
     adsTotals,
     pageInsights,
+    instagram,
+    platformSpend,
+    dateRange,
     diagnostics,
   }
 }

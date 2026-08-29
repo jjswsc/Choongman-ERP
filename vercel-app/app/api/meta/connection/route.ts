@@ -29,7 +29,12 @@ export async function GET(req: NextRequest) {
       grantedScopes: live.grantedScopes,
       lastSyncedAt: row?.last_synced_at || lastSync.syncedAt || null,
       lastSync,
+      instagram: (lastSync as { instagram?: { id?: string; username?: string } }).instagram
+        || (row?.ig_user_id
+          ? { id: row.ig_user_id, username: row.ig_username || "" }
+          : null),
       appConfigured: Boolean(creds.appId && creds.appSecret),
+      pendingPagePick: live.source === "oauth" && !live.pageId,
       diagnostics: Array.isArray(lastSync.diagnostics) ? lastSync.diagnostics : [],
     })
   } catch (e) {

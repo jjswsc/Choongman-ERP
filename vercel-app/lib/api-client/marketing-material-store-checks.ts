@@ -16,6 +16,8 @@ export interface MarketingMaterialStoreCheck {
   installedPlacementSpot: string | null
   installedPhotoUrl: string
   note: string
+  /** 해당 매장 출고 개수. 없으면 품목 총수량 균등 배분으로 표시 */
+  quantity?: number | null
   updatedAt: string | null
 }
 
@@ -47,6 +49,7 @@ export async function saveMarketingMaterialStoreCheck(params: {
   installedPhotoUrl?: string | null
   note?: string
   materialType?: string | null
+  quantity?: number | null
 }) {
   const res = await apiFetchWithOffline('/api/marketingMaterialStoreChecks', {
     method: 'POST',

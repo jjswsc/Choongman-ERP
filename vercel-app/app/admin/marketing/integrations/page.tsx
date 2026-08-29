@@ -8,13 +8,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { getLineOaGroupV2List, getLineOaGroups, getLineOaSegments } from "@/lib/api-client"
-import { disconnectMeta, getMetaConnectionStatus, syncMetaAds } from "@/lib/api-client/marketing-meta"
+import { disconnectMeta, getMetaConnectionStatus, listMetaPages, selectMetaPage, syncMetaAds } from "@/lib/api-client/marketing-meta"
 import { appAlert } from "@/lib/app-message"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 import { IntegrationEnvDocList } from "@/lib/marketing-integration-env-doc"
 import { useSearchParams } from "next/navigation"
-import type { MetaConnectionStatus } from "@/lib/api-client/marketing-meta"
+import type { MetaConnectionStatus, MetaPageChoice } from "@/lib/api-client/marketing-meta"
 
 export default function MarketingIntegrationsPage() {
   const t = useT(useLang().lang)
@@ -27,10 +27,21 @@ export default function MarketingIntegrationsPage() {
   const [groupV2Preview, setGroupV2Preview] = React.useState<string | null>(null)
   const [metaStatus, setMetaStatus] = React.useState<MetaConnectionStatus | null>(null)
   const [metaBusy, setMetaBusy] = React.useState(false)
+  const [metaPages, setMetaPages] = React.useState<MetaPageChoice[]>([])
+  const [showPagePick, setShowPagePick] = React.useState(false)
 
   const loadMeta = React.useCallback(async () => {
     try {
-      setMetaStatus(await getMetaConnectionStatus())
+      const st = await getMetaConnectionStatus()
+      setMetaStatus(st)
+      if (st.connected || st.pendingPagePick) {
+        const pages = await listMetaPages().catch(() => ({ pages: [] as MetaPageChoice[], pendingPick: false }))
+        setMetaPages(Array.isArray(pages.pages) ? pages.pages : [])
+        setShowPagePick(Boolean(st.pendingPagePick || pages.pendingPick))
+      } else {
+        setMetaPages([])
+        setShowPagePick(false)
+      }
     } catch {
       setMetaStatus({ connected: false, source: "none" })
     }
@@ -44,6 +55,10 @@ export default function MarketingIntegrationsPage() {
     const code = searchParams.get("meta")
     if (!code) return
     if (code === "ok") void appAlert(t("marketingMetaOauthOk"))
+    else if (code === "pick") {
+      setShowPagePick(true)
+      void appAlert(t("marketingMetaOauthPick"))
+    }
     else if (code === "nopage") void appAlert(t("marketingMetaOauthNoPage"))
     else if (code === "config") void appAlert(t("marketingMetaOauthConfig"))
     else if (code !== "ok") void appAlert(t("marketingMetaOauthFail"))
@@ -218,7 +233,12 @@ export default function MarketingIntegrationsPage() {
                 <p className="text-xs text-muted-foreground">{t("marketingIntegrationMetaSubtitle")}</p>
                 {metaStatus?.pageName ? (
                   <p className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                    {metaStatus.pageName} · {metaStatus.pageId}
+                    Facebook: {metaStatus.pageName} · {metaStatus.pageId}
+                  </p>
+                ) : null}
+                {metaStatus?.instagram?.username || metaStatus?.lastSync?.instagram?.username ? (
+                  <p className="mt-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    Instagram: @{metaStatus.instagram?.username || metaStatus.lastSync?.instagram?.username}
                   </p>
                 ) : null}
               </div>
@@ -232,6 +252,46 @@ export default function MarketingIntegrationsPage() {
                 {metaStatus?.connected ? t("marketingMetaConnected") : t("marketingMetaDisconnected")}
               </Badge>
             </div>
+            <p className="mb-3 text-sm text-muted-foreground">{t("marketingMetaOneConnectHint")}</p>
+            <p className="mb-3 text-xs text-muted-foreground">{t("marketingMetaConnectSteps")}</p>
+            {showPagePick && metaPages.length > 0 ? (
+              <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+                <p className="mb-2 text-sm font-medium">{t("marketingMetaPickPage")}</p>
+                <p className="mb-2 text-xs text-muted-foreground">{t("marketingMetaPickPageHint")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {metaPages.map((p) => (
+                    <Button
+                      key={p.id}
+                      type="button"
+                      size="sm"
+                      variant={metaStatus?.pageId === p.id ? "default" : "outline"}
+                      disabled={metaBusy}
+                      onClick={() => {
+                        setMetaBusy(true)
+                        void selectMetaPage(p.id)
+                          .then(async (r) => {
+                            if (!r.success) await appAlert(r.message || t("marketingWsSaveFail"))
+                            await loadMeta()
+                          })
+                          .finally(() => setMetaBusy(false))
+                      }}
+                    >
+                      {p.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : metaStatus?.connected && metaPages.length > 1 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mb-3 h-8 text-xs"
+                onClick={() => setShowPagePick(true)}
+              >
+                {t("marketingMetaChangePage")}
+              </Button>
+            ) : null}
             <ul className="text-sm text-muted-foreground space-y-1 mb-3">
               <li>{t("marketingIntegrationMetaEnvLine1")}</li>
               <li>{t("marketingIntegrationMetaEnvLine2")}</li>

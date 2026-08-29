@@ -31,6 +31,8 @@ export type MetaConnectionRow = {
   token_kind?: string
   last_synced_at?: string | null
   last_sync_json?: MetaSyncPayload | Record<string, unknown>
+  ig_user_id?: string
+  ig_username?: string
 }
 
 export async function loadMetaConnectionRow(tenantScope: SaasTenantScope): Promise<MetaConnectionRow | null> {
@@ -140,22 +142,29 @@ export async function deleteMetaConnection(tenantScope: SaasTenantScope): Promis
   await supabaseDeleteByFilter("marketing_meta_connections", `id=eq.${existing.id}`)
 }
 
-export async function syncMetaConnection(tenantScope: SaasTenantScope): Promise<MetaSyncPayload> {
+export async function syncMetaConnection(
+  tenantScope: SaasTenantScope,
+  range?: { since?: string; until?: string }
+): Promise<MetaSyncPayload> {
+  const empty = (diagnostics: string[]): MetaSyncPayload => ({
+    syncedAt: new Date().toISOString(),
+    tokenKind: "unknown",
+    pageId: "",
+    pageName: "",
+    adAccountId: "",
+    grantedScopes: [],
+    ads: [],
+    adsTotals: { ads: 0, impressions: 0, reach: 0, spend: 0 },
+    pageInsights: { postEngagement: 0, newFollows: 0, pageViews: 0 },
+    instagram: null,
+    platformSpend: { facebook: 0, instagram: 0, other: 0 },
+    dateRange: {},
+    diagnostics,
+  })
   const row = await loadMetaConnectionRow(tenantScope)
   const live = resolveLiveTokens(row)
   if (!live.pageToken && !live.userToken) {
-    return {
-      syncedAt: new Date().toISOString(),
-      tokenKind: "unknown",
-      pageId: "",
-      pageName: "",
-      adAccountId: "",
-      grantedScopes: [],
-      ads: [],
-      adsTotals: { ads: 0, impressions: 0, reach: 0, spend: 0 },
-      pageInsights: { postEngagement: 0, newFollows: 0, pageViews: 0 },
-      diagnostics: ["not_connected"],
-    }
+    return empty(["not_connected"])
   }
 
   let pageId = live.pageId
@@ -164,17 +173,8 @@ export async function syncMetaConnection(tenantScope: SaasTenantScope): Promise<
   let pageToken = live.pageToken
   const userToken = live.userToken
 
-  if (!pageId && (userToken || pageToken)) {
-    const accounts = await metaGraphGet<{ data?: { id?: string; name?: string; access_token?: string }[] }>(
-      "me/accounts",
-      userToken || pageToken
-    )
-    const first = accounts.json?.data?.[0]
-    if (first?.id) {
-      pageId = String(first.id)
-      pageName = String(first.name || "")
-      if (first.access_token) pageToken = String(first.access_token)
-    }
+  if (!pageId) {
+    return empty(["need_page_pick"])
   }
 
   if (pageId && !pageName) {
@@ -198,6 +198,8 @@ export async function syncMetaConnection(tenantScope: SaasTenantScope): Promise<
     adAccountId,
     tokenKind: live.tokenKind,
     grantedScopes: live.grantedScopes,
+    since: range?.since,
+    until: range?.until,
   })
 
   if (live.source === "oauth") {

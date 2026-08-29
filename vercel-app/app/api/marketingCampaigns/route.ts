@@ -167,6 +167,8 @@ export async function GET(req: NextRequest) {
         conclusion: String(row.conclusion ?? ''),
         collabDetail: normalizeMarketingCollabDetail(row.collab_detail),
         phasePeriods: parsePhasePeriodsFromUnknown(row.phase_periods),
+        metaCampaignId: String(row.meta_campaign_id ?? ''),
+        metaCampaignName: String(row.meta_campaign_name ?? ''),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }
@@ -201,6 +203,8 @@ export async function GET(req: NextRequest) {
       collabManagement: row.collab_management === true,
       collabDetail: normalizeMarketingCollabDetail(row.collab_detail),
       phasePeriods: parsePhasePeriodsFromUnknown(row.phase_periods),
+      metaCampaignId: String(row.meta_campaign_id ?? ''),
+      metaCampaignName: String(row.meta_campaign_name ?? ''),
     }))
 
     return NextResponse.json(list, { headers })
@@ -263,6 +267,8 @@ export async function POST(req: NextRequest) {
       userStore?: string
       user_role?: string
       user_store?: string
+      metaCampaignId?: string
+      metaCampaignName?: string
     }
 
     const topic = String(body.topic ?? '').trim()
@@ -336,6 +342,8 @@ export async function POST(req: NextRequest) {
       conclusion: String(body.conclusion ?? '').trim(),
       collab_management: body.collabManagement === true,
       phase_periods: phasePeriods,
+      meta_campaign_id: String(body.metaCampaignId ?? '').trim(),
+      meta_campaign_name: String(body.metaCampaignName ?? '').trim(),
       updated_at: new Date().toISOString(),
     }, tenantScope, 'marketing_campaigns')
 
@@ -346,12 +354,26 @@ export async function POST(req: NextRequest) {
         { limit: 1 }
       )) as { id?: number }[] | null
       if (existing && existing.length > 0) {
-        await supabaseUpdateByFilter('marketing_campaigns', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_campaigns'), row)
+        const filter = appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_campaigns')
+        try {
+          await supabaseUpdateByFilter('marketing_campaigns', filter, row)
+        } catch (err) {
+          if (!String(err).includes('meta_campaign')) throw err
+          const { meta_campaign_id: _id, meta_campaign_name: _name, ...rest } = row as Record<string, unknown>
+          await supabaseUpdateByFilter('marketing_campaigns', filter, rest)
+        }
         return NextResponse.json({ success: true, message: '수정되었습니다.', id: editingId }, { headers })
       }
     }
 
-    const inserted = (await supabaseInsert('marketing_campaigns', row)) as { id?: number }[]
+    let inserted: { id?: number }[]
+    try {
+      inserted = (await supabaseInsert('marketing_campaigns', row)) as { id?: number }[]
+    } catch (err) {
+      if (!String(err).includes('meta_campaign')) throw err
+      const { meta_campaign_id: _id, meta_campaign_name: _name, ...rest } = row as Record<string, unknown>
+      inserted = (await supabaseInsert('marketing_campaigns', rest)) as { id?: number }[]
+    }
     const created = Array.isArray(inserted) ? inserted[0] : inserted
     const newId = created?.id
 

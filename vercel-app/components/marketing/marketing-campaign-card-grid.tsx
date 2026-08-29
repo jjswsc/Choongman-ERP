@@ -9,7 +9,6 @@ import type { MarketingCampaign } from "@/lib/api-client"
 import type { MarketingCampaignHubLinkSets } from "@/lib/marketing-campaign-list-query"
 import { getCampaignTypeLabel } from "@/lib/marketing-campaign-type-utils"
 import { marketingCampaignWorkspaceHref } from "@/lib/marketing-campaign-create-ui"
-import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 
 export function MarketingCampaignCardGrid(props: {
   campaigns: MarketingCampaign[]
@@ -21,9 +20,16 @@ export function MarketingCampaignCardGrid(props: {
   onCopy?: (c: MarketingCampaign) => void
   openLabel: string
   budgetLabel: string
+  kpiLabel?: string
   empty: React.ReactNode
   loading?: boolean
   loadingLabel?: string
+  shortcuts?: {
+    promos: string
+    collab: string
+    tasks: string
+    results: string
+  }
 }) {
   const {
     campaigns,
@@ -35,9 +41,11 @@ export function MarketingCampaignCardGrid(props: {
     onCopy,
     openLabel,
     budgetLabel,
+    kpiLabel = "KPI",
     empty,
     loading,
     loadingLabel,
+    shortcuts,
   } = props
 
   if (loading && campaigns.length === 0) {
@@ -57,8 +65,12 @@ export function MarketingCampaignCardGrid(props: {
         return (
           <article
             key={c.id}
-            className="flex h-full min-h-[16rem] flex-col rounded-2xl border border-primary/20 bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
+            className="flex h-full min-h-[16rem] flex-col overflow-hidden rounded-2xl border border-primary/20 bg-card shadow-sm transition-shadow hover:shadow-md"
           >
+            <Link
+              href={marketingCampaignWorkspaceHref(c.id)}
+              className="flex min-h-0 flex-1 flex-col p-4 text-inherit no-underline"
+            >
             <div className="mb-2 flex items-start justify-between gap-2">
               <p className="text-[11px] text-muted-foreground">
                 {c.campaignNo || "—"} · {getCampaignTypeLabel(c.campaignType, lang)}
@@ -90,7 +102,7 @@ export function MarketingCampaignCardGrid(props: {
                 <div className="font-semibold tabular-nums">฿{(c.budgetTotal || 0).toLocaleString()}</div>
               </div>
               <div className="rounded-md bg-muted/40 px-2 py-1.5">
-                <div className="text-[10px] text-muted-foreground">KPI</div>
+                <div className="text-[10px] text-muted-foreground">{kpiLabel}</div>
                 <div className="font-semibold tabular-nums">{(c.kpiTarget || 0).toLocaleString()}</div>
               </div>
             </div>
@@ -111,17 +123,38 @@ export function MarketingCampaignCardGrid(props: {
                 <Package className="h-3 w-3" />
                 {hubLinkSets?.materials.has(c.id) ? 1 : 0}
               </span>
-              <div className="ml-auto flex items-center gap-1">
+              <span className="ml-auto text-primary">{openLabel}</span>
+            </div>
+            </Link>
+            {shortcuts ? (
+              <div className="grid grid-cols-2 gap-1 border-t px-2 py-2 sm:grid-cols-4">
+                {(
+                  [
+                    { tab: "promos" as const, label: shortcuts.promos },
+                    { tab: "collab" as const, label: shortcuts.collab },
+                    { tab: "tasks" as const, label: shortcuts.tasks },
+                    { tab: "results" as const, label: shortcuts.results },
+                  ] as const
+                ).map((s) => (
+                  <Link
+                    key={s.tab}
+                    href={marketingCampaignWorkspaceHref(c.id, s.tab)}
+                    className="rounded-md px-1.5 py-1 text-center text-[10px] font-medium text-primary hover:bg-muted"
+                  >
+                    {s.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+            {onCopy || onDelete ? (
+              <div className="flex items-center justify-end gap-1 border-t px-3 py-1.5">
                 {onCopy ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className="h-7 w-7 p-0"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      onCopy(c)
-                    }}
+                    onClick={() => onCopy(c)}
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
@@ -132,19 +165,13 @@ export function MarketingCampaignCardGrid(props: {
                     variant="ghost"
                     size="sm"
                     className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      onDelete(c)
-                    }}
+                    onClick={() => onDelete(c)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 ) : null}
-                <Button variant="ghost" size="sm" className={`${ADMIN_BTN_XS_CN} text-xs`} asChild>
-                  <Link href={marketingCampaignWorkspaceHref(c.id)}>{openLabel}</Link>
-                </Button>
               </div>
-            </div>
+            ) : null}
           </article>
         )
       })}
