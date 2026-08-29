@@ -1,12 +1,14 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { ExternalLink, Tag } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PosSetMenuTabWorkspace } from "@/components/erp/pos-set-menu-tab-workspace"
 import { PosSetMenuInquiryTab } from "@/components/erp/pos-set-menu-inquiry-tab"
 import { MarketingEmptyState } from "@/components/marketing/marketing-empty-state"
-import { Tag } from "lucide-react"
 import {
   getMarketingCampaigns,
   getPosMenuCategories,
@@ -29,6 +31,7 @@ import {
   adminTabsRootCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
+import { writeSelectedMarketingCampaignId } from "@/lib/marketing-selected-campaign"
 
 export function MarketingCampaignPromosPanel({ campaignId }: { campaignId: string }) {
   const { lang } = useLang()
@@ -103,19 +106,34 @@ export function MarketingCampaignPromosPanel({ campaignId }: { campaignId: strin
     refreshCampaignPromos()
   }, [refreshCampaignPromos])
 
+  React.useEffect(() => {
+    if (cid) writeSelectedMarketingCampaignId(cid)
+  }, [cid])
+
   const schemaOk = schemaStatus == null ? null : schemaStatus.ok
   const exists = campaigns.some((c) => c.id === cid)
+  const sidebarHref = cid
+    ? `/admin/marketing/promos?campaignId=${encodeURIComponent(cid)}`
+    : "/admin/marketing/promos"
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as "compose" | "inquiry")} className={adminTabsRootCn}>
-      <TabsList className={adminTabsListRowCn}>
-        <TabsTrigger value="compose" className={adminTabsTriggerCn}>
-          {t("marketingPromoTabsEditCompose")}
-        </TabsTrigger>
-        <TabsTrigger value="inquiry" className={adminTabsTriggerCn}>
-          {t("marketingPromoTabsList")}
-        </TabsTrigger>
-      </TabsList>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <TabsList className={adminTabsListRowCn}>
+          <TabsTrigger value="compose" className={adminTabsTriggerCn}>
+            {t("marketingPromoTabsEditCompose")}
+          </TabsTrigger>
+          <TabsTrigger value="inquiry" className={adminTabsTriggerCn}>
+            {t("marketingPromoTabsList")}
+          </TabsTrigger>
+        </TabsList>
+        <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" asChild>
+          <Link href={sidebarHref}>
+            <ExternalLink className="h-3.5 w-3.5" />
+            {t("adminMarketingPromos")}
+          </Link>
+        </Button>
+      </div>
       <TabsContent value="compose" className={adminTabsContentCn}>
         {!cid || !exists ? (
           <MarketingEmptyState icon={Tag} title={t("marketingPromoListEmptyNeedCampaign")} description={t("marketingWsNotFound")} />

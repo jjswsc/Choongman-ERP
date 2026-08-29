@@ -9,8 +9,8 @@ export type MarketingAdPlatformOption = { value: string; label: string }
 export type MarketingAdLabelOption = { value: string; label: string }
 
 export const DEFAULT_MARKETING_AD_PLATFORMS: MarketingAdPlatformOption[] = [
-  { value: 'instagram', label: 'Instagram' },
   { value: 'facebook', label: 'Facebook' },
+  { value: 'instagram', label: 'Instagram' },
   { value: 'tiktok', label: 'TikTok' },
   { value: 'line_oa', label: 'Line OA' },
   { value: 'twitter', label: 'Twitter' },

@@ -117,10 +117,18 @@ export function MarketingMetaInsightsPanel({
     <div className="rounded-xl border bg-card p-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Facebook className="h-4 w-4 text-[#1877F2]" />
+          <div className="flex items-center -space-x-1">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full border bg-background">
+              <Facebook className="h-3.5 w-3.5 text-[#1877F2]" />
+            </span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-full border bg-background">
+              <Instagram className="h-3.5 w-3.5 text-[#E4405F]" />
+            </span>
+          </div>
           <div>
             <h3 className="text-sm font-semibold">{t("marketingMetaAdsTitle")}</h3>
-            <p className="text-[11px] text-muted-foreground">{t("marketingMetaOneConnectHint")}</p>
+            <p className="text-[11px] text-muted-foreground">{t("marketingMetaAdsSubtitle")}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{t("marketingMetaOneConnectHint")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -152,11 +160,17 @@ export function MarketingMetaInsightsPanel({
       {plat && (plat.facebook > 0 || plat.instagram > 0 || plat.other > 0) ? (
         <div className="mb-3 grid gap-2 sm:grid-cols-3">
           <div className="rounded-lg border bg-muted/20 px-3 py-2">
-            <div className="text-[10px] text-muted-foreground">Facebook</div>
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <Facebook className="h-3 w-3 text-[#1877F2]" />
+              Facebook
+            </div>
             <div className="font-semibold tabular-nums">฿{plat.facebook.toLocaleString()}</div>
           </div>
           <div className="rounded-lg border bg-muted/20 px-3 py-2">
-            <div className="text-[10px] text-muted-foreground">Instagram</div>
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <Instagram className="h-3 w-3 text-[#E4405F]" />
+              Instagram
+            </div>
             <div className="font-semibold tabular-nums">฿{plat.instagram.toLocaleString()}</div>
           </div>
           {plat.other > 0 ? (

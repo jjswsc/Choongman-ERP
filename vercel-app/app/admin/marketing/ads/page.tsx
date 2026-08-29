@@ -114,7 +114,7 @@ export default function MarketingAdsPage() {
     contentDetail: "",
     publishDate: "",
     periodEndDate: "",
-    platform: "instagram",
+    platform: "facebook",
     postLink: "",
     boostBudget: "",
     actualSpent: "",

@@ -1,7 +1,9 @@
 'use client'
 
 import * as React from 'react'
-import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { ExternalLink, Megaphone, Tag } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
@@ -29,6 +31,7 @@ import {
   adminTabsTriggerCn,
 } from '@/lib/admin-tab-styles'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAdminUrlTab } from '@/lib/use-admin-url-tab'
 import { POS_MAIN_CATEGORIES } from '@/lib/pos-menu-categories'
@@ -36,14 +39,17 @@ import { MarketingPageHero } from '@/components/marketing/marketing-page-hero'
 import { MarketingPageShell } from '@/components/marketing/marketing-page-shell'
 import { MarketingStickyHubBar } from '@/components/marketing/marketing-sticky-hub-bar'
 import { MarketingEmptyState } from '@/components/marketing/marketing-empty-state'
+import { marketingCampaignWorkspaceHref } from '@/lib/marketing-campaign-create-ui'
 import {
   readSelectedMarketingCampaignId,
   writeSelectedMarketingCampaignId,
 } from '@/lib/marketing-selected-campaign'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tag } from 'lucide-react'
+
 export default function MarketingPromosPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const campaignIdFromQuery = searchParams.get('campaignId')?.trim() || ''
   const { lang } = useLang()
   const t = useT(lang)
@@ -87,11 +93,18 @@ export default function MarketingPromosPage() {
     }
   }, [campaigns, workspaceCampaignId, pageLoading])
 
-  const selectCampaign = React.useCallback((next: string) => {
-    setWorkspaceCampaignId(next)
-    writeSelectedMarketingCampaignId(next)
-  }, [])
-
+  const selectCampaign = React.useCallback(
+    (next: string) => {
+      setWorkspaceCampaignId(next)
+      writeSelectedMarketingCampaignId(next)
+      const params = new URLSearchParams(searchParams.toString())
+      if (next) params.set('campaignId', next)
+      else params.delete('campaignId')
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParams]
+  )
   const loadMenusAndMeta = React.useCallback(async () => {
     try {
       const [list, catRes, config, campRes] = await Promise.all([
@@ -239,6 +252,24 @@ export default function MarketingPromosPage() {
               onRefresh={loadMenusAndMeta}
               disabled={pageLoading}
               className="mb-0 mt-3 rounded-lg border border-border/60 bg-muted/15 shadow-none"
+              aside={
+                <>
+                  {cidTrim ? (
+                    <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" asChild>
+                      <Link href={marketingCampaignWorkspaceHref(cidTrim, 'promos')}>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {t('marketingScopedOpenWorkspace')}
+                      </Link>
+                    </Button>
+                  ) : null}
+                  <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" asChild>
+                    <Link href="/admin/marketing/campaigns">
+                      <Megaphone className="h-3.5 w-3.5" />
+                      {t('adminMarketingCampaigns')}
+                    </Link>
+                  </Button>
+                </>
+              }
               summary={
                 selectedCampaign ? (
                   <div className="space-y-0.5 text-xs">
