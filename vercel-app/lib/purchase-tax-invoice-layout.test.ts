@@ -104,6 +104,16 @@ describe('findLayoutInvoiceNo', () => {
     expect(got?.value).toBe('INV2026070017')
   })
 
+  it('Shopee 번호가 연도 없이 잘려도 다음 줄과 이어 붙인다', () => {
+    const got = findLayoutInvoiceNo(
+      page([
+        line(514, [['เลขที่', 1379], ['No.', 1459], ['TRSPESPF00-00000-', 1545]]),
+        line(562, [['ที่อยู่', 311], ['2026', 400], ['0701-017862', 1546]]),
+      ])
+    )
+    expect(got?.value).toBe('TRSPESPF00-00000-260701-017862')
+  })
+
   it('Shopee 번호가 다음 줄로 갈라져도 이어 붙인다', () => {
     const got = findLayoutInvoiceNo(
       page([

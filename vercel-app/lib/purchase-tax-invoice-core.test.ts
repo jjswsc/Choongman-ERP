@@ -316,6 +316,18 @@ describe('purchase tax review flags', () => {
         '2026-08'
       )
     ).toBe(true)
+    expect(
+      purchaseTaxReviewIsProblem(
+        {
+          invoiceNo: 'TRSPESPF00-00000-',
+          sellerTaxId: '0105558019581',
+          docDate: '2026-07-01',
+          netAmount: 218.34,
+          vatAmount: 15.28,
+        },
+        '2026-07'
+      )
+    ).toBe(true)
   })
 
   it('compares register VAT with PP.30 draft', () => {

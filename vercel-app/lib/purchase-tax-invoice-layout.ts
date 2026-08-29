@@ -222,7 +222,40 @@ function invoiceTokenLooksReal(token: string): boolean {
 }
 
 function isTruncatedShopeeToken(token: string): boolean {
-  return /^TRS[A-Z]{2,8}PF00-\d{5}-\d{1,5}$/i.test(token)
+  return /^TRS[A-Z]{2,8}PF00-\d{5}-?\d{0,5}$/i.test(token)
+}
+
+function shopeeYearYyFromWords(words: OcrWordBox[]): string {
+  for (const w of words) {
+    const y = String(w.text || '').match(/\b20(\d{2})\b/)
+    if (y) return y[1]
+  }
+  return ''
+}
+
+function joinShopeeHeadAndTail(headToken: string, tail: string, yearYy: string): string | undefined {
+  const head =
+    headToken.match(/^(TRS[A-Z]{2,8}PF00-\d{5}-)(\d{0,5})$/i) ||
+    headToken.match(/^(TRS[A-Z]{2,8}PF00-\d{5})()$/i)
+  if (!head) return undefined
+  const prefix = head[1].endsWith('-') ? head[1] : `${head[1]}-`
+  const mid = head[2]
+  const ymd = tail.match(/^(\d{6})-(\d{5,8})$/)
+  if (ymd && !mid) {
+    const joined = `${prefix}${ymd[1]}-${ymd[2]}`
+    return invoiceTokenLooksReal(joined) ? joined : undefined
+  }
+  const md = tail.match(/^(\d{4})-(\d{5,8})$/)
+  if (!md) return undefined
+  if (mid && mid.length + md[1].length === 6) {
+    const joined = `${prefix}${mid}${md[1]}-${md[2]}`
+    return invoiceTokenLooksReal(joined) ? joined : undefined
+  }
+  if (!mid && yearYy) {
+    const joined = `${prefix}${yearYy}${md[1]}-${md[2]}`
+    return invoiceTokenLooksReal(joined) ? joined : undefined
+  }
+  return undefined
 }
 
 /** 단어 안에서 태국어를 빼고 남는 영숫자 토막들 */
@@ -252,28 +285,23 @@ function adjacent(a: OcrWordBox, b: OcrWordBox): boolean {
 /** Shopee 번호는 `TRSPESPF00-00000-26` / `0701-017862` 처럼 두 토막으로 찍힌다 */
 function extendShopeeToken(token: string, words: OcrWordBox[], fromIdx: number): string {
   if (!isTruncatedShopeeToken(token)) return token
-  const head = token.match(/^(TRS[A-Z]{2,8}PF00-\d{5}-)(\d{2,5})$/i)
-  if (!head) return token
+  const yearYy = shopeeYearYyFromWords(words)
   for (let i = fromIdx + 1; i < Math.min(words.length, fromIdx + 8); i += 1) {
     const run = asciiRuns(words[i].text)[0] || cleanLayoutInvoiceToken(words[i].text)
-    const tail = run.match(/^(\d{4})-(\d{5,8})$/)
-    if (!tail) continue
-    if (head[2].length + tail[1].length !== 6) continue
-    const joined = `${head[1]}${head[2]}${tail[1]}-${tail[2]}`
-    if (invoiceTokenLooksReal(joined)) return joined
+    const joined = joinShopeeHeadAndTail(token, run, yearYy)
+    if (joined) return joined
   }
   return token
 }
 
 function completeShopeeInvoiceToken(token: string, layout: OcrPageLayout): string {
   if (!isTruncatedShopeeToken(token)) return token
-  const head = token.match(/^(TRS[A-Z]{2,8}PF00-\d{5}-)(\d{2,5})$/i)
-  if (!head) return token
+  const yearYy = shopeeYearYyFromWords(layout.lines.flatMap((l) => l.words))
   let anchor: OcrWordBox | undefined
   for (const line of layout.lines) {
     for (const w of line.words) {
       const run = asciiRuns(w.text)[0] || ''
-      if (run === token) anchor = w
+      if (run === token || run.replace(/-$/, '') === token.replace(/-$/, '')) anchor = w
       else if (!anchor && run.startsWith('TRS')) anchor = w
     }
   }
@@ -282,9 +310,8 @@ function completeShopeeInvoiceToken(token: string, layout: OcrPageLayout): strin
     for (const w of line.words) {
       if (anchor && w.y1 < anchor.y0 - 4) continue
       const run = asciiRuns(w.text)[0] || cleanLayoutInvoiceToken(w.text)
-      const tail = run.match(/^(\d{4})-(\d{5,8})$/)
-      if (!tail || head[2].length + tail[1].length !== 6) continue
-      const joined = `${head[1]}${head[2]}${tail[1]}-${tail[2]}`
+      const joined = joinShopeeHeadAndTail(token, run, yearYy)
+      if (!joined) continue
       const dist = anchor ? Math.abs(w.x0 - anchor.x0) + Math.max(0, w.y0 - anchor.y1) : 0
       if (!best || dist < best.dist) best = { token: joined, dist }
     }

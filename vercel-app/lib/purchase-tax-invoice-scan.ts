@@ -216,7 +216,8 @@ export function invoiceNoLooksPlausible(raw: unknown): boolean {
   if (/plzb/i.test(compact)) return false
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(inv)) return false
   if (/^TRS[A-Z0-9]{0,8}PF00-?$/i.test(inv)) return false
-  if (/^TRS[A-Z]{2,8}PF00-\d{5}-\d{1,5}$/i.test(inv)) return false
+  // `TRSPESPF00-00000-` / `TRSPESPF00-00000-26` 처럼 뒤 토막이 없는 쇼피 번호
+  if (/^TRS[A-Z]{2,8}PF00-\d{5}-?\d{0,5}$/i.test(inv)) return false
   if (/^IM20\d{0,11}$/i.test(compact) && compact.length < 16) return false
   if (!/[A-Za-z]/.test(compact) && compact.length < 4) return false
   return true
@@ -251,18 +252,35 @@ function formatRecoveredShopeeInvoice(compact: string): string | undefined {
   return cleanInvoiceNo(`${prefix.toUpperCase()}-${m[1]}-${m[2]}-${m[3]}`)
 }
 
-function recoverShopeeInvoiceNo(text: string): string | undefined {
+function recoverShopeeInvoiceNo(text: string, taxMonth?: string): string | undefined {
   const compact = platformInvoiceBlob(text)
   const full = formatRecoveredShopeeInvoice(compact)
   if (full) return full
 
-  // OCR이 `TRSPESPF00-00000-26` 다음 줄에 `0701-017862` 를 찍고 사이에 태국어가 끼는 경우
+  // OCR이 `TRSPESPF00-00000-` / `…-26` 다음 줄에 `0701-017862` 를 찍고 사이에 태국어가 끼는 경우
   const raw = String(text || '')
-  const head = raw.match(/TRS[A-Z]{2,8}PF0[0CO]-(\d{5})-(\d{2,6})/i)
+  const head = raw.match(/TRS[A-Z]{2,8}PF0[0CO]-(\d{5})-?(\d{0,6})/i)
   if (head) {
     const prefix = platformInvoiceBlob(head[0]).match(/TRS[A-Z]{2,8}PF00/i)?.[0]
     const mid = head[2]
     const after = raw.slice(raw.indexOf(head[0]) + head[0].length).slice(0, 800)
+    const yy = grabYmFromTaxMonth(taxMonth).slice(2, 4)
+    if (prefix && mid.length === 0) {
+      const ymd = after.match(/(\d{6})-(\d{5,8})/)
+      if (ymd) {
+        const joined = formatRecoveredShopeeInvoice(
+          `${prefix.toUpperCase()}-${head[1]}-${ymd[1]}-${ymd[2]}`
+        )
+        if (joined) return joined
+      }
+      const md = after.match(/(\d{4})-(\d{5,8})/)
+      if (md && yy) {
+        const joined = formatRecoveredShopeeInvoice(
+          `${prefix.toUpperCase()}-${head[1]}-${yy}${md[1]}-${md[2]}`
+        )
+        if (joined) return joined
+      }
+    }
     if (prefix && mid.length < 6) {
       const tail = after.match(/(\d{4})-(\d{5,8})/)
       if (tail && mid.length + tail[1].length === 6) {
@@ -360,7 +378,7 @@ function extractInvoiceNo(text: string, sellerTaxId?: string, taxMonth?: string)
   const s = String(text || '')
   const compact = platformInvoiceBlob(s)
   const recovered =
-    recoverShopeeInvoiceNo(s) ||
+    recoverShopeeInvoiceNo(s, taxMonth) ||
     recoverGrabInvoiceNo(s, sellerTaxId, taxMonth) ||
     recoverKasikornInvoiceNo(s)
   if (recovered) return recovered
@@ -380,7 +398,7 @@ const KNOWN_INVOICE_SELLERS: Array<{ re: RegExp; tin: string; name: string }> = 
   { re: /^370\d+W\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
   { re: /^INV-\d{11}$/i, tin: '0105559082715', name: 'บริษัท โพลาร์ แบร์ มิชชั่น จำกัด' },
   { re: /^INV-\d{8}-\d{2,4}$/i, tin: '0135564019457', name: 'บริษัท ไทย แอ็กโกร เฟรช จำกัด' },
-  { re: /^26\d{5,6}$/, tin: '0105550102497', name: 'บริษัท จีดูบัง (เอเชีย) จำกัด' },
+  { re: /^(?:26|69)\d{5}$/, tin: '0105550102497', name: 'บริษัท จีดูบัง (เอเชีย) จำกัด' },
   { re: /^RT-\d{8}\d*$/i, tin: '0125569006965', name: 'บริษัท ร่ำรวย แพ็คเกจจิ้ง จำกัด' },
 ]
 
@@ -1115,12 +1133,14 @@ export function repairExtractedPurchaseTaxInvoice(
 
   const pageNums = collectBahtAmounts(hint?.pageText || '')
   const fromPageAmt = pickExclusiveVatAmounts(pageNums)
+  const exemptZeroPair = netAmount === 0 && vatAmount === 0
   const amountsBroken =
-    netAmount == null ||
-    vatAmount == null ||
-    vatAmount === 0 ||
-    (vatAmount > 0 && purchaseTaxVatLooksWrong(netAmount, vatAmount)) ||
-    (netAmount != null && amountLooksLikeOcrFragment(netAmount, pageNums))
+    !exemptZeroPair &&
+    (netAmount == null ||
+      vatAmount == null ||
+      vatAmount === 0 ||
+      (vatAmount > 0 && purchaseTaxVatLooksWrong(netAmount, vatAmount)) ||
+      (netAmount != null && amountLooksLikeOcrFragment(netAmount, pageNums)))
   if (fromPageAmt && amountsBroken) {
     netAmount = fromPageAmt.netAmount
     vatAmount = fromPageAmt.vatAmount
@@ -1163,6 +1183,7 @@ export function repairExtractedPurchaseTaxInvoice(
     totalAmount = roundMoney2(netAmount + vatAmount)
   }
   if (
+    !(netAmount === 0 && vatAmount === 0) &&
     netAmount != null &&
     netAmount < 5 &&
     (vatAmount == null || vatAmount < 1 || purchaseTaxVatLooksWrong(netAmount, vatAmount))
@@ -1183,7 +1204,7 @@ export function repairExtractedPurchaseTaxInvoice(
   let invoiceNo = String(row.invoiceNo || '').trim() || undefined
   if (invoiceNo) {
     invoiceNo =
-      recoverShopeeInvoiceNo(invoiceNo) ||
+      recoverShopeeInvoiceNo(invoiceNo, hint?.taxMonth) ||
       recoverGrabInvoiceNo(invoiceNo, sellerTaxId, hint?.taxMonth) ||
       recoverKasikornInvoiceNo(invoiceNo) ||
       cleanInvoiceNo(invoiceNo) ||
@@ -1192,7 +1213,7 @@ export function repairExtractedPurchaseTaxInvoice(
   const pageText = hint?.pageText || ''
   if (pageText) {
     const fromPage =
-      recoverShopeeInvoiceNo(pageText) ||
+      recoverShopeeInvoiceNo(pageText, hint?.taxMonth) ||
       recoverGrabInvoiceNo(pageText, sellerTaxId, hint?.taxMonth) ||
       recoverKasikornInvoiceNo(pageText)
     if (fromPage && invoiceFromPageBeatsCurrent(fromPage, invoiceNo)) invoiceNo = fromPage

@@ -413,7 +413,9 @@ export function purchaseTaxReviewIsProblem(
   taxMonth: string
 ): boolean {
   if (row.skip) return false
-  if (!String(row.invoiceNo || '').trim()) return true
+  const invoice = String(row.invoiceNo || '').trim()
+  if (!invoice) return true
+  if (/^TRS[A-Z]{2,8}PF00-\d{5}-?\d{0,5}$/i.test(invoice)) return true
   return purchaseTaxReviewFlags(row, taxMonth).some((flag) => flag !== 'month')
 }
 

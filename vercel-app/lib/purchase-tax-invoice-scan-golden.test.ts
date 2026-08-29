@@ -94,6 +94,19 @@ describe('purchase tax invoice golden texts', () => {
     )
     expect(shopeeExtraDay?.invoiceNo).toBe('TRSPESPF00-00000-260708-018240')
 
+    const shopeeHeadOnly = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'เลขที่/ No. | TRSPESPF00-00000-',
+        'ที่อยู่/ Address           เลขที่ 54                        0701-017862',
+        'เลขประจำตัวผู้เสียภาษี 0105558019581',
+        'มูลค่าสินค้า 218.34',
+        'ภาษีมูลค่าเพิ่ม 15.28',
+      ].join('\n'),
+      { buyerTaxId: BUYER, taxMonth: '2026-07' }
+    )
+    expect(shopeeHeadOnly?.invoiceNo).toBe('TRSPESPF00-00000-260701-017862')
+    expect(shopeeHeadOnly?.netAmount).toBe(218.34)
+
     const shopeeThaiSplit = extractPurchaseTaxInvoiceFromScanText(
       [
         'เลขที่/ No. | TRSPESPF00-00000-26',
@@ -171,6 +184,9 @@ describe('purchase tax invoice golden texts', () => {
     )
     expect(jidubangExempt?.invoiceNo).toBe('6907030')
     expect(jidubangExempt?.sellerTaxId).toBe('0105550102497')
+    expect(jidubangExempt?.sellerName).toBe('บริษัท จีดูบัง (เอเชีย) จำกัด')
+    expect(jidubangExempt?.netAmount).toBe(0)
+    expect(jidubangExempt?.vatAmount).toBe(0)
 
     const tinAsInvoice = extractPurchaseTaxInvoiceFromScanText(
       `เลขที่ 0105558019581\nTRSPESPF00-00000-260702-017827\nมูลค่า 137.05 ภาษีมูลค่าเพิ่ม 9.59`,
