@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { shouldClearBuildRelatedCache } from "@/lib/chunk-load-recovery"
 
 /**
  * Serwist/Workbox가 `/_next/static/*.js`를 잘못 캐시(HTML 오류 페이지 등)하면 청크 실행 시 SyntaxError·ChunkLoadError가 난다.
@@ -9,10 +10,6 @@ import { useEffect } from "react"
  * (로그인 후 `SwPreregister`가 다시 등록한다.)
  * `/pos/login`에는 넣지 않음 — SW·프리캐시를 지우면 오프라인에서 브라우저 기본 끊김 화면만 뜰 수 있음.
  */
-function shouldClearBuildRelatedCache(name: string): boolean {
-  const k = name.toLowerCase()
-  return k.includes("next-static") || k.includes("serwist") || k.includes("workbox")
-}
 
 export function LoginNextCacheReset() {
   useEffect(() => {

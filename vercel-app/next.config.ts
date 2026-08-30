@@ -104,6 +104,31 @@ const nextConfig: NextConfig = {
           maxRetries: 3,
           retryDelay: 2000,
           cacheBust: `function() { return Date.now(); }`,
+          lastResortScript: `
+            try {
+              if (!sessionStorage.getItem("cm-erp-chunk-recovery")) {
+                sessionStorage.setItem("cm-erp-chunk-recovery", String(Date.now()));
+                var finish = function () { location.reload(); };
+                var jobs = [];
+                if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+                  jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+                    return Promise.all(rs.map(function (r) { return r.unregister(); }));
+                  }));
+                }
+                if (self.caches && caches.keys) {
+                  jobs.push(caches.keys().then(function (keys) {
+                    return Promise.all(keys.filter(function (k) {
+                      k = String(k).toLowerCase();
+                      return k.indexOf("next-static") >= 0 || k.indexOf("serwist") >= 0 || k.indexOf("workbox") >= 0;
+                    }).map(function (k) { return caches.delete(k); }));
+                  }));
+                }
+                Promise.all(jobs).then(finish, finish);
+              }
+            } catch (e) {
+              location.reload();
+            }
+          `,
         })
       );
     }
