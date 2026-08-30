@@ -265,6 +265,34 @@ describe('aggregatePosSalesByPeriod daysOfWeek filter', () => {
     expect(rows[0]?.total).toBe(100)
     expect(rows[1]?.total).toBe(200)
   })
+
+  it('keeps overnight (end<start) sales on the previous business weekday', () => {
+    // 10:00–02:00. Sat 01:00 Bangkok = Friday business day (not calendar Saturday).
+    const hours = { start: { hour: 10, minute: 0 }, end: { hour: 2, minute: 0 } }
+    const overnight: PeriodOrderRow[] = [
+      {
+        store_code: 'S1',
+        status: 'completed',
+        total: 100,
+        created_at: '2026-08-07T08:00:00.000Z', // Fri 15:00 Bangkok
+      },
+      {
+        store_code: 'S1',
+        status: 'completed',
+        total: 50,
+        created_at: '2026-08-07T18:00:00.000Z', // Sat 01:00 Bangkok
+      },
+      {
+        store_code: 'S1',
+        status: 'completed',
+        total: 999,
+        created_at: '2026-08-08T04:00:00.000Z', // Sat 11:00 Bangkok
+      },
+    ]
+    const fri = aggregatePosSalesByPeriod(overnight, 'day', null, hours, undefined, [5])
+    expect(fri.map((r) => r.key)).toEqual(['2026-08-07'])
+    expect(fri.reduce((s, r) => s + r.total, 0)).toBe(150)
+  })
 })
 
 describe('rollupPeriodDayRows (RPC-dow fast path)', () => {

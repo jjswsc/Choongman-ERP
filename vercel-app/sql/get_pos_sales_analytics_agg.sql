@@ -114,7 +114,9 @@ AS $$
   ) n;
 $$;
 
--- 24h 창(start=end) 및 동일일 창 기준 영업일. 심야 넘김(end<start)은 방콕 달력일 폴백.
+-- 24h 창(start=end)·같은 달력일 창(end>=start): 시작 시각을 뺀 날짜.
+-- 심야 넘김(end<start): [D@start, (D+1)@end) — TS getPosBusinessDateStrFromConfig 와 동일.
+--   예전 달력일 폴백은 요일 필터에서 심야 매출이 다음날로 빠져 누락됨.
 CREATE OR REPLACE FUNCTION public.pos_sales_business_ymd_from_clock(
   p_created_at timestamptz,
   p_start_hour int,
@@ -138,6 +140,16 @@ AS $$
             mins => coalesce(p_start_minute, 0)
           )
       )::date
+    WHEN (
+      extract(hour FROM timezone('Asia/Bangkok', p_created_at))::int * 60
+      + extract(minute FROM timezone('Asia/Bangkok', p_created_at))::int
+    ) >= (coalesce(p_start_hour, 8) * 60 + coalesce(p_start_minute, 0))
+      THEN timezone('Asia/Bangkok', p_created_at)::date
+    WHEN (
+      extract(hour FROM timezone('Asia/Bangkok', p_created_at))::int * 60
+      + extract(minute FROM timezone('Asia/Bangkok', p_created_at))::int
+    ) < (coalesce(p_end_hour, 8) * 60 + coalesce(p_end_minute, 0))
+      THEN timezone('Asia/Bangkok', p_created_at)::date - 1
     ELSE timezone('Asia/Bangkok', p_created_at)::date
   END;
 $$;

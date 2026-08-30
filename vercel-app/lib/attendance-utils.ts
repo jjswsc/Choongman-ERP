@@ -435,10 +435,10 @@ export function diffDaysInclusiveBangkok(startDate: string, endDate: string): nu
 export function getDayOfWeekBangkok(dateStr: string): number {
   const s = dateStr.trim().slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return 0
-  const d = new Date(s + 'T12:00:00Z')
-  const w = d.toLocaleDateString('en-US', { timeZone: ATTENDANCE_TZ, weekday: 'short' })
-  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-  return map[w] ?? 0
+  const [y, m, d] = s.split('-').map(Number)
+  if (!y || !m || !d) return 0
+  // 라벨은 이미 방콕 달력일(영업일). 로케일 weekday 문자열에 의존하지 않음.
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay()
 }
 
 /** 해당 주의 방콕 기준 월요일 날짜 YYYY-MM-DD. dateStr 없으면 방콕 오늘 기준 */

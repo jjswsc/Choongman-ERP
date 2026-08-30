@@ -93,6 +93,7 @@ import {
 import { useSalesDiscountDrillSheet } from "@/components/tabs/sales-discount-drill-sheet"
 import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN, ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
 import {
+  mergePeriodSeriesToAggregated,
   periodRowsForStoreSelection,
   resolvePeriodSeriesStoreKey,
 } from "@/lib/pos-sales-period-aggregate"
@@ -754,10 +755,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   const comparePeriodChartRows = React.useMemo(() => {
     if (!periodSplitSeries || storesForCompareChart.length < 2) return []
-    const firstKey = resolvePeriodSeriesStoreKey(periodSplitSeries, storesForCompareChart[0]!)
-    const base = firstKey ? periodSplitSeries[firstKey] : undefined
-    if (!base?.length) return []
-    return base.map((r) => {
+    const keyOrder = mergePeriodSeriesToAggregated(periodSplitSeries, storesForCompareChart)
+    if (keyOrder.length === 0) return []
+    return keyOrder.map((r) => {
       const row: Record<string, string | number> = {
         key: r.key,
         axisLabel: translatePeriodAxisLabel({ key: r.key, label: r.label }, periodGroupUi, tr),
@@ -1147,6 +1147,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [paymentBreakdownData.summary, paymentData])
 
   const activeTotalsSummary = React.useMemo(() => {
+    // posSalesByStore 는 요일 필터를 반영하지 않음 → 일자/시간·매장×기간은 period 합계 사용
+    if (dowsKey && (selectedView === "period" || selectedView === "store-period")) {
+      return totalsSummary
+    }
     if (scopedStoreData.length > 0 && (selectedStoresParam?.length ?? 0) > 0) {
       const t = sumStoreSalesTotals(scopedStoreData)
       return { ...t, gross: salesWaterfallGross(t) }
@@ -1160,6 +1164,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (selectedView === "payment") return paymentTotalsSummary
     return totalsSummary
   }, [
+    dowsKey,
     scopedStoreData,
     selectedStoresParam,
     selectedView,
@@ -1180,7 +1185,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (
       selectedView === "store" ||
       selectedView === "store-category" ||
-      selectedView === "store-period"
+      (selectedView === "store-period" && !dowsKey)
     )
       return storeTotalsSummary.total
     if (selectedView === "payment") return paymentTotalsSummary.total
