@@ -49,6 +49,7 @@ export type PeriodOrderRow = {
   payment_qr?: number
   payment_other?: number
   payment_delivery_app?: number
+  payment_crypto?: number
 }
 
 type Bucket = {
@@ -67,6 +68,7 @@ type Bucket = {
   qrSales: number
   otherSales: number
   deliveryAppSales: number
+  cryptoSales: number
 }
 
 export type PeriodAggRow = {
@@ -91,6 +93,7 @@ export type PeriodAggRow = {
   qrSales: number
   otherSales: number
   deliveryAppSales: number
+  cryptoSales?: number
 }
 
 function toRow(k: string, v: Bucket): PeriodAggRow {
@@ -118,6 +121,7 @@ function toRow(k: string, v: Bucket): PeriodAggRow {
     qrSales: v.qrSales,
     otherSales: v.otherSales,
     deliveryAppSales: v.deliveryAppSales,
+    cryptoSales: v.cryptoSales,
   }
 }
 
@@ -137,6 +141,7 @@ const emptyBucket = (): Bucket => ({
   qrSales: 0,
   otherSales: 0,
   deliveryAppSales: 0,
+  cryptoSales: 0,
 })
 
 /** posSalesByStore·기간 집계 공통 — 완료 건·주문유형 필터 */
@@ -199,6 +204,7 @@ export function aggregatePosSalesByPeriod(
     b.qrSales += Number(r.payment_qr) || 0
     b.otherSales += Number(r.payment_other) || 0
     b.deliveryAppSales += Number(r.payment_delivery_app) || 0
+    b.cryptoSales += Number(r.payment_crypto) || 0
     const gc = Math.max(0, Math.trunc(Number(r.guest_count) || 0))
     b.guestSum += gc
     {
@@ -297,6 +303,7 @@ function emptyPeriodAggRow(key: string): PeriodAggRow {
     qrSales: 0,
     otherSales: 0,
     deliveryAppSales: 0,
+    cryptoSales: 0,
   }
 }
 
@@ -316,6 +323,7 @@ function addPeriodAggRow(into: PeriodAggRow, row: PeriodAggRow): void {
   into.qrSales += row.qrSales
   into.otherSales += row.otherSales
   into.deliveryAppSales += row.deliveryAppSales
+  into.cryptoSales = (into.cryptoSales || 0) + (row.cryptoSales || 0)
 }
 
 function finalizePeriodAggRow(row: PeriodAggRow): PeriodAggRow {
@@ -454,6 +462,7 @@ export function mergePeriodSeriesToAggregated(
       qrSales: 0,
       otherSales: 0,
       deliveryAppSales: 0,
+      cryptoSales: 0,
     }
     for (const sc of storeCodes) {
       const row = series[sc]?.find((r) => r.key === key)
@@ -473,6 +482,7 @@ export function mergePeriodSeriesToAggregated(
       merged.qrSales += row.qrSales
       merged.otherSales += row.otherSales
       merged.deliveryAppSales += row.deliveryAppSales
+      merged.cryptoSales = (merged.cryptoSales || 0) + (row.cryptoSales || 0)
     }
     merged.sales = merged.total
     merged.salesPerDineInOrder =

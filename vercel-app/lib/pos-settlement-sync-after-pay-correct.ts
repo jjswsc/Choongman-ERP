@@ -14,6 +14,7 @@ export type SettlementPaymentAmts = {
   otherAmt: number
   deliveryAppAmt: number
   dineInDeliveryAmt: number
+  cryptoAmt: number
 }
 
 export type PosSettlementPayCorrectSyncResult = {
@@ -76,6 +77,7 @@ export type PayCorrectPaymentSnapshot = {
   paymentQr: number
   paymentOther: number
   paymentDeliveryApp: number
+  paymentCrypto?: number
   deliveryPaymentChannel?: string | null
   orderType?: string | null
 }
@@ -104,6 +106,7 @@ export function computePayCorrectSettlementDeltas(
     otherAmt: round2Signed((Number(after.paymentOther) || 0) - (Number(before.paymentOther) || 0)),
     deliveryAppAmt: round2Signed(afterApp - beforeApp),
     dineInDeliveryAmt: round2Signed(afterDine - beforeDine),
+    cryptoAmt: round2Signed((Number(after.paymentCrypto) || 0) - (Number(before.paymentCrypto) || 0)),
   }
 }
 
@@ -174,7 +177,7 @@ export async function syncPosSettlementAfterPayCorrect(params: {
     {
       limit: 1,
       select:
-        'id,store_code,settle_date,cash_amt,card_amt,qr_amt,other_amt,delivery_app_amt,dine_in_delivery_amt,card_breakdown,qr_breakdown,other_breakdown,delivery_app_breakdown,dine_in_delivery_breakdown,memo,closed',
+        'id,store_code,settle_date,cash_amt,card_amt,qr_amt,other_amt,delivery_app_amt,dine_in_delivery_amt,crypto_amt,card_breakdown,qr_breakdown,other_breakdown,delivery_app_breakdown,dine_in_delivery_breakdown,memo,closed',
     },
     'syncPosSettlementAfterPayCorrect'
   )) as {
@@ -185,6 +188,7 @@ export async function syncPosSettlementAfterPayCorrect(params: {
     other_amt?: number
     delivery_app_amt?: number
     dine_in_delivery_amt?: number
+    crypto_amt?: number
     card_breakdown?: Record<string, unknown> | null
     qr_breakdown?: Record<string, unknown> | null
     other_breakdown?: Record<string, unknown> | null
@@ -208,6 +212,7 @@ export async function syncPosSettlementAfterPayCorrect(params: {
   const nextDineIn = round2(
     Math.max(0, (Number(row.dine_in_delivery_amt) || 0) + deltas.dineInDeliveryAmt)
   )
+  const nextCrypto = round2(Math.max(0, (Number(row.crypto_amt) || 0) + deltas.cryptoAmt))
 
   const cashChanged = Math.abs(nextCash - savedCashBefore) > 0.02
   const otherChanged =
@@ -215,7 +220,8 @@ export async function syncPosSettlementAfterPayCorrect(params: {
     Math.abs(deltas.qrAmt) > 0.02 ||
     Math.abs(deltas.otherAmt) > 0.02 ||
     Math.abs(deltas.deliveryAppAmt) > 0.02 ||
-    Math.abs(deltas.dineInDeliveryAmt) > 0.02
+    Math.abs(deltas.dineInDeliveryAmt) > 0.02 ||
+    Math.abs(deltas.cryptoAmt) > 0.02
 
   if (!cashChanged && !otherChanged) {
     return {
@@ -242,6 +248,7 @@ export async function syncPosSettlementAfterPayCorrect(params: {
       other_amt: nextOther,
       delivery_app_amt: nextDelivery,
       dine_in_delivery_amt: nextDineIn,
+      crypto_amt: nextCrypto,
       card_breakdown: applySettlementBreakdownDelta(row.card_breakdown, deltas.cardAmt, 'Other'),
       qr_breakdown: applySettlementBreakdownDelta(row.qr_breakdown, deltas.qrAmt, 'PromptPay'),
       other_breakdown: applySettlementBreakdownDelta(row.other_breakdown, deltas.otherAmt, 'Other'),

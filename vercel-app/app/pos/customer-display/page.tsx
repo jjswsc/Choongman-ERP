@@ -415,6 +415,11 @@ export default function PosCustomerDisplayPage() {
                 <p className={`mt-1 max-w-xl text-sm md:text-base ${mutedClass}`}>
                   {state?.message || (t("posScanToPayHint") || "스캔 후 결제해 주세요.")}
                 </p>
+                {state?.qrType === "CRYPTO" && Number(state.cryptoAmount || 0) > 0 ? (
+                  <p className="mt-2 text-xl font-bold tabular-nums">
+                    {state.cryptoAmount} {String(state.cryptoAsset || "").replace(/_/g, " ").toUpperCase()}
+                  </p>
+                ) : null}
               </div>
               {showOrderTotal && state?.showOrderTotal !== false && qrTotalBaht > 0 ? (
                 <div

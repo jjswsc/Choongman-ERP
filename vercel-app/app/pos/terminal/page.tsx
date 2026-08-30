@@ -50,6 +50,7 @@ import {
   getPosDeliveryApps,
   getPosTaxInvoiceRecipients,
   getPosPaymentAttempts,
+  getPosCryptoPaymentSettings,
   executeKbankCancelQr,
   executeKbankCheckStatus,
   executeKbankGenerateQr,
@@ -76,6 +77,8 @@ import {
   type PosPaymentAttempt,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
+import { defaultPosCryptoPaymentSettings, type PosCryptoPaymentSettings } from '@/lib/payments/crypto-assets'
+import type { CryptoDepositDisplay } from '@/components/pos/pos-crypto-pay-panel'
 import { isLinkposCardApiEnabled, shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
 import { shouldSkipKbankApiForQr } from '@/lib/kbank-qr-api-enabled'
 import { isKbankQrEnabledForStore } from '@/lib/kbank-pilot-stores'
@@ -824,7 +827,9 @@ export default function PosTerminalPage() {
   const [selectedTakeoutTargetId, setSelectedTakeoutTargetId] = useState<string | null>(null)
   const [selectedTakeoutTargetLabel, setSelectedTakeoutTargetLabel] = useState<string>('')
   const [tourPaymentModalOpen, setTourPaymentModalOpen] = useState(false)
-  const [tourPaymentTab, setTourPaymentTab] = useState<'cash' | 'card' | 'qr' | 'delivery_app' | 'other'>('cash')
+  const [tourPaymentTab, setTourPaymentTab] = useState<
+    'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'crypto'
+  >('cash')
   const [tourTaxInvoiceEnabled, setTourTaxInvoiceEnabled] = useState(false)
   const [tourPaymentCompletedCount, setTourPaymentCompletedCount] = useState(0)
   const [activeTab, setActiveTab] = useState<'tables' | 'delivery' | 'takeout'>(
@@ -1030,6 +1035,10 @@ export default function PosTerminalPage() {
   const [customerDisplayIdleMediaType, setCustomerDisplayIdleMediaType] = useState<'none' | 'image' | 'video'>('none')
   const [customerDisplayIdleMediaUrl, setCustomerDisplayIdleMediaUrl] = useState('')
   const [customerDisplayPaymentDraft, setCustomerDisplayPaymentDraft] = useState<CartPanelPaymentPayload | null>(null)
+  const [cryptoPaymentSettings, setCryptoPaymentSettings] = useState<PosCryptoPaymentSettings>(
+    defaultPosCryptoPaymentSettings()
+  )
+  const [cryptoDepositDisplay, setCryptoDepositDisplay] = useState<CryptoDepositDisplay | null>(null)
   const tourPaymentCardAmount = Number(customerDisplayPaymentDraft?.paymentCard ?? 0)
   const tourPaymentQrAmount = Number(customerDisplayPaymentDraft?.paymentQr ?? 0)
   const tourPaymentDeliveryAppAmount = Number(customerDisplayPaymentDraft?.paymentDeliveryApp ?? 0)
@@ -1759,6 +1768,32 @@ export default function PosTerminalPage() {
       .then(s => setTodaySales({ completedCount: s.completedCount, completedTotal: s.completedTotal }))
       .catch(() => setTodaySales(null))
   }, [auth?.store])
+
+  useEffect(() => {
+    const code = String(currentStoreId || '').trim()
+    if (!code) {
+      setCryptoPaymentSettings(defaultPosCryptoPaymentSettings())
+      return
+    }
+    let cancelled = false
+    void getPosCryptoPaymentSettings(code)
+      .then((s) => {
+        if (cancelled) return
+        setCryptoPaymentSettings({
+          enabled: s.enabled === true,
+          wallets: s.wallets,
+          assetsEnabled: s.assetsEnabled,
+          rateSource: s.rateSource === 'coingecko' ? 'coingecko' : 'manual',
+          explorerKeys: s.explorerKeys || { etherscan: false, trongrid: false },
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setCryptoPaymentSettings(defaultPosCryptoPaymentSettings())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [currentStoreId])
 
   useEffect(() => {
     if (!currentStoreId) return
@@ -3563,6 +3598,19 @@ export default function PosTerminalPage() {
               ? effectiveStaffKbankQrAmount
               : customerDisplayBreakdown.total,
         }
+      : cryptoDepositDisplay?.qrPayload
+        ? {
+            ...base,
+            kind: 'qr',
+            title: customerDisplayT('posPaymentCrypto') || 'Crypto',
+            message: cryptoDepositDisplay.networkLabel,
+            qrPayload: cryptoDepositDisplay.qrPayload,
+            qrType: 'CRYPTO',
+            cryptoNetwork: cryptoDepositDisplay.networkLabel,
+            cryptoAmount: cryptoDepositDisplay.amountCrypto,
+            cryptoAsset: cryptoDepositDisplay.asset,
+            totalAmount: cryptoDepositDisplay.amountThb,
+          }
       : showLiveKbankQr
         ? {
             ...base,
@@ -3639,6 +3687,7 @@ export default function PosTerminalPage() {
     liveKbankQrPayload,
     effectiveCustomerDisplayQrPayload,
     effectiveCustomerDisplayQrType,
+    cryptoDepositDisplay,
     effectiveStaffKbankQrAmount,
     customerDisplayIdleMessage,
     customerDisplayIdleMediaType,
@@ -8875,6 +8924,8 @@ export default function PosTerminalPage() {
               stores={stores}
             currentStoreId={currentStoreId}
             defaultQrPayType={defaultQrPayTypeForCart}
+            cryptoPaymentSettings={cryptoPaymentSettings}
+            onCryptoDepositDisplayChange={setCryptoDepositDisplay}
             selectedTable={selectedTable}
             dineInMultiFloorLayout={dineInMultiFloorLayout}
             onStoreChange={() => {}}
@@ -11210,7 +11261,7 @@ export default function PosTerminalPage() {
         selectedDeliveryTargetId={selectedDeliveryTargetId}
         selectedTakeoutTargetId={selectedTakeoutTargetId}
         paymentModalOpen={tourPaymentModalOpen}
-        paymentTab={tourPaymentTab}
+        paymentTab={tourPaymentTab === 'crypto' ? 'other' : tourPaymentTab}
         paymentCardAmount={tourPaymentCardAmount}
         paymentQrAmount={tourPaymentQrAmount}
         paymentDeliveryAppAmount={tourPaymentDeliveryAppAmount}

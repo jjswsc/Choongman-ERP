@@ -27,6 +27,7 @@ import { isOfficeRole } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { PosScreenConfigEmeraldSaveButton } from '@/components/pos/pos-screen-config-action-bar'
 import { PosScreenConfigStoreAndCopyRow } from '@/components/pos/pos-screen-config-store-and-copy-row'
+import { PosCryptoSettingsCard } from '@/components/pos/pos-crypto-settings-card'
 
 function isSyntheticPaymentMethodId(id: string | undefined): boolean {
   return Boolean(id?.startsWith('syn:'))
@@ -199,6 +200,8 @@ export function PosPaymentSettingsContent() {
           </PosScreenConfigEmeraldSaveButton>
         }
       />
+
+      {effectiveStore ? <PosCryptoSettingsCard storeCode={effectiveStore} t={t} /> : null}
 
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center gap-2 text-sm font-semibold mb-4">

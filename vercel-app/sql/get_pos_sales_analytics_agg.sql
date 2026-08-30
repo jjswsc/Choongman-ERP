@@ -4,7 +4,9 @@
 --
 -- 선행(충만·Omni 공통): RPC가 o.tenant_id 를 참조하므로 컬럼이 없으면 42703.
 -- 충만은 보통 p_tenant_id=null 이라 필터는 no-op. Omni만 tenant 격리에 사용.
+-- payment_crypto 도 본문에서 참조. 없으면 CREATE FUNCTION 이 실패하고 기존 RPC가 그대로 남음.
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS tenant_id text;
+ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS payment_crypto numeric(12, 2) NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_pos_orders_tenant_id ON public.pos_orders (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_pos_orders_created_at ON public.pos_orders (created_at);
 --
@@ -226,6 +228,7 @@ RETURNS TABLE (
   payment_qr numeric,
   payment_other numeric,
   payment_delivery_app numeric,
+  payment_crypto numeric,
   delivery_payment_channel text,
   delivery_app_code text,
   biz_ymd date
@@ -253,7 +256,7 @@ AS $$
   )
   SELECT s.id, s.created_at, s.store_code, s.order_type, s.norm_order_type, s.total, s.subtotal, s.vat,
          s.discount, s.service_amt, s.guest_count, s.payment_cash, s.payment_card, s.payment_qr,
-         s.payment_other, s.payment_delivery_app, s.delivery_payment_channel, s.delivery_app_code,
+         s.payment_other, s.payment_delivery_app, s.payment_crypto, s.delivery_payment_channel, s.delivery_app_code,
          s.biz_ymd
   FROM (
     SELECT
@@ -273,6 +276,7 @@ AS $$
       coalesce(o.payment_qr, 0)::numeric AS payment_qr,
       coalesce(o.payment_other, 0)::numeric AS payment_other,
       coalesce(o.payment_delivery_app, 0)::numeric AS payment_delivery_app,
+      coalesce(o.payment_crypto, 0)::numeric AS payment_crypto,
       coalesce(o.delivery_payment_channel, '') AS delivery_payment_channel,
       coalesce(o.delivery_app_code, '') AS delivery_app_code,
       public.pos_sales_business_ymd_from_clock(
@@ -349,7 +353,8 @@ RETURNS TABLE (
   credit_sales numeric,
   qr_sales numeric,
   other_sales numeric,
-  delivery_app_sales numeric
+  delivery_app_sales numeric,
+  crypto_sales numeric
 )
 LANGUAGE plpgsql
 STABLE
@@ -377,7 +382,7 @@ BEGIN
       coalesce(sum(f.guest_count) FILTER (WHERE f.norm_order_type IN ('dine_in', '')), 0)::bigint,
       0::numeric,
       NULL::text,
-      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM public.pos_sales_analytics_base(
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -397,7 +402,7 @@ BEGIN
       sum(f.subtotal), sum(f.vat), sum(f.discount), sum(f.service_amt), sum(f.total),
       coalesce(sum(f.guest_count), 0)::bigint,
       0::bigint, 0::numeric, 0::bigint, 0::numeric, NULL::text,
-      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM public.pos_sales_analytics_base(
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -420,7 +425,8 @@ BEGIN
       coalesce(sum(f.payment_card), 0),
       coalesce(sum(f.payment_qr), 0),
       coalesce(sum(f.payment_other), 0),
-      coalesce(sum(f.payment_delivery_app), 0)
+      coalesce(sum(f.payment_delivery_app), 0),
+      coalesce(sum(f.payment_crypto), 0)
     FROM public.pos_sales_analytics_base(
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -443,7 +449,8 @@ BEGIN
       coalesce(sum(f.payment_card), 0),
       coalesce(sum(f.payment_qr), 0),
       coalesce(sum(f.payment_other), 0),
-      coalesce(sum(f.payment_delivery_app), 0)
+      coalesce(sum(f.payment_delivery_app), 0),
+      coalesce(sum(f.payment_crypto), 0)
     FROM public.pos_sales_analytics_base(
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -463,7 +470,7 @@ BEGIN
       sum(f.subtotal), sum(f.vat), sum(f.discount), sum(f.service_amt), sum(f.total),
       coalesce(sum(f.guest_count), 0)::bigint,
       0::bigint, 0::numeric, 0::bigint, 0::numeric, NULL::text,
-      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM public.pos_sales_analytics_base(
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -478,7 +485,7 @@ BEGIN
       count(*)::bigint,
       sum(f.subtotal), sum(f.vat), sum(f.discount), sum(f.service_amt), sum(f.total),
       0::bigint, 0::bigint, 0::numeric, 0::bigint, 0::numeric, NULL::text,
-      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM public.pos_sales_analytics_base(
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -505,7 +512,7 @@ BEGIN
       0::numeric, 0::numeric, 0::numeric, 0::numeric,
       sum(f.payment_delivery_app),
       0::bigint, 0::bigint, 0::numeric, 0::bigint, 0::numeric, NULL::text,
-      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM public.pos_sales_analytics_base(
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -530,7 +537,7 @@ BEGIN
       sum(f.subtotal), sum(f.vat), sum(f.discount), sum(f.service_amt), sum(f.total),
       coalesce(sum(f.guest_count), 0)::bigint,
       0::bigint, 0::numeric, 0::bigint, 0::numeric, NULL::text,
-      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM public.pos_sales_analytics_base(
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -544,7 +551,7 @@ BEGIN
       count(*)::bigint,
       sum(f.subtotal), sum(f.vat), sum(f.discount), sum(f.service_amt), sum(f.total),
       0::bigint, 0::bigint, 0::numeric, 0::bigint, 0::numeric, NULL::text,
-      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM public.pos_sales_analytics_base(
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -556,7 +563,7 @@ BEGIN
     RETURN QUERY
     SELECT p.bucket_key, ''::text, 0::bigint, 0::numeric, 0::numeric, 0::numeric, 0::numeric,
            p.sales, 0::bigint, 0::bigint, 0::numeric, 0::bigint, 0::numeric,
-           p.bucket_key, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+           p.bucket_key, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM (
       SELECT k AS bucket_key, s AS sales
       FROM (
@@ -565,7 +572,8 @@ BEGIN
           coalesce(sum(f.payment_card), 0) AS card,
           coalesce(sum(f.payment_qr), 0) AS qr,
           coalesce(sum(f.payment_other), 0) AS other,
-          coalesce(sum(f.payment_delivery_app), 0) AS delivery_app
+          coalesce(sum(f.payment_delivery_app), 0) AS delivery_app,
+          coalesce(sum(f.payment_crypto), 0) AS crypto
         FROM public.pos_sales_analytics_base(
           p_start_utc, p_end_utc_exclusive, v_start, v_end,
           p_store_codes, p_order_types, p_biz_hours, p_tenant_id
@@ -576,7 +584,8 @@ BEGIN
         ('card', t.card),
         ('qr', t.qr),
         ('other', t.other),
-        ('delivery_app', t.delivery_app)
+        ('delivery_app', t.delivery_app),
+        ('crypto', t.crypto)
       ) v(k, s)
       WHERE s > 0
     ) p;
@@ -591,7 +600,7 @@ BEGIN
       0::bigint, 0::bigint, 0::numeric, 0::bigint,
       sum(mf.qty),
       NULL::text,
-      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
     FROM (
       SELECT
         coalesce(nullif(btrim(ml.item->>'name'), ''), '(없음)') AS menu_name,

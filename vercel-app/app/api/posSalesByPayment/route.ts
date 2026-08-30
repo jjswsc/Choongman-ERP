@@ -26,6 +26,7 @@ type PaymentOrderRow = {
   payment_other?: number
   payment_other_breakdown?: unknown
   payment_delivery_app?: number
+  payment_crypto?: number
   delivery_payment_channel?: string | null
 }
 
@@ -89,11 +90,13 @@ export async function GET(request: NextRequest) {
       const qr = Number(r.payment_qr) || 0
       const other = Number(r.payment_other) || 0
       const deliveryApp = Number(r.payment_delivery_app) || 0
+      const crypto = Number(r.payment_crypto) || 0
       const deliveryCh = String(r.delivery_payment_channel ?? '').trim().toLowerCase()
       const orderType = String(r.order_type ?? '').trim().toLowerCase()
       if (cash > 0) byMethod.cash = (byMethod.cash || 0) + cash
       if (card > 0) byMethod.card = (byMethod.card || 0) + card
       if (qr > 0) byMethod.qr = (byMethod.qr || 0) + qr
+      if (crypto > 0.005) byMethod.crypto = (byMethod.crypto || 0) + crypto
       if (other > 0) {
         const bo = parsePaymentOtherBreakdown(r.payment_other_breakdown)
         if (bo && Math.abs(sumPaymentOtherBreakdown(bo) - other) <= 0.02) {

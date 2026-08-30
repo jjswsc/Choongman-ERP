@@ -338,11 +338,13 @@ export async function GET(request: NextRequest) {
         const qr = Number(r.payment_qr) || 0
         const other = Number(r.payment_other) || 0
         const deliveryApp = Number(r.payment_delivery_app) || 0
+        const crypto = Number(r.payment_crypto) || 0
         if (cash > 0) byMethod.cash = (byMethod.cash || 0) + cash
         if (card > 0) byMethod.card = (byMethod.card || 0) + card
         if (qr > 0) byMethod.qr = (byMethod.qr || 0) + qr
         if (other > 0) byMethod.other = (byMethod.other || 0) + other
         if (deliveryApp > 0) byMethod.delivery_app = (byMethod.delivery_app || 0) + deliveryApp
+        if (crypto > 0.005) byMethod.crypto = (byMethod.crypto || 0) + crypto
       }
       summary = Object.entries(byMethod)
         .filter(([, v]) => v > 0)

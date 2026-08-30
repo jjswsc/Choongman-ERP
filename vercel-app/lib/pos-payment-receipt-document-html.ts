@@ -160,6 +160,7 @@ function collectReceiptPaymentMethodLabels(
   const qr = Math.max(0, Number(receiptData.paymentQr ?? 0) || 0)
   const other = Math.max(0, Number(receiptData.paymentOther ?? 0) || 0)
   const del = Math.max(0, Number(receiptData.paymentDeliveryApp ?? 0) || 0)
+  const crypto = Math.max(0, Number(receiptData.paymentCrypto ?? 0) || 0)
   const eps = 0.005
   if (cash > eps) labels.push(tr('posPaymentCash', 'Cash'))
   if (card > eps) labels.push(tr('posPaymentCard', 'Card'))
@@ -181,6 +182,11 @@ function collectReceiptPaymentMethodLabels(
         ? `${tr('posPaymentDeliveryApp', 'Delivery app')} (${ch})`
         : tr('posPaymentDeliveryApp', 'Delivery app')
     )
+  }
+  if (crypto > eps) {
+    const meta = receiptData.paymentCryptoMeta as { asset?: string } | undefined
+    const asset = String(meta?.asset || '').toUpperCase()
+    labels.push(asset ? `${tr('posPaymentCrypto', 'Crypto')} (${asset})` : tr('posPaymentCrypto', 'Crypto'))
   }
   return labels
 }

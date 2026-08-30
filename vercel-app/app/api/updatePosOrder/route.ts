@@ -134,6 +134,11 @@ export async function POST(req: NextRequest) {
     let paymentQr = normalizedTender.paymentQr
     let paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
     let paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? body?.payment_delivery_app ?? 0))
+    let paymentCrypto = Math.max(0, Number(body?.paymentCrypto ?? body?.payment_crypto ?? 0))
+    const paymentCryptoMeta =
+      body?.paymentCryptoMeta && typeof body.paymentCryptoMeta === 'object'
+        ? body.paymentCryptoMeta
+        : null
     const pointEarnedReq = roundMemberPointsEarn(body?.pointEarned)
     const guestCountBody = body?.guestCount ?? body?.guest_count
     const pricingAdjustments = body?.pricingAdjustments || {}
@@ -168,7 +173,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json,created_by',
+          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,payment_crypto,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json,created_by',
       },
       'updatePosOrder'
     )) as {
@@ -190,6 +195,7 @@ export async function POST(req: NextRequest) {
       payment_other?: number
       payment_other_breakdown?: unknown
       payment_delivery_app?: number
+      payment_crypto?: number
       delivery_payment_channel?: string | null
       delivery_app_code?: string | null
       member_id?: number | null
@@ -218,6 +224,7 @@ export async function POST(req: NextRequest) {
       paymentQr,
       paymentOther,
       paymentDeliveryApp,
+      paymentCrypto,
     })
     const existingPaymentSum = posOrderPaymentSumFromAmounts({
       paymentCash: Number(current?.payment_cash ?? 0),
@@ -225,6 +232,7 @@ export async function POST(req: NextRequest) {
       paymentQr: Number(current?.payment_qr ?? 0),
       paymentOther: Number(current?.payment_other ?? 0),
       paymentDeliveryApp: Number(current?.payment_delivery_app ?? 0),
+      paymentCrypto: Number(current?.payment_crypto ?? 0),
     })
     if (
       shouldPreserveExistingPosOrderPayment({
@@ -239,6 +247,7 @@ export async function POST(req: NextRequest) {
       paymentQr = preserved.paymentQr
       paymentOther = preserved.paymentOther
       paymentDeliveryApp = preserved.paymentDeliveryApp
+      paymentCrypto = preserved.paymentCrypto
     }
 
     if (!(await authCanAccessPosStoreWrite(auth, String(current?.store_code ?? '')))) {
@@ -431,8 +440,10 @@ export async function POST(req: NextRequest) {
       paymentQr: Number(current?.payment_qr ?? 0),
       paymentOther: Number(current?.payment_other ?? 0),
       paymentDeliveryApp: Number(current?.payment_delivery_app ?? 0),
+      paymentCrypto: Number(current?.payment_crypto ?? 0),
     })
-    let nextPaymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+    let nextPaymentSum =
+      paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
     if (nextPaymentSum > 0.02) {
       const reconciled = reconcilePosOrderPaymentTenderGap({
         total,
@@ -445,6 +456,7 @@ export async function POST(req: NextRequest) {
           paymentQr,
           paymentOther,
           paymentDeliveryApp: paymentDeliveryAppFinal,
+          paymentCrypto,
         },
         paymentOtherBreakdown:
           body?.paymentOtherBreakdown ??
@@ -457,6 +469,7 @@ export async function POST(req: NextRequest) {
         paymentQr = reconciled.payment.paymentQr
         paymentOther = reconciled.payment.paymentOther
         paymentDeliveryAppFinal = reconciled.payment.paymentDeliveryApp
+        paymentCrypto = reconciled.payment.paymentCrypto
         paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
           paymentOther,
           reconciled.paymentOtherBreakdown ?? paymentOtherBreakdown
@@ -473,7 +486,7 @@ export async function POST(req: NextRequest) {
           paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
         }
         nextPaymentSum =
-          paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+          paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
       }
     }
     const dbTotal = Math.max(0, Number(current?.total ?? 0) || 0)
@@ -550,6 +563,8 @@ export async function POST(req: NextRequest) {
           ? { payment_other_breakdown: paymentOtherBreakdownDb }
           : { payment_other_breakdown: null }),
       payment_delivery_app: paymentDeliveryAppFinal,
+      payment_crypto: paymentCrypto,
+      ...(paymentCrypto > 0.005 && paymentCryptoMeta ? { payment_crypto_meta: paymentCryptoMeta } : {}),
       delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,
       member_no: memberNo || null,
@@ -646,7 +661,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+    const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
     const paymentComplete = isPosOrderCouponPaymentSettled({
       total,
       paymentSum,

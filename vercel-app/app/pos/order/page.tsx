@@ -14,6 +14,7 @@ import {
   getPosTableLayout,
   getPosPrinterSettings,
   type PosPrinterSettings,
+  getPosCryptoPaymentSettings,
   getPosCollabCampaigns,
   validatePosCoupons,
   type PosAppliedCoupon,
@@ -69,6 +70,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { OfflineBanner } from "@/components/offline-banner"
+import { PosCryptoPayPanel } from "@/components/pos/pos-crypto-pay-panel"
+import {
+  defaultPosCryptoPaymentSettings,
+  isPosCryptoPaymentTabVisible,
+  type PosCryptoPaymentSettings,
+} from "@/lib/payments/crypto-assets"
+import { cryptoAttemptToOrderMeta } from "@/lib/payments/crypto-attempt-meta"
 import {
   getBanbanFlavorMenuList,
   isBanbanFlavorWhitelistMissing,
@@ -361,6 +369,11 @@ export default function PosOrderPage() {
   const [payQr, setPayQr] = React.useState("")
   const [payOther, setPayOther] = React.useState("")
   const [payDeliveryApp, setPayDeliveryApp] = React.useState("")
+  const [payCrypto, setPayCrypto] = React.useState("")
+  const [cryptoMeta, setCryptoMeta] = React.useState<Record<string, unknown> | null>(null)
+  const [cryptoPaymentSettings, setCryptoPaymentSettings] = React.useState<PosCryptoPaymentSettings>(
+    defaultPosCryptoPaymentSettings()
+  )
   const [deliveryPaymentChannel, setDeliveryPaymentChannel] = React.useState<"grab" | "lineman" | "shopee">("grab")
   const [receiptData, setReceiptData] = React.useState<{
     orderNo: string
@@ -393,6 +406,7 @@ export default function PosOrderPage() {
     paymentOther?: number
     paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
     paymentDeliveryApp?: number
+    paymentCrypto?: number
     deliveryPaymentChannel?: string | null
   } | null>(null)
   const [, setKitchenPrintFailureVersion] = React.useState(0)
@@ -415,6 +429,33 @@ export default function PosOrderPage() {
   React.useEffect(() => {
     loadTodaySales()
   }, [loadTodaySales])
+
+  React.useEffect(() => {
+    const code = String(storeCode || "").trim()
+    if (!code) {
+      setCryptoPaymentSettings(defaultPosCryptoPaymentSettings())
+      return
+    }
+    let cancelled = false
+    void getPosCryptoPaymentSettings(code)
+      .then((s) => {
+        if (cancelled) return
+        setCryptoPaymentSettings({
+          enabled: s.enabled === true,
+          wallets: s.wallets,
+          assetsEnabled: s.assetsEnabled,
+          rateSource: s.rateSource === "coingecko" ? "coingecko" : "manual",
+          explorerKeys: s.explorerKeys || { etherscan: false, trongrid: false },
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setCryptoPaymentSettings(defaultPosCryptoPaymentSettings())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [storeCode])
+  const cryptoTabVisible = isPosCryptoPaymentTabVisible(cryptoPaymentSettings)
 
   const loadTableLayout = React.useCallback(() => {
     if (!storeCode) return
@@ -1353,7 +1394,8 @@ export default function PosOrderPage() {
     (Number(payCard) || 0) +
     (Number(payQr) || 0) +
     (Number(payOther) || 0) +
-    (Number(payDeliveryApp) || 0)
+    (Number(payDeliveryApp) || 0) +
+    (Number(payCrypto) || 0)
   const paymentInputMatch = Math.abs(paymentInputSum - paymentPreviewTotal) < 0.01
 
   const lineDiscountSnapshot = React.useMemo(() => {
@@ -1423,6 +1465,7 @@ export default function PosOrderPage() {
     qr: number
     other: number
     deliveryApp: number
+    crypto: number
     deliveryChannel: "grab" | "lineman" | "shopee" | null
   }) => {
     if (cart.length === 0) return
@@ -1436,9 +1479,13 @@ export default function PosOrderPage() {
       adjustments: pricingAdjustments,
     })
     const checkoutTotal = checkoutPricing.finalTotal
-    const sum = payment.cash + payment.card + payment.qr + payment.other + payment.deliveryApp
+    const sum = payment.cash + payment.card + payment.qr + payment.other + payment.deliveryApp + payment.crypto
     if (Math.abs(sum - checkoutTotal) > 0.01) {
       await appAlert(t("posPaymentSumMismatch") || "결제 합계가 주문 금액과 일치하지 않습니다.")
+      return
+    }
+    if (payment.crypto > 0.005 && !cryptoMeta) {
+      await appAlert(t("posCryptoNeedConfirm") || "암호화폐는 입금 확인 후에만 결제 완료할 수 있습니다.")
       return
     }
     setSubmitting(true)
@@ -1469,6 +1516,8 @@ export default function PosOrderPage() {
         paymentOther: payment.other || undefined,
         ...(paymentOtherBreakdown ? { paymentOtherBreakdown } : {}),
         paymentDeliveryApp: payment.deliveryApp || undefined,
+        paymentCrypto: payment.crypto || undefined,
+        ...(payment.crypto > 0.005 && cryptoMeta ? { paymentCryptoMeta: cryptoMeta } : {}),
         deliveryPaymentChannel:
           payment.deliveryApp > 0.005 ? payment.deliveryChannel : null,
         pricingAdjustments,
@@ -1528,6 +1577,7 @@ export default function PosOrderPage() {
           paymentOther: payment.other,
           ...(paymentOtherBreakdown ? { paymentOtherBreakdown } : {}),
           paymentDeliveryApp: payment.deliveryApp,
+          paymentCrypto: payment.crypto,
           deliveryPaymentChannel:
             payment.deliveryApp > 0.005 ? payment.deliveryChannel : null,
         })
@@ -2586,6 +2636,22 @@ export default function PosOrderPage() {
                   />
                 </div>
               </div>
+              {cryptoTabVisible ? (
+                <div className="rounded-lg border border-amber-500/40 p-2 space-y-2">
+                  <PosCryptoPayPanel
+                    storeCode={storeCode || "ST01"}
+                    settings={cryptoPaymentSettings}
+                    amountThb={Number(payCrypto) || paymentPreviewTotal}
+                    staffName={auth?.user ?? ""}
+                    enabled
+                    t={(key, fallback) => t(key) || fallback || key}
+                    onConfirmed={(attempt) => {
+                      setPayCrypto(String(attempt.amountThb))
+                      setCryptoMeta(cryptoAttemptToOrderMeta(attempt))
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="flex justify-between text-sm border-t pt-2">
               <span>{t("posPaymentSum") || "입력 합계"}</span>
@@ -2609,6 +2675,8 @@ export default function PosOrderPage() {
                   setPayQr("0")
                   setPayOther("0")
                   setPayDeliveryApp("0")
+                  setPayCrypto("0")
+                  setCryptoMeta(null)
                 }}
               >
                 {t("posPaymentFullCash") || "전액 현금"}
@@ -2623,6 +2691,7 @@ export default function PosOrderPage() {
                   qr: parseFloat(payQr) || 0,
                   other: parseFloat(payOther) || 0,
                   deliveryApp: parseFloat(payDeliveryApp) || 0,
+                  crypto: parseFloat(payCrypto) || 0,
                   deliveryChannel: deliveryPaymentChannel,
                 })}
               >

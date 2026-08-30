@@ -41,7 +41,10 @@ describe('withVisibleScanTimeout', () => {
     await Promise.resolve()
     expect(await Promise.race([caught, Promise.resolve('pending')])).toBe('pending')
     setVisibility('visible')
-    await vi.advanceTimersByTimeAsync(11_000)
+    await vi.advanceTimersByTimeAsync(3_999)
+    await Promise.resolve()
+    expect(await Promise.race([caught, Promise.resolve('pending')])).toBe('pending')
+    await vi.advanceTimersByTimeAsync(2)
     await expect(caught).resolves.toBe('ptiOcrPageTimeout')
   })
 

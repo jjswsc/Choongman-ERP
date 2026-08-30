@@ -294,6 +294,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [systemTotal, setSystemTotal] = React.useState(0)
   /** 완료 주문 `payment_cash` 합계 — 마감 결산에서 현금 줄은 이 값만 사용(수정 불가) */
   const [systemCashFromOrders, setSystemCashFromOrders] = React.useState(0)
+  const [systemCryptoFromOrders, setSystemCryptoFromOrders] = React.useState(0)
+  const [cryptoAmt, setCryptoAmt] = React.useState('')
   const [cashReconcileBanner, setCashReconcileBanner] = React.useState<'mismatch' | null>(null)
   const [settlement, setSettlement] = React.useState<PosSettlement | null>(null)
   const [closeRun, setCloseRun] = React.useState<PosCloseRun | null>(null)
@@ -583,6 +585,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           systemSubtotal: sub,
           systemVat: vat,
           systemCashFromOrders: cashFromOrdersRaw,
+          systemCryptoFromOrders: cryptoFromOrdersRaw,
           tillNetForSettleDate: tillNetRaw,
           cashReconcile,
           linkpos,
@@ -590,7 +593,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           closeRun: nextCloseRun,
         } = main
         const autoCashTotal = Number(cashFromOrdersRaw ?? 0) || 0
+        const autoCryptoTotal = Number(cryptoFromOrdersRaw ?? 0) || 0
         setSystemCashFromOrders(autoCashTotal)
+        setSystemCryptoFromOrders(autoCryptoTotal)
         if (cashReconcile?.mismatch) {
           setCashReconcileBanner('mismatch')
         } else {
@@ -649,6 +654,12 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setQrAmt(formatBahtAmountForField(nextQrAmt))
           setDeliveryAppAmt(formatBahtAmountForField(nextDeliveryAmt))
           setOtherAmt(formatBahtAmountForField(nextOtherAmt))
+          const nextCryptoAmt = preferLiveAuto
+            ? autoCryptoTotal > 0
+              ? autoCryptoTotal
+              : Number(single.cryptoAmt ?? 0)
+            : Number(single.cryptoAmt ?? 0)
+          setCryptoAmt(formatBahtAmountForField(nextCryptoAmt))
           const cb: Record<string, string> = {}
           activeCardKeys.forEach((k) => {
             cb[k] = String((single.cardBreakdown ?? {})[k] ?? '')
@@ -758,6 +769,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           setQrAmt(formatBahtAmountForField(autoQrTotal || 0))
           setDeliveryAppAmt(formatBahtAmountForField(autoDeliveryTotal || 0))
           setOtherAmt(formatBahtAmountForField(autoOtherTotal || 0))
+          setCryptoAmt(formatBahtAmountForField(autoCryptoTotal || 0))
           const newRowCardAuto = shouldApplyAutoCardBreakdown({
             preferLiveAuto: true,
             savedBreakdownEmpty: true,
@@ -889,7 +901,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
               Number(s.qrAmt ?? 0) +
               Number(s.deliveryAppAmt ?? 0) +
               Number(s.dineInDeliveryAmt ?? 0) +
-              Number(s.otherAmt ?? 0)
+              Number(s.otherAmt ?? 0) +
+              Number(s.cryptoAmt ?? 0)
             : 0
           return {
             date,
@@ -953,7 +966,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     0
   const dineInNum = Object.values(dineInDeliveryBreakdown).reduce((s, v) => s + parseBahtAmount(v), 0)
   const deliveryAppTotalNum = deliveryNum + dineInNum
-  const totalInput = cashAmtNum + cardNum + qrNum + deliveryNum + dineInNum + otherNum
+  const cryptoAmtNum = parseBahtAmount(cryptoAmt)
+  const showCryptoSettlement =
+    systemCryptoFromOrders > 0.005 || cryptoAmtNum > 0.005 || Number(settlement?.cryptoAmt ?? 0) > 0.005
+  const totalInput = cashAmtNum + cardNum + qrNum + deliveryNum + dineInNum + otherNum + cryptoAmtNum
   const currencySuffix = ' ฿'
   /** 화면 금액 표시 — 영수증·주문과 동일하게 `formatBahtNum`(소수 둘째 자리) */
   const fmtBahtSuffix = (n: number | null | undefined) => `${formatBahtNum(n)}${currencySuffix}`
@@ -964,7 +980,8 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const savedDelivery = Number(settlement?.deliveryAppAmt ?? 0)
   const savedDineIn = Number(settlement?.dineInDeliveryAmt ?? 0)
   const savedOther = Number(settlement?.otherAmt ?? 0)
-  const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedDineIn + savedOther
+  const savedCrypto = Number(settlement?.cryptoAmt ?? 0)
+  const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedDineIn + savedOther + savedCrypto
   const tillNetAppliedToDrawer = openMode ? 0 : tillNetForSettleDate
   const expectedDrawerByOpenAndCash = (openingCashActual ?? 0) + cashAmtNum + tillNetAppliedToDrawer
   /** 권종 실사 − 「예상 돈통 시제」(시작+당일 현금 매출±시재 입출금 순액). Till 순액을 빼면 출금 분만큼 차이가 틀어짐 */
@@ -1068,6 +1085,7 @@ ${platformBreakdownPrintRows}
 ${amtIndent(t('posSettlementDeliverySubDineIn') || '홀 (Dine in)', formatBahtNum(dineInNum))}
 ${dineInBreakdownPrintRows}
 ${amt(t('posPaymentOther') || '기타', formatBahtNum(otherNum))}
+${showCryptoSettlement ? amt(t('posSettlementCrypto') || t('posPaymentCrypto') || '암호화폐', formatBahtNum(cryptoAmtNum)) : ''}
 <div class="receipt-divider"></div>
 ${amt(t('posInputTotal') || '입력 합계', formatBahtNum(totalInput), ' receipt-total')}
 ${memo ? `<div class="memo"><span class="footer-strong">${escapeHtml(t('posMemo') || '비고')}:</span> ${escapeHtml(memo)}</div>` : ''}
@@ -1210,6 +1228,7 @@ ${footerStamp}
         otherBreakdown: Object.fromEntries(
           OTHER_KEYS.map((k) => [k, parseBahtAmount(otherBreakdown[k])])
         ) as Record<string, number>,
+        cryptoAmt: cryptoAmtNum,
         memo,
         closed,
       })
@@ -2102,6 +2121,47 @@ ${footerStamp}
                     </label>
                   </CollapsibleContent>
                 </Collapsible>
+
+                {showCryptoSettlement ? (
+                  <Collapsible defaultOpen>
+                    <CollapsibleTrigger asChild>
+                      <div className="flex items-center justify-between rounded-lg border px-4 py-2.5 hover:bg-muted/30 cursor-pointer">
+                        <span className="font-medium flex items-center gap-2">
+                          {t('posSettlementCrypto') || t('posPaymentCrypto') || '암호화폐'}
+                          {systemCryptoFromOrders > 0 && (
+                            <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-800 dark:bg-slate-700 dark:text-slate-100">
+                              {t('posSettlementCashFromPosBadge') || 'POS'}
+                            </span>
+                          )}
+                        </span>
+                        <span className="tabular-nums font-semibold">{fmtBahtSuffix(cryptoAmtNum)}</span>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="mt-2 space-y-2 border-t pt-2 pl-2">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
+                          <span className="text-muted-foreground">{t('posSettlementCryptoPos') || 'POS 암호화폐 합계'}</span>
+                          <span className="font-semibold tabular-nums">{fmtBahtSuffix(systemCryptoFromOrders)}</span>
+                        </div>
+                        <label className="flex items-center justify-between gap-2 text-xs">
+                          <span>{t('posSettlementCrypto') || '암호화폐 실입금'}</span>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              className="h-8 w-28 text-right tabular-nums"
+                              value={cryptoAmt}
+                              onChange={(e) => setCryptoAmt(formatBahtInputDisplay(e.target.value))}
+                              disabled={inputsLocked}
+                            />
+                            <span className="w-5">{currencySuffix}</span>
+                          </div>
+                        </label>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ) : null}
               </div>
 
               {!openMode && effectiveStore && settleDate && !offlineAware ? (

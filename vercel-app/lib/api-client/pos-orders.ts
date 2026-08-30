@@ -80,6 +80,8 @@ export interface PosOrder {
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   /** 배달앱(Grab/Line Man/Shopee 등) 플랫폼 결제 금액 */
   paymentDeliveryApp?: number
+  paymentCrypto?: number
+  paymentCryptoMeta?: Record<string, unknown> | null
   /** grab | lineman | shopee | dine_in */
   deliveryPaymentChannel?: string
   /** pos_orders.delivery_app_code — POS 수동 배달·연동 주문의 플랫폼 구분 */
@@ -749,6 +751,8 @@ export async function savePosOrder(params: {
   paymentOther?: number
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
+  paymentCrypto?: number
+  paymentCryptoMeta?: Record<string, unknown> | null
   deliveryPaymentChannel?: string | null
   memberId?: number
   memberNo?: string

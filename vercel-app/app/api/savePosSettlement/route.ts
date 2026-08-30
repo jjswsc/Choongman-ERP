@@ -83,6 +83,7 @@ export async function POST(req: NextRequest) {
       body.dineInDeliveryBreakdown && typeof body.dineInDeliveryBreakdown === 'object' ? body.dineInDeliveryBreakdown : {}
     const otherAmt = numOrZero(body.otherAmt)
     const otherBreakdown = body.otherBreakdown && typeof body.otherBreakdown === 'object' ? body.otherBreakdown : {}
+    const cryptoAmt = numOrZero(body.cryptoAmt)
     const memo = String(body.memo ?? '').trim()
     const closed = !!body.closed
     const cashActualDenoms = normalizeCashActualDenoms(body.cashActualDenoms)
@@ -122,6 +123,7 @@ export async function POST(req: NextRequest) {
         dine_in_delivery_breakdown: dineInDeliveryBreakdown,
         other_amt: otherAmt,
         other_breakdown: otherBreakdown,
+        crypto_amt: cryptoAmt,
         memo,
         closed,
         cash_actual_denoms: cashActualDenoms,
@@ -137,7 +139,12 @@ export async function POST(req: NextRequest) {
       const msg = firstErr instanceof Error ? firstErr.message : String(firstErr)
       const missingDenomCol =
         msg.includes('cash_actual_denoms') && (msg.includes('PGRST204') || msg.includes('Could not find'))
-      if (missingDenomCol) {
+      const missingCryptoCol =
+        msg.includes('crypto_amt') && (msg.includes('PGRST204') || msg.includes('Could not find'))
+      if (missingCryptoCol) {
+        const { crypto_amt: _omitCrypto, ...rowWithoutCrypto } = row
+        await supabaseUpsert('pos_settlements', [rowWithoutCrypto], conflict)
+      } else if (missingDenomCol) {
         const { cash_actual_denoms: _omit, ...rowWithoutDenoms } = row
         try {
           await supabaseUpsert('pos_settlements', [rowWithoutDenoms], conflict)

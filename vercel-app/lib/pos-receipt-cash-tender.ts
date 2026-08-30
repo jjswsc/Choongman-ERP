@@ -41,6 +41,8 @@ export type ReceiptPaymentSnapshotForPrint = {
   paymentOtherBreakdown?: import('@/lib/pos-payment-other-breakdown').PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
+  paymentCrypto?: number
+  paymentCryptoMeta?: Record<string, unknown> | null
   paymentCashTendered?: number
 }
 
@@ -58,6 +60,8 @@ export function receiptPaymentFieldsFromSnapshot(
     ...(payment.paymentOtherBreakdown ? { paymentOtherBreakdown: payment.paymentOtherBreakdown } : {}),
     paymentDeliveryApp: payment.paymentDeliveryApp ?? 0,
     deliveryPaymentChannel: payment.deliveryPaymentChannel ?? null,
+    paymentCrypto: payment.paymentCrypto ?? 0,
+    ...(payment.paymentCryptoMeta ? { paymentCryptoMeta: payment.paymentCryptoMeta } : {}),
     ...(tendered > EPS ? { paymentCashTendered: tendered } : {}),
   }
 }
@@ -71,6 +75,7 @@ export function posOrderPaymentFieldsFromSnapshot(payment?: ReceiptPaymentSnapsh
       paymentQr: 0,
       paymentOther: 0,
       paymentDeliveryApp: 0,
+      paymentCrypto: 0,
       deliveryPaymentChannel: null as string | null,
       paymentCashTendered: 0,
     }
@@ -89,6 +94,8 @@ export function posOrderPaymentFieldsFromSnapshot(payment?: ReceiptPaymentSnapsh
     paymentOther: Math.max(0, Number(payment.paymentOther ?? 0) || 0),
     ...(payment.paymentOtherBreakdown ? { paymentOtherBreakdown: payment.paymentOtherBreakdown } : {}),
     paymentDeliveryApp: Math.max(0, Number(payment.paymentDeliveryApp ?? 0) || 0),
+    paymentCrypto: Math.max(0, Number(payment.paymentCrypto ?? 0) || 0),
+    ...(payment.paymentCryptoMeta ? { paymentCryptoMeta: payment.paymentCryptoMeta } : {}),
     deliveryPaymentChannel: payment.deliveryPaymentChannel ?? null,
     paymentCashTendered: tendered,
   }

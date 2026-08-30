@@ -64,7 +64,8 @@ export function posOrderRowPaymentSum(row: Record<string, unknown>): number {
     Number(row.payment_card ?? 0) +
     Number(row.payment_qr ?? 0) +
     Number(row.payment_other ?? 0) +
-    Number((row as { payment_delivery_app?: unknown }).payment_delivery_app ?? 0)
+    Number((row as { payment_delivery_app?: unknown }).payment_delivery_app ?? 0) +
+    Number((row as { payment_crypto?: unknown }).payment_crypto ?? 0)
   )
 }
 
@@ -74,7 +75,8 @@ export function posOrderPaymentSum(order: PosOrder): number {
     Number(order.paymentCard ?? 0) +
     Number(order.paymentQr ?? 0) +
     Number(order.paymentOther ?? 0) +
-    Number(order.paymentDeliveryApp ?? 0)
+    Number(order.paymentDeliveryApp ?? 0) +
+    Number(order.paymentCrypto ?? 0)
   if (sum > 0.005) return sum
   if (isPosOrderPaidLikeStatus(String(order.status ?? ''))) {
     return Math.max(0, Number(order.total ?? 0) || 0)
@@ -775,6 +777,8 @@ export function receiptModalDataFromPosOrderForPayment(
     paymentOther: order.paymentOther,
     ...(order.paymentOtherBreakdown ? { paymentOtherBreakdown: order.paymentOtherBreakdown } : {}),
     paymentDeliveryApp: order.paymentDeliveryApp,
+    paymentCrypto: order.paymentCrypto,
+    ...(order.paymentCryptoMeta ? { paymentCryptoMeta: order.paymentCryptoMeta } : {}),
     deliveryPaymentChannel: order.deliveryPaymentChannel ?? null,
     ...(String(order.deliveryAppCode ?? '').trim()
       ? { deliveryAppCode: String(order.deliveryAppCode).trim().toLowerCase() }
@@ -909,6 +913,7 @@ export function hallOrderReceiptPayloadFromOrderFields(
     paymentQr?: number
     paymentOther?: number
     paymentDeliveryApp?: number
+    paymentCrypto?: number
   },
   adjustments: PosPricingAdjustments
 ): HallOrderPayload {
@@ -946,6 +951,7 @@ export function hallOrderReceiptPayloadFromOrderFields(
     paymentQr: fields.paymentQr,
     paymentOther: fields.paymentOther,
     paymentDeliveryApp: fields.paymentDeliveryApp,
+    paymentCrypto: fields.paymentCrypto,
   })
   const total = resolvePosOrderReceiptPrintTotal({
     storedTotal: Math.max(0, Number(fields.total) || 0),
@@ -1146,6 +1152,8 @@ export function receiptModalDataFromTerminalOrderTaxReprint(
     | 'paymentQr'
     | 'paymentOther'
     | 'paymentDeliveryApp'
+    | 'paymentCrypto'
+    | 'paymentCryptoMeta'
     | 'deliveryPaymentChannel'
     | 'deliveryAppCode'
     | 'guestCount'
@@ -1182,6 +1190,8 @@ export function receiptModalDataFromTerminalOrderTaxReprint(
     paymentQr: Number(order.paymentQr || 0),
     paymentOther: Number(order.paymentOther || 0),
     paymentDeliveryApp: Number(order.paymentDeliveryApp || 0),
+    paymentCrypto: Number(order.paymentCrypto || 0),
+    ...(order.paymentCryptoMeta ? { paymentCryptoMeta: order.paymentCryptoMeta } : {}),
     deliveryPaymentChannel: order.deliveryPaymentChannel,
     ...(Math.max(0, Number(order.paymentCashTendered ?? 0) || 0) > 0.005
       ? { paymentCashTendered: Math.max(0, Number(order.paymentCashTendered || 0) || 0) }

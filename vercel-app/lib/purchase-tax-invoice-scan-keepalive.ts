@@ -1,10 +1,10 @@
 /**
- * Chrome은 백그라운드 탭의 메인 스레드 타이머를 늦춘다.
+ * Chrome은 백그라운드 탭의 메인 스레드·워커를 늦춘다.
  * Screen Wake Lock은 탭이 숨으면 풀린다.
  *
  * - Wake Lock: 화면이 보일 때 절전만 막음
- * - Web Worker: 숨은 탭에서도 짧은 주기로 연산해 프로세스 우선순위·스로틀을 완화
- * - 소리는 쓰지 않음 (스피커 아이콘·잡음 없음)
+ * - Web Worker: 숨은 탭에서도 짧은 주기로 연산해 프로세스 우선순위를 유지
+ * - WebRTC 루프백: 소리/스피커 없이 “실시간 연결”로 보고 집중 스로틀을 완화
  */
 
 type WakeLockSentinelLike = { release: () => Promise<void> }
@@ -15,8 +15,6 @@ export type PurchaseTaxScanKeepAlive = {
 
 let runningCount = 0
 const runningListeners = new Set<(running: boolean) => void>()
-const foregroundListeners = new Set<() => void>()
-const LONG_HIDDEN_MS = 3_000
 
 function setScanRunning(delta: 1 | -1) {
   const prev = runningCount > 0
@@ -37,14 +35,6 @@ export function subscribePurchaseTaxScanRunning(fn: (running: boolean) => void):
   }
 }
 
-/** 오래 숨었다가 다시 보이면 호출. 얼어 죽은 OCR 워커를 갈아끼울 때 쓴다. */
-export function subscribePurchaseTaxScanForeground(fn: () => void): () => void {
-  foregroundListeners.add(fn)
-  return () => {
-    foregroundListeners.delete(fn)
-  }
-}
-
 const WORKER_SRC = `
 self.onmessage = function (e) {
   if (e.data === 'stop') {
@@ -58,6 +48,43 @@ setInterval(function () {
   try { self.postMessage(n) } catch (err) {}
 }, 250)
 `
+
+async function startRtcLoopback(): Promise<() => void> {
+  if (typeof RTCPeerConnection === 'undefined') return () => undefined
+  const a = new RTCPeerConnection()
+  const b = new RTCPeerConnection()
+  const close = () => {
+    try {
+      a.close()
+    } catch {
+      /* ignore */
+    }
+    try {
+      b.close()
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    a.onicecandidate = (ev) => {
+      if (ev.candidate) void b.addIceCandidate(ev.candidate)
+    }
+    b.onicecandidate = (ev) => {
+      if (ev.candidate) void a.addIceCandidate(ev.candidate)
+    }
+    a.createDataChannel('cm-pti-scan')
+    const offer = await a.createOffer()
+    await a.setLocalDescription(offer)
+    await b.setRemoteDescription(offer)
+    const answer = await b.createAnswer()
+    await b.setLocalDescription(answer)
+    await a.setRemoteDescription(answer)
+    return close
+  } catch {
+    close()
+    return () => undefined
+  }
+}
 
 export function startPurchaseTaxScanKeepAlive(): PurchaseTaxScanKeepAlive {
   setScanRunning(1)
@@ -76,7 +103,6 @@ export function startPurchaseTaxScanKeepAlive(): PurchaseTaxScanKeepAlive {
   let wake: WakeLockSentinelLike | null = null
   let worker: Worker | null = null
   let stopped = false
-  let hiddenAt = typeof document !== 'undefined' && document.visibilityState === 'hidden' ? Date.now() : 0
 
   const requestWake = async () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
@@ -111,6 +137,13 @@ export function startPurchaseTaxScanKeepAlive(): PurchaseTaxScanKeepAlive {
 
   void requestWake()
   startWorker()
+  void startRtcLoopback().then((stopRtc) => {
+    if (stopped) {
+      stopRtc()
+      return
+    }
+    cleanups.push(stopRtc)
+  })
 
   const tick = window.setInterval(() => {
     void requestWake()
@@ -119,23 +152,9 @@ export function startPurchaseTaxScanKeepAlive(): PurchaseTaxScanKeepAlive {
   cleanups.push(() => window.clearInterval(tick))
 
   const onVis = () => {
-    if (document.visibilityState === 'hidden') {
-      hiddenAt = Date.now()
-      return
-    }
-    const slept = hiddenAt ? Date.now() - hiddenAt : 0
-    hiddenAt = 0
+    if (document.visibilityState === 'hidden') return
     void requestWake()
     if (!worker) startWorker()
-    if (slept >= LONG_HIDDEN_MS) {
-      for (const fn of foregroundListeners) {
-        try {
-          fn()
-        } catch {
-          /* ignore */
-        }
-      }
-    }
   }
   document.addEventListener('visibilitychange', onVis)
   window.addEventListener('focus', onVis)

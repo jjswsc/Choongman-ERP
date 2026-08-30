@@ -15,6 +15,8 @@ import {
   deletePosPaymentMethodItem,
   getPosDeliveryApps,
   savePosDeliveryApps,
+  getPosCryptoPaymentSettings,
+  savePosCryptoPaymentSettings,
   type PosPrinterSettings,
 } from "@/lib/api-client"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
@@ -194,6 +196,21 @@ export async function runPosScreenConfigCopyPayment(
       await appAlert(translateApiMessage(res.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
       return false
     }
+  }
+  try {
+    const [sourceCrypto, targetCrypto] = await Promise.all([
+      getPosCryptoPaymentSettings(s),
+      getPosCryptoPaymentSettings(t),
+    ])
+    await savePosCryptoPaymentSettings({
+      storeCode: t,
+      enabled: targetCrypto.enabled === true,
+      wallets: sourceCrypto.wallets,
+      assetsEnabled: sourceCrypto.assetsEnabled,
+      rateSource: sourceCrypto.rateSource === "coingecko" ? "coingecko" : "manual",
+    })
+  } catch {
+    /* 지갑 복사는 부가 — 수기 수단 복사는 이미 성공 */
   }
   await appAlert(tr("posScreenConfigPaymentCopyDone", "결제 수단(수기입력) 목록을 복사했습니다."))
   return true

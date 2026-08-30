@@ -69,6 +69,7 @@ export type PosSalesAnalyticsAggRow = {
   qr_sales?: number | string | null
   other_sales?: number | string | null
   delivery_app_sales?: number | string | null
+  crypto_sales?: number | string | null
 }
 
 function num(v: unknown): number {
@@ -225,6 +226,7 @@ export function mapAnalyticsAggRowToPeriodRow(r: PosSalesAnalyticsAggRow): Perio
     qrSales: num(r.qr_sales),
     otherSales: num(r.other_sales),
     deliveryAppSales: num(r.delivery_app_sales),
+    cryptoSales: num(r.crypto_sales),
   }
 }
 

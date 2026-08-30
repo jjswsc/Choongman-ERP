@@ -9,6 +9,18 @@ import {
 const emptySnap = (key: string): SalesManagementViewCache =>
   ({
     analyticsParamKey: key,
+    startStr: "2026-07-01",
+    endStr: "2026-07-31",
+    selectedStores: ["S1"],
+    periodGroup: "month",
+    orderTypesKey: "",
+    dowsKey: "",
+    compareStores: false,
+    menuSearch: "",
+    menuSearchAnd: false,
+    activeSubMenuId: "sales-compare",
+    selectedTopicBySubMenu: { "sales-compare": "compare-store-summary" },
+    forecastHorizon: "month",
     periodData: [{ label: "2026-07", key: "2026-07", sales: 100 }],
     periodSplitSeries: null,
     periodTruncated: false,
@@ -53,9 +65,23 @@ const emptySnap = (key: string): SalesManagementViewCache =>
 describe("sales-management-view-cache", () => {
   beforeEach(() => clearSalesManagementViewCache())
 
-  it("returns snapshot only when analytics key matches", () => {
+  it("returns snapshot only when analytics key matches if a key is given", () => {
     saveSalesManagementViewCache(emptySnap("k1"))
     expect(readSalesManagementViewCache("k2")).toBeNull()
     expect(readSalesManagementViewCache("k1")?.periodData[0]?.sales).toBe(100)
+  })
+
+  it("returns last query without a key so remount can restore filters too", () => {
+    saveSalesManagementViewCache(emptySnap("k1"))
+    const snap = readSalesManagementViewCache()
+    expect(snap?.startStr).toBe("2026-07-01")
+    expect(snap?.selectedStores).toEqual(["S1"])
+    expect(snap?.activeSubMenuId).toBe("sales-compare")
+    expect(snap?.analyticsParamKey).toBe("k1")
+  })
+
+  it("does not save a snapshot without analyticsParamKey", () => {
+    saveSalesManagementViewCache({ ...emptySnap(""), analyticsParamKey: "" })
+    expect(readSalesManagementViewCache()).toBeNull()
   })
 })

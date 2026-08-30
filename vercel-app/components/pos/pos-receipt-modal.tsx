@@ -105,6 +105,8 @@ export type ReceiptModalData = {
   paymentOther?: number
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
+  paymentCrypto?: number
+  paymentCryptoMeta?: Record<string, unknown> | null
   deliveryPaymentChannel?: string | null
   /** 주문의 `delivery_app_code` — 영수증 배달 채널 표시 시 결제 필드보다 우선 */
   deliveryAppCode?: string | null

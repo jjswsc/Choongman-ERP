@@ -12,7 +12,10 @@ export type PosCustomerDisplayPayload = {
   title?: string
   message?: string
   qrPayload?: string
-  qrType?: "THAI_QR" | "CREDIT_CARD"
+  qrType?: "THAI_QR" | "CREDIT_CARD" | "CRYPTO"
+  cryptoNetwork?: string
+  cryptoAmount?: number
+  cryptoAsset?: string
   /** 결제 모달에서 입력 중인 수단별 금액(고객 모니터 표시용) */
   paymentLines?: Array<{ label: string; amount: number }>
   /** 매장 영수증 로고 등 — 주문/결제 화면 상단 */

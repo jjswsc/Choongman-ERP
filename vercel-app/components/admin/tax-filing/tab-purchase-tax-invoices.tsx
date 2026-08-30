@@ -89,7 +89,6 @@ import {
 import {
   isPurchaseTaxScanRunning,
   startPurchaseTaxScanKeepAlive,
-  subscribePurchaseTaxScanForeground,
 } from "@/lib/purchase-tax-invoice-scan-keepalive"
 import {
   clearPurchaseTaxScanFiles,
@@ -346,13 +345,6 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   }, [reviewRows.length])
 
   React.useEffect(() => {
-    return subscribePurchaseTaxScanForeground(() => {
-      if (!isPurchaseTaxScanRunning()) return
-      void recycleSharedTaxInvoiceOcrSession()
-    })
-  }, [])
-
-  React.useEffect(() => {
     if (!canWrite) return
     let cancelled = false
     const tryResume = async () => {
@@ -466,6 +458,8 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       .filter(({ r }) => purchaseTaxReviewIsProblem(r, filingYearMonth))
   }, [reviewRows, reviewFilter, filingYearMonth])
 
+  const flagsFor = (r: ReviewRow) => purchaseTaxReviewFlags(r, filingYearMonth)
+
   const flagLabel = (flag: PurchaseTaxReviewFlag) =>
     flag === "vat"
       ? t("ptiReviewVatWarn")
@@ -474,6 +468,48 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         : flag === "amount"
           ? t("ptiReviewAmountWarn")
           : t("ptiReviewTinWarn")
+
+  const flagShort = (flag: PurchaseTaxReviewFlag) =>
+    flag === "vat"
+      ? t("ptiReviewVatShort")
+      : flag === "month"
+        ? t("ptiReviewMonthShort")
+        : flag === "amount"
+          ? t("ptiReviewAmountShort")
+          : t("ptiReviewTinShort")
+
+  const skipReasonShort = (reason: string) => {
+    const key = String(reason || "").trim()
+    if (key === "ptiPdfEmptyPage") return t("ptiSkipEmptyShort")
+    if (key === "ptiPdfSkipCopy") return t("ptiSkipCopyShort")
+    if (key === "ptiDupError") return t("ptiSkipDupShort")
+    return t("ptiSkip")
+  }
+
+  const reviewNoteChips = (r: ReviewRow) => {
+    if (r.skip) {
+      const full = ptiSkipReasonText(r.skipReason || "", t)
+      return (
+        <span className="whitespace-nowrap rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground" title={full}>
+          {skipReasonShort(r.skipReason || "")}
+        </span>
+      )
+    }
+    if (!flagsFor(r).length) return null
+    return (
+      <span className="flex flex-nowrap items-center gap-0.5">
+        {flagsFor(r).map((flag) => (
+          <span
+            key={flag}
+            title={flagLabel(flag)}
+            className="whitespace-nowrap rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+          >
+            {flagShort(flag)}
+          </span>
+        ))}
+      </span>
+    )
+  }
 
   const pp30Compare = React.useMemo(
     () =>
@@ -1201,7 +1237,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           </>
         ) : null}
         {pdfBusy ? (
-          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span>{tr(t, pdfBusy.key, pdfBusy.vars)}</span>
             {pdfProgress ? (
               <span className="inline-block h-1.5 w-28 overflow-hidden rounded bg-muted">
@@ -1212,7 +1248,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               </span>
             ) : null}
             <span className="max-w-[14rem] text-[11px] leading-snug text-muted-foreground">{t("ptiScanBgHint")}</span>
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={cancelScan}>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              className="h-8 shrink-0 px-3 font-semibold shadow-sm"
+              onClick={cancelScan}
+            >
               {t("ptiPdfCancel")}
             </Button>
           </span>
@@ -1333,7 +1375,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                   <th className="p-1 w-[3.5rem]" title={t("ptiBranchBlankHq")}>{t("ptiColBranch")}</th>
                   <th className="p-1 w-[6rem] text-right">{t("ptiColNet")}</th>
                   <th className="p-1 w-[5.5rem] text-right">{t("ptiColVat")}</th>
-                  <th className="p-1">{t("ptiSkip")}</th>
+                  <th className="p-1 min-w-[5.5rem] whitespace-nowrap" title={t("ptiSkipHint")}>
+                    {t("ptiSkip")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1376,18 +1420,14 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                     <td className="p-1">
                       <Input className={reviewWarnClass("h-7 w-[5.25rem] text-right", flags.includes("vat"))} value={r.vatAmount} onChange={(e) => patchReview(idx, { vatAmount: e.target.value })} />
                     </td>
-                    <td className="p-1 text-[10px]">
-                      <label className="flex items-start gap-1">
+                    <td className="p-1 align-middle">
+                      <label className="flex items-center gap-1 whitespace-nowrap">
                         <input
                           type="checkbox"
-                          className="mt-0.5"
                           checked={!!r.skip}
                           onChange={(e) => patchReview(idx, { skip: e.target.checked })}
                         />
-                        <span>
-                          {r.skip ? ptiSkipReasonText(r.skipReason || "", t) : ""}
-                          {!r.skip && flags.length ? flags.map(flagLabel).join(" · ") : ""}
-                        </span>
+                        {reviewNoteChips(r)}
                       </label>
                     </td>
                   </tr>
@@ -1510,7 +1550,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                       <Input className={reviewWarnClass("h-7", flags.includes("vat"))} value={r.vatAmount} onChange={(e) => patchReview(idx, { vatAmount: e.target.value })} />
                     </div>
                   </div>
-                  {r.skip ? <div className="text-muted-foreground">{ptiSkipReasonText(r.skipReason || "", t)}</div> : flags.length ? <div className="text-amber-700 dark:text-amber-400">{flags.map(flagLabel).join(" · ")}</div> : null}
+                  {r.skip || flags.length ? <div>{reviewNoteChips(r)}</div> : null}
                 </div>
                 )
               })}

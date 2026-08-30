@@ -8,6 +8,7 @@ export type PosSalesPaymentTenderFields = {
   qrSales?: number
   otherSales?: number
   deliveryAppSales?: number
+  cryptoSales?: number
 }
 
 export type PosSalesPaymentTenderGapRow = PosSalesPaymentTenderFields & {
@@ -34,7 +35,8 @@ export function posSalesPeriodPaymentTenderSum(row: PosSalesPaymentTenderFields)
     (Number(row.creditSales) || 0) +
     (Number(row.qrSales) || 0) +
     (Number(row.otherSales) || 0) +
-    (Number(row.deliveryAppSales) || 0)
+    (Number(row.deliveryAppSales) || 0) +
+    (Number(row.cryptoSales) || 0)
   )
 }
 

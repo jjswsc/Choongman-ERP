@@ -261,6 +261,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [loading, setLoading] = React.useState(false)
   /** 마지막으로「조회」로 성공 적용된 필터 키(자동 로드 없음; 키가 바뀌면 결과 비움) */
   const [fetchedAnalyticsKey, setFetchedAnalyticsKey] = React.useState("")
+  const fetchedAnalyticsKeyRef = React.useRef(fetchedAnalyticsKey)
+  fetchedAnalyticsKeyRef.current = fetchedAnalyticsKey
   const [periodGroup, setPeriodGroup] = React.useState<PeriodGroupValue>(defaultLanding.periodGroup)
   const isLongRangeSalesQuery = React.useMemo(
     () => isSalesLongRangeQuery(startStr, endStr),
@@ -995,11 +997,25 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const showSalesResults = fetchedAnalyticsKey !== "" && fetchedAnalyticsKey === analyticsParamKey
 
   const viewCacheRestoreKeyRef = React.useRef<string | null>(null)
+  const viewCacheRestoredRef = React.useRef(false)
+  const skipFilterClearOnceRef = React.useRef(false)
 
   React.useEffect(() => {
     if (!fetchedAnalyticsKey || fetchedAnalyticsKey !== analyticsParamKey) return
     saveSalesManagementViewCache({
       analyticsParamKey: fetchedAnalyticsKey,
+      startStr,
+      endStr,
+      selectedStores,
+      periodGroup,
+      orderTypesKey,
+      dowsKey,
+      compareStores,
+      menuSearch,
+      menuSearchAnd,
+      activeSubMenuId,
+      selectedTopicBySubMenu,
+      forecastHorizon,
       periodData,
       periodSplitSeries,
       periodTruncated,
@@ -1024,6 +1040,18 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [
     fetchedAnalyticsKey,
     analyticsParamKey,
+    startStr,
+    endStr,
+    selectedStores,
+    periodGroup,
+    orderTypesKey,
+    dowsKey,
+    compareStores,
+    menuSearch,
+    menuSearchAnd,
+    activeSubMenuId,
+    selectedTopicBySubMenu,
+    forecastHorizon,
     periodData,
     periodSplitSeries,
     periodTruncated,
@@ -1054,7 +1082,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         "매장을 하나 이상 선택한 뒤「조회」를 눌러 주세요. 「전체 선택」으로 여러 매장·전체를 볼 수 있습니다."
       )
     }
-    if (loading) {
+    if (loading && !showSalesResults) {
       return tr("salesQueryLoading", "집계 조회 중… 잠시만 기다려 주세요.")
     }
     if (!showSalesResults) {
@@ -1200,6 +1228,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   React.useEffect(() => {
     // keep-alive 숨김 중 dataFilterKey가 다른 탭 URL 때문에 바뀌어도 조회 결과를 지우지 않음.
     // pageActive를 deps에 넣으면 탭 복귀 시 effect가 재실행되며 결과가 초기화되므로 ref로만 가드한다.
+    if (skipFilterClearOnceRef.current) {
+      skipFilterClearOnceRef.current = false
+      return
+    }
     if (!pageActiveRef.current) return
     setPeriodData([])
     setPeriodSplitSeries(null)
@@ -1231,14 +1263,63 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     viewCacheRestoreKeyRef.current = null
   }, [dataFilterKey, pageActiveRef])
 
-  // clear effect 이후에 복구 — 같은 틱에서 초기화 후 스냅샷으로 다시 채움
-  React.useEffect(() => {
-    if (fetchedAnalyticsKey) return
-    if (!analyticsParamKey || isHoursPanel) return
-    if (viewCacheRestoreKeyRef.current === analyticsParamKey) return
-    const snap = readSalesManagementViewCache(analyticsParamKey)
-    if (!snap) return
-    viewCacheRestoreKeyRef.current = analyticsParamKey
+  const validTopicByMenu = React.useMemo(
+    () =>
+      Object.fromEntries(
+        SALES_IA.map((menu) => [menu.id, new Set(menu.topics.map((topic) => topic.id))])
+      ) as Record<string, Set<string>>,
+    []
+  )
+
+  /** 사용자 선택 직후 URL 반영 전에 Effect 1이 state를 덮어쓰지 않도록 (경쟁 상태 방지) */
+  const userSelectedRef = React.useRef<{
+    subMenu?: string
+    topic?: string
+    storesKey?: string
+    periodGroup?: string
+    dateRange?: string
+    orderTypesKey?: string
+    dowsKey?: string
+    compare?: boolean
+  }>({})
+
+  React.useLayoutEffect(() => {
+    if (viewCacheRestoredRef.current) return
+    if (!pageActiveRef.current) return
+    viewCacheRestoredRef.current = true
+    const snap = readSalesManagementViewCache()
+    if (!snap?.analyticsParamKey) return
+    skipFilterClearOnceRef.current = true
+    defaultStoresHydratedRef.current = true
+    skipDefaultStoreAutoSelectRef.current = true
+    if (snap.startStr) setStartStr(snap.startStr)
+    if (snap.endStr) setEndStr(snap.endStr)
+    if (Array.isArray(snap.selectedStores)) setSelectedStores(snap.selectedStores)
+    if (snap.periodGroup && PERIOD_GROUP_VALUES.has(snap.periodGroup)) {
+      setPeriodGroup(snap.periodGroup)
+    }
+    if (typeof snap.orderTypesKey === "string") setOrderTypesKey(snap.orderTypesKey)
+    if (typeof snap.dowsKey === "string") setDowsKey(snap.dowsKey)
+    setCompareStores(Boolean(snap.compareStores))
+    if (typeof snap.menuSearch === "string") setMenuSearch(snap.menuSearch)
+    setMenuSearchAnd(Boolean(snap.menuSearchAnd))
+    if (snap.activeSubMenuId && SALES_IA.some((m) => m.id === snap.activeSubMenuId)) {
+      setActiveSubMenuId(snap.activeSubMenuId)
+    }
+    if (snap.selectedTopicBySubMenu && typeof snap.selectedTopicBySubMenu === "object") {
+      setSelectedTopicBySubMenu((prev) => ({ ...prev, ...snap.selectedTopicBySubMenu }))
+    }
+    if (snap.forecastHorizon) setForecastHorizon(snap.forecastHorizon)
+    userSelectedRef.current = {
+      subMenu: snap.activeSubMenuId,
+      topic: snap.selectedTopicBySubMenu?.[snap.activeSubMenuId],
+      storesKey: (snap.selectedStores || []).join(","),
+      periodGroup: snap.periodGroup,
+      dateRange: `${snap.startStr || ""}~${snap.endStr || ""}`,
+      orderTypesKey: snap.orderTypesKey,
+      dowsKey: snap.dowsKey,
+      compare: Boolean(snap.compareStores),
+    }
     setPeriodData(snap.periodData)
     setPeriodSplitSeries(snap.periodSplitSeries)
     setPeriodTruncated(snap.periodTruncated)
@@ -1260,27 +1341,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setForecastActualRows(snap.forecastActualRows)
     setSummaryCards(snap.summaryCards)
     setFetchedAnalyticsKey(snap.analyticsParamKey)
-  }, [analyticsParamKey, fetchedAnalyticsKey, isHoursPanel])
-
-  const validTopicByMenu = React.useMemo(
-    () =>
-      Object.fromEntries(
-        SALES_IA.map((menu) => [menu.id, new Set(menu.topics.map((topic) => topic.id))])
-      ) as Record<string, Set<string>>,
-    []
-  )
-
-  /** 사용자 선택 직후 URL 반영 전에 Effect 1이 state를 덮어쓰지 않도록 (경쟁 상태 방지) */
-  const userSelectedRef = React.useRef<{
-    subMenu?: string
-    topic?: string
-    storesKey?: string
-    periodGroup?: string
-    dateRange?: string
-    orderTypesKey?: string
-    dowsKey?: string
-    compare?: boolean
-  }>({})
+    viewCacheRestoreKeyRef.current = snap.analyticsParamKey
+  }, [pageActive, pageActiveRef])
 
   const applyStoreSelection = React.useCallback(
     (next: string[], meta?: { clearedAll?: boolean }) => {
@@ -2150,6 +2212,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const qTopic = searchParams.get("topic")
     const qGroup = searchParams.get("group")
     if (qMenu || qTopic || qGroup) return
+    // 탭 복귀 시 URL이 pathname만 있어도 조회 조건·결과를 기본 랜딩으로 덮지 않음
+    if (fetchedAnalyticsKeyRef.current) return
+    if (readSalesManagementViewCache()?.analyticsParamKey) return
     if (activeSubMenuId !== defaultLanding.menuId) {
       userSelectedRef.current.subMenu = defaultLanding.menuId
       setActiveSubMenuId(defaultLanding.menuId)
@@ -2487,7 +2552,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   /** API 응답 race 방지: 최신 요청 ID와 일치할 때만 setState */
   const loadIdRef = React.useRef(0)
 
-  const loadAllAnalytics = React.useCallback(() => {
+  const loadAllAnalytics = React.useCallback((opts?: { silent?: boolean }) => {
     if (isHoursPanel) return
     if (!startStr || !endStr) return
     if (canMultiStorePicker && selectedStores.length === 0) return
@@ -2565,7 +2630,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gForecastLookback = guarded(setForecastLookbackRows)
     const gForecastActual = guarded(setForecastActualRows)
     const gSummary = guarded(setSummaryCards)
-    setLoading(true)
+    if (!opts?.silent) setLoading(true)
     if (isLongRangeSalesQuery && isSalesHeavyTopicSkippedOnLongRange(selectedView)) {
       setPeriodSplitSeries(null)
       setPeriodData([])
@@ -3018,7 +3083,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   useErpRefetchOnActivate(() => {
     if (!showSalesResults) return
-    loadAllAnalytics()
+    loadAllAnalytics({ silent: true })
   })
 
   const online = useOnlineStatus()
@@ -3177,7 +3242,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </div>
             <Button
               size="sm"
-              onClick={loadAllAnalytics}
+              onClick={() => loadAllAnalytics()}
               disabled={!canQuerySales || loading}
               title={
                 canMultiStorePicker && selectedStores.length === 0

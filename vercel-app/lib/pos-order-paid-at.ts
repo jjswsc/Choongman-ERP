@@ -15,6 +15,7 @@ type PosOrderPaidAtSource = Pick<
   | 'paymentQr'
   | 'paymentOther'
   | 'paymentDeliveryApp'
+  | 'paymentCrypto'
 >
 
 export function posOrderPaymentSumFromAmounts(row: {
@@ -23,13 +24,15 @@ export function posOrderPaymentSumFromAmounts(row: {
   paymentQr?: number
   paymentOther?: number
   paymentDeliveryApp?: number
+  paymentCrypto?: number
 }): number {
   return (
     Math.max(0, Number(row.paymentCash ?? 0)) +
     Math.max(0, Number(row.paymentCard ?? 0)) +
     Math.max(0, Number(row.paymentQr ?? 0)) +
     Math.max(0, Number(row.paymentOther ?? 0)) +
-    Math.max(0, Number(row.paymentDeliveryApp ?? 0))
+    Math.max(0, Number(row.paymentDeliveryApp ?? 0)) +
+    Math.max(0, Number(row.paymentCrypto ?? 0))
   )
 }
 

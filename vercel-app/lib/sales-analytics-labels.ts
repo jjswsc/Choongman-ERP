@@ -117,6 +117,7 @@ export function translateCreditPaymentChannelKey(
     qr: "salesPayQr",
     other: "salesPayOther",
     delivery_app: "salesPayDeliveryApp",
+    crypto: "posPaymentCrypto",
     delivery_grab: "posDeliveryAppGrab",
     delivery_lineman: "posDeliveryAppLineMan",
     delivery_shopee: "posDeliveryAppShopee",

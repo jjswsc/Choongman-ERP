@@ -1,7 +1,7 @@
 import type { CartPanelPaymentPayload } from '@/components/pos/cart-panel-types'
 import type { PosPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
 
-export type CartPanelPaymentMethodTab = 'cash' | 'card' | 'qr' | 'delivery_app' | 'other'
+export type CartPanelPaymentMethodTab = 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'crypto'
 
 export function paymentTabTourTarget(tab: CartPanelPaymentMethodTab): string {
   switch (tab) {
@@ -15,6 +15,8 @@ export function paymentTabTourTarget(tab: CartPanelPaymentMethodTab): string {
       return 'pos-tour-payment-tab-delivery-app'
     case 'other':
       return 'pos-tour-payment-tab-other'
+    case 'crypto':
+      return 'pos-tour-payment-tab-crypto'
     default:
       return 'pos-tour-payment-tab-cash'
   }
@@ -26,7 +28,8 @@ export function sumCartPanelPaymentSnapshot(snap: CartPanelPaymentPayload): numb
     (snap.paymentCard || 0) +
     (snap.paymentQr || 0) +
     (snap.paymentOther || 0) +
-    (snap.paymentDeliveryApp ?? 0)
+    (snap.paymentDeliveryApp ?? 0) +
+    (snap.paymentCrypto ?? 0)
   )
 }
 
@@ -43,7 +46,7 @@ export function capCartPanelPaymentSnapshot(
   const channels: Array<{
     key: keyof Pick<
       CartPanelPaymentPayload,
-      'paymentCash' | 'paymentCard' | 'paymentQr' | 'paymentOther' | 'paymentDeliveryApp'
+      'paymentCash' | 'paymentCard' | 'paymentQr' | 'paymentOther' | 'paymentDeliveryApp' | 'paymentCrypto'
     >
   }> = [
     { key: 'paymentCash' },
@@ -51,6 +54,7 @@ export function capCartPanelPaymentSnapshot(
     { key: 'paymentQr' },
     { key: 'paymentOther' },
     { key: 'paymentDeliveryApp' },
+    { key: 'paymentCrypto' },
   ]
   let remaining = maxCap
   const out: CartPanelPaymentPayload = {
@@ -60,6 +64,7 @@ export function capCartPanelPaymentSnapshot(
     paymentQr: 0,
     paymentOther: 0,
     paymentDeliveryApp: 0,
+    paymentCrypto: 0,
     paymentCashTendered: 0,
   }
   for (const { key } of channels) {
@@ -104,6 +109,7 @@ export function mergeCartPanelPaymentSnapshots(snaps: CartPanelPaymentPayload[])
     paymentQrType: 'THAI_QR',
     paymentOther: 0,
     paymentDeliveryApp: 0,
+    paymentCrypto: 0,
     deliveryPaymentChannel: null,
     paymentCashTendered: 0,
   }
@@ -114,6 +120,8 @@ export function mergeCartPanelPaymentSnapshots(snaps: CartPanelPaymentPayload[])
     if (snap.paymentQrType) merged.paymentQrType = snap.paymentQrType
     merged.paymentOther += snap.paymentOther || 0
     merged.paymentDeliveryApp = (merged.paymentDeliveryApp || 0) + (snap.paymentDeliveryApp ?? 0)
+    merged.paymentCrypto = (merged.paymentCrypto || 0) + (snap.paymentCrypto ?? 0)
+    if (snap.paymentCryptoMeta) merged.paymentCryptoMeta = snap.paymentCryptoMeta
     if (snap.deliveryPaymentChannel) merged.deliveryPaymentChannel = snap.deliveryPaymentChannel
     merged.paymentCashTendered = (merged.paymentCashTendered || 0) + (snap.paymentCashTendered || 0)
   }

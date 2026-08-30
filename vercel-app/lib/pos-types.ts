@@ -58,6 +58,8 @@ export interface Order {
   paymentQr?: number
   paymentOther?: number
   paymentDeliveryApp?: number
+  paymentCrypto?: number
+  paymentCryptoMeta?: Record<string, unknown> | null
   deliveryPaymentChannel?: string
   memberId?: number
   memberNo?: string

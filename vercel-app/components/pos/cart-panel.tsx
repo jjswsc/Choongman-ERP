@@ -57,6 +57,7 @@ import {
   LayoutGrid,
   ArrowLeft,
   Bike,
+  Bitcoin,
   Package,
   CircleDollarSign,
   Sparkles,
@@ -216,6 +217,12 @@ import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatMemberPortalReceiptMemo } from '@/lib/pos-member-portal-takeout-label'
 import { searchCartPanelTaxInvoiceProfile } from '@/lib/cart-panel-tax-invoice-search'
 import { CartPanelTaxInvoiceSection } from '@/components/pos/cart-panel-tax-invoice-section'
+import { PosCryptoPayPanel, type CryptoDepositDisplay } from '@/components/pos/pos-crypto-pay-panel'
+import {
+  isPosCryptoPaymentTabVisible,
+  type PosCryptoPaymentSettings,
+} from '@/lib/payments/crypto-assets'
+import { cryptoAttemptToOrderMeta } from '@/lib/payments/crypto-attempt-meta'
 import {
   normalizeExistingPosOrderId,
   resetCheckoutDiscountUiState,
@@ -253,6 +260,8 @@ interface CartPanelProps {
   onBackToTableSelection?: () => void
   /** 매장 POS 설정 — Thai QR 기본 탭 (Windows 하이브리드) */
   defaultQrPayType?: 'THAI_QR' | 'EDC'
+  cryptoPaymentSettings?: PosCryptoPaymentSettings | null
+  onCryptoDepositDisplayChange?: (payload: CryptoDepositDisplay | null) => void
   /** 부모에서 POS 저장 API 처리 중(중복 탭·이중 요청 방지) */
   posBackendActionInFlight?: boolean
   /** 홀 주문 전송 (주방 전달) - 부모에서 savePosOrder 호출 후 pendingOrderId 전달 */
@@ -450,6 +459,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   dineInMultiFloorLayout = false,
   onBackToTableSelection,
   defaultQrPayType,
+  cryptoPaymentSettings = null,
+  onCryptoDepositDisplayChange,
   posBackendActionInFlight = false,
   onOrderSubmit,
   onTakeoutOrderComplete,
@@ -817,6 +828,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [defaultQrPayType, currentStoreId])
   const [payLinePay, setPayLinePay] = useState('')
   const [payShopeePay, setPayShopeePay] = useState('')
+  const [payCrypto, setPayCrypto] = useState('')
+  const [cryptoMeta, setCryptoMeta] = useState<Record<string, unknown> | null>(null)
+  const cryptoTabVisible = isPosCryptoPaymentTabVisible(cryptoPaymentSettings || undefined)
   const [payOther, setPayOther] = useState('')
   const [payDeliveryApp, setPayDeliveryApp] = useState('')
   const [deliveryPaymentChannel, setDeliveryPaymentChannel] = useState<'grab' | 'lineman' | 'shopee'>('grab')
@@ -1468,7 +1482,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (parseBahtAmount(payCard) || 0) +
     (parseBahtAmount(payPromptPay) || 0) +
     (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
-    (parseBahtAmount(payDeliveryApp) || 0)
+    (parseBahtAmount(payDeliveryApp) || 0) +
+    (parseBahtAmount(payCrypto) || 0)
   const SPLIT_AMOUNT_EPS = 0.02
   const paymentTotalsReconcile = (entered: number, due: number) =>
     Math.abs(round2(entered) - round2(due)) <= SPLIT_AMOUNT_EPS ||
@@ -1491,7 +1506,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (parseBahtAmount(payCard) || 0) +
     (parseBahtAmount(payPromptPay) || 0) +
     (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
-    (parseBahtAmount(payDeliveryApp) || 0)
+    (parseBahtAmount(payDeliveryApp) || 0) +
+    (parseBahtAmount(payCrypto) || 0)
+  const cryptoPaymentConfirmed =
+    (parseBahtAmount(payCrypto) || 0) <= 0.005 || Boolean(cryptoMeta)
   const cashRequiredAmount = Math.max(0, total - nonCashPaymentSum)
   const cashTenderedNum = parseBahtAmount(cashTendered)
   const _cashChangeAmount = Math.max(0, cashTenderedNum - cashRequiredAmount)
@@ -1578,7 +1596,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       (parseBahtAmount(payCard) || 0) +
       (parseBahtAmount(payPromptPay) || 0) +
       (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
-      (parseBahtAmount(payDeliveryApp) || 0)
+      (parseBahtAmount(payDeliveryApp) || 0) +
+      (parseBahtAmount(payCrypto) || 0)
     const cashOnlyPay = nonCashPay <= 0.005 && cashPay > 0.005
     const effectiveTendered = tenderedRaw > 0.005 ? tenderedRaw : cashOnlyPay ? cashPay : 0
     return {
@@ -1590,6 +1609,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       paymentOther: paymentOtherSum,
       ...(ob ? { paymentOtherBreakdown: ob } : {}),
       ...deliveryPayPart,
+      paymentCrypto: parseBahtAmount(payCrypto) || 0,
+      ...(cryptoMeta ? { paymentCryptoMeta: cryptoMeta } : {}),
       ...(effectiveTendered > 0.005 ? { paymentCashTendered: effectiveTendered } : {}),
     }
   }, [
@@ -1608,6 +1629,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     legacyWalletPaymentSum,
     buildPaymentOtherBreakdownSnapshot,
     cashTendered,
+    payCrypto,
+    cryptoMeta,
   ])
 
   const paymentSnapshotHasAmount = (snap: CartPanelPaymentPayload) => {
@@ -2007,12 +2030,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return splitSettledPersonCount >= count
   }, [showSplit, splitCount, splitSettledPersonCount])
   const splitReadyForComplete = useMemo(() => {
-    if (!showSplit) return paymentSumMatch
+    if (!showSplit) return paymentSumMatch && cryptoPaymentConfirmed
     if (splitMode === 'menu' && menuSplitUnassignedQty > 0.009) return false
     const reconciled =
       paymentSumMatch ||
       (splitAllGuestsSettled && paymentTotalsReconcile(splitCapturedPaymentSum, total))
     if (!reconciled) return false
+    if (!cryptoPaymentConfirmed) return false
     if (splitOpenRemainders.length === 0) return true
     if (splitOpenRemainders.length === 1 && paymentSum >= splitOpenRemainders[0] - SPLIT_AMOUNT_EPS) {
       return true
@@ -2027,6 +2051,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     paymentSum,
     splitAllGuestsSettled,
     splitCapturedPaymentSum,
+    cryptoPaymentConfirmed,
     total,
   ])
   /** 전원 확정·합계 일치 시에만 일부 결제 비활성(마지막 1명 입력만 된 경우는 일부 결제·결제 완료 둘 다 허용) */
@@ -2040,6 +2065,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     { id: 'qr', label: tr('posPaymentQrCode', 'QR Code'), icon: QrCode },
     { id: 'delivery_app', label: t('posPaymentDeliveryApp') || '배달앱', icon: Bike },
     { id: 'other', label: t('posPaymentOther') || '기타', icon: Wallet },
+    ...(cryptoTabVisible
+      ? [{ id: 'crypto' as const, label: t('posPaymentCrypto') || '암호화폐', icon: Bitcoin }]
+      : []),
   ]
   const isMemberOrder = selectedMemberId !== ''
   const selectedMemberDetail = memberMap[selectedMemberId]
@@ -2457,6 +2485,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPayShopeePay('0')
     setPayOther('0')
     setPayDeliveryApp('0')
+    setPayCrypto('')
+    setCryptoMeta(null)
     const lines = adminPaymentLinesRef.current
     setPayAdminLineAmounts(Object.fromEntries(lines.map((i) => [i.id, '0'])))
   }
@@ -2533,7 +2563,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setTaxAddress('')
   }
 
-  const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'unionpay' | 'linepay' | 'shopeepay') => {
+  const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'crypto' | 'truemoney' | 'wechat' | 'alipay' | 'unionpay' | 'linepay' | 'shopeepay') => {
     const amount = Math.max(0, round2(total))
     resetPaymentInputs()
     const lines = adminPaymentLinesRef.current
@@ -2571,6 +2601,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       )
     }
     if (target === 'other') setPayOther(formatBahtAmountForField(amount))
+    if (target === 'crypto') return
     if (target === 'truemoney') setPayTrueMoney(formatBahtAmountForField(amount))
     if (target === 'wechat') setPayWeChat(formatBahtAmountForField(amount))
     if (target === 'alipay') setPayAlipay(formatBahtAmountForField(amount))
@@ -2591,6 +2622,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     | 'unionpay'
     | 'linepay'
     | 'shopeepay'
+    | 'crypto'
 
   const isWalletMoveTarget = (target: MoveTarget) =>
     target === 'other' ||
@@ -2664,6 +2696,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (target === 'unionpay') { setShowOtherPayments(true); setPayUnionPay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
     if (target === 'linepay') { setShowOtherPayments(true); setPayLinePay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
     if (target === 'shopeepay') { setShowOtherPayments(true); setPayShopeePay((p) => String(Math.max(0, (parseFloat(p || '0') || 0) + delta))) }
+    if (target === 'crypto') return
   }
 
   const activePaymentTabToMoveTarget = (tab: PaymentMethodTab): MoveTarget =>
@@ -3594,6 +3627,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       splitDraftAssignedRef.current = null
     }
     const resolvedPayment = showSplit ? buildOrderPaymentFromSplit() : buildPaymentSnapshot()
+    if ((resolvedPayment.paymentCrypto || 0) > 0.005 && !resolvedPayment.paymentCryptoMeta) {
+      await appAlert(t('posCryptoNeedConfirm') || '암호화폐는 입금 확인 후에만 결제 완료할 수 있습니다.')
+      return
+    }
     const finalPaySum = round2(sumCartPanelPaymentSnapshot(resolvedPayment))
     if (total > 0.005 && !paymentTotalsReconcile(finalPaySum, total)) {
       scrollToPaymentMethods()
@@ -6112,7 +6149,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <div ref={paymentMethodSectionRef} className="scroll-mt-3 space-y-2" data-pos-payment-method-section>
               <p className="text-sm font-semibold">{tr('posPaymentMethodSection', '결제 수단')}</p>
             {/* 결제 수단 탭 */}
-            <div className="grid grid-cols-5 gap-1 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-inner" data-tour="pos-tour-payment-tabs">
+            <div className={cn(
+              'gap-1 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-inner grid',
+              cryptoTabVisible ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-5'
+            )} data-tour="pos-tour-payment-tabs">
               {paymentTabs.map((tab) => {
                 const Icon = tab.icon
                 return (
@@ -6140,6 +6180,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           setShowOtherPayments(true)
                           moveAllAmountTo('other')
                         }
+                        if (tab.id === 'crypto') moveAllAmountTo('crypto')
                       }
                     }}
                     data-tour={paymentTabTourTarget(tab.id)}
@@ -6168,7 +6209,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 { key: 'card', value: payCard, set: setPayCard, label: t('posPaymentCard') || '카드', icon: CreditCard },
                 { key: 'qr', value: payPromptPay, set: setPayPromptPay, label: tr('posPaymentQrCode', 'QR Code'), icon: QrCode },
               ]
-                .filter(({ key }) => (activePaymentTab === 'other' || activePaymentTab === 'delivery_app' ? false : key === activePaymentTab))
+                .filter(({ key }) =>
+                  activePaymentTab === 'other' || activePaymentTab === 'delivery_app' || activePaymentTab === 'crypto'
+                    ? false
+                    : key === activePaymentTab
+                )
                 .map(({ key, value, set, label, icon: Icon }) => (
                 <div
                   key={key}
@@ -6338,6 +6383,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   )}
                 </div>
               ))}
+
+              {activePaymentTab === 'crypto' && cryptoTabVisible && cryptoPaymentSettings && (
+                <PosCryptoPayPanel
+                  storeCode={currentStoreId}
+                  settings={cryptoPaymentSettings}
+                  amountThb={parseBahtAmount(payCrypto) || total}
+                  staffName=""
+                  enabled
+                  t={(key, fallback) => tr(key, fallback || key)}
+                  onConfirmed={(attempt) => {
+                    setPayCrypto(formatBahtAmountForField(attempt.amountThb))
+                    setCryptoMeta(cryptoAttemptToOrderMeta(attempt))
+                  }}
+                  onDisplayChange={onCryptoDepositDisplayChange}
+                />
+              )}
 
               {activePaymentTab === 'delivery_app' && (
                 <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/15">

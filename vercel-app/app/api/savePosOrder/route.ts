@@ -253,6 +253,13 @@ export async function POST(req: NextRequest) {
     )
     let paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
     const paymentDeliveryApp = Math.max(0, Number(body.paymentDeliveryApp ?? body.payment_delivery_app ?? 0))
+    let paymentCrypto = Math.max(0, Number(body.paymentCrypto ?? body.payment_crypto ?? 0))
+    const paymentCryptoMeta =
+      body.paymentCryptoMeta && typeof body.paymentCryptoMeta === 'object'
+        ? body.paymentCryptoMeta
+        : body.payment_crypto_meta && typeof body.payment_crypto_meta === 'object'
+          ? body.payment_crypto_meta
+          : null
     const memberId = Math.max(0, Number(body.memberId ?? 0))
     const memberNo = String(body.memberNo ?? '').trim()
     const pointUsed = roundMemberPointsEarn(body.pointUsed)
@@ -434,7 +441,8 @@ export async function POST(req: NextRequest) {
       }
       deliveryAppCodeForReconcile = code || null
     }
-    let paymentSumForStatus = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+    let paymentSumForStatus =
+      paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
     if (paymentSumForStatus > 0.02) {
       const reconciled = reconcilePosOrderPaymentTenderGap({
         total,
@@ -447,6 +455,7 @@ export async function POST(req: NextRequest) {
           paymentQr,
           paymentOther,
           paymentDeliveryApp: paymentDeliveryAppFinal,
+          paymentCrypto,
         },
         paymentOtherBreakdown: body.paymentOtherBreakdown ?? body.payment_other_breakdown,
       })
@@ -456,6 +465,7 @@ export async function POST(req: NextRequest) {
         paymentQr = reconciled.payment.paymentQr
         paymentOther = reconciled.payment.paymentOther
         paymentDeliveryAppFinal = reconciled.payment.paymentDeliveryApp
+        paymentCrypto = reconciled.payment.paymentCrypto
         paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
           paymentOther,
           reconciled.paymentOtherBreakdown ?? paymentOtherBreakdown
@@ -469,7 +479,7 @@ export async function POST(req: NextRequest) {
         paymentOtherBreakdownDb =
           br !== undefined ? br : paymentOtherBreakdownForDb(paymentOtherBreakdown)
         paymentSumForStatus =
-          paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+          paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
       }
     }
     const adj = pricingAdjustments as { cardRate?: number } | undefined
@@ -583,6 +593,8 @@ export async function POST(req: NextRequest) {
           ? { payment_other_breakdown: paymentOtherBreakdownDb }
           : {}),
       payment_delivery_app: paymentDeliveryAppFinal,
+      payment_crypto: paymentCrypto,
+      ...(paymentCrypto > 0.005 && paymentCryptoMeta ? { payment_crypto_meta: paymentCryptoMeta } : {}),
       delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,
       member_no: memberNo || null,

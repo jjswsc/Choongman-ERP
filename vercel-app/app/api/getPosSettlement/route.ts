@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest) {
         systemSubtotal: 0,
         systemVat: 0,
         systemCashFromOrders: 0,
+        systemCryptoFromOrders: 0,
         tillNetForSettleDate: 0,
         linkpos: null,
         settlement: null,
@@ -196,6 +198,7 @@ export async function GET(request: NextRequest) {
       payment_qr?: number
       payment_delivery_app?: number
       payment_other?: number
+      payment_crypto?: number
       payment_other_breakdown?: unknown
       delivery_payment_channel?: string
       delivery_app_code?: string
@@ -207,11 +210,16 @@ export async function GET(request: NextRequest) {
     /** Omni 등 pos_orders 컬럼 미배포 시에도 시재(cash_actual)는 반환 — 영업 시작 게이트가 막히지 않게 */
     let orders: PosOrderSettlementRow[] | null = null
     try {
-      orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
-        limit: 20000,
-        select:
-          'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
-      })) as PosOrderSettlementRow[] | null
+      orders = (await supabaseSelectFilterStrippingUnknownColumns(
+        'pos_orders',
+        orderFilter,
+        {
+          limit: 20000,
+          select:
+            'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_crypto,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
+        },
+        'getPosSettlementOrders'
+      )) as PosOrderSettlementRow[] | null
     } catch (orderErr) {
       console.warn('getPosSettlement pos_orders (settlement-only fallback):', orderErr)
       orders = []
@@ -221,6 +229,7 @@ export async function GET(request: NextRequest) {
     let systemSubtotal = 0
     let systemVat = 0
     let systemCashFromOrders = 0
+    let systemCryptoFromOrders = 0
     let linkposApprovedCount = 0
     let linkposFailedCount = 0
     let linkposRequestedTotal = 0
@@ -248,6 +257,7 @@ export async function GET(request: NextRequest) {
       systemSubtotal += Number(o.subtotal ?? o.total) || 0
       systemVat += Number(o.vat ?? 0) || 0
       systemCashFromOrders += Number(o.payment_cash) || 0
+      systemCryptoFromOrders += Number(o.payment_crypto) || 0
       cardReportedTotal += Number(o.payment_card) || 0
       const deliveryAmt = resolvePosDeliveryAppSettlementGross(o)
       if (deliveryAmt > 0) {
@@ -386,6 +396,7 @@ export async function GET(request: NextRequest) {
       dine_in_delivery_breakdown?: Record<string, number>
       other_amt?: number
       other_breakdown?: Record<string, number>
+      crypto_amt?: number
       memo?: string
       closed?: boolean
       cash_actual_denoms?: Record<string, unknown> | null
@@ -411,6 +422,7 @@ export async function GET(request: NextRequest) {
       otherAmt: Number(s.other_amt) ?? 0,
       otherBreakdown:
         s.other_breakdown && typeof s.other_breakdown === 'object' ? s.other_breakdown : {},
+      cryptoAmt: Number(s.crypto_amt) || 0,
       memo: String(s.memo ?? ''),
       closed: !!s.closed,
       cashActualDenoms: mapCashActualDenomsFromDb(s.cash_actual_denoms),
@@ -450,6 +462,7 @@ export async function GET(request: NextRequest) {
         systemSubtotal,
         systemVat,
         systemCashFromOrders,
+        systemCryptoFromOrders,
         tillNetForSettleDate,
         cashReconcile,
         linkpos: {
@@ -495,6 +508,7 @@ export async function GET(request: NextRequest) {
         systemSubtotal: 0,
         systemVat: 0,
         systemCashFromOrders: 0,
+        systemCryptoFromOrders: 0,
         tillNetForSettleDate: 0,
         linkpos: null,
         settlement: null,

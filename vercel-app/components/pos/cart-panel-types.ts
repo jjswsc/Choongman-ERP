@@ -44,6 +44,8 @@ export type CartPanelPaymentPayload = {
   paymentOtherBreakdown?: PosPaymentOtherBreakdown
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
+  paymentCrypto?: number
+  paymentCryptoMeta?: Record<string, unknown> | null
   paymentCashTendered?: number
 }
 

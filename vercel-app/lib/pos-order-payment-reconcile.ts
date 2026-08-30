@@ -18,6 +18,7 @@ export type PosOrderPaymentAmounts = {
   paymentQr: number
   paymentOther: number
   paymentDeliveryApp: number
+  paymentCrypto: number
 }
 
 /** 추가주문(items만) PATCH 시 기존 결제를 0으로 덮어쓰지 않음 */
@@ -43,6 +44,7 @@ export function readPreservedPosOrderPaymentAmounts(current: {
   payment_qr?: number
   payment_other?: number
   payment_delivery_app?: number
+  payment_crypto?: number
 }): PosOrderPaymentAmounts {
   return {
     paymentCash: Math.max(0, Number(current.payment_cash ?? 0)),
@@ -50,6 +52,7 @@ export function readPreservedPosOrderPaymentAmounts(current: {
     paymentQr: Math.max(0, Number(current.payment_qr ?? 0)),
     paymentOther: Math.max(0, Number(current.payment_other ?? 0)),
     paymentDeliveryApp: Math.max(0, Number(current.payment_delivery_app ?? 0)),
+    paymentCrypto: Math.max(0, Number(current.payment_crypto ?? 0)),
   }
 }
 
@@ -130,7 +133,8 @@ export function reconcilePosOrderPaymentTenderGap(params: {
     payment.paymentCash <= EPS &&
     payment.paymentCard <= EPS &&
     payment.paymentQr <= EPS &&
-    payment.paymentOther <= EPS
+    payment.paymentOther <= EPS &&
+    payment.paymentCrypto <= EPS
 
   if (paymentSum > EPS && gap > EPS && orderType === 'delivery' && deliveryCode && deliveryOnly) {
     payment = { ...payment, paymentDeliveryApp: round2(total) }

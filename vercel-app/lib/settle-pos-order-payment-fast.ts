@@ -229,7 +229,7 @@ async function settlePosOrderPaymentFastBody(params: {
     {
       limit: 1,
       select:
-        'id,order_no,store_code,status,order_type,table_name,memo,total,vat,service_amt,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,paid_at',
+        'id,order_no,store_code,status,order_type,table_name,memo,total,vat,service_amt,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,payment_crypto,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,paid_at',
     },
     'settlePosOrderPaymentFast'
   )) as {
@@ -249,6 +249,7 @@ async function settlePosOrderPaymentFastBody(params: {
     payment_other?: number
     payment_other_breakdown?: unknown
     payment_delivery_app?: number
+    payment_crypto?: number
     delivery_payment_channel?: string | null
     delivery_app_code?: string | null
     member_id?: number | null
@@ -280,6 +281,7 @@ async function settlePosOrderPaymentFastBody(params: {
   let paymentQr = normalizedTender.paymentQr
   let paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
   let paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? body?.payment_delivery_app ?? 0))
+  let paymentCrypto = Math.max(0, Number(body?.paymentCrypto ?? body?.payment_crypto ?? 0))
 
   const incomingPaymentSum = posOrderPaymentSumFromAmounts({
     paymentCash,
@@ -287,6 +289,7 @@ async function settlePosOrderPaymentFastBody(params: {
     paymentQr,
     paymentOther,
     paymentDeliveryApp,
+    paymentCrypto,
   })
   const existingPaymentSum = posOrderPaymentSumFromAmounts({
     paymentCash: Number(current?.payment_cash ?? 0),
@@ -294,6 +297,7 @@ async function settlePosOrderPaymentFastBody(params: {
     paymentQr: Number(current?.payment_qr ?? 0),
     paymentOther: Number(current?.payment_other ?? 0),
     paymentDeliveryApp: Number(current?.payment_delivery_app ?? 0),
+    paymentCrypto: Number(current?.payment_crypto ?? 0),
   })
   if (
     shouldPreserveExistingPosOrderPayment({
@@ -308,6 +312,7 @@ async function settlePosOrderPaymentFastBody(params: {
     paymentQr = preserved.paymentQr
     paymentOther = preserved.paymentOther
     paymentDeliveryApp = preserved.paymentDeliveryApp
+    paymentCrypto = preserved.paymentCrypto
   }
 
   if (!(await authCanAccessPosStoreWrite(auth, String(current?.store_code ?? '')))) {
@@ -353,7 +358,8 @@ async function settlePosOrderPaymentFastBody(params: {
   let paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
 
   const previousPaymentSum = existingPaymentSum
-  let nextPaymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+  let nextPaymentSum =
+    paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
   if (nextPaymentSum > 0.02) {
     const reconciled = reconcilePosOrderPaymentTenderGap({
       total,
@@ -366,6 +372,7 @@ async function settlePosOrderPaymentFastBody(params: {
         paymentQr,
         paymentOther,
         paymentDeliveryApp: paymentDeliveryAppFinal,
+        paymentCrypto,
       },
       paymentOtherBreakdown:
         body?.paymentOtherBreakdown ??
@@ -378,6 +385,7 @@ async function settlePosOrderPaymentFastBody(params: {
       paymentQr = reconciled.payment.paymentQr
       paymentOther = reconciled.payment.paymentOther
       paymentDeliveryAppFinal = reconciled.payment.paymentDeliveryApp
+      paymentCrypto = reconciled.payment.paymentCrypto
       paymentOtherBreakdown = coercePaymentOtherBreakdownForSave(
         paymentOther,
         reconciled.paymentOtherBreakdown ?? paymentOtherBreakdown
@@ -394,7 +402,7 @@ async function settlePosOrderPaymentFastBody(params: {
         paymentOtherBreakdownDb = paymentOtherBreakdownForDb(paymentOtherBreakdown)
       }
       nextPaymentSum =
-        paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal
+        paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
     }
   }
 
@@ -473,6 +481,7 @@ async function settlePosOrderPaymentFastBody(params: {
     payment_qr: paymentQr,
     payment_other: paymentOther,
     payment_delivery_app: paymentDeliveryAppFinal,
+    payment_crypto: paymentCrypto,
     member_id: memberId || null,
     member_no: memberNo || null,
     point_used: pointUsed,

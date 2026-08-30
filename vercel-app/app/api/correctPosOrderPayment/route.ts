@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,store_code,total,subtotal,vat,status,created_at,memo,table_name,order_no,order_type,delivery_app_code,discount_amt,coupon_discount_amt,collab_discount_amt,tier_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel',
+          'id,store_code,total,subtotal,vat,status,created_at,memo,table_name,order_no,order_type,delivery_app_code,discount_amt,coupon_discount_amt,collab_discount_amt,tier_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,payment_crypto,delivery_payment_channel',
       },
       'correctPosOrderPayment'
     )) as {
@@ -122,6 +122,7 @@ export async function POST(req: NextRequest) {
       payment_qr?: number
       payment_other?: number
       payment_delivery_app?: number
+      payment_crypto?: number
       delivery_payment_channel?: string | null
       payment_other_breakdown?: unknown
     }[] | null
@@ -240,6 +241,7 @@ export async function POST(req: NextRequest) {
       paymentQr: Number(row.payment_qr) || 0,
       paymentOther: Number(row.payment_other) || 0,
       paymentDeliveryApp: Number(row.payment_delivery_app) || 0,
+      paymentCrypto: Number(row.payment_crypto) || 0,
       deliveryPaymentChannel: row.delivery_payment_channel,
       orderType: row.order_type,
     }
@@ -249,6 +251,7 @@ export async function POST(req: NextRequest) {
       paymentQr,
       paymentOther,
       paymentDeliveryApp,
+      paymentCrypto: Number(row.payment_crypto) || 0,
       deliveryPaymentChannel,
       orderType: row.order_type,
     }
