@@ -60,6 +60,8 @@ import {
 } from "@/lib/purchase-tax-invoice-scan"
 import {
   fillSellerFromProfiles,
+  learnedInvoiceHistory,
+  netsByTin,
   parseRdSellerList,
   profilesFromVendors,
   readLearnedSellerProfiles,
@@ -682,8 +684,16 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       ...extracted,
     ]
 
-    /** 저장된 행 + 이번 배치에서 이미 읽은 행 → 거래처별 번호 꼴 */
-    const vendorHints = () => buildVendorInvoiceHints([...rows, ...extracted])
+    /** 검수 기억 + 저장된 행 + 이번 배치에서 이미 읽은 행 → 거래처별 번호 꼴 */
+    const vendorHints = () =>
+      buildVendorInvoiceHints([...learnedInvoiceHistory(learnedProfiles), ...rows, ...extracted])
+    const learnedNets = () => netsByTin(learnedProfiles)
+    const scanHint = (pageText: string): PurchaseTaxInvoiceScanHint => ({
+      ...hint,
+      pageText,
+      vendorHints: vendorHints(),
+      learnedNetsByTin: learnedNets(),
+    })
 
     const ingestLocalPage = (page: number, pageText: string, layout?: OcrPageLayout) => {
       const known = sellerKnown()
@@ -700,7 +710,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         ? applyLayoutExtract(textOnly, extractFromLayout(layout, hint.buyerTaxId, vendorHints())).fields
         : textOnly
       const local = fillSellerFromProfiles(
-        repairExtractedPurchaseTaxInvoice(layoutFields, { ...hint, pageText }),
+        repairExtractedPurchaseTaxInvoice(layoutFields, scanHint(pageText)),
         known
       )
       if (local && purchaseTaxInvoiceHasExtractedFields(local)) {
@@ -723,14 +733,23 @@ export function TaxFilingPurchaseTaxInvoicesTab({
      * 아예 판독에서 빠지는 일이 잦다.
      */
     const mergePageExtract = (pageText: string, layout?: OcrPageLayout) => {
-      const textOnly = extractPurchaseTaxInvoiceFromScanText(pageText, hint)
+      const vh = vendorHints()
+      const withHint = scanHint(pageText)
+      const textOnly = extractPurchaseTaxInvoiceFromScanText(pageText, withHint)
       if (!layout) {
-        return textOnly ? repairExtractedPurchaseTaxInvoice(textOnly, { ...hint, pageText }) : textOnly
+        return {
+          row: textOnly ? repairExtractedPurchaseTaxInvoice(textOnly, withHint) : textOnly,
+          layoutExtract: undefined,
+        }
       }
-      return repairExtractedPurchaseTaxInvoice(
-        applyLayoutExtract(textOnly || {}, extractFromLayout(layout, hint.buyerTaxId, vendorHints())).fields,
-        { ...hint, pageText }
-      )
+      const layoutExtract = extractFromLayout(layout, hint.buyerTaxId, vh)
+      return {
+        row: repairExtractedPurchaseTaxInvoice(
+          applyLayoutExtract(textOnly || {}, layoutExtract).fields,
+          withHint
+        ),
+        layoutExtract,
+      }
     }
 
     const textForPage = async (
@@ -747,9 +766,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       const page = await readTaxInvoicePageLayout(work, ocr)
       const layouts = [page.layout]
       let pageText = [withQr, page.text].filter((s) => String(s || "").trim()).join("\n")
-      let extractedRow = mergePageExtract(pageText, page.layout)
-      if (source && purchaseTaxInvoiceNeedsSparseOcr(extractedRow, hint)) {
-        const regionNames = purchaseTaxInvoiceHiresRegionNames(extractedRow, hint)
+      let { row: extractedRow, layoutExtract } = mergePageExtract(pageText, page.layout)
+      if (source && purchaseTaxInvoiceNeedsSparseOcr(extractedRow, scanHint(pageText), layoutExtract)) {
+        const regionNames = purchaseTaxInvoiceHiresRegionNames(extractedRow, scanHint(pageText), layoutExtract)
         if (regionNames.length) {
           setPdfBusy({
             key: "ptiOcrPageHires",
@@ -761,11 +780,11 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           })
           layouts.push(hires.layout)
           pageText = [pageText, hires.text].filter((s) => String(s || "").trim()).join("\n")
-          extractedRow = mergePageExtract(pageText, mergeTaxInvoiceLayouts(layouts))
+          ;({ row: extractedRow, layoutExtract } = mergePageExtract(pageText, mergeTaxInvoiceLayouts(layouts)))
         }
       }
       const layout = mergeTaxInvoiceLayouts(layouts)
-      if (purchaseTaxInvoiceNeedsSparseOcr(extractedRow, hint)) {
+      if (purchaseTaxInvoiceNeedsSparseOcr(extractedRow, scanHint(pageText), layoutExtract)) {
         const extra = await ocr.recognizeSparseCrops(work)
         pageText = [pageText, extra].filter((s) => String(s || "").trim()).join("\n")
       }

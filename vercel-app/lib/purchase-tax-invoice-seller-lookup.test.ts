@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   fillSellerFromProfiles,
+  learnedInvoiceHistory,
+  netsByTin,
+  netLooksImplausiblySmallForTin,
   parseRdSellerList,
   pickRdCompanyForSeller,
   profileFromRdCompany,
@@ -106,5 +109,36 @@ describe('rememberSellerProfiles', () => {
     rememberSellerProfiles([{ sellerTaxId: SELLER, sellerName: 'บริษัท จำได้ จำกัด', sellerBranch: 'สำนักงานใหญ่' }])
     const learned = readLearnedSellerProfiles()
     expect(learned.some((r) => r.sellerTaxId === SELLER && r.sellerName.includes('จำได้'))).toBe(true)
+  })
+
+  it('keeps invoice numbers and nets from review, and RD lookup does not wipe them', () => {
+    rememberSellerProfiles([
+      { sellerTaxId: SELLER, sellerName: 'บริษัท จำได้ จำกัด', invoiceNo: 'RV269070486', netAmount: 1162.63 },
+      { sellerTaxId: SELLER, sellerName: 'บริษัท จำได้ จำกัด', invoiceNo: 'RV269070512', netAmount: 980.5 },
+      { sellerTaxId: SELLER, sellerName: 'บริษัท จำได้ จำกัด', invoiceNo: 'RV269070530', netAmount: 1400 },
+    ])
+    rememberSellerProfiles([{ sellerTaxId: SELLER, sellerName: 'บริษัท จำได้ จำกัด' }])
+    const learned = readLearnedSellerProfiles()
+    const hit = learned.find((r) => r.sellerTaxId === SELLER)
+    expect(hit?.invoiceNos).toEqual(['RV269070486', 'RV269070512', 'RV269070530'])
+    expect(hit?.nets).toEqual([1162.63, 980.5, 1400])
+    expect(learnedInvoiceHistory(learned)).toEqual([
+      { sellerTaxId: SELLER, invoiceNo: 'RV269070486' },
+      { sellerTaxId: SELLER, invoiceNo: 'RV269070512' },
+      { sellerTaxId: SELLER, invoiceNo: 'RV269070530' },
+    ])
+    expect(netsByTin(learned)[SELLER]).toEqual([1162.63, 980.5, 1400])
+  })
+})
+
+describe('netLooksImplausiblySmallForTin', () => {
+  it('does not block the first invoices of a vendor', () => {
+    expect(netLooksImplausiblySmallForTin(14, [1162])).toBe(false)
+    expect(netLooksImplausiblySmallForTin(14, [1162, 980])).toBe(false)
+  })
+
+  it('flags a tiny OCR fragment against a typical mid-size invoice', () => {
+    expect(netLooksImplausiblySmallForTin(14, [1162, 980, 1400])).toBe(true)
+    expect(netLooksImplausiblySmallForTin(1162, [1162, 980, 1400])).toBe(false)
   })
 })

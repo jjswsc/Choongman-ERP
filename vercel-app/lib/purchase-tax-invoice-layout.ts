@@ -449,6 +449,10 @@ function vendorHintScore(token: string, hint: VendorInvoiceHint): number {
 }
 
 /** 자릿수·머리글자가 다 맞으면 그 거래처 번호로 본다 */
+export function invoiceMatchesVendorHint(token: string, hint: VendorInvoiceHint): boolean {
+  return matchesVendorHint(token, hint)
+}
+
 function matchesVendorHint(token: string, hint: VendorInvoiceHint): boolean {
   const t = normToken(token)
   const digits = t.replace(/\D/g, '')
@@ -486,6 +490,10 @@ function findVendorPatternTokens(layout: OcrPageLayout, hint: VendorInvoiceHint)
 }
 
 /** OCR 이 `IV` 를 흘려 숫자만 남은 경우 되살린다 */
+export function restoreInvoiceWithVendorHint(token: string, hint: VendorInvoiceHint): string {
+  return restoreVendorPrefix(token, hint)
+}
+
 function restoreVendorPrefix(token: string, hint: VendorInvoiceHint): string {
   if (!hint.prefix) return token
   const t = normToken(token)
@@ -1019,6 +1027,48 @@ export function extractFromLayout(
 
 /** 이보다 흐릿하면 값을 넣지 않고 비워 둔다 — 틀린 값보다 빈칸이 낫다 */
 export const LAYOUT_MIN_CONFIDENCE = 55
+/** 값은 넣었지만 흔들림. 고배율로 그 영역만 다시 읽는다 */
+export const LAYOUT_RETRY_CONFIDENCE = 70
+
+function layoutFieldLooksShaky<T>(f?: LayoutField<T>): boolean {
+  return Boolean(f) && f!.confidence < LAYOUT_RETRY_CONFIDENCE
+}
+
+/** 글자는 있는데 신뢰도가 낮으면 해당 영역만 고배율 */
+export function purchaseTaxLayoutWeakRegions(
+  extract: LayoutExtract | undefined
+): Array<'head-left' | 'head-right' | 'tail'> {
+  if (!extract) return []
+  const names: Array<'head-left' | 'head-right' | 'tail'> = []
+  const needHead =
+    layoutFieldLooksShaky(extract.invoiceNo) ||
+    layoutFieldLooksShaky(extract.sellerTaxId) ||
+    layoutFieldLooksShaky(extract.docDate)
+  const needTail = layoutFieldLooksShaky(extract.netAmount) || layoutFieldLooksShaky(extract.vatAmount)
+  if (needHead) names.push('head-left', 'head-right')
+  if (needTail) names.push('tail')
+  return names
+}
+
+/**
+ * 지면 글자에서 그 거래처 꼴에 맞는 번호를 줍는다.
+ * 바코드 숫자만 잡혔을 때 `IVT-` / `RV` 본문을 되찾는 용도.
+ */
+export function findInvoiceTokenInText(text: string, hint: VendorInvoiceHint): string | undefined {
+  if (!hint.prefix && !hint.digitPrefix && !hint.digitCount) return undefined
+  const re = /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|ABB|RT|IV|TI)[\s\-/]?[A-Z0-9\-/]{2,48}|\d{7,12})\b/gi
+  const found: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(String(text || '')))) {
+    const raw = String(m[1] || '').trim()
+    if (!raw) continue
+    const restored = restoreVendorPrefix(raw, hint)
+    const token = matchesVendorHint(restored, hint) ? restored : matchesVendorHint(raw, hint) ? raw : ''
+    if (token && !found.includes(token)) found.push(token)
+  }
+  found.sort((a, b) => vendorHintScore(b, hint) - vendorHintScore(a, hint) || b.length - a.length)
+  return found[0]
+}
 
 export type LayoutMergeResult = {
   fields: ExtractedPurchaseTaxInvoiceFields

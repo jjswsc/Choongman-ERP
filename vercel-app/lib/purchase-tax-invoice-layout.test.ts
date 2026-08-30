@@ -6,8 +6,10 @@ import {
   findLayoutAmounts,
   findLayoutInvoiceNo,
   findLayoutTaxIds,
+  findInvoiceTokenInText,
   learnVendorInvoiceHint,
   normalizeLabelText,
+  purchaseTaxLayoutWeakRegions,
   type OcrLineBox,
   type OcrPageLayout,
 } from './purchase-tax-invoice-layout'
@@ -177,6 +179,15 @@ describe('거래처별 번호 꼴', () => {
     )
     expect(got.invoiceNo?.value).toBe('IV6907773')
   })
+
+  it('지면 글자에서 거래처 꼴에 맞는 번호를 바코드 숫자보다 고른다', () => {
+    const hint = learnVendorInvoiceHint(['RV269070486', 'RV269070512'])
+    expect(hint).toBeTruthy()
+    expect(findInvoiceTokenInText('996302538 RV269070486 ใบกำกับภาษี', hint!)).toBe('RV269070486')
+    expect(findInvoiceTokenInText('IVT-69070062 barcode 996302538', learnVendorInvoiceHint(['IVT-69070011', 'IVT-69070040'])!)).toBe(
+      'IVT-69070062'
+    )
+  })
 })
 
 describe('findLayoutTaxIds', () => {
@@ -305,6 +316,28 @@ describe('applyLayoutExtract', () => {
     )
     expect(got.fields.netAmount).toBe(1148.36)
     expect(got.fields.vatAmount).toBe(80.38)
+  })
+})
+
+describe('purchaseTaxLayoutWeakRegions', () => {
+  it('55~70 신뢰도면 해당 영역만 고배율로 표시한다', () => {
+    expect(
+      purchaseTaxLayoutWeakRegions({
+        invoiceNo: { value: 'RV248070123', confidence: 62, source: 'tax-invoice-no' },
+      })
+    ).toEqual(['head-left', 'head-right'])
+    expect(
+      purchaseTaxLayoutWeakRegions({
+        netAmount: { value: 14, confidence: 58, source: 'amount-triple' },
+        vatAmount: { value: 0.95, confidence: 90, source: 'amount-triple' },
+      })
+    ).toEqual(['tail'])
+    expect(
+      purchaseTaxLayoutWeakRegions({
+        invoiceNo: { value: 'RV269070486', confidence: 88, source: 'tax-invoice-no' },
+        netAmount: { value: 400, confidence: 90, source: 'amount-triple' },
+      })
+    ).toEqual([])
   })
 })
 

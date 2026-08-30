@@ -26,6 +26,7 @@ import {
   thaiTinChecksumOk,
   tinsFromOcrDigitBlob,
 } from './purchase-tax-invoice-scan'
+import { buildVendorInvoiceHints } from './purchase-tax-invoice-layout'
 
 const BUYER = '0105566137147'
 const SELLER = '0105559082715'
@@ -189,6 +190,28 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
       )
     ).toEqual([])
     expect(purchaseTaxInvoiceHiresRegionNames({ netAmount: 100, vatAmount: 7 }, { buyerTaxId: BUYER })).toEqual([
+      'head-left',
+      'head-right',
+    ])
+    const shaky = { invoiceNo: 'RV248070123', sellerTaxId: SELLER, netAmount: 100, vatAmount: 7 }
+    expect(purchaseTaxInvoiceNeedsSparseOcr(shaky, { buyerTaxId: BUYER })).toBe(false)
+    expect(
+      purchaseTaxInvoiceNeedsSparseOcr(shaky, { buyerTaxId: BUYER }, {
+        invoiceNo: { value: 'RV248070123', confidence: 62, source: 'tax-invoice-no' },
+      })
+    ).toBe(true)
+    expect(
+      purchaseTaxInvoiceHiresRegionNames(shaky, { buyerTaxId: BUYER }, {
+        invoiceNo: { value: 'RV248070123', confidence: 62, source: 'tax-invoice-no' },
+      })
+    ).toEqual(['head-left', 'head-right'])
+    const hints = buildVendorInvoiceHints([
+      { sellerTaxId: SELLER, invoiceNo: 'RV269070486' },
+      { sellerTaxId: SELLER, invoiceNo: 'RV269070512' },
+    ])
+    const barcode = { invoiceNo: '996302538', sellerTaxId: SELLER, netAmount: 100, vatAmount: 7 }
+    expect(purchaseTaxInvoiceNeedsSparseOcr(barcode, { buyerTaxId: BUYER, vendorHints: hints })).toBe(true)
+    expect(purchaseTaxInvoiceHiresRegionNames(barcode, { buyerTaxId: BUYER, vendorHints: hints })).toEqual([
       'head-left',
       'head-right',
     ])
@@ -431,6 +454,31 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(repaired.netAmount).toBeUndefined()
   })
 
+  it('replaces a barcode invoice with the learned vendor token on the page', () => {
+    const hints = buildVendorInvoiceHints([
+      { sellerTaxId: SELLER, invoiceNo: 'RV269070486' },
+      { sellerTaxId: SELLER, invoiceNo: 'RV269070512' },
+    ])
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: '996302538', sellerTaxId: SELLER, netAmount: 400, vatAmount: 28 },
+      {
+        buyerTaxId: BUYER,
+        pageText: 'ใบกำกับภาษี เลขที่ RV269070499\n996302538',
+        vendorHints: hints,
+      }
+    )
+    expect(repaired.invoiceNo).toBe('RV269070499')
+  })
+
+  it('clears an implausibly small net against learned typical amounts', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'A-1', sellerTaxId: SELLER, netAmount: 14, vatAmount: 0.98 },
+      { buyerTaxId: BUYER, learnedNetsByTin: { [SELLER]: [1162, 980, 1400] } }
+    )
+    expect(repaired.netAmount).toBeUndefined()
+    expect(repaired.vatAmount).toBeUndefined()
+  })
+
   it('snaps an OCR year that is a few years off the filing period', () => {
     expect(snapDocDateYearToTaxPeriod('2022-07-10', '2026-08')).toBe('2026-07-10')
     expect(snapDocDateYearToTaxPeriod('2026-07-10', '2026-08')).toBe('2026-07-10')
@@ -468,6 +516,14 @@ describe('inferAmountsFromMoneySequence', () => {
       totalAmount: 1423.28,
     })
   })
+
+  it('prefers the larger 7% pair over a tiny OCR fragment pair', () => {
+    expect(pickExclusiveVatAmounts([14, 0.95, 14.95, 1162.63, 81.38, 1244.01])).toEqual({
+      netAmount: 1162.63,
+      vatAmount: 81.38,
+      totalAmount: 1244.01,
+    })
+  })
 })
 
 describe('withholding and exempt lines', () => {
@@ -491,6 +547,19 @@ describe('withholding and exempt lines', () => {
   it('ignores exempt produce when repairing Polar Bear 7% net', () => {
     const inferred = inferAmountsFromMoneySequence(
       'สินค้าเกษตรยกเว้น 658.00\n756.00\n6.41\n91.59'
+    )
+    expect(inferred?.netAmount).toBe(91.59)
+    expect(inferred?.vatAmount).toBe(6.41)
+  })
+
+  it('uses grand minus exempt as taxable even when shipping labels are missing', () => {
+    const inferred = inferAmountsFromMoneySequence(
+      [
+        'สินค้าเกษตรยกเว้น / TOTAL AMOUNT (VAT EXEMPTED ITEMS) 658.00',
+        'ภาษีมูลค่าเพิ่ม / VAT 7% 6.41',
+        'จำนวนเงินรวมทั้งสิ้น / SUBTOTAL 756.00',
+        '91.59',
+      ].join('\n')
     )
     expect(inferred?.netAmount).toBe(91.59)
     expect(inferred?.vatAmount).toBe(6.41)

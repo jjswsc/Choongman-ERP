@@ -5,12 +5,23 @@
 
 import { formatSellerBranch, digitsTin13, isLikelyTaxInvoiceCopy, looksLikeJunkSellerName, purchaseTaxInvoiceHasExtractedFields, purchaseTaxVatLooksWrong, thaiTinChecksumOk, type ExtractedPurchaseTaxInvoiceFields } from '@/lib/purchase-tax-invoice-core'
 import { roundMoney2 } from '@/lib/invoice-vat-total'
+import {
+  findInvoiceTokenInText,
+  invoiceMatchesVendorHint,
+  purchaseTaxLayoutWeakRegions,
+  restoreInvoiceWithVendorHint,
+  type LayoutExtract,
+  type VendorInvoiceHint,
+} from '@/lib/purchase-tax-invoice-layout'
+import { netLooksImplausiblySmallForTin } from '@/lib/purchase-tax-invoice-seller-lookup'
 
 export type PurchaseTaxInvoiceScanHint = {
   buyerTaxId?: string
   buyerName?: string
   pageText?: string
   taxMonth?: string
+  vendorHints?: Map<string, VendorInvoiceHint>
+  learnedNetsByTin?: Record<string, number[]>
 }
 
 const THAI_MONTH: Record<string, number> = {
@@ -532,7 +543,14 @@ function extractSellerName(text: string, buyerName?: string): string | undefined
 }
 
 function lineLooksLikeWithholdingOrExempt(line: string): boolean {
-  return /หัก\s*ณ\s*ที่จ่าย|withholding|\bwht\b|สินค้าเกษตรยกเว้น|ยกเว้นภาษี|vat\s*exempt/i.test(line)
+  return /หัก.{0,12}ที่จ่าย|ถูกหัก|withholding|\bwht\b|สินค้าเกษตรยกเว้น|ยกเว้นภาษี|vat\s*exempt|VAT\s*EXEMPTED/i.test(
+    line
+  )
+}
+
+function looksLikeWithholdingAmount(net: number, n: number): boolean {
+  if (!(net > 0) || !(n > 0) || n >= net) return false
+  return [0.01, 0.02, 0.03, 0.05].some((r) => Math.abs(roundMoney2(net * r) - n) <= 0.05)
 }
 
 /**
@@ -645,6 +663,11 @@ export function pickExclusiveVatAmounts(nums: number[]): {
     if (cands.some((o) => o !== c && Math.abs(o.netAmount - c.vatAmount) < 0.02 && o.netAmount < c.netAmount - 0.05)) {
       c.score -= 12
     }
+    if (looksLikeWithholdingAmount(c.netAmount, c.vatAmount)) c.score -= 8
+    const bigger = cands.find(
+      (o) => o.netAmount >= Math.max(200, c.netAmount * 4) && o.score >= c.score - 3
+    )
+    if (c.netAmount < 80 && bigger) c.score -= 10
   }
   cands.sort((a, b) => b.score - a.score || b.lastIdx - a.lastIdx || a.netAmount - b.netAmount)
   const top = cands[0]
@@ -665,6 +688,10 @@ export function inferAmountsFromMoneySequence(text: string): {
     const totalAmount = extractAmountNear(text, /รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)
     return { netAmount: 0, vatAmount: 0, totalAmount: totalAmount ?? 0 }
   }
+  const fromExempt = inferTaxableExcludingExempt(text)
+  if (fromExempt) return fromExempt
+  const fromFees = inferTaxableFromShippingAndService(text)
+  if (fromFees) return fromFees
   const nums = collectBahtAmounts(text)
   const picked = pickExclusiveVatAmounts(nums)
   if (picked) return picked
@@ -694,18 +721,60 @@ export function inferAmountsFromMoneySequence(text: string): {
       return { netAmount, vatAmount, totalAmount: roundMoney2(netAmount + vatAmount) }
     }
   }
-  // Grab·Shopee: 배송비+수수료 합 = 과세 공급가 (한 칸에 합계가 안 찍힌 경우)
+  return null
+}
+
+/** 면세 농산물 + 7% 과세(배송·수수료)가 한 장에 있을 때 면세 합계를 공급가로 쓰지 않는다 */
+function inferTaxableExcludingExempt(text: string): {
+  netAmount: number
+  vatAmount: number
+  totalAmount: number
+} | null {
+  const exemptParts = collectLabeledBahtParts(
+    text,
+    /สินค้าเกษตรยกเว้น|VAT\s*EXEMPTED|exempted\s*items/i
+  )
+  if (!exemptParts.length) return null
+  const grand = extractAmountNear(text, /รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due|SUBTOTAL/i)
+  const vat = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
+  if (vat == null || vat <= 0 || grand == null || grand <= 0) return null
+  const exempt = Math.max(...exemptParts)
+  if (grand <= exempt) return null
+  const rest = roundMoney2(grand - exempt)
+  const wantNet = roundMoney2(vat / 0.07)
+  if (Math.abs(rest - roundMoney2(wantNet + vat)) <= 0.2) {
+    const nums = collectBahtAmounts(text)
+    const netHit = nums.find((n) => Math.abs(n - wantNet) <= 0.05)
+    return {
+      netAmount: netHit ?? wantNet,
+      vatAmount: vat,
+      totalAmount: rest,
+    }
+  }
+  const nums = collectBahtAmounts(text)
+  const netHit = nums.find((n) => Math.abs(n - wantNet) <= 0.05)
+  if (netHit != null && netHit > vat) {
+    return { netAmount: netHit, vatAmount: vat, totalAmount: roundMoney2(netHit + vat) }
+  }
+  return null
+}
+
+/** Grab·Shopee: 배송비+수수료 합 = 과세 공급가 (한 칸에 합계가 안 찍힌 경우) */
+function inferTaxableFromShippingAndService(text: string): {
+  netAmount: number
+  vatAmount: number
+  totalAmount: number
+} | null {
   const shippingParts = collectLabeledBahtParts(text, /ค่าจัดส่ง|ค่าขนส่ง|SHIPPING|DELIVERY\s*FEE/i)
   const serviceParts = collectLabeledBahtParts(text, /ค่าบริการ|SERVICE\s*FEE|HANDLING/i)
   const vatLabeled = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
-  if (vatLabeled != null && vatLabeled > 0) {
-    const wantNet = roundMoney2(vatLabeled / 0.07)
-    for (const s of shippingParts) {
-      for (const f of serviceParts) {
-        const net = roundMoney2(s + f)
-        if (Math.abs(net - wantNet) <= 0.05) {
-          return { netAmount: net, vatAmount: vatLabeled, totalAmount: roundMoney2(net + vatLabeled) }
-        }
+  if (vatLabeled == null || vatLabeled <= 0) return null
+  const wantNet = roundMoney2(vatLabeled / 0.07)
+  for (const s of shippingParts) {
+    for (const f of serviceParts) {
+      const net = roundMoney2(s + f)
+      if (Math.abs(net - wantNet) <= 0.05) {
+        return { netAmount: net, vatAmount: vatLabeled, totalAmount: roundMoney2(net + vatLabeled) }
       }
     }
   }
@@ -1080,29 +1149,52 @@ export function purchaseTaxInvoiceTextExtractIsComplete(
   return true
 }
 
+function invoiceConflictsWithVendorHint(
+  row: ExtractedPurchaseTaxInvoiceFields | null | undefined,
+  hint?: PurchaseTaxInvoiceScanHint
+): boolean {
+  const tin = digitsTin13(row?.sellerTaxId)
+  const vh = tin ? hint?.vendorHints?.get(tin) : undefined
+  if (!vh || !row?.invoiceNo) return false
+  return !invoiceMatchesVendorHint(row.invoiceNo, vh)
+}
+
 /** 1차 판독 뒤 고배율이 필요한 영역. 비면 고배율을 건너뛴다. */
 export function purchaseTaxInvoiceHiresRegionNames(
   row: ExtractedPurchaseTaxInvoiceFields | null | undefined,
-  hint?: PurchaseTaxInvoiceScanHint
+  hint?: PurchaseTaxInvoiceScanHint,
+  layout?: LayoutExtract
 ): Array<'head-left' | 'head-right' | 'tail'> {
-  if (purchaseTaxInvoiceTextExtractIsComplete(row, hint)) return []
+  const weak = purchaseTaxLayoutWeakRegions(layout)
+  const complete = purchaseTaxInvoiceTextExtractIsComplete(row, hint)
+  const mismatch = invoiceConflictsWithVendorHint(row, hint)
+  if (complete && !weak.length && !mismatch) return []
   const needHead =
+    mismatch ||
     !row?.invoiceNo ||
     !invoiceNoLooksPlausible(row.invoiceNo) ||
     !row.sellerTaxId ||
     row.sellerTaxId.length !== 13
   const needTail = row?.netAmount == null || row?.vatAmount == null
-  const names: Array<'head-left' | 'head-right' | 'tail'> = []
-  if (needHead) names.push('head-left', 'head-right')
-  if (needTail) names.push('tail')
-  return names.length ? names : ['head-left', 'head-right', 'tail']
+  const names = new Set<'head-left' | 'head-right' | 'tail'>(weak)
+  if (needHead) {
+    names.add('head-left')
+    names.add('head-right')
+  }
+  if (needTail) names.add('tail')
+  if (!names.size) names.add('head-left').add('head-right').add('tail')
+  const order: Array<'head-left' | 'head-right' | 'tail'> = ['head-left', 'head-right', 'tail']
+  return order.filter((n) => names.has(n))
 }
 
-/** 번호·TIN만 있고 금액이 비면 합계 크롭을 한 번 더 돌린다. */
+/** 번호·TIN만 있고 금액이 비면 합계 크롭을 한 번 더 돌린다. 흐릿한 값도 다시 본다. */
 export function purchaseTaxInvoiceNeedsSparseOcr(
   row: ExtractedPurchaseTaxInvoiceFields | null | undefined,
-  hint?: PurchaseTaxInvoiceScanHint
+  hint?: PurchaseTaxInvoiceScanHint,
+  layout?: LayoutExtract
 ): boolean {
+  if (purchaseTaxLayoutWeakRegions(layout).length) return true
+  if (invoiceConflictsWithVendorHint(row, hint)) return true
   if (purchaseTaxInvoiceTextExtractIsComplete(row, hint)) return false
   return true
 }
@@ -1337,6 +1429,21 @@ export function repairExtractedPurchaseTaxInvoice(
     vatAmount = undefined
   }
 
+  if (sellerTaxId && netAmount != null && netAmount > 0) {
+    const typical = hint?.learnedNetsByTin?.[sellerTaxId] || []
+    if (netLooksImplausiblySmallForTin(netAmount, typical)) {
+      if (fromPageAmt && !netLooksImplausiblySmallForTin(fromPageAmt.netAmount, typical)) {
+        netAmount = fromPageAmt.netAmount
+        vatAmount = fromPageAmt.vatAmount
+        totalAmount = fromPageAmt.totalAmount
+      } else {
+        netAmount = undefined
+        vatAmount = undefined
+        totalAmount = undefined
+      }
+    }
+  }
+
   let invoiceNo = String(row.invoiceNo || '').trim() || undefined
   if (invoiceNo) {
     invoiceNo =
@@ -1356,6 +1463,15 @@ export function repairExtractedPurchaseTaxInvoice(
     const prefixed = invoiceNo ? attachOfficePrefix(pageText, invoiceNo) : undefined
     if (prefixed) invoiceNo = prefixed
     if (invoiceNo) invoiceNo = snapRvInvoiceToTaxMonth(invoiceNo, hint?.taxMonth)
+    const vendorHint = sellerTaxId ? hint?.vendorHints?.get(sellerTaxId) : undefined
+    if (vendorHint) {
+      if (!invoiceNo || !invoiceMatchesVendorHint(invoiceNo, vendorHint)) {
+        const recovered = findInvoiceTokenInText(pageText, vendorHint)
+        if (recovered) invoiceNo = recovered
+      } else if (!/[A-Za-z]/.test(invoiceNo)) {
+        invoiceNo = restoreInvoiceWithVendorHint(invoiceNo, vendorHint)
+      }
+    }
   }
   // 세금번호 일부가 문서번호로 잡힌 경우 (`565002677` ⊂ `0605565002677`)
   if (invoiceNo && sellerTaxId) {
