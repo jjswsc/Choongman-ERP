@@ -42,6 +42,8 @@ export type PosChickenOptionPickerPanelProps = {
   setOptionPickerSelections: React.Dispatch<React.SetStateAction<Record<string, string>>>
   /** 터미널 터치 디바운스 등 */
   wrapAction?: (fn: () => void) => void
+  /** QR 손님창: 크림/앰버. POS 기본은 슬레이트/초록 */
+  tone?: 'pos' | 'guest'
 }
 
 function PosOptionPriceRow(props: {
@@ -50,16 +52,22 @@ function PosOptionPriceRow(props: {
   priceText: string
   description?: string
   onClick: () => void
+  tone?: 'pos' | 'guest'
 }) {
-  const { opt, label, priceText, description, onClick } = props
+  const { opt, label, priceText, description, onClick, tone } = props
+  const guest = tone === 'guest'
   return (
     <button
       key={opt.id}
       type="button"
       onClick={onClick}
-      className="flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
+      className={
+        guest
+          ? 'flex justify-between gap-2 rounded-lg border border-stone-200 bg-[#faf7f2] px-4 py-3 text-left transition hover:border-amber-500 hover:bg-amber-50'
+          : 'flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50'
+      }
     >
-      <span className="min-w-0 flex-1 text-slate-800">
+      <span className={`min-w-0 flex-1 ${guest ? 'text-stone-800' : 'text-slate-800'}`}>
         <span className="block font-medium">{label}</span>
         {description ? (
           <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground" title={description}>
@@ -67,7 +75,9 @@ function PosOptionPriceRow(props: {
           </span>
         ) : null}
       </span>
-      <span className="shrink-0 font-bold text-emerald-600">{priceText}</span>
+      <span className={`shrink-0 font-bold ${guest ? 'text-[var(--qr-brand,#b45309)]' : 'text-emerald-600'}`}>
+        {priceText}
+      </span>
     </button>
   )
 }
@@ -96,6 +106,7 @@ export function PosChickenOptionPickerPanel({
   setOptionPickerStep,
   setOptionPickerSelections,
   wrapAction,
+  tone = 'pos',
 }: PosChickenOptionPickerPanelProps) {
   const act = wrapAction ?? ((fn: () => void) => fn())
   const pickerLabelRollout = isPosCartOptionLabelMatchPickerEnabled(storeCode)
@@ -151,7 +162,7 @@ export function PosChickenOptionPickerPanel({
         }
         className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
       >
-        <span className="font-medium text-slate-800">
+        <span className={`font-medium ${tone === 'guest' ? 'text-stone-800' : 'text-slate-800'}`}>
           {pickerLabelRollout
             ? plan.chickenDefaultDisplay
             : t("posOptionDefault") || "Default (S Boneless)"}
@@ -170,6 +181,7 @@ export function PosChickenOptionPickerPanel({
           priceText={`${formatPrice(menuBasePrice + getOptionModifier(opt))} ฿`}
           description={optionDescription(opt) || undefined}
           onClick={() => act(() => onPick(opt))}
+          tone={tone}
         />
       ))}
     </div>
@@ -260,6 +272,7 @@ export function PosChickenOptionPickerPanel({
                 )} ฿`}
                 description={optionDescription(opt) || undefined}
                 onClick={() => act(() => handleStepSelect(stepValue))}
+                tone={tone}
               />
             ))}
           </div>
@@ -270,7 +283,11 @@ export function PosChickenOptionPickerPanel({
                 key={val}
                 type="button"
                 onClick={() => act(() => handleStepSelect(val))}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 text-slate-800"
+                className={
+                  tone === 'guest'
+                    ? 'rounded-lg border border-stone-200 bg-[#faf7f2] px-4 py-3 text-stone-800 transition hover:border-amber-500 hover:bg-amber-50'
+                    : 'rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-800 transition hover:border-emerald-400 hover:bg-emerald-50'
+                }
               >
                 {translateChickenPartLabel(val)}
               </button>

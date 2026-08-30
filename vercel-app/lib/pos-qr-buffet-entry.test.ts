@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 import {
   inferPrevQtySnapshotExcludingRecentQrGuestLines,
+  markNewlyPrepaidQrExtraLines,
   orderLooksLikeQrTableGuestOrder,
+  planQrGuestAddonAutoprint,
   resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
+  shouldSkipQrTableSessionOpenAutoprint,
   shouldSkipRealtimeKitchenAutoprintForQrGuestAddon,
 } from '@/lib/qr-table-types'
 
@@ -73,6 +76,88 @@ describe('shouldSkipHallAutoprintForQrGuestAddon', () => {
 
   it('does not skip empty delta', () => {
     expect(shouldSkipHallAutoprintForQrGuestAddon([])).toBe(false)
+  })
+})
+
+describe('shouldSkipQrTableSessionOpenAutoprint', () => {
+  it('skips INSERT print when created_by is qr_table', () => {
+    expect(shouldSkipQrTableSessionOpenAutoprint({ createdBy: 'qr_table:9', items: [{ id: 'buffet-entry-9' }] })).toBe(
+      true
+    )
+  })
+
+  it('skips INSERT print when memo is QR table and lines are guest/buffet', () => {
+    expect(
+      shouldSkipQrTableSessionOpenAutoprint({
+        createdBy: null,
+        memo: '[QR테이블] Buffet / 2pax',
+        items: [{ id: 'buffet-entry-3', source: 'qr_table' }],
+      })
+    ).toBe(true)
+  })
+
+  it('does not skip a normal dine-in insert', () => {
+    expect(
+      shouldSkipQrTableSessionOpenAutoprint({
+        createdBy: 'pos',
+        memo: '',
+        items: [{ id: 'cart-1', name: 'Chicken' }],
+      })
+    ).toBe(false)
+  })
+})
+
+describe('planQrGuestAddonAutoprint', () => {
+  it('prints hall/kitchen only for staff lines when mixed with QR', () => {
+    const plan = planQrGuestAddonAutoprint({
+      hallAddonLines: [
+        { id: 'cart-1', name: 'Coke' },
+        { id: 'qr-12-99-1', source: 'qr_table', name: 'Chicken' },
+      ],
+      kitchenCartLines: [
+        { id: 'cart-1', name: 'Coke' },
+        { id: 'qr-12-99-1', source: 'qr_table', name: 'Chicken' },
+      ],
+    })
+    expect(plan.printHall).toBe(true)
+    expect(plan.skipRealtimeKitchen).toBe(false)
+    expect(plan.hallStaffLines.map((l) => l.id)).toEqual(['cart-1'])
+    expect(plan.kitchenStaffLines.map((l) => l.id)).toEqual(['cart-1'])
+  })
+
+  it('prints hall from kitchen staff lines when hall addon flags are empty', () => {
+    const plan = planQrGuestAddonAutoprint({
+      hallAddonLines: [] as Array<{ id: string }>,
+      kitchenCartLines: [{ id: 'cart-1', name: 'Coke' }],
+    })
+    expect(plan.printHall).toBe(true)
+    expect(plan.skipRealtimeKitchen).toBe(false)
+    expect(plan.hallStaffLines).toEqual([])
+    expect(plan.kitchenStaffLines.map((l) => l.id)).toEqual(['cart-1'])
+  })
+
+  it('skips both when the delta is QR-only', () => {
+    const plan = planQrGuestAddonAutoprint({
+      hallAddonLines: [{ id: 'qr-12-99-1', source: 'qr_table' }],
+      kitchenCartLines: [{ id: 'qr-12-99-1', source: 'qr_table' }],
+    })
+    expect(plan.printHall).toBe(false)
+    expect(plan.skipRealtimeKitchen).toBe(true)
+  })
+})
+
+describe('markNewlyPrepaidQrExtraLines', () => {
+  it('marks only unpaid extras and leaves already prepaid lines out of the print set', () => {
+    const items = [
+      { id: 'qr-old', source: 'qr_table', qrPrepaid: true, name: 'Coke' },
+      { id: 'qr-new', source: 'qr_table', qrPrepaid: false, name: 'Beer' },
+      { id: 'buffet-entry-1', source: 'qr_table', isBuffetEntry: true, name: 'Buffet' },
+      { id: 'cart-1', name: 'Staff drink' },
+    ]
+    const newly = markNewlyPrepaidQrExtraLines(items)
+    expect(newly.map((l) => l.id)).toEqual(['qr-new'])
+    expect(items[1]?.qrPrepaid).toBe(true)
+    expect(items[0]?.qrPrepaid).toBe(true)
   })
 })
 

@@ -46,6 +46,7 @@ import {
   QR_TABLE_CREATED_BY_PREFIX,
   buffetTierDisplayName,
   defaultQrOrderStoreSettings,
+  markNewlyPrepaidQrExtraLines,
   type QrBuffetTier,
   type QrCartLineInput,
   type QrOrderMode,
@@ -1723,7 +1724,7 @@ export async function submitQrCart(params: {
         buffetIncluded: isIncluded,
         menuOptions: optionsByMenuId.get(menuId) || [],
         optionIds: line.optionIds,
-        requireOption: false,
+        requireOption: true,
       })
       if (!resolved.ok) throw new Error(resolved.error)
       lineName = resolved.name
@@ -2070,12 +2071,7 @@ async function finalizeExtrasPrepay(session: QrTableSession & { secretHash?: str
   if (String(order.status || '').toLowerCase() === 'paid') return
 
   const items = parseItemsJson(order.items_json)
-  // Mark recently unpaid qr extras as prepaid
-  for (const it of items) {
-    if (it.source === 'qr_table' && it.buffetIncluded !== true && it.qrPrepaid !== true && !it.isBuffetEntry) {
-      it.qrPrepaid = true
-    }
-  }
+  const newlyPrepaid = markNewlyPrepaidQrExtraLines(items)
   const nextQr = Math.round((asNum(order.payment_qr) + amount) * 100) / 100
   const now = getBangkokDateTimeString()
   await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
@@ -2089,12 +2085,7 @@ async function finalizeExtrasPrepay(session: QrTableSession & { secretHash?: str
     updated_at: now,
   })
 
-  // Kitchen print unpaid extras that were waiting
-  const kitchenLines = items.filter(
-    (it) => it.source === 'qr_table' && it.qrPrepaid === true && it.buffetIncluded !== true && !it.isBuffetEntry
-  )
-  // Only print delta once — use amount-based dedupe
-  const toPrint = kitchenLines.slice(-20).map((it) => ({
+  const toPrint = newlyPrepaid.map((it) => ({
     ...it,
     name: `[Extra] ${String(it.name || '')}`,
   }))

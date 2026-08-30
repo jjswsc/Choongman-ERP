@@ -235,6 +235,7 @@ export function QrTableGuestOptionSheet({
               setPendingSizeOpt={setPendingSizeOpt}
               setOptionPickerStep={setOptionPickerStep}
               setOptionPickerSelections={setOptionPickerSelections}
+              tone="guest"
             />
           )}
         </div>

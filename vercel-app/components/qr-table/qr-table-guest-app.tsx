@@ -27,6 +27,7 @@ import { normalizeQrGuestLang, qrGuestT, type QrGuestLang } from '@/lib/i18n-qr-
 import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
 import type { PosMenu, PosMenuOption } from '@/lib/api-client'
 import { QR_TABLE_GUEST_PAY_POLL_MS } from '@/lib/qr-table-poll-interval'
+import QRCode from 'qrcode'
 
 type MenuItem = {
   menuId: number
@@ -99,6 +100,40 @@ function ClockIcon({ className }: { className?: string }) {
   )
 }
 
+function GuestPayQrImg({
+  payload,
+  alt,
+  className,
+}: {
+  payload: string
+  alt: string
+  className?: string
+}) {
+  const [src, setSrc] = React.useState('')
+  React.useEffect(() => {
+    let cancelled = false
+    if (!payload) {
+      setSrc('')
+      return
+    }
+    void QRCode.toDataURL(payload, { width: 280, margin: 1, errorCorrectionLevel: 'M' })
+      .then((url) => {
+        if (!cancelled) setSrc(url)
+      })
+      .catch(() => {
+        if (!cancelled) setSrc('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [payload])
+  if (!src) {
+    return <div className={`${className || ''} animate-pulse rounded-xl bg-stone-100`} aria-hidden />
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img alt={alt} className={className} src={src} />
+}
+
 type Step = 'boot' | 'tier' | 'pay_entry' | 'wait_staff' | 'menu' | 'error'
 
 const AUTH_KEY = 'cm_qr_table_session_auth'
@@ -138,6 +173,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [qrPayload, setQrPayload] = React.useState('')
   const [qrAmount, setQrAmount] = React.useState(0)
   const [busy, setBusy] = React.useState(false)
+  const [submitConfirmOpen, setSubmitConfirmOpen] = React.useState(false)
+  const submitLockRef = React.useRef(false)
   const [callOpen, setCallOpen] = React.useState(false)
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [orderSummary, setOrderSummary] = React.useState<OrderSummaryState | null>(null)
@@ -169,9 +206,9 @@ export function QrTableGuestApp({ token }: { token: string }) {
     return msg
   }
 
-  function showToast(msg: string) {
+  function showToast(msg: string, ms = 4200) {
     setToast(msg)
-    window.setTimeout(() => setToast(''), 2800)
+    window.setTimeout(() => setToast(''), ms)
   }
 
   React.useEffect(() => {
@@ -412,6 +449,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
     })
   }
 
+  function requestSubmit() {
+    if (submitLockRef.current || busy || cart.length === 0) return
+    setSubmitConfirmOpen(true)
+  }
+
   async function handleSubmit() {
     const lines = cart.map((line) => ({
       menuId: line.menuId,
@@ -420,10 +462,25 @@ export function QrTableGuestApp({ token }: { token: string }) {
       menuId1: line.menuId1,
       menuId2: line.menuId2,
     }))
-    if (!lines.length) return
+    if (!lines.length || submitLockRef.current) return
+    submitLockRef.current = true
+    setSubmitConfirmOpen(false)
     setBusy(true)
     setError('')
+    const extrasPrepay = session?.extrasPaymentModeResolved === 'prepay' || extrasChoice === 'prepay'
+    const extrasTotal = extrasPrepay
+      ? lines.reduce((sum, l) => {
+          const m = extraMenus.find((x) => x.menuId === l.menuId)
+          if (!m) return sum
+          const modifier = (l.optionIds || []).reduce((n, id) => {
+            const opt = (m.options || []).find((o) => o.id === id)
+            return n + (opt ? Number(opt.priceModifier) || 0 : 0)
+          }, 0)
+          return sum + (m.listPrice + modifier) * l.qty
+        }, 0)
+      : 0
     let auth = sessionAuth
+    let submitted = false
     try {
       let res = await qrTableSubmitCart(auth, lines)
       if (!res.success && (res.message === 'session_forbidden' || res.message === 'session_required')) {
@@ -441,48 +498,46 @@ export function QrTableGuestApp({ token }: { token: string }) {
         return
       }
       setCart([])
-      showToast(g('sentKitchen'))
+      submitted = true
       if (res.order) {
         setOrderSummary(toOrderSummary(res.order))
+      }
+      if (extrasTotal >= 1) {
+        showToast(g('extrasPayThenKitchen'), 5600)
+      } else {
+        showToast(`${g('sentKitchen')} · ${g('sentKitchenHint')}`)
+        setHistoryOpen(true)
       }
     } catch (e) {
       setError(humanizeApiError(e instanceof Error ? e.message : 'submit_failed'))
       return
     } finally {
       setBusy(false)
+      submitLockRef.current = false
     }
-    if (session?.extrasPaymentModeResolved === 'prepay' || extrasChoice === 'prepay') {
-      const extrasTotal = lines.reduce((sum, l) => {
-        const m = extraMenus.find((x) => x.menuId === l.menuId)
-        if (!m) return sum
-        const modifier = (l.optionIds || []).reduce((n, id) => {
-          const opt = (m.options || []).find((o) => o.id === id)
-          return n + (opt ? Number(opt.priceModifier) || 0 : 0)
-        }, 0)
-        return sum + (m.listPrice + modifier) * l.qty
-      }, 0)
-      if (extrasTotal >= 1) {
-        try {
-          const qr = await qrTableIssueExtrasQr(auth)
-          if (qr?.success) {
-            setQrPayload(String(qr.qrPayload || ''))
-            setQrAmount(Number(qr.qrAmount || 0))
-            clearExtrasPayPoll()
-            extrasPayPollRef.current = window.setInterval(async () => {
-              const st = await qrTablePollExtrasPay(auth)
-              if (st?.paid) {
-                clearExtrasPayPoll()
-                setQrPayload('')
-                const order = await qrTableGetOrder(auth)
-                if (order?.success && order.order) {
-                  setOrderSummary(toOrderSummary(order.order))
-                }
+    if (submitted && extrasTotal >= 1) {
+      try {
+        const qr = await qrTableIssueExtrasQr(auth)
+        if (qr?.success) {
+          setQrPayload(String(qr.qrPayload || ''))
+          setQrAmount(Number(qr.qrAmount || 0))
+          clearExtrasPayPoll()
+          extrasPayPollRef.current = window.setInterval(async () => {
+            const st = await qrTablePollExtrasPay(auth)
+            if (st?.paid) {
+              clearExtrasPayPoll()
+              setQrPayload('')
+              showToast(`${g('sentKitchen')} · ${g('sentKitchenHint')}`)
+              setHistoryOpen(true)
+              const order = await qrTableGetOrder(auth)
+              if (order?.success && order.order) {
+                setOrderSummary(toOrderSummary(order.order))
               }
-            }, QR_TABLE_GUEST_PAY_POLL_MS)
-          }
-        } catch {
-          /* extras QR is not on the kitchen-send path */
+            }
+          }, QR_TABLE_GUEST_PAY_POLL_MS)
         }
+      } catch {
+        /* extras QR is not on the kitchen-send path */
       }
     }
   }
@@ -932,12 +987,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
               <p className="mb-2 text-sm">
                 {g('amount')} ฿{qrAmount.toLocaleString()}
               </p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                alt="PromptPay QR"
-                className="mx-auto h-56 w-56 object-contain"
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(qrPayload)}`}
-              />
+              <GuestPayQrImg alt="PromptPay QR" className="mx-auto h-56 w-56 object-contain" payload={qrPayload} />
               <p className="mt-2 text-xs text-stone-500">{g('waitingPay')}</p>
             </div>
           )}
@@ -956,7 +1006,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
       {step === 'menu' ? (
         <section className="pb-28">
-          <div className="sticky top-[57px] z-10 space-y-3 border-b border-stone-200/80 bg-white/95 px-4 py-3 backdrop-blur">
+          <div className="sticky top-[57px] z-10 space-y-2 border-b border-stone-200/80 bg-white/95 px-4 py-2 backdrop-blur">
             <div className="flex gap-2">
               {includedMenus.length > 0 ? (
                 <button type="button" className={`min-h-12 flex-1 rounded-2xl text-[15px] font-semibold touch-manipulation ${tab === 'included' ? 'bg-[var(--qr-brand)]/15 text-[var(--qr-brand)]' : 'bg-stone-100 text-stone-800'}`} onClick={() => switchTab('included')}>
@@ -974,8 +1024,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
               onChange={(e) => setSearch(e.target.value)}
             />
             {mainCategories.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-stone-700">{g('mainCategory')}</p>
+              <div>
                 <div
                   className={
                     mainCategories.length <= 4
@@ -1015,9 +1064,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
               </div>
             ) : null}
             {subCategories.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-stone-700">{g('subCategory')}</p>
-                <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <div>
+                <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
                   {['', ...subCategories].map((c) => {
                     const selected = c ? subCategory === c : !subCategory
                     const label = c || g('allCategories')
@@ -1048,12 +1096,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
           <ul className="divide-y divide-stone-100/80">
             {list.map((m) => (
               <li key={m.menuId} className={`flex gap-3 px-4 py-3.5 ${m.soldOut ? 'opacity-55' : ''}`}>
-                <button
-                  type="button"
-                  className="flex min-w-0 flex-1 gap-3 text-left disabled:opacity-100"
-                  disabled={m.soldOut}
-                  onClick={() => requestAddMenu(m)}
-                >
+                <div className="flex min-w-0 flex-1 gap-3">
                 {m.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={m.imageUrl} alt="" className="h-[4.5rem] w-[4.5rem] shrink-0 rounded-2xl object-cover bg-stone-100 shadow-sm" />
@@ -1086,7 +1129,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
                     )}
                   </p>
                 </div>
-                </button>
+                </div>
                 <div className="flex items-center gap-2 self-center">
                   <button type="button" className="h-9 w-9 rounded-full bg-white text-lg shadow-sm disabled:opacity-40" disabled={m.soldOut || qtyForMenu(m.menuId) <= 0} onClick={() => decMenu(m.menuId)}>
                     −
@@ -1134,16 +1177,12 @@ export function QrTableGuestApp({ token }: { token: string }) {
           ) : null}
 
           {qrPayload ? (
-            <div className="mx-4 mt-3 rounded-2xl border border-stone-200 bg-white p-3 text-center shadow-sm">
-              <p className="mb-2 text-sm">
+            <div className="mx-4 mt-3 rounded-2xl border border-amber-200 bg-white p-3 text-center shadow-sm">
+              <p className="mb-1 text-sm font-semibold">
                 {g('payExtras')} ฿{qrAmount.toLocaleString()}
               </p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                alt="Extras QR"
-                className="mx-auto h-48 w-48 object-contain"
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrPayload)}`}
-              />
+              <p className="mb-2 text-xs text-stone-600">{g('extrasPayThenKitchen')}</p>
+              <GuestPayQrImg alt="Extras QR" className="mx-auto h-48 w-48 object-contain" payload={qrPayload} />
             </div>
           ) : null}
 
@@ -1151,7 +1190,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
             <button
               type="button"
               disabled={busy || cart.length === 0}
-              onClick={handleSubmit}
+              onClick={requestSubmit}
               className={`w-full rounded-2xl py-3.5 font-semibold disabled:opacity-50 ${brandBtn}`}
             >
               {busy ? g('sendingKitchen') : g('sendKitchen')}
@@ -1161,6 +1200,41 @@ export function QrTableGuestApp({ token }: { token: string }) {
             </button>
           </div>
         </section>
+      ) : null}
+
+      {submitConfirmOpen ? (
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-black/45"
+          role="presentation"
+          onClick={() => setSubmitConfirmOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-3xl bg-white p-4 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-base font-semibold">{g('confirmSendKitchen')}</p>
+            <p className="mt-1 text-sm text-stone-600">{g('confirmSendKitchenHint')}</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="rounded-2xl bg-stone-100 py-3 font-semibold text-stone-800"
+                onClick={() => setSubmitConfirmOpen(false)}
+              >
+                {g('cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className={`rounded-2xl py-3 font-semibold disabled:opacity-50 ${brandBtn}`}
+                onClick={() => void handleSubmit()}
+              >
+                {g('confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <QrTableGuestOptionSheet

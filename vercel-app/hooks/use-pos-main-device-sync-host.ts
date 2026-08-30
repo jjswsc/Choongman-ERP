@@ -141,11 +141,12 @@ import {
 } from '@/lib/pos-kitchen-dine-in-delta'
 import {
   inferPrevQtySnapshotExcludingRecentQrGuestLines,
+  isQrTableGuestOrderLine,
   orderLooksLikeQrTableGuestOrder,
+  planQrGuestAddonAutoprint,
   resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
-  shouldSkipHallAutoprintForQrGuestAddon,
-  shouldSkipRealtimeKitchenAutoprintForQrGuestAddon,
+  shouldSkipQrTableSessionOpenAutoprint,
 } from '@/lib/qr-table-types'
 import { syncGrabCancelWatchSnapshot, applyGrabCancelWatchRealtimeRow } from '@/lib/pos-grab-cancel-watch'
 import {
@@ -947,7 +948,14 @@ export function usePosMainDeviceSyncHost(): void {
         guestCount: Number(row.guest_count ?? 0) || undefined,
       } as PosOrder
 
-      if (!skipLocalKitchenAutoprintForOrder(orderId, row)) {
+      const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({
+        createdBy: String(row.created_by ?? ''),
+        memo: String(row.memo ?? ''),
+        items,
+      })
+      if (skipQrSessionOpenPrint) {
+        logPosPrintDebug('realtime_insert_skip_qr_table_session_open', { orderId })
+      } else if (!skipLocalKitchenAutoprintForOrder(orderId, row)) {
         runAutoprintForNewOrder(orderId, receiptPayload, orderForKitchen, 'realtime_insert', shouldDeferAutoprint)
       } else if (
         shouldSyncHostKitchenFallbackForTerminalOrder(orderId, storeCode, autoPrint.kitchenOnOrder)
@@ -1339,13 +1347,18 @@ export function usePosMainDeviceSyncHost(): void {
         })
         const receiptPrintItemsRemote = items.map((it) => ({
           ...it,
-          ...(changedSet.has(resolveDineInKitchenSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
+          ...(changedSet.has(resolveDineInKitchenSnapshotItemKey(it)) && !isQrTableGuestOrderLine(it)
+            ? { isAddon: true as const }
+            : {}),
         }))
         const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
-        const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
-          hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
-        )
-        const printHallAddon = shouldAutoPrintReceipt && !skipQrGuestHall
+        const qrAddonPlan = planQrGuestAddonAutoprint({
+          hallAddonLines: hallAddonLinesRemote,
+          kitchenCartLines,
+        })
+        const skipQrGuestHall = !qrAddonPlan.printHall
+        const printHallAddon = shouldAutoPrintReceipt && qrAddonPlan.printHall
+        const kitchenRealtimeLines = qrAddonPlan.kitchenStaffLines
         const receiptPayloadRemote: HallReceiptPrintPayload = {
           orderNo: String(addonRow.order_no ?? ''),
           storeCode: storeCodeForSkip,
@@ -1358,7 +1371,9 @@ export function usePosMainDeviceSyncHost(): void {
           couponDiscountAmt,
           discountReason: String(addonRow.discount_reason ?? '').trim() || undefined,
           total: pricing.finalTotal,
-          _autoPrintDedupeKey: `order:${addonOrderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
+          _autoPrintDedupeKey: `order:${addonOrderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(
+            qrAddonPlan.hallStaffLines.length > 0 ? qrAddonPlan.hallStaffLines : kitchenRealtimeLines
+          )}`,
           vatFeeAmt: pricing.vatFeeAmt,
           vatFeeMode: pricing.vatFeeMode,
           ...receiptTaxDisplayFieldsFromPricing(pricing),
@@ -1371,8 +1386,8 @@ export function usePosMainDeviceSyncHost(): void {
           ...posGuestCountSpread(addonRow.guest_count),
         }
         dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
-        if (autoPrint.kitchenOnOrder && kitchenCartLines.length > 0) {
-          if (shouldSkipRealtimeKitchenAutoprintForQrGuestAddon(kitchenCartLines)) {
+        if (autoPrint.kitchenOnOrder && kitchenRealtimeLines.length > 0) {
+          if (qrAddonPlan.skipRealtimeKitchen) {
             logPosPrintDebug('realtime_dine_in_add_kitchen_skip_qr_job', { orderId: addonOrderId })
           } else {
           const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
@@ -1385,7 +1400,7 @@ export function usePosMainDeviceSyncHost(): void {
             kitchenOnlyDelayMs: KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS,
           })
           const runKitchen = () => {
-            const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(addonOrderId, kitchenCartLines)
+            const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(addonOrderId, kitchenRealtimeLines)
             if (!reserveKitchenAutoPrintKey(kitchenDedupeKey)) return
             const orderForKitchen = {
               id: addonOrderId,
@@ -1394,11 +1409,11 @@ export function usePosMainDeviceSyncHost(): void {
               orderType: 'dine_in',
               tableName: String(addonRow.table_name ?? ''),
               memo: String(addonRow.memo ?? ''),
-              items: kitchenCartLines as PosOrder['items'],
+              items: kitchenRealtimeLines as PosOrder['items'],
               guestCount: Number(addonRow.guest_count ?? 0) || undefined,
             } as PosOrder
             void printKitchenForOrder(orderForKitchen, autoprintCtx, {
-              kitchenLines: kitchenCartLines as Array<Record<string, unknown>>,
+              kitchenLines: kitchenRealtimeLines as Array<Record<string, unknown>>,
               dedupeKey: kitchenDedupeKey,
             }).catch(() => releaseKitchenAutoPrintKey(kitchenDedupeKey))
           }
@@ -1678,7 +1693,14 @@ export function usePosMainDeviceSyncHost(): void {
           })
           const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
 
-          if (!skipLocalKitchenAutoprintForOrder(oid, {
+          const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({
+            createdBy: String((order as { createdBy?: string }).createdBy ?? ''),
+            memo: String(order.memo ?? ''),
+            items,
+          })
+          if (skipQrSessionOpenPrint) {
+            logPosPrintDebug('poll_skip_qr_table_session_open', { orderId: oid })
+          } else if (!skipLocalKitchenAutoprintForOrder(oid, {
             memo: String(order.memo ?? ''),
             order_type: String(order.orderType ?? ''),
             created_by: String((order as { createdBy?: string }).createdBy ?? ''),
@@ -1836,13 +1858,16 @@ export function usePosMainDeviceSyncHost(): void {
                   refetchStores({ scope: 'all' })
                   const receiptPrintItemsRemote = items.map((it) => ({
                     ...it,
-                    ...(changedSet.has(resolveDineInKitchenSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
+                    ...(changedSet.has(resolveDineInKitchenSnapshotItemKey(it)) && !isQrTableGuestOrderLine(it)
+                      ? { isAddon: true as const }
+                      : {}),
                   }))
                   const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
-                  const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
-                    hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
-                  )
-                  const printHallAddon = wantMetaDineInAddonReceipt && !skipQrGuestHall
+                  const qrAddonPlan = planQrGuestAddonAutoprint({
+                    hallAddonLines: hallAddonLinesRemote,
+                    kitchenCartLines,
+                  })
+                  const printHallAddon = wantMetaDineInAddonReceipt && qrAddonPlan.printHall
                   const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
                   const discountAmt = Number(o.discountAmt ?? 0)
                   const couponDiscountAmt = Number(o.couponDiscountAmt ?? 0)
@@ -1864,7 +1889,9 @@ export function usePosMainDeviceSyncHost(): void {
                     couponDiscountAmt,
                     discountReason: String(o.discountReason ?? '').trim() || undefined,
                     total: pricing.finalTotal,
-                    _autoPrintDedupeKey: `order:${oid}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines)}`,
+                    _autoPrintDedupeKey: `order:${oid}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(
+                      qrAddonPlan.hallStaffLines.length > 0 ? qrAddonPlan.hallStaffLines : qrAddonPlan.kitchenStaffLines
+                    )}`,
                     vatFeeAmt: pricing.vatFeeAmt,
                     vatFeeMode: pricing.vatFeeMode,
                     ...receiptTaxDisplayFieldsFromPricing(pricing),

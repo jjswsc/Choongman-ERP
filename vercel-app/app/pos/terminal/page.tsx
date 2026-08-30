@@ -177,11 +177,12 @@ import {
 } from '@/lib/pos-kitchen-dine-in-delta'
 import {
   inferPrevQtySnapshotExcludingRecentQrGuestLines,
+  isQrTableGuestOrderLine,
   orderLooksLikeQrTableGuestOrder,
+  planQrGuestAddonAutoprint,
   resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
-  shouldSkipHallAutoprintForQrGuestAddon,
-  shouldSkipRealtimeKitchenAutoprintForQrGuestAddon,
+  shouldSkipQrTableSessionOpenAutoprint,
 } from '@/lib/qr-table-types'
 import { usePosMainDeviceSyncOwnedByLayout } from '@/hooks/use-pos-main-device-sync-owned-by-layout'
 import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
@@ -4906,7 +4907,14 @@ export default function PosTerminalPage() {
         created_by: String(row.created_by ?? ''),
       })
       const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
-      if (!shouldDeferAutoprint) {
+      const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({
+        createdBy: String(row.created_by ?? ''),
+        memo,
+        items,
+      })
+      if (skipQrSessionOpenPrint) {
+        logPosPrintDebug('realtime_insert_skip_qr_table_session_open', { orderId })
+      } else if (!shouldDeferAutoprint) {
         logPosPrintDebug('realtime_insert_autoprint_start', {
           orderId,
           autoPrintReceiptOnOrder,
@@ -5482,15 +5490,20 @@ export default function PosTerminalPage() {
         adjustments: pricingAdjustments,
       })
 
-      const receiptPrintItemsRemote = items.map((it) => ({
-        ...it,
-        ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
-      }))
-      const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
-      const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
-        hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
-      )
-      const printHallAddon = shouldAutoPrintReceipt && !skipQrGuestHall
+        const receiptPrintItemsRemote = items.map((it) => ({
+          ...it,
+          ...(changedSet.has(resolveDineInSnapshotItemKey(it)) && !isQrTableGuestOrderLine(it)
+            ? { isAddon: true as const }
+            : {}),
+        }))
+        const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
+        const qrAddonPlan = planQrGuestAddonAutoprint({
+          hallAddonLines: hallAddonLinesRemote,
+          kitchenCartLines,
+        })
+        const skipQrGuestHall = !qrAddonPlan.printHall
+        const printHallAddon = shouldAutoPrintReceipt && qrAddonPlan.printHall
+        const kitchenRealtimeLines = qrAddonPlan.kitchenStaffLines
 
       const storeCode = String(row.store_code ?? currentStoreId)
       const orderNoStr = String(row.order_no ?? '')
@@ -5510,7 +5523,7 @@ export default function PosTerminalPage() {
         discountReason: String(row.discount_reason ?? '').trim() || undefined,
         total: pricing.finalTotal,
         _autoPrintDedupeKey: `order:${orderId}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(
-          hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines,
+          qrAddonPlan.hallStaffLines.length > 0 ? qrAddonPlan.hallStaffLines : kitchenRealtimeLines,
           { formatNote: formatLineNoteForPrint }
         )}`,
         vatFeeAmt: pricing.vatFeeAmt,
@@ -5525,7 +5538,7 @@ export default function PosTerminalPage() {
         ...posGuestCountSpread(row.guest_count),
       }
 
-      const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(orderId, kitchenCartLines, {
+      const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(orderId, kitchenRealtimeLines, {
         formatNote: formatLineNoteForPrint,
       })
 
@@ -5534,7 +5547,7 @@ export default function PosTerminalPage() {
 
       const dispatchRemoteKitchen = () => {
         dispatchDineInAddonKitchenPrint({
-          kitchenCartLines,
+          kitchenCartLines: kitchenRealtimeLines,
           dedupeKey: kitchenDedupeKey,
           orderNo: orderNoStr,
           storeCode,
@@ -5545,8 +5558,8 @@ export default function PosTerminalPage() {
         })
       }
 
-      if (autoPrintKitchenSlipOnOrder && kitchenCartLines.length > 0) {
-        if (shouldSkipRealtimeKitchenAutoprintForQrGuestAddon(kitchenCartLines)) {
+      if (autoPrintKitchenSlipOnOrder && kitchenRealtimeLines.length > 0) {
+        if (qrAddonPlan.skipRealtimeKitchen) {
           logPosPrintDebug('remote_dine_in_add_kitchen_skip_qr_job', { orderId })
         } else {
           const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
@@ -5829,7 +5842,14 @@ export default function PosTerminalPage() {
             created_by: undefined,
           })
           const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
-          if (!shouldDeferAutoprint) {
+          const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({
+            createdBy: String((order as { createdBy?: string }).createdBy ?? ''),
+            memo: String(order.memo ?? ''),
+            items,
+          })
+          if (skipQrSessionOpenPrint) {
+            logPosPrintDebug('poll_skip_qr_table_session_open', { orderId: oid })
+          } else if (!shouldDeferAutoprint) {
             logPosPrintDebug('poll_autoprint_start', {
               orderId: oid,
               autoPrintReceiptOnOrder,
@@ -5979,13 +5999,18 @@ export default function PosTerminalPage() {
                 refetchCurrentStore()
                 const receiptPrintItemsRemote = items.map((it) => ({
                   ...it,
-                  ...(changedSet.has(resolveDineInSnapshotItemKey(it)) ? { isAddon: true as const } : {}),
+                  ...(changedSet.has(resolveDineInSnapshotItemKey(it)) && !isQrTableGuestOrderLine(it)
+                    ? { isAddon: true as const }
+                    : {}),
                 }))
                 const hallAddonLinesRemote = receiptPrintItemsRemote.filter((it) => it.isAddon === true)
-                const skipQrGuestHall = shouldSkipHallAutoprintForQrGuestAddon(
-                  hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines
-                )
-                const printHallAddon = wantMetaDineInAddonReceipt && !skipQrGuestHall
+                const qrAddonPlan = planQrGuestAddonAutoprint({
+                  hallAddonLines: hallAddonLinesRemote,
+                  kitchenCartLines,
+                })
+                const skipQrGuestHall = !qrAddonPlan.printHall
+                const printHallAddon = wantMetaDineInAddonReceipt && qrAddonPlan.printHall
+                const kitchenRealtimeLines = qrAddonPlan.kitchenStaffLines
                 const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
                 const discountAmt = Number(o.discountAmt ?? 0)
                 const couponDiscountAmt = Number(o.couponDiscountAmt ?? 0)
@@ -6011,7 +6036,7 @@ export default function PosTerminalPage() {
                   discountReason: String(o.discountReason ?? '').trim() || undefined,
                   total: pricing.finalTotal,
                   _autoPrintDedupeKey: `order:${oid}:hall:add:${buildDineInAddKitchenPrintDedupeSuffix(
-                    hallAddonLinesRemote.length > 0 ? hallAddonLinesRemote : kitchenCartLines,
+                    qrAddonPlan.hallStaffLines.length > 0 ? qrAddonPlan.hallStaffLines : kitchenRealtimeLines,
                     { formatNote: formatLineNoteForPrint }
                   )}`,
                   vatFeeAmt: pricing.vatFeeAmt,
@@ -6029,8 +6054,8 @@ export default function PosTerminalPage() {
                   orderId: oid,
                   changedCount: changedIds.length,
                 })
-                if (wantMetaDineInAddonKitchen && kitchenCartLines.length > 0) {
-                  if (shouldSkipRealtimeKitchenAutoprintForQrGuestAddon(kitchenCartLines)) {
+                if (wantMetaDineInAddonKitchen && kitchenRealtimeLines.length > 0) {
+                  if (qrAddonPlan.skipRealtimeKitchen) {
                     logPosPrintDebug('poll_meta_remote_dine_in_add_kitchen_skip_qr_job', { orderId: oid })
                   } else {
                   const kitchenDelayMs = resolveDineInAddonKitchenDelayMs({
@@ -6044,8 +6069,8 @@ export default function PosTerminalPage() {
                   })
                   const runPollKitchen = () => {
                     dispatchDineInAddonKitchenPrint({
-                      kitchenCartLines,
-                      dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(oid, kitchenCartLines, {
+                      kitchenCartLines: kitchenRealtimeLines,
+                      dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(oid, kitchenRealtimeLines, {
                         formatNote: formatLineNoteForPrint,
                       }),
                       orderNo: orderNoStr,

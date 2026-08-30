@@ -130,6 +130,56 @@ export function shouldSkipHallAutoprintForQrGuestAddon(
   return deltaLines.every(isQrTableGuestOrderLine)
 }
 
+export function excludeQrTableGuestOrderLines<T extends { source?: unknown; id?: unknown }>(
+  lines: T[] | null | undefined
+): T[] {
+  return (lines || []).filter((it) => !isQrTableGuestOrderLine(it))
+}
+
+/**
+ * 홀 직원 줄과 QR 손님이 한 UPDATE에 섞이면, 홀·Realtime 주방은 직원 줄만 찍는다.
+ * QR 줄은 pos_print_jobs 가 주방을 담당한다.
+ */
+export function planQrGuestAddonAutoprint<
+  H extends { source?: unknown; id?: unknown },
+  K extends { source?: unknown; id?: unknown },
+>(params: {
+  hallAddonLines: H[]
+  kitchenCartLines: K[]
+}): {
+  hallStaffLines: H[]
+  kitchenStaffLines: K[]
+  printHall: boolean
+  skipRealtimeKitchen: boolean
+} {
+  const hallStaffLines = excludeQrTableGuestOrderLines(params.hallAddonLines)
+  const kitchenStaffLines = excludeQrTableGuestOrderLines(params.kitchenCartLines)
+  const hallFromKitchenFallback =
+    params.hallAddonLines.length === 0 && kitchenStaffLines.length > 0
+  return {
+    hallStaffLines,
+    kitchenStaffLines,
+    printHall: hallStaffLines.length > 0 || hallFromKitchenFallback,
+    skipRealtimeKitchen: kitchenStaffLines.length === 0,
+  }
+}
+
+/** 세션 오픈 때 만든 pos_orders INSERT — 홀 체크빌·주방을 찍지 않음(음식은 이후 submit 잡) */
+export function shouldSkipQrTableSessionOpenAutoprint(params: {
+  createdBy?: string | null
+  memo?: string | null
+  items?: Array<{ source?: unknown; id?: unknown; isBuffetEntry?: unknown }> | null
+}): boolean {
+  if (isQrTableCreatedBy(params.createdBy)) return true
+  const memo = String(params.memo || '')
+  const memoLooksQr = /\[QR테이블\]|\[QR table\]/i.test(memo)
+  const items = Array.isArray(params.items) ? params.items : []
+  if (memoLooksQr && (items.length === 0 || items.every((it) => isQrTableGuestOrderLine(it)))) {
+    return true
+  }
+  return false
+}
+
 /**
  * QR 손님 추가는 pos_print_jobs 가 주방을 찍는다.
  * Realtime이 메뉴 내용 키로 찍으면, 같은 메뉴를 2대가 동시에 낼 때 한 장만 나간다.
@@ -138,6 +188,25 @@ export function shouldSkipRealtimeKitchenAutoprintForQrGuestAddon(
   deltaLines: Array<{ source?: unknown; id?: unknown }> | null | undefined
 ): boolean {
   return shouldSkipHallAutoprintForQrGuestAddon(deltaLines)
+}
+
+type QrExtraPrepayLine = {
+  source?: unknown
+  buffetIncluded?: unknown
+  qrPrepaid?: unknown
+  isBuffetEntry?: unknown
+}
+
+/** Extra 선결제 확정 시 방금 unpaid→prepaid로 바뀐 줄만 반환(과거 prepaid 재인쇄 금지) */
+export function markNewlyPrepaidQrExtraLines<T extends QrExtraPrepayLine>(items: T[]): T[] {
+  const newly: T[] = []
+  for (const it of items) {
+    if (it.source === 'qr_table' && it.buffetIncluded !== true && it.qrPrepaid !== true && !it.isBuffetEntry) {
+      it.qrPrepaid = true
+      newly.push(it)
+    }
+  }
+  return newly
 }
 
 /** QR 손님 추가주문은 홀 전표·UI 깜빡임을 기다리지 않고 주방을 바로 보냄 */
