@@ -260,21 +260,12 @@ export function QrTableSessionPanel(props: {
       {/* 한 줄 툴바 */}
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 px-2.5 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <button
-            type="button"
-            className="flex min-w-0 items-center gap-1.5 rounded-lg text-left transition hover:opacity-90 disabled:opacity-50"
-            disabled={printBusy}
-            title={printQrHint}
-            aria-label={printQrLabel}
-            onClick={() => void printTableQr()}
-          >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
-              <QrCode className="h-3.5 w-3.5" aria-hidden />
-            </span>
-            <span className="truncate text-xs font-semibold tracking-tight text-slate-800">
-              {tr('qrTableSessionTitle', 'QR 테이블오더')}
-            </span>
-          </button>
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
+            <QrCode className="h-3.5 w-3.5" aria-hidden />
+          </span>
+          <span className="truncate text-xs font-semibold tracking-tight text-slate-800">
+            {tr('qrTableSessionTitle', 'QR 테이블오더')}
+          </span>
           {badge ? (
             <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>
               {badge.label}

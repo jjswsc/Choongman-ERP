@@ -74,6 +74,7 @@ export async function qrTableGetMenus(sessionAuth: string) {
 type MenuLike = {
   menuId: number
   name: string
+  code?: string
   price: number
   listPrice: number
   imageUrl: string
@@ -81,6 +82,27 @@ type MenuLike = {
   description: string
   category: string
   categoryMain: string
+  soldOut?: boolean
+  isBanban?: boolean
+  banbanFlavorMenuIds?: string[]
+  optionSelectionGroups?: string[]
+  optionSelectionConfig?: Array<{
+    key: string
+    label?: string
+    audience?: 'all' | 'hall' | 'delivery'
+    required?: boolean
+  }>
+  options?: Array<{
+    id: number
+    menuId: number
+    name: string
+    optionCode: string
+    priceModifier: number
+    optionType: 'substitution' | 'additive'
+    sortOrder: number
+    optionStepValues?: Record<string, string> | null
+    sellHall?: boolean
+  }>
 }
 
 export async function qrTableSubmitCart(sessionAuth: string, lines: QrCartLineInput[]) {

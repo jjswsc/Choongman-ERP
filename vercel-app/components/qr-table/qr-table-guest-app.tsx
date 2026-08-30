@@ -16,13 +16,22 @@ import {
 } from '@/lib/api-client/qr-table'
 import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession } from '@/lib/qr-table-types'
 import { buffetTierDisplayName } from '@/lib/qr-table-types'
-import { aggregateQrGuestSentLines, groupQrGuestSentLinesByTime } from '@/lib/qr-table-guest-menu'
+import {
+  aggregateQrGuestSentLines,
+  groupQrGuestSentLinesByTime,
+  qrGuestCartLineKey,
+  qrGuestMenuNeedsOptionPicker,
+  type QrGuestMenuOption,
+} from '@/lib/qr-table-guest-menu'
 import { normalizeQrGuestLang, qrGuestT, type QrGuestLang } from '@/lib/i18n-qr-table-guest'
+import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
+import type { PosMenu, PosMenuOption } from '@/lib/api-client'
 import { QR_TABLE_GUEST_PAY_POLL_MS } from '@/lib/qr-table-poll-interval'
 
 type MenuItem = {
   menuId: number
   name: string
+  code?: string
   price: number
   listPrice: number
   imageUrl: string
@@ -31,6 +40,21 @@ type MenuItem = {
   description: string
   category: string
   categoryMain: string
+  isBanban?: boolean
+  banbanFlavorMenuIds?: string[]
+  optionSelectionGroups?: string[]
+  optionSelectionConfig?: PosMenu['optionSelectionConfig']
+  options?: QrGuestMenuOption[]
+}
+
+type CartLine = {
+  key: string
+  menuId: number
+  qty: number
+  optionIds: number[]
+  optionName: string
+  menuId1?: number
+  menuId2?: number
 }
 
 type OrderSummaryItem = {
@@ -105,7 +129,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [session, setSession] = React.useState<QrTableSession | null>(null)
   const [includedMenus, setIncludedMenus] = React.useState<MenuItem[]>([])
   const [extraMenus, setExtraMenus] = React.useState<MenuItem[]>([])
-  const [cart, setCart] = React.useState<Record<number, number>>({})
+  const [cart, setCart] = React.useState<CartLine[]>([])
+  const [optionMenu, setOptionMenu] = React.useState<MenuItem | null>(null)
   const [tab, setTab] = React.useState<'included' | 'extras'>('included')
   const [mainCategory, setMainCategory] = React.useState('')
   const [subCategory, setSubCategory] = React.useState('')
@@ -139,6 +164,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
     if (msg === 'session_forbidden' || msg === 'session_required') return g('sessionForbidden')
     if (msg === 'session_device_limit') return g('sessionDeviceLimit')
     if (msg === 'invalid_token') return g('invalidToken')
+    if (msg === 'option_required' || msg.startsWith('option_not_')) return g('optionRequired')
+    if (msg === 'banban_required' || msg === 'banban_flavor_missing') return g('banbanRequired')
     return msg
   }
 
@@ -329,21 +356,69 @@ export function QrTableGuestApp({ token }: { token: string }) {
     }
   }
 
-  function bumpCart(menuId: number, delta: number, soldOut?: boolean) {
-    if (soldOut && delta > 0) return
+  function qtyForMenu(menuId: number): number {
+    return cart.filter((line) => line.menuId === menuId).reduce((n, line) => n + line.qty, 0)
+  }
+
+  function cartLinesForMenu(menuId: number): CartLine[] {
+    return cart.filter((line) => line.menuId === menuId)
+  }
+
+  function addCartLine(menu: MenuItem, pick?: QrGuestOptionPick) {
+    if (menu.soldOut) return
+    const optionIds = pick?.optionIds || []
+    const banban =
+      pick?.menuId1 && pick?.menuId2 ? { menuId1: pick.menuId1, menuId2: pick.menuId2 } : undefined
+    const key = qrGuestCartLineKey(menu.menuId, optionIds, banban)
     setCart((prev) => {
-      const next = { ...prev }
-      const v = Math.max(0, (next[menuId] || 0) + delta)
-      if (v <= 0) delete next[menuId]
-      else next[menuId] = v
-      return next
+      const i = prev.findIndex((line) => line.key === key)
+      if (i >= 0) {
+        const next = [...prev]
+        next[i] = { ...next[i], qty: Math.min(99, next[i].qty + 1) }
+        return next
+      }
+      return [
+        ...prev,
+        {
+          key,
+          menuId: menu.menuId,
+          qty: 1,
+          optionIds,
+          optionName: pick?.optionName || '',
+          menuId1: pick?.menuId1,
+          menuId2: pick?.menuId2,
+        },
+      ]
+    })
+    setOptionMenu(null)
+  }
+
+  function requestAddMenu(menu: MenuItem) {
+    if (menu.soldOut) return
+    if (qrGuestMenuNeedsOptionPicker(menu)) {
+      setOptionMenu(menu)
+      return
+    }
+    addCartLine(menu)
+  }
+
+  function decMenu(menuId: number) {
+    setCart((prev) => {
+      const last = [...prev].reverse().find((line) => line.menuId === menuId)
+      if (!last) return prev
+      return prev
+        .map((line) => (line.key === last.key ? { ...line, qty: line.qty - 1 } : line))
+        .filter((line) => line.qty > 0)
     })
   }
 
   async function handleSubmit() {
-    const lines = Object.entries(cart).map(([menuId, qty]) => ({
-      menuId: Number(menuId),
-      qty: Number(qty),
+    const lines = cart.map((line) => ({
+      menuId: line.menuId,
+      qty: line.qty,
+      optionIds: line.optionIds.length ? line.optionIds : undefined,
+      menuId1: line.menuId1,
+      menuId2: line.menuId2,
     }))
     if (!lines.length) return
     setBusy(true)
@@ -365,7 +440,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         setError(humanizeApiError(res.message || 'submit_failed'))
         return
       }
-      setCart({})
+      setCart([])
       showToast(g('sentKitchen'))
       if (res.order) {
         setOrderSummary(toOrderSummary(res.order))
@@ -379,7 +454,12 @@ export function QrTableGuestApp({ token }: { token: string }) {
     if (session?.extrasPaymentModeResolved === 'prepay' || extrasChoice === 'prepay') {
       const extrasTotal = lines.reduce((sum, l) => {
         const m = extraMenus.find((x) => x.menuId === l.menuId)
-        return sum + (m ? m.listPrice * l.qty : 0)
+        if (!m) return sum
+        const modifier = (l.optionIds || []).reduce((n, id) => {
+          const opt = (m.options || []).find((o) => o.id === id)
+          return n + (opt ? Number(opt.priceModifier) || 0 : 0)
+        }, 0)
+        return sum + (m.listPrice + modifier) * l.qty
       }, 0)
       if (extrasTotal >= 1) {
         try {
@@ -461,6 +541,30 @@ export function QrTableGuestApp({ token }: { token: string }) {
     return [...set].sort((a, b) => a.localeCompare(b))
   }, [listRaw, mainCategory, uncategorizedLabel])
 
+  const mainCategoryCounts = React.useMemo(() => {
+    const map = new Map<string, number>()
+    for (const m of listRaw) {
+      const main = String(m.categoryMain || '').trim() || uncategorizedLabel
+      map.set(main, (map.get(main) || 0) + 1)
+    }
+    return map
+  }, [listRaw, uncategorizedLabel])
+
+  const subCategoryCounts = React.useMemo(() => {
+    const map = new Map<string, number>()
+    let all = 0
+    for (const m of listRaw) {
+      const main = String(m.categoryMain || '').trim() || uncategorizedLabel
+      if (mainCategory && main !== mainCategory) continue
+      all += 1
+      const sub = String(m.category || '').trim()
+      if (!sub) continue
+      map.set(sub, (map.get(sub) || 0) + 1)
+    }
+    map.set('', all)
+    return map
+  }, [listRaw, mainCategory, uncategorizedLabel])
+
   React.useEffect(() => {
     if (!mainCategories.length) {
       setMainCategory('')
@@ -497,6 +601,44 @@ export function QrTableGuestApp({ token }: { token: string }) {
       String(m.categoryMain || '').toLowerCase().includes(q)
     )
   })
+
+  function toPosMenu(m: MenuItem): PosMenu {
+    return {
+      id: String(m.menuId),
+      code: m.code || '',
+      name: m.name,
+      category: m.category,
+      categoryMain: m.categoryMain,
+      price: m.listPrice,
+      imageUrl: m.imageUrl,
+      vatIncluded: true,
+      isActive: true,
+      sortOrder: 0,
+      isBanban: m.isBanban,
+      banbanFlavorMenuIds: m.banbanFlavorMenuIds,
+      optionSelectionGroups: m.optionSelectionGroups,
+      optionSelectionConfig: m.optionSelectionConfig,
+      soldOutDate: m.soldOut ? getBangkokSoldOutFlag() : undefined,
+    }
+  }
+
+  function toPosOptions(options: QrGuestMenuOption[] | undefined): PosMenuOption[] {
+    return (options || []).map((o) => ({
+      id: String(o.id),
+      menuId: String(o.menuId),
+      name: o.name,
+      optionCode: o.optionCode,
+      priceModifier: o.priceModifier,
+      sortOrder: o.sortOrder,
+      optionType: o.optionType,
+      optionStepValues: o.optionStepValues,
+      sellHall: o.sellHall !== false,
+    }))
+  }
+
+  function getBangkokSoldOutFlag(): string {
+    return new Date().toLocaleString('en-CA', { timeZone: 'Asia/Bangkok' }).slice(0, 10)
+  }
 
   function switchTab(next: 'included' | 'extras') {
     setTab(next)
@@ -814,70 +956,90 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
       {step === 'menu' ? (
         <section className="pb-28">
-          <div className="sticky top-[57px] z-10 space-y-2 border-b border-stone-200/80 bg-white/95 px-4 py-2 backdrop-blur">
+          <div className="sticky top-[57px] z-10 space-y-3 border-b border-stone-200/80 bg-white/95 px-4 py-3 backdrop-blur">
             <div className="flex gap-2">
               {includedMenus.length > 0 ? (
-                <button type="button" className={`flex-1 rounded-xl py-2.5 text-sm font-medium ${tab === 'included' ? 'bg-[var(--qr-brand)]/15 text-[var(--qr-brand)]' : 'bg-stone-100'}`} onClick={() => switchTab('included')}>
+                <button type="button" className={`min-h-12 flex-1 rounded-2xl text-[15px] font-semibold touch-manipulation ${tab === 'included' ? 'bg-[var(--qr-brand)]/15 text-[var(--qr-brand)]' : 'bg-stone-100 text-stone-800'}`} onClick={() => switchTab('included')}>
                   {g('included')}
                 </button>
               ) : null}
-              <button type="button" className={`flex-1 rounded-xl py-2.5 text-sm font-medium ${tab === 'extras' ? 'bg-[var(--qr-brand)]/15 text-[var(--qr-brand)]' : 'bg-stone-100'}`} onClick={() => switchTab('extras')}>
+              <button type="button" className={`min-h-12 flex-1 rounded-2xl text-[15px] font-semibold touch-manipulation ${tab === 'extras' ? 'bg-[var(--qr-brand)]/15 text-[var(--qr-brand)]' : 'bg-stone-100 text-stone-800'}`} onClick={() => switchTab('extras')}>
                 {includedMenus.length > 0 ? g('extras') : g('menuTab')}
               </button>
             </div>
             <input
-              className="w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm"
+              className="min-h-12 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 text-[15px]"
               placeholder={g('search')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             {mainCategories.length > 0 ? (
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-stone-500">{g('mainCategory')}</p>
-                <div className="flex gap-2 overflow-x-auto pb-0.5">
-                  {mainCategories.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                        mainCategory === c ? 'bg-[var(--qr-brand,#b45309)] text-white' : 'bg-stone-100 text-stone-800'
-                      }`}
-                      onClick={() => {
-                        setMainCategory(c)
-                        setSubCategory('')
-                      }}
-                    >
-                      {c}
-                    </button>
-                  ))}
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-stone-700">{g('mainCategory')}</p>
+                <div
+                  className={
+                    mainCategories.length <= 4
+                      ? 'grid grid-cols-2 gap-2'
+                      : mainCategories.length <= 6
+                        ? 'grid grid-cols-3 gap-2'
+                        : 'flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 scrollbar-hide'
+                  }
+                >
+                  {mainCategories.map((c) => {
+                    const selected = mainCategory === c
+                    const count = mainCategoryCounts.get(c) || 0
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`flex min-h-14 items-center justify-between gap-1.5 rounded-2xl px-3 text-left shadow-sm touch-manipulation ${
+                          mainCategories.length > 6 ? 'min-w-[9.5rem] shrink-0 snap-start px-3.5' : ''
+                        } ${
+                          selected
+                            ? 'bg-[var(--qr-brand,#b45309)] text-white'
+                            : 'bg-white text-stone-800 ring-1 ring-stone-200'
+                        }`}
+                        onClick={() => {
+                          setMainCategory(c)
+                          setSubCategory('')
+                        }}
+                      >
+                        <span className="min-w-0 truncate text-[15px] font-semibold leading-tight">{c}</span>
+                        <span className={`shrink-0 tabular-nums text-sm font-medium ${selected ? 'text-white/80' : 'text-stone-400'}`}>
+                          {count}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             ) : null}
             {subCategories.length > 0 ? (
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-stone-500">{g('subCategory')}</p>
-                <div className="flex gap-2 overflow-x-auto pb-0.5">
-                  <button
-                    type="button"
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
-                      !subCategory ? 'bg-stone-900 text-white' : 'bg-stone-100'
-                    }`}
-                    onClick={() => setSubCategory('')}
-                  >
-                    {g('allCategories')}
-                  </button>
-                  {subCategories.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${
-                        subCategory === c ? 'bg-stone-900 text-white' : 'bg-stone-100'
-                      }`}
-                      onClick={() => setSubCategory(c)}
-                    >
-                      {c}
-                    </button>
-                  ))}
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-stone-700">{g('subCategory')}</p>
+                <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                  {['', ...subCategories].map((c) => {
+                    const selected = c ? subCategory === c : !subCategory
+                    const label = c || g('allCategories')
+                    const count = subCategoryCounts.get(c) || 0
+                    return (
+                      <button
+                        key={c || 'all'}
+                        type="button"
+                        className={`flex min-h-12 shrink-0 snap-start items-center gap-2 rounded-2xl px-4 text-[15px] font-semibold shadow-sm touch-manipulation ${
+                          selected
+                            ? 'bg-stone-900 text-white'
+                            : 'bg-white text-stone-800 ring-1 ring-stone-200'
+                        }`}
+                        onClick={() => setSubCategory(c)}
+                      >
+                        <span className="whitespace-nowrap">{label}</span>
+                        <span className={`tabular-nums text-sm font-medium ${selected ? 'text-white/75' : 'text-stone-400'}`}>
+                          {count}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             ) : null}
@@ -886,6 +1048,12 @@ export function QrTableGuestApp({ token }: { token: string }) {
           <ul className="divide-y divide-stone-100/80">
             {list.map((m) => (
               <li key={m.menuId} className={`flex gap-3 px-4 py-3.5 ${m.soldOut ? 'opacity-55' : ''}`}>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 gap-3 text-left disabled:opacity-100"
+                  disabled={m.soldOut}
+                  onClick={() => requestAddMenu(m)}
+                >
                 {m.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={m.imageUrl} alt="" className="h-[4.5rem] w-[4.5rem] shrink-0 rounded-2xl object-cover bg-stone-100 shadow-sm" />
@@ -900,6 +1068,14 @@ export function QrTableGuestApp({ token }: { token: string }) {
                     </p>
                   ) : null}
                   {m.description ? <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{m.description}</p> : null}
+                  {cartLinesForMenu(m.menuId).some((line) => line.optionName) ? (
+                    <p className="mt-1 text-[11px] leading-snug text-[var(--qr-brand,#b45309)]">
+                      {cartLinesForMenu(m.menuId)
+                        .filter((line) => line.optionName)
+                        .map((line) => `${line.optionName} ×${line.qty}`)
+                        .join(' · ')}
+                    </p>
+                  ) : null}
                   <p className="mt-1.5 text-sm font-semibold">
                     {m.soldOut ? (
                       <span className="text-red-600">{g('soldOut')}</span>
@@ -910,12 +1086,13 @@ export function QrTableGuestApp({ token }: { token: string }) {
                     )}
                   </p>
                 </div>
+                </button>
                 <div className="flex items-center gap-2 self-center">
-                  <button type="button" className="h-9 w-9 rounded-full bg-white text-lg shadow-sm disabled:opacity-40" disabled={m.soldOut} onClick={() => bumpCart(m.menuId, -1, m.soldOut)}>
+                  <button type="button" className="h-9 w-9 rounded-full bg-white text-lg shadow-sm disabled:opacity-40" disabled={m.soldOut || qtyForMenu(m.menuId) <= 0} onClick={() => decMenu(m.menuId)}>
                     −
                   </button>
-                  <span className="w-6 text-center tabular-nums">{cart[m.menuId] || 0}</span>
-                  <button type="button" className={`h-9 w-9 rounded-full text-lg text-white shadow-sm disabled:opacity-40 ${brandBtn}`} disabled={m.soldOut} onClick={() => bumpCart(m.menuId, 1, m.soldOut)}>
+                  <span className="w-6 text-center tabular-nums">{qtyForMenu(m.menuId)}</span>
+                  <button type="button" className={`h-9 w-9 rounded-full text-lg text-white shadow-sm disabled:opacity-40 ${brandBtn}`} disabled={m.soldOut} onClick={() => requestAddMenu(m)}>
                     +
                   </button>
                 </div>
@@ -973,18 +1150,32 @@ export function QrTableGuestApp({ token }: { token: string }) {
           <div className="fixed inset-x-0 bottom-0 mx-auto max-w-lg border-t border-stone-200 bg-white/95 p-3 backdrop-blur">
             <button
               type="button"
-              disabled={busy || Object.keys(cart).length === 0}
+              disabled={busy || cart.length === 0}
               onClick={handleSubmit}
               className={`w-full rounded-2xl py-3.5 font-semibold disabled:opacity-50 ${brandBtn}`}
             >
               {busy ? g('sendingKitchen') : g('sendKitchen')}
-              {!busy && Object.keys(cart).length > 0
-                ? ` · ${Object.values(cart).reduce((a, b) => a + b, 0)}`
+              {!busy && cart.length > 0
+                ? ` · ${cart.reduce((a, line) => a + line.qty, 0)}`
                 : ''}
             </button>
           </div>
         </section>
       ) : null}
+
+      <QrTableGuestOptionSheet
+        open={!!optionMenu}
+        menu={optionMenu ? toPosMenu(optionMenu) : null}
+        options={optionMenu ? toPosOptions(optionMenu.options) : []}
+        flavorMenus={[...includedMenus, ...extraMenus].map(toPosMenu)}
+        buffetIncluded={optionMenu?.buffetIncluded === true}
+        storeCode={storeCode}
+        t={g}
+        onClose={() => setOptionMenu(null)}
+        onPick={(pick) => {
+          if (optionMenu) addCartLine(optionMenu, pick)
+        }}
+      />
     </div>
   )
 }

@@ -185,3 +185,138 @@ export function splitQrGuestMenusByTier<T extends { menuId: number }>(params: {
   }
   return { included: includedOut, extras: extrasOut }
 }
+
+/** QR 손님 앱·제출 API가 공유하는 홀 옵션 */
+export type QrGuestMenuOption = {
+  id: number
+  menuId: number
+  name: string
+  optionCode: string
+  priceModifier: number
+  optionType: 'substitution' | 'additive'
+  sortOrder: number
+  optionStepValues?: Record<string, string> | null
+  sellHall?: boolean
+}
+
+export function hallSubstitutionQrGuestOptions(
+  options: QrGuestMenuOption[] | null | undefined
+): QrGuestMenuOption[] {
+  return (options || []).filter((o) => {
+    if (o.sellHall === false) return false
+    const typ = o.optionType || 'substitution'
+    return typ === 'substitution'
+  })
+}
+
+export function qrGuestMenuNeedsOptionPicker(menu: {
+  options?: QrGuestMenuOption[] | null
+  isBanban?: boolean
+  name?: string
+  code?: string
+}): boolean {
+  if (menu.isBanban === true) return true
+  const name = String(menu.name || '').toLowerCase()
+  const code = String(menu.code || '').trim().toLowerCase()
+  if (name.includes('banban') || name.includes('반반') || code === 'c024' || code === 'c24') return true
+  return hallSubstitutionQrGuestOptions(menu.options).length > 0
+}
+
+export function qrGuestCartLineKey(menuId: number, optionIds: number[], banbanPair?: { menuId1: number; menuId2: number }): string {
+  const mid = Math.floor(Number(menuId) || 0)
+  if (banbanPair) {
+    const a = Math.min(banbanPair.menuId1, banbanPair.menuId2)
+    const b = Math.max(banbanPair.menuId1, banbanPair.menuId2)
+    return `${mid}:banban:${a}+${b}`
+  }
+  const ids = [...optionIds]
+    .map((n) => Math.floor(Number(n) || 0))
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b)
+  return ids.length ? `${mid}:${ids.join('+')}` : String(mid)
+}
+
+/** 피커가 합성 id(bbq-123-456)를 줄 때 실제 옵션 id만 추출 */
+export function extractQrGuestOptionIds(
+  opt: { id?: string | number | null } | null | undefined,
+  pendingSizeOpt?: { id?: string | number | null } | null
+): number[] {
+  const out: number[] = []
+  const pushToken = (raw: string) => {
+    const n = Number(raw)
+    if (Number.isFinite(n) && n > 0) out.push(Math.floor(n))
+  }
+  const pushRaw = (raw: string | number | null | undefined) => {
+    const s = String(raw ?? '').trim()
+    if (!s) return
+    if (/^bbq-/i.test(s)) {
+      for (const part of s.slice(4).split('-')) pushToken(part)
+      return
+    }
+    pushToken(s)
+  }
+  pushRaw(opt?.id)
+  pushRaw(pendingSizeOpt?.id)
+  return [...new Set(out)]
+}
+
+export type QrGuestResolvedLineOption =
+  | {
+      ok: true
+      name: string
+      price: number
+      optionId: string | undefined
+      optionCode: string | undefined
+      optionName: string
+      optionIds: number[]
+    }
+  | { ok: false; error: string }
+
+/**
+ * 홀 옵션을 주문 줄에 반영. 뷔페 포함 메뉴는 금액 0, 옵션명만 붙인다.
+ * 치환 옵션이 있는 메뉴는 optionIds 필수.
+ */
+export function resolveQrGuestLineOption(params: {
+  menuId: number
+  menuName: string
+  menuPrice: number
+  buffetIncluded: boolean
+  menuOptions: QrGuestMenuOption[]
+  optionIds?: number[] | null
+  /** false면 옵션 미선택도 통과(구 클라이언트·옵션 조회 실패 대비) */
+  requireOption?: boolean
+}): QrGuestResolvedLineOption {
+  const menuName = String(params.menuName || '').trim() || '—'
+  const required = hallSubstitutionQrGuestOptions(params.menuOptions)
+  const requested = [...(params.optionIds || [])]
+    .map((n) => Math.floor(Number(n) || 0))
+    .filter((n) => n > 0)
+  const byId = new Map(params.menuOptions.map((o) => [o.id, o]))
+  const picked: QrGuestMenuOption[] = []
+  for (const id of requested) {
+    const opt = byId.get(id)
+    if (!opt || opt.menuId !== params.menuId) return { ok: false, error: `option_not_found:${id}` }
+    if (opt.sellHall === false) return { ok: false, error: `option_not_hall:${id}` }
+    picked.push(opt)
+  }
+  if (
+    params.requireOption !== false &&
+    required.length > 0 &&
+    picked.filter((o) => (o.optionType || 'substitution') === 'substitution').length === 0
+  ) {
+    return { ok: false, error: 'option_required' }
+  }
+  const optionName = picked.map((o) => String(o.name || '').trim()).filter(Boolean).join(' - ')
+  const modifier = picked.reduce((sum, o) => sum + (Number(o.priceModifier) || 0), 0)
+  const price = params.buffetIncluded ? 0 : Math.max(0, Number(params.menuPrice) || 0) + modifier
+  const first = picked[0]
+  return {
+    ok: true,
+    name: optionName ? `${menuName} (${optionName})` : menuName,
+    price,
+    optionId: first ? String(first.id) : undefined,
+    optionCode: first?.optionCode || undefined,
+    optionName,
+    optionIds: picked.map((o) => o.id),
+  }
+}

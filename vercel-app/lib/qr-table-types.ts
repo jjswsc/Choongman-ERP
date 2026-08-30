@@ -78,6 +78,9 @@ export type QrCartLineInput = {
   qty: number
   note?: string
   optionIds?: number[]
+  /** 반반 — 맛 메뉴 id */
+  menuId1?: number
+  menuId2?: number
 }
 
 export const QR_TABLE_SESSION_COOKIE = 'cm_qr_table_session'

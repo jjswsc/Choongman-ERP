@@ -5213,45 +5213,27 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                             ) : null}
                           </div>
                         ) : null}
-                        {lineDiscountMode === 'service' || lineDiscountMode === 'cancel' ? (
+                        {lineDiscountMode !== 'none' ? (
                           <div className="mt-1">
                             <Badge
                               variant="secondary"
                               className={cn(
                                 'h-5 rounded-md px-1.5 text-[10px]',
-                                lineDiscountMode === 'service'
-                                  ? 'border-emerald-400/50 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200'
-                                  : 'border-rose-400/50 bg-rose-50 text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200'
+                                lineDiscountMode === 'discount'
+                                  ? 'border-amber-400/50 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200'
+                                  : lineDiscountMode === 'service'
+                                    ? 'border-emerald-400/50 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200'
+                                    : 'border-rose-400/50 bg-rose-50 text-rose-800 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-200'
                               )}
                             >
-                              {lineDiscountMode === 'service'
-                                ? tr('posServiceHandled', '서비스처리')
-                                : tr('posLineCancelledShort', '취소처리')}
+                              {lineDiscountMode === 'discount'
+                                ? tr('posDiscountApplied', '할인적용')
+                                : lineDiscountMode === 'service'
+                                  ? tr('posServiceHandled', '서비스처리')
+                                  : tr('posLineCancelledShort', '취소처리')}
                             </Badge>
                           </div>
-                        ) : (
-                          <div className="mt-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={lineDiscountMode === 'discount' ? 'default' : 'outline'}
-                              className={cn(
-                                'h-6 rounded-md px-2 text-[10px] font-semibold touch-manipulation',
-                                lineDiscountMode === 'discount'
-                                  ? 'bg-amber-600 text-white hover:bg-amber-700'
-                                  : 'border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-950/40'
-                              )}
-                              onClick={() =>
-                                setLineDiscountModeForItem(
-                                  item.id,
-                                  lineDiscountMode === 'discount' ? 'none' : 'discount'
-                                )
-                              }
-                            >
-                              {tr('posDiscountApplied', '할인적용')}
-                            </Button>
-                          </div>
-                        )}
+                        ) : null}
                         <p className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
                           {formatBahtNum(item.price)} ฿
                         </p>

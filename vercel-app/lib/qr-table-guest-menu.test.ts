@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateQrGuestSentLines, groupQrGuestSentLinesByTime, splitQrGuestMenusByTier } from '@/lib/qr-table-guest-menu'
+import {
+  aggregateQrGuestSentLines,
+  extractQrGuestOptionIds,
+  groupQrGuestSentLinesByTime,
+  qrGuestMenuNeedsOptionPicker,
+  resolveQrGuestLineOption,
+  splitQrGuestMenusByTier,
+} from '@/lib/qr-table-guest-menu'
 
 describe('aggregateQrGuestSentLines', () => {
   it('sums qty for the same name and skips cancelled', () => {
@@ -77,6 +84,96 @@ describe('groupQrGuestSentLinesByTime', () => {
     )
     expect(groups.map((g) => g.timeLabel)).toEqual(['09:31:04', '09:34:19', '09:38:50', '09:40:18'])
     expect(groups[0].lines[0].name).toBe('[Buffet] Buffet 299 x 2')
+  })
+})
+
+describe('qrGuestMenuNeedsOptionPicker', () => {
+  it('is true when hall substitution options exist', () => {
+    expect(
+      qrGuestMenuNeedsOptionPicker({
+        options: [{ id: 1, menuId: 9, name: 'M - Boneless', optionCode: 'C1-1', priceModifier: 0, optionType: 'substitution', sortOrder: 1 }],
+      })
+    ).toBe(true)
+  })
+
+  it('is false for drinks with no options', () => {
+    expect(qrGuestMenuNeedsOptionPicker({ name: 'Coke', options: [] })).toBe(false)
+  })
+
+  it('is true for banban even without options', () => {
+    expect(qrGuestMenuNeedsOptionPicker({ name: 'Banban Chicken', isBanban: true, options: [] })).toBe(true)
+  })
+})
+
+describe('extractQrGuestOptionIds', () => {
+  it('reads a numeric option id', () => {
+    expect(extractQrGuestOptionIds({ id: '42' })).toEqual([42])
+  })
+
+  it('splits bbq merged ids and pending size', () => {
+    expect(extractQrGuestOptionIds({ id: 'bbq-11-22' }, { id: '11' })).toEqual([11, 22])
+  })
+})
+
+describe('resolveQrGuestLineOption', () => {
+  const options = [
+    { id: 7, menuId: 11, name: 'M - Drumette', optionCode: 'C011-2', priceModifier: 20, optionType: 'substitution' as const, sortOrder: 2 },
+    { id: 8, menuId: 11, name: 'M - Boneless', optionCode: 'C011-1', priceModifier: 0, optionType: 'substitution' as const, sortOrder: 1 },
+  ]
+
+  it('requires an option when the menu has substitutions', () => {
+    const r = resolveQrGuestLineOption({
+      menuId: 11,
+      menuName: 'Soy Sauce Chicken',
+      menuPrice: 199,
+      buffetIncluded: false,
+      menuOptions: options,
+      optionIds: [],
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toBe('option_required')
+  })
+
+  it('appends option name and hall modifier', () => {
+    const r = resolveQrGuestLineOption({
+      menuId: 11,
+      menuName: 'Soy Sauce Chicken',
+      menuPrice: 199,
+      buffetIncluded: false,
+      menuOptions: options,
+      optionIds: [7],
+    })
+    expect(r).toMatchObject({
+      ok: true,
+      name: 'Soy Sauce Chicken (M - Drumette)',
+      price: 219,
+      optionCode: 'C011-2',
+    })
+  })
+
+  it('allows missing options when requireOption is false', () => {
+    const r = resolveQrGuestLineOption({
+      menuId: 11,
+      menuName: 'Soy Sauce Chicken',
+      menuPrice: 199,
+      buffetIncluded: false,
+      menuOptions: options,
+      optionIds: [],
+      requireOption: false,
+    })
+    expect(r).toMatchObject({ ok: true, name: 'Soy Sauce Chicken', price: 199 })
+  })
+
+  it('keeps buffet included price at 0 but still names the option', () => {
+    const r = resolveQrGuestLineOption({
+      menuId: 11,
+      menuName: 'Soy Sauce Chicken',
+      menuPrice: 199,
+      buffetIncluded: true,
+      menuOptions: options,
+      optionIds: [8],
+    })
+    expect(r).toMatchObject({ ok: true, name: 'Soy Sauce Chicken (M - Boneless)', price: 0 })
   })
 })
 
