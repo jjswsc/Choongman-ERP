@@ -649,7 +649,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       if (invoiceNo) seen.add(key)
       extracted.push({
         storeName,
-        docDate: String(f.docDate || `${filingYearMonth}-01`).slice(0, 10),
+        docDate: String(f.docDate || "").slice(0, 10),
         invoiceNo,
         sellerName: String(f.sellerName || "").trim(),
         sellerTaxId,
@@ -1369,7 +1369,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 <tr className="text-left text-muted-foreground">
                   <th className="p-1 w-[4.5rem]">{t("ptiColPage")}</th>
                   <th className="p-1 w-[8.5rem]">{t("ptiColDate")}</th>
-                  <th className="p-1 min-w-[10rem]">{t("ptiColInvoiceNo")}</th>
+                  <th className="p-1 min-w-[16rem]">{t("ptiColInvoiceNo")}</th>
                   <th className="p-1 min-w-[12rem]">{t("ptiColSeller")}</th>
                   <th className="p-1 min-w-[9rem]">{t("ptiColSellerTaxId")}</th>
                   <th className="p-1 w-[3.5rem]" title={t("ptiBranchBlankHq")}>{t("ptiColBranch")}</th>
@@ -1399,7 +1399,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                       <Input className={reviewWarnClass("h-7 w-[130px]", flags.includes("month"))} type="date" value={r.docDate} onChange={(e) => patchReview(idx, { docDate: e.target.value })} />
                     </td>
                     <td className="p-1">
-                      <Input className={reviewWarnClass("h-7 w-full min-w-[10rem]", !r.skip && !String(r.invoiceNo || "").trim())} value={r.invoiceNo} onChange={(e) => {
+                      <Input className={reviewWarnClass("h-7 w-full min-w-[16rem]", !r.skip && !String(r.invoiceNo || "").trim())} title={r.invoiceNo} value={r.invoiceNo} onChange={(e) => {
                         const invoiceNo = e.target.value
                         const unskipEmpty = r.skip && isPtiEmptyPageSkip(r.skipReason || "", t) && invoiceNo.trim()
                         patchReview(idx, { invoiceNo, skip: unskipEmpty ? false : r.skip, skipReason: unskipEmpty ? "" : r.skipReason })

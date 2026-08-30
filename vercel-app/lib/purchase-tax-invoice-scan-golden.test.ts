@@ -188,6 +188,21 @@ describe('purchase tax invoice golden texts', () => {
     expect(jidubangExempt?.netAmount).toBe(0)
     expect(jidubangExempt?.vatAmount).toBe(0)
 
+    const jidubangExemptTotalOnly = extractPurchaseTaxInvoiceFromScanText(
+      `TAX INVOICE\nJIDUBANG (ASIA) CO., LTD.\nเลขประจำตัวผู้เสียภาษี 0105550102497\nเลขที่ 6907163\nวันที่ 09/07/2026\nสินค้ายกเว้น VAT\nรวมทั้งสิ้น 3,300.00`,
+      { buyerTaxId: BUYER }
+    )
+    expect(jidubangExemptTotalOnly?.invoiceNo).toBe('6907163')
+    expect(jidubangExemptTotalOnly?.netAmount).toBe(0)
+    expect(jidubangExemptTotalOnly?.vatAmount).toBe(0)
+
+    const jidubangExemptZeroNetOnly = extractPurchaseTaxInvoiceFromScanText(
+      `เลขที่ 6907458\nเลขประจำตัวผู้เสียภาษี 0105550102497\nมูลค่าสินค้า 0.00\nรวมทั้งสิ้น 2,200.00`,
+      { buyerTaxId: BUYER }
+    )
+    expect(jidubangExemptZeroNetOnly?.netAmount).toBe(0)
+    expect(jidubangExemptZeroNetOnly?.vatAmount).toBe(0)
+
     const tinAsInvoice = extractPurchaseTaxInvoiceFromScanText(
       `เลขที่ 0105558019581\nTRSPESPF00-00000-260702-017827\nมูลค่า 137.05 ภาษีมูลค่าเพิ่ม 9.59`,
       { buyerTaxId: BUYER }

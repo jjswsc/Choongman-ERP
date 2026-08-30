@@ -124,6 +124,10 @@ export function parseTaxInvoiceDateFromText(text: string): string | undefined {
   if (dmy) {
     return ymdFromParts(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]))
   }
+  const dmy2 = s.match(/\b(\d{1,2})[./-](\d{1,2})[./-](\d{2})\b/)
+  if (dmy2) {
+    return ymdFromParts(Number(dmy2[3]), Number(dmy2[2]), Number(dmy2[1]))
+  }
   const thai = s.match(
     /(\d{1,2})\s+(ม\.?\s*ค\.?|ก\.?\s*พ\.?|มี\.?\s*ค\.?|เม\.?\s*ย\.?|พ\.?\s*ค\.?|มิ\.?\s*ย\.?|ก\.?\s*ค\.?|ส\.?\s*ค\.?|ก\.?\s*ย\.?|ต\.?\s*ค\.?|พ\.?\s*ย\.?|ธ\.?\s*ค\.?|มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม)\s+(\d{4})/
   )
@@ -344,6 +348,35 @@ const INVOICE_LINE_STOP_RE =
 const OFFICE_INVOICE_RE =
   /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|IV|TI|ABB|RT)[\-/]?[A-Z0-9\-/ ]{2,48}|\d{7,12})\b/gi
 
+function officeInvoiceRank(inv: string): number {
+  const s = String(inv || '')
+  if (/^(INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|IV)[-/]?/i.test(s)) return 8
+  if (/[A-Za-z]/.test(s)) return 4
+  return 1
+}
+
+function attachOfficePrefix(text: string, inv: string): string | undefined {
+  if (!inv || /[A-Za-z]/.test(inv)) return undefined
+  const esc = inv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const m = String(text || '').match(new RegExp(`\\b(INV|IVT|IV|NX|NC|RV|SI|CS|DCI|DOI|TI)[\\s\\-]*${esc}\\b`, 'i'))
+  if (!m) return undefined
+  const prefix = m[1].toUpperCase()
+  const joined = /^(INV|IVT|IV|DCI|DOI)$/.test(prefix) ? `${prefix}-${inv}` : `${prefix}${inv}`
+  return cleanInvoiceNo(joined)
+}
+
+/** RV26907… = AD연도 앞자리 2 + 불기 뒤 2자리 + 월. OCR이 연도만 어긋나면 조회월로 맞춘다. */
+function snapRvInvoiceToTaxMonth(inv: string, taxMonth?: string): string {
+  const ym = String(taxMonth || '')
+  const year = Number(ym.slice(0, 4))
+  const month = ym.slice(5, 7)
+  if (!year || !/^\d{2}$/.test(month)) return inv
+  const beYy = String(year + 543).slice(-2)
+  const hit = String(inv || '').match(/^(RV)2(\d{2})(0[1-9]|1[0-2])(\d{4,})$/i)
+  if (!hit || hit[3] !== month || hit[2] === beYy) return inv
+  return `${hit[1].toUpperCase()}2${beYy}${hit[3]}${hit[4]}`
+}
+
 function invoiceNoFromLabeledSlice(slice: string): string | undefined {
   const sameLine = slice.split(/\r?\n/, 1)[0] || ''
   const cut = sameLine.split(INVOICE_LINE_STOP_RE)[0]
@@ -356,22 +389,26 @@ function invoiceNoFromLabeledSlice(slice: string): string | undefined {
 
 function extractLabeledInvoiceNo(s: string): string | undefined {
   INVOICE_LABEL_RE.lastIndex = 0
+  const found: string[] = []
   let m: RegExpExecArray | null
   while ((m = INVOICE_LABEL_RE.exec(s))) {
     const inv = invoiceNoFromLabeledSlice(s.slice(m.index + m[0].length))
-    if (inv) return inv
+    if (inv && !found.includes(inv)) found.push(inv)
   }
-  return undefined
+  found.sort((a, b) => officeInvoiceRank(b) - officeInvoiceRank(a) || b.length - a.length)
+  return found[0]
 }
 
 function firstOfficeInvoiceNo(s: string): string | undefined {
   OFFICE_INVOICE_RE.lastIndex = 0
+  const found: string[] = []
   let m: RegExpExecArray | null
   while ((m = OFFICE_INVOICE_RE.exec(s))) {
     const inv = cleanInvoiceNo(m[1])
-    if (inv) return inv
+    if (inv && !found.includes(inv)) found.push(inv)
   }
-  return undefined
+  found.sort((a, b) => officeInvoiceRank(b) - officeInvoiceRank(a) || b.length - a.length)
+  return found[0]
 }
 
 function extractInvoiceNo(text: string, sellerTaxId?: string, taxMonth?: string): string | undefined {
@@ -387,7 +424,10 @@ function extractInvoiceNo(text: string, sellerTaxId?: string, taxMonth?: string)
     const inv = cleanInvoiceNo(platformInvoiceBlob(platform[1]))
     if (inv) return inv
   }
-  return extractLabeledInvoiceNo(s) || firstOfficeInvoiceNo(s)
+  const office = extractLabeledInvoiceNo(s) || firstOfficeInvoiceNo(s)
+  if (!office) return undefined
+  const prefixed = attachOfficePrefix(s, office) || office
+  return snapRvInvoiceToTaxMonth(prefixed, taxMonth)
 }
 
 const KNOWN_INVOICE_SELLERS: Array<{ re: RegExp; tin: string; name: string }> = [
@@ -495,6 +535,34 @@ function lineLooksLikeWithholdingOrExempt(line: string): boolean {
   return /หัก\s*ณ\s*ที่จ่าย|withholding|\bwht\b|สินค้าเกษตรยกเว้น|ยกเว้นภาษี|vat\s*exempt/i.test(line)
 }
 
+/**
+ * 한 장 전체가 영세(0/0). 농산물 면세 한 줄만 있는 과세 계산서와 구분한다.
+ * 판매자·번호 패턴에 의존하지 않음.
+ */
+export function pageLooksFullyVatExempt(text: string): boolean {
+  const s = String(text || '')
+  if (!s.trim()) return false
+  const vatLabeled = extractAmountNear(s, /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
+  if (vatLabeled != null && vatLabeled > 0.05) return false
+  if (pickExclusiveVatAmounts(collectBahtAmounts(s))) return false
+  if (vatLabeled === 0) return true
+  if (
+    /ยกเว้น(?:ภาษี|VAT|vat).{0,24}ทั้งใบ|ทั้งใบ.{0,24}ยกเว้น|สินค้ายกเว้น\s*(?:VAT|ภาษี)|VAT\s*EXEMPTED\s*(?:ITEMS?)?\b/i.test(
+      s
+    )
+  ) {
+    return true
+  }
+  const netLabeled = extractAmountNear(s, /มูลค่าสินค้า|มูลค่า(?!เพิ่ม)|ฐานภาษี|Taxable|Net\s*amount/i)
+  return netLabeled === 0 && (vatLabeled == null || vatLabeled === 0)
+}
+
+function pageHasTaxableVatPair(text: string): boolean {
+  if (pickExclusiveVatAmounts(collectBahtAmounts(text))) return true
+  const vatLabeled = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
+  return vatLabeled != null && vatLabeled > 0.05
+}
+
 function extractAmountNear(text: string, keywords: RegExp): number | undefined {
   const isVat = /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i.test(keywords.source)
   const lines = String(text || '').split(/\r?\n/)
@@ -593,6 +661,10 @@ export function inferAmountsFromMoneySequence(text: string): {
   vatAmount: number
   totalAmount: number
 } | null {
+  if (pageLooksFullyVatExempt(text)) {
+    const totalAmount = extractAmountNear(text, /รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)
+    return { netAmount: 0, vatAmount: 0, totalAmount: totalAmount ?? 0 }
+  }
   const nums = collectBahtAmounts(text)
   const picked = pickExclusiveVatAmounts(nums)
   if (picked) return picked
@@ -945,11 +1017,15 @@ export function extractPurchaseTaxInvoiceFromScanText(
   let merged = mergePurchaseTaxInvoiceExtract(fromQr, fromHeader)
   merged = mergePurchaseTaxInvoiceExtract(merged, fromText)
   if (inferred) {
+    const keepZero =
+      merged?.netAmount === 0 && (merged.vatAmount === 0 || merged.vatAmount == null)
     const amountsWeak =
-      !merged ||
-      merged.netAmount == null ||
-      merged.vatAmount == null ||
-      (merged.vatAmount > 0 && purchaseTaxVatLooksWrong(merged.netAmount, merged.vatAmount))
+      !keepZero &&
+      !pageLooksFullyVatExempt(raw) &&
+      (!merged ||
+        merged.netAmount == null ||
+        merged.vatAmount == null ||
+        (merged.vatAmount > 0 && purchaseTaxVatLooksWrong(merged.netAmount, merged.vatAmount)))
     if (amountsWeak) {
       merged = mergePurchaseTaxInvoiceExtract(
         { netAmount: inferred.netAmount, vatAmount: inferred.vatAmount, totalAmount: inferred.totalAmount },
@@ -999,6 +1075,7 @@ export function purchaseTaxInvoiceTextExtractIsComplete(
   const buyerTin = digitsTin13(hint?.buyerTaxId)
   if (buyerTin && row.sellerTaxId === buyerTin) return false
   if (row.netAmount == null || row.vatAmount == null) return false
+  if (row.netAmount === 0 && row.vatAmount === 0) return true
   if (row.vatAmount > 0 && purchaseTaxVatLooksWrong(row.netAmount, row.vatAmount)) return false
   return true
 }
@@ -1058,6 +1135,7 @@ function invoiceFromPageBeatsCurrent(fromPage: string, current?: string): boolea
   if (/^[IT]M20/i.test(page) && /^[IT1]M20/i.test(cur) && page.length >= cur.length) return true
   if (/^\d{6}[EFH]/i.test(page) && !/^\d{6}[EFH]/i.test(cur)) return true
   if (page.startsWith('TRS') && cur.startsWith('TRS') && page.length > cur.length + 4) return true
+  if (officeInvoiceRank(page) > officeInvoiceRank(cur)) return true
   return false
 }
 
@@ -1077,14 +1155,21 @@ export function repairExtractedPurchaseTaxInvoice(
   let netAmount = row.netAmount
   let vatAmount = row.vatAmount
   let totalAmount = row.totalAmount
+  const pageTextRaw = hint?.pageText || ''
+  const fullyExempt = pageLooksFullyVatExempt(pageTextRaw)
+
+  if (fullyExempt) {
+    netAmount = 0
+    vatAmount = 0
+  }
 
   if (netAmount != null && vatAmount != null && totalAmount == null) {
     totalAmount = roundMoney2(netAmount + vatAmount)
   }
-  if (netAmount != null && totalAmount != null && vatAmount == null) {
+  if (!fullyExempt && netAmount != null && netAmount > 0 && totalAmount != null && vatAmount == null) {
     vatAmount = roundMoney2(Math.max(0, totalAmount - netAmount))
   }
-  if (vatAmount != null && totalAmount != null && netAmount == null) {
+  if (!fullyExempt && vatAmount != null && totalAmount != null && netAmount == null) {
     netAmount = roundMoney2(Math.max(0, totalAmount - vatAmount))
   }
 
@@ -1159,12 +1244,15 @@ export function repairExtractedPurchaseTaxInvoice(
       vatAmount === 0 ||
       (vatAmount > 0 && purchaseTaxVatLooksWrong(netAmount, vatAmount)) ||
       (netAmount != null && amountLooksLikeOcrFragment(netAmount, pageNums)))
-  if (fromPageAmt && amountsBroken) {
+  if (
+    fromPageAmt &&
+    (amountsBroken ||
+      (netAmount != null && netAmount < 80 && fromPageAmt.netAmount >= Math.max(200, netAmount * 4)))
+  ) {
     netAmount = fromPageAmt.netAmount
     vatAmount = fromPageAmt.vatAmount
     totalAmount = fromPageAmt.totalAmount
   }
-  const pageTextRaw = hint?.pageText || ''
   const netAmt = netAmount
   const vatAmt = vatAmount
   const netOnPage =
@@ -1181,9 +1269,10 @@ export function repairExtractedPurchaseTaxInvoice(
     !keepDerivedPair &&
     Boolean(repeatedNet) &&
     /ภาษีมูลค่าเพิ่ม|VAT\s*7|ใบกำกับภาษี/i.test(pageTextRaw) &&
-    !/ยกเว้นภาษี|vat\s*exempt/i.test(pageTextRaw) &&
+    !fullyExempt &&
+    !/ยกเว้นภาษี|ยกเว้น\s*VAT|vat\s*exempt/i.test(pageTextRaw) &&
     (netAmount == null || !netOnPage)
-  if (!fromPageAmt && shouldFillFromRepeated && repeatedNet) {
+  if (!fromPageAmt && !fullyExempt && shouldFillFromRepeated && repeatedNet) {
     netAmount = repeatedNet
     vatAmount = roundMoney2(repeatedNet * 0.07)
     totalAmount = roundMoney2(netAmount + vatAmount)
@@ -1195,20 +1284,49 @@ export function repairExtractedPurchaseTaxInvoice(
     Math.abs(repeatedNet - netAmount) < 0.05 &&
     (vatAmount == null || vatAmount === 0) &&
     /ภาษีมูลค่าเพิ่ม|VAT\s*7|ใบกำกับภาษี/i.test(pageTextRaw) &&
-    !/ยกเว้นภาษี|vat\s*exempt/i.test(pageTextRaw)
+    !fullyExempt &&
+    !/ยกเว้นภาษี|ยกเว้น\s*VAT|vat\s*exempt/i.test(pageTextRaw)
   ) {
     vatAmount = roundMoney2(netAmount * 0.07)
     totalAmount = roundMoney2(netAmount + vatAmount)
   }
   if (
-    !(netAmount === 0 && vatAmount === 0) &&
+    !fullyExempt &&
+    !fromPageAmt &&
     netAmount != null &&
+    netAmount > 20 &&
+    (vatAmount == null || vatAmount === 0)
+  ) {
+    const excl = roundMoney2(netAmount / 1.07)
+    const vat = roundMoney2(netAmount - excl)
+    const totalLabeled = extractAmountNear(pageTextRaw, /รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)
+    const netIsPrintedTotal = totalLabeled != null && Math.abs(totalLabeled - netAmount) <= 0.05
+    const saysInclusive = /รวม\s*(?:VAT|ภาษี)/i.test(pageTextRaw)
+    const exclOnPage = pageNums.some((p) => Math.abs(p - excl) <= 0.05 || Math.abs(p - vat) <= 0.05)
+    if (vat >= 0.01 && !purchaseTaxVatLooksWrong(excl, vat) && (netIsPrintedTotal || saysInclusive || exclOnPage)) {
+      netAmount = excl
+      vatAmount = vat
+      totalAmount = roundMoney2(excl + vat)
+    }
+  }
+  if (
+    !(netAmount === 0 && (vatAmount == null || vatAmount === 0)) &&
+    netAmount != null &&
+    netAmount > 0 &&
     netAmount < 5 &&
     (vatAmount == null || vatAmount < 1 || purchaseTaxVatLooksWrong(netAmount, vatAmount))
   ) {
     netAmount = undefined
     if (vatAmount != null && vatAmount < 1) vatAmount = undefined
     totalAmount = undefined
+  }
+  if (
+    (fullyExempt || (netAmount === 0 && !pageHasTaxableVatPair(pageTextRaw))) &&
+    (netAmount == null || netAmount === 0) &&
+    (vatAmount == null || vatAmount === 0)
+  ) {
+    netAmount = 0
+    vatAmount = 0
   }
   if (
     vatAmount === 0 &&
@@ -1235,6 +1353,9 @@ export function repairExtractedPurchaseTaxInvoice(
       recoverGrabInvoiceNo(pageText, sellerTaxId, hint?.taxMonth) ||
       recoverKasikornInvoiceNo(pageText)
     if (fromPage && invoiceFromPageBeatsCurrent(fromPage, invoiceNo)) invoiceNo = fromPage
+    const prefixed = invoiceNo ? attachOfficePrefix(pageText, invoiceNo) : undefined
+    if (prefixed) invoiceNo = prefixed
+    if (invoiceNo) invoiceNo = snapRvInvoiceToTaxMonth(invoiceNo, hint?.taxMonth)
   }
   // 세금번호 일부가 문서번호로 잡힌 경우 (`565002677` ⊂ `0605565002677`)
   if (invoiceNo && sellerTaxId) {

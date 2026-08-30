@@ -19,6 +19,7 @@ import {
   extractPurchaseTaxInvoicesFromScanText,
   fillSellerNameFromTinLookup,
   invoiceNoLooksPlausible,
+  pageLooksFullyVatExempt,
   snapDocDateYearToTaxPeriod,
   splitScanTextIntoInvoiceBlocks,
   wrapTaxInvoiceQrText,
@@ -493,6 +494,106 @@ describe('withholding and exempt lines', () => {
     )
     expect(inferred?.netAmount).toBe(91.59)
     expect(inferred?.vatAmount).toBe(6.41)
+  })
+})
+
+describe('full-page VAT exempt (any seller)', () => {
+  it('does not treat mixed produce-exempt + 7% as a full-page zero invoice', () => {
+    expect(
+      pageLooksFullyVatExempt(
+        'สินค้าเกษตรยกเว้น 658.00\nค่าจัดส่ง 73.83\nภาษีมูลค่าเพิ่ม 6.41\nรวมทั้งสิ้น 756.00'
+      )
+    ).toBe(false)
+  })
+
+  it('keeps 0/0 when the page is labeled fully exempt and only a grand total remains', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบกำกับภาษี เลขที่ EX-330',
+        'เลขประจำตัวผู้เสียภาษี 0105550102497',
+        'สินค้ายกเว้น VAT ทั้งใบ',
+        'รวมทั้งสิ้น 330.00',
+      ].join('\n'),
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.invoiceNo).toBe('EX-330')
+    expect(row?.netAmount).toBe(0)
+    expect(row?.vatAmount).toBe(0)
+    expect(purchaseTaxInvoiceTextExtractIsComplete(row, { buyerTaxId: BUYER })).toBe(true)
+    expect(purchaseTaxInvoiceNeedsSparseOcr(row, { buyerTaxId: BUYER })).toBe(false)
+  })
+
+  it('keeps a labeled 0 net instead of wiping it as an OCR fragment', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'EX-0', sellerTaxId: '0105550102497', netAmount: 0 },
+      { buyerTaxId: BUYER, pageText: 'มูลค่าสินค้า 0.00\nรวมทั้งสิ้น 2,200.00' }
+    )
+    expect(repaired.netAmount).toBe(0)
+    expect(repaired.vatAmount).toBe(0)
+  })
+
+  it('does not invent a 7% pair from a lone exempt grand total', () => {
+    const inferred = inferAmountsFromMoneySequence(
+      'สินค้ายกเว้น VAT ทั้งใบ\nรวมทั้งสิ้น 3,300.00'
+    )
+    expect(inferred?.netAmount).toBe(0)
+    expect(inferred?.vatAmount).toBe(0)
+  })
+
+  it('reads a 2-digit year date as Buddhist/AD without inventing the filing month', () => {
+    expect(parseTaxInvoiceDateFromText('Date : 17-Jul-26')).toBe('2026-07-17')
+    expect(parseTaxInvoiceDateFromText('วันที่ 25/07/26')).toBe('2026-07-25')
+  })
+})
+
+describe('office invoice and inclusive amounts', () => {
+  it('prefers a letter-prefix invoice over a nearby bare number', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'อ้างอิง 996302538',
+        'เลขที่ RV248070770',
+        'เลขประจำตัวผู้เสียภาษี 0105550095270',
+        'มูลค่าสินค้า 4,200.00',
+        'ภาษีมูลค่าเพิ่ม 294.00',
+        'รวมทั้งสิ้น 4,494.00',
+      ].join('\n'),
+      { buyerTaxId: BUYER, taxMonth: '2026-07' }
+    )
+    expect(row?.invoiceNo).toBe('RV269070770')
+    expect(row?.netAmount).toBe(4200)
+    expect(row?.vatAmount).toBe(294)
+  })
+
+  it('reattaches a dropped IVT prefix sitting next to the digits', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'เลขที่ 69070062',
+        'IVT-69070062',
+        'เลขประจำตัวผู้เสียภาษี 0105533116116',
+        'มูลค่าสินค้า 3,200.00',
+        'ภาษีมูลค่าเพิ่ม 224.00',
+      ].join('\n'),
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.invoiceNo).toBe('IVT-69070062')
+  })
+
+  it('unwraps a VAT-inclusive printed total when VAT is missing', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'NX-1', netAmount: 400 },
+      { buyerTaxId: BUYER, pageText: 'ค่าขนส่ง รวม VAT\nรวมทั้งสิ้น 400.00' }
+    )
+    expect(repaired.netAmount).toBe(373.83)
+    expect(repaired.vatAmount).toBe(26.17)
+  })
+
+  it('replaces a tiny 7% pair when the page also has a much larger pair', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      { invoiceNo: 'INV-9', sellerTaxId: SELLER, netAmount: 14, vatAmount: 0.95 },
+      { buyerTaxId: BUYER, pageText: '14.00\n0.95\n1,162.63\n81.38\n1,244.01' }
+    )
+    expect(repaired.netAmount).toBe(1162.63)
+    expect(repaired.vatAmount).toBe(81.38)
   })
 })
 
