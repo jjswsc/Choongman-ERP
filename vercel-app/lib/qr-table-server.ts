@@ -741,6 +741,7 @@ export type QrFloorSessionHint = {
   status: QrSessionStatus
   entryPaid: boolean
   staffCallAt: string | null
+  staffCallNote: string | null
   posOrderId: number | null
 }
 
@@ -798,6 +799,7 @@ export async function listActiveQrSessionsForStore(
         status: live.status,
         entryPaid: live.entryPaid,
         staffCallAt: live.staffCallAt || null,
+        staffCallNote: live.staffCallNote || null,
         posOrderId: live.posOrderId,
       })
     }

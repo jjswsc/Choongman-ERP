@@ -13,6 +13,7 @@ import {
 } from '@/lib/pos-ui-tokens'
 import type { PosFloorLabels, PosTableItem } from '@/lib/api-client'
 import { resolvePosFloorDisplayLabel, normalizePosTableColor, resolvePosTableEmptyColor, darkenPosTableColor, posTableColorIsDark } from '@/lib/pos-table-layout-payload'
+import type { QrFloorMarker } from '@/lib/use-qr-floor-session-hints'
 
 const FLOOR_W = 720
 const FLOOR_H = 480
@@ -93,8 +94,8 @@ export interface TableFloorViewProps {
    * `null`이면 마커 없음.
    */
   timeTourSpotlights?: TableFloorTimeTourSpotlights | null
-  /** QR 테이블오더 세션 뱃지: awaiting | active | call */
-  getQrSessionMarker?: (id: string, name: string) => 'awaiting' | 'active' | 'call' | null
+  /** QR 테이블오더 세션 뱃지: awaiting | active | call | call_bill | call_help */
+  getQrSessionMarker?: (id: string, name: string) => QrFloorMarker
 }
 
 function getPreparingStageByElapsed(createdAt: string | undefined, freshMaxMin: number, warningMaxMin: number): TableStatusStage {
@@ -505,20 +506,31 @@ export function TableFloorView({
             {qrMarker ? (
               <span
                 className={cn(
-                  'pointer-events-none absolute -left-1 -top-1 z-20 rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide shadow-md ring-1',
-                  qrMarker === 'call' && 'animate-pulse bg-rose-600 text-white ring-rose-300',
+                  'pointer-events-none absolute -left-1 -top-1 z-20 rounded-full px-1.5 py-0.5 text-[9px] font-black tracking-wide shadow-md ring-1',
+                  (qrMarker === 'call' || qrMarker === 'call_bill' || qrMarker === 'call_help') &&
+                    'animate-pulse bg-rose-600 text-white ring-rose-300',
                   qrMarker === 'active' && 'bg-emerald-600 text-white ring-emerald-300',
                   qrMarker === 'awaiting' && 'bg-amber-500 text-white ring-amber-200'
                 )}
                 title={
-                  qrMarker === 'call'
-                    ? 'QR guest call'
-                    : qrMarker === 'active'
-                      ? 'QR ordering'
-                      : 'QR awaiting entry'
+                  qrMarker === 'call_bill'
+                    ? t('qrTableSessionCallBill') || '계산 요청'
+                    : qrMarker === 'call_help'
+                      ? t('qrTableSessionCallHelp') || '도움 요청'
+                      : qrMarker === 'call'
+                        ? t('qrTableSessionStaffCall') || '손님 호출'
+                        : qrMarker === 'active'
+                          ? t('qrTableSessionOrdering') || 'QR 주문중'
+                          : t('qrTableSessionAwaitConfirm') || 'QR awaiting entry'
                 }
               >
-                {qrMarker === 'call' ? 'CALL' : 'QR'}
+                {qrMarker === 'call_bill'
+                  ? t('qrTableSessionCallBillShort') || '계산'
+                  : qrMarker === 'call_help'
+                    ? t('qrTableSessionCallHelpShort') || '도움'
+                    : qrMarker === 'call'
+                      ? t('qrTableSessionStaffCallShort') || '호출'
+                      : 'QR'}
               </span>
             ) : null}
             {/* AABB(바깥) + w×h 논리 면(안): 회전 90/270이어도 보이는 점유 면·그리드와 맞음 */}

@@ -23,10 +23,17 @@ import {
   qrGuestMenuNeedsOptionPicker,
   type QrGuestMenuOption,
 } from '@/lib/qr-table-guest-menu'
-import { normalizeQrGuestLang, qrGuestT, type QrGuestLang } from '@/lib/i18n-qr-table-guest'
+import {
+  normalizeQrGuestLang,
+  qrGuestLangOption,
+  qrGuestT,
+  QR_GUEST_LANG_OPTIONS,
+  type QrGuestLang,
+} from '@/lib/i18n-qr-table-guest'
 import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
 import type { PosMenu, PosMenuOption } from '@/lib/api-client'
 import { QR_TABLE_GUEST_PAY_POLL_MS } from '@/lib/qr-table-poll-interval'
+import { QR_STAFF_CALL_BILL, QR_STAFF_CALL_HELP } from '@/lib/qr-table-staff-call'
 import QRCode from 'qrcode'
 
 type MenuItem = {
@@ -97,6 +104,72 @@ function ClockIcon({ className }: { className?: string }) {
       <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
       <path d="M12 7.75V12l3 1.75" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  )
+}
+
+function GuestLangSwitcher({
+  lang,
+  onChange,
+}: {
+  lang: QrGuestLang
+  onChange: (next: QrGuestLang) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const current = qrGuestLangOption(lang)
+  return (
+    <>
+      <button
+        type="button"
+        className="inline-flex min-h-9 items-center gap-1 rounded-full bg-[#fff7ed] px-3 py-1.5 text-sm font-bold text-stone-800 shadow-sm ring-1 ring-amber-400 touch-manipulation"
+        aria-label={qrGuestT(lang, 'languageBar')}
+        onClick={() => setOpen(true)}
+      >
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
+          <path d="M3 12h18M12 3c2.5 3 3.8 6 3.8 9s-1.3 6-3.8 9c-2.5-3-3.8-6-3.8-9S9.5 6 12 3Z" stroke="currentColor" strokeWidth="1.75" />
+        </svg>
+        {current.label}
+      </button>
+      {open ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/45"
+          role="presentation"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-3xl bg-white p-4 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-base font-semibold">{qrGuestT(lang, 'languageBar')}</p>
+            <div className="mt-3 grid gap-2">
+              {QR_GUEST_LANG_OPTIONS.map((opt) => {
+                const selected = lang === opt.id
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={`flex min-h-12 items-center justify-between rounded-2xl px-4 text-left text-[15px] font-semibold touch-manipulation ${
+                      selected
+                        ? 'bg-[var(--qr-brand,#b45309)] text-white'
+                        : 'bg-[#fff7ed] text-stone-800 ring-1 ring-amber-200'
+                    }`}
+                    onClick={() => {
+                      onChange(opt.id)
+                      setOpen(false)
+                    }}
+                  >
+                    <span>{opt.label}</span>
+                    <span className={`text-xs font-bold ${selected ? 'text-white/80' : 'text-stone-400'}`}>{opt.hint}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   )
 }
 
@@ -213,7 +286,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return
-    setLang(normalizeQrGuestLang(sessionStorage.getItem(LANG_KEY) || navigator.language?.slice(0, 2)))
+    setLang(normalizeQrGuestLang(sessionStorage.getItem(LANG_KEY)))
   }, [])
 
   React.useEffect(() => {
@@ -476,7 +549,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
             const opt = (m.options || []).find((o) => o.id === id)
             return n + (opt ? Number(opt.priceModifier) || 0 : 0)
           }, 0)
-          return sum + (m.listPrice + modifier) * l.qty
+          const unit = Math.max(0, Number(m.price) || Number(m.listPrice) || 0) + modifier
+          return sum + unit * l.qty
         }, 0)
       : 0
     let auth = sessionAuth
@@ -566,6 +640,21 @@ export function QrTableGuestApp({ token }: { token: string }) {
     () => aggregateQrGuestSentLines(orderSummary?.items),
     [orderSummary]
   )
+  const cartQty = cart.reduce((n, line) => n + line.qty, 0)
+  const cartTotal = React.useMemo(() => {
+    const menus = [...includedMenus, ...extraMenus]
+    return cart.reduce((sum, line) => {
+      const m = menus.find((x) => x.menuId === line.menuId)
+      if (!m || m.buffetIncluded) return sum
+      const modifier = (line.optionIds || []).reduce((n, id) => {
+        const opt = (m.options || []).find((o) => o.id === id)
+        return n + (opt ? Number(opt.priceModifier) || 0 : 0)
+      }, 0)
+      const unit = Math.max(0, Number(m.price) || Number(m.listPrice) || 0) + modifier
+      return sum + unit * line.qty
+    }, 0)
+  }, [cart, includedMenus, extraMenus])
+  const displayTotal = Math.round((Number(orderSummary?.total || 0) + cartTotal) * 100) / 100
   const sentGroups = React.useMemo(
     () => groupQrGuestSentLinesByTime(orderSummary?.items, session?.createdAt),
     [orderSummary, session?.createdAt]
@@ -711,7 +800,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
   }
   if (step === 'error') {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-2 bg-stone-50 p-6 text-center">
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-[var(--qr-accent,#faf7f2)] p-6 text-center" style={brandCss(settings)}>
+        <GuestLangSwitcher lang={lang} onChange={changeLang} />
         <p className="text-lg font-semibold text-stone-900">{g('cannotOpen')}</p>
         <p className="text-sm text-stone-600">{error}</p>
       </div>
@@ -750,26 +840,15 @@ export function QrTableGuestApp({ token }: { token: string }) {
                 {g('callStaff')}
               </button>
             ) : null}
-            <select
-              className="rounded-md border border-stone-300 bg-white px-2 py-1 text-sm"
-              value={lang}
-              onChange={(e) => changeLang(normalizeQrGuestLang(e.target.value))}
-            >
-              <option value="th">ไทย</option>
-              <option value="en">EN</option>
-              <option value="ko">한국어</option>
-            </select>
+            <GuestLangSwitcher lang={lang} onChange={changeLang} />
           </div>
         </div>
         {callOpen ? (
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <button type="button" disabled={busy} className="rounded-lg bg-stone-100 py-2 text-xs font-medium" onClick={() => void handleCall(g('callWater'))}>
-              {g('callWater')}
-            </button>
-            <button type="button" disabled={busy} className="rounded-lg bg-stone-100 py-2 text-xs font-medium" onClick={() => void handleCall(g('callBill'))}>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" disabled={busy} className="rounded-lg bg-stone-100 py-2 text-xs font-medium" onClick={() => void handleCall(QR_STAFF_CALL_BILL)}>
               {g('callBill')}
             </button>
-            <button type="button" disabled={busy} className="rounded-lg bg-stone-100 py-2 text-xs font-medium" onClick={() => void handleCall(g('callHelp'))}>
+            <button type="button" disabled={busy} className="rounded-lg bg-stone-100 py-2 text-xs font-medium" onClick={() => void handleCall(QR_STAFF_CALL_HELP)}>
               {g('callHelp')}
             </button>
           </div>
@@ -1024,14 +1103,22 @@ export function QrTableGuestApp({ token }: { token: string }) {
               onChange={(e) => setSearch(e.target.value)}
             />
             {mainCategories.length > 0 ? (
-              <div>
+              <div className="rounded-2xl bg-[#fff7ed] p-2 ring-1 ring-amber-200/90">
+                <div className="mb-1.5 flex items-center gap-2 px-0.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[var(--qr-brand,#b45309)] text-[11px] font-bold text-white">
+                    1
+                  </span>
+                  <p className="text-[12px] font-bold tracking-wide text-[var(--qr-brand,#b45309)]">
+                    {g('mainCategory')}
+                  </p>
+                </div>
                 <div
                   className={
                     mainCategories.length <= 4
-                      ? 'grid grid-cols-2 gap-2'
+                      ? 'grid grid-cols-2 gap-1.5'
                       : mainCategories.length <= 6
-                        ? 'grid grid-cols-3 gap-2'
-                        : 'flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 scrollbar-hide'
+                        ? 'grid grid-cols-3 gap-1.5'
+                        : 'flex snap-x snap-mandatory gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide'
                   }
                 >
                   {mainCategories.map((c) => {
@@ -1041,20 +1128,24 @@ export function QrTableGuestApp({ token }: { token: string }) {
                       <button
                         key={c}
                         type="button"
-                        className={`flex min-h-14 items-center justify-between gap-1.5 rounded-2xl px-3 text-left shadow-sm touch-manipulation ${
+                        className={`flex min-h-12 items-center justify-between gap-1.5 rounded-xl px-3 text-left touch-manipulation ${
                           mainCategories.length > 6 ? 'min-w-[9.5rem] shrink-0 snap-start px-3.5' : ''
                         } ${
                           selected
-                            ? 'bg-[var(--qr-brand,#b45309)] text-white'
-                            : 'bg-white text-stone-800 ring-1 ring-stone-200'
+                            ? 'bg-[var(--qr-brand,#b45309)] text-white shadow-md shadow-amber-900/15'
+                            : 'bg-white text-stone-800 shadow-sm ring-1 ring-amber-100'
                         }`}
                         onClick={() => {
                           setMainCategory(c)
                           setSubCategory('')
                         }}
                       >
-                        <span className="min-w-0 truncate text-[15px] font-semibold leading-tight">{c}</span>
-                        <span className={`shrink-0 tabular-nums text-sm font-medium ${selected ? 'text-white/80' : 'text-stone-400'}`}>
+                        <span className="min-w-0 truncate text-[14px] font-bold leading-tight">{c}</span>
+                        <span
+                          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                            selected ? 'bg-white/20 text-white' : 'bg-amber-50 text-amber-800'
+                          }`}
+                        >
                           {count}
                         </span>
                       </button>
@@ -1064,8 +1155,17 @@ export function QrTableGuestApp({ token }: { token: string }) {
               </div>
             ) : null}
             {subCategories.length > 0 ? (
-              <div>
-                <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
+              <div className="rounded-2xl border border-stone-200 bg-stone-50/90 p-2">
+                <div className="mb-1.5 flex min-w-0 items-center gap-2 px-0.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-800 text-[11px] font-bold text-white">
+                    2
+                  </span>
+                  <p className="shrink-0 text-[12px] font-bold text-stone-700">{g('subCategory')}</p>
+                  {mainCategory ? (
+                    <p className="min-w-0 truncate text-[11px] text-stone-400">· {mainCategory}</p>
+                  ) : null}
+                </div>
+                <div className="flex snap-x snap-mandatory gap-1 overflow-x-auto scrollbar-hide">
                   {['', ...subCategories].map((c) => {
                     const selected = c ? subCategory === c : !subCategory
                     const label = c || g('allCategories')
@@ -1074,15 +1174,15 @@ export function QrTableGuestApp({ token }: { token: string }) {
                       <button
                         key={c || 'all'}
                         type="button"
-                        className={`flex min-h-12 shrink-0 snap-start items-center gap-2 rounded-2xl px-4 text-[15px] font-semibold shadow-sm touch-manipulation ${
+                        className={`flex min-h-8 shrink-0 snap-start items-center gap-1 rounded-full px-3 text-[12px] font-semibold touch-manipulation ${
                           selected
-                            ? 'bg-stone-900 text-white'
-                            : 'bg-white text-stone-800 ring-1 ring-stone-200'
+                            ? 'bg-stone-900 text-white shadow-sm'
+                            : 'bg-white text-stone-600 ring-1 ring-stone-200'
                         }`}
                         onClick={() => setSubCategory(c)}
                       >
                         <span className="whitespace-nowrap">{label}</span>
-                        <span className={`tabular-nums text-sm font-medium ${selected ? 'text-white/75' : 'text-stone-400'}`}>
+                        <span className={`tabular-nums text-[10px] ${selected ? 'text-white/70' : 'text-stone-400'}`}>
                           {count}
                         </span>
                       </button>
@@ -1165,7 +1265,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
                 <p className="mt-1 text-xs text-stone-500">{g('orderHistoryEmpty')}</p>
               )}
               <p className="mt-2">
-                {g('total')} ฿{Number(orderSummary.total || 0).toLocaleString()}
+                {g('total')} ฿{displayTotal.toLocaleString()}
               </p>
               <p>
                 {g('paidQr')} ฿{Number(orderSummary.paymentQr || 0).toLocaleString()}
@@ -1194,9 +1294,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
               className={`w-full rounded-2xl py-3.5 font-semibold disabled:opacity-50 ${brandBtn}`}
             >
               {busy ? g('sendingKitchen') : g('sendKitchen')}
-              {!busy && cart.length > 0
-                ? ` · ${cart.reduce((a, line) => a + line.qty, 0)}`
-                : ''}
+              {!busy && cartQty > 0 ? ` · ${cartQty}` : ''}
+              {!busy && cartTotal >= 1 ? ` · ฿${Math.round(cartTotal).toLocaleString()}` : ''}
             </button>
           </div>
         </section>
@@ -1216,6 +1315,12 @@ export function QrTableGuestApp({ token }: { token: string }) {
           >
             <p className="text-base font-semibold">{g('confirmSendKitchen')}</p>
             <p className="mt-1 text-sm text-stone-600">{g('confirmSendKitchenHint')}</p>
+            {cartQty > 0 ? (
+              <p className="mt-2 text-sm font-semibold tabular-nums">
+                {cartQty}
+                {cartTotal >= 1 ? ` · ฿${Math.round(cartTotal).toLocaleString()}` : ''}
+              </p>
+            ) : null}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="button"

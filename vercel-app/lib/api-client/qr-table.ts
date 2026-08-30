@@ -300,6 +300,7 @@ export async function qrTableStaffSessionsMap(storeCode: string) {
       status: string
       entryPaid: boolean
       staffCallAt: string | null
+      staffCallNote?: string | null
       posOrderId: number | null
     }>
     message?: string

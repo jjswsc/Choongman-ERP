@@ -29,6 +29,8 @@ import { buffetTierDisplayName, defaultQrOrderStoreSettings } from '@/lib/qr-tab
 import { appAlert } from '@/lib/app-message'
 import { useLang } from '@/lib/lang-context'
 import { useT, tOr } from '@/lib/i18n'
+import { playQrStaffCallMelody } from '@/lib/pos-qr-staff-call-sound'
+import { normalizeQrStaffCallKind, qrStaffCallKindLabel } from '@/lib/qr-table-staff-call'
 
 type OrderBalance = {
   orderId: number | null
@@ -36,28 +38,6 @@ type OrderBalance = {
   paymentQr: number
   balanceDue: number
   status: string
-}
-
-function playCallBeep() {
-  try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (!Ctx) return
-    const ctx = new Ctx()
-    const o = ctx.createOscillator()
-    const g = ctx.createGain()
-    o.type = 'sine'
-    o.frequency.value = 880
-    g.gain.value = 0.08
-    o.connect(g)
-    g.connect(ctx.destination)
-    o.start()
-    window.setTimeout(() => {
-      o.stop()
-      void ctx.close()
-    }, 180)
-  } catch {
-    /* ignore */
-  }
 }
 
 export function QrTableSessionPanel(props: {
@@ -94,7 +74,7 @@ export function QrTableSessionPanel(props: {
     const next = sessRes.session || null
     const callAt = next?.staffCallAt || null
     if (callAt && callAt !== lastCallAtRef.current) {
-      playCallBeep()
+      playQrStaffCallMelody(`${String(tableName || '').trim().toLowerCase()}:${callAt}`)
     }
     lastCallAtRef.current = callAt
     setSession(next)
@@ -226,12 +206,14 @@ export function QrTableSessionPanel(props: {
   const printQrLabel = tr('qrTableSessionPrintQr', 'QR 인쇄')
   const printQrHint = tr('qrTableSessionPrintQrHint', '영수증 프린터로 테이블 QR을 출력합니다. 손님이 스캔해 주문합니다.')
   const printBusy = busy || printing
+  const callKind = session?.staffCallAt ? normalizeQrStaffCallKind(session.staffCallNote) : null
+  const callKindLabel = callKind ? qrStaffCallKindLabel(callKind, tr) : ''
 
   const badge =
     !session
       ? null
       : session.staffCallAt
-        ? { label: tr('qrTableSessionStaffCall', '손님 호출'), className: 'bg-rose-100 text-rose-800 animate-pulse' }
+        ? { label: callKindLabel, className: 'bg-rose-100 text-rose-800 animate-pulse' }
         : session.status === 'active' && session.entryPaid
           ? { label: tr('qrTableSessionOrdering', 'QR 주문중'), className: 'bg-emerald-100 text-emerald-800' }
           : session.entryPaymentModeResolved === 'prepay' && !session.entryPaid
@@ -345,8 +327,8 @@ export function QrTableSessionPanel(props: {
                 {printQrLabel}
               </Button>
               {session.staffCallAt ? (
-                <Button size="sm" variant="destructive" className="h-8 px-3 text-xs" disabled={busy} onClick={() => void ackCall()}>
-                  {tr('qrTableSessionAckCall', '호출 확인')}
+                <Button size="sm" variant="destructive" className="h-8 px-3 text-xs font-semibold" disabled={busy} onClick={() => void ackCall()}>
+                  {callKindLabel} · {tr('qrTableSessionAckCall', '확인')}
                 </Button>
               ) : null}
               {session.status === 'awaiting_entry' && !session.entryPaid ? (
@@ -427,9 +409,10 @@ export function QrTableSessionPanel(props: {
       </div>
 
       {/* 호출 메모·좁은 화면 잔액·힌트만 필요 시 한 줄 더 */}
-      {session?.staffCallAt && session.staffCallNote ? (
-        <p className="border-t border-rose-200/70 bg-rose-50/60 px-2.5 py-1.5 text-[11px] text-rose-800">
-          {session.staffCallNote}
+      {session?.staffCallAt ? (
+        <p className="border-t border-rose-200/70 bg-rose-50/80 px-2.5 py-1.5 text-sm font-semibold text-rose-900">
+          {callKindLabel}
+          {callKind === 'other' && session.staffCallNote ? ` · ${session.staffCallNote}` : ''}
         </p>
       ) : null}
       {session && orderBalance && orderBalance.orderId ? (

@@ -282,7 +282,8 @@ export function buffetTierDisplayName(
 ): string {
   const l = String(lang || '').toLowerCase()
   if (l.startsWith('ko') && tier.nameKo) return tier.nameKo
-  if (l.startsWith('en') && tier.nameEn) return tier.nameEn
+  if (l.startsWith('th') && tier.nameTh) return tier.nameTh
+  if (l && tier.nameEn) return tier.nameEn
   if (tier.nameTh) return tier.nameTh
   if (tier.nameEn) return tier.nameEn
   if (tier.nameKo) return tier.nameKo
