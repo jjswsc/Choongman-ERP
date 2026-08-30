@@ -3,6 +3,7 @@
  */
 
 import { normalizeEmployeeNameFields } from '@/lib/employee-display-name'
+import { isEffectivelyResignedForStaffRollup } from '@/lib/erp-store-master-shared'
 
 const BANGKOK = 'Asia/Bangkok'
 
@@ -207,6 +208,36 @@ export function leaveRowMatchesEmployeeForStats(
     normalizeLeaveMatchKey(empStore) === normalizeLeaveMatchKey(leaveStore) &&
     leavePersonKeyForLeaveStats(empName, empNameTitle) === leavePersonKeyForLeaveStats(leaveName, '')
   )
+}
+
+/** 휴가 통계 직원 범위. 기본은 재직자만. */
+export type LeaveStatsStaffFilter = 'active' | 'resigned' | 'all'
+
+export function parseLeaveStatsStaffFilter(raw: string | null | undefined): LeaveStatsStaffFilter {
+  const v = String(raw || '')
+    .trim()
+    .toLowerCase()
+  if (v === 'resigned' || v === 'all') return v
+  return 'active'
+}
+
+/**
+ * 휴가 통계 목록에 올릴 직원인지.
+ * soft-delete는 범위와 무관하게 제외. 퇴사 예정(미래 퇴사일)은 재직으로 포함.
+ */
+export function isEmployeeIncludedInLeaveStats(
+  emp: {
+    deleted_at?: string | null
+    employment_status?: string | null
+    resign_date?: string | null
+  },
+  staffFilter: LeaveStatsStaffFilter = 'active'
+): boolean {
+  if (String(emp.deleted_at || '').trim()) return false
+  const resigned = isEffectivelyResignedForStaffRollup(emp.employment_status, emp.resign_date)
+  if (staffFilter === 'all') return true
+  if (staffFilter === 'resigned') return resigned
+  return !resigned
 }
 
 /** YYYY-MM-DD 문자열 기준 기간 포함 (서버 타임존과 무관) */

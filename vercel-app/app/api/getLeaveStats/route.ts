@@ -9,7 +9,10 @@ import {
   isAnnualLeaveFamilyType,
   leaveDateInYmdRange,
   assignLeaveRowToEmployeeForStats,
+  isEmployeeIncludedInLeaveStats,
+  parseLeaveStatsStaffFilter,
 } from '@/lib/leave-request-utils'
+import { isEffectivelyResignedForStaffRollup } from '@/lib/erp-store-master-shared'
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -64,6 +67,9 @@ export async function GET(request: NextRequest) {
 
   const periodStart = /^\d{4}-\d{2}-\d{2}$/.test(startStr) ? startStr : '1900-01-01'
   const periodEnd = /^\d{4}-\d{2}-\d{2}$/.test(endStr) ? endStr : '2999-12-31'
+  const staffFilter = parseLeaveStatsStaffFilter(
+    searchParams.get('staffFilter') || searchParams.get('staff') || searchParams.get('employmentStatus')
+  )
 
   try {
     type EmpRow = {
@@ -74,6 +80,9 @@ export async function GET(request: NextRequest) {
       annual_leave_days?: number | null
       join_date?: string | null
       employee_code?: string | null
+      resign_date?: string | null
+      employment_status?: string | null
+      deleted_at?: string | null
     }
 
     function normEmployeeCode(c: string | null | undefined): string {
@@ -94,40 +103,35 @@ export async function GET(request: NextRequest) {
 
     let empRows: EmpRow[] = []
     const empSelectBase = 'id,store,name,name_title,annual_leave_days,join_date,sal_type'
-    const empSelectWithCode = `${empSelectBase},employee_code`
-    try {
-      if (storeFilter) {
-        empRows = (await supabaseSelectFilterAllPages(
-          'employees',
-          `store=ilike.${encodeURIComponent(storeFilter)}`,
-          { order: 'id.asc', select: empSelectWithCode, pageSize: 1000, maxRows: EMP_STATS_MAX_ROWS }
-        )) as EmpRow[]
-      } else {
-        empRows = (await supabaseSelectFilterAllPages('employees', 'id=not.is.null', {
+    const empSelectCandidates = [
+      `${empSelectBase},employee_code,resign_date,employment_status,deleted_at`,
+      `${empSelectBase},employee_code,resign_date,deleted_at`,
+      `${empSelectBase},employee_code,resign_date`,
+      `${empSelectBase},employee_code`,
+      empSelectBase,
+    ]
+    const empFilter = storeFilter
+      ? `store=ilike.${encodeURIComponent(storeFilter)}`
+      : 'id=not.is.null'
+    let empSelectErr: unknown
+    for (const select of empSelectCandidates) {
+      try {
+        empRows = (await supabaseSelectFilterAllPages('employees', empFilter, {
           order: 'id.asc',
-          select: empSelectWithCode,
+          select,
           pageSize: 1000,
           maxRows: EMP_STATS_MAX_ROWS,
         })) as EmpRow[]
-      }
-    } catch (e) {
-      const em = e instanceof Error ? e.message : String(e)
-      if (!/employee_code|42703|column/i.test(em)) throw e
-      if (storeFilter) {
-        empRows = (await supabaseSelectFilterAllPages(
-          'employees',
-          `store=ilike.${encodeURIComponent(storeFilter)}`,
-          { order: 'id.asc', select: empSelectBase, pageSize: 1000, maxRows: EMP_STATS_MAX_ROWS }
-        )) as EmpRow[]
-      } else {
-        empRows = (await supabaseSelectFilterAllPages('employees', 'id=not.is.null', {
-          order: 'id.asc',
-          select: empSelectBase,
-          pageSize: 1000,
-          maxRows: EMP_STATS_MAX_ROWS,
-        })) as EmpRow[]
+        empSelectErr = null
+        break
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/42703|column/i.test(em)) throw e
+        empSelectErr = e
       }
     }
+    if (empSelectErr) throw empSelectErr
+    empRows = (empRows || []).filter((emp) => isEmployeeIncludedInLeaveStats(emp, staffFilter))
 
     let leaveRows: LeaveRow[] = []
     if (storeFilter) {
@@ -165,6 +169,7 @@ export async function GET(request: NextRequest) {
       store: string
       name: string
       employeeCode: string
+      resigned: boolean
       usedPeriodAnnual: number
       usedPeriodSick: number
       usedPeriodUnpaid: number
@@ -230,6 +235,7 @@ export async function GET(request: NextRequest) {
         store: empStore,
         name: empName,
         employeeCode: normEmployeeCode(emp.employee_code),
+        resigned: isEffectivelyResignedForStaffRollup(emp.employment_status, emp.resign_date),
         usedPeriodAnnual: Math.round(usedPeriodAnnual * 10) / 10,
         usedPeriodSick: Math.round(usedPeriodSick * 10) / 10,
         usedPeriodUnpaid: Math.round(usedPeriodUnpaid * 10) / 10,

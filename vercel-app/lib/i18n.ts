@@ -419,9 +419,11 @@ export const i18n = {
     leave_col_reason: '사유',
     leave_col_cert: '증명서',
     leave_col_action: '처리',
-    leave_stats_hint: '기간·매장 선택 후 검색 버튼을 눌러주세요.',
+    leave_stats_hint: '기간·매장·재직상태를 선택한 뒤 검색 버튼을 눌러주세요.',
     leave_stats_approved_only:
-      '집계에는 승인(Approved) 처리된 휴가만 포함됩니다. 연차 승인 화면에서 상태가 «대기»인 건은 통계에 반영되지 않습니다.',
+      '집계에는 승인(Approved) 처리된 휴가만 포함됩니다. 연차 승인 화면에서 상태가 «대기»인 건은 통계에 반영되지 않습니다. 기본 검색은 재직 직원만 보이며, 퇴사·전체로 바꿔 조회할 수 있습니다.',
+    leave_stats_staff_filter: '재직 상태',
+    leave_stats_name_ph: '이름 또는 직원코드',
     // 네비게이션
     tabHome: '홈',
     tabOrder: '주문',
@@ -1841,9 +1843,9 @@ export const i18n = {
     helpHow_admin_attendance:
       '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 오늘 출근 현황을 봅니다.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~29:00, 자정 이후는 24:00~)에서 고릅니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
     helpSum_admin_leave:
-      '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다. 사이드바 배지는 최근 휴가일 기준 미승인만 표시합니다.',
+      '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다. 통계 기본은 재직 직원만 보이며, 사이드바 배지는 최근 휴가일 기준 미승인만 표시합니다.',
     helpHow_admin_leave:
-      '① [승인]: 대기 목록에서 증명서 확인 후 승인·반려합니다.\n② [통계]: 기간·매장별 사용·잔여 연차를 조회합니다.\n③ 급여 관리에서 월별로 링크해 들어올 수 있습니다.\n④ 사이드바 배지는 최근 30일(휴가일)~미래 미승인만 집계합니다.',
+      '① [승인]: 대기 목록에서 증명서 확인 후 승인·반려합니다.\n② [통계]: 기간·매장별 사용·잔여 연차를 조회합니다. 기본은 재직 직원만 보이며, 검색에서 퇴사·전체로 바꿀 수 있습니다.\n③ 급여 관리에서 월별로 링크해 들어올 수 있습니다.\n④ 사이드바 배지는 최근 30일(휴가일)~미래 미승인만 집계합니다.',
     helpSum_admin_hr_calendar:
       '재직 직원의 생일·입사·N년·퇴사일을 월별 캘린더와 목록으로 확인합니다.',
     helpHow_admin_hr_calendar:
@@ -8706,9 +8708,11 @@ Only matters the employee must handle personally on a working day:
     leave_col_reason: 'Reason',
     leave_col_cert: 'Certificate',
     leave_col_action: 'Action',
-    leave_stats_hint: 'Select period and store, then click Search.',
+    leave_stats_hint: 'Select period, store, and employment status, then click Search.',
     leave_stats_approved_only:
-      'Only approved leave is counted. Items still «Pending» on the approval screen do not appear in usage totals.',
+      'Only approved leave is counted. Items still «Pending» on the approval screen do not appear in usage totals. The default search shows current staff; choose Resigned or All to include former employees.',
+    leave_stats_staff_filter: 'Employment',
+    leave_stats_name_ph: 'Name or employee code',
     tabHome: 'Home',
     tabOrder: 'Order',
     tabUsage: 'Usage',
@@ -10122,9 +10126,9 @@ Only matters the employee must handle personally on a working day:
     helpHow_admin_attendance:
       '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: see who is on shift now.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–29:00; after midnight use 24:00+).\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
     helpSum_admin_leave:
-      'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Sidebar badges count only recent unapproved leave dates.',
+      'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Stats default to current staff. Sidebar badges count only recent unapproved leave dates.',
     helpHow_admin_leave:
-      '① Approval: review certificates, then approve or reject pending requests.\n② Stats: query usage and remaining leave by period and store.\n③ Payroll may deep-link here by month.\n④ Sidebar badges count pending leave from the last 30 leave-days through future dates only.',
+      '① Approval: review certificates, then approve or reject pending requests.\n② Stats: query usage and remaining leave by period and store. Default list is current staff; choose Resigned or All to include former employees.\n③ Payroll may deep-link here by month.\n④ Sidebar badges count pending leave from the last 30 leave-days through future dates only.',
     helpSum_admin_hr_calendar:
       'View birthdays, hire dates, work anniversaries, and resignations on a monthly calendar and list.',
     helpHow_admin_hr_calendar:
@@ -16980,9 +16984,11 @@ orderItemQty: 'Qty',
     leave_col_reason: 'เหตุผล',
     leave_col_cert: 'ใบรับรอง',
     leave_col_action: 'จัดการ',
-    leave_stats_hint: 'เลือกช่วงและสาขา แล้วกดค้นหา',
+    leave_stats_hint: 'เลือกช่วง สาขา และสถานะพนักงาน แล้วกดค้นหา',
     leave_stats_approved_only:
-      'สถิตินับเฉพาะการลาที่อนุมัติแล้ว รายการสถานะ «รออนุมัติ» ในหน้าอนุมัติจะไม่ถูกรวมในยอดใช้',
+      'สถิตินับเฉพาะการลาที่อนุมัติแล้ว รายการสถานะ «รออนุมัติ» ในหน้าอนุมัติจะไม่ถูกรวมในยอดใช้ ค่าเริ่มต้นแสดงพนักงานที่ยังทำงาน เลือก «ออกแล้ว» หรือ «ทั้งหมด» เพื่อดูผู้ที่ลาออกแล้วครับ',
+    leave_stats_staff_filter: 'สถานะพนักงาน',
+    leave_stats_name_ph: 'ชื่อหรือรหัสพนักงาน',
     tabHome: 'หน้าแรก',
     tabOrder: 'ออเดอร์',
     tabUsage: 'การใช้งาน',
@@ -18234,9 +18240,9 @@ orderItemQty: 'จำนวน',
     helpHow_admin_attendance:
       'กรอง อนุมัติ ปรับเวลา — แท็บช่วยเหลือมีกฎ ตารางงานเลือกเริ่มพักได้ตามช่วงที่แสดง รวมหลังเที่ยงคืน (24:00 ขึ้นไป)',
     helpSum_admin_leave:
-      'Approve/reject leave and view usage statistics.',
+      'อนุมัติ/ปฏิเสธการลา และดูสถิติการใช้ ค่าเริ่มต้นแสดงพนักงานที่ยังปฏิบัติงานอยู่ครับ',
     helpHow_admin_leave:
-      'Approval tab and Stats tab by period and store.',
+      'แท็บอนุมัติ และแท็บสถิติตามช่วงและสาขา ค่าเริ่มต้นแสดงพนักงานที่ยังทำงาน เลือก «ออกแล้ว» หรือ «ทั้งหมด» เพื่อดูผู้ที่ลาออกแล้วครับ',
     helpSum_admin_hr_calendar:
       'Monthly birthdays, hire dates, anniversaries, resignations.',
     helpHow_admin_hr_calendar:
@@ -23732,8 +23738,11 @@ orderItemQty: 'จำนวน',
     leave_col_reason: 'အကြောင်းပြချက်',
     leave_col_cert: 'လက်မှတ်',
     leave_col_action: 'လုပ်ဆောင်ချက်',
-    leave_stats_hint: 'ကာလနှင့်ဆိုင်ရွေးပြီး ရှာမှတ်နိုင်ပါသည်',
-    leave_stats_approved_only: 'အတည်ပြုပြီးသာ ခွင့်များသာ စာရင်းထဲပါသည်။ စောင့်ဆိုင်းနေသာ ခွင့်များ မပါဝင်ပါ။',
+    leave_stats_hint: 'ကာလ၊ ဆိုင်နှင့် အလုပ်အခြေအနေ ရွေးပြီး ရှာမှတ်နိုင်ပါသည်',
+    leave_stats_approved_only:
+      'အတည်ပြုပြီးသာ ခွင့်များသာ စာရင်းထဲပါသည်။ စောင့်ဆိုင်းနေသာ ခွင့်များ မပါဝင်ပါ။ ပုံမှန်မှာ လုပ်ကိုင်ဆဲသာ ပြသည်။ ထွက်ပြီး သို့မဟုတ် အားလုံး ရွေးနိုင်သည်။',
+    leave_stats_staff_filter: 'အလုပ်အခြေအနေ',
+    leave_stats_name_ph: 'အမည် သို့မဟုတ် ကုဒ်',
     tabHome: 'ပင်မ',
     tabOrder: 'အော်ဒါ',
     tabUsage: 'အသုံး',
@@ -24828,7 +24837,7 @@ orderItemQty: 'အရေအတွက်',
     helpSum_admin_leave:
       'Approve/reject leave and view usage statistics.',
     helpHow_admin_leave:
-      'Approval tab and Stats tab by period and store.',
+      'Approval tab and Stats tab by period and store. Default is current staff; choose Resigned or All to include former employees.',
     helpSum_admin_hr_calendar:
       'Monthly birthdays, hire dates, anniversaries, resignations.',
     helpHow_admin_hr_calendar:
@@ -28693,8 +28702,11 @@ orderItemQty: 'အရေအတွက်',
     leave_col_reason: 'ເຫດຜົນ',
     leave_col_cert: 'ໃບຢັ້ງຢືນ',
     leave_col_action: 'ການດຳເນີນການ',
-    leave_stats_hint: 'ເລືອກໄລຍະແລະສາຂາ ແລ້ວກົດຄົ້ນຫາ',
-    leave_stats_approved_only: 'ນັບເພີ່ນລາທີ່ອະນຸມັດແລ້ວເທົ່ານັ້ນ. ລາຍການລໍຖ້າອະນຸມັດບໍ່ຖືກລວມ.',
+    leave_stats_hint: 'ເລືອກໄລຍະ ສາຂາ ແລະ ສະຖານະພະນັກງານ ແລ້ວກົດຄົ້ນຫາ',
+    leave_stats_approved_only:
+      'ນັບເພີ່ນລາທີ່ອະນຸມັດແລ້ວເທົ່ານັ້ນ. ລາຍການລໍຖ້າອະນຸມັດບໍ່ຖືກລວມ. ຄ່າເລີ່ມຕົ້ນສະແດງພະນັກງານທີ່ຍັງເຮັດວຽກ. ເລືອກອອກແລ້ວ ຫຼື ທັງໝົດໄດ້.',
+    leave_stats_staff_filter: 'ສະຖານະພະນັກງານ',
+    leave_stats_name_ph: 'ຊື່ ຫຼື ລະຫັດ',
     tabHome: 'ໜ້າຫຼັກ',
     tabOrder: 'ອໍເດີ',
     tabUsage: 'ການໃຊ້',
@@ -29792,7 +29804,7 @@ orderItemQty: 'ຈຳນວນ',
     helpSum_admin_leave:
       'Approve/reject leave and view usage statistics.',
     helpHow_admin_leave:
-      'Approval tab and Stats tab by period and store.',
+      'Approval tab and Stats tab by period and store. Default is current staff; choose Resigned or All to include former employees.',
     helpSum_admin_hr_calendar:
       'Monthly birthdays, hire dates, anniversaries, resignations.',
     helpHow_admin_hr_calendar:
@@ -35063,7 +35075,7 @@ orderItemQty: 'ຈຳນວນ',
     helpSum_admin_attendance: 'Attendance និង schedule',
     helpHow_admin_attendance: 'Filter, approve, adjust',
     helpSum_admin_leave: 'ច្បាប់ និងស្ថិតិ',
-    helpHow_admin_leave: 'Approval និង Stats',
+    helpHow_admin_leave: 'Approval និង Stats — លំនាំដើមបុគ្គលិកបច្ចុប្បន្ន; ជ្រើស Resigned ឬ All',
     helpSum_admin_hr_calendar: 'ប្រតិទិន HR',
     helpHow_admin_hr_calendar: 'Filter និងចុចបើកបុគ្គលិក',
     helpSum_admin_payroll: 'ប្រាក់ខែ',
@@ -36945,7 +36957,7 @@ orderItemQty: 'ຈຳນວນ',
     helpSum_admin_attendance: 'Chấm công và lịch tuần',
     helpHow_admin_attendance: 'Lọc, duyệt, điều chỉnh',
     helpSum_admin_leave: 'Nghỉ phép và thống kê',
-    helpHow_admin_leave: 'Tab duyệt và thống kê',
+    helpHow_admin_leave: 'Tab duyệt và thống kê. Mặc định nhân viên đang làm; chọn thôi việc hoặc tất cả.',
     helpSum_admin_hr_calendar: 'Lịch HR theo tháng',
     helpHow_admin_hr_calendar: 'Lọc và bấm mở hồ sơ NV',
     helpSum_admin_payroll: 'Lương',
@@ -38781,7 +38793,7 @@ orderItemQty: 'ຈຳນວນ',
     helpSum_admin_attendance: 'Kehadiran dan jadual',
     helpHow_admin_attendance: 'Tapis, lulus, laraskan',
     helpSum_admin_leave: 'Cuti dan statistik',
-    helpHow_admin_leave: 'Tab kelulusan dan statistik',
+    helpHow_admin_leave: 'Tab kelulusan dan statistik. Lalai staf semasa; pilih berhenti atau semua.',
     helpSum_admin_hr_calendar: 'Kalendar HR bulanan',
     helpHow_admin_hr_calendar: 'Tapis dan klik profil pekerja',
     helpSum_admin_payroll: 'Gaji',

@@ -45,6 +45,7 @@ export async function getLeaveStats(params: {
   startStr?: string
   endStr?: string
   store?: string
+  staffFilter?: 'active' | 'resigned' | 'all'
   userStore?: string
   userRole?: string
 }) {
@@ -52,6 +53,7 @@ export async function getLeaveStats(params: {
   if (params.startStr) clean.startStr = params.startStr
   if (params.endStr) clean.endStr = params.endStr
   if (params.store != null && params.store !== '') clean.store = params.store
+  if (params.staffFilter) clean.staffFilter = params.staffFilter
   if (params.userStore) clean.userStore = params.userStore
   if (params.userRole) clean.userRole = params.userRole
   const q = new URLSearchParams(clean)
@@ -61,6 +63,7 @@ export async function getLeaveStats(params: {
       store: string
       name: string
       employeeCode: string
+      resigned?: boolean
       usedPeriodAnnual: number
       usedPeriodSick: number
       usedPeriodUnpaid: number
