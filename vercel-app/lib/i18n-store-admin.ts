@@ -32,6 +32,19 @@ const STORE_ADMIN_KEYS = {
   store_ops_go_repairs: '',
   store_ops_go_complaints: '',
   store_ops_go_visits: '',
+  store_ops_kpi_stock_take: '',
+  store_ops_kpi_stock_take_done: '',
+  store_ops_go_stock_take: '',
+  store_ops_go_variance: '',
+  store_ops_stock_take_due: '',
+  store_ops_stock_take_missing: '',
+  store_ops_stock_take_empty: '',
+  store_ops_stock_take_window: '',
+  store_ops_stock_take_month: '',
+  store_ops_stock_take_copy_line: '',
+  store_ops_stock_take_copied: '',
+  store_ops_stock_take_copy_fail: '',
+  store_ops_stock_take_auto_notice: '',
   tab_complaint_dashboard: '',
   tab_complaint_process: '',
   complaint_kpi_total: '',
@@ -88,9 +101,9 @@ function mergeStoreAdmin(base: Record<string, string>, overrides: Partial<Record
 
 export const I18N_STORE_ADMIN_KO = pack({
   helpSum_admin_store_ops:
-    '매장 점검·방문·A/S·컴플레인 KPI를 한 화면에서 보고, 각 업무 화면으로 바로 이동하는 매장 운영 허브입니다. 사이드바 배지는 아직 미착수(접수) 건·당일 미점검만 표시합니다.',
+    '매장 점검·방문·A/S·컴플레인·월말 실사 KPI를 한 화면에서 보고, 각 업무 화면으로 바로 이동하는 매장 운영 허브입니다. 사이드바 배지는 아직 미착수(접수) 건·당일 미점검만 표시합니다. 월말 실사 카드는 기말 재고조정(Adjustment) 여부로 완료를 셉니다.',
   helpHow_admin_store_ops:
-    '① 상단 KPI·사이드바 배지는 「아직 아무도 손대지 않은」 건만 셉니다(A/S·컴플레인=접수, 조사중·진행중 제외·최근 30일).\n② 카드를 클릭하거나 하위 메뉴로 해당 화면(점검·방문·A/S·컴플레인)으로 이동합니다.\n③ 본사는 매장별 우선순위를 정한 뒤 SV·매장에 후속 조치를 요청하세요.',
+    '① 상단 KPI·사이드바 배지는 「아직 아무도 손대지 않은」 건만 셉니다(A/S·컴플레인=접수, 조사중·진행중 제외·최근 30일).\n② 카드를 클릭하거나 하위 메뉴로 해당 화면(점검·방문·A/S·컴플레인)으로 이동합니다.\n③ 월말 실사: 말일 2일 전~익월 5일이 기한입니다. 미실사 매장에서 「재고 실사」로 기준일을 말일로 두고 조정하세요. 본사는 「LINE 붙여넣기」로 미실사 목록을 채팅에 보내고, 공지→자동 알림에서 미완료 매장만 독려할 수 있습니다.\n④ 본사는 매장별 우선순위를 정한 뒤 SV·매장에 후속 조치를 요청하세요.',
   helpSum_admin_store_check:
     '매장 일일 점검 체크리스트를 입력·저장하고, 이력·FAIL 항목 요약·항목 설정(본사)을 관리하는 화면입니다.',
   helpHow_admin_store_check:
@@ -109,7 +122,7 @@ export const I18N_STORE_ADMIN_KO = pack({
     '①「현황」: 기본 최근 30일(7·90일 프리셋 가능). 기간·매장·유형으로 KPI·차트를 봅니다.\n②「입력」: 고객·방문 경로·유형·내용·사진을 등록하거나 기존 건을 수정합니다. 「고객 답변」은 회원앱에 보이고, 「내부 조치」는 내부용입니다.\n③「검색」: 기간·키워드·매장·방문·유형·심각도·상태·유입으로 목록을 조회하고 상세보기로 수정합니다.\n④「처리」: 미완료 체크 시 기간과 무관하게 미완료 건을 모두 보여 줍니다. 키워드·매장·심각도로 좁힌 뒤 담당자·고객 답변·내부 조치·상태를 저장합니다.\n⑤ 사이드바 배지는 「접수」만(조사중·보류 제외)·최근 30일입니다.',
   storeSubnavAria: '매장 관리 하위 메뉴',
   adminStoreOps: '매장 운영',
-  store_ops_page_sub: '점검·방문·A/S·컴플레인 KPI 허브',
+  store_ops_page_sub: '점검·방문·A/S·컴플레인·월말 실사 KPI 허브',
   store_check_page_sub: '매장 일일 점검 체크리스트',
   complaint_page_sub: '고객 컴플레인 접수·처리',
   store_check_readonly_hint: '읽기 전용입니다. 수정하려면 아래 버튼을 누르세요.',
@@ -128,6 +141,19 @@ export const I18N_STORE_ADMIN_KO = pack({
   store_ops_go_repairs: 'A/S 보기',
   store_ops_go_complaints: '컴플레인 보기',
   store_ops_go_visits: '방문 현황',
+  store_ops_kpi_stock_take: '월말 실사 미완료',
+  store_ops_kpi_stock_take_done: '실사 완료',
+  store_ops_go_stock_take: '재고 실사',
+  store_ops_go_variance: '이론 vs 실소진',
+  store_ops_stock_take_due: '실사 기한',
+  store_ops_stock_take_missing: '미실사 매장',
+  store_ops_stock_take_empty: '대상 매장 모두 실사했습니다.',
+  store_ops_stock_take_window: '실사 기한',
+  store_ops_stock_take_month: '대상 월',
+  store_ops_stock_take_copy_line: 'LINE 붙여넣기',
+  store_ops_stock_take_copied: '복사했습니다. 채팅에 붙여넣으세요.',
+  store_ops_stock_take_copy_fail: '복사에 실패했습니다.',
+  store_ops_stock_take_auto_notice: '자동 알림',
   tab_complaint_dashboard: '현황',
   tab_complaint_process: '처리',
   complaint_kpi_total: '전체',
@@ -174,9 +200,9 @@ export const I18N_STORE_ADMIN_KO = pack({
 
 export const I18N_STORE_ADMIN_EN = pack({
   helpSum_admin_store_ops:
-    'Store operations hub: daily check, visits, repairs, and complaints KPIs with quick links. Sidebar badges count only untouched (Received) items and today’s unchecked stores.',
+    'Store operations hub: daily check, visits, repairs, complaints, and month-end stock-take KPIs with quick links. Sidebar badges count only untouched (Received) items and today’s unchecked stores. Stock-take completion is based on period-end Adjustment logs.',
   helpHow_admin_store_ops:
-    '① KPI and sidebar badges count only items nobody has started yet (repairs/complaints = Received; exclude In progress / Investigating; last 30 days).\n② Open the related screen from cards or sub-navigation.\n③ HQ: prioritize stores and assign follow-ups to SVs or managers.',
+    '① KPI and sidebar badges count only items nobody has started yet (repairs/complaints = Received; exclude In progress / Investigating; last 30 days).\n② Open the related screen from cards or sub-navigation.\n③ Month-end stock take: due from 2 days before month-end through the 5th of next month. Missing stores: open Stock, set as-of to month-end, Adjust. HQ can copy a LINE list and turn on Notices → Auto alerts for stores still missing.\n④ HQ: prioritize stores and assign follow-ups to SVs or managers.',
   helpSum_admin_store_check:
     'Daily store checklist entry, history, FAIL item summary, and checklist settings (HQ).',
   helpHow_admin_store_check:
@@ -195,7 +221,7 @@ export const I18N_STORE_ADMIN_EN = pack({
     '① Dashboard: default last 30 days (7/90-day presets). Filter by period, store, type for KPIs.\n② Input: register or edit complaints with photos. Customer reply shows in the member app; Internal action is staff-only.\n③ List: search by period, keyword, store, visit path, type, severity, status, source.\n④ Process: with Open checked, shows all open items regardless of date. Narrow with keyword/store/severity, then save status, customer reply, and internal action.\n⑤ Sidebar badges count Received only (exclude Investigating/On hold), last 30 days.',
   storeSubnavAria: 'Store management sub-navigation',
   adminStoreOps: 'Store Operations',
-  store_ops_page_sub: 'Checks · visits · repairs · complaints hub',
+  store_ops_page_sub: 'Checks · visits · repairs · complaints · month-end stock take',
   store_check_page_sub: 'Daily store checklist',
   complaint_page_sub: 'Customer complaint intake and resolution',
   store_check_readonly_hint: 'Read-only. Click below to edit.',
@@ -214,6 +240,19 @@ export const I18N_STORE_ADMIN_EN = pack({
   store_ops_go_repairs: 'View repairs',
   store_ops_go_complaints: 'View complaints',
   store_ops_go_visits: 'Visit status',
+  store_ops_kpi_stock_take: 'Stock take missing',
+  store_ops_kpi_stock_take_done: 'Stock take done',
+  store_ops_go_stock_take: 'Count stock',
+  store_ops_go_variance: 'Theo vs actual',
+  store_ops_stock_take_due: 'Due now',
+  store_ops_stock_take_missing: 'Stores without count',
+  store_ops_stock_take_empty: 'All in-scope stores have counted.',
+  store_ops_stock_take_window: 'Due window',
+  store_ops_stock_take_month: 'Target month',
+  store_ops_stock_take_copy_line: 'Copy for LINE',
+  store_ops_stock_take_copied: 'Copied. Paste into chat.',
+  store_ops_stock_take_copy_fail: 'Copy failed.',
+  store_ops_stock_take_auto_notice: 'Auto notice',
   tab_complaint_dashboard: 'Dashboard',
   tab_complaint_process: 'Process',
   complaint_kpi_total: 'Total',
@@ -260,28 +299,28 @@ export const I18N_STORE_ADMIN_EN = pack({
 
 export const I18N_STORE_ADMIN_TH = pack({
   helpSum_admin_store_ops:
-    'ศูนย์กลางการดำเนินงานร้าน: KPI การตรวจรายวัน เยี่ยมร้าน ซ่อม และคำร้อง พร้อมลิงก์ไปแต่ละหน้าจอ',
+    'ศูนย์กลางการดำเนินงานร้าน: KPI การตรวจรายวัน เยี่ยมร้าน ซ่อม คำร้อง และนับสต็อกสิ้นเดือน พร้อมลิงก์ไปแต่ละหน้าจอ นับสต็อกดูจาก Adjustment ปลายงวดครับ',
   helpHow_admin_store_ops:
-    '① ดู KPI ร้านที่ยังไม่ตรวจวันนี้ งานซ่อมค้าง คำร้องค้าง และการเยี่ยมภาคสนาม\n② เปิดหน้าที่เกี่ยวข้องจากการ์ดหรือเมนูย่อย\n③ สำนักงานใหญ่: จัดลำดับความสำคัญและมอบหมายติดตาม',
+    '① ดู KPI ร้านที่ยังไม่ตรวจวันนี้ งานซ่อมค้าง คำร้องค้าง และการเยี่ยมภาคสนามครับ\n② เปิดหน้าที่เกี่ยวข้องจากการ์ดหรือเมนูย่อย\n③ นับสต็อกสิ้นเดือน: กำหนด 2 วันก่อนสิ้นเดือนถึงวันที่ 5 ของเดือนถัดไป จากสาขาที่ยังไม่นับ เปิดสต็อก ตั้งวันที่เป็นวันสิ้นเดือน แล้ว Adjust สำนักงานใหญ่คัดลอกข้อความ LINE และเปิดประกาศ→แจ้งอัตโนมัติได้ครับ\n④ สำนักงานใหญ่: จัดลำดับความสำคัญและมอบหมายติดตามครับ',
   helpSum_admin_store_check:
     'บันทึกและจัดการเช็กลิสต์ตรวจร้านรายวัน ประวัติ สรุปรายการ FAIL และตั้งค่ารายการ (สำนักงานใหญ่)',
   helpHow_admin_store_check:
-    '① เลือกสาขาและวันที่ (เวลากรุงเทพ) แล้วกดโหลดฟอร์ม หากตรวจแล้วจะโหลดข้อมูลเดิม\n② เลือก O/X ต่อรายการ ใส่หมายเหตุและความเห็นรวม แล้วบันทึก\n③ ประวัติการตรวจ: ค้นหา แก้ไข ลบ\n④ สรุปรายการ: ดูเฉพาะ FAIL (X) และสร้างตั๋วซ่อม\n⑤ สำนักงานใหญ่เท่านั้น: ตั้งค่ารายการตรวจ',
+    '① เลือกสาขาและวันที่ (เวลากรุงเทพ) แล้วกดโหลดฟอร์ม หากตรวจแล้วจะโหลดข้อมูลเดิมครับ\n② เลือก O/X ต่อรายการ ใส่หมายเหตุและความเห็นรวม แล้วบันทึก\n③ ประวัติการตรวจ: ค้นหา แก้ไข ลบ\n④ สรุปรายการ: ดูเฉพาะ FAIL (X) และสร้างตั๋วซ่อม\n⑤ สำนักงานใหญ่เท่านั้น: ตั้งค่ารายการตรวจครับ',
   helpSum_admin_store_visit:
     'รายการเยี่ยมร้าน สถานะวันนี้ และสถิติการเยี่ยมตามแผนก พนักงาน วัตถุประสงค์ และสาขา',
   helpHow_admin_store_visit:
-    '① รายการเยี่ยม: ค้นหาและเรียงตามช่วงเวลา สาขา แผนก พนักงาน วัตถุประสงค์\n② วันนี้: ไทม์ไลน์การเยี่ยมที่กำลังดำเนินการ/เสร็จ (เวลากรุงเทพ)\n③ สถิติการเยี่ยม: ระยะเวลา จำนวน ฮีตแมป และกราฟแนวโน้ม',
+    '① รายการเยี่ยม: ค้นหาและเรียงตามช่วงเวลา สาขา แผนก พนักงาน วัตถุประสงค์ครับ\n② วันนี้: ไทม์ไลน์การเยี่ยมที่กำลังดำเนินการ/เสร็จ (เวลากรุงเทพ)\n③ สถิติการเยี่ยม: ระยะเวลา จำนวน ฮีตแมป และกราฟแนวโน้มครับ',
   helpSum_admin_store_repairs:
     'ตั๋วแจ้งซ่อมสิ่งอำนวยความสะดวก/อุปกรณ์ พร้อม KPI บันทึกความคืบหน้า รูปภาพ และผู้รับเหมา',
   helpHow_admin_store_repairs:
-    '① ภาพรวม: KPI และกราฟตามช่วงเวลาและสาขา\n② รายการ: ค้นหาตั๋ว คลิกแถวเพื่อไปแท็บดำเนินการ งานค้าง 3 วัน+ จะเน้น\n③ ดำเนินการ: อัปเดตสถานะ ผู้รับผิดชอบ หมายเหตุ และรูป\n④ ใหม่: ลงทะเบียนตั๋วซ่อม',
+    '① ภาพรวม: KPI และกราฟตามช่วงเวลาและสาขาครับ\n② รายการ: ค้นหาตั๋ว คลิกแถวเพื่อไปแท็บดำเนินการ งานค้าง 3 วัน+ จะเน้น\n③ ดำเนินการ: อัปเดตสถานะ ผู้รับผิดชอบ หมายเหตุ และรูป\n④ ใหม่: ลงทะเบียนตั๋วซ่อมครับ',
   helpSum_admin_complaints:
     'รับเรื่อง สอบสวน และแก้ไขคำร้องของลูกค้า พร้อม KPI ตามประเภทและความรุนแรง',
   helpHow_admin_complaints:
-    '① ภาพรวม: ค่าเริ่มต้น 30 วันล่าสุด (พรีเซ็ต 7/90 วัน) กรองตามช่วง สาขา ประเภท\n② กรอก: ลงทะเบียนหรือแก้ไขคำร้องพร้อมรูป 「ข้อความตอบลูกค้า」แสดงในแอปสมาชิก 「การดำเนินการภายใน」เป็นบันทึกภายใน\n③ ค้นหา: กรองด้วยช่วง คำค้น สาขา เส้นทาง ประเภท ความรุนแรง สถานะ แหล่งที่มา\n④ ดำเนินการ: ติ๊กยังไม่เสร็จจะแสดงทุกรายการโดยไม่สนวันที่ จากนั้นอัปเดตสถานะและข้อความตอบลูกค้า',
+    '① ภาพรวม: ค่าเริ่มต้น 30 วันล่าสุด (พรีเซ็ต 7/90 วัน) กรองตามช่วง สาขา ประเภทครับ\n② กรอก: ลงทะเบียนหรือแก้ไขคำร้องพร้อมรูป 「ข้อความตอบลูกค้า」แสดงในแอปสมาชิก 「การดำเนินการภายใน」เป็นบันทึกภายใน\n③ ค้นหา: กรองด้วยช่วง คำค้น สาขา เส้นทาง ประเภท ความรุนแรง สถานะ แหล่งที่มา\n④ ดำเนินการ: ติ๊กยังไม่เสร็จจะแสดงทุกรายการโดยไม่สนวันที่ จากนั้นอัปเดตสถานะและข้อความตอบลูกค้าครับ',
   storeSubnavAria: 'เมนูย่อยการจัดการร้าน',
   adminStoreOps: 'การดำเนินงานร้าน',
-  store_ops_page_sub: 'ศูนย์ KPI ตรวจ · เยี่ยม · ซ่อม · คำร้อง',
+  store_ops_page_sub: 'ศูนย์ KPI ตรวจ · เยี่ยม · ซ่อม · คำร้อง · นับสต็อกสิ้นเดือน',
   store_check_page_sub: 'เช็กลิสต์ตรวจร้านรายวัน',
   complaint_page_sub: 'รับและแก้ไขคำร้องลูกค้า',
   store_check_readonly_hint: 'โหมดดูอย่างเดียว กดปุ่มด้านล่างเพื่อแก้ไข',
@@ -300,6 +339,19 @@ export const I18N_STORE_ADMIN_TH = pack({
   store_ops_go_repairs: 'ดูงานซ่อม',
   store_ops_go_complaints: 'ดูคำร้อง',
   store_ops_go_visits: 'สถานะการเยี่ยม',
+  store_ops_kpi_stock_take: 'ยังไม่นับสต็อกสิ้นเดือน',
+  store_ops_kpi_stock_take_done: 'นับสต็อกแล้ว',
+  store_ops_go_stock_take: 'นับสต็อก',
+  store_ops_go_variance: 'ทฤษฎี vs ใช้จริง',
+  store_ops_stock_take_due: 'ถึงกำหนดนับ',
+  store_ops_stock_take_missing: 'สาขาที่ยังไม่นับ',
+  store_ops_stock_take_empty: 'สาขาในขอบเขตนับครบแล้วครับ',
+  store_ops_stock_take_window: 'กำหนดนับ',
+  store_ops_stock_take_month: 'เดือนเป้าหมาย',
+  store_ops_stock_take_copy_line: 'คัดลอก LINE',
+  store_ops_stock_take_copied: 'คัดลอกแล้ว นำไปวางในแชทได้ครับ',
+  store_ops_stock_take_copy_fail: 'คัดลอกไม่สำเร็จครับ',
+  store_ops_stock_take_auto_notice: 'แจ้งอัตโนมัติ',
   tab_complaint_dashboard: 'ภาพรวม',
   tab_complaint_process: 'ดำเนินการ',
   complaint_kpi_total: 'ทั้งหมด',

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
+import { assertAccountingDateOpen } from '@/lib/accounting-posting'
+import {
+  accountingPeriodClosedMessage,
+  isAccountingPeriodClosedError,
+} from '@/lib/accounting-period-mutation-guard'
 import {
   appendInventoryTenantFilter,
   assertInventoryTenantWritable,
@@ -31,11 +36,16 @@ export async function POST(request: NextRequest) {
     const batchRows = (await supabaseSelectFilter(
       'inbound_batches',
       appendInventoryTenantFilter(`id=eq.${batchId}`, tenantScope),
-      { limit: 1 }
-    )) as { id?: number }[]
+      { limit: 1, select: 'id,batch_date,location' }
+    )) as { id?: number; batch_date?: string | null; location?: string | null }[]
     if (!batchRows?.length) {
       return NextResponse.json({ success: false, message: '해당 입고 배치가 없습니다.' }, { status: 404, headers })
     }
+
+    await assertAccountingDateOpen(
+      String(batchRows[0].batch_date || '').slice(0, 10),
+      String(batchRows[0].location || '').trim() || null
+    )
 
     // 1. payable_transactions 삭제 (ref_type=Inbound, ref_id=batchId)
     await supabaseDeleteByFilter('payable_transactions', `ref_type=eq.Inbound&ref_id=eq.${batchId}`)
@@ -71,6 +81,12 @@ export async function POST(request: NextRequest) {
       )
     }
     console.error('deleteInboundBatch:', e)
+    if (isAccountingPeriodClosedError(e)) {
+      return NextResponse.json(
+        { success: false, message: accountingPeriodClosedMessage('delete') },
+        { status: 409, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '삭제 실패' },
       { status: 500, headers }

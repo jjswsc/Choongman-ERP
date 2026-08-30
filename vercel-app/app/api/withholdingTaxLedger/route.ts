@@ -14,6 +14,7 @@ import {
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { canonicalLedgerStoreName } from '@/lib/erp-store-identity'
 import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import {
   syncTaxWithholdingLedgersFromBankDeposits,
@@ -206,6 +207,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'INVALID_BODY' }, { status: 400, headers })
     }
 
+    const periodStoreForCheck = effectiveStoreName || null
+    if (id <= 0 && (await isAccountingPeriodClosed(taxMonth, periodStoreForCheck))) {
+      await writeAccountingComplianceAudit({
+        actionType: 'withholding_tax_ledger_post',
+        userRole,
+        actor: body.createdBy != null ? String(body.createdBy).slice(0, 200) : null,
+        decision: 'deny',
+        reasonCode: 'PERIOD_CLOSED',
+        yearMonth: taxMonth,
+        periodType: 'monthly',
+        storeScope: periodStoreForCheck,
+        filingType: 'wht_pnd',
+        targetType: 'withholding_tax_ledger',
+      })
+      return NextResponse.json({ success: false, error: 'PERIOD_CLOSED' }, { status: 409, headers })
+    }
+
     const directionRaw = String(body.direction || '').trim().toLowerCase()
     const sourceTypeRaw = String(body.sourceType ?? body.source_type ?? '').trim()
     const sourceIdRaw = body.sourceId ?? body.source_id
@@ -246,9 +264,9 @@ export async function POST(request: NextRequest) {
 
     if (id > 0) {
       const existingRows = (await supabaseSelectFilter('withholding_tax_ledger_entries', `id=eq.${id}`, {
-        select: 'id,store_name,memo',
+        select: 'id,store_name,memo,tax_month',
         limit: 1,
-      })) as { id?: number; store_name?: string | null; memo?: string | null }[] | null
+      })) as { id?: number; store_name?: string | null; memo?: string | null; tax_month?: string | null }[] | null
       const existing = existingRows?.[0]
       if (!existing?.id) {
         return NextResponse.json({ success: false, error: 'NOT_FOUND' }, { status: 404, headers })
@@ -259,6 +277,27 @@ export async function POST(request: NextRequest) {
         if (!canAccessExisting) {
           return NextResponse.json({ success: false, error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
         }
+      }
+      const lockStore = effectiveStoreName || existingStoreName || null
+      const existingMonth = String(existing.tax_month || taxMonth).trim().slice(0, 7)
+      if (
+        (existingMonth && (await isAccountingPeriodClosed(existingMonth, existingStoreName || lockStore))) ||
+        (await isAccountingPeriodClosed(taxMonth, lockStore))
+      ) {
+        await writeAccountingComplianceAudit({
+          actionType: 'withholding_tax_ledger_post',
+          userRole,
+          actor: body.createdBy != null ? String(body.createdBy).slice(0, 200) : null,
+          decision: 'deny',
+          reasonCode: 'PERIOD_CLOSED',
+          yearMonth: taxMonth,
+          periodType: 'monthly',
+          storeScope: lockStore,
+          filingType: 'wht_pnd',
+          targetType: 'withholding_tax_ledger',
+          targetId: String(id),
+        })
+        return NextResponse.json({ success: false, error: 'PERIOD_CLOSED' }, { status: 409, headers })
       }
       row.memo = preserveAutoWhtMemoTags(existing.memo, String(row.memo || ''))
       try {
@@ -387,9 +426,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     const existingRows = (await supabaseSelectFilter('withholding_tax_ledger_entries', `id=eq.${id}`, {
-      select: 'id,store_name',
+      select: 'id,store_name,tax_month',
       limit: 1,
-    })) as { id?: number; store_name?: string | null }[] | null
+    })) as { id?: number; store_name?: string | null; tax_month?: string | null }[] | null
     const existing = existingRows?.[0]
     if (!existing?.id) {
       return NextResponse.json({ success: false, error: 'NOT_FOUND' }, { status: 404, headers })
@@ -400,6 +439,23 @@ export async function DELETE(request: NextRequest) {
       if (!canAccessExisting) {
         return NextResponse.json({ success: false, error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
       }
+    }
+    const taxMonthDel = String(existing.tax_month || '').trim().slice(0, 7)
+    if (taxMonthDel && (await isAccountingPeriodClosed(taxMonthDel, existingStoreName || null))) {
+      await writeAccountingComplianceAudit({
+        actionType: 'withholding_tax_ledger_delete',
+        userRole,
+        actor: null,
+        decision: 'deny',
+        reasonCode: 'PERIOD_CLOSED',
+        yearMonth: taxMonthDel,
+        periodType: 'monthly',
+        storeScope: existingStoreName || null,
+        filingType: 'wht_pnd',
+        targetType: 'withholding_tax_ledger',
+        targetId: String(id),
+      })
+      return NextResponse.json({ success: false, error: 'PERIOD_CLOSED' }, { status: 409, headers })
     }
 
     await supabaseDeleteByFilter('withholding_tax_ledger_entries', `id=eq.${id}`)

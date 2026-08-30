@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
       })
 
     if (action === 'delete' || !paidLocked) {
-      await assertAccountingDateOpen(String(row.expense_date || '').slice(0, 10))
+      await assertAccountingDateOpen(String(row.expense_date || '').slice(0, 10), rowStoreName || null)
     }
 
     if (action === 'delete') {
@@ -263,7 +263,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '비용 발생일 형식이 올바르지 않습니다.' }, { status: 400, headers })
     }
     if (!paidLocked) {
-      await assertAccountingDateOpen(expenseDate)
+      await assertAccountingDateOpen(expenseDate, storeName || rowStoreName || null)
     }
     if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       return NextResponse.json({ success: false, message: '지급예정일 형식이 올바르지 않습니다.' }, { status: 400, headers })
@@ -484,7 +484,7 @@ export async function POST(request: NextRequest) {
             success: false,
             message: closed ? '마감된 회계기간의 거래는 수정할 수 없습니다.' : postingMsg,
           },
-          { status: closed ? 400 : 500, headers }
+          { status: closed ? 409 : 500, headers }
         )
       }
     }
@@ -536,7 +536,7 @@ export async function POST(request: NextRequest) {
         success: false,
         message: closed ? '마감된 회계기간의 거래는 수정할 수 없습니다.' : raw,
       },
-      { status: closed ? 400 : 500, headers }
+      { status: closed ? 409 : 500, headers }
     )
   }
 }

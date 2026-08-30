@@ -172,7 +172,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await assertAccountingDateOpen(String(txRows[0].trans_date || '').slice(0, 10))
+    await assertAccountingDateOpen(
+      String(txRows[0].trans_date || '').slice(0, 10),
+      String(txRows[0].store_name || '').trim() || null
+    )
 
     if (deletableLinkedAccrualIds.length > 0) {
       await supabaseDeleteByFilter(
@@ -215,7 +218,7 @@ export async function POST(request: NextRequest) {
     const raw = e instanceof Error ? e.message : '삭제 실패'
     const message =
       raw === 'ACCOUNTING_PERIOD_CLOSED' ? '마감된 회계기간의 거래는 삭제할 수 없습니다.' : raw
-    return NextResponse.json({ success: false, message }, { status: 500, headers })
+    return NextResponse.json({ success: false, message }, { status: raw === 'ACCOUNTING_PERIOD_CLOSED' ? 409 : 500, headers })
   }
 }
 

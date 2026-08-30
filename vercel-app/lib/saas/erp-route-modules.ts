@@ -198,6 +198,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/uploadMarketingMaterialInstallPhoto", module: "marketing" },
   { prefix: "/api/uploadStoreCheckPhoto", module: "store_ops" },
   { prefix: "/api/getStoreOpsAlertSummary", module: "store_ops" },
+  { prefix: "/api/getStockTakeKpi", module: "store_ops" },
   { prefix: "/api/getStoreVisitTodaySnapshot", module: "store_ops" },
   { prefix: "/api/uploadComplaintPhoto", module: "store_ops" },
   { prefix: "/api/checkUserVisitStatus", module: "store_ops" },

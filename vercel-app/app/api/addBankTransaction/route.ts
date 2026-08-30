@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
     const depositCategories = withLoanBorrowDepositCategory(['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified'])
     const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
     let validCategory = transType === 'deposit'
-      ? (depositCategories.includes(category) ? category : depositCategories[0])
+      ? (depositCategories.includes(category) ? category : 'receivable_receive')
       : (withdrawCategories.includes(category) ? category : 'expense')
     if (transType === 'withdraw' && validCategory === 'fixed') validCategory = 'expense'
 
@@ -180,10 +180,7 @@ export async function POST(request: NextRequest) {
         await assertPosRevenueDepositCategorySafe({
           storeName: posStore,
           category: validCategory,
-          accountSubjectId:
-            accountSubjectId != null && !isNaN(Number(accountSubjectId))
-              ? Number(accountSubjectId)
-              : null,
+          memo,
         })
       } catch (e) {
         if (isBankSettlementGuardError(e)) {

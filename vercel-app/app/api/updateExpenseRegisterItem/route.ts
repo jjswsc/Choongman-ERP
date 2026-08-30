@@ -23,6 +23,8 @@ type BankTxRow = {
   note?: string
   category?: string | null
   vendor_code?: string | null
+  store?: string | null
+  store_name?: string | null
 }
 
 type PayableRow = {
@@ -143,7 +145,7 @@ export async function POST(request: NextRequest) {
     const bankRows = (await supabaseSelectFilter(
       'bank_transactions',
       `id=eq.${bankTransactionId}`,
-      { limit: 1, select: 'id,account_id,trans_type,amount,trans_date,memo,note,category,vendor_code' }
+      { limit: 1, select: 'id,account_id,trans_type,amount,trans_date,memo,note,category,vendor_code,store,store_name' }
     )) as BankTxRow[] | null
     const bankRow = bankRows?.[0]
     if (!bankRow?.id) return NextResponse.json({ success: false, message: '대상 거래를 찾을 수 없습니다.' }, { status: 404, headers })
@@ -232,7 +234,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      await assertAccountingDateOpen(String(bankRow.trans_date || '').slice(0, 10))
+      await assertAccountingDateOpen(
+        String(bankRow.trans_date || '').slice(0, 10),
+        String(bankRow.store_name || bankRow.store || '').trim() || null
+      )
       await supabaseDeleteByFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`)
       if (transTypeLower === 'deposit') {
         await supabaseDeleteByFilter('receivable_transactions', `bank_transaction_id=eq.${bankTransactionId}`)
@@ -253,7 +258,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '출금 거래만 수정할 수 있습니다.' }, { status: 400, headers })
     }
 
-    await assertAccountingDateOpen(String(bankRow.trans_date || transDate || '').slice(0, 10))
+    await assertAccountingDateOpen(
+      String(bankRow.trans_date || transDate || '').slice(0, 10),
+      String(bankRow.store_name || bankRow.store || '').trim() || null
+    )
 
     const linkedPayables = (await supabaseSelectFilter(
       'payable_transactions',
@@ -343,8 +351,8 @@ export async function POST(request: NextRequest) {
     console.error('updateExpenseRegisterItem:', e)
     const raw = e instanceof Error ? e.message : '수정 실패'
     const message =
-      raw === 'ACCOUNTING_PERIOD_CLOSED' ? '마감된 회계기간의 거래는 삭제할 수 없습니다.' : raw
-    return NextResponse.json({ success: false, message }, { status: 500, headers })
+      raw === 'ACCOUNTING_PERIOD_CLOSED' ? '마감된 회계기간의 거래는 수정할 수 없습니다.' : raw
+    return NextResponse.json({ success: false, message }, { status: raw === 'ACCOUNTING_PERIOD_CLOSED' ? 409 : 500, headers })
   }
 }
 

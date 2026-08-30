@@ -4,7 +4,11 @@ import {
   supabaseSelectFilter,
   supabaseUpdate,
 } from '@/lib/supabase-server'
-import { deleteJournalEntriesBySource, postCardTransactionJournal } from '@/lib/accounting-posting'
+import { deleteJournalEntriesBySource, postCardTransactionJournal, assertAccountingDateOpen } from '@/lib/accounting-posting'
+import {
+  accountingPeriodClosedMessage,
+  isAccountingPeriodClosedError,
+} from '@/lib/accounting-period-mutation-guard'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { CARD_BILL_HEADER_NOTE } from '@/lib/card-bill-allocation'
 import {
@@ -134,6 +138,15 @@ export async function saveCardBillAllocation(params: {
   if (!loaded.ok) return loaded
 
   const { header } = loaded
+  try {
+    await assertAccountingDateOpen(header.transDate, null)
+  } catch (e) {
+    if (isAccountingPeriodClosedError(e)) {
+      return { ok: false, message: accountingPeriodClosedMessage('edit'), status: 409 }
+    }
+    throw e
+  }
+
   const normalized = (params.lines || [])
     .map((l) => ({
       id: l.id != null && Number(l.id) > 0 ? Number(l.id) : undefined,

@@ -19,16 +19,20 @@ import {
   getIngredientUsageVariance,
   type IngredientUsageVarianceRow,
 } from "@/lib/api-client"
-import { getBangkokTodayDateString, addBangkokCalendarDays } from "@/lib/bangkok-time"
 import { isOfficeStockSelection } from "@/lib/stock-location-patterns"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
+import { resolveStockTakeKpiMonth, STOCK_VARIANCE_HIGH_PCT, summarizeVarianceKpi } from "@/lib/stock-take-kpi"
+import Link from "next/link"
 
 export interface StockIngredientVariancePanelProps {
   stores: string[]
   storeFilter: string
   setStoreFilter: (v: string) => void
   storeSelectDisabled?: boolean
+  initialStartYmd?: string
+  initialEndYmd?: string
+  autoLoad?: boolean
 }
 
 function formatNum(n: number, maxFrac = 2): string {
@@ -47,13 +51,18 @@ export function StockIngredientVariancePanel({
   storeFilter,
   setStoreFilter,
   storeSelectDisabled = false,
+  initialStartYmd,
+  initialEndYmd,
+  autoLoad = false,
 }: StockIngredientVariancePanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
 
-  const today = getBangkokTodayDateString()
-  const [startYmd, setStartYmd] = React.useState(() => addBangkokCalendarDays(today, -6))
-  const [endYmd, setEndYmd] = React.useState(today)
+  const kpiMonth = React.useMemo(() => resolveStockTakeKpiMonth(), [])
+  const [startYmd, setStartYmd] = React.useState(
+    () => initialStartYmd || kpiMonth.startYmd
+  )
+  const [endYmd, setEndYmd] = React.useState(() => initialEndYmd || kpiMonth.endYmd)
   const [loading, setLoading] = React.useState(false)
   const [rows, setRows] = React.useState<IngredientUsageVarianceRow[]>([])
   const [meta, setMeta] = React.useState<{
@@ -116,6 +125,16 @@ export function StockIngredientVariancePanel({
       setLoading(false)
     }
   }, [storeFilter, startYmd, endYmd, t])
+
+  const autoLoadedRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!autoLoad || autoLoadedRef.current) return
+    if (!storeFilter.trim() || isOfficeStockSelection(storeFilter)) return
+    autoLoadedRef.current = true
+    void load()
+  }, [autoLoad, storeFilter, load])
+
+  const kpiStrip = React.useMemo(() => summarizeVarianceKpi(rows), [rows])
 
   const filtered = React.useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
@@ -192,6 +211,7 @@ export function StockIngredientVariancePanel({
       <p className="text-sm text-muted-foreground whitespace-pre-line">
         {t("stockVarianceIntro")}
       </p>
+      <p className="text-xs text-muted-foreground">{t("stockVarianceKpiMonthHint")}</p>
 
       <AdminFilterBar>
         <AdminFilterField label={t("store") || "매장"}>
@@ -261,6 +281,18 @@ export function StockIngredientVariancePanel({
             size="sm"
             variant="outline"
             className="h-9"
+            onClick={() => {
+              setStartYmd(kpiMonth.startYmd)
+              setEndYmd(kpiMonth.endYmd)
+            }}
+          >
+            {t("stockVarianceKpiMonthBtn")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-9"
             onClick={exportCsv}
             disabled={!filtered.length}
           >
@@ -282,6 +314,46 @@ export function StockIngredientVariancePanel({
 
       {errorMsg ? (
         <p className="text-sm text-destructive">{errorMsg}</p>
+      ) : null}
+
+      {rows.length > 0 && !errorMsg ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-md border bg-muted/30 p-3">
+            <p className="text-[11px] text-muted-foreground">{t("stockVarianceKpiAbsCost")}</p>
+            <p className="text-lg font-semibold tabular-nums">{formatNum(kpiStrip.absVarianceCost, 0)}</p>
+            <p className="text-[10px] text-muted-foreground">{t("stockVarianceKpiFoodOnly")}</p>
+          </div>
+          <div className="rounded-md border bg-muted/30 p-3">
+            <p className="text-[11px] text-muted-foreground">{t("stockVarianceKpiAvgPct")}</p>
+            <p className="text-lg font-semibold tabular-nums">
+              {kpiStrip.avgAbsVariancePct == null ? "—" : `${formatNum(kpiStrip.avgAbsVariancePct, 1)}%`}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {t("stockVarianceKpiHigh")}: {kpiStrip.highVarCount} (≥{STOCK_VARIANCE_HIGH_PCT}%)
+            </p>
+          </div>
+          <div className={cn("rounded-md border p-3", kpiStrip.coverageLow ? "border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20" : "bg-muted/30")}>
+            <p className="text-[11px] text-muted-foreground">{t("stockVarianceKpiCoverage")}</p>
+            <p className="text-lg font-semibold tabular-nums">{formatNum(kpiStrip.coverage * 100, 0)}%</p>
+            <p className="text-[10px] text-muted-foreground">
+              {t("stockVarianceKpiAdjItems")}: {kpiStrip.adjCount}/{kpiStrip.rowCount}
+            </p>
+          </div>
+          <div className="rounded-md border bg-muted/30 p-3 flex flex-col justify-between gap-2">
+            {kpiStrip.coverageLow ? (
+              <p className="text-xs text-amber-800 dark:text-amber-200">{t("stockVarianceKpiCoverageWarn")}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">{t("stockVarianceKpiMonthHint")}</p>
+            )}
+            {storeFilter.trim() ? (
+              <Button asChild variant="secondary" size="sm" className="h-7 text-[11px]">
+                <Link href={`/admin/stock?store=${encodeURIComponent(storeFilter.trim())}&asOf=${encodeURIComponent(endYmd)}`}>
+                  {t("stockVarianceKpiLinkStock")}
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       {meta && !errorMsg ? (

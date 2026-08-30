@@ -14,6 +14,7 @@ import {
   type BankWithdrawExpenseOverride,
 } from '@/lib/chart-of-accounts-mapping'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
+import { uniqueAccountingPeriodChecks } from '@/lib/accounting-period-mutation-guard'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
 
 type JournalLineInput = {
@@ -64,22 +65,28 @@ export async function deleteJournalEntriesBySource(
     'journal_entries',
     `source_type=eq.${sourceTypeKey}&source_id=eq.${sid}`,
     {
-      select: 'id,memo',
+      select: 'id,memo,accounting_date,store_name',
       limit: 200,
       order: 'id.asc',
     }
-  )) as { id?: number; memo?: string | null }[] | null
+  )) as {
+    id?: number
+    memo?: string | null
+    accounting_date?: string | null
+    store_name?: string | null
+  }[] | null
   const memoIncludes = (options.memoIncludes || [])
     .map((m) => String(m || '').trim())
     .filter(Boolean)
-  const targetIds = (rows || [])
-    .filter((row) => {
-      if (!memoIncludes.length) return true
-      const memo = String(row.memo || '')
-      return memoIncludes.some((needle) => memo.includes(needle))
-    })
-    .map((row) => Number(row.id || 0))
-    .filter((id) => id > 0)
+  const targets = (rows || []).filter((row) => {
+    if (!memoIncludes.length) return true
+    const memo = String(row.memo || '')
+    return memoIncludes.some((needle) => memo.includes(needle))
+  })
+  for (const check of uniqueAccountingPeriodChecks(targets)) {
+    await assertAccountingDateOpen(check.dateYmd, check.storeName)
+  }
+  const targetIds = targets.map((row) => Number(row.id || 0)).filter((id) => id > 0)
   if (!targetIds.length) return 0
   const idList = targetIds.join(',')
   await supabaseDeleteByFilter('journal_lines', `journal_entry_id=in.(${idList})`)

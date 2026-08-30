@@ -78,10 +78,10 @@ export async function POST(request: NextRequest) {
     if (!row) {
       return NextResponse.json({ success: false, message: '해당 거래를 찾을 수 없습니다.' }, { status: 404, headers })
     }
-    await assertAccountingDateOpen(String(row.trans_date || '').slice(0, 10))
-    await assertAccountingDateOpen(transDate)
-
     const store = String(row.store || '').trim()
+    await assertAccountingDateOpen(String(row.trans_date || '').slice(0, 10), store || null)
+    await assertAccountingDateOpen(transDate, store || null)
+
     const isScopedRole =
       !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
       (userRole.includes('manager') || userRole.includes('franchisee'))
@@ -179,9 +179,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
   } catch (e) {
     console.error('updatePettyCashTransaction:', e)
+    const closed = e instanceof Error && e.message === 'ACCOUNTING_PERIOD_CLOSED'
     return NextResponse.json(
-      { success: false, message: '오류: ' + (e instanceof Error ? e.message : String(e)) },
-      { status: 500, headers }
+      {
+        success: false,
+        message: closed ? '마감된 회계기간의 거래는 수정할 수 없습니다.' : '오류: ' + (e instanceof Error ? e.message : String(e)),
+      },
+      { status: closed ? 409 : 500, headers }
     )
   }
 }

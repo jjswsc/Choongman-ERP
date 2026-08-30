@@ -11,6 +11,11 @@ import {
 } from '@/lib/inbound-fx'
 import { inboundPersistLocation } from '@/lib/office-store-canonical'
 import { getVerifiedAuth } from '@/lib/verify-auth'
+import { assertAccountingDateOpen } from '@/lib/accounting-posting'
+import {
+  accountingPeriodClosedMessage,
+  isAccountingPeriodClosedError,
+} from '@/lib/accounting-period-mutation-guard'
 import {
   appendInventoryTenantFilter,
   assertInventoryTenantWritable,
@@ -105,6 +110,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { grossTotal, batchDateYmd } = computeInboundRegisterTotals(resolvedLines, taxByCode)
+
+    await assertAccountingDateOpen(batchDateYmd, location || null)
 
     const rows = resolvedLines.map((item) => {
       const qty = parseFloat(String(item.qty || 0).replace(/,/g, '')) || 0
@@ -224,6 +231,12 @@ export async function POST(request: NextRequest) {
       )
     }
     console.error('registerInboundBatch:', e)
+    if (isAccountingPeriodClosedError(e)) {
+      return NextResponse.json(
+        { success: false, message: accountingPeriodClosedMessage('edit') },
+        { status: 409, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '입고 저장 실패' },
       { headers }

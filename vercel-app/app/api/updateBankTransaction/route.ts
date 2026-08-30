@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     const transType = String(existing[0].trans_type || 'withdraw').toLowerCase()
     const transDate = String(existing[0].trans_date || '').slice(0, 10)
-    await assertAccountingDateOpen(transDate)
+    await assertAccountingDateOpen(transDate, String(existing[0].store || existing[0].store_name || '').trim() || null)
     const depositCategories = withLoanBorrowDepositCategory(['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified'])
     const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
     const prevCategory = String(existing[0].category || '').toLowerCase()
@@ -192,10 +192,7 @@ export async function POST(request: NextRequest) {
           await assertPosRevenueDepositCategorySafe({
             storeName: posStore,
             category: nextCat,
-            accountSubjectId:
-              finalAccountSubjectId != null && Number(finalAccountSubjectId) > 0
-                ? Number(finalAccountSubjectId)
-                : null,
+            memo: String(existing[0].memo || '').trim() || null,
           })
         }
       } catch (e) {
@@ -301,9 +298,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {
     console.error('updateBankTransaction:', e)
+    const closed = e instanceof Error && e.message === 'ACCOUNTING_PERIOD_CLOSED'
     return NextResponse.json(
-      { success: false, message: e instanceof Error ? e.message : '처리 실패' },
-      { status: 500, headers }
+      {
+        success: false,
+        message: closed ? '마감된 회계기간의 거래는 수정할 수 없습니다.' : e instanceof Error ? e.message : '처리 실패',
+      },
+      { status: closed ? 409 : 500, headers }
     )
   }
 }

@@ -117,6 +117,35 @@ export async function getStoreOpsAlertSummary(): Promise<StoreOpsAlertSummary> {
   return (await res.json()) as StoreOpsAlertSummary
 }
 
+export type StockTakeKpiStore = {
+  store: string
+  stockTakeDone: boolean
+  adjustmentCount: number
+  adjustmentItemCount: number
+  lastAdjYmd: string
+}
+
+export type StockTakeKpiResponse = {
+  yearMonth: string
+  startYmd: string
+  endYmd: string
+  windowStart: string
+  windowEnd: string
+  dueStartYmd?: string
+  dueEndYmd?: string
+  inDueWindow: boolean
+  totalStores: number
+  doneCount: number
+  missingCount: number
+  stores: StockTakeKpiStore[]
+}
+
+export async function getStockTakeKpi(yearMonth?: string): Promise<StockTakeKpiResponse> {
+  const q = yearMonth && /^\d{4}-\d{2}$/.test(yearMonth) ? `?yearMonth=${yearMonth}` : ''
+  const res = await apiFetchWithOffline(`/api/getStockTakeKpi${q}`)
+  return (await res.json()) as StockTakeKpiResponse
+}
+
 /** 컴플레인 증빙 사진 업로드 */
 export async function uploadComplaintPhoto(store: string, file: File) {
   const { apiFetch } = await import('../api/fetch')

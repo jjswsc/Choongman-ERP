@@ -1,4 +1,7 @@
-/** POS 자동분개 매장 입금 — revenue_* 는 4110 이중 위험(단, 채널 세부 계정 4111·4120 등은 예외) */
+import { isBankAccountOfficeStore } from '@/lib/bank-account-display'
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+
+/** POS 자동분개 매장 입금 — revenue_* 는 4110 이중 위험 (채널 세부 계정 예외 없음) */
 export const POS_REVENUE_DEPOSIT_CATEGORIES = [
   'revenue_delivery',
   'revenue_card',
@@ -12,7 +15,7 @@ export const POS_REVENUE_DEPOSIT_CATEGORIES = [
  * @see docs/ACCOUNTING_LEDGER_SOP.md §2–3
  */
 export const POS_CHANNEL_SETTLEMENT_MEMO_RE =
-  /\b(grab|grabtaxi|line\s*pay|linepay|line\s*man|lineman|shopee|shopeepay|food\s*panda|foodpanda|robinhood|delivery|배달|visa|master|mastercard|unionpay|jcb|card|credit|카드|qr|promptpay|truemoney|판매대금|qr결제)\b/i
+  /\b(grabfood|grabtaxi|grab|line\s*pay|linepay|line\s*man|lineman|shopeefood|shopee|shopeepay|food\s*panda|foodpanda|robinhood|delivery|배달|visa|master|mastercard|unionpay|jcb|card|credit|카드|qr|promptpay|truemoney|판매대금|qr결제)\b/i
 
 export function isPosChannelSettlementMemo(memo: string | undefined | null): boolean {
   return POS_CHANNEL_SETTLEMENT_MEMO_RE.test(String(memo || '').trim())
@@ -41,6 +44,53 @@ export function isPosRevenueDepositCategory(category: string | undefined | null)
   return (POS_REVENUE_DEPOSIT_CATEGORIES as readonly string[]).includes(c)
 }
 
+/** 통장 입금 용도 드롭다운 — POS 매장에서는 revenue_* 숨김 */
+export const BANK_DEPOSIT_UI_CATEGORIES = [
+  'revenue_delivery',
+  'revenue_card',
+  'revenue_qr',
+  'revenue_cash',
+  'receivable_receive',
+  'loan_borrow',
+  'advance',
+  'unclassified',
+  'correction',
+] as const
+
+/** POS 매장 통장: revenue_* 숨김. 이미 그 값인 옛 줄만 선택지에 남김 */
+export function shouldShowPosRevenueDepositSelectOption(params: {
+  hideForPosStore: boolean
+  currentCategory?: string | null
+  option: string
+}): boolean {
+  if (!isPosRevenueDepositCategory(params.option)) return true
+  if (!params.hideForPosStore) return true
+  return String(params.currentCategory || '').trim().toLowerCase() === String(params.option).toLowerCase()
+}
+
+export function filterBankDepositUiCategories(params: {
+  hidePosRevenue: boolean
+  currentCategory?: string | null
+}): string[] {
+  return BANK_DEPOSIT_UI_CATEGORIES.filter((option) =>
+    shouldShowPosRevenueDepositSelectOption({
+      hideForPosStore: params.hidePosRevenue,
+      currentCategory: params.currentCategory,
+      option,
+    })
+  )
+}
+
+/** 본사 통장은 제외. POS 터미널 매장 목록과 계좌 매장이 같으면 revenue_* 숨김 */
+export function isPosStoreBankAccount(
+  accountStore: string | null | undefined,
+  posStoreCodes: readonly string[]
+): boolean {
+  const store = String(accountStore || '').trim()
+  if (!store || isBankAccountOfficeStore(store)) return false
+  return posStoreCodes.some((code) => storesMatchForGradeLookup(code, store))
+}
+
 export function isChannelRevenueAccountCode(code: string | undefined | null): boolean {
   const c = String(code || '').trim()
   return CHANNEL_REVENUE_GL_CODES.has(c)
@@ -48,7 +98,7 @@ export function isChannelRevenueAccountCode(code: string | undefined | null): bo
 
 /**
  * POS 매장 통장 일괄 가져오기: revenue_* 는 매출(4110) 이중 위험 → 매출 수령으로 통일.
- * 채널 세부 계정(4111·4120 등)이면 revenue_* 유지(서버 가드와 동일).
+ * 채널 세부 계정(4111·4120)이어도 예외 없음 — POS 자동분개가 이미 4110을 올림.
  */
 export function coercePosStoreImportDepositCategory(params: {
   category: string
@@ -61,13 +111,8 @@ export function coercePosStoreImportDepositCategory(params: {
   if (!store || !isPosRevenueDepositCategory(cat)) {
     return { category: cat }
   }
-  const asid = params.accountSubjectId
-  if (asid != null && asid !== '' && asid !== '__none__' && params.revenueSubjects?.length) {
-    const subj = params.revenueSubjects.find((s) => String(s.id) === String(asid))
-    if (subj && isChannelRevenueAccountCode(subj.code)) {
-      return { category: cat }
-    }
-  }
+  void params.accountSubjectId
+  void params.revenueSubjects
   return { category: 'receivable_receive', storeName: store }
 }
 
@@ -78,6 +123,8 @@ export function isNonRetryableBankBusinessErrorMessage(message: string | undefin
   return (
     m.includes('이중 인식') ||
     m.includes('POS_REVENUE_DEPOSIT_DOUBLE_RISK') ||
+    m.includes('BANK_REVENUE_DEPOSIT_STORE_REQUIRED') ||
+    m.includes('매장 없이 revenue_') ||
     (m.includes('receivable_receive') && m.includes('채널 정산')) ||
     (m.includes('매출 수령') && m.includes('revenue_'))
   )

@@ -68,7 +68,7 @@ export function AdminNoticeAuto() {
   })
   const [stockTake, setStockTake] = React.useState<AutoNoticeStockTakeClient>({
     enabled: false,
-    daysBeforeMonthEnd: 1,
+    daysBeforeMonthEnd: 2,
     hourBangkok: 10,
     title: "",
     body: "",

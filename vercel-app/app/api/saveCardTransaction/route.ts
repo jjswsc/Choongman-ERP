@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
-import { deleteJournalEntriesBySource, postCardTransactionJournal } from '@/lib/accounting-posting'
+import {
+  assertAccountingDateOpen,
+  deleteJournalEntriesBySource,
+  postCardTransactionJournal,
+} from '@/lib/accounting-posting'
+import {
+  accountingPeriodClosedMessage,
+  isAccountingPeriodClosedError,
+} from '@/lib/accounting-period-mutation-guard'
 import { CARD_BILL_HEADER_NOTE } from '@/lib/card-bill-allocation'
 import { allocateExpenseDocumentNo } from '@/lib/expense-document-no-server'
 
@@ -34,17 +42,19 @@ export async function POST(request: NextRequest) {
 
     const isUpdate = id != null && !isNaN(id)
     let existingAccountSubjectId: number | null = null
+    let existingTransDate = transDate
 
     if (isUpdate) {
       const existingRows = (await supabaseSelectFilter('card_transactions', `id=eq.${id}`, {
         limit: 1,
-        select: 'id,is_bill_header,note,parent_id,account_subject_id',
+        select: 'id,is_bill_header,note,parent_id,account_subject_id,trans_date',
       })) as {
         id?: number
         is_bill_header?: boolean
         note?: string | null
         parent_id?: number | null
         account_subject_id?: number | null
+        trans_date?: string | null
       }[] | null
       const existing = existingRows?.[0]
       if (!existing?.id) {
@@ -62,7 +72,11 @@ export async function POST(request: NextRequest) {
         existing.account_subject_id != null && !isNaN(Number(existing.account_subject_id))
           ? Number(existing.account_subject_id)
           : null
+      existingTransDate = String(existing.trans_date || transDate).slice(0, 10)
     }
+
+    await assertAccountingDateOpen(existingTransDate, null)
+    await assertAccountingDateOpen(transDate, null)
 
     const hasBankTxField = body.bankTransactionId !== undefined || body.bank_transaction_id !== undefined
     const bankTransactionIdRaw = body.bankTransactionId ?? body.bank_transaction_id
@@ -137,6 +151,7 @@ export async function POST(request: NextRequest) {
               : null,
         })
       } catch (postingErr) {
+        if (isAccountingPeriodClosedError(postingErr)) throw postingErr
         console.error('saveCardTransaction update posting:', postingErr)
       }
       return NextResponse.json({ success: true, id, message: '수정되었습니다.' }, { headers })
@@ -179,6 +194,7 @@ export async function POST(request: NextRequest) {
               : null,
         })
       } catch (postingErr) {
+        if (isAccountingPeriodClosedError(postingErr)) throw postingErr
         console.error('saveCardTransaction create posting:', postingErr)
       }
     }
@@ -188,6 +204,12 @@ export async function POST(request: NextRequest) {
     )
   } catch (e) {
     console.error('saveCardTransaction:', e)
+    if (isAccountingPeriodClosedError(e)) {
+      return NextResponse.json(
+        { success: false, message: accountingPeriodClosedMessage('edit') },
+        { status: 409, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: '오류: ' + (e instanceof Error ? e.message : String(e)) },
       { status: 500, headers }

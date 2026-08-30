@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { buildBankTransactionDeepLink } from "@/lib/receivable-unallocated-bank"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   AccountingEmptyState,
@@ -142,13 +144,23 @@ export function LedgerReconciliationTab({
         <IssueTable
           title={t("recon_riskyRevenueDeposits")}
           hint={t("recon_riskyRevenueDepositsHint")}
-          headers={[t("bankDate") || "Date", t("bankAmount") || "Amount", t("bankCategory") || "Category", t("pL_store")]}
+          headers={[t("bankDate") || "Date", t("bankAmount") || "Amount", t("bankCategory") || "Category", t("pL_store"), t("recon_openBank")]}
           rows={data.riskyRevenueDeposits.map((r) => [
             r.transDate,
             formatBaht(r.amount),
             r.category,
             r.store || "—",
+            t("recon_openBank"),
           ])}
+          hrefs={data.riskyRevenueDeposits.map((r) =>
+            r.id > 0
+              ? buildBankTransactionDeepLink({
+                  bankTransactionId: r.id,
+                  transDate: r.transDate,
+                  accountId: r.accountId,
+                })
+              : null
+          )}
         />
       ) : null}
 
@@ -166,6 +178,15 @@ export function LedgerReconciliationTab({
             r.bankTransactionId ? String(r.bankTransactionId) : "—",
             r.journalEntryId ? String(r.journalEntryId) : "—",
           ])}
+          hrefs={data.pendingChannelSettlements.map((r) =>
+            r.bankTransactionId
+              ? buildBankTransactionDeepLink({
+                  bankTransactionId: r.bankTransactionId,
+                  transDate: r.settleDate,
+                })
+              : null
+          )}
+          hrefColumnIndex={5}
         />
       ) : null}
 
@@ -173,13 +194,23 @@ export function LedgerReconciliationTab({
         <IssueTable
           title={t("recon_recvSettleConflict")}
           hint={t("recon_recvSettleConflictHint")}
-          headers={["Bank ID", t("bankDate") || "Date", t("bankAmount") || "Amount", "Settlement IDs"]}
+          headers={["Bank ID", t("bankDate") || "Date", t("bankAmount") || "Amount", "Settlement IDs", t("recon_openBank")]}
           rows={data.receivableReceiveWithSettlementLink.map((r) => [
             String(r.bankId),
             r.transDate,
             formatBaht(r.amount),
             r.settlementIds.join(", "),
+            t("recon_openBank"),
           ])}
+          hrefs={data.receivableReceiveWithSettlementLink.map((r) =>
+            r.bankId > 0
+              ? buildBankTransactionDeepLink({
+                  bankTransactionId: r.bankId,
+                  transDate: r.transDate,
+                  accountId: r.accountId,
+                })
+              : null
+          )}
         />
       ) : null}
 
@@ -194,6 +225,7 @@ export function LedgerReconciliationTab({
             t("bankAmount") || "Amount",
             "POS",
             t("bankMemo") || "Memo",
+            t("recon_openBank"),
           ]}
           rows={data.receivableBankSubledgerGaps.map((r) => [
             String(r.bankId),
@@ -202,7 +234,17 @@ export function LedgerReconciliationTab({
             formatBaht(r.amount),
             r.isPosStore ? "Y" : "—",
             (r.memo || "—").slice(0, 60),
+            t("recon_openBank"),
           ])}
+          hrefs={data.receivableBankSubledgerGaps.map((r) =>
+            r.bankId > 0
+              ? buildBankTransactionDeepLink({
+                  bankTransactionId: r.bankId,
+                  transDate: r.transDate,
+                  accountId: r.accountId,
+                })
+              : null
+          )}
         />
       ) : null}
 
@@ -246,11 +288,15 @@ function IssueTable({
   hint,
   headers,
   rows,
+  hrefs,
+  hrefColumnIndex,
 }: {
   title: string
   hint?: string
   headers: string[]
   rows: string[][]
+  hrefs?: (string | null)[]
+  hrefColumnIndex?: number
 }) {
   return (
     <div className="rounded-lg border border-amber-200/80 dark:border-amber-800/50 bg-amber-50/40 dark:bg-amber-950/20 p-3 space-y-2 shadow-sm">
@@ -267,17 +313,27 @@ function IssueTable({
         <tbody>
           {rows.map((cells, i) => (
             <AccountingTableBodyRow key={i}>
-              {cells.map((c, j) => (
-                <td
-                  key={j}
-                  className={cn(
-                    j === 0 ? accountingResultTdCn : accountingResultTdRightCn,
-                    "font-mono text-sm"
-                  )}
-                >
-                  {c}
-                </td>
-              ))}
+              {cells.map((c, j) => {
+                const linkCol = hrefColumnIndex ?? cells.length - 1
+                const href = j === linkCol ? hrefs?.[i] : null
+                return (
+                  <td
+                    key={j}
+                    className={cn(
+                      j === 0 ? accountingResultTdCn : accountingResultTdRightCn,
+                      "font-mono text-sm"
+                    )}
+                  >
+                    {href ? (
+                      <Link href={href} className="text-primary underline-offset-2 hover:underline">
+                        {c}
+                      </Link>
+                    ) : (
+                      c
+                    )}
+                  </td>
+                )
+              })}
             </AccountingTableBodyRow>
           ))}
         </tbody>

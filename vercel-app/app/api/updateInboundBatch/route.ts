@@ -24,6 +24,12 @@ import {
 } from '@/lib/inbound-fx'
 import { inboundPersistLocation } from '@/lib/office-store-canonical'
 import { getVerifiedAuth } from '@/lib/verify-auth'
+import { assertAccountingDateOpen } from '@/lib/accounting-posting'
+import {
+  accountingPeriodClosedMessage,
+  inboundHeaderPatchAffectsClosedPeriod,
+  isAccountingPeriodClosedError,
+} from '@/lib/accounting-period-mutation-guard'
 import {
   appendInventoryTenantFilter,
   assertInventoryTenantWritable,
@@ -86,12 +92,13 @@ export async function POST(request: NextRequest) {
 
     const existing = (await supabaseSelectFilter('inbound_batches', appendInventoryTenantFilter(`id=eq.${batchId}`, tenantScope), {
       limit: 1,
-      select: 'id,location,vendor_name,vendor_code',
+      select: 'id,location,vendor_name,vendor_code,batch_date',
     })) as {
       id?: number
       location?: string
       vendor_name?: string
       vendor_code?: string
+      batch_date?: string | null
     }[] | null
     if (!existing?.[0]?.id) {
       return NextResponse.json({ success: false, message: '입고 배치를 찾을 수 없습니다.' }, { status: 404, headers })
@@ -127,6 +134,15 @@ export async function POST(request: NextRequest) {
 
       if (Object.keys(patch).length === 0) {
         return NextResponse.json({ success: true, message: '변경 사항이 없습니다.' }, { headers })
+      }
+
+      if (inboundHeaderPatchAffectsClosedPeriod(Object.keys(patch))) {
+        const oldDate = String(existing[0].batch_date || '').slice(0, 10)
+        const oldLoc = String(existing[0].location || '').trim() || null
+        await assertAccountingDateOpen(oldDate, oldLoc)
+        if (patch.location !== undefined) {
+          await assertAccountingDateOpen(oldDate, inboundPersistLocation(String(patch.location ?? '')) || oldLoc)
+        }
       }
 
       await supabaseUpdate('inbound_batches', batchId, patch)
@@ -221,6 +237,12 @@ export async function POST(request: NextRequest) {
       body.storeName !== undefined
         ? inboundPersistLocation(body.storeName)
         : inboundPersistLocation(existing[0].location)
+
+    await assertAccountingDateOpen(
+      String(existing[0].batch_date || batchDateYmd).slice(0, 10),
+      String(existing[0].location || '').trim() || null
+    )
+    await assertAccountingDateOpen(batchDateYmd, location || null)
 
     const rows = resolvedLines.map((item) => {
       const qty = parseFloat(String(item.qty || 0).replace(/,/g, '')) || 0
@@ -330,6 +352,12 @@ export async function POST(request: NextRequest) {
       )
     }
     console.error('updateInboundBatch:', e)
+    if (isAccountingPeriodClosedError(e)) {
+      return NextResponse.json(
+        { success: false, message: accountingPeriodClosedMessage('edit') },
+        { status: 409, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '수정 실패' },
       { status: 500, headers }

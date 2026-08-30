@@ -10,6 +10,7 @@ import { StockAdjustDialog } from "@/components/erp/stock-adjust-dialog"
 import { StockAdjustmentHistory } from "@/components/erp/stock-adjustment-history"
 import { StockReorderAssist } from "@/components/erp/stock-reorder-assist"
 import { StockDailyMatrixPanel } from "@/components/erp/stock-daily-matrix-panel"
+import { StockTakeDueBanner } from "@/components/erp/stock-take-due-banner"
 import {
   adminTabsBarCn,
   adminTabsContentCn,
@@ -67,6 +68,8 @@ export default function StockPage() {
   const allowStockUrlSync = useErpAllowUrlSync("/admin/stock")
   const pageActiveRef = useErpPageActiveRef()
   const viewCacheRestoredRef = React.useRef(false)
+  const urlDeepLinkFetchRef = React.useRef(false)
+  const applyMonthEndAsOfRef = React.useRef(false)
   const lastFetchedRef = React.useRef<{
     storeFilter: string
     stockDateFilter: string
@@ -161,7 +164,13 @@ export default function StockPage() {
     if (viewCacheRestoredRef.current) return
     if (!pageActiveRef.current || !allowStockUrlSync) return
     viewCacheRestoredRef.current = true
-    const snap = readStockStatusViewCache()
+    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null
+    const urlStore = (q?.get("store") || "").trim()
+    const urlAsOf = (q?.get("asOf") || q?.get("date") || "").trim()
+    const urlAsOfOk = /^\d{4}-\d{2}-\d{2}$/.test(urlAsOf)
+    const hasUrlDeepLink = Boolean(urlStore || urlAsOfOk)
+
+    const snap = hasUrlDeepLink ? null : readStockStatusViewCache()
     if (snap?.hasSearched) {
       setStoreFilter(snap.storeFilter || "")
       setStockDateFilter(snap.stockDateFilter || getBangkokTodayDateString())
@@ -178,8 +187,28 @@ export default function StockPage() {
       if (snap.activeTab) setActiveTab(snap.activeTab)
       return
     }
-    setStockDateFilter(getBangkokTodayDateString())
-  }, [allowStockUrlSync, pageActiveRef])
+    if (urlAsOfOk) setStockDateFilter(urlAsOf)
+    else setStockDateFilter(getBangkokTodayDateString())
+    if (urlStore && !(isManager && userStore)) setStoreFilter(urlStore)
+    if ((urlStore || (isManager && userStore)) && urlAsOfOk) {
+      urlDeepLinkFetchRef.current = true
+    }
+  }, [allowStockUrlSync, pageActiveRef, isManager, userStore])
+
+  React.useEffect(() => {
+    if (!urlDeepLinkFetchRef.current) return
+    if (isManager && userStore && storeFilter.trim() !== userStore) return
+    if (!storeFilter.trim() || !stockDateFilter.trim()) return
+    urlDeepLinkFetchRef.current = false
+    void fetchStock()
+  }, [storeFilter, stockDateFilter, fetchStock, isManager, userStore])
+
+  React.useEffect(() => {
+    if (!applyMonthEndAsOfRef.current) return
+    applyMonthEndAsOfRef.current = false
+    if (!storeFilter.trim() || !stockDateFilter.trim()) return
+    void fetchStock()
+  }, [stockDateFilter, storeFilter, fetchStock])
 
   React.useEffect(() => {
     if (isManager && userStore) {
@@ -298,6 +327,17 @@ export default function StockPage() {
             </p>
           </div>
         </div>
+
+        <StockTakeDueBanner
+          storeFilter={storeFilter}
+          stockDateFilter={stockDateFilter}
+          t={t}
+          onUseMonthEnd={(ymd) => {
+            applyMonthEndAsOfRef.current = true
+            setStockDateFilter(ymd)
+            setActiveTab("list")
+          }}
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>

@@ -56,6 +56,7 @@ import {
   I18N_MARKETING_HUB_TH,
   I18N_MARKETING_HUB_VI,
 } from "./i18n-marketing-hub"
+import { I18N_HELP_SUM_HOW_TH } from "./i18n-admin-help-th"
 
 export const i18n = {
   ko: {
@@ -695,19 +696,21 @@ export const i18n = {
     noticeAutoHourBangkok: '발송 시각 (방콕)',
     noticeAutoNotifyManager: '매장 매니저에게도 알림',
     noticeAutoStockTakeTitle: '월말 재고조사 알림',
-    noticeAutoStockTakeDesc: '월말 N일 전에 매장 매니저에게 재고 조정(실사) 안내 공지를 보냅니다. 발송 내역에 남습니다.',
-    noticeAutoDaysBeforeMonthEnd: '월말 며칠 전',
+    noticeAutoStockTakeDesc:
+      '실사 기한 시작일(월말 N일 전)과 말일 다음날에, 아직 실사하지 않은 매장 매니저에게만 공지를 보냅니다.',
+    noticeAutoDaysBeforeMonthEnd: '첫 안내 — 월말 며칠 전',
     noticeAutoDaysBeforeValue: '{n}일 전',
     noticeAutoTitle: '제목',
     noticeAutoBody: '본문',
-    noticeAutoStockTakeTargetHint: '대상: 역할에 manager가 포함된 직원',
+    noticeAutoStockTakeTargetHint:
+      '이미 실사한 매장은 제외합니다. 두 번째 안내는 말일 다음날입니다. 역할에 manager가 포함된 직원만.',
     noticeAutoLastRunWorkLog: '최근 발송일: {date}',
-    noticeAutoLastRunStockTake: '최근 발송 월: {month}',
+    noticeAutoLastRunStockTake: '최근 발송: {month}',
     noticeAutoSaveOk: '자동 알림 설정을 저장했습니다.',
     noticeAutoSaveFail: '자동 알림 설정 저장에 실패했습니다.',
     noticeAutoLoadFail: '자동 알림 설정을 불러오지 못했습니다.',
     noticeAutoReload: '다시 불러오기',
-    noticeAutoCronHint: '서버가 매시 정각에 규칙을 확인하며, 시각·날짜 조건이 맞을 때만 하루(또는 월) 1회 발송합니다. 시간은 방콕(Asia/Bangkok) 기준입니다. 자유 반복 공지는 발송 내역에도 남습니다.',
+    noticeAutoCronHint: '서버가 매시 정각에 규칙을 확인하며, 같은 규칙은 같은 방콕 날짜에 1회만 발송합니다. 월말 실사는 기한 시작일·말일 다음날 최대 2회입니다. 자유 반복 공지는 발송 내역에도 남습니다.',
     noticeAutoCustomSectionTitle: '직접 추가한 반복 공지',
     noticeAutoCustomSectionDesc:
       '제목·본문·주기·대상을 정해 반복 공지를 추가합니다. (업무일지처럼 데이터 조건이 있는 알림은 위 기본 항목을 사용하세요.)',
@@ -1209,6 +1212,14 @@ export const i18n = {
     stockAdjustDiffPh: '+10 또는 -5',
     stockAdjustHint: '증가: +10, 감소: -5 형식으로 입력',
     stockAdjustAsOfHint: '기준일 {date}로 저장됩니다. (월말 실사 시 해당 날짜를 선택한 뒤 조정하세요)',
+    stockTakeDueBannerHqTitle: '월말 실사 기한',
+    stockTakeDueBannerHqMissing: '미실사 {n}개 매장',
+    stockTakeDueBannerGoOps: '매장 운영 허브',
+    stockTakeDueBannerStoreTitle: '이번 달 실사 기간입니다',
+    stockTakeDueBannerDue: '기한 {start} ~ {end}.',
+    stockTakeDueBannerAsOf: '기준일은 말일 {date}로 맞추세요.',
+    stockTakeDueBannerSetAsOf: '기준일을 말일로 맞추고 조회',
+    stockTakeDueBannerAsOfReady: '기준일이 말일입니다. 조회된 품목을 조정하세요.',
     stockAdjustMemo: '사유 (선택)',
     stockAdjustMemoPh: '예: 파손, 분실, 오차',
     stockAdjustConfirm: '조정 확정',
@@ -1266,6 +1277,16 @@ export const i18n = {
     stockVarianceColOut: '출고',
     stockVarianceColEnd: '기말',
     stockVarianceAdjBadge: '실사/조정',
+    stockVarianceKpiAbsCost: '식재 차이금액(절댓값)',
+    stockVarianceKpiAvgPct: '평균 |차이%|',
+    stockVarianceKpiHigh: '고차이 품목',
+    stockVarianceKpiCoverage: '실사 커버리지',
+    stockVarianceKpiCoverageWarn: '실사 부족 — 실제 소진 의미 약함',
+    stockVarianceKpiFoodOnly: '식재 기준',
+    stockVarianceKpiMonthHint: '기본 기간은 월말 실사 대상 월입니다. 기말 실사가 있어야 실제 소진이 의미가 있습니다.',
+    stockVarianceKpiMonthBtn: '실사 대상 월',
+    stockVarianceKpiAdjItems: '실사/조정 품목',
+    stockVarianceKpiLinkStock: '기말 실사하기',
     stockVarianceMenuContrib: '메뉴별 이론 기여',
     stockVarianceNoMenuContrib: '이론 기여 메뉴 없음 (판매 미반영 또는 BOM 없음)',
     stockTabDailyMatrix: '본사 일별 입출고',
@@ -1330,7 +1351,7 @@ export const i18n = {
     helpSum_admin_stock:
       '매장·본사 창고 재고를 조회·조정하고, 본사 일별 입출고 탭에서 S&J 창고 입고·매장 출고·잔량·인보이스를 한 화면에서 볼 수 있습니다.',
     helpHow_admin_stock:
-      '① 재고 목록: 매장·기준일을 고른 뒤 조회합니다. 본사·매장 매니저는 재고 조정이 가능합니다. 조정은 선택한 기준일로 저장되므로 월말 실사는 해당 날짜를 고른 뒤 Adjust 하세요.\n② 발주 도움: 기간 사용량·보충 제안을 확인합니다(자동 발주 아님).\n③ 본사 일별 입출고(본사 권한): 기간·창고·매장·보기 모드(상세/일합계/매장피벗)로 입출고 매트릭스를 보고, OUT 셀·인보이스에서 출고 이력·인쇄로 연결할 수 있습니다.\n④ 엑셀(XLSX)로 Daily Stock Report 형식보내기를 할 수 있습니다.',
+      '① 재고 목록: 매장·기준일을 고른 뒤 조회합니다. 본사·매장 매니저는 재고 조정이 가능합니다. 조정은 선택한 기준일로 저장되므로 월말 실사는 해당 날짜를 고른 뒤 Adjust 하세요. 실사 기한(말일 전후)에는 안내 배너가 뜹니다. 매장 운영 허브의 미실사 매장에서 들어오면 매장·기말이 미리 채워집니다.\n② 발주 도움: 기간 사용량·보충 제안을 확인합니다(자동 발주 아님).\n③ 본사 일별 입출고(본사 권한): 기간·창고·매장·보기 모드(상세/일합계/매장피벗)로 입출고 매트릭스를 보고, OUT 셀·인보이스에서 출고 이력·인쇄로 연결할 수 있습니다.\n④ 엑셀(XLSX)로 Daily Stock Report 형식보내기를 할 수 있습니다.',
     helpSum_admin_outbound:
       '본사 창고에서 매장·판매처로 출고합니다. 강제출고는 대기 목록을 한 번에 확정하면 같은 출고일·출고처·참조번호가 IVF 한 장으로 묶이고, 주문 출고는 주문당 IV 한 장입니다.',
     helpHow_admin_outbound:
@@ -1338,7 +1359,7 @@ export const i18n = {
     helpSum_admin_notices:
       '직원·매장 공지를 작성·발송하고, 발송 내역·미확인자·자동 알림(업무일지·월말 재고조사 등)을 관리합니다.',
     helpHow_admin_notices:
-      '① 새 공지: 대상·미리보기 확인 후 발송합니다.\n② 발송 내역: 확인율·재알림·수정을 씁니다.\n③ 미확인자: 미확인 집계·수당 제외를 처리합니다.\n④ 자동 알림: 기본 알림(업무일지·재고조사)과「반복 공지 추가」로 만든 규칙을 저장합니다.',
+      '① 새 공지: 대상·미리보기 확인 후 발송합니다.\n② 발송 내역: 확인율·재알림·수정을 씁니다.\n③ 미확인자: 미확인 집계·수당 제외를 처리합니다.\n④ 자동 알림: 업무일지와 월말 실사(기한 시작일·말일 다음날, 미완료 매장 매니저만)를 켜고,「반복 공지 추가」로 규칙을 저장합니다.',
     stockReorderIntro:
       '본사(Office·입고등록)를 고르면 기간 출고(Outbound·강제출고) 합계, 매장을 고르면 사용 확정(Usage)만 집계합니다. 보충 제안 = max(0, 기간 소모 + 안전재고 − 현재고)이며, 자동으로 발주서를 만들지는 않습니다.',
     stockReorderDays: '사용 집계(일)',
@@ -4482,7 +4503,7 @@ export const i18n = {
     bankImportQueuedForSync:
       '네트워크 문제로 이 브라우저에만 임시 저장되었습니다. 연결 후 자동 전송됩니다. 입금 분류가 배달앱/카드 매출(revenue_*)이면 저장 전 「매출 수령」으로 바꿔 주세요.',
     bankImportPosRevenueHint:
-      'POS 매장: Grab·카드·QR 입금은 「매출 수령(receivable_receive)」+ 매장·매출일을 사용하세요. 수수료는 채널 정산으로 처리합니다.',
+      'POS 매장: Grab·카드·QR 입금은 「매출 수령」+ 매장. 용도 목록에서 배달앱·카드·QR·현금은 숨깁니다. 수수료는 채널 정산.',
     bankParseNoRows: '파싱된 거래가 없습니다. K-DEPOSIT 형식인지 확인하세요.',
     bankParseFailPrefix: '파일 파싱 실패:',
     bankPlanAmountMismatch: '통장 금액과 선택한 지급예정 잔액(합계)이 일치해야 합니다.',
@@ -4620,12 +4641,12 @@ export const i18n = {
     helpSum_admin_bank_transactions:
       '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급·차입금과 맞물립니다. 임원이 회사에 빌려준 입금은 「차입 수령」+관련당사자(매출 4110 금지). 통장 변경 시 계좌 추가(삭제 금지), 삭제·등록 이력은 본사·회계가 계좌 관리에서 확인합니다.',
     helpHow_admin_bank_transactions:
-      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, revenue_* 입금 분류는 쓰지 마세요(매출 이중 위험). 수수료 분개는 POS 결산에서 처리하거나, 통장 조회에서 해당 입금 행의 「채널 정산」을 사용하세요.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
+      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, revenue_* 입금 분류는 쓰지 마세요(매출 이중 위험). POS 매장 통장 용도에서 배달앱·카드·QR·현금은 숨기고(이미 그렇게 저장된 줄만 보임), 저장은 거절됩니다(신규·일괄은 매출 수령으로 바뀌고, 기존 줄 수정은 거절). 장부 대사 목록에서 「통장」으로 이동해 바꾸세요. 수수료 분개는 POS 결산에서 처리하거나, 통장 조회에서 해당 입금 행의 「채널 정산」을 사용하세요.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
     bankManualS3PosReceivable:
       'POS 자동분개 매장: 카드·배달앱·QR 입금은 「매출 수령」+ 매장. revenue_delivery/revenue_card는 4110 이중 인식 위험.',
     bankPosReceivableDepositTitle: 'POS 자동분개 매장 — 입금 분류',
     bankPosReceivableDepositBody:
-      'Grab·카드·QR 정산 입금은 「매출 수령」+ 매장·매출일만 사용하세요. revenue_* 입금은 매출 이중 위험입니다.',
+      'Grab·카드·QR 정산 입금은 「매출 수령」+ 매장·매출일만 사용하세요. POS 매장 통장 용도에서 배달앱·카드·QR·현금은 숨기고, 이미 그렇게 저장된 옛 줄만 보입니다. 저장도 거절됩니다. 과거 줄은 장부 대사에서 통장으로 이동해 매출 수령으로 바꾸세요.',
     bankPosChannelSettleHint:
       '수수료(GROSS−NET) 분개는 POS 결산에서 처리하거나, 아래 목록의 입금 행에서 「채널 정산」을 누르세요.',
     bankPosChannelSettlePosLink: 'POS 결산 →',
@@ -5023,7 +5044,7 @@ export const i18n = {
     salesTopicPivotStoreByPeriod: '매장·기간 목록',
     salesTopicPivotStoreByPeriodHint: '집계 기간(년·월·주·일 등)마다 매장별 행으로 표시 · 요일 필터 지원',
     salesStorePeriodFootnote:
-      '매장을 전체로 두면 이 기간에 주문이 있는 매장만 행으로 나옵니다. 위쪽「집계 기간」으로 년·월·주·일·요일·시간대를 바꿀 수 있습니다. 일별·요일은 주문 시각 기준 방콕 달력일이며, 월·연 집계만 매장 POS 영업일 경계를 씁니다.',
+      '매장을 전체로 두면 이 기간에 주문이 있는 매장만 행으로 나옵니다. 위쪽「집계 기간」으로 년·월·주·일·요일·시간대를 바꿀 수 있습니다. 연·월·주·일·요일은 매장 POS 영업일 기준이며, 시간대만 방콕 벽시계 시각입니다.',
     salesTopicPivotStoreCategory: '매출 집계(매장&분류)',
     salesTopicPivotStoreCategoryHint: '매장별·분류별 차트 및 테이블',
     salesTopicPivotStoreChannel: '채널별 매출 집계',
@@ -5487,7 +5508,8 @@ export const i18n = {
     recon_subledgerBorrow: '보조원장 차입',
     recon_difference: '차이 (분개 − 보조)',
     recon_riskyRevenueDeposits: 'POS 이중 매출 위험 입금',
-    recon_riskyRevenueDepositsHint: 'revenue_delivery/card/qr/cash 분류 — 채널 정산 또는 매출 수령으로 변경하세요.',
+    recon_riskyRevenueDepositsHint:
+      'revenue_* 분류입니다. 「통장」을 눌러 매출 수령 또는 채널 정산으로 바꾸세요. POS 매장은 새로 저장할 수 없습니다.',
     recon_pendingChannelSettlements: '미완료 채널 정산',
     recon_pendingChannelSettlementsHint: '분개 또는 통장 연결이 없는 정산 건입니다.',
     recon_recvSettleConflict: '매출 수령 + 채널 정산 충돌',
@@ -5496,6 +5518,7 @@ export const i18n = {
     recon_b2bRecvBankGapHint:
       'POS 매장의 가맹 이체 수금(โอนเงินมัดจำ 등)인데 미수금에 반영되지 않았습니다. 통장 조회에서 해당 Bank ID 행의 매장을 다시 저장하세요. Grab·카드·QR 정산 입금은 여기 나오지 않는 것이 정상입니다.',
     recon_allClear: '이번 기간·범위에서 대사 이슈가 없습니다.',
+    recon_openBank: '통장',
     bs_total: '합계',
     bs_liabilities: '부채',
     bs_payables: '미지급금',
@@ -7707,6 +7730,15 @@ export const i18n = {
     adminContentTabMain: '이 화면',
     adminContentTabHelp: '도움말',
     adminHelpBackToScreen: '화면으로 돌아가기',
+    adminHelpThisPage: '이 화면 도움말',
+    adminHelpHeaderThisScreen: '이 화면',
+    adminHelpAudienceLabel_office: '본사',
+    adminHelpAudienceLabel_franchise: '가맹·매장',
+    adminHelpDiscoverShort:
+      '자세한 안내는 상단「이 화면」(책 아이콘) 또는 도움말 센터에서 볼 수 있습니다.',
+    adminHelpFullGuideBelow: '아래 안내를 이어서 보세요.',
+    adminHelpPayrollSheetHint: '급여 도움말은 아래 가이드와 급여 화면「도움말」탭에서 볼 수 있습니다.',
+    adminHelpPayrollOpenTab: '급여 화면 도움말 탭 열기',
     adminHelpHandoverTitle: '인수인계 메모 (매장 공용)',
     adminHelpHandoverHint:
       '이 메뉴에 대한 팀 메모입니다. 같은 매장 직원이 함께 보고 이어서 수정할 수 있습니다. (현재 로그인 매장 기준, 서버 공용 설정 JSON에 저장됩니다. 동시에 저장하면 마지막 저장이 적용됩니다.)',
@@ -7730,6 +7762,7 @@ export const i18n = {
     ...I18N_HELP_LONG_KO,
     adminHelpNoHow:
       '권한·역할에 맞는 화면에서 기간·필터로 범위를 정한 뒤 조회·입력·저장(또는 제출)하세요. 일부 탭은 권한·팀 절차에 따라 다릅니다.',
+    adminHelpNoSummary: '이 화면의 짧은 설명이 없습니다. 아래 사용 방법 또는 도움말 센터를 보세요.',
     helpSum_admin_tax_filing:
       '태국 세무신고(부가세·원천세·법인세·SSO)와 매입 세금계산서를 기간/매장 기준으로 조회하고 신고용 자료를 내보내는 화면입니다.',
     helpHow_admin_tax_filing:
@@ -7741,7 +7774,7 @@ export const i18n = {
     helpSum_admin_pos_cost_analysis:
       'POS 메뉴별 홀·배달 판매가와 원가·원가율·마진을 조회하고, 실적 원가율·이론 vs 실소진(원재료)·What-if·재료 구성·배합 단가·원가 계산기로 검토하는 화면입니다. (본사 오피스만 저장·수정)',
     helpHow_admin_pos_cost_analysis:
-      '① 목록: 화면에 들어오면 목록이 자동으로 불러와집니다. 대분류·카테고리·판매 상태(기본 판매중)·상태 필터·검색어로 좁히고, 최신이 필요하면「검색」으로 다시 받습니다. 상단에서 VAT 포함/제외를 고르면 원가율 분모만 바뀝니다(원가는 공급가 유지). 프로모션 세트 조회와 같은 저장값을 씁니다. 상단 KPI 카드에서 평균 원가율·마진·문제 메뉴 수를 확인하고, CSV 내보내기를 사용할 수 있습니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다(요약 조회 후 펼치면 BOM을 lazy 로드). 프로모션 세트는 구성 메뉴 원가를 합산하며(선택 그룹은 실제 고르는 개수만), 복사 잔여 BOM은 쓰지 않습니다. 행을 누르면「원가 계산기」탭으로 이동합니다.\n② 실적 원가율: 기간·매장·채널「실적 조회」로 판매 가중 원가율(상단·채널·대분류)을 봅니다. 목표 대비는 목록이 불러와진 뒤 보이는 원가분석(판매중·기본 메뉴) 홀 원가율 평균을 기준으로 합니다. 커버리지·옵션 폴백·정확 BOM은 안내 패널에서 확인하세요.\n③ 이론 vs 실소진: 매장·기간을 고른 뒤 품목별 이론(판매×레시피)·실제(기초+입고−출고−기말)·차이를 확인합니다. 행을 펼치면 메뉴별 이론 기여와 입출고 분해가 보입니다. BOM·기말 실사가 정확해야 의미가 있습니다. POS 자동차감은 「실제」대용이 아닙니다.\n④ 표시되는 원가·원가율은 재료별 Loss(%)가 반영된 BOM 합계입니다(전역 미즈는 더하지 않음).\n⑤ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 조회합니다. 추가·수정·재계산은 본사 오피스만 가능합니다.\n⑥ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 원가를 확인합니다. 저장·BOM 수정은 본사 오피스만 가능합니다.\n⑦ 수정 이력: 기간과 검색어를 정한 뒤「조회」— update 행은 변경 전·후 수량·로스 diff를 표시합니다.',
+      '① 목록: 화면에 들어오면 목록이 자동으로 불러와집니다. 대분류·카테고리·판매 상태(기본 판매중)·상태 필터·검색어로 좁히고, 최신이 필요하면「검색」으로 다시 받습니다. 상단에서 VAT 포함/제외를 고르면 원가율 분모만 바뀝니다(원가는 공급가 유지). 프로모션 세트 조회와 같은 저장값을 씁니다. 상단 KPI 카드에서 평균 원가율·마진·문제 메뉴 수를 확인하고, CSV 내보내기를 사용할 수 있습니다. 열 헤더로 정렬하고, 행 왼쪽 화살표로 재료 내역을 펼칩니다(요약 조회 후 펼치면 BOM을 lazy 로드). 프로모션 세트는 구성 메뉴 원가를 합산하며(선택 그룹은 실제 고르는 개수만), 복사 잔여 BOM은 쓰지 않습니다. 행을 누르면「원가 계산기」탭으로 이동합니다.\n② 실적 원가율: 기간·매장·채널「실적 조회」로 판매 가중 원가율(상단·채널·대분류)을 봅니다. 목표 대비는 목록이 불러와진 뒤 보이는 원가분석(판매중·기본 메뉴) 홀 원가율 평균을 기준으로 합니다. 커버리지·옵션 폴백·정확 BOM은 안내 패널에서 확인하세요.\n③ 이론 vs 실소진: 기본 기간은 월말 실사 대상 월입니다. 매장 조회 후 상단 KPI(식재 차이금액·평균 |차이%|·실사 커버리지)를 먼저 보세요. 커버리지가 낮으면 기말 실사를 먼저 하세요. 품목별 이론(판매×레시피)·실제(기초+입고−출고−기말)·차이를 확인하고, 행을 펼치면 메뉴별 이론 기여가 보입니다. BOM·기말 실사가 정확해야 의미가 있습니다. POS 자동차감은 「실제」대용이 아닙니다.\n④ 표시되는 원가·원가율은 재료별 Loss(%)가 반영된 BOM 합계입니다(전역 미즈는 더하지 않음).\n⑤ 배합 원가: 소스·드레싱 등 배합 레시피와 단가를 조회합니다. 추가·수정·재계산은 본사 오피스만 가능합니다.\n⑥ 원가 계산기: 메뉴·옵션을 고른 뒤 식재·포장 재료와 원가를 확인합니다. 저장·BOM 수정은 본사 오피스만 가능합니다.\n⑦ 수정 이력: 기간과 검색어를 정한 뒤「조회」— update 행은 변경 전·후 수량·로스 diff를 표시합니다.',
     helpSum_admin_total_sales:
       '대분류·카테고리·메인 메뉴·옵션 4단계로 메뉴 판매 수량·판매액을 조회하는 화면입니다. 홀·포장·배달 필터, 메뉴 검색, 오늘·이번 달 요약을 함께 볼 수 있습니다.',
     helpHow_admin_total_sales:
@@ -8947,20 +8980,21 @@ Only matters the employee must handle personally on a working day:
     noticeAutoNotifyManager: 'Also notify store managers',
     noticeAutoStockTakeTitle: 'Month-end stock take alert',
     noticeAutoStockTakeDesc:
-      'N days before month-end, send stock adjustment guidance to managers (also listed in sent history).',
-    noticeAutoDaysBeforeMonthEnd: 'Days before month-end',
+      'On the due-window start (N days before month-end) and the day after month-end, notify only managers of stores that have not counted yet.',
+    noticeAutoDaysBeforeMonthEnd: 'First alert — days before month-end',
     noticeAutoDaysBeforeValue: '{n} day(s) before',
     noticeAutoTitle: 'Title',
     noticeAutoBody: 'Body',
-    noticeAutoStockTakeTargetHint: 'Audience: employees whose role includes manager',
+    noticeAutoStockTakeTargetHint:
+      'Stores that already counted are skipped. The second alert is the day after month-end. Employees whose role includes manager only.',
     noticeAutoLastRunWorkLog: 'Last sent date: {date}',
-    noticeAutoLastRunStockTake: 'Last sent month: {month}',
+    noticeAutoLastRunStockTake: 'Last sent: {month}',
     noticeAutoSaveOk: 'Auto alert settings saved.',
     noticeAutoSaveFail: 'Failed to save auto alert settings.',
     noticeAutoLoadFail: 'Failed to load auto alert settings.',
     noticeAutoReload: 'Reload',
     noticeAutoCronHint:
-      'The server checks rules every hour and sends at most once per day (or month) when Bangkok date/hour match. Custom recurring notices also appear in sent history.',
+      'The server checks rules every hour and sends a given rule at most once per Bangkok date. Month-end stock take can send twice (due start and the day after month-end). Custom recurring notices also appear in sent history.',
     noticeAutoCustomSectionTitle: 'Custom recurring notices',
     noticeAutoCustomSectionDesc:
       'Add recurring notices with title, body, schedule, and audience. Use built-in rules above for data-conditioned alerts (e.g. missing work log).',
@@ -9464,6 +9498,14 @@ Only matters the employee must handle personally on a working day:
     stockAdjustDiffPh: '+10 or -5',
     stockAdjustHint: 'Increase: +10, Decrease: -5',
     stockAdjustAsOfHint: 'Saved as of {date}. For month-end count, select that date then Adjust.',
+    stockTakeDueBannerHqTitle: 'Month-end stock take due',
+    stockTakeDueBannerHqMissing: '{n} stores not counted',
+    stockTakeDueBannerGoOps: 'Store ops hub',
+    stockTakeDueBannerStoreTitle: 'Stock-take window is open',
+    stockTakeDueBannerDue: 'Due {start} ~ {end}.',
+    stockTakeDueBannerAsOf: 'Set as-of date to month-end {date}.',
+    stockTakeDueBannerSetAsOf: 'Set as-of to month-end and load',
+    stockTakeDueBannerAsOfReady: 'As-of is month-end. Adjust the listed items.',
     stockAdjustMemo: 'Memo (optional)',
     stockAdjustMemoPh: 'e.g. damage, loss',
     stockAdjustConfirm: 'Confirm',
@@ -9521,6 +9563,16 @@ Only matters the employee must handle personally on a working day:
     stockVarianceColOut: 'Outbound',
     stockVarianceColEnd: 'Ending',
     stockVarianceAdjBadge: 'Count/adj',
+    stockVarianceKpiAbsCost: 'Food abs. variance cost',
+    stockVarianceKpiAvgPct: 'Avg |variance %|',
+    stockVarianceKpiHigh: 'High-variance items',
+    stockVarianceKpiCoverage: 'Count coverage',
+    stockVarianceKpiCoverageWarn: 'Count too thin — actual usage is weakly meaningful',
+    stockVarianceKpiFoodOnly: 'Food items',
+    stockVarianceKpiMonthHint: 'Default period is the month-end stock-take month. Actual usage needs a period-end count.',
+    stockVarianceKpiMonthBtn: 'Stock-take month',
+    stockVarianceKpiAdjItems: 'Counted/adjusted items',
+    stockVarianceKpiLinkStock: 'Do period-end count',
     stockVarianceMenuContrib: 'Theoretical by menu',
     stockVarianceNoMenuContrib: 'No menu contribution (no sales match or missing BOM)',
     stockTabDailyMatrix: 'HQ daily in/out',
@@ -9585,7 +9637,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_stock:
       'View and adjust stock by store or HQ warehouse. The HQ daily in/out tab shows S&J inbound, store outbound, balance, and invoices.',
     helpHow_admin_stock:
-      '① Stock list: pick store and as-of date, then search. Managers can adjust stock. Adjustments are saved on the selected as-of date—for month-end, set that date then Adjust.\n② Reorder assist: usage window and suggested qty (does not auto-order).\n③ HQ daily in/out (office): matrix by period, warehouse, store, and view mode; drill to outbound history or invoice print.\n④ Export XLSX in Daily Stock Report layout.',
+      '① Stock list: pick store and as-of date, then search. During the due window (month-end −2 ~ next month +5) a banner appears. Managers can adjust stock. Adjustments are saved on the selected as-of date—for month-end, set that date then Adjust. Links from Store operations pre-fill store and month-end.\n② Reorder assist: usage window and suggested qty (does not auto-order).\n③ HQ daily in/out (office): matrix by period, warehouse, store, and view mode; drill to outbound history or invoice print.\n④ Export XLSX in Daily Stock Report layout.',
     helpSum_admin_outbound:
       'Ship from HQ warehouse to stores or sales accounts. Force outbound items confirmed together (same date, destination, Reference No.) share one IVF sheet; order outbound stays one IV per order.',
     helpHow_admin_outbound:
@@ -9593,7 +9645,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_notices:
       'Compose and send staff notices, review history and unread lists, and manage auto alerts (work log, month-end stock take).',
     helpHow_admin_notices:
-      '① New notice: pick targets, preview, then send.\n② Sent history: read rates, reminders, limited edits.\n③ Unread: aggregate misses and allowance exclusion.\n④ Auto alerts: built-in jobs plus “Add recurring notice” for custom schedules.',
+      '① New notice: pick targets, preview, then send.\n② Sent history: read rates, reminders, limited edits.\n③ Unread: aggregate misses and allowance exclusion.\n④ Auto alerts: work log and month-end stock take (due start + day after month-end, missing stores only), plus “Add recurring notice”.',
     stockReorderIntro:
       'HQ (Office / inbound warehouse): sums Outbound + ForceOutbound from HQ. Stores: Usage (manual usage confirm) only. Suggested reorder = max(0, period consumption + safety stock − on hand). Does not create purchase orders automatically.',
     stockReorderDays: 'Usage window (days)',
@@ -12735,7 +12787,7 @@ Only matters the employee must handle personally on a working day:
     bankImportQueuedForSync:
       'Saved only in this browser due to a network issue; it will send when online. If deposits use revenue_delivery/card/qr/cash, change to Sales collection (receivable_receive) before saving.',
     bankImportPosRevenueHint:
-      'POS stores: use Sales collection (receivable_receive) with store and sales date for Grab/card/QR deposits. Post fees via Channel settlement.',
+      'POS stores: Grab/card/QR deposits use Sales collection + store. Delivery/card/QR/cash categories are hidden on POS accounts. Fees: Channel settlement.',
     bankParseNoRows: 'No parsed transactions found. Please check K-DEPOSIT format.',
     bankParseFailPrefix: 'File parse failed:',
     bankPlanAmountMismatch: 'Bank amount must match the selected payment plan balance (sum).',
@@ -12873,12 +12925,12 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_bank_transactions:
       'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables/borrowings. Officer deposits to the company: Borrowing in + related party (do not post as sales 4110). When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
     helpHow_admin_bank_transactions:
-      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_* (double revenue risk). Post fees on POS settlement or use Channel settlement on the deposit row in Bank.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
+      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_* (double revenue risk). POS store bank category lists hide delivery/card/QR/cash except on legacy rows; saves are rejected (new/bulk coerced to Sales collection; editing an existing revenue_* row is rejected). Open the bank row from Ledger recon to fix. Post fees on POS settlement or use Channel settlement on the deposit row in Bank.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
     bankManualS3PosReceivable:
       'POS auto-journal stores: card/delivery/QR deposits → Sales collection + store. Avoid revenue_* categories (double 4110).',
     bankPosReceivableDepositTitle: 'POS auto-journal — deposit category',
     bankPosReceivableDepositBody:
-      'Use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements. revenue_* risks double revenue.',
+      'Use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements. POS store bank category lists hide delivery/card/QR/cash except on legacy rows that already have them. Saves are rejected. Fix legacy rows from Ledger recon → Bank.',
     bankPosChannelSettleHint:
       'Post fees (GROSS−NET) on POS settlement, or click Channel settlement on a deposit row below.',
     bankPosChannelSettlePosLink: 'POS settlement →',
@@ -13275,7 +13327,7 @@ Only matters the employee must handle personally on a working day:
     salesTopicPivotStoreByPeriod: 'Store × period list',
     salesTopicPivotStoreByPeriodHint: 'One row per store and time bucket (year, month, week, day…) · weekday filter supported',
     salesStorePeriodFootnote:
-      'With all stores, only branches with orders in the range appear. Use “Period granularity” above for year/month/week/day/DOW/hour. Day and DOW buckets use Bangkok calendar dates from order time; month/year use each store’s POS business-day boundaries.',
+      'With all stores, only branches with orders in the range appear. Use “Period granularity” above for year/month/week/day/DOW/hour. Year, month, week, day, and weekday use each store’s POS business day; hour buckets use Bangkok wall-clock time.',
     salesTopicPivotStoreCategory: 'Sales (Store & Category)',
     salesTopicPivotStoreCategoryHint: 'Charts and tables by store·category',
     salesTopicPivotStoreChannel: 'Sales by channel',
@@ -13738,7 +13790,8 @@ Only matters the employee must handle personally on a working day:
     recon_subledgerBorrow: 'Subledger borrowings',
     recon_difference: 'Difference (GL − subledger)',
     recon_riskyRevenueDeposits: 'Double-revenue risk deposits',
-    recon_riskyRevenueDepositsHint: 'revenue_* categories — switch to channel settlement or Sales collection.',
+    recon_riskyRevenueDepositsHint:
+      'revenue_* rows. Open Bank and switch to Sales collection or channel settlement. POS stores cannot save new revenue_* deposits.',
     recon_pendingChannelSettlements: 'Incomplete channel settlements',
     recon_pendingChannelSettlementsHint: 'Missing journal or bank link.',
     recon_recvSettleConflict: 'Sales collection + channel settlement conflict',
@@ -13747,6 +13800,7 @@ Only matters the employee must handle personally on a working day:
     recon_b2bRecvBankGapHint:
       'Franchise bank transfer (e.g. deposit to HQ) missing from receivables subledger. Re-save the bank row by store in Bank query. Grab/card/QR settlements should not appear here.',
     recon_allClear: 'No reconciliation issues for this scope.',
+    recon_openBank: 'Bank',
     bs_total: 'Total',
     bs_liabilities: 'Liabilities',
     bs_payables: 'Payables',
@@ -15959,6 +16013,15 @@ orderItemQty: 'Qty',
     adminContentTabMain: 'Screen',
     adminContentTabHelp: 'Help',
     adminHelpBackToScreen: 'Back to screen',
+    adminHelpThisPage: 'Help for this screen',
+    adminHelpHeaderThisScreen: 'This screen',
+    adminHelpAudienceLabel_office: 'HQ',
+    adminHelpAudienceLabel_franchise: 'Franchise / store',
+    adminHelpDiscoverShort:
+      'Full help is in the header This screen (book icon) button or the Help center.',
+    adminHelpFullGuideBelow: 'Continue with the guide below.',
+    adminHelpPayrollSheetHint: 'Payroll help is in the guide below and the Help tab on the payroll screen.',
+    adminHelpPayrollOpenTab: 'Open payroll Help tab',
     adminHelpHandoverTitle: 'Handover notes (shared for this store)',
     adminHelpHandoverHint:
       'Team notes for this menu. Colleagues at the same store can view and edit. Scoped to your current logged-in store; stored in server settings JSON. If two people save at once, the last save wins.',
@@ -15984,6 +16047,7 @@ orderItemQty: 'Qty',
     adminHelpFooterTooltip: '{n} help entries, one per sidebar item (description and how to use).',
     adminHelpNoHow:
       'In screens you can access, set date/store/filters, then look up, enter, and save (or submit). Some steps are role- or process-specific.',
+    adminHelpNoSummary: 'No short description for this screen. See How to use below or the Help center.',
     helpSum_admin_tax_filing:
       'Prepare Thai tax filings (VAT, WHT, CIT, SSO) and the purchase tax invoice register by period and store, then export filing-ready outputs.',
     helpHow_admin_tax_filing:
@@ -15995,7 +16059,7 @@ orderItemQty: 'Qty',
     helpSum_admin_pos_cost_analysis:
       'Review POS menu hall vs delivery prices, costs, cost ratios, and margins; use actual cost %, theoretical vs actual ingredient usage, What-if, BOM, blend costs, and the cost calculator. (Head office only for save/edit)',
     helpHow_admin_pos_cost_analysis:
-      '① List: the list loads automatically when you open the screen. Narrow with main category, category, sale status (default Active), and search; press Search to refresh. VAT included/excluded changes only the sales denominator (cost stays net). Same preference as promotion-set inquiry. KPI cards, CSV export, sort columns, expand rows for BOM (lazy-loaded). Promotion sets use composed component costs (choice groups count only the picks), not leftover copied BOM. Click a row to open Cost calculator.\n② Actual cost %: Query actuals for sales-weighted headline/channel/category. Vs-target uses the cost-analysis hall % average from the loaded List (active base menus). Check coverage/fallback and Exact BOM on the info panel.\n③ Theoretical vs actual: pick store and period; compare theoretical (sales×recipe), actual (beginning+inbound−outbound−ending), and variance by ingredient. Expand a row for menu contributions and movement breakdown. Needs accurate BOM and period-end counts. POS auto-deduction is not the Actual column.\n④ Costs use BOM totals with per-ingredient loss % only (no extra global mise).\n⑤ Blend costs: view sauce recipes and unit costs; add/edit/recalculate is head office only.\n⑥ Cost calculator: pick menu/option and review ingredients; save/BOM edit is head office only.\n⑦ Audit: set period and keyword, then Query — update rows show before/after quantity and loss diff.',
+      '① List: the list loads automatically when you open the screen. Narrow with main category, category, sale status (default Active), and search; press Search to refresh. VAT included/excluded changes only the sales denominator (cost stays net). Same preference as promotion-set inquiry. KPI cards, CSV export, sort columns, expand rows for BOM (lazy-loaded). Promotion sets use composed component costs (choice groups count only the picks), not leftover copied BOM. Click a row to open Cost calculator.\n② Actual cost %: Query actuals for sales-weighted headline/channel/category. Vs-target uses the cost-analysis hall % average from the loaded List (active base menus). Check coverage/fallback and Exact BOM on the info panel.\n③ Theoretical vs actual: default period is the month-end stock-take month. After query, read the KPI strip (food abs. variance cost, avg |%|, count coverage). If coverage is low, count stock first. Compare theoretical (sales×recipe), actual (beginning+inbound−outbound−ending), and variance; expand a row for menu contributions. Needs accurate BOM and period-end counts. POS auto-deduction is not the Actual column.\n④ Costs use BOM totals with per-ingredient loss % only (no extra global mise).\n⑤ Blend costs: view sauce recipes and unit costs; add/edit/recalculate is head office only.\n⑥ Cost calculator: pick menu/option and review ingredients; save/BOM edit is head office only.\n⑦ Audit: set period and keyword, then Query — update rows show before/after quantity and loss diff.',
     helpSum_admin_total_sales:
       'View menu sales in four levels (main category, category, main menu, option). Filter by hall / takeout / delivery, search menus, and see today/this-month summaries.',
     helpHow_admin_total_sales:
@@ -17080,20 +17144,21 @@ orderItemQty: 'Qty',
     noticeAutoNotifyManager: 'แจ้งผู้จัดการร้านด้วย',
     noticeAutoStockTakeTitle: 'แจ้งตรวจนับสต๊อกสิ้นเดือน',
     noticeAutoStockTakeDesc:
-      'ก่อนสิ้นเดือน N วัน ส่งประกาศปรับสต๊อกให้ผู้จัดการ (บันทึกในประวัติการส่งด้วย)',
-    noticeAutoDaysBeforeMonthEnd: 'กี่วันก่อนสิ้นเดือน',
+      'วันเริ่มช่วงนับสต็อก (ก่อนสิ้นเดือน N วัน) และวันถัดจากสิ้นเดือน ส่งประกาศให้ผู้จัดการสาขาที่ยังไม่นับเท่านั้นครับ',
+    noticeAutoDaysBeforeMonthEnd: 'แจ้งครั้งแรก — กี่วันก่อนสิ้นเดือน',
     noticeAutoDaysBeforeValue: 'ก่อน {n} วัน',
     noticeAutoTitle: 'หัวข้อ',
     noticeAutoBody: 'เนื้อหา',
-    noticeAutoStockTakeTargetHint: 'กลุ่มเป้าหมาย: พนักงานที่ role มีคำว่า manager',
+    noticeAutoStockTakeTargetHint:
+      'สาขาที่นับแล้วไม่ส่งซ้ำ ครั้งที่สองคือวันถัดจากสิ้นเดือน เฉพาะพนักงานที่ role มีคำว่า manager ครับ',
     noticeAutoLastRunWorkLog: 'ส่งล่าสุด: {date}',
-    noticeAutoLastRunStockTake: 'เดือนที่ส่งล่าสุด: {month}',
+    noticeAutoLastRunStockTake: 'ส่งล่าสุด: {month}',
     noticeAutoSaveOk: 'บันทึกการตั้งค่าแจ้งเตือนอัตโนมัติแล้วครับ',
     noticeAutoSaveFail: 'บันทึกการตั้งค่าไม่สำเร็จครับ',
     noticeAutoLoadFail: 'โหลดการตั้งค่าไม่สำเร็จครับ',
     noticeAutoReload: 'โหลดใหม่',
     noticeAutoCronHint:
-      'เซิร์ฟเวอร์ตรวจกฎทุกชั่วโมง และส่งได้วันละ/เดือนละ 1 ครั้งเมื่อตรงวันที่และเวลาตามกรุงเทพฯ ประกาศซ้ำที่สร้างเองจะอยู่ในประวัติการส่งด้วย',
+      'เซิร์ฟเวอร์ตรวจกฎทุกชั่วโมง และกฎเดียวกันส่งได้วันละ 1 ครั้งตามวันที่กรุงเทพฯ นับสต็อกสิ้นเดือนส่งได้สูงสุด 2 ครั้ง (วันเริ่มกำหนด และวันถัดจากสิ้นเดือน) ประกาศซ้ำที่สร้างเองจะอยู่ในประวัติการส่งด้วยครับ',
     noticeAutoCustomSectionTitle: 'ประกาศซ้ำที่เพิ่มเอง',
     noticeAutoCustomSectionDesc:
       'เพิ่มประกาศซ้ำด้วยหัวข้อ เนื้อหา รอบเวลา และกลุ่มเป้าหมาย (ถ้ามีเงื่อนไขข้อมูล เช่น ยังไม่เขียนบันทึกงาน ให้ใช้รายการพื้นฐานด้านบน)',
@@ -17693,6 +17758,14 @@ orderItemQty: 'จำนวน',
     stockAdjustDiffPh: '+10 หรือ -5',
     stockAdjustHint: 'เพิ่ม: +10, ลด: -5',
     stockAdjustAsOfHint: 'บันทึกตามวันที่ {date} (นับสต็อกสิ้นเดือน ให้เลือกวันนั้นก่อนแล้วกด Adjust)',
+    stockTakeDueBannerHqTitle: 'กำหนดนับสต็อกสิ้นเดือน',
+    stockTakeDueBannerHqMissing: 'สาขาที่ยังไม่นับ {n} สาขา',
+    stockTakeDueBannerGoOps: 'ศูนย์ดำเนินงานร้าน',
+    stockTakeDueBannerStoreTitle: 'ถึงช่วงนับสต็อกแล้วครับ',
+    stockTakeDueBannerDue: 'กำหนด {start} ~ {end}',
+    stockTakeDueBannerAsOf: 'ตั้งวันที่อ้างอิงเป็นสิ้นเดือน {date} ครับ',
+    stockTakeDueBannerSetAsOf: 'ตั้งวันสิ้นเดือนแล้วโหลด',
+    stockTakeDueBannerAsOfReady: 'วันที่อ้างอิงเป็นสิ้นเดือนแล้ว ปรับรายการด้านล่างได้ครับ',
     stockAdjustMemo: 'หมายเหตุ (ถ้ามี)',
     stockAdjustMemoPh: 'เช่น เสียหาย สูญหาย',
     stockAdjustConfirm: 'ยืนยัน',
@@ -17710,6 +17783,16 @@ orderItemQty: 'จำนวน',
     stockTabReorder: 'ช่วยสั่งซื้อ',
     stockTabHistory: 'ประวัติการปรับ',
     stockTabVariance: 'ทฤษฎี vs ใช้จริง',
+    stockVarianceKpiAbsCost: 'มูลค่าส่วนต่างอาหาร (ค่าสัมบูรณ์)',
+    stockVarianceKpiAvgPct: 'ค่าเฉลี่ย |ส่วนต่าง %|',
+    stockVarianceKpiHigh: 'รายการส่วนต่างสูง',
+    stockVarianceKpiCoverage: 'ความครอบคลุมการนับ',
+    stockVarianceKpiCoverageWarn: 'นับสต็อกไม่พอ — ของที่ใช้จริงยังเชื่อได้น้อย',
+    stockVarianceKpiFoodOnly: 'เฉพาะวัตถุดิบอาหาร',
+    stockVarianceKpiMonthHint: 'ช่วงเริ่มต้นคือเดือนนับสต็อกสิ้นเดือน ต้องนับปลายงวดถึงจะใช้ยอดใช้จริงได้ครับ',
+    stockVarianceKpiMonthBtn: 'เดือนนับสต็อก',
+    stockVarianceKpiAdjItems: 'รายการที่นับ/ปรับ',
+    stockVarianceKpiLinkStock: 'ไปนับสต็อกสิ้นงวด',
     stockTabDailyMatrix: 'HQ รับเข้า-ส่งออกรายวัน',
     stockDailyMatrixIntro:
       'สรุปรับเข้า HQ (S&J) · ส่งออกสาขา · ปรับสต็อกรายวันและรายสาขา หมายเลข Invoice ตรงกับการจัดการส่งออก (IV/IVF)',
@@ -20468,7 +20551,14 @@ orderItemQty: 'จำนวน',
     bankImportQueuedForSync:
       'บันทึกชั่วคราวในเบราว์เซอร์นี้เท่านั้น (เครือข่าย) จะส่งเมื่อออนไลน์ หากเป็นหมวด revenue_* ให้เปลี่ยนเป็น receivable_receive ก่อนบันทึก',
     bankImportPosRevenueHint:
-      'ร้าน POS: เงินเข้า Grab/บัตร/QR ใช้ Sales collection (receivable_receive) + ร้าน + วันที่ขาย ค่าธรรมเนียมใช้ Channel settlement',
+      'ร้าน POS: เงินเข้า Grab/บัตร/QR ใช้รับยอดขาย + สาขา รายการเดลิเวอรี่ บัตร QR เงินสดถูกซ่อนในบัญชีสาขา POS ครับ ค่าธรรมเนียมใช้ชำระช่องทาง',
+    recon_openBank: 'ธนาคาร',
+    recon_riskyRevenueDeposits: 'เงินเข้าเสี่ยงยอดขายซ้ำ POS',
+    recon_riskyRevenueDepositsHint:
+      'หมวด revenue_* กด「ธนาคาร」แล้วเปลี่ยนเป็นรับยอดขายหรือชำระช่องทาง สาขา POS บันทึก revenue_* ใหม่ไม่ได้ครับ',
+    bankPosReceivableDepositTitle: 'ร้านลงบัญชีอัตโนมัติจาก POS — ประเภทเงินเข้า',
+    bankPosReceivableDepositBody:
+      'เงินเข้าชำระ Grab บัตร QR ให้ใช้รับยอดขาย + สาขาและวันขายเท่านั้นครับ บัญชีสาขา POS ซ่อนหมวดเดลิเวอรี่ บัตร QR เงินสด เหลือเฉพาะรายการเก่าที่บันทึกไว้แล้ว บันทึกใหม่ไม่ได้ครับ รายการเก่าให้เปิดจากแท็บกระทบยอดบัญชีแล้วเปลี่ยนเป็นรับยอดขายครับ',
     bankParseNoRows: 'ไม่พบรายการที่แปลงได้ กรุณาตรวจสอบรูปแบบ K-DEPOSIT',
     bankParseFailPrefix: 'แปลงไฟล์ไม่สำเร็จ:',
     bankPlanAmountMismatch: 'จำนวนเงินธนาคารต้องตรงกับยอดคงเหลือของรายการที่เลือก (รวม)',
@@ -22678,6 +22768,7 @@ orderItemQty: 'จำนวน',
     workLogTabInsights: 'ข้อมูล HR',
     workLogTabAudit: 'ประวัติการเปลี่ยนแปลง',
     workLogTabHelp: 'วิธีใช้',
+    ...I18N_HELP_SUM_HOW_TH,
     workLogLoginRequired: 'ต้องเข้าสู่ระบบ',
     workLogDate: 'วันที่',
     workLogEmployee: 'พนักงาน',

@@ -77,10 +77,18 @@ export default function PosCostAnalysisPage() {
   }, [rawStores, isManager, userStore])
   const [varianceStoreFilter, setVarianceStoreFilter] = React.useState("")
   const storeSelectDisabled = isManager && !!userStore
+  const urlStore = (searchParams.get("store") || "").trim()
+  const urlStart = (searchParams.get("start") || "").trim()
+  const urlEnd = (searchParams.get("end") || "").trim()
+  const urlYmd = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
 
   React.useEffect(() => {
-    if (isManager && userStore) setVarianceStoreFilter(userStore)
-  }, [isManager, userStore])
+    if (isManager && userStore) {
+      setVarianceStoreFilter(userStore)
+      return
+    }
+    if (urlStore) setVarianceStoreFilter(urlStore)
+  }, [isManager, userStore, urlStore])
 
   const [rows, setRows] = React.useState<PosMenuCostAnalysisRow[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -321,6 +329,12 @@ export default function PosCostAnalysisPage() {
               storeFilter={varianceStoreFilter}
               setStoreFilter={setVarianceStoreFilter}
               storeSelectDisabled={storeSelectDisabled}
+              initialStartYmd={urlYmd(urlStart) ? urlStart : undefined}
+              initialEndYmd={urlYmd(urlEnd) ? urlEnd : undefined}
+              autoLoad={
+                activeTab === "variance" &&
+                Boolean((urlStore || (isManager && userStore)) && urlYmd(urlStart) && urlYmd(urlEnd))
+              }
             />
           </TabsContent>
 

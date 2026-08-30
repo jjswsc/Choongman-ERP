@@ -82,6 +82,7 @@ export interface SubledgerGlReconciliationData {
     category: string
     store: string | null
     memo: string | null
+    accountId?: number | null
   }[]
   pendingChannelSettlements: {
     id: number
@@ -99,6 +100,7 @@ export interface SubledgerGlReconciliationData {
     transDate: string
     amount: number
     storeName: string | null
+    accountId?: number | null
     settlementIds: number[]
   }[]
   receivableBankSubledgerGaps: {
@@ -108,6 +110,7 @@ export interface SubledgerGlReconciliationData {
     storeName: string
     memo: string | null
     isPosStore: boolean
+    accountId?: number | null
   }[]
 }
 

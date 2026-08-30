@@ -100,7 +100,7 @@ type PayableMini = { id?: number; amount?: number }
 
 async function deletePlannedAccrual(expenseAccrualId: number): Promise<void> {
   const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
-    select: 'id,status,expense_date',
+    select: 'id,status,expense_date,store_name',
     limit: 1,
   })) as AccrualRow[] | null
   const row = rows?.[0]
@@ -109,7 +109,10 @@ async function deletePlannedAccrual(expenseAccrualId: number): Promise<void> {
   if (status !== 'planned') {
     throw new Error('이미 승인·지급 처리된 지급예정은 마케팅 화면에서 삭제할 수 없습니다. 지출 관리에서 처리해 주세요.')
   }
-  await assertAccountingDateOpen(String(row.expense_date || '').slice(0, 10))
+  await assertAccountingDateOpen(
+    String(row.expense_date || '').slice(0, 10),
+    String(row.store_name || '').trim() || null
+  )
   await deleteJournalEntriesBySource('expense_accrual', expenseAccrualId)
   await supabaseDeleteByFilter('payable_transactions', `expense_accrual_id=eq.${expenseAccrualId}`)
   await supabaseDeleteByFilter('expense_accruals', `id=eq.${expenseAccrualId}`)
@@ -138,7 +141,7 @@ async function updatePlannedAccrual(
   if (status !== 'planned') {
     throw new Error('승인 전(지급예정) 상태에서만 금액을 수정할 수 있습니다.')
   }
-  await assertAccountingDateOpen(params.expenseDate)
+  await assertAccountingDateOpen(params.expenseDate, String(row.store_name || '').trim() || null)
   const encoded = encodeExpensePayeeCode(params.payeeCode)
   const payableVendorCode = resolvePayableVendorCodeForMarketing(params.vendorCode, params.payeeCode)
   const accountSubjectId = row.account_subject_id != null ? Number(row.account_subject_id) : null
@@ -316,7 +319,7 @@ export async function syncMarketingExpenseAccrual(params: {
       return {}
     }
 
-    await assertAccountingDateOpen(expenseDate)
+    await assertAccountingDateOpen(expenseDate, null)
 
     if (existingId) {
       await updatePlannedAccrual(existingId, {

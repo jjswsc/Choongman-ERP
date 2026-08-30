@@ -76,11 +76,11 @@ export const DEFAULT_AUTO_NOTICE_WORK_LOG: AutoNoticeWorkLogSettings = {
 
 export const DEFAULT_AUTO_NOTICE_STOCK_TAKE: AutoNoticeStockTakeSettings = {
   enabled: false,
-  daysBeforeMonthEnd: 1,
+  daysBeforeMonthEnd: 2,
   hourBangkok: 10,
-  title: '[재고조사] 월말 재고 조정 안내',
+  title: '[재고조사] 월말 실사 안내',
   body:
-    '월말 하루 전입니다. 재고 현황(/admin/stock)에서 기준일을 해당 월 말일로 두고 재고 조정을 진행해 주세요.',
+    '월말 실사 기간입니다. 재고 화면에서 기준일을 해당 월 말일로 맞춘 뒤 조정을 진행해 주세요. 이미 실사한 매장에는 보내지 않습니다.',
   target: 'managers',
 }
 
@@ -220,7 +220,8 @@ export function normalizeAutoNoticeLastRun(raw: unknown): AutoNoticeLastRun {
   }
   return {
     work_log: /^\d{4}-\d{2}-\d{2}$/.test(workLog) ? workLog : '',
-    stock_take: /^\d{4}-\d{2}$/.test(stockTake) ? stockTake : '',
+    stock_take:
+      /^\d{4}-\d{2}-\d{2}$/.test(stockTake) || /^\d{4}-\d{2}$/.test(stockTake) ? stockTake : '',
     custom,
   }
 }

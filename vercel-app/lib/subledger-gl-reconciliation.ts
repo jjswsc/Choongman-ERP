@@ -42,6 +42,7 @@ export type SubledgerGlReconciliationReport = {
     category: string
     store: string | null
     memo: string | null
+    accountId?: number | null
   }[]
   /** 정산일·채널별 미분개 또는 통장 미연결 */
   pendingChannelSettlements: {
@@ -61,6 +62,7 @@ export type SubledgerGlReconciliationReport = {
     transDate: string
     amount: number
     storeName: string | null
+    accountId?: number | null
     settlementIds: number[]
   }[]
   /** B2B 수금으로 미수금 Receive가 있어야 하는데 없는 통장 입금 */
@@ -194,7 +196,7 @@ export async function computeSubledgerGlReconciliation(
   if (bankStoreFrag) riskyFilter += `&${bankStoreFrag}`
 
   const riskyRows = (await supabaseSelectFilter('bank_transactions', riskyFilter, {
-    select: 'id,trans_date,amount,category,store,memo',
+    select: 'id,trans_date,amount,category,store,store_name,memo,account_id',
     order: 'trans_date.desc',
     limit: 200,
   })) as {
@@ -203,7 +205,9 @@ export async function computeSubledgerGlReconciliation(
     amount?: number
     category?: string
     store?: string | null
+    store_name?: string | null
     memo?: string | null
+    account_id?: number | null
   }[]
 
   let settleFilter = `settle_date=lte.${encodeURIComponent(endStr)}`
@@ -243,7 +247,7 @@ export async function computeSubledgerGlReconciliation(
   let recvBankFilter = `trans_date=lte.${encodeURIComponent(endStr)}&trans_type=eq.deposit&category=eq.receivable_receive`
   if (bankStoreFrag) recvBankFilter += `&${bankStoreFrag}`
   const recvBankRows = (await supabaseSelectFilter('bank_transactions', recvBankFilter, {
-    select: 'id,trans_date,amount,store_name,store',
+    select: 'id,trans_date,amount,store_name,store,account_id',
     limit: 300,
   })) as {
     id?: number
@@ -251,6 +255,7 @@ export async function computeSubledgerGlReconciliation(
     amount?: number
     store_name?: string | null
     store?: string | null
+    account_id?: number | null
   }[]
 
   const receivableReceiveWithSettlementLink: SubledgerGlReconciliationReport['receivableReceiveWithSettlementLink'] =
@@ -269,6 +274,7 @@ export async function computeSubledgerGlReconciliation(
         transDate: String(b.trans_date || '').slice(0, 10),
         amount: Math.abs(Number(b.amount) || 0),
         storeName: b.store_name != null ? String(b.store_name) : b.store != null ? String(b.store) : null,
+        accountId: b.account_id != null ? Number(b.account_id) : null,
         settlementIds: (linked || []).map((x) => Number(x.id || 0)).filter((id) => id > 0),
       })
     }
@@ -306,8 +312,9 @@ export async function computeSubledgerGlReconciliation(
       transDate: String(r.trans_date || '').slice(0, 10),
       amount: Math.abs(Number(r.amount) || 0),
       category: String(r.category || ''),
-      store: r.store != null ? String(r.store) : null,
+      store: r.store_name != null ? String(r.store_name) : r.store != null ? String(r.store) : null,
       memo: r.memo != null ? String(r.memo) : null,
+      accountId: r.account_id != null ? Number(r.account_id) : null,
     })),
     pendingChannelSettlements,
     receivableReceiveWithSettlementLink,

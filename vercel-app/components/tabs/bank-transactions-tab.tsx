@@ -88,7 +88,9 @@ import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposi
 import { compressImageForUpload, cn } from "@/lib/utils"
 import {
   coercePosStoreImportDepositCategory,
+  filterBankDepositUiCategories,
   isPosRevenueDepositCategory,
+  isPosStoreBankAccount,
 } from "@/lib/bank-import-deposit-category"
 import { bankDepositLoanCategorySelectValue } from "@/lib/bank-loan-categories"
 import { defaultBankDepositSalesDateForRow } from "@/lib/pos-channel-reconcile-match"
@@ -355,6 +357,10 @@ export function BankTransactionsTab() {
   const [channelSettleRow, setChannelSettleRow] = React.useState<(typeof list)[0] | null>(null)
   const [bankQuickMemosDraft, setBankQuickMemosDraft] = React.useState<string[]>([])
   const selectedAccountStore = (accounts.find((a) => String(a.id) === String(accountId))?.store || "").trim()
+  const hidePosRevenueCategories = React.useMemo(
+    () => isPosStoreBankAccount(selectedAccountStore, storeList),
+    [selectedAccountStore, storeList]
+  )
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
   const importRestoreKey = "bank_import_pending_restore"
   const importDraftStorageKey = "bank_import_input_draft_v1"
@@ -1446,7 +1452,12 @@ export function BankTransactionsTab() {
             next[idx] = {
               ...next[idx],
               category: coerced.category,
-              accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined,
+              accountSubjectId:
+                coerced.category === "receivable_receive"
+                  ? undefined
+                  : sug.accountSubjectId
+                    ? String(sug.accountSubjectId)
+                    : undefined,
               autoAssigned: true,
               storeName: coerced.storeName ?? next[idx]?.storeName,
               salesDate:
@@ -2889,15 +2900,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="revenue_delivery">{t("bankRevenueDelivery") || "배달앱"}</SelectItem>
-                                      <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
-                                      <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
-                                      <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
-                                      <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                                      <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                                      <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                                      <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                                      <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                      {filterBankDepositUiCategories({
+                                        hidePosRevenue: hidePosRevenueCategories,
+                                        currentCategory: cat,
+                                      }).map((value) => (
+                                        <SelectItem key={value} value={value}>
+                                          {getCategoryLabel(value, "deposit")}
+                                        </SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 )}
@@ -3573,15 +3583,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="revenue_delivery">{t("bankRevenueDelivery") || "배달앱"}</SelectItem>
-                                  <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
-                                  <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
-                                  <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
-                                  <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                                  <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                                  <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                                  <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                                  <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                  {filterBankDepositUiCategories({
+                                    hidePosRevenue: hidePosRevenueCategories,
+                                    currentCategory: impRaw,
+                                  }).map((value) => (
+                                    <SelectItem key={value} value={value}>
+                                      {getCategoryLabel(value, "deposit")}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                               {isAutoAssigned ? (
@@ -3970,17 +3979,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         </SelectTrigger>
                         <SelectContent>
                           {newRuleTransType === "deposit" ? (
-                            <>
-                              <SelectItem value="revenue_delivery">{t("bankRevenueDelivery") || "배달앱"}</SelectItem>
-                              <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
-                              <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
-                              <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
-                              <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                              <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                              <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                              <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                              <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
-                            </>
+                            filterBankDepositUiCategories({
+                              hidePosRevenue: true,
+                              currentCategory: newRuleCategory,
+                            }).map((value) => (
+                              <SelectItem key={value} value={value}>
+                                {getCategoryLabel(value, "deposit")}
+                              </SelectItem>
+                            ))
                           ) : (
                             <>
                               {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (
@@ -4067,17 +4073,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       </SelectTrigger>
                                       <SelectContent>
                                         {newRuleTransType === "deposit" ? (
-                                          <>
-                                            <SelectItem value="revenue_delivery">{t("bankRevenueDelivery") || "배달앱"}</SelectItem>
-                                            <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
-                                            <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
-                                            <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
-                                            <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
-                                            <SelectItem value="loan_borrow">{t("bankCategoryLoanBorrow") || "차입 수령"}</SelectItem>
-                                            <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
-                                            <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
-                                            <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
-                                          </>
+                                          filterBankDepositUiCategories({
+                                            hidePosRevenue: true,
+                                            currentCategory: newRuleCategory,
+                                          }).map((value) => (
+                                            <SelectItem key={value} value={value}>
+                                              {getCategoryLabel(value, "deposit")}
+                                            </SelectItem>
+                                          ))
                                         ) : (
                                           <>
                                             {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (

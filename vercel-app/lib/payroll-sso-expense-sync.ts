@@ -112,14 +112,17 @@ async function resolveSsoAccountSubject(): Promise<AccountSubjectPick> {
 
 async function deletePlannedSsoAccrual(expenseAccrualId: number): Promise<void> {
   const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
-    select: 'id,status,expense_date',
+    select: 'id,status,expense_date,store_name',
     limit: 1,
   })) as AccrualRow[] | null
   const row = rows?.[0]
   if (!row?.id) return
   const status = String(row.status || '').toLowerCase()
   if (status === 'paid') return
-  await assertAccountingDateOpen(String(row.expense_date || '').slice(0, 10))
+  await assertAccountingDateOpen(
+    String(row.expense_date || '').slice(0, 10),
+    String(row.store_name || '').trim() || null
+  )
   await deleteJournalEntriesBySource('expense_accrual', expenseAccrualId)
   await supabaseDeleteByFilter('payable_transactions', `expense_accrual_id=eq.${expenseAccrualId}`)
   await supabaseDeleteByFilter('expense_accruals', `id=eq.${expenseAccrualId}`)
@@ -159,7 +162,7 @@ async function upsertStoreSsoAccrual(params: {
   if (existingId > 0 && existingStatus === 'paid') return 'skipped_paid'
 
   if (existingId > 0) {
-    await assertAccountingDateOpen(expenseDate)
+    await assertAccountingDateOpen(expenseDate, store)
     await supabaseUpdate('expense_accruals', existingId, {
       payee_code: payeeCode,
       payee_name: payeeName,

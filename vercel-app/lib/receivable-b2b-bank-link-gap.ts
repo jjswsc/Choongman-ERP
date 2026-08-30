@@ -11,6 +11,7 @@ export type ReceivableBankSubledgerGap = {
   memo: string | null
   /** POS 완료 주문이 있는 매장 — CM Bangna 유형 */
   isPosStore: boolean
+  accountId?: number | null
 }
 
 const posStoreCache = new Map<string, boolean>()
@@ -45,7 +46,7 @@ export async function findReceivableBankSubledgerGaps(params: {
   }
 
   const bankRows = (await supabaseSelectFilterAllPages('bank_transactions', bankFilter, {
-    select: 'id,trans_date,amount,store_name,store,memo',
+    select: 'id,trans_date,amount,store_name,store,memo,account_id',
     order: 'trans_date.desc',
     pageSize: 500,
     maxRows,
@@ -56,6 +57,7 @@ export async function findReceivableBankSubledgerGaps(params: {
     store_name?: string | null
     store?: string | null
     memo?: string | null
+    account_id?: number | null
   }[]
 
   const storeIndex =
@@ -124,6 +126,7 @@ export async function findReceivableBankSubledgerGaps(params: {
       storeName,
       memo,
       isPosStore: hasPosCompletedOrders,
+      accountId: r.account_id != null ? Number(r.account_id) : null,
     })
   }
 

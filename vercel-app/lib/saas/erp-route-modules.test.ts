@@ -61,6 +61,7 @@ describe("erp-route-modules", () => {
   it("maps store-ops APIs away from pos_base", () => {
     expect(resolveApiPathSaasModule("/api/getStoreCheck")).toBe("store_ops")
     expect(resolveApiPathSaasModule("/api/getStoreOpsAlertSummary")).toBe("store_ops")
+    expect(resolveApiPathSaasModule("/api/getStockTakeKpi")).toBe("store_ops")
     expect(resolveApiPathSaasModule("/api/getAdminEmployee")).toBe("pos_base")
   })
 

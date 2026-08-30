@@ -28,13 +28,18 @@ export function suggestDepositFromMemo(
   const byCode = Object.fromEntries((revenueSubjects || []).map((s) => [s.code, s.id]).filter(([, id]) => id != null))
 
   const channelSettlement = POS_CHANNEL_SETTLEMENT_MEMO_RE.test(m)
+  const looksLikeChannelSales =
+    channelSettlement ||
+    /\b(grabfood|grab|line\s*man|lineman|shopee|food\s*panda|foodpanda|robinhood|delivery|배달|visa|master|mastercard|unionpay|jcb|card|credit|카드|qr|promptpay|truemoney)\b/i.test(
+      m
+    )
 
-  if (preferAr && channelSettlement) {
+  if (preferAr && looksLikeChannelSales) {
     return { category: 'receivable_receive' }
   }
 
-  // 배달앱 - 세부 구분
-  if (/\bgrab\b/i.test(m)) return { category: 'revenue_delivery', accountSubjectId: byCode['4111'] ?? byCode['4110'] }
+  // 배달앱 - 세부 구분 (preferAr 꺼진 레거시·비POS 경로)
+  if (/grabfood|\bgrab\b/i.test(m)) return { category: 'revenue_delivery', accountSubjectId: byCode['4111'] ?? byCode['4110'] }
   if (/\b(line\s*man|lineman)\b/i.test(m)) return { category: 'revenue_delivery', accountSubjectId: byCode['4112'] ?? byCode['4110'] }
   if (/\bshopee\b/i.test(m)) return { category: 'revenue_delivery', accountSubjectId: byCode['4113'] ?? byCode['4110'] }
   if (/\b(food\s*panda|foodpanda)\b/i.test(m)) return { category: 'revenue_delivery', accountSubjectId: byCode['4114'] ?? byCode['4110'] }

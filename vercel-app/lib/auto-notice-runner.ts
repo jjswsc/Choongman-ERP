@@ -1,7 +1,6 @@
 import 'server-only'
 
 import {
-  addBangkokCalendarDays,
   getBangkokHourOfDay,
   getBangkokIsoWeekday,
   getBangkokMonthRange,
@@ -23,6 +22,11 @@ import {
 } from '@/lib/send-notice-util'
 import { getRecipientsByTargetStoreRole } from '@/lib/firebase-admin'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  managerBelongsToMissingStore,
+  resolveStockTakeNoticePhase,
+} from '@/lib/stock-take-kpi'
+import { loadStockTakeKpiReport } from '@/lib/stock-take-kpi-report'
 
 export type AutoNoticesRunResult = {
   date: string
@@ -73,36 +77,56 @@ export async function runAutoNotices(base: Date = new Date()): Promise<AutoNotic
     }
   }
 
-  // —— 월말 재고조사 ——
+  // —— 월말 재고조사 (실사 기한: 시작일 + 말일 다음날 독촉, 미완료 매장 매니저만) ——
   const st = settings.stockTake
-  const { endStr, yearMonth } = getBangkokMonthRange(undefined, base)
-  const targetDate = addBangkokCalendarDays(endStr, -st.daysBeforeMonthEnd)
+  const notice = resolveStockTakeNoticePhase(today, st.daysBeforeMonthEnd)
   if (!st.enabled) {
     result.stockTake.skippedReason = 'disabled'
   } else if (hourBangkok !== st.hourBangkok) {
     result.stockTake.skippedReason = 'hour_mismatch'
-  } else if (today !== targetDate) {
+  } else if (!notice) {
     result.stockTake.skippedReason = 'not_target_date'
-  } else if (lastRun.stock_take === yearMonth) {
-    result.stockTake.skippedReason = 'already_sent_this_month'
+  } else if (lastRun.stock_take === today) {
+    result.stockTake.skippedReason = 'already_sent_today'
   } else {
-    const managers = await getAllManagers()
-    const unique = dedupeRecipients(managers)
-    if (unique.length > 0) {
-      const body = `${st.body.trim()}\n\n(기준일 후보: ${endStr})`
-      await sendNoticeToRecipients({
-        title: st.title,
-        content: body,
-        recipients: unique,
-        sender: '시스템(자동 알림)',
-        pushGate: 'notice',
-      })
+    try {
+      const kpiMonth = notice.month
+      const report = await loadStockTakeKpiReport({ officeScope: true, yearMonth: kpiMonth.yearMonth })
+      const missingStores = report.stores.filter((s) => !s.stockTakeDone).map((s) => s.store)
+      if (missingStores.length === 0) {
+        result.stockTake.skippedReason = 'all_done'
+      } else {
+        const managers = await getAllManagers()
+        const unique = dedupeRecipients(
+          managers.filter((m) => managerBelongsToMissingStore(m.store, missingStores))
+        )
+        if (unique.length > 0) {
+          const phaseHint =
+            notice.phase === 'nudge' ? '아직 실사 기록이 없는 매장만 안내합니다.' : '실사 기간이 시작되었습니다.'
+          const body = `${st.body.trim()}\n\n${phaseHint}\n기준일(말일): ${kpiMonth.endYmd}\n실사 기한: ${kpiMonth.dueStartYmd} ~ ${kpiMonth.dueEndYmd}\n미실사 매장: ${missingStores.join(', ')}`
+          await sendNoticeToRecipients({
+            title: st.title,
+            content: body,
+            recipients: unique,
+            sender: '시스템(자동 알림)',
+            pushGate: 'notice',
+          })
+        }
+        result.stockTake = { ran: true, sent: unique.length }
+        await saveAutoNoticeLastRun({ stock_take: today })
+      }
+    } catch (e) {
+      console.error('auto-notices stockTake:', e)
+      result.stockTake = {
+        ran: false,
+        sent: 0,
+        skippedReason: `error:${e instanceof Error ? e.message : String(e)}`,
+      }
     }
-    result.stockTake = { ran: true, sent: unique.length }
-    await saveAutoNoticeLastRun({ stock_take: yearMonth })
   }
 
   // —— 자유 반복 공지 ——
+  const { endStr, yearMonth } = getBangkokMonthRange(undefined, base)
   const customPatch: Record<string, string> = {}
   for (const rule of settings.customRules) {
     const sendKey = resolveCustomRuleSendKey({

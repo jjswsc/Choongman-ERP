@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { saveCardBillAllocation } from '@/lib/card-bill-allocation-server'
 import { requireAuth } from '@/lib/verify-auth'
+import {
+  accountingPeriodClosedMessage,
+  isAccountingPeriodClosedError,
+} from '@/lib/accounting-period-mutation-guard'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -55,6 +59,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: '계정별 배분이 저장되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveCardBillAllocation:', e)
+    if (isAccountingPeriodClosedError(e)) {
+      return NextResponse.json(
+        { success: false, message: accountingPeriodClosedMessage('edit') },
+        { status: 409, headers }
+      )
+    }
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '저장 실패' },
       { status: 500, headers }

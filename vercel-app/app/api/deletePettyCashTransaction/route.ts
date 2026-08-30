@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
     }
 
     const transDate = String(row.trans_date || '').slice(0, 10)
-    await assertAccountingDateOpen(transDate)
-
     const store = String(row.store || '').trim()
+    await assertAccountingDateOpen(transDate, store || null)
+
     const isScopedRole =
       !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
       (userRole.includes('manager') || userRole.includes('franchisee'))
@@ -96,9 +96,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: '삭제되었습니다.' }, { headers })
   } catch (e) {
     console.error('deletePettyCashTransaction:', e)
+    const closed = e instanceof Error && e.message === 'ACCOUNTING_PERIOD_CLOSED'
     return NextResponse.json(
-      { success: false, message: '오류: ' + (e instanceof Error ? e.message : String(e)) },
-      { status: 500, headers }
+      {
+        success: false,
+        message: closed ? '마감된 회계기간의 거래는 삭제할 수 없습니다.' : '오류: ' + (e instanceof Error ? e.message : String(e)),
+      },
+      { status: closed ? 409 : 500, headers }
     )
   }
 }

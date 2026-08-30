@@ -1,4 +1,7 @@
-import { isChannelRevenueAccountCode } from '@/lib/bank-import-deposit-category'
+/**
+ * 통장 입금 vs POS 자동분개(4110/1130) 이중 인식 가드.
+ */
+import { isPosChannelSettlementMemo } from '@/lib/bank-import-deposit-category'
 import { expandStoreVariantsForGrade } from '@/lib/grade-store-key-variants'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
@@ -25,6 +28,26 @@ export function isBankSettlementGuardError(e: unknown): e is BankSettlementGuard
   if (!e || typeof e !== 'object') return false
   const o = e as { name?: string; code?: string }
   return o.name === 'BankSettlementGuardError' && typeof o.code === 'string'
+}
+
+export type PosRevenueDepositGuardVerdict = 'allow' | 'require_store' | 'check_pos_orders'
+
+/**
+ * revenue_* 저장 여부 — DB 조회 없이 판정.
+ * POS 매장은 채널 세부 GL(4111·4120 등)이어도 revenue_* 금지 (4110 이중).
+ */
+export function classifyPosRevenueDepositGuard(params: {
+  category: string
+  storeName?: string | null
+  memo?: string | null
+}): PosRevenueDepositGuardVerdict {
+  const cat = String(params.category || '').toLowerCase()
+  if (!POS_REVENUE_DEPOSIT_CATEGORIES.has(cat)) return 'allow'
+  const store = String(params.storeName || '').trim()
+  if (!store) {
+    return isPosChannelSettlementMemo(params.memo) ? 'require_store' : 'allow'
+  }
+  return 'check_pos_orders'
 }
 
 /** 동일 통장 입금에 채널 정산이 이미 연결된 경우 receivable_receive 등 금지 */
@@ -82,28 +105,27 @@ export async function storeHasPosCompletedOrders(storeName: string): Promise<boo
   return false
 }
 
-/** POS 매출 이중 위험: 해당 매장에 완료 POS 주문이 있으면 revenue_* 입금 분류 차단 (채널 세부 GL은 허용) */
+/** POS 매출 이중 위험: 완료 주문이 있는 매장은 revenue_* 입금 분류 차단 */
 export async function assertPosRevenueDepositCategorySafe(params: {
   storeName: string
   category: string
-  accountSubjectId?: number | null
+  memo?: string | null
 }): Promise<void> {
-  const cat = String(params.category || '').toLowerCase()
-  if (!POS_REVENUE_DEPOSIT_CATEGORIES.has(cat)) return
-  const store = String(params.storeName || '').trim()
-  if (!store) return
-
-  const asid = params.accountSubjectId != null ? Number(params.accountSubjectId) : NaN
-  if (Number.isFinite(asid) && asid > 0) {
-    const subjectRows = (await supabaseSelectFilter('account_subjects', `id=eq.${Math.floor(asid)}`, {
-      select: 'code',
-      limit: 1,
-    })) as { code?: string }[] | null
-    const code = String(subjectRows?.[0]?.code ?? '').trim()
-    if (isChannelRevenueAccountCode(code)) return
+  const verdict = classifyPosRevenueDepositGuard({
+    category: params.category,
+    storeName: params.storeName,
+    memo: params.memo,
+  })
+  if (verdict === 'allow') return
+  if (verdict === 'require_store') {
+    throw new BankSettlementGuardError(
+      'Grab·카드·QR 등 채널 정산 입금은 매장을 지정하고 매출 수령(receivable_receive) 또는 채널 정산으로 저장하세요. 매장 없이 revenue_* 로 넣을 수 없습니다.',
+      'BANK_REVENUE_DEPOSIT_STORE_REQUIRED'
+    )
   }
-
+  const store = String(params.storeName || '').trim()
   if (await storeHasPosCompletedOrders(store)) {
+    const cat = String(params.category || '').toLowerCase()
     throw new BankSettlementGuardError(
       `매장「${store}」에 POS 완료 주문이 있어 입금 분류「${cat}」은 매출(4110) 이중 인식 위험이 있습니다. 카드·배달 입금은 채널 정산을, 가맹 수금은 매출 수령(receivable_receive)을 사용하세요.`,
       'POS_REVENUE_DEPOSIT_DOUBLE_RISK'
