@@ -82,6 +82,9 @@ describe('bank-import-deposit-category', () => {
     ).toBe(false)
     expect(
       filterBankDepositUiCategories({ hidePosRevenue: true, currentCategory: 'receivable_receive' })
+    ).toEqual(expect.arrayContaining(['other_income', 'cash_to_bank', 'receivable_receive']))
+    expect(
+      filterBankDepositUiCategories({ hidePosRevenue: true, currentCategory: 'receivable_receive' })
     ).not.toContain('revenue_delivery')
     expect(
       filterBankDepositUiCategories({ hidePosRevenue: false, currentCategory: 'receivable_receive' })

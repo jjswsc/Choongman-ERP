@@ -8,6 +8,7 @@ export const BANK_QUICK_MEMO_DEFAULTS: readonly string[] = [
   'Credit Card Sales',
   'store sales QR',
   'Cash Deposit',
+  'Sale Old Oil',
 ]
 
 const STORAGE_KEY = 'cm-erp-bank-quick-memos-v2'

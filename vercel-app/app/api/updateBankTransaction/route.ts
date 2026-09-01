@@ -7,7 +7,8 @@ import {
   upsertReceivableFromBankReceive,
 } from '@/lib/receivable-payable'
 import { syncBorrowingFromBankDeposit } from '@/lib/borrowing-ledger'
-import { isLoanBorrowDepositCategory, withLoanBorrowDepositCategory } from '@/lib/bank-loan-categories'
+import { isLoanBorrowDepositCategory } from '@/lib/bank-loan-categories'
+import { bankDepositSavedCategories } from '@/lib/bank-import-deposit-category'
 import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     const transType = String(existing[0].trans_type || 'withdraw').toLowerCase()
     const transDate = String(existing[0].trans_date || '').slice(0, 10)
     await assertAccountingDateOpen(transDate, String(existing[0].store || existing[0].store_name || '').trim() || null)
-    const depositCategories = withLoanBorrowDepositCategory(['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified'])
+    const depositCategories = bankDepositSavedCategories()
     const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
     const prevCategory = String(existing[0].category || '').toLowerCase()
 

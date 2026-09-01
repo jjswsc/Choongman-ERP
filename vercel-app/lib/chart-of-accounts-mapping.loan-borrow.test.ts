@@ -13,6 +13,12 @@ describe('loan borrow deposit posting', () => {
     }
   })
 
+  it('posts other income to 4191 and skips journal for cash-to-bank', () => {
+    const oil = linesForBankDeposit('other_income', 800)
+    expect(oil.find((l) => l.side === 'credit')?.accountCode).toBe('4191')
+    expect(linesForBankDeposit('cash_to_bank', 500)).toEqual([])
+  })
+
   it('keeps sales collection on 1130', () => {
     const lines = linesForBankDeposit('receivable_receive', 500)
     expect(lines.find((l) => l.side === 'credit')?.accountCode).toBe('1130')

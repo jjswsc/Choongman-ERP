@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { bankDepositSavedCategories } from '@/lib/bank-import-deposit-category'
 
 /** 은행 적요 키워드 규칙 추가/수정 */
 export async function POST(request: NextRequest) {
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '용도를 선택하세요.' }, { status: 400, headers })
     }
 
-    const validDepositCats = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'loan', 'advance', 'unclassified', 'correction']
+    const validDepositCats = bankDepositSavedCategories()
     const validWithdrawCats = ['transfer', 'expense', 'fixed', 'purchase_payment', 'loan', 'advance', 'unclassified', 'correction']
     const validCats = transType === 'deposit' ? validDepositCats : validWithdrawCats
     if (!validCats.includes(category)) {

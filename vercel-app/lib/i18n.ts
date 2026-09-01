@@ -3358,7 +3358,7 @@ export const i18n = {
     ptiSourceManual: '수기',
     ptiSourceInbound: '입고',
     ptiSourcePdf: 'PDF',
-    ptiDupError: '같은 판매자의 세금계산서 번호가 이미 등록되어 있습니다.',
+    ptiDupError: '같은 판매자의 세금계산서 번호 전체가 이미 등록되어 있습니다. 끝자리만 같으면 다른 문서입니다.',
     ptiSubmittedLocked: '이미 제출된 PP.30 행은 수정·삭제할 수 없습니다.',
     ptiPdfUpload: '스캔 PDF/이미지',
     ptiPdfReview: '저장 전 검수',
@@ -4658,14 +4658,14 @@ export const i18n = {
     helpSum_admin_bank_transactions:
       '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급·차입금과 맞물립니다. 임원이 회사에 빌려준 입금은 「차입 수령」+관련당사자(매출 4110 금지). 통장 변경 시 계좌 추가(삭제 금지), 삭제·등록 이력은 본사·회계가 계좌 관리에서 확인합니다.',
     helpHow_admin_bank_transactions:
-      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS·EDC를 쓰는 매장: 용도에 배달앱·카드·QR·현금이 다시 보입니다. Grab·카드·QR 입금은 「매출 수령」+ 매장·매출일로 두고, 오른쪽 「채널 정산」으로 수수료를 분개하세요. 배달앱 등으로 저장하면 매출이 두 번 잡힐 수 있어 거절되거나 매출 수령으로 바뀝니다.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
+      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ 매장 통장: Grab·카드·QR 입금은 「매출 수령」 후 오른쪽 「채널 정산」. 폐유는 「기타수익」(4191), 시재 현금을 통장에 넣는 입금은 「현금시재입금」(손익 없음). 배달앱·카드·QR·현금 유형은 숨겨져 있으며 그 용도로 저장하면 매출이 두 번 잡힐 수 있습니다.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
     bankManualS3PosReceivable:
       'POS 자동분개 매장: 카드·배달앱·QR 입금은 「매출 수령」+ 매장. revenue_delivery/revenue_card는 4110 이중 인식 위험.',
     bankPosReceivableDepositTitle: 'POS 자동분개 매장 — 입금 분류',
     bankPosReceivableDepositBody:
       'Grab·카드·QR 정산 입금은 「매출 수령」+ 매장·매출일만 사용하세요. 배달앱·카드·QR·현금은 목록에 보이지만 POS 매장에서 그 용도로 저장하면 거절되거나 매출 수령으로 바뀝니다.',
     bankPosStoreCategoryLockedHint:
-      '이 통장은 POS 매장입니다. 배달앱·카드·QR·현금 용도는 고를 수 없습니다(EDC 연결 후 잠긴 것처럼 보이는 것은 정상). 입금은 「매출 수령」으로 두고, Grab·Shopee·QR·카드는 오른쪽 「채널 정산」을 누르세요. 위의 자주 쓰는 문구는 「메모」만 채웁니다.',
+      '배달앱·카드·QR·현금 유형은 숨김이 정상입니다. Grab·카드·매장 QR은 「매출 수령」 후 오른쪽 「채널 정산」. 폐유(Sale Old Oil)는 「기타수익」, 시재를 통장에 넣는 입금은 「현금시재입금」입니다. 노란 칩은 메모만 채웁니다.',
     bankPosStoreCategorySelectTitle:
       'POS 매장: 배달앱·카드·QR·현금은 숨김. Grab·Shopee·QR·카드는 오른쪽 「채널 정산」을 사용하세요.',
     bankPosStoreCategoryHiddenOptions: '배달앱·카드·QR·현금 숨김 — 오른쪽 「채널 정산」',
@@ -4732,6 +4732,8 @@ export const i18n = {
     bankCategoryTax: '세금',
     bankCategoryPurchasePayment: '매입 대금',
     bankCategoryReceivableReceive: '매출 수령',
+    bankCategoryOtherIncome: '기타수익',
+    bankCategoryCashToBank: '현금시재입금',
     bankCategoryFixed: '고정비',
     bankCategoryLabel: '용도',
     bankTabInput: '입력',
@@ -7788,7 +7790,7 @@ export const i18n = {
     helpSum_admin_tax_filing:
       '태국 세무신고(부가세·원천세·법인세·SSO)와 매입 세금계산서를 기간/매장 기준으로 조회하고 신고용 자료를 내보내는 화면입니다.',
     helpHow_admin_tax_filing:
-      '① 상단 탭에서 신고 유형(납세자, PP.30, 매입 세금계산서, PP.36, PND, SSO)을 선택합니다.\n② 기준 월(또는 연도)과 매장을 정한 뒤 먼저 조회/검색으로 데이터를 확정합니다.\n③ RD Prep용 TXT는 탭에 맞는 버튼만 사용합니다(PND 탭≠PP30). e-Filing에는 .rdx만 업로드되며, TXT는 RD Prep에서 1회 매핑 저장 후 .rdx로 만듭니다.\n④ P.N.D.50/51은 세무조정 초안 저장 후 CSV/PDF를 내보냅니다. 경고가 있으면 수치·분개를 재검토합니다.\n⑤ 지출 등록의 Tax Invoice는 비용 증빙만입니다. PP.30 매입세는 「매입 세금계산서」탭에서 수기·입고 자동·스캔 PDF로 등록하고, 직원 템플릿 8열 엑셀로 내보냅니다. 스캔은 PDF 글자층이 있으면 그대로 읽고, 그림만 있는 장·깨진 글자층은 QR과 브라우저 태국어 OCR로 채웁니다. 상호가 비면 거래처·이전 검수·국세청 VAT 조회로 채우고, 검수에서 고친 상호·번호 꼴·금액 규모는 다음 스캔에 기억됩니다. 스캔 중에는 이 탭이 유지됩니다. 다른 창·PP.30을 봐도 인식은 이어지며, 브라우저 탭은 닫지 마세요. 중간에 멈추면 같은 PDF를 다시 올리면 이어서 읽습니다. 저장 전 검수에서 빈 칸·사본을 확인하고 경고 칸은 노랗게 표시됩니다. 「문제」건수는 빈 번호·VAT 불일치·TIN만 세고, 세금계산서 월이 조회 월과 다른 건은 노란 경고만 표시합니다. 월이 달라도 저장할 수 있으며, 저장하면 조회가 세금계산서 일자 월로 바뀌어 아래 목록에 보입니다. 페이지 번호로 원본을 대조하며 미리보기에서 바로 수정하고, PP.30 초안 합계와 맞는지 봅니다. 등록함에서는 행을 선택한 뒤「선택 삭제」하거나「전체 삭제」로 지금 조회한 목록을 지울 수 있습니다. 이미 제출된 PP.30 행은 삭제되지 않습니다.\n⑥ PND.1·3·53·54에서 과세표준·세율·원천징수액을 고친 뒤 그 행의 「저장」을 누르면 유지됩니다. 이후 원장 동기화가 저장한 금액을 덮지 않습니다.',
+      '① 상단 탭에서 신고 유형(납세자, PP.30, 매입 세금계산서, PP.36, PND, SSO)을 선택합니다.\n② 기준 월(또는 연도)과 매장을 정한 뒤 먼저 조회/검색으로 데이터를 확정합니다.\n③ RD Prep용 TXT는 탭에 맞는 버튼만 사용합니다(PND 탭≠PP30). e-Filing에는 .rdx만 업로드되며, TXT는 RD Prep에서 1회 매핑 저장 후 .rdx로 만듭니다.\n④ P.N.D.50/51은 세무조정 초안 저장 후 CSV/PDF를 내보냅니다. 경고가 있으면 수치·분개를 재검토합니다.\n⑤ 지출 등록의 Tax Invoice는 비용 증빙만입니다. PP.30 매입세는 「매입 세금계산서」탭에서 수기·입고 자동·스캔 PDF로 등록하고, 직원 템플릿 8열 엑셀로 내보냅니다. 스캔은 PDF 글자층이 있으면 그대로 읽고, 그림만 있는 장·깨진 글자층은 QR과 브라우저 태국어 OCR로 채웁니다. 상호가 비면 거래처·이전 검수·국세청 VAT 조회로 채우고, 검수에서 고친 상호·번호 꼴·금액 규모는 다음 스캔에 기억됩니다. 스캔 중에는 이 탭이 유지됩니다. 다른 창·PP.30을 봐도 인식은 이어지며, 브라우저 탭은 닫지 마세요. 중간에 멈추면 같은 PDF를 다시 올리면 이어서 읽습니다. 저장 전 검수에서 빈 칸·사본을 확인하고 경고 칸은 노랗게 표시됩니다. 중복(ซ้ำ)은 같은 판매자의 번호 전체가 이미 등록된 경우만이며, 끝 일련번호만 같으면 다른 문서입니다. 「문제」건수는 빈 번호·VAT 불일치·TIN만 세고, 세금계산서 월이 조회 월과 다른 건은 노란 경고만 표시합니다. 월이 달라도 저장할 수 있으며, 저장하면 조회가 세금계산서 일자 월로 바뀌어 아래 목록에 보입니다. 페이지 번호로 원본을 대조하며 미리보기에서 바로 수정하고, PP.30 초안 합계와 맞는지 봅니다. 등록함에서는 행을 선택한 뒤「선택 삭제」하거나「전체 삭제」로 지금 조회한 목록을 지울 수 있습니다. 이미 제출된 PP.30 행은 삭제되지 않습니다.\n⑥ PND.1·3·53·54에서 과세표준·세율·원천징수액을 고친 뒤 그 행의 「저장」을 누르면 유지됩니다. 이후 원장 동기화가 저장한 금액을 덮지 않습니다.',
     helpSum_admin_work_log:
       '매일의 업무·진행률을 기록하고, 권한이 있으면 검토·피드백을 처리하며, 주·월 실적·HR 인사이트·변경 이력을 조회하는 화면입니다.',
     helpHow_admin_work_log:
@@ -11663,7 +11665,7 @@ Only matters the employee must handle personally on a working day:
     ptiSourceManual: 'Manual',
     ptiSourceInbound: 'Inbound',
     ptiSourcePdf: 'PDF',
-    ptiDupError: 'This invoice number is already registered for the same seller.',
+    ptiDupError: 'This full invoice number is already registered for the same seller. Matching only the trailing sequence is not a duplicate.',
     ptiSubmittedLocked: 'Submitted PP.30 rows cannot be edited or deleted.',
     ptiPdfUpload: 'Scan PDF / image',
     ptiPdfReview: 'Review before save',
@@ -12964,14 +12966,14 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_bank_transactions:
       'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables/borrowings. Officer deposits to the company: Borrowing in + related party (do not post as sales 4110). When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
     helpHow_admin_bank_transactions:
-      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ POS/EDC stores: Delivery/Card/QR/Cash are shown again. Keep Grab/card/QR deposits as Sales collection + store + sales date, then use Channel settlement on the right for fees. Saving as Delivery/Card/QR/Cash on a POS store is rejected or converted to Sales collection (double-sales risk).\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
+      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Store bank: Grab/card/QR deposits are Sales collection, then Channel settlement on the right. Used-oil (Sale Old Oil) is Other income (4191). Putting till cash into the bank is Cash to bank (no P&L). Hiding Delivery/Card/QR/Cash is expected; saving those types can double-count sales.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
     bankManualS3PosReceivable:
       'POS auto-journal stores: card/delivery/QR deposits → Sales collection + store. Avoid revenue_* categories (double 4110).',
     bankPosReceivableDepositTitle: 'POS auto-journal — deposit category',
     bankPosReceivableDepositBody:
       'Use Sales collection + store + sales date for Grab/card/QR deposits. Delivery/Card/QR/Cash appear in the list, but saving those on a POS store is rejected or converted to Sales collection.',
     bankPosStoreCategoryLockedHint:
-      'This is a POS store account. You cannot pick Delivery, Card, QR, or Cash (it looks locked after EDC — that is expected). Keep the type as Sales collection, then tap Channel settlement on the right for Grab, Shopee, QR, or card. The quick phrases above fill the Note field only.',
+      'Hiding Delivery/Card/QR/Cash is expected. Grab/card/store QR: Sales collection, then Channel settlement on the right. Used-oil (Sale Old Oil) is Other income. Putting till cash into the bank is Cash to bank. Yellow chips fill the Note only.',
     bankPosStoreCategorySelectTitle:
       'POS store: Delivery/Card/QR/Cash are hidden. Use Channel settlement on the right for Grab, Shopee, QR, or card.',
     bankPosStoreCategoryHiddenOptions: 'Delivery/Card/QR/Cash hidden — use Channel settlement on the right',
@@ -13038,6 +13040,8 @@ Only matters the employee must handle personally on a working day:
     bankCategoryTax: 'Tax',
     bankCategoryPurchasePayment: 'Purchase Payment',
     bankCategoryReceivableReceive: 'Receivable',
+    bankCategoryOtherIncome: 'Other income',
+    bankCategoryCashToBank: 'Cash to bank',
     bankCategoryFixed: 'Fixed',
     bankCategoryLabel: 'Category',
     bankTabInput: 'Input',
@@ -16095,7 +16099,7 @@ orderItemQty: 'Qty',
     helpSum_admin_tax_filing:
       'Prepare Thai tax filings (VAT, WHT, CIT, SSO) and the purchase tax invoice register by period and store, then export filing-ready outputs.',
     helpHow_admin_tax_filing:
-      '① Select a filing tab (taxpayer, PP.30, Purchase tax invoices, PP.36, PND, SSO).\n② Set year-month (or fiscal year) and store, then Search.\n③ Use the RD Prep TXT button that matches the tab (PND ≠ PP30). e-Filing accepts .rdx only — import TXT in RD Prep once (save mapping) then save .rdx.\n④ In P.N.D.50/51, save tax adjustment draft first, then export CSV/PDF. Review warnings before filing.\n⑤ Expense Tax Invoice is cost evidence only. PP.30 input VAT is registered on the Purchase tax invoices tab (manual, inbound auto, or scanned PDF) and exported as the 8-column Thai Excel. Scan uses the PDF text layer when it already has complete fields; otherwise Thai OCR and QR in the browser. Empty seller names are filled from vendors, saved reviews, and the Revenue Department VAT search. Corrected seller names, invoice-number patterns, and typical amounts from review are remembered for the next scan. The tab stays on Purchase tax invoices while scanning. Scanning continues if you switch windows; keep this browser tab open. Review blanks and copies; warning cells are highlighted yellow. The issue count is empty invoice numbers, VAT mismatch, and TIN only — a different invoice month is a yellow warning, not an issue. You can save even if the invoice month differs from the lookup month — after save the lookup month follows the invoice date so the register list shows the rows. Click the page number to compare the original and edit there, then check totals against the PP.30 draft. On the register list, tick rows then Delete selected, or Delete all for the current lookup. Submitted PP.30 rows are not deleted.\n⑥ On PND.1/3/53/54, edit tax base, rate, and withheld amount, then Save on that row. Later ledger sync does not overwrite saved amounts.',
+      '① Select a filing tab (taxpayer, PP.30, Purchase tax invoices, PP.36, PND, SSO).\n② Set year-month (or fiscal year) and store, then Search.\n③ Use the RD Prep TXT button that matches the tab (PND ≠ PP30). e-Filing accepts .rdx only — import TXT in RD Prep once (save mapping) then save .rdx.\n④ In P.N.D.50/51, save tax adjustment draft first, then export CSV/PDF. Review warnings before filing.\n⑤ Expense Tax Invoice is cost evidence only. PP.30 input VAT is registered on the Purchase tax invoices tab (manual, inbound auto, or scanned PDF) and exported as the 8-column Thai Excel. Scan uses the PDF text layer when it already has complete fields; otherwise Thai OCR and QR in the browser. Empty seller names are filled from vendors, saved reviews, and the Revenue Department VAT search. Corrected seller names, invoice-number patterns, and typical amounts from review are remembered for the next scan. The tab stays on Purchase tax invoices while scanning. Scanning continues if you switch windows; keep this browser tab open. Review blanks and copies; warning cells are highlighted yellow. Duplicate (ซ้ำ) is only the same seller plus the full invoice number — matching only the trailing sequence is a different document. The issue count is empty invoice numbers, VAT mismatch, and TIN only — a different invoice month is a yellow warning, not an issue. You can save even if the invoice month differs from the lookup month — after save the lookup month follows the invoice date so the register list shows the rows. Click the page number to compare the original and edit there, then check totals against the PP.30 draft. On the register list, tick rows then Delete selected, or Delete all for the current lookup. Submitted PP.30 rows are not deleted.\n⑥ On PND.1/3/53/54, edit tax base, rate, and withheld amount, then Save on that row. Later ledger sync does not overwrite saved amounts.',
     helpSum_admin_work_log:
       'Record daily tasks and progress; handle review/feedback when permitted; view weekly/monthly rollups, HR insights, and change history.',
     helpHow_admin_work_log:
@@ -19377,11 +19381,11 @@ orderItemQty: 'จำนวน',
     helpSum_admin_tax_filing:
       'เตรียมเอกสารยื่นภาษีไทย (VAT, หัก ณ ที่จ่าย, ภาษีนิติบุคคล, SSO) และทะเบียนใบกำกับภาษีซื้อ ตามงวดและสาขา แล้วส่งออกไฟล์สำหรับยื่นครับ',
     helpHow_admin_tax_filing:
-      '① เลือกแท็บยื่น (ผู้เสียภาษี, PP.30, ใบกำกับภาษีซื้อ, PP.36, PND, SSO) ครับ\n② ตั้งปี-เดือน (หรือปีบัญชี) และสาขา แล้วกดค้นหา\n③ ใช้ปุ่ม RD Prep TXT ให้ตรงแท็บ (PND ≠ PP30) e-Filing รับเฉพาะ .rdx — นำเข้า TXT ใน RD Prep ครั้งเดียว (บันทึก mapping) แล้วบันทึกเป็น .rdx\n④ ใน P.N.D.50/51 บันทึกร่างปรับปรุงภาษีก่อน แล้วส่งออก CSV/PDF ตรวจคำเตือนก่อนยื่น\n⑤ Tax Invoice ในรายจ่ายเป็นหลักฐานค่าใช้จ่ายเท่านั้นครับ ภาษีซื้อลงที่แท็บ ใบกำกับภาษีซื้อ (มือ / รับสินค้า / สแกน PDF) แล้วส่งออก Excel 8 คอลัมน์ สแกนอ่านชั้นข้อความ QR และ OCR ภาษาไทยในเบราว์เซอร์ ถ้าชื่อผู้ขายว่าง ระบบเติมจากคู่ค้า การตรวจครั้งก่อน และค้นหา VAT กรมสรรพากร ชื่อ รูปแบบเลขที่ และขนาดยอดที่แก้ตอนตรวจจะจำไว้ใช้รอบถัดไป ช่องเตือนเป็นสีเหลือง และแก้ในหน้าดูต้นฉบับได้ครับ จำนวน「ปัญหา」นับเฉพาะเลขที่ว่าง VAT ไม่ตรง และ TIN เดือนใบกำกับไม่ตรงเดือนค้นเป็นคำเตือนสีเหลืองเท่านั้น เดือนไม่ตรงก็บันทึกได้ ระบบจะเปลี่ยนเดือนค้นตามวันที่ใบกำกับให้เห็นในรายการครับ สแกนต่อได้แม้ไปดูหน้าต่างอื่น อย่าปิดแท็บนี้ครับ ในรายการทะเบียน ติ๊กแถวแล้วกด「ลบที่เลือก」 หรือกด「ลบทั้งหมด」ตามเดือนและสาขาที่ค้นอยู่ครับ รายการที่ยื่น ภ.พ.30 แล้วจะไม่ถูกลบ\n⑥ ที่แท็บ PND.1 / 3 / 53 / 54 แก้ฐานภาษี อัตรา และยอดหัก แล้วกดบันทึกรายแถวได้ครับ ระบบซิงค์บัญชีจะไม่ทับยอดที่บันทึกแล้ว',
+      '① เลือกแท็บยื่น (ผู้เสียภาษี, PP.30, ใบกำกับภาษีซื้อ, PP.36, PND, SSO) ครับ\n② ตั้งปี-เดือน (หรือปีบัญชี) และสาขา แล้วกดค้นหา\n③ ใช้ปุ่ม RD Prep TXT ให้ตรงแท็บ (PND ≠ PP30) e-Filing รับเฉพาะ .rdx — นำเข้า TXT ใน RD Prep ครั้งเดียว (บันทึก mapping) แล้วบันทึกเป็น .rdx\n④ ใน P.N.D.50/51 บันทึกร่างปรับปรุงภาษีก่อน แล้วส่งออก CSV/PDF ตรวจคำเตือนก่อนยื่น\n⑤ Tax Invoice ในรายจ่ายเป็นหลักฐานค่าใช้จ่ายเท่านั้นครับ ภาษีซื้อลงที่แท็บ ใบกำกับภาษีซื้อ (มือ / รับสินค้า / สแกน PDF) แล้วส่งออก Excel 8 คอลัมน์ สแกนอ่านชั้นข้อความ QR และ OCR ภาษาไทยในเบราว์เซอร์ ถ้าชื่อผู้ขายว่าง ระบบเติมจากคู่ค้า การตรวจครั้งก่อน และค้นหา VAT กรมสรรพากร ชื่อ รูปแบบเลขที่ และขนาดยอดที่แก้ตอนตรวจจะจำไว้ใช้รอบถัดไป ช่องเตือนเป็นสีเหลือง และแก้ในหน้าดูต้นฉบับได้ครับ ซ้ำ หมายถึงเลขที่ทั้งชุดของผู้ขายรายเดียวกันที่มีอยู่แล้ว ไม่ใช่แค่เลขท้ายครับ จำนวน「ปัญหา」นับเฉพาะเลขที่ว่าง VAT ไม่ตรง และ TIN เดือนใบกำกับไม่ตรงเดือนค้นเป็นคำเตือนสีเหลืองเท่านั้น เดือนไม่ตรงก็บันทึกได้ ระบบจะเปลี่ยนเดือนค้นตามวันที่ใบกำกับให้เห็นในรายการครับ สแกนต่อได้แม้ไปดูหน้าต่างอื่น อย่าปิดแท็บนี้ครับ ในรายการทะเบียน ติ๊กแถวแล้วกด「ลบที่เลือก」 หรือกด「ลบทั้งหมด」ตามเดือนและสาขาที่ค้นอยู่ครับ รายการที่ยื่น ภ.พ.30 แล้วจะไม่ถูกลบ\n⑥ ที่แท็บ PND.1 / 3 / 53 / 54 แก้ฐานภาษี อัตรา และยอดหัก แล้วกดบันทึกรายแถวได้ครับ ระบบซิงค์บัญชีจะไม่ทับยอดที่บันทึกแล้ว',
     helpLongWhat_admin_tax_filing:
       'หน้าเตรียมยื่นภาษีไทย (VAT หัก ณ ที่จ่าย ภาษีนิติบุคคล SSO) และทะเบียนใบกำกับภาษีซื้อ ตามงวดและสาขา แล้วส่งออกไฟล์สำหรับยื่นครับ ขอบเขตสาขา แท็บ และสิทธิ์แก้ขึ้นกับบทบาท',
     helpLongHow_admin_tax_filing:
-      '① เลือกแท็บยื่น (ผู้เสียภาษี, PP.30, ใบกำกับภาษีซื้อ, PP.36, PND, SSO) ครับ\n② ตั้งปี-เดือน (หรือปีบัญชี) และสาขา แล้วกดค้นหา\n③ ใช้ปุ่ม RD Prep TXT ให้ตรงแท็บ (PND ≠ PP30) e-Filing รับเฉพาะ .rdx — นำเข้า TXT ใน RD Prep ครั้งเดียว (บันทึก mapping) แล้วบันทึกเป็น .rdx\n④ ใน P.N.D.50/51 บันทึกร่างปรับปรุงภาษีก่อน แล้วส่งออก CSV/PDF ตรวจคำเตือนก่อนยื่น\n⑤ Tax Invoice ในรายจ่ายเป็นหลักฐานค่าใช้จ่ายเท่านั้นครับ ภาษีซื้อลงที่แท็บ ใบกำกับภาษีซื้อ (มือ / รับสินค้า / สแกน PDF) แล้วส่งออก Excel 8 คอลัมน์ สแกนอ่านชั้นข้อความ QR และ OCR ภาษาไทยในเบราว์เซอร์ กำลังเตรียมตัวอ่านตัวอักษรจะโหลดภาษาไทยครั้งแรกครั้งเดียว ถ้าอ่านไม่สำเร็จ PDF ตัวอักษรยังกรอกจากชั้นข้อความได้ เอกสารสแกนให้กรอกในขั้นตรวจครับ ถ้าชื่อผู้ขายว่าง ระบบเติมจากคู่ค้า การตรวจครั้งก่อน และค้นหา VAT กรมสรรพากร ชื่อ รูปแบบเลขที่ และขนาดยอดที่แก้ตอนตรวจจะจำไว้ใช้รอบถัดไป ช่องเตือนเป็นสีเหลือง และแก้ในหน้าดูต้นฉบับได้ครับ จำนวน「ปัญหา」นับเฉพาะเลขที่ว่าง VAT ไม่ตรง และ TIN เดือนใบกำกับไม่ตรงเดือนค้นเป็นคำเตือนสีเหลืองเท่านั้น ในรายการทะเบียน ติ๊กแถวแล้วกด「ลบที่เลือก」 หรือกด「ลบทั้งหมด」ตามเดือนและสาขาที่ค้นอยู่ครับ รายการที่ยื่น ภ.พ.30 แล้วจะไม่ถูกลบ\n⑥ ที่แท็บ PND.1 / 3 / 53 / 54 แก้ฐานภาษี อัตรา และยอดหัก แล้วกดบันทึกรายแถวได้ครับ ระบบซิงค์บัญชีจะไม่ทับยอดที่บันทึกแล้ว',
+      '① เลือกแท็บยื่น (ผู้เสียภาษี, PP.30, ใบกำกับภาษีซื้อ, PP.36, PND, SSO) ครับ\n② ตั้งปี-เดือน (หรือปีบัญชี) และสาขา แล้วกดค้นหา\n③ ใช้ปุ่ม RD Prep TXT ให้ตรงแท็บ (PND ≠ PP30) e-Filing รับเฉพาะ .rdx — นำเข้า TXT ใน RD Prep ครั้งเดียว (บันทึก mapping) แล้วบันทึกเป็น .rdx\n④ ใน P.N.D.50/51 บันทึกร่างปรับปรุงภาษีก่อน แล้วส่งออก CSV/PDF ตรวจคำเตือนก่อนยื่น\n⑤ Tax Invoice ในรายจ่ายเป็นหลักฐานค่าใช้จ่ายเท่านั้นครับ ภาษีซื้อลงที่แท็บ ใบกำกับภาษีซื้อ (มือ / รับสินค้า / สแกน PDF) แล้วส่งออก Excel 8 คอลัมน์ สแกนอ่านชั้นข้อความ QR และ OCR ภาษาไทยในเบราว์เซอร์ กำลังเตรียมตัวอ่านตัวอักษรจะโหลดภาษาไทยครั้งแรกครั้งเดียว ถ้าอ่านไม่สำเร็จ PDF ตัวอักษรยังกรอกจากชั้นข้อความได้ เอกสารสแกนให้กรอกในขั้นตรวจครับ ถ้าชื่อผู้ขายว่าง ระบบเติมจากคู่ค้า การตรวจครั้งก่อน และค้นหา VAT กรมสรรพากร ชื่อ รูปแบบเลขที่ และขนาดยอดที่แก้ตอนตรวจจะจำไว้ใช้รอบถัดไป ช่องเตือนเป็นสีเหลือง และแก้ในหน้าดูต้นฉบับได้ครับ ซ้ำ หมายถึงเลขที่ทั้งชุดของผู้ขายรายเดียวกันที่มีอยู่แล้ว ไม่ใช่แค่เลขท้ายครับ จำนวน「ปัญหา」นับเฉพาะเลขที่ว่าง VAT ไม่ตรง และ TIN เดือนใบกำกับไม่ตรงเดือนค้นเป็นคำเตือนสีเหลืองเท่านั้น ในรายการทะเบียน ติ๊กแถวแล้วกด「ลบที่เลือก」 หรือกด「ลบทั้งหมด」ตามเดือนและสาขาที่ค้นอยู่ครับ รายการที่ยื่น ภ.พ.30 แล้วจะไม่ถูกลบ\n⑥ ที่แท็บ PND.1 / 3 / 53 / 54 แก้ฐานภาษี อัตรา และยอดหัก แล้วกดบันทึกรายแถวได้ครับ ระบบซิงค์บัญชีจะไม่ทับยอดที่บันทึกแล้ว',
     accCompTabScope: 'ขอบเขตการยื่น',
     accCompTabChannels: 'ช่องทางราชการ',
     accCompTabResp: 'ผู้รับผิดชอบ',
@@ -19538,7 +19542,7 @@ orderItemQty: 'จำนวน',
     ptiSourceManual: 'บันทึกเอง',
     ptiSourceInbound: 'รับสินค้า',
     ptiSourcePdf: 'PDF',
-    ptiDupError: 'เลขที่ใบกำกับของผู้ขายรายนี้มีอยู่แล้วครับ',
+    ptiDupError: 'เลขที่ใบกำกับทั้งชุดของผู้ขายรายนี้มีอยู่แล้วครับ ไม่ใช่แค่เลขท้ายเหมือนกันครับ',
     ptiSubmittedLocked: 'รายการที่ยื่น ภ.พ.30 แล้ว แก้ไขหรือลบไม่ได้ครับ',
     ptiPdfUpload: 'สแกน PDF/รูป',
     ptiPdfReview: 'ตรวจก่อนบันทึก',
@@ -20621,7 +20625,7 @@ orderItemQty: 'จำนวน',
     bankPosReceivableDepositBody:
       'เงินเข้า Grab บัตร QR ให้ใช้「รับชำระ」+ สาขาและวันขายครับ เดลิเวอรี่ บัตร QR เงินสดยังเห็นในรายการเลือกได้ แต่สาขา POS บันทึกหมวดนั้นไม่ได้หรือระบบจะเปลี่ยนเป็นรับชำระครับ',
     bankPosStoreCategoryLockedHint:
-      'บัญชีนี้เป็นสาขา POS ครับ เลือกหมวดเดลิเวอรี่ บัตร QR เงินสดไม่ได้ (หลังเชื่อม EDC เหมือนล็อก เป็นเรื่องปกติ) ให้ประเภทเป็น「รับชำระ」 แล้วกด「ชำระช่องทาง」ด้านขวาสำหรับ Grab Shopee QR บัตร ปุ่มข้อความที่ใช้บ่อยด้านบนใส่ได้แค่ช่อง「หมายเหตุ」ครับ',
+      'ซ่อนเดลิเวอรี่ บัตร QR เงินสด เป็นเรื่องปกติครับ Grab/บัตร/QR ร้านใช้「รับชำระ」แล้วกด「ชำระช่องทาง」ด้านขวา Sale Old Oil เลือก「รายได้อื่น」 นำเงินสดในลิ้นชักเข้าบัญชีเลือก「ฝากเงินสด」 ปุ่มสีเหลืองใส่ได้แค่ช่องหมายเหตุครับ',
     bankPosStoreCategorySelectTitle:
       'สาขา POS: ซ่อนเดลิเวอรี่ บัตร QR เงินสด ใช้「ชำระช่องทาง」ด้านขวาสำหรับ Grab Shopee QR บัตรครับ',
     bankPosStoreCategoryHiddenOptions: 'เดลิเวอรี่ บัตร QR เงินสดถูกซ่อน — ใช้「ชำระช่องทาง」ด้านขวาครับ',
@@ -20808,6 +20812,8 @@ orderItemQty: 'จำนวน',
     bankCategoryTax: 'ภาษี',
     bankCategoryPurchasePayment: 'ชำระค่าซื้อ',
     bankCategoryReceivableReceive: 'รับชำระ',
+    bankCategoryOtherIncome: 'รายได้อื่น',
+    bankCategoryCashToBank: 'ฝากเงินสด',
     bankCategoryFixed: 'คงที่',
     bankCategoryLabel: 'ประเภท',
     bankTabInput: 'บันทึก',
@@ -25719,7 +25725,7 @@ orderItemQty: 'အရေအတွက်',
     ptiSourceManual: 'Manual',
     ptiSourceInbound: 'Inbound',
     ptiSourcePdf: 'PDF',
-    ptiDupError: 'This invoice number is already registered for the same seller.',
+    ptiDupError: 'This full invoice number is already registered for the same seller. Matching only the trailing sequence is not a duplicate.',
     ptiSubmittedLocked: 'Submitted PP.30 rows cannot be edited or deleted.',
     ptiPdfUpload: 'Scan PDF / image',
     ptiPdfReview: 'Review before save',
@@ -30695,7 +30701,7 @@ orderItemQty: 'ຈຳນວນ',
     ptiSourceManual: 'Manual',
     ptiSourceInbound: 'Inbound',
     ptiSourcePdf: 'PDF',
-    ptiDupError: 'This invoice number is already registered for the same seller.',
+    ptiDupError: 'This full invoice number is already registered for the same seller. Matching only the trailing sequence is not a duplicate.',
     ptiSubmittedLocked: 'Submitted PP.30 rows cannot be edited or deleted.',
     ptiPdfUpload: 'Scan PDF / image',
     ptiPdfReview: 'Review before save',
@@ -33778,7 +33784,7 @@ orderItemQty: 'ຈຳນວນ',
     ptiSourceManual: 'Manual',
     ptiSourceInbound: 'Inbound',
     ptiSourcePdf: 'PDF',
-    ptiDupError: 'This invoice number is already registered for the same seller.',
+    ptiDupError: 'This full invoice number is already registered for the same seller. Matching only the trailing sequence is not a duplicate.',
     ptiSubmittedLocked: 'Submitted PP.30 rows cannot be edited or deleted.',
     ptiPdfUpload: 'Scan PDF / image',
     ptiPdfReview: 'Review before save',
@@ -35678,7 +35684,7 @@ orderItemQty: 'ຈຳນວນ',
     ptiSourceManual: 'Manual',
     ptiSourceInbound: 'Inbound',
     ptiSourcePdf: 'PDF',
-    ptiDupError: 'This invoice number is already registered for the same seller.',
+    ptiDupError: 'This full invoice number is already registered for the same seller. Matching only the trailing sequence is not a duplicate.',
     ptiSubmittedLocked: 'Submitted PP.30 rows cannot be edited or deleted.',
     ptiPdfUpload: 'Scan PDF / image',
     ptiPdfReview: 'Review before save',
@@ -37540,7 +37546,7 @@ orderItemQty: 'ຈຳນວນ',
     ptiSourceManual: 'Manual',
     ptiSourceInbound: 'Inbound',
     ptiSourcePdf: 'PDF',
-    ptiDupError: 'This invoice number is already registered for the same seller.',
+    ptiDupError: 'This full invoice number is already registered for the same seller. Matching only the trailing sequence is not a duplicate.',
     ptiSubmittedLocked: 'Submitted PP.30 rows cannot be edited or deleted.',
     ptiPdfUpload: 'Scan PDF / image',
     ptiPdfReview: 'Review before save',

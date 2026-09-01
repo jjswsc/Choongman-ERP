@@ -89,6 +89,8 @@ import { compressImageForUpload, cn } from "@/lib/utils"
 import {
   coercePosStoreImportDepositCategory,
   filterBankDepositUiCategories,
+  isBankDepositWithoutChannelGl,
+  bankDepositSavedCategories,
   isPosRevenueDepositCategory,
   isPosStoreBankAccount,
   posStoreLegacyRevenueSavePatch,
@@ -1996,6 +1998,8 @@ export function BankTransactionsTab() {
       revenue_qr: t("bankRevenueQr") || "QR/Transfer",
       revenue_cash: t("bankRevenueCash") || "Cash",
       receivable_receive: t("bankCategoryReceivableReceive") || "Sales Collection",
+      other_income: t("bankCategoryOtherIncome") || "Other income",
+      cash_to_bank: t("bankCategoryCashToBank") || "Cash to bank",
       loan: t("bankCategoryLoanBorrow") || "차입 수령",
       loan_borrow: t("bankCategoryLoanBorrow") || "차입 수령",
       advance: t("bankCategoryAdvance") || "Advance",
@@ -2307,7 +2311,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
   const handleImportSave = async () => {
     if (!importPreview || !accountId) return
     const acc = accounts.find((a) => String(a.id) === accountId)
-    const depositCats = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "receivable_receive", "correction", "loan", "loan_borrow", "advance", "unclassified"] as const
+    const depositCats = bankDepositSavedCategories()
     const withdrawCats = ["transfer", "expense", "purchase_payment", "correction", "loan", "advance", "unclassified"] as const
     const items = importPreview.rows.map((r, idx) => {
       const edit = importRowEdits[idx]
@@ -2342,7 +2346,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
       let accountSubjectId: number | undefined
       if (category === "advance" && prepaymentSubject?.id) {
         accountSubjectId = prepaymentSubject.id
-      } else if (r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(category)) {
+      } else if (r.transType === "deposit" && !isBankDepositWithoutChannelGl(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
       } else if (r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(category)) {
         if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
@@ -2350,7 +2354,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
 
       const note = edit?.note?.trim() || undefined
       const salesDate =
-        r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(category)
+        r.transType === "deposit" && !isBankDepositWithoutChannelGl(category)
           ? edit?.salesDate ||
             defaultBankDepositSalesDateForRow({
               transDate: r.transDate,
@@ -3113,7 +3117,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       ))}
                                     </SelectContent>
                                   </Select>
-                                ) : r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
+                                ) : r.transType === "deposit" && !isBankDepositWithoutChannelGl(cat) ? (
                                   <Select
                                     value={(edits?.accountSubjectId !== undefined ? edits.accountSubjectId : r.accountSubjectId != null ? String(r.accountSubjectId) : "__none__") || "__none__"}
                                     onValueChange={(v) => r.id && setQueryRowEdit(r.id, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -3153,7 +3157,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 {formatBankLedgerWithdrawCell(r.transType || "withdraw", r.amount)}
                               </td>
                               <td className="p-2 align-middle text-center">
-                                {r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
+                                {r.transType === "deposit" && !isBankDepositWithoutChannelGl(cat) ? (
                                   <Input
                                     type="date"
                                     value={
@@ -3838,7 +3842,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   ))}
                               </SelectContent>
                             </Select>
-                          ) : r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(impCat) ? (
+                          ) : r.transType === "deposit" && !isBankDepositWithoutChannelGl(impCat) ? (
                             <Select
                               value={importRowEdits[idx]?.accountSubjectId || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -3894,7 +3898,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           />
                         </td>
                         <td className="p-2 whitespace-nowrap">
-                          {r.transType === "deposit" && !["correction", "loan", "loan_borrow", "advance", "unclassified", "receivable_receive"].includes(impCat) ? (
+                          {r.transType === "deposit" && !isBankDepositWithoutChannelGl(impCat) ? (
                             <Input
                               type="date"
                               value={

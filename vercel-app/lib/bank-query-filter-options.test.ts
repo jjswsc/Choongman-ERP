@@ -15,6 +15,8 @@ describe('bank-query-filter-options', () => {
 
   it('lists deposit categories when trans type is deposit', () => {
     expect(resolveBankQueryFilterCategories('deposit')).toContain('receivable_receive')
+    expect(resolveBankQueryFilterCategories('deposit')).toContain('other_income')
+    expect(resolveBankQueryFilterCategories('deposit')).toContain('cash_to_bank')
     expect(resolveBankQueryFilterCategories('deposit')).not.toContain('purchase_payment')
   })
 

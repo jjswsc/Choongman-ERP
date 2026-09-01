@@ -10,11 +10,13 @@ export type DepositCategory =
   | 'revenue_qr'
   | 'revenue_cash'
   | 'receivable_receive'
+  | 'other_income'
+  | 'cash_to_bank'
   | 'correction'
 
 /**
  * POS 주문 자동분개(카드·배달→1130) 매장: 채널 정산 입금은 매출 수령으로만 분류 (revenue_* 이중 매출 방지).
- * 현금·미식별 입금만 revenue_* 유지.
+ * 폐유는 기타수익, 시재 현금 입금은 cash_to_bank.
  */
 export function suggestDepositFromMemo(
   memo: string,
@@ -23,6 +25,16 @@ export function suggestDepositFromMemo(
 ): { category: DepositCategory; accountSubjectId?: number } | null {
   const m = (memo || '').toLowerCase().trim()
   if (!m) return null
+
+  if (/sale\s*old\s*oil|\bold\s*oil\b|น้ำมันเก่า|น้ำมันใช้แล้ว|폐유/i.test(m)) {
+    return { category: 'other_income' }
+  }
+  if (
+    /cash\s*deposit|ฝากเงินสด|นำเงินสดเข้าบัญชี|현금시재|시재입금|현금입금/i.test(m) ||
+    /^\s*(cash|현금)\s*$/i.test(memo || '')
+  ) {
+    return { category: 'cash_to_bank' }
+  }
 
   const preferAr = options?.preferReceivableClearing !== false
   const byCode = Object.fromEntries((revenueSubjects || []).map((s) => [s.code, s.id]).filter(([, id]) => id != null))
@@ -58,9 +70,9 @@ export function suggestDepositFromMemo(
     return { category: 'revenue_qr', accountSubjectId: byCode['4130'] ?? undefined }
   }
 
-  // 현금
+  // 현금 — 시재를 통장에 넣는 입금 (매출 4110 아님)
   if (/\b(cash|현금)\b/i.test(m)) {
-    return { category: 'revenue_cash', accountSubjectId: byCode['4140'] ?? undefined }
+    return { category: 'cash_to_bank' }
   }
 
   return null

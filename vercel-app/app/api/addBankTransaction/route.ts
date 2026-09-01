@@ -8,7 +8,7 @@ import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
 import { upsertReceivableFromBankReceive } from '@/lib/receivable-payable'
 import { syncBorrowingFromBankDeposit } from '@/lib/borrowing-ledger'
-import { withLoanBorrowDepositCategory } from '@/lib/bank-loan-categories'
+import { bankDepositSavedCategories } from '@/lib/bank-import-deposit-category'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
   assertPosRevenueDepositCategorySafe,
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
     }
 
     const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
-    const depositCategories = withLoanBorrowDepositCategory(['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified'])
+    const depositCategories = bankDepositSavedCategories()
     const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
     let validCategory = transType === 'deposit'
       ? (depositCategories.includes(category) ? category : 'receivable_receive')

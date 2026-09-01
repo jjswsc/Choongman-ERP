@@ -29,6 +29,8 @@ export const BANK_FILTER_DEPOSIT_CATEGORIES = [
   'revenue_qr',
   'revenue_cash',
   'receivable_receive',
+  'other_income',
+  'cash_to_bank',
   'loan',
   'advance',
   'unclassified',
@@ -85,7 +87,7 @@ export function resolveBankQueryFilterAccountSubjects(params: {
   if (cat === 'expense') {
     return filterExpenseWithdrawAccountSubjects(accountSubjectOptions)
   }
-  if (['purchase_payment', 'loan', 'correction', 'unclassified', 'tax'].includes(cat)) {
+  if (['purchase_payment', 'loan', 'correction', 'unclassified', 'tax', 'other_income', 'cash_to_bank'].includes(cat)) {
     return []
   }
 

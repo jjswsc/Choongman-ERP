@@ -4,21 +4,21 @@ import { BANK_QUICK_MEMO_DEFAULTS, mergeBankQuickMemoDefaults } from './bank-qui
 describe('bank-quick-memos', () => {
   it('adds card/QR/Lineman defaults without dropping custom phrases', () => {
     expect(
-      mergeBankQuickMemoDefaults(['Grab Sales', 'Sale Old Oil', 'Ingredients Makro'])
+      mergeBankQuickMemoDefaults(['Grab Sales', 'Ingredients Makro'])
     ).toEqual([
       'Grab Sales',
-      'Sale Old Oil',
       'Ingredients Makro',
       'Shopee Sales',
       'Line man sales',
       'Credit Card Sales',
       'store sales QR',
       'Cash Deposit',
+      'Sale Old Oil',
     ])
   })
 
   it('keeps a complete custom list that already has the new defaults', () => {
-    const saved = [...BANK_QUICK_MEMO_DEFAULTS, 'Sale Old Oil']
+    const saved = [...BANK_QUICK_MEMO_DEFAULTS, 'Ingredients Makro']
     expect(mergeBankQuickMemoDefaults(saved)).toEqual(saved)
   })
 })

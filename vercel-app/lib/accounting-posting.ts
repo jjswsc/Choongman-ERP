@@ -231,6 +231,7 @@ export async function postBankTransactionJournal(params: {
   let lines: JournalLineInput[] = []
   if (params.transType === 'deposit') {
     lines = linesForBankDeposit(cat, amount) as JournalLineInput[]
+    if (lines.length === 0) return null
   } else {
     const w = linesForBankWithdraw(cat, amount, expenseOverride)
     if (w.length === 0) return null

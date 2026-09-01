@@ -147,6 +147,14 @@ export const CHART_OF_ACCOUNTS_BY_CODE: Record<string, AccountMeta> = {
     normalSide: 'credit',
     vatRelated: true,
   },
+  '4191': {
+    code: '4191',
+    nameKo: '기타수익',
+    nameEn: 'Other income',
+    tfrsNpaesGroupKo: '수익 — 기타',
+    statement: 'pl',
+    normalSide: 'credit',
+  },
   '5110': {
     code: '5110',
     nameKo: '매출원가',
@@ -215,6 +223,16 @@ export function linesForBankDeposit(
       { ...cash, side: 'debit', amount },
       { ...borrowings, side: 'credit', amount },
     ]
+  }
+  if (categoryLower === 'other_income') {
+    const otherIncome = accountLine('4191')
+    return [
+      { ...cash, side: 'debit', amount },
+      { ...otherIncome, side: 'credit', amount },
+    ]
+  }
+  if (categoryLower === 'cash_to_bank') {
+    return []
   }
   return [
     { ...cash, side: 'debit', amount },

@@ -59,6 +59,7 @@ VALUES
   ('3110', '자본금', 'Capital', 'equity', NULL, 5, 'bs', 'credit'),
   ('3120', '이익잉여금', 'Retained Earnings', 'equity', NULL, 6, 'bs', 'credit'),
   ('4110', '매출', 'Sales', 'revenue', 'revenue', 50, 'pl', 'credit'),
+  ('4191', '기타수익', 'Other income', 'revenue', 'revenue', 85, 'pl', 'credit'),
   ('5110', '매출원가', 'Cost of Goods Sold', 'expense', 'cost', 90, 'pl', 'debit'),
   ('5500', '감가상각비', 'Depreciation', 'expense', 'fixed', 132, 'pl', 'debit'),
   ('5520', '기타경비', 'Misc Expense', 'expense', 'expense', 199, 'pl', 'debit')

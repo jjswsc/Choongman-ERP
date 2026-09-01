@@ -1,4 +1,5 @@
 import { isBankAccountOfficeStore } from '@/lib/bank-account-display'
+import { withLoanBorrowDepositCategory } from '@/lib/bank-loan-categories'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 /** POS 자동분개 매장 입금 — revenue_* 는 4110 이중 위험 (채널 세부 계정 예외 없음) */
@@ -51,6 +52,55 @@ export function isPosRevenueDepositCategory(category: string | undefined | null)
   return (POS_REVENUE_DEPOSIT_CATEGORIES as readonly string[]).includes(c)
 }
 
+/** 폐유·잡이익 등 — 매출(4110)이 아님 */
+export const BANK_DEPOSIT_OTHER_INCOME_CATEGORY = 'other_income'
+/** POS 현금시재를 통장에 넣는 입금 — 손익 없음(1010 현금·예금 통합) */
+export const BANK_DEPOSIT_CASH_TO_BANK_CATEGORY = 'cash_to_bank'
+
+export function isOtherIncomeDepositCategory(category: string | undefined | null): boolean {
+  return String(category || '').trim().toLowerCase() === BANK_DEPOSIT_OTHER_INCOME_CATEGORY
+}
+
+export function isCashToBankDepositCategory(category: string | undefined | null): boolean {
+  return String(category || '').trim().toLowerCase() === BANK_DEPOSIT_CASH_TO_BANK_CATEGORY
+}
+
+/**
+ * 채널 매출 계정·매출일을 쓰지 않는 입금 유형.
+ * (매출 수령·기타수익·시재입금·차입·가수금 등)
+ */
+export const BANK_DEPOSIT_NO_CHANNEL_GL_CATEGORIES = [
+  'correction',
+  'loan',
+  'loan_borrow',
+  'advance',
+  'unclassified',
+  'receivable_receive',
+  BANK_DEPOSIT_OTHER_INCOME_CATEGORY,
+  BANK_DEPOSIT_CASH_TO_BANK_CATEGORY,
+] as const
+
+export function isBankDepositWithoutChannelGl(category: string | undefined | null): boolean {
+  const c = String(category || '').trim().toLowerCase()
+  return (BANK_DEPOSIT_NO_CHANNEL_GL_CATEGORIES as readonly string[]).includes(c)
+}
+
+/** API가 저장을 허용하는 입금 용도 (loan_borrow 는 withLoanBorrowDepositCategory 로 보강) */
+export const BANK_DEPOSIT_SAVED_CATEGORIES = [
+  ...POS_REVENUE_DEPOSIT_CATEGORIES,
+  'receivable_receive',
+  'correction',
+  'loan',
+  'advance',
+  'unclassified',
+  BANK_DEPOSIT_OTHER_INCOME_CATEGORY,
+  BANK_DEPOSIT_CASH_TO_BANK_CATEGORY,
+] as const
+
+export function bankDepositSavedCategories(): string[] {
+  return withLoanBorrowDepositCategory([...BANK_DEPOSIT_SAVED_CATEGORIES])
+}
+
 /** 통장 입금 용도 드롭다운 (배달앱·카드·QR·현금 포함). POS 매장 저장 가드는 API에서 유지 */
 export const BANK_DEPOSIT_UI_CATEGORIES = [
   'revenue_delivery',
@@ -58,6 +108,8 @@ export const BANK_DEPOSIT_UI_CATEGORIES = [
   'revenue_qr',
   'revenue_cash',
   'receivable_receive',
+  BANK_DEPOSIT_OTHER_INCOME_CATEGORY,
+  BANK_DEPOSIT_CASH_TO_BANK_CATEGORY,
   'loan_borrow',
   'advance',
   'unclassified',
