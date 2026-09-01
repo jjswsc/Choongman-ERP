@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  SCHEDULE_HOUR_DEFAULT_END,
+  SCHEDULE_HOUR_MAX,
   buildScheduleEmployeeRoster,
   buildScheduleHalfHourOptions,
   resolveScheduleRosterEntry,
   resolveScheduleSavePayloadFromSlot,
   scheduleBreakSlotKey,
+  scheduleGridEndHourForExclusiveEndMinutes,
   scheduleSlotKeyFromEmployee,
   scheduleSlotKeyFromLoadedRow,
 } from './schedule-employee-slot'
@@ -61,15 +64,26 @@ describe('schedule-employee-slot', () => {
     expect(scheduleBreakSlotKey('M0020')).toBe('BRK_M0020')
   })
 
-  it('기본 그리드 06~29는 주간·심야 휴게(24:00+)를 모두 포함한다', () => {
-    const opts = buildScheduleHalfHourOptions(6, 29)
+  it('기본 그리드 06~31는 주간·심야 휴게(24:00+)와 22:00–07:00을 포함한다', () => {
+    const opts = buildScheduleHalfHourOptions(6, SCHEDULE_HOUR_DEFAULT_END)
     expect(opts[0]).toBe('06:00')
     expect(opts).toContain('12:00')
     expect(opts).toContain('23:30')
     expect(opts).toContain('24:00')
     expect(opts).toContain('26:00')
-    expect(opts[opts.length - 1]).toBe('29:30')
+    expect(opts).toContain('30:00')
+    expect(opts).toContain('30:30')
+    expect(opts).toContain('31:00')
+    expect(opts[opts.length - 1]).toBe('31:30')
     expect(opts).not.toContain('05:30')
     expect(opts).not.toContain('00:00')
+  })
+
+  it('22:00–07:00은 30시 슬롯까지, 22:00–06:00은 29시에서 끝난다', () => {
+    const startMin = 22 * 60
+    expect(scheduleGridEndHourForExclusiveEndMinutes(startMin + 8 * 60)).toBe(29)
+    expect(scheduleGridEndHourForExclusiveEndMinutes(startMin + 9 * 60)).toBe(30)
+    expect(scheduleGridEndHourForExclusiveEndMinutes(startMin + 10 * 60)).toBe(31)
+    expect(scheduleGridEndHourForExclusiveEndMinutes(startMin + 20 * 60)).toBe(SCHEDULE_HOUR_MAX)
   })
 })

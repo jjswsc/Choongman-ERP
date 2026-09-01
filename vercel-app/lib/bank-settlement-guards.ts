@@ -119,7 +119,7 @@ export async function assertPosRevenueDepositCategorySafe(params: {
   if (verdict === 'allow') return
   if (verdict === 'require_store') {
     throw new BankSettlementGuardError(
-      'Grab·카드·QR 등 채널 정산 입금은 매장을 지정하고 매출 수령(receivable_receive) 또는 채널 정산으로 저장하세요. 매장 없이 revenue_* 로 넣을 수 없습니다.',
+      BANK_REVENUE_DEPOSIT_STORE_REQUIRED_MESSAGE,
       'BANK_REVENUE_DEPOSIT_STORE_REQUIRED'
     )
   }
@@ -127,8 +127,20 @@ export async function assertPosRevenueDepositCategorySafe(params: {
   if (await storeHasPosCompletedOrders(store)) {
     const cat = String(params.category || '').toLowerCase()
     throw new BankSettlementGuardError(
-      `매장「${store}」에 POS 완료 주문이 있어 입금 분류「${cat}」은 매출(4110) 이중 인식 위험이 있습니다. 카드·배달 입금은 채널 정산을, 가맹 수금은 매출 수령(receivable_receive)을 사용하세요.`,
+      posRevenueDepositDoubleRiskMessage(store, cat),
       'POS_REVENUE_DEPOSIT_DOUBLE_RISK'
     )
   }
+}
+
+export const BANK_REVENUE_DEPOSIT_STORE_REQUIRED_MESSAGE =
+  'Grab·카드·QR 등 채널 정산 입금은 매장을 지정하고 매출 수령(receivable_receive) 또는 채널 정산으로 저장하세요. 매장 없이 revenue_* 로 넣을 수 없습니다.'
+
+export function posRevenueDepositDoubleRiskMessage(store: string, category: string): string {
+  return `매장「${store}」에 POS 완료 주문이 있어 입금 분류「${category}」은 매출(4110) 이중 인식 위험이 있습니다. 카드·배달 입금은 채널 정산을, 가맹 수금은 매출 수령(receivable_receive)을 사용하세요.`
+}
+
+/** 조회 탭에서 메모만 바꿀 때는 옛 revenue_* 를 다시 막지 않음 */
+export function shouldAssertPosRevenueDepositOnBankUpdate(categoryInPayload: boolean): boolean {
+  return categoryInPayload
 }

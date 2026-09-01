@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   inferAmountsFromMoneySequence,
+  inferDocDateFromInvoiceNo,
+  mergeComplementaryInvoiceRows,
   pickExclusiveVatAmounts,
   joinPdfTextItemsByLine,
   mergePurchaseTaxInvoiceExtract,
@@ -89,7 +91,10 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('TRSPESPF00-00000')).toBe(false)
     expect(invoiceNoLooksPlausible('TRSPESPF00-00000-')).toBe(false)
     expect(invoiceNoLooksPlausible('TRSPESPF00-00000-26')).toBe(false)
+    expect(invoiceNoLooksPlausible('TRSPEFHMOO-00000-26')).toBe(false)
+    expect(invoiceNoLooksPlausible('TRSPEFHM00-00000026')).toBe(false)
     expect(invoiceNoLooksPlausible('TRSPESPF00-00000-260701-017862')).toBe(true)
+    expect(invoiceNoLooksPlausible('260821-001305')).toBe(true)
     expect(invoiceNoLooksPlausible('IM202607040')).toBe(false)
   })
 })
@@ -483,6 +488,67 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(snapDocDateYearToTaxPeriod('2022-07-10', '2026-08')).toBe('2026-07-10')
     expect(snapDocDateYearToTaxPeriod('2026-07-10', '2026-08')).toBe('2026-07-10')
   })
+
+  it('prefers IV prefix and BE yymmdd in the office invoice number over a misread month', () => {
+    expect(inferDocDateFromInvoiceNo('IV690819-0637')).toBe('2026-08-19')
+    expect(inferDocDateFromInvoiceNo('260821-001305')).toBe('2026-08-21')
+    expect(inferDocDateFromInvoiceNo('TRSPEFHM00-00000-260821-001305')).toBe('2026-08-21')
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      {
+        invoiceNo: '690819-0637',
+        sellerName: 'บริษัท แพนฟู้ด จำกัด 523 6 3',
+        sellerTaxId: '0745538001265',
+        docDate: '2026-02-19',
+        netAmount: 6,
+        vatAmount: 0,
+      },
+      {
+        buyerTaxId: '0105568080622',
+        taxMonth: '2026-08',
+        pageText: [
+          'บริษัท แพนฟู้ด จำกัด',
+          'เลขประจำตัวผู้เสียภาษีอากร 0745538001265',
+          'เลขที่ IV690819-0637',
+          'วันที่ 19/08/2026',
+          'มูลค่าสินค้าคิดภาษี 1,700.00',
+          'ภาษีมูลค่าเพิ่ม 119.00',
+          'รวมเงินทั้งสิ้น 1,819.00',
+        ].join('\n'),
+      }
+    )
+    expect(repaired.invoiceNo).toBe('IV690819-0637')
+    expect(repaired.docDate).toBe('2026-08-19')
+    expect(repaired.sellerName).toBe('บริษัท แพนฟู้ด จำกัด')
+    expect(repaired.netAmount).toBe(1700)
+    expect(repaired.vatAmount).toBe(119)
+  })
+
+  it('merges a split header row and a split totals row into one invoice', () => {
+    const merged = mergeComplementaryInvoiceRows(
+      {
+        invoiceNo: '690819-0637',
+        sellerName: 'บริษัท แพนฟู้ด จำกัด 523 6 3',
+        sellerTaxId: '0745538001265',
+        docDate: '2026-02-19',
+        netAmount: 6,
+        vatAmount: 0,
+      },
+      {
+        invoiceNo: 'IV690819-0637',
+        sellerName: 'บริษัท แพนฟู้ด จำกัด 523638',
+        sellerTaxId: '0344238130348',
+        docDate: '2026-08-28',
+        netAmount: 1700,
+        vatAmount: 119,
+      }
+    )
+    expect(merged.invoiceNo).toBe('IV690819-0637')
+    expect(merged.sellerName).toBe('บริษัท แพนฟู้ด จำกัด')
+    expect(merged.sellerTaxId).toBe('0745538001265')
+    expect(merged.netAmount).toBe(1700)
+    expect(merged.vatAmount).toBe(119)
+    expect(merged.docDate).toBe('2026-08-19')
+  })
 })
 
 describe('mergePurchaseTaxInvoiceExtract', () => {
@@ -807,5 +873,45 @@ ${'padding '.repeat(30)}
 สำเนาใบกำกับภาษี ONLY-1`
     expect(splitScanTextIntoInvoiceBlocks(text)).toHaveLength(1)
     expect(extractPurchaseTaxInvoicesFromScanText(text, { buyerTaxId: BUYER })).toHaveLength(1)
+  })
+
+  it('does not split a LINE QR plus a tax QR on the same office invoice', () => {
+    const page = [
+      'บริษัท แพนฟู้ด จำกัด 523 6 3',
+      `เลขประจำตัวผู้เสียภาษีอากร 0745538001265`,
+      'ใบกำกับภาษี/ใบส่งของ/ใบแจ้งหนี้ ต้นฉบับ',
+      'เลขที่ / INVOICE NO. IV690819-0637',
+      'วันที่ / DATE 19/08/2026',
+      'McCain Seasoned Battered Cajun Fries 6x2kg 1.00 Carton 1,700.00',
+      'จำนวนเงิน 1,700.00',
+      'มูลค่าสินค้าคิดภาษี 1,700.00',
+      'ภาษีมูลค่าเพิ่ม VAT 7% 119.00',
+      'รวมเงินทั้งสิ้น 1,819.00',
+      'เริ่มใช้ 01/09/2020',
+    ].join('\n')
+    const text = [page, wrapTaxInvoiceQrText(['https://line.me/R/ti/p/@panfood', 'https://line.me/R/ti/p/@other'])].join(
+      '\n'
+    )
+    expect(splitScanTextIntoInvoiceBlocks(text)).toHaveLength(1)
+    const rows = extractPurchaseTaxInvoicesFromScanText(text, { buyerTaxId: '0105568080622', taxMonth: '2026-08' })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.invoiceNo).toBe('IV690819-0637')
+    expect(rows[0]?.docDate).toBe('2026-08-19')
+    expect(rows[0]?.sellerName).toBe('บริษัท แพนฟู้ด จำกัด')
+    expect(rows[0]?.sellerTaxId).toBe('0745538001265')
+    expect(rows[0]?.netAmount).toBe(1700)
+    expect(rows[0]?.vatAmount).toBe(119)
+  })
+
+  it('treats IV690819-0637 and 690819-0637 as the same document', () => {
+    const text = `ใบกำกับภาษี ต้นฉบับ
+เลขที่ 690819-0637
+${'x'.repeat(80)}
+ต้นฉบับ เลขที่ IV690819-0637
+เลขประจำตัวผู้เสียภาษีอากร 0745538001265
+มูลค่าสินค้า 1,700.00
+ภาษีมูลค่าเพิ่ม 119.00
+รวมทั้งสิ้น 1,819.00`
+    expect(splitScanTextIntoInvoiceBlocks(text)).toHaveLength(1)
   })
 })

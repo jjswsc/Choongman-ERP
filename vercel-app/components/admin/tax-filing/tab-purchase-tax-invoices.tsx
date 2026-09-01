@@ -55,6 +55,7 @@ import {
   purchaseTaxInvoiceTextExtractIsComplete,
   repairExtractedPurchaseTaxInvoice,
   splitScanTextIntoInvoiceBlocks,
+  collapseExtractedInvoices,
   wrapTaxInvoiceQrText,
   type PurchaseTaxInvoiceScanHint,
 } from "@/lib/purchase-tax-invoice-scan"
@@ -699,8 +700,19 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       const known = sellerKnown()
       const blocks = splitScanTextIntoInvoiceBlocks(pageText)
       if (blocks.length >= 2) {
-        for (const block of blocks) {
-          const local = fillSellerFromProfiles(extractPurchaseTaxInvoiceFromScanText(block, hint) || {}, known)
+        const locals = blocks.map((block) =>
+          fillSellerFromProfiles(
+            repairExtractedPurchaseTaxInvoice(
+              extractPurchaseTaxInvoiceFromScanText(block, scanHint(block)) || {},
+              scanHint(pageText)
+            ),
+            known
+          )
+        )
+        const collapsed = collapseExtractedInvoices(locals).map((row) =>
+          fillSellerFromProfiles(repairExtractedPurchaseTaxInvoice(row, scanHint(pageText)), known)
+        )
+        for (const local of collapsed) {
           pushFromParsed(local, page, purchaseTaxInvoiceHasExtractedFields(local) ? undefined : "ptiPdfEmptyPage")
         }
         return

@@ -4,23 +4,47 @@
 export const BANK_QUICK_MEMO_DEFAULTS: readonly string[] = [
   'Shopee Sales',
   'Grab Sales',
-  'Cash Deposit',
+  'Line man sales',
+  'Credit Card Sales',
   'store sales QR',
+  'Cash Deposit',
 ]
 
-const STORAGE_KEY = 'cm-erp-bank-quick-memos-v1'
+const STORAGE_KEY = 'cm-erp-bank-quick-memos-v2'
+const LEGACY_STORAGE_KEY = 'cm-erp-bank-quick-memos-v1'
+
+export function mergeBankQuickMemoDefaults(saved: string[]): string[] {
+  const have = new Set(saved.map((s) => s.toLowerCase()))
+  const extra = BANK_QUICK_MEMO_DEFAULTS.filter((phrase) => !have.has(phrase.toLowerCase()))
+  return extra.length ? [...saved, ...extra] : saved
+}
+
+function parsePhraseList(raw: string | null): string[] | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return null
+    const cleaned = parsed
+      .map((x) => (typeof x === 'string' ? x.trim() : ''))
+      .filter(Boolean)
+    return cleaned.length > 0 ? cleaned : null
+  } catch {
+    return null
+  }
+}
 
 export function loadBankQuickMemos(): string[] {
   if (typeof window === 'undefined') return [...BANK_QUICK_MEMO_DEFAULTS]
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return [...BANK_QUICK_MEMO_DEFAULTS]
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return [...BANK_QUICK_MEMO_DEFAULTS]
-    const cleaned = parsed
-      .map((x) => (typeof x === 'string' ? x.trim() : ''))
-      .filter(Boolean)
-    return cleaned.length > 0 ? cleaned : [...BANK_QUICK_MEMO_DEFAULTS]
+    const current = parsePhraseList(localStorage.getItem(STORAGE_KEY))
+    if (current) return mergeBankQuickMemoDefaults(current)
+    const legacy = parsePhraseList(localStorage.getItem(LEGACY_STORAGE_KEY))
+    if (legacy) {
+      const merged = mergeBankQuickMemoDefaults(legacy)
+      saveBankQuickMemos(merged)
+      return merged
+    }
+    return [...BANK_QUICK_MEMO_DEFAULTS]
   } catch {
     return [...BANK_QUICK_MEMO_DEFAULTS]
   }
@@ -39,4 +63,5 @@ export function saveBankQuickMemos(phrases: string[]): void {
 export function resetBankQuickMemosStorage(): void {
   if (typeof window === 'undefined') return
   localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(LEGACY_STORAGE_KEY)
 }

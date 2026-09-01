@@ -679,6 +679,7 @@ export async function upsertPayableFromBankPurchasePayment(params: {
 export async function shouldUpsertFranchiseReceivableSubledger(params: {
   storeName: string
   memo?: string | null
+  note?: string | null
   bankTransactionId?: number
 }): Promise<boolean> {
   const store = String(params.storeName || '').trim()
@@ -699,6 +700,7 @@ export async function shouldUpsertFranchiseReceivableSubledger(params: {
     linkedToChannelSettlement,
     hasPosCompletedOrders: await storeHasPosCompletedOrders(store),
     memo: params.memo,
+    note: params.note,
   })
 }
 
@@ -712,10 +714,11 @@ export async function upsertReceivableFromBankReceive(params: {
   amountAbs: number
   transDate: string
   memo: string
+  note?: string | null
 }): Promise<void> {
-  const { bankTransactionId, storeName, amountAbs, transDate, memo } = params
+  const { bankTransactionId, storeName, amountAbs, transDate, memo, note } = params
   if (!bankTransactionId || !storeName || !amountAbs) return
-  if (!(await shouldUpsertFranchiseReceivableSubledger({ storeName, memo, bankTransactionId }))) {
+  if (!(await shouldUpsertFranchiseReceivableSubledger({ storeName, memo, note, bankTransactionId }))) {
     await deleteReceivableFromBankReceive({ bankTransactionId, storeName, amountAbs, transDate, memo })
     return
   }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { classifyPosRevenueDepositGuard } from './bank-settlement-guards'
+import {
+  classifyPosRevenueDepositGuard,
+  posRevenueDepositDoubleRiskMessage,
+  shouldAssertPosRevenueDepositOnBankUpdate,
+} from './bank-settlement-guards'
 
 describe('classifyPosRevenueDepositGuard', () => {
   it('allows non-revenue categories', () => {
@@ -36,5 +40,19 @@ describe('classifyPosRevenueDepositGuard', () => {
         memo: 'VISA',
       })
     ).toBe('check_pos_orders')
+  })
+
+  it('skips POS revenue re-assert when category is not in the update payload', () => {
+    expect(shouldAssertPosRevenueDepositOnBankUpdate(false)).toBe(false)
+    expect(shouldAssertPosRevenueDepositOnBankUpdate(true)).toBe(true)
+  })
+
+  it('formats a stable double-risk message for i18n mapping', () => {
+    expect(posRevenueDepositDoubleRiskMessage('CM Seacon Srinakarin', 'revenue_delivery')).toContain(
+      'CM Seacon Srinakarin'
+    )
+    expect(posRevenueDepositDoubleRiskMessage('CM Seacon Srinakarin', 'revenue_delivery')).toContain(
+      'revenue_delivery'
+    )
   })
 })

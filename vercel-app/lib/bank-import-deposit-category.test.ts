@@ -7,6 +7,7 @@ import {
   isPosChannelSettlementMemo,
   isPosRevenueDepositCategory,
   isPosStoreBankAccount,
+  posStoreLegacyRevenueSavePatch,
   shouldShowPosRevenueDepositSelectOption,
 } from '@/lib/bank-import-deposit-category'
 
@@ -20,6 +21,9 @@ describe('bank-import-deposit-category', () => {
     expect(isPosChannelSettlementMemo('GRABFOOD UNION')).toBe(true)
     expect(isPosChannelSettlementMemo('VISA SETTLEMENT')).toBe(true)
     expect(isPosChannelSettlementMemo('기타 입금')).toBe(false)
+    expect(isPosChannelSettlementMemo('รับเงินจากการขาย', 'Credit Card Sales')).toBe(true)
+    expect(isPosChannelSettlementMemo('รับเงินจากการขาย', 'store sales QR')).toBe(true)
+    expect(isPosChannelSettlementMemo('รับเงินจากการขาย', 'Sale Old Oil')).toBe(false)
   })
 
   it('allows channel GL codes used in statement import', () => {
@@ -80,8 +84,38 @@ describe('bank-import-deposit-category', () => {
       filterBankDepositUiCategories({ hidePosRevenue: true, currentCategory: 'receivable_receive' })
     ).not.toContain('revenue_delivery')
     expect(
+      filterBankDepositUiCategories({ hidePosRevenue: false, currentCategory: 'receivable_receive' })
+    ).toEqual(expect.arrayContaining(['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash']))
+    expect(
       filterBankDepositUiCategories({ hidePosRevenue: true, currentCategory: 'revenue_qr' })
     ).toContain('revenue_qr')
+  })
+
+  it('patches POS-store legacy revenue_* rows to sales collection on note/save', () => {
+    expect(
+      posStoreLegacyRevenueSavePatch({
+        transType: 'deposit',
+        hidePosRevenue: true,
+        category: 'revenue_delivery',
+        accountStore: 'CM Seacon Srinakarin',
+      })
+    ).toEqual({ category: 'receivable_receive', storeName: 'CM Seacon Srinakarin' })
+    expect(
+      posStoreLegacyRevenueSavePatch({
+        transType: 'deposit',
+        hidePosRevenue: true,
+        category: 'unclassified',
+        accountStore: 'CM Seacon Srinakarin',
+      })
+    ).toBeNull()
+    expect(
+      posStoreLegacyRevenueSavePatch({
+        transType: 'deposit',
+        hidePosRevenue: false,
+        category: 'revenue_delivery',
+        accountStore: 'HQ',
+      })
+    ).toBeNull()
   })
 
   it('does not treat HQ bank accounts as POS stores for the deposit dropdown', () => {

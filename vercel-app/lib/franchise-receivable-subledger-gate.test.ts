@@ -19,6 +19,14 @@ describe('shouldCreateFranchiseReceivableSubledgerFromBankReceive', () => {
         memo: 'Grab settlement NET 193415',
       })
     ).toBe(false)
+    expect(
+      shouldCreateFranchiseReceivableSubledgerFromBankReceive({
+        linkedToChannelSettlement: false,
+        hasPosCompletedOrders: true,
+        memo: 'รับเงินจากการขาย',
+        note: 'Credit Card Sales',
+      })
+    ).toBe(false)
   })
 
   it('creates subledger for POS store B2B transfer (non-channel memo)', () => {

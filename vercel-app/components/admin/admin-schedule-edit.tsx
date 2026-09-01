@@ -29,6 +29,9 @@ import { getMondayOfWeekBangkok, addDaysSchedule, todayStrBangkok } from "@/lib/
 import { cn, displayLabelShort } from "@/lib/utils"
 import { findStaffForScheduleSlotName } from "@/lib/employee-display-name"
 import {
+  SCHEDULE_HOUR_DEFAULT_END,
+  SCHEDULE_HOUR_DEFAULT_START,
+  SCHEDULE_HOUR_MAX,
   buildScheduleEmployeeRoster,
   resolveScheduleRosterEntry,
   resolveScheduleSavePayloadFromSlot,
@@ -39,6 +42,7 @@ import {
   isScheduleBreakSlot,
   isScheduleLeaveSlot,
   buildScheduleHalfHourOptions,
+  scheduleGridEndHourForExclusiveEndMinutes,
 } from "@/lib/schedule-employee-slot"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
@@ -111,8 +115,8 @@ export function AdminScheduleEdit({
   const t = useT(lang)
 
   const [monday, setMonday] = React.useState(() => getMondayOfWeekBangkok())
-  const [startHour, setStartHour] = React.useState(6)
-  const [endHour, setEndHour] = React.useState(29)
+  const [startHour, setStartHour] = React.useState(SCHEDULE_HOUR_DEFAULT_START)
+  const [endHour, setEndHour] = React.useState(SCHEDULE_HOUR_DEFAULT_END)
   const [staffList, setStaffList] = React.useState<StaffItem[]>([])
   const [selectedStaff, setSelectedStaff] = React.useState<StaffItem | null>(null)
   const [slotData, setSlotData] = React.useState<Record<string, string[]>>({})
@@ -194,6 +198,7 @@ export function AdminScheduleEdit({
         const leaveMap: Record<number, Set<string>> = {}
         const leaveDetailList: { name: string; dayIdx: number; dateStr: string; type: string }[] = []
         const dayStrsLocal = Array.from({ length: 7 }, (_, i) => addDaysSchedule(monday, i))
+        let maxLoadedHour = SCHEDULE_HOUR_DEFAULT_START
         for (const row of data || []) {
           const dateStr = row.date?.slice(0, 10)
           const dayIdx = dayStrsLocal.indexOf(dateStr)
@@ -224,6 +229,10 @@ export function AdminScheduleEdit({
           const endSlot = row.plan_in_prev_day ? `${String(outH + 24).padStart(2, "0")}:${String(outM).padStart(2, "0")}` : pOut
           const workTimes = get30MinIntervals(pIn, endSlot)
           const breakTimes = !isLeave && row.pBS && row.pBE ? get30MinIntervals(row.pBS, row.pBE) : []
+          for (const t of [...workTimes, ...breakTimes]) {
+            const th = parseInt(t.split(":")[0] || "", 10)
+            if (Number.isFinite(th) && th > maxLoadedHour) maxLoadedHour = th
+          }
           for (const t of workTimes) {
             const key = getSlotKey(displayDayIdx, area, t)
             const names = next[key] || []
@@ -235,6 +244,7 @@ export function AdminScheduleEdit({
         setSlotData(next)
         setLeaveByDay(leaveMap)
         setLeaveDetails(leaveDetailList)
+        setEndHour((prev) => Math.max(prev, Math.min(SCHEDULE_HOUR_MAX, maxLoadedHour)))
       })
       .catch(async () => {
         await appAlert(t("att_load_failed"))
@@ -323,12 +333,14 @@ export function AdminScheduleEdit({
     const [bsh, bsm] = quickBreakStart.split(":").map(Number)
     const bStartMin = bsh * 60 + bsm
     const bEndMin = bStartMin + quickBreakHours * 60
+    const gridEndHour = Math.max(endHour, scheduleGridEndHourForExclusiveEndMinutes(endMin))
+    if (gridEndHour > endHour) setEndHour(gridEndHour)
 
     setSlotData((prev) => {
       const next = { ...prev }
       const slotKey = staffSlotKey(selectedStaff)
       const brkKey = scheduleBreakSlotKey(slotKey)
-      for (let h = startHour; h <= endHour; h++) {
+      for (let h = startHour; h <= gridEndHour; h++) {
         for (const half of [0, 30]) {
           const time = `${String(h).padStart(2, "0")}:${String(half).padStart(2, "0")}`
           const currMin = h * 60 + half
@@ -624,11 +636,11 @@ export function AdminScheduleEdit({
   }, [slotData])
   const hours: number[] = []
   for (let h = startHour; h <= endHour; h++) hours.push(h)
-  const hourOptions = Array.from({ length: 30 }, (_, i) => i)
-  const timeOptions = Array.from({ length: 30 }, (_, i) =>
+  const hourOptions = Array.from({ length: SCHEDULE_HOUR_MAX + 1 }, (_, i) => i)
+  const timeOptions = Array.from({ length: SCHEDULE_HOUR_MAX + 1 }, (_, i) =>
     ["00", "30"].map((m) => `${String(i).padStart(2, "0")}:${m}`)
   ).flat()
-  /** 휴게 시작: 그리드와 동일(기본 06:00~29:30). 자정 이후는 24:00=00:00, 26:00=02:00 */
+  /** 휴게 시작: 그리드와 동일(기본 06:00~31:30). 자정 이후는 24:00=00:00, 31:00=07:00 */
   const breakStartOptions = React.useMemo(
     () => buildScheduleHalfHourOptions(startHour, endHour),
     [startHour, endHour]

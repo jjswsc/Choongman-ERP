@@ -9,6 +9,7 @@ import {
   gregorianYmdToBuddhistHint,
   isLikelyTaxInvoiceCopy,
   looksLikeJunkSellerName,
+  trimPurchaseTaxSellerName,
   parsePurchaseTaxInvoiceVisionPayload,
   purchaseTaxDocMonthMismatch,
   purchaseTaxInvoiceDedupeKey,
@@ -78,6 +79,12 @@ describe('purchase tax invoice helpers', () => {
     expect(purchaseTaxInvoiceDedupeKey('0105566137147', 'IV-1', '0105558123456')).not.toBe(
       purchaseTaxInvoiceDedupeKey('0105568080622', 'IV-1', '0105558123456')
     )
+    expect(
+      purchaseTaxInvoiceDedupeKey('0105566137147', 'TRSPESPF00-00000-260701-017862', '0105558019581')
+    ).toBe(purchaseTaxInvoiceDedupeKey('0105566137147', '260701-017862', '0105558019581'))
+    expect(
+      purchaseTaxInvoiceDedupeKey('0105566137147', '260821-001305', '0105558019581')
+    ).not.toBe(purchaseTaxInvoiceDedupeKey('0105566137147', '260822-001400', '0105558019581'))
   })
 
   it('formats seller branch as สำนักงานใหญ่ or สาขา 00001', () => {
@@ -180,6 +187,11 @@ describe('purchase tax invoice helpers', () => {
     expect(looksLikeJunkSellerName('fad')).toBe(true)
     expect(looksLikeJunkSellerName('จนกว่า')).toBe(true)
     expect(looksLikeJunkSellerName('บริษัท จีดูบัง (เอเชีย) จำกัด')).toBe(false)
+  })
+
+  it('cuts trailing address numbers after จำกัด', () => {
+    expect(trimPurchaseTaxSellerName('บริษัท แพนฟู้ด จำกัด 523 6 3')).toBe('บริษัท แพนฟู้ด จำกัด')
+    expect(trimPurchaseTaxSellerName('บริษัท แพนฟู้ด จำกัด 523638')).toBe('บริษัท แพนฟู้ด จำกัด')
   })
 
   it('detects invoice copies to skip', () => {

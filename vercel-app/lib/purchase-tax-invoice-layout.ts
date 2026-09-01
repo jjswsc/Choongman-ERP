@@ -10,6 +10,8 @@
  */
 import {
   digitsTin13,
+  isTruncatedShopeeInvoiceNo,
+  normalizeShopeeInvoiceBlob,
   purchaseTaxVatLooksWrong,
   thaiTinChecksumOk,
   type ExtractedPurchaseTaxInvoiceFields,
@@ -222,7 +224,7 @@ function invoiceTokenLooksReal(token: string): boolean {
 }
 
 function isTruncatedShopeeToken(token: string): boolean {
-  return /^TRS[A-Z]{2,8}PF00-\d{5}-?\d{0,5}$/i.test(token)
+  return isTruncatedShopeeInvoiceNo(token)
 }
 
 function shopeeYearYyFromWords(words: OcrWordBox[]): string {
@@ -234,28 +236,25 @@ function shopeeYearYyFromWords(words: OcrWordBox[]): string {
 }
 
 function joinShopeeHeadAndTail(headToken: string, tail: string, yearYy: string): string | undefined {
-  const head =
-    headToken.match(/^(TRS[A-Z]{2,8}PF00-\d{5}-)(\d{0,5})$/i) ||
-    headToken.match(/^(TRS[A-Z]{2,8}PF00-\d{5})()$/i)
-  if (!head) return undefined
-  const prefix = head[1].endsWith('-') ? head[1] : `${head[1]}-`
-  const mid = head[2]
+  const head = normalizeShopeeInvoiceBlob(headToken)
+  const prefix = head.match(/TRS[A-Z]{2,10}00/i)?.[0]
+  const parsed =
+    head.match(/^(TRS[A-Z]{2,10}00-\d{5}-)(\d{0,8})$/i) ||
+    head.match(/^(TRS[A-Z]{2,10}00-\d{5})(\d{0,8})$/i) ||
+    head.match(/^(TRS[A-Z]{2,10}00-)(\d{0,8})$/i)
+  if (!prefix || !parsed) return undefined
+  const mid = parsed[2]
   const ymd = tail.match(/^(\d{6})-(\d{5,8})$/)
   if (ymd && !mid) {
-    const joined = `${prefix}${ymd[1]}-${ymd[2]}`
+    const joined = `${prefix.toUpperCase()}-00000-${ymd[1]}-${ymd[2]}`
     return invoiceTokenLooksReal(joined) ? joined : undefined
   }
   const md = tail.match(/^(\d{4})-(\d{5,8})$/)
   if (!md) return undefined
-  if (mid && mid.length + md[1].length === 6) {
-    const joined = `${prefix}${mid}${md[1]}-${md[2]}`
-    return invoiceTokenLooksReal(joined) ? joined : undefined
-  }
-  if (!mid && yearYy) {
-    const joined = `${prefix}${yearYy}${md[1]}-${md[2]}`
-    return invoiceTokenLooksReal(joined) ? joined : undefined
-  }
-  return undefined
+  const year = (mid.slice(-2) || yearYy).slice(-2)
+  if (year.length !== 2) return undefined
+  const joined = `${prefix.toUpperCase()}-00000-${year}${md[1]}-${md[2]}`
+  return invoiceTokenLooksReal(joined) ? joined : undefined
 }
 
 /** 단어 안에서 태국어를 빼고 남는 영숫자 토막들 */
@@ -282,7 +281,7 @@ function adjacent(a: OcrWordBox, b: OcrWordBox): boolean {
  * 붙어서 `1105100429022026` 이 된다. 다만 바로 앞에 `IV` 같은 머리글자가 떨어져 찍혀
  * 있으면 그것만 되붙인다.
  */
-/** Shopee 번호는 `TRSPESPF00-00000-26` / `0701-017862` 처럼 두 토막으로 찍힌다 */
+/** Shopee 번호는 `TRSPEFHM00-00000026` / `0821-001305` 처럼 두 토막으로 찍힌다 */
 function extendShopeeToken(token: string, words: OcrWordBox[], fromIdx: number): string {
   if (!isTruncatedShopeeToken(token)) return token
   const yearYy = shopeeYearYyFromWords(words)
@@ -979,6 +978,7 @@ export function findLayoutDocDate(layout: OcrPageLayout): LayoutField<string> | 
     }
   }
   for (const cl of lines) {
+    if (/เริ่มใช้|Rev\.?\s*:|FM-AC/i.test(cl.text) && !DOC_DATE_LABEL_RE.test(cl.text)) continue
     const isDue = DUE_DATE_LABEL_RE.test(cl.text)
     const labeled = DOC_DATE_LABEL_RE.test(cl.text)
     const en = String(cl.text || '').match(
@@ -1116,12 +1116,15 @@ function textInvoiceBeatsLayout(base: string, layout: string): boolean {
   const b = normToken(base)
   const l = normToken(layout)
   if (/^IM20\d/.test(b) && /^[T1]M20\d/.test(l)) return true
-  if (b.startsWith('TRS') && l.startsWith('TRS')) {
-    const baseOk = /^TRS[A-Z]{2,8}PF00-\d{5}-\d{6}-\d{6}$/i.test(base)
-    const layoutOk = /^TRS[A-Z]{2,8}PF00-\d{5}-\d{6}-\d{6}$/i.test(layout)
+  if (b.startsWith('TRS') || l.startsWith('TRS') || /^\d{6}-\d{5,8}$/.test(b) || /^\d{6}-\d{5,8}$/.test(l)) {
+    const shopeeOk = (s: string) =>
+      /^TRS[A-Z]{2,10}00-\d{5}-\d{6}-\d{5,8}$/i.test(normalizeShopeeInvoiceBlob(s)) ||
+      /^\d{6}-\d{5,8}$/.test(s)
+    const baseOk = shopeeOk(base)
+    const layoutOk = shopeeOk(layout)
     if (layoutOk && !baseOk) return false
     if (baseOk && !layoutOk) return true
-    if (b.length > l.length + 2) return true
+    if (b.startsWith('TRS') && l.startsWith('TRS') && b.length > l.length + 2) return true
   }
   if (/^\d{6}[EFH]\d{7,14}$/i.test(b) && !/^\d{6}[EFH]\d{7,14}$/i.test(l)) return true
   return invoiceNoQuality(base) > invoiceNoQuality(layout) + 8
@@ -1191,7 +1194,14 @@ export function applyLayoutExtract(
     }
   }
 
-  if (!fields.docDate && extract.docDate) fields.docDate = extract.docDate.value
+  if (extract.docDate && extract.docDate.confidence >= LAYOUT_MIN_CONFIDENCE) {
+    const labeled = extract.docDate.source === 'date-labeled'
+    if (!fields.docDate || labeled) {
+      if (fields.docDate && fields.docDate !== extract.docDate.value) disagreed.push('docDate')
+      if (fields.docDate !== extract.docDate.value) usedLayout.push('docDate')
+      fields.docDate = extract.docDate.value
+    }
+  }
   return { fields, usedLayout, disagreed }
 }
 

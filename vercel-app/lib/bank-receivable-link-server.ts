@@ -39,6 +39,7 @@ type BankTxRow = {
   amount?: number
   trans_date?: string
   memo?: string
+  note?: string | null
   store_name?: string | null
   store?: string | null
 }
@@ -63,7 +64,7 @@ export async function loadOpenReceivablesForBankTx(bankRow: BankTxRow): Promise<
   if (String(bankRow.trans_type || '').toLowerCase() !== 'deposit') return []
   if (String(bankRow.category || '').toLowerCase() !== 'receivable_receive') return []
 
-  if (isPosChannelSettlementMemo(bankRow.memo)) return []
+  if (isPosChannelSettlementMemo(bankRow.memo, bankRow.note)) return []
 
   const channelLinked = (await supabaseSelectFilter(
     'pos_channel_settlements',
@@ -161,7 +162,7 @@ export async function linkReceivableAccrualsFromBankTransaction(params: {
 
   const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
     limit: 1,
-    select: 'id,trans_type,category,amount,trans_date,memo,store_name,store',
+    select: 'id,trans_type,category,amount,trans_date,memo,note,store_name,store',
   })) as BankTxRow[] | null
   const bankRow = bankRows?.[0]
   if (!bankRow?.id) {
@@ -467,7 +468,7 @@ export async function loadLinkedReceivablesForBankTx(bankTransactionId: number):
 
   const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankId}`, {
     limit: 1,
-    select: 'id,trans_type,category,amount,trans_date,memo,store_name,store',
+    select: 'id,trans_type,category,amount,trans_date,memo,note,store_name,store',
   })) as BankTxRow[] | null
   const bankRow = bankRows?.[0]
   if (!bankRow?.id) return null

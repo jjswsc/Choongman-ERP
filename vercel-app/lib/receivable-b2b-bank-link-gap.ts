@@ -46,7 +46,7 @@ export async function findReceivableBankSubledgerGaps(params: {
   }
 
   const bankRows = (await supabaseSelectFilterAllPages('bank_transactions', bankFilter, {
-    select: 'id,trans_date,amount,store_name,store,memo,account_id',
+    select: 'id,trans_date,amount,store_name,store,memo,note,account_id',
     order: 'trans_date.desc',
     pageSize: 500,
     maxRows,
@@ -57,6 +57,7 @@ export async function findReceivableBankSubledgerGaps(params: {
     store_name?: string | null
     store?: string | null
     memo?: string | null
+    note?: string | null
     account_id?: number | null
   }[]
 
@@ -109,6 +110,7 @@ export async function findReceivableBankSubledgerGaps(params: {
 
     const storeName = String(r.store_name || r.store || '').trim()
     const memo = r.memo != null ? String(r.memo) : null
+    const note = r.note != null ? String(r.note) : null
     const linkedToChannelSettlement = settlementLinked.has(bankId)
     const hasPosCompletedOrders = await cachedStoreHasPosCompletedOrders(storeName)
 
@@ -116,6 +118,7 @@ export async function findReceivableBankSubledgerGaps(params: {
       linkedToChannelSettlement,
       hasPosCompletedOrders,
       memo,
+      note,
     })
     if (!shouldHave) continue
 

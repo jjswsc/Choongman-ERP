@@ -91,12 +91,13 @@ import {
   filterBankDepositUiCategories,
   isPosRevenueDepositCategory,
   isPosStoreBankAccount,
+  posStoreLegacyRevenueSavePatch,
 } from "@/lib/bank-import-deposit-category"
 import { bankDepositLoanCategorySelectValue } from "@/lib/bank-loan-categories"
 import { defaultBankDepositSalesDateForRow } from "@/lib/pos-channel-reconcile-match"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 import { useRouter, useSearchParams } from "next/navigation"
-import { translateApiMessage } from "@/lib/translate-api-message"
+import { localizeApiMessage, translateApiMessage } from "@/lib/translate-api-message"
 import { sortVendorsByDisplayName } from "@/lib/vendor-sort"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 import {
@@ -498,6 +499,19 @@ export function BankTransactionsTab() {
       if (String(r.category || "").toLowerCase() === "fixed" && payload.category === undefined) {
         payload.category = "expense"
       }
+      const posPatch = posStoreLegacyRevenueSavePatch({
+        transType: r.transType,
+        hidePosRevenue: hidePosRevenueCategories,
+        category: String(edits.category ?? r.category ?? ""),
+        storeName: edits.storeName === "__none__" ? "" : edits.storeName ?? r.storeName,
+        accountStore: selectedAccountStore,
+      })
+      if (posPatch) {
+        payload.category = posPatch.category
+        if (payload.storeName === undefined && posPatch.storeName) {
+          payload.storeName = posPatch.storeName
+        }
+      }
       const res = await updateBankTransaction(payload)
       if (res.success) {
         await Promise.all([
@@ -535,7 +549,14 @@ export function BankTransactionsTab() {
                   salesDate: edits.salesDate ?? x.salesDate,
                   expenseDate: edits.expenseDate ?? x.expenseDate,
                   vendorCode: edits.vendorCode ?? x.vendorCode,
-                  storeName: edits.storeName !== undefined ? (edits.storeName === "__none__" ? "" : edits.storeName) : x.storeName,
+                  storeName:
+                    edits.storeName !== undefined
+                      ? edits.storeName === "__none__"
+                        ? ""
+                        : edits.storeName
+                      : payload.storeName !== undefined
+                        ? payload.storeName
+                        : x.storeName,
                   withholdingTaxAmount:
                     edits.withholdingTaxAmount !== undefined
                       ? (() => {
@@ -555,7 +576,14 @@ export function BankTransactionsTab() {
           )
         )
       } else {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(
+          localizeApiMessage(
+            res.message,
+            t,
+            tt("bankPosRevenueDepositSaveHint", "POS 매장 Grab·카드·QR 입금은 「매출 수령」으로 바꾼 뒤 저장하세요."),
+            lang
+          ) || res.message || t("processFail")
+        )
       }
     } catch (e) {
       await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
@@ -1988,6 +2016,29 @@ export function BankTransactionsTab() {
     return transType === "deposit" ? (depositMap[cat] ?? cat) : (withdrawMap[cat] ?? cat)
   }
 
+  const renderDepositCategorySelectItems = (currentCategory: string, hidePosRevenue: boolean) => (
+    <>
+      {filterBankDepositUiCategories({ hidePosRevenue, currentCategory }).map((value) => (
+        <SelectItem key={value} value={value}>
+          {getCategoryLabel(value, "deposit")}
+        </SelectItem>
+      ))}
+    </>
+  )
+
+  const posStoreCategoryBanner = hidePosRevenueCategories ? (
+    <div
+      className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+      role="note"
+    >
+      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+      <p className="leading-relaxed">
+        {t("bankPosStoreCategoryLockedHint") ||
+          "이 통장은 POS 매장입니다. 배달앱·카드·QR·현금 용도는 고르지 마세요. 입금은 「매출 수령」으로 두고 Grab·Shopee·QR·카드는 오른쪽 「채널 정산」을 누르세요."}
+      </p>
+    </div>
+  ) : null
+
   const activeFilterChips = React.useMemo(() => {
     const chips: string[] = []
     if (filterTransType === "deposit") chips.push(t("bankDeposit") || "입금")
@@ -2192,7 +2243,27 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               edits?.note !== undefined ? edits.note ?? "" : bankNoteUserDisplayText(r.note ?? "")
             const cur = base.trim()
             const next = cur ? `${cur} | ${phrase}` : phrase
-            return { ...prev, [rowId]: { ...prev[rowId], note: next } }
+            const currentCat = String(edits?.category ?? r.category ?? "")
+            const posPatch = posStoreLegacyRevenueSavePatch({
+              transType: r.transType,
+              hidePosRevenue: hidePosRevenueCategories,
+              category: currentCat,
+              storeName: edits?.storeName === "__none__" ? "" : edits?.storeName ?? r.storeName,
+              accountStore: selectedAccountStore,
+            })
+            return {
+              ...prev,
+              [rowId]: {
+                ...prev[rowId],
+                note: next,
+                ...(posPatch
+                  ? {
+                      category: posPatch.category,
+                      ...(posPatch.storeName ? { storeName: posPatch.storeName } : {}),
+                    }
+                  : {}),
+              },
+            }
           })
           return
         }
@@ -2206,7 +2277,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         }
       )
     },
-    [list, tt]
+    [list, tt, hidePosRevenueCategories, selectedAccountStore]
   )
 
   const openBankQuickMemosEdit = React.useCallback(() => {
@@ -2751,6 +2822,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   ) : null}
 
                   {!loading && accountId && accounts.length > 0 && (
+                    <>
+                      {posStoreCategoryBanner}
                     <BankQuickMemoChipBar
                       className="mb-3"
                       phrases={bankQuickMemos}
@@ -2763,6 +2836,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                       onManageClick={openBankQuickMemosEdit}
                       manageLabel={t("bankQuickMemosManage") || "편집"}
                     />
+                    </>
                   )}
 
                   <AccountingDataTable
@@ -2832,6 +2906,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 isReceivableLinked: r.isReceivableLinked,
                                 isChannelSettled: r.isChannelSettled,
                                 memo: r.memo,
+                                note: edits?.note !== undefined ? edits.note : r.note,
                               },
                               edits
                             )
@@ -2896,18 +2971,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       }
                                     }}
                                   >
-                                    <SelectTrigger className="h-8 text-xs">
+                                    <SelectTrigger
+                                      className="h-8 text-xs"
+                                      title={
+                                        hidePosRevenueCategories
+                                          ? t("bankPosStoreCategorySelectTitle") ||
+                                            "POS 매장: 배달앱·카드·QR·현금은 숨김. 오른쪽 「채널 정산」을 사용하세요."
+                                          : undefined
+                                      }
+                                    >
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      {filterBankDepositUiCategories({
-                                        hidePosRevenue: hidePosRevenueCategories,
-                                        currentCategory: cat,
-                                      }).map((value) => (
-                                        <SelectItem key={value} value={value}>
-                                          {getCategoryLabel(value, "deposit")}
-                                        </SelectItem>
-                                      ))}
+                                      {renderDepositCategorySelectItems(cat, hidePosRevenueCategories)}
                                     </SelectContent>
                                   </Select>
                                 )}
@@ -3227,6 +3303,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       category: cat,
                                       storeName: store,
                                       memo: r.memo,
+                                      note: rowEdits?.note !== undefined ? rowEdits.note : r.note,
                                       isReceivableLinked: r.isReceivableLinked,
                                       isChannelSettled: r.isChannelSettled,
                                     }
@@ -3514,6 +3591,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
                 {t("bankImportWithdrawCoaHint") || "※ 출금: 아래 표에서 용도·계정과목(매입 대금이면 거래처)을 선택하면 저장 시 통장에 반영됩니다. 적요 규칙으로 자동 채워집니다."}
               </p>
+              {posStoreCategoryBanner}
               <BankQuickMemoChipBar
                 phrases={bankQuickMemos}
                 title={t("bankImportQuickMemosTitle") || "자주 쓰는 메모"}
@@ -3579,18 +3657,19 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 value={bankDepositLoanCategorySelectValue(impRaw)}
                                 onValueChange={(v) => setImportRowEdit(idx, "category", v)}
                               >
-                                <SelectTrigger className="h-8 text-xs">
+                                <SelectTrigger
+                                  className="h-8 text-xs"
+                                  title={
+                                    hidePosRevenueCategories
+                                      ? t("bankPosStoreCategorySelectTitle") ||
+                                        "POS 매장: 배달앱·카드·QR·현금은 숨김. 오른쪽 「채널 정산」을 사용하세요."
+                                      : undefined
+                                  }
+                                >
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {filterBankDepositUiCategories({
-                                    hidePosRevenue: hidePosRevenueCategories,
-                                    currentCategory: impRaw,
-                                  }).map((value) => (
-                                    <SelectItem key={value} value={value}>
-                                      {getCategoryLabel(value, "deposit")}
-                                    </SelectItem>
-                                  ))}
+                                  {renderDepositCategorySelectItems(impRaw, hidePosRevenueCategories)}
                                 </SelectContent>
                               </Select>
                               {isAutoAssigned ? (
@@ -3862,6 +3941,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 <h3 className="text-lg font-semibold border-b pb-2">{t("bankManualTitle")}</h3>
                 <p className="text-muted-foreground">{t("bankManualDesc")}</p>
 
+                <div className="rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                  <p className="font-medium">{t("bankPosReceivableDepositTitle")}</p>
+                  <p className="mt-1 leading-relaxed">{t("bankPosStoreCategoryLockedHint")}</p>
+                  <p className="mt-1 leading-relaxed text-muted-foreground dark:text-amber-100/80">
+                    {t("bankPosReceivableDepositBody")}
+                  </p>
+                </div>
+
                 <div className="rounded-lg bg-muted/30 p-4 space-y-2">
                   <h4 className="font-medium">■ {t("bankManualScreenLayout")}</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
@@ -3899,6 +3986,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     <li>{t("bankManualS3_2")}</li>
                     <li>{t("bankManualS3_3")}</li>
                     <li>{t("bankManualS3_4")}</li>
+                    <li>{t("bankManualS3PosReceivable")}</li>
                   </ul>
                 </div>
 
@@ -3979,14 +4067,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         </SelectTrigger>
                         <SelectContent>
                           {newRuleTransType === "deposit" ? (
-                            filterBankDepositUiCategories({
-                              hidePosRevenue: true,
-                              currentCategory: newRuleCategory,
-                            }).map((value) => (
-                              <SelectItem key={value} value={value}>
-                                {getCategoryLabel(value, "deposit")}
-                              </SelectItem>
-                            ))
+                            renderDepositCategorySelectItems(newRuleCategory, true)
                           ) : (
                             <>
                               {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (
@@ -4073,14 +4154,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       </SelectTrigger>
                                       <SelectContent>
                                         {newRuleTransType === "deposit" ? (
-                                          filterBankDepositUiCategories({
-                                            hidePosRevenue: true,
-                                            currentCategory: newRuleCategory,
-                                          }).map((value) => (
-                                            <SelectItem key={value} value={value}>
-                                              {getCategoryLabel(value, "deposit")}
-                                            </SelectItem>
-                                          ))
+                                          renderDepositCategorySelectItems(newRuleCategory, true)
                                         ) : (
                                           <>
                                             {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (

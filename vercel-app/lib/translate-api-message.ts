@@ -452,6 +452,15 @@ export function translateApiMessage(
     const statusT = t(statusKey[attMatch[2]] || attMatch[2])
     return `✅ ${typeT}! (${statusT})`
   }
+  if (trimmed.startsWith("Grab·카드·QR 등 채널 정산 입금은 매장을 지정"))
+    return t("bankPosRevenueDepositStoreRequired")
+  const posRevDouble = trimmed.match(
+    /^매장「(.+)」에 POS 완료 주문이 있어 입금 분류「([^」]+)」은 매출\(4110\) 이중 인식 위험이 있습니다/
+  )
+  if (posRevDouble)
+    return t("bankPosRevenueDepositDoubleRisk")
+      .replace("{store}", posRevDouble[1]!)
+      .replace("{category}", posRevDouble[2]!)
   return msg
 }
 

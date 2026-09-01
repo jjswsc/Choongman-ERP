@@ -125,6 +125,16 @@ describe('findLayoutInvoiceNo', () => {
     )
     expect(got?.value).toBe('TRSPESPF00-00000-260701-017862')
   })
+
+  it('Shopee 두 줄 번호는 고유 꼬리까지 이어 붙인다', () => {
+    const got = findLayoutInvoiceNo(
+      page([
+        line(514, [['เลขที่', 1379], ['No.', 1459], ['TRSPEFHM00-00000026', 1545]]),
+        line(548, [['0821-001305', 1546]]),
+      ])
+    )
+    expect(got?.value).toBe('TRSPEFHM00-00000-260821-001305')
+  })
 })
 
 describe('거래처별 번호 꼴', () => {

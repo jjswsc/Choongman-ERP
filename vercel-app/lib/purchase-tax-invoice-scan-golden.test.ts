@@ -36,7 +36,7 @@ describe('purchase tax invoice golden texts', () => {
       ].join('\n'),
       { buyerTaxId: BUYER }
     )
-    expect(shopee?.invoiceNo).toBe('TRSPESPF00-00000-260701-004099')
+    expect(shopee?.invoiceNo).toBe('260701-004099')
     expect(shopee?.sellerTaxId).toBe('0105558019581')
     expect(shopee?.sellerName).toContain('ช้อปปี้')
     expect(shopee?.docDate).toBe('2026-07-01')
@@ -92,7 +92,7 @@ describe('purchase tax invoice golden texts', () => {
       `เลขที่ TRSPESPF00-00000-260708-01824008\nเลขประจำตัวผู้เสียภาษี 0105558019581\nมูลค่า 391.23 ภาษีมูลค่าเพิ่ม 27.39`,
       { buyerTaxId: BUYER, taxMonth: '2026-07' }
     )
-    expect(shopeeExtraDay?.invoiceNo).toBe('TRSPESPF00-00000-260708-018240')
+    expect(shopeeExtraDay?.invoiceNo).toBe('260708-018240')
 
     const shopeeHeadOnly = extractPurchaseTaxInvoiceFromScanText(
       [
@@ -104,7 +104,7 @@ describe('purchase tax invoice golden texts', () => {
       ].join('\n'),
       { buyerTaxId: BUYER, taxMonth: '2026-07' }
     )
-    expect(shopeeHeadOnly?.invoiceNo).toBe('TRSPESPF00-00000-260701-017862')
+    expect(shopeeHeadOnly?.invoiceNo).toBe('260701-017862')
     expect(shopeeHeadOnly?.netAmount).toBe(218.34)
 
     const shopeeThaiSplit = extractPurchaseTaxInvoiceFromScanText(
@@ -119,14 +119,14 @@ describe('purchase tax invoice golden texts', () => {
       ].join('\n'),
       { buyerTaxId: BUYER }
     )
-    expect(shopeeThaiSplit?.invoiceNo).toBe('TRSPESPF00-00000-260701-017862')
+    expect(shopeeThaiSplit?.invoiceNo).toBe('260701-017862')
     expect(shopeeThaiSplit?.netAmount).toBe(218.34)
 
     const shopeeSplit = extractPurchaseTaxInvoiceFromScanText(
       `เลขที่ TRSPESPF00-\n00000-260701-017862\nเลขประจำตัวผู้เสียภาษี 0105558019581\nมูลค่าสินค้า 218.34\nภาษีมูลค่าเพิ่ม 15.28\nรวมทั้งสิ้น 233.62`,
       { buyerTaxId: BUYER }
     )
-    expect(shopeeSplit?.invoiceNo).toBe('TRSPESPF00-00000-260701-017862')
+    expect(shopeeSplit?.invoiceNo).toBe('260701-017862')
     expect(shopeeSplit?.sellerTaxId).toBe('0105558019581')
     expect(shopeeSplit?.netAmount).toBe(218.34)
 
@@ -134,7 +134,36 @@ describe('purchase tax invoice golden texts', () => {
       `เลขที่ TRSPESPF0C-00000-260728-017950\nเลขประจำตัวผู้เสียภาษี 0105558019581\nมูลค่า 442.62 ภาษีมูลค่าเพิ่ม 30.98`,
       { buyerTaxId: BUYER }
     )
-    expect(shopeeOcrC?.invoiceNo).toBe('TRSPESPF00-00000-260728-017950')
+    expect(shopeeOcrC?.invoiceNo).toBe('260728-017950')
+
+    const shopeeWrapped = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'เลขที่/ No. TRSPEFHM00-00000026',
+        '0821-001305',
+        'วันที่ 21/08/2026',
+        'เลขประจำตัวผู้เสียภาษี 0105558019581',
+        'มูลค่าสินค้า 126.85',
+        'ภาษีมูลค่าเพิ่ม 8.88',
+      ].join('\n'),
+      { buyerTaxId: BUYER }
+    )
+    expect(shopeeWrapped?.invoiceNo).toBe('260821-001305')
+    expect(shopeeWrapped?.docDate).toBe('2026-08-21')
+    expect(shopeeWrapped?.netAmount).toBe(126.85)
+
+    const shopeeWrappedOcrO = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'เลขที่/ No. TRSPEFHMOO-00000-26',
+        '0822-001400',
+        'วันที่ 22/08/2026',
+        'เลขประจำตัวผู้เสียภาษี 0105558019581',
+        'มูลค่าสินค้า 176.18',
+        'ภาษีมูลค่าเพิ่ม 12.33',
+      ].join('\n'),
+      { buyerTaxId: BUYER }
+    )
+    expect(shopeeWrappedOcrO?.invoiceNo).toBe('260822-001400')
+    expect(shopeeWrappedOcrO?.invoiceNo).not.toBe(shopeeWrapped?.invoiceNo)
 
     const grabSplit = extractPurchaseTaxInvoiceFromScanText(
       `เลขที่ IM20260704039284\nบริษัท แกร็บแท็กซี่ (ประเทศไทย) จำกัด\nเลขประจำตัวผู้เสียภาษี 0105556090377\nมูลค่า 1,148.36 ภาษีมูลค่าเพิ่ม 80.38 รวมทั้งสิ้น 1,228.74`,
@@ -207,7 +236,7 @@ describe('purchase tax invoice golden texts', () => {
       `เลขที่ 0105558019581\nTRSPESPF00-00000-260702-017827\nมูลค่า 137.05 ภาษีมูลค่าเพิ่ม 9.59`,
       { buyerTaxId: BUYER }
     )
-    expect(tinAsInvoice?.invoiceNo).toBe('TRSPESPF00-00000-260702-017827')
+    expect(tinAsInvoice?.invoiceNo).toBe('260702-017827')
     expect(tinAsInvoice?.sellerTaxId).toBe('0105558019581')
   })
 

@@ -41,6 +41,39 @@ describe('bank-receivable-link', () => {
     ).toBe(false)
   })
 
+  it('skips POS card/QR notes even when bank memo is generic', () => {
+    expect(
+      bankDepositNeedsReceivableOrderLink({
+        transType: 'deposit',
+        category: 'receivable_receive',
+        storeName: 'CM Ekkamai',
+        memo: 'รับเงินจากการขาย',
+        note: 'Credit Card Sales',
+        isChannelSettled: false,
+      })
+    ).toBe(false)
+    expect(
+      bankDepositNeedsReceivableOrderLink({
+        transType: 'deposit',
+        category: 'receivable_receive',
+        storeName: 'CM Ekkamai',
+        memo: 'รับเงินจากการขาย',
+        note: 'store sales QR',
+        isChannelSettled: false,
+      })
+    ).toBe(false)
+    expect(
+      bankDepositNeedsReceivableOrderLink({
+        transType: 'deposit',
+        category: 'receivable_receive',
+        storeName: 'CM Ekkamai',
+        memo: 'รับเงินจากการขาย',
+        note: 'Sale Old Oil',
+        isChannelSettled: false,
+      })
+    ).toBe(true)
+  })
+
   it('computes open amount from receive offsets', () => {
     expect(computeReceivableOpenAmount(1000, [{ amount: -400 }])).toBe(600)
     expect(computeReceivableOpenAmount(1000, [{ amount: -1000 }])).toBe(0)

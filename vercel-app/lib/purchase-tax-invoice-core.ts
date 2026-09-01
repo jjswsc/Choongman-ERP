@@ -107,15 +107,49 @@ export function displaySellerBranchForUi(
   return formatted
 }
 
+/** Shopee 머리: `TRSPESPF00`, `TRSPEFHM00` (OCR `OO`→`00`) */
+const SHOPEE_PREFIX_SRC = 'TRS[A-Z]{2,10}00'
+
+export function normalizeShopeeInvoiceBlob(raw: string): string {
+  return String(raw || '')
+    .replace(/\s+/g, '')
+    .replace(/!/g, '1')
+    .replace(/PF0[CO]/gi, 'PF00')
+    .replace(/(TRS[A-Z]{2,10})[O0]{2}/gi, (_m, p: string) => `${String(p).toUpperCase()}00`)
+}
+
+/** `TRSPEFHM00-00000-26`처럼 고유 꼬리가 빠진 쇼피 번호 */
+export function isTruncatedShopeeInvoiceNo(raw: unknown): boolean {
+  const s = normalizeShopeeInvoiceBlob(String(raw || ''))
+  if (!s) return false
+  if (new RegExp(`^${SHOPEE_PREFIX_SRC}-?$`, 'i').test(s)) return true
+  return new RegExp(`^${SHOPEE_PREFIX_SRC}-\\d{5}-?\\d{0,5}$`, 'i').test(s)
+}
+
+/**
+ * 쇼피 고유 번호. 칸이 두 줄(`TRSPEFHM00-00000026` + `0821-001305`)이어도
+ * 빨간 원 구간만 남긴다: `260821-001305`.
+ */
+export function shopeeUniqueInvoiceTail(raw: unknown): string | undefined {
+  const s = normalizeShopeeInvoiceBlob(String(raw || ''))
+  if (!s) return undefined
+  const fromTrs = s.match(new RegExp(`${SHOPEE_PREFIX_SRC}-?\\d{5}-?(\\d{6})-?(\\d{5,8})`, 'i'))
+  if (fromTrs) return `${fromTrs[1]}-${fromTrs[2]}`
+  const tail = s.match(/^(\d{6})-(\d{5,8})$/)
+  if (tail) return `${tail[1]}-${tail[2]}`
+  return undefined
+}
+
 export function purchaseTaxInvoiceDedupeKey(
   buyerTaxId: string,
   invoiceNo: string,
   sellerTaxId: string
 ): string {
-  const inv = String(invoiceNo || '')
+  const raw = String(invoiceNo || '')
     .trim()
     .replace(/\s+/g, '')
     .toUpperCase()
+  const inv = shopeeUniqueInvoiceTail(raw) || raw
   return `${digitsTin13(buyerTaxId)}|${inv}|${digitsTin13(sellerTaxId)}`
 }
 
@@ -246,6 +280,18 @@ export function looksLikeJunkSellerName(raw: unknown): boolean {
     if (/^[A-Za-z]{2,16}$/.test(s)) return true
   }
   return false
+}
+
+/** 상호 뒤 주소 번지(523 6 3)를 잘라 บริษัท … จำกัด 만 남긴다 */
+export function trimPurchaseTaxSellerName(raw: unknown): string {
+  let s = String(raw || '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  if (!s) return ''
+  const entity = s.match(/^(.*?(?:บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วน)\s+.{1,80}?จำกัด(?:\s*\(มหาชน\))?)/)
+  if (entity) s = entity[1].trim()
+  s = s.replace(/\s+\d[\d\s./\-]{0,24}$/, '').trim()
+  return s.slice(0, 200)
 }
 
 function sanitizeTaxInvoiceMoney(n: unknown): number | undefined {
@@ -415,7 +461,7 @@ export function purchaseTaxReviewIsProblem(
   if (row.skip) return false
   const invoice = String(row.invoiceNo || '').trim()
   if (!invoice) return true
-  if (/^TRS[A-Z]{2,8}PF00-\d{5}-?\d{0,5}$/i.test(invoice)) return true
+  if (isTruncatedShopeeInvoiceNo(invoice)) return true
   return purchaseTaxReviewFlags(row, taxMonth).some((flag) => flag !== 'month')
 }
 

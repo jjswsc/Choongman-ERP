@@ -25,6 +25,7 @@ import {
   assertBankNotUsedByChannelSettlement,
   assertPosRevenueDepositCategorySafe,
   isBankSettlementGuardError,
+  shouldAssertPosRevenueDepositOnBankUpdate,
 } from '@/lib/bank-settlement-guards'
 
 /** 통장 거래 수정 (용도, 계정과목, 상세내용, 인식일, 거래처, 매장 등) */
@@ -80,7 +81,6 @@ export async function POST(request: NextRequest) {
     const patch: Record<string, unknown> = {}
 
     if (category !== undefined) {
-      const requested = String(category).toLowerCase()
       let validCategory = transType === 'deposit'
         ? (depositCategories.includes(String(category).toLowerCase()) ? String(category).toLowerCase() : existing[0].category)
         : (withdrawCategories.includes(String(category).toLowerCase()) ? String(category).toLowerCase() : existing[0].category)
@@ -120,9 +120,9 @@ export async function POST(request: NextRequest) {
       const ed = String(expenseDate || '').slice(0, 10)
       patch.expense_date = /^\d{4}-\d{2}-\d{2}$/.test(ed) ? ed : null
     }
-    const finalCategory = (patch.category as string) ?? existing[0].category
-    const finalCategoryLower = String(finalCategory || '').toLowerCase()
-    const finalStoreName = storeName !== undefined ? String(storeName || '').trim() || null : (existing[0].store_name ?? null)
+    let finalCategory = (patch.category as string) ?? existing[0].category
+    let finalCategoryLower = String(finalCategory || '').toLowerCase()
+    let finalStoreName = storeName !== undefined ? String(storeName || '').trim() || null : (existing[0].store_name ?? null)
     const finalAccountSubjectId =
       patch.account_subject_id !== undefined
         ? (patch.account_subject_id as number | null)
@@ -180,20 +180,32 @@ export async function POST(request: NextRequest) {
     }
 
     if (transType === 'deposit') {
-      const nextCat = String(finalCategory || '').toLowerCase()
       try {
-        if (nextCat === 'receivable_receive') {
+        if (finalCategoryLower === 'receivable_receive') {
           await assertBankNotUsedByChannelSettlement(bankTxId)
-        } else {
+        } else if (shouldAssertPosRevenueDepositOnBankUpdate(category !== undefined)) {
           const posStore =
             finalStoreName ||
             String(existing[0].store_name || '').trim() ||
             String(existing[0].store || '').trim()
-          await assertPosRevenueDepositCategorySafe({
-            storeName: posStore,
-            category: nextCat,
-            memo: String(existing[0].memo || '').trim() || null,
-          })
+          try {
+            await assertPosRevenueDepositCategorySafe({
+              storeName: posStore,
+              category: finalCategoryLower,
+              memo: String(existing[0].memo || '').trim() || null,
+            })
+          } catch (e) {
+            if (isBankSettlementGuardError(e) && e.code === 'POS_REVENUE_DEPOSIT_DOUBLE_RISK' && posStore) {
+              patch.category = 'receivable_receive'
+              patch.store_name = posStore
+              finalCategory = 'receivable_receive'
+              finalCategoryLower = 'receivable_receive'
+              finalStoreName = posStore
+              await assertBankNotUsedByChannelSettlement(bankTxId)
+            } else {
+              throw e
+            }
+          }
         }
       } catch (e) {
         if (isBankSettlementGuardError(e)) {
@@ -236,6 +248,7 @@ export async function POST(request: NextRequest) {
           amountAbs: amount,
           transDate,
           memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
+          note: patch.note !== undefined ? String(patch.note || '') : String(existing[0].note || ''),
         })
       }
       await syncBorrowingFromBankDeposit({

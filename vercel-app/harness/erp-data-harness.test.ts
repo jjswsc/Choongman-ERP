@@ -40,6 +40,11 @@ describe("ERP data harness - 직원 데이터", () => {
     expect(minutes).toBe(450)
   })
 
+  it("심야 근무 22:00–07:00(휴게 27:00–28:30) 분이 잘리지 않는다", () => {
+    const minutes = plannedWorkMinutesFromPlans("22:00", "07:00", "27:00", "28:30", true)
+    expect(minutes).toBe(450)
+  })
+
   it("plan_in_prev_day=false인 오전출근+익일퇴근 계획은 0분 처리되고 true면 정상 계산", () => {
     const offMinutes = plannedWorkMinutesFromPlans("10:00", "02:00", "", "", false)
     const onMinutes = plannedWorkMinutesFromPlans("10:00", "02:00", "", "", true)

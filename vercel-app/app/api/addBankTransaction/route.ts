@@ -269,6 +269,7 @@ export async function POST(request: NextRequest) {
         amountAbs: Math.abs(amount),
         transDate,
         memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
+        note,
       })
     }
     if (bankId && transType === 'deposit') {

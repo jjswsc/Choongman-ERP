@@ -1841,7 +1841,7 @@ export const i18n = {
     helpSum_admin_attendance:
       '출퇴근 기록 조회·승인, 지각·조퇴·연장 조정, 당일 실시간 근무, 주간 스케줄 조회·작성을 한 화면에서 처리합니다. 사이드바 배지는 GPS·강제퇴근 등 미승인만 표시합니다.',
     helpHow_admin_attendance:
-      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 오늘 출근 현황을 봅니다.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~29:00, 자정 이후는 24:00~)에서 고릅니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
+      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 오늘 출근 현황을 봅니다.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~31:00, 자정 이후는 24:00~·익일 07:00은 31:00)에서 고릅니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
     helpSum_admin_leave:
       '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다. 통계 기본은 재직 직원만 보이며, 사이드바 배지는 최근 휴가일 기준 미승인만 표시합니다.',
     helpHow_admin_leave:
@@ -4490,7 +4490,7 @@ export const i18n = {
       '※ 출금: 용도·계정과목(매입 대금이면 거래처)을 선택해 분류만 저장합니다. 경비·매입 대금의 분개·미지급 반영은 저장 후 조회 탭 「지출관리 연결」로 완료하세요.',
     bankImportQuickMemosTitle: '자주 쓰는 메모',
     bankImportQuickMemoHint:
-      '메모 칸을 먼저 선택한 뒤 누르면 해당 줄에 붙고, 아니면 클립보드로 복사됩니다.',
+      '「메모」칸을 먼저 선택한 뒤 누르면 해당 줄에 붙습니다. 용도(배달앱·카드 등)는 바뀌지 않습니다. 칸을 안 고르면 클립보드로 복사됩니다.',
     bankImportQuickMemoCopied: '클립보드에 복사했습니다.',
     bankImportQuickMemoCopyFailed: '복사에 실패했습니다.',
     bankQuickMemosManage: '편집',
@@ -4505,7 +4505,13 @@ export const i18n = {
     bankImportQueuedForSync:
       '네트워크 문제로 이 브라우저에만 임시 저장되었습니다. 연결 후 자동 전송됩니다. 입금 분류가 배달앱/카드 매출(revenue_*)이면 저장 전 「매출 수령」으로 바꿔 주세요.',
     bankImportPosRevenueHint:
-      'POS 매장: Grab·카드·QR 입금은 「매출 수령」+ 매장. 용도 목록에서 배달앱·카드·QR·현금은 숨깁니다. 수수료는 채널 정산.',
+      'POS 매장: Grab·카드·QR 입금은 「매출 수령」+ 매장. 배달앱·카드·QR·현금으로 저장하면 매출이 두 번 잡힐 수 있습니다. 수수료는 「채널 정산」.',
+    bankPosRevenueDepositSaveHint:
+      'POS 매장 Grab·카드·QR 입금은 「매출 수령」으로 바꾼 뒤 저장하세요. 카드·배달 수수료는 「채널 정산」을 사용하세요.',
+    bankPosRevenueDepositDoubleRisk:
+      '매장「{store}」에 POS 완료 주문이 있어 입금 분류「{category}」은 매출(4110) 이중 인식 위험이 있습니다. 카드·배달 입금은 채널 정산을, 가맹 수금은 매출 수령을 사용하세요.',
+    bankPosRevenueDepositStoreRequired:
+      'Grab·카드·QR 등 채널 정산 입금은 매장을 지정하고 매출 수령 또는 채널 정산으로 저장하세요.',
     bankParseNoRows: '파싱된 거래가 없습니다. K-DEPOSIT 형식인지 확인하세요.',
     bankParseFailPrefix: '파일 파싱 실패:',
     bankPlanAmountMismatch: '통장 금액과 선택한 지급예정 잔액(합계)이 일치해야 합니다.',
@@ -4643,12 +4649,17 @@ export const i18n = {
     helpSum_admin_bank_transactions:
       '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급·차입금과 맞물립니다. 임원이 회사에 빌려준 입금은 「차입 수령」+관련당사자(매출 4110 금지). 통장 변경 시 계좌 추가(삭제 금지), 삭제·등록 이력은 본사·회계가 계좌 관리에서 확인합니다.',
     helpHow_admin_bank_transactions:
-      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS 주문 자동분개(카드·배달앱→1130)를 쓰는 매장: Grab·카드·QR 정산 입금은 「매출 수령(receivable_receive)」+ 매장·매출일만 쓰고, revenue_* 입금 분류는 쓰지 마세요(매출 이중 위험). POS 매장 통장 용도에서 배달앱·카드·QR·현금은 숨기고(이미 그렇게 저장된 줄만 보임), 저장은 거절됩니다(신규·일괄은 매출 수령으로 바뀌고, 기존 줄 수정은 거절). 장부 대사 목록에서 「통장」으로 이동해 바꾸세요. 수수료 분개는 POS 결산에서 처리하거나, 통장 조회에서 해당 입금 행의 「채널 정산」을 사용하세요.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
+      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ POS·EDC를 쓰는 매장: 용도에 배달앱·카드·QR·현금이 다시 보입니다. Grab·카드·QR 입금은 「매출 수령」+ 매장·매출일로 두고, 오른쪽 「채널 정산」으로 수수료를 분개하세요. 배달앱 등으로 저장하면 매출이 두 번 잡힐 수 있어 거절되거나 매출 수령으로 바뀝니다.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
     bankManualS3PosReceivable:
       'POS 자동분개 매장: 카드·배달앱·QR 입금은 「매출 수령」+ 매장. revenue_delivery/revenue_card는 4110 이중 인식 위험.',
     bankPosReceivableDepositTitle: 'POS 자동분개 매장 — 입금 분류',
     bankPosReceivableDepositBody:
-      'Grab·카드·QR 정산 입금은 「매출 수령」+ 매장·매출일만 사용하세요. POS 매장 통장 용도에서 배달앱·카드·QR·현금은 숨기고, 이미 그렇게 저장된 옛 줄만 보입니다. 저장도 거절됩니다. 과거 줄은 장부 대사에서 통장으로 이동해 매출 수령으로 바꾸세요.',
+      'Grab·카드·QR 정산 입금은 「매출 수령」+ 매장·매출일만 사용하세요. 배달앱·카드·QR·현금은 목록에 보이지만 POS 매장에서 그 용도로 저장하면 거절되거나 매출 수령으로 바뀝니다.',
+    bankPosStoreCategoryLockedHint:
+      '이 통장은 POS 매장입니다. 배달앱·카드·QR·현금 용도는 고를 수 없습니다(EDC 연결 후 잠긴 것처럼 보이는 것은 정상). 입금은 「매출 수령」으로 두고, Grab·Shopee·QR·카드는 오른쪽 「채널 정산」을 누르세요. 위의 자주 쓰는 문구는 「메모」만 채웁니다.',
+    bankPosStoreCategorySelectTitle:
+      'POS 매장: 배달앱·카드·QR·현금은 숨김. Grab·Shopee·QR·카드는 오른쪽 「채널 정산」을 사용하세요.',
+    bankPosStoreCategoryHiddenOptions: '배달앱·카드·QR·현금 숨김 — 오른쪽 「채널 정산」',
     bankPosChannelSettleHint:
       '수수료(GROSS−NET) 분개는 POS 결산에서 처리하거나, 아래 목록의 입금 행에서 「채널 정산」을 누르세요.',
     bankPosChannelSettlePosLink: 'POS 결산 →',
@@ -10124,7 +10135,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_attendance:
       'Review and approve clock-in/out, adjust late/early/OT, view today’s live status, and browse or edit weekly schedules in one place. Sidebar badges show only unapproved GPS/forced items.',
     helpHow_admin_attendance:
-      '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: see who is on shift now.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–29:00; after midnight use 24:00+).\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
+      '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: see who is on shift now.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–31:00; after midnight use 24:00+, and 07:00 next morning is 31:00).\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
     helpSum_admin_leave:
       'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Stats default to current staff. Sidebar badges count only recent unapproved leave dates.',
     helpHow_admin_leave:
@@ -12776,7 +12787,7 @@ Only matters the employee must handle personally on a working day:
       '※ Withdrawals: pick category and account subject (or vendor for purchase payment) — classification only. For expense and purchase payment, complete accounting via Query tab → “Link expense mgmt”.',
     bankImportQuickMemosTitle: 'Quick memo phrases',
     bankImportQuickMemoHint:
-      'Focus a memo cell first, then click to insert on that row; otherwise the phrase is copied to the clipboard.',
+      'Focus the Note cell first, then tap a phrase to insert it. This does not change the category (Delivery/Card/etc.). If no cell is focused, the phrase is copied.',
     bankImportQuickMemoCopied: 'Copied to clipboard.',
     bankImportQuickMemoCopyFailed: 'Could not copy.',
     bankQuickMemosManage: 'Edit',
@@ -12791,7 +12802,13 @@ Only matters the employee must handle personally on a working day:
     bankImportQueuedForSync:
       'Saved only in this browser due to a network issue; it will send when online. If deposits use revenue_delivery/card/qr/cash, change to Sales collection (receivable_receive) before saving.',
     bankImportPosRevenueHint:
-      'POS stores: Grab/card/QR deposits use Sales collection + store. Delivery/card/QR/cash categories are hidden on POS accounts. Fees: Channel settlement.',
+      'POS stores: Grab/card/QR deposits use Sales collection + store. Saving as delivery/card/QR/cash can double-count revenue. Fees: Channel settlement.',
+    bankPosRevenueDepositSaveHint:
+      'POS store Grab/card/QR deposits: change to Sales collection before saving. For card/delivery fees use Channel settlement.',
+    bankPosRevenueDepositDoubleRisk:
+      'Store "{store}" already has POS completed orders, so deposit category "{category}" would double-count sales (4110). Use Channel settlement for card/delivery, or Sales collection for franchise receipts.',
+    bankPosRevenueDepositStoreRequired:
+      'Grab/card/QR settlement deposits need a store, then Sales collection or Channel settlement.',
     bankParseNoRows: 'No parsed transactions found. Please check K-DEPOSIT format.',
     bankParseFailPrefix: 'File parse failed:',
     bankPlanAmountMismatch: 'Bank amount must match the selected payment plan balance (sum).',
@@ -12929,12 +12946,17 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_bank_transactions:
       'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables/borrowings. Officer deposits to the company: Borrowing in + related party (do not post as sales 4110). When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
     helpHow_admin_bank_transactions:
-      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Stores with POS auto-journals (card/delivery→1130): use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements—do not use revenue_* (double revenue risk). POS store bank category lists hide delivery/card/QR/cash except on legacy rows; saves are rejected (new/bulk coerced to Sales collection; editing an existing revenue_* row is rejected). Open the bank row from Ledger recon to fix. Post fees on POS settlement or use Channel settlement on the deposit row in Bank.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
+      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ POS/EDC stores: Delivery/Card/QR/Cash are shown again. Keep Grab/card/QR deposits as Sales collection + store + sales date, then use Channel settlement on the right for fees. Saving as Delivery/Card/QR/Cash on a POS store is rejected or converted to Sales collection (double-sales risk).\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
     bankManualS3PosReceivable:
       'POS auto-journal stores: card/delivery/QR deposits → Sales collection + store. Avoid revenue_* categories (double 4110).',
     bankPosReceivableDepositTitle: 'POS auto-journal — deposit category',
     bankPosReceivableDepositBody:
-      'Use Sales collection (receivable_receive) + store + sales date for Grab/card/QR settlements. POS store bank category lists hide delivery/card/QR/cash except on legacy rows that already have them. Saves are rejected. Fix legacy rows from Ledger recon → Bank.',
+      'Use Sales collection + store + sales date for Grab/card/QR deposits. Delivery/Card/QR/Cash appear in the list, but saving those on a POS store is rejected or converted to Sales collection.',
+    bankPosStoreCategoryLockedHint:
+      'This is a POS store account. You cannot pick Delivery, Card, QR, or Cash (it looks locked after EDC — that is expected). Keep the type as Sales collection, then tap Channel settlement on the right for Grab, Shopee, QR, or card. The quick phrases above fill the Note field only.',
+    bankPosStoreCategorySelectTitle:
+      'POS store: Delivery/Card/QR/Cash are hidden. Use Channel settlement on the right for Grab, Shopee, QR, or card.',
+    bankPosStoreCategoryHiddenOptions: 'Delivery/Card/QR/Cash hidden — use Channel settlement on the right',
     bankPosChannelSettleHint:
       'Post fees (GROSS−NET) on POS settlement, or click Channel settlement on a deposit row below.',
     bankPosChannelSettlePosLink: 'POS settlement →',
@@ -18238,7 +18260,7 @@ orderItemQty: 'จำนวน',
     helpSum_admin_attendance:
       'Attendance records, approval, schedule view/edit in one place.',
     helpHow_admin_attendance:
-      'กรอง อนุมัติ ปรับเวลา — แท็บช่วยเหลือมีกฎ ตารางงานเลือกเริ่มพักได้ตามช่วงที่แสดง รวมหลังเที่ยงคืน (24:00 ขึ้นไป)',
+      'กรอง อนุมัติ ปรับเวลา — แท็บช่วยเหลือมีกฎ ตารางงานเลือกเริ่มพักได้ตามช่วงที่แสดง รวมหลังเที่ยงคืนถึงเช้า (เช่น 22:00–07:00 คือ 22:00–31:00) ครับ',
     helpSum_admin_leave:
       'อนุมัติ/ปฏิเสธการลา และดูสถิติการใช้ ค่าเริ่มต้นแสดงพนักงานที่ยังปฏิบัติงานอยู่ครับ',
     helpHow_admin_leave:
@@ -20542,7 +20564,7 @@ orderItemQty: 'จำนวน',
     bankRegisterLinkExpenseMgmt: 'เชื่อมจัดการค่าใช้จ่าย',
     bankImportQuickMemosTitle: 'ข้อความที่ใช้บ่อย',
     bankImportQuickMemoHint:
-      'คลิกช่องรายละเอียดก่อน แล้วคลิกปุ่มเพื่อใส่ในแถวนั้น ถ้าไม่ได้เลือกช่องจะคัดลอกไปคลิปบอร์ด',
+      'กดช่อง「หมายเหตุ」ก่อน แล้วกดปุ่มเพื่อใส่ในแถวนั้นครับ ปุ่มนี้ไม่เปลี่ยนประเภท (เดลิเวอรี่/บัตร) ถ้าไม่ได้เลือกช่องจะคัดลอกไปคลิปบอร์ด',
     bankImportQuickMemoCopied: 'คัดลอกไปคลิปบอร์ดแล้ว',
     bankImportQuickMemoCopyFailed: 'คัดลอกไม่สำเร็จ',
     bankQuickMemosManage: 'แก้ไข',
@@ -20557,14 +20579,35 @@ orderItemQty: 'จำนวน',
     bankImportQueuedForSync:
       'บันทึกชั่วคราวในเบราว์เซอร์นี้เท่านั้น (เครือข่าย) จะส่งเมื่อออนไลน์ หากเป็นหมวด revenue_* ให้เปลี่ยนเป็น receivable_receive ก่อนบันทึก',
     bankImportPosRevenueHint:
-      'ร้าน POS: เงินเข้า Grab/บัตร/QR ใช้รับยอดขาย + สาขา รายการเดลิเวอรี่ บัตร QR เงินสดถูกซ่อนในบัญชีสาขา POS ครับ ค่าธรรมเนียมใช้ชำระช่องทาง',
+      'สาขา POS: เงินเข้า Grab/บัตร/QR ใช้「รับชำระ」+ สาขา อย่าบันทึกเป็นเดลิเวอรี่ บัตร QR เงินสด จะมียอดขายซ้ำครับ ค่าธรรมเนียมกด「ชำระช่องทาง」',
+    bankPosRevenueDepositSaveHint:
+      'สาขาที่ใช้ POS: เงินเข้า Grab/บัตร/QR ให้เปลี่ยนเป็น「รับชำระ」แล้วบันทึกครับ ค่าธรรมเนียมบัตร/เดลิเวอรี่ใช้「ชำระช่องทาง」',
+    bankPosRevenueDepositDoubleRisk:
+      'สาขา「{store}」มียอดขายจาก POS แล้ว ไม่สามารถใช้หมวด「{category}」ได้ เพราะยอดขาย (4110) จะซ้ำครับ ให้เปลี่ยนเป็น「รับชำระ」 เงินเข้าบัตร/เดลิเวอรี่ใช้「ชำระช่องทาง」ครับ',
+    bankPosRevenueDepositStoreRequired:
+      'เงินเข้า Grab/บัตร/QR ต้องระบุสาขา แล้วใช้「รับชำระ」หรือ「ชำระช่องทาง」ครับ',
     recon_openBank: 'ธนาคาร',
     recon_riskyRevenueDeposits: 'เงินเข้าเสี่ยงยอดขายซ้ำ POS',
     recon_riskyRevenueDepositsHint:
-      'หมวด revenue_* กด「ธนาคาร」แล้วเปลี่ยนเป็นรับยอดขายหรือชำระช่องทาง สาขา POS บันทึก revenue_* ใหม่ไม่ได้ครับ',
-    bankPosReceivableDepositTitle: 'ร้านลงบัญชีอัตโนมัติจาก POS — ประเภทเงินเข้า',
+      'หมวดเดลิเวอรี่/บัตร/QR กด「ธนาคาร」แล้วเปลี่ยนเป็น「รับชำระ」หรือ「ชำระช่องทาง」 สาขา POS บันทึกหมวดเดิมใหม่ไม่ได้ครับ',
+    bankPosReceivableDepositTitle: 'สาขา POS — ประเภทเงินเข้า',
     bankPosReceivableDepositBody:
-      'เงินเข้าชำระ Grab บัตร QR ให้ใช้รับยอดขาย + สาขาและวันขายเท่านั้นครับ บัญชีสาขา POS ซ่อนหมวดเดลิเวอรี่ บัตร QR เงินสด เหลือเฉพาะรายการเก่าที่บันทึกไว้แล้ว บันทึกใหม่ไม่ได้ครับ รายการเก่าให้เปิดจากแท็บกระทบยอดบัญชีแล้วเปลี่ยนเป็นรับยอดขายครับ',
+      'เงินเข้า Grab บัตร QR ให้ใช้「รับชำระ」+ สาขาและวันขายครับ เดลิเวอรี่ บัตร QR เงินสดยังเห็นในรายการเลือกได้ แต่สาขา POS บันทึกหมวดนั้นไม่ได้หรือระบบจะเปลี่ยนเป็นรับชำระครับ',
+    bankPosStoreCategoryLockedHint:
+      'บัญชีนี้เป็นสาขา POS ครับ เลือกหมวดเดลิเวอรี่ บัตร QR เงินสดไม่ได้ (หลังเชื่อม EDC เหมือนล็อก เป็นเรื่องปกติ) ให้ประเภทเป็น「รับชำระ」 แล้วกด「ชำระช่องทาง」ด้านขวาสำหรับ Grab Shopee QR บัตร ปุ่มข้อความที่ใช้บ่อยด้านบนใส่ได้แค่ช่อง「หมายเหตุ」ครับ',
+    bankPosStoreCategorySelectTitle:
+      'สาขา POS: ซ่อนเดลิเวอรี่ บัตร QR เงินสด ใช้「ชำระช่องทาง」ด้านขวาสำหรับ Grab Shopee QR บัตรครับ',
+    bankPosStoreCategoryHiddenOptions: 'เดลิเวอรี่ บัตร QR เงินสดถูกซ่อน — ใช้「ชำระช่องทาง」ด้านขวาครับ',
+    bankPosChannelSettleHint:
+      'ค่าธรรมเนียม (GROSS−NET) ลงที่ปิดยอด POS หรือกด「ชำระช่องทาง」ที่แถวเงินเข้าด้านล่างครับ',
+    bankPosChannelSettlePosLink: 'ปิดยอด POS →',
+    bankPosChannelSettleRowBtn: 'ชำระช่องทาง',
+    bankPosChannelSettleNeedStore: 'เลือกสาขาก่อนแล้วค่อยชำระช่องทางครับ',
+    bankPosChannelSettleDialogTitle: 'ชำระช่องทาง (ลงค่าธรรมเนียม)',
+    bankPosChannelSettleDialogDesc:
+      'NET = ยอดเงินเข้านี้ FEE = GROSS − NET ปิดวันและ CSV ทั้งชุดทำที่ปิดยอด POS ได้ครับ',
+    bankManualS3PosReceivable:
+      'สาขา POS: เงินเข้าบัตร เดลิเวอรี่ QR ให้เป็น「รับชำระ」+ สาขา อย่าใช้หมวดเดลิเวอรี่/บัตร จะมียอดขายซ้ำครับ',
     bankParseNoRows: 'ไม่พบรายการที่แปลงได้ กรุณาตรวจสอบรูปแบบ K-DEPOSIT',
     bankParseFailPrefix: 'แปลงไฟล์ไม่สำเร็จ:',
     bankPlanAmountMismatch: 'จำนวนเงินธนาคารต้องตรงกับยอดคงเหลือของรายการที่เลือก (รวม)',
@@ -20786,13 +20829,13 @@ orderItemQty: 'จำนวน',
     bankSalesDate: 'วันขาย',
     bankExpenseDate: 'วันค่าใช้จ่าย',
     bankAttributedDate: 'วันรับรู้',
-    bankMemoLabel: 'รหัสธนาคาร',
+    bankMemoLabel: 'รายการธนาคาร',
     bankReconcileCol: 'กระทบยอด',
     bankReconcileBy: 'โดย',
-    bankNoteLabel: 'รายละเอียด',
-    bankMemoPh: 'รหัสธนาคาร',
-    bankNotePh: 'รายละเอียด',
-    bankNotePlaceholder: 'กรอกรายละเอียด',
+    bankNoteLabel: 'หมายเหตุ',
+    bankMemoPh: 'รายการธนาคาร',
+    bankNotePh: 'หมายเหตุ',
+    bankNotePlaceholder: 'ใส่หมายเหตุ',
     accountSubject: 'บัญชี',
     adminFixedExpenses: 'ค่าใช้จ่ายคงที่',
     fixedExpTitle: 'ค่าใช้จ่ายคงที่',

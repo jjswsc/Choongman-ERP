@@ -12,8 +12,9 @@ export function shouldCreateFranchiseReceivableSubledgerFromBankReceive(params: 
   linkedToChannelSettlement: boolean
   hasPosCompletedOrders: boolean
   memo?: string | null
+  note?: string | null
 }): boolean {
   if (params.linkedToChannelSettlement) return false
-  if (params.hasPosCompletedOrders && isPosChannelSettlementMemo(params.memo)) return false
+  if (params.hasPosCompletedOrders && isPosChannelSettlementMemo(params.memo, params.note)) return false
   return true
 }

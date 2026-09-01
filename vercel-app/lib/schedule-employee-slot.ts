@@ -221,11 +221,27 @@ export function resolveScheduleDisplayNickFromMaps(
   return maps.nameToNick[nm] || nm
 }
 
-const SCHEDULE_HOUR_MAX = 29
+/**
+ * 그리드에 넣을 수 있는 최대 시각(시). 32 = 32:00·32:30 슬롯 = 익일 08:00~09:00.
+ * 22:00–07:00은 30시 슬롯까지, 22:00–08:00(근무 8.5+휴게 1.5)은 31시 슬롯까지 필요하다.
+ */
+export const SCHEDULE_HOUR_MAX = 32
+export const SCHEDULE_HOUR_DEFAULT_START = 6
+/** 기본 끝 시각. 31 = 31:30까지 = 익일 07:30~08:00 */
+export const SCHEDULE_HOUR_DEFAULT_END = 31
 
-function clampScheduleHour(n: number): number {
+export function clampScheduleHour(n: number): number {
   if (!Number.isFinite(n)) return 0
   return Math.max(0, Math.min(SCHEDULE_HOUR_MAX, Math.trunc(n)))
+}
+
+/**
+ * 종료 시각(분, 해당 시각은 미포함)을 그리드에 넣으려면 endHour가 이 값 이상이어야 한다.
+ * 예: 31:00(익일 07:00) 종료 → 30, 30:00(익일 06:00) 종료 → 29.
+ */
+export function scheduleGridEndHourForExclusiveEndMinutes(endMin: number): number {
+  if (!Number.isFinite(endMin) || endMin <= 0) return 0
+  return clampScheduleHour(Math.floor((endMin - 1) / 60))
 }
 
 /**

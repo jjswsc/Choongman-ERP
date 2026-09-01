@@ -5,6 +5,7 @@ import {
   formatSellerBranch,
   looksLikeJunkSellerName,
   thaiTinChecksumOk,
+  trimPurchaseTaxSellerName,
   type ExtractedPurchaseTaxInvoiceFields,
 } from '@/lib/purchase-tax-invoice-core'
 
@@ -220,7 +221,7 @@ export function fillSellerFromProfiles(
   if (tin.length !== 13) return row
   const hit = known.find((k) => digitsTin13(k.sellerTaxId) === tin && String(k.sellerName || '').trim())
   if (!hit) return row
-  const currentName = String(row.sellerName || '').trim()
+  const currentName = trimPurchaseTaxSellerName(row.sellerName)
   const useProfileName = !currentName || looksLikeJunkSellerName(currentName)
   return {
     ...row,

@@ -30,6 +30,7 @@ export type BankReceivableLinkRow = {
   category?: string
   storeName?: string | null
   memo?: string | null
+  note?: string | null
   isReceivableLinked?: boolean
   isChannelSettled?: boolean
 }
@@ -40,7 +41,7 @@ export function bankDepositNeedsReceivableOrderLink(row: BankReceivableLinkRow):
   if (String(row.category || '').toLowerCase() !== 'receivable_receive') return false
   if (!String(row.storeName || '').trim()) return false
   if (row.isChannelSettled) return false
-  if (isPosChannelSettlementMemo(row.memo)) return false
+  if (isPosChannelSettlementMemo(row.memo, row.note)) return false
   return true
 }
 

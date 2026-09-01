@@ -21,6 +21,7 @@ export type BankAttentionRow = {
   vendorCode?: string | null
   storeName?: string | null
   memo?: string | null
+  note?: string | null
   isLinked?: boolean
   isReceivableLinked?: boolean
   isChannelSettled?: boolean
@@ -34,6 +35,7 @@ export type BankAttentionEdits = {
   accountSubjectId?: string
   vendorCode?: string
   storeName?: string
+  note?: string
 }
 
 const DEPOSIT_CATEGORIES_NEED_SUBJECT = new Set([
@@ -100,6 +102,7 @@ export function bankRowNeedsAttention(
       category: cat,
       storeName: resolveBankRowStoreName(row, edits),
       memo: row.memo,
+      note: edits?.note !== undefined ? edits.note : row.note,
       isReceivableLinked: row.isReceivableLinked,
       isChannelSettled: row.isChannelSettled,
     })

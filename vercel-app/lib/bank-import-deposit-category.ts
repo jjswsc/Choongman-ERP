@@ -15,10 +15,17 @@ export const POS_REVENUE_DEPOSIT_CATEGORIES = [
  * @see docs/ACCOUNTING_LEDGER_SOP.md §2–3
  */
 export const POS_CHANNEL_SETTLEMENT_MEMO_RE =
-  /\b(grabfood|grabtaxi|grab|line\s*pay|linepay|line\s*man|lineman|shopeefood|shopee|shopeepay|food\s*panda|foodpanda|robinhood|delivery|배달|visa|master|mastercard|unionpay|jcb|card|credit|카드|qr|promptpay|truemoney|판매대금|qr결제)\b/i
+  /\b(grabfood|grabtaxi|grab|line\s*pay|linepay|line\s*man|lineman|shopeefood|shopee|shopeepay|food\s*panda|foodpanda|robinhood|delivery|배달|visa|master|mastercard|unionpay|jcb|edc|card|credit|카드|บัตร|qr|promptpay|truemoney|พร้อมเพย์|판매대금|qr결제|store sales?\s*qr)\b/i
 
-export function isPosChannelSettlementMemo(memo: string | undefined | null): boolean {
-  return POS_CHANNEL_SETTLEMENT_MEMO_RE.test(String(memo || '').trim())
+export function isPosChannelSettlementMemo(
+  ...texts: Array<string | undefined | null>
+): boolean {
+  return texts.some((text) => {
+    const s = String(text || '').trim()
+    if (!s) return false
+    if (POS_CHANNEL_SETTLEMENT_MEMO_RE.test(s)) return true
+    return /บัตรเครดิต|พร้อมเพย์|คิวอาร์/.test(s)
+  })
 }
 
 /** suggest-deposit-from-memo·적요 규칙과 동일 — 통장 UI·가드에서 채널별 매출 계정 */
@@ -44,7 +51,7 @@ export function isPosRevenueDepositCategory(category: string | undefined | null)
   return (POS_REVENUE_DEPOSIT_CATEGORIES as readonly string[]).includes(c)
 }
 
-/** 통장 입금 용도 드롭다운 — POS 매장에서는 revenue_* 숨김 */
+/** 통장 입금 용도 드롭다운 (배달앱·카드·QR·현금 포함). POS 매장 저장 가드는 API에서 유지 */
 export const BANK_DEPOSIT_UI_CATEGORIES = [
   'revenue_delivery',
   'revenue_card',
@@ -79,6 +86,26 @@ export function filterBankDepositUiCategories(params: {
       option,
     })
   )
+}
+
+/**
+ * POS 매장 통장 조회: 옛 revenue_* 줄에 메모·저장할 때 매출 수령으로 맞춤.
+ * 칩(Grab Sales 등)은 분류가 아니라 상세라서, 저장 시 분류를 같이 바꿔야 이중 매출 가드에 안 막힌다.
+ */
+export function posStoreLegacyRevenueSavePatch(params: {
+  transType?: string | null
+  hidePosRevenue: boolean
+  category: string
+  storeName?: string | null
+  accountStore?: string | null
+}): { category: 'receivable_receive'; storeName?: string } | null {
+  if (String(params.transType || '').toLowerCase() !== 'deposit') return null
+  if (!params.hidePosRevenue) return null
+  if (!isPosRevenueDepositCategory(params.category)) return null
+  const store = String(params.storeName || params.accountStore || '').trim()
+  return store
+    ? { category: 'receivable_receive', storeName: store }
+    : { category: 'receivable_receive' }
 }
 
 /** 본사 통장은 제외. POS 터미널 매장 목록과 계좌 매장이 같으면 revenue_* 숨김 */
