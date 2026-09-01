@@ -79,6 +79,13 @@ describe('findLayoutInvoiceNo', () => {
     expect(got?.value).toBe('IV6907772')
   })
 
+  it('OCR이 IV 머리글자를 1V로 읽어도 되돌린다', () => {
+    const got = findLayoutInvoiceNo(
+      page([line(400, [['เลขที่', 1500], ['1V20260820-2330', 1800]])])
+    )
+    expect(got?.value).toBe('IV20260820-2330')
+  })
+
   it('라벨이 없어도 머리말 오른쪽의 번호 꼴은 후보로 받는다', () => {
     const got = findLayoutInvoiceNo(page([line(120, [['Menustyle', 370], ['Printing', 670], ['IV-016119', 2010]])]))
     expect(got?.value).toBe('IV-016119')

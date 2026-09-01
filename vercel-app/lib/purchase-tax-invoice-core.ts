@@ -140,15 +140,77 @@ export function shopeeUniqueInvoiceTail(raw: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * OCR이 머리글자 I를 1(또는 l, |)로 읽은 경우.
+ * 숫자 1을 I로 일괄 바꾸면 IM/INV가 깨지므로, 알려진 접두만 되돌린다.
+ */
+export function fixOcrInvoiceLetterIPrefix(raw: string): string {
+  const s = String(raw || '')
+  if (/^1NV(?=[-/]?\d)/i.test(s)) return s.replace(/^1NV/i, 'INV')
+  if (/^1VT(?=[-/]?\d)/i.test(s)) return s.replace(/^1VT/i, 'IVT')
+  if (/^1M(?=20\d{12}$)/i.test(s)) return s.replace(/^1M/i, 'IM')
+  if (/^[Il1|]V(?=\d{6})/.test(s)) return s.replace(/^[Il1|]V/, 'IV')
+  return s
+}
+
+export function compactPurchaseInvoiceToken(raw: string): string {
+  return fixOcrInvoiceLetterIPrefix(
+    String(raw || '')
+      .replace(/\s*-\s*/g, '-')
+      .replace(/\s*\/\s*/g, '/')
+      .replace(/\s+/g, '')
+      .trim()
+  )
+}
+
+/**
+ * 같은 장인가. 머리글자만 빠지거나 OCR이 I를 1로 읽은 경우는 같고,
+ * 날짜가 들어 있는 본문이 다르면(IV20260818-2330 vs IV20260820-2330) 다른 문서.
+ * 끝 일련번호만 같다고 합치지 않는다.
+ */
+export function purchaseInvoiceNosAreSameDocument(a?: string, b?: string): boolean {
+  const compact = (s?: string) =>
+    compactPurchaseInvoiceToken(String(s || ''))
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+  const na = compact(a)
+  const nb = compact(b)
+  if (!na || !nb) return false
+  if (na === nb) return true
+  const strip = (t: string) => t.replace(/^(INV|IVT|IV|NX|NC|RV|SI|CS|DCI|DOI|TI|ABB|RT)/, '')
+  const sa = strip(na)
+  const sb = strip(nb)
+  if (sa === sb && sa.length >= 6) return true
+  const letterPrefixOnly = (longer: string, shorter: string) => {
+    if (shorter.length < 6 || !longer.endsWith(shorter)) return false
+    const extra = longer.slice(0, longer.length - shorter.length)
+    return /^[A-Z]{1,4}$/.test(extra) && !/[A-Z]/.test(shorter)
+  }
+  return letterPrefixOnly(na, nb) || letterPrefixOnly(nb, na)
+}
+
+export function purchaseInvoiceConflictsWithPrior(
+  invoiceNo: string,
+  sellerTaxId: string,
+  prior: Array<{ invoiceNo?: string; sellerTaxId?: string }>
+): boolean {
+  const no = String(invoiceNo || '').trim()
+  if (!no) return false
+  const tin = digitsTin13(sellerTaxId)
+  return prior.some(
+    (r) =>
+      String(r.invoiceNo || '').trim() &&
+      digitsTin13(r.sellerTaxId) === tin &&
+      purchaseInvoiceNosAreSameDocument(r.invoiceNo, no)
+  )
+}
+
 export function purchaseTaxInvoiceDedupeKey(
   buyerTaxId: string,
   invoiceNo: string,
   sellerTaxId: string
 ): string {
-  const raw = String(invoiceNo || '')
-    .trim()
-    .replace(/\s+/g, '')
-    .toUpperCase()
+  const raw = compactPurchaseInvoiceToken(String(invoiceNo || '')).toUpperCase()
   const inv = shopeeUniqueInvoiceTail(raw) || raw
   return `${digitsTin13(buyerTaxId)}|${inv}|${digitsTin13(sellerTaxId)}`
 }

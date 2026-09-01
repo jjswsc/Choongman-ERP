@@ -14,6 +14,9 @@ import {
   purchaseTaxDocMonthMismatch,
   purchaseTaxInvoiceDedupeKey,
   uniquePositiveIds,
+  fixOcrInvoiceLetterIPrefix,
+  purchaseInvoiceConflictsWithPrior,
+  purchaseInvoiceNosAreSameDocument,
   purchaseTaxInvoiceHasExtractedFields,
   purchaseTaxReviewFlags,
   purchaseTaxReviewIsProblem,
@@ -86,11 +89,44 @@ describe('purchase tax invoice helpers', () => {
     expect(
       purchaseTaxInvoiceDedupeKey('0105566137147', '260821-001305', '0105558019581')
     ).not.toBe(purchaseTaxInvoiceDedupeKey('0105566137147', '260822-001400', '0105558019581'))
+    expect(
+      purchaseTaxInvoiceDedupeKey('0105566137147', '1V20260818-2330', '0105566137147')
+    ).toBe(purchaseTaxInvoiceDedupeKey('0105566137147', 'IV20260818-2330', '0105566137147'))
+    expect(
+      purchaseTaxInvoiceDedupeKey('0105566137147', 'IV20260818-2330', '0105566137147')
+    ).not.toBe(purchaseTaxInvoiceDedupeKey('0105566137147', 'IV20260820-2330', '0105566137147'))
+  })
+
+  it('does not treat the same running sequence on different dates as one invoice', () => {
+    expect(purchaseInvoiceNosAreSameDocument('1V20260818-2330', '1V20260820-2330')).toBe(false)
+    expect(purchaseInvoiceNosAreSameDocument('IV20260818-2330', 'IV20260820-2330')).toBe(false)
+    expect(purchaseInvoiceNosAreSameDocument('1V20260818-2330', 'IV20260818-2330')).toBe(true)
+    expect(purchaseInvoiceNosAreSameDocument('IV690819-0637', '690819-0637')).toBe(true)
+    expect(purchaseInvoiceNosAreSameDocument('IV20260818-2330', '2330')).toBe(false)
+    expect(
+      purchaseInvoiceConflictsWithPrior('1V20260818-2330', '0105566137147', [
+        { invoiceNo: '1V20260820-2330', sellerTaxId: '0105566137147' },
+      ])
+    ).toBe(false)
+    expect(
+      purchaseInvoiceConflictsWithPrior('1V20260818-2330', '0105566137147', [
+        { invoiceNo: 'IV20260818-2330', sellerTaxId: '0105566137147' },
+      ])
+    ).toBe(true)
   })
 
   it('keeps unique positive ids for bulk delete', () => {
     expect(uniquePositiveIds(['1', 2, 2, 0, -3, 'x', 4])).toEqual([1, 2, 4])
     expect(uniquePositiveIds([1, 2, 3], 2)).toEqual([1, 2])
+  })
+
+  it('restores OCR I→1 on IV/INV/IM prefixes', () => {
+    expect(fixOcrInvoiceLetterIPrefix('1V20260820-2330')).toBe('IV20260820-2330')
+    expect(fixOcrInvoiceLetterIPrefix('IV20260820-2330')).toBe('IV20260820-2330')
+    expect(fixOcrInvoiceLetterIPrefix('1V690819-0637')).toBe('IV690819-0637')
+    expect(fixOcrInvoiceLetterIPrefix('1NV-20260524902')).toBe('INV-20260524902')
+    expect(fixOcrInvoiceLetterIPrefix('IM20260819011079')).toBe('IM20260819011079')
+    expect(fixOcrInvoiceLetterIPrefix('010726E00037051')).toBe('010726E00037051')
   })
 
   it('formats seller branch as สำนักงานใหญ่ or สาขา 00001', () => {

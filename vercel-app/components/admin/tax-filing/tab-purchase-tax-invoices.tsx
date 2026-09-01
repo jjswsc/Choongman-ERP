@@ -26,8 +26,8 @@ import {
   formatSellerBranch,
   displaySellerBranchForUi,
   isLikelyTaxInvoiceCopy,
+  purchaseInvoiceConflictsWithPrior,
   purchaseTaxDocMonthMismatch,
-  purchaseTaxInvoiceDedupeKey,
   purchaseTaxInvoiceHasExtractedFields,
   purchaseTaxPp30Compare,
   purchaseTaxReviewFlags,
@@ -698,14 +698,12 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     setError("")
     setSaveNotice("")
     const extracted: ReviewRow[] = []
-    const seen = new Set(rows.map((r) => purchaseTaxInvoiceDedupeKey(r.buyerTaxId, r.invoiceNo, r.sellerTaxId)))
     const storeName = defaultStoreFromFilter(filingStoreFilter, form.storeName || fallbackStore)
 
     const pushFromParsed = (f: ExtractedPurchaseTaxInvoiceFields, page: number, failReason?: string) => {
       const invoiceNo = String(f.invoiceNo || "").trim()
       const sellerTaxId = String(f.sellerTaxId || "").replace(/\D/g, "")
       const isCopy = f.isCopy === true || isLikelyTaxInvoiceCopy(String(f.sellerName || ""))
-      const key = purchaseTaxInvoiceDedupeKey("x", invoiceNo, sellerTaxId)
       let skip = false
       let skipReason = ""
       if (failReason || !purchaseTaxInvoiceHasExtractedFields(f)) {
@@ -714,21 +712,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       } else if (isCopy) {
         skip = true
         skipReason = "ptiPdfSkipCopy"
-      } else if (invoiceNo && seen.has(purchaseTaxInvoiceDedupeKey(rows[0]?.buyerTaxId || "x", invoiceNo, sellerTaxId))) {
+      } else if (purchaseInvoiceConflictsWithPrior(invoiceNo, sellerTaxId, [...rows, ...extracted])) {
         skip = true
         skipReason = "ptiDupError"
-      } else if (
-        invoiceNo &&
-        extracted.some(
-          (r) =>
-            r.invoiceNo.replace(/\s+/g, "").toUpperCase() === invoiceNo.replace(/\s+/g, "").toUpperCase() &&
-            r.sellerTaxId === sellerTaxId
-        )
-      ) {
-        skip = true
-        skipReason = "ptiPdfSkipCopy"
       }
-      if (invoiceNo) seen.add(key)
       extracted.push({
         storeName,
         docDate: String(f.docDate || "").slice(0, 10),
@@ -926,15 +913,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               window.confirm(
                 tr(t, "ptiScanResume", { n: String(checkpoint.nextPage - 1), total: String(checkpoint.total || total) })
               )
-            if (resume) {
-              startPage = Math.min(checkpoint.nextPage, total)
-              extracted.push(...checkpoint.rows)
-              for (const row of checkpoint.rows) {
-                if (row.invoiceNo) {
-                  seen.add(purchaseTaxInvoiceDedupeKey("x", row.invoiceNo, row.sellerTaxId))
-                }
-              }
-              setReviewRows([...extracted])
+              if (resume) {
+                startPage = Math.min(checkpoint.nextPage, total)
+                extracted.push(...checkpoint.rows)
+                setReviewRows([...extracted])
               setPdfBusy({
                 key: "ptiScanResuming",
                 vars: { n: String(startPage), total: String(total) },

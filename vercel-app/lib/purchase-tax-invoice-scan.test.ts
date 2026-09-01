@@ -21,6 +21,8 @@ import {
   extractPurchaseTaxInvoicesFromScanText,
   fillSellerNameFromTinLookup,
   invoiceNoLooksPlausible,
+  invoiceTokensAreSameDocument,
+  collapseExtractedInvoices,
   pageLooksFullyVatExempt,
   snapDocDateYearToTaxPeriod,
   splitScanTextIntoInvoiceBlocks,
@@ -79,6 +81,8 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('110510042902')).toBe(true)
     expect(invoiceNoLooksPlausible('IV 6907772')).toBe(true)
     expect(invoiceNoLooksPlausible('INV-20260531153')).toBe(true)
+    expect(invoiceNoLooksPlausible('1V20260820-2330')).toBe(true)
+    expect(invoiceNoLooksPlausible('IV20260820-2330')).toBe(true)
     expect(invoiceNoLooksPlausible('AB-99')).toBe(true)
     expect(invoiceNoLooksPlausible('IM20260701000087')).toBe(true)
     expect(invoiceNoLooksPlausible('010726E00037051')).toBe(true)
@@ -96,6 +100,24 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('TRSPESPF00-00000-260701-017862')).toBe(true)
     expect(invoiceNoLooksPlausible('260821-001305')).toBe(true)
     expect(invoiceNoLooksPlausible('IM202607040')).toBe(false)
+  })
+})
+
+describe('invoiceTokensAreSameDocument', () => {
+  it('keeps IV+date invoices with the same sequence as different documents', () => {
+    expect(invoiceTokensAreSameDocument('1V20260818-2330', '1V20260820-2330')).toBe(false)
+    expect(invoiceTokensAreSameDocument('IV20260818-2330', 'IV20260820-2330')).toBe(false)
+    expect(invoiceTokensAreSameDocument('1V20260818-2330', 'IV20260818-2330')).toBe(true)
+    expect(invoiceTokensAreSameDocument('IV690819-0637', '690819-0637')).toBe(true)
+  })
+
+  it('does not collapse different dated invoices that share a sequence', () => {
+    const rows = collapseExtractedInvoices([
+      { invoiceNo: '1V20260818-2330', sellerTaxId: BUYER, netAmount: 100, vatAmount: 7 },
+      { invoiceNo: '1V20260820-2330', sellerTaxId: BUYER, netAmount: 200, vatAmount: 14 },
+    ])
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.invoiceNo)).toEqual(['1V20260818-2330', '1V20260820-2330'])
   })
 })
 
@@ -155,6 +177,23 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
     expect(row?.vatAmount).toBe(100.81)
     expect(purchaseTaxInvoiceTextExtractIsComplete(row, { buyerTaxId: BUYER })).toBe(true)
     expect(pdfPageTextIsReliableForExtract(text, { buyerTaxId: BUYER })).toBe(true)
+  })
+
+  it('restores OCR 1V to IV on a YYYYMMDD invoice number', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบกำกับภาษี',
+        'เลขที่ 1V20260820-2330',
+        'วันที่ 20/08/2026',
+        'บริษัท เอสแอนด์เจ โกลบอล จำกัด',
+        'เลขประจำตัวผู้เสียภาษี 0105558123456',
+        'มูลค่าสินค้า 3280.00',
+        'ภาษีมูลค่าเพิ่ม 229.60',
+      ].join('\n'),
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.invoiceNo).toBe('IV20260820-2330')
+    expect(row?.docDate).toBe('2026-08-20')
   })
 
   it('runs sparse OCR when amounts are still missing even if invoice and TIN are present', () => {
@@ -491,6 +530,8 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
 
   it('prefers IV prefix and BE yymmdd in the office invoice number over a misread month', () => {
     expect(inferDocDateFromInvoiceNo('IV690819-0637')).toBe('2026-08-19')
+    expect(inferDocDateFromInvoiceNo('IV20260820-2330')).toBe('2026-08-20')
+    expect(inferDocDateFromInvoiceNo('1V20260820-2330')).toBe('2026-08-20')
     expect(inferDocDateFromInvoiceNo('260821-001305')).toBe('2026-08-21')
     expect(inferDocDateFromInvoiceNo('TRSPEFHM00-00000-260821-001305')).toBe('2026-08-21')
     const repaired = repairExtractedPurchaseTaxInvoice(

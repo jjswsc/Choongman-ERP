@@ -3,7 +3,7 @@
  * (1) PDF 글자층 (2) QR (jsQR·URL·파이프) (3) 브라우저 태국어 OCR (4) 매수자 TIN 힌트·금액 교차검증.
  */
 
-import { formatSellerBranch, digitsTin13, isLikelyTaxInvoiceCopy, isTruncatedShopeeInvoiceNo, looksLikeJunkSellerName, normalizeShopeeInvoiceBlob, purchaseTaxInvoiceHasExtractedFields, purchaseTaxVatLooksWrong, shopeeUniqueInvoiceTail, thaiTinChecksumOk, trimPurchaseTaxSellerName, type ExtractedPurchaseTaxInvoiceFields } from '@/lib/purchase-tax-invoice-core'
+import { formatSellerBranch, compactPurchaseInvoiceToken, digitsTin13, fixOcrInvoiceLetterIPrefix, isLikelyTaxInvoiceCopy, isTruncatedShopeeInvoiceNo, looksLikeJunkSellerName, normalizeShopeeInvoiceBlob, purchaseInvoiceNosAreSameDocument, purchaseTaxInvoiceHasExtractedFields, purchaseTaxVatLooksWrong, shopeeUniqueInvoiceTail, thaiTinChecksumOk, trimPurchaseTaxSellerName, type ExtractedPurchaseTaxInvoiceFields } from '@/lib/purchase-tax-invoice-core'
 import { roundMoney2 } from '@/lib/invoice-vat-total'
 import {
   findInvoiceTokenInText,
@@ -218,11 +218,7 @@ function extractTins(text: string): string[] {
 }
 
 function compactInvoiceToken(raw: string): string {
-  return String(raw || '')
-    .replace(/\s*-\s*/g, '-')
-    .replace(/\s*\/\s*/g, '/')
-    .replace(/\s+/g, '')
-    .trim()
+  return compactPurchaseInvoiceToken(raw)
 }
 
 /** OCR이 번호 끝의 ! 를 1로 읽은 경우. I→1 치환은 INV/IM 접두를 깨므로 하지 않음. */
@@ -376,11 +372,11 @@ const INVOICE_LINE_STOP_RE =
   /วันที่|บริษัท|ห้างหุ้น|ห้าง|เลขประจำ|มูลค่า|ภาษีมูลค่า|ผู้ซื้อ|ผู้ขาย|สำนักงาน|สาขา\s*\d|Tax\s*ID|\bTIN\b/i
 
 const OFFICE_INVOICE_RE =
-  /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|IV|TI|ABB|RT)[\-/]?[A-Z0-9\-/ ]{2,48}|\d{7,12})\b/gi
+  /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|IV|1V|TI|ABB|RT)[\-/]?[A-Z0-9\-/ ]{2,48}|\d{7,12})\b/gi
 
 function officeInvoiceRank(inv: string): number {
   const s = String(inv || '')
-  if (/^(INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|IV)[-/]?/i.test(s)) return 8
+  if (/^(INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|IV|1V)[-/]?/i.test(s)) return 8
   if (/[A-Za-z]/.test(s)) return 4
   return 1
 }
@@ -523,21 +519,9 @@ function preferPlausibleInvoiceNo(a?: string, b?: string): string | undefined {
   return aOk || bOk
 }
 
-/** IV690819-0637 과 690819-0637 은 같은 장 */
+/** IV690819-0637 과 690819-0637 은 같은 장. 끝 일련번호만 같으면 다른 문서 */
 export function invoiceTokensAreSameDocument(a?: string, b?: string): boolean {
-  const compact = (s?: string) =>
-    compactInvoiceToken(String(s || ''))
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
-  const na = compact(a)
-  const nb = compact(b)
-  if (!na || !nb) return false
-  if (na === nb) return true
-  const strip = (t: string) => t.replace(/^(INV|IVT|IV|NX|NC|RV|SI|CS|DCI|DOI|TI|ABB|RT)/, '')
-  if (strip(na) === strip(nb) && strip(na).length >= 6) return true
-  if (na.endsWith(nb) && na.length - nb.length <= 4 && /[A-Z]/.test(na) && !/[A-Z]/.test(nb)) return true
-  if (nb.endsWith(na) && nb.length - na.length <= 4 && /[A-Z]/.test(nb) && !/[A-Z]/.test(na)) return true
-  return false
+  return purchaseInvoiceNosAreSameDocument(a, b)
 }
 
 function vatPairLooksOk(row: ExtractedPurchaseTaxInvoiceFields | null | undefined): boolean {
@@ -614,7 +598,7 @@ export function inferSellerFromInvoiceNo(
 }
 
 export function inferDocDateFromInvoiceNo(invoiceNo: string): string | undefined {
-  const s = platformInvoiceBlob(String(invoiceNo || '').trim())
+  const s = platformInvoiceBlob(fixOcrInvoiceLetterIPrefix(String(invoiceNo || '').trim()))
   const im = s.match(/^IM(20\d{2})(\d{2})(\d{2})\d+$/i)
   if (im) return ymdFromParts(Number(im[1]), Number(im[2]), Number(im[3]))
   const lm = s.match(/^LMRN(20\d{2})(\d{2})(\d{2})/i)
@@ -629,6 +613,8 @@ export function inferDocDateFromInvoiceNo(invoiceNo: string): string | undefined
     /^(?:INV|IVT|IV)[\-/]?(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?:[\-/]\d+)?$/i
   )
   if (officePrefixed) return ymdFromParts(Number(officePrefixed[1]), Number(officePrefixed[2]), Number(officePrefixed[3]))
+  const ivYmd = s.match(/^IV(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])-\d+$/i)
+  if (ivYmd) return ymdFromParts(Number(ivYmd[1]), Number(ivYmd[2]), Number(ivYmd[3]))
   const officeBare = s.match(/^(\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[\-/]\d{2,}$/)
   if (officeBare) return ymdFromParts(Number(officeBare[1]), Number(officeBare[2]), Number(officeBare[3]))
   return undefined

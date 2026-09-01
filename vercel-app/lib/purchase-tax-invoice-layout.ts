@@ -10,6 +10,7 @@
  */
 import {
   digitsTin13,
+  fixOcrInvoiceLetterIPrefix,
   isTruncatedShopeeInvoiceNo,
   normalizeShopeeInvoiceBlob,
   purchaseTaxVatLooksWrong,
@@ -204,9 +205,11 @@ const INVOICE_VALUE_STOP_RE = labelPattern(
 )
 
 function cleanLayoutInvoiceToken(raw: string): string {
-  return String(raw || '')
-    .replace(/[^A-Za-z0-9\-/]/g, '')
-    .replace(/^[-/]+|[-/]+$/g, '')
+  return fixOcrInvoiceLetterIPrefix(
+    String(raw || '')
+      .replace(/[^A-Za-z0-9\-/]/g, '')
+      .replace(/^[-/]+|[-/]+$/g, '')
+  )
 }
 
 function invoiceTokenLooksReal(token: string): boolean {
