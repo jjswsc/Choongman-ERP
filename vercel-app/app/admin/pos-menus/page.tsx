@@ -111,8 +111,6 @@ import { OptionItemRowCard } from "@/components/erp/option-item-row-card"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import {
-  POS_MAIN_CATEGORIES,
-  POS_CATEGORIES_BY_MAIN,
   resolveConfiguredCategoriesForMain,
 } from "@/lib/pos-menu-categories"
 import {
@@ -3300,11 +3298,11 @@ export default function PosMenusPage() {
   }, [menus, optionsConfigSearchTerm, optionsConfigCategoryFilter, mainCategoryFilter])
 
   const categories = React.useMemo(() => {
-    const presetFromConfig = categoriesConfig?.categoriesByMain
-      ? new Set(
-          Object.values(categoriesConfig.categoriesByMain).flat().filter((c): c is string => typeof c === "string")
-        )
-      : new Set(POS_MAIN_CATEGORIES.flatMap((m) => POS_CATEGORIES_BY_MAIN[m as keyof typeof POS_CATEGORIES_BY_MAIN] ?? []))
+    const presetFromConfig = new Set(
+      Object.values(categoriesConfig?.categoriesByMain || {})
+        .flat()
+        .filter((c): c is string => typeof c === "string")
+    )
     const fromMenus = new Set(menus.map((m) => m.category).filter((c): c is string => typeof c === "string" && c !== ""))
     const fromDb = new Set(allCategories)
     return Array.from(new Set([...presetFromConfig, ...fromDb, ...fromMenus]))
@@ -3313,9 +3311,9 @@ export default function PosMenusPage() {
   }, [menus, allCategories, categoriesConfig])
 
   const mainCategories = React.useMemo(() => {
-    const preset = categoriesConfig?.mainCategories?.length
-      ? new Set(categoriesConfig.mainCategories.filter((c): c is string => typeof c === "string"))
-      : new Set(POS_MAIN_CATEGORIES)
+    const preset = new Set(
+      (categoriesConfig?.mainCategories || []).filter((c): c is string => typeof c === "string")
+    )
     const fromMenus = new Set(menus.map((m) => m.categoryMain).filter((c): c is string => typeof c === "string" && c !== ""))
     const fromDb = new Set(allMainCategories)
     return Array.from(new Set([...preset, ...fromDb, ...fromMenus]))

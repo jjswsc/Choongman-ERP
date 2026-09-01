@@ -1,6 +1,6 @@
 /**
  * POS 메뉴 대분류·소분류 프리셋
- * 메뉴 관리, 원가 분석 드롭다운에 사용
+ * 충만 레거시 라이브러리(치킨 브랜드). Omni 신규 테넌트 기본값으로 쓰지 않는다.
  */
 
 import {
@@ -80,6 +80,25 @@ export const POS_CATEGORIES_BY_MAIN: Record<PosMainCategory, readonly string[]> 
   Side: ["SIDE MENU", "SIDE DISH", "salad"],
   Drinks: ["DRINKS"],
 } as const
+
+export function emptyPosMenuCategoriesConfig(): PosMenuCategoriesConfigShape {
+  return { mainCategories: [], categoriesByMain: {}, codePrefixByMain: {} }
+}
+
+export function chungmanPresetPosMenuCategoriesConfig(): PosMenuCategoriesConfigShape {
+  return {
+    mainCategories: [...POS_MAIN_CATEGORIES],
+    categoriesByMain: Object.fromEntries(
+      Object.entries(POS_CATEGORIES_BY_MAIN).map(([k, v]) => [k, [...v]])
+    ),
+    codePrefixByMain: {},
+  }
+}
+
+/** Omni(enforce) 신규 계정은 빈 설정. 충만 레거시만 치킨 프리셋. */
+export function fallbackPosMenuCategoriesConfig(omniEnforce: boolean): PosMenuCategoriesConfigShape {
+  return omniEnforce ? emptyPosMenuCategoriesConfig() : chungmanPresetPosMenuCategoriesConfig()
+}
 
 /** 전체 소분류 (평탄화) */
 export const POS_ALL_SUB_CATEGORIES = POS_MAIN_CATEGORIES.flatMap(

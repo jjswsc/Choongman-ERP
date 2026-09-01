@@ -37,7 +37,7 @@ import {
 } from "@/lib/pos-menu-ingredient-quantity-unit"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow, PosMenuIngredient, SauceRow } from "@/lib/api-client"
-import { POS_MAIN_CATEGORIES, mainCategoryMatches, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
+import { mainCategoryMatches } from "@/lib/pos-menu-categories"
 import { posCostAnalysisRowKey, isCostAnalysisBaseRow } from "@/lib/pos-cost-analysis-keys"
 import { getPosMenuIngredients, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis, replacePosMenuIngredients, getMenuCost, type MenuCostBreakdown } from "@/lib/api-client"
 import { syncCostAnalysisRuntime } from "@/lib/cost-analysis-runtime"
@@ -360,21 +360,13 @@ export function CostCalculatorTab({ canEdit = true, initialLoadFromRow, onClearL
     const fromRows = new Set(
       menuRows.map((r) => r.categoryMain).filter((c): c is string => typeof c === "string" && c !== "")
     )
-    return Array.from(new Set([...POS_MAIN_CATEGORIES, ...fromRows]))
+    return Array.from(fromRows)
       .filter((c): c is string => typeof c === "string")
       .sort()
   }, [menuRows])
 
   const categoriesFromMenusByMain = useMemo(() => {
     return (mainCat: string) => {
-      const preset = getPresetCategoriesForMain(mainCat)
-      if (preset) {
-        const fromRows = menuRows
-          .filter((r) => mainCategoryMatches(mainCat, r.categoryMain, r.menuCode))
-          .map((r) => r.category)
-          .filter(Boolean)
-        return Array.from(new Set([...preset, ...fromRows])).sort()
-      }
       const fromRows = menuRows
         .filter((r) => mainCategoryMatches(mainCat, r.categoryMain, r.menuCode))
         .map((r) => r.category)

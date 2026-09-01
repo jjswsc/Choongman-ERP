@@ -34,7 +34,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAdminUrlTab } from '@/lib/use-admin-url-tab'
-import { POS_MAIN_CATEGORIES } from '@/lib/pos-menu-categories'
 import { MarketingPageHero } from '@/components/marketing/marketing-page-hero'
 import { MarketingPageShell } from '@/components/marketing/marketing-page-shell'
 import { MarketingStickyHubBar } from '@/components/marketing/marketing-sticky-hub-bar'
@@ -75,9 +74,9 @@ export default function MarketingPromosPage() {
   const [mainTab, setMainTab] = useAdminUrlTab('tab', ['compose', 'inquiry'] as const, 'compose')
   const [focusPromoId, setFocusPromoId] = React.useState<string | null>(null)
   const mainCategories = React.useMemo(() => {
-    const preset = categoriesConfig?.mainCategories?.length
-      ? new Set(categoriesConfig.mainCategories.filter((c): c is string => typeof c === 'string'))
-      : new Set(POS_MAIN_CATEGORIES)
+    const preset = new Set(
+      (categoriesConfig?.mainCategories || []).filter((c): c is string => typeof c === 'string')
+    )
     const fromMenus = new Set(menus.map((m) => m.categoryMain).filter((c): c is string => typeof c === 'string' && c !== ''))
     const fromDb = new Set(allMainCategories)
     return Array.from(new Set([...preset, ...fromDb, ...fromMenus]))

@@ -24,7 +24,6 @@ import {
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
-import { POS_MAIN_CATEGORIES } from "@/lib/pos-menu-categories"
 import {
   adminTabsContentCn,
   adminTabsListRowCn,
@@ -51,9 +50,9 @@ export function MarketingCampaignPromosPanel({ campaignId }: { campaignId: strin
   const [focusPromoId, setFocusPromoId] = React.useState<string | null>(null)
 
   const mainCategories = React.useMemo(() => {
-    const preset = categoriesConfig?.mainCategories?.length
-      ? new Set(categoriesConfig.mainCategories.filter((c): c is string => typeof c === "string"))
-      : new Set(POS_MAIN_CATEGORIES)
+    const preset = new Set(
+      (categoriesConfig?.mainCategories || []).filter((c): c is string => typeof c === "string")
+    )
     const fromMenus = new Set(menus.map((m) => m.categoryMain).filter((c): c is string => typeof c === "string" && c !== ""))
     const fromDb = new Set(allMainCategories)
     return Array.from(new Set([...preset, ...fromDb, ...fromMenus])).filter((c): c is string => typeof c === "string").sort()

@@ -3,6 +3,9 @@ import {
   mergePromotionIntoCategoriesConfig,
   resolveConfiguredCategoriesForMain,
   POS_CATEGORIES_BY_MAIN,
+  fallbackPosMenuCategoriesConfig,
+  emptyPosMenuCategoriesConfig,
+  chungmanPresetPosMenuCategoriesConfig,
 } from '@/lib/pos-menu-categories'
 import {
   PROMOTION_DEFAULT_SUBCATEGORIES,
@@ -65,5 +68,18 @@ describe('resolveConfiguredCategoriesForMain', () => {
     expect(resolveConfiguredCategoriesForMain('Chicken', {})).toEqual([
       ...POS_CATEGORIES_BY_MAIN.Chicken,
     ])
+  })
+})
+
+describe('fallbackPosMenuCategoriesConfig', () => {
+  it('returns empty config for Omni tenants so new accounts are not seeded with Chungman categories', () => {
+    expect(fallbackPosMenuCategoriesConfig(true)).toEqual(emptyPosMenuCategoriesConfig())
+    expect(fallbackPosMenuCategoriesConfig(true).mainCategories).toEqual([])
+  })
+
+  it('keeps Chungman chicken presets for legacy DB', () => {
+    const cfg = fallbackPosMenuCategoriesConfig(false)
+    expect(cfg.mainCategories).toEqual(chungmanPresetPosMenuCategoriesConfig().mainCategories)
+    expect(cfg.categoriesByMain.Chicken).toEqual([...POS_CATEGORIES_BY_MAIN.Chicken])
   })
 })

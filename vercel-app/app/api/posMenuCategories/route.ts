@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseUpsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
-  POS_MAIN_CATEGORIES,
-  POS_CATEGORIES_BY_MAIN,
+  fallbackPosMenuCategoriesConfig,
   mergePromotionIntoCategoriesConfig,
 } from '@/lib/pos-menu-categories'
 import {
@@ -25,12 +24,15 @@ export interface PosMenuCategoriesConfig {
   codePrefixByMain?: Record<string, string>
 }
 
-const defaultConfig: PosMenuCategoriesConfig = {
-  mainCategories: [...POS_MAIN_CATEGORIES],
-  categoriesByMain: Object.fromEntries(
-    Object.entries(POS_CATEGORIES_BY_MAIN).map(([k, v]) => [k, [...v]])
-  ),
-  codePrefixByMain: {},
+function defaultConfigForScope(scope: PosCatalogTenantScope): PosMenuCategoriesConfig {
+  const cfg = fallbackPosMenuCategoriesConfig(scope.enforce)
+  return {
+    mainCategories: [...cfg.mainCategories],
+    categoriesByMain: Object.fromEntries(
+      Object.entries(cfg.categoriesByMain).map(([k, v]) => [k, [...v]])
+    ),
+    codePrefixByMain: { ...(cfg.codePrefixByMain || {}) },
+  }
 }
 
 /** oldConfig → newConfig 기준으로 pos_menus의 category_main·category 매핑 후 업데이트 */
@@ -171,7 +173,7 @@ export async function GET(request: NextRequest) {
     const auth = await getVerifiedAuth(request, { skipSaasGate: true })
     const catalogScope = await resolvePosCatalogTenantScope({ auth })
     if (isPosCatalogTenantQueryBlocked(catalogScope)) {
-      return NextResponse.json(defaultConfig, { headers })
+      return NextResponse.json(defaultConfigForScope(catalogScope), { headers })
     }
     const settingsKey = posMenuCategoriesSettingsKey(catalogScope)
     const rows = (await supabaseSelectFilter(
@@ -194,11 +196,12 @@ export async function GET(request: NextRequest) {
       )
       return NextResponse.json({ ...merged, codePrefixByMain }, { headers })
     }
-    const { codePrefixByMain } = ensureCodePrefixesForMains(defaultConfig.mainCategories, {})
-    return NextResponse.json({ ...defaultConfig, codePrefixByMain }, { headers })
+    const fallback = defaultConfigForScope(catalogScope)
+    const { codePrefixByMain } = ensureCodePrefixesForMains(fallback.mainCategories, {})
+    return NextResponse.json({ ...fallback, codePrefixByMain }, { headers })
   } catch (e) {
     console.error('getPosMenuCategories:', e)
-    return NextResponse.json(defaultConfig, { headers })
+    return NextResponse.json(fallbackPosMenuCategoriesConfig(true), { headers })
   }
 }
 
@@ -223,9 +226,10 @@ export async function POST(request: NextRequest) {
       applyToMenus?: boolean
     }
 
+    const scopeDefault = defaultConfigForScope(catalogScope)
     const mainCategories = Array.isArray(body.mainCategories)
       ? body.mainCategories.filter((c): c is string => typeof c === 'string' && c.trim() !== '')
-      : defaultConfig.mainCategories
+      : scopeDefault.mainCategories
 
     const categoriesByMain =
       body.categoriesByMain && typeof body.categoriesByMain === 'object'
@@ -234,7 +238,7 @@ export async function POST(request: NextRequest) {
               .filter(([k, v]) => typeof k === 'string' && Array.isArray(v))
               .map(([k, v]) => [k, v.filter((c): c is string => typeof c === 'string' && c.trim() !== '')])
           )
-        : defaultConfig.categoriesByMain
+        : scopeDefault.categoriesByMain
 
     const oldRows = (await supabaseSelectFilter(
       'system_settings',
@@ -255,7 +259,7 @@ export async function POST(request: NextRequest) {
                 ? rawOld.codePrefixByMain
                 : {},
           }
-        : defaultConfig
+        : scopeDefault
 
     const renames: [string, string][] = []
     for (

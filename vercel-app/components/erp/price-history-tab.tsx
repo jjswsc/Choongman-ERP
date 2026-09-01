@@ -14,7 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getPriceHistory, getPosMenus, getPosMenuCategoriesConfig, getItemCategories, type PriceHistoryRow, backfillPriceHistory, restoreFromPriceHistory } from "@/lib/api-client"
-import { POS_MAIN_CATEGORIES, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
 import { useT } from "@/lib/i18n"
 import { useLang, type LangCode } from "@/lib/lang-context"
 import { cn } from "@/lib/utils"
@@ -93,7 +92,7 @@ export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHisto
     if (mode === "menu") {
       Promise.all([getPosMenuCategoriesConfig(), getPosMenus()])
         .then(([config, menuList]) => {
-          const mainCats = config?.mainCategories || [...POS_MAIN_CATEGORIES]
+          const mainCats = Array.isArray(config?.mainCategories) ? config.mainCategories : []
           const byMain = config?.categoriesByMain || {}
           setCategories(mainCats)
           setCategoriesByMain(byMain)
@@ -226,12 +225,10 @@ export function PriceHistoryTab({ entityTypes, mode, title: _title }: PriceHisto
     if (mode !== "menu") return []
     if (mainCategoryFilter === "all") {
       const all = Object.values(categoriesByMain).flat()
-      const preset = POS_MAIN_CATEGORIES.flatMap((m) => getPresetCategoriesForMain(m) || [])
-      return [...new Set([...all, ...preset])].filter(Boolean).sort()
+      return [...new Set(all)].filter(Boolean).sort()
     }
-    const preset = getPresetCategoriesForMain(mainCategoryFilter)
     const fromConfig = categoriesByMain[mainCategoryFilter] || []
-    return [...new Set([...(preset || []), ...fromConfig])].filter(Boolean).sort()
+    return [...new Set(fromConfig)].filter(Boolean).sort()
   }, [mode, mainCategoryFilter, categoriesByMain])
 
   const filteredMenus = React.useMemo(() => {

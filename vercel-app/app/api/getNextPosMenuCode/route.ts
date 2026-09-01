@@ -8,8 +8,7 @@ import {
   resolvePosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
 import {
-  POS_MAIN_CATEGORIES,
-  POS_CATEGORIES_BY_MAIN,
+  fallbackPosMenuCategoriesConfig,
   mergePromotionIntoCategoriesConfig,
 } from '@/lib/pos-menu-categories'
 import {
@@ -22,14 +21,6 @@ type CategoriesSettingsJson = {
   mainCategories?: string[]
   categoriesByMain?: Record<string, string[]>
   codePrefixByMain?: Record<string, string>
-}
-
-const defaultConfig = {
-  mainCategories: [...POS_MAIN_CATEGORIES],
-  categoriesByMain: Object.fromEntries(
-    Object.entries(POS_CATEGORIES_BY_MAIN).map(([k, v]) => [k, [...v]])
-  ),
-  codePrefixByMain: {} as Record<string, string>,
 }
 
 /** GET ?mainCategory=Chicken → 다음 코드 C013. 임의·신규 대분류도 접두사 자동 할당 후 발급 */
@@ -66,12 +57,13 @@ export async function GET(req: NextRequest) {
       Array.isArray(raw.mainCategories) &&
       typeof raw.categoriesByMain === 'object'
 
+    const fallback = fallbackPosMenuCategoriesConfig(catalogScope.enforce)
     const baseMains = hasSaved
       ? [...raw!.mainCategories!]
-      : [...defaultConfig.mainCategories]
+      : [...fallback.mainCategories]
     const categoriesByMain = hasSaved
       ? { ...raw!.categoriesByMain! }
-      : { ...defaultConfig.categoriesByMain }
+      : { ...fallback.categoriesByMain }
     const existingPrefixes =
       hasSaved && raw!.codePrefixByMain && typeof raw!.codePrefixByMain === 'object'
         ? { ...raw!.codePrefixByMain }
