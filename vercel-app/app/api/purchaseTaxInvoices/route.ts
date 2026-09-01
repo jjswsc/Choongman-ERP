@@ -7,6 +7,7 @@ import {
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import {
   deletePurchaseTaxInvoice,
+  deletePurchaseTaxInvoices,
   listPurchaseTaxInvoices,
   PurchaseTaxInvoiceDuplicateError,
   PurchaseTaxInvoiceSubmittedError,
@@ -20,6 +21,7 @@ import {
   isTin13,
   normalizePurchaseTaxInvoiceSource,
   parseAttachmentUrlsJson,
+  uniquePositiveIds,
   type PurchaseTaxInvoiceInput,
 } from '@/lib/purchase-tax-invoice-core'
 import { buildPurchaseTaxInvoiceThaiFilename, buildPurchaseTaxInvoiceThaiWorkbook } from '@/lib/purchase-tax-invoice-xlsx'
@@ -154,6 +156,25 @@ export async function POST(request: NextRequest) {
         targetId: String(id),
       })
       return NextResponse.json({ success: true }, { headers })
+    }
+
+    if (action === 'delete_bulk') {
+      const ids = uniquePositiveIds(body.ids)
+      if (!ids.length) return jsonError(400, 'IDS_REQUIRED')
+      const result = await deletePurchaseTaxInvoices(ids)
+      await writeAccountingComplianceAudit({
+        actionType: 'purchase_tax_invoice_delete_bulk',
+        userRole,
+        actor,
+        decision: 'allow',
+        filingType: 'vat_pp30',
+        targetType: 'purchase_tax_invoices',
+        targetId: String(result.deleted),
+      })
+      if (result.failed && !result.deleted) {
+        return jsonError(500, 'DELETE_FAILED', result)
+      }
+      return NextResponse.json({ success: true, ...result }, { headers })
     }
 
     if (action === 'bulk') {

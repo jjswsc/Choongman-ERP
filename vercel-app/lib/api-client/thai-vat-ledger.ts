@@ -444,3 +444,18 @@ export async function deletePurchaseTaxInvoice(id: number) {
   })
   return res.json() as Promise<{ success: boolean; error?: string }>
 }
+
+export async function deletePurchaseTaxInvoices(ids: number[]) {
+  const res = await apiFetchWithOffline('/api/purchaseTaxInvoices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'delete_bulk', ids }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    deleted?: number
+    skippedSubmitted?: number
+    failed?: number
+    error?: string
+  }>
+}

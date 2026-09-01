@@ -157,6 +157,20 @@ export function normalizeInvoiceNo(raw: unknown): string {
   return String(raw || '').trim().slice(0, 128)
 }
 
+export function uniquePositiveIds(raw: unknown, max = 2000): number[] {
+  const list = Array.isArray(raw) ? raw : []
+  const out: number[] = []
+  const seen = new Set<number>()
+  for (const v of list) {
+    const id = Math.floor(Number(v) || 0)
+    if (id <= 0 || seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+    if (out.length >= max) break
+  }
+  return out
+}
+
 export function parsePurchaseTaxInvIdFromMemo(memo: string): number {
   const m = String(memo || '').match(/\[AUTO:PURCHASE_TAX_INV:(\d+)\]/)
   if (!m) return 0

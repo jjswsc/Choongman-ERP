@@ -13,6 +13,7 @@ import {
   parsePurchaseTaxInvoiceVisionPayload,
   purchaseTaxDocMonthMismatch,
   purchaseTaxInvoiceDedupeKey,
+  uniquePositiveIds,
   purchaseTaxInvoiceHasExtractedFields,
   purchaseTaxReviewFlags,
   purchaseTaxReviewIsProblem,
@@ -85,6 +86,11 @@ describe('purchase tax invoice helpers', () => {
     expect(
       purchaseTaxInvoiceDedupeKey('0105566137147', '260821-001305', '0105558019581')
     ).not.toBe(purchaseTaxInvoiceDedupeKey('0105566137147', '260822-001400', '0105558019581'))
+  })
+
+  it('keeps unique positive ids for bulk delete', () => {
+    expect(uniquePositiveIds(['1', 2, 2, 0, -3, 'x', 4])).toEqual([1, 2, 4])
+    expect(uniquePositiveIds([1, 2, 3], 2)).toEqual([1, 2])
   })
 
   it('formats seller branch as สำนักงานใหญ่ or สาขา 00001', () => {

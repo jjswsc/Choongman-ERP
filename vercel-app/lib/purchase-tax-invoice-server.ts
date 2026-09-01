@@ -423,6 +423,26 @@ export async function deletePurchaseTaxInvoice(id: number): Promise<void> {
   await supabaseDeleteByFilter('purchase_tax_invoices', `id=eq.${ptiId}`)
 }
 
+export async function deletePurchaseTaxInvoices(ids: number[]): Promise<{
+  deleted: number
+  skippedSubmitted: number
+  failed: number
+}> {
+  let deleted = 0
+  let skippedSubmitted = 0
+  let failed = 0
+  for (const id of ids) {
+    try {
+      await deletePurchaseTaxInvoice(id)
+      deleted += 1
+    } catch (e) {
+      if (e instanceof PurchaseTaxInvoiceSubmittedError) skippedSubmitted += 1
+      else failed += 1
+    }
+  }
+  return { deleted, skippedSubmitted, failed }
+}
+
 export async function deletePurchaseTaxInvoiceByInboundBatch(batchId: number): Promise<void> {
   const existing = await findByInboundBatchId(batchId)
   if (!existing) return

@@ -12,6 +12,7 @@ import { canWriteAccountingCompliance } from "@/lib/accounting-auth"
 import {
   bulkSavePurchaseTaxInvoices,
   deletePurchaseTaxInvoice,
+  deletePurchaseTaxInvoices,
   getAdminVendors,
   getPurchaseTaxInvoices,
   getThaiTaxFilingSummary,
@@ -306,6 +307,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   const canWrite = canWriteAccountingCompliance(String(auth?.role || ""))
   const fallbackStore = String(auth?.store || "").trim()
   const [rows, setRows] = React.useState<PurchaseTaxInvoiceDto[]>([])
+  const [selectedIds, setSelectedIds] = React.useState<Set<number>>(() => new Set())
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState("")
   const [tableMissing, setTableMissing] = React.useState(false)
@@ -398,6 +400,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       if (res.error) setError("msg_load_fail")
       setTableMissing(!!res.tableMissing)
       setRows(res.rows)
+      setSelectedIds(new Set())
       setPp30Vat(
         summary?.vat
           ? { outputVat: Number(summary.vat.outputVat) || 0, inputVat: Number(summary.vat.inputVat) || 0 }
@@ -407,6 +410,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       setError("msg_load_fail")
       setTableMissing(false)
       setRows([])
+      setSelectedIds(new Set())
       setPp30Vat(null)
     } finally {
       setLoading(false)
@@ -585,6 +589,81 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       setForm(emptyForm(defaultStoreFromFilter(filingStoreFilter, fallbackStore), filingYearMonth))
     }
     await load()
+  }
+
+  const toggleSelected = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
+  const someSelected = rows.some((r) => selectedIds.has(r.id))
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(rows.map((r) => r.id)) : new Set())
+  }
+
+  const applyBulkDeleteResult = async (
+    res: Awaited<ReturnType<typeof deletePurchaseTaxInvoices>>,
+    deletedFormIds: number[]
+  ) => {
+    if (!res.success && !res.deleted) {
+      setError(res.error === "SUBMITTED" ? "ptiSubmittedLocked" : "msg_delete_fail")
+      return
+    }
+    if (res.failed && !res.deleted) {
+      setError("msg_delete_fail")
+      return
+    }
+    const deleted = res.deleted || 0
+    const skipped = res.skippedSubmitted || 0
+    if (skipped > 0) {
+      setSaveNotice(tr(t, "ptiDeleteBulkPartial", { deleted: String(deleted), skipped: String(skipped) }))
+    } else {
+      setSaveNotice(tr(t, "ptiDeleteBulkDone", { n: String(deleted) }))
+    }
+    if (form.id && deletedFormIds.includes(form.id)) {
+      setForm(emptyForm(defaultStoreFromFilter(filingStoreFilter, fallbackStore), filingYearMonth))
+    }
+    await load()
+  }
+
+  const onDeleteSelected = async () => {
+    if (!canWrite) return
+    const ids = rows.filter((r) => selectedIds.has(r.id)).map((r) => r.id)
+    if (!ids.length) {
+      setError("ptiDeleteNoneSelected")
+      return
+    }
+    if (!window.confirm(tr(t, "ptiDeleteSelectedConfirm", { n: String(ids.length) }))) return
+    setError("")
+    setSaveNotice("")
+    setSaving(true)
+    try {
+      const res = await deletePurchaseTaxInvoices(ids)
+      await applyBulkDeleteResult(res, ids)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onDeleteAll = async () => {
+    if (!canWrite || !rows.length) return
+    const ids = rows.map((r) => r.id)
+    if (!window.confirm(tr(t, "ptiDeleteAllConfirm", { n: String(ids.length) }))) return
+    setError("")
+    setSaveNotice("")
+    setSaving(true)
+    try {
+      const res = await deletePurchaseTaxInvoices(ids)
+      await applyBulkDeleteResult(res, ids)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const onExport = async () => {
@@ -1249,6 +1328,30 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         <Button type="button" variant="secondary" size="sm" onClick={onExport} disabled={!rows.length}>
           {t("ptiExportExcel")}
         </Button>
+        {canWrite && rows.length ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-destructive"
+              onClick={() => void onDeleteSelected()}
+              disabled={saving || !someSelected}
+            >
+              {t("ptiDeleteSelected")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-destructive"
+              onClick={() => void onDeleteAll()}
+              disabled={saving}
+            >
+              {t("ptiDeleteAll")}
+            </Button>
+          </>
+        ) : null}
         {canWrite ? (
           <>
             <input
@@ -1478,6 +1581,19 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           <table className="w-full text-sm">
             <thead className="bg-muted/30">
               <tr>
+                {canWrite ? (
+                  <th className="p-2 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someSelected && !allSelected
+                      }}
+                      onChange={(e) => toggleSelectAll(e.target.checked)}
+                      aria-label={t("ptiSelectAll")}
+                    />
+                  </th>
+                ) : null}
                 <th className="p-2 text-left">{t("ptiColSeq")}</th>
                 <th className="p-2 text-left">{t("ptiColDate")}</th>
                 <th className="p-2 text-left">{t("ptiColInvoiceNo")}</th>
@@ -1493,6 +1609,16 @@ export function TaxFilingPurchaseTaxInvoicesTab({
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.id} className="border-t border-border/60">
+                  {canWrite ? (
+                    <td className="p-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(r.id)}
+                        onChange={(e) => toggleSelected(r.id, e.target.checked)}
+                        aria-label={t("ptiSelectRow")}
+                      />
+                    </td>
+                  ) : null}
                   <td className="p-2 tabular-nums">{i + 1}</td>
                   <td className="p-2 tabular-nums">{r.docDate}</td>
                   <td className="p-2">{r.invoiceNo}</td>
@@ -1520,7 +1646,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               ))}
               {!rows.length && !loading ? (
                 <tr>
-                  <td className="p-6 text-center text-muted-foreground" colSpan={10}>
+                  <td className="p-6 text-center text-muted-foreground" colSpan={canWrite ? 11 : 10}>
                     {tableMissing ? t("ptiTableMissing") : t("ptiEmpty")}
                   </td>
                 </tr>
