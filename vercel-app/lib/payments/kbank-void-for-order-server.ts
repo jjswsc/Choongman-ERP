@@ -3,9 +3,11 @@ import 'server-only'
 import { checkKbankQrStatus, voidKbankPayment } from '@/lib/payments/kbank-client'
 import {
   extractKbankPaymentTxnNo,
+  formatKbankVoidInquiryFailureMessage,
   isKbankInquiryResponseApproved,
   isKbankPaymentTxnNo,
   normalizeKbankTxnStatusToPos,
+  resolveKbankVoidTxnNoForRequest,
 } from '@/lib/payments/kbank-api-reference'
 import {
   evaluateKbankVoidEligibilityFromAttempts,
@@ -33,6 +35,8 @@ type PosOrderVoidRow = {
   total?: number | null
   payment_qr?: number | null
   status?: string | null
+  linkpos_approval_code?: string | null
+  linkpos_trace_no?: string | null
 }
 
 type PosAttemptVoidRow = {
@@ -166,7 +170,7 @@ export async function loadKbankVoidOrderContext(
 
   const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${orderId}`, {
     limit: 1,
-    select: 'id,order_no,store_code,total,payment_qr,status',
+    select: 'id,order_no,store_code,total,payment_qr,status,linkpos_approval_code,linkpos_trace_no',
   })) as PosOrderVoidRow[] | null
   const order = orderRows?.[0]
   if (!order?.id) {
@@ -188,7 +192,17 @@ export async function loadKbankVoidOrderContext(
       'provider,bank_id,tx_code,local_tx_id,status,approval_code,trace_no,terminal_id,response_text,response_raw,request_raw,response_code,approved_amount',
   })) as PosAttemptVoidRow[] | null
   const attempts = (attemptRows || []).map(mapAttemptRow)
-  const eligibility = evaluateKbankVoidEligibilityFromAttempts(attempts)
+  let eligibility = evaluateKbankVoidEligibilityFromAttempts(attempts)
+  const fromOrderTxnNo =
+    resolveKbankVoidTxnNoForRequest(order.linkpos_approval_code) ||
+    resolveKbankVoidTxnNoForRequest(order.linkpos_trace_no) ||
+    ''
+  if (fromOrderTxnNo && !eligibility.txnNo) {
+    eligibility = { ...eligibility, txnNo: fromOrderTxnNo }
+    if (eligibility.paid && eligibility.allowVoid !== 'N' && !eligibility.alreadyVoided) {
+      eligibility = { ...eligibility, canVoid: true, reason: 'ok' }
+    }
+  }
   const paymentQr = Math.max(0, Number(order.payment_qr) || 0)
   const total = Math.max(0, Number(order.total) || 0)
   return {
@@ -537,4 +551,29 @@ export function messageForReason(reason: KbankVoidEligibility['reason']): string
     default:
       return 'KBank Void is not available for this bill.'
   }
+}
+
+export function messageForBlockedVoidPreview(ctx: KbankVoidOrderContext): string {
+  const base = messageForReason(ctx.eligibility.reason)
+  if (
+    ctx.eligibility.reason !== 'apic_session_only' &&
+    ctx.eligibility.reason !== 'missing_payment_txn_no'
+  ) {
+    return base
+  }
+  const lastInquiry = ctx.attempts.find((a) => {
+    const code = String(a.txCode || '').trim().toUpperCase()
+    return code === 'STATUS' || code === 'INQUIRY'
+  })
+  if (!lastInquiry) return base
+  return formatKbankVoidInquiryFailureMessage({
+    fallback: base,
+    inquiry: {
+      success: String(lastInquiry.status || '').trim().toLowerCase() === 'approved',
+      status: lastInquiry.status,
+      statusCode: lastInquiry.responseCode,
+      statusMessage: lastInquiry.responseText,
+      data: lastInquiry.responseRaw,
+    },
+  })
 }

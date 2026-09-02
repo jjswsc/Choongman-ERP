@@ -319,10 +319,10 @@ export function isKbankQrSessionTxnNo(txnNo: unknown): boolean {
   return /^APIC/i.test(s)
 }
 
-/** Bank payment txnNo for Inquiry/Void (e.g. 26440008). */
+/** Bank payment txnNo for Inquiry/Void (e.g. 26440008). Stored columns are 20 chars. */
 export function isKbankPaymentTxnNo(txnNo: unknown): boolean {
   const s = String(txnNo || '').trim()
-  return /^\d{6,16}$/.test(s)
+  return /^\d{6,20}$/.test(s)
 }
 
 function asKbankPlainObject(raw: unknown): Record<string, unknown> | null {
@@ -330,45 +330,67 @@ function asKbankPlainObject(raw: unknown): Record<string, unknown> | null {
   return raw as Record<string, unknown>
 }
 
-function pickKbankTxnNoFromObject(obj: Record<string, unknown> | null): string[] {
-  if (!obj) return []
-  const keys = [
-    'txnNo',
-    'txn_no',
-    'transactionNo',
-    'transaction_no',
-    'bankTxnNo',
-    'bank_txn_no',
-    'paymentTxnNo',
-    'payment_txn_no',
-    'kbankTxnNo',
-    'approvalTxnNo',
-    'txnRef',
-    'txn_ref',
-    'paymentRef',
-    'payment_ref',
-    'invoiceNo',
-    'invoice_no',
-    'referenceNo',
-    'reference_no',
-  ]
-  const out: string[] = []
-  for (const key of keys) {
-    const v = String(obj[key] ?? '').trim()
-    if (v) out.push(v)
+function parseKbankJsonObject(raw: unknown): Record<string, unknown> | null {
+  const direct = asKbankPlainObject(raw)
+  if (direct) return direct
+  if (typeof raw !== 'string') return null
+  const text = raw.trim()
+  if (!text || (text[0] !== '{' && text[0] !== '[')) return null
+  try {
+    return asKbankPlainObject(JSON.parse(text) as unknown)
+  } catch {
+    return null
   }
-  const data = asKbankPlainObject(obj.data)
-  const payment = asKbankPlainObject(obj.payment)
-  const paymentInfo = asKbankPlainObject(obj.paymentInfo)
-  for (const nested of [data, payment, paymentInfo]) {
-    out.push(...pickKbankTxnNoFromObject(nested))
+}
+
+const KBANK_TXN_NO_KEYS = [
+  'txnNo',
+  'txn_no',
+  'transactionNo',
+  'transaction_no',
+  'bankTxnNo',
+  'bank_txn_no',
+  'paymentTxnNo',
+  'payment_txn_no',
+  'kbankTxnNo',
+  'approvalTxnNo',
+  'authCode',
+  'auth_code',
+  'approvalCode',
+  'approval_code',
+  'txnRef',
+  'txn_ref',
+  'paymentRef',
+  'payment_ref',
+  'invoiceNo',
+  'invoice_no',
+  'referenceNo',
+  'reference_no',
+  'retrieveRefNo',
+  'retrievalRefNo',
+  'retrievalReferenceNo',
+] as const
+
+function pickKbankTxnNoFromObject(obj: Record<string, unknown> | null, depth = 0): string[] {
+  if (!obj || depth > 5) return []
+  const out: string[] = []
+  for (const key of KBANK_TXN_NO_KEYS) {
+    const v = obj[key]
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'bigint') {
+      const s = String(v).trim()
+      if (s) out.push(s)
+    }
+  }
+  for (const nestedKey of ['data', 'result', 'payment', 'paymentInfo']) {
+    const nested = parseKbankJsonObject(obj[nestedKey])
+    if (nested) out.push(...pickKbankTxnNoFromObject(nested, depth + 1))
   }
   return out
 }
 
 /** Collect txnNo candidates from API/callback JSON; prefer numeric payment txnNo. */
 export function extractKbankPaymentTxnNo(raw: unknown): string {
-  const root = asKbankPlainObject(raw)
+  const root = parseKbankJsonObject(raw)
   if (!root) return ''
   const candidates = pickKbankTxnNoFromObject(root)
   const payment = candidates.filter((c) => isKbankPaymentTxnNo(c))
@@ -402,7 +424,7 @@ export function formatKbankVoidInquiryFailureMessage(params: {
   ].filter(Boolean)
   if (detailBits.length) lines.push(detailBits.join(' · '))
 
-  const root = asKbankPlainObject(inq.data) || asKbankPlainObject(inq)
+  const root = parseKbankJsonObject(inq.data) || asKbankPlainObject(inq)
   const candidates = root ? [...new Set(pickKbankTxnNoFromObject(root))].slice(0, 5) : []
   if (candidates.length > 0) {
     lines.push(`bank txnNo: ${candidates.join(', ')}`)

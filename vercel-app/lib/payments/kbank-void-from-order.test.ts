@@ -133,6 +133,34 @@ describe('evaluateKbankVoidEligibilityFromAttempts', () => {
     expect(el.txnNo).toBe('')
   })
 
+  it('reads numeric txnNo from nested result in inquiry JSON', () => {
+    const el = evaluateKbankVoidEligibilityFromAttempts([
+      {
+        provider: 'kbank_qr_api',
+        txCode: 'QR',
+        localTxId: 'PnestedResult',
+        status: 'pending',
+        approvalCode: 'APICNESTEDRESULT',
+      },
+      {
+        provider: 'kbank_qr_api',
+        txCode: 'STATUS',
+        localTxId: 'CHKNESTED',
+        status: 'approved',
+        responseCode: '00',
+        responseRaw: JSON.stringify({
+          statusCode: '00',
+          txnStatus: 'PAID',
+          txnNo: 'APIC1780542865020JY5',
+          result: { txnNo: '26440008', allowVoid: 'Y' },
+        }),
+      },
+    ])
+    expect(el.canVoid).toBe(true)
+    expect(el.txnNo).toBe('26440008')
+    expect(el.reason).toBe('ok')
+  })
+
   it('blocks Void when allowVoid is N', () => {
     const el = evaluateKbankVoidEligibilityFromAttempts([
       {

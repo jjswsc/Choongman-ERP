@@ -210,7 +210,11 @@ export function evaluateKbankVoidEligibilityFromAttempts(
   const txnNo = pickTxnNo(
     generate?.approvalCode,
     generate?.traceNo,
-    ...rows.flatMap((a) => [a.approvalCode, a.traceNo, extractKbankPaymentTxnNo(parseJsonObject(a.responseRaw))])
+    ...rows.flatMap((a) => [
+      a.approvalCode,
+      a.traceNo,
+      extractKbankPaymentTxnNo(parseJsonObject(a.responseRaw) || a.responseRaw),
+    ])
   )
   const terminalId = String(
     generate?.terminalId || rows.find((a) => String(a.terminalId || '').trim())?.terminalId || ''

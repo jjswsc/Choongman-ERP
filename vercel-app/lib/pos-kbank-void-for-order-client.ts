@@ -23,12 +23,16 @@ export function messageForKbankVoidForOrderStatus(
       return tOr(t, 'posKbankVoidNotAllowed', 'KBank does not allow Void for this payment.')
     case 'KBANK_VOID_NOT_PAID':
       return tOr(t, 'posKbankVoidNotPaid', 'This payment is not settled yet, so it cannot be voided.')
-    case 'KBANK_VOID_NO_PAYMENT_TXN_NO':
-      return tOr(
+    case 'KBANK_VOID_NO_PAYMENT_TXN_NO': {
+      const base = tOr(
         t,
         'posKbankVoidNoPaymentTxnNo',
         'Payment transaction number was not found. APIC session ids cannot be sent to Void.'
       )
+      const extra = String(fallback || '').trim()
+      if (!extra || extra === base) return base
+      return extra.includes(base) ? extra : `${base}\n\n${extra}`
+    }
     case 'KBANK_VOID_ALREADY':
       return tOr(t, 'posReceiptPayCorrectKbankVoidAlready', 'This KBank payment was already voided.')
     case 'KBANK_VOID_NO_ATTEMPT':

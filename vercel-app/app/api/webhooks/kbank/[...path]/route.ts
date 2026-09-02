@@ -4,6 +4,7 @@ import { finalizeMemberPortalPrepaidOrder } from '@/lib/member-portal-checkout-s
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
   extractKbankPaymentTxnNo,
+  isKbankPaymentTxnNo,
   normalizeKbankWebhookPaymentStatus,
 } from '@/lib/payments/kbank-api-reference'
 
@@ -217,7 +218,9 @@ export async function POST(
   const primaryLocalTxId = localTxCandidates[0] || ''
   const amountRawPath = amountPaths.find((p) => String(getPathValue(body, p) ?? '').trim() !== '')
   const amount = parseAmount(amountRawPath ? getPathValue(body, amountRawPath) : undefined)
-  const paymentTxnNo = extractKbankPaymentTxnNo(body) || extractKbankPaymentTxnNo({ txnNo: pickFirst(body, txnNoPaths) })
+  const paymentTxnNoRaw =
+    extractKbankPaymentTxnNo(body) || extractKbankPaymentTxnNo({ txnNo: pickFirst(body, txnNoPaths) })
+  const paymentTxnNo = isKbankPaymentTxnNo(paymentTxnNoRaw) ? paymentTxnNoRaw : ''
   const normalized = normalizeStatusFromWebhook(transactionStatusRaw, statusCode, amount, paymentTxnNo)
 
   const safeBodyForLog = rawBody.length > 50000 ? `${rawBody.slice(0, 50000)}...` : rawBody

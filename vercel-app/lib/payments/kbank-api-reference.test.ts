@@ -111,6 +111,20 @@ describe('kbank-api-reference', () => {
       '26440008'
     )
     expect(extractKbankPaymentTxnNo({ data: { payment_txn_no: '12345678' } })).toBe('12345678')
+    expect(
+      extractKbankPaymentTxnNo({
+        txnNo: 'APIC1780542865020JY5',
+        result: { txnNo: '26440008', txnStatus: 'PAID' },
+      })
+    ).toBe('26440008')
+    expect(
+      extractKbankPaymentTxnNo({
+        txnNo: 'APIC1780542865020JY5',
+        data: JSON.stringify({ txnNo: '99887766' }),
+      })
+    ).toBe('99887766')
+    expect(isKbankPaymentTxnNo('202608021632548812')).toBe(true)
+    expect(extractKbankPaymentTxnNo({ txnNo: 'APIC1780542865020JY5' })).toBe('')
   })
 
   it('formats Void Inquiry failure with bank detail', () => {

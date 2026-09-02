@@ -5,6 +5,7 @@ import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import type { KbankCheckStatusRequest } from '@/lib/payments/kbank-types'
 import {
   extractKbankPaymentTxnNo,
+  isKbankPaymentTxnNo,
   normalizeKbankTxnStatusToPos,
 } from '@/lib/payments/kbank-api-reference'
 import { integrationScopeFromAuth } from '@/lib/integration-scope-from-auth'
@@ -138,7 +139,7 @@ export async function POST(req: NextRequest) {
     const statusLabel = extractTxnStatus(result.response)
     const approvedAmount = statusLabel === 'approved' ? extractApprovedAmount(result.response) : 0
     const paymentTxnNo = extractKbankPaymentTxnNo(result.response).slice(0, 20)
-    const paymentTxnNoFields = paymentTxnNo
+    const paymentTxnNoFields = isKbankPaymentTxnNo(paymentTxnNo)
       ? {
           trace_no: paymentTxnNo.slice(0, 40),
           approval_code: paymentTxnNo.slice(0, 20),

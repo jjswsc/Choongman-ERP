@@ -4,6 +4,7 @@ import {
   executeConfirmedKbankVoidForOrder,
   inquireKbankVoidForOrderOnce,
   loadKbankVoidOrderContext,
+  messageForBlockedVoidPreview,
   messageForReason,
   previewFromContext,
   tryLockKbankVoidForOrder,
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
               statusCode: preview.canVoid
                 ? 'KBANK_VOID_PREVIEW'
                 : kbankVoidReasonToStatusCode(preview.reason),
-              message: preview.canVoid ? undefined : messageForReason(preview.reason),
+              message: preview.canVoid ? undefined : messageForBlockedVoidPreview(inquired.ctx),
               orderId,
             },
             { status: preview.alreadyVoided || preview.canVoid ? 200 : 422 }
