@@ -21,11 +21,11 @@ export function isWeekendBatchSettleDate(ymd: string): boolean {
 }
 
 export function channelFeePctBand(channel: PosChannelSettlementChannel): { min: number; max: number } {
-  if (channel === 'card') return { min: 0.4, max: 5 }
-  if (channel === 'grab') return { min: 10, max: 28 }
-  if (channel === 'lineman') return { min: 10, max: 26 }
-  if (channel === 'shopee') return { min: 8, max: 20 }
-  return { min: 8, max: 28 }
+  if (channel === 'card') return { min: 0, max: 8 }
+  if (channel === 'grab') return { min: 0, max: 28 }
+  if (channel === 'lineman') return { min: 0, max: 26 }
+  if (channel === 'shopee') return { min: 0, max: 20 }
+  return { min: 0, max: 28 }
 }
 
 export function isPlausibleCoverFee(
@@ -43,7 +43,7 @@ export function isPlausibleCoverFee(
 }
 
 export function weekendCoverNeighborDates(settleDate: string): string[] {
-  return [-2, -1, 0, 1, 2].map((delta) => addDaysYmd(settleDate, delta))
+  return [-3, -2, -1, 0, 1, 2, 3].map((delta) => addDaysYmd(settleDate, delta))
 }
 
 const COVER_MEMO_RE = /\[cover\s+([0-9,\s-]+)\]/i
@@ -95,7 +95,7 @@ export type GrossCoverPick = {
 
 /**
  * 하루 GROSS 가 NET 보다 작을 때, 정산일을 포함하는 연속 구간을 합쳐 NET 을 덮는다.
- * 평일(화·수·목)은 합치지 않음. 수수료율이 채널 구간에 안 맞으면 null.
+ * 수수료가 음수이거나(아직 부족) 옆날을 너무 많이 넣어 수수료율이 비정상이면 null.
  */
 export function pickGrossCoveringNet(params: {
   settleDate: string
@@ -117,7 +117,6 @@ export function pickGrossCoveringNet(params: {
     return { coverDates: [settleDate], gross: dayGross, fee: deriveFeeFromGrossNet(dayGross, net) }
   }
   if (dayGross <= 0.02) return null
-  if (!isWeekendBatchSettleDate(settleDate)) return null
 
   const claimed = new Set<string>()
   for (const d of params.claimedDates || []) {

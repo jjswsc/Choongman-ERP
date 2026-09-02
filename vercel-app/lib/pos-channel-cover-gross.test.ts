@@ -18,15 +18,15 @@ describe('weekend batch GROSS cover', () => {
     expect(isWeekendBatchSettleDate('2026-09-02')).toBe(false)
   })
 
-  it('does not expand a weekday when GROSS < NET', () => {
-    expect(
-      pickGrossCoveringNet({
-        settleDate: '2026-09-01',
-        net: 13259.86,
-        channel: 'card',
-        grossByDate: { '2026-09-01': 10426, '2026-09-02': 4000 },
-      })
-    ).toBeNull()
+  it('expands a weekday when GROSS is short of NET', () => {
+    const pick = pickGrossCoveringNet({
+      settleDate: '2026-09-01',
+      net: 13259.86,
+      channel: 'card',
+      grossByDate: { '2026-09-01': 10426, '2026-09-02': 3000 },
+    })
+    expect(pick?.coverDates).toEqual(['2026-09-01', '2026-09-02'])
+    expect(pick?.gross).toBe(13426)
   })
 
   it('keeps a single Saturday when GROSS already covers NET with a card-like fee', () => {
@@ -42,6 +42,21 @@ describe('weekend batch GROSS cover', () => {
       fee: 226,
     })
     expect(isPlausibleCoverFee('card', 10426, 10200)).toBe(true)
+  })
+
+  it('sums Saturday + Sunday even when implied fee is ~0', () => {
+    const pick = pickGrossCoveringNet({
+      settleDate: '2026-08-29',
+      net: 13259.86,
+      channel: 'card',
+      grossByDate: {
+        '2026-08-29': 10426,
+        '2026-08-30': 2833.86,
+      },
+    })
+    expect(pick?.coverDates).toEqual(['2026-08-29', '2026-08-30'])
+    expect(pick?.gross).toBe(13259.86)
+    expect(pick?.fee).toBe(0)
   })
 
   it('sums Saturday + Sunday when one day is short and the fee stays in band', () => {

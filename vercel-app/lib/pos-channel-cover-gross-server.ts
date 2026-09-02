@@ -3,7 +3,6 @@ import { fetchPosChannelSettlementGross } from '@/lib/pos-channel-settlement-gro
 import {
   appendCoverMemo,
   claimedCoverDatesFromSettlements,
-  isWeekendBatchSettleDate,
   pickGrossCoveringNet,
   weekendCoverNeighborDates,
 } from '@/lib/pos-channel-cover-gross'
@@ -31,7 +30,7 @@ export async function fetchChannelGrossCoveringNet(params: {
     expanded: false,
   }
   if (net <= 0) return single
-  if (day0.gross + 0.02 >= net || !isWeekendBatchSettleDate(settleDate)) return single
+  if (day0.gross + 0.02 >= net) return single
 
   const neighbors = weekendCoverNeighborDates(settleDate)
   const claimedRows = (await supabaseSelectFilter(

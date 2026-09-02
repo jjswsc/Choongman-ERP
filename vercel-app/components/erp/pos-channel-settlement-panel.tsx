@@ -77,17 +77,24 @@ export function PosChannelSettlementPanel({
   const [csvImporting, setCsvImporting] = React.useState(false)
   const [coverDates, setCoverDates] = React.useState<string[]>([])
   const csvInputRef = React.useRef<HTMLInputElement>(null)
+  const netRef = React.useRef(net)
+  React.useEffect(() => {
+    netRef.current = net
+  }, [net])
 
   const loadGross = React.useCallback(async () => {
     if (!storeCode || !settleDate) return
     setLoadingGross(true)
     setCoverDates([])
     try {
+      const fromField = roundSettlementMoney(Number(netRef.current) || 0)
+      const netForLoad =
+        fromField > 0 ? fromField : initialNet != null && initialNet > 0 ? initialNet : 0
       const res = await getPosChannelSettlementGross({
         storeCode,
         settleDate,
         channel,
-        net: initialNet != null && initialNet > 0 ? initialNet : undefined,
+        net: netForLoad > 0 ? netForLoad : undefined,
       })
       if (res.success) {
         const g = roundSettlementMoney(Number(res.gross) || 0)
@@ -336,6 +343,12 @@ export function PosChannelSettlementPanel({
               )}
             </p>
           ) : null}
+          {gross > 0 && roundSettlementMoney(Number(net) || 0) > gross + 0.02 ? (
+            <p className="text-[11px] text-red-700 dark:text-red-300 mt-1">
+              {t('posChannelSettleCoverFail') ||
+                '옆날 POS를 합쳐도 이 입금과 안 맞습니다. 수수료 분개는 하지 마세요.'}
+            </p>
+          ) : null}
         </div>
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">{t('posChannelSettleFee') || '수수료'}</label>
@@ -385,7 +398,7 @@ export function PosChannelSettlementPanel({
       />
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" onClick={() => void handlePost(false)} disabled={saving || !!existing?.journalEntryId}>
+        <Button type="button" size="sm" onClick={() => void handlePost(false)} disabled={saving || !!existing?.journalEntryId || (gross > 0 && roundSettlementMoney(Number(net) || 0) > gross + 0.02)}>
           {saving ? '...' : t('posChannelSettlePostJournal') || '정산 분개 생성'}
         </Button>
         {existing?.journalEntryId ? (
