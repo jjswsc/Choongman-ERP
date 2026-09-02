@@ -4,7 +4,11 @@ import {
   LOGIN_CONNECTING_WATCHDOG_MS,
   LOGIN_LIST_FETCH_TIMEOUT_KIOSK_MS,
   LOGIN_SESSION_REDIRECT_BOUNCE_MS,
+  LOGIN_SESSION_REDIRECT_HANG_MS,
+  isKioskLikeClient,
   isLoginSessionRedirectBounce,
+  isStillOnLoginPath,
+  loginListFetchMaxAttempts,
   loginListFetchTimeoutMs,
   resolveLoginBootPhase,
   shouldHardNavigateLoginSessionRedirect,
@@ -53,6 +57,14 @@ describe('isLoginSessionRedirectBounce', () => {
   })
 })
 
+describe('isStillOnLoginPath', () => {
+  it('matches POS and ERP login routes', () => {
+    expect(isStillOnLoginPath('/pos/login')).toBe(true)
+    expect(isStillOnLoginPath('/pos/login/')).toBe(true)
+    expect(isStillOnLoginPath('/pos')).toBe(false)
+  })
+})
+
 describe('shouldHardNavigateLoginSessionRedirect', () => {
   it('uses hard navigation on Android tablets and installed PWA', () => {
     expect(
@@ -78,12 +90,26 @@ describe('shouldHardNavigateLoginSessionRedirect', () => {
     ).toBe(true)
   })
 
+  it('treats Huawei desktop-UA tablets as kiosk via touch signals', () => {
+    expect(
+      isKioskLikeClient({
+        isHybridShell: false,
+        isStandaloneDisplay: false,
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+        maxTouchPoints: 5,
+        pointerCoarse: true,
+      })
+    ).toBe(true)
+  })
+
   it('keeps client navigation on desktop browser tabs', () => {
     expect(
       shouldHardNavigateLoginSessionRedirect({
         isHybridShell: false,
         isStandaloneDisplay: false,
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126',
+        maxTouchPoints: 0,
+        pointerCoarse: false,
       })
     ).toBe(false)
   })
@@ -95,10 +121,16 @@ describe('loginListFetchTimeoutMs', () => {
       loginListFetchTimeoutMs({ hybridOfflineFastPath: false, kioskClient: true })
     ).toBe(LOGIN_LIST_FETCH_TIMEOUT_KIOSK_MS)
     expect(LOGIN_LIST_FETCH_TIMEOUT_KIOSK_MS).toBeLessThan(LOGIN_CONNECTING_WATCHDOG_MS * 2)
+    expect(LOGIN_SESSION_REDIRECT_HANG_MS).toBeLessThan(LOGIN_CONNECTING_WATCHDOG_MS)
   })
 
   it('keeps a longer desktop timeout and a 3s hybrid offline path', () => {
     expect(loginListFetchTimeoutMs({ hybridOfflineFastPath: true, kioskClient: true })).toBe(3_000)
     expect(loginListFetchTimeoutMs({ hybridOfflineFastPath: false, kioskClient: false })).toBe(60_000)
+  })
+
+  it('does not retry the store list on kiosk', () => {
+    expect(loginListFetchMaxAttempts({ kioskClient: true, hybridOfflineFastPath: false })).toBe(1)
+    expect(loginListFetchMaxAttempts({ kioskClient: false, hybridOfflineFastPath: false })).toBe(2)
   })
 })

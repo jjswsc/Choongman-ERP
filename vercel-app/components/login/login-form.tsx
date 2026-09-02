@@ -64,13 +64,17 @@ import {
   SAAS_PARTNER_LOGIN_STORE_DEFAULT,
 } from "@/lib/saas-partner-login-defaults-client"
 import {
+  LOGIN_AUTH_INIT_WATCHDOG_MS,
   LOGIN_CONNECTING_WATCHDOG_MS,
   LOGIN_SESSION_REDIRECT_BOUNCE_KEY,
+  LOGIN_SESSION_REDIRECT_HANG_MS,
   LOGIN_SESSION_REDIRECT_HARD_NAV_MS,
+  detectKioskLikeClient,
   isLoginSessionRedirectBounce,
+  isStillOnLoginPath,
+  loginListFetchMaxAttempts,
   loginListFetchTimeoutMs,
   resolveLoginBootPhase,
-  shouldHardNavigateLoginSessionRedirect,
 } from "@/lib/login-connecting-watchdog"
 
 /** i18n 키 누락·손상 시 영어 (번들 문자열은 네트워크 없이 동작 — 이 폴백은 이중 안전장치) */
@@ -251,6 +255,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const router = useRouter()
   const { auth, setAuth, initialized: authInitialized } = useAuth()
   const [stayOnLoginForm, setStayOnLoginForm] = useState(false)
+  const [authWaitTimedOut, setAuthWaitTimedOut] = useState(false)
   const [loadingStuck, setLoadingStuck] = useState(false)
   const [loginData, setLoginData] = useState<Record<string, string[]>>({})
   const [loginStoreLabels, setLoginStoreLabels] = useState<Record<string, string>>({})
@@ -293,6 +298,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const companyPrefillAppliedRef = useRef(false)
   const storePrefillAppliedRef = useRef(false)
   const userPrefillAppliedRef = useRef(false)
+  const companyRef = useRef(company)
+  companyRef.current = company
+  const fetchSeqRef = useRef(0)
+  const listReadyRef = useRef(false)
 
   const queryCompany = useMemo(
     () => String(searchParams?.get("company") || "").trim(),
@@ -524,8 +533,11 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     const src = d._source ?? "fallback"
     setLoginDataSource(src)
     if (src === "api" || src === "cache") {
+      listReadyRef.current = Object.keys(d.users || {}).length > 0
       setBrowserOnline(true)
       setLoginListProbeOk(true)
+    } else {
+      listReadyRef.current = false
     }
     if (d._source === "fallback") {
       setLoadError("SERVER_ERROR")
@@ -540,12 +552,14 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
 
   const fetchLoginData = useCallback(
     (companyOverride?: string) => {
+      const seq = ++fetchSeqRef.current
       setLoadError(null)
       setLoginListProbeOk(null)
-      if (!stayOnLoginForm) setLoading(true)
+      if (!stayOnLoginForm && !listReadyRef.current) setLoading(true)
       /** navigator.onLine 거짓 false 대비 프로브. 조기 종료하지 않음 — getLoginDataWithCache가 API를 직접 시도해 오탐을 복구함 */
       const run = async () => {
-        const scopeCompany = String(companyOverride ?? company ?? "").trim()
+        const stillCurrent = () => seq === fetchSeqRef.current
+        const scopeCompany = String(companyOverride ?? companyRef.current ?? "").trim()
         const loginOpts =
           needsScopedLoginData || (isOmniBrand && scopeCompany)
             ? scopeCompany
@@ -554,6 +568,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             : undefined
 
         if (loginOpts === null) {
+          if (!stillCurrent()) return
           setLoginData({})
           setLoginStoreLabels({})
           setLoginStoreCompanies({})
@@ -567,6 +582,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         if (typeof navigator !== "undefined" && !isBrowserOnline()) {
           await runReachabilityProbe()
         }
+        if (!stillCurrent()) return
         const loginSnapshot = loadOfflineResumeAuth()
         const bootV2 = isPosOfflinePhaseAEnabled(loginSnapshot?.store)
         const hybridFastBoot =
@@ -575,15 +591,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           isCmPosHybridShell() &&
           loginApp === "pos" &&
           !!loginSnapshot
-
-        const kioskClient = shouldHardNavigateLoginSessionRedirect({
-          isHybridShell: isCmPosHybridShell(),
-          isStandaloneDisplay:
-            typeof window !== "undefined" &&
-            typeof window.matchMedia === "function" &&
-            window.matchMedia("(display-mode: standalone)").matches,
-          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-        })
+        const kioskClient = detectKioskLikeClient(isCmPosHybridShell())
         let timeoutMs = loginListFetchTimeoutMs({ hybridOfflineFastPath: false, kioskClient })
         if (hybridFastBoot) {
           if (!isBrowserOnline()) {
@@ -591,14 +599,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           } else {
             const probeOk = await runReachabilityProbe()
             if (!probeOk) timeoutMs = 3_000
-          }
-          if (timeoutMs === 3_000) {
-            const cachedOnly = await readLoginDataFromCacheOnly(loginOpts)
-            if (cachedOnly._source === "cache") {
-              applyLoginDataResult(cachedOnly)
-              setLoading(false)
-              return
-            }
           }
         } else {
           const hybridOfflineBoot =
@@ -609,6 +609,17 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           if (hybridOfflineBoot) timeoutMs = 3_000
         }
 
+        /** 홀 태블릿·오프라인 부팅: API가 느려도 캐시 목록으로 폼을 먼저 연다 */
+        if (kioskClient || timeoutMs === 3_000) {
+          const cachedOnly = await readLoginDataFromCacheOnly(loginOpts)
+          if (!stillCurrent()) return
+          if (cachedOnly._source === "cache") {
+            applyLoginDataResult(cachedOnly)
+            setLoading(false)
+            if (timeoutMs === 3_000 && !isBrowserOnline()) return
+          }
+        }
+
         const fetchOnce = () =>
           Promise.race([
             getLoginData(loginOpts),
@@ -616,8 +627,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               setTimeout(() => reject(new Error(`연결 시간 초과 (${timeoutMs / 1000}초)`)), timeoutMs)
             ),
           ])
-        /** API 실패 시 getLoginData는 throw 대신 _source:fallback 을 줄 수 있음 → 1회 재시도 */
-        const maxAttempts = hybridFastBoot && timeoutMs === 3_000 ? 1 : 2
+        const maxAttempts = loginListFetchMaxAttempts({
+          kioskClient,
+          hybridOfflineFastPath: timeoutMs === 3_000,
+        })
         const loadWithRetry = async () => {
           let last: LoginDataResult | undefined
           for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -634,11 +647,22 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
         }
         try {
           const d = await loadWithRetry()
+          if (!stillCurrent()) return
+          if (d._source === "fallback" && listReadyRef.current) {
+            setLoading(false)
+            return
+          }
           applyLoginDataResult(d)
           setLoading(false)
         } catch (e) {
+          if (!stillCurrent()) return
+          if (listReadyRef.current) {
+            setLoading(false)
+            return
+          }
           const msg = e instanceof Error ? e.message : String(e)
           const probeOk = await runReachabilityProbe()
+          if (!stillCurrent()) return
           setLoginListProbeOk(probeOk)
           if (probeOk) setBrowserOnline(true)
           const companyGate =
@@ -669,7 +693,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       }
       void run()
     },
-    [applyLoginDataResult, company, isOmniBrand, loginApp, needsScopedLoginData, stayOnLoginForm]
+    [applyLoginDataResult, isOmniBrand, loginApp, needsScopedLoginData, stayOnLoginForm]
   )
 
   useLayoutEffect(() => {
@@ -691,17 +715,43 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [])
 
   useEffect(() => {
+    if (authInitialized) {
+      setAuthWaitTimedOut(false)
+      return
+    }
+    const tid = window.setTimeout(() => setAuthWaitTimedOut(true), LOGIN_AUTH_INIT_WATCHDOG_MS)
+    return () => window.clearTimeout(tid)
+  }, [authInitialized])
+
+  useEffect(() => {
     if (!loading) {
       setLoadingStuck(false)
       return
     }
-    const tid = window.setTimeout(() => setLoadingStuck(true), LOGIN_CONNECTING_WATCHDOG_MS)
+    const tid = window.setTimeout(() => {
+      setLoadingStuck(true)
+      setStayOnLoginForm(true)
+      setLoading(false)
+      void (async () => {
+        if (listReadyRef.current) return
+        const scopeCompany = String(companyRef.current || "").trim()
+        const loginOpts =
+          needsScopedLoginData && scopeCompany ? { company: scopeCompany } : undefined
+        const cached = await readLoginDataFromCacheOnly(loginOpts)
+        if (cached._source === "cache") {
+          applyLoginDataResult(cached)
+          return
+        }
+        setLoadError((prev) => prev || "SERVER_ERROR")
+        setLoginDataSource((prev) => prev ?? "fallback")
+      })()
+    }, LOGIN_CONNECTING_WATCHDOG_MS)
     return () => window.clearTimeout(tid)
-  }, [loading])
+  }, [applyLoginDataResult, loading, needsScopedLoginData])
 
   useEffect(() => {
     const boot = resolveLoginBootPhase({
-      authInitialized,
+      authInitialized: authInitialized || authWaitTimedOut,
       hasSession: Boolean(auth),
       stayOnLoginForm,
     })
@@ -754,26 +804,31 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
       } catch {
         /* ignore */
       }
-      const hard = shouldHardNavigateLoginSessionRedirect({
-        isHybridShell: isCmPosHybridShell(),
-        isStandaloneDisplay:
-          typeof window.matchMedia === "function" &&
-          window.matchMedia("(display-mode: standalone)").matches,
-        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-      })
+      const hard = detectKioskLikeClient(isCmPosHybridShell())
+      const abortHungRedirect = window.setTimeout(() => {
+        if (typeof window === "undefined") return
+        if (!isStillOnLoginPath(window.location.pathname || "")) return
+        setStayOnLoginForm(true)
+        setLoading(false)
+        if (!skipLoginDataFetch && !resolveSaasAdminLogin() && !needsScopedLoginData) {
+          fetchLoginData()
+        }
+      }, LOGIN_SESSION_REDIRECT_HANG_MS)
       if (hard) {
         window.location.replace(dest)
-        return
+        return () => window.clearTimeout(abortHungRedirect)
       }
       replacePosOfflineAware(dest, (p) => router.replace(p))
       const hardNavFallback = window.setTimeout(() => {
         if (typeof window === "undefined") return
-        const path = (window.location.pathname || "").replace(/\/+$/, "") || "/"
-        if (path === "/login" || path === "/admin/login" || path === "/pos/login" || path === "/saas-admin/login") {
+        if (isStillOnLoginPath(window.location.pathname || "")) {
           window.location.replace(dest)
         }
       }, LOGIN_SESSION_REDIRECT_HARD_NAV_MS)
-      return () => window.clearTimeout(hardNavFallback)
+      return () => {
+        window.clearTimeout(abortHungRedirect)
+        window.clearTimeout(hardNavFallback)
+      }
     }
     if (skipLoginDataFetch || resolveSaasAdminLogin()) {
       setLoading(false)
@@ -794,6 +849,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [
     auth,
     authInitialized,
+    authWaitTimedOut,
     stayOnLoginForm,
     effectiveRedirectTo,
     router,
@@ -1633,6 +1689,22 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 ) : null}
               </div>
             </div>
+          ) : null}
+          {auth && stayOnLoginForm && !loading ? (
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.setItem(LOGIN_SESSION_REDIRECT_BOUNCE_KEY, String(Date.now()))
+                } catch {
+                  /* ignore */
+                }
+                window.location.replace(effectiveRedirectTo)
+              }}
+              className="mb-3 w-full max-w-sm rounded-md bg-emerald-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-emerald-500"
+            >
+              {t.continueSession}
+            </button>
           ) : null}
           <form onSubmit={handleSubmit}>
             <div className="mb-3 w-full max-w-sm" data-login-step="language">
