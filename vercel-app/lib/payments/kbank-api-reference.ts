@@ -319,6 +319,14 @@ export function isKbankQrSessionTxnNo(txnNo: unknown): boolean {
   return /^APIC/i.test(s)
 }
 
+export function isKbankCreditCardQrTypeLabel(qrType: unknown): boolean {
+  const s = String(qrType || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_')
+  return s === 'CREDIT_CARD' || s === 'QRCC' || s === '4' || s === '5' || s.includes('CREDIT')
+}
+
 /** Bank payment txnNo for Inquiry/Void (e.g. 26440008). Stored columns are 20 chars. */
 export function isKbankPaymentTxnNo(txnNo: unknown): boolean {
   const s = String(txnNo || '').trim()
@@ -399,6 +407,16 @@ export function extractKbankPaymentTxnNo(raw: unknown): string {
   return nonSession[0] || ''
 }
 
+export function extractKbankQrSessionTxnNo(raw: unknown): string {
+  const root = parseKbankJsonObject(raw)
+  if (!root) {
+    const direct = String(raw || '').trim()
+    return isKbankQrSessionTxnNo(direct) ? direct : ''
+  }
+  const candidates = pickKbankTxnNoFromObject(root)
+  return candidates.find((c) => isKbankQrSessionTxnNo(c)) || ''
+}
+
 /** Alert text when Void cannot resolve numeric payment txnNo after Inquiry. */
 export function formatKbankVoidInquiryFailureMessage(params: {
   fallback: string
@@ -462,12 +480,16 @@ export function resolveKbankInquiryTxnNoForRequest(
   return t
 }
 
-/** txnNo for Void — same rules as inquiry (payment txnNo only). */
-export function resolveKbankVoidTxnNoForRequest(txnNo: unknown): string | undefined {
+/** txnNo for Void. Credit Card needs numeric payment txnNo; Thai QR / PromptPay keeps APIC after PAID. */
+export function resolveKbankVoidTxnNoForRequest(
+  txnNo: unknown,
+  options?: { qrType?: string }
+): string | undefined {
   const t = String(txnNo || '').trim()
-  if (!t || isKbankQrSessionTxnNo(t)) return undefined
-  if (!isKbankPaymentTxnNo(t)) return undefined
-  return t
+  if (!t) return undefined
+  if (isKbankPaymentTxnNo(t)) return t
+  if (isKbankQrSessionTxnNo(t) && !isKbankCreditCardQrTypeLabel(options?.qrType)) return t
+  return undefined
 }
 
 export function normalizeKbankTxnStatusToPos(

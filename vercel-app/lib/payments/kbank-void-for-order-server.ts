@@ -6,6 +6,7 @@ import {
   formatKbankVoidInquiryFailureMessage,
   isKbankInquiryResponseApproved,
   isKbankPaymentTxnNo,
+  isKbankQrSessionTxnNo,
   normalizeKbankTxnStatusToPos,
   resolveKbankVoidTxnNoForRequest,
 } from '@/lib/payments/kbank-api-reference'
@@ -368,10 +369,11 @@ async function persistVoidAttempt(params: {
   statusMessage?: string
   response: Record<string, unknown>
 }): Promise<void> {
-  const paymentTxnNo = (isKbankPaymentTxnNo(params.txnNo) ? params.txnNo : extractKbankPaymentTxnNo(params.response)).slice(
-    0,
-    20
-  )
+  const paymentTxnNo = (
+    isKbankPaymentTxnNo(params.txnNo) || isKbankQrSessionTxnNo(params.txnNo)
+      ? params.txnNo
+      : extractKbankPaymentTxnNo(params.response) || ''
+  ).slice(0, 20)
   try {
     await supabaseInsert('pos_payment_attempts', {
       order_id: params.orderId,
@@ -437,8 +439,9 @@ export async function executeConfirmedKbankVoidForOrder(
     )
   }
   const origPartnerTxnUid = ctx.eligibility.partnerTxnUid
-  const txnNo = ctx.eligibility.txnNo
-  if (!isKbankPaymentTxnNo(txnNo)) {
+  const txnNo =
+    resolveKbankVoidTxnNoForRequest(ctx.eligibility.txnNo, { qrType: ctx.eligibility.qrType }) || ''
+  if (!txnNo) {
     return fail(422, 'KBANK_VOID_NO_PAYMENT_TXN_NO', messageForReason('missing_payment_txn_no'), {
       eligibility: ctx.eligibility,
       preview,
@@ -459,6 +462,7 @@ export async function executeConfirmedKbankVoidForOrder(
         partnerTxnUid: voidPartnerTxnUid,
         origPartnerTxnUid,
         txnNo,
+        qrType: ctx.eligibility.qrType,
         ...(terminalId ? { terminalId } : {}),
       },
     },

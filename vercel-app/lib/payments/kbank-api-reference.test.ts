@@ -106,7 +106,11 @@ describe('kbank-api-reference', () => {
       undefined
     )
     expect(resolveKbankInquiryTxnNoForRequest('26440008', { qrType: 'CREDIT_CARD' })).toBe('26440008')
-    expect(resolveKbankVoidTxnNoForRequest('APIC1780542865020JY5')).toBeUndefined()
+    expect(resolveKbankVoidTxnNoForRequest('APIC1780542865020JY5')).toBe('APIC1780542865020JY5')
+    expect(resolveKbankVoidTxnNoForRequest('APIC1780542865020JY5', { qrType: 'THAI_QR' })).toBe(
+      'APIC1780542865020JY5'
+    )
+    expect(resolveKbankVoidTxnNoForRequest('APIC1780542865020JY5', { qrType: 'CREDIT_CARD' })).toBeUndefined()
     expect(extractKbankPaymentTxnNo({ txnNo: 'APIC1780542865020JY5', data: { txnNo: '26440008' } })).toBe(
       '26440008'
     )

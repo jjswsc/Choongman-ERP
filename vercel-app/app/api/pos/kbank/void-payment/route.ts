@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
         ''
     ).trim()
     let txnNo = String(body.txnNo || rawPayload?.txnNo || '').trim()
+    let qrTypeHint = String(body.qrType || rawPayload?.qrType || '').trim()
     if (orderId > 0) {
       const bound = await loadKbankVoidOrderContext(orderId, authResult.auth)
       if (!bound.ok) {
@@ -87,8 +88,9 @@ export async function POST(req: NextRequest) {
         )
       }
       origPartnerTxnUid = el.partnerTxnUid || origPartnerTxnUid
-      const boundTxnNo = resolveKbankVoidTxnNoForRequest(el.txnNo) || ''
-      const clientTxnNo = resolveKbankVoidTxnNoForRequest(txnNo) || ''
+      qrTypeHint = el.qrType || qrTypeHint
+      const boundTxnNo = resolveKbankVoidTxnNoForRequest(el.txnNo, { qrType: qrTypeHint }) || ''
+      const clientTxnNo = resolveKbankVoidTxnNoForRequest(txnNo, { qrType: qrTypeHint }) || ''
       if (clientTxnNo && boundTxnNo && clientTxnNo !== boundTxnNo) {
         return withCorsHeaders(
           NextResponse.json(
@@ -111,7 +113,7 @@ export async function POST(req: NextRequest) {
     const voidPartnerTxnUid = buildVoidPartnerTxnUid(
       String(body.partnerTxnUid || rawPayload?.partnerTxnUid || '').trim()
     )
-    const resolvedTxnNo = resolveKbankVoidTxnNoForRequest(txnNo) || ''
+    const resolvedTxnNo = resolveKbankVoidTxnNoForRequest(txnNo, { qrType: qrTypeHint }) || ''
 
     if (!origPartnerTxnUid) {
       return withCorsHeaders(
@@ -151,6 +153,7 @@ export async function POST(req: NextRequest) {
         partnerTxnUid: voidPartnerTxnUid,
         origPartnerTxnUid,
         txnNo: resolvedTxnNo,
+        ...(qrTypeHint ? { qrType: qrTypeHint } : {}),
         ...(terminalId ? { terminalId } : {}),
       },
     }

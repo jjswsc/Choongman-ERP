@@ -1,5 +1,6 @@
 import {
   extractKbankPaymentTxnNo,
+  extractKbankQrSessionTxnNo,
   isKbankInquiryResponseApproved,
   isKbankPaymentAttemptApproved,
   isKbankPaymentTxnNo,
@@ -79,9 +80,12 @@ function isGenerateQrAttempt(a: KbankVoidAttemptLike): boolean {
   return code === 'QR' || code === 'GENERATE'
 }
 
-function pickTxnNo(...values: Array<string | null | undefined>): string {
+function pickTxnNo(qrType: string, ...values: Array<string | null | undefined>): string {
   for (const v of values) {
-    const n = resolveKbankVoidTxnNoForRequest(v) || ''
+    if (isKbankPaymentTxnNo(v)) return String(v || '').trim()
+  }
+  for (const v of values) {
+    const n = resolveKbankVoidTxnNoForRequest(v, { qrType }) || ''
     if (n) return n
   }
   return ''
@@ -163,8 +167,11 @@ function isPaidKbankAttempt(a: KbankVoidAttemptLike): boolean {
     responseText: String(a.responseText || ''),
   }
   if (isGenerateQrAttempt(a)) {
-    const paymentTxnNo =
-      resolveKbankVoidTxnNoForRequest(a.approvalCode) || resolveKbankVoidTxnNoForRequest(a.traceNo) || ''
+    const paymentTxnNo = isKbankPaymentTxnNo(a.approvalCode)
+      ? String(a.approvalCode || '').trim()
+      : isKbankPaymentTxnNo(a.traceNo)
+        ? String(a.traceNo || '').trim()
+        : ''
     return Boolean(paymentTxnNo) && isKbankPaymentAttemptApproved(hit)
   }
   return isKbankPaymentAttemptApproved(hit)
@@ -207,13 +214,22 @@ export function evaluateKbankVoidEligibilityFromAttempts(
   const partnerTxnUid = localTxIdOf(generate || {})
   const hasApicSessionTxnNo = rows.some(attemptHasApic)
 
+  let qrType = ''
+  for (const a of [generate, ...rows].filter(Boolean) as KbankVoidAttemptLike[]) {
+    qrType = qrTypeOf(a)
+    if (qrType) break
+  }
+  qrType = qrType || 'THAI_QR'
+
   const txnNo = pickTxnNo(
+    qrType,
     generate?.approvalCode,
     generate?.traceNo,
     ...rows.flatMap((a) => [
       a.approvalCode,
       a.traceNo,
       extractKbankPaymentTxnNo(parseJsonObject(a.responseRaw) || a.responseRaw),
+      extractKbankQrSessionTxnNo(parseJsonObject(a.responseRaw) || a.responseRaw),
     ])
   )
   const terminalId = String(
@@ -230,19 +246,13 @@ export function evaluateKbankVoidEligibilityFromAttempts(
     if (v === 'Y' && allowVoid !== 'N') allowVoid = 'Y'
   }
 
-  let qrType = ''
-  for (const a of [generate, ...rows].filter(Boolean) as KbankVoidAttemptLike[]) {
-    qrType = qrTypeOf(a)
-    if (qrType) break
-  }
-
   const paid = rows.some(isPaidKbankAttempt)
 
   const base: KbankVoidEligibility = {
     partnerTxnUid,
     txnNo,
     terminalId,
-    qrType: qrType || 'THAI_QR',
+    qrType,
     allowVoid,
     alreadyVoided,
     paid,
@@ -270,7 +280,8 @@ export function evaluateKbankVoidEligibilityFromAttempts(
       reason: hasApicSessionTxnNo ? 'apic_session_only' : 'missing_payment_txn_no',
     }
   }
-  if (!isKbankPaymentTxnNo(txnNo)) {
+  const voidTxnNo = resolveKbankVoidTxnNoForRequest(txnNo, { qrType }) || ''
+  if (!voidTxnNo) {
     return {
       ...base,
       txnNo: '',
@@ -278,7 +289,7 @@ export function evaluateKbankVoidEligibilityFromAttempts(
       reason: isKbankQrSessionTxnNo(txnNo) || hasApicSessionTxnNo ? 'apic_session_only' : 'missing_payment_txn_no',
     }
   }
-  return { ...base, canVoid: true, reason: 'ok' }
+  return { ...base, txnNo: voidTxnNo, canVoid: true, reason: 'ok' }
 }
 
 /** Resolve KBank Void ids from payment-attempt rows of one POS order. */

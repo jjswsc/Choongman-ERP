@@ -865,8 +865,14 @@ function buildTxnPayload(
   const partnerId = mustEnvCtx(ctx, 'KBANK_PARTNER_ID')
   const partnerSecret = mustEnvCtx(ctx, 'KBANK_PARTNER_SECRET')
   const merchantId = mustEnvCtx(ctx, 'KBANK_MERCHANT_ID')
+  const payloadIn = { ...(req.payload || {}) } as Record<string, unknown>
+  const qrTypeHint = String(
+    payloadIn.qrType ||
+      ('qrType' in req ? String((req as { qrType?: string }).qrType || '') : '') ||
+      ''
+  ).trim()
   const payload = stripDisallowedKbankActionPayloadFields(
-    { ...(req.payload || {}) } as Record<string, unknown>,
+    payloadIn,
     { includeQrType: options?.includeQrType, includeTxnNo: options?.includeTxnNo }
   )
   const reqTerminalId =
@@ -910,7 +916,7 @@ function buildTxnPayload(
     ? String(payload.txnNo || reqTxnNo || '').trim()
     : ''
   const resolvedTxnNo = options?.includeTxnNo
-    ? resolveKbankVoidTxnNoForRequest(rawTxnNo) || ''
+    ? resolveKbankVoidTxnNoForRequest(rawTxnNo, { qrType: qrTypeHint }) || ''
     : ''
   return {
     ...payload,

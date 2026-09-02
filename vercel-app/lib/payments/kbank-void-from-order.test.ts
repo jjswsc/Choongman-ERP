@@ -108,7 +108,7 @@ describe('evaluateKbankVoidEligibilityFromAttempts', () => {
     expect(billA.txnNo).not.toBe(billB.txnNo)
   })
 
-  it('blocks Void when inquiry returned only APIC session id', () => {
+  it('blocks Credit Card Void when inquiry returned only APIC session id', () => {
     const el = evaluateKbankVoidEligibilityFromAttempts([
       {
         provider: 'kbank_qr_api',
@@ -116,6 +116,7 @@ describe('evaluateKbankVoidEligibilityFromAttempts', () => {
         localTxId: 'PsessionOnly',
         status: 'pending',
         approvalCode: 'APIC1780542865020JY5',
+        requestRaw: JSON.stringify({ qrType: 'CREDIT_CARD' }),
       },
       {
         provider: 'kbank_qr_api',
@@ -127,10 +128,41 @@ describe('evaluateKbankVoidEligibilityFromAttempts', () => {
       },
     ])
     expect(el.paid).toBe(true)
+    expect(el.qrType).toBe('CREDIT_CARD')
     expect(el.canVoid).toBe(false)
     expect(el.reason).toBe('apic_session_only')
     expect(el.hasApicSessionTxnNo).toBe(true)
     expect(el.txnNo).toBe('')
+  })
+
+  it('allows Thai QR Void when inquiry returned only APIC session id', () => {
+    const el = evaluateKbankVoidEligibilityFromAttempts([
+      {
+        provider: 'kbank_qr_api',
+        txCode: 'QR',
+        localTxId: 'PthaiApic',
+        status: 'pending',
+        approvalCode: 'APIC1788341214404YTL',
+        requestRaw: JSON.stringify({ qrType: 'THAI_QR' }),
+      },
+      {
+        provider: 'kbank_qr_api',
+        txCode: 'STATUS',
+        localTxId: 'CHKTHAIAPIC',
+        status: 'approved',
+        responseCode: '00',
+        responseRaw: JSON.stringify({
+          statusCode: '00',
+          txnStatus: 'PAID',
+          txnNo: 'APIC1788341214404YTL',
+        }),
+      },
+    ])
+    expect(el.paid).toBe(true)
+    expect(el.qrType).toBe('THAI_QR')
+    expect(el.canVoid).toBe(true)
+    expect(el.reason).toBe('ok')
+    expect(el.txnNo).toBe('APIC1788341214404YTL')
   })
 
   it('reads numeric txnNo from nested result in inquiry JSON', () => {

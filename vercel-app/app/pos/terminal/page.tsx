@@ -295,6 +295,7 @@ import { normalizePosPaymentTender } from '@/lib/pos-payment-tender-normalize'
 import {
   extractKbankQrResponseMeta,
   extractKbankPaymentTxnNo,
+  extractKbankQrSessionTxnNo,
   formatKbankVoidInquiryFailureMessage,
   isKbankCreditCardQrUnavailableError,
   isKbankPaymentTxnNo,
@@ -7405,7 +7406,7 @@ export default function PosTerminalPage() {
           return
         }
         if (action === 'void') {
-          let voidTxnNo = resolveKbankVoidTxnNoForRequest(txnNoRaw) || ''
+          let voidTxnNo = resolveKbankVoidTxnNoForRequest(txnNoRaw, { qrType: followupQrType }) || ''
           if (!voidTxnNo) {
             kbankInquiryLastAtRef.current = Date.now()
             const inq = await executeKbankCheckStatus({
@@ -7421,7 +7422,14 @@ export default function PosTerminalPage() {
             })
             if (inq.success) {
               const inqData = (inq.data || {}) as Record<string, unknown>
-              voidTxnNo = extractKbankPaymentTxnNo(inqData).slice(0, 20)
+              voidTxnNo =
+                resolveKbankVoidTxnNoForRequest(extractKbankPaymentTxnNo(inqData), {
+                  qrType: followupQrType,
+                }) ||
+                resolveKbankVoidTxnNoForRequest(extractKbankQrSessionTxnNo(inqData), {
+                  qrType: followupQrType,
+                }) ||
+                ''
               if (voidTxnNo) {
                 setKbankOpsTxnNo(voidTxnNo)
                 setKbankPaidVoidSnapshot((prev) =>
@@ -7461,6 +7469,7 @@ export default function PosTerminalPage() {
             payload: {
               partnerTxnUid: voidPartnerTxnUid,
               origPartnerTxnUid,
+              ...(followupQrType ? { qrType: followupQrType } : {}),
               ...(terminalId ? { terminalId } : {}),
               ...(voidTxnNo ? { txnNo: voidTxnNo } : {}),
             },
