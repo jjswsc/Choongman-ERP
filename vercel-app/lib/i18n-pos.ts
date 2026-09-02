@@ -48,6 +48,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posChannelSettleUsePlatformFee: '플랫폼 수수료(예상)',
     posChannelSettleFeeDefault: '기본',
     posChannelSettleCardFeeHint: '카드: NET은 PG/카드사 입금액. FEE=GROSS−NET.',
+    posChannelSettleCoverHint: '주말 묶음: {dates} POS 합산',
     posDeliveryOpsSettlementFeePct: '플랫폼 정산 수수료 (%)',
     posDeliveryOpsSettlementFeePctPh: '미입력 시 Grab 20 / LINE 18 / Shopee 13%',
     posDeliveryOpsSettlementFeePctHint:
@@ -3506,6 +3507,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posChannelSettleUsePlatformFee: 'Platform fee (est.)',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleCardFeeHint: 'Card: NET = PG settlement. FEE = GROSS − NET.',
+    posChannelSettleCoverHint: 'Weekend batch: POS sum {dates}',
     posDeliveryOpsSettlementFeePct: 'Platform settlement fee (%)',
     posDeliveryOpsSettlementFeePctPh: 'Default Grab 20 / LINE 18 / Shopee 13% if empty',
     posDeliveryOpsSettlementFeePctHint:
@@ -10020,6 +10022,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posChannelSettleAlreadyPosted: 'Already posted with the same amounts.',
     posChannelSettleBank: 'Bank deposit',
     posChannelSettleCardFeeHint: 'Card: NET = PG settlement. FEE = GROSS − NET.',
+    posChannelSettleCoverHint: 'รวมยอด POS วันหยุด {dates} ครับ',
     posChannelSettleChannel: 'Channel',
     posChannelSettleCsvDone: '{n} posted, {f} failed',
     posChannelSettleCsvHint: 'Columns: settle_date, channel, gross, net, fee (optional). Store/date default from screen. channel=grab|lineman|shopee|card',

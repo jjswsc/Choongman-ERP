@@ -223,18 +223,22 @@ export async function getPosChannelSettlementGross(params: {
   storeCode: string
   settleDate: string
   channel: PosChannelSettlementChannel
+  net?: number
 }) {
   const q = new URLSearchParams({
     storeCode: params.storeCode,
     settleDate: params.settleDate,
     channel: params.channel,
   })
+  if (params.net != null && Number(params.net) > 0) q.set('net', String(params.net))
   const res = await apiFetchWithOffline(`/api/getPosChannelSettlementGross?${q}`)
   return res.json() as Promise<{
     success: boolean
     gross?: number
     orderCount?: number
     cardFeeTotal?: number
+    coverDates?: string[]
+    expanded?: boolean
     suggestedFee?: number | null
     suggestedFeeSource?: string | null
     platformFeePct?: number | null

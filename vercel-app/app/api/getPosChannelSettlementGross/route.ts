@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { fetchChannelGrossCoveringNet } from '@/lib/pos-channel-cover-gross-server'
 import { fetchPosChannelSettlementGross } from '@/lib/pos-channel-settlement-gross-server'
 import { normalizePosChannelSettlementChannel } from '@/lib/pos-channel-settlement'
 import {
@@ -28,7 +29,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const grossRow = await fetchPosChannelSettlementGross({ storeCode, settleDate, channel })
+    const netRaw = Number(searchParams.get('net') || 0)
+    const net = Number.isFinite(netRaw) && netRaw > 0 ? netRaw : 0
+
+    const grossRow =
+      net > 0
+        ? await fetchChannelGrossCoveringNet({ storeCode, settleDate, channel, net })
+        : { ...(await fetchPosChannelSettlementGross({ storeCode, settleDate, channel })), coverDates: [settleDate], expanded: false }
 
     const appCode = deliveryAppCodeForSettlementChannel(channel)
     let platformFeePct: number | null = null
@@ -57,6 +64,8 @@ export async function GET(request: NextRequest) {
         gross: grossRow.gross,
         orderCount: grossRow.orderCount,
         cardFeeTotal: grossRow.cardFeeTotal,
+        coverDates: grossRow.coverDates,
+        expanded: grossRow.expanded,
         suggestedFee,
         suggestedFeeSource:
           suggestedFee != null && platformFeePctSource ? `platform_${platformFeePctSource}` : null,

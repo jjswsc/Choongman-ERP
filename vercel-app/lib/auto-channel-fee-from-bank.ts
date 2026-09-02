@@ -3,7 +3,7 @@
  * 실패해도 통장 저장은 유지. QR·현금·폐유는 호출하지 않음.
  */
 import { saveChannelSettlement } from '@/lib/pos-channel-settlement-process'
-import { fetchPosChannelSettlementGross } from '@/lib/pos-channel-settlement-gross-server'
+import { fetchChannelGrossCoveringNet, memoWithWeekendCover } from '@/lib/pos-channel-cover-gross-server'
 import { deriveFeeFromGrossNet, roundSettlementMoney } from '@/lib/pos-channel-settlement'
 import {
   channelFeeSettleDateCandidates,
@@ -38,7 +38,7 @@ export async function maybeAutoPostChannelFeeAfterBankDeposit(params: {
   })
   for (const settleDate of dates) {
     try {
-      const grossRow = await fetchPosChannelSettlementGross({ storeCode, settleDate, channel })
+      const grossRow = await fetchChannelGrossCoveringNet({ storeCode, settleDate, channel, net })
       const gross = roundSettlementMoney(Number(grossRow.gross) || 0)
       if (gross <= 0 || gross + 0.02 < net) continue
       const fee = deriveFeeFromGrossNet(gross, net)
@@ -50,8 +50,8 @@ export async function maybeAutoPostChannelFeeAfterBankDeposit(params: {
         gross,
         net,
         fee,
-        memo: String(params.memo || params.note || '').trim() || null,
-        feeSource: 'auto_bank_chip',
+        memo: memoWithWeekendCover(String(params.memo || params.note || '').trim() || null, grossRow.coverDates),
+        feeSource: grossRow.expanded ? 'auto_bank_chip_cover' : 'auto_bank_chip',
         bankTransactionId: bankId,
         postedBy: params.postedBy || null,
       })

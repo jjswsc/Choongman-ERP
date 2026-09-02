@@ -21,6 +21,7 @@ import {
   type PosChannelSettlementRow,
 } from '@/lib/api-client'
 import { parseChannelSettlementCsv } from '@/lib/parse-channel-settlement-csv'
+import { appendCoverMemo } from '@/lib/pos-channel-cover-gross'
 import { deriveFeeFromGrossNet, roundSettlementMoney } from '@/lib/pos-channel-settlement'
 import { cn } from '@/lib/utils'
 
@@ -74,16 +75,24 @@ export function PosChannelSettlementPanel({
   const [platformFeePct, setPlatformFeePct] = React.useState<number | null>(null)
   const [feeSourceKey, setFeeSourceKey] = React.useState<string | null>(null)
   const [csvImporting, setCsvImporting] = React.useState(false)
+  const [coverDates, setCoverDates] = React.useState<string[]>([])
   const csvInputRef = React.useRef<HTMLInputElement>(null)
 
   const loadGross = React.useCallback(async () => {
     if (!storeCode || !settleDate) return
     setLoadingGross(true)
+    setCoverDates([])
     try {
-      const res = await getPosChannelSettlementGross({ storeCode, settleDate, channel })
+      const res = await getPosChannelSettlementGross({
+        storeCode,
+        settleDate,
+        channel,
+        net: initialNet != null && initialNet > 0 ? initialNet : undefined,
+      })
       if (res.success) {
         const g = roundSettlementMoney(Number(res.gross) || 0)
         setGross(g)
+        setCoverDates(Array.isArray(res.coverDates) ? res.coverDates : [])
         setSuggestedFee(res.suggestedFee != null ? roundSettlementMoney(res.suggestedFee) : null)
         setPlatformFeePct(
           res.platformFeePct != null && Number.isFinite(Number(res.platformFeePct))
@@ -97,7 +106,7 @@ export function PosChannelSettlementPanel({
     } finally {
       setLoadingGross(false)
     }
-  }, [storeCode, settleDate, channel])
+  }, [storeCode, settleDate, channel, initialNet])
 
   const loadPosted = React.useCallback(async () => {
     if (!storeCode || !settleDate) return
@@ -185,10 +194,12 @@ export function PosChannelSettlementPanel({
         net: netNum,
         fee: feeNum,
         feeSource:
-          suggestedFee != null && Math.abs(feeNum - suggestedFee) < 0.02
-            ? feeSourceKey || 'platform_policy_pct'
-            : 'manual',
-        memo: memo.trim() || undefined,
+          coverDates.length > 1
+            ? 'weekend_cover'
+            : suggestedFee != null && Math.abs(feeNum - suggestedFee) < 0.02
+              ? feeSourceKey || 'platform_policy_pct'
+              : 'manual',
+        memo: appendCoverMemo(memo.trim() || undefined, coverDates) || undefined,
         bankTransactionId:
           bankTransactionId != null && bankTransactionId > 0 ? bankTransactionId : undefined,
         repost,
@@ -317,6 +328,14 @@ export function PosChannelSettlementPanel({
         <div className="rounded-md bg-background/80 px-3 py-2 border">
           <span className="text-muted-foreground text-xs">GROSS (1130)</span>
           <p className="font-bold tabular-nums">{formatBaht(gross)} ฿</p>
+          {coverDates.length > 1 ? (
+            <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1">
+              {(t('posChannelSettleCoverHint') || '주말 묶음: {dates} POS 합산').replace(
+                '{dates}',
+                coverDates.map((d) => d.slice(5)).join('+')
+              )}
+            </p>
+          ) : null}
         </div>
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">{t('posChannelSettleFee') || '수수료'}</label>
