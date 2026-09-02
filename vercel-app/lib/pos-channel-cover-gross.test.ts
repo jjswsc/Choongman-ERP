@@ -92,18 +92,38 @@ describe('weekend batch GROSS cover', () => {
     expect(pick?.coverDates).toEqual(['2026-08-31', '2026-09-01'])
   })
 
-  it('rejects a two-day sum whose implied fee is not a card MDR', () => {
-    expect(
-      pickGrossCoveringNet({
-        settleDate: '2026-08-29',
-        net: 13259.86,
-        channel: 'card',
-        grossByDate: {
-          '2026-08-29': 10426,
-          '2026-08-30': 20000,
-        },
-      })
-    ).toBeNull()
+  it('skips a huge neighboring day and uses a smaller leftover day', () => {
+    const pick = pickGrossCoveringNet({
+      settleDate: '2026-08-29',
+      net: 13259.86,
+      channel: 'card',
+      grossByDate: {
+        '2026-08-29': 10426,
+        '2026-08-30': 15000,
+        '2026-08-31': 2834,
+      },
+    })
+    expect(pick?.coverDates).toEqual(['2026-08-29', '2026-08-31'])
+    expect(pick?.gross).toBe(13260)
+    expect(pick?.partial).toBeFalsy()
+  })
+
+  it('takes only the leftover slice from a huge neighboring day', () => {
+    const pick = pickGrossCoveringNet({
+      settleDate: '2026-08-29',
+      net: 13259.86,
+      channel: 'card',
+      grossByDate: {
+        '2026-08-29': 10426,
+        '2026-08-30': 20000,
+      },
+    })
+    expect(pick).toEqual({
+      coverDates: ['2026-08-29', '2026-08-30'],
+      gross: 13259.86,
+      fee: 0,
+      partial: true,
+    })
   })
 
   it('parses and writes [cover …] without duplicating', () => {

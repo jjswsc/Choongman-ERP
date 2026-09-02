@@ -231,7 +231,7 @@ export async function getPosChannelSettlementGross(params: {
     channel: params.channel,
   })
   if (params.net != null && Number(params.net) > 0) q.set('net', String(params.net))
-  const res = await apiFetchWithOffline(`/api/getPosChannelSettlementGross?${q}`)
+  const res = await apiFetchWithOffline(`/api/getPosChannelSettlementGross?${q}`, { cache: 'no-store' })
   return res.json() as Promise<{
     success: boolean
     gross?: number
@@ -239,6 +239,7 @@ export async function getPosChannelSettlementGross(params: {
     cardFeeTotal?: number
     coverDates?: string[]
     expanded?: boolean
+    partial?: boolean
     suggestedFee?: number | null
     suggestedFeeSource?: string | null
     platformFeePct?: number | null

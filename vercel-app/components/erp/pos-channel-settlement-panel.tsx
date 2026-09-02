@@ -76,6 +76,7 @@ export function PosChannelSettlementPanel({
   const [feeSourceKey, setFeeSourceKey] = React.useState<string | null>(null)
   const [csvImporting, setCsvImporting] = React.useState(false)
   const [coverDates, setCoverDates] = React.useState<string[]>([])
+  const [coverPartial, setCoverPartial] = React.useState(false)
   const csvInputRef = React.useRef<HTMLInputElement>(null)
   const netRef = React.useRef(net)
   React.useEffect(() => {
@@ -86,6 +87,7 @@ export function PosChannelSettlementPanel({
     if (!storeCode || !settleDate) return
     setLoadingGross(true)
     setCoverDates([])
+    setCoverPartial(false)
     try {
       const fromField = roundSettlementMoney(Number(netRef.current) || 0)
       const netForLoad =
@@ -100,6 +102,7 @@ export function PosChannelSettlementPanel({
         const g = roundSettlementMoney(Number(res.gross) || 0)
         setGross(g)
         setCoverDates(Array.isArray(res.coverDates) ? res.coverDates : [])
+        setCoverPartial(Boolean(res.partial))
         setSuggestedFee(res.suggestedFee != null ? roundSettlementMoney(res.suggestedFee) : null)
         setPlatformFeePct(
           res.platformFeePct != null && Number.isFinite(Number(res.platformFeePct))
@@ -185,6 +188,13 @@ export function PosChannelSettlementPanel({
       fee.trim() !== '' ? roundSettlementMoney(Number(fee) || 0) : deriveFeeFromGrossNet(gross, netNum)
     if (gross <= 0) {
       await appAlert(t('posChannelSettleNoGross') || 'POS 채권(GROSS)이 없습니다.')
+      return
+    }
+    if (coverPartial) {
+      await appAlert(
+        t('posChannelSettleSliceNoFee') ||
+          '수수료가 0입니다. 매출 수령만으로 끝입니다. 분개 버튼을 누르지 마세요.'
+      )
       return
     }
     if (Math.abs(gross - feeNum - netNum) > 0.02) {
@@ -337,10 +347,19 @@ export function PosChannelSettlementPanel({
           <p className="font-bold tabular-nums">{formatBaht(gross)} ฿</p>
           {coverDates.length > 1 ? (
             <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1">
-              {(t('posChannelSettleCoverHint') || '주말 묶음: {dates} POS 합산').replace(
+              {(coverPartial
+                ? t('posChannelSettleSliceHint') || '당일 POS + 옆날 일부: {dates}'
+                : t('posChannelSettleCoverHint') || '주말 묶음: {dates} POS 합산'
+              ).replace(
                 '{dates}',
                 coverDates.map((d) => d.slice(5)).join('+')
               )}
+            </p>
+          ) : null}
+          {coverPartial ? (
+            <p className="text-[11px] text-sky-800 dark:text-sky-300 mt-1">
+              {t('posChannelSettleSliceNoFee') ||
+                '수수료가 0입니다. 매출 수령만으로 끝입니다. 분개 버튼을 누르지 마세요.'}
             </p>
           ) : null}
           {gross > 0 && roundSettlementMoney(Number(net) || 0) > gross + 0.02 ? (
@@ -398,7 +417,7 @@ export function PosChannelSettlementPanel({
       />
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" onClick={() => void handlePost(false)} disabled={saving || !!existing?.journalEntryId || (gross > 0 && roundSettlementMoney(Number(net) || 0) > gross + 0.02)}>
+        <Button type="button" size="sm" onClick={() => void handlePost(false)} disabled={saving || !!existing?.journalEntryId || coverPartial || (gross > 0 && roundSettlementMoney(Number(net) || 0) > gross + 0.02)}>
           {saving ? '...' : t('posChannelSettlePostJournal') || '정산 분개 생성'}
         </Button>
         {existing?.journalEntryId ? (

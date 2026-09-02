@@ -91,12 +91,30 @@ export type GrossCoverPick = {
   coverDates: string[]
   gross: number
   fee: number
+  /** 옆날 POS 통째가 아니라, 모자란 금액만 옆날에서 가져온 경우 */
+  partial?: boolean
 }
 
 /**
- * 하루 GROSS 가 NET 보다 작을 때, 정산일을 포함하는 연속 구간을 합쳐 NET 을 덮는다.
- * 수수료가 음수이거나(아직 부족) 옆날을 너무 많이 넣어 수수료율이 비정상이면 null.
+ * 하루 GROSS 가 NET 보다 작을 때, 정산일 + 옆날(최대 3일)을 골라 NET 을 덮는다.
+ * 큰 날을 통째로 넣으면 수수료가 비정상이라, 작은 날부터 조합한다.
  */
+function eachNonemptySubset<T>(items: T[], maxSize: number, visit: (subset: T[]) => void): void {
+  const n = items.length
+  const limit = Math.min(Math.max(0, maxSize), n)
+  const acc: T[] = []
+  const walk = (start: number) => {
+    if (acc.length > 0) visit(acc.slice())
+    if (acc.length >= limit) return
+    for (let i = start; i < n; i++) {
+      acc.push(items[i]!)
+      walk(i + 1)
+      acc.pop()
+    }
+  }
+  walk(0)
+}
+
 export function pickGrossCoveringNet(params: {
   settleDate: string
   net: number
@@ -124,34 +142,60 @@ export function pickGrossCoveringNet(params: {
     if (/^\d{4}-\d{2}-\d{2}$/.test(ymd) && ymd !== settleDate) claimed.add(ymd)
   }
 
-  const window = weekendCoverNeighborDates(settleDate).filter((d) => !claimed.has(d) || d === settleDate)
-  const idx = window.indexOf(settleDate)
-  if (idx < 0) return null
+  const extras = weekendCoverNeighborDates(settleDate).filter((d) => {
+    if (d === settleDate || claimed.has(d)) return false
+    return roundSettlementMoney(Number(byDate.get(d) || 0)) > 0.02
+  })
 
   type Cand = GrossCoverPick & { extra: number; overshoot: number }
   const cands: Cand[] = []
-  for (let i = 0; i <= idx; i++) {
-    for (let j = idx; j < window.length; j++) {
-      const coverDates = window.slice(i, j + 1)
-      if (!coverDates.includes(settleDate)) continue
-      let gross = 0
-      for (const d of coverDates) {
-        gross += roundSettlementMoney(Number(byDate.get(d) || 0))
+  const consider = (coverDates: string[]) => {
+    let gross = 0
+    for (const d of coverDates) {
+      gross += roundSettlementMoney(Number(byDate.get(d) || 0))
+    }
+    gross = roundSettlementMoney(gross)
+    if (gross + 0.02 < net) return
+    if (!isPlausibleCoverFee(params.channel, gross, net)) return
+    const dates = [...coverDates].sort()
+    cands.push({
+      coverDates: dates,
+      gross,
+      fee: deriveFeeFromGrossNet(gross, net),
+      extra: coverDates.length,
+      overshoot: roundSettlementMoney(gross - net),
+    })
+  }
+
+  eachNonemptySubset(extras, 3, (subset) => consider([settleDate, ...subset]))
+  if (cands.length) {
+    cands.sort((a, b) => a.extra - b.extra || a.overshoot - b.overshoot)
+    const best = cands[0]!
+    return { coverDates: best.coverDates, gross: best.gross, fee: best.fee }
+  }
+
+  // 옆날이 너무 크면 통째 합산은 수수료가 비정상. 모자란 금액(gap)만 옆날 POS에서 가져온다.
+  const gap = roundSettlementMoney(net - dayGross)
+  if (gap <= 0.02) return null
+  const extrasBySize = [...extras].sort(
+    (a, b) =>
+      roundSettlementMoney(Number(byDate.get(a) || 0)) - roundSettlementMoney(Number(byDate.get(b) || 0))
+  )
+  let cap = 0
+  const used: string[] = []
+  for (const d of extrasBySize) {
+    const g = roundSettlementMoney(Number(byDate.get(d) || 0))
+    if (g <= 0.02) continue
+    used.push(d)
+    cap = roundSettlementMoney(cap + g)
+    if (cap + 0.02 >= gap) {
+      return {
+        coverDates: [settleDate, ...used].sort(),
+        gross: net,
+        fee: 0,
+        partial: true,
       }
-      gross = roundSettlementMoney(gross)
-      if (gross + 0.02 < net) continue
-      if (!isPlausibleCoverFee(params.channel, gross, net)) continue
-      cands.push({
-        coverDates,
-        gross,
-        fee: deriveFeeFromGrossNet(gross, net),
-        extra: coverDates.length,
-        overshoot: roundSettlementMoney(gross - net),
-      })
     }
   }
-  if (!cands.length) return null
-  cands.sort((a, b) => a.extra - b.extra || a.overshoot - b.overshoot)
-  const best = cands[0]!
-  return { coverDates: best.coverDates, gross: best.gross, fee: best.fee }
+  return null
 }

@@ -50,6 +50,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posChannelSettleCardFeeHint: '카드: NET은 PG/카드사 입금액. FEE=GROSS−NET.',
     posChannelSettleCoverHint: '주말 묶음: {dates} POS 합산',
     posChannelSettleCoverFail: '옆날 POS를 합쳐도 이 입금과 안 맞습니다. 수수료 분개는 하지 마세요.',
+    posChannelSettleSliceHint: '당일 POS + 옆날 일부: {dates}',
+    posChannelSettleSliceNoFee: '수수료가 0입니다. 매출 수령만으로 끝입니다. 분개 버튼을 누르지 마세요.',
     posDeliveryOpsSettlementFeePct: '플랫폼 정산 수수료 (%)',
     posDeliveryOpsSettlementFeePctPh: '미입력 시 Grab 20 / LINE 18 / Shopee 13%',
     posDeliveryOpsSettlementFeePctHint:
@@ -3510,6 +3512,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posChannelSettleCardFeeHint: 'Card: NET = PG settlement. FEE = GROSS − NET.',
     posChannelSettleCoverHint: 'Weekend batch: POS sum {dates}',
     posChannelSettleCoverFail: 'Neighboring POS days still do not match this deposit. Do not post the fee journal.',
+    posChannelSettleSliceHint: 'POS that day + leftover from {dates}',
+    posChannelSettleSliceNoFee: 'Fee is 0. Sales collection already posted. Do not post the fee journal.',
     posDeliveryOpsSettlementFeePct: 'Platform settlement fee (%)',
     posDeliveryOpsSettlementFeePctPh: 'Default Grab 20 / LINE 18 / Shopee 13% if empty',
     posDeliveryOpsSettlementFeePctHint:
@@ -10027,6 +10031,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posChannelSettleCoverHint: 'รวมยอด POS วันหยุด {dates} ครับ',
     posChannelSettleCoverFail:
       'รวมวันข้างเคียงแล้วยังไม่ตรงกับเงินเข้านี้ครับ อย่ากดลงค่าธรรมเนียม',
+    posChannelSettleSliceHint: 'ยอดวันนี้ + บางส่วนของวันข้างเคียง {dates} ครับ',
+    posChannelSettleSliceNoFee:
+      'ค่าธรรมเนียม 0 บาท ลงรับชำระไว้แล้ว ไม่ต้องกดลงค่าธรรมเนียม ปิดหน้านี้ได้ครับ',
     posChannelSettleChannel: 'Channel',
     posChannelSettleCsvDone: '{n} posted, {f} failed',
     posChannelSettleCsvHint: 'Columns: settle_date, channel, gross, net, fee (optional). Store/date default from screen. channel=grab|lineman|shopee|card',
@@ -13280,6 +13287,10 @@ export const I18N_POS_MM: Record<string, string> = {
     posSettlementCardMismatchBadge: 'Mismatch',
     posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
     posManualDiscountPickTitle: 'Select items to discount',
+    posChannelSettleCoverFail: 'Neighboring POS days still do not match this deposit. Do not post the fee journal.',
+    posChannelSettleCoverHint: 'Weekend batch: POS sum {dates}',
+    posChannelSettleSliceHint: 'POS that day + leftover from {dates}',
+    posChannelSettleSliceNoFee: 'Fee is 0. Sales collection already posted. Do not post the fee journal.',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -16321,6 +16332,10 @@ export const I18N_POS_LA: Record<string, string> = {
     posSettlementCardMismatchBadge: 'Mismatch',
     posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
     posManualDiscountPickTitle: 'Select items to discount',
+    posChannelSettleCoverFail: 'Neighboring POS days still do not match this deposit. Do not post the fee journal.',
+    posChannelSettleCoverHint: 'Weekend batch: POS sum {dates}',
+    posChannelSettleSliceHint: 'POS that day + leftover from {dates}',
+    posChannelSettleSliceNoFee: 'Fee is 0. Sales collection already posted. Do not post the fee journal.',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -19397,6 +19412,10 @@ export const I18N_POS_KH: Record<string, string> = {
     posSettlementCardMismatchBadge: 'Mismatch',
     posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
     posManualDiscountPickTitle: 'Select items to discount',
+    posChannelSettleCoverFail: 'Neighboring POS days still do not match this deposit. Do not post the fee journal.',
+    posChannelSettleCoverHint: 'Weekend batch: POS sum {dates}',
+    posChannelSettleSliceHint: 'POS that day + leftover from {dates}',
+    posChannelSettleSliceNoFee: 'Fee is 0. Sales collection already posted. Do not post the fee journal.',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -22442,6 +22461,10 @@ export const I18N_POS_VI: Record<string, string> = {
     posSettlementCardMismatchBadge: 'Mismatch',
     posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
     posManualDiscountPickTitle: 'Select items to discount',
+    posChannelSettleCoverFail: 'Neighboring POS days still do not match this deposit. Do not post the fee journal.',
+    posChannelSettleCoverHint: 'Weekend batch: POS sum {dates}',
+    posChannelSettleSliceHint: 'POS that day + leftover from {dates}',
+    posChannelSettleSliceNoFee: 'Fee is 0. Sales collection already posted. Do not post the fee journal.',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -25491,4 +25514,8 @@ export const I18N_POS_MS: Record<string, string> = {
     posSettlementCardMismatchBadge: 'Mismatch',
     posManualDiscountPickHint: 'Tap only the items to discount, then tap a % below. If none are selected, it applies to the whole order.',
     posManualDiscountPickTitle: 'Select items to discount',
+    posChannelSettleCoverFail: 'Neighboring POS days still do not match this deposit. Do not post the fee journal.',
+    posChannelSettleCoverHint: 'Weekend batch: POS sum {dates}',
+    posChannelSettleSliceHint: 'POS that day + leftover from {dates}',
+    posChannelSettleSliceNoFee: 'Fee is 0. Sales collection already posted. Do not post the fee journal.',
 }

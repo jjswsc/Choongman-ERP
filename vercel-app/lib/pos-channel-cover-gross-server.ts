@@ -11,6 +11,7 @@ import { roundSettlementMoney, type PosChannelGrossRow, type PosChannelSettlemen
 export type ChannelGrossCoverRow = PosChannelGrossRow & {
   coverDates: string[]
   expanded: boolean
+  partial?: boolean
 }
 
 export async function fetchChannelGrossCoveringNet(params: {
@@ -28,6 +29,7 @@ export async function fetchChannelGrossCoveringNet(params: {
     ...day0,
     coverDates: [settleDate],
     expanded: false,
+    partial: false,
   }
   if (net <= 0) return single
   if (day0.gross + 0.02 >= net) return single
@@ -67,9 +69,14 @@ export async function fetchChannelGrossCoveringNet(params: {
 
   let orderCount = 0
   let cardFeeTotal = 0
-  for (const d of pick.coverDates) {
-    orderCount += Number(orderByDate.get(d) || 0)
-    cardFeeTotal += Number(feeByDate.get(d) || 0)
+  if (pick.partial) {
+    orderCount = day0.orderCount
+    cardFeeTotal = day0.cardFeeTotal
+  } else {
+    for (const d of pick.coverDates) {
+      orderCount += Number(orderByDate.get(d) || 0)
+      cardFeeTotal += Number(feeByDate.get(d) || 0)
+    }
   }
   return {
     gross: pick.gross,
@@ -77,6 +84,7 @@ export async function fetchChannelGrossCoveringNet(params: {
     cardFeeTotal: roundSettlementMoney(cardFeeTotal),
     coverDates: pick.coverDates,
     expanded: true,
+    partial: Boolean(pick.partial),
   }
 }
 

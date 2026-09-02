@@ -12,6 +12,7 @@ import { requireAuth } from '@/lib/verify-auth'
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'no-store, max-age=0')
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     const grossRow =
       net > 0
         ? await fetchChannelGrossCoveringNet({ storeCode, settleDate, channel, net })
-        : { ...(await fetchPosChannelSettlementGross({ storeCode, settleDate, channel })), coverDates: [settleDate], expanded: false }
+        : { ...(await fetchPosChannelSettlementGross({ storeCode, settleDate, channel })), coverDates: [settleDate], expanded: false, partial: false }
 
     const appCode = deliveryAppCodeForSettlementChannel(channel)
     let platformFeePct: number | null = null
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
         cardFeeTotal: grossRow.cardFeeTotal,
         coverDates: grossRow.coverDates,
         expanded: grossRow.expanded,
+        partial: Boolean(grossRow.partial),
         suggestedFee,
         suggestedFeeSource:
           suggestedFee != null && platformFeePctSource ? `platform_${platformFeePctSource}` : null,
