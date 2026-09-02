@@ -165,6 +165,34 @@ describe('purchase tax invoice golden texts', () => {
     expect(shopeeWrappedOcrO?.invoiceNo).toBe('260822-001400')
     expect(shopeeWrappedOcrO?.invoiceNo).not.toBe(shopeeWrapped?.invoiceNo)
 
+    const shopeeMashedDup = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'เลขที่/ No. TRSPEFHMO21189195',
+        '0821-001305',
+        'วันที่ 21/08/2026',
+        'เลขประจำตัวผู้เสียภาษี 0105558019581',
+        'มูลค่าสินค้า 126.85',
+        'ภาษีมูลค่าเพิ่ม 8.88',
+      ].join('\n'),
+      { buyerTaxId: BUYER, taxMonth: '2026-08' }
+    )
+    expect(shopeeMashedDup?.invoiceNo).toBe('260821-001305')
+    expect(shopeeMashedDup?.invoiceNo).not.toBe('TRSPEFHMO21189195')
+
+    const shopeeMashedOtherDay = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'เลขที่/ No. TRSPEFHMO21189195',
+        '0822-001400',
+        'วันที่ 22/08/2026',
+        'เลขประจำตัวผู้เสียภาษี 0105558019581',
+        'มูลค่าสินค้า 176.18',
+        'ภาษีมูลค่าเพิ่ม 12.33',
+      ].join('\n'),
+      { buyerTaxId: BUYER, taxMonth: '2026-08' }
+    )
+    expect(shopeeMashedOtherDay?.invoiceNo).toBe('260822-001400')
+    expect(shopeeMashedOtherDay?.invoiceNo).not.toBe(shopeeMashedDup?.invoiceNo)
+
     const grabSplit = extractPurchaseTaxInvoiceFromScanText(
       `เลขที่ IM20260704039284\nบริษัท แกร็บแท็กซี่ (ประเทศไทย) จำกัด\nเลขประจำตัวผู้เสียภาษี 0105556090377\nมูลค่า 1,148.36 ภาษีมูลค่าเพิ่ม 80.38 รวมทั้งสิ้น 1,228.74`,
       { buyerTaxId: BUYER }

@@ -8,6 +8,7 @@ import {
   formatSellerBranch,
   gregorianYmdToBuddhistHint,
   isLikelyTaxInvoiceCopy,
+  isTruncatedShopeeInvoiceNo,
   looksLikeJunkSellerName,
   trimPurchaseTaxSellerName,
   parsePurchaseTaxInvoiceVisionPayload,
@@ -15,6 +16,8 @@ import {
   purchaseTaxInvoiceDedupeKey,
   uniquePositiveIds,
   fixOcrInvoiceLetterIPrefix,
+  fixOcrInvoiceIdPrefix,
+  compactPurchaseInvoiceToken,
   purchaseInvoiceConflictsWithPrior,
   purchaseInvoiceNosAreSameDocument,
   purchaseTaxInvoiceHasExtractedFields,
@@ -103,6 +106,16 @@ describe('purchase tax invoice helpers', () => {
     expect(purchaseInvoiceNosAreSameDocument('1V20260818-2330', 'IV20260818-2330')).toBe(true)
     expect(purchaseInvoiceNosAreSameDocument('IV690819-0637', '690819-0637')).toBe(true)
     expect(purchaseInvoiceNosAreSameDocument('IV20260818-2330', '2330')).toBe(false)
+    expect(purchaseInvoiceNosAreSameDocument('TRSPEFHMO21189195', 'TRSPEFHMO21189195')).toBe(false)
+    expect(purchaseInvoiceNosAreSameDocument('260821-001305', '260821-001305')).toBe(true)
+    expect(purchaseInvoiceNosAreSameDocument('260821-001305', '260822-001400')).toBe(false)
+    expect(isTruncatedShopeeInvoiceNo('TRSPEFHMO21189195')).toBe(true)
+    expect(isTruncatedShopeeInvoiceNo('TRSPEFHM00-00000-260821-001305')).toBe(false)
+    expect(
+      purchaseInvoiceConflictsWithPrior('TRSPEFHMO21189195', '0105558019581', [
+        { invoiceNo: 'TRSPEFHMO21189195', sellerTaxId: '0105558019581' },
+      ])
+    ).toBe(false)
     expect(
       purchaseInvoiceConflictsWithPrior('1V20260818-2330', '0105566137147', [
         { invoiceNo: '1V20260820-2330', sellerTaxId: '0105566137147' },
@@ -127,6 +140,11 @@ describe('purchase tax invoice helpers', () => {
     expect(fixOcrInvoiceLetterIPrefix('1NV-20260524902')).toBe('INV-20260524902')
     expect(fixOcrInvoiceLetterIPrefix('IM20260819011079')).toBe('IM20260819011079')
     expect(fixOcrInvoiceLetterIPrefix('010726E00037051')).toBe('010726E00037051')
+    expect(compactPurchaseInvoiceToken('1016908/00226orto')).toBe('ID16908/00226')
+    expect(compactPurchaseInvoiceToken('ID16908/00226')).toBe('ID16908/00226')
+    expect(fixOcrInvoiceIdPrefix('1016908/00226')).toBe('ID16908/00226')
+    expect(compactPurchaseInvoiceToken('RFTKBKO27082026000023577')).toBe('2026000023577')
+    expect(compactPurchaseInvoiceToken('TITKBK008072026000010005')).toBe('TITKBK008072026000010005')
   })
 
   it('formats seller branch as สำนักงานใหญ่ or สาขา 00001', () => {
@@ -234,6 +252,14 @@ describe('purchase tax invoice helpers', () => {
   it('cuts trailing address numbers after จำกัด', () => {
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟู้ด จำกัด 523 6 3')).toBe('บริษัท แพนฟู้ด จำกัด')
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟู้ด จำกัด 523638')).toBe('บริษัท แพนฟู้ด จำกัด')
+    expect(trimPurchaseTaxSellerName('ชนาคารกสิกรไทย จำกัด (มหาชน)')).toBe('ธนาคารกสิกรไทย จำกัด (มหาชน)')
+    expect(trimPurchaseTaxSellerName('บริษัท 1. เอ. พี. อินเตอร์เทรด จำกัด')).toBe(
+      'บริษัท ซี.เอ.พี.อินเตอร์เทรด จำกัด'
+    )
+    expect(trimPurchaseTaxSellerName('บริษัท พีเอพี แก๊ส วัน จำกัดใบ')).toBe('บริษัท พีเอพี แก๊ส วัน จำกัด')
+    expect(trimPurchaseTaxSellerName('บริษัท พีเอพี แก๊ส วัน จำกัดใบกำกับภาษี')).toBe(
+      'บริษัท พีเอพี แก๊ส วัน จำกัด'
+    )
   })
 
   it('detects invoice copies to skip', () => {

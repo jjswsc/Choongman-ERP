@@ -86,6 +86,7 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('AB-99')).toBe(true)
     expect(invoiceNoLooksPlausible('IM20260701000087')).toBe(true)
     expect(invoiceNoLooksPlausible('010726E00037051')).toBe(true)
+    expect(invoiceNoLooksPlausible('370290826W02075')).toBe(true)
     expect(invoiceNoLooksPlausible('12345678')).toBe(true)
     expect(invoiceNoLooksPlausible('2607074')).toBe(true)
     expect(invoiceNoLooksPlausible('3763')).toBe(true)
@@ -96,10 +97,13 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('TRSPESPF00-00000-')).toBe(false)
     expect(invoiceNoLooksPlausible('TRSPESPF00-00000-26')).toBe(false)
     expect(invoiceNoLooksPlausible('TRSPEFHMOO-00000-26')).toBe(false)
+    expect(invoiceNoLooksPlausible('TRSPEFHMO21189195')).toBe(false)
     expect(invoiceNoLooksPlausible('TRSPEFHM00-00000026')).toBe(false)
     expect(invoiceNoLooksPlausible('TRSPESPF00-00000-260701-017862')).toBe(true)
     expect(invoiceNoLooksPlausible('260821-001305')).toBe(true)
     expect(invoiceNoLooksPlausible('IM202607040')).toBe(false)
+    expect(invoiceNoLooksPlausible('ID16908/00226')).toBe(true)
+    expect(invoiceNoLooksPlausible('1016908/00226orto')).toBe(true)
   })
 })
 
@@ -526,6 +530,7 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
   it('snaps an OCR year that is a few years off the filing period', () => {
     expect(snapDocDateYearToTaxPeriod('2022-07-10', '2026-08')).toBe('2026-07-10')
     expect(snapDocDateYearToTaxPeriod('2026-07-10', '2026-08')).toBe('2026-07-10')
+    expect(snapDocDateYearToTaxPeriod('2017-08-25', '2026-08')).toBe('2026-08-25')
   })
 
   it('prefers IV prefix and BE yymmdd in the office invoice number over a misread month', () => {
@@ -534,6 +539,8 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(inferDocDateFromInvoiceNo('1V20260820-2330')).toBe('2026-08-20')
     expect(inferDocDateFromInvoiceNo('260821-001305')).toBe('2026-08-21')
     expect(inferDocDateFromInvoiceNo('TRSPEFHM00-00000-260821-001305')).toBe('2026-08-21')
+    expect(inferDocDateFromInvoiceNo('370290826W02075')).toBe('2026-08-29')
+    expect(inferDocDateFromInvoiceNo('010726E00037051')).toBe('2026-07-01')
     const repaired = repairExtractedPurchaseTaxInvoice(
       {
         invoiceNo: '690819-0637',
@@ -630,6 +637,145 @@ describe('inferAmountsFromMoneySequence', () => {
       vatAmount: 81.38,
       totalAmount: 1244.01,
     })
+  })
+
+  it('prefers document totals over a line-item 7% pair', () => {
+    expect(pickExclusiveVatAmounts([1450.47, 885.98, 2336.45, 163.55, 2500])).toEqual({
+      netAmount: 2336.45,
+      vatAmount: 163.55,
+      totalAmount: 2500,
+    })
+  })
+})
+
+describe('office invoice OCR (ID prefix, bank name, line vs total)', () => {
+  it('restores ID invoice numbers and does not use the first table amount', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบกำกับภาษี/ใบส่งสินค้า',
+        'บริษัท 1. เอ. พี. อินเตอร์เทรด จำกัด',
+        'เลขประจำตัวผู้เสียภาษี 0105540092693',
+        'เลขที่ 1016908/00226orto',
+        'วันที่ 24/08/2569',
+        'รายการ จำนวน ราคา/หน่วย มูลค่า',
+        '70782108 1.00 1,450.47 1,450.47',
+        '70780588 1.00 885.98 885.98',
+        'รวมเป็นเงิน 2,336.45',
+        'จำนวนภาษีมูลค่าเพิ่ม 163.55',
+        'จำนวนเงินรวมทั้งสิ้น 2,500.00',
+      ].join('\n'),
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.invoiceNo).toBe('ID16908/00226')
+    expect(row?.sellerName).toBe('บริษัท ซี.เอ.พี.อินเตอร์เทรด จำกัด')
+    expect(row?.sellerTaxId).toBe('0105540092693')
+    expect(row?.netAmount).toBe(2336.45)
+    expect(row?.vatAmount).toBe(163.55)
+  })
+
+  it('reads the full Kasikorn document number and fixes ชนาคาร', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบเสร็จรับเงิน / ใบกำกับภาษี',
+        'บริษัท ชนาคารกสิกรไทย จำกัด (มหาชน)',
+        'เลขประจำตัวผู้เสียภาษี 0107536000315',
+        'เลขที่เอกสาร 210826E00023449',
+        'วันที่ออกเอกสาร 21/08/2026',
+        'ค่าธรรมเนียม 41.50',
+        'ภาษีมูลค่าเพิ่ม 2.91',
+        'รวมทั้งสิ้น 44.41',
+      ].join('\n'),
+      { buyerTaxId: BUYER }
+    )
+    expect(row?.invoiceNo).toBe('210826E00023449')
+    expect(row?.sellerName).toContain('ธนาคารกสิกร')
+    expect(row?.sellerName).not.toContain('ชนาคาร')
+    expect(row?.netAmount).toBe(41.5)
+    expect(row?.vatAmount).toBe(2.91)
+  })
+
+  it('reads PAP-style เอกสารเลขที่, drops ใบ, and uses totals not 48กก', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบกำกับภาษี / Tax Invoice',
+        'บริษัท พีเอพี แก๊ส วัน จำกัดใบกำกับภาษี',
+        'เลขประจำตัวผู้เสียภาษี 0105552009478',
+        'เอกสารเลขที่ INCT690825077',
+        'วันที่ 25/08/17',
+        'ใบสั่งซื้อเลขที่ C6908-04525',
+        'แก๊ส LPG ขนาดบรรจุ 48กก. 2 ถัง 1,420.00 2,840.00',
+        'จำนวนเงินรวมก่อนภาษีมูลค่าเพิ่ม 2,654.21',
+        'จำนวนภาษีมูลค่าเพิ่ม 7% 185.79',
+        'จำนวนเงินรวมภาษีมูลค่าเพิ่ม 2,840.00',
+      ].join('\n'),
+      { buyerTaxId: BUYER, taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('INCT690825077')
+    expect(row?.sellerName).toBe('บริษัท พีเอพี แก๊ส วัน จำกัด')
+    expect(row?.docDate).toBe('2026-08-25')
+    expect(row?.netAmount).toBe(2654.21)
+    expect(row?.vatAmount).toBe(185.79)
+  })
+
+  it('uses seller next to TIN, not delivery-address buyer, and shortens RFT+date invoice nos', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบเสร็จรับเงิน/ใบกำกับภาษี',
+        'ที่อยู่ในการจัดส่งเอกสาร',
+        'บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+        'วันที่ออกเอกสาร 27/08/2569',
+        'เลขที่เอกสาร RFTKBKO27082026000023577',
+        'รหัสลูกค้า 308003411',
+        'หมายเลข 0971141183',
+        'บริษัท ทรู มูฟ เอช ยูนิเวอร์แซล คอมมิวนิเคชั่น จำกัด',
+        'เลขประจำตัวผู้เสียภาษี 0105553045044',
+        'สำนักงานใหญ่',
+        'ที่อยู่ตามภาษีมูลค่าเพิ่ม',
+        'บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+        'เลขประจำตัวผู้เสียภาษี 0105568080622',
+        'ค่าบริการ สิงหาคม 2569',
+        'จำนวนเงินรวมก่อนภาษีมูลค่าเพิ่ม 399.00',
+        'จำนวนภาษีมูลค่าเพิ่ม 27.93',
+        'จำนวนเงินรวมภาษีมูลค่าเพิ่ม 426.93',
+      ].join('\n'),
+      { buyerTaxId: BUYER, taxMonth: '2026-08' }
+    )
+    expect(row?.sellerName).toContain('ทรู มูฟ เอช')
+    expect(row?.sellerName).not.toContain('เอเชีย คอมเมิร์ซ')
+    expect(row?.sellerTaxId).toBe('0105553045044')
+    expect(row?.invoiceNo).toBe('2026000023577')
+    expect(row?.docDate).toBe('2026-08-27')
+    expect(row?.netAmount).toBe(399)
+    expect(row?.vatAmount).toBe(27.93)
+  })
+
+  it('reads Kasikorn credit-advice 370…W number, not the buyer TIN', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบเสร็จรับเงิน / ใบกำกับภาษี / ใบแจ้งเข้าบัญชี',
+        'ที่ ชต.611 : D370290826W02075/0826',
+        'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)',
+        'เลขประจำตัวผู้เสียภาษีอากร 0107536000315',
+        'วันที่ออกเอกสาร 29/08/2026',
+        'เลขที่เอกสาร 370290826W02075',
+        'ชื่อร้านค้า บ.เอเชีย คอมเมิร์ซ แอนด์ เทรด จก.',
+        'เลขประจำตัวผู้เสียภาษีอากร 0105568080622',
+        'เลขที่บัญชี 2083678677',
+        'กระเป๋าเงินอิเล็กทรอนิกส์',
+        'ยอดเงิน 617.00',
+        'ค่าธรรมเนียม 9.87',
+        'ภาษีมูลค่าเพิ่ม 0.69',
+        'ยอดเงินสุทธิ 606.44',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('370290826W02075')
+    expect(row?.invoiceNo).not.toBe('105568080622')
+    expect(row?.sellerName).toContain('กสิกร')
+    expect(row?.sellerTaxId).toBe('0107536000315')
+    expect(row?.docDate).toBe('2026-08-29')
+    expect(row?.netAmount).toBe(9.87)
+    expect(row?.vatAmount).toBe(0.69)
   })
 })
 

@@ -9,8 +9,8 @@
  * DOM을 쓰지 않는 순수 모듈 — 브라우저 OCR 결과를 넣고 테스트에서 그대로 재생한다.
  */
 import {
+  compactPurchaseInvoiceToken,
   digitsTin13,
-  fixOcrInvoiceLetterIPrefix,
   isTruncatedShopeeInvoiceNo,
   normalizeShopeeInvoiceBlob,
   purchaseTaxVatLooksWrong,
@@ -145,7 +145,7 @@ const INVOICE_LABELS: { re: RegExp; score: number; name: string }[] = [
     name: 'invoice-no',
   },
   {
-    re: labelPattern(['เลขที่เอกสาร', 'เลขที่บิล'], 'DOCUMENT\\s*NO|DOC\\s*NO|BILL\\s*NO'),
+    re: labelPattern(['เอกสารเลขที่', 'เลขที่เอกสาร', 'เลขที่บิล'], 'DOCUMENT\\s*NO|DOC\\s*NO|BILL\\s*NO'),
     score: 90,
     name: 'document-no',
   },
@@ -205,7 +205,7 @@ const INVOICE_VALUE_STOP_RE = labelPattern(
 )
 
 function cleanLayoutInvoiceToken(raw: string): string {
-  return fixOcrInvoiceLetterIPrefix(
+  return compactPurchaseInvoiceToken(
     String(raw || '')
       .replace(/[^A-Za-z0-9\-/]/g, '')
       .replace(/^[-/]+|[-/]+$/g, '')
@@ -218,11 +218,12 @@ function invoiceTokenLooksReal(token: string): boolean {
   const digits = token.replace(/\D/g, '')
   if (digits.length < 3) return false
   // 13자리 숫자만 있으면 세금번호를 집은 것
-  if (!/[A-Za-z]/.test(token) && digits.length === 13) return false
+  if (!/[A-Za-z]/.test(token) && digits.length === 13 && /^0\d{12}$/.test(digits)) return false
   if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(token)) return false
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(token)) return false
   if (/^\d{0,2}-\d{2}-\d{2}$/.test(token)) return false
   if (/^NO?\d{13}$/i.test(token)) return false
+  if (/^0\d{8,9}$/.test(token.replace(/\D/g, '')) && !/[A-Za-z]/.test(token)) return false
   return true
 }
 
@@ -241,20 +242,21 @@ function shopeeYearYyFromWords(words: OcrWordBox[]): string {
 function joinShopeeHeadAndTail(headToken: string, tail: string, yearYy: string): string | undefined {
   const head = normalizeShopeeInvoiceBlob(headToken)
   const prefix = head.match(/TRS[A-Z]{2,10}00/i)?.[0]
+  if (!prefix) return undefined
+  const ymd = tail.match(/^(\d{6})-(\d{5,8})$/)
+  const md = tail.match(/^(\d{4})-(\d{5,8})$/)
   const parsed =
     head.match(/^(TRS[A-Z]{2,10}00-\d{5}-)(\d{0,8})$/i) ||
     head.match(/^(TRS[A-Z]{2,10}00-\d{5})(\d{0,8})$/i) ||
     head.match(/^(TRS[A-Z]{2,10}00-)(\d{0,8})$/i)
-  if (!prefix || !parsed) return undefined
-  const mid = parsed[2]
-  const ymd = tail.match(/^(\d{6})-(\d{5,8})$/)
+  const mid = parsed?.[2] || ''
+  const midLooksLikeYear = mid.length > 0 && mid.length <= 3 && /^(?:2[6-9]|69|70)$/.test(mid.slice(-2))
   if (ymd && !mid) {
     const joined = `${prefix.toUpperCase()}-00000-${ymd[1]}-${ymd[2]}`
     return invoiceTokenLooksReal(joined) ? joined : undefined
   }
-  const md = tail.match(/^(\d{4})-(\d{5,8})$/)
   if (!md) return undefined
-  const year = (mid.slice(-2) || yearYy).slice(-2)
+  const year = (midLooksLikeYear ? mid.slice(-2) : yearYy).slice(-2)
   if (year.length !== 2) return undefined
   const joined = `${prefix.toUpperCase()}-00000-${year}${md[1]}-${md[2]}`
   return invoiceTokenLooksReal(joined) ? joined : undefined
@@ -428,7 +430,10 @@ export function layoutInvoiceIsHintWorthy(field?: LayoutField<string>): boolean 
 
 /** 과거 번호들에서 공통 꼴을 뽑는다. 근거가 빈약하면 undefined. */
 export function learnVendorInvoiceHint(pastNumbers: string[]): VendorInvoiceHint | undefined {
-  const norms = pastNumbers.map(normToken).filter((n) => n.length >= 4 && /\d/.test(n))
+  const norms = pastNumbers
+    .filter((n) => !isTruncatedShopeeInvoiceNo(n))
+    .map(normToken)
+    .filter((n) => n.length >= 4 && /\d/.test(n))
   if (!norms.length) return undefined
   const alphas = norms.map((n) => (n.match(/^[A-Za-z]+/) || [''])[0])
   const prefix = alphas.every((a) => a && a === alphas[0]) ? alphas[0] : ''
@@ -663,8 +668,16 @@ const SELLER_MARK_RE = labelPattern(
   'SELLER|VENDOR|SUPPLIER'
 )
 const BUYER_MARK_RE = labelPattern(
-  ['ลูกค้า', 'ผู้ซื้อ', 'นามลูกค้า', 'รหัสลูกค้า', 'ผู้รับใบกำกับ'],
-  'CUSTOMER|BUYER|BILL\\s*TO|SHIP\\s*TO'
+  [
+    'ลูกค้า',
+    'ผู้ซื้อ',
+    'นามลูกค้า',
+    'รหัสลูกค้า',
+    'ผู้รับใบกำกับ',
+    'ที่อยู่ในการจัดส่ง',
+    'ที่อยู่จัดส่ง',
+  ],
+  'CUSTOMER|BUYER|BILL\\s*TO|SHIP\\s*TO|DELIVERY\\s*ADDRESS'
 )
 
 type TinHit = { tin: string; y: number; conf: number; labeled: boolean }
@@ -756,13 +769,14 @@ const NET_LABEL_RE = labelPattern(
     'สินค้าเสียภาษี',
     'ราคาสินค้า',
     'มูลค่าก่อนภาษี',
+    'จำนวนเงินรวมก่อนภาษีมูลค่าเพิ่ม',
     'รวมเป็นเงิน',
     'รวมเงิน',
   ],
   'TOTAL\\s*AMOUNT|SUB\\s*TOTAL|NET\\s*AMOUNT|AMOUNT\\s*BEFORE'
 )
 const TOTAL_LABEL_RE = labelPattern(
-  ['จำนวนเงินรวมทั้งสิ้น', 'รวมทั้งสิ้น', 'จำนวนเงินทั้งสิ้น', 'ยอดชำระ', 'จำนวนเงินที่ชำระ'],
+  ['จำนวนเงินรวมภาษีมูลค่าเพิ่ม', 'จำนวนเงินรวมทั้งสิ้น', 'รวมทั้งสิ้น', 'จำนวนเงินทั้งสิ้น', 'ยอดชำระ', 'จำนวนเงินที่ชำระ'],
   'GRAND\\s*TOTAL|NET\\s*TOTAL|TOTAL\\s*DUE|SUBTOTAL'
 )
 /** 원천징수·면세·할인 줄의 숫자는 공급가·부가세가 아니다 */
@@ -908,7 +922,7 @@ export function findLayoutAmounts(layout: OcrPageLayout): {
       c.score -= 12
     }
   }
-  combos.sort((a, b) => b.score - a.score || a.net - b.net)
+  combos.sort((a, b) => b.score - a.score || b.net - a.net)
   const top = combos[0]
   const ambiguous = combos.some((c) => c !== top && c.score === top.score && Math.abs(c.net - top.net) > 0.01)
   const meanConf = top.observed.reduce((a, m) => a + m.conf, 0) / top.observed.length
@@ -945,7 +959,7 @@ function toIsoDate(d: number, m: number, y: number): string | undefined {
     const last4 = year % 10000
     if (last4 >= 2000 && last4 <= 2100) year = last4
   }
-  if (year < 100) year += year > 60 ? 1900 : 2000
+  if (year < 100) year = year >= 50 ? 2500 + year - 543 : 2000 + year
   if (year >= 2400) year -= 543
   if (year < 2000 || year > 2100) return undefined
   if (m < 1 || m > 12 || d < 1 || d > 31) return undefined
@@ -1059,7 +1073,7 @@ export function purchaseTaxLayoutWeakRegions(
  */
 export function findInvoiceTokenInText(text: string, hint: VendorInvoiceHint): string | undefined {
   if (!hint.prefix && !hint.digitPrefix && !hint.digitCount) return undefined
-  const re = /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|ABB|RT|IV|TI)[\s\-/]?[A-Z0-9\-/]{2,48}|\d{7,12})\b/gi
+  const re = /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|INCT|ABB|RT|IV|ID|TI)[\s\-/]?[A-Z0-9\-/]{2,48}|\d{7,12})\b/gi
   const found: string[] = []
   let m: RegExpExecArray | null
   while ((m = re.exec(String(text || '')))) {
@@ -1130,6 +1144,7 @@ function textInvoiceBeatsLayout(base: string, layout: string): boolean {
     if (b.startsWith('TRS') && l.startsWith('TRS') && b.length > l.length + 2) return true
   }
   if (/^\d{6}[EFH]\d{7,14}$/i.test(b) && !/^\d{6}[EFH]\d{7,14}$/i.test(l)) return true
+  if (/^370\d{6}W\d+$/i.test(b) && !/^370\d{6}W\d+$/i.test(l)) return true
   return invoiceNoQuality(base) > invoiceNoQuality(layout) + 8
 }
 

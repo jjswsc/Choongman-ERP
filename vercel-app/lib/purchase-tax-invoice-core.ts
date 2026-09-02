@@ -107,7 +107,7 @@ export function displaySellerBranchForUi(
   return formatted
 }
 
-/** Shopee 머리: `TRSPESPF00`, `TRSPEFHM00` (OCR `OO`→`00`) */
+/** Shopee 머리: `TRSPESPF00`, `TRSPEFHM00` (OCR `OO`→`00`, 단독 `O`→`00`) */
 const SHOPEE_PREFIX_SRC = 'TRS[A-Z]{2,10}00'
 
 export function normalizeShopeeInvoiceBlob(raw: string): string {
@@ -116,14 +116,21 @@ export function normalizeShopeeInvoiceBlob(raw: string): string {
     .replace(/!/g, '1')
     .replace(/PF0[CO]/gi, 'PF00')
     .replace(/(TRS[A-Z]{2,10})[O0]{2}/gi, (_m, p: string) => `${String(p).toUpperCase()}00`)
+    .replace(/(TRS[A-Z]{2,10})O(?=\d)/gi, (_m, p: string) => `${String(p).toUpperCase()}00`)
 }
 
-/** `TRSPEFHM00-00000-26`처럼 고유 꼬리가 빠진 쇼피 번호 */
+function shopeeHasUniqueTail(s: string): boolean {
+  return Boolean(shopeeUniqueInvoiceTail(s)) || new RegExp(`${SHOPEE_PREFIX_SRC}-\\d{5}-\\d{6}-\\d{5,8}$`, 'i').test(s)
+}
+
+/** `TRSPEFHM00-00000-26` · `TRSPEFHMO21189195` 처럼 고유 꼬리가 빠진 쇼피 번호 */
 export function isTruncatedShopeeInvoiceNo(raw: unknown): boolean {
-  const s = normalizeShopeeInvoiceBlob(String(raw || ''))
-  if (!s) return false
-  if (new RegExp(`^${SHOPEE_PREFIX_SRC}-?$`, 'i').test(s)) return true
-  return new RegExp(`^${SHOPEE_PREFIX_SRC}-\\d{5}-?\\d{0,5}$`, 'i').test(s)
+  const original = String(raw || '').replace(/\s+/g, '')
+  const s = normalizeShopeeInvoiceBlob(original)
+  if (!s && !original) return false
+  if (!/^TRS[A-Z]/i.test(s) && !/^TRS[A-Z]/i.test(original)) return false
+  if (shopeeHasUniqueTail(s) || shopeeHasUniqueTail(original)) return false
+  return true
 }
 
 /**
@@ -147,20 +154,44 @@ export function shopeeUniqueInvoiceTail(raw: unknown): string | undefined {
 export function fixOcrInvoiceLetterIPrefix(raw: string): string {
   const s = String(raw || '')
   if (/^1NV(?=[-/]?\d)/i.test(s)) return s.replace(/^1NV/i, 'INV')
+  if (/^1NCT(?=\d)/i.test(s)) return s.replace(/^1NCT/i, 'INCT')
   if (/^1VT(?=[-/]?\d)/i.test(s)) return s.replace(/^1VT/i, 'IVT')
   if (/^1M(?=20\d{12}$)/i.test(s)) return s.replace(/^1M/i, 'IM')
   if (/^[Il1|]V(?=\d{6})/.test(s)) return s.replace(/^[Il1|]V/, 'IV')
   return s
 }
 
+/** OCR이 ID 접두를 10/1D/I0 으로 읽거나, Original 조각(orto)을 번호 뒤에 붙인 경우 */
+export function fixOcrInvoiceIdPrefix(raw: string): string {
+  const s = String(raw || '')
+  const m = s.match(/^([Il1][D0O])(\d{4,8}\/\d{3,8})$/i)
+  if (m) return `ID${m[2]}`
+  if (/^ID\d/i.test(s)) return `ID${s.slice(2)}`
+  return s
+}
+
 export function compactPurchaseInvoiceToken(raw: string): string {
-  return fixOcrInvoiceLetterIPrefix(
-    String(raw || '')
-      .replace(/\s*-\s*/g, '-')
-      .replace(/\s*\/\s*/g, '/')
-      .replace(/\s+/g, '')
-      .trim()
-  )
+  const stripped = String(raw || '')
+    .replace(/\s*-\s*/g, '-')
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s+/g, '')
+    .trim()
+    .replace(/(\d)[A-Za-z]{3,}$/g, '$1')
+  const fixed = fixOcrInvoiceIdPrefix(fixOcrInvoiceLetterIPrefix(stripped))
+  return shortenLongLetterPrefixedInvoiceNo(fixed)
+}
+
+/**
+ * `RFTKBKO27082026000023577` 처럼 영문 머리 + 일·월 + 서기연도 + 일련번호가 긴 경우
+ * 연도부터 (`2026000023577`) 만 남긴다. `TITKBK008072026…` 는 일·월이 아니라 그대로 둔다.
+ */
+export function shortenLongLetterPrefixedInvoiceNo(raw: string): string {
+  const s = String(raw || '').trim()
+  const packed = s.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  if (packed.length < 22) return s
+  const m = packed.match(/^([A-Z]{5,12})(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(20\d{2})(\d{7,})$/)
+  if (!m) return s
+  return `${m[4]}${m[5]}`
 }
 
 /**
@@ -169,6 +200,11 @@ export function compactPurchaseInvoiceToken(raw: string): string {
  * 끝 일련번호만 같다고 합치지 않는다.
  */
 export function purchaseInvoiceNosAreSameDocument(a?: string, b?: string): boolean {
+  const ta = shopeeUniqueInvoiceTail(a)
+  const tb = shopeeUniqueInvoiceTail(b)
+  if (ta && tb) return ta === tb
+  if (ta || tb) return false
+  if (isTruncatedShopeeInvoiceNo(a) || isTruncatedShopeeInvoiceNo(b)) return false
   const compact = (s?: string) =>
     compactPurchaseInvoiceToken(String(s || ''))
       .toUpperCase()
@@ -364,6 +400,11 @@ export function trimPurchaseTaxSellerName(raw: unknown): string {
     .replace(/\s{2,}/g, ' ')
     .trim()
   if (!s) return ''
+  s = s.replace(/ชนาคาร/g, 'ธนาคาร')
+  s = s.replace(/บริษัท\s+1\.\s+(?=[\u0E00-\u0E7F]+\.)/g, 'บริษัท ซี. ')
+  s = s.replace(/\.\s+(?=[\u0E00-\u0E7F])/g, '.')
+  s = s.replace(/\s*ใบ(?:กำกับ(?:ภาษี)?|เสร็จ(?:รับเงิน)?|ส่งสินค้า|แจ้งหนี้).*$/u, '')
+  s = s.replace(/(จำกัด(?:\s*\(มหาชน\))?)ใบ$/u, '$1')
   const entity = s.match(/^(.*?(?:บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วน)\s+.{1,80}?จำกัด(?:\s*\(มหาชน\))?)/)
   if (entity) s = entity[1].trim()
   s = s.replace(/\s+\d[\d\s./\-]{0,24}$/, '').trim()
