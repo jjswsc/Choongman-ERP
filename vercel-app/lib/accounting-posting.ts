@@ -13,6 +13,7 @@ import {
   linesForBankWithdraw,
   type BankWithdrawExpenseOverride,
 } from '@/lib/chart-of-accounts-mapping'
+import { linesForPosChannelSettlement } from '@/lib/pos-channel-settlement'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { uniqueAccountingPeriodChecks } from '@/lib/accounting-period-mutation-guard'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
@@ -568,18 +569,7 @@ export async function postPosOrderJournal(params: {
 
 export type PosChannelSettlementChannel = 'card' | 'grab' | 'lineman' | 'shopee' | 'delivery_all'
 
-function feeLineForChannel(channel: PosChannelSettlementChannel, amount: number): JournalLineInput {
-  const code = channel === 'card' ? '5529' : '5528'
-  const name = channel === 'card' ? '카드수수료' : '배달앱수수료'
-  return {
-    ...accountLine(code, { nameKo: name }),
-    side: 'debit',
-    amount,
-    memo: '채널 정산 수수료',
-  }
-}
-
-/** 카드·배달앱 정산: Dr 현금(NET) + Dr 수수료(FEE), Cr 채권(GROSS) */
+/** 카드·배달앱 정산. 매출 수령으로 NET을 이미 올린 경우 bankNetAlreadyPosted */
 export async function postPosChannelSettlementJournal(params: {
   settlementId?: number
   storeCode: string
@@ -590,6 +580,7 @@ export async function postPosChannelSettlementJournal(params: {
   net: number
   memo?: string
   postedBy?: string | null
+  bankNetAlreadyPosted?: boolean
 }): Promise<number | null> {
   const gross = Math.abs(Number(params.gross) || 0)
   const fee = Math.abs(Number(params.fee) || 0)
@@ -598,20 +589,19 @@ export async function postPosChannelSettlementJournal(params: {
   if (Math.abs(gross - fee - net) > 0.02) {
     throw new Error(`CHANNEL_SETTLEMENT_AMOUNT_MISMATCH: gross=${gross}, fee=${fee}, net=${net}`)
   }
-  const receivable = accountLine('1130', { nameKo: '결제대기자산' })
-  const lines: JournalLineInput[] = []
-  if (net > 0) {
-    lines.push({ ...GL.cash(), side: 'debit', amount: net, memo: `${params.channel} 정산 입금` })
-  }
-  if (fee > 0) {
-    lines.push(feeLineForChannel(params.channel, fee))
-  }
-  lines.push({
-    ...receivable,
-    side: 'credit',
-    amount: gross,
-    memo: `${params.channel} 채권 소거`,
+  const built = linesForPosChannelSettlement({
+    channel: params.channel,
+    gross,
+    fee,
+    net,
+    bankNetAlreadyPosted: params.bankNetAlreadyPosted,
   })
+  const lines: JournalLineInput[] = built.map((line) => ({
+    ...accountLine(line.accountCode, { nameKo: line.accountName }),
+    side: line.side,
+    amount: line.amount,
+    memo: line.memo,
+  }))
   if (lines.length < 2) return null
 
   return postJournalEntry({

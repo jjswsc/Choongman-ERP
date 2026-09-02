@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { PosChannelSettlementPanel } from '@/components/erp/pos-channel-settlement-panel'
+import type { PosChannelSettlementChannel } from '@/lib/pos-channel-settlement'
 
 export type PosChannelSettlementDialogProps = {
   open: boolean
@@ -19,6 +20,7 @@ export type PosChannelSettlementDialogProps = {
   settleDate: string
   initialNet?: number
   bankTransactionId?: number
+  initialChannel?: PosChannelSettlementChannel
   onPosted?: () => void
 }
 
@@ -30,6 +32,7 @@ export function PosChannelSettlementDialog({
   settleDate,
   initialNet,
   bankTransactionId,
+  initialChannel,
   onPosted,
 }: PosChannelSettlementDialogProps) {
   const handlePosted = React.useCallback(() => {
@@ -56,6 +59,7 @@ export function PosChannelSettlementDialog({
             storeCode={storeCode}
             settleDate={settleDate}
             initialNet={initialNet}
+            initialChannel={initialChannel}
             bankTransactionId={bankTransactionId}
             hideCsv
             onPosted={handlePosted}

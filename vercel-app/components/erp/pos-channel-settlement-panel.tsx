@@ -42,6 +42,8 @@ export type PosChannelSettlementPanelProps = {
   className?: string
   /** 통장 입금 행에서 열 때 NET 프리필 */
   initialNet?: number
+  /** 칩(Grab/라인맨 등)에서 연 채널 */
+  initialChannel?: PosChannelSettlementChannel
   /** 정산 저장 시 연결할 통장 거래 ID */
   bankTransactionId?: number
   /** 다이얼로그 등 좁은 UI에서는 CSV 일괄 숨김 */
@@ -55,11 +57,12 @@ export function PosChannelSettlementPanel({
   settleDate,
   className,
   initialNet,
+  initialChannel,
   bankTransactionId,
   hideCsv = false,
   onPosted,
 }: PosChannelSettlementPanelProps) {
-  const [channel, setChannel] = React.useState<PosChannelSettlementChannel>('card')
+  const [channel, setChannel] = React.useState<PosChannelSettlementChannel>(initialChannel || 'card')
   const [gross, setGross] = React.useState(0)
   const [net, setNet] = React.useState('')
   const [fee, setFee] = React.useState('')
@@ -107,6 +110,11 @@ export function PosChannelSettlementPanel({
       console.error('loadPosted:', e)
     }
   }, [storeCode, settleDate])
+
+  React.useEffect(() => {
+    if (!initialChannel) return
+    setChannel(initialChannel)
+  }, [initialChannel])
 
   React.useEffect(() => {
     void loadGross()

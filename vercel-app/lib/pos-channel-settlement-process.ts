@@ -67,6 +67,7 @@ export async function saveChannelSettlement(
 
   await assertAccountingDateOpen(settleDate, storeCode)
 
+  let bankNetAlreadyPosted = false
   const bankTransactionId =
     input.bankTransactionId != null && input.bankTransactionId > 0
       ? Math.floor(Number(input.bankTransactionId))
@@ -74,6 +75,14 @@ export async function saveChannelSettlement(
   if (bankTransactionId) {
     try {
       await assertBankDepositAllowedForChannelSettlement(bankTransactionId)
+      const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
+        select: 'id,category',
+        limit: 1,
+      })) as { id?: number; category?: string }[] | null
+      bankNetAlreadyPosted =
+        String(bankRows?.[0]?.category || '')
+          .trim()
+          .toLowerCase() === 'receivable_receive'
       const otherSettle = (await supabaseSelectFilter(
         'pos_channel_settlements',
         `bank_transaction_id=eq.${bankTransactionId}`,
@@ -183,6 +192,7 @@ export async function saveChannelSettlement(
     net,
     memo: input.memo || undefined,
     postedBy: input.postedBy || undefined,
+    bankNetAlreadyPosted,
   })
 
   if (journalEntryId) {

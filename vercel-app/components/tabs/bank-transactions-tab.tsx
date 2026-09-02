@@ -126,6 +126,13 @@ import {
   saveBankQueryViewCache,
 } from "@/lib/bank-query-view-cache"
 import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlement-dialog"
+import {
+  appendBankChipNote,
+  bankChannelSettlementRowAction,
+  bankChipSavePatch,
+  inferPosBankChipKind,
+  settlementChannelForPosBankChip,
+} from "@/lib/pos-bank-chip-settlement"
 import { formatBahtAmountForField, formatBahtInputDisplay, parseBahtAmount } from "@/lib/baht-input-format"
 import {
   todayStr,
@@ -2216,10 +2223,24 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
     (phrase: string) => {
       const idx = importMemoFocusIdxRef.current
       if (idx !== null && idx >= 0) {
+        const row = importPreview?.rows?.[idx]
         setImportRowEdits((prev) => {
           const cur = (prev[idx]?.note ?? "").trim()
-          const next = cur ? `${cur} | ${phrase}` : phrase
-          return { ...prev, [idx]: { ...prev[idx], note: next } }
+          const next = appendBankChipNote(cur, phrase)
+          const chipPatch = bankChipSavePatch({
+            phrase,
+            transType: row?.transType,
+            accountStore: selectedAccountStore,
+          })
+          return {
+            ...prev,
+            [idx]: {
+              ...prev[idx],
+              note: next,
+              ...(chipPatch.category ? { category: chipPatch.category } : {}),
+              ...(chipPatch.storeName ? { storeName: chipPatch.storeName } : {}),
+            },
+          }
         })
         return
       }
@@ -2232,7 +2253,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         }
       )
     },
-    [tt]
+    [tt, importPreview, selectedAccountStore]
   )
 
   const applyQueryQuickMemo = React.useCallback(
@@ -2245,13 +2266,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             const edits = prev[rowId]
             const base =
               edits?.note !== undefined ? edits.note ?? "" : bankNoteUserDisplayText(r.note ?? "")
-            const cur = base.trim()
-            const next = cur ? `${cur} | ${phrase}` : phrase
+            const next = appendBankChipNote(base, phrase)
             const currentCat = String(edits?.category ?? r.category ?? "")
+            const chipPatch = bankChipSavePatch({
+              phrase,
+              transType: r.transType,
+              accountStore: selectedAccountStore,
+            })
             const posPatch = posStoreLegacyRevenueSavePatch({
               transType: r.transType,
               hidePosRevenue: hidePosRevenueCategories,
-              category: currentCat,
+              category: chipPatch.category || currentCat,
               storeName: edits?.storeName === "__none__" ? "" : edits?.storeName ?? r.storeName,
               accountStore: selectedAccountStore,
             })
@@ -2260,7 +2285,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               [rowId]: {
                 ...prev[rowId],
                 note: next,
-                ...(posPatch
+                ...(chipPatch.category ? { category: chipPatch.category } : {}),
+                ...(chipPatch.storeName ? { storeName: chipPatch.storeName } : {}),
+                ...(posPatch && !chipPatch.category
                   ? {
                       category: posPatch.category,
                       ...(posPatch.storeName ? { storeName: posPatch.storeName } : {}),
@@ -3353,16 +3380,28 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         </>
                                       )
                                     }
-                                    if (!r.isChannelSettled && store) {
+                                    const settleAction = bankChannelSettlementRowAction({
+                                      memo: r.memo,
+                                      note: depositLinkCtx.note,
+                                      storeName: store,
+                                      isChannelSettled: r.isChannelSettled,
+                                    })
+                                    if (settleAction === "post" || settleAction === "edit") {
                                       return (
                                         <Button
                                           size="sm"
-                                          variant="outline"
+                                          variant={settleAction === "edit" ? "ghost" : "outline"}
                                           className={ADMIN_BTN_XS_CN}
                                           onClick={() => setChannelSettleRow(r)}
-                                          title={tt("bankPosChannelSettleRowBtn", "채널 정산 (수수료 분개)")}
+                                          title={
+                                            settleAction === "edit"
+                                              ? tt("bankPosChannelSettleEditBtn", "수수료 수정")
+                                              : tt("bankPosChannelSettleRowBtn", "채널 정산 (수수료 분개)")
+                                          }
                                         >
-                                          {tt("bankPosChannelSettleRowBtn", "채널 정산")}
+                                          {settleAction === "edit"
+                                            ? tt("bankPosChannelSettleEditBtn", "수수료 수정")
+                                            : tt("bankPosChannelSettleRowBtn", "채널 정산")}
                                         </Button>
                                       )
                                     }
@@ -4376,6 +4415,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             settleDate={csSettleDate}
             initialNet={Math.abs(channelSettleRow.amount ?? 0)}
             bankTransactionId={channelSettleRow.id}
+            initialChannel={
+              settlementChannelForPosBankChip(
+                inferPosBankChipKind(
+                  channelSettleRow.memo,
+                  csEdits?.note !== undefined ? csEdits.note : channelSettleRow.note
+                )
+              ) ?? undefined
+            }
             onPosted={() => {
               setChannelSettleRow(null)
               void loadData()

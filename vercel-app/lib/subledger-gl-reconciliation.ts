@@ -6,6 +6,7 @@ import { resolveAccountingRollupStores } from '@/lib/accounting-store-scope'
 import { findReceivableBankSubledgerGaps, type ReceivableBankSubledgerGap } from '@/lib/receivable-b2b-bank-link-gap'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { buildStoreFieldOrIlikeFragment } from '@/lib/accounting-store-match'
+import { channelSettlementAllowsReceivableReceive } from '@/lib/pos-bank-chip-settlement'
 
 export type SubledgerGlReconciliationReport = {
   yearMonth: string
@@ -247,7 +248,7 @@ export async function computeSubledgerGlReconciliation(
   let recvBankFilter = `trans_date=lte.${encodeURIComponent(endStr)}&trans_type=eq.deposit&category=eq.receivable_receive`
   if (bankStoreFrag) recvBankFilter += `&${bankStoreFrag}`
   const recvBankRows = (await supabaseSelectFilter('bank_transactions', recvBankFilter, {
-    select: 'id,trans_date,amount,store_name,store,account_id',
+    select: 'id,trans_date,amount,store_name,store,account_id,memo,note',
     limit: 300,
   })) as {
     id?: number
@@ -256,6 +257,8 @@ export async function computeSubledgerGlReconciliation(
     store_name?: string | null
     store?: string | null
     account_id?: number | null
+    memo?: string | null
+    note?: string | null
   }[]
 
   const receivableReceiveWithSettlementLink: SubledgerGlReconciliationReport['receivableReceiveWithSettlementLink'] =
@@ -263,6 +266,7 @@ export async function computeSubledgerGlReconciliation(
   for (const b of recvBankRows || []) {
     const bankId = Number(b.id || 0)
     if (bankId <= 0) continue
+    if (channelSettlementAllowsReceivableReceive({ memo: b.memo, note: b.note })) continue
     const linked = (await supabaseSelectFilter(
       'pos_channel_settlements',
       `bank_transaction_id=eq.${bankId}`,

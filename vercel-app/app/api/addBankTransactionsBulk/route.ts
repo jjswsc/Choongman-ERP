@@ -18,6 +18,7 @@ import {
   assertPosRevenueDepositCategorySafe,
   isBankSettlementGuardError,
 } from '@/lib/bank-settlement-guards'
+import { maybeAutoPostChannelFeeAfterBankDeposit } from '@/lib/auto-channel-fee-from-bank'
 import {
   appendSaasTenantFilter,
   assertSaasTenantWritable,
@@ -423,6 +424,23 @@ export async function POST(request: NextRequest) {
         }
       } catch (postingErr) {
         console.error('addBankTransactionsBulk posting:', postingErr)
+      }
+      if (bankId && transType === 'deposit') {
+        try {
+          await maybeAutoPostChannelFeeAfterBankDeposit({
+            bankTransactionId: bankId,
+            storeCode: effectiveStoreNameForReceivable || store,
+            transDate,
+            salesDate,
+            netAmount: Math.abs(amount),
+            category: validCategory,
+            memo,
+            note,
+            postedBy: userName || null,
+          })
+        } catch (feeErr) {
+          console.warn('addBankTransactionsBulk auto channel fee:', feeErr)
+        }
       }
       inserted++
     }

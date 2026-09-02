@@ -2,6 +2,7 @@
  * 통장 입금 vs POS 자동분개(4110/1130) 이중 인식 가드.
  */
 import { isPosChannelSettlementMemo } from '@/lib/bank-import-deposit-category'
+import { channelSettlementAllowsReceivableReceive } from '@/lib/pos-bank-chip-settlement'
 import { expandStoreVariantsForGrade } from '@/lib/grade-store-key-variants'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
@@ -73,9 +74,9 @@ export async function assertBankDepositAllowedForChannelSettlement(
 ): Promise<void> {
   if (!bankTransactionId || bankTransactionId <= 0) return
   const rows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
-    select: 'id,category,trans_type',
+    select: 'id,category,trans_type,memo,note',
     limit: 1,
-  })) as { id?: number; category?: string; trans_type?: string }[] | null
+  })) as { id?: number; category?: string; trans_type?: string; memo?: string | null; note?: string | null }[] | null
   const row = rows?.[0]
   if (!row?.id) return
   if (String(row.trans_type || '').toLowerCase() !== 'deposit') {
@@ -83,8 +84,9 @@ export async function assertBankDepositAllowedForChannelSettlement(
   }
   const cat = String(row.category || '').toLowerCase()
   if (cat === 'receivable_receive') {
+    if (channelSettlementAllowsReceivableReceive({ memo: row.memo, note: row.note })) return
     throw new BankSettlementGuardError(
-      '매출 수령(receivable_receive)으로 분류된 통장 입금에는 채널 정산을 연결할 수 없습니다. 용도를 변경하거나 채널 정산만 사용하세요.',
+      '가맹 수금(매출 수령) 통장 입금에는 채널 정산을 연결할 수 없습니다. 미수 연결을 사용하세요.',
       'BANK_RECEIVABLE_RECEIVE_CONFLICT'
     )
   }

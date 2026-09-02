@@ -28,6 +28,7 @@ import {
   isBankSettlementGuardError,
   shouldAssertPosRevenueDepositOnBankUpdate,
 } from '@/lib/bank-settlement-guards'
+import { maybeAutoPostChannelFeeAfterBankDeposit } from '@/lib/auto-channel-fee-from-bank'
 
 /** 통장 거래 수정 (용도, 계정과목, 상세내용, 인식일, 거래처, 매장 등) */
 export async function POST(request: NextRequest) {
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
       user_name?: string
       account_subject_id?: number | null
       vendor_code?: string | null
+      sales_date?: string | null
     }[]
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '해당 통장 거래가 없습니다.' }, { status: 404, headers })
@@ -182,7 +184,7 @@ export async function POST(request: NextRequest) {
 
     if (transType === 'deposit') {
       try {
-        if (finalCategoryLower === 'receivable_receive') {
+        if (finalCategoryLower === 'receivable_receive' && prevCategory !== 'receivable_receive') {
           await assertBankNotUsedByChannelSettlement(bankTxId)
         } else if (shouldAssertPosRevenueDepositOnBankUpdate(category !== undefined)) {
           const posStore =
@@ -307,6 +309,27 @@ export async function POST(request: NextRequest) {
         { success: false, message: postingErr instanceof Error ? postingErr.message : '분개 재처리 실패' },
         { status: 500, headers }
       )
+    }
+
+    if (transType === 'deposit') {
+      try {
+        await maybeAutoPostChannelFeeAfterBankDeposit({
+          bankTransactionId: bankTxId,
+          storeCode: finalStoreName || existing[0].store_name || existing[0].store,
+          transDate,
+          salesDate:
+            patch.sales_date !== undefined
+              ? String(patch.sales_date || '')
+              : existing[0].sales_date,
+          netAmount: Math.abs(Number(existing[0].amount) || 0),
+          category: String(finalCategory || ''),
+          memo: String(existing[0].memo || ''),
+          note: patch.note !== undefined ? String(patch.note || '') : String(existing[0].note || ''),
+          postedBy: String(existing[0].user_name || '').trim() || null,
+        })
+      } catch (feeErr) {
+        console.warn('updateBankTransaction auto channel fee:', feeErr)
+      }
     }
 
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
