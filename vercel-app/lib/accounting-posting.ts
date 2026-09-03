@@ -502,6 +502,8 @@ export async function postPosOrderJournal(params: {
   paymentQr?: number
   paymentOther?: number
   paymentDeliveryApp?: number
+  /** 방문 시 선수금 적용액. payment_* 잔금과 합쳐 매출 차변을 구성(매출 이중인식 방지) */
+  depositAppliedAmt?: number
   storeName?: string
   memo?: string
 }) {
@@ -518,11 +520,37 @@ export async function postPosOrderJournal(params: {
   const paymentQr = Math.max(0, Number(params.paymentQr) || 0)
   const paymentOther = Math.max(0, Number(params.paymentOther) || 0)
   const paymentDeliveryApp = Math.max(0, Number(params.paymentDeliveryApp) || 0)
+  const depositApplied = Math.max(0, Number(params.depositAppliedAmt) || 0)
   const paymentKnownTotal = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
   const receivableLike = accountLine('1130', { nameKo: '결제대기자산' })
+  const depositLiability = accountLine('2160', { nameKo: '선수금부채' })
   const lines: JournalLineInput[] = []
 
-  if (paymentKnownTotal > 0) {
+  if (depositApplied > 0.005) {
+    if (paymentCash > 0.005) {
+      lines.push({ ...GL.cash(), side: 'debit', amount: paymentCash })
+    }
+    const cardLike = paymentCard + paymentQr + paymentOther + paymentDeliveryApp
+    if (cardLike > 0.005) {
+      lines.push({
+        ...receivableLike,
+        side: 'debit',
+        amount: cardLike,
+        memo: '카드/QR/배달앱 정산 예정',
+      })
+    }
+    lines.push({
+      ...depositLiability,
+      side: 'debit',
+      amount: depositApplied,
+      memo: '손님 선수금 적용',
+    })
+    const debitSum = paymentCash + cardLike + depositApplied
+    const gap = Math.round((amount - debitSum) * 100) / 100
+    if (gap > 0.005) {
+      lines.push({ ...GL.cash(), side: 'debit', amount: gap })
+    }
+  } else if (paymentKnownTotal > 0) {
     const denom = paymentKnownTotal || 1
     const cardLikeRaw = paymentCard + paymentQr + paymentOther + paymentDeliveryApp
     const cardLike = Math.round((amount * cardLikeRaw * 100) / denom) / 100

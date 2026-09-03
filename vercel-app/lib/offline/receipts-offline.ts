@@ -51,6 +51,7 @@ export async function getPosOrdersWithCache(params: {
   /** 수동 새로고침 — 직전 IndexedDB 캐시와 id 합집합 생략(결제 후 잔존 방지) */
   skipPollMinimalCache?: boolean
   limit?: number
+  includeAdvancePending?: boolean
 }): Promise<PosOrder[]> {
   const {
     startStr,
@@ -63,6 +64,7 @@ export async function getPosOrdersWithCache(params: {
     pollMinimal,
     skipPollMinimalCache,
     limit,
+    includeAdvancePending,
   } = params
   const cacheStore = storeCode || 'all'
   const key = cacheKeyOrders(cacheStore, startStr, endStr, { posBizDay: Boolean(posBizDayScope) })
@@ -87,6 +89,7 @@ export async function getPosOrdersWithCache(params: {
         ...(orderBy ? { orderBy } : {}),
         ...(posBizDayScope ? { posBizDayScope: true } : {}),
         ...(pollMinimal ? { pollMinimal: true } : {}),
+        ...(includeAdvancePending ? { includeAdvancePending: true } : {}),
         ...(limit != null && limit > 0 ? { limit } : {}),
       })
       let rows = data
@@ -129,8 +132,9 @@ export async function getPosOrdersWithCache(params: {
       debugPosOrders,
       ...(orderBy ? { orderBy } : {}),
       ...(posBizDayScope ? { posBizDayScope: true } : {}),
-      ...(pollMinimal ? { pollMinimal: true } : {}),
-      ...(limit != null && limit > 0 ? { limit } : {}),
+        ...(pollMinimal ? { pollMinimal: true } : {}),
+        ...(includeAdvancePending ? { includeAdvancePending: true } : {}),
+        ...(limit != null && limit > 0 ? { limit } : {}),
     })
     await setCache('pos_orders_cache', key, data)
     const merged = await mergePendingIntoRows(data, range)

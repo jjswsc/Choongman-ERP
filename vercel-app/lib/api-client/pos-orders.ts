@@ -106,6 +106,16 @@ export interface PosOrder {
   updatedAt?: string
   /** 최초 결제 완료 시각(DB paid_at). 영수증 관리 결제일시 표시용 */
   paidAt?: string
+  /** 선주문 방문/픽업 시각 */
+  scheduledAt?: string
+  isAdvance?: boolean
+  guestPhone?: string
+  guestName?: string
+  depositAmt?: number
+  depositTender?: 'cash' | 'qr' | 'transfer'
+  depositPolicy?: 'refundable' | 'non_refundable' | 'staff_choice'
+  depositCancelHours?: number
+  advanceCheckedInAt?: string
   linkposProvider?: string
   linkposMode?: string
   linkposTxCode?: string
@@ -223,6 +233,8 @@ export async function getPosOrders(params?: {
   pollMinimal?: boolean
   /** items_json 없는 초경량 감지용 (신규 id·updated_at) */
   pollHeads?: boolean
+  /** 날짜 범위 밖이어도 미체크인 선주문 pending을 포함 (POS จอง 목록) */
+  includeAdvancePending?: boolean
 }): Promise<PosOrder[]> {
   const q = new URLSearchParams()
   if (params?.orderId != null && params.orderId > 0) q.set('orderId', String(params.orderId))
@@ -239,6 +251,7 @@ export async function getPosOrders(params?: {
   if (params?.limit != null && params.limit > 0) q.set('limit', String(params.limit))
   if (params?.pollHeads) q.set('pollHeads', '1')
   else if (params?.pollMinimal) q.set('pollMinimal', '1')
+  if (params?.includeAdvancePending) q.set('includeAdvancePending', '1')
   const res = await apiFetchWithOffline('/api/getPosOrders?' + q.toString())
   if (res.status === 204) return []
   const data = await res.json().catch(() => null)
@@ -425,6 +438,8 @@ export async function updatePosOrder(params: {
    * 충만 클라이언트는 보내지 않음 → 기존 동기 적립 유지.
    */
   skipPostPaymentSideEffects?: boolean
+  depositAmt?: number
+  depositPhone?: string
   pricingAdjustments?: {
     vatRate?: number
     vatMode?: 'included' | 'separate'
@@ -642,6 +657,8 @@ export async function updatePosOrderStatus(params: {
   /** 취소·환불 시 pos_orders.memo 에 감사 로그 한 줄 추가 */
   memoAppend?: string
   retrySideEffects?: boolean
+  /** 선수금 보유 주문 취소 시 환불/몰수 */
+  depositDisposition?: 'refund' | 'forfeit'
 }) {
   const res = await apiFetchWithOffline('/api/updatePosOrderStatus', {
     method: 'POST',
@@ -780,6 +797,15 @@ export async function savePosOrder(params: {
    * 서버에서 payment 합계·total 로 검증 후 적용.
    */
   closeStatus?: 'paid' | 'completed'
+  /** 선주문 มัดจำ — closeStatus 없이 pending 저장, payment_* 는 0 */
+  isAdvance?: boolean
+  scheduledAt?: string
+  guestPhone?: string
+  guestName?: string
+  depositAmt?: number
+  depositTender?: 'cash' | 'qr' | 'transfer'
+  depositPolicy?: 'refundable' | 'non_refundable' | 'staff_choice'
+  depositCancelHours?: number
   /** 카드 승인 완료 메타 (KBTG LINKPOS) */
   linkposPayment?: LinkposPaymentSummary | null
   /** KBank QR 생성 시 발급된 partnerTransactionId (주문 저장 후 결제 시도 연결용) */
@@ -820,4 +846,91 @@ export async function savePosOrder(params: {
     memberTierCode?: string
     memberPointBalance?: number
   }>
+}
+
+export async function receivePosDeposit(params: {
+  storeCode: string
+  depositAmt: number
+  depositTender: 'cash' | 'qr' | 'transfer'
+  memberId?: number
+  guestPhone?: string
+  guestName?: string
+}) {
+  const res = await apiFetchWithOffline('/api/posDepositReceive', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    ledgerId?: number
+    amount?: number
+    memberId?: number
+    guestPhone?: string
+    guestName?: string
+  }>
+}
+
+export async function disposePosDeposit(params: {
+  storeCode: string
+  disposition: 'refund' | 'forfeit'
+  memberId?: number
+  phone?: string
+}) {
+  const res = await apiFetchWithOffline('/api/posDepositDispose', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeCode: params.storeCode,
+      disposition: params.disposition,
+      memberId: params.memberId,
+      phone: params.phone,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; amount?: number }>
+}
+
+export type PosDepositHistoryRow = {
+  id: number
+  createdAt: string
+  storeCode: string
+  posOrderId: number
+  orderNo?: string
+  kind: string
+  amount: number
+  tender?: string
+  memo?: string
+  guestPhone?: string
+  guestName?: string
+  memberId?: number
+}
+
+export async function getPosDepositHistory(params: {
+  storeCode?: string
+  memberId?: number
+  phone?: string
+  orderId?: number
+  limit?: number
+}) {
+  const q = new URLSearchParams()
+  if (params.storeCode) q.set('storeCode', params.storeCode)
+  if (params.memberId != null && params.memberId > 0) q.set('memberId', String(params.memberId))
+  if (params.phone) q.set('phone', params.phone)
+  if (params.orderId != null && params.orderId > 0) q.set('orderId', String(params.orderId))
+  if (params.limit != null && params.limit > 0) q.set('limit', String(params.limit))
+  const res = await apiFetch('/api/getPosDepositHistory?' + q.toString())
+  const data = (await res.json()) as {
+    success?: boolean
+    rows?: PosDepositHistoryRow[]
+    heldBalance?: number
+    message?: string
+  }
+  if (!res.ok || data.success === false) {
+    return { rows: [] as PosDepositHistoryRow[], heldBalance: 0, message: data.message }
+  }
+  return {
+    rows: Array.isArray(data.rows) ? data.rows : [],
+    heldBalance: Math.max(0, Number(data.heldBalance) || 0),
+  }
 }

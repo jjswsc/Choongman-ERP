@@ -66,4 +66,15 @@ describe('translateApiMessage tenant schema', () => {
       translateApiMessage('회사(테넌트) 정보가 없어 저장할 수 없습니다. 다시 로그인해 주세요.', t)
     ).toBe('TENANT_MISSING')
   })
+
+  it('translates PostgREST missing-column JSON', () => {
+    const t2 = (k: string) =>
+      k === 'dbColumnMissing' ? 'missing:{column}' : dict[k] || k
+    expect(
+      translateApiMessage(
+        `Supabase insert failed: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'addr' column of 'vendors' in the schema cache"}`,
+        t2
+      )
+    ).toBe('missing:addr')
+  })
 })

@@ -14,12 +14,15 @@ describe('aggregatePosTodaySalesFromRows', () => {
         { status: 'ready', total: 50, payment_cash: 0 },
         { status: 'cooking', total: 30, payment_cash: 0 },
         { status: 'cancelled', total: 99, payment_cash: 99 },
+        { status: 'ready', total: 80, payment_cash: 0, is_advance: true },
+        { status: 'pending', total: 70, payment_cash: 0, is_advance: true },
+        { status: 'completed', total: 200, payment_cash: 150, is_advance: true },
       ])
     ).toEqual({
-      completedCount: 2,
-      completedTotal: 150,
-      completedCash: 40,
-      pendingCount: 1,
+      completedCount: 3,
+      completedTotal: 350,
+      completedCash: 190,
+      pendingCount: 3,
     })
   })
 })

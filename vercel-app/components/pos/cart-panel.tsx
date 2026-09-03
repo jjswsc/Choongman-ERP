@@ -1,4 +1,5 @@
 'use client'
+import { appAlert } from "@/lib/app-message"
 
 import {
   Fragment,
@@ -72,7 +73,8 @@ import { PosPaymentBahtInput } from '@/components/pos/pos-payment-baht-input'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
-import { appAlert } from '@/lib/app-message'
+import { PosAdvanceDepositDialog, type PosAdvanceDepositSubmit } from '@/components/pos/pos-advance-deposit-dialog'
+import { posOrderCollectableDue } from '@/lib/pos-deposit-domain'
 import { useAuth } from '@/lib/auth-context'
 import {
   getPosMenuOptions,
@@ -80,6 +82,7 @@ import {
   getPosCollabCampaigns,
   getPosMemberTierRates,
   getPosPaymentMethodItems,
+  getPosDepositHistory,
   upsertPosTaxInvoiceRecipient,
   validatePosCoupons,
   type PosAppliedCoupon,
@@ -301,6 +304,8 @@ interface CartPanelProps {
     /** 테이블에 이미 열린 주문이 있으면 해당 주문 id */
     existingOrderId?: number
   }) => void
+  /** 홀·포장 예약금(메뉴 없이 금액만) */
+  onAdvanceDeposit?: (payload: PosAdvanceDepositSubmit) => void | Promise<boolean | void>
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
   onDeliveryOrderComplete?: (payload: {
     items: CartPanelOrderLinePayload[]
@@ -322,6 +327,8 @@ interface CartPanelProps {
     collabDiscountAmt?: number
     collabCampaignId?: string
     pointUsed?: number
+    depositAmt?: number
+    depositPhone?: string
   }, existingOrderId?: number) => CartPanelOrderCompleteResult
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
   onTakeoutOrderComplete?: (payload: {
@@ -344,6 +351,8 @@ interface CartPanelProps {
     collabDiscountAmt?: number
     collabCampaignId?: string
     pointUsed?: number
+    depositAmt?: number
+    depositPhone?: string
   }, existingOrderId?: number) => CartPanelOrderCompleteResult
   /** 홀 주문 결제 완료 시. existingOrderId 있으면 해당 주문에 결제만 반영(updatePosOrder) */
   onDineInOrderComplete?: (payload: {
@@ -369,6 +378,8 @@ interface CartPanelProps {
     /** 선불: 결제 후 테이블 유지. 후불: 결제 시 테이블 초기화 */
     isPrepaid?: boolean
     guestCount?: number
+    depositAmt?: number
+    depositPhone?: string
   }, existingOrderId?: number) => CartPanelOrderCompleteResult
   /** 배달/포장 주문 결제 완료 시 */
   onNonDineOrderComplete?: (payload: {
@@ -463,6 +474,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   onCryptoDepositDisplayChange,
   posBackendActionInFlight = false,
   onOrderSubmit,
+  onAdvanceDeposit,
   onTakeoutOrderComplete,
   onDeliveryOrderComplete,
   onDineInOrderComplete,
@@ -874,6 +886,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [editingCustomerMemo, setEditingCustomerMemo] = useState(false)
   const [paymentTableNameOverride, setPaymentTableNameOverride] = useState<string | null>(null)
   const [isPrepaid, setIsPrepaid] = useState(false)
+  const [showAdvanceDepositDialog, setShowAdvanceDepositDialog] = useState(false)
+  const [checkoutDepositAmt, setCheckoutDepositAmt] = useState(0)
+  const [checkoutDepositPhone, setCheckoutDepositPhone] = useState('')
   const prevSelectedTableIdRef = useRef<string | null>(selectedTable?.id ?? null)
   const instanceIdRef = useRef(`cart-${Math.random().toString(36).slice(2, 10)}`)
   const cartItemsRef = useRef<CartItem[]>(cartItems)
@@ -1394,6 +1409,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     adjustments: pricingAdjustments,
   })
   const total = pricing.finalTotal
+  const collectableDue = posOrderCollectableDue(total, checkoutDepositAmt)
   const round2 = (n: number) => Math.round(n * 100) / 100
   const receiptSubtotalForUi = resolveReceiptSubtotalPrintAmount({
     subtotal,
@@ -1498,7 +1514,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return Math.round(sum * 100) / 100
   }, [showSplit, splitPaidSteps, splitCaptureTick, paymentSum])
   const displayPaymentSum = showSplit
-    ? paymentTotalsReconcile(splitCapturedPaymentSum, total)
+    ? paymentTotalsReconcile(splitCapturedPaymentSum, collectableDue)
       ? splitCapturedPaymentSum
       : Math.round((splitCapturedPaymentSum + paymentSum) * 100) / 100
     : paymentSum
@@ -1510,12 +1526,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (parseBahtAmount(payCrypto) || 0)
   const cryptoPaymentConfirmed =
     (parseBahtAmount(payCrypto) || 0) <= 0.005 || Boolean(cryptoMeta)
-  const cashRequiredAmount = Math.max(0, total - nonCashPaymentSum)
+  const cashRequiredAmount = Math.max(0, collectableDue - nonCashPaymentSum)
   const cashTenderedNum = parseBahtAmount(cashTendered)
   const _cashChangeAmount = Math.max(0, cashTenderedNum - cashRequiredAmount)
   const _cashShortAmount = Math.max(0, cashRequiredAmount - cashTenderedNum)
   const paymentEnteredSum = showSplit ? displayPaymentSum : paymentSum
-  const paymentSumMatch = paymentTotalsReconcile(paymentEnteredSum, total)
+  const paymentSumMatch = paymentTotalsReconcile(paymentEnteredSum, collectableDue)
 
   const buildPaymentOtherBreakdownSnapshot = useCallback((): PosPaymentOtherBreakdown | undefined => {
     const r2 = (n: number) => Math.round(Math.max(0, n) * 100) / 100
@@ -2034,7 +2050,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (splitMode === 'menu' && menuSplitUnassignedQty > 0.009) return false
     const reconciled =
       paymentSumMatch ||
-      (splitAllGuestsSettled && paymentTotalsReconcile(splitCapturedPaymentSum, total))
+      (splitAllGuestsSettled && paymentTotalsReconcile(splitCapturedPaymentSum, collectableDue))
     if (!reconciled) return false
     if (!cryptoPaymentConfirmed) return false
     if (splitOpenRemainders.length === 0) return true
@@ -2390,6 +2406,24 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (detail?.phone && !taxPhone.trim()) setTaxPhone(detail.phone)
     if (detail?.email && !taxEmail.trim()) setTaxEmail(detail.email)
   }, [selectedMemberId, selectedMemberDetail, taxName, taxMemberNo, taxPhone, taxEmail])
+
+  useEffect(() => {
+    const memberId = Number(selectedMemberId || 0)
+    if (!memberId || !currentStoreId) {
+      return
+    }
+    let cancelled = false
+    void getPosDepositHistory({ storeCode: currentStoreId, memberId, limit: 20 }).then((res) => {
+      if (cancelled) return
+      const held = Math.max(0, Number(res.heldBalance) || 0)
+      setCheckoutDepositAmt(held)
+      const phone = String(memberMap[selectedMemberId]?.phone ?? '').trim()
+      if (phone) setCheckoutDepositPhone(phone)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedMemberId, currentStoreId, memberMap])
 
   useEffect(() => {
     try {
@@ -3524,6 +3558,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const openPaymentModal = () => {
     checkoutExistingPosOrderIdRef.current = null
     setIsExistingOrderCheckout(false)
+    setCheckoutDepositAmt(0)
     void openPaymentModalWithAmount(total)
   }
 
@@ -3632,7 +3667,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       return
     }
     const finalPaySum = round2(sumCartPanelPaymentSnapshot(resolvedPayment))
-    if (total > 0.005 && !paymentTotalsReconcile(finalPaySum, total)) {
+    if (collectableDue > 0.005 && !paymentTotalsReconcile(finalPaySum, collectableDue)) {
       scrollToPaymentMethods()
       return
     }
@@ -3715,6 +3750,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           pointUsed: pointUsedNum || undefined,
           isPrepaid,
           guestCount: guestCount > 0 ? guestCount : undefined,
+          ...(checkoutDepositAmt > 0.005 ? { depositAmt: checkoutDepositAmt } : {}),
+          ...(checkoutDepositPhone ? { depositPhone: checkoutDepositPhone } : {}),
         },
         resolvedExistingCheckoutId ?? undefined
       )) !== false
@@ -3783,6 +3820,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
           appliedCoupons: couponPayloadFields.appliedCoupons,
           pointUsed: pointUsedNum || undefined,
+          ...(checkoutDepositAmt > 0.005 ? { depositAmt: checkoutDepositAmt } : {}),
+          ...(checkoutDepositPhone ? { depositPhone: checkoutDepositPhone } : {}),
         },
         resolvedExistingCheckoutId
       )) !== false
@@ -4354,10 +4393,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
+    depositAmt?: number
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
+    setCheckoutDepositAmt(Math.max(0, Number(payload.depositAmt) || 0))
     const normalized = payload.items.map((i, idx) => {
       const menuId =
         String(i.menuId ?? i.menuId1 ?? '').trim() ||
@@ -4438,10 +4479,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
+    depositAmt?: number
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
+    setCheckoutDepositAmt(Math.max(0, Number(payload.depositAmt) || 0))
     const normalized = payload.items.map((i, idx) => {
       const menuId =
         String(i.menuId ?? i.menuId1 ?? '').trim() ||
@@ -4520,10 +4563,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
+    depositAmt?: number
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
+    setCheckoutDepositAmt(Math.max(0, Number(payload.depositAmt) || 0))
     const normalized = payload.items.map((i, idx) => {
       const menuId =
         String(i.menuId ?? i.menuId1 ?? '').trim() ||
@@ -5684,7 +5729,55 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               {t('posOrderButton') || '주문'}
             </Button>
           )}
-          {orderType !== 'dine-in' && (
+          {orderType === 'dine-in' && onAdvanceDeposit && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-11 text-base font-semibold border-amber-400 text-amber-900 hover:bg-amber-50 dark:text-amber-100"
+              disabled={posBackendActionInFlight}
+              onClick={() => setShowAdvanceDepositDialog(true)}
+            >
+              {t('posDepositButton') || 'มัดจำ'}
+            </Button>
+          )}
+          {orderType === 'takeout' && (
+            <div className={cn('w-full grid gap-2', onAdvanceDeposit ? 'grid-cols-3' : 'grid-cols-2')}>
+              <Button
+                className="h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
+                disabled={!canSubmit || cartItems.length === 0 || posBackendActionInFlight}
+                onClick={() => {
+                  if (posBackendActionInFlight) return
+                  submitNonDineOrder(false)
+                  handleClearCart()
+                }}
+              >
+                {t('posOrderButton') || '주문'}
+              </Button>
+              {onAdvanceDeposit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 text-base font-semibold border-amber-400"
+                  disabled={posBackendActionInFlight}
+                  onClick={() => setShowAdvanceDepositDialog(true)}
+                >
+                  {t('posDepositButton') || 'มัดจำ'}
+                </Button>
+              )}
+              <Button
+                className="h-12 text-lg font-semibold bg-primary hover:bg-primary/90"
+                data-tour="pos-tour-cart-pay"
+                disabled={total <= 0 || !canSubmit || posBackendActionInFlight}
+                onClick={() => {
+                  if (posBackendActionInFlight) return
+                  openPaymentModal()
+                }}
+              >
+                {t('posPayButton')}
+              </Button>
+            </div>
+          )}
+          {orderType === 'delivery' && (
             <div className="w-full grid grid-cols-2 gap-2">
               <Button
                 className="h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
@@ -7138,6 +7231,47 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 <span className="font-medium">{tr('posPrepaidKeepTable', '선불 (결제 후 테이블 유지)')}</span>
               </label>
             )}
+            {!selectedMemberId && (
+              <div className="flex gap-2">
+                <Input
+                  value={checkoutDepositPhone}
+                  onChange={(e) => setCheckoutDepositPhone(e.target.value)}
+                  placeholder={tr('posDepositHistoryPhonePh', '예약금 전화')}
+                  className="h-9"
+                  inputMode="tel"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-9 shrink-0"
+                  disabled={checkoutDepositPhone.replace(/\D/g, '').length < 8}
+                  onClick={() => {
+                    void getPosDepositHistory({
+                      storeCode: currentStoreId,
+                      phone: checkoutDepositPhone,
+                      limit: 20,
+                    }).then((res) => {
+                      setCheckoutDepositAmt(Math.max(0, Number(res.heldBalance) || 0))
+                    })
+                  }}
+                >
+                  {tr('posDepositHistorySearch', '조회')}
+                </Button>
+              </div>
+            )}
+            {checkoutDepositAmt > 0.005 && (
+              <div className="rounded-xl border border-amber-300/50 bg-amber-50 px-4 py-2 text-sm dark:border-amber-700/40 dark:bg-amber-950/30">
+                <div className="flex justify-between gap-2">
+                  <span>{tr('posDepositApplied', 'มัดจำ 차감')}</span>
+                  <span className="tabular-nums font-semibold">-{formatBahtNum(checkoutDepositAmt)} ฿</span>
+                </div>
+                <div className="flex justify-between gap-2 font-bold">
+                  <span>{tr('posDepositCollectable', '받을 금액')}</span>
+                  <span className="tabular-nums">{formatBahtNum(collectableDue)} ฿</span>
+                </div>
+              </div>
+            )}
             <div
               className={cn(
                 'space-y-2 rounded-2xl border px-4 py-3 shadow-sm',
@@ -7166,10 +7300,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   />
                 </div>
               )}
-              {!paymentSumMatch && total > 0 && (
+              {!paymentSumMatch && collectableDue > 0 && (
                 <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
                   {tr('posPaymentRemaining', '남은 금액')}:{' '}
-                  {`${formatBahtNum(Math.max(0, total - paymentEnteredSum))} ฿`}
+                  {`${formatBahtNum(Math.max(0, collectableDue - paymentEnteredSum))} ฿`}
                 </p>
               )}
             </div>
@@ -7254,6 +7388,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       </Dialog>
     )}
 
+    <PosAdvanceDepositDialog
+      open={showAdvanceDepositDialog}
+      onOpenChange={setShowAdvanceDepositDialog}
+      t={t}
+      busy={posBackendActionInFlight}
+      initialMemberId={selectedMemberId ? Number(selectedMemberId) : undefined}
+      initialMemberName={memberMap[selectedMemberId]?.name}
+      initialMemberPhone={memberMap[selectedMemberId]?.phone}
+      onSubmit={async (deposit) => {
+        if (!onAdvanceDeposit) return
+        const ok = await onAdvanceDeposit({
+          ...deposit,
+          ...(selectedMemberId && !deposit.memberId
+            ? { memberId: Number(selectedMemberId) }
+            : {}),
+        })
+        if (ok === false) return
+        setShowAdvanceDepositDialog(false)
+      }}
+    />
     <PosCouponQrScannerDialog
       open={couponQrScannerOpen}
       onOpenChange={setCouponQrScannerOpen}

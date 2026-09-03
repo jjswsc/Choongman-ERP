@@ -50,6 +50,26 @@ describe("pos-terminal-auto-print", () => {
     expect(calls).toEqual(["hall", "kitchen"])
   })
 
+  it("skips kitchen enqueue for unfulfilled advance orders", () => {
+    expect(
+      shouldEnqueueKitchenPrintOnOrderCreate({
+        orderType: "dine_in",
+        status: "pending",
+        kitchenLineCount: 2,
+        isAdvance: true,
+      })
+    ).toBe(false)
+    expect(
+      shouldEnqueueKitchenPrintOnOrderCreate({
+        orderType: "takeout",
+        status: "pending",
+        kitchenLineCount: 2,
+        isAdvance: true,
+        advanceCheckedInAt: "2026-09-04T10:00:00+07:00",
+      })
+    ).toBe(true)
+  })
+
   it("enqueues kitchen on dine-in create, not on pending delivery", () => {
     expect(
       shouldEnqueueKitchenPrintOnOrderCreate({

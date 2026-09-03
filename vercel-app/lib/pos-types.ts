@@ -70,6 +70,13 @@ export interface Order {
   pointEarned?: number
   /** 저장 직후 목록 refetch에 아직 안 잡힐 때 UI 유지(서버 id 확정 건) */
   pendingListSync?: boolean
+  scheduledAt?: string
+  isAdvance?: boolean
+  depositAmt?: number
+  depositTender?: 'cash' | 'qr' | 'transfer'
+  depositPolicy?: 'refundable' | 'non_refundable' | 'staff_choice'
+  depositCancelHours?: number
+  advanceCheckedInAt?: string
 }
 
 export interface OrderItem {

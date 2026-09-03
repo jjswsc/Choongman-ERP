@@ -100,6 +100,8 @@ export type ReceiptModalData = {
   paymentCash?: number
   /** 현금 결제 시 손님이 건넨 금액(영수증 Paid Amount·Change) */
   paymentCashTendered?: number
+  /** 방문 완납 시 มัดจำ 차감(이미 받은 선수금) */
+  depositAppliedAmt?: number
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number

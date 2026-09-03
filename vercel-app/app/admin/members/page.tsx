@@ -35,6 +35,7 @@ import { CrmPageHero } from "@/components/crm/crm-shared-ui"
 import { MemberListPanel, type MemberListPanelHandle } from "@/components/admin/member-list-panel"
 import { MemberMergePanel } from "@/components/admin/member-merge-panel"
 import { MemberNotesPanel } from "@/components/admin/member-notes-panel"
+import { MemberDepositHistoryPanel } from "@/components/admin/member-deposit-history-panel"
 import { MemberPointsOpsPanel } from "@/components/admin/member-points-ops-panel"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -586,6 +587,7 @@ export default function MembersPage() {
                   t={t}
                 />
                 <MemberNotesPanel member={selectedMember} />
+                <MemberDepositHistoryPanel member={selectedMember} t={t} />
                 <Collapsible open={mergeOpen} onOpenChange={setMergeOpen}>
                   <div className="rounded-xl border border-dashed border-amber-300/70 bg-amber-50/30">
                     <CollapsibleTrigger asChild>

@@ -22,6 +22,7 @@ import {
 import { resolvePosOrderReceiptPrintTotal } from '@/lib/pos-order-save-discount'
 import { coercePosReceiptLineDiscountAmt } from '@/lib/pos-receipt-line-discount'
 import { roundMemberPointsEarn } from '@/lib/member-points-math'
+import { posOrderDepositAppliedForReceipt } from '@/lib/pos-deposit-domain'
 import {
   buildKitchenMenuNameLookup,
   resolveKitchenMenuNameFromLookup,
@@ -797,6 +798,9 @@ export function receiptModalDataFromPosOrderForPayment(
     receiptPrintedAt: resolvePosOrderPaidAt(order),
     ...(Number(order.id) > 0 ? { serverOrderId: Number(order.id) } : {}),
     ...memberReceiptFieldsFromPosOrder(order),
+    ...(posOrderDepositAppliedForReceipt(order) > 0.005
+      ? { depositAppliedAmt: posOrderDepositAppliedForReceipt(order) }
+      : {}),
   }
 }
 
@@ -1051,6 +1055,7 @@ export function buildCheckoutPaymentReceiptModalData(params: {
   receiptAutoPrintContext?: ReceiptModalData['receiptAutoPrintContext']
   suppressReceiptModalAutoPrint?: boolean
   serverOrderId?: number
+  depositAppliedAmt?: number
 }): ReceiptModalData {
   const receiptItems = checkoutPosItemsToReceiptLines(params.items)
   const subtotal =
@@ -1131,6 +1136,14 @@ export function buildCheckoutPaymentReceiptModalData(params: {
       : {}),
     ...(params.serverOrderId != null && params.serverOrderId > 0
       ? { serverOrderId: params.serverOrderId }
+      : {}),
+    ...(Math.max(0, Number(params.depositAppliedAmt ?? params.paymentFields?.depositAppliedAmt) || 0) > 0.005
+      ? {
+          depositAppliedAmt: Math.max(
+            0,
+            Number(params.depositAppliedAmt ?? params.paymentFields?.depositAppliedAmt) || 0
+          ),
+        }
       : {}),
   }
 }

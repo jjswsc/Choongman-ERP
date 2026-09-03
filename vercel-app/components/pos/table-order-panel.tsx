@@ -524,11 +524,14 @@ export function TableOrderPanel({
         i18n: {
           reasonPrompt: t('posCancelReasonPrompt') || '취소 사유를 입력하세요 (2자 이상, 메모에 기록됩니다)',
           reasonTooShort: t('posReceiptPayCorrectReasonShort') || '사유를 2자 이상 입력해 주세요.',
+          depositRefundAsk:
+            t('posDepositRefundAsk') || '선수금을 환불할까요?\n확인 = 환불, 취소 = 미환불(몰수)',
         },
       })
       if (!outcome.ok) return
       const oid = outcome.serverId ?? (posOrderHasServerId(order.id) ? Number(order.id) : 0)
-      if (order.items.length > 0) {
+      const skipKitchen = Boolean(order.isAdvance && !order.advanceCheckedInAt)
+      if (order.items.length > 0 && !skipKitchen) {
         const kitchenLines = order.items.map((it) =>
           kitchenRoutingItemFromOrderItem(it, translatePosMenuLineForReceipt(it.name, t))
         )

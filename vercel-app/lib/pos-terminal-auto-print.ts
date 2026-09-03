@@ -112,8 +112,11 @@ export function shouldEnqueueKitchenPrintOnOrderCreate(input: {
   orderType?: string | null
   status?: string | null
   kitchenLineCount: number
+  isAdvance?: boolean
+  advanceCheckedInAt?: string | null
 }): boolean {
   if (!Number.isFinite(input.kitchenLineCount) || input.kitchenLineCount <= 0) return false
+  if (input.isAdvance && !String(input.advanceCheckedInAt ?? '').trim()) return false
   const type = String(input.orderType ?? '').trim().toLowerCase()
   const status = String(input.status ?? '').trim().toLowerCase()
   if (type === 'delivery' && (status === 'pending' || status === '')) return false

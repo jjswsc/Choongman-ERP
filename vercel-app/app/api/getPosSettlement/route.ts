@@ -16,6 +16,10 @@ import {
 } from '@/lib/pos-payment-settings-resolve'
 import { resolvePosDeliveryAppSettlementGross } from '@/lib/pos-delivery-app-settlement-amount'
 import {
+  posDepositCashDrawerDelta,
+  shouldExcludeAdvanceFromSalesAggregate,
+} from '@/lib/pos-deposit-domain'
+import {
   buildSettlementCashReconcile,
 } from '@/lib/pos-settlement-sync-after-pay-correct'
 
@@ -205,6 +209,8 @@ export async function GET(request: NextRequest) {
       linkpos_response_code?: string
       linkpos_requested_amount?: number
       linkpos_approved_amount?: number
+      is_advance?: boolean | null
+      scheduled_at?: string | null
     }
 
     /** Omni 등 pos_orders 컬럼 미배포 시에도 시재(cash_actual)는 반환 — 영업 시작 게이트가 막히지 않게 */
@@ -216,7 +222,7 @@ export async function GET(request: NextRequest) {
         {
           limit: 20000,
           select:
-            'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_crypto,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
+            'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_crypto,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount,is_advance,scheduled_at',
         },
         'getPosSettlementOrders'
       )) as PosOrderSettlementRow[] | null
@@ -252,6 +258,7 @@ export async function GET(request: NextRequest) {
 
     for (const o of orders || []) {
       if (!isPosPaidLikeStatus(String(o.status ?? ''))) continue
+      if (shouldExcludeAdvanceFromSalesAggregate(o)) continue
       paidOrdersForPayment.push(o)
       systemTotal += Number(o.total) || 0
       systemSubtotal += Number(o.subtotal ?? o.total) || 0
@@ -284,6 +291,19 @@ export async function GET(request: NextRequest) {
       } else {
         linkposFailedCount += 1
       }
+    }
+
+    try {
+      const ledgerRows = (await supabaseSelectFilterStrippingUnknownColumns(
+        'pos_deposit_ledger',
+        `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}` +
+          `&store_code=ilike.${encodeURIComponent(storeCode)}`,
+        { select: 'kind,amount,tender', limit: 20000 },
+        'getPosSettlementDepositLedger'
+      )) as { kind?: string; amount?: number; tender?: string }[] | null
+      systemCashFromOrders += posDepositCashDrawerDelta(ledgerRows || [])
+    } catch (ledgerErr) {
+      console.warn('getPosSettlement pos_deposit_ledger:', ledgerErr)
     }
 
     const { autoQrFromOrders: autoQrBreakdownFromOrders, autoOtherFromOrders: autoOtherBreakdown } =

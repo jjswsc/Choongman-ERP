@@ -25,16 +25,20 @@ import {
 } from '@/lib/grab-order-memo'
 import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
 import { rollbackPosOrderCouponRedemptions, redeemMemberCouponIssuesForPaidOrder } from '@/lib/pos-coupon-server'
-import {
-  isPosOrderPaymentCompleteForTotal,
-  posOrderPaymentSumFromAmounts,
-} from '@/lib/pos-order-paid-at'
+import { posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
 import { notifyMemberPortalPickupReady } from '@/lib/member-portal-pickup-notify'
 import { ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
 import {
   shouldRunPosAccountingSideEffectsForStore,
   shouldRunPosStockDeductionForStore,
 } from '@/lib/saas/pos-completion-side-effects-gate'
+import {
+  applyPosDepositOnSettle,
+} from '@/lib/pos-deposit-server'
+import {
+  isPosOrderCollectableSettled,
+  posOrderCollectableDue,
+} from '@/lib/pos-deposit-domain'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
@@ -321,7 +325,10 @@ export async function POST(req: NextRequest) {
     const nextStatusLower = nextStatus
     if (
       !String(prev?.paid_at ?? '').trim() &&
-      isPosOrderPaymentCompleteForTotal(orderTotal, paymentSum) &&
+      isPosOrderCollectableSettled(
+        posOrderCollectableDue(orderTotal, Number((prev as { deposit_amt?: number }).deposit_amt || 0)),
+        paymentSum
+      ) &&
       (isPosCompletionStatus(nextStatusLower) || nextStatusLower === 'paid')
     ) {
       patch.paid_at = new Date().toISOString()
@@ -386,6 +393,20 @@ export async function POST(req: NextRequest) {
       const vat = Number(prev?.vat || 0)
       const subtotal = Number(prev?.subtotal || Math.max(0, total - vat))
       const orderNo = String(prev?.order_no || `POS-${id}`)
+      let depositAppliedAmt = 0
+      try {
+        depositAppliedAmt = await applyPosDepositOnSettle({
+          posOrderId: id,
+          storeCode,
+          memberId: Number(prev?.member_id || 0) || null,
+          guestPhone: String(body.depositPhone ?? body.guestPhone ?? ''),
+          amount: Number(body.depositAmt ?? body.deposit_amt ?? 0) || null,
+          maxAmount: Number(prev?.total || 0) || null,
+          createdBy: String(prev?.created_by ?? ''),
+        })
+      } catch (depApplyErr) {
+        console.error('updatePosOrderStatus deposit apply:', depApplyErr)
+      }
       if (allowAccounting) {
         try {
           const alreadyPosted = await hasJournalForSource('pos_order', id)
@@ -401,6 +422,7 @@ export async function POST(req: NextRequest) {
               paymentQr: Number(prev?.payment_qr || 0),
               paymentOther: Number(prev?.payment_other || 0),
               paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
+              depositAppliedAmt,
               storeName: storeCode || undefined,
               memo: 'POS 주문 완료 자동분개',
             })
@@ -460,6 +482,45 @@ export async function POST(req: NextRequest) {
         } catch (stampErr) {
           console.error('updatePosOrderStatus stamp revoke:', stampErr)
         }
+      }
+    }
+
+    if (nextStatus === 'paid' && !isPosCompletionStatus(nextStatus)) {
+      try {
+        const applied = await applyPosDepositOnSettle({
+          posOrderId: id,
+          storeCode,
+          memberId: Number(prev?.member_id || 0) || null,
+          guestPhone: String(body.depositPhone ?? body.guestPhone ?? ''),
+          amount: Number(body.depositAmt ?? body.deposit_amt ?? 0) || null,
+          maxAmount: Number(prev?.total || 0) || null,
+          createdBy: String(prev?.created_by ?? ''),
+        })
+        const allowAccounting = storeCode
+          ? await shouldRunPosAccountingSideEffectsForStore(storeCode)
+          : false
+        if (allowAccounting && applied > 0.005) {
+          const alreadyPosted = await hasJournalForSource('pos_order', id)
+          if (!alreadyPosted) {
+            await postPosOrderJournal({
+              posOrderId: id,
+              salesDate,
+              total: Number(prev?.total || 0),
+              vatAmount: Number(prev?.vat || 0),
+              serviceAmount: Number(prev?.service_amt || 0),
+              paymentCash: Number(prev?.payment_cash || 0),
+              paymentCard: Number(prev?.payment_card || 0),
+              paymentQr: Number(prev?.payment_qr || 0),
+              paymentOther: Number(prev?.payment_other || 0),
+              paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
+              depositAppliedAmt: applied,
+              storeName: storeCode || undefined,
+              memo: 'POS 주문 완료 자동분개',
+            })
+          }
+        }
+      } catch (depPaidErr) {
+        console.error('updatePosOrderStatus deposit apply on paid:', depPaidErr)
       }
     }
 

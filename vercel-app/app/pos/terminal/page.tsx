@@ -10,6 +10,8 @@ import { QrTableSessionPanel } from '@/components/pos/qr-table-session-panel'
 import { useQrFloorSessionHints } from '@/lib/use-qr-floor-session-hints'
 import { DeliveryOrderPanel } from '@/components/pos/delivery-order-panel'
 import { TakeoutOrderPanel } from '@/components/pos/takeout-order-panel'
+import { PosAdvanceOrderPanel } from '@/components/pos/pos-advance-order-panel'
+import { PosAdvanceDepositDialog } from '@/components/pos/pos-advance-deposit-dialog'
 import { OrderBarList, type OrderBarItem, type OrderBarStatus } from '@/components/pos/order-bar-list'
 import { resolveOrderBarCookElapsedEndAt } from '@/lib/pos-order-bar-cook-elapsed'
 import { PosTerminalMenuScreen } from '@/components/pos/pos-terminal-menu-screen'
@@ -65,6 +67,8 @@ import {
   upsertPosTaxInvoiceRecipient,
   updatePosOrder,
   updatePosOrderStatus,
+  receivePosDeposit,
+  disposePosDeposit,
   type PosMenu,
   type PosMenuOption,
   type PosDeliveryApp,
@@ -255,6 +259,8 @@ import {
   buildCheckoutPaymentReceiptModalData,
   type PosOrderReceiptLineOptions,
 } from '@/lib/pos-payment-receipt-from-order'
+import { buildPosDepositReceiveSlipHtml } from '@/lib/pos-deposit-receive-slip-html'
+import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { buildPosPaymentReceiptDocumentHtmlAsync } from '@/lib/pos-payment-receipt-document-html'
 import {
   mergeMemberReceiptFields,
@@ -441,6 +447,8 @@ type PendingPayRequest = {
   orderMember?: PosExistingOrderCheckoutMember
   /** 기존 주문 memo — 결제 모달에서 세금계산서 복원 */
   orderMemo?: string
+  /** 선주문 보유 선수금 — 잔금 결제 due */
+  depositAmt?: number
 } | null
 
 /** 테이블 현황 + 배달/포장 주문 + 장바구니. 테이블 선택 시 메뉴로 주문 추가. */
@@ -855,6 +863,95 @@ export default function PosTerminalPage() {
   const [pendingTakeoutPayRequest, setPendingTakeoutPayRequest] = useState<PendingPayRequest>(null)
   const [pendingDeliveryOrderId, setPendingDeliveryOrderId] = useState<number | null>(null)
   const [pendingDeliveryPayRequest, setPendingDeliveryPayRequest] = useState<PendingPayRequest>(null)
+  const [showPosDepositDialog, setShowPosDepositDialog] = useState(false)
+  const handleReceivePosDeposit = useCallback(
+    async (payload: {
+      depositAmt: number
+      guestPhone: string
+      guestName: string
+      depositTender: 'cash' | 'qr' | 'transfer'
+      memberId?: number
+    }) => {
+      if (posCartBackendBusyRef.current) {
+        await alertPaymentBackendBusy()
+        return false
+      }
+      if (isPosDemo) {
+        await appAlert(t('posDemoTablePaySkipped') || '')
+        return false
+      }
+      if (!(await ensureBusinessOpenForOrder())) return false
+      posCartBackendBusyRef.current = true
+      setPosCartBackendBusy(true)
+      try {
+        const res = await receivePosDeposit({
+          storeCode: currentStoreId,
+          depositAmt: payload.depositAmt,
+          depositTender: payload.depositTender,
+          memberId: payload.memberId,
+          guestPhone: payload.guestPhone,
+          guestName: payload.guestName,
+        })
+        if (!res.success) {
+          await appAlert(
+            localizeApiMessage(String(res.message || ''), t, t('msg_save_fail') || '저장 실패', lang)
+          )
+          return false
+        }
+        try {
+          const slipHtml = buildPosDepositReceiveSlipHtml({
+            orderNo: '',
+            storeCode: currentStoreId,
+            amount: payload.depositAmt,
+            guestPhone: res.guestPhone || payload.guestPhone,
+            guestName: res.guestName || payload.guestName,
+            tender: payload.depositTender,
+            t,
+            lang,
+          })
+          await printPosHtmlDocument(slipHtml, {
+            title: t('posDepositSlipTitle') || 'มัดจำ',
+            printDelayMs: 0,
+            fallbackCleanupMs: 60_000,
+            focusIframeBeforePrint: false,
+            printRole: 'receipt',
+            printReceiptKind: 'payment',
+          })
+        } catch (printErr) {
+          console.warn('deposit slip print:', printErr)
+        }
+        return true
+      } catch (e) {
+        console.error('receivePosDeposit:', e)
+        await appAlert(t('posOrderSaveFailed') || '저장에 실패했습니다.')
+        return false
+      } finally {
+        posCartBackendBusyRef.current = false
+        setPosCartBackendBusy(false)
+      }
+    },
+    [isPosDemo, t, lang, currentStoreId, ensureBusinessOpenForOrder, alertPaymentBackendBusy]
+  )
+  const handleRefundPosDeposit = useCallback(
+    async (holder: { memberId?: number; phone: string }) => {
+      if (!currentStoreId) return
+      const refund = await appConfirm(
+        t('posDepositRefundAsk') || '예약금을 환불할까요?\n확인 = 환불, 취소 = 몰수'
+      )
+      const res = await disposePosDeposit({
+        storeCode: currentStoreId,
+        disposition: refund ? 'refund' : 'forfeit',
+        memberId: holder.memberId,
+        phone: holder.phone,
+      })
+      if (!res.success) {
+        await appAlert(
+          localizeApiMessage(String(res.message || ''), t, t('processFail') || '처리 실패', lang)
+        )
+      }
+    },
+    [currentStoreId, t, lang]
+  )
   const [liveSearchOpen, setLiveSearchOpen] = useState(false)
   const [deliveryEditOrderNoOpen, setDeliveryEditOrderNoOpen] = useState(false)
   const [deliveryEditOrderNoValue, setDeliveryEditOrderNoValue] = useState('')
@@ -2029,6 +2126,7 @@ export default function PosTerminalPage() {
       existingOrderId: pendingDineInOrderId,
       orderMember: pendingPayRequest.orderMember,
       orderMemo: pendingPayRequest.orderMemo,
+      depositAmt: pendingPayRequest.depositAmt,
     })
     setPendingPayRequest(null)
   }, [pendingPayRequest])
@@ -2043,6 +2141,7 @@ export default function PosTerminalPage() {
       orderDiscount: pendingTakeoutPayRequest.orderDiscount,
       orderMember: pendingTakeoutPayRequest.orderMember,
       orderMemo: pendingTakeoutPayRequest.orderMemo,
+      depositAmt: pendingTakeoutPayRequest.depositAmt,
     })
     setPendingTakeoutPayRequest(null)
   }, [pendingTakeoutPayRequest, pendingTakeoutOrderId])
@@ -8994,6 +9093,7 @@ export default function PosTerminalPage() {
             pricingAdjustments={pricingAdjustments}
             pendingOrderId={activeTab === 'tables' ? pendingDineInOrderId : activeTab === 'takeout' ? pendingTakeoutOrderId : activeTab === 'delivery' ? pendingDeliveryOrderId : null}
             posBackendActionInFlight={posCartBackendBusy}
+            onAdvanceDeposit={handleReceivePosDeposit}
             onCustomerDisplayPaymentDraftChange={setCustomerDisplayPaymentDraft}
             onDeliveryOrderComplete={async (payload, existingOrderId) => {
               if (posCartBackendBusyRef.current) {
@@ -9060,6 +9160,10 @@ export default function PosTerminalPage() {
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
+                    ...(payload.depositAmt && payload.depositAmt > 0.005
+                      ? { depositAmt: payload.depositAmt }
+                      : {}),
+                    ...(payload.depositPhone ? { depositPhone: payload.depositPhone } : {}),
                     ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
                     pricingAdjustments,
                   })
@@ -9245,6 +9349,10 @@ export default function PosTerminalPage() {
                     pointUsed: payload.pointUsed,
                     ...posOrderPaymentFieldsFromSnapshot(payload.payment),
                     linkposPayment: linkpos.linkposPayment,
+                    ...(payload.depositAmt && payload.depositAmt > 0.005
+                      ? { depositAmt: payload.depositAmt }
+                      : {}),
+                    ...(payload.depositPhone ? { depositPhone: payload.depositPhone } : {}),
                     ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
                     pricingAdjustments,
                   })
@@ -9306,6 +9414,7 @@ export default function PosTerminalPage() {
                     paymentFields: payload.payment
                       ? receiptPaymentFieldsFromSnapshot(payload.payment)
                       : undefined,
+                    depositAppliedAmt: payload.depositAmt,
                     suppressReceiptModalAutoPrint: !isMainPosDevice,
                     serverOrderId: existingOrderId,
                   })
@@ -10276,6 +10385,10 @@ export default function PosTerminalPage() {
                     guestCount: payload.guestCount,
                     ...posOrderPaymentFieldsFromSnapshot(pay),
                     linkposPayment: linkpos.linkposPayment,
+                    ...(payload.depositAmt && payload.depositAmt > 0.005
+                      ? { depositAmt: payload.depositAmt }
+                      : {}),
+                    ...(payload.depositPhone ? { depositPhone: payload.depositPhone } : {}),
                     ...(isOmniPaymentFastPath ? { skipPostPaymentSideEffects: true } : {}),
                     pricingAdjustments,
                   })
@@ -10436,6 +10549,7 @@ export default function PosTerminalPage() {
                       : 0,
                     adjustments: pricingAdjustments,
                     paymentFields: pay ? receiptPaymentFieldsFromSnapshot(pay) : undefined,
+                    depositAppliedAmt: payload.depositAmt,
                     suppressReceiptModalAutoPrint: !isMainPosDevice,
                     serverOrderId: orderIdToComplete ?? undefined,
                   })
@@ -11762,6 +11876,16 @@ export default function PosTerminalPage() {
                 </div>
               ) : (
                 <>
+                  <div className="shrink-0 pb-3">
+                    <PosAdvanceOrderPanel
+                      t={t}
+                      lang={lang}
+                      storeCode={currentStoreId}
+                      busy={posCartBackendBusy}
+                      onReceive={() => setShowPosDepositDialog(true)}
+                      onRefund={handleRefundPosDeposit}
+                    />
+                  </div>
                   {loadingTables && (
                     <div className="h-full flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm min-h-[min(420px,50vh)]">
                       {t('loading')}
@@ -11932,6 +12056,18 @@ export default function PosTerminalPage() {
 
             {/* 포장 탭 — 배달 TabsContent와 동일(고정 min-h 없음) */}
             <TabsContent value="takeout" className="flex-1 m-0 min-w-0 p-4 min-h-0 overflow-auto">
+              {selectedTakeoutTargetId !== 'takeout-draft' ? (
+                <div className="mb-3">
+                  <PosAdvanceOrderPanel
+                    t={t}
+                    lang={lang}
+                    storeCode={currentStoreId}
+                    busy={posCartBackendBusy}
+                    onReceive={() => setShowPosDepositDialog(true)}
+                    onRefund={handleRefundPosDeposit}
+                  />
+                </div>
+              ) : null}
               {selectedTakeoutTargetId === 'takeout-draft' ? (
                 <PosBusinessOpenGateBlock
                   blocked={businessOpenBlocked}
@@ -12100,6 +12236,7 @@ export default function PosTerminalPage() {
                   }),
                   orderMember: posOrderToCheckoutMemberSnapshot(servingTable.order),
                   orderMemo: servingTable.order.memo,
+                  depositAmt: servingTable.order.depositAmt,
                 })
                 setServingTableId(null)
               }}
@@ -12313,6 +12450,7 @@ export default function PosTerminalPage() {
                   }),
                   orderMember: posOrderToCheckoutMemberSnapshot(selectedTakeoutOrder),
                   orderMemo: selectedTakeoutOrder.memo,
+                  depositAmt: selectedTakeoutOrder.depositAmt,
                 })
                 setSelectedTakeoutTargetId(null)
                 setSelectedTakeoutTargetLabel('')
@@ -12345,6 +12483,17 @@ export default function PosTerminalPage() {
           )
         })()}
       </div>
+      <PosAdvanceDepositDialog
+        open={showPosDepositDialog}
+        onOpenChange={setShowPosDepositDialog}
+        t={t}
+        busy={posCartBackendBusy}
+        onSubmit={async (payload) => {
+          const ok = await handleReceivePosDeposit(payload)
+          if (ok === false) return
+          setShowPosDepositDialog(false)
+        }}
+      />
       <PosTerminalDialogs
         t={t}
         tPrint={tPrint}

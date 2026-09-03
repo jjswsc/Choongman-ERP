@@ -88,6 +88,14 @@ export const CHART_OF_ACCOUNTS_BY_CODE: Record<string, AccountMeta> = {
     statement: 'bs',
     normalSide: 'credit',
   },
+  '2160': {
+    code: '2160',
+    nameKo: '선수금부채',
+    nameEn: 'Customer deposits',
+    tfrsNpaesGroupKo: '유동부채 — 선수금',
+    statement: 'bs',
+    normalSide: 'credit',
+  },
   '2170': {
     code: '2170',
     nameKo: '법인세납부예정금',

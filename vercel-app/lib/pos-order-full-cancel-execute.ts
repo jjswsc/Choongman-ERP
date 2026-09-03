@@ -28,6 +28,7 @@ export async function executePosFullOrderCancel(params: {
     reasonPrompt?: string
     reasonTooShort?: string
     retryConfirm?: string
+    depositRefundAsk?: string
     sideEffectLabels?: {
       stock?: string
       journal?: string
@@ -46,6 +47,16 @@ export async function executePosFullOrderCancel(params: {
   if (memoAppend.length < 2) {
     await onAlert(reasonTooShort)
     return { ok: false, message: reasonTooShort }
+  }
+
+  const depositHeld = Math.max(0, Number(order.depositAmt ?? 0) || 0)
+  let depositDisposition: 'refund' | 'forfeit' | undefined
+  if (depositHeld > 0.005) {
+    const refund = await onConfirm(
+      i18n?.depositRefundAsk ||
+        '선수금을 환불할까요?\n확인 = 환불, 취소 = 미환불(몰수)'
+    )
+    depositDisposition = refund ? 'refund' : 'forfeit'
   }
 
   let resolved = await resolvePosOrderServerIdForAction(order, storeCode)
@@ -72,7 +83,12 @@ export async function executePosFullOrderCancel(params: {
     return { ok: false, message: '주문을 찾을 수 없습니다.' }
   }
 
-  const first = await updatePosOrderStatus({ id: serverId, status: 'cancelled', memoAppend })
+  const first = await updatePosOrderStatus({
+    id: serverId,
+    status: 'cancelled',
+    memoAppend,
+    ...(depositDisposition ? { depositDisposition } : {}),
+  })
   if (first.success) {
     return { ok: true, serverId, localOnly: false, result: first }
   }
@@ -96,6 +112,7 @@ export async function executePosFullOrderCancel(params: {
     status: 'cancelled',
     retrySideEffects: true,
     memoAppend,
+    ...(depositDisposition ? { depositDisposition } : {}),
   })
   if (!retried.success) {
     const retryMsg = buildPosStatusFailureMessage(retried, failMessageFallback, {

@@ -27,6 +27,7 @@ import {
   canonicalSalesStoreRowKey,
   rowMatchesSalesStoreSelection,
 } from '@/lib/pos-sales-store-filter'
+import { shouldExcludeAdvanceFromSalesAggregate } from '@/lib/pos-deposit-domain'
 
 export const POS_SALES_COMPLETED_STATUSES = ['completed', 'paid', 'ready'] as const
 
@@ -50,6 +51,7 @@ export type PeriodOrderRow = {
   payment_other?: number
   payment_delivery_app?: number
   payment_crypto?: number
+  is_advance?: boolean | null
 }
 
 type Bucket = {
@@ -152,7 +154,8 @@ export function filterCompletedPosSalesRows(
   return rows.filter(
     (r) =>
       rowMatchesOrderFilter(r.order_type, orderTypesAllowed) &&
-      COMPLETED_STATUSES.includes(String(r.status ?? ''))
+      COMPLETED_STATUSES.includes(String(r.status ?? '')) &&
+      !shouldExcludeAdvanceFromSalesAggregate(r)
   )
 }
 
@@ -220,6 +223,7 @@ export function aggregatePosSalesByPeriod(
   for (const r of rows) {
     if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
     if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
+    if (shouldExcludeAdvanceFromSalesAggregate(r)) continue
     const dt = r.created_at
     if (!dt) continue
 

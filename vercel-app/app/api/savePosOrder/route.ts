@@ -61,6 +61,7 @@ import {
   shouldRunPosStockDeductionForStore,
 } from '@/lib/saas/pos-completion-side-effects-gate'
 import { assertSaasOrderQuotaAllowed } from '@/lib/saas/saas-order-quota-server'
+import { parsePosAdvanceDepositFromBody } from '@/lib/pos-deposit-domain'
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000
 const idempotencyCache = new Map<string, { id: number; orderNo: string; at: number }>()
@@ -484,6 +485,18 @@ export async function POST(req: NextRequest) {
     }
     const adj = pricingAdjustments as { cardRate?: number } | undefined
     const cardRateSnapshot = Math.max(0, Number(adj?.cardRate ?? 0) || 0)
+
+    const advanceParsed = parsePosAdvanceDepositFromBody(body, total)
+    if (!advanceParsed.ok) {
+      return NextResponse.json({ success: false, message: advanceParsed.message }, { headers })
+    }
+    const advance = advanceParsed.value
+    if (advance.isAdvance) {
+      return NextResponse.json(
+        { success: false, message: 'deposit_use_receive_api' },
+        { headers }
+      )
+    }
 
     const closeStatusRaw = String(body.closeStatus ?? body.close_status ?? '').trim().toLowerCase()
     const closeStatus =

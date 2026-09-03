@@ -32,6 +32,7 @@ import {
   resolveMemberPortalTakeoutTableDisplay,
 } from '@/lib/pos-member-portal-takeout-label'
 import { mergeOrderUiItemsPreserveLineState, resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
+import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import {
   combineOrdersForTerminalMerge,
   isActiveTerminalListOrder,
@@ -44,7 +45,7 @@ import {
   shouldKeepPrevOrderMissingFromFetched,
 } from '@/lib/pos-order-local-reconcile'
 import { isPosOfflineOnlyOrder } from '@/lib/pos-order-server-id'
-import { roundMemberPointsEarn } from '@/lib/member-points-math'
+import { shouldExcludeAdvanceFromLiveFloor } from '@/lib/pos-deposit-domain'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
 const GRID_SIZE = 24
@@ -239,7 +240,6 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     paidAt: String(po.paidAt ?? '').trim() || undefined,
     updatedAt: String(po.updatedAt ?? '').trim() || undefined,
     tableName: tableDisplay || undefined,
-    customerName: tableDisplay || undefined,
     memo: String(po.memo || '').trim() || undefined,
     orderNo: String(po.orderNo ?? '').trim() || undefined,
     deliveryAppCode: (() => {
@@ -270,6 +270,15 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
       : undefined,
     pointUsed: roundMemberPointsEarn(po.pointUsed) || undefined,
     pointEarned: roundMemberPointsEarn(po.pointEarned) || undefined,
+    customerPhone: String(po.guestPhone ?? '').trim() || undefined,
+    customerName: String(po.guestName ?? '').trim() || tableDisplay || undefined,
+    scheduledAt: String(po.scheduledAt ?? '').trim() || undefined,
+    isAdvance: Boolean(po.isAdvance),
+    depositAmt: Math.max(0, Number(po.depositAmt ?? 0) || 0) || undefined,
+    depositTender: po.depositTender,
+    depositPolicy: po.depositPolicy,
+    depositCancelHours: po.depositCancelHours,
+    advanceCheckedInAt: String(po.advanceCheckedInAt ?? '').trim() || undefined,
   }
 }
 
@@ -772,6 +781,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
         posBizDayScope: true,
         pollMinimal: true,
         limit: 1000,
+        includeAdvancePending: true,
         skipPollMinimalCache: Boolean(options?.skipPollMinimalCache),
       }).catch(() => [] as PosOrder[])
       const ordersPromise = awaitFullNetwork
@@ -793,6 +803,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
         (o) =>
           isDineInOrderForTableDisplay(o.orderType, o.dbOrderType) &&
           (o.tableName ?? '').trim() !== '' &&
+          !shouldExcludeAdvanceFromLiveFloor(o) &&
           // paid는 확정 매출 — 테이블에 남기면 실시간「테이블 총액」과 홀이 이중으로 잡힘. ready(서빙완료·미결제)는 좌석 표시용으로 유지.
           !['cancelled', 'refunded', 'completed', 'paid'].includes((o.status ?? '').toLowerCase())
       )
@@ -1207,8 +1218,11 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
     (o) => o.type === 'delivery' && (o.status === 'completed' || o.status === 'paid')
   )
   const isOpenTakeoutOrder = (o: Order) =>
-    o.type === 'takeout' && (isOpenChannelOrder(o) || isMemberPortalTakeoutKitchenOpen(o))
+    o.type === 'takeout' &&
+    !shouldExcludeAdvanceFromLiveFloor(o) &&
+    (isOpenChannelOrder(o) || isMemberPortalTakeoutKitchenOpen(o))
   const takeoutOrders = currentStoreOrders.filter(isOpenTakeoutOrder)
+  const advanceOrders = currentStoreOrders.filter((o) => shouldExcludeAdvanceFromLiveFloor(o))
   const packagedTakeoutOrders = currentStoreOrders.filter(
     (o) => o.type === 'takeout' && o.status === 'ready'
   )
@@ -1457,6 +1471,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
     takeoutOrders,
     packagedTakeoutOrders,
     completedTakeoutOrders,
+    advanceOrders,
     updateOrderStatus,
     upsertOptimisticOrder,
     upsertOrderFromServer,

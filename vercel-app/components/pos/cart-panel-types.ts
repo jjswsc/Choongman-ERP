@@ -104,6 +104,7 @@ export interface CartPanelHandle {
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
+    depositAmt?: number
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
     orderLabel: string
@@ -112,6 +113,7 @@ export interface CartPanelHandle {
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
+    depositAmt?: number
   }) => void
   openDeliveryPaymentFromOrder: (payload: {
     orderLabel: string
@@ -120,5 +122,6 @@ export interface CartPanelHandle {
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
+    depositAmt?: number
   }) => void
 }

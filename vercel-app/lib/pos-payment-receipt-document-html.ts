@@ -1096,6 +1096,11 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="simple-total-eq-rule">${POS_RECEIPT_TOTAL_EQ_RULE}</div>
         <div class="simple-total">${esc(totalsLabels.totalLabel)}: ${formatBahtNum(receiptData.total)}</div>
         ${
+          Math.max(0, Number(receiptData.depositAppliedAmt ?? 0) || 0) > 0.005
+            ? `<div class="simple-line">${esc(tr('posDepositApplied', 'มัดจำ'))}: -${formatBahtNum(Math.max(0, Number(receiptData.depositAppliedAmt) || 0))}</div>`
+            : ''
+        }
+        ${
           voidMode
             ? `<div class="simple-total">${esc(tr('posReceiptVoidAmount', 'Void Amount'))}: ${formatBahtNum(receiptData.total)}</div>`
             : ''
@@ -1395,6 +1400,14 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           formatBahtNum(receiptData.total),
           useLegacyAligned ? 'receipt-total' : 'receipt-pay-line--total'
         )}
+        ${
+          Math.max(0, Number(receiptData.depositAppliedAmt ?? 0) || 0) > 0.005
+            ? paymentRowHtml(
+                esc(tr('posDepositApplied', 'มัดจำ')),
+                `-${formatBahtNum(Math.max(0, Number(receiptData.depositAppliedAmt) || 0))}`
+              )
+            : ''
+        }
         ${
           voidMode
             ? paymentRowHtml(

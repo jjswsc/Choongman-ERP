@@ -1,4 +1,5 @@
 import { canonicalSalesStoreRowKey, rowMatchesSalesStoreSelection } from '@/lib/pos-sales-store-filter'
+import { shouldExcludeAdvanceFromSalesAggregate } from '@/lib/pos-deposit-domain'
 
 const COMPLETED_STATUSES = new Set(['completed', 'paid', 'ready'])
 const PENDING_STATUSES = new Set(['pending', 'cooking'])
@@ -15,6 +16,7 @@ export type PosTodaySalesRow = {
   status?: string | null
   total?: number | string | null
   payment_cash?: number | string | null
+  is_advance?: boolean | null
 }
 
 export function emptyPosTodaySalesSummary(): PosTodaySalesSummary {
@@ -26,6 +28,12 @@ export function aggregatePosTodaySalesFromRows(rows: PosTodaySalesRow[]): PosTod
   for (const r of rows) {
     const status = String(r.status ?? '').toLowerCase()
     const total = Number(r.total) || 0
+    if (shouldExcludeAdvanceFromSalesAggregate(r)) {
+      if (PENDING_STATUSES.has(status) || status === 'ready' || status === 'pending') {
+        out.pendingCount += 1
+      }
+      continue
+    }
     if (COMPLETED_STATUSES.has(status)) {
       out.completedCount += 1
       out.completedTotal += total

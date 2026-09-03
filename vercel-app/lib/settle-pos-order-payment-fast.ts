@@ -18,7 +18,15 @@ import {
   resolvePosOrderPaidAtStampIso,
   posOrderPaymentSumFromAmounts,
 } from '@/lib/pos-order-paid-at'
-import { isDineInOrderTypeForGuestCount, sanitizePosOrderTableNameForDb } from '@/lib/pos-sales-order-type-filter'
+import { posOrderCollectableDue, isPosOrderCollectableSettled } from '@/lib/pos-deposit-domain'
+import {
+  applyPosDepositOnSettle,
+  loadPosDepositHeldAmount,
+} from '@/lib/pos-deposit-server'
+import {
+  isDineInOrderTypeForGuestCount,
+  sanitizePosOrderTableNameForDb,
+} from '@/lib/pos-sales-order-type-filter'
 import {
   coercePaymentOtherBreakdownForSave,
   paymentOtherBreakdownForDb,
@@ -341,6 +349,29 @@ async function settlePosOrderPaymentFastBody(params: {
   }
 
   let total = Math.max(0, Number(current?.total ?? 0))
+  const settleMemberId =
+    body?.memberId != null && body?.memberId !== ''
+      ? Math.max(0, Number(body.memberId))
+      : Math.max(0, Number(current?.member_id || 0))
+  const settleDepositPhone = String(body?.depositPhone ?? body?.guestPhone ?? body?.guest_phone ?? '').trim()
+  const requestedDeposit = Math.max(0, Number(body?.depositAmt ?? body?.deposit_amt ?? 0) || 0)
+  let depositHeld = 0
+  try {
+    const held = await loadPosDepositHeldAmount({
+      storeCode: String(current?.store_code ?? ''),
+      memberId: settleMemberId || null,
+      guestPhone: settleDepositPhone,
+    })
+    if (requestedDeposit > 0.005) {
+      depositHeld = Math.min(held, requestedDeposit)
+    } else if (settleMemberId > 0) {
+      depositHeld = held
+    }
+    depositHeld = Math.min(depositHeld, total)
+  } catch (heldErr) {
+    console.warn('settlePosOrderPaymentFast deposit held:', heldErr)
+  }
+  const collectableDue = posOrderCollectableDue(total, depositHeld)
   const serviceAmt = Math.max(0, Number(current?.service_amt ?? body?.serviceAmt ?? 0))
   let paymentDeliveryAppFinal = syncPosPaymentDeliveryAppToNetTotal({
     paymentDeliveryApp,
@@ -362,7 +393,7 @@ async function settlePosOrderPaymentFastBody(params: {
     paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
   if (nextPaymentSum > 0.02) {
     const reconciled = reconcilePosOrderPaymentTenderGap({
-      total,
+      total: collectableDue,
       serviceAmt,
       orderType: String(current?.order_type ?? ''),
       deliveryAppCode: current?.delivery_app_code,
@@ -407,7 +438,7 @@ async function settlePosOrderPaymentFastBody(params: {
   }
 
   let settleFastAlignedDue: { total: number; vat: number; serviceAmt: number } | null = null
-  if (total > 0.02 && nextPaymentSum > total + 0.02) {
+  if (collectableDue > 0.02 && nextPaymentSum > collectableDue + 0.02) {
     const aligned = await alignSettleFastTotalIfPaymentMatchesRecomputedDue({
       orderId: id,
       storeCode: String(current?.store_code ?? ''),
@@ -418,7 +449,7 @@ async function settlePosOrderPaymentFastBody(params: {
       dbVat: Math.max(0, Number(current?.vat ?? 0) || 0),
       dbServiceAmt: serviceAmt,
     })
-    if (aligned && nextPaymentSum <= aligned.total + 0.02) {
+    if (aligned && nextPaymentSum <= posOrderCollectableDue(aligned.total, depositHeld) + 0.02) {
       settleFastAlignedDue = aligned
       total = aligned.total
     } else {
@@ -435,13 +466,13 @@ async function settlePosOrderPaymentFastBody(params: {
       ? (body.linkposPayment as Record<string, unknown>)
       : null
 
-  const paidAtStamp = resolvePosOrderPaidAtStampIso({
-    existingPaidAt: current?.paid_at,
-    total,
-    previousPaymentSum,
-    nextPaymentSum,
-    linkposRespondedAt: linkposPayment ? String(linkposPayment.respondedAt ?? '') : null,
-  })
+  const dueNow = posOrderCollectableDue(total, depositHeld)
+  const paidAtStamp =
+    !String(current?.paid_at ?? '').trim() &&
+    isPosOrderCollectableSettled(dueNow, nextPaymentSum) &&
+    !isPosOrderCollectableSettled(dueNow, previousPaymentSum)
+      ? nullableTimestamptz(linkposPayment ? linkposPayment.respondedAt : null) || new Date().toISOString()
+      : null
 
   const memberId =
     body?.memberId != null && body?.memberId !== ''
@@ -542,6 +573,22 @@ async function settlePosOrderPaymentFastBody(params: {
   }
 
   await updatePosOrderSettleFastPatch(id, patch)
+
+  if (depositHeld > 0.005 && isPosOrderCollectableSettled(dueNow, nextPaymentSum)) {
+    try {
+      await applyPosDepositOnSettle({
+        posOrderId: id,
+        storeCode: String(current?.store_code ?? ''),
+        memberId: settleMemberId || null,
+        guestPhone: settleDepositPhone,
+        amount: depositHeld,
+        maxAmount: total,
+        createdBy: String(auth?.name || body?.updatedBy || body?.createdBy || ''),
+      })
+    } catch (applyErr) {
+      console.error('settlePosOrderPaymentFast deposit apply:', applyErr)
+    }
+  }
 
   if (linkposPayment) {
     void supabaseInsert('pos_payment_attempts', {

@@ -259,4 +259,7 @@ export const I18N_MEMBERS_ADMIN_TH: Record<string, string> = {
   age: 'อายุ',
   points: 'แต้ม',
   reason: 'เหตุผล',
+  memberDepositHistoryTitle: 'ประวัติมัดจำ',
+  memberDepositHistoryEmpty: 'ยังไม่มีประวัติมัดจำครับ',
+  memberDepositHeld: 'ยอดมัดจำคงเหลือ',
 }

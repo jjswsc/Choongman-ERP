@@ -75,6 +75,15 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   pos_drawer_pin_wrong: "posDrawerPinWrong",
   pos_drawer_pin_current_required: "posDrawerPinCurrentRequired",
   payment_exceeds_total: "posPaymentExceedsTotal",
+  deposit_amount_required: "posDepositErrAmount",
+  deposit_exceeds_total: "posDepositErrExceedsTotal",
+  deposit_scheduled_at_required: "posDepositErrScheduled",
+  deposit_scheduled_at_too_far: "posDepositErrScheduledFar",
+  deposit_phone_required: "posDepositErrPhone",
+  deposit_name_required: "posDepositErrName",
+  deposit_use_receive_api: "posDepositHint",
+  deposit_not_for_delivery: "posDepositErrDelivery",
+  deposit_checkin_table_required: "posDepositErrCheckinTable",
   "포장(takeout) 주문만 테이블로 옮길 수 있습니다.": "posTakeoutToTableOnlyTakeout",
   "매장(홀) 주문만 이동할 수 있습니다.": "posTableMoveDineInOnly",
   "이미 주문이 있는 테이블입니다. 빈 테이블로 이동하거나 합석 기능을 사용해 주세요.": "posTableMoveTargetOccupied",
@@ -495,6 +504,10 @@ export function translateApiMessage(
   // Omni SaaS: "{label} tenant_id 스키마가 없습니다..." / SQL 파일명 변형
   if (/tenant_id 스키마가 없습니다/.test(trimmed)) return t("saasTenantSchemaMissing")
   if (/^회사\(테넌트\) 정보가 없어/.test(trimmed)) return t("saasTenantIdMissing")
+  const pgrstCol = trimmed.match(/Could not find the '([^']+)' column/i)
+  if (pgrstCol) return t("dbColumnMissing").replace("{column}", pgrstCol[1]!)
+  const pg42703Col = trimmed.match(/column\s+[\w.]+\.(\w+)\s+does not exist/i)
+  if (pg42703Col) return t("dbColumnMissing").replace("{column}", pg42703Col[1]!)
   return msg
 }
 
