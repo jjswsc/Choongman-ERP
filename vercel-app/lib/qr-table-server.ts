@@ -16,6 +16,7 @@ import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-de
 import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { resolvePosMenuDescriptionForChannel } from '@/lib/pos-menu-display-description'
+import { parsePosMenuI18nMap } from '@/lib/pos-menu-guest-i18n'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import {
   type QrGuestMenuOption,
@@ -137,6 +138,8 @@ type DbMenu = {
   sold_out_date?: string | null
   description_default?: string | null
   description_table?: string | null
+  name_i18n?: unknown
+  description_i18n?: unknown
   kitchen_printer?: number | null
   sort_order?: number | null
   is_banban?: boolean
@@ -1602,6 +1605,7 @@ export async function loadQrMenusForSession(session: QrTableSession) {
       menuId: id,
       code: String(m.code || ''),
       name: String(m.name || ''),
+      nameI18n: parsePosMenuI18nMap(m.name_i18n),
       category,
       categoryMain,
       price: isIncluded ? 0 : asNum(m.price),
@@ -1618,6 +1622,8 @@ export async function loadQrMenusForSession(session: QrTableSession) {
       optionSelectionConfig: parseOptionSelectionConfig(m.option_selection_config),
       options: optionsByMenuId.get(id) || [],
       sortOrder: asNum(m.sort_order),
+      descriptionDefault: String(m.description_default || ''),
+      descriptionI18n: parsePosMenuI18nMap(m.description_i18n),
       description: resolvePosMenuDescriptionForChannel(
         {
           descriptionDefault: String(m.description_default || ''),

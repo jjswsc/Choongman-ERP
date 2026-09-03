@@ -20,6 +20,7 @@ import {
 } from '@/lib/pos-banban-utils'
 import { extractQrGuestOptionIds, findQrGuestImplicitChickenDefault } from '@/lib/qr-table-guest-menu'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { resolvePosMenuGuestLabel } from '@/lib/pos-menu-guest-i18n'
 
 export type QrGuestOptionPick = {
   optionIds: number[]
@@ -37,6 +38,7 @@ type Props = {
   flavorMenus: PosMenu[]
   buffetIncluded: boolean
   storeCode: string
+  lang: string
   t: (key: string) => string
   onClose: () => void
   onPick: (pick: QrGuestOptionPick) => void
@@ -49,6 +51,7 @@ export function QrTableGuestOptionSheet({
   flavorMenus,
   buffetIncluded,
   storeCode,
+  lang,
   t,
   onClose,
   onPick,
@@ -116,7 +119,7 @@ export function QrTableGuestOptionSheet({
         <div className="flex items-start justify-between gap-3 px-4 pb-2 pt-1">
           <div className="min-w-0">
             <p className="text-base font-semibold">
-              {menu.name}
+              {resolvePosMenuGuestLabel(menu.name, lang)}
               {stepSuffix ? <span className="text-stone-400">{stepSuffix}</span> : null}
             </p>
             <p className="text-xs text-stone-500">{t('selectOption')}</p>
@@ -138,7 +141,7 @@ export function QrTableGuestOptionSheet({
               </p>
               {banbanFirst ? (
                 <p className="text-sm font-medium text-[var(--qr-brand,#b45309)]">
-                  1. {banbanFirst.name}
+                  1. {resolvePosMenuGuestLabel(banbanFirst.name, lang)}
                 </p>
               ) : null}
               {banbanFlavors.length === 0 ? (
@@ -167,7 +170,7 @@ export function QrTableGuestOptionSheet({
                         })
                       }}
                     >
-                      {flavor.name}
+                      {resolvePosMenuGuestLabel(flavor.name, lang)}
                     </button>
                   ))}
                 </div>
@@ -218,7 +221,7 @@ export function QrTableGuestOptionSheet({
                 }
                 return t(map[key] || key)
               }}
-              translateChickenPartLabel={(name) => name}
+              translateChickenPartLabel={(name) => resolvePosMenuGuestLabel(name, lang)}
               resolveCartDisplayName={(m, opt) => resolvePosCartOptionDisplayName(m, opt, storeCode || undefined)}
               onAddToCart={(_m, opt, defaultDisplay) => {
                 let optionIds = extractQrGuestOptionIds(opt, pendingSizeOpt)
