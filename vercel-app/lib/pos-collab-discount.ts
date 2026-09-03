@@ -389,6 +389,8 @@ export function buildCartPanelLineDiscountAllocations(input: {
   tierDiscountAmt?: number
   manualDiscountAmt?: number
   couponLineAlloc?: number[]
+  /** 메뉴별 % 수동 할인 — 있으면 비례 배분 대신 이 값을 사용 */
+  manualLineAlloc?: number[]
 }): number[] {
   const {
     lines,
@@ -403,6 +405,7 @@ export function buildCartPanelLineDiscountAllocations(input: {
     tierDiscountAmt = 0,
     manualDiscountAmt = 0,
     couponLineAlloc,
+    manualLineAlloc,
   } = input
 
   const modeForLine = (line: CollabCartLineLike): PosCartLineDiscountMode =>
@@ -443,18 +446,22 @@ export function buildCartPanelLineDiscountAllocations(input: {
     ? weightsForModes(['discount'])
     : lines.map((line) => (modeForLine(line) !== 'cancel' ? collabLineTotal(line) : 0))
 
+  const hasManualLineAlloc = Array.isArray(manualLineAlloc) && manualLineAlloc.length === lines.length
   const useSplitManualTierCoupon =
     tierDiscountAmt > 0.0001 ||
     manualDiscountAmt > 0.0001 ||
+    hasManualLineAlloc ||
     (Array.isArray(couponLineAlloc) && couponLineAlloc.length === lines.length)
 
-  const manualAlloc = useSplitManualTierCoupon
-    ? manualDiscountAmt > 0.0001
-      ? allocateDiscountProportional(manualWeights, manualDiscountAmt)
-      : lines.map(() => 0)
-    : manualAndCouponDiscountAmt > 0.0001
-      ? allocateDiscountProportional(manualWeights, manualAndCouponDiscountAmt)
-      : lines.map(() => 0)
+  const manualAlloc = hasManualLineAlloc
+    ? lines.map((_, i) => Math.max(0, Number(manualLineAlloc[i] ?? 0) || 0))
+    : useSplitManualTierCoupon
+      ? manualDiscountAmt > 0.0001
+        ? allocateDiscountProportional(manualWeights, manualDiscountAmt)
+        : lines.map(() => 0)
+      : manualAndCouponDiscountAmt > 0.0001
+        ? allocateDiscountProportional(manualWeights, manualAndCouponDiscountAmt)
+        : lines.map(() => 0)
 
   const couponAlloc =
     useSplitManualTierCoupon && Array.isArray(couponLineAlloc) && couponLineAlloc.length === lines.length

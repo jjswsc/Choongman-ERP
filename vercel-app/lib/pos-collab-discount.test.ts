@@ -309,6 +309,26 @@ describe('buildCartPanelLineDiscountAllocations', () => {
     expect(alloc[1]).toBeCloseTo(tierDiscount / 2, 1)
     expect(alloc.reduce((s, v) => s + v, 0)).toBeCloseTo(249 + tierDiscount, 1)
   })
+
+  it('메뉴별 % 수동 할인은 해당 줄 금액 그대로 쓴다', () => {
+    const alloc = buildCartPanelLineDiscountAllocations({
+      lines: [
+        { id: 'a', name: 'Samgyeopsal', price: 249, qty: 1, menuId: '10' },
+        { id: 'b', name: 'Tteokbokki', price: 199, qty: 1, menuId: '11' },
+      ],
+      menuById,
+      lineModeById: { a: 'discount', b: 'discount' },
+      hasSelectedDiscountScope: true,
+      collabDetail: null,
+      collabDiscountAmt: 0,
+      serviceDiscountAmt: 0,
+      cancelledLineAmt: 0,
+      manualDiscountAmt: 49 + 99,
+      manualLineAlloc: [49, 99],
+    })
+    expect(alloc[0]).toBe(49)
+    expect(alloc[1]).toBe(99)
+  })
 })
 
 describe('pos-collab-discount amount stacking', () => {

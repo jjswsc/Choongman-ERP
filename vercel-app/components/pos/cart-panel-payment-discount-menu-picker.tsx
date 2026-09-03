@@ -3,11 +3,15 @@
 import { Check } from 'lucide-react'
 import type { OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
+import { effectiveLineDiscountPct } from '@/lib/pos-manual-line-discount'
 import type { CartPanelMenuLineDiscountMode } from '@/components/pos/cart-panel-payment-modal-amount-card'
 
 type PosPaymentDiscountMenuPickerProps = {
   cartItems: OrderItem[]
   lineDiscountModeByItemId: Record<string, CartPanelMenuLineDiscountMode>
+  lineDiscountPctByItemId?: Record<string, number>
+  lastDiscountTargetId?: string | null
+  fallbackPct?: number
   onLineDiscountModeChange: (itemId: string, nextMode: CartPanelMenuLineDiscountMode) => void
   t: (key: string) => string
 }
@@ -15,6 +19,9 @@ type PosPaymentDiscountMenuPickerProps = {
 export function PosPaymentDiscountMenuPicker({
   cartItems,
   lineDiscountModeByItemId,
+  lineDiscountPctByItemId,
+  lastDiscountTargetId,
+  fallbackPct = 0,
   onLineDiscountModeChange,
   t,
 }: PosPaymentDiscountMenuPickerProps) {
@@ -40,17 +47,31 @@ export function PosPaymentDiscountMenuPicker({
           const lineTotal = Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
           const locked = mode === 'service' || mode === 'cancel'
           const selected = mode === 'discount'
+          const pct = effectiveLineDiscountPct({
+            itemId: item.id,
+            selected,
+            storedPct: lineDiscountPctByItemId?.[item.id],
+            fallbackPct,
+          })
+          const focused = selected && lastDiscountTargetId === item.id
           return (
             <button
               key={item.id}
               type="button"
               disabled={locked}
-              onClick={() => onLineDiscountModeChange(item.id, selected ? 'none' : 'discount')}
+              onClick={() => {
+                if (selected && lastDiscountTargetId !== item.id) {
+                  onLineDiscountModeChange(item.id, 'discount')
+                  return
+                }
+                onLineDiscountModeChange(item.id, selected ? 'none' : 'discount')
+              }}
               className={cn(
                 'flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left touch-manipulation',
                 selected
                   ? 'border-amber-500 bg-amber-100/90 dark:border-amber-400 dark:bg-amber-950/50'
                   : 'border-border/70 bg-background/80',
+                focused && 'ring-2 ring-amber-500/80',
                 locked && 'cursor-not-allowed opacity-55'
               )}
             >
@@ -78,6 +99,11 @@ export function PosPaymentDiscountMenuPicker({
                     : ''}
                 </span>
               </span>
+              {pct > 0 ? (
+                <span className="shrink-0 rounded-md bg-rose-600 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white">
+                  {pct}%
+                </span>
+              ) : null}
             </button>
           )
         })}

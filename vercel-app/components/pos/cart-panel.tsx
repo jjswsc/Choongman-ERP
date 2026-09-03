@@ -98,6 +98,12 @@ import {
   resolveCartLineMenuIdFromCatalog,
 } from '@/lib/pos-collab-discount'
 import {
+  computeManualLineDiscountAllocations,
+  nextLineDiscountPctsAfterPercentTap,
+  normalizeLineDiscountPct,
+  summarizeLineDiscountPcts,
+} from '@/lib/pos-manual-line-discount'
+import {
   normalizeMemberTierCodeForDiscount,
   resolveMemberTierDisplayLabel,
 } from '@/lib/member-tier-discount'
@@ -608,6 +614,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const discountValue = parsePosDiscountValueInput(discountValueInput, discountType)
   const [discountReason, setDiscountReason] = useState('')
   const [lineDiscountModeByItemId, setLineDiscountModeByItemId] = useState<Record<string, MenuLineDiscountMode>>({})
+  const [lineDiscountPctByItemId, setLineDiscountPctByItemId] = useState<Record<string, number>>({})
+  const [lastDiscountTargetId, setLastDiscountTargetId] = useState<string | null>(null)
+  const lastDiscountTargetIdRef = useRef<string | null>(null)
   const manualDiscountCardRef = useRef<HTMLDivElement | null>(null)
   /** 결제 모달 금액·할인·포인트 입력 중 자동 합계 덮어쓰기·스캔 포커스가 키보드를 끊지 않도록 */
   const paymentAmountInputFocusedRef = useRef(false)
@@ -1027,12 +1036,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   useEffect(() => {
+    const validIds = new Set(cartItems.map((item) => item.id))
     setLineDiscountModeByItemId((prev) => {
-      const validIds = new Set(cartItems.map((item) => item.id))
       let changed = false
       const next: Record<string, MenuLineDiscountMode> = {}
       for (const [id, mode] of Object.entries(prev)) {
         if (validIds.has(id)) next[id] = mode
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+    setLineDiscountPctByItemId((prev) => {
+      let changed = false
+      const next: Record<string, number> = {}
+      for (const [id, pct] of Object.entries(prev)) {
+        if (validIds.has(id)) next[id] = pct
         else changed = true
       }
       return changed ? next : prev
@@ -1049,7 +1067,28 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
       return { ...prev, [itemId]: nextMode }
     })
-  }, [])
+    if (nextMode === 'discount') {
+      lastDiscountTargetIdRef.current = itemId
+      setLastDiscountTargetId(itemId)
+      const brush = discountType === 'percent' ? normalizeLineDiscountPct(discountValue) : 0
+      if (brush > 0) {
+        setLineDiscountPctByItemId((prev) => {
+          if (normalizeLineDiscountPct(prev[itemId]) > 0) return prev
+          return { ...prev, [itemId]: brush }
+        })
+      }
+      return
+    }
+    setLineDiscountPctByItemId((prev) => {
+      if (!(itemId in prev)) return prev
+      const { [itemId]: _removed, ...rest } = prev
+      return rest
+    })
+    if (lastDiscountTargetIdRef.current === itemId) {
+      lastDiscountTargetIdRef.current = null
+      setLastDiscountTargetId(null)
+    }
+  }, [discountType, discountValue])
   const serviceDiscountAmt = useMemo(() => {
     return cartItems.reduce((sum, item) => {
       if ((lineDiscountModeByItemId[item.id] ?? 'none') !== 'service') return sum
@@ -1092,7 +1131,65 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
       return changed ? next : prev
     })
+    setLineDiscountPctByItemId({})
+    lastDiscountTargetIdRef.current = null
+    setLastDiscountTargetId(null)
   }, [])
+  const perLineManualDiscount = useMemo(() => {
+    if (discountType !== 'percent' || !hasSelectedDiscountScope) return null
+    return computeManualLineDiscountAllocations({
+      lines: cartItems.map((item) => ({
+        id: String(item.id ?? ''),
+        price: Number(item.price ?? 0),
+        quantity: resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown }),
+      })),
+      lineDiscountModeByItemId,
+      lineDiscountPctByItemId,
+      fallbackPct: discountValue,
+    })
+  }, [cartItems, discountType, discountValue, hasSelectedDiscountScope, lineDiscountModeByItemId, lineDiscountPctByItemId])
+  const mixedLineDiscountPcts = useMemo(
+    () =>
+      hasSelectedDiscountScope
+        ? summarizeLineDiscountPcts(
+            cartItems,
+            lineDiscountModeByItemId,
+            lineDiscountPctByItemId,
+            discountType === 'percent' ? discountValue : 0
+          )
+        : [],
+    [
+      cartItems,
+      discountType,
+      discountValue,
+      hasSelectedDiscountScope,
+      lineDiscountModeByItemId,
+      lineDiscountPctByItemId,
+    ]
+  )
+  const applyPercentToSelectedLines = useCallback(
+    (pct: number) => {
+      const rate = normalizeLineDiscountPct(pct)
+      setDiscountType('percent')
+      setDiscountValueInput(rate > 0 ? String(rate) : '')
+      if (rate > 0) {
+        setLineDiscountPctByItemId((prev) => {
+          const selectedIds = cartItems
+            .filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount')
+            .map((item) => item.id)
+          if (selectedIds.length === 0) return prev
+          return nextLineDiscountPctsAfterPercentTap({
+            selectedIds,
+            currentPcts: prev,
+            lastFocusedId: lastDiscountTargetIdRef.current,
+            pct: rate,
+          })
+        })
+      }
+      bumpDiscountPaymentSync()
+    },
+    [bumpDiscountPaymentSync, cartItems, lineDiscountModeByItemId]
+  )
   const discountScopeSubtotal = hasSelectedDiscountScope
     ? selectedDiscountSubtotal
     : Math.max(0, subtotalAfterCancel - serviceDiscountAmt)
@@ -1190,8 +1287,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     tierDiscountPolicy,
   ])
   const manualDiscountInputAmt =
-    discountType === 'percent' ? Math.floor((discountScopeSubtotal * discountValue) / 100) : discountValue
+    discountType === 'percent' && perLineManualDiscount
+      ? perLineManualDiscount.total
+      : discountType === 'percent'
+        ? Math.floor((discountScopeSubtotal * discountValue) / 100)
+        : discountValue
   const manualDiscountAmt = Math.min(Math.max(0, manualDiscountInputAmt), Math.max(0, subtotalAfterCancel - serviceDiscountAmt))
+  const manualLineAlloc = perLineManualDiscount?.lineAlloc
   const couponDiscountTotal = useMemo(
     () =>
       Math.round(
@@ -1292,6 +1394,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       tierDiscountAmt,
       manualDiscountAmt,
       couponLineAlloc,
+      ...(manualLineAlloc && manualLineAlloc.length === cartItems.length ? { manualLineAlloc } : {}),
     })
   }, [
     appliedCollab,
@@ -1304,6 +1407,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     hasSelectedDiscountScope,
     lineDiscountModeByItemId,
     manualDiscountAmt,
+    manualLineAlloc,
     menuByIdForCollab,
     serviceDiscountAmt,
   ])
@@ -3496,6 +3600,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   tierDiscountAmt,
                   manualDiscountAmt: manualPart,
                   couponLineAlloc: receiptCouponAlloc,
+                  ...(manualLineAlloc &&
+                  manualLineAlloc.length === linesForReceipt.length &&
+                  receiptLinesMatchCart
+                    ? { manualLineAlloc }
+                    : {}),
                 })
               })()
           : []
@@ -4688,6 +4797,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     checkoutItemsSnapshotRef.current = []
     setCartItems([])
     setLineDiscountModeByItemId({})
+    setLineDiscountPctByItemId({})
+    lastDiscountTargetIdRef.current = null
+    setLastDiscountTargetId(null)
     setGuestCount(0)
     setCustomerMemo('')
     setCouponCode('')
@@ -4846,6 +4958,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         <PosPaymentDiscountMenuPicker
           cartItems={cartItems}
           lineDiscountModeByItemId={lineDiscountModeByItemId}
+          lineDiscountPctByItemId={lineDiscountPctByItemId}
+          lastDiscountTargetId={lastDiscountTargetId}
+          fallbackPct={discountType === 'percent' ? discountValue : 0}
           onLineDiscountModeChange={setLineDiscountModeForItem}
           t={t}
         />
@@ -4853,7 +4968,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           <div className="flex items-center justify-between gap-2">
             <p className="min-w-0">
               {selectedDiscountLineCount > 0
-                ? `${tr('posManualDiscountScopeSelected', '할인적용 메뉴')} ${selectedDiscountLineCount}${tr('posMenuLineUnit', '건')} · ${tr('posManualDiscountScopeAmount', '대상금액')} ${formatBahtNum(selectedDiscountSubtotal)} ฿`
+                ? `${tr('posManualDiscountScopeSelected', '할인적용 메뉴')} ${selectedDiscountLineCount}${tr('posMenuLineUnit', '건')} · ${tr('posManualDiscountScopeAmount', '대상금액')} ${formatBahtNum(selectedDiscountSubtotal)} ฿${
+                    mixedLineDiscountPcts.length > 0
+                      ? ` · ${mixedLineDiscountPcts.map((row) => `${row.pct}% × ${row.count}`).join(' · ')}`
+                      : ''
+                  }`
                 : `${tr('posManualDiscountScopeAll', '할인적용 메뉴 미선택: 서비스처리 제외 전체 메뉴에 적용')}`}
             </p>
             {selectedDiscountLineCount > 0 ? (
@@ -4887,11 +5006,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               size="default"
               variant={discountType === 'percent' && discountValue === pct ? 'default' : 'outline'}
               className="h-10 min-w-[3.75rem] shrink-0 px-3 text-sm font-semibold touch-manipulation"
-              onClick={() => {
-                setDiscountType('percent')
-                setDiscountValueInput(String(pct))
-                bumpDiscountPaymentSync()
-              }}
+              onClick={() => applyPercentToSelectedLines(pct)}
             >
               {pct}%
             </Button>
@@ -4906,6 +5021,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             onClick={() => {
               setDiscountType('percent')
               setDiscountValueInput('')
+              setLineDiscountPctByItemId({})
               bumpDiscountPaymentSync()
             }}
           >
@@ -4937,11 +5053,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             }
             value={discountValueInput}
             {...bindPaymentAmountInputFocus({ syncPaymentOnBlur: true })}
-            onChange={(e) =>
-              discountType === 'percent'
-                ? handlePaymentIntegerInputChange(e, setDiscountValueInput, 3)
-                : handlePaymentBahtInputChange(e, setDiscountValueInput)
-            }
+            onChange={(e) => {
+              if (discountType === 'percent') {
+                handlePaymentIntegerInputChange(e, (formatted) => {
+                  setDiscountValueInput(formatted)
+                  const rate = normalizeLineDiscountPct(formatted)
+                  const focusedId = lastDiscountTargetIdRef.current
+                  if (rate > 0 && focusedId && (lineDiscountModeByItemId[focusedId] ?? 'none') === 'discount') {
+                    setLineDiscountPctByItemId((prev) =>
+                      prev[focusedId] === rate ? prev : { ...prev, [focusedId]: rate }
+                    )
+                  }
+                }, 3)
+                return
+              }
+              handlePaymentBahtInputChange(e, setDiscountValueInput)
+            }}
             className="h-11 min-w-[5.5rem] text-right text-sm font-semibold tabular-nums rounded-xl px-2.5"
           />
           <Input
@@ -5870,6 +5997,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 totalLabelKey="posInputTotal"
                 cartItems={cartItems}
                 lineDiscountModeByItemId={lineDiscountModeByItemId}
+                lineDiscountPctByItemId={lineDiscountPctByItemId}
+                lastDiscountTargetId={lastDiscountTargetId}
+                fallbackPct={discountType === 'percent' ? discountValue : 0}
                 onLineDiscountModeChange={setLineDiscountModeForItem}
                 onDiscountLineSelected={focusManualDiscountCard}
                 t={t}
@@ -5916,6 +6046,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 totalLabelKey="posInputTotal"
                 cartItems={cartItems}
                 lineDiscountModeByItemId={lineDiscountModeByItemId}
+                lineDiscountPctByItemId={lineDiscountPctByItemId}
+                lastDiscountTargetId={lastDiscountTargetId}
+                fallbackPct={discountType === 'percent' ? discountValue : 0}
                 onLineDiscountModeChange={setLineDiscountModeForItem}
                 onDiscountLineSelected={focusManualDiscountCard}
                 t={t}
@@ -5959,6 +6092,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               total={total}
               cartItems={cartItems}
               lineDiscountModeByItemId={lineDiscountModeByItemId}
+              lineDiscountPctByItemId={lineDiscountPctByItemId}
+              lastDiscountTargetId={lastDiscountTargetId}
+              fallbackPct={discountType === 'percent' ? discountValue : 0}
               onLineDiscountModeChange={setLineDiscountModeForItem}
               onDiscountLineSelected={focusManualDiscountCard}
               t={t}

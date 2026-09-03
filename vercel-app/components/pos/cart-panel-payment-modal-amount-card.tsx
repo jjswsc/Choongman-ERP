@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import type { OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
+import { effectiveLineDiscountPct } from '@/lib/pos-manual-line-discount'
 import {
   resolveReceiptSubtotalPrintAmount,
   resolveReceiptVatPrintAmount,
@@ -31,6 +32,9 @@ export type PosPaymentModalAmountCardProps = {
   totalLabelKey?: string
   cartItems?: OrderItem[]
   lineDiscountModeByItemId?: Record<string, CartPanelMenuLineDiscountMode>
+  lineDiscountPctByItemId?: Record<string, number>
+  lastDiscountTargetId?: string | null
+  fallbackPct?: number
   onLineDiscountModeChange?: (itemId: string, nextMode: CartPanelMenuLineDiscountMode) => void
   onDiscountLineSelected?: () => void
   t: (key: string) => string
@@ -45,6 +49,9 @@ export function PosPaymentModalAmountCard({
   totalLabelKey,
   cartItems,
   lineDiscountModeByItemId,
+  lineDiscountPctByItemId,
+  lastDiscountTargetId,
+  fallbackPct = 0,
   onLineDiscountModeChange,
   onDiscountLineSelected,
   t,
@@ -148,8 +155,20 @@ export function PosPaymentModalAmountCard({
                   {cartItems?.map((item) => {
                     const mode = lineDiscountModeByItemId?.[item.id] ?? 'none'
                     const lineTotal = Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
+                    const pct = effectiveLineDiscountPct({
+                      itemId: item.id,
+                      selected: mode === 'discount',
+                      storedPct: lineDiscountPctByItemId?.[item.id],
+                      fallbackPct,
+                    })
                     return (
-                      <div key={item.id} className="rounded-xl border border-border/60 bg-background/70 p-2">
+                      <div
+                        key={item.id}
+                        className={cn(
+                          'rounded-xl border border-border/60 bg-background/70 p-2',
+                          mode === 'discount' && lastDiscountTargetId === item.id && 'ring-2 ring-amber-500/70'
+                        )}
+                      >
                         <div className="mb-1 flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-xs font-medium">{item.name}</p>
@@ -157,7 +176,11 @@ export function PosPaymentModalAmountCard({
                               {t('qty') || '수량'} {formatBahtNum(item.quantity)} · {formatBahtNum(lineTotal)} ฿
                             </p>
                           </div>
-                          {mode !== 'none' ? (
+                          {mode === 'discount' && pct > 0 ? (
+                            <Badge className="shrink-0 bg-rose-600 text-[10px] font-bold text-white hover:bg-rose-600">
+                              {pct}%
+                            </Badge>
+                          ) : mode !== 'none' ? (
                             <Badge variant="secondary" className="shrink-0 text-[10px]">
                               {mode === 'service'
                                 ? tr('posServiceHandled', '서비스처리')
@@ -174,6 +197,11 @@ export function PosPaymentModalAmountCard({
                             variant={mode === 'discount' ? 'default' : 'outline'}
                             className="h-7 rounded-lg text-[11px]"
                             onClick={() => {
+                              if (mode === 'discount' && lastDiscountTargetId !== item.id) {
+                                onLineDiscountModeChange?.(item.id, 'discount')
+                                onDiscountLineSelected?.()
+                                return
+                              }
                               const nextMode: CartPanelMenuLineDiscountMode = mode === 'discount' ? 'none' : 'discount'
                               onLineDiscountModeChange?.(item.id, nextMode)
                               if (nextMode === 'discount') onDiscountLineSelected?.()
