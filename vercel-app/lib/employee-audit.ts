@@ -1,4 +1,5 @@
-import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseInsert } from '@/lib/supabase-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import type { JwtPayload } from '@/lib/jwt-auth'
 import { isAccountingRole } from '@/lib/permissions'
@@ -25,19 +26,17 @@ export function canViewAllEmployeeAuditStores(role: string): boolean {
 export async function fetchEmployeeAuditSnapshot(employeeId: number): Promise<Record<string, unknown> | null> {
   if (!Number.isFinite(employeeId) || employeeId <= 0) return null
   const filter = `id=eq.${Math.floor(employeeId)}`
-  for (const select of [EMPLOYEE_AUDIT_SELECT, EMPLOYEE_AUDIT_SELECT_FALLBACK]) {
-    try {
-      const rows = (await supabaseSelectFilter('employees', filter, {
-        limit: 1,
-        select,
-      })) as Record<string, unknown>[]
-      if (rows?.[0]) return rows[0]
-    } catch (e) {
-      const em = e instanceof Error ? e.message : String(e)
-      if (!/42703|column/i.test(em)) throw e
-    }
+  try {
+    const rows = (await supabaseSelectFilterStrippingUnknownColumns(
+      'employees',
+      filter,
+      { limit: 1, select: EMPLOYEE_AUDIT_SELECT },
+      'employeeAudit.snapshot'
+    )) as Record<string, unknown>[]
+    return rows?.[0] ?? null
+  } catch {
+    return null
   }
-  return null
 }
 
 export type EmployeeAuditActor = {

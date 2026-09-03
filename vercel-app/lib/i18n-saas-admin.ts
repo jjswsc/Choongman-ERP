@@ -727,6 +727,7 @@ export const I18N_SAAS_ADMIN_KO: Record<string, string> = {
   saasTenantSchemaMissing:
     "tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.",
   saasTenantIdMissing: "회사(테넌트) 정보가 없어 저장할 수 없습니다. 다시 로그인해 주세요.",
+  dbColumnMissing: "'{column}' 컬럼이 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.",
 }
 
 export const I18N_SAAS_ADMIN_EN: Record<string, string> = {
@@ -1452,6 +1453,7 @@ export const I18N_SAAS_ADMIN_EN: Record<string, string> = {
   saasTenantSchemaMissing:
     "Cannot save: the tenant_id schema is missing. Please contact the administrator.",
   saasTenantIdMissing: "Cannot save: company (tenant) information is missing. Please sign in again.",
+  dbColumnMissing: "Column '{column}' is missing. Please contact the administrator.",
 }
 
 export const I18N_SAAS_ADMIN_TH: Record<string, string> = {
@@ -2174,6 +2176,7 @@ export const I18N_SAAS_ADMIN_TH: Record<string, string> = {
   saasTenantSchemaMissing:
     "ยังบันทึกไม่ได้ เพราะฐานข้อมูลยังไม่มีคอลัมน์ tenant_id กรุณาติดต่อผู้ดูแลระบบ",
   saasTenantIdMissing: "ไม่มีข้อมูลบริษัท (tenant) จึงบันทึกไม่ได้ กรุณาเข้าสู่ระบบอีกครั้ง",
+  dbColumnMissing: "ฐานข้อมูลยังไม่มีคอลัมน์ '{column}' กรุณาติดต่อผู้ดูแลระบบ",
 }
 
 export const SAAS_ADMIN_FEATURE_KEYS = [

@@ -12,6 +12,7 @@ import {
   parseBanbanFlavorsFromName,
   resolveBanbanFlavorPairForKitchenPrint,
   splitBanbanSlashOptionParts,
+  overlayBanbanFlavorMenuIds,
 } from './pos-banban-utils'
 
 describe('parseBanbanFlavorsFromName', () => {
@@ -180,6 +181,22 @@ describe('getBanbanFlavorMenuList', () => {
       '2026-05-26'
     )
     expect(list.map((menu) => menu.id)).toEqual(['1', '2'])
+  })
+
+  it('overlayBanbanFlavorMenuIds applies POS flavor links so QR matches POS picker', () => {
+    const overlaid = overlayBanbanFlavorMenuIds(
+      [
+        banbanMenu,
+        soyMenu,
+        supremeMenu,
+        { ...supremeMenu, id: '99', name: 'Chicken Katsu', code: 'C199' },
+      ],
+      new Map([[100, ['1', '2']]])
+    )
+    expect(overlaid[0]?.banbanFlavorMenuIds).toEqual(['1', '2'])
+    expect(
+      getBanbanFlavorMenuList(overlaid, overlaid[0]!, '2026-05-26').map((menu) => menu.name)
+    ).toEqual(['Soy Sauce Chicken', 'Supreme Chicken'])
   })
 })
 

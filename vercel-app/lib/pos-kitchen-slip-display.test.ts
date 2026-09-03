@@ -3,6 +3,7 @@ import {
   buildKitchenHallStyleSlipLines,
   mapKitchenSlipGroupItemsForPrint,
   parseKitchenSplitPromoLineName,
+  stripQrKitchenSourceBracketTags,
 } from './pos-kitchen-slip-display'
 import { formatKitchenSlipItemRowHtml } from './pos-kitchen-slip-html'
 import { buildGrabPosCatalog } from './grab-pos-order-enrich'
@@ -16,6 +17,38 @@ describe('pos-kitchen-slip-display', () => {
       parentLabel: 'Set 1',
       childLabel: 'GOLDEN FRIED CHICKEN',
     })
+  })
+
+  it('does not treat QR [Extra]/[Buffet] tags as promo set parents', () => {
+    expect(stripQrKitchenSourceBracketTags('[C024] [Extra] Banban Chicken (A / B)')).toBe(
+      '[C024] Banban Chicken (A / B)'
+    )
+    expect(parseKitchenSplitPromoLineName('[C024] [Extra] Banban Chicken (Currycane / Katsu)')).toEqual({
+      codePrefix: '',
+      parentLabel: 'C024',
+      childLabel: 'Banban Chicken (Currycane / Katsu)',
+    })
+    const lines = buildKitchenHallStyleSlipLines(
+      [
+        {
+          id: 'qr-banban',
+          name: '[C024] [Extra] Banban Chicken (Currycane Chicken / Chicken Katsu)',
+          qty: 1,
+          note: 'Extra',
+        },
+        { id: 'qr-salad', name: '[Extra] Cajun Chicken Salad', qty: 1, note: 'Extra' },
+      ],
+      {
+        menuNameByMenuId: { '24': 'Banban Chicken' },
+        menuCodeByMenuId: { '24': 'C024' },
+      }
+    )
+    expect(lines.map((l) => l.name)).toEqual([
+      'Banban Chicken (Currycane Chicken / Chicken Katsu)',
+      'Cajun Chicken Salad',
+    ])
+    expect(lines.some((l) => /^extra$/i.test(String(l.name)))).toBe(false)
+    expect(lines.every((l) => !/extra/i.test(String(l.note ?? '')))).toBe(true)
   })
 
   it('groups split promo children under set header and keeps station-specific children', () => {

@@ -21,7 +21,7 @@ import {
   type QrGuestMenuOption,
   resolveQrGuestLineOption,
 } from '@/lib/qr-table-guest-menu'
-import { isBanbanMenu } from '@/lib/pos-banban-utils'
+import { isBanbanMenu, overlayBanbanFlavorMenuIds } from '@/lib/pos-banban-utils'
 import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import {
@@ -966,6 +966,53 @@ function parseBanbanFlavorMenuIds(raw: unknown): string[] | undefined {
     .filter(Boolean)
 }
 
+async function loadBanbanFlavorIdsByMenuId(menuIds: number[]): Promise<Map<number, string[]>> {
+  const ids = [...new Set(menuIds.map((n) => Math.floor(Number(n) || 0)).filter((n) => n > 0))]
+  const out = new Map<number, string[]>()
+  if (!ids.length) return out
+  try {
+    const chunkSize = 80
+    const chunks: number[][] = []
+    for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize))
+    const parts = await Promise.all(
+      chunks.map((chunk) =>
+        supabaseSelectFilter('pos_banban_flavor_links', `banban_menu_id=in.(${chunk.join(',')})`, {
+          limit: 20000,
+          select: 'banban_menu_id,flavor_menu_id,enabled,sort_order',
+        }) as Promise<
+          Array<{
+            banban_menu_id?: number | null
+            flavor_menu_id?: number | null
+            enabled?: boolean | null
+            sort_order?: number | null
+          }>
+        >
+      )
+    )
+    const rows = parts.flat().filter((row) => row.enabled !== false)
+    rows.sort((a, b) => {
+      const aMenuId = Number(a.banban_menu_id || 0)
+      const bMenuId = Number(b.banban_menu_id || 0)
+      if (aMenuId !== bMenuId) return aMenuId - bMenuId
+      const aSort = Number(a.sort_order || 0)
+      const bSort = Number(b.sort_order || 0)
+      if (aSort !== bSort) return aSort - bSort
+      return Number(a.flavor_menu_id || 0) - Number(b.flavor_menu_id || 0)
+    })
+    for (const row of rows) {
+      const menuId = Number(row.banban_menu_id || 0)
+      const flavorMenuId = String(row.flavor_menu_id || '').trim()
+      if (!menuId || !flavorMenuId) continue
+      const list = out.get(menuId) || []
+      if (!list.includes(flavorMenuId)) list.push(flavorMenuId)
+      out.set(menuId, list)
+    }
+  } catch (e) {
+    console.error('qr_table banban flavor links load:', e)
+  }
+  return out
+}
+
 function parseOptionStepValues(raw: unknown): Record<string, string> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const out: Record<string, string> = {}
@@ -1531,12 +1578,14 @@ export async function loadQrMenusForSession(session: QrTableSession) {
     return asNum(a.id) - asNum(b.id)
   })
 
-  let optionsByMenuId = new Map<number, QrGuestMenuOption[]>()
-  try {
-    optionsByMenuId = await loadHallOptionsByMenuIds(menus.map((m) => Number(m.id || 0)))
-  } catch (e) {
-    console.error('qr_table menus options load:', e)
-  }
+  const menuIds = menus.map((m) => Number(m.id || 0)).filter((id) => id > 0)
+  const [optionsByMenuId, flavorIdsByBanban] = await Promise.all([
+    loadHallOptionsByMenuIds(menuIds).catch((e) => {
+      console.error('qr_table menus options load:', e)
+      return new Map<number, QrGuestMenuOption[]>()
+    }),
+    loadBanbanFlavorIdsByMenuId(menuIds),
+  ])
 
   const includedMenus = []
   const extraMenus = []
@@ -1547,6 +1596,7 @@ export async function loadQrMenusForSession(session: QrTableSession) {
     const isIncluded = included.has(id)
     const categoryMain = normalizePromotionCategoryMain(m.category_main)
     const category = String(m.category || '').trim()
+    const linkedFlavors = flavorIdsByBanban.get(id)
     const item = {
       id: String(id),
       menuId: id,
@@ -1560,7 +1610,10 @@ export async function loadQrMenusForSession(session: QrTableSession) {
       soldOut,
       buffetIncluded: isIncluded,
       isBanban: m.is_banban === true,
-      banbanFlavorMenuIds: parseBanbanFlavorMenuIds(m.banban_flavor_menu_ids),
+      banbanFlavorMenuIds:
+        linkedFlavors && linkedFlavors.length > 0
+          ? linkedFlavors
+          : parseBanbanFlavorMenuIds(m.banban_flavor_menu_ids),
       optionSelectionGroups: parseOptionSelectionGroups(m.option_selection_groups),
       optionSelectionConfig: parseOptionSelectionConfig(m.option_selection_config),
       options: optionsByMenuId.get(id) || [],
@@ -1577,7 +1630,11 @@ export async function loadQrMenusForSession(session: QrTableSession) {
     if (tierId > 0 && isIncluded) includedMenus.push(item)
     else if (!limitExtras || extraAllow.has(id)) extraMenus.push(item)
   }
-  return { includedMenus, extraMenus, mode: tierId > 0 ? 'buffet' : 'a_la_carte' }
+  return {
+    includedMenus: overlayBanbanFlavorMenuIds(includedMenus, flavorIdsByBanban),
+    extraMenus: overlayBanbanFlavorMenuIds(extraMenus, flavorIdsByBanban),
+    mode: tierId > 0 ? 'buffet' : 'a_la_carte',
+  }
 }
 
 /** POS 결제·취소·환불 시 연결된 QR 세션을 closed 로 전환 (Realtime 영수증과 무관). */
@@ -1636,7 +1693,7 @@ export async function submitQrCart(params: {
     .filter((id) => id > 0)
   const optionLookupIds = [...requestedIds, ...flavorIds]
 
-  const [included, extraAllow, byId, optionsByMenuId, orderRows] = await Promise.all([
+  const [included, extraAllow, byId, optionsByMenuId, flavorIdsByBanban, orderRows] = await Promise.all([
     tierId > 0 ? loadIncludedMenuIdSet(tierId, requestedIds) : Promise.resolve(new Set<number>()),
     tierId > 0
       ? loadExtraMenuAllowForCart(tierId, requestedIds)
@@ -1646,6 +1703,7 @@ export async function submitQrCart(params: {
       console.error('qr_table cart options load:', e)
       return new Map<number, QrGuestMenuOption[]>()
     }),
+    loadBanbanFlavorIdsByMenuId(requestedIds),
     supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
       limit: 1,
       select:
@@ -1714,6 +1772,12 @@ export async function submitQrCart(params: {
       const flavor1 = byId.get(menuId1)
       const flavor2 = byId.get(menuId2)
       if (!flavor1 || !flavor2) throw new Error('banban_flavor_missing')
+      const allowedFlavors = flavorIdsByBanban.get(menuId)
+      if (allowedFlavors && allowedFlavors.length > 0) {
+        if (!allowedFlavors.includes(String(menuId1)) || !allowedFlavors.includes(String(menuId2))) {
+          throw new Error('banban_flavor_missing')
+        }
+      }
       const n1 = String(flavor1.name || '').trim()
       const n2 = String(flavor2.name || '').trim()
       lineName = `${lineName} (${n1} / ${n2})`
@@ -1737,7 +1801,7 @@ export async function submitQrCart(params: {
       optionIds = resolved.optionIds.length ? resolved.optionIds : undefined
     }
     if (!isIncluded) extrasSubtotal += unitPrice * qty
-    const kitchenTag = isIncluded ? 'Buffet' : 'Extra'
+    const guestNote = String(line.note || '').slice(0, 200).trim()
     newLines.push({
       id: `qr-${session.id}-${menuId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       menuId: String(menuId),
@@ -1745,7 +1809,7 @@ export async function submitQrCart(params: {
       price: unitPrice,
       qty,
       quantity: qty,
-      note: [String(line.note || '').slice(0, 200), kitchenTag].filter(Boolean).join(' · '),
+      ...(guestNote ? { note: guestNote } : {}),
       buffetIncluded: isIncluded,
       buffetTierId: tierId || null,
       source: 'qr_table',
@@ -1775,15 +1839,7 @@ export async function submitQrCart(params: {
     : filterKitchenCartLinesForDineInAdd(
         newLines as Parameters<typeof filterKitchenCartLinesForDineInAdd>[0],
         [] as Parameters<typeof filterKitchenCartLinesForDineInAdd>[1]
-      ).map((line) => {
-        const row = line as Record<string, unknown>
-        const includedLine = row.buffetIncluded === true
-        const baseName = String(row.name || '')
-        return {
-          ...row,
-          name: includedLine ? `[Buffet] ${baseName}` : `[Extra] ${baseName}`,
-        }
-      })
+      )
   if (kitchenDelta.length) {
     // 합계 계산·pos_orders UPDATE 보다 먼저 큐에 넣어, 홀 화면보다 주방이 먼저 나가게
     try {
@@ -2087,10 +2143,7 @@ async function finalizeExtrasPrepay(session: QrTableSession & { secretHash?: str
     updated_at: now,
   })
 
-  const toPrint = newlyPrepaid.map((it) => ({
-    ...it,
-    name: `[Extra] ${String(it.name || '')}`,
-  }))
+  const toPrint = newlyPrepaid
   if (toPrint.length) {
     await enqueueKitchenPrintJob({
       storeCode: session.storeCode,

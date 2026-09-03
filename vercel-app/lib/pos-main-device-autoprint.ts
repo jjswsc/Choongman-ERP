@@ -18,7 +18,7 @@ import {
   preparePosOrderItemsForKitchenSlip,
   type KitchenSlipRoutingItem,
 } from '@/lib/pos-kitchen-slip-routing'
-import { mapKitchenSlipGroupItemsForPrint } from '@/lib/pos-kitchen-slip-display'
+import { mapKitchenSlipGroupItemsForPrint, stripQrKitchenSourceBracketTags } from '@/lib/pos-kitchen-slip-display'
 import { mergeGrabOrderItemsForKitchenPrint } from '@/lib/grab-kitchen-print-items'
 import { mapPosOrderRowForKitchenPrint } from '@/lib/pos-kitchen-print-item-map'
 import { mergeSetChildrenForReceipt } from '@/lib/pos-hall-order-receipt-document-html'
@@ -62,6 +62,7 @@ import { buildPosCustomerMemoLineForPrint } from '@/lib/pos-member-portal-takeou
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { escapeHtml } from '@/lib/utils'
 import { posKitchenGuestSpread } from '@/lib/pos-terminal-auto-print'
+import { pickQrGuestNoKitchenLinesForHallPrint } from '@/lib/qr-table-types'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 import type { LangCode } from '@/lib/lang-context'
 import type { PosPricingAdjustments } from '@/lib/pos-pricing'
@@ -269,6 +270,48 @@ function kitchenSlipItemsForPrint(
   })
 }
 
+async function printQrNoKitchenLinesToHall(
+  order: PosOrder,
+  ctx: PosMainDeviceAutoprintCtx,
+  hallLines: Array<Record<string, unknown>>
+): Promise<void> {
+  const orderId = Number(order.id ?? 0)
+  const items: PosOrder['items'] = hallLines.map((it) => ({
+    id: String(it.id ?? '').trim() || `qr-hall-${orderId}`,
+    name: stripQrKitchenSourceBracketTags(String(it.name ?? '')),
+    price: Number(it.price ?? 0) || 0,
+    qty: Number(it.qty ?? it.quantity ?? 1) || 1,
+    ...(String(it.menuId ?? '').trim() ? { menuId: String(it.menuId).trim() } : {}),
+    ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+  }))
+  const drinkSubtotal = items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.qty || 0), 0)
+  const lineIds = items
+    .map((it) => String(it.id ?? '').trim())
+    .filter(Boolean)
+    .sort()
+    .join(',')
+  const payload = {
+    ...hallOrderReceiptPayloadFromPosOrder(
+      {
+        ...order,
+        items,
+        subtotal: drinkSubtotal,
+        total: drinkSubtotal,
+        discountAmt: 0,
+        couponDiscountAmt: 0,
+      },
+      ctx.pricingAdjustments,
+      {
+        ...ctx.posReceiptLineOpts,
+        orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, ctx.t),
+        storeCodeFallback: ctx.storeCode,
+      }
+    ),
+    _autoPrintDedupeKey: `order:${orderId}:hall:qr-nokitchen:${lineIds || '0'}`,
+  }
+  await printHallReceiptPayload(payload, ctx)
+}
+
 function resolveOrderItemDisplayName(
   item: { id?: string; name?: string; menuId?: string; promoId?: string; promoCode?: string },
   ctx: PosMainDeviceAutoprintCtx
@@ -446,7 +489,24 @@ export async function printKitchenForOrder(
       kitchenItemsWithResolvedPromo(items as Record<string, unknown>[], ctx) as typeof items,
       buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
     )
+    const hallLines = pickQrGuestNoKitchenLinesForHallPrint(
+      items as Array<{
+        id?: unknown
+        source?: unknown
+        kitchenPrinter?: number | null
+        isBuffetEntry?: unknown
+      }>,
+      slips.flatMap((slip) => slip.items)
+    )
     if (!slips.length) {
+      if (hallLines.length) {
+        await printQrNoKitchenLinesToHall(order, ctx, hallLines as Array<Record<string, unknown>>)
+        ctx.logPosPrintDebug?.('kitchen_autoprint_qr_hall_only', {
+          orderId,
+          lines: hallLines.length,
+        })
+        return
+      }
       ctx.releaseKitchenAutoPrintKey(kitchenDedupeKey)
       ctx.logPosPrintDebug?.('kitchen_autoprint_skip_empty_slips', { orderId })
       return
@@ -495,6 +555,17 @@ export async function printKitchenForOrder(
       })
       if (idx + 1 < slips.length) {
         await new Promise((resolve) => setTimeout(resolve, resolveBetweenKitchenSlipsDelayMs()))
+      }
+    }
+    if (hallLines.length) {
+      try {
+        await printQrNoKitchenLinesToHall(order, ctx, hallLines as Array<Record<string, unknown>>)
+        ctx.logPosPrintDebug?.('kitchen_autoprint_qr_hall_drinks', {
+          orderId,
+          lines: hallLines.length,
+        })
+      } catch (e) {
+        console.error('qr no-kitchen hall print:', e)
       }
     }
   } catch (e) {

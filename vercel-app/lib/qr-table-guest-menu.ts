@@ -5,6 +5,11 @@ import {
   normalizeBangkokDateTimeCompareKey,
   parseBangkokWallClockToMs,
 } from '@/lib/bangkok-time'
+import {
+  isChickenDefaultOptionName,
+  menuHasChickenSizeProfile,
+} from '@/lib/pos-chicken-option-inference'
+import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
 
 export type QrGuestSentLine = {
   name: string
@@ -272,9 +277,39 @@ export type QrGuestResolvedLineOption =
     }
   | { ok: false; error: string }
 
+/** POS와 같이 S/M/L 치킨은 목록가 = S Boneless. DB에 S 행이 있으면 그걸 쓴다. */
+export function findQrGuestImplicitChickenDefault(
+  options: QrGuestMenuOption[] | null | undefined
+): QrGuestMenuOption | null {
+  const hall = hallSubstitutionQrGuestOptions(options)
+  if (!menuHasChickenSizeProfile(hall)) return null
+  return hall.find((o) => isChickenDefaultOptionName(o.name)) || null
+}
+
+function finishQrGuestLineOption(params: {
+  menuName: string
+  menuPrice: number
+  buffetIncluded: boolean
+  picked: QrGuestMenuOption[]
+}): Extract<QrGuestResolvedLineOption, { ok: true }> {
+  const optionName = params.picked.map((o) => String(o.name || '').trim()).filter(Boolean).join(' - ')
+  const modifier = params.picked.reduce((sum, o) => sum + (Number(o.priceModifier) || 0), 0)
+  const price = params.buffetIncluded ? 0 : Math.max(0, Number(params.menuPrice) || 0) + modifier
+  const first = params.picked[0]
+  return {
+    ok: true,
+    name: optionName ? `${params.menuName} (${optionName})` : params.menuName,
+    price,
+    optionId: first ? String(first.id) : undefined,
+    optionCode: first?.optionCode || undefined,
+    optionName,
+    optionIds: params.picked.map((o) => o.id),
+  }
+}
+
 /**
  * 홀 옵션을 주문 줄에 반영. 뷔페 포함 메뉴는 금액 0, 옵션명만 붙인다.
- * 치환 옵션이 있는 메뉴는 optionIds 필수.
+ * 치환 옵션이 있는 메뉴는 optionIds 필수. 치킨 S/M/L 은 미선택 시 S Boneless(목록 시작가).
  */
 export function resolveQrGuestLineOption(params: {
   menuId: number
@@ -299,24 +334,36 @@ export function resolveQrGuestLineOption(params: {
     if (opt.sellHall === false) return { ok: false, error: `option_not_hall:${id}` }
     picked.push(opt)
   }
-  if (
-    params.requireOption !== false &&
-    required.length > 0 &&
-    picked.filter((o) => (o.optionType || 'substitution') === 'substitution').length === 0
-  ) {
+  const pickedSubs = picked.filter((o) => (o.optionType || 'substitution') === 'substitution')
+  if (params.requireOption !== false && required.length > 0 && pickedSubs.length === 0) {
+    const implicit = findQrGuestImplicitChickenDefault(params.menuOptions)
+    if (implicit) {
+      return finishQrGuestLineOption({
+        menuName,
+        menuPrice: params.menuPrice,
+        buffetIncluded: params.buffetIncluded,
+        picked: [implicit, ...picked],
+      })
+    }
+    if (menuHasChickenSizeProfile(required)) {
+      const optionName = POS_CHICKEN_DEFAULT_OPTION_DISPLAY
+      const additiveMod = picked.reduce((sum, o) => sum + (Number(o.priceModifier) || 0), 0)
+      return {
+        ok: true,
+        name: `${menuName} (${optionName})`,
+        price: params.buffetIncluded ? 0 : Math.max(0, Number(params.menuPrice) || 0) + additiveMod,
+        optionId: undefined,
+        optionCode: undefined,
+        optionName,
+        optionIds: picked.map((o) => o.id),
+      }
+    }
     return { ok: false, error: 'option_required' }
   }
-  const optionName = picked.map((o) => String(o.name || '').trim()).filter(Boolean).join(' - ')
-  const modifier = picked.reduce((sum, o) => sum + (Number(o.priceModifier) || 0), 0)
-  const price = params.buffetIncluded ? 0 : Math.max(0, Number(params.menuPrice) || 0) + modifier
-  const first = picked[0]
-  return {
-    ok: true,
-    name: optionName ? `${menuName} (${optionName})` : menuName,
-    price,
-    optionId: first ? String(first.id) : undefined,
-    optionCode: first?.optionCode || undefined,
-    optionName,
-    optionIds: picked.map((o) => o.id),
-  }
+  return finishQrGuestLineOption({
+    menuName,
+    menuPrice: params.menuPrice,
+    buffetIncluded: params.buffetIncluded,
+    picked,
+  })
 }

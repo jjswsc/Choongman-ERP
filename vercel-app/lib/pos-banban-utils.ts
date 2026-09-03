@@ -248,6 +248,21 @@ export function getBanbanFlavorMenuList(allMenus: PosMenu[], banbanMenu: PosMenu
   return getAutoBanbanFlavorMenuList(allMenus, banbanMenu, { todayStr })
 }
 
+/** POS `pos_banban_flavor_links` 결과를 메뉴 목록에 얹는다. 연결된 맛이 있을 때만 whitelist. */
+export function overlayBanbanFlavorMenuIds<T extends { id?: string; banbanFlavorMenuIds?: string[] }>(
+  menus: T[],
+  idsByBanbanMenuId: Map<number, string[]>
+): T[] {
+  if (!idsByBanbanMenuId.size) return menus
+  return menus.map((menu) => {
+    const id = Number(menu.id || 0)
+    if (!id) return menu
+    const linked = idsByBanbanMenuId.get(id)
+    if (!linked?.length) return menu
+    return { ...menu, banbanFlavorMenuIds: linked }
+  })
+}
+
 export type BanbanKitchenLineLike = {
   id?: string | null
   name?: string | null

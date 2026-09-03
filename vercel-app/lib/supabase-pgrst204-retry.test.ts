@@ -8,4 +8,11 @@ describe('extractPgUndefinedColumn', () => {
     )
     expect(extractPgUndefinedColumn(err)).toBe('join_date')
   })
+
+  it('reads phone from PostgREST 42703 with photo hint', () => {
+    const err = new Error(
+      'Supabase select failed: {"code":"42703","details":null,"hint":"Perhaps you meant to reference the column \\"employees.photo\\".","message":"column employees.phone does not exist"}'
+    )
+    expect(extractPgUndefinedColumn(err)).toBe('phone')
+  })
 })

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import {
+  supabaseInsertWithPgrst204Fallback,
+  supabaseSelectFilterStrippingUnknownColumns,
+  supabaseUpdateByFilterWithPgrst204Fallback,
+} from '@/lib/supabase-pgrst204-retry'
 import { hashPassword, isHashed } from '@/lib/password'
 import {
   isAccountingRole,
@@ -436,64 +441,60 @@ export async function POST(req: NextRequest) {
     let phoneChanged = true
     if (rowId > 0 && inputPhoneNorm) {
       try {
-        const curRows = (await supabaseSelectFilter(
+        const curRows = (await supabaseSelectFilterStrippingUnknownColumns(
           'employees',
           appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'),
-          { limit: 1, select: 'phone' }
+          { limit: 1, select: 'id,phone' },
+          'saveAdminEmployee.currentPhone'
         )) as { phone?: string | null }[]
-        const curNorm = normalizePhoneForMatch(curRows?.[0]?.phone)
-        phoneChanged = curNorm !== inputPhoneNorm
+        if (curRows?.[0] && !Object.prototype.hasOwnProperty.call(curRows[0], 'phone')) {
+          phoneChanged = false
+        } else {
+          const curNorm = normalizePhoneForMatch(curRows?.[0]?.phone)
+          phoneChanged = curNorm !== inputPhoneNorm
+        }
       } catch {
         phoneChanged = true
       }
     }
     if (inputPhoneNorm && phoneChanged) {
       try {
-        const rows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), {
-          select: 'id,phone,deleted_at,employment_status,resign_date',
-          limit: 5000,
-          order: 'id.asc',
-        })) as {
+        const rows = (await supabaseSelectFilterStrippingUnknownColumns(
+          'employees',
+          appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'),
+          {
+            select: 'id,phone,deleted_at,employment_status,resign_date',
+            limit: 5000,
+            order: 'id.asc',
+          },
+          'saveAdminEmployee.phoneDup'
+        )) as {
           id?: number
           phone?: string | null
           deleted_at?: string | null
           employment_status?: string | null
           resign_date?: string | null
         }[]
-        const hasDup = (rows || []).some((r) => {
-          const rid = Number(r.id || 0)
-          if (rowId > 0 && rid === rowId) return false
-          if (String(r.deleted_at || '').trim()) return false
-          const status = normalizeEmploymentStatus(r.employment_status, r.resign_date)
-          if (status === 'resigned') return false
-          return normalizePhoneForMatch(r.phone) === inputPhoneNorm
-        })
-        if (hasDup) {
-          return NextResponse.json(
-            { success: false, code: 'PHONE_DUPLICATE', message: '❌ 이미 사용 중인 전화번호입니다.' },
-            { status: 409, headers }
-          )
+        const phoneColPresent = (rows || []).some((r) => Object.prototype.hasOwnProperty.call(r, 'phone'))
+        if (phoneColPresent) {
+          const hasDup = (rows || []).some((r) => {
+            const rid = Number(r.id || 0)
+            if (rowId > 0 && rid === rowId) return false
+            if (String(r.deleted_at || '').trim()) return false
+            const status = normalizeEmploymentStatus(r.employment_status, r.resign_date)
+            if (status === 'resigned') return false
+            return normalizePhoneForMatch(r.phone) === inputPhoneNorm
+          })
+          if (hasDup) {
+            return NextResponse.json(
+              { success: false, code: 'PHONE_DUPLICATE', message: '❌ 이미 사용 중인 전화번호입니다.' },
+              { status: 409, headers }
+            )
+          }
         }
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (!/deleted_at|employment_status|42703|column/i.test(em)) throw e
-        const rows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), {
-          select: 'id,phone,resign_date',
-          limit: 5000,
-          order: 'id.asc',
-        })) as { id?: number; phone?: string | null; resign_date?: string | null }[]
-        const hasDupFallback = (rows || []).some((r) => {
-          const rid = Number(r.id || 0)
-          if (rowId > 0 && rid === rowId) return false
-          if (String(r.resign_date || '').trim()) return false
-          return normalizePhoneForMatch(r.phone) === inputPhoneNorm
-        })
-        if (hasDupFallback) {
-          return NextResponse.json(
-            { success: false, code: 'PHONE_DUPLICATE', message: '❌ 이미 사용 중인 전화번호입니다.' },
-            { status: 409, headers }
-          )
-        }
       }
     }
 
@@ -553,31 +554,15 @@ export async function POST(req: NextRequest) {
       let insertedRow: Record<string, unknown> | null = null
       for (;;) {
         try {
-          const inserted = (await supabaseInsert('employees', toInsert)) as Record<string, unknown>[] | null
+          const inserted = (await supabaseInsertWithPgrst204Fallback(
+            'employees',
+            toInsert,
+            'saveAdminEmployee.insert'
+          )) as Record<string, unknown>[] | null
           insertedRow = inserted?.[0] ?? null
           break
         } catch (insErr) {
           const em = insErr instanceof Error ? insErr.message : String(insErr)
-          if (/attendance_allowance|42703|column/i.test(em) && 'attendance_allowance' in toInsert) {
-            const { attendance_allowance: _aa, ...rest } = toInsert
-            toInsert = rest
-            continue
-          }
-          if (/employee_code|42703|column/i.test(em) && 'employee_code' in toInsert) {
-            const { employee_code: _ec, ...rest } = toInsert
-            toInsert = rest
-            continue
-          }
-          if (/employment_status|42703|column/i.test(em) && 'employment_status' in toInsert) {
-            const { employment_status: _es, ...rest } = toInsert
-            toInsert = rest
-            continue
-          }
-          if (/extra_stores|42703|column/i.test(em) && 'extra_stores' in toInsert) {
-            const { extra_stores: _xs, ...rest } = toInsert
-            toInsert = rest
-            continue
-          }
           if (/employee_code/i.test(em) && /(duplicate key|23505)/i.test(em)) {
             if (codeRaw) {
               return NextResponse.json(
@@ -645,32 +630,19 @@ export async function POST(req: NextRequest) {
       employment_status?: string | null
     }[] = []
     try {
-      existing = (await supabaseSelectFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), {
-        limit: 1,
-        select:
-          'store,name,sal_type,sal_amt,position_allowance,haz_allow,employee_code,job,role,phone,resign_date,employment_status',
-      })) as typeof existing
+      existing = (await supabaseSelectFilterStrippingUnknownColumns(
+        'employees',
+        appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'),
+        {
+          limit: 1,
+          select:
+            'store,name,sal_type,sal_amt,position_allowance,haz_allow,employee_code,job,role,phone,resign_date,employment_status',
+        },
+        'saveAdminEmployee.existing'
+      )) as typeof existing
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
-      if (!/employment_status|42703|column/i.test(em)) throw e
-    }
-    if (!existing || existing.length === 0) {
-      existing = (await supabaseSelectFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), {
-        limit: 1,
-        select: 'store,name,sal_type,sal_amt,position_allowance,haz_allow,employee_code,job,role,phone,resign_date',
-      })) as {
-        store?: string
-        name?: string
-        sal_type?: string
-        sal_amt?: number
-        position_allowance?: number
-        haz_allow?: number
-        employee_code?: string | null
-        job?: string | null
-        role?: string | null
-        phone?: string | null
-        resign_date?: string | null
-      }[]
+      if (!/42703|column/i.test(em)) throw e
     }
     const old = existing?.[0]
     if (!old) {
@@ -727,23 +699,21 @@ export async function POST(req: NextRequest) {
 
     if (passwordValue) payload.password = passwordValue
     try {
-      await supabaseUpdateByFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), stampSaasTenantId(payload, tenantScope, 'employees'))
+      await supabaseUpdateByFilterWithPgrst204Fallback(
+        'employees',
+        appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'),
+        stampSaasTenantId(payload, tenantScope, 'employees'),
+        'saveAdminEmployee.update'
+      )
     } catch (updErr) {
       const em = updErr instanceof Error ? updErr.message : String(updErr)
-      if (/attendance_allowance|42703|column/i.test(em)) {
-        const { attendance_allowance: _aa, ...withoutAa } = payload
-        await supabaseUpdateByFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), stampSaasTenantId(withoutAa, tenantScope, 'employees'))
-      } else if (/employment_status|42703|column/i.test(em)) {
-        const { employment_status: _es, ...withoutStatus } = payload
-        await supabaseUpdateByFilter('employees', appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'), stampSaasTenantId(withoutStatus, tenantScope, 'employees'))
-      } else if (/employee_code/i.test(em) && /(duplicate key|23505)/i.test(em)) {
+      if (/employee_code/i.test(em) && /(duplicate key|23505)/i.test(em)) {
         return NextResponse.json(
           { success: false, code: 'EMPLOYEE_CODE_DUPLICATE', message: '❌ 이미 사용 중인 직원 코드입니다.' },
           { status: 409, headers }
         )
-      } else {
-        throw updErr
       }
+      throw updErr
     }
 
     if (salaryChanged) {

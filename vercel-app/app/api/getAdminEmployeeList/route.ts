@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelectPageCap } from '@/lib/supabase-server'
+import { supabaseSelectPageCap } from '@/lib/supabase-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { isOfficeStore, OFFICE_STORES, isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import { requireAuth } from '@/lib/verify-auth'
@@ -104,51 +105,23 @@ export async function GET(req: NextRequest) {
     /** photo·id_card_photo(base64)는 목록에서 제외 — 편집 시 /api/getAdminEmployeeMedia lazy load */
     const empSelectFull =
       'id,store,name,nick,name_title,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,tax_id,sso_number,sso_exempt,can_manage_office_payroll,address,bank_name,account_number,position_allowance,haz_allow,attendance_allowance,grade,extra_stores,employee_code,employment_status,deleted_at'
-    const empSelectFullNoStatus = empSelectFull.replace(',employment_status,deleted_at', '')
-    const empSelectFallback =
-      'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,employee_code'
-    /** employee_code 컬럼 미배포 DB용 */
-    const empSelectFallbackNoEmpCode =
-      'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade'
     let rows: Record<string, unknown>[] | null = null
-    const empSelectFullNoExtra = empSelectFull.replace(',extra_stores', '')
-    const empSelectFullNoSsoExempt = empSelectFull.replace(',sso_exempt', '')
-    const empSelectFullNoOfficePayroll = empSelectFull.replace(',can_manage_office_payroll', '')
-    const empSelectFullNoExtraNoSsoExempt = empSelectFullNoExtra.replace(',sso_exempt', '')
-    const empSelectFullNoStatusNoSsoExempt = empSelectFullNoStatus.replace(',sso_exempt', '')
-    const empSelectFullNoStatusNoExtra = empSelectFullNoStatus.replace(',extra_stores', '')
-    const empSelectCandidates = [
-      empSelectFull,
-      empSelectFullNoStatus,
-      empSelectFullNoOfficePayroll,
-      empSelectFullNoSsoExempt,
-      empSelectFullNoExtra,
-      empSelectFullNoExtraNoSsoExempt,
-      empSelectFullNoStatusNoSsoExempt,
-      empSelectFullNoStatusNoExtra,
-      empSelectFallback,
-      empSelectFallbackNoEmpCode,
-    ]
-    let loadErr: unknown = null
     const empFetchLimit = supabaseSelectPageCap()
-    for (const sel of empSelectCandidates) {
-      try {
-        rows = (await supabaseSelectFilter('employees', appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'), { order: 'id.asc', select: sel, limit: empFetchLimit })) as Record<
-          string,
-          unknown
-        >[] | null
-        loadErr = null
-        break
-      } catch (e) {
-        if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
-          // tenant_id 컬럼 자체가 없을 때만 중단. 다른 컬럼 PGRST204는 아래 후보 select로 재시도.
-          markSaasTenantColumnMissing('employees')
-          return NextResponse.json({ list: [], stores: [], jobOptions: [] }, { headers })
-        }
-        loadErr = e
+    try {
+      rows = (await supabaseSelectFilterStrippingUnknownColumns(
+        'employees',
+        appendSaasTenantFilter('id=gt.0', tenantScope, 'employees'),
+        { order: 'id.asc', select: empSelectFull, limit: empFetchLimit },
+        'getAdminEmployeeList'
+      )) as Record<string, unknown>[] | null
+    } catch (e) {
+      if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+        // tenant_id 컬럼 자체가 없을 때만 중단. 다른 컬럼 42703/PGRST204는 stripping 재시도.
+        markSaasTenantColumnMissing('employees')
+        return NextResponse.json({ list: [], stores: [], jobOptions: [] }, { headers })
       }
+      throw e
     }
-    if (loadErr) throw loadErr
     const role = effectiveRole
     const list: Record<string, unknown>[] = []
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   aggregateQrGuestSentLines,
   extractQrGuestOptionIds,
+  findQrGuestImplicitChickenDefault,
   groupQrGuestSentLinesByTime,
   qrGuestMenuNeedsOptionPicker,
   resolveQrGuestLineOption,
@@ -121,13 +122,71 @@ describe('resolveQrGuestLineOption', () => {
     { id: 8, menuId: 11, name: 'M - Boneless', optionCode: 'C011-1', priceModifier: 0, optionType: 'substitution' as const, sortOrder: 1 },
   ]
 
-  it('requires an option when the menu has substitutions', () => {
+  it('uses implicit S Boneless when chicken M options exist but none were picked', () => {
     const r = resolveQrGuestLineOption({
       menuId: 11,
-      menuName: 'Soy Sauce Chicken',
-      menuPrice: 199,
+      menuName: 'CURRY Bar.B.Q FRIED CHICKEN',
+      menuPrice: 149,
       buffetIncluded: false,
       menuOptions: options,
+      optionIds: [],
+    })
+    expect(r).toMatchObject({
+      ok: true,
+      name: 'CURRY Bar.B.Q FRIED CHICKEN (S Boneless)',
+      price: 149,
+      optionName: 'S Boneless',
+    })
+  })
+
+  it('attaches the S - Boneless option id when that row exists', () => {
+    const withS = [
+      {
+        id: 9,
+        menuId: 11,
+        name: 'S - Boneless',
+        optionCode: 'C011-0',
+        priceModifier: 0,
+        optionType: 'substitution' as const,
+        sortOrder: 0,
+      },
+      ...options,
+    ]
+    expect(findQrGuestImplicitChickenDefault(withS)?.id).toBe(9)
+    const r = resolveQrGuestLineOption({
+      menuId: 11,
+      menuName: 'CURRY Bar.B.Q FRIED CHICKEN',
+      menuPrice: 149,
+      buffetIncluded: false,
+      menuOptions: withS,
+      optionIds: [],
+    })
+    expect(r).toMatchObject({
+      ok: true,
+      name: 'CURRY Bar.B.Q FRIED CHICKEN (S - Boneless)',
+      price: 149,
+      optionId: '9',
+      optionIds: [9],
+    })
+  })
+
+  it('still requires an option for non-chicken substitutions', () => {
+    const r = resolveQrGuestLineOption({
+      menuId: 5,
+      menuName: 'Coke',
+      menuPrice: 30,
+      buffetIncluded: false,
+      menuOptions: [
+        {
+          id: 1,
+          menuId: 5,
+          name: 'Large',
+          optionCode: 'L',
+          priceModifier: 10,
+          optionType: 'substitution',
+          sortOrder: 1,
+        },
+      ],
       optionIds: [],
     })
     expect(r.ok).toBe(false)

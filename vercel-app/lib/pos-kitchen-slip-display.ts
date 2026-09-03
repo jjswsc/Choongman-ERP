@@ -15,6 +15,7 @@ import {
   isBanbanKitchenLine,
   parseBanbanFlavorsFromDisplayName,
 } from '@/lib/pos-banban-utils'
+import { stripQrBuffetKitchenTagsFromNote } from '@/lib/pos-guest-bill-buffet-print'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import {
   isLikelyPosMenuSkuCode,
@@ -49,13 +50,34 @@ function stripOneLeadingBracketTag(raw: string): string {
     .trim()
 }
 
+/** QR 주방 접두 `[Extra]`/`[Buffet]` — 세트 부모로 오인되면 Banban이 Extra로 찍힌다 */
+export function stripQrKitchenSourceBracketTags(rawName: string): string {
+  return String(rawName ?? '')
+    .replace(/\[(?:extra|buffet)\]\s*/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function normalizeQrKitchenSlipItem<T extends KitchenSlipRoutingItem>(it: T): T {
+  const nextName = stripQrKitchenSourceBracketTags(String(it.name ?? ''))
+  const nextNote = stripQrBuffetKitchenTagsFromNote(String(it.note ?? ''))
+  const nameChanged = nextName !== String(it.name ?? '').trim()
+  const noteChanged = nextNote !== String(it.note ?? '').trim()
+  if (!nameChanged && !noteChanged) return it
+  return {
+    ...it,
+    ...(nameChanged ? { name: nextName } : {}),
+    ...(noteChanged ? { note: nextNote || undefined } : {}),
+  }
+}
+
 /** `[CODE] [세트명] 구성메뉴` 또는 `[세트명] 구성메뉴` 분리 */
 export function parseKitchenSplitPromoLineName(rawName: string): {
   codePrefix: string
   parentLabel: string
   childLabel: string
 } | null {
-  let rest = String(rawName ?? '').trim()
+  let rest = stripQrKitchenSourceBracketTags(rawName)
   if (!rest) return null
   let codePrefix = ''
   const codeLead = rest.match(/^(\[[^\]]+\]\s*)(?=\[)/u)
@@ -466,7 +488,7 @@ export function buildKitchenHallStyleSlipLines(
   }
   const menuCodeByMenuId = opts?.menuCodeByMenuId
   const formatItemNoteForPrint = (note: string): string | undefined => {
-    const raw = String(note ?? '').trim()
+    const raw = stripQrBuffetKitchenTagsFromNote(String(note ?? '').trim())
     if (!raw) return undefined
     if (grabInbound) {
       const lines = collectGrabPrintOptionLines({
@@ -510,10 +532,14 @@ export function buildKitchenHallStyleSlipLines(
   const promoGroups = new Map<string, PromoGroup>()
   const regular: KitchenSlipRoutingItem[] = []
 
-  for (const it of slipItems) {
+  for (const raw of slipItems) {
+    const it = normalizeQrKitchenSlipItem(raw)
     const groupId = String((it as { kitchenPromoGroupId?: string }).kitchenPromoGroupId ?? '').trim()
     const metaParent = String((it as { kitchenPromoParentName?: string }).kitchenPromoParentName ?? '').trim()
     let parsed = parseKitchenSplitPromoLineName(String(it.name ?? ''))
+    if (parsed && /^(extra|buffet)$/i.test(parsed.parentLabel.trim())) {
+      parsed = null
+    }
     // `withKitchenCodeName`이 단품에도 `[메뉴코드]` 접두를 붙이므로
     // `[SC001] SOY SAUCE CHICKEN (S Boneless)` 같은 단품이 promo 부모(SC001)로 오인되어
     // 같은 코드의 다른 사이즈끼리 한 줄로 합쳐지는 문제를 막는다.

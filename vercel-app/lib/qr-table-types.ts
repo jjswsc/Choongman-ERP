@@ -1,6 +1,7 @@
 /** Shared types for QR table order + buffet (client + server). */
 
 import { parseBangkokWallClockToMs } from '@/lib/bangkok-time'
+import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 
 export type QrOrderMode = 'buffet' | 'a_la_carte' | 'both'
 export type QrPaymentMode = 'prepay' | 'postpay' | 'guest_choice'
@@ -134,6 +135,30 @@ export function excludeQrTableGuestOrderLines<T extends { source?: unknown; id?:
   lines: T[] | null | undefined
 ): T[] {
   return (lines || []).filter((it) => !isQrTableGuestOrderLine(it))
+}
+
+/**
+ * QR 손님 줄 중 주방 미인쇄(kitchen_printer=0, 음료 등)만 홀(หน้าร้าน) 전표로 보낸다.
+ * 이미 주방 슬립에 들어간 줄·뷔페 입장료는 제외.
+ */
+export function pickQrGuestNoKitchenLinesForHallPrint<
+  T extends {
+    id?: unknown
+    source?: unknown
+    kitchenPrinter?: number | null
+    isBuffetEntry?: unknown
+  },
+>(allLines: T[], kitchenSlipItems: Array<{ id?: unknown }>): T[] {
+  const printedIds = new Set(
+    (kitchenSlipItems || []).map((it) => String(it.id ?? '').trim()).filter(Boolean)
+  )
+  return (allLines || []).filter((it) => {
+    if (!isQrTableGuestOrderLine(it)) return false
+    if (isQrBuffetPackageKitchenSkipLine(it)) return false
+    const id = String(it.id ?? '').trim()
+    if (id && printedIds.has(id)) return false
+    return Number(it.kitchenPrinter) === 0
+  })
 }
 
 /**

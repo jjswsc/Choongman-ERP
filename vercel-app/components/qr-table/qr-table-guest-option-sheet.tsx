@@ -18,7 +18,7 @@ import {
   isBanbanFlavorWhitelistMissing,
   isBanbanMenu,
 } from '@/lib/pos-banban-utils'
-import { extractQrGuestOptionIds } from '@/lib/qr-table-guest-menu'
+import { extractQrGuestOptionIds, findQrGuestImplicitChickenDefault } from '@/lib/qr-table-guest-menu'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 
 export type QrGuestOptionPick = {
@@ -193,11 +193,11 @@ export function QrTableGuestOptionSheet({
               optionPickerSelections={optionPickerSelections}
               showMenuDescriptions={false}
               descriptionChannel="dine_in"
-              showDefaultButton={false}
+              showDefaultButton
               storeCode={storeCode}
               getMenuPrice={(m) => (buffetIncluded ? 0 : Number(m.price) || 0)}
               getOptionModifier={(opt) => (buffetIncluded ? 0 : Number(opt.priceModifier) || 0)}
-              formatPrice={(n) => `฿${Math.round(n).toLocaleString()}`}
+              formatPrice={(n) => Math.round(n).toLocaleString()}
               t={(key) => {
                 const map: Record<string, string> = {
                   posOptionGroupSize: 'optionGroupSize',
@@ -208,7 +208,7 @@ export function QrTableGuestOptionSheet({
                   posOptionGroupSide: 'optionGroupSide',
                   posOptionGroupDrink: 'optionGroupDrink',
                   posBarBqPickSizeFirst: 'pickSizeThenSide',
-                  posOptionDefault: 'optionDefault',
+                  posOptionDefault: 'optionSBoneless',
                   optional: 'optional',
                   skip: 'skipOption',
                   posBack: 'optionBack',
@@ -221,11 +221,27 @@ export function QrTableGuestOptionSheet({
               translateChickenPartLabel={(name) => name}
               resolveCartDisplayName={(m, opt) => resolvePosCartOptionDisplayName(m, opt, storeCode || undefined)}
               onAddToCart={(_m, opt, defaultDisplay) => {
-                const optionIds = extractQrGuestOptionIds(opt, pendingSizeOpt)
+                let optionIds = extractQrGuestOptionIds(opt, pendingSizeOpt)
                 const optionName =
                   (opt ? resolvePosCartOptionDisplayName(pickerMenu, opt, storeCode || undefined) : '') ||
                   defaultDisplay ||
                   ''
+                if (optionIds.length === 0 && defaultDisplay) {
+                  const implicit = findQrGuestImplicitChickenDefault(
+                    options.map((o) => ({
+                      id: Math.floor(Number(o.id) || 0),
+                      menuId: Math.floor(Number(o.menuId) || 0),
+                      name: o.name,
+                      optionCode: String(o.optionCode || ''),
+                      priceModifier: Number(o.priceModifier) || 0,
+                      optionType: o.optionType === 'additive' ? 'additive' : 'substitution',
+                      sortOrder: Number(o.sortOrder) || 0,
+                      optionStepValues: o.optionStepValues,
+                      sellHall: o.sellHall !== false,
+                    }))
+                  )
+                  if (implicit) optionIds = [implicit.id]
+                }
                 if (options.some((o) => o.optionType !== 'additive') && optionIds.length === 0 && !defaultDisplay) {
                   return
                 }
