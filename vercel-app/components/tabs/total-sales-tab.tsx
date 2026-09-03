@@ -67,24 +67,30 @@ import {
 
 type PeriodPreset = "today" | "month" | "custom"
 
-type LevelDef = { id: PosSalesHierarchyLevel; labelKey: string; fallback: string }
-
-const DEFAULT_LEVELS: LevelDef[] = [
+const LEVELS: { id: PosSalesHierarchyLevel; labelKey: string; fallback: string }[] = [
   { id: "main", labelKey: "totalSalesLevelMain", fallback: "대분류" },
   { id: "category", labelKey: "totalSalesLevelCategory", fallback: "카테고리" },
   { id: "menu", labelKey: "totalSalesLevelMenu", fallback: "메인 메뉴" },
   { id: "option", labelKey: "totalSalesLevelOption", fallback: "옵션" },
 ]
 
-type LevelOrderPreset = "default" | "option_first"
-
-const LEVEL_ORDER_PRESETS: { id: LevelOrderPreset; labelKey: string; fallback: string; order: PosSalesHierarchyLevel[] }[] = [
-  { id: "default", labelKey: "totalSalesOrderDefault", fallback: "대분류 → 카테고리 → 메뉴 → 옵션", order: ["main", "category", "menu", "option"] },
-  { id: "option_first", labelKey: "totalSalesOrderOptionFirst", fallback: "옵션 → 메뉴 → 카테고리 → 대분류", order: ["option", "menu", "category", "main"] },
-]
-
-function buildLevelsForOrder(order: PosSalesHierarchyLevel[]): LevelDef[] {
-  return order.map((id) => DEFAULT_LEVELS.find((l) => l.id === id)!).filter(Boolean)
+/**
+ * 옵션 레벨 행("메뉴명 — 옵션명")을 옵션명만으로 재집계.
+ * 예: "양념치킨 — 순살" + "간장치킨 — 순살" → "순살" 합산 1행.
+ */
+function aggregateByOptionName(optionRows: PosSalesHierarchyRow[]): PosSalesHierarchyRow[] {
+  const map = new Map<string, { qty: number; sales: number }>()
+  for (const row of optionRows) {
+    const dashIdx = row.label.indexOf(" — ")
+    const optName = dashIdx >= 0 ? row.label.slice(dashIdx + 3).trim() : row.label
+    const bucket = map.get(optName) ?? { qty: 0, sales: 0 }
+    bucket.qty += row.qty
+    bucket.sales += row.sales
+    map.set(optName, bucket)
+  }
+  return [...map.entries()]
+    .map(([name, b]) => ({ key: `optgrp::${name}`, label: name, qty: b.qty, sales: b.sales }))
+    .sort((a, b) => b.sales - a.sales || b.qty - a.qty)
 }
 
 const CHART_COLORS = [...ADMIN_CHART_COLORS]
@@ -172,13 +178,9 @@ export function TotalSalesTab() {
   const [searchAnd, setSearchAnd] = React.useState(false)
   const [orderTypesKey, setOrderTypesKey] = React.useState("")
   const [compareChannels, setCompareChannels] = React.useState(false)
-  const [levelOrderPreset, setLevelOrderPreset] = React.useState<LevelOrderPreset>("default")
-  const orderedLevels = React.useMemo(() => {
-    const preset = LEVEL_ORDER_PRESETS.find((p) => p.id === levelOrderPreset) ?? LEVEL_ORDER_PRESETS[0]!
-    return buildLevelsForOrder(preset.order)
-  }, [levelOrderPreset])
   const [level, setLevel] = React.useState<PosSalesHierarchyLevel>("menu")
   const [drillFilter, setDrillFilter] = React.useState<PosSalesDrillFilter>({})
+  const [optionGroupMode, setOptionGroupMode] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [exporting, setExporting] = React.useState(false)
   const [truncated, setTruncated] = React.useState(false)
@@ -638,10 +640,13 @@ export function TotalSalesTab() {
 
   const drillToChildLevel = React.useCallback(
     (row: Pick<PosSalesHierarchyRow, "label" | "categoryMain" | "category">) => {
-      const order = (LEVEL_ORDER_PRESETS.find((p) => p.id === levelOrderPreset) ?? LEVEL_ORDER_PRESETS[0]!).order
-      const curIdx = order.indexOf(level)
-      if (curIdx < 0 || curIdx >= order.length - 1) return
-      const child = order[curIdx + 1]!
+      const next: Partial<Record<PosSalesHierarchyLevel, PosSalesHierarchyLevel>> = {
+        main: "category",
+        category: "menu",
+        menu: "option",
+      }
+      const child = next[level]
+      if (!child) return
       setLevel(child)
       setDrillFilter(() => {
         if (level === "main") return { main: row.label }
@@ -663,7 +668,7 @@ export function TotalSalesTab() {
       setSearch(row.label)
       setSearchAnd(false)
     },
-    [level, levelOrderPreset]
+    [level]
   )
 
   /** 매출관리 등에서 ?start&end&stores 딥링크로 들어온 경우만 1회 자동 조회 */
@@ -696,9 +701,12 @@ export function TotalSalesTab() {
   }, [compareChannels, hasQueried, canQuery, startStr, endStr])
 
   const activeRows = React.useMemo(() => {
+    if (optionGroupMode) {
+      return aggregateByOptionName(levelsData?.option ?? [])
+    }
     const rows = levelsData?.[level] ?? []
     return filterHierarchyRowsByDrill(rows, level, drillFilter)
-  }, [levelsData, level, drillFilter])
+  }, [levelsData, level, drillFilter, optionGroupMode])
   const compareRows = React.useMemo(() => {
     if (!compareChannels || !byOrderTypeLevels) return []
     const rows = buildHierarchyChannelCompareRows(level, byOrderTypeLevels, compareChannelsList)
@@ -711,12 +719,8 @@ export function TotalSalesTab() {
         { qty: 0, sales: 0 }
       )
     : sumHierarchyRows(activeRows)
-  const levelLabel = DEFAULT_LEVELS.find((l) => l.id === level)?.fallback ?? level
-  const canDrillDown = React.useMemo(() => {
-    const order = (LEVEL_ORDER_PRESETS.find((p) => p.id === levelOrderPreset) ?? LEVEL_ORDER_PRESETS[0]!).order
-    const idx = order.indexOf(level)
-    return idx >= 0 && idx < order.length - 1
-  }, [level, levelOrderPreset])
+  const levelLabel = LEVELS.find((l) => l.id === level)?.fallback ?? level
+  const canDrillDown = level !== "option" && !optionGroupMode
 
   const compareChartRows = React.useMemo(() => {
     if (!compareChannels || compareRows.length === 0) return []
@@ -1166,7 +1170,7 @@ export function TotalSalesTab() {
             <div className="rounded-lg border p-3">
               <h3 className="mb-2 text-sm font-semibold">
                 {tr("totalSalesChartChannelCompare", "채널별 매출 비교")} (
-                {tr(DEFAULT_LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)})
+                {tr(LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)})
               </h3>
               <div className="h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1232,7 +1236,7 @@ export function TotalSalesTab() {
               </div>
               <div className="rounded-lg border p-3">
                 <h3 className="mb-2 text-sm font-semibold">
-                  {tr("totalSalesChartItems", "품목")} ({tr(DEFAULT_LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)})
+                  {tr("totalSalesChartItems", "품목")} ({tr(LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)})
                 </h3>
                 {itemChartRows.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
@@ -1279,37 +1283,33 @@ export function TotalSalesTab() {
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2 border-b pb-2">
-            <select
-              className="h-8 rounded-md border bg-background px-2 text-sm"
-              value={levelOrderPreset}
-              onChange={(e) => {
-                const next = e.target.value as LevelOrderPreset
-                setLevelOrderPreset(next)
-                const nextOrder = (LEVEL_ORDER_PRESETS.find((p) => p.id === next) ?? LEVEL_ORDER_PRESETS[0]!).order
-                setLevel(nextOrder[0]!)
-                setDrillFilter({})
-                setSearch("")
-              }}
-              aria-label={tr("totalSalesLevelOrder", "집계 순서")}
-            >
-              {LEVEL_ORDER_PRESETS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {tr(p.labelKey, p.fallback)}
-                </option>
-              ))}
-            </select>
-            <span className="hidden h-4 w-px bg-border sm:inline-block" aria-hidden />
-            {orderedLevels.map((lv) => (
+            {LEVELS.map((lv) => (
               <Button
                 key={lv.id}
                 type="button"
                 size="sm"
-                variant={level === lv.id ? "default" : "outline"}
-                onClick={() => setLevel(lv.id)}
+                variant={!optionGroupMode && level === lv.id ? "default" : "outline"}
+                onClick={() => {
+                  setOptionGroupMode(false)
+                  setLevel(lv.id)
+                }}
               >
                 {tr(lv.labelKey, lv.fallback)}
               </Button>
             ))}
+            <span className="hidden h-4 w-px bg-border sm:inline-block" aria-hidden />
+            <Button
+              type="button"
+              size="sm"
+              variant={optionGroupMode ? "default" : "outline"}
+              onClick={() => {
+                setOptionGroupMode(true)
+                setDrillFilter({})
+                setSearch("")
+              }}
+            >
+              {tr("totalSalesOptionGroupMode", "옵션별 합산")}
+            </Button>
           </div>
 
           {truncated ? (
@@ -1323,7 +1323,7 @@ export function TotalSalesTab() {
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span className="text-muted-foreground">
-              {tr("totalSalesActiveLevel", "집계 단위")}: {tr(DEFAULT_LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)}
+              {tr("totalSalesActiveLevel", "집계 단위")}: {optionGroupMode ? tr("totalSalesOptionGroupMode", "옵션별 합산") : tr(LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)}
             </span>
             <span className="font-erp-numeric">
               {tr("totalSalesTableTotal", "합계")}: {tr("totalSalesQtyUnit", "수량")} {totals.qty.toLocaleString()} · ฿
