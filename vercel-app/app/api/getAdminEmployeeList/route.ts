@@ -141,6 +141,7 @@ export async function GET(req: NextRequest) {
         break
       } catch (e) {
         if (tenantScope.enforce && isMissingSaasTenantColumnError(e)) {
+          // tenant_id 컬럼 자체가 없을 때만 중단. 다른 컬럼 PGRST204는 아래 후보 select로 재시도.
           markSaasTenantColumnMissing('employees')
           return NextResponse.json({ list: [], stores: [], jobOptions: [] }, { headers })
         }

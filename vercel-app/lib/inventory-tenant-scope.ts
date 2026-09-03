@@ -3,6 +3,7 @@
  * 충만 레거시 DB: 필터 생략.
  */
 import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
+import { isMissingTenantIdColumnError } from '@/lib/missing-tenant-id-column-error'
 import { deriveTenantIdFromCompany, normalizeTenantId } from '@/lib/tenant-context'
 import { appendTenantFilter, buildTenantFilter } from '@/lib/supabase-server'
 import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
@@ -19,8 +20,7 @@ export function markInventoryTenantIdColumnMissing(): void {
 }
 
 export function isMissingInventoryTenantIdColumnError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err || '')
-  return /42703|PGRST204|tenant_id.*does not exist|column.*tenant_id/i.test(msg)
+  return isMissingTenantIdColumnError(err)
 }
 
 export async function resolveInventoryTenantScope(params: {

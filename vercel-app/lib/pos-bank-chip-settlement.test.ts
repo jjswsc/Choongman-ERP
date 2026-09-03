@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendBankChipNote,
+  applyBankDepositCategorySelect,
+  BANK_DEPOSIT_QR_CHIP_SELECT_VALUE,
   bankChannelSettlementRowAction,
   bankChipSavePatch,
+  bankDepositCategorySelectValue,
   channelFeeSettleDateCandidates,
   channelSettlementAllowsReceivableReceive,
   depositCategoryForPosBankChip,
@@ -69,6 +72,41 @@ describe('pos-bank-chip-settlement', () => {
       category: 'cash_to_bank',
     })
     expect(bankChipSavePatch({ phrase: 'store sales QR', transType: 'withdraw' })).toEqual({})
+  })
+
+  it('shows QR in the POS store category dropdown without saving revenue_qr', () => {
+    expect(
+      bankDepositCategorySelectValue({
+        category: 'receivable_receive',
+        hidePosRevenue: true,
+        note: 'store sales QR',
+      })
+    ).toBe(BANK_DEPOSIT_QR_CHIP_SELECT_VALUE)
+    expect(
+      applyBankDepositCategorySelect({
+        value: BANK_DEPOSIT_QR_CHIP_SELECT_VALUE,
+        transType: 'deposit',
+        accountStore: 'CM Silom',
+        currentNote: '',
+      })
+    ).toEqual({
+      category: 'receivable_receive',
+      note: 'store sales QR',
+      storeName: 'CM Silom',
+    })
+    expect(
+      applyBankDepositCategorySelect({
+        value: 'other_income',
+        currentNote: 'store sales QR',
+      })
+    ).toEqual({ category: 'other_income', note: '' })
+    expect(
+      bankDepositCategorySelectValue({
+        category: 'other_income',
+        hidePosRevenue: true,
+        memo: 'QR PAYMENT',
+      })
+    ).toBe('other_income')
   })
 
   it('tries sales date then T-1 then same-day for fee settle dates', () => {

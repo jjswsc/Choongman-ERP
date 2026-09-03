@@ -187,7 +187,7 @@ export function resolveTaxInvoiceClientFromPoBillTo(
   return resolvedClient
 }
 
-/** 일괄 인쇄 상한 — sessionStorage·순번 예약·브라우저 인쇄 미리보기 부담 */
+/** 일괄 인쇄 상한 — sessionStorage·순번 예약·브라우저 인쇄 미리보기 부담. 팝업 1창이라 5건 제한은 없음. */
 export const RECEIVABLE_TAX_INVOICE_PRINT_MAX_BATCH = 50
 
 export type ReceivableTaxInvoicePrintRow = {

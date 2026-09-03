@@ -128,8 +128,11 @@ import {
 import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlement-dialog"
 import {
   appendBankChipNote,
+  applyBankDepositCategorySelect,
+  BANK_DEPOSIT_QR_CHIP_SELECT_VALUE,
   bankChannelSettlementRowAction,
   bankChipSavePatch,
+  bankDepositCategorySelectValue,
   inferPosBankChipKind,
   settlementChannelForPosBankChip,
 } from "@/lib/pos-bank-chip-settlement"
@@ -2002,6 +2005,7 @@ export function BankTransactionsTab() {
 
   const getCategoryLabel = (cat: string, transType: string) => {
     const depositMap: Record<string, string> = {
+      [BANK_DEPOSIT_QR_CHIP_SELECT_VALUE]: t("bankDepositChipQr") || "QR",
       revenue_delivery: t("bankRevenueDelivery") || "Delivery App",
       revenue_card: t("bankRevenueCard") || "Card",
       revenue_qr: t("bankRevenueQr") || "QR/Transfer",
@@ -2029,8 +2033,15 @@ export function BankTransactionsTab() {
     return transType === "deposit" ? (depositMap[cat] ?? cat) : (withdrawMap[cat] ?? cat)
   }
 
-  const renderDepositCategorySelectItems = (currentCategory: string, hidePosRevenue: boolean) => (
+  const renderDepositCategorySelectItems = (
+    currentCategory: string,
+    hidePosRevenue: boolean,
+    opts?: { includeQrChip?: boolean }
+  ) => (
     <>
+      {hidePosRevenue && opts?.includeQrChip !== false ? (
+        <SelectItem value={BANK_DEPOSIT_QR_CHIP_SELECT_VALUE}>{t("bankDepositChipQr") || "QR"}</SelectItem>
+      ) : null}
       {filterBankDepositUiCategories({ hidePosRevenue, currentCategory }).map((value) => (
         <SelectItem key={value} value={value}>
           {getCategoryLabel(value, "deposit")}
@@ -2988,18 +2999,41 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   </Select>
                                 ) : (
                                   <Select
-                                    value={bankDepositLoanCategorySelectValue(cat)}
+                                    value={bankDepositCategorySelectValue({
+                                      category: cat,
+                                      hidePosRevenue: hidePosRevenueCategories,
+                                      memo: r.memo,
+                                      note:
+                                        edits?.note !== undefined
+                                          ? edits.note
+                                          : bankNoteUserDisplayText(r.note ?? ""),
+                                    })}
                                     onValueChange={(v) => {
                                       if (!r.id) return
+                                      const currentNote =
+                                        edits?.note !== undefined
+                                          ? edits.note ?? ""
+                                          : bankNoteUserDisplayText(r.note ?? "")
+                                      const applied = applyBankDepositCategorySelect({
+                                        value: v,
+                                        transType: r.transType,
+                                        accountStore: selectedAccountStore,
+                                        currentNote,
+                                      })
                                       const mergedEdits = patchCategoryEditsForAdvance(
-                                        { ...(queryRowEdits[r.id] || {}), category: v },
-                                        v
+                                        {
+                                          ...(queryRowEdits[r.id] || {}),
+                                          category: applied.category,
+                                          ...(applied.note !== undefined ? { note: applied.note } : {}),
+                                          ...(applied.storeName ? { storeName: applied.storeName } : {}),
+                                        },
+                                        applied.category
                                       )
                                       setQueryRowEdits((prev) => ({ ...prev, [r.id!]: mergedEdits }))
                                       const effectiveStoreName = (mergedEdits.storeName ?? r.storeName ?? "").trim()
-                                      if (v === "receivable_receive" && effectiveStoreName) {
+                                      if (applied.category === "receivable_receive" && effectiveStoreName) {
                                         void handleQueryRowSave(r, mergedEdits)
-                                      } else if (v === "advance" && prepaymentSubject?.id) {
+                                      } else if (applied.category === "advance" && prepaymentSubject?.id) {
                                         void handleQueryRowSave(r, mergedEdits)
                                       }
                                     }}
@@ -3699,8 +3733,30 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           ) : (
                             <div className="space-y-1">
                               <Select
-                                value={bankDepositLoanCategorySelectValue(impRaw)}
-                                onValueChange={(v) => setImportRowEdit(idx, "category", v)}
+                                value={bankDepositCategorySelectValue({
+                                  category: impRaw,
+                                  hidePosRevenue: hidePosRevenueCategories,
+                                  memo: r.memo,
+                                  note: importRowEdits[idx]?.note ?? "",
+                                })}
+                                onValueChange={(v) => {
+                                  const applied = applyBankDepositCategorySelect({
+                                    value: v,
+                                    transType: r.transType,
+                                    accountStore: selectedAccountStore,
+                                    currentNote: importRowEdits[idx]?.note ?? "",
+                                  })
+                                  setImportRowEdits((prev) => ({
+                                    ...prev,
+                                    [idx]: {
+                                      ...prev[idx],
+                                      category: applied.category,
+                                      autoAssigned: false,
+                                      ...(applied.note !== undefined ? { note: applied.note } : {}),
+                                      ...(applied.storeName ? { storeName: applied.storeName } : {}),
+                                    },
+                                  }))
+                                }}
                               >
                                 <SelectTrigger
                                   className="h-8 text-xs"
@@ -4112,7 +4168,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         </SelectTrigger>
                         <SelectContent>
                           {newRuleTransType === "deposit" ? (
-                            renderDepositCategorySelectItems(newRuleCategory, true)
+                            renderDepositCategorySelectItems(newRuleCategory, true, { includeQrChip: false })
                           ) : (
                             <>
                               {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (
@@ -4199,7 +4255,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       </SelectTrigger>
                                       <SelectContent>
                                         {newRuleTransType === "deposit" ? (
-                                          renderDepositCategorySelectItems(newRuleCategory, true)
+                                          renderDepositCategorySelectItems(newRuleCategory, true, {
+                                            includeQrChip: false,
+                                          })
                                         ) : (
                                           <>
                                             {BANK_WITHDRAW_UI_CATEGORIES.map((value) => (

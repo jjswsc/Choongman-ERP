@@ -33,6 +33,11 @@ import { SALES_OUTBOUND_INVOICE_TITLE } from "@/lib/sales-tax-document-title"
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
 import { collectOutboundInvoiceNosForPrintStatus } from "@/lib/outbound-invoice-print-status"
 import {
+  closeReservedInvoicePrintWindow,
+  commitReservedInvoicePrintWindow,
+  reserveInvoicePrintWindow,
+} from "@/lib/open-invoice-print-window"
+import {
   resolveInvoiceClientForTarget,
   resolveInvoiceClientFromBillToCandidates,
 } from "@/lib/invoice-client-resolve"
@@ -2251,6 +2256,12 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       await appAlert(t("outSelectForPrint"))
       return
     }
+    const reservedWindow = reserveInvoicePrintWindow()
+    if (!reservedWindow) {
+      await appAlert(t("invLoadFailed") + "\n\n" + t("outPrintPopoverBlocked"))
+      return
+    }
+    let handedOff = false
     try {
       const [invoiceDataRes, invSettings] = await Promise.all([getInvoiceData(), getInvoiceSettings()])
       const { company, clients } = invoiceDataRes
@@ -2364,13 +2375,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
           }
         }
       }
-      sessionStorage.setItem("invoice-print-data", JSON.stringify(invoiceDatas))
-      const printWindow = window.open("/admin/invoice-print", "_blank")
-      if (!printWindow) {
+      const committed = commitReservedInvoicePrintWindow(reservedWindow, invoiceDatas)
+      if (committed !== "ok") {
+        closeReservedInvoicePrintWindow(reservedWindow)
         await appAlert(t("invLoadFailed") + "\n\n" + t("outPrintPopoverBlocked"))
         return
       }
-      printWindow.focus()
+      handedOff = true
       const billedInvoiceNos = collectOutboundInvoiceNosForPrintStatus(invoiceDatas)
       if (billedInvoiceNos.length > 0) {
         void markOutboundInvoicesPrinted({ invoiceNos: billedInvoiceNos }).catch((e) => {
@@ -2378,6 +2389,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         })
       }
     } catch (e) {
+      if (!handedOff) closeReservedInvoicePrintWindow(reservedWindow)
       console.error(e)
       await appAlert(t("invLoadFailed"))
     }

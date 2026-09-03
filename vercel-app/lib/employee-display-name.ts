@@ -260,3 +260,80 @@ export function findStaffForScheduleSlotName(
     return xn === blCompact || xn === nblCompact || xnick === blCompact || xnick === nblCompact
   })
 }
+
+function trimNick(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+}
+
+/**
+ * 급여 명세서 등: 직원 마스터 nick 을 employee_id → 매장+이름 순으로 붙인다.
+ */
+export function attachEmployeeNickToPayrollRows<T extends { store?: string; name?: string; employee_id?: number }>(
+  rows: T[],
+  empRows: EmployeeRowForAttendanceDisplay[] | null | undefined
+): (T & { nick: string })[] {
+  const nickByEmployeeId: Record<number, string> = {}
+  const nickByStoreAndBareName: Record<string, string> = {}
+  for (const e of empRows || []) {
+    const nick = trimNick(e.nick)
+    if (!nick) continue
+    const store = String(e.store || "")
+      .trim()
+      .replace(/\s+/g, " ")
+    const nm = String(e.name || "")
+      .trim()
+      .replace(/\s+/g, " ")
+    const eid = e.id != null && Number.isFinite(Number(e.id)) ? Math.floor(Number(e.id)) : 0
+    if (eid > 0) nickByEmployeeId[eid] = nick
+    if (!store || !nm) continue
+    for (const vs of expandStoreVariantsForGrade(store)) {
+      const v = String(vs || "")
+        .trim()
+        .replace(/\s+/g, " ")
+      if (!v) continue
+      nickByStoreAndBareName[`${v}|${nm}`] = nick
+      const k2 = `${v}|${normalizeEmployeeNameForGradeMatch(nm)}`
+      nickByStoreAndBareName[k2] = nick
+    }
+  }
+  return rows.map((r) => {
+    const eid = r.employee_id != null && Number.isFinite(Number(r.employee_id)) ? Math.floor(Number(r.employee_id)) : 0
+    if (eid > 0 && nickByEmployeeId[eid]) {
+      return { ...r, nick: nickByEmployeeId[eid] }
+    }
+    const st = String(r.store || "")
+      .trim()
+      .replace(/\s+/g, " ")
+    const raw = String(r.name || "")
+      .trim()
+      .replace(/\s+/g, " ")
+    const split = splitEmbeddedNameTitle(raw)
+    const nameCandidates = new Set<string>()
+    if (raw) nameCandidates.add(raw)
+    const rawNorm = normalizeEmployeeNameForGradeMatch(raw)
+    if (rawNorm) nameCandidates.add(rawNorm)
+    if (split.name) {
+      nameCandidates.add(split.name)
+      const sn = normalizeEmployeeNameForGradeMatch(split.name)
+      if (sn) nameCandidates.add(sn)
+    }
+    let nick = ""
+    for (const vs of st ? expandStoreVariantsForGrade(st) : []) {
+      const v = String(vs || "")
+        .trim()
+        .replace(/\s+/g, " ")
+      if (!v) continue
+      for (const nc of nameCandidates) {
+        const hit = nickByStoreAndBareName[`${v}|${nc}`]
+        if (hit) {
+          nick = hit
+          break
+        }
+      }
+      if (nick) break
+    }
+    return { ...r, nick }
+  })
+}

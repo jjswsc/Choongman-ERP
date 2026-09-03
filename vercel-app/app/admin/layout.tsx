@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useLang, normalizeAdminUiLang } from "@/lib/lang-context"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 import {
   isManagerRole,
   isFranchiseeRole,
@@ -67,6 +68,7 @@ export default function AdminLayout({
   const pathname = usePathname()
   const { auth, initialized, setAuth } = useAuth()
   const { lang, setLang } = useLang()
+  const brand = useAppBrandConfig()
   const saasModules = useSaasEnabledModules()
   const isLoginPage = isAdminLoginPath(pathname)
 
@@ -104,7 +106,7 @@ export default function AdminLayout({
       window.location.replace("/admin/login?msg=no_admin")
       return
     }
-    if (auth && !isLoginPage && (isManagerRole(auth.role || "") || isFranchiseeRole(auth.role || "")) && !canManagerAccessPath(pathname)) {
+    if (auth && !isLoginPage && (isManagerRole(auth.role || "", brand.key) || isFranchiseeRole(auth.role || "")) && !canManagerAccessPath(pathname)) {
       router.replace("/admin")
     }
     if (auth && !isLoginPage && (isPosOrderOnlyRole(auth.role || "") || isPosSettlementOnlyRole(auth.role || ""))) {
@@ -128,7 +130,7 @@ export default function AdminLayout({
         router.replace("/admin?saas_module_locked=1")
       }
     }
-  }, [auth, initialized, isLoginPage, pathname, router, setAuth, saasModules])
+  }, [auth, initialized, isLoginPage, pathname, router, setAuth, saasModules, brand.key])
 
   // 로그인 페이지: 사이드바 없이 전체 화면
   if (isLoginPage) {

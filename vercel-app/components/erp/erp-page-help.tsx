@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAuth } from "@/lib/auth-context"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { cn } from "@/lib/utils"
 import {
   Sheet,
@@ -44,8 +45,9 @@ export function ErpPageHelpButton({ className, showLabel = true }: ErpPageHelpBu
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const brand = useAppBrandConfig()
   const [open, setOpen] = React.useState(false)
-  const audience = getAdminHelpAudienceFromRole(auth?.role)
+  const audience = getAdminHelpAudienceFromRole(auth?.role, brand.key)
   const audLabel = audience === "office" ? t("adminHelpAudienceLabel_office") : t("adminHelpAudienceLabel_franchise")
 
   const matchedHref = React.useMemo(() => matchErpNavHrefForHelp(pathname), [pathname])

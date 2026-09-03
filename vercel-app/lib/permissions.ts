@@ -6,12 +6,22 @@
  * - Secretary: secretary → Director급과 동일 권한
  * - Officer: officer → Office 제외한 전체 권한 (급여/직원 관리)
  * - Manager: manager → 매장 매니저, 자기 매장 한정
+ *   (Omni/omnifoodtech만: ERP에서는 Officer와 동일. SaaS 본사 콘솔은 제외)
  * - Franchisee: franchisee → 매장 소유자, 기본은 매니저와 동일(자기 매장). 시스템 설정+extra_stores로 복수 매장 허용 시 JWT·ERP 매장 전환
  *
  * store=Office → Officer로 인식 (employees.store가 본사/Office/오피스/본점이면)
  */
 
+import { getAppBrandConfigFromEnv, normalizeBrandKey, type AppBrandKey } from '@/lib/app-brand'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+
+export type PermissionBrandKey = AppBrandKey | string | null | undefined
+
+function resolvePermissionBrandKey(brandKey?: PermissionBrandKey): AppBrandKey {
+  const raw = brandKey == null ? "" : String(brandKey).trim()
+  if (raw) return normalizeBrandKey(raw)
+  return getAppBrandConfigFromEnv().key
+}
 
 /** employees.store가 본사/Office인지 (→ Officer 권한 적용) */
 export function isOfficeStore(store: string): boolean {
@@ -41,10 +51,24 @@ export function isDirectorRole(role: string): boolean {
   return DIRECTOR_ROLES.some((x) => r.includes(x))
 }
 
-/** 본사 권한인지 (Director + Officer + Secretary) */
-export function isOfficeRole(role: string): boolean {
+/** JWT·직원 role이 Director/Officer/Secretary 등 실제 본사 역할인지 (Omni Manager 승격 제외) */
+export function isNativeOfficeRole(role: string): boolean {
   const r = String(role || "").toLowerCase().trim()
   return OFFICE_ROLES.some((x) => r.includes(x))
+}
+
+/**
+ * Omni SaaS 고객사 Manager → ERP Officer와 동일.
+ * 충만 프랜차이즈 Manager·가맹점주에는 적용하지 않는다.
+ */
+export function isOmniManagerOfficeEquivalent(role: string, brandKey?: PermissionBrandKey): boolean {
+  if (resolvePermissionBrandKey(brandKey) !== "omnifoodtech") return false
+  return roleTextMatchesManager(role)
+}
+
+/** 본사 권한인지 (Director + Officer + Secretary). Omni Manager는 Officer로 취급 */
+export function isOfficeRole(role: string, brandKey?: PermissionBrandKey): boolean {
+  return isNativeOfficeRole(role) || isOmniManagerOfficeEquivalent(role, brandKey)
 }
 
 /** Secretary(본사 실무) 역할인지 */
@@ -162,8 +186,9 @@ function roleTextMatchesFranchisee(role: string): boolean {
   return /가맹|프랜차이즈|점주|franchise/i.test(raw)
 }
 
-/** 매장 매니저인지 */
-export function isManagerRole(role: string): boolean {
+/** 매장 매니저인지. Omni에서는 Officer로 승격되므로 false */
+export function isManagerRole(role: string, brandKey?: PermissionBrandKey): boolean {
+  if (isOmniManagerOfficeEquivalent(role, brandKey)) return false
   return roleTextMatchesManager(role)
 }
 
@@ -178,9 +203,9 @@ export function canViewMobileStoreSales(role: string): boolean {
   return true
 }
 
-/** 매장 관리자급인지 (매니저 또는 가맹점주) */
-export function isManagerOrFranchiseeRole(role: string): boolean {
-  return isManagerRole(role) || isFranchiseeRole(role)
+/** 매장 관리자급인지 (매니저 또는 가맹점주). Omni Manager는 Officer이므로 false */
+export function isManagerOrFranchiseeRole(role: string, brandKey?: PermissionBrandKey): boolean {
+  return isManagerRole(role, brandKey) || isFranchiseeRole(role)
 }
 
 /** 회계 권한인지 (미수금·미지급금에서 매장별 선택 관리 가능) */
@@ -306,9 +331,9 @@ export function canAccessAdmin(role: string): boolean {
   )
 }
 
-/** SaaS 관리자 역할(본사·회계). 대리점은 saas_partner_users 연동으로 별도 허용 — {@link canAccessSaasControlPlane} */
+/** SaaS 관리자 역할(본사·회계). Omni 매장 Manager 승격은 제외. 대리점은 saas_partner_users 연동으로 별도 허용 — {@link canAccessSaasControlPlane} */
 export function canAccessSaasAdmin(role: string): boolean {
-  return isOfficeRole(role) || isAccountingRole(role)
+  return isNativeOfficeRole(role) || isAccountingRole(role)
 }
 
 /** AI 센터 접근 가능 (관리자 계열 + 회계, POS 전용 역할 제외) */
@@ -326,10 +351,9 @@ export function canApproveAiActions(role: string): boolean {
   return isOfficeRole(role) || isManagerRole(role) || isAccountingRole(role)
 }
 
-/** 설정 페이지 접근 가능 (Director, Officer만) */
-export function canAccessSettings(role: string): boolean {
-  const r = String(role || "").toLowerCase().trim()
-  return r.includes("director") || r.includes("secretary") || r.includes("officer") || r.includes("ceo") || r.includes("hr")
+/** 설정 페이지 접근 가능 (Director, Officer, Omni Manager=Officer) */
+export function canAccessSettings(role: string, brandKey?: PermissionBrandKey): boolean {
+  return isOfficeRole(role, brandKey)
 }
 
 /** 해당 경로에 매니저 접근 불가 여부 */

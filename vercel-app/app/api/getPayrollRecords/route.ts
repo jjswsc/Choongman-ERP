@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { isOfficeStore } from '@/lib/permissions'
 import { filterPayrollRowsHidingOffice } from '@/lib/office-payroll-access'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
+import { attachEmployeeNickToPayrollRows } from '@/lib/employee-display-name'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
@@ -16,6 +17,7 @@ export interface PayrollRecordRow {
   month: string
   store: string
   name: string
+  nick?: string
   employee_id?: number
   employee_code?: string
   dept: string
@@ -119,6 +121,7 @@ export async function GET(request: NextRequest) {
       month: String(r.month || ''),
       store: String(r.store || ''),
       name: String(r.name || ''),
+      nick: '',
       employee_id:
         r.employee_id != null && Number.isFinite(Number(r.employee_id)) && Number(r.employee_id) > 0
           ? Math.floor(Number(r.employee_id))
@@ -159,7 +162,30 @@ export async function GET(request: NextRequest) {
       pay_date: r.pay_date ? String(r.pay_date).slice(0, 10) : undefined,
     }))
 
-    const filtered = filterPayrollRowsHidingOffice(list, payrollAuth)
+    let empRows: { id?: number; store?: string; name?: string; nick?: string | null }[] = []
+    try {
+      const empBase = 'id=gt.0'
+      const empFilter = appendSaasTenantFilter(empBase, tenantScope, 'employees')
+      try {
+        empRows = ((await supabaseSelectFilter('employees', empFilter, {
+          select: 'id,store,name,nick',
+          limit: 5000,
+        })) || []) as { id?: number; store?: string; name?: string; nick?: string | null }[]
+      } catch (empErr) {
+        if (isMissingSaasTenantColumnError(empErr)) {
+          markSaasTenantColumnMissing('employees')
+          empRows = ((await supabaseSelectFilter('employees', empBase, {
+            select: 'id,store,name,nick',
+            limit: 5000,
+          })) || []) as { id?: number; store?: string; name?: string; nick?: string | null }[]
+        }
+      }
+    } catch {
+      empRows = []
+    }
+
+    const withNick = attachEmployeeNickToPayrollRows(list, empRows)
+    const filtered = filterPayrollRowsHidingOffice(withNick, payrollAuth)
 
     return NextResponse.json({ success: true, list: filtered }, { headers })
   } catch (e) {

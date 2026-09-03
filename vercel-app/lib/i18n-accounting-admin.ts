@@ -381,7 +381,7 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   recTaxInvoiceSelectAllHint: '이 거래처의 출고 건을 모두 선택. 한 장으로 합치지 않습니다.',
   recTaxInvoiceBulkBarCount: '{n}건 선택',
   recTaxInvoiceBulkPrintBtn: '선택 건 인쇄 (건별 1장)',
-  recTaxInvoiceBulkPrintHint: '출고 1건 = 세금계산서 1장. 여러 건을 한 장으로 합치지 않습니다.',
+  recTaxInvoiceBulkPrintHint: '출고 1건 = 세금계산서 1장. 한 번에 최대 50건까지, 인쇄 창 하나에서 건별로 나뉩니다.',
   recTaxInvoiceBulkMax: '한 번에 최대 {n}건까지 인쇄할 수 있습니다. 선택을 줄여 주세요.',
   recTaxInvoiceBulkNone: '인쇄할 출고 건을 선택해 주세요. 수금(Receive) 행은 선택할 수 없습니다.',
   recTaxInvoiceBulkPartial: '{ok}건 준비, {fail}건은 건너뜀: {detail}',
@@ -392,7 +392,7 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   helpSum_admin_receivable_payable:
     '매출처별 미수 잔액·수금·세금계산서. 통장 입금은 잔액에 먼저 반영되고, 노란 칸의 미배분 입금을 누르면 그 입금이 있는 통장에서 「미수 연결」합니다. 임원 차입은 「차입금」 탭(2150)이며 가맹 미수와 섞지 않습니다.',
   helpHow_admin_receivable_payable:
-    '① 매출처·기간·미수만을 정한 뒤 「검색」합니다. 다른 메뉴로 갔다가 돌아와도 조회 조건이 유지됩니다.\n② 노란 칸의 미배분 통장 입금은 조회 기간과 무관합니다. 버튼을 누르면 그 입금이 들어 있는 통장으로 이동합니다. 통장에서 「미수 연결」하면 수금확인이 자동 반영됩니다.\n③ 수금확인 체크는 통장 없는 수금(현금 등)만 사용합니다. 미배분 입금이 있으면 체크가 막힙니다.\n④ 통장 연동된 행의 해제는 통장 거래에서 합니다.\n⑤ 세금계산서 인쇄: 미수는 Tax Invoice/Receipt, 수금 완료(수금확인·통장 연결)는 Receipt. 문서번호(IV.)는 같습니다.\n⑥ 세금계산서는 출고 1건 = 1장입니다. 원장에서 여러 출고를 선택해 한꺼번에 인쇄할 수 있고, 한 장으로 합치지 않습니다. 수금확인 체크와는 별개입니다.',
+    '① 매출처·기간·미수만을 정한 뒤 「검색」합니다. 다른 메뉴로 갔다가 돌아와도 조회 조건이 유지됩니다.\n② 노란 칸의 미배분 통장 입금은 조회 기간과 무관합니다. 버튼을 누르면 그 입금이 들어 있는 통장으로 이동합니다. 통장에서 「미수 연결」하면 수금확인이 자동 반영됩니다.\n③ 수금확인 체크는 통장 없는 수금(현금 등)만 사용합니다. 미배분 입금이 있으면 체크가 막힙니다.\n④ 통장 연동된 행의 해제는 통장 거래에서 합니다.\n⑤ 세금계산서 인쇄: 미수는 Tax Invoice/Receipt, 수금 완료(수금확인·통장 연결)는 Receipt. 문서번호(IV.)는 같습니다.\n⑥ 세금계산서는 출고 1건 = 1장입니다. 원장에서 여러 출고를 선택해 한꺼번에 인쇄할 수 있고(한 번에 최대 50건, 인쇄 창은 하나), 한 장으로 합치지 않습니다. 수금확인 체크와는 별개입니다.',
   cardManagementBankLinkTitle: '통장 카드대금 연동',
   cardManagementBankLinkHint: '이미 나간 카드 대금 출금을 카드에 연결한 뒤, 계정별 배분으로 비용을 나눕니다.',
   cardManagementBankLinkQuery: '미연결 출금 조회',
@@ -648,7 +648,7 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   recTaxInvoiceSelectAllHint: 'Select all outbound rows for this customer. Documents stay separate.',
   recTaxInvoiceBulkBarCount: '{n} selected',
   recTaxInvoiceBulkPrintBtn: 'Print selected (1 each)',
-  recTaxInvoiceBulkPrintHint: 'Each outbound stays its own tax invoice. They are not combined into one receipt.',
+  recTaxInvoiceBulkPrintHint: 'Each outbound stays its own tax invoice. Up to 50 at a time, in one print window — not combined into one receipt.',
   recTaxInvoiceBulkMax: 'Print up to {n} at a time. Reduce the selection.',
   recTaxInvoiceBulkNone: 'Select outbound rows to print. Receive rows cannot be selected.',
   recTaxInvoiceBulkPartial: 'Prepared {ok}, skipped {fail}: {detail}',
@@ -659,7 +659,7 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   helpSum_admin_receivable_payable:
     'A/R by customer: balances, collections, tax invoices. Bank deposits hit the store balance first; tap a yellow unallocated deposit to open that deposit’s bank account and use Link receivable. Officer borrowings are the Borrowings tab (2150), not franchise A/R.',
   helpHow_admin_receivable_payable:
-    '① Set customer, dates, and filters, then Search. Filters stay when you leave and return.\n② Yellow unallocated deposits are independent of the search period. The button opens the bank account that actually received that deposit. Link receivable there; checkboxes update automatically.\n③ Use the checkbox only for cash (no bank row). It is blocked while unallocated bank deposits exist.\n④ Unlink bank-linked rows from Bank transactions.\n⑤ Tax print title: unpaid = Tax Invoice/Receipt; after collection (checkbox or bank link) = Receipt. Document No (IV.) stays the same.\n⑥ One outbound = one tax invoice. In ledger view you can select several rows and print them together — they stay separate documents. This is not the collection checkbox.',
+    '① Set customer, dates, and filters, then Search. Filters stay when you leave and return.\n② Yellow unallocated deposits are independent of the search period. The button opens the bank account that actually received that deposit. Link receivable there; checkboxes update automatically.\n③ Use the checkbox only for cash (no bank row). It is blocked while unallocated bank deposits exist.\n④ Unlink bank-linked rows from Bank transactions.\n⑤ Tax print title: unpaid = Tax Invoice/Receipt; after collection (checkbox or bank link) = Receipt. Document No (IV.) stays the same.\n⑥ One outbound = one tax invoice. In ledger view you can select several rows and print them together (up to 50, one print window) — they stay separate documents. This is not the collection checkbox.',
   cardManagementBankLinkTitle: 'Link bank card bill payments',
   cardManagementBankLinkHint: 'Link bank payments that already left the account to a card, then split costs by account.',
   cardManagementBankLinkQuery: 'Find unlinked withdrawals',
@@ -915,7 +915,7 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   recTaxInvoiceSelectAllHint: 'เลือกทุกรายการส่งออกของลูกค้านี้ ไม่รวมเป็นใบเดียว',
   recTaxInvoiceBulkBarCount: 'เลือก {n} รายการ',
   recTaxInvoiceBulkPrintBtn: 'พิมพ์ที่เลือก (ใบละ 1 ฉบับ)',
-  recTaxInvoiceBulkPrintHint: '1 รายการส่งออก = 1 ใบกำกับภาษี ไม่รวมหลายรายการเป็นใบเสร็จใบเดียวครับ',
+  recTaxInvoiceBulkPrintHint: '1 รายการส่งออก = 1 ใบกำกับภาษี พิมพ์ได้ครั้งละไม่เกิน 50 รายการ ในหน้าต่างเดียว ไม่รวมเป็นใบเสร็จใบเดียวครับ',
   recTaxInvoiceBulkMax: 'พิมพ์ได้ครั้งละไม่เกิน {n} รายการ ลดจำนวนที่เลือกครับ',
   recTaxInvoiceBulkNone: 'เลือกแถวส่งออกที่จะพิมพ์ แถวรับเงินเลือกไม่ได้ครับ',
   recTaxInvoiceBulkPartial: 'พร้อม {ok} รายการ ข้าม {fail}: {detail}',
@@ -926,7 +926,7 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   helpSum_admin_receivable_payable:
     'ลูกหนี้ตามร้าน: ยอดคงเหลือ รับเงิน ใบกำกับ เงินฝากเข้ายอดร้านก่อน กดปุ่มเหลืองเพื่อเปิดบัญชีธนาคารของรายการนั้นแล้วเชื่อมลูกหนี้ เงินกู้จากผู้บริหารอยู่แท็บเงินกู้ (2150) ไม่ปนกับลูกหนี้แฟรนไชส์ครับ',
   helpHow_admin_receivable_payable:
-    '① เลือกลูกค้า วันที่ แล้วค้นหา กลับจากเมนูอื่นแล้วยังคงเงื่อนไข\n② เงินฝากที่ยังไม่จัดสรรไม่จำกัดช่วงค้นหา กดปุ่มเพื่อเปิดบัญชีที่รับเงินจริง แล้วเชื่อมลูกหนี้ที่ธนาคาร\n③ ช่องติ๊กใช้เงินสดเท่านั้น ถ้ามีเงินฝากค้างจะติ๊กไม่ได้\n④ ยกเลิกการเชื่อมที่หน้าธุรกรรมธนาคาร\n⑤ พิมพ์บิล: ยังไม่รับเงินเป็น Tax Invoice/Receipt รับเงินแล้ว (ติ๊กหรือเชื่อมธนาคาร) เป็น Receipt เลขที่เอกสาร IV. เหมือนเดิมครับ\n⑥ ใบกำกับภาษีคือ 1 ใบต่อ 1 รายการส่งออก เลือกหลายรายการในมุมมองสมุดบัญชีเพื่อพิมพ์พร้อมกันได้ แต่ไม่รวมเป็นใบเดียว ช่องติ๊กนี้ไม่ใช่ช่องยืนยันรับเงินครับ',
+    '① เลือกลูกค้า วันที่ แล้วค้นหา กลับจากเมนูอื่นแล้วยังคงเงื่อนไข\n② เงินฝากที่ยังไม่จัดสรรไม่จำกัดช่วงค้นหา กดปุ่มเพื่อเปิดบัญชีที่รับเงินจริง แล้วเชื่อมลูกหนี้ที่ธนาคาร\n③ ช่องติ๊กใช้เงินสดเท่านั้น ถ้ามีเงินฝากค้างจะติ๊กไม่ได้\n④ ยกเลิกการเชื่อมที่หน้าธุรกรรมธนาคาร\n⑤ พิมพ์บิล: ยังไม่รับเงินเป็น Tax Invoice/Receipt รับเงินแล้ว (ติ๊กหรือเชื่อมธนาคาร) เป็น Receipt เลขที่เอกสาร IV. เหมือนเดิมครับ\n⑥ ใบกำกับภาษีคือ 1 ใบต่อ 1 รายการส่งออก เลือกหลายรายการในมุมมองสมุดบัญชีเพื่อพิมพ์พร้อมกันได้ (ครั้งละไม่เกิน 50 รายการ เปิดหน้าต่างพิมพ์หน้าเดียว) ไม่รวมเป็นใบเดียว ช่องติ๊กนี้ไม่ใช่ช่องยืนยันรับเงินครับ',
   cardManagementBankLinkTitle: 'เชื่อมค่าบัตรจากธนาคาร',
   cardManagementBankLinkHint: 'เชื่อมรายการถอนที่ตัดไปแล้วกับบัตร แล้วแบ่งตามบัญชีครับ',
   cardManagementNoUnlinkedBank: 'ไม่มีรายการถอนให้เชื่อมครับ ที่ลงทะเบียนค่าใช้จ่าย เลือกประเภทโอน → ธนาคาร → ค่าบัตร แล้วเชื่อมถอนที่มีแล้วก่อน',

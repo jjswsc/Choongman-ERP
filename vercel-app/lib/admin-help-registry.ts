@@ -2,7 +2,7 @@ import {
   getErpNavItemsForHelp,
   type ErpNavHelpItem,
 } from "@/lib/erp-nav-registry"
-import { isAccountingRole, isOfficeRole } from "@/lib/permissions"
+import { isAccountingRole, isOfficeRole, type PermissionBrandKey } from "@/lib/permissions"
 
 export type AdminHelpEmbedded = "inbound" | "payroll"
 
@@ -11,11 +11,14 @@ export type AdminHelpAudience = "office" | "franchise"
 
 /**
  * 로그인 `role`만으로 본사/가맹 관점을 나눈다. (회계=본사 업무에 가깝다고 보고 office)
- * 가맹점주·매장 매니저·기타 = franchise
+ * Omni Manager는 Officer와 동일하므로 office. 가맹점주·충만 매장 매니저·기타 = franchise
  */
-export function getAdminHelpAudienceFromRole(role: string | null | undefined): AdminHelpAudience {
+export function getAdminHelpAudienceFromRole(
+  role: string | null | undefined,
+  brandKey?: PermissionBrandKey
+): AdminHelpAudience {
   const r = String(role || "")
-  if (isOfficeRole(r) || isAccountingRole(r)) return "office"
+  if (isOfficeRole(r, brandKey) || isAccountingRole(r)) return "office"
   return "franchise"
 }
 

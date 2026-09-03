@@ -1,6 +1,7 @@
 "use client"
 
 import { useAuth } from "@/lib/auth-context"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -25,7 +26,8 @@ export function HelpSumHowBlocks({ helpSumKey, className, compact, detail }: Hel
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const audience = getAdminHelpAudienceFromRole(auth?.role)
+  const brand = useAppBrandConfig()
+  const audience = getAdminHelpAudienceFromRole(auth?.role, brand.key)
   const desc = detail
     ? resolveHelpLongWhat(t, helpSumKey, audience)
     : resolveHelpSummary(t, helpSumKey, audience)

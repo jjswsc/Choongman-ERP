@@ -17,6 +17,7 @@ import {
 } from "@/lib/permissions"
 import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
 import { isSaasModuleEnabled, type SaasEnabledModulesMap } from "@/lib/use-saas-enabled-modules"
+import type { AppBrandKey } from "@/lib/app-brand"
 import {
   ERP_NAV_MAIN_ITEMS,
   ERP_NAV_MENU_SECTIONS,
@@ -24,7 +25,7 @@ import {
   type ErpNavMenuSection,
 } from "@/lib/erp-nav-registry"
 
-/** 매니저에게 숨길 메뉴 href */
+/** 충만 매장 매니저·가맹점주에게 숨길 메뉴. Omni Manager는 Officer로 승격되어 이 필터를 타지 않음 */
 export const ERP_NAV_MANAGER_HIDDEN_HREFS = new Set(["/admin/items", "/admin/vendors"])
 
 /** POS 메뉴별 href → 권한 체크 함수 */
@@ -46,10 +47,12 @@ export type ErpNavAccessContext = {
   store?: string
   saasModules: SaasEnabledModulesMap | null
   aiModuleEnabled: boolean | null
+  /** Omni vs 충만. 없으면 env/쿠키 브랜드 */
+  brandKey?: AppBrandKey | string | null
 }
 
 export function isErpNavHrefAccessible(href: string, ctx: ErpNavAccessContext): boolean {
-  const { role, saasModules, aiModuleEnabled } = ctx
+  const { role, saasModules, aiModuleEnabled, brandKey } = ctx
   if (!isSaasModuleEnabled(saasModules, resolveAdminPathSaasModule(href))) return false
   if (href === "/admin/ai-center") {
     return canAccessAiCenter(role) && aiModuleEnabled !== false
@@ -58,7 +61,7 @@ export function isErpNavHrefAccessible(href: string, ctx: ErpNavAccessContext): 
     return canAccessPosCostAnalysis(role)
   }
   if (href === "/admin/settings") {
-    return canAccessSettings(role)
+    return canAccessSettings(role, brandKey)
   }
   return true
 }
@@ -67,7 +70,7 @@ export function filterErpNavSectionItems(
   section: ErpNavMenuSection,
   ctx: ErpNavAccessContext
 ): ErpNavMenuItem[] {
-  const isManager = isManagerRole(ctx.role) || isFranchiseeRole(ctx.role)
+  const isManager = isManagerRole(ctx.role, ctx.brandKey) || isFranchiseeRole(ctx.role)
   const isPosStaff = isPosOrderOnlyRole(ctx.role) || isPosSettlementOnlyRole(ctx.role)
 
   return section.items
@@ -102,7 +105,7 @@ export function getAccessibleErpNavHrefs(ctx: ErpNavAccessContext): string[] {
       hrefs.push(item.href)
     }
   }
-  if (canAccessSettings(ctx.role)) {
+  if (canAccessSettings(ctx.role, ctx.brandKey)) {
     hrefs.push("/admin/settings")
   }
   if (canViewMobileStoreSales(ctx.role)) {

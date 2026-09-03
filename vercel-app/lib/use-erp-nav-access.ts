@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useAuth } from "@/lib/auth-context"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { useAiCenterModuleEnabled } from "@/lib/use-ai-center-module"
 import { useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 import {
@@ -14,6 +15,7 @@ import {
 
 export function useErpNavAccess() {
   const { auth } = useAuth()
+  const brand = useAppBrandConfig()
   const saasModules = useSaasEnabledModules()
   const aiModuleEnabled = useAiCenterModuleEnabled()
 
@@ -23,8 +25,9 @@ export function useErpNavAccess() {
       store: auth?.store,
       saasModules,
       aiModuleEnabled,
+      brandKey: brand.key,
     }),
-    [auth?.role, auth?.store, saasModules, aiModuleEnabled]
+    [auth?.role, auth?.store, saasModules, aiModuleEnabled, brand.key]
   )
 
   const accessibleHrefs = React.useMemo(() => getAccessibleErpNavHrefs(ctx), [ctx])

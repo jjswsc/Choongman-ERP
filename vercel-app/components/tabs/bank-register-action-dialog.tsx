@@ -278,17 +278,17 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
           }
         }}
       >
-        <DialogContent className="left-0 top-0 flex h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 flex-col gap-3 overflow-hidden rounded-none border-0 p-4 sm:p-6">
-          <DialogHeader className="shrink-0 pr-8">
+        <DialogContent className={`max-w-lg ${ADMIN_DIALOG_SCROLL_CN}`}>
+          <DialogHeader>
             <DialogTitle>{tt("expensePlanTab", "지급예정")} {tt("btnSelect", "선택")}</DialogTitle>
           </DialogHeader>
-          <p className="mb-0 shrink-0 text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {approvedPickRow ? `${approvedPickRow.transDate} · ฿${formatMoneyBaht(Math.abs(approvedPickRow.amount || 0))}` : ""}
           </p>
           {approvedPickLoading ? (
             <p className="text-sm text-muted-foreground py-4">{t("loading") || "로딩..."}</p>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="space-y-3">
               <p className="text-xs text-muted-foreground leading-snug">
                 {tt(
                   "bankExpensePickExactHint",
@@ -296,13 +296,13 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                 )}
               </p>
               {approvedPickList.length === 0 ? (
-                <p className="min-h-0 flex-1 py-2 text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {comboSearched
                     ? tt("bankExpensePickComboEmpty", "검색 결과가 없습니다. 거래처명·문서번호·한쪽 금액을 바꿔 보세요.")
                     : tt("expensePlanPickEmptyForBankLink", "No linkable payment plan for this date/store.")}
                 </p>
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border divide-y divide-border">
+                <div className="max-h-[min(40vh,280px)] overflow-y-auto rounded-md border border-border divide-y divide-border">
                   {approvedPickList.map((p) => {
                     const checked = approvedPickIds.includes(p.id)
                     const tag =

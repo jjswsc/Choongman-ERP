@@ -26,10 +26,7 @@ export function markPosMenusTenantIdColumnMissing(): void {
   posMenusTenantIdColumnMissing = true
 }
 
-export function isMissingTenantIdColumnError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err || '')
-  return /42703|PGRST204|tenant_id.*does not exist|column.*tenant_id/i.test(msg)
-}
+export { isMissingTenantIdColumnError } from '@/lib/missing-tenant-id-column-error'
 
 /**
  * Omni + tenant 알 수 있음 → enforce.

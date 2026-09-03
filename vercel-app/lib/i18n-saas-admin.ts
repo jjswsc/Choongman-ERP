@@ -723,6 +723,10 @@ export const I18N_SAAS_ADMIN_KO: Record<string, string> = {
   saasAdminInt_savedTenant: "{provider} 테넌트 연동을 저장했습니다.",
   saasAdminInt_savedStore: "{provider} 매장 연동을 저장했습니다.",
   saasAdminInt_errStoreCode: "매장 코드(store_code)를 입력하세요.",
+
+  saasTenantSchemaMissing:
+    "tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.",
+  saasTenantIdMissing: "회사(테넌트) 정보가 없어 저장할 수 없습니다. 다시 로그인해 주세요.",
 }
 
 export const I18N_SAAS_ADMIN_EN: Record<string, string> = {
@@ -1444,6 +1448,10 @@ export const I18N_SAAS_ADMIN_EN: Record<string, string> = {
   saasAdminInt_savedTenant: "{provider} tenant integration saved.",
   saasAdminInt_savedStore: "{provider} store integration saved.",
   saasAdminInt_errStoreCode: "Enter store code (store_code).",
+
+  saasTenantSchemaMissing:
+    "Cannot save: the tenant_id schema is missing. Please contact the administrator.",
+  saasTenantIdMissing: "Cannot save: company (tenant) information is missing. Please sign in again.",
 }
 
 export const I18N_SAAS_ADMIN_TH: Record<string, string> = {
@@ -2162,6 +2170,10 @@ export const I18N_SAAS_ADMIN_TH: Record<string, string> = {
   saasAdminInt_savedTenant: "บันทึกการเชื่อมต่อเทนแนต {provider} แล้ว",
   saasAdminInt_savedStore: "บันทึกการเชื่อมต่อสาขา {provider} แล้ว",
   saasAdminInt_errStoreCode: "กรอกรหัสสาขา (store_code)",
+
+  saasTenantSchemaMissing:
+    "ยังบันทึกไม่ได้ เพราะฐานข้อมูลยังไม่มีคอลัมน์ tenant_id กรุณาติดต่อผู้ดูแลระบบ",
+  saasTenantIdMissing: "ไม่มีข้อมูลบริษัท (tenant) จึงบันทึกไม่ได้ กรุณาเข้าสู่ระบบอีกครั้ง",
 }
 
 export const SAAS_ADMIN_FEATURE_KEYS = [

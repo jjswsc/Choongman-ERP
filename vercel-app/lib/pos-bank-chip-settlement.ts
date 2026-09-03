@@ -3,6 +3,7 @@
  * 직원은 칩만 고르고 저장. 수수료 분개는 저장 시 자동, 수정만 나중에 클릭.
  */
 import { isPosChannelSettlementMemo } from '@/lib/bank-import-deposit-category'
+import { bankDepositLoanCategorySelectValue } from '@/lib/bank-loan-categories'
 import {
   defaultBankDepositSalesDate,
   bankDepositRecognitionDate,
@@ -74,6 +75,13 @@ export function bankChannelSettlementRowAction(params: {
   return params.isChannelSettled ? 'edit' : 'post'
 }
 
+export const BANK_DEPOSIT_QR_CHIP_SELECT_VALUE = '__chip_qr'
+export const BANK_DEPOSIT_QR_CHIP_PHRASE = 'store sales QR'
+
+export function isBankDepositQrChipSelectValue(value: string | null | undefined): boolean {
+  return String(value || '').trim() === BANK_DEPOSIT_QR_CHIP_SELECT_VALUE
+}
+
 export function appendBankChipNote(current: string, phrase: string): string {
   const cur = String(current || '').trim()
   const p = String(phrase || '').trim()
@@ -81,6 +89,62 @@ export function appendBankChipNote(current: string, phrase: string): string {
   if (!cur) return p
   if (cur.toLowerCase().includes(p.toLowerCase())) return cur
   return `${cur} | ${p}`
+}
+
+export function stripBankChipPhrase(current: string, phrase: string): string {
+  const p = String(phrase || '').trim()
+  if (!p) return String(current || '').trim()
+  const parts = String(current || '')
+    .split(/\s*\|\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => s.toLowerCase() !== p.toLowerCase())
+  return parts.join(' | ')
+}
+
+/** POS 매장 용도 칸: QR 은 매출 수령+칩 메모로 저장. 드롭다운에만 QR 로 보여 준다. */
+export function bankDepositCategorySelectValue(params: {
+  category: string | null | undefined
+  hidePosRevenue?: boolean
+  memo?: string | null
+  note?: string | null
+}): string {
+  const cat = String(params.category || '').trim()
+  if (
+    params.hidePosRevenue &&
+    (cat === 'receivable_receive' || !cat) &&
+    inferPosBankChipKind(params.memo, params.note) === 'qr'
+  ) {
+    return BANK_DEPOSIT_QR_CHIP_SELECT_VALUE
+  }
+  return bankDepositLoanCategorySelectValue(cat)
+}
+
+export function applyBankDepositCategorySelect(params: {
+  value: string
+  transType?: string | null
+  accountStore?: string | null
+  currentNote?: string | null
+}): { category: string; note?: string; storeName?: string } {
+  const value = String(params.value || '').trim()
+  const currentNote = String(params.currentNote || '')
+  if (isBankDepositQrChipSelectValue(value)) {
+    const chipPatch = bankChipSavePatch({
+      phrase: BANK_DEPOSIT_QR_CHIP_PHRASE,
+      transType: params.transType || 'deposit',
+      accountStore: params.accountStore,
+    })
+    return {
+      category: chipPatch.category || 'receivable_receive',
+      note: appendBankChipNote(currentNote, BANK_DEPOSIT_QR_CHIP_PHRASE),
+      ...(chipPatch.storeName ? { storeName: chipPatch.storeName } : {}),
+    }
+  }
+  const stripped = stripBankChipPhrase(currentNote, BANK_DEPOSIT_QR_CHIP_PHRASE)
+  return {
+    category: value,
+    ...(stripped !== currentNote ? { note: stripped } : {}),
+  }
 }
 
 export function bankChipSavePatch(params: {

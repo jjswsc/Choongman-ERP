@@ -4658,16 +4658,16 @@ export const i18n = {
     helpSum_admin_bank_transactions:
       '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급·차입금과 맞물립니다. 임원이 회사에 빌려준 입금은 「차입 수령」+관련당사자(매출 4110 금지). 통장 변경 시 계좌 추가(삭제 금지), 삭제·등록 이력은 본사·회계가 계좌 관리에서 확인합니다.',
     helpHow_admin_bank_transactions:
-      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ 매장 통장: 노란 칩(store sales QR, Line man sales 등)을 누르면 용도·메모가 채워집니다. 저장하면 분개는 자동입니다. QR은 끝. Grab·라인맨·카드는 수수료도 저장 시 자동(POS GROSS−입금액)이며, 금액이 틀리면 「수수료 수정」만 누르세요. 주말(금~월) 카드 입금이 그날 POS보다 크면 옆날 매출을 합쳐 수수료를 맞춥니다. 폐유는 「기타수익」, 시재 현금 입금은 「현금시재입금」. 배달앱·카드·QR·현금 유형으로 저장하면 매출이 두 번 잡힐 수 있습니다.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
+      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ 매장 통장: QR은 용도에서 「QR」을 고르면 됩니다(노란 칩과 같음). Grab·라인맨·카드는 노란 칩. 저장하면 분개는 자동입니다. QR은 끝. Grab·라인맨·카드는 수수료도 저장 시 자동(POS GROSS−입금액)이며, 금액이 틀리면 「수수료 수정」만 누르세요. 주말(금~월) 카드 입금이 그날 POS보다 크면 옆날 매출을 합쳐 수수료를 맞춥니다. 폐유는 「기타수익」, 시재 현금 입금은 「현금시재입금」. 배달앱·카드·현금 유형으로 저장하면 매출이 두 번 잡힐 수 있습니다.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 과납분은 「선수금 등록」 후 상계하세요.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
     bankManualS3PosReceivable:
       'POS 자동분개 매장: 카드·배달앱·QR 입금은 「매출 수령」+ 매장. revenue_delivery/revenue_card는 4110 이중 인식 위험.',
     bankPosReceivableDepositTitle: 'POS 자동분개 매장 — 입금 분류',
     bankPosReceivableDepositBody:
       'Grab·카드·QR 정산 입금은 「매출 수령」+ 매장·매출일만 사용하세요. 배달앱·카드·QR·현금은 목록에 보이지만 POS 매장에서 그 용도로 저장하면 거절되거나 매출 수령으로 바뀝니다.',
     bankPosStoreCategoryLockedHint:
-      '배달앱·카드·QR·현금 유형은 숨김이 정상입니다. 노란 칩(QR·Grab·라인맨·카드)만 고르고 저장하세요. 분개·수수료는 자동이고, 금액이 틀릴 때만 「수수료 수정」. 폐유는 「기타수익」, 시재 입금은 「현금시재입금」입니다.',
+      '배달앱·카드·현금 유형은 숨김이 정상입니다. QR은 용도에서 「QR」을 고르면 됩니다. Grab·라인맨·카드는 노란 칩. 저장하면 분개·수수료는 자동이고, 금액이 틀릴 때만 「수수료 수정」. 폐유는 「기타수익」, 시재 입금은 「현금시재입금」입니다.',
     bankPosStoreCategorySelectTitle:
-      'POS 매장: 배달앱·카드·QR·현금은 숨김. 노란 칩을 고르고 저장하면 분개가 자동입니다.',
+      'POS 매장: QR은 용도에서 고르세요. Grab·카드는 노란 칩. 저장하면 분개가 자동입니다.',
     bankPosStoreCategoryHiddenOptions: '배달앱·카드·QR·현금 숨김 — 노란 칩 + 저장',
     bankPosChannelSettleHint:
       'QR은 칩+저장만. Grab·카드 수수료는 저장 시 자동이며, 금액이 틀릴 때만 아래 「수수료 수정」을 누르세요.',
@@ -4834,6 +4834,7 @@ export const i18n = {
     bankRevenueDelivery: '배달앱정산',
     bankRevenueCard: '카드매출',
     bankRevenueQr: 'QR/이체',
+    bankDepositChipQr: 'QR',
     bankRevenueCash: '현금입금',
     bankSalesDate: '매출일',
     bankExpenseDate: '비용인식일',
@@ -6032,7 +6033,7 @@ export const i18n = {
     settings_perm_role_officer: '2. Officer (오피서)',
     settings_perm_role_officer_desc: 'Director급을 제외한 대부분 이용 가능. 단, 급여·직원 관리에서 본사(Office)는 검색 불가.',
     settings_perm_role_manager: '3. Manager (매장 매니저)',
-    settings_perm_role_manager_desc: '자기 매장만 조회·수정. 품목/거래처/설정/강제출고 메뉴 접근 불가. 직원관리는 권한(role) 수정 불가. 급여 공휴일·미수금 입력은 조회만. 컴플레인은 입력=자기 매장, 조회=전 매장. 아래 표를 참고하세요.',
+    settings_perm_role_manager_desc: '충만: 자기 매장만 조회·수정. 품목/거래처/설정/강제출고 메뉴 접근 불가. 직원관리는 권한(role) 수정 불가. 급여 공휴일·미수금 입력은 조회만. 컴플레인은 입력=자기 매장, 조회=전 매장. Omni: Manager가 Officer와 같은 ERP 권한(품목·거래처·설정 포함). SaaS 본사 콘솔은 불가. 아래 표를 참고하세요.',
     settings_perm_role_franchisee: '4. Franchisee (가맹점주)',
     settings_perm_role_franchisee_desc:
       '기본 권한은 매장 매니저와 동일합니다. 시스템 설정 → 가맹점주 탭에서 복수 매장을 켠 뒤, 같은 화면 목록에서 추가 매장을 지정하면 로그인 시 허용 매장이 JWT에 포함되고 ERP 상단에서 매장을 전환하며 조회할 수 있습니다.',
@@ -7869,6 +7870,10 @@ export const i18n = {
       '품목 기본정보와 판매가/원가를 관리하고, 가격 이력과 가격 예약(지정일 자동 반영)을 조회·등록하는 화면입니다.',
     helpHow_admin_items:
       '① 목록 탭에서 품목을 조회·등록·수정합니다. 품목은 삭제하지 않고「사용 안함」(발주 중지)으로 표시합니다.\n② 가격이력 탭에서 변경 타임라인을 확인합니다.\n③ 가격이력 내부의 「가격 예약」에서 적용 시각(방콕 기준)과 변경가를 등록합니다.\n④ 예약 목록에서 대기·적용·취소 상태를 확인하고 필요한 건을 취소합니다.',
+    helpSum_admin_vendors:
+      '매입·매출 거래처 마스터를 등록·수정합니다. 입고·발주·지출에서 거래처를 쓰려면 여기에 먼저 등록해야 합니다. Omni Manager는 Officer와 같이 이 메뉴를 사용할 수 있습니다.',
+    helpHow_admin_vendors:
+      '① 검색 후 신규 등록하거나 행을 열어 수정합니다.\n② 입고·발주용은 유형을 매입(purchase)으로 저장합니다.\n③ 품목 관리에서 거래처를 연결한 뒤 입고·재고를 진행합니다.\n④ 충만 매장 매니저·가맹점주는 이 메뉴가 숨겨집니다. Omni Manager는 Officer와 동일합니다.',
     helpSum_admin_company_documents:
       '매장별 계약·면허·세무 등 회사 문서를 Drive 링크 또는 파일 업로드로 등록하고, KPI·만료·공문 필터로 검색·관리하는 화면입니다.',
     helpHow_admin_company_documents:
@@ -12967,16 +12972,16 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_bank_transactions:
       'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables/borrowings. Officer deposits to the company: Borrowing in + related party (do not post as sales 4110). When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
     helpHow_admin_bank_transactions:
-      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Store bank: tap a yellow chip (store sales QR, Line man sales, etc.) to fill category and note, then save — journals post automatically. QR is done. Grab/LINE MAN/card fees also post on save (POS GROSS − deposit); click Fee edit only if the amount is wrong. If a Fri–Mon card deposit is larger than that day’s POS, weekend days are summed to match the fee. Used-oil is Other income. Putting till cash into the bank is Cash to bank. Hiding Delivery/Card/QR/Cash is expected; saving those types can double-count sales.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
+      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Store bank: pick QR in the category list (same as the yellow chip). Grab/LINE MAN/card: yellow chip, then save — journals post automatically. QR is done. Grab/LINE MAN/card fees also post on save (POS GROSS − deposit); click Fee edit only if the amount is wrong. If a Fri–Mon card deposit is larger than that day’s POS, weekend days are summed to match the fee. Used-oil is Other income. Putting till cash into the bank is Cash to bank. Hiding Delivery/Card/Cash is expected; saving those types can double-count sales.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). Register store credit for prior overpayments, then apply when linking.\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
     bankManualS3PosReceivable:
       'POS auto-journal stores: card/delivery/QR deposits → Sales collection + store. Avoid revenue_* categories (double 4110).',
     bankPosReceivableDepositTitle: 'POS auto-journal — deposit category',
     bankPosReceivableDepositBody:
       'Use Sales collection + store + sales date for Grab/card/QR deposits. Delivery/Card/QR/Cash appear in the list, but saving those on a POS store is rejected or converted to Sales collection.',
     bankPosStoreCategoryLockedHint:
-      'Hiding Delivery/Card/QR/Cash is expected. Tap a yellow chip (QR/Grab/LINE MAN/card) and save. Journals and fees post automatically; use Fee edit only if the amount is wrong. Used-oil is Other income. Till cash to bank is Cash to bank.',
+      'Hiding Delivery/Card/Cash is expected. Pick QR in the category list. Grab/LINE MAN/card: yellow chip. Journals and fees post on save; use Fee edit only if the amount is wrong. Used-oil is Other income. Till cash to bank is Cash to bank.',
     bankPosStoreCategorySelectTitle:
-      'POS store: Delivery/Card/QR/Cash are hidden. Tap a yellow chip and save — journals post automatically.',
+      'POS store: pick QR in the category list. Grab/card: yellow chip. Save — journals post automatically.',
     bankPosStoreCategoryHiddenOptions: 'Delivery/Card/QR/Cash hidden — tap a chip and save',
     bankPosChannelSettleHint:
       'QR: chip + save only. Grab/card fees post on save; click Fee edit below only if the amount is wrong.',
@@ -13143,6 +13148,7 @@ Only matters the employee must handle personally on a working day:
     bankRevenueDelivery: 'Delivery App',
     bankRevenueCard: 'Card Sales',
     bankRevenueQr: 'QR/Transfer',
+    bankDepositChipQr: 'QR',
     bankRevenueCash: 'Cash Deposit',
     bankSalesDate: 'Sales Date',
     bankExpenseDate: 'Expense Date',
@@ -14341,7 +14347,7 @@ Only matters the employee must handle personally on a working day:
     settings_perm_role_officer: '2. Officer',
     settings_perm_role_officer_desc: 'Most access except Director-level. Office is hidden in Payroll and Employee search.',
     settings_perm_role_manager: '3. Manager (Store Manager)',
-    settings_perm_role_manager_desc: 'Own store only. Items, Vendors, Settings, Force Outbound denied. Cannot edit employee role. Payroll holiday & receivable: view only. Complaints: input=own store, view=all stores. See table below.',
+    settings_perm_role_manager_desc: 'Choongman: own store only. Items, Vendors, Settings, Force Outbound denied. Cannot edit employee role. Payroll holiday & receivable: view only. Complaints: input=own store, view=all stores. Omni: Manager has the same ERP access as Officer (including Items, Vendors, Settings). SaaS control-plane console stays denied. See table below.',
     settings_perm_role_franchisee: '4. Franchisee',
     settings_perm_role_franchisee_desc:
       'Same baseline as store manager. Enable multi-store under Settings → Franchisee, assign extra stores in the roster list; after re-login the ERP header lists allowed stores to switch.',
@@ -16181,6 +16187,10 @@ orderItemQty: 'Qty',
       'Manage item basics and item price/cost, and review or register future price schedules from the price-history area.',
     helpHow_admin_items:
       '① Use the list tab to query, add, and edit items. Do not delete items; mark them Unused (pause order) instead.\n② Use Price history to review past changes.\n③ In Price history > Price schedule, set Bangkok-time effective datetime and target price.\n④ Monitor pending/applied/cancelled status and cancel pending records when needed.',
+    helpSum_admin_vendors:
+      'Register and edit purchase/sales vendors. Add the vendor here before inbound, purchase orders, or expenses. On Omni, Manager has the same access as Officer.',
+    helpHow_admin_vendors:
+      '① Search, then create a vendor or open a row to edit.\n② For inbound/PO use type purchase.\n③ Link items to the vendor in Item management, then run inbound/stock.\n④ Choongman store managers and franchisees do not see this menu. Omni Manager is treated as Officer.',
     helpSum_admin_company_documents:
       'Register and manage company documents per store via Drive links or uploads; use KPI, expiry, and correspondence filters to search and track compliance.',
     helpHow_admin_company_documents:
@@ -20627,9 +20637,9 @@ orderItemQty: 'จำนวน',
     bankPosReceivableDepositBody:
       'เงินเข้า Grab บัตร QR ให้ใช้「รับชำระ」+ สาขาและวันขายครับ เดลิเวอรี่ บัตร QR เงินสดยังเห็นในรายการเลือกได้ แต่สาขา POS บันทึกหมวดนั้นไม่ได้หรือระบบจะเปลี่ยนเป็นรับชำระครับ',
     bankPosStoreCategoryLockedHint:
-      'ซ่อนเดลิเวอรี่ บัตร QR เงินสด เป็นเรื่องปกติครับ กดปุ่มเหลือง QR Grab LINE MAN บัตร แล้วบันทึก บัญชีกับค่าธรรมเนียมลงเอง ยอดผิดค่อยกด「แก้ค่าธรรมเนียม」 น้ำมันเก่าเลือก「รายได้อื่น」 นำเงินสดในลิ้นชักเข้าบัญชีเลือก「ฝากเงินสด」ครับ',
+      'ซ่อนเดลิเวอรี่ บัตร เงินสด เป็นเรื่องปกติครับ เงินเข้า QR เลือก「QR」ในช่องประเภทได้เลย Grab LINE MAN บัตร กดปุ่มเหลือง บันทึกแล้วบัญชีกับค่าธรรมเนียมลงเอง ยอดผิดค่อยกด「แก้ค่าธรรมเนียม」 น้ำมันเก่าเลือก「รายได้อื่น」 นำเงินสดในลิ้นชักเข้าบัญชีเลือก「ฝากเงินสด」ครับ',
     bankPosStoreCategorySelectTitle:
-      'สาขา POS: ซ่อนเดลิเวอรี่ บัตร QR เงินสด กดปุ่มเหลืองแล้วบันทึก บัญชีลงอัตโนมัติครับ',
+      'สาขา POS: เงินเข้า QR เลือก「QR」ในช่องประเภทครับ Grab/บัตร กดปุ่มเหลืองแล้วบันทึก บัญชีลงอัตโนมัติ',
     bankPosStoreCategoryHiddenOptions: 'เดลิเวอรี่ บัตร QR เงินสดถูกซ่อน — กดปุ่มเหลืองแล้วบันทึกครับ',
     bankPosChannelSettleHint:
       'QR กดปุ่มเหลืองแล้วบันทึกอย่างเดียวครับ Grab/บัตร ค่าธรรมเนียมลงอัตโนมัติ ยอดผิดค่อยกด「แก้ค่าธรรมเนียม」ด้านล่าง',
@@ -20861,6 +20871,7 @@ orderItemQty: 'จำนวน',
     bankRevenueDelivery: 'เดลิเวอรี่',
     bankRevenueCard: 'บัตร',
     bankRevenueQr: 'QR/โอน',
+    bankDepositChipQr: 'QR',
     bankRevenueCash: 'เงินสด',
     bankSalesDate: 'วันขาย',
     bankExpenseDate: 'วันค่าใช้จ่าย',
@@ -26360,6 +26371,7 @@ orderItemQty: 'အရေအတွက်',
     bankRevenueDelivery: 'ပစ္စည်းပို့',
     bankRevenueCard: 'ကတ်အရောင်း',
     bankRevenueQr: 'QR/ပြောင်း',
+    bankDepositChipQr: 'QR',
     bankRevenueCash: 'ငွေသား',
     bankSalesDate: 'အရောင်းရက်',
     bankExpenseDate: 'အသုံးစရိတ်ရက်',
@@ -31336,6 +31348,7 @@ orderItemQty: 'ຈຳນວນ',
     bankRevenueDelivery: 'ສົ່ງ',
     bankRevenueCard: 'ບັດ',
     bankRevenueQr: 'QR/ໂອນ',
+    bankDepositChipQr: 'QR',
     bankRevenueCash: 'ເງິນສົດ',
     bankSalesDate: 'ວັນຂາຍ',
     bankExpenseDate: 'ວັນຄ່າໃຊ້ຈ່າຍ',

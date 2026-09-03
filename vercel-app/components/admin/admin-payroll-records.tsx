@@ -43,6 +43,7 @@ type RecordRow = {
   month: string
   store: string
   name: string
+  nick?: string
   employee_id?: number
   employee_code?: string
   salary: number
@@ -283,6 +284,7 @@ export function AdminPayrollRecords() {
       t("pay_month"),
       t("pay_col_store"),
       t("pay_col_name"),
+      t("emp_label_nickname"),
       t("emp_label_employee_code"),
       t("pay_col_base"),
       t("pay_pos_allow"),
@@ -341,6 +343,7 @@ export function AdminPayrollRecords() {
         period,
         r.store,
         r.name,
+        String(r.nick || ""),
         String(r.employee_code || ""),
         String(r.salary ?? 0),
         String(r.pos_allow ?? 0),
@@ -363,6 +366,7 @@ export function AdminPayrollRecords() {
       "",
       "",
       t("pay_total_amount"),
+      "",
       "",
       String(sums.salary),
       String(sums.pos),
@@ -620,6 +624,7 @@ ${rows.map((row, ri) => {
                   </th>
                   <th className="p-2 text-left font-medium">{t("pay_col_store")}</th>
                   <th className="p-2 text-left font-medium">{t("pay_col_name")}</th>
+                  <th className="p-2 text-left font-medium">{t("emp_label_nickname")}</th>
                   <th className="p-2 text-center font-medium">{t("emp_label_employee_code")}</th>
                   <th className="p-2 text-right font-medium">{t("pay_col_base")}</th>
                   <th className="p-2 text-right font-medium text-primary">{t("pay_allowance_sum")}</th>
@@ -645,6 +650,7 @@ ${rows.map((row, ri) => {
                       </td>
                       <td className="p-2 font-medium">{r.store}</td>
                       <td className="p-2">{r.name}</td>
+                      <td className="p-2">{r.nick || "-"}</td>
                       <td className="p-2 text-center whitespace-nowrap tabular-nums">{r.employee_code || "-"}</td>
                       <td className="p-2 text-right text-muted-foreground">{fmt(r.salary)}</td>
                       <td className="p-2 text-right text-primary">+{fmt(allowSum)}</td>

@@ -3,6 +3,7 @@
  * 충만 레거시 DB: enforce=false. Omni: JWT/매장으로 tenantId 강제.
  */
 import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
+import { isMissingTenantIdColumnError } from '@/lib/missing-tenant-id-column-error'
 import { normalizeTenantId } from '@/lib/tenant-context'
 import { appendTenantFilter, buildTenantFilter } from '@/lib/supabase-server'
 import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
@@ -24,8 +25,7 @@ export function isSaasTenantColumnMissing(tableHint = 'default'): boolean {
 }
 
 export function isMissingSaasTenantColumnError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err || '')
-  return /42703|PGRST204|tenant_id.*does not exist|column.*tenant_id/i.test(msg)
+  return isMissingTenantIdColumnError(err)
 }
 
 export async function resolveSaasTenantScope(params: {

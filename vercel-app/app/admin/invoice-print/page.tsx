@@ -11,6 +11,11 @@ import { appAlert } from "@/lib/app-message"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
+  isInvoicePrintPreparingSearch,
+  parseInvoicePrintDatas,
+  readInvoicePrintStorageRaw,
+} from "@/lib/open-invoice-print-window"
+import {
   getInvoicePrintOverrides,
   markOutboundInvoicesPrinted,
   updateInvoicePrintOverrides,
@@ -97,17 +102,20 @@ function InvoicePrintPageInner() {
   const t = useT(lang)
   const searchParams = useSearchParams()
   const embed = searchParams.get("embed") === "1"
+  const preparing = isInvoicePrintPreparingSearch(searchParams.toString())
   const [editDatas, setEditDatas] = React.useState<InvoiceData[]>([])
   const [loaded, setLoaded] = React.useState(false)
   const [updating, setUpdating] = React.useState(false)
 
   React.useEffect(() => {
+    if (preparing) {
+      setLoaded(false)
+      return
+    }
     try {
-      const raw = typeof window !== "undefined" ? sessionStorage.getItem(STORAGE_KEY) : null
-      if (raw) {
-        const parsed = JSON.parse(raw) as unknown
-        const arr = Array.isArray(parsed) ? parsed : [parsed]
-        const valid = arr.filter((d): d is InvoiceData => d && typeof d === "object" && "documentNo" in d && "seller" in d && "client" in d && Array.isArray((d as InvoiceData).items))
+      const raw = typeof window !== "undefined" ? readInvoicePrintStorageRaw() : null
+      const valid = parseInvoicePrintDatas(raw) as unknown as InvoiceData[]
+      if (valid.length > 0) {
         setEditDatas(valid)
         const refs = valid
           .map((d) => ({
@@ -201,11 +209,13 @@ function InvoicePrintPageInner() {
               // ignore override fetch errors
             })
         }
+      } else {
+        setEditDatas([])
       }
     } finally {
       setLoaded(true)
     }
-  }, [])
+  }, [preparing])
 
   const buildOverridePayload = React.useCallback((datas: InvoiceData[]): InvoicePrintOverridePayload[] => {
     return datas.flatMap((d) => {

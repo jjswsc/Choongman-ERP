@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  attachEmployeeNickToPayrollRows,
   buildAttendanceDisplayMapsFromEmployees,
   resolveEmployeeDisplayNameForAttendanceGrid,
 } from '@/lib/employee-display-name'
@@ -43,5 +44,31 @@ describe('attendance grid display name', () => {
     expect(
       resolveEmployeeDisplayNameForAttendanceGrid('X', 'Mr. Nobody', 0, empty.displayByEmployeeId, empty.displayByStoreAndBareName)
     ).toBe('Mr. Nobody')
+  })
+})
+
+describe('attachEmployeeNickToPayrollRows', () => {
+  it('employee_id 로 닉네임을 붙인다', () => {
+    const rows = attachEmployeeNickToPayrollRows(
+      [{ store: 'CM Office', name: 'Somchai', employee_id: 10 }],
+      [{ id: 10, store: 'CM Office', name: 'Somchai', nick: '챠이' }]
+    )
+    expect(rows[0].nick).toBe('챠이')
+  })
+
+  it('id 없으면 매장·이름으로 매칭하고 CM 접두 차이를 허용한다', () => {
+    const rows = attachEmployeeNickToPayrollRows(
+      [{ store: 'CM Office', name: 'Ms. Jane' }],
+      [{ id: 2, store: 'Office', name: 'Jane', nick: '제인' }]
+    )
+    expect(rows[0].nick).toBe('제인')
+  })
+
+  it('마스터에 닉이 없으면 빈 문자열', () => {
+    const rows = attachEmployeeNickToPayrollRows(
+      [{ store: 'X', name: 'Nobody' }],
+      [{ id: 1, store: 'X', name: 'Nobody' }]
+    )
+    expect(rows[0].nick).toBe('')
   })
 })

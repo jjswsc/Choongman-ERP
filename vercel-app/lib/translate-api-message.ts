@@ -282,6 +282,37 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "패티캐시 보충 등록에 실패했습니다.": "pettyApiRegisterFailed",
   "DB에 bank_transaction_id 컬럼이 없습니다. sql/petty_cash_bank_link.sql을 실행해 주세요.":
     "pettyApiDbMigrationRequired",
+
+  // Omni SaaS tenant_id 스키마 (assertSaasTenantWritable 등)
+  "직원 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "데이터 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "회계 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "통장 거래 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "통장 계좌 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "고정비 tenant_id 스키마가 없습니다. Omni DB 마이그레이션 SQL을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "inventory tenant_id 스키마가 없습니다.": "saasTenantSchemaMissing",
+  "inventory tenant_id 스키마가 없습니다. Omni DB에 sql/inventory_tenant_id.sql 을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "메뉴 tenant_id 스키마가 없습니다. Omni DB에 sql/pos_catalog_tenant_id.sql 을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "회원 tenant_id 스키마가 없습니다. Omni DB에 sql/members_tenant_id.sql 을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "items tenant_id 스키마가 없습니다. sql/inventory_tenant_id.sql 을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "vendors tenant_id 스키마가 없습니다. sql/inventory_tenant_id.sql 을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "회사(테넌트) 정보가 없어 저장할 수 없습니다. 다시 로그인해 주세요.": "saasTenantIdMissing",
+  "회사(테넌트) 정보가 없어 직원을 저장할 수 없습니다. 다시 로그인해 주세요.": "saasTenantIdMissing",
+  "회사(테넌트) 정보가 없어 데이터를 저장할 수 없습니다. 다시 로그인해 주세요.":
+    "saasTenantIdMissing",
+  "회사(테넌트) 정보가 없어 회원을 저장할 수 없습니다. 다시 로그인해 주세요.": "saasTenantIdMissing",
+  "회사(테넌트) 정보가 없어 메뉴를 저장할 수 없습니다. 다시 로그인해 주세요.": "saasTenantIdMissing",
   "패티캐시 보충 매장을 선택해 주세요.": "pettyApiReplenishStoreRequired",
   "이미 지출·매입·카드·패티캐시와 연결된 통장 거래입니다.":
     "cardApiAlreadyLinkedAny",
@@ -461,6 +492,9 @@ export function translateApiMessage(
     return t("bankPosRevenueDepositDoubleRisk")
       .replace("{store}", posRevDouble[1]!)
       .replace("{category}", posRevDouble[2]!)
+  // Omni SaaS: "{label} tenant_id 스키마가 없습니다..." / SQL 파일명 변형
+  if (/tenant_id 스키마가 없습니다/.test(trimmed)) return t("saasTenantSchemaMissing")
+  if (/^회사\(테넌트\) 정보가 없어/.test(trimmed)) return t("saasTenantIdMissing")
   return msg
 }
 

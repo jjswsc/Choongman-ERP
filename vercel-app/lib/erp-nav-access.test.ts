@@ -59,3 +59,33 @@ describe("POS-only ERP nav", () => {
     expect(hrefs).not.toContain("/admin/items")
   })
 })
+
+describe("Omni vs Choongman manager logistics nav", () => {
+  const logisticsOn = modulesOn(["logistics", "pos_base"])
+
+  function managerCtx(brandKey: "choongman" | "omnifoodtech"): ErpNavAccessContext {
+    return {
+      role: "manager",
+      store: "1001",
+      saasModules: logisticsOn,
+      aiModuleEnabled: false,
+      brandKey,
+    }
+  }
+
+  it("hides items and vendors for Choongman manager", () => {
+    const hrefs = getAccessibleErpNavHrefs(managerCtx("choongman"))
+    expect(hrefs).not.toContain("/admin/items")
+    expect(hrefs).not.toContain("/admin/vendors")
+    expect(hrefs).toContain("/admin/inbound")
+    expect(hrefs).not.toContain("/admin/settings")
+  })
+
+  it("shows items, vendors, and settings for Omni manager", () => {
+    const hrefs = getAccessibleErpNavHrefs(managerCtx("omnifoodtech"))
+    expect(hrefs).toContain("/admin/items")
+    expect(hrefs).toContain("/admin/vendors")
+    expect(hrefs).toContain("/admin/inbound")
+    expect(hrefs).toContain("/admin/settings")
+  })
+})

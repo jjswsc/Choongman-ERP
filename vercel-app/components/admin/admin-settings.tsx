@@ -30,6 +30,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { canAccessSettings } from "@/lib/permissions"
 import { formatEmployeeDisplayName } from "@/lib/employee-display-name"
 import {
@@ -103,6 +104,7 @@ export function AdminSettings() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const brand = useAppBrandConfig()
 
   const [tab, setTab] = useState<SettingsTab>("office")
 
@@ -157,7 +159,7 @@ export function AdminSettings() {
   }, [])
 
   const { posStores: storeKeys, storeLabels: erpStoreLabels } = useStoreList()
-  const canEditFranchiseeSettings = canAccessSettings(auth?.role || "")
+  const canEditFranchiseeSettings = canAccessSettings(auth?.role || "", brand.key)
   const loadPermOptions = useCallback(async () => {
     setPermStores(storeKeys)
     const empRes = await getAdminEmployeeList({ userStore: auth?.store || "", userRole: auth?.role || "director" })
@@ -359,7 +361,7 @@ export function AdminSettings() {
   }
 
   const handleSaveFranchiseeMulti = async () => {
-    if (!canAccessSettings(auth?.role || "")) {
+    if (!canAccessSettings(auth?.role || "", brand.key)) {
       await appAlert(t("apiPermissionDenied"))
       return
     }

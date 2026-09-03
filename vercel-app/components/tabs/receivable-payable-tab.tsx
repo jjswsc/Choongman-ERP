@@ -155,6 +155,11 @@ import {
 } from "./receivable-payable-tab-utils"
 import { subscribeReceivablePayableListInvalidated, publishReceivablePayableListInvalidated } from "@/lib/receivable-payable-list-sync"
 import {
+  closeReservedInvoicePrintWindow,
+  commitReservedInvoicePrintWindow,
+  reserveInvoicePrintWindow,
+} from "@/lib/open-invoice-print-window"
+import {
   buildTaxInvoiceDocNo,
   extractPurchaseOrderNoFromText,
   normalizeTaxInvoiceReferenceNo,
@@ -412,12 +417,14 @@ export function ReceivablePayableTab() {
   )
 
   const openTaxInvoicePrintWindow = React.useCallback(
-    async (datas: InvoiceData[]) => {
-      if (datas.length === 0) return false
-      try {
-        sessionStorage.setItem("invoice-print-data", JSON.stringify(datas))
-      } catch (e) {
-        console.error(e)
+    async (datas: InvoiceData[], reservedWindow: Window) => {
+      if (datas.length === 0) {
+        closeReservedInvoicePrintWindow(reservedWindow)
+        return false
+      }
+      const result = commitReservedInvoicePrintWindow(reservedWindow, datas)
+      if (result === "storage") {
+        closeReservedInvoicePrintWindow(reservedWindow)
         await appAlert(
           tt(
             "recTaxInvoiceBulkStorageFail",
@@ -426,12 +433,11 @@ export function ReceivablePayableTab() {
         )
         return false
       }
-      const printWindow = window.open("/admin/invoice-print", "_blank")
-      if (!printWindow) {
+      if (result !== "ok") {
+        closeReservedInvoicePrintWindow(reservedWindow)
         await appAlert(tt("recTaxInvoicePopupBlocked", "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
         return false
       }
-      printWindow.focus()
       return true
     },
     [tt]
@@ -652,19 +658,30 @@ export function ReceivablePayableTab() {
         await appAlert(taxInvoicePrintSourceError(row))
         return
       }
+      const reservedWindow = reserveInvoicePrintWindow()
+      if (!reservedWindow) {
+        await appAlert(tt("recTaxInvoicePopupBlocked", "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
+        return
+      }
       setTaxInvoiceLoadingKey(source.loadKey)
+      let handedOff = false
       try {
         const result = await buildTaxInvoicePrintData(row, recItem)
         if (!result.ok) {
+          closeReservedInvoicePrintWindow(reservedWindow)
           await appAlert(result.message)
           return
         }
-        await openTaxInvoicePrintWindow([result.data])
+        handedOff = await openTaxInvoicePrintWindow([result.data], reservedWindow)
+      } catch (e) {
+        if (!handedOff) closeReservedInvoicePrintWindow(reservedWindow)
+        console.error(e)
+        await appAlert(t("invLoadFailed"))
       } finally {
         setTaxInvoiceLoadingKey(null)
       }
     },
-    [buildTaxInvoicePrintData, openTaxInvoicePrintWindow, taxInvoicePrintSourceError]
+    [buildTaxInvoicePrintData, openTaxInvoicePrintWindow, t, taxInvoicePrintSourceError, tt]
   )
 
   const handleBulkTaxInvoicePrint = React.useCallback(async () => {
@@ -687,8 +704,14 @@ export function ReceivablePayableTab() {
       )
       return
     }
+    const reservedWindow = reserveInvoicePrintWindow()
+    if (!reservedWindow) {
+      await appAlert(tt("recTaxInvoicePopupBlocked", "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
+      return
+    }
     setTaxInvoiceLoadingKey("bulk")
     setTaxInvoiceBulkProgress({ current: 0, total: targets.length })
+    let handedOff = false
     try {
       const [invoiceDataRes, invSettings] = await Promise.all([getInvoiceData(), getInvoiceSettings()])
       const shared = {
@@ -706,10 +729,12 @@ export function ReceivablePayableTab() {
         else failed.push(result.message)
       }
       if (datas.length > 0) {
-        const opened = await openTaxInvoicePrintWindow(datas)
-        if (opened && failed.length === 0) {
+        handedOff = await openTaxInvoicePrintWindow(datas, reservedWindow)
+        if (handedOff && failed.length === 0) {
           setSelectedTaxInvoicePrintKeys(new Set())
         }
+      } else {
+        closeReservedInvoicePrintWindow(reservedWindow)
       }
       if (failed.length > 0) {
         const detail = [...new Set(failed)].slice(0, 3).join(" · ")
@@ -721,6 +746,7 @@ export function ReceivablePayableTab() {
         )
       }
     } catch (e) {
+      if (!handedOff) closeReservedInvoicePrintWindow(reservedWindow)
       console.error(e)
       await appAlert(t("invLoadFailed"))
     } finally {

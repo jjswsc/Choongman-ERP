@@ -12,4 +12,8 @@ describe("canAccessSaasAdmin", () => {
     expect(canAccessSaasAdmin("Manager")).toBe(false)
     expect(canAccessSaasAdmin("Franchisee")).toBe(false)
   })
+
+  it("still denies Omni ERP-elevated manager", () => {
+    expect(canAccessSaasAdmin("Manager")).toBe(false)
+  })
 })
