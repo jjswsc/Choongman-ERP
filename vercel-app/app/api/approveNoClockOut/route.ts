@@ -126,8 +126,7 @@ export async function POST(request: NextRequest) {
       })
     })()) as { id?: number; log_type?: string; log_at?: string; status?: string }[]
     const inLogs = (attRows || []).filter((r) => String(r.log_type || '').trim() === '출근')
-    const outLog = (attRows || []).find((r) => String(r.log_type || '').trim() === '퇴근')
-    const hasOut = !!outLog
+    const outLogs = (attRows || []).filter((r) => String(r.log_type || '').trim() === '퇴근')
 
     if (inLogs.length === 0) {
       return NextResponse.json(
@@ -136,14 +135,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const inTimeIso = inLogs[0].log_at || ''
+    // 더블 시프트: 마지막(가장 늦은) 출근 기준으로 퇴근 누락 여부 판단
+    // attRows는 log_at.asc 정렬이므로 마지막 출근 = inLogs[last]
+    const lastIn = inLogs[inLogs.length - 1]
+    const inTimeIso = lastIn.log_at || ''
     if (!inTimeIso) {
       return NextResponse.json(
         { success: false, message: '출근 시각을 확인할 수 없습니다.' },
         { headers }
       )
     }
-    if (hasOut && !/강제퇴근\(승인\)/.test(String(outLog?.status || ''))) {
+    const lastInMs = new Date(inTimeIso).getTime()
+    // 마지막 출근 이후의 퇴근이 있으면 이미 처리된 것
+    const hasOutAfterLastIn = outLogs.some((r) => {
+      const t = r.log_at ? new Date(r.log_at).getTime() : 0
+      return t > lastInMs && !/강제퇴근\(승인\)/.test(String(r.status || ''))
+    })
+    if (hasOutAfterLastIn) {
       return NextResponse.json(
         { success: false, message: '이미 퇴근 기록이 있습니다.' },
         { headers }
@@ -190,8 +198,12 @@ export async function POST(request: NextRequest) {
     const outMs = originalOutMs - effectiveEarlyMin * 60 * 1000
     const outDate = new Date(outMs)
 
-    if (hasOut && outLog?.id != null && /강제퇴근\(승인\)/.test(String(outLog.status || ''))) {
-      await supabaseUpdate('attendance_logs', outLog.id, {
+    // 기존 강제퇴근(승인) 기록이 있으면 업데이트
+    const existingForceOut = outLogs.find((r) =>
+      r.log_at && new Date(r.log_at).getTime() > lastInMs && /강제퇴근\(승인\)/.test(String(r.status || ''))
+    )
+    if (existingForceOut?.id != null) {
+      await supabaseUpdate('attendance_logs', existingForceOut.id, {
         log_at: outDate.toISOString(),
         break_min: breakMin,
         late_min: 0,
