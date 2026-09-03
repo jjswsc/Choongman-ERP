@@ -50,6 +50,10 @@ import {
   downloadTotalSalesHierarchyXlsx,
 } from "@/lib/total-sales-export"
 import {
+  chickenPartDedupeKey,
+  prettyChickenPartLibraryLabel,
+} from "@/lib/pos-print-translate"
+import {
   Bar,
   BarChart,
   CartesianGrid,
@@ -75,22 +79,40 @@ const LEVELS: { id: PosSalesHierarchyLevel; labelKey: string; fallback: string }
 ]
 
 /**
- * 옵션 레벨 행("메뉴명 — 옵션명")을 옵션명만으로 재집계.
- * 예: "양념치킨 — 순살" + "간장치킨 — 순살" → "순살" 합산 1행.
+ * 옵션 레벨 행("메뉴명 — M - Boneless")에서 치킨 부위만 추출해 합산.
+ * Boneless(순살) / Wing(윙) / Drumette(봉) 3그룹 — 사이즈·메뉴 무시하고 부위만 합침.
  */
-function aggregateByOptionName(optionRows: PosSalesHierarchyRow[]): PosSalesHierarchyRow[] {
-  const map = new Map<string, { qty: number; sales: number }>()
+type OptionGroupRow = PosSalesHierarchyRow & { qtyPct: number; salesPct: number }
+
+function aggregateByChickenPart(optionRows: PosSalesHierarchyRow[]): OptionGroupRow[] {
+  const map = new Map<string, { qty: number; sales: number; sample: string }>()
   for (const row of optionRows) {
     const dashIdx = row.label.indexOf(" — ")
     const optName = dashIdx >= 0 ? row.label.slice(dashIdx + 3).trim() : row.label
-    const bucket = map.get(optName) ?? { qty: 0, sales: 0 }
+    const partKey = chickenPartDedupeKey(optName)
+    if (partKey !== "boneless" && partKey !== "wing" && partKey !== "drumette") continue
+    const bucket = map.get(partKey) ?? { qty: 0, sales: 0, sample: optName }
     bucket.qty += row.qty
     bucket.sales += row.sales
-    map.set(optName, bucket)
+    map.set(partKey, bucket)
   }
-  return [...map.entries()]
-    .map(([name, b]) => ({ key: `optgrp::${name}`, label: name, qty: b.qty, sales: b.sales }))
-    .sort((a, b) => b.sales - a.sales || b.qty - a.qty)
+  const PART_ORDER = ["boneless", "wing", "drumette"] as const
+  const PART_LABEL: Record<string, string> = {
+    boneless: "Boneless (순살)",
+    wing: "Wing (윙)",
+    drumette: "Drumette (봉)",
+  }
+  const entries = PART_ORDER.filter((k) => map.has(k)).map((k) => [k, map.get(k)!] as const)
+  const totalQty = entries.reduce((s, [, b]) => s + b.qty, 0)
+  const totalSales = entries.reduce((s, [, b]) => s + b.sales, 0)
+  return entries.map(([key, b]) => ({
+    key: `part::${key}`,
+    label: PART_LABEL[key] ?? prettyChickenPartLibraryLabel(key, b.sample),
+    qty: b.qty,
+    sales: b.sales,
+    qtyPct: totalQty > 0 ? (b.qty / totalQty) * 100 : 0,
+    salesPct: totalSales > 0 ? (b.sales / totalSales) * 100 : 0,
+  }))
 }
 
 const CHART_COLORS = [...ADMIN_CHART_COLORS]
@@ -702,11 +724,15 @@ export function TotalSalesTab() {
 
   const activeRows = React.useMemo(() => {
     if (optionGroupMode) {
-      return aggregateByOptionName(levelsData?.option ?? [])
+      return aggregateByChickenPart(levelsData?.option ?? [])
     }
     const rows = levelsData?.[level] ?? []
     return filterHierarchyRowsByDrill(rows, level, drillFilter)
   }, [levelsData, level, drillFilter, optionGroupMode])
+  const optionGroupRows = React.useMemo(
+    () => (optionGroupMode ? (activeRows as OptionGroupRow[]) : null),
+    [optionGroupMode, activeRows]
+  )
   const compareRows = React.useMemo(() => {
     if (!compareChannels || !byOrderTypeLevels) return []
     const rows = buildHierarchyChannelCompareRows(level, byOrderTypeLevels, compareChannelsList)
@@ -742,13 +768,16 @@ export function TotalSalesTab() {
     [compareChannelsList]
   )
 
-  const categoryPieRows = React.useMemo(
-    () =>
-      levelsData?.category?.length
-        ? pieRowsFromHierarchy(levelsData.category, tr("totalSalesChartOther", "기타"))
-        : [],
-    [levelsData?.category, tr]
-  )
+  const categoryPieRows = React.useMemo(() => {
+    if (optionGroupMode && optionGroupRows?.length) {
+      return optionGroupRows
+        .filter((r) => r.sales > 0)
+        .map((r) => ({ name: r.label, sales: Math.round(r.sales) }))
+    }
+    return levelsData?.category?.length
+      ? pieRowsFromHierarchy(levelsData.category, tr("totalSalesChartOther", "기타"))
+      : []
+  }, [levelsData?.category, optionGroupMode, optionGroupRows, tr])
 
   const itemChartRows = React.useMemo(
     () => topRowsForChart(activeRows, CHART_TOP_N),
@@ -1166,7 +1195,7 @@ export function TotalSalesTab() {
             </div>
           ) : null}
 
-          {levelsData && compareChannels && compareChartRows.length > 0 ? (
+          {levelsData && compareChannels && !optionGroupMode && compareChartRows.length > 0 ? (
             <div className="rounded-lg border p-3">
               <h3 className="mb-2 text-sm font-semibold">
                 {tr("totalSalesChartChannelCompare", "채널별 매출 비교")} (
@@ -1200,11 +1229,13 @@ export function TotalSalesTab() {
             </div>
           ) : null}
 
-          {levelsData && !compareChannels && (categoryPieRows.length > 0 || itemChartRows.length > 0) ? (
+          {levelsData && (!compareChannels || optionGroupMode) && (categoryPieRows.length > 0 || itemChartRows.length > 0) ? (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-lg border p-3">
                 <h3 className="mb-2 text-sm font-semibold">
-                  {tr("totalSalesChartCategory", "카테고리")}
+                  {optionGroupMode
+                    ? tr("totalSalesOptionGroupMode", "부위별 합산")
+                    : tr("totalSalesChartCategory", "카테고리")}
                 </h3>
                 {categoryPieRows.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
@@ -1308,9 +1339,18 @@ export function TotalSalesTab() {
                 setSearch("")
               }}
             >
-              {tr("totalSalesOptionGroupMode", "옵션별 합산")}
+              {tr("totalSalesOptionGroupMode", "부위별 합산")}
             </Button>
           </div>
+
+          {optionGroupMode ? (
+            <p className="text-xs text-muted-foreground">
+              {tr(
+                "totalSalesOptionGroupHint",
+                "모든 메뉴의 치킨 옵션을 Boneless(순살)·Wing(윙)·Drumette(봉)으로 합산합니다. 사이즈(S/M)는 무시하고 부위만 봅니다."
+              )}
+            </p>
+          ) : null}
 
           {truncated ? (
             <p className={`text-sm ${ADMIN_PANEL_WARNING_CN}`} role="status">
@@ -1323,7 +1363,7 @@ export function TotalSalesTab() {
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span className="text-muted-foreground">
-              {tr("totalSalesActiveLevel", "집계 단위")}: {optionGroupMode ? tr("totalSalesOptionGroupMode", "옵션별 합산") : tr(LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)}
+              {tr("totalSalesActiveLevel", "집계 단위")}: {optionGroupMode ? tr("totalSalesOptionGroupMode", "부위별 합산") : tr(LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)}
             </span>
             <span className="font-erp-numeric">
               {tr("totalSalesTableTotal", "합계")}: {tr("totalSalesQtyUnit", "수량")} {totals.qty.toLocaleString()} · ฿
@@ -1376,7 +1416,7 @@ export function TotalSalesTab() {
                 </colgroup>
               ) : null}
               <thead className="sticky top-0 z-[1] bg-muted/80 backdrop-blur">
-                {compareChannels ? (
+                {compareChannels && !optionGroupMode ? (
                   <tr className="border-b text-muted-foreground">
                     <th className="py-2 pl-3 text-left" rowSpan={2}>
                       #
@@ -1402,22 +1442,28 @@ export function TotalSalesTab() {
                   </tr>
                 ) : null}
                 <tr className="border-b text-muted-foreground">
-                  {!compareChannels ? (
+                  {!compareChannels || optionGroupMode ? (
                     <>
                       <th className="w-12 py-2 pl-3 text-left">#</th>
                       <th className="py-2 text-left">{tr("totalSalesColName", "명칭")}</th>
-                      {level !== "main" ? (
+                      {!optionGroupMode && level !== "main" ? (
                         <th className="hidden py-2 text-left md:table-cell">
                           {tr("totalSalesLevelMain", "대분류")}
                         </th>
                       ) : null}
-                      {level === "option" || level === "menu" ? (
+                      {!optionGroupMode && (level === "option" || level === "menu") ? (
                         <th className="hidden py-2 text-left lg:table-cell">
                           {tr("totalSalesLevelCategory", "카테고리")}
                         </th>
                       ) : null}
                       <th className="py-2 pr-3 text-right">{tr("salesQuantity", "수량")}</th>
+                      {optionGroupMode ? (
+                        <th className="py-2 pr-3 text-right">{tr("totalSalesQtyPct", "수량 비율")}</th>
+                      ) : null}
                       <th className="py-2 pr-3 text-right">{tr("pL_sales", "매출")}</th>
+                      {optionGroupMode ? (
+                        <th className="py-2 pr-3 text-right">{tr("totalSalesSalesPct", "매출 비율")}</th>
+                      ) : null}
                     </>
                   ) : (
                     <>
@@ -1444,11 +1490,11 @@ export function TotalSalesTab() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={compareChannels ? compareTableColSpan : 6} className="py-10 text-center text-muted-foreground">
+                    <td colSpan={compareChannels && !optionGroupMode ? compareTableColSpan : 6} className="py-10 text-center text-muted-foreground">
                       {tr("loading", "불러오는 중…")}
                     </td>
                   </tr>
-                ) : compareChannels ? (
+                ) : compareChannels && !optionGroupMode ? (
                   compareRows.length === 0 ? (
                     <tr>
                       <td colSpan={compareTableColSpan} className="py-10 text-center text-muted-foreground">
@@ -1502,12 +1548,14 @@ export function TotalSalesTab() {
                   )
                 ) : activeRows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                    <td colSpan={optionGroupMode ? 6 : 6} className="py-10 text-center text-muted-foreground">
                       {tr("salesDataNone", "데이터 없음")}
                     </td>
                   </tr>
                 ) : (
-                  activeRows.map((row, idx) => (
+                  activeRows.map((row, idx) => {
+                    const pct = optionGroupMode ? (row as OptionGroupRow) : null
+                    return (
                     <tr key={row.key} className="border-b hover:bg-muted/30">
                       <td className="py-1.5 pl-3 text-muted-foreground">{idx + 1}</td>
                       <td className="py-1.5 pr-2">
@@ -1521,19 +1569,30 @@ export function TotalSalesTab() {
                             {row.label}
                           </button>
                         ) : (
-                          row.label
+                          <span className="font-medium">{row.label}</span>
                         )}
                       </td>
-                      {level !== "main" ? (
+                      {!optionGroupMode && level !== "main" ? (
                         <td className="hidden py-1.5 md:table-cell text-muted-foreground">{row.categoryMain || "—"}</td>
                       ) : null}
-                      {level === "option" || level === "menu" ? (
+                      {!optionGroupMode && (level === "option" || level === "menu") ? (
                         <td className="hidden py-1.5 lg:table-cell text-muted-foreground">{row.category || "—"}</td>
                       ) : null}
                       <td className="py-1.5 pr-3 text-right font-erp-numeric">{row.qty.toLocaleString()}</td>
+                      {pct ? (
+                        <td className="py-1.5 pr-3 text-right font-erp-numeric text-muted-foreground">
+                          {pct.qtyPct.toFixed(1)}%
+                        </td>
+                      ) : null}
                       <td className="py-1.5 pr-3 text-right font-erp-numeric">{formatSalesAmount(row.sales)}</td>
+                      {pct ? (
+                        <td className="py-1.5 pr-3 text-right font-erp-numeric font-medium">
+                          {pct.salesPct.toFixed(1)}%
+                        </td>
+                      ) : null}
                     </tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>
