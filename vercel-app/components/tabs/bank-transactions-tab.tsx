@@ -144,6 +144,7 @@ import {
   type BankQueryDraft,
   type BankTransactionRow,
 } from "./bank-transactions-tab-utils"
+import { sortBankTransactionsByDate } from "@/lib/bank-transaction-sort"
 import { BankAccountManageDialog } from "./bank-account-manage-dialog"
 import { BankRegisterActionDialog } from "./bank-register-action-dialog"
 import { BankQuickMemoChipBar, BankMiscDialogs } from "./bank-misc-dialogs"
@@ -1820,7 +1821,7 @@ export function BankTransactionsTab() {
   }
 
   const filteredList = React.useMemo(() => {
-    return list.filter((r) => {
+    const filtered = list.filter((r) => {
       const edits = r.id ? queryRowEdits[r.id] : undefined
       if (filterNeedsAttention) {
         if (!bankRowNeedsAttention(r, edits).needsAttention) return false
@@ -1867,6 +1868,7 @@ export function BankTransactionsTab() {
       }
       return true
     })
+    return sortBankTransactionsByDate(filtered)
   }, [
     list,
     filterTransType,

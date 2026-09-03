@@ -3,6 +3,7 @@ import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supaba
 import { parseMoneyAmount } from '@/lib/money-amount'
 import { requireAuth } from '@/lib/verify-auth'
 import { INTERNAL_BANK_SOURCE_MARKER } from '@/lib/bank-transaction-note-meta'
+import { sortBankTransactionsByDate } from '@/lib/bank-transaction-sort'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest) {
     }
     filter = appendSaasTenantFilter(filter, tenantScope, 'bank_transactions')
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
-      order: isDesc ? 'id.desc' : 'id.asc',
+      order: isDesc ? 'trans_date.desc,id.desc' : 'trans_date.asc,id.asc',
       limit: pageSize,
     })) as {
       id?: number
@@ -153,7 +154,7 @@ export async function GET(request: NextRequest) {
     }
 
     const visibleRows = (rows || []).filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
-    const list = visibleRows.map((r) => ({
+    const list = sortBankTransactionsByDate(visibleRows.map((r) => ({
       id: r.id,
       transDate: String(r.trans_date || '').slice(0, 10),
       transType: String(r.trans_type || 'withdraw').toLowerCase(),
@@ -182,7 +183,7 @@ export async function GET(request: NextRequest) {
       isReceivableLinked: receivableLinkedIds.has(Number(r.id || 0)),
       isChannelSettled: channelSettledIds.has(Number(r.id || 0)),
       isCardLinked: cardLinkedIds.has(Number(r.id || 0)),
-    }))
+    })), isDesc ? 'desc' : 'asc')
 
     const periodDeposits = list.filter((t) => t.transType === 'deposit').reduce((s, t) => s + t.amount, 0)
     const periodWithdrawals = list.filter((t) => t.transType === 'withdraw').reduce((s, t) => s + Math.abs(t.amount), 0)
