@@ -26,6 +26,7 @@ import {
 } from '@/lib/qr-table-guest-menu'
 import {
   normalizeQrGuestLang,
+  qrGuestLangOption,
   qrGuestT,
   QR_GUEST_LANG_OPTIONS,
   type QrGuestLang,
@@ -34,11 +35,11 @@ import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr
 import type { PosMenu, PosMenuOption } from '@/lib/api-client'
 import {
   posMenuGuestSearchHaystack,
-  resolvePosMenuGuestDescription,
   resolvePosMenuGuestLabel,
   resolvePosMenuGuestName,
   type PosMenuGuestI18nMap,
 } from '@/lib/pos-menu-guest-i18n'
+import { translateQrGuestDescriptions, uniqueQrGuestDescriptions } from '@/lib/qr-table-guest-translate'
 import { QR_TABLE_GUEST_PAY_POLL_MS } from '@/lib/qr-table-poll-interval'
 import { QR_STAFF_CALL_BILL, QR_STAFF_CALL_HELP } from '@/lib/qr-table-staff-call'
 import QRCode from 'qrcode'
@@ -205,11 +206,46 @@ function GuestLangSheet({
         </div>
         <p className="px-4 pb-1 pt-1 text-base font-semibold">{qrGuestT(lang, 'languageBar')}</p>
         <div className="overflow-y-auto overscroll-contain px-4 pb-3">
-          <GuestLangPickerGrid lang={lang} onChange={onChange} />
+          <GuestLangPickerGrid
+            lang={lang}
+            onChange={(next) => {
+              onChange(next)
+              onClose()
+            }}
+          />
         </div>
       </div>
     </div>,
     document.body
+  )
+}
+
+function GuestLangHeaderButton({
+  lang,
+  onClick,
+}: {
+  lang: QrGuestLang
+  onClick: () => void
+}) {
+  const current = qrGuestLangOption(lang)
+  return (
+    <button
+      type="button"
+      className="inline-flex min-h-8 shrink-0 items-center gap-0.5 rounded-full bg-[#fff7ed] px-2 py-1 text-[11px] font-bold text-stone-800 shadow-sm ring-1 ring-amber-400 touch-manipulation"
+      aria-label={qrGuestT(lang, 'languageBar')}
+      aria-haspopup="dialog"
+      onClick={onClick}
+    >
+      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
+        <path
+          d="M3 12h18M12 3c2.5 3 3.8 6 3.8 9s-1.3 6-3.8 9c-2.5-3-3.8-6-3.8-9S9.5 6 12 3Z"
+          stroke="currentColor"
+          strokeWidth="1.75"
+        />
+      </svg>
+      {current.hint}
+    </button>
   )
 }
 
@@ -292,8 +328,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [orderSummary, setOrderSummary] = React.useState<OrderSummaryState | null>(null)
   const [lang, setLang] = React.useState<QrGuestLang>('th')
-  const [langPicked, setLangPicked] = React.useState(false)
-  const [langReady, setLangReady] = React.useState(false)
+  const [langSheetOpen, setLangSheetOpen] = React.useState(false)
+  const [descByLang, setDescByLang] = React.useState<Record<string, Record<string, string>>>({})
   const [catSheetOpen, setCatSheetOpen] = React.useState(false)
   const extrasPayPollRef = React.useRef<number | null>(null)
 
@@ -329,11 +365,28 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return
-    const saved = sessionStorage.getItem(LANG_KEY)
-    setLang(normalizeQrGuestLang(saved))
-    setLangPicked(Boolean(saved))
-    setLangReady(true)
+    setLang(normalizeQrGuestLang(sessionStorage.getItem(LANG_KEY)))
   }, [])
+
+  const guestDescSources = React.useMemo(
+    () => uniqueQrGuestDescriptions([...includedMenus, ...extraMenus]),
+    [includedMenus, extraMenus]
+  )
+
+  React.useEffect(() => {
+    let cancelled = false
+    if (guestDescSources.length === 0) {
+      return
+    }
+    void translateQrGuestDescriptions(guestDescSources, lang).then((map) => {
+      if (!cancelled) {
+        setDescByLang((prev) => ({ ...prev, [lang]: map }))
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [guestDescSources, lang])
 
   React.useEffect(() => {
     let cancelled = false
@@ -451,7 +504,6 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
   function persistLang(next: QrGuestLang) {
     setLang(next)
-    setLangPicked(true)
     try {
       sessionStorage.setItem(LANG_KEY, next)
     } catch {
@@ -791,15 +843,20 @@ export function QrTableGuestApp({ token }: { token: string }) {
       if (sub !== subCategory) return false
     }
     if (!q) return true
-    return posMenuGuestSearchHaystack({
-      name: m.name,
-      description: m.description,
-      category: m.category,
-      categoryMain: m.categoryMain,
-      nameI18n: m.nameI18n,
-      descriptionI18n: m.descriptionI18n,
-      lang,
-    }).includes(q)
+    return (
+      posMenuGuestSearchHaystack({
+        name: m.name,
+        description: m.description,
+        category: m.category,
+        categoryMain: m.categoryMain,
+        nameI18n: m.nameI18n,
+        descriptionI18n: m.descriptionI18n,
+        lang,
+      }).includes(q) ||
+      String(descByLang[lang]?.[String(m.description || '').trim()] || '')
+        .toLowerCase()
+        .includes(q)
+    )
   })
 
   function toPosMenu(m: MenuItem): PosMenu {
@@ -844,17 +901,14 @@ export function QrTableGuestApp({ token }: { token: string }) {
     return resolvePosMenuGuestName({ name: String(m.name || ''), nameI18n: 'nameI18n' in m ? m.nameI18n : undefined, lang })
   }
 
-  function guestMenuDesc(m: Pick<MenuItem, 'description' | 'descriptionDefault' | 'descriptionI18n'>) {
-    return resolvePosMenuGuestDescription({
-      description: m.description,
-      descriptionDefault: m.descriptionDefault,
-      descriptionI18n: m.descriptionI18n,
-      lang,
-    })
+  function guestMenuDesc(m: Pick<MenuItem, 'description' | 'descriptionDefault'>) {
+    const src = String(m.description || m.descriptionDefault || '').trim()
+    if (!src) return ''
+    return descByLang[lang]?.[src] || src
   }
 
   function guestLabel(raw: string) {
-    return resolvePosMenuGuestLabel(raw, lang)
+    return resolvePosMenuGuestLabel(raw)
   }
 
   function switchTab(next: 'included' | 'extras') {
@@ -885,9 +939,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
   }
 
   const brandBtn = 'bg-[var(--qr-brand,#b45309)] text-white'
-  const catFilterLabel =
-    [mainCategory, subCategory].filter(Boolean).map((c) => guestLabel(c)).join(' · ') || g('allCategories')
-  const showLangPrompt = langReady && !langPicked && (step === 'menu' || step === 'wait_staff' || step === 'pay_entry')
+  const catFilterLabel = [mainCategory, subCategory].filter(Boolean).join(' · ') || g('allCategories')
 
   return (
     <div className="mx-auto min-h-dvh max-w-lg bg-[var(--qr-accent,#faf7f2)] text-stone-900" style={brandCss(settings)}>
@@ -918,6 +970,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
                 {g('callStaff')}
               </button>
             ) : null}
+            <GuestLangHeaderButton lang={lang} onClick={() => setLangSheetOpen(true)} />
           </div>
         </div>
         {step === 'menu' ? (
@@ -1335,10 +1388,10 @@ export function QrTableGuestApp({ token }: { token: string }) {
       ) : null}
 
       <GuestLangSheet
-        open={showLangPrompt}
+        open={langSheetOpen}
         lang={lang}
         onChange={changeLang}
-        onClose={() => persistLang(lang)}
+        onClose={() => setLangSheetOpen(false)}
       />
 
       {catSheetOpen && typeof document !== 'undefined'
@@ -1476,7 +1529,6 @@ export function QrTableGuestApp({ token }: { token: string }) {
         flavorMenus={[...includedMenus, ...extraMenus].map(toPosMenu)}
         buffetIncluded={optionMenu?.buffetIncluded === true}
         storeCode={storeCode}
-        lang={lang}
         t={g}
         onClose={() => setOptionMenu(null)}
         onPick={(pick) => {

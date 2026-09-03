@@ -14,6 +14,12 @@ const LANG_MAP: Record<string, string> = {
   my: 'my',
   lo: 'lo',
   km: 'km',
+  zh: 'zh',
+  ja: 'ja',
+  ru: 'ru',
+  hi: 'hi',
+  ar: 'ar',
+  pt: 'pt',
 }
 const MYMEMORY_LANG: Record<string, string> = {
   ko: 'ko',
@@ -24,6 +30,12 @@ const MYMEMORY_LANG: Record<string, string> = {
   km: 'km',
   vi: 'vi',
   ms: 'ms',
+  zh: 'zh',
+  ja: 'ja',
+  ru: 'ru',
+  hi: 'hi',
+  ar: 'ar',
+  pt: 'pt',
 }
 const UA = 'Mozilla/5.0 (compatible; ChoongmanERP/1.0)'
 const CONCURRENCY = 4

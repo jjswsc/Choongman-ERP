@@ -15,33 +15,33 @@ describe('parsePosMenuI18nMap', () => {
 })
 
 describe('resolvePosMenuGuestName', () => {
-  it('uses stored i18n when present', () => {
+  it('keeps POS menu names untranslated', () => {
+    expect(resolvePosMenuGuestName({ name: 'Banban Chicken', lang: 'th' })).toBe('Banban Chicken')
+    expect(resolvePosMenuGuestName({ name: 'GUCHUJANG Bar.B.Q FRIED CHICKEN', lang: 'ko' })).toBe(
+      'GUCHUJANG Bar.B.Q FRIED CHICKEN'
+    )
     expect(
       resolvePosMenuGuestName({
         name: 'Banban Chicken',
         nameI18n: { ko: '반반 치킨' },
         lang: 'ko',
       })
-    ).toBe('반반 치킨')
-  })
-
-  it('keeps English names in English', () => {
-    expect(resolvePosMenuGuestName({ name: 'Banban Chicken', lang: 'en' })).toBe('Banban Chicken')
-  })
-
-  it('translates common English chicken names for Korean and Thai', () => {
-    expect(resolvePosMenuGuestName({ name: 'Banban Chicken', lang: 'ko' })).toBe('반반 치킨')
-    expect(resolvePosMenuGuestName({ name: 'GUCHUJANG Bar.B.Q FRIED CHICKEN', lang: 'ko' })).toBe(
-      '고추장 바베큐 후라이드 치킨'
-    )
-    expect(resolvePosMenuGuestName({ name: 'SOY SAUCE Bar.B.Q FRIED CHICKEN', lang: 'th' })).toContain(
-      'ซอสถั่วเหลือง'
-    )
+    ).toBe('Banban Chicken')
   })
 })
 
 describe('resolvePosMenuGuestDescription', () => {
-  it('shows Thai table copy only for Thai guests', () => {
+  it('uses language-specific description when stored', () => {
+    expect(
+      resolvePosMenuGuestDescription({
+        description: 'ไก่ทอดคลุกซอสโคชูจัง',
+        descriptionI18n: { ko: '고추장 소스에 버무린 후라이드 치킨' },
+        lang: 'ko',
+      })
+    ).toBe('고추장 소스에 버무린 후라이드 치킨')
+  })
+
+  it('falls back to the original table description', () => {
     const th = 'ไก่ทอดคลุกซอสโคชูจัง'
     expect(
       resolvePosMenuGuestDescription({
@@ -53,33 +53,15 @@ describe('resolvePosMenuGuestDescription', () => {
     expect(
       resolvePosMenuGuestDescription({
         description: th,
-        descriptionDefault: 'Fried chicken tossed in gochujang sauce',
         lang: 'ko',
       })
-    ).toBe('Fried chicken tossed in gochujang sauce')
-    expect(
-      resolvePosMenuGuestDescription({
-        description: th,
-        lang: 'ko',
-      })
-    ).toBe('')
-  })
-
-  it('prefers language map over channel copy', () => {
-    expect(
-      resolvePosMenuGuestDescription({
-        description: 'ไก่ทอด',
-        descriptionI18n: { ko: '고추장에 버무린 후라이드 치킨' },
-        lang: 'ko',
-      })
-    ).toBe('고추장에 버무린 후라이드 치킨')
+    ).toBe(th)
   })
 })
 
 describe('resolvePosMenuGuestLabel', () => {
-  it('translates category chips without changing the source key', () => {
-    expect(resolvePosMenuGuestLabel('Chicken', 'ko')).toBe('치킨')
-    expect(resolvePosMenuGuestLabel('Drinks', 'th')).toBe('เครื่องดื่ม')
-    expect(resolvePosMenuGuestLabel('Banban', 'ko')).toBe('반반')
+  it('keeps category labels as stored', () => {
+    expect(resolvePosMenuGuestLabel('Chicken')).toBe('Chicken')
+    expect(resolvePosMenuGuestLabel('Banban')).toBe('Banban')
   })
 })
