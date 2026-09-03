@@ -3,6 +3,7 @@ import { supabaseSelectFilter, supabaseDeleteByFilter, supabaseInsertMany } from
 import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 import {
   buildScheduleEmployeeRoster,
+  findScheduleSaveDuplicates,
   resolveScheduleSavePayloadFromSlot,
   type ScheduleEmployeeRowInput,
 } from '@/lib/schedule-employee-slot'
@@ -67,20 +68,6 @@ export async function POST(request: NextRequest) {
     const startStr = monday
     const endStr = addDays(monday, 6)
 
-    const existingFilter = appendSaasTenantFilter(
-      `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}&store_name=ilike.${encodeURIComponent(store)}`,
-      tenantScope,
-      'schedules'
-    )
-    await supabaseDeleteByFilter('schedules', existingFilter)
-
-    if (rows.length === 0) {
-      return NextResponse.json(
-        { success: true, message: `${store} 해당 주 시간표가 삭제되었습니다.` },
-        { headers }
-      )
-    }
-
     const empSelectCandidates = [
       'id,name,nick,name_title,employee_code',
       'id,name,nick,name_title',
@@ -103,40 +90,33 @@ export async function POST(request: NextRequest) {
 
     const roster = buildScheduleEmployeeRoster(employeeRows)
 
-    // (schedule_date, store, 직원) 유니크: 코드 우선, 없으면 이름
-    const seen = new Map<string, string>()
-    const duplicates: { name: string; date: string }[] = []
-    for (const s of rows) {
-      const dateStr = String(s.date || '').trim().slice(0, 10)
-      if (!dateStr) continue
-      const slotKey = String(s.employeeCode || s.name || '').trim()
-      if (!slotKey) continue
-      const resolved = resolveScheduleSavePayloadFromSlot(slotKey, roster)
-      const dedupeId =
-        resolved.employeeCode ||
-        (resolved.employeeId != null ? `#${resolved.employeeId}` : '') ||
-        resolved.name ||
-        slotKey
-      const key = `${dateStr}|${store}|${dedupeId}`
-      const area = String(s.remark || s.memo || '').trim() || ''
-      const label = resolved.name || slotKey
-      if (seen.has(key)) {
-        if (!duplicates.some((d) => d.name === label && d.date === dateStr)) {
-          duplicates.push({ name: label, date: dateStr })
-        }
-      } else {
-        seen.set(key, area)
+    // 반드시 DELETE 전에 검증 — 예전이면 중복 오류 시에도 해당 주 시간표가 먼저 지워짐
+    if (rows.length > 0) {
+      const duplicates = findScheduleSaveDuplicates(rows, roster)
+      if (duplicates.length > 0) {
+        const namesList = [...new Set(duplicates.map((d) => d.name))].join(', ')
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'schedule_dup_area',
+            duplicateNames: namesList,
+            duplicateCount: duplicates.length,
+          },
+          { headers }
+        )
       }
     }
-    if (duplicates.length > 0) {
-      const namesList = [...new Set(duplicates.map((d) => d.name))].join(', ')
+
+    const existingFilter = appendSaasTenantFilter(
+      `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}&store_name=ilike.${encodeURIComponent(store)}`,
+      tenantScope,
+      'schedules'
+    )
+    await supabaseDeleteByFilter('schedules', existingFilter)
+
+    if (rows.length === 0) {
       return NextResponse.json(
-        {
-          success: false,
-          message: 'schedule_dup_area',
-          duplicateNames: namesList,
-          duplicateCount: duplicates.length,
-        },
+        { success: true, message: `${store} 해당 주 시간표가 삭제되었습니다.` },
         { headers }
       )
     }

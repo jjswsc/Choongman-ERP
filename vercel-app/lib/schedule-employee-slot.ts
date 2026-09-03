@@ -158,6 +158,60 @@ export function resolveScheduleSavePayloadFromSlot(
   return { name: raw, employeeCode: code, employeeId: null }
 }
 
+/** 저장 시 (날짜·직원) 유니크 키 — 코드 → id → 이름 순 */
+export function scheduleSaveDedupeId(resolved: {
+  name: string
+  employeeCode: string
+  employeeId: number | null
+}, slotKeyFallback = ''): string {
+  return (
+    resolved.employeeCode ||
+    (resolved.employeeId != null && resolved.employeeId > 0 ? `#${resolved.employeeId}` : '') ||
+    resolved.name ||
+    String(slotKeyFallback || '').trim()
+  )
+}
+
+export type ScheduleSaveRowInput = {
+  date?: string
+  name?: string
+  employeeCode?: string
+  remark?: string
+  memo?: string
+}
+
+/**
+ * 같은 날짜에 동일 직원이 두 행이면 중복.
+ * (클라이언트는 구역을 한 행으로 합치므로, 여기 중복은 보통 코드·이름이 따로 들어간 경우)
+ */
+export function findScheduleSaveDuplicates(
+  rows: ScheduleSaveRowInput[],
+  roster: ReturnType<typeof buildScheduleEmployeeRoster>
+): { name: string; date: string; dedupeId: string }[] {
+  const seen = new Map<string, string>()
+  const duplicates: { name: string; date: string; dedupeId: string }[] = []
+  for (const s of rows) {
+    const dateStr = String(s.date || '').trim().slice(0, 10)
+    if (!dateStr) continue
+    const slotKey = String(s.employeeCode || s.name || '').trim()
+    if (!slotKey) continue
+    const resolved = resolveScheduleSavePayloadFromSlot(slotKey, roster)
+    const dedupeId = scheduleSaveDedupeId(resolved, slotKey)
+    if (!dedupeId) continue
+    const key = `${dateStr}|${dedupeId}`
+    const entry = resolveScheduleRosterEntry(slotKey, roster)
+    const label = (entry?.nick || resolved.name || slotKey).trim() || slotKey
+    if (seen.has(key)) {
+      if (!duplicates.some((d) => d.dedupeId === dedupeId && d.date === dateStr)) {
+        duplicates.push({ name: label, date: dateStr, dedupeId })
+      }
+    } else {
+      seen.set(key, label)
+    }
+  }
+  return duplicates
+}
+
 /** 이름·코드 맵 (조회 API 닉네임 해석) */
 export function buildScheduleNameNickMaps(employees: ScheduleEmployeeRowInput[] | null | undefined): {
   nameToNick: Record<string, string>

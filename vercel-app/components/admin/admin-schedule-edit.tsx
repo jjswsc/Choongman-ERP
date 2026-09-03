@@ -33,9 +33,11 @@ import {
   SCHEDULE_HOUR_DEFAULT_START,
   SCHEDULE_HOUR_MAX,
   buildScheduleEmployeeRoster,
+  findScheduleSaveDuplicates,
   resolveScheduleRosterEntry,
   resolveScheduleSavePayloadFromSlot,
   scheduleBreakSlotKey,
+  scheduleSaveDedupeId,
   scheduleSlotKeyFromEmployee,
   scheduleSlotKeyFromLoadedRow,
   scheduleWorkSlotKeyFromSlot,
@@ -97,6 +99,107 @@ function staffListToRoster(list: StaffItem[]) {
       employee_code: s.employeeCode,
     }))
   )
+}
+
+type ScheduleSaveRowDraft = {
+  date: string
+  name: string
+  employeeCode?: string
+  pIn: string
+  pOut: string
+  pBS: string
+  pBE: string
+  remark: string
+  plan_in_prev_day?: boolean
+}
+
+/** 슬롯 키(코드·이름)가 달라도 같은 직원이면 한 행으로 합침 */
+function collapseMergedSlotsByEmployee(
+  mergedByDateSlot: Record<string, { work: string[]; break: string[]; areas: string[] }>,
+  roster: ReturnType<typeof buildScheduleEmployeeRoster>
+): Record<string, { work: string[]; break: string[]; areas: string[]; slotKey: string }> {
+  const out: Record<string, { work: string[]; break: string[]; areas: string[]; slotKey: string }> = {}
+  for (const [mergeKey, v] of Object.entries(mergedByDateSlot)) {
+    const idx = mergeKey.indexOf("|")
+    const date = mergeKey.slice(0, idx)
+    const slotKey = mergeKey.slice(idx + 1)
+    const resolved = resolveScheduleSavePayloadFromSlot(slotKey, roster)
+    const dedupeId = scheduleSaveDedupeId(resolved, slotKey)
+    const idKey = `${date}|${dedupeId}`
+    if (!out[idKey]) {
+      out[idKey] = { work: [], break: [], areas: [], slotKey }
+    }
+    out[idKey].work.push(...v.work)
+    out[idKey].break.push(...v.break)
+    for (const a of v.areas) {
+      if (!out[idKey].areas.includes(a)) out[idKey].areas.push(a)
+    }
+  }
+  return out
+}
+
+function buildSaveRowsFromCollapsed(
+  collapsed: Record<string, { work: string[]; break: string[]; areas: string[]; slotKey: string }>,
+  dayStrs: string[],
+  roster: ReturnType<typeof buildScheduleEmployeeRoster>
+): ScheduleSaveRowDraft[] {
+  const rows: ScheduleSaveRowDraft[] = []
+  for (const [idKey, v] of Object.entries(collapsed)) {
+    const idx = idKey.indexOf("|")
+    const date = idKey.slice(0, idx)
+    const resolved = resolveScheduleSavePayloadFromSlot(v.slotKey, roster)
+    const dayIdx = dayStrs.indexOf(date)
+    if (dayIdx < 0) continue
+    const all = [...v.work, ...v.break].sort()
+    if (all.length === 0) continue
+    const pIn = all[0]
+    const last = all[all.length - 1]
+    const [lh, lm] = last.split(":").map(Number)
+    let lm2 = lm + 30
+    let lh2 = lh
+    if (lm2 >= 60) {
+      lm2 -= 60
+      lh2++
+    }
+    const isOvernight = lh2 >= 24
+    const storeDate = date
+    let pOut: string
+    const plan_in_prev_day = isOvernight
+    if (isOvernight) {
+      const outH = lh2 - 24
+      const outM = lm2
+      pOut = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
+    } else {
+      pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
+    }
+    let pBS = ""
+    let pBE = ""
+    if (v.break.length > 0) {
+      const bSorted = v.break.sort()
+      pBS = bSorted[0]
+      const bLast = bSorted[bSorted.length - 1]
+      const [bh, bm] = bLast.split(":").map(Number)
+      let bm2 = bm + 30
+      let bh2 = bh
+      if (bm2 >= 60) {
+        bm2 -= 60
+        bh2++
+      }
+      pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
+    }
+    rows.push({
+      date: storeDate,
+      name: resolved.name,
+      ...(resolved.employeeCode ? { employeeCode: resolved.employeeCode } : {}),
+      pIn,
+      pOut,
+      pBS,
+      pBE,
+      remark: `[${v.areas.join(", ")}]`,
+      plan_in_prev_day,
+    })
+  }
+  return rows
 }
 
 export function AdminScheduleEdit({
@@ -358,22 +461,17 @@ export function AdminScheduleEdit({
     })
   }
 
-  const copyToNext = async () => {
-    if (!store || !monday) {
-      await appAlert(t("att_store_monday_required"))
-      return
-    }
-    const nextMonday = addDaysSchedule(monday, 7)
-    if (!await appConfirm(t("att_copy_confirm").replace("{date}", nextMonday))) return
-
-    const nextDayStrs = Array.from({ length: 7 }, (_, i) => addDaysSchedule(nextMonday, i))
+  const buildRowsFromSlotData = (targetMonday: string): ScheduleSaveRowDraft[] => {
+    const roster = staffListToRoster(staffList)
+    const targetDayStrs = Array.from({ length: 7 }, (_, i) => addDaysSchedule(targetMonday, i))
     const map: Record<string, { work: string[]; break: string[] }> = {}
     for (const [key, names] of Object.entries(slotData)) {
       if (!names.length) continue
       const [dayStr, area, time] = key.split("-")
       const day = parseInt(dayStr, 10)
       if (day < 0 || day > 6) continue
-      const datePart = nextDayStrs[day]
+      const datePart = targetDayStrs[day]
+      if (!datePart) continue
       for (const n of names) {
         if (isScheduleLeaveSlot(n)) continue
         const realSlotKey = isScheduleBreakSlot(n) ? scheduleWorkSlotKeyFromSlot(n) : n
@@ -384,7 +482,6 @@ export function AdminScheduleEdit({
       }
     }
 
-    const roster = staffListToRoster(staffList)
     const mergedByDateSlot: Record<string, { work: string[]; break: string[]; areas: string[] }> = {}
     for (const [k, v] of Object.entries(map)) {
       const parts = k.split("_")
@@ -398,76 +495,28 @@ export function AdminScheduleEdit({
       if (!mergedByDateSlot[mergeKey].areas.includes(area)) mergedByDateSlot[mergeKey].areas.push(area)
     }
 
-    const rows: {
-      date: string
-      name: string
-      employeeCode?: string
-      pIn: string
-      pOut: string
-      pBS: string
-      pBE: string
-      remark: string
-      plan_in_prev_day?: boolean
-    }[] = []
-    for (const [mergeKey, v] of Object.entries(mergedByDateSlot)) {
-      const idx = mergeKey.indexOf("|")
-      const date = mergeKey.slice(0, idx)
-      const slotKey = mergeKey.slice(idx + 1)
-      const resolved = resolveScheduleSavePayloadFromSlot(slotKey, roster)
-      const dayIdx = nextDayStrs.indexOf(date)
-      if (dayIdx < 0) continue
-      const all = [...v.work, ...v.break].sort()
-      if (all.length === 0) continue
-      const pIn = all[0]
-      const last = all[all.length - 1]
-      const [lh, lm] = last.split(":").map(Number)
-      let lm2 = lm + 30
-      let lh2 = lh
-      if (lm2 >= 60) {
-        lm2 -= 60
-        lh2++
-      }
-      const isOvernight = lh2 >= 24
-      const storeDate = date
-      let pOut: string
-      const plan_in_prev_day = isOvernight
-      if (isOvernight) {
-        const outH = lh2 - 24
-        const outM = lm2
-        pOut = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
-      } else {
-        pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
-      }
-      let pBS = ""
-      let pBE = ""
-      if (v.break.length > 0) {
-        const bSorted = v.break.sort()
-        pBS = bSorted[0]
-        const bLast = bSorted[bSorted.length - 1]
-        const [bh, bm] = bLast.split(":").map(Number)
-        let bm2 = bm + 30
-        let bh2 = bh
-        if (bm2 >= 60) {
-          bm2 -= 60
-          bh2++
-        }
-        pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
-      }
-      rows.push({
-        date: storeDate,
-        name: resolved.name,
-        ...(resolved.employeeCode ? { employeeCode: resolved.employeeCode } : {}),
-        pIn,
-        pOut,
-        pBS,
-        pBE,
-        remark: `[${v.areas.join(", ")}]`,
-        plan_in_prev_day,
-      })
-    }
+    const collapsed = collapseMergedSlotsByEmployee(mergedByDateSlot, roster)
+    return buildSaveRowsFromCollapsed(collapsed, targetDayStrs, roster)
+  }
 
+  const copyToNext = async () => {
+    if (!store || !monday) {
+      await appAlert(t("att_store_monday_required"))
+      return
+    }
+    const nextMonday = addDaysSchedule(monday, 7)
+    if (!await appConfirm(t("att_copy_confirm").replace("{date}", nextMonday))) return
+
+    const roster = staffListToRoster(staffList)
+    const rows = buildRowsFromSlotData(nextMonday)
     if (rows.length === 0) {
       await appAlert(t("att_no_data_to_save") || "복사할 스케줄 데이터가 없습니다.")
+      return
+    }
+    const duplicates = findScheduleSaveDuplicates(rows, roster)
+    if (duplicates.length > 0) {
+      const namesList = [...new Set(duplicates.map((d) => d.name))].join(", ")
+      await appAlert(t("schedule_dup_area").replace("{names}", namesList))
       return
     }
 
@@ -495,108 +544,15 @@ export function AdminScheduleEdit({
       return
     }
     const roster = staffListToRoster(staffList)
-    const map: Record<string, { work: string[]; break: string[] }> = {}
-    const dayStrs = Array.from({ length: 7 }, (_, i) => addDaysSchedule(monday, i))
-
-    for (const [key, names] of Object.entries(slotData)) {
-      if (!names.length) continue
-      const [dayStr, area, time] = key.split("-")
-      const day = parseInt(dayStr, 10)
-      const datePart = dayStrs[day]
-      for (const n of names) {
-        if (isScheduleLeaveSlot(n)) continue
-        const realSlotKey = isScheduleBreakSlot(n) ? scheduleWorkSlotKeyFromSlot(n) : n
-        const recKey = `${datePart}_${realSlotKey}_${area}`
-        if (!map[recKey]) map[recKey] = { work: [], break: [] }
-        if (isScheduleBreakSlot(n)) map[recKey].break.push(time)
-        else map[recKey].work.push(time)
-      }
-    }
-
-    const mergedByDateSlot: Record<string, { work: string[]; break: string[]; areas: string[] }> = {}
-    for (const [k, v] of Object.entries(map)) {
-      const parts = k.split("_")
-      const date = parts[0]
-      const area = parts[parts.length - 1]
-      const slotKey = parts.slice(1, -1).join("_")
-      const mergeKey = `${date}|${slotKey}`
-      if (!mergedByDateSlot[mergeKey]) mergedByDateSlot[mergeKey] = { work: [], break: [], areas: [] }
-      mergedByDateSlot[mergeKey].work.push(...v.work)
-      mergedByDateSlot[mergeKey].break.push(...v.break)
-      if (!mergedByDateSlot[mergeKey].areas.includes(area)) mergedByDateSlot[mergeKey].areas.push(area)
-    }
-
-    const rows: {
-      date: string
-      name: string
-      employeeCode?: string
-      pIn: string
-      pOut: string
-      pBS: string
-      pBE: string
-      remark: string
-      plan_in_prev_day?: boolean
-    }[] = []
-    for (const [mergeKey, v] of Object.entries(mergedByDateSlot)) {
-      const idx = mergeKey.indexOf("|")
-      const date = mergeKey.slice(0, idx)
-      const slotKey = mergeKey.slice(idx + 1)
-      const resolved = resolveScheduleSavePayloadFromSlot(slotKey, roster)
-      const dayIdx = dayStrs.indexOf(date)
-      if (dayIdx < 0) continue
-      const all = [...v.work, ...v.break].sort()
-      if (all.length === 0) continue
-      const pIn = all[0]
-      const last = all[all.length - 1]
-      const [lh, lm] = last.split(":").map(Number)
-      let lm2 = lm + 30
-      let lh2 = lh
-      if (lm2 >= 60) {
-        lm2 -= 60
-        lh2++
-      }
-      const isOvernight = lh2 >= 24
-      // schedule_date는 항상 근무 시작일(plan_in 기준). 자정 넘김은 plan_in_prev_day로 표현
-      const storeDate = date
-      let pOut: string
-      const plan_in_prev_day = isOvernight
-      if (isOvernight) {
-        const outH = lh2 - 24
-        const outM = lm2
-        pOut = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
-      } else {
-        pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
-      }
-      let pBS = ""
-      let pBE = ""
-      if (v.break.length > 0) {
-        const bSorted = v.break.sort()
-        pBS = bSorted[0]
-        const bLast = bSorted[bSorted.length - 1]
-        const [bh, bm] = bLast.split(":").map(Number)
-        let bm2 = bm + 30
-        let bh2 = bh
-        if (bm2 >= 60) {
-          bm2 -= 60
-          bh2++
-        }
-        pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
-      }
-      rows.push({
-        date: storeDate,
-        name: resolved.name,
-        ...(resolved.employeeCode ? { employeeCode: resolved.employeeCode } : {}),
-        pIn,
-        pOut,
-        pBS,
-        pBE,
-        remark: `[${v.areas.join(", ")}]`,
-        plan_in_prev_day,
-      })
-    }
-
+    const rows = buildRowsFromSlotData(monday)
     if (rows.length === 0) {
       await appAlert(t("att_no_data_to_save"))
+      return
+    }
+    const duplicates = findScheduleSaveDuplicates(rows, roster)
+    if (duplicates.length > 0) {
+      const namesList = [...new Set(duplicates.map((d) => d.name))].join(", ")
+      await appAlert(t("schedule_dup_area").replace("{names}", namesList))
       return
     }
     setSaving(true)

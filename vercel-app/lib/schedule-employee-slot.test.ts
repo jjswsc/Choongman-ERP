@@ -4,6 +4,7 @@ import {
   SCHEDULE_HOUR_MAX,
   buildScheduleEmployeeRoster,
   buildScheduleHalfHourOptions,
+  findScheduleSaveDuplicates,
   resolveScheduleRosterEntry,
   resolveScheduleSavePayloadFromSlot,
   scheduleBreakSlotKey,
@@ -85,5 +86,31 @@ describe('schedule-employee-slot', () => {
     expect(scheduleGridEndHourForExclusiveEndMinutes(startMin + 9 * 60)).toBe(30)
     expect(scheduleGridEndHourForExclusiveEndMinutes(startMin + 10 * 60)).toBe(31)
     expect(scheduleGridEndHourForExclusiveEndMinutes(startMin + 20 * 60)).toBe(SCHEDULE_HOUR_MAX)
+  })
+
+  it('같은 날짜에 코드·이름이 갈라진 동일 직원은 중복으로 잡는다', () => {
+    const roster = buildScheduleEmployeeRoster(employees)
+    const dups = findScheduleSaveDuplicates(
+      [
+        { date: '2026-08-31', employeeCode: 'M0020', name: 'Chosita Krutkran' },
+        { date: '2026-08-31', name: 'Chosita Krutkran' },
+      ],
+      roster
+    )
+    expect(dups).toHaveLength(1)
+    expect(dups[0].dedupeId).toBe('M0020')
+    expect(dups[0].name).toBe('Bew')
+  })
+
+  it('날짜가 다르면 동일 직원이어도 중복이 아니다', () => {
+    const roster = buildScheduleEmployeeRoster(employees)
+    const dups = findScheduleSaveDuplicates(
+      [
+        { date: '2026-08-31', employeeCode: 'M0020' },
+        { date: '2026-09-01', employeeCode: 'M0020' },
+      ],
+      roster
+    )
+    expect(dups).toHaveLength(0)
   })
 })

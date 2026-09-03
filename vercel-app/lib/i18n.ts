@@ -1841,7 +1841,7 @@ export const i18n = {
     helpSum_admin_attendance:
       '출퇴근 기록 조회·승인, 지각·조퇴·연장 조정, 당일 실시간 근무, 주간 스케줄 조회·작성을 한 화면에서 처리합니다. 사이드바 배지는 GPS·강제퇴근 등 미승인만 표시합니다.',
     helpHow_admin_attendance:
-      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 오늘 출근 현황을 봅니다.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~31:00, 자정 이후는 24:00~·익일 07:00은 31:00)에서 고릅니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
+      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 오늘 출근 현황을 봅니다.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~31:00, 자정 이후는 24:00~·익일 07:00은 31:00)에서 고릅니다. 저장 전에 같은 날 동일 직원 중복을 검사하며, 오류가 나도 기존 표는 지우지 않습니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
     helpSum_admin_leave:
       '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다. 통계 기본은 재직 직원만 보이며, 사이드바 배지는 최근 휴가일 기준 미승인만 표시합니다.',
     helpHow_admin_leave:
@@ -6172,7 +6172,8 @@ export const i18n = {
     att_no_data_to_save: '저장할 데이터가 없습니다.',
     att_saved: '저장되었습니다.',
     att_save_failed: '저장 실패',
-    schedule_dup_area: '같은 날짜에 한 직원은 주방 또는 서비스 한 곳에만 배정할 수 있습니다. 중복 배정된 직원: {names}',
+    schedule_dup_area:
+      '같은 날짜에 한 직원은 한 번만 배정할 수 있습니다(이름·직원코드가 갈라져 두 번 들어간 경우 포함). 중복: {names}',
     att_schedule_store_required: '매장과 기준 월요일이 필요합니다.',
     att_schedule_deleted: '해당 주 시간표가 삭제되었습니다.',
     att_schedule_saved: '주간 시간표가 저장되었습니다!',
@@ -10160,7 +10161,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_attendance:
       'Review and approve clock-in/out, adjust late/early/OT, view today’s live status, and browse or edit weekly schedules in one place. Sidebar badges show only unapproved GPS/forced items.',
     helpHow_admin_attendance:
-      '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: see who is on shift now.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–31:00; after midnight use 24:00+, and 07:00 next morning is 31:00).\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
+      '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: see who is on shift now.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–31:00; after midnight use 24:00+, and 07:00 next morning is 31:00). Save validates same-day duplicate staff first and does not clear the week on validation errors.\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
     helpSum_admin_leave:
       'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Stats default to current staff. Sidebar badges count only recent unapproved leave dates.',
     helpHow_admin_leave:
@@ -14474,7 +14475,8 @@ Only matters the employee must handle personally on a working day:
     att_no_data_to_save: 'No data to save.',
     att_saved: 'Saved.',
     att_save_failed: 'Save failed',
-    schedule_dup_area: 'One employee can be assigned to Kitchen or Service only once per day. Duplicate: {names}',
+    schedule_dup_area:
+      'One employee can be scheduled only once per day (including when the same person appears under both name and employee code). Duplicate: {names}',
     att_schedule_store_required: 'Store and Monday required.',
     att_schedule_deleted: 'Schedule deleted.',
     att_schedule_saved: 'Weekly schedule saved!',
@@ -18310,7 +18312,7 @@ orderItemQty: 'จำนวน',
     helpSum_admin_attendance:
       'Attendance records, approval, schedule view/edit in one place.',
     helpHow_admin_attendance:
-      'กรอง อนุมัติ ปรับเวลา — แท็บช่วยเหลือมีกฎ ตารางงานเลือกเริ่มพักได้ตามช่วงที่แสดง รวมหลังเที่ยงคืนถึงเช้า (เช่น 22:00–07:00 คือ 22:00–31:00) ครับ',
+      'กรอง อนุมัติ ปรับเวลา — แท็บช่วยเหลือมีกฎ ตารางงานเลือกเริ่มพักได้ตามช่วงที่แสดง รวมหลังเที่ยงคืนถึงเช้า (เช่น 22:00–07:00 คือ 22:00–31:00) บันทึกจะตรวจพนักงานซ้ำในวันเดียวกันก่อน และถ้าผิดพลาดจะไม่ลบตารางเดิมครับ',
     helpSum_admin_leave:
       'อนุมัติ/ปฏิเสธการลา และดูสถิติการใช้ ค่าเริ่มต้นแสดงพนักงานที่ยังปฏิบัติงานอยู่ครับ',
     helpHow_admin_leave:
@@ -21906,7 +21908,8 @@ orderItemQty: 'จำนวน',
     att_no_data_to_save: 'ไม่มีข้อมูลที่จะบันทึก',
     att_saved: 'บันทึกแล้ว',
     att_save_failed: 'บันทึกไม่สำเร็จ',
-    schedule_dup_area: 'พนักงานหนึ่งคนสามารถลงได้เพียงครัวหรือบริการอย่างใดอย่างหนึ่งต่อวัน ซ้ำ: {names}',
+    schedule_dup_area:
+      'พนักงานหนึ่งคนลงตารางได้เพียงครั้งเดียวต่อวัน (รวมกรณีชื่อกับรหัสพนักงานแยกกันแล้วซ้ำ) ซ้ำ: {names}',
     att_schedule_store_required: 'ต้องมีสาขาและวันจันทร์',
     att_schedule_deleted: 'ลบตารางแล้ว',
     att_schedule_saved: 'บันทึกตารางรายสัปดาห์แล้ว!',
