@@ -4,6 +4,7 @@
 import { defaultCache } from "@serwist/next/worker"
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist"
 import { ExpirationPlugin, CacheFirst, NetworkFirst, NetworkOnly, Serwist } from "serwist"
+import { isLoginHardRefreshUrl } from "../lib/login-hard-refresh"
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -306,7 +307,7 @@ const posTerminalDocumentNetworkFirst = {
 const posLoginDocumentNetworkFirst = {
   matcher({
     sameOrigin,
-    url: { pathname },
+    url,
     request,
   }: {
     request: Request
@@ -315,7 +316,9 @@ const posLoginDocumentNetworkFirst = {
     event?: ExtendableEvent
   }) {
     if (!sameOrigin || request.method !== "GET") return false
-    return pathname === "/pos/login" && request.destination === "document"
+    if (url.pathname !== "/pos/login" || request.destination !== "document") return false
+    if (isLoginHardRefreshUrl(url)) return false
+    return true
   },
   method: "GET" as const,
   handler: new NetworkFirst({
@@ -329,6 +332,26 @@ const posLoginDocumentNetworkFirst = {
       }),
     ],
   }),
+}
+
+/** 「새로고침」쿼리 — 30일짜리 로그인 HTML 캐시를 건너뛰고 네트워크만 */
+const posLoginDocumentForceNetworkOnly = {
+  matcher({
+    sameOrigin,
+    url,
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    if (!sameOrigin || request.method !== "GET") return false
+    if (url.pathname !== "/pos/login" || request.destination !== "document") return false
+    return isLoginHardRefreshUrl(url)
+  },
+  method: "GET" as const,
+  handler: new NetworkOnly(),
 }
 
 const loginPagesGetNetworkOnly = {
@@ -444,6 +467,7 @@ const serwist = new Serwist({
     authLoginApisGetNetworkOnly,
     memberPortalApisNetworkOnly,
     authLoginPostNetworkOnly,
+    posLoginDocumentForceNetworkOnly,
     posLoginDocumentNetworkFirst,
     posTerminalDocumentNetworkFirst,
     loginPagesGetNetworkOnly,

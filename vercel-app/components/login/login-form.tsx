@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type MouseEvent,
 } from "react"
 import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -25,6 +26,7 @@ import { isLoginExcludedStoreKey } from "@/lib/pos-sales-test-office"
 import { readLoginDataFromCacheOnly, type LoginDataResult } from "@/lib/offline/erp-offline"
 import { asLoginNameList, normalizeLoginUsersMap } from "@/lib/login-data-normalize"
 import { recoverFromChunkLoadError } from "@/lib/chunk-load-recovery"
+import { loginNativeRefreshHref } from "@/lib/login-hard-refresh"
 import { useAuth, loadOfflineResumeAuth, clearOfflineLoginSnapshot, enrichOfflinePosAuth, type AuthState } from "@/lib/auth-context"
 import {
   isLangCode,
@@ -67,6 +69,7 @@ import {
 } from "@/lib/saas-partner-login-defaults-client"
 import {
   LOGIN_AUTH_INIT_WATCHDOG_MS,
+  LOGIN_CACHE_PREFETCH_MS,
   LOGIN_CONNECTING_WATCHDOG_MS,
   LOGIN_SESSION_REDIRECT_BOUNCE_KEY,
   LOGIN_SESSION_REDIRECT_HANG_MS,
@@ -76,6 +79,7 @@ import {
   isStillOnLoginPath,
   loginListFetchMaxAttempts,
   loginListFetchTimeoutMs,
+  racePromiseWithTimeout,
   resolveLoginBootPhase,
 } from "@/lib/login-connecting-watchdog"
 
@@ -612,11 +616,31 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
           if (hybridOfflineBoot) timeoutMs = 3_000
         }
 
-        /** 홀 태블릿·오프라인 부팅: API가 느려도 캐시 목록으로 폼을 먼저 연다 */
+        /**
+         * 홀 태블릿 IndexedDB가 막히면 예전엔 캐시를 기다린 뒤에야 API를 불렀다.
+         * 방나처럼 Wi‑Fi만 있는 기기는 그 대기 동안 목록이 영원히 비어 보인다.
+         * 캐시는 짧게만 기다리고, API는 바로 시작한다.
+         */
+        const cachePromise =
+          kioskClient || timeoutMs === 3_000
+            ? readLoginDataFromCacheOnly(loginOpts)
+            : Promise.resolve(null as LoginDataResult | null)
+        let gotApiSuccess = false
+        void cachePromise.then((cachedOnly) => {
+          if (!stillCurrent() || gotApiSuccess) return
+          if (cachedOnly && cachedOnly._source === "cache") {
+            applyLoginDataResult(cachedOnly)
+            setLoading(false)
+          }
+        })
         if (kioskClient || timeoutMs === 3_000) {
-          const cachedOnly = await readLoginDataFromCacheOnly(loginOpts)
+          const cachedOnly = await racePromiseWithTimeout(
+            cachePromise,
+            LOGIN_CACHE_PREFETCH_MS,
+            null
+          )
           if (!stillCurrent()) return
-          if (cachedOnly._source === "cache") {
+          if (cachedOnly && cachedOnly._source === "cache") {
             applyLoginDataResult(cachedOnly)
             setLoading(false)
             if (timeoutMs === 3_000 && !isBrowserOnline()) return
@@ -655,6 +679,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
             setLoading(false)
             return
           }
+          if (d._source === "api") gotApiSuccess = true
           applyLoginDataResult(d)
           setLoading(false)
         } catch (e) {
@@ -1528,6 +1553,21 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     ? (lang as (typeof LOGIN_BUILTIN_LABEL_LANGS)[number])
     : "en"
   const t = labels[loginLabelLang]
+  const loginRefreshHref = loginNativeRefreshHref(loginPath || "/pos/login")
+  const loginRecoveryLinkClass =
+    "relative z-20 inline-flex min-h-11 min-w-[7.5rem] flex-1 items-center justify-center rounded-md bg-amber-500 px-3 py-2.5 text-center text-sm font-semibold text-white pointer-events-auto touch-manipulation hover:bg-amber-400"
+  const handleLoginHardRefreshClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault()
+    void recoverFromChunkLoadError()
+  }
+  const handleLoginRetryClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (loading) {
+      handleLoginHardRefreshClick(e)
+      return
+    }
+    e.preventDefault()
+    fetchLoginData()
+  }
 
   return (
     <div className="login-page">
@@ -1659,21 +1699,21 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
               {loadingStuck ? (
                 <p className="text-xs leading-relaxed text-amber-100/90">{t.connectingDelayed}</p>
               ) : null}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => fetchLoginData()}
-                  className="rounded-md bg-amber-500/30 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+              <div className="relative z-20 flex w-full flex-col gap-2">
+                <a
+                  href={loginRefreshHref}
+                  className={loginRecoveryLinkClass}
+                  onClick={handleLoginRetryClick}
                 >
                   {t.retry}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void recoverFromChunkLoadError()}
-                  className="rounded-md bg-amber-500/30 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+                </a>
+                <a
+                  href={loginRefreshHref}
+                  className={loginRecoveryLinkClass}
+                  onClick={handleLoginHardRefreshClick}
                 >
                   {t.refresh}
-                </button>
+                </a>
                 {auth ? (
                   <button
                     type="button"
@@ -1685,7 +1725,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                       }
                       window.location.replace(effectiveRedirectTo)
                     }}
-                    className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                    className="relative z-20 min-h-11 rounded-md bg-emerald-600 px-3 py-2.5 text-sm font-medium text-white pointer-events-auto touch-manipulation hover:bg-emerald-500"
                   >
                     {t.continueSession}
                   </button>
@@ -1745,21 +1785,21 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                     )}
                   </p>
                 </div>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fetchLoginData()}
-                    className="rounded-md bg-amber-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+                <div className="relative z-20 flex w-full flex-col gap-2">
+                  <a
+                    href={loginRefreshHref}
+                    className={loginRecoveryLinkClass}
+                    onClick={handleLoginRetryClick}
                   >
                     {t.retry}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void recoverFromChunkLoadError()}
-                    className="rounded-md bg-amber-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+                  </a>
+                  <a
+                    href={loginRefreshHref}
+                    className={loginRecoveryLinkClass}
+                    onClick={handleLoginHardRefreshClick}
                   >
                     {t.refresh}
-                  </button>
+                  </a>
                 </div>
               </div>
             ) : null}

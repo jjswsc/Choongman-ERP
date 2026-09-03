@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  LOGIN_CACHE_PREFETCH_MS,
   LOGIN_CONNECTING_REPLACES_FORM,
   LOGIN_CONNECTING_WATCHDOG_MS,
   LOGIN_LIST_FETCH_TIMEOUT_KIOSK_MS,
@@ -10,6 +11,7 @@ import {
   isStillOnLoginPath,
   loginListFetchMaxAttempts,
   loginListFetchTimeoutMs,
+  racePromiseWithTimeout,
   resolveLoginBootPhase,
   shouldHardNavigateLoginSessionRedirect,
 } from './login-connecting-watchdog'
@@ -132,5 +134,27 @@ describe('loginListFetchTimeoutMs', () => {
   it('does not retry the store list on kiosk', () => {
     expect(loginListFetchMaxAttempts({ kioskClient: true, hybridOfflineFastPath: false })).toBe(1)
     expect(loginListFetchMaxAttempts({ kioskClient: false, hybridOfflineFastPath: false })).toBe(2)
+  })
+
+  it('does not wait on IndexedDB longer than the login cache prefetch window', () => {
+    expect(LOGIN_CACHE_PREFETCH_MS).toBeLessThan(LOGIN_LIST_FETCH_TIMEOUT_KIOSK_MS)
+    expect(LOGIN_CACHE_PREFETCH_MS).toBeLessThan(LOGIN_CONNECTING_WATCHDOG_MS)
+  })
+})
+
+describe('racePromiseWithTimeout', () => {
+  it('returns the job value when it finishes in time', async () => {
+    await expect(racePromiseWithTimeout(Promise.resolve('ok'), 50, 'fallback')).resolves.toBe('ok')
+  })
+
+  it('returns fallback when the job hangs', async () => {
+    const hung = new Promise<string>(() => {})
+    await expect(racePromiseWithTimeout(hung, 20, 'fallback')).resolves.toBe('fallback')
+  })
+
+  it('returns fallback when the job rejects', async () => {
+    await expect(racePromiseWithTimeout(Promise.reject(new Error('idb')), 50, 'fallback')).resolves.toBe(
+      'fallback'
+    )
   })
 })

@@ -217,7 +217,8 @@ body {
   justify-content: center;
   align-items: center;
   background: radial-gradient(ellipse 80% 80% at 50% 40%, #1a1512 0%, #0d0c0b 40%, #050505 100%);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: white;
   position: relative;
 }
@@ -227,6 +228,7 @@ body {
   inset: 0;
   z-index: 0;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .login-page .background-cover {
@@ -268,12 +270,23 @@ body {
   width: 100%;
   max-width: 400px;
   padding: 40px;
+  position: relative;
+  z-index: 2;
+  isolation: isolate;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 140, 0, 0.4);
   border-radius: 24px;
   box-shadow: 0 0 20px rgba(255, 107, 0, 0.2), 0 20px 40px -12px rgba(0, 0, 0, 0.5);
+}
+
+@media (pointer: coarse) {
+  .login-page .glass-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(20, 16, 14, 0.94);
+  }
 }
 
 .login-page .logo-section {

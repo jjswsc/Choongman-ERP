@@ -18,6 +18,11 @@ export const LOGIN_SESSION_REDIRECT_BOUNCE_MS = 8_000
 export const LOGIN_LIST_FETCH_TIMEOUT_DESKTOP_MS = 60_000
 export const LOGIN_LIST_FETCH_TIMEOUT_KIOSK_MS = 12_000
 export const LOGIN_LIST_FETCH_TIMEOUT_HYBRID_OFFLINE_MS = 3_000
+/**
+ * 홀 태블릿 IndexedDB가 막혀도 매장 목록 API를 기다리지 않는다.
+ * 캐시는 이 시간만 기다렸다가, 더 느리면 백그라운드에서만 반영한다.
+ */
+export const LOGIN_CACHE_PREFETCH_MS = 800
 
 export type LoginBootPhase = 'wait_auth' | 'redirect_session' | 'load_list'
 
@@ -106,4 +111,28 @@ export function loginListFetchTimeoutMs(opts: {
 export function loginListFetchMaxAttempts(opts: { kioskClient: boolean; hybridOfflineFastPath: boolean }): number {
   if (opts.hybridOfflineFastPath || opts.kioskClient) return 1
   return 2
+}
+
+/** 캐시 조회가 멈춰도 API를 막지 않기 위한 제한 대기 */
+export function racePromiseWithTimeout<T>(
+  job: Promise<T>,
+  timeoutMs: number,
+  fallback: T
+): Promise<T> {
+  const ms = Math.max(0, Math.trunc(Number(timeoutMs) || 0))
+  if (ms === 0) return Promise.resolve(fallback)
+  return new Promise<T>((resolve) => {
+    let settled = false
+    const finish = (value: T) => {
+      if (settled) return
+      settled = true
+      clearTimeout(tid)
+      resolve(value)
+    }
+    const tid = setTimeout(() => finish(fallback), ms)
+    void job.then(
+      (value) => finish(value),
+      () => finish(fallback)
+    )
+  })
 }

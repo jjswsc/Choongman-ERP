@@ -659,7 +659,7 @@ export async function getLoginDataWithCache(opts?: GetLoginDataOptions): Promise
   }
 
   try {
-    const res = await apiFetch(buildLoginDataQuery(opts))
+    const res = await apiFetch(buildLoginDataQuery(opts), { cache: 'no-store' })
     const data = (await res.json()) as {
       users?: Record<string, string[]>
       vendors?: string[]

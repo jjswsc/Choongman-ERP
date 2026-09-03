@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   isChunkLoadError,
   isStaleClientBundleError,
+  recoverFromChunkLoadError,
   shouldClearBuildRelatedCache,
 } from "@/lib/chunk-load-recovery"
 
@@ -46,5 +47,30 @@ describe("shouldClearBuildRelatedCache", () => {
     expect(shouldClearBuildRelatedCache("serwist-precache-v2-https://example")).toBe(true)
     expect(shouldClearBuildRelatedCache("workbox-precache-v2")).toBe(true)
     expect(shouldClearBuildRelatedCache("pos-warm-get-apis")).toBe(false)
+  })
+})
+
+describe("recoverFromChunkLoadError", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("navigates immediately even if service worker unregister hangs", async () => {
+    const replace = vi.fn()
+    vi.stubGlobal("window", {
+      location: {
+        href: "https://x.example/pos/login",
+        origin: "https://x.example",
+        replace,
+      },
+    })
+    vi.stubGlobal("navigator", {
+      serviceWorker: {
+        getRegistrations: () => new Promise(() => {}),
+      },
+    })
+    await recoverFromChunkLoadError()
+    expect(replace).toHaveBeenCalledTimes(1)
+    expect(String(replace.mock.calls[0]?.[0] ?? "")).toContain("_refresh=")
   })
 })

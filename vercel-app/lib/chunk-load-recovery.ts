@@ -1,3 +1,5 @@
+import { LOGIN_HARD_REFRESH_PARAM } from "@/lib/login-hard-refresh"
+
 /** 배포 직후 옛 webpack 런타임이 없는 청크 해시를 보면 `64807.undefined.js` 로 요청한다. */
 export const CHUNK_RECOVERY_SESSION_KEY = "cm-erp-chunk-recovery"
 
@@ -62,20 +64,15 @@ async function deleteBuildRelatedCaches(): Promise<void> {
 /**
  * 오염된 SW·정적 캐시를 지운 뒤 현재 URL을 다시 연다.
  * 하이브리드 `reloadPosUrl(preferFresh)` 는 로그인 URL로 보내므로 쓰지 않는다.
+ *
+ * Android PWA에서 getRegistrations/unregister 가 멈추면 예전엔 화면이 그대로였다.
+ * 정리는 백그라운드로 던지고, 이동은 즉시 한다.
  */
 export async function recoverFromChunkLoadError(): Promise<void> {
   markChunkRecovery()
-  try {
-    await unregisterServiceWorkers()
-  } catch {
-    /* ignore */
-  }
-  try {
-    await deleteBuildRelatedCaches()
-  } catch {
-    /* ignore */
-  }
+  void unregisterServiceWorkers().catch(() => {})
+  void deleteBuildRelatedCaches().catch(() => {})
   const next = new URL(window.location.href)
-  next.searchParams.set("_chunk", String(Date.now()))
+  next.searchParams.set(LOGIN_HARD_REFRESH_PARAM, String(Date.now()))
   window.location.replace(next.toString())
 }
