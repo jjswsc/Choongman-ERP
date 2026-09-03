@@ -3,7 +3,7 @@
 import * as React from "react"
 import {
   hasRecentChunkRecovery,
-  isChunkLoadError,
+  isStaleClientBundleError,
   recoverFromChunkLoadError,
 } from "@/lib/chunk-load-recovery"
 
@@ -29,7 +29,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught:", error, errorInfo)
-    if (!isChunkLoadError(error)) return
+    if (!isStaleClientBundleError(error)) return
     if (hasRecentChunkRecovery()) return
     this.setState({ recovering: true })
     void recoverFromChunkLoadError()
@@ -37,7 +37,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   handleRetry = () => {
     const err = this.state.error
-    if (isChunkLoadError(err)) {
+    if (isStaleClientBundleError(err)) {
       this.setState({ recovering: true })
       void recoverFromChunkLoadError()
       return
@@ -56,7 +56,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (this.state.hasError && this.state.error) {
-      const chunkError = isChunkLoadError(this.state.error)
+      const staleBundle = isStaleClientBundleError(this.state.error)
       const hybrid = typeof window !== "undefined" && typeof window.cmPosShell?.resetCacheAndReload === "function"
       if (this.state.recovering) {
         return (
@@ -75,14 +75,15 @@ export class ErrorBoundary extends React.Component<Props, State> {
             <p className="mt-2 text-sm text-muted-foreground">
               페이지를 로드하는 중 문제가 발생했습니다.
             </p>
-            {chunkError && (
+            {staleBundle && (
               <div className="mt-2 space-y-2 text-xs text-muted-foreground">
                 <p>
-                  업데이트 직후 캐시가 섞이면 이 화면이 납니다. 「다시 시도」를 누르거나, Windows POS에서는{" "}
-                  <span className="font-semibold">Ctrl+Shift+R</span> 로 캐시를 지운 뒤 다시 열어 주세요.
+                  업데이트 직후 휴대폰·브라우저 캐시가 섞이면 이 화면이 납니다. 「다시 시도」 또는 「캐시 지우고
+                  새로고침」을 눌러 주세요. Windows POS에서는{" "}
+                  <span className="font-semibold">Ctrl+Shift+R</span> 입니다.
                 </p>
                 <p>
-                  หลังอัปเดตแคชค้างได้ครับ กด「다시 시도」 หรือบนโปรแกรม POS กด{" "}
+                  หลังอัปเดตแคชค้างได้ครับ กด「다시 시도」หรือ「캐시 지우고 새로고침」 หรือบนโปรแกรม POS กด{" "}
                   <span className="font-semibold">Ctrl+Shift+R</span> เพื่อล้างแคชแล้วเปิดใหม่
                   อย่าใช้เว็บบราวเซอร์รับเงินสด ลิ้นชักจะไม่เด้งครับ
                 </p>
@@ -99,13 +100,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
               >
                 다시 시도
               </button>
-              {hybrid && chunkError && (
+              {staleBundle && (
                 <button
                   type="button"
-                  onClick={this.handleHybridCacheReset}
+                  onClick={hybrid ? this.handleHybridCacheReset : this.handleRetry}
                   className="rounded border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
                 >
-                  캐시 초기화 (Ctrl+Shift+R)
+                  {hybrid ? "캐시 초기화 (Ctrl+Shift+R)" : "캐시 지우고 새로고침"}
                 </button>
               )}
             </div>

@@ -35,7 +35,7 @@ export function AdminHomeDashboard() {
 
   const quickLinks = React.useMemo(
     () =>
-      dashboardQuickHrefs
+      (Array.isArray(dashboardQuickHrefs) ? dashboardQuickHrefs : [])
         .map((href, index) => {
           const item = navItemByHref.get(href)
           if (!item || !isNavItemVisible(href)) return null

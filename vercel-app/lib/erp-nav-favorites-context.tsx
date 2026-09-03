@@ -112,8 +112,8 @@ export function ErpNavFavoritesProvider({ children }: { children: React.ReactNod
 
   const value = React.useMemo<ErpNavFavoritesContextValue>(
     () => ({
-      favoriteHrefs,
-      dashboardQuickHrefs: getErpNavDashboardQuickHrefs(favoriteHrefs),
+      favoriteHrefs: Array.isArray(favoriteHrefs) ? favoriteHrefs : [],
+      dashboardQuickHrefs: getErpNavDashboardQuickHrefs(Array.isArray(favoriteHrefs) ? favoriteHrefs : []),
       isCustom,
       isFavorite: (href) => favoriteHrefs.includes(href),
       toggleFavorite,

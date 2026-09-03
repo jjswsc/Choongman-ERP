@@ -52,7 +52,7 @@ export function ErpHeader() {
   const franchiseeSwitchStores = useMemo(() => {
     if (!auth || !isFranchiseeRole(auth.role || "")) return null
     const a = auth.allowedStores
-    if (!a || a.length <= 1) return null
+    if (!Array.isArray(a) || a.length <= 1) return null
     return a
   }, [auth])
 

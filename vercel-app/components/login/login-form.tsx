@@ -23,6 +23,8 @@ import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
 import { seedSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
 import { isLoginExcludedStoreKey } from "@/lib/pos-sales-test-office"
 import { readLoginDataFromCacheOnly, type LoginDataResult } from "@/lib/offline/erp-offline"
+import { asLoginNameList, normalizeLoginUsersMap } from "@/lib/login-data-normalize"
+import { recoverFromChunkLoadError } from "@/lib/chunk-load-recovery"
 import { useAuth, loadOfflineResumeAuth, clearOfflineLoginSnapshot, enrichOfflinePosAuth, type AuthState } from "@/lib/auth-context"
 import {
   isLangCode,
@@ -512,7 +514,8 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [])
 
   const applyLoginDataResult = useCallback((d: LoginDataResult) => {
-    setLoginData(d.users || {})
+    const usersMap = normalizeLoginUsersMap(d.users)
+    setLoginData(usersMap)
     setLoginStoreLabels(d.storeLabels || {})
     const companyMap = d.storeCompanies || {}
     setLoginStoreCompanies(companyMap)
@@ -533,7 +536,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     const src = d._source ?? "fallback"
     setLoginDataSource(src)
     if (src === "api" || src === "cache") {
-      listReadyRef.current = Object.keys(d.users || {}).length > 0
+      listReadyRef.current = Object.keys(usersMap).length > 0
       setBrowserOnline(true)
       setLoginListProbeOk(true)
     } else {
@@ -1200,7 +1203,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     }
     storePrefillAppliedRef.current = true
   }, [filteredStores, queryStore, useManualStoreUserFields, isSaasAdminLogin, saasPartnerLoginFlow])
-  const users = store ? (loginData[store] || []) : []
+  const users = store ? asLoginNameList(loginData[store]) : []
   useEffect(() => {
     if (userPrefillAppliedRef.current) return
     const savedUser = lastLoginSelectionRef.current?.user || ""
@@ -1666,7 +1669,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.location.reload()}
+                  onClick={() => void recoverFromChunkLoadError()}
                   className="rounded-md bg-amber-500/30 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
                 >
                   {t.refresh}
@@ -1752,7 +1755,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
                   </button>
                   <button
                     type="button"
-                    onClick={() => window.location.reload()}
+                    onClick={() => void recoverFromChunkLoadError()}
                     className="rounded-md bg-amber-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
                   >
                     {t.refresh}

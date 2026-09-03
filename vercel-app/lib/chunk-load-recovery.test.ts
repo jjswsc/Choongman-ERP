@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { isChunkLoadError, shouldClearBuildRelatedCache } from "@/lib/chunk-load-recovery"
+import {
+  isChunkLoadError,
+  isStaleClientBundleError,
+  shouldClearBuildRelatedCache,
+} from "@/lib/chunk-load-recovery"
 
 describe("isChunkLoadError", () => {
   it("matches webpack retry plugin message with undefined hash", () => {
@@ -18,6 +22,21 @@ describe("isChunkLoadError", () => {
 
   it("ignores unrelated errors", () => {
     expect(isChunkLoadError(new Error("Network request failed"))).toBe(false)
+  })
+})
+
+describe("isStaleClientBundleError", () => {
+  it("treats minified .map TypeError as stale bundle", () => {
+    expect(isStaleClientBundleError(new Error("eo.map is not a function"))).toBe(true)
+    expect(isStaleClientBundleError(new TypeError("x.filter is not a function"))).toBe(true)
+  })
+
+  it("includes chunk load errors", () => {
+    expect(isStaleClientBundleError(new Error("Loading chunk 1 failed"))).toBe(true)
+  })
+
+  it("ignores unrelated errors", () => {
+    expect(isStaleClientBundleError(new Error("Network request failed"))).toBe(false)
   })
 })
 
