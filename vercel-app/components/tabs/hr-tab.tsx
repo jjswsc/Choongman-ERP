@@ -385,9 +385,9 @@ export function HrTab() {
   }
 
   const todayTypes = todayAttendanceState.types || []
+  // 퇴근으로 세션이 닫혔으면 다시 출근 가능 (2교대/더블 시프트 허용)
   const hasClockIn =
     todayAttendanceState.hasClockIn === true ||
-    todayTypes.includes("출근") ||
     todayAttendanceState.canBreakStart ||
     todayAttendanceState.canBreakEnd
   const hasClockOut =

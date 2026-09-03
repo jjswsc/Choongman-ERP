@@ -190,25 +190,18 @@ export async function POST(request: NextRequest) {
         return rowDate === todayStrVal
       })
       if (logType === '퇴근') {
-        // [퇴근 특별 처리] 퇴근→출근 시나리오(실수로 퇴근 먼저 누른 경우): 새 근무 세션으로 간주하여 퇴근 재기록 허용
-        const lastOut = todayLogs.find((r) => String(r.log_type || '').trim() === '퇴근')
-        const lastIn = todayLogs.find((r) => String(r.log_type || '').trim() === '출근')
-        if (lastOut && lastIn && new Date(lastIn.log_at!).getTime() > new Date(lastOut.log_at!).getTime()) {
-          // 출근이 퇴근보다 더 최근 → 퇴근 후 재출근한 새 세션 → 퇴근 허용
-        } else if (lastOut) {
-          return NextResponse.json(
-            { success: false, message: '오늘 이미 [퇴근] 기록이 있습니다. 하루에 한 번만 기록할 수 있습니다.' },
-            { headers }
-          )
+        // 2교대/더블 시프트: 미종료 세션이 없으면(이미 퇴근 완료) 퇴근 중복 차단
+        if (!hasUnclosedClockWorkSession(logs)) {
+          const lastOut = todayLogs.find((r) => String(r.log_type || '').trim() === '퇴근')
+          if (lastOut) {
+            return NextResponse.json(
+              { success: false, message: '현재 열린 근무 세션이 없습니다. 출근을 먼저 기록해 주세요.' },
+              { headers }
+            )
+          }
         }
       } else if (logType === '출근') {
-        const hasDuplicate = todayLogs.some((r) => String(r.log_type || '').trim() === logType)
-        if (hasDuplicate) {
-          return NextResponse.json(
-            { success: false, message: `오늘 이미 [${logType}] 기록이 있습니다. 하루에 한 번만 기록할 수 있습니다.` },
-            { headers }
-          )
-        }
+        // 2교대/더블 시프트 허용: 이전 세션이 퇴근으로 닫혔으면 재출근 가능
         if (hasUnclosedClockWorkSession(logs)) {
           return NextResponse.json(
             {

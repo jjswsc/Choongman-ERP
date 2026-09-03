@@ -86,7 +86,8 @@ export async function GET(request: NextRequest) {
     }
     if (openSession && !types.includes('출근')) types.push('출근')
 
-    const hasClockIn = openSession || types.includes('출근')
+    // 퇴근으로 세션이 닫혔으면 다시 출근 가능 (2교대/더블 시프트 허용)
+    const hasClockIn = openSession
     const hasClockOut = !openSession && types.includes('퇴근')
     const canBreakStart = hasClockIn && !hasClockOut && !isOnBreak
     const canBreakEnd = hasClockIn && !hasClockOut && isOnBreak
