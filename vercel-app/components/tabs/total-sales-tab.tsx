@@ -67,12 +67,25 @@ import {
 
 type PeriodPreset = "today" | "month" | "custom"
 
-const LEVELS: { id: PosSalesHierarchyLevel; labelKey: string; fallback: string }[] = [
+type LevelDef = { id: PosSalesHierarchyLevel; labelKey: string; fallback: string }
+
+const DEFAULT_LEVELS: LevelDef[] = [
   { id: "main", labelKey: "totalSalesLevelMain", fallback: "대분류" },
   { id: "category", labelKey: "totalSalesLevelCategory", fallback: "카테고리" },
   { id: "menu", labelKey: "totalSalesLevelMenu", fallback: "메인 메뉴" },
   { id: "option", labelKey: "totalSalesLevelOption", fallback: "옵션" },
 ]
+
+type LevelOrderPreset = "default" | "option_first"
+
+const LEVEL_ORDER_PRESETS: { id: LevelOrderPreset; labelKey: string; fallback: string; order: PosSalesHierarchyLevel[] }[] = [
+  { id: "default", labelKey: "totalSalesOrderDefault", fallback: "대분류 → 카테고리 → 메뉴 → 옵션", order: ["main", "category", "menu", "option"] },
+  { id: "option_first", labelKey: "totalSalesOrderOptionFirst", fallback: "옵션 → 메뉴 → 카테고리 → 대분류", order: ["option", "menu", "category", "main"] },
+]
+
+function buildLevelsForOrder(order: PosSalesHierarchyLevel[]): LevelDef[] {
+  return order.map((id) => DEFAULT_LEVELS.find((l) => l.id === id)!).filter(Boolean)
+}
 
 const CHART_COLORS = [...ADMIN_CHART_COLORS]
 
@@ -159,6 +172,11 @@ export function TotalSalesTab() {
   const [searchAnd, setSearchAnd] = React.useState(false)
   const [orderTypesKey, setOrderTypesKey] = React.useState("")
   const [compareChannels, setCompareChannels] = React.useState(false)
+  const [levelOrderPreset, setLevelOrderPreset] = React.useState<LevelOrderPreset>("default")
+  const orderedLevels = React.useMemo(() => {
+    const preset = LEVEL_ORDER_PRESETS.find((p) => p.id === levelOrderPreset) ?? LEVEL_ORDER_PRESETS[0]!
+    return buildLevelsForOrder(preset.order)
+  }, [levelOrderPreset])
   const [level, setLevel] = React.useState<PosSalesHierarchyLevel>("menu")
   const [drillFilter, setDrillFilter] = React.useState<PosSalesDrillFilter>({})
   const [loading, setLoading] = React.useState(false)
@@ -620,13 +638,10 @@ export function TotalSalesTab() {
 
   const drillToChildLevel = React.useCallback(
     (row: Pick<PosSalesHierarchyRow, "label" | "categoryMain" | "category">) => {
-      const next: Partial<Record<PosSalesHierarchyLevel, PosSalesHierarchyLevel>> = {
-        main: "category",
-        category: "menu",
-        menu: "option",
-      }
-      const child = next[level]
-      if (!child) return
+      const order = (LEVEL_ORDER_PRESETS.find((p) => p.id === levelOrderPreset) ?? LEVEL_ORDER_PRESETS[0]!).order
+      const curIdx = order.indexOf(level)
+      if (curIdx < 0 || curIdx >= order.length - 1) return
+      const child = order[curIdx + 1]!
       setLevel(child)
       setDrillFilter(() => {
         if (level === "main") return { main: row.label }
@@ -648,7 +663,7 @@ export function TotalSalesTab() {
       setSearch(row.label)
       setSearchAnd(false)
     },
-    [level]
+    [level, levelOrderPreset]
   )
 
   /** 매출관리 등에서 ?start&end&stores 딥링크로 들어온 경우만 1회 자동 조회 */
@@ -696,7 +711,12 @@ export function TotalSalesTab() {
         { qty: 0, sales: 0 }
       )
     : sumHierarchyRows(activeRows)
-  const levelLabel = LEVELS.find((l) => l.id === level)?.fallback ?? level
+  const levelLabel = DEFAULT_LEVELS.find((l) => l.id === level)?.fallback ?? level
+  const canDrillDown = React.useMemo(() => {
+    const order = (LEVEL_ORDER_PRESETS.find((p) => p.id === levelOrderPreset) ?? LEVEL_ORDER_PRESETS[0]!).order
+    const idx = order.indexOf(level)
+    return idx >= 0 && idx < order.length - 1
+  }, [level, levelOrderPreset])
 
   const compareChartRows = React.useMemo(() => {
     if (!compareChannels || compareRows.length === 0) return []
@@ -1146,7 +1166,7 @@ export function TotalSalesTab() {
             <div className="rounded-lg border p-3">
               <h3 className="mb-2 text-sm font-semibold">
                 {tr("totalSalesChartChannelCompare", "채널별 매출 비교")} (
-                {tr(LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)})
+                {tr(DEFAULT_LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)})
               </h3>
               <div className="h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1212,7 +1232,7 @@ export function TotalSalesTab() {
               </div>
               <div className="rounded-lg border p-3">
                 <h3 className="mb-2 text-sm font-semibold">
-                  {tr("totalSalesChartItems", "품목")} ({tr(LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)})
+                  {tr("totalSalesChartItems", "품목")} ({tr(DEFAULT_LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)})
                 </h3>
                 {itemChartRows.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
@@ -1258,8 +1278,28 @@ export function TotalSalesTab() {
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-2 border-b pb-2">
-            {LEVELS.map((lv) => (
+          <div className="flex flex-wrap items-center gap-2 border-b pb-2">
+            <select
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+              value={levelOrderPreset}
+              onChange={(e) => {
+                const next = e.target.value as LevelOrderPreset
+                setLevelOrderPreset(next)
+                const nextOrder = (LEVEL_ORDER_PRESETS.find((p) => p.id === next) ?? LEVEL_ORDER_PRESETS[0]!).order
+                setLevel(nextOrder[0]!)
+                setDrillFilter({})
+                setSearch("")
+              }}
+              aria-label={tr("totalSalesLevelOrder", "집계 순서")}
+            >
+              {LEVEL_ORDER_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {tr(p.labelKey, p.fallback)}
+                </option>
+              ))}
+            </select>
+            <span className="hidden h-4 w-px bg-border sm:inline-block" aria-hidden />
+            {orderedLevels.map((lv) => (
               <Button
                 key={lv.id}
                 type="button"
@@ -1283,14 +1323,14 @@ export function TotalSalesTab() {
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <span className="text-muted-foreground">
-              {tr("totalSalesActiveLevel", "집계 단위")}: {tr(LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)}
+              {tr("totalSalesActiveLevel", "집계 단위")}: {tr(DEFAULT_LEVELS.find((l) => l.id === level)?.labelKey ?? "", levelLabel)}
             </span>
             <span className="font-erp-numeric">
               {tr("totalSalesTableTotal", "합계")}: {tr("totalSalesQtyUnit", "수량")} {totals.qty.toLocaleString()} · ฿
               {formatSalesAmount(totals.sales)}
             </span>
           </div>
-          {level !== "option" ? (
+          {canDrillDown ? (
             <p className="text-xs text-muted-foreground">
               {tr("totalSalesDrillHint", "클릭 시 하위 집계·검색으로 이동")}
             </p>
@@ -1420,7 +1460,7 @@ export function TotalSalesTab() {
                       <tr key={row.key} className="border-b hover:bg-muted/30">
                         <td className="py-2 pl-3 text-muted-foreground tabular-nums">{idx + 1}</td>
                         <td className="max-w-0 py-2 pr-2" title={row.label}>
-                          {level !== "option" ? (
+                          {canDrillDown ? (
                             <button
                               type="button"
                               className="block max-w-full truncate text-left font-medium hover:underline"
@@ -1471,7 +1511,7 @@ export function TotalSalesTab() {
                     <tr key={row.key} className="border-b hover:bg-muted/30">
                       <td className="py-1.5 pl-3 text-muted-foreground">{idx + 1}</td>
                       <td className="py-1.5 pr-2">
-                        {level !== "option" ? (
+                        {canDrillDown ? (
                           <button
                             type="button"
                             className="text-left font-medium hover:underline"
