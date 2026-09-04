@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
-import { HR_POLICY_LIST_COLS } from '@/lib/postgrest-narrow-select'
+import { selectHrPoliciesList } from '@/lib/hr-policies-select'
 import {
   appendSaasTenantFilter,
   assertSaasTenantWritable,
@@ -162,17 +162,11 @@ export async function POST(request: NextRequest) {
         effective_at?: string
       }[] = []
       try {
-        existing = (await supabaseSelectFilter('hr_policies', existingFilter, {
-          limit: 1,
-          select: HR_POLICY_LIST_COLS + ',id',
-        })) as typeof existing
+        existing = (await selectHrPoliciesList(existingFilter, { limit: 1 })) as typeof existing
       } catch (e) {
         if (isMissingSaasTenantColumnError(e)) {
           markSaasTenantColumnMissing('hr_policies')
-          existing = (await supabaseSelectFilter('hr_policies', `id=eq.${id}`, {
-            limit: 1,
-            select: HR_POLICY_LIST_COLS + ',id',
-          })) as typeof existing
+          existing = (await selectHrPoliciesList(`id=eq.${id}`, { limit: 1 })) as typeof existing
         } else {
           throw e
         }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { HR_POLICY_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { isHrPolicyReadCurrent } from '@/lib/hr-policy-read-status'
+import { isMissingHrPolicyListColumnError, selectHrPoliciesList } from '@/lib/hr-policies-select'
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
 import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
@@ -90,7 +90,7 @@ async function getMyHrPoliciesHandler(
   const built: HrPolicyListItem[] = []
   const policiesBase = 'is_active=eq.true'
   const policiesFilter = appendSaasTenantFilter(policiesBase, tenantScope, 'hr_policies')
-  let rows: {
+  type HrPolicyDbRow = {
     id: number
     title?: string
     content?: string
@@ -102,28 +102,43 @@ async function getMyHrPoliciesHandler(
     created_at?: string
     effective_at?: string
     attachments?: string
-  }[] | null = null
+  }
+  let rows: HrPolicyDbRow[] = []
   try {
-    rows = (await supabaseSelectFilter('hr_policies', policiesFilter, {
+    rows = (await selectHrPoliciesList(policiesFilter, {
       order: 'created_at.desc',
       limit: DB_FETCH_LIMIT,
-      select: HR_POLICY_LIST_COLS,
-    })) as typeof rows
+    })) as HrPolicyDbRow[]
   } catch (e) {
     if (isMissingSaasTenantColumnError(e)) {
       markSaasTenantColumnMissing('hr_policies')
-      rows = (await supabaseSelectFilter('hr_policies', policiesBase, {
+      try {
+        rows = (await selectHrPoliciesList(policiesBase, {
+          order: 'created_at.desc',
+          limit: DB_FETCH_LIMIT,
+        })) as HrPolicyDbRow[]
+      } catch (e2) {
+        if (isMissingHrPolicyListColumnError(e2)) {
+          rows = (await selectHrPoliciesList('id=gte.0', {
+            order: 'created_at.desc',
+            limit: DB_FETCH_LIMIT,
+          })) as HrPolicyDbRow[]
+        } else {
+          throw e2
+        }
+      }
+    } else if (isMissingHrPolicyListColumnError(e)) {
+      rows = (await selectHrPoliciesList(appendSaasTenantFilter('id=gte.0', tenantScope, 'hr_policies'), {
         order: 'created_at.desc',
         limit: DB_FETCH_LIMIT,
-        select: HR_POLICY_LIST_COLS,
-      })) as typeof rows
+      })) as HrPolicyDbRow[]
     } else {
       throw e
     }
   }
 
-  for (let i = 0; i < (rows || []).length; i++) {
-    const row = rows![i]
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
     if (!employeeIsTargetedForRow(store, name, myJob, myRole, row)) continue
     const cv = Math.max(1, Math.floor(Number(row.content_version ?? 1)) || 1)
     const rd = readData.get(row.id)

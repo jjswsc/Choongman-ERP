@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { HR_POLICY_LIST_COLS } from '@/lib/postgrest-narrow-select'
+import { selectHrPoliciesList } from '@/lib/hr-policies-select'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -73,10 +73,9 @@ export async function GET(request: NextRequest) {
     const endPlus = endStr + 'T23:59:59.999Z'
     filter += `&created_at=lte.${endPlus}`
 
-    const policyRows = (await supabaseSelectFilter('hr_policies', filter, {
+    const policyRows = (await selectHrPoliciesList(filter, {
       order: 'created_at.desc',
       limit: POLICY_READ_STATS_LIMIT,
-      select: HR_POLICY_LIST_COLS,
     })) as (HrPolicyForAggregation & { created_at?: string })[]
 
     const truncated = (policyRows || []).length >= POLICY_READ_STATS_LIMIT

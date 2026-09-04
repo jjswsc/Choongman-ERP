@@ -15,6 +15,13 @@ export const NOTICE_LIST_COLS_LEGACY =
 export const HR_POLICY_LIST_COLS =
   'id,title,content,target_store,target_role,target_permission_group,target_recipients,content_version,created_at,updated_at,effective_at,is_active,attachments,sender'
 
+/** target_permission_group 등 미배포 DB fallback */
+export const HR_POLICY_LIST_COLS_LEGACY =
+  'id,title,content,target_store,target_role,target_recipients,created_at,is_active,attachments,sender'
+
+/** 최소 컬럼 — 구 스키마 */
+export const HR_POLICY_LIST_COLS_MINIMAL = 'id,title,content,target_store,target_role,created_at'
+
 /** 관리자 주문 목록·상세 조합에 필요한 컬럼 */
 export const ORDERS_ADMIN_LIST_COLS =
   'id,order_date,store_name,user_name,cart_json,total,status,delivery_status,delivery_date,delivery_dates_by_outbound,received_indices,approved_indices,approved_original_qty_json,reject_reason'

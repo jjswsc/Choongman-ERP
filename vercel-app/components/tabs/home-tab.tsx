@@ -62,7 +62,7 @@ export function HomeTab() {
   const [hrTruncated, setHrTruncated] = useState(false)
   const [hrLoading, setHrLoading] = useState(false)
   const [hrExpandedId, setHrExpandedId] = useState<number | null>(null)
-  const [hrStatusFilter, setHrStatusFilter] = useState<'All' | 'Unread' | 'Read'>('Unread')
+  const [hrStatusFilter, setHrStatusFilter] = useState<'All' | 'Unread' | 'Read'>('All')
   const [hrConfirmingId, setHrConfirmingId] = useState<number | null>(null)
 
   const noticeTexts = useMemo(

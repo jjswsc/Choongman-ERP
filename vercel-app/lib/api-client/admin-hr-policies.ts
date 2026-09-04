@@ -1,7 +1,7 @@
 /**
  * 인사 규정 API — admin.ts에서 분리 — move only
  */
-import { apiFetchWithOffline } from '../api/fetch-offline'
+import { apiFetch } from '../api/fetch'
 import type { NoticeReaderStatsRow } from './admin-notices'
 
 export type HrPolicyRow = {
@@ -40,7 +40,7 @@ export async function getHrPolicies(params?: {
   if (params?.store?.trim()) q.set('store', params.store.trim())
   if (params?.permissionGroup?.trim()) q.set('permissionGroup', params.permissionGroup.trim())
   if (params?.audience && params.audience !== 'all') q.set('audience', params.audience)
-  const res = await apiFetchWithOffline(`/api/getHrPolicies?${q}`)
+  const res = await apiFetch(`/api/getHrPolicies?${q}`)
   return (await res.json()) as {
     success: boolean
     items: (HrPolicyRow & { targetSummary?: string })[]
@@ -62,7 +62,7 @@ export async function saveHrPolicy(body: {
   is_active?: boolean
   attachments?: Array<{ name: string; mime: string; url: string }>
 }): Promise<{ success: boolean; message?: string; id?: number; content_version?: number }> {
-  const res = await apiFetchWithOffline('/api/saveHrPolicy', {
+  const res = await apiFetch('/api/saveHrPolicy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -110,7 +110,7 @@ export async function getMyHrPolicies(params: {
   if (params.page != null) q.set('page', String(params.page))
   if (params.pageSize != null) q.set('pageSize', String(params.pageSize))
   if (params.status && params.status !== 'all') q.set('status', params.status)
-  const res = await apiFetchWithOffline(`/api/getMyHrPolicies?${q}`)
+  const res = await apiFetch(`/api/getMyHrPolicies?${q}`)
   return (await res.json()) as {
     items: HrPolicyListItem[]
     total: number
@@ -126,7 +126,7 @@ export async function confirmHrPolicyRead(params: {
   name: string
   action?: string
 }): Promise<{ success: boolean; message?: string }> {
-  const res = await apiFetchWithOffline('/api/confirmHrPolicyRead', {
+  const res = await apiFetch('/api/confirmHrPolicyRead', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -152,7 +152,7 @@ export async function getHrPolicyReadDetail(params: { policyId: number }): Promi
   contentVersion: number
 }> {
   const q = new URLSearchParams({ policyId: String(params.policyId) })
-  const res = await apiFetchWithOffline(`/api/getHrPolicyReadDetail?${q}`)
+  const res = await apiFetch(`/api/getHrPolicyReadDetail?${q}`)
   const data = (await res.json()) as {
     items?: HrPolicyReadDetailItem[]
     success?: boolean
@@ -181,7 +181,7 @@ export async function getHrPolicyReaderStats(params: {
   })
   if (params.store) q.set('store', params.store)
   if (params.minMissed != null && params.minMissed > 0) q.set('minMissed', String(params.minMissed))
-  const res = await apiFetchWithOffline(`/api/getHrPolicyReaderStats?${q}`)
+  const res = await apiFetch(`/api/getHrPolicyReaderStats?${q}`)
   const data = (await res.json()) as {
     success?: boolean
     message?: string

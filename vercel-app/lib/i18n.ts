@@ -1830,10 +1830,11 @@ export const i18n = {
     hrPolicyListPermPrefix: '권한',
     hrPolicyListScopedHint:
       '본사 권한이 아니면, 허용된 매장·대상과 겹치는 규정만 목록에 표시됩니다.',
+    hrPolicyListLoadError: '규정 목록을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.',
     helpSum_admin_hr_policies:
       '인사 규정을 등록하고 오피스·매장·개인별 수신 대상을 지정합니다. 목록에서 등록 내용·열람 현황을 확인하고, 배포 시 공지로 안내할 수 있습니다.',
     helpHow_admin_hr_policies:
-      '① 제목·첨부(또는 본문)·수신 대상(전체/오피스/매장/개인)을 입력한 뒤 저장합니다.\n② 규정 목록에서 대상 구분 필터·「등록 내용 보기」·열람 상세를 확인합니다.\n③ 게시·공지가 필요하면「대상·배포(공지)」로 활성화하고 안내를 보냅니다.',
+      '① 제목·첨부(또는 본문)·수신 대상(전체/오피스/매장/개인)을 입력한 뒤 저장합니다. 저장하면 대상 직원 화면에도 바로 보입니다.\n② 규정 목록에서 대상 구분 필터·「등록 내용 보기」·열람 상세를 확인합니다.\n③ 공지 안내가 필요하면「대상·배포(공지)」로 보냅니다. 초안(미게시)은 목록에서 비활성화할 수 있습니다.',
     helpSum_admin_hr:
       '인사 관리 허브 — 휴가·근태 미승인(사이드바 배지는 GPS·강제퇴근 등 미처리·최근 휴가 대기만), 이번 주 인사 일정, 급여·직원·규정 메뉴로 바로 이동합니다.',
     helpHow_admin_hr:
@@ -10150,10 +10151,11 @@ Only matters the employee must handle personally on a working day:
     hrPolicyListPermPrefix: 'Perm.',
     hrPolicyListScopedHint:
       'Without head-office access, only policies that overlap your allowed stores and audience are listed.',
+    hrPolicyListLoadError: 'Could not load the policy list. Refresh and try again.',
     helpSum_admin_hr_policies:
       'Register HR policies and set audiences (head office, stores, or individuals). Review content and read status in the list; deploy via notice when ready.',
     helpHow_admin_hr_policies:
-      '① Enter title, attachment/body, and audience (all / head office / stores / individuals), then save.\n② Use list filters, “View registered content”, and read details to verify.\n③ Use “Targets & deploy (notice)” to publish and notify staff.',
+      '① Enter title, attachment/body, and audience (all / head office / stores / individuals), then save. Saved policies appear immediately for the target staff.\n② Use list filters, “View registered content”, and read details to verify.\n③ Use “Targets & deploy (notice)” to send a notice. Deactivate drafts from the list if needed.',
     helpSum_admin_hr:
       'HR hub — pending leave/attendance (sidebar badges count only unapproved GPS/forced clock-out and recent leave), this week’s HR events, and quick links to payroll, staff, and policies.',
     helpHow_admin_hr:

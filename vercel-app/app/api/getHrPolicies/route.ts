@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { HR_POLICY_LIST_COLS } from '@/lib/postgrest-narrow-select'
+import { supabaseSelect } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import {
   filterHrPoliciesForList,
   type HrPolicyListQuery,
 } from '@/lib/hr-policy-access'
+import { selectHrPoliciesList } from '@/lib/hr-policies-select'
 import type { BroadcastTargetAudienceFilter } from '@/lib/broadcast-target-selection'
 import {
   appendSaasTenantFilter,
@@ -58,36 +58,33 @@ export async function GET(request: NextRequest) {
     const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'hr_policies')
     let rows: Record<string, unknown>[] = []
     try {
-      rows = (await supabaseSelectFilter('hr_policies', filter, {
-        order: 'created_at.desc',
-        limit: 500,
-        select: HR_POLICY_LIST_COLS,
-      })) as Record<string, unknown>[]
+      rows = await selectHrPoliciesList(filter, { order: 'created_at.desc', limit: 500 })
     } catch (e) {
       if (isMissingSaasTenantColumnError(e)) {
         markSaasTenantColumnMissing('hr_policies')
-        rows = (await supabaseSelectFilter('hr_policies', baseFilter, {
-          order: 'created_at.desc',
-          limit: 500,
-          select: HR_POLICY_LIST_COLS,
-        })) as Record<string, unknown>[]
+        rows = await selectHrPoliciesList(baseFilter, { order: 'created_at.desc', limit: 500 })
       } else {
         throw e
       }
     }
 
-    const empRows = (await supabaseSelect('employees', {
-      order: 'id.asc',
-      select: 'store',
-      limit: 2000,
-    })) as { store?: string }[]
-    const knownStoreNames = Array.from(
-      new Set(
-        (empRows || [])
-          .map((e) => String(e.store || '').trim())
-          .filter((s) => s && s !== '매장명' && s !== 'Store')
-      )
-    ).sort()
+    let knownStoreNames: string[] = []
+    try {
+      const empRows = (await supabaseSelect('employees', {
+        order: 'id.asc',
+        select: 'store',
+        limit: 2000,
+      })) as { store?: string }[]
+      knownStoreNames = Array.from(
+        new Set(
+          (empRows || [])
+            .map((e) => String(e.store || '').trim())
+            .filter((s) => s && s !== '매장명' && s !== 'Store')
+        )
+      ).sort()
+    } catch {
+      knownStoreNames = []
+    }
 
     const summaryLabels = {
       all: '전체',

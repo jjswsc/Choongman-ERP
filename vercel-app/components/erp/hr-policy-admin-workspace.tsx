@@ -78,11 +78,11 @@ export function HrPolicyAdminWorkspace() {
   const [docRef, setDocRef] = React.useState("")
   const [docTo, setDocTo] = React.useState("전 직원")
   const [contentBody, setContentBody] = React.useState("")
-  const [editingIsActive, setEditingIsActive] = React.useState(false)
   const [effectiveAt, setEffectiveAt] = React.useState("")
   const [editingId, setEditingId] = React.useState(0)
   const [policies, setPolicies] = React.useState<HrPolicyRow[]>([])
   const [listLoading, setListLoading] = React.useState(false)
+  const [listError, setListError] = React.useState("")
   const [readOpen, setReadOpen] = React.useState(false)
   const [readTitle, setReadTitle] = React.useState("")
   const [readItems, setReadItems] = React.useState<{ store: string; name: string; read_at: string; status: string }[]>([])
@@ -125,11 +125,18 @@ export function HrPolicyAdminWorkspace() {
         if (r.success) {
           setPolicies(r.items || [])
           setListScoped(Boolean(r.scoped))
-        } else setPolicies([])
+          setListError("")
+        } else {
+          setPolicies([])
+          setListError(translateApiMessage(r.message, t) || t("hrPolicyListLoadError"))
+        }
       })
-      .catch(() => setPolicies([]))
+      .catch(() => {
+        setPolicies([])
+        setListError(t("hrPolicyListLoadError"))
+      })
       .finally(() => setListLoading(false))
-  }, [listSearchQ, listStoreFilter, listPermFilter, listAudienceFilter])
+  }, [listSearchQ, listStoreFilter, listPermFilter, listAudienceFilter, t])
 
   React.useEffect(() => {
     loadPolicyList()
@@ -207,7 +214,6 @@ export function HrPolicyAdminWorkspace() {
     setDocRef(parts.docRef)
     setDocTo(parts.recipientTo || "전 직원")
     setContentBody(parts.body)
-    setEditingIsActive(row.is_active !== false)
     setEffectiveAt(
       row.effective_at ? String(row.effective_at).slice(0, 10) : ""
     )
@@ -250,7 +256,6 @@ export function HrPolicyAdminWorkspace() {
     setDocRef("")
     setDocTo("전 직원")
     setContentBody("")
-    setEditingIsActive(false)
     setEffectiveAt("")
     setFiles([])
     setTargetSelection(emptyBroadcastTargetSelection())
@@ -292,7 +297,7 @@ export function HrPolicyAdminWorkspace() {
         targetPermissionGroup: targetPayload.targetPermissionGroup || undefined,
         targetRecipients: targetPayload.targetRecipients,
         effectiveAt: effectiveAt.trim() || null,
-        is_active: isNew ? false : editingIsActive,
+        is_active: true,
         attachments,
       })
       if (res.success) {
@@ -675,6 +680,8 @@ export function HrPolicyAdminWorkspace() {
       <div className="flex-1 p-3 overflow-auto max-h-[70vh] text-xs">
         {listLoading ? (
           <div className="py-8 text-center text-muted-foreground">{t("loading")}</div>
+        ) : listError ? (
+          <div className="py-8 text-center text-destructive">{listError}</div>
         ) : policies.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground">{t("noNotices")}</div>
         ) : (
