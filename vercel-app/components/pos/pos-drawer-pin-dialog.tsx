@@ -21,6 +21,8 @@ export type PosDrawerPinDialogProps = {
   onSubmit: (pin: string) => void | Promise<void>
   loading?: boolean
   errorMessage?: string | null
+  title?: string
+  description?: string
 }
 
 /** 금전 서랍 열기 — 6자리 PIN 입력 */
@@ -30,6 +32,8 @@ export function PosDrawerPinDialog({
   onSubmit,
   loading = false,
   errorMessage = null,
+  title,
+  description,
 }: PosDrawerPinDialogProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -50,9 +54,9 @@ export function PosDrawerPinDialog({
       <DialogContent className="max-w-xs sm:max-w-sm">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{t('posDrawerPinEnterTitle') || '금전 서랍 PIN'}</DialogTitle>
+            <DialogTitle>{title || t('posDrawerPinEnterTitle') || '금전 서랍 PIN'}</DialogTitle>
             <DialogDescription>
-              {t('posDrawerPinEnterBody') || '돈통을 열려면 6자리 PIN을 입력하세요.'}
+              {description || t('posDrawerPinEnterBody') || '돈통을 열려면 6자리 PIN을 입력하세요.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-4">

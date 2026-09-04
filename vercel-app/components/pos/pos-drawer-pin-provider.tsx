@@ -15,21 +15,32 @@ import { translateApiMessage } from '@/lib/translate-api-message'
 
 type PinResolver = (pin: string | null) => void
 
+type RequestDrawerPinAuthOptions = {
+  title?: string
+  description?: string
+}
+
 type PosDrawerPinContextValue = {
   openPosCashDrawerSecure: (params: PosCashDrawerOpenParams) => Promise<PosCashDrawerOpenResult>
   refreshDrawerPinConfigured: (storeCode: string) => Promise<void>
   invalidateDrawerPinCache: (storeCode?: string) => void
+  /**
+   * 매장 서랍 PIN이 설정돼 있으면 입력·검증. 미설정이면 true.
+   * 취소·실패 시 false.
+   */
+  requestDrawerPinAuth: (storeCode: string, options?: RequestDrawerPinAuthOptions) => Promise<boolean>
 }
 
 const PosDrawerPinContext = React.createContext<PosDrawerPinContextValue | null>(null)
 
 export function PosDrawerPinProvider({ children }: { children: React.ReactNode }) {
-  const { lang } = useLang()
-  const t = useT(lang)
+  const t = useT(useLang().lang)
   const pinConfiguredByStoreRef = React.useRef<Map<string, boolean>>(new Map())
   const [pinDialogOpen, setPinDialogOpen] = React.useState(false)
   const [pinLoading, setPinLoading] = React.useState(false)
   const [pinError, setPinError] = React.useState<string | null>(null)
+  const [pinDialogTitle, setPinDialogTitle] = React.useState<string | undefined>()
+  const [pinDialogDescription, setPinDialogDescription] = React.useState<string | undefined>()
   const pinResolverRef = React.useRef<PinResolver | null>(null)
   const pendingStoreRef = React.useRef('')
 
@@ -53,9 +64,11 @@ export function PosDrawerPinProvider({ children }: { children: React.ReactNode }
     pinConfiguredByStoreRef.current.delete(store)
   }, [])
 
-  const promptPin = React.useCallback((storeCode: string) => {
+  const promptPin = React.useCallback((storeCode: string, options?: RequestDrawerPinAuthOptions) => {
     pendingStoreRef.current = storeCode
     setPinError(null)
+    setPinDialogTitle(options?.title)
+    setPinDialogDescription(options?.description)
     setPinDialogOpen(true)
     return new Promise<string | null>((resolve) => {
       pinResolverRef.current = resolve
@@ -66,10 +79,27 @@ export function PosDrawerPinProvider({ children }: { children: React.ReactNode }
     setPinDialogOpen(false)
     setPinLoading(false)
     setPinError(null)
+    setPinDialogTitle(undefined)
+    setPinDialogDescription(undefined)
     const resolve = pinResolverRef.current
     pinResolverRef.current = null
     resolve?.(pin)
   }, [])
+
+  const requestDrawerPinAuth = React.useCallback(
+    async (storeCode: string, options?: RequestDrawerPinAuthOptions): Promise<boolean> => {
+      const store = String(storeCode ?? '').trim()
+      if (!store) return false
+      if (!pinConfiguredByStoreRef.current.has(store)) {
+        await refreshDrawerPinConfigured(store)
+      }
+      const configured = pinConfiguredByStoreRef.current.get(store) ?? false
+      if (!configured) return true
+      const pin = await promptPin(store, options)
+      return Boolean(pin)
+    },
+    [promptPin, refreshDrawerPinConfigured]
+  )
 
   const openPosCashDrawerSecure = React.useCallback(
     async (params: PosCashDrawerOpenParams): Promise<PosCashDrawerOpenResult> => {
@@ -87,7 +117,7 @@ export function PosDrawerPinProvider({ children }: { children: React.ReactNode }
 
       return openPosCashDrawer(params)
     },
-    [closePinDialog, promptPin, refreshDrawerPinConfigured, t]
+    [promptPin, refreshDrawerPinConfigured]
   )
 
   const handlePinSubmit = React.useCallback(
@@ -119,7 +149,12 @@ export function PosDrawerPinProvider({ children }: { children: React.ReactNode }
 
   return (
     <PosDrawerPinContext.Provider
-      value={{ openPosCashDrawerSecure, refreshDrawerPinConfigured, invalidateDrawerPinCache }}
+      value={{
+        openPosCashDrawerSecure,
+        refreshDrawerPinConfigured,
+        invalidateDrawerPinCache,
+        requestDrawerPinAuth,
+      }}
     >
       {children}
       <PosDrawerPinDialog
@@ -130,6 +165,8 @@ export function PosDrawerPinProvider({ children }: { children: React.ReactNode }
         onSubmit={handlePinSubmit}
         loading={pinLoading}
         errorMessage={pinError}
+        title={pinDialogTitle}
+        description={pinDialogDescription}
       />
     </PosDrawerPinContext.Provider>
   )
@@ -142,6 +179,7 @@ export function usePosCashDrawerOpen(): PosDrawerPinContextValue {
       openPosCashDrawerSecure: openPosCashDrawer,
       refreshDrawerPinConfigured: async () => {},
       invalidateDrawerPinCache: () => {},
+      requestDrawerPinAuth: async () => true,
     }
   }
   return ctx

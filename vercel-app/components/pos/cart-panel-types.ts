@@ -47,6 +47,13 @@ export type CartPanelPaymentPayload = {
   paymentCrypto?: number
   paymentCryptoMeta?: Record<string, unknown> | null
   paymentCashTendered?: number
+  /**
+   * EDC 기기에서 이미 승인된 뒤 POS만 마감 (LinkPOS 재호출 금지).
+   * 승인번호 필수 — runLinkposPaymentIfNeeded 가 synthetic linkposPayment 생성.
+   */
+  manualEdcConfirm?: boolean
+  manualEdcApprovalCode?: string
+  manualEdcTraceNo?: string
 }
 
 export type CartPanelOrderLinePayload = {

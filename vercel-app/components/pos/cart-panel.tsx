@@ -227,6 +227,8 @@ import { formatMemberPortalReceiptMemo } from '@/lib/pos-member-portal-takeout-l
 import { searchCartPanelTaxInvoiceProfile } from '@/lib/cart-panel-tax-invoice-search'
 import { CartPanelTaxInvoiceSection } from '@/components/pos/cart-panel-tax-invoice-section'
 import { PosCryptoPayPanel, type CryptoDepositDisplay } from '@/components/pos/pos-crypto-pay-panel'
+import { PosManualEdcConfirmDialog } from '@/components/pos/pos-manual-edc-confirm-dialog'
+import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import {
   isPosCryptoPaymentTabVisible,
   type PosCryptoPaymentSettings,
@@ -442,6 +444,11 @@ interface CartPanelProps {
    * 터미널에서 즉시 돈통을 열어 거스름돈을 받을 수 있게 함.
    */
   onSplitCashPaymentStep?: (payment: CartPanelPaymentPayload) => void
+  /**
+   * LinkPOS 단말 승인 매장(수기 아님)일 때
+   * 「EDC에서 결제 완료」수동 마감 버튼 표시.
+   */
+  linkposCardTerminalEnabled?: boolean
   /** 터미널 데모: 홀에서 손님 수가 0이면 지정 값으로(투어 주문 버튼) */
   posDineInDemoDefaultGuestCount?: number
   /**
@@ -499,6 +506,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   onTaxInvoiceToggleChange,
   onPaymentComplete,
   onSplitCashPaymentStep,
+  linkposCardTerminalEnabled = false,
   posDineInDemoDefaultGuestCount,
   requireGuestCount = true,
   onGuestCountChange,
@@ -509,6 +517,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const { lang } = useLang()
   const tDefault = useT(lang)
   const t = tProp ?? tDefault
+  const { requestDrawerPinAuth } = usePosCashDrawerOpen()
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const tr = (key: string, fallback: string) => {
     const v = t(key)
@@ -830,6 +839,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     onPaymentModalOpenChange?.(showPaymentModal)
   }, [showPaymentModal, onPaymentModalOpenChange])
   const [activePaymentTab, setActivePaymentTab] = useState<PaymentMethodTab>('cash')
+  const [showManualEdcDialog, setShowManualEdcDialog] = useState(false)
+  const [manualEdcSubmitInFlight, setManualEdcSubmitInFlight] = useState(false)
+  /** handlePaymentComplete 직전에만 설정 — LinkPOS 재호출 없이 마감 */
+  const manualEdcPendingRef = useRef<{ approvalCode: string; traceNo?: string } | null>(null)
   const [payCash, setPayCash] = useState('')
   const [cashTendered, setCashTendered] = useState('')
   /** capture/스냅샷 시 setState 직후 값 누락 방지(더치·일부결제) */
@@ -3712,11 +3725,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       splitDraftAssignedRef.current = null
     }
     const splitReceipts = withPayment ? buildSplitReceiptPayloads() : undefined
-    const paymentBase = withPayment
+    const paymentBaseRaw = withPayment
       ? showSplit
         ? buildOrderPaymentFromSplit()
         : buildPaymentSnapshot()
       : null
+    const manualEdc = withPayment ? manualEdcPendingRef.current : null
+    const paymentBase =
+      paymentBaseRaw && manualEdc
+        ? {
+            ...paymentBaseRaw,
+            manualEdcConfirm: true as const,
+            manualEdcApprovalCode: manualEdc.approvalCode,
+            ...(manualEdc.traceNo ? { manualEdcTraceNo: manualEdc.traceNo } : {}),
+          }
+        : paymentBaseRaw
     const result = await onNonDineOrderComplete({
       orderType,
       orderLabel: orderType === 'delivery'
@@ -3770,7 +3793,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       resetPaymentInputs()
       splitDraftAssignedRef.current = null
     }
-    const resolvedPayment = showSplit ? buildOrderPaymentFromSplit() : buildPaymentSnapshot()
+    const resolvedPaymentRaw = showSplit ? buildOrderPaymentFromSplit() : buildPaymentSnapshot()
+    const manualEdc = manualEdcPendingRef.current
+    const resolvedPayment: CartPanelPaymentPayload = manualEdc
+      ? {
+          ...resolvedPaymentRaw,
+          manualEdcConfirm: true,
+          manualEdcApprovalCode: manualEdc.approvalCode,
+          ...(manualEdc.traceNo ? { manualEdcTraceNo: manualEdc.traceNo } : {}),
+        }
+      : resolvedPaymentRaw
     if ((resolvedPayment.paymentCrypto || 0) > 0.005 && !resolvedPayment.paymentCryptoMeta) {
       await appAlert(t('posCryptoNeedConfirm') || '암호화폐는 입금 확인 후에만 결제 완료할 수 있습니다.')
       return
@@ -3947,13 +3979,61 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const showPostCashChangeReminder = cashPayRecorded > 0.001 && tenderChangeRounded > 0.001
 
     onPaymentComplete?.()
+    setShowManualEdcDialog(false)
     setShowPaymentModal(false)
     handleClearCart()
     if (showPostCashChangeReminder) {
       setPostPaymentCashChange(tenderChangeRounded)
     }
     } finally {
+      manualEdcPendingRef.current = null
       setPaymentSubmitInFlight(false)
+      setManualEdcSubmitInFlight(false)
+    }
+  }
+
+  const cardAmountForManualEdc = parseBahtAmount(payCard) || 0
+  const showManualEdcButton =
+    linkposCardTerminalEnabled && cardAmountForManualEdc > 0.005 && !showSplit
+
+  const openManualEdcConfirm = () => {
+    if (paymentSubmitInFlight || posBackendActionInFlight || manualEdcSubmitInFlight) return
+    if (!splitReadyForComplete || taxInvoiceInvalid) {
+      if (!paymentSumMatch) scrollToPaymentMethods()
+      return
+    }
+    if (cardAmountForManualEdc <= 0.005) {
+      void appAlert(
+        tr('posManualEdcNeedCardAmount', '카드 금액을 먼저 입력한 뒤 사용해 주세요.')
+      )
+      return
+    }
+    setShowManualEdcDialog(true)
+  }
+
+  const confirmManualEdcAndPay = async (payload: { approvalCode: string; traceNo: string }) => {
+    if (paymentSubmitInFlight || posBackendActionInFlight || manualEdcSubmitInFlight) return
+    setManualEdcSubmitInFlight(true)
+    try {
+      const store = String(currentStoreId || '').trim()
+      if (store) {
+        const pinOk = await requestDrawerPinAuth(store, {
+          title: tr('posManualEdcPinTitle', 'EDC 수동 마감 PIN'),
+          description: tr(
+            'posManualEdcPinBody',
+            '이미 EDC에서 승인한 결제를 POS에 반영합니다. 금전 서랍 PIN을 입력하세요.'
+          ),
+        })
+        if (!pinOk) return
+      }
+      manualEdcPendingRef.current = {
+        approvalCode: payload.approvalCode,
+        ...(payload.traceNo ? { traceNo: payload.traceNo } : {}),
+      }
+      await handlePaymentComplete()
+    } finally {
+      manualEdcPendingRef.current = null
+      setManualEdcSubmitInFlight(false)
     }
   }
 
@@ -7456,6 +7536,24 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               >
                 {t('posCancel') || '취소'}
               </Button>
+              {showManualEdcButton && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full rounded-xl border-amber-500/50 font-semibold text-amber-900 dark:text-amber-100 sm:w-auto sm:min-w-[11rem]"
+                  disabled={
+                    !splitReadyForComplete ||
+                    taxInvoiceInvalid ||
+                    posBackendActionInFlight ||
+                    paymentSubmitInFlight ||
+                    manualEdcSubmitInFlight
+                  }
+                  onClick={openManualEdcConfirm}
+                  data-tour="pos-tour-payment-manual-edc"
+                >
+                  {tr('posManualEdcButton', 'EDC에서 결제 완료')}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -7489,6 +7587,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         )}
       </DialogContent>
     </Dialog>
+
+    <PosManualEdcConfirmDialog
+      open={showManualEdcDialog}
+      onOpenChange={(open) => {
+        if (!manualEdcSubmitInFlight && !paymentSubmitInFlight) setShowManualEdcDialog(open)
+      }}
+      cardAmountBaht={cardAmountForManualEdc}
+      loading={manualEdcSubmitInFlight || paymentSubmitInFlight}
+      onConfirm={(payload) => void confirmManualEdcAndPay(payload)}
+    />
 
     {!onPostPaymentCashChange && (
       <Dialog open={postPaymentCashChangeBaht != null}>

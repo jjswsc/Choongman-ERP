@@ -12,7 +12,7 @@ import type { PosPaymentOtherBreakdown } from '../pos-payment-other-breakdown'
 
 export type LinkposPaymentSummary = {
   provider: 'kbtg_linkpos'
-  mode: 'hypercom'
+  mode: 'hypercom' | 'manual_edc'
   txCode: '20' | '26' | '50' | '70'
   bankId: string
   responseCode: string

@@ -989,6 +989,8 @@ export default function PosTerminalPage() {
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = useState(false)
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = useState(false)
   const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = useState(false)
+  /** LinkPOS 단말 승인 매장 — EDC 수동 마감 버튼 표시용 */
+  const [linkposCardTerminalEnabled, setLinkposCardTerminalEnabled] = useState(false)
   const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = useState(false)
   /** 주방 자동인쇄 실패 — 서버/네트워크 끊김 시 조용히 스킵되지 않도록 상단 안내 */
   const [kitchenAutoprintNotice, setKitchenAutoprintNotice] = useState<{
@@ -1923,6 +1925,7 @@ export default function PosTerminalPage() {
         setAutoPrintReceiptOnOrder(Boolean(s.autoPrintReceiptOnOrder))
         setAutoPrintReceiptOnAddOrder(Boolean(s.autoPrintReceiptOnAddOrder || s.autoPrintReceiptOnOrder))
         setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
+        setLinkposCardTerminalEnabled(!shouldSkipLinkposTerminalForCard(s.linkposSkipTerminalForCard))
         setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
         setAutoPrintFinalOrderBeforePayment(Boolean(s.autoPrintFinalOrderBeforePayment))
         setAutoPrintKitchenSlipOnCancel(
@@ -2038,6 +2041,7 @@ export default function PosTerminalPage() {
         setAutoPrintReceiptOnOrder(false)
         setAutoPrintReceiptOnAddOrder(false)
         setAutoPrintReceiptOnPayment(false)
+        setLinkposCardTerminalEnabled(false)
         setAutoPrintKitchenSlipOnOrder(false)
         setAutoPrintFinalOrderBeforePayment(false)
         setReceiptBizName('')
@@ -6438,6 +6442,36 @@ export default function PosTerminalPage() {
       const cardAmount = Math.max(0, Number(payment?.paymentCard || 0))
       if (cardAmount <= 0) return { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
 
+      // EDC 기기에서 이미 승인 → POS만 마감 (재세일 금지)
+      if (payment?.manualEdcConfirm) {
+        const approvalCode = String(payment.manualEdcApprovalCode ?? '')
+          .trim()
+          .toUpperCase()
+        if (approvalCode.length < 4) {
+          const msg =
+            t('posManualEdcApprovalRequired') ||
+            'EDC 전표의 승인번호를 입력해 주세요.'
+          await appAlert(msg)
+          return { ok: false as const, message: msg }
+        }
+        const nowIso = new Date().toISOString()
+        const manualPayment: LinkposPaymentSummary = {
+          provider: 'kbtg_linkpos',
+          mode: 'manual_edc',
+          txCode: '20',
+          bankId: '',
+          responseCode: '00',
+          approvalCode,
+          traceNo: String(payment.manualEdcTraceNo ?? '').trim() || undefined,
+          reference1: `MAN${Date.now().toString().slice(-14)}`.slice(0, 20),
+          requestedAmount: cardAmount,
+          approvedAmount: cardAmount,
+          requestedAt: nowIso,
+          respondedAt: nowIso,
+        }
+        return { ok: true as const, linkposPayment: manualPayment }
+      }
+
       // 매장「단말 생략(수기)」이 true면 EDC 호출 금지.
       // (이전: 로컬 브리지 serialReady면 skip를 무시 → 시콘 등 수기 매장에서 카드만 멈춤)
       if (shouldSkipLinkposTerminalForCard(posPrinterSettingsRef.current?.linkposSkipTerminalForCard)) {
@@ -6451,8 +6485,11 @@ export default function PosTerminalPage() {
       const localBridgeReady = await probeLinkposLocalReady()
       if (!localBridgeReady) {
         const soft =
-          t('posCardApprovalFailedSoft') ||
-          'เครื่องยังไม่พร้อมหรือรายการไม่สำเร็จ กรุณาลองอีกครั้งครับ'
+          (t('posCardApprovalFailedSoft') ||
+            'เครื่องยังไม่พร้อมหรือรายการไม่สำเร็จ กรุณาลองอีกครั้งครับ') +
+          '\n\n' +
+          (t('posManualEdcHintAfterFail') ||
+            '이미 EDC에서 승인했다면 「EDC에서 결제 완료」로 마감하세요. 다시 결제 완료를 누르면 이중 승인될 수 있습니다.')
         await appAlert(soft)
         return { ok: false as const, message: soft }
       }
@@ -6481,20 +6518,28 @@ export default function PosTerminalPage() {
       setCustomerDisplayPaymentMessage('')
       if (!result.success) {
         const raw = String(result.message || '').trim()
-        const soft =
+        const softBase =
           raw === 'edc_nak' || raw === 'serial_not_ready' || raw === 'serial_response_timeout'
             ? t('posCardApprovalFailedSoft') ||
               'เครื่องยังไม่พร้อมหรือรายการไม่สำเร็จ กรุณาลองอีกครั้งครับ'
             : (t('posCardApprovalFailed') || '카드 승인에 실패했습니다.') +
               (raw ? ` (${raw})` : '')
+        const soft =
+          softBase +
+          '\n\n' +
+          (t('posManualEdcHintAfterFail') ||
+            '이미 EDC에서 승인했다면 「EDC에서 결제 완료」로 마감하세요. 다시 결제 완료를 누르면 이중 승인될 수 있습니다.')
         await appAlert(soft)
         return { ok: false as const, message: soft }
       }
       // API disabled stub(payment null)을 카드 승인 성공으로 취급하지 않음
       if (!result.payment) {
         const soft =
-          t('posCardApprovalFailedSoft') ||
-          'เครื่องยังไม่พร้อมหรือรายการไม่สำเร็จ กรุณาลองอีกครั้งครับ'
+          (t('posCardApprovalFailedSoft') ||
+            'เครื่องยังไม่พร้อมหรือรายการไม่สำเร็จ กรุณาลองอีกครั้งครับ') +
+          '\n\n' +
+          (t('posManualEdcHintAfterFail') ||
+            '이미 EDC에서 승인했다면 「EDC에서 결제 완료」로 마감하세요. 다시 결제 완료를 누르면 이중 승인될 수 있습니다.')
         await appAlert(soft)
         return { ok: false as const, message: soft }
       }
@@ -9093,6 +9138,7 @@ export default function PosTerminalPage() {
             pricingAdjustments={pricingAdjustments}
             pendingOrderId={activeTab === 'tables' ? pendingDineInOrderId : activeTab === 'takeout' ? pendingTakeoutOrderId : activeTab === 'delivery' ? pendingDeliveryOrderId : null}
             posBackendActionInFlight={posCartBackendBusy}
+            linkposCardTerminalEnabled={linkposCardTerminalEnabled}
             onAdvanceDeposit={handleReceivePosDeposit}
             onCustomerDisplayPaymentDraftChange={setCustomerDisplayPaymentDraft}
             onDeliveryOrderComplete={async (payload, existingOrderId) => {

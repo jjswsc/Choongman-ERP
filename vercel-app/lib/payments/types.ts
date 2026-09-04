@@ -1,4 +1,4 @@
-export type LinkposMode = 'hypercom'
+export type LinkposMode = 'hypercom' | 'manual_edc'
 
 export type LinkposTransactionCode = '20' | '26' | '50'
 
