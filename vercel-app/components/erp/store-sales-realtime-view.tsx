@@ -80,6 +80,8 @@ export type StoreSalesRealtimeViewProps = {
   showSalesCharts?: boolean
   /** 관리자 전체 매장: 상단 `AdminSalesDashboardCharts` 매장별 표와 중복 방지 */
   hideByStoreSection?: boolean
+  /** 가맹 「내 매장 전체」등 — 명시 매장 코드(본사 All=store list) */
+  salesStoreCodes?: string[]
   /** 부모「검색」토큰 — 당일 매출만 강제 재조회(테이블은 부모가 refetch) */
   refreshToken?: number
   className?: string
@@ -99,6 +101,7 @@ export function StoreSalesRealtimeView({
   onRegisterRefresh,
   showSalesCharts = false,
   hideByStoreSection = false,
+  salesStoreCodes,
   refreshToken,
   className,
 }: StoreSalesRealtimeViewProps) {
@@ -121,12 +124,20 @@ export function StoreSalesRealtimeView({
   const [todaySales, setTodaySales] = useState<TodaySalesSummary | null>(null)
   const [storeSalesMap, setStoreSalesMap] = useState<Record<string, TodaySalesSummary>>({})
   const [tableSortMode, setTableSortMode] = useState<"amount" | "guests">("amount")
+  const [salesRefreshing, setSalesRefreshing] = useState(false)
+  const salesReqGenRef = useRef(0)
 
-  /** 테이블/주문만 바뀌고 매장 ID 집합이 같으면 동일 — `stores` 참조 변경으로 당일 매출 API가 반복 호출되는 것을 막음 */
+  /**
+   * 당일 매출 집계 매장 목록 — 테이블 스냅샷(stores)을 기다리지 않음.
+   * 스냅샷은 미결제 좌석용이고, 확정 매출은 store list / 가맹 허용 코드로 바로 조회.
+   */
   const allStoresCodesKey = useMemo(() => {
     if (!isAllStoresSelected) return ""
-    return [...new Set(operationalStores.map((s) => String(s.id || "").trim()).filter(Boolean))].sort().join(",")
-  }, [isAllStoresSelected, operationalStores])
+    const scoped = (salesStoreCodes?.length ? salesStoreCodes : storeListCodes)
+      .map((c) => String(c || "").trim())
+      .filter(Boolean)
+    return [...new Set(filterPosSalesStoreOptionsForManagement(scoped))].sort().join(",")
+  }, [isAllStoresSelected, salesStoreCodes, storeListCodes])
 
   const loadTodaySales = useCallback((opts?: { forceNetwork?: boolean }) => {
     const forceNetwork = Boolean(opts?.forceNetwork)
@@ -137,7 +148,11 @@ export function StoreSalesRealtimeView({
       completedCash: 0,
       pendingCount: 0,
     }
+    const gen = ++salesReqGenRef.current
+    if (forceNetwork) setSalesRefreshing(true)
+    const isLatest = () => gen === salesReqGenRef.current
     const applyTotals = (data: TodaySalesSummary & { byStore?: Record<string, TodaySalesSummary> }) => {
+      if (!isLatest()) return
       setTodaySales({
         completedCount: Number(data.completedCount ?? 0),
         completedTotal: Number(data.completedTotal ?? 0),
@@ -145,25 +160,32 @@ export function StoreSalesRealtimeView({
         pendingCount: Number(data.pendingCount ?? 0),
       })
     }
+    const settle = () => {
+      if (isLatest()) setSalesRefreshing(false)
+    }
 
     if (!isAllStoresSelected) {
       return getPosTodaySales({ storeCode: effectiveStoreCode, forceNetwork })
         .then((data) => {
           applyTotals(data)
+          if (!isLatest()) return
           setStoreSalesMap((prev) => ({ ...prev, [effectiveStoreCode]: data }))
         })
-        .catch(() => setTodaySales(null))
+        .catch(() => {
+          /* 검색 실패 시 직전 숫자를 유지 — 0으로 비우면 「집계 안 됨」처럼 보임 */
+        })
+        .finally(settle)
     }
     const storeCodes = allStoresCodesKey
       ? allStoresCodesKey.split(",").map((c) => c.trim()).filter(Boolean)
       : []
     if (!storeCodes.length) {
-      setTodaySales(empty)
-      setStoreSalesMap({})
+      settle()
       return Promise.resolve()
     }
     return getPosTodaySales({ storeCodes, forceNetwork })
       .then((data) => {
+        if (!isLatest()) return
         const nextMap: Record<string, TodaySalesSummary> = { ...(data.byStore || {}) }
         for (const code of storeCodes) {
           if (!nextMap[code]) nextMap[code] = empty
@@ -172,9 +194,9 @@ export function StoreSalesRealtimeView({
         applyTotals(data)
       })
       .catch(() => {
-        setStoreSalesMap({})
-        setTodaySales(null)
+        /* 검색 실패 시 직전 숫자 유지 */
       })
+      .finally(settle)
   }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey])
 
   const refreshRealtimeSection = useCallback(async () => {
@@ -269,11 +291,25 @@ export function StoreSalesRealtimeView({
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="rounded-lg bg-background/60 px-2 py-2">
           <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesCompletedOrders")}</p>
-          <p className="text-lg font-semibold tabular-nums">{todaySales?.completedCount ?? "—"}</p>
+          <p
+            className={cn(
+              "text-lg font-semibold tabular-nums",
+              salesRefreshing && "animate-pulse"
+            )}
+          >
+            {todaySales?.completedCount ?? "—"}
+          </p>
         </div>
         <div className="rounded-lg bg-background/60 px-2 py-2">
           <p className="text-[10px] text-muted-foreground">{t("mobileStoreSalesPendingOrders")}</p>
-          <p className="text-lg font-semibold tabular-nums">{todaySales?.pendingCount ?? "—"}</p>
+          <p
+            className={cn(
+              "text-lg font-semibold tabular-nums",
+              salesRefreshing && "animate-pulse"
+            )}
+          >
+            {todaySales?.pendingCount ?? "—"}
+          </p>
         </div>
         <div className="rounded-lg bg-background/60 px-2 py-2">
           <p className="text-[10px] text-muted-foreground">
@@ -413,8 +449,16 @@ export function StoreSalesRealtimeView({
       <section className="rounded-xl border border-border/80 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-sm">
         <p className="text-xs font-medium text-muted-foreground">
           {tr("mobileStoreSalesConfirmedTotal", "확정 매출")}
+          {salesRefreshing ? (
+            <span className="ml-2 text-[10px] font-normal">{t("loading")}</span>
+          ) : null}
         </p>
-        <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl">
+        <p
+          className={cn(
+            "mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl",
+            salesRefreshing && "animate-pulse"
+          )}
+        >
           {todaySales != null ? formatBahtInt(todaySales.completedTotal) : "—"}
         </p>
         {summaryMetricsGrid}

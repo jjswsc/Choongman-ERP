@@ -100,8 +100,9 @@ async function fetchCatalogAndPersist<T>(
   relativeUrl: string,
   cacheKey: string,
   fallback: T,
-  options?: { cache?: RequestCache; timeoutMs?: number }
+  options?: { cache?: RequestCache; timeoutMs?: number; allowStaleOnError?: boolean }
 ): Promise<T> {
+  const allowStaleOnError = options?.allowStaleOnError !== false
   const signal = catalogFetchSignal(options?.timeoutMs)
   const res = await apiFetch(relativeUrl, {
     ...(signal ? { signal } : {}),
@@ -110,6 +111,9 @@ async function fetchCatalogAndPersist<T>(
   if (res.ok) reportNetworkSuccess()
   else if (res.status >= 500) reportNetworkFailure()
   if (!res.ok) {
+    if (!allowStaleOnError) {
+      throw new Error(`catalog fetch failed: ${res.status}`)
+    }
     return readCache(cacheKey, fallback)
   }
   const data = (await res.json()) as T
@@ -156,21 +160,24 @@ export async function fetchPosCatalogCached<T>(
   cacheKey: string,
   relativeUrl: string,
   fallback: T,
-  options?: { forceNetwork?: boolean; timeoutMs?: number }
+  options?: { forceNetwork?: boolean; timeoutMs?: number; allowStaleOnError?: boolean }
 ): Promise<T> {
   const forceNetwork = Boolean(options?.forceNetwork)
+  const allowStaleOnError = options?.allowStaleOnError !== false
   const fromIdb = await readCacheOrNull<T>(cacheKey)
   const persistOpts = {
     ...(forceNetwork ? { cache: 'no-store' as RequestCache } : {}),
     ...(options?.timeoutMs != null ? { timeoutMs: options.timeoutMs } : {}),
+    allowStaleOnError,
   }
 
   if (shouldPreferOfflineCache()) {
     if (!forceNetwork && fromIdb !== null) return fromIdb
     try {
       return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback, persistOpts)
-    } catch {
+    } catch (err) {
       reportNetworkFailure()
+      if (!allowStaleOnError) throw err
       return fromIdb !== null ? fromIdb : fallback
     }
   }
@@ -183,8 +190,9 @@ export async function fetchPosCatalogCached<T>(
 
   try {
     return await fetchCatalogAndPersist(relativeUrl, cacheKey, fallback, persistOpts)
-  } catch {
+  } catch (err) {
     reportNetworkFailure()
+    if (!allowStaleOnError) throw err
     return readCache(cacheKey, fallback)
   }
 }

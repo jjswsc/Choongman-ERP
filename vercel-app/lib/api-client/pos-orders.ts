@@ -180,6 +180,8 @@ export async function getPosTodaySales(params?: {
   return fetchPosCatalogCached<PosTodaySalesSummary>(cacheKey, url, fallback, {
     forceNetwork: Boolean(params?.forceNetwork),
     timeoutMs: POS_TODAY_SALES_FETCH_MS,
+    /** 수동 검색: 타임아웃 때 옛 캐시를 성공처럼 보여 주면 「집계가 안 된 것」처럼 보임 */
+    allowStaleOnError: !params?.forceNetwork,
   })
 }
 

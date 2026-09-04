@@ -7,6 +7,7 @@ import {
 import {
   canUsePosSalesPeriodSummaryRpc,
   posSalesPeriodSummaryUtcEnvelopeForStore,
+  tryFetchPosSalesPeriodSummaryByStores,
   tryFetchPosSalesPeriodSummaryRpc,
 } from '@/lib/pos-sales-period-summary-rpc'
 import {
@@ -16,9 +17,9 @@ import {
 import { resolveStoresFromParams } from '@/lib/pos-sales-store-filter'
 import {
   aggregatePosTodaySalesFromRows,
-  emptyPosTodaySalesSummary,
   groupPosTodaySalesByCanonicalStore,
   groupPosTodaySalesByStoreCodes,
+  sumPosTodaySalesSummaries,
 } from '@/lib/pos-today-sales-aggregate'
 
 const TODAY_SALES_SELECT = `${POS_SALES_ORDER_ROW_SELECT},payment_cash`
@@ -77,6 +78,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    /** 전체·복수 매장: 주문 전량 fetch 대신 매장별 RPC 병렬 집계 (검색 체감) */
+    if (!forceFetch && storeCodes.length > 1 && startStr === endStr) {
+      const byStoreRpc = await tryFetchPosSalesPeriodSummaryByStores({
+        bizCtx,
+        businessYmd: startStr,
+        storeCodes,
+      })
+      if (byStoreRpc) {
+        const totals = sumPosTodaySalesSummaries(Object.values(byStoreRpc))
+        return NextResponse.json(
+          {
+            ...totals,
+            byStore: byStoreRpc,
+            source: 'rpc' as const,
+            truncated: false,
+          },
+          { headers }
+        )
+      }
+    }
+
     const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
       request,
       startStr,
@@ -94,13 +116,7 @@ export async function GET(request: NextRequest) {
     const totals =
       storeCodes.length > 0
         ? aggregatePosTodaySalesFromRows(rows)
-        : Object.values(byStore).reduce((acc, row) => {
-            acc.completedCount += row.completedCount
-            acc.completedTotal += row.completedTotal
-            acc.completedCash += row.completedCash
-            acc.pendingCount += row.pendingCount
-            return acc
-          }, emptyPosTodaySalesSummary())
+        : sumPosTodaySalesSummaries(Object.values(byStore))
 
     return NextResponse.json(
       {

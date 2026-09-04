@@ -4,7 +4,32 @@ import {
   groupPosTodaySalesByCanonicalStore,
   groupPosTodaySalesByStoreCodes,
   matchRequestedStoreCodeForTodaySales,
+  sumPosTodaySalesSummaries,
 } from '@/lib/pos-today-sales-aggregate'
+describe('sumPosTodaySalesSummaries', () => {
+  it('adds completed/pending totals across stores', () => {
+    expect(
+      sumPosTodaySalesSummaries([
+        { completedCount: 2, completedTotal: 100, completedCash: 40, pendingCount: 1 },
+        { completedCount: 3, completedTotal: 250, completedCash: 10, pendingCount: 4 },
+      ])
+    ).toEqual({
+      completedCount: 5,
+      completedTotal: 350,
+      completedCash: 50,
+      pendingCount: 5,
+    })
+  })
+
+  it('returns zeros for an empty list', () => {
+    expect(sumPosTodaySalesSummaries([])).toEqual({
+      completedCount: 0,
+      completedTotal: 0,
+      completedCash: 0,
+      pendingCount: 0,
+    })
+  })
+})
 
 describe('aggregatePosTodaySalesFromRows', () => {
   it('splits completed vs pending and sums cash', () => {

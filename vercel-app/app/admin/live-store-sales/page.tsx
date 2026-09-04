@@ -269,6 +269,7 @@ export default function AdminLiveStoreSalesPage() {
                 }
                 hideByStoreSection={hideDuplicateByStoreSection}
                 refreshToken={refreshToken}
+                salesStoreCodes={franchiseSalesStoreCodes}
               />
             ) : null}
           </TabsContent>

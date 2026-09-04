@@ -34,8 +34,8 @@ export function normalizePosSalesPeriodSummaryRow(
 }
 
 /**
- * getPosTodaySales 전용: 단일 영업일·단일 매장일 때만 RPC 사용.
- * (다매장/다일·영업일 JS 재필터가 필요한 경우는 호출하지 않음)
+ * getPosTodaySales 단일 매장·단일 영업일 RPC 경로.
+ * 복수 매장은 tryFetchPosSalesPeriodSummaryByStores (매장별 영업시간 병렬).
  */
 export function canUsePosSalesPeriodSummaryRpc(params: {
   startStr: string
@@ -81,4 +81,43 @@ export async function tryFetchPosSalesPeriodSummaryRpc(params: {
     console.warn('tryFetchPosSalesPeriodSummaryRpc:', e instanceof Error ? e.message : e)
     return null
   }
+}
+
+/**
+ * 복수 매장 당일 요약 — 매장별 영업시간 봉투로 RPC를 병렬 호출.
+ * 하나라도 실패하면 null (호출측에서 주문 전량 fetch 폴백).
+ */
+export async function tryFetchPosSalesPeriodSummaryByStores(params: {
+  bizCtx: PosBusinessDaySettingsContext
+  businessYmd: string
+  storeCodes: string[]
+}): Promise<Record<string, PosSalesPeriodSummary> | null> {
+  const unique = [
+    ...new Set(params.storeCodes.map((c) => String(c || '').trim()).filter(Boolean)),
+  ]
+  if (unique.length === 0) return null
+  const ymd = params.businessYmd.trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null
+
+  const settled = await Promise.all(
+    unique.map(async (storeCode) => {
+      const { startISO, endISOExclusive } = posSalesPeriodSummaryUtcEnvelopeForStore(
+        params.bizCtx,
+        ymd,
+        storeCode
+      )
+      const summary = await tryFetchPosSalesPeriodSummaryRpc({
+        startISO,
+        endISOExclusive,
+        storeCode,
+      })
+      return { storeCode, summary }
+    })
+  )
+  if (settled.some((r) => r.summary == null)) return null
+  const byStore: Record<string, PosSalesPeriodSummary> = {}
+  for (const row of settled) {
+    byStore[row.storeCode] = row.summary!
+  }
+  return byStore
 }

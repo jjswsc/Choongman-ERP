@@ -23,6 +23,20 @@ export function emptyPosTodaySalesSummary(): PosTodaySalesSummary {
   return { completedCount: 0, completedTotal: 0, completedCash: 0, pendingCount: 0 }
 }
 
+/** 매장별 당일 요약을 합산 (전체 매장 실시간 매출 헤더) */
+export function sumPosTodaySalesSummaries(
+  rows: Iterable<PosTodaySalesSummary>
+): PosTodaySalesSummary {
+  const out = emptyPosTodaySalesSummary()
+  for (const row of rows) {
+    out.completedCount += row.completedCount
+    out.completedTotal += row.completedTotal
+    out.completedCash += row.completedCash
+    out.pendingCount += row.pendingCount
+  }
+  return out
+}
+
 export function aggregatePosTodaySalesFromRows(rows: PosTodaySalesRow[]): PosTodaySalesSummary {
   const out = emptyPosTodaySalesSummary()
   for (const r of rows) {
