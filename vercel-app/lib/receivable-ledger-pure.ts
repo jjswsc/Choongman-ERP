@@ -110,9 +110,10 @@ export function filterReceivableRows(
   if (!storeFilter?.trim() || isAllFilterToken(storeFilter)) return rows
   return rows.filter((r) => {
     const resolvedStore = resolveReceivableAttributedStore(r, attributionMaps)
+    if (matchesReceivableStoreNorm(resolvedStore, storeFilter)) return true
     return filterByVendorLink
       ? matchesReceivableStoreByVendorLink(resolvedStore, storeFilter, vendorMaps)
-      : matchesReceivableStoreNorm(resolvedStore, storeFilter)
+      : false
   })
 }
 

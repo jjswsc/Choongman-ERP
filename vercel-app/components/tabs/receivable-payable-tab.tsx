@@ -143,6 +143,8 @@ import {
   cumulativeBalanceKey,
   buildCumulativeByKey,
   mergeReceivablePayableCumulativeByKey,
+  mergeReceivableCustomerOptions,
+  filterReceivableCustomerOptions,
   resolveEffectivePayableStoreFilter,
   isOfficeLikeLabel,
   clientHasBillToAddress,
@@ -283,7 +285,16 @@ export function ReceivablePayableTab() {
   }, [tab])
   // 미수금: 매출처만 (매장은 미수금 없음 - 본사가 매출처에게 받을 돈)
   const [salesOutletFilter, setSalesOutletFilter] = React.useState("All")
-  const [salesOutletOptions, setSalesOutletOptions] = React.useState<{ code: string; name: string }[]>([])
+  const [salesVendors, setSalesVendors] = React.useState<{ code: string; name: string }[]>([])
+  const [salesOutletSearch, setSalesOutletSearch] = React.useState("")
+  const salesOutletOptions = React.useMemo(
+    () => mergeReceivableCustomerOptions(salesVendors, storeList || [], formatStoreLabel),
+    [salesVendors, storeList, formatStoreLabel]
+  )
+  const filteredSalesOutletOptions = React.useMemo(
+    () => filterReceivableCustomerOptions(salesOutletOptions, salesOutletSearch, salesOutletFilter),
+    [salesOutletOptions, salesOutletSearch, salesOutletFilter]
+  )
   // 미지급금: 매장 선택 + 매입처. 본사/회계직원은 매장 선택, 매니저는 자기 매장 고정
   const [payableStoreFilter, setPayableStoreFilter] = React.useState(() =>
     !canSelectStores && isManager && managerStore ? managerStore : "All"
@@ -868,19 +879,19 @@ export function ReceivablePayableTab() {
     getVendorsForPurchase().then((rows) => setVendors(rows || []))
   }, [])
 
-  // 매출처 목록: vendor code + 표시명
+  // 매출처 목록: vendor code + 표시명 (매장 마스터는 salesOutletOptions에서 합침)
   React.useEffect(() => {
     const load = async () => {
       const sales = (await getVendorsForSales()) || []
       const seen = new Set<string>()
-      setSalesOutletOptions((sales || []).filter((v) => {
+      setSalesVendors((sales || []).filter((v) => {
         const c = String(v.code || "").trim()
         if (!c || seen.has(c)) return false
         seen.add(c)
         return true
       }))
     }
-    load().catch(() => setSalesOutletOptions([]))
+    load().catch(() => setSalesVendors([]))
   }, [])
 
   // 매니저(회계권한 없을 때): 미지급금 매장 선택을 자기 매장으로 고정
@@ -2124,13 +2135,28 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         value={salesOutletFilter}
                         onValueChange={setSalesOutletFilter}
                         disabled={!canSelectStores && isManager && !!managerStore}
+                        onOpenChange={(open) => {
+                          if (!open) setSalesOutletSearch("")
+                        }}
                       >
-                        <SelectTrigger className="w-[160px] h-9">
+                        <SelectTrigger className="w-[240px] h-9">
                           <SelectValue placeholder={t("recFilterSalesOutletAll") || "All Customers"} />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="min-w-[280px]">
+                          <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                            <Input
+                              placeholder={
+                                t("recFilterSalesOutletSearch") ||
+                                tt("recFilterSalesOutletSearch", "Search store (Ekkamai, Union…)")
+                              }
+                              value={salesOutletSearch}
+                              onChange={(e) => setSalesOutletSearch(e.target.value)}
+                              onKeyDown={(e) => e.stopPropagation()}
+                              className="h-8 text-sm"
+                            />
+                          </div>
                           <SelectItem value="All">{(t("recFilterSalesOutletAll") || "All Customers")}</SelectItem>
-                          {salesOutletOptions.map((s) => (
+                          {filteredSalesOutletOptions.map((s) => (
                             <SelectItem key={s.code} value={s.code}>
                               {s.name && s.name !== s.code ? `${s.name} (${s.code})` : s.code}
                             </SelectItem>

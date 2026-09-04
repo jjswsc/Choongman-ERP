@@ -1,9 +1,10 @@
 import { formatMoneyBaht } from "@/lib/money-amount"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
-import { receivableStoreGroupKey } from "@/lib/receivable-store-key"
+import { normalizeReceivableStoreKey, receivableStoreGroupKey } from "@/lib/receivable-store-key"
 import { CANONICAL_OFFICE_STORE, canonicalOfficeStore } from "@/lib/office-store-canonical"
 import { orderIdFromReceivableOrderRow } from "@/lib/receivable-order-id-parse"
+import { sortVendorsByDisplayName } from "@/lib/vendor-sort"
 import type { InvoiceDataClient } from "@/lib/api-client"
 import type { PoInvoiceBillToVendor } from "@/lib/po-invoice-bill-to"
 import type {
@@ -147,6 +148,58 @@ export function resolveEffectivePayableStoreFilter(params: {
     params.storeList.find((s) => String(s || "").toLowerCase().includes("office")) ||
     params.storeList.find((s) => canonicalOfficeStore(s) === CANONICAL_OFFICE_STORE)
   return office || params.payableStoreFilter
+}
+
+export type ReceivableCustomerOption = { code: string; name: string }
+
+function optionCoversStore(option: ReceivableCustomerOption, storeCode: string): boolean {
+  const storeKey = normalizeReceivableStoreKey(storeCode)
+  if (!storeKey) return false
+  return (
+    normalizeReceivableStoreKey(option.name) === storeKey ||
+    normalizeReceivableStoreKey(option.code) === storeKey
+  )
+}
+
+/** 미수금 고객 드롭다운: 매출 거래처 + 매장 마스터(거래처 type 누락 매장 포함) */
+export function mergeReceivableCustomerOptions(
+  vendors: ReceivableCustomerOption[],
+  storeCodes: string[],
+  formatLabel?: (code: string) => string
+): ReceivableCustomerOption[] {
+  const seenCodes = new Set<string>()
+  const out: ReceivableCustomerOption[] = []
+  for (const v of vendors || []) {
+    const code = String(v.code || "").trim()
+    if (!code || seenCodes.has(code)) continue
+    seenCodes.add(code)
+    out.push({ code, name: String(v.name || "").trim() || code })
+  }
+  for (const raw of storeCodes || []) {
+    const storeCode = String(raw || "").trim()
+    if (!storeCode || seenCodes.has(storeCode)) continue
+    if (out.some((o) => optionCoversStore(o, storeCode))) continue
+    seenCodes.add(storeCode)
+    const label = String(formatLabel?.(storeCode) || "").trim()
+    out.push({ code: storeCode, name: label || storeCode })
+  }
+  return sortVendorsByDisplayName(out)
+}
+
+export function filterReceivableCustomerOptions(
+  options: ReceivableCustomerOption[],
+  query: string,
+  selectedCode?: string
+): ReceivableCustomerOption[] {
+  const q = String(query || "").trim().toLowerCase()
+  const selected = String(selectedCode || "").trim()
+  const filtered = q
+    ? options.filter((s) => `${s.name} ${s.code}`.toLowerCase().includes(q))
+    : options
+  if (!selected || selected === "All") return filtered
+  if (filtered.some((s) => s.code === selected)) return filtered
+  const keep = options.find((s) => s.code === selected)
+  return keep ? [keep, ...filtered] : filtered
 }
 
 export function isOfficeLikeLabel(label: string): boolean {

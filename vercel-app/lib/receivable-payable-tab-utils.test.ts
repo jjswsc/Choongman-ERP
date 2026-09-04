@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   collectReceivableTaxInvoicePrintTargets,
+  filterReceivableCustomerOptions,
   isReceivableTaxInvoicePrintableRow,
+  mergeReceivableCustomerOptions,
   mergeReceivablePayableCumulativeByKey,
   printableReceivableTaxInvoiceKeys,
   RECEIVABLE_TAX_INVOICE_PRINT_MAX_BATCH,
@@ -72,6 +74,44 @@ describe('resolveEffectivePayableStoreFilter', () => {
         storeList: ['CM Bangna', 'CM Office'],
       })
     ).toBe('CM Bangna')
+  })
+})
+
+describe('mergeReceivableCustomerOptions', () => {
+  it('adds Ekkamai and Union Mall when they are missing from sales vendors', () => {
+    const merged = mergeReceivableCustomerOptions(
+      [{ code: '1042', name: 'CM Silom' }],
+      ['CM Silom', 'CM Ekkamai', 'CM Union Mall']
+    )
+    expect(merged.map((v) => v.name)).toEqual(['CM Ekkamai', 'CM Silom', 'CM Union Mall'])
+    expect(merged.find((v) => v.name === 'CM Ekkamai')?.code).toBe('CM Ekkamai')
+    expect(merged.find((v) => v.name === 'CM Union Mall')?.code).toBe('CM Union Mall')
+  })
+
+  it('does not duplicate a store already covered by vendor display name', () => {
+    const merged = mergeReceivableCustomerOptions(
+      [{ code: '1043', name: 'CM Ekkamai' }],
+      ['CM Ekkamai']
+    )
+    expect(merged).toEqual([{ code: '1043', name: 'CM Ekkamai' }])
+  })
+})
+
+describe('filterReceivableCustomerOptions', () => {
+  const options = [
+    { code: '1042', name: 'CM Silom' },
+    { code: 'CM Ekkamai', name: 'CM Ekkamai' },
+    { code: 'CM Union Mall', name: 'CM Union Mall' },
+  ]
+
+  it('finds Ekkamai and Union by partial name', () => {
+    expect(filterReceivableCustomerOptions(options, 'ekkamai').map((v) => v.name)).toEqual(['CM Ekkamai'])
+    expect(filterReceivableCustomerOptions(options, 'union').map((v) => v.name)).toEqual(['CM Union Mall'])
+  })
+
+  it('keeps the selected customer even when the search does not match it', () => {
+    const filtered = filterReceivableCustomerOptions(options, 'union', '1042')
+    expect(filtered.map((v) => v.code)).toEqual(['1042', 'CM Union Mall'])
   })
 })
 
