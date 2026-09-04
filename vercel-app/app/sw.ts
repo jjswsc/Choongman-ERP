@@ -21,6 +21,7 @@ declare const self: ServiceWorkerGlobalScope
 function isPosLiveOpsGetApi(pathname: string): boolean {
   return (
     pathname.startsWith("/api/getPosTodaySales") ||
+    pathname.startsWith("/api/getPosOpenTableTotals") ||
     pathname.startsWith("/api/getPosOrders") ||
     pathname.startsWith("/api/posRealtimeRevenueDashboard") ||
     pathname.startsWith("/api/posSalesByStore") ||

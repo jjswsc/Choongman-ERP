@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { canViewMobileStoreSales, isOfficeRole, isOfficeStore } from "@/lib/permissions"
-import { usePosStoreStandalone } from "@/hooks/use-pos-store"
+import { usePosStoreInternal } from "@/hooks/use-pos-store"
 import { useStoreList } from "@/lib/use-store-list"
 import { StoreViewProvider, useStoreView } from "@/lib/store-view-context"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
@@ -59,7 +59,7 @@ function StoreSalesBody() {
     setCurrentStoreId,
     loadingTables,
     refetchStores,
-  } = usePosStoreStandalone()
+  } = usePosStoreInternal({ initialLoadScope: "current" })
   const selectedStoreLabel = useMemo(() => {
     if (effectiveStoreCode === ALL_STORE_VALUE) return t("store_all_stores")
     const code = effectiveStoreCode || currentStoreId
@@ -93,19 +93,21 @@ function StoreSalesBody() {
     setSearchBusy(true)
     setRefreshToken((n) => n + 1)
     try {
-      await Promise.race([
-        Promise.resolve(
-          refetchStores({
-            scope: isAllStores ? "all" : "current",
-            storeCode: isAllStores ? undefined : effectiveStoreCode,
-            immediate: true,
-            forceFullRefresh: true,
-          })
-        ),
-        new Promise<void>((resolve) => {
-          window.setTimeout(resolve, SEARCH_BUSY_MAX_MS)
-        }),
-      ])
+      if (!isAllStores) {
+        await Promise.race([
+          Promise.resolve(
+            refetchStores({
+              scope: "current",
+              storeCode: effectiveStoreCode,
+              immediate: true,
+              forceFullRefresh: true,
+            })
+          ),
+          new Promise<void>((resolve) => {
+            window.setTimeout(resolve, SEARCH_BUSY_MAX_MS)
+          }),
+        ])
+      }
       if (gen === searchGenRef.current) setLastUpdated(new Date())
     } finally {
       if (gen === searchGenRef.current) setSearchBusy(false)

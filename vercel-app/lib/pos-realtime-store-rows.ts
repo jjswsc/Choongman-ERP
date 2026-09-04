@@ -184,21 +184,45 @@ export function mergeRealtimeStoreSalesRows(params: {
   legacyToCanonical: Record<string, string>
   /** `useStoreList().formatStoreLabel` — erp_stores·Grab ID 매핑 반영 */
   formatStoreLabel: (code: string) => string
+  /** 스냅샷 전에 매장 목록만으로 행을 만듦 (전체 매장 실시간 매출) */
+  includeStoreIds?: string[]
+  /** 미결제 테이블 API 합계 — 레이아웃 스냅샷보다 우선 */
+  tableTotalByStore?: Record<string, number>
 }): RealtimeStoreSalesRow[] {
   const storeCodes = params.storeCodes.map((s) => String(s || '').trim()).filter(Boolean)
   const resolveCanonical = (rawId: string) =>
     resolveStoreListKey(String(rawId || '').trim(), storeCodes, params.legacyToCanonical)
 
   const groups = new Map<string, { paid: number; tableTotal: number }>()
+  const bump = (rawId: string, paid: number, tableTotal: number) => {
+    const id = String(rawId || '').trim()
+    if (!id) return
+    const canon = resolveCanonical(id)
+    const prev = groups.get(canon) || { paid: 0, tableTotal: 0 }
+    prev.paid += paid
+    prev.tableTotal = Math.max(prev.tableTotal, tableTotal)
+    groups.set(canon, prev)
+  }
+
+  const includeIds = (params.includeStoreIds ?? []).map((s) => String(s || '').trim()).filter(Boolean)
+  for (const rawId of includeIds) {
+    const fromApi =
+      params.tableTotalByStore?.[rawId] ??
+      params.tableTotalByStore?.[resolveCanonical(rawId)]
+    bump(rawId, Number(params.storeSalesMap[rawId]?.completedTotal ?? 0), Number(fromApi ?? 0) || 0)
+  }
 
   for (const store of params.operationalStores) {
     const rawId = String(store.id || '').trim()
     if (!rawId) continue
-    const canon = resolveCanonical(rawId)
-    const prev = groups.get(canon) || { paid: 0, tableTotal: 0 }
-    prev.paid += Number(params.storeSalesMap[rawId]?.completedTotal ?? 0)
-    prev.tableTotal = Math.max(prev.tableTotal, sumStoreTableOrders(store))
-    groups.set(canon, prev)
+    const fromApi =
+      params.tableTotalByStore?.[rawId] ??
+      params.tableTotalByStore?.[resolveCanonical(rawId)]
+    const tableTotal =
+      fromApi != null && Number.isFinite(fromApi)
+        ? Number(fromApi)
+        : sumStoreTableOrders(store)
+    bump(rawId, includeIds.length > 0 ? 0 : Number(params.storeSalesMap[rawId]?.completedTotal ?? 0), tableTotal)
   }
 
   return Array.from(groups.entries())

@@ -80,6 +80,8 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
    * calendar: 방콕 달력일(paid_at 우선). 채널 확인 QR·카드·배달앱.
    */
   dateBucket?: 'business' | 'calendar'
+  /** 지정 시 PostgREST status=in.(...) — 미결제 테이블 등 경량 조회 */
+  statusIn?: string[]
 }): Promise<PosSalesFetchedRows> {
   const bizCtx = await loadPosBusinessDaySettingsContext()
   const dateBucket = params.dateBucket === 'calendar' ? 'calendar' : 'business'
@@ -122,6 +124,12 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
 
   let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
   filter = appendStoreCodeFilterFromExpanded(filter, expanded)
+  const statusIn = (params.statusIn || [])
+    .map((s) => String(s || '').trim().toLowerCase())
+    .filter((s) => /^[a-z_]+$/.test(s))
+  if (statusIn.length > 0) {
+    filter += `&status=${encodeURIComponent(`in.(${statusIn.join(',')})`)}`
+  }
   if (tenantScope) {
     filter = appendSaasTenantFilter(filter, tenantScope, 'pos_orders')
   }

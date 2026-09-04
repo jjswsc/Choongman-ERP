@@ -185,6 +185,42 @@ export async function getPosTodaySales(params?: {
   })
 }
 
+export type PosOpenTableTotalsResponse = {
+  tableTotal: number
+  expectedAddend: number
+  byStore?: Record<string, { tableTotal: number; expectedAddend: number }>
+}
+
+const POS_OPEN_TABLE_FETCH_MS = 15_000
+
+export async function getPosOpenTableTotals(params?: {
+  storeCode?: string
+  storeCodes?: string[]
+  forceNetwork?: boolean
+}): Promise<PosOpenTableTotalsResponse> {
+  const storeCodes = (params?.storeCodes || [])
+    .map((c) => String(c || '').trim())
+    .filter(Boolean)
+  const q = new URLSearchParams()
+  if (storeCodes.length > 1) q.set('stores', storeCodes.join(','))
+  else if (storeCodes.length === 1) q.set('storeCode', storeCodes[0]!)
+  else if (params?.storeCode) q.set('storeCode', params.storeCode)
+  if (params?.forceNetwork) q.set('_', String(Date.now()))
+  const qs = q.toString()
+  const url = '/api/getPosOpenTableTotals' + (qs ? `?${qs}` : '')
+  const storeKey =
+    storeCodes.length > 0
+      ? [...storeCodes].sort().join(',')
+      : params?.storeCode?.trim() || ''
+  const cacheKey = `erp:posOpenTableTotals:${storeKey}`
+  const fallback: PosOpenTableTotalsResponse = { tableTotal: 0, expectedAddend: 0, byStore: {} }
+  return fetchPosCatalogCached<PosOpenTableTotalsResponse>(cacheKey, url, fallback, {
+    forceNetwork: Boolean(params?.forceNetwork),
+    timeoutMs: POS_OPEN_TABLE_FETCH_MS,
+    allowStaleOnError: !params?.forceNetwork,
+  })
+}
+
 export async function getPosReversalJournals(params: {
   startStr: string
   endStr: string

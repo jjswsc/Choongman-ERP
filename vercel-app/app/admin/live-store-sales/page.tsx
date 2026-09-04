@@ -14,7 +14,7 @@ import {
   isFranchiseeAggregateAllStoresView,
   resolveFranchiseePosSalesFetchStoreCodes,
 } from "@/lib/franchisee-multi-store"
-import { usePosStoreStandalone } from "@/hooks/use-pos-store"
+import { usePosStoreInternal } from "@/hooks/use-pos-store"
 import { useStoreView } from "@/lib/store-view-context"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
 import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-view"
@@ -87,7 +87,9 @@ export default function AdminLiveStoreSalesPage() {
     return codes.length > 0 ? codes : undefined
   }, [canFranchiseeAll, auth, effectiveStoreCode])
 
-  const { stores, currentStore, setCurrentStoreId, loadingTables, refetchStores } = usePosStoreStandalone()
+  const { stores, currentStore, setCurrentStoreId, loadingTables, refetchStores } = usePosStoreInternal({
+    initialLoadScope: "current",
+  })
   const { stores: storeListCodes, legacyToCanonical, formatStoreLabel } = useStoreList()
 
   const storesForRealtime = useMemo(() => {
@@ -188,19 +190,21 @@ export default function AdminLiveStoreSalesPage() {
     setSearchBusy(true)
     setRefreshToken((n) => n + 1)
     try {
-      await Promise.race([
-        Promise.resolve(
-          refetchStores({
-            scope: isAllStoresTableTotal ? "all" : "current",
-            storeCode: isAllStoresTableTotal ? undefined : effectiveStoreCode,
-            immediate: true,
-            forceFullRefresh: true,
-          })
-        ),
-        new Promise<void>((resolve) => {
-          window.setTimeout(resolve, 40_000)
-        }),
-      ])
+      if (!isAllStoresTableTotal) {
+        await Promise.race([
+          Promise.resolve(
+            refetchStores({
+              scope: "current",
+              storeCode: effectiveStoreCode,
+              immediate: true,
+              forceFullRefresh: true,
+            })
+          ),
+          new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 40_000)
+          }),
+        ])
+      }
       if (gen === searchGenRef.current) setLastUpdated(new Date())
     } finally {
       if (gen === searchGenRef.current) setSearchBusy(false)

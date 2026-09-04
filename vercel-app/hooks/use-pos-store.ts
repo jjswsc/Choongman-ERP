@@ -1,2 +1,2 @@
 export { usePosStore, PosStoreProvider } from '@/lib/pos-store-provider'
-export { usePosStoreStandalone } from '@/lib/pos-store'
+export { usePosStoreStandalone, usePosStoreInternal } from '@/lib/pos-store'

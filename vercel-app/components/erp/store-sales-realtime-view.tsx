@@ -17,7 +17,7 @@ import {
 } from "recharts"
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
-import { getPosTodaySales } from "@/lib/api-client"
+import { getPosOpenTableTotals, getPosTodaySales } from "@/lib/api-client"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { useStoreList } from "@/lib/use-store-list"
 import {
@@ -100,7 +100,7 @@ export function StoreSalesRealtimeView({
   showHeaderBadge = false,
   onRegisterRefresh,
   showSalesCharts = false,
-  hideByStoreSection = false,
+  hideByStoreSection: _hideByStoreSection = false,
   salesStoreCodes,
   refreshToken,
   className,
@@ -123,6 +123,11 @@ export function StoreSalesRealtimeView({
 
   const [todaySales, setTodaySales] = useState<TodaySalesSummary | null>(null)
   const [storeSalesMap, setStoreSalesMap] = useState<Record<string, TodaySalesSummary>>({})
+  const [openTableTotals, setOpenTableTotals] = useState<{
+    tableTotal: number
+    expectedAddend: number
+    byStore: Record<string, { tableTotal: number; expectedAddend: number }>
+  } | null>(null)
   const [tableSortMode, setTableSortMode] = useState<"amount" | "guests">("amount")
   const [salesRefreshing, setSalesRefreshing] = useState(false)
   const salesReqGenRef = useRef(0)
@@ -160,43 +165,66 @@ export function StoreSalesRealtimeView({
         pendingCount: Number(data.pendingCount ?? 0),
       })
     }
+    const applyOpenTables = (open: {
+      tableTotal?: number
+      expectedAddend?: number
+      byStore?: Record<string, { tableTotal: number; expectedAddend: number }>
+    }) => {
+      if (!isLatest()) return
+      setOpenTableTotals({
+        tableTotal: Number(open.tableTotal ?? 0),
+        expectedAddend: Number(open.expectedAddend ?? 0),
+        byStore: open.byStore || {},
+      })
+    }
     const settle = () => {
       if (isLatest()) setSalesRefreshing(false)
     }
 
-    if (!isAllStoresSelected) {
-      return getPosTodaySales({ storeCode: effectiveStoreCode, forceNetwork })
-        .then((data) => {
-          applyTotals(data)
-          if (!isLatest()) return
-          setStoreSalesMap((prev) => ({ ...prev, [effectiveStoreCode]: data }))
-        })
-        .catch(() => {
-          /* 검색 실패 시 직전 숫자를 유지 — 0으로 비우면 「집계 안 됨」처럼 보임 */
-        })
-        .finally(settle)
-    }
-    const storeCodes = allStoresCodesKey
-      ? allStoresCodesKey.split(",").map((c) => c.trim()).filter(Boolean)
+    const storeCodes = isAllStoresSelected
+      ? allStoresCodesKey
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean)
       : []
-    if (!storeCodes.length) {
+    if (isAllStoresSelected && !storeCodes.length) {
       settle()
       return Promise.resolve()
     }
-    return getPosTodaySales({ storeCodes, forceNetwork })
-      .then((data) => {
-        if (!isLatest()) return
-        const nextMap: Record<string, TodaySalesSummary> = { ...(data.byStore || {}) }
-        for (const code of storeCodes) {
-          if (!nextMap[code]) nextMap[code] = empty
-        }
-        setStoreSalesMap(nextMap)
-        applyTotals(data)
-      })
-      .catch(() => {
-        /* 검색 실패 시 직전 숫자 유지 */
-      })
-      .finally(settle)
+
+    const salesReq = isAllStoresSelected
+      ? getPosTodaySales({ storeCodes, forceNetwork })
+      : getPosTodaySales({ storeCode: effectiveStoreCode, forceNetwork })
+    const tablesReq = isAllStoresSelected
+      ? getPosOpenTableTotals({ storeCodes, forceNetwork })
+      : getPosOpenTableTotals({ storeCode: effectiveStoreCode, forceNetwork })
+
+    return Promise.all([
+      salesReq
+        .then((data) => {
+          applyTotals(data)
+          if (!isLatest()) return
+          if (isAllStoresSelected) {
+            const nextMap: Record<string, TodaySalesSummary> = { ...(data.byStore || {}) }
+            for (const code of storeCodes) {
+              if (!nextMap[code]) nextMap[code] = empty
+            }
+            setStoreSalesMap(nextMap)
+          } else {
+            setStoreSalesMap((prev) => ({ ...prev, [effectiveStoreCode]: data }))
+          }
+        })
+        .catch(() => {
+          /* 검색 실패 시 직전 숫자를 유지 */
+        }),
+      tablesReq
+        .then((open) => {
+          applyOpenTables(open)
+        })
+        .catch(() => {
+          /* 검색 실패 시 직전 숫자를 유지 */
+        }),
+    ]).finally(settle)
   }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey])
 
   const refreshRealtimeSection = useCallback(async () => {
@@ -208,7 +236,7 @@ export function StoreSalesRealtimeView({
             immediate: true,
             forceFullRefresh: true,
           })
-        : refetchStores({ scope: "all", immediate: true, forceFullRefresh: true })
+        : Promise.resolve()
     await Promise.all([Promise.resolve(salesTask), Promise.resolve(storesTask)])
   }, [loadTodaySales, refetchStores, effectiveStoreCode, isAllStoresSelected])
 
@@ -235,6 +263,21 @@ export function StoreSalesRealtimeView({
       return String(a.name || "").localeCompare(String(b.name || ""), "ko")
     })
   }, [currentStore?.tables, tableSortMode])
+  const openTableTotalByStore = useMemo(() => {
+    if (!openTableTotals?.byStore) return undefined
+    return Object.fromEntries(
+      Object.entries(openTableTotals.byStore).map(([code, row]) => [code, Number(row.tableTotal ?? 0) || 0])
+    )
+  }, [openTableTotals])
+
+  const allStoreIdsForRows = useMemo(
+    () =>
+      allStoresCodesKey
+        ? allStoresCodesKey.split(",").map((c) => c.trim()).filter(Boolean)
+        : [],
+    [allStoresCodesKey]
+  )
+
   const byStoreRows = useMemo(
     () =>
       mergeRealtimeStoreSalesRows({
@@ -243,8 +286,19 @@ export function StoreSalesRealtimeView({
         storeCodes: storeListCodes,
         legacyToCanonical,
         formatStoreLabel,
+        includeStoreIds: isAllStoresSelected ? allStoreIdsForRows : undefined,
+        tableTotalByStore: openTableTotalByStore,
       }),
-    [operationalStores, storeSalesMap, storeListCodes, legacyToCanonical, formatStoreLabel]
+    [
+      operationalStores,
+      storeSalesMap,
+      storeListCodes,
+      legacyToCanonical,
+      formatStoreLabel,
+      isAllStoresSelected,
+      allStoreIdsForRows,
+      openTableTotalByStore,
+    ]
   )
   const byStoreTotal = useMemo(
     () =>
@@ -259,7 +313,7 @@ export function StoreSalesRealtimeView({
     [byStoreRows]
   )
 
-  const summaryTableTotal = useMemo(
+  const snapshotTableTotal = useMemo(
     () =>
       computeRealtimeTableTotal({
         isAllStores: isAllStoresSelected,
@@ -271,7 +325,7 @@ export function StoreSalesRealtimeView({
     [isAllStoresSelected, operationalStores, currentStore, storeListCodes, legacyToCanonical]
   )
 
-  const expectedTableAddend = useMemo(
+  const snapshotExpectedAddend = useMemo(
     () =>
       computeRealtimeExpectedAddend({
         isAllStores: isAllStoresSelected,
@@ -283,6 +337,12 @@ export function StoreSalesRealtimeView({
     [isAllStoresSelected, operationalStores, currentStore, storeListCodes, legacyToCanonical]
   )
 
+  const summaryTableTotal =
+    openTableTotals != null ? openTableTotals.tableTotal : snapshotTableTotal
+  const expectedTableAddend =
+    openTableTotals != null ? openTableTotals.expectedAddend : snapshotExpectedAddend
+  const unpaidReady =
+    openTableTotals != null || !loadingTables
   const expectedTotal =
     todaySales != null ? Number(todaySales.completedTotal ?? 0) + expectedTableAddend : null
 
@@ -316,7 +376,7 @@ export function StoreSalesRealtimeView({
             {tr("mobileStoreSalesUnpaidTableTotal", "미결제 테이블")}
           </p>
           <p className="text-sm font-semibold tabular-nums leading-snug">
-            {loadingTables ? "—" : formatBahtInt(summaryTableTotal)}
+            {unpaidReady ? formatBahtInt(summaryTableTotal) : "—"}
           </p>
         </div>
       </div>
@@ -328,7 +388,7 @@ export function StoreSalesRealtimeView({
           </span>
         </p>
         <p className="text-base font-semibold tabular-nums text-foreground">
-          {expectedTotal == null || loadingTables ? "—" : formatBahtInt(expectedTotal)}
+          {expectedTotal == null || !unpaidReady ? "—" : formatBahtInt(expectedTotal)}
         </p>
       </div>
     </div>
@@ -514,19 +574,19 @@ export function StoreSalesRealtimeView({
         ) : null}
       </section>
 
-      {isAllStoresSelected && !hideByStoreSection ? (
+      {isAllStoresSelected ? (
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
               {t("mobileStoreSalesByStoreHeading")}
-              {loadingTables ? (
+              {salesRefreshing ? (
                 <span className="text-xs font-normal text-muted-foreground">{t("loading")}</span>
               ) : null}
             </h2>
           </div>
           {byStoreRows.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-              {t("mobileStoreSalesByStoreEmpty")}
+              {salesRefreshing ? t("loading") : t("mobileStoreSalesByStoreEmpty")}
             </p>
           ) : showSalesCharts ? (
             <div className="space-y-4">
@@ -661,7 +721,7 @@ export function StoreSalesRealtimeView({
           </div>
           {sortedTables.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-              {t("mobileStoreSalesTableEmpty")}
+              {loadingTables ? t("loading") : t("mobileStoreSalesTableEmpty")}
             </p>
           ) : showSalesCharts ? (
             tableAmountBarRows.length > 0 ? (
