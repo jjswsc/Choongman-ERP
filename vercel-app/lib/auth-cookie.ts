@@ -3,8 +3,10 @@
  * sessionStorage는 탭마다 달라 새 탭에서 API만 401 나는 문제를 쿠키로 보완.
  */
 
+import { AUTH_TOKEN_TTL_SEC } from '@/lib/auth-token-ttl'
+
 const COOKIE_NAME = 'cm_token'
-const MAX_AGE_SEC = 7 * 24 * 60 * 60
+const MAX_AGE_SEC = AUTH_TOKEN_TTL_SEC
 
 function isSecureCookieEnv(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'

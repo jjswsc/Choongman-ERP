@@ -1,9 +1,10 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { canAccessPosOrder } from '@/lib/permissions'
 import { readJwtCanManageOfficePayroll } from '@/lib/jwt-payload-client'
 import { setMemoryAuthToken } from '@/lib/auth-token-memory'
+import { shouldRefreshAuthToken } from '@/lib/auth-session-keep-alive'
 
 export interface AuthState {
   company?: string
@@ -320,6 +321,8 @@ const AuthContext = createContext<{
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [auth, setAuthState] = useState<AuthState | null>(null)
   const [initialized, setInitialized] = useState(false)
+  const authRef = useRef<AuthState | null>(null)
+  authRef.current = auth
 
   useEffect(() => {
     let a = loadAuth()
@@ -346,6 +349,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthState(null)
     clearAuth()
   }, [])
+
+  useEffect(() => {
+    if (!initialized) return
+    let cancelled = false
+    const tick = () => {
+      void (async () => {
+        if (cancelled) return
+        if (typeof window !== 'undefined' && isAuthLoginPathname(window.location.pathname || '')) return
+        const current = authRef.current
+        const token = current?.token
+        if (!token || !shouldRefreshAuthToken(token)) return
+        try {
+          const res = await fetch(`${window.location.origin}/api/refreshSession`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (!res.ok || cancelled) return
+          const data = (await res.json()) as { token?: string }
+          const nextToken = String(data.token || '').trim()
+          const latest = authRef.current
+          if (!nextToken || !latest || cancelled) return
+          setAuth({ ...latest, token: nextToken })
+        } catch {
+          /* 네트워크 실패 시 기존 토큰 유지 */
+        }
+      })()
+    }
+    tick()
+    const onVis = () => {
+      if (document.visibilityState === 'visible') tick()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    const intervalId = window.setInterval(tick, 12 * 60 * 60 * 1000)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVis)
+      window.clearInterval(intervalId)
+    }
+  }, [initialized, setAuth])
 
   const logout = useCallback(() => {
     setAuthState(null)

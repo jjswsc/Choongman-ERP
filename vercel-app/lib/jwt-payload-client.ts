@@ -22,3 +22,12 @@ export function readJwtCanManageOfficePayroll(token: string | null | undefined):
   const claims = readJwtPayloadClaimsUnsafe(token)
   return claims?.canManageOfficePayroll === true
 }
+
+/** JWT exp까지 남은 초. 없거나 파싱 실패면 null. */
+export function readJwtRemainingSec(token: string | null | undefined): number | null {
+  if (!token) return null
+  const claims = readJwtPayloadClaimsUnsafe(token)
+  const exp = Number(claims?.exp)
+  if (!Number.isFinite(exp) || exp <= 0) return null
+  return exp - Date.now() / 1000
+}

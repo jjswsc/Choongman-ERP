@@ -38,5 +38,13 @@ describe('jwt-auth', () => {
       const tampered = parts[0] + '.' + parts[1] + '.wrongsignature'
       expect(await verifyToken(tampered)).toBeNull()
     })
+
+    it('발급 토큰 유효기간은 약 365일', async () => {
+      const token = await signToken({ store: 'S', name: 'N', role: 'staff' })
+      const payloadJson = Buffer.from(token.split('.')[1], 'base64url').toString('utf8')
+      const payload = JSON.parse(payloadJson) as { iat?: number; exp?: number }
+      expect(Number(payload.exp) - Number(payload.iat)).toBeGreaterThan(360 * 24 * 60 * 60)
+      expect(Number(payload.exp) - Number(payload.iat)).toBeLessThan(370 * 24 * 60 * 60)
+    })
   })
 })

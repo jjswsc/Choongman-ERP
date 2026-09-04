@@ -3,6 +3,7 @@
  * 로그인 성공 시 토큰 발급, API 요청 시 검증에 사용
  */
 import * as jose from 'jose'
+import { AUTH_TOKEN_JWT_EXPIRY } from '@/lib/auth-token-ttl'
 
 export interface JwtPayload {
   tenantId?: string
@@ -23,7 +24,6 @@ export interface JwtPayload {
 }
 
 const ALG = 'HS256'
-const EXPIRY = '7d'
 
 const FALLBACK_SECRET = 'cm-erp-fallback'
 
@@ -80,7 +80,7 @@ export async function signToken(payload: JwtPayload): Promise<string> {
   return new jose.SignJWT(body)
     .setProtectedHeader({ alg: ALG })
     .setIssuedAt()
-    .setExpirationTime(EXPIRY)
+    .setExpirationTime(AUTH_TOKEN_JWT_EXPIRY)
     .sign(secret)
 }
 
