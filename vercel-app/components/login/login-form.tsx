@@ -36,6 +36,7 @@ import {
   type LangCode,
 } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { loginNoticeKeyFromQueryMsg } from "@/lib/session-expired-notice"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { replacePosOfflineAware, setPosSessionPreferHardNavigation } from "@/lib/pos-offline-nav"
 import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
@@ -297,7 +298,6 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const [loginListProbeOk, setLoginListProbeOk] = useState<boolean | null>(null)
   const [browserOnline, setBrowserOnline] = useState(true)
   const [hybridPosShell, setHybridPosShell] = useState(false)
-  const initialNoticeShownRef = useRef(false)
   const loginAppPrefHydratedRef = useRef(false)
   const lastLoginSelectionRef = useRef<LoginLastSelection | null>(null)
   const lastLoginSelectionHydratedRef = useRef(false)
@@ -320,6 +320,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const queryUser = useMemo(
     () => String(searchParams?.get("user") || "").trim(),
     [searchParams]
+  )
+  const queryNoticeKey = useMemo(
+    () => loginNoticeKeyFromQueryMsg(searchParams?.get("msg")) || initialNoticeKey,
+    [searchParams, initialNoticeKey]
   )
   /** 고객사 로그인 링크(회사 바로가기) — 기존 세션 강제 해제 */
   const forceAccountSwitch = useMemo(
@@ -813,7 +817,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
        */
       const saasLoginDenied =
         resolveSaasAdminLogin() &&
-        (initialNoticeKey === "msg_no_admin_permission" ||
+        (queryNoticeKey === "msg_no_admin_permission" ||
           (!canAccessSaasAdmin(auth.role || "") &&
             !isSaasPartnerLoginStoreClient(auth.store || "")))
       if (mustSwitchAccount || saasLoginDenied) {
@@ -890,7 +894,7 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     queryStore,
     queryUser,
     setAuth,
-    initialNoticeKey,
+    queryNoticeKey,
   ])
 
   /** Omni POS: 회사명 입력 후 해당 테넌트 매장·직원만 로드 */
@@ -917,11 +921,10 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   }, [needsScopedLoginData, auth, company, fetchLoginData])
 
   useEffect(() => {
-    if (auth || !initialNoticeKey || initialNoticeShownRef.current) return
-    initialNoticeShownRef.current = true
-    setError(tMsg(initialNoticeKey))
+    if (auth || !queryNoticeKey) return
+    setError(tMsg(queryNoticeKey))
     setErrorIsConnectivity(false)
-  }, [auth, initialNoticeKey, tMsg])
+  }, [auth, queryNoticeKey, tMsg])
 
   /** SaaS 관리: 입력 중인 회사·이름(·매장)을 브라우저에 보관 — 다음 방문 시 프리필 (PIN 제외) */
   useEffect(() => {

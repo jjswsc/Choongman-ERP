@@ -5,11 +5,12 @@ import { useSearchParams } from "next/navigation"
 import { LoginForm } from "@/components/login/login-form"
 import { LoginFormShellFallback } from "@/components/login/login-form-shell-fallback"
 import { LoginNextCacheReset } from "@/components/login-next-cache-reset"
+import { loginNoticeKeyFromQueryMsg } from "@/lib/session-expired-notice"
 
 function SaasAdminLoginContent() {
   const searchParams = useSearchParams()
   const msg = searchParams.get("msg")?.trim()
-  const initialNoticeKey = msg === "no_admin" ? "msg_no_admin_permission" : undefined
+  const initialNoticeKey = loginNoticeKeyFromQueryMsg(msg)
   return (
     <>
       <LoginNextCacheReset />

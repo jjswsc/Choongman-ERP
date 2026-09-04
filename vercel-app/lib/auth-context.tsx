@@ -5,6 +5,8 @@ import { canAccessPosOrder } from '@/lib/permissions'
 import { readJwtCanManageOfficePayroll } from '@/lib/jwt-payload-client'
 import { setMemoryAuthToken } from '@/lib/auth-token-memory'
 import { shouldRefreshAuthToken } from '@/lib/auth-session-keep-alive'
+import { readJwtRemainingSec } from '@/lib/jwt-payload-client'
+import { loginPathWithSessionExpired } from '@/lib/session-expired-notice'
 
 export interface AuthState {
   company?: string
@@ -333,6 +335,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     if (a) a = enrichOfflinePosAuth(a)
+    const remain = a?.token ? readJwtRemainingSec(a.token) : null
+    const path = typeof window !== 'undefined' ? window.location.pathname || '' : ''
+    const tokenExpired = remain != null && remain <= 0
+    const posOfflineExpired =
+      tokenExpired && path.startsWith('/pos') && typeof navigator !== 'undefined' && navigator.onLine === false
+    if (tokenExpired && !isAuthLoginPathname(path) && !posOfflineExpired) {
+      clearAuth()
+      setAuthState(null)
+      setInitialized(true)
+      window.location.replace(loginPathWithSessionExpired(resolveLoginPathByCurrentRoute()))
+      return
+    }
     setAuthState(a)
     // 세션 복구·스냅샷 복구 후 sessionStorage·스냅샷 동기화 (새 탭/401 직후에도 POS 레이아웃이 로그인으로 튕기지 않게)
     if (a) saveAuth(a)

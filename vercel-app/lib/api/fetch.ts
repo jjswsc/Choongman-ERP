@@ -1,4 +1,6 @@
 import { getMemoryAuthToken } from '@/lib/auth-token-memory'
+import { readJwtRemainingSec } from '@/lib/jwt-payload-client'
+import { loginPathWithSessionExpired } from '@/lib/session-expired-notice'
 
 /**
  * API fetch 핵심 - 인증 토큰 자동 첨부, 401 시 로그인 리다이렉트
@@ -92,7 +94,12 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
       }
     } catch {}
     if (!isPos) {
-      window.location.href = resolveLoginPathFromLocation()
+      window.location.href = loginPathWithSessionExpired(resolveLoginPathFromLocation())
+      return res
+    }
+    const remain = readJwtRemainingSec(auth.Authorization.replace(/^Bearer\s+/i, ''))
+    if (remain != null && remain <= 0) {
+      window.location.href = loginPathWithSessionExpired(resolveLoginPathFromLocation())
     }
   }
   return res
