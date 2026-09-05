@@ -222,7 +222,7 @@ export async function GET(request: NextRequest) {
         {
           limit: 20000,
           select:
-            'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_crypto,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount,is_advance,scheduled_at',
+            'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_crypto,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
         },
         'getPosSettlementOrders'
       )) as PosOrderSettlementRow[] | null

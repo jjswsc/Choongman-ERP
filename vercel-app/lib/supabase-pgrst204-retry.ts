@@ -33,6 +33,19 @@ function extractAnyMissingColumn(error: unknown): string | null {
 
 export { extractAnyMissingColumn }
 
+/** filter/order가 없는 컬럼을 참조하면 select에서 빼도 같은 42703이 반복된다. */
+export function filterOrOrderReferencesColumn(
+  missingCol: string,
+  filter: string,
+  order = ''
+): boolean {
+  const col = String(missingCol || '').trim()
+  if (!col || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(col)) return false
+  const hay = `${filter} ${order}`
+  const re = new RegExp(`(?:^|[^A-Za-z0-9_])${col}(?:$|[^A-Za-z0-9_])`)
+  return re.test(hay)
+}
+
 export async function supabaseInsertWithPgrst204Fallback(
   table: string,
   row: Record<string, unknown>,
@@ -142,6 +155,7 @@ export async function supabaseSelectFilterStrippingUnknownColumns(
     } catch (e) {
       const missingCol = extractAnyMissingColumn(e)
       if (!missingCol) throw e
+      if (filterOrOrderReferencesColumn(missingCol, filter, opts.order || '')) throw e
       const next = use.filter((c) => c !== missingCol)
       if (next.length === use.length) throw e
       use = next
@@ -181,6 +195,7 @@ export async function supabaseSelectFilterAllPagesStrippingUnknownColumns(
     } catch (e) {
       const missingCol = extractAnyMissingColumn(e)
       if (!missingCol) throw e
+      if (filterOrOrderReferencesColumn(missingCol, filter, opts.order || '')) throw e
       const next = use.filter((c) => c !== missingCol)
       if (next.length === use.length) throw e
       use = next

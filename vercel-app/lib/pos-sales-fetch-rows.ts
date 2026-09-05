@@ -23,7 +23,7 @@ import type { SaasTenantScope } from '@/lib/saas-tenant-scope'
 
 /** posSalesByStore·손익·기간 집계 공통 select */
 export const POS_SALES_ORDER_ROW_SELECT =
-  'created_at,store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,service_amt,guest_count,status,order_type,is_advance'
+  'created_at,store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,service_amt,guest_count,status,order_type'
 
 export const POS_SALES_MENU_ROW_SELECT = `${POS_SALES_ORDER_ROW_SELECT},items_json`
 

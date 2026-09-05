@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   aggregateOpenTableTotalsFromRows,
   flattenOpenTableTotalLookup,
+  POS_OPEN_TABLE_ROW_SELECT,
   rowCountsTowardOpenTable,
 } from '@/lib/pos-open-table-totals'
 
@@ -93,5 +94,13 @@ describe('flattenOpenTableTotalLookup', () => {
     })
     expect(lookup['CM MBK']).toBe(7600)
     expect(lookup.MBK).toBe(7600)
+  })
+})
+
+describe('POS_OPEN_TABLE_ROW_SELECT', () => {
+  it('omits undeployed advance columns', () => {
+    expect(POS_OPEN_TABLE_ROW_SELECT).not.toMatch(/\bis_advance\b/)
+    expect(POS_OPEN_TABLE_ROW_SELECT).not.toMatch(/\bscheduled_at\b/)
+    expect(POS_OPEN_TABLE_ROW_SELECT).not.toMatch(/\badvance_checked_in_at\b/)
   })
 })

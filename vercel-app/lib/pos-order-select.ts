@@ -1,14 +1,31 @@
+/**
+ * 선주문·선수금 컬럼(is_advance, scheduled_at, guest_phone, deposit_* 등).
+ * 충만 DB 미배포·기능 보류(예약금은 pos_deposit_ledger). select에 넣으면 42703이 컬럼마다 재시도되며 로그가 폭주한다.
+ * 재개 시 vercel-app/sql/pos_orders_advance_deposit.sql 실행 후 이 목록을 select에 되돌린다.
+ */
+export const POS_ORDER_ADVANCE_DEPOSIT_SELECT_COLS = [
+  'scheduled_at',
+  'is_advance',
+  'guest_phone',
+  'guest_name',
+  'deposit_amt',
+  'deposit_tender',
+  'deposit_policy',
+  'deposit_cancel_hours',
+  'advance_checked_in_at',
+] as const
+
 /** getPosOrders 전체 행 (목록·상세·결제 연동) */
 export const POS_ORDER_FULL_SELECT =
-  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,card_fee_amt,card_fee_mode,card_rate,payment_cash,payment_cash_tendered,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,service_amt,service_reason,items_json,subtotal,vat,total,status,created_by,created_at,updated_at,paid_at,scheduled_at,is_advance,guest_phone,guest_name,deposit_amt,deposit_tender,deposit_policy,deposit_cancel_hours,advance_checked_in_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
+  'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,card_fee_amt,card_fee_mode,card_rate,payment_cash,payment_cash_tendered,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,service_amt,service_reason,items_json,subtotal,vat,total,status,created_by,created_at,updated_at,paid_at,linkpos_provider,linkpos_mode,linkpos_tx_code,linkpos_bank_id,linkpos_response_code,linkpos_approval_code,linkpos_trace_no,linkpos_ref_no,linkpos_terminal_id,linkpos_merchant_id,linkpos_reference1,linkpos_requested_amount,linkpos_approved_amount,linkpos_requested_at,linkpos_responded_at'
 
 /** 메인 POS 폴링·테이블 스냅샷 — linkpos 등 대형 컬럼 제외 (결제·테이블 UI·영수증 판별용 필드는 유지) */
 export const POS_ORDER_POLL_MINIMAL_SELECT =
-  'id,order_no,store_code,order_type,table_name,memo,items_json,subtotal,vat,discount_amt,coupon_discount_amt,discount_reason,delivery_fee,packaging_fee,service_amt,service_reason,total,status,created_at,updated_at,paid_at,guest_count,delivery_app_code,member_id,member_no,coupon_code,point_used,point_earned,payment_cash,payment_cash_tendered,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,applied_coupons,created_by,scheduled_at,is_advance,guest_phone,guest_name,deposit_amt,deposit_tender,deposit_policy,deposit_cancel_hours,advance_checked_in_at'
+  'id,order_no,store_code,order_type,table_name,memo,items_json,subtotal,vat,discount_amt,coupon_discount_amt,discount_reason,delivery_fee,packaging_fee,service_amt,service_reason,total,status,created_at,updated_at,paid_at,guest_count,delivery_app_code,member_id,member_no,coupon_code,point_used,point_earned,payment_cash,payment_cash_tendered,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,applied_coupons,created_by'
 
 /**
  * 신규·변경 감지용 초경량 select (items_json 없음).
  * Realtime 활발할 때는 미호출, 무음·장애 시에만 head 폴링 → 변경 시 pollMinimal.
  */
 export const POS_ORDER_POLL_HEADS_SELECT =
-  'id,store_code,order_type,table_name,status,created_at,updated_at,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,is_advance,scheduled_at,deposit_amt,advance_checked_in_at'
+  'id,store_code,order_type,table_name,status,created_at,updated_at,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app'

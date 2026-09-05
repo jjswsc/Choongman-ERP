@@ -11,7 +11,7 @@ import {
 export const POS_OPEN_TABLE_STATUSES = ['pending', 'cooking', 'ready', 'preparing', 'served'] as const
 
 export const POS_OPEN_TABLE_ROW_SELECT =
-  'created_at,store_code,status,total,order_type,table_name,is_advance,scheduled_at,advance_checked_in_at'
+  'created_at,store_code,status,total,order_type,table_name'
 
 export type PosOpenTableTotals = {
   tableTotal: number

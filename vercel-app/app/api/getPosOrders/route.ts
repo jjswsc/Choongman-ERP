@@ -321,9 +321,6 @@ export async function GET(request: NextRequest) {
   const primaryStoreFilter = storeFilterCandidates[0] || ''
   const limitRaw = searchParams.get('limit')?.trim()
   const parsedListLimit = limitRaw && /^\d+$/.test(limitRaw) ? parseInt(limitRaw, 10) : null
-  const includeAdvancePending =
-    searchParams.get('includeAdvancePending') === '1' ||
-    searchParams.get('includeAdvancePending') === 'true'
   const isSingleStoreBizDayList =
     orderId == null &&
     pollLight &&
@@ -592,35 +589,6 @@ export async function GET(request: NextRequest) {
 
     if (posBizDayFilterCtx && posBizDayScope && startDate && endDate) {
       rows = filterRowsByPosSalesBusinessDateRange(rows || [], posBizDayFilterCtx, startDate, endDate)
-    }
-
-    if (includeAdvancePending && orderId == null && primaryStoreFilter && primaryStoreFilter !== 'All') {
-      try {
-        const advanceFilter = appendSaasTenantFilter(
-          `store_code=ilike.${encodeURIComponent(primaryStoreFilter)}&is_advance=eq.true&status=in.(pending,cooking,ready)`,
-          tenantScope,
-          'pos_orders'
-        )
-        const extra = (await selectPosOrders(
-          advanceFilter,
-          { order: 'scheduled_at.asc', limit: 200, select: rowSelect },
-          'getPosOrders/advance-pending'
-        )) as typeof rows
-        if (extra?.length) {
-          const byId = new Map<number, (typeof rows)[number]>()
-          for (const row of rows || []) {
-            const id = Number(row.id || 0)
-            if (id > 0) byId.set(id, row)
-          }
-          for (const row of extra) {
-            const id = Number(row.id || 0)
-            if (id > 0 && !byId.has(id)) byId.set(id, row)
-          }
-          rows = Array.from(byId.values())
-        }
-      } catch {
-        /* is_advance 컬럼 미배포 시 무시 */
-      }
     }
 
     let serviceById = new Map<number, PosOrderServiceColumnsRow>()
