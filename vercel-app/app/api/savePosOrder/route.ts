@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'node:crypto'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { insertPosPaymentAttemptFromLinkpos } from '@/lib/pos-payment-attempt-insert'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
@@ -681,28 +682,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (linkposPayment && Number(created?.id) > 0) {
-      try {
-        await supabaseInsert('pos_payment_attempts', {
-          order_id: Number(created.id),
-          local_tx_id: String(linkposPayment.reference1 ?? '').slice(0, 20),
-          provider: String(linkposPayment.provider ?? 'kbtg_linkpos'),
-          mode: String(linkposPayment.mode ?? 'hypercom'),
-          tx_code: String(linkposPayment.txCode ?? '20'),
-          bank_id: String(linkposPayment.bankId ?? ''),
-          request_amount: Number(linkposPayment.requestedAmount ?? 0),
-          approved_amount: Number(linkposPayment.approvedAmount ?? 0),
-          response_code: String(linkposPayment.responseCode ?? ''),
-          approval_code: String(linkposPayment.approvalCode ?? ''),
-          trace_no: String(linkposPayment.traceNo ?? ''),
-          terminal_id: String(linkposPayment.terminalId ?? ''),
-          merchant_id: String(linkposPayment.merchantId ?? ''),
-          status: String(linkposPayment.responseCode ?? '') === '00' ? 'approved' : 'declined',
-          created_at: String(linkposPayment.requestedAt ?? new Date().toISOString()),
-        })
-      } catch (e) {
-        // local_tx_id unique 충돌(중복 재전송) 시 무시
-        console.error('savePosOrder linkpos attempt insert:', e)
-      }
+      await insertPosPaymentAttemptFromLinkpos({
+        orderId: Number(created.id),
+        linkposPayment,
+        logLabel: 'savePosOrder',
+      })
     }
     if (kbankPartnerTransactionId && Number(created?.id) > 0) {
       try {

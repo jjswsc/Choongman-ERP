@@ -459,15 +459,19 @@ function createRuntime(userCfg) {
     return { ack: rx.ack, responseHex }
   }
 
-  async function sendTxAndParse(txCode, frame, timeoutMs) {
+  async function sendTxAndParse(txCode, frame, timeoutMs, paymentExtras) {
     try {
       const result = await enqueue(() => sendFrameAndWait(frame, timeoutMs))
       const parsed = parseFrame(Buffer.from(result.responseHex, 'hex'))
       const approved = String(parsed.responseCode || '').trim() === '00'
+      const extras = paymentExtras && typeof paymentExtras === 'object' ? paymentExtras : {}
+      const requestedAmount = Number(extras.requestedAmount || 0)
       return {
         success: approved,
         ack: result.ack,
         payment: {
+          provider: 'kbtg_linkpos',
+          mode: 'hypercom',
           txCode,
           responseCode: parsed.responseCode,
           responseText: parsed.fields['02'] || '',
@@ -476,6 +480,10 @@ function createRuntime(userCfg) {
           refNo: parsed.fields['D3'] || '',
           terminalId: parsed.fields['16'] || '',
           merchantId: parsed.fields['D1'] || '',
+          reference1: String(extras.reference1 || ''),
+          bankId: String(extras.bankId || ''),
+          requestedAmount,
+          approvedAmount: approved ? requestedAmount : 0,
         },
         rawResponseHex: result.responseHex,
       }
@@ -506,7 +514,11 @@ function createRuntime(userCfg) {
       const ref2 = sanitizeHypercomText(json.reference2)
       if (ref1) fields.splice(1, 0, { type: 'R1', data: ref1 })
       if (ref2) fields.push({ type: 'R2', data: ref2 })
-      return await sendTxAndParse('20', buildFrame({ txCode: '20', more: '1', fields }), timeoutMs)
+      return await sendTxAndParse('20', buildFrame({ txCode: '20', more: '1', fields }), timeoutMs, {
+        reference1: ref1,
+        bankId: String(json.bankId || ''),
+        requestedAmount: Number(json.amount) || 0,
+      })
     }
 
     if (action === 'void') {
@@ -538,7 +550,11 @@ function createRuntime(userCfg) {
     }
 
     if (action === 'qr') {
-      return await sendTxAndParse('70', buildNativeQrRequestFrame(json), timeoutMs)
+      return await sendTxAndParse('70', buildNativeQrRequestFrame(json), timeoutMs, {
+        reference1: sanitizeHypercomText(json.reference1),
+        bankId: String(json.bankId || ''),
+        requestedAmount: Number(json.amount) || 0,
+      })
     }
 
     if (action === 'display_qr' || action === 'display_qr_payload') {

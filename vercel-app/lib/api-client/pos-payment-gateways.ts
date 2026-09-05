@@ -149,6 +149,48 @@ export async function probeLinkposLocalReady(): Promise<boolean> {
   }
 }
 
+/**
+ * 로컬 EDC 브리지는 payment에 reference1을 안 넣는 경우가 있다.
+ * updatePosOrder 가 빈 local_tx_id 로 unique 충돌나지 않도록 요청 R1을 채운다.
+ */
+function normalizeLinkposSalePaymentSummary(
+  data: Record<string, unknown> | null | undefined,
+  params: { amount: number; bankId: string; reference1: string }
+): LinkposPaymentSummary | null {
+  const nested = (
+    data?.payment && typeof data.payment === 'object' ? data.payment : null
+  ) as Record<string, unknown> | null
+  const p =
+    nested ||
+    (data && (data.responseCode != null || data.approvalCode != null) ? data : null)
+  if (!p) return null
+  const responseCode = String(p.responseCode ?? '').trim()
+  if (!responseCode) return null
+  const now = new Date().toISOString()
+  const txRaw = String(p.txCode ?? '20')
+  const txCode: LinkposPaymentSummary['txCode'] =
+    txRaw === '26' || txRaw === '50' || txRaw === '70' ? txRaw : '20'
+  const requestedAmount = Number(p.requestedAmount ?? params.amount)
+  const approvedRaw = Number(p.approvedAmount ?? (responseCode === '00' ? requestedAmount : 0))
+  return {
+    provider: 'kbtg_linkpos',
+    mode: 'hypercom',
+    txCode,
+    bankId: String(p.bankId ?? params.bankId ?? ''),
+    responseCode,
+    approvalCode: p.approvalCode != null ? String(p.approvalCode) : undefined,
+    traceNo: p.traceNo != null ? String(p.traceNo) : undefined,
+    refNo: p.refNo != null ? String(p.refNo) : undefined,
+    terminalId: p.terminalId != null ? String(p.terminalId) : undefined,
+    merchantId: p.merchantId != null ? String(p.merchantId) : undefined,
+    reference1: String(p.reference1 || params.reference1 || '').slice(0, 20),
+    requestedAmount: Number.isFinite(requestedAmount) ? requestedAmount : Number(params.amount),
+    approvedAmount: Number.isFinite(approvedRaw) ? approvedRaw : 0,
+    requestedAt: String(p.requestedAt ?? now),
+    respondedAt: String(p.respondedAt ?? now),
+  }
+}
+
 export async function executeLinkposPayment(params: {
   amount: number
   bankId: string
@@ -176,6 +218,11 @@ export async function executeLinkposPayment(params: {
     storeCode: String(params.storeCode || ''),
     protocol: 'hypercom_v2',
   }
+  const saleParams = {
+    amount: payload.amount,
+    bankId: payload.bankId,
+    reference1: payload.reference1,
+  }
 
   // Hybrid #0: Electron IPC (권장)
   {
@@ -184,7 +231,7 @@ export async function executeLinkposPayment(params: {
       if (r.data.success) {
         return {
           success: true,
-          payment: (r.data.payment || null) as LinkposPaymentSummary | null,
+          payment: normalizeLinkposSalePaymentSummary(r.data, saleParams),
           source: 'local' as const,
         }
       }
@@ -203,7 +250,7 @@ export async function executeLinkposPayment(params: {
     if (r.data?.success) {
       return {
         success: true,
-        payment: (r.data.payment || null) as LinkposPaymentSummary | null,
+        payment: normalizeLinkposSalePaymentSummary(r.data, saleParams),
         source: 'local' as const,
       }
     }
@@ -230,7 +277,7 @@ export async function executeLinkposPayment(params: {
   }
   return {
     success: true,
-    payment: (data.payment || null) as LinkposPaymentSummary | null,
+    payment: normalizeLinkposSalePaymentSummary(data as Record<string, unknown>, saleParams),
     source: 'server' as const,
   }
 }
@@ -842,7 +889,11 @@ export async function executeLinkposPaymentServer(params: {
   }
   return {
     success: true,
-    payment: (data.payment || null) as LinkposPaymentSummary | null,
+    payment: normalizeLinkposSalePaymentSummary(data as Record<string, unknown>, {
+      amount: Number(params.amount),
+      bankId: String(params.bankId || ''),
+      reference1: String(params.reference1 || '').slice(0, 20),
+    }),
     source: 'server' as const,
   }
 }

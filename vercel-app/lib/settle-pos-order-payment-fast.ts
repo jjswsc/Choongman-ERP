@@ -4,7 +4,8 @@
  * 재고·분개·적립·쿠폰 소진은 이어지는 updatePosOrderStatus 에 맡긴다.
  */
 import { NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { insertPosPaymentAttemptFromLinkpos } from '@/lib/pos-payment-attempt-insert'
 import {
   extractAnyMissingColumn,
   supabaseSelectFilterStrippingUnknownColumns,
@@ -591,23 +592,11 @@ async function settlePosOrderPaymentFastBody(params: {
   }
 
   if (linkposPayment) {
-    void supabaseInsert('pos_payment_attempts', {
-      order_id: id,
-      local_tx_id: String(linkposPayment.reference1 ?? '').slice(0, 20),
-      provider: String(linkposPayment.provider ?? 'kbtg_linkpos'),
-      mode: String(linkposPayment.mode ?? 'hypercom'),
-      tx_code: String(linkposPayment.txCode ?? '20'),
-      bank_id: String(linkposPayment.bankId ?? ''),
-      request_amount: Number(linkposPayment.requestedAmount ?? 0),
-      approved_amount: Number(linkposPayment.approvedAmount ?? 0),
-      response_code: String(linkposPayment.responseCode ?? ''),
-      approval_code: String(linkposPayment.approvalCode ?? ''),
-      trace_no: String(linkposPayment.traceNo ?? ''),
-      terminal_id: String(linkposPayment.terminalId ?? ''),
-      merchant_id: String(linkposPayment.merchantId ?? ''),
-      status: String(linkposPayment.responseCode ?? '') === '00' ? 'approved' : 'declined',
-      created_at: String(linkposPayment.requestedAt ?? new Date().toISOString()),
-    }).catch((e) => console.error('settlePosOrderPaymentFast linkpos attempt:', e))
+    void insertPosPaymentAttemptFromLinkpos({
+      orderId: id,
+      linkposPayment,
+      logLabel: 'settlePosOrderPaymentFast',
+    })
   }
 
   const paymentSum = nextPaymentSum

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { insertPosPaymentAttemptFromLinkpos } from '@/lib/pos-payment-attempt-insert'
 import {
   supabaseSelectFilterStrippingUnknownColumns,
   supabaseUpdateByFilterWithPgrst204Fallback,
@@ -638,27 +639,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (linkposPayment) {
-      try {
-        await supabaseInsert('pos_payment_attempts', {
-          order_id: id,
-          local_tx_id: String(linkposPayment.reference1 ?? '').slice(0, 20),
-          provider: String(linkposPayment.provider ?? 'kbtg_linkpos'),
-          mode: String(linkposPayment.mode ?? 'hypercom'),
-          tx_code: String(linkposPayment.txCode ?? '20'),
-          bank_id: String(linkposPayment.bankId ?? ''),
-          request_amount: Number(linkposPayment.requestedAmount ?? 0),
-          approved_amount: Number(linkposPayment.approvedAmount ?? 0),
-          response_code: String(linkposPayment.responseCode ?? ''),
-          approval_code: String(linkposPayment.approvalCode ?? ''),
-          trace_no: String(linkposPayment.traceNo ?? ''),
-          terminal_id: String(linkposPayment.terminalId ?? ''),
-          merchant_id: String(linkposPayment.merchantId ?? ''),
-          status: String(linkposPayment.responseCode ?? '') === '00' ? 'approved' : 'declined',
-          created_at: String(linkposPayment.requestedAt ?? new Date().toISOString()),
-        })
-      } catch (e) {
-        console.error('updatePosOrder linkpos attempt insert:', e)
-      }
+      await insertPosPaymentAttemptFromLinkpos({
+        orderId: id,
+        linkposPayment,
+        logLabel: 'updatePosOrder',
+      })
     }
 
     const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
