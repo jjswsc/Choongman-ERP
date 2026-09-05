@@ -22,6 +22,8 @@ import { PosRevenueRealtimeDashboard } from "@/components/erp/pos-revenue-realti
 import { AdminSalesDashboardCharts } from "@/components/erp/admin-sales-dashboard-charts"
 import { SalesPageHeader } from "@/components/erp/sales-page-header"
 import { LiveSalesSearchButton } from "@/components/erp/live-sales-search-button"
+import { getPosOpenTableTotals } from "@/lib/api-client"
+import { flattenOpenTableTotalLookup } from "@/lib/pos-open-table-totals"
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
 import { storeMatches } from "@/lib/admin-employee-store-access"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
@@ -114,7 +116,50 @@ export default function AdminLiveStoreSalesPage() {
     effectiveStoreCode === ALL_STORE_VALUE ||
     effectiveStoreCode === FRANCHISEE_AGGREGATE_ALL_STORES_VALUE
 
-  const adminTableTotal = useMemo(
+  const liveOpenTableStoreCodes = useMemo(() => {
+    if (franchiseSalesStoreCodes?.length) return franchiseSalesStoreCodes
+    if (isAllStoresTableTotal) {
+      return filterPosSalesStoreOptionsForManagement(storeListCodes)
+    }
+    const code = String(effectiveStoreCode || "").trim()
+    return code && code !== ALL_STORE_VALUE ? [code] : []
+  }, [franchiseSalesStoreCodes, isAllStoresTableTotal, storeListCodes, effectiveStoreCode])
+
+  const [parentOpenTableTotals, setParentOpenTableTotals] = useState<{
+    tableTotal: number
+    expectedAddend: number
+    byStore: Record<string, { tableTotal: number; expectedAddend: number }>
+  } | null>(null)
+
+  const loadParentOpenTables = useCallback(
+    async (forceNetwork: boolean) => {
+      const codes = liveOpenTableStoreCodes
+      if (isAllStoresTableTotal && codes.length === 0) return
+      try {
+        const open =
+          codes.length > 1 || (isAllStoresTableTotal && codes.length > 0)
+            ? await getPosOpenTableTotals({ storeCodes: codes, forceNetwork })
+            : await getPosOpenTableTotals({
+                storeCode: codes[0] || effectiveStoreCode,
+                forceNetwork,
+              })
+        setParentOpenTableTotals({
+          tableTotal: Number(open.tableTotal ?? 0),
+          expectedAddend: Number(open.expectedAddend ?? 0),
+          byStore: open.byStore || {},
+        })
+      } catch {
+        /* 직전 숫자 유지 */
+      }
+    },
+    [liveOpenTableStoreCodes, isAllStoresTableTotal, effectiveStoreCode]
+  )
+
+  useEffect(() => {
+    void loadParentOpenTables(false)
+  }, [loadParentOpenTables])
+
+  const snapshotTableTotal = useMemo(
     () =>
       computeRealtimeTableTotal({
         isAllStores: isAllStoresTableTotal,
@@ -126,7 +171,7 @@ export default function AdminLiveStoreSalesPage() {
     [isAllStoresTableTotal, operationalStoresForTableTotal, currentStore, storeListCodes, legacyToCanonical]
   )
 
-  const adminExpectedTableAddend = useMemo(
+  const snapshotExpectedAddend = useMemo(
     () =>
       computeRealtimeExpectedAddend({
         isAllStores: isAllStoresTableTotal,
@@ -138,7 +183,15 @@ export default function AdminLiveStoreSalesPage() {
     [isAllStoresTableTotal, operationalStoresForTableTotal, currentStore, storeListCodes, legacyToCanonical]
   )
 
+  const adminTableTotal =
+    parentOpenTableTotals != null ? parentOpenTableTotals.tableTotal : snapshotTableTotal
+  const adminExpectedTableAddend =
+    parentOpenTableTotals != null ? parentOpenTableTotals.expectedAddend : snapshotExpectedAddend
+
   const tableTotalByStore = useMemo(() => {
+    if (parentOpenTableTotals?.byStore) {
+      return flattenOpenTableTotalLookup(parentOpenTableTotals.byStore)
+    }
     const rows = mergeRealtimeStoreSalesRows({
       operationalStores: operationalStoresForTableTotal,
       storeSalesMap: {},
@@ -147,7 +200,13 @@ export default function AdminLiveStoreSalesPage() {
       formatStoreLabel,
     })
     return Object.fromEntries(rows.map((r) => [r.storeId, r.tableTotal]))
-  }, [operationalStoresForTableTotal, storeListCodes, legacyToCanonical, formatStoreLabel])
+  }, [
+    parentOpenTableTotals,
+    operationalStoresForTableTotal,
+    storeListCodes,
+    legacyToCanonical,
+    formatStoreLabel,
+  ])
 
   const showBranchRealtime =
     effectiveStoreCode &&
@@ -190,26 +249,28 @@ export default function AdminLiveStoreSalesPage() {
     setSearchBusy(true)
     setRefreshToken((n) => n + 1)
     try {
-      if (!isAllStoresTableTotal) {
-        await Promise.race([
-          Promise.resolve(
+      const openTablesTask = loadParentOpenTables(true)
+      const storesTask = isAllStoresTableTotal
+        ? Promise.resolve()
+        : Promise.resolve(
             refetchStores({
               scope: "current",
               storeCode: effectiveStoreCode,
               immediate: true,
               forceFullRefresh: true,
             })
-          ),
-          new Promise<void>((resolve) => {
-            window.setTimeout(resolve, 40_000)
-          }),
-        ])
-      }
+          )
+      await Promise.race([
+        Promise.all([openTablesTask, storesTask]),
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 40_000)
+        }),
+      ])
       if (gen === searchGenRef.current) setLastUpdated(new Date())
     } finally {
       if (gen === searchGenRef.current) setSearchBusy(false)
     }
-  }, [refetchStores, isAllStoresTableTotal, effectiveStoreCode])
+  }, [refetchStores, isAllStoresTableTotal, effectiveStoreCode, loadParentOpenTables])
 
   const headerActions = (
     <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
@@ -274,6 +335,8 @@ export default function AdminLiveStoreSalesPage() {
                 hideByStoreSection={hideDuplicateByStoreSection}
                 refreshToken={refreshToken}
                 salesStoreCodes={franchiseSalesStoreCodes}
+                parentOwnsOpenTables
+                parentOpenTableTotals={parentOpenTableTotals}
               />
             ) : null}
           </TabsContent>
@@ -285,6 +348,7 @@ export default function AdminLiveStoreSalesPage() {
               salesStoreCodes={franchiseSalesStoreCodes}
               tableTotalByStore={tableTotalByStore}
               refreshToken={refreshToken}
+              onLiveSearch={runSearch}
             />
           </TabsContent>
 
@@ -295,8 +359,9 @@ export default function AdminLiveStoreSalesPage() {
               salesStoreCodes={franchiseSalesStoreCodes}
               tableTotal={adminTableTotal}
               expectedTableAddend={adminExpectedTableAddend}
-              tableTotalLoading={loadingTables}
+              tableTotalLoading={parentOpenTableTotals == null && loadingTables}
               refreshToken={refreshToken}
+              onLiveSearch={runSearch}
             />
           </TabsContent>
         </Tabs>

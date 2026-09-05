@@ -13,6 +13,7 @@ import {
   sumStoreTableOrders,
   sumStoreTableOrdersForExpectedAddend,
 } from '@/lib/pos-realtime-store-rows'
+import { flattenOpenTableTotalLookup } from '@/lib/pos-open-table-totals'
 import type { Store } from '@/lib/pos-types'
 
 describe('enrichStoreListWithGrabMap', () => {
@@ -161,6 +162,21 @@ describe('mergeRealtimeStoreSalesRows', () => {
     })
     expect(rows).toHaveLength(1)
     expect(rows[0]?.tableTotal).toBe(500)
+  })
+
+  it('matches unpaid API totals when store codes differ by CM prefix', () => {
+    const lookup = flattenOpenTableTotalLookup({ 'CM MBK': { tableTotal: 7600 } })
+    const rows = mergeRealtimeStoreSalesRows({
+      operationalStores: [],
+      storeSalesMap: { MBK: { completedTotal: 100 } },
+      storeCodes: ['MBK'],
+      legacyToCanonical: {},
+      formatStoreLabel: (code) => code,
+      includeStoreIds: ['MBK'],
+      tableTotalByStore: lookup,
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.tableTotal).toBe(7600)
   })
 })
 

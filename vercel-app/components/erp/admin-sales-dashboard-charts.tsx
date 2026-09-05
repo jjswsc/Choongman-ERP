@@ -72,6 +72,8 @@ export type AdminSalesDashboardChartsProps = {
   tableTotalByStore?: Record<string, number>
   /** 부모 자동 갱신 토큰 */
   refreshToken?: number
+  /** 있으면 탭 안 검색도 상단과 같이 미결제 테이블까지 다시 조회 */
+  onLiveSearch?: () => void | Promise<void>
 }
 
 function resolveStoresParam(storeCode: string): string[] | undefined {
@@ -88,10 +90,15 @@ function resolveTableTotalForStore(
   const direct = tableTotalByStore[storeName]
   if (direct != null && Number.isFinite(direct)) return Math.max(0, direct)
   const lower = storeName.toLowerCase()
+  let best = 0
+  let matched = false
   for (const [key, value] of Object.entries(tableTotalByStore)) {
-    if (key.toLowerCase() === lower) return Math.max(0, Number(value) || 0)
+    if (key.toLowerCase() === lower || rowMatchesSalesStoreSelection(storeName, key)) {
+      matched = true
+      best = Math.max(best, Number(value) || 0)
+    }
   }
-  return 0
+  return matched ? best : 0
 }
 
 export function AdminSalesDashboardCharts({
@@ -100,6 +107,7 @@ export function AdminSalesDashboardCharts({
   salesStoreCodes,
   tableTotalByStore,
   refreshToken,
+  onLiveSearch,
 }: AdminSalesDashboardChartsProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -239,8 +247,12 @@ export function AdminSalesDashboardCharts({
   }, [refreshToken, loadCharts])
 
   const handleSearch = React.useCallback(() => {
+    if (onLiveSearch) {
+      void Promise.resolve(onLiveSearch())
+      return
+    }
     void loadCharts()
-  }, [loadCharts])
+  }, [onLiveSearch, loadCharts])
 
   const storeChannelMap = React.useMemo(() => {
     const map = new Map<string, { dineIn: number; takeout: number; delivery: number }>()

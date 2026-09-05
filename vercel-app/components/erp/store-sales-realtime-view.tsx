@@ -18,6 +18,7 @@ import {
 import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
 import { getPosOpenTableTotals, getPosTodaySales } from "@/lib/api-client"
+import { flattenOpenTableTotalLookup } from "@/lib/pos-open-table-totals"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { useStoreList } from "@/lib/use-store-list"
 import {
@@ -84,6 +85,13 @@ export type StoreSalesRealtimeViewProps = {
   salesStoreCodes?: string[]
   /** 부모「검색」토큰 — 당일 매출만 강제 재조회(테이블은 부모가 refetch) */
   refreshToken?: number
+  /** 부모가 미결제 테이블 합계를 이미 조회하면 여기서 다시 치지 않음(당일 차트와 숫자 공유) */
+  parentOpenTableTotals?: {
+    tableTotal: number
+    expectedAddend: number
+    byStore: Record<string, { tableTotal: number; expectedAddend: number }>
+  } | null
+  parentOwnsOpenTables?: boolean
   className?: string
 }
 
@@ -103,6 +111,8 @@ export function StoreSalesRealtimeView({
   hideByStoreSection: _hideByStoreSection = false,
   salesStoreCodes,
   refreshToken,
+  parentOpenTableTotals = null,
+  parentOwnsOpenTables = false,
   className,
 }: StoreSalesRealtimeViewProps) {
   const { lang } = useLang()
@@ -195,9 +205,11 @@ export function StoreSalesRealtimeView({
     const salesReq = isAllStoresSelected
       ? getPosTodaySales({ storeCodes, forceNetwork })
       : getPosTodaySales({ storeCode: effectiveStoreCode, forceNetwork })
-    const tablesReq = isAllStoresSelected
-      ? getPosOpenTableTotals({ storeCodes, forceNetwork })
-      : getPosOpenTableTotals({ storeCode: effectiveStoreCode, forceNetwork })
+    const tablesReq = parentOwnsOpenTables
+      ? Promise.resolve()
+      : isAllStoresSelected
+        ? getPosOpenTableTotals({ storeCodes, forceNetwork })
+        : getPosOpenTableTotals({ storeCode: effectiveStoreCode, forceNetwork })
 
     return Promise.all([
       salesReq
@@ -219,13 +231,14 @@ export function StoreSalesRealtimeView({
         }),
       tablesReq
         .then((open) => {
+          if (!open || parentOwnsOpenTables) return
           applyOpenTables(open)
         })
         .catch(() => {
           /* 검색 실패 시 직전 숫자를 유지 */
         }),
     ]).finally(settle)
-  }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey])
+  }, [effectiveStoreCode, isAllStoresSelected, allStoresCodesKey, parentOwnsOpenTables])
 
   const refreshRealtimeSection = useCallback(async () => {
     const salesTask = loadTodaySales({ forceNetwork: true })
@@ -239,6 +252,11 @@ export function StoreSalesRealtimeView({
         : Promise.resolve()
     await Promise.all([Promise.resolve(salesTask), Promise.resolve(storesTask)])
   }, [loadTodaySales, refetchStores, effectiveStoreCode, isAllStoresSelected])
+
+  useEffect(() => {
+    if (!parentOwnsOpenTables || parentOpenTableTotals == null) return
+    setOpenTableTotals(parentOpenTableTotals)
+  }, [parentOwnsOpenTables, parentOpenTableTotals])
 
   /** 당일 매출 숫자만 자동 갱신. 테이블/주문(getPosOrders)은 부모 usePosStore 초기 로드·수동 새로고침에만 맡김 — 중복 호출·전송량 절감 */
   useEffect(() => {
@@ -265,9 +283,7 @@ export function StoreSalesRealtimeView({
   }, [currentStore?.tables, tableSortMode])
   const openTableTotalByStore = useMemo(() => {
     if (!openTableTotals?.byStore) return undefined
-    return Object.fromEntries(
-      Object.entries(openTableTotals.byStore).map(([code, row]) => [code, Number(row.tableTotal ?? 0) || 0])
-    )
+    return flattenOpenTableTotalLookup(openTableTotals.byStore)
   }, [openTableTotals])
 
   const allStoreIdsForRows = useMemo(
@@ -341,8 +357,9 @@ export function StoreSalesRealtimeView({
     openTableTotals != null ? openTableTotals.tableTotal : snapshotTableTotal
   const expectedTableAddend =
     openTableTotals != null ? openTableTotals.expectedAddend : snapshotExpectedAddend
-  const unpaidReady =
-    openTableTotals != null || !loadingTables
+  const unpaidReady = parentOwnsOpenTables
+    ? openTableTotals != null
+    : openTableTotals != null || !loadingTables
   const expectedTotal =
     todaySales != null ? Number(todaySales.completedTotal ?? 0) + expectedTableAddend : null
 
@@ -384,7 +401,7 @@ export function StoreSalesRealtimeView({
         <p className="text-[10px] text-muted-foreground">
           {tr("mobileStoreSalesExpectedTotal", "예상 총액")}
           <span className="ml-1 text-muted-foreground/80">
-            ({tr("mobileStoreSalesExpectedTotalHint", "확정 + 미확정 좌석")})
+            ({tr("mobileStoreSalesExpectedTotalHint", "확정 + 조리중(ready는 확정에 포함)")})
           </span>
         </p>
         <p className="text-base font-semibold tabular-nums text-foreground">

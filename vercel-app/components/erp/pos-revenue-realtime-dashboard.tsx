@@ -74,6 +74,8 @@ type PosRevenueRealtimeDashboardProps = {
   tableTotalLoading?: boolean
   /** 부모 자동 갱신 토큰 */
   refreshToken?: number
+  /** 있으면 탭 안 검색도 상단과 같이 미결제 테이블까지 다시 조회 */
+  onLiveSearch?: () => void | Promise<void>
 }
 
 function formatBaht(value: number): string {
@@ -100,6 +102,7 @@ export function PosRevenueRealtimeDashboard({
   expectedTableAddend,
   tableTotalLoading = false,
   refreshToken,
+  onLiveSearch,
 }: PosRevenueRealtimeDashboardProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -140,8 +143,12 @@ export function PosRevenueRealtimeDashboard({
   }, [refreshToken, loadDashboard])
 
   const handleSearch = React.useCallback(() => {
+    if (onLiveSearch) {
+      void Promise.resolve(onLiveSearch())
+      return
+    }
     void loadDashboard()
-  }, [loadDashboard])
+  }, [onLiveSearch, loadDashboard])
 
   const store = data?.store
   const officeRows = data?.office?.stores || []
