@@ -1,15 +1,20 @@
 /**
  * 충만(Choongman) 매장별 KBank Merchant ID 기본값.
- * 은행 개통: HUAMAK / SEACON SQUARE (2026-08), FUTURE PARK / EKKAMAI / SILOM (2026-08-28)
+ * 은행 개통: HUAMAK / SEACON SQUARE (2026-08), FUTURE PARK / EKKAMAI / SILOM (2026-08-28),
+ * MBK / TRUE DIGITAL PARK (2026-09, 동일 MID·Shop ID — 은행 발급값).
  * 확인·저장은 SaaS가 아니라 관리자 > POS 프린터 설정 > 결제·돈통 탭.
  * resolve 우선순위: 코드 기본값 < SaaS store 설정 < pos_printer_settings(관리자).
  */
 import type { StoreKbankConfig } from '@/lib/tenant-integration-types'
 
+export type ChoongmanKbankQrDisplayMode = 'cashier' | 'edc_mirror' | 'edc_native'
+
 export type ChoongmanKbankStoreDefault = StoreKbankConfig & {
   /** ERP store_code 후보 (첫 항목이 정식 코드) */
   storeCodes: string[]
   label: string
+  /** 미설정 시 Thai QR 표시 기본값. True Digital Park는 고객 모니터 없음 → EDC. */
+  qrDisplayMode?: ChoongmanKbankQrDisplayMode
 }
 
 /** Partner ID는 공통 PTR0000115 (테넌트/env) */
@@ -44,6 +49,19 @@ export const CHOONGMAN_KBANK_STORE_DEFAULTS: ChoongmanKbankStoreDefault[] = [
     merchantId: 'KB000002346591',
     partnerShopId: 'SJGLB00003',
   },
+  {
+    label: 'CHOONGMAN MBK CENTER',
+    storeCodes: ['CM MBK', 'MBK', 'MBK Center', 'CM MBK Center', '1041'],
+    merchantId: 'KB000002350191',
+    partnerShopId: 'SJGLB00002',
+  },
+  {
+    label: 'CHOONGMAN TRUE DIGITAL PARK',
+    storeCodes: ['CM True Digital', 'True Digital', 'True Digital Park', 'CM True Digital Park', '1040'],
+    merchantId: 'KB000002350191',
+    partnerShopId: 'SJGLB00002',
+    qrDisplayMode: 'edc_mirror',
+  },
 ]
 
 function normalizeStoreKey(v: string): string {
@@ -55,28 +73,77 @@ function normalizeStoreKey(v: string): string {
     .trim()
 }
 
-export function lookupChoongmanKbankStoreDefaults(storeCode: string): StoreKbankConfig | null {
+function storeDefaultRowMatches(row: ChoongmanKbankStoreDefault, key: string): boolean {
+  const codes = row.storeCodes.map(normalizeStoreKey)
+  if (codes.includes(key) || codes.some((c) => Boolean(c) && (key.includes(c) || c.includes(key)))) {
+    return true
+  }
+  if (key.includes('huamak') && row.merchantId === 'KB000002340300') return true
+  if (key.includes('seacon') && row.merchantId === 'KB000002340299') return true
+  if (
+    (key.includes('future park') || key.includes('futurepark')) &&
+    row.merchantId === 'KB000002346593'
+  ) {
+    return true
+  }
+  if ((key.includes('ekkamai') || key.includes('ekamai')) && row.merchantId === 'KB000002346592') {
+    return true
+  }
+  if (key.includes('silom') && row.merchantId === 'KB000002346591') return true
+  // MBK / True Digital 은 MID가 같아 merchantId로 구분하지 않음
+  if ((key.includes('mbk') || key === '1041') && row.partnerShopId === 'SJGLB00002' && row.label.includes('MBK')) {
+    return true
+  }
+  if (
+    (key.includes('true digital') || key.includes('truedigital') || key === '1040') &&
+    row.partnerShopId === 'SJGLB00002' &&
+    row.label.includes('TRUE DIGITAL')
+  ) {
+    return true
+  }
+  return false
+}
+
+export function lookupChoongmanKbankStoreDefaultRow(storeCode: string): ChoongmanKbankStoreDefault | null {
   const key = normalizeStoreKey(storeCode)
   if (!key) return null
   for (const row of CHOONGMAN_KBANK_STORE_DEFAULTS) {
-    const codes = row.storeCodes.map(normalizeStoreKey)
-    const hit =
-      codes.includes(key) ||
-      codes.some((c) => key.includes(c) || c.includes(key)) ||
-      (key.includes('huamak') && row.merchantId === 'KB000002340300') ||
-      (key.includes('seacon') && row.merchantId === 'KB000002340299') ||
-      ((key.includes('future park') || key.includes('futurepark')) &&
-        row.merchantId === 'KB000002346593') ||
-      ((key.includes('ekkamai') || key.includes('ekamai')) &&
-        row.merchantId === 'KB000002346592') ||
-      (key.includes('silom') && row.merchantId === 'KB000002346591')
-    if (!hit) continue
-    return {
-      merchantId: row.merchantId,
-      partnerShopId: row.partnerShopId,
-      terminalId: row.terminalId,
-      qrEnabled: true,
-    }
+    if (storeDefaultRowMatches(row, key)) return row
   }
   return null
+}
+
+export function lookupChoongmanKbankStoreDefaults(storeCode: string): StoreKbankConfig | null {
+  const row = lookupChoongmanKbankStoreDefaultRow(storeCode)
+  if (!row) return null
+  return {
+    merchantId: row.merchantId,
+    partnerShopId: row.partnerShopId,
+    terminalId: row.terminalId,
+    qrEnabled: true,
+  }
+}
+
+/** 다른 충만 매장에 발급된 MID/Shop ID가 이 매장에 들어가 있으면 true (Seacon 값을 MBK에 넣은 경우 등) */
+export function credentialsBelongToOtherChoongmanStore(
+  storeCode: string,
+  merchantId: string,
+  partnerShopId: string
+): boolean {
+  const own = lookupChoongmanKbankStoreDefaults(storeCode)
+  if (!own) return false
+  const mid = String(merchantId || '').trim()
+  const shop = String(partnerShopId || '').trim()
+  if (!mid && !shop) return false
+  const ownMid = String(own.merchantId || '').trim()
+  const ownShop = String(own.partnerShopId || '').trim()
+  if (mid && mid === ownMid && (!shop || shop === ownShop)) return false
+  if (shop && shop === ownShop && (!mid || mid === ownMid)) return false
+  for (const row of CHOONGMAN_KBANK_STORE_DEFAULTS) {
+    const rowMid = String(row.merchantId || '').trim()
+    const rowShop = String(row.partnerShopId || '').trim()
+    if (rowMid === ownMid && rowShop === ownShop) continue
+    if ((mid && mid === rowMid) || (shop && shop === rowShop)) return true
+  }
+  return false
 }

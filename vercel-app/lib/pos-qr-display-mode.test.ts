@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultPayQrTypeForStore,
   normalizePosQrDisplayMode,
+  resolvePosQrDisplayModeForStore,
   shouldMirrorKbankQrToEdc,
   shouldUseLinkposNativeQr,
 } from './pos-qr-display-mode'
@@ -26,5 +27,12 @@ describe('pos-qr-display-mode', () => {
     expect(shouldMirrorKbankQrToEdc('edc_mirror')).toBe(true)
     expect(shouldMirrorKbankQrToEdc('edc_native')).toBe(false)
     expect(shouldMirrorKbankQrToEdc('cashier')).toBe(false)
+  })
+
+  it('defaults True Digital Park to EDC mirror when unset, keeps saved cashier', () => {
+    expect(resolvePosQrDisplayModeForStore('CM True Digital', '')).toBe('edc_mirror')
+    expect(resolvePosQrDisplayModeForStore('1040', null)).toBe('edc_mirror')
+    expect(resolvePosQrDisplayModeForStore('CM True Digital', 'cashier')).toBe('cashier')
+    expect(resolvePosQrDisplayModeForStore('CM MBK', '')).toBe('cashier')
   })
 })

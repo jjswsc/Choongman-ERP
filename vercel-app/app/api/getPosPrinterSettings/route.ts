@@ -10,8 +10,12 @@ import { canPickPosTerminalStore } from '@/lib/permissions'
 import { canAccessPosStoreForAuth } from '@/lib/pos-store-access-server'
 import { coerceMembershipQrLinkUrl } from '@/lib/pos-membership-qr-defaults'
 import { shouldSkipLinkposTerminalForCard } from '@/lib/linkpos-card-api-enabled'
-import { lookupChoongmanKbankStoreDefaults } from '@/lib/kbank-store-merchant-defaults'
-import { normalizePosQrDisplayMode } from '@/lib/pos-qr-display-mode'
+import {
+  credentialsBelongToOtherChoongmanStore,
+  lookupChoongmanKbankStoreDefaults,
+} from '@/lib/kbank-store-merchant-defaults'
+import { resolveKbankSkipApiForQrSetting } from '@/lib/kbank-qr-api-enabled'
+import { resolvePosQrDisplayModeForStore } from '@/lib/pos-qr-display-mode'
 
 type VendorBizInfo = {
   name?: string
@@ -36,13 +40,19 @@ function fillKbankMidFromChoongmanDefaults(
   storeCode: string,
   fields: { kbankMerchantId: string; kbankPartnerShopId: string; kbankTerminalId: string }
 ) {
-  if (fields.kbankMerchantId || fields.kbankPartnerShopId || fields.kbankTerminalId) return fields
   const d = lookupChoongmanKbankStoreDefaults(storeCode)
   if (!d) return fields
+  const hasSaved = Boolean(fields.kbankMerchantId || fields.kbankPartnerShopId || fields.kbankTerminalId)
+  if (
+    hasSaved &&
+    !credentialsBelongToOtherChoongmanStore(storeCode, fields.kbankMerchantId, fields.kbankPartnerShopId)
+  ) {
+    return fields
+  }
   return {
     kbankMerchantId: String(d.merchantId ?? '').trim(),
     kbankPartnerShopId: String(d.partnerShopId ?? '').trim(),
-    kbankTerminalId: String(d.terminalId ?? '').trim(),
+    kbankTerminalId: hasSaved ? fields.kbankTerminalId : String(d.terminalId ?? '').trim(),
   }
 }
 
@@ -143,7 +153,7 @@ export async function GET(request: NextRequest) {
     checkAutoOpen: false,
     linkposSkipTerminalForCard: shouldSkipLinkposTerminalForCard(null),
     kbankSkipApiForQr: true,
-    posQrDisplayMode: 'cashier' as const,
+    posQrDisplayMode: 'cashier' as 'cashier' | 'edc_mirror' | 'edc_native',
     kbankMerchantId: '',
     kbankPartnerShopId: '',
     kbankTerminalId: '',
@@ -254,6 +264,8 @@ export async function GET(request: NextRequest) {
       kbankTerminalId: '',
     })
   )
+  defaultRes.kbankSkipApiForQr = resolveKbankSkipApiForQrSetting(storeCode, null)
+  defaultRes.posQrDisplayMode = resolvePosQrDisplayModeForStore(storeCode, '')
 
   try {
     const rows = (await supabaseSelectFilter(
@@ -439,8 +451,12 @@ export async function GET(request: NextRequest) {
           ? raw.linkpos_skip_terminal_for_card
           : null
       ),
-      kbankSkipApiForQr: raw?.kbank_skip_api_for_qr !== false,
-      posQrDisplayMode: normalizePosQrDisplayMode(
+      kbankSkipApiForQr: resolveKbankSkipApiForQrSetting(
+        storeCode,
+        typeof raw?.kbank_skip_api_for_qr === 'boolean' ? raw.kbank_skip_api_for_qr : null
+      ),
+      posQrDisplayMode: resolvePosQrDisplayModeForStore(
+        storeCode,
         (raw as Record<string, unknown> | null | undefined)?.pos_qr_display_mode
       ),
       ...fillKbankMidFromChoongmanDefaults(storeCode, {

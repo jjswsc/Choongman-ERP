@@ -1,3 +1,5 @@
+import { lookupChoongmanKbankStoreDefaultRow } from '@/lib/kbank-store-merchant-defaults'
+
 /** 매장별 KBank Thai QR 표시·승인 경로 (pos_printer_settings.pos_qr_display_mode) */
 export type PosQrDisplayMode = 'cashier' | 'edc_mirror' | 'edc_native'
 
@@ -8,6 +10,17 @@ export function normalizePosQrDisplayMode(raw: unknown): PosQrDisplayMode {
     .replace(/-/g, '_')
   if (s === 'edc_mirror' || s === 'edc_display' || s === 'mirror') return 'edc_mirror'
   if (s === 'edc_native' || s === 'native' || s === 'edc') return 'edc_native'
+  return 'cashier'
+}
+
+/** True Digital Park 등 고객 모니터 없는 매장: 미저장이면 EDC mirror. 저장된 값은 유지. */
+export function resolvePosQrDisplayModeForStore(storeCode: string, raw: unknown): PosQrDisplayMode {
+  if (String(raw ?? '').trim()) return normalizePosQrDisplayMode(raw)
+  const row = lookupChoongmanKbankStoreDefaultRow(storeCode)
+  const fallback = row?.qrDisplayMode
+  if (fallback === 'edc_mirror' || fallback === 'edc_native' || fallback === 'cashier') {
+    return fallback
+  }
   return 'cashier'
 }
 

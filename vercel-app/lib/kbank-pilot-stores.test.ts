@@ -1,5 +1,5 @@
 import { isKbankQrEnabledForStore, isKbankQrPilotStoreLabel } from '@/lib/kbank-pilot-stores'
-import { lookupChoongmanKbankStoreDefaults } from '@/lib/kbank-store-merchant-defaults'
+import { lookupChoongmanKbankStoreDefaults, credentialsBelongToOtherChoongmanStore } from '@/lib/kbank-store-merchant-defaults'
 import {
   applyStoreKbankConfig,
   emptyKbankRuntime,
@@ -15,7 +15,7 @@ describe('isKbankQrEnabledForStore', () => {
     expect(isKbankQrEnabledForStore({ storeName: 'cm_office' })).toBe(true)
   })
 
-  it('allows Huamak / Seacon / Future Park / Ekkamai / Silom', () => {
+  it('allows Huamak / Seacon / Future Park / Ekkamai / Silom / MBK / True Digital', () => {
     expect(isKbankQrEnabledForStore({ storeId: 'CM Huamak' })).toBe(true)
     expect(isKbankQrEnabledForStore({ storeLabel: 'CHOONGMAN HUAMAK' })).toBe(true)
     expect(isKbankQrEnabledForStore({ storeId: 'CM Seacon Square' })).toBe(true)
@@ -23,6 +23,10 @@ describe('isKbankQrEnabledForStore', () => {
     expect(isKbankQrEnabledForStore({ storeId: 'CM Future Park' })).toBe(true)
     expect(isKbankQrEnabledForStore({ storeId: 'CM Ekkamai' })).toBe(true)
     expect(isKbankQrEnabledForStore({ storeId: 'CM Silom' })).toBe(true)
+    expect(isKbankQrEnabledForStore({ storeId: 'CM MBK' })).toBe(true)
+    expect(isKbankQrEnabledForStore({ storeId: '1041', storeLabel: 'MBK Center' })).toBe(true)
+    expect(isKbankQrEnabledForStore({ storeId: 'CM True Digital' })).toBe(true)
+    expect(isKbankQrEnabledForStore({ storeId: '1040', storeName: 'CM True Digital' })).toBe(true)
   })
 
   it('rejects unrelated stores', () => {
@@ -33,7 +37,7 @@ describe('isKbankQrEnabledForStore', () => {
 })
 
 describe('choongman kbank store MID defaults', () => {
-  it('maps Huamak / Seacon / Future Park / Ekkamai / Silom codes to bank MIDs', () => {
+  it('maps Huamak / Seacon / Future Park / Ekkamai / Silom / MBK / True Digital codes to bank MIDs', () => {
     expect(lookupChoongmanKbankStoreDefaults('CM Huamak')?.merchantId).toBe('KB000002340300')
     expect(lookupChoongmanKbankStoreDefaults('CM Huamak')?.partnerShopId).toBe('SJGLB00007')
     expect(lookupChoongmanKbankStoreDefaults('CM Seacon Srinakarin')?.merchantId).toBe(
@@ -48,6 +52,24 @@ describe('choongman kbank store MID defaults', () => {
     expect(lookupChoongmanKbankStoreDefaults('CM Ekkamai')?.partnerShopId).toBe('SJGLB00004')
     expect(lookupChoongmanKbankStoreDefaults('CM Silom')?.merchantId).toBe('KB000002346591')
     expect(lookupChoongmanKbankStoreDefaults('CM Silom')?.partnerShopId).toBe('SJGLB00003')
+    expect(lookupChoongmanKbankStoreDefaults('CM MBK')?.merchantId).toBe('KB000002350191')
+    expect(lookupChoongmanKbankStoreDefaults('CM MBK')?.partnerShopId).toBe('SJGLB00002')
+    expect(lookupChoongmanKbankStoreDefaults('1041')?.merchantId).toBe('KB000002350191')
+    expect(lookupChoongmanKbankStoreDefaults('CM True Digital')?.merchantId).toBe('KB000002350191')
+    expect(lookupChoongmanKbankStoreDefaults('CM True Digital')?.partnerShopId).toBe('SJGLB00002')
+    expect(lookupChoongmanKbankStoreDefaults('1040')?.partnerShopId).toBe('SJGLB00002')
+  })
+
+  it('detects another store\'s MID pasted onto MBK', () => {
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM MBK', 'KB000002340299', 'SJGLB00006')
+    ).toBe(true)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM MBK', 'KB000002350191', 'SJGLB00002')
+    ).toBe(false)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM True Digital', 'KB000002350191', 'SJGLB00002')
+    ).toBe(false)
   })
 })
 
