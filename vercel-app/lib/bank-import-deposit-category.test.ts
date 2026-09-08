@@ -4,6 +4,7 @@ import {
   filterBankDepositUiCategories,
   isChannelRevenueAccountCode,
   isNonRetryableBankBusinessErrorMessage,
+  isFranchiseB2BBankDepositMemo,
   isPosChannelSettlementMemo,
   isPosRevenueDepositCategory,
   isPosStoreBankAccount,
@@ -24,6 +25,11 @@ describe('bank-import-deposit-category', () => {
     expect(isPosChannelSettlementMemo('รับเงินจากการขาย', 'Credit Card Sales')).toBe(true)
     expect(isPosChannelSettlementMemo('รับเงินจากการขาย', 'store sales QR')).toBe(true)
     expect(isPosChannelSettlementMemo('รับเงินจากการขาย', 'Sale Old Oil')).toBe(false)
+    expect(isPosChannelSettlementMemo('Grab Sales')).toBe(true)
+    expect(isPosChannelSettlementMemo('โอนเงินมัดจำ | จาก X1781', 'Grab 08-69')).toBe(false)
+    expect(isPosChannelSettlementMemo('Grab GP')).toBe(false)
+    expect(isFranchiseB2BBankDepositMemo('โอนเงินมัดจำ | จาก X1781', 'Grab 08-69')).toBe(true)
+    expect(isFranchiseB2BBankDepositMemo('Grab Sales')).toBe(false)
   })
 
   it('allows channel GL codes used in statement import', () => {

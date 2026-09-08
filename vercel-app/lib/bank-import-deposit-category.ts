@@ -18,9 +18,24 @@ export const POS_REVENUE_DEPOSIT_CATEGORIES = [
 export const POS_CHANNEL_SETTLEMENT_MEMO_RE =
   /\b(grabfood|grabtaxi|grab|line\s*pay|linepay|line\s*man|lineman|shopeefood|shopee|shopeepay|food\s*panda|foodpanda|robinhood|delivery|배달|visa|master|mastercard|unionpay|jcb|edc|card|credit|카드|บัตร|qr|promptpay|truemoney|พร้อมเพย์|판매대금|qr결제|store sales?\s*qr)\b/i
 
+/**
+ * 가맹 B2B 수금·본사 청구(Grab GP 등).
+ * 적요에 Grab 이 있어도 앱 정산(ชำระช่องทาง)이 아님 — 미수 연결(เชื่อมลูกหนี้).
+ */
+export const FRANCHISE_B2B_BANK_DEPOSIT_RE =
+  /โอนเงินมัดจำ|\bgrab\s*gp\b|\bdelivery\s*gp\b|\bgrab\s*\d{1,2}\s*[-./]\s*\d{2}\b/i
+
+export function isFranchiseB2BBankDepositMemo(
+  ...texts: Array<string | undefined | null>
+): boolean {
+  const s = texts.map((t) => String(t || '')).join(' \n ')
+  return FRANCHISE_B2B_BANK_DEPOSIT_RE.test(s)
+}
+
 export function isPosChannelSettlementMemo(
   ...texts: Array<string | undefined | null>
 ): boolean {
+  if (isFranchiseB2BBankDepositMemo(...texts)) return false
   return texts.some((text) => {
     const s = String(text || '').trim()
     if (!s) return false

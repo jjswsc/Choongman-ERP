@@ -2,7 +2,10 @@
  * 통장 노란 칩(store sales QR, Line man sales 등) → 용도·채널 정산 여부.
  * 직원은 칩만 고르고 저장. 수수료 분개는 저장 시 자동, 수정만 나중에 클릭.
  */
-import { isPosChannelSettlementMemo } from '@/lib/bank-import-deposit-category'
+import {
+  isFranchiseB2BBankDepositMemo,
+  isPosChannelSettlementMemo,
+} from '@/lib/bank-import-deposit-category'
 import { bankDepositLoanCategorySelectValue } from '@/lib/bank-loan-categories'
 import {
   defaultBankDepositSalesDate,
@@ -24,6 +27,7 @@ export function inferPosBankChipKind(
   ) {
     return 'cash'
   }
+  if (isFranchiseB2BBankDepositMemo(...texts)) return null
   if (/\b(line\s*man|lineman)\b/i.test(s)) return 'lineman'
   if (/\bshopee\b/i.test(s)) return 'shopee'
   if (/grabfood|\bgrab\b/i.test(s)) return 'grab'
@@ -71,6 +75,9 @@ export function bankChannelSettlementRowAction(params: {
   isChannelSettled?: boolean
 }): BankChannelSettlementAction {
   if (!String(params.storeName || '').trim()) return 'none'
+  if (!channelSettlementAllowsReceivableReceive({ memo: params.memo, note: params.note })) {
+    return 'none'
+  }
   if (!isFeeBearingPosBankChip(inferPosBankChipKind(params.memo, params.note))) return 'none'
   return params.isChannelSettled ? 'edit' : 'post'
 }

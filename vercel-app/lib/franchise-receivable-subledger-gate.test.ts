@@ -37,6 +37,14 @@ describe('shouldCreateFranchiseReceivableSubledgerFromBankReceive', () => {
         memo: 'โอนเงินมัดจำ | จาก X2781',
       })
     ).toBe(true)
+    expect(
+      shouldCreateFranchiseReceivableSubledgerFromBankReceive({
+        linkedToChannelSettlement: false,
+        hasPosCompletedOrders: true,
+        memo: 'โอนเงินมัดจำ | จาก X1781',
+        note: 'Grab 08-69',
+      })
+    ).toBe(true)
   })
 
   it('creates subledger for non-POS franchise B2B collection', () => {

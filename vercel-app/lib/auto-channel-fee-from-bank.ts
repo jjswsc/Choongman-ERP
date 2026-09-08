@@ -7,6 +7,7 @@ import { fetchChannelGrossCoveringNet, memoWithWeekendCover } from '@/lib/pos-ch
 import { deriveFeeFromGrossNet, roundSettlementMoney } from '@/lib/pos-channel-settlement'
 import {
   channelFeeSettleDateCandidates,
+  channelSettlementAllowsReceivableReceive,
   inferPosBankChipKind,
   settlementChannelForPosBankChip,
 } from '@/lib/pos-bank-chip-settlement'
@@ -27,6 +28,7 @@ export async function maybeAutoPostChannelFeeAfterBankDeposit(params: {
   if (String(params.category || '').toLowerCase() !== 'receivable_receive') return
   const storeCode = String(params.storeCode || '').trim()
   if (!storeCode) return
+  if (!channelSettlementAllowsReceivableReceive({ memo: params.memo, note: params.note })) return
   const channel = settlementChannelForPosBankChip(inferPosBankChipKind(params.memo, params.note))
   if (!channel) return
   const net = roundSettlementMoney(Math.abs(Number(params.netAmount) || 0))

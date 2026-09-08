@@ -55,11 +55,27 @@ describe('pos-bank-chip-settlement', () => {
         isChannelSettled: true,
       })
     ).toBe('edit')
+    expect(
+      bankChannelSettlementRowAction({
+        memo: 'โอนเงินมัดจำ | จาก X1781',
+        note: 'Grab 08-69',
+        storeName: 'CM The Street',
+        isChannelSettled: false,
+      })
+    ).toBe('none')
+    expect(inferPosBankChipKind('โอนเงินมัดจำ | จาก X1781', 'Grab 08-69')).toBe(null)
+    expect(inferPosBankChipKind('Grab GP')).toBe(null)
   })
 
   it('allows receivable_receive + fee journal for POS channel memos, not B2B', () => {
     expect(channelSettlementAllowsReceivableReceive({ note: 'store sales QR' })).toBe(true)
     expect(channelSettlementAllowsReceivableReceive({ memo: 'โอนเงินมัดจำ' })).toBe(false)
+    expect(
+      channelSettlementAllowsReceivableReceive({
+        memo: 'โอนเงินมัดจำ | จาก X1781',
+        note: 'Grab 08-69',
+      })
+    ).toBe(false)
   })
 
   it('fills chip note without duplicating and sets deposit category', () => {

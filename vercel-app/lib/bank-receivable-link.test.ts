@@ -72,6 +72,16 @@ describe('bank-receivable-link', () => {
         isChannelSettled: false,
       })
     ).toBe(true)
+    expect(
+      bankDepositNeedsReceivableOrderLink({
+        transType: 'deposit',
+        category: 'receivable_receive',
+        storeName: 'CM The Street',
+        memo: 'โอนเงินมัดจำ | จาก X1781',
+        note: 'Grab 08-69',
+        isChannelSettled: false,
+      })
+    ).toBe(true)
   })
 
   it('computes open amount from receive offsets', () => {
