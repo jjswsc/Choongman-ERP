@@ -86,3 +86,13 @@ export function resolveEffectiveMenuScopeStoreCodes(
   if (compatibilityMode) return normalizeMenuScopeStoreCodes(allStoreCodes)
   return []
 }
+
+/** 메뉴 저장 시 storeCodes가 오면 스코프 동기화. 프로모 연동 descriptionOnly 저장도 허용. */
+export function shouldSyncPosMenuStoreScopeOnSave(params: {
+  hasStoreCodesPayload: boolean
+  isPartialMenuEdit: boolean
+  isDescriptionOnlyEdit: boolean
+}): boolean {
+  return params.hasStoreCodesPayload && (!params.isPartialMenuEdit || params.isDescriptionOnlyEdit)
+}
+

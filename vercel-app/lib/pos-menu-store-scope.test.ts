@@ -6,6 +6,7 @@ import {
   resolveEffectiveMenuScopeStoreCodes,
   shouldMenuBeVisibleForStore,
   isPosMenuStoreScopeCompatibilityModeForBrand,
+  shouldSyncPosMenuStoreScopeOnSave,
 } from '@/lib/pos-menu-store-scope'
 import { posMenusCatalogCacheKey } from '@/lib/offline/pos-catalog-offline'
 
@@ -59,6 +60,38 @@ describe('pos-menu-store-scope', () => {
     expect(isPosMenuStoreScopeCompatibilityModeForBrand('omnifoodtech')).toBe(false)
     expect(isPosMenuStoreScopeCompatibilityModeForBrand('choongman')).toBe(true)
     expect(resolveEffectiveMenuScopeStoreCodes([], ['A', 'B'], false)).toEqual([])
+  })
+})
+
+describe('shouldSyncPosMenuStoreScopeOnSave', () => {
+  it('syncs storeCodes on full menu save', () => {
+    expect(
+      shouldSyncPosMenuStoreScopeOnSave({
+        hasStoreCodesPayload: true,
+        isPartialMenuEdit: false,
+        isDescriptionOnlyEdit: false,
+      })
+    ).toBe(true)
+  })
+
+  it('syncs storeCodes on promo descriptionOnly save', () => {
+    expect(
+      shouldSyncPosMenuStoreScopeOnSave({
+        hasStoreCodesPayload: true,
+        isPartialMenuEdit: true,
+        isDescriptionOnlyEdit: true,
+      })
+    ).toBe(true)
+  })
+
+  it('skips storeCodes on imageOnly partial save', () => {
+    expect(
+      shouldSyncPosMenuStoreScopeOnSave({
+        hasStoreCodesPayload: true,
+        isPartialMenuEdit: true,
+        isDescriptionOnlyEdit: false,
+      })
+    ).toBe(false)
   })
 })
 

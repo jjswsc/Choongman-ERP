@@ -1162,7 +1162,11 @@ export default function PosMenusPage() {
           })()
         )
       : []
-    /** 프로모션 연동 메뉴: 설명·이미지만 메뉴 화면에서 저장 (이름·가격 등은 프로모션 관리) */
+    if (shouldPersistStoreScope && scopeForSave.length === 0) {
+      await appAlert(t("posMenuVisibleStoresPickAtLeastOne"))
+      return
+    }
+    /** 프로모션 연동 메뉴: 설명·이미지·매장 노출은 이 화면에서 저장 (이름·가격 등은 프로모션 관리) */
     if (isPromoLinkedMenuEdit && editingId) {
       const imageSave = resolvePosMenuImageUrlPayloadForSave(formData.imageUrl.trim(), editingId, {
         isEdit: true,
@@ -1178,6 +1182,9 @@ export default function PosMenusPage() {
       if (imageSave.includeImageUrl) {
         promoSavePayload.imageUrl = imageSave.imageUrl
       }
+      if (shouldPersistStoreScope) {
+        promoSavePayload.storeCodes = scopeForSave
+      }
       const promoRes = await savePosMenu(promoSavePayload)
       if (!promoRes.success) {
         await appAlert(translateApiMessage(promoRes.message, t) || t("msg_save_fail_detail"))
@@ -1192,10 +1199,18 @@ export default function PosMenusPage() {
                 descriptionDelivery: formData.descriptionDelivery.trim() || null,
                 descriptionTable: formData.descriptionTable.trim() || null,
                 ...(imageSave.includeImageUrl ? { imageUrl: imageSave.imageUrl } : {}),
+                ...(shouldPersistStoreScope ? { storeCodes: scopeForSave } : {}),
               }
             : m
         )
       )
+      if (shouldPersistStoreScope) {
+        const scopeTargets = Array.from(new Set(scopeForSave.map((x) => String(x || "").trim()).filter(Boolean)))
+        if (scopeTargets.length > 0) {
+          await Promise.all(scopeTargets.map((sc) => refreshPosMenusCatalogCache({ storeCode: sc })))
+        }
+        setStoreScopeDirty(false)
+      }
       if (!(await saveSelectedOptionDescriptionIfAny())) return
       if (imageSave.mismatchMessage) {
         await appAlert(
@@ -1204,10 +1219,6 @@ export default function PosMenusPage() {
       } else {
         await appAlert(t("itemsAlertUpdated"))
       }
-      return
-    }
-    if (shouldPersistStoreScope && scopeForSave.length === 0) {
-      await appAlert(t("posMenuVisibleStoresPickAtLeastOne"))
       return
     }
     if (shouldPersistStoreScope && !storeScopeDirty && !storeScopeCodesEqual(selectedStoreCodes, scopeForSave)) {

@@ -1,4 +1,8 @@
-import { buildMemberPointLineFlexMessage } from '@/lib/member-point-line-flex'
+import {
+  buildMemberPointLineFlexMessage,
+  defaultMemberPointNotifyReason,
+  formatMemberLineHonorificName,
+} from '@/lib/member-point-line-flex'
 import { pushLineMessages, pushLineTextMessage } from '@/lib/line-messaging-server'
 import { formatMemberPointsDisplay, roundMemberPointsEarn } from '@/lib/member-points-math'
 import { isMemberPointLineNotifyEnabled } from '@/lib/member-point-line-notify-settings'
@@ -6,6 +10,12 @@ import { createMemberEvent } from '@/lib/members-server-core'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 const BRAND_NAME = 'Choongman Chicken'
+
+type MemberPointNotifyProfile = {
+  name: string
+  pointBalance: number
+  tierCode: string
+}
 
 async function resolveMemberLineUserId(memberId: number): Promise<string> {
   const base = `provider=eq.line&member_id=eq.${memberId}`
@@ -26,27 +36,49 @@ export function buildMemberPointLineNotifyText(params: {
   earned: number
   used: number
   balanceAfter: number
-  tierCode: string
+  tierCode?: string
   storeCode?: string
   orderNo?: string
+  memberName?: string
+  reason?: string
 }): string {
-  const lines: string[] = [BRAND_NAME]
+  const lines: string[] = [`${BRAND_NAME} 🍗`]
   const earned = Number(params.earned || 0)
   const used = Number(params.used || 0)
+  const honorificName = formatMemberLineHonorificName(params.memberName)
+  if (honorificName) lines.push(`คุณ${honorificName}`)
   if (earned > 0) {
-    lines.push(`ได้รับพอยท์ +${formatMemberPointsDisplay(earned)}`)
+    lines.push(`ได้รับ ${formatMemberPointsDisplay(earned)} แต้ม`)
   }
   if (used > 0) {
-    lines.push(`ใช้พอยท์ -${formatMemberPointsDisplay(used)}`)
+    lines.push(`ใช้ ${formatMemberPointsDisplay(used)} แต้ม`)
   }
-  lines.push(`พอยท์คงเหลือ ${formatMemberPointsDisplay(params.balanceAfter)}`)
-  const tier = String(params.tierCode || '').trim()
-  if (tier) lines.push(`ระดับสมาชิก ${tier}`)
-  const storeCode = String(params.storeCode || '').trim()
-  const orderNo = String(params.orderNo || '').trim()
-  const tail = [storeCode, orderNo].filter(Boolean).join(' · ')
-  if (tail) lines.push(tail)
+  const reason = String(params.reason || '').trim() || defaultMemberPointNotifyReason(params)
+  lines.push(`เหตุผล: ${reason}`)
+  lines.push(`แต้มคงเหลือ: ${formatMemberPointsDisplay(params.balanceAfter)} แต้ม`)
+  lines.push('ขอบคุณที่ใช้บริการครับ')
   return lines.join('\n').slice(0, 5000)
+}
+
+async function resolveMemberPointNotifyProfile(memberId: number): Promise<MemberPointNotifyProfile | null> {
+  const id = Number(memberId || 0)
+  if (!id) return null
+  const rows = (await supabaseSelectFilter('members', `id=eq.${id}`, {
+    limit: 1,
+    select: 'name,full_name,point_balance,tier_code',
+  })) as Array<{
+    name?: string
+    full_name?: string
+    point_balance?: number | null
+    tier_code?: string | null
+  }>
+  const member = rows?.[0]
+  if (!member) return null
+  return {
+    name: String(member.full_name || member.name || '').trim(),
+    pointBalance: roundMemberPointsEarn(member.point_balance),
+    tierCode: String(member.tier_code || '').trim(),
+  }
 }
 
 async function wasPointLineNotifySent(orderId: number): Promise<boolean> {
@@ -137,16 +169,7 @@ export async function getMemberPointLineNotifyReadiness(memberId: number): Promi
       tierCode: '',
     }
   }
-  const rows = (await supabaseSelectFilter('members', `id=eq.${id}`, {
-    limit: 1,
-    select: 'name,full_name,point_balance,tier_code',
-  })) as Array<{
-    name?: string
-    full_name?: string
-    point_balance?: number | null
-    tier_code?: string | null
-  }>
-  const member = rows?.[0]
+  const profile = await resolveMemberPointNotifyProfile(id)
   const lineUserId = await resolveMemberLineUserId(id)
   return {
     notifyEnabled,
@@ -154,9 +177,9 @@ export async function getMemberPointLineNotifyReadiness(memberId: number): Promi
     lineUserId,
     lineLinked: Boolean(lineUserId),
     lineOaFriend: false,
-    memberName: String(member?.full_name || member?.name || '').trim(),
-    pointBalance: roundMemberPointsEarn(member?.point_balance),
-    tierCode: String(member?.tier_code || '').trim(),
+    memberName: profile?.name || '',
+    pointBalance: profile?.pointBalance || 0,
+    tierCode: profile?.tierCode || '',
   }
 }
 
@@ -168,18 +191,31 @@ async function deliverMemberPointLineNotify(params: {
   tierCode: string
   storeCode?: string
   orderNo?: string
+  memberName?: string
+  reason?: string
 }): Promise<{ ok: boolean; channel?: 'flex' | 'text'; message?: string }> {
   const lineUserId = await resolveMemberLineUserId(params.memberId)
   if (!lineUserId) return { ok: false, message: 'no_line_identity' }
 
-  const flex = buildMemberPointLineFlexMessage(params)
+  let memberName = String(params.memberName || '').trim()
+  if (!memberName) {
+    const profile = await resolveMemberPointNotifyProfile(params.memberId)
+    memberName = profile?.name || ''
+  }
+  const cardParams = {
+    ...params,
+    memberName,
+    reason: String(params.reason || '').trim() || defaultMemberPointNotifyReason(params),
+  }
+
+  const flex = buildMemberPointLineFlexMessage(cardParams)
   const flexResult = await pushLineMessages({
     userId: lineUserId,
     messages: [{ type: 'flex', altText: flex.altText, contents: flex.contents }],
   })
   if (flexResult.ok) return { ok: true, channel: 'flex' }
 
-  const text = buildMemberPointLineNotifyText(params)
+  const text = buildMemberPointLineNotifyText(cardParams)
   const textResult = await pushLineTextMessage({ userId: lineUserId, text })
   if (textResult.ok) return { ok: true, channel: 'text' }
   return { ok: false, message: textResult.message || flexResult.message || 'push_failed' }
@@ -206,21 +242,18 @@ export async function notifyMemberPointLineForPaidOrder(params: {
     return { sent: false, reason: 'already_sent' }
   }
 
-  const memberRows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, {
-    limit: 1,
-    select: 'point_balance,tier_code',
-  })) as Array<{ point_balance?: number | null; tier_code?: string | null }>
-  const member = memberRows?.[0]
+  const member = await resolveMemberPointNotifyProfile(memberId)
   if (!member) return { sent: false, reason: 'member_not_found' }
 
   const result = await deliverMemberPointLineNotify({
     memberId,
     earned,
     used,
-    balanceAfter: roundMemberPointsEarn(member.point_balance),
-    tierCode: String(member.tier_code || '').trim(),
+    balanceAfter: member.pointBalance,
+    tierCode: member.tierCode,
     storeCode: params.storeCode,
     orderNo: params.orderNo,
+    memberName: member.name,
   })
   if (!result.ok) {
     console.warn('member-point-line-notify: push_failed', {
@@ -301,6 +334,7 @@ export async function sendMemberPointLineTestNotify(memberId: number): Promise<{
     tierCode: readiness.tierCode || 'BRONZE',
     storeCode: 'TEST',
     orderNo: 'TEST-NOTIFY',
+    memberName: readiness.memberName,
   })
   return { ok: result.ok, message: result.message, channel: result.channel }
 }

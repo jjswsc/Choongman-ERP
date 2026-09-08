@@ -1,11 +1,31 @@
 import { formatMemberPointsDisplay } from '@/lib/member-points-math'
 
 const BRAND_NAME = 'Choongman Chicken'
-const BRAND_GREEN = '#1B7F4B'
+const HEADER_NAVY = '#0B2A4A'
+const HEADER_REWARDS = '#7FE8D0'
 const TEXT_MUTED = '#6B7280'
-const TEXT_DARK = '#111827'
-const EARN_COLOR = '#059669'
+const TEXT_TITLE = '#1E3A8A'
+const TEXT_BALANCE = '#1D4ED8'
+const TEXT_FOOTER = '#64748B'
+const FOOTER_BG = '#E8EEF4'
+const EARN_COLOR = '#16A34A'
 const USE_COLOR = '#DC2626'
+const TEXT_DARK = '#111827'
+
+const THAI_SHORT_MONTHS = [
+  'ม.ค.',
+  'ก.พ.',
+  'มี.ค.',
+  'เม.ย.',
+  'พ.ค.',
+  'มิ.ย.',
+  'ก.ค.',
+  'ส.ค.',
+  'ก.ย.',
+  'ต.ค.',
+  'พ.ย.',
+  'ธ.ค.',
+] as const
 
 type FlexText = {
   type: 'text'
@@ -19,54 +39,68 @@ type FlexText = {
   margin?: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl'
 }
 
-type FlexBox = {
-  type: 'box'
-  layout: 'vertical' | 'horizontal' | 'baseline'
-  contents: Array<FlexBox | FlexText | { type: 'separator'; margin?: string; color?: string }>
-  spacing?: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl'
-  margin?: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl'
-  paddingAll?: string
-  backgroundColor?: string
-  cornerRadius?: string
-  flex?: number
-}
-
 function flexText(partial: Omit<FlexText, 'type'> & { type?: 'text' }): FlexText {
   return { type: 'text', wrap: true, ...partial }
 }
 
-function detailRow(label: string, value: string): FlexBox {
-  return {
-    type: 'box',
-    layout: 'horizontal',
-    spacing: 'sm',
-    contents: [
-      flexText({ text: label, size: 'sm', color: TEXT_MUTED, flex: 2 }),
-      flexText({ text: value, size: 'sm', color: TEXT_DARK, align: 'end', flex: 3, weight: 'bold' }),
-    ],
-  }
+export function formatBangkokThaiBuddhistDateTime(at: Date = new Date()): string {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Bangkok',
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+  const parts = Object.fromEntries(fmt.formatToParts(at).map((p) => [p.type, p.value]))
+  const day = Number(parts.day)
+  const month = Number(parts.month)
+  const year = Number(parts.year) + 543
+  const hour = String(parts.hour ?? '').padStart(2, '0')
+  const minute = String(parts.minute ?? '').padStart(2, '0')
+  const monthLabel = THAI_SHORT_MONTHS[month - 1] ?? ''
+  return `${day} ${monthLabel} ${year} ${hour}:${minute}`
 }
 
-function resolveHeadline(params: { earned: number; used: number }): { title: string; delta: string; deltaColor: string } {
+export function formatMemberLineHonorificName(raw: string | undefined): string {
+  const n = String(raw || '')
+    .trim()
+    .replace(/^คุณ\s*/, '')
+    .trim()
+  return n
+}
+
+export function defaultMemberPointNotifyReason(params: { earned: number; used: number }): string {
+  if (Number(params.earned || 0) > 0) return 'ซื้อสินค้าที่ร้าน'
+  if (Number(params.used || 0) > 0) return 'ใช้แต้มที่ร้าน'
+  return 'ซื้อสินค้าที่ร้าน'
+}
+
+function resolveHeadline(params: { earned: number; used: number }): {
+  title: string
+  delta: string
+  deltaColor: string
+} {
   const earned = Number(params.earned || 0)
   const used = Number(params.used || 0)
   if (earned > 0 && used > 0) {
     return {
-      title: 'อัปเดตพอยท์',
-      delta: `+${formatMemberPointsDisplay(earned)} / -${formatMemberPointsDisplay(used)}`,
+      title: 'คุณอัปเดตแต้ม',
+      delta: `+${formatMemberPointsDisplay(earned)} / -${formatMemberPointsDisplay(used)} แต้ม`,
       deltaColor: TEXT_DARK,
     }
   }
   if (earned > 0) {
     return {
-      title: 'ได้รับพอยท์',
-      delta: `+${formatMemberPointsDisplay(earned)}`,
+      title: 'คุณได้รับแต้ม',
+      delta: `+${formatMemberPointsDisplay(earned)} แต้ม`,
       deltaColor: EARN_COLOR,
     }
   }
   return {
-    title: 'ใช้พอยท์แล้ว',
-    delta: `-${formatMemberPointsDisplay(used)}`,
+    title: 'คุณใช้แต้ม',
+    delta: `-${formatMemberPointsDisplay(used)} แต้ม`,
     deltaColor: USE_COLOR,
   }
 }
@@ -75,97 +109,120 @@ export function buildMemberPointLineFlexMessage(params: {
   earned: number
   used: number
   balanceAfter: number
-  tierCode: string
+  tierCode?: string
   storeCode?: string
   orderNo?: string
+  memberName?: string
+  reason?: string
+  occurredAt?: Date
 }): { altText: string; contents: Record<string, unknown> } {
   const headline = resolveHeadline(params)
-  const tier = String(params.tierCode || '').trim() || '-'
-  const storeCode = String(params.storeCode || '').trim()
-  const orderNo = String(params.orderNo || '').trim()
+  const honorificName = formatMemberLineHonorificName(params.memberName)
+  const greeting = honorificName ? `สวัสดี คุณ${honorificName}` : 'สวัสดีครับ'
+  const reason = String(params.reason || '').trim() || defaultMemberPointNotifyReason(params)
   const balance = formatMemberPointsDisplay(params.balanceAfter)
+  const stamp = formatBangkokThaiBuddhistDateTime(params.occurredAt ?? new Date())
 
-  const bodyRows: FlexBox['contents'] = [
-    detailRow('พอยท์คงเหลือ', `${balance} P`),
-    detailRow('ระดับสมาชิก', tier),
-  ]
-  if (storeCode) bodyRows.push(detailRow('สาขา', storeCode))
-  if (orderNo) bodyRows.push(detailRow('ออเดอร์', orderNo))
-
-  const altParts = [headline.title, headline.delta, `คงเหลือ ${balance}`].filter(Boolean)
+  const altParts = [greeting, headline.title, headline.delta, `คงเหลือ ${balance} แต้ม`].filter(Boolean)
   const altText = `${BRAND_NAME}: ${altParts.join(' · ')}`.slice(0, 400)
 
   const bubble: Record<string, unknown> = {
     type: 'bubble',
     header: {
       type: 'box',
-      layout: 'vertical',
+      layout: 'horizontal',
       contents: [
         flexText({
-          text: BRAND_NAME,
+          text: 'CHOONGMAN',
           weight: 'bold',
           size: 'sm',
           color: '#FFFFFF',
+          flex: 1,
+          wrap: false,
         }),
         flexText({
-          text: headline.title,
+          text: 'REWARDS',
           weight: 'bold',
-          size: 'lg',
-          color: '#FFFFFF',
-          margin: 'sm',
+          size: 'sm',
+          color: HEADER_REWARDS,
+          align: 'end',
+          wrap: false,
         }),
       ],
-      backgroundColor: BRAND_GREEN,
+      backgroundColor: HEADER_NAVY,
       paddingAll: '16px',
     },
     body: {
       type: 'box',
       layout: 'vertical',
-      spacing: 'md',
+      spacing: 'sm',
       contents: [
+        flexText({
+          text: greeting,
+          size: 'sm',
+          color: TEXT_TITLE,
+        }),
+        flexText({
+          text: headline.title,
+          size: 'md',
+          weight: 'bold',
+          color: TEXT_TITLE,
+          margin: 'xs',
+        }),
+        flexText({
+          text: headline.delta,
+          size: 'xxl',
+          weight: 'bold',
+          color: headline.deltaColor,
+          margin: 'md',
+        }),
         {
           type: 'box',
-          layout: 'vertical',
+          layout: 'horizontal',
+          spacing: 'sm',
+          margin: 'lg',
           contents: [
+            flexText({ text: 'เหตุผล', size: 'sm', color: TEXT_MUTED, flex: 2 }),
+            flexText({ text: reason, size: 'sm', color: TEXT_MUTED, flex: 5, wrap: true }),
+          ],
+        },
+        {
+          type: 'box',
+          layout: 'horizontal',
+          spacing: 'sm',
+          margin: 'sm',
+          contents: [
+            flexText({ text: 'แต้มคงเหลือ', size: 'sm', color: TEXT_MUTED, flex: 2 }),
             flexText({
-              text: 'พอยท์อัปเดต',
-              size: 'xs',
-              color: TEXT_MUTED,
-              align: 'center',
-            }),
-            flexText({
-              text: headline.delta,
-              size: '3xl',
+              text: `${balance} แต้ม`,
+              size: 'sm',
               weight: 'bold',
-              color: headline.deltaColor,
-              align: 'center',
-              margin: 'sm',
+              color: TEXT_BALANCE,
+              flex: 5,
             }),
           ],
-          paddingAll: '12px',
-          backgroundColor: '#F9FAFB',
-          cornerRadius: '12px',
-        },
-        {
-          type: 'box',
-          layout: 'vertical',
-          spacing: 'sm',
-          contents: bodyRows,
         },
       ],
-      paddingAll: '16px',
+      paddingAll: '20px',
     },
     footer: {
       type: 'box',
       layout: 'vertical',
+      spacing: 'xs',
       contents: [
         flexText({
-          text: 'ขอบคุณที่ใช้บริการ Choongman Chicken',
+          text: `ขอบคุณที่ใช้บริการ ${BRAND_NAME} 🍗`,
+          size: 'xs',
+          color: TEXT_FOOTER,
+          wrap: true,
+        }),
+        flexText({
+          text: stamp,
           size: 'xxs',
-          color: TEXT_MUTED,
-          align: 'center',
+          color: TEXT_FOOTER,
         }),
       ],
+      backgroundColor: FOOTER_BG,
       paddingAll: '12px',
     },
   }

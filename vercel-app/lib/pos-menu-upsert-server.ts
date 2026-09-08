@@ -33,6 +33,7 @@ import {
   type PosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
 import { sanitizeMenuScopeStoreCodes } from '@/lib/pos-operating-store-code'
+import { shouldSyncPosMenuStoreScopeOnSave } from '@/lib/pos-menu-store-scope'
 
 export { resolveMenuImageColumnForUpsert } from '@/lib/pos-menu-image-upsert'
 
@@ -82,6 +83,7 @@ export type PosMenuUpsertApiBody = {
   /**
    * true 이면 설명(description_*) 컬럼만 갱신한다. 프로모션 연동 메뉴의
    * Grab/LineMan 설명 등은 메뉴 화면 설명 탭에서 저장할 수 있어야 한다.
+   * storeCodes가 함께 오면 매장 노출 범위(pos_menu_store_scopes)도 동기화한다.
    */
   descriptionOnly?: boolean
 }
@@ -976,7 +978,12 @@ export async function upsertPosMenuFromBody(
         /* items에 해당 code 없으면 무시 */
       }
     }
-    if (result.success && hasStoreCodesPayload && !isPartialMenuEdit) {
+    const shouldSyncStoreScope = shouldSyncPosMenuStoreScopeOnSave({
+      hasStoreCodesPayload,
+      isPartialMenuEdit,
+      isDescriptionOnlyEdit,
+    })
+    if (result.success && shouldSyncStoreScope) {
       const savedMenuId = String(result.newId || editingId || '').trim()
       if (!savedMenuId) {
         return {
