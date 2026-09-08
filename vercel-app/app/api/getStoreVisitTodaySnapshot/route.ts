@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseSelect, supabaseSelectFilter } from "@/lib/supabase-server"
 import { buildVisitDisplayNameMap, visitDisplayName } from "@/lib/visit-display-name"
 import { requireAuth } from "@/lib/verify-auth"
-import { isAccountingRole, isOfficeRole } from "@/lib/permissions"
+import { canViewAllStoreVisitActivity } from "@/lib/permissions"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import {
   attendanceBusinessDateStrBangkok,
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       .filter(Boolean)
       .concat(userStore)
   const isScopedRole =
-    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    !canViewAllStoreVisitActivity(userRole, userStore) &&
     (userRole.includes("manager") || userRole.includes("franchisee"))
   if (isScopedRole && allowedStores.length === 0) {
     return NextResponse.json(

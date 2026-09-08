@@ -12,6 +12,7 @@ import {
   canEditPosDeviceRoleLimits,
   canEditPosDeviceRoleLimitsForStore,
   hasOfficeStaffScope,
+  canViewAllStoreVisitActivity,
   canEditPosAttendanceManagement,
 } from "@/lib/permissions"
 import { attendanceStoreNamePostgrestFilter } from "@/lib/attendance-utils"
@@ -33,6 +34,15 @@ describe("RLS/권한 스코프 harness", () => {
     expect(hasOfficeStaffScope("staff", "Office")).toBe(true)
     expect(hasOfficeStaffScope("supervisor", "CM Rama9")).toBe(false)
     expect(canEditPosAttendanceManagement("supervisor", "CM Office")).toBe(true)
+  })
+
+  it("매장 방문 현황: 오피스 소속·슈퍼바이저는 전 매장, 매장 매니저만 자기 매장", () => {
+    expect(canViewAllStoreVisitActivity("director", "CM Office")).toBe(true)
+    expect(canViewAllStoreVisitActivity("officer", "CM Office")).toBe(true)
+    expect(canViewAllStoreVisitActivity("manager", "CM Office")).toBe(true)
+    expect(canViewAllStoreVisitActivity("supervisor", "CM Rama9")).toBe(true)
+    expect(canViewAllStoreVisitActivity("manager", "CM Future Park")).toBe(false)
+    expect(canViewAllStoreVisitActivity("franchisee", "CM Silom")).toBe(false)
   })
 
   it("오피스 소속은 직무와 무관하게 전체 매장·Office 직원 접근", () => {

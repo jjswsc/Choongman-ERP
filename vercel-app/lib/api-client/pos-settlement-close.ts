@@ -119,6 +119,22 @@ export async function getPosSettlement(params: {
   }>
 }
 
+/** 영업 시작(시재) 여부 — 결산 집계 없이 cash_actual만 조회 */
+export async function getPosBusinessOpenStatus(params: { storeCode: string }) {
+  const q = new URLSearchParams()
+  q.set('storeCode', String(params.storeCode || '').trim())
+  const res = await apiFetchWithOffline('/api/getPosBusinessOpenStatus?' + q.toString(), { cache: 'no-store' })
+  return res.json() as Promise<{
+    success?: boolean
+    allowed?: boolean
+    businessDateYmd?: string
+    blockReason?: 'none' | 'never_opened' | 'new_business_day'
+    prevBusinessDateYmd?: string
+    settlementClosed?: boolean
+    message?: string
+  }>
+}
+
 /** 결산 현금을 완료 주문 합에 맞춤(마감이어도 결제 금액만, 시재 유지) */
 export async function reconcilePosSettlementCash(params: {
   storeCode: string

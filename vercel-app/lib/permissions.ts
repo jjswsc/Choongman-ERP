@@ -222,6 +222,16 @@ export function hasOfficeStaffScope(role: string, store?: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role) || isOfficeStore(String(store || ""))
 }
 
+/**
+ * 모바일·관리자 「당일 방문 현황」에서 전 매장 방문자를 볼 수 있는지.
+ * 본사 role/회계/오피스 소속은 직무가 Manager여도 HQ 순회 현황을 봐야 하고,
+ * 슈퍼바이저는 소속 매장과 무관하게 전 매장을 본다.
+ * 매장 매니저·가맹점주만 자기 매장 방문으로 제한한다.
+ */
+export function canViewAllStoreVisitActivity(role: string, store?: string): boolean {
+  return hasOfficeStaffScope(role, store) || isSupervisorRole(role)
+}
+
 /** 미수금·미지급금에서 전체 매장 선택 가능 (본사 + 회계직원) */
 export function canManageReceivablePayableAllStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)

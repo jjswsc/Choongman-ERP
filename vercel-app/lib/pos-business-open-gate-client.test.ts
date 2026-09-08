@@ -8,6 +8,7 @@ vi.mock('@/lib/api-client', () => ({
     endHour: 10,
     endMinute: 0,
   })),
+  getPosBusinessOpenStatus: vi.fn(async () => ({ success: false })),
 }))
 
 vi.mock('@/lib/offline/settlement-offline', () => ({

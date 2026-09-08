@@ -8,6 +8,7 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import type { PosBusinessOpenBlockReason } from '@/lib/pos-business-open-gate-client'
+import { joinPosI18nAllLangs } from '@/lib/pos-i18n-all-langs'
 
 export type PosBusinessOpenGateBlockProps = {
   blocked: boolean
@@ -40,10 +41,14 @@ export function PosBusinessOpenGateBlock({
 
   const body =
     blockReason === 'new_business_day'
-      ? t('posBusinessOpenNewDayBody') ||
-        `아침에 등록한 시제는 이전 영업일${prevBusinessDateYmd ? `(${prevBusinessDateYmd})` : ''} 기준입니다. 현재 영업일${businessDateYmd ? `(${businessDateYmd})` : ''} 시제를 다시 입력·저장해 주세요.`
-      : t('posBusinessOpenRequiredBody') ||
-        '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
+      ? joinPosI18nAllLangs(
+          'posBusinessOpenNewDayBody',
+          `아침에 등록한 시제는 이전 영업일${prevBusinessDateYmd ? `(${prevBusinessDateYmd})` : ''} 기준입니다. 현재 영업일${businessDateYmd ? `(${businessDateYmd})` : ''} 시제를 다시 입력·저장해 주세요.`
+        )
+      : joinPosI18nAllLangs(
+          'posBusinessOpenRequiredBody',
+          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
+        )
 
   return (
     <div className={cn('relative min-h-0', className)}>
@@ -62,7 +67,10 @@ export function PosBusinessOpenGateBlock({
             <h2 id="pos-business-open-gate-title" className="text-lg font-semibold text-foreground">
               {title}
             </h2>
-            <p id="pos-business-open-gate-body" className="mt-2 text-sm text-muted-foreground">
+            <p
+              id="pos-business-open-gate-body"
+              className="mt-2 max-h-[min(40vh,18rem)] overflow-y-auto whitespace-pre-wrap text-left text-sm text-muted-foreground"
+            >
               {body}
             </p>
             {businessDateYmd ? (

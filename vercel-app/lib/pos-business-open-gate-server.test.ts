@@ -20,6 +20,7 @@ vi.mock('@/lib/pos-business-day-server', () => ({
 import {
   assertPosBusinessOpenForExistingOrderSave,
   assertPosBusinessOpenForOrderSave,
+  checkPosBusinessOpenServer,
 } from '@/lib/pos-business-open-gate-server'
 
 describe('assertPosBusinessOpenForOrderSave', () => {
@@ -77,5 +78,33 @@ describe('assertPosBusinessOpenForOrderSave', () => {
       terminalStoreCode: '1042',
     })
     expect(result.ok).toBe(true)
+  })
+})
+
+describe('checkPosBusinessOpenServer', () => {
+  beforeEach(() => {
+    supabaseSelectFilterMock.mockReset()
+    resolvePosStoreFilterCandidatesMock.mockReset()
+    loadPosBusinessHoursForServerMock.mockResolvedValue({
+      start: { hour: 10, minute: 0 },
+      end: { hour: 10, minute: 0 },
+    })
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T12:00:00+07:00'))
+  })
+
+  it('allows when cash_actual is on a linked store code for current business day', async () => {
+    resolvePosStoreFilterCandidatesMock.mockResolvedValue(['GFSBPOS-sima', '1040'])
+    supabaseSelectFilterMock.mockImplementation(async (_table: string, filter: string) => {
+      if (filter.includes('1040')) {
+        return [{ store_code: '1040', settle_date: '2026-06-05', cash_actual: 2000, closed: false }]
+      }
+      return []
+    })
+
+    const result = await checkPosBusinessOpenServer('GFSBPOS-sima')
+    expect(result.allowed).toBe(true)
+    expect(result.blockReason).toBe('none')
+    expect(result.businessDateYmd).toBe('2026-06-05')
   })
 })

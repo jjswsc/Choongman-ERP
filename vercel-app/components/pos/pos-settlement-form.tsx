@@ -59,6 +59,7 @@ import {
 import { useOnlineStatus } from '@/lib/offline'
 import { savePosSettlementWithOffline } from '@/lib/offline'
 import { useAuth } from '@/lib/auth-context'
+import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
 import { ADMIN_UI_LANG_OPTIONS, type LangCode, useLang } from '@/lib/lang-context'
 import { tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
@@ -1108,7 +1109,15 @@ ${footerStamp}
     return fetched ?? null
   }
 
-  const handlePrint = async () => {
+  const handlePrint = async (opts?: { force?: boolean }) => {
+    if (openMode && !opts?.force && !isPosBusinessOpenRecorded(settlement)) {
+      await appAlert(
+        t('posBusinessOpenPrintNeedSave') ||
+          t('posBusinessOpenRequiredBody') ||
+          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
+      )
+      return
+    }
     const reportTitle = openMode
       ? t('posSettlementOpenReport') || t('posBusinessOpen') || 'POS opening report'
       : t('posSettlementReport') || 'POS 결산 리포트'
@@ -1194,6 +1203,7 @@ ${footerStamp}
         try {
           await persistPosBusinessOpenAfterSave({
             storeCode: effectiveStore,
+            extraStoreCodes: [auth?.store || ''],
             settleDates: openSettleDates,
             cashActual: cashActualNum,
           })
@@ -1254,6 +1264,7 @@ ${footerStamp}
           try {
             await persistPosBusinessOpenAfterSave({
               storeCode: effectiveStore,
+              extraStoreCodes: [auth?.store || ''],
               settleDates: openSettleDates,
               cashActual: cashActualNum,
             })
@@ -1268,10 +1279,10 @@ ${footerStamp}
             closePrintPopup(webKioskPrintPopup)
             webKioskPrintPopup = null
             try {
-              await handlePrint()
+              await handlePrint({ force: true })
             } catch {
               await new Promise((resolve) => window.setTimeout(resolve, 450))
-              await handlePrint()
+              await handlePrint({ force: true })
             }
           } else if (webKioskPrintPopup && !webKioskPrintPopup.closed) {
             const p = webKioskPrintPopup
@@ -1287,12 +1298,12 @@ ${footerStamp}
               }, 800)
             } catch {
               closePrintPopup(p)
-              await handlePrint()
+              await handlePrint({ force: true })
             }
           } else {
             closePrintPopup(webKioskPrintPopup)
             webKioskPrintPopup = null
-            await handlePrint()
+            await handlePrint({ force: true })
           }
         } else {
           closePrintPopup(webKioskPrintPopup)
@@ -1457,7 +1468,7 @@ ${footerStamp}
             {t('posRefresh') || '새로고침'}
           </Button>
           {effectiveStore && (
-            <Button size="sm" variant="outline" className="h-10 gap-1.5" onClick={handlePrint}>
+            <Button size="sm" variant="outline" className="h-10 gap-1.5" onClick={() => void handlePrint()}>
               <Printer className="h-4 w-4" />
               {t('printBtn') || '인쇄'}
             </Button>

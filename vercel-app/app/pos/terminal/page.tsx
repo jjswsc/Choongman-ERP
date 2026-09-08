@@ -388,6 +388,7 @@ import {
 import { PosBusinessOpenGateBlock } from '@/components/pos/pos-business-open-gate-block'
 import { usePosBusinessOpenGate } from '@/lib/use-pos-business-open-gate'
 import { ensurePosBusinessOpenForOrder } from '@/lib/pos-business-open-gate-client'
+import { joinPosI18nAllLangs } from '@/lib/pos-i18n-all-langs'
 import {
   buildCustomerDisplayPaymentLines,
   mapLinesToCustomerDisplayItems,
@@ -576,12 +577,18 @@ export default function PosTerminalPage() {
       legacyToCanonical,
       storeLabels,
       messages: {
-        neverOpened:
-          t('posBusinessOpenRequiredBody') ||
-          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.',
-        newBusinessDay: ({ businessDateYmd, prevBusinessDateYmd }) =>
-          t('posBusinessOpenNewDayBody') ||
-          `아침에 등록한 시제는 이전 영업일${prevBusinessDateYmd ? `(${prevBusinessDateYmd})` : ''} 기준입니다. 현재 영업일(${businessDateYmd}) 시제를 다시 저장해 주세요.`,
+        neverOpened: joinPosI18nAllLangs(
+          'posBusinessOpenRequiredBody',
+          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
+        ),
+        newBusinessDay: ({ businessDateYmd, prevBusinessDateYmd }) => {
+          const body = joinPosI18nAllLangs(
+            'posBusinessOpenNewDayBody',
+            `아침에 등록한 시제는 이전 영업일${prevBusinessDateYmd ? `(${prevBusinessDateYmd})` : ''} 기준입니다. 현재 영업일(${businessDateYmd}) 시제를 다시 저장해 주세요.`
+          )
+          const dates = [prevBusinessDateYmd, businessDateYmd].filter(Boolean).join(' → ')
+          return dates ? `${body}\n\n${dates}` : body
+        },
       },
       onAlert: appAlert,
     })
@@ -593,7 +600,6 @@ export default function PosTerminalPage() {
     resolveStoreKey,
     legacyToCanonical,
     storeLabels,
-    t,
   ])
 
   /**
@@ -9076,8 +9082,10 @@ export default function PosTerminalPage() {
   const handleAddItemToCart = useCallback((item: CartPanelAddItemPayload) => {
     if (!isPosDemo && businessOpenBlocked) {
       void appAlert(
-        t('posBusinessOpenRequiredBody') ||
+        joinPosI18nAllLangs(
+          'posBusinessOpenRequiredBody',
           '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
+        )
       )
       return
     }
@@ -9088,7 +9096,7 @@ export default function PosTerminalPage() {
       // 패널 마운트 전/전환 중이면 state 직접 갱신
       setTerminalCartLines((prev) => mergeCartPanelAddItem(prev, item))
     }
-  }, [businessOpenBlocked, isPosDemo, t])
+  }, [businessOpenBlocked, isPosDemo])
 
   const renderTerminalCartPanel = (
     debugOwner: 'inline-mobile' | 'side-panel' | 'inline-delivery' | 'inline-takeout'

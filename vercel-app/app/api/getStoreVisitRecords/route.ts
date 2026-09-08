@@ -8,7 +8,7 @@ import {
 } from "@/lib/visit-display-name"
 import { addDayBangkok, visitRowBusinessDateStrBangkok } from "@/lib/attendance-utils"
 import { requireAuth } from "@/lib/verify-auth"
-import { isAccountingRole, isOfficeRole } from "@/lib/permissions"
+import { canViewAllStoreVisitActivity } from "@/lib/permissions"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 
 /** 매장 방문 통계용 raw records (VisitRecord 형식) - Supabase store_visits + employees 부서 매핑 */
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       .filter(Boolean)
       .concat(userStore)
   const isScopedRole =
-    !isOfficeRole(userRole) && !isAccountingRole(userRole) &&
+    !canViewAllStoreVisitActivity(userRole, userStore) &&
     (userRole.includes("manager") || userRole.includes("franchisee"))
   if (isScopedRole && allowedStores.length === 0) {
     return NextResponse.json([], { status: 403 })

@@ -1,4 +1,4 @@
-import { getPosBusinessDaySettings, getPosSettlement } from '@/lib/api-client'
+import { getPosBusinessDaySettings, getPosBusinessOpenStatus, getPosSettlement } from '@/lib/api-client'
 import {
   addDaysYmd,
   getPosBusinessDateStrFromConfig,
@@ -208,10 +208,41 @@ export async function checkPosBusinessOpenClient(params: {
   let allowedToday = false
   let closedToday = false
   for (const probeDate of todayDatesToCheck) {
-    if (await isBusinessOpenForCandidates(candidates, probeDate)) {
-      allowedToday = true
-      if (await isSettlementClosedForCandidates(candidates, probeDate)) closedToday = true
-      break
+    for (const sc of candidates) {
+      if (await isBusinessOpenInLocalCache(sc, probeDate)) {
+        allowedToday = true
+        if (await isSettlementClosedForCandidates(candidates, probeDate)) closedToday = true
+        break
+      }
+    }
+    if (allowedToday) break
+  }
+  if (!allowedToday) {
+    try {
+      const remote = await getPosBusinessOpenStatus({ storeCode: store })
+      if (remote?.success && remote.allowed) {
+        allowedToday = true
+        closedToday = Boolean(remote.settlementClosed)
+      } else if (remote?.success && remote.blockReason === 'new_business_day') {
+        return {
+          allowed: false,
+          businessDateYmd: String(remote.businessDateYmd || businessDateYmd),
+          blockReason: 'new_business_day',
+          prevBusinessDateYmd: remote.prevBusinessDateYmd,
+          settlementClosed: false,
+        }
+      }
+    } catch {
+      /* 가벼운 시재 API 실패 시 결산 API 폴백 */
+    }
+  }
+  if (!allowedToday) {
+    for (const probeDate of todayDatesToCheck) {
+      if (await isBusinessOpenForCandidates(candidates, probeDate)) {
+        allowedToday = true
+        if (await isSettlementClosedForCandidates(candidates, probeDate)) closedToday = true
+        break
+      }
     }
   }
   if (allowedToday) {
@@ -259,7 +290,6 @@ export async function ensurePosBusinessOpenForOrder(
 ): Promise<boolean> {
   const store = String(params.storeCode ?? '').trim()
   if (!store) {
-    await params.onAlert(params.messages.neverOpened)
     return false
   }
   const result = await checkPosBusinessOpenClient({

@@ -143,12 +143,17 @@ export async function applyPosSettlementSaveToCache(params: {
 /** 영업 시작 저장 — IndexedDB·sessionStorage·게이트 이벤트 일괄 반영 */
 export async function persistPosBusinessOpenAfterSave(params: {
   storeCode: string
+  extraStoreCodes?: string[]
   /** 영업일(게이트 기준). 달력일과 다를 수 있어 둘 다 넘기면 캐시 키를 모두 기록 */
   settleDates: string[]
   cashActual: number
 }): Promise<void> {
   const storeCode = String(params.storeCode || '').trim()
   if (!storeCode || !Number.isFinite(params.cashActual)) return
+  const storeCodes = uniqueStoreCacheKeys([
+    storeCode,
+    ...(params.extraStoreCodes || []).map((s) => String(s || '').trim()),
+  ])
   const dates = (() => {
     const seen = new Set<string>()
     const out: string[] = []
@@ -162,13 +167,15 @@ export async function persistPosBusinessOpenAfterSave(params: {
   })()
   if (dates.length === 0) return
 
-  for (const settleDate of dates) {
-    await applyPosSettlementSaveToCache({
-      storeCode,
-      settleDate,
-      cashActual: params.cashActual,
-    })
-    writePosBusinessOpenLocal({ storeCode, settleDate, cashActual: params.cashActual })
+  for (const persistStore of storeCodes) {
+    for (const settleDate of dates) {
+      await applyPosSettlementSaveToCache({
+        storeCode: persistStore,
+        settleDate,
+        cashActual: params.cashActual,
+      })
+      writePosBusinessOpenLocal({ storeCode: persistStore, settleDate, cashActual: params.cashActual })
+    }
   }
   dispatchPosBusinessOpenUpdated({ storeCode, settleDate: dates[0] })
 }

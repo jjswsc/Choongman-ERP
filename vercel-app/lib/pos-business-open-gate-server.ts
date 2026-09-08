@@ -1,5 +1,5 @@
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
+import { addDaysYmd, getBangkokDateStr, getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
 import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
 import { POS_BUSINESS_OPEN_REQUIRED_CODE } from '@/lib/pos-business-open-gate'
 import { resolvePosStoreFilterCandidates } from '@/lib/pos-store-filter-candidates'
@@ -8,6 +8,92 @@ import { normStoreKey } from '@/lib/store-list-keys'
 export type PosBusinessOpenCheckResult =
   | { ok: true; businessDateYmd: string }
   | { ok: false; businessDateYmd: string; message: string; code: string }
+
+export type PosBusinessOpenStatusPayload = {
+  allowed: boolean
+  businessDateYmd: string
+  blockReason: 'none' | 'never_opened' | 'new_business_day'
+  prevBusinessDateYmd?: string
+  settlementClosed: boolean
+}
+
+function uniqueNonEmpty(values: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of values) {
+    const v = String(raw || '').trim()
+    if (!v) continue
+    const key = normStoreKey(v) || v
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(v)
+  }
+  return out
+}
+
+function isCashActualRecorded(cashActual: unknown): boolean {
+  return cashActual != null && cashActual !== '' && Number.isFinite(Number(cashActual))
+}
+
+/**
+ * POS 게이트용 — 매장 별칭·영업일·달력일을 한 번에 조회.
+ * 판매 화면이 표시명 코드를 써도, 시재가 터미널 코드로 저장된 경우를 찾는다.
+ */
+export async function checkPosBusinessOpenServer(storeCode: string): Promise<PosBusinessOpenStatusPayload> {
+  const store = String(storeCode ?? '').trim()
+  if (!store) {
+    return { allowed: false, businessDateYmd: '', blockReason: 'never_opened', settlementClosed: false }
+  }
+
+  const hours = await loadPosBusinessHoursForServer(store)
+  const businessDateYmd = getPosBusinessDateStrFromConfig(new Date(), hours)
+  const calendarYmd = getBangkokDateStr()
+  const prevBusinessDateYmd = addDaysYmd(businessDateYmd, -1)
+  const todayDates = uniqueNonEmpty([businessDateYmd, calendarYmd])
+  const candidates = uniqueNonEmpty([
+    store,
+    ...((await resolvePosStoreFilterCandidates(store).catch(() => [])) as string[]),
+  ])
+  const dates = uniqueNonEmpty([...todayDates, prevBusinessDateYmd])
+
+  let rows: { store_code?: string; settle_date?: string; cash_actual?: number | null; closed?: boolean }[] = []
+  try {
+    const storeIn = candidates.map((c) => encodeURIComponent(c)).join(',')
+    const dateIn = dates.map((d) => encodeURIComponent(d)).join(',')
+    rows =
+      ((await supabaseSelectFilter(
+        'pos_settlements',
+        `store_code=in.(${storeIn})&settle_date=in.(${dateIn})`,
+        { limit: 80, select: 'store_code,settle_date,cash_actual,closed' }
+      )) as typeof rows) || []
+  } catch {
+    rows = []
+  }
+
+  const ymd = (raw: unknown) => String(raw ?? '').trim().slice(0, 10)
+  const todayRows = rows.filter((r) => todayDates.includes(ymd(r.settle_date)) && isCashActualRecorded(r.cash_actual))
+  if (todayRows.length > 0) {
+    return {
+      allowed: true,
+      businessDateYmd,
+      blockReason: 'none',
+      settlementClosed: todayRows.some((r) => Boolean(r.closed)),
+    }
+  }
+
+  const prevOpen = rows.some((r) => ymd(r.settle_date) === prevBusinessDateYmd && isCashActualRecorded(r.cash_actual))
+  if (prevOpen) {
+    return {
+      allowed: false,
+      businessDateYmd,
+      blockReason: 'new_business_day',
+      prevBusinessDateYmd,
+      settlementClosed: false,
+    }
+  }
+
+  return { allowed: false, businessDateYmd, blockReason: 'never_opened', settlementClosed: false }
+}
 
 /** 매장·영업일 기준 영업 시작(시재) 저장 여부 */
 export async function loadPosBusinessOpenStatus(

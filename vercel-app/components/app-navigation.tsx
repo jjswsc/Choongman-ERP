@@ -16,7 +16,7 @@ import {
   Wrench,
 } from "lucide-react"
 import { isPhysicalStoreForRepair } from "@/lib/store-repair-visibility"
-import { hasOfficeStaffScope } from "@/lib/permissions"
+import { canViewAllStoreVisitActivity, hasOfficeStaffScope } from "@/lib/permissions"
 
 const tabs = [
   { id: "home", labelKey: "tabHome" as const, icon: Home },
@@ -24,7 +24,7 @@ const tabs = [
   { id: "usage", labelKey: "tabUsage" as const, icon: Package },
   { id: "hr", labelKey: "tabHr" as const, icon: Users },
   { id: "timesheet", labelKey: "tabTimesheet" as const, icon: Clock },
-  { id: "visit", labelKey: "tabVisit" as const, icon: MapPin, officeOnly: true },
+  { id: "visit", labelKey: "tabVisit" as const, icon: MapPin },
   { id: "repair", labelKey: "tabRepair" as const, icon: Wrench, physicalStoreOnly: true },
   { id: "pettycash", labelKey: "tabPettyCash" as const, icon: Banknote },
   { id: "admin", labelKey: "tabAdmin" as const, icon: Settings, managerOrAdminOnly: true },
@@ -42,6 +42,7 @@ export function AppNavigation({ activeTab, onTabChange, ordersBadge = 0 }: AppNa
   const t = useT(lang)
 
   const isOffice = hasOfficeStaffScope(auth?.role || "", auth?.store)
+  const canSeeVisitTab = canViewAllStoreVisitActivity(auth?.role || "", auth?.store)
   const isAdmin =
     auth?.role &&
     ["director", "officer", "ceo", "hr", "manager"].some((r) =>
@@ -55,6 +56,7 @@ export function AppNavigation({ activeTab, onTabChange, ordersBadge = 0 }: AppNa
       managerOrAdminOnly?: boolean
       physicalStoreOnly?: boolean
     }
+    if (tabItem.id === "visit") return canSeeVisitTab
     if (x.officeOnly && !isOffice) return false
     if (x.adminOnly && !isAdmin) return false
     if (x.managerOrAdminOnly && !isAdmin) return false

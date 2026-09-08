@@ -27,7 +27,7 @@ import {
   type StoreVisitTodaySnapshotActive,
 } from "@/lib/api-client"
 import { translateVisitType, translateVisitPurpose } from "@/lib/visit-i18n"
-import { isOfficeRole, isOfficeStore, isSupervisorRole } from "@/lib/permissions"
+import { canViewAllStoreVisitActivity } from "@/lib/permissions"
 import { AttendanceQrScannerDialog } from "@/components/attendance/attendance-qr-scanner-dialog"
 import { MapPin, Building2, Target, LogIn, LogOut } from "lucide-react"
 
@@ -205,8 +205,7 @@ export function VisitTab() {
     )
   }
 
-  const canAccessVisit =
-    isOfficeStore(auth.store || "") || isOfficeRole(auth.role || "") || isSupervisorRole(auth.role || "")
+  const canAccessVisit = canViewAllStoreVisitActivity(auth.role || "", auth.store)
 
   if (!canAccessVisit) {
     return (

@@ -38,6 +38,7 @@ import { localizeApiMessage } from "@/lib/translate-api-message"
 import { PosBusinessOpenGateBlock } from "@/components/pos/pos-business-open-gate-block"
 import { usePosBusinessOpenGate } from "@/lib/use-pos-business-open-gate"
 import { ensurePosBusinessOpenForOrder } from "@/lib/pos-business-open-gate-client"
+import { joinPosI18nAllLangs } from "@/lib/pos-i18n-all-langs"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import {
   computePosPricing,
@@ -296,16 +297,22 @@ export default function PosOrderPage() {
       legacyToCanonical,
       storeLabels,
       messages: {
-        neverOpened:
-          t('posBusinessOpenRequiredBody') ||
-          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.',
-        newBusinessDay: ({ businessDateYmd, prevBusinessDateYmd }) =>
-          t('posBusinessOpenNewDayBody') ||
-          `아침에 등록한 시제는 이전 영업일${prevBusinessDateYmd ? `(${prevBusinessDateYmd})` : ''} 기준입니다. 현재 영업일(${businessDateYmd}) 시제를 다시 저장해 주세요.`,
+        neverOpened: joinPosI18nAllLangs(
+          "posBusinessOpenRequiredBody",
+          "오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요."
+        ),
+        newBusinessDay: ({ businessDateYmd, prevBusinessDateYmd }) => {
+          const body = joinPosI18nAllLangs(
+            "posBusinessOpenNewDayBody",
+            `아침에 등록한 시제는 이전 영업일${prevBusinessDateYmd ? `(${prevBusinessDateYmd})` : ""} 기준입니다. 현재 영업일(${businessDateYmd}) 시제를 다시 저장해 주세요.`
+          )
+          const dates = [prevBusinessDateYmd, businessDateYmd].filter(Boolean).join(" → ")
+          return dates ? `${body}\n\n${dates}` : body
+        },
       },
       onAlert: appAlert,
     })
-  }, [storeCode, resolveStoreKey, legacyToCanonical, storeLabels, t])
+  }, [storeCode, resolveStoreKey, legacyToCanonical, storeLabels])
   const { lastSyncedAtMs } = usePosMenusCatalogLiveRefresh(
     React.useCallback((list) => setMenus(list), []),
     storeCode || null
@@ -416,8 +423,8 @@ export default function PosOrderPage() {
 
   React.useEffect(() => {
     const def = auth?.store || effectiveStores[0] || "ST01"
-    if (!storeCode && def) setStoreCode(def)
-  }, [auth?.store, effectiveStores, storeCode])
+    if (!storeCode && def) setStoreCode(resolveStoreKey(def) || def)
+  }, [auth?.store, effectiveStores, storeCode, resolveStoreKey])
 
   const loadTodaySales = React.useCallback(() => {
     if (!storeCode) return
