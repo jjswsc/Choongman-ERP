@@ -4686,6 +4686,10 @@ export const i18n = {
     bankPosChannelSettleDialogTitle: '채널 정산 (수수료 분개)',
     bankPosChannelSettleDialogDesc:
       'NET=이 입금액, FEE=GROSS−NET. 직원은 칩+저장만 하면 됩니다. 주말 카드는 옆날 POS를 합쳐 맞출 수 있습니다. 이 화면은 수수료가 틀릴 때 수정용입니다.',
+    helpSum_admin_petty_cash:
+      '매장·본사 패티캐시 입출금과 거래 후 잔액을 봅니다. 매장 한 곳을 고르면 현재 잔액이 위에 나오고, 내역·월별 현황 표에도 잔액 열이 있습니다.',
+    helpHow_admin_petty_cash:
+      '① 매장을 선택한 뒤 기간을 지정하고 검색합니다. 한 매장이면 상단에 현재 잔액이 표시됩니다.\n② 내역 탭과 월별 현황 탭 모두 각 거래 후의 잔액 열이 있습니다. 월별 현황에서 계정과목·수정·삭제를 합니다.\n③ 본사·회계·오피스 소속은 전 매장을 고를 수 있고, 매장 계정은 자기 매장(및 허용된 추가 매장)만 봅니다.',
     helpSum_admin_pos_settlement:
       '일별 POS 결산·채널 정산(카드·배달 수수료). 통장 입금은 매출 수령, 수수료는 채널 정산 분개로 처리합니다.',
     helpHow_admin_pos_settlement:
@@ -13012,6 +13016,10 @@ Only matters the employee must handle personally on a working day:
     bankPosChannelSettleDialogTitle: 'Channel settlement (fee journal)',
     bankPosChannelSettleDialogDesc:
       'NET = this deposit; FEE = GROSS − NET. Staff only tap a chip and save. Fri–Mon card deposits may include neighboring POS days. Use this dialog to correct fees.',
+    helpSum_admin_petty_cash:
+      'Store/HQ petty cash in/out with running balance after each line. Pick one store to see current cash on hand; the balance column is on both List and Monthly.',
+    helpHow_admin_petty_cash:
+      '① Choose a store and period, then search. A single store shows current balance at the top.\n② List and Monthly both include a running-balance column. Use Monthly to set account subjects and to edit/delete.\n③ HQ, accounting, and office-based staff can pick any store; store accounts see their store (plus extra stores if allowed).',
     helpSum_admin_pos_settlement:
       'Daily POS settlement and channel clearing (card/delivery fees). Bank: Sales collection; fees: channel settlement journal.',
     helpHow_admin_pos_settlement:

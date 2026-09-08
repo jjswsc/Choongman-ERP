@@ -44,7 +44,7 @@ import { cn } from "@/lib/utils"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { getBangkokRecentYearMonths, getBangkokMonthRange } from "@/lib/bangkok-time"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { canSearchAllPettyCashStores, scopedPettyCashStoreOptions } from "@/lib/petty-cash-store-scope"
 import {
   getPettyCashOptions,
   getPettyCashList,
@@ -84,6 +84,7 @@ import {
   aggregatePettyCashByAccount,
   aggregatePettyCashByDay,
   computePettyCashPeriodSummary,
+  latestPettyCashBalanceAfter,
   resolvePettyPeriodPresetRange,
   type PettyAdminViewMode,
   type PettyCashPeriodSummary,
@@ -215,7 +216,7 @@ export function PettyCashTab({
   const editReceiptFileInputRef = useRef<HTMLInputElement>(null)
   const editReceiptCameraInputRef = useRef<HTMLInputElement>(null)
 
-  const canSearchAll = isOfficeRole(auth?.role || "")
+  const canSearchAll = canSearchAllPettyCashStores(auth?.role || "", auth?.store)
   /** petty_cash.user_name 은 로그인 시점 문자열이라 직원 마스터 name 과 1:1이 아닐 수 있음 — 스케줄과 동일한 매칭 사용 */
   const [staffForNickMatch, setStaffForNickMatch] = useState<StaffRowForScheduleMatch[]>([])
 
@@ -279,21 +280,22 @@ export function PettyCashTab({
         setAddStore(opts.stores?.[0] || auth.store || "")
         setAddDepartment(opts.officeDepartments?.[0] || "")
       } else {
-        const st = opts.stores?.includes(auth.store!) ? [auth.store!] : (opts.stores?.length ? opts.stores : [auth.store!])
+        const st = scopedPettyCashStoreOptions(opts.stores || [], auth.store!, auth.allowedStores)
         setStores(st)
-        setListStore(auth.store!)
-        setMonthlyStore(auth.store!)
-        setAddStore(auth.store!)
+        setListStore((prev) => (st.includes(prev) ? prev : st[0] || auth.store!))
+        setMonthlyStore((prev) => (st.includes(prev) ? prev : st[0] || auth.store!))
+        setAddStore((prev) => (st.includes(prev) ? prev : st[0] || auth.store!))
       }
     }).catch(() => {
       if (auth?.store) {
-        setStores([auth.store])
-        setListStore(auth.store)
-        setMonthlyStore(auth.store)
-        setAddStore(auth.store)
+        const st = scopedPettyCashStoreOptions([auth.store], auth.store, auth.allowedStores)
+        setStores(st)
+        setListStore(st[0] || auth.store)
+        setMonthlyStore(st[0] || auth.store)
+        setAddStore(st[0] || auth.store)
       }
     })
-  }, [auth?.store, auth?.role, canSearchAll])
+  }, [auth?.store, auth?.role, auth?.allowedStores, canSearchAll])
 
   useEffect(() => {
     if (!adminEnhancedSearch || !canSearchAll) return
@@ -455,6 +457,19 @@ export function PettyCashTab({
     () => applyPettyCashClientFilters(monthlyData, clientFilterOpts),
     [monthlyData, clientFilterOpts]
   )
+
+  const listSingleStore = listScope === "store" && listStore !== "All" && Boolean(listStore)
+  const monthlySingleStore = monthlyScope === "store" && monthlyStore !== "All" && Boolean(monthlyStore)
+  const listLedgerBalance = useMemo(() => {
+    if (!listSingleStore) return null
+    if (adminEnhancedSearch) return latestPettyCashBalanceAfter(adminListFullRows) ?? 0
+    if (listPage !== 1) return null
+    return latestPettyCashBalanceAfter(listData) ?? 0
+  }, [listSingleStore, adminEnhancedSearch, adminListFullRows, listPage, listData])
+  const monthlyLedgerBalance = useMemo(() => {
+    if (!monthlySingleStore) return null
+    return latestPettyCashBalanceAfter(monthlyData) ?? 0
+  }, [monthlySingleStore, monthlyData])
 
   const listPeriodSummary = useMemo(() => {
     if (!adminEnhancedSearch) return null
@@ -1055,6 +1070,16 @@ export function PettyCashTab({
 
   const fmt = (n: number) => (n || 0).toLocaleString()
 
+  const renderLedgerBalanceBanner = (balance: number | null, loading: boolean) => {
+    if (loading || balance == null) return null
+    return (
+      <div className="rounded-xl border-2 border-primary/30 bg-primary/5 px-4 py-3 sm:px-6">
+        <p className="text-xs font-medium text-muted-foreground">{t("pettyCurrentBalance") || "현재 잔액"}</p>
+        <p className="mt-0.5 text-xl font-bold tabular-nums text-primary sm:text-2xl">฿{fmt(balance)}</p>
+      </div>
+    )
+  }
+
   const renderPettySummaryCards = (
     summary: PettyCashPeriodSummary | null,
     meta?: { rpc: PettyCashSummaryResult | null; loadedRowCount: number }
@@ -1576,6 +1601,7 @@ ${rows.map((row, ri) => {
                 </div>
                 {renderAdminClientFilters()}
               </section>
+              {renderLedgerBalanceBanner(listLedgerBalance, listLoading)}
               {renderPettySummaryCards(listPeriodSummary, {
                 rpc: listSummaryRpc,
                 loadedRowCount: adminListFullRows.length,
@@ -1593,13 +1619,14 @@ ${rows.map((row, ri) => {
                 ) : filteredListData.length === 0 ? (
                   <p className="px-4 py-10 text-center text-sm text-muted-foreground">{(adminEnhancedSearch ? adminListFullRows.length : listData.length) === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
-                  <table className={cn("w-full text-sm", canSearchAll ? "min-w-[520px]" : "min-w-[460px]")}>
+                  <table className={cn("w-full text-sm", canSearchAll ? "min-w-[600px]" : "min-w-[520px]")}>
                     <thead className="sticky top-0 z-[1] border-b border-border/60 bg-muted/60 backdrop-blur-sm">
                       <tr>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColDate") || "날짜"}</th>
                         {canSearchAll && <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("store") || "매장"}</th>}
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColType") || "유형"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColAmount") || "금액"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wide text-foreground sm:py-3 sm:text-xs whitespace-nowrap">{t("pettyColBalance") || "잔액"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 min-w-[7rem]">{t("vendor") || "거래처"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3 min-w-[12rem]">{t("pettyColMemo") || "내용"}</th>
                         <th className="px-3 py-2.5 text-center text-sm font-bold tracking-wide text-muted-foreground sm:py-3">{t("pettyColUser") || "등록자"}</th>
@@ -1617,6 +1644,7 @@ ${rows.map((row, ri) => {
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
                           </td>
+                          <td className="px-3 py-2.5 text-center align-top font-medium whitespace-nowrap tabular-nums text-sm">{fmt(r.balance_after ?? 0)}</td>
                           <td className="px-3 py-2.5 text-center align-top truncate text-sm max-w-[8rem]" title={vendorDisplayName(r.vendorCode)}>
                             {r.trans_type === "expense" ? vendorDisplayName(r.vendorCode) : "—"}
                           </td>
@@ -1975,6 +2003,7 @@ ${rows.map((row, ri) => {
                 </div>
                 {renderAdminClientFilters()}
               </section>
+              {renderLedgerBalanceBanner(monthlyLedgerBalance, monthlyLoading)}
               {renderPettySummaryCards(monthlyPeriodSummary, {
                 rpc: monthlySummaryRpc,
                 loadedRowCount: monthlyData.length,

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
-import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { resolvePettyCashEffectiveStore } from '@/lib/petty-cash-store-scope'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
@@ -11,6 +10,9 @@ import {
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+
+/** 잔액 계산용 전체 이력. getPettyCashList 와 동일 상한 */
+const PETTY_CASH_LEDGER_SELECT_LIMIT = 20000
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -50,21 +52,15 @@ export async function GET(request: NextRequest) {
 
   if (storeFilter === 'undefined' || storeFilter === 'null' || storeFilter === 'All') storeFilter = ''
 
-  const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
-  let effectiveStore = ''
-  if (!isOffice) {
-    if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {
-      const fallbackStore = String(allowedStores[0] || '').trim()
-      if (!fallbackStore) return NextResponse.json([], { status: 403, headers })
-      effectiveStore = fallbackStore
-    } else {
-      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
-      if (!allowed) return NextResponse.json([], { status: 403, headers })
-      effectiveStore = storeFilter
-    }
-  } else if (scopeFilter === 'office') {
-    effectiveStore = departmentFilter ? 'Office-' + departmentFilter : 'Office'
-  } else if (storeFilter) effectiveStore = storeFilter
+  const { effectiveStore, forbidden } = resolvePettyCashEffectiveStore({
+    scopeFilter,
+    storeFilter,
+    departmentFilter,
+    userStore,
+    userRole,
+    allowedStores,
+  })
+  if (forbidden) return NextResponse.json([], { status: 403, headers })
 
   let startStr: string
   let endStr: string
@@ -109,7 +105,7 @@ export async function GET(request: NextRequest) {
         try {
           rows = (await supabaseSelectFilter('petty_cash_transactions', filter, {
             order: 'trans_date.asc,id.asc',
-            limit: 2000,
+            limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
             select: PETTY_CASH_LIST_COLS,
           })) as typeof rows
         } catch (e) {
@@ -117,7 +113,7 @@ export async function GET(request: NextRequest) {
             markSaasTenantColumnMissing('petty_cash_transactions')
             rows = (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
               order: 'trans_date.asc,id.asc',
-              limit: 2000,
+              limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
               select: PETTY_CASH_LIST_COLS,
             })) as typeof rows
           } else {
@@ -130,7 +126,7 @@ export async function GET(request: NextRequest) {
         try {
           rows = (await supabaseSelectFilter('petty_cash_transactions', filter, {
             order: 'trans_date.asc,id.asc',
-            limit: 2000,
+            limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
             select: PETTY_CASH_LIST_COLS,
           })) as typeof rows
         } catch (e) {
@@ -138,7 +134,7 @@ export async function GET(request: NextRequest) {
             markSaasTenantColumnMissing('petty_cash_transactions')
             rows = (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
               order: 'trans_date.asc,id.asc',
-              limit: 2000,
+              limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
               select: PETTY_CASH_LIST_COLS,
             })) as typeof rows
           } else {
@@ -152,7 +148,7 @@ export async function GET(request: NextRequest) {
       try {
         rows = (await supabaseSelectFilter('petty_cash_transactions', filter, {
           order: 'trans_date.asc,id.asc',
-          limit: 2000,
+          limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
           select: PETTY_CASH_LIST_COLS,
         })) as typeof rows
       } catch (e) {
@@ -160,7 +156,7 @@ export async function GET(request: NextRequest) {
           markSaasTenantColumnMissing('petty_cash_transactions')
           rows = (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
             order: 'trans_date.asc,id.asc',
-            limit: 2000,
+            limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
             select: PETTY_CASH_LIST_COLS,
           })) as typeof rows
         } else {

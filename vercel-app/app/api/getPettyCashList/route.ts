@@ -3,8 +3,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
-import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { resolvePettyCashEffectiveStore } from '@/lib/petty-cash-store-scope'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
@@ -53,31 +52,20 @@ export async function GET(request: NextRequest) {
 
   if (storeFilter === 'undefined' || storeFilter === 'null' || storeFilter === 'All') storeFilter = ''
 
-  const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
-  let effectiveStore = ''
-  if (!isOffice) {
-    if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {
-      const fallbackStore = String(allowedStores[0] || '').trim()
-      if (!fallbackStore) {
-        return NextResponse.json(
-          { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE },
-          { status: 403, headers }
-        )
-      }
-      effectiveStore = fallbackStore
-    } else {
-      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeFilter))
-      if (!allowed) {
-        return NextResponse.json(
-          { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE },
-          { status: 403, headers }
-        )
-      }
-      effectiveStore = storeFilter
-    }
-  } else if (scopeFilter === 'office') {
-    effectiveStore = departmentFilter ? 'Office-' + departmentFilter : 'Office'
-  } else if (storeFilter) effectiveStore = storeFilter
+  const { effectiveStore, forbidden } = resolvePettyCashEffectiveStore({
+    scopeFilter,
+    storeFilter,
+    departmentFilter,
+    userStore,
+    userRole,
+    allowedStores,
+  })
+  if (forbidden) {
+    return NextResponse.json(
+      { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE },
+      { status: 403, headers }
+    )
+  }
 
   try {
     let rows: {

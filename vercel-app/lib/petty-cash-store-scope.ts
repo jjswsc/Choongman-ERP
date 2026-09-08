@@ -1,4 +1,4 @@
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 export type PettyCashStoreScopeInput = {
@@ -10,7 +10,31 @@ export type PettyCashStoreScopeInput = {
   allowedStores: string[]
 }
 
-/** getPettyCashList / getPettyCashSummary 공통 매장·본사 범위 */
+/** 전 매장 Petty Cash 조회 — 본사 role·회계·오피스 소속(순회 SV 포함) */
+export function canSearchAllPettyCashStores(role: string, store?: string): boolean {
+  return hasOfficeStaffScope(role, store)
+}
+
+/** 매장 직원·가맹: 본인 매장 + extra_stores(allowedStores)만 선택지에 둠 */
+export function scopedPettyCashStoreOptions(
+  masterStores: string[],
+  userStore: string,
+  allowedStores?: string[] | null
+): string[] {
+  const home = String(userStore || '').trim()
+  const allowed = Array.from(
+    new Set(
+      [home, ...(allowedStores || [])]
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+    )
+  )
+  const master = new Set((masterStores || []).map((s) => String(s || '').trim()).filter(Boolean))
+  const picked = allowed.filter((s) => master.has(s) || s === home)
+  return picked.length ? picked : home ? [home] : []
+}
+
+/** getPettyCashList / getPettyCashSummary / getPettyCashMonthDetail 공통 매장·본사 범위 */
 export function resolvePettyCashEffectiveStore(input: PettyCashStoreScopeInput): {
   effectiveStore: string
   forbidden: boolean
@@ -18,8 +42,7 @@ export function resolvePettyCashEffectiveStore(input: PettyCashStoreScopeInput):
   let storeFilter = String(input.storeFilter || '').trim()
   if (storeFilter === 'undefined' || storeFilter === 'null' || storeFilter === 'All') storeFilter = ''
 
-  const userRole = String(input.userRole || '').toLowerCase()
-  const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
+  const isOffice = canSearchAllPettyCashStores(input.userRole, input.userStore)
 
   if (!isOffice) {
     if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {

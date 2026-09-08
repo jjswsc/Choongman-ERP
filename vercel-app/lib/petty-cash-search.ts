@@ -230,3 +230,20 @@ export function computePettyCashPeriodSummary(rows: PettyCashItem[]): PettyCashP
     rowCount: (rows || []).length,
   }
 }
+
+/** 조회 구간 안에서의 최신 거래 후 잔액(매장 1곳 원장). 행이 없으면 null */
+export function latestPettyCashBalanceAfter(rows: PettyCashItem[]): number | null {
+  let best: PettyCashItem | null = null
+  for (const r of rows || []) {
+    if (!best) {
+      best = r
+      continue
+    }
+    const dateCmp = String(r.trans_date || '').localeCompare(String(best.trans_date || ''))
+    if (dateCmp > 0 || (dateCmp === 0 && Number(r.id || 0) > Number(best.id || 0))) {
+      best = r
+    }
+  }
+  if (!best) return null
+  return Number(best.balance_after ?? 0)
+}

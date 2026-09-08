@@ -29,6 +29,8 @@ import { translateApiMessage } from '@/lib/translate-api-message'
 import { OfflineBanner } from '@/components/offline-banner'
 import { ListPaginationBar } from '@/components/list-pagination-bar'
 import { cn } from '@/lib/utils'
+import { hasOfficeStaffScope } from '@/lib/permissions'
+import { scopedPettyCashStoreOptions } from '@/lib/petty-cash-store-scope'
 
 function normalizePettyCashListPayload(data: unknown): { items: PettyCashItem[]; total: number; page: number } {
   if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray((data as { items?: unknown }).items)) {
@@ -37,12 +39,6 @@ function normalizePettyCashListPayload(data: unknown): { items: PettyCashItem[];
   }
   const arr = Array.isArray(data) ? (data as PettyCashItem[]) : []
   return { items: arr, total: arr.length, page: 1 }
-}
-
-const OFFICE_ROLES = ['director', 'secretary', 'officer', 'ceo', 'hr']
-function isOfficeRole(role: string | undefined): boolean {
-  const r = (role || '').toLowerCase()
-  return OFFICE_ROLES.some((o) => r.includes(o))
 }
 
 const typeKeys: Record<string, string> = {
@@ -63,7 +59,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
   const t = useT(lang)
   const { stores } = useStoreList()
   const online = useOnlineStatus()
-  const isOffice = isOfficeRole(auth?.role)
+  const isOffice = hasOfficeStaffScope(auth?.role || '', auth?.store)
   const storeCode = auth?.store || stores[0] || ''
 
   const [storeOptions, setStoreOptions] = React.useState<string[]>([])
@@ -86,7 +82,8 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
   const [addSaving, setAddSaving] = React.useState(false)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
 
-  const effectiveStore = isOffice ? (selectedStoreForView || storeOptions[0] || storeCode) : storeCode
+  const canPickStore = isOffice || storeOptions.length > 1
+  const effectiveStore = canPickStore ? (selectedStoreForView || storeOptions[0] || storeCode) : storeCode
 
   React.useEffect(() => {
     const memos = [...new Set(listData.map((r) => (r.memo || "").trim()).filter(Boolean))]
@@ -115,9 +112,11 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
     load()
       .then((opts: { stores: string[]; officeDepartments: string[] }) => {
         const list = opts.stores?.filter((s) => s && s !== 'All') || (auth?.store ? [auth.store] : [])
-        const options = list.length ? list : auth?.store ? [auth.store] : []
+        const options = isOffice
+          ? (list.length ? list : auth?.store ? [auth.store] : [])
+          : scopedPettyCashStoreOptions(list, auth?.store || '', auth?.allowedStores)
         setStoreOptions(options)
-        if (isOffice) {
+        if (isOffice || options.length > 1) {
           setSelectedStoreForView((prev) => (options.includes(prev) ? prev : options[0] || ''))
           setAddStore((prev) => (options.includes(prev) ? prev : options[0] || ''))
         } else {
@@ -129,7 +128,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
         setStoreOptions(list)
         if (!isOffice) setAddStore(auth?.store || '')
       })
-  }, [auth?.store, stores, offlineAware, isOffice])
+  }, [auth?.store, auth?.allowedStores, stores, offlineAware, isOffice])
 
   const loadList = React.useCallback(
     (page: number) => {
@@ -254,7 +253,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
             <h2 className="text-lg font-semibold">{t('adminPettyCash') || '패티 캐쉬'}</h2>
           </div>
 
-          {isOffice && storeOptions.length > 0 && (
+          {canPickStore && storeOptions.length > 0 && (
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-muted-foreground">{t('store') || '매장'}</span>
               <Select
@@ -318,12 +317,13 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
           )}
 
           <div className="overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-xl border">
-            <table className="w-full min-w-[400px] text-sm">
+            <table className="w-full min-w-[480px] text-sm">
               <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
                 <tr className="border-b bg-muted/30">
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColDate') || '날짜'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColType') || '유형'}</th>
                   <th className="px-4 py-3 text-right font-semibold">{t('pettyColAmount') || '금액'}</th>
+                  <th className="px-4 py-3 text-right font-semibold">{t('pettyColBalance') || '잔액'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColMemo') || '내용'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColUser') || '등록자'}</th>
                 </tr>
@@ -331,7 +331,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
               <tbody>
                 {listData.length === 0 && !listLoading ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
                       {t('pettyNoData') || '데이터가 없습니다.'}
                     </td>
                   </tr>
@@ -350,6 +350,9 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
                       >
                         {r.amount >= 0 ? '' : '-'}
                         {fmt(Math.abs(r.amount))}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium tabular-nums">
+                        {fmt(r.balance_after ?? 0)}
                       </td>
                       <td className="px-4 py-3 truncate max-w-[160px]">
                         {getMemo(r.memo)}
@@ -378,7 +381,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div>
                   <label className="text-xs text-muted-foreground">{t('store') || '매장'}</label>
-                  {isOffice && storeOptions.length > 0 ? (
+                  {canPickStore && storeOptions.length > 0 ? (
                     <Select value={addStore} onValueChange={setAddStore}>
                       <SelectTrigger className="h-9 mt-1">
                         <SelectValue placeholder={t('store') || '매장 선택'} />
