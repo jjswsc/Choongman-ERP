@@ -1,4 +1,5 @@
-import { isAccountingRole, isDirectorRole, isOfficeRole } from '@/lib/permissions'
+import { canManageOfficePayroll } from '@/lib/office-payroll-access'
+import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 
 /** 본사(Office·본사 등) 매장명인지 — 지출 승인 권한 분기용 */
 export function isExpenseAccrualHqStoreName(storeName: string | undefined): boolean {
@@ -8,21 +9,23 @@ export function isExpenseAccrualHqStoreName(storeName: string | undefined): bool
 }
 
 /**
- * 본사(Office) 명의 지급예정 승인·반려·삭제 — 임원, 또는 오피스 급여 권한이 있는 회계
+ * 본사(Office) 명의 지급예정 승인·반려·삭제
+ * — 임원, 또는 오피스 급여 담당(employees.can_manage_office_payroll). 회계 role이 아니어도 됨(Officer 급여 담당 포함).
  */
 export function canApproveHqExpenseAccrual(
   userRoleRaw: string | undefined,
-  canManageOfficePayroll?: boolean
+  canManageOfficePayrollFlag?: boolean
 ): boolean {
-  const role = String(userRoleRaw || '')
-  if (isDirectorRole(role)) return true
-  return isAccountingRole(role) && canManageOfficePayroll === true
+  return canManageOfficePayroll({
+    role: userRoleRaw,
+    canManageOfficePayroll: canManageOfficePayrollFlag,
+  })
 }
 
 /**
  * 지급예정 승인·반려 가능 역할
- * - 본사(Office 등) 명의 건: 임원급(director·ceo·hr), 또는 오피스 급여 권한이 있는 회계
- * - 그 외 매장 건: 본사 권한 전체(officer 포함) + 회계 (기존에는 officer만이라 director·회계는 UI에 체크가 안 나옴)
+ * - 본사(Office 등) 명의 건: 임원급, 또는 오피스 급여 담당(역할 무관)
+ * - 그 외 매장 건: 본사 권한 전체(officer 포함) + 회계
  */
 export function canApproveExpenseAccrual(
   userRoleRaw: string | undefined,
@@ -71,7 +74,7 @@ export function isExpenseAccrualDeletableByPaymentState(input: {
 }
 
 /**
- * 본사(Office) 명의 지급예정 삭제 — 승인 권한과 동일 (임원, 또는 오피스 급여 권한이 있는 회계)
+ * 본사(Office) 명의 지급예정 삭제 — 승인 권한과 동일 (임원, 또는 오피스 급여 담당)
  */
 export function canDeleteHqExpenseAccrual(
   userRoleRaw: string | undefined,
@@ -83,7 +86,7 @@ export function canDeleteHqExpenseAccrual(
 /**
  * 지급예정 삭제 권한
  * - 매장 미선택: 본사·회계
- * - 본사(Office) 명의: 임원, 또는 오피스 급여 권한이 있는 회계
+ * - 본사(Office) 명의: 임원, 또는 오피스 급여 담당
  * - 그 외 매장: 해당 건 승인 가능 역할과 동일 + 지급 상태 가드
  */
 export function canDeleteExpenseAccrual(input: {

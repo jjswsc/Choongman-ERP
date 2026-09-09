@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           message:
-            '승인 권한이 없습니다. 본사(Office·본사 등) 명의 건은 임원(director·ceo·hr) 또는 오피스 급여 권한이 있는 회계, 그 외 매장 건은 본사(임원·오피스) 또는 회계에서 승인할 수 있습니다.',
+            '승인 권한이 없습니다. 본사(Office·본사 등) 명의 건은 임원 또는 오피스 급여 담당, 그 외 매장 건은 본사(임원·오피스) 또는 회계에서 승인할 수 있습니다.',
         },
         { status: 403, headers }
       )

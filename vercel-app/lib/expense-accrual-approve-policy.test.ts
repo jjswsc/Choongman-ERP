@@ -97,8 +97,14 @@ describe('canApproveExpenseAccrual', () => {
     expect(canApproveExpenseAccrual('accounting', '본사', true)).toBe(true)
   })
 
-  it('does not let officer with office payroll approve HQ-named accruals', () => {
-    expect(canApproveExpenseAccrual('officer', 'CM Office', true)).toBe(false)
+  it('lets officer with office payroll approve HQ-named accruals', () => {
+    expect(canApproveExpenseAccrual('officer', 'CM Office', true)).toBe(true)
+    expect(canApproveExpenseAccrual('officer', 'Office', true)).toBe(true)
+  })
+
+  it('blocks officer on HQ-named accruals without office payroll flag', () => {
+    expect(canApproveExpenseAccrual('officer', 'CM Office')).toBe(false)
+    expect(canApproveExpenseAccrual('officer', 'CM Office', false)).toBe(false)
   })
 
   it('lets director and secretary approve HQ-named accruals', () => {
@@ -189,7 +195,7 @@ describe('canDeleteExpenseAccrual', () => {
     ).toBe(false)
   })
 
-  it('does not let officer with office payroll delete HQ-named accruals', () => {
+  it('lets officer with office payroll delete HQ-named unpaid accruals', () => {
     expect(
       canDeleteExpenseAccrual({
         userRole: 'officer',
@@ -198,7 +204,7 @@ describe('canDeleteExpenseAccrual', () => {
         paidAmount: 0,
         canManageOfficePayroll: true,
       })
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it('lets director delete HQ-named accruals', () => {
