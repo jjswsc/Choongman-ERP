@@ -1544,6 +1544,7 @@ function invoiceFromPageBeatsCurrent(fromPage: string, current?: string): boolea
   const page = String(fromPage || '').trim()
   const cur = String(current || '').trim()
   if (!page || page === cur) return false
+  if (compactInvoiceToken(page).toUpperCase() === compactInvoiceToken(cur).toUpperCase()) return false
   if (isTruncatedShopeeInvoiceNo(cur) && !isTruncatedShopeeInvoiceNo(page)) return true
   if (isTruncatedShopeeInvoiceNo(cur) && page.startsWith('TRS')) return page.length > cur.length
   if (/^[IT]M20/i.test(page) && /^[IT1]M20/i.test(cur) && page.length >= cur.length) return true
@@ -1782,7 +1783,8 @@ export function repairExtractedPurchaseTaxInvoice(
     const fromPage =
       recoverShopeeInvoiceNo(pageText, hint?.taxMonth) ||
       recoverGrabInvoiceNo(pageText, sellerTaxId, hint?.taxMonth) ||
-      recoverKasikornInvoiceNo(pageText)
+      recoverKasikornInvoiceNo(pageText) ||
+      extractInvoiceNo(pageText, sellerTaxId, hint?.taxMonth, buyerTin)
     if (fromPage && invoiceFromPageBeatsCurrent(fromPage, invoiceNo)) invoiceNo = fromPage
     const prefixed = invoiceNo ? attachOfficePrefix(pageText, invoiceNo) : undefined
     if (prefixed) invoiceNo = prefixed

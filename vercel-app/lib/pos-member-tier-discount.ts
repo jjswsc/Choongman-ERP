@@ -12,6 +12,7 @@ import {
   menuIdsForCollabLineWithCatalog,
   menuMatchesCollabScope,
 } from '@/lib/pos-collab-discount'
+import { selectedDiscountQuantityForLine } from '@/lib/pos-manual-line-discount'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 
 /** 배달 주문은 멤버 연결·포인트 적립만 허용, 등급 할인 불가 */
@@ -36,7 +37,7 @@ function lineIsExcludedFromTier(
   const mode = lineDiscountModeByItemId?.[line.id] ?? 'none'
   if (mode === 'cancel') return true
   if (!hasSelectedDiscountScope && mode === 'service') return true
-  if (hasSelectedDiscountScope && mode !== 'discount') return true
+  if (hasSelectedDiscountScope && selectedDiscountQuantityForLine(line, lineDiscountModeByItemId) <= 0) return true
   return false
 }
 
@@ -92,7 +93,10 @@ export function computeMemberTierDiscountEligibleSubtotal(params: {
     if (lineIsExcludedFromTier(line, lineDiscountModeByItemId, hasSelectedDiscountScope)) continue
     if (lineFailsPromoOrSetExclusion(line, menuById, policy)) continue
     if (!lineMatchesTierScope(line, menuById, policy)) continue
-    total += Math.max(0, Number(line.price || 0)) * lineQty(line)
+    const qty = hasSelectedDiscountScope
+      ? selectedDiscountQuantityForLine(line, lineDiscountModeByItemId)
+      : lineQty(line)
+    total += Math.max(0, Number(line.price || 0)) * qty
   }
   return Math.max(0, total)
 }

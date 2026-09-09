@@ -157,7 +157,7 @@ export function fixOcrInvoiceLetterIPrefix(raw: string): string {
   if (/^1NCT(?=\d)/i.test(s)) return s.replace(/^1NCT/i, 'INCT')
   if (/^1VT(?=[-/]?\d)/i.test(s)) return s.replace(/^1VT/i, 'IVT')
   if (/^1M(?=20\d{12}$)/i.test(s)) return s.replace(/^1M/i, 'IM')
-  if (/^[Il1|]V(?=\d{6})/.test(s)) return s.replace(/^[Il1|]V/, 'IV')
+  if (/^[Il1|][Vv](?=\d{6})/.test(s)) return s.replace(/^[Il1|][Vv]/, 'IV')
   return s
 }
 
@@ -407,6 +407,7 @@ export function trimPurchaseTaxSellerName(raw: unknown): string {
   s = s.replace(/(จำกัด(?:\s*\(มหาชน\))?)ใบ$/u, '$1')
   const entity = s.match(/^(.*?(?:บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วน)\s+.{1,80}?จำกัด(?:\s*\(มหาชน\))?)/)
   if (entity) s = entity[1].trim()
+  s = s.replace(/(จำกัด(?:\s*\(มหาชน\))?)[\s\d./\-]{1,24}$/u, '$1')
   s = s.replace(/\s+\d[\d\s./\-]{0,24}$/, '').trim()
   return s.slice(0, 200)
 }

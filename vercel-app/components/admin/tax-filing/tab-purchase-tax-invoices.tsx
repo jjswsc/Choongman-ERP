@@ -92,7 +92,10 @@ import {
 } from "@/lib/purchase-tax-invoice-layout"
 import {
   isPurchaseTaxScanRunning,
+  releasePurchaseTaxScanKeepAliveUnlock,
   startPurchaseTaxScanKeepAlive,
+  unlockPurchaseTaxScanKeepAlive,
+  updatePurchaseTaxScanKeepAliveProgress,
 } from "@/lib/purchase-tax-invoice-scan-keepalive"
 import {
   clearPurchaseTaxScanFiles,
@@ -874,6 +877,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     const markScanTitle = (n: number, total: number) => {
       if (typeof document === "undefined") return
       document.title = `(${n}/${total}) ${pageTitleBase}`
+      updatePurchaseTaxScanKeepAliveProgress(n, total)
     }
     const keepAlive = startPurchaseTaxScanKeepAlive()
     markPurchaseTaxScanSession(true)
@@ -1269,7 +1273,10 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         const dropped = Array.from(e.dataTransfer.files || []).filter(
           (f) => /pdf/i.test(f.type) || f.type.startsWith("image/") || /\.(pdf|png|jpe?g|webp)$/i.test(f.name)
         )
-        if (dropped.length) void ingestFiles(dropped)
+        if (dropped.length) {
+          unlockPurchaseTaxScanKeepAlive()
+          void ingestFiles(dropped)
+        }
       }}
     >
       <Card className="border-border/80">
@@ -1342,12 +1349,27 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               accept="application/pdf,image/*"
               multiple
               className="sr-only"
+              onClick={() => unlockPurchaseTaxScanKeepAlive()}
               onChange={(e) => {
-                void ingestFiles(Array.from(e.target.files || []))
+                const picked = Array.from(e.target.files || [])
                 e.target.value = ""
+                if (!picked.length) {
+                  releasePurchaseTaxScanKeepAliveUnlock()
+                  return
+                }
+                void ingestFiles(picked)
               }}
             />
-            <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={!!pdfBusy}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                unlockPurchaseTaxScanKeepAlive()
+                fileRef.current?.click()
+              }}
+              disabled={!!pdfBusy}
+            >
               {t("ptiPdfUpload")}
             </Button>
           </>

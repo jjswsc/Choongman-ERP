@@ -27,7 +27,7 @@ describe('withVisibleScanTimeout', () => {
     await expect(caught).resolves.toBe('ptiOcrPageTimeout')
   })
 
-  it('does not count hidden time against the limit', async () => {
+  it('counts hidden time against the limit so a frozen page cannot wait forever', async () => {
     vi.useFakeTimers()
     setVisibility('visible')
     const p = withVisibleScanTimeout(new Promise(() => undefined), 5_000)
@@ -37,14 +37,7 @@ describe('withVisibleScanTimeout', () => {
     )
     await vi.advanceTimersByTimeAsync(1_000)
     setVisibility('hidden')
-    await vi.advanceTimersByTimeAsync(60_000)
-    await Promise.resolve()
-    expect(await Promise.race([caught, Promise.resolve('pending')])).toBe('pending')
-    setVisibility('visible')
-    await vi.advanceTimersByTimeAsync(3_999)
-    await Promise.resolve()
-    expect(await Promise.race([caught, Promise.resolve('pending')])).toBe('pending')
-    await vi.advanceTimersByTimeAsync(2)
+    await vi.advanceTimersByTimeAsync(4_000)
     await expect(caught).resolves.toBe('ptiOcrPageTimeout')
   })
 
@@ -58,7 +51,7 @@ describe('withVisibleScanTimeout', () => {
     const p = withVisibleScanTimeout(page, 5_000)
     await vi.advanceTimersByTimeAsync(500)
     setVisibility('hidden')
-    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(30)
     setVisibility('visible')
     resolvePage('done')
     await expect(p).resolves.toBe('done')

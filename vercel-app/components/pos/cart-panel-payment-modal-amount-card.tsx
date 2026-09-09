@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import type { OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
-import { effectiveLineDiscountPct } from '@/lib/pos-manual-line-discount'
+import { effectiveLineDiscountPct, lineHasSelectedDiscount, parseDiscountUnitKey, summarizeLineDiscountPcts } from '@/lib/pos-manual-line-discount'
 import {
   resolveReceiptSubtotalPrintAmount,
   resolveReceiptVatPrintAmount,
@@ -153,20 +153,35 @@ export function PosPaymentModalAmountCard({
               <CollapsibleContent className="pt-1">
                 <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
                   {cartItems?.map((item) => {
-                    const mode = lineDiscountModeByItemId?.[item.id] ?? 'none'
+                    const storedMode = lineDiscountModeByItemId?.[item.id] ?? 'none'
+                    const mode =
+                      storedMode === 'service' || storedMode === 'cancel'
+                        ? storedMode
+                        : lineHasSelectedDiscount(item, lineDiscountModeByItemId)
+                          ? 'discount'
+                          : 'none'
                     const lineTotal = Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
+                    const mixedPcts = summarizeLineDiscountPcts(
+                      [item],
+                      lineDiscountModeByItemId ?? {},
+                      lineDiscountPctByItemId ?? {},
+                      fallbackPct
+                    )
+                    const pctLabel = mixedPcts.map((row) => `${row.pct}%`).join('/')
                     const pct = effectiveLineDiscountPct({
                       itemId: item.id,
                       selected: mode === 'discount',
                       storedPct: lineDiscountPctByItemId?.[item.id],
                       fallbackPct,
                     })
+                    const focusedItemId = parseDiscountUnitKey(lastDiscountTargetId || '').itemId
+                    const focused = mode === 'discount' && (lastDiscountTargetId === item.id || focusedItemId === item.id)
                     return (
                       <div
                         key={item.id}
                         className={cn(
                           'rounded-xl border border-border/60 bg-background/70 p-2',
-                          mode === 'discount' && lastDiscountTargetId === item.id && 'ring-2 ring-amber-500/70'
+                          focused && 'ring-2 ring-amber-500/70'
                         )}
                       >
                         <div className="mb-1 flex items-start justify-between gap-2">
@@ -176,9 +191,9 @@ export function PosPaymentModalAmountCard({
                               {t('qty') || '수량'} {formatBahtNum(item.quantity)} · {formatBahtNum(lineTotal)} ฿
                             </p>
                           </div>
-                          {mode === 'discount' && pct > 0 ? (
+                          {mode === 'discount' && (pctLabel || pct > 0) ? (
                             <Badge className="shrink-0 bg-rose-600 text-[10px] font-bold text-white hover:bg-rose-600">
-                              {pct}%
+                              {pctLabel || `${pct}%`}
                             </Badge>
                           ) : mode !== 'none' ? (
                             <Badge variant="secondary" className="shrink-0 text-[10px]">
@@ -197,14 +212,17 @@ export function PosPaymentModalAmountCard({
                             variant={mode === 'discount' ? 'default' : 'outline'}
                             className="h-7 rounded-lg text-[11px]"
                             onClick={() => {
-                              if (mode === 'discount' && lastDiscountTargetId !== item.id) {
-                                onLineDiscountModeChange?.(item.id, 'discount')
+                              if (mode === 'discount') {
+                                const focusedLine = parseDiscountUnitKey(lastDiscountTargetId || '').itemId
+                                if (focusedLine === item.id || lastDiscountTargetId === item.id) {
+                                  onLineDiscountModeChange?.(item.id, 'none')
+                                  return
+                                }
                                 onDiscountLineSelected?.()
                                 return
                               }
-                              const nextMode: CartPanelMenuLineDiscountMode = mode === 'discount' ? 'none' : 'discount'
-                              onLineDiscountModeChange?.(item.id, nextMode)
-                              if (nextMode === 'discount') onDiscountLineSelected?.()
+                              onLineDiscountModeChange?.(item.id, 'discount')
+                              onDiscountLineSelected?.()
                             }}
                           >
                             {tr('posDiscountApplied', '할인적용')}

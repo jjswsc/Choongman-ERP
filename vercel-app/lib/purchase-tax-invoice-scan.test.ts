@@ -539,6 +539,7 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
 
   it('prefers IV prefix and BE yymmdd in the office invoice number over a misread month', () => {
     expect(inferDocDateFromInvoiceNo('IV690819-0637')).toBe('2026-08-19')
+    expect(inferDocDateFromInvoiceNo('1v690819-0627')).toBe('2026-08-19')
     expect(inferDocDateFromInvoiceNo('IV20260820-2330')).toBe('2026-08-20')
     expect(inferDocDateFromInvoiceNo('1V20260820-2330')).toBe('2026-08-20')
     expect(inferDocDateFromInvoiceNo('260821-001305')).toBe('2026-08-21')
@@ -574,6 +575,44 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(repaired.sellerName).toBe('บริษัท แพนฟู้ด จำกัด')
     expect(repaired.netAmount).toBe(1700)
     expect(repaired.vatAmount).toBe(119)
+  })
+
+  it('fixes Panfood OCR: 1v prefix, DATE 08→02, and address digits on the seller name', () => {
+    const repaired = repairExtractedPurchaseTaxInvoice(
+      {
+        invoiceNo: '1v690819-0627',
+        sellerName: 'บริษัท แพนฟูด จำกัด 523 6 3',
+        sellerTaxId: '0745538001265',
+        docDate: '2026-02-19',
+        netAmount: 1700,
+        vatAmount: 119,
+      },
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(repaired.invoiceNo).toBe('IV690819-0627')
+    expect(repaired.docDate).toBe('2026-08-19')
+    expect(repaired.sellerName).toBe('บริษัท แพนฟูด จำกัด')
+
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท แพนฟูด จำกัด 523 6 3',
+        'เลขประจำตัวผู้เสียภาษีอากร 0745538001265',
+        'ใบกำกับภาษี/ใบส่งของ/ใบแจ้งหนี้',
+        'เลขที่ / INVOICE NO. 1v690819-0627',
+        'วันที่ / DATE 19/02/2026',
+        'DUE DATE 26/08/2026',
+        'มูลค่าสินค้าคิดภาษี 1,700.00',
+        'ภาษีมูลค่าเพิ่ม VAT 7% 119.00',
+        'รวมเงินทั้งสิ้น 1,819.00',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('IV690819-0627')
+    expect(row?.docDate).toBe('2026-08-19')
+    expect(row?.sellerName).toBe('บริษัท แพนฟูด จำกัด')
+    expect(row?.sellerTaxId).toBe('0745538001265')
+    expect(row?.netAmount).toBe(1700)
+    expect(row?.vatAmount).toBe(119)
   })
 
   it('merges a split header row and a split totals row into one invoice', () => {

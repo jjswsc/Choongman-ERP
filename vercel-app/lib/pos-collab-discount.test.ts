@@ -329,6 +329,22 @@ describe('buildCartPanelLineDiscountAllocations', () => {
     expect(alloc[0]).toBe(49)
     expect(alloc[1]).toBe(99)
   })
+
+  it('같은 메뉴 2개 중 한 접시만 고르면 그 수량만큼만 수동 할인 배분한다', () => {
+    const alloc = buildCartPanelLineDiscountAllocations({
+      lines: [{ id: 'katsu', name: 'Chicken Katsu', price: 199, qty: 2, menuId: '10' }],
+      menuById,
+      lineModeById: { 'katsu::u0': 'discount' },
+      hasSelectedDiscountScope: true,
+      collabDetail: null,
+      collabDiscountAmt: 0,
+      serviceDiscountAmt: 0,
+      cancelledLineAmt: 0,
+      manualDiscountAmt: 19,
+      manualLineAlloc: [19],
+    })
+    expect(alloc[0]).toBe(19)
+  })
 })
 
 describe('pos-collab-discount amount stacking', () => {

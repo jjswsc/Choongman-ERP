@@ -137,6 +137,8 @@ describe('purchase tax invoice helpers', () => {
     expect(fixOcrInvoiceLetterIPrefix('1V20260820-2330')).toBe('IV20260820-2330')
     expect(fixOcrInvoiceLetterIPrefix('IV20260820-2330')).toBe('IV20260820-2330')
     expect(fixOcrInvoiceLetterIPrefix('1V690819-0637')).toBe('IV690819-0637')
+    expect(fixOcrInvoiceLetterIPrefix('1v690819-0627')).toBe('IV690819-0627')
+    expect(fixOcrInvoiceLetterIPrefix('lv690819-0637')).toBe('IV690819-0637')
     expect(fixOcrInvoiceLetterIPrefix('1NV-20260524902')).toBe('INV-20260524902')
     expect(fixOcrInvoiceLetterIPrefix('IM20260819011079')).toBe('IM20260819011079')
     expect(fixOcrInvoiceLetterIPrefix('010726E00037051')).toBe('010726E00037051')
@@ -251,6 +253,8 @@ describe('purchase tax invoice helpers', () => {
 
   it('cuts trailing address numbers after จำกัด', () => {
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟู้ด จำกัด 523 6 3')).toBe('บริษัท แพนฟู้ด จำกัด')
+    expect(trimPurchaseTaxSellerName('บริษัท แพนฟูด จำกัด 523 6 3')).toBe('บริษัท แพนฟูด จำกัด')
+    expect(trimPurchaseTaxSellerName('บริษัท แพนฟูด จำกัด523 6 3')).toBe('บริษัท แพนฟูด จำกัด')
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟู้ด จำกัด 523638')).toBe('บริษัท แพนฟู้ด จำกัด')
     expect(trimPurchaseTaxSellerName('ชนาคารกสิกรไทย จำกัด (มหาชน)')).toBe('ธนาคารกสิกรไทย จำกัด (มหาชน)')
     expect(trimPurchaseTaxSellerName('บริษัท 1. เอ. พี. อินเตอร์เทรด จำกัด')).toBe(

@@ -3,7 +3,12 @@
 import { Check } from 'lucide-react'
 import type { OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
-import { effectiveLineDiscountPct } from '@/lib/pos-manual-line-discount'
+import {
+  effectiveLineDiscountPct,
+  expandLinesToDiscountUnits,
+  resolveDiscountPickerUnitMode,
+  storedLineDiscountPctForKey,
+} from '@/lib/pos-manual-line-discount'
 import type { CartPanelMenuLineDiscountMode } from '@/components/pos/cart-panel-payment-modal-amount-card'
 
 type PosPaymentDiscountMenuPickerProps = {
@@ -30,6 +35,7 @@ export function PosPaymentDiscountMenuPicker({
     return !v || v === key ? fallback : v
   }
   if (!cartItems.length) return null
+  const units = expandLinesToDiscountUnits(cartItems)
 
   return (
     <div className="space-y-2">
@@ -41,30 +47,30 @@ export function PosPaymentDiscountMenuPicker({
           {t('posManualDiscountPickHint')}
         </p>
       </div>
-      <div className="max-h-52 space-y-1.5 overflow-y-auto pr-0.5">
-        {cartItems.map((item) => {
-          const mode = lineDiscountModeByItemId[item.id] ?? 'none'
-          const lineTotal = Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
+      <div className="max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
+        {units.map((unit) => {
+          const mode = resolveDiscountPickerUnitMode(lineDiscountModeByItemId, unit)
+          const lineTotal = Math.max(0, Number(unit.price) || 0) * Math.max(0, Number(unit.quantity) || 0)
           const locked = mode === 'service' || mode === 'cancel'
           const selected = mode === 'discount'
           const pct = effectiveLineDiscountPct({
-            itemId: item.id,
+            itemId: unit.key,
             selected,
-            storedPct: lineDiscountPctByItemId?.[item.id],
+            storedPct: storedLineDiscountPctForKey(lineDiscountPctByItemId, unit.key),
             fallbackPct,
           })
-          const focused = selected && lastDiscountTargetId === item.id
+          const focused = selected && lastDiscountTargetId === unit.key
           return (
             <button
-              key={item.id}
+              key={unit.key}
               type="button"
               disabled={locked}
               onClick={() => {
-                if (selected && lastDiscountTargetId !== item.id) {
-                  onLineDiscountModeChange(item.id, 'discount')
+                if (selected && lastDiscountTargetId !== unit.key) {
+                  onLineDiscountModeChange(unit.key, 'discount')
                   return
                 }
-                onLineDiscountModeChange(item.id, selected ? 'none' : 'discount')
+                onLineDiscountModeChange(unit.key, selected ? 'none' : 'discount')
               }}
               className={cn(
                 'flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left touch-manipulation',
@@ -87,9 +93,10 @@ export function PosPaymentDiscountMenuPicker({
                 {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-medium">{item.name}</span>
+                <span className="block truncate text-xs font-medium">{unit.name}</span>
                 <span className="block text-[11px] text-muted-foreground">
-                  {t('qty') || '수량'} {formatBahtNum(item.quantity)} · {formatBahtNum(lineTotal)} ฿
+                  {t('qty') || '수량'} {formatBahtNum(unit.quantity)} · {formatBahtNum(lineTotal)} ฿
+                  {unit.unitCount > 1 ? ` · ${unit.unitIndex + 1}/${unit.unitCount}` : ''}
                   {locked
                     ? ` · ${
                         mode === 'service'

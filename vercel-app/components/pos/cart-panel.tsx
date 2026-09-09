@@ -98,9 +98,19 @@ import {
   resolveCartLineMenuIdFromCatalog,
 } from '@/lib/pos-collab-discount'
 import {
+  buildDiscountUnitKey,
+  collectSelectedDiscountTargetKeys,
   computeManualLineDiscountAllocations,
+  discountUnitCount,
+  explodeLineDiscountPctsToUnits,
+  isActiveDiscountSelectionKey,
+  lineHasSelectedDiscount,
+  nextDiscountModesForTargetChange,
   nextLineDiscountPctsAfterPercentTap,
   normalizeLineDiscountPct,
+  parseDiscountUnitKey,
+  selectedDiscountAmountForLine,
+  selectedDiscountQuantityForLine,
   summarizeLineDiscountPcts,
 } from '@/lib/pos-manual-line-discount'
 import {
@@ -1049,13 +1059,29 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   useEffect(() => {
-    const validIds = new Set(cartItems.map((item) => item.id))
+    const migrateUnitKeyToLine = (
+      key: string,
+      value: string | number
+    ): { key: string; value: string | number } | null => {
+      if (isActiveDiscountSelectionKey(key, cartItems)) return { key, value }
+      const parsed = parseDiscountUnitKey(key)
+      if (parsed.unitIndex !== 0) return null
+      const item = cartItems.find((row) => row.id === parsed.itemId)
+      if (!item) return null
+      if (discountUnitCount(item.quantity) > 1) return null
+      return { key: parsed.itemId, value }
+    }
     setLineDiscountModeByItemId((prev) => {
       let changed = false
       const next: Record<string, MenuLineDiscountMode> = {}
       for (const [id, mode] of Object.entries(prev)) {
-        if (validIds.has(id)) next[id] = mode
-        else changed = true
+        const migrated = migrateUnitKeyToLine(id, mode)
+        if (!migrated) {
+          changed = true
+          continue
+        }
+        if (migrated.key !== id) changed = true
+        next[migrated.key] = migrated.value as MenuLineDiscountMode
       }
       return changed ? next : prev
     })
@@ -1063,45 +1089,69 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       let changed = false
       const next: Record<string, number> = {}
       for (const [id, pct] of Object.entries(prev)) {
-        if (validIds.has(id)) next[id] = pct
-        else changed = true
+        const migrated = migrateUnitKeyToLine(id, pct)
+        if (!migrated) {
+          changed = true
+          continue
+        }
+        if (migrated.key !== id) changed = true
+        next[migrated.key] = Number(migrated.value) || 0
       }
       return changed ? next : prev
     })
   }, [cartItems])
   const setLineDiscountModeForItem = useCallback((itemId: string, nextMode: MenuLineDiscountMode) => {
-    setLineDiscountModeByItemId((prev) => {
-      const current = prev[itemId] ?? 'none'
-      if (current === nextMode) return prev
-      if (nextMode === 'none') {
-        if (!(itemId in prev)) return prev
-        const { [itemId]: _removed, ...rest } = prev
-        return rest
-      }
-      return { ...prev, [itemId]: nextMode }
-    })
+    const parsed = parseDiscountUnitKey(itemId)
+    const lineId = parsed.itemId || itemId
+    const line = cartItems.find((row) => row.id === lineId)
+    const unitCount = discountUnitCount(line?.quantity ?? 1)
+    setLineDiscountModeByItemId((prev) =>
+      nextDiscountModesForTargetChange({
+        prev,
+        targetKey: itemId,
+        nextMode,
+        itemId: lineId,
+        unitCount,
+      })
+    )
     if (nextMode === 'discount') {
       lastDiscountTargetIdRef.current = itemId
       setLastDiscountTargetId(itemId)
       const brush = discountType === 'percent' ? normalizeLineDiscountPct(discountValue) : 0
-      if (brush > 0) {
-        setLineDiscountPctByItemId((prev) => {
-          if (normalizeLineDiscountPct(prev[itemId]) > 0) return prev
-          return { ...prev, [itemId]: brush }
-        })
-      }
+      setLineDiscountPctByItemId((prev) => {
+        let next = prev
+        if (parsed.unitIndex != null && unitCount > 1) {
+          next = explodeLineDiscountPctsToUnits(next, lineId, unitCount)
+        }
+        if (brush > 0 && normalizeLineDiscountPct(next[itemId]) <= 0) {
+          if (next === prev) next = { ...prev }
+          next[itemId] = brush
+        }
+        return next
+      })
       return
     }
     setLineDiscountPctByItemId((prev) => {
-      if (!(itemId in prev)) return prev
-      const { [itemId]: _removed, ...rest } = prev
-      return rest
+      let next = prev
+      if (parsed.unitIndex != null && unitCount > 1) {
+        next = explodeLineDiscountPctsToUnits(next, lineId, unitCount)
+      }
+      if (!(itemId in next) && !(lineId in next)) return next
+      const copy = { ...next }
+      delete copy[itemId]
+      if (parsed.unitIndex == null) {
+        for (let i = 0; i < Math.max(unitCount, 1); i++) {
+          delete copy[buildDiscountUnitKey(lineId, i)]
+        }
+        delete copy[lineId]
+      }
+      return copy
     })
     if (lastDiscountTargetIdRef.current === itemId) {
       lastDiscountTargetIdRef.current = null
       setLastDiscountTargetId(null)
     }
-  }, [discountType, discountValue])
+  }, [cartItems, discountType, discountValue])
   const serviceDiscountAmt = useMemo(() => {
     return cartItems.reduce((sum, item) => {
       if ((lineDiscountModeByItemId[item.id] ?? 'none') !== 'service') return sum
@@ -1115,13 +1165,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }, 0)
   }, [cartItems, lineDiscountModeByItemId])
   const selectedDiscountSubtotal = useMemo(() => {
-    return cartItems.reduce((sum, item) => {
-      if ((lineDiscountModeByItemId[item.id] ?? 'none') !== 'discount') return sum
-      return sum + Math.max(0, Number(item.price) || 0) * Math.max(0, Number(item.quantity) || 0)
-    }, 0)
+    return cartItems.reduce((sum, item) => sum + selectedDiscountAmountForLine(item, lineDiscountModeByItemId), 0)
   }, [cartItems, lineDiscountModeByItemId])
   const selectedDiscountLineCount = useMemo(() => {
-    return cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount').length
+    return collectSelectedDiscountTargetKeys(cartItems, lineDiscountModeByItemId).length
   }, [cartItems, lineDiscountModeByItemId])
   const selectedServiceLineCount = useMemo(() => {
     return cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'service').length
@@ -1187,9 +1234,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setDiscountValueInput(rate > 0 ? String(rate) : '')
       if (rate > 0) {
         setLineDiscountPctByItemId((prev) => {
-          const selectedIds = cartItems
-            .filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount')
-            .map((item) => item.id)
+          const selectedIds = collectSelectedDiscountTargetKeys(cartItems, lineDiscountModeByItemId)
           if (selectedIds.length === 0) return prev
           return nextLineDiscountPctsAfterPercentTap({
             selectedIds,
@@ -1243,7 +1288,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const collabDiscountAmt = useMemo(() => {
     if (!appliedCollab || menuByIdForCollab.size === 0) return 0
     const collabScopeItems = hasSelectedDiscountScope
-      ? cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount')
+      ? cartItems.flatMap((item) => {
+          const selectedQty = selectedDiscountQuantityForLine(item, lineDiscountModeByItemId)
+          if (selectedQty <= 0) return []
+          return [{ ...item, quantity: selectedQty }]
+        })
       : cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') !== 'cancel')
     if (!collabScopeItems.length) return 0
     return collabDiscountAmountForCart(
@@ -1488,7 +1537,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           .filter(Boolean)
           .join(' · ') || formatAppliedCouponsDiscountReason(appliedCoupons)
       : ''
-    const lineDiscountCount = cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') === 'discount').length
+    const lineDiscountCount = collectSelectedDiscountTargetKeys(cartItems, lineDiscountModeByItemId).length
     const linePart = [
       lineDiscountCount > 0 ? `${tr('posDiscount', '할인')} ${lineDiscountCount}${tr('posMenuLineUnit', '건')}` : '',
     ]
@@ -5139,7 +5188,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   setDiscountValueInput(formatted)
                   const rate = normalizeLineDiscountPct(formatted)
                   const focusedId = lastDiscountTargetIdRef.current
-                  if (rate > 0 && focusedId && (lineDiscountModeByItemId[focusedId] ?? 'none') === 'discount') {
+                  const focusedSelected =
+                    !!focusedId &&
+                    collectSelectedDiscountTargetKeys(cartItems, lineDiscountModeByItemId).includes(focusedId)
+                  if (rate > 0 && focusedSelected && focusedId) {
                     setLineDiscountPctByItemId((prev) =>
                       prev[focusedId] === rate ? prev : { ...prev, [focusedId]: rate }
                     )
@@ -5344,7 +5396,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <TooltipProvider delayDuration={0}>
               <div className="space-y-1.5 w-full max-w-full min-w-0 overflow-hidden pr-2">
                 {cartItems.map(item => {
-                  const lineDiscountMode = lineDiscountModeByItemId[item.id] ?? 'none'
+                  const storedLineMode = lineDiscountModeByItemId[item.id] ?? 'none'
+                  const lineDiscountMode =
+                    storedLineMode === 'service' || storedLineMode === 'cancel'
+                      ? storedLineMode
+                      : lineHasSelectedDiscount(item, lineDiscountModeByItemId)
+                        ? 'discount'
+                        : 'none'
                   const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                   const mainName = optMatch ? optMatch[1].trim() : item.name
                   const optionPart = optMatch ? optMatch[2].trim() : null

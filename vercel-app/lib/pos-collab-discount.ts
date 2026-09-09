@@ -1,5 +1,6 @@
 import type { PosMenu } from '@/lib/api-client'
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
+import { lineHasSelectedDiscount, selectedDiscountQuantityForLine } from '@/lib/pos-manual-line-discount'
 import { normalizeCartLineIdForSave } from '@/lib/pos-order-item-map'
 import {
   LEGACY_PROMOTION_MAIN_CATEGORY,
@@ -408,15 +409,25 @@ export function buildCartPanelLineDiscountAllocations(input: {
     manualLineAlloc,
   } = input
 
-  const modeForLine = (line: CollabCartLineLike): PosCartLineDiscountMode =>
-    lineModeById?.[String(line.id ?? '')] ?? 'none'
+  const modeForLine = (line: CollabCartLineLike): PosCartLineDiscountMode => {
+    const stored = lineModeById?.[String(line.id ?? '')] ?? 'none'
+    if (stored === 'service' || stored === 'cancel') return stored
+    if (lineHasSelectedDiscount(line, lineModeById)) return 'discount'
+    return stored === 'discount' ? 'discount' : 'none'
+  }
+
+  const discountScopeLineTotal = (line: CollabCartLineLike): number => {
+    if (modeForLine(line) !== 'discount') return 0
+    const selectedQty = selectedDiscountQuantityForLine(line, lineModeById)
+    return Math.max(0, Number(line.price) || 0) * selectedQty
+  }
 
   const collabAlloc = (() => {
     if (!collabDetail || collabDiscountAmt <= 0.0001) return lines.map(() => 0)
     if (hasSelectedDiscountScope) {
       const weights = lines.map((line) =>
         modeForLine(line) === 'discount' && isCartLineEligibleForCollabDiscount(line, menuById, collabDetail)
-          ? collabLineTotal(line)
+          ? discountScopeLineTotal(line)
           : 0
       )
       return allocateDiscountProportional(weights, collabDiscountAmt)
@@ -425,7 +436,11 @@ export function buildCartPanelLineDiscountAllocations(input: {
   })()
 
   const weightsForModes = (modes: PosCartLineDiscountMode[]) =>
-    lines.map((line) => (modes.includes(modeForLine(line)) ? collabLineTotal(line) : 0))
+    lines.map((line) => {
+      if (!modes.includes(modeForLine(line))) return 0
+      if (modes.length === 1 && modes[0] === 'discount') return discountScopeLineTotal(line)
+      return collabLineTotal(line)
+    })
 
   const serviceAlloc =
     serviceDiscountAmt > 0.0001

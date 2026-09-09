@@ -33,6 +33,21 @@ describe('pos-member-tier-discount', () => {
     expect(subtotal).toBe(200)
   })
 
+  it('할인 접시만 고르면 같은 메뉴 수량 중 그 접시만 등급 대상이다', () => {
+    const policy = {
+      ...DEFAULT_MEMBER_TIER_DISCOUNT_POLICY,
+      scopeMainCategories: ['Chicken'],
+    }
+    const subtotal = computeMemberTierDiscountEligibleSubtotal({
+      lines: [{ id: 'katsu', menuId: 'm1', price: 199, quantity: 2 }],
+      menuById,
+      policy,
+      lineDiscountModeByItemId: { 'katsu::u0': 'discount' },
+      hasSelectedDiscountScope: true,
+    })
+    expect(subtotal).toBe(199)
+  })
+
   it('blocks tier discount when collab is active and stacking disabled', () => {
     const amt = resolveMemberTierDiscountAmount({
       eligibleSubtotal: 1000,
