@@ -99,6 +99,60 @@ describe('collectDeliveryPlatformPromoLineShares', () => {
     expect(result.lines[0]?.regularAmount).toBe(440)
     expect(result.lines[0]?.allocatedDiscount).toBe(40)
   })
+
+  it('splits when items_json is already an array (jsonb from Supabase)', () => {
+    const result = collectDeliveryPlatformPromoLineShares({
+      catalog: catalogFixture(),
+      order: {
+        order_type: 'delivery',
+        delivery_app_code: 'grab',
+        discount_amt: 80,
+        items_json: [
+          {
+            name: 'Festival Set',
+            promoId: '9',
+            promoCode: 'SET-9',
+            price: 250,
+            qty: 1,
+            promoItems: [
+              { menuId: '1', quantity: 1 },
+              { menuId: '2', quantity: 1 },
+            ],
+          },
+        ],
+      },
+    })
+    expect(result.lines).toHaveLength(1)
+    expect(result.lines[0]?.name).toContain('Festival Set')
+    expect(result.lines[0]?.saleAmount).toBe(250)
+    expect(result.lines[0]?.regularAmount).toBe(330)
+    expect(result.lines[0]?.allocatedDiscount).toBe(80)
+  })
+
+  it('uses parent promo line and skips grabSetChild component rows', () => {
+    const result = collectDeliveryPlatformPromoLineShares({
+      catalog: catalogFixture(),
+      order: {
+        order_type: 'delivery',
+        delivery_app_code: 'grab',
+        discount_amt: 50,
+        items_json: [
+          {
+            name: 'Festival Set',
+            promoId: '9',
+            promoCode: 'SET-9',
+            price: 250,
+            qty: 1,
+            promoItems: [{ menuId: '1', quantity: 1 }],
+          },
+          { name: 'Rice', price: 0, qty: 1, grabSetChild: true },
+        ],
+      },
+    })
+    expect(result.lines).toHaveLength(1)
+    expect(result.lines[0]?.name).toContain('Festival Set')
+    expect(result.lines[0]?.qty).toBe(1)
+  })
 })
 
 describe('extraPlatformPromoSearchHaystack', () => {

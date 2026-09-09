@@ -1,4 +1,4 @@
-import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
+import { parsePosOrderItemsJson } from '@/lib/pos-order-item-map'
 import {
   orderTypeToPromoRegularPriceChannel,
   resolvePromoRegularPricePerSet,
@@ -42,13 +42,23 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-function parseOrderItems(itemsJson: string | null | undefined): Record<string, unknown>[] {
-  try {
-    const parsed = JSON.parse(String(itemsJson || '[]'))
-    return Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : []
-  } catch {
-    return []
+function parseOrderItems(itemsJson: unknown): Record<string, unknown>[] {
+  return parsePosOrderItemsJson(itemsJson)
+}
+
+function isGrabSetChild(row: Record<string, unknown>): boolean {
+  return row.grabSetChild === true || row.grab_set_child === true
+}
+
+function resolvePlatformLineQty(row: Record<string, unknown>): number {
+  for (const c of [row.quantity, row.qty, row.count, row.order_qty, row.orderQty]) {
+    const n = Number(c)
+    if (Number.isFinite(n) && n > 0) return n
   }
+  const name = str(row.name)
+  const price = Math.max(0, Number(row.price ?? 0) || 0)
+  if (name || price > 0.0001) return 1
+  return 0
 }
 
 function resolveLineSaleAmount(row: Record<string, unknown>, qty: number): number {
@@ -156,17 +166,35 @@ function collectRawLines(
   const channel = orderTypeToPromoRegularPriceChannel(order.order_type)
   const promoLines: RawLine[] = []
   const menuLines: RawLine[] = []
+  const childFallback: RawLine[] = []
 
   for (const row of items) {
-    const qty = Math.max(0, resolveItemsJsonLineQty(row))
+    const qty = resolvePlatformLineQty(row)
     if (qty <= 0) continue
-
+    const child = isGrabSetChild(row)
     const promoId = resolveLinePromoId(row, catalog)
     const promoCode = str(row.promoCode ?? row.promo_code)
     const lineName = str(row.name)
     const saleAmount = resolveLineSaleAmount(row, qty)
 
+    const pushMenu = (target: RawLine[]) => {
+      const menuReg = resolveMenuRegularAmount(row, catalog, qty, channel)
+      target.push({
+        key: `${platformKey}::${menuLineKey(row)}`,
+        promoId: '',
+        promoCode: appLabel.toUpperCase(),
+        name: formatPlatformLineName(appLabel, lineName || menuLineKey(row)),
+        qty,
+        saleAmount,
+        regularAmount: menuReg.amount,
+        estimatedLineQty: 0,
+        unresolvedLineQty: menuReg.unresolved ? qty : 0,
+        weight: lineWeight(menuReg.amount, saleAmount, qty),
+      })
+    }
+
     if (promoId || promoCode) {
+      if (child) continue
       const meta = resolvePromoMeta(promoId, promoCode, lineName, catalog)
       const regularResolved = resolvePromoRegularPricePerSet({
         row,
@@ -199,22 +227,16 @@ function collectRawLines(
       continue
     }
 
-    const menuReg = resolveMenuRegularAmount(row, catalog, qty, channel)
-    menuLines.push({
-      key: `${platformKey}::${menuLineKey(row)}`,
-      promoId: '',
-      promoCode: appLabel.toUpperCase(),
-      name: formatPlatformLineName(appLabel, lineName || menuLineKey(row)),
-      qty,
-      saleAmount,
-      regularAmount: menuReg.amount,
-      estimatedLineQty: 0,
-      unresolvedLineQty: menuReg.unresolved ? qty : 0,
-      weight: lineWeight(menuReg.amount, saleAmount, qty),
-    })
+    if (child) {
+      pushMenu(childFallback)
+      continue
+    }
+    pushMenu(menuLines)
   }
 
-  return mergeRawLines(promoLines.length > 0 ? promoLines : menuLines)
+  if (promoLines.length > 0) return mergeRawLines(promoLines)
+  if (menuLines.length > 0) return mergeRawLines(menuLines)
+  return mergeRawLines(childFallback)
 }
 
 function mergeRawLines(lines: RawLine[]): RawLine[] {

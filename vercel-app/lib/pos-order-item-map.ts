@@ -64,6 +64,42 @@ export function resolveItemsJsonLineQty(it: {
   return n
 }
 
+/** pos_orders.items_json — TEXT 문자열·jsonb 배열·이중 인코딩을 모두 배열로 맞춤 */
+export function parsePosOrderItemsJson(raw: unknown): Record<string, unknown>[] {
+  if (raw == null || raw === '') return []
+  if (Array.isArray(raw)) {
+    return raw.filter((x) => x && typeof x === 'object') as Record<string, unknown>[]
+  }
+  let parsed: unknown = raw
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return []
+    try {
+      parsed = JSON.parse(trimmed)
+    } catch {
+      return []
+    }
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed)
+      } catch {
+        return []
+      }
+    }
+  }
+  if (Array.isArray(parsed)) {
+    return parsed.filter((x) => x && typeof x === 'object') as Record<string, unknown>[]
+  }
+  if (parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>
+    const inner = obj.items ?? obj.lines ?? obj.orderItems ?? obj.order_items
+    if (Array.isArray(inner)) {
+      return inner.filter((x) => x && typeof x === 'object') as Record<string, unknown>[]
+    }
+  }
+  return []
+}
+
 /** 카트→저장 시 최종 qty (양수가 아니면 1) */
 export function resolveCartLineQuantityForSave(line: {
   quantity?: unknown

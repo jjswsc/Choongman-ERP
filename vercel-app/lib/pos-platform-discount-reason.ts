@@ -76,7 +76,7 @@ export type DeliveryPlatformDiscountOrderRow = {
   discount_reason?: string
   order_type?: string
   delivery_app_code?: string | null
-  items_json?: string | null
+  items_json?: unknown
   discount_amt?: number
   coupon_discount_amt?: number
 }
@@ -105,7 +105,7 @@ export function resolvePlatformDiscountReasonForAnalytics(
 /** Grab memo 등 — delivery_app_code 없을 때 보정용 앱 코드 */
 export function resolveDeliveryAppCodeForPlatformBackfill(row: {
   delivery_app_code?: string | null
-  items_json?: string | null
+  items_json?: unknown
   memo?: string | null
 }): string {
   const fromOrder = resolveOrderDeliveryAppCode(row)

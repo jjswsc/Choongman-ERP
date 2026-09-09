@@ -1,5 +1,5 @@
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
-import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
+import { parsePosOrderItemsJson, resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import { isDeliveryPlatformDiscountOrder } from '@/lib/pos-platform-discount-reason'
 import {
   collectDeliveryPlatformPromoLineShares,
@@ -77,7 +77,7 @@ export type PosSalesPromoAggregateResult = {
 }
 
 type OrderRowForPromoAgg = {
-  items_json?: string
+  items_json?: unknown
   order_type?: string
   total?: number
   discount_amt?: number
@@ -133,13 +133,8 @@ function resolvePromoMeta(
   }
 }
 
-function parseOrderItems(itemsJson: string | undefined): Record<string, unknown>[] {
-  try {
-    const parsed = JSON.parse(String(itemsJson || '[]'))
-    return Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : []
-  } catch {
-    return []
-  }
+function parseOrderItems(itemsJson: unknown): Record<string, unknown>[] {
+  return parsePosOrderItemsJson(itemsJson)
 }
 
 function emptyKindTotals(kind: PosPromoSalesKind): Omit<PosSalesPromoKindTotals, 'discountPct' | 'saleSharePctOfGross' | 'bundleDiscountPctOfGross' | 'bundleDiscountSharePct'> {

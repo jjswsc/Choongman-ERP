@@ -1,5 +1,5 @@
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
-import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
+import { parsePosOrderItemsJson, resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import {
   orderTypeToPromoRegularPriceChannel,
   resolvePromoRegularPricePerSet,
@@ -48,7 +48,7 @@ type OrderRowBase = {
   discount_reason?: string
   coupon_code?: string
   applied_coupons?: unknown
-  items_json?: string
+  items_json?: unknown
   delivery_app_code?: string | null
   tier_discount_amt?: number | null
   member_tier_code?: string | null
@@ -73,13 +73,8 @@ function resolveLineSaleAmount(row: Record<string, unknown>, qty: number): numbe
   return Math.max(0, qty * price - lineDisc)
 }
 
-function parseOrderItems(itemsJson: string | undefined): Record<string, unknown>[] {
-  try {
-    const parsed = JSON.parse(String(itemsJson || '[]'))
-    return Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : []
-  } catch {
-    return []
-  }
+function parseOrderItems(itemsJson: unknown): Record<string, unknown>[] {
+  return parsePosOrderItemsJson(itemsJson)
 }
 
 function baseOrderRow(order: OrderRowBase): Omit<PosSalesDiscountDrillOrderRow, 'discountAmount'> {

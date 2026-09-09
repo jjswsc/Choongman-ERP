@@ -7,7 +7,28 @@ import {
   mergeDineInPaymentCartWithServerItems,
   mergeOrderUiItemsPreserveLineState,
   normalizeCartLineIdForSave,
+  parsePosOrderItemsJson,
 } from '@/lib/pos-order-item-map'
+
+describe('parsePosOrderItemsJson', () => {
+  const line = { name: 'Festival Set', promoId: '9', qty: 1, price: 250 }
+
+  it('reads a JSON string array', () => {
+    expect(parsePosOrderItemsJson(JSON.stringify([line]))).toEqual([line])
+  })
+
+  it('reads a jsonb-style already-parsed array', () => {
+    expect(parsePosOrderItemsJson([line])).toEqual([line])
+  })
+
+  it('reads a double-encoded JSON string', () => {
+    expect(parsePosOrderItemsJson(JSON.stringify(JSON.stringify([line])))).toEqual([line])
+  })
+
+  it('unwraps { items: [...] }', () => {
+    expect(parsePosOrderItemsJson({ items: [line] })).toEqual([line])
+  })
+})
 
 describe('normalizeCartLineIdForSave', () => {
   it('strips cart-existing prefix and keeps original ids', () => {
