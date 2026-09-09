@@ -1,6 +1,10 @@
 import { resolvePosSalesDiscountAmount } from '@/lib/pos-coupon-domain'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
-import { isDeliveryPlatformDiscountOrder, resolveDeliveryPlatformBundleDiscountAmt, resolveDeliveryPlatformBundleKey, resolvePlatformDiscountReasonForAnalytics } from '@/lib/pos-platform-discount-reason'
+import { isDeliveryPlatformDiscountOrder } from '@/lib/pos-platform-discount-reason'
+import {
+  collectDeliveryPlatformPromoLineShares,
+  extraPlatformPromoSearchHaystack,
+} from '@/lib/pos-sales-platform-promo-lines'
 import {
   orderTypeToPromoRegularPriceChannel,
   resolvePromoRegularPricePerSet,
@@ -155,7 +159,16 @@ export function filterPromoSalesRows(
 ): PosSalesPromoRow[] {
   if (searchTokens.length === 0) return rows
   return rows.filter((row) => {
-    const haystack = [row.name, row.promoCode, row.promoId, row.key, row.kind].join(' ').toLowerCase()
+    const haystack = [
+      row.name,
+      row.promoCode,
+      row.promoId,
+      row.key,
+      row.kind,
+      extraPlatformPromoSearchHaystack(row),
+    ]
+      .join(' ')
+      .toLowerCase()
     return searchAnd
       ? searchTokens.every((token) => haystack.includes(token))
       : searchTokens.some((token) => haystack.includes(token))
@@ -205,37 +218,95 @@ export function aggregatePosSalesPromoBundleDiscount(params: {
       Number(order.discount_amt) || 0,
       Number(order.coupon_discount_amt) || 0
     )
-    const platformBundleDiscount = resolveDeliveryPlatformBundleDiscountAmt(order)
+    const platformShares = collectDeliveryPlatformPromoLineShares({
+      order,
+      catalog: params.catalog,
+    })
+    const platformBundleDiscount = platformShares.discountAmt
     totals.paymentDiscount = round2(
       totals.paymentDiscount + Math.max(0, orderPaymentDiscount - platformBundleDiscount)
     )
 
     if (platformBundleDiscount > 0.0001) {
-      const key = resolveDeliveryPlatformBundleKey(order)
-      const label = resolvePlatformDiscountReasonForAnalytics(order, platformBundleDiscount)
-      const prev = buckets.get(key) ?? {
-        key,
-        promoId: '',
-        promoCode: key.replace(/^platform::/, '').toUpperCase(),
-        name: label,
-        kind: 'platform' as const,
-        qty: 0,
-        saleAmount: 0,
-        regularAmount: 0,
-        bundleDiscount: 0,
-        estimatedLineQty: 0,
-        unresolvedLineQty: 0,
-      }
-      prev.qty += 1
-      prev.bundleDiscount = round2(prev.bundleDiscount + platformBundleDiscount)
-      buckets.set(key, prev)
-
       const kindPrev = kindBuckets.get('platform') ?? emptyKindTotals('platform')
-      kindPrev.qty += 1
-      kindPrev.bundleDiscount = round2(kindPrev.bundleDiscount + platformBundleDiscount)
-      kindBuckets.set('platform', kindPrev)
+      const addPlatformBucket = (line: {
+        key: string
+        promoId: string
+        promoCode: string
+        name: string
+        qty: number
+        saleAmount: number
+        regularAmount: number
+        bundleDiscount: number
+        estimatedLineQty: number
+        unresolvedLineQty: number
+      }) => {
+        const prev = buckets.get(line.key) ?? {
+          key: line.key,
+          promoId: line.promoId,
+          promoCode: line.promoCode,
+          name: line.name,
+          kind: 'platform' as const,
+          qty: 0,
+          saleAmount: 0,
+          regularAmount: 0,
+          bundleDiscount: 0,
+          estimatedLineQty: 0,
+          unresolvedLineQty: 0,
+        }
+        prev.qty += line.qty
+        prev.saleAmount = round2(prev.saleAmount + line.saleAmount)
+        prev.regularAmount = round2(prev.regularAmount + line.regularAmount)
+        prev.bundleDiscount = round2(prev.bundleDiscount + line.bundleDiscount)
+        prev.estimatedLineQty += line.estimatedLineQty
+        prev.unresolvedLineQty += line.unresolvedLineQty
+        if (!prev.promoId && line.promoId) prev.promoId = line.promoId
+        if (!prev.promoCode && line.promoCode) prev.promoCode = line.promoCode
+        buckets.set(line.key, prev)
 
-      totals.bundleDiscount = round2(totals.bundleDiscount + platformBundleDiscount)
+        kindPrev.qty += line.qty
+        kindPrev.saleAmount = round2(kindPrev.saleAmount + line.saleAmount)
+        kindPrev.regularAmount = round2(kindPrev.regularAmount + line.regularAmount)
+        kindPrev.bundleDiscount = round2(kindPrev.bundleDiscount + line.bundleDiscount)
+
+        totals.qty += line.qty
+        totals.saleAmount = round2(totals.saleAmount + line.saleAmount)
+        totals.regularAmount = round2(totals.regularAmount + line.regularAmount)
+        totals.bundleDiscount = round2(totals.bundleDiscount + line.bundleDiscount)
+        totals.estimatedLineQty += line.estimatedLineQty
+        totals.unresolvedLineQty += line.unresolvedLineQty
+      }
+
+      if (platformShares.lines.length === 0) {
+        addPlatformBucket({
+          key: platformShares.platformKey,
+          promoId: '',
+          promoCode: platformShares.platformKey.replace(/^platform::/, '').toUpperCase(),
+          name: platformShares.residualLabel,
+          qty: 1,
+          saleAmount: 0,
+          regularAmount: 0,
+          bundleDiscount: platformBundleDiscount,
+          estimatedLineQty: 0,
+          unresolvedLineQty: 0,
+        })
+      } else {
+        for (const line of platformShares.lines) {
+          addPlatformBucket({
+            key: line.key,
+            promoId: line.promoId,
+            promoCode: line.promoCode,
+            name: line.name,
+            qty: line.qty,
+            saleAmount: line.saleAmount,
+            regularAmount: line.regularAmount,
+            bundleDiscount: line.allocatedDiscount,
+            estimatedLineQty: line.estimatedLineQty,
+            unresolvedLineQty: line.unresolvedLineQty,
+          })
+        }
+      }
+      kindBuckets.set('platform', kindPrev)
     }
 
     /** 플랫폼 API 주문 — discount_amt가 세트 프로모이므로 promo 줄 정가 역산과 이중 집계하지 않음 */

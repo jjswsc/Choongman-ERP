@@ -5129,7 +5129,7 @@ export const i18n = {
       '기간·매장 KPI, 채널·매장·결제·일별 추이를 한눈에 보는 요약 리포트입니다.',
     salesTopicPromoBundleReport: '세트 할인',
     salesTopicPromoBundleReportHint:
-      '세트·프로모 줄의 정가 대비 판매가 차이(세트 할인)만 분석합니다. 유형별·메뉴별 상세와 총매출 대비 비중을 제공합니다.',
+      '세트·프로모 줄의 정가 대비 판매가 차이(세트 할인)만 분석합니다. 배달앱(Grab·Shopee 등)은 앱 안 세트·메뉴별로 수량·정가·판매액을 나눕니다.',
     salesPromoBundleDiscount: '세트 할인',
     salesPromoRegularAmount: '정가 합계',
     salesPromoSaleAmount: '판매액',
@@ -5139,7 +5139,7 @@ export const i18n = {
     salesPromoTotalDiscountHint: '세트 내재 + 결제 할인(참고)',
     salesPromoTotalDiscount: '할인 합계',
     salesPromoBundleFootnote:
-      '정가는 주문 promoRegularPrice 스냅샷(신규 주문) 또는 promoItems·DB 구성 역산(과거 주문)입니다. 결제 할인과 세트 내재 할인은 겹치지 않으며, 「할인 합계」에 더하면 됩니다.',
+      '정가는 주문 promoRegularPrice 스냅샷(신규 주문) 또는 promoItems·DB 구성 역산(과거 주문)입니다. 배달앱 플랫폼 할인은 주문 할인액을 세트·메뉴 줄에 나눠 붙이며, 행을 누르면 해당 메뉴 주문을 볼 수 있습니다. 결제 할인과 세트 내재 할인은 겹치지 않으며, 「할인 합계」에 더하면 됩니다.',
     salesPromoEstimatedQty: '추정 정가 줄',
     salesPromoUnresolvedQty: '정가 미산출',
     salesPromoPeriodGrossSales: '기간 총매출',
@@ -5147,6 +5147,7 @@ export const i18n = {
     salesPromoDiscountPctOfGross: '총매출 대비 할인',
     salesPromoKindSet: '메뉴 세트',
     salesPromoKindCampaign: '캠페인 프로모',
+    salesPromoKindPlatform: '배달·플랫폼',
     salesPromoKindOther: '기타',
     salesPromoKindBreakdown: '유형별 분석',
     salesPromoBundleDiscountShare: '세트 할인 비중',
@@ -5156,7 +5157,7 @@ export const i18n = {
     salesPromoAnalyticsTitle: '할인 영향 분석',
     salesBundleDiscountAnalyticsTitle: '세트 할인 영향 분석',
     salesBundleDiscountAnalyticsHint:
-      '세트·프로모 줄의 정가 대비 판매가 차이(세트 할인)만 집계합니다. 결제 할인은 「결제 할인」리포트를 보세요.',
+      '세트·프로모 줄의 정가 대비 판매가 차이(세트 할인)만 집계합니다. 배달앱은 Grab·Shopee 등 앱 안에서 세트·메뉴별로 합산됩니다. 결제 할인은 「결제 할인」리포트를 보세요.',
     salesPromoSaleQty: '세트 판매 수량',
     salesPromoAnalyticsHint:
       '총매출은 동일 기간·매장·주문유형의 완료 주문 합계입니다. 세트 할인은 정가 대비 판매가 차이이며, 결제 할인과는 별도 층입니다.',
@@ -13456,7 +13457,7 @@ Only matters the employee must handle personally on a working day:
     salesTopicOverviewReport: 'Overview report',
     salesTopicPromoBundleReport: 'Set discount',
     salesTopicPromoBundleReportHint:
-      'Analyzes set/promo line regular price vs sale price (set discount only). Type and menu breakdown with share of gross sales.',
+      'Analyzes set/promo line regular vs sale price (set discount). Delivery apps (Grab, Shopee, etc.) break down by set/menu inside each app.',
     salesPromoBundleDiscount: 'Set discount',
     salesPromoRegularAmount: 'Regular total',
     salesPromoSaleAmount: 'Sale amount',
@@ -13466,7 +13467,7 @@ Only matters the employee must handle personally on a working day:
     salesPromoTotalDiscountHint: 'Set + checkout (reference)',
     salesPromoTotalDiscount: 'Total discount',
     salesPromoBundleFootnote:
-      'Regular price is derived from order promoItems (or DB set composition) and current menu/option prices. Past orders may differ after price changes. Lines without composition show as unresolved.',
+      'Regular price is from the order promoRegularPrice snapshot or promoItems/DB composition. Delivery-app platform discounts are allocated onto set/menu lines; click a row for those orders. Built-in and checkout discounts do not overlap.',
     salesPromoEstimatedQty: 'Estimated regular lines',
     salesPromoUnresolvedQty: 'Unresolved regular',
     salesPromoPeriodGrossSales: 'Period gross sales',
@@ -13474,6 +13475,7 @@ Only matters the employee must handle personally on a working day:
     salesPromoDiscountPctOfGross: 'Discount vs gross',
     salesPromoKindSet: 'Menu set',
     salesPromoKindCampaign: 'Campaign promo',
+    salesPromoKindPlatform: 'Delivery platform',
     salesPromoKindOther: 'Other',
     salesPromoKindBreakdown: 'By type',
     salesPromoBundleDiscountShare: 'Set discount share',
@@ -13483,7 +13485,7 @@ Only matters the employee must handle personally on a working day:
     salesPromoAnalyticsTitle: 'Discount impact',
     salesBundleDiscountAnalyticsTitle: 'Set discount impact',
     salesBundleDiscountAnalyticsHint:
-      'Set discount only (regular vs sale on set/promo lines). See Checkout discount report for payment discounts.',
+      'Set discount only (regular vs sale on set/promo lines). Delivery apps split by set/menu inside Grab, Shopee, etc. See Checkout discount for payment discounts.',
     salesPromoSaleQty: 'Set quantity sold',
     salesPromoAnalyticsHint:
       'Gross sales = completed orders in the same period, stores, and order types. Built-in discount is regular minus sale price; checkout discount is a separate layer.',

@@ -252,10 +252,65 @@ describe('aggregatePosSalesPromoBundleDiscount', () => {
       ],
     })
 
-    expect(result.rows.find((r) => r.kind === 'platform')?.bundleDiscount).toBe(80)
+    const platformRow = result.rows.find((r) => r.kind === 'platform')
+    expect(platformRow?.bundleDiscount).toBe(80)
+    expect(platformRow?.name).toContain('Festival Set')
+    expect(platformRow?.promoCode).toBe('SET-9')
+    expect(platformRow?.qty).toBe(1)
+    expect(platformRow?.saleAmount).toBe(250)
+    expect(platformRow?.regularAmount).toBe(330)
     expect(result.totals.bundleDiscount).toBe(80)
+    expect(result.totals.saleAmount).toBe(250)
+    expect(result.totals.qty).toBe(1)
     expect(result.totals.paymentDiscount).toBe(0)
     expect(result.byKind.find((k) => k.kind === 'platform')?.bundleDiscount).toBe(80)
+    expect(result.byKind.find((k) => k.kind === 'platform')?.saleAmount).toBe(250)
+  })
+
+  it('splits a platform order across promo menus and keeps discount total', () => {
+    const result = aggregatePosSalesPromoBundleDiscount({
+      catalog: catalogFixture(),
+      orderRows: [
+        {
+          total: 800,
+          order_type: 'delivery',
+          delivery_app_code: 'grab',
+          discount_amt: 90,
+          items_json: JSON.stringify([
+            {
+              name: 'Festival Set',
+              promoId: '9',
+              promoCode: 'SET-9',
+              price: 250,
+              qty: 1,
+              promoItems: [
+                { menuId: '1', quantity: 1 },
+                { menuId: '2', quantity: 1 },
+              ],
+            },
+            {
+              name: 'Campaign Set',
+              promoId: '10',
+              promoCode: 'CAMP-S01',
+              price: 240,
+              qty: 1,
+              promoItems: [
+                { menuId: '1', quantity: 1 },
+                { menuId: '2', quantity: 1 },
+              ],
+            },
+          ]),
+        },
+      ],
+    })
+
+    const platformRows = result.rows.filter((r) => r.kind === 'platform')
+    expect(platformRows).toHaveLength(2)
+    expect(platformRows.some((r) => r.name.includes('Festival Set'))).toBe(true)
+    expect(platformRows.some((r) => r.name.includes('Campaign Set'))).toBe(true)
+    expect(Math.round(platformRows.reduce((s, r) => s + r.bundleDiscount, 0) * 100) / 100).toBe(90)
+    expect(result.totals.bundleDiscount).toBe(90)
+    expect(result.totals.qty).toBe(2)
   })
 })
 
@@ -289,6 +344,33 @@ describe('filterPromoSalesRows', () => {
         },
       ],
       ['alpha'],
+      false
+    )
+    expect(rows).toHaveLength(1)
+  })
+
+  it('matches Korean aliases for platform rows', () => {
+    const rows = filterPromoSalesRows(
+      [
+        {
+          key: 'platform::grab::promo::9',
+          promoId: '9',
+          promoCode: 'SET-9',
+          name: 'Grab · Festival Set',
+          kind: 'platform',
+          qty: 1,
+          saleAmount: 250,
+          regularAmount: 330,
+          bundleDiscount: 80,
+          discountPct: 24,
+          discountPctOfGross: 1,
+          saleSharePctOfGross: 2,
+          bundleDiscountSharePct: 100,
+          estimatedLineQty: 0,
+          unresolvedLineQty: 0,
+        },
+      ],
+      ['그랩'],
       false
     )
     expect(rows).toHaveLength(1)

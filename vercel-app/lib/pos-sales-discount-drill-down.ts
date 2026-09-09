@@ -16,9 +16,8 @@ import { resolveMemberTierDiscountLabel } from '@/lib/pos-tier-discount-reason'
 import {
   isDeliveryPlatformDiscountOrder,
   resolveDeliveryPlatformBundleDiscountAmt,
-  resolveDeliveryPlatformBundleKey,
-  resolvePlatformDiscountReasonForAnalytics,
 } from '@/lib/pos-platform-discount-reason'
+import { collectDeliveryPlatformPromoLineShares } from '@/lib/pos-sales-platform-promo-lines'
 
 export type PosSalesDiscountDrillLayer = 'bundle' | 'payment'
 
@@ -230,16 +229,32 @@ export function collectPosSalesPromoBundleDrillOrders(params: {
   const promoKeyFilter = str(params.filter.promoKey)
 
   for (const order of params.orderRows) {
-    const platformBundleDiscount = resolveDeliveryPlatformBundleDiscountAmt(order)
-    if (platformBundleDiscount > 0.0001) {
-      const platformKey = resolveDeliveryPlatformBundleKey(order)
+    const platformShares = collectDeliveryPlatformPromoLineShares({
+      order,
+      catalog: params.catalog,
+    })
+    if (platformShares.discountAmt > 0.0001) {
       const kindOk = !kindFilter || kindFilter === 'platform'
-      const keyOk = !promoKeyFilter || promoKeyFilter === platformKey
-      if (kindOk && keyOk) {
-        mergeDrillRow(map, order, platformBundleDiscount, {
-          promoLabel: resolvePlatformDiscountReasonForAnalytics(order, platformBundleDiscount),
-          discountReason: resolvePlatformDiscountReasonForAnalytics(order, platformBundleDiscount),
-        })
+      if (kindOk) {
+        if (!promoKeyFilter) {
+          mergeDrillRow(map, order, platformShares.discountAmt, {
+            promoLabel: platformShares.residualLabel,
+            discountReason: platformShares.residualLabel,
+          })
+        } else if (platformShares.lines.length === 0 && promoKeyFilter === platformShares.platformKey) {
+          mergeDrillRow(map, order, platformShares.discountAmt, {
+            promoLabel: platformShares.residualLabel,
+            discountReason: platformShares.residualLabel,
+          })
+        } else {
+          const line = platformShares.lines.find((l) => l.key === promoKeyFilter)
+          if (line && line.allocatedDiscount > 0.0001) {
+            mergeDrillRow(map, order, line.allocatedDiscount, {
+              promoLabel: line.name,
+              discountReason: line.name,
+            })
+          }
+        }
       }
     }
 

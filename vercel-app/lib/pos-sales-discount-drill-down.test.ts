@@ -93,6 +93,53 @@ describe('collectPosSalesPromoBundleDrillOrders', () => {
     expect(orders[0]?.discountAmount).toBe(23)
   })
 
+  it('filters platform drill by promo line key and shows menu label', () => {
+    const catalog: PromoPricingCatalog = {
+      ...emptyCatalog,
+      promoMetaById: new Map([
+        ['9', { code: 'SET-9', name: 'Festival Set', kind: 'set' }],
+      ]),
+      promoItemsByPromoId: new Map([['9', [{ menuId: '1', quantity: 1 }]]]),
+      menus: [{ id: '1', price: 200, priceDelivery: 220 }],
+    }
+    const orderRows = [
+      {
+        id: 1,
+        order_no: 'A-1',
+        store_code: 'CM01',
+        order_type: 'delivery',
+        delivery_app_code: 'grab',
+        total: 250,
+        discount_amt: 80,
+        items_json: JSON.stringify([
+          {
+            name: 'Festival Set',
+            promoId: '9',
+            promoCode: 'SET-9',
+            price: 250,
+            qty: 1,
+            promoItems: [{ menuId: '1', quantity: 1 }],
+          },
+        ]),
+      },
+    ]
+    const matched = collectPosSalesPromoBundleDrillOrders({
+      orderRows,
+      catalog,
+      filter: { kind: 'platform', promoKey: 'platform::grab::promo::9' },
+    })
+    expect(matched).toHaveLength(1)
+    expect(matched[0]?.discountAmount).toBe(80)
+    expect(matched[0]?.promoLabel).toContain('Festival Set')
+
+    const missed = collectPosSalesPromoBundleDrillOrders({
+      orderRows,
+      catalog,
+      filter: { kind: 'platform', promoKey: 'platform::grab::promo::99' },
+    })
+    expect(missed).toHaveLength(0)
+  })
+
   it('returns empty when no promo lines', () => {
     const orders = collectPosSalesPromoBundleDrillOrders({
       orderRows: [{ id: 1, items_json: '[]', total: 100 }],

@@ -90,7 +90,7 @@ export function resolveSalesDiscountDrillExplanation(
   if (kind === 'platform') {
     return tr(
       'salesDiscountDrillExplainBundlePlatform',
-      '배달앱(Grab·Shopee 등) API 주문의 플랫폼 세트·프로모 할인입니다. discount_amt에 기록되며 POS 결제 할인과는 별도입니다.'
+      '배달앱(Grab·Shopee 등) API 주문의 플랫폼 세트·프로모 할인입니다. 앱 안 세트·메뉴별로 나뉘며, 행을 누르면 해당 메뉴 주문을 볼 수 있습니다. discount_amt에 기록되며 POS 결제 할인과는 별도입니다.'
     )
   }
   return tr(
