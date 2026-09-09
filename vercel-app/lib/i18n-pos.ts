@@ -2372,7 +2372,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posMenuVisibleStoresScopeHint:
       '노출할 매장을 선택하세요. 선택한 매장 POS에서만 메뉴가 보입니다.',
     posMenuVisibleStoresCompatHint:
-      '아직 DB에 매장 지정이 없어 전 매장 POS에 노출 중입니다. 아래는 현재 노출 상태입니다. 매장을 바꾼 뒤 저장하면 DB에 반영됩니다.',
+      '아직 DB에 매장 지정이 없어 전 매장 POS에 노출 중입니다. 아래 체크를 확인한 뒤 저장하면 선택한 매장이 DB에 반영됩니다.',
     posMenuVisibleStoresUnscopedStrictHint:
       '매장 지정이 DB에 없어 POS에 표시되지 않습니다. 아래에서 매장을 선택한 뒤 저장하세요.',
     posMenuVisibleStoresRequiredNewMenu: '신규 메뉴는 노출 매장을 1개 이상 선택해야 합니다.',
@@ -5904,7 +5904,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posMenuVisibleStoresScopeHint:
       'Choose which stores show this menu. It appears only on POS for selected stores.',
     posMenuVisibleStoresCompatHint:
-      'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Change stores and save to persist.',
+      'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Save to persist the selection.',
     posMenuVisibleStoresUnscopedStrictHint:
       'No store scope is saved in the database, so this menu will not appear on POS. Select store(s) below and save.',
     posMenuVisibleStoresRequiredNewMenu: 'For a new menu, select at least one store where it is shown.',
@@ -7095,6 +7095,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posMenuVisibleStoresRequiredToSave: 'ต้องเลือกร้านที่แสดงเมนูอย่างน้อย 1 ร้านจึงจะบันทึกได้',
     posMenuVisibleStoresScopeHint:
       'เลือกร้านที่จะแสดงเมนู เมนูจะปรากฏเฉพาะ POS ของร้านที่เลือก',
+    posMenuVisibleStoresCompatHint:
+      'ยังไม่ได้บันทึกร้านในฐานข้อมูล จึงโชว์ทุกสาขาชั่วคราว ช่องติ๊กคือสถานะตอนนี้ กดบันทึกเพื่อเก็บสาขาที่เลือกครับ',
     posMenuVisibleStoresUnscopedStrictHint:
       'ยังไม่ได้บันทึกร้านในฐานข้อมูล จึงไม่แสดงบน POS กรุณาเลือกร้านด้านล่างแล้วกดบันทึก',
     posMenuVisibleStoresRequiredNewMenu: 'เมนูใหม่ต้องเลือกร้านที่แสดงเมนูอย่างน้อย 1 ร้าน',
@@ -10160,7 +10162,6 @@ export const I18N_POS_TH: Record<string, string> = {
     posCouponStackMode: 'กฎการซ้อน',
     posCouponStackPercent: 'เปอร์เซ็นต์เท่านั้น',
     posMenuSavedWithoutImageMismatch: 'Menu info was saved. The photo URL belongs to another menu, so the photo was left unchanged.',
-    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Change stores and save to persist.',
     posOptionTemplateStepKeyLabel: 'Step key · {key}',
     posSetTabConfirmNonBonelessChicken: 'Some chicken lines use Wing/Drumette instead of Boneless. Delivery sets usually use M-Boneless. Save anyway?',
     posChannelSettleAlreadyPosted: 'Already posted with the same amounts.',
@@ -13081,7 +13082,7 @@ export const I18N_POS_MM: Record<string, string> = {
     posLineCancelQtyTitle: 'Confirm',
     posMenuLineUnit: ' item(s)',
     posMenuSavedWithoutImageMismatch: 'Menu info was saved. The photo URL belongs to another menu, so the photo was left unchanged.',
-    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Change stores and save to persist.',
+    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Save to persist the selection.',
     posOptionTemplateStepKeyLabel: 'Step key · {key}',
     posSetTabConfirmNonBonelessChicken: 'Some chicken lines use Wing/Drumette instead of Boneless. Delivery sets usually use M-Boneless. Save anyway?',
     posReceiptSearchBizDayHint: 'Dates follow the same POS operating day as close/settlement (store open time through before next open).',
@@ -16160,7 +16161,7 @@ export const I18N_POS_LA: Record<string, string> = {
     posLineCancelQtyTitle: 'Confirm',
     posMenuLineUnit: ' item(s)',
     posMenuSavedWithoutImageMismatch: 'Menu info was saved. The photo URL belongs to another menu, so the photo was left unchanged.',
-    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Change stores and save to persist.',
+    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Save to persist the selection.',
     posOptionTemplateStepKeyLabel: 'Step key · {key}',
     posSetTabConfirmNonBonelessChicken: 'Some chicken lines use Wing/Drumette instead of Boneless. Delivery sets usually use M-Boneless. Save anyway?',
     posReceiptSearchBizDayHint: 'Dates follow the same POS operating day as close/settlement (store open time through before next open).',
@@ -19290,7 +19291,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posLineCancelQtyTitle: 'Confirm',
     posMenuLineUnit: ' item(s)',
     posMenuSavedWithoutImageMismatch: 'Menu info was saved. The photo URL belongs to another menu, so the photo was left unchanged.',
-    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Change stores and save to persist.',
+    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Save to persist the selection.',
     posOptionTemplateStepKeyLabel: 'Step key · {key}',
     posSetTabConfirmNonBonelessChicken: 'Some chicken lines use Wing/Drumette instead of Boneless. Delivery sets usually use M-Boneless. Save anyway?',
     posReceiptSearchBizDayHint: 'Dates follow the same POS operating day as close/settlement (store open time through before next open).',
@@ -22356,7 +22357,7 @@ export const I18N_POS_VI: Record<string, string> = {
     posLineCancelQtyTitle: 'Confirm',
     posMenuLineUnit: ' item(s)',
     posMenuSavedWithoutImageMismatch: 'Menu info was saved. The photo URL belongs to another menu, so the photo was left unchanged.',
-    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Change stores and save to persist.',
+    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Save to persist the selection.',
     posOptionTemplateStepKeyLabel: 'Step key · {key}',
     posSetTabConfirmNonBonelessChicken: 'Some chicken lines use Wing/Drumette instead of Boneless. Delivery sets usually use M-Boneless. Save anyway?',
     posReceiptSearchBizDayHint: 'Dates follow the same POS operating day as close/settlement (store open time through before next open).',
@@ -25443,7 +25444,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posLineCancelQtyTitle: 'Confirm',
     posMenuLineUnit: ' item(s)',
     posMenuSavedWithoutImageMismatch: 'Menu info was saved. The photo URL belongs to another menu, so the photo was left unchanged.',
-    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Change stores and save to persist.',
+    posMenuVisibleStoresCompatHint: 'No store scope is saved yet, so this menu is shown on all stores (compatibility mode). Checkboxes reflect current visibility. Save to persist the selection.',
     posOptionTemplateStepKeyLabel: 'Step key · {key}',
     posSetTabConfirmNonBonelessChicken: 'Some chicken lines use Wing/Drumette instead of Boneless. Delivery sets usually use M-Boneless. Save anyway?',
     posReceiptSearchBizDayHint: 'Dates follow the same POS operating day as close/settlement (store open time through before next open).',

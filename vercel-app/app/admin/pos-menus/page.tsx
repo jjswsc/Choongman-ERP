@@ -143,6 +143,7 @@ import {
   menuHasPersistedStoreScope,
   normalizeMenuScopeStoreCodes,
   resolveEffectiveMenuScopeStoreCodes,
+  shouldPersistPosMenuStoreScopeOnSave,
 } from "@/lib/pos-menu-store-scope"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 
@@ -1147,12 +1148,12 @@ export default function PosMenusPage() {
     }
     const editingMenu = editingId ? menus.find((m) => m.id === editingId) : null
     const persistedScope = editingMenu ? menuScopeStoreCodes(editingMenu) : []
-    const shouldPersistStoreScope =
-      !editingId ||
-      storeScopeDirty ||
-      menuHasPersistedStoreScope(persistedScope) ||
-      /** Omni 등 엄격 모드: 미저장 스코프 메뉴도 저장 시 체크된 매장을 DB에 남김 */
-      (storeScopeStrictPersist && !!editingId)
+    const shouldPersistStoreScope = shouldPersistPosMenuStoreScopeOnSave({
+      isNewMenu: !editingId,
+      storeScopeDirty,
+      hasPersistedScope: menuHasPersistedStoreScope(persistedScope),
+      strictPersist: storeScopeStrictPersist,
+    })
     const scopeForSave = shouldPersistStoreScope
       ? normalizeMenuScopeStoreCodes(
           (() => {

@@ -96,3 +96,18 @@ export function shouldSyncPosMenuStoreScopeOnSave(params: {
   return params.hasStoreCodesPayload && (!params.isPartialMenuEdit || params.isDescriptionOnlyEdit)
 }
 
+/**
+ * 메뉴 정보 저장 시 화면에 체크된 매장을 DB에 남길지.
+ * 세트/프로모 미러는 생성 직후 스코프가 비어 있고, 충만 호환 모드에서는
+ * 체크박스가 전 매장으로 보이기만 한다. 체크를 안 바꿔도 저장하면 persist 해야
+ * 주황 경고가 사라지고 선택한 매장이 유지된다.
+ */
+export function shouldPersistPosMenuStoreScopeOnSave(_params: {
+  isNewMenu: boolean
+  storeScopeDirty: boolean
+  hasPersistedScope: boolean
+  strictPersist: boolean
+}): boolean {
+  return true
+}
+

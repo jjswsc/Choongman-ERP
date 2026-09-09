@@ -7,6 +7,7 @@ import {
   shouldMenuBeVisibleForStore,
   isPosMenuStoreScopeCompatibilityModeForBrand,
   shouldSyncPosMenuStoreScopeOnSave,
+  shouldPersistPosMenuStoreScopeOnSave,
 } from '@/lib/pos-menu-store-scope'
 import { posMenusCatalogCacheKey } from '@/lib/offline/pos-catalog-offline'
 
@@ -92,6 +93,41 @@ describe('shouldSyncPosMenuStoreScopeOnSave', () => {
         isDescriptionOnlyEdit: false,
       })
     ).toBe(false)
+  })
+})
+
+describe('shouldPersistPosMenuStoreScopeOnSave', () => {
+  it('persists on new menu', () => {
+    expect(
+      shouldPersistPosMenuStoreScopeOnSave({
+        isNewMenu: true,
+        storeScopeDirty: false,
+        hasPersistedScope: false,
+        strictPersist: false,
+      })
+    ).toBe(true)
+  })
+
+  it('persists Choongman unscoped promo even when checkboxes were not toggled', () => {
+    expect(
+      shouldPersistPosMenuStoreScopeOnSave({
+        isNewMenu: false,
+        storeScopeDirty: false,
+        hasPersistedScope: false,
+        strictPersist: false,
+      })
+    ).toBe(true)
+  })
+
+  it('persists Omni unscoped menus in strict mode', () => {
+    expect(
+      shouldPersistPosMenuStoreScopeOnSave({
+        isNewMenu: false,
+        storeScopeDirty: false,
+        hasPersistedScope: false,
+        strictPersist: true,
+      })
+    ).toBe(true)
   })
 })
 
