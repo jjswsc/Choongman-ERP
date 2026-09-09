@@ -17,6 +17,9 @@ import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { isMissingPostgrestTableError } from '@/lib/supabase-missing-table'
+
+const PP36_TABLE = 'vat_pp36_ledger_entries'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -99,7 +102,7 @@ export async function GET(request: NextRequest) {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
-    const rows = (await supabaseSelectFilterAllPages('vat_pp36_ledger_entries', monthFilter, {
+    const rows = (await supabaseSelectFilterAllPages(PP36_TABLE, monthFilter, {
       select: '*',
       pageSize: 4000,
       maxRows: 100000,
@@ -111,6 +114,10 @@ export async function GET(request: NextRequest) {
     })
     return NextResponse.json({ entries, period }, { headers })
   } catch (e) {
+    if (isMissingPostgrestTableError(e, PP36_TABLE)) {
+      console.warn('pp36Ledger GET: table missing — run sql/thai_tax_pp36_pnd54_minimal.sql')
+      return NextResponse.json({ entries: [] }, { headers })
+    }
     console.error('pp36Ledger GET:', e)
     return NextResponse.json({ entries: [] }, { headers })
   }
@@ -179,7 +186,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (id > 0) {
-      const existingRows = (await supabaseSelectFilter('vat_pp36_ledger_entries', `id=eq.${id}`, {
+      const existingRows = (await supabaseSelectFilter(PP36_TABLE, `id=eq.${id}`, {
         select: 'id,store_name',
         limit: 1,
       })) as { id?: number; store_name?: string | null }[] | null
@@ -195,10 +202,10 @@ export async function POST(request: NextRequest) {
         }
       }
       try {
-        await supabaseUpdate('vat_pp36_ledger_entries', id, row)
+        await supabaseUpdate(PP36_TABLE, id, row)
       } catch (e) {
         if (!isMissingSubmissionColumnError(e)) throw e
-        await supabaseUpdate('vat_pp36_ledger_entries', id, stripSubmissionAuditFields(row))
+        await supabaseUpdate(PP36_TABLE, id, stripSubmissionAuditFields(row))
       }
       return NextResponse.json({ success: true, id }, { headers })
     }
@@ -210,17 +217,24 @@ export async function POST(request: NextRequest) {
     }
     let inserted: { id?: number }[] = []
     try {
-      inserted = (await supabaseInsert('vat_pp36_ledger_entries', insertRow)) as { id?: number }[]
+      inserted = (await supabaseInsert(PP36_TABLE, insertRow)) as { id?: number }[]
     } catch (e) {
       if (!isMissingSubmissionColumnError(e)) throw e
       inserted = (await supabaseInsert(
-        'vat_pp36_ledger_entries',
+        PP36_TABLE,
         stripSubmissionAuditFields(insertRow)
       )) as { id?: number }[]
     }
     const newId = Number(inserted?.[0]?.id || 0)
     return NextResponse.json({ success: true, id: newId }, { headers })
   } catch (e) {
+    if (isMissingPostgrestTableError(e, PP36_TABLE)) {
+      console.warn('pp36Ledger POST: table missing — run sql/thai_tax_pp36_pnd54_minimal.sql')
+      return NextResponse.json(
+        { success: false, error: 'TABLE_MISSING' },
+        { status: 503, headers }
+      )
+    }
     console.error('pp36Ledger POST:', e)
     return NextResponse.json(
       { success: false, error: e instanceof Error ? e.message : String(e) },
@@ -251,7 +265,7 @@ export async function DELETE(request: NextRequest) {
     assertCanWriteAccountingCompliance(userRole)
     const id = Number(body.id || 0)
     if (!id) return NextResponse.json({ success: false, error: 'INVALID_ID' }, { status: 400, headers })
-    const existingRows = (await supabaseSelectFilter('vat_pp36_ledger_entries', `id=eq.${id}`, {
+    const existingRows = (await supabaseSelectFilter(PP36_TABLE, `id=eq.${id}`, {
       select: 'id,store_name',
       limit: 1,
     })) as { id?: number; store_name?: string | null }[] | null
@@ -264,9 +278,16 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'FORBIDDEN_STORE_SCOPE' }, { status: 403, headers })
       }
     }
-    await supabaseDeleteByFilter('vat_pp36_ledger_entries', `id=eq.${id}`)
+    await supabaseDeleteByFilter(PP36_TABLE, `id=eq.${id}`)
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
+    if (isMissingPostgrestTableError(e, PP36_TABLE)) {
+      console.warn('pp36Ledger DELETE: table missing — run sql/thai_tax_pp36_pnd54_minimal.sql')
+      return NextResponse.json(
+        { success: false, error: 'TABLE_MISSING' },
+        { status: 503, headers }
+      )
+    }
     console.error('pp36Ledger DELETE:', e)
     return NextResponse.json(
       { success: false, error: e instanceof Error ? e.message : String(e) },

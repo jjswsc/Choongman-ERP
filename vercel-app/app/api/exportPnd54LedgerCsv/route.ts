@@ -7,6 +7,7 @@ import { pnd54LedgerToCsv, type Pnd54LedgerRow } from '@/lib/pnd54-ledger-csv'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { isMissingPostgrestTableError } from '@/lib/supabase-missing-table'
 
 function parseFilingStatus(v: unknown): '' | 'draft' | 'submitted' {
   const raw = String(v || '').trim().toLowerCase()
@@ -94,6 +95,10 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (e) {
+    if (isMissingPostgrestTableError(e, 'withholding_tax_pnd54_entries')) {
+      console.warn('exportPnd54LedgerCsv: table missing — run sql/thai_tax_pp36_pnd54_minimal.sql')
+      return NextResponse.json({ error: 'TABLE_MISSING' }, { status: 503, headers })
+    }
     console.error('exportPnd54LedgerCsv:', e)
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

@@ -103,6 +103,12 @@ begin
       on public.withholding_tax_pnd54_entries (tenant_id);
   end if;
 
+  if to_regclass('public.vat_pp36_ledger_entries') is not null then
+    alter table public.vat_pp36_ledger_entries add column if not exists tenant_id text;
+    create index if not exists idx_vat_pp36_ledger_entries_tenant_id
+      on public.vat_pp36_ledger_entries (tenant_id);
+  end if;
+
   if to_regclass('public.accounting_periods') is not null then
     alter table public.accounting_periods add column if not exists tenant_id text;
     create index if not exists idx_accounting_periods_tenant_id on public.accounting_periods (tenant_id);
@@ -166,6 +172,12 @@ begin
   end if;
   if to_regclass('public.withholding_tax_ledger_entries') is not null then
     update public.withholding_tax_ledger_entries set tenant_id = only_tenant where coalesce(trim(tenant_id), '') = '';
+  end if;
+  if to_regclass('public.withholding_tax_pnd54_entries') is not null then
+    update public.withholding_tax_pnd54_entries set tenant_id = only_tenant where coalesce(trim(tenant_id), '') = '';
+  end if;
+  if to_regclass('public.vat_pp36_ledger_entries') is not null then
+    update public.vat_pp36_ledger_entries set tenant_id = only_tenant where coalesce(trim(tenant_id), '') = '';
   end if;
 end $$;
 
