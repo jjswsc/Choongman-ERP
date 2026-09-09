@@ -3,7 +3,7 @@
 import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
-import { ExternalLink, RefreshCw, ClipboardCopy, Pencil, Play, Ban, Link2 } from "lucide-react"
+import { ExternalLink, RefreshCw, ClipboardCopy, Pencil, Play, Ban, Link2, Trash2 } from "lucide-react"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,6 +37,7 @@ import {
   getPosPromosWithItems,
   savePosPromo,
   savePosPromoItem,
+  deletePosPromo,
   type MarketingCampaign,
   type PosPromo,
 } from "@/lib/api-client"
@@ -302,6 +303,18 @@ export function PosSetMenuInquiryTab({
       onRefresh()
     })
 
+  const handleDelete = (p: PosPromo) =>
+    runBusy(p.id, async () => {
+      if (!(await appConfirm(t("posSetInquiryDeleteConfirm").replace("{{name}}", p.name || p.code)))) return
+      const res = await deletePosPromo({ id: p.id })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
+        return
+      }
+      await appAlert(t("posSetInquiryDeleted"))
+      onRefresh()
+    })
+
   const handleCopy = (p: PosPromo) =>
     runBusy(p.id, async () => {
       const items = await getPosPromoItems({ promoId: p.id }).catch(() => [])
@@ -397,6 +410,88 @@ export function PosSetMenuInquiryTab({
       await appAlert(t("posSetLinkCampaignSuccess"))
       onRefresh()
     })
+  }
+
+  const renderRowActions = (p: PosPromo, includeLinkCampaign: boolean) => {
+    const b = busyId === p.id
+    return (
+      <>
+        {includeLinkCampaign && !hideLinkCampaign && !p.marketingCampaignId?.trim() ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-8 gap-1 px-2 text-[11px]"
+            disabled={b}
+            onClick={() => {
+              setLinkCampaignId("")
+              setLinkTarget(p)
+            }}
+          >
+            <Link2 className="h-3 w-3" />
+            {t("posSetLinkCampaign")}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1 px-2 text-[11px]"
+          disabled={b}
+          onClick={() => onOpenInSetTab(p.id)}
+        >
+          <Pencil className="h-3 w-3" />
+          {t("posSetInquiryOpenInSetTab")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1 px-2 text-[11px]"
+          disabled={b}
+          onClick={() => void handleCopy(p)}
+        >
+          <ClipboardCopy className="h-3 w-3" />
+          {t("posSetInquiryCopy")}
+        </Button>
+        {p.isActive ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-8 gap-1 px-2 text-[11px]"
+            disabled={b}
+            onClick={() => void handleDeactivate(p)}
+          >
+            <Ban className="h-3 w-3" />
+            {t("posSetInquirySuspend")}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            className="h-8 gap-1 bg-emerald-600 px-2 text-[11px] hover:bg-emerald-700"
+            disabled={b}
+            onClick={() => void handleActivate(p)}
+          >
+            <Play className="h-3 w-3" />
+            {t("posSetInquiryActivate")}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1 px-2 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+          disabled={b}
+          onClick={() => void handleDelete(p)}
+        >
+          <Trash2 className="h-3 w-3" />
+          {t("posSetInquiryDelete")}
+        </Button>
+      </>
+    )
   }
 
   return (
@@ -554,7 +649,6 @@ export function PosSetMenuInquiryTab({
             </div>
           ) : (
             filtered.map((p) => {
-              const b = busyId === p.id
               const promoItems = (p as PosPromo & {
                 items?: { menuId: string; optionId: string | null; quantity: number }[]
               }).items || []
@@ -626,55 +720,7 @@ export function PosSetMenuInquiryTab({
                       ) : null}
                     </div>
                     <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1 px-2 text-[11px]"
-                        disabled={b}
-                        onClick={() => onOpenInSetTab(p.id)}
-                      >
-                        <Pencil className="h-3 w-3" />
-                        {t("posSetInquiryOpenInSetTab")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1 px-2 text-[11px]"
-                        disabled={b}
-                        onClick={() => void handleCopy(p)}
-                      >
-                        <ClipboardCopy className="h-3 w-3" />
-                        {t("posSetInquiryCopy")}
-                      </Button>
-                      {p.isActive ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="h-8 gap-1 px-2 text-[11px]"
-                            disabled={b}
-                            onClick={() => void handleDeactivate(p)}
-                          >
-                            <Ban className="h-3 w-3" />
-                            {t("posSetInquirySuspend")}
-                          </Button>
-                        </>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="default"
-                          size="sm"
-                          className="h-8 gap-1 bg-emerald-600 px-2 text-[11px] hover:bg-emerald-700"
-                          disabled={b}
-                          onClick={() => void handleActivate(p)}
-                        >
-                          <Play className="h-3 w-3" />
-                          {t("posSetInquiryActivate")}
-                        </Button>
-                      )}
+                      {renderRowActions(p, false)}
                     </div>
                   </div>
                 </div>
@@ -714,7 +760,6 @@ export function PosSetMenuInquiryTab({
                 </tr>
               ) : (
                 filtered.map((p) => {
-                  const b = busyId === p.id
                   const promoItems = (p as PosPromo & {
                     items?: { menuId: string; optionId: string | null; quantity: number }[]
                   }).items || []
@@ -793,73 +838,7 @@ export function PosSetMenuInquiryTab({
                         )}
                       </td>
                       <td className="px-3 py-2.5 align-top text-right">
-                        <div className="flex flex-wrap justify-end gap-1">
-                          {!hideLinkCampaign && !p.marketingCampaignId?.trim() ? (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              className="h-8 gap-1 px-2 text-[11px]"
-                              disabled={b}
-                              onClick={() => {
-                                setLinkCampaignId("")
-                                setLinkTarget(p)
-                              }}
-                            >
-                              <Link2 className="h-3 w-3" />
-                              {t("posSetLinkCampaign")}
-                            </Button>
-                          ) : null}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 gap-1 px-2 text-[11px]"
-                            disabled={b}
-                            onClick={() => onOpenInSetTab(p.id)}
-                          >
-                            <Pencil className="h-3 w-3" />
-                            {t("posSetInquiryOpenInSetTab")}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 gap-1 px-2 text-[11px]"
-                            disabled={b}
-                            onClick={() => void handleCopy(p)}
-                          >
-                            <ClipboardCopy className="h-3 w-3" />
-                            {t("posSetInquiryCopy")}
-                          </Button>
-                          {p.isActive ? (
-                            <>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                className="h-8 gap-1 px-2 text-[11px]"
-                                disabled={b}
-                                onClick={() => void handleDeactivate(p)}
-                              >
-                                <Ban className="h-3 w-3" />
-                                {t("posSetInquirySuspend")}
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="default"
-                              size="sm"
-                              className="h-8 gap-1 bg-emerald-600 px-2 text-[11px] hover:bg-emerald-700"
-                              disabled={b}
-                              onClick={() => void handleActivate(p)}
-                            >
-                              <Play className="h-3 w-3" />
-                              {t("posSetInquiryActivate")}
-                            </Button>
-                          )}
-                        </div>
+                        <div className="flex flex-wrap justify-end gap-1">{renderRowActions(p, true)}</div>
                       </td>
                     </tr>
                   )

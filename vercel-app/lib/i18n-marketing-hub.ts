@@ -116,7 +116,7 @@ export const I18N_MARKETING_HUB_KO: Record<string, string> = {
     '상단에서 캠페인을 고르면 그 캠페인만 다룹니다(캠페인 카드 「협업 할인」탭과 같은 화면).\n① 캠페인을 고른 뒤 「협업 관리 목록에 포함」을 켭니다.\n② 협업 상세에서 제휴사·증빙·메뉴 범위·할인(정률 시 할인 상한 ฿ 가능)을 저장합니다.\n③ 협업 조회 탭에서 기간·제휴사별 목록을 봅니다.\n④ 사용 현황 탭: 기간·매장·캠페인 검색 후 「조회」. 매장수를 누르면 매장별 주문·할인을 봅니다.\n⑤ 협업 분석 탭: 캠페인·매장 순위, 일별 추이, 비중을 확인합니다.\n⑥ 과거 주문은 sql/backfill_pos_orders_collab_discount_usage.sql 을 Supabase에서 실행한 뒤 조회합니다. 매장·일별 RPC는 sql/get_collab_discount_usage_by_store_daily_rpc.sql 을 실행하세요.',
   helpSum_admin_marketing_promos: 'POS·Grab 연동 프로모션 세트를 캠페인 단위로 구성·조회합니다.',
   helpHow_admin_marketing_promos:
-    '상단에서 캠페인을 고르면 그 캠페인만 다룹니다(캠페인 카드 「프로모션 세트」탭과 같은 화면).\n① 상단에서 캠페인을 선택합니다.\n② 편집·구성: 메뉴를 골라 세트를 만들고 저장합니다(POS와 동일 로직).\n③ 목록 조회: 활성·기간 필터로 세트를 보고 편집 탭으로 이동합니다.',
+    '상단에서 캠페인을 고르면 그 캠페인만 다룹니다(캠페인 카드 「프로모션 세트」탭과 같은 화면).\n① 상단에서 캠페인을 선택합니다.\n② 편집·구성: 메뉴를 골라 세트를 만들고 저장합니다(POS와 동일 로직).\n③ 목록 조회: 활성·기간 필터로 세트를 보고, 편집 탭으로 이동하거나 복사·중단·삭제할 수 있습니다. 삭제는 복구할 수 없습니다.',
   helpSum_admin_marketing_tasks: '고른 캠페인의 스탠디·포스터·인플루언서 작업을 칸반으로 관리합니다.',
   helpHow_admin_marketing_tasks:
     '① 상단에서 캠페인을 고릅니다. 고른 캠페인은 다른 마케팅 메뉴로 옮겨도 유지됩니다.\n② 홍보물·인플루언서 카드를 칸반에서 옮겨 진행 상태를 바꿉니다. 모바일은 카드의 이동 버튼을 씁니다.\n③ 홍보물은 매장별 개수를 넣습니다. 비우면 총수량을 매장 수로 나눈 값으로 봅니다.',
@@ -376,7 +376,7 @@ export const I18N_MARKETING_HUB_EN: Record<string, string> = {
     'Pick a campaign at the top and this screen covers only that campaign (same as the collab tab in the campaign workspace).\n① Pick a campaign and enable “Include in collab list”.\n② Save partner, proof, scope, and discount (percent can set a max ฿ cap).\n③ Overview tab for period and partner filters.\n④ Usage tab: search by period/store/campaign, then Load. Click store count for per-store breakdown.\n⑤ Analytics tab: rankings, daily trend, and share.\n⑥ For legacy orders run sql/backfill_pos_orders_collab_discount_usage.sql. For store/daily RPC run sql/get_collab_discount_usage_by_store_daily_rpc.sql.',
   helpSum_admin_marketing_promos: 'Compose and review POS·Grab promo sets by campaign.',
   helpHow_admin_marketing_promos:
-    'Pick a campaign at the top and this screen covers only that campaign (same as the promo-set tab in the campaign workspace).\n① Select a campaign at the top.\n② Compose: pick menus and save sets (same logic as POS).\n③ List: filter by active/period and open in compose tab.',
+    'Pick a campaign at the top and this screen covers only that campaign (same as the promo-set tab in the campaign workspace).\n① Select a campaign at the top.\n② Compose: pick menus and save sets (same logic as POS).\n③ List: filter by active/period, open in compose, or copy/suspend/delete. Delete cannot be undone.',
   helpSum_admin_marketing_tasks: 'Run the picked campaign’s standee, poster, and influencer work on a kanban board.',
   helpHow_admin_marketing_tasks:
     '① Pick a campaign at the top. The choice follows you across marketing menus.\n② Drag material and influencer cards between columns to change status. On mobile use the move buttons on each card.\n③ Enter a per-store count for materials. Leave it blank to split the total across stores.',
@@ -630,7 +630,7 @@ export const I18N_MARKETING_HUB_TH: Record<string, string> = {
     'เลือกแคมเปญด้านบนแล้วหน้านี้จะดูเฉพาะแคมเปญนั้นครับ (เหมือนแท็บส่วนลดความร่วมมือในหน้าแคมเปญ)\n① เลือกแคมเปญและเปิด「รวมในรายการความร่วมมือ」\n② บันทึกพันธมิตร หลักฐาน ขอบเขต ส่วนลด (แบบ % ตั้งส่วนลดสูงสุด ฿ ได้)\n③ แท็บภาพรวมสำหรับช่วงและพันธมิตร\n④ แท็บสถานะการใช้: ค้นหาตามช่วง/สาขา/แคมเปญ แล้วกดโหลด กดจำนวนสาขาเพื่อดูรายสาขา\n⑤ แท็บวิเคราะห์: อันดับ แนวโน้มรายวัน สัดส่วน\n⑥ ออเดอร์เก่า: sql/backfill_pos_orders_collab_discount_usage.sql · RPC รายสาขา/รายวัน: sql/get_collab_discount_usage_by_store_daily_rpc.sql',
   helpSum_admin_marketing_promos: 'สร้างและดูชุดโปรโม POS·Grab ตามแคมเปญ',
   helpHow_admin_marketing_promos:
-    'เลือกแคมเปญด้านบนแล้วหน้านี้จะดูเฉพาะแคมเปญนั้นครับ (เหมือนแท็บโปรโมชันเซ็ตในหน้าแคมเปญ)\n① เลือกแคมเปญด้านบน\n② แก้ไข/สร้าง: เลือกเมนูและบันทึกชุด (ตรรกะเดียวกับ POS)\n③ รายการ: กรองและเปิดในแท็บแก้ไข',
+    'เลือกแคมเปญด้านบนแล้วหน้านี้จะดูเฉพาะแคมเปญนั้นครับ (เหมือนแท็บโปรโมชันเซ็ตในหน้าแคมเปญ)\n① เลือกแคมเปญด้านบน\n② แก้ไข/สร้าง: เลือกเมนูและบันทึกชุด (ตรรกะเดียวกับ POS)\n③ รายการ: กรอง เปิดแก้ในแท็บชุด คัดลอก หยุดขาย หรือลบโปรโมชั่นได้ครับ การลบกู้คืนไม่ได้',
   helpSum_admin_marketing_tasks: 'จัดการงานสแตนดี้ โปสเตอร์ และอินฟลูของแคมเปญที่เลือก บนบอร์ดคัมบัง',
   helpHow_admin_marketing_tasks:
     '① เลือกแคมเปญด้านบน ระบบจะจำไว้เมื่อสลับเมนูการตลาดอื่นครับ\n② ลากการ์ดสื่อโปรโมชันกับอินฟลูข้ามคอลัมน์เพื่อเปลี่ยนสถานะ บนมือถือใช้ปุ่มย้ายบนการ์ดครับ\n③ สื่อโปรโมชันใส่จำนวนรายสาขาได้ ถ้าเว้นว่างจะหารจำนวนรวมตามจำนวนสาขาครับ',

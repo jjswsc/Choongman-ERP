@@ -9330,7 +9330,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posSetInquiryOpenInSetTab: 'แก้ไขในแท็บชุด',
     posSetInquiryCopy: 'คัดลอก',
     posSetInquirySuspend: 'หยุดขาย',
-    posSetInquiryDelete: 'ลบ',
+    posSetInquiryDelete: 'ลบโปรโมชั่น',
     posSetInquiryActivate: 'เปิดใช้งาน',
     posSetInquiryDeactivateConfirm: 'หยุดขาย 「{{name}}」หรือไม่? (โปรจะถูกปิดใช้งาน)',
     posSetInquiryDeleteConfirm:
