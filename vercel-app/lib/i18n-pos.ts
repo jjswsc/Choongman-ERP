@@ -1795,6 +1795,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posBusinessOpenRequiredDate: '영업일',
     posBusinessOpenNewDayTitle: '새 영업일 시재 등록이 필요합니다',
     posBusinessOpenNewDayBody: '아침에 등록한 시제는 이전 영업일 기준입니다. 매장 영업 시작 시각이 지나 새 영업일이 시작되면, 현재 영업일 시제를 다시 입력·저장해야 주문할 수 있습니다.',
+    posBusinessOpenPrintNeedSave: '인쇄하려면 먼저 영업 시작(시재)을 저장해 주세요.',
     posDrawerPinManageTitle: '금전 서랍 PIN 관리',
     posDrawerPinManageBody:
       '6자리 PIN을 설정하면 현금 결제 자동 오픈을 제외한 돈통 열기 시 PIN이 필요합니다.',
@@ -5328,6 +5329,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posBusinessOpenRequiredDate: 'Business date',
     posBusinessOpenNewDayTitle: 'Opening cash required for new business day',
     posBusinessOpenNewDayBody: 'Morning opening cash was saved for the previous business day. After your store\'s business-day start time, register opening cash again for the current business day before taking orders.',
+    posBusinessOpenPrintNeedSave: 'Save the opening cash count first, then print.',
     posDrawerPinManageTitle: 'Cash drawer PIN',
     posDrawerPinManageBody: 'When a 6-digit PIN is set, opening the drawer (except auto-open on cash payment) requires PIN entry.',
     posDrawerPinEnterTitle: 'Cash drawer PIN',
@@ -7421,6 +7423,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posBusinessOpenRequiredDate: 'วันทำการ',
     posBusinessOpenNewDayTitle: 'ต้องลงทะเบียนเงินสดเริ่มต้นสำหรับวันทำการใหม่',
     posBusinessOpenNewDayBody: 'เงินสดเริ่มต้นที่บันทึกตอนเช้าเป็นของวันทำการก่อนหน้า เมื่อถึงเวลาเริ่มวันทำการของร้าน กรุณาบันทึกเงินสดเริ่มต้นของวันทำการปัจจุบันอีกครั้งก่อนคีย์ออเดอร์',
+    posBusinessOpenPrintNeedSave: 'กรุณาบันทึกเงินสดเริ่มต้นก่อน แล้วค่อยพิมพ์ครับ',
     posDrawerPinManageTitle: 'PIN ลิ้นชักเงิน',
     posDrawerPinManageBody: 'เมื่อตั้ง PIN 6 หลักแล้ว การเปิดลิ้นชัก (ยกเว้นเปิดอัตโนมัติเมื่อรับเงินสด) ต้องใส่ PIN',
     posDrawerPinEnterTitle: 'PIN ลิ้นชักเงิน',
@@ -13175,6 +13178,7 @@ export const I18N_POS_MM: Record<string, string> = {
     posShellStartupHealthWarnNoExplicit: 'No explicit print target is set, so output may rely only on the Windows default printer.',
     posShellStartupHealthWarnTitle: 'Startup printer check found a risk item.',
     posBusinessOpenNewDayBody: 'မနက်က သိမ်းထားသော ငွေသားအစသည် ယခင်လုပ်ငန်းနေ့အတွက် ဖြစ်သည်။ ဆိုင်၏ လုပ်ငန်းနေ့ စတင်ချိန်ကျလျှင် လက်ရှိလုပ်ငန်းနေ့အတွက် ငွေသားအစကို ထပ်မံသိမ်းမှ အော်ဒါယူနိုင်သည်။',
+    posBusinessOpenPrintNeedSave: 'ပုံနှိပ်ရန် အရင် ငွေသားအစကို သိမ်းပါ။',
     posBusinessOpenNewDayTitle: 'လုပ်ငန်းနေ့အသစ်အတွက် ငွေသားအစ မှတ်ရန် လိုအပ်သည်',
     posDeliveryOpsBulkSellApplied: 'Applied {{start}}–{{end}} to {{n}} menus. Save to push to Grab.',
     posDeliveryOpsBulkSellApply: 'Apply to all menus',
@@ -13502,6 +13506,8 @@ export const I18N_POS_MM: Record<string, string> = {
     posDepositMemberSelected: 'Member',
     posDepositRefund: 'Refund',
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
+    posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
+    posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -16251,6 +16257,7 @@ export const I18N_POS_LA: Record<string, string> = {
     posShellStartupHealthWarnNoExplicit: 'No explicit print target is set, so output may rely only on the Windows default printer.',
     posShellStartupHealthWarnTitle: 'Startup printer check found a risk item.',
     posBusinessOpenNewDayBody: 'ເງິນສົດເລີ່ມຕົ້ນທີ່ບັນທຶກເຊົ້ານີ້ເປັນຂອງວັນທຸລະກິດກ່ອນ. ເມື່ອຮອດເວລາເລີ່ມວັນທຸລະກິດຂອງຮ້ານ ກະລຸນາບັນທຶກເງິນສົດເລີ່ມຕົ້ນຂອງວັນປັດຈຸບັນອີກຄັ້ງກ່ອນຮັບອໍເດີ.',
+    posBusinessOpenPrintNeedSave: 'ກະລຸນາບັນທຶກເງິນສົດເລີ່ມຕົ້ນກ່ອນ ຈຶ່ງພິມ.',
     posBusinessOpenNewDayTitle: 'ຕ້ອງບັນທຶກເງິນສົດເລີ່ມຕົ້ນສຳລັບວັນທຸລະກິດໃໝ່',
     posDeliveryOpsBulkSellApplied: 'Applied {{start}}–{{end}} to {{n}} menus. Save to push to Grab.',
     posDeliveryOpsBulkSellApply: 'Apply to all menus',
@@ -16578,6 +16585,8 @@ export const I18N_POS_LA: Record<string, string> = {
     posDepositMemberSelected: 'Member',
     posDepositRefund: 'Refund',
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
+    posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
+    posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -19365,6 +19374,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posShellStartupHealthWarnNoExplicit: 'No explicit print target is set, so output may rely only on the Windows default printer.',
     posShellStartupHealthWarnTitle: 'Startup printer check found a risk item.',
     posBusinessOpenNewDayBody: 'លុយដើមដែលរក្សាទុកព្រឹកនេះជារបស់ថ្ងៃអាជីវកម្មមុន។ បន្ទាប់ពីម៉ោងចាប់ផ្តើមថ្ងៃអាជីវកម្មរបស់ហាង សូមរក្សាទុកលុយដើមថ្ងៃបច្ចុប្បន្នម្តងទៀតមុនពេលទទួលការបញ្ជាទិញ។',
+    posBusinessOpenPrintNeedSave: 'សូមរក្សាទុកលុយដើមមុនសិន រួចទើបបោះពុម្ព។',
     posBusinessOpenNewDayTitle: 'ត្រូវចុះឈ្មោះលុយដើមសម្រាប់ថ្ងៃអាជីវកម្មថ្មី',
     posDeliveryOpsBulkSellApplied: 'Applied {{start}}–{{end}} to {{n}} menus. Save to push to Grab.',
     posDeliveryOpsBulkSellApply: 'Apply to all menus',
@@ -19689,6 +19699,8 @@ export const I18N_POS_KH: Record<string, string> = {
     posDepositMemberSelected: 'Member',
     posDepositRefund: 'Refund',
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
+    posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
+    posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -22441,6 +22453,7 @@ export const I18N_POS_VI: Record<string, string> = {
     posShellStartupHealthWarnNoExplicit: 'No explicit print target is set, so output may rely only on the Windows default printer.',
     posShellStartupHealthWarnTitle: 'Startup printer check found a risk item.',
     posBusinessOpenNewDayBody: 'Quỹ đầu ngày đã lưu buổi sáng thuộc ngày kinh doanh trước. Khi đến giờ bắt đầu ngày kinh doanh của cửa hàng, hãy lưu lại quỹ của ngày hiện tại trước khi nhận đơn.',
+    posBusinessOpenPrintNeedSave: 'Hãy lưu quỹ đầu ngày trước, rồi in.',
     posBusinessOpenNewDayTitle: 'Cần đăng ký quỹ đầu ngày cho ngày kinh doanh mới',
     posDeliveryOpsBulkSellApplied: 'Applied {{start}}–{{end}} to {{n}} menus. Save to push to Grab.',
     posDeliveryOpsBulkSellApply: 'Apply to all menus',
@@ -22769,6 +22782,8 @@ export const I18N_POS_VI: Record<string, string> = {
     posDepositMemberSelected: 'Member',
     posDepositRefund: 'Refund',
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
+    posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
+    posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -25525,6 +25540,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posShellStartupHealthWarnNoExplicit: 'No explicit print target is set, so output may rely only on the Windows default printer.',
     posShellStartupHealthWarnTitle: 'Startup printer check found a risk item.',
     posBusinessOpenNewDayBody: 'Tunai pembukaan yang disimpan pagi tadi adalah untuk hari perniagaan sebelumnya. Selepas waktu mula hari perniagaan kedai, daftar semula tunai pembukaan hari semasa sebelum ambil pesanan.',
+    posBusinessOpenPrintNeedSave: 'Simpan kiraan tunai pembukaan dahulu, kemudian cetak.',
     posBusinessOpenNewDayTitle: 'Perlu daftar tunai pembukaan untuk hari perniagaan baharu',
     posDeliveryOpsBulkSellApplied: 'Applied {{start}}–{{end}} to {{n}} menus. Save to push to Grab.',
     posDeliveryOpsBulkSellApply: 'Apply to all menus',
@@ -25853,4 +25869,6 @@ export const I18N_POS_MS: Record<string, string> = {
     posDepositMemberSelected: 'Member',
     posDepositRefund: 'Refund',
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
+    posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
+    posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
 }

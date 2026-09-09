@@ -163,6 +163,7 @@ const INVOICE_NEGATIVE_RE = labelPattern(
     'ใบสั่งซื้อเลขที่',
     'เลขที่ใบสั่งซื้อ',
     'รหัสลูกค้า',
+    'รหัสพาร์ทเนอร์',
     'อ้างอิง',
     'เลขที่บัญชี',
     'เลขที่ห้อง',
@@ -170,7 +171,7 @@ const INVOICE_NEGATIVE_RE = labelPattern(
     'เลขทะเบียน',
     'เลขที่ผู้เสียภาษี',
   ],
-  'TAX\\s*ID|P\\.?O\\.?\\s*NO|PURCHASE\\s*ORDER|CUSTOMER\\s*NO|CUST\\s*NO|REFERENCE|ACCOUNT\\s*NO|BRANCH\\s*NO'
+  'TAX\\s*ID|P\\.?O\\.?\\s*NO|PURCHASE\\s*ORDER|CUSTOMER\\s*NO|CUST\\s*NO|REFERENCE|ACCOUNT\\s*NO|BRANCH\\s*NO|PARTNER\\s*ID'
 )
 
 /** `เลขที่ 1106 ถนน…` `เลขที่ 101 ห้อง 545` 처럼 번지수·호실인 경우 */
@@ -431,7 +432,7 @@ export function layoutInvoiceIsHintWorthy(field?: LayoutField<string>): boolean 
 /** 과거 번호들에서 공통 꼴을 뽑는다. 근거가 빈약하면 undefined. */
 export function learnVendorInvoiceHint(pastNumbers: string[]): VendorInvoiceHint | undefined {
   const norms = pastNumbers
-    .filter((n) => !isTruncatedShopeeInvoiceNo(n))
+    .filter((n) => !isTruncatedShopeeInvoiceNo(n) && !/^THMG20/i.test(String(n || '')))
     .map(normToken)
     .filter((n) => n.length >= 4 && /\d/.test(n))
   if (!norms.length) return undefined

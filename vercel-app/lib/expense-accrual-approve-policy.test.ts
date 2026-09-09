@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canApproveExpenseAccrual,
   canDeleteExpenseAccrual,
   canEditExpenseAccrualClassification,
   canEditExpenseAccrualPlan,
@@ -75,6 +76,34 @@ describe('isExpenseAccrualDeletableByPaymentState', () => {
 
   it('allows no-store cleanup rows', () => {
     expect(isExpenseAccrualDeletableByPaymentState({ status: 'paid', isNoStore: true })).toBe(true)
+  })
+})
+
+describe('canApproveExpenseAccrual', () => {
+  it('lets accounting approve store items without office payroll flag', () => {
+    expect(canApproveExpenseAccrual('accounting', 'CM Silom')).toBe(true)
+    expect(canApproveExpenseAccrual('accounting', 'CM Silom', false)).toBe(true)
+  })
+
+  it('blocks accounting on HQ-named accruals without office payroll flag', () => {
+    expect(canApproveExpenseAccrual('accounting', 'Office')).toBe(false)
+    expect(canApproveExpenseAccrual('accounting', 'CM Office')).toBe(false)
+    expect(canApproveExpenseAccrual('accounting', '본사', false)).toBe(false)
+  })
+
+  it('lets accounting with office payroll approve HQ-named accruals', () => {
+    expect(canApproveExpenseAccrual('accounting', 'Office', true)).toBe(true)
+    expect(canApproveExpenseAccrual('accounting', 'CM Office', true)).toBe(true)
+    expect(canApproveExpenseAccrual('accounting', '본사', true)).toBe(true)
+  })
+
+  it('does not let officer with office payroll approve HQ-named accruals', () => {
+    expect(canApproveExpenseAccrual('officer', 'CM Office', true)).toBe(false)
+  })
+
+  it('lets director and secretary approve HQ-named accruals', () => {
+    expect(canApproveExpenseAccrual('director', 'CM Office')).toBe(true)
+    expect(canApproveExpenseAccrual('secretary', 'Office')).toBe(true)
   })
 })
 

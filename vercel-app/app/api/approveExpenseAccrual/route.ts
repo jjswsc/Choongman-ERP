@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { canApproveExpenseAccrual } from '@/lib/expense-accrual-approve-policy'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
+import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 import { requireAuth } from '@/lib/verify-auth'
 
 type ExpenseAccrualRow = {
@@ -44,12 +45,23 @@ export async function POST(request: NextRequest) {
     if (!row?.id) {
       return NextResponse.json({ success: false, message: '지급 예정 데이터를 찾을 수 없습니다.' }, { status: 404, headers })
     }
-    if (!canApproveExpenseAccrual(userRole, String(row.store_name || ''))) {
+    const payrollAuth = await resolveCanManageOfficePayrollAuth({
+      role: userRole,
+      canManageOfficePayroll: auth.canManageOfficePayroll,
+      employeeId: auth.employeeId,
+    })
+    if (
+      !canApproveExpenseAccrual(
+        userRole,
+        String(row.store_name || ''),
+        payrollAuth.canManageOfficePayroll === true
+      )
+    ) {
       return NextResponse.json(
         {
           success: false,
           message:
-            '승인 권한이 없습니다. 본사(Office·본사 등) 명의 건은 임원(director·ceo·hr), 그 외 매장 건은 본사(임원·오피스) 또는 회계에서 승인할 수 있습니다.',
+            '승인 권한이 없습니다. 본사(Office·본사 등) 명의 건은 임원(director·ceo·hr) 또는 오피스 급여 권한이 있는 회계, 그 외 매장 건은 본사(임원·오피스) 또는 회계에서 승인할 수 있습니다.',
         },
         { status: 403, headers }
       )

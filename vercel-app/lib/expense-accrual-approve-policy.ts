@@ -8,13 +8,31 @@ export function isExpenseAccrualHqStoreName(storeName: string | undefined): bool
 }
 
 /**
+ * 본사(Office) 명의 지급예정 승인·반려·삭제 — 임원, 또는 오피스 급여 권한이 있는 회계
+ */
+export function canApproveHqExpenseAccrual(
+  userRoleRaw: string | undefined,
+  canManageOfficePayroll?: boolean
+): boolean {
+  const role = String(userRoleRaw || '')
+  if (isDirectorRole(role)) return true
+  return isAccountingRole(role) && canManageOfficePayroll === true
+}
+
+/**
  * 지급예정 승인·반려 가능 역할
- * - 본사(Office 등) 명의 건: 임원급(director·ceo·hr)
+ * - 본사(Office 등) 명의 건: 임원급(director·ceo·hr), 또는 오피스 급여 권한이 있는 회계
  * - 그 외 매장 건: 본사 권한 전체(officer 포함) + 회계 (기존에는 officer만이라 director·회계는 UI에 체크가 안 나옴)
  */
-export function canApproveExpenseAccrual(userRoleRaw: string | undefined, storeName: string | undefined): boolean {
+export function canApproveExpenseAccrual(
+  userRoleRaw: string | undefined,
+  storeName: string | undefined,
+  canManageOfficePayroll?: boolean
+): boolean {
   const role = String(userRoleRaw || '')
-  if (isExpenseAccrualHqStoreName(storeName)) return isDirectorRole(role)
+  if (isExpenseAccrualHqStoreName(storeName)) {
+    return canApproveHqExpenseAccrual(role, canManageOfficePayroll)
+  }
   return isOfficeRole(role) || isAccountingRole(role)
 }
 
@@ -53,15 +71,13 @@ export function isExpenseAccrualDeletableByPaymentState(input: {
 }
 
 /**
- * 본사(Office) 명의 지급예정 삭제 — 임원, 또는 오피스 급여 권한이 있는 회계
+ * 본사(Office) 명의 지급예정 삭제 — 승인 권한과 동일 (임원, 또는 오피스 급여 권한이 있는 회계)
  */
 export function canDeleteHqExpenseAccrual(
   userRoleRaw: string | undefined,
   canManageOfficePayroll?: boolean
 ): boolean {
-  const role = String(userRoleRaw || '')
-  if (isDirectorRole(role)) return true
-  return isAccountingRole(role) && canManageOfficePayroll === true
+  return canApproveHqExpenseAccrual(userRoleRaw, canManageOfficePayroll)
 }
 
 /**

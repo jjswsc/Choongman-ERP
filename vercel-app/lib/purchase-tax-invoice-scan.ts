@@ -239,6 +239,7 @@ export function invoiceNoLooksPlausible(raw: unknown): boolean {
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(inv)) return false
   if (isTruncatedShopeeInvoiceNo(inv)) return false
   if (/^IM20\d{0,11}$/i.test(compact) && compact.length < 16) return false
+  if (/^THMG20/i.test(compact)) return false
   if (!/[A-Za-z]/.test(compact) && compact.length < 4) return false
   return true
 }
@@ -256,7 +257,7 @@ function cleanInvoiceNo(raw: string): string | undefined {
 }
 
 const PLATFORM_INVOICE_RE =
-  /\b(TRS[A-Z]{2,10}\s*[O0]{2}\s*-\s*\d{5}\s*-\s*\d{6}\s*-\s*\d{5,8}|IM\s*20\d{2}\s*\d{10,12}|LMRN\s*[A-Z0-9]{8,20}|\d{6}\s*[A-EFH]\s*\d{7,14}|INV\s*-\s*\d{8,14}(?:\s*-\s*\d{2,4})?)\b/i
+  /\b(TRS[A-Z]{2,10}\s*[O0]{2}\s*-\s*\d{5}\s*-\s*\d{6}\s*-\s*\d{5,8}|IM\s*20\d{2}\s*\d{10,12}|GFAD\s*20\d{12}|LMRN\s*[A-Z0-9]{8,20}|\d{6}\s*[A-EFH]\s*\d{7,14}|INV\s*-\s*\d{8,14}(?:\s*-\s*\d{2,4})?)\b/i
 
 function platformInvoiceBlob(raw: string): string {
   return normalizeShopeeInvoiceBlob(ocrFixDigitsInInvoiceBlob(String(raw || '')))
@@ -370,14 +371,35 @@ function grabYmFromTaxMonth(taxMonth?: string): string {
   return String(taxMonth || '').replace(/-/g, '').slice(0, 6)
 }
 
+function looksLikeCompleteGrabInvoiceNo(raw: string): boolean {
+  const s = String(raw || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+  return /^(?:IM|GFAD)20\d{12}$/.test(s)
+}
+
 function recoverGrabInvoiceNo(text: string, sellerTaxId?: string, taxMonth?: string): string | undefined {
-  const compact = platformInvoiceBlob(text)
+  const compact = platformInvoiceBlob(text).replace(/THMG20\d{14,}/gi, ' ')
   const ym = grabYmFromTaxMonth(taxMonth)
+  const gfad = [...compact.matchAll(/GFAD20\d{12}/gi)].map((m) => m[0].replace(/\s+/g, '').toUpperCase())
+  const withoutGated = compact.replace(/GFAD20\d{12}/gi, ' ').replace(/[IT]M20\d{12}/gi, ' ')
   const prefixed = [...compact.matchAll(/[IT]M20\d{12}/gi)].map((m) => `IM${m[0].replace(/^[IT]M/i, '')}`)
-  const grabTin = sellerTaxId === '0105556090377' || compact.includes('0105556090377')
-  const bodies = grabTin ? [...compact.matchAll(/20\d{12}/g)].map((m) => `IM${m[0]}`) : []
-  const all = [...prefixed, ...bodies]
-  const pick = (ym && all.find((n) => n.slice(2, 8) === ym)) || prefixed[0] || (grabTin ? bodies[0] : undefined)
+  const grabTin = sellerTaxId === '0105556090377' || compact.includes('0105556090377') || gfad.length > 0
+  const bodies = grabTin
+    ? [...withoutGated.matchAll(/(?<![A-Z])20\d{12}/g)].map((m) => `IM${m[0]}`)
+    : []
+  const ymdOf = (n: string) => {
+    const s = n.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+    if (s.startsWith('GFAD')) return s.slice(4, 10)
+    if (s.startsWith('IM')) return s.slice(2, 8)
+    return ''
+  }
+  const pickYm = (hits: string[]) => (ym ? hits.find((n) => ymdOf(n) === ym) : undefined)
+  const pick =
+    pickYm(gfad) ||
+    pickYm(prefixed) ||
+    pickYm(bodies) ||
+    gfad[0] ||
+    prefixed[0] ||
+    (grabTin && !ym ? bodies[0] : undefined)
   if (pick) return cleanInvoiceNo(pick)
   if (!grabTin) return undefined
   const partial = compact.match(/[IT]M(20\d{7,11})/i)
@@ -420,11 +442,12 @@ const INVOICE_LINE_STOP_RE =
   /วันที่|บริษัท|ห้างหุ้น|ห้าง|เลขประจำ|มูลค่า|ภาษีมูลค่า|ผู้ซื้อ|ผู้ขาย|สำนักงาน|สาขา\s*\d|Tax\s*ID|\bTIN\b/i
 
 const OFFICE_INVOICE_RE =
-  /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|INCT|IV|1V|ID|TI|ABB|RT)[\-/]?[A-Z0-9\-/ ]{2,48}|[A-Z]{5,10}\d{12,28}|370\d{6}W\d{4,8}|\d{6}[EFH]\d{4,14}|\d{7,12})\b/gi
+  /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|INCT|IV|1V|ID|TI|ABB|RT|GFAD)[\-/]?[A-Z0-9\-/ ]{2,48}|[A-Z]{5,10}\d{12,28}|370\d{6}W\d{4,8}|\d{6}[EFH]\d{4,14}|\d{7,12})\b/gi
 
 function officeInvoiceRank(inv: string): number {
   const s = String(inv || '')
-  if (/^(INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|INCT|IV|1V|ID)[-/]?/i.test(s)) return 8
+  if (/^(INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|INCT|IV|1V|ID|GFAD)[-/]?/i.test(s)) return 8
+  if (looksLikeCompleteGrabInvoiceNo(s)) return 8
   if (looksLikeKasikornInvoiceNo(s)) return 8
   if (/^[A-Z]{5,12}\d{12,}$/i.test(s.replace(/[^A-Za-z0-9]/g, ''))) return 7
   if (/^0\d{8,9}$/.test(s.replace(/\D/g, '')) && !/[A-Za-z]/.test(s)) return 0
@@ -543,6 +566,7 @@ function extractInvoiceNo(
 const KNOWN_INVOICE_SELLERS: Array<{ re: RegExp; tin: string; name: string }> = [
   { re: /^TRS[A-Z]{2,10}00-/i, tin: '0105558019581', name: 'บริษัท ช้อปปี้ (ประเทศไทย) จำกัด' },
   { re: /^IM20\d{12}$/i, tin: '0105556090377', name: 'บริษัท แกร็บแท็กซี่ (ประเทศไทย) จำกัด' },
+  { re: /^GFAD20\d{12}$/i, tin: '0105556090377', name: 'บริษัท แกร็บแท็กซี่ (ประเทศไทย) จำกัด' },
   { re: /^LMRN/i, tin: '0105562160721', name: 'บริษัท ไลน์แมน (ประเทศไทย) จำกัด' },
   { re: /^\d{6}[EFH]\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
   { re: /^370\d+W\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
@@ -673,6 +697,8 @@ export function inferDocDateFromInvoiceNo(invoiceNo: string): string | undefined
   const s = platformInvoiceBlob(fixOcrInvoiceLetterIPrefix(String(invoiceNo || '').trim()))
   const im = s.match(/^IM(20\d{2})(\d{2})(\d{2})\d+$/i)
   if (im) return ymdFromParts(Number(im[1]), Number(im[2]), Number(im[3]))
+  const gfad = s.match(/^GFAD(20\d{2})(\d{2})(\d{2})\d+$/i)
+  if (gfad) return ymdFromParts(Number(gfad[1]), Number(gfad[2]), Number(gfad[3]))
   const lm = s.match(/^LMRN(20\d{2})(\d{2})(\d{2})/i)
   if (lm) return ymdFromParts(Number(lm[1]), Number(lm[2]), Number(lm[3]))
   const shopee =
@@ -1521,6 +1547,7 @@ function invoiceFromPageBeatsCurrent(fromPage: string, current?: string): boolea
   if (isTruncatedShopeeInvoiceNo(cur) && !isTruncatedShopeeInvoiceNo(page)) return true
   if (isTruncatedShopeeInvoiceNo(cur) && page.startsWith('TRS')) return page.length > cur.length
   if (/^[IT]M20/i.test(page) && /^[IT1]M20/i.test(cur) && page.length >= cur.length) return true
+  if (/^GFAD20\d{12}$/i.test(page) && /^IM20/i.test(cur)) return true
   if (/^\d{6}[EFH]/i.test(page) && !/^\d{6}[EFH]/i.test(cur)) return true
   if (/^370\d{6}W\d+$/i.test(page) && !/^370\d{6}W\d+$/i.test(cur)) return true
   if (page.startsWith('TRS') && cur.startsWith('TRS') && page.length > cur.length + 4) return true
@@ -1761,7 +1788,7 @@ export function repairExtractedPurchaseTaxInvoice(
     if (prefixed) invoiceNo = prefixed
     if (invoiceNo) invoiceNo = snapRvInvoiceToTaxMonth(invoiceNo, hint?.taxMonth)
     const vendorHint = sellerTaxId ? hint?.vendorHints?.get(sellerTaxId) : undefined
-    if (vendorHint) {
+    if (vendorHint && !looksLikeCompleteGrabInvoiceNo(String(invoiceNo || ''))) {
       if (!invoiceNo || !invoiceMatchesVendorHint(invoiceNo, vendorHint)) {
         const recovered = findInvoiceTokenInText(pageText, vendorHint)
         if (recovered) invoiceNo = recovered

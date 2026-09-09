@@ -79,6 +79,19 @@ describe('purchase tax invoice golden texts', () => {
     )
     expect(grabWrongYearRef?.invoiceNo).toBe('IM20260702033636')
 
+    const grabAds = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'เลขที่/No. GFAD20260825011177',
+        'วันที่ 25/08/2026',
+        'รหัสพาร์ทเนอร์ THMG20250616072219019783',
+        'เลขประจำตัวผู้เสียภาษี 0105556090377',
+        'มูลค่า 116.78 ภาษีมูลค่าเพิ่ม 8.17',
+      ].join('\n'),
+      { buyerTaxId: BUYER, taxMonth: '2026-08' }
+    )
+    expect(grabAds?.invoiceNo).toBe('GFAD20260825011177')
+    expect(grabAds?.invoiceNo).not.toBe('IM20250616072219')
+
     const grabBang = extractPurchaseTaxInvoiceFromScanText(
       `ใบกำกับภาษี เลขที่ IM2026070100008!\nเลขประจำตัวผู้เสียภาษี 0105556090377\nมูลค่า 337.16 ภาษีมูลค่าเพิ่ม 23.60`,
       { buyerTaxId: BUYER }

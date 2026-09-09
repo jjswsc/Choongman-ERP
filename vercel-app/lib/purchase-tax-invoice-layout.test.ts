@@ -103,6 +103,16 @@ describe('findLayoutInvoiceNo', () => {
     expect(got?.value).toBe('370290826W02075')
   })
 
+  it('Grab Ads는 เลขที่ GFAD를 쓰고 Partner ID THMG는 쓰지 않는다', () => {
+    const got = findLayoutInvoiceNo(
+      page([
+        line(200, [['เลขที่', 1400], ['No.', 1480], ['GFAD20260825011177', 1600]]),
+        line(280, [['รหัสพาร์ทเนอร์', 200], ['Partner ID', 500], ['THMG20250616072219019783', 800]]),
+      ])
+    )
+    expect(got?.value).toBe('GFAD20260825011177')
+  })
+
   it('라벨이 없어도 머리말 오른쪽의 번호 꼴은 후보로 받는다', () => {
     const got = findLayoutInvoiceNo(page([line(120, [['Menustyle', 370], ['Printing', 670], ['IV-016119', 2010]])]))
     expect(got?.value).toBe('IV-016119')

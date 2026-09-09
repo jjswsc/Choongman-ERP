@@ -594,8 +594,9 @@ export function ExpenseManagementTab() {
   }, [filteredExpensePlans, filteredPurchasePlans])
 
   const canApproveByPolicy = React.useCallback(
-    (row: ExpenseAccrualPlanItem) => canApproveExpenseAccrual(auth?.role, row.storeName),
-    [auth?.role]
+    (row: ExpenseAccrualPlanItem) =>
+      canApproveExpenseAccrual(auth?.role, row.storeName, auth?.canManageOfficePayroll === true),
+    [auth?.role, auth?.canManageOfficePayroll]
   )
   const canDeleteByPolicy = React.useCallback(
     (row: ExpenseAccrualPlanItem) =>

@@ -85,6 +85,8 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('IV20260820-2330')).toBe(true)
     expect(invoiceNoLooksPlausible('AB-99')).toBe(true)
     expect(invoiceNoLooksPlausible('IM20260701000087')).toBe(true)
+    expect(invoiceNoLooksPlausible('GFAD20260825011177')).toBe(true)
+    expect(invoiceNoLooksPlausible('THMG20250616072219019783')).toBe(false)
     expect(invoiceNoLooksPlausible('010726E00037051')).toBe(true)
     expect(invoiceNoLooksPlausible('370290826W02075')).toBe(true)
     expect(invoiceNoLooksPlausible('12345678')).toBe(true)
@@ -113,6 +115,8 @@ describe('invoiceTokensAreSameDocument', () => {
     expect(invoiceTokensAreSameDocument('IV20260818-2330', 'IV20260820-2330')).toBe(false)
     expect(invoiceTokensAreSameDocument('1V20260818-2330', 'IV20260818-2330')).toBe(true)
     expect(invoiceTokensAreSameDocument('IV690819-0637', '690819-0637')).toBe(true)
+    expect(invoiceTokensAreSameDocument('GFAD20260825011177', 'GFAD20260826011200')).toBe(false)
+    expect(invoiceTokensAreSameDocument('GFAD20260825011177', 'IM20250616072219')).toBe(false)
   })
 
   it('does not collapse different dated invoices that share a sequence', () => {
@@ -541,6 +545,7 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(inferDocDateFromInvoiceNo('TRSPEFHM00-00000-260821-001305')).toBe('2026-08-21')
     expect(inferDocDateFromInvoiceNo('370290826W02075')).toBe('2026-08-29')
     expect(inferDocDateFromInvoiceNo('010726E00037051')).toBe('2026-07-01')
+    expect(inferDocDateFromInvoiceNo('GFAD20260825011177')).toBe('2026-08-25')
     const repaired = repairExtractedPurchaseTaxInvoice(
       {
         invoiceNo: '690819-0637',
@@ -776,6 +781,40 @@ describe('office invoice OCR (ID prefix, bank name, line vs total)', () => {
     expect(row?.docDate).toBe('2026-08-29')
     expect(row?.netAmount).toBe(9.87)
     expect(row?.vatAmount).toBe(0.69)
+  })
+
+  it('reads Grab Ads GFAD number, not the THMG partner id as IM', () => {
+    const text = [
+      'ใบเสร็จรับเงิน / ใบกำกับภาษี',
+      'Grabtaxi (Thailand) Co., Ltd.',
+      'เลขประจำตัวผู้เสียภาษี 0105556090377',
+      'เลขที่/No. GFAD20260825011177',
+      'วันที่ 25/08/2026',
+      'รหัสพาร์ทเนอร์/Partner ID THMG20250616072219019783',
+      'ชื่อ บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+      'เลขประจำตัวผู้เสียภาษี 0105568080622',
+      'Advertising fees - 2026-08-25',
+      'รวมมูลค่าสินค้าและบริการ 116.78',
+      'ภาษีมูลค่าเพิ่ม 8.17',
+      'จำนวนเงินรวมทั้งสิ้น 124.95',
+    ].join('\n')
+    const row = extractPurchaseTaxInvoiceFromScanText(text, {
+      buyerTaxId: '0105568080622',
+      taxMonth: '2026-08',
+    })
+    expect(row?.invoiceNo).toBe('GFAD20260825011177')
+    expect(row?.invoiceNo).not.toBe('IM20250616072219')
+    expect(row?.sellerTaxId).toBe('0105556090377')
+    expect(row?.docDate).toBe('2026-08-25')
+    expect(row?.netAmount).toBe(116.78)
+    expect(row?.vatAmount).toBe(8.17)
+
+    const otherDay = extractPurchaseTaxInvoiceFromScanText(
+      text.replace('GFAD20260825011177', 'GFAD20260826011200').replace('25/08/2026', '26/08/2026'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(otherDay?.invoiceNo).toBe('GFAD20260826011200')
+    expect(invoiceTokensAreSameDocument(row?.invoiceNo, otherDay?.invoiceNo)).toBe(false)
   })
 })
 
