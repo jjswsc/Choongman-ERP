@@ -36,8 +36,8 @@ contextBridge.exposeInMainWorld("cmPosShell", {
         o.kitchenStation === 1 || o.kitchenStation === 2 || o.kitchenStation === 3 ? o.kitchenStation : undefined,
     });
   },
-  /** App 메뉴의 Reset cache + reload 와 동일(확인 대화상자는 메인 프로세스) */
-  resetCacheAndReload: () => ipcRenderer.invoke("cm-pos-reset-cache-reload"),
+  /** App 메뉴의 Reset cache + reload 와 동일. silent:true 면 확인 창 없이 직원이 누른 Clear Cache 와 같음 */
+  resetCacheAndReload: (opts) => ipcRenderer.invoke("cm-pos-reset-cache-reload", opts || {}),
   configureCustomerDisplay: (params) => ipcRenderer.invoke("cm-pos-customer-display-configure", params || {}),
   openCustomerDisplayWindow: () => ipcRenderer.invoke("cm-pos-customer-display-open"),
   closeCustomerDisplayWindow: () => ipcRenderer.invoke("cm-pos-customer-display-close"),

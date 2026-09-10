@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
+  hasHybridSilentCacheReset,
   isChunkLoadError,
   isStaleClientBundleError,
   recoverFromChunkLoadError,
   shouldClearBuildRelatedCache,
+  shouldRecoverStaleBundleEvent,
 } from "@/lib/chunk-load-recovery"
 
 describe("isChunkLoadError", () => {
@@ -41,6 +43,14 @@ describe("isStaleClientBundleError", () => {
   })
 })
 
+describe("shouldRecoverStaleBundleEvent", () => {
+  it("recovers chunk errors unless a recovery already ran", () => {
+    expect(shouldRecoverStaleBundleEvent(new Error("Loading chunk 1 failed"), false)).toBe(true)
+    expect(shouldRecoverStaleBundleEvent(new Error("Loading chunk 1 failed"), true)).toBe(false)
+    expect(shouldRecoverStaleBundleEvent(new Error("Network request failed"), false)).toBe(false)
+  })
+})
+
 describe("shouldClearBuildRelatedCache", () => {
   it("clears next/serwist/workbox caches only", () => {
     expect(shouldClearBuildRelatedCache("next-static-build-assets-v2")).toBe(true)
@@ -53,6 +63,23 @@ describe("shouldClearBuildRelatedCache", () => {
 describe("recoverFromChunkLoadError", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it("uses silent hybrid Clear Cache when the Windows POS shell is present", async () => {
+    const resetCacheAndReload = vi.fn(async () => ({ ok: true }))
+    const replace = vi.fn()
+    vi.stubGlobal("window", {
+      cmPosShell: { resetCacheAndReload },
+      location: {
+        href: "https://x.example/pos",
+        origin: "https://x.example",
+        replace,
+      },
+    })
+    expect(hasHybridSilentCacheReset({ resetCacheAndReload })).toBe(true)
+    await recoverFromChunkLoadError()
+    expect(resetCacheAndReload).toHaveBeenCalledWith({ silent: true })
+    expect(replace).not.toHaveBeenCalled()
   })
 
   it("navigates immediately even if service worker unregister hangs", async () => {

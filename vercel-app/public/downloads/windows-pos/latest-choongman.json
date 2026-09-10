@@ -1,20 +1,20 @@
 {
-    "version":  "0.1.17",
+    "version":  "0.1.18",
     "files":  [
                   {
                       "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
                       "name":  "cm-pos-windows-choongman-latest-setup.exe",
-                      "sha256":  "a87a8f62a48d1f26725114eb626469cf6db5fd6673b3338ab674a3f4b7c92081"
+                      "sha256":  "1b8366fc6966b258b1d3098475c956f11c2038dfe3c28f2a17e711c9c6e66f74"
                   },
                   {
-                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.17-setup.exe",
-                      "name":  "cm-pos-windows-choongman-0.1.17-setup.exe",
-                      "sha256":  "a87a8f62a48d1f26725114eb626469cf6db5fd6673b3338ab674a3f4b7c92081"
+                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.18-setup.exe",
+                      "name":  "cm-pos-windows-choongman-0.1.18-setup.exe",
+                      "sha256":  "1b8366fc6966b258b1d3098475c956f11c2038dfe3c28f2a17e711c9c6e66f74"
                   }
               ],
-    "publishedAtUtc":  "2026-08-25T15:08:10.5286777Z",
+    "publishedAtUtc":  "2026-09-09T15:19:00.7770457Z",
     "brand":  "choongman",
-    "installerSha256":  "a87a8f62a48d1f26725114eb626469cf6db5fd6673b3338ab674a3f4b7c92081",
-    "notes":  "Fix LinkPOS Native QR Error Code -1 (tx 70: 40→A1=03→R1→R2→J6=04). Reinstall Windows POS, then test Thai QR.",
-    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.17-setup.exe"
+    "installerSha256":  "1b8366fc6966b258b1d3098475c956f11c2038dfe3c28f2a17e711c9c6e66f74",
+    "notes":  "White-screen auto Clear Cache, reopen after crash, start at Windows login.",
+    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.18-setup.exe"
 }

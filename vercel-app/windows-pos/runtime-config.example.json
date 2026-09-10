@@ -5,6 +5,7 @@
   "kiosk": "1",
   "mainLoadTimeoutMs": 45000,
   "posDomBlankCheckMs": 22000,
+  "posLiveBlankPollMs": 5000,
   "printHtmlSettleMs": 360,
   "postHtmlPrintSpoolFlushMs": 600,
   "printHtmlQueueGapMs": 120,

@@ -6,6 +6,7 @@ import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 import { AppMessageProvider } from "@/components/app-message-provider"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { StaleBundleAutoRecover } from "@/components/stale-bundle-auto-recover"
 import { SwPreregister } from "@/components/sw-preregister"
 import { SwAutoUpdate } from "@/components/sw-auto-update"
 import { AppBrandProvider } from "@/components/app-brand-provider"
@@ -122,6 +123,7 @@ export default async function RootLayout({
         className={`${inter.variable} ${pretendard.variable} ${notoSansThai.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased notranslate`}
       >
         <AppBrandProvider value={brand}>
+          <StaleBundleAutoRecover />
           <ErrorBoundary>
             <AuthProvider>
               <SwPreregister />

@@ -30,6 +30,11 @@ export function shouldClearBuildRelatedCache(name: string): boolean {
   return k.includes("next-static") || k.includes("serwist") || k.includes("workbox")
 }
 
+export function shouldRecoverStaleBundleEvent(payload: unknown, recentRecovery: boolean): boolean {
+  if (recentRecovery) return false
+  return isStaleClientBundleError(payload)
+}
+
 export function hasRecentChunkRecovery(now = Date.now(), windowMs = 90_000): boolean {
   if (typeof sessionStorage === "undefined") return false
   try {
@@ -63,13 +68,29 @@ async function deleteBuildRelatedCaches(): Promise<void> {
 
 /**
  * 오염된 SW·정적 캐시를 지운 뒤 현재 URL을 다시 연다.
- * 하이브리드 `reloadPosUrl(preferFresh)` 는 로그인 URL로 보내므로 쓰지 않는다.
+ * Windows 하이브리드면 직원이 누른 Clear Cache 와 같게 셸이 캐시를 지운다(확인 창 없음).
+ * `reloadPosUrl(preferFresh)` 는 로그인 URL로 보내므로 쓰지 않는다.
  *
  * Android PWA에서 getRegistrations/unregister 가 멈추면 예전엔 화면이 그대로였다.
  * 정리는 백그라운드로 던지고, 이동은 즉시 한다.
  */
+export function hasHybridSilentCacheReset(
+  shell: { resetCacheAndReload?: (opts?: { silent?: boolean }) => Promise<unknown> } | null | undefined
+): boolean {
+  return typeof shell?.resetCacheAndReload === "function"
+}
+
 export async function recoverFromChunkLoadError(): Promise<void> {
   markChunkRecovery()
+  const shell = typeof window !== "undefined" ? window.cmPosShell : undefined
+  if (hasHybridSilentCacheReset(shell)) {
+    try {
+      await shell!.resetCacheAndReload!({ silent: true })
+      return
+    } catch {
+      /* fall through to web recovery */
+    }
+  }
   void unregisterServiceWorkers().catch(() => {})
   void deleteBuildRelatedCaches().catch(() => {})
   const next = new URL(window.location.href)

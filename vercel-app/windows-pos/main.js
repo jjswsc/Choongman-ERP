@@ -18,6 +18,7 @@ function requireDeployPublicOrigin() {
 }
 const { resolveDeployPublicOrigin } = requireDeployPublicOrigin();
 const DEPLOY_ORIGIN = resolveDeployPublicOrigin();
+const posShellRecovery = require("./pos-shell-recovery");
 
 let linkposBridgeApi = null;
 try {
@@ -724,6 +725,35 @@ const POS_DOM_BLANK_CHECK_MS = readConfigInt(
   120000
 );
 
+/** 영업 중 흰 화면 폴링 간격. 첫 로드 22초 검사와 별개로, 주문 중에 하얘져도 다시 본다. */
+const POS_LIVE_BLANK_POLL_MS = readConfigInt(
+  process.env.WINDOWS_POS_LIVE_BLANK_POLL_MS !== undefined && process.env.WINDOWS_POS_LIVE_BLANK_POLL_MS !== ""
+    ? process.env.WINDOWS_POS_LIVE_BLANK_POLL_MS
+    : runtimeConfig.posLiveBlankPollMs,
+  5000,
+  3000,
+  30000
+);
+const POS_LIVE_BLANK_HITS_BEFORE_RELOAD = readConfigInt(
+  process.env.WINDOWS_POS_LIVE_BLANK_HITS !== undefined && process.env.WINDOWS_POS_LIVE_BLANK_HITS !== ""
+    ? process.env.WINDOWS_POS_LIVE_BLANK_HITS
+    : runtimeConfig.posLiveBlankHitsBeforeReload,
+  2,
+  1,
+  6
+);
+const POS_LIVE_BLANK_MAX_RECOVERIES = readConfigInt(
+  process.env.WINDOWS_POS_LIVE_BLANK_MAX_RECOVERIES !== undefined &&
+    process.env.WINDOWS_POS_LIVE_BLANK_MAX_RECOVERIES !== ""
+    ? process.env.WINDOWS_POS_LIVE_BLANK_MAX_RECOVERIES
+    : runtimeConfig.posLiveBlankMaxRecoveries,
+  3,
+  1,
+  10
+);
+const POS_LIVE_BLANK_RECOVERY_WINDOW_MS = 180000;
+const POS_LIVE_BLANK_COOLDOWN_MS = 12000;
+
 const POS_URL = process.env.WINDOWS_POS_URL || runtimeConfig.posUrl || DEFAULT_POS_URL;
 const ALLOWED_ORIGIN = process.env.WINDOWS_POS_ALLOWED_ORIGIN || runtimeConfig.allowedOrigin || toOrigin(POS_URL);
 const isKiosk = String(process.env.WINDOWS_POS_KIOSK || runtimeConfig.kiosk || "1") !== "0";
@@ -1006,6 +1036,13 @@ let posMainLoadFailAttempts = 0;
 let posMainLoadRetryTimer = null;
 let posMainLoadWatchdogTimer = null;
 let posDomBlankWatchdogTimer = null;
+let posLiveBlankPollTimer = null;
+let posLiveBlankHits = 0;
+let posLiveBlankCooldownUntil = 0;
+let posLiveBlankRecoveries = { count: 0, windowStart: 0 };
+let posUnresponsiveTimer = null;
+let userRequestedQuit = false;
+let cacheReloadInFlight = false;
 const POS_MAIN_LOAD_MAX_ATTEMPTS = 5;
 /** 오프라인 cold start: SW·Chromium 캐시에서 셸을 띄울 시간을 더 준다 */
 const POS_MAIN_LOAD_MAX_ATTEMPTS_OFFLINE = 12;
@@ -1419,6 +1456,7 @@ function loadPosUrlWithTimeout(preferFresh) {
   const effectivePreferFresh = preferFresh && isSystemOnline();
   const timeoutMs = reloadPosUrlTimeoutMs(effectivePreferFresh);
   clearPosDomBlankWatchdog();
+  clearLiveBlankWatchdog();
   schedulePosMainLoadWatchdog();
   return Promise.race([
     mainWindow.loadURL(url, posUrlLoadOptions(effectivePreferFresh)).then(() => ({ ok: true })),
@@ -1434,6 +1472,7 @@ function loadPosUrlWithTimeout(preferFresh) {
 function loadPosMainUrl(preferFresh) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   clearPosDomBlankWatchdog();
+  clearLiveBlankWatchdog();
   schedulePosMainLoadWatchdog();
   try {
     void mainWindow.loadURL(resolvePosLoadUrl(preferFresh), posUrlLoadOptions(preferFresh && isSystemOnline()));
@@ -1501,6 +1540,133 @@ function clearPosDomBlankWatchdog() {
   }
 }
 
+function clearLiveBlankWatchdog() {
+  if (posLiveBlankPollTimer) {
+    try {
+      clearInterval(posLiveBlankPollTimer);
+    } catch {
+      /* ignore */
+    }
+    posLiveBlankPollTimer = null;
+  }
+  posLiveBlankHits = 0;
+}
+
+function clearPosUnresponsiveTimer() {
+  if (posUnresponsiveTimer) {
+    try {
+      clearTimeout(posUnresponsiveTimer);
+    } catch {
+      /* ignore */
+    }
+    posUnresponsiveTimer = null;
+  }
+}
+
+function markLiveBlankCooldown(ms) {
+  posLiveBlankCooldownUntil = Date.now() + (Number(ms) > 0 ? Number(ms) : POS_LIVE_BLANK_COOLDOWN_MS);
+}
+
+function currentLiveBlankRecoveries(now) {
+  return posShellRecovery.recoveriesInWindow(
+    posLiveBlankRecoveries,
+    now || Date.now(),
+    POS_LIVE_BLANK_RECOVERY_WINDOW_MS
+  );
+}
+
+function applyLiveBlankAction(action) {
+  if (action === "clear") {
+    posLiveBlankHits = 0;
+    return;
+  }
+  if (action === "wait") return;
+  if (action === "clear-cache") {
+    posLiveBlankRecoveries = posShellRecovery.bumpRecoveries(
+      posLiveBlankRecoveries,
+      Date.now(),
+      POS_LIVE_BLANK_RECOVERY_WINDOW_MS
+    );
+    posLiveBlankHits = 0;
+    markLiveBlankCooldown();
+    console.warn("[cm-pos] live blank watchdog: Clear Cache + reload");
+    void silentClearCacheAndReload();
+    return;
+  }
+  if (action === "offline") {
+    posLiveBlankHits = 0;
+    markLiveBlankCooldown();
+    console.warn("[cm-pos] live blank watchdog: too many recoveries, offline fallback");
+    loadOfflineFallbackPage();
+  }
+}
+
+async function probeAndRecoverLiveBlank() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const u = mainWindow.webContents.getURL() || "";
+    const onOfflinePage = u.includes("offline.html");
+    const isLoading =
+      typeof mainWindow.webContents.isLoadingMainFrame === "function"
+        ? Boolean(mainWindow.webContents.isLoadingMainFrame())
+        : Boolean(mainWindow.webContents.isLoading());
+    const cooldown = Date.now() < posLiveBlankCooldownUntil;
+    if (onOfflinePage || isLoading || cooldown) return;
+    if (!(ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN))) return;
+
+    let isBlank = false;
+    let probeFailed = false;
+    try {
+      isBlank = await mainWindow.webContents.executeJavaScript(posShellRecovery.DOM_BLANK_PROBE_JS);
+    } catch {
+      probeFailed = true;
+    }
+    const blank = probeFailed || Boolean(isBlank);
+    posLiveBlankHits = posShellRecovery.nextLiveBlankHits(posLiveBlankHits, blank);
+    const action = posShellRecovery.decideLiveBlankAction({
+      probeFailed,
+      isBlank: blank,
+      consecutiveHits: posLiveBlankHits,
+      hitsBeforeReload: POS_LIVE_BLANK_HITS_BEFORE_RELOAD,
+      recoveriesInWindow: currentLiveBlankRecoveries(),
+      maxRecoveries: POS_LIVE_BLANK_MAX_RECOVERIES,
+      isLoading,
+      cooldown,
+      onOfflinePage,
+    });
+    applyLiveBlankAction(action);
+  } catch (e) {
+    console.warn("[cm-pos] live blank probe", e && e.message ? e.message : e);
+  }
+}
+
+function startLiveBlankWatchdog() {
+  if (posLiveBlankPollTimer) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  posLiveBlankHits = 0;
+  posLiveBlankPollTimer = setInterval(() => {
+    void probeAndRecoverLiveBlank();
+  }, POS_LIVE_BLANK_POLL_MS);
+}
+
+function recoverDeadRenderer(reason) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const action = posShellRecovery.decideRendererGoneAction({
+    reason,
+    recoveriesInWindow: currentLiveBlankRecoveries(),
+    maxRecoveries: POS_LIVE_BLANK_MAX_RECOVERIES,
+  });
+  if (action === "ignore") return;
+  applyLiveBlankAction(action);
+}
+
+function relaunchMainWindowIfNeeded() {
+  if (userRequestedQuit) return;
+  if (mainWindow && !mainWindow.isDestroyed()) return;
+  console.warn("[cm-pos] window closed unexpectedly; relaunching");
+  createWindow();
+}
+
 /**
  * 원격 origin 로드는 됐는데(메인 URL 워치독만으로는 누락) 클라이언트 번들 실패·무한 대기로 흰 화면만 이어질 때 offline.html
  */
@@ -1514,17 +1680,29 @@ function schedulePosDomBlankWatchdog() {
       const u = mainWindow.webContents.getURL() || "";
       if (ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN)) {
         void mainWindow.webContents
-          .executeJavaScript(
-            "(() => { try { const b = document && document.body; if (!b) return true; if (b.querySelector('svg,img,button,input,select,form,main,nav,header,footer,textarea,canvas,iframe')) return false; const t = (b.innerText || '').replace(/\\s/g, ''); if (t.length > 0) return false; return ((b.textContent || '').replace(/\\s/g, '')).length === 0; } catch (e) { return true; } })()"
-          )
+          .executeJavaScript(posShellRecovery.DOM_BLANK_PROBE_JS)
           .then((isBlank) => {
             if (isBlank) {
-              console.warn("[cm-pos] DOM blank watchdog: nothing rendered, showing offline fallback");
-              loadOfflineFallbackPage();
+              const action = posShellRecovery.decideLiveBlankAction({
+                isBlank: true,
+                consecutiveHits: POS_LIVE_BLANK_HITS_BEFORE_RELOAD,
+                recoveriesInWindow: currentLiveBlankRecoveries(),
+                maxRecoveries: POS_LIVE_BLANK_MAX_RECOVERIES,
+              });
+              console.warn("[cm-pos] DOM blank watchdog: nothing rendered", action);
+              applyLiveBlankAction(action);
+              return;
             }
+            startLiveBlankWatchdog();
           })
           .catch(() => {
-            loadOfflineFallbackPage();
+            applyLiveBlankAction(
+              posShellRecovery.decideLiveBlankAction({
+                probeFailed: true,
+                recoveriesInWindow: currentLiveBlankRecoveries(),
+                maxRecoveries: POS_LIVE_BLANK_MAX_RECOVERIES,
+              })
+            )
           });
       }
     } catch (e) {
@@ -1556,6 +1734,7 @@ function loadOfflineFallbackPage() {
   try {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     clearPosDomBlankWatchdog();
+    clearLiveBlankWatchdog();
     try {
       mainWindow.webContents.stop();
     } catch {
@@ -2550,6 +2729,59 @@ function sendEscPosDrawerKickForPrinter(printerName) {
  * - 로그인 세션은 유지하기 위해 cookies/localStorage는 건드리지 않음
  * - Service Worker + Cache Storage만 비우고 강력 새로고침
  */
+async function clearRuntimeBuildCache(ses) {
+  const errs = [];
+  if (!ses) return errs;
+  try {
+    await ses.clearStorageData({
+      storages: ["serviceworkers", "cachestorage"],
+    });
+  } catch (e) {
+    errs.push(`clearStorageData: ${String(e && e.message ? e.message : e)}`);
+  }
+  try {
+    await ses.clearCache();
+  } catch (e) {
+    errs.push(`clearCache: ${String(e && e.message ? e.message : e)}`);
+  }
+  return errs;
+}
+
+function reloadAfterCacheClear() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const u = mainWindow.webContents.getURL() || "";
+    if (ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN) && !u.includes("offline.html")) {
+      mainWindow.webContents.reloadIgnoringCache();
+      return;
+    }
+  } catch {
+    /* fall through */
+  }
+  loadPosMainUrl(true);
+}
+
+/** 흰 화면 자동 복구 — 직원이 누른 Clear Cache 와 동일, 확인 창 없음 */
+async function silentClearCacheAndReload() {
+  if (cacheReloadInFlight) return { ok: false, reason: "busy" };
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    loadPosMainUrl(true);
+    return { ok: false, reason: "no_window" };
+  }
+  cacheReloadInFlight = true;
+  try {
+    const errs = await clearRuntimeBuildCache(mainWindow.webContents.session);
+    reloadAfterCacheClear();
+    if (errs.length > 0) {
+      console.warn("[cm-pos] silent cache reset warnings:", errs.join("; "));
+      return { ok: true, warnings: errs };
+    }
+    return { ok: true };
+  } finally {
+    cacheReloadInFlight = false;
+  }
+}
+
 async function clearRuntimeCacheAndReloadManual() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return { ok: false, reason: "no_window" };
@@ -2570,37 +2802,18 @@ async function clearRuntimeCacheAndReloadManual() {
     return { ok: false, reason: "cancelled" };
   }
 
-  const errs = [];
-  const ses = mainWindow.webContents.session;
-  try {
-    await ses.clearStorageData({
-      storages: ["serviceworkers", "cachestorage"],
-    });
-  } catch (e) {
-    errs.push(`clearStorageData: ${String(e && e.message ? e.message : e)}`);
-  }
-  try {
-    await ses.clearCache();
-  } catch (e) {
-    errs.push(`clearCache: ${String(e && e.message ? e.message : e)}`);
-  }
-
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.reloadIgnoringCache();
-  }
-
-  if (errs.length > 0) {
+  const result = await silentClearCacheAndReload();
+  if (result.warnings && result.warnings.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
     await dialog.showMessageBox(mainWindow, {
       type: "warning",
       buttons: ["OK"],
       title: "POS cache reset",
       message: "Cache reset completed with warnings.",
-      detail: errs.join("\n"),
+      detail: result.warnings.join("\n"),
       noLink: true,
     });
-    return { ok: true, warnings: errs };
   }
-  return { ok: true };
+  return result;
 }
 
 function buildAppMenu() {
@@ -2709,7 +2922,13 @@ function buildAppMenu() {
           },
         },
         { type: "separator" },
-        { role: "quit", label: "Quit" },
+        {
+          label: "Quit",
+          click: () => {
+            userRequestedQuit = true;
+            app.quit();
+          },
+        },
       ],
     },
   ];
@@ -2741,6 +2960,7 @@ function createWindow() {
       /* ignore */
     }
     clearPosDomBlankWatchdog();
+    clearLiveBlankWatchdog();
     schedulePosMainUrlRetryFromFailure();
   });
 
@@ -2750,6 +2970,7 @@ function createWindow() {
       const u = mainWindow.webContents.getURL() || "";
       if (u.includes("offline.html")) {
         clearPosDomBlankWatchdog();
+        clearLiveBlankWatchdog();
         clearPosMainLoadWatchdog();
         clearPosMainLoadRetryTimer();
         posMainLoadFailAttempts = 0;
@@ -2781,7 +3002,37 @@ function createWindow() {
     }
   });
 
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    const reason = details && details.reason ? String(details.reason) : "unknown";
+    console.warn("[cm-pos] render-process-gone", reason, details && details.exitCode);
+    recoverDeadRenderer(reason);
+  });
+
+  mainWindow.webContents.on("unresponsive", () => {
+    clearPosUnresponsiveTimer();
+    posUnresponsiveTimer = setTimeout(() => {
+      posUnresponsiveTimer = null;
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      console.warn("[cm-pos] renderer unresponsive; crashing renderer to recover");
+      try {
+        if (typeof mainWindow.webContents.forcefullyCrashRenderer === "function") {
+          mainWindow.webContents.forcefullyCrashRenderer();
+        } else {
+          recoverDeadRenderer("unresponsive");
+        }
+      } catch {
+        recoverDeadRenderer("unresponsive");
+      }
+    }, 8000);
+  });
+
+  mainWindow.webContents.on("responsive", () => {
+    clearPosUnresponsiveTimer();
+  });
+
   mainWindow.on("closed", () => {
+    clearLiveBlankWatchdog();
+    clearPosUnresponsiveTimer();
     mainWindow = null;
   });
 
@@ -2843,6 +3094,18 @@ if (!gotLock) {
   app.whenReady().then(() => {
     migrateLegacyPosSettingsIntoUserData();
     ensureUserRuntimeConfigSeeded();
+    try {
+      const openAtLogin = posShellRecovery.shouldOpenAtLogin({
+        isPackaged: Boolean(app.isPackaged),
+        envValue: process.env.WINDOWS_POS_OPEN_AT_LOGIN,
+      });
+      app.setLoginItemSettings({
+        openAtLogin,
+        name: "Choongman POS",
+      });
+    } catch (e) {
+      console.warn("[cm-pos] setLoginItemSettings failed", e && e.message ? e.message : e);
+    }
     Menu.setApplicationMenu(buildAppMenu());
     // #region agent log
     debugLog("H1_silent_flag", "windows-pos/main.js:app.whenReady", "print_runtime_boot", {
@@ -2925,6 +3188,7 @@ if (!gotLock) {
         return { ok: false, reason: "forbidden" };
       }
       try {
+        userRequestedQuit = true;
         app.quit();
         return { ok: true };
       } catch (e) {
@@ -3122,9 +3386,12 @@ if (!gotLock) {
       return out;
     });
 
-    ipcMain.handle("cm-pos-reset-cache-reload", async (event) => {
+    ipcMain.handle("cm-pos-reset-cache-reload", async (event, opts) => {
       if (!senderAllowedOrigin(event.sender)) {
         return { ok: false, reason: "forbidden" };
+      }
+      if (opts && opts.silent === true) {
+        return silentClearCacheAndReload();
       }
       return clearRuntimeCacheAndReloadManual();
     });
@@ -3338,6 +3605,16 @@ if (!gotLock) {
     if (!registered) {
       console.warn("Global shortcut CommandOrControl+Shift+U could not be registered");
     }
+    if (isKiosk) {
+      const reloadOk = globalShortcut.register("CommandOrControl+R", () => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        console.warn("[cm-pos] Ctrl+R: reload POS");
+        loadPosMainUrl(true);
+      });
+      if (!reloadOk) {
+        console.warn("Global shortcut CommandOrControl+R could not be registered");
+      }
+    }
   });
 }
 
@@ -3347,5 +3624,16 @@ app.on("will-quit", () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (
+    !posShellRecovery.shouldRelaunchAfterAllWindowsClosed({
+      userRequestedQuit,
+      platform: process.platform,
+    })
+  ) {
+    if (process.platform !== "darwin") app.quit();
+    return;
+  }
+  setTimeout(() => {
+    relaunchMainWindowIfNeeded();
+  }, 500);
 });

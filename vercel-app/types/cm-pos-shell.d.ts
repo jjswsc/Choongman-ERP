@@ -83,8 +83,8 @@ declare global {
         reason?: string
       }>
       linkposTransaction?: (payload: Record<string, unknown>) => Promise<Record<string, unknown>>
-      /** SW·Cache Storage 비우고 캐시 무시 새로고침 (로그인 유지). 확인 대화상자는 셸에서 표시 */
-      resetCacheAndReload?: () => Promise<{
+      /** SW·Cache Storage 비우고 캐시 무시 새로고침 (로그인 유지). silent면 확인 창 없음 */
+      resetCacheAndReload?: (opts?: { silent?: boolean }) => Promise<{
         ok: boolean
         reason?: string
         warnings?: string[]

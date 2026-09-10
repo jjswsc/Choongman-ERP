@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { isMemberPortalPath } from "@/lib/member-portal-path"
+import { recoverFromChunkLoadError } from "@/lib/chunk-load-recovery"
 import {
   isPurchaseTaxScanRunning,
   subscribePurchaseTaxScanRunning,
@@ -42,6 +43,10 @@ export function SwAutoUpdate() {
   const reloadOnce = () => {
     if (reloadingRef.current) return
     reloadingRef.current = true
+    if (isPosPath(pathname)) {
+      void recoverFromChunkLoadError()
+      return
+    }
     window.location.reload()
   }
 
