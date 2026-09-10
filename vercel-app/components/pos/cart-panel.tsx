@@ -252,6 +252,16 @@ import {
   resolveDineInTableNameForStorage,
 } from '@/lib/cart-panel-checkout-helpers'
 
+/** 배포 직후 옛 split-due 청크에 새 export가 없으면 POS 전체가 흰 오류 화면이 된다 */
+function allocateLineDiscountOrZero(
+  params: Parameters<typeof allocateLineDiscountByAssignedQty>[0]
+): number[] {
+  if (typeof allocateLineDiscountByAssignedQty === 'function') {
+    return allocateLineDiscountByAssignedQty(params)
+  }
+  return (params.assignedQtyByPerson || []).map(() => 0)
+}
+
 type PaymentMethodTab = CartPanelPaymentMethodTab
 type MenuLineDiscountMode = CartPanelMenuLineDiscountMode
 
@@ -1932,7 +1942,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     cartItems.forEach((item, cartIdx) => {
       const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
       const assignedQtyByPerson = Array.from({ length: count }, (_, i) => Math.max(0, Number(row[i] || 0)))
-      const alloc = allocateLineDiscountByAssignedQty({
+      const alloc = allocateLineDiscountOrZero({
         lineDiscountAmt: Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0),
         lineQty: resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown }),
         assignedQtyByPerson,
@@ -2543,7 +2553,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       const lineDiscountByItemId: Record<string, number[]> = {}
       cartItems.forEach((item, cartIdx) => {
         const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-        lineDiscountByItemId[item.id] = allocateLineDiscountByAssignedQty({
+        lineDiscountByItemId[item.id] = allocateLineDiscountOrZero({
           lineDiscountAmt: Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0),
           lineQty: resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown }),
           assignedQtyByPerson: Array.from({ length: count }, (_, i) => Math.max(0, Number(row[i] || 0))),

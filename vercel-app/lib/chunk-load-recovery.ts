@@ -17,12 +17,15 @@ export function isChunkLoadError(error: unknown): boolean {
 /**
  * 배포 직후 PWA·Android WebView 캐시가 섞이면 청크 대신
  * 압축 변수 `.map is not a function`(예: `eo.map is not a function`)으로 터진다.
+ * 새 named export를 옛 청크가 모를 때는 webpack interop
+ * `(0 , a.allocateLineDiscountByAssignedQty) is not a function` 으로 터진다.
  * 한 번만 SW·정적 캐시를 지우고 다시 연다.
  */
 export function isStaleClientBundleError(error: unknown): boolean {
   if (isChunkLoadError(error)) return true
   const message = error instanceof Error ? error.message : String(error ?? "")
-  return /\.map is not a function/i.test(message) || /\.filter is not a function/i.test(message)
+  if (/\.map is not a function/i.test(message) || /\.filter is not a function/i.test(message)) return true
+  return /\(\s*0\s*,\s*[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*\s*\)\s+is not a function/i.test(message)
 }
 
 export function shouldClearBuildRelatedCache(name: string): boolean {

@@ -34,6 +34,14 @@ describe("isStaleClientBundleError", () => {
     expect(isStaleClientBundleError(new TypeError("x.filter is not a function"))).toBe(true)
   })
 
+  it("treats webpack missing named export as stale bundle", () => {
+    expect(
+      isStaleClientBundleError(
+        new TypeError("(0 , a.allocateLineDiscountByAssignedQty) is not a function")
+      )
+    ).toBe(true)
+  })
+
   it("includes chunk load errors", () => {
     expect(isStaleClientBundleError(new Error("Loading chunk 1 failed"))).toBe(true)
   })
