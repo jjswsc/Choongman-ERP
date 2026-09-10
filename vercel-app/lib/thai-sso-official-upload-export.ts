@@ -5,7 +5,11 @@
 import * as XLSX from "xlsx"
 import { writeErpXlsxWorkbook } from "@/lib/erp-excel-export"
 import { splitEmployeeNameForThaiSsoEform } from "@/lib/thai-sso-eform-v15"
-import { type SsoFilingWageMode, resolveSsoFilingWageBaht } from "@/lib/payroll-utils"
+import {
+  DEFAULT_SSO_FILING_WAGE_MODE,
+  type SsoFilingWageMode,
+  resolveSsoFilingWageBaht,
+} from "@/lib/payroll-utils"
 import { citizenDigits13Only } from "@/lib/thai-sso-sps1-10-export"
 
 /** 공식 업로드 1행 헤더 — www.sso.go.th/eservices SampleExcel.xlsx 와 동일 */
@@ -27,8 +31,8 @@ export type SsoOfficialUploadColumnHelp = {
 export const SSO_OFFICIAL_UPLOAD_COLUMN_HELP: SsoOfficialUploadColumnHelp[] = [
   {
     labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[0],
-    labelEn: "National ID (13 digits)",
-    labelKo: "주민번호 (13자리)",
+    labelEn: "National ID (13 digits, no separators)",
+    labelKo: "주민번호 (13자리, 구분자 없음)",
   },
   {
     labelTh: SSO_OFFICIAL_UPLOAD_HEADERS_TH[1],
@@ -78,24 +82,46 @@ export function normalizeSsoOfficialSheetName(branchCode: string): string {
   return digits.padStart(6, "0").slice(-6)
 }
 
-function citizenIdCellValue(raw: unknown): number | string {
-  const digits = citizenDigits13Only(raw)
-  if (digits.length === 13) {
-    const n = Number(digits)
-    if (Number.isSafeInteger(n)) return n
+/** เลขบัตรประชาชน: 숫자만 연속. 엑셀 숫자 변환 금지(앞 0·콤마 방지). */
+export function officialUploadCitizenIdText(raw: unknown): string {
+  return citizenDigits13Only(raw)
+}
+
+export function formatOfficialUploadPreviewCell(cell: string | number, colIdx: number): string {
+  if (colIdx === 0) {
+    const digits = officialUploadCitizenIdText(cell)
+    if (digits) return digits
+    const fallback = cell != null ? String(cell).trim() : ""
+    return fallback || "-"
   }
-  return digits
+  if (typeof cell === "number") return cell.toLocaleString()
+  return cell ? String(cell) : "-"
+}
+
+function forceCitizenIdColumnAsExcelText(ws: XLSX.WorkSheet): void {
+  const ref = ws["!ref"]
+  if (!ref) return
+  const range = XLSX.utils.decode_range(ref)
+  for (let R = range.s.r + 1; R <= range.e.r; R += 1) {
+    const addr = XLSX.utils.encode_cell({ r: R, c: 0 })
+    const cell = ws[addr]
+    if (!cell) continue
+    const text = officialUploadCitizenIdText(cell.v) || String(cell.v ?? "")
+    cell.t = "s"
+    cell.v = text
+    cell.z = "@"
+  }
 }
 
 export function mapPayrollRowToOfficialUploadRow(
   r: Record<string, unknown>,
-  filingWageMode: SsoFilingWageMode = "contributable"
+  filingWageMode: SsoFilingWageMode = DEFAULT_SSO_FILING_WAGE_MODE
 ): (string | number)[] {
   const nameTitle = r.nameTitle != null ? String(r.nameTitle).trim() : ""
   const { first, last } = splitEmployeeNameForThaiSsoEform(String(r.name || ""), nameTitle)
   const wage = resolveSsoFilingWageBaht(r, filingWageMode)
   const contribution = Math.max(0, Math.floor(Number(r.sso) || 0))
-  return [citizenIdCellValue(r.idNumber), nameTitle, first, last, wage, contribution]
+  return [officialUploadCitizenIdText(r.idNumber), nameTitle, first, last, wage, contribution]
 }
 
 function buildOfficialUploadWorksheet(
@@ -106,6 +132,7 @@ function buildOfficialUploadWorksheet(
   const aoa: (string | number)[][] = [[...SSO_OFFICIAL_UPLOAD_HEADERS_TH], ...lines]
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws["!cols"] = [{ wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 14 }]
+  forceCitizenIdColumnAsExcelText(ws)
   return ws
 }
 
@@ -138,7 +165,7 @@ export async function downloadThaiSsoOfficialUploadFromPayrollXlsx(params: {
   filingWageMode?: SsoFilingWageMode
 }): Promise<void> {
   const ym = (params.yearMonth || "").trim().slice(0, 7) || "YYYY-MM"
-  const filingWageMode = params.filingWageMode || "contributable"
+  const filingWageMode = params.filingWageMode || DEFAULT_SSO_FILING_WAGE_MODE
   const wb = XLSX.utils.book_new()
   const usedNames = new Set<string>()
   const nonEmpty = (params.sheets || []).filter((s) => (s.rows || []).length > 0)

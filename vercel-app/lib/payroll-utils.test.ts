@@ -14,6 +14,7 @@ import {
   roundSsoContributionBaht,
   ssoContributableWageBaht,
   ssoContributionBaseWage,
+  DEFAULT_SSO_FILING_WAGE_MODE,
   resolveSsoFilingWageBaht,
   bankExpenseDateWhenPayingPayrollAccrual,
   defaultPayrollAttributionMonthBangkok,
@@ -323,6 +324,12 @@ describe('payroll-utils', () => {
       expect(resolveSsoFilingWageBaht(row, 'basic')).toBe(15000)
       expect(resolveSsoFilingWageBaht(row, 'gross')).toBe(18000)
       expect(resolveSsoFilingWageBaht(row, 'contributable')).toBe(17500)
+    })
+
+    it('defaults filing wage to actual pay, not the 17500 ceiling', () => {
+      expect(DEFAULT_SSO_FILING_WAGE_MODE).toBe('gross')
+      expect(resolveSsoFilingWageBaht(row, DEFAULT_SSO_FILING_WAGE_MODE)).toBe(18000)
+      expect(resolveSsoFilingWageBaht(row, DEFAULT_SSO_FILING_WAGE_MODE)).not.toBe(17500)
     })
   })
 })

@@ -25,6 +25,7 @@ import {
   parseSsoWorkflowNote,
 } from "./admin-accounting-compliance-utils"
 import {
+  formatOfficialUploadPreviewCell,
   mapPayrollRowToOfficialUploadRow,
   resolveSsoOfficialUploadColumnLabel,
   SSO_OFFICIAL_UPLOAD_COLUMN_HELP,
@@ -218,12 +219,12 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                   value={ssoFilingWageMode}
                   onValueChange={(v) => setSsoFilingWageMode(v as SsoFilingWageMode)}
                 >
-                  <SelectTrigger className="h-9 w-[220px]">
+                  <SelectTrigger className="h-9 w-[280px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="contributable">{t("accCompSsoFilingWageContributable")}</SelectItem>
                     <SelectItem value="gross">{t("accCompSsoFilingWageGross")}</SelectItem>
+                    <SelectItem value="contributable">{t("accCompSsoFilingWageContributable")}</SelectItem>
                     <SelectItem value="basic">{t("accCompSsoFilingWageBasic")}</SelectItem>
                   </SelectContent>
                 </Select>
@@ -331,7 +332,7 @@ export function AccountingComplianceSsoTab(props: AccountingComplianceSsoTabProp
                                         colIdx === 0 ? "font-mono text-[11px]" : ""
                                       )}
                                     >
-                                      {typeof cell === "number" ? cell.toLocaleString() : cell || "-"}
+                                      {formatOfficialUploadPreviewCell(cell, colIdx)}
                                     </td>
                                   ))}
                                 </tr>

@@ -220,7 +220,7 @@ import {
   SSO_OFFICIAL_UPLOAD_COLUMN_HELP,
   type SsoOfficialUploadSheet,
 } from "@/lib/thai-sso-official-upload-export"
-import { type SsoFilingWageMode } from "@/lib/payroll-utils"
+import { DEFAULT_SSO_FILING_WAGE_MODE, type SsoFilingWageMode } from "@/lib/payroll-utils"
 import {
   readPnd91ChecklistEntry,
   readPnd91ChecklistForScope,
@@ -650,7 +650,9 @@ export function AdminAccountingCompliance({
   const [ssoEvidenceUploading, setSsoEvidenceUploading] = React.useState(false)
   const [ssoSubmissionSaving, setSsoSubmissionSaving] = React.useState(false)
   const [ssoAccountingSyncing, setSsoAccountingSyncing] = React.useState(false)
-  const [ssoFilingWageMode, setSsoFilingWageMode] = React.useState<SsoFilingWageMode>("contributable")
+  const [ssoFilingWageMode, setSsoFilingWageMode] = React.useState<SsoFilingWageMode>(
+    DEFAULT_SSO_FILING_WAGE_MODE
+  )
   const [ssoSubView, setSsoSubView] = React.useState<"filing" | "history">("filing")
   const [ssoHistoryRows, setSsoHistoryRows] = React.useState<AccountingWorkflowStatusRow[]>([])
   const [ssoHistoryLoading, setSsoHistoryLoading] = React.useState(false)

@@ -3528,8 +3528,8 @@ export const i18n = {
     accCompSsoOfficialUploadMissingBranch:
       '일부 매장에 SSO 지점 순번(ลำดับที่สาขา)이 없어 시트 이름을 000000으로 채웠습니다. 세무·신고 프로필에서 지점 코드를 입력한 뒤 다시 받으세요.',
     accCompSsoFilingWageMode: '신고 임금 열 (ค่าจ้าง)',
-    accCompSsoFilingWageContributable: '산정기준 (1,650·상한 적용)',
-    accCompSsoFilingWageGross: '총지급 (수당·OT 포함)',
+    accCompSsoFilingWageContributable: '산정기준 (상한 17,500)',
+    accCompSsoFilingWageGross: '실지급액 (수당·OT 포함)',
     accCompSsoFilingWageBasic: '기본급만',
     accCompSsoSps110FromPayroll: 'SSO 1-10 양식 (인쇄·보관용)',
     accCompSsoSps110Hint:
@@ -4697,7 +4697,7 @@ export const i18n = {
     helpSum_admin_expense_management:
       '지출 발생·승인·지급(통장·패티·카드)과 통장·미지급을 연결합니다. 대출 상환·대여는 관련당사자(임원 등)를 필수 선택하며 가맹 미수금과 섞이지 않습니다. 지급대기의 「은행이체」보기로 예금주·계좌·은행·금액을 엑셀처럼 확인·복사·인쇄할 수 있습니다. 문서번호는 EXPyyyymm000x로 자동 발급됩니다.',
     helpHow_admin_expense_management:
-      '① 지출 예정 등록·승인 후 지급합니다. 매장 건은 본사·회계가 승인하고, 본사(Office) 명의 건은 임원 또는 오피스 급여 담당이 승인합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다. 한 번 송금이면 지출 1건이 기본입니다. 영수증이 두 장이면 그 한 건에 둘 다 첨부하세요(이미지·PDF 최대 3개). 이미 두 건으로 넣었으면 연결 전에 한 건으로 합치거나, 계정과목이 다를 때만 통장 「두 건 합산 검색」으로 기간을 찾아 합산 연결합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다. 계정과목은 자산 계정(예: 1490 유형자산)을 고르며, 나중에 송금해도 경비(손익)가 아니라 그 자산 계정으로 표시·분개됩니다. 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수는 「항목 추가」로 여러 건(임대 5% + 용역 3% 등)을 넣을 수 있습니다. 50 ทวิ에 줄별로 나가고, 「50 ทวิ 자동 생성」을 켜면 등록 직후 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice는 비용 증빙입니다. PP.30 매입세는 세무 신고 → 매입 세금계산서에서 등록합니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다. 본사(Office) 명의 건은 임원, 또는 오피스 급여 담당이 삭제할 수 있습니다.\n⑪ 「출금 등록」은 통장 CSV와 잔액이 겹치지 않도록 통장 조회 목록에 나오지 않습니다. 통장 페이지에 보이게 하려면 CSV를 먼저 가져온 뒤 그 출금 줄에서 「저장」하세요.\n⑫ 세금 유형의 세부에서 VAT·원천세·법인세·사회보험(SSO)을 고르면 해당 미지급 계정으로 납부됩니다(SSO는 2195 사회보험예수금).\n⑬ 신용카드 월 대금은 출금 유형 「이체」→ 이체 유형 「통장 → 카드 대금」에서 「이미 나간 출금 연결」로 이미 나간 출금을 고른 뒤, 어느 카드로 쓴 지출인지 지정하고 카드 탭 「계정별 배분」에서 계정과목·텍스인보이스를 맞춥니다.',
+      '① 지출 예정 등록·승인 후 지급합니다. 매장 건은 본사·회계가 승인하고, 본사(Office) 명의 건은 임원 또는 오피스 급여 담당이 승인합니다. 등록 시 문서번호(EXP…)가 발급되고, 가능하면 예금주·은행·계좌를 함께 넣습니다.\n② 지급예정 탭은 승인대기 / 지급대기 / 전체로 나뉩니다. 지급대기에서 「은행이체」보기로 이체 목록을 복사·인쇄한 뒤 은행 앱에서 이체하세요.\n③ 개별 지급 시 해당 매장에 등록된 통장이 자동 선택됩니다(통장 계좌 마스터의 매장과 매칭). 일괄 지급도 매장 필터·동일 매장이면 해당 통장을 우선합니다. 계좌 미비 건은 기본 차단됩니다(허용 체크 시에만 진행).\n④ 통장 지급 시 미연결 출금만 선택됩니다. 경비·매입 대금은 「지출관리 연결」로 지급을 완료합니다. 한 번 송금이면 지출 1건이 기본입니다. 영수증이 두 장이면 그 한 건에 둘 다 첨부하세요(이미지·PDF 최대 3개). 이미 두 건으로 넣었으면 연결 전에 한 건으로 합치거나, 계정과목이 다를 때만 통장 「두 건 합산 검색」으로 기간을 찾아 합산 연결합니다.\n⑤ 지출 검색에서 거래처명·문서번호로 조회하고, 지급예정·통장·카드 연결 상태를 확인합니다.\n⑥ 거래처 선택에서 「거래처 추가」로 마스터를 바로 등록하거나, 「กรมสรรพากร」 검색으로 세금번호·상호를 채울 수 있습니다(일회성은 「직접 입력」).\n⑦ 고정자산 취득은 유형 「고정자산」으로 등록하면 자산 관리에 반영됩니다. 계정과목은 자산 계정(예: 1490 유형자산)을 고르며, 나중에 송금해도 경비(손익)가 아니라 그 자산 계정으로 표시·분개됩니다. 경비·매입과 같이 인보이스·영수증 첨부와 VAT를 입력할 수 있습니다.\n⑧ 원천징수는 「항목 추가」로 여러 건(임대 5% + 용역 3% 등)을 넣을 수 있습니다. 50 ทวิ에 줄별로 나가고, 「50 ทวิ 자동 생성」을 켜면 등록 직후 인쇄 창이 열립니다.\n⑨ 증빙 첨부(경비·매입·고정자산) 시 문서 유형(Invoice / Tax Invoice / Receipt)을 선택하세요. Tax Invoice는 비용 증빙입니다. PP.30 매입세는 세무 신고 → 매입 세금계산서에서 등록합니다.\n⑩ 지급예정 삭제는 본사·회계가 요청·반려·승인(미지급·통장/패티 미연결) 건에 가능합니다. 본사(Office) 명의 건은 임원, 또는 오피스 급여 담당이 삭제할 수 있습니다.\n⑪ 「출금 등록」은 통장 CSV와 잔액이 겹치지 않도록 통장 조회 목록에 나오지 않습니다. 통장 페이지에 보이게 하려면 CSV를 먼저 가져온 뒤 그 출금 줄에서 「저장」하세요.\n⑫ 세금 유형의 세부에서 VAT·원천세·법인세·사회보험(SSO)을 고르면 해당 미지급 계정으로 납부됩니다(SSO는 2195 사회보험예수금).\n⑬ 카드 관리 탭에서 통장 계좌·기간·금액으로 미연결 출금을 조회해 카드에 연결합니다. 연결되면 통장은 용도 「비용」으로 저장되고, 계정별 배분의 계정과목이 통장에 자동 반영됩니다(여러 과목이면 금액이 큰 과목). 월 대금은 한꺼번에 나가므로 통장에서는 비용으로만 처리합니다.',
     helpSum_admin_depreciation:
       '고정자산 목록·수정, 월 감가상각, 처분. 신규는 지출등록(고정자산) 또는 예외등록(지급예정 자동)·목록의 지급예정 만들기 후 통장 연결.',
     helpHow_admin_depreciation:
@@ -11857,8 +11857,8 @@ Only matters the employee must handle personally on a working day:
     accCompSsoOfficialUploadMissingBranch:
       'Some stores have no SSO branch sequence (ลำดับที่สาขา); sheet tab fell back to 000000. Set it in Tax/SSO profile and download again.',
     accCompSsoFilingWageMode: 'Filing wage column',
-    accCompSsoFilingWageContributable: 'Contributable (1,650 floor + ceiling)',
-    accCompSsoFilingWageGross: 'Gross pay (allowances + OT)',
+    accCompSsoFilingWageContributable: 'Contribution base (ceiling 17,500)',
+    accCompSsoFilingWageGross: 'Actual wages paid (allowances + OT)',
     accCompSsoFilingWageBasic: 'Basic salary only',
     accCompSsoSps110FromPayroll: 'SSO 1-10 form (print/archive)',
     accCompSsoSps110Hint:
@@ -13028,7 +13028,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_expense_management:
       'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Loan repayment/lending requires a related party (officer) and is not franchise A/R. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use EXPyyyymm000x.',
     helpHow_admin_expense_management:
-      '① Register and approve accruals, then pay. Store items: HQ/accounting. HQ-named (Office) items: directors, or office payroll staff. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link. One bank transfer = one expense by default; attach both receipts on that row (up to 3 files). If you already registered two plans because GL accounts differ, use “Search two plans” on the bank “Link expense mgmt” dialog by date range so the sum equals the withdrawal.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management. Pick an asset account (e.g. 1490 PPE); later bank transfer posts to that asset account, not P&L expense. Attach invoice/receipt and VAT like expense/purchase.\n⑧ Add multiple WHT lines (rent 5% + service 3%). The 50 ทวิ shows each line; with "Auto-create 50 ทวิ" on, the print window opens after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Tax Invoice is cost evidence only. Register PP.30 input VAT on Tax filing → Purchase tax invoices.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows. HQ-named (Office) rows can be deleted by directors, or by office payroll staff.\n⑪ Register Withdrawal does not appear on the bank query list (avoids double-counting CSV). Import CSV first, then Save from that withdrawal row.\n⑫ Under Tax details, pick VAT, withholding, corporate tax, or Social Security (SSO); payment posts to the matching payable (SSO uses 2195).\n⑬ Monthly card bills: Expense Register → Transfer → Bank → card bill → Link existing withdrawal, then choose the card that spending belongs to and allocate accounts/tax invoices on the Card tab.',
+      '① Register and approve accruals, then pay. Store items: HQ/accounting. HQ-named (Office) items: directors, or office payroll staff. A document number (EXP…) is issued on create; add payee bank details when possible.\n② Payment plan has To Approve / To Pay / All. On To Pay, use Bank transfer view to copy/print for bank apps.\n③ On individual pay, the bank account for that store is auto-selected (matched to Bank Accounts master by store). Bulk pay also prefers that store\'s account when filtered or all items share one store. Bulk pay still blocks items missing payee bank account unless you allow pay without account.\n④ For bank pay, only unlinked withdrawals are listed. Complete Expense/Purchase payment via Expense Management link. One bank transfer = one expense by default; attach both receipts on that row (up to 3 files). If you already registered two plans because GL accounts differ, use “Search two plans” on the bank “Link expense mgmt” dialog by date range so the sum equals the withdrawal.\n⑤ Use Expense Search to filter by vendor name or document number and see plan/bank/card link status.\n⑥ In payee/vendor pickers, use "Add vendor" to register to master without opening Logistics, or Revenue Department (กรมสรรพากร) search to fill tax ID and name (one-off payees: Manual entry).\n⑦ Register fixed-asset acquisitions as type Fixed Asset—they appear in Asset Management. Pick an asset account (e.g. 1490 PPE); later bank transfer posts to that asset account, not P&L expense. Attach invoice/receipt and VAT like expense/purchase.\n⑧ Add multiple WHT lines (rent 5% + service 3%). The 50 ทวิ shows each line; with "Auto-create 50 ทวิ" on, the print window opens after register.\n⑨ When attaching documents (expense/purchase/fixed asset), pick document type (Invoice / Tax Invoice / Receipt). Tax Invoice is cost evidence only. Register PP.30 input VAT on Tax filing → Purchase tax invoices.\n⑩ Payment-plan delete is available for HQ/accounting on request/rejected/approved (unpaid, no bank/petty link) rows. HQ-named (Office) rows can be deleted by directors, or by office payroll staff.\n⑪ Register Withdrawal does not appear on the bank query list (avoids double-counting CSV). Import CSV first, then Save from that withdrawal row.\n⑫ Under Tax details, pick VAT, withholding, corporate tax, or Social Security (SSO); payment posts to the matching payable (SSO uses 2195).\n⑬ On the Card tab, find unlinked withdrawals by bank account, period, and amount, then link them to a card. Linked bank rows are saved as Expense; allocation account subjects are applied automatically (largest amount if several). Monthly bills leave the bank in one lump, so the bank row is treated as Expense only.',
     helpSum_admin_depreciation:
       'Fixed assets list/edit, monthly depreciation, disposal. New buys via Expense Register or exception register (auto payment plan) / Create payment plan, then bank link.',
     helpHow_admin_depreciation:
@@ -19425,7 +19425,7 @@ orderItemQty: 'จำนวน',
     helpSum_admin_expense_management:
       'ลงรายจ่าย อนุมัติ จ่ายเงิน (ธนาคาร/เงินสดย่อย/บัตร) และเชื่อมบัญชีธนาคารกับเจ้าหนี้ครับ การชำระหนี้/ให้กู้ต้องเลือกบุคคลที่เกี่ยวข้อง (ผู้บริหาร) ไม่ปนกับลูกหนี้แฟรนไชส์ ดูแผนจ่าย → มุมมองโอนธนาคาร เพื่อตรวจชื่อบัญชี·เลขบัญชี·ธนาคาร·จำนวนเงินแบบ Excel ได้ครับ เลขที่เอกสารเป็น EXPyyyymm000x',
     helpHow_admin_expense_management:
-      '① ลงรายจ่ายแล้วอนุมัติ จากนั้นจ่ายเงินครับ รายการสาขาอนุมัติโดยสำนักงานใหญ่/บัญชี รายการสำนักงานใหญ่อนุมัติโดยผู้บริหาร หรือผู้ดูแลเงินเดือนออฟฟิศครับ ตอนลงระบบจะออกเลขที่เอกสาร (EXP…) ใส่ชื่อบัญชี ธนาคาร เลขบัญชีถ้ามี\n② แท็บแผนจ่ายแบ่งเป็น รออนุมัติ / รอจ่าย / ทั้งหมด ในรอจ่ายใช้มุมมองโอนธนาคารเพื่อคัดลอก/พิมพ์แล้วโอนในแอปธนาคาร\n③ จ่ายรายรายการ ระบบเลือกบัญชีธนาคารของสาขานั้นให้อัตโนมัติ จ่ายหลายรายการก็ใช้บัญชีสาขาเดียวกันถ้ากรองสาขาไว้ ถ้าไม่มีเลขบัญชีจะถูกบล็อก เว้นแต่ติ๊กอนุญาต\n④ จ่ายผ่านธนาคารเลือกได้เฉพาะรายการถอนที่ยังไม่เชื่อม ค่าใช้จ่าย/ซื้อให้จบที่「เชื่อมจัดการรายจ่าย」 โอนครั้งเดียวให้ลงรายจ่าย 1 รายการแล้วแนบใบเสร็จทั้งสองใบครับ ถ้าแยกตามหมวดบัญชีแล้ว ให้ใช้「ค้นหา 2 รายการรวม」ที่หน้าธนาคารตามช่วงวันที่ให้ยอดรวมเท่ากับยอดถอน\n⑤ ค้นหารายจ่ายด้วยชื่อคู่ค้าหรือเลขที่เอกสาร แล้วดูสถานะแผนจ่าย ธนาคาร บัตร\n⑥ เลือกคู่ค้าแล้วกด「เพิ่มคู่ค้า」หรือค้นหา กรมสรรพากร เพื่อเติมเลขผู้เสียภาษีและชื่อ (รายครั้งใช้กรอกเอง)\n⑦ สินทรัพย์ถาวรเลือกประเภทสินทรัพย์ถาวร แล้วเลือกบัญชีสินทรัพย์ เช่น 1490 ไม่ลงเป็นค่าใช้จ่ายในงบกำไรขาดทุน แนบใบแจ้งหนี้/ใบเสร็จและ VAT ได้เหมือนรายจ่าย\n⑧ หัก ณ ที่จ่ายเพิ่มได้หลายรายการ เช่น ค่าเช่า 5% + ค่าบริการ 3% ใบ 50 ทวิ แสดงทีละบรรทัด ถ้าเปิดสร้าง 50 ทวิ อัตโนมัติ จะเปิดหน้าพิมพ์หลังบันทึกครับ\n⑨ แนบเอกสารแล้วเลือกประเภท Invoice / Tax Invoice / Receipt ครับ Tax Invoice เป็นหลักฐานค่าใช้จ่ายเท่านั้น ภาษีซื้อลงที่ การยื่นภาษี → ใบกำกับภาษีซื้อ ครับ\n⑩ ลบแผนจ่ายได้เฉพาะสำนักงานใหญ่/บัญชี สำหรับรายการขอ/ปฏิเสธ/อนุมัติที่ยังไม่จ่ายและยังไม่เชื่อมธนาคาร รายการชื่อสำนักงานใหญ่ลบได้โดยผู้บริหาร หรือผู้ดูแลเงินเดือนออฟฟิศ\n⑪ 「ลงทะเบียนถอนเงิน」ไม่โชว์ในรายการค้นหาธนาคาร เพื่อไม่ให้ซ้ำกับ CSV ถ้าจะให้เห็นในหน้าธนาคาร ให้นำเข้า CSV ก่อนแล้วกดบันทึกที่แถวนั้นครับ\n⑫ ประเภทภาษี เลือกรายละเอียด VAT / หัก ณ ที่จ่าย / ภาษีนิติบุคคล / ประกันสังคม ได้เลยครับ ระบบลงบัญชีเจ้าหนี้ที่ตรงกัน (ประกันสังคมใช้ 2195)\n⑬ ค่าบัตรรายเดือน: ประเภทโอน → ธนาคาร → ค่าบัตร แล้วเชื่อมรายการถอนที่ตัดไปแล้ว ระบุบัตรที่ใช้จ่าย จากนั้นแบ่งบัญชี/ใบกำกับที่แท็บบัตรครับ',
+      '① ลงรายจ่ายแล้วอนุมัติ จากนั้นจ่ายเงินครับ รายการสาขาอนุมัติโดยสำนักงานใหญ่/บัญชี รายการสำนักงานใหญ่อนุมัติโดยผู้บริหาร หรือผู้ดูแลเงินเดือนออฟฟิศครับ ตอนลงระบบจะออกเลขที่เอกสาร (EXP…) ใส่ชื่อบัญชี ธนาคาร เลขบัญชีถ้ามี\n② แท็บแผนจ่ายแบ่งเป็น รออนุมัติ / รอจ่าย / ทั้งหมด ในรอจ่ายใช้มุมมองโอนธนาคารเพื่อคัดลอก/พิมพ์แล้วโอนในแอปธนาคาร\n③ จ่ายรายรายการ ระบบเลือกบัญชีธนาคารของสาขานั้นให้อัตโนมัติ จ่ายหลายรายการก็ใช้บัญชีสาขาเดียวกันถ้ากรองสาขาไว้ ถ้าไม่มีเลขบัญชีจะถูกบล็อก เว้นแต่ติ๊กอนุญาต\n④ จ่ายผ่านธนาคารเลือกได้เฉพาะรายการถอนที่ยังไม่เชื่อม ค่าใช้จ่าย/ซื้อให้จบที่「เชื่อมจัดการรายจ่าย」 โอนครั้งเดียวให้ลงรายจ่าย 1 รายการแล้วแนบใบเสร็จทั้งสองใบครับ ถ้าแยกตามหมวดบัญชีแล้ว ให้ใช้「ค้นหา 2 รายการรวม」ที่หน้าธนาคารตามช่วงวันที่ให้ยอดรวมเท่ากับยอดถอน\n⑤ ค้นหารายจ่ายด้วยชื่อคู่ค้าหรือเลขที่เอกสาร แล้วดูสถานะแผนจ่าย ธนาคาร บัตร\n⑥ เลือกคู่ค้าแล้วกด「เพิ่มคู่ค้า」หรือค้นหา กรมสรรพากร เพื่อเติมเลขผู้เสียภาษีและชื่อ (รายครั้งใช้กรอกเอง)\n⑦ สินทรัพย์ถาวรเลือกประเภทสินทรัพย์ถาวร แล้วเลือกบัญชีสินทรัพย์ เช่น 1490 ไม่ลงเป็นค่าใช้จ่ายในงบกำไรขาดทุน แนบใบแจ้งหนี้/ใบเสร็จและ VAT ได้เหมือนรายจ่าย\n⑧ หัก ณ ที่จ่ายเพิ่มได้หลายรายการ เช่น ค่าเช่า 5% + ค่าบริการ 3% ใบ 50 ทวิ แสดงทีละบรรทัด ถ้าเปิดสร้าง 50 ทวิ อัตโนมัติ จะเปิดหน้าพิมพ์หลังบันทึกครับ\n⑨ แนบเอกสารแล้วเลือกประเภท Invoice / Tax Invoice / Receipt ครับ Tax Invoice เป็นหลักฐานค่าใช้จ่ายเท่านั้น ภาษีซื้อลงที่ การยื่นภาษี → ใบกำกับภาษีซื้อ ครับ\n⑩ ลบแผนจ่ายได้เฉพาะสำนักงานใหญ่/บัญชี สำหรับรายการขอ/ปฏิเสธ/อนุมัติที่ยังไม่จ่ายและยังไม่เชื่อมธนาคาร รายการชื่อสำนักงานใหญ่ลบได้โดยผู้บริหาร หรือผู้ดูแลเงินเดือนออฟฟิศ\n⑪ 「ลงทะเบียนถอนเงิน」ไม่โชว์ในรายการค้นหาธนาคาร เพื่อไม่ให้ซ้ำกับ CSV ถ้าจะให้เห็นในหน้าธนาคาร ให้นำเข้า CSV ก่อนแล้วกดบันทึกที่แถวนั้นครับ\n⑫ ประเภทภาษี เลือกรายละเอียด VAT / หัก ณ ที่จ่าย / ภาษีนิติบุคคล / ประกันสังคม ได้เลยครับ ระบบลงบัญชีเจ้าหนี้ที่ตรงกัน (ประกันสังคมใช้ 2195)\n⑬ ที่แท็บบัตร ค้นหารายการถอนที่ยังไม่เชื่อมด้วยบัญชีธนาคาร ช่วงวันที่ และจำนวนเงิน แล้วเชื่อมกับบัตรครับ เชื่อมแล้วรายการธนาคารเป็นค่าใช้จ่าย และหมวดบัญชีจากการแบ่งจะติดให้อัตโนมัติ (หลายหมวดใช้ยอดมากสุด) ค่าบัตรตัดครั้งเดียว จึงบันทึกธนาคารเป็นค่าใช้จ่ายอย่างเดียวครับ',
     helpSum_admin_tax_filing:
       'เตรียมเอกสารยื่นภาษีไทย (VAT, หัก ณ ที่จ่าย, ภาษีนิติบุคคล, SSO) และทะเบียนใบกำกับภาษีซื้อ ตามงวดและสาขา แล้วส่งออกไฟล์สำหรับยื่นครับ',
     helpHow_admin_tax_filing:
@@ -19754,8 +19754,8 @@ orderItemQty: 'จำนวน',
     accCompSsoPayrollEmpty: 'ไม่มีแถวเงินเดือนสำหรับเดือน/สาขานี้',
     accCompSsoPayrollStore: 'สาขา (เงินเดือน)',
     accCompSsoFilingWageMode: 'คอลัมน์ค่าจ้างที่ยื่น',
-    accCompSsoFilingWageContributable: 'ฐานคำนวณ (ขั้นต่ำ 1,650 · เพดาน)',
-    accCompSsoFilingWageGross: 'ค่าจ้างรวม (เบี้ย+OT)',
+    accCompSsoFilingWageContributable: 'ฐานสมทบ (เพดาน 17,500)',
+    accCompSsoFilingWageGross: 'ค่าจ้างที่จ่ายจริง (เงินเดือน+เบี้ย+OT)',
     accCompSsoFilingWageBasic: 'เงินเดือนพื้นฐานเท่านั้น',
     accCompSsoSps110FromPayroll: 'สปส.1-10 (PDF สำหรับพิมพ์)',
     accCompSsoSps110Hint:
@@ -26043,8 +26043,8 @@ orderItemQty: 'အရေအတွက်',
     accCompSsoEserviceBulkHint:
       '7-column workbook (upload + employer + README). May differ from the official 6-column file — use for cross-check only.',
     accCompSsoFilingWageMode: 'Filing wage column',
-    accCompSsoFilingWageContributable: 'Contributable (1,650 floor + ceiling)',
-    accCompSsoFilingWageGross: 'Gross pay (allowances + OT)',
+    accCompSsoFilingWageContributable: 'Contribution base (ceiling 17,500)',
+    accCompSsoFilingWageGross: 'Actual wages paid (allowances + OT)',
     accCompSsoFilingWageBasic: 'Basic salary only',
     accCompSsoSps110FromPayroll: 'สปส.1-10 (PDF layout)',
     accCompSsoSps110Hint:
@@ -31021,8 +31021,8 @@ orderItemQty: 'ຈຳນວນ',
     accCompSsoEserviceBulkHint:
       '7-column workbook (upload + employer + README). May differ from the official 6-column file — use for cross-check only.',
     accCompSsoFilingWageMode: 'Filing wage column',
-    accCompSsoFilingWageContributable: 'Contributable (1,650 floor + ceiling)',
-    accCompSsoFilingWageGross: 'Gross pay (allowances + OT)',
+    accCompSsoFilingWageContributable: 'Contribution base (ceiling 17,500)',
+    accCompSsoFilingWageGross: 'Actual wages paid (allowances + OT)',
     accCompSsoFilingWageBasic: 'Basic salary only',
     accCompSsoSps110FromPayroll: 'สปส.1-10 (PDF layout)',
     accCompSsoSps110Hint:
@@ -34106,8 +34106,8 @@ orderItemQty: 'ຈຳນວນ',
     accCompSsoEserviceBulkHint:
       '7-column workbook (upload + employer + README). May differ from the official 6-column file — use for cross-check only.',
     accCompSsoFilingWageMode: 'Filing wage column',
-    accCompSsoFilingWageContributable: 'Contributable (1,650 floor + ceiling)',
-    accCompSsoFilingWageGross: 'Gross pay (allowances + OT)',
+    accCompSsoFilingWageContributable: 'Contribution base (ceiling 17,500)',
+    accCompSsoFilingWageGross: 'Actual wages paid (allowances + OT)',
     accCompSsoFilingWageBasic: 'Basic salary only',
     accCompSsoSps110FromPayroll: 'สปส.1-10 (PDF layout)',
     accCompSsoSps110Hint:
@@ -36007,8 +36007,8 @@ orderItemQty: 'ຈຳນວນ',
     accCompSsoEserviceBulkHint:
       '7-column workbook (upload + employer + README). May differ from the official 6-column file — use for cross-check only.',
     accCompSsoFilingWageMode: 'Filing wage column',
-    accCompSsoFilingWageContributable: 'Contributable (1,650 floor + ceiling)',
-    accCompSsoFilingWageGross: 'Gross pay (allowances + OT)',
+    accCompSsoFilingWageContributable: 'Contribution base (ceiling 17,500)',
+    accCompSsoFilingWageGross: 'Actual wages paid (allowances + OT)',
     accCompSsoFilingWageBasic: 'Basic salary only',
     accCompSsoSps110FromPayroll: 'สปส.1-10 (PDF layout)',
     accCompSsoSps110Hint:
@@ -37870,8 +37870,8 @@ orderItemQty: 'ຈຳນວນ',
     accCompSsoEserviceBulkHint:
       '7-column workbook (upload + employer + README). May differ from the official 6-column file — use for cross-check only.',
     accCompSsoFilingWageMode: 'Filing wage column',
-    accCompSsoFilingWageContributable: 'Contributable (1,650 floor + ceiling)',
-    accCompSsoFilingWageGross: 'Gross pay (allowances + OT)',
+    accCompSsoFilingWageContributable: 'Contribution base (ceiling 17,500)',
+    accCompSsoFilingWageGross: 'Actual wages paid (allowances + OT)',
     accCompSsoFilingWageBasic: 'Basic salary only',
     accCompSsoSps110FromPayroll: 'สปส.1-10 (PDF layout)',
     accCompSsoSps110Hint:

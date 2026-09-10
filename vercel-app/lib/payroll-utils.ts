@@ -58,6 +58,12 @@ export function ssoContributableWageBaht(rawWage: number, year: number): number 
 /** e-Service ค่าจ้างที่จ่ายจริง 열 표시 방식 */
 export type SsoFilingWageMode = 'contributable' | 'gross' | 'basic'
 
+/**
+ * SSO 신고 임금(ค่าจ้าง) 기본값 = 실지급액.
+ * 17,500 상한은 보험료(จำนวนเงินสมทบ)에만 적용하고 임금 열을 자르지 않는다.
+ */
+export const DEFAULT_SSO_FILING_WAGE_MODE: SsoFilingWageMode = 'gross'
+
 export function resolveSsoFilingWageBaht(
   row: Record<string, unknown>,
   mode: SsoFilingWageMode
