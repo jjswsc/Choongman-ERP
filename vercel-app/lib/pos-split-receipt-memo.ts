@@ -24,6 +24,8 @@ export type PosSplitReceiptLineSnapshot = {
   note?: string
   menuId?: string
   optionId?: string
+  /** 선택 메뉴에만 붙는 줄 할인(Lucky Day 등). 없으면 영수증이 전 메뉴에 비례 배분함 */
+  lineDiscountAmt?: number
 }
 
 export type PosSplitReceiptSnapshot = {
@@ -108,6 +110,9 @@ function coerceLineSnapshot(raw: unknown): PosSplitReceiptLineSnapshot | null {
   const note = String(row.note ?? '').trim()
   const menuId = String(row.menuId ?? row.menu_id ?? '').trim()
   const optionId = String(row.optionId ?? row.option_id ?? '').trim()
+  const lineDiscountAmt = round2(
+    Math.max(0, Number(row.lineDiscountAmt ?? row.line_discount_amt ?? 0) || 0)
+  )
   return {
     id: String(row.id ?? '').trim() || `${name}:${qty}`,
     name,
@@ -116,6 +121,7 @@ function coerceLineSnapshot(raw: unknown): PosSplitReceiptLineSnapshot | null {
     ...(note ? { note } : {}),
     ...(menuId ? { menuId } : {}),
     ...(optionId ? { optionId } : {}),
+    ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
   }
 }
 
@@ -159,6 +165,9 @@ export function serializePosSplitReceiptsMarker(splits: PosSplitReceiptSnapshot[
       ...(it.note ? { note: it.note } : {}),
       ...(it.menuId ? { m: it.menuId } : {}),
       ...(it.optionId ? { o: it.optionId } : {}),
+      ...(Math.max(0, Number(it.lineDiscountAmt) || 0) > 0.0001
+        ? { ld: round2(Math.max(0, Number(it.lineDiscountAmt) || 0)) }
+        : {}),
     })),
     s: s.subtotal,
     d: s.discountAmt,
@@ -192,6 +201,7 @@ function deserializePosSplitReceiptsMarker(encoded: string): PosSplitReceiptSnap
             note: line.note,
             menuId: line.m,
             optionId: line.o,
+            lineDiscountAmt: line.ld,
           })
         })
         .filter((it): it is PosSplitReceiptLineSnapshot => it != null)

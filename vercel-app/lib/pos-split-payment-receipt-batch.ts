@@ -7,6 +7,7 @@ import {
 } from '@/lib/pos-payment-receipt-from-order'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { receiptPaymentFieldsFromSnapshot } from '@/lib/pos-receipt-cash-tender'
+import { coercePosReceiptLineDiscountAmt } from '@/lib/pos-receipt-line-discount'
 import { parsePosOrderMemo, upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 import {
   parsePosSplitReceiptsFromMemo,
@@ -15,6 +16,64 @@ import {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+function linePoolKey(id: string, name: string): string {
+  const nid = String(id ?? '').trim()
+  const nname = String(name ?? '').trim()
+  return nid ? `id:${nid}` : `name:${nname.toLowerCase()}`
+}
+
+type OrderLineDiscountPool = { remainingQty: number; remainingDisc: number }
+
+/** 분할 스냅샷에 줄 할인이 없으면 주문 품목 스냅샷에서 수량 비율로 채움 */
+export function applyOrderLineDiscountsToSplitSnapshots(
+  splits: PosSplitReceiptSnapshot[],
+  orderItems: unknown[] | null | undefined
+): PosSplitReceiptSnapshot[] {
+  if (!splits.length) return splits
+  const alreadyHasLineDiscount = splits.some((split) =>
+    (split.items || []).some((it) => Math.max(0, Number(it.lineDiscountAmt) || 0) > 0.0001)
+  )
+  if (alreadyHasLineDiscount) return splits
+  const pools = new Map<string, OrderLineDiscountPool>()
+  for (const raw of orderItems || []) {
+    if (!raw || typeof raw !== 'object') continue
+    const row = raw as Record<string, unknown>
+    const id = String(row.id ?? '').trim()
+    const name = String(row.name ?? '').trim()
+    const qty = Math.max(0, Number(row.qty ?? row.quantity ?? 0) || 0)
+    const disc = coercePosReceiptLineDiscountAmt(row)
+    if (!id && !name) continue
+    if (qty <= 0.0001 || disc <= 0.0001) continue
+    const key = linePoolKey(id, name)
+    const prev = pools.get(key)
+    if (prev) {
+      prev.remainingQty = round2(prev.remainingQty + qty)
+      prev.remainingDisc = round2(prev.remainingDisc + disc)
+    } else {
+      pools.set(key, { remainingQty: qty, remainingDisc: disc })
+    }
+  }
+  if (pools.size === 0) return splits
+
+  return splits.map((split) => ({
+    ...split,
+    items: (split.items || []).map((it) => {
+      if (Math.max(0, Number(it.lineDiscountAmt) || 0) > 0.0001) return it
+      const pool = pools.get(linePoolKey(it.id, it.name)) || pools.get(linePoolKey('', it.name))
+      if (!pool || pool.remainingDisc <= 0.0001 || pool.remainingQty <= 0.0001) return it
+      const takeQty = Math.min(Math.max(0, Number(it.quantity) || 0), pool.remainingQty)
+      if (takeQty <= 0.0001) return it
+      const share =
+        pool.remainingQty - takeQty <= 0.0001
+          ? round2(pool.remainingDisc)
+          : round2((pool.remainingDisc * takeQty) / pool.remainingQty)
+      pool.remainingQty = round2(Math.max(0, pool.remainingQty - takeQty))
+      pool.remainingDisc = round2(Math.max(0, pool.remainingDisc - share))
+      return share > 0.0001 ? { ...it, lineDiscountAmt: share } : it
+    }),
+  }))
 }
 
 function allocateAmountBySplitTotals(
@@ -52,6 +111,15 @@ export type SplitPaymentReceiptBatchBase = {
   otherFeeMode?: 'included' | 'separate'
 }
 
+/** 합산 영수증 + 분할 영수증. 분할이 없으면 합산만. */
+export function composeCheckoutPaymentReceiptPrintBatch(
+  fullReceipt: ReceiptModalData,
+  splitBatch: ReceiptModalData[]
+): ReceiptModalData[] {
+  if (!Array.isArray(splitBatch) || splitBatch.length === 0) return [fullReceipt]
+  return [fullReceipt, ...splitBatch]
+}
+
 /** 결제 직후·사후 세금계산서 공통 — 분할 영수증 `ReceiptModalData` 배열 */
 export function buildSplitPaymentReceiptBatch(
   base: SplitPaymentReceiptBatchBase,
@@ -85,14 +153,18 @@ export function buildSplitPaymentReceiptBatch(
 
   return splits.flatMap((split, idx) => {
     const items = (split.items || [])
-      .map((it) => ({
-        id: String(it.id ?? ''),
-        name: String(it.name ?? '').trim(),
-        price: Number(it.price ?? 0),
-        qty: Math.max(0, Number(it.quantity ?? 0) || 0),
-        ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
-        ...(it.menuId ? { menuId: String(it.menuId) } : {}),
-      }))
+      .map((it) => {
+        const lineDiscountAmt = round2(Math.max(0, Number(it.lineDiscountAmt) || 0))
+        return {
+          id: String(it.id ?? ''),
+          name: String(it.name ?? '').trim(),
+          price: Number(it.price ?? 0),
+          qty: Math.max(0, Number(it.quantity ?? 0) || 0),
+          ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+          ...(it.menuId ? { menuId: String(it.menuId) } : {}),
+          ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
+        }
+      })
       .filter((it) => it.qty > 0 && it.name)
     const subtotal = Math.max(0, Number(split.subtotal ?? 0) || 0)
     const total = Math.max(0, Number(split.total ?? 0) || 0)
@@ -108,6 +180,11 @@ export function buildSplitPaymentReceiptBatch(
     const cardAmt = cardAlloc[idx] ?? 0
     const otherAmt = otherAlloc[idx] ?? 0
     const serverOrderId = Number(opts?.serverOrderId ?? 0)
+    const snapshotDiscount = round2(Math.max(0, Number(split.discountAmt ?? 0) || 0))
+    const lineDiscountSum = round2(
+      items.reduce((sum, it) => sum + Math.max(0, Number(it.lineDiscountAmt) || 0), 0)
+    )
+    const discountAmt = snapshotDiscount > 0.0001 ? snapshotDiscount : lineDiscountSum
 
     return [
       {
@@ -119,7 +196,7 @@ export function buildSplitPaymentReceiptBatch(
         discountReason: base.discountReason,
         items,
         subtotal,
-        discountAmt: Math.max(0, Number(split.discountAmt ?? 0) || 0),
+        discountAmt,
         total: total > 0 ? total : subtotal,
         ...(vatAmt > 0.001 ? { vatFeeAmt: vatAmt, vatFeeMode } : {}),
         ...(serviceAmt > 0.001 ? { serviceFeeAmt: serviceAmt, serviceFeeMode } : {}),
@@ -135,7 +212,7 @@ export function buildSplitPaymentReceiptBatch(
   })
 }
 
-/** 영수증 관리 재인쇄·사후 세금계산서 — memo 스냅샷 기준 분할 영수증 */
+/** 영수증 관리 재인쇄·사후 세금계산서 — memo 스냅샷 기준 분할 영수증(+합산) */
 export function buildSplitPaymentReceiptBatchFromOrder(
   order: PosOrder,
   opts?: PosOrderReceiptLineOptions & {
@@ -166,7 +243,12 @@ export function buildSplitPaymentReceiptBatchFromOrder(
   const orderCard = Math.max(0, Number(fullReceipt.cardFeeAmt ?? pricing?.cardFeeAmt ?? 0) || 0)
   const orderOther = Math.max(0, Number(fullReceipt.otherFeeAmt ?? pricing?.otherFeeAmt ?? 0) || 0)
 
-  const batch = buildSplitPaymentReceiptBatch(
+  const splitsWithLineDiscount = applyOrderLineDiscountsToSplitSnapshots(
+    splits,
+    Array.isArray(order.items) ? order.items : fullReceipt.items
+  )
+
+  const splitRows = buildSplitPaymentReceiptBatch(
     {
       orderNo: order.orderNo ?? '',
       storeCode: order.storeCode ?? '',
@@ -179,7 +261,7 @@ export function buildSplitPaymentReceiptBatchFromOrder(
       cardFeeMode: fullReceipt.cardFeeMode,
       otherFeeMode: fullReceipt.otherFeeMode,
     },
-    splits,
+    splitsWithLineDiscount,
     {
       suppressReceiptModalAutoPrint: opts?.suppressReceiptModalAutoPrint ?? true,
       orderVat,
@@ -194,5 +276,16 @@ export function buildSplitPaymentReceiptBatchFromOrder(
     ...row,
     items: enrichReceiptModalItemsForPromoDisplay(row.items, opts),
   }))
-  return batch.length > 0 ? batch : null
+  if (splitRows.length === 0) return null
+  return composeCheckoutPaymentReceiptPrintBatch(
+    {
+      ...fullReceipt,
+      items: enrichReceiptModalItemsForPromoDisplay(fullReceipt.items, opts),
+      receiptAutoPrintContext: 'payment',
+      suppressReceiptModalAutoPrint: opts?.suppressReceiptModalAutoPrint ?? true,
+      printInstanceKey: fullReceipt.printInstanceKey || `full:${order.orderNo ?? order.id ?? 'order'}`,
+      ...(Number(order.id) > 0 ? { serverOrderId: Number(order.id) } : {}),
+    },
+    splitRows
+  )
 }

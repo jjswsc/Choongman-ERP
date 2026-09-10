@@ -64,6 +64,7 @@ export type CartPanelOrderLinePayload = {
   note?: string
   menuId?: string
   optionId?: string
+  lineDiscountAmt?: number
 }
 
 export type CartPanelSplitReceiptPayload = {

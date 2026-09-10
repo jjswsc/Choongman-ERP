@@ -38,6 +38,36 @@ describe('pos split receipt memo', () => {
     expect(parsePosOrderMemo(memo).plainMemo).toBe('customer note')
   })
 
+  it('keeps per-line discount amounts through memo round-trip', () => {
+    const splits = normalizePosSplitReceiptSnapshots([
+      {
+        key: 'menu-1',
+        label: '1/2',
+        items: [
+          { id: 'tteok', name: 'Tteokbokki', price: 159, quantity: 1, lineDiscountAmt: 7 },
+          { id: 'water', name: 'Aquafina', price: 20, quantity: 1 },
+        ],
+        subtotal: 179,
+        discountAmt: 7,
+        total: 172,
+      },
+      {
+        key: 'menu-2',
+        label: '2/2',
+        items: [{ id: 'pork', name: 'Soy Sauce Pork', price: 149, quantity: 1, lineDiscountAmt: 7 }],
+        subtotal: 149,
+        discountAmt: 7,
+        total: 142,
+      },
+    ])
+    expect(splits?.[0].items[0].lineDiscountAmt).toBe(7)
+    expect(splits?.[0].items[1].lineDiscountAmt).toBeUndefined()
+    const parsed = parsePosSplitReceiptsFromMemo(upsertPosSplitReceiptsInMemo('', splits))
+    expect(parsed?.[0].items[0].lineDiscountAmt).toBe(7)
+    expect(parsed?.[0].items[1].lineDiscountAmt).toBeUndefined()
+    expect(parsed?.[1].items[0].lineDiscountAmt).toBe(7)
+  })
+
   it('keeps split snapshot when tax invoice block is appended later', () => {
     const memoWithSplit = upsertPosSplitReceiptsInMemo('', sampleSplits)
     const tax = {

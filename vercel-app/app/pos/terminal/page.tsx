@@ -286,7 +286,7 @@ import {
   normalizePosSplitReceiptSnapshots,
   upsertPosSplitReceiptsInMemo,
 } from '@/lib/pos-split-receipt-memo'
-import { buildSplitPaymentReceiptBatch } from '@/lib/pos-split-payment-receipt-batch'
+import { buildSplitPaymentReceiptBatch, composeCheckoutPaymentReceiptPrintBatch, applyOrderLineDiscountsToSplitSnapshots } from '@/lib/pos-split-payment-receipt-batch'
 import { mergeGrabOrderItemsForKitchenPrint } from '@/lib/grab-kitchen-print-items'
 import { mergeGrabSetChildLinesIntoPromoParents, parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
 import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
@@ -1340,11 +1340,13 @@ export default function PosTerminalPage() {
       },
       splitReceipts: CartPanelSplitReceiptPayload[] | undefined,
       suppressReceiptModalAutoPrint: boolean,
-      serverOrderId?: number | null
+      serverOrderId?: number | null,
+      orderItems?: unknown[] | null
     ): ReceiptModalData[] => {
       const splits = normalizePosSplitReceiptSnapshots(splitReceipts)
       if (!splits) return []
-      return buildSplitPaymentReceiptBatch(base, splits, {
+      const splitsWithLineDiscount = applyOrderLineDiscountsToSplitSnapshots(splits, orderItems)
+      return buildSplitPaymentReceiptBatch(base, splitsWithLineDiscount, {
         suppressReceiptModalAutoPrint,
         ...(serverOrderId != null && serverOrderId > 0 ? { serverOrderId } : {}),
       })
@@ -4466,18 +4468,10 @@ export default function PosTerminalPage() {
         serverOrderId != null ? { ...row, serverOrderId: row.serverOrderId ?? serverOrderId } : row
       const enrichedPayload = withMember(withOrderId(receiptPayload))
       const enrichedSplit = splitBatch.map((row) => withMember(withOrderId(row)))
-      const batch = (enrichedSplit.length > 0 ? enrichedSplit : [enrichedPayload])
+      const batch = composeCheckoutPaymentReceiptPrintBatch(enrichedPayload, enrichedSplit)
 
       if (!isMainPosDevice) {
-        if (enrichedSplit.length > 0) {
-          startReceiptBatch(enrichedSplit)
-        } else {
-          setReceiptData({
-            ...enrichedPayload,
-            receiptAutoPrintContext: 'payment',
-            suppressReceiptModalAutoPrint: true,
-          })
-        }
+        startReceiptBatch(batch)
         return
       }
 
@@ -4491,15 +4485,7 @@ export default function PosTerminalPage() {
         return
       }
 
-      if (enrichedSplit.length > 0) {
-        startReceiptBatch(enrichedSplit)
-      } else {
-        setReceiptData({
-          ...enrichedPayload,
-          receiptAutoPrintContext: 'payment',
-          suppressReceiptModalAutoPrint: false,
-        })
-      }
+      startReceiptBatch(batch)
       if (orderId != null && orderId > 0) {
         printedPaymentReceiptIdsRef.current.add(orderId)
       }
@@ -9297,7 +9283,8 @@ export default function PosTerminalPage() {
                     },
                     payload.splitReceipts,
                     !isMainPosDevice,
-                    existingOrderId
+                    existingOrderId,
+                    payload.items
                   )
                   dispatchCheckoutPaymentReceipt({
                     receiptPayload,
@@ -9484,7 +9471,8 @@ export default function PosTerminalPage() {
                     },
                     payload.splitReceipts,
                     !isMainPosDevice,
-                    existingOrderId
+                    existingOrderId,
+                    payload.items
                   )
                   dispatchCheckoutPaymentReceipt({
                     receiptPayload,
@@ -10619,7 +10607,8 @@ export default function PosTerminalPage() {
                     },
                     payload.splitReceipts,
                     !isMainPosDevice,
-                    orderIdToComplete
+                    orderIdToComplete,
+                    payload.items
                   )
                   dispatchCheckoutPaymentReceipt({
                     receiptPayload,
@@ -11298,7 +11287,8 @@ export default function PosTerminalPage() {
                       },
                       payload.splitReceipts,
                       suppressReceiptModalAutoPrint,
-                      newOrderId
+                      newOrderId,
+                      payload.items
                     )
                     dispatchCheckoutPaymentReceipt({
                       receiptPayload: buildNonDineCheckoutPaymentReceipt(),
@@ -11415,7 +11405,8 @@ export default function PosTerminalPage() {
                           },
                           payload.splitReceipts,
                           suppressReceiptModalAutoPrint,
-                          newOrderId
+                          newOrderId,
+                          payload.items
                         )
                         dispatchCheckoutPaymentReceipt({
                           receiptPayload: buildNonDineCheckoutPaymentReceipt(),

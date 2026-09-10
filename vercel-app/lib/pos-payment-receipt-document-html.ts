@@ -295,7 +295,6 @@ function resolveLineDiscountsForReceipt(
   discountReason?: string
 ): number[] {
   if (!enabled || !Array.isArray(items) || items.length === 0) return []
-  const total = Math.max(0, Number(totalDiscount) || 0)
   const collabReason = isCollabDiscountReasonText(String(discountReason ?? ''))
   const toReceiptAllocLines = (list: ReceiptModalData['items']) =>
     (list || []).map((it) => ({
@@ -307,15 +306,11 @@ function resolveLineDiscountsForReceipt(
     }))
   const hasSavedLineDiscount = items.some((it) => Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001)
   if (hasSavedLineDiscount) {
-    const saved = items.map((it) => Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0))
-    const savedSum = saved.reduce((sum, v) => sum + v, 0)
-    if (collabReason && total > 0.0001 && Math.abs(savedSum - total) > 0.02) {
-      return allocateDiscountExcludingDrinksAndPromos(toReceiptAllocLines(items), total)
-    }
-    return saved
+    // 저장된 줄 할인만 표시. 합이 주문 할인과 달라도 비대상 메뉴에 재배분하지 않음.
+    return items.map((it) => Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0))
   }
   if (collabReason) {
-    return allocateDiscountExcludingDrinksAndPromos(toReceiptAllocLines(items), total)
+    return allocateDiscountExcludingDrinksAndPromos(toReceiptAllocLines(items), totalDiscount)
   }
   return allocateDiscountByItem(items, totalDiscount)
 }
