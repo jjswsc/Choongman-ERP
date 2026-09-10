@@ -1,10 +1,12 @@
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isMemberPortalPublicStore } from '@/lib/member-portal-stores-shared'
+import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
 import {
   loadTenantScopedSystemSettingsMap,
   upsertTenantScopedSystemSettings,
 } from '@/lib/tenant-system-settings-server'
 import type { TenantSettingsScope } from '@/lib/tenant-system-settings'
+import type { NextRequest } from 'next/server'
 
 export { MEMBER_PORTAL_PREPAY_MIN_QR_BAHT, MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS } from '@/lib/member-portal-prepay-constants'
 
@@ -47,13 +49,6 @@ function parseBoolSetting(raw: string): boolean {
   return v === '1' || v === 'true' || v === 'yes'
 }
 
-function readSettingValue(raw: unknown): string {
-  if (typeof raw === 'boolean') return raw ? 'true' : 'false'
-  if (typeof raw === 'string') return raw.replace(/^"|"$/g, '').trim()
-  if (raw != null) return JSON.stringify(raw)
-  return ''
-}
-
 const PREPAY_KEYS = [KEY_ENABLED, KEY_STORE_CODES, KEY_ALL_PUBLIC] as const
 const LEGACY_SCOPE: TenantSettingsScope = { enforce: false, tenantId: '' }
 
@@ -67,16 +62,35 @@ function configFromMap(map: Map<string, string>, envEnabled: boolean): MemberPor
   }
 }
 
+export function isMemberPortalPrepayEnvOverride(): boolean {
+  return String(process.env.MEMBER_PORTAL_PREPAY_ENABLED || '').trim() === '1'
+}
+
 export async function loadMemberPortalPrepayConfig(
   scope: TenantSettingsScope = LEGACY_SCOPE
 ): Promise<MemberPortalPrepayConfig> {
-  const envEnabled = String(process.env.MEMBER_PORTAL_PREPAY_ENABLED || '').trim() === '1'
+  const envEnabled = isMemberPortalPrepayEnvOverride()
   try {
     const map = await loadTenantScopedSystemSettingsMap(PREPAY_KEYS, scope)
     return configFromMap(map, envEnabled)
   } catch {
     return { enabled: envEnabled, storeCodes: new Set(), allPublicStores: false }
   }
+}
+
+/** 회원 세션 테넌트로 선결제 설정을 읽는다. (관리자 저장 키와 동일 스코프) */
+export async function loadMemberPortalPrepayConfigForMember(params: {
+  memberId?: number | null
+  request?: NextRequest
+}): Promise<MemberPortalPrepayConfig> {
+  const tenantScope = await resolveMemberPortalTenantScope({
+    memberId: params.memberId,
+    request: params.request,
+  })
+  return loadMemberPortalPrepayConfig({
+    enforce: tenantScope.enforce,
+    tenantId: tenantScope.tenantId,
+  })
 }
 
 export function isMemberPortalPrepayStore(
@@ -87,7 +101,9 @@ export function isMemberPortalPrepayStore(
   const code = String(store.storeCode || '').trim()
   if (!code) return false
   const displayName = String(store.displayName || '').trim()
-  if (config.allPublicStores && isMemberPortalPublicStore({ storeCode: code, displayName: displayName || code })) return true
+  if (config.allPublicStores) {
+    return isMemberPortalPublicStore({ storeCode: code, displayName: displayName || code })
+  }
   const norm = normStoreCode(code)
   if (config.storeCodes.size > 0) {
     return config.storeCodes.has(norm)
@@ -103,7 +119,7 @@ export async function loadMemberPortalPrepaySettingsForAdmin(
   allPublicStores: boolean
   envOverride: boolean
 }> {
-  const envOverride = String(process.env.MEMBER_PORTAL_PREPAY_ENABLED || '').trim() === '1'
+  const envOverride = isMemberPortalPrepayEnvOverride()
   try {
     const map = await loadTenantScopedSystemSettingsMap(PREPAY_KEYS, scope)
     const dbEnabled = parseBoolSetting(map.get(KEY_ENABLED) || '')
@@ -126,9 +142,6 @@ export async function saveMemberPortalPrepaySettings(
   },
   scope: TenantSettingsScope = LEGACY_SCOPE
 ): Promise<void> {
-  if (String(process.env.MEMBER_PORTAL_PREPAY_ENABLED || '').trim() === '1') {
-    throw new Error('prepay_env_override')
-  }
   const codes = (params.storeCodes || []).map((c) => String(c || '').trim()).filter(Boolean)
   await upsertTenantScopedSystemSettings(
     [

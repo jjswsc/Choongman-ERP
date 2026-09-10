@@ -164,14 +164,15 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
 
   mpAdmin_prepayTitle: '픽업 선결제 (포인트·QR)',
   mpAdmin_prepayDesc:
-    '켜 두면 지정 매장(비우면 본사·오피스 계열) 회원앱 픽업 주문 시 포인트·PromptPay QR 선결제가 적용됩니다. Vercel MEMBER_PORTAL_PREPAY_ENABLED=1 이면 DB 설정보다 환경변수가 우선합니다.',
+    '켜 두면 지정 매장 회원앱 픽업 주문 시 포인트·PromptPay QR 선결제가 적용됩니다. 매장 코드를 비우면 본사·오피스만 해당되므로, 일반 매장에서 QR을 쓰려면 「모든 회원앱 공개 매장」을 켜거나 매장 칩을 선택하세요.',
   mpAdmin_prepayEnabled: '선결제 사용',
   mpAdmin_prepayStoreCodes: '대상 매장 코드 (쉼표 구분, 비우면 오피스·본사 자동)',
   mpAdmin_prepayStoreCodesPh: 'Office, CM Office',
   mpAdmin_prepayAllPublic: '모든 회원앱 공개 매장 (코드 목록 무시)',
   mpAdmin_prepayStorePickHint: '아래에서 매장을 눌러 추가·제거할 수 있습니다.',
   mpAdmin_prepaySave: '선결제 설정 저장',
-  mpAdmin_prepayEnvOverride: 'Vercel 환경변수로 선결제가 강제 ON 되어 있습니다. Dashboard에서 MEMBER_PORTAL_PREPAY_ENABLED 를 끄면 DB 설정을 쓸 수 있습니다.',
+  mpAdmin_prepayEnvOverride:
+    'Vercel MEMBER_PORTAL_PREPAY_ENABLED=1 이라 선결제는 강제 ON입니다. 대상 매장·공개 매장 전체는 아래에서 저장할 수 있습니다. 기능을 끄려면 Dashboard에서 해당 환경변수를 제거하세요.',
   mpAdmin_errPrepaySave: '선결제 설정 저장에 실패했습니다.',
   mpAdmin_noticePrepaySaved: '선결제 설정을 저장했습니다.',
   mpAdmin_errPrepaySaveGeneric: '선결제 설정 저장 중 오류가 발생했습니다.',
@@ -580,14 +581,15 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
 
   mpAdmin_prepayTitle: 'Pickup prepay (points · QR)',
   mpAdmin_prepayDesc:
-    'When on, member app pickup at listed stores (empty = head office / office stores) requires points and/or PromptPay QR prepayment. Vercel MEMBER_PORTAL_PREPAY_ENABLED=1 overrides DB.',
+    'When on, member app pickup at listed stores requires points and/or PromptPay QR. Empty store list = office/HQ only — turn on “All public member-app stores” or tap store chips for franchise pickup QR.',
   mpAdmin_prepayEnabled: 'Enable prepay',
   mpAdmin_prepayStoreCodes: 'Store codes (comma-separated; empty = office stores auto)',
   mpAdmin_prepayStoreCodesPh: 'Office, CM Office',
   mpAdmin_prepayAllPublic: 'All public member-app stores (ignore code list)',
   mpAdmin_prepayStorePickHint: 'Tap stores below to add or remove from the prepay list.',
   mpAdmin_prepaySave: 'Save prepay settings',
-  mpAdmin_prepayEnvOverride: 'Prepay is forced ON by Vercel env MEMBER_PORTAL_PREPAY_ENABLED. Remove it to use DB settings.',
+  mpAdmin_prepayEnvOverride:
+    'Prepay is forced ON by Vercel MEMBER_PORTAL_PREPAY_ENABLED=1. You can still save store targeting below. Remove the env var in Dashboard to turn the feature off.',
   mpAdmin_errPrepaySave: 'Failed to save prepay settings.',
   mpAdmin_noticePrepaySaved: 'Prepay settings saved.',
   mpAdmin_errPrepaySaveGeneric: 'An error occurred while saving prepay settings.',
@@ -994,14 +996,16 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_deliverySave: 'บันทึกลิงก์เดลิเวอรี',
 
   mpAdmin_prepayTitle: 'ชำระล่วงหน้ารับที่ร้าน (พอยท์·QR)',
-  mpAdmin_prepayDesc: 'เปิดใช้สำหรับร้านที่กำหนด (ว่าง = สำนักงานใหญ่/ออฟฟิศ)',
+  mpAdmin_prepayDesc:
+    'เปิดแล้ว แอปสมาชิกจะให้จ่ายพอยท์และ/หรือ PromptPay QR ตอนสั่งรับที่ร้าน ถ้ารหัสร้านว่าง = ออฟฟิศเท่านั้น ร้านทั่วไปต้องติ๊ก「ร้านสาธารณะทั้งหมด」หรือเลือกสาขาด้านล่างครับ',
   mpAdmin_prepayEnabled: 'เปิดชำระล่วงหน้า',
   mpAdmin_prepayStoreCodes: 'รหัสร้าน (คั่นด้วยจุลภาค ว่าง = ออฟฟิศอัตโนมัติ)',
   mpAdmin_prepayStoreCodesPh: 'Office',
   mpAdmin_prepayAllPublic: 'ร้านสาธารณะทั้งหมดในแอปสมาชิก',
   mpAdmin_prepayStorePickHint: 'แตะร้านด้านล่างเพื่อเพิ่ม/ลบ',
   mpAdmin_prepaySave: 'บันทึกการชำระล่วงหน้า',
-  mpAdmin_prepayEnvOverride: 'เปิดบังคับด้วย Vercel MEMBER_PORTAL_PREPAY_ENABLED',
+  mpAdmin_prepayEnvOverride:
+    'Vercel MEMBER_PORTAL_PREPAY_ENABLED บังคับเปิดชำระล่วงหน้าอยู่ครับ เลือกสาขายังบันทึกได้ ถ้าจะปิดทั้งระบบ ให้ลบตัวแปรที่ Dashboard',
   mpAdmin_errPrepaySave: 'บันทึกการชำระล่วงหน้าไม่สำเร็จ',
   mpAdmin_noticePrepaySaved: 'บันทึกการชำระล่วงหน้าแล้ว',
   mpAdmin_errPrepaySaveGeneric: 'เกิดข้อผิดพลาดขณะบันทึก',

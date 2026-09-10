@@ -1340,11 +1340,12 @@ export default function CrmMemberAppContentPage() {
                     {t("mpAdmin_prepayEnvOverride")}
                   </div>
                 ) : null}
-                <fieldset disabled={!canEdit || prepayEnvOverride} className="space-y-4 disabled:opacity-60">
+                <fieldset disabled={!canEdit} className="space-y-4 disabled:opacity-60">
                   <label className="flex cursor-pointer items-center gap-2 text-sm">
                     <input
                       type="checkbox"
                       checked={prepayEnabled}
+                      disabled={prepayEnvOverride}
                       onChange={(e) => setPrepayEnabled(e.target.checked)}
                       className="h-4 w-4 rounded border-gray-300"
                     />
@@ -1394,7 +1395,7 @@ export default function CrmMemberAppContentPage() {
                     ) : null}
                   </div>
                   <div className="flex gap-2">
-                    <Button onClick={() => savePrepaySettings()} disabled={prepaySaving || !canEdit || prepayEnvOverride}>
+                    <Button onClick={() => savePrepaySettings()} disabled={prepaySaving || !canEdit}>
                       {prepaySaving ? t("mpAdmin_saving") : t("mpAdmin_prepaySave")}
                     </Button>
                     <Button variant="outline" onClick={() => loadPrepaySettings().catch(() => {})}>

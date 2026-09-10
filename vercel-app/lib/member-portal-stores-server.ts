@@ -25,7 +25,10 @@ export async function memberPortalStoresForSession(
     tenantScope.enforce && tenantScope.tenantId
       ? await fetchErpStoresMasterForTenant(tenantScope.tenantId)
       : await fetchErpStoresMaster()
-  const prepay = await loadMemberPortalPrepayConfig()
+  const prepay = await loadMemberPortalPrepayConfig({
+    enforce: tenantScope.enforce,
+    tenantId: tenantScope.tenantId,
+  })
   return memberPortalStoresFromMasters(rows, {
     orderStoreFilter: (store) =>
       isMemberPortalPublicStore(store) ||

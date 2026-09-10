@@ -3,7 +3,7 @@ import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
 import { resolveMemberPortalPointAndQr } from '@/lib/member-portal-checkout-amounts'
 import {
-  loadMemberPortalPrepayConfig,
+  loadMemberPortalPrepayConfigForMember,
   MEMBER_PORTAL_PREPAY_MIN_QR_BAHT,
   MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS,
   type MemberPortalPrepayConfig,
@@ -129,7 +129,9 @@ async function resolveMemberPortalCheckoutPricing(params: {
   couponCode?: string
   prepayConfig?: MemberPortalPrepayConfig
 }): Promise<ResolvedCheckoutPricing> {
-  const prepayConfig = params.prepayConfig ?? (await loadMemberPortalPrepayConfig())
+  const prepayConfig =
+    params.prepayConfig ??
+    (await loadMemberPortalPrepayConfigForMember({ memberId: params.member.id }))
   const storeCode = String(params.storeCode || '').trim()
   const storeCtx = await resolveStoreContext(storeCode)
   const prepayEnabled = isMemberPortalPrepayStore(storeCtx, prepayConfig)
@@ -428,7 +430,9 @@ export async function createMemberPickupOrderWithPrepay(params: {
   createdAt?: string
   paymentExpiresAt?: string
 }> {
-  const prepayConfig = params.prepayConfig ?? (await loadMemberPortalPrepayConfig())
+  const prepayConfig =
+    params.prepayConfig ??
+    (await loadMemberPortalPrepayConfigForMember({ memberId: params.member.id }))
   const storeCode = String(params.storeCode || '').trim()
   const storeCtx = await resolveStoreContext(storeCode)
   assertStoreOrderable(storeCtx.storeCode, storeCtx.displayName, prepayConfig)

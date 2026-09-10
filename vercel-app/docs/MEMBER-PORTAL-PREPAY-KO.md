@@ -5,11 +5,12 @@
 1. **Vercel 환경변수 (Production 필수)**
    - `KBANK_TERMINAL_ID` 등 KBank QR (POS와 동일)
    - **`CRON_SECRET`** — Vercel Cron이 `Authorization: Bearer {값}` 으로 호출. **16자 이상 랜덤 문자열**, 특수문자·줄바꿈 없이. Production에 등록 후 **재배포**해야 Cron에 반영됨.
-   - (선택) `MEMBER_PORTAL_PREPAY_ENABLED=1` — DB 설정보다 env 우선
+   - (선택) `MEMBER_PORTAL_PREPAY_ENABLED=1` — 선결제 **기능 ON**만 강제. 대상 매장·「공개 매장 전체」는 CRM에서 저장 가능.
 
 2. **Supabase SQL** (1회)
-   - `sql/member_portal_prepay_office_pilot.sql` 실행
-   - 또는 CRM → 회원앱 → 배달 탭에서 선결제 ON
+   - 오피스 파일럿만: `sql/member_portal_prepay_office_pilot.sql`
+   - 회원앱 일반 매장 QR: `sql/member_portal_prepay_all_public_01_enable.sql` 후 `sql/member_portal_prepay_all_public_02_verify.sql`
+   - 또는 CRM → 회원앱 → 배달 탭에서 「모든 회원앱 공개 매장」 저장
 
 3. **Vercel Cron** (`vercel.json`)
    - `*/5` — `/api/member-portal/cron/expire-pending-payments` (5분 QR 만료)
@@ -25,7 +26,7 @@
 
 ## 관리자 설정
 
-- **CRM → 회원앱 → 배달**: 선결제 ON/OFF, 매장 칩, 전 매장 공개, **7일 통계**, **픽업 최소 리드(분)**
+- **CRM → 회원앱 → 배달**: 선결제 ON/OFF, 매장 칩, 전 매장 공개, **7일 통계**, **픽업 최소 리드(분)**. 환경변수가 켜져 있어도 매장 대상은 저장할 수 있습니다. 코드 목록이 비어 있으면 **오피스만** QR이 나옵니다. 일반 매장은 「모든 회원앱 공개 매장」을 켜세요.
 
 ## 수동 점검 (manager 로그인)
 
