@@ -8,6 +8,8 @@ import { getPosPrinterSettings } from "@/lib/api-client"
 import { PosQrGuidelineCard } from "@/components/pos/pos-qr-guideline-card"
 import {
   readPosCustomerDisplayState,
+  resolveCustomerDisplayStoreCode,
+  shouldAcceptCustomerDisplayPayload,
   subscribePosCustomerDisplayState,
   type PosCustomerDisplayPayload,
 } from "@/lib/pos-customer-display-state"
@@ -19,7 +21,11 @@ type DisplayTheme = "dark" | "light" | "brand"
 export default function PosCustomerDisplayPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
-  const storeCode = String(auth?.store || "").trim()
+  const [storeCode, setStoreCode] = React.useState(() => String(auth?.store || "").trim())
+
+  React.useEffect(() => {
+    setStoreCode(resolveCustomerDisplayStoreCode(auth?.store))
+  }, [auth?.store])
 
   const [theme, setTheme] = React.useState<DisplayTheme>("dark")
   const [state, setState] = React.useState<PosCustomerDisplayPayload | null>(() =>
@@ -62,18 +68,23 @@ export default function PosCustomerDisplayPage() {
   }, [lang, storeCode])
 
   React.useEffect(() => {
-    if (!storeCode) return
-    const latest = readPosCustomerDisplayState(storeCode)
+    const latest = storeCode ? readPosCustomerDisplayState(storeCode) : null
     if (latest) setState(latest)
-    return subscribePosCustomerDisplayState(storeCode, setState)
+    return subscribePosCustomerDisplayState(storeCode, (payload) => {
+      setState(payload)
+      const got = String(payload.storeCode || "").trim()
+      if (got) setStoreCode((prev) => prev || got)
+    })
   }, [storeCode])
 
   React.useEffect(() => {
     const shell = window.cmPosShell
     if (typeof shell?.onCustomerDisplayState !== "function") return
     return shell.onCustomerDisplayState((payload) => {
-      if (!payload || payload.storeCode !== storeCode) return
+      if (!shouldAcceptCustomerDisplayPayload(payload, storeCode)) return
       setState(payload)
+      const got = String(payload.storeCode || "").trim()
+      if (got) setStoreCode((prev) => prev || got)
     })
   }, [storeCode])
 
@@ -228,7 +239,7 @@ export default function PosCustomerDisplayPage() {
   const qrTotalBaht = Number(state?.totalAmount || 0)
 
   return (
-    <div className={`flex h-full min-h-0 w-full flex-col overflow-hidden ${rootClass}`}>
+    <div className={`flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden ${rootClass}`}>
       <div
         className={`mx-auto flex h-full min-h-0 w-full flex-col overflow-hidden p-5 md:p-8 ${
           current === "qr" ? "max-w-7xl" : "max-w-6xl"

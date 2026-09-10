@@ -53,9 +53,50 @@ export type PosCustomerDisplayPayload = {
 
 const CHANNEL_NAME = "cm-pos-customer-display"
 const STORAGE_PREFIX = "cm:pos:customer-display:"
+const LAST_LOGIN_SNAPSHOT_KEY = "cm_last_login_snapshot"
 
 function keyForStore(storeCode: string) {
   return `${STORAGE_PREFIX}${storeCode.trim()}`
+}
+
+export function isPosCustomerDisplayPathname(pathname: string): boolean {
+  const p = (pathname || "/").replace(/\/+$/, "") || "/"
+  return p === "/pos/customer-display"
+}
+
+/** 고객 창은 sessionStorage가 비어 있을 수 있음 — URL·로그인 스냅샷으로 매장 코드를 보강 */
+export function resolveCustomerDisplayStoreCode(authStore?: string | null): string {
+  const fromAuth = String(authStore || "").trim()
+  if (fromAuth) return fromAuth
+  if (typeof window === "undefined") return ""
+  try {
+    const q = new URLSearchParams(window.location.search).get("store")
+    if (q && q.trim()) return q.trim()
+  } catch {
+    /* ignore */
+  }
+  try {
+    const raw = window.localStorage.getItem(LAST_LOGIN_SNAPSHOT_KEY)
+    if (raw) {
+      const o = JSON.parse(raw) as { store?: string }
+      const s = String(o.store || "").trim()
+      if (s) return s
+    }
+  } catch {
+    /* ignore */
+  }
+  return ""
+}
+
+export function shouldAcceptCustomerDisplayPayload(
+  payload: PosCustomerDisplayPayload | null | undefined,
+  storeCode: string
+): payload is PosCustomerDisplayPayload {
+  if (!payload || typeof payload !== "object") return false
+  const got = String(payload.storeCode || "").trim()
+  if (!got) return false
+  const want = storeCode.trim()
+  return !want || got === want
 }
 
 export function readPosCustomerDisplayState(storeCode: string): PosCustomerDisplayPayload | null {
@@ -95,9 +136,16 @@ export function subscribePosCustomerDisplayState(
   const key = keyForStore(storeCode)
 
   const onStorage = (e: StorageEvent) => {
-    if (e.key !== key || !e.newValue) return
+    if (!e.newValue) return
+    const want = storeCode.trim()
+    if (want) {
+      if (e.key !== key) return
+    } else if (!e.key || !e.key.startsWith(STORAGE_PREFIX)) {
+      return
+    }
     try {
       const parsed = JSON.parse(e.newValue) as PosCustomerDisplayPayload
+      if (!shouldAcceptCustomerDisplayPayload(parsed, storeCode)) return
       onChange(parsed)
     } catch {
       // ignore invalid payload
@@ -110,7 +158,7 @@ export function subscribePosCustomerDisplayState(
     bc = new BroadcastChannel(CHANNEL_NAME)
     bc.onmessage = (event: MessageEvent<unknown>) => {
       const data = event.data as PosCustomerDisplayPayload | null
-      if (!data || data.storeCode !== storeCode) return
+      if (!shouldAcceptCustomerDisplayPayload(data, storeCode)) return
       onChange(data)
     }
   } catch {

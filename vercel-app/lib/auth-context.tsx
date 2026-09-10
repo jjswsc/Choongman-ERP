@@ -7,6 +7,7 @@ import { setMemoryAuthToken } from '@/lib/auth-token-memory'
 import { shouldRefreshAuthToken } from '@/lib/auth-session-keep-alive'
 import { readJwtRemainingSec } from '@/lib/jwt-payload-client'
 import { loginPathWithSessionExpired } from '@/lib/session-expired-notice'
+import { isPosCustomerDisplayPathname } from '@/lib/pos-customer-display-state'
 
 export interface AuthState {
   company?: string
@@ -341,6 +342,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const posOfflineExpired =
       tokenExpired && path.startsWith('/pos') && typeof navigator !== 'undefined' && navigator.onLine === false
     if (tokenExpired && !isAuthLoginPathname(path) && !posOfflineExpired) {
+      /** 고객 모니터는 별도 창(sessionStorage 없음). 로그인으로 보내면 흰 화면·로그인 폼만 남음 */
+      if (isPosCustomerDisplayPathname(path)) {
+        setAuthState(a)
+        setInitialized(true)
+        return
+      }
       clearAuth()
       setAuthState(null)
       setInitialized(true)

@@ -1179,14 +1179,37 @@ process.on("unhandledRejection", (reason) => {
 });
 
 function getCustomerDisplayUrl() {
+  const store = String(customerDisplayConfig.storeCode || "").trim();
   try {
     const url = new URL(POS_URL);
     url.pathname = "/pos/customer-display";
     url.search = "";
     url.hash = "";
+    if (store) url.searchParams.set("store", store);
     return url.toString();
   } catch {
-    return `${ALLOWED_ORIGIN || DEPLOY_ORIGIN}/pos/customer-display`;
+    const base = `${ALLOWED_ORIGIN || DEPLOY_ORIGIN}/pos/customer-display`;
+    return store ? `${base}?store=${encodeURIComponent(store)}` : base;
+  }
+}
+
+function customerDisplayIsOnDisplayPage(urlStr) {
+  try {
+    const u = new URL(String(urlStr || ""));
+    return u.pathname.replace(/\/+$/, "") === "/pos/customer-display";
+  } catch {
+    return String(urlStr || "").includes("/pos/customer-display");
+  }
+}
+
+function reloadCustomerDisplayIfWrongUrl(win) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    if (customerDisplayIsOnDisplayPage(win.webContents.getURL() || "")) return;
+    console.warn("[cm-pos] customer-display left display page; reloading");
+    void win.loadURL(getCustomerDisplayUrl());
+  } catch {
+    /* ignore */
   }
 }
 
@@ -1271,6 +1294,7 @@ function placeCustomerWindowOnTarget(win) {
 function broadcastCustomerDisplayState(payload) {
   customerDisplayLastState = payload;
   if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+    reloadCustomerDisplayIfWrongUrl(customerDisplayWindow);
     customerDisplayWindow.webContents.send("cm-pos-customer-display-state", payload);
   }
 }
@@ -1291,6 +1315,7 @@ async function ensureCustomerDisplayWindow(forceOpen = false, options = {}) {
     return { ok: true, reason: "single-display-skip" };
   }
   if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+    reloadCustomerDisplayIfWrongUrl(customerDisplayWindow);
     if (forceOpen || reposition) {
       placeCustomerWindowOnTarget(customerDisplayWindow);
     }
@@ -1309,6 +1334,7 @@ async function ensureCustomerDisplayWindow(forceOpen = false, options = {}) {
       width: 1200,
       height: 900,
       show: false,
+      backgroundColor: "#09090b",
       autoHideMenuBar: true,
       skipTaskbar: true,
       webPreferences: {
@@ -1327,10 +1353,35 @@ async function ensureCustomerDisplayWindow(forceOpen = false, options = {}) {
       shell.openExternal(url);
       return { action: "deny" };
     });
+    let customerDisplayFailLoadRetries = 0;
+    customerDisplayWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+      if (!isMainFrame) return;
+      if (errorCode === -3) return;
+      if (customerDisplayFailLoadRetries >= 5) return;
+      customerDisplayFailLoadRetries += 1;
+      console.warn("[cm-pos] customer-display did-fail-load", errorCode, errorDescription);
+      setTimeout(() => {
+        if (!customerDisplayWindow || customerDisplayWindow.isDestroyed()) return;
+        void customerDisplayWindow.loadURL(getCustomerDisplayUrl());
+      }, 1500);
+    });
+    customerDisplayWindow.webContents.on("did-finish-load", () => {
+      customerDisplayFailLoadRetries = 0;
+    });
     customerDisplayWindow.webContents.on("will-navigate", (event, url) => {
       if (ALLOWED_ORIGIN && !url.startsWith(ALLOWED_ORIGIN)) {
         event.preventDefault();
         shell.openExternal(url);
+        return;
+      }
+      try {
+        const u = new URL(url);
+        if (u.pathname.replace(/\/+$/, "") === "/pos/login") {
+          event.preventDefault();
+          console.warn("[cm-pos] blocked customer-display navigate to login");
+        }
+      } catch {
+        /* ignore */
       }
     });
     customerDisplayWindow.on("closed", () => {

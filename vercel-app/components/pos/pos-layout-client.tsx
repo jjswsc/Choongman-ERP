@@ -358,7 +358,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!initialized) return
-    if (isPosLoginPage) return
+    if (isPosLoginPage || isCustomerDisplayPage) return
     if (!auth) {
       replacePosOfflineAware("/pos/login", (p) => router.replace(p))
       return
@@ -386,7 +386,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
         return
       }
     }
-  }, [auth, initialized, isPosLoginPage, pathname, router, saasModules])
+  }, [auth, initialized, isPosLoginPage, isCustomerDisplayPage, pathname, router, saasModules])
 
   const showTopChrome = (bar: boolean) => shellChrome && bar && !topBarHidden
   const touchMainButtonClass = isTouchViewport ? "min-h-10 px-3" : "px-2 py-1.5"
@@ -421,6 +421,14 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     ) : null
 
   const padForRevealStrip = Boolean(shellChrome && topBarHidden && topBarHydrated)
+
+  if (isCustomerDisplayPage) {
+    return (
+      <div className="fixed inset-0 flex flex-col overflow-hidden bg-zinc-950 text-zinc-50">
+        {children}
+      </div>
+    )
+  }
 
   if (isPosLoginPage) {
     return (
