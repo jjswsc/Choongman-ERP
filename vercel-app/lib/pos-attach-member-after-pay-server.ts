@@ -12,7 +12,7 @@ import {
 } from '@/lib/pos-attach-member-after-pay'
 import { applyLoyaltyOnOrder, getMemberSummaryById } from '@/lib/members-server'
 import { resolveMembersTenantScope } from '@/lib/members-tenant-scope'
-import { notifyMemberPointLineForPaidOrder } from '@/lib/member-point-line-notify'
+import { scheduleNotifyMemberPointLineForPaidOrder } from '@/lib/member-point-line-notify-schedule'
 import { roundMemberPointsEarn } from '@/lib/member-points-math'
 import {
   supabaseSelectFilterStrippingUnknownColumns,
@@ -195,11 +195,13 @@ export async function attachMemberAndEarnPointsAfterPay(params: {
   }
 
   try {
-    await notifyMemberPointLineForPaidOrder({
+    await scheduleNotifyMemberPointLineForPaidOrder({
       orderId,
       memberId,
       storeCode,
       orderNo: String(order.order_no || ''),
+      earned: pointEarned,
+      used: roundMemberPointsEarn(order.point_used),
     })
   } catch (notifyErr) {
     console.warn('attachPosOrderMember point notify:', notifyErr)

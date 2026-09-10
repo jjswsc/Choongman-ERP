@@ -754,7 +754,7 @@ export function usePosMainDeviceSyncHost(): void {
     void Promise.all([
       getPosMenus({ storeCode }),
       getPosMenuOptions({ fresh: true, forCodeMap: true }),
-      getPosPromosWithItems(),
+      getPosPromosWithItems({ storeCode }),
       getPosPrinterSettings({ storeCode }),
     ])
       .then(([menuList, options, promoList, settings]) => {

@@ -93,7 +93,7 @@ import {
 } from "@/lib/pos-promo-constants"
 import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceGroup } from "@/lib/pos-promo-choice"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
-import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
+import { isPromoVisibleInContext, shouldShowStandalonePromoTile } from "@/lib/pos-promo-visibility"
 import { buildPromoRegularPriceById } from "@/lib/pos-promo-cut-price"
 import { PosPromoCutPriceLabel } from "@/components/pos/pos-promo-cut-price-label"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
@@ -585,7 +585,7 @@ export default function PosOrderPage() {
       getPosMenus({ storeCode: storeCode || undefined }),
       getPosMenuCategories(),
       getPosMenuOptions({}),
-      getPosPromosWithItems(),
+      getPosPromosWithItems({ storeCode: storeCode || undefined }),
     ])
       .then(([r0, r1, r2, r3]) => {
         const list = r0.status === "fulfilled" ? r0.value || [] : []
@@ -856,7 +856,15 @@ export default function PosOrderPage() {
   const filteredPromos = React.useMemo(() => {
     return promos.filter((p) => {
       if (!p.isActive) return false
-      if (linkedPromoIds.has(p.id)) return false
+      if (
+        !shouldShowStandalonePromoTile({
+          hasMirrorMenu: p.hasMirrorMenu,
+          promoId: p.id,
+          linkedPromoIds,
+        })
+      ) {
+        return false
+      }
       const cm = (p.categoryMain || PROMOTION_MAIN_CATEGORY).trim()
       const sub = (p.category || "").trim()
       if (selectedMainCategory && cm !== selectedMainCategory) return false

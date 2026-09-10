@@ -7,6 +7,10 @@ import {
   isSaasTenantQueryBlocked,
   resolveSaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+import { stripTenantPrefixedStoreCode } from '@/lib/pos-operating-store-code'
+import { isPosMenuScopeCompatibilityModeEnabled } from '@/lib/pos-menu-store-scope'
+import { shouldIncludeMirroredPromoForStore } from '@/lib/pos-promo-visibility'
+import { loadPromoMirrorIndex } from '@/lib/pos-promo-mirror-scope-server'
 
 const SELECT_EXTENDED =
   'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to,grab_campaign_start_time_bkk,grab_campaign_end_time_bkk'
@@ -70,6 +74,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const campaignId = searchParams.get('campaignId')?.trim() || ''
     const includeInactive = searchParams.get('includeInactive') === 'true'
+    const requestedStoreCode = stripTenantPrefixedStoreCode(searchParams.get('storeCode') ?? '')
 
     let promos: RawPromo[] | null = null
     for (const sel of [SELECT_EXTENDED_WITH_COMPOSE, SELECT_EXTENDED, SELECT_BASE]) {
@@ -226,22 +231,39 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json(
-      promoList.map((p) => ({
-        ...p,
-        items: (itemsByPromo[p.id] || []).map((it) => {
-          const mid = String(it.menuId ?? '').trim()
-          const menuName = mid ? menuNameById.get(mid) : undefined
-          const menuCode = mid ? menuCodeById.get(mid) : undefined
-          return {
-            ...it,
-            ...(menuName ? { menuName } : {}),
-            ...(menuCode ? { menuCode } : {}),
-          }
-        }),
-      })),
-      { headers }
-    )
+    const mirrorIndex = await loadPromoMirrorIndex(promoList.map((p) => p.id))
+    const compatibilityMode = isPosMenuScopeCompatibilityModeEnabled()
+    const mapped = promoList.flatMap((p) => {
+      const hasMirrorMenu = mirrorIndex.hasMirrorById.has(p.id)
+      if (
+        !shouldIncludeMirroredPromoForStore({
+          requestedStoreCode,
+          hasMirrorMenu,
+          mirrorStoreCodes: mirrorIndex.storeCodesByPromoId.get(p.id) || [],
+          compatibilityMode,
+          scopeSchemaReady: mirrorIndex.scopeSchemaReady,
+        })
+      ) {
+        return []
+      }
+      return [
+        {
+          ...p,
+          hasMirrorMenu,
+          items: (itemsByPromo[p.id] || []).map((it) => {
+            const mid = String(it.menuId ?? '').trim()
+            const menuName = mid ? menuNameById.get(mid) : undefined
+            const menuCode = mid ? menuCodeById.get(mid) : undefined
+            return {
+              ...it,
+              ...(menuName ? { menuName } : {}),
+              ...(menuCode ? { menuCode } : {}),
+            }
+          }),
+        },
+      ]
+    })
+    return NextResponse.json(mapped, { headers })
   } catch (e) {
     console.error('getPosPromosWithItems:', e)
     return NextResponse.json([], { headers })

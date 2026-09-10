@@ -748,12 +748,16 @@ export async function POST(req: NextRequest) {
         console.error('savePosOrder loyalty:', loyaltyErr)
       }
       try {
-        const { notifyMemberPointLineForPaidOrder } = await import('@/lib/member-point-line-notify')
-        await notifyMemberPointLineForPaidOrder({
+        const { scheduleNotifyMemberPointLineForPaidOrder } = await import(
+          '@/lib/member-point-line-notify-schedule'
+        )
+        await scheduleNotifyMemberPointLineForPaidOrder({
           orderId: Number(created.id),
           memberId,
           storeCode,
           orderNo,
+          earned: pointEarned,
+          used: pointUsed,
         })
       } catch (notifyErr) {
         console.error('savePosOrder point line notify:', notifyErr)

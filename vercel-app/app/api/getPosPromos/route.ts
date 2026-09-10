@@ -3,6 +3,7 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { campaignNoByIdMap } from '@/lib/marketing-campaign-code-resolve'
 import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import { getVerifiedAuth } from '@/lib/verify-auth'
+import { loadPromoMirrorIndex } from '@/lib/pos-promo-mirror-scope-server'
 import {
   appendPosCatalogTenantFilter,
   isMissingTenantIdColumnError,
@@ -156,8 +157,10 @@ export async function GET(req: NextRequest) {
 
     const base = (rows || []).map((row) => mapRow(row))
     const cmap = await campaignNoByIdMap(base.map((p) => p.marketingCampaignId))
+    const mirrorIndex = await loadPromoMirrorIndex(base.map((p) => p.id))
     const list = base.map((p) => ({
       ...p,
+      hasMirrorMenu: mirrorIndex.hasMirrorById.has(p.id),
       marketingCampaignNo:
         p.marketingCampaignId != null && String(p.marketingCampaignId).trim() !== ''
           ? cmap.get(Number(p.marketingCampaignId)) ?? ''

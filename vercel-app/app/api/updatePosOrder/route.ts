@@ -709,12 +709,16 @@ export async function POST(req: NextRequest) {
     }
     if (!skipPostPaymentSideEffects && memberId > 0 && paymentComplete) {
       try {
-        const { notifyMemberPointLineForPaidOrder } = await import('@/lib/member-point-line-notify')
-        await notifyMemberPointLineForPaidOrder({
+        const { scheduleNotifyMemberPointLineForPaidOrder } = await import(
+          '@/lib/member-point-line-notify-schedule'
+        )
+        await scheduleNotifyMemberPointLineForPaidOrder({
           orderId: id,
           memberId,
           storeCode: String(current?.store_code ?? '').trim(),
           orderNo: String(current?.order_no ?? ''),
+          earned: pointEarned,
+          used: pointUsed,
         })
       } catch (notifyErr) {
         console.error('updatePosOrder point line notify:', notifyErr)

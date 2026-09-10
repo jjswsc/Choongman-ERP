@@ -35,6 +35,8 @@ export interface PosPromo {
   expenseAccrualId?: string | null
   /** 세트 구성 Step 1 가격 기준 (DB 컬럼 compose_pricing_basis, 없으면 hall) */
   composePricingBasis?: 'hall' | 'delivery'
+  /** pos_menus.promo_id 미러가 있으면 true — POS 노란 카드 폴백 숨김 */
+  hasMirrorMenu?: boolean
 }
 
 export interface PosPromoItem {
@@ -89,13 +91,19 @@ export interface PosPromoWithItems extends PosPromo {
   }[]
 }
 
-export async function getPosPromosWithItems(params?: { campaignId?: string; includeInactive?: boolean }) {
+export async function getPosPromosWithItems(params?: {
+  campaignId?: string
+  includeInactive?: boolean
+  storeCode?: string
+}) {
   const q = new URLSearchParams()
   if (params?.campaignId) q.set("campaignId", params.campaignId)
   if (params?.includeInactive) q.set("includeInactive", "true")
+  const storeCode = String(params?.storeCode || '').trim()
+  if (storeCode) q.set('storeCode', storeCode)
   const qs = q.toString()
   const url = '/api/getPosPromosWithItems' + (qs ? `?${qs}` : '')
-  const cacheKey = `erp:posCatalog:promos:${params?.campaignId?.trim() || ''}:${params?.includeInactive ? '1' : '0'}`
+  const cacheKey = `erp:posCatalog:promos:v2:${params?.campaignId?.trim() || ''}:${params?.includeInactive ? '1' : '0'}:${storeCode}`
   return fetchPosCatalogCached<PosPromoWithItems[]>(cacheKey, url, [])
 }
 

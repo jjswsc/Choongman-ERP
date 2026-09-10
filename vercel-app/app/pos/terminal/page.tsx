@@ -2106,7 +2106,7 @@ export default function PosTerminalPage() {
     void Promise.allSettled([
       getPosMenus({ storeCode: requestStoreCode || undefined }),
       getPosMenuOptions({ forCodeMap: true }),
-      getPosPromosWithItems({ includeInactive: true }),
+      getPosPromosWithItems({ includeInactive: true, storeCode: requestStoreCode || undefined }),
     ])
       .then(([rMenus, rOpts, rPromos]) => {
         if (seq !== storeSettingsLoadSeqRef.current) return

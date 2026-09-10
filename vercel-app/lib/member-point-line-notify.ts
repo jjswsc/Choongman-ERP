@@ -18,18 +18,23 @@ type MemberPointNotifyProfile = {
 }
 
 async function resolveMemberLineUserId(memberId: number): Promise<string> {
-  const base = `provider=eq.line&member_id=eq.${memberId}`
-  const activeRows = (await supabaseSelectFilter('member_identities', `${base}&status=eq.active`, {
-    limit: 1,
-    select: 'provider_user_id',
-  })) as Array<{ provider_user_id?: string | null }>
-  const active = String(activeRows?.[0]?.provider_user_id || '').trim()
-  if (active) return active
-  const rows = (await supabaseSelectFilter('member_identities', base, {
-    limit: 1,
-    select: 'provider_user_id',
-  })) as Array<{ provider_user_id?: string | null }>
-  return String(rows?.[0]?.provider_user_id || '').trim()
+  const rows = (await supabaseSelectFilter(
+    'member_identities',
+    `provider=eq.line&member_id=eq.${memberId}`,
+    { limit: 20, select: 'provider_user_id,status' }
+  )) as Array<{ provider_user_id?: string | null; status?: string | null }>
+  const list = rows || []
+  const pick = (wantActive: boolean) =>
+    list.find((row) => {
+      const uid = String(row.provider_user_id || '').trim()
+      if (!uid) return false
+      const active = String(row.status || '').trim().toLowerCase() === 'active'
+      return wantActive ? active : true
+    })
+  const active = pick(true)
+  if (active) return String(active.provider_user_id || '').trim()
+  const any = pick(false)
+  return String(any?.provider_user_id || '').trim()
 }
 
 export function buildMemberPointLineNotifyText(params: {
@@ -227,6 +232,8 @@ export async function notifyMemberPointLineForPaidOrder(params: {
   memberId: number
   storeCode?: string
   orderNo?: string
+  earned?: number
+  used?: number
 }): Promise<{ sent: boolean; reason?: string }> {
   const orderId = Number(params.orderId || 0)
   const memberId = Number(params.memberId || 0)
@@ -235,7 +242,13 @@ export async function notifyMemberPointLineForPaidOrder(params: {
   const enabled = await isMemberPointLineNotifyEnabled()
   if (!enabled) return { sent: false, reason: 'disabled' }
 
-  const { earned, used } = await resolveOrderPointNotifyAmounts(orderId)
+  let earned = roundMemberPointsEarn(params.earned)
+  let used = roundMemberPointsEarn(params.used)
+  if (earned <= 0 && used <= 0) {
+    const resolved = await resolveOrderPointNotifyAmounts(orderId)
+    earned = resolved.earned
+    used = resolved.used
+  }
   if (earned <= 0 && used <= 0) return { sent: false, reason: 'no_points' }
 
   if (await wasPointLineNotifySent(orderId)) {

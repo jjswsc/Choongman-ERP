@@ -52,7 +52,7 @@ import {
   uniqueSubcategoriesForMainMenu,
 } from '@/lib/pos-promo-constants'
 import { translatePosMenuCategoryLabel } from '@/lib/pos-menu-category-label'
-import { isPromoVisibleInContext } from '@/lib/pos-promo-visibility'
+import { isPromoVisibleInContext, shouldShowStandalonePromoTile } from '@/lib/pos-promo-visibility'
 import { buildPromoRegularPriceById } from '@/lib/pos-promo-cut-price'
 import { PosPromoCutPriceLabel } from '@/components/pos/pos-promo-cut-price-label'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
@@ -305,7 +305,7 @@ export function PosTerminalMenuScreen({
         : getPosMenus({ storeCode: storeCode || undefined }),
       getPosMenuCategories(),
       fromParent ? Promise.resolve(fromParent.options) : getPosMenuOptions({ forCodeMap: true }),
-      fromParent ? Promise.resolve(fromParent.promos) : getPosPromosWithItems(),
+      fromParent ? Promise.resolve(fromParent.promos) : getPosPromosWithItems({ storeCode: storeCode || undefined }),
     ])
     const list = r0.status === 'fulfilled' ? r0.value || [] : []
     const catRes = r1.status === 'fulfilled' ? r1.value || emptyCats : emptyCats
@@ -488,7 +488,15 @@ export function PosTerminalMenuScreen({
   const filteredPromos = React.useMemo(() => {
     return promos.filter((p) => {
       if (!p.isActive) return false
-      if (linkedPromoIds.has(p.id)) return false
+      if (
+        !shouldShowStandalonePromoTile({
+          hasMirrorMenu: p.hasMirrorMenu,
+          promoId: p.id,
+          linkedPromoIds,
+        })
+      ) {
+        return false
+      }
       const cm = (p.categoryMain || PROMOTION_MAIN_CATEGORY).trim()
       const sub = (p.category || '').trim()
       if (selectedMainCategory && cm !== selectedMainCategory) return false

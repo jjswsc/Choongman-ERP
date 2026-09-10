@@ -19,7 +19,6 @@ import {
 } from '@/lib/member-point-earn-policy'
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
 import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
-import { notifyMemberPointLineForPaidOrder } from '@/lib/member-point-line-notify'
 import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
 import {
   isPosOrderPaymentCompleteForTotal,
@@ -400,17 +399,25 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
   if (!paymentComplete && !paidLike) return 0
 
   const priorEarned = roundMemberPointsEarn(order.point_earned)
-  if (priorEarned > 0) {
+  const schedulePointNotify = async (earned: number, used: number) => {
     try {
-      await notifyMemberPointLineForPaidOrder({
+      const { scheduleNotifyMemberPointLineForPaidOrder } = await import(
+        '@/lib/member-point-line-notify-schedule'
+      )
+      await scheduleNotifyMemberPointLineForPaidOrder({
         orderId: id,
         memberId,
         storeCode: String(order.store_code || '').trim(),
         orderNo: String(order.order_no || ''),
+        earned,
+        used,
       })
     } catch (notifyErr) {
       console.warn('ensurePosOrderLoyaltyApplied point notify:', notifyErr)
     }
+  }
+  if (priorEarned > 0) {
+    await schedulePointNotify(priorEarned, roundMemberPointsEarn(order.point_used))
     return priorEarned
   }
 
@@ -423,16 +430,7 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
     const ledgerPts = roundMemberPointsEarn(ledger?.[0]?.points)
     if (ledgerPts > 0) {
       await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, { point_earned: ledgerPts })
-      try {
-        await notifyMemberPointLineForPaidOrder({
-          orderId: id,
-          memberId,
-          storeCode: String(order.store_code || '').trim(),
-          orderNo: String(order.order_no || ''),
-        })
-      } catch (notifyErr) {
-        console.warn('ensurePosOrderLoyaltyApplied point notify:', notifyErr)
-      }
+      await schedulePointNotify(ledgerPts, roundMemberPointsEarn(order.point_used))
       return ledgerPts
     }
   } catch {
@@ -460,16 +458,7 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
   } catch (redeemErr) {
     console.error('ensurePosOrderLoyaltyApplied coupon redeem:', redeemErr)
   }
-  try {
-    await notifyMemberPointLineForPaidOrder({
-      orderId: id,
-      memberId,
-      storeCode: String(order.store_code || '').trim(),
-      orderNo: String(order.order_no || ''),
-    })
-  } catch (notifyErr) {
-    console.warn('ensurePosOrderLoyaltyApplied point notify:', notifyErr)
-  }
+  await schedulePointNotify(earned, roundMemberPointsEarn(order.point_used))
   return earned
 }
 
