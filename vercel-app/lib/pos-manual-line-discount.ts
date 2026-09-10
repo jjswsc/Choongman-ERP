@@ -15,7 +15,7 @@ export function lineDiscountAmtFromPct(lineTotal: number, pct: number): number {
   const total = Math.max(0, Number(lineTotal) || 0)
   const rate = normalizeLineDiscountPct(pct)
   if (total <= 0.0001 || rate <= 0) return 0
-  return Math.min(total, Math.floor((total * rate) / 100))
+  return Math.min(total, Math.round((total * rate) / 100 * 100) / 100)
 }
 
 export function buildDiscountUnitKey(itemId: string, unitIndex: number): string {
@@ -174,6 +174,30 @@ export function memberTierEligibleQuantityForLine(
     n += 1
   }
   return n
+}
+
+/** 직접(프로모) %가 이미 걸린 수량 — 협업 할인은 이 수량에는 겹치지 않음 */
+export function manualPromoDiscountedQuantityForLine(
+  line: { id?: string; quantity?: number; qty?: number },
+  options?: {
+    lineDiscountModeByItemId?: Record<string, string>
+    lineDiscountPctByItemId?: Record<string, number>
+    fallbackPct?: number
+    excludeSelectedForFixed?: boolean
+  }
+): number {
+  const qty = Math.max(0, Number(line.quantity ?? line.qty ?? 0) || 0)
+  if (qty <= 0) return 0
+  const id = String(line.id ?? '')
+  const lineMode = options?.lineDiscountModeByItemId?.[id] ?? 'none'
+  if (lineMode === 'service' || lineMode === 'cancel') return 0
+  const unitCount = discountUnitCount(qty)
+  const fullUnits = unitCount <= 1 ? qty : unitCount
+  const withoutPromo = memberTierEligibleQuantityForLine(line, {
+    ...options,
+    wholeOrderManualDiscount: false,
+  })
+  return Math.max(0, fullUnits - withoutPromo)
 }
 
 export function selectedDiscountQuantityForLine(

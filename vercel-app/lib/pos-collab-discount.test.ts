@@ -310,6 +310,30 @@ describe('buildCartPanelLineDiscountAllocations', () => {
     expect(alloc.reduce((s, v) => s + v, 0)).toBeCloseTo(249 + tierDiscount, 1)
   })
 
+  it('메뉴별 20%·10%는 줄 가격 그대로이고 협업 금액은 그 줄에 겹치지 않는다', () => {
+    const alloc = buildCartPanelLineDiscountAllocations({
+      lines: [
+        { id: 'a', name: 'Gochujang Pork Bulgogi', price: 149, qty: 1, menuId: '10' },
+        { id: 'b', name: 'Samgyeopsal Pork Belly Combo', price: 169, qty: 1, menuId: '9' },
+      ],
+      menuById,
+      lineModeById: { a: 'discount', b: 'discount' },
+      hasSelectedDiscountScope: true,
+      collabDetail: detail({
+        posDiscountType: 'percent',
+        posDiscountValue: 20,
+        scopeMainCategories: ['Chicken', 'Korean'],
+      }),
+      collabDiscountAmt: 43,
+      serviceDiscountAmt: 0,
+      cancelledLineAmt: 0,
+      manualDiscountAmt: 29.8 + 16.9,
+      manualLineAlloc: [29.8, 16.9],
+    })
+    expect(alloc[0]).toBe(29.8)
+    expect(alloc[1]).toBe(16.9)
+  })
+
   it('메뉴별 % 수동 할인은 해당 줄 금액 그대로 쓴다', () => {
     const alloc = buildCartPanelLineDiscountAllocations({
       lines: [

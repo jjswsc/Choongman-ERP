@@ -65,6 +65,20 @@ describe('computeManualLineDiscountAllocations', () => {
     expect(res.total).toBe(res.lineAlloc[0] + res.lineAlloc[1])
   })
 
+  it('메뉴1 20%·메뉴2 10%는 표시 가격 기준으로 각각 계산한다', () => {
+    const res = computeManualLineDiscountAllocations({
+      lines: [
+        { id: 'a', price: 149, quantity: 1 },
+        { id: 'b', price: 169, quantity: 1 },
+      ],
+      lineDiscountModeByItemId: { a: 'discount', b: 'discount' },
+      lineDiscountPctByItemId: { a: 20, b: 10 },
+    })
+    expect(res.lineAlloc[0]).toBe(29.8)
+    expect(res.lineAlloc[1]).toBe(16.9)
+    expect(res.total).toBe(46.7)
+  })
+
   it('같은 메뉴 2개는 접시마다 다른 %를 적용한다', () => {
     const u0 = buildDiscountUnitKey('katsu', 0)
     const u1 = buildDiscountUnitKey('katsu', 1)

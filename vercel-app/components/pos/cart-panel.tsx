@@ -112,6 +112,7 @@ import {
   selectedDiscountAmountForLine,
   selectedDiscountQuantityForLine,
   summarizeLineDiscountPcts,
+  manualPromoDiscountedQuantityForLine,
 } from '@/lib/pos-manual-line-discount'
 import {
   normalizeMemberTierCodeForDiscount,
@@ -169,7 +170,7 @@ import {
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
-import { computeMenuSplitDueByPerson, computeMenuSplitDueFromBaseSum } from '@/lib/pos-menu-split-due'
+import { allocateLineDiscountByAssignedQty, computeMenuSplitDueByPerson, computeMenuSplitDueFromBaseSum } from '@/lib/pos-menu-split-due'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { PosCollabQuantityControl } from '@/components/pos/pos-collab-quantity-control'
 import { resolvePromoSublineOptionDisplayName } from '@/lib/pos-promo-subline-option-label'
@@ -1294,13 +1295,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   )
   const collabDiscountAmt = useMemo(() => {
     if (!appliedCollab || menuByIdForCollab.size === 0) return 0
-    const collabScopeItems = hasSelectedDiscountScope
-      ? cartItems.flatMap((item) => {
-          const selectedQty = selectedDiscountQuantityForLine(item, lineDiscountModeByItemId)
-          if (selectedQty <= 0) return []
-          return [{ ...item, quantity: selectedQty }]
-        })
-      : cartItems.filter((item) => (lineDiscountModeByItemId[item.id] ?? 'none') !== 'cancel')
+    const promoOpts = {
+      lineDiscountModeByItemId,
+      lineDiscountPctByItemId,
+      fallbackPct: discountType === 'percent' ? discountValue : 0,
+      excludeSelectedForFixed: discountType === 'fixed' && discountValue > 0.0001,
+    }
+    const collabScopeItems = cartItems.flatMap((item) => {
+      if ((lineDiscountModeByItemId[item.id] ?? 'none') === 'cancel') return []
+      const promoQty = manualPromoDiscountedQuantityForLine(item, promoOpts)
+      const selectedQty = hasSelectedDiscountScope
+        ? selectedDiscountQuantityForLine(item, lineDiscountModeByItemId)
+        : resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown })
+      const collabQty = Math.max(0, selectedQty - promoQty)
+      if (collabQty <= 0) return []
+      return [{ ...item, quantity: collabQty }]
+    })
     if (!collabScopeItems.length) return 0
     return collabDiscountAmountForCart(
       collabScopeItems,
@@ -1308,7 +1318,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       appliedCollab.collabDetail,
       collabQuantity
     )
-  }, [appliedCollab, cartItems, collabQuantity, hasSelectedDiscountScope, lineDiscountModeByItemId, menuByIdForCollab])
+  }, [
+    appliedCollab,
+    cartItems,
+    collabQuantity,
+    discountType,
+    discountValue,
+    hasSelectedDiscountScope,
+    lineDiscountModeByItemId,
+    lineDiscountPctByItemId,
+    menuByIdForCollab,
+  ])
   const selectedMemberTierDiscountRate = useMemo(() => {
     if (!selectedMemberId) return 0
     const tierCode = normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')
@@ -1481,7 +1501,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     serviceDiscountAmt,
   ])
 
-  const mapCartItemToOrderPayload = (i: CartItem, quantityOverride?: number, lineIdx?: number) => {
+  const mapCartItemToOrderPayload = (
+    i: CartItem,
+    quantityOverride?: number,
+    lineIdx?: number,
+    lineDiscountAmtOverride?: number
+  ) => {
     const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
     const lineNote = String(i.note ?? '').trim()
     const quantity =
@@ -1494,7 +1519,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const optionIdLine = String(i.optionId ?? '').trim()
     const optionCodeLine = String(i.optionCode ?? '').trim()
     const lineDiscountAmt =
-      lineIdx != null && lineIdx >= 0 ? Math.max(0, Number(lineDiscountSnapshot[lineIdx] ?? 0) || 0) : 0
+      lineDiscountAmtOverride != null
+        ? Math.max(0, Number(lineDiscountAmtOverride) || 0)
+        : lineIdx != null && lineIdx >= 0
+          ? Math.max(0, Number(lineDiscountSnapshot[lineIdx] ?? 0) || 0)
+          : 0
     return {
       id: i.id,
       name: i.name,
@@ -1897,16 +1926,36 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
     return baseByPerson.map((v) => round2(v))
   }, [cartItems, menuSplitAssigned, splitCount])
-  const menuSplitDueByPerson = useMemo(
-    () =>
-      computeMenuSplitDueByPerson({
-        total,
-        subtotal,
-        baseByPerson: menuSplitBaseByPerson,
+  const menuSplitDiscountByPerson = useMemo(() => {
+    const count = Math.max(1, Number(splitCount) || 1)
+    const discByPerson = Array.from({ length: count }, () => 0)
+    cartItems.forEach((item, cartIdx) => {
+      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+      const assignedQtyByPerson = Array.from({ length: count }, (_, i) => Math.max(0, Number(row[i] || 0)))
+      const alloc = allocateLineDiscountByAssignedQty({
+        lineDiscountAmt: Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0),
+        lineQty: resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown }),
+        assignedQtyByPerson,
         round2,
-      }),
-    [menuSplitBaseByPerson, subtotal, total]
-  )
+      })
+      for (let i = 0; i < count; i += 1) {
+        discByPerson[i] = round2(discByPerson[i] + Math.max(0, Number(alloc[i] || 0)))
+      }
+    })
+    return discByPerson
+  }, [cartItems, lineDiscountSnapshot, menuSplitAssigned, round2, splitCount])
+  const menuSplitDueByPerson = useMemo(() => {
+    const netByPerson = menuSplitBaseByPerson.map((base, i) =>
+      round2(Math.max(0, Number(base) || 0) - Math.max(0, Number(menuSplitDiscountByPerson[i] || 0)))
+    )
+    const orderNet = round2(Math.max(0, Number(subtotal) || 0) - Math.max(0, Number(discount) || 0))
+    return computeMenuSplitDueByPerson({
+      total,
+      subtotal: orderNet > 0.009 ? orderNet : subtotal,
+      baseByPerson: netByPerson,
+      round2,
+    })
+  }, [menuSplitBaseByPerson, menuSplitDiscountByPerson, round2, subtotal, discount, total])
   const menuSplitRemainingByPerson = useMemo(() => {
     const count = Math.max(1, Number(splitCount) || 1)
     return Array.from({ length: count }, (_, i) =>
@@ -1931,12 +1980,25 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [cartItems, menuSplitPendingQty])
   const menuSplitPendingAmount = useMemo(() => {
     let baseSum = 0
-    for (const item of cartItems) {
+    let discountSum = 0
+    cartItems.forEach((item, cartIdx) => {
       const qty = Math.max(0, Number(menuSplitPendingQty[item.id] || 0))
       baseSum += qty * (Number(item.price) || 0)
-    }
-    return computeMenuSplitDueFromBaseSum({ total, subtotal, baseSum, round2 })
-  }, [cartItems, menuSplitPendingQty, subtotal, total])
+      const fullQty = resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown })
+      const fullDisc = Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0)
+      if (qty > 0.0001 && fullQty > 0.0001 && fullDisc > 0.0001) {
+        discountSum += fullQty - qty <= 0.0001 ? fullDisc : (fullDisc * qty) / fullQty
+      }
+    })
+    const pendingNet = round2(Math.max(0, baseSum - discountSum))
+    const orderNet = round2(Math.max(0, Number(subtotal) || 0) - Math.max(0, Number(discount) || 0))
+    return computeMenuSplitDueFromBaseSum({
+      total,
+      subtotal: orderNet > 0.009 ? orderNet : subtotal,
+      baseSum: pendingNet,
+      round2,
+    })
+  }, [cartItems, discount, lineDiscountSnapshot, menuSplitPendingQty, subtotal, total])
   const menuSplitItemStatuses = useMemo(() => {
     return cartItems.map((item) => {
       const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
@@ -2478,6 +2540,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (count <= 1) return undefined
     const round2Local = (n: number) => Math.round(n * 100) / 100
     if (splitMode === 'menu') {
+      const lineDiscountByItemId: Record<string, number[]> = {}
+      cartItems.forEach((item, cartIdx) => {
+        const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+        lineDiscountByItemId[item.id] = allocateLineDiscountByAssignedQty({
+          lineDiscountAmt: Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0),
+          lineQty: resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown }),
+          assignedQtyByPerson: Array.from({ length: count }, (_, i) => Math.max(0, Number(row[i] || 0))),
+          round2: round2Local,
+        })
+      })
       const entries: CartPanelSplitReceiptPayload[] = []
       for (let personIdx = 0; personIdx < count; personIdx += 1) {
         const lines: CartPanelOrderLinePayload[] = []
@@ -2486,10 +2558,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
           const qty = Math.max(0, Number(row[personIdx] || 0))
           if (qty <= 0) continue
-          {
-            const cartIdx = cartItems.findIndex((c) => c.id === item.id)
-            lines.push(mapCartItemToOrderPayload(item, qty, cartIdx >= 0 ? cartIdx : undefined))
-          }
+          const cartIdx = cartItems.findIndex((c) => c.id === item.id)
+          const personLineDisc = Math.max(0, Number(lineDiscountByItemId[item.id]?.[personIdx] ?? 0) || 0)
+          lines.push(
+            mapCartItemToOrderPayload(item, qty, cartIdx >= 0 ? cartIdx : undefined, personLineDisc)
+          )
           subtotalByPerson += (Number(item.price) || 0) * qty
         }
         const subtotalRounded = round2Local(subtotalByPerson)
@@ -2521,7 +2594,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         accum = round2Local(accum + rounded)
       }
     }
-    const fullMenuLines = cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx))
+    const fullMenuLines = cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx, 0))
     const entries: CartPanelSplitReceiptPayload[] = dueByPerson
       .map((due, idx) => ({
         key: `amount-${idx + 1}`,

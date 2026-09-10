@@ -422,17 +422,30 @@ export function buildCartPanelLineDiscountAllocations(input: {
     return Math.max(0, Number(line.price) || 0) * selectedQty
   }
 
+  const hasManualLineAlloc = Array.isArray(manualLineAlloc) && manualLineAlloc.length === lines.length
+
   const collabAlloc = (() => {
     if (!collabDetail || collabDiscountAmt <= 0.0001) return lines.map(() => 0)
+    const skipManualPromo = (index: number) =>
+      hasManualLineAlloc && Math.max(0, Number(manualLineAlloc[index] ?? 0) || 0) > 0.0001
     if (hasSelectedDiscountScope) {
-      const weights = lines.map((line) =>
-        modeForLine(line) === 'discount' && isCartLineEligibleForCollabDiscount(line, menuById, collabDetail)
-          ? discountScopeLineTotal(line)
-          : 0
+      const weights = lines.map((line, index) =>
+        skipManualPromo(index)
+          ? 0
+          : modeForLine(line) === 'discount' && isCartLineEligibleForCollabDiscount(line, menuById, collabDetail)
+            ? discountScopeLineTotal(line)
+            : 0
       )
       return allocateDiscountProportional(weights, collabDiscountAmt)
     }
-    return collabLineDiscountAllocations(lines, menuById, collabDetail, collabDiscountAmt)
+    const weights = lines.map((line, index) =>
+      skipManualPromo(index)
+        ? 0
+        : isCartLineEligibleForCollabDiscount(line, menuById, collabDetail)
+          ? collabLineTotal(line)
+          : 0
+    )
+    return allocateDiscountProportional(weights, collabDiscountAmt)
   })()
 
   const weightsForModes = (modes: PosCartLineDiscountMode[]) =>
@@ -461,7 +474,6 @@ export function buildCartPanelLineDiscountAllocations(input: {
     ? weightsForModes(['discount'])
     : lines.map((line) => (modeForLine(line) !== 'cancel' ? collabLineTotal(line) : 0))
 
-  const hasManualLineAlloc = Array.isArray(manualLineAlloc) && manualLineAlloc.length === lines.length
   const useSplitManualTierCoupon =
     tierDiscountAmt > 0.0001 ||
     manualDiscountAmt > 0.0001 ||
