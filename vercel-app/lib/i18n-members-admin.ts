@@ -158,7 +158,7 @@ export const I18N_MEMBERS_ADMIN_TH: Record<string, string> = {
   memberTierDiscountRate: 'อัตราส่วนลด (%)',
   memberTierDiscountRatePh: 'เช่น 5',
   memberTierDiscountPosHint:
-    'ส่วนลดตามระดับใช้ได้เฉพาะขอบเขตเมนูที่เลือกใน POS เมนูโปรโมชัน/เซ็ตยกเว้น ไม่ซ้อนกับ Collab/คูปองโดยค่าเริ่มต้น',
+    'ส่วนลดตามระดับใช้ได้เฉพาะขอบเขตเมนูที่เลือกใน POS เมนูโปรโมชัน/เซ็ตยกเว้น เมนูที่ใส่ส่วนลดโปรโมชันแล้วไม่ซ้อนส่วนลดระดับ เมนูอื่นยังได้ส่วนลดสมาชิก ไม่ซ้อนกับ Collab/คูปองโดยค่าเริ่มต้น',
   memberTierDiscountScopeTitle: 'ขอบเขตส่วนลดตามระดับ (POS)',
   memberTierDiscountScopeHint:
     'เลือกหมวดหลัก หมวดย่อย หรือเมนู เช่น จัดการ Collab ต้องตั้งขอบเขตก่อนส่วนลดตามระดับจึงมีผล',

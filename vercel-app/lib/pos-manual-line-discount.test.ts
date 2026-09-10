@@ -11,6 +11,7 @@ import {
   nextLineDiscountPctsAfterPercentTap,
   selectedDiscountQuantityForLine,
   summarizeLineDiscountPcts,
+  memberTierEligibleQuantityForLine,
 } from '@/lib/pos-manual-line-discount'
 
 describe('nextLineDiscountPctsAfterPercentTap', () => {
@@ -171,6 +172,44 @@ describe('selectedDiscountQuantityForLine', () => {
   it('접시 하나만 고르면 1이다', () => {
     const u0 = buildDiscountUnitKey('katsu', 0)
     expect(selectedDiscountQuantityForLine({ id: 'katsu', quantity: 2 }, { [u0]: 'discount' })).toBe(1)
+  })
+})
+
+describe('memberTierEligibleQuantityForLine', () => {
+  it('프로모 %가 없는 메뉴는 수량 전부가 등급 대상이다', () => {
+    expect(
+      memberTierEligibleQuantityForLine(
+        { id: 'snow', quantity: 1 },
+        { lineDiscountModeByItemId: {}, lineDiscountPctByItemId: {} }
+      )
+    ).toBe(1)
+  })
+
+  it('프로모 %가 걸린 메뉴는 등급 대상이 아니다', () => {
+    expect(
+      memberTierEligibleQuantityForLine(
+        { id: 'banban', quantity: 1 },
+        {
+          lineDiscountModeByItemId: { banban: 'discount' },
+          lineDiscountPctByItemId: { banban: 5 },
+          fallbackPct: 5,
+        }
+      )
+    ).toBe(0)
+  })
+
+  it('같은 메뉴 2개 중 한 접시만 프로모면 나머지 1이 등급 대상이다', () => {
+    const u0 = buildDiscountUnitKey('katsu', 0)
+    expect(
+      memberTierEligibleQuantityForLine(
+        { id: 'katsu', quantity: 2 },
+        {
+          lineDiscountModeByItemId: { [u0]: 'discount' },
+          lineDiscountPctByItemId: { [u0]: 10 },
+          fallbackPct: 10,
+        }
+      )
+    ).toBe(1)
   })
 })
 

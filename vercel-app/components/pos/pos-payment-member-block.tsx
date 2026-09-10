@@ -35,6 +35,8 @@ type PosMemberResultsSectionProps = {
   memberSearchEmpty: boolean
   /** delivery면 등급 할인 대신 포인트만 안내 */
   orderType?: string | null
+  /** 직접(프로모) 할인 적용 시 등급 할인 없음 안내 */
+  tierDiscountBlockedByManual?: boolean
   compact?: boolean
   t: (key: string) => string
   tr: (key: string, fallback: string) => string
@@ -51,6 +53,7 @@ export function PosMemberResultsSection({
   selectedMemberTierDiscountRate,
   memberSearchEmpty,
   orderType,
+  tierDiscountBlockedByManual = false,
   compact = false,
   t,
   tr,
@@ -172,6 +175,18 @@ export function PosMemberResultsSection({
                   '배달 주문: 포인트만 적립 (등급 할인 없음)'
                 )}
               </p>
+            ) : tierDiscountBlockedByManual && selectedMemberId ? (
+              <p
+                className={cn(
+                  'text-right font-medium leading-tight text-muted-foreground',
+                  compact ? 'text-[10px]' : 'text-[11px]'
+                )}
+              >
+                {tr(
+                  'posTierDiscountManualBlocked',
+                  '프로모 적용 메뉴는 등급 할인 없음'
+                )}
+              </p>
             ) : null}
           </div>
         </div>
@@ -253,6 +268,7 @@ type PosPaymentMemberBlockProps = {
   selectedMemberTierDiscountRate: number
   memberSearchEmpty: boolean
   orderType?: string | null
+  tierDiscountBlockedByManual?: boolean
   t: (key: string) => string
   tr: (key: string, fallback: string) => string
 }
@@ -275,6 +291,7 @@ export function PosPaymentMemberBlock({
   selectedMemberTierDiscountRate,
   memberSearchEmpty,
   orderType,
+  tierDiscountBlockedByManual = false,
   t,
   tr,
 }: PosPaymentMemberBlockProps) {
@@ -333,6 +350,7 @@ export function PosPaymentMemberBlock({
         selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
         memberSearchEmpty={memberSearchEmpty}
         orderType={orderType}
+        tierDiscountBlockedByManual={tierDiscountBlockedByManual}
         t={t}
         tr={tr}
       />

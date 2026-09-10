@@ -1251,6 +1251,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const discountScopeSubtotal = hasSelectedDiscountScope
     ? selectedDiscountSubtotal
     : Math.max(0, subtotalAfterCancel - serviceDiscountAmt)
+  const manualDiscountInputAmt =
+    discountType === 'percent' && perLineManualDiscount
+      ? perLineManualDiscount.total
+      : discountType === 'percent'
+        ? Math.floor((discountScopeSubtotal * discountValue) / 100)
+        : discountValue
+  const manualDiscountAmt = Math.min(Math.max(0, manualDiscountInputAmt), Math.max(0, subtotalAfterCancel - serviceDiscountAmt))
   const menuByIdForCollab = useMemo(() => {
     if (!posMenus?.length) return new Map<string, PosMenu>()
     return new Map(posMenus.map((m) => [String(m.id), m]))
@@ -1326,7 +1333,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       menuById: menuByIdForCollab,
       policy: tierDiscountPolicy,
       lineDiscountModeByItemId,
-      hasSelectedDiscountScope,
+      lineDiscountPctByItemId,
+      fallbackPct: discountType === 'percent' ? discountValue : 0,
+      wholeOrderManualDiscount: !hasSelectedDiscountScope && manualDiscountAmt > 0.0001,
+      excludeSelectedForFixed: discountType === 'fixed' && discountValue > 0.0001,
     })
     return resolveMemberTierDiscountAmount({
       eligibleSubtotal,
@@ -1340,21 +1350,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     appliedCollab,
     appliedCoupons.length,
     cartItems,
+    discountType,
+    discountValue,
     hasSelectedDiscountScope,
     lineDiscountModeByItemId,
+    lineDiscountPctByItemId,
+    manualDiscountAmt,
     menuByIdForCollab,
     orderType,
     selectedMemberId,
     selectedMemberTierDiscountRate,
     tierDiscountPolicy,
   ])
-  const manualDiscountInputAmt =
-    discountType === 'percent' && perLineManualDiscount
-      ? perLineManualDiscount.total
-      : discountType === 'percent'
-        ? Math.floor((discountScopeSubtotal * discountValue) / 100)
-        : discountValue
-  const manualDiscountAmt = Math.min(Math.max(0, manualDiscountInputAmt), Math.max(0, subtotalAfterCancel - serviceDiscountAmt))
   const manualLineAlloc = perLineManualDiscount?.lineAlloc
   const couponDiscountTotal = useMemo(
     () =>
@@ -5791,6 +5798,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
             memberSearchEmpty={memberSearchEmpty}
             orderType={orderType}
+            tierDiscountBlockedByManual={
+              manualDiscountAmt > 0.0001 && tierDiscountAmt <= 0.0001
+            }
             t={t}
             tr={tr}
           />
@@ -6278,6 +6288,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
               memberSearchEmpty={memberSearchEmpty}
               orderType={orderType}
+              tierDiscountBlockedByManual={
+                manualDiscountAmt > 0.0001 && tierDiscountAmt <= 0.0001
+              }
               t={t}
               tr={tr}
             />

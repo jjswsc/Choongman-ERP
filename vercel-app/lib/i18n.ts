@@ -6565,7 +6565,7 @@ export const i18n = {
     memberTierDiscountRate: '할인율 (%)',
     memberTierDiscountRatePh: '예: 5',
     memberTierDiscountPosHint:
-      'POS에서 회원 연결 시 선택한 메뉴 범위에만 등급 할인이 적용됩니다. 세트·프로모션 제외, 협업/쿠폰과 중복 불가(기본).',
+      'POS에서 회원 연결 시 선택한 메뉴 범위에만 등급 할인이 적용됩니다. 세트·프로모션 제외. 직접(프로모) 할인을 건 메뉴는 등급에서 빠지고, 나머지 메뉴는 등급이 유지됩니다. 협업/쿠폰과 중복 불가(기본).',
     memberTierDiscountScopeTitle: '등급 할인 적용 범위 (POS)',
     memberTierDiscountScopeHint:
       '협업관리와 같이 대분류·카테고리·메뉴를 선택하세요. 범위를 지정해야 POS에서 등급 할인이 적용됩니다.',
@@ -7922,7 +7922,7 @@ export const i18n = {
     helpSum_admin_members_tiers:
       '회원 등급 기준, 등급별 할인율·POS 적용 범위, 회원 분포를 관리하는 화면입니다.',
     helpHow_admin_members_tiers:
-      '① 등급 코드·혜택 기준을 확인·수정합니다.\n② 등급별 할인율(%)과 「등급 할인 적용 범위」에서 POS 메뉴 범위를 지정합니다(세트·프로모 제외, 협업/쿠폰 중복 기본 불가).\n③ 등급별 회원 수와 전환 조건을 점검합니다.\n④ 등급 변경 후 포인트·쿠폰 정책과 맞는지 확인합니다.',
+      '① 등급 코드·혜택 기준을 확인·수정합니다.\n② 등급별 할인율(%)과 「등급 할인 적용 범위」에서 POS 메뉴 범위를 지정합니다(세트·프로모 제외. 직접 할인을 건 메뉴만 등급에서 빠지고 나머지는 유지. 협업/쿠폰 중복 기본 불가).\n③ 등급별 회원 수와 전환 조건을 점검합니다.\n④ 등급 변경 후 포인트·쿠폰 정책과 맞는지 확인합니다.',
     helpSum_admin_crm:
       '지휘(우선순위) 화면입니다. KPI·오늘 할 일·매장 비교로 「어디를 먼저 챙길지」를 보고, 대상 목록·CSV·캠페인은「고객 세그먼트」에서 실행합니다.',
     helpHow_admin_crm:
@@ -14897,7 +14897,7 @@ orderItemQty: 'Qty',
     memberTierDiscountRate: 'Discount rate (%)',
     memberTierDiscountRatePh: 'e.g. 5',
     memberTierDiscountPosHint:
-      'Tier discount applies only to selected menu scope in POS. Promo/set excluded; no stack with collab/coupon by default.',
+      'Tier discount applies only to selected menu scope in POS. Promo/set excluded. Items with a store/manual promo lose the tier discount; other items keep it. No stack with collab/coupon by default.',
     memberTierDiscountScopeTitle: 'Tier discount scope (POS)',
     memberTierDiscountScopeHint:
       'Pick main category, category, or menus like Collab management. Scope must be set before tier discount applies.',
@@ -16256,7 +16256,7 @@ orderItemQty: 'Qty',
     helpSum_admin_members_tiers:
       'Manage tier rules, discount rates, POS scope, and members by tier.',
     helpHow_admin_members_tiers:
-      '① Review or edit tier codes and benefit thresholds.\n② Set tier discount % and POS menu scope under Tier discount scope (excludes promo/set; no stack with collab/coupon by default).\n③ Check member counts and upgrade conditions per tier.\n④ Align point and coupon policies after tier changes.',
+      '① Review or edit tier codes and benefit thresholds.\n② Set tier discount % and POS menu scope under Tier discount scope (excludes promo/set. Items with a store/manual promo lose the tier discount; other items keep it. No stack with collab/coupon by default).\n③ Check member counts and upgrade conditions per tier.\n④ Align point and coupon policies after tier changes.',
     helpSum_admin_crm:
       'Command (priority) screen: KPIs, today’s actions, and store comparison. Run full lists, CSV, and campaigns in Customer Segments.',
     helpHow_admin_crm:

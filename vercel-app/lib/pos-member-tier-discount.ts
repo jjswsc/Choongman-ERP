@@ -1,5 +1,6 @@
 import type { PosMenu } from '@/lib/api-client'
 import {
+  canStackMemberTierDiscount,
   isMemberTierDiscountScopeConfigured,
   memberTierDiscountPolicyToCollabScope,
   type MemberTierDiscountPolicy,
@@ -12,7 +13,7 @@ import {
   menuIdsForCollabLineWithCatalog,
   menuMatchesCollabScope,
 } from '@/lib/pos-collab-discount'
-import { selectedDiscountQuantityForLine } from '@/lib/pos-manual-line-discount'
+import { memberTierEligibleQuantityForLine } from '@/lib/pos-manual-line-discount'
 import { normalizePosOrderTypeKey } from '@/lib/pos-sales-order-type-filter'
 
 /** 배달 주문은 멤버 연결·포인트 적립만 허용, 등급 할인 불가 */
@@ -23,23 +24,6 @@ export function isMemberTierDiscountAllowedForOrderType(
 }
 
 type CollabMenuPick = Pick<PosMenu, 'id' | 'category' | 'categoryMain' | 'name' | 'code'>
-
-function lineQty(line: CollabCartLineLike): number {
-  const q = Number(line.quantity ?? line.qty ?? 1)
-  return Number.isFinite(q) && q > 0 ? q : 1
-}
-
-function lineIsExcludedFromTier(
-  line: CollabCartLineLike,
-  lineDiscountModeByItemId: Record<string, string> | undefined,
-  hasSelectedDiscountScope: boolean
-): boolean {
-  const mode = lineDiscountModeByItemId?.[line.id] ?? 'none'
-  if (mode === 'cancel') return true
-  if (!hasSelectedDiscountScope && mode === 'service') return true
-  if (hasSelectedDiscountScope && selectedDiscountQuantityForLine(line, lineDiscountModeByItemId) <= 0) return true
-  return false
-}
 
 function lineFailsPromoOrSetExclusion(
   line: CollabCartLineLike,
@@ -73,29 +57,39 @@ function lineMatchesTierScope(
   })
 }
 
-/** 등급 할인 대상 금액 — 프로모/세트 제외 + 범위 내 메뉴만 */
+/** 등급 할인 대상 금액 — 프로모/세트 제외 + 범위 내 메뉴만. 직접(프로모) 할인을 건 접시는 빼고 나머지는 유지 */
 export function computeMemberTierDiscountEligibleSubtotal(params: {
   lines: CollabCartLineLike[]
   menuById: Map<string, CollabMenuPick>
   policy: MemberTierDiscountPolicy
   lineDiscountModeByItemId?: Record<string, string>
-  hasSelectedDiscountScope?: boolean
+  lineDiscountPctByItemId?: Record<string, number>
+  fallbackPct?: number
+  wholeOrderManualDiscount?: boolean
+  excludeSelectedForFixed?: boolean
 }): number {
   const {
     lines,
     menuById,
     policy,
     lineDiscountModeByItemId,
-    hasSelectedDiscountScope = false,
+    lineDiscountPctByItemId,
+    fallbackPct,
+    wholeOrderManualDiscount = false,
+    excludeSelectedForFixed = false,
   } = params
   let total = 0
   for (const line of lines || []) {
-    if (lineIsExcludedFromTier(line, lineDiscountModeByItemId, hasSelectedDiscountScope)) continue
     if (lineFailsPromoOrSetExclusion(line, menuById, policy)) continue
     if (!lineMatchesTierScope(line, menuById, policy)) continue
-    const qty = hasSelectedDiscountScope
-      ? selectedDiscountQuantityForLine(line, lineDiscountModeByItemId)
-      : lineQty(line)
+    const qty = memberTierEligibleQuantityForLine(line, {
+      lineDiscountModeByItemId,
+      lineDiscountPctByItemId,
+      fallbackPct,
+      wholeOrderManualDiscount,
+      excludeSelectedForFixed,
+    })
+    if (qty <= 0) continue
     total += Math.max(0, Number(line.price || 0)) * qty
   }
   return Math.max(0, total)
@@ -113,8 +107,15 @@ export function resolveMemberTierDiscountAmount(params: {
   if (!isMemberTierDiscountAllowedForOrderType(params.orderType)) return 0
   const rate = Math.max(0, Number(params.discountRate || 0))
   if (rate <= 0) return 0
-  if (params.hasCollab && !params.policy.stackWithCollab) return 0
-  if (params.hasCoupons && !params.policy.stackWithCoupons) return 0
+  if (
+    !canStackMemberTierDiscount({
+      policy: params.policy,
+      hasCollab: params.hasCollab,
+      hasCoupons: params.hasCoupons,
+    })
+  ) {
+    return 0
+  }
   if (!isMemberTierDiscountScopeConfigured(params.policy)) return 0
   return computeMemberTierDiscountAmount(params.eligibleSubtotal, rate)
 }

@@ -123,6 +123,59 @@ export function resolveDiscountPickerUnitMode(
   return modeById?.[unit.key] ?? (lineMode === 'discount' ? 'discount' : 'none')
 }
 
+/** 프로모(직접 %)가 이미 걸린 접시는 빼고, 나머지 수량만 등급 할인 대상 */
+export function memberTierEligibleQuantityForLine(
+  line: { id?: string; quantity?: number; qty?: number },
+  options?: {
+    lineDiscountModeByItemId?: Record<string, string>
+    lineDiscountPctByItemId?: Record<string, number>
+    fallbackPct?: number
+    /** 메뉴를 고르지 않고 주문 전체에 직접 할인을 건 경우 */
+    wholeOrderManualDiscount?: boolean
+    /** 선택한 메뉴에 정액 할인을 건 경우 그 접시도 등급에서 제외 */
+    excludeSelectedForFixed?: boolean
+  }
+): number {
+  const id = String(line.id ?? '')
+  const qty = Math.max(0, Number(line.quantity ?? line.qty ?? 0) || 0)
+  if (qty <= 0) return 0
+  const modeById = options?.lineDiscountModeByItemId
+  const lineMode = modeById?.[id] ?? 'none'
+  if (lineMode === 'service' || lineMode === 'cancel') return 0
+  if (options?.wholeOrderManualDiscount) return 0
+
+  const pcts = options?.lineDiscountPctByItemId ?? {}
+  const fallbackPct = normalizeLineDiscountPct(options?.fallbackPct)
+  const excludeSelectedForFixed = options?.excludeSelectedForFixed === true
+  const unitHasPromo = (key: string, selected: boolean) => {
+    if (!selected) return false
+    if (excludeSelectedForFixed) return true
+    return (
+      effectiveLineDiscountPct({
+        itemId: key,
+        selected: true,
+        storedPct: storedLineDiscountPctForKey(pcts, key),
+        fallbackPct,
+      }) > 0
+    )
+  }
+
+  const unitCount = discountUnitCount(qty)
+  if (unitCount <= 1) {
+    return unitHasPromo(id, lineMode === 'discount') ? 0 : qty
+  }
+
+  let n = 0
+  for (let i = 0; i < unitCount; i++) {
+    const key = buildDiscountUnitKey(id, i)
+    const mode = modeById?.[key] ?? (lineMode === 'discount' ? 'discount' : 'none')
+    if (mode === 'service' || mode === 'cancel') continue
+    if (unitHasPromo(key, mode === 'discount')) continue
+    n += 1
+  }
+  return n
+}
+
 export function selectedDiscountQuantityForLine(
   line: { id?: string; quantity?: number; qty?: number },
   modeById: Record<string, string> | undefined

@@ -33,7 +33,7 @@ describe('pos-member-tier-discount', () => {
     expect(subtotal).toBe(200)
   })
 
-  it('할인 접시만 고르면 같은 메뉴 수량 중 그 접시만 등급 대상이다', () => {
+  it('프로모 %가 걸린 접시는 등급에서 빼고 나머지 접시는 등급 대상이다', () => {
     const policy = {
       ...DEFAULT_MEMBER_TIER_DISCOUNT_POLICY,
       scopeMainCategories: ['Chicken'],
@@ -43,9 +43,46 @@ describe('pos-member-tier-discount', () => {
       menuById,
       policy,
       lineDiscountModeByItemId: { 'katsu::u0': 'discount' },
-      hasSelectedDiscountScope: true,
+      lineDiscountPctByItemId: { 'katsu::u0': 5 },
+      fallbackPct: 5,
     })
     expect(subtotal).toBe(199)
+  })
+
+  it('한 메뉴만 프로모 할인이면 그 메뉴만 빼고 나머지 메뉴는 등급 대상이다', () => {
+    const policy = {
+      ...DEFAULT_MEMBER_TIER_DISCOUNT_POLICY,
+      scopeMainCategories: ['Chicken'],
+    }
+    const subtotal = computeMemberTierDiscountEligibleSubtotal({
+      lines: [
+        { id: 'banban', menuId: 'm1', price: 259, quantity: 1 },
+        { id: 'snow', menuId: 'm1', price: 199, quantity: 1 },
+      ],
+      menuById,
+      policy,
+      lineDiscountModeByItemId: { banban: 'discount' },
+      lineDiscountPctByItemId: { banban: 5 },
+      fallbackPct: 5,
+    })
+    expect(subtotal).toBe(199)
+  })
+
+  it('메뉴를 고르지 않고 주문 전체에 직접 할인을 걸면 등급 대상이 없다', () => {
+    const policy = {
+      ...DEFAULT_MEMBER_TIER_DISCOUNT_POLICY,
+      scopeMainCategories: ['Chicken'],
+    }
+    const subtotal = computeMemberTierDiscountEligibleSubtotal({
+      lines: [
+        { id: 'banban', menuId: 'm1', price: 259, quantity: 1 },
+        { id: 'snow', menuId: 'm1', price: 199, quantity: 1 },
+      ],
+      menuById,
+      policy,
+      wholeOrderManualDiscount: true,
+    })
+    expect(subtotal).toBe(0)
   })
 
   it('blocks tier discount when collab is active and stacking disabled', () => {
