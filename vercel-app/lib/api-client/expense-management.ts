@@ -573,12 +573,14 @@ export async function getUnlinkedBankWithdrawalsForCard(params: {
   accountId: number
   startStr: string
   endStr: string
+  amount?: number
 }) {
   const q = new URLSearchParams({
     accountId: String(params.accountId),
     startStr: params.startStr,
     endStr: params.endStr,
   })
+  if (params.amount != null && params.amount > 0) q.set('amount', formatMoneyAmountParam(params.amount))
   const res = await apiFetchWithOffline(`/api/getUnlinkedBankWithdrawalsForCard?${q}`)
   return jsonObjectWithList<UnlinkedBankWithdrawalForCard>(await res.json())
 }

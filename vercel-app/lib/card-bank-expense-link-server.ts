@@ -1,38 +1,29 @@
-import { supabaseInsert, supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { postBankCardBillJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { resolveCardBillAccountSubjectId } from '@/lib/card-bill-account'
 import { CARD_BILL_HEADER_NOTE } from '@/lib/card-bill-allocation'
 import {
   INTERNAL_BANK_SOURCE_MARKER,
-  extractWithdrawalCategoryFromNote,
   hasCardBillQueueMarker,
   mergeCardBillQueueIntoBankNote,
 } from '@/lib/bank-transaction-note-meta'
 import { collectLinkedBankTransactionIds } from '@/lib/petty-bank-expense-link-server'
 import { moneyEqual, parseMoneyAmount } from '@/lib/money-amount'
 import { canQueueWithdrawCategoryForCardBill, memoLooksLikeCardBill } from '@/lib/card-bill-memo'
+import {
+  filterUnlinkedBankWithdrawalsForCardRows,
+  resolvedWithdrawCategory,
+  type UnlinkedBankWithdrawalForCard,
+} from '@/lib/card-bank-expense-link'
 
-const LINKED_BANK_SCAN_MAX_ROWS = 1_000_000
-
-export type UnlinkedBankWithdrawalForCard = {
-  id: number
-  transDate: string
-  amount: number
-  memo: string
-  likelyCardBill: boolean
-}
-
-function resolvedWithdrawCategory(row: { category?: string; note?: string }): string {
-  const cat = String(row.category || '').trim().toLowerCase()
-  if (cat) return cat
-  return String(extractWithdrawalCategoryFromNote(String(row.note || '')) || '').trim().toLowerCase()
-}
+export type { UnlinkedBankWithdrawalForCard }
 
 export async function getUnlinkedBankWithdrawalsForCard(params: {
   accountId: number
   startStr: string
   endStr: string
+  amount?: number | null
 }): Promise<UnlinkedBankWithdrawalForCard[]> {
   const accountId = Number(params.accountId || 0)
   const startStr = String(params.startStr || '').slice(0, 10)
@@ -49,22 +40,10 @@ export async function getUnlinkedBankWithdrawalsForCard(params: {
   if (!rows?.length) return []
 
   const linkedIds = await collectLinkedBankTransactionIds()
-
-  return (rows || [])
-    .filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
-    .filter((r) => hasCardBillQueueMarker(String(r.note || '')))
-    .filter((r) => !linkedIds.has(Number(r.id || 0)))
-    .map((r) => {
-      const memo = String(r.memo || '').trim()
-      return {
-        id: Number(r.id || 0),
-        transDate: String(r.trans_date || '').slice(0, 10),
-        amount: Math.abs(Number(r.amount || 0)),
-        memo,
-        likelyCardBill: memoLooksLikeCardBill(memo),
-      }
-    })
-    .filter((r) => r.id > 0 && r.amount > 0)
+  return filterUnlinkedBankWithdrawalsForCardRows(rows, {
+    linkedIds,
+    amount: params.amount,
+  })
 }
 
 type BankTxRow = {
@@ -270,8 +249,7 @@ export async function registerCardExpenseFromBankTransaction(params: {
       postedBy: params.postedBy || undefined,
     })
     await supabaseUpdate('bank_transactions', bankTransactionId, {
-      account_subject_id: accountSubjectId,
-      category: 'transfer',
+      category: 'expense',
     })
   } catch (postingErr) {
     console.error('registerCardExpenseFromBankTransaction posting:', postingErr)

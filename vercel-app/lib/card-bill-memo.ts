@@ -43,6 +43,16 @@ export function canQueueWithdrawCategoryForCardBill(category: string, memo: stri
   return memoLooksLikeCardBill(memo)
 }
 
+/**
+ * 카드 탭에서 통장 출금 연결 후보.
+ * CSV 일괄 입력을 비용(expense)으로만 둔 경우에도 기간·금액으로 찾아 연결할 수 있게 한다.
+ */
+export function canLinkWithdrawForCardBill(category: string, memo: string): boolean {
+  const c = String(category || '').trim().toLowerCase()
+  if (c === 'expense') return true
+  return canQueueWithdrawCategoryForCardBill(category, memo)
+}
+
 /** 통장 조회에서 「지출 등록」을 카드대금 경로로 열지 */
 export function bankWithdrawOpensCardBillRegister(category: string, memo: string): boolean {
   const c = String(category || '').trim().toLowerCase()

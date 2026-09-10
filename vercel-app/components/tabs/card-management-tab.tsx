@@ -52,11 +52,16 @@ import {
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { formatBankAccountLabel } from "@/lib/bank-account-display"
 import { normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
+import { bankRowMatchesAmountFilter } from "@/lib/bank-query-filter-options"
 import { splitVatFromInclusiveGross } from "@/lib/expense-fee-vat"
 import { readLastCardAccountId, writeLastCardAccountId } from "@/lib/card-last-account"
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+}
+
+function monthStartStrBkk() {
+  return `${todayStrBkk().slice(0, 7)}-01`
 }
 
 type AllocationLineForm = {
@@ -150,11 +155,13 @@ export function CardManagementTab() {
 
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([])
   const [bankAccountId, setBankAccountId] = React.useState<string>("")
+  const [bankLinkStartStr, setBankLinkStartStr] = React.useState(monthStartStrBkk)
+  const [bankLinkEndStr, setBankLinkEndStr] = React.useState(todayStrBkk)
+  const [bankLinkAmount, setBankLinkAmount] = React.useState("")
   const [unlinkedBankRows, setUnlinkedBankRows] = React.useState<UnlinkedBankWithdrawalForCard[]>([])
   const [unlinkedBankLoading, setUnlinkedBankLoading] = React.useState(false)
   const [bankLinkRow, setBankLinkRow] = React.useState<UnlinkedBankWithdrawalForCard | null>(null)
   const [bankLinkCardId, setBankLinkCardId] = React.useState("")
-  const [bankLinkSubjectId, setBankLinkSubjectId] = React.useState("__none__")
   const [bankLinkMemo, setBankLinkMemo] = React.useState("")
   const [bankLinkSaving, setBankLinkSaving] = React.useState(false)
 
@@ -202,20 +209,31 @@ export function CardManagementTab() {
 
   const loadUnlinkedBank = React.useCallback(async () => {
     const accountId = Number(bankAccountId || 0)
-    if (!accountId || !startStr || !endStr) {
+    if (!accountId || !bankLinkStartStr || !bankLinkEndStr) {
       setUnlinkedBankRows([])
       return
     }
     setUnlinkedBankLoading(true)
     try {
-      const res = await getUnlinkedBankWithdrawalsForCard({ accountId, startStr, endStr })
+      const amount = parseMoneyAmount(bankLinkAmount)
+      const res = await getUnlinkedBankWithdrawalsForCard({
+        accountId,
+        startStr: bankLinkStartStr,
+        endStr: bankLinkEndStr,
+        amount: amount > 0 ? amount : undefined,
+      })
       setUnlinkedBankRows(res.list || [])
     } catch {
       setUnlinkedBankRows([])
     } finally {
       setUnlinkedBankLoading(false)
     }
-  }, [bankAccountId, startStr, endStr])
+  }, [bankAccountId, bankLinkStartStr, bankLinkEndStr, bankLinkAmount])
+
+  const visibleUnlinkedBankRows = React.useMemo(
+    () => unlinkedBankRows.filter((r) => bankRowMatchesAmountFilter(r.amount, bankLinkAmount)),
+    [unlinkedBankRows, bankLinkAmount]
+  )
 
   const selectedBankAccount = React.useMemo(
     () => bankAccounts.find((a) => String(a.id) === String(bankAccountId)) ?? null,
@@ -229,8 +247,31 @@ export function CardManagementTab() {
   }, [bankAccountId, bankAccounts])
 
   React.useEffect(() => {
-    void loadUnlinkedBank()
-  }, [loadUnlinkedBank])
+    const accountId = Number(bankAccountId || 0)
+    if (!accountId || !bankLinkStartStr || !bankLinkEndStr) {
+      setUnlinkedBankRows([])
+      return
+    }
+    let cancelled = false
+    setUnlinkedBankLoading(true)
+    getUnlinkedBankWithdrawalsForCard({
+      accountId,
+      startStr: bankLinkStartStr,
+      endStr: bankLinkEndStr,
+    })
+      .then((res) => {
+        if (!cancelled) setUnlinkedBankRows(res.list || [])
+      })
+      .catch(() => {
+        if (!cancelled) setUnlinkedBankRows([])
+      })
+      .finally(() => {
+        if (!cancelled) setUnlinkedBankLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [bankAccountId, bankLinkStartStr, bankLinkEndStr])
 
   const openBankLinkDialog = (row: UnlinkedBankWithdrawalForCard) => {
     setBankLinkRow(row)
@@ -245,8 +286,6 @@ export function CardManagementTab() {
           ? String(filteredCardAccounts[0].id)
           : ""
     setBankLinkCardId(defaultCard)
-    const prepay = accountSubjects.find((a) => String(a.code || "").trim() === "1160")
-    setBankLinkSubjectId(prepay?.id ? String(prepay.id) : "__none__")
   }
 
   const handleRegisterBankLink = async () => {
@@ -261,7 +300,6 @@ export function CardManagementTab() {
       const res = await registerCardExpenseFromBankTransaction({
         bankTransactionId: bankLinkRow.id,
         cardAccountId: cardId,
-        accountSubjectId: bankLinkSubjectId !== "__none__" ? Number(bankLinkSubjectId) : undefined,
         memo: bankLinkMemo.trim() || undefined,
         userName: auth?.user,
         userRole: auth?.role,
@@ -666,6 +704,39 @@ export function CardManagementTab() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-0.5">{tt("date", "Date")}</label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="date"
+                    value={bankLinkStartStr}
+                    onChange={(e) => setBankLinkStartStr(e.target.value)}
+                    className="h-9 w-full text-[13px] sm:w-[148px]"
+                  />
+                  <span className="hidden text-xs sm:inline">~</span>
+                  <Input
+                    type="date"
+                    value={bankLinkEndStr}
+                    onChange={(e) => setBankLinkEndStr(e.target.value)}
+                    className="h-9 w-full text-[13px] sm:w-[148px]"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-0.5">
+                  {tt("cardManagementBankLinkAmount", "Amount")}
+                </label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={bankLinkAmount}
+                  onChange={(e) => setBankLinkAmount(normalizeMoneyInputString(e.target.value))}
+                  placeholder={tt("cardManagementBankLinkAmountPh", "Amount (optional)")}
+                  className="h-9 w-full sm:w-[140px]"
+                />
+              </div>
+            </div>
             <Button size="sm" variant="outline" className="h-9" onClick={() => void loadUnlinkedBank()} disabled={unlinkedBankLoading || !bankAccountId}>
               <Search className="h-4 w-4 mr-1" />
               {unlinkedBankLoading ? "..." : tt("cardManagementBankLinkQuery", "Find unlinked withdrawals")}
@@ -673,7 +744,7 @@ export function CardManagementTab() {
           </div>
           {unlinkedBankLoading ? (
             <p className="text-sm text-muted-foreground py-4">{t("loading")}</p>
-          ) : unlinkedBankRows.length === 0 ? (
+          ) : visibleUnlinkedBankRows.length === 0 ? (
             <p className="text-sm text-muted-foreground py-2">{tt("cardManagementNoUnlinkedBank", "No unlinked withdrawals.")}</p>
           ) : (
             <div className="rounded-lg border overflow-auto max-h-[220px]">
@@ -688,7 +759,7 @@ export function CardManagementTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {unlinkedBankRows.map((row) => (
+                  {visibleUnlinkedBankRows.map((row) => (
                     <tr key={row.id} className="border-t">
                       <td className="p-2 text-center whitespace-nowrap">{row.transDate}</td>
                       <td className="p-2 text-right tabular-nums font-medium">{fmt(row.amount)}</td>
@@ -712,7 +783,7 @@ export function CardManagementTab() {
               </table>
               </AdminDesktopOnly>
               <AdminMobileOnly className="divide-y divide-border/60">
-                {unlinkedBankRows.map((row) => (
+                {visibleUnlinkedBankRows.map((row) => (
                   <div key={row.id} className="space-y-2 px-3 py-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -1112,7 +1183,7 @@ export function CardManagementTab() {
           </DialogHeader>
           {bankLinkRow ? (
             <div className="space-y-3 pt-2">
-              <p className="text-xs text-muted-foreground">{tt("bankCardExpenseAccountHint", "분개: 차변 선급금(전도금 1160) · 대변 현금")}</p>
+              <p className="text-xs text-muted-foreground">{tt("bankCardExpenseAccountHint", "통장 용도는 비용으로 저장됩니다. 계정별 배분의 계정과목이 통장에 자동 반영됩니다.")}</p>
               <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">{tt("date", "Date")}</span>

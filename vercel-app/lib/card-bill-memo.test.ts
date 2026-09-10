@@ -55,8 +55,8 @@ describe('bankWithdrawOpensCardBillRegister', () => {
 })
 
 describe('suggestWithdrawFromMemo card bill', () => {
-  it('classifies monthly card bills as transfer, not expense', () => {
-    expect(suggestWithdrawFromMemo('KBank Credit Card', []).category).toBe('transfer')
+  it('classifies monthly card bills as expense (bulk CSV; GL from card allocation)', () => {
+    expect(suggestWithdrawFromMemo('KBank Credit Card', []).category).toBe('expense')
     expect(suggestWithdrawFromMemo('CREDIT CARD PAYMENT', []).accountSubjectId).toBeUndefined()
   })
 

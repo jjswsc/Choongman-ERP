@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUnlinkedBankWithdrawalsForCard } from '@/lib/card-bank-expense-link-server'
+import { parseMoneyAmount } from '@/lib/money-amount'
 import { requireAuth } from '@/lib/verify-auth'
 
 /** 카드 대금 연동용 미연결 통장 출금 목록 */
@@ -18,12 +19,14 @@ export async function GET(request: NextRequest) {
     const accountId = Number(searchParams.get('accountId') || 0)
     const startStr = String(searchParams.get('startStr') || '').slice(0, 10)
     const endStr = String(searchParams.get('endStr') || '').slice(0, 10)
+    const amountRaw = searchParams.get('amount')
+    const amount = amountRaw != null && amountRaw !== '' ? parseMoneyAmount(amountRaw) : null
 
     if (!accountId || !startStr || !endStr) {
       return NextResponse.json({ list: [] }, { headers })
     }
 
-    const list = await getUnlinkedBankWithdrawalsForCard({ accountId, startStr, endStr })
+    const list = await getUnlinkedBankWithdrawalsForCard({ accountId, startStr, endStr, amount })
     return NextResponse.json({ list }, { headers })
   } catch (e) {
     console.error('getUnlinkedBankWithdrawalsForCard:', e)

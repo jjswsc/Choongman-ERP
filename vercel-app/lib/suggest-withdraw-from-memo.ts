@@ -26,9 +26,9 @@ export function suggestWithdrawFromMemo(
     return { category: 'expense', accountSubjectId: byCode['5529'] }
   }
 
-  // 신용카드 월 대금(통장에서 한 번에 출금) → 이체. 계정과목은 카드 탭 배분에서 지정
+  // 신용카드 월 대금(통장에서 한 번에 출금) → 비용. 계정과목은 카드 탭 연결·배분에서 지정
   if (memoLooksLikeCardBill(memo)) {
-    return { category: 'transfer' }
+    return { category: 'expense' }
   }
 
   // 이체/보충
