@@ -3,6 +3,8 @@ import { MemberPortalPwaHead } from "@/components/member-portal/member-portal-pw
 import { getServerAppBrandConfig } from "@/lib/app-brand-server"
 import { getMemberPwaAssets } from "@/lib/member-portal-pwa"
 
+export const dynamic = "force-dynamic"
+
 /** /m/* — 회원 라운지 전용 PWA(홈 화면 설치·시작 URL /m) */
 export async function generateMetadata(): Promise<Metadata> {
   const brand = await getServerAppBrandConfig()

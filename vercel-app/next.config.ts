@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import path from "path";
 import { RetryChunkLoadPlugin } from "webpack-retry-chunk-load-plugin";
 import withSerwistInit from "@serwist/next";
-import { PWA_SHELL_REVISION } from "./lib/pwa-shell-revision";
+import { PWA_SHELL_REVISION, PWA_MEMBER_SHELL_REVISION } from "./lib/pwa-shell-revision";
 
 const vercelAppDir = __dirname;
 
@@ -26,7 +26,7 @@ const withSerwist = withSerwistInit({
     { url: "/pos", revision: PWA_SHELL_REVISION },
     /** POS PWA start_url·오프라인 폴백. 터미널 HTML은 프리캐시하지 않음(배포마다 전 단말 FDT). 오프라인은 /pos 폴백. */
     { url: "/pos/login", revision: PWA_SHELL_REVISION },
-    { url: "/m", revision: PWA_SHELL_REVISION },
+    { url: "/m", revision: PWA_MEMBER_SHELL_REVISION },
   ],
 });
 

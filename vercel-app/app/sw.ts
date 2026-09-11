@@ -305,6 +305,35 @@ const posTerminalDocumentNetworkFirst = {
   }),
 }
 
+/** 회원앱 HTML — 프리캐시된 옛 /m 때문에 배포 후에도 홈 UI가 안 바뀌지 않게 네트워크 우선 */
+const memberPortalDocumentNetworkFirst = {
+  matcher({
+    sameOrigin,
+    url: { pathname },
+    request,
+  }: {
+    request: Request
+    sameOrigin: boolean
+    url: URL
+    event?: ExtendableEvent
+  }) {
+    if (!sameOrigin || request.method !== "GET") return false
+    return pathname.startsWith("/m") && request.destination === "document"
+  },
+  method: "GET" as const,
+  handler: new NetworkFirst({
+    cacheName: "member-portal-document",
+    networkTimeoutSeconds: 8,
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 6,
+        maxAgeSeconds: 24 * 60 * 60,
+        maxAgeFrom: "last-used",
+      }),
+    ],
+  }),
+}
+
 /** POS 로그인 문서 — 오프라인 cold start(하이브리드·PWA)에서 프리캐시·캐시 우선 */
 const posLoginDocumentNetworkFirst = {
   matcher({
@@ -476,6 +505,7 @@ const serwist = new Serwist({
     posLoginDocumentForceNetworkOnly,
     posLoginDocumentNetworkFirst,
     posTerminalDocumentNetworkFirst,
+    memberPortalDocumentNetworkFirst,
     loginPagesGetNetworkOnly,
     downloadsBinaryNetworkOnly,
     nextStaticBuildAssets,

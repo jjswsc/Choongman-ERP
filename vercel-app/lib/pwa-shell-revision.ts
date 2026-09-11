@@ -6,3 +6,5 @@
  * (JS 청크는 파일 해시가 바뀌면 그대로 갱신된다.)
  */
 export const PWA_SHELL_REVISION = '2026-09-11'
+/** 회원앱 `/m`만. POS 로그인 셸 FDT를 건드리지 않고 홈 HTML 프리캐시를 갱신한다. */
+export const PWA_MEMBER_SHELL_REVISION = '2026-09-11-m-hub'
