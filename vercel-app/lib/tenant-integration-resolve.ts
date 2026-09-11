@@ -22,41 +22,56 @@ import {
   parseGrabPartnerApiMenuMerchantMap,
   parseGrabStoreMap,
 } from '@/lib/grab-store-map-env'
-import { lookupChoongmanKbankStoreDefaults } from '@/lib/kbank-store-merchant-defaults'
+import {
+  choongmanKbankPrinterStoreCodeCandidates,
+  lookupChoongmanKbankStoreDefaults,
+  sanitizeChoongmanStoreKbankOverride,
+} from '@/lib/kbank-store-merchant-defaults'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+
+function parsePosPrinterKbankRow(raw: {
+  kbank_merchant_id?: string | null
+  kbank_partner_shop_id?: string | null
+  kbank_terminal_id?: string | null
+} | null | undefined): StoreKbankConfig | null {
+  if (!raw) return null
+  const merchantId = String(raw.kbank_merchant_id ?? '').trim()
+  const partnerShopId = String(raw.kbank_partner_shop_id ?? '').trim()
+  const terminalId = String(raw.kbank_terminal_id ?? '').trim()
+  if (!merchantId && !partnerShopId && !terminalId) return null
+  return {
+    ...(merchantId ? { merchantId } : {}),
+    ...(partnerShopId ? { partnerShopId } : {}),
+    ...(terminalId ? { terminalId } : {}),
+  }
+}
 
 /** 관리자 POS 프린터 설정에 저장된 매장별 KBank MID */
 async function loadPosPrinterKbankConfig(storeCode: string): Promise<StoreKbankConfig | null> {
   const code = String(storeCode || '').trim()
   if (!code) return null
-  try {
-    const rows = (await supabaseSelectFilter(
-      'pos_printer_settings',
-      `store_code=eq.${encodeURIComponent(code)}`,
-      {
-        limit: 1,
-        select: 'kbank_merchant_id,kbank_partner_shop_id,kbank_terminal_id',
-      }
-    )) as Array<{
-      kbank_merchant_id?: string | null
-      kbank_partner_shop_id?: string | null
-      kbank_terminal_id?: string | null
-    }>
-    const raw = rows?.[0]
-    if (!raw) return null
-    const merchantId = String(raw.kbank_merchant_id ?? '').trim()
-    const partnerShopId = String(raw.kbank_partner_shop_id ?? '').trim()
-    const terminalId = String(raw.kbank_terminal_id ?? '').trim()
-    if (!merchantId && !partnerShopId && !terminalId) return null
-    return {
-      ...(merchantId ? { merchantId } : {}),
-      ...(partnerShopId ? { partnerShopId } : {}),
-      ...(terminalId ? { terminalId } : {}),
+  const candidates = choongmanKbankPrinterStoreCodeCandidates(code)
+  for (const candidate of candidates) {
+    try {
+      const rows = (await supabaseSelectFilter(
+        'pos_printer_settings',
+        `store_code=eq.${encodeURIComponent(candidate)}`,
+        {
+          limit: 1,
+          select: 'kbank_merchant_id,kbank_partner_shop_id,kbank_terminal_id',
+        }
+      )) as Array<{
+        kbank_merchant_id?: string | null
+        kbank_partner_shop_id?: string | null
+        kbank_terminal_id?: string | null
+      }>
+      const parsed = parsePosPrinterKbankRow(rows?.[0])
+      if (parsed) return sanitizeChoongmanStoreKbankOverride(code, parsed)
+    } catch {
+      // 컬럼 미배포·조회 실패 시 다음 후보 또는 코드 기본값/SaaS 폴백
     }
-  } catch {
-    // 컬럼 미배포·조회 실패 시 무시 (코드 기본값/SaaS 설정으로 폴백)
-    return null
   }
+  return null
 }
 
 function pickStr(...values: unknown[]): string {
@@ -206,6 +221,14 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
         runtime = { ...runtime, cacheKey: `${runtime.cacheKey}|store:${storeCode}` }
       }
     }
+    runtime = applyStoreKbankConfig(
+      runtime,
+      sanitizeChoongmanStoreKbankOverride(storeCode, {
+        merchantId: runtime.merchantId,
+        partnerShopId: runtime.partnerShopId,
+        terminalId: runtime.terminalId,
+      })
+    )
   }
 
   return runtime

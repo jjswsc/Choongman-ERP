@@ -19,6 +19,7 @@ import {
 } from '@/lib/pos-membership-qr-defaults'
 import { LINKPOS_FORCE_MANUAL_CARD, isLinkposCardApiEnabled } from '@/lib/linkpos-card-api-enabled'
 import { normalizePosQrDisplayMode } from '@/lib/pos-qr-display-mode'
+import { sanitizeChoongmanStoreKbankOverride } from '@/lib/kbank-store-merchant-defaults'
 
 /** POS 주문/결산 직원 등: 고객 화면·듀얼 모니터 컬럼만 갱신 (나머지는 DB 기존값 유지) */
 const CUSTOMER_DISPLAY_ONLY_DB_KEYS = new Set([
@@ -236,9 +237,14 @@ export async function POST(req: NextRequest) {
     const linkposSkipTerminalForCard = LINKPOS_FORCE_MANUAL_CARD
       ? true
       : parseBoolParam(body?.linkposSkipTerminalForCard, !isLinkposCardApiEnabled())
-    const kbankMerchantId = String(body?.kbankMerchantId ?? '').trim()
-    const kbankPartnerShopId = String(body?.kbankPartnerShopId ?? '').trim()
-    const kbankTerminalId = String(body?.kbankTerminalId ?? '').trim()
+    const kbankSanitized = sanitizeChoongmanStoreKbankOverride(storeCode, {
+      merchantId: String(body?.kbankMerchantId ?? '').trim(),
+      partnerShopId: String(body?.kbankPartnerShopId ?? '').trim(),
+      terminalId: String(body?.kbankTerminalId ?? '').trim(),
+    })
+    const kbankMerchantId = String(kbankSanitized.merchantId ?? '').trim()
+    const kbankPartnerShopId = String(kbankSanitized.partnerShopId ?? '').trim()
+    const kbankTerminalId = String(kbankSanitized.terminalId ?? '').trim()
     const kbankSkipApiForQr = parseBoolParam(body?.kbankSkipApiForQr, true)
     const posQrDisplayMode = normalizePosQrDisplayMode(body?.posQrDisplayMode)
     const drawerOpt = String(body?.drawerOpenOption || 'reason_only')

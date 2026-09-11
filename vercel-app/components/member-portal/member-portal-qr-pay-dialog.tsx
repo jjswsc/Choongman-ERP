@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import QRCode from "qrcode"
 import { Button } from "@/components/ui/button"
 import { formatBaht } from "@/components/member-portal/portal-ui"
 import { MemberPortalQrCountdown } from "@/components/member-portal/member-portal-qr-countdown"
+import { PosQrGuidelineCard } from "@/components/pos/pos-qr-guideline-card"
 import { MEMBER_PORTAL_PREPAY_QR_EXPIRY_MS, MEMBER_PORTAL_QR_STATUS_POLL_MS } from "@/lib/member-portal-prepay-constants"
 import type { MemberPortalKey } from "@/lib/member-portal-i18n"
 
@@ -32,7 +32,7 @@ export function MemberPortalQrPayDialog({
   onExpired,
   t,
 }: MemberPortalQrPayDialogProps) {
-  const [qrDataUrl, setQrDataUrl] = React.useState("")
+  const [qrPayload, setQrPayload] = React.useState("")
   const [partnerTxnId, setPartnerTxnId] = React.useState("")
   const [qrDeadlineMs, setQrDeadlineMs] = React.useState(0)
   const [loading, setLoading] = React.useState(false)
@@ -48,7 +48,7 @@ export function MemberPortalQrPayDialog({
     let cancelled = false
     setLoading(true)
     setError("")
-    setQrDataUrl("")
+    setQrPayload("")
     setPartnerTxnId("")
     setQrDeadlineMs(0)
 
@@ -73,13 +73,8 @@ export function MemberPortalQrPayDialog({
           )
           return
         }
-        const url = await QRCode.toDataURL(data.qrPayload, {
-          width: 280,
-          margin: 1,
-          errorCorrectionLevel: "H",
-        })
         if (cancelled) return
-        setQrDataUrl(url)
+        setQrPayload(data.qrPayload)
         setPartnerTxnId(String(data.partnerTransactionId || ""))
         const deadline = data.paymentExpiresAt
           ? new Date(data.paymentExpiresAt).getTime()
@@ -145,9 +140,10 @@ export function MemberPortalQrPayDialog({
           <p className="mt-8 text-center text-sm text-neutral-500">{t("loginChecking")}</p>
         ) : error ? (
           <p className="mt-6 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-        ) : qrDataUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={qrDataUrl} alt="PromptPay QR" className="mx-auto mt-4 w-[280px] rounded-xl" />
+        ) : qrPayload ? (
+          <div className="mx-auto mt-4 w-fit">
+            <PosQrGuidelineCard payload={qrPayload} kind="THAI_QR" />
+          </div>
         ) : null}
         {!loading && !error && qrDeadlineMs > 0 ? (
           <MemberPortalQrCountdown

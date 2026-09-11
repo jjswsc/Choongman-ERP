@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import QRCode from "qrcode"
 import { Button } from "@/components/ui/button"
 import { formatBaht } from "@/components/member-portal/portal-ui"
 import type { PortalCouponRow } from "@/components/member-portal/portal-ui"
@@ -10,6 +9,7 @@ import type { MemberSummary } from "@/lib/members-server"
 import { memberPortalT, type MemberPortalKey } from "@/lib/member-portal-i18n"
 import type { LangCode } from "@/lib/lang-context"
 import { MemberPortalQrCountdown } from "@/components/member-portal/member-portal-qr-countdown"
+import { PosQrGuidelineCard } from "@/components/pos/pos-qr-guideline-card"
 import {
   clearMemberPortalCheckoutDraft,
   saveMemberPortalCheckoutDraft,
@@ -82,7 +82,7 @@ export function MemberPortalCheckoutSheet({
   const [preview, setPreview] = React.useState<CheckoutPreview | null>(null)
   const [previewLoading, setPreviewLoading] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
-  const [qrDataUrl, setQrDataUrl] = React.useState("")
+  const [qrPayload, setQrPayload] = React.useState("")
   const [qrAmount, setQrAmount] = React.useState(0)
   const [orderId, setOrderId] = React.useState(0)
   const [orderNo, setOrderNo] = React.useState("")
@@ -153,7 +153,7 @@ export function MemberPortalCheckoutSheet({
   React.useEffect(() => {
     if (!open) return
     setPhase("checkout")
-    setQrDataUrl("")
+    setQrPayload("")
     setPartnerTxnId("")
     setOrderId(0)
     setOrderNo("")
@@ -296,12 +296,7 @@ export function MemberPortalCheckoutSheet({
         }
         return
       }
-      const url = await QRCode.toDataURL(qrJson.qrPayload, {
-        width: 280,
-        margin: 1,
-        errorCorrectionLevel: "H",
-      })
-      setQrDataUrl(url)
+      setQrPayload(qrJson.qrPayload)
       setQrAmount(Number(qrJson.qrAmount || data.qrAmount || preview.qrAmount || 0))
       setPartnerTxnId(String(qrJson.partnerTransactionId || ""))
       const deadline = data.paymentExpiresAt
@@ -489,9 +484,10 @@ export function MemberPortalCheckoutSheet({
             <p className="mt-3 text-center text-2xl font-bold tabular-nums text-neutral-900">
               {formatBaht(qrAmount)}
             </p>
-            {qrDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={qrDataUrl} alt="PromptPay QR" className="mx-auto mt-4 w-[280px] rounded-xl" />
+            {qrPayload ? (
+              <div className="mx-auto mt-4 w-fit">
+                <PosQrGuidelineCard payload={qrPayload} kind="THAI_QR" />
+              </div>
             ) : null}
             <p className="mt-4 text-center text-xs text-neutral-500">{t("orderCheckoutQrWaiting")}</p>
             {orderNo ? (

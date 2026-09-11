@@ -32,6 +32,7 @@ import {
   type QrGuestLang,
 } from '@/lib/i18n-qr-table-guest'
 import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
+import { PosQrGuidelineCard } from '@/components/pos/pos-qr-guideline-card'
 import type { PosMenu, PosMenuOption } from '@/lib/api-client'
 import {
   posMenuGuestSearchHaystack,
@@ -249,7 +250,7 @@ function GuestLangHeaderButton({
   )
 }
 
-function GuestPayQrImg({
+function GuestPayPlainQrImg({
   payload,
   alt,
   className,
@@ -281,6 +282,26 @@ function GuestPayQrImg({
   }
   // eslint-disable-next-line @next/next/no-img-element
   return <img alt={alt} className={className} src={src} />
+}
+
+function GuestPayQrImg({
+  payload,
+  alt,
+  className,
+}: {
+  payload: string
+  alt: string
+  className?: string
+}) {
+  const raw = String(payload || '').trim()
+  if (raw.startsWith('000201')) {
+    return (
+      <div className="mx-auto w-fit">
+        <PosQrGuidelineCard payload={raw} kind="THAI_QR" qrClassName="w-[224px] h-[224px]" />
+      </div>
+    )
+  }
+  return <GuestPayPlainQrImg payload={payload} alt={alt} className={className} />
 }
 
 type Step = 'boot' | 'tier' | 'pay_entry' | 'wait_staff' | 'menu' | 'error'

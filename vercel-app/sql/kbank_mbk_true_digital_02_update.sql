@@ -15,8 +15,8 @@ WHERE store_code IN ('CM MBK', '1041')
 UPDATE pos_printer_settings
 SET
   kbank_skip_api_for_qr = false,
-  kbank_merchant_id = 'KB000002350191',
-  kbank_partner_shop_id = 'SJGLB00002',
+  kbank_merchant_id = 'KB000002350190',
+  kbank_partner_shop_id = 'SJGLB00011',
   pos_qr_display_mode = 'edc_mirror'
 WHERE store_code IN ('CM True Digital', '1040')
    OR store_code ILIKE '%True Digital%';

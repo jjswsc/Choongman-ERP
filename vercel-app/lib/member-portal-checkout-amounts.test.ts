@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { resolveMemberPortalPointAndQr } from '@/lib/member-portal-checkout-amounts'
+import { memberPortalT } from '@/lib/member-portal-i18n'
 
 describe('resolveMemberPortalPointAndQr', () => {
   it('uses full points when total is coverable', () => {
@@ -41,5 +42,12 @@ describe('resolveMemberPortalPointAndQr', () => {
         requestedPointUsed: 500,
       })
     ).toEqual({ pointUsed: 50, qrAmount: 450, requiresQr: true })
+  })
+})
+
+describe('memberPortalT interpolation', () => {
+  it('fills {time} without leftover braces', () => {
+    expect(memberPortalT('th', 'orderCheckoutQrCountdown', { time: '4:58' })).toBe('เหลือเวลา 4:58')
+    expect(memberPortalT('en', 'orderCheckoutQrCountdown', { time: '4:58' })).toBe('Time left: 4:58')
   })
 })

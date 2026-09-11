@@ -1226,9 +1226,9 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '결제 확인 대기 중…',
   },
   orderCheckoutQrCountdown: {
-    en: 'Time left: {{time}}',
-    th: 'เหลือเวลา {{time}}',
-    ko: '남은 시간 {{time}}',
+    en: 'Time left: {time}',
+    th: 'เหลือเวลา {time}',
+    ko: '남은 시간 {time}',
   },
   orderCheckoutQrExpired: {
     en: 'QR expired. Please order again.',
@@ -1289,14 +1289,14 @@ const MS: Record<MemberPortalKey, Dict> = {
     ko: '주문을 불러올 수 없습니다.',
   },
   orderPickupReadyBanner: {
-    en: '{{orderNo}} is ready for pickup at {{store}}.',
-    th: '{{orderNo}} พร้อมรับที่ {{store}}',
-    ko: '{{orderNo}} — {{store}}에서 픽업 준비가 완료되었습니다.',
+    en: '{orderNo} is ready for pickup at {store}.',
+    th: '{orderNo} พร้อมรับที่ {store}',
+    ko: '{orderNo} — {store}에서 픽업 준비가 완료되었습니다.',
   },
   orderCheckoutCouponMinOrder: {
-    en: 'Min. order ฿{{amount}}',
-    th: 'ขั้นต่ำ ฿{{amount}}',
-    ko: '최소 주문 ฿{{amount}}',
+    en: 'Min. order ฿{amount}',
+    th: 'ขั้นต่ำ ฿{amount}',
+    ko: '최소 주문 ฿{amount}',
   },
   orderStatusAwaitingPayment: { en: 'Awaiting payment', th: 'รอชำระ', ko: '결제 대기' },
   orderStatusPaid: { en: 'Paid · preparing', th: 'ชำระแล้ว · กำลังเตรียม', ko: '결제 완료 · 준비 중' },

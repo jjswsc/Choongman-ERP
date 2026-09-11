@@ -1,5 +1,10 @@
 import { isKbankQrEnabledForStore, isKbankQrPilotStoreLabel } from '@/lib/kbank-pilot-stores'
-import { lookupChoongmanKbankStoreDefaults, credentialsBelongToOtherChoongmanStore } from '@/lib/kbank-store-merchant-defaults'
+import {
+  lookupChoongmanKbankStoreDefaults,
+  credentialsBelongToOtherChoongmanStore,
+  sanitizeChoongmanStoreKbankOverride,
+  choongmanKbankPrinterStoreCodeCandidates,
+} from '@/lib/kbank-store-merchant-defaults'
 import {
   applyStoreKbankConfig,
   emptyKbankRuntime,
@@ -55,12 +60,16 @@ describe('choongman kbank store MID defaults', () => {
     expect(lookupChoongmanKbankStoreDefaults('CM MBK')?.merchantId).toBe('KB000002350191')
     expect(lookupChoongmanKbankStoreDefaults('CM MBK')?.partnerShopId).toBe('SJGLB00002')
     expect(lookupChoongmanKbankStoreDefaults('1041')?.merchantId).toBe('KB000002350191')
-    expect(lookupChoongmanKbankStoreDefaults('CM True Digital')?.merchantId).toBe('KB000002350191')
-    expect(lookupChoongmanKbankStoreDefaults('CM True Digital')?.partnerShopId).toBe('SJGLB00002')
-    expect(lookupChoongmanKbankStoreDefaults('1040')?.partnerShopId).toBe('SJGLB00002')
+    expect(lookupChoongmanKbankStoreDefaults('CM True Digital')?.merchantId).toBe('KB000002350190')
+    expect(lookupChoongmanKbankStoreDefaults('CM True Digital')?.partnerShopId).toBe('SJGLB00011')
+    expect(lookupChoongmanKbankStoreDefaults('1040')?.merchantId).toBe('KB000002350190')
+    expect(lookupChoongmanKbankStoreDefaults('1040')?.partnerShopId).toBe('SJGLB00011')
+    expect(choongmanKbankPrinterStoreCodeCandidates('CM True Digital')).toEqual(
+      expect.arrayContaining(['CM True Digital', '1040'])
+    )
   })
 
-  it('detects another store\'s MID pasted onto MBK', () => {
+  it('detects another store\'s MID pasted onto MBK / True Digital', () => {
     expect(
       credentialsBelongToOtherChoongmanStore('CM MBK', 'KB000002340299', 'SJGLB00006')
     ).toBe(true)
@@ -68,8 +77,41 @@ describe('choongman kbank store MID defaults', () => {
       credentialsBelongToOtherChoongmanStore('CM MBK', 'KB000002350191', 'SJGLB00002')
     ).toBe(false)
     expect(
-      credentialsBelongToOtherChoongmanStore('CM True Digital', 'KB000002350191', 'SJGLB00002')
+      credentialsBelongToOtherChoongmanStore('CM True Digital', 'KB000002350190', 'SJGLB00011')
     ).toBe(false)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM True Digital', 'KB000002350191', 'SJGLB00011')
+    ).toBe(true)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM True Digital', 'KB000002350191', 'SJGLB00002')
+    ).toBe(true)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM MBK', 'KB000002350191', 'SJGLB00011')
+    ).toBe(true)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM MBK', 'KB000002350190', 'SJGLB00011')
+    ).toBe(true)
+  })
+
+  it('rewrites True Digital away from MBK merchant credentials', () => {
+    expect(
+      sanitizeChoongmanStoreKbankOverride('CM True Digital', {
+        merchantId: 'KB000002350191',
+        partnerShopId: 'SJGLB00011',
+      })
+    ).toEqual({
+      merchantId: 'KB000002350190',
+      partnerShopId: 'SJGLB00011',
+    })
+    expect(
+      sanitizeChoongmanStoreKbankOverride('CM True Digital', {
+        merchantId: 'KB000002350191',
+        partnerShopId: 'SJGLB00002',
+      })
+    ).toEqual({
+      merchantId: 'KB000002350190',
+      partnerShopId: 'SJGLB00011',
+    })
   })
 })
 

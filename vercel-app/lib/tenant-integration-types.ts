@@ -23,7 +23,7 @@ export type TenantKbankConfig = {
 export type StoreKbankConfig = {
   /** 매장별 Merchant ID (예: KB000002340300) — 테넌트 MID를 덮어씀 */
   merchantId?: string
-  /** 은행 Partner Shop ID (예: SJGLB00007) — 참고·향후 API용 */
+  /** 은행 Partner Shop ID (예: SJGLB00007). 매장별 개통값. QR 계좌는 Merchant ID가 우선. */
   partnerShopId?: string
   terminalId?: string
   qrEnabled?: boolean
