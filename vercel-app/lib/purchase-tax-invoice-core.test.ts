@@ -143,6 +143,7 @@ describe('purchase tax invoice helpers', () => {
     expect(fixOcrInvoiceLetterIPrefix('IM20260819011079')).toBe('IM20260819011079')
     expect(fixOcrInvoiceLetterIPrefix('010726E00037051')).toBe('010726E00037051')
     expect(compactPurchaseInvoiceToken('1016908/00226orto')).toBe('ID16908/00226')
+    expect(compactPurchaseInvoiceToken('wit01/08/2026anand10260800007')).toBe('10260800007')
     expect(compactPurchaseInvoiceToken('ID16908/00226')).toBe('ID16908/00226')
     expect(fixOcrInvoiceIdPrefix('1016908/00226')).toBe('ID16908/00226')
     expect(compactPurchaseInvoiceToken('RFTKBKO27082026000023577')).toBe('2026000023577')
@@ -256,6 +257,11 @@ describe('purchase tax invoice helpers', () => {
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟูด จำกัด 523 6 3')).toBe('บริษัท แพนฟูด จำกัด')
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟูด จำกัด523 6 3')).toBe('บริษัท แพนฟูด จำกัด')
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟู้ด จำกัด 523638')).toBe('บริษัท แพนฟู้ด จำกัด')
+    expect(trimPurchaseTaxSellerName('บริษัท สยามอรุณ กรุ๊ป จำกัด F')).toBe('บริษัท สยามอรุณ กรุ๊ป จำกัด')
+    expect(trimPurchaseTaxSellerName('บริษัท สยามอรุณ กรุ๊ป จำกัด Page 1 of')).toBe(
+      'บริษัท สยามอรุณ กรุ๊ป จำกัด'
+    )
+    expect(trimPurchaseTaxSellerName('เบอรุณ กรุ๊ป จำกัด Page 1 of')).toBe('เบอรุณ กรุ๊ป จำกัด')
     expect(trimPurchaseTaxSellerName('ชนาคารกสิกรไทย จำกัด (มหาชน)')).toBe('ธนาคารกสิกรไทย จำกัด (มหาชน)')
     expect(trimPurchaseTaxSellerName('บริษัท 1. เอ. พี. อินเตอร์เทรด จำกัด')).toBe(
       'บริษัท ซี.เอ.พี.อินเตอร์เทรด จำกัด'
@@ -264,6 +270,7 @@ describe('purchase tax invoice helpers', () => {
     expect(trimPurchaseTaxSellerName('บริษัท พีเอพี แก๊ส วัน จำกัดใบกำกับภาษี')).toBe(
       'บริษัท พีเอพี แก๊ส วัน จำกัด'
     )
+    expect(trimPurchaseTaxSellerName('S&J GLOBAL CO., LTD. (Head Office)')).toBe('S&J GLOBAL CO., LTD.')
   })
 
   it('detects invoice copies to skip', () => {

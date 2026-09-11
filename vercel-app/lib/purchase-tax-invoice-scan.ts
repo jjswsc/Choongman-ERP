@@ -113,17 +113,37 @@ const EN_MONTH: Record<string, number> = {
   dec: 12,
 }
 
+function dateLineHasClockNoise(line: string): boolean {
+  return /digitally\s*signed|gmt\s*[+-]|วันที่ลงนาม|\b\d{1,2}:\d{2}(?::\d{2})?\b/i.test(line)
+}
+
+function stripDateClockNoise(line: string): string {
+  return String(line || '')
+    .replace(/digitally\s*signed[\s\S]*/i, ' ')
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b(?:\s*\([^)]*GMT[^)]*\))?/gi, ' ')
+}
+
+function dateLineIsIssued(line: string): boolean {
+  return /วันที่ออก(?:เอกสาร|ใบ)|issued?\s*date|document\s*date|วันที่ใบ(?:เสร็จ|กำกับ)/i.test(line)
+}
+
 export function parseTaxInvoiceDateFromText(text: string): string | undefined {
   const lines = String(text || '').split(/\r?\n/)
   const fromLine = (line: string): string | undefined => parseTaxInvoiceDateFromFragment(line)
+  const skipDue = (line: string) => /เริ่มใช้|ครบกำหนด|due\s*date|วันที่ครบ/i.test(line)
+  for (const line of lines) {
+    if (skipDue(line) || !dateLineIsIssued(line)) continue
+    const d = fromLine(stripDateClockNoise(line))
+    if (d) return d
+  }
   for (const line of lines) {
     if (!/วันที่|\bDATE\b/i.test(line)) continue
-    if (/เริ่มใช้|ครบกำหนด|due\s*date|วันที่ครบ/i.test(line)) continue
+    if (skipDue(line) || dateLineHasClockNoise(line)) continue
     const d = fromLine(line)
     if (d) return d
   }
   for (const line of lines) {
-    if (/เริ่มใช้|Rev\.?\s*:|FM-AC/i.test(line)) continue
+    if (/เริ่มใช้|Rev\.?\s*:|FM-AC/i.test(line) || dateLineHasClockNoise(line)) continue
     const d = fromLine(line)
     if (d) return d
   }
@@ -187,7 +207,7 @@ export function tinsFromOcrDigitBlob(raw: string): string[] {
   return found
 }
 
-function extractTins(text: string): string[] {
+function extractTins(text: string, opts?: { labeledOnly?: boolean }): string[] {
   const found: string[] = []
   const add = (raw: string) => {
     const cands = tinsFromOcrDigitBlob(raw)
@@ -197,9 +217,12 @@ function extractTins(text: string): string[] {
     }
   }
   const s = String(text || '')
-  for (const m of s.match(/เลขประจำตัวผู้เสียภาษี[^\dA-Za-zOoIl|]{0,24}([\dA-Za-zOoIl|][\dA-Za-zOoIl|\-\s]{11,22}[\dA-Za-zOoIl|])/g) || []) {
+  for (const m of s.match(
+    /(?:เลขประจำตัวผู้เสียภาษี(?:อากร)?|เลขผู้เสียภาษี|Tax\s*I\.?D\.?)\s*[:#.\-]*[^\dA-Za-zOoIl|]{0,8}([\dA-Za-zOoIl|][\dA-Za-zOoIl|\-\s]{11,22}[\dA-Za-zOoIl|])/gi
+  ) || []) {
     add(m)
   }
+  if (opts?.labeledOnly) return found.filter(thaiTinChecksumOk).slice(0, 4)
   for (const m of s.match(/\b\d{1,3}[- ]\d{3,4}[- ]\d{3,4}[- ]\d{1,4}\b/g) || []) {
     add(m)
   }
@@ -210,6 +233,26 @@ function extractTins(text: string): string[] {
     add(m)
   }
   return found.filter(thaiTinChecksumOk).slice(0, 4)
+}
+
+function sellerHeaderText(text: string): string {
+  const s = String(text || '')
+  const cut = s.search(/\bBILL\s*TO\b|\bSHIP\s*TO\b|ผู้ซื้อ|ที่อยู่ในการจัดส่ง|ที่อยู่จัดส่ง/i)
+  return cut >= 12 ? s.slice(0, cut) : s
+}
+
+function preferJuristicTin(tins: string[], buyerTin?: string): string | undefined {
+  const other = tins.filter((t) => t !== buyerTin)
+  return other.find((t) => t.startsWith('0')) || other[0]
+}
+
+function extractSellerTaxId(text: string, buyerTin?: string): string | undefined {
+  const buyer = digitsTin13(buyerTin)
+  const headerLabeled = preferJuristicTin(extractTins(sellerHeaderText(text), { labeledOnly: true }), buyer)
+  if (headerLabeled) return headerLabeled
+  const labeled = preferJuristicTin(extractTins(text, { labeledOnly: true }), buyer)
+  if (labeled) return labeled
+  return preferJuristicTin(extractTins(text), buyer)
 }
 
 function compactInvoiceToken(raw: string): string {
@@ -237,6 +280,7 @@ export function invoiceNoLooksPlausible(raw: unknown): boolean {
   if (/^(deliveryorder|creditadvice|document|description|quantity|unitprice|amount|number|date)/.test(lower)) return false
   if (/plzb/i.test(compact)) return false
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(inv)) return false
+  if (/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(String(raw || ''))) return false
   if (isTruncatedShopeeInvoiceNo(inv)) return false
   if (/^IM20\d{0,11}$/i.test(compact) && compact.length < 16) return false
   if (/^THMG20/i.test(compact)) return false
@@ -436,10 +480,10 @@ function recoverKasikornInvoiceNo(text: string): string | undefined {
 }
 
 const INVOICE_LABEL_RE =
-  /(?:เอกสารเลขที่|เลขที่(?:เอกสาร|ใบกำกับ(?:ภาษี)?)?|เลขท[ีิ]|Invoice\s*No\.?|Tax\s*Invoice\s*No\.?|Doc(?:ument)?\s*No\.?|\bNo\.?(?=\s*[:#]?[A-Z0-9]))\s*[:#.\-]*/gi
+  /(?:เอกสารเลขที่|เลขที่(?:เอกสาร|ใบเสร็จ(?:รับเงิน)?|ใบกำกับ(?:ภาษี)?)?|เลขท[ีิ]|Receipt\s*No\.?|Invoice\s*No\.?|Tax\s*Invoice\s*No\.?|Doc(?:ument)?\s*No\.?|\bNo\.?(?=\s*[:#]?[A-Z0-9]))\s*[:#.\-]*/gi
 
 const INVOICE_LINE_STOP_RE =
-  /วันที่|บริษัท|ห้างหุ้น|ห้าง|เลขประจำ|มูลค่า|ภาษีมูลค่า|ผู้ซื้อ|ผู้ขาย|สำนักงาน|สาขา\s*\d|Tax\s*ID|\bTIN\b/i
+  /วันที่|บริษัท|ห้างหุ้น|ห้าง|เลขประจำ|มูลค่า|ภาษีมูลค่า|ผู้ซื้อ|ผู้ขาย|สำนักงาน|สาขา\s*\d|Tax\s*ID|\bTIN\b|Page\s*\d|หน้า\s*\d|For\s*Customer|สำหรับลูกค้า/i
 
 const OFFICE_INVOICE_RE =
   /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|INCT|IV|1V|ID|TI|ABB|RT|GFAD)[\-/]?[A-Z0-9\-/ ]{2,48}|[A-Z]{5,10}\d{12,28}|370\d{6}W\d{4,8}|\d{6}[EFH]\d{4,14}|\d{7,12})\b/gi
@@ -478,7 +522,7 @@ function joinOfficePrefix(prefix: string, inv: string): string {
   return `${p}${body}`
 }
 
-/** RV26907… = AD연도 앞자리 2 + 불기 뒤 2자리 + 월. OCR이 연도만 어긋나면 조회월로 맞춘다. */
+/** RV26907… = AD연도 앞자리 2 + 불기 뒤 2자리 + 월. OCR이 연도 두 자리를 모두 틀린 경우만 조회월로 맞춘다. */
 function snapRvInvoiceToTaxMonth(inv: string, taxMonth?: string): string {
   const ym = String(taxMonth || '')
   const year = Number(ym.slice(0, 4))
@@ -487,19 +531,34 @@ function snapRvInvoiceToTaxMonth(inv: string, taxMonth?: string): string {
   const beYy = String(year + 543).slice(-2)
   const hit = String(inv || '').match(/^(RV)2(\d{2})(0[1-9]|1[0-2])(\d{4,})$/i)
   if (!hit || hit[3] !== month || hit[2] === beYy) return inv
+  let dist = 0
+  for (let i = 0; i < 2; i += 1) {
+    if (hit[2][i] !== beYy[i]) dist += 1
+  }
+  if (dist < 2) return inv
   return `${hit[1].toUpperCase()}2${beYy}${hit[3]}${hit[4]}`
 }
 
 function invoiceNoFromLabeledSlice(slice: string): string | undefined {
   const sameLine = slice.split(/\r?\n/, 1)[0] || ''
   const cut = sameLine
-    .replace(/^(?:เอกสาร|ใบกำกับ(?:ภาษี)?|Invoice)\s*/i, '')
+    .replace(/^(?:เอกสาร|ใบกำกับ(?:ภาษี)?|ใบเสร็จ(?:รับเงิน)?|Invoice|Receipt)\s*/i, '')
     .split(INVOICE_LINE_STOP_RE)[0]
-  const inv = cleanInvoiceNo(cut)
+  const inv = cleanInvoiceNo(cut) || firstOfficeInvoiceNo(cut)
   if (inv) return inv
   const next = slice.match(/^(?:[^\S\r\n]*)\r?\n\s*([^\r\n]{2,80})/)
   if (!next) return undefined
-  return cleanInvoiceNo(next[1].split(INVOICE_LINE_STOP_RE)[0])
+  const nextCut = next[1].split(INVOICE_LINE_STOP_RE)[0]
+  return cleanInvoiceNo(nextCut) || firstOfficeInvoiceNo(nextCut)
+}
+
+/** 본문 줄의 Inv. No. AR… 는 세금계산서 번호가 아니라 품목 참조다. */
+function invoiceLabelIsLineItemRef(full: string, labelIndex: number, labelText: string): boolean {
+  if (!/inv(?:oice)?\s*no/i.test(labelText)) return false
+  const lineStart = full.lastIndexOf('\n', Math.max(0, labelIndex - 1)) + 1
+  const lineEnd = full.indexOf('\n', labelIndex)
+  const line = full.slice(lineStart, lineEnd < 0 ? undefined : lineEnd)
+  return /inv(?:oice)?\s*date|cust(?:omer)?\s*ref|remarks/i.test(line)
 }
 
 function extractLabeledInvoiceNo(s: string): string | undefined {
@@ -507,6 +566,7 @@ function extractLabeledInvoiceNo(s: string): string | undefined {
   const found: string[] = []
   let m: RegExpExecArray | null
   while ((m = INVOICE_LABEL_RE.exec(s))) {
+    if (invoiceLabelIsLineItemRef(s, m.index, m[0])) continue
     const inv = invoiceNoFromLabeledSlice(s.slice(m.index + m[0].length))
     if (inv && !found.includes(inv)) found.push(inv)
   }
@@ -722,6 +782,13 @@ export function inferDocDateFromInvoiceNo(invoiceNo: string): string | undefined
   return undefined
 }
 
+function bangkokDayDiff(fromYmd: string, toYmd: string): number | undefined {
+  const a = Date.parse(`${fromYmd}T00:00:00+07:00`)
+  const b = Date.parse(`${toYmd}T00:00:00+07:00`)
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return undefined
+  return Math.round((b - a) / 86_400_000)
+}
+
 function extractSellerBranchRaw(text: string): string | undefined {
   const s = String(text || '')
   if (/สำนักงานใหญ่|head\s*office|\bhq\b/i.test(s) && !/สาขา\s*\d/.test(s)) return 'สำนักงานใหญ่'
@@ -732,6 +799,9 @@ function extractSellerBranchRaw(text: string): string | undefined {
 
 const COMPANY_NAME_RE =
   /((?:บริษัท|ห้างหุ้นส่วน(?:จำกัด)?|ร้าน|ทรัสต์)\s+[^\n]{2,90}(?:จำกัด(?:\s*\(มหาชน\))?)?)/g
+
+const EN_COMPANY_RE =
+  /([A-Z0-9][A-Za-z0-9&.'’\-]*(?:\s+[A-Z0-9(&][A-Za-z0-9&.'’\-)()]*){0,12}\s*,?\s*(?:CO\.?,?\s*LTD\.?|COMPANY\s*LIMITED|LIMITED|LLC)\.?)/g
 
 const BUYER_NAME_ZONE_RE =
   /ที่อยู่ในการจัดส่ง|จัดส่งเอกสาร|ที่อยู่ตามภาษีมูลค่าเพิ่ม|ชื่อลูกค้า|รหัสลูกค้า|ผู้ซื้อ|ลูกค้า|ผู้รับใบกำกับ|BILL\s*TO|SHIP\s*TO/i
@@ -770,8 +840,9 @@ function companyNameNearTin(text: string, tin: string): string | undefined {
   const m = s.match(tinRe)
   if (!m || m.index == null) return undefined
   const before = s.slice(Math.max(0, m.index - 280), m.index)
-  const matches = [...before.matchAll(new RegExp(COMPANY_NAME_RE.source, 'g'))]
-  const last = matches[matches.length - 1]
+  const thai = [...before.matchAll(new RegExp(COMPANY_NAME_RE.source, 'g'))]
+  const en = [...before.matchAll(new RegExp(EN_COMPANY_RE.source, 'g'))]
+  const last = (thai.length ? thai : en)[(thai.length ? thai : en).length - 1]
   if (!last) return undefined
   const name = trimPurchaseTaxSellerName(last[1])
   if (!name || looksLikeJunkSellerName(name)) return undefined
@@ -789,35 +860,49 @@ function companyIsInBuyerNameZone(text: string, index: number, name: string): bo
   return BUYER_NAME_ZONE_RE.test(after) && !/(?:ผู้ขาย|ผู้จำหน่าย|ผู้ประกอบการ)/i.test(after)
 }
 
+function usableSellerName(name: string, buyerName?: string): string | undefined {
+  const cleaned = trimPurchaseTaxSellerName(name)
+  if (
+    !cleaned ||
+    /ผู้ซื้อ|ลูกค้า|Buyer|BILL\s*TO|SHIP\s*TO/i.test(cleaned) ||
+    looksLikeJunkSellerName(cleaned) ||
+    nameLooksLikeBuyerHint(cleaned, buyerName)
+  ) {
+    return undefined
+  }
+  return cleaned.slice(0, 200)
+}
+
 function extractSellerName(text: string, buyerName?: string, sellerTaxId?: string): string | undefined {
   const s = String(text || '')
   const labeled = s.match(
     /(?:ผู้ขาย|ผู้จำหน่าย|ผู้ประกอบการ|Seller|Vendor)\s*[:\-]?\s*([^\n]{3,120})/i
   )
   if (labeled) {
-    const name = trimPurchaseTaxSellerName(labeled[1])
-    if (
-      name &&
-      !/ผู้ซื้อ|ลูกค้า|Buyer/i.test(name) &&
-      !looksLikeJunkSellerName(name) &&
-      !nameLooksLikeBuyerHint(name, buyerName)
-    ) {
-      return name
-    }
+    const name = usableSellerName(labeled[1], buyerName)
+    if (name) return name
+  }
+  const fromBlock = s.match(/(?:^|\n)\s*FROM\b\s*[:\-]?\s*\n?\s*([^\n]{3,120})/i)
+  if (fromBlock) {
+    const name = usableSellerName(fromBlock[1], buyerName)
+    if (name) return name
   }
   const nearTin = sellerTaxId ? companyNameNearTin(s, sellerTaxId) : undefined
   if (nearTin && !nameLooksLikeBuyerHint(nearTin, buyerName)) return nearTin
 
-  COMPANY_NAME_RE.lastIndex = 0
-  let m: RegExpExecArray | null
-  while ((m = COMPANY_NAME_RE.exec(s))) {
-    if (m.index == null) continue
-    const name = trimPurchaseTaxSellerName(m[1])
-    if (!name || looksLikeJunkSellerName(name) || nameLooksLikeBuyerHint(name, buyerName)) continue
-    if (companyIsInBuyerNameZone(s, m.index, name)) continue
-    return name.slice(0, 200)
+  const tryCompanyRe = (re: RegExp) => {
+    re.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = re.exec(s))) {
+      if (m.index == null) continue
+      const name = usableSellerName(m[1], buyerName)
+      if (!name) continue
+      if (companyIsInBuyerNameZone(s, m.index, name)) continue
+      return name
+    }
+    return undefined
   }
-  return undefined
+  return tryCompanyRe(COMPANY_NAME_RE) || tryCompanyRe(EN_COMPANY_RE)
 }
 
 function lineLooksLikeWithholdingOrExempt(line: string): boolean {
@@ -1421,8 +1506,7 @@ export function parsePurchaseTaxInvoiceFromPdfText(
   const raw = normalizeTaxInvoiceOcrText(text)
   if (raw.length < 12) return null
   const buyerTin = digitsTin13(hint?.buyerTaxId)
-  const tins = extractTins(raw)
-  const sellerTaxId = tins.find((tin) => tin !== buyerTin) || (tins[0] && tins[0] !== buyerTin ? tins[0] : undefined)
+  const sellerTaxId = extractSellerTaxId(raw, buyerTin)
   const netAmountLabeled =
     extractAmountNear(raw, /มูลค่าสินค้า|มูลค่าที่คำนวณภาษี|มูลค่าก่อนภาษี|จำนวนเงินรวมก่อนภาษีมูลค่าเพิ่ม|รวมเป็นเงิน|รวมเงิน|มูลค่า(?!เพิ่ม)|ฐานภาษี|Taxable|Sub\s*total|Net\s*amount/i) ??
     extractAmountNear(raw, /ก่อนภาษี|ก่อน VAT/i)
@@ -1552,6 +1636,17 @@ function invoiceFromPageBeatsCurrent(fromPage: string, current?: string): boolea
   if (/^\d{6}[EFH]/i.test(page) && !/^\d{6}[EFH]/i.test(cur)) return true
   if (/^370\d{6}W\d+$/i.test(page) && !/^370\d{6}W\d+$/i.test(cur)) return true
   if (page.startsWith('TRS') && cur.startsWith('TRS') && page.length > cur.length + 4) return true
+  const pageDigits = compactInvoiceToken(page).replace(/\D/g, '')
+  const curDigits = compactInvoiceToken(cur).replace(/\D/g, '')
+  if (
+    pageDigits.length >= 10 &&
+    curDigits.length >= 8 &&
+    pageDigits.startsWith(curDigits) &&
+    pageDigits.length > curDigits.length &&
+    !/[A-Za-z]/.test(compactInvoiceToken(page))
+  ) {
+    return true
+  }
   if (officeInvoiceRank(page) > officeInvoiceRank(cur)) return true
   return false
 }
@@ -1807,7 +1902,9 @@ export function repairExtractedPurchaseTaxInvoice(
   }
   const pageTins = extractTins(pageText).filter((tin) => tin !== buyerTin)
   if (pageTins.length) {
-    if (!sellerTaxId) sellerTaxId = pageTins[0]
+    const betterTin = extractSellerTaxId(pageText, buyerTin) || preferJuristicTin(pageTins, buyerTin)
+    if (!sellerTaxId) sellerTaxId = betterTin
+    else if (betterTin && betterTin.startsWith('0') && !sellerTaxId.startsWith('0')) sellerTaxId = betterTin
   }
 
   const trsToken = pageText.match(/TRS[A-Z]{2,10}00[^\s]*/i)?.[0]
@@ -1842,15 +1939,21 @@ export function repairExtractedPurchaseTaxInvoice(
   const labeledDate = snapDocDateYearToTaxPeriod(row.docDate, hint?.taxMonth)
   const invDate = snapDocDateYearToTaxPeriod(fromInvDate, hint?.taxMonth)
   let docDate = labeledDate || invDate
-  if (fromInvDate && labeledDate && Math.abs(Number(labeledDate.slice(0, 4)) - Number(fromInvDate.slice(0, 4))) >= 2) {
-    docDate = invDate || fromInvDate
-  } else if (
-    fromInvDate &&
-    docDate &&
-    fromInvDate.slice(0, 4) === docDate.slice(0, 4) &&
-    fromInvDate.slice(5, 7) !== docDate.slice(5, 7)
-  ) {
-    docDate = fromInvDate
+  if (fromInvDate && labeledDate && fromInvDate !== labeledDate) {
+    const yearDelta = Math.abs(Number(labeledDate.slice(0, 4)) - Number(fromInvDate.slice(0, 4)))
+    if (yearDelta >= 2) {
+      docDate = invDate || fromInvDate
+    } else if (
+      fromInvDate.slice(0, 4) === labeledDate.slice(0, 4) &&
+      fromInvDate.slice(5, 7) !== labeledDate.slice(5, 7)
+    ) {
+      docDate = fromInvDate
+    } else if (
+      looksLikeKasikornInvoiceNo(invoiceNo || '') ||
+      bangkokDayDiff(fromInvDate, labeledDate) === 1
+    ) {
+      docDate = fromInvDate
+    }
   }
 
   if (invoiceNo) invoiceNo = shopeeUniqueInvoiceTail(invoiceNo) || invoiceNo

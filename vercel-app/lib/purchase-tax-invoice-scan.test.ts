@@ -106,6 +106,8 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('IM202607040')).toBe(false)
     expect(invoiceNoLooksPlausible('ID16908/00226')).toBe(true)
     expect(invoiceNoLooksPlausible('1016908/00226orto')).toBe(true)
+    expect(invoiceNoLooksPlausible('wit01/08/2026anand10260800007')).toBe(false)
+    expect(invoiceNoLooksPlausible('102608000072')).toBe(true)
   })
 })
 
@@ -158,6 +160,17 @@ describe('parseTaxInvoiceDateFromText', () => {
     expect(parseTaxInvoiceDateFromText('4 ส.ค. 2569')).toBe('2026-08-04')
     expect(parseTaxInvoiceDateFromText('Date : 2-Jul-26')).toBe('2026-07-02')
     expect(parseTaxInvoiceDateFromText('วันที่ 01/07/72026')).toBe('2026-07-01')
+  })
+
+  it('uses Issued Date, not the digitally-signed clock', () => {
+    const text = [
+      'ใบเสร็จรับเงิน / ใบกำกับภาษี',
+      'วันที่ออกเอกสาร Issued Date 01/08/2026',
+      'Digitally signed by บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)',
+      'Date: 02/08/2026 2:22:54 (GMT+07:00)',
+      'เลขที่เอกสาร 010826E00041602',
+    ].join('\n')
+    expect(parseTaxInvoiceDateFromText(text)).toBe('2026-08-01')
   })
 })
 
@@ -615,6 +628,57 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(row?.vatAmount).toBe(119)
   })
 
+  it('prefers receipt no RV over line-item Inv. No. AR and strips Page/For from the seller name', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท สยามอรุณ กรุ๊ป จำกัด F',
+        'Page 1 of 1',
+        'For Customer',
+        'เลขประจำตัวผู้เสียภาษี TAX ID : 0105563174564',
+        'สาขา : 00006',
+        'เลขที่ใบเสร็จ/Receipt No. : RV266070016',
+        'วันที่ใบเสร็จ/Date : 08/07/2026',
+        'รายการ Description',
+        'Inv. No. AR266060054 Inv. Date. 26/06/2026 Cust Ref. No. EK/A10',
+        'มูลค่าบริการที่เสียภาษี (Taxable) 44,976.00',
+        'ภาษีมูลค่าเพิ่ม (Vat) 3,148.32',
+        'รวมเป็นเงิน 48,124.32',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-07' }
+    )
+    expect(row?.invoiceNo).toBe('RV266070016')
+    expect(row?.invoiceNo).not.toBe('AR266060054')
+    expect(row?.docDate).toBe('2026-07-08')
+    expect(row?.sellerName).toBe('บริษัท สยามอรุณ กรุ๊ป จำกัด')
+    expect(row?.sellerTaxId).toBe('0105563174564')
+    expect(row?.netAmount).toBe(44976)
+    expect(row?.vatAmount).toBe(3148.32)
+  })
+
+  it('reads เลขที่เอกสาร instead of a date-glued OCR blob', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท ทีพีดี กรุงเทพฯ (1987) จำกัด',
+        'เลขประจำตัวผู้เสียภาษีอากร 0105530022307',
+        'วันที่ 01/08/2026',
+        'เลขที่เอกสาร 102608000072',
+        'หน้า 1 of 1',
+        'wit01/08/2026anand10260800007',
+        'มูลค่าสินค้า 2,640.64',
+        'ภาษีมูลค่าเพิ่ม 184.84',
+        'จำนวนเงินรวมทั้งสิ้น 2,825.48',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('102608000072')
+    expect(row?.invoiceNo).not.toMatch(/wit|anand|01\/08\/2026/i)
+    expect(row?.docDate).toBe('2026-08-01')
+    expect(row?.sellerName).toContain('ทีพีดี')
+    expect(row?.sellerTaxId).toBe('0105530022307')
+    expect(row?.netAmount).toBe(2640.64)
+    expect(row?.vatAmount).toBe(184.84)
+  })
+
   it('merges a split header row and a split totals row into one invoice', () => {
     const merged = mergeComplementaryInvoiceRows(
       {
@@ -820,6 +884,58 @@ describe('office invoice OCR (ID prefix, bank name, line vs total)', () => {
     expect(row?.docDate).toBe('2026-08-29')
     expect(row?.netAmount).toBe(9.87)
     expect(row?.vatAmount).toBe(0.69)
+  })
+
+  it('uses Kasikorn Issued Date, not the next-day signed clock', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบเสร็จรับเงิน / ใบกำกับภาษี',
+        'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)',
+        'เลขประจำตัวผู้เสียภาษีอากร 0107536000315',
+        'วันที่ออกเอกสาร Issued Date 01/08/2026',
+        'เลขที่เอกสาร 010826E00041602',
+        'Digitally signed by บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)',
+        'Date: 02/08/2026 2:22:54 (GMT+07:00)',
+        'ค่าธรรมเนียม 133.31',
+        'ภาษีมูลค่าเพิ่ม 9.33',
+        'ยอดเงินสุทธิ 5,619.36',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('010826E00041602')
+    expect(row?.docDate).toBe('2026-08-01')
+    expect(row?.sellerTaxId).toBe('0107536000315')
+    expect(row?.netAmount).toBe(133.31)
+    expect(row?.vatAmount).toBe(9.33)
+  })
+
+  it('reads English FROM seller name and Tax ID, not a stray 13-digit run', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'Invoice/Tax invoice',
+        'Document No. IV20260801-2158',
+        'Issue Date: 2026-08-01',
+        'FROM',
+        'S&J GLOBAL CO., LTD. (Head Office)',
+        'Tax ID: 0105566137147',
+        'BILL TO',
+        'Aisa Commerce & Trade Co.,Ltd. (00001)',
+        'Tax ID: 0105568080622',
+        'Payment Information 8011620001620',
+        'Subtotal: 35,099.00',
+        'VAT (7%): 2,456.93',
+        'Grand Total: 37,555.93 THB',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('IV20260801-2158')
+    expect(row?.docDate).toBe('2026-08-01')
+    expect(row?.sellerName).toMatch(/S&J GLOBAL/i)
+    expect(row?.sellerName).not.toMatch(/Aisa Commerce/i)
+    expect(row?.sellerTaxId).toBe('0105566137147')
+    expect(row?.sellerTaxId).not.toBe('8011620001620')
+    expect(row?.netAmount).toBe(35099)
+    expect(row?.vatAmount).toBe(2456.93)
   })
 
   it('reads Grab Ads GFAD number, not the THMG partner id as IM', () => {

@@ -172,6 +172,8 @@ export function fixOcrInvoiceIdPrefix(raw: string): string {
 
 export function compactPurchaseInvoiceToken(raw: string): string {
   const stripped = String(raw || '')
+    .replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, '')
+    .replace(/[a-z]{3,}/g, '')
     .replace(/\s*-\s*/g, '-')
     .replace(/\s*\/\s*/g, '/')
     .replace(/\s+/g, '')
@@ -394,7 +396,7 @@ export function looksLikeJunkSellerName(raw: unknown): boolean {
   return false
 }
 
-/** 상호 뒤 주소 번지(523 6 3)를 잘라 บริษัท … จำกัด 만 남긴다 */
+/** 상호 뒤 주소 번지(523 6 3)·Page 1 of·For Customer 를 잘라 บริษัท … จำกัด 만 남긴다 */
 export function trimPurchaseTaxSellerName(raw: unknown): string {
   let s = String(raw || '')
     .replace(/\s{2,}/g, ' ')
@@ -403,11 +405,16 @@ export function trimPurchaseTaxSellerName(raw: unknown): string {
   s = s.replace(/ชนาคาร/g, 'ธนาคาร')
   s = s.replace(/บริษัท\s+1\.\s+(?=[\u0E00-\u0E7F]+\.)/g, 'บริษัท ซี. ')
   s = s.replace(/\.\s+(?=[\u0E00-\u0E7F])/g, '.')
+  s = s.replace(/\s*หน้า\s*\d+\s*(?:of|\/)\s*\d+/gi, ' ')
+  s = s.replace(/\s*Page\s*\d+\s*of(?:\s*\d+)?/gi, ' ')
+  s = s.replace(/\s*(?:For\s*Customer|สำหรับลูกค้า)\b/gi, ' ')
+  s = s.replace(/\s*\((?:Head\s*Office|สำนักงานใหญ่)\)\s*$/i, '')
+  s = s.replace(/\s{2,}/g, ' ').trim()
   s = s.replace(/\s*ใบ(?:กำกับ(?:ภาษี)?|เสร็จ(?:รับเงิน)?|ส่งสินค้า|แจ้งหนี้).*$/u, '')
   s = s.replace(/(จำกัด(?:\s*\(มหาชน\))?)ใบ$/u, '$1')
   const entity = s.match(/^(.*?(?:บริษัท|ห้างหุ้นส่วนจำกัด|ห้างหุ้นส่วน)\s+.{1,80}?จำกัด(?:\s*\(มหาชน\))?)/)
   if (entity) s = entity[1].trim()
-  s = s.replace(/(จำกัด(?:\s*\(มหาชน\))?)[\s\d./\-]{1,24}$/u, '$1')
+  s = s.replace(/(จำกัด(?:\s*\(มหาชน\))?)[\sA-Za-z\d./\-]{0,24}$/u, '$1')
   s = s.replace(/\s+\d[\d\s./\-]{0,24}$/, '').trim()
   return s.slice(0, 200)
 }

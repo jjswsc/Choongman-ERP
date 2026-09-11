@@ -140,6 +140,11 @@ function wordsAfter(cl: CompactLine, charEnd: number): OcrWordBox[] {
 const INVOICE_LABELS: { re: RegExp; score: number; name: string }[] = [
   { re: labelPattern(['เลขที่ใบกำกับภาษี', 'เลขที่ใบกำกับ']), score: 96, name: 'tax-invoice-no' },
   {
+    re: labelPattern(['เลขที่ใบเสร็จ', 'เลขที่ใบเสร็จรับเงิน'], 'RECEIPT\\s*NO'),
+    score: 95,
+    name: 'receipt-no',
+  },
+  {
     re: labelPattern(['เลขที่อินวอยซ์'], 'TAX\\s*INVOICE\\s*NO|INVOICE\\s*NO|INV\\s*NO'),
     score: 94,
     name: 'invoice-no',
@@ -171,7 +176,7 @@ const INVOICE_NEGATIVE_RE = labelPattern(
     'เลขทะเบียน',
     'เลขที่ผู้เสียภาษี',
   ],
-  'TAX\\s*ID|P\\.?O\\.?\\s*NO|PURCHASE\\s*ORDER|CUSTOMER\\s*NO|CUST\\s*NO|REFERENCE|ACCOUNT\\s*NO|BRANCH\\s*NO|PARTNER\\s*ID'
+  'TAX\\s*ID|P\\.?O\\.?\\s*NO|PURCHASE\\s*ORDER|CUSTOMER\\s*NO|CUST\\s*NO|CUST\\s*REF|INV(?:OICE)?\\s*DATE|REFERENCE|ACCOUNT\\s*NO|BRANCH\\s*NO|PARTNER\\s*ID'
 )
 
 /** `เลขที่ 1106 ถนน…` `เลขที่ 101 ห้อง 545` 처럼 번지수·호실인 경우 */
@@ -666,7 +671,7 @@ const TIN_LABEL_RE = labelPattern(
 )
 const SELLER_MARK_RE = labelPattern(
   ['ผู้ขาย', 'ผู้จำหน่าย', 'ผู้ประกอบการ'],
-  'SELLER|VENDOR|SUPPLIER'
+  'SELLER|VENDOR|SUPPLIER|\\bFROM\\b'
 )
 const BUYER_MARK_RE = labelPattern(
   [
@@ -742,7 +747,13 @@ export function findLayoutTaxIds(
   const sellerPool = sellerHits.length ? sellerHits : hits.filter((h) => !hintTin || h.tin !== hintTin)
   const seller = sellerPool
     .slice()
-    .sort((a, b) => (a.labeled === b.labeled ? a.y - b.y : a.labeled ? -1 : 1))[0]
+    .sort((a, b) => {
+      if (a.labeled !== b.labeled) return a.labeled ? -1 : 1
+      const az = a.tin.startsWith('0') ? 0 : 1
+      const bz = b.tin.startsWith('0') ? 0 : 1
+      if (az !== bz) return az - bz
+      return a.y - b.y
+    })[0]
   const buyer = buyerHits.find((h) => h.tin !== seller?.tin)
   return {
     seller: seller
@@ -947,12 +958,20 @@ export function findLayoutAmounts(layout: OcrPageLayout): {
 
 const DOC_DATE_LABEL_RE = labelPattern(
   ['วันที่ออก', 'วันที่ใบกำกับ', 'วันที่เอกสาร', 'วันที่'],
-  'ISSUE\\s*DATE|INVOICE\\s*DATE|DOCUMENT\\s*DATE|\\bDATE\\b'
+  'ISSUED?\\s*DATE|INVOICE\\s*DATE|DOCUMENT\\s*DATE|\\bDATE\\b'
+)
+const ISSUED_DATE_LABEL_RE = labelPattern(
+  ['วันที่ออก', 'วันที่ใบกำกับ', 'วันที่เอกสาร'],
+  'ISSUED?\\s*DATE|INVOICE\\s*DATE|DOCUMENT\\s*DATE'
 )
 const DUE_DATE_LABEL_RE = labelPattern(
   ['ครบกำหนด', 'วันที่ครบ', 'ชำระภายใน'],
   'DUE\\s*DATE|VALID\\s*UNTIL'
 )
+
+function dateLineHasClockNoise(text: string): boolean {
+  return /digitally\s*signed|gmt\s*[+-]|วันที่ลงนาม|\b\d{1,2}:\d{2}(?::\d{2})?\b/i.test(text)
+}
 
 function toIsoDate(d: number, m: number, y: number): string | undefined {
   let year = y
@@ -985,8 +1004,8 @@ const EN_MONTH_NUM: Record<string, number> = {
 export function findLayoutDocDate(layout: OcrPageLayout): LayoutField<string> | undefined {
   const lines = compactLayoutLines(layout)
   let best: (LayoutField<string> & { score: number }) | undefined
-  const consider = (iso: string, conf: number, labeled: boolean, isDue: boolean) => {
-    const score = (labeled ? 10 : 0) - (isDue ? 8 : 0) + Math.round(conf / 25)
+  const consider = (iso: string, conf: number, labeled: boolean, isDue: boolean, isIssued: boolean) => {
+    const score = (isIssued ? 16 : labeled ? 10 : 0) - (isDue ? 8 : 0) + Math.round(conf / 25)
     if (best && best.score >= score) return
     best = {
       value: iso,
@@ -996,23 +1015,25 @@ export function findLayoutDocDate(layout: OcrPageLayout): LayoutField<string> | 
     }
   }
   for (const cl of lines) {
+    if (dateLineHasClockNoise(cl.text)) continue
     if (/เริ่มใช้|Rev\.?\s*:|FM-AC/i.test(cl.text) && !DOC_DATE_LABEL_RE.test(cl.text)) continue
     const isDue = DUE_DATE_LABEL_RE.test(cl.text)
     const labeled = DOC_DATE_LABEL_RE.test(cl.text)
+    const isIssued = ISSUED_DATE_LABEL_RE.test(cl.text)
     const en = String(cl.text || '').match(
       /\b(\d{1,2})[.\-/\s]+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[.\-/\s]+(\d{2,4})\b/i
     )
     if (en) {
       const month = EN_MONTH_NUM[en[2].slice(0, 3).toLowerCase()]
       const iso = month ? toIsoDate(Number(en[1]), month, Number(en[3])) : undefined
-      if (iso) consider(iso, cl.line.conf, labeled, isDue)
+      if (iso) consider(iso, cl.line.conf, labeled, isDue, isIssued)
     }
     for (const w of cl.line.words) {
       const m = String(w.text || '').match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,5})$/)
       if (!m) continue
       const iso = toIsoDate(Number(m[1]), Number(m[2]), Number(m[3]))
       if (!iso) continue
-      consider(iso, w.conf, labeled, isDue)
+      consider(iso, w.conf, labeled, isDue, isIssued)
     }
   }
   if (!best) return undefined
@@ -1122,6 +1143,7 @@ function layoutInvoiceLooksJunk(token: string): boolean {
   if (!t) return true
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(t)) return true
   if (/^\d{0,2}-\d{2}-\d{2}$/.test(t)) return true
+  if (/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(t)) return true
   if (/^NO?\d{13}$/i.test(t)) return true
   if (isTruncatedShopeeToken(t)) return true
   if (!/[A-Za-z]/.test(t) && t.replace(/\D/g, '').length === 13) return true
