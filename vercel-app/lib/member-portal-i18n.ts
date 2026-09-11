@@ -121,7 +121,16 @@ export type MemberPortalKey =
   | 'homeNewMenuTitle'
   | 'homeNewMenuThisMonth'
   | 'homeNewMenuEmpty'
+  | 'homeNewMenuBadge'
+  | 'homeNewMenuCardSub'
   | 'homePromoTitle'
+  | 'homePromoDiscountTitle'
+  | 'homePromoDiscountSub'
+  | 'homePromoSelectStoreTitle'
+  | 'homePromoSelectStoreSub'
+  | 'homePromoOtherStores'
+  | 'homePromoOfThisStore'
+  | 'homePromoStoreOnlyBadge'
   | 'homePromoThisMonth'
   | 'homePromoEmpty'
   | 'homePromoPrevMonth'
@@ -900,10 +909,51 @@ const MS: Record<MemberPortalKey, Dict> = {
     th: 'ยังไม่มีเมนูใหม่ในเดือนนี้',
     ko: '이 달에 등록된 신메뉴가 없습니다.',
   },
+  homeNewMenuBadge: { en: 'New!', th: 'New!', ko: 'New!' },
+  homeNewMenuCardSub: {
+    en: 'Try the latest dishes',
+    th: 'อร่อยใหม่ ต้องลอง',
+    ko: '새로 나온 맛을 만나보세요',
+  },
   homePromoTitle: {
     en: 'Monthly promotions',
     th: 'โปรโมชั่นประจำเดือน',
     ko: '이달의 프로모션',
+  },
+  homePromoDiscountTitle: {
+    en: 'Promos & discounts',
+    th: 'โปรโมชั่น & ส่วนลด',
+    ko: '프로모션 & 할인',
+  },
+  homePromoDiscountSub: {
+    en: 'Member-only deals',
+    th: 'ดีลพิเศษ เฉพาะสมาชิก',
+    ko: '회원 전용 혜택',
+  },
+  homePromoSelectStoreTitle: {
+    en: 'Choose a store',
+    th: 'เลือกสาขา',
+    ko: '매장 선택',
+  },
+  homePromoSelectStoreSub: {
+    en: 'Pick a Choongman store to see its promos and events.',
+    th: 'เลือกสาขาเพื่อดูโปรโมชั่นเฉพาะสาขา',
+    ko: '충만 매장을 고르면 그 매장 프로모션·행사를 볼 수 있습니다.',
+  },
+  homePromoOtherStores: {
+    en: 'Other stores',
+    th: 'สาขาอื่น ๆ',
+    ko: '다른 매장',
+  },
+  homePromoOfThisStore: {
+    en: 'Promos at this store',
+    th: 'โปรโมชั่นของสาขานี้',
+    ko: '이 매장 프로모션',
+  },
+  homePromoStoreOnlyBadge: {
+    en: 'This store: {store}',
+    th: 'เฉพาะสาขา {store}',
+    ko: '{store} 전용',
   },
   homePromoThisMonth: {
     en: 'This month',

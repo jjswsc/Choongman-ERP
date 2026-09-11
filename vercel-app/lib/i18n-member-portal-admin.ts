@@ -259,7 +259,7 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_popupNew: '새 팝업',
   mpAdmin_promoTitle: '월별 프로모션',
   mpAdmin_promoDesc:
-    '회원앱 홈 멤버십 카드 아래 가로형 히어로 배너(매장)와 주문 탭 상단 배너(배달)에 노출됩니다. 이미지는 12:5 가로형·오른쪽 음식 사진 구도를 권장합니다. 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
+    '회원앱 홈 「프로모션 & 할인」을 누르면 매장을 고른 뒤 좌우 슬라이드로 보입니다. 배달 프로모는 주문 탭 상단입니다. 이미지는 12:5 가로형·오른쪽 음식 사진 구도를 권장합니다. 시작·종료일(방콕)로 월별 필터가 적용됩니다. 매장 코드를 넣으면 그 매장만, 비우면 전 매장 공통입니다.',
   mpAdmin_promoEmpty: '등록된 월별 프로모션이 없습니다.',
   mpAdmin_promoNew: '새 프로모션',
   mpAdmin_promoNewDine: '매장 프로모션',
@@ -267,10 +267,10 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_promoChannelDine: '매장',
   mpAdmin_promoChannelDelivery: '배달',
   mpAdmin_promoChannelHint:
-    '매장(หน้าร้าน)은 홈 히어로 배너, 배달(Delivery)은 주문 탭 상단 배너에 노출됩니다. 정렬순서가 작을수록 해당 채널에서 먼저 표시됩니다.',
+    '매장(หน้าร้าน)은 홈 「프로모션 & 할인」에서 매장 선택 후 슬라이드, 배달(Delivery)은 주문 탭 상단 배너에 노출됩니다. 정렬순서가 작을수록 해당 채널에서 먼저 표시됩니다.',
   mpAdmin_newMenuTitle: '신메뉴',
   mpAdmin_newMenuDesc:
-    '회원앱 홈(프로모 배너 아래)과 주문 탭에 프로모션과 동일한 가로형 큰 배너로 노출됩니다. 월별 프로모션과 동일하게 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
+    '회원앱 홈 「신메뉴」 카드를 누르면 메뉴별 좌우 슬라이드로 보입니다. 주문 탭에도 같은 가로형 배너 캐러셀로 노출됩니다. 월별 프로모션과 동일하게 시작·종료일(방콕)로 월별 필터가 적용됩니다.',
   mpAdmin_newMenuEmpty: '등록된 신메뉴 콘텐츠가 없습니다.',
   mpAdmin_newMenuNew: '새 신메뉴',
   mpAdmin_infoTitle: '정보·공지',
@@ -312,6 +312,9 @@ export const I18N_MP_ADMIN_KO: Record<string, string> = {
   mpAdmin_startsBangkok: '시작 (방콕)',
   mpAdmin_endsBangkok: '종료 (방콕)',
   mpAdmin_storeCodeOptional: '매장 코드 (선택)',
+  mpAdmin_storeCodeAllStores: '전 매장 공통 (비움)',
+  mpAdmin_storeCodeOptionalHint:
+    '비우면 모든 매장에 보입니다. 매장을 지정하면 회원앱에서 그 매장을 골랐을 때만 프로모션 슬라이드에 추가됩니다.',
   mpAdmin_isActive: '사용 중 (회원앱 노출)',
 
   mpAdmin_targetHomeNotice: '홈 · 공지',
@@ -676,7 +679,7 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_popupNew: 'New popup',
   mpAdmin_promoTitle: 'Monthly promos',
   mpAdmin_promoDesc:
-    'Wide hero banner on home (dine-in) and at the top of the Order tab (delivery). Use a 12:5 landscape image with food on the right. Bangkok start/end dates filter by month.',
+    'On Home, members tap Promos & discounts, pick a store, then swipe left/right. Delivery promos stay at the top of the Order tab. Use a 12:5 landscape image with food on the right. Bangkok start/end dates filter by month. Leave store code empty for all stores, or set it so the slide appears only for that store.',
   mpAdmin_promoEmpty: 'No monthly promos yet.',
   mpAdmin_promoNew: 'New promo',
   mpAdmin_promoNewDine: 'Dine-in promo',
@@ -684,10 +687,10 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_promoChannelDine: 'Dine-in',
   mpAdmin_promoChannelDelivery: 'Delivery',
   mpAdmin_promoChannelHint:
-    'Dine-in (หน้าร้าน) shows on the home hero; delivery shows on the Order tab hero. Lower sort order appears first in each channel.',
+    'Dine-in (หน้าร้าน) shows after picking a store on Home Promos & discounts; delivery shows on the Order tab hero. Lower sort order appears first in each channel.',
   mpAdmin_newMenuTitle: 'New menu',
   mpAdmin_newMenuDesc:
-    'Large landscape banners on Home (below promos) and the Order tab, same as promos. Same monthly Bangkok date filter as promos.',
+    'On Home, members tap New menu to swipe each item left/right. The Order tab uses the same landscape carousel. Same monthly Bangkok date filter as promos.',
   mpAdmin_newMenuEmpty: 'No new menu content yet.',
   mpAdmin_newMenuNew: 'New menu item',
   mpAdmin_infoTitle: 'Info & notices',
@@ -729,6 +732,9 @@ export const I18N_MP_ADMIN_EN: Record<string, string> = {
   mpAdmin_startsBangkok: 'Start (Bangkok)',
   mpAdmin_endsBangkok: 'End (Bangkok)',
   mpAdmin_storeCodeOptional: 'Store code (optional)',
+  mpAdmin_storeCodeAllStores: 'All stores (empty)',
+  mpAdmin_storeCodeOptionalHint:
+    'Leave empty to show at every store. If you pick a store, the slide is added only when the member selects that branch.',
   mpAdmin_isActive: 'Active (visible in member app)',
 
   mpAdmin_targetHomeNotice: 'Home · notice',
@@ -1093,7 +1099,7 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_popupNew: 'ป๊อปอัปใหม่',
   mpAdmin_promoTitle: 'โปรโมชันประจำเดือน',
   mpAdmin_promoDesc:
-    'แบนเนอร์แนวนอนบนหน้าแรก (หน้าร้าน) และด้านบนแท็บสั่งอาหาร (Delivery) แนะนำรูปแนวนอน 12:5 วางอาหารทางขวา กรองตามเดือนด้วยวันเริ่ม·สิ้นสุด (เวลากรุงเทพ)',
+    'หน้าแรกสมาชิกกด「โปรโมชั่น & ส่วนลด」แล้วเลือกสาขา เลื่อนซ้าย-ขวาดูสไลด์ Delivery อยู่ด้านบนแท็บสั่งอาหาร แนะนำรูปแนวนอน 12:5 วางอาหารทางขวา กรองตามเดือนด้วยวันเริ่ม·สิ้นสุด (เวลากรุงเทพ) ถ้าว่างรหัสสาขา = ทุกสาขา ถ้าระบุสาขา = โชว์เมื่อลูกค้าเลือกสาขานั้นเท่านั้น',
   mpAdmin_promoEmpty: 'ยังไม่มีโปรโมชันประจำเดือน',
   mpAdmin_promoNew: 'โปรโมชันใหม่',
   mpAdmin_promoNewDine: 'โปรโมชันหน้าร้าน',
@@ -1101,10 +1107,10 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_promoChannelDine: 'หน้าร้าน',
   mpAdmin_promoChannelDelivery: 'Delivery',
   mpAdmin_promoChannelHint:
-    'หน้าร้านแสดงบนแบนเนอร์หน้าแรก Delivery แสดงบนแบนเนอร์แท็บสั่งอาหาร ลำดับน้อยจะแสดงก่อนในแต่ละช่องทาง',
+    'หน้าร้านแสดงหลังเลือกสาขาใน「โปรโมชั่น & ส่วนลด」หน้าแรก Delivery แสดงบนแบนเนอร์แท็บสั่งอาหาร ลำดับน้อยจะแสดงก่อนในแต่ละช่องทาง',
   mpAdmin_newMenuTitle: 'เมนูใหม่',
   mpAdmin_newMenuDesc:
-    'แบนเนอร์แนวนอนขนาดใหญ่บนหน้าแรก (ใต้โปรโมชัน) และแท็บสั่งอาหาร เหมือนโปรโมชัน ใช้การกรองเดือนแบบเดียวกับโปรโมชัน (วันเริ่ม·สิ้นสุด เวลากรุงเทพ)',
+    'หน้าแรกกด「เมนูใหม่」แล้วเลื่อนซ้าย-ขวาทีละเมนู แท็บสั่งอาหารใช้แบนเนอร์แนวนอนแบบเดียวกัน กรองเดือนเหมือนโปรโมชัน (วันเริ่ม·สิ้นสุด เวลากรุงเทพ)',
   mpAdmin_newMenuEmpty: 'ยังไม่มีเนื้อหาเมนูใหม่',
   mpAdmin_newMenuNew: 'เมนูใหม่',
   mpAdmin_infoTitle: 'ข้อมูล·ประกาศ',
@@ -1146,6 +1152,9 @@ export const I18N_MP_ADMIN_TH: Record<string, string> = {
   mpAdmin_startsBangkok: 'เริ่ม (กรุงเทพ)',
   mpAdmin_endsBangkok: 'สิ้นสุด (กรุงเทพ)',
   mpAdmin_storeCodeOptional: 'รหัสสาขา (ไม่บังคับ)',
+  mpAdmin_storeCodeAllStores: 'ทุกสาขา (เว้นว่าง)',
+  mpAdmin_storeCodeOptionalHint:
+    'เว้นว่างแล้วโชว์ทุกสาขา ถ้าเลือกสาขา สไลด์จะเพิ่มเมื่อลูกค้าเลือกสาขานั้นในแอปสมาชิกเท่านั้น',
   mpAdmin_isActive: 'เปิดใช้งาน (แสดงบนแอปสมาชิก)',
 
   mpAdmin_targetHomeNotice: 'หน้าแรก · ประกาศ',

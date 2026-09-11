@@ -81,7 +81,7 @@ export function MemberPortalHeroBannerCard({
   )
 }
 
-function MemberPortalHeroCarousel({
+export function MemberPortalHeroCarousel({
   items,
   fallbackTitle,
   ctaLabel,
@@ -268,30 +268,13 @@ export function MemberPortalHomeNewMenuHeroes({
 
   if (!items.length) return null
 
-  if (items.length === 1) {
-    return (
-      <MemberPortalHeroBannerCard
-        item={items[0]}
-        fallbackTitle={t("homeNewMenuTitle")}
-        ctaLabel={t("homePromoOrderNow")}
-        onSelect={() => onSelectItem(items[0])}
-        onCta={onOrder}
-      />
-    )
-  }
-
   return (
-    <div className="space-y-3">
-      {items.map((item) => (
-        <MemberPortalHeroBannerCard
-          key={item.contentKey}
-          item={item}
-          fallbackTitle={t("homeNewMenuTitle")}
-          ctaLabel={t("homePromoOrderNow")}
-          onSelect={() => onSelectItem(item)}
-          onCta={onOrder}
-        />
-      ))}
-    </div>
+    <MemberPortalHeroCarousel
+      items={items}
+      fallbackTitle={t("homeNewMenuTitle")}
+      ctaLabel={t("homePromoOrderNow")}
+      onSelectItem={onSelectItem}
+      onCta={onOrder}
+    />
   )
 }

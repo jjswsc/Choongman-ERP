@@ -2,6 +2,7 @@ import {
   isBangkokDateTimeAfter,
   isBangkokDateTimeBefore,
 } from '@/lib/bangkok-time'
+import { normStoreKey } from '@/lib/store-list-keys'
 
 export type MemberPortalContentType = 'popup' | 'info' | 'store_photo'
 
@@ -229,6 +230,48 @@ export function listMemberPortalHomePromosForMonth(
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
       return b.updatedAt.localeCompare(a.updatedAt)
     })
+}
+
+/**
+ * 매장 스코프: store_code 비움 = 전 매장 공통.
+ * 값이 있으면 선택한 매장과 같을 때만 노출.
+ */
+export function memberPortalContentMatchesStore(
+  item: Pick<MemberPortalContentItem, 'storeCode'>,
+  storeCode: string
+): boolean {
+  const itemStore = asText(item.storeCode)
+  if (!itemStore) return true
+  const selected = asText(storeCode)
+  if (!selected) return false
+  return normStoreKey(itemStore) === normStoreKey(selected)
+}
+
+export function listMemberPortalHomePromosForStore(
+  items: MemberPortalContentItem[],
+  yearMonth: string,
+  monthRange: { startStr: string; endStr: string },
+  storeCode: string,
+  channel?: MemberPortalHomePromoChannel
+): MemberPortalContentItem[] {
+  return listMemberPortalHomePromosForMonth(items, yearMonth, monthRange, channel).filter((x) =>
+    memberPortalContentMatchesStore(x, storeCode)
+  )
+}
+
+export function pickDefaultMemberPortalPromoStoreCode(params: {
+  availableStoreCodes: string[]
+  preferredStoreCodes: Array<string | null | undefined>
+}): string {
+  const available = params.availableStoreCodes.map((s) => asText(s)).filter(Boolean)
+  const byNorm = new Map(available.map((code) => [normStoreKey(code), code]))
+  for (const raw of params.preferredStoreCodes) {
+    const code = asText(raw)
+    if (!code) continue
+    const hit = byNorm.get(normStoreKey(code))
+    if (hit) return hit
+  }
+  return available[0] || ''
 }
 
 export function listMemberPortalHomeNewMenusForMonth(

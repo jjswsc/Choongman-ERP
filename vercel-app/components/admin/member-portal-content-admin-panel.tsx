@@ -35,6 +35,7 @@ import {
   validateMemberPortalImageByRule,
 } from "@/lib/member-portal-content-image-rules"
 import { uploadMemberPortalContentImageToStorage } from "@/lib/member-portal-image-upload"
+import type { MemberPortalStoreDto } from "@/lib/member-portal-stores"
 
 type ContentType = "popup" | "info" | "store_photo"
 
@@ -213,6 +214,28 @@ export function MemberPortalContentAdminPanel({
   const [imageUploadNotice, setImageUploadNotice] = React.useState("")
   const [togglingKey, setTogglingKey] = React.useState<string | null>(null)
   const [deletingKey, setDeletingKey] = React.useState<string | null>(null)
+  const [storeOptions, setStoreOptions] = React.useState<Array<{ storeCode: string; displayName: string }>>([])
+
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await apiFetch("/api/member-portal/admin/stores", { cache: "no-store" })
+        const data = (await res.json()) as { success?: boolean; stores?: MemberPortalStoreDto[] }
+        if (cancelled || !data.success || !Array.isArray(data.stores)) return
+        setStoreOptions(
+          data.stores
+            .filter((s) => s.isActive !== false)
+            .map((s) => ({ storeCode: s.storeCode, displayName: s.displayName || s.storeCode }))
+        )
+      } catch {
+        /* keep text input fallback */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const formMeta = variantMetaFor(t, formVariant)
   const imageRule = React.useMemo(() => resolveMemberPortalContentImageRule(formVariant), [formVariant])
@@ -651,12 +674,32 @@ export function MemberPortalContentAdminPanel({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="mp-content-store">{t("mpAdmin_storeCodeOptional")}</Label>
-                <Input
-                  id="mp-content-store"
-                  value={form.storeCode}
-                  onChange={(e) => setForm((p) => ({ ...p, storeCode: e.target.value }))}
-                  placeholder="CM01"
-                />
+                {storeOptions.length > 0 ? (
+                  <select
+                    id="mp-content-store"
+                    value={form.storeCode}
+                    onChange={(e) => setForm((p) => ({ ...p, storeCode: e.target.value }))}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="">{t("mpAdmin_storeCodeAllStores")}</option>
+                    {form.storeCode && !storeOptions.some((s) => s.storeCode === form.storeCode) ? (
+                      <option value={form.storeCode}>{form.storeCode}</option>
+                    ) : null}
+                    {storeOptions.map((s) => (
+                      <option key={s.storeCode} value={s.storeCode}>
+                        {s.displayName} ({s.storeCode})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    id="mp-content-store"
+                    value={form.storeCode}
+                    onChange={(e) => setForm((p) => ({ ...p, storeCode: e.target.value }))}
+                    placeholder="CM01"
+                  />
+                )}
+                <p className="text-xs leading-relaxed text-muted-foreground">{t("mpAdmin_storeCodeOptionalHint")}</p>
               </div>
             </div>
 

@@ -43,7 +43,7 @@ import {
 } from "@/lib/member-portal-notifications"
 import type { MemberStampHistoryRow } from "@/lib/member-stamp-card"
 import { formatStampHistoryKind } from "@/components/member-portal/member-portal-stamp-card"
-import { MemberPortalHomeHeroBanner, MemberPortalHomeNewMenuHeroes } from "@/components/member-portal/member-portal-home-hero-banner"
+import { MemberPortalHomePromoMenuHub } from "@/components/member-portal/member-portal-home-promo-menu-hub"
 import { MemberPortalHomePrivileges } from "@/components/member-portal/member-portal-home-privileges"
 import { MP_HOME_SECTION_GAP } from "@/lib/member-portal-home-layout"
 import {
@@ -1293,19 +1293,11 @@ export function MemberPortalApp() {
 
             <MemberPortalComplaintPromoCard onOpen={openInAppComplaint} />
 
-            <MemberPortalHomeHeroBanner
+            <MemberPortalHomePromoMenuHub
               contentItems={contentItems}
-              t={t}
-              onOrder={() => changeTab("order")}
-              onSelectItem={(item) => {
-                setHomePopupOpen(false)
-                setSelectedHomePromo(item)
-                setHomePromoOpen(true)
-              }}
-            />
-
-            <MemberPortalHomeNewMenuHeroes
-              contentItems={contentItems}
+              stores={stores}
+              joinStoreCode={member.joinStoreCode}
+              favoriteStoreCodes={favoriteStoreCodes}
               t={t}
               onOrder={() => changeTab("order")}
               onSelectItem={(item) => {

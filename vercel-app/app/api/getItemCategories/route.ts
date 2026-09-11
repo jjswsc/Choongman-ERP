@@ -9,7 +9,7 @@ import {
 import { getVerifiedAuth } from '@/lib/verify-auth'
 
 function normalizeCategoryName(raw: string): string {
-  let c = String(raw || '').trim()
+  const c = String(raw || '').trim()
   if (c === '매장 전용') return 'Store Only'
   if (c === 'Packaging') return 'Packing'
   return c
