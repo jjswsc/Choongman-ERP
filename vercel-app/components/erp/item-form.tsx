@@ -89,9 +89,10 @@ export interface ItemFormProps {
   onNewRegister: () => void
   categories?: string[]
   outboundLocations?: { location_code: string; name: string }[]
+  onOpenOutboundSettings?: () => void
 }
 
-export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, onNewRegister, categories = [], outboundLocations = [] }: ItemFormProps) {
+export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, onNewRegister, categories = [], outboundLocations = [], onOpenOutboundSettings }: ItemFormProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const tt = React.useCallback((key: string, fallback: string) => {
@@ -422,6 +423,21 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
               ))}
             </SelectContent>
           </Select>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            {tt("itemsOutboundLocationHint", "품목이 출고되는 창고입니다. 회사마다 목록이 다릅니다.")}
+            {onOpenOutboundSettings ? (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 font-medium text-foreground/80 hover:text-foreground"
+                  onClick={onOpenOutboundSettings}
+                >
+                  {tt("outboundLocationSettings", "출고지 설정")}
+                </button>
+              </>
+            ) : null}
+          </p>
         </div>
 
         <div className="flex flex-col gap-2">

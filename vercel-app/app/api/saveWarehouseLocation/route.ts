@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import {
+  appendInventoryTenantFilter,
+  assertInventoryTenantWritable,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
-/** 출고지(창고) 추가/수정 */
+/** 출고지(창고) 추가/수정. Omni는 tenant 격리. */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    const writeBlock = assertInventoryTenantWritable(tenantScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { headers })
+    }
+
     const body = (await request.json()) as {
       id?: number
       name?: string
@@ -28,7 +42,11 @@ export async function POST(request: NextRequest) {
     const row = { name, address, location_code, sort_order }
 
     if (id > 0) {
-      const existing = (await supabaseSelectFilter('warehouse_locations', `id=eq.${id}`, { limit: 1 })) as { id?: number }[] | null
+      const existing = (await supabaseSelectFilter(
+        'warehouse_locations',
+        appendInventoryTenantFilter(`id=eq.${id}`, tenantScope),
+        { limit: 1 }
+      )) as { id?: number }[] | null
       if (!existing || existing.length === 0) {
         return NextResponse.json({ success: false, message: '존재하지 않는 출고지입니다.' }, { headers })
       }
@@ -36,12 +54,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
-    const dup = (await supabaseSelectFilter('warehouse_locations', `location_code=eq.${encodeURIComponent(location_code)}`, { limit: 1 })) as unknown[]
+    const dup = (await supabaseSelectFilter(
+      'warehouse_locations',
+      appendInventoryTenantFilter(`location_code=eq.${encodeURIComponent(location_code)}`, tenantScope),
+      { limit: 1 }
+    )) as unknown[]
     if (dup && dup.length > 0) {
       return NextResponse.json({ success: false, message: '이미 같은 코드의 출고지가 있습니다.' }, { headers })
     }
 
-    await supabaseInsert('warehouse_locations', row)
+    await supabaseInsert('warehouse_locations', stampInventoryTenantId(row, tenantScope))
     return NextResponse.json({ success: true, message: '추가되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveWarehouseLocation:', e)

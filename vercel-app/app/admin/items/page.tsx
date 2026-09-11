@@ -601,6 +601,7 @@ export default function ItemsPage() {
               onNewRegister={handleNewRegister}
               categories={categories}
               outboundLocations={outboundLocations}
+              onOpenOutboundSettings={() => setOutboundSettingsOpen(true)}
             />
           </div>
           <ItemTable

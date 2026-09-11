@@ -321,6 +321,11 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "카테고리명이 필요합니다.": "itemsCategoryRequired",
   "이미 같은 이름의 카테고리가 있습니다.": "itemsCategoryDuplicate",
   "존재하지 않는 카테고리입니다.": "itemsCategoryNotFound",
+  "출고지명이 필요합니다.": "outboundLocationNameRequired",
+  "존재하지 않는 출고지입니다.": "outboundLocationNotFound",
+  "이미 같은 코드의 출고지가 있습니다.": "outboundLocationDuplicate",
+  "해당 출고지를 사용 중인 품목이 있어 삭제할 수 없습니다.": "outboundLocationInUse",
+  "id 또는 location_code가 필요합니다.": "outboundLocationIdOrCodeRequired",
   "회사(테넌트) 정보가 없어 저장할 수 없습니다. 다시 로그인해 주세요.": "saasTenantIdMissing",
   "회사(테넌트) 정보가 없어 직원을 저장할 수 없습니다. 다시 로그인해 주세요.": "saasTenantIdMissing",
   "회사(테넌트) 정보가 없어 데이터를 저장할 수 없습니다. 다시 로그인해 주세요.":

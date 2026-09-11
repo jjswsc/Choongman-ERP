@@ -64,6 +64,22 @@ describe('translateApiMessage tenant schema', () => {
     ).toBe('SCHEMA_MISSING')
   })
 
+  it('translates warehouse location alerts', () => {
+    const tw = (k: string) =>
+      ({
+        outboundLocationNameRequired: 'WH_NAME',
+        outboundLocationNotFound: 'WH_NF',
+        outboundLocationDuplicate: 'WH_DUP',
+        outboundLocationInUse: 'WH_INUSE',
+      }[k] || k)
+    expect(translateApiMessage('출고지명이 필요합니다.', tw)).toBe('WH_NAME')
+    expect(translateApiMessage('존재하지 않는 출고지입니다.', tw)).toBe('WH_NF')
+    expect(translateApiMessage('이미 같은 코드의 출고지가 있습니다.', tw)).toBe('WH_DUP')
+    expect(translateApiMessage('해당 출고지를 사용 중인 품목이 있어 삭제할 수 없습니다.', tw)).toBe(
+      'WH_INUSE'
+    )
+  })
+
   it('translates missing company tenant alerts', () => {
     expect(
       translateApiMessage('회사(테넌트) 정보가 없어 직원을 저장할 수 없습니다. 다시 로그인해 주세요.', t)
