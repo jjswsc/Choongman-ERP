@@ -77,7 +77,7 @@ explorer $env:APPDATA\choongman-pos-windows
 - `posUrl`: POS 접속 URL
 - `allowedOrigin`: 허용 오리진(외부 이동 차단 기준)
 - `kiosk`: `1`(기본) 키오스크 / `0` 일반창
-- `posLiveBlankPollMs`: 영업 중 흰 화면 검사 간격(ms). 기본 **5000**. 연속 2회 비어 있으면 직원이 누른 **Clear Cache**와 같이 SW·Cache Storage를 지운 뒤 새로고침한다. 3분에 3번 넘으면 `offline.html`(터치 가능한 다시 시도)로 떨어진다.
+- `posLiveBlankPollMs`: 영업 중 흰 화면 검사 간격(ms). 기본 **5000**. 연속 2회 비어 있으면 직원이 누른 **Clear Cache**와 같이 Electron 캐시를 지운 뒤 새로고침한다. 3분에 3번 넘으면 `offline.html`(터치 가능한 다시 시도)로 떨어진다. Windows POS는 서비스워커를 쓰지 않는다(배포 직후 JS 섞임 방지). 오프라인은 디스크 캐시와 `offline.html`.
 - 설치본은 Windows 로그인 시 **Choongman POS 자동 실행**. 끄려면 `WINDOWS_POS_OPEN_AT_LOGIN=0`.
 - 렌더러가 죽거나 창이 예상 밖으로 닫히면 셸이 창을 다시 연다. 메뉴 **Quit** 으로만 종료.
 - `updateManifestUrl`: 업데이트 매니페스트 URL (`latest-choongman.json` 충만 / `latest.json` Omni)

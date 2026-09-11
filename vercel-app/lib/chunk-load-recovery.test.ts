@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
+  CHUNK_RECOVERY_UI_WATCHDOG_MS,
+  didHybridCacheResetReload,
   hasHybridSilentCacheReset,
+  HYBRID_CACHE_RESET_WAIT_MS,
   isChunkLoadError,
   isStaleClientBundleError,
   recoverFromChunkLoadError,
@@ -61,6 +64,7 @@ describe("shouldRecoverStaleBundleEvent", () => {
 
 describe("shouldClearBuildRelatedCache", () => {
   it("clears next/serwist/workbox caches only", () => {
+    expect(shouldClearBuildRelatedCache("next-static-build-assets-v3")).toBe(true)
     expect(shouldClearBuildRelatedCache("next-static-build-assets-v2")).toBe(true)
     expect(shouldClearBuildRelatedCache("serwist-precache-v2-https://example")).toBe(true)
     expect(shouldClearBuildRelatedCache("workbox-precache-v2")).toBe(true)
@@ -68,9 +72,26 @@ describe("shouldClearBuildRelatedCache", () => {
   })
 })
 
+describe("CHUNK_RECOVERY_UI_WATCHDOG_MS", () => {
+  it("gives stores a way out of the loading screen", () => {
+    expect(CHUNK_RECOVERY_UI_WATCHDOG_MS).toBe(5_000)
+    expect(HYBRID_CACHE_RESET_WAIT_MS).toBeLessThan(CHUNK_RECOVERY_UI_WATCHDOG_MS)
+  })
+})
+
+describe("didHybridCacheResetReload", () => {
+  it("treats ok:true as a completed reload", () => {
+    expect(didHybridCacheResetReload({ ok: true })).toBe(true)
+    expect(didHybridCacheResetReload({ ok: false, reason: "busy" })).toBe(false)
+    expect(didHybridCacheResetReload({ ok: false, reason: "timeout" })).toBe(false)
+    expect(didHybridCacheResetReload(undefined)).toBe(false)
+  })
+})
+
 describe("recoverFromChunkLoadError", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   it("uses silent hybrid Clear Cache when the Windows POS shell is present", async () => {
@@ -88,6 +109,40 @@ describe("recoverFromChunkLoadError", () => {
     await recoverFromChunkLoadError()
     expect(resetCacheAndReload).toHaveBeenCalledWith({ silent: true })
     expect(replace).not.toHaveBeenCalled()
+  })
+
+  it("falls through to a hard refresh when hybrid Clear Cache is busy", async () => {
+    const resetCacheAndReload = vi.fn(async () => ({ ok: false, reason: "busy" }))
+    const replace = vi.fn()
+    vi.stubGlobal("window", {
+      cmPosShell: { resetCacheAndReload },
+      location: {
+        href: "https://x.example/pos",
+        origin: "https://x.example",
+        replace,
+      },
+    })
+    await recoverFromChunkLoadError()
+    expect(replace).toHaveBeenCalledTimes(1)
+    expect(String(replace.mock.calls[0]?.[0] ?? "")).toContain("_refresh=")
+  })
+
+  it("falls through when hybrid Clear Cache hangs past the wait", async () => {
+    vi.useFakeTimers()
+    const resetCacheAndReload = vi.fn(() => new Promise(() => {}))
+    const replace = vi.fn()
+    vi.stubGlobal("window", {
+      cmPosShell: { resetCacheAndReload },
+      location: {
+        href: "https://x.example/pos",
+        origin: "https://x.example",
+        replace,
+      },
+    })
+    const pending = recoverFromChunkLoadError()
+    await vi.advanceTimersByTimeAsync(HYBRID_CACHE_RESET_WAIT_MS)
+    await pending
+    expect(replace).toHaveBeenCalledTimes(1)
   })
 
   it("navigates immediately even if service worker unregister hangs", async () => {

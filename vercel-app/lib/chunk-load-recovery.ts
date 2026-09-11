@@ -1,4 +1,10 @@
 import { LOGIN_HARD_REFRESH_PARAM } from "@/lib/login-hard-refresh"
+import { racePromiseWithTimeout } from "@/lib/login-connecting-watchdog"
+
+/** 하이브리드 Clear Cache IPC가 멈추면 웹 새로고침으로 넘긴다. UI 워치독보다 짧아야 한다. */
+export const HYBRID_CACHE_RESET_WAIT_MS = 4_000
+/** 「최신 버전을 불러오는 중」만 남기지 않고 버튼을 보여 주는 시간 */
+export const CHUNK_RECOVERY_UI_WATCHDOG_MS = 5_000
 
 /** 배포 직후 옛 webpack 런타임이 없는 청크 해시를 보면 `64807.undefined.js` 로 요청한다. */
 export const CHUNK_RECOVERY_SESSION_KEY = "cm-erp-chunk-recovery"
@@ -83,16 +89,21 @@ export function hasHybridSilentCacheReset(
   return typeof shell?.resetCacheAndReload === "function"
 }
 
+export function didHybridCacheResetReload(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false
+  return (result as { ok?: unknown }).ok === true
+}
+
 export async function recoverFromChunkLoadError(): Promise<void> {
   markChunkRecovery()
   const shell = typeof window !== "undefined" ? window.cmPosShell : undefined
   if (hasHybridSilentCacheReset(shell)) {
-    try {
-      await shell!.resetCacheAndReload!({ silent: true })
-      return
-    } catch {
-      /* fall through to web recovery */
-    }
+    const result = await racePromiseWithTimeout(
+      Promise.resolve().then(() => shell!.resetCacheAndReload!({ silent: true })),
+      HYBRID_CACHE_RESET_WAIT_MS,
+      { ok: false, reason: "timeout" }
+    )
+    if (didHybridCacheResetReload(result)) return
   }
   void unregisterServiceWorkers().catch(() => {})
   void deleteBuildRelatedCaches().catch(() => {})

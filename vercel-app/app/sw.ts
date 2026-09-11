@@ -5,6 +5,7 @@ import { defaultCache } from "@serwist/next/worker"
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist"
 import { ExpirationPlugin, CacheFirst, NetworkFirst, NetworkOnly, Serwist } from "serwist"
 import { isLoginHardRefreshUrl } from "../lib/login-hard-refresh"
+import { isCacheableNextStaticAssetResponse } from "../lib/next-static-asset-cache"
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -425,8 +426,10 @@ const posMenuImageProxyGetNetworkOnly = {
 
 /**
  * defaultCache는 `/_next/static/*.js`를 CacheFirst로 캐시함.
- * 배포 직후·일시 오류로 HTML이 JS 청크 URL에 캐시되면 실행 시 SyntaxError(Invalid or unexpected token)가 난다.
- * 동일 경로는 네트워크 우선으로 덮어쓴다(캐시 이름 분리로 과거 오염 캐시와 분리).
+ * 배포 직후·일시 오류로 HTML이 JS 청크 URL에 캐시되면 실행 시 SyntaxError가 난다.
+ * 해시된 JS/CSS는 같은 URL이면 내용이 같으므로 CacheFirst가 맞고,
+ * 10초 NetworkFirst 타임아웃은 매장 Wi-Fi에서 캐시 미스 → ChunkLoadError만 만든다.
+ * HTML/JSON 응답은 캐시하지 않는다.
  */
 const nextStaticBuildAssets = {
   matcher({
@@ -441,11 +444,13 @@ const nextStaticBuildAssets = {
     return sameOrigin && /\/_next\/static\/.+\.(?:js|css)$/i.test(pathname)
   },
   method: "GET" as const,
-  handler: new NetworkFirst({
-    /** 이름 변경 시 기존 `next-static-build-assets`에 남은 오염 엔트리를 더 이상 쓰지 않음 */
-    cacheName: "next-static-build-assets-v2",
-    networkTimeoutSeconds: 10,
+  handler: new CacheFirst({
+    cacheName: "next-static-build-assets-v3",
     plugins: [
+      {
+        cacheWillUpdate: async ({ response }: { response?: Response }) =>
+          response && isCacheableNextStaticAssetResponse(response) ? response : null,
+      },
       new ExpirationPlugin({
         maxEntries: 120,
         maxAgeSeconds: 7 * 24 * 60 * 60,

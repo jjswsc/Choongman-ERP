@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { isMemberPortalPath } from "@/lib/member-portal-path"
+import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
 
 /** 로그인·POS 로그인 등 공개 경로: 한 번이라도 온라인으로 열면 SW·프리캐시가 깔려야 오프라인에서 로그인 화면이 뜸 */
 function shouldRegisterSwForPath(pathname: string | null): boolean {
@@ -23,7 +24,18 @@ export function SwPreregister() {
   const pathname = usePathname()
   useEffect(() => {
     if (typeof window === "undefined") return
+    if (!isCmPosHybridShell()) return
+    const t = window.setTimeout(() => {
+      void import("@/lib/hybrid-pos-service-worker")
+        .then((m) => m.disableHybridPosServiceWorker())
+        .catch(() => {})
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [])
+  useEffect(() => {
+    if (typeof window === "undefined") return
     if (!initialized) return
+    if (isCmPosHybridShell()) return
     if (!auth && !shouldRegisterSwForPath(pathname)) return
     const t = window.setTimeout(() => {
       import("@/lib/firebase-client")

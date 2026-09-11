@@ -2,6 +2,8 @@
 
 import { getApps, initializeApp, getApp, type FirebaseApp } from "firebase/app"
 import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging"
+import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
+import { shouldRegisterPosServiceWorker } from "@/lib/pos-service-worker-policy"
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -49,13 +51,14 @@ export type FcmTokenError = "unsupported" | "webview" | "permission" | "network"
  */
 export function preRegisterServiceWorker(): void {
   if (typeof window === "undefined" || !navigator?.serviceWorker?.register) return
-  // Local dev + HMR에서 SW 캐시가 _next 청크를 오염시키면 ChunkLoadError/SyntaxError가 반복된다.
-  if (process.env.NODE_ENV !== "production") return
-  /**
-   * Windows Electron 하이브리드도 SW를 등록한다.
-   * 교차 출처 이미지(Supabase 썸네일)는 sw.ts 의 NetworkOnly 규칙으로 캐시하지 않음.
-   * 오프라인 cold start 시 /pos/login·정적 청크·POS warm API 프리캐시가 필요하다.
-   */
+  if (
+    !shouldRegisterPosServiceWorker({
+      isProduction: process.env.NODE_ENV === "production",
+      isHybridShell: isCmPosHybridShell(),
+    })
+  ) {
+    return
+  }
   navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {})
 }
 

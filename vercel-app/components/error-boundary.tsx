@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import {
+  CHUNK_RECOVERY_UI_WATCHDOG_MS,
   hasRecentChunkRecovery,
   isStaleClientBundleError,
   recoverFromChunkLoadError,
@@ -18,6 +19,8 @@ interface State {
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null
+
   constructor(props: Props) {
     super(props)
     this.state = { hasError: false, error: undefined, recovering: false }
@@ -27,21 +30,45 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error }
   }
 
+  componentWillUnmount() {
+    this.clearRecoveryWatchdog()
+  }
+
+  clearRecoveryWatchdog() {
+    if (this.recoveryTimer != null) {
+      clearTimeout(this.recoveryTimer)
+      this.recoveryTimer = null
+    }
+  }
+
+  armRecoveryWatchdog() {
+    this.clearRecoveryWatchdog()
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = null
+      this.setState({ recovering: false })
+    }, CHUNK_RECOVERY_UI_WATCHDOG_MS)
+  }
+
+  startStaleBundleRecovery() {
+    this.setState({ recovering: true })
+    this.armRecoveryWatchdog()
+    void recoverFromChunkLoadError()
+  }
+
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught:", error, errorInfo)
     if (!isStaleClientBundleError(error)) return
     if (hasRecentChunkRecovery()) return
-    this.setState({ recovering: true })
-    void recoverFromChunkLoadError()
+    this.startStaleBundleRecovery()
   }
 
   handleRetry = () => {
     const err = this.state.error
     if (isStaleClientBundleError(err)) {
-      this.setState({ recovering: true })
-      void recoverFromChunkLoadError()
+      this.startStaleBundleRecovery()
       return
     }
+    this.clearRecoveryWatchdog()
     this.setState({ hasError: false, error: undefined, recovering: false })
   }
 
@@ -64,6 +91,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
             <div className="max-w-lg rounded-lg border bg-card p-6 text-center">
               <p className="text-sm font-medium">최신 버전을 불러오는 중입니다. 잠시만 기다려 주세요.</p>
               <p className="mt-2 text-sm text-muted-foreground">กำลังโหลดเวอร์ชันใหม่ กรุณารอสักครู่ครับ</p>
+              <p className="mt-3 text-xs text-muted-foreground">
+                5초 안에 안 열리면 버튼이 나옵니다. ถ้าไม่เปิดใน 5 วินาที จะมีปุ่มครับ
+              </p>
             </div>
           </div>
         )

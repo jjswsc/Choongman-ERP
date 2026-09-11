@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { isMemberPortalPath } from "@/lib/member-portal-path"
-import { recoverFromChunkLoadError } from "@/lib/chunk-load-recovery"
+import { hasRecentChunkRecovery, recoverFromChunkLoadError } from "@/lib/chunk-load-recovery"
+import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
+import {
+  currentDocumentNextBuildStamp,
+  extractSharedNextBuildStamp,
+  shouldReloadForNewWebBuild,
+} from "@/lib/web-build-stamp"
 import {
   isPurchaseTaxScanRunning,
   subscribePurchaseTaxScanRunning,
@@ -30,7 +36,8 @@ function isAdminPath(p: string) {
  * POS·ERP 모두 탭을 오래 켜 두면 배포 후에도 옛 코드가 남을 수 있어 갱신이 필요하다.
  *
  * 동작: skipWaiting+clientsClaim 으로 새 sw.js 가 활성화되면 `controllerchange` 등으로 감지한다.
- *  - **POS**: 키오스크·전체 화면이라 탭이 숨겨지지 않으므로 감지 후 짧은 유예(8초) 뒤 자동 새로고침.
+ *  - **Windows POS**: SW를 쓰지 않으므로 같은 페이지 HTML의 webpack 스탬프를 5분마다 비교한다.
+ *  - **POS(PWA)**: 키오스크·전체 화면이라 탭이 숨겨지지 않으므로 감지 후 짧은 유예(8초) 뒤 자동 새로고침.
  *  - **ERP/관리자**: 탭 전환이 가능하므로 hidden 시 즉시 새로고침. 30초 내 hidden이 없으면 타이머 폴백.
  *  - **기타**: 탭이 숨겨질 때만 새로고침 (기존 동작).
  *  - IndexedDB·오프라인 큐 등은 건드리지 않는다.
@@ -54,6 +61,47 @@ export function SwAutoUpdate() {
     if (typeof window === "undefined") return
     if (process.env.NODE_ENV !== "production") return
     if (isMemberPortalPath(pathname)) return
+    if (!isCmPosHybridShell()) return
+    if (!isPosPath(pathname)) return
+
+    let cancelled = false
+    const check = () => {
+      if (cancelled || !navigator.onLine) return
+      if (hasRecentChunkRecovery()) return
+      const current = currentDocumentNextBuildStamp(document)
+      if (!current) return
+      void fetch(`/pos/login?_cmBuild=${Date.now()}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { Accept: "text/html" },
+      })
+        .then((res) => (res.ok ? res.text() : ""))
+        .then((html) => {
+          if (cancelled || !html) return
+          if (shouldReloadForNewWebBuild(current, extractSharedNextBuildStamp(html))) {
+            setUpdateReady(true)
+          }
+        })
+        .catch(() => {})
+    }
+
+    check()
+    const intervalId = window.setInterval(check, 5 * 60_000)
+    window.addEventListener("online", check)
+    window.addEventListener("focus", check)
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      window.removeEventListener("online", check)
+      window.removeEventListener("focus", check)
+    }
+  }, [pathname])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (process.env.NODE_ENV !== "production") return
+    if (isMemberPortalPath(pathname)) return
+    if (isCmPosHybridShell()) return
     const sw = navigator.serviceWorker
     if (!sw) return
 
