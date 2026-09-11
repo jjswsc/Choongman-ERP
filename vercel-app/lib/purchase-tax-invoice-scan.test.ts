@@ -108,6 +108,14 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('1016908/00226orto')).toBe(true)
     expect(invoiceNoLooksPlausible('wit01/08/2026anand10260800007')).toBe(false)
     expect(invoiceNoLooksPlausible('102608000072')).toBe(true)
+    expect(invoiceNoLooksPlausible('wpmavuas10110nguamiuaT10110')).toBe(false)
+    expect(invoiceNoLooksPlausible('102608002415')).toBe(true)
+    expect(invoiceNoLooksPlausible('6908/0022')).toBe(true)
+    expect(invoiceNoLooksPlausible('800518201')).toBe(false)
+    expect(invoiceNoLooksPlausible('NR-260704333')).toBe(true)
+    expect(invoiceNoLooksPlausible('siaiudCTO215000gndi00001swith')).toBe(false)
+    expect(invoiceNoLooksPlausible('IV260810392')).toBe(true)
+    expect(invoiceNoLooksPlausible('BL260800093')).toBe(false)
   })
 })
 
@@ -160,6 +168,8 @@ describe('parseTaxInvoiceDateFromText', () => {
     expect(parseTaxInvoiceDateFromText('4 ส.ค. 2569')).toBe('2026-08-04')
     expect(parseTaxInvoiceDateFromText('Date : 2-Jul-26')).toBe('2026-07-02')
     expect(parseTaxInvoiceDateFromText('วันที่ 01/07/72026')).toBe('2026-07-01')
+    expect(parseTaxInvoiceDateFromText('Invoice Date: August 5, 2026')).toBe('2026-08-05')
+    expect(parseTaxInvoiceDateFromText('Date : 2-Jul-26')).toBe('2026-07-02')
   })
 
   it('uses Issued Date, not the digitally-signed clock', () => {
@@ -604,7 +614,7 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     )
     expect(repaired.invoiceNo).toBe('IV690819-0627')
     expect(repaired.docDate).toBe('2026-08-19')
-    expect(repaired.sellerName).toBe('บริษัท แพนฟูด จำกัด')
+    expect(repaired.sellerName).toBe('บริษัท แพนฟู้ด จำกัด')
 
     const row = extractPurchaseTaxInvoiceFromScanText(
       [
@@ -622,7 +632,7 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     )
     expect(row?.invoiceNo).toBe('IV690819-0627')
     expect(row?.docDate).toBe('2026-08-19')
-    expect(row?.sellerName).toBe('บริษัท แพนฟูด จำกัด')
+    expect(row?.sellerName).toBe('บริษัท แพนฟู้ด จำกัด')
     expect(row?.sellerTaxId).toBe('0745538001265')
     expect(row?.netAmount).toBe(1700)
     expect(row?.vatAmount).toBe(119)
@@ -752,6 +762,14 @@ describe('inferAmountsFromMoneySequence', () => {
       netAmount: 2336.45,
       vatAmount: 163.55,
       totalAmount: 2500,
+    })
+  })
+
+  it('uses printed net+vat+grand total, not vat/0.07 of the grand total', () => {
+    expect(inferAmountsFromMoneySequence('1,960.00 5,880.00 688.00 6,138.32 429.68 6,568.00')).toEqual({
+      netAmount: 6138.32,
+      vatAmount: 429.68,
+      totalAmount: 6568,
     })
   })
 })
@@ -936,6 +954,382 @@ describe('office invoice OCR (ID prefix, bank name, line vs total)', () => {
     expect(row?.sellerTaxId).not.toBe('8011620001620')
     expect(row?.netAmount).toBe(35099)
     expect(row?.vatAmount).toBe(2456.93)
+  })
+
+  it('does not treat the S&J office phone as the seller TIN, and fills name from IV', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'Invoice/Tax invoice',
+        'Document No. IV20260804-2154',
+        'Issue Date: 2026-08-04',
+        'FROM',
+        'S&J GLOBAL CO., LTD. (Head Office)',
+        '101 true digital park pegasus building',
+        'Khwang Bang Chak Bangkok 10260',
+        '091-072-6252',
+        '0910726252087',
+        'BILL TO',
+        'Aisa Commerce & Trade Co.,Ltd. (00001)',
+        'Tax ID: 0105568080622',
+        '082-551-1939',
+        'Subtotal: 2,065.00',
+        'VAT (7%): 144.55',
+        'Grand Total: 2,209.55 THB',
+        'Bank Name: Kasikorn Bank (KBank)',
+        'Account Number: 166-2-97879-6',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(thaiTinChecksumOk('0910726252087')).toBe(true)
+    expect(row?.invoiceNo).toBe('IV20260804-2154')
+    expect(row?.sellerTaxId).toBe('0105566137147')
+    expect(row?.sellerTaxId).not.toBe('0910726252087')
+    expect(row?.sellerName).toMatch(/S&J GLOBAL/i)
+    expect(row?.sellerName).not.toMatch(/Aisa Commerce/i)
+    expect(row?.netAmount).toBe(2065)
+    expect(row?.vatAmount).toBe(144.55)
+  })
+
+  it('reads Kasikorn e-wallet fee table, not the 229.00 turnover', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบเสร็จรับเงิน / ใบกำกับภาษี / ใบแจ้งเข้าบัญชี',
+        'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)',
+        'เลขประจำตัวผู้เสียภาษีอากร 0107536000315',
+        'วันที่ออกเอกสาร Issued Date 05/08/2026',
+        'เลขที่เอกสาร 370050826W01926',
+        'ชื่อร้านค้า บ.เอเชีย คอมเมิร์ซ แอนด์ เทรด จก.',
+        'เลขประจำตัวผู้เสียภาษี 0105568080622',
+        'ประเภทรายการ จำนวนรายการ ยอดเงิน ค่าธรรมเนียม ภาษีมูลค่าเพิ่ม ยอดเงินสุทธิ',
+        'PAYMENT TYPE ITEM AMOUNT FEE/COMMISSION VAT (7.00%) NET AMOUNT',
+        'กระเป๋าเงินอิเล็กทรอนิกส์ 2 229.00 3.66 0.26 225.08',
+        'E-WALLET TOTAL',
+        'หัก ณ ที่จ่าย 0.11',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('370050826W01926')
+    expect(row?.sellerTaxId).toBe('0107536000315')
+    expect(row?.sellerName).toContain('กสิกร')
+    expect(row?.docDate).toBe('2026-08-05')
+    expect(row?.netAmount).toBe(3.66)
+    expect(row?.vatAmount).toBe(0.26)
+    expect(row?.netAmount).not.toBe(229)
+    expect(row?.netAmount).not.toBe(225.08)
+  })
+
+  it('keeps the IV prefix, English seller, and totals on a Neo S. Group slip', () => {
+    const text = [
+      'Neo S. Group Co., Ltd. (Head Office)',
+      'บริษัท นีโอ เอ dob |',
+      'เลขประจำตัวผู้เสียภาษี 0105540092693',
+      'ต้นฉบับใบกำกับภาษี TAX INVOICE',
+      'เลขที่ :',
+      'NO. 1V0342325',
+      'PAGE NO : 1',
+      'SOLD TO:',
+      'บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+      'เลขประจำตัวผู้เสียภาษี 0105568080622',
+      'วันที่ DATE 03/08/69',
+      '1,960.00 5,880.00',
+      '688.00',
+      'รวมราคาสินค้า TOTAL 6,138.32',
+      'ส่วนลด DISCOUNT 0.00',
+      'VAT',
+      'ภาษีมูลค่าเพิ่ม 429.68',
+      'ยอดเงินรวม GRAND TOTAL 6,568.00',
+    ].join('\n')
+    const row = extractPurchaseTaxInvoiceFromScanText(text, {
+      buyerTaxId: '0105568080622',
+      taxMonth: '2026-08',
+    })
+    expect(row?.invoiceNo).toBe('IV0342325')
+    expect(row?.invoiceNo).not.toBe('0342325')
+    expect(row?.sellerName).toMatch(/Neo S\. Group/i)
+    expect(row?.sellerName).not.toMatch(/dob|เอเชีย คอมเมิร์ซ/i)
+    expect(row?.sellerTaxId).toBe('0105540092693')
+    expect(row?.netAmount).toBe(6138.32)
+    expect(row?.vatAmount).toBe(429.68)
+    expect(row?.netAmount).not.toBe(93828.57)
+    expect(row?.vatAmount).not.toBe(6568)
+  })
+
+  it('reads IV-HI invoice no and seller branch 00368, not buyer 00001 or product 1V', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท แอตลาส เอ็นเนอยี จำกัด (มหาชน)',
+        'ATLAS ENERGY PUBLIC COMPANY LIMITED',
+        'เลขประจำตัวผู้เสียภาษี 0107565000557',
+        'สาขาที่ออกใบกำกับภาษี สาขาที่ 00368',
+        'เลขที่ลูกค้า : CU-435840',
+        'ลูกค้า บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขา 00001)',
+        'เลขประจำตัวผู้เสียภาษี 0105568080622',
+        'เลขที่ IV-HI652608050053',
+        'วันที่ 05/08/2026',
+        'แก๊สถัง 48 KG 1V 1.00 EA 1,484.00',
+        'มูลค่าก่อนภาษี 1,386.92',
+        'ภาษีมูลค่าเพิ่มอัตราร้อยละ 7 % 97.08',
+        'จำนวนเงินทั้งสิ้น 1,484.00',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('IV-HI652608050053')
+    expect(row?.invoiceNo).not.toMatch(/^1v?1$/i)
+    expect(row?.sellerBranch).toBe('สาขา 00368')
+    expect(row?.netAmount).toBe(1386.92)
+    expect(row?.vatAmount).toBe(97.08)
+  })
+
+  it('uses seller head office, not the buyer branch 00001', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท ซี. เอ. พี. อินเตอร์เทรด จำกัด (สำนักงานใหญ่)',
+        'เลขประจำตัวผู้เสียภาษี 0105540092693',
+        'รหัสลูกค้า D1101740/1',
+        'บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+        'TAX ID. 0105568080622 สาขา 00001',
+        'เลขที่ ID16908/00062',
+        'วันที่ 06/08/2569',
+        'รวมเป็นเงิน 1,332.71',
+        'ภาษีมูลค่าเพิ่ม 93.29',
+        'จำนวนเงินรวมทั้งสิ้น 1,426.00',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('ID16908/00062')
+    expect(row?.sellerBranch).toBe('สำนักงานใหญ่')
+    expect(row?.netAmount).toBe(1332.71)
+    expect(row?.vatAmount).toBe(93.29)
+  })
+
+  it('reads Invoice Date written as August 5, 2026', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'AC Plus Global Co., Ltd.',
+        'Tax id : 0105540092693',
+        'Invoice Number: RV2026-002895',
+        'Invoice Date: August 5, 2026',
+        'Payment Due: August 5, 2026',
+        'Bill to',
+        'บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขา00001)',
+        'Subtotal: 3,105.00',
+        'VAT 7%: 217.35',
+        'Total: 3,322.35',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('RV2026-002895')
+    expect(row?.docDate).toBe('2026-08-05')
+    expect(row?.sellerName).toMatch(/AC Plus Global/i)
+    expect(row?.netAmount).toBe(3105)
+    expect(row?.vatAmount).toBe(217.35)
+  })
+
+  it('keeps TPD เลขที่เอกสาร and ignores address OCR glued to postal 10110', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท ทีพีดี กรุงเทพฯ (1987) จำกัด',
+        'สำนักงานใหญ่',
+        'เลขประจำตัวผู้เสียภาษีอากร 0105530022307',
+        'วันที่ 08/08/2026',
+        'เลขที่เอกสาร 102608002415',
+        'ที่อยู่ ซอยสุขุมวิท รหัสไปรษณีย์ 10110',
+        'wpmavuas10110nguamiuaT10110',
+        'จำนวนเงินก่อนภาษีมูลค่าเพิ่ม 2,429.80',
+        'ภาษีมูลค่าเพิ่ม 170.09',
+        'จำนวนเงินรวมทั้งสิ้น 2,599.89',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('102608002415')
+    expect(row?.invoiceNo).not.toMatch(/wpmavuas|10110T10110/i)
+    expect(row?.docDate).toBe('2026-08-08')
+    expect(row?.sellerName).toContain('ทีพีดี')
+    expect(row?.netAmount).toBe(2429.8)
+    expect(row?.vatAmount).toBe(170.09)
+  })
+
+  it('reads เลขที่ใบกำกับ / No. YYMM/seq, keeps seller HQ, and skips 0.00 before-tax lines', () => {
+    const taitun = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท ไทตั้น คอม จำกัด (สำนักงานใหญ่)',
+        'เลขประจำตัวผู้เสียภาษีอากร 0105542024849',
+        'ชื่อลูกค้า Customers:',
+        'บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขา00001)',
+        'เลขประจำตัวผู้เสียภาษี 0105568080622',
+        'เลขที่ใบกำกับ / No. 6908/0022',
+        'วันที่ / Date 06/06/2569',
+        'รวมเงิน 1,790.00',
+        'ภาษีมูลค่าเพิ่ม (VAT 7%) 125.30',
+        'ยอดรวมสุทธิ NET AMOUNT 1,915.30',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(taitun?.invoiceNo).toBe('6908/0022')
+    expect(taitun?.docDate).toBe('2026-08-06')
+    expect(taitun?.sellerName).toBe('บริษัท ไทตั้น คอม จำกัด')
+    expect(taitun?.sellerTaxId).toBe('0105542024849')
+    expect(taitun?.sellerBranch).toBe('สำนักงานใหญ่')
+    expect(taitun?.netAmount).toBe(1790)
+    expect(taitun?.vatAmount).toBe(125.3)
+
+    const panfood = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท แพนฟุด จำกัด',
+        'PANFOOD CO., LTD.',
+        'HEAD OFFICE',
+        'เลขประจำตัวผู้เสียภาษีอากร 0745538001265',
+        'ชื่อลูกค้า/CUSTOMER : R 7597',
+        'เลขประจำตัวผู้เสียภาษี 0105568080622 สาขา 00001',
+        'บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+        'เลขที่ / INVOICE NO. IV690807-0378',
+        'วันที่ / DATE 07/08/2026',
+        'จำนวนเงิน TOTAL AMOUNT 1,700.00',
+        'หักส่วนลด 0.00',
+        'มูลค่าสินค้าก่อนเงินภาษี 0.00',
+        'มูลค่าสินค้าคิดภาษี 1,700.00',
+        'ภาษีมูลค่าเพิ่ม VAT 7% 119.00',
+        'รวมเงินทั้งสิ้น NET AMOUNT 1,819.00',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(panfood?.invoiceNo).toBe('IV690807-0378')
+    expect(panfood?.sellerName).toBe('บริษัท แพนฟู้ด จำกัด')
+    expect(panfood?.sellerBranch).toBe('สำนักงานใหญ่')
+    expect(panfood?.netAmount).toBe(1700)
+    expect(panfood?.vatAmount).toBe(119)
+  })
+
+  it('reads NR invoice no and English CO LTD, not the phone number', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'DELI TECHNOLOGY (THAI) CO.,LTD.',
+        'เลขประจำตัวผู้เสียภาษีอากร 01055569056628 (สำนักงานใหญ่)',
+        'โทรศัพท์ +66-800518201',
+        'ลูกค้า บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+        'เลขประจำตัวผู้เสียภาษีอากร 0105568080622 (สาขาที่ 00001)',
+        'เลขที่ NR-260704333',
+        'วันที่ 09 กรกฎาคม 2569',
+        'จำนวนเงินรวมสุทธิ 354.21',
+        'ภาษีมูลค่าเพิ่ม 7% 24.79',
+        'จำนวนเงินรวมทั้งสิ้น 379.00',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-07' }
+    )
+    expect(row?.invoiceNo).toBe('NR-260704333')
+    expect(row?.invoiceNo).not.toBe('800518201')
+    expect(row?.sellerName).toMatch(/DELI TECHNOLOGY/i)
+    expect(row?.sellerBranch).toBe('สำนักงานใหญ่')
+    expect(row?.netAmount).toBe(354.21)
+    expect(row?.vatAmount).toBe(24.79)
+  })
+
+  it('uses the juristic seller, not the Shopee shop name or buyer branch 00001', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท ทีแกรนด์มอมเอด จำกัด (สำนักงานใหญ่)',
+        'เลขประจำตัวผู้เสียภาษี 0105560027099',
+        'เลขที่ CA2026081480',
+        'วันที่ 09/08/2026',
+        'ชื่อร้าน Shopee (มะม่วงหิมพานต์เผาในราชา Grand Mom Aead)',
+        'ผู้ขาย Shopee (มะม่วงหิมพานต์เผา)',
+        'ผู้ติดต่อ บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขา 00001)',
+        'ลูกค้า บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขา 00001)',
+        'เลขประจำตัวผู้เสียภาษี 0105568080622',
+        'มูลค่าที่คำนวณภาษี 242.06',
+        'ภาษีมูลค่าเพิ่ม 7% 16.94',
+        'จำนวนเงินทั้งสิ้น 259.00',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('CA2026081480')
+    expect(row?.sellerName).toBe('บริษัท ทีแกรนด์มอมเอด จำกัด')
+    expect(row?.sellerName).not.toMatch(/Shopee/i)
+    expect(row?.sellerTaxId).toBe('0105560027099')
+    expect(row?.sellerBranch).toBe('สำนักงานใหญ่')
+    expect(row?.netAmount).toBe(242.06)
+    expect(row?.vatAmount).toBe(16.94)
+  })
+
+  it('fixes CAP ซี OCR 4.เอ.พี. and trailing S, keeps HQ not buyer 00001', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท 4.เอ.พี.อินเตอร์เทรด S',
+        'C.A.P. INTERTRADE CO., LTD. (สำนักงานใหญ่)',
+        'เลขประจำตัวผู้เสียภาษี 0105540092693',
+        'รหัสลูกค้า D1101740/1',
+        'บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+        'TAX ID. 0105568080622 สาขา 00001',
+        'เลขที่ ID16908/00087',
+        'วันที่ 10/08/2569',
+        'รวมเป็นเงิน 885.98',
+        'ภาษีมูลค่าเพิ่ม 7.00% 62.02',
+        'จำนวนเงินรวมทั้งสิ้น 948.00',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('ID16908/00087')
+    expect(row?.sellerName).toMatch(/ซี\.เอ\.พี\.อินเตอร์เทรด/)
+    expect(row?.sellerName).not.toMatch(/4\.เอ|อินเตอร์เทรด S/)
+    expect(row?.sellerBranch).toBe('สำนักงานใหญ่')
+    expect(row?.netAmount).toBe(885.98)
+    expect(row?.vatAmount).toBe(62.02)
+  })
+
+  it('prefers เลขที่เอกสาร IV over เอกสารอ้างอิง BL and uses HQ not buyer 00001', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท สปริงกรีนอีโวลูชัน จำกัด (สำนักงานใหญ่)',
+        'เลขประจำตัวผู้เสียภาษี 0115559008515',
+        'ลูกค้า:',
+        'บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขา00001)',
+        'เลขประจำตัวผู้เสียภาษี 0105568080622',
+        'เอกสารอ้างอิง BL260800093',
+        'วันที่ 13/08/2569',
+        'เลขที่เอกสาร IV260810392',
+        'ยอดรวมก่อนภาษี 7,258.79',
+        'ภาษีมูลค่าเพิ่ม 7% 508.12',
+        'ยอดเงินสุทธิ 7,766.91',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('IV260810392')
+    expect(row?.invoiceNo).not.toBe('260800093')
+    expect(row?.invoiceNo).not.toBe('BL260800093')
+    expect(row?.sellerName).toBe('บริษัท สปริงกรีนอีโวลูชั่น จำกัด')
+    expect(row?.sellerTaxId).toBe('0115559008515')
+    expect(row?.sellerBranch).toBe('สำนักงานใหญ่')
+    expect(row?.netAmount).toBe(7258.79)
+    expect(row?.vatAmount).toBe(508.12)
+  })
+
+  it('keeps TPD seller TIN and เลขที่เอกสาร, not buyer TIN or customer-code OCR', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท ทีพีดี กรุงเทพฯ (1987) จำกัด',
+        'สำนักงานใหญ่',
+        'เลขประจำตัวผู้เสียภาษีอากร 0105530022307',
+        'รหัสร้านค้า CT00215000',
+        'สาขาที่ 00001',
+        'เลขที่ใบสั่งซื้อ 9',
+        'วันที่ 15/08/2026',
+        'เลขที่เอกสาร 102608004320',
+        'siaiudCTO215000gndi00001swith',
+        'ชื่อลูกค้า บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+        'เลขประจำตัวผู้เสียภาษีผู้ซื้อ 0105568080622',
+        'จำนวนเงินก่อนภาษีมูลค่าเพิ่ม 1,581.80',
+        'ภาษีมูลค่าเพิ่ม 110.73',
+        'จำนวนเงินรวมทั้งสิ้น 1,692.53',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('102608004320')
+    expect(row?.invoiceNo).not.toMatch(/siaiud|CTO215000|00001swith/i)
+    expect(row?.sellerName).toContain('ทีพีดี')
+    expect(row?.sellerTaxId).toBe('0105530022307')
+    expect(row?.sellerTaxId).not.toBe('0105568080622')
+    expect(row?.netAmount).toBe(1581.8)
+    expect(row?.vatAmount).toBe(110.73)
   })
 
   it('reads Grab Ads GFAD number, not the THMG partner id as IM', () => {

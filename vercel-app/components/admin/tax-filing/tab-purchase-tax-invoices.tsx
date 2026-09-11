@@ -26,7 +26,7 @@ import {
   formatSellerBranch,
   displaySellerBranchForUi,
   isLikelyTaxInvoiceCopy,
-  purchaseInvoiceConflictsWithPrior,
+  findPurchaseInvoiceConflict,
   purchaseTaxDocMonthMismatch,
   purchaseTaxInvoiceHasExtractedFields,
   purchaseTaxPp30Compare,
@@ -131,7 +131,14 @@ type FormState = {
   vatAmount: string
 }
 
-type ReviewRow = FormState & { skip?: boolean; skipReason?: string; page?: number }
+type ReviewRow = FormState & {
+  skip?: boolean
+  skipReason?: string
+  page?: number
+  skipDupSeq?: number
+  skipDupPage?: number
+  skipDupInvoiceNo?: string
+}
 
 const REVIEW_DRAFT_KEY = "cm_pti_review_draft"
 
@@ -488,20 +495,26 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           ? t("ptiReviewAmountShort")
           : t("ptiReviewTinShort")
 
-  const skipReasonShort = (reason: string) => {
-    const key = String(reason || "").trim()
+  const skipReasonShort = (r: ReviewRow) => {
+    const key = String(r.skipReason || "").trim()
     if (key === "ptiPdfEmptyPage") return t("ptiSkipEmptyShort")
     if (key === "ptiPdfSkipCopy") return t("ptiSkipCopyShort")
-    if (key === "ptiDupError") return t("ptiSkipDupShort")
+    if (key === "ptiDupError") {
+      if (r.skipDupSeq) return tr(t, "ptiSkipDupSeqShort", { n: String(r.skipDupSeq) })
+      if (r.skipDupPage) return tr(t, "ptiSkipDupPageShort", { n: String(r.skipDupPage) })
+      return t("ptiSkipDupShort")
+    }
     return t("ptiSkip")
   }
 
   const reviewNoteChips = (r: ReviewRow) => {
     if (r.skip) {
       const full = ptiSkipReasonText(r.skipReason || "", t)
+      const dupNo = String(r.skipDupInvoiceNo || "").trim()
+      const title = dupNo ? `${full} (${dupNo})` : full
       return (
-        <span className="whitespace-nowrap rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground" title={full}>
-          {skipReasonShort(r.skipReason || "")}
+        <span className="whitespace-nowrap rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground" title={title}>
+          {skipReasonShort(r)}
         </span>
       )
     }
@@ -709,15 +722,29 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       const isCopy = f.isCopy === true || isLikelyTaxInvoiceCopy(String(f.sellerName || ""))
       let skip = false
       let skipReason = ""
+      let skipDupSeq: number | undefined
+      let skipDupPage: number | undefined
+      let skipDupInvoiceNo: string | undefined
       if (failReason || !purchaseTaxInvoiceHasExtractedFields(f)) {
         skip = true
         skipReason = failReason || "ptiPdfEmptyPage"
       } else if (isCopy) {
         skip = true
         skipReason = "ptiPdfSkipCopy"
-      } else if (purchaseInvoiceConflictsWithPrior(invoiceNo, sellerTaxId, [...rows, ...extracted])) {
-        skip = true
-        skipReason = "ptiDupError"
+      } else {
+        const registerHitIdx = rows.findIndex((p) => findPurchaseInvoiceConflict(invoiceNo, sellerTaxId, [p]))
+        const scanHit = findPurchaseInvoiceConflict(invoiceNo, sellerTaxId, extracted)
+        if (registerHitIdx >= 0 || scanHit) {
+          skip = true
+          skipReason = "ptiDupError"
+          if (registerHitIdx >= 0) {
+            skipDupSeq = registerHitIdx + 1
+            skipDupInvoiceNo = rows[registerHitIdx]?.invoiceNo
+          } else if (scanHit) {
+            skipDupPage = scanHit.page
+            skipDupInvoiceNo = scanHit.invoiceNo
+          }
+        }
       }
       extracted.push({
         storeName,
@@ -730,6 +757,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         vatAmount: f.vatAmount != null ? String(f.vatAmount) : "",
         skip,
         skipReason,
+        skipDupSeq,
+        skipDupPage,
+        skipDupInvoiceNo,
         page,
       })
     }

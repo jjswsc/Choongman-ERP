@@ -113,6 +113,27 @@ describe('findLayoutInvoiceNo', () => {
     expect(got?.value).toBe('GFAD20260825011177')
   })
 
+  it('TPD 고객코드·주소 OCR은 버리고 เลขที่เอกสาร를 쓴다', () => {
+    const got = findLayoutInvoiceNo(
+      page([
+        line(180, [['รหัสร้านค้า', 200], ['CT00215000', 520], ['สาขาที่', 900], ['00001', 1100]]),
+        line(220, [['siaiudCTO215000gndi00001swith', 200]]),
+        line(400, [['เลขที่เอกสาร', 1500], ['102608004320', 1750]]),
+      ])
+    )
+    expect(got?.value).toBe('102608004320')
+  })
+
+  it('เอกสารอ้างอิง BL 은 버리고 เลขที่เอกสาร IV 를 쓴다', () => {
+    const got = findLayoutInvoiceNo(
+      page([
+        line(360, [['เอกสารอ้างอิง', 900], ['BL260800093', 1200], ['วันที่', 1500], ['13/08/2569', 1650]]),
+        line(400, [['เลขที่เอกสาร', 1500], ['IV260810392', 1750]]),
+      ])
+    )
+    expect(got?.value).toBe('IV260810392')
+  })
+
   it('라벨이 없어도 머리말 오른쪽의 번호 꼴은 후보로 받는다', () => {
     const got = findLayoutInvoiceNo(page([line(120, [['Menustyle', 370], ['Printing', 670], ['IV-016119', 2010]])]))
     expect(got?.value).toBe('IV-016119')

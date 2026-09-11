@@ -157,7 +157,7 @@ export function fixOcrInvoiceLetterIPrefix(raw: string): string {
   if (/^1NCT(?=\d)/i.test(s)) return s.replace(/^1NCT/i, 'INCT')
   if (/^1VT(?=[-/]?\d)/i.test(s)) return s.replace(/^1VT/i, 'IVT')
   if (/^1M(?=20\d{12}$)/i.test(s)) return s.replace(/^1M/i, 'IM')
-  if (/^[Il1|][Vv](?=\d{6})/.test(s)) return s.replace(/^[Il1|][Vv]/, 'IV')
+  if (/^[Il1|][Vv](?=[-/]?[A-Za-z]{0,4}\d{4,})/i.test(s)) return s.replace(/^[Il1|][Vv]/i, 'IV')
   return s
 }
 
@@ -227,20 +227,28 @@ export function purchaseInvoiceNosAreSameDocument(a?: string, b?: string): boole
   return letterPrefixOnly(na, nb) || letterPrefixOnly(nb, na)
 }
 
-export function purchaseInvoiceConflictsWithPrior(
+export function findPurchaseInvoiceConflict<T extends { invoiceNo?: string; sellerTaxId?: string }>(
   invoiceNo: string,
   sellerTaxId: string,
-  prior: Array<{ invoiceNo?: string; sellerTaxId?: string }>
-): boolean {
+  prior: T[]
+): T | undefined {
   const no = String(invoiceNo || '').trim()
-  if (!no) return false
+  if (!no) return undefined
   const tin = digitsTin13(sellerTaxId)
-  return prior.some(
+  return prior.find(
     (r) =>
       String(r.invoiceNo || '').trim() &&
       digitsTin13(r.sellerTaxId) === tin &&
       purchaseInvoiceNosAreSameDocument(r.invoiceNo, no)
   )
+}
+
+export function purchaseInvoiceConflictsWithPrior(
+  invoiceNo: string,
+  sellerTaxId: string,
+  prior: Array<{ invoiceNo?: string; sellerTaxId?: string }>
+): boolean {
+  return findPurchaseInvoiceConflict(invoiceNo, sellerTaxId, prior) != null
 }
 
 export function purchaseTaxInvoiceDedupeKey(
@@ -385,6 +393,7 @@ export function looksLikeJunkSellerName(raw: unknown): boolean {
   if (/^(id|seller\s*id|merchant\s*id|tax\s*id|tin|customer\s*id)\b/i.test(s)) return true
   if (/^id\s*[|:.\/]/i.test(s)) return true
   if (/^[\d\s|.:#\-/]{4,}$/.test(s)) return true
+  if (/[|]/.test(s)) return true
   if (/[!|]/.test(s) && /\d{5,}/.test(s) && !/บริษัท|ห้าง|ร้าน|ทรัสต์/.test(s)) return true
   if (/ซอย|แขวง|เขต|ถนน/.test(s) && !/บริษัท|ห้าง|ร้าน|ทรัสต์/.test(s)) return true
   const hasEntity = /บริษัท|ห้าง|ร้าน|ทรัสต์|limited|l\.?t\.?d|co\.?\s*ltd|\bco\b|นาย|นางสาว|นาง/i.test(s)
@@ -403,11 +412,17 @@ export function trimPurchaseTaxSellerName(raw: unknown): string {
     .trim()
   if (!s) return ''
   s = s.replace(/ชนาคาร/g, 'ธนาคาร')
-  s = s.replace(/บริษัท\s+1\.\s+(?=[\u0E00-\u0E7F]+\.)/g, 'บริษัท ซี. ')
+  s = s.replace(/แพนฟ[ูุืีิ]ด/g, 'แพนฟู้ด')
+  s = s.replace(/อีโวลูชัน/g, 'อีโวลูชั่น')
+  // OCR이 ซี(C)를 1·4로 읽거나 점을 붙인 경우 — `4.เอ.พี.` / `1. เอ. พี.`
+  s = s.replace(/บริษัท\s+[14C]\.?\s*(?=[\u0E00-\u0E7F]+\.)/g, 'บริษัท ซี. ')
   s = s.replace(/\.\s+(?=[\u0E00-\u0E7F])/g, '.')
   s = s.replace(/\s*หน้า\s*\d+\s*(?:of|\/)\s*\d+/gi, ' ')
   s = s.replace(/\s*Page\s*\d+\s*of(?:\s*\d+)?/gi, ' ')
   s = s.replace(/\s*(?:For\s*Customer|สำหรับลูกค้า)\b/gi, ' ')
+  s = s.replace(/\s*\|+\s*/g, ' ')
+  s = s.replace(/\s+\b[a-z]{2,6}\b\s*$/g, '')
+  s = s.replace(/\s+[A-Za-z]\s*$/g, '')
   s = s.replace(/\s*\((?:Head\s*Office|สำนักงานใหญ่)\)\s*$/i, '')
   s = s.replace(/\s{2,}/g, ' ').trim()
   s = s.replace(/\s*ใบ(?:กำกับ(?:ภาษี)?|เสร็จ(?:รับเงิน)?|ส่งสินค้า|แจ้งหนี้).*$/u, '')

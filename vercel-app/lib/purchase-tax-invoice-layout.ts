@@ -168,15 +168,17 @@ const INVOICE_NEGATIVE_RE = labelPattern(
     'ใบสั่งซื้อเลขที่',
     'เลขที่ใบสั่งซื้อ',
     'รหัสลูกค้า',
+    'รหัสร้านค้า',
     'รหัสพาร์ทเนอร์',
     'อ้างอิง',
+    'เอกสารอ้างอิง',
     'เลขที่บัญชี',
     'เลขที่ห้อง',
     'เลขที่สาขา',
     'เลขทะเบียน',
     'เลขที่ผู้เสียภาษี',
   ],
-  'TAX\\s*ID|P\\.?O\\.?\\s*NO|PURCHASE\\s*ORDER|CUSTOMER\\s*NO|CUST\\s*NO|CUST\\s*REF|INV(?:OICE)?\\s*DATE|REFERENCE|ACCOUNT\\s*NO|BRANCH\\s*NO|PARTNER\\s*ID'
+  'TAX\\s*ID|P\\.?O\\.?\\s*NO|PURCHASE\\s*ORDER|CUSTOMER\\s*NO|CUST\\s*NO|CUST\\s*REF|INV(?:OICE)?\\s*DATE|REFERENCE|ACCOUNT\\s*NO|BRANCH\\s*NO|PARTNER\\s*ID|B/?L\\s*NO'
 )
 
 /** `เลขที่ 1106 ถนน…` `เลขที่ 101 ห้อง 545` 처럼 번지수·호실인 경우 */
@@ -203,7 +205,7 @@ const ADDRESS_LINE_RE = labelPattern([
 ])
 
 /** 태국 전화번호 — `เลขที่` 옆이라도 문서번호가 아니다 */
-const PHONE_LIKE_RE = /^0\d{8,9}$/
+const PHONE_LIKE_RE = /^(?:0\d{8,9}|66\d{8,10}|[689]\d{8})$/
 
 const INVOICE_VALUE_STOP_RE = labelPattern(
   ['วันที่', 'เครดิต', 'อ้างอิง', 'ครบกำหนด', 'หน้า', 'สาขา'],
@@ -221,6 +223,7 @@ function cleanLayoutInvoiceToken(raw: string): string {
 function invoiceTokenLooksReal(token: string): boolean {
   if (token.length < 4 || token.length > 48) return false
   if (!/\d/.test(token)) return false
+  if (/[a-z]{6,}/.test(token) && !/^(inv|invoice)/i.test(token)) return false
   const digits = token.replace(/\D/g, '')
   if (digits.length < 3) return false
   // 13자리 숫자만 있으면 세금번호를 집은 것
@@ -229,7 +232,10 @@ function invoiceTokenLooksReal(token: string): boolean {
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(token)) return false
   if (/^\d{0,2}-\d{2}-\d{2}$/.test(token)) return false
   if (/^NO?\d{13}$/i.test(token)) return false
+  if (/^\d{5}[A-Za-z]\d{5}$/.test(token.replace(/[^A-Za-z0-9]/g, ''))) return false
   if (/^0\d{8,9}$/.test(token.replace(/\D/g, '')) && !/[A-Za-z]/.test(token)) return false
+  if (/^CT[O0]?\d{4,}$/i.test(token.replace(/[^A-Za-z0-9]/g, ''))) return false
+  if (/^BL/i.test(token.replace(/[^A-Za-z0-9]/g, ''))) return false
   return true
 }
 
@@ -628,7 +634,7 @@ function countTokenOccurrences(layout: OcrPageLayout, token: string): number {
 function scoreInvoiceCandidate(c: InvoiceCandidate, occurrences: number, hint?: VendorInvoiceHint): number {
   let s = c.labelScore + Math.min(6, Math.round(c.conf / 20))
   if (c.crossBlock) s -= 8
-  if (/[A-Za-z]/.test(c.token)) s += 4
+  if (/[A-Za-z]/.test(c.token) && !/[a-z]{6,}/.test(c.token)) s += 4
   if (occurrences > 1) s += 7
   if (c.yRatio < 0.45) s += 3
   if (PHONE_LIKE_RE.test(c.token)) s -= 30
@@ -683,7 +689,7 @@ const BUYER_MARK_RE = labelPattern(
     'ที่อยู่ในการจัดส่ง',
     'ที่อยู่จัดส่ง',
   ],
-  'CUSTOMER|BUYER|BILL\\s*TO|SHIP\\s*TO|DELIVERY\\s*ADDRESS'
+  'CUSTOMER|BUYER|BILL\\s*TO|SHIP\\s*TO|SOLD\\s*TO|DELIVERY\\s*ADDRESS'
 )
 
 type TinHit = { tin: string; y: number; conf: number; labeled: boolean }
@@ -966,7 +972,7 @@ const ISSUED_DATE_LABEL_RE = labelPattern(
 )
 const DUE_DATE_LABEL_RE = labelPattern(
   ['ครบกำหนด', 'วันที่ครบ', 'ชำระภายใน'],
-  'DUE\\s*DATE|VALID\\s*UNTIL'
+  'DUE\\s*DATE|VALID\\s*UNTIL|PAYMENT\\s*DUE'
 )
 
 function dateLineHasClockNoise(text: string): boolean {
@@ -1026,6 +1032,14 @@ export function findLayoutDocDate(layout: OcrPageLayout): LayoutField<string> | 
     if (en) {
       const month = EN_MONTH_NUM[en[2].slice(0, 3).toLowerCase()]
       const iso = month ? toIsoDate(Number(en[1]), month, Number(en[3])) : undefined
+      if (iso) consider(iso, cl.line.conf, labeled, isDue, isIssued)
+    }
+    const enMonthFirst = String(cl.text || '').match(
+      /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{2,4})\b/i
+    )
+    if (enMonthFirst) {
+      const month = EN_MONTH_NUM[enMonthFirst[1].slice(0, 3).toLowerCase()]
+      const iso = month ? toIsoDate(Number(enMonthFirst[2]), month, Number(enMonthFirst[3])) : undefined
       if (iso) consider(iso, cl.line.conf, labeled, isDue, isIssued)
     }
     for (const w of cl.line.words) {
@@ -1141,6 +1155,11 @@ const WEAK_INVOICE_SOURCES = new Set(['header-unlabeled', 'vendor-pattern', 'bar
 function layoutInvoiceLooksJunk(token: string): boolean {
   const t = String(token || '').trim()
   if (!t) return true
+  const packed = t.replace(/[^A-Za-z0-9]/g, '')
+  if (/[a-z]{6,}/.test(t) && !/^(inv|invoice)/i.test(t)) return true
+  if (/^\d{5}[A-Za-z]\d{5}$/.test(packed)) return true
+  if (/^CT[O0]?\d{4,}$/i.test(packed)) return true
+  if (/^BL/i.test(packed)) return true
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(t)) return true
   if (/^\d{0,2}-\d{2}-\d{2}$/.test(t)) return true
   if (/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(t)) return true

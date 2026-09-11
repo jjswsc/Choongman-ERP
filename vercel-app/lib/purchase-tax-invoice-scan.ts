@@ -67,11 +67,15 @@ export { thaiTinChecksumOk }
 
 function moneyFromFragment(raw: string): number | undefined {
   const s = String(raw || '').replace(/\b7(?:\.0+)?\s*%/g, ' ')
-  const money = s.match(/\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2}/)
-  if (!money) return undefined
-  const v = Number(money[0].replace(/,/g, ''))
-  if (!Number.isFinite(v) || v < 0 || v >= 500_000_000) return undefined
-  return roundMoney2(v)
+  const money = s.match(/\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2}/g) || []
+  for (const tok of money) {
+    const v = Number(tok.replace(/,/g, ''))
+    if (!Number.isFinite(v) || v < 0 || v >= 500_000_000) continue
+    // `VAT 7% 119.00` 에서 세율 7을 금액으로 쓰지 않음
+    if (Math.abs(v - 7) < 0.001 && /%/.test(String(raw || '')) && money.length > 1) continue
+    return roundMoney2(v)
+  }
+  return undefined
 }
 
 function ymdFromParts(year: number, month: number, day: number): string | undefined {
@@ -124,13 +128,16 @@ function stripDateClockNoise(line: string): string {
 }
 
 function dateLineIsIssued(line: string): boolean {
-  return /วันที่ออก(?:เอกสาร|ใบ)|issued?\s*date|document\s*date|วันที่ใบ(?:เสร็จ|กำกับ)/i.test(line)
+  return /วันที่ออก(?:เอกสาร|ใบ)|issued?\s*date|invoice\s*date|document\s*date|วันที่ใบ(?:เสร็จ|กำกับ)/i.test(
+    line
+  )
 }
 
 export function parseTaxInvoiceDateFromText(text: string): string | undefined {
   const lines = String(text || '').split(/\r?\n/)
   const fromLine = (line: string): string | undefined => parseTaxInvoiceDateFromFragment(line)
-  const skipDue = (line: string) => /เริ่มใช้|ครบกำหนด|due\s*date|วันที่ครบ/i.test(line)
+  const skipDue = (line: string) =>
+    /เริ่มใช้|ครบกำหนด|due\s*date|payment\s*due|วันที่ครบ/i.test(line)
   for (const line of lines) {
     if (skipDue(line) || !dateLineIsIssued(line)) continue
     const d = fromLine(stripDateClockNoise(line))
@@ -157,6 +164,13 @@ function parseTaxInvoiceDateFromFragment(s: string): string | undefined {
   if (en) {
     const month = EN_MONTH[en[2].slice(0, 3).toLowerCase()]
     if (month) return ymdFromParts(Number(en[3]), month, Number(en[1]))
+  }
+  const enMonthFirst = s.match(
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{2,4})\b/i
+  )
+  if (enMonthFirst) {
+    const month = EN_MONTH[enMonthFirst[1].slice(0, 3).toLowerCase()]
+    if (month) return ymdFromParts(Number(enMonthFirst[3]), month, Number(enMonthFirst[2]))
   }
   const iso = s.match(/\b(20\d{2}|25\d{2})[./-](\d{1,2})[./-](\d{1,2})\b/)
   if (iso) {
@@ -207,12 +221,18 @@ export function tinsFromOcrDigitBlob(raw: string): string[] {
   return found
 }
 
+/** 08x/09x 휴대폰 10자리에 OCR이 숫자 3개를 붙여 체크디짓만 맞는 13자리 */
+function looksLikeGluedMobileTin(tin: string): boolean {
+  return /^0[89]\d{11}$/.test(tin)
+}
+
 function extractTins(text: string, opts?: { labeledOnly?: boolean }): string[] {
   const found: string[] = []
   const add = (raw: string) => {
     const cands = tinsFromOcrDigitBlob(raw)
     for (const d of cands.length ? cands : [digitsTin13(raw)]) {
       if (d.length !== 13 || found.includes(d) || !thaiTinChecksumOk(d)) continue
+      if (looksLikeGluedMobileTin(d)) continue
       found.push(d)
     }
   }
@@ -237,22 +257,39 @@ function extractTins(text: string, opts?: { labeledOnly?: boolean }): string[] {
 
 function sellerHeaderText(text: string): string {
   const s = String(text || '')
-  const cut = s.search(/\bBILL\s*TO\b|\bSHIP\s*TO\b|ผู้ซื้อ|ที่อยู่ในการจัดส่ง|ที่อยู่จัดส่ง/i)
+  const cut = s.search(
+    /\bBILL\s*TO\b|\bSHIP\s*TO\b|\bSOLD\s*TO\b|\bCUSTOMER\b|(?:^|\n)\s*ลูกค้า(?:\s|:|$)|ชื่อลูกค้า|รหัสลูกค้า|รหัสร้านค้า|เลขที่ลูกค้า|ผู้ซื้อ|ผู้ติดต่อ|ชื่อร้าน|สั่งจาก|ที่อยู่ในการจัดส่ง|ที่อยู่จัดส่ง/im
+  )
   return cut >= 12 ? s.slice(0, cut) : s
 }
 
-function preferJuristicTin(tins: string[], buyerTin?: string): string | undefined {
-  const other = tins.filter((t) => t !== buyerTin)
-  return other.find((t) => t.startsWith('0')) || other[0]
+function tinAppearsInBuyerZone(text: string, tin: string): boolean {
+  const tinDigits = digitsTin13(tin)
+  if (tinDigits.length !== 13) return false
+  const tinRe = new RegExp(tinDigits.split('').join('[\\s-]*'))
+  const m = String(text || '').match(tinRe)
+  if (!m || m.index == null) return false
+  const before = String(text || '').slice(Math.max(0, m.index - 220), m.index)
+  return /ที่อยู่ตามภาษีมูลค่าเพิ่ม|ชื่อลูกค้า|เลขประจำตัวผู้เสียภาษีผู้ซื้อ|ผู้ซื้อ|(?:^|\n)\s*ลูกค้า(?:\s|:)/m.test(
+    before
+  )
+}
+
+function preferJuristicTin(tins: string[], buyerTin?: string, text?: string): string | undefined {
+  const buyer = digitsTin13(buyerTin)
+  const other = tins.filter((t) => t !== buyer && !looksLikeGluedMobileTin(t))
+  const pool = text ? other.filter((t) => !tinAppearsInBuyerZone(text, t)) : other
+  return pool.find((t) => t.startsWith('0')) || pool[0]
 }
 
 function extractSellerTaxId(text: string, buyerTin?: string): string | undefined {
   const buyer = digitsTin13(buyerTin)
-  const headerLabeled = preferJuristicTin(extractTins(sellerHeaderText(text), { labeledOnly: true }), buyer)
-  if (headerLabeled) return headerLabeled
-  const labeled = preferJuristicTin(extractTins(text, { labeledOnly: true }), buyer)
-  if (labeled) return labeled
-  return preferJuristicTin(extractTins(text), buyer)
+  const headerLabeled = preferJuristicTin(extractTins(sellerHeaderText(text), { labeledOnly: true }), buyer, text)
+  if (headerLabeled && headerLabeled !== buyer) return headerLabeled
+  const labeled = preferJuristicTin(extractTins(text, { labeledOnly: true }), buyer, text)
+  if (labeled && labeled !== buyer) return labeled
+  const any = preferJuristicTin(extractTins(text), buyer, text)
+  return any && any !== buyer ? any : undefined
 }
 
 function compactInvoiceToken(raw: string): string {
@@ -267,7 +304,17 @@ function ocrFixDigitsInInvoiceBlob(raw: string): string {
 const INVOICE_JUNK_TOKEN_RE = /contact|customer|taxrex|invpice|^nsee$|^find$|^fad$/i
 
 /** OCR이 제목(Tax Invoice)이나 주소 조각을 번호로 넣은 경우 */
+export function invoiceNoLooksLikeAddressOcr(raw: unknown): boolean {
+  const original = String(raw || '')
+  if (/[a-z]{6,}/.test(original) && !/^(inv|invoice)/i.test(original.trim())) return true
+  const compact = compactInvoiceToken(original).replace(/[^A-Za-z0-9]/g, '')
+  // `10110T10110` — 우편번호끼리 붙은 주소 OCR
+  if (/^\d{5}[A-Za-z]\d{5}$/.test(compact)) return true
+  return false
+}
+
 export function invoiceNoLooksPlausible(raw: unknown): boolean {
+  if (invoiceNoLooksLikeAddressOcr(raw)) return false
   const inv = compactInvoiceToken(String(raw || ''))
   if (!inv) return false
   const compact = inv.replace(/[^A-Za-z0-9]/g, '')
@@ -284,11 +331,36 @@ export function invoiceNoLooksPlausible(raw: unknown): boolean {
   if (isTruncatedShopeeInvoiceNo(inv)) return false
   if (/^IM20\d{0,11}$/i.test(compact) && compact.length < 16) return false
   if (/^THMG20/i.test(compact)) return false
+  if (/^(IV|1V)[-/]?/i.test(compact) && compact.replace(/\D/g, '').length < 4) return false
   if (!/[A-Za-z]/.test(compact) && compact.length < 4) return false
+  if (looksLikePhoneInvoiceToken(inv)) return false
+  if (looksLikeRefOrCustomerInvoice(inv)) return false
   return true
 }
 
+/** `+66-800518201` / `0800518201` 처럼 전화번호를 문서번호로 쓴 경우 */
+function looksLikePhoneInvoiceToken(raw: string): boolean {
+  if (/[A-Za-z]/.test(raw)) return false
+  const d = String(raw || '').replace(/\D/g, '')
+  if (/^0\d{8,9}$/.test(d)) return true
+  if (/^66\d{8,10}$/.test(d)) return true
+  if (/^[689]\d{8}$/.test(d)) return true
+  return false
+}
+
+function looksLikeRefOrCustomerInvoice(inv: string, page?: string): boolean {
+  const token = compactInvoiceToken(inv)
+  const packed = token.replace(/[^A-Za-z0-9]/g, '')
+  if (/^BL/i.test(packed)) return true
+  if (/^CT[O0]?\d{4,}$/i.test(packed)) return true
+  const digits = packed.replace(/\D/g, '')
+  if (page && digits.length >= 7 && new RegExp(`BL\\s*${digits}\\b`, 'i').test(page)) return true
+  return false
+}
+
 function cleanInvoiceNo(raw: string): string | undefined {
+  if (invoiceNoLooksLikeAddressOcr(raw)) return undefined
+  if (looksLikeRefOrCustomerInvoice(raw)) return undefined
   const inv = compactInvoiceToken(raw)
   if (!inv) return undefined
   const onlyDigits = inv.replace(/\D/g, '')
@@ -297,6 +369,7 @@ function cleanInvoiceNo(raw: string): string | undefined {
   if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(inv) && parseTaxInvoiceDateFromText(inv)) return undefined
   if (!/^[A-Z0-9][A-Z0-9\-/]{1,64}$/i.test(inv)) return undefined
   if (!invoiceNoLooksPlausible(inv)) return undefined
+  if (looksLikeRefOrCustomerInvoice(inv)) return undefined
   return inv.slice(0, 80)
 }
 
@@ -480,21 +553,25 @@ function recoverKasikornInvoiceNo(text: string): string | undefined {
 }
 
 const INVOICE_LABEL_RE =
-  /(?:เอกสารเลขที่|เลขที่(?:เอกสาร|ใบเสร็จ(?:รับเงิน)?|ใบกำกับ(?:ภาษี)?)?|เลขท[ีิ]|Receipt\s*No\.?|Invoice\s*No\.?|Tax\s*Invoice\s*No\.?|Doc(?:ument)?\s*No\.?|\bNo\.?(?=\s*[:#]?[A-Z0-9]))\s*[:#.\-]*/gi
+  /(?:เอกสารเลขที่|เลขที่(?:เอกสาร|ใบเสร็จ(?:รับเงิน)?|ใบกำกับ(?:ภาษี)?)?(?:\s*\/\s*No\.?)?|เลขท[ีิ]|Receipt\s*No\.?|Invoice\s*(?:No\.?|Number)|Tax\s*Invoice\s*No\.?|Doc(?:ument)?\s*No\.?|\bNo\.?(?=\s*[:#]?[A-Z0-9]))\s*[:#.\-]*/gi
 
 const INVOICE_LINE_STOP_RE =
   /วันที่|บริษัท|ห้างหุ้น|ห้าง|เลขประจำ|มูลค่า|ภาษีมูลค่า|ผู้ซื้อ|ผู้ขาย|สำนักงาน|สาขา\s*\d|Tax\s*ID|\bTIN\b|Page\s*\d|หน้า\s*\d|For\s*Customer|สำหรับลูกค้า/i
 
 const OFFICE_INVOICE_RE =
-  /\b((?:INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|INCT|IV|1V|ID|TI|ABB|RT|GFAD)[\-/]?[A-Z0-9\-/ ]{2,48}|[A-Z]{5,10}\d{12,28}|370\d{6}W\d{4,8}|\d{6}[EFH]\d{4,14}|\d{7,12})\b/gi
+  /\b((?:INV|IVT|NX|NC|NR|RV|SI|CS|DCI|DOI|TIT|INCT|[Il1|]V|ID|TI|ABB|RT|GFAD)[\-/]?[A-Z0-9\-/ ]{2,48}|[A-Z]{5,10}\d{12,28}|370\d{6}W\d{4,8}|\d{6}[EFH]\d{4,14}|\d{4}\/\d{3,5}|\d{7,12})\b/gi
 
 function officeInvoiceRank(inv: string): number {
   const s = String(inv || '')
-  if (/^(INV|IVT|NX|NC|RV|SI|CS|DCI|DOI|TIT|INCT|IV|1V|ID|GFAD)[-/]?/i.test(s)) return 8
+  if (invoiceNoLooksLikeAddressOcr(s) || looksLikeRefOrCustomerInvoice(s)) return 0
+  if (/^(INV|IVT|NX|NC|NR|RV|SI|CS|DCI|DOI|TIT|INCT|IV|1V|[Il|]V|ID|GFAD)[-/]?/i.test(s)) return 8
   if (looksLikeCompleteGrabInvoiceNo(s)) return 8
   if (looksLikeKasikornInvoiceNo(s)) return 8
   if (/^[A-Z]{5,12}\d{12,}$/i.test(s.replace(/[^A-Za-z0-9]/g, ''))) return 7
   if (/^0\d{8,9}$/.test(s.replace(/\D/g, '')) && !/[A-Za-z]/.test(s)) return 0
+  const digits = s.replace(/\D/g, '')
+  if (!/[A-Za-z]/.test(s) && /^\d{10,12}$/.test(digits)) return 6
+  if (/^\d{4}\/\d{3,5}$/.test(s)) return 5
   if (/[A-Za-z]/.test(s)) return 4
   return 1
 }
@@ -502,18 +579,21 @@ function officeInvoiceRank(inv: string): number {
 function attachOfficePrefix(text: string, inv: string): string | undefined {
   if (!inv || /[A-Za-z]/.test(inv)) return undefined
   const esc = inv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const m = String(text || '').match(new RegExp(`\\b(INV|IVT|IV|NX|NC|RV|SI|CS|DCI|DOI|TI|ID|INCT)[\\s\\-]*${esc}\\b`, 'i'))
+  const m = String(text || '').match(
+    new RegExp(`\\b(INV|IVT|IV|1V|[Il|]V|NX|NC|NR|RV|SI|CS|DCI|DOI|TI|ID|INCT)([\\s\\-]*)(${esc})\\b`, 'i')
+  )
   if (!m) return undefined
-  const prefix = m[1].toUpperCase()
-  const joined = joinOfficePrefix(prefix, inv)
-  return cleanInvoiceNo(joined)
+  let prefix = m[1].toUpperCase()
+  if (/^[IL1|]V$/.test(prefix)) prefix = 'IV'
+  if (!m[2]) return cleanInvoiceNo(`${prefix}${inv}`)
+  return cleanInvoiceNo(joinOfficePrefix(prefix, inv))
 }
 
 /** IV-016119 은 하이픈, IV690819-0637 처럼 불기 연월이 본문이면 붙여 쓴다 */
 function joinOfficePrefix(prefix: string, inv: string): string {
   const p = prefix.toUpperCase()
   const body = String(inv || '').replace(/^\-+/, '')
-  if (/^(INV|IVT|IV|DCI|DOI|ID|INCT)$/.test(p)) {
+  if (/^(INV|IVT|IV|DCI|DOI|ID|INCT|NR)$/.test(p)) {
     if (body.includes('-') || ((p === 'ID' || p === 'INCT') && body.includes('/'))) return `${p}${body}`
     if (p === 'IV' && /^(6\d|7[0-2])\d{4,}$/.test(body.replace(/\D/g, ''))) return `${p}${body}`
     if (p === 'ID' || p === 'INCT') return `${p}${body}`
@@ -543,6 +623,7 @@ function invoiceNoFromLabeledSlice(slice: string): string | undefined {
   const sameLine = slice.split(/\r?\n/, 1)[0] || ''
   const cut = sameLine
     .replace(/^(?:เอกสาร|ใบกำกับ(?:ภาษี)?|ใบเสร็จ(?:รับเงิน)?|Invoice|Receipt)\s*/i, '')
+    .replace(/^[/\s]*(?:No\.?|Number)\s*[:#.\-]*/i, '')
     .split(INVOICE_LINE_STOP_RE)[0]
   const inv = cleanInvoiceNo(cut) || firstOfficeInvoiceNo(cut)
   if (inv) return inv
@@ -561,14 +642,21 @@ function invoiceLabelIsLineItemRef(full: string, labelIndex: number, labelText: 
   return /inv(?:oice)?\s*date|cust(?:omer)?\s*ref|remarks/i.test(line)
 }
 
+function invoiceLabelIsNoiseNo(full: string, labelIndex: number, labelText: string): boolean {
+  if (invoiceLabelIsLineItemRef(full, labelIndex, labelText)) return true
+  if (!/\bno\.?/i.test(labelText) && !/เลขที่/.test(labelText)) return false
+  const before = full.slice(Math.max(0, labelIndex - 16), labelIndex)
+  return /page|หน้า|ลูกค้า|customer|order|credit\s*term|อ้างอิง|reference/i.test(before)
+}
+
 function extractLabeledInvoiceNo(s: string): string | undefined {
   INVOICE_LABEL_RE.lastIndex = 0
   const found: string[] = []
   let m: RegExpExecArray | null
   while ((m = INVOICE_LABEL_RE.exec(s))) {
-    if (invoiceLabelIsLineItemRef(s, m.index, m[0])) continue
+    if (invoiceLabelIsNoiseNo(s, m.index, m[0])) continue
     const inv = invoiceNoFromLabeledSlice(s.slice(m.index + m[0].length))
-    if (inv && !found.includes(inv)) found.push(inv)
+    if (inv && !looksLikeRefOrCustomerInvoice(inv, s) && !found.includes(inv)) found.push(inv)
   }
   found.sort((a, b) => officeInvoiceRank(b) - officeInvoiceRank(a) || b.length - a.length)
   return found[0]
@@ -580,7 +668,7 @@ function firstOfficeInvoiceNo(s: string): string | undefined {
   let m: RegExpExecArray | null
   while ((m = OFFICE_INVOICE_RE.exec(s))) {
     const inv = cleanInvoiceNo(m[1])
-    if (inv && !found.includes(inv)) found.push(inv)
+    if (inv && !looksLikeRefOrCustomerInvoice(inv, s) && !found.includes(inv)) found.push(inv)
   }
   found.sort((a, b) => officeInvoiceRank(b) - officeInvoiceRank(a) || b.length - a.length)
   return found[0]
@@ -606,7 +694,8 @@ function extractInvoiceNo(
   const s = String(text || '')
   const compact = platformInvoiceBlob(s)
   const tins = [...extractTins(s), digitsTin13(sellerTaxId), digitsTin13(buyerTaxId)].filter((t) => t.length === 13)
-  const take = (inv?: string) => (inv && !invoiceDigitsLookLikeTinFragment(inv, tins) ? inv : undefined)
+  const take = (inv?: string) =>
+    inv && !invoiceDigitsLookLikeTinFragment(inv, tins) && !looksLikeRefOrCustomerInvoice(inv, s) ? inv : undefined
   const recovered =
     recoverShopeeInvoiceNo(s, taxMonth) ||
     recoverGrabInvoiceNo(s, sellerTaxId, taxMonth) ||
@@ -630,6 +719,7 @@ const KNOWN_INVOICE_SELLERS: Array<{ re: RegExp; tin: string; name: string }> = 
   { re: /^LMRN/i, tin: '0105562160721', name: 'บริษัท ไลน์แมน (ประเทศไทย) จำกัด' },
   { re: /^\d{6}[EFH]\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
   { re: /^370\d+W\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
+  { re: /^IVF?\d{8}-\d+$/i, tin: '0105566137147', name: 'S&J GLOBAL CO., LTD.' },
   { re: /^INV-\d{11}$/i, tin: '0105559082715', name: 'บริษัท โพลาร์ แบร์ มิชชั่น จำกัด' },
   { re: /^INV-\d{8}-\d{2,4}$/i, tin: '0135564019457', name: 'บริษัท ไทย แอ็กโกร เฟรช จำกัด' },
   { re: /^(?:26|69)\d{5}$/, tin: '0105550102497', name: 'บริษัท จีดูบัง (เอเชีย) จำกัด' },
@@ -683,7 +773,7 @@ export function invoiceTokensAreSameDocument(a?: string, b?: string): boolean {
 function vatPairLooksOk(row: ExtractedPurchaseTaxInvoiceFields | null | undefined): boolean {
   if (row?.netAmount == null || row.vatAmount == null) return false
   if (row.netAmount === 0 && row.vatAmount === 0) return true
-  return row.vatAmount > 0 && !purchaseTaxVatLooksWrong(row.netAmount, row.vatAmount) && row.netAmount >= 20
+  return row.vatAmount > 0 && !purchaseTaxVatLooksWrong(row.netAmount, row.vatAmount)
 }
 
 export function mergeComplementaryInvoiceRows(
@@ -742,7 +832,7 @@ export function inferSellerFromInvoiceNo(
   invoiceNo: string,
   sellerTaxId?: string
 ): { tin: string; name: string } | null {
-  const inv = platformInvoiceBlob(String(invoiceNo || '').trim())
+  const inv = platformInvoiceBlob(fixOcrInvoiceLetterIPrefix(String(invoiceNo || '').trim()))
   if (!inv) return null
   for (const row of KNOWN_INVOICE_SELLERS) {
     if (row.re.test(inv)) return { tin: row.tin, name: row.name }
@@ -782,6 +872,15 @@ export function inferDocDateFromInvoiceNo(invoiceNo: string): string | undefined
   return undefined
 }
 
+/** `6908/0022` 처럼 불기 연·월만 들어 있고 일은 없는 번호 */
+function yearMonthFromBeYyMmSlashInvoice(invoiceNo?: string): string | undefined {
+  const s = compactInvoiceToken(String(invoiceNo || ''))
+  const m = s.match(/^(6[5-9]|7[0-2])(0[1-9]|1[0-2])\/\d{3,6}$/)
+  if (!m) return undefined
+  const ymd = ymdFromParts(Number(m[1]), Number(m[2]), 1)
+  return ymd ? ymd.slice(0, 7) : undefined
+}
+
 function bangkokDayDiff(fromYmd: string, toYmd: string): number | undefined {
   const a = Date.parse(`${fromYmd}T00:00:00+07:00`)
   const b = Date.parse(`${toYmd}T00:00:00+07:00`)
@@ -790,10 +889,13 @@ function bangkokDayDiff(fromYmd: string, toYmd: string): number | undefined {
 }
 
 function extractSellerBranchRaw(text: string): string | undefined {
-  const s = String(text || '')
-  if (/สำนักงานใหญ่|head\s*office|\bhq\b/i.test(s) && !/สาขา\s*\d/.test(s)) return 'สำนักงานใหญ่'
-  const branch = s.match(/สาขา\s*[:.\-]?\s*(\d{1,5})/i)
-  if (branch) return branch[1]
+  const header = sellerHeaderText(text)
+  const issued =
+    header.match(/สาขาที่(?:ออก(?:ใบกำกับ(?:ภาษี)?)?)?\s*[:.\-]?\s*(?:สาขาที่\s*)?(\d{1,5})/i)
+  if (issued) return issued[1]
+  if (/สำนักงานใหญ่|head\s*office|\bhq\b/i.test(header)) return 'สำนักงานใหญ่'
+  const branchHit = header.match(/สาขา(?:ที่)?\s*[:.\-]?\s*(\d{1,5})/i)
+  if (branchHit) return branchHit[1]
   return undefined
 }
 
@@ -801,10 +903,10 @@ const COMPANY_NAME_RE =
   /((?:บริษัท|ห้างหุ้นส่วน(?:จำกัด)?|ร้าน|ทรัสต์)\s+[^\n]{2,90}(?:จำกัด(?:\s*\(มหาชน\))?)?)/g
 
 const EN_COMPANY_RE =
-  /([A-Z0-9][A-Za-z0-9&.'’\-]*(?:\s+[A-Z0-9(&][A-Za-z0-9&.'’\-)()]*){0,12}\s*,?\s*(?:CO\.?,?\s*LTD\.?|COMPANY\s*LIMITED|LIMITED|LLC)\.?)/g
+  /([A-Z][A-Za-z0-9&.'’\-.() ]{1,80}?(?:CO\.?,?\s*LTD\.?|COMPANY\s*LIMITED|LIMITED|LLC)\.?)/gi
 
 const BUYER_NAME_ZONE_RE =
-  /ที่อยู่ในการจัดส่ง|จัดส่งเอกสาร|ที่อยู่ตามภาษีมูลค่าเพิ่ม|ชื่อลูกค้า|รหัสลูกค้า|ผู้ซื้อ|ลูกค้า|ผู้รับใบกำกับ|BILL\s*TO|SHIP\s*TO/i
+  /ที่อยู่ในการจัดส่ง|จัดส่งเอกสาร|ที่อยู่ตามภาษีมูลค่าเพิ่ม|ชื่อลูกค้า|รหัสลูกค้า|รหัสร้านค้า|ผู้ซื้อ|ลูกค้า|ผู้รับใบกำกับ|ผู้ติดต่อ|ชื่อร้าน|สั่งจาก|BILL\s*TO|SHIP\s*TO|SOLD\s*TO|\bCUSTOMER\b/i
 
 function companyNameCore(name: string): string {
   return trimPurchaseTaxSellerName(name)
@@ -841,7 +943,7 @@ function companyNameNearTin(text: string, tin: string): string | undefined {
   if (!m || m.index == null) return undefined
   const before = s.slice(Math.max(0, m.index - 280), m.index)
   const thai = [...before.matchAll(new RegExp(COMPANY_NAME_RE.source, 'g'))]
-  const en = [...before.matchAll(new RegExp(EN_COMPANY_RE.source, 'g'))]
+  const en = [...before.matchAll(new RegExp(EN_COMPANY_RE.source, 'gi'))]
   const last = (thai.length ? thai : en)[(thai.length ? thai : en).length - 1]
   if (!last) return undefined
   const name = trimPurchaseTaxSellerName(last[1])
@@ -856,8 +958,21 @@ function companyIsInBuyerNameZone(text: string, index: number, name: string): bo
   const lineEnd = text.indexOf('\n', index)
   const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd)
   if (BUYER_NAME_ZONE_RE.test(line) || BUYER_NAME_ZONE_RE.test(prevLine)) return true
+  const lookback = text.slice(Math.max(0, lineStart - 220), lineStart)
+  if (
+    /ชื่อลูกค้า|BILL\s*TO|SOLD\s*TO|\bCUSTOMER\b|ผู้ซื้อ|ชื่อร้าน|สั่งจาก/i.test(lookback) &&
+    !/(?:ผู้ขาย|ผู้จำหน่าย|ผู้ประกอบการ|\bFROM\b)/i.test(lookback)
+  ) {
+    return true
+  }
   const after = text.slice(index, Math.min(text.length, index + name.length + 40))
   return BUYER_NAME_ZONE_RE.test(after) && !/(?:ผู้ขาย|ผู้จำหน่าย|ผู้ประกอบการ)/i.test(after)
+}
+
+function looksLikeMarketplaceShopName(name: string): boolean {
+  const n = String(name || '').trim()
+  if (/บริษัท|ห้าง|จำกัด|co\.?\s*ltd|company\s*limited/i.test(n)) return false
+  return /^(?:shopee|lazada|tiktok(?:\s*shop)?|line\s*myshop|facebook)\b/i.test(n)
 }
 
 function usableSellerName(name: string, buyerName?: string): string | undefined {
@@ -865,6 +980,7 @@ function usableSellerName(name: string, buyerName?: string): string | undefined 
   if (
     !cleaned ||
     /ผู้ซื้อ|ลูกค้า|Buyer|BILL\s*TO|SHIP\s*TO/i.test(cleaned) ||
+    looksLikeMarketplaceShopName(cleaned) ||
     looksLikeJunkSellerName(cleaned) ||
     nameLooksLikeBuyerHint(cleaned, buyerName)
   ) {
@@ -873,36 +989,49 @@ function usableSellerName(name: string, buyerName?: string): string | undefined 
   return cleaned.slice(0, 200)
 }
 
+function sellerNameScore(name: string): number {
+  const n = String(name || '').trim()
+  if (!n) return -10
+  let score = n.length >= 8 ? 1 : 0
+  if (/จำกัด/.test(n) || /co\.?\s*ltd|limited/i.test(n)) score += 4
+  if (/\b[a-z]{2,6}\b/.test(n) && !/ltd|co\b/i.test(n)) score -= 2
+  if (looksLikeJunkSellerName(n)) score -= 5
+  return score
+}
+
 function extractSellerName(text: string, buyerName?: string, sellerTaxId?: string): string | undefined {
   const s = String(text || '')
+  const candidates: { name: string; score: number }[] = []
+  const add = (raw?: string, index?: number, bonus = 0) => {
+    const name = usableSellerName(raw || '', buyerName)
+    if (!name) return
+    if (index != null && companyIsInBuyerNameZone(s, index, name)) return
+    candidates.push({ name, score: sellerNameScore(name) + bonus })
+  }
   const labeled = s.match(
     /(?:ผู้ขาย|ผู้จำหน่าย|ผู้ประกอบการ|Seller|Vendor)\s*[:\-]?\s*([^\n]{3,120})/i
   )
-  if (labeled) {
-    const name = usableSellerName(labeled[1], buyerName)
-    if (name) return name
-  }
+  add(labeled?.[1])
   const fromBlock = s.match(/(?:^|\n)\s*FROM\b\s*[:\-]?\s*\n?\s*([^\n]{3,120})/i)
-  if (fromBlock) {
-    const name = usableSellerName(fromBlock[1], buyerName)
-    if (name) return name
-  }
+  add(fromBlock?.[1])
   const nearTin = sellerTaxId ? companyNameNearTin(s, sellerTaxId) : undefined
-  if (nearTin && !nameLooksLikeBuyerHint(nearTin, buyerName)) return nearTin
-
-  const tryCompanyRe = (re: RegExp) => {
+  add(
+    nearTin,
+    undefined,
+    nearTin && (/จำกัด/.test(nearTin) || /ltd|limited|co\.?\s*ltd/i.test(nearTin)) ? 8 : 0
+  )
+  const collectRe = (re: RegExp) => {
     re.lastIndex = 0
     let m: RegExpExecArray | null
     while ((m = re.exec(s))) {
       if (m.index == null) continue
-      const name = usableSellerName(m[1], buyerName)
-      if (!name) continue
-      if (companyIsInBuyerNameZone(s, m.index, name)) continue
-      return name
+      add(m[1], m.index)
     }
-    return undefined
   }
-  return tryCompanyRe(COMPANY_NAME_RE) || tryCompanyRe(EN_COMPANY_RE)
+  collectRe(COMPANY_NAME_RE)
+  collectRe(EN_COMPANY_RE)
+  candidates.sort((a, b) => b.score - a.score || b.name.length - a.name.length)
+  return candidates[0] && candidates[0].score >= 0 ? candidates[0].name : undefined
 }
 
 function lineLooksLikeWithholdingOrExempt(line: string): boolean {
@@ -923,7 +1052,7 @@ function looksLikeWithholdingAmount(net: number, n: number): boolean {
 export function pageLooksFullyVatExempt(text: string): boolean {
   const s = String(text || '')
   if (!s.trim()) return false
-  const vatLabeled = extractAmountNear(s, /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
+  const vatLabeled = extractAmountNear(s, /ภาษีมูลค่าเพิ่ม|\bVAT\b(?!\s*(?:CODE|ID))|Vat amount|VAT\s*7|ภาษี\s*7/i)
   if (vatLabeled != null && vatLabeled > 0.05) return false
   if (pickExclusiveVatAmounts(collectBahtAmounts(s))) return false
   if (vatLabeled === 0) return true
@@ -940,29 +1069,36 @@ export function pageLooksFullyVatExempt(text: string): boolean {
 
 function pageHasTaxableVatPair(text: string): boolean {
   if (pickExclusiveVatAmounts(collectBahtAmounts(text))) return true
-  const vatLabeled = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
+  const vatLabeled = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|\bVAT\b(?!\s*(?:CODE|ID))|Vat amount|VAT\s*7|ภาษี\s*7/i)
   return vatLabeled != null && vatLabeled > 0.05
 }
 
 function extractAmountNear(text: string, keywords: RegExp): number | undefined {
-  const isVat = /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i.test(keywords.source)
+  const isVat = /ภาษีมูลค่าเพิ่ม|\bVAT\b|Vat amount|ภาษี\s*7/i.test(keywords.source)
   const tableHeader = /รายการ|รหัสสินค้า|หน่วยนับ|ราคา\/?หน่วย|ราคาหน่วย/i
   const qtyLine = /กก\.?|กิโล|ถัง|ขนาดบรรจุ/i
+  const grandRe = /รวมทั้งสิ้น|ยอดรวมสุทธิ|ยอดเงินรวม|Grand\s*total|Amount\s*due/i
   const lines = String(text || '').split(/\r?\n/)
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]
     if (lineLooksLikeWithholdingOrExempt(line)) continue
     const idx = line.search(keywords)
     if (idx < 0) continue
+    if (/\bTOTAL\b/i.test(line) && /grand\s*$/i.test(line.slice(Math.max(0, idx - 6), idx))) continue
     if (isVat && /ก่อนภาษีมูลค่าเพิ่ม|จำนวนเงินรวมก่อน/i.test(line)) continue
+    if (!isVat && /รวมเงินทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total/i.test(line) && /net\s*amount/i.test(line)) continue
+    if (!isVat && /มูลค่าสินค้าก่อน|ก่อนเงินภาษี|สินค้าไม่คิดภาษี/.test(line)) continue
     if (tableHeader.test(line) && moneyFromFragment(line) == null) continue
     let frag = line.slice(idx)
-    if (isVat) frag = frag.split(/รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)[0]
+    if (isVat) frag = frag.split(grandRe)[0]
     const v = moneyFromFragment(frag)
+    if (v != null && v === 0 && !isVat) continue
     if (v != null) return v
     for (const extra of [lines[i + 1], lines[i + 2]]) {
       if (!extra || lineLooksLikeWithholdingOrExempt(extra) || tableHeader.test(extra) || qtyLine.test(extra)) continue
+      if (isVat && grandRe.test(extra)) continue
       const n = moneyFromFragment(extra)
+      if (n != null && n === 0 && !isVat) continue
       if (n != null) return n
     }
   }
@@ -972,7 +1108,7 @@ function extractAmountNear(text: string, keywords: RegExp): number | undefined {
   const m = usable.match(keywords)
   if (!m || m.index == null) return undefined
   let frag = usable.slice(m.index, m.index + 96)
-  if (isVat) frag = frag.split(/รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)[0]
+  if (isVat) frag = frag.split(grandRe)[0]
   return moneyFromFragment(frag)
 }
 
@@ -1054,6 +1190,46 @@ export function pickExclusiveVatAmounts(nums: number[]): {
   return { netAmount: top.netAmount, vatAmount: top.vatAmount, totalAmount: top.totalAmount }
 }
 
+function pageLooksLikeKasikornFeeInvoice(text: string): boolean {
+  const s = String(text || '')
+  const bankIssuer = /บริษัท\s*ธนาคารกสิกรไทย|ธนาคารกสิกรไทย\s*จำกัด/i.test(s)
+  const feeAdvice =
+    /ใบแจ้งเข้าบัญชี|กระเป๋าเงินอิเล็กทรอนิกส์|E-WALLET|FEE\s*\/\s*COMMISSION|MERCHANT\s*ID/i.test(s)
+  if (bankIssuer && (feeAdvice || /ค่าธรรมเนียม/.test(s))) return true
+  if (feeAdvice && /กสิกร|KASIKORN/i.test(s)) return true
+  const inv = recoverKasikornInvoiceNo(s)
+  return Boolean(inv && (feeAdvice || /ค่าธรรมเนียม/.test(s)))
+}
+
+/**
+ * 카시콘 입금통지: 거래액(ยอดเงิน)이 아니라 수수료+VAT가 매입 세금계산서 금액.
+ * 표는 `229.00  3.66  0.26  225.08` 처럼 헤더와 숫자가 다른 줄에 있음.
+ */
+function inferKasikornFeeAmounts(text: string): {
+  netAmount: number
+  vatAmount: number
+  totalAmount: number
+} | null {
+  if (!pageLooksLikeKasikornFeeInvoice(text)) return null
+  const nums = collectBahtAmounts(text)
+  for (let i = 1; i + 2 < nums.length; i += 1) {
+    const amount = nums[i - 1]
+    const fee = nums[i]
+    const vat = nums[i + 1]
+    const settled = nums[i + 2]
+    if (fee < 0.5 || vat < 0.01 || amount <= fee) continue
+    if (purchaseTaxVatLooksWrong(fee, vat)) continue
+    if (Math.abs(roundMoney2(amount - fee - vat) - settled) > 0.05) continue
+    return { netAmount: fee, vatAmount: vat, totalAmount: roundMoney2(fee + vat) }
+  }
+  const fee = extractAmountNear(text, /ค่าธรรมเนียม|FEE\s*\/?\s*COMMISSION(?:\s*AMOUNT)?/i)
+  const vat = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|VAT\s*\(?\s*7|Vat amount|ภาษี\s*7/i)
+  if (fee != null && vat != null && fee >= 0.5 && vat > 0 && !purchaseTaxVatLooksWrong(fee, vat)) {
+    return { netAmount: fee, vatAmount: vat, totalAmount: roundMoney2(fee + vat) }
+  }
+  return null
+}
+
 /**
  * 키워드가 깨져도 하단 금액 3개가 공급가+VAT=합계·VAT≈7%이면 그 값을 씀.
  * OCR이 태국어 라벨을 잃어도 숫자열은 남는 경우가 많음.
@@ -1067,6 +1243,8 @@ export function inferAmountsFromMoneySequence(text: string): {
     const totalAmount = extractAmountNear(text, /รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)
     return { netAmount: 0, vatAmount: 0, totalAmount: totalAmount ?? 0 }
   }
+  const fromKasikorn = inferKasikornFeeAmounts(text)
+  if (fromKasikorn) return fromKasikorn
   const fromExempt = inferTaxableExcludingExempt(text)
   if (fromExempt) return fromExempt
   const fromFees = inferTaxableFromShippingAndService(text)
@@ -1115,7 +1293,7 @@ function inferTaxableExcludingExempt(text: string): {
   )
   if (!exemptParts.length) return null
   const grand = extractAmountNear(text, /รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due|SUBTOTAL/i)
-  const vat = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
+  const vat = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|\bVAT\b(?!\s*(?:CODE|ID))|Vat amount|VAT\s*7|ภาษี\s*7/i)
   if (vat == null || vat <= 0 || grand == null || grand <= 0) return null
   const exempt = Math.max(...exemptParts)
   if (grand <= exempt) return null
@@ -1146,7 +1324,7 @@ function inferTaxableFromShippingAndService(text: string): {
 } | null {
   const shippingParts = collectLabeledBahtParts(text, /ค่าจัดส่ง|ค่าขนส่ง|SHIPPING|DELIVERY\s*FEE/i)
   const serviceParts = collectLabeledBahtParts(text, /ค่าบริการ|SERVICE\s*FEE|HANDLING/i)
-  const vatLabeled = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
+  const vatLabeled = extractAmountNear(text, /ภาษีมูลค่าเพิ่ม|\bVAT\b(?!\s*(?:CODE|ID))|Vat amount|VAT\s*7|ภาษี\s*7/i)
   if (vatLabeled == null || vatLabeled <= 0) return null
   const wantNet = roundMoney2(vatLabeled / 0.07)
   for (const s of shippingParts) {
@@ -1508,13 +1686,18 @@ export function parsePurchaseTaxInvoiceFromPdfText(
   const buyerTin = digitsTin13(hint?.buyerTaxId)
   const sellerTaxId = extractSellerTaxId(raw, buyerTin)
   const netAmountLabeled =
-    extractAmountNear(raw, /มูลค่าสินค้า|มูลค่าที่คำนวณภาษี|มูลค่าก่อนภาษี|จำนวนเงินรวมก่อนภาษีมูลค่าเพิ่ม|รวมเป็นเงิน|รวมเงิน|มูลค่า(?!เพิ่ม)|ฐานภาษี|Taxable|Sub\s*total|Net\s*amount/i) ??
+    extractAmountNear(raw, /มูลค่าสินค้า|มูลค่าที่คำนวณภาษี|มูลค่าก่อนภาษี|จำนวนเงินรวมก่อนภาษีมูลค่าเพิ่ม|รวมราคาสินค้า|รวมเป็นเงิน|รวมเงิน|มูลค่า(?!เพิ่ม)|ฐานภาษี|Taxable|Sub\s*total|Net\s*amount|(?<!Grand\s)\bTOTAL\b/i) ??
     extractAmountNear(raw, /ก่อนภาษี|ก่อน VAT/i)
-  const vatAmountLabeled = extractAmountNear(raw, /จำนวนภาษีมูลค่าเพิ่ม|ภาษีมูลค่าเพิ่ม|VAT\s*7|Vat amount|ภาษี\s*7/i)
-  const totalAmountLabeled = extractAmountNear(raw, /จำนวนเงินรวมภาษีมูลค่าเพิ่ม|รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)
+  const vatAmountLabeled = extractAmountNear(raw, /จำนวนภาษีมูลค่าเพิ่ม|ภาษีมูลค่าเพิ่ม|\bVAT\b(?!\s*(?:CODE|ID))|Vat amount|VAT\s*7|ภาษี\s*7/i)
+  const totalAmountLabeled = extractAmountNear(raw, /จำนวนเงินรวมภาษีมูลค่าเพิ่ม|รวมทั้งสิ้น|ยอดรวมสุทธิ|ยอดเงินรวม|Grand\s*total|Amount\s*due/i)
   const inferred = inferAmountsFromMoneySequence(raw)
   const inferredOk =
     inferred != null && inferred.vatAmount > 0 && !purchaseTaxVatLooksWrong(inferred.netAmount, inferred.vatAmount)
+  const labeledPairWrong =
+    netAmountLabeled != null &&
+    vatAmountLabeled != null &&
+    vatAmountLabeled > 0 &&
+    purchaseTaxVatLooksWrong(netAmountLabeled, vatAmountLabeled)
   const labeledLineItem =
     inferredOk &&
     netAmountLabeled != null &&
@@ -1522,9 +1705,11 @@ export function parsePurchaseTaxInvoiceFromPdfText(
     (vatAmountLabeled == null ||
       purchaseTaxVatLooksWrong(netAmountLabeled, vatAmountLabeled) ||
       Math.abs(inferred.netAmount - netAmountLabeled) > 0.05)
-  const netAmount = labeledLineItem ? inferred.netAmount : netAmountLabeled ?? inferred?.netAmount
-  const vatAmount = labeledLineItem ? inferred.vatAmount : vatAmountLabeled ?? inferred?.vatAmount
-  const totalAmount = labeledLineItem ? inferred.totalAmount : totalAmountLabeled ?? inferred?.totalAmount
+  const preferInferredFee = inferredOk && labeledPairWrong
+  const useInferred = Boolean(inferred && (labeledLineItem || preferInferredFee))
+  const netAmount = useInferred && inferred ? inferred.netAmount : netAmountLabeled ?? inferred?.netAmount
+  const vatAmount = useInferred && inferred ? inferred.vatAmount : vatAmountLabeled ?? inferred?.vatAmount
+  const totalAmount = useInferred && inferred ? inferred.totalAmount : totalAmountLabeled ?? inferred?.totalAmount
   const row: ExtractedPurchaseTaxInvoiceFields = {
     docDate: parseTaxInvoiceDateFromText(raw),
     invoiceNo: extractInvoiceNo(raw, sellerTaxId, hint?.taxMonth, hint?.buyerTaxId),
@@ -1727,8 +1912,17 @@ export function repairExtractedPurchaseTaxInvoice(
   if ((netAmount == null || netAmount === 0) && vatAmount != null && vatAmount > 0.5 && Math.abs(vatAmount - 7) > 0.2) {
     const inferredNet = roundMoney2(vatAmount / 0.07)
     if (inferredNet >= 1 && inferredNet < 500_000_000) {
-      netAmount = inferredNet
-      if (totalAmount == null) totalAmount = roundMoney2(netAmount + vatAmount)
+      const printed = collectBahtAmounts(pageTextRaw)
+      const hit = printed.find((n) => Math.abs(n - inferredNet) <= 0.05)
+      const grandLabeled = extractAmountNear(
+        pageTextRaw,
+        /รวมทั้งสิ้น|ยอดรวมสุทธิ|ยอดเงินรวม|Grand\s*total|Amount\s*due/i
+      )
+      const vatIsGrand = grandLabeled != null && Math.abs(grandLabeled - vatAmount) <= 0.05
+      if (!vatIsGrand) {
+        netAmount = hit ?? inferredNet
+        if (totalAmount == null) totalAmount = roundMoney2(netAmount + vatAmount)
+      }
     }
   }
 
@@ -1811,7 +2005,7 @@ export function repairExtractedPurchaseTaxInvoice(
   ) {
     const excl = roundMoney2(netAmount / 1.07)
     const vat = roundMoney2(netAmount - excl)
-    const totalLabeled = extractAmountNear(pageTextRaw, /รวมทั้งสิ้น|ยอดรวมสุทธิ|Grand\s*total|Amount\s*due/i)
+    const totalLabeled = extractAmountNear(pageTextRaw, /รวมทั้งสิ้น|ยอดรวมสุทธิ|ยอดเงินรวม|Grand\s*total|Amount\s*due/i)
     const netIsPrintedTotal = totalLabeled != null && Math.abs(totalLabeled - netAmount) <= 0.05
     const saysInclusive = /รวม\s*(?:VAT|ภาษี)/i.test(pageTextRaw)
     const exclOnPage = pageNums.some((p) => Math.abs(p - excl) <= 0.05 || Math.abs(p - vat) <= 0.05)
@@ -1821,12 +2015,17 @@ export function repairExtractedPurchaseTaxInvoice(
       totalAmount = roundMoney2(excl + vat)
     }
   }
+  const smallPairOk =
+    netAmount != null &&
+    vatAmount != null &&
+    vatAmount > 0 &&
+    !purchaseTaxVatLooksWrong(netAmount, vatAmount)
   if (
     !(netAmount === 0 && (vatAmount == null || vatAmount === 0)) &&
     netAmount != null &&
     netAmount > 0 &&
     netAmount < 5 &&
-    (vatAmount == null || vatAmount < 1 || purchaseTaxVatLooksWrong(netAmount, vatAmount))
+    !smallPairOk
   ) {
     netAmount = undefined
     if (vatAmount != null && vatAmount < 1) vatAmount = undefined
@@ -1888,7 +2087,7 @@ export function repairExtractedPurchaseTaxInvoice(
     if (vendorHint && !looksLikeCompleteGrabInvoiceNo(String(invoiceNo || ''))) {
       if (!invoiceNo || !invoiceMatchesVendorHint(invoiceNo, vendorHint)) {
         const recovered = findInvoiceTokenInText(pageText, vendorHint)
-        if (recovered) invoiceNo = recovered
+        if (recovered && (!invoiceNo || invoiceFromPageBeatsCurrent(recovered, invoiceNo))) invoiceNo = recovered
       } else if (!/[A-Za-z]/.test(invoiceNo)) {
         invoiceNo = restoreInvoiceWithVendorHint(invoiceNo, vendorHint)
       }
@@ -1902,7 +2101,7 @@ export function repairExtractedPurchaseTaxInvoice(
   }
   const pageTins = extractTins(pageText).filter((tin) => tin !== buyerTin)
   if (pageTins.length) {
-    const betterTin = extractSellerTaxId(pageText, buyerTin) || preferJuristicTin(pageTins, buyerTin)
+    const betterTin = extractSellerTaxId(pageText, buyerTin) || preferJuristicTin(pageTins, buyerTin, pageText)
     if (!sellerTaxId) sellerTaxId = betterTin
     else if (betterTin && betterTin.startsWith('0') && !sellerTaxId.startsWith('0')) sellerTaxId = betterTin
   }
@@ -1911,21 +2110,17 @@ export function repairExtractedPurchaseTaxInvoice(
   const inferredSeller =
     (invoiceNo ? inferSellerFromInvoiceNo(invoiceNo, sellerTaxId) : null) ||
     (trsToken ? inferSellerFromInvoiceNo(trsToken, sellerTaxId) : null)
-  if (inferredSeller) {
+  if (inferredSeller && inferredSeller.tin !== buyerTin) {
     sellerTaxId = inferredSeller.tin
   }
   let sellerName = String(row.sellerName || '').trim()
   sellerName = trimPurchaseTaxSellerName(sellerName)
   if (looksLikeJunkSellerName(sellerName)) sellerName = ''
   if (sellerName && nameLooksLikeBuyerHint(sellerName, hint?.buyerName)) sellerName = ''
-  if (sellerName && pageText) {
-    const otherTins = extractTins(pageText).filter((tin) => tin !== sellerTaxId)
-    for (const tin of otherTins) {
-      const nearBuyer = companyNameNearTin(pageText, tin)
-      if (nearBuyer && sellerNamesShareCompany(sellerName, nearBuyer)) {
-        sellerName = ''
-        break
-      }
+  if (sellerName && buyerTin && pageText) {
+    const nearBuyer = companyNameNearTin(pageText, buyerTin)
+    if (nearBuyer && sellerNamesShareCompany(sellerName, nearBuyer)) {
+      sellerName = ''
     }
   }
   const nearSeller = sellerTaxId && pageText ? companyNameNearTin(pageText, sellerTaxId) : undefined
@@ -1938,8 +2133,11 @@ export function repairExtractedPurchaseTaxInvoice(
   const fromInvDate = invoiceNo ? inferDocDateFromInvoiceNo(invoiceNo) : undefined
   const labeledDate = snapDocDateYearToTaxPeriod(row.docDate, hint?.taxMonth)
   const invDate = snapDocDateYearToTaxPeriod(fromInvDate, hint?.taxMonth)
+  const invYm = yearMonthFromBeYyMmSlashInvoice(invoiceNo)
   let docDate = labeledDate || invDate
-  if (fromInvDate && labeledDate && fromInvDate !== labeledDate) {
+  if (invYm && labeledDate && invYm !== labeledDate.slice(0, 7) && invYm.slice(0, 4) === labeledDate.slice(0, 4)) {
+    docDate = `${invYm}-${labeledDate.slice(8, 10)}`
+  } else if (fromInvDate && labeledDate && fromInvDate !== labeledDate) {
     const yearDelta = Math.abs(Number(labeledDate.slice(0, 4)) - Number(fromInvDate.slice(0, 4)))
     if (yearDelta >= 2) {
       docDate = invDate || fromInvDate
