@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { filterUnlinkedBankWithdrawalsForCardRows } from '@/lib/card-bank-expense-link'
-import { pickBankAccountSubjectIdForCardBill } from '@/lib/card-bill-allocation'
+import { isCardBillAllocationPlLine } from '@/lib/card-bill-allocation'
 import { canLinkWithdrawForCardBill, canQueueWithdrawCategoryForCardBill } from '@/lib/card-bill-memo'
 import { INTERNAL_BANK_SOURCE_MARKER } from '@/lib/bank-transaction-note-meta'
 
@@ -17,29 +17,12 @@ describe('canLinkWithdrawForCardBill', () => {
   })
 })
 
-describe('pickBankAccountSubjectIdForCardBill', () => {
-  it('returns the single subject when all lines share one account', () => {
-    expect(
-      pickBankAccountSubjectIdForCardBill([
-        { accountSubjectId: 10, amount: 100 },
-        { accountSubjectId: 10, amount: 50 },
-      ])
-    ).toBe(10)
-  })
-
-  it('picks the largest-amount subject when several accounts are used', () => {
-    expect(
-      pickBankAccountSubjectIdForCardBill([
-        { accountSubjectId: 10, amount: 100 },
-        { accountSubjectId: 20, amount: 250 },
-        { accountSubjectId: 30, amount: 40 },
-      ])
-    ).toBe(20)
-  })
-
-  it('returns null when there are no valid lines', () => {
-    expect(pickBankAccountSubjectIdForCardBill([])).toBeNull()
-    expect(pickBankAccountSubjectIdForCardBill([{ accountSubjectId: 0, amount: 10 }])).toBeNull()
+describe('isCardBillAllocationPlLine', () => {
+  it('counts child allocation lines only', () => {
+    expect(isCardBillAllocationPlLine({ transType: 'expense', parentId: 9, isBillHeader: false })).toBe(true)
+    expect(isCardBillAllocationPlLine({ transType: 'expense', parentId: null, isBillHeader: true })).toBe(false)
+    expect(isCardBillAllocationPlLine({ transType: 'expense', parentId: null, isBillHeader: false })).toBe(false)
+    expect(isCardBillAllocationPlLine({ transType: 'charge', parentId: 9, isBillHeader: false })).toBe(false)
   })
 })
 

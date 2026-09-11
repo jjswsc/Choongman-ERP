@@ -23,6 +23,7 @@ export type BankAttentionRow = {
   memo?: string | null
   note?: string | null
   isLinked?: boolean
+  isCardLinked?: boolean
   isReceivableLinked?: boolean
   isChannelSettled?: boolean
   invoiceReceived?: boolean
@@ -110,7 +111,7 @@ export function bankRowNeedsAttention(
     return { needsAttention: true, reason: 'receivable_link_pending' }
   }
 
-  if (row.transType === 'withdraw' && isBankExpenseRelatedWithdrawCategory(cat) && !row.isLinked) {
+  if (row.transType === 'withdraw' && isBankExpenseRelatedWithdrawCategory(cat) && !row.isLinked && !row.isCardLinked) {
     return { needsAttention: true, reason: 'expense_link_pending' }
   }
 
@@ -123,7 +124,7 @@ export function bankRowNeedsAttention(
   const needsSubject =
     row.transType === 'deposit'
       ? DEPOSIT_CATEGORIES_NEED_SUBJECT.has(cat)
-      : WITHDRAW_CATEGORIES_NEED_SUBJECT.has(cat) && cat !== 'tax'
+      : WITHDRAW_CATEGORIES_NEED_SUBJECT.has(cat) && cat !== 'tax' && !row.isCardLinked
 
   if (needsSubject && resolveBankRowAccountSubjectId(row, edits) == null) {
     return { needsAttention: true, reason: 'no_subject' }
@@ -138,6 +139,7 @@ export function bankRowShowsVatNotRegistered(
   edits?: BankAttentionEdits
 ): boolean {
   if (row.transType !== 'withdraw') return false
+  if (row.isCardLinked) return false
   const cat = resolveBankRowCategory(row, edits)
   if (!isBankExpenseRelatedWithdrawCategory(cat)) return false
   if (cat === 'tax') return false

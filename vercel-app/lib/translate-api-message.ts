@@ -316,6 +316,11 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
     "saasTenantSchemaMissing",
   "vendors tenant_id 스키마가 없습니다. sql/inventory_tenant_id.sql 을 실행해 주세요.":
     "saasTenantSchemaMissing",
+  "품목 카테고리 테이블이 없습니다. Omni DB에 sql/omni_item_categories_01_create.sql 을 실행해 주세요.":
+    "saasTenantSchemaMissing",
+  "카테고리명이 필요합니다.": "itemsCategoryRequired",
+  "이미 같은 이름의 카테고리가 있습니다.": "itemsCategoryDuplicate",
+  "존재하지 않는 카테고리입니다.": "itemsCategoryNotFound",
   "회사(테넌트) 정보가 없어 저장할 수 없습니다. 다시 로그인해 주세요.": "saasTenantIdMissing",
   "회사(테넌트) 정보가 없어 직원을 저장할 수 없습니다. 다시 로그인해 주세요.": "saasTenantIdMissing",
   "회사(테넌트) 정보가 없어 데이터를 저장할 수 없습니다. 다시 로그인해 주세요.":

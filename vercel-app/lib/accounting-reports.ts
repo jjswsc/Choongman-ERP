@@ -44,6 +44,7 @@ import {
   mergeIncomeStatementReports,
 } from '@/lib/accounting-income-statement-merge'
 import { isExpenseInternalBankNote, shouldExcludeBankWithdrawFromPlExpense } from '@/lib/bank-transaction-note-meta'
+import { loadCardBillAllocationLinesForPl } from '@/lib/card-bill-income-statement'
 import {
   isPp30PlExpenseSubjectCode,
   PL_PP30_EXPENSE_SUBJECT_CODE,
@@ -1777,6 +1778,52 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     limit: ACCOUNTING_ROWS_MAX,
   }
 
+  const cardBillPl = await loadCardBillAllocationLinesForPl({
+    startStr,
+    endStr,
+    storeFilter,
+    isHQ,
+  })
+  const cardBillLinkedBankIds = cardBillPl.linkedBankTransactionIds
+  const cardBillPurchaseVendorMap: Record<string, number> = {}
+  const cardBillPurchaseVendorVatMap: Record<string, number> = {}
+  for (const line of cardBillPl.lines) {
+    addBankExpenseWithdrawToPl({
+      row: {
+        amount: line.amount,
+        vat_amount: line.vatAmount,
+        account_subject_id: line.accountSubjectId,
+        vendor_code: line.vendorCode,
+        memo: line.memo,
+      },
+      subjectMeta,
+      purchaseVendorMap: cardBillPurchaseVendorMap,
+      purchaseVendorVatMap: cardBillPurchaseVendorVatMap,
+      expenseBySubjectMap,
+      expenseVatBySubjectMap,
+      onExpense: (amt) => {
+        bankWithdrawExpense += amt
+      },
+      onExpenseVat: (vat) => {
+        cashExpenseVat += vat
+      },
+      onPurchase: (amt) => {
+        purchasesBankGross += amt
+        purchases += amt
+      },
+      onPurchaseVat: (vat) => {
+        purchasesBankVat += vat
+      },
+      onSkippedNonPl: (amt) => {
+        skippedNonPlExpense += amt
+      },
+    })
+  }
+  limits.card_bill_allocation = {
+    fetched: cardBillPl.fetched,
+    limit: ACCOUNTING_ROWS_MAX,
+  }
+
   const franchiseBillingPl = await loadFranchiseBillingForIncomeStatement({
     yearMonth,
     startStr,
@@ -1890,7 +1937,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     const bankPayVatByVendorHq = pickVendorVatForKeptAmounts(bankPayVatHqNorm, bankPayByVendorHq)
     const purchaseVendorMapHq: Record<string, number> = { ...inboundByVendorHq }
     mergeVendorAmountMap(purchaseVendorMapHq, bankPayByVendorHq)
+    mergeVendorAmountMap(purchaseVendorMapHq, cardBillPurchaseVendorMap)
     mergeVendorAmountMap(purchaseVendorVatMapAccum, bankPayVatByVendorHq)
+    mergeVendorAmountMap(purchaseVendorVatMapAccum, cardBillPurchaseVendorVatMap)
     /** 거래처별: 직접입고(발생) + 통장 매입지급(입고 없는 거래처만) */
     const inboundHqTotal = Object.values(inboundByVendorHq).reduce((a, b) => a + b, 0)
     const bankHqTotal = Object.values(bankPayByVendorHq).reduce((a, b) => a + b, 0)
@@ -1979,6 +2028,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         for (const r of btRows) {
           const bankId = Number(r.id || 0)
           if (bankId > 0 && feeAccrualLinkedBankIds.has(bankId)) continue
+          if (bankId > 0 && cardBillLinkedBankIds.has(bankId)) continue
           const cat = String(r.category || 'expense').toLowerCase()
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
           const salaryDecision = classifySalaryCashForPl(r)
@@ -2223,7 +2273,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     )
     const purchaseVendorMapStore: Record<string, number> = { ...inboundByVendorStoreNorm }
     mergeVendorAmountMap(purchaseVendorMapStore, bankPayByVendorStore)
+    mergeVendorAmountMap(purchaseVendorMapStore, cardBillPurchaseVendorMap)
     mergeVendorAmountMap(purchaseVendorVatMapAccum, bankPayVatByVendorStore)
+    mergeVendorAmountMap(purchaseVendorVatMapAccum, cardBillPurchaseVendorVatMap)
     /** 본사 창고 출고 + 거래처별(직접입고 + 통장 매입지급, 본사 법인 제외) — 펼침 합계와 매입 총액 일치 */
     const inboundStoreTotal = Object.values(inboundByVendorStoreNorm).reduce((a, b) => a + b, 0)
     const bankStoreTotal = Object.values(bankPayByVendorStore).reduce((a, b) => a + b, 0)
@@ -2312,6 +2364,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
         for (const r of btRows) {
           const bankId = Number(r.id || 0)
           if (bankId > 0 && feeAccrualLinkedBankIds.has(bankId)) continue
+          if (bankId > 0 && cardBillLinkedBankIds.has(bankId)) continue
           const cat = String(r.category || 'expense').toLowerCase()
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
           const salaryDecision = classifySalaryCashForPl(r)
@@ -3595,6 +3648,12 @@ export async function computeIncomeStatementExpenseDrillDown(
     isHQ,
     subjectMeta,
   })
+  const cardBillPl = await loadCardBillAllocationLinesForPl({
+    startStr,
+    endStr,
+    storeFilter,
+    isHQ,
+  })
   const feeAccountSubjectIds = new Set(feeAccountSubjectIdsFromMeta(subjectMeta).allIds)
   if (accountIds.length > 0) {
     const { rows: btRows, truncated } = await fetchBankWithdrawRowsForPl(
@@ -3617,8 +3676,9 @@ export async function computeIncomeStatementExpenseDrillDown(
       if (!isPlExpenseAccountSubject(r.account_subject_id, subjectMeta)) continue
       const bid = Number(r.id)
       if (!bid) continue
-      // 손익 본표와 동일: 수수료 지급예정에 연결된 통장은 이중 표시 제외
+      // 손익 본표와 동일: 수수료 지급예정·카드 대금 배분에 연결된 통장은 이중 표시 제외
       if (feeAccrualPl.linkedBankTransactionIds.has(bid)) continue
+      if (cardBillPl.linkedBankTransactionIds.has(bid)) continue
       bankAcc.push({
         kind: 'bank',
         id: bid,
@@ -3644,6 +3704,21 @@ export async function computeIncomeStatementExpenseDrillDown(
       category: 'expense_accrual',
       memo: memoParts.join(' ').trim() || '[지급예정]',
       store: ar.store,
+    })
+  }
+  for (const line of cardBillPl.lines) {
+    if (!expenseDrillMatchesSubject(line.accountSubjectId, wantSubjectId)) continue
+    if (!isPlExpenseAccountSubject(line.accountSubjectId, subjectMeta)) continue
+    const memoParts = ['[카드배분]', line.memo || ''].filter(Boolean)
+    bankAcc.push({
+      kind: 'bank',
+      id: line.id,
+      transDate: line.transDate || startStr,
+      expenseDate: line.transDate || null,
+      amount: line.amount,
+      category: 'card_bill',
+      memo: memoParts.join(' ').trim() || '[카드배분]',
+      store: line.store,
     })
   }
   const bankTruncated = bankFetchTruncated || bankAcc.length > EXPENSE_DRILL_LIMIT

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bankRowShowsVatNotRegistered } from '@/lib/bank-transaction-attention'
+import { bankRowNeedsAttention, bankRowShowsVatNotRegistered } from '@/lib/bank-transaction-attention'
 
 describe('bank-transaction-attention VAT badge', () => {
   it('flags unlinked expense withdraw without invoice', () => {
@@ -62,5 +62,43 @@ describe('bank-transaction-attention VAT badge', () => {
         invoiceReceived: false,
       })
     ).toBe(false)
+  })
+
+  it('does not flag card-linked expense as missing VAT on the bank row', () => {
+    expect(
+      bankRowShowsVatNotRegistered({
+        transType: 'withdraw',
+        category: 'expense',
+        isCardLinked: true,
+        isLinked: false,
+        invoiceReceived: false,
+      })
+    ).toBe(false)
+  })
+})
+
+describe('bank-transaction-attention card-linked expense', () => {
+  it('treats card-linked expense as complete without an account subject', () => {
+    expect(
+      bankRowNeedsAttention({
+        transType: 'withdraw',
+        category: 'expense',
+        isCardLinked: true,
+        isLinked: false,
+        accountSubjectId: null,
+      })
+    ).toEqual({ needsAttention: false, reason: null })
+  })
+
+  it('still flags unlinked expense as expense-link pending', () => {
+    expect(
+      bankRowNeedsAttention({
+        transType: 'withdraw',
+        category: 'expense',
+        isCardLinked: false,
+        isLinked: false,
+        accountSubjectId: null,
+      }).reason
+    ).toBe('expense_link_pending')
   })
 })

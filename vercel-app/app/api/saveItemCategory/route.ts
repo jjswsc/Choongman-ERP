@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdate, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import {
+  ITEM_CATEGORIES_MISSING_MESSAGE,
+  isMissingItemCategoriesTableError,
+} from '@/lib/item-categories-db'
+import {
+  appendInventoryTenantFilter,
+  assertInventoryTenantWritable,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 /** 품목 카테고리 추가/수정 (이름 변경 시 items.category도 업데이트) */
 export async function POST(request: NextRequest) {
@@ -7,6 +18,13 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    const writeBlock = assertInventoryTenantWritable(tenantScope)
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { headers })
+    }
+
     const body = (await request.json()) as {
       id?: number
       name?: string
@@ -24,13 +42,21 @@ export async function POST(request: NextRequest) {
     }
 
     if (id > 0 && oldName && oldName !== name) {
-      await supabaseUpdateByFilter('items', `category=eq.${encodeURIComponent(oldName)}`, { category: name })
+      await supabaseUpdateByFilter(
+        'items',
+        appendInventoryTenantFilter(`category=eq.${encodeURIComponent(oldName)}`, tenantScope),
+        { category: name }
+      )
       await supabaseUpdate('item_categories', id, { name, sort_order })
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
     if (id > 0) {
-      const existing = (await supabaseSelectFilter('item_categories', `id=eq.${id}`, { limit: 1, select: 'id,name' })) as { id?: number; name?: string }[] | null
+      const existingFilter = appendInventoryTenantFilter(`id=eq.${id}`, tenantScope)
+      const existing = (await supabaseSelectFilter('item_categories', existingFilter, {
+        limit: 1,
+        select: 'id,name',
+      })) as { id?: number; name?: string }[] | null
       if (!existing || existing.length === 0) {
         return NextResponse.json({ success: false, message: '존재하지 않는 카테고리입니다.' }, { headers })
       }
@@ -38,15 +64,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
-    const dup = (await supabaseSelectFilter('item_categories', `name=eq.${encodeURIComponent(name)}`, { limit: 1 })) as unknown[]
+    const dupFilter = appendInventoryTenantFilter(`name=eq.${encodeURIComponent(name)}`, tenantScope)
+    const dup = (await supabaseSelectFilter('item_categories', dupFilter, { limit: 1 })) as unknown[]
     if (dup && dup.length > 0) {
       return NextResponse.json({ success: false, message: '이미 같은 이름의 카테고리가 있습니다.' }, { headers })
     }
 
-    await supabaseInsert('item_categories', { name, sort_order })
+    await supabaseInsert('item_categories', stampInventoryTenantId({ name, sort_order }, tenantScope))
     return NextResponse.json({ success: true, message: '추가되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveItemCategory:', e)
+    if (isMissingItemCategoriesTableError(e)) {
+      return NextResponse.json({ success: false, message: ITEM_CATEGORIES_MISSING_MESSAGE }, { headers })
+    }
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '저장 실패' },
       { headers }

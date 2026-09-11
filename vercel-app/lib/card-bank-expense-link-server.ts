@@ -250,6 +250,7 @@ export async function registerCardExpenseFromBankTransaction(params: {
     })
     await supabaseUpdate('bank_transactions', bankTransactionId, {
       category: 'expense',
+      account_subject_id: null,
     })
   } catch (postingErr) {
     console.error('registerCardExpenseFromBankTransaction posting:', postingErr)

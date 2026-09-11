@@ -23,4 +23,13 @@ describe('isMissingPostgrestTableError', () => {
   it('does not treat network timeout as missing table', () => {
     expect(isMissingPostgrestTableError(new Error('Supabase request timeout'))).toBe(false)
   })
+
+  it('detects Omni item_categories PGRST205', () => {
+    expect(
+      isMissingPostgrestTableError(
+        'Supabase select failed: {"code":"PGRST205","details":null,"hint":"Perhaps you meant the table \'public.item_vendors\'","message":"Could not find the table \'public.item_categories\' in the schema cache"}',
+        'item_categories'
+      )
+    ).toBe(true)
+  })
 })

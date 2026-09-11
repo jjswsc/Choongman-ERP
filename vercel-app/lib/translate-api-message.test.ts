@@ -56,6 +56,12 @@ describe('translateApiMessage tenant schema', () => {
       )
     ).toBe('SCHEMA_MISSING')
     expect(translateApiMessage('inventory tenant_id 스키마가 없습니다.', t)).toBe('SCHEMA_MISSING')
+    expect(
+      translateApiMessage(
+        '품목 카테고리 테이블이 없습니다. Omni DB에 sql/omni_item_categories_01_create.sql 을 실행해 주세요.',
+        t
+      )
+    ).toBe('SCHEMA_MISSING')
   })
 
   it('translates missing company tenant alerts', () => {

@@ -3165,6 +3165,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       void handleQueryRowSave(r, mergedEdits)
                                     }}
                                   />
+                                ) : r.isCardLinked ? (
+                                  <span className="text-xs text-muted-foreground">—</span>
                                 ) : r.transType === "withdraw" && !isBankWithdrawCategoryWithoutSubject(cat) ? (
                                   <Select
                                     value={(edits?.accountSubjectId !== undefined ? edits.accountSubjectId : r.accountSubjectId != null ? String(r.accountSubjectId) : "__none__") || "__none__"}

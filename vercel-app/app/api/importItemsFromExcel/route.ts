@@ -9,10 +9,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import {
   supabaseSelect,
+  supabaseSelectFilter,
   supabaseInsertMany,
   supabaseInsert,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { isMissingItemCategoriesTableError } from '@/lib/item-categories-db'
+import {
+  appendInventoryTenantFilter,
+  resolveInventoryTenantScope,
+  stampInventoryTenantId,
+} from '@/lib/inventory-tenant-scope'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 /** 헤더에서 컬럼 인덱스 찾기 (한글/영어 모두 지원) */
 function findCol(header: string[], ...names: string[]): number {
@@ -97,20 +105,40 @@ export async function POST(request: NextRequest) {
         orderedCategoryNames.push(cat)
       }
     }
-    const existingCats = (await supabaseSelect('item_categories', { select: 'id,name', limit: 500 })) as { id?: number; name?: string }[] | null
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const tenantScope = await resolveInventoryTenantScope({ auth })
+    const categoryFilter = appendInventoryTenantFilter('', tenantScope)
+    let existingCats: { id?: number; name?: string }[] | null = null
+    try {
+      existingCats = (
+        categoryFilter
+          ? await supabaseSelectFilter('item_categories', categoryFilter, { select: 'id,name', limit: 500 })
+          : await supabaseSelect('item_categories', { select: 'id,name', limit: 500 })
+      ) as { id?: number; name?: string }[] | null
+    } catch (catErr) {
+      if (!isMissingItemCategoriesTableError(catErr)) throw catErr
+      existingCats = []
+    }
     const existingCatNames = new Set((existingCats || []).map((r) => String(r.name || '').trim()).filter(Boolean))
     for (let idx = 0; idx < orderedCategoryNames.length; idx++) {
       const name = orderedCategoryNames[idx]
       const sortOrder = idx
       try {
         if (existingCatNames.has(name)) {
-          await supabaseUpdateByFilter('item_categories', `name=eq.${encodeURIComponent(name)}`, { sort_order: sortOrder })
+          await supabaseUpdateByFilter(
+            'item_categories',
+            appendInventoryTenantFilter(`name=eq.${encodeURIComponent(name)}`, tenantScope),
+            { sort_order: sortOrder }
+          )
         } else {
-          await supabaseInsert('item_categories', { name, sort_order: sortOrder })
+          await supabaseInsert(
+            'item_categories',
+            stampInventoryTenantId({ name, sort_order: sortOrder }, tenantScope)
+          )
           existingCatNames.add(name)
         }
-      } catch (_) {
-        // 무시
+      } catch (catWriteErr) {
+        if (isMissingItemCategoriesTableError(catWriteErr)) break
       }
     }
 

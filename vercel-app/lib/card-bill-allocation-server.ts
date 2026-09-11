@@ -10,7 +10,7 @@ import {
   isAccountingPeriodClosedError,
 } from '@/lib/accounting-period-mutation-guard'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
-import { CARD_BILL_HEADER_NOTE, pickBankAccountSubjectIdForCardBill } from '@/lib/card-bill-allocation'
+import { CARD_BILL_HEADER_NOTE } from '@/lib/card-bill-allocation'
 import {
   deleteCardTransactionInputVatLedger,
   syncCardTransactionInputVatLedger,
@@ -264,10 +264,9 @@ export async function saveCardBillAllocation(params: {
 
   const bankTransactionId = header.bankTransactionId != null ? Number(header.bankTransactionId) : 0
   if (bankTransactionId > 0) {
-    const bankSubjectId = pickBankAccountSubjectIdForCardBill(normalized)
     await supabaseUpdate('bank_transactions', bankTransactionId, {
       category: 'expense',
-      ...(bankSubjectId != null ? { account_subject_id: bankSubjectId } : {}),
+      account_subject_id: null,
       updated_at: new Date().toISOString(),
     })
   }
