@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest"
 import type { PosMenu, PosMenuOption } from "@/lib/api-client"
 import {
+  chickenOptionPickerHasVisibleChoices,
   resolveChickenOptionPickerPlan,
+  resolveChickenOptionPickerStepTitleSuffix,
   shouldInitChickenTwoPhaseOnMenuOpen,
+  shouldOpenChickenOptionPicker,
 } from "@/lib/pos-chicken-option-picker-plan"
 
 const t = (k: string) => k
@@ -149,5 +152,100 @@ describe("resolveChickenOptionPickerPlan", () => {
     expect(plan.mode).toBe("flat-list")
     expect(plan.flatListOpts.length).toBeGreaterThan(0)
     expect(plan.activeStepGroups).toEqual(["part"])
+  })
+
+  it("skips empty Supreme picker when only hidden Size S remains", () => {
+    const supremeMenu: PosMenu = {
+      ...soyMenu,
+      id: "5",
+      code: "C002",
+      name: "Supreme Chicken",
+      category: "SPECIALTIES",
+      optionSelectionGroups: ["part", "sidedish"],
+      optionSelectionConfig: [
+        { key: "part", label: "part", audience: "all", required: true },
+        { key: "sidedish", label: "sidedish", audience: "delivery", required: true },
+      ],
+    }
+    const sizeS: PosMenuOption = {
+      ...mBoneless,
+      id: "s1",
+      menuId: "5",
+      name: "Size S - Boneless",
+      priceModifier: 0,
+      optionStepValues: { size: "S", part: "Boneless" },
+    }
+    const plan = resolveChickenOptionPickerPlan({
+      menu: supremeMenu,
+      options: [sizeS],
+      orderType: "delivery",
+      twoPhasePhase: null,
+      optionPickerStep: 0,
+      optionPickerSelections: {},
+      t,
+    })
+    expect(plan.activeStepGroups).toEqual([])
+    expect(plan.flatListOpts).toEqual([])
+    expect(plan.chickenDefaultDisplay).toBe("")
+    expect(chickenOptionPickerHasVisibleChoices(plan)).toBe(false)
+    expect(
+      shouldOpenChickenOptionPicker({
+        menu: supremeMenu,
+        options: [sizeS],
+        orderType: "delivery",
+      })
+    ).toBe(false)
+    expect(
+      resolveChickenOptionPickerStepTitleSuffix({
+        menu: supremeMenu,
+        orderType: "delivery",
+        twoPhasePhase: null,
+        optionPickerStep: 0,
+        options: [sizeS],
+      })
+    ).toBe("")
+  })
+
+  it("opens Supreme sidedish picker when Kimchi remains after hiding Size S", () => {
+    const supremeMenu: PosMenu = {
+      ...soyMenu,
+      id: "5",
+      code: "C002",
+      name: "Supreme Chicken",
+      category: "SPECIALTIES",
+      optionSelectionGroups: ["part", "sidedish"],
+      optionSelectionConfig: [
+        { key: "part", label: "part", audience: "all", required: true },
+        { key: "sidedish", label: "sidedish", audience: "delivery", required: true },
+      ],
+    }
+    const sizeS: PosMenuOption = {
+      ...mBoneless,
+      id: "s1",
+      menuId: "5",
+      name: "Size S - Boneless",
+      priceModifier: 0,
+      optionStepValues: { size: "S", part: "Boneless" },
+    }
+    const kimchiOpt: PosMenuOption = { ...kimchi, menuId: "5" }
+    const plan = resolveChickenOptionPickerPlan({
+      menu: supremeMenu,
+      options: [sizeS, kimchiOpt],
+      orderType: "delivery",
+      twoPhasePhase: null,
+      optionPickerStep: 0,
+      optionPickerSelections: {},
+      t,
+    })
+    expect(plan.activeStepGroups).toEqual(["sidedish"])
+    expect(plan.mode).toBe("multistep")
+    expect(plan.multistep?.stepValues).toContain("Kimchi")
+    expect(
+      shouldOpenChickenOptionPicker({
+        menu: supremeMenu,
+        options: [sizeS, kimchiOpt],
+        orderType: "delivery",
+      })
+    ).toBe(true)
   })
 })

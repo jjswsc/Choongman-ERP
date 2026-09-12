@@ -133,6 +133,7 @@ import {
   collectPosOptionPickerStepValues,
   resolvePosOptionPickerMatch,
 } from "@/lib/pos-option-picker-resolve"
+import { shouldOpenChickenOptionPicker } from "@/lib/pos-chicken-option-picker-plan"
 import {
   filterOptionSelectionGroupsForAudience,
   filterPosOptionsForVisibleGroups,
@@ -1082,7 +1083,11 @@ export default function PosOrderPage() {
       return
     }
     const opts = optionsByMenuId[menu.id]
-    if (opts && opts.length > 0) {
+    if (
+      opts &&
+      opts.length > 0 &&
+      shouldOpenChickenOptionPicker({ menu, options: opts, orderType })
+    ) {
       setOptionPickerMenu(menu)
       return
     }

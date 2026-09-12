@@ -8294,6 +8294,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posCatalogSyncLabel: 'ซิงก์เมนู',
     posCatalogSyncWaiting: 'รอซิงก์เมนู',
     posSelectOption: 'เลือกตัวเลือก',
+    posAddWithoutOption: 'เพิ่มโดยไม่เลือกตัวเลือก',
     posSelect: 'เลือก',
     posBackToTableSelect: 'กลับไปเลือกโต๊ะ',
     posAddItem: 'เพิ่มรายการ',
@@ -10148,7 +10149,6 @@ export const I18N_POS_TH: Record<string, string> = {
     posTraceIdJumpOrder: 'Go to order by Trace ID',
     posMenuSaveBeforeImageUpload:
       'กรุณาบันทึกเมนูก่อน แล้วค่อยอัปโหลดรูปภาพ (ชื่อไฟล์ต้องมีรหัสเมนู)',
-    posAddWithoutOption: 'Add without option',
     posOptionStepMismatchFallback: 'Option steps are misconfigured; showing a flat option list. Ask an admin to fix option_step_values.',
     posCollabMaxPerOrder: 'Max',
     posCollabQuantity: 'Qty to apply',

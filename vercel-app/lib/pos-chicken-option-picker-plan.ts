@@ -64,6 +64,14 @@ export function groupHasSelectablePickerValues(params: {
   return false
 }
 
+function pickerOptionsExcludingHiddenChickenSize(params: {
+  options: PosMenuOption[]
+  isChickenMenu: boolean
+}): PosMenuOption[] {
+  if (!params.isChickenMenu) return params.options
+  return params.options.filter((o) => !isChickenSizeOnlyOptionName(o.name))
+}
+
 /** 채널·옵션 목록 기준 — 선택지가 없는 단계(part/sidedish 등)는 제외 */
 export function filterGroupsWithSelectableValues(params: {
   groups: string[]
@@ -71,7 +79,8 @@ export function filterGroupsWithSelectableValues(params: {
   options: PosMenuOption[]
   isChickenMenu: boolean
 }): string[] {
-  const optionsWithSteps = params.options.filter(
+  const pickerOptions = pickerOptionsExcludingHiddenChickenSize(params)
+  const optionsWithSteps = pickerOptions.filter(
     (o) =>
       o.optionType === "substitution" &&
       o.optionStepValues &&
@@ -82,7 +91,7 @@ export function filterGroupsWithSelectableValues(params: {
       groupKey,
       groups: params.groups,
       menuCode: params.menuCode,
-      options: params.options,
+      options: pickerOptions,
       optionsWithSteps,
       isChickenMenu: params.isChickenMenu,
     })
@@ -180,6 +189,7 @@ export function resolveChickenOptionPickerStepTitleSuffix(params: {
   orderType: string
   twoPhasePhase: ChickenTwoPhasePhase
   optionPickerStep: number
+  options?: PosMenuOption[]
 }): string {
   const cfg = new Map(
     (params.menu.optionSelectionConfig || [])
@@ -187,14 +197,54 @@ export function resolveChickenOptionPickerStepTitleSuffix(params: {
       .filter(([k]) => !!k)
   )
   const aud = resolveStepAudienceFromOrderType(params.orderType)
-  const allG = filterOptionSelectionGroupsForAudience(
+  const allGRaw = filterOptionSelectionGroupsForAudience(
     params.menu.optionSelectionGroups || [],
     cfg,
     aud
   )
+  const allG =
+    params.options && params.options.length > 0
+      ? filterGroupsWithSelectableValues({
+          groups: allGRaw,
+          menuCode: params.menu.code,
+          options: params.options,
+          isChickenMenu: isChickenMenu(params.menu),
+        })
+      : allGRaw
   const stepG =
     params.twoPhasePhase === "ancillary" ? getBarBqAncillarySelectionGroups(allG) : allG
   return stepG.length ? ` (${(params.optionPickerStep || 0) + 1}/${stepG.length})` : ""
+}
+
+export function chickenOptionPickerHasVisibleChoices(plan: ChickenOptionPickerPlan): boolean {
+  if (plan.chickenDefaultDisplay) return true
+  if (plan.mode === "two-phase-m-size") return plan.flatMOpts.length > 0
+  if (plan.mode === "multistep" && plan.multistep) {
+    if (plan.multistep.usePriceList) return plan.multistep.priceListRows.length > 0
+    if (plan.multistep.stepValues.length > 0) return true
+    return plan.multistep.groupRequired === false
+  }
+  return plan.flatListOpts.some((o) => o.optionType === "substitution")
+}
+
+/** Size S만 있고 UI에서 숨겨지면 빈 모달 대신 바로 담기 */
+export function shouldOpenChickenOptionPicker(params: {
+  menu: PosMenu
+  options: PosMenuOption[]
+  orderType: string
+}): boolean {
+  if (!params.options.length) return false
+  const twoPhase = shouldInitChickenTwoPhaseOnMenuOpen(params)
+  const plan = resolveChickenOptionPickerPlan({
+    menu: params.menu,
+    options: params.options,
+    orderType: params.orderType,
+    twoPhasePhase: twoPhase ? "size" : null,
+    optionPickerStep: 0,
+    optionPickerSelections: {},
+    t: () => "",
+  })
+  return chickenOptionPickerHasVisibleChoices(plan)
 }
 
 const GROUP_LABEL_KEYS: Record<string, string> = {

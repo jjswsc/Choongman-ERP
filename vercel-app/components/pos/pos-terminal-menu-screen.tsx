@@ -75,6 +75,7 @@ import { resolvePosCartOptionDisplayName } from '@/lib/pos-cart-option-display-n
 import { resolveChickenDefaultOptionDisplayName } from '@/lib/pos-chicken-option-inference'
 import {
   shouldInitChickenTwoPhaseOnMenuOpen,
+  shouldOpenChickenOptionPicker,
   resolveChickenOptionPickerStepTitleSuffix,
 } from '@/lib/pos-chicken-option-picker-plan'
 import { PosChickenOptionPickerPanel } from '@/components/pos/pos-chicken-option-picker-panel'
@@ -803,7 +804,10 @@ export function PosTerminalMenuScreen({
       return
     }
     const opts = optionsByMenuId[menu.id]
-    if (opts?.length) {
+    if (
+      opts?.length &&
+      shouldOpenChickenOptionPicker({ menu, options: opts, orderType })
+    ) {
       setOptionPickerMenu(menu)
       setOptionPickerStep(0)
       setOptionPickerSelections({})
@@ -1621,6 +1625,7 @@ export function PosTerminalMenuScreen({
                     orderType,
                     twoPhasePhase: barBqPickerPhase,
                     optionPickerStep,
+                    options: optionsByMenuId[optionPickerMenu.id] || [],
                   })
                 : ''}
             </DialogTitle>

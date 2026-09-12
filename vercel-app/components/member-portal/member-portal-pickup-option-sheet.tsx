@@ -102,6 +102,7 @@ export function MemberPortalPickupOptionSheet({
     orderType: "takeout",
     twoPhasePhase,
     optionPickerStep,
+    options,
   })
 
   return (

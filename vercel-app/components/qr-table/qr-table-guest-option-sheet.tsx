@@ -92,6 +92,7 @@ export function QrTableGuestOptionSheet({
     orderType: 'dine-in',
     twoPhasePhase,
     optionPickerStep,
+    options,
   })
 
   const todayStr = getBangkokTodayDateString()

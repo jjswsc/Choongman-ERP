@@ -365,7 +365,13 @@ export function PosChickenOptionPickerPanel({
   return (
     <div className="flex flex-col gap-2 py-2">
       {defaultBtn}
-      {renderMPriceRows(plan.flatListOpts, (opt) => onAddToCart(menu, opt))}
+      {plan.flatListOpts.length > 0 ? (
+        renderMPriceRows(plan.flatListOpts, (opt) => onAddToCart(menu, opt))
+      ) : (
+        <Button variant="outline" onClick={() => act(() => onAddToCart(menu, null))}>
+          {t("posAddWithoutOption") || "옵션 없이 담기"}
+        </Button>
+      )}
     </div>
   )
 }
