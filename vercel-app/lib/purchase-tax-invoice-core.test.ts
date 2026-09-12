@@ -141,6 +141,7 @@ describe('purchase tax invoice helpers', () => {
     expect(fixOcrInvoiceLetterIPrefix('lv690819-0637')).toBe('IV690819-0637')
     expect(fixOcrInvoiceLetterIPrefix('1NV-20260524902')).toBe('INV-20260524902')
     expect(fixOcrInvoiceLetterIPrefix('IM20260819011079')).toBe('IM20260819011079')
+    expect(fixOcrInvoiceLetterIPrefix('1VR-260812345')).toBe('IVR-260812345')
     expect(fixOcrInvoiceLetterIPrefix('1v-HI652608050053')).toBe('IV-HI652608050053')
     expect(fixOcrInvoiceLetterIPrefix('1V1')).toBe('1V1')
     expect(compactPurchaseInvoiceToken('1016908/00226orto')).toBe('ID16908/00226')
@@ -246,6 +247,8 @@ describe('purchase tax invoice helpers', () => {
     expect(looksLikeJunkSellerName('ID | 12964955')).toBe(true)
     expect(looksLikeJunkSellerName('!) | 12964955')).toBe(true)
     expect(looksLikeJunkSellerName('163/141 ซอยประชาอุทิศ11 แขวงดอนเมือง')).toBe(true)
+    expect(looksLikeJunkSellerName('จำภัต (สำนักงานใหญ่) ต้นฉบับ')).toBe(true)
+    expect(looksLikeJunkSellerName('จำกัด')).toBe(true)
     expect(looksLikeJunkSellerName('บริษัท ช้อปปี้ (ประเทศไทย) จำกัด')).toBe(false)
     expect(looksLikeJunkSellerName('find')).toBe(true)
     expect(looksLikeJunkSellerName('fad')).toBe(true)
@@ -254,6 +257,12 @@ describe('purchase tax invoice helpers', () => {
   })
 
   it('cuts trailing address numbers after จำกัด', () => {
+    expect(trimPurchaseTaxSellerName('บริษัท แพนฟุ้ด จำกัด')).toBe('บริษัท แพนฟู้ด จำกัด')
+    expect(trimPurchaseTaxSellerName('บริษัท ไทตั้น คอม จำกัด (สำนักงานใหญ่) ต้นฉบับ')).toBe(
+      'บริษัท ไทตั้น คอม จำกัด'
+    )
+    expect(trimPurchaseTaxSellerName('จำภัต (สำนักงานใหญ่) ต้นฉบับ')).toBe('จำกัด')
+    expect(trimPurchaseTaxSellerName('Sบริษัท ทดสอบ จำกัด')).toBe('บริษัท ทดสอบ จำกัด')
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟู้ด จำกัด 523 6 3')).toBe('บริษัท แพนฟู้ด จำกัด')
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟูด จำกัด 523 6 3')).toBe('บริษัท แพนฟู้ด จำกัด')
     expect(trimPurchaseTaxSellerName('บริษัท แพนฟุด จำกัด')).toBe('บริษัท แพนฟู้ด จำกัด')

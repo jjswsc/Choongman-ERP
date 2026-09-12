@@ -12,6 +12,7 @@ import {
   compactPurchaseInvoiceToken,
   digitsTin13,
   isTruncatedShopeeInvoiceNo,
+  looksLikeGrabPartnerInvoiceNo,
   normalizeShopeeInvoiceBlob,
   purchaseTaxVatLooksWrong,
   thaiTinChecksumOk,
@@ -443,7 +444,7 @@ export function layoutInvoiceIsHintWorthy(field?: LayoutField<string>): boolean 
 /** 과거 번호들에서 공통 꼴을 뽑는다. 근거가 빈약하면 undefined. */
 export function learnVendorInvoiceHint(pastNumbers: string[]): VendorInvoiceHint | undefined {
   const norms = pastNumbers
-    .filter((n) => !isTruncatedShopeeInvoiceNo(n) && !/^THMG20/i.test(String(n || '')))
+    .filter((n) => !isTruncatedShopeeInvoiceNo(n) && !looksLikeGrabPartnerInvoiceNo(n))
     .map(normToken)
     .filter((n) => n.length >= 4 && /\d/.test(n))
   if (!norms.length) return undefined
@@ -1160,6 +1161,7 @@ function layoutInvoiceLooksJunk(token: string): boolean {
   if (/^\d{5}[A-Za-z]\d{5}$/.test(packed)) return true
   if (/^CT[O0]?\d{4,}$/i.test(packed)) return true
   if (/^BL/i.test(packed)) return true
+  if (/^(?:ID)?THMG20/i.test(packed) || looksLikeGrabPartnerInvoiceNo(t)) return true
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(t)) return true
   if (/^\d{0,2}-\d{2}-\d{2}$/.test(t)) return true
   if (/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(t)) return true

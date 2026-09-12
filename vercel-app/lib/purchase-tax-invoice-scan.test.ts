@@ -87,6 +87,7 @@ describe('invoiceNoLooksPlausible', () => {
     expect(invoiceNoLooksPlausible('IM20260701000087')).toBe(true)
     expect(invoiceNoLooksPlausible('GFAD20260825011177')).toBe(true)
     expect(invoiceNoLooksPlausible('THMG20250616072219019783')).toBe(false)
+    expect(invoiceNoLooksPlausible('IDIDTHMG20250804101630012435')).toBe(false)
     expect(invoiceNoLooksPlausible('010726E00037051')).toBe(true)
     expect(invoiceNoLooksPlausible('370290826W02075')).toBe(true)
     expect(invoiceNoLooksPlausible('12345678')).toBe(true)
@@ -1364,6 +1365,95 @@ describe('office invoice OCR (ID prefix, bank name, line vs total)', () => {
     )
     expect(otherDay?.invoiceNo).toBe('GFAD20260826011200')
     expect(invoiceTokensAreSameDocument(row?.invoiceNo, otherDay?.invoiceNo)).toBe(false)
+  })
+
+  it('reads Grab IM number and HQ, not Partner ID IDTHMG or buyer branch 00001', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'ใบเสร็จรับเงิน / ใบกำกับภาษี RECEIPT / TAX INVOICE',
+        'Grabtaxi (Thailand) Co., Ltd. (Head Office)',
+        '252 SPE Tower, 10th floor',
+        'TAX ID 0105556090377',
+        'รหัสพาร์ทเนอร์/Partner ID IDTHMG20250804101630012435',
+        'ชื่อ/Name 1 บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขาที่ 00001)',
+        'เลขประจำตัวผู้เสียภาษี/Tax ID 0105568080622',
+        'รหัสสาขา/Partner Branch ID 00001',
+        'เลขที่/No. IM20260801054170',
+        'วันที่/Date 01/08/2026',
+        'รวมมูลค่าสินค้าและบริการ Total Amount 3,819.49',
+        'ภาษีมูลค่าเพิ่ม VAT 7% 267.36',
+        'จำนวนเงินรวมทั้งสิ้น Grand Total 4,086.85',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('IM20260801054170')
+    expect(row?.invoiceNo).not.toMatch(/THMG|IDTHMG/i)
+    expect(row?.sellerTaxId).toBe('0105556090377')
+    expect(row?.sellerName).toContain('แกร็บแท็กซี่')
+    expect(row?.sellerBranch).toBe('สำนักงานใหญ่')
+    expect(row?.netAmount).toBe(3819.49)
+    expect(row?.vatAmount).toBe(267.36)
+  })
+
+  it('does not keep Partner ID when the IM number is missing from OCR', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'Grabtaxi (Thailand) Co., Ltd. (Head Office)',
+        'TAX ID 0105556090377',
+        'รหัสพาร์ทเนอร์/Partner ID IDTHMG20250804101630012435',
+        'ชื่อ/Name 1 บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขาที่ 00001)',
+        'รหัสสาขา/Partner Branch ID 00001',
+        'รวมมูลค่าสินค้าและบริการ 100.00',
+        'ภาษีมูลค่าเพิ่ม 7.00',
+        'จำนวนเงินรวมทั้งสิ้น 107.00',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo || '').not.toMatch(/THMG|IDTHMG/i)
+    expect(row?.sellerBranch).toBe('สำนักงานใหญ่')
+  })
+
+  it('attaches IVR prefix and does not keep OCR junk after จำกัด', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท ทดสอบ จำกัด (สำนักงานใหญ่) ต้นฉบับ',
+        'เลขประจำตัวผู้เสียภาษี 0105542024849',
+        'ลูกค้า บริษัท เอเชีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขาที่ 00001)',
+        'เลขที่ IVR-260812345',
+        'วันที่ 12/08/2569',
+        'มูลค่าสินค้า 100.00',
+        'ภาษีมูลค่าเพิ่ม 7.00',
+        'รวมทั้งสิ้น 107.00',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('IVR-260812345')
+    expect(row?.sellerName).toBe('บริษัท ทดสอบ จำกัด')
+    expect(row?.sellerName).not.toMatch(/สำนักงานใหญ่|ต้นฉบับ|จำภัต/)
+    expect(row?.sellerBranch).toBe('สำนักงานใหญ่')
+  })
+
+  it('keeps Taitun company name, not OCR จำภัต suffix, and does not use VAT as net', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'บริษัท ไทตั้น คอม จำกัด (สำนักงานใหญ่)',
+        'เลขประจำตัวผู้เสียภาษีอากร 0105542024849',
+        'ชื่อลูกค้า Customers:',
+        'บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด (สาขา00001)',
+        'เลขที่ใบกำกับ / No. 6908/0022',
+        'วันที่ / Date 06/08/2569',
+        'จำภัต (สำนักงานใหญ่) ต้นฉบับ',
+        'รวมเงิน 1,790.00',
+        'ภาษีมูลค่าเพิ่ม (VAT 7%) 125.30',
+        'ยอดรวมสุทธิ NET AMOUNT 1,915.30',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('6908/0022')
+    expect(row?.sellerName).toBe('บริษัท ไทตั้น คอม จำกัด')
+    expect(row?.sellerName).not.toMatch(/จำภัต|ต้นฉบับ|สำนักงานใหญ่/)
+    expect(row?.netAmount).toBe(1790)
+    expect(row?.vatAmount).toBe(125.3)
   })
 })
 

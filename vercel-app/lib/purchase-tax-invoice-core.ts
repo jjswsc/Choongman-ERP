@@ -156,9 +156,19 @@ export function fixOcrInvoiceLetterIPrefix(raw: string): string {
   if (/^1NV(?=[-/]?\d)/i.test(s)) return s.replace(/^1NV/i, 'INV')
   if (/^1NCT(?=\d)/i.test(s)) return s.replace(/^1NCT/i, 'INCT')
   if (/^1VT(?=[-/]?\d)/i.test(s)) return s.replace(/^1VT/i, 'IVT')
+  if (/^1VR(?=[-/]?\d)/i.test(s)) return s.replace(/^1VR/i, 'IVR')
   if (/^1M(?=20\d{12}$)/i.test(s)) return s.replace(/^1M/i, 'IM')
-  if (/^[Il1|][Vv](?=[-/]?[A-Za-z]{0,4}\d{4,})/i.test(s)) return s.replace(/^[Il1|][Vv]/i, 'IV')
+  if (/^[Il1|][Vv](?=[-/]?[A-Za-z]{0,4}[-/]?\d{4,})/i.test(s)) return s.replace(/^[Il1|][Vv]/i, 'IV')
   return s
+}
+
+/** Grab รหัสพาร์ทเนอร์ / Partner ID. ใบกำกับเลขที่ IM/GFAD ไม่ใช่ตัวนี้ */
+export function looksLikeGrabPartnerInvoiceNo(raw: unknown): boolean {
+  const packed = String(raw || '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase()
+  if (/^(?:IM|GFAD)20\d{12}$/.test(packed)) return false
+  return /(?:ID)*THMG20\d{8,}/.test(packed)
 }
 
 /** OCR이 ID 접두를 10/1D/I0 으로 읽거나, Original 조각(orto)을 번호 뒤에 붙인 경우 */
@@ -215,7 +225,7 @@ export function purchaseInvoiceNosAreSameDocument(a?: string, b?: string): boole
   const nb = compact(b)
   if (!na || !nb) return false
   if (na === nb) return true
-  const strip = (t: string) => t.replace(/^(INV|IVT|IV|NX|NC|RV|SI|CS|DCI|DOI|TI|ABB|RT)/, '')
+  const strip = (t: string) => t.replace(/^(INV|IVT|IVR|IV|NX|NC|RV|SI|CS|DCI|DOI|TI|ABB|RT)/, '')
   const sa = strip(na)
   const sb = strip(nb)
   if (sa === sb && sa.length >= 6) return true
@@ -396,9 +406,11 @@ export function looksLikeJunkSellerName(raw: unknown): boolean {
   if (/[|]/.test(s)) return true
   if (/[!|]/.test(s) && /\d{5,}/.test(s) && !/บริษัท|ห้าง|ร้าน|ทรัสต์/.test(s)) return true
   if (/ซอย|แขวง|เขต|ถนน/.test(s) && !/บริษัท|ห้าง|ร้าน|ทรัสต์/.test(s)) return true
+  if (/^(?:บริษัท\s*)?(?:จำกัด(?:\s*\(มหาชน\))?)$/.test(s)) return true
   const hasEntity = /บริษัท|ห้าง|ร้าน|ทรัสต์|limited|l\.?t\.?d|co\.?\s*ltd|\bco\b|นาย|นางสาว|นาง/i.test(s)
   if (!hasEntity) {
     if (/จนกว่า/.test(s)) return true
+    if (/ต้นฉบับ|สำนักงานใหญ่|สำเนา/.test(s)) return true
     if (/^(find|fad|contact|customer|taxrex)s?$/i.test(s)) return true
     if (/^[A-Za-z]{2,16}$/.test(s)) return true
   }
@@ -412,9 +424,11 @@ export function trimPurchaseTaxSellerName(raw: unknown): string {
     .trim()
   if (!s) return ''
   s = s.replace(/ชนาคาร/g, 'ธนาคาร')
-  s = s.replace(/แพนฟ[ูุืีิ]ด/g, 'แพนฟู้ด')
+  s = s.replace(/จำ[กภ]ัต/g, 'จำกัด')
+  s = s.replace(/แพนฟ[ูุืีิ]?[่้๊๋]?ด/g, 'แพนฟู้ด')
   s = s.replace(/อีโวลูชัน/g, 'อีโวลูชั่น')
   // OCR이 ซี(C)를 1·4로 읽거나 점을 붙인 경우 — `4.เอ.พี.` / `1. เอ. พี.`
+  s = s.replace(/^[A-Za-z0-9]\s*(?=บริษัท|ห้างหุ้นส่วน)/, '')
   s = s.replace(/บริษัท\s+[14C]\.?\s*(?=[\u0E00-\u0E7F]+\.)/g, 'บริษัท ซี. ')
   s = s.replace(/\.\s+(?=[\u0E00-\u0E7F])/g, '.')
   s = s.replace(/\s*หน้า\s*\d+\s*(?:of|\/)\s*\d+/gi, ' ')
@@ -423,7 +437,8 @@ export function trimPurchaseTaxSellerName(raw: unknown): string {
   s = s.replace(/\s*\|+\s*/g, ' ')
   s = s.replace(/\s+\b[a-z]{2,6}\b\s*$/g, '')
   s = s.replace(/\s+[A-Za-z]\s*$/g, '')
-  s = s.replace(/\s*\((?:Head\s*Office|สำนักงานใหญ่)\)\s*$/i, '')
+  s = s.replace(/\s*\((?:Head\s*Office|สำนักงานใหญ่)\)\s*/gi, ' ')
+  s = s.replace(/\s+(?:ต้นฉบับ|สำเนา)\s*$/g, '')
   s = s.replace(/\s{2,}/g, ' ').trim()
   s = s.replace(/\s*ใบ(?:กำกับ(?:ภาษี)?|เสร็จ(?:รับเงิน)?|ส่งสินค้า|แจ้งหนี้).*$/u, '')
   s = s.replace(/(จำกัด(?:\s*\(มหาชน\))?)ใบ$/u, '$1')
