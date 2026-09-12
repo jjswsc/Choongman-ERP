@@ -362,6 +362,7 @@ type PosOrderLoyaltyRow = {
   coupon_code?: string | null
   created_by?: string | null
   order_type?: string | null
+  memo?: string | null
   payment_cash?: number | null
   payment_card?: number | null
   payment_qr?: number | null
@@ -377,14 +378,12 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
   const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
     limit: 1,
     select:
-      'id,order_no,store_code,status,total,member_id,point_used,point_earned,coupon_code,created_by,order_type,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app',
+      'id,order_no,store_code,status,total,member_id,point_used,point_earned,coupon_code,created_by,order_type,memo,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app',
   })) as PosOrderLoyaltyRow[]
   const order = rows?.[0]
   if (!order?.id) return 0
 
   const memberId = Number(order.member_id || 0)
-  if (!memberId) return 0
-
   const total = Math.max(0, Number(order.total || 0))
   const paymentSum = posOrderPaymentSumFromAmounts({
     paymentCash: Number(order.payment_cash || 0),
@@ -399,14 +398,15 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
   if (!paymentComplete && !paidLike) return 0
 
   const priorEarned = roundMemberPointsEarn(order.point_earned)
-  const schedulePointNotify = async (earned: number, used: number) => {
+  const schedulePointNotify = async (earned: number, used: number, notifyMemberId = memberId) => {
+    if (!(notifyMemberId > 0)) return
     try {
       const { scheduleNotifyMemberPointLineForPaidOrder } = await import(
         '@/lib/member-point-line-notify-schedule'
       )
       await scheduleNotifyMemberPointLineForPaidOrder({
         orderId: id,
-        memberId,
+        memberId: notifyMemberId,
         storeCode: String(order.store_code || '').trim(),
         orderNo: String(order.order_no || ''),
         earned,
@@ -420,6 +420,70 @@ export async function ensurePosOrderLoyaltyApplied(orderId: number): Promise<num
     await schedulePointNotify(priorEarned, roundMemberPointsEarn(order.point_used))
     return priorEarned
   }
+
+  let splits: import('@/lib/pos-split-receipt-memo').PosSplitReceiptSnapshot[] | null = null
+  try {
+    const { parsePosSplitReceiptsFromMemo } = await import('@/lib/pos-split-receipt-memo')
+    splits = parsePosSplitReceiptsFromMemo(order.memo)
+  } catch {
+    splits = null
+  }
+  const splitHasMember = Boolean(
+    splits?.some((split) => Math.max(0, Math.trunc(Number(split.member?.memberId) || 0)) > 0)
+  )
+
+  if (splitHasMember && splits && splits.length > 1) {
+    try {
+      const { applyLoyaltyForPaidOrderSplits, attachSplitLoyaltyToSnapshots } = await import(
+        '@/lib/pos-split-loyalty'
+      )
+      const splitLoyalty = await applyLoyaltyForPaidOrderSplits({
+        orderId: id,
+        storeCode: String(order.store_code || '').trim(),
+        orderNo: String(order.order_no || ''),
+        orderType: String(order.order_type || ''),
+        createdBy: String(order.created_by || ''),
+        couponCode: String(order.coupon_code || '').trim() || undefined,
+        pointUsed: roundMemberPointsEarn(order.point_used),
+        fallbackMemberId: memberId,
+        orderTotal: total,
+        splits,
+      })
+      const earned = roundMemberPointsEarn(splitLoyalty.pointEarned)
+      const nextSplits = attachSplitLoyaltyToSnapshots(splits, splitLoyalty.perSplit)
+      const { upsertPosSplitReceiptsInMemo } = await import('@/lib/pos-split-receipt-memo')
+      const nextMemo = upsertPosSplitReceiptsInMemo(order.memo, nextSplits)
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, {
+        ...(earned > 0 ? { point_earned: earned } : {}),
+        ...(nextMemo !== String(order.memo || '') ? { memo: nextMemo } : {}),
+      })
+      try {
+        const { redeemMemberCouponIssuesForPaidOrder } = await import('@/lib/pos-coupon-server')
+        await redeemMemberCouponIssuesForPaidOrder(id)
+      } catch (redeemErr) {
+        console.error('ensurePosOrderLoyaltyApplied coupon redeem:', redeemErr)
+      }
+      const used = roundMemberPointsEarn(order.point_used)
+      const notified = new Set<number>()
+      for (const row of splitLoyalty.perSplit) {
+        if (row.memberId <= 0 || notified.has(row.memberId)) continue
+        notified.add(row.memberId)
+        const memberEarn = splitLoyalty.perSplit
+          .filter((r) => r.memberId === row.memberId)
+          .reduce((s, r) => s + roundMemberPointsEarn(r.pointEarned), 0)
+        await schedulePointNotify(
+          memberEarn,
+          row.memberId === splitLoyalty.primaryMemberId ? used : 0,
+          row.memberId
+        )
+      }
+      return earned
+    } catch (splitErr) {
+      console.error('ensurePosOrderLoyaltyApplied split loyalty:', splitErr)
+    }
+  }
+
+  if (!memberId) return 0
 
   try {
     const ledger = (await supabaseSelectFilter(

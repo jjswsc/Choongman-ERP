@@ -269,6 +269,7 @@ type PosPaymentMemberBlockProps = {
   memberSearchEmpty: boolean
   orderType?: string | null
   tierDiscountBlockedByManual?: boolean
+  guestHint?: string
   t: (key: string) => string
   tr: (key: string, fallback: string) => string
 }
@@ -294,6 +295,7 @@ export function PosPaymentMemberBlock({
   tierDiscountBlockedByManual = false,
   t,
   tr,
+  guestHint,
 }: PosPaymentMemberBlockProps) {
   return (
     <div className="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-amber-50/80 via-card to-card p-3 shadow-sm dark:from-amber-950/20 dark:via-card dark:to-card">
@@ -305,6 +307,9 @@ export function PosPaymentMemberBlock({
           <p className="text-sm font-semibold leading-tight">
             {t('posPaymentSectionMember') || t('posMember') || '회원 검색'}
           </p>
+          {guestHint ? (
+            <p className="text-[10px] font-medium text-amber-800/80 dark:text-amber-200/80">{guestHint}</p>
+          ) : null}
         </div>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <Input

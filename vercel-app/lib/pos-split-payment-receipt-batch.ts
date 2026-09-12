@@ -207,6 +207,17 @@ export function buildSplitPaymentReceiptBatch(
         suppressReceiptModalAutoPrint: opts?.suppressReceiptModalAutoPrint ?? false,
         printInstanceKey: `dutch:${base.orderNo}:${idx}:${split.key}`,
         ...(serverOrderId > 0 ? { serverOrderId } : {}),
+        ...(split.member?.memberId && split.member.memberId > 0 ? { memberId: split.member.memberId } : {}),
+        ...(split.member?.memberNo ? { memberNo: split.member.memberNo } : {}),
+        ...(split.member?.memberPhone ? { memberPhone: split.member.memberPhone } : {}),
+        ...(split.member?.memberTierCode ? { memberTierCode: split.member.memberTierCode } : {}),
+        ...(Math.max(0, Number(split.member?.memberPointEarned) || 0) > 0.0001
+          ? { memberPointEarned: round2(Math.max(0, Number(split.member?.memberPointEarned) || 0)) }
+          : {}),
+        ...(split.member?.memberPointBalance != null &&
+        Number.isFinite(Number(split.member.memberPointBalance))
+          ? { memberPointBalance: round2(Number(split.member.memberPointBalance)) }
+          : {}),
       },
     ]
   })
@@ -288,4 +299,42 @@ export function buildSplitPaymentReceiptBatchFromOrder(
     },
     splitRows
   )
+}
+
+export type SplitReceiptLoyaltyRow = {
+  key: string
+  memberId: number
+  memberNo?: string
+  memberPhone?: string
+  memberTierCode?: string
+  pointEarned: number
+  pointBalanceExcludingEarn?: number
+}
+
+/** 결제 API splitLoyalty 를 분리 영수증에 병합 — 빌별 멤버·적립 */
+export function applySplitLoyaltyToReceiptBatch(
+  rows: ReceiptModalData[],
+  splitLoyalty?: SplitReceiptLoyaltyRow[] | null
+): ReceiptModalData[] {
+  if (!Array.isArray(rows) || rows.length === 0) return rows
+  if (!Array.isArray(splitLoyalty) || splitLoyalty.length === 0) return rows
+  const byKey = new Map(splitLoyalty.map((row) => [String(row.key || ''), row]))
+  return rows.map((row) => {
+    const inst = String(row.printInstanceKey || '')
+    if (!inst.startsWith('dutch:')) return row
+    const key = inst.split(':').pop() || ''
+    const hit = byKey.get(key) || splitLoyalty.find((s) => inst.includes(`:${s.key}`))
+    if (!hit) return row
+    return {
+      ...row,
+      memberId: hit.memberId,
+      ...(hit.memberNo ? { memberNo: hit.memberNo } : {}),
+      ...(hit.memberPhone ? { memberPhone: hit.memberPhone } : {}),
+      ...(hit.memberTierCode ? { memberTierCode: hit.memberTierCode } : {}),
+      memberPointEarned: round2(Math.max(0, Number(hit.pointEarned) || 0)),
+      ...(hit.pointBalanceExcludingEarn != null
+        ? { memberPointBalance: round2(Number(hit.pointBalanceExcludingEarn)) }
+        : {}),
+    }
+  })
 }

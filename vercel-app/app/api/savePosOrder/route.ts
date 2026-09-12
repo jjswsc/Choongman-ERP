@@ -717,33 +717,82 @@ export async function POST(req: NextRequest) {
       tierCode?: string
       pointBalanceExcludingEarn?: number
     } | null = null
-    if (memberId > 0 && paymentComplete && created?.id) {
+    let splitLoyaltyRows: import('@/lib/pos-split-loyalty').SplitLoyaltyReceiptRow[] = []
+    if (paymentComplete && created?.id) {
       try {
-        const loyalty = await applyLoyaltyOnOrder({
-          memberId,
-          orderId: Number(created.id),
-          storeCode,
-          totalAmount: total,
-          pointUsed,
-          pointEarned: pointEarnedReq,
-          orderNo,
-          couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
-          orderType,
-          createdBy,
-        })
-        pointEarned = loyalty.pointEarned
-        stampResult = loyalty.stamp ?? null
-        loyaltyReceipt = {
-          ...(loyalty.memberNo ? { memberNo: loyalty.memberNo } : {}),
-          ...(loyalty.phone ? { phone: loyalty.phone } : {}),
-          ...(loyalty.tierCode ? { tierCode: loyalty.tierCode } : {}),
-          ...(loyalty.pointBalanceExcludingEarn != null
-            ? { pointBalanceExcludingEarn: loyalty.pointBalanceExcludingEarn }
-            : {}),
+        const { parsePosSplitReceiptsFromMemo, upsertPosSplitReceiptsInMemo } = await import(
+          '@/lib/pos-split-receipt-memo'
+        )
+        const splits = parsePosSplitReceiptsFromMemo(memo)
+        const splitHasMember = Boolean(
+          splits?.some((split) => Math.max(0, Math.trunc(Number(split.member?.memberId) || 0)) > 0)
+        )
+        if (splitHasMember && splits && splits.length > 1) {
+          const { applyLoyaltyForPaidOrderSplits, attachSplitLoyaltyToSnapshots } = await import(
+            '@/lib/pos-split-loyalty'
+          )
+          const splitLoyalty = await applyLoyaltyForPaidOrderSplits({
+            orderId: Number(created.id),
+            storeCode,
+            orderNo,
+            orderType,
+            createdBy,
+            couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
+            pointUsed,
+            fallbackMemberId: memberId,
+            orderTotal: total,
+            splits,
+          })
+          pointEarned = splitLoyalty.pointEarned
+          splitLoyaltyRows = splitLoyalty.perSplit
+          const primaryRow =
+            splitLoyalty.perSplit.find((row) => row.memberId === splitLoyalty.primaryMemberId) ||
+            splitLoyalty.perSplit[0]
+          if (primaryRow) {
+            loyaltyReceipt = {
+              ...(primaryRow.memberNo ? { memberNo: primaryRow.memberNo } : {}),
+              ...(primaryRow.memberPhone ? { phone: primaryRow.memberPhone } : {}),
+              ...(primaryRow.memberTierCode ? { tierCode: primaryRow.memberTierCode } : {}),
+              ...(primaryRow.pointBalanceExcludingEarn != null
+                ? { pointBalanceExcludingEarn: primaryRow.pointBalanceExcludingEarn }
+                : {}),
+            }
+          }
+          const nextMemo = upsertPosSplitReceiptsInMemo(
+            memo,
+            attachSplitLoyaltyToSnapshots(splits, splitLoyalty.perSplit)
+          )
+          await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(created.id)}`, {
+            point_earned: pointEarned,
+            ...(nextMemo ? { memo: nextMemo } : {}),
+          })
+        } else if (memberId > 0) {
+          const loyalty = await applyLoyaltyOnOrder({
+            memberId,
+            orderId: Number(created.id),
+            storeCode,
+            totalAmount: total,
+            pointUsed,
+            pointEarned: pointEarnedReq,
+            orderNo,
+            couponCode: appliedCoupons.length === 1 ? appliedCoupons[0]?.code : couponCode,
+            orderType,
+            createdBy,
+          })
+          pointEarned = loyalty.pointEarned
+          stampResult = loyalty.stamp ?? null
+          loyaltyReceipt = {
+            ...(loyalty.memberNo ? { memberNo: loyalty.memberNo } : {}),
+            ...(loyalty.phone ? { phone: loyalty.phone } : {}),
+            ...(loyalty.tierCode ? { tierCode: loyalty.tierCode } : {}),
+            ...(loyalty.pointBalanceExcludingEarn != null
+              ? { pointBalanceExcludingEarn: loyalty.pointBalanceExcludingEarn }
+              : {}),
+          }
+          await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(created.id)}`, {
+            point_earned: pointEarned,
+          })
         }
-        await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(created.id)}`, {
-          point_earned: pointEarned,
-        })
       } catch (loyaltyErr) {
         console.error('savePosOrder loyalty:', loyaltyErr)
       }
@@ -751,14 +800,33 @@ export async function POST(req: NextRequest) {
         const { scheduleNotifyMemberPointLineForPaidOrder } = await import(
           '@/lib/member-point-line-notify-schedule'
         )
-        await scheduleNotifyMemberPointLineForPaidOrder({
-          orderId: Number(created.id),
-          memberId,
-          storeCode,
-          orderNo,
-          earned: pointEarned,
-          used: pointUsed,
-        })
+        if (splitLoyaltyRows.length > 0) {
+          const notified = new Set<number>()
+          for (const row of splitLoyaltyRows) {
+            if (row.memberId <= 0 || notified.has(row.memberId)) continue
+            notified.add(row.memberId)
+            const memberEarn = splitLoyaltyRows
+              .filter((r) => r.memberId === row.memberId)
+              .reduce((s, r) => s + roundMemberPointsEarn(r.pointEarned), 0)
+            await scheduleNotifyMemberPointLineForPaidOrder({
+              orderId: Number(created.id),
+              memberId: row.memberId,
+              storeCode,
+              orderNo,
+              earned: memberEarn,
+              used: row.memberId === memberId ? pointUsed : 0,
+            })
+          }
+        } else if (memberId > 0) {
+          await scheduleNotifyMemberPointLineForPaidOrder({
+            orderId: Number(created.id),
+            memberId,
+            storeCode,
+            orderNo,
+            earned: pointEarned,
+            used: pointUsed,
+          })
+        }
       } catch (notifyErr) {
         console.error('savePosOrder point line notify:', notifyErr)
       }
@@ -936,6 +1004,7 @@ export async function POST(req: NextRequest) {
         ...(receiptPhone ? { memberPhone: receiptPhone } : {}),
         ...(receiptTier ? { memberTierCode: receiptTier } : {}),
         ...(receiptBalance != null ? { memberPointBalance: receiptBalance } : {}),
+        ...(splitLoyaltyRows.length > 0 ? { splitLoyalty: splitLoyaltyRows } : {}),
         perf: {
           elapsedMs: totalElapsedMs,
           allocateOrderNoMs,

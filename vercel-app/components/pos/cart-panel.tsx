@@ -171,6 +171,13 @@ import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import { allocateLineDiscountByAssignedQty, computeMenuSplitDueByPerson, computeMenuSplitDueFromBaseSum } from '@/lib/pos-menu-split-due'
+import {
+  collabAssignedQtyForLine,
+  computeAmountSplitDueWithCollabJoin,
+  padSplitPersonFlags,
+  padSplitPersonIds,
+  pickPrimarySplitMemberId,
+} from '@/lib/pos-split-person'
 import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
 import { PosCollabQuantityControl } from '@/components/pos/pos-collab-quantity-control'
 import { resolvePromoSublineOptionDisplayName } from '@/lib/pos-promo-subline-option-label'
@@ -922,6 +929,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [menuSplitPaidByPerson, setMenuSplitPaidByPerson] = useState<number[]>([])
   const menuSplitAutoAppliedKeyRef = useRef<string>('')
   const splitPaymentsByPersonRef = useRef<(CartPanelPaymentPayload | undefined)[]>([])
+  const [splitMemberIdByPerson, setSplitMemberIdByPerson] = useState<string[]>([])
+  const [splitCollabJoinByPerson, setSplitCollabJoinByPerson] = useState<boolean[]>([])
   const [splitCaptureTick, setSplitCaptureTick] = useState(0)
   const splitDraftAssignedRef = useRef<{ target: MoveTarget; amount: number; personIdx: number | null } | null>(null)
   const [menuNameTooltipOpen, setMenuNameTooltipOpen] = useState<string | null>(null)
@@ -1311,13 +1320,24 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       fallbackPct: discountType === 'percent' ? discountValue : 0,
       excludeSelectedForFixed: discountType === 'fixed' && discountValue > 0.0001,
     }
+    const joinFlags = padSplitPersonFlags(splitCollabJoinByPerson, Math.max(1, Number(splitCount) || 1), true)
     const collabScopeItems = cartItems.flatMap((item) => {
       if ((lineDiscountModeByItemId[item.id] ?? 'none') === 'cancel') return []
       const promoQty = manualPromoDiscountedQuantityForLine(item, promoOpts)
       const selectedQty = hasSelectedDiscountScope
         ? selectedDiscountQuantityForLine(item, lineDiscountModeByItemId)
         : resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown })
-      const collabQty = Math.max(0, selectedQty - promoQty)
+      const assignedRow = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+      const collabQty = Math.max(
+        0,
+        collabAssignedQtyForLine({
+          showSplit,
+          splitMode,
+          lineQty: Math.max(0, selectedQty - promoQty),
+          assignedQtyByPerson: assignedRow,
+          joinByPerson: joinFlags,
+        })
+      )
       if (collabQty <= 0) return []
       return [{ ...item, quantity: collabQty }]
     })
@@ -1338,6 +1358,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     lineDiscountModeByItemId,
     lineDiscountPctByItemId,
     menuByIdForCollab,
+    menuSplitAssigned,
+    showSplit,
+    splitCollabJoinByPerson,
+    splitCount,
+    splitMode,
   ])
   const selectedMemberTierDiscountRate = useMemo(() => {
     if (!selectedMemberId) return 0
@@ -1509,6 +1534,42 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     manualLineAlloc,
     menuByIdForCollab,
     serviceDiscountAmt,
+  ])
+  const otherLineDiscountSnapshot = useMemo(() => {
+    if (!Array.isArray(cartItems) || cartItems.length === 0) return cartItems.map(() => 0)
+    return buildCartPanelLineDiscountAllocations({
+      lines: cartItems.map((i) => ({
+        id: String(i.id ?? ''),
+        name: String(i.name ?? ''),
+        price: Number(i.price ?? 0),
+        qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
+        ...(i.promoId ? { promoId: String(i.promoId) } : {}),
+        ...(i.menuId ? { menuId: String(i.menuId) } : {}),
+        ...(i.menuId1 != null ? { menuId1: i.menuId1, menuId2: i.menuId2 } : {}),
+      })),
+      menuById: menuByIdForCollab,
+      lineModeById: lineDiscountModeByItemId,
+      hasSelectedDiscountScope,
+      collabDetail: null,
+      collabDiscountAmt: 0,
+      serviceDiscountAmt,
+      cancelledLineAmt,
+      tierDiscountAmt,
+      manualDiscountAmt,
+      couponLineAlloc,
+      ...(manualLineAlloc && manualLineAlloc.length === cartItems.length ? { manualLineAlloc } : {}),
+    })
+  }, [
+    cancelledLineAmt,
+    cartItems,
+    couponLineAlloc,
+    hasSelectedDiscountScope,
+    lineDiscountModeByItemId,
+    manualDiscountAmt,
+    manualLineAlloc,
+    menuByIdForCollab,
+    serviceDiscountAmt,
+    tierDiscountAmt,
   ])
 
   const mapCartItemToOrderPayload = (
@@ -1939,21 +2000,44 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const menuSplitDiscountByPerson = useMemo(() => {
     const count = Math.max(1, Number(splitCount) || 1)
     const discByPerson = Array.from({ length: count }, () => 0)
+    const joinFlags = padSplitPersonFlags(splitCollabJoinByPerson, count, true)
     cartItems.forEach((item, cartIdx) => {
       const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
       const assignedQtyByPerson = Array.from({ length: count }, (_, i) => Math.max(0, Number(row[i] || 0)))
-      const alloc = allocateLineDiscountOrZero({
-        lineDiscountAmt: Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0),
+      const otherAmt = Math.max(0, Number(otherLineDiscountSnapshot[cartIdx] ?? 0) || 0)
+      const collabAmt = Math.max(
+        0,
+        round2(Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0) - otherAmt)
+      )
+      const otherAlloc = allocateLineDiscountOrZero({
+        lineDiscountAmt: otherAmt,
         lineQty: resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown }),
         assignedQtyByPerson,
         round2,
       })
+      const joinAssigned = assignedQtyByPerson.map((qty, i) => (joinFlags[i] === false ? 0 : qty))
+      const collabAlloc = allocateLineDiscountOrZero({
+        lineDiscountAmt: collabAmt,
+        lineQty: joinAssigned.reduce((s, q) => s + q, 0),
+        assignedQtyByPerson: joinAssigned,
+        round2,
+      })
       for (let i = 0; i < count; i += 1) {
-        discByPerson[i] = round2(discByPerson[i] + Math.max(0, Number(alloc[i] || 0)))
+        discByPerson[i] = round2(
+          discByPerson[i] + Math.max(0, Number(otherAlloc[i] || 0)) + Math.max(0, Number(collabAlloc[i] || 0))
+        )
       }
     })
     return discByPerson
-  }, [cartItems, lineDiscountSnapshot, menuSplitAssigned, round2, splitCount])
+  }, [
+    cartItems,
+    lineDiscountSnapshot,
+    menuSplitAssigned,
+    otherLineDiscountSnapshot,
+    round2,
+    splitCollabJoinByPerson,
+    splitCount,
+  ])
   const menuSplitDueByPerson = useMemo(() => {
     const netByPerson = menuSplitBaseByPerson.map((base, i) =>
       round2(Math.max(0, Number(base) || 0) - Math.max(0, Number(menuSplitDiscountByPerson[i] || 0)))
@@ -2064,22 +2148,38 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     Math.max(0, Number(amountSplitTargetPerson) || 0),
     Math.max(0, Math.max(1, Number(splitCount) || 1) - 1)
   )
+  const currentSplitPersonIndex =
+    splitMode === 'menu' ? menuSplitTargetPersonIndex : amountSplitTargetPersonIndex
+  const checkoutMemberId = showSplit
+    ? String(pickPrimarySplitMemberId(splitMemberIdByPerson) || selectedMemberId || '')
+    : selectedMemberId
+  const applyMemberToCurrentSplitPerson = useCallback(
+    (memberId: string) => {
+      setSelectedMemberId(memberId)
+      if (!showSplit) return
+      const count = Math.max(1, Number(splitCount) || 1)
+      const idx = Math.min(
+        Math.max(0, splitMode === 'menu' ? menuSplitTargetPersonIndex : amountSplitTargetPersonIndex),
+        count - 1
+      )
+      setSplitMemberIdByPerson((prev) => {
+        const next = padSplitPersonIds(prev, count)
+        next[idx] = memberId
+        return next
+      })
+    },
+    [amountSplitTargetPersonIndex, menuSplitTargetPersonIndex, showSplit, splitCount, splitMode]
+  )
   const amountSplitDueByPerson = useMemo(() => {
     const count = Math.max(1, Number(splitCount) || 1)
-    const due = Array.from({ length: count }, () => 0)
-    if (total <= 0) return due
-    let acc = 0
-    for (let i = 0; i < count; i += 1) {
-      if (i === count - 1) {
-        due[i] = round2(Math.max(0, total - acc))
-      } else {
-        const one = round2(total / count)
-        due[i] = one
-        acc = round2(acc + one)
-      }
-    }
-    return due
-  }, [round2, splitCount, total])
+    const joinFlags = padSplitPersonFlags(splitCollabJoinByPerson, count, true)
+    return computeAmountSplitDueWithCollabJoin({
+      total,
+      collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
+      joinByPerson: joinFlags,
+      round2,
+    })
+  }, [appliedCollab, collabDiscountAmt, round2, splitCollabJoinByPerson, splitCount, total])
   const amountSplitRemainingByPerson = useMemo(() => {
     const count = Math.max(1, Number(splitCount) || 1)
     return Array.from({ length: count }, (_, i) =>
@@ -2387,8 +2487,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           tierCode: row.tierCode || 'BRONZE',
         }
       }
-      setMemberOptions(options)
-      setMemberMap(map)
+      setMemberOptions((prev) => {
+        const seen = new Set(options.map((o) => o.value))
+        return [...options, ...prev.filter((o) => !seen.has(o.value))]
+      })
+      setMemberMap((prev) => ({ ...prev, ...map }))
 
       const exactMemberNo = String(opts?.autoSelectExactMemberNo || '').trim().toUpperCase()
       if (exactMemberNo) {
@@ -2396,7 +2499,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           (row) => String(row.memberNo || '').trim().toUpperCase() === exactMemberNo
         )
         if (exact?.id) {
-          setSelectedMemberId(String(exact.id))
+          applyMemberToCurrentSplitPerson(String(exact.id))
           finishMemberScanInput('success')
         } else {
           finishMemberScanInput('error')
@@ -2404,8 +2507,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
     } catch (e) {
       console.error('getMembers:', e)
-      setMemberOptions([])
-      setMemberMap({})
+      if (!showSplit) {
+        setMemberOptions([])
+        setMemberMap({})
+      }
     } finally {
       setMembersLoading(false)
     }
@@ -2425,7 +2530,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (!match?.id) return null
       const value = String(match.id)
       const name = match.name || match.memberNo || keyword
-      setSelectedMemberId(value)
+      applyMemberToCurrentSplitPerson(value)
       setMemberKeyword(match.memberNo || keyword)
       setMemberOptions((prev) => {
         const label = buildPosMemberSearchOptionLabel(match)
@@ -2445,7 +2550,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }))
       return { id: match.id, name }
     },
-    []
+    [applyMemberToCurrentSplitPerson]
   )
 
   const linkMemberById = useCallback(
@@ -2457,7 +2562,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       if (!match?.id) return null
       const value = String(match.id)
       const name = match.name || match.memberNo || String(id)
-      setSelectedMemberId(value)
+      applyMemberToCurrentSplitPerson(value)
       setMemberKeyword(match.memberNo || String(id))
       setMemberOptions((prev) => {
         const label = buildPosMemberSearchOptionLabel(match)
@@ -2477,7 +2582,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }))
       return { id: match.id, name }
     },
-    []
+    [applyMemberToCurrentSplitPerson]
   )
 
   const handleMemberSearch = useCallback(
@@ -2549,16 +2654,48 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const count = Math.max(1, Number(splitCount) || 1)
     if (count <= 1) return undefined
     const round2Local = (n: number) => Math.round(n * 100) / 100
+    const joinFlags = padSplitPersonFlags(splitCollabJoinByPerson, count, true)
+    const memberIds = padSplitPersonIds(splitMemberIdByPerson, count)
+    const memberForPerson = (idx: number) => {
+      const mid = memberIds[idx]
+      const detail = memberMap[mid]
+      const memberIdNum = Math.max(0, Number(mid) || 0)
+      const joined = Boolean(appliedCollab) && joinFlags[idx] !== false
+      if (memberIdNum <= 0 && !joined && !detail) return undefined
+      return {
+        ...(memberIdNum > 0 ? { memberId: memberIdNum } : {}),
+        ...(detail?.memberNo ? { memberNo: detail.memberNo } : {}),
+        ...(detail?.phone ? { memberPhone: detail.phone } : {}),
+        ...(detail?.tierCode ? { memberTierCode: detail.tierCode } : {}),
+        collabJoined: joined,
+      }
+    }
     if (splitMode === 'menu') {
       const lineDiscountByItemId: Record<string, number[]> = {}
       cartItems.forEach((item, cartIdx) => {
         const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-        lineDiscountByItemId[item.id] = allocateLineDiscountOrZero({
-          lineDiscountAmt: Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0),
+        const assignedQtyByPerson = Array.from({ length: count }, (_, i) => Math.max(0, Number(row[i] || 0)))
+        const otherAmt = Math.max(0, Number(otherLineDiscountSnapshot[cartIdx] ?? 0) || 0)
+        const collabAmt = Math.max(
+          0,
+          round2Local(Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0) - otherAmt)
+        )
+        const otherAlloc = allocateLineDiscountOrZero({
+          lineDiscountAmt: otherAmt,
           lineQty: resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown }),
-          assignedQtyByPerson: Array.from({ length: count }, (_, i) => Math.max(0, Number(row[i] || 0))),
+          assignedQtyByPerson,
           round2: round2Local,
         })
+        const joinAssigned = assignedQtyByPerson.map((qty, i) => (joinFlags[i] === false ? 0 : qty))
+        const collabAlloc = allocateLineDiscountOrZero({
+          lineDiscountAmt: collabAmt,
+          lineQty: joinAssigned.reduce((s, q) => s + q, 0),
+          assignedQtyByPerson: joinAssigned,
+          round2: round2Local,
+        })
+        lineDiscountByItemId[item.id] = Array.from({ length: count }, (_, i) =>
+          round2Local(Math.max(0, Number(otherAlloc[i] || 0)) + Math.max(0, Number(collabAlloc[i] || 0)))
+        )
       })
       const entries: CartPanelSplitReceiptPayload[] = []
       for (let personIdx = 0; personIdx < count; personIdx += 1) {
@@ -2580,6 +2717,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         const totalByPerson = due > 0 ? due : subtotalRounded
         const discountByPerson = Math.max(0, round2Local(subtotalRounded - totalByPerson))
         if (lines.length === 0 && totalByPerson <= 0) continue
+        const member = memberForPerson(personIdx)
         entries.push({
           key: `menu-${personIdx + 1}`,
           label: `${tr('posCurrentPerson', '현재 인원')} ${personIdx + 1}/${count}`,
@@ -2588,41 +2726,35 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           discountAmt: discountByPerson,
           total: totalByPerson,
           payment: splitPaymentsByPersonRef.current[personIdx],
+          ...(member ? { member } : {}),
         })
       }
       return entries.length > 0 ? entries : undefined
     }
-    const dueByPerson = Array.from({ length: count }, () => 0)
-    let accum = 0
-    for (let i = 0; i < count; i += 1) {
-      if (i === count - 1) {
-        dueByPerson[i] = round2Local(Math.max(0, total - accum))
-      } else {
-        const raw = total / count
-        const rounded = round2Local(raw)
-        dueByPerson[i] = rounded
-        accum = round2Local(accum + rounded)
-      }
-    }
+    const dueByPerson = amountSplitDueByPerson
     const fullMenuLines = cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx, 0))
     const entries: CartPanelSplitReceiptPayload[] = dueByPerson
-      .map((due, idx) => ({
-        key: `amount-${idx + 1}`,
-        label: `${tr('posCurrentPerson', '현재 인원')} ${idx + 1}/${count}`,
-        items: [
-          ...fullMenuLines,
-          {
-            id: `dutch-amount-${idx + 1}`,
-            name: `${tr('posDutchPayHeader', '더치페이')} ${idx + 1}/${count}`,
-            price: due,
-            quantity: 1,
-          },
-        ],
-        subtotal: due,
-        discountAmt: 0,
-        total: due,
-        payment: splitPaymentsByPersonRef.current[idx],
-      }))
+      .map((due, idx) => {
+        const member = memberForPerson(idx)
+        return {
+          key: `amount-${idx + 1}`,
+          label: `${tr('posCurrentPerson', '현재 인원')} ${idx + 1}/${count}`,
+          items: [
+            ...fullMenuLines,
+            {
+              id: `dutch-amount-${idx + 1}`,
+              name: `${tr('posDutchPayHeader', '더치페이')} ${idx + 1}/${count}`,
+              price: due,
+              quantity: 1,
+            },
+          ],
+          subtotal: due,
+          discountAmt: 0,
+          total: due,
+          payment: splitPaymentsByPersonRef.current[idx],
+          ...(member ? { member } : {}),
+        }
+      })
       .filter((entry) => entry.total > 0)
     return entries.length > 0 ? entries : undefined
   }
@@ -2789,6 +2921,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       tryCommitCurrentSplitGuestPaymentCapture()
       const fillAmount = Math.max(0, Number(menuSplitRemainingByPerson[safeIdx] || 0))
       setMenuSplitTargetPerson(safeIdx)
+      const personMember = padSplitPersonIds(splitMemberIdByPerson, count)[safeIdx] || ''
+      setSelectedMemberId(personMember)
+      setMemberKeyword(personMember ? memberMap[personMember]?.memberNo || '' : '')
       resetPaymentInputs()
       menuSplitAutoAppliedKeyRef.current = ''
       if (fillAmount > 0.009) {
@@ -2806,6 +2941,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       activePaymentTab,
       scrollToPaymentMethods,
       tryCommitCurrentSplitGuestPaymentCapture,
+      splitMemberIdByPerson,
+      memberMap,
     ]
   )
 
@@ -2817,6 +2954,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       tryCommitCurrentSplitGuestPaymentCapture()
       const fillAmount = Math.max(0, Number(amountSplitRemainingByPerson[safeIdx] || 0))
       setAmountSplitTargetPerson(safeIdx)
+      const personMember = padSplitPersonIds(splitMemberIdByPerson, count)[safeIdx] || ''
+      setSelectedMemberId(personMember)
+      setMemberKeyword(personMember ? memberMap[personMember]?.memberNo || '' : '')
       resetPaymentInputs()
       splitDraftAssignedRef.current = null
       menuSplitAutoAppliedKeyRef.current = ''
@@ -2833,6 +2973,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       activePaymentTab,
       scrollToPaymentMethods,
       tryCommitCurrentSplitGuestPaymentCapture,
+      splitMemberIdByPerson,
+      memberMap,
     ]
   )
 
@@ -3436,8 +3578,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       menuSplitAutoAppliedKeyRef.current = ''
       couponScanAutoSubmitRef.current = null
       memberFieldCouponAutoRef.current = null
+      setSplitMemberIdByPerson([])
+      setSplitCollabJoinByPerson([])
     }
   }, [showPaymentModal])
+
+  useEffect(() => {
+    if (!showSplit) return
+    const n = Math.max(1, Number(splitCount) || 1)
+    setSplitMemberIdByPerson((prev) => padSplitPersonIds(prev, n))
+    setSplitCollabJoinByPerson((prev) => padSplitPersonFlags(prev, n, true))
+  }, [showSplit, splitCount])
 
   /**
    * 더치페이 켜짐·인원 변경 시 결제 입력을 비움.
@@ -3857,7 +4008,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const deliveryLabel = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
       .filter(Boolean)
       .join(' ')
-    const selectedMemberNo = memberMap[selectedMemberId]?.memberNo || ''
+    const selectedMemberNo =
+      memberMap[checkoutMemberId]?.memberNo || memberMap[selectedMemberId]?.memberNo || ''
     if (withPayment) finalizeSplitPaymentsForReceipt()
     if (withPayment && showSplit) {
       resetPaymentInputs()
@@ -3892,7 +4044,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       ...collabOrderFields,
       serviceAmt: serviceDiscountAmt,
       serviceReason: paymentServiceReason || undefined,
-      memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+      memberId: checkoutMemberId ? Number(checkoutMemberId) : undefined,
       memberNo: selectedMemberNo || undefined,
       couponCode: couponPayloadFields.couponCode,
       couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
@@ -3985,8 +4137,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           userStore: auth.store,
           userRole: auth.role,
           storeCode: currentStoreId,
-          memberId: selectedMemberId ? Number(selectedMemberId) : null,
-          memberNo: taxMemberNo.trim() || memberMap[selectedMemberId]?.memberNo || null,
+          memberId: checkoutMemberId ? Number(checkoutMemberId) : selectedMemberId ? Number(selectedMemberId) : null,
+          memberNo: taxMemberNo.trim() || memberMap[checkoutMemberId]?.memberNo || memberMap[selectedMemberId]?.memberNo || null,
           customerType: invoiceCustomerType === 'company' ? 'company' : 'person',
           name: normalizedTaxFields.name,
           taxId: normalizedTaxFields.taxId,
@@ -4022,8 +4174,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             deliveryPayPart,
           }),
           ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
-          memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-          memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+          memberId: checkoutMemberId ? Number(checkoutMemberId) : undefined,
+          memberNo: memberMap[checkoutMemberId]?.memberNo || memberMap[selectedMemberId]?.memberNo || undefined,
           couponCode: couponPayloadFields.couponCode,
           couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
           appliedCoupons: couponPayloadFields.appliedCoupons,
@@ -4060,8 +4212,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             deliveryPayPart,
           }),
           ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
-          memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-          memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+          memberId: checkoutMemberId ? Number(checkoutMemberId) : undefined,
+          memberNo: memberMap[checkoutMemberId]?.memberNo || memberMap[selectedMemberId]?.memberNo || undefined,
           couponCode: couponPayloadFields.couponCode,
           couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
           appliedCoupons: couponPayloadFields.appliedCoupons,
@@ -4094,8 +4246,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             deliveryPayPart,
           }),
           ...(splitReceipts && splitReceipts.length > 0 ? { splitReceipts } : {}),
-          memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-          memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+          memberId: checkoutMemberId ? Number(checkoutMemberId) : undefined,
+          memberNo: memberMap[checkoutMemberId]?.memberNo || memberMap[selectedMemberId]?.memberNo || undefined,
           couponCode: couponPayloadFields.couponCode,
           couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
           appliedCoupons: couponPayloadFields.appliedCoupons,
@@ -4330,7 +4482,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       }
       const ok = await applyCouponWithParams({
         code: raw,
-        memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+        memberId: checkoutMemberId ? Number(checkoutMemberId) : undefined,
       })
       if (ok) finishCouponScanInput('success')
       else finishCouponScanInput('error')
@@ -4682,7 +4834,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       tierDiscountAmt,
       cartLines: buildCouponCartLines(),
       applied: appliedCoupons,
-      memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+      memberId: checkoutMemberId ? Number(checkoutMemberId) : undefined,
     }).then((res) => {
       if (cancelled || !res.appliedCoupons) return
       setAppliedCoupons(res.appliedCoupons)
@@ -4989,8 +5141,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           paymentDeliveryApp: total,
           deliveryPaymentChannel: payChannel,
         },
-        memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-        memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+        memberId: checkoutMemberId ? Number(checkoutMemberId) : undefined,
+        memberNo: memberMap[checkoutMemberId]?.memberNo || memberMap[selectedMemberId]?.memberNo || undefined,
         couponCode: couponPayloadFields.couponCode,
         couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
         appliedCoupons: couponPayloadFields.appliedCoupons,
@@ -5005,11 +5157,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const clearSelectedMemberState = useCallback(() => {
-    setSelectedMemberId('')
+    applyMemberToCurrentSplitPerson('')
     setMemberKeyword('')
-    setMemberOptions([])
-    setMemberMap({})
-  }, [])
+    if (!showSplit) {
+      setMemberOptions([])
+      setMemberMap({})
+    }
+  }, [applyMemberToCurrentSplitPerson, showSplit])
 
   const handleClearCart = () => {
     resetTaxInvoiceUiState()
@@ -5031,6 +5185,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setAppliedCollabId(null)
     setPaymentTableNameOverride(null)
     clearSelectedMemberState()
+    setSplitMemberIdByPerson([])
+    setSplitCollabJoinByPerson([])
     checkoutExistingPosOrderIdRef.current = null
     setIsExistingOrderCheckout(false)
   }
@@ -5875,7 +6031,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             }
             selectedMemberTierLabel={selectedMemberTierLabel}
             memberOptions={memberOptions}
-            onSelectMember={setSelectedMemberId}
+            onSelectMember={applyMemberToCurrentSplitPerson}
             onClearMember={clearSelectedMemberState}
             tierDiscountAmt={tierDiscountAmt}
             selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
@@ -6073,8 +6229,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   ...collabOrderFields,
                   serviceAmt: serviceDiscountAmt,
                   serviceReason: paymentServiceReason || undefined,
-                  memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-                  memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+                  memberId: checkoutMemberId ? Number(checkoutMemberId) : undefined,
+                  memberNo: memberMap[checkoutMemberId]?.memberNo || memberMap[selectedMemberId]?.memberNo || undefined,
                   couponCode: couponPayloadFields.couponCode,
                   couponDiscountAmt: couponPayloadFields.couponDiscountAmt,
                   appliedCoupons: couponPayloadFields.appliedCoupons,
@@ -6365,7 +6521,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               }
               selectedMemberTierLabel={selectedMemberTierLabel}
               memberOptions={memberOptions}
-              onSelectMember={setSelectedMemberId}
+              onSelectMember={applyMemberToCurrentSplitPerson}
               onClearMember={clearSelectedMemberState}
               tierDiscountAmt={tierDiscountAmt}
               selectedMemberTierDiscountRate={selectedMemberTierDiscountRate}
@@ -6376,6 +6532,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               }
               t={t}
               tr={tr}
+              guestHint={
+                showSplit
+                  ? tr('posSplitMemberForGuest', '현재 인원 {n}').replace(
+                      '{n}',
+                      String(currentSplitPersonIndex + 1)
+                    )
+                  : undefined
+              }
             />
 
             <div className="space-y-3">
@@ -7114,6 +7278,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               open={showSplit}
               onOpenChange={(open) => {
                 setShowSplit(open)
+                if (open) {
+                  const count = Math.max(1, Number(splitCount) || 1)
+                  setSplitCollabJoinByPerson(padSplitPersonFlags([], count, true))
+                  const ids = padSplitPersonIds([], count)
+                  ids[0] = selectedMemberId
+                  setSplitMemberIdByPerson(ids)
+                  setMenuSplitTargetPerson(0)
+                  setAmountSplitTargetPerson(0)
+                }
               }}
             >
               <div className="w-full rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-50/90 to-card p-3 shadow-sm dark:from-violet-950/30 dark:to-card">
@@ -7308,6 +7481,28 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                                 )}
                               </div>
                               {renderSplitGuestAmountRows(due, paid, 'posSplitCardShare', '분담', isPaid)}
+                              {appliedCollab ? (
+                                <label className="mt-1 flex items-center gap-1 text-[10px] font-medium text-violet-800 dark:text-violet-200">
+                                  <input
+                                    type="checkbox"
+                                    className="h-3.5 w-3.5 accent-violet-700"
+                                    checked={padSplitPersonFlags(splitCollabJoinByPerson, splitCount, true)[idx] !== false}
+                                    onChange={(e) => {
+                                      setSplitCollabJoinByPerson((prev) => {
+                                        const next = padSplitPersonFlags(prev, Math.max(1, splitCount), true)
+                                        next[idx] = e.target.checked
+                                        return next
+                                      })
+                                    }}
+                                  />
+                                  {tr('posSplitCollabJoin', 'เข้าร่วม')}
+                                </label>
+                              ) : null}
+                              {memberMap[padSplitPersonIds(splitMemberIdByPerson, splitCount)[idx] || '']?.memberNo ? (
+                                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                                  {memberMap[padSplitPersonIds(splitMemberIdByPerson, splitCount)[idx] || '']?.memberNo}
+                                </p>
+                              ) : null}
                               <Button
                                 type="button"
                                 size="sm"
@@ -7561,6 +7756,28 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                               '배정',
                               isMenuPaid
                             )}
+                              {appliedCollab ? (
+                                <label className="mt-1 flex items-center gap-1 text-[10px] font-medium text-violet-800 dark:text-violet-200">
+                                  <input
+                                    type="checkbox"
+                                    className="h-3.5 w-3.5 accent-violet-700"
+                                    checked={padSplitPersonFlags(splitCollabJoinByPerson, splitCount, true)[idx] !== false}
+                                    onChange={(e) => {
+                                      setSplitCollabJoinByPerson((prev) => {
+                                        const next = padSplitPersonFlags(prev, Math.max(1, splitCount), true)
+                                        next[idx] = e.target.checked
+                                        return next
+                                      })
+                                    }}
+                                  />
+                                  {tr('posSplitCollabJoin', 'เข้าร่วม')}
+                                </label>
+                              ) : null}
+                              {memberMap[padSplitPersonIds(splitMemberIdByPerson, splitCount)[idx] || '']?.memberNo ? (
+                                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                                  {memberMap[padSplitPersonIds(splitMemberIdByPerson, splitCount)[idx] || '']?.memberNo}
+                                </p>
+                              ) : null}
                             <Button
                               type="button"
                               size="sm"

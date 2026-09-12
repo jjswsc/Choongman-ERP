@@ -512,6 +512,15 @@ export async function updatePosOrder(params: {
     memberPhone?: string
     memberTierCode?: string
     memberPointBalance?: number
+    splitLoyalty?: Array<{
+      key: string
+      memberId: number
+      memberNo?: string
+      memberPhone?: string
+      memberTierCode?: string
+      pointEarned: number
+      pointBalanceExcludingEarn?: number
+    }>
   }>
 }
 

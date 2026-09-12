@@ -28,6 +28,16 @@ export type PosSplitReceiptLineSnapshot = {
   lineDiscountAmt?: number
 }
 
+export type PosSplitReceiptMemberSnapshot = {
+  memberId?: number
+  memberNo?: string
+  memberPhone?: string
+  memberTierCode?: string
+  memberPointEarned?: number
+  memberPointBalance?: number
+  collabJoined?: boolean
+}
+
 export type PosSplitReceiptSnapshot = {
   key: string
   label: string
@@ -36,6 +46,7 @@ export type PosSplitReceiptSnapshot = {
   discountAmt: number
   total: number
   payment?: PosSplitReceiptPaymentSnapshot
+  member?: PosSplitReceiptMemberSnapshot
 }
 
 const SPLIT_MARKER_LINE = /^\[POS_SPLIT_RECEIPTS\]\s+(\S+)\s*$/i
@@ -101,6 +112,28 @@ function coercePaymentSnapshot(raw: unknown): PosSplitReceiptPaymentSnapshot | u
   return out
 }
 
+function coerceMemberSnapshot(raw: unknown): PosSplitReceiptMemberSnapshot | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  const memberId = Math.max(0, Math.trunc(Number(o.memberId ?? o.mid ?? 0) || 0))
+  const memberNo = String(o.memberNo ?? o.mno ?? '').trim()
+  const memberPhone = String(o.memberPhone ?? o.mph ?? '').trim()
+  const memberTierCode = String(o.memberTierCode ?? o.mt ?? '').trim()
+  const memberPointEarned = round2(Math.max(0, Number(o.memberPointEarned ?? o.pe ?? 0) || 0))
+  const memberPointBalance = Number(o.memberPointBalance ?? o.pb)
+  const collabJoined = o.collabJoined ?? o.cj
+  const out: PosSplitReceiptMemberSnapshot = {}
+  if (memberId > 0) out.memberId = memberId
+  if (memberNo) out.memberNo = memberNo
+  if (memberPhone) out.memberPhone = memberPhone
+  if (memberTierCode) out.memberTierCode = memberTierCode
+  if (memberPointEarned > 0.0001) out.memberPointEarned = memberPointEarned
+  if (Number.isFinite(memberPointBalance)) out.memberPointBalance = round2(memberPointBalance)
+  if (collabJoined === true || collabJoined === 1 || collabJoined === '1') out.collabJoined = true
+  if (collabJoined === false || collabJoined === 0 || collabJoined === '0') out.collabJoined = false
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 function coerceLineSnapshot(raw: unknown): PosSplitReceiptLineSnapshot | null {
   if (!raw || typeof raw !== 'object') return null
   const row = raw as Record<string, unknown>
@@ -140,6 +173,7 @@ export function normalizePosSplitReceiptSnapshots(raw: unknown): PosSplitReceipt
     const subtotal = round2(Math.max(0, Number(o.subtotal ?? 0) || 0))
     const total = round2(Math.max(0, Number(o.total ?? 0) || 0))
     if (items.length === 0 && total <= 0.005) continue
+    const member = coerceMemberSnapshot(o.member && typeof o.member === 'object' ? o.member : o)
     out.push({
       key: String(o.key ?? `split-${idx + 1}`).trim() || `split-${idx + 1}`,
       label: String(o.label ?? `${idx + 1}/${raw.length}`).trim() || `${idx + 1}/${raw.length}`,
@@ -148,6 +182,7 @@ export function normalizePosSplitReceiptSnapshots(raw: unknown): PosSplitReceipt
       discountAmt: round2(Math.max(0, Number(o.discountAmt ?? 0) || 0)),
       total: total > 0 ? total : subtotal,
       ...(o.payment ? { payment: coercePaymentSnapshot(o.payment) } : {}),
+      ...(member ? { member } : {}),
     })
   }
   return out.length > 1 ? out : null
@@ -173,6 +208,18 @@ export function serializePosSplitReceiptsMarker(splits: PosSplitReceiptSnapshot[
     d: s.discountAmt,
     t: s.total,
     ...(s.payment ? { pay: s.payment } : {}),
+    ...(s.member?.memberId && s.member.memberId > 0 ? { mid: s.member.memberId } : {}),
+    ...(s.member?.memberNo ? { mno: s.member.memberNo } : {}),
+    ...(s.member?.memberPhone ? { mph: s.member.memberPhone } : {}),
+    ...(s.member?.memberTierCode ? { mt: s.member.memberTierCode } : {}),
+    ...(Math.max(0, Number(s.member?.memberPointEarned) || 0) > 0.0001
+      ? { pe: round2(Math.max(0, Number(s.member?.memberPointEarned) || 0)) }
+      : {}),
+    ...(s.member?.memberPointBalance != null && Number.isFinite(Number(s.member.memberPointBalance))
+      ? { pb: round2(Number(s.member.memberPointBalance)) }
+      : {}),
+    ...(s.member?.collabJoined === true ? { cj: 1 } : {}),
+    ...(s.member?.collabJoined === false ? { cj: 0 } : {}),
   }))
   return `${POS_SPLIT_RECEIPTS_MARKER} ${toBase64Url(JSON.stringify(compact))}`
 }
@@ -208,6 +255,7 @@ function deserializePosSplitReceiptsMarker(encoded: string): PosSplitReceiptSnap
       const subtotal = round2(Math.max(0, Number(o.s ?? 0) || 0))
       const total = round2(Math.max(0, Number(o.t ?? 0) || 0))
       if (items.length === 0 && total <= 0.005) continue
+      const member = coerceMemberSnapshot(o)
       out.push({
         key: String(o.k ?? `split-${idx + 1}`).trim() || `split-${idx + 1}`,
         label: String(o.l ?? `${idx + 1}/${parsed.length}`).trim() || `${idx + 1}/${parsed.length}`,
@@ -216,6 +264,7 @@ function deserializePosSplitReceiptsMarker(encoded: string): PosSplitReceiptSnap
         discountAmt: round2(Math.max(0, Number(o.d ?? 0) || 0)),
         total: total > 0 ? total : subtotal,
         ...(o.pay ? { payment: coercePaymentSnapshot(o.pay) } : {}),
+        ...(member ? { member } : {}),
       })
     }
     return out.length > 1 ? out : null
@@ -259,4 +308,70 @@ export function upsertPosSplitReceiptsInMemo(
   const marker = serializePosSplitReceiptsMarker(normalized)
   if (!base) return marker
   return `${base}\n${marker}`
+}
+
+export function collectSplitLoyaltyGroups(
+  splits: PosSplitReceiptSnapshot[] | null | undefined,
+  fallbackMemberId = 0
+): { memberId: number; totalAmount: number; keys: string[] }[] {
+  const rows = Array.isArray(splits) ? splits : []
+  const byMember = new Map<number, { totalAmount: number; keys: string[] }>()
+  for (const split of rows) {
+    const memberId = Math.max(0, Math.trunc(Number(split.member?.memberId ?? 0) || 0))
+    if (memberId <= 0) continue
+    const total = Math.max(0, Number(split.total) || 0)
+    const prev = byMember.get(memberId)
+    if (prev) {
+      prev.totalAmount = round2(prev.totalAmount + total)
+      prev.keys.push(String(split.key || ''))
+    } else {
+      byMember.set(memberId, { totalAmount: round2(total), keys: [String(split.key || '')] })
+    }
+  }
+  if (byMember.size > 0) {
+    return [...byMember.entries()].map(([memberId, g]) => ({ memberId, ...g }))
+  }
+  const fallback = Math.max(0, Math.trunc(Number(fallbackMemberId) || 0))
+  if (fallback <= 0) return []
+  const orderTotal = round2(rows.reduce((s, split) => s + Math.max(0, Number(split.total) || 0), 0))
+  return [
+    {
+      memberId: fallback,
+      totalAmount: orderTotal,
+      keys: rows.map((split) => String(split.key || '')),
+    },
+  ]
+}
+
+export function attachSplitLoyaltyToSnapshots(
+  splits: PosSplitReceiptSnapshot[],
+  perSplit: Array<{
+    key: string
+    memberId: number
+    memberNo?: string
+    memberPhone?: string
+    memberTierCode?: string
+    pointEarned: number
+    pointBalanceExcludingEarn?: number
+  }>
+): PosSplitReceiptSnapshot[] {
+  const byKey = new Map(perSplit.map((row) => [row.key, row]))
+  return splits.map((split) => {
+    const hit = byKey.get(String(split.key || ''))
+    if (!hit) return split
+    return {
+      ...split,
+      member: {
+        ...(split.member || {}),
+        memberId: hit.memberId,
+        ...(hit.memberNo ? { memberNo: hit.memberNo } : {}),
+        ...(hit.memberPhone ? { memberPhone: hit.memberPhone } : {}),
+        ...(hit.memberTierCode ? { memberTierCode: hit.memberTierCode } : {}),
+        memberPointEarned: hit.pointEarned,
+        ...(hit.pointBalanceExcludingEarn != null
+          ? { memberPointBalance: hit.pointBalanceExcludingEarn }
+          : {}),
+      },
+    }
+  })
 }

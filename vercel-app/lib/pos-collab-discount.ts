@@ -315,22 +315,25 @@ export function collabLineTotal(line: CollabCartLineLike): number {
   return Math.max(0, Number(line.price) || 0) * q
 }
 
-/** 총 할인액을 줄별 금액 비율로 배분 (마지막 줄에 잔액) */
+/** 총 할인액을 줄별 금액 비율로 배분 (잔액은 마지막 양수 가중 줄 — 미대상 줄에 사땅 누수 금지) */
 export function allocateDiscountProportional(lineTotals: number[], totalDiscount: number): number[] {
   const discount = Math.max(0, Number(totalDiscount) || 0)
   if (lineTotals.length === 0 || discount <= 0.0001) return lineTotals.map(() => 0)
-  const gross = lineTotals.reduce((sum, v) => sum + v, 0)
+  const weights = lineTotals.map((v) => Math.max(0, Number(v) || 0))
+  const gross = weights.reduce((sum, v) => sum + v, 0)
   if (gross <= 0.0001) return lineTotals.map(() => 0)
 
-  const out = lineTotals.map(() => 0)
+  const out = weights.map(() => 0)
+  const positiveIdx = weights.map((w, i) => (w > 0.0001 ? i : -1)).filter((i) => i >= 0)
   let used = 0
   const to2 = (n: number) => Math.round(n * 100) / 100
-  for (let i = 0; i < lineTotals.length; i += 1) {
-    if (i === lineTotals.length - 1) {
+  for (let k = 0; k < positiveIdx.length; k += 1) {
+    const i = positiveIdx[k]
+    if (k === positiveIdx.length - 1) {
       out[i] = to2(Math.max(0, discount - used))
       break
     }
-    const share = to2((discount * lineTotals[i]) / gross)
+    const share = to2((discount * weights[i]) / gross)
     out[i] = share
     used = to2(used + share)
   }

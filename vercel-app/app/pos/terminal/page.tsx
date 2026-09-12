@@ -286,7 +286,7 @@ import {
   normalizePosSplitReceiptSnapshots,
   upsertPosSplitReceiptsInMemo,
 } from '@/lib/pos-split-receipt-memo'
-import { buildSplitPaymentReceiptBatch, composeCheckoutPaymentReceiptPrintBatch, applyOrderLineDiscountsToSplitSnapshots } from '@/lib/pos-split-payment-receipt-batch'
+import { buildSplitPaymentReceiptBatch, composeCheckoutPaymentReceiptPrintBatch, applyOrderLineDiscountsToSplitSnapshots, applySplitLoyaltyToReceiptBatch } from '@/lib/pos-split-payment-receipt-batch'
 import { mergeGrabOrderItemsForKitchenPrint } from '@/lib/grab-kitchen-print-items'
 import { mergeGrabSetChildLinesIntoPromoParents, parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
 import { buildGrabPosCatalog } from '@/lib/grab-pos-order-enrich'
@@ -974,9 +974,30 @@ export default function PosTerminalPage() {
   const receiptQueueRef = useRef<ReceiptModalData[]>([])
   /** 결제 update/save 직후 회원·포인트 스냅샷 — dispatchCheckoutPaymentReceipt 에서 병합 */
   const pendingPaymentReceiptMemberRef = useRef<PosReceiptMemberSnapshot | null>(null)
+  const pendingSplitLoyaltyRef = useRef<
+    Array<{
+      key: string
+      memberId: number
+      memberNo?: string
+      memberPhone?: string
+      memberTierCode?: string
+      pointEarned: number
+      pointBalanceExcludingEarn?: number
+    }>
+  >([])
   const capturePaymentReceiptMember = useCallback(
     (
-      res: Parameters<typeof pickMemberReceiptFieldsFromApi>[0],
+      res: Parameters<typeof pickMemberReceiptFieldsFromApi>[0] & {
+        splitLoyalty?: Array<{
+          key: string
+          memberId: number
+          memberNo?: string
+          memberPhone?: string
+          memberTierCode?: string
+          pointEarned: number
+          pointBalanceExcludingEarn?: number
+        }>
+      },
       fallback?: {
         memberId?: number
         memberNo?: string
@@ -986,11 +1007,13 @@ export default function PosTerminalPage() {
       }
     ) => {
       pendingPaymentReceiptMemberRef.current = pickMemberReceiptFieldsFromApi(res, fallback)
+      pendingSplitLoyaltyRef.current = Array.isArray(res?.splitLoyalty) ? res.splitLoyalty : []
     },
     []
   )
   const clearPaymentReceiptMember = useCallback(() => {
     pendingPaymentReceiptMemberRef.current = null
+    pendingSplitLoyaltyRef.current = []
   }, [])
   const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = useState(false)
   const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = useState(false)
@@ -4462,12 +4485,18 @@ export default function PosTerminalPage() {
       const serverOrderId = orderId != null && orderId > 0 ? orderId : undefined
       const memberSnap = pendingPaymentReceiptMemberRef.current
       pendingPaymentReceiptMemberRef.current = null
-      const withMember = (row: ReceiptModalData): ReceiptModalData =>
-        mergeMemberReceiptFields(row, memberSnap)
+      const splitLoyalty = pendingSplitLoyaltyRef.current
+      pendingSplitLoyaltyRef.current = []
+      const withMember = (row: ReceiptModalData): ReceiptModalData => {
+        if (String(row.printInstanceKey || '').startsWith('dutch:')) return row
+        return mergeMemberReceiptFields(row, memberSnap)
+      }
       const withOrderId = (row: ReceiptModalData): ReceiptModalData =>
         serverOrderId != null ? { ...row, serverOrderId: row.serverOrderId ?? serverOrderId } : row
       const enrichedPayload = withMember(withOrderId(receiptPayload))
-      const enrichedSplit = splitBatch.map((row) => withMember(withOrderId(row)))
+      const enrichedSplit = applySplitLoyaltyToReceiptBatch(splitBatch, splitLoyalty).map((row) =>
+        withMember(withOrderId(row))
+      )
       const batch = composeCheckoutPaymentReceiptPrintBatch(enrichedPayload, enrichedSplit)
 
       if (!isMainPosDevice) {

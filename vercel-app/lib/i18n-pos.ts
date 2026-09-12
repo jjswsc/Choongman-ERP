@@ -2283,6 +2283,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posAmountSplitSelectingPerson: '선택 중',
     posDutchGuestPickSection: '손님 선택',
     posSplitGuestLabel: '{n}명',
+    posSplitMemberForGuest: '현재 인원 {n}',
+    posSplitCollabJoin: '참여',
     posSplitPaidTotalProgress: '결제 입력',
     posAmountSplitActivePerson: '결제 대상',
     posAmountSplitFlowHint:
@@ -5816,6 +5818,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posAmountSplitSelectingPerson: 'Selecting',
     posDutchGuestPickSection: 'Select guest',
     posSplitGuestLabel: 'Guest {n}',
+    posSplitMemberForGuest: 'Guest {n}',
+    posSplitCollabJoin: 'Join',
     posSplitPaidTotalProgress: 'Paid in',
     posAmountSplitActivePerson: 'Paying',
     posAmountSplitFlowHint:
@@ -7769,6 +7773,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posAmountSplitSelectingPerson: 'กำลังเลือก',
     posDutchGuestPickSection: 'เลือกลูกค้า',
     posSplitGuestLabel: '{n} คน',
+    posSplitMemberForGuest: 'ลูกค้าคนที่ {n}',
+    posSplitCollabJoin: 'เข้าร่วม',
     posSplitPaidTotalProgress: 'ชำระแล้ว',
     posAmountSplitActivePerson: 'กำลังชำระ',
     posAmountSplitFlowHint:
@@ -10962,6 +10968,8 @@ export const I18N_POS_MM: Record<string, string> = {
     posAmountSplitSelectingPerson: 'ရွေးနေသည်',
     posDutchGuestPickSection: 'ဧည့်သည်ရွေးပါ',
     posSplitGuestLabel: '{n} ဦး',
+    posSplitMemberForGuest: 'Guest {n}',
+    posSplitCollabJoin: 'Join',
     posSplitPaidTotalProgress: 'ပေးချေထား',
     posAmountSplitActivePerson: 'ပေးချေရန်',
     posAmountSplitFlowHint:
@@ -14053,6 +14061,8 @@ export const I18N_POS_LA: Record<string, string> = {
     posAmountSplitSelectingPerson: 'ກຳລັງເລືອກ',
     posDutchGuestPickSection: 'ເລືອກລູກຄ້າ',
     posSplitGuestLabel: '{n} ຄົນ',
+    posSplitMemberForGuest: 'Guest {n}',
+    posSplitCollabJoin: 'Join',
     posSplitPaidTotalProgress: 'ຊຳລະແລ້ວ',
     posAmountSplitActivePerson: 'ກຳລັງຊຳລະ',
     posAmountSplitFlowHint:
@@ -17497,6 +17507,8 @@ export const I18N_POS_KH: Record<string, string> = {
     posAmountSplitSelectingPerson: 'កំពុងជ្រើស',
     posDutchGuestPickSection: 'ជ្រើសភ្ញៀវ',
     posSplitGuestLabel: 'ភ្ញៀវ {n}',
+    posSplitMemberForGuest: 'Guest {n}',
+    posSplitCollabJoin: 'Join',
     posSplitPaidTotalProgress: 'បានបង់',
     posAmountSplitActivePerson: 'កំពុងបង់',
     posAmountSplitFlowHint:
@@ -20019,6 +20031,8 @@ export const I18N_POS_VI: Record<string, string> = {
     posAmountSplitSelectingPerson: 'Đang chọn',
     posDutchGuestPickSection: 'Chọn khách',
     posSplitGuestLabel: 'Khách {n}',
+    posSplitMemberForGuest: 'Guest {n}',
+    posSplitCollabJoin: 'Join',
     posSplitPaidTotalProgress: 'Đã nhập',
     posAmountSplitActivePerson: 'Đang thanh toán',
     posAmountSplitFlowHint:
@@ -23102,6 +23116,8 @@ export const I18N_POS_MS: Record<string, string> = {
     posAmountSplitSelectingPerson: 'Memilih',
     posDutchGuestPickSection: 'Pilih tetamu',
     posSplitGuestLabel: 'Tetamu {n}',
+    posSplitMemberForGuest: 'Guest {n}',
+    posSplitCollabJoin: 'Join',
     posSplitPaidTotalProgress: 'Dibayar',
     posAmountSplitActivePerson: 'Sedang bayar',
     posAmountSplitFlowHint:

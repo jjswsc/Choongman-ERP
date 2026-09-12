@@ -75,6 +75,13 @@ export type CartPanelSplitReceiptPayload = {
   discountAmt: number
   total: number
   payment?: CartPanelPaymentPayload
+  member?: {
+    memberId?: number
+    memberNo?: string
+    memberPhone?: string
+    memberTierCode?: string
+    collabJoined?: boolean
+  }
 }
 
 export type CartPanelAddItemPayload = {
