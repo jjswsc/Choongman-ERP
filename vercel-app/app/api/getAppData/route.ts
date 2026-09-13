@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseRpc } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseRpc } from '@/lib/supabase-server'
+import { fetchStockLogsItemQtySum } from '@/lib/stock-logs-active-filter'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { isPosAdditiveOptionItemCategory } from '@/lib/pos-additive-item-category'
 import { getStockLocationPatterns } from '@/lib/stock-location-patterns'
@@ -207,18 +208,10 @@ async function getStoreStock(
       const dateSuffix = asOfTimestamp
         ? `&log_date=lte.${encodeURIComponent(asOfTimestamp)}`
         : ''
-      const rows = (await supabaseSelectFilterAllPages(
-        'stock_logs',
+      return await fetchStockLogsItemQtySum(
         appendInventoryTenantFilter(`${locFilter}${dateSuffix}`, tenantScope),
-        { order: 'id.asc', pageSize: 8000, maxRows: 1_000_000, select: 'item_code,qty' }
-      )) as { item_code?: string; qty?: number }[] | null
-      const m: Record<string, number> = {}
-      for (let i = 0; i < (rows || []).length; i++) {
-        const code = rows![i].item_code
-        if (!code) continue
-        m[code] = (m[code] || 0) + Number(rows![i].qty || 0)
-      }
-      return m
+        { pageSize: 8000, maxRows: 1_000_000 }
+      )
     }
   } catch (e) {
     if (tenantScope.enforce && isMissingInventoryTenantIdColumnError(e)) {

@@ -74,6 +74,7 @@ import {
 import { getBangkokDateRangeUtc, getBangkokMonthRange } from '@/lib/bangkok-time'
 import { resolveInventoryAsOfUtcIso, resolveStockValuationUnitCost } from '@/lib/accounting-inventory-asof'
 import { appendInventoryTenantFilter } from '@/lib/inventory-tenant-scope'
+import { fetchStockLogsItemQtySum } from '@/lib/stock-logs-active-filter'
 import {
   loadFranchiseBillingForIncomeStatement,
   PL_FRANCHISE_BILLING_SALES_KEY,
@@ -1462,19 +1463,10 @@ async function fetchStoreStockQtyByItem(
     }
     const dateSuffix = `&log_date=lte.${encodeURIComponent(asOfUtcIso)}`
     const tenantScope = { enforce: Boolean(tenantId), tenantId: tenantId || '' }
-    const rows = (await supabaseSelectFilterAllPages('stock_logs', appendInventoryTenantFilter(`${locFilter}${dateSuffix}`, tenantScope), {
-      order: 'id.asc',
-      pageSize: 8000,
-      maxRows: ACCOUNTING_ROWS_MAX,
-      select: 'item_code,qty',
-    })) as { item_code?: string; qty?: number }[] | null
-    const m: Record<string, number> = {}
-    for (const r of rows || []) {
-      const code = String(r.item_code || '').trim()
-      if (!code) continue
-      m[code] = (m[code] || 0) + Number(r.qty || 0)
-    }
-    return m
+    return await fetchStockLogsItemQtySum(
+      appendInventoryTenantFilter(`${locFilter}${dateSuffix}`, tenantScope),
+      { pageSize: 8000, maxRows: ACCOUNTING_ROWS_MAX }
+    )
   }
 }
 

@@ -14,6 +14,8 @@ import { syncReceivableToOutboundView } from '@/lib/receivable-match-outbound'
 import { syncReceivableFromForceOutboundStockLogById } from '@/lib/force-outbound-receivable'
 import { findReceivedCartLineIndex, type OrderCartLine } from '@/lib/outbound-order-line-match'
 import { projectOutstandingAfterDelete } from '@/lib/outbound-delete-precheck'
+import { uniqueTrimmedReferenceNos } from '@/lib/force-outbound-delete-siblings'
+import { postgrestQuotedInList } from '@/lib/office-store-canonical'
 
 type DeleteMode = 'order' | 'force'
 
@@ -102,6 +104,19 @@ async function loadTargetRows(params: {
       { select: selectCols, limit: Math.min(20000, Math.max(200, ids.length + 20)), order: 'id.asc' }
     )) as StockLogRow[]
     for (const r of rows || []) {
+      const id = Number(r.id)
+      if (id > 0) uniq.set(id, r)
+    }
+  }
+  const siblingRefs = uniqueTrimmedReferenceNos([...uniq.values()])
+  const siblingIn = postgrestQuotedInList(siblingRefs)
+  if (siblingIn) {
+    const siblingRows = (await supabaseSelectFilterAllPages(
+      'stock_logs',
+      `log_type=in.(ForceOutbound,ForcePush)&reference_no=in.(${siblingIn})&is_deleted=is.false`,
+      { order: 'id.asc', select: selectCols, pageSize: 3000, maxRows: 30000 }
+    )) as StockLogRow[]
+    for (const r of siblingRows || []) {
       const id = Number(r.id)
       if (id > 0) uniq.set(id, r)
     }
@@ -586,6 +601,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const rpcForceIds =
+      mode === 'force'
+        ? [...new Set(targetRows.map((r) => Number(r.id || 0)).filter((n) => n > 0))]
+        : []
     const rpcResultRaw = await supabaseRpc<Record<string, unknown>>('soft_delete_outbound_logs', {
       p_mode: mode,
       p_reason: reason,
@@ -598,7 +617,7 @@ export async function POST(request: NextRequest) {
       p_request_key: idempotencyKey || null,
       p_order_id: mode === 'order' ? orderId : null,
       p_reference_no: mode === 'force' && referenceNo ? referenceNo : null,
-      p_stock_log_ids: mode === 'force' && stockLogIds.length > 0 ? stockLogIds : null,
+      p_stock_log_ids: mode === 'force' && rpcForceIds.length > 0 ? rpcForceIds : null,
     })
 
     const rpcResult = (rpcResultRaw || {}) as Record<string, unknown>

@@ -3,6 +3,7 @@
  * stock_logs + 출고 관리와 동일 단가·인보이스 번호(IV/IVF).
  */
 import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseRpc } from '@/lib/supabase-server'
+import { fetchStockLogsItemQtySum } from '@/lib/stock-logs-active-filter'
 import { STOCK_LOG_OUTBOUND_HISTORY_COLS } from '@/lib/postgrest-narrow-select'
 import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 import { addBangkokCalendarDays, getBangkokDateRangeUtc, getBangkokEndOfDayUtcIso } from '@/lib/bangkok-time'
@@ -380,19 +381,10 @@ async function fetchHqStockQtyMap(warehouseKey: string, asOfYmd: string): Promis
       locFilter = `or=(${patterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
     }
     const dateSuffix = `&log_date=lte.${encodeURIComponent(asOfIso)}`
-    const rows = (await supabaseSelectFilterAllPages('stock_logs', `${locFilter}${dateSuffix}`, {
-      order: 'id.asc',
+    return await fetchStockLogsItemQtySum(`${locFilter}${dateSuffix}`, {
       pageSize: 8000,
       maxRows: ROW_CAP,
-      select: 'item_code,qty',
-    })) as { item_code?: string; qty?: number }[] | null
-    const m: Record<string, number> = {}
-    for (const r of rows || []) {
-      const code = String(r.item_code || '').trim()
-      if (!code) continue
-      m[code] = (m[code] || 0) + Number(r.qty || 0)
-    }
-    return m
+    })
   }
 }
 

@@ -138,11 +138,27 @@ BEGIN
         SELECT s.id
         FROM public.stock_logs s
         WHERE coalesce(s.is_deleted, false) = false
+          AND s.log_type IN ('ForceOutbound', 'ForcePush')
           AND (
-            (s.log_type IN ('ForceOutbound', 'ForcePush') AND p_reference_no IS NOT NULL AND btrim(p_reference_no) <> '' AND s.reference_no = p_reference_no)
+            (p_reference_no IS NOT NULL AND btrim(p_reference_no) <> '' AND s.reference_no = p_reference_no)
             OR
             (p_stock_log_ids IS NOT NULL AND cardinality(p_stock_log_ids) > 0 AND s.id = ANY(p_stock_log_ids))
           );
+
+        -- 강제출고 id만 넘어와도 같은 reference_no 의 ForcePush 를 함께 삭제
+        INSERT INTO tmp_outbound_delete_target(id)
+        SELECT s.id
+        FROM public.stock_logs s
+        WHERE coalesce(s.is_deleted, false) = false
+          AND s.log_type IN ('ForceOutbound', 'ForcePush')
+          AND btrim(coalesce(s.reference_no, '')) <> ''
+          AND s.reference_no IN (
+            SELECT btrim(x.reference_no)
+            FROM public.stock_logs x
+            JOIN tmp_outbound_delete_target t ON t.id = x.id
+            WHERE btrim(coalesce(x.reference_no, '')) <> ''
+          )
+        ON CONFLICT (id) DO NOTHING;
       END IF;
 
       SELECT count(*)::INTEGER INTO v_deleted_count FROM tmp_outbound_delete_target;

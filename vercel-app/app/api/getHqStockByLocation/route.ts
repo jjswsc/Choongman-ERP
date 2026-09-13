@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { fetchStockLogsItemQtySum } from '@/lib/stock-logs-active-filter'
 
 /** 본사 발주용: location별 재고 (stock_logs 합산) */
 export async function GET(request: NextRequest) {
@@ -14,19 +14,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const enc = encodeURIComponent(locationCode)
-    const rows = (await supabaseSelectFilter(
-      'stock_logs',
-      `location=ilike.${enc}`,
-      { limit: 10000, select: 'item_code,qty' }
-    )) as { item_code?: string; qty?: number }[] | null
-
-    const m: Record<string, number> = {}
-    for (const row of rows || []) {
-      const code = row?.item_code
-      if (!code) continue
-      m[code] = (m[code] || 0) + Number(row.qty || 0)
-    }
-
+    const m = await fetchStockLogsItemQtySum(`location=ilike.${enc}`, {
+      pageSize: 8000,
+      maxRows: 100000,
+    })
     return NextResponse.json(m, { headers })
   } catch (e) {
     console.error('getHqStockByLocation:', e)

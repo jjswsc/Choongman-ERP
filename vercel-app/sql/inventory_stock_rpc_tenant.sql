@@ -33,6 +33,7 @@ AS $$
       coalesce(trim(p_tenant_id), '') = ''
       OR coalesce(trim(sl.tenant_id), '') = trim(p_tenant_id)
     )
+    AND (sl.is_deleted IS NULL OR sl.is_deleted = false)
   GROUP BY sl.item_code;
 $$;
 
@@ -56,7 +57,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.get_store_stock(text[], timestamptz, text) IS
-  '매장별 재고 합계. Omni는 p_tenant_id 로 stock_logs 격리.';
+  '매장별 재고 합계. Omni는 p_tenant_id 로 stock_logs 격리. is_deleted 행 제외.';
 
 COMMENT ON FUNCTION public.get_distinct_stock_locations(text) IS
   '재고 location 목록. Omni는 p_tenant_id 로 stock_logs 격리.';

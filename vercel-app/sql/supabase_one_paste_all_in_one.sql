@@ -1763,6 +1763,7 @@ AS $$
         WHERE sl.location ILIKE pat
       )
     )
+    AND (sl.is_deleted IS NULL OR sl.is_deleted = false)
   GROUP BY sl.item_code;
 $$;
 
@@ -1840,7 +1841,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.get_store_stock(text[], timestamptz) IS
-  '매장별 재고 합계. location ILIKE. p_as_of_date 상한(<=).';
+  '매장별 재고 합계. location ILIKE. p_as_of_date 상한(<=). is_deleted 행 제외.';
 COMMENT ON FUNCTION public.get_distinct_stock_locations() IS
   'stock_logs DISTINCT location.';
 COMMENT ON FUNCTION public.get_receivable_summary(text, text) IS

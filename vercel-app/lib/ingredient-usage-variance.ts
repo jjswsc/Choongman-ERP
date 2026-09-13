@@ -25,6 +25,7 @@ import { getStockLocationPatterns, isOfficeStockSelection } from '@/lib/stock-lo
 import { getItemCostPerUnit } from '@/lib/item-cost-util'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import { supabaseRpc, supabaseSelectAllPages, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { fetchStockLogsItemQtySum } from '@/lib/stock-logs-active-filter'
 import type { NextRequest } from 'next/server'
 
 /** items_json 줄 → menu/option (원가·마진 집계와 동일 우선순위) */
@@ -367,20 +368,10 @@ async function fetchActualFallback(
       return m
     } catch {
       const dateSuffix = `&log_date=lte.${encodeURIComponent(asOf)}`
-      const filter = appendInventoryTenantFilter(`${locOr}${dateSuffix}`, tenantScope)
-      const rows = (await supabaseSelectFilterAllPages('stock_logs', filter, {
-        select: 'item_code,qty',
-        order: 'id.asc',
-        pageSize: 8000,
-        maxRows: 400000,
-      })) as { item_code?: string; qty?: number }[]
-      const m: Record<string, number> = {}
-      for (const r of rows || []) {
-        const code = String(r.item_code || '').trim()
-        if (!code) continue
-        m[code] = (m[code] || 0) + (Number(r.qty) || 0)
-      }
-      return m
+      return await fetchStockLogsItemQtySum(
+        appendInventoryTenantFilter(`${locOr}${dateSuffix}`, tenantScope),
+        { pageSize: 8000, maxRows: 400000 }
+      )
     }
   }
 
