@@ -152,8 +152,10 @@ import { PosCouponQrScannerDialog } from '@/components/pos/pos-coupon-qr-scanner
 import {
   computePosPricing,
   receiptTaxDisplayFieldsFromPricing,
+  resolvePaymentTotalRoundingMode,
   resolveReceiptSubtotalPrintAmount,
   resolveReceiptVatPrintAmount,
+  roundSplitPaymentDuesToWholeBaht,
   type PosPricingAdjustments,
   type PosPricingResult,
 } from '@/lib/pos-pricing'
@@ -2043,13 +2045,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       round2(Math.max(0, Number(base) || 0) - Math.max(0, Number(menuSplitDiscountByPerson[i] || 0)))
     )
     const orderNet = round2(Math.max(0, Number(subtotal) || 0) - Math.max(0, Number(discount) || 0))
-    return computeMenuSplitDueByPerson({
+    const raw = computeMenuSplitDueByPerson({
       total,
       subtotal: orderNet > 0.009 ? orderNet : subtotal,
       baseByPerson: netByPerson,
       round2,
     })
-  }, [menuSplitBaseByPerson, menuSplitDiscountByPerson, round2, subtotal, discount, total])
+    return roundSplitPaymentDuesToWholeBaht(
+      raw,
+      resolvePaymentTotalRoundingMode(pricingAdjustments),
+      total
+    )
+  }, [
+    menuSplitBaseByPerson,
+    menuSplitDiscountByPerson,
+    pricingAdjustments,
+    round2,
+    subtotal,
+    discount,
+    total,
+  ])
   const menuSplitRemainingByPerson = useMemo(() => {
     const count = Math.max(1, Number(splitCount) || 1)
     return Array.from({ length: count }, (_, i) =>
@@ -2173,13 +2188,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const amountSplitDueByPerson = useMemo(() => {
     const count = Math.max(1, Number(splitCount) || 1)
     const joinFlags = padSplitPersonFlags(splitCollabJoinByPerson, count, true)
-    return computeAmountSplitDueWithCollabJoin({
+    const raw = computeAmountSplitDueWithCollabJoin({
       total,
       collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
       joinByPerson: joinFlags,
       round2,
     })
-  }, [appliedCollab, collabDiscountAmt, round2, splitCollabJoinByPerson, splitCount, total])
+    return roundSplitPaymentDuesToWholeBaht(
+      raw,
+      resolvePaymentTotalRoundingMode(pricingAdjustments),
+      total
+    )
+  }, [
+    appliedCollab,
+    collabDiscountAmt,
+    pricingAdjustments,
+    round2,
+    splitCollabJoinByPerson,
+    splitCount,
+    total,
+  ])
   const amountSplitRemainingByPerson = useMemo(() => {
     const count = Math.max(1, Number(splitCount) || 1)
     return Array.from({ length: count }, (_, i) =>
@@ -2715,7 +2743,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         const subtotalRounded = round2Local(subtotalByPerson)
         const due = round2Local(Math.max(0, Number(menuSplitDueByPerson[personIdx] || 0)))
         const totalByPerson = due > 0 ? due : subtotalRounded
-        const discountByPerson = Math.max(0, round2Local(subtotalRounded - totalByPerson))
+        const discountByPerson = round2Local(
+          Math.max(0, Number(menuSplitDiscountByPerson[personIdx] || 0))
+        )
         if (lines.length === 0 && totalByPerson <= 0) continue
         const member = memberForPerson(personIdx)
         entries.push({

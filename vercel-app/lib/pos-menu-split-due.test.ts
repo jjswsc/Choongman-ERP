@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { roundSplitPaymentDuesToWholeBaht } from './pos-pricing'
 import {
   allocateLineDiscountByAssignedQty,
   computeMenuSplitDueByPerson,
@@ -67,5 +68,20 @@ describe('computeMenuSplitDueFromBaseSum', () => {
         baseSum: 49,
       })
     ).toBe(24.5)
+  })
+})
+
+describe('menu split + whole-baht rounding', () => {
+  it('회원별 메뉴 분리 198.75/152.25 → 199/152 (합 351)', () => {
+    const raw = computeMenuSplitDueByPerson({
+      total: 351,
+      subtotal: 351,
+      baseByPerson: [198.75, 152.25],
+    })
+    expect(raw[0]).toBe(198.75)
+    expect(raw[1]).toBe(152.25)
+    const due = roundSplitPaymentDuesToWholeBaht(raw, 'round', 351)
+    expect(due).toEqual([199, 152])
+    expect(due[0] + due[1]).toBe(351)
   })
 })

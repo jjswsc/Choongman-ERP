@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { roundSplitPaymentDuesToWholeBaht } from '@/lib/pos-pricing'
 import {
   collabAssignedQtyForLine,
   computeAmountSplitDueWithCollabJoin,
@@ -56,6 +57,16 @@ describe('pos-split-person', () => {
         joinByPerson: [true, true, true],
       })
     ).toEqual([300, 300, 300])
+  })
+
+  it('amount split whole-baht rounding last person absorbs .50', () => {
+    const raw = computeAmountSplitDueWithCollabJoin({
+      total: 351,
+      collabDiscountAmt: 0,
+      joinByPerson: [true, true],
+    })
+    expect(raw).toEqual([175.5, 175.5])
+    expect(roundSplitPaymentDuesToWholeBaht(raw, 'round', 351)).toEqual([176, 175])
   })
 })
 

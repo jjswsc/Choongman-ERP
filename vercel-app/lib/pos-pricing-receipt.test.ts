@@ -6,6 +6,7 @@ import {
   resolveReceiptVatPrintAmount,
   resolveTaxInvoiceReceiptVatBreakdown,
   resolveTaxInvoiceSubtotalBeforeVatForPrint,
+  roundSplitPaymentDuesToWholeBaht,
   splitThaiVatInclusiveGrossForReceipt,
 } from '@/lib/pos-pricing'
 
@@ -185,6 +186,33 @@ describe('computePosPricing payment total rounding', () => {
       },
     })
     expect(pricing.finalTotal).toBe(118)
+  })
+})
+
+describe('roundSplitPaymentDuesToWholeBaht', () => {
+  it('rounds split member bills to whole baht and last person absorbs remainder', () => {
+    // 209−10.25=198.75, 169−16.75=152.25 → 199 + 152 = 351
+    expect(roundSplitPaymentDuesToWholeBaht([198.75, 152.25], 'round', 351)).toEqual([199, 152])
+  })
+
+  it('keeps the parent total when both shares are .50', () => {
+    expect(roundSplitPaymentDuesToWholeBaht([100.5, 100.5], 'round', 201)).toEqual([101, 100])
+  })
+
+  it('skips zero-due guests so the paying guest gets the rounded total', () => {
+    expect(roundSplitPaymentDuesToWholeBaht([0, 198.75, 0], 'round', 199)).toEqual([0, 199, 0])
+  })
+
+  it('floors non-last shares when store mode is floor', () => {
+    expect(roundSplitPaymentDuesToWholeBaht([198.75, 152.25], 'floor', 351)).toEqual([198, 153])
+  })
+
+  it('still makes person dues whole baht when parent total is already whole and mode is none', () => {
+    expect(roundSplitPaymentDuesToWholeBaht([198.75, 152.25], 'none', 351)).toEqual([199, 152])
+  })
+
+  it('keeps satang when parent total is not whole baht and mode is none', () => {
+    expect(roundSplitPaymentDuesToWholeBaht([100.4, 100.4], 'none', 200.8)).toEqual([100.4, 100.4])
   })
 })
 

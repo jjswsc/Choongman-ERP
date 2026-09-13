@@ -368,3 +368,34 @@ describe('buildPosPaymentReceiptDocumentHtmlAsync — Windows hybrid logo', () =
     expect(html).not.toContain('Item: Extra')
   })
 })
+
+describe('buildPosPaymentReceiptDocumentHtml — split member whole-baht total', () => {
+  it('keeps 2-decimal discount/VAT and prints Rounding so yod ruam is 199', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: {
+        orderNo: '20260913011',
+        storeCode: 'CM Test',
+        orderType: 'dine_in',
+        items: [{ id: '1', name: 'Gochujang Pork Bulgogi Set', price: 209, qty: 1, lineDiscountAmt: 10.45 }],
+        subtotal: 209,
+        discountAmt: 10.25,
+        total: 199,
+        vatFeeAmt: 12.99,
+        vatFeeMode: 'included',
+        vatRate: 7,
+        paymentQr: 199,
+        receiptAutoPrintContext: 'payment',
+      },
+      menus: [],
+      orderTypeLabels: { dine_in: 'Dine-in' },
+      t: (k, fallback) => fallback || k,
+      lang: 'en',
+      origin: 'https://example.com',
+    })
+    expect(html).toContain('199.00')
+    expect(html).not.toContain('198.75')
+    expect(html).toContain('Rounding')
+    expect(html).toContain('+0.25')
+    expect(html).toContain('10.25')
+  })
+})

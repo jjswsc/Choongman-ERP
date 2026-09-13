@@ -249,4 +249,14 @@ describe('receipt Amount Before VAT + Rounding vs fee modes', () => {
     expect(r.total).toBe(2600)
     expect(r.rounding).toBe(0)
   })
+
+  it('split member bill: 198.75 rounded to 199 keeps VAT and shows Rounding +0.25', () => {
+    const rounding = resolvePosReceiptRoundingAmt({
+      total: 199,
+      amountBeforeVat: 185.76,
+      vatPrint: 12.99,
+    })
+    expect(rounding).toBe(0.25)
+    expect(round2(185.76 + 12.99 + rounding)).toBe(199)
+  })
 })

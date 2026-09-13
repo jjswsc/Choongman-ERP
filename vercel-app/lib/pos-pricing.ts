@@ -118,6 +118,52 @@ export function applyPosPaymentTotalRounding(
   return roundPosPaymentTotalBaht(n)
 }
 
+function isWholeBaht(n: number): boolean {
+  const v = round2(Math.max(0, Number(n) || 0))
+  return Math.abs(v - Math.round(v)) < 0.001
+}
+
+/**
+ * 분리결제 인원별 받을 돈.
+ * 주문 합계가 정수 바트이면 각 인원도 정수로 맞추고, 마지막 유료 인원이 잔차를 받아 합이 주문 합계와 같다.
+ * 할인·VAT는 그대로 두고 영수증 Rounding 행이 차액을 보여 준다.
+ */
+export function roundSplitPaymentDuesToWholeBaht(
+  dues: number[],
+  mode: PosPaymentTotalRoundingMode = 'round',
+  targetTotal?: number
+): number[] {
+  const src = (Array.isArray(dues) ? dues : []).map((d) => round2(Math.max(0, Number(d) || 0)))
+  if (src.length === 0) return src
+  const rawSum = round2(src.reduce((sum, v) => sum + v, 0))
+  const targetRaw =
+    targetTotal != null && Number.isFinite(Number(targetTotal))
+      ? round2(Math.max(0, Number(targetTotal)))
+      : rawSum
+  const target = applyPosPaymentTotalRounding(targetRaw, mode)
+  if (mode === 'none' && !isWholeBaht(target)) return src
+
+  const personMode: PosPaymentTotalRoundingMode = mode === 'none' ? 'round' : mode
+  const paidIdx = src.map((v, i) => (v > 0.0001 ? i : -1)).filter((i) => i >= 0)
+  const out = src.map(() => 0)
+  if (paidIdx.length === 0) return out
+  if (paidIdx.length === 1) {
+    out[paidIdx[0]] = target
+    return out
+  }
+  let acc = 0
+  for (let k = 0; k < paidIdx.length; k += 1) {
+    const i = paidIdx[k]
+    if (k === paidIdx.length - 1) {
+      out[i] = round2(Math.max(0, target - acc))
+      break
+    }
+    out[i] = applyPosPaymentTotalRounding(src[i], personMode)
+    acc = round2(acc + out[i])
+  }
+  return out
+}
+
 /**
  * 미할인 합계와 저장된 TOTAL 차이가 정수 바트 반올림/반내림 잔차인지.
  * 예: 290 + VAT 20.30 = 310.30 → TOTAL 310 (차 0.30) 은 Rounding이지 Discount가 아님.
