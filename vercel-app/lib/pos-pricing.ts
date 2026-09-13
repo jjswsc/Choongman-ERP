@@ -127,6 +127,10 @@ function isWholeBaht(n: number): boolean {
  * 분리결제 인원별 받을 돈.
  * 주문 합계가 정수 바트이면 각 인원도 정수로 맞추고, 마지막 유료 인원이 잔차를 받아 합이 주문 합계와 같다.
  * 할인·VAT는 그대로 두고 영수증 Rounding 행이 차액을 보여 준다.
+ *
+ * `targetTotal`은 이미 전원(또는 전 메뉴)이 배정된 합계만 넘긴다.
+ * 메뉴 더치에서 아직 미배정 수량이 있을 때 주문 전체 total을 넘기면
+ * 한 명만 배정된 순간 미배정 금액까지 그 인원에게 몰린다. 메뉴 기준은 `roundMenuSplitPaymentDues`.
  */
 export function roundSplitPaymentDuesToWholeBaht(
   dues: number[],
@@ -162,6 +166,22 @@ export function roundSplitPaymentDuesToWholeBaht(
     acc = round2(acc + out[i])
   }
   return out
+}
+
+const MENU_SPLIT_UNASSIGNED_EPS = 0.009
+
+/**
+ * 메뉴 기준 더치페이 인원별 받을 돈 반올림.
+ * 미배정 수량이 남아 있으면 배정분 합만 맞추고, 전 메뉴 배정이면 주문 합계에 맞춘다.
+ */
+export function roundMenuSplitPaymentDues(
+  dues: number[],
+  mode: PosPaymentTotalRoundingMode = 'round',
+  orderTotal: number,
+  unassignedQty: number
+): number[] {
+  const allAssigned = Math.max(0, Number(unassignedQty) || 0) <= MENU_SPLIT_UNASSIGNED_EPS
+  return roundSplitPaymentDuesToWholeBaht(dues, mode, allAssigned ? orderTotal : undefined)
 }
 
 /**

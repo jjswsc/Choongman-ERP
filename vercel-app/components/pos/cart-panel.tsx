@@ -155,6 +155,7 @@ import {
   resolvePaymentTotalRoundingMode,
   resolveReceiptSubtotalPrintAmount,
   resolveReceiptVatPrintAmount,
+  roundMenuSplitPaymentDues,
   roundSplitPaymentDuesToWholeBaht,
   type PosPricingAdjustments,
   type PosPricingResult,
@@ -2040,6 +2041,15 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     splitCollabJoinByPerson,
     splitCount,
   ])
+  const menuSplitUnassignedQty = useMemo(() => {
+    let sum = 0
+    for (const item of cartItems) {
+      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
+      const assigned = row.reduce((s, v) => s + Math.max(0, Number(v || 0)), 0)
+      sum += Math.max(0, (Number(item.quantity) || 0) - assigned)
+    }
+    return round2(sum)
+  }, [cartItems, menuSplitAssigned])
   const menuSplitDueByPerson = useMemo(() => {
     const netByPerson = menuSplitBaseByPerson.map((base, i) =>
       round2(Math.max(0, Number(base) || 0) - Math.max(0, Number(menuSplitDiscountByPerson[i] || 0)))
@@ -2051,14 +2061,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       baseByPerson: netByPerson,
       round2,
     })
-    return roundSplitPaymentDuesToWholeBaht(
+    return roundMenuSplitPaymentDues(
       raw,
       resolvePaymentTotalRoundingMode(pricingAdjustments),
-      total
+      total,
+      menuSplitUnassignedQty
     )
   }, [
     menuSplitBaseByPerson,
     menuSplitDiscountByPerson,
+    menuSplitUnassignedQty,
     pricingAdjustments,
     round2,
     subtotal,
@@ -2071,15 +2083,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       round2(Math.max(0, Number(menuSplitDueByPerson[i] || 0) - Number(menuSplitPaidByPerson[i] || 0)))
     )
   }, [menuSplitDueByPerson, menuSplitPaidByPerson, splitCount])
-  const menuSplitUnassignedQty = useMemo(() => {
-    let sum = 0
-    for (const item of cartItems) {
-      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-      const assigned = row.reduce((s, v) => s + Math.max(0, Number(v || 0)), 0)
-      sum += Math.max(0, (Number(item.quantity) || 0) - assigned)
-    }
-    return round2(sum)
-  }, [cartItems, menuSplitAssigned])
   const menuSplitPendingQtyTotal = useMemo(() => {
     let sum = 0
     for (const item of cartItems) {

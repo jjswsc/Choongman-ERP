@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { roundSplitPaymentDuesToWholeBaht } from './pos-pricing'
+import { roundMenuSplitPaymentDues, roundSplitPaymentDuesToWholeBaht } from './pos-pricing'
 import {
   allocateLineDiscountByAssignedQty,
   computeMenuSplitDueByPerson,
@@ -83,5 +83,47 @@ describe('menu split + whole-baht rounding', () => {
     const due = roundSplitPaymentDuesToWholeBaht(raw, 'round', 351)
     expect(due).toEqual([199, 152])
     expect(due[0] + due[1]).toBe(351)
+  })
+})
+
+describe('roundMenuSplitPaymentDues', () => {
+  it('부분 배정 시 주문 전체 합계를 한 명에게 몰지 않는다', () => {
+    const raw = computeMenuSplitDueByPerson({
+      total: 598,
+      subtotal: 598,
+      baseByPerson: [429, 0],
+    })
+    expect(raw[0]).toBe(429)
+    expect(roundSplitPaymentDuesToWholeBaht(raw, 'round', 598)).toEqual([598, 0])
+    expect(roundMenuSplitPaymentDues(raw, 'round', 598, 4)).toEqual([429, 0])
+  })
+
+  it('미배정 메뉴가 남은 두 명 배정도 미배정분을 마지막 인원에게 몰지 않는다', () => {
+    const raw = computeMenuSplitDueByPerson({
+      total: 598,
+      subtotal: 598,
+      baseByPerson: [200, 200],
+    })
+    expect(roundMenuSplitPaymentDues(raw, 'round', 598, 4)).toEqual([200, 200])
+  })
+
+  it('전 메뉴를 한 명에게 배정하면 그 인원이 주문 합계를 받는다', () => {
+    const raw = computeMenuSplitDueByPerson({
+      total: 598,
+      subtotal: 598,
+      baseByPerson: [598, 0],
+    })
+    expect(roundMenuSplitPaymentDues(raw, 'round', 598, 0)).toEqual([598, 0])
+  })
+
+  it('전 메뉴를 두 명에게 배정하면 합이 주문 합계', () => {
+    const raw = computeMenuSplitDueByPerson({
+      total: 598,
+      subtotal: 598,
+      baseByPerson: [429, 169],
+    })
+    const due = roundMenuSplitPaymentDues(raw, 'round', 598, 0)
+    expect(due).toEqual([429, 169])
+    expect(due[0] + due[1]).toBe(598)
   })
 })
