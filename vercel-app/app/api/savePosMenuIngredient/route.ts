@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  supabaseInsertWithPgrst204Fallback,
+  supabaseUpdateByFilterWithPgrst204Fallback,
+} from '@/lib/supabase-pgrst204-retry'
 import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import {
@@ -82,31 +86,19 @@ export async function POST(req: NextRequest) {
         { limit: 1 }
       ).catch(() => [])) as Record<string, unknown>[]
       beforeRow = beforeRows[0] ?? null
-      try {
-        await supabaseUpdateByFilter(
-          'pos_menu_ingredients',
-          `id=eq.${id}`,
-          stampPosMenuIngredientRow(ingredientRow, catalogScope)
-        )
-      } catch {
-        const { menu_code: _ignored, ...legacyRow } = ingredientRow as typeof ingredientRow & { menu_code?: string }
-        await supabaseUpdateByFilter('pos_menu_ingredients', `id=eq.${id}`, legacyRow)
-      }
+      await supabaseUpdateByFilterWithPgrst204Fallback(
+        'pos_menu_ingredients',
+        `id=eq.${id}`,
+        stampPosMenuIngredientRow(ingredientRow, catalogScope),
+        'savePosMenuIngredient.update'
+      )
     } else {
-      try {
-        const inserted = (await supabaseInsert(
-          'pos_menu_ingredients',
-          stampPosMenuIngredientRow({ menu_id: menuId, ...ingredientRow }, catalogScope)
-        )) as { id?: number | string }[] | null
-        insertedId = String(inserted?.[0]?.id ?? '').trim()
-      } catch {
-        const { menu_code: _ignored, ...legacyRow } = ingredientRow as typeof ingredientRow & { menu_code?: string }
-        const inserted = (await supabaseInsert('pos_menu_ingredients', {
-          menu_id: menuId,
-          ...legacyRow,
-        })) as { id?: number | string }[] | null
-        insertedId = String(inserted?.[0]?.id ?? '').trim()
-      }
+      const inserted = (await supabaseInsertWithPgrst204Fallback(
+        'pos_menu_ingredients',
+        stampPosMenuIngredientRow({ menu_id: menuId, ...ingredientRow }, catalogScope),
+        'savePosMenuIngredient.insert'
+      )) as { id?: number | string }[] | null
+      insertedId = String(inserted?.[0]?.id ?? '').trim()
     }
 
     const resolvedId = id ? String(id) : insertedId

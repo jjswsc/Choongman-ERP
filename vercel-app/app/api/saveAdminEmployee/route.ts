@@ -5,7 +5,7 @@ import {
   supabaseSelectFilterStrippingUnknownColumns,
   supabaseUpdateByFilterWithPgrst204Fallback,
 } from '@/lib/supabase-pgrst204-retry'
-import { hashPassword, isHashed } from '@/lib/password'
+import { hashPassword, isHashed, verifyPassword } from '@/lib/password'
 import {
   isAccountingRole,
   isFranchiseeRole,
@@ -46,9 +46,44 @@ import {
   roleCountsAsManagerSeat,
 } from '@/lib/saas/saas-manager-limit-server'
 import { invalidateLoginDataCache } from '@/lib/login-data-cache-server'
+import { normalizeCompanyName } from '@/lib/tenant-context'
+import { resolveSaasTenantForLogin } from '@/lib/saas-login-tenant-resolve'
 
 const EMPLOYEE_CODE_RE = /^[A-Z]{2}\d{3}$/
 const EMPLOYMENT_STATUS_VALUES = new Set(['active', 'leave', 'resigned', 'suspended'])
+const EMP_PIN_NOT_SAVED = 'PIN이 저장되지 않았습니다. 다시 저장해 주세요.'
+
+async function resolveEmployeeCompanyName(
+  auth: { company?: string },
+  tenantScope: SaasTenantScope
+): Promise<string> {
+  const fromJwt = normalizeCompanyName(auth.company)
+  if (fromJwt) return fromJwt
+  if (!tenantScope.enforce || !tenantScope.tenantId) return ''
+  const resolved = await resolveSaasTenantForLogin({
+    tenantId: tenantScope.tenantId,
+    requireExistingRow: true,
+  })
+  return normalizeCompanyName(resolved?.companyName)
+}
+
+async function assertEmployeePinPersisted(filter: string, plainPin: string): Promise<string | null> {
+  try {
+    const rows = (await supabaseSelectFilter('employees', filter, {
+      limit: 1,
+      select: 'password',
+    })) as { password?: string | null }[]
+    const stored = String(rows?.[0]?.password ?? '').trim()
+    if (!stored) return EMP_PIN_NOT_SAVED
+    const ok = await verifyPassword(plainPin, stored, { allowLegacyPlaintext: false })
+    if (!ok) return EMP_PIN_NOT_SAVED
+    return null
+  } catch (e) {
+    const em = e instanceof Error ? e.message : String(e)
+    if (/password|42703|column|PGRST204/i.test(em)) return EMP_PIN_NOT_SAVED
+    throw e
+  }
+}
 
 function toDateStr(val: unknown): string | null {
   if (!val) return null
@@ -522,6 +557,11 @@ export async function POST(req: NextRequest) {
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
     const auditActor = actorFromJwt(auth, userName)
 
+    if (tenantScope.enforce) {
+      const companyName = await resolveEmployeeCompanyName(auth, tenantScope)
+      if (companyName) payload.company = companyName
+    }
+
     if (rowId === 0) {
       const staffLimit = await assertSaasStaffRegistrationAllowed({
         tenantId: tenantScope.tenantId,
@@ -607,6 +647,15 @@ export async function POST(req: NextRequest) {
         changeReason: changeReason || null,
         actor: auditActor,
       })
+      if (rawPw && resolvedInsertId) {
+        const pinErr = await assertEmployeePinPersisted(
+          appendSaasTenantFilter(`id=eq.${resolvedInsertId}`, tenantScope, 'employees'),
+          rawPw
+        )
+        if (pinErr) {
+          return NextResponse.json({ success: false, message: pinErr }, { headers })
+        }
+      }
       invalidateLoginDataCache()
       return NextResponse.json({ success: true, message: '✅ 신규 직원이 등록되었습니다.' }, { headers })
     }
@@ -714,6 +763,16 @@ export async function POST(req: NextRequest) {
         )
       }
       throw updErr
+    }
+
+    if (rawPw) {
+      const pinErr = await assertEmployeePinPersisted(
+        appendSaasTenantFilter(`id=eq.${rowId}`, tenantScope, 'employees'),
+        rawPw
+      )
+      if (pinErr) {
+        return NextResponse.json({ success: false, message: pinErr }, { headers })
+      }
     }
 
     if (salaryChanged) {

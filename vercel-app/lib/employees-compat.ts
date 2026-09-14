@@ -80,38 +80,38 @@ export async function supabaseSelectEmployeesForLoginList(): Promise<unknown> {
 }
 
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY =
-  'id,employee_code,company,store,name,password,role,job,resign_date,extra_stores,deleted_at' as const
+  'id,employee_code,company,tenant_id,store,name,password,role,job,resign_date,extra_stores,deleted_at' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY =
-  'id,employee_code,store,name,password,role,job,resign_date,extra_stores,deleted_at' as const
+  'id,employee_code,tenant_id,store,name,password,role,job,resign_date,extra_stores,deleted_at' as const
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL =
-  'id,employee_code,company,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll,deleted_at' as const
+  'id,employee_code,company,tenant_id,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll,deleted_at' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL =
-  'id,employee_code,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll,deleted_at' as const
+  'id,employee_code,tenant_id,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll,deleted_at' as const
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL_NO_EXTRA =
-  'id,employee_code,company,store,name,password,role,job,resign_date,can_manage_office_payroll,deleted_at' as const
+  'id,employee_code,company,tenant_id,store,name,password,role,job,resign_date,can_manage_office_payroll,deleted_at' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL_NO_EXTRA =
-  'id,employee_code,store,name,password,role,job,resign_date,can_manage_office_payroll,deleted_at' as const
+  'id,employee_code,tenant_id,store,name,password,role,job,resign_date,can_manage_office_payroll,deleted_at' as const
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_NO_EXTRA =
-  'id,employee_code,company,store,name,password,role,job,resign_date,deleted_at' as const
+  'id,employee_code,company,tenant_id,store,name,password,role,job,resign_date,deleted_at' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_NO_EXTRA =
-  'id,employee_code,store,name,password,role,job,resign_date,deleted_at' as const
+  'id,employee_code,tenant_id,store,name,password,role,job,resign_date,deleted_at' as const
 /** deleted_at 컬럼 없는 DB 폴백 */
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_LEGACY =
-  'id,employee_code,company,store,name,password,role,job,resign_date,extra_stores' as const
+  'id,employee_code,company,tenant_id,store,name,password,role,job,resign_date,extra_stores' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_LEGACY =
-  'id,employee_code,store,name,password,role,job,resign_date,extra_stores' as const
+  'id,employee_code,tenant_id,store,name,password,role,job,resign_date,extra_stores' as const
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL_LEGACY =
-  'id,employee_code,company,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll' as const
+  'id,employee_code,company,tenant_id,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL_LEGACY =
-  'id,employee_code,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll' as const
+  'id,employee_code,tenant_id,store,name,password,role,job,resign_date,extra_stores,can_manage_office_payroll' as const
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_OFFICE_PAYROLL_NO_EXTRA_LEGACY =
-  'id,employee_code,company,store,name,password,role,job,resign_date,can_manage_office_payroll' as const
+  'id,employee_code,company,tenant_id,store,name,password,role,job,resign_date,can_manage_office_payroll' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_OFFICE_PAYROLL_NO_EXTRA_LEGACY =
-  'id,employee_code,store,name,password,role,job,resign_date,can_manage_office_payroll' as const
+  'id,employee_code,tenant_id,store,name,password,role,job,resign_date,can_manage_office_payroll' as const
 const EMPLOYEES_LOGIN_CHECK_WITH_COMPANY_NO_EXTRA_LEGACY =
-  'id,employee_code,company,store,name,password,role,job,resign_date' as const
+  'id,employee_code,company,tenant_id,store,name,password,role,job,resign_date' as const
 const EMPLOYEES_LOGIN_CHECK_NO_COMPANY_NO_EXTRA_LEGACY =
-  'id,employee_code,store,name,password,role,job,resign_date' as const
+  'id,employee_code,tenant_id,store,name,password,role,job,resign_date' as const
 
 function isMissingEmployeesExtraStoresColumn(err: unknown): boolean {
   const m = err instanceof Error ? err.message : String(err)
@@ -126,6 +126,13 @@ function isMissingEmployeesOfficePayrollColumn(err: unknown): boolean {
 function isMissingEmployeesDeletedAtColumn(err: unknown): boolean {
   const m = err instanceof Error ? err.message : String(err)
   return /deleted_at/i.test(m)
+}
+
+function isMissingEmployeesTenantIdColumn(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err)
+  return /Could not find the ['"]tenant_id['"] column|column\s+[\w.]*tenant_id\s+does not exist|42703.*tenant_id/i.test(
+    m
+  )
 }
 
 function loginCheckSelectAttempts(): { select: string }[] {
@@ -158,23 +165,34 @@ export async function supabaseSelectFilterEmployeesByNameForLogin(name: string):
   const nameFilter = `name=eq.${encodeURIComponent(name)}`
   const attempts = loginCheckSelectAttempts()
   let lastErr: unknown = null
-  for (const { select } of attempts) {
-    try {
-      return await supabaseSelectFilter('employees', nameFilter, {
-        limit: 120,
-        select,
-      })
-    } catch (e) {
-      lastErr = e
-      if (
-        isMissingEmployeesCompanyColumn(e) ||
-        isMissingEmployeesOfficePayrollColumn(e) ||
-        isMissingEmployeesExtraStoresColumn(e) ||
-        isMissingEmployeesDeletedAtColumn(e)
-      ) {
-        continue
+  for (const { select: select0 } of attempts) {
+    let select = select0
+    for (let inner = 0; inner < 2; inner++) {
+      try {
+        return await supabaseSelectFilter('employees', nameFilter, {
+          limit: 120,
+          select,
+        })
+      } catch (e) {
+        lastErr = e
+        if (inner === 0 && isMissingEmployeesTenantIdColumn(e) && select.includes('tenant_id')) {
+          select = select
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s && s !== 'tenant_id')
+            .join(',')
+          continue
+        }
+        if (
+          isMissingEmployeesCompanyColumn(e) ||
+          isMissingEmployeesOfficePayrollColumn(e) ||
+          isMissingEmployeesExtraStoresColumn(e) ||
+          isMissingEmployeesDeletedAtColumn(e)
+        ) {
+          break
+        }
+        throw e
       }
-      throw e
     }
   }
   throw lastErr

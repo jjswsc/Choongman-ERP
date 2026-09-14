@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilterEmployeesByNameForLogin } from '@/lib/employees-compat'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { signToken } from '@/lib/jwt-auth'
-import { verifyPassword } from '@/lib/password'
+import { hashPassword, isHashed, verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
 import { isOfficeStore, resolveAuthRoleFromEmployeeRoleColumn } from '@/lib/permissions'
-import { saasLoginCompanyMatches } from '@/lib/saas-login-id'
+import { scopeEmployeesForSaasLogin } from '@/lib/login-check-employee-scope'
 import { normalizeCompanyName, normalizeTenantId } from '@/lib/tenant-context'
 import { buildAllowedStoresForToken } from '@/lib/franchisee-multi-store'
 import { getFranchiseeMultiStoreSettings } from '@/lib/franchisee-multi-store-settings-server'
@@ -78,23 +78,15 @@ export async function POST(req: NextRequest) {
         ? fetchErpStoresMasterForTenant(resolvedTenant.tenantId, resolvedTenant.companyName || companyInput)
         : fetchErpStoresMaster(),
     ])
-    const byCompany = companyInput
-      ? (byName || []).filter((r) => saasLoginCompanyMatches(companyInput, normalizeCompanyName(r.company)))
-      : []
     /**
-     * 회사명을 보냈으면 반드시 회사로 좁힌다.
-     * (이전: 회사 불일치 시 전 테넌트 동명이인으로 폴백 → Omni 교차 로그인 위험)
+     * Omni: 목록은 tenant_id 로 보이는데 company 문자열만 보면
+     * company 공란 직원은 PIN 이 맞아도 Login Failed.
+     * 테넌트가 해석되면 tenant_id 우선, 다른 테넌트 동명이인 폴백 금지.
      */
-    let scopedRows: EmpLoginRow[] = companyInput ? byCompany : byName || []
-    if (resolvedTenant?.tenantId) {
-      const tid = normalizeTenantId(resolvedTenant.tenantId)
-      const withTenant = scopedRows.filter((r) => {
-        const rowTid = normalizeTenantId(r.tenant_id)
-        if (!rowTid) return true
-        return rowTid === tid
-      })
-      if (withTenant.length > 0) scopedRows = withTenant
-    }
+    const scopedRows = scopeEmployeesForSaasLogin(byName, {
+      companyInput,
+      tenantId: resolvedTenant?.tenantId,
+    })
     const matched = employeeRowsMatchingSubmittedStore(scopedRows, store, masters)
     const row = pickBestEmployeeStoreMatch(matched, store)
     if (!row) {
@@ -112,10 +104,26 @@ export async function POST(req: NextRequest) {
       }
     }
     const storedPw = String(row.password || '').trim()
-    const ok = await verifyPassword(pw, storedPw, {
+    let ok = await verifyPassword(pw, storedPw, {
       /** Omni: 평문 저장 계정 로그인 거부. 충만만 레거시 평문 허용. */
       allowLegacyPlaintext: !saasBrand,
     })
+    /**
+     * Omni 직원 화면에서 PIN 을 저장해도 과거 평문이 남아 있으면 로그인이 거절된다.
+     * PIN 이 맞으면 bcrypt 로 올려 주고 이번 로그인은 통과.
+     */
+    if (!ok && saasBrand && storedPw && !isHashed(storedPw) && pw.trim() === storedPw) {
+      try {
+        const hashed = await hashPassword(pw)
+        const empId = row.id != null ? Math.floor(Number(row.id)) : 0
+        if (hashed && empId > 0) {
+          await supabaseUpdateByFilter('employees', `id=eq.${empId}`, { password: hashed })
+        }
+        ok = true
+      } catch (upgradeErr) {
+        console.warn('loginCheck: plaintext PIN upgrade failed', upgradeErr)
+      }
+    }
     if (!ok) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }

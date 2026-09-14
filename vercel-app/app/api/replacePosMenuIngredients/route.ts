@@ -4,6 +4,7 @@ import {
   supabaseInsert,
   supabaseSelectFilter,
 } from '@/lib/supabase-server'
+import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import {
@@ -156,27 +157,12 @@ export async function POST(req: NextRequest) {
         ...(menuCode ? { menu_code: menuCode } : {}),
       }
       let insertedId = ''
-      try {
-        const inserted = (await supabaseInsert(
-          'pos_menu_ingredients',
-          stampPosMenuIngredientRow(ingredientRowBase, catalogScope)
-        )) as { id?: number | string }[] | null
-        insertedId = String(inserted?.[0]?.id ?? '').trim()
-      } catch {
-        const { quantity_unit_key: _u, menu_code: _m, ...withoutUnitKey } = ingredientRowBase
-        try {
-          const inserted = (await supabaseInsert('pos_menu_ingredients', withoutUnitKey)) as
-            | { id?: number | string }[]
-            | null
-          insertedId = String(inserted?.[0]?.id ?? '').trim()
-        } catch {
-          const { menu_code: _ignored, ...legacyRow } = ingredientRowBase as Record<string, unknown>
-          const inserted = (await supabaseInsert('pos_menu_ingredients', legacyRow)) as
-            | { id?: number | string }[]
-            | null
-          insertedId = String(inserted?.[0]?.id ?? '').trim()
-        }
-      }
+      const inserted = (await supabaseInsertWithPgrst204Fallback(
+        'pos_menu_ingredients',
+        stampPosMenuIngredientRow(ingredientRowBase, catalogScope),
+        'replacePosMenuIngredients.insert'
+      )) as { id?: number | string }[] | null
+      insertedId = String(inserted?.[0]?.id ?? '').trim()
 
       const afterRows = insertedId
         ? ((await supabaseSelectFilter(
