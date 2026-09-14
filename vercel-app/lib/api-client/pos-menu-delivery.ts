@@ -158,3 +158,20 @@ export async function getGrabPromoCampaigns(params: { storeCode?: string; mercha
     hint?: string
   }>
 }
+
+export async function cancelGrabPromoCampaign(params: { merchantID: string; campaignId: string }) {
+  const res = await apiFetchWithOffline('/api/grab/cancelPromoCampaign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      merchantID: params.merchantID,
+      campaignId: params.campaignId,
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    name?: string
+    menuNotified?: boolean
+  }>
+}

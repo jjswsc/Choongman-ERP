@@ -2975,6 +2975,11 @@ export const I18N_POS_KO: Record<string, string> = {
     posGrabCampaignPeriod: '기간(BKK)',
     posGrabCampaignOngoing: '진행중',
     posGrabCampaignUpcoming: '예정',
+    posGrabCampaignCancel: '취소',
+    posGrabCampaignCancelConfirm:
+      '이 Grab 캠페인을 취소할까요?\n새 프로모가 안 바뀌면 예전 캠페인을 먼저 취소한 뒤 메뉴를 다시 보내야 합니다.',
+    posGrabCampaignCancelDone: '캠페인을 취소했고, Grab 메뉴 업데이트를 보냈습니다.',
+    posGrabCampaignCancelFailed: '캠페인을 취소하지 못했습니다.',
     posGrabCampaignsSuppressedBanner:
       '운영 모드: Grab Campaign API 미사용 — 할인은 메뉴 가격(Menu sync)만 반영. Campaign ID 없음이 정상입니다.',
     posGrabCampaignsErpPromosTitle: 'ERP Grab 프로모 (메뉴 가격 동기화)',
@@ -6380,6 +6385,11 @@ export const I18N_POS_EN: Record<string, string> = {
     posGrabCampaignPeriod: 'Period (BKK)',
     posGrabCampaignOngoing: 'Ongoing',
     posGrabCampaignUpcoming: 'Upcoming',
+    posGrabCampaignCancel: 'Cancel',
+    posGrabCampaignCancelConfirm:
+      'Cancel this Grab campaign?\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
+    posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
+    posGrabCampaignCancelFailed: 'Could not cancel the campaign.',
     posGrabCampaignsSuppressedBanner:
       'Mode: Grab Partner Campaign API is off — promo prices use menu sync only. No Campaign ID is expected.',
     posGrabCampaignsErpPromosTitle: 'ERP Grab promos (menu price sync)',
@@ -10257,6 +10267,11 @@ export const I18N_POS_TH: Record<string, string> = {
     posGrabCampaignPeriod: 'Period (BKK)',
     posGrabCampaignState: 'State',
     posGrabCampaignUpcoming: 'Upcoming',
+    posGrabCampaignCancel: 'ยกเลิก',
+    posGrabCampaignCancelConfirm:
+      'ต้องการยกเลิกแคมเปญนี้ใน Grab ไหมครับ\nถ้าโปรใหม่ไม่อัปเดต ให้ยกเลิกแคมเปญเก่าก่อน แล้วระบบจะส่งอัปเดตเมนูให้อีกครั้งครับ',
+    posGrabCampaignCancelDone: 'ยกเลิกแคมเปญแล้ว และส่งอัปเดตเมนูไป Grab แล้วครับ',
+    posGrabCampaignCancelFailed: 'ยกเลิกแคมเปญไม่สำเร็จครับ',
     posGrabCampaignsSuppressedBanner:
       'โหมดปฏิบัติการ: ปิด Grab Partner Campaign API — ส่วนลดใช้ซิงค์ราคาเมนูเท่านั้น ไม่มี Campaign ID ถือว่าปกติ',
     posGrabCampaignsErpPromosTitle: 'โปรโม Grab ใน ERP (ซิงค์ราคาเมนู)',
@@ -13536,6 +13551,9 @@ export const I18N_POS_MM: Record<string, string> = {
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
     posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
     posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
+    posGrabCampaignCancel: 'Cancel',
+    posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
+    posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -16621,6 +16639,9 @@ export const I18N_POS_LA: Record<string, string> = {
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
     posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
     posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
+    posGrabCampaignCancel: 'Cancel',
+    posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
+    posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -19741,6 +19762,9 @@ export const I18N_POS_KH: Record<string, string> = {
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
     posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
     posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
+    posGrabCampaignCancel: 'Cancel',
+    posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
+    posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -22830,6 +22854,9 @@ export const I18N_POS_VI: Record<string, string> = {
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
     posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
     posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
+    posGrabCampaignCancel: 'Cancel',
+    posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
+    posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -25923,4 +25950,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
     posManualEdcApprovalRequired: 'Please enter the approval code from the EDC slip.',
     posManualEdcHintAfterFail: 'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
+    posGrabCampaignCancel: 'Cancel',
+    posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
+    posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
 }

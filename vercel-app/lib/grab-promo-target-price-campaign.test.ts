@@ -19,6 +19,7 @@ import {
   shouldOmitGrabPromoAdvancedPricingForMenu,
   shouldSendGrabPromoSaleAdvancedPricing,
   shouldSuppressGrabPromoCampaignsForConsumerSale,
+  findManagedGrabCampaignToDelete,
 } from '@/lib/grab-promo-target-price-campaign'
 
 describe('resolveGrabMenuSalePriceMajor', () => {
@@ -440,5 +441,29 @@ describe('classifyGrabCampaignApiError', () => {
         new Error('campaign start time too close for now | invalid_argument')
       )
     ).toBe('START_TIME_INVALID')
+  })
+})
+
+describe('findManagedGrabCampaignToDelete', () => {
+  it('returns the CM-POS-PROMO row with a matching id', () => {
+    expect(
+      findManagedGrabCampaignToDelete(
+        [
+          { id: 'camp-1', name: 'CM-POS-PROMO-51 Set 1 Golden Fried Chicken' },
+          { id: 'camp-2', name: 'CM-POS-PROMO-53 Set 2 Soy Sauce Chicken' },
+        ],
+        'camp-2'
+      )
+    ).toEqual({ id: 'camp-2', name: 'CM-POS-PROMO-53 Set 2 Soy Sauce Chicken' })
+  })
+
+  it('rejects empty ids and non-managed campaign names', () => {
+    expect(findManagedGrabCampaignToDelete([{ id: 'camp-1', name: 'CM-POS-PROMO-51' }], '')).toBeNull()
+    expect(
+      findManagedGrabCampaignToDelete([{ id: 'camp-1', name: 'Other Grab Campaign' }], 'camp-1')
+    ).toBeNull()
+    expect(
+      findManagedGrabCampaignToDelete([{ id: 'camp-1', name: 'CM-POS-PROMO-51' }], 'missing')
+    ).toBeNull()
   })
 })

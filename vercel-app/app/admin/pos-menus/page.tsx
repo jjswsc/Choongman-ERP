@@ -43,6 +43,7 @@ import {
   getNextPosMenuCode,
   savePosDeliveryAppPolicies,
   getGrabPromoCampaigns,
+  cancelGrabPromoCampaign,
   type GrabErpPromoForCampaignLookup,
   type GrabPromoCampaign,
   type PosMenuCategoriesConfig,
@@ -498,6 +499,7 @@ export default function PosMenusPage() {
     erpGrabPromos: GrabErpPromoForCampaignLookup[]
   } | null>(null)
   const [grabCampaignCopiedId, setGrabCampaignCopiedId] = React.useState<string | null>(null)
+  const [grabCampaignCancellingId, setGrabCampaignCancellingId] = React.useState<string | null>(null)
 
   const resolveNewOptionChannelPayload = React.useCallback(() => {
     const hall = Number(newOptionModifier) || 0
@@ -3825,6 +3827,35 @@ export default function PosMenusPage() {
     }
   }, [])
 
+  const handleCancelGrabCampaign = React.useCallback(
+    async (row: GrabPromoCampaign) => {
+      const campaignId = String(row.id || "").trim()
+      const merchantID = String(row.merchantID || "").trim()
+      if (!campaignId || !merchantID) return
+      const ok = await appConfirm(
+        `${t("posGrabCampaignCancelConfirm") || "이 Grab 캠페인을 취소할까요?\n\n새 프로모가 안 바뀌면 예전 캠페인을 먼저 취소한 뒤 메뉴를 다시 보내야 합니다."}\n\n${row.name || campaignId}`
+      )
+      if (!ok) return
+      setGrabCampaignCancellingId(`${merchantID}:${campaignId}`)
+      try {
+        const res = await cancelGrabPromoCampaign({ merchantID, campaignId })
+        if (res?.success === false) {
+          await appAlert(translateApiMessage(String(res.message ?? "cancel_failed"), t))
+          return
+        }
+        await appAlert(
+          t("posGrabCampaignCancelDone") || "캠페인을 취소했고, Grab 메뉴 업데이트를 보냈습니다."
+        )
+        await handleLoadGrabCampaigns()
+      } catch (e) {
+        await appAlert(translateApiMessage(String(e ?? "cancel_failed"), t))
+      } finally {
+        setGrabCampaignCancellingId(null)
+      }
+    },
+    [handleLoadGrabCampaigns, t]
+  )
+
   const buildGrabSupportReplyText = React.useCallback(() => {
     const mid = grabCampaignsMeta?.merchantIDs?.join(", ") || ""
     const promos = grabCampaignsMeta?.erpGrabPromos ?? []
@@ -6832,7 +6863,7 @@ export default function PosMenusPage() {
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-snug">
                     {t("posGrabCampaignsHint") ||
-                      "Grab에 전송된 프로모션 캠페인 목록입니다. Grab이 'Campaign ID'를 요청하면 아래 ID(복사 버튼)를 전달하세요. 0건이면 현재 이 매장에 살아있는 캠페인이 없습니다."}
+                      "Grab에 전송된 프로모션 캠페인 목록입니다. Grab이 'Campaign ID'를 요청하면 아래 ID(복사 버튼)를 전달하세요. 0건이면 현재 이 매장에 살아있는 캠페인이 없습니다. 새 프로모가 안 바뀌면 해당 캠페인을 취소한 뒤 다시 조회하세요."}
                   </p>
                   {grabCampaignsMeta && (
                     <p className="text-[11px] text-muted-foreground">
@@ -6925,6 +6956,7 @@ export default function PosMenusPage() {
                               <th className="p-2 text-center w-20">{t("posGrabCampaignState") || "상태"}</th>
                               <th className="p-2 text-center w-24">{t("posGrabCampaignDiscount") || "할인"}</th>
                               <th className="p-2 text-left w-44">{t("posGrabCampaignPeriod") || "기간(BKK)"}</th>
+                              <th className="p-2 text-right w-24">{t("posGrabCampaignCancel") || "취소"}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -6968,6 +7000,23 @@ export default function PosMenusPage() {
                                 <td className="p-2 text-[11px] leading-snug">
                                   <div>{c.startTimeBkk || c.startTimeUtc || "-"}</div>
                                   <div className="text-muted-foreground">~ {c.endTimeBkk || c.endTimeUtc || "-"}</div>
+                                </td>
+                                <td className="p-2 text-right">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className={`${ADMIN_BTN_XS_CN} text-[11px] text-destructive`}
+                                    disabled={
+                                      grabCampaignsLoading ||
+                                      grabCampaignCancellingId === `${c.merchantID}:${c.id}`
+                                    }
+                                    onClick={() => void handleCancelGrabCampaign(c)}
+                                  >
+                                    {grabCampaignCancellingId === `${c.merchantID}:${c.id}`
+                                      ? (t("loading") || "처리 중...")
+                                      : (t("posGrabCampaignCancel") || "취소")}
+                                  </Button>
                                 </td>
                               </tr>
                             ))}

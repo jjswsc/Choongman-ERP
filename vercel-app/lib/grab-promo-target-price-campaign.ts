@@ -969,6 +969,38 @@ export async function listGrabManagedPromoCampaigns(merchantID: string): Promise
   return out
 }
 
+export function findManagedGrabCampaignToDelete(
+  rows: Array<{ id?: string; name?: string }>,
+  campaignId: string
+): { id: string; name: string } | null {
+  const id = String(campaignId ?? '').trim()
+  if (!id) return null
+  const found = rows.find((r) => String(r.id ?? '').trim() === id)
+  if (!found) return null
+  const name = String(found.name ?? '').trim()
+  if (!name.startsWith(CAMPAIGN_NAME_PREFIX)) return null
+  return { id, name }
+}
+
+/** Grab Partner Campaign 1건 삭제. 목록에 있는 CM-POS-PROMO만 허용. */
+export async function deleteGrabManagedPromoCampaign(params: {
+  merchantID: string
+  campaignId: string
+}): Promise<{ ok: true; name: string } | { ok: false; message: string }> {
+  const merchantID = String(params.merchantID ?? '').trim()
+  const campaignId = String(params.campaignId ?? '').trim()
+  if (!merchantID || !campaignId) return { ok: false, message: 'merchantID_and_campaignId_required' }
+  const rows = await listGrabManagedPromoCampaigns(merchantID)
+  const found = findManagedGrabCampaignToDelete(rows, campaignId)
+  if (!found) return { ok: false, message: 'campaign_not_found' }
+  await grabJsonRequest({
+    path: `/partner/v1/campaigns/${encodeURIComponent(found.id)}`,
+    method: 'DELETE',
+    expectNoContentOk: true,
+  })
+  return { ok: true, name: found.name }
+}
+
 async function createGrabCampaign(body: Record<string, unknown>): Promise<void> {
   await grabJsonRequest({
     path: '/partner/v1/campaigns',
