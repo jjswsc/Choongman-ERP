@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendCoverMemo,
+  autoPostChannelFeeDecision,
   claimedCoverDatesFromSettlements,
   isPlausibleCoverFee,
   isWeekendBatchSettleDate,
@@ -42,6 +43,19 @@ describe('weekend batch GROSS cover', () => {
       fee: 226,
     })
     expect(isPlausibleCoverFee('card', 10426, 10200)).toBe(true)
+  })
+
+  it('does not auto-post a same-day card fee when NET is a small leftover vs GROSS', () => {
+    expect(autoPostChannelFeeDecision('card', 9913, 869.91)).toBe('skip')
+    expect(isPlausibleCoverFee('card', 9913, 869.91)).toBe(false)
+  })
+
+  it('auto-posts card when FEE is GROSS − bank NET in the card band', () => {
+    expect(autoPostChannelFeeDecision('card', 9913, 9426.18)).toBe('post')
+  })
+
+  it('skips a fee journal when GROSS already equals NET', () => {
+    expect(autoPostChannelFeeDecision('card', 500, 500)).toBe('no-fee')
   })
 
   it('sums Saturday + Sunday even when implied fee is ~0', () => {

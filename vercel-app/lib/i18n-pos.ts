@@ -69,6 +69,10 @@ export const I18N_POS_KO: Record<string, string> = {
     posChannelSettlePostJournal: '정산 분개 생성',
     posChannelSettleRepost: '재분개',
     posChannelSettleExisting: '등록됨',
+    posChannelSettleStaffSop:
+      '수수료율은 계산하지 마세요.\n위 숫자와 초록 Posted가 같으면 끝입니다.\n다르면 통장 입금을 확인한 뒤 Repost journal만 누르세요.\nGrab/LINE/Shopee에 ✓가 있으면 건드리지 마세요.\n평소는 노란 칩+저장만 하면 됩니다.',
+    posChannelSettlePostedMismatch:
+      'Posted 금액이 위 GROSS/FEE/NET과 다릅니다. 통장 입금을 확인한 뒤 Repost journal만 누르세요.',
     posChannelSettlePosted: '채널 정산 분개가 생성되었습니다.',
     posChannelSettleAlreadyPosted: '이미 동일 금액으로 분개되어 있습니다.',
     posChannelSettleNoGross: 'POS 채권(GROSS)이 없습니다.',
@@ -3595,6 +3599,10 @@ export const I18N_POS_EN: Record<string, string> = {
     posChannelSettlePostJournal: 'Post settlement journal',
     posChannelSettleRepost: 'Repost journal',
     posChannelSettleExisting: 'Posted',
+    posChannelSettleStaffSop:
+      'Do not calculate a fee %.\nIf the amounts above match the green Posted line, you are done.\nIf they differ, check the bank deposit then tap Repost journal only.\nIf Grab / LINE MAN / Shopee already have ✓, do not touch them.\nDay to day: yellow chip + save is enough.',
+    posChannelSettlePostedMismatch:
+      'Posted amounts do not match GROSS/FEE/NET above. Check the bank deposit, then tap Repost journal only.',
     posChannelSettlePosted: 'Channel settlement journal created.',
     posChannelSettleAlreadyPosted: 'Already posted with the same amounts.',
     posChannelSettleNoGross: 'No POS gross receivable for this channel.',
@@ -10190,6 +10198,10 @@ export const I18N_POS_TH: Record<string, string> = {
     posChannelSettleCsvParseErrors: 'Parse warnings',
     posChannelSettleCsvTitle: 'Settlement CSV batch',
     posChannelSettleExisting: 'Posted',
+    posChannelSettleStaffSop:
+      'ไม่ต้องคิด % ค่าธรรมเนียมเองครับ\nตัวเลขด้านบน กับแถวสีเขียว Posted ตรงกัน = เสร็จแล้ว ไม่ต้องกดอะไรครับ\nถ้าไม่ตรง → เช็คยอดเข้าบัญชี แล้วกด Repost journal อย่างเดียวครับ\nGrab / LINE MAN / Shopee มี ✓ แล้ว = ห้ามแตะครับ\nปกติกดชิปเหลือง + บันทึก ก็พอครับ',
+    posChannelSettlePostedMismatch:
+      'ยอด Posted ไม่ตรงกับด้านบนครับ เช็คยอดเข้าบัญชี แล้วกด Repost journal อย่างเดียวครับ',
     posChannelSettleFee: 'Fee',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleGpPlatformLink: 'Platform settlement % (Delivery ops)',
@@ -13112,6 +13124,10 @@ export const I18N_POS_MM: Record<string, string> = {
     posChannelSettleCsvParseErrors: 'Parse warnings',
     posChannelSettleCsvTitle: 'Settlement CSV batch',
     posChannelSettleExisting: 'Posted',
+    posChannelSettleStaffSop:
+      'Do not calculate a fee %.\nIf the amounts above match the green Posted line, you are done.\nIf they differ, check the bank deposit then tap Repost journal only.\nIf Grab / LINE MAN / Shopee already have ✓, do not touch them.\nDay to day: yellow chip + save is enough.',
+    posChannelSettlePostedMismatch:
+      'Posted amounts do not match GROSS/FEE/NET above. Check the bank deposit, then tap Repost journal only.',
     posChannelSettleFee: 'Fee',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleGpPlatformLink: 'Platform settlement % (Delivery ops)',
@@ -16193,6 +16209,10 @@ export const I18N_POS_LA: Record<string, string> = {
     posChannelSettleCsvParseErrors: 'Parse warnings',
     posChannelSettleCsvTitle: 'Settlement CSV batch',
     posChannelSettleExisting: 'Posted',
+    posChannelSettleStaffSop:
+      'Do not calculate a fee %.\nIf the amounts above match the green Posted line, you are done.\nIf they differ, check the bank deposit then tap Repost journal only.\nIf Grab / LINE MAN / Shopee already have ✓, do not touch them.\nDay to day: yellow chip + save is enough.',
+    posChannelSettlePostedMismatch:
+      'Posted amounts do not match GROSS/FEE/NET above. Check the bank deposit, then tap Repost journal only.',
     posChannelSettleFee: 'Fee',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleGpPlatformLink: 'Platform settlement % (Delivery ops)',
@@ -19325,6 +19345,10 @@ export const I18N_POS_KH: Record<string, string> = {
     posChannelSettleCsvParseErrors: 'Parse warnings',
     posChannelSettleCsvTitle: 'Settlement CSV batch',
     posChannelSettleExisting: 'Posted',
+    posChannelSettleStaffSop:
+      'Do not calculate a fee %.\nIf the amounts above match the green Posted line, you are done.\nIf they differ, check the bank deposit then tap Repost journal only.\nIf Grab / LINE MAN / Shopee already have ✓, do not touch them.\nDay to day: yellow chip + save is enough.',
+    posChannelSettlePostedMismatch:
+      'Posted amounts do not match GROSS/FEE/NET above. Check the bank deposit, then tap Repost journal only.',
     posChannelSettleFee: 'Fee',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleGpPlatformLink: 'Platform settlement % (Delivery ops)',
@@ -22393,6 +22417,10 @@ export const I18N_POS_VI: Record<string, string> = {
     posChannelSettleCsvParseErrors: 'Parse warnings',
     posChannelSettleCsvTitle: 'Settlement CSV batch',
     posChannelSettleExisting: 'Posted',
+    posChannelSettleStaffSop:
+      'Do not calculate a fee %.\nIf the amounts above match the green Posted line, you are done.\nIf they differ, check the bank deposit then tap Repost journal only.\nIf Grab / LINE MAN / Shopee already have ✓, do not touch them.\nDay to day: yellow chip + save is enough.',
+    posChannelSettlePostedMismatch:
+      'Posted amounts do not match GROSS/FEE/NET above. Check the bank deposit, then tap Repost journal only.',
     posChannelSettleFee: 'Fee',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleGpPlatformLink: 'Platform settlement % (Delivery ops)',
@@ -25482,6 +25510,10 @@ export const I18N_POS_MS: Record<string, string> = {
     posChannelSettleCsvParseErrors: 'Parse warnings',
     posChannelSettleCsvTitle: 'Settlement CSV batch',
     posChannelSettleExisting: 'Posted',
+    posChannelSettleStaffSop:
+      'Do not calculate a fee %.\nIf the amounts above match the green Posted line, you are done.\nIf they differ, check the bank deposit then tap Repost journal only.\nIf Grab / LINE MAN / Shopee already have ✓, do not touch them.\nDay to day: yellow chip + save is enough.',
+    posChannelSettlePostedMismatch:
+      'Posted amounts do not match GROSS/FEE/NET above. Check the bank deposit, then tap Repost journal only.',
     posChannelSettleFee: 'Fee',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleGpPlatformLink: 'Platform settlement % (Delivery ops)',

@@ -22,7 +22,11 @@ import {
 } from '@/lib/api-client'
 import { parseChannelSettlementCsv } from '@/lib/parse-channel-settlement-csv'
 import { appendCoverMemo } from '@/lib/pos-channel-cover-gross'
-import { deriveFeeFromGrossNet, roundSettlementMoney } from '@/lib/pos-channel-settlement'
+import {
+  deriveFeeFromGrossNet,
+  roundSettlementMoney,
+  settlementPostedMatchesForm,
+} from '@/lib/pos-channel-settlement'
 import { cn } from '@/lib/utils'
 
 const CHANNELS: { id: PosChannelSettlementChannel; labelKey: string; fallback: string }[] = [
@@ -240,6 +244,16 @@ export function PosChannelSettlementPanel({
   }
 
   const existing = posted.find((p) => p.channel === channel)
+  const formNet = roundSettlementMoney(Number(net) || 0)
+  const formFee =
+    fee.trim() !== ''
+      ? roundSettlementMoney(Number(fee) || 0)
+      : deriveFeeFromGrossNet(gross, formNet)
+  const postedMatches = settlementPostedMatchesForm(existing, {
+    gross,
+    fee: formFee,
+    net: formNet,
+  })
 
   const handleCsvFile = async (file: File | null) => {
     if (!file || !storeCode || !settleDate) return
@@ -294,6 +308,10 @@ export function PosChannelSettlementPanel({
     >
       <div>
         <p className="text-sm font-semibold">{t('posChannelSettleTitle') || '채널 정산 (회계)'}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">
+          {t('posChannelSettleStaffSop') ||
+            '수수료율은 계산하지 마세요. 위 숫자와 초록 Posted가 같으면 끝입니다. 다르면 통장 입금을 확인한 뒤 Repost journal만 누르세요. Grab/LINE/Shopee에 ✓가 있으면 건드리지 마세요. 평소는 노란 칩+저장만 하면 됩니다.'}
+        </p>
         <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-line">
           {t('posChannelSettleHint') ||
             '배달: 플랫폼(Grab/LINE 등)이 매출 GROSS에서 수수료를 빼고 익일 NET을 입금합니다(본사 PO 배달 GP와 별도).\nGROSS(1130)=POS 결제 합계, NET=통장 실입금, FEE=GROSS−NET. 통장 입금 분류는 「매출 수령」만.'}
@@ -428,11 +446,25 @@ export function PosChannelSettlementPanel({
       </div>
 
       {existing ? (
-        <p className="text-xs text-emerald-700 dark:text-emerald-400">
-          {t('posChannelSettleExisting') || '등록됨'}: GROSS {formatBaht(existing.gross)} / FEE {formatBaht(existing.fee)}{' '}
-          / NET {formatBaht(existing.net)}
-          {existing.journalEntryId ? ` · JE#${existing.journalEntryId}` : ''}
-        </p>
+        <div className="space-y-1">
+          <p
+            className={
+              postedMatches
+                ? 'text-xs text-emerald-700 dark:text-emerald-400'
+                : 'text-xs text-amber-800 dark:text-amber-300'
+            }
+          >
+            {t('posChannelSettleExisting') || '등록됨'}: GROSS {formatBaht(existing.gross)} / FEE{' '}
+            {formatBaht(existing.fee)} / NET {formatBaht(existing.net)}
+            {existing.journalEntryId ? ` · JE#${existing.journalEntryId}` : ''}
+          </p>
+          {!postedMatches ? (
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              {t('posChannelSettlePostedMismatch') ||
+                'Posted 금액이 위 GROSS/FEE/NET과 다릅니다. 통장 입금을 확인한 뒤 Repost journal만 누르세요.'}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {posted.length > 1 ? (

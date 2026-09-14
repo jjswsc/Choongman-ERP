@@ -38,6 +38,19 @@ export function deriveFeeFromGrossNet(gross: number, net: number): number {
   return roundSettlementMoney(Math.max(0, gross - net))
 }
 
+export function settlementPostedMatchesForm(
+  posted: { gross?: number; fee?: number; net?: number } | null | undefined,
+  form: { gross: number; fee: number; net: number },
+  eps = 0.02
+): boolean {
+  if (!posted) return false
+  return (
+    Math.abs(Number(posted.gross) - form.gross) <= eps &&
+    Math.abs(Number(posted.fee) - form.fee) <= eps &&
+    Math.abs(Number(posted.net) - form.net) <= eps
+  )
+}
+
 export type ChannelSettlementJournalLine = {
   accountCode: string
   accountName: string

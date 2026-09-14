@@ -4681,14 +4681,14 @@ export const i18n = {
       'POS 매장: QR은 용도에서 고르세요. Grab·카드는 노란 칩. 저장하면 분개가 자동입니다.',
     bankPosStoreCategoryHiddenOptions: '배달앱·카드·QR·현금 숨김 — 노란 칩 + 저장',
     bankPosChannelSettleHint:
-      'QR은 칩+저장만. Grab·카드 수수료는 저장 시 자동이며, 금액이 틀릴 때만 아래 「수수료 수정」을 누르세요.',
+      'QR은 칩+저장만. Grab·카드 수수료는 저장 시 자동이며, 금액이 틀릴 때만 아래 「수수료 수정」. 초록 Posted와 위 숫자가 다르면 Repost journal만 누르세요.',
     bankPosChannelSettlePosLink: 'POS 결산 →',
     bankPosChannelSettleRowBtn: '채널 정산',
     bankPosChannelSettleEditBtn: '수수료 수정',
     bankPosChannelSettleNeedStore: '매장을 선택한 뒤 채널 정산을 진행하세요.',
     bankPosChannelSettleDialogTitle: '채널 정산 (수수료 분개)',
     bankPosChannelSettleDialogDesc:
-      'NET=이 입금액, FEE=GROSS−NET. 직원은 칩+저장만 하면 됩니다. 주말 카드는 옆날 POS를 합쳐 맞출 수 있습니다. 이 화면은 수수료가 틀릴 때 수정용입니다.',
+      '수수료율은 계산하지 마세요. 위 숫자와 초록 Posted가 같으면 끝입니다. 다르면 통장 입금 확인 후 Repost journal만. Grab/LINE/Shopee에 ✓가 있으면 건드리지 마세요. 평소는 노란 칩+저장. FEE=GROSS−NET.',
     helpSum_admin_petty_cash:
       '매장·본사 패티캐시 입출금과 거래 후 잔액을 봅니다. 매장 한 곳을 고르면 현재 잔액이 위에 나오고, 내역·월별 현황 표에도 잔액 열이 있습니다.',
     helpHow_admin_petty_cash:
@@ -13022,14 +13022,14 @@ Only matters the employee must handle personally on a working day:
       'POS store: pick QR in the category list. Grab/card: yellow chip. Save — journals post automatically.',
     bankPosStoreCategoryHiddenOptions: 'Delivery/Card/QR/Cash hidden — tap a chip and save',
     bankPosChannelSettleHint:
-      'QR: chip + save only. Grab/card fees post on save; click Fee edit below only if the amount is wrong.',
+      'QR: chip + save only. Grab/card fees post on save; click Fee edit below only if the amount is wrong. If green Posted differs from the amounts above, tap Repost journal only.',
     bankPosChannelSettlePosLink: 'POS settlement →',
     bankPosChannelSettleRowBtn: 'Channel settlement',
     bankPosChannelSettleEditBtn: 'Fee edit',
     bankPosChannelSettleNeedStore: 'Select a store before channel settlement.',
     bankPosChannelSettleDialogTitle: 'Channel settlement (fee journal)',
     bankPosChannelSettleDialogDesc:
-      'NET = this deposit; FEE = GROSS − NET. Staff only tap a chip and save. Fri–Mon card deposits may include neighboring POS days. Use this dialog to correct fees.',
+      'Do not calculate a fee %. If amounts above match green Posted, you are done. If not, check the bank deposit then tap Repost journal only. Grab/LINE/Shopee with ✓: do not touch. Day to day: yellow chip + save. FEE = GROSS − NET.',
     helpSum_admin_petty_cash:
       'Store/HQ petty cash in/out with running balance after each line. Pick one store to see current cash on hand; the balance column is on both List and Monthly.',
     helpHow_admin_petty_cash:
@@ -20701,14 +20701,14 @@ orderItemQty: 'จำนวน',
       'สาขา POS: เงินเข้า QR เลือก「QR」ในช่องประเภทครับ Grab/บัตร กดปุ่มเหลืองแล้วบันทึก บัญชีลงอัตโนมัติ',
     bankPosStoreCategoryHiddenOptions: 'เดลิเวอรี่ บัตร QR เงินสดถูกซ่อน — กดปุ่มเหลืองแล้วบันทึกครับ',
     bankPosChannelSettleHint:
-      'QR กดปุ่มเหลืองแล้วบันทึกอย่างเดียวครับ Grab/บัตร ค่าธรรมเนียมลงอัตโนมัติ ยอดผิดค่อยกด「แก้ค่าธรรมเนียม」ด้านล่าง',
+      'QR กดปุ่มเหลืองแล้วบันทึกอย่างเดียวครับ Grab/บัตร ค่าธรรมเนียมลงอัตโนมัติ ยอดผิดค่อยกด「แก้ค่าธรรมเนียม」ด้านล่าง ถ้า Posted สีเขียวไม่ตรงกับตัวเลขด้านบน กด Repost journal อย่างเดียวครับ',
     bankPosChannelSettlePosLink: 'ปิดยอด POS →',
     bankPosChannelSettleRowBtn: 'ชำระช่องทาง',
     bankPosChannelSettleEditBtn: 'แก้ค่าธรรมเนียม',
     bankPosChannelSettleNeedStore: 'เลือกสาขาก่อนแล้วค่อยชำระช่องทางครับ',
     bankPosChannelSettleDialogTitle: 'ชำระช่องทาง (ลงค่าธรรมเนียม)',
     bankPosChannelSettleDialogDesc:
-      'NET = ยอดเงินเข้านี้ FEE = GROSS − NET พนักงานกดปุ่มเหลืองแล้วบันทึกพอครับ บัตรศุกร์-จันทร์ถ้ายอดเข้ามากกว่า POS วันนั้น ระบบรวมวันข้างเคียงให้ หน้านี้ใช้แก้ค่าธรรมเนียมเมื่อยอดผิด',
+      'ไม่ต้องคิด % ค่าธรรมเนียมเองครับ ตัวเลขด้านบนกับ Posted สีเขียวตรงกัน = เสร็จแล้ว ถ้าไม่ตรง เช็คยอดเข้าบัญชี แล้วกด Repost journal อย่างเดียวครับ Grab/LINE/Shopee มี ✓ แล้วห้ามแตะ ปกติกดชิปเหลือง+บันทึก FEE = GROSS − NET',
     bankManualS3PosReceivable:
       'สาขา POS: เงินเข้าบัตร เดลิเวอรี่ QR ให้เป็น「รับชำระ」+ สาขา อย่าใช้หมวดเดลิเวอรี่/บัตร จะมียอดขายซ้ำครับ',
     bankParseNoRows: 'ไม่พบรายการที่แปลงได้ กรุณาตรวจสอบรูปแบบ K-DEPOSIT',

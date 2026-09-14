@@ -42,6 +42,23 @@ export function isPlausibleCoverFee(
   return pct + 1e-9 >= min && pct <= max + 1e-9
 }
 
+/** 노란 칩 자동분개: 당일 GROSS≥NET 이어도 수수료율이 비정상이면 올리지 않는다. */
+export type AutoPostChannelFeeDecision = 'post' | 'no-fee' | 'skip'
+
+export function autoPostChannelFeeDecision(
+  channel: PosChannelSettlementChannel,
+  gross: number,
+  net: number
+): AutoPostChannelFeeDecision {
+  const g = roundSettlementMoney(gross)
+  const n = roundSettlementMoney(net)
+  if (g <= 0 || n <= 0 || g + 0.02 < n) return 'skip'
+  const fee = deriveFeeFromGrossNet(g, n)
+  if (fee <= 0.02) return 'no-fee'
+  if (!isPlausibleCoverFee(channel, g, n)) return 'skip'
+  return 'post'
+}
+
 export function weekendCoverNeighborDates(settleDate: string): string[] {
   return [-3, -2, -1, 0, 1, 2, 3].map((delta) => addDaysYmd(settleDate, delta))
 }

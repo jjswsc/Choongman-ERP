@@ -3,6 +3,7 @@
  * 실패해도 통장 저장은 유지. QR·현금·폐유는 호출하지 않음.
  */
 import { saveChannelSettlement } from '@/lib/pos-channel-settlement-process'
+import { autoPostChannelFeeDecision } from '@/lib/pos-channel-cover-gross'
 import { fetchChannelGrossCoveringNet, memoWithWeekendCover } from '@/lib/pos-channel-cover-gross-server'
 import { deriveFeeFromGrossNet, roundSettlementMoney } from '@/lib/pos-channel-settlement'
 import {
@@ -42,9 +43,10 @@ export async function maybeAutoPostChannelFeeAfterBankDeposit(params: {
     try {
       const grossRow = await fetchChannelGrossCoveringNet({ storeCode, settleDate, channel, net })
       const gross = roundSettlementMoney(Number(grossRow.gross) || 0)
-      if (gross <= 0 || gross + 0.02 < net) continue
+      const decision = autoPostChannelFeeDecision(channel, gross, net)
+      if (decision === 'skip') continue
+      if (decision === 'no-fee') return
       const fee = deriveFeeFromGrossNet(gross, net)
-      if (fee <= 0.02) return
       const out = await saveChannelSettlement({
         storeCode,
         settleDate,
