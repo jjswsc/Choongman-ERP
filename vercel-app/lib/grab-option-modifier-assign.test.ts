@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
+  GRAB_CHICKEN_SIZE_GROUP_DISPLAY_NAME,
+  applyGrabChickenSizeChoiceGroupMeta,
+  dedupeGrabChickenDefaultOptionRows,
   formatGrabModifierOptionDisplayName,
+  grabChickenPartSizeOptionName,
   resolveGrabModifierAssignments,
   shouldIncludeStandaloneOptionForLinkedMenu,
+  sortGrabChickenSizeChoiceRows,
 } from "@/lib/grab-option-modifier-assign"
 
 describe("resolveGrabModifierAssignments", () => {
@@ -20,7 +25,7 @@ describe("resolveGrabModifierAssignments", () => {
     expect(out[1]).toEqual({ groupName: "sidedish", optionName: "Kimchi" })
   })
 
-  it("keeps chicken legacy size+part row in part group only", () => {
+  it("keeps chicken legacy size+part in one group but preserves S/M option names", () => {
     const out = resolveGrabModifierAssignments(
       {
         name: "M - Wing",
@@ -29,7 +34,127 @@ describe("resolveGrabModifierAssignments", () => {
       "C008",
       ["size", "part"]
     )
-    expect(out).toEqual([{ groupName: "part", optionName: "Wing" }])
+    expect(out).toEqual([{ groupName: "part", optionName: "M - Wing" }])
+  })
+
+  it("keeps M - Boneless name when only part step exists", () => {
+    const out = resolveGrabModifierAssignments(
+      {
+        name: "M - Boneless",
+        option_step_values: { part: "Boneless" },
+      },
+      "C018",
+      ["part"]
+    )
+    expect(out).toEqual([{ groupName: "part", optionName: "M - Boneless" }])
+  })
+
+  it("keeps S - Boneless name in the part group", () => {
+    const out = resolveGrabModifierAssignments(
+      {
+        name: "S - Boneless",
+        option_step_values: { part: "Boneless" },
+      },
+      "C018",
+      ["part"]
+    )
+    expect(out).toEqual([{ groupName: "part", optionName: "S - Boneless" }])
+  })
+})
+
+describe("grabChickenPartSizeOptionName", () => {
+  it("prefers the POS option name over the part value", () => {
+    expect(
+      grabChickenPartSizeOptionName({
+        originalName: "M - Boneless",
+        groupKey: "part",
+        stepValue: "Boneless",
+      })
+    ).toBe("M - Boneless")
+  })
+
+  it("composes size + part when the original name is empty", () => {
+    expect(
+      grabChickenPartSizeOptionName({
+        originalName: "",
+        groupKey: "part",
+        stepValue: "Wing",
+        sizeValue: "M",
+        partValue: "Wing",
+      })
+    ).toBe("M - Wing")
+  })
+})
+
+describe("applyGrabChickenSizeChoiceGroupMeta", () => {
+  it("renames generic part/size labels and requires one choice", () => {
+    expect(
+      applyGrabChickenSizeChoiceGroupMeta({
+        groupName: "part",
+        label: "Part",
+        min: 0,
+        max: 1,
+      })
+    ).toEqual({
+      min: 1,
+      max: 1,
+      groupDisplayName: GRAB_CHICKEN_SIZE_GROUP_DISPLAY_NAME,
+    })
+  })
+
+  it("leaves sidedish groups unchanged", () => {
+    expect(
+      applyGrabChickenSizeChoiceGroupMeta({
+        groupName: "sidedish",
+        label: "sidedish",
+        min: 0,
+        max: 1,
+      })
+    ).toEqual({
+      min: 0,
+      max: 1,
+      groupDisplayName: "sidedish",
+    })
+  })
+
+  it("does not rename a leftover size group to the same title as part", () => {
+    expect(
+      applyGrabChickenSizeChoiceGroupMeta({
+        groupName: "size",
+        label: "Size",
+        min: 1,
+        max: 1,
+      })
+    ).toEqual({
+      min: 1,
+      max: 1,
+      groupDisplayName: "Size",
+    })
+  })
+})
+
+describe("dedupeGrabChickenDefaultOptionRows", () => {
+  it("keeps one S - Boneless and prefers the row with a description", () => {
+    const out = dedupeGrabChickenDefaultOptionRows([
+      { name: "S - Boneless", description_delivery: null },
+      { name: "M - Boneless", description_delivery: null },
+      { name: "S - Boneless", description_delivery: "ไม่มีกระดูก 5 ชิ้น 175 g." },
+    ])
+    expect(out).toEqual([
+      { name: "M - Boneless", description_delivery: null },
+      { name: "S - Boneless", description_delivery: "ไม่มีกระดูก 5 ชิ้น 175 g." },
+    ])
+  })
+})
+
+describe("sortGrabChickenSizeChoiceRows", () => {
+  it("puts S - Boneless first so guests tap the default size first", () => {
+    const out = sortGrabChickenSizeChoiceRows([
+      { name: "M - Drumette", sort_order: 1 },
+      { name: "M - Boneless", sort_order: 0 },
+      { name: "S - Boneless", sort_order: 9 },
+    ])
+    expect(out.map((r) => r.name)).toEqual(["S - Boneless", "M - Boneless", "M - Drumette"])
   })
 })
 

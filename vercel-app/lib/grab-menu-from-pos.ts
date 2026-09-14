@@ -23,9 +23,13 @@ import {
   loadPosOptionGroupsWithItems,
 } from '@/lib/pos-option-groups-server'
 import {
+  applyGrabChickenSizeChoiceGroupMeta,
+  dedupeGrabChickenDefaultOptionRows,
   formatGrabModifierOptionDisplayName,
+  isGrabChickenSizeChoiceGroup,
   resolveGrabModifierAssignments,
   shouldIncludeStandaloneOptionForLinkedMenu,
+  sortGrabChickenSizeChoiceRows,
 } from '@/lib/grab-option-modifier-assign'
 import {
   buildCategoryOrderMap,
@@ -182,6 +186,7 @@ function grabSelectionRangeForBucket(params: {
   groupName: string
   configEntry: OptionSelectionConfigEntry | null
   forceSingleSelectLegacy: boolean
+  chickenSizeChoice?: boolean
 }): { min: number; max: number; groupDisplayName: string } {
   const n = params.rows.length
   const cap = Math.max(1, Math.min(10, n))
@@ -192,6 +197,14 @@ function grabSelectionRangeForBucket(params: {
     max = Math.min(max, cap)
     const minC = Math.min(min, max)
     const label = String(params.configEntry.label || '').trim()
+    if (params.chickenSizeChoice) {
+      return applyGrabChickenSizeChoiceGroupMeta({
+        groupName: baseName,
+        label: label || baseName,
+        min: minC,
+        max,
+      })
+    }
     return {
       min: minC,
       max,
@@ -199,6 +212,14 @@ function grabSelectionRangeForBucket(params: {
     }
   }
   const forceSingle = params.forceSingleSelectLegacy
+  if (params.chickenSizeChoice) {
+    return applyGrabChickenSizeChoiceGroupMeta({
+      groupName: baseName,
+      label: baseName,
+      min: 0,
+      max: forceSingle ? 1 : cap,
+    })
+  }
   return {
     min: 0,
     max: forceSingle ? 1 : cap,
@@ -976,13 +997,21 @@ export async function buildGrabMenuFromPos(params: {
           return a.sourceGroupName.localeCompare(b.sourceGroupName)
         })
         .map((bucket, gidx) => {
-          const rows = [...bucket.rows].sort((a, b) => {
+          const sorted = [...bucket.rows].sort((a, b) => {
             const ao = Number(a.sort_order ?? 0)
             const bo = Number(b.sort_order ?? 0)
             if (ao !== bo) return ao - bo
             return String(a.name ?? '').localeCompare(String(b.name ?? ''))
           })
           const groupName = String(bucket.sourceGroupName || '').trim() || 'Options'
+          const chickenSizeChoice =
+            String(menu.code ?? '')
+              .trim()
+              .toLowerCase()
+              .startsWith('c') && isGrabChickenSizeChoiceGroup(groupName)
+          const rows = chickenSizeChoice
+            ? sortGrabChickenSizeChoiceRows(dedupeGrabChickenDefaultOptionRows(sorted))
+            : sorted
           const forceSingleSelect = shouldForceSingleSelectGroup(groupName, rows)
           const cfgBucket = resolveOptionSelectionConfigForBucket(bucket.sourceGroupName, selectionConfigEntries)
           if (cfgBucket?.audience === 'hall') return null
@@ -991,6 +1020,7 @@ export async function buildGrabMenuFromPos(params: {
             groupName,
             configEntry: cfgBucket,
             forceSingleSelectLegacy: forceSingleSelect,
+            chickenSizeChoice,
           })
           return {
             id: gidx === 0 ? `${itemId}-mods` : `${itemId}-mods-${gidx + 1}`,

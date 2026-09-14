@@ -1,3 +1,5 @@
+import { isChickenDefaultOptionName } from "@/lib/pos-chicken-option-inference"
+
 /** Grab modifierGroups 버킷에 넣을 (그룹명, 옵션명) 분해 — POS 옵션 행 1개 기준 */
 
 export type GrabModifierAssignInput = {
@@ -8,6 +10,116 @@ export type GrabModifierAssignInput = {
 export type GrabModifierAssignment = {
   groupName: string
   optionName: string
+}
+
+/** Grab 손님 앱 — 치킨 size/part 한 목록 제목. `part`면 추가 구매로 오해됨. */
+export const GRAB_CHICKEN_SIZE_GROUP_DISPLAY_NAME = "เลือกขนาด"
+
+const GENERIC_CHICKEN_SIZE_GROUP_LABELS = new Set([
+  "part",
+  "size",
+  "부위",
+  "사이즈",
+  "ส่วน",
+  "ไซส์",
+])
+
+function isChickenMenuCode(code: string | undefined): boolean {
+  return String(code ?? "")
+    .trim()
+    .toLowerCase()
+    .startsWith("c")
+}
+
+function isChickenPartOrSizeKey(groupKey: string): boolean {
+  const key = String(groupKey ?? "").trim().toLowerCase()
+  return key === "part" || key === "size"
+}
+
+/** 치킨 size/part 한 줄은 Grab에 S/M 이름을 유지한다. 부위값만 내면 Boneless +110이 추가 구매처럼 보인다. */
+export function grabChickenPartSizeOptionName(params: {
+  originalName: string
+  groupKey: string
+  stepValue: string
+  sizeValue?: string
+  partValue?: string
+}): string {
+  if (!isChickenPartOrSizeKey(params.groupKey)) return params.stepValue
+  const original = String(params.originalName ?? "").trim()
+  if (original) return original
+  const size = String(params.sizeValue ?? "").trim()
+  const part = String(params.partValue ?? "").trim()
+  if (size && part) return `${size} - ${part}`
+  return String(params.stepValue ?? "").trim()
+}
+
+/** Grab 손님 앱에서 S/M 한 목록으로 다루는 그룹. size 단계가 남아 있으면 제목이 겹치지 않게 part만. */
+export function isGrabChickenSizeChoiceGroup(groupName: string): boolean {
+  return String(groupName ?? "").trim().toLowerCase() === "part"
+}
+
+export function resolveGrabChickenSizeGroupDisplayName(label: string, groupKey: string): string {
+  const raw = String(label || groupKey || "").trim()
+  if (!raw || GENERIC_CHICKEN_SIZE_GROUP_LABELS.has(raw.toLowerCase()) || GENERIC_CHICKEN_SIZE_GROUP_LABELS.has(raw)) {
+    return GRAB_CHICKEN_SIZE_GROUP_DISPLAY_NAME
+  }
+  return raw.slice(0, 60)
+}
+
+export function applyGrabChickenSizeChoiceGroupMeta(params: {
+  groupName: string
+  label?: string
+  min: number
+  max: number
+}): { min: number; max: number; groupDisplayName: string } {
+  const fallback = String(params.label || params.groupName || "Options").trim() || "Options"
+  if (!isGrabChickenSizeChoiceGroup(params.groupName)) {
+    return {
+      min: params.min,
+      max: params.max,
+      groupDisplayName: fallback.slice(0, 60),
+    }
+  }
+  return {
+    min: Math.max(1, params.min),
+    max: params.max,
+    groupDisplayName: resolveGrabChickenSizeGroupDisplayName(params.label || "", params.groupName),
+  }
+}
+
+export function dedupeGrabChickenDefaultOptionRows<T extends {
+  name?: string
+  description_delivery?: string | null
+  description_default?: string | null
+}>(rows: T[]): T[] {
+  const defaultIdx: number[] = []
+  for (let i = 0; i < rows.length; i++) {
+    if (isChickenDefaultOptionName(rows[i]?.name)) defaultIdx.push(i)
+  }
+  if (defaultIdx.length <= 1) return rows
+  let keep = defaultIdx[0]!
+  let bestScore = -1
+  for (const i of defaultIdx) {
+    const d = String(rows[i]?.description_delivery ?? rows[i]?.description_default ?? "").trim()
+    if (d.length > bestScore) {
+      bestScore = d.length
+      keep = i
+    }
+  }
+  const drop = new Set(defaultIdx.filter((i) => i !== keep))
+  return rows.filter((_, i) => !drop.has(i))
+}
+
+export function sortGrabChickenSizeChoiceRows<T extends { name?: string; sort_order?: number }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const aDefault = isChickenDefaultOptionName(a.name) ? 0 : 1
+    const bDefault = isChickenDefaultOptionName(b.name) ? 0 : 1
+    if (aDefault !== bDefault) return aDefault - bDefault
+    const ao = Number(a.sort_order ?? 0)
+    const bo = Number(b.sort_order ?? 0)
+    if (ao !== bo) return ao - bo
+    return String(a.name ?? "").localeCompare(String(b.name ?? ""))
+  })
 }
 
 function splitOptionGroupAndName(rawName: string): { groupName: string; optionName: string } {
@@ -28,7 +140,8 @@ function splitOptionGroupAndName(rawName: string): { groupName: string; optionNa
 
 /**
  * option_step_values 가 여러 단계면 Grab modifier 그룹마다 1건씩 분리한다.
- * 단일 키·이름 파싱은 기존과 동일. 치킨 레거시 size+part 동시 키는 part만(Grab 정책).
+ * 단일 키·이름 파싱은 기존과 동일. 치킨 레거시 size+part 는 한 그룹(part)으로 보내되
+ * 옵션 이름은 S/M 을 유지한다(Grab에 Size 단계를 따로 두지 않음).
  */
 export function resolveGrabModifierAssignments(
   opt: GrabModifierAssignInput,
@@ -57,10 +170,19 @@ export function resolveGrabModifierAssignments(
           const partOnly = entries.filter(([k]) => String(k).trim().toLowerCase() === "part")
           if (partOnly.length === 1) {
             const [groupKey, optionValue] = partOnly[0]!
+            const sizeValue = String(
+              entries.find(([k]) => String(k).trim().toLowerCase() === "size")?.[1] ?? ""
+            ).trim()
             return [
               {
                 groupName: String(groupKey).trim(),
-                optionName: String(optionValue).trim(),
+                optionName: grabChickenPartSizeOptionName({
+                  originalName,
+                  groupKey: String(groupKey).trim(),
+                  stepValue: String(optionValue).trim(),
+                  sizeValue,
+                  partValue: String(optionValue).trim(),
+                }),
               },
             ]
           }
@@ -82,10 +204,20 @@ export function resolveGrabModifierAssignments(
     }
     if (entries.length === 1) {
       const [groupKey, optionValue] = entries[0]!
+      const key = String(groupKey).trim()
+      const value = String(optionValue).trim()
       return [
         {
-          groupName: String(groupKey).trim(),
-          optionName: String(optionValue).trim(),
+          groupName: key,
+          optionName: isChickenMenuCode(menuCode)
+            ? grabChickenPartSizeOptionName({
+                originalName,
+                groupKey: key,
+                stepValue: value,
+                partValue: key.toLowerCase() === "part" ? value : undefined,
+                sizeValue: key.toLowerCase() === "size" ? value : undefined,
+              })
+            : value,
         },
       ]
     }
