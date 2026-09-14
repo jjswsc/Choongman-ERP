@@ -3,14 +3,63 @@ import {
   collectReceivableTaxInvoicePrintTargets,
   filterReceivableCustomerOptions,
   isReceivableTaxInvoicePrintableRow,
+  formatVendorDisplayLabel,
   mergeReceivableCustomerOptions,
   mergeReceivablePayableCumulativeByKey,
+  receivablePayableListMatchesTab,
   printableReceivableTaxInvoiceKeys,
   RECEIVABLE_TAX_INVOICE_PRINT_MAX_BATCH,
   receivableTaxInvoicePrintSelectionKey,
   resolveEffectivePayableStoreFilter,
   resolveReceivableTaxInvoicePrintSource,
 } from '@/components/tabs/receivable-payable-tab-utils'
+
+describe('formatVendorDisplayLabel', () => {
+  const vendors = [
+    { code: '1006', name: 'Klever Goods Co.,Ltd.' },
+    { code: '1040', name: 'Jinwon f&b Co.,Ltd. (Head Office)' },
+  ]
+
+  it('shows name (code) when the vendor exists', () => {
+    expect(formatVendorDisplayLabel('1006', vendors)).toBe('Klever Goods Co.,Ltd. (1006)')
+  })
+
+  it('matches codes case-insensitively and ignores surrounding spaces', () => {
+    expect(formatVendorDisplayLabel(' 1040 ', vendors)).toBe(
+      'Jinwon f&b Co.,Ltd. (Head Office) (1040)'
+    )
+  })
+
+  it('falls back to the raw code when the vendor is missing', () => {
+    expect(formatVendorDisplayLabel('1041', vendors)).toBe('1041')
+  })
+})
+
+describe('receivablePayableListMatchesTab', () => {
+  const receivableList = [
+    { items: [{ ref_type: 'Order' }, { ref_type: 'Receive' }] },
+  ]
+  const payableList = [
+    { items: [{ ref_type: 'Inbound' }, { ref_type: 'Payment' }] },
+  ]
+
+  it('rejects receivable rows on the payable tab', () => {
+    expect(receivablePayableListMatchesTab('payable', receivableList)).toBe(false)
+    expect(receivablePayableListMatchesTab('receivable', receivableList)).toBe(true)
+  })
+
+  it('rejects payable rows on the receivable tab', () => {
+    expect(receivablePayableListMatchesTab('receivable', payableList)).toBe(false)
+    expect(receivablePayableListMatchesTab('payable', payableList)).toBe(true)
+  })
+
+  it('allows empty or opening-only lists', () => {
+    expect(receivablePayableListMatchesTab('payable', [])).toBe(true)
+    expect(receivablePayableListMatchesTab('payable', [{ items: [{ ref_type: 'Opening' }] }])).toBe(
+      true
+    )
+  })
+})
 
 describe('mergeReceivablePayableCumulativeByKey', () => {
   it('prefers payable list cumulativeByVendor over summary rows', () => {

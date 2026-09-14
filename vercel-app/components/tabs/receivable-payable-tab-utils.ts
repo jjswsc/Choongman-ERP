@@ -75,6 +75,45 @@ export function cumulativeBalanceKey(tab: "receivable" | "payable", item: Receiv
   return String(item.vendorCode || "").trim().toLowerCase()
 }
 
+export function normalizeVendorLookupCode(code: string | undefined | null): string {
+  return String(code || "").trim().toLowerCase()
+}
+
+/** 매입처 코드 → 표시명. 코드만 있으면 숫자/코드 그대로. */
+export function formatVendorDisplayLabel(
+  vendorCode: string | undefined | null,
+  vendors: Array<{ code?: string; name?: string }>
+): string {
+  const raw = String(vendorCode || "").trim()
+  if (!raw) return ""
+  const key = raw.toLowerCase()
+  const matched = vendors.find((x) => String(x.code || "").trim().toLowerCase() === key)
+  const name = String(matched?.name || "").trim()
+  if (!name || name.toLowerCase() === key) return raw
+  return `${name} (${raw})`
+}
+
+const RECEIVABLE_LIST_REF_TYPES = new Set(["Order", "ForceOutbound", "AccountingPO", "Receive"])
+const PAYABLE_LIST_REF_TYPES = new Set(["Inbound", "Payment", "PO"])
+
+/** 탭과 목록 원장이 엇갈리면(미지급 화면에 미수금 행) 잔액·거래처가 깨진다. */
+export function receivablePayableListMatchesTab(
+  tab: "receivable" | "payable",
+  list: Array<{ items?: Array<{ ref_type?: string }> }>
+): boolean {
+  let recHits = 0
+  let payHits = 0
+  for (const item of list || []) {
+    for (const row of item.items || []) {
+      const rt = String(row.ref_type || "").trim()
+      if (RECEIVABLE_LIST_REF_TYPES.has(rt)) recHits += 1
+      if (PAYABLE_LIST_REF_TYPES.has(rt)) payHits += 1
+    }
+  }
+  if (recHits === 0 && payHits === 0) return true
+  return tab === "payable" ? payHits >= recHits : recHits >= payHits
+}
+
 export function buildCumulativeByKey(
   tab: "receivable" | "payable",
   rows: { storeName?: string; vendorCode?: string; balance?: number }[]
