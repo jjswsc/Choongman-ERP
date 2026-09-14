@@ -14,6 +14,7 @@ import {
   taxMonthToRdParts,
 } from '@/lib/rd-filing-common'
 import { ledgerRowsToRdPrepSoftAttachmentTxt } from '@/lib/rd-prep-soft-attachment-txt'
+import { stripIncomeTypeTaxRate } from '@/lib/pnd-rd-income-type'
 
 /** Format กลาง v2.0 — HEADER 25칸 / DETAIL 38칸 */
 export const PND53_RD_HEADER_FIELD_COUNT = 25
@@ -88,7 +89,10 @@ export function pnd53LedgerToRdPrepSoftTxt(
   opts?: { includeHeader?: boolean }
 ): string {
   const includeHeader = opts?.includeHeader === true
-  const filtered = filterPnd53Rows(rows, formHint)
+  const filtered = filterPnd53Rows(rows, formHint).map((r) => ({
+    ...r,
+    income_type: toPnd53IncomeTypeLabel(r.income_type),
+  }))
   if (formHint === 'ALL') {
     const pnd3 = filtered.filter((r) => effectivePnd353FormHint(r) === 'PND3')
     const pnd53 = filtered.filter((r) => effectivePnd353FormHint(r) === 'PND53')
@@ -106,9 +110,9 @@ export function pnd53LedgerToRdPrepSoftTxt(
   return ledgerRowsToRdPrepSoftAttachmentTxt(filtered, rdPrepSoftOpts(formHint === 'PND3', includeHeader))
 }
 
-/** RD ใบแนบ ประเภทเงินได้ — 한글·영문 원장을 태국어 양식 문구로 */
+/** RD ใบแนบ ประเภทเงินได้ — 한글·영문 원장을 태국어 양식 문구로. 세율(%)은 붙이지 않음. */
 export function toPnd53IncomeTypeLabel(raw: unknown): string {
-  const s = rdPipeSafe(raw).slice(0, 100)
+  const s = rdPipeSafe(stripIncomeTypeTaxRate(raw)).slice(0, 100)
   if (!s) return ''
   if (/[\u0E00-\u0E7F]/.test(s)) return s
   const lower = s.toLowerCase()

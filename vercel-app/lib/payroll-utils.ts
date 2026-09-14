@@ -109,6 +109,42 @@ export function grossWageBeforeSSO(params: {
   return Math.max(0, raw)
 }
 
+/** PND1 เงินได้ที่จ่าย 계산에 쓰는 급여 행 필드 */
+export type PayrollPnd1GrossInput = {
+  salary?: number | null
+  pos_allow?: number | null
+  haz_allow?: number | null
+  diligence_allow?: number | null
+  birth_bonus?: number | null
+  holiday_pay?: number | null
+  spl_bonus?: number | null
+  ot_amt?: number | null
+  sso?: number | null
+}
+
+function finitePay(n: number | null | undefined): number {
+  const x = Number(n)
+  return Number.isFinite(x) ? x : 0
+}
+
+/**
+ * PND1 ฐานภาษี(เงินได้ที่จ่าย) = ฐาน + ค่าเบี้ย + OT + ประกันสังคม.
+ * ยอดก่อนหัก SSO — เงินสุทธิ(หัก SSO แล้ว)를 쓰지 않는다.
+ */
+export function payrollPnd1GrossAmount(row: PayrollPnd1GrossInput): number {
+  const earnings =
+    finitePay(row.salary) +
+    finitePay(row.pos_allow) +
+    finitePay(row.haz_allow) +
+    finitePay(row.diligence_allow) +
+    finitePay(row.birth_bonus) +
+    finitePay(row.holiday_pay) +
+    finitePay(row.spl_bonus) +
+    finitePay(row.ot_amt)
+  const sso = Math.max(0, finitePay(row.sso))
+  return Math.max(0, earnings + sso)
+}
+
 /**
  * 태국 SSO 본인부담 산정 기준액(기본급만, 수당·OT·지각공제 등 제외).
  * - 월급제: 인사 등록 월 기본급 `sal_amt`

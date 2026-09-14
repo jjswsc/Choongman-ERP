@@ -8,6 +8,8 @@ import {
   type Pnd1RdPrepTxtOptions,
   type Pnd1SourceRow,
 } from '@/lib/pnd1-rd-prep-txt'
+import { splitThaiPayeeName } from '@/lib/rd-filing-common'
+import { toPnd1IncomeTypeLabel } from '@/lib/pnd-rd-income-type'
 
 function digitsOnly(v: unknown): string {
   return String(v ?? '').replace(/\D/g, '')
@@ -45,6 +47,10 @@ export function buildPnd1RdPrepReviewWorkbook(
     'seq',
     'payee_tax_id',
     'payee_name',
+    'title_name',
+    'first_name',
+    'middle_name',
+    'last_name',
     'payee_address',
     'payment_date',
     'payment_date_txt',
@@ -61,26 +67,33 @@ export function buildPnd1RdPrepReviewWorkbook(
     'payer_branch_no',
     'payer_name',
   ]
-  const detailBody = (rows || []).map((r, i) => [
-    i + 1,
-    digitsOnly(r.payee_tax_id).slice(0, 13),
-    String(r.payee_name || '').trim(),
-    String(r.payee_address || '').trim(),
-    String(r.payment_date || '').trim().slice(0, 10),
-    toChristianDdMmYyyy(r.payment_date),
-    String(r.income_type || '').trim(),
-    Number(r.wht_rate) || 0,
-    Number(r.gross_amount) || 0,
-    Number(r.wht_amount) || 0,
-    String(r.certificate_no || '').trim(),
-    String(r.tax_month || '').trim(),
-    String(r.store_name || '').trim(),
-    String((r as { form_hint?: string | null }).form_hint || '').trim(),
-    String(r.memo || '').trim(),
-    payerTaxId,
-    payerBranchNo,
-    payerName,
-  ])
+  const detailBody = (rows || []).map((r, i) => {
+    const names = splitThaiPayeeName(String(r.payee_name || '').trim())
+    return [
+      i + 1,
+      digitsOnly(r.payee_tax_id).slice(0, 13),
+      String(r.payee_name || '').trim(),
+      names.titleName,
+      names.firstName,
+      names.middleName,
+      names.surName,
+      String(r.payee_address || '').trim(),
+      String(r.payment_date || '').trim().slice(0, 10),
+      toChristianDdMmYyyy(r.payment_date),
+      toPnd1IncomeTypeLabel(r.income_type, r.wht_rate),
+      Number(r.wht_rate) || 0,
+      Number(r.gross_amount) || 0,
+      Number(r.wht_amount) || 0,
+      String(r.certificate_no || '').trim(),
+      String(r.tax_month || '').trim(),
+      String(r.store_name || '').trim(),
+      String((r as { form_hint?: string | null }).form_hint || '').trim(),
+      String(r.memo || '').trim(),
+      payerTaxId,
+      payerBranchNo,
+      payerName,
+    ]
+  })
 
   const pipePreview = pnd1LedgerToRdPrepTxt(rows, { ...opts, includeHeader: true })
     .split(/\r?\n/)

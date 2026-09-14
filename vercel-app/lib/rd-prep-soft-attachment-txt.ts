@@ -1,17 +1,18 @@
 /**
  * RD Prep 소프트 매핑용 TXT (pipe `|`, UTF-8, CRLF)
  *
- * PND1 샘플:
- * |seq|tin||name|addr1|addr2|addr3||||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
+ * PND1 (개인 — คำนำหน้า/ชื่อ/ชื่อกลาง/ชื่อสกุล, ประเภทเงินได้ = มาตรา 40):
+ * |seq|tin||title|first|middle|last|address|tambon|amphoe|province|zip|||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
  *
  * PND3 (개인 — คำนำหน้า/ชื่อ/ชื่อกลาง/ชื่อสกุล):
  * |seq|tin||title|first|middle|last|address|tambon|amphoe|province|zip|||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
  *
  * PND53 (법인 — 이름 1칸. RD Prep ถนน=Col6, ตำบล=Col7, อำเภอ=Col8):
  * |seq|tin||companyName|road|tambon|amphoe|province|zip|||dd/mm/yyyy|incomeDesc|rate|gross|wht|1
- * ภ.ง.ด.53에는 ชื่อกลาง/ชื่อสกุล 칸이 없다. 4칸 분리는 상호가 ถนน으로 들어간다.
+ * incomeDesc 는 ประเภทเงินได้ 만 (세율은 rate 칸). ภ.ง.ด.53에는 ชื่อกลาง/ชื่อสกุล 칸이 없다.
  */
 import { splitThaiPayeeName } from '@/lib/rd-filing-common'
+import { stripIncomeTypeTaxRate } from '@/lib/pnd-rd-income-type'
 
 export type RdPrepSoftAttachmentRow = {
   payee_name?: string | null
@@ -78,13 +79,9 @@ function formatRateField(rate: number): string {
   return (Math.round(rate * 10) / 10).toFixed(1)
 }
 
-function formatIncomeDesc(incomeType: string, rate: number): string {
-  const base = pipeSafe(incomeType)
-  if (!base) return ''
-  if (/%/.test(base)) return base
-  const rounded = Math.round(rate * 10) / 10
-  const pct = Number.isInteger(rounded) ? String(rounded) : String(rounded)
-  return `${base} ${pct}%`
+/** RD Prep ประเภทเงินได้ — 소득 종류만. 세율은 wht_rate 칸. */
+function formatIncomeDesc(incomeType: string): string {
+  return stripIncomeTypeTaxRate(incomeType)
 }
 
 /** 주소를 약 35자 단위로 3칸 분할 */
@@ -301,7 +298,7 @@ export function ledgerRowsToRdPrepSoftAttachmentTxt(
       ...nameFields,
       ...addrFields,
       toChristianDdMmYyyy(row.payment_date),
-      formatIncomeDesc(String(row.income_type ?? ''), rate),
+      formatIncomeDesc(String(row.income_type ?? '')),
       formatRateField(rate),
       formatAmount(row.gross_amount),
       formatAmount(row.wht_amount),

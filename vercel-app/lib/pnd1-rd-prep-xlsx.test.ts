@@ -23,30 +23,31 @@ describe('pnd1 rd prep exports', () => {
 
   it('builds soft RD Prep pipe with empty address slots', () => {
     const txt = pnd1LedgerToRdPrepTxt(rows, { includeHeader: false })
-    // |seq|tin||name|a1|a2|a3||||date|desc|rate|gross|wht|1
+    // |seq|tin||title|first|middle|last|addr...|date|มาตรา|rate|gross|wht|1
     expect(txt).toBe(
-      '|1|1234567890123||Test Employee||||||||31/07/2026|급여 3%|3.0|15000.00|450.00|1'
+      '|1|1234567890123|||Test||Employee||||||||31/07/2026|เงินได้ตามมาตรา 40(1) เงินเดือน ค่าจ้าง ฯลฯ กรณีได้รับอนุมัติจากกรมฯ ให้หักอัตราร้อยละ 3|3.0|15000.00|450.00|1'
     )
   })
 
-  it('keeps address parts and four empty slots before date', () => {
+  it('splits first and last name and uses มาตรา 40(1) without a tax rate in the description', () => {
     const txt = pnd1LedgerToRdPrepTxt(
       [
         {
-          payment_date: '2026-06-19',
-          payee_name: 'บริษัท วัฒนะ โกลด์ จำกัด',
-          payee_tax_id: '0105560154864',
-          payee_address: '12 ซอยสุขุมวิท 4 ถนนสุขุมวิท4 แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร',
-          income_type: 'ค่าเช่า',
-          wht_rate: 5,
-          gross_amount: 500000,
-          wht_amount: 25000,
+          payment_date: '2026-08-31',
+          payee_name: 'Akkarawat Phuw',
+          payee_tax_id: '1400600186754',
+          income_type: 'เงินเดือน',
+          wht_rate: 0,
+          gross_amount: 20000,
+          wht_amount: 0,
         },
       ],
       { includeHeader: false }
     )
-    expect(txt.startsWith('|1|0105560154864||บริษัท วัฒนะ โกลด์ จำกัด|')).toBe(true)
-    expect(txt).toContain('|||||19/06/2026|ค่าเช่า 5%|5.0|500000.00|25000.00|1')
+    expect(txt).toContain('|Akkarawat||Phuw|')
+    expect(txt).toContain('เงินได้ตามมาตรา 40(1) เงินเดือน ค่าจ้าง ฯลฯ กรณีทั่วไป')
+    expect(txt).not.toContain('กรณีทั่วไป 0%')
+    expect(txt).not.toContain('|Akkarawat Phuw|')
   })
 
   it('splits long address into up to 3 parts', () => {

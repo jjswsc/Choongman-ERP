@@ -52,7 +52,7 @@ describe('pnd91-annual-summary', () => {
     })
 
     expect(summary.employees).toHaveLength(1)
-    expect(summary.employees[0]?.annualGross).toBe(41000)
+    expect(summary.employees[0]?.annualGross).toBe(42750)
     expect(summary.employees[0]?.annualWhtPayroll).toBe(1000)
     expect(summary.employees[0]?.annualWhtLedger).toBe(1000)
     expect(summary.employees[0]?.whtLedgerMismatch).toBe(false)
@@ -60,14 +60,15 @@ describe('pnd91-annual-summary', () => {
     expect(summary.employees[0]?.monthCount).toBe(2)
   })
 
-  it('payrollGrossForPnd91 includes allowances', () => {
+  it('payrollGrossForPnd91 includes allowances and SSO', () => {
     expect(
       payrollGrossForPnd91({
         salary: 100,
         pos_allow: 10,
         ot_amt: 5,
+        sso: 8,
       })
-    ).toBe(115)
+    ).toBe(123)
   })
 
   it('filing due is next year March 31', () => {

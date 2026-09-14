@@ -49,6 +49,8 @@ describe('pnd53 Format กลาง v2.0', () => {
     expect(toPnd53IncomeTypeLabel('서비스')).toBe('ค่าบริการ')
     expect(toPnd53IncomeTypeLabel('로열티·용역 수입')).toBe('ค่าสิทธิ')
     expect(toPnd53IncomeTypeLabel('ค่าเช่าอาคาร')).toBe('ค่าเช่าอาคาร')
+    expect(toPnd53IncomeTypeLabel('ค่าบริการ 3%')).toBe('ค่าบริการ')
+    expect(toPnd53IncomeTypeLabel('ค่าเช่า 5%')).toBe('ค่าเช่า')
   })
 
   it('builds H/D records with spec field counts, amounts, and empty slot dates', () => {
@@ -191,7 +193,7 @@ describe('pnd53-rd-prep-soft (mapping fallback)', () => {
       'PND53'
     )
     expect(soft).toBe(
-      '|1|0105560154864||บริษัท วัฒนะ โกลด์ จำกัด||||||||19/06/2026|ค่าเช่า 5%|5.0|500000.00|25000.00|1'
+      '|1|0105560154864||บริษัท วัฒนะ โกลด์ จำกัด||||||||19/06/2026|ค่าเช่า|5.0|500000.00|25000.00|1'
     )
   })
 
@@ -359,7 +361,7 @@ describe('pnd53-rd-prep-soft (mapping fallback)', () => {
       'PND3'
     )
     expect(soft).toBe(
-      '|1|1139900435246||น.ส.|ปิยวรรณ||แสนทวีสุข||||||||06/08/2026|ค่าบริการ 3%|3.0|10000.00|300.00|1'
+      '|1|1139900435246||น.ส.|ปิยวรรณ||แสนทวีสุข||||||||06/08/2026|ค่าบริการ|3.0|10000.00|300.00|1'
     )
   })
 })

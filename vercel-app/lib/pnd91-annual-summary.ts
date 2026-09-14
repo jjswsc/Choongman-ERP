@@ -1,3 +1,5 @@
+import { payrollPnd1GrossAmount } from '@/lib/payroll-utils'
+
 /** P.N.D.91 연간 직원 소득·원천징수 집계 (급여 DB + 원장 대조) */
 
 export type Pnd91PayrollRow = {
@@ -80,16 +82,7 @@ export function isPayrollRowPaidForPnd91(status: unknown): boolean {
 }
 
 export function payrollGrossForPnd91(row: Pnd91PayrollRow): number {
-  return (
-    toFinite(row.salary) +
-    toFinite(row.pos_allow) +
-    toFinite(row.haz_allow) +
-    toFinite(row.diligence_allow) +
-    toFinite(row.birth_bonus) +
-    toFinite(row.spl_bonus) +
-    toFinite(row.ot_amt) +
-    toFinite(row.holiday_pay)
-  )
+  return payrollPnd1GrossAmount(row)
 }
 
 function normalizeEmployeeName(name: string): string {

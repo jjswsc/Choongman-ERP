@@ -1,3 +1,11 @@
+import {
+  ledgerRowsToRdPrepSoftAttachmentTxt,
+  splitPayeeAddressParts,
+} from '@/lib/rd-prep-soft-attachment-txt'
+import { toPnd1IncomeTypeLabel } from '@/lib/pnd-rd-income-type'
+
+export { splitPayeeAddressParts }
+
 export type Pnd1SourceRow = {
   payment_date?: string | null
   tax_month?: string | null
@@ -55,12 +63,20 @@ export type Pnd1ValidationIssue = {
   certificateNo: string
 }
 
-import {
-  ledgerRowsToRdPrepSoftAttachmentTxt,
-  splitPayeeAddressParts,
-} from '@/lib/rd-prep-soft-attachment-txt'
+function mapPnd1RowsForRdPrep(rows: Pnd1SourceRow[]): Pnd1SourceRow[] {
+  return (rows || []).map((row) => ({
+    ...row,
+    income_type: toPnd1IncomeTypeLabel(row.income_type, row.wht_rate),
+  }))
+}
 
-export { splitPayeeAddressParts }
+/** RD Prep 소프트 매핑용 — 빈 칸 `|` 유지. 개인은 ชื่อ-นามสกุล 분리. */
+export function pnd1LedgerToRdPrepTxt(rows: Pnd1SourceRow[], opts: Pnd1RdPrepTxtOptions = {}): string {
+  return ledgerRowsToRdPrepSoftAttachmentTxt(mapPnd1RowsForRdPrep(rows), {
+    includeHeader: opts.includeHeader === true,
+    splitNaturalPersonName: true,
+  })
+}
 
 function pipeSafe(v: unknown): string {
   return String(v ?? '')
@@ -165,9 +181,4 @@ export function validatePnd1Rows(rows: Pnd1SourceRow[]): Pnd1ValidationSummary {
     sampleWarnings,
     issues,
   }
-}
-
-/** RD Prep 소프트 매핑용 — 빈 칸 `|` 유지 (PND1/PND53 공통 레이아웃) */
-export function pnd1LedgerToRdPrepTxt(rows: Pnd1SourceRow[], opts: Pnd1RdPrepTxtOptions = {}): string {
-  return ledgerRowsToRdPrepSoftAttachmentTxt(rows, { includeHeader: opts.includeHeader === true })
 }

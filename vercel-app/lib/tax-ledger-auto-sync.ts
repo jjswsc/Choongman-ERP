@@ -42,6 +42,8 @@ import {
   hqIssuedInvoiceNumberForStoreInput,
   unitPriceForStoreHqInputLog,
 } from '@/lib/hq-store-vat-pricing'
+import { payrollPnd1GrossAmount } from '@/lib/payroll-utils'
+import { toPnd1IncomeTypeLabel } from '@/lib/pnd-rd-income-type'
 
 type ItemTaxMeta = {
   price: number
@@ -1111,35 +1113,8 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
 
     const whtAmount = round2(Math.max(0, Number(p.tax) || 0))
 
-    const ssoAmount = round2(Math.max(0, Number(p.sso) || 0))
-    // SSO 미적용(3% 원천) 직원도 급여 지급 → ภ.ง.ด.1. 개인 용역(지출 EAW)만 PND3.
-    const usePaidGrossForSsoExempt = ssoAmount <= 0
-    const grossFromPayroll =
-      Number(p.salary || 0) +
-      Number(p.pos_allow || 0) +
-      Number(p.haz_allow || 0) +
-      Number(p.diligence_allow || 0) +
-      Number(p.birth_bonus || 0) +
-      Number(p.holiday_pay || 0) +
-      Number(p.spl_bonus || 0) +
-      Number(p.ot_amt || 0)
-    const grossPaidBeforeWithholding = Number(p.net_pay || 0) + Number(p.tax || 0) + ssoAmount
-    const grossFallback =
-      Number(p.net_pay || 0) + Number(p.tax || 0) + Number(p.sso || 0) + Number(p.other_ded || 0)
-    const grossAmount = round2(
-      Math.max(
-        0,
-        usePaidGrossForSsoExempt
-          ? grossPaidBeforeWithholding > 0
-            ? grossPaidBeforeWithholding
-            : grossFromPayroll > 0
-              ? grossFromPayroll
-              : grossFallback
-          : grossFromPayroll > 0
-            ? grossFromPayroll
-            : grossFallback
-      )
-    )
+    // PND1 ฐานภาษี = ฐาน + ค่าเบี้ย + OT + ประกันสังคม (ยอดก่อนหัก SSO, ไม่ใช้เงินสุทธิ)
+    const grossAmount = round2(payrollPnd1GrossAmount(p))
     // PND1 신고 목록: 원천세 0이어도 지급(총액)>0 이면 포함
     if (grossAmount <= 0 && whtAmount <= 0) continue
 
@@ -1152,7 +1127,7 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
       tax_month: taxMonth,
       payee_name: employeeName.slice(0, 500),
       payee_tax_id: payeeTaxId,
-      income_type: '급여',
+      income_type: toPnd1IncomeTypeLabel('급여', rate),
       gross_amount: grossAmount,
       wht_rate: rate,
       wht_amount: whtAmount,

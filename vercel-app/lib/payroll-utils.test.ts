@@ -7,6 +7,7 @@ import {
   getSSOLimitsByYear,
   calcSSO,
   grossWageBeforeSSO,
+  payrollPnd1GrossAmount,
   isEmployeeActiveInPayrollPeriod,
   isEmployeePayrollEligibleForMonth,
   otMinutesForPayroll,
@@ -166,6 +167,40 @@ describe('payroll-utils', () => {
           earlyDed: 0,
         })
       ).toBe(0)
+    })
+  })
+
+  describe('payrollPnd1GrossAmount', () => {
+    it('ฐาน + ค่าเบี้ย + OT + SSO (ยอดก่อนหัก SSO, ไม่ใช้เงินสุทธิ)', () => {
+      expect(
+        payrollPnd1GrossAmount({
+          salary: 14400,
+          pos_allow: 680,
+          ot_amt: 0,
+          sso: 720,
+        })
+      ).toBe(15800)
+    })
+
+    it('OT와 수당을 모두 더한다', () => {
+      expect(
+        payrollPnd1GrossAmount({
+          salary: 17000,
+          haz_allow: 1847,
+          ot_amt: 500,
+          sso: 850,
+        })
+      ).toBe(20197)
+    })
+
+    it('SSO 0이어도 실수령액이 아니라 지급총액(ฐาน+ค่าเบี้ย+OT)을 쓴다', () => {
+      expect(
+        payrollPnd1GrossAmount({
+          salary: 17000,
+          diligence_allow: 2377,
+          sso: 0,
+        })
+      ).toBe(19377)
     })
   })
 
