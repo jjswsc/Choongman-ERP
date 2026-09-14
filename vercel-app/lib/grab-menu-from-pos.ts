@@ -22,14 +22,15 @@ import {
   loadMenuGroupLinks,
   loadPosOptionGroupsWithItems,
 } from '@/lib/pos-option-groups-server'
+import { isChickenDefaultOptionName } from '@/lib/pos-chicken-option-inference'
 import {
   applyGrabChickenSizeChoiceGroupMeta,
-  dedupeGrabChickenDefaultOptionRows,
+  finalizeGrabChickenSizeChoiceRows,
   formatGrabModifierOptionDisplayName,
   isGrabChickenSizeChoiceGroup,
+  pullGrabChickenDefaultOptionsFromSizeGroup,
   resolveGrabModifierAssignments,
   shouldIncludeStandaloneOptionForLinkedMenu,
-  sortGrabChickenSizeChoiceRows,
 } from '@/lib/grab-option-modifier-assign'
 import {
   buildCategoryOrderMap,
@@ -883,9 +884,15 @@ export async function buildGrabMenuFromPos(params: {
         opt.option_step_values && typeof opt.option_step_values === 'object' && !Array.isArray(opt.option_step_values)
           ? opt.option_step_values
           : null
-      if (!shouldIncludeStandaloneOptionForLinkedMenu(sv, linkedStepKeysByMenuId.get(menuId))) continue
+      if (
+        !shouldIncludeStandaloneOptionForLinkedMenu(sv, linkedStepKeysByMenuId.get(menuId)) &&
+        !isChickenDefaultOptionName(opt.name)
+      ) {
+        continue
+      }
     }
-    if (opt.sell_delivery === false) continue
+    // S는 POS 기본가라 배달 옵션에서 꺼져 있어도 Grab에서는 손님이 골라야 한다.
+    if (opt.sell_delivery === false && !isChickenDefaultOptionName(opt.name)) continue
     const list = optionByMenuId.get(menuId) || []
     list.push(opt)
     optionByMenuId.set(menuId, list)
@@ -893,7 +900,7 @@ export async function buildGrabMenuFromPos(params: {
   for (const opt of linkedOptions) {
     const menuId = Number(opt.menu_id ?? 0)
     if (!menuId) continue
-    if (opt.sell_delivery === false) continue
+    if (opt.sell_delivery === false && !isChickenDefaultOptionName(opt.name)) continue
     const list = optionByMenuId.get(menuId) || []
     list.push(opt)
     optionByMenuId.set(menuId, list)
@@ -991,6 +998,20 @@ export async function buildGrabMenuFromPos(params: {
           })
         }
       }
+      const isChickenMenu = String(menu.code ?? '')
+        .trim()
+        .toLowerCase()
+        .startsWith('c')
+      if (isChickenMenu) {
+        const partBucket = modifierGroupBuckets.get('part')
+        const sizeBucket = modifierGroupBuckets.get('size')
+        if (partBucket && sizeBucket) {
+          const moved = pullGrabChickenDefaultOptionsFromSizeGroup(partBucket.rows, sizeBucket.rows)
+          partBucket.rows = moved.partRows
+          sizeBucket.rows = moved.sizeRows
+          if (sizeBucket.rows.length === 0) modifierGroupBuckets.delete('size')
+        }
+      }
       const modifierGroups = Array.from(modifierGroupBuckets.values())
         .sort((a, b) => {
           if (a.firstSort !== b.firstSort) return a.firstSort - b.firstSort
@@ -1004,14 +1025,8 @@ export async function buildGrabMenuFromPos(params: {
             return String(a.name ?? '').localeCompare(String(b.name ?? ''))
           })
           const groupName = String(bucket.sourceGroupName || '').trim() || 'Options'
-          const chickenSizeChoice =
-            String(menu.code ?? '')
-              .trim()
-              .toLowerCase()
-              .startsWith('c') && isGrabChickenSizeChoiceGroup(groupName)
-          const rows = chickenSizeChoice
-            ? sortGrabChickenSizeChoiceRows(dedupeGrabChickenDefaultOptionRows(sorted))
-            : sorted
+          const chickenSizeChoice = isChickenMenu && isGrabChickenSizeChoiceGroup(groupName)
+          const rows = chickenSizeChoice ? finalizeGrabChickenSizeChoiceRows(sorted) : sorted
           const forceSingleSelect = shouldForceSingleSelectGroup(groupName, rows)
           const cfgBucket = resolveOptionSelectionConfigForBucket(bucket.sourceGroupName, selectionConfigEntries)
           if (cfgBucket?.audience === 'hall') return null

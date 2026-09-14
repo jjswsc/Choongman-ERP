@@ -1,4 +1,7 @@
-import { isChickenDefaultOptionName } from "@/lib/pos-chicken-option-inference"
+import {
+  isChickenDefaultOptionName,
+  isFlatChickenMListOptionName,
+} from "@/lib/pos-chicken-option-inference"
 
 /** Grab modifierGroups 버킷에 넣을 (그룹명, 옵션명) 분해 — POS 옵션 행 1개 기준 */
 
@@ -14,6 +17,10 @@ export type GrabModifierAssignment = {
 
 /** Grab 손님 앱 — 치킨 size/part 한 목록 제목. `part`면 추가 구매로 오해됨. */
 export const GRAB_CHICKEN_SIZE_GROUP_DISPLAY_NAME = "เลือกขนาด"
+
+/** POS에는 S가 기본가라 옵션 행이 없어도, Grab에서는 손님이 직접 고를 수 있게 넣는다. */
+export const GRAB_CHICKEN_DEFAULT_SIZE_OPTION_NAME = "S - Boneless"
+export const GRAB_CHICKEN_DEFAULT_SIZE_OPTION_DESC = "ไม่มีกระดูก 5 ชิ้น 175 g."
 
 const GENERIC_CHICKEN_SIZE_GROUP_LABELS = new Set([
   "part",
@@ -120,6 +127,52 @@ export function sortGrabChickenSizeChoiceRows<T extends { name?: string; sort_or
     if (ao !== bo) return ao - bo
     return String(a.name ?? "").localeCompare(String(b.name ?? ""))
   })
+}
+
+type GrabChickenSizeOptionRow = {
+  name?: string
+  price_modifier?: number
+  price_modifier_delivery?: number | null
+  sort_order?: number
+  description_delivery?: string | null
+  description_default?: string | null
+}
+
+export function grabChickenSizeChoiceNeedsDefaultS<T extends { name?: string }>(rows: T[]): boolean {
+  if (rows.some((r) => isChickenDefaultOptionName(r.name))) return false
+  return rows.some((r) => isFlatChickenMListOptionName(r.name))
+}
+
+/** M만 있으면 S(0원)를 앞에 넣는다. ERP는 S를 기본가로 숨기므로 Grab 행이 비는 경우가 있다. */
+export function injectGrabChickenDefaultSizeOption<T extends GrabChickenSizeOptionRow>(rows: T[]): T[] {
+  if (!grabChickenSizeChoiceNeedsDefaultS(rows)) return rows
+  const injected = {
+    name: GRAB_CHICKEN_DEFAULT_SIZE_OPTION_NAME,
+    price_modifier: 0,
+    price_modifier_delivery: 0,
+    sort_order: -1,
+    description_delivery: GRAB_CHICKEN_DEFAULT_SIZE_OPTION_DESC,
+  } as T
+  return [injected, ...rows]
+}
+
+export function finalizeGrabChickenSizeChoiceRows<T extends GrabChickenSizeOptionRow>(rows: T[]): T[] {
+  return sortGrabChickenSizeChoiceRows(
+    dedupeGrabChickenDefaultOptionRows(injectGrabChickenDefaultSizeOption(rows))
+  )
+}
+
+/** leftover size 그룹의 S를 part(เลือกขนาด)로 옮긴다. 두 그룹으로 쪼개지면 S가 안 보인다. */
+export function pullGrabChickenDefaultOptionsFromSizeGroup<T extends { name?: string }>(
+  partRows: T[],
+  sizeRows: T[]
+): { partRows: T[]; sizeRows: T[] } {
+  const defaults = sizeRows.filter((r) => isChickenDefaultOptionName(r.name))
+  if (defaults.length === 0) return { partRows, sizeRows }
+  return {
+    partRows: [...defaults, ...partRows],
+    sizeRows: sizeRows.filter((r) => !isChickenDefaultOptionName(r.name)),
+  }
 }
 
 function splitOptionGroupAndName(rawName: string): { groupName: string; optionName: string } {

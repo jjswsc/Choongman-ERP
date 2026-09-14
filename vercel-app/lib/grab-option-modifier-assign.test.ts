@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest"
+import { composeGrabModifierName } from "@/lib/grab-menu-limits"
 import {
+  GRAB_CHICKEN_DEFAULT_SIZE_OPTION_DESC,
+  GRAB_CHICKEN_DEFAULT_SIZE_OPTION_NAME,
   GRAB_CHICKEN_SIZE_GROUP_DISPLAY_NAME,
   applyGrabChickenSizeChoiceGroupMeta,
   dedupeGrabChickenDefaultOptionRows,
+  finalizeGrabChickenSizeChoiceRows,
   formatGrabModifierOptionDisplayName,
   grabChickenPartSizeOptionName,
+  injectGrabChickenDefaultSizeOption,
+  pullGrabChickenDefaultOptionsFromSizeGroup,
   resolveGrabModifierAssignments,
   shouldIncludeStandaloneOptionForLinkedMenu,
   sortGrabChickenSizeChoiceRows,
@@ -155,6 +161,73 @@ describe("sortGrabChickenSizeChoiceRows", () => {
       { name: "S - Boneless", sort_order: 9 },
     ])
     expect(out.map((r) => r.name)).toEqual(["S - Boneless", "M - Boneless", "M - Drumette"])
+  })
+})
+
+describe("injectGrabChickenDefaultSizeOption", () => {
+  it("adds S - Boneless at 0 when Grab only has M upsells", () => {
+    const out = injectGrabChickenDefaultSizeOption([
+      { name: "M - Boneless", price_modifier: 110, sort_order: 0 },
+      { name: "M - Drumette", price_modifier: 110, sort_order: 1 },
+      { name: "M - Joint Wing", price_modifier: 110, sort_order: 2 },
+    ])
+    expect(out[0]).toMatchObject({
+      name: GRAB_CHICKEN_DEFAULT_SIZE_OPTION_NAME,
+      price_modifier: 0,
+      price_modifier_delivery: 0,
+      description_delivery: GRAB_CHICKEN_DEFAULT_SIZE_OPTION_DESC,
+    })
+    expect(out.map((r) => r.name)).toEqual([
+      "S - Boneless",
+      "M - Boneless",
+      "M - Drumette",
+      "M - Joint Wing",
+    ])
+  })
+
+  it("does not add a second S when one already exists", () => {
+    const out = injectGrabChickenDefaultSizeOption([
+      { name: "S - Boneless", price_modifier: 0 },
+      { name: "M - Boneless", price_modifier: 110 },
+    ])
+    expect(out.filter((r) => r.name === "S - Boneless")).toHaveLength(1)
+  })
+
+  it("does not invent S for Supreme-style menus without M upsells", () => {
+    const out = injectGrabChickenDefaultSizeOption([{ name: "Kimchi", price_modifier: 0 }])
+    expect(out.map((r) => r.name)).toEqual(["Kimchi"])
+  })
+})
+
+describe("finalizeGrabChickenSizeChoiceRows", () => {
+  it("puts injected S first in the guest size list", () => {
+    const out = finalizeGrabChickenSizeChoiceRows([
+      { name: "M - Drumette", price_modifier: 110, sort_order: 1 },
+      { name: "M - Boneless", price_modifier: 110, sort_order: 0 },
+    ])
+    expect(out.map((r) => r.name)).toEqual(["S - Boneless", "M - Boneless", "M - Drumette"])
+  })
+})
+
+describe("pullGrabChickenDefaultOptionsFromSizeGroup", () => {
+  it("moves Size S from leftover size group into part", () => {
+    const out = pullGrabChickenDefaultOptionsFromSizeGroup(
+      [{ name: "M - Boneless" }],
+      [{ name: "Size S" }, { name: "Size M" }]
+    )
+    expect(out.partRows.map((r) => r.name)).toEqual(["Size S", "M - Boneless"])
+    expect(out.sizeRows.map((r) => r.name)).toEqual(["Size M"])
+  })
+})
+
+describe("Grab S modifier name length", () => {
+  it("keeps injected S name + desc within Grab 40-char modifier limit", () => {
+    const name = composeGrabModifierName(
+      GRAB_CHICKEN_DEFAULT_SIZE_OPTION_NAME,
+      GRAB_CHICKEN_DEFAULT_SIZE_OPTION_DESC
+    )
+    expect(name.length).toBeLessThanOrEqual(40)
+    expect(name.startsWith("S - Boneless")).toBe(true)
   })
 })
 
