@@ -449,8 +449,22 @@ function POSMainPageInner() {
             user: res.userName,
             role: res.role || '',
             token: res.token,
+            ...(res.companyName
+              ? { company: res.companyName }
+              : auth?.company
+                ? { company: auth.company }
+                : {}),
+            ...(res.tenantId
+              ? { tenantId: res.tenantId }
+              : auth?.tenantId
+                ? { tenantId: auth.tenantId }
+                : {}),
             ...(res.employeeId != null && res.employeeId > 0 ? { employeeId: res.employeeId } : {}),
             ...(res.employeeCode ? { employeeCode: String(res.employeeCode).trim() } : {}),
+            ...(Array.isArray(res.allowedStores) && res.allowedStores.length > 0
+              ? { allowedStores: res.allowedStores }
+              : {}),
+            ...(res.canManageOfficePayroll ? { canManageOfficePayroll: true } : {}),
           })
           setSwitchUserOpen(false)
           setSwitchPw('')
@@ -468,7 +482,7 @@ function POSMainPageInner() {
         setSwitchLoading(false)
       }
     },
-    [switchStore, switchName, switchPw, t, setAuth]
+    [switchStore, switchName, switchPw, t, setAuth, auth]
   )
 
   const switchStores = useMemo(

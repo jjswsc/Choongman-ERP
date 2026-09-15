@@ -445,14 +445,18 @@ export function canEditPosAttendanceManagement(role: string, store?: string): bo
   return hasOfficeStaffScope(role, store) || isManagerRole(role) || isFranchiseeRole(role)
 }
 
-/** 출퇴근 QR 키오스크 단말 등록·해제 — Director·Supervisor·매장 Manager */
-export function canRegisterAttendanceQrDevice(role: string): boolean {
-  return isEmployeeAuthRoleDirector(role) || isSupervisorRole(role) || isManagerRole(role)
+/**
+ * 출퇴근 QR 키오스크 단말 등록·해제 — 본사(Officer·Director 등)·Supervisor·매장 Manager.
+ * Omni 초기 admin 계정은 Officer라서 isManagerRole만 보면 등록 버튼이 안 나온다.
+ * Omni Manager는 ERP에서 Officer로 승격되어 isManagerRole=false 이므로 isOfficeRole로 허용.
+ */
+export function canRegisterAttendanceQrDevice(role: string, brandKey?: PermissionBrandKey): boolean {
+  return isOfficeRole(role, brandKey) || isSupervisorRole(role) || isManagerRole(role, brandKey)
 }
 
 /** 출퇴근 QR 단말 목록 조회·revoke (프린터 설정 화면) */
-export function canManageAttendanceQrDevices(role: string): boolean {
-  return canRegisterAttendanceQrDevice(role)
+export function canManageAttendanceQrDevices(role: string, brandKey?: PermissionBrandKey): boolean {
+  return canRegisterAttendanceQrDevice(role, brandKey)
 }
 
 /** POS 설정 → 단말 (메인/주문 지정·접속 기기) — 본사·슈퍼바이저·매장 관리자 */
@@ -493,8 +497,14 @@ export function canPickPosTerminalStore(role: string, authStore?: string): boole
 }
 
 /** 본사 화면에서 매장별 QR 단말 목록·등록 시 매장 선택 */
-export function canPickAttendanceQrStoreFilter(role: string, authStore?: string): boolean {
-  if (!canRegisterAttendanceQrDevice(role)) return false
+export function canPickAttendanceQrStoreFilter(
+  role: string,
+  authStore?: string,
+  brandKey?: PermissionBrandKey
+): boolean {
+  if (!canRegisterAttendanceQrDevice(role, brandKey)) return false
+  /** Omni 테넌트 admin(Officer)은 첫 매장 소속이어도 다른 매장 키오스크를 등록해야 함 */
+  if (isNativeOfficeRole(role) || isSupervisorRole(role)) return true
   return isOfficeStore(String(authStore || ""))
 }
 

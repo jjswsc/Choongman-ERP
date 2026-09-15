@@ -19,6 +19,7 @@ import {
   requestAttendanceQrPersistentStorage,
   writeAttendanceQrDeviceToken,
   writeAttendanceQrStoreCode,
+  attendanceQrKioskLoginHref,
 } from "@/lib/attendance-qr-device-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -67,11 +68,9 @@ export function AttendanceQrKiosk() {
       setStoreCode(savedStore)
       return
     }
-    if (!canPickStore) {
-      const authStore = String(auth?.store || "").trim()
-      if (authStore) setStoreCode(authStore)
-    }
-  }, [initialized, auth?.store, canPickStore])
+    const authStore = String(auth?.store || "").trim()
+    if (authStore) setStoreCode(authStore)
+  }, [initialized, auth?.store])
 
   const resolveStoreCode = React.useCallback(() => {
     return String(storeCode || readAttendanceQrStoreCode()).trim()
@@ -110,6 +109,9 @@ export function AttendanceQrKiosk() {
     return true
   }, [deviceToken, resolveStoreCode, t, kioskLang])
 
+  const refreshQrRef = React.useRef(refreshQr)
+  refreshQrRef.current = refreshQr
+
   React.useEffect(() => {
     if (!initialized || !deviceToken) return
     let cancelled = false
@@ -128,7 +130,7 @@ export function AttendanceQrKiosk() {
         }
         writeAttendanceQrDeviceToken(deviceToken)
         setMode("display")
-        await refreshQr()
+        await refreshQrRef.current()
       } else {
         setMode("register")
       }
@@ -136,7 +138,7 @@ export function AttendanceQrKiosk() {
     return () => {
       cancelled = true
     }
-  }, [initialized, deviceToken, resolveStoreCode, refreshQr])
+  }, [initialized, deviceToken, resolveStoreCode])
 
   React.useEffect(() => {
     if (mode !== "display") return
@@ -166,7 +168,7 @@ export function AttendanceQrKiosk() {
     if (!canRegister) {
       await appAlert(
         t("attendanceQrRegisterLoginHint") ||
-          "Director, Supervisor 또는 해당 매장 Manager가 로그인한 뒤 등록해 주세요."
+          "Officer, Director, Supervisor 또는 해당 매장 Manager가 로그인한 뒤 등록해 주세요."
       )
       return
     }
@@ -214,6 +216,16 @@ export function AttendanceQrKiosk() {
               {t("attendanceQrKioskRegisterDesc") ||
                 "이 기기를 매장 출퇴근 QR 표시용으로 1회 등록합니다. 등록 후에는 로그인 없이 QR만 표시됩니다."}
             </p>
+            {auth?.user ? (
+              <p className="mt-2 text-xs text-slate-400">
+                {auth.user}
+                {auth.store ? ` · ${formatStoreLabel(auth.store)}` : ""}
+                {" · "}
+                <Link href={attendanceQrKioskLoginHref()} className="underline text-slate-300">
+                  {t("posSwitchUser") || "Switch user"}
+                </Link>
+              </p>
+            ) : null}
           </div>
 
           {canPickStore ? (
@@ -265,10 +277,10 @@ export function AttendanceQrKiosk() {
             <div className="space-y-3 text-sm text-amber-200">
               <p>
                 {t("attendanceQrRegisterLoginHint") ||
-                  "Director, Supervisor 또는 해당 매장 Manager가 로그인한 뒤 등록해 주세요."}
+                  "Officer, Director, Supervisor 또는 해당 매장 Manager가 로그인한 뒤 등록해 주세요."}
               </p>
               <Button asChild variant="secondary" className="w-full">
-                <Link href="/pos/login">{t("qrFooterPosLogin") || "POS 로그인"}</Link>
+                <Link href={attendanceQrKioskLoginHref()}>{t("qrFooterPosLogin") || "POS 로그인"}</Link>
               </Button>
             </div>
           )}

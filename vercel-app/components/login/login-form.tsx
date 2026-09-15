@@ -61,6 +61,7 @@ import {
 } from "@/lib/offline/network"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { canAccessSaasAdmin } from "@/lib/permissions"
+import { safeAttendanceQrKioskRedirect } from "@/lib/attendance-qr-device-client"
 import { sanitizeSaasLoginIdTyping, normalizeSaasLoginId } from "@/lib/saas-login-id"
 import {
   isSaasPlatformDefaultLoginCompany,
@@ -388,11 +389,20 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     return s ? `?${s}` : ""
   }, [loginApp, searchParams])
 
+  const kioskReturnPath = useMemo(
+    () =>
+      safeAttendanceQrKioskRedirect(
+        searchParams?.get("redirect") || searchParams?.get("next")
+      ),
+    [searchParams]
+  )
+
   const effectiveRedirectTo = useMemo(() => {
+    if (kioskReturnPath) return kioskReturnPath
     if (loginApp === "mobile") return "/"
     if (loginApp === "pos") return `/pos${posLoginPreserveQuery}`
     return erpLandingPath
-  }, [loginApp, erpLandingPath, posLoginPreserveQuery])
+  }, [kioskReturnPath, loginApp, erpLandingPath, posLoginPreserveQuery])
 
   /** SaaS 관리 로그인은 탭과 무관하게 항상 관리자 권한 검증 — 이전: mobile/POS 탭이면 isAdminPage false로 잘못 전달됨 */
   const effectiveIsAdminPage =

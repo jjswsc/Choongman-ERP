@@ -150,6 +150,19 @@ export function buildAttendanceQrClientHint(): string {
   }
 }
 
+export const ATTENDANCE_QR_KIOSK_PATH = '/kiosk/attendance-qr'
+
+export function attendanceQrKioskLoginHref(): string {
+  return `/pos/login?redirect=${encodeURIComponent(ATTENDANCE_QR_KIOSK_PATH)}`
+}
+
+/** POS/관리자 로그인 ?redirect= 은 출퇴근 QR 키오스크 경로만 허용 (오픈 리다이렉트 방지) */
+export function safeAttendanceQrKioskRedirect(raw: string | null | undefined): string {
+  const p = String(raw || '').trim()
+  if (p === ATTENDANCE_QR_KIOSK_PATH) return p
+  return ''
+}
+
 export const ATTENDANCE_QR_DEVICE_HEADERS = {
   deviceToken: 'X-Cm-Attendance-Qr-Device-Token',
   storeCode: 'X-Cm-Attendance-Qr-Store-Code',

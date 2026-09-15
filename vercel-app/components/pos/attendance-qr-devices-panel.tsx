@@ -90,12 +90,12 @@ export function AttendanceQrDevicesPanel(props: { storeCode: string }) {
           </h4>
           <p className="mt-1 text-xs text-muted-foreground max-w-2xl">
             {t('attendanceQrDevicesDesc') ||
-              '매장 고정 태블릿에서 /kiosk/attendance-qr 을 켜 두세요. 최초 1회 매니저·본사 등록.'}
+              '매장 고정 태블릿에서 /kiosk/attendance-qr 을 켜 두세요. 최초 1회 Officer·본사 또는 매장 Manager 등록.'}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" asChild>
-            <Link href="/kiosk/attendance-qr" target="_blank" rel="noopener noreferrer">
+            <Link href="/kiosk/attendance-qr">
               {t('attendanceQrDevicesOpenKiosk') || 'QR 키오스크 열기'}
             </Link>
           </Button>

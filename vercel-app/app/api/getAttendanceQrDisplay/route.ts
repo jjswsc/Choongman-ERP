@@ -8,6 +8,8 @@ import { buildAttendanceQrPayload, ATTENDANCE_QR_BUCKET_HOURS } from '@/lib/atte
 import {
   ATTENDANCE_QR_DEVICE_HEADERS,
 } from '@/lib/attendance-qr-device-client'
+import { getVerifiedAuth } from '@/lib/verify-auth'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 
 function readDeviceAuth(req: NextRequest): { storeCode: string; deviceToken: string } {
   const fromHeaderStore = String(req.headers.get(ATTENDANCE_QR_DEVICE_HEADERS.storeCode) || '').trim()
@@ -32,9 +34,15 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    let device = storeCode ? await fetchAttendanceQrDevice(storeCode, deviceToken) : null
+    const auth = await getVerifiedAuth(req, { skipSaasGate: true })
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: storeCode || null,
+    })
+
+    let device = storeCode ? await fetchAttendanceQrDevice(storeCode, deviceToken, tenantScope) : null
     if (!device) {
-      device = await fetchAttendanceQrDeviceByToken(deviceToken)
+      device = await fetchAttendanceQrDeviceByToken(deviceToken, tenantScope)
     }
     if (!device) {
       return NextResponse.json(
@@ -49,6 +57,7 @@ export async function GET(req: NextRequest) {
     await touchAttendanceQrDevice({
       storeCode: resolvedStoreCode,
       deviceToken,
+      tenantScope,
       ...(clientHint ? { clientHint } : {}),
     })
 
