@@ -508,6 +508,16 @@ export function canPickAttendanceQrStoreFilter(
   return isOfficeStore(String(authStore || ""))
 }
 
+/**
+ * 입고 등록에서 다른 매장을 고를 수 있는지.
+ * Omni Manager는 ERP Officer와 같지만, 지점 소속이면 자기 매장만 입고한다.
+ * (충만 본사 Officer·오피스 소속·Omni 테넌트 admin(Officer)은 매장 선택 가능)
+ */
+export function canPickInboundStore(role: string, authStore?: string): boolean {
+  if (isNativeOfficeRole(role)) return true
+  return isOfficeStore(String(authStore || ""))
+}
+
 /** 업무일지 검토·승인·첨언·보류·반려·삭제 (매장 매니저·가맹점주는 조회만) */
 export function canReviewWorkLog(role: string): boolean {
   return (

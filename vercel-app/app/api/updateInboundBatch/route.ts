@@ -22,7 +22,9 @@ import {
   resolveInboundLineCost,
   validateInboundFxHeader,
 } from '@/lib/inbound-fx'
-import { inboundPersistLocation } from '@/lib/office-store-canonical'
+import { resolveInboundPersistLocation } from '@/lib/office-store-canonical'
+import { canPickInboundStore } from '@/lib/permissions'
+import { getServerAppBrandConfig } from '@/lib/app-brand-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { assertAccountingDateOpen } from '@/lib/accounting-posting'
 import {
@@ -79,6 +81,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const brand = await getServerAppBrandConfig()
+    const canPickStore = auth ? canPickInboundStore(auth.role || '', auth.store) : true
+    const persistRequestedLocation = (requested: string | null | undefined) =>
+      resolveInboundPersistLocation({
+        requestedStore: requested,
+        authStore: auth?.store,
+        canPickStore,
+        brandKey: brand.key,
+      })
     const tenantScope = await resolveInventoryTenantScope({ auth })
     const writeBlock = assertInventoryTenantWritable(tenantScope)
     if (writeBlock) {
@@ -122,7 +133,7 @@ export async function POST(request: NextRequest) {
         patch.purchase_order_id = v && !isNaN(Number(v)) ? Number(v) : null
       }
       if (body.storeName !== undefined) {
-        patch.location = inboundPersistLocation(body.storeName)
+        patch.location = persistRequestedLocation(body.storeName)
       }
       // 헤더만 수정 시 통화·환율 변경 금지 (stock_logs 단가와 불일치 방지)
       if (hasFxInBody) {
@@ -141,7 +152,7 @@ export async function POST(request: NextRequest) {
         const oldLoc = String(existing[0].location || '').trim() || null
         await assertAccountingDateOpen(oldDate, oldLoc)
         if (patch.location !== undefined) {
-          await assertAccountingDateOpen(oldDate, inboundPersistLocation(String(patch.location ?? '')) || oldLoc)
+          await assertAccountingDateOpen(oldDate, String(patch.location || '') || oldLoc)
         }
       }
 
@@ -235,8 +246,8 @@ export async function POST(request: NextRequest) {
 
     const location =
       body.storeName !== undefined
-        ? inboundPersistLocation(body.storeName)
-        : inboundPersistLocation(existing[0].location)
+        ? persistRequestedLocation(body.storeName)
+        : persistRequestedLocation(existing[0].location)
 
     await assertAccountingDateOpen(
       String(existing[0].batch_date || batchDateYmd).slice(0, 10),

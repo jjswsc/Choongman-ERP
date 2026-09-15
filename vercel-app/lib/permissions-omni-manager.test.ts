@@ -4,6 +4,7 @@ import {
   canAccessSettings,
   canManageAttendanceQrDevices,
   canPickAttendanceQrStoreFilter,
+  canPickInboundStore,
   canRegisterAttendanceQrDevice,
   isManagerRole,
   isNativeOfficeRole,
@@ -58,5 +59,17 @@ describe("Omni Manager = Officer (ERP only)", () => {
   it("keeps Choongman Manager able to register attendance QR kiosk", () => {
     expect(canRegisterAttendanceQrDevice("Manager", "choongman")).toBe(true)
     expect(canPickAttendanceQrStoreFilter("Manager", "Branch A", "choongman")).toBe(false)
+  })
+
+  it("locks Omni branch Manager inbound to own store, not CM Office", () => {
+    expect(canPickInboundStore("Manager", "1001")).toBe(false)
+    expect(canPickInboundStore("Manager", "Office")).toBe(true)
+    expect(canPickInboundStore("Officer", "1001")).toBe(true)
+    expect(canPickInboundStore("Officer", "CM Office")).toBe(true)
+  })
+
+  it("keeps Choongman store Manager inbound locked to own store", () => {
+    expect(canPickInboundStore("Manager", "CM Silom")).toBe(false)
+    expect(canPickInboundStore("Officer", "CM Silom")).toBe(true)
   })
 })

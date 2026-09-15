@@ -1,3 +1,4 @@
+import { normalizeBrandKey, type AppBrandKey } from '@/lib/app-brand'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import { INBOUND_HQ_LOCATION } from '@/lib/stock-location-patterns'
@@ -60,14 +61,66 @@ export function canonicalOfficeStore(store: string | null | undefined): string {
   return isOfficeStoreVariant(s) ? CANONICAL_OFFICE_STORE : s
 }
 
+function inboundBrandKey(brandKey?: string | null): AppBrandKey {
+  return normalizeBrandKey(String(brandKey || ''))
+}
+
 /**
  * 입고·재고 DB location 저장값.
- * 화면은 CM Office로 고르더라도 stock_logs·inbound_batches 본사 창고는 입고등록으로 통일.
+ * 충만: 화면은 CM Office로 고르더라도 stock_logs·inbound_batches 본사 창고는 입고등록으로 통일.
+ * Omni: 고객사 매장 코드를 그대로 저장하고, 충만 본사 창고(입고등록/CM Office)로 바꾸지 않는다.
  */
-export function inboundPersistLocation(store: string | null | undefined): string {
+export function inboundPersistLocation(
+  store: string | null | undefined,
+  brandKey?: string | null
+): string {
   const s = String(store || '').trim()
+  if (inboundBrandKey(brandKey) === 'omnifoodtech') return s
   if (!s || isOfficeStoreVariant(s)) return INBOUND_HQ_LOCATION
   return s
+}
+
+/**
+ * 입고 등록 드롭다운.
+ * 충만 본사는 CM Office를 항상 넣고, Omni는 본사 창고(CM Office/Office/HQ)를 숨긴다.
+ */
+export function inboundPickerStoreOptions(
+  stores: string[],
+  opts?: { includeCanonicalHq?: boolean }
+): string[] {
+  const raw = (stores || [])
+    .map((s) => String(s || '').trim())
+    .filter((s) => s && s !== 'All')
+  if (opts?.includeCanonicalHq === false) {
+    return [...new Set(raw.filter((s) => !isOfficeStoreVariant(s)))].sort((a, b) =>
+      a.localeCompare(b, 'ko')
+    )
+  }
+  const deduped = dedupeOfficeStoreOptions(raw)
+  if (!deduped.includes(CANONICAL_OFFICE_STORE)) {
+    deduped.push(CANONICAL_OFFICE_STORE)
+    deduped.sort((a, b) => a.localeCompare(b, 'ko'))
+  }
+  return deduped
+}
+
+/** 입고 저장 location — 지점 계정은 자기 매장만, Omni는 CM Office로 바꾸지 않음 */
+export function resolveInboundPersistLocation(opts: {
+  requestedStore: string | null | undefined
+  authStore: string | null | undefined
+  canPickStore: boolean
+  brandKey?: string | null
+}): string {
+  const brand = inboundBrandKey(opts.brandKey)
+  const own = String(opts.authStore || '').trim()
+  if (!opts.canPickStore) {
+    return inboundPersistLocation(own, brand)
+  }
+  let requested = String(opts.requestedStore || '').trim()
+  if (brand === 'omnifoodtech' && isOfficeStoreVariant(requested)) {
+    requested = own && !isOfficeStoreVariant(own) ? own : ''
+  }
+  return inboundPersistLocation(requested || own, brand)
 }
 
 /** 두 location/매장명이 같은 본사 범위인지 (입고 필터·미지급 등) */

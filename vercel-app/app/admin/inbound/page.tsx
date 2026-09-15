@@ -39,7 +39,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
+import { canPickInboundStore } from "@/lib/permissions"
 import {
   getAdminItems,
   getAdminVendors,
@@ -93,7 +94,7 @@ import { sortVendorNameStrings, sortVendorsByDisplayName } from "@/lib/vendor-so
 import {
   CANONICAL_OFFICE_STORE,
   canonicalOfficeStore,
-  dedupeOfficeStoreOptions,
+  inboundPickerStoreOptions,
   isOfficeStoreVariant,
 } from "@/lib/office-store-canonical"
 
@@ -135,6 +136,8 @@ export default function InboundPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
+  const brand = useAppBrandConfig()
+  const includeCanonicalHq = brand.key !== "omnifoodtech"
   const [items, setItems] = React.useState<AdminItem[]>([])
   const [vendors, setVendors] = React.useState<AdminVendor[]>([])
   const [itemsForVendor, setItemsForVendor] = React.useState<AdminItem[]>([])
@@ -143,7 +146,7 @@ export default function InboundPage() {
   const [historyHasQueried, setHistoryHasQueried] = React.useState(false)
 
   const [inDate, setInDate] = React.useState("")
-  /** 입고 매장: 본사는 CM Office(저장 location=입고등록), 매니저는 자기 매장 고정 */
+  /** 입고 매장: 본사만 선택. Omni 지점 Manager는 자기 매장만. Omni는 CM Office를 목록에 넣지 않음 */
   const [inStore, setInStore] = React.useState("")
   const [inVendor, setInVendor] = React.useState("")
   const [inPoNo, setInPoNo] = React.useState("")
@@ -221,7 +224,7 @@ export default function InboundPage() {
   const { posStores: storeList } = useStoreList()
 
   const isOffice = React.useMemo(() => {
-    return isOfficeRole(auth?.role || "") || isOfficeStoreVariant(auth?.store)
+    return canPickInboundStore(auth?.role || "", auth?.store)
   }, [auth?.role, auth?.store])
 
   const purchaseVendors = React.useMemo(() => {
@@ -248,21 +251,13 @@ export default function InboundPage() {
   }, [vendors])
 
   const storeOptions = React.useMemo(() => {
-    const stores = dedupeOfficeStoreOptions((storeList || []).filter((s) => s && s !== "All"))
-    if (!stores.includes(CANONICAL_OFFICE_STORE)) {
-      stores.push(CANONICAL_OFFICE_STORE)
-      stores.sort((a, b) => a.localeCompare(b, "ko"))
-    }
+    const stores = inboundPickerStoreOptions(storeList || [], { includeCanonicalHq })
     return { stores, salesVendors }
-  }, [storeList, salesVendors])
+  }, [storeList, salesVendors, includeCanonicalHq])
 
-  /** 입고 내역 필터용: 매장 + 판매처 (본사·입고등록은 CM Office 한 줄) */
+  /** 입고 내역 필터용: 매장 + 판매처 (충만 본사·입고등록은 CM Office 한 줄, Omni는 본사 창고 숨김) */
   const histStoreOptions = React.useMemo(() => {
-    const base = dedupeOfficeStoreOptions((storeList || []).filter((s) => s && s !== "All"))
-    if (!base.includes(CANONICAL_OFFICE_STORE)) {
-      base.push(CANONICAL_OFFICE_STORE)
-      base.sort((a, b) => a.localeCompare(b, "ko"))
-    }
+    const base = inboundPickerStoreOptions(storeList || [], { includeCanonicalHq })
     const salesNames = salesVendors.map((v) => v.name).filter(Boolean)
     const seen = new Set(base.map((s) => s.toLowerCase()))
     const out = [...base]
@@ -275,7 +270,7 @@ export default function InboundPage() {
       }
     }
     return out
-  }, [storeList, salesVendors])
+  }, [storeList, salesVendors, includeCanonicalHq])
 
   const filteredStoreOptions = React.useMemo(() => {
     const q = inStoreSearch.trim().toLowerCase()
@@ -357,13 +352,18 @@ export default function InboundPage() {
   React.useEffect(() => {
     if (isOffice) {
       setInStore((prev) => {
-        if (!prev || isOfficeStoreVariant(prev)) return CANONICAL_OFFICE_STORE
-        return prev
+        if (prev && !isOfficeStoreVariant(prev)) return prev
+        if (!includeCanonicalHq) {
+          const own = String(auth?.store || "").trim()
+          if (own && !isOfficeStoreVariant(own)) return own
+          return storeOptions.stores[0] || ""
+        }
+        return CANONICAL_OFFICE_STORE
       })
     } else if (auth?.store) {
       setInStore(auth.store)
     }
-  }, [isOffice, auth?.store])
+  }, [isOffice, auth?.store, includeCanonicalHq, storeOptions.stores])
 
   React.useEffect(() => {
     Promise.all([getAdminItems(), getAdminVendors()])
@@ -514,15 +514,20 @@ export default function InboundPage() {
     if (!isOffice) {
       return auth?.store?.trim() || undefined
     }
-    if (!inStore || isOfficeStoreVariant(inStore)) {
-      return CANONICAL_OFFICE_STORE
-    }
     if (inStore.startsWith("sales:")) {
       const code = inStore.slice(6)
       return salesVendors.find((v) => v.code === code)?.name ?? inStore
     }
+    if (!inStore || isOfficeStoreVariant(inStore)) {
+      if (!includeCanonicalHq) {
+        const own = String(auth?.store || "").trim()
+        if (own && !isOfficeStoreVariant(own)) return own
+        return storeOptions.stores[0] || undefined
+      }
+      return CANONICAL_OFFICE_STORE
+    }
     return inStore.trim()
-  }, [isOffice, auth?.store, inStore, salesVendors])
+  }, [isOffice, auth?.store, inStore, salesVendors, includeCanonicalHq, storeOptions.stores])
 
   const handleSave = async () => {
     if (!cart.length) {
@@ -580,7 +585,7 @@ export default function InboundPage() {
           vendorCode,
           poNo: inPoNo.trim() || undefined,
           invoiceNo: inInvoiceNo.trim() || undefined,
-          storeName: storeName || CANONICAL_OFFICE_STORE,
+          storeName: storeName || (includeCanonicalHq ? CANONICAL_OFFICE_STORE : auth?.store || ""),
           purchaseOrderId: editingPurchaseOrderId,
           list,
           ...fxOptions,
@@ -1390,7 +1395,9 @@ export default function InboundPage() {
         }
 
         const loc = String(b.location || "").trim()
-        let storeValue = CANONICAL_OFFICE_STORE
+        let storeValue = includeCanonicalHq
+          ? CANONICAL_OFFICE_STORE
+          : String(auth?.store || "").trim()
         if (loc && !isOfficeStoreVariant(loc)) {
           const salesMatch = salesVendors.find((v) => v.name === loc)
           if (salesMatch) storeValue = `sales:${salesMatch.code}`
@@ -1421,7 +1428,7 @@ export default function InboundPage() {
         setEditLoading(false)
       }
     },
-    [t, salesVendors]
+    [t, salesVendors, includeCanonicalHq, auth?.store]
   )
 
   const handleDeleteRow = React.useCallback(
@@ -1784,7 +1791,9 @@ export default function InboundPage() {
                           <Select
                             value={
                               !inStore || isOfficeStoreVariant(inStore)
-                                ? CANONICAL_OFFICE_STORE
+                                ? includeCanonicalHq
+                                  ? CANONICAL_OFFICE_STORE
+                                  : storeOptions.stores[0] || inStore
                                 : inStore
                             }
                             onValueChange={(v) => setInStore(v)}
@@ -1936,7 +1945,7 @@ export default function InboundPage() {
           <TabsContent value="hist" className={adminTabsContentCn}>
             {isOffice ? (
               <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
-                {t("inHistFilterHintOffice")}
+                {t(includeCanonicalHq ? "inHistFilterHintOffice" : "inHistFilterHintOfficeOmni")}
               </p>
             ) : (
               <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
@@ -1947,9 +1956,17 @@ export default function InboundPage() {
               totalAmount={periodTotalFormatted}
               totalVat={periodVatFormatted}
               isOffice={isOffice}
-              histStore={isOfficeStoreVariant(histStore) ? CANONICAL_OFFICE_STORE : histStore}
+              histStore={
+                isOfficeStoreVariant(histStore)
+                  ? includeCanonicalHq
+                    ? CANONICAL_OFFICE_STORE
+                    : ""
+                  : histStore
+              }
               stores={histStoreOptions}
-              onHistStoreChange={(v) => setHistStore(canonicalOfficeStore(v) || v)}
+              onHistStoreChange={(v) =>
+                setHistStore(includeCanonicalHq ? canonicalOfficeStore(v) || v : v)
+              }
               histStart={histStart}
               histEnd={histEnd}
               histMonth={histMonth}

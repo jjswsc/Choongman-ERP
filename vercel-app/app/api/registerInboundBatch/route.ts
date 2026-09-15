@@ -9,7 +9,9 @@ import {
   resolveInboundLineCost,
   validateInboundFxHeader,
 } from '@/lib/inbound-fx'
-import { inboundPersistLocation } from '@/lib/office-store-canonical'
+import { resolveInboundPersistLocation } from '@/lib/office-store-canonical'
+import { canPickInboundStore } from '@/lib/permissions'
+import { getServerAppBrandConfig } from '@/lib/app-brand-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { assertAccountingDateOpen } from '@/lib/accounting-posting'
 import {
@@ -32,6 +34,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const brand = await getServerAppBrandConfig()
     const tenantScope = await resolveInventoryTenantScope({ auth })
     const writeBlock = assertInventoryTenantWritable(tenantScope)
     if (writeBlock) {
@@ -70,7 +73,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const location = inboundPersistLocation(storeName)
+    const canPickStore = auth ? canPickInboundStore(auth.role || '', auth.store) : true
+    const location = resolveInboundPersistLocation({
+      requestedStore: storeName,
+      authStore: auth?.store,
+      canPickStore,
+      brandKey: brand.key,
+    })
+    if (!location) {
+      return NextResponse.json(
+        { success: false, message: '매장을 선택해 주세요.' },
+        { status: 400, headers }
+      )
+    }
     const vendorName = String(list[0]?.vendor || '').trim()
 
     const itemRows = (await supabaseSelectFilter('items', appendInventoryTenantFilter('', tenantScope), {

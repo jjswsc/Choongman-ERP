@@ -1437,6 +1437,8 @@ export const i18n = {
     inItemSearchPh: '품목 코드·명·규격 검색',
     inHistFilterHintOffice:
       '내역 조회에서 기간·매장(본사는 CM Office)·거래처·품목을 설정한 뒤 조회하세요. 본사 입고는 CM Office로 통일되어 표시·조회됩니다.',
+    inHistFilterHintOfficeOmni:
+      '내역 조회에서 기간·매장·거래처·품목을 설정한 뒤 조회하세요. 지점 계정은 자기 매장만 입고되며, CM Office는 목록에 나오지 않습니다.',
     inHistExpandHintStore:
       '내역은 입고 건(배치) 단위로 묶여 있습니다. 품목이 여러 개인 행은 왼쪽 화살표(▶)를 눌러 품목별 수량·금액을 펼쳐 볼 수 있습니다.',
     inHistSelectedCount: '선택 {n}건',
@@ -1547,6 +1549,7 @@ export const i18n = {
     inGuide8_1: '입고 날짜·거래처·품목·수량·단가는 정확히 입력해야 손익과 재고가 맞습니다.',
     inGuide8_2: '오입력이 있다면 가능한 빨리 수정하거나 삭제 후 재등록하는 것이 좋습니다.',
     inGuide8_3: '통장 출금과 입고 연동을 꼼꼼히 하면, 어떤 입고 건에 대한 결제인지 나중에 쉽게 확인할 수 있습니다.',
+    inGuide8_4: '매장 소속 계정은 자기 매장으로만 입고됩니다. 본사 창고(CM Office)는 충만 본사 입고용이며 Omni 매장 목록에는 나오지 않습니다.',
     inPeriodTotal: '기간 총액',
     inEtcCount: '외',
     inMonthHint: '월 선택 후 조회 시 해당 월 전체 검색',
@@ -9781,6 +9784,8 @@ Only matters the employee must handle personally on a working day:
     inItemSearchPh: 'Item code / name / spec',
     inHistFilterHintOffice:
       'Set period, store (HQ = CM Office), vendor, and item, then Search. HQ inbound is unified under CM Office.',
+    inHistFilterHintOfficeOmni:
+      'Set period, store, vendor, and item, then Search. A branch account can inbound only to its own store. CM Office is not in the list.',
     inHistExpandHintStore:
       'History is grouped by inbound batch. When a row has multiple line items, click the arrow (▶) to expand and see each item, quantity, and amount.',
     inHistSelectedCount: 'Selected: {n}',
@@ -9888,6 +9893,8 @@ Only matters the employee must handle personally on a working day:
     inGuide8_1: 'Enter date, vendor, items, qty, and cost accurately for correct P&L and stock.',
     inGuide8_2: 'Fix or delete and re-register quickly if there is an error.',
     inGuide8_3: 'Link bank withdrawals to inbounds carefully for easy settlement tracking.',
+    inGuide8_4:
+      'A store account can register inbound only to its own store. The HQ warehouse (CM Office) is for Choongman head office and is not shown on Omni.',
     inPeriodTotal: 'Period Total',
     inEtcCount: 'and',
     inMonthHint: 'Select month to search',
@@ -18045,6 +18052,8 @@ orderItemQty: 'จำนวน',
     inItemSearchPh: 'รหัส/ชื่อสินค้า',
     inHistFilterHintOffice:
       'ตั้งช่วงวันที่ สาขา(ถ้ามี) ผู้ขาย และสินค้า แล้วกดค้นหา — เปิดแท็บนี้จะค้นหาตามเงื่อนไขปัจจุบันอัตโนมัติ',
+    inHistFilterHintOfficeOmni:
+      'ตั้งช่วงวันที่ สาขา ผู้ขาย และสินค้า แล้วกดค้นหา บัญชีสาขาลงรับเข้าได้เฉพาะสาขาของตัวเองครับ และจะไม่โชว์ CM Office ในรายการสาขาครับ',
     inHistExpandHintStore:
       'ประวัติจัดกลุ่มตามงวดรับเข้า หากหลายรายการ ให้กดลูกศร (▶) เพื่อขยายดูรายการย่อย',
     inHistSelectedCount: 'เลือก {n} รายการ',
@@ -18146,6 +18155,8 @@ orderItemQty: 'จำนวน',
     inGuide8_1: 'กรอกวันที่ ผู้ขาย สินค้า จำนวน และราคาให้ถูกต้อง เพื่อให้งบกำไรขาดทุนและสต็อกตรงกัน',
     inGuide8_2: 'ถ้ามีข้อผิดพลาด แก้ไขหรือลบแล้วลงทะเบียนใหม่โดยเร็ว',
     inGuide8_3: 'เชื่อมโยงการโอนกับรับเข้าอย่างละเอียด เพื่อให้ติดตามการชำระได้ง่าย',
+    inGuide8_4:
+      'บัญชีสาขาลงรับเข้าได้เฉพาะสาขาของตัวเองครับ คลังสำนักงานใหญ่ (CM Office) เป็นของสำนักงานใหญ่ Choongman และจะไม่โชว์ในหน้าร้าน Omni ครับ',
     inPeriodTotal: 'รวมช่วง',
     inEtcCount: 'และ',
     inMonthHint: 'เลือกเดือนเพื่อค้นหา',
@@ -24717,6 +24728,8 @@ orderItemQty: 'အရေအတွက်',
     inItemSearchPh: 'ကုဒ်/အမည် ရှာရန်',
     inHistFilterHintOffice:
       'ရက်စွဲ၊ ဆိုင်၊ ရောင်းချသူ၊ ပစ္စည်းဖြင့် စစ်ပါ။ ဤတဘ်ကို ပြန်ဖွင့်လျှင် လက်ရှိစစ်ည့်ချက်ဖြင့် အလိုအလျောက် စစ်ပါသည်။',
+    inHistFilterHintOfficeOmni:
+      'ရက်စွဲ၊ ဆိုင်၊ ရောင်းချသူ၊ ပစ္စည်းဖြင့် စစ်ပါ။ ဆိုင်အကောင့်သည် မိမိဆိုင်သို့သာ လက်ခံနိုင်ပြီး CM Office ကို စာရင်းတွင် မပြပါ။',
     inHistExpandHintStore:
       'မှတ်တမ်းကို လက်ခံအသုတ်အလိုက် စုထားသည်။ ပစ္စည်းများစွာရှိပါက မြားကို နှိပ်ပြီး ချဲ့ကြည့်ပါ။',
     inHistSelectedCount: 'ရွေးထား {n}',
@@ -24797,6 +24810,7 @@ orderItemQty: 'အရေအတွက်',
     inGuide8_1: 'ရေရှည်အပြောင်းအလဲနှင့်ပစ္စည်းစု မှန်ကန်ရန် နေ့ရက်၊ ရောင်းချသူ၊ ပစ္စည်း၊ အရေအတွက်၊ ကုန်ကျစရိတ် မှန်မှန်ထည့်ပါ။',
     inGuide8_2: 'မှားထည့်ထားပါက မြန်မြန်ပြင်ခြင်း သို့မဟုတ် ဖျက်ပြီး ပြန်မှတ်ပုံတင်ခြင်း ပြုပါ။',
     inGuide8_3: 'ဘဏ်ထုတ်ချေမှုနှင့်လက်ခံချိတ်ဆက်မှုကို သေချာစွာ လုပ်ပါ။ မည်သည့်လက်ခံအတွက် ပေးချေသည်ကို နောက်ပိုင်းလွယ်ကူစွာ ကြည့်နိုင်သည်။',
+    inGuide8_4: 'ဆိုင်အကောင့်သည် မိမိဆိုင်သို့သာ လက်ခံနိုင်သည်။ CM Office ကို Omni စာရင်းတွင် မပြပါ။',
     inPeriodTotal: 'စုစုပေါင်း',
     inEtcCount: 'နှင့်',
     inMonthHint: 'ရှာရန်လရွေးပါ',
@@ -29703,6 +29717,8 @@ orderItemQty: 'ຈຳນວນ',
     inItemSearchPh: 'ລະຫັດ/ຊື່ສິນຄ້າ',
     inHistFilterHintOffice:
       'ຕັ້ງຊ່ວງວັນທີ ສາຂາ ຜູ້ຂາຍ ແລະສິນຄ້າແລ້ວກົດຄົ້ນຫາ — ເປີດແຖບນີ້ຈະຄົ້ນຫາຕາມເງື່ອນໄຂອັດຕະໂນມັດ',
+    inHistFilterHintOfficeOmni:
+      'ຕັ້ງຊ່ວງວັນທີ ສາຂາ ຜູ້ຂາຍ ແລະສິນຄ້າແລ້ວກົດຄົ້ນຫາ. ບັນຊີສາຂາຮັບເຂົ້າໄດ້ສະເພາະສາຂາຂອງຕົນ ແລະບໍ່ສະແດງ CM Office.',
     inHistExpandHintStore:
       'ປະຫວັດຈັດກຸ່ມຕາມງວດຮັບເຂົ້າ. ຫຼາຍລາຍການໃຫ້ກົດລູກສອນ (▶) ເພື່ອຂະຫຍາຍ.',
     inHistSelectedCount: 'ເລືອກ {n}',
@@ -29783,6 +29799,7 @@ orderItemQty: 'ຈຳນວນ',
     inGuide8_1: 'ໃສ່ວັນທີ ຜູ້ຂາຍ ສິນຄ້າ ຈຳນວນ ແລະຕົ້ນທຶນໃຫ້ຖືກຕ້ອງເພື່ອໃຫ້ລາຍງານກຳໄລແລະສິນຄ້າຄົງຄາກຕົງກັນ',
     inGuide8_2: 'ຖ້າມີຂໍ້ຜິດພາດ ແກ້ຫຼືລຶບແລ້ວລົງທະບຽນໃໝ່ໂດຍໄວ',
     inGuide8_3: 'ເຊື່ອມການຖອນກັບຮັບເຂົ້າຢ່າງລະອຽດ ເພື່ອຕິດຕາມການຈ່າຍໄດ້ງ່າຍ',
+    inGuide8_4: 'ບັນຊີສາຂາຮັບເຂົ້າໄດ້ສະເພາະສາຂາຂອງຕົນ. CM Office ບໍ່ສະແດງໃນ Omni.',
     inPeriodTotal: 'ລວມໄລຍະ',
     inEtcCount: 'ແລະ',
     inMonthHint: 'ເລືອກເດືອນເພື່ອຄົ້ນຫາ',

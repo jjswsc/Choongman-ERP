@@ -90,6 +90,7 @@ export function InboundGuideContent() {
           <li>{t("inGuide8_1")}</li>
           <li>{t("inGuide8_2")}</li>
           <li>{t("inGuide8_3")}</li>
+          <li>{t("inGuide8_4")}</li>
         </ul>
       </section>
     </div>

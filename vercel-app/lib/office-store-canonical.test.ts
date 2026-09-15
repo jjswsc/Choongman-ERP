@@ -4,9 +4,11 @@ import {
   canonicalOfficeStore,
   dedupeOfficeStoreOptions,
   inboundPersistLocation,
+  inboundPickerStoreOptions,
   isOfficeStoreVariant,
   officeInboundLocationInFilterSuffix,
   postgrestQuotedInList,
+  resolveInboundPersistLocation,
 } from '@/lib/office-store-canonical'
 
 describe('office-store-canonical', () => {
@@ -44,5 +46,33 @@ describe('office-store-canonical', () => {
       'CM Asoke',
       CANONICAL_OFFICE_STORE,
     ])
+  })
+
+  it('keeps Choongman HQ warehouse mapping and injects CM Office in inbound picker', () => {
+    expect(inboundPickerStoreOptions(['1001'])).toEqual(['1001', CANONICAL_OFFICE_STORE])
+    expect(inboundPersistLocation('CM Office')).toBe('입고등록')
+  })
+
+  it('hides CM Office in Omni inbound picker and persists the branch code', () => {
+    expect(inboundPickerStoreOptions(['1001', 'CM Office', 'Office'], { includeCanonicalHq: false })).toEqual([
+      '1001',
+    ])
+    expect(inboundPersistLocation('1001', 'omnifoodtech')).toBe('1001')
+    expect(
+      resolveInboundPersistLocation({
+        requestedStore: 'CM Office',
+        authStore: '1001',
+        canPickStore: false,
+        brandKey: 'omnifoodtech',
+      })
+    ).toBe('1001')
+    expect(
+      resolveInboundPersistLocation({
+        requestedStore: 'CM Office',
+        authStore: '1001',
+        canPickStore: true,
+        brandKey: 'omnifoodtech',
+      })
+    ).toBe('1001')
   })
 })
