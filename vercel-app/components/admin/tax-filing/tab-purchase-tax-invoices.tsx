@@ -332,6 +332,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   const [dropHover, setDropHover] = React.useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const abortRef = React.useRef<AbortController | null>(null)
+  const discardScanReviewRef = React.useRef(false)
   const ingestingRef = React.useRef(false)
   const ingestFilesRef = React.useRef<(files: File[], opts?: { quietResume?: boolean; fromAutoRetry?: boolean }) => Promise<void>>(
     async () => undefined
@@ -910,6 +911,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       updatePurchaseTaxScanKeepAliveProgress(n, total)
     }
     const keepAlive = startPurchaseTaxScanKeepAlive()
+    discardScanReviewRef.current = false
     markPurchaseTaxScanSession(true)
     void persistPurchaseTaxScanStorage()
     void savePurchaseTaxScanFiles(files)
@@ -1149,7 +1151,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     } catch (e) {
       if (isPurchaseTaxScanAbortError(e) || ac.signal.aborted) {
         markPurchaseTaxScanSession(false)
-        if (extracted.length) setReviewRows(extracted)
+        if (!discardScanReviewRef.current && extracted.length) setReviewRows(extracted)
         return
       }
       setError(purchaseTaxInvoiceScanFailI18nKey(e instanceof Error ? e.message : String(e), "ptiOcrFailed"))
@@ -1182,6 +1184,23 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   const cancelScan = () => {
     markPurchaseTaxScanSession(false)
     abortRef.current?.abort()
+  }
+
+  const discardScanReview = () => {
+    if (!reviewRows.length) return
+    if (!window.confirm(t("ptiPdfDiscardConfirm"))) return
+    discardScanReviewRef.current = true
+    clearScanCheckpoint()
+    writeReviewDraft([])
+    markPurchaseTaxScanSession(false)
+    abortRef.current?.abort()
+    scanPdfRef.current = null
+    scanImagePreviewRef.current = ""
+    setPreviewPage(null)
+    setPreviewUrl("")
+    setReviewRows([])
+    void clearPurchaseTaxScanFiles()
+    setSaveNotice("")
   }
 
   const saveReview = async () => {
@@ -1601,9 +1620,21 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 })}
               </tbody>
             </table>
-            <Button type="button" size="sm" onClick={() => void saveReview()} disabled={saving || !reviewStats.keep}>
-              {t("ptiPdfSave")}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" onClick={() => void saveReview()} disabled={saving || !reviewStats.keep}>
+                {t("ptiPdfSave")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="text-destructive"
+                onClick={discardScanReview}
+                disabled={saving}
+              >
+                {t("ptiPdfDiscard")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : null}
