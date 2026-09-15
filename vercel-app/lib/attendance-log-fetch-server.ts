@@ -12,6 +12,13 @@ import {
   normalizeEmployeeCodeForMatch,
   normalizeEmployeeNameForGradeMatch,
 } from '@/lib/employee-display-name'
+import {
+  attendanceLogsMissingEmployeeCodeColumn,
+  attendanceLogsMissingEmployeeIdColumn,
+  noteAttendanceLogsMissingColumnFromError,
+  shouldSkipAttendanceLogEmployeeKeyFilter,
+  stripAttendanceLogSelectMissingColumns,
+} from '@/lib/attendance-logs-schema-compat'
 
 export type AttendanceLogFetchRow = {
   id?: number
@@ -91,25 +98,29 @@ type FetchParams = {
 }
 
 const DEFAULT_SELECT = 'id,log_at,log_type,employee_id,employee_code,name'
-const DEFAULT_SELECT_NO_CODE = 'id,log_at,log_type,employee_id,name'
 
 async function selectLogs(
   filter: string,
   opts: { order: 'log_at.asc' | 'log_at.desc'; limit: number; select: string }
 ): Promise<AttendanceLogFetchRow[]> {
-  try {
-    return (await supabaseSelectFilter('attendance_logs', filter, opts)) as AttendanceLogFetchRow[]
-  } catch (e) {
-    const em = e instanceof Error ? e.message : String(e)
-    if (!/employee_code|42703|column/i.test(em)) throw e
-    const noCode = opts.select.includes('employee_code')
-      ? opts.select.replace(/,?employee_code/g, '')
-      : opts.select
-    return (await supabaseSelectFilter('attendance_logs', filter, {
-      ...opts,
-      select: noCode || DEFAULT_SELECT_NO_CODE,
-    })) as AttendanceLogFetchRow[]
+  if (shouldSkipAttendanceLogEmployeeKeyFilter(filter)) return []
+  let select = stripAttendanceLogSelectMissingColumns(opts.select || DEFAULT_SELECT)
+  for (let i = 0; i < 4; i++) {
+    try {
+      return (await supabaseSelectFilter('attendance_logs', filter, {
+        ...opts,
+        select,
+      })) as AttendanceLogFetchRow[]
+    } catch (e) {
+      const missing = noteAttendanceLogsMissingColumnFromError(e)
+      if (!missing) throw e
+      if (shouldSkipAttendanceLogEmployeeKeyFilter(filter)) return []
+      const next = stripAttendanceLogSelectMissingColumns(select)
+      if (!next || next === select) throw e
+      select = next
+    }
   }
+  return []
 }
 
 /**
@@ -158,10 +169,10 @@ export async function fetchMergedAttendanceLogsForEmployee(
     }
   }
 
-  if (employeeId > 0) {
+  if (employeeId > 0 && !attendanceLogsMissingEmployeeIdColumn()) {
     pushForStoreFragments(`employee_id=eq.${employeeId}`)
   }
-  if (employeeCodeNorm) {
+  if (employeeCodeNorm && !attendanceLogsMissingEmployeeCodeColumn()) {
     pushForStoreFragments(`employee_code=eq.${encodeURIComponent(employeeCodeNorm)}`)
   }
   pushForStoreFragments(`name=ilike.${encodeURIComponent(employeeName)}`)

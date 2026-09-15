@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import {
   ATTENDANCE_LOG_ADMIN_GRID_COLS,
-  ATTENDANCE_LOG_ADMIN_GRID_COLS_NO_CODE,
 } from '@/lib/postgrest-narrow-select'
 import {
   attendanceStoreNamePostgrestFilter,
@@ -15,6 +14,13 @@ import {
 } from '@/lib/attendance-utils'
 import { resolveAttendanceEmployeeIdentity } from '@/lib/attendance-employee-resolve-server'
 import { attendanceLogRowMatchesEmployee } from '@/lib/attendance-log-fetch-server'
+import {
+  attendanceLogsMissingEmployeeCodeColumn,
+  attendanceLogsMissingEmployeeIdColumn,
+  noteAttendanceLogsMissingColumnFromError,
+  shouldSkipAttendanceLogEmployeeKeyFilter,
+  stripAttendanceLogSelectMissingColumns,
+} from '@/lib/attendance-logs-schema-compat'
 import { otMinutesForPayroll } from '@/lib/payroll-utils'
 import {
   buildAttendanceDisplayMapsFromEmployees,
@@ -240,19 +246,26 @@ export async function GET(request: NextRequest) {
       maxRows: 120_000,
     }
     const fetchAttGrid = async (filter: string): Promise<AttRow[]> => {
-      try {
-        return (await supabaseSelectFilterAllPages('attendance_logs', filter, {
+      if (shouldSkipAttendanceLogEmployeeKeyFilter(filter)) return []
+      const run = async (select: string) =>
+        (await supabaseSelectFilterAllPages('attendance_logs', filter, {
           ...attGridPage,
-          select: ATTENDANCE_LOG_ADMIN_GRID_COLS,
+          select,
         })) as AttRow[]
-      } catch (e) {
-        const em = e instanceof Error ? e.message : String(e)
-        if (!/employee_code|42703|column/i.test(em)) throw e
-        return (await supabaseSelectFilterAllPages('attendance_logs', filter, {
-          ...attGridPage,
-          select: ATTENDANCE_LOG_ADMIN_GRID_COLS_NO_CODE,
-        })) as AttRow[]
+      let select = stripAttendanceLogSelectMissingColumns(ATTENDANCE_LOG_ADMIN_GRID_COLS)
+      for (let i = 0; i < 4; i++) {
+        try {
+          return await run(select)
+        } catch (e) {
+          const missing = noteAttendanceLogsMissingColumnFromError(e)
+          if (!missing) throw e
+          if (shouldSkipAttendanceLogEmployeeKeyFilter(filter)) return []
+          const next = stripAttendanceLogSelectMissingColumns(select)
+          if (!next || next === select) throw e
+          select = next
+        }
       }
+      return []
     }
     const mergeAttByLogId = (chunks: AttRow[][]): AttRow[] => {
       const seenLogIds = new Set<number>()
@@ -321,17 +334,18 @@ export async function GET(request: NextRequest) {
     let attRows: AttRow[]
     if (effHasEmployeeId && effectiveEmployeeFilter.trim()) {
       const trimmedName = effectiveEmployeeFilter.trim()
-      const employeeParts = [
-        `employee_id=eq.${effectiveEmployeeId}`,
-        `name=eq.${encodeURIComponent(trimmedName)}&employee_id=is.null`,
-      ]
-      if (effHasEmployeeCode) {
+      const employeeParts = [`name=eq.${encodeURIComponent(trimmedName)}`]
+      if (!attendanceLogsMissingEmployeeIdColumn()) {
+        employeeParts.unshift(`employee_id=eq.${effectiveEmployeeId}`)
+        employeeParts.push(`name=eq.${encodeURIComponent(trimmedName)}&employee_id=is.null`)
+      }
+      if (effHasEmployeeCode && !attendanceLogsMissingEmployeeCodeColumn()) {
         employeeParts.push(`employee_code=eq.${encodeURIComponent(effectiveEmployeeCodeNorm)}`)
       }
       attRows = await fetchAttGridForEmployeeParts(employeeParts)
-    } else if (effHasEmployeeId) {
+    } else if (effHasEmployeeId && !attendanceLogsMissingEmployeeIdColumn()) {
       const employeeParts = [`employee_id=eq.${effectiveEmployeeId}`]
-      if (effHasEmployeeCode) {
+      if (effHasEmployeeCode && !attendanceLogsMissingEmployeeCodeColumn()) {
         employeeParts.push(`employee_code=eq.${encodeURIComponent(effectiveEmployeeCodeNorm)}`)
       }
       attRows = await fetchAttGridForEmployeeParts(employeeParts)

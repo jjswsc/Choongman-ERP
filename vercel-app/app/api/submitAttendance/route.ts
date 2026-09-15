@@ -10,6 +10,7 @@ import {
   addDayBangkok,
 } from '@/lib/attendance-utils'
 import { fetchMergedAttendanceLogsForEmployee } from '@/lib/attendance-log-fetch-server'
+import { extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
 import { verifyAttendanceQrPayload } from '@/lib/attendance-qr-token'
 import { canEmployeeUseAttendanceQr, isAttendanceQrRequiredForAllStores } from '@/lib/attendance-qr-pilot'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -39,6 +40,53 @@ function addDays(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + delta)
   return d.toISOString().slice(0, 10)
+}
+
+type SchedulePlanRow = {
+  plan_in?: string
+  plan_out?: string
+  break_start?: string
+  break_end?: string
+  plan_in_prev_day?: boolean
+}
+
+/** Omni 등 schedules.employee_id 미배포 DB는 이름 조회로 폴백 */
+async function fetchSchedulePlanRows(params: {
+  dateFilter: string
+  empId: number
+  empName: string
+}): Promise<SchedulePlanRow[]> {
+  const byName = `${params.dateFilter}&name=ilike.${encodeURIComponent(params.empName)}`
+  if (params.empId <= 0) {
+    return (await supabaseSelectFilter('schedules', byName, { limit: 5 })) as SchedulePlanRow[]
+  }
+  const byId = `${params.dateFilter}&employee_id=eq.${params.empId}`
+  try {
+    return (await supabaseSelectFilter('schedules', byId, { limit: 5 })) as SchedulePlanRow[]
+  } catch (e) {
+    if (extractAnyMissingColumn(e) !== 'employee_id') throw e
+    return (await supabaseSelectFilter('schedules', byName, { limit: 5 })) as SchedulePlanRow[]
+  }
+}
+
+async function selectAttendanceLogsByEmployee<T>(params: {
+  empId: number
+  empName: string
+  storeIlike: string
+  extraFilter?: string
+  opts: { order: string; limit: number; select: string }
+}): Promise<T[]> {
+  const extra = params.extraFilter ? `&${params.extraFilter}` : ''
+  const byName = `store_name=ilike.${params.storeIlike}&name=ilike.${encodeURIComponent(params.empName)}${extra}`
+  if (params.empId > 0) {
+    const byId = `store_name=ilike.${params.storeIlike}&employee_id=eq.${params.empId}${extra}`
+    try {
+      return (await supabaseSelectFilter('attendance_logs', byId, params.opts)) as T[]
+    } catch (e) {
+      if (extractAnyMissingColumn(e) !== 'employee_id') throw e
+    }
+  }
+  return (await supabaseSelectFilter('attendance_logs', byName, params.opts)) as T[]
 }
 
 function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -437,26 +485,23 @@ export async function POST(request: NextRequest) {
       planOut = '',
       planBS = '',
       planBE = ''
-    const scheduleFilter =
-      empId > 0
-        ? `schedule_date=eq.${todayStrVal}&${attendanceStoreNamePostgrestFilter(storeName)}&employee_id=eq.${empId}`
-        : `schedule_date=eq.${todayStrVal}&${attendanceStoreNamePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(empName)}`
-    let schRows = (await supabaseSelectFilter(
-      'schedules',
-      scheduleFilter,
-      { limit: 5 }
-    )) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
+    const scheduleDateFilter = `schedule_date=eq.${todayStrVal}&${attendanceStoreNamePostgrestFilter(storeName)}`
+    let schRows = await fetchSchedulePlanRows({
+      dateFilter: scheduleDateFilter,
+      empId,
+      empName,
+    })
     if ((!schRows || schRows.length === 0) && logType === '출근') {
       const tomorrow = (() => {
         const d = new Date(todayStrVal + 'T12:00:00')
         d.setDate(d.getDate() + 1)
         return d.toISOString().slice(0, 10)
       })()
-      const prevDayFilter =
-        empId > 0
-          ? `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&${attendanceStoreNamePostgrestFilter(storeName)}&employee_id=eq.${empId}`
-          : `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&${attendanceStoreNamePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(empName)}`
-      schRows = (await supabaseSelectFilter('schedules', prevDayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
+      schRows = await fetchSchedulePlanRows({
+        dateFilter: `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&${attendanceStoreNamePostgrestFilter(storeName)}`,
+        empId,
+        empName,
+      })
     }
     let usedYesterdaySchedule = false
     // 퇴근/휴식종료: 당일 스케줄 없으면 전날(자정 넘는 근무) 스케줄 확인
@@ -466,11 +511,11 @@ export async function POST(request: NextRequest) {
         d.setUTCDate(d.getUTCDate() - 1)
         return d.toISOString().slice(0, 10)
       })()
-      const yesterdayFilter =
-        empId > 0
-          ? `schedule_date=eq.${yesterday}&${attendanceStoreNamePostgrestFilter(storeName)}&employee_id=eq.${empId}`
-          : `schedule_date=eq.${yesterday}&${attendanceStoreNamePostgrestFilter(storeName)}&name=ilike.${encodeURIComponent(empName)}`
-      schRows = (await supabaseSelectFilter('schedules', yesterdayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
+      schRows = await fetchSchedulePlanRows({
+        dateFilter: `schedule_date=eq.${yesterday}&${attendanceStoreNamePostgrestFilter(storeName)}`,
+        empId,
+        empName,
+      })
       usedYesterdaySchedule = !!(schRows && schRows.length > 0)
     }
     if (schRows && schRows.length > 0) {
@@ -520,15 +565,12 @@ export async function POST(request: NextRequest) {
       }
     } else if (logType === '휴식종료') {
       const storeIlikeResume = encodeURIComponent(attendanceStoreIlikeFragment(storeName))
-      const allLogsFilter =
-        empId > 0
-          ? `store_name=ilike.${storeIlikeResume}&employee_id=eq.${empId}`
-          : `store_name=ilike.${storeIlikeResume}&name=ilike.${encodeURIComponent(empName)}`
-      const allLogs = (await supabaseSelectFilter('attendance_logs', allLogsFilter, {
-        order: 'log_at.desc',
-        limit: 50,
-        select: 'log_at,log_type',
-      })) as { log_at?: string; log_type?: string }[]
+      const allLogs = await selectAttendanceLogsByEmployee<{ log_at?: string; log_type?: string }>({
+        empId,
+        empName,
+        storeIlike: storeIlikeResume,
+        opts: { order: 'log_at.desc', limit: 50, select: 'log_at,log_type' },
+      })
       const openBreakMs = getOpenBreakStartMs(allLogs)
       if (openBreakMs != null) {
         const actualStart = new Date(openBreakMs)
@@ -555,15 +597,16 @@ export async function POST(request: NextRequest) {
       // 네트워크 재시도/중복 탭으로 동일 휴식종료가 연속 저장되면 break_min이 2배 집계된다.
       // 최근 15초 내 같은 break_min 휴식종료가 있으면 멱등 처리로 무시.
       const storeIlikeResume = encodeURIComponent(attendanceStoreIlikeFragment(storeName))
-      const duplicateFilter =
-        empId > 0
-          ? `store_name=ilike.${storeIlikeResume}&employee_id=eq.${empId}&log_type=eq.${encodeURIComponent('휴식종료')}`
-          : `store_name=ilike.${storeIlikeResume}&name=ilike.${encodeURIComponent(empName)}&log_type=eq.${encodeURIComponent('휴식종료')}`
-      const recentResumeRows = (await supabaseSelectFilter('attendance_logs', duplicateFilter, {
-        order: 'log_at.desc',
-        limit: 1,
-        select: 'log_at,break_min',
-      })) as { log_at?: string; break_min?: number | null }[]
+      const recentResumeRows = await selectAttendanceLogsByEmployee<{
+        log_at?: string
+        break_min?: number | null
+      }>({
+        empId,
+        empName,
+        storeIlike: storeIlikeResume,
+        extraFilter: `log_type=eq.${encodeURIComponent('휴식종료')}`,
+        opts: { order: 'log_at.desc', limit: 1, select: 'log_at,break_min' },
+      })
       const recent = recentResumeRows?.[0]
       const recentMs = recent?.log_at ? new Date(recent.log_at).getTime() : NaN
       const sameBreakMin =
