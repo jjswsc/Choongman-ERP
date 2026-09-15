@@ -37,6 +37,11 @@ export function defaultPayQrTypeForStore(
   return mode === 'edc_native' ? 'EDC' : 'THAI_QR'
 }
 
+/** 결제 모달 EDC 탭(LinkPOS tx70). 고객 모니터 있는 매장(cashier)에서는 숨긴다. */
+export function shouldShowEdcNativeQrPayTab(defaultQrPayType?: 'THAI_QR' | 'EDC' | string): boolean {
+  return defaultQrPayType === 'EDC'
+}
+
 /** LinkPOS tx70 — EDC 펌웨어 QR(기기에서 ตรวจสอบรายการ 필요). edc_mirror 에서는 사용 안 함 */
 export function shouldUseLinkposNativeQr(
   mode: PosQrDisplayMode,

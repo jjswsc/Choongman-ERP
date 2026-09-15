@@ -4,6 +4,7 @@ import {
   normalizePosQrDisplayMode,
   resolvePosQrDisplayModeForStore,
   shouldMirrorKbankQrToEdc,
+  shouldShowEdcNativeQrPayTab,
   shouldUseLinkposNativeQr,
 } from './pos-qr-display-mode'
 
@@ -19,6 +20,9 @@ describe('pos-qr-display-mode', () => {
     expect(defaultPayQrTypeForStore('edc_mirror', true)).toBe('THAI_QR')
     expect(defaultPayQrTypeForStore('edc_native', true)).toBe('EDC')
     expect(defaultPayQrTypeForStore('edc_mirror', false)).toBe('THAI_QR')
+    expect(shouldShowEdcNativeQrPayTab('EDC')).toBe(true)
+    expect(shouldShowEdcNativeQrPayTab('THAI_QR')).toBe(false)
+    expect(shouldShowEdcNativeQrPayTab(undefined)).toBe(false)
   })
 
   it('gates native EDC QR vs KBank mirror', () => {

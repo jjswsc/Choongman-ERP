@@ -172,6 +172,7 @@ import {
 } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
+import { shouldShowEdcNativeQrPayTab } from '@/lib/pos-qr-display-mode'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import { allocateLineDiscountByAssignedQty, computeMenuSplitDueByPerson, computeMenuSplitDueFromBaseSum } from '@/lib/pos-menu-split-due'
 import {
@@ -6904,7 +6905,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       <p className="mb-2 text-[11px] font-medium text-muted-foreground">
                         {tr('posQrTypeLabel', 'ประเภท QR')}
                       </p>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className={`grid gap-2 ${shouldShowEdcNativeQrPayTab(defaultQrPayType) ? 'grid-cols-3' : 'grid-cols-2'}`}>
                         <Button
                           type="button"
                           variant={payQrType === 'THAI_QR' ? 'default' : 'outline'}
@@ -6921,14 +6922,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         >
                           {tr('posQrTypeCredit', 'QR บัตรเครดิต')}
                         </Button>
-                        <Button
-                          type="button"
-                          variant={payQrType === 'EDC' ? 'default' : 'outline'}
-                          className="h-9 rounded-lg text-xs"
-                          onClick={() => setPayQrType('EDC')}
-                        >
-                          {tr('posQrTypeShowOnEdc', 'EDC')}
-                        </Button>
+                        {shouldShowEdcNativeQrPayTab(defaultQrPayType) ? (
+                          <Button
+                            type="button"
+                            variant={payQrType === 'EDC' ? 'default' : 'outline'}
+                            className="h-9 rounded-lg text-xs"
+                            onClick={() => setPayQrType('EDC')}
+                          >
+                            {tr('posQrTypeShowOnEdc', 'EDC')}
+                          </Button>
+                        ) : null}
                       </div>
                       <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
                         {payQrType === 'EDC'
