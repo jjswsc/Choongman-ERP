@@ -3,7 +3,7 @@ import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrs
 import { requireAuth } from '@/lib/verify-auth'
 import { posApiCorsHeaders } from '@/lib/pos-api-write-auth'
 import { memberPhoneLookupVariants, canonicalMemberPhoneForStorage } from '@/lib/member-phone-lookup'
-import { posDepositBalanceFromLedger } from '@/lib/pos-deposit-domain'
+import { posDepositBalanceFromLedger, summarizePosDepositHeldHolders } from '@/lib/pos-deposit-domain'
 import { appendSaasTenantFilter, resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 
 export async function GET(req: NextRequest) {
@@ -27,6 +27,8 @@ export async function GET(req: NextRequest) {
       storeCode: storeCode || null,
     })
 
+    const heldListMode = Boolean(storeCode) && memberId <= 0 && !phoneRaw && orderId <= 0
+
     const parts: string[] = []
     if (orderId > 0) parts.push(`pos_order_id=eq.${orderId}`)
     if (memberId > 0) parts.push(`member_id=eq.${memberId}`)
@@ -47,16 +49,26 @@ export async function GET(req: NextRequest) {
     }
 
     const filter = appendSaasTenantFilter(parts.join('&'), tenantScope, 'pos_deposit_ledger')
+    const rowLimit = heldListMode ? 20000 : limit
     const rows = (await supabaseSelectFilterStrippingUnknownColumns(
       'pos_deposit_ledger',
       filter,
       {
         select: 'id,created_at,store_code,pos_order_id,member_id,guest_phone,guest_name,kind,amount,tender,memo',
         order: 'created_at.desc',
-        limit,
+        limit: rowLimit,
       },
       'getPosDepositHistory'
     )) as Record<string, unknown>[] | null
+
+    if (heldListMode) {
+      const heldHolders = summarizePosDepositHeldHolders(rows || [])
+      const heldBalance = heldHolders.reduce((s, h) => s + h.held, 0)
+      return NextResponse.json(
+        { success: true, heldBalance, heldHolders, rows: [] },
+        { headers }
+      )
+    }
 
     const orderIds = Array.from(
       new Set((rows || []).map((r) => Math.trunc(Number(r.pos_order_id) || 0)).filter((n) => n > 0))
@@ -80,6 +92,7 @@ export async function GET(req: NextRequest) {
       {
         success: true,
         heldBalance,
+        heldHolders: [],
         rows: (rows || []).map((r) => ({
           id: Number(r.id || 0),
           createdAt: String(r.created_at ?? ''),

@@ -14,10 +14,20 @@ function shouldRegisterSwForPath(pathname: string | null): boolean {
   return false
 }
 
+function registerPosServiceWorker() {
+  import("@/lib/firebase-client")
+    .then((m) => {
+      m.preRegisterServiceWorker()
+      m.setupForegroundHandler()
+    })
+    .catch(() => {})
+}
+
 /**
  * 로그인 전(일반 페이지)에 SW가 너무 이르게 뜨면 `/_next/static` 청크 캐시 오염 이슈가 있어,
  * 기본은 **세션 있을 때만** 등록.
  * 다만 `/pos/login` 등 공개 로그인 URL은 오프라인 대비를 위해 **비로그인이어도** 등록한다.
+ * Windows POS는 인터넷이 끊겨도 로그인·주문이 열려야 하므로 **인증 전에도** 등록한다.
  */
 export function SwPreregister() {
   const { auth, initialized } = useAuth()
@@ -26,9 +36,7 @@ export function SwPreregister() {
     if (typeof window === "undefined") return
     if (!isCmPosHybridShell()) return
     const t = window.setTimeout(() => {
-      void import("@/lib/hybrid-pos-service-worker")
-        .then((m) => m.disableHybridPosServiceWorker())
-        .catch(() => {})
+      registerPosServiceWorker()
     }, 0)
     return () => window.clearTimeout(t)
   }, [])
@@ -38,12 +46,7 @@ export function SwPreregister() {
     if (isCmPosHybridShell()) return
     if (!auth && !shouldRegisterSwForPath(pathname)) return
     const t = window.setTimeout(() => {
-      import("@/lib/firebase-client")
-        .then((m) => {
-          m.preRegisterServiceWorker()
-          m.setupForegroundHandler()
-        })
-        .catch(() => {})
+      registerPosServiceWorker()
     }, 0)
     return () => window.clearTimeout(t)
   }, [initialized, auth, pathname])

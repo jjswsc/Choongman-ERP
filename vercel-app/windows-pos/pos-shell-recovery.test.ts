@@ -50,6 +50,32 @@ describe("pos-shell-recovery", () => {
     ).toBe("clear-cache")
   })
 
+  it("reloads from cache while offline instead of clearing it", () => {
+    expect(
+      recovery.decideLiveBlankAction({
+        isBlank: true,
+        consecutiveHits: 2,
+        hitsBeforeReload: 2,
+        recoveriesInWindow: 0,
+        isOnline: false,
+      })
+    ).toBe("cache-reload")
+    expect(
+      recovery.decideLiveBlankAction({
+        probeFailed: true,
+        recoveriesInWindow: 0,
+        isOnline: false,
+      })
+    ).toBe("cache-reload")
+    expect(
+      recovery.decideRendererGoneAction({
+        reason: "crashed",
+        recoveriesInWindow: 0,
+        isOnline: false,
+      })
+    ).toBe("cache-reload")
+  })
+
   it("clears cache immediately when the renderer probe fails", () => {
     expect(
       recovery.decideLiveBlankAction({

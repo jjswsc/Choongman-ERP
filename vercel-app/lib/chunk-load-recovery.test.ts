@@ -6,9 +6,11 @@ import {
   HYBRID_CACHE_RESET_WAIT_MS,
   isChunkLoadError,
   isStaleClientBundleError,
+  isHybridCacheResetSkippedOffline,
   recoverFromChunkLoadError,
   shouldClearBuildRelatedCache,
   shouldRecoverStaleBundleEvent,
+  shouldWipeCachesForChunkRecovery,
 } from "@/lib/chunk-load-recovery"
 
 describe("isChunkLoadError", () => {
@@ -54,11 +56,30 @@ describe("isStaleClientBundleError", () => {
   })
 })
 
+describe("shouldWipeCachesForChunkRecovery", () => {
+  it("never wipes when Electron reports offline", () => {
+    expect(shouldWipeCachesForChunkRecovery({ systemOnline: false, navigatorOnLine: true })).toBe(false)
+  })
+
+  it("wipes when Electron reports online even if navigator.onLine is false", () => {
+    expect(shouldWipeCachesForChunkRecovery({ systemOnline: true, navigatorOnLine: false })).toBe(true)
+  })
+
+  it("falls back to navigator.onLine when the shell probe is missing", () => {
+    expect(shouldWipeCachesForChunkRecovery({ navigatorOnLine: false })).toBe(false)
+    expect(shouldWipeCachesForChunkRecovery({ navigatorOnLine: true })).toBe(true)
+  })
+})
+
 describe("shouldRecoverStaleBundleEvent", () => {
   it("recovers chunk errors unless a recovery already ran", () => {
     expect(shouldRecoverStaleBundleEvent(new Error("Loading chunk 1 failed"), false)).toBe(true)
     expect(shouldRecoverStaleBundleEvent(new Error("Loading chunk 1 failed"), true)).toBe(false)
     expect(shouldRecoverStaleBundleEvent(new Error("Network request failed"), false)).toBe(false)
+  })
+
+  it("does not wipe caches while offline", () => {
+    expect(shouldRecoverStaleBundleEvent(new Error("Loading chunk 1 failed"), false, false)).toBe(false)
   })
 })
 
@@ -86,6 +107,11 @@ describe("didHybridCacheResetReload", () => {
     expect(didHybridCacheResetReload({ ok: false, reason: "timeout" })).toBe(false)
     expect(didHybridCacheResetReload(undefined)).toBe(false)
   })
+
+  it("does not keep wiping after Electron skipped Clear Cache while offline", () => {
+    expect(isHybridCacheResetSkippedOffline({ ok: false, reason: "offline" })).toBe(true)
+    expect(isHybridCacheResetSkippedOffline({ ok: false, reason: "busy" })).toBe(false)
+  })
 })
 
 describe("recoverFromChunkLoadError", () => {
@@ -107,6 +133,40 @@ describe("recoverFromChunkLoadError", () => {
     })
     expect(hasHybridSilentCacheReset({ resetCacheAndReload })).toBe(true)
     await recoverFromChunkLoadError()
+    expect(resetCacheAndReload).toHaveBeenCalledWith({ silent: true })
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it("does not Clear Cache when Electron reports the PC is offline", async () => {
+    const resetCacheAndReload = vi.fn(async () => ({ ok: true }))
+    const replace = vi.fn()
+    vi.stubGlobal("window", {
+      cmPosShell: { resetCacheAndReload, isSystemOnline: async () => false },
+      location: {
+        href: "https://x.example/pos",
+        origin: "https://x.example",
+        replace,
+      },
+    })
+    const did = await recoverFromChunkLoadError()
+    expect(did).toBe(false)
+    expect(resetCacheAndReload).not.toHaveBeenCalled()
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it("does not keep wiping when hybrid Clear Cache reports the PC is offline", async () => {
+    const resetCacheAndReload = vi.fn(async () => ({ ok: false, reason: "offline" }))
+    const replace = vi.fn()
+    vi.stubGlobal("window", {
+      cmPosShell: { resetCacheAndReload, isSystemOnline: async () => true },
+      location: {
+        href: "https://x.example/pos",
+        origin: "https://x.example",
+        replace,
+      },
+    })
+    const did = await recoverFromChunkLoadError()
+    expect(did).toBe(false)
     expect(resetCacheAndReload).toHaveBeenCalledWith({ silent: true })
     expect(replace).not.toHaveBeenCalled()
   })

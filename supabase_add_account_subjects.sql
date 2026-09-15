@@ -61,7 +61,7 @@ INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_o
   ('5320', '상여금', 'Bonus', 'expense', 'expense', 101),
   ('5330', '복리후생', 'Welfare', 'expense', 'expense', 102),
   ('5410', '임차료', 'Rent', 'expense', 'fixed', 110),
-  ('5420', '통신비', 'Utilities', 'expense', 'fixed', 111),
+  ('5420', '통신비', 'Communication', 'expense', 'fixed', 111),
   ('5430', '전기료', 'Electricity', 'expense', 'fixed', 112),
   ('5440', '수도광열비', 'Water/Gas', 'expense', 'fixed', 113),
   ('5450', '접대비', 'Entertainment', 'expense', 'expense', 120),

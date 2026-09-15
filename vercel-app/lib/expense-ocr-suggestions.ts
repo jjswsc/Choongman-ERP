@@ -44,7 +44,8 @@ export function suggestVendorFromHint(
 
 const MEMO_SUBJECT_KEYWORDS: { keys: RegExp; codes: string[] }[] = [
   { keys: /rent|lease|임대|ค่าเช่า/i, codes: ['5510', '5520'] },
-  { keys: /electric|water|utility|공과|ค่าไฟ|ค่าน้ำ|ค่าสาธารณูปโภค/i, codes: ['5520', '5510'] },
+  { keys: /electric|\butilities?\b|공과|ค่าไฟ|ไฟฟ้า|ค่าสาธารณูปโภค/i, codes: ['5430', '5440'] },
+  { keys: /water|ค่าน้ำ|ประปา/i, codes: ['5440', '5430'] },
   { keys: /delivery|grab|lineman|shopee|배달|5528/i, codes: ['5528'] },
   { keys: /card fee|카드.?수수료|5529/i, codes: ['5529'] },
   { keys: /repair|maint|수리|유지|ซ่อม|บำรุง/i, codes: ['5520', '5530'] },

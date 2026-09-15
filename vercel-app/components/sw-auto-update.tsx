@@ -36,7 +36,8 @@ function isAdminPath(p: string) {
  * POS·ERP 모두 탭을 오래 켜 두면 배포 후에도 옛 코드가 남을 수 있어 갱신이 필요하다.
  *
  * 동작: skipWaiting+clientsClaim 으로 새 sw.js 가 활성화되면 `controllerchange` 등으로 감지한다.
- *  - **Windows POS**: SW를 쓰지 않으므로 같은 페이지 HTML의 webpack 스탬프를 5분마다 비교한다.
+ *  - **Windows POS**: SW가 있으면 웹 POS와 같이 `controllerchange`로 갱신한다. SW가 아직 없으면
+ *    같은 페이지 HTML의 webpack 스탬프를 5분마다 비교한다. 배포 감지 후 캐시 비우기는 온라인일 때만.
  *  - **POS(PWA)**: 키오스크·전체 화면이라 탭이 숨겨지지 않으므로 감지 후 짧은 유예(8초) 뒤 자동 새로고침.
  *  - **ERP/관리자**: 탭 전환이 가능하므로 hidden 시 즉시 새로고침. 30초 내 hidden이 없으면 타이머 폴백.
  *  - **기타**: 탭이 숨겨질 때만 새로고침 (기존 동작).
@@ -51,7 +52,9 @@ export function SwAutoUpdate() {
     if (reloadingRef.current) return
     reloadingRef.current = true
     if (isPosPath(pathname)) {
-      void recoverFromChunkLoadError()
+      void recoverFromChunkLoadError().then((didReload) => {
+        if (!didReload) reloadingRef.current = false
+      })
       return
     }
     window.location.reload()
@@ -67,6 +70,7 @@ export function SwAutoUpdate() {
     let cancelled = false
     const check = () => {
       if (cancelled || !navigator.onLine) return
+      if (navigator.serviceWorker?.controller) return
       if (hasRecentChunkRecovery()) return
       const current = currentDocumentNextBuildStamp(document)
       if (!current) return
@@ -101,7 +105,6 @@ export function SwAutoUpdate() {
     if (typeof window === "undefined") return
     if (process.env.NODE_ENV !== "production") return
     if (isMemberPortalPath(pathname)) return
-    if (isCmPosHybridShell()) return
     const sw = navigator.serviceWorker
     if (!sw) return
 

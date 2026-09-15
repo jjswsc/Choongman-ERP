@@ -113,6 +113,7 @@ export async function GET(request: NextRequest) {
         systemSubtotal: 0,
         systemVat: 0,
         systemCashFromOrders: 0,
+        systemDepositCashDelta: 0,
         systemCryptoFromOrders: 0,
         tillNetForSettleDate: 0,
         linkpos: null,
@@ -134,6 +135,7 @@ export async function GET(request: NextRequest) {
           systemSubtotal: 0,
           systemVat: 0,
           systemCashFromOrders: 0,
+          systemDepositCashDelta: 0,
           tillNetForSettleDate: 0,
           linkpos: null,
           settlement: null,
@@ -293,6 +295,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    let systemDepositCashDelta = 0
     try {
       const ledgerRows = (await supabaseSelectFilterStrippingUnknownColumns(
         'pos_deposit_ledger',
@@ -301,7 +304,7 @@ export async function GET(request: NextRequest) {
         { select: 'kind,amount,tender', limit: 20000 },
         'getPosSettlementDepositLedger'
       )) as { kind?: string; amount?: number; tender?: string }[] | null
-      systemCashFromOrders += posDepositCashDrawerDelta(ledgerRows || [])
+      systemDepositCashDelta = posDepositCashDrawerDelta(ledgerRows || [])
     } catch (ledgerErr) {
       console.warn('getPosSettlement pos_deposit_ledger:', ledgerErr)
     }
@@ -474,6 +477,7 @@ export async function GET(request: NextRequest) {
       liveCash: systemCashFromOrders,
       savedCash: settlementRow?.cashAmt,
       closed: settlementRow?.closed,
+      depositCashDelta: systemDepositCashDelta,
     })
 
     return NextResponse.json(
@@ -482,6 +486,7 @@ export async function GET(request: NextRequest) {
         systemSubtotal,
         systemVat,
         systemCashFromOrders,
+        systemDepositCashDelta,
         systemCryptoFromOrders,
         tillNetForSettleDate,
         cashReconcile,
@@ -528,6 +533,7 @@ export async function GET(request: NextRequest) {
         systemSubtotal: 0,
         systemVat: 0,
         systemCashFromOrders: 0,
+        systemDepositCashDelta: 0,
         systemCryptoFromOrders: 0,
         tillNetForSettleDate: 0,
         linkpos: null,

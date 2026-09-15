@@ -11,12 +11,13 @@ import {
 } from "@/lib/pos-service-worker-policy"
 
 /**
- * Windows POS: Electron 디스크 캐시·offline.html로 오프라인 부팅한다.
- * Serwist를 같이 두면 배포 직후 옛 JS/새 HTML이 섞여 매장이 멈춘다.
+ * 부팅 시 호출하지 말 것. 인터넷이 끊긴 매장에서 SW·캐시를 지우면 흰 화면만 남는다.
+ * 직원이 온라인에서 수동 Clear Cache 할 때만 쓴다.
  */
 export async function disableHybridPosServiceWorker(): Promise<void> {
   if (!isCmPosHybridShell()) return
   if (typeof navigator === "undefined" || !navigator.serviceWorker) return
+  if (navigator.onLine === false) return
 
   let hadController = false
   try {

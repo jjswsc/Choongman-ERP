@@ -86,6 +86,7 @@ const EMPTY_SETTLEMENT_RESPONSE = (): PosSettlementResponse => ({
   systemSubtotal: 0,
   systemVat: 0,
   systemCashFromOrders: 0,
+  systemDepositCashDelta: 0,
   systemCryptoFromOrders: 0,
   tillNetForSettleDate: 0,
   linkpos: null,
@@ -201,6 +202,7 @@ export type PosSettlementResponse = {
   systemSubtotal?: number
   systemVat?: number
   systemCashFromOrders?: number
+  systemDepositCashDelta?: number
   systemCryptoFromOrders?: number
   tillNetForSettleDate?: number
   cashReconcile?: {

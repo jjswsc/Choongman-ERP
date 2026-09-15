@@ -953,6 +953,15 @@ export type PosDepositHistoryRow = {
   memberId?: number
 }
 
+export type PosDepositHeldHolder = {
+  memberId?: number
+  guestPhone: string
+  guestName: string
+  held: number
+  lastAt: string
+  tender: string
+}
+
 export async function getPosDepositHistory(params: {
   storeCode?: string
   memberId?: number
@@ -970,14 +979,21 @@ export async function getPosDepositHistory(params: {
   const data = (await res.json()) as {
     success?: boolean
     rows?: PosDepositHistoryRow[]
+    heldHolders?: PosDepositHeldHolder[]
     heldBalance?: number
     message?: string
   }
   if (!res.ok || data.success === false) {
-    return { rows: [] as PosDepositHistoryRow[], heldBalance: 0, message: data.message }
+    return {
+      rows: [] as PosDepositHistoryRow[],
+      heldHolders: [] as PosDepositHeldHolder[],
+      heldBalance: 0,
+      message: data.message,
+    }
   }
   return {
     rows: Array.isArray(data.rows) ? data.rows : [],
+    heldHolders: Array.isArray(data.heldHolders) ? data.heldHolders : [],
     heldBalance: Math.max(0, Number(data.heldBalance) || 0),
   }
 }

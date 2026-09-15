@@ -14,7 +14,15 @@ export function StaleBundleAutoRecover() {
   useEffect(() => {
     if (typeof window === "undefined") return
     const run = (payload: unknown) => {
-      if (!shouldRecoverStaleBundleEvent(payload, hasRecentChunkRecovery())) return
+      if (
+        !shouldRecoverStaleBundleEvent(
+          payload,
+          hasRecentChunkRecovery(),
+          typeof navigator === "undefined" ? true : navigator.onLine !== false
+        )
+      ) {
+        return
+      }
       void recoverFromChunkLoadError()
     }
     const onError = (event: ErrorEvent) => {

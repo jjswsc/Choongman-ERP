@@ -1,12 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { getPosDepositHistory, type PosDepositHistoryRow } from '@/lib/api-client'
+import {
+  getPosDepositHistory,
+  type PosDepositHeldHolder,
+  type PosDepositHistoryRow,
+} from '@/lib/api-client'
 
 const KIND_KEY: Record<string, string> = {
   receive: 'posDepositKindReceive',
@@ -20,15 +24,35 @@ export function PosAdvanceOrderPanel(props: {
   lang?: string
   storeCode?: string
   busy?: boolean
+  reloadToken?: number
   onReceive: () => void
   onRefund?: (holder: { memberId?: number; phone: string }) => void | Promise<void>
 }) {
-  const { t, storeCode, busy, onReceive, onRefund } = props
+  const { t, storeCode, busy, reloadToken, onReceive, onRefund } = props
   const [open, setOpen] = useState(false)
   const [phoneQuery, setPhoneQuery] = useState('')
   const [historyRows, setHistoryRows] = useState<PosDepositHistoryRow[]>([])
   const [held, setHeld] = useState(0)
   const [historyBusy, setHistoryBusy] = useState(false)
+  const [heldHolders, setHeldHolders] = useState<PosDepositHeldHolder[]>([])
+  const [heldBusy, setHeldBusy] = useState(false)
+
+  const loadHeld = useCallback(() => {
+    if (!storeCode) {
+      setHeldHolders([])
+      return
+    }
+    setHeldBusy(true)
+    void getPosDepositHistory({ storeCode, limit: 5000 })
+      .then((res) => {
+        setHeldHolders(res.heldHolders)
+      })
+      .finally(() => setHeldBusy(false))
+  }, [storeCode])
+
+  useEffect(() => {
+    loadHeld()
+  }, [loadHeld, reloadToken])
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -46,6 +70,11 @@ export function PosAdvanceOrderPanel(props: {
               )}
               <CardTitle className="text-sm font-semibold">
                 {t('posDepositQueueTitle') || 'จอง / มัดจำ'}
+                {heldHolders.length > 0 ? (
+                  <span className="ml-1.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+                    {heldHolders.length}
+                  </span>
+                ) : null}
               </CardTitle>
             </button>
           </CollapsibleTrigger>
@@ -59,6 +88,50 @@ export function PosAdvanceOrderPanel(props: {
               {t('posDepositUseLaterHint') ||
                 '메뉴 없이 예약금만 걸어 둡니다. 방문 때 회원 선택 또는 같은 전화로 결제하면 차감됩니다.'}
             </p>
+            {heldBusy && heldHolders.length === 0 ? (
+              <p className="text-xs text-muted-foreground">{t('loading') || '…'}</p>
+            ) : heldHolders.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t('posDepositQueueEmpty') || '아직 걸어 둔 예약금이 없습니다.'}
+              </p>
+            ) : (
+              <div className="rounded-md border bg-background p-2 text-xs space-y-1.5 max-h-44 overflow-auto">
+                {heldHolders.map((holder) => (
+                  <div
+                    key={`${holder.memberId || 0}-${holder.guestPhone}`}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">
+                        {holder.guestName || holder.guestPhone || (t('posDepositHeld') || 'มัดจำ')}
+                      </p>
+                      {holder.guestPhone ? (
+                        <p className="truncate tabular-nums text-muted-foreground">{holder.guestPhone}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className="tabular-nums font-semibold">{holder.held.toLocaleString()} ฿</span>
+                      {onRefund && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={busy}
+                          onClick={() => {
+                            void Promise.resolve(
+                              onRefund({ memberId: holder.memberId, phone: holder.guestPhone })
+                            ).then(() => loadHeld())
+                          }}
+                        >
+                          {t('posDepositRefund') || '환불'}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2">
               <Input
                 value={phoneQuery}
@@ -99,7 +172,7 @@ export function PosAdvanceOrderPanel(props: {
                       disabled={busy}
                       onClick={() => {
                         const memberId = historyRows.find((r) => Number(r.memberId) > 0)?.memberId
-                        void onRefund({ memberId, phone: phoneQuery })
+                        void Promise.resolve(onRefund({ memberId, phone: phoneQuery })).then(() => loadHeld())
                       }}
                     >
                       {t('posDepositRefund') || '환불'}

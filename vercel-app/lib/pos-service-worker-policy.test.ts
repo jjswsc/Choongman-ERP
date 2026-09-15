@@ -5,10 +5,11 @@ import {
 } from "@/lib/pos-service-worker-policy"
 
 describe("shouldRegisterPosServiceWorker", () => {
-  it("registers only production non-hybrid clients", () => {
+  it("registers production clients including Windows hybrid POS", () => {
     expect(shouldRegisterPosServiceWorker({ isProduction: true, isHybridShell: false })).toBe(true)
-    expect(shouldRegisterPosServiceWorker({ isProduction: true, isHybridShell: true })).toBe(false)
+    expect(shouldRegisterPosServiceWorker({ isProduction: true, isHybridShell: true })).toBe(true)
     expect(shouldRegisterPosServiceWorker({ isProduction: false, isHybridShell: false })).toBe(false)
+    expect(shouldRegisterPosServiceWorker({ isProduction: false, isHybridShell: true })).toBe(false)
   })
 })
 

@@ -39,9 +39,21 @@ export function shouldClearBuildRelatedCache(name: string): boolean {
   return k.includes("next-static") || k.includes("serwist") || k.includes("workbox")
 }
 
-export function shouldRecoverStaleBundleEvent(payload: unknown, recentRecovery: boolean): boolean {
+export function shouldRecoverStaleBundleEvent(payload: unknown, recentRecovery: boolean, online = true): boolean {
+  if (!online) return false
   if (recentRecovery) return false
   return isStaleClientBundleError(payload)
+}
+
+/** 인터넷이 없으면 캐시를 지우는 복구는 오프라인 POS를 더 못 쓰게 만든다. */
+export function shouldWipeCachesForChunkRecovery(opts: {
+  systemOnline?: boolean | null
+  navigatorOnLine?: boolean | null
+}): boolean {
+  if (opts.systemOnline === false) return false
+  if (opts.systemOnline === true) return true
+  if (opts.navigatorOnLine === false) return false
+  return true
 }
 
 export function hasRecentChunkRecovery(now = Date.now(), windowMs = 90_000): boolean {
@@ -94,20 +106,38 @@ export function didHybridCacheResetReload(result: unknown): boolean {
   return (result as { ok?: unknown }).ok === true
 }
 
-export async function recoverFromChunkLoadError(): Promise<void> {
-  markChunkRecovery()
+export function isHybridCacheResetSkippedOffline(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false
+  return (result as { reason?: unknown }).reason === "offline"
+}
+
+export async function recoverFromChunkLoadError(): Promise<boolean> {
   const shell = typeof window !== "undefined" ? window.cmPosShell : undefined
+  let systemOnline: boolean | null = null
+  if (typeof shell?.isSystemOnline === "function") {
+    try {
+      systemOnline = (await shell.isSystemOnline()) === true
+    } catch {
+      systemOnline = null
+    }
+  }
+  const navigatorOnLine = typeof navigator !== "undefined" ? navigator.onLine : null
+  if (!shouldWipeCachesForChunkRecovery({ systemOnline, navigatorOnLine })) return false
+
+  markChunkRecovery()
   if (hasHybridSilentCacheReset(shell)) {
     const result = await racePromiseWithTimeout(
       Promise.resolve().then(() => shell!.resetCacheAndReload!({ silent: true })),
       HYBRID_CACHE_RESET_WAIT_MS,
       { ok: false, reason: "timeout" }
     )
-    if (didHybridCacheResetReload(result)) return
+    if (didHybridCacheResetReload(result)) return true
+    if (isHybridCacheResetSkippedOffline(result)) return false
   }
   void unregisterServiceWorkers().catch(() => {})
   void deleteBuildRelatedCaches().catch(() => {})
   const next = new URL(window.location.href)
   next.searchParams.set(LOGIN_HARD_REFRESH_PARAM, String(Date.now()))
   window.location.replace(next.toString())
+  return true
 }

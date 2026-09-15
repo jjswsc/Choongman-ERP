@@ -137,6 +137,16 @@ describe('vendor + subject hints', () => {
     )
     expect(sid).toBe(1)
   })
+
+  it('maps Thai building utility memo to electricity not misc', () => {
+    const subjects = [
+      { id: 6, code: '5420', name: '통신비', nameEn: 'Communication' },
+      { id: 7, code: '5430', name: '전기료', nameEn: 'Electricity' },
+      { id: 20, code: '5520', name: '기타경비' },
+    ]
+    expect(suggestAccountSubjectId(subjects, { memo: 'ค่าแก๊ส,ค่าน้ำประปา,ค่าไฟฟ้า' })).toBe(7)
+    expect(suggestAccountSubjectId(subjects, { memo: 'Utilities charge' })).toBe(7)
+  })
 })
 
 describe('parseExpenseDocumentFromText integration', () => {

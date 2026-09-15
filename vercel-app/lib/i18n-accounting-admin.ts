@@ -93,6 +93,10 @@ const ACCOUNTING_ADMIN_KEYS = {
   recUnallocatedBankStoreTitle: '',
   recUnallocatedBankStoreHint: '',
   recUnallocatedBankOpenHint: '',
+  recUnallocatedBankCount: '',
+  recUnallocatedBankShowMore: '',
+  recUnallocatedBankShowLess: '',
+  recUnallocatedBankFromJulyHint: '',
   recLedgerNoPeriodWithUnallocated: '',
   recColReceiveCheckHint: '',
   recReceiveCheckBankLinkedHint: '',
@@ -370,8 +374,12 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   recUnallocatedBankStoreBadge: '미할당 통장 입금',
   recUnallocatedBankStoreTitle: '미배분 통장 입금 (조회 기간과 별개)',
   recUnallocatedBankStoreHint:
-    '매장 잔액에는 이미 반영됐지만 아래 인보이스에는 아직 배분되지 않은 입금입니다. 날짜가 아래 표와 달라도 정상입니다. 버튼을 누르면 그 입금이 들어 있는 통장으로 이동합니다.',
+    '매장 잔액에는 이미 반영됐지만 아래 인보이스에는 아직 배분되지 않은 입금입니다. 2026년 7월 1일 이후만 표시합니다. 최근 입금만 먼저 보이고, 이전이 있으면 「더 보기」로 펼칩니다. 버튼을 누르면 그 입금이 들어 있는 통장으로 이동합니다.',
   recUnallocatedBankOpenHint: '이 입금이 들어 있는 통장으로 이동합니다',
+  recUnallocatedBankCount: '{n}건',
+  recUnallocatedBankShowMore: '이전 내역 {n}건 더 보기',
+  recUnallocatedBankShowLess: '접기',
+  recUnallocatedBankFromJulyHint: '2026년 7월 이전 입금은 목록에 넣지 않습니다. 잔액에는 이미 반영되어 있습니다.',
   recLedgerNoPeriodWithUnallocated:
     '이 기간의 인보이스·거래는 없습니다. 위 버튼은 과거 미배분 통장 입금입니다.',
   recColReceiveCheckHint: '통장 수금은 「미수 연결」로 처리합니다. 체크는 통장 없는 수금(현금 등) 또는 연동 결과 표시용입니다.',
@@ -394,7 +402,7 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   helpSum_admin_receivable_payable:
     '매출처별 미수 잔액·수금·세금계산서. 통장 입금은 잔액에 먼저 반영되고, 노란 칸의 미배분 입금을 누르면 그 입금이 있는 통장에서 「미수 연결」합니다. 임원 차입은 「차입금」 탭(2150)이며 가맹 미수와 섞지 않습니다.',
   helpHow_admin_receivable_payable:
-    '① 매출처·기간·미수만을 정한 뒤 「검색」합니다. 매출처 칸을 열고 Ekkamai·Union처럼 이름을 치면 바로 나옵니다. 다른 메뉴로 갔다가 돌아와도 조회 조건이 유지됩니다.\n② 노란 칸의 미배분 통장 입금은 조회 기간과 무관합니다. 버튼을 누르면 그 입금이 들어 있는 통장으로 이동합니다. 통장에서 「미수 연결」하면 수금확인이 자동 반영됩니다.\n③ 수금확인 체크는 통장 없는 수금(현금 등)만 사용합니다. 미배분 입금이 있으면 체크가 막힙니다.\n④ 통장 연동된 행의 해제는 통장 거래에서 합니다.\n⑤ 세금계산서 인쇄: 미수는 Tax Invoice/Receipt, 수금 완료(수금확인·통장 연결)는 Receipt. 문서번호(IV.)는 같습니다.\n⑥ 세금계산서는 출고 1건 = 1장입니다. 원장에서 여러 출고를 선택해 한꺼번에 인쇄할 수 있고(한 번에 최대 50건, 인쇄 창은 하나), 한 장으로 합치지 않습니다. 수금확인 체크와는 별개입니다.',
+    '① 매출처·기간·미수만을 정한 뒤 「검색」합니다. 매출처 칸을 열고 Ekkamai·Union처럼 이름을 치면 바로 나옵니다. 다른 메뉴로 갔다가 돌아와도 조회 조건이 유지됩니다.\n② 노란 칸의 미배분 통장 입금은 조회 기간과 무관합니다. 2026년 7월 1일 이후만 보이고, 최근 입금만 먼저 나옵니다. 버튼을 누르면 그 입금이 들어 있는 통장으로 이동합니다. 통장에서 「미수 연결」하면 수금확인이 자동 반영됩니다.\n③ 수금확인 체크는 통장 없는 수금(현금 등)만 사용합니다. 미배분 입금이 있으면 체크가 막힙니다.\n④ 통장 연동된 행의 해제는 통장 거래에서 합니다.\n⑤ 세금계산서 인쇄: 미수는 Tax Invoice/Receipt, 수금 완료(수금확인·통장 연결)는 Receipt. 문서번호(IV.)는 같습니다.\n⑥ 세금계산서는 출고 1건 = 1장입니다. 원장에서 여러 출고를 선택해 한꺼번에 인쇄할 수 있고(한 번에 최대 50건, 인쇄 창은 하나), 한 장으로 합치지 않습니다. 수금확인 체크와는 별개입니다.',
   cardManagementBankLinkTitle: '통장 카드대금 연동',
   cardManagementBankLinkHint: '통장 계좌·기간·금액으로 미연결 출금을 찾아 카드에 연결합니다. 통장은 비용으로만 두고, 계정별 배분의 계정과목은 손익계산서에 반영됩니다.',
   cardManagementBankLinkQuery: '미연결 출금 조회',
@@ -639,8 +647,12 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   recUnallocatedBankStoreBadge: 'Unallocated bank',
   recUnallocatedBankStoreTitle: 'Unallocated bank deposits (not limited to search dates)',
   recUnallocatedBankStoreHint:
-    'These deposits already reduced the store balance but are not matched to the invoices below. Different dates from the table are expected. The button opens the bank account that actually received this deposit.',
+    'These deposits already reduced the store balance but are not matched to the invoices below. Only deposits from 1 Jul 2026 are listed. The latest deposits are shown first; use Show more for older ones. The button opens the bank account that actually received this deposit.',
   recUnallocatedBankOpenHint: 'Opens the bank account that holds this deposit',
+  recUnallocatedBankCount: '{n} items',
+  recUnallocatedBankShowMore: 'Show {n} older deposits',
+  recUnallocatedBankShowLess: 'Show less',
+  recUnallocatedBankFromJulyHint: 'Deposits before July 2026 are hidden from this list. They already reduced the store balance.',
   recLedgerNoPeriodWithUnallocated:
     'No invoices in this period. The buttons above are older unallocated bank deposits.',
   recColReceiveCheckHint: 'Bank collections: use Link receivable. Checkboxes are for cash (no bank) or read-only linked results.',
@@ -663,7 +675,7 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   helpSum_admin_receivable_payable:
     'A/R by customer: balances, collections, tax invoices. Bank deposits hit the store balance first; tap a yellow unallocated deposit to open that deposit’s bank account and use Link receivable. Officer borrowings are the Borrowings tab (2150), not franchise A/R.',
   helpHow_admin_receivable_payable:
-    '① Set customer, dates, and filters, then Search. Open the customer list and type Ekkamai or Union to find a store. Filters stay when you leave and return.\n② Yellow unallocated deposits are independent of the search period. The button opens the bank account that actually received that deposit. Link receivable there; checkboxes update automatically.\n③ Use the checkbox only for cash (no bank row). It is blocked while unallocated bank deposits exist.\n④ Unlink bank-linked rows from Bank transactions.\n⑤ Tax print title: unpaid = Tax Invoice/Receipt; after collection (checkbox or bank link) = Receipt. Document No (IV.) stays the same.\n⑥ One outbound = one tax invoice. In ledger view you can select several rows and print them together (up to 50, one print window) — they stay separate documents. This is not the collection checkbox.',
+    '① Set customer, dates, and filters, then Search. Open the customer list and type Ekkamai or Union to find a store. Filters stay when you leave and return.\n② Yellow unallocated deposits are independent of the search period. Only deposits from 1 Jul 2026 are listed; the latest ones show first. The button opens the bank account that actually received that deposit. Link receivable there; checkboxes update automatically.\n③ Use the checkbox only for cash (no bank row). It is blocked while unallocated bank deposits exist.\n④ Unlink bank-linked rows from Bank transactions.\n⑤ Tax print title: unpaid = Tax Invoice/Receipt; after collection (checkbox or bank link) = Receipt. Document No (IV.) stays the same.\n⑥ One outbound = one tax invoice. In ledger view you can select several rows and print them together (up to 50, one print window) — they stay separate documents. This is not the collection checkbox.',
   cardManagementBankLinkTitle: 'Link bank card bill payments',
   cardManagementBankLinkHint: 'Find unlinked withdrawals by account, period, and amount, then link them to a card. The bank row is Expense only; allocation accounts go to the income statement.',
   cardManagementBankLinkQuery: 'Find unlinked withdrawals',
@@ -908,8 +920,12 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   recUnallocatedBankStoreBadge: 'ฝากธนาคารคงค้าง',
   recUnallocatedBankStoreTitle: 'เงินฝากที่ยังไม่จัดสรร (ไม่จำกัดช่วงค้นหา)',
   recUnallocatedBankStoreHint:
-    'ยอดร้านลดแล้วแต่ยังไม่จับคู่ใบแจ้งหนี้ด้านล่าง วันที่ต่างจากตารางด้านล่างถือว่าปกติ กดปุ่มเพื่อเปิดบัญชีธนาคารที่รับเงินรายการนี้จริง',
+    'ยอดร้านลดแล้วแต่ยังไม่จับคู่ใบแจ้งหนี้ด้านล่าง แสดงเฉพาะตั้งแต่ 1 ก.ค. 2026 รายการล่าสุดขึ้นก่อน รายการเก่ายก 「ดูเพิ่ม」 กดปุ่มเพื่อเปิดบัญชีธนาคารที่รับเงินรายการนี้จริงครับ',
   recUnallocatedBankOpenHint: 'เปิดบัญชีธนาคารที่มียอดฝากรายการนี้',
+  recUnallocatedBankCount: '{n} รายการ',
+  recUnallocatedBankShowMore: 'ดูรายการก่อนหน้าอีก {n} รายการ',
+  recUnallocatedBankShowLess: 'ย่อ',
+  recUnallocatedBankFromJulyHint: 'รายการก่อน ก.ค. 2026 ไม่แสดงในรายการนี้ แต่ยอดร้านลดไปแล้วครับ',
   recLedgerNoPeriodWithUnallocated:
     'ไม่มีใบแจ้งหนี้ในช่วงนี้ ปุ่มด้านบนเป็นเงินฝากเก่าที่ยังไม่จัดสรร',
   recColReceiveCheckHint: 'รับเงินผ่านธนาคาร: ใช้เชื่อมลูกหนี้ ช่องติ๊กสำหรับเงินสดหรือแสดงผลที่เชื่อมแล้ว',
@@ -932,7 +948,7 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   helpSum_admin_receivable_payable:
     'ลูกหนี้ตามร้าน: ยอดคงเหลือ รับเงิน ใบกำกับ เงินฝากเข้ายอดร้านก่อน กดปุ่มเหลืองเพื่อเปิดบัญชีธนาคารของรายการนั้นแล้วเชื่อมลูกหนี้ เงินกู้จากผู้บริหารอยู่แท็บเงินกู้ (2150) ไม่ปนกับลูกหนี้แฟรนไชส์ครับ',
   helpHow_admin_receivable_payable:
-    '① เลือกลูกค้า วันที่ แล้วค้นหา เปิดช่องลูกค้าแล้วพิมพ์ชื่อสาขา เช่น Ekkamai, Union ได้เลยครับ กลับจากเมนูอื่นแล้วยังคงเงื่อนไข\n② เงินฝากที่ยังไม่จัดสรรไม่จำกัดช่วงค้นหา กดปุ่มเพื่อเปิดบัญชีที่รับเงินจริง แล้วเชื่อมลูกหนี้ที่ธนาคาร\n③ ช่องติ๊กใช้เงินสดเท่านั้น ถ้ามีเงินฝากค้างจะติ๊กไม่ได้\n④ ยกเลิกการเชื่อมที่หน้าธุรกรรมธนาคาร\n⑤ พิมพ์บิล: ยังไม่รับเงินเป็น Tax Invoice/Receipt รับเงินแล้ว (ติ๊กหรือเชื่อมธนาคาร) เป็น Receipt เลขที่เอกสาร IV. เหมือนเดิมครับ\n⑥ ใบกำกับภาษีคือ 1 ใบต่อ 1 รายการส่งออก เลือกหลายรายการในมุมมองสมุดบัญชีเพื่อพิมพ์พร้อมกันได้ (ครั้งละไม่เกิน 50 รายการ เปิดหน้าต่างพิมพ์หน้าเดียว) ไม่รวมเป็นใบเดียว ช่องติ๊กนี้ไม่ใช่ช่องยืนยันรับเงินครับ',
+    '① เลือกลูกค้า วันที่ แล้วค้นหา เปิดช่องลูกค้าแล้วพิมพ์ชื่อสาขา เช่น Ekkamai, Union ได้เลยครับ กลับจากเมนูอื่นแล้วยังคงเงื่อนไข\n② เงินฝากที่ยังไม่จัดสรรไม่จำกัดช่วงค้นหา แสดงเฉพาะตั้งแต่ 1 ก.ค. 2026 รายการล่าสุดขึ้นก่อน กดปุ่มเพื่อเปิดบัญชีที่รับเงินจริง แล้วเชื่อมลูกหนี้ที่ธนาคารครับ\n③ ช่องติ๊กใช้เงินสดเท่านั้น ถ้ามีเงินฝากค้างจะติ๊กไม่ได้\n④ ยกเลิกการเชื่อมที่หน้าธุรกรรมธนาคาร\n⑤ พิมพ์บิล: ยังไม่รับเงินเป็น Tax Invoice/Receipt รับเงินแล้ว (ติ๊กหรือเชื่อมธนาคาร) เป็น Receipt เลขที่เอกสาร IV. เหมือนเดิมครับ\n⑥ ใบกำกับภาษีคือ 1 ใบต่อ 1 รายการส่งออก เลือกหลายรายการในมุมมองสมุดบัญชีเพื่อพิมพ์พร้อมกันได้ (ครั้งละไม่เกิน 50 รายการ เปิดหน้าต่างพิมพ์หน้าเดียว) ไม่รวมเป็นใบเดียว ช่องติ๊กนี้ไม่ใช่ช่องยืนยันรับเงินครับ',
   cardManagementBankLinkTitle: 'เชื่อมค่าบัตรจากธนาคาร',
   cardManagementBankLinkHint: 'ค้นหารายการถอนที่ยังไม่เชื่อมด้วยบัญชี ช่วงวันที่ และจำนวนเงิน แล้วเชื่อมกับบัตรครับ รายการธนาคารเป็นค่าใช้จ่ายอย่างเดียว หมวดบัญชีจากการแบ่งไปที่งบกำไรขาดทุนครับ',
   cardManagementNoUnlinkedBank: 'ไม่มีรายการถอนที่ตรงช่วงวันที่และจำนวนเงินครับ ตรวจบัญชีธนาคารและเงื่อนไขการค้นหา',

@@ -49,6 +49,7 @@ import {
   shouldApplyAutoCardBreakdown,
   sumSettlementBreakdownAmounts,
 } from '@/lib/pos-settlement-card-amount'
+import { posExpectedDrawerCash } from '@/lib/pos-deposit-domain'
 import { DEFAULT_OTHER_KEYS, DEFAULT_QR_KEYS } from '@/lib/pos-payment-default-keys'
 import {
   dispatchPosBusinessOpenUpdated,
@@ -295,6 +296,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [systemTotal, setSystemTotal] = React.useState(0)
   /** 완료 주문 `payment_cash` 합계 — 마감 결산에서 현금 줄은 이 값만 사용(수정 불가) */
   const [systemCashFromOrders, setSystemCashFromOrders] = React.useState(0)
+  const [systemDepositCashDelta, setSystemDepositCashDelta] = React.useState(0)
   const [systemCryptoFromOrders, setSystemCryptoFromOrders] = React.useState(0)
   const [cryptoAmt, setCryptoAmt] = React.useState('')
   const [cashReconcileBanner, setCashReconcileBanner] = React.useState<'mismatch' | null>(null)
@@ -586,6 +588,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           systemSubtotal: sub,
           systemVat: vat,
           systemCashFromOrders: cashFromOrdersRaw,
+          systemDepositCashDelta: depositCashRaw,
           systemCryptoFromOrders: cryptoFromOrdersRaw,
           tillNetForSettleDate: tillNetRaw,
           cashReconcile,
@@ -594,8 +597,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           closeRun: nextCloseRun,
         } = main
         const autoCashTotal = Number(cashFromOrdersRaw ?? 0) || 0
+        const autoDepositCash = Number(depositCashRaw ?? 0) || 0
         const autoCryptoTotal = Number(cryptoFromOrdersRaw ?? 0) || 0
         setSystemCashFromOrders(autoCashTotal)
+        setSystemDepositCashDelta(autoDepositCash)
         setSystemCryptoFromOrders(autoCryptoTotal)
         if (cashReconcile?.mismatch) {
           setCashReconcileBanner('mismatch')
@@ -984,7 +989,12 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const savedCrypto = Number(settlement?.cryptoAmt ?? 0)
   const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedDineIn + savedOther + savedCrypto
   const tillNetAppliedToDrawer = openMode ? 0 : tillNetForSettleDate
-  const expectedDrawerByOpenAndCash = (openingCashActual ?? 0) + cashAmtNum + tillNetAppliedToDrawer
+  const expectedDrawerByOpenAndCash = posExpectedDrawerCash({
+    opening: openingCashActual ?? 0,
+    posCashSales: cashAmtNum,
+    depositCashDelta: openMode ? 0 : systemDepositCashDelta,
+    tillNet: tillNetAppliedToDrawer,
+  })
   /** 권종 실사 − 「예상 돈통 시제」(시작+당일 현금 매출±시재 입출금 순액). Till 순액을 빼면 출금 분만큼 차이가 틀어짐 */
   const drawerDenomDeltaVsPosCash =
     openingCashActual != null ? cashActualNum - expectedDrawerByOpenAndCash : null
@@ -1074,6 +1084,7 @@ ${amt(t('posSystemVat') || 'VAT (7%)', formatBahtNum(systemVat))}
 ${amt(t('posSystemTotal') || '시스템 매출', formatBahtNum(systemTotal), ' receipt-total')}
 <div class="receipt-divider"></div>
 ${amt(t('posCash') || '현금', formatBahtNum(cashAmtNum))}
+${Math.abs(systemDepositCashDelta) > 0.005 ? amt(t('posTodayDepositCash') || 'มัดจำ 현금', `${systemDepositCashDelta > 0 ? '+' : ''}${formatBahtNum(systemDepositCashDelta)}`) : ''}
 ${amt(t('posCashActual') || '돈통 시재', formatBahtNum(cashActualNum))}
 ${amt(t('posCard') || '카드', formatBahtNum(cardNum))}
 ${cardBreakdownPrintRows}
@@ -1816,10 +1827,17 @@ ${footerStamp}
                   <CollapsibleContent>
                     <p className="mt-2 pl-2 text-[10px] leading-snug text-muted-foreground border-t pt-2">
                       {t('posSettlementCashFromPosReadOnly') ||
-                        '완료 주문의 현금 결제 합계입니다. 결제 화면과 맞추기 위해 수정할 수 없습니다.'}
+                        '완료 주문의 현금 결제 합계입니다. 예약금(มัดจำ)은 아래 별도 줄입니다.'}
                     </p>
                   </CollapsibleContent>
                 </Collapsible>
+
+                {Math.abs(systemDepositCashDelta) > 0.005 ? (
+                  <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5 dark:border-amber-900/60 dark:bg-amber-950/30">
+                    <span className="font-medium">{t('posTodayDepositCash') || 'มัดจำ 현금'}</span>
+                    <span className="tabular-nums font-semibold">{fmtSignedBaht(systemDepositCashDelta)}</span>
+                  </div>
+                ) : null}
 
                 {/* 카드: 큰 제목 + 펼치기/접기 */}
                 <Collapsible open={cardExpanded} onOpenChange={setCardExpanded}>
@@ -2221,6 +2239,14 @@ ${footerStamp}
                   <span className="text-muted-foreground">{t('posTodayCashTotal') || '당일 현금 총액'}</span>
                   <span className="tabular-nums">{formatBahtNum(cashAmtNum)} ฿</span>
                 </div>
+                {Math.abs(systemDepositCashDelta) > 0.005 ? (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground shrink">
+                      {t('posTodayDepositCash') || 'มัดจำ 현금'}
+                    </span>
+                    <span className="tabular-nums shrink-0 font-medium">{fmtSignedBaht(systemDepositCashDelta)}</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between gap-3">
                   <span className="text-muted-foreground shrink">
                     {t('posSettlementTillNetLine') || 'Till in/out net (transactions dated close day)'}

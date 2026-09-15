@@ -879,15 +879,16 @@ export const I18N_POS_KO: Record<string, string> = {
     posCashActual: '돈통 시제',
     posCashActualDenomGrandTotal: '돈통 시제 합계',
     posMorningOpeningFloat: '아침 시작 시제',
-    posTodayCashTotal: '당일 현금 총액',
+    posTodayCashTotal: '당일 현금 매출',
+    posTodayDepositCash: '당일 예약금 현금',
     posSettlementTillNetLine: '시재 입출금 순액 (거래일=결산일)',
     posSettlementInputTotalsScopeHint:
       '「입력 합계」는 결제 수단별 금액으로 POS 매출과 맞추는 줄입니다. 실제 서랍 현금 확인은 카드 아래쪽 「돈통 차이」를 보세요.',
     posSettlementDrawerVarianceBadge: '돈통 점검',
     posSettlementDrawerVarianceHint:
-      '(권종 합 − 아침 시작 시제 − 당일 POS 현금). 아침에 넣어 둔 권종이 그대로면 「당일 현금 총액」만큼 권종을 늘렸을 때 0 근처가 됩니다. 시재 출금까지 반영하려면 아래 「예상 돈통 시제」에 맞춰 줄이거나 전체 재실사하세요.',
+      '(권종 합 − 아침 시작 시제 − 당일 POS 현금 − 예약금 현금 ± 시재). 예약금(มัดจำ)은 매출 현금과 다른 줄입니다. 시재 출금까지 반영하려면 「예상 돈통 시제」에 맞추세요.',
     posDrawerVarianceFocusTitle: '돈통 차이 (증분 − 당일 현금)',
-    posExpectedDrawerCash: '예상 돈통 시제(시작+현금±시재)',
+    posExpectedDrawerCash: '예상 돈통 시제(시작+매출현금+예약금±시재)',
     posDrawerCashDiff: '돈통 차이(현재-예상)',
     posTillDayNetMovement: '당일 입출금 순액',
     posTillDayNetMovementHint:
@@ -2082,7 +2083,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posSettlementCardEdcDiffConfirm:
       '카드 브랜드 합이 POS 주문 카드와 다릅니다.\n브랜드(EDC): {brand} ฿\nPOS 주문: {pos} ฿\n차액: {diff} ฿\n이 금액으로 마감할까요?',
     posSettlementCashFromPosReadOnly:
-      '완료 주문의 현금 결제 합계입니다. POS 결제 수단과 맞추기 위해 이 금액은 수정할 수 없습니다.',
+      '완료 주문의 현금 결제 합계입니다. 예약금(มัดจำ)은 별도 줄이며 여기 포함되지 않습니다.',
     posSettlementCashReconciledBanner:
       '결제 정정·주문 변경으로 결산 현금이 주문 합계와 달라 자동으로 맞췄습니다. ERP 매출(Payment/Card) 현금도 같은 금액입니다.',
     posSettlementCashMismatchBanner:
@@ -4439,15 +4440,16 @@ export const I18N_POS_EN: Record<string, string> = {
     posCashActual: 'Cash in drawer',
     posCashActualDenomGrandTotal: 'Counted cash in drawer (total)',
     posMorningOpeningFloat: 'Morning opening float',
-    posTodayCashTotal: 'Today cash total',
+    posTodayCashTotal: 'Today POS cash sales',
+    posTodayDepositCash: 'Today deposit cash',
     posSettlementTillNetLine: 'Till net (transactions dated close day)',
     posSettlementDrawerVarianceBadge: 'Drawer check',
     posSettlementDrawerVarianceHint:
-      '(Denom total − opening float − POS cash sales for the day.) If denominations still reflect opening counts, bump them by roughly today’s POS cash until this nears zero. For payouts, reconcile against Expected drawer below or recount.',
+      '(Denom total − opening float − POS cash sales − deposit cash ± till.) Reservation deposits (มัดจำ) are a separate line, not extra sales. For payouts, reconcile against Expected drawer below.',
     posDrawerVarianceFocusTitle: 'Drawer variance (Δ from open − POS cash)',
     posSettlementInputTotalsScopeHint:
       '"Input total" reconciles tenders vs POS sales. For physical drawer, use Drawer variance below.',
-    posExpectedDrawerCash: 'Expected drawer cash (opening + cash ± till in/out)',
+    posExpectedDrawerCash: 'Expected drawer cash (opening + POS cash + deposit ± till)',
     posDrawerCashDiff: 'Drawer variance (actual - expected)',
     posTillDayNetMovement: 'Net till movement today',
     posTillDayNetMovementHint:
@@ -5624,7 +5626,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posSettlementCardEdcDiffConfirm:
       'Card brand total does not match POS card orders.\nBrands (EDC): {brand} ฿\nPOS orders: {pos} ฿\nDifference: {diff} ฿\nClose with this amount?',
     posSettlementCashFromPosReadOnly:
-      'Total cash from completed orders. This amount cannot be edited so it stays aligned with POS.',
+      'Total cash from completed orders. Reservation deposits are a separate line and are not included here.',
     posSettlementCashReconciledBanner:
       'Settlement cash was out of sync with completed orders (e.g. after a payment correction) and was updated automatically. ERP Payment/Card cash uses the same amount.',
     posSettlementCashMismatchBanner:
@@ -7727,7 +7729,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posSettlementCardEdcDiffConfirm:
       'ยอดแบรนด์บัตรไม่ตรงกับยอดบัตรในออเดอร์ POS ครับ\nแบรนด์ (EDC): {brand} ฿\nออเดอร์ POS: {pos} ฿\nส่วนต่าง: {diff} ฿\nจะปิดยอดด้วยตัวเลขนี้ไหมครับ',
     posSettlementCashFromPosReadOnly:
-      'ยอดเงินสดจากออเดอร์ที่เสร็จแล้ว ตัวเลขนี้แก้ไม่ได้เพื่อให้ตรงกับ POS',
+      'ยอดเงินสดจากออเดอร์ที่เสร็จแล้ว มัดจำอยู่บรรทัดแยก ไม่รวมในตัวเลขนี้ครับ',
     posSettlementCashReconciledBanner:
       'ยอดเงินสดในปิดยอดไม่ตรงกับออเดอร์ (เช่น หลังแก้ช่องทางชำระ) ระบบปรับให้อัตโนมัติแล้ว ยอดเงินสดใน ERP Payment/Card ใช้ตัวเลขเดียวกันครับ',
     posSettlementCashMismatchBanner:
@@ -8155,15 +8157,16 @@ export const I18N_POS_TH: Record<string, string> = {
     posCashActual: 'เงินสดจริงในลิ้นชัก',
     posCashActualDenomGrandTotal: 'ยอดรวมนับธนบัตรในลิ้นชัก',
     posMorningOpeningFloat: 'เงินตั้งต้นตอนเปิดร้านเช้า',
-    posTodayCashTotal: 'ยอดเงินสดรวมของวันนี้',
+    posTodayCashTotal: 'ยอดขายเงินสดวันนี้',
+    posTodayDepositCash: 'เงินสดมัดจำวันนี้',
     posSettlementTillNetLine: 'ยอดรับ–จ่ายลิ้นชักสุทธิ (วันรายการ = วันปิดยอด)',
     posSettlementInputTotalsScopeHint:
       '「ยอดกรอกรวม» ใช้เทียบช่องทางชำระกับยอด POS เงินสดในลิ้นชักจริงให้ดูที่ 「ส่วนต่างลิ้นชัก」 ในกล่องสีฟ้าด้านล่าง',
     posSettlementDrawerVarianceBadge: 'เช็คลิ้นชัก',
     posSettlementDrawerVarianceHint:
-      '(ยอดรวมการนับ − ยอดตั้งต้น − ขายสดจาก POS). ถ้ายังเป็นแบบเดิมจากเช้า ให้เพิ่มจำนวนธนบัตร/เหรียญเล็กน้อยจนเป็นลบเข้าระบบ ≈ 「ยอดเงินสดของวัน» เรื่องถอนส่งธนาคารใช้บรรทัด 「เงินสดคาดการณ์」 หรือนับใหม่ให้ครบ',
+      '(ยอดนับ − เงินตั้งต้น − ขายสด POS − เงินสดมัดจำ ± รับจ่ายลิ้นชัก) มัดจำไม่ใช่ยอดขายเกิน ให้ดูบรรทัดแยก ถ้าถอนเงินให้เทียบกับ「เงินสดคาดการณ์」ครับ',
     posDrawerVarianceFocusTitle: 'ส่วนต่างลิ้นชัก (เพิ่มจากตั้งต้น − ยอดขาย)',
-    posExpectedDrawerCash: 'เงินสดคาดการณ์ (ตั้งต้น + เงินสด ± ส่งเข้า/ถอน)',
+    posExpectedDrawerCash: 'เงินสดคาดการณ์ (ตั้งต้น + ขายสด + มัดจำ ± รับจ่ายลิ้นชัก)',
     posTillDayNetMovement: 'ยอดรับ–จ่ายลิ้นชักของวันนี้',
     posTillDayNetMovementHint:
       'ยอดตามที่บันทึกในวันที่เลือก ไม่ใช่สดในลิ้นชักจากการปิดยอด และอาจไม่เท่ากับยอดสะสมตั้งแต่ต้นของเมนูนี้',
@@ -10422,7 +10425,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posDepositCancelHours: 'เวลายกเลิก (ชั่วโมง)',
     posDepositSave: 'บันทึกมัดจำ',
     posDepositQueueTitle: 'จอง / มัดจำ',
-    posDepositQueueEmpty: 'ยังไม่มีออเดอร์จองครับ',
+    posDepositQueueEmpty: 'ยังไม่มีมัดจำคงเหลือครับ',
     posDepositHistoryPhonePh: 'ค้นประวัติด้วยเบอร์โทร',
     posDepositHistorySearch: 'ค้นหา',
     posDepositHeld: 'ยอดมัดจำคงเหลือ',
@@ -14365,6 +14368,7 @@ export const I18N_POS_LA: Record<string, string> = {
     posCashActual: 'ເງິນສົດຈິງໃນລິ້ນຊັກ',
     posMorningOpeningFloat: 'ເງິນຕັ້ງຕົ້ນຕອນເປີດຮ້ານເຊົ້າ',
     posTodayCashTotal: 'ຍອດເງິນສົດລວມຂອງມື້ນີ້',
+    posTodayDepositCash: 'Today deposit cash',
     posExpectedDrawerCash: 'ເງິນສົດຄາດຄະເນໃນລິ້ນຊັກ (ຕັ້ງຕົ້ນ+ເງິນສົດ)',
     posDrawerCashDiff: 'ສ່ວນຕ່າງລິ້ນຊັກ (ຈິງ-ຄາດຄະເນ)',
     posDifference: 'ຜົນຕ່າງ',
@@ -16761,6 +16765,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posCashActual: 'សាច់ប្រាក់ក្នុងថត',
     posMorningOpeningFloat: 'សាច់ប្រាក់ដើមពេលបើកព្រឹក',
     posTodayCashTotal: 'សាច់ប្រាក់សរុបប្រចាំថ្ងៃ',
+    posTodayDepositCash: 'Today deposit cash',
     posExpectedDrawerCash: 'សាច់ប្រាក់រំពឹងក្នុងថត (ដើម+សាច់ប្រាក់ថ្ងៃនេះ)',
     posDrawerCashDiff: 'ភាពខុសក្នុងថត (ពិត-រំពឹង)',
     posDifference: 'ភាពខុសគ្នា',
@@ -20355,6 +20360,7 @@ export const I18N_POS_VI: Record<string, string> = {
     posCashActual: 'Tiền mặt thực tế',
     posMorningOpeningFloat: 'Tiền quỹ đầu ca buổi sáng',
     posTodayCashTotal: 'Tổng tiền mặt trong ngày',
+    posTodayDepositCash: 'Today deposit cash',
     posExpectedDrawerCash: 'Tiền ngăn kéo dự kiến (đầu ca + tiền mặt)',
     posDrawerCashDiff: 'Chênh lệch ngăn kéo (thực tế - dự kiến)',
     posDifference: 'Chênh lệch',
@@ -23447,6 +23453,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posCashActual: 'Tunai sebenar dalam laci',
     posMorningOpeningFloat: 'Tunai permulaan waktu pagi',
     posTodayCashTotal: 'Jumlah tunai hari ini',
+    posTodayDepositCash: 'Today deposit cash',
     posExpectedDrawerCash: 'Tunai laci jangkaan (permulaan + tunai)',
     posDrawerCashDiff: 'Perbezaan laci (sebenar - jangkaan)',
     posDifference: 'Perbezaan',

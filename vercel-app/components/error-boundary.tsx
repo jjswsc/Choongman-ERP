@@ -6,6 +6,7 @@ import {
   hasRecentChunkRecovery,
   isStaleClientBundleError,
   recoverFromChunkLoadError,
+  shouldWipeCachesForChunkRecovery,
 } from "@/lib/chunk-load-recovery"
 
 interface Props {
@@ -49,7 +50,18 @@ export class ErrorBoundary extends React.Component<Props, State> {
     }, CHUNK_RECOVERY_UI_WATCHDOG_MS)
   }
 
-  startStaleBundleRecovery() {
+  async startStaleBundleRecovery() {
+    const shell = typeof window !== "undefined" ? window.cmPosShell : undefined
+    let systemOnline: boolean | null = null
+    if (typeof shell?.isSystemOnline === "function") {
+      try {
+        systemOnline = (await shell.isSystemOnline()) === true
+      } catch {
+        systemOnline = null
+      }
+    }
+    const navigatorOnLine = typeof navigator !== "undefined" ? navigator.onLine : null
+    if (!shouldWipeCachesForChunkRecovery({ systemOnline, navigatorOnLine })) return
     this.setState({ recovering: true })
     this.armRecoveryWatchdog()
     void recoverFromChunkLoadError()

@@ -11,7 +11,9 @@ import {
   shouldExcludeAdvanceFromLiveFloor,
   shouldExcludeAdvanceFromSalesAggregate,
   posDepositCashDrawerDelta,
+  posExpectedDrawerCash,
   posOrderDepositAppliedForReceipt,
+  summarizePosDepositHeldHolders,
 } from '@/lib/pos-deposit-domain'
 
 describe('pos-deposit-domain', () => {
@@ -148,6 +150,52 @@ describe('pos-deposit-domain', () => {
         { kind: 'apply', amount: 200, tender: 'cash' },
       ])
     ).toBe(250)
+  })
+
+  it('lets same-day cash refunds reduce expected drawer below sales cash', () => {
+    expect(posDepositCashDrawerDelta([{ kind: 'refund', amount: 5000, tender: 'cash' }])).toBe(-5000)
+    expect(
+      posExpectedDrawerCash({
+        opening: 11411,
+        posCashSales: 2393,
+        depositCashDelta: -5000,
+        tillNet: -2393,
+      })
+    ).toBe(6411)
+  })
+
+  it('lists only holders who still have a deposit balance', () => {
+    const holders = summarizePosDepositHeldHolders([
+      {
+        member_id: 6832,
+        guest_phone: '0924871595',
+        guest_name: 'LeeLy',
+        kind: 'receive',
+        amount: 5000,
+        created_at: '2026-09-03T10:50:00Z',
+        tender: 'cash',
+      },
+      {
+        member_id: 6832,
+        guest_phone: '0924871595',
+        guest_name: 'LeeLy',
+        kind: 'refund',
+        amount: 5000,
+        created_at: '2026-09-04T11:02:00Z',
+        tender: 'cash',
+      },
+      {
+        guest_phone: '0944738696',
+        guest_name: 'Fasiah',
+        kind: 'receive',
+        amount: 2000,
+        created_at: '2026-09-03T11:07:00Z',
+        tender: 'transfer',
+      },
+    ])
+    expect(holders).toHaveLength(1)
+    expect(holders[0]?.guestPhone).toBe('0944738696')
+    expect(holders[0]?.held).toBe(2000)
   })
 
   it('infers receipt deposit from remaining payment after apply', () => {

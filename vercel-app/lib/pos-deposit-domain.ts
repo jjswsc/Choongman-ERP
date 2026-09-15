@@ -21,6 +21,10 @@ function round2(n: unknown): number {
   return Math.round(Math.max(0, Number(n) || 0) * 100) / 100
 }
 
+function round2Signed(n: unknown): number {
+  return Math.round((Number(n) || 0) * 100) / 100
+}
+
 export function coercePosDepositTender(raw: unknown): PosDepositTender {
   const v = String(raw ?? '').trim().toLowerCase()
   if (v === 'qr' || v === 'promptpay' || v === 'thai_qr') return 'qr'
@@ -127,7 +131,7 @@ export function shouldExcludeAdvanceFromSalesAggregate(row: {
   return st !== 'paid' && st !== 'completed'
 }
 
-/** 시재: 현금 선수금 수령 − 현금 환불. apply/forfeit·QR/이체는 시재 현금이 아님. */
+/** 시재: 현금 선수금 수령 − 현금 환불. apply/forfeit·QR/이체는 시재 현금이 아님. 환불이 더 많으면 음수. */
 export function posDepositCashDrawerDelta(
   rows: Array<{ kind?: unknown; amount?: unknown; tender?: unknown }>
 ): number {
@@ -140,7 +144,100 @@ export function posDepositCashDrawerDelta(
     if (kind === 'receive') sum += amt
     else if (kind === 'refund') sum -= amt
   }
-  return round2(sum)
+  return round2Signed(sum)
+}
+
+/** 예상 돈통 = 시작 시제 + POS 현금 매출 + 당일 예약금 현금 순액 + 시재 입출금 */
+export function posExpectedDrawerCash(params: {
+  opening: number
+  posCashSales: number
+  depositCashDelta: number
+  tillNet: number
+}): number {
+  return round2Signed(
+    (Number(params.opening) || 0) +
+      (Number(params.posCashSales) || 0) +
+      (Number(params.depositCashDelta) || 0) +
+      (Number(params.tillNet) || 0)
+  )
+}
+
+export type PosDepositHeldHolder = {
+  memberId?: number
+  guestPhone: string
+  guestName: string
+  held: number
+  lastAt: string
+  tender: string
+}
+
+export function posDepositHolderGroupKey(row: {
+  memberId?: unknown
+  member_id?: unknown
+  guestPhone?: unknown
+  guest_phone?: unknown
+}): string {
+  const mid = Math.trunc(Number(row.memberId ?? row.member_id) || 0)
+  if (mid > 0) return `m:${mid}`
+  const phone = canonicalMemberPhoneForStorage(String(row.guestPhone ?? row.guest_phone ?? ''))
+  if (phone) return `p:${phone}`
+  return ''
+}
+
+/** 매장 원장에서 아직 남아 있는 손님별 예약금 */
+export function summarizePosDepositHeldHolders(
+  rows: Array<{
+    memberId?: unknown
+    member_id?: unknown
+    guestPhone?: unknown
+    guest_phone?: unknown
+    guestName?: unknown
+    guest_name?: unknown
+    kind?: unknown
+    amount?: unknown
+    createdAt?: unknown
+    created_at?: unknown
+    tender?: unknown
+  }>
+): PosDepositHeldHolder[] {
+  const groups = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const key = posDepositHolderGroupKey(row)
+    if (!key) continue
+    const list = groups.get(key)
+    if (list) list.push(row)
+    else groups.set(key, [row])
+  }
+  const out: PosDepositHeldHolder[] = []
+  for (const list of groups.values()) {
+    const held = posDepositBalanceFromLedger(list)
+    if (held <= 0.005) continue
+    const sorted = [...list].sort((a, b) =>
+      String(a.created_at ?? a.createdAt ?? '').localeCompare(String(b.created_at ?? b.createdAt ?? ''))
+    )
+    const last = sorted[sorted.length - 1]
+    const memberId = Math.trunc(Number(last?.member_id ?? last?.memberId) || 0)
+    const nameFromLast = [...sorted]
+      .reverse()
+      .map((r) => String(r.guest_name ?? r.guestName ?? '').trim())
+      .find(Boolean)
+    const phoneFromLast = [...sorted]
+      .reverse()
+      .map((r) => String(r.guest_phone ?? r.guestPhone ?? '').trim())
+      .find(Boolean)
+    const tenderFromReceive = [...sorted]
+      .reverse()
+      .find((r) => coercePosDepositLedgerKind(r.kind) === 'receive')
+    out.push({
+      memberId: memberId > 0 ? memberId : undefined,
+      guestPhone: phoneFromLast || '',
+      guestName: nameFromLast || '',
+      held,
+      lastAt: String(last?.created_at ?? last?.createdAt ?? ''),
+      tender: coercePosDepositTender(tenderFromReceive?.tender ?? last?.tender),
+    })
+  }
+  return out.sort((a, b) => b.held - a.held || a.guestName.localeCompare(b.guestName))
 }
 
 function paymentSumFromOrderLike(row: {

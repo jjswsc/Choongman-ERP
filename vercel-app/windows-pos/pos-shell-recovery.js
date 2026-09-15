@@ -17,9 +17,15 @@ function nextLiveBlankHits(prevHits, isBlank) {
 }
 
 /**
- * 흰 화면은 단순 새로고침이 아니라 Clear Cache(SW·Cache Storage 삭제)가 필요하다.
- * @returns {'wait'|'clear'|'clear-cache'|'offline'}
+ * 흰 화면은 온라인이면 Clear Cache, 오프라인이면 캐시로 다시 연다.
+ * @returns {'wait'|'clear'|'clear-cache'|'cache-reload'|'offline'}
  */
+function liveBlankRecoverAction(opts, recoveriesInWindow, maxRecoveries) {
+  if (recoveriesInWindow >= maxRecoveries) return "offline";
+  if (opts.isOnline === false) return "cache-reload";
+  return "clear-cache";
+}
+
 function decideLiveBlankAction(opts) {
   const o = opts || {};
   const hitsBeforeReload = Math.max(1, Number(o.hitsBeforeReload) || 2);
@@ -28,15 +34,15 @@ function decideLiveBlankAction(opts) {
   const consecutiveHits = Math.max(0, Number(o.consecutiveHits) || 0);
   if (o.onOfflinePage || o.isLoading || o.cooldown) return "wait";
   if (o.probeFailed) {
-    return recoveriesInWindow >= maxRecoveries ? "offline" : "clear-cache";
+    return liveBlankRecoverAction(o, recoveriesInWindow, maxRecoveries);
   }
   if (!o.isBlank) return "clear";
   if (consecutiveHits < hitsBeforeReload) return "wait";
-  return recoveriesInWindow >= maxRecoveries ? "offline" : "clear-cache";
+  return liveBlankRecoverAction(o, recoveriesInWindow, maxRecoveries);
 }
 
 /**
- * @returns {'ignore'|'clear-cache'|'offline'}
+ * @returns {'ignore'|'clear-cache'|'cache-reload'|'offline'}
  */
 function decideRendererGoneAction(opts) {
   const o = opts || {};
@@ -44,7 +50,7 @@ function decideRendererGoneAction(opts) {
   const recoveriesInWindow = Math.max(0, Number(o.recoveriesInWindow) || 0);
   const maxRecoveries = Math.max(1, Number(o.maxRecoveries) || 3);
   if (reason === "clean-exit") return "ignore";
-  return recoveriesInWindow >= maxRecoveries ? "offline" : "clear-cache";
+  return liveBlankRecoverAction(o, recoveriesInWindow, maxRecoveries);
 }
 
 function shouldOpenAtLogin(opts) {

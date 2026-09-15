@@ -1458,7 +1458,7 @@ function isSystemOnline() {
   try {
     return net.isOnline();
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -1632,6 +1632,18 @@ function applyLiveBlankAction(action) {
     return;
   }
   if (action === "wait") return;
+  if (action === "cache-reload") {
+    posLiveBlankRecoveries = posShellRecovery.bumpRecoveries(
+      posLiveBlankRecoveries,
+      Date.now(),
+      POS_LIVE_BLANK_RECOVERY_WINDOW_MS
+    );
+    posLiveBlankHits = 0;
+    markLiveBlankCooldown();
+    console.warn("[cm-pos] live blank watchdog: reload from cache (offline)");
+    loadPosMainUrl(false);
+    return;
+  }
   if (action === "clear-cache") {
     posLiveBlankRecoveries = posShellRecovery.bumpRecoveries(
       posLiveBlankRecoveries,
@@ -1684,6 +1696,7 @@ async function probeAndRecoverLiveBlank() {
       isLoading,
       cooldown,
       onOfflinePage,
+      isOnline: isSystemOnline(),
     });
     applyLiveBlankAction(action);
   } catch (e) {
@@ -1706,6 +1719,7 @@ function recoverDeadRenderer(reason) {
     reason,
     recoveriesInWindow: currentLiveBlankRecoveries(),
     maxRecoveries: POS_LIVE_BLANK_MAX_RECOVERIES,
+    isOnline: isSystemOnline(),
   });
   if (action === "ignore") return;
   applyLiveBlankAction(action);
@@ -1739,6 +1753,7 @@ function schedulePosDomBlankWatchdog() {
                 consecutiveHits: POS_LIVE_BLANK_HITS_BEFORE_RELOAD,
                 recoveriesInWindow: currentLiveBlankRecoveries(),
                 maxRecoveries: POS_LIVE_BLANK_MAX_RECOVERIES,
+                isOnline: isSystemOnline(),
               });
               console.warn("[cm-pos] DOM blank watchdog: nothing rendered", action);
               applyLiveBlankAction(action);
@@ -1752,6 +1767,7 @@ function schedulePosDomBlankWatchdog() {
                 probeFailed: true,
                 recoveriesInWindow: currentLiveBlankRecoveries(),
                 maxRecoveries: POS_LIVE_BLANK_MAX_RECOVERIES,
+                isOnline: isSystemOnline(),
               })
             )
           });
@@ -2815,6 +2831,10 @@ function reloadAfterCacheClear() {
 /** 흰 화면 자동 복구 — 직원이 누른 Clear Cache 와 동일, 확인 창 없음 */
 async function silentClearCacheAndReload() {
   if (cacheReloadInFlight) return { ok: false, reason: "busy" };
+  if (!isSystemOnline()) {
+    loadPosMainUrl(false);
+    return { ok: false, reason: "offline" };
+  }
   if (!mainWindow || mainWindow.isDestroyed()) {
     loadPosMainUrl(true);
     return { ok: false, reason: "no_window" };

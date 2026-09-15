@@ -79,4 +79,15 @@ describe('buildSettlementCashReconcile', () => {
     const r = buildSettlementCashReconcile({ liveCash: 11883, savedCash: 11883 })
     expect(r.mismatch).toBe(false)
   })
+
+  it('treats legacy cash_amt that mixed in deposit cash as matched', () => {
+    const r = buildSettlementCashReconcile({
+      liveCash: 1234,
+      savedCash: 6244,
+      depositCashDelta: 5010,
+      closed: true,
+    })
+    expect(r.mismatch).toBe(false)
+    expect(r.diff).toBe(5010)
+  })
 })

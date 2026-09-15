@@ -53,9 +53,16 @@ export function suggestWithdrawFromMemo(
 
   // 반복 경비(임대·공과 등) — 통장 용도는 경비(expense)로 통일
   if (/\b(월세|임대|rent|rental|집세)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5410'] }
-  if (/\b(전기|electricity|ไฟฟ้า)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5430'] }
-  if (/\b(수도|water|광열|gas|ประปา)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5440'] }
-  if (/\b(인터넷|통신|internet|โทรศัพท์)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5420'] ?? byCode['5470'] }
+  // 한글·태국어는 \b 가 안 먹음. Utilities 영문은 5420(통신)이 아니라 전기·공과.
+  if (/전기|electricity|\butilities?\b|ไฟฟ้า|ค่าไฟ|สาธารณูปโภค|공과/i.test(m)) {
+    return { category: 'expense', accountSubjectId: byCode['5430'] }
+  }
+  if (/수도|\bwater\b|광열|\bgas\b|ประปา|ค่าน้ำ|แก๊ส/i.test(m)) {
+    return { category: 'expense', accountSubjectId: byCode['5440'] }
+  }
+  if (/인터넷|통신|\binternet\b|โทรศัพท์/i.test(m)) {
+    return { category: 'expense', accountSubjectId: byCode['5420'] ?? byCode['5470'] }
+  }
   if (/\b(급여|salary|월급|ค่าจ้าง)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5310'] }
   if (/\b(상여|bonus|보너스)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5320'] }
   if (/\b(복리|복지|welfare|สวัสดิการ)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5330'] }

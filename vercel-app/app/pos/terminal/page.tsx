@@ -870,6 +870,7 @@ export default function PosTerminalPage() {
   const [pendingDeliveryOrderId, setPendingDeliveryOrderId] = useState<number | null>(null)
   const [pendingDeliveryPayRequest, setPendingDeliveryPayRequest] = useState<PendingPayRequest>(null)
   const [showPosDepositDialog, setShowPosDepositDialog] = useState(false)
+  const [depositQueueTick, setDepositQueueTick] = useState(0)
   const handleReceivePosDeposit = useCallback(
     async (payload: {
       depositAmt: number
@@ -926,6 +927,7 @@ export default function PosTerminalPage() {
         } catch (printErr) {
           console.warn('deposit slip print:', printErr)
         }
+        setDepositQueueTick((n) => n + 1)
         return true
       } catch (e) {
         console.error('receivePosDeposit:', e)
@@ -954,7 +956,9 @@ export default function PosTerminalPage() {
         await appAlert(
           localizeApiMessage(String(res.message || ''), t, t('processFail') || '처리 실패', lang)
         )
+        return
       }
+      setDepositQueueTick((n) => n + 1)
     },
     [currentStoreId, t, lang]
   )
@@ -11956,6 +11960,7 @@ export default function PosTerminalPage() {
                       lang={lang}
                       storeCode={currentStoreId}
                       busy={posCartBackendBusy}
+                      reloadToken={depositQueueTick}
                       onReceive={() => setShowPosDepositDialog(true)}
                       onRefund={handleRefundPosDeposit}
                     />
@@ -12137,6 +12142,7 @@ export default function PosTerminalPage() {
                     lang={lang}
                     storeCode={currentStoreId}
                     busy={posCartBackendBusy}
+                    reloadToken={depositQueueTick}
                     onReceive={() => setShowPosDepositDialog(true)}
                     onRefund={handleRefundPosDeposit}
                   />

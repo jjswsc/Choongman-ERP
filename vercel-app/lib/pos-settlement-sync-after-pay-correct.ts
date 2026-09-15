@@ -353,6 +353,8 @@ export function buildSettlementCashReconcile(params: {
   liveCash: number
   savedCash: number | null | undefined
   closed?: boolean
+  /** 당일 예약금 현금 순액. 예전에 매출 현금에 섞어 저장한 날(saved = live + deposit)은 불일치로 보지 않음 */
+  depositCashDelta?: number
 }): {
   liveCash: number
   savedCash: number | null
@@ -366,10 +368,14 @@ export function buildSettlementCashReconcile(params: {
       ? null
       : round2(Number(params.savedCash))
   const diff = savedCash == null ? 0 : round2Signed(savedCash - liveCash)
+  const depositDelta = round2Signed(Number(params.depositCashDelta) || 0)
+  const mixedLegacyMatch =
+    savedCash != null && Math.abs(round2Signed(savedCash - (liveCash + depositDelta))) <= 0.02
+  const mismatch = savedCash != null && Math.abs(diff) > 0.02 && !mixedLegacyMatch
   return {
     liveCash,
     savedCash,
-    mismatch: savedCash != null && Math.abs(diff) > 0.02,
+    mismatch,
     diff,
     closed: !!params.closed,
   }
