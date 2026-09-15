@@ -1,7 +1,8 @@
 /**
  * 충만(Choongman) 매장별 KBank Merchant ID 기본값.
  * 은행 개통: HUAMAK / SEACON SQUARE (2026-08), FUTURE PARK / EKKAMAI / SILOM (2026-08-28),
- * MBK (KB000002350191 / SJGLB00002) · TRUE DIGITAL PARK (KB000002350190 / SJGLB00011) — MID·Shop ID 모두 매장별.
+ * MBK (KB000002350191 / SJGLB00002) · TRUE DIGITAL PARK (KB000002350190 / SJGLB00011) ·
+ * THE STREET (KB000002350209 / SJGLB00012) · UNION MALL (KB000002350372 / SJGLB00008) — MID·Shop ID 모두 매장별.
  * 확인·저장은 SaaS가 아니라 관리자 > POS 프린터 설정 > 결제·돈통 탭.
  * resolve 우선순위: 코드 기본값 < SaaS store 설정 < pos_printer_settings(관리자).
  */
@@ -62,6 +63,26 @@ export const CHOONGMAN_KBANK_STORE_DEFAULTS: ChoongmanKbankStoreDefault[] = [
     partnerShopId: 'SJGLB00011',
     qrDisplayMode: 'edc_mirror',
   },
+  {
+    label: 'CHOONGMAN THE STREET',
+    storeCodes: [
+      'CM The Street',
+      'CM The street',
+      'CM The Street Ratchada',
+      'The Street',
+      'The Street Ratchada',
+      '1050',
+    ],
+    merchantId: 'KB000002350209',
+    partnerShopId: 'SJGLB00012',
+  },
+  {
+    label: 'CHOONGMAN UNION MALL',
+    storeCodes: ['CM Union Mall', 'Union Mall', '1047'],
+    merchantId: 'KB000002350372',
+    partnerShopId: 'SJGLB00008',
+    qrDisplayMode: 'edc_mirror',
+  },
 ]
 
 function normalizeStoreKey(v: string): string {
@@ -97,6 +118,20 @@ function storeDefaultRowMatches(row: ChoongmanKbankStoreDefault, key: string): b
     (key.includes('true digital') || key.includes('truedigital') || key === '1040') &&
     row.partnerShopId === 'SJGLB00011' &&
     row.label.includes('TRUE DIGITAL')
+  ) {
+    return true
+  }
+  if (
+    (key.includes('the street') || key.includes('thestreet') || key === '1050') &&
+    row.partnerShopId === 'SJGLB00012' &&
+    row.label.includes('THE STREET')
+  ) {
+    return true
+  }
+  if (
+    (key.includes('union mall') || key.includes('unionmall') || key === '1047') &&
+    row.partnerShopId === 'SJGLB00008' &&
+    row.label.includes('UNION MALL')
   ) {
     return true
   }

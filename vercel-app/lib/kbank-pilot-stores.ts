@@ -1,7 +1,7 @@
 /**
  * KBank Partner QR를 POS에서 쓰는 매장 판정 (클라이언트·서버 공통).
  * - CM Office 파일럿
- * - CHOONGMAN HUAMAK / SEACON / FUTURE PARK / EKKAMAI / SILOM / MBK / TRUE DIGITAL PARK (은행 MID 개통)
+ * - CHOONGMAN HUAMAK / SEACON / FUTURE PARK / EKKAMAI / SILOM / MBK / TRUE DIGITAL PARK / THE STREET / UNION MALL (은행 MID 개통)
  * - 필요 시 KBANK_QR_TEST_STORE_CODES(서버)와 별도로 UI 허용 목록 확장
  */
 
@@ -42,6 +42,14 @@ export function isKbankQrPilotStoreLabel(normalized: string): boolean {
     normalized.includes('truedigital') ||
     normalized === '1040'
   ) {
+    return true
+  }
+  // The Street Ratchada (Grab partner 1050)
+  if (normalized.includes('the street') || normalized.includes('thestreet') || normalized === '1050') {
+    return true
+  }
+  // Union Mall (Grab partner 1047) — 고객 모니터 없음, 회원앱·EDC
+  if (normalized.includes('union mall') || normalized.includes('unionmall') || normalized === '1047') {
     return true
   }
   return false

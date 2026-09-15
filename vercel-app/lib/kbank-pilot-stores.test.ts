@@ -20,7 +20,7 @@ describe('isKbankQrEnabledForStore', () => {
     expect(isKbankQrEnabledForStore({ storeName: 'cm_office' })).toBe(true)
   })
 
-  it('allows Huamak / Seacon / Future Park / Ekkamai / Silom / MBK / True Digital', () => {
+  it('allows Huamak / Seacon / Future Park / Ekkamai / Silom / MBK / True Digital / The Street / Union Mall', () => {
     expect(isKbankQrEnabledForStore({ storeId: 'CM Huamak' })).toBe(true)
     expect(isKbankQrEnabledForStore({ storeLabel: 'CHOONGMAN HUAMAK' })).toBe(true)
     expect(isKbankQrEnabledForStore({ storeId: 'CM Seacon Square' })).toBe(true)
@@ -32,17 +32,23 @@ describe('isKbankQrEnabledForStore', () => {
     expect(isKbankQrEnabledForStore({ storeId: '1041', storeLabel: 'MBK Center' })).toBe(true)
     expect(isKbankQrEnabledForStore({ storeId: 'CM True Digital' })).toBe(true)
     expect(isKbankQrEnabledForStore({ storeId: '1040', storeName: 'CM True Digital' })).toBe(true)
+    expect(isKbankQrEnabledForStore({ storeId: 'CM The Street' })).toBe(true)
+    expect(isKbankQrEnabledForStore({ storeId: '1050', storeLabel: 'The Street Ratchada' })).toBe(true)
+    expect(isKbankQrEnabledForStore({ storeId: 'CM Union Mall' })).toBe(true)
+    expect(isKbankQrEnabledForStore({ storeId: '1047', storeName: 'Union Mall' })).toBe(true)
   })
 
   it('rejects unrelated stores', () => {
     expect(isKbankQrEnabledForStore({ storeId: 'CM Asoke' })).toBe(false)
     expect(isKbankQrPilotStoreLabel('jayle')).toBe(false)
     expect(isKbankQrPilotStoreLabel('huama')).toBe(false)
+    expect(isKbankQrPilotStoreLabel('street')).toBe(false)
+    expect(isKbankQrPilotStoreLabel('union')).toBe(false)
   })
 })
 
 describe('choongman kbank store MID defaults', () => {
-  it('maps Huamak / Seacon / Future Park / Ekkamai / Silom / MBK / True Digital codes to bank MIDs', () => {
+  it('maps Huamak / Seacon / Future Park / Ekkamai / Silom / MBK / True Digital / The Street / Union Mall codes to bank MIDs', () => {
     expect(lookupChoongmanKbankStoreDefaults('CM Huamak')?.merchantId).toBe('KB000002340300')
     expect(lookupChoongmanKbankStoreDefaults('CM Huamak')?.partnerShopId).toBe('SJGLB00007')
     expect(lookupChoongmanKbankStoreDefaults('CM Seacon Srinakarin')?.merchantId).toBe(
@@ -67,6 +73,15 @@ describe('choongman kbank store MID defaults', () => {
     expect(choongmanKbankPrinterStoreCodeCandidates('CM True Digital')).toEqual(
       expect.arrayContaining(['CM True Digital', '1040'])
     )
+    expect(lookupChoongmanKbankStoreDefaults('CM The Street')?.merchantId).toBe('KB000002350209')
+    expect(lookupChoongmanKbankStoreDefaults('CM The Street')?.partnerShopId).toBe('SJGLB00012')
+    expect(lookupChoongmanKbankStoreDefaults('1050')?.merchantId).toBe('KB000002350209')
+    expect(lookupChoongmanKbankStoreDefaults('CM Union Mall')?.merchantId).toBe('KB000002350372')
+    expect(lookupChoongmanKbankStoreDefaults('CM Union Mall')?.partnerShopId).toBe('SJGLB00008')
+    expect(lookupChoongmanKbankStoreDefaults('1047')?.merchantId).toBe('KB000002350372')
+    expect(choongmanKbankPrinterStoreCodeCandidates('CM Union Mall')).toEqual(
+      expect.arrayContaining(['CM Union Mall', '1047'])
+    )
   })
 
   it('detects another store\'s MID pasted onto MBK / True Digital', () => {
@@ -90,6 +105,18 @@ describe('choongman kbank store MID defaults', () => {
     ).toBe(true)
     expect(
       credentialsBelongToOtherChoongmanStore('CM MBK', 'KB000002350190', 'SJGLB00011')
+    ).toBe(true)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM The Street', 'KB000002350209', 'SJGLB00012')
+    ).toBe(false)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM The Street', 'KB000002350372', 'SJGLB00008')
+    ).toBe(true)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM Union Mall', 'KB000002350372', 'SJGLB00008')
+    ).toBe(false)
+    expect(
+      credentialsBelongToOtherChoongmanStore('CM Union Mall', 'KB000002350209', 'SJGLB00012')
     ).toBe(true)
   })
 

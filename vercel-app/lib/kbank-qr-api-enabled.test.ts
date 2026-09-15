@@ -13,6 +13,8 @@ describe('resolveKbankSkipApiForQrSetting', () => {
   it('uses API for live Choongman MID stores when unset', () => {
     expect(resolveKbankSkipApiForQrSetting('CM MBK', null)).toBe(false)
     expect(resolveKbankSkipApiForQrSetting('CM True Digital', undefined)).toBe(false)
+    expect(resolveKbankSkipApiForQrSetting('CM The Street', null)).toBe(false)
+    expect(resolveKbankSkipApiForQrSetting('CM Union Mall', null)).toBe(false)
     expect(resolveKbankSkipApiForQrSetting('CM Huamak', null)).toBe(false)
   })
 
