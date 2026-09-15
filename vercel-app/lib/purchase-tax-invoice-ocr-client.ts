@@ -251,27 +251,50 @@ function contrastCanvas(src: HTMLCanvasElement, amount: number): HTMLCanvasEleme
   return c
 }
 
-function sampleLuminanceMean(src: HTMLCanvasElement): number {
+export function rgbToLuma(r: number, g: number, b: number): number {
+  return 0.299 * r + 0.587 * g + 0.114 * b
+}
+
+export function rgbToChroma(r: number, g: number, b: number): number {
+  return Math.max(r, g, b) - Math.min(r, g, b)
+}
+
+/** 초록 TPD 용지처럼 색지가 있으면 반전하지 않음. 어두운 야간 사진만 반전. */
+export function taxInvoiceShouldInvertForOcr(opts: { luma: number; chroma: number }): boolean {
+  if (opts.chroma >= 16) return false
+  return opts.luma < 108
+}
+
+function sampleColorStats(src: HTMLCanvasElement): { luma: number; chroma: number } {
   const ctx = src.getContext('2d')
-  if (!ctx) return 200
+  if (!ctx) return { luma: 200, chroma: 0 }
   const { width, height } = src
   const step = Math.max(1, Math.floor(Math.min(width, height) / 48))
   const img = ctx.getImageData(0, 0, width, height)
-  let sum = 0
+  let lumaSum = 0
+  let chromaSum = 0
   let n = 0
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
-      sum += img.data[(y * width + x) * 4]
+      const i = (y * width + x) * 4
+      const r = img.data[i]
+      const g = img.data[i + 1]
+      const b = img.data[i + 2]
+      lumaSum += rgbToLuma(r, g, b)
+      chromaSum += rgbToChroma(r, g, b)
       n += 1
     }
   }
-  return n ? sum / n : 200
+  return { luma: n ? lumaSum / n : 200, chroma: n ? chromaSum / n : 0 }
 }
 
-/** 어두운 배경(폰 야간 사진)이면 반전. 흰 전자 PDF는 그대로. */
+/** 어두운 배경(폰 야간 사진)만 반전. 초록·노란 세금계산서는 회색조로 읽는다. */
 export function prepareTaxInvoiceScanCanvas(src: HTMLCanvasElement): HTMLCanvasElement {
   const deskewed = deskewTaxInvoiceCanvas(src)
-  return sampleLuminanceMean(deskewed) < 108 ? invertCanvas(deskewed) : deskewed
+  const stats = sampleColorStats(deskewed)
+  if (taxInvoiceShouldInvertForOcr(stats)) return invertCanvas(deskewed)
+  if (stats.chroma >= 16) return preprocessForThai(deskewed)
+  return deskewed
 }
 
 function qrEnhanceCrops(src: HTMLCanvasElement): HTMLCanvasElement[] {

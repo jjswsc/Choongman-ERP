@@ -138,7 +138,9 @@ export function parseTaxInvoiceDateFromText(text: string): string | undefined {
   const lines = String(text || '').split(/\r?\n/)
   const fromLine = (line: string): string | undefined => parseTaxInvoiceDateFromFragment(line)
   const skipDue = (line: string) =>
-    /เริ่มใช้|ครบกำหนด|due\s*date|payment\s*due|วันที่ครบ/i.test(line)
+    /เริ่มใช้|ครบกำหนด|due\s*date|payment\s*due|วันที่ครบ|วันที่พิมพ์|print(?:ed)?\s*date|date\s*printed/i.test(
+      line
+    )
   for (const line of lines) {
     if (skipDue(line) || !dateLineIsIssued(line)) continue
     const d = fromLine(stripDateClockNoise(line))
@@ -530,6 +532,32 @@ function recoverGrabInvoiceNo(text: string, sellerTaxId?: string, taxMonth?: str
   return undefined
 }
 
+function looksLikeTpdInvoiceNo(raw: string): boolean {
+  const d = String(raw || '').replace(/\D/g, '')
+  return /^10\d{2}(?:0[1-9]|1[0-2])\d{6}$/.test(d)
+}
+
+function pageLooksLikeTpd(text: string, sellerTaxId?: string): boolean {
+  if (digitsTin13(sellerTaxId) === '0105530022307') return true
+  return /ทีพีดี|\bTPD\b|0105530022307/i.test(String(text || ''))
+}
+
+/** TPD `เลขที่เอกสาร 102608000072` — OCR이 날짜·주소와 붙이거나 O/I로 읽은 12자리 */
+function recoverTpdInvoiceNo(text: string, sellerTaxId?: string, taxMonth?: string): string | undefined {
+  const s = String(text || '')
+  const labeled = s.match(/เลขที่เอกสาร\s*[:.\-]?\s*([0-9OoIl|]{10,14})/i)
+  if (labeled) {
+    const inv = cleanInvoiceNo(ocrFixDigitsInInvoiceBlob(labeled[1]))
+    if (inv && looksLikeTpdInvoiceNo(inv)) return inv
+  }
+  if (!pageLooksLikeTpd(s, sellerTaxId)) return undefined
+  const compact = platformInvoiceBlob(s)
+  const hits = [...compact.matchAll(/10\d{2}(?:0[1-9]|1[0-2])\d{6}/g)].map((m) => m[0])
+  const ym = grabYmFromTaxMonth(taxMonth).slice(2, 6)
+  const pick = (ym ? hits.find((n) => n.slice(2, 6) === ym) : undefined) || hits[0]
+  return pick ? cleanInvoiceNo(pick) : undefined
+}
+
 function looksLikeKasikornInvoiceNo(raw: string): boolean {
   const s = String(raw || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
   return /^\d{6}[EFH]\d{4,14}$/.test(s) || /^370\d{6}W\d{4,8}$/.test(s)
@@ -570,6 +598,7 @@ function officeInvoiceRank(inv: string): number {
   if (/^(INV|IVT|IVR|NX|NC|NR|RV|SI|CS|DCI|DOI|TIT|INCT|IV|1V|[Il|]V|ID|GFAD)[-/]?/i.test(s)) return 8
   if (looksLikeCompleteGrabInvoiceNo(s)) return 8
   if (looksLikeKasikornInvoiceNo(s)) return 8
+  if (looksLikeTpdInvoiceNo(s)) return 7
   if (/^[A-Z]{5,12}\d{12,}$/i.test(s.replace(/[^A-Za-z0-9]/g, ''))) return 7
   if (/^0\d{8,9}$/.test(s.replace(/\D/g, '')) && !/[A-Za-z]/.test(s)) return 0
   const digits = s.replace(/\D/g, '')
@@ -650,7 +679,12 @@ function invoiceLabelIsNoiseNo(full: string, labelIndex: number, labelText: stri
   if (invoiceLabelIsLineItemRef(full, labelIndex, labelText)) return true
   if (!/\bno\.?/i.test(labelText) && !/เลขที่/.test(labelText)) return false
   const before = full.slice(Math.max(0, labelIndex - 16), labelIndex)
-  return /page|หน้า|ลูกค้า|customer|order|credit\s*term|อ้างอิง|reference|partner|พาร์ทเนอร์/i.test(before)
+  if (/page|หน้า|ลูกค้า|customer|order|credit\s*term|อ้างอิง|reference|partner|พาร์ทเนอร์|สั่งซื้อ|ใบสั่ง|purchase\s*order|\bP\.?\s*O\.?\b/i.test(before)) {
+    return true
+  }
+  const after = full.slice(labelIndex, Math.min(full.length, labelIndex + 28))
+  if (/เลขที่เอกสาร|เลขที่ใบกำกับ|เลขที่ใบเสร็จ/i.test(after)) return false
+  return /เลขที่(?:ใบสั่ง|โครงการ)|สั่งซื้อ|โครงการ/i.test(after)
 }
 
 function extractLabeledInvoiceNo(s: string): string | undefined {
@@ -703,6 +737,7 @@ function extractInvoiceNo(
   const recovered =
     recoverShopeeInvoiceNo(s, taxMonth) ||
     recoverGrabInvoiceNo(s, sellerTaxId, taxMonth) ||
+    recoverTpdInvoiceNo(s, sellerTaxId, taxMonth) ||
     recoverKasikornInvoiceNo(s)
   if (take(recovered)) return recovered
   const platform = s.match(PLATFORM_INVOICE_RE) || compact.match(PLATFORM_INVOICE_RE)
@@ -1715,7 +1750,7 @@ export function parsePurchaseTaxInvoiceFromPdfText(
   const buyerTin = digitsTin13(hint?.buyerTaxId)
   const sellerTaxId = extractSellerTaxId(raw, buyerTin)
   const netAmountLabeled =
-    extractAmountNear(raw, /มูลค่าสินค้า|มูลค่าที่คำนวณภาษี|มูลค่าก่อนภาษี|จำนวนเงินรวมก่อนภาษีมูลค่าเพิ่ม|รวมราคาสินค้า|รวมเป็นเงิน|รวมเงิน|มูลค่า(?!เพิ่ม)|ฐานภาษี|Taxable|Sub\s*total|Net\s*amount|(?<!Grand\s)\bTOTAL\b/i) ??
+    extractAmountNear(raw, /มูลค่าสินค้า|มูลค่าที่คำนวณภาษี|มูลค่าก่อนภาษี|จำนวนเงินรวมก่อนภาษีมูลค่าเพิ่ม|จำนวนเงินก่อนหักส่วนลด|จำนวนเงินหลังหักส่วนลด|จำนวนเงินก่อนภาษี|รวมราคาสินค้า|รวมเป็นเงิน|รวมเงิน|มูลค่า(?!เพิ่ม)|ฐานภาษี|Taxable|Sub\s*total|Net\s*amount|(?<!Grand\s)\bTOTAL\b/i) ??
     extractAmountNear(raw, /ก่อนภาษี|ก่อน VAT/i)
   const vatAmountLabeled = extractAmountNear(raw, /จำนวนภาษีมูลค่าเพิ่ม|ภาษีมูลค่าเพิ่ม|\bVAT\b(?!\s*(?:CODE|ID))|Vat amount|VAT\s*7|ภาษี\s*7/i)
   const totalAmountLabeled = extractAmountNear(raw, /จำนวนเงินรวมภาษีมูลค่าเพิ่ม|รวมทั้งสิ้น|ยอดรวมสุทธิ|ยอดเงินรวม|Grand\s*total|Amount\s*due/i)
@@ -1851,6 +1886,7 @@ function invoiceFromPageBeatsCurrent(fromPage: string, current?: string): boolea
   if (/^GFAD20\d{12}$/i.test(page) && /^IM20/i.test(cur)) return true
   if (/^\d{6}[EFH]/i.test(page) && !/^\d{6}[EFH]/i.test(cur)) return true
   if (/^370\d{6}W\d+$/i.test(page) && !/^370\d{6}W\d+$/i.test(cur)) return true
+  if (looksLikeTpdInvoiceNo(page) && !looksLikeTpdInvoiceNo(cur)) return true
   if (page.startsWith('TRS') && cur.startsWith('TRS') && page.length > cur.length + 4) return true
   const pageDigits = compactInvoiceToken(page).replace(/\D/g, '')
   const curDigits = compactInvoiceToken(cur).replace(/\D/g, '')
@@ -2099,6 +2135,7 @@ export function repairExtractedPurchaseTaxInvoice(
     invoiceNo =
       recoverShopeeInvoiceNo(invoiceNo, hint?.taxMonth) ||
       recoverGrabInvoiceNo(invoiceNo, sellerTaxId, hint?.taxMonth) ||
+      recoverTpdInvoiceNo(invoiceNo, sellerTaxId, hint?.taxMonth) ||
       recoverKasikornInvoiceNo(invoiceNo) ||
       cleanInvoiceNo(invoiceNo) ||
       (invoiceNoLooksPlausible(invoiceNo) ? compactInvoiceToken(invoiceNo) : undefined)
@@ -2108,6 +2145,7 @@ export function repairExtractedPurchaseTaxInvoice(
     const fromPage =
       recoverShopeeInvoiceNo(pageText, hint?.taxMonth) ||
       recoverGrabInvoiceNo(pageText, sellerTaxId, hint?.taxMonth) ||
+      recoverTpdInvoiceNo(pageText, sellerTaxId, hint?.taxMonth) ||
       recoverKasikornInvoiceNo(pageText) ||
       extractInvoiceNo(pageText, sellerTaxId, hint?.taxMonth, buyerTin)
     if (fromPage && invoiceFromPageBeatsCurrent(fromPage, invoiceNo)) invoiceNo = fromPage

@@ -1053,9 +1053,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               }
             }
             if (ac.signal.aborted) break
-            if (i === total || i % 5 === 0 || (typeof document !== "undefined" && document.hidden)) {
-              setReviewRows([...extracted])
-            }
+            setReviewRows([...extracted])
             writeReviewDraft(extracted)
             writeScanCheckpoint({
               fileName: file.name,

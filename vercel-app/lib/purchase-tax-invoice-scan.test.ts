@@ -690,6 +690,42 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(row?.vatAmount).toBe(184.84)
   })
 
+  it('reads a TPD green-form page: เลขที่เอกสาร not PO 11/CT/โครงการ, HQ not buyer 00001, issued date not วันที่พิมพ์', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'TPD บริษัท ทีพีดี กรุงเทพ (1987) จำกัด',
+        'สำนักงานใหญ่',
+        'เลขประจำตัวผู้เสียภาษีอากร 0105530022307',
+        'ต้นฉบับ ใบกำกับภาษี/ใบส่งสินค้า',
+        'หน้าที่ 1 of 1',
+        'รหัสลูกค้า CT00215000',
+        'สาขาที่ 00001',
+        'เลขที่ใบสั่งซื้อ 11',
+        'วันที่ 01/08/2026',
+        'เลขที่โครงการ 11TP01',
+        'เลขที่เอกสาร 102608000072',
+        'ชื่อลูกค้า บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+        'เลขประจำตัวผู้เสียภาษี 0105568080622',
+        'กรุงเทพมหานคร 10110',
+        'จำนวนเงินก่อนหักส่วนลด 2,640.64',
+        'ภาษีมูลค่าเพิ่ม 7% 184.84',
+        'จำนวนเงินรวมทั้งสิ้น 2,825.48',
+        'วันที่พิมพ์ 03/08/2026',
+      ].join('\n'),
+      { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('102608000072')
+    expect(row?.invoiceNo).not.toBe('11')
+    expect(row?.invoiceNo).not.toMatch(/CT002|11TP01/i)
+    expect(row?.docDate).toBe('2026-08-01')
+    expect(row?.docDate).not.toBe('2026-08-03')
+    expect(row?.sellerName).toContain('ทีพีดี')
+    expect(row?.sellerTaxId).toBe('0105530022307')
+    expect(row?.sellerBranch).toBe('สำนักงานใหญ่')
+    expect(row?.netAmount).toBe(2640.64)
+    expect(row?.vatAmount).toBe(184.84)
+  })
+
   it('merges a split header row and a split totals row into one invoice', () => {
     const merged = mergeComplementaryInvoiceRows(
       {
