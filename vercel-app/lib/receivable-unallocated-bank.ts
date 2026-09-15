@@ -129,6 +129,51 @@ export function listUnallocatedBankReceives(
   return out
 }
 
+/** 미수금 노란 칸에 보여줄 입금 시작일(방콕). 이 날짜 이전은 잔액에는 남고 목록에는 안 냄 */
+export const UNALLOCATED_BANK_DEPOSIT_VISIBLE_FROM = '2026-07-01'
+
+export function isUnallocatedBankDepositVisible(
+  transDate: string | null | undefined,
+  fromDate = UNALLOCATED_BANK_DEPOSIT_VISIBLE_FROM
+): boolean {
+  const d = String(transDate || '').slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= fromDate
+}
+
+export function filterUnallocatedBankDepositsVisible<T extends { transDate: string; amountAbs?: number }>(
+  deposits: T[],
+  fromDate = UNALLOCATED_BANK_DEPOSIT_VISIBLE_FROM
+): T[] {
+  return deposits.filter((d) => isUnallocatedBankDepositVisible(d.transDate, fromDate))
+}
+
+export function sumUnallocatedBankDeposits(deposits: Array<{ amountAbs?: number }>): number {
+  let total = 0
+  for (const d of deposits) {
+    total = roundMoney(total + Math.abs(Number(d.amountAbs || 0)))
+  }
+  return total
+}
+
+/** 미수금 노란 칸 — 기본으로 보여줄 최근 입금 건수 (나머지는 「더 보기」) */
+export const UNALLOCATED_BANK_DEPOSIT_PREVIEW_LIMIT = 8
+
+export function sliceUnallocatedBankDepositsForPreview<T>(
+  deposits: T[],
+  expanded: boolean,
+  limit = UNALLOCATED_BANK_DEPOSIT_PREVIEW_LIMIT
+): { visible: T[]; hiddenCount: number; canToggle: boolean } {
+  const canToggle = deposits.length > limit
+  if (expanded || !canToggle) {
+    return { visible: deposits, hiddenCount: 0, canToggle }
+  }
+  return {
+    visible: deposits.slice(0, limit),
+    hiddenCount: deposits.length - limit,
+    canToggle,
+  }
+}
+
 export function sumUnallocatedBankReceiveByStoreGroup(
   rows: ReceivableTransactionRow[],
   attributionMaps: ReceivableAttributionMaps

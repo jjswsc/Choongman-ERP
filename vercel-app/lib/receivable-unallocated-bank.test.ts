@@ -5,7 +5,10 @@ import {
   canManuallyToggleReceivableReceiveCheck,
   collectBankTransactionIdsFromReceivableGroups,
   isConsolidatedBankReceiveRow,
+  filterUnallocatedBankDepositsVisible,
   listUnallocatedBankReceives,
+  sliceUnallocatedBankDepositsForPreview,
+  sumUnallocatedBankDeposits,
   sumUnallocatedBankReceiveByStoreGroup,
 } from './receivable-unallocated-bank'
 import type { ReceivableTransactionRow } from './receivable-ledger-pure'
@@ -136,6 +139,53 @@ describe('bank account meta on receivable groups', () => {
     expect(item?.unallocatedBankDeposits?.[0]?.bankAccountId).toBe(12)
     expect(item?.unallocatedBankDeposits?.[0]?.bankAccountName).toBe('HQ KBank')
     expect(item?.items?.[0]?.bank_account_id).toBe(12)
+  })
+})
+
+describe('filterUnallocatedBankDepositsVisible', () => {
+  const deposits = [
+    { transDate: '2026-06-18', amountAbs: 28454.19 },
+    { transDate: '2026-06-30', amountAbs: 100 },
+    { transDate: '2026-07-01', amountAbs: 200 },
+    { transDate: '2026-09-11', amountAbs: 10921.49 },
+  ]
+
+  it('hides deposits before 2026-07-01', () => {
+    const visible = filterUnallocatedBankDepositsVisible(deposits)
+    expect(visible.map((d) => d.transDate)).toEqual(['2026-07-01', '2026-09-11'])
+    expect(sumUnallocatedBankDeposits(visible)).toBe(11121.49)
+  })
+
+  it('keeps an empty list empty', () => {
+    expect(filterUnallocatedBankDepositsVisible([])).toEqual([])
+  })
+})
+
+describe('sliceUnallocatedBankDepositsForPreview', () => {
+  it('returns all when at or below the limit', () => {
+    expect(sliceUnallocatedBankDepositsForPreview([1, 2, 3], false, 8)).toEqual({
+      visible: [1, 2, 3],
+      hiddenCount: 0,
+      canToggle: false,
+    })
+  })
+
+  it('keeps the newest slice when collapsed over the limit', () => {
+    const list = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    expect(sliceUnallocatedBankDepositsForPreview(list, false, 8)).toEqual({
+      visible: [1, 2, 3, 4, 5, 6, 7, 8],
+      hiddenCount: 1,
+      canToggle: true,
+    })
+  })
+
+  it('returns all when expanded', () => {
+    const list = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    expect(sliceUnallocatedBankDepositsForPreview(list, true, 8)).toEqual({
+      visible: list,
+      hiddenCount: 0,
+      canToggle: true,
+    })
   })
 })
 
