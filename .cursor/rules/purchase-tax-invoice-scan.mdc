@@ -33,7 +33,7 @@ GPT 없음. 글자층 → QR → OCR → 레이아웃 좌표. 이미 검수에 �
 | TIN | 판매자 구역·헤더 라벨 | 구매자 구역 TIN, 구매자 TIN 폴백 |
 | 금액 | 과세 공급가 + VAT 7% 쌍 | 자리 0.00, 세율 7, Grand를 NET로 쓴 줄, 원천징수, Grand를 VAT로 역산 |
 
-플랫폼 번호 꼴(Shopee `TRS`, Grab `IM`/`GFAD`, Line Man `LMRN`, 카시콘)만 상호 사전에 넣는다.
+플랫폼 번호 꼴(Shopee `TRS`, Grab `IM`/`GFAD`, Line Man `LMRN`, 카시콘, TPD `10YYMM######`)만 상호 사전에 넣는다.
 
 ## 변경 시
 

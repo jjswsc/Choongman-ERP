@@ -726,6 +726,26 @@ describe('repairExtractedPurchaseTaxInvoice', () => {
     expect(row?.vatAmount).toBe(184.84)
   })
 
+  it('does not keep Kasikorn name or buyer TIN when TPD เลขที่เอกสาร is recovered from mixed OCR', () => {
+    const row = extractPurchaseTaxInvoiceFromScanText(
+      [
+        'เลขที่เอกสาร 102608000072',
+        'วันที่ 01/08/2026',
+        'บริษัท ธนาคารกสิกรไทย จำกัด',
+        'ชื่อลูกค้า บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+        'เลขประจำตัวผู้เสียภาษี 0105568080622',
+        'ภาษีมูลค่าเพิ่ม 7% 184.84',
+      ].join('\n'),
+      { taxMonth: '2026-08' }
+    )
+    expect(row?.invoiceNo).toBe('102608000072')
+    expect(row?.sellerName).toMatch(/ทีพีดี/)
+    expect(row?.sellerName || '').not.toMatch(/กสิกร/i)
+    expect(row?.sellerTaxId).toBe('0105530022307')
+    expect(row?.vatAmount).toBe(184.84)
+    expect(row?.netAmount).not.toBe(184.84)
+  })
+
   it('merges a split header row and a split totals row into one invoice', () => {
     const merged = mergeComplementaryInvoiceRows(
       {

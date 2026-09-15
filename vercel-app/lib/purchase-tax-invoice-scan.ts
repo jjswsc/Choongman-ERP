@@ -758,6 +758,7 @@ const KNOWN_INVOICE_SELLERS: Array<{ re: RegExp; tin: string; name: string }> = 
   { re: /^LMRN/i, tin: '0105562160721', name: 'บริษัท ไลน์แมน (ประเทศไทย) จำกัด' },
   { re: /^\d{6}[EFH]\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
   { re: /^370\d+W\d+$/i, tin: '0107536000315', name: 'บริษัท ธนาคารกสิกรไทย จำกัด (มหาชน)' },
+  { re: /^10\d{2}(?:0[1-9]|1[0-2])\d{6}$/, tin: '0105530022307', name: 'บริษัท ทีพีดี กรุงเทพ (1987) จำกัด' },
   { re: /^IVF?\d{8}-\d+$/i, tin: '0105566137147', name: 'S&J GLOBAL CO., LTD.' },
   { re: /^INV-\d{11}$/i, tin: '0105559082715', name: 'บริษัท โพลาร์ แบร์ มิชชั่น จำกัด' },
   { re: /^INV-\d{8}-\d{2,4}$/i, tin: '0135564019457', name: 'บริษัท ไทย แอ็กโกร เฟรช จำกัด' },
@@ -1274,6 +1275,7 @@ function inferKasikornFeeAmounts(text: string): {
   vatAmount: number
   totalAmount: number
 } | null {
+  if (pageLooksLikeTpd(text) || recoverTpdInvoiceNo(text)) return null
   if (!pageLooksLikeKasikornFeeInvoice(text)) return null
   const nums = collectBahtAmounts(text)
   for (let i = 1; i + 2 < nums.length; i += 1) {
@@ -1935,6 +1937,17 @@ export function repairExtractedPurchaseTaxInvoice(
   }
   if (!fullyExempt && vatAmount != null && totalAmount != null && netAmount == null) {
     netAmount = roundMoney2(Math.max(0, totalAmount - vatAmount))
+  }
+  if (!fullyExempt && vatAmount == null && netAmount != null && netAmount > 0.5) {
+    const vatLabeled = extractAmountNear(
+      pageTextRaw,
+      /จำนวนภาษีมูลค่าเพิ่ม|ภาษีมูลค่าเพิ่ม|\bVAT\b(?!\s*(?:CODE|ID))|Vat amount|VAT\s*7|ภาษี\s*7/i
+    )
+    if (vatLabeled != null && Math.abs(vatLabeled - netAmount) <= 0.05) {
+      vatAmount = vatLabeled
+      netAmount = undefined
+      totalAmount = undefined
+    }
   }
 
   if (netAmount != null && vatAmount != null && vatAmount > 0 && purchaseTaxVatLooksWrong(netAmount, vatAmount)) {

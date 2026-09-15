@@ -159,6 +159,28 @@ export const PURCHASE_TAX_SCAN_RULES: PurchaseTaxScanRuleCase[] = [
     },
   },
   {
+    id: 'inv-tpd-number-not-kasikorn-or-buyer-tin',
+    field: 'sellerName',
+    title: 'TPD เลขที่เอกสาร 102608…. กสิกร 상호·구매자 TIN·VAT를 공급가로 쓰지 않음',
+    taxMonth: AUG,
+    text: page(
+      'เลขที่เอกสาร 102608000072',
+      'วันที่ 01/08/2026',
+      'บริษัท ธนาคารกสิกรไทย จำกัด',
+      'ชื่อลูกค้า บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+      'เลขประจำตัวผู้เสียภาษี 0105568080622',
+      'ภาษีมูลค่าเพิ่ม 7% 184.84'
+    ),
+    expect: {
+      invoiceNo: '102608000072',
+      sellerName: /ทีพีดี/,
+      sellerNameNot: /กสิกร/i,
+      sellerTaxId: '0105530022307',
+      sellerTaxIdNot: '0105568080622',
+      vatAmount: 184.84,
+    },
+  },
+  {
     id: 'inv-not-phone',
     field: 'invoiceNo',
     title: 'NR 번호. 전화번호 금지',
