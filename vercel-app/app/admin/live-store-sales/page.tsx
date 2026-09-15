@@ -37,7 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   adminTabsContentCn,
   adminTabsListRowCn,
-  adminTabsRootCn,
+  adminTabsRootScrollableCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { getBangkokDateTimeString } from "@/lib/bangkok-time"
@@ -295,7 +295,7 @@ export default function AdminLiveStoreSalesPage() {
     showBranchRealtime || showFranchiseAllRealtime || showOfficeAllRealtime
 
   return (
-    <div className="flex-1 overflow-auto">
+    <div className="min-w-0 flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
         <SalesPageHeader
           title={tOr(t, "adminLiveStoreSales", "실시간 매출")}
@@ -307,7 +307,7 @@ export default function AdminLiveStoreSalesPage() {
 
         {isOfficeSelector ? <MobileStoreSelectorBar /> : null}
 
-        <Tabs defaultValue="realtime" className={adminTabsRootCn}>
+        <Tabs defaultValue="realtime" className={adminTabsRootScrollableCn}>
           <AdminTabsBarWithHelp>
             <TabsList className={adminTabsListRowCn}>
               <TabsTrigger value="realtime" className={adminTabsTriggerCn}>
@@ -341,7 +341,7 @@ export default function AdminLiveStoreSalesPage() {
             ) : null}
           </TabsContent>
 
-          <TabsContent value="charts" className={adminTabsContentCn}>
+          <TabsContent value="charts" className={`${adminTabsContentCn} min-w-0`}>
             <AdminSalesDashboardCharts
               effectiveStoreCode={effectiveStoreCode}
               isOfficeSelector={isOfficeSelector}

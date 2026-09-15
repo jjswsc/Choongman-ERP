@@ -58,7 +58,8 @@ export function AdminTableScroll({
     left: number
     width: number
     scrollWidth: number
-  }>({ visible: false, left: 0, width: 0, scrollWidth: 0 })
+    insetBottom: number
+  }>({ visible: false, left: 0, width: 0, scrollWidth: 0, insetBottom: 0 })
 
   const updateSticky = React.useCallback(() => {
     const el = scrollRef.current
@@ -68,21 +69,27 @@ export function AdminTableScroll({
     }
     const needsH = el.scrollWidth > el.clientWidth + 1
     const rect = el.getBoundingClientRect()
-    const vh = window.innerHeight
-    const intersects = rect.top < vh && rect.bottom > 0
-    // 네이티브 가로 스크롤바는 컨테이너 바닥에 있음 → 그 바닥이 뷰포트 안에 있으면 sticky 불필요
-    const nativeBarInView = rect.bottom <= vh + 1 && rect.bottom > 12
+    // 폴드·모바일 브라우저 크롬: layout innerHeight와 보이는 영역이 다름
+    const vv = window.visualViewport
+    const visualTop = vv?.offsetTop ?? 0
+    const visualBottom = visualTop + (vv?.height ?? window.innerHeight)
+    const insetBottom = Math.max(0, window.innerHeight - visualBottom)
+    const intersects = rect.top < visualBottom && rect.bottom > visualTop
+    // 네이티브 가로 스크롤바는 컨테이너 바닥에 있음 → 그 바닥이 보이는 영역 안에 있으면 sticky 불필요
+    const nativeBarInView = rect.bottom <= visualBottom + 1 && rect.bottom > visualTop + 12
     const next = {
       visible: needsH && intersects && !nativeBarInView,
       left: Math.max(0, rect.left),
       width: Math.max(0, rect.width),
       scrollWidth: el.scrollWidth,
+      insetBottom,
     }
     setSticky((prev) =>
       prev.visible === next.visible &&
       Math.abs(prev.left - next.left) < 0.5 &&
       Math.abs(prev.width - next.width) < 0.5 &&
-      prev.scrollWidth === next.scrollWidth
+      prev.scrollWidth === next.scrollWidth &&
+      Math.abs(prev.insetBottom - next.insetBottom) < 0.5
         ? prev
         : next
     )
@@ -106,12 +113,17 @@ export function AdminTableScroll({
     window.addEventListener("scroll", onScrollOrResize, true)
     window.addEventListener("resize", onScrollOrResize)
     el.addEventListener("scroll", onScrollOrResize)
+    const vv = window.visualViewport
+    vv?.addEventListener("resize", onScrollOrResize)
+    vv?.addEventListener("scroll", onScrollOrResize)
 
     return () => {
       ro?.disconnect()
       window.removeEventListener("scroll", onScrollOrResize, true)
       window.removeEventListener("resize", onScrollOrResize)
       el.removeEventListener("scroll", onScrollOrResize)
+      vv?.removeEventListener("resize", onScrollOrResize)
+      vv?.removeEventListener("scroll", onScrollOrResize)
     }
   }, [stickyHorizontal, updateSticky, children])
 
@@ -125,7 +137,7 @@ export function AdminTableScroll({
   }, [sticky.visible, sticky.scrollWidth])
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0 max-w-full">
       {hint ? (
         <p className="mb-1.5 text-[10px] leading-snug text-muted-foreground md:hidden">
           {tOr(t, "adminTableScrollHint", "표를 좌우로 밀어 보세요")}
@@ -134,9 +146,9 @@ export function AdminTableScroll({
       <div
         ref={scrollRef}
         className={cn(
-          // 가로·세로를 한 컨테이너에서 처리 → max-h 사용 시 가로 스크롤바가 항상 뷰포트 하단에 보임
-          "overflow-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]",
-          lockViewport ? ADMIN_TABLE_SCROLL_VIEWPORT_CN : null,
+          // min-w-0: 그리드/플렉스 자식이 표 min-width만큼 커져 부모 overflow-clip에 잘리는 것 방지
+          "min-w-0 max-w-full overflow-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]",
+          lockViewport ? ADMIN_TABLE_SCROLL_VIEWPORT_CN : "touch-pan-x",
           className
         )}
       >
@@ -146,7 +158,7 @@ export function AdminTableScroll({
         <div
           ref={stickyRef}
           className="fixed z-40 h-3.5 overflow-x-auto overflow-y-hidden border-t border-border/70 bg-background/90 shadow-[0_-2px_8px_-4px_rgba(0,0,0,0.12)] backdrop-blur-sm"
-          style={{ left: sticky.left, width: sticky.width, bottom: 0 }}
+          style={{ left: sticky.left, width: sticky.width, bottom: sticky.insetBottom }}
           aria-hidden
           onScroll={(e) => {
             const main = scrollRef.current
