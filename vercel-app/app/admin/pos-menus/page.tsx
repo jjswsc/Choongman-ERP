@@ -177,6 +177,9 @@ import {
   resolveOptionCode,
   emptyForm,
   newPackagingChecklistRow,
+  isPersistedPosMenuOptionId,
+  optionConfigHasResettableState,
+  optionConfigResetTargetGroups,
   type PackagingChecklistDraftRow,
 } from './pos-menus-page-helpers'
 
@@ -2952,24 +2955,107 @@ export default function PosMenusPage() {
     }
   }
 
+  const handleDeleteOptionForConfig = async (opt: PosMenuOption) => {
+    const name = String(opt.name ?? "").trim() || String(opt.id ?? "")
+    if (
+      !(await appConfirm(
+        (t("posOptionDeleteConfirm") || '옵션 "{name}"을(를) 삭제할까요?').replace("{name}", name)
+      ))
+    ) {
+      return
+    }
+    const id = String(opt.id ?? "")
+    if (isPersistedPosMenuOptionId(id)) {
+      const res = await deletePosMenuOption({ id })
+      if (!res.success) {
+        await appAlert(res.message || t("msg_delete_fail_detail") || "삭제 실패")
+        return
+      }
+      setOptionsConfigOriginalOptions((prev) => prev.filter((o) => String(o.id) !== id))
+    }
+    setOptionsConfigMenuOptions((prev) => prev.filter((o) => String(o.id) !== id))
+  }
+
   const handleResetOptionsForConfig = async () => {
-    if (!optionsConfigSelectedMenuId || optionsConfigMenuOptions.length === 0) return
+    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
+    if (optionsConfigSelectedMenu.promoId?.trim()) {
+      await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
+      return
+    }
+    if (
+      !optionConfigHasResettableState(
+        optionsConfigMenuOptions.length,
+        optionsConfigPanelStepGroups,
+        optionsConfigSelectedMenu.code
+      )
+    ) {
+      return
+    }
     if (!await appConfirm(t("posMenuOptionsConfigResetConfirm") || "선택한 메뉴의 모든 옵션을 삭제합니다. 계속하시겠습니까?")) return
+    const menuIdNum = Number(optionsConfigSelectedMenuId)
     try {
+      setOptionsConfigSaving(true)
+      if (Number.isFinite(menuIdNum) && menuIdNum > 0) {
+        const unlinkRes = await savePosMenuOptionGroupLinks({
+          menuId: menuIdNum,
+          links: [],
+        })
+        if (!unlinkRes.success) {
+          await appAlert(translateApiMessage(unlinkRes.message, t) || unlinkRes.message || t("msg_save_fail_detail"))
+          return
+        }
+      }
       for (const o of optionsConfigMenuOptions) {
-        if (!/^\d+$/.test(String(o.id ?? ""))) continue
+        if (!isPersistedPosMenuOptionId(o.id)) continue
         const res = await deletePosMenuOption({ id: o.id })
         if (!res.success) {
           await appAlert(res.message)
           return
         }
       }
-      setOptionsConfigMenuOptions([])
-      getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(applyLoadedOptionsForConfig)
+      const emptyGroups = optionConfigResetTargetGroups(optionsConfigSelectedMenu.code)
+      const emptyConfig = applyChickenDeliveryRulesToConfig(
+        emptyGroups,
+        normalizeOptionSelectionConfig(emptyGroups, []),
+        optionsConfigSelectedMenu.code,
+        t
+      )
+      const menuRes = await savePosMenu({
+        id: optionsConfigSelectedMenuId,
+        code: optionsConfigSelectedMenu.code,
+        name: optionsConfigSelectedMenu.name,
+        category: optionsConfigSelectedMenu.category ?? "",
+        categoryMain: optionsConfigSelectedMenu.categoryMain ?? "",
+        sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
+        price: optionsConfigSelectedMenu.price,
+        priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
+        vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
+        isActive: optionsConfigSelectedMenu.isActive ?? true,
+        optionSelectionGroups: emptyGroups,
+        optionSelectionConfig: emptyConfig,
+        isBanban: optionsConfigSelectedMenu.isBanban ?? false,
+      })
+      if (!menuRes.success) {
+        await appAlert(translateApiMessage(menuRes.message, t) || menuRes.message || t("msg_save_fail_detail"))
+        return
+      }
+      setMenus((prev) =>
+        prev.map((m) =>
+          m.id === optionsConfigSelectedMenuId
+            ? { ...m, optionSelectionGroups: emptyGroups, optionSelectionConfig: emptyConfig }
+            : m
+        )
+      )
+      setOptionsConfigGroupsDraft(emptyGroups.join(", "))
+      setOptionsConfigGroupRulesDraft(emptyConfig)
+      const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
+      applyLoadedOptionsForConfig(Array.isArray(refreshed) ? refreshed : [])
       await appAlert(t("posMenuOptionsConfigResetDone") || "초기화되었습니다.")
     } catch (e) {
       console.error("handleResetOptionsForConfig:", e)
       await appAlert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setOptionsConfigSaving(false)
     }
   }
 
@@ -5524,7 +5610,15 @@ export default function PosMenusPage() {
                   onReset={handleResetOptionsForConfig}
                   onSave={handleSaveOptionsForConfig}
                   saveDisabled={optionsConfigMenuOptions.length === 0 || optionsConfigSaving}
-                  resetDisabled={optionsConfigMenuOptions.length === 0 || optionsConfigSaving}
+                  resetDisabled={
+                    optionsConfigSaving ||
+                    !!optionsConfigSelectedMenu?.promoId?.trim() ||
+                    !optionConfigHasResettableState(
+                      optionsConfigMenuOptions.length,
+                      optionsConfigPanelStepGroups,
+                      optionsConfigSelectedMenu?.code
+                    )
+                  }
                 >
                   <div className="space-y-4">
                     <p className="text-[11px] text-muted-foreground">
@@ -6243,6 +6337,9 @@ export default function PosMenusPage() {
                                   sellDelivery: checked,
                                 })
                               }
+                              onDelete={() => void handleDeleteOptionForConfig(o)}
+                              deleteLabel={t("posOptionDeleteBtn") || "옵션 삭제"}
+                              deleteDisabled={optionsConfigSaving}
                               draggable={true}
                               onDragStart={() => setOptionsConfigDraggingOptionId(String(o.id))}
                               onDragOver={() => undefined}

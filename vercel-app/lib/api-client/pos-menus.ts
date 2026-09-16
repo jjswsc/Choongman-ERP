@@ -257,6 +257,7 @@ export async function getPosMenuOptions(params?: {
   const q = new URLSearchParams()
   if (params?.menuId) q.set('menuId', params.menuId)
   if (params?.forCodeMap) q.set('forCodeMap', '1')
+  if (params?.fresh) q.set('_t', String(Date.now()))
   const qs = q.toString()
   const url = '/api/getPosMenuOptions' + (qs ? `?${qs}` : '')
   if (params?.fresh) {

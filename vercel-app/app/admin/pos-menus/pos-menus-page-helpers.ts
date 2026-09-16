@@ -394,3 +394,25 @@ export function newPackagingChecklistRow(sortOrder: number): PackagingChecklistD
     isActive: true,
   }
 }
+
+/** DB `pos_menu_options.id` 만 숫자. 그룹 링크 가상 행은 `m{menuId}-g{groupId}i{itemId}` 형태 */
+export function isPersistedPosMenuOptionId(id: unknown): boolean {
+  return /^\d+$/.test(String(id ?? ""))
+}
+
+/** [초기화] 후 메뉴에 남을 단계 키. 치킨(c)은 part 가 항상 포함되고, BBQ 본리스는 빈 목록 */
+export function optionConfigResetTargetGroups(menuCode: string | undefined): string[] {
+  return normalizeOptionGroupsForMenu([], menuCode)
+}
+
+/** 옵션 행 또는 (치킨 기본 part 외) 단계가 있으면 [초기화] 대상 */
+export function optionConfigHasResettableState(
+  optionsCount: number,
+  stepGroups: string[],
+  menuCode: string | undefined
+): boolean {
+  if (optionsCount > 0) return true
+  const current = stepGroups.map((g) => String(g).trim()).filter(Boolean)
+  const cleared = optionConfigResetTargetGroups(menuCode)
+  return JSON.stringify(current) !== JSON.stringify(cleared)
+}

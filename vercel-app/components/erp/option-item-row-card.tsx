@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { GripVertical } from "lucide-react"
+import { GripVertical, Trash2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import type { PosMenuOption } from "@/lib/api-client"
@@ -22,6 +23,9 @@ type OptionItemRowCardProps = {
   onChangePrice: (field: "priceModifier" | "priceModifierDelivery", value: string) => void
   onToggleBaseChannel: (checked: boolean) => void
   onToggleDeliveryChannel: (checked: boolean) => void
+  onDelete?: () => void
+  deleteLabel?: string
+  deleteDisabled?: boolean
   draggable?: boolean
   onDragStart?: () => void
   onDragOver?: () => void
@@ -44,6 +48,9 @@ export function OptionItemRowCard({
   onChangePrice,
   onToggleBaseChannel,
   onToggleDeliveryChannel,
+  onDelete,
+  deleteLabel,
+  deleteDisabled,
   draggable,
   onDragStart,
   onDragOver,
@@ -55,8 +62,6 @@ export function OptionItemRowCard({
   return (
     <div
       className="rounded-lg border bg-background p-3"
-      draggable={draggable}
-      onDragStart={onDragStart}
       onDragOver={(e) => {
         e.preventDefault()
         onDragOver?.()
@@ -69,6 +74,11 @@ export function OptionItemRowCard({
       <div className="flex items-center gap-2">
         <span
           className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing"
+          draggable={draggable}
+          onDragStart={(e) => {
+            e.stopPropagation()
+            onDragStart?.()
+          }}
           aria-hidden
         >
           <GripVertical className="h-4 w-4" />
@@ -90,6 +100,25 @@ export function OptionItemRowCard({
             <p className="truncate text-sm font-medium">{displayName}</p>
           )}
         </div>
+        {onDelete ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 shrink-0 gap-1 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={deleteDisabled}
+            title={deleteLabel}
+            aria-label={deleteLabel}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onDelete()
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {deleteLabel ? <span className="text-[11px]">{deleteLabel}</span> : null}
+          </Button>
+        ) : null}
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">

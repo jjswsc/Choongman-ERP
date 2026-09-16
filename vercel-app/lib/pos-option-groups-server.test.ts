@@ -86,6 +86,8 @@ describe("buildMenuOptionsFromLinks", () => {
 
     const rows = buildMenuOptionsFromLinks(99, links, groupsById, itemsByGroupId, "C008")
     expect(rows).toHaveLength(2)
+    expect(rows.every((r) => !/^\d+$/.test(String(r.id)))).toBe(true)
+    expect(rows[0]?.id).toMatch(/^m99-/)
     const bonelessKimchi = rows.find((r) => r.optionStepValues.part === "Boneless")
     expect(bonelessKimchi?.optionStepValues.sidedish).toBe("Kimchi")
     expect(bonelessKimchi?.priceModifier).toBe(15)
