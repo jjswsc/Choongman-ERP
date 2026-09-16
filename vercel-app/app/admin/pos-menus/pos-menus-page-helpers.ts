@@ -395,63 +395,19 @@ export function newPackagingChecklistRow(sortOrder: number): PackagingChecklistD
   }
 }
 
-/** DB `pos_menu_options.id` 만 숫자. 그룹 링크 가상 행은 `m{menuId}-g{groupId}i{itemId}` 형태 */
-export function isPersistedPosMenuOptionId(id: unknown): boolean {
-  return /^\d+$/.test(String(id ?? ""))
-}
-
-export function isDraftPosMenuOptionId(id: unknown): boolean {
-  return String(id ?? "").startsWith("draft-")
-}
-
-export type LinkedOptionGroupItemRef = { groupId: number; itemId: number }
-
-/** 그룹 링크 가상 행 id → 그룹 항목. `g12-i34` 또는 `m99-g12i34` / `m99-g12i34-g15i50` */
-export function parsePosLinkedOptionGroupItemRefs(id: unknown): LinkedOptionGroupItemRef[] {
-  const raw = String(id ?? "").trim()
-  if (!raw || isPersistedPosMenuOptionId(raw) || isDraftPosMenuOptionId(raw)) return []
-  const simple = raw.match(/^g(\d+)-i(\d+)$/)
-  if (simple) {
-    return [{ groupId: Number(simple[1]), itemId: Number(simple[2]) }]
-  }
-  const out: LinkedOptionGroupItemRef[] = []
-  const re = /g(\d+)i(\d+)/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(raw))) {
-    out.push({ groupId: Number(m[1]), itemId: Number(m[2]) })
-  }
-  return out
-}
-
-export function optionRowUsesLinkedGroupItem(
-  optionId: unknown,
-  ref: LinkedOptionGroupItemRef
-): boolean {
-  return parsePosLinkedOptionGroupItemRefs(optionId).some(
-    (x) => x.groupId === ref.groupId && x.itemId === ref.itemId
-  )
-}
-
-/** 가운데 패널에서 고른 단계의 그룹 항목만 지운다. 다단계 조합 행이면 현재 단계 항목을 고른다. */
-export function pickLinkedOptionGroupItemToDelete(
-  optionId: unknown,
-  groups: Array<{ id: string | number; key: string }>,
-  selectedGroupKey: string | undefined
-): LinkedOptionGroupItemRef | null {
-  const refs = parsePosLinkedOptionGroupItemRefs(optionId)
-  if (refs.length === 0) return null
-  if (refs.length === 1) return refs[0]
-  const key = String(selectedGroupKey ?? "").trim().toLowerCase()
-  if (key && key !== "__default__") {
-    const match = refs.find((r) =>
-      groups.some(
-        (g) => Number(g.id) === r.groupId && String(g.key ?? "").trim().toLowerCase() === key
-      )
-    )
-    if (match) return match
-  }
-  return refs[refs.length - 1] ?? null
-}
+export {
+  fingerprintDeletedOption,
+  filterOptionsExcludingDeleted,
+  isDraftPosMenuOptionId,
+  isPersistedPosMenuOptionId,
+  optionMatchesDeleteFingerprint,
+  optionRowUsesLinkedGroupItem,
+  optionStepValuesRecord,
+  parsePosLinkedOptionGroupItemRefs,
+  pickLinkedOptionGroupItemToDelete,
+  type LinkedOptionGroupItemRef,
+  type OptionDeleteFingerprint,
+} from "@/lib/pos-option-delete-match"
 
 /** [초기화] 후 메뉴에 남을 단계 키. 치킨(c)은 part 가 항상 포함되고, BBQ 본리스는 빈 목록 */
 export function optionConfigResetTargetGroups(menuCode: string | undefined): string[] {

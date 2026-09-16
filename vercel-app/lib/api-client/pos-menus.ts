@@ -280,6 +280,15 @@ export async function getPosOptionGroups(params?: { menuId?: string }) {
   return Array.isArray(data) ? (data as PosOptionGroup[]) : []
 }
 
+export async function deletePosOptionGroupItem(params: { id: string }) {
+  const res = await apiFetchWithOffline("/api/deletePosOptionGroupItem", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function savePosOptionGroup(params: {
   id?: string
   key: string

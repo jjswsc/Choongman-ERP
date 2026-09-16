@@ -166,6 +166,7 @@ const LEGACY_QUEUE_WHITELIST = new Set([
   '/api/costSettings',
   '/api/deletePosMenuIngredient',
   '/api/deletePosMenuOption',
+  '/api/deletePosOptionGroupItem',
   '/api/savePosMenu',
   '/api/deletePosMenu',
   '/api/updatePosMenuSoldOut',

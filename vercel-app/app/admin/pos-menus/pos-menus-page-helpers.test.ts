@@ -7,6 +7,9 @@ import {
   optionRowUsesLinkedGroupItem,
   parsePosLinkedOptionGroupItemRefs,
   pickLinkedOptionGroupItemToDelete,
+  fingerprintDeletedOption,
+  filterOptionsExcludingDeleted,
+  optionMatchesDeleteFingerprint,
 } from "./pos-menus-page-helpers"
 
 describe("option config reset helpers", () => {
@@ -55,5 +58,26 @@ describe("linked option group item ids", () => {
     })
     expect(optionRowUsesLinkedGroupItem("m99-g12i34-g15i50", { groupId: 15, itemId: 50 })).toBe(true)
     expect(optionRowUsesLinkedGroupItem("m99-g12i34-g15i88", { groupId: 15, itemId: 50 })).toBe(false)
+  })
+})
+
+describe("option delete fingerprints", () => {
+  it("keeps a reloaded group row out after save", () => {
+    const fp = fingerprintDeletedOption({
+      id: "m99-g15i50",
+      name: "Kimchi",
+      optionStepValues: { sidedish: "Kimchi" },
+    })
+    const reloaded = [
+      { id: "m99-g15i50", name: "Kimchi", optionStepValues: { sidedish: "Kimchi" } },
+      { id: "m99-g15i51", name: "Pickled Radish", optionStepValues: { sidedish: "Pickled Radish" } },
+    ]
+    expect(filterOptionsExcludingDeleted(reloaded, [fp]).map((o) => o.id)).toEqual(["m99-g15i51"])
+    expect(
+      optionMatchesDeleteFingerprint(
+        { id: "88", name: "Kimchi", optionStepValues: { sidedish: "Kimchi" } },
+        fp
+      )
+    ).toBe(true)
   })
 })

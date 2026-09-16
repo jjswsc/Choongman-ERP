@@ -270,7 +270,12 @@ export async function deletePosMenuIngredient(
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-export async function deletePosMenuOption(params: { id: string }) {
+export async function deletePosMenuOption(params: {
+  id?: string
+  menuId?: string
+  name?: string
+  optionStepValues?: Record<string, string>
+}) {
   const res = await apiFetchWithOffline('/api/deletePosMenuOption', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

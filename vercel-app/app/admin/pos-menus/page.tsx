@@ -62,6 +62,7 @@ import {
   savePosMenuOptionsBulk,
   savePosMenuOptionGroupLinks,
   savePosOptionGroup,
+  deletePosOptionGroupItem,
   savePosMenuIngredient,
   deletePosMenuOption,
   deletePosMenuIngredient,
@@ -146,6 +147,7 @@ import {
   resolveEffectiveMenuScopeStoreCodes,
   shouldPersistPosMenuStoreScopeOnSave,
 } from "@/lib/pos-menu-store-scope"
+import { deleteErpCacheByPrefix } from "@/lib/offline/cache"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 
 import { posMenuCodePlaceholderForMain } from "@/lib/pos-menu-next-code"
@@ -182,6 +184,10 @@ import {
   optionConfigHasResettableState,
   optionConfigResetTargetGroups,
   optionRowUsesLinkedGroupItem,
+  fingerprintDeletedOption,
+  filterOptionsExcludingDeleted,
+  optionMatchesDeleteFingerprint,
+  type OptionDeleteFingerprint,
   pickLinkedOptionGroupItemToDelete,
   type PackagingChecklistDraftRow,
 } from './pos-menus-page-helpers'
@@ -438,6 +444,7 @@ export default function PosMenusPage() {
   const [optionsConfigSelectedMenuId, setOptionsConfigSelectedMenuId] = React.useState<string | null>(null)
   const [optionsConfigMenuOptions, setOptionsConfigMenuOptions] = React.useState<PosMenuOption[]>([])
   const [optionsConfigOriginalOptions, setOptionsConfigOriginalOptions] = React.useState<PosMenuOption[]>([])
+  const optionsConfigDeletedRef = React.useRef<OptionDeleteFingerprint[]>([])
   const [optionsConfigSaving, setOptionsConfigSaving] = React.useState(false)
   const [optionsConfigSelectedGroupKey, setOptionsConfigSelectedGroupKey] = React.useState<string>("")
   const [newOptionStepValues, setNewOptionStepValues] = React.useState<Record<string, string>>({})
@@ -825,12 +832,13 @@ export default function PosMenusPage() {
   }, [optionsConfigSelectedMenuId, menus])
 
   const applyLoadedOptionsForConfig = React.useCallback((raw: PosMenuOption[] | null | undefined) => {
-    const next = Array.isArray(raw) ? raw : []
+    const next = filterOptionsExcludingDeleted(Array.isArray(raw) ? raw : [], optionsConfigDeletedRef.current)
     setOptionsConfigMenuOptions(next)
     setOptionsConfigOriginalOptions(next)
   }, [])
 
   React.useEffect(() => {
+    optionsConfigDeletedRef.current = []
     if (!optionsConfigSelectedMenuId) {
       setOptionsConfigMenuOptions([])
       setOptionsConfigOriginalOptions([])
@@ -2900,6 +2908,7 @@ export default function PosMenusPage() {
         (o) => isPersistedPosMenuOptionId(o.id) || isDraftPosMenuOptionId(o.id)
       )
       if (persistableChanged.length === 0 && deletedNumericIds.length === 0) {
+        await deleteErpCacheByPrefix("erp:posCatalog:options")
         const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
         applyLoadedOptionsForConfig(Array.isArray(refreshed) ? refreshed : [])
         await appAlert(t("msg_save_success") || "저장되었습니다.")
@@ -2918,6 +2927,7 @@ export default function PosMenusPage() {
       }
 
       if (persistableChanged.length === 0) {
+        await deleteErpCacheByPrefix("erp:posCatalog:options")
         const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
         applyLoadedOptionsForConfig(Array.isArray(refreshed) ? refreshed : [])
         await appAlert(t("msg_save_success") || "저장되었습니다.")
@@ -2952,6 +2962,7 @@ export default function PosMenusPage() {
         await appAlert(firstError?.message || res.message || t("msg_save_fail_detail"))
         return
       }
+      await deleteErpCacheByPrefix("erp:posCatalog:options")
       const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
       applyLoadedOptionsForConfig(Array.isArray(refreshed) ? refreshed : [])
       await appAlert(t("msg_save_success") || "저장되었습니다.")
@@ -2977,24 +2988,17 @@ export default function PosMenusPage() {
       optionsConfigEffectiveGroupKey && optionsConfigEffectiveGroupKey !== "__default__"
         ? optionsConfigEffectiveGroupKey
         : undefined
+    const fp = fingerprintDeletedOption(opt)
+    optionsConfigDeletedRef.current = [...optionsConfigDeletedRef.current, fp]
 
     const dropFromLocalLists = (ref?: { groupId: number; itemId: number }) => {
       const gone = (row: PosMenuOption) => {
         if (String(row.id) === id) return true
-        return ref ? optionRowUsesLinkedGroupItem(row.id, ref) : false
+        if (ref && optionRowUsesLinkedGroupItem(row.id, ref)) return true
+        return optionMatchesDeleteFingerprint(row, fp)
       }
       setOptionsConfigOriginalOptions((prev) => prev.filter((row) => !gone(row)))
       setOptionsConfigMenuOptions((prev) => prev.filter((row) => !gone(row)))
-    }
-
-    if (isPersistedPosMenuOptionId(id)) {
-      const res = await deletePosMenuOption({ id })
-      if (!res.success) {
-        await appAlert(res.message || t("msg_delete_fail_detail") || "삭제 실패")
-        return
-      }
-      dropFromLocalLists()
-      return
     }
 
     if (isDraftPosMenuOptionId(id)) {
@@ -3008,43 +3012,47 @@ export default function PosMenusPage() {
       groups = fetched
       setOptionsConfigLibraryGroups(fetched)
     }
-    const pick = pickLinkedOptionGroupItemToDelete(id, groups, selectedKey)
-    if (!pick) {
-      dropFromLocalLists()
-      return
+    let pick = pickLinkedOptionGroupItemToDelete(id, groups, selectedKey)
+    if (!pick && selectedKey) {
+      const group = groups.find((g) => String(g.key ?? "").trim().toLowerCase() === selectedKey.toLowerCase())
+      const value = (fp.stepValues[selectedKey] || fp.name).trim()
+      const item = (group?.items || []).find((it) => String(it.itemName ?? "").trim() === value)
+      if (group && item) {
+        pick = { groupId: Number(group.id), itemId: Number(item.id) }
+      }
     }
-    const group = groups.find((g) => Number(g.id) === pick.groupId)
-    if (!group) {
-      dropFromLocalLists(pick)
-      return
-    }
-    const remaining = (group.items || []).filter((it) => Number(it.id) !== pick.itemId)
-    const saveRes = await savePosOptionGroup({
-      id: String(group.id),
-      key: group.key,
-      name: group.name,
-      isActive: group.isActive !== false,
-      sortOrder: Number(group.sortOrder ?? 0) || 0,
-      items: remaining.map((it, i) => ({
-        id: it.id,
-        itemName: it.itemName,
-        sortOrder: i,
-        basePriceHall: Number(it.basePriceHall ?? 0) || 0,
-        basePriceDelivery: it.basePriceDelivery ?? null,
-        sellHall: it.sellHall !== false,
-        sellDelivery: it.sellDelivery !== false,
-      })),
-    })
-    if (!saveRes.success) {
-      await appAlert(
-        translateApiMessage(saveRes.message, t) || saveRes.message || t("msg_save_fail_detail")
+    if (pick) {
+      const delGroup = await deletePosOptionGroupItem({ id: String(pick.itemId) })
+      if (!delGroup.success) {
+        await appAlert(
+          translateApiMessage(delGroup.message, t) || delGroup.message || t("msg_delete_fail_detail") || "삭제 실패"
+        )
+        optionsConfigDeletedRef.current = optionsConfigDeletedRef.current.filter((x) => x.id !== fp.id)
+        return
+      }
+      setOptionsConfigLibraryGroups((prev) =>
+        prev.map((g) =>
+          Number(g.id) === pick!.groupId
+            ? { ...g, items: (g.items || []).filter((it) => Number(it.id) !== pick!.itemId) }
+            : g
+        )
       )
+    }
+
+    const delMenu = await deletePosMenuOption({
+      id: isPersistedPosMenuOptionId(id) ? id : undefined,
+      menuId: optionsConfigSelectedMenuId ?? undefined,
+      name: fp.name,
+      optionStepValues: fp.stepValues,
+    })
+    if (!delMenu.success) {
+      await appAlert(delMenu.message || t("msg_delete_fail_detail") || "삭제 실패")
+      optionsConfigDeletedRef.current = optionsConfigDeletedRef.current.filter((x) => x.id !== fp.id)
       return
     }
-    setOptionsConfigLibraryGroups((prev) =>
-      prev.map((g) => (Number(g.id) === pick.groupId ? { ...g, items: remaining } : g))
-    )
-    dropFromLocalLists(pick)
+
+    await deleteErpCacheByPrefix("erp:posCatalog:options")
+    dropFromLocalLists(pick ?? undefined)
   }
 
   const handleResetOptionsForConfig = async () => {
