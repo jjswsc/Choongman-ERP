@@ -47,4 +47,18 @@ describe('bank-receivable-link-policy', () => {
     })
     expect(ok.ok).toBe(true)
   })
+
+  it('allows large surplus without note or director approval', () => {
+    const ok = validateReceivableBankLinkRequest({
+      bankAmt: 81523.3,
+      selectedTotal: 62017.2,
+      storeCreditApply: 0,
+      canApproveMismatch: false,
+    })
+    expect(ok.ok).toBe(true)
+    if (ok.ok) {
+      expect(ok.kind).toBe('large')
+      expect(ok.gap).toBe(-19506.1)
+    }
+  })
 })

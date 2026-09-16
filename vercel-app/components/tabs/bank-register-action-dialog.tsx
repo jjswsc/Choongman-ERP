@@ -25,6 +25,8 @@ import {
   getApprovedExpenseAccrualsForBankTx,
   linkReceivableFromBankTransaction,
   addReceivableStoreCredit,
+  registerReceivableSurplusFromBankTx,
+  getLinkedReceivablesForBankTx,
   invalidateReceivablePayableListCache,
   type ExpenseAccrualPlanItem,
   type OpenReceivableForBankItem,
@@ -55,7 +57,9 @@ import {
 } from "@/lib/expense-accrual-bank-multi-link"
 import {
   canSaveReceivablePickWithMismatch,
+  receivableLinkSurplusCreditAmount,
   roundReceivableMoney,
+  suggestedReceivableLinkCreditApply,
   sumOpenReceivablePickAmount,
 } from "@/lib/bank-receivable-link"
 import {
@@ -150,6 +154,30 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
   const [comboTo, setComboTo] = React.useState("")
   const [comboSearching, setComboSearching] = React.useState(false)
   const [comboSearched, setComboSearched] = React.useState(false)
+  const [surplusCreditSaving, setSurplusCreditSaving] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!receivablePickRow || receivablePickLoading) return
+    const bankAmt = Math.abs(Number(receivablePickRow.amount || 0))
+    const selectedTotal = sumOpenReceivablePickAmount(
+      receivablePickList,
+      receivablePickSelectedIds
+    )
+    setReceivablePickCreditApply(
+      suggestedReceivableLinkCreditApply(
+        bankAmt,
+        selectedTotal,
+        receivablePickStoreCreditAvailable
+      )
+    )
+  }, [
+    receivablePickRow,
+    receivablePickLoading,
+    receivablePickList,
+    receivablePickSelectedIds,
+    receivablePickStoreCreditAvailable,
+    setReceivablePickCreditApply,
+  ])
 
   const applyDefaultComboPeriod = React.useCallback((bankDate?: string) => {
     const d = defaultExpenseBankComboPeriod(bankDate || "")
@@ -661,9 +689,65 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                       </span>
                     </div>
                   ) : null}
+                  {(receivableLinkedSummary.storeCreditRegistered || 0) > 0.009 ? (
+                    <div className="flex justify-between gap-2 tabular-nums text-xs">
+                      <span className="text-muted-foreground">
+                        {tt("bankReceivableLinkedStoreCreditRegistered", "과납 선수금 적립")}
+                      </span>
+                      <span>
+                        ฿{(receivableLinkedSummary.storeCreditRegistered || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  ) : null}
+                  {(receivableLinkedSummary.surplusUnregistered || 0) > 0.009 ? (
+                    <p className="text-xs text-amber-800 dark:text-amber-200 leading-snug">
+                      {tt(
+                        "bankReceivableLinkedRegisterSurplusHint",
+                        "연결 합계보다 통장 입금이 많습니다. 과납분을 다음 청구 상계용 선수금으로 등록하세요."
+                      )}{" "}
+                      ฿{(receivableLinkedSummary.surplusUnregistered || 0).toLocaleString()}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
               <div className="flex justify-end gap-2">
+                {(receivableLinkedSummary?.surplusUnregistered || 0) > 0.009 && receivableLinkedRow?.id ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={surplusCreditSaving || receivableLinkedUnlinking}
+                    onClick={async () => {
+                      const bankId = Number(receivableLinkedRow.id)
+                      setSurplusCreditSaving(true)
+                      try {
+                        const res = await registerReceivableSurplusFromBankTx({
+                          bankTransactionId: bankId,
+                        })
+                        if (!res.success) {
+                          await appAlert(
+                            translateApiMessage(res.message, t) || res.message || t("processFail")
+                          )
+                          return
+                        }
+                        const next = await getLinkedReceivablesForBankTx({
+                          bankTransactionId: bankId,
+                        })
+                        if (next.success && next.summary) {
+                          setReceivableLinkedSummary(next.summary)
+                          setReceivableLinkedList(next.items || [])
+                        }
+                        await invalidateReceivablePayableListCache()
+                        loadData()
+                      } finally {
+                        setSurplusCreditSaving(false)
+                      }
+                    }}
+                  >
+                    {surplusCreditSaving
+                      ? "..."
+                      : tt("bankReceivableLinkedRegisterSurplus", "과납분을 선수금으로 등록")}
+                  </Button>
+                ) : null}
                 <Button variant="outline" onClick={() => setReceivableLinkedRow(null)}>
                   {t("cancel") || "취소"}
                 </Button>
@@ -722,7 +806,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
               <p className="text-xs text-muted-foreground">
                 {tt(
                   "bankReceivablePickMultiHint",
-                  "여러 인보이스를 선택할 수 있습니다. 선택 합계가 통장 입금액과 일치해야 저장됩니다."
+                  "여러 인보이스를 선택할 수 있습니다. 입금이 더 많으면 과납분이 다음 연결용 선수금으로 적립되고, 부족하면 이전 과납 선수금이 자동 적용됩니다."
                 )}
               </p>
               <p className="text-[11px] text-muted-foreground">
@@ -774,6 +858,12 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                 const gap = computeReceivableLinkGap(bankAmt, selectedTotal, creditApply)
                 const matches = Math.abs(gap) <= 0.01
                 const { kind } = classifyReceivableBankLinkMismatch(bankAmt, selectedTotal, creditApply)
+                const surplusCredit = receivableLinkSurplusCreditAmount(
+                  bankAmt,
+                  selectedTotal,
+                  creditApply
+                )
+                const willCreditSurplus = surplusCredit > 0.009
                 const canSave =
                   receivablePickSelectedIds.length > 0 &&
                   canSaveReceivablePickWithMismatch({
@@ -784,7 +874,8 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                     mismatchReason: receivablePickMismatchReason,
                     canApproveMismatch: canApproveReceivableMismatch,
                   })
-                const showMismatchFields = receivablePickSelectedIds.length > 0 && !matches
+                const showMismatchFields =
+                  receivablePickSelectedIds.length > 0 && !matches && !willCreditSurplus
                 const shortfall = Math.max(0, gap)
                 return (
                   <>
@@ -793,7 +884,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                         "rounded-md border px-3 py-2 text-sm space-y-1",
                         receivablePickSelectedIds.length === 0
                           ? "border-border bg-muted/30"
-                          : matches
+                          : matches || willCreditSurplus
                             ? "border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
                             : "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
                       )}
@@ -826,6 +917,15 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                       {receivablePickSelectedIds.length > 0 && matches ? (
                         <p className="text-xs text-green-800 dark:text-green-300">
                           {tt("bankReceivablePickAmountOk", "금액이 일치합니다.")}
+                        </p>
+                      ) : null}
+                      {willCreditSurplus ? (
+                        <p className="text-xs text-green-800 dark:text-green-300">
+                          {tt(
+                            "bankReceivablePickSurplusWillCredit",
+                            "차액은 다음 입금에서 쓸 선수금으로 적립됩니다."
+                          )}{" "}
+                          ฿{surplusCredit.toLocaleString()}
                         </p>
                       ) : null}
                       {showMismatchFields && kind === "large" && !canApproveReceivableMismatch ? (
@@ -885,7 +985,7 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                         <p className="text-xs text-muted-foreground leading-snug">
                           {tt(
                             "bankReceivablePickMismatchHint",
-                            "금액이 다를 때는 사유를 선택하거나 หมายเหตุ를 입력하세요."
+                            "부족분이 이전 과납 선수금으로 안 맞을 때만 사유를 입력하세요. ฿1 초과 부족은 Director 또는 오피스 급여 담당 승인이 필요합니다."
                           )}
                         </p>
                         <div>

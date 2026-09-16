@@ -1,5 +1,6 @@
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import type { PosMenuCostIndexEntry } from '@/lib/pos-menu-cost-index-server'
+import { costIndexFoodPackForOrder } from '@/lib/pos-menu-cost-index-server'
 import {
   buildTheoreticalCostResolveContext,
   expandOrderLineToCostLines,
@@ -462,8 +463,7 @@ export function aggregatePosCostWeightedByCategory(params: {
         bucket.netSales = round2(bucket.netSales + catalogNet)
         bucket.matchedQty = round2(bucket.matchedQty + p.qty)
         orderMatchedSales = round2(orderMatchedSales + orderShare)
-        const unitFood = entry.foodCost
-        const unitPack = entry.packagingCost
+        const { food: unitFood, packaging: unitPack } = costIndexFoodPackForOrder(entry, isDelivery)
         bucket.foodCost = round2(bucket.foodCost + unitFood * p.qty)
         if (isDelivery) {
           bucket.packagingCost = round2(bucket.packagingCost + unitPack * p.qty)

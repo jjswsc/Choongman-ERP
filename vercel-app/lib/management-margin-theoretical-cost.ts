@@ -1,6 +1,7 @@
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import { parseGrabSetChildLineName } from '@/lib/grab-set-pos-lines'
 import type { PosMenuCostIndexEntry } from '@/lib/pos-menu-cost-index-server'
+import { costIndexFoodPackForOrder } from '@/lib/pos-menu-cost-index-server'
 import type { PromoLineLike, PromoMenuLike, PromoOptionLike } from '@/lib/promo-economics'
 import type { PromoPricingCatalog } from '@/lib/pos-order-promo-regular-price'
 
@@ -621,8 +622,7 @@ export function aggregateTheoreticalCostFromOrders(params: {
           continue
         }
         matchedLineQty += qty
-        const unitFood = entry.foodCost
-        const unitPack = entry.packagingCost
+        const { food: unitFood, packaging: unitPack } = costIndexFoodPackForOrder(entry, isDelivery)
         foodCost += unitFood * qty
         if (isDelivery) packagingCost += unitPack * qty
       }

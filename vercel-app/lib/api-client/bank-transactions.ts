@@ -484,6 +484,8 @@ export type LinkedReceivableForBankSummary = {
   paidFromCredit: number
   paidFromRounding: number
   storeCreditApplied: number
+  storeCreditRegistered?: number
+  surplusUnregistered?: number
 }
 
 export async function getLinkedReceivablesForBankTx(params: { bankTransactionId: number }) {
@@ -559,4 +561,13 @@ export async function addReceivableStoreCredit(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string; id?: number }>
+}
+
+export async function registerReceivableSurplusFromBankTx(params: { bankTransactionId: number }) {
+  const res = await apiFetchWithOffline('/api/registerReceivableSurplusFromBankTx', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bankTransactionId: params.bankTransactionId }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; amount?: number }>
 }

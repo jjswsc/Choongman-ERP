@@ -25,6 +25,23 @@ export function computeReceivableOpenAmount(
   return Math.max(0, roundReceivableMoney(gross - paid))
 }
 
+/**
+ * 과납 선수금 Receive(음수 원금)의 남은 가용액.
+ * CreditApply 는 부호와 관계없이 사용액으로 차감한다.
+ */
+export function remainingBankSurplusAfterApplies(
+  principalSigned: number,
+  applyAmounts: Array<{ amount?: number } | number>
+): number {
+  const gross = Math.abs(Number(principalSigned) || 0)
+  let applied = 0
+  for (const row of applyAmounts || []) {
+    const n = typeof row === 'number' ? row : Number(row.amount ?? 0)
+    applied += Math.abs(n)
+  }
+  return Math.max(0, roundReceivableMoney(gross - applied))
+}
+
 export type BankReceivableLinkRow = {
   transType?: string
   category?: string
@@ -166,10 +183,32 @@ export function canSaveReceivablePickWithMismatch(params: {
   )
   if (Math.abs(gap) <= 0.01) return true
   if (gap < -0.01) {
-    if (Math.abs(gap) <= 1) return Boolean(String(params.mismatchReason || '').trim())
-    return Boolean(String(params.mismatchNote || '').trim())
+    // 과납: 소액은 반올림, 큰 금액은 다음 입금 상계용 선수금으로 적립
+    return true
   }
   if (Math.abs(gap) <= 1) return Boolean(String(params.mismatchReason || '').trim())
   if (!params.canApproveMismatch) return false
   return Boolean(String(params.mismatchNote || '').trim())
+}
+
+/** 선택 합계가 통장보다 클 때 적용할 선수금(가용 잔액·부족분 중 작은 값) */
+export function suggestedReceivableLinkCreditApply(
+  bankAmt: number,
+  selectedTotal: number,
+  storeCreditAvailable: number
+): number {
+  const shortfall = roundReceivableMoney(Math.max(0, selectedTotal - bankAmt))
+  if (shortfall <= 0.009) return 0
+  return roundReceivableMoney(Math.min(shortfall, Math.max(0, storeCreditAvailable)))
+}
+
+/** ฿1 초과 과납분 — 다음 입금 상계용 선수금 적립액 */
+export function receivableLinkSurplusCreditAmount(
+  bankAmt: number,
+  selectedTotal: number,
+  storeCreditApply = 0
+): number {
+  const gap = roundReceivableMoney(selectedTotal - bankAmt - storeCreditApply)
+  if (gap >= -1) return 0
+  return roundReceivableMoney(-gap)
 }

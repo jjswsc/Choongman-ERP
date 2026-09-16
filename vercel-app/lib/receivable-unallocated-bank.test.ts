@@ -38,6 +38,18 @@ describe('isConsolidatedBankReceiveRow', () => {
       })
     ).toBe(false)
   })
+
+  it('rejects leftover overpayment credit', () => {
+    expect(
+      isConsolidatedBankReceiveRow({
+        ref_type: 'Receive',
+        ref_id: null,
+        bank_transaction_id: 99,
+        memo: '과납 선수금 ฿19,506.10 (다음 입금 상계)',
+        amount: -19506.1,
+      })
+    ).toBe(false)
+  })
 })
 
 describe('unallocated bank receive totals', () => {

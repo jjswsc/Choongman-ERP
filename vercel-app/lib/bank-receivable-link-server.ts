@@ -2,6 +2,7 @@ import {
   buildReceivableLinkAllocations,
   computeReceivableOpenAmount,
   isReceivableAccrualRefType,
+  receivableLinkSurplusCreditAmount,
   receivableStoreMatchesBank,
   roundReceivableMoney,
   sumReceivableLinkAllocation,
@@ -11,7 +12,13 @@ import {
   classifyReceivableBankLinkMismatch,
   validateReceivableBankLinkRequest,
 } from '@/lib/bank-receivable-link-policy'
-import { consumeStoreCreditFifo, sumStoreCreditAvailable } from '@/lib/bank-receivable-store-credit'
+import {
+  consumeStoreCreditFifo,
+  insertBankSurplusCredit,
+  loadBankSurplusCreditForBankTx,
+  restoreBankSurplusCreditFromApplies,
+  sumStoreCreditAvailable,
+} from '@/lib/bank-receivable-store-credit'
 import { isPosChannelSettlementMemo } from '@/lib/bank-import-deposit-category'
 import {
   supabaseDeleteByFilter,
@@ -251,9 +258,11 @@ export async function linkReceivableAccrualsFromBankTransaction(params: {
   }
 
   if (Math.abs(bankAmt - selectedTotal) > 0.01) {
-    const storeCreditApply = roundReceivableMoney(
+    const rawCreditApply = roundReceivableMoney(
       Math.max(0, Number(params.storeCreditApplyAmount) || 0)
     )
+    const shortfall = roundReceivableMoney(Math.max(0, selectedTotal - bankAmt))
+    const storeCreditApply = roundReceivableMoney(Math.min(rawCreditApply, shortfall))
     const canApprove = canApproveReceivableBankMismatch({
       role: params.auth?.role,
       canManageOfficePayroll: params.auth?.canManageOfficePayroll,
@@ -370,6 +379,16 @@ export async function linkReceivableAccrualsFromBankTransaction(params: {
       })
     }
 
+    const surplusCredit = receivableLinkSurplusCreditAmount(bankAmt, selectedTotal, storeCreditApply)
+    if (surplusCredit > 0.009) {
+      await insertBankSurplusCredit({
+        storeName: bankStore,
+        amount: surplusCredit,
+        transDate,
+        bankTransactionId,
+      })
+    }
+
     return { ok: true }
   }
 
@@ -452,6 +471,8 @@ export type LinkedReceivableForBankSummary = {
   paidFromCredit: number
   paidFromRounding: number
   storeCreditApplied: number
+  storeCreditRegistered: number
+  surplusUnregistered: number
 }
 
 function isCompanionReceiveMemoForBankLink(memo: string | undefined | null): boolean {
@@ -579,6 +600,13 @@ export async function loadLinkedReceivablesForBankTx(bankTransactionId: number):
 
   items.sort((a, b) => a.transDate.localeCompare(b.transDate) || a.accrualId - b.accrualId)
 
+  const leftoverItems = await loadBankSurplusCreditForBankTx(bankId)
+  const storeCreditRegistered = roundReceivableMoney(
+    leftoverItems.reduce((sum, item) => sum + item.amount, 0)
+  )
+  const surplusUnregistered = roundReceivableMoney(
+    Math.max(0, bankAmt - paidFromBank - storeCreditRegistered)
+  )
   const linkedTotal = roundReceivableMoney(paidFromBank + paidFromCredit + paidFromRounding)
   return {
     items,
@@ -589,6 +617,8 @@ export async function loadLinkedReceivablesForBankTx(bankTransactionId: number):
       paidFromCredit,
       paidFromRounding,
       storeCreditApplied,
+      storeCreditRegistered,
+      surplusUnregistered: surplusUnregistered > 1 ? surplusUnregistered : 0,
     },
   }
 }
@@ -641,6 +671,24 @@ export async function unlinkReceivableAccrualsFromBankTransaction(
     return { ok: false, message: '연결된 미수금(출고·주문)이 없습니다.', status: 404 }
   }
 
+  const leftoverRows = await loadBankSurplusCreditForBankTx(bankId)
+  const leftoverIds = leftoverRows.map((item) => item.id).filter((id) => id > 0)
+  if (leftoverIds.length > 0) {
+    const leftoverApply = (await supabaseSelectFilter(
+      'receivable_transactions',
+      `ref_type=eq.CreditApply&ref_id=in.(${leftoverIds.join(',')})`,
+      { select: 'id', limit: 20 }
+    )) as { id?: number }[] | null
+    if (leftoverApply?.length) {
+      return {
+        ok: false,
+        message:
+          '이 입금의 과납 선수금이 이후 미수 연결에 사용되었습니다. 먼저 그 연결을 해제하세요.',
+        status: 409,
+      }
+    }
+  }
+
   const transDate = String(bankRow.trans_date || '').slice(0, 10)
   const accrualIds = linked.items.map((item) => item.accrualId)
 
@@ -657,6 +705,13 @@ export async function unlinkReceivableAccrualsFromBankTransaction(
       if (id > 0) companionDeleteIds.push(id)
     }
   }
+
+  const creditApplyRows = (await supabaseSelectFilter(
+    'receivable_transactions',
+    `bank_transaction_id=eq.${bankId}&ref_type=eq.CreditApply`,
+    { select: 'ref_id,amount', limit: 100 }
+  )) as { ref_id?: number; amount?: number }[] | null
+  await restoreBankSurplusCreditFromApplies(creditApplyRows || [])
 
   await supabaseDeleteByFilter(
     'receivable_transactions',
@@ -676,4 +731,50 @@ export async function unlinkReceivableAccrualsFromBankTransaction(
   }
 
   return { ok: true, accrualIds }
+}
+
+/** 이미 연결된 과납 입금의 잔여분을 다음 입금 상계용 선수금으로 적립 */
+export async function registerSurplusCreditFromLinkedBankTx(
+  bankTransactionId: number
+): Promise<{ ok: true; amount: number } | { ok: false; message: string; status?: number }> {
+  const bankId = Number(bankTransactionId || 0)
+  if (!bankId) {
+    return { ok: false, message: '통장 거래 ID가 필요합니다.', status: 400 }
+  }
+
+  const linked = await loadLinkedReceivablesForBankTx(bankId)
+  if (!linked?.items.length) {
+    return { ok: false, message: '연결된 미수금(출고·주문)이 없습니다.', status: 404 }
+  }
+
+  const existing = await loadBankSurplusCreditForBankTx(bankId)
+  if (existing.length > 0) {
+    return { ok: false, message: '이 입금의 과납 선수금이 이미 등록되어 있습니다.', status: 409 }
+  }
+
+  const surplus = roundReceivableMoney(
+    Math.max(0, linked.summary.bankAmount - linked.summary.paidFromBank)
+  )
+  if (surplus <= 1) {
+    return { ok: false, message: '적립할 과납분(฿1 초과)이 없습니다.', status: 400 }
+  }
+
+  const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankId}`, {
+    limit: 1,
+    select: 'id,trans_date,store_name,store',
+  })) as BankTxRow[] | null
+  const bankRow = bankRows?.[0]
+  const storeName = String(bankRow?.store_name || bankRow?.store || linked.items[0]?.storeName || '').trim()
+  const transDate = String(bankRow?.trans_date || linked.items[0]?.transDate || '').slice(0, 10)
+  if (!storeName || transDate.length !== 10) {
+    return { ok: false, message: '통장 입금의 매장·일자를 확인할 수 없습니다.', status: 400 }
+  }
+
+  await insertBankSurplusCredit({
+    storeName,
+    amount: surplus,
+    transDate,
+    bankTransactionId: bankId,
+  })
+  return { ok: true, amount: surplus }
 }

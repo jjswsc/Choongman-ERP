@@ -206,6 +206,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/registerCardExpenseFromBankTransaction", module: "accounting" },
   { prefix: "/api/registerPettyReplenishFromBankTransaction", module: "accounting" },
   { prefix: "/api/addReceivableStoreCredit", module: "accounting" },
+  { prefix: "/api/registerReceivableSurplusFromBankTx", module: "accounting" },
   { prefix: "/api/getPettyCash", module: "accounting" },
   { prefix: "/api/getTrialBalance", module: "accounting" },
   { prefix: "/api/getAccounting", module: "accounting" },

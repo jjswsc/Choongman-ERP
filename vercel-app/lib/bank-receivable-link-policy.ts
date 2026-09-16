@@ -61,12 +61,7 @@ export function validateReceivableBankLinkRequest(params: {
   if (kind === 'exact') return { ok: true, kind, gap }
 
   if (gap < -0.01) {
-    // 통장·크레딧이 인보이스 합보다 큼 — 인보이스 전액 수금 후 통장 잔여 허용
-    if (kind === 'small') return { ok: true, kind, gap }
-    const note = String(params.mismatchNote || '').trim()
-    if (!note) {
-      return { ok: false, message: '통장·크레딧 합계가 선택 합계보다 큽니다. 차액 사유(หมายเหตุ)를 입력하세요.' }
-    }
+    // 과납: 인보이스 전액 수금 후 잔여분은 다음 입금 상계용 선수금으로 적립
     return { ok: true, kind, gap }
   }
 

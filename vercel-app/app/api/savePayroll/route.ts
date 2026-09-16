@@ -79,6 +79,22 @@ function withoutPeriodDateCols(row: Record<string, unknown>): Record<string, unk
   return rest
 }
 
+/** Omni 등 미배포 DB: early_min/early_ded 없으면 지각 열로 합산해 저장(표 Late = late+early). */
+function withoutEarlyLeaveCols(row: Record<string, unknown>): Record<string, unknown> {
+  const earlyMin = Number(row.early_min) || 0
+  const earlyDed = Number(row.early_ded) || 0
+  const { early_min: _em, early_ded: _ed, ...rest } = row
+  return {
+    ...rest,
+    late_min: (Number(rest.late_min) || 0) + earlyMin,
+    late_ded: (Number(rest.late_ded) || 0) + earlyDed,
+  }
+}
+
+function isMissingPayrollColumnError(em: string): boolean {
+  return /42703|column|PGRST204/i.test(em)
+}
+
 function toMonthDate(monthStr: string, useLastDay: boolean): string {
   const base = new Date(`${monthStr}-01T12:00:00`)
   if (Number.isNaN(base.getTime())) return `${monthStr}-01`
@@ -404,12 +420,24 @@ export async function POST(request: NextRequest) {
 
     for (let j = 0; j < rows.length; j += CHUNK) {
       const chunk = rows.slice(j, j + CHUNK)
+      let payload = chunk
       try {
-        await savePayrollRecordsChunk(monthStr, chunk, tenantScope)
-      } catch (e) {
+        await savePayrollRecordsChunk(monthStr, payload, tenantScope)
+      } catch (e0) {
+        const em0 = e0 instanceof Error ? e0.message : String(e0)
+        let e: unknown = e0
+        if (isMissingPayrollColumnError(em0) && /early_min|early_ded/i.test(em0)) {
+          payload = chunk.map(withoutEarlyLeaveCols)
+          try {
+            await savePayrollRecordsChunk(monthStr, payload, tenantScope)
+            continue
+          } catch (eEarly) {
+            e = eEarly
+          }
+        }
         const em = e instanceof Error ? e.message : String(e)
         if (/published_at|period_start|period_end|pay_date|42703|column/i.test(em)) {
-          const withoutPublished = chunk.map((r) => {
+          const withoutPublished = payload.map((r) => {
             const { published_at: _p, ...rest } = r
             return rest
           })
@@ -429,6 +457,12 @@ export async function POST(request: NextRequest) {
                     return rest
                   })
                   await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
+                } else if (isMissingPayrollColumnError(em3) && /early_min|early_ded/i.test(em3)) {
+                  await supabaseUpsert(
+                    'payroll_records',
+                    withoutPeriod.map(withoutEarlyLeaveCols),
+                    'month,store,name'
+                  )
                 } else {
                   throw e3
                 }
@@ -444,7 +478,7 @@ export async function POST(request: NextRequest) {
             }
           }
         } else if (/employee_id|employee_code|42703|column/i.test(em)) {
-          const fallbackChunk = chunk.map((r) => {
+          const fallbackChunk = payload.map((r) => {
             const { employee_id: _eid, employee_code: _ecode, published_at: _p, ...rest } = r
             return withoutPeriodDateCols(rest)
           })

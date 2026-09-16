@@ -3,8 +3,12 @@ import {
   bankDepositNeedsReceivableOrderLink,
   bankDepositReceivableLinkPending,
   buildReceivableLinkAllocations,
+  canSaveReceivablePickWithMismatch,
   computeReceivableOpenAmount,
+  remainingBankSurplusAfterApplies,
+  receivableLinkSurplusCreditAmount,
   receivablePickTotalMatchesBank,
+  suggestedReceivableLinkCreditApply,
   sumOpenReceivablePickAmount,
   sumReceivableLinkAllocation,
 } from '@/lib/bank-receivable-link'
@@ -89,6 +93,12 @@ describe('bank-receivable-link', () => {
     expect(computeReceivableOpenAmount(1000, [{ amount: -1000 }])).toBe(0)
   })
 
+  it('keeps leftover overpay principal and subtracts CreditApply as used amount', () => {
+    expect(remainingBankSurplusAfterApplies(-19506.1, [])).toBe(19506.1)
+    expect(remainingBankSurplusAfterApplies(-19506.1, [{ amount: 19506.1 }])).toBe(0)
+    expect(remainingBankSurplusAfterApplies(-19506.1, [{ amount: -5000 }, { amount: 4506.1 }])).toBe(10000)
+  })
+
   it('sums selected receivable pick amounts and matches bank total', () => {
     const list = [
       { id: 1, remainingAmount: 50007.6 },
@@ -148,5 +158,41 @@ describe('bank-receivable-link', () => {
     })
     expect(parts[0]?.fromBank).toBe(100)
     expect(parts[0]?.fromRounding).toBe(0.5)
+  })
+
+  it('offsets Seacon overpay against the next billing without director approval', () => {
+    const bankSep8 = 81523.3
+    const invoicesSep8 = 62017.2
+    const surplus = receivableLinkSurplusCreditAmount(bankSep8, invoicesSep8)
+    expect(surplus).toBe(19506.1)
+    expect(
+      canSaveReceivablePickWithMismatch({
+        bankAmt: bankSep8,
+        selectedTotal: invoicesSep8,
+        storeCreditApply: 0,
+        mismatchNote: '',
+        mismatchReason: '',
+        canApproveMismatch: false,
+      })
+    ).toBe(true)
+
+    const bankSep11 = 10921.49
+    const invoicesSep11 = 30427.59
+    const apply = suggestedReceivableLinkCreditApply(bankSep11, invoicesSep11, surplus)
+    expect(apply).toBe(19506.1)
+    expect(
+      canSaveReceivablePickWithMismatch({
+        bankAmt: bankSep11,
+        selectedTotal: invoicesSep11,
+        storeCreditApply: apply,
+        mismatchNote: '',
+        mismatchReason: '',
+        canApproveMismatch: false,
+      })
+    ).toBe(true)
+  })
+
+  it('does not convert ฿1-or-less surplus into store credit', () => {
+    expect(receivableLinkSurplusCreditAmount(5042, 5041.38)).toBe(0)
   })
 })

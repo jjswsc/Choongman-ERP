@@ -4,12 +4,23 @@
  */
 import { supabaseSelectAllPages } from '@/lib/supabase-server'
 import { getItemCostPerUnit } from '@/lib/item-cost-util'
+import {
+  lineCostForChannels,
+  normalizePosMenuIngredientChannel,
+  type PosMenuIngredientChannel,
+} from '@/lib/pos-menu-ingredient-channel'
 
 export type PosMenuCostIndexEntry = {
   costHall: number
   costDelivery: number
+  /** 홀 식재 (하위 호환: 채널 필드 없을 때 foodCost와 같음) */
   foodCost: number
+  /** 배달 포장재 (하위 호환) */
   packagingCost: number
+  foodCostHall?: number
+  foodCostDelivery?: number
+  packagingCostHall?: number
+  packagingCostDelivery?: number
 }
 
 type IngRow = {
@@ -19,6 +30,7 @@ type IngRow = {
   quantity?: number
   loss_rate?: number
   ingredient_type?: string
+  channel_scope?: string | null
 }
 
 type ItemRow = {
@@ -41,7 +53,30 @@ type OptRow = {
   quantity?: number
 }
 
-type CostParts = { food: number; packaging: number }
+export type PosMenuCostParts = {
+  foodHall: number
+  foodDelivery: number
+  packagingHall: number
+  packagingDelivery: number
+}
+
+type CostParts = PosMenuCostParts
+
+export function costIndexFoodPackForOrder(
+  entry: PosMenuCostIndexEntry,
+  isDelivery: boolean
+): { food: number; packaging: number } {
+  if (isDelivery) {
+    return {
+      food: entry.foodCostDelivery ?? entry.foodCost,
+      packaging: entry.packagingCostDelivery ?? entry.packagingCost,
+    }
+  }
+  return {
+    food: entry.foodCostHall ?? entry.foodCost,
+    packaging: entry.packagingCostHall ?? 0,
+  }
+}
 
 function effectiveItemCodeKey(r: ItemRow): string {
   const raw = String(r.code ?? '').trim()
@@ -95,13 +130,41 @@ export function costIndexKey(menuId: number, optionId: number | null | undefined
 }
 
 function emptyParts(): CostParts {
-  return { food: 0, packaging: 0 }
+  return { foodHall: 0, foodDelivery: 0, packagingHall: 0, packagingDelivery: 0 }
 }
 
 function addParts(a: CostParts, b: CostParts, mult = 1): CostParts {
   return {
-    food: a.food + b.food * mult,
-    packaging: a.packaging + b.packaging * mult,
+    foodHall: a.foodHall + b.foodHall * mult,
+    foodDelivery: a.foodDelivery + b.foodDelivery * mult,
+    packagingHall: a.packagingHall + b.packagingHall * mult,
+    packagingDelivery: a.packagingDelivery + b.packagingDelivery * mult,
+  }
+}
+
+function partsHasCost(p: CostParts): boolean {
+  return p.foodHall > 0 || p.foodDelivery > 0 || p.packagingHall > 0 || p.packagingDelivery > 0
+}
+
+function partsFromLineCost(
+  costTotal: number,
+  itype: 'food' | 'packaging',
+  channel: PosMenuIngredientChannel
+): CostParts {
+  const split = lineCostForChannels(costTotal, itype, channel)
+  if (itype === 'packaging') {
+    return {
+      foodHall: 0,
+      foodDelivery: 0,
+      packagingHall: split.hall,
+      packagingDelivery: split.delivery,
+    }
+  }
+  return {
+    foodHall: split.hall,
+    foodDelivery: split.delivery,
+    packagingHall: 0,
+    packagingDelivery: 0,
   }
 }
 
@@ -114,18 +177,24 @@ function computeIngredientLineCost(ing: IngRow, itemLookup: Record<string, ItemR
   const qty = Number(ing.quantity) ?? 1
   const lossRate = Number(ing.loss_rate) ?? 0
   const costTotal = costPerUnit * qty * (1 + lossRate / 100)
-  if (itype === 'packaging') return { food: 0, packaging: costTotal }
-  return { food: costTotal, packaging: 0 }
+  const channel = normalizePosMenuIngredientChannel(ing.channel_scope)
+  return partsFromLineCost(costTotal, itype, channel)
 }
 
 function toEntry(parts: CostParts): PosMenuCostIndexEntry {
-  const food = Math.round(parts.food * 10) / 10
-  const packaging = Math.round(parts.packaging * 10) / 10
+  const foodHall = Math.round(parts.foodHall * 10) / 10
+  const foodDelivery = Math.round(parts.foodDelivery * 10) / 10
+  const packagingHall = Math.round(parts.packagingHall * 10) / 10
+  const packagingDelivery = Math.round(parts.packagingDelivery * 10) / 10
   return {
-    foodCost: food,
-    packagingCost: packaging,
-    costHall: food,
-    costDelivery: Math.round((food + packaging) * 10) / 10,
+    foodCost: foodHall,
+    packagingCost: packagingDelivery,
+    foodCostHall: foodHall,
+    foodCostDelivery: foodDelivery,
+    packagingCostHall: packagingHall,
+    packagingCostDelivery: packagingDelivery,
+    costHall: Math.round((foodHall + packagingHall) * 10) / 10,
+    costDelivery: Math.round((foodDelivery + packagingDelivery) * 10) / 10,
   }
 }
 
@@ -169,10 +238,15 @@ export function assemblePosMenuCostIndexEntries(params: {
 
   const resolveAdditiveSourceParts = (srcMenuId: number): CostParts => {
     const nullParts = getParts(srcMenuId, null)
-    if (nullParts.food > 0 || nullParts.packaging > 0) return nullParts
+    if (partsHasCost(nullParts)) return nullParts
     const fromOut = out.get(costIndexKey(srcMenuId, null))
-    if (fromOut && (fromOut.foodCost > 0 || fromOut.packagingCost > 0)) {
-      return { food: fromOut.foodCost, packaging: fromOut.packagingCost }
+    if (fromOut && (fromOut.costHall > 0 || fromOut.costDelivery > 0)) {
+      return {
+        foodHall: fromOut.foodCostHall ?? fromOut.foodCost,
+        foodDelivery: fromOut.foodCostDelivery ?? fromOut.foodCost,
+        packagingHall: fromOut.packagingCostHall ?? 0,
+        packagingDelivery: fromOut.packagingCostDelivery ?? fromOut.packagingCost,
+      }
     }
     // null BOM 없고 옵션 전용 원가만 1건이면 그 값을 소스 폴백(목록 srcBaseRow 의도와 유사)
     let found: CostParts | null = null
@@ -181,7 +255,7 @@ export function assemblePosMenuCostIndexEntries(params: {
       const [midStr, optStr] = key.split('|')
       if (Number(midStr) !== srcMenuId) continue
       if (!optStr) continue
-      if (parts.food > 0 || parts.packaging > 0) {
+      if (partsHasCost(parts)) {
         found = parts
         hits++
       }
@@ -200,7 +274,7 @@ export function assemblePosMenuCostIndexEntries(params: {
 
     if (!isAdditive) {
       // 옵션 전용 BOM이 없으면 키를 넣지 않음 → lookup 시 baseFallback=true
-      if (optOwn.food > 0 || optOwn.packaging > 0) {
+      if (partsHasCost(optOwn)) {
         out.set(costIndexKey(mid, oid), toEntry(optOwn))
       }
       continue
@@ -212,10 +286,7 @@ export function assemblePosMenuCostIndexEntries(params: {
       merged = addParts(merged, resolveAdditiveSourceParts(opt.additiveSourceMenuId), qty)
     } else if (opt.itemCode) {
       const unit = params.itemFoodCostByCode?.[opt.itemCode] ?? 0
-      merged = {
-        food: merged.food + unit * qty,
-        packaging: merged.packaging,
-      }
+      merged = addParts(merged, partsFromLineCost(unit * qty, 'food', 'both'))
     }
     merged = addParts(merged, optOwn)
     out.set(costIndexKey(mid, oid), toEntry(merged))
@@ -231,8 +302,13 @@ export async function buildPosMenuCostIndex(): Promise<Map<string, PosMenuCostIn
   const [ingRows, itemRows, optRows, sauceRows, sauceIngRows] = await Promise.all([
     supabaseSelectAllPages('pos_menu_ingredients', {
       order: 'menu_id.asc,id.asc',
-      select: 'menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
-    }).catch(() => []) as Promise<IngRow[]>,
+      select: 'menu_id,option_id,item_code,quantity,loss_rate,ingredient_type,channel_scope',
+    }).catch(() =>
+      supabaseSelectAllPages('pos_menu_ingredients', {
+        order: 'menu_id.asc,id.asc',
+        select: 'menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
+      }).catch(() => [])
+    ) as Promise<IngRow[]>,
     supabaseSelectAllPages('items', {
       order: 'code.asc',
       select: 'id,code,cost,price,total_quantity,unit,purchase_source,category',

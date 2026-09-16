@@ -36,7 +36,7 @@ import {
   translatePayrollExplainReason,
 } from "@/lib/payroll-explain-i18n"
 import { defaultPayrollAttributionMonthBangkok } from "@/lib/payroll-utils"
-import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN, ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
 
 /** 급여 API·인증 오류: `msg` 또는 `message` 중 하나만 오는 경우 대비 */
 function pickApiMsg(data: { msg?: unknown; message?: unknown }): string {
@@ -731,80 +731,95 @@ export function AdminPayrollCalc() {
   return (
     <Card className="shadow-sm">
       <CardContent className="pt-6">
-        <div className="flex flex-wrap items-end gap-3 mb-4">
-          <div className="flex-1 min-w-[140px]">
-            <label className="text-xs font-semibold block mb-1">{t("pay_month")}</label>
-            <Input
-              type="month"
-              value={monthStr}
-              onChange={(e) => setMonthStr(e.target.value)}
-              className="h-9 text-xs"
-            />
-            {periodHint ? (
-              <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                {i18nVar(t("pay_cycle_hint"), {
-                  start: periodHint.start,
-                  end: periodHint.end,
-                  pay: periodHint.payYmd,
-                })}
-                {periodHint.isTransitionShort
-                  ? ` · ${i18nVar(t("pay_cycle_short_note"), {
-                      start: periodHint.start,
-                      end: periodHint.end,
-                    })}`
-                  : ""}
-              </p>
-            ) : null}
-          </div>
-          {!isManager && (
-            <div className="flex-1 min-w-[140px]">
-              <label className="text-xs font-semibold block mb-1">{t("store")}</label>
-              <Select value={storeFilter} onValueChange={setStoreFilter}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder={t("store")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {stores.map((st) => (
-                    <SelectItem key={st} value={st}>{st}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <div className="mb-4 space-y-2.5">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-[13rem] shrink-0">
+              <label className="text-xs font-semibold block mb-1">{t("pay_month")}</label>
+              <Input
+                type="month"
+                value={monthStr}
+                onChange={(e) => setMonthStr(e.target.value)}
+                className="h-9 text-xs"
+              />
             </div>
-          )}
-          <Button
-            className="h-9 font-medium"
-            onClick={handleCalc}
-            disabled={loading}
-          >
-            <Calculator className="mr-1.5 h-3.5 w-3.5" />
-            {loading ? t("loading") : t("pay_calc_run")}
-          </Button>
-          <Button
-            variant="outline"
-            className="h-9 font-medium"
-            onClick={handleLoad}
-            disabled={loading}
-          >
-            <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-            {loading ? t("loading") : t("pay_load_from_db")}
-          </Button>
-          <Button
-            variant="outline"
-            className="h-9 font-medium border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30 disabled:opacity-50"
-            onClick={handleSaveDraft}
-            disabled={savingDraft || !hasResult}
-          >
-            <FileDown className="mr-1.5 h-3.5 w-3.5" />
-            {savingDraft ? t("loading") : t("pay_save_draft")}
-          </Button>
-          <Button
-            className="h-9 font-medium bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
-            onClick={handleSave}
-            disabled={saving || !hasResult}
-          >
-            <Save className="mr-1.5 h-3.5 w-3.5" />
-            {saving ? t("loading") : t("pay_save_confirm")}
-          </Button>
+            {!isManager && (
+              <div className="w-[13rem] shrink-0">
+                <label className="text-xs font-semibold block mb-1">{t("store")}</label>
+                <Select value={storeFilter} onValueChange={setStoreFilter}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder={t("store")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stores.map((st) => (
+                      <SelectItem key={st} value={st}>{st}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+              <Button
+                className="h-9 font-medium"
+                onClick={handleCalc}
+                disabled={loading}
+              >
+                <Calculator className="mr-1.5 h-3.5 w-3.5" />
+                {loading ? t("loading") : t("pay_calc_run")}
+              </Button>
+              <Button
+                variant="outline"
+                className="h-9 font-medium"
+                onClick={handleLoad}
+                disabled={loading}
+              >
+                <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+                {loading ? t("loading") : t("pay_load_from_db")}
+              </Button>
+              <Button
+                variant="outline"
+                className="h-9 font-medium border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30 disabled:opacity-50"
+                onClick={handleSaveDraft}
+                disabled={savingDraft || !hasResult}
+              >
+                <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                {savingDraft ? t("loading") : t("pay_save_draft")}
+              </Button>
+              <Button
+                className="h-9 font-medium bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                onClick={handleSave}
+                disabled={saving || !hasResult}
+              >
+                <Save className="mr-1.5 h-3.5 w-3.5" />
+                {saving ? t("loading") : t("pay_save_confirm")}
+              </Button>
+            </div>
+          </div>
+          {periodHint ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/80 bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="font-medium text-foreground/80">{t("pay_period_label")}</span>
+                  <span className={ADMIN_NUMERIC_CN}>
+                    {periodHint.start} ~ {periodHint.end}
+                  </span>
+                </span>
+                <span className="hidden h-3.5 w-px bg-border sm:block" aria-hidden />
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="font-medium text-foreground/80">{t("pay_pay_date_label")}</span>
+                  <span className={ADMIN_NUMERIC_CN}>{periodHint.payYmd}</span>
+                </span>
+              </div>
+              {periodHint.isTransitionShort ? (
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  {i18nVar(t("pay_cycle_short_note"), {
+                    start: periodHint.start,
+                    end: periodHint.end,
+                  })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 px-3 py-2 text-xs text-blue-800 dark:text-blue-200 space-y-0.5">
