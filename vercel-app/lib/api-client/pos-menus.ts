@@ -260,13 +260,13 @@ export async function getPosMenuOptions(params?: {
   if (params?.fresh) q.set('_t', String(Date.now()))
   const qs = q.toString()
   const url = '/api/getPosMenuOptions' + (qs ? `?${qs}` : '')
-  if (params?.fresh) {
-    const res = await apiFetchWithOffline(url)
-    const data = await res.json().catch(() => [])
-    return Array.isArray(data) ? (data as PosMenuOption[]) : []
-  }
   const cacheKey = `erp:posCatalog:options:${params?.menuId?.trim() || 'all'}:${params?.forCodeMap ? 'codemap' : 'default'}`
-  return fetchPosCatalogCached<PosMenuOption[]>(cacheKey, url, [])
+  return fetchPosCatalogCached<PosMenuOption[]>(
+    cacheKey,
+    url,
+    [],
+    params?.fresh ? { forceNetwork: true } : undefined
+  )
 }
 
 export async function getPosOptionGroups(params?: { menuId?: string }) {

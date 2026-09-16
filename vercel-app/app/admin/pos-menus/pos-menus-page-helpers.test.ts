@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
+  isDraftPosMenuOptionId,
   isPersistedPosMenuOptionId,
   optionConfigHasResettableState,
   optionConfigResetTargetGroups,
+  optionRowUsesLinkedGroupItem,
+  parsePosLinkedOptionGroupItemRefs,
+  pickLinkedOptionGroupItemToDelete,
 } from "./pos-menus-page-helpers"
 
 describe("option config reset helpers", () => {
@@ -24,5 +28,32 @@ describe("option config reset helpers", () => {
     expect(optionConfigResetTargetGroups("S001")).toEqual([])
     expect(optionConfigHasResettableState(0, [], "S001")).toBe(false)
     expect(optionConfigHasResettableState(0, ["sidedish"], "S001")).toBe(true)
+  })
+})
+
+describe("linked option group item ids", () => {
+  it("parses per-group and cartesian virtual ids", () => {
+    expect(parsePosLinkedOptionGroupItemRefs("g12-i34")).toEqual([{ groupId: 12, itemId: 34 }])
+    expect(parsePosLinkedOptionGroupItemRefs("m99-g12i34")).toEqual([{ groupId: 12, itemId: 34 }])
+    expect(parsePosLinkedOptionGroupItemRefs("m99-g12i34-g15i50")).toEqual([
+      { groupId: 12, itemId: 34 },
+      { groupId: 15, itemId: 50 },
+    ])
+    expect(parsePosLinkedOptionGroupItemRefs("12")).toEqual([])
+    expect(parsePosLinkedOptionGroupItemRefs("draft-1")).toEqual([])
+    expect(isDraftPosMenuOptionId("draft-abc")).toBe(true)
+  })
+
+  it("picks the selected step item from a cartesian row", () => {
+    const groups = [
+      { id: "12", key: "part" },
+      { id: "15", key: "sidedish" },
+    ]
+    expect(pickLinkedOptionGroupItemToDelete("m99-g12i34-g15i50", groups, "sidedish")).toEqual({
+      groupId: 15,
+      itemId: 50,
+    })
+    expect(optionRowUsesLinkedGroupItem("m99-g12i34-g15i50", { groupId: 15, itemId: 50 })).toBe(true)
+    expect(optionRowUsesLinkedGroupItem("m99-g12i34-g15i88", { groupId: 15, itemId: 50 })).toBe(false)
   })
 })

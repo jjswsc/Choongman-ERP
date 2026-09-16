@@ -178,8 +178,11 @@ import {
   emptyForm,
   newPackagingChecklistRow,
   isPersistedPosMenuOptionId,
+  isDraftPosMenuOptionId,
   optionConfigHasResettableState,
   optionConfigResetTargetGroups,
+  optionRowUsesLinkedGroupItem,
+  pickLinkedOptionGroupItemToDelete,
   type PackagingChecklistDraftRow,
 } from './pos-menus-page-helpers'
 
@@ -2893,7 +2896,12 @@ export default function PosMenusPage() {
         if (!prev) return true
         return !areOptionsEqualForSave(o, prev)
       })
-      if (changed.length === 0 && deletedNumericIds.length === 0) {
+      const persistableChanged = changed.filter(
+        (o) => isPersistedPosMenuOptionId(o.id) || isDraftPosMenuOptionId(o.id)
+      )
+      if (persistableChanged.length === 0 && deletedNumericIds.length === 0) {
+        const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
+        applyLoadedOptionsForConfig(Array.isArray(refreshed) ? refreshed : [])
         await appAlert(t("msg_save_success") || "저장되었습니다.")
         return
       }
@@ -2909,15 +2917,15 @@ export default function PosMenusPage() {
         }
       }
 
-      if (changed.length === 0) {
-        const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId })
-        applyLoadedOptionsForConfig(refreshed)
+      if (persistableChanged.length === 0) {
+        const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
+        applyLoadedOptionsForConfig(Array.isArray(refreshed) ? refreshed : [])
         await appAlert(t("msg_save_success") || "저장되었습니다.")
         return
       }
 
       const res = await savePosMenuOptionsBulk({
-        options: changed.map((o) => ({
+        options: persistableChanged.map((o) => ({
           id: /^\d+$/.test(String(o.id ?? "")) ? String(o.id) : undefined,
           menuId: Number(o.menuId),
           optionCode: o.optionCode ?? undefined,
@@ -2944,8 +2952,8 @@ export default function PosMenusPage() {
         await appAlert(firstError?.message || res.message || t("msg_save_fail_detail"))
         return
       }
-      const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId })
-      applyLoadedOptionsForConfig(refreshed)
+      const refreshed = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId, fresh: true })
+      applyLoadedOptionsForConfig(Array.isArray(refreshed) ? refreshed : [])
       await appAlert(t("msg_save_success") || "저장되었습니다.")
     } catch (e) {
       console.error("handleSaveOptionsForConfig:", e)
@@ -2965,15 +2973,78 @@ export default function PosMenusPage() {
       return
     }
     const id = String(opt.id ?? "")
+    const selectedKey =
+      optionsConfigEffectiveGroupKey && optionsConfigEffectiveGroupKey !== "__default__"
+        ? optionsConfigEffectiveGroupKey
+        : undefined
+
+    const dropFromLocalLists = (ref?: { groupId: number; itemId: number }) => {
+      const gone = (row: PosMenuOption) => {
+        if (String(row.id) === id) return true
+        return ref ? optionRowUsesLinkedGroupItem(row.id, ref) : false
+      }
+      setOptionsConfigOriginalOptions((prev) => prev.filter((row) => !gone(row)))
+      setOptionsConfigMenuOptions((prev) => prev.filter((row) => !gone(row)))
+    }
+
     if (isPersistedPosMenuOptionId(id)) {
       const res = await deletePosMenuOption({ id })
       if (!res.success) {
         await appAlert(res.message || t("msg_delete_fail_detail") || "삭제 실패")
         return
       }
-      setOptionsConfigOriginalOptions((prev) => prev.filter((o) => String(o.id) !== id))
+      dropFromLocalLists()
+      return
     }
-    setOptionsConfigMenuOptions((prev) => prev.filter((o) => String(o.id) !== id))
+
+    if (isDraftPosMenuOptionId(id)) {
+      dropFromLocalLists()
+      return
+    }
+
+    let groups = optionsConfigLibraryGroups
+    const fetched = (await getPosOptionGroups()) as PosOptionGroup[]
+    if (Array.isArray(fetched) && fetched.length > 0) {
+      groups = fetched
+      setOptionsConfigLibraryGroups(fetched)
+    }
+    const pick = pickLinkedOptionGroupItemToDelete(id, groups, selectedKey)
+    if (!pick) {
+      dropFromLocalLists()
+      return
+    }
+    const group = groups.find((g) => Number(g.id) === pick.groupId)
+    if (!group) {
+      dropFromLocalLists(pick)
+      return
+    }
+    const remaining = (group.items || []).filter((it) => Number(it.id) !== pick.itemId)
+    const saveRes = await savePosOptionGroup({
+      id: String(group.id),
+      key: group.key,
+      name: group.name,
+      isActive: group.isActive !== false,
+      sortOrder: Number(group.sortOrder ?? 0) || 0,
+      items: remaining.map((it, i) => ({
+        id: it.id,
+        itemName: it.itemName,
+        sortOrder: i,
+        basePriceHall: Number(it.basePriceHall ?? 0) || 0,
+        basePriceDelivery: it.basePriceDelivery ?? null,
+        sellHall: it.sellHall !== false,
+        sellDelivery: it.sellDelivery !== false,
+      })),
+    })
+    if (!saveRes.success) {
+      await appAlert(
+        translateApiMessage(saveRes.message, t) || saveRes.message || t("msg_save_fail_detail")
+      )
+      return
+    }
+    setOptionsConfigLibraryGroups((prev) =>
+      prev.map((g) => (Number(g.id) === pick.groupId ? { ...g, items: remaining } : g))
+    )
+    dropFromLocalLists(pick)
   }
 
   const handleResetOptionsForConfig = async () => {
