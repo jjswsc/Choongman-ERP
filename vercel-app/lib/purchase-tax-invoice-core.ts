@@ -417,6 +417,13 @@ export function looksLikeJunkSellerName(raw: unknown): boolean {
   return false
 }
 
+/** 매입 계산서에 반복되는 우리(구매자) 법인명. 판매자 칸에 넣지 않는다. */
+export function looksLikePurchaseTaxBuyerLegalName(raw: unknown): boolean {
+  const s = String(raw || '').trim()
+  if (!s) return false
+  return /เอเซีย\s*คอมเมิร์ซ|เอเชีย\s*คอมเมิร์ซ|ASIA\s*COMMERCE\s*(?:AND|&)\s*TRADE/i.test(s)
+}
+
 /** 상호 뒤 주소 번지(523 6 3)·Page 1 of·For Customer 를 잘라 บริษัท … จำกัด 만 남긴다 */
 export function trimPurchaseTaxSellerName(raw: unknown): string {
   let s = String(raw || '')

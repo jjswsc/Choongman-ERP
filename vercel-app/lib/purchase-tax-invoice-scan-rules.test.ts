@@ -14,7 +14,7 @@ function matchText(got: string | undefined, want: string | RegExp) {
 
 function assertRule(rule: PurchaseTaxScanRuleCase) {
   const row = extractPurchaseTaxInvoiceFromScanText(rule.text, {
-    buyerTaxId: rule.buyerTaxId || PURCHASE_TAX_SCAN_BUYER_TIN,
+    buyerTaxId: rule.buyerTaxId !== undefined ? rule.buyerTaxId : PURCHASE_TAX_SCAN_BUYER_TIN,
     taxMonth: rule.taxMonth,
   })
   const e = rule.expect

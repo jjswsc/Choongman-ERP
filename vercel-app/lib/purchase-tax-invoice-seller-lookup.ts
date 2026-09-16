@@ -4,6 +4,7 @@ import {
   digitsTin13,
   formatSellerBranch,
   looksLikeJunkSellerName,
+  looksLikePurchaseTaxBuyerLegalName,
   thaiTinChecksumOk,
   trimPurchaseTaxSellerName,
   type ExtractedPurchaseTaxInvoiceFields,
@@ -222,10 +223,14 @@ export function fillSellerFromProfiles(
   const hit = known.find((k) => digitsTin13(k.sellerTaxId) === tin && String(k.sellerName || '').trim())
   if (!hit) return row
   const currentName = trimPurchaseTaxSellerName(row.sellerName)
-  const useProfileName = !currentName || looksLikeJunkSellerName(currentName)
+  const profileName = String(hit.sellerName).trim()
+  const currentIsBuyer = looksLikePurchaseTaxBuyerLegalName(currentName)
+  const profileIsBuyer = looksLikePurchaseTaxBuyerLegalName(profileName)
+  const useProfileName =
+    (!currentName || looksLikeJunkSellerName(currentName) || currentIsBuyer) && !profileIsBuyer
   return {
     ...row,
-    sellerName: useProfileName ? String(hit.sellerName).trim().slice(0, 200) : currentName,
+    sellerName: useProfileName ? profileName.slice(0, 200) : currentName,
     sellerBranch: row.sellerBranch || (hit.sellerBranch ? formatSellerBranch(hit.sellerBranch) : undefined),
   }
 }

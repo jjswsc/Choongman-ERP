@@ -1333,6 +1333,63 @@ describe('office invoice OCR (ID prefix, bank name, line vs total)', () => {
     expect(row?.vatAmount).toBe(62.02)
   })
 
+  it('keeps header seller and เลขที่เอกสาร, not buyer ACT or RT-ref or customer code', () => {
+    const page = [
+      'บริษัท คอมมอนวิว จำกัด (สำนักงานใหญ่)',
+      'เลขประจำตัวผู้เสียภาษี: 0135545006400',
+      'ลูกค้า: C260100004',
+      'Choongman Chicken',
+      'บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด (00002)',
+      'เลขประจำตัวผู้เสียภาษี 0105568080622',
+      'เอกสารอ้างอิง RT-20260702-0111',
+      'วันที่ 02/07/2026',
+      'เลขที่เอกสาร APIICE260700119',
+      'ยอดรวมก่อนภาษี 56.07',
+      'ภาษีมูลค่าเพิ่ม 7% 3.93',
+      'ยอดเงินสุทธิ 60.00',
+    ].join('\n')
+    const withHint = extractPurchaseTaxInvoiceFromScanText(page, {
+      buyerTaxId: '0105568080622',
+      taxMonth: '2026-07',
+    })
+    const withoutHint = extractPurchaseTaxInvoiceFromScanText(page, { taxMonth: '2026-07' })
+    for (const row of [withHint, withoutHint]) {
+      expect(row?.invoiceNo).toBe('APIICE260700119')
+      expect(row?.sellerName).toMatch(/คอมมอนวิว/)
+      expect(row?.sellerName).not.toMatch(/เอเซีย คอมเมิร์ซ/)
+      expect(row?.sellerTaxId).toBe('0135545006400')
+      expect(row?.netAmount).toBe(56.07)
+      expect(row?.vatAmount).toBe(3.93)
+    }
+  })
+
+  it('does not restore a learned RT-ref over เลขที่เอกสาร', () => {
+    const page = [
+      'บริษัท คอมมอนวิว จำกัด',
+      'เลขประจำตัวผู้เสียภาษี: 0135545006400',
+      'ลูกค้า: C260100004',
+      'บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด',
+      'เลขประจำตัวผู้เสียภาษี 0105568080622',
+      'เอกสารอ้างอิง RT-20260702-0111',
+      'วันที่ 02/07/2026',
+      'เลขที่เอกสาร APIICE260700119',
+      'ยอดรวมก่อนภาษี 56.07',
+      'ภาษีมูลค่าเพิ่ม 7% 3.93',
+      'ยอดเงินสุทธิ 60.00',
+    ].join('\n')
+    const vendorHints = buildVendorInvoiceHints([
+      { sellerTaxId: '0135545006400', invoiceNo: 'RT-20260702-0111APIICE26070011' },
+    ])
+    const row = extractPurchaseTaxInvoiceFromScanText(page, {
+      buyerTaxId: '0105568080622',
+      taxMonth: '2026-07',
+      vendorHints,
+    })
+    expect(row?.invoiceNo).toBe('APIICE260700119')
+    expect(row?.invoiceNo).not.toMatch(/RT-/)
+    expect(row?.sellerName).toMatch(/คอมมอนวิว/)
+  })
+
   it('prefers เลขที่เอกสาร IV over เอกสารอ้างอิง BL and uses HQ not buyer 00001', () => {
     const row = extractPurchaseTaxInvoiceFromScanText(
       [

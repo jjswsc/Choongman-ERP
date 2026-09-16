@@ -1160,6 +1160,8 @@ function layoutInvoiceLooksJunk(token: string): boolean {
   if (/[a-z]{6,}/.test(t) && !/^(inv|invoice)/i.test(t)) return true
   if (/^\d{5}[A-Za-z]\d{5}$/.test(packed)) return true
   if (/^CT[O0]?\d{4,}$/i.test(packed)) return true
+  if (/^C\d{8,12}$/i.test(packed)) return true
+  if (/^RT-\d{8}-\d+$/i.test(t)) return true
   if (/^BL/i.test(packed)) return true
   if (/^(?:ID)?THMG20/i.test(packed) || looksLikeGrabPartnerInvoiceNo(t)) return true
   if (/^GD-\d{1,4}-\d{1,4}$/i.test(t)) return true

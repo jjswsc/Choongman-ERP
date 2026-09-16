@@ -79,6 +79,22 @@ describe('fillSellerFromProfiles', () => {
     expect(filled.sellerName).toBe('Keep Me')
     expect(filled.sellerBranch).toBe('สาขา 1')
   })
+
+  it('replaces our buyer legal name with the profile seller', () => {
+    const filled = fillSellerFromProfiles(
+      { sellerTaxId: SELLER, sellerName: 'บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด' },
+      [{ sellerTaxId: SELLER, sellerName: 'บริษัท คอมมอนวิว จำกัด' }]
+    )
+    expect(filled.sellerName).toContain('คอมมอนวิว')
+  })
+
+  it('does not fill a profile that is our buyer legal name', () => {
+    const filled = fillSellerFromProfiles(
+      { sellerTaxId: SELLER, sellerName: '' },
+      [{ sellerTaxId: SELLER, sellerName: 'บริษัท เอเซีย คอมเมิร์ซ แอนด์ เทรด จำกัด' }]
+    )
+    expect(filled.sellerName).toBe('')
+  })
 })
 
 describe('rememberSellerProfiles', () => {
