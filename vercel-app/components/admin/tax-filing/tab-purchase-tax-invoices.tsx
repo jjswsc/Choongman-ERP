@@ -28,12 +28,12 @@ import {
   isLikelyTaxInvoiceCopy,
   findPurchaseInvoiceConflict,
   purchaseTaxDocMonthMismatch,
+  partitionPurchaseTaxReviewForSave,
   purchaseTaxInvoiceHasExtractedFields,
   purchaseTaxPp30Compare,
   purchaseTaxReviewFlags,
   purchaseTaxReviewIsProblem,
   thaiTinChecksumOk,
-  taxMonthFromDocDate,
   type ExtractedPurchaseTaxInvoiceFields,
   type PurchaseTaxReviewFlag,
 } from "@/lib/purchase-tax-invoice-core"
@@ -1204,9 +1204,8 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   }
 
   const saveReview = async () => {
-    const payload = reviewRows
-      .filter((r) => !r.skip)
-      .map((r) => ({
+    const { viewMonth, toSave, leftover } = partitionPurchaseTaxReviewForSave(reviewRows, filingYearMonth)
+    const payload = toSave.map((r) => ({
         storeName: r.storeName,
         docDate: r.docDate,
         invoiceNo: r.invoiceNo,
@@ -1233,26 +1232,17 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         setError("ptiSaveNone")
         return
       }
-      const monthCounts = new Map<string, number>()
-      for (const r of payload) {
-        const month = taxMonthFromDocDate(String(r.docDate || ""))
-        if (!month) continue
-        monthCounts.set(month, (monthCounts.get(month) || 0) + 1)
-      }
-      const savedMonth =
-        [...monthCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || filingYearMonth
       const parts = [tr(t, "ptiSaveOk", { n: String(savedCount) })]
       if (skippedCount) parts.push(tr(t, "ptiSaveSkipped", { n: String(skippedCount) }))
-      if (savedMonth && savedMonth !== filingYearMonth) {
-        parts.push(tr(t, "ptiSaveSwitchedMonth", { month: savedMonth }))
-        setReviewRows([])
-        writeReviewDraft([])
+      if (leftover.length) parts.push(tr(t, "ptiSaveKeptOtherMonths", { n: String(leftover.length) }))
+      setReviewRows(leftover)
+      writeReviewDraft(leftover)
+      if (viewMonth && viewMonth !== filingYearMonth) {
+        parts.push(tr(t, "ptiSaveSwitchedMonth", { month: viewMonth }))
         setSaveNotice(parts.join(" "))
-        onFilingYearMonthChange?.(savedMonth)
+        onFilingYearMonthChange?.(viewMonth)
         return
       }
-      setReviewRows([])
-      writeReviewDraft([])
       setSaveNotice(parts.join(" "))
       await load()
     } finally {

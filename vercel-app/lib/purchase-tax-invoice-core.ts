@@ -576,6 +576,35 @@ export function purchaseTaxDocMonthMismatch(docDate: unknown, taxMonth: string):
   return Boolean(month && want && month !== want)
 }
 
+/** 저장할 월과, 검수에 남겨 둘 다른 월 행을 나눈다. 다른 월은 저장 때 버리지 않는다. */
+export function partitionPurchaseTaxReviewForSave<T extends { docDate?: string; skip?: boolean }>(
+  rows: T[],
+  filingYearMonth: string
+): { viewMonth: string; toSave: T[]; leftover: T[] } {
+  const filing = String(filingYearMonth || '').trim().slice(0, 7)
+  const monthOf = (row: T) => taxMonthFromDocDate(String(row.docDate || ''))
+  const keepable = rows.filter((r) => !r.skip)
+  const monthCounts = new Map<string, number>()
+  for (const r of keepable) {
+    const m = monthOf(r)
+    if (!m) continue
+    monthCounts.set(m, (monthCounts.get(m) || 0) + 1)
+  }
+  const majority =
+    [...monthCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || filing
+  const hasFilingMonth = Boolean(filing) && keepable.some((r) => monthOf(r) === filing)
+  const viewMonth = hasFilingMonth ? filing : majority
+  const leftover = rows.filter((r) => {
+    const m = monthOf(r)
+    return Boolean(m && m !== viewMonth)
+  })
+  const toSave = keepable.filter((r) => {
+    const m = monthOf(r)
+    return !m || m === viewMonth
+  })
+  return { viewMonth, toSave, leftover }
+}
+
 export type PurchaseTaxReviewFlag = 'vat' | 'month' | 'tin' | 'amount'
 
 export function purchaseTaxReviewFlags(

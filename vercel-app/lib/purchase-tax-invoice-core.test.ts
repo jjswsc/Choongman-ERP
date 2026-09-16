@@ -13,6 +13,7 @@ import {
   trimPurchaseTaxSellerName,
   parsePurchaseTaxInvoiceVisionPayload,
   purchaseTaxDocMonthMismatch,
+  partitionPurchaseTaxReviewForSave,
   purchaseTaxInvoiceDedupeKey,
   uniquePositiveIds,
   fixOcrInvoiceLetterIPrefix,
@@ -170,6 +171,30 @@ describe('purchase tax invoice helpers', () => {
 
   it('takes tax_month from invoice date', () => {
     expect(taxMonthFromDocDate('2026-07-31')).toBe('2026-07')
+  })
+
+  it('keeps other-month review rows when saving the lookup month', () => {
+    const rows = [
+      { docDate: '2026-08-01', skip: false, invoiceNo: 'A' },
+      { docDate: '2026-07-08', skip: false, invoiceNo: 'B' },
+      { docDate: '2026-07-13', skip: true, invoiceNo: 'C' },
+    ]
+    const part = partitionPurchaseTaxReviewForSave(rows, '2026-08')
+    expect(part.viewMonth).toBe('2026-08')
+    expect(part.toSave.map((r) => r.invoiceNo)).toEqual(['A'])
+    expect(part.leftover.map((r) => r.invoiceNo)).toEqual(['B', 'C'])
+  })
+
+  it('saves the majority month and keeps the rest when lookup has no matching rows', () => {
+    const rows = [
+      { docDate: '2026-08-01', skip: false, invoiceNo: 'A' },
+      { docDate: '2026-08-14', skip: false, invoiceNo: 'B' },
+      { docDate: '2026-07-08', skip: false, invoiceNo: 'C' },
+    ]
+    const part = partitionPurchaseTaxReviewForSave(rows, '2026-09')
+    expect(part.viewMonth).toBe('2026-08')
+    expect(part.toSave.map((r) => r.invoiceNo)).toEqual(['A', 'B'])
+    expect(part.leftover.map((r) => r.invoiceNo)).toEqual(['C'])
   })
 
   it('exports the staff 8-column Thai headers', () => {
