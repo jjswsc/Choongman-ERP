@@ -5,7 +5,7 @@ import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pa
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
 import { employeeIsTargetedForRow, findEmployeeContextFromRoster, noticeReadRowMatchesEmployee } from '@/lib/broadcast-notice-target'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
-import { noticeCreatedYmdBangkok } from '@/lib/notice-read-aggregation'
+import { isPurchaseOrderDecisionNotice, noticeCreatedYmdBangkok } from '@/lib/notice-read-aggregation'
 import { buildMyNoticesDbFilter, MY_NOTICES_DB_FETCH_LIMIT } from '@/lib/my-notices-query'
 import {
   appendSaasTenantFilter,
@@ -231,15 +231,19 @@ async function getMyNoticesHandler(
   if (opts.listMode === 'unread_or_in_range') {
     filtered = built.filter((n) => {
       const d = (n.date || '').slice(0, 10)
-      const unread = !isNoticeReadStatus(n.status)
+      const unread =
+        !isNoticeReadStatus(n.status) && !isPurchaseOrderDecisionNotice(n.title, n.content)
       const inRange = rs && re ? d >= rs && d <= re : true
       return unread || inRange
     })
   } else {
     if (df) filtered = filtered.filter((n) => (n.date || '').slice(0, 10) >= df)
     if (dt) filtered = filtered.filter((n) => (n.date || '').slice(0, 10) <= dt)
-    if (opts.status === 'unread') filtered = filtered.filter((n) => !isNoticeReadStatus(n.status))
-    else if (opts.status === 'read') filtered = filtered.filter((n) => isNoticeReadStatus(n.status))
+    if (opts.status === 'unread') {
+      filtered = filtered.filter(
+        (n) => !isNoticeReadStatus(n.status) && !isPurchaseOrderDecisionNotice(n.title, n.content)
+      )
+    } else if (opts.status === 'read') filtered = filtered.filter((n) => isNoticeReadStatus(n.status))
   }
 
   filtered = [...filtered].sort((a, b) => {

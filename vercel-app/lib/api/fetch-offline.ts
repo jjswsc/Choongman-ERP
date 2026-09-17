@@ -200,7 +200,6 @@ const LEGACY_QUEUE_WHITELIST = new Set([
   '/api/addChecklistItem',
   '/api/deleteChecklistItem',
   '/api/updateChecklistItems',
-  '/api/confirmNoticeRead',
   '/api/saveVendor',
   '/api/deleteVendor',
   '/api/processPurchaseOrderApproval',

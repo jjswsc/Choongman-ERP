@@ -27,6 +27,12 @@ import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
 import { MY_NOTICES_DB_FETCH_LIMIT } from "@/lib/my-notices-query"
 import { isNoticeReadStatus } from "@/lib/notice-read-status"
+import { isPurchaseOrderDecisionNotice } from "@/lib/notice-read-aggregation"
+import {
+  addLocalConfirmedNoticeId,
+  applyLocalNoticeReads,
+  readLocalConfirmedNoticeIds,
+} from "@/lib/notice-read-local"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 import { Megaphone, Bell, Search, FileText, RefreshCw, BookOpen } from "lucide-react"
 import { PwaInstallBanner } from "@/components/pwa-install-banner"
@@ -111,7 +117,12 @@ export function HomeTab() {
         lang,
       })
         .then((res) => {
-          setNotices(res.items)
+          const localIds = readLocalConfirmedNoticeIds(auth.store, auth.user)
+          let items = applyLocalNoticeReads(res.items, localIds)
+          if (statusParam === "unread") {
+            items = items.filter((n) => !isNoticeReadStatus(n.status))
+          }
+          setNotices(items)
           setNoticeTotal(res.total)
           setNoticeTruncated(Boolean(res.truncated))
           setNoticePage(res.page)
@@ -200,23 +211,22 @@ export function HomeTab() {
         return
       }
       setConfirmingId(noticeId)
+      addLocalConfirmedNoticeId(auth.store, auth.user, noticeId)
+      setNotices((prev) => {
+        if (statusFilter === "Unread") return prev.filter((n) => n.id !== noticeId)
+        return prev.map((n) => (n.id === noticeId ? { ...n, status: "확인" } : n))
+      })
+      if (statusFilter === "Unread") {
+        setNoticeTotal((t) => Math.max(0, t - 1))
+      }
+      setExpandedId(null)
       try {
-        const res = await confirmNoticeRead({ noticeId, store: auth.store, name: auth.user, action })
-        if (res.success) {
-          setNotices((prev) => {
-            if (statusFilter === "Unread") return prev.filter((n) => n.id !== noticeId)
-            return prev.map((n) => (n.id === noticeId ? { ...n, status: "확인" } : n))
-          })
-          if (statusFilter === "Unread") {
-            setNoticeTotal((t) => Math.max(0, t - 1))
-          }
-          setExpandedId(null)
-          refreshUnreadCount()
-        }
+        await confirmNoticeRead({ noticeId, store: auth.store, name: auth.user, action })
       } catch {
-        // ignore
+        /* 로컬 확인은 남기고, 서버 실패는 다음 조회 때 persist 재시도하지 않음 */
       } finally {
         setConfirmingId(null)
+        refreshUnreadCount()
       }
     },
     [auth?.store, auth?.user, refreshUnreadCount, statusFilter]
@@ -406,7 +416,8 @@ export function HomeTab() {
                             })}
                           </div>
                         )}
-                        {!isNoticeReadStatus(n.status) && (
+                        {!isNoticeReadStatus(n.status) &&
+                          !isPurchaseOrderDecisionNotice(n.title, n.content) && (
                           <div className="mt-4 flex flex-wrap gap-2">
                             <Button
                               size="sm"

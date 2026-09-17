@@ -1,6 +1,7 @@
 /**
  * 모바일 홈 — 공지·급여 조회 (api-client.ts에서 분리 — move only)
  */
+import { apiFetch } from '../api/fetch'
 import { apiFetchWithOffline } from '../api/fetch-offline'
 import type { PaginatedList } from './types'
 
@@ -70,7 +71,7 @@ export async function confirmNoticeRead(params: {
   name: string
   action: '확인' | '다음에'
 }) {
-  const res = await apiFetchWithOffline('/api/confirmNoticeRead', {
+  const res = await apiFetch('/api/confirmNoticeRead', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
