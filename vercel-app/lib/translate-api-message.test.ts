@@ -108,12 +108,22 @@ describe('translateApiMessage tenant schema', () => {
 
   it('translates PostgREST missing-column JSON', () => {
     const t2 = (k: string) =>
-      k === 'dbColumnMissing' ? 'missing:{column}' : dict[k] || k
+      k === 'dbColumnMissing'
+        ? 'missing:{column}'
+        : k === 'processFail'
+          ? 'Processing failed'
+          : dict[k] || k
     expect(
       translateApiMessage(
         `Supabase insert failed: {"code":"PGRST204","details":null,"hint":null,"message":"Could not find the 'addr' column of 'vendors' in the schema cache"}`,
         t2
       )
     ).toBe('missing:addr')
+    expect(
+      translateApiMessage(
+        '처리 실패: Supabase select failed: {"code":"42703","details":null,"hint":null,"message":"column leave_requests.employee_id does not exist"}',
+        t2
+      )
+    ).toBe('Processing failed: missing:employee_id')
   })
 })

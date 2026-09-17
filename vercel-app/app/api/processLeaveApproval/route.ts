@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseUpdate, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { supabaseUpdate, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestVariantsFilter } from '@/lib/attendance-utils'
 import { requireAuth } from '@/lib/verify-auth'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import {
   appendSaasTenantFilter,
   assertSaasTenantWritable,
@@ -59,6 +60,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const leaveSelect = 'id,store,type,name,leave_date,employee_id'
     const leaveSelectFilter = appendSaasTenantFilter(`id=eq.${id}`, tenantScope, 'leave_requests')
     let rows: {
       id: number
@@ -69,17 +71,21 @@ export async function POST(request: NextRequest) {
       employee_id?: number | null
     }[] = []
     try {
-      rows = (await supabaseSelectFilter('leave_requests', leaveSelectFilter, {
-        limit: 1,
-        select: 'id,store,type,name,leave_date,employee_id',
-      })) as typeof rows
+      rows = (await supabaseSelectFilterStrippingUnknownColumns(
+        'leave_requests',
+        leaveSelectFilter,
+        { limit: 1, select: leaveSelect },
+        'processLeaveApproval'
+      )) as typeof rows
     } catch (e) {
       if (isMissingSaasTenantColumnError(e)) {
         markSaasTenantColumnMissing('leave_requests')
-        rows = (await supabaseSelectFilter('leave_requests', `id=eq.${id}`, {
-          limit: 1,
-          select: 'id,store,type,name,leave_date,employee_id',
-        })) as typeof rows
+        rows = (await supabaseSelectFilterStrippingUnknownColumns(
+          'leave_requests',
+          `id=eq.${id}`,
+          { limit: 1, select: leaveSelect },
+          'processLeaveApproval'
+        )) as typeof rows
       } else {
         throw e
       }

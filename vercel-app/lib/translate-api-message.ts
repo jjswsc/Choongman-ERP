@@ -375,8 +375,12 @@ export function translateApiMessage(
   if (trimmed.startsWith("❌ 신청 실패:") || trimmed.startsWith("신청 실패:")) {
     return t("leaveRequestFail")
   }
-  if (trimmed.startsWith("처리 실패:"))
+  if (trimmed.startsWith("처리 실패:")) {
+    const rest = trimmed.slice("처리 실패:".length).trim()
+    const inner = rest ? translateApiMessage(rest, t) : ""
+    if (inner && inner !== rest) return `${t("processFail")}: ${inner}`
     return t("processFail") + trimmed.slice("처리 실패:".length)
+  }
   if (trimmed.startsWith("저장 실패:"))
     return t("msg_save_fail") + trimmed.slice("저장 실패:".length)
   if (trimmed.startsWith("삭제 실패:"))
