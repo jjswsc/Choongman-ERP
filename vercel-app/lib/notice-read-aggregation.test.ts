@@ -32,10 +32,24 @@ describe('isPurchaseOrderDecisionNotice', () => {
     expect(isPurchaseOrderDecisionNotice('คำสั่งซื้อ #2650 ได้รับการอนุมัติแล้ว', '')).toBe(true)
   })
 
+  it('hides logistics auto-notices that keep asking HQ to confirm', () => {
+    expect(isPurchaseOrderDecisionNotice('매장 발주: CM Huamak', 'CM Huamak에서 발주를 넣었습니다.')).toBe(
+      true
+    )
+    expect(isPurchaseOrderDecisionNotice('매장 수령 완료: CM MBK', 'CM MBK에서 주문 수령(받기)을 완료했습니다.')).toBe(
+      true
+    )
+    expect(isPurchaseOrderDecisionNotice('CM Silom 강제 출고 완료', '3건의 품목이 해당 매장으로 출고되었습니다.')).toBe(
+      true
+    )
+  })
+
   it('keeps HQ office announcements', () => {
     expect(isPurchaseOrderDecisionNotice('แจ้งปรับราคาไก่ S Size (หน้าร้าน/Delivery)', '')).toBe(false)
     expect(isPurchaseOrderDecisionNotice('ประกาศเรื่องแก้ไข Sticker', 'ราคาในเล่มเมนู')).toBe(false)
     expect(isPurchaseOrderDecisionNotice('แจ้งเกี่ยวกับกิจกรรม "สุ่มได้งาน"', '')).toBe(false)
+    expect(isPurchaseOrderDecisionNotice('แจ้งโปรโมชั่นใหม่ — SEOUL คุ้ม!', '')).toBe(false)
+    expect(isPurchaseOrderDecisionNotice('ประกาศเปลี่ยนรอบการจ่ายเงินเดือน', '')).toBe(false)
   })
 })
 

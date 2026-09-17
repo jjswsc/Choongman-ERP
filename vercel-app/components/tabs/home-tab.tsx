@@ -89,10 +89,12 @@ export function HomeTab() {
       page: 1,
       pageSize: 1,
       status: "unread",
+      dateFrom,
+      dateTo,
     })
       .then((res) => setUnreadTotal(res.total))
       .catch(() => setUnreadTotal(null))
-  }, [auth?.store, auth?.user])
+  }, [auth?.store, auth?.user, dateFrom, dateTo])
 
   const fetchNotices = useCallback(
     (page: number) => {
@@ -201,9 +203,13 @@ export function HomeTab() {
       try {
         const res = await confirmNoticeRead({ noticeId, store: auth.store, name: auth.user, action })
         if (res.success) {
-          setNotices((prev) =>
-            prev.map((n) => (n.id === noticeId ? { ...n, status: '확인' } : n))
-          )
+          setNotices((prev) => {
+            if (statusFilter === "Unread") return prev.filter((n) => n.id !== noticeId)
+            return prev.map((n) => (n.id === noticeId ? { ...n, status: "확인" } : n))
+          })
+          if (statusFilter === "Unread") {
+            setNoticeTotal((t) => Math.max(0, t - 1))
+          }
           setExpandedId(null)
           refreshUnreadCount()
         }
@@ -213,7 +219,7 @@ export function HomeTab() {
         setConfirmingId(null)
       }
     },
-    [auth?.store, auth?.user, refreshUnreadCount]
+    [auth?.store, auth?.user, refreshUnreadCount, statusFilter]
   )
 
   return (

@@ -189,7 +189,7 @@ async function getMyNoticesHandler(
       const sch = new Date(row.scheduled_at).getTime()
       if (!isNaN(sch) && sch > nowMs) continue
     }
-    // 발주 승인·반려·보류는 푸시로만 두고, ประกาศ 목록에서는 본사 공지가 보이도록 제외
+    // 발주·수령·출고 운영 알림은 푸시로만 두고, ประกาศ 목록에서는 본사 공지가 보이도록 제외
     if (isPurchaseOrderDecisionNotice(row.title || '', row.content || '')) continue
 
     let att: unknown[] = []
