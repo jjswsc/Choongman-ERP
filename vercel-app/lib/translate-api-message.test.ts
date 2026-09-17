@@ -89,6 +89,23 @@ describe('translateApiMessage tenant schema', () => {
     ).toBe('TENANT_MISSING')
   })
 
+  it('translates leave duplicate unique-constraint errors', () => {
+    const tl = (k: string) =>
+      ({
+        leaveRequestDuplicate: 'LEAVE_DUP',
+        leaveRequestFail: 'LEAVE_FAIL',
+      }[k] || k)
+    expect(
+      translateApiMessage('이미 해당 날짜에 휴가 신청이 있습니다. 신청 내역을 확인해 주세요.', tl)
+    ).toBe('LEAVE_DUP')
+    expect(
+      translateApiMessage(
+        '❌ 신청 실패: Supabase insert failed: {"code":"23505","details":"Key (store, name, leave_date)=(1001, Parin Promvihan, 2026-09-17) already exists.","hint":null,"message":"duplicate key value violates unique constraint \\"leave_requests_store_name_date_key\\""}',
+        tl
+      )
+    ).toBe('LEAVE_DUP')
+  })
+
   it('translates PostgREST missing-column JSON', () => {
     const t2 = (k: string) =>
       k === 'dbColumnMissing' ? 'missing:{column}' : dict[k] || k

@@ -32,6 +32,33 @@ export function isApprovedLeaveStatus(status: string): boolean {
   return s === '승인' || s === 'Approved' || s === 'อนุมัติ'
 }
 
+export function isPendingLeaveStatus(status: string): boolean {
+  const s = String(status || '').trim().toLowerCase()
+  return s === '대기' || s === 'pending' || s === 'รอดำเนินการ' || s === 'รออนุมัติ'
+}
+
+export function isRejectedLeaveStatus(status: string): boolean {
+  const s = String(status || '').trim()
+  const low = s.toLowerCase()
+  return s === '반려' || low === 'rejected' || s === 'ปฏิเสธ'
+}
+
+/** 같은 날짜 unique(store,name,leave_date) 때문에 반려 건만 재신청(UPDATE) 가능 */
+export function canReapplyLeaveOnSameDate(status: string): boolean {
+  return isRejectedLeaveStatus(status)
+}
+
+export const LEAVE_REQUEST_ALREADY_EXISTS_KO =
+  '이미 해당 날짜에 휴가 신청이 있습니다. 신청 내역을 확인해 주세요.'
+
+export function isLeaveDuplicateConstraintError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err || '')
+  return (
+    /leave_requests_store_name_date_key/i.test(msg) ||
+    (/23505/.test(msg) && /Key \(store, name, leave_date\)/i.test(msg))
+  )
+}
+
 /** 반차·Half = 0.5일 (무급휴가(반차) 등 복합 문자열 포함) — `half` 단어 단위만 (다른 단어 부분일치 방지) */
 export function getLeaveDayValueFromType(type: string): number {
   const t = String(type || '').trim()

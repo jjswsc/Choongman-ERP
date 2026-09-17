@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { parseOr400, requestLeaveSchema } from '@/lib/api-validate'
 import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
 import {
   bareNameFuzzySameForLeaveStats,
+  canReapplyLeaveOnSameDate,
   isAnnualLeaveFamilyType,
+  isLeaveDuplicateConstraintError,
+  LEAVE_REQUEST_ALREADY_EXISTS_KO,
   leavePersonKeyForLeaveStats,
   normalizeLeaveMatchKey,
 } from '@/lib/leave-request-utils'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
 import {
+  appendSaasTenantFilter,
   assertSaasTenantWritable,
   isMissingSaasTenantColumnError,
   markSaasTenantColumnMissing,
@@ -120,13 +124,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const leaveReason = String(reason || '').trim()
     const leaveRow: Record<string, unknown> = stampSaasTenantId(
       {
         store,
         name,
         type: effectiveType,
         leave_date: leaveDate,
-        reason: String(reason || '').trim(),
+        reason: leaveReason,
         status: '대기',
         ...(verifiedEmployeeId != null && verifiedEmployeeId > 0
           ? { employee_id: verifiedEmployeeId }
@@ -135,9 +140,68 @@ export async function POST(request: NextRequest) {
       tenantScope,
       'leave_requests'
     )
+
+    const existingBaseFilter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}&leave_date=eq.${leaveDate}`
+    let existing: { id?: number; status?: string }[] = []
+    try {
+      existing = (await supabaseSelectFilter(
+        'leave_requests',
+        appendSaasTenantFilter(existingBaseFilter, tenantScope, 'leave_requests'),
+        { limit: 1, select: 'id,status' }
+      )) as typeof existing
+    } catch (selErr) {
+      if (isMissingSaasTenantColumnError(selErr)) {
+        markSaasTenantColumnMissing('leave_requests')
+        existing = (await supabaseSelectFilter('leave_requests', existingBaseFilter, {
+          limit: 1,
+          select: 'id,status',
+        })) as typeof existing
+      } else {
+        throw selErr
+      }
+    }
+    const existingRow = existing?.[0]
+    const existingId = existingRow?.id != null ? Math.floor(Number(existingRow.id)) : 0
+    if (existingId > 0) {
+      if (!canReapplyLeaveOnSameDate(String(existingRow?.status || ''))) {
+        return NextResponse.json(
+          { success: false, message: LEAVE_REQUEST_ALREADY_EXISTS_KO },
+          { headers }
+        )
+      }
+      const reapplyPayload: Record<string, unknown> = {
+        type: effectiveType,
+        reason: leaveReason,
+        status: '대기',
+        reject_reason: '',
+        certificate_url: null,
+        ...(verifiedEmployeeId != null && verifiedEmployeeId > 0
+          ? { employee_id: verifiedEmployeeId }
+          : {}),
+      }
+      try {
+        await supabaseUpdate('leave_requests', existingId, reapplyPayload)
+      } catch (updErr) {
+        const um = updErr instanceof Error ? updErr.message : String(updErr)
+        if (/employee_id|42703|column/i.test(um) && 'employee_id' in reapplyPayload) {
+          const { employee_id: _eid, ...withoutEid } = reapplyPayload
+          await supabaseUpdate('leave_requests', existingId, withoutEid)
+        } else {
+          throw updErr
+        }
+      }
+      return NextResponse.json({ success: true, message: '✅ 신청 완료' }, { headers })
+    }
+
     try {
       await supabaseInsert('leave_requests', leaveRow)
     } catch (insErr) {
+      if (isLeaveDuplicateConstraintError(insErr)) {
+        return NextResponse.json(
+          { success: false, message: LEAVE_REQUEST_ALREADY_EXISTS_KO },
+          { headers }
+        )
+      }
       const em = insErr instanceof Error ? insErr.message : String(insErr)
       if (isMissingSaasTenantColumnError(insErr) && 'tenant_id' in leaveRow) {
         markSaasTenantColumnMissing('leave_requests')
@@ -145,17 +209,43 @@ export async function POST(request: NextRequest) {
         try {
           await supabaseInsert('leave_requests', withoutTenant)
         } catch (insErr2) {
+          if (isLeaveDuplicateConstraintError(insErr2)) {
+            return NextResponse.json(
+              { success: false, message: LEAVE_REQUEST_ALREADY_EXISTS_KO },
+              { headers }
+            )
+          }
           const em2 = insErr2 instanceof Error ? insErr2.message : String(insErr2)
           if (/employee_id|42703|column/i.test(em2) && 'employee_id' in withoutTenant) {
             const { employee_id: _eid, ...withoutEid } = withoutTenant
-            await supabaseInsert('leave_requests', withoutEid)
+            try {
+              await supabaseInsert('leave_requests', withoutEid)
+            } catch (insErrEid) {
+              if (isLeaveDuplicateConstraintError(insErrEid)) {
+                return NextResponse.json(
+                  { success: false, message: LEAVE_REQUEST_ALREADY_EXISTS_KO },
+                  { headers }
+                )
+              }
+              throw insErrEid
+            }
           } else {
             throw insErr2
           }
         }
       } else if (/employee_id|42703|column/i.test(em) && 'employee_id' in leaveRow) {
         const { employee_id: _eid, ...withoutEid } = leaveRow
-        await supabaseInsert('leave_requests', withoutEid)
+        try {
+          await supabaseInsert('leave_requests', withoutEid)
+        } catch (insErr3) {
+          if (isLeaveDuplicateConstraintError(insErr3)) {
+            return NextResponse.json(
+              { success: false, message: LEAVE_REQUEST_ALREADY_EXISTS_KO },
+              { headers }
+            )
+          }
+          throw insErr3
+        }
       } else {
         throw insErr
       }

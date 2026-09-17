@@ -5,10 +5,12 @@ import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams, useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
 import {
   BarChart2,
   ClipboardList,
   ClipboardPenLine,
+  Download,
   History,
   Tags,
   Users,
@@ -66,6 +68,7 @@ import { expandStoreVariantsForGrade } from "@/lib/grade-store-key-variants"
 import { getEmployeeJobOptionLabel } from "@/lib/employee-job-catalog"
 import { HrPageShell } from "@/components/hr/hr-page-shell"
 import { EmployeeCsvImportDialog } from "@/components/employees/employee-csv-import-dialog"
+import { downloadEmployeeListCsv } from "@/lib/employee-list-csv"
 import { useErpBackHandler } from "@/lib/erp-navigation"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import { useSyncOfficePayrollAccess } from "@/lib/use-office-payroll-access"
@@ -526,6 +529,14 @@ export default function EmployeesPage() {
     loadEmployeeList({ updateDisplay: true })
   }
 
+  const handleExportCsv = () => {
+    if (!hasSearched || filteredRows.length === 0) {
+      void appAlert(t("emp_csv_export_empty"))
+      return
+    }
+    downloadEmployeeListCsv(filteredRows, t, { officePayrollAuth })
+  }
+
   const handleEdit = (idx: number) => {
     const e = filteredRows[idx]
     if (e) openEmployeeForm(e)
@@ -687,11 +698,22 @@ export default function EmployeesPage() {
               {hasSearched && employeeCache.length > 0 && (
                 <JobCountSummary rows={filteredRows} t={t} />
               )}
-              {isOffice ? (
-                <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5"
+                  onClick={handleExportCsv}
+                  disabled={!hasSearched || filteredRows.length === 0}
+                >
+                  <Download className="h-3.5 w-3.5" aria-hidden />
+                  {t("emp_csv_export")}
+                </Button>
+                {isOffice ? (
                   <EmployeeCsvImportDialog onImported={() => void loadEmployeeList({ updateDisplay: true })} />
-                </div>
-              ) : null}
+                ) : null}
+              </div>
               <div className="rounded-lg border border-border bg-card p-3">
                 <EmployeeFilterBar
                   stores={storesForFilter}

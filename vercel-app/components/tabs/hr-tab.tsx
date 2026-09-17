@@ -336,14 +336,17 @@ export function HrTab() {
         reason: leaveReason,
         ...(auth.employeeId != null && auth.employeeId > 0 ? { employeeId: auth.employeeId } : {}),
       })
+      setLeaveSubmitting(false)
+      loadLeaveInfo()
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("leaveRequestSuccess"))
         setLeaveReason("")
-        loadLeaveInfo()
       } else {
         await appAlert(translateApiMessage(res.message, t) || t("leaveRequestFail"))
       }
     } catch (e) {
+      setLeaveSubmitting(false)
+      loadLeaveInfo()
       await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setLeaveSubmitting(false)

@@ -5,7 +5,11 @@ vi.mock('@/lib/attendance-utils', () => ({
 }))
 
 import {
+  canReapplyLeaveOnSameDate,
   isEmployeeIncludedInLeaveStats,
+  isLeaveDuplicateConstraintError,
+  isPendingLeaveStatus,
+  isRejectedLeaveStatus,
   parseLeaveStatsStaffFilter,
 } from '@/lib/leave-request-utils'
 
@@ -54,5 +58,25 @@ describe('isEmployeeIncludedInLeaveStats', () => {
     expect(isEmployeeIncludedInLeaveStats({ deleted_at: '2026-08-01T00:00:00Z' })).toBe(false)
     expect(isEmployeeIncludedInLeaveStats({ deleted_at: '2026-08-01T00:00:00Z' }, 'all')).toBe(false)
     expect(isEmployeeIncludedInLeaveStats({ deleted_at: '2026-08-01T00:00:00Z' }, 'resigned')).toBe(false)
+  })
+})
+
+describe('leave same-date unique constraint', () => {
+  it('allows reapply only when rejected', () => {
+    expect(isRejectedLeaveStatus('반려')).toBe(true)
+    expect(isPendingLeaveStatus('대기')).toBe(true)
+    expect(canReapplyLeaveOnSameDate('반려')).toBe(true)
+    expect(canReapplyLeaveOnSameDate('Rejected')).toBe(true)
+    expect(canReapplyLeaveOnSameDate('대기')).toBe(false)
+    expect(canReapplyLeaveOnSameDate('승인')).toBe(false)
+  })
+
+  it('detects store-name-date duplicate errors', () => {
+    expect(
+      isLeaveDuplicateConstraintError(
+        'Supabase insert failed: {"code":"23505","details":"Key (store, name, leave_date)=(1001, Parin Promvihan, 2026-09-17) already exists.","message":"duplicate key value violates unique constraint \\"leave_requests_store_name_date_key\\""}'
+      )
+    ).toBe(true)
+    expect(isLeaveDuplicateConstraintError('duplicate key 23505 on employees_pkey')).toBe(false)
   })
 })

@@ -9,6 +9,7 @@ import { BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE } from '@/lib/bank-expense-via-ex
 const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 휴가
   "✅ 신청 완료": "leaveRequestSuccess",
+  "이미 해당 날짜에 휴가 신청이 있습니다. 신청 내역을 확인해 주세요.": "leaveRequestDuplicate",
   "증명서가 업로드되었습니다.": "leaveCertUploaded",
   "진단서가 업로드되었습니다.": "leaveCertUploaded",
   "증빙 서류가 업로드되었습니다.": "leaveCertUploaded",
@@ -365,6 +366,15 @@ export function translateApiMessage(
   const key = API_MESSAGE_TO_KEY[trimmed]
   if (key) return t(key)
   // "처리 실패:" 등 접두사 패턴
+  if (
+    /leave_requests_store_name_date_key/i.test(trimmed) ||
+    (/23505/.test(trimmed) && /Key \(store, name, leave_date\)/i.test(trimmed))
+  ) {
+    return t("leaveRequestDuplicate")
+  }
+  if (trimmed.startsWith("❌ 신청 실패:") || trimmed.startsWith("신청 실패:")) {
+    return t("leaveRequestFail")
+  }
   if (trimmed.startsWith("처리 실패:"))
     return t("processFail") + trimmed.slice("처리 실패:".length)
   if (trimmed.startsWith("저장 실패:"))
