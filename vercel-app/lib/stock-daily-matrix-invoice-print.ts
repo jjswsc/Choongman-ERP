@@ -13,6 +13,7 @@ import {
   resolveInvoiceClientForTarget,
   resolveInvoiceClientFromBillToCandidates,
 } from '@/lib/invoice-client-resolve'
+import { isOutboundBillableForInvoice } from '@/lib/outbound-billable-delivery'
 import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 import { SALES_OUTBOUND_INVOICE_TITLE } from '@/lib/sales-tax-document-title'
 import type { InvoiceData } from '@/components/invoice'
@@ -34,6 +35,14 @@ export async function openStockDailyMatrixInvoicePrint(
   })
   if (!lines.length) {
     return { ok: false, message: 'invoice_lines_not_found' }
+  }
+  if (
+    !isOutboundBillableForInvoice({
+      type: lines[0]?.type,
+      deliveryStatus: lines[0]?.deliveryStatus,
+    })
+  ) {
+    return { ok: false, message: 'not_delivered' }
   }
 
   const totalAmt = lines.reduce((s, l) => s + (l.amount || 0), 0)

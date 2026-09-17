@@ -10,12 +10,14 @@ import { signEtaxXml } from '@/lib/etax-sign'
 import { resolveHeadOfficeFromVendorRow } from '@/lib/head-office-defaults'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { fetchSalesTypesVendorsForInvoice } from '@/lib/invoice-vendor-clients'
+import { isOutboundBillableForInvoice } from '@/lib/outbound-billable-delivery'
 
 interface OutboundGroup {
   date: string
   target: string
   type: string
   invoiceNo?: string
+  deliveryStatus?: string
   items: { name: string; code?: string; spec?: string; qty: number; amount: number }[]
   totalAmt: number
 }
@@ -99,6 +101,15 @@ export async function POST(request: NextRequest) {
     const wantSign = !!body.sign
     if (groups.length === 0) {
       return NextResponse.json({ error: 'No groups provided', xml: null }, { status: 400, headers })
+    }
+    const notBillable = groups.filter(
+      (g) => !isOutboundBillableForInvoice({ type: g.type, deliveryStatus: g.deliveryStatus })
+    )
+    if (notBillable.length > 0) {
+      return NextResponse.json(
+        { error: 'Only delivered outbound can generate e-Tax (จัดส่งแล้ว)', xml: null },
+        { status: 400, headers }
+      )
     }
 
     const { company, clients } = await getInvoiceData()

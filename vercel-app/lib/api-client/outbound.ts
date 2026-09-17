@@ -394,6 +394,7 @@ export interface EtaxGroupInput {
   type: string
   orderRowId?: string
   invoiceNo?: string
+  deliveryStatus?: string
   items: { name: string; code?: string; spec?: string; qty: number; amount: number }[]
   totalAmt: number
 }

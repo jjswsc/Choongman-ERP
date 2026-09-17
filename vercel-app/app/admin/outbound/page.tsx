@@ -49,7 +49,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tr, useT } from "@/lib/i18n"
+import {
+  isOutboundBillableForInvoice,
+  normalizeOutboundDeliveryStatus,
+  partitionOutboundInvoiceGroups,
+} from "@/lib/outbound-billable-delivery"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
@@ -1235,13 +1240,7 @@ export default function OutboundPage() {
       .sort((a, b) => a.localeCompare(b))
   }, [outboundTargets, historyList])
 
-  const normalizedDeliveryStatus = (s: string) => {
-    const v = String(s || "").trim()
-    if (v.includes("일부") || v.includes("Partial")) return "일부배송완료"
-    if (v.includes("배송완료") || v.includes("Delivered") || v.includes("수령완료") || v.includes("수령")) return "배송완료"
-    if (v.includes("배송중") || v.includes("Transit")) return "배송중"
-    return v || ""
-  }
+  const normalizedDeliveryStatus = (s: string) => normalizeOutboundDeliveryStatus(s)
 
   const groupedHistory = React.useMemo(() => {
     const g: Record<string, {
@@ -1947,13 +1946,23 @@ export default function OutboundPage() {
       await appAlert(t("outSelectForPrint"))
       return
     }
+    const { billable, skipped } = partitionOutboundInvoiceGroups(checked)
+    if (billable.length === 0) {
+      await appAlert(t("outInvoiceNoneDelivered"))
+      return
+    }
+    if (skipped.length > 0) {
+      const ok = await appConfirm(tr(t, "outInvoiceSkippedInTransit", { n: skipped.length }))
+      if (!ok) return
+    }
     try {
-      const groups = checked.map((g) => ({
+      const groups = billable.map((g) => ({
         date: g.date,
         target: g.target,
-        type: g.type || "Force",
+        type: g.type || "",
         orderRowId: g.items[0]?.orderRowId,
         invoiceNo: g.invoiceNo,
+        deliveryStatus: g.items[0]?.deliveryStatus || "",
         items: g.items.map((it) => ({
           name: it.name || "-",
           code: it.code,
@@ -2251,9 +2260,14 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
   }
 
   const handlePrintInvoice = async () => {
-    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => displayGroupedHistory[i]).filter(Boolean)
-    if (checked.length === 0) {
+    const selectedGroups = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => displayGroupedHistory[i]).filter(Boolean)
+    if (selectedGroups.length === 0) {
       await appAlert(t("outSelectForPrint"))
+      return
+    }
+    const { billable, skipped } = partitionOutboundInvoiceGroups(selectedGroups)
+    if (billable.length === 0) {
+      await appAlert(t("outInvoiceNoneDelivered"))
       return
     }
     const reservedWindow = reserveInvoicePrintWindow()
@@ -2261,6 +2275,14 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       await appAlert(t("invLoadFailed") + "\n\n" + t("outPrintPopoverBlocked"))
       return
     }
+    if (skipped.length > 0) {
+      const ok = await appConfirm(tr(t, "outInvoiceSkippedInTransit", { n: skipped.length }))
+      if (!ok) {
+        closeReservedInvoicePrintWindow(reservedWindow)
+        return
+      }
+    }
+    const checked = billable
     let handedOff = false
     try {
       const [invoiceDataRes, invSettings] = await Promise.all([getInvoiceData(), getInvoiceSettings()])
@@ -2396,15 +2418,25 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
   }
 
   /** 기간 총액: 실제 stock_logs 출고만(미수령 발주 가상 줄·기간 밖 보강 제외) — 손익 본사 출고와 맞춤 */
+  const periodLogRows = React.useMemo(
+    () => historyList.filter((i) => i.stockLogId != null && i.stockLogId > 0 && !i.outsidePeriodRange),
+    [historyList]
+  )
   const periodTotal = React.useMemo(() => {
-    const sumOutboundLogs = (rows: typeof historyList) =>
-      rows
-        .filter((i) => i.stockLogId != null && i.stockLogId > 0 && !i.outsidePeriodRange)
-        .reduce((sum, i) => sum + (i.amount || 0), 0)
-    if (isOffice) return sumOutboundLogs(historyList)
+    if (isOffice) return periodLogRows.reduce((sum, i) => sum + (i.amount || 0), 0)
     return usageList.reduce((sum, i) => sum + (i.amount || 0), 0)
-  }, [historyList, usageList, isOffice])
-  const periodTotalsWithVat = React.useMemo(() => thaiInvoiceTotalsFromRawSubtotal(periodTotal), [periodTotal])
+  }, [periodLogRows, usageList, isOffice])
+  const periodBillableTotal = React.useMemo(() => {
+    if (!isOffice) return periodTotal
+    return periodLogRows
+      .filter((i) => isOutboundBillableForInvoice({ type: i.type, deliveryStatus: i.deliveryStatus }))
+      .reduce((sum, i) => sum + (i.amount || 0), 0)
+  }, [isOffice, periodLogRows, periodTotal])
+  const periodTotalsWithVat = React.useMemo(
+    () => thaiInvoiceTotalsFromRawSubtotal(periodBillableTotal),
+    [periodBillableTotal]
+  )
+  const periodAllTotalsWithVat = React.useMemo(() => thaiInvoiceTotalsFromRawSubtotal(periodTotal), [periodTotal])
 
   React.useEffect(() => {
     setTabValue(isOffice ? "new" : "hist")
@@ -2419,9 +2451,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     )
   }
 
-  const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
-  const periodVatFormatted = `${periodTotalsWithVat.vatRounded.toLocaleString()}${lang === "th" ? " THB" : ""}`
-  const periodGrandTotalFormatted = `${periodTotalsWithVat.grandTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
+  const thb = lang === "th" ? " THB" : ""
+  const periodTotalFormatted = `${periodBillableTotal.toLocaleString()}${thb}`
+  const periodVatFormatted = `${periodTotalsWithVat.vatRounded.toLocaleString()}${thb}`
+  const periodGrandTotalFormatted = `${periodTotalsWithVat.grandTotal.toLocaleString()}${thb}`
+  const periodAllTotalFormatted = `${periodTotal.toLocaleString()}${thb}`
+  const periodAllVatFormatted = `${periodAllTotalsWithVat.vatRounded.toLocaleString()}${thb}`
+  const periodAllGrandTotalFormatted = `${periodAllTotalsWithVat.grandTotal.toLocaleString()}${thb}`
 
   return (
     <div className="flex-1 overflow-auto">
@@ -3345,6 +3381,9 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               totalAmount={periodTotalFormatted}
               totalVatAmount={periodVatFormatted}
               totalWithVatAmount={periodGrandTotalFormatted}
+              allOutboundAmount={isOffice ? periodAllTotalFormatted : undefined}
+              allOutboundVatAmount={isOffice ? periodAllVatFormatted : undefined}
+              allOutboundWithVatAmount={isOffice ? periodAllGrandTotalFormatted : undefined}
               isOffice={isOffice}
               histStart={histStart}
               histEnd={histEnd}

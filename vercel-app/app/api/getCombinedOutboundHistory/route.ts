@@ -299,7 +299,7 @@ export async function GET(request: NextRequest) {
 
     const list: OutboundHistoryItem[] = []
 
-    // 승인된 주문 중 아직 수령 전인 건도 목록에 포함 (주문 직후 인보이스 인쇄 가능)
+    // 승인된 주문 중 아직 수령 전인 건도 목록에 포함 (배송 추적용). ใบกำกับ/e-Tax는 배송완료만.
     const typeFilterOkForOrder =
       !typeFilter || typeFilter === 'All' || typeFilter === 'Order'
     if (typeFilterOkForOrder) {

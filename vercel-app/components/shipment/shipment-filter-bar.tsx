@@ -22,6 +22,10 @@ interface ShipmentFilterBarProps {
   totalAmount: string
   totalVatAmount?: string
   totalWithVatAmount?: string
+  /** 본사: 기간 전체 출고(배송중 포함). 없으면 청구 합계만 표시 */
+  allOutboundAmount?: string
+  allOutboundVatAmount?: string
+  allOutboundWithVatAmount?: string
   /** 본사 권한 시 확장 필터 표시 */
   isOffice?: boolean
   // Period
@@ -67,6 +71,9 @@ export function ShipmentFilterBar({
   totalAmount,
   totalVatAmount = "",
   totalWithVatAmount = "",
+  allOutboundAmount = "",
+  allOutboundVatAmount = "",
+  allOutboundWithVatAmount = "",
   isOffice = true,
   histStart,
   histEnd,
@@ -395,10 +402,13 @@ export function ShipmentFilterBar({
           </button>
         )}
 
-        {/* Total */}
+        {/* Total: วางบิล(배송완료) 우선, 출고 전체는 보조 */}
         <div className="ml-auto text-right">
-          <span className={cn("text-sm font-bold text-emerald-600 dark:text-emerald-400", ADMIN_NUMERIC_CN)}>
-            {t("outPeriodTotal")}: {totalAmount}
+          <span
+            className={cn("text-sm font-bold text-emerald-600 dark:text-emerald-400", ADMIN_NUMERIC_CN)}
+            title={t("outBillableTotalHint")}
+          >
+            {t(allOutboundAmount ? "outBillableTotal" : "outPeriodTotal")}: {totalAmount}
           </span>
           {totalVatAmount ? (
             <p className={cn("text-xs font-medium text-muted-foreground", ADMIN_NUMERIC_CN)}>
@@ -409,6 +419,19 @@ export function ShipmentFilterBar({
             <p className={cn("text-xs font-semibold text-foreground", ADMIN_NUMERIC_CN)}>
               {t("inv_total")}: {totalWithVatAmount}
             </p>
+          ) : null}
+          {allOutboundAmount ? (
+            <div className="mt-1 border-t border-border/60 pt-1" title={t("outPeriodTotalAllHint")}>
+              <p className={cn("text-[11px] text-muted-foreground", ADMIN_NUMERIC_CN)}>
+                {t("outPeriodTotalAll")}: {allOutboundAmount}
+              </p>
+              {allOutboundVatAmount ? (
+                <p className={cn("text-[10px] text-muted-foreground", ADMIN_NUMERIC_CN)}>
+                  {t("inv_vat7")}: {allOutboundVatAmount}
+                  {allOutboundWithVatAmount ? ` · ${t("inv_total")}: ${allOutboundWithVatAmount}` : ""}
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
     </AdminFilterBar>

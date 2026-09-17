@@ -291,7 +291,13 @@ export function StockDailyMatrixPanel({ storeTargets }: StockDailyMatrixPanelPro
     setInvoicePrinting(key)
     try {
       const res = await openStockDailyMatrixInvoicePrint(inv, data.startStr, data.endStr)
-      if (!res.ok) await appAlert(res.message || t("msg_save_fail"))
+      if (!res.ok) {
+        await appAlert(
+          res.message === "not_delivered"
+            ? t("outInvoiceNoneDelivered")
+            : res.message || t("msg_save_fail")
+        )
+      }
     } finally {
       setInvoicePrinting(null)
     }
