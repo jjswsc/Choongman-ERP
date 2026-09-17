@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdate, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestVariantsFilter } from '@/lib/attendance-utils'
 import { requireAuth } from '@/lib/verify-auth'
-import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { canApproveLeaveForStore } from '@/lib/leave-approval-access'
+import { loadLeaveApproverRows } from '@/lib/leave-approval-access-server'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import {
   appendSaasTenantFilter,
@@ -38,13 +39,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const id = body?.id != null ? Number(body.id) : NaN
     const decision = String(body?.decision || '').trim()
-    const userStore = String(auth.store || '').trim()
-    const userRole = String(auth.role || '').toLowerCase()
-    const allowedStores =
-      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
-        .map((s) => String(s || '').trim())
-        .filter(Boolean)
-        .concat(userStore)
 
     if (!id || isNaN(id)) {
       return NextResponse.json(
@@ -98,16 +92,18 @@ export async function POST(request: NextRequest) {
     }
 
     const targetStore = String(rows[0].store || '').trim()
-    const isManagerLike = userRole.includes('manager') || userRole.includes('franchisee')
-    if (isManagerLike && targetStore) {
-      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, targetStore))
-      if (!allowed) {
-        return NextResponse.json(
-          { success: false, message: '해당 매장의 휴가만 승인할 수 있습니다.' },
-          { headers }
-        )
-      }
-    } else if (isManagerLike && userStore && !storesMatchForGradeLookup(userStore, targetStore)) {
+    const approverRows = await loadLeaveApproverRows(tenantScope)
+    const mayApprove = canApproveLeaveForStore(
+      {
+        role: auth.role,
+        store: auth.store,
+        employeeId: auth.employeeId,
+        allowedStores: auth.allowedStores,
+      },
+      targetStore,
+      approverRows
+    )
+    if (!mayApprove) {
       return NextResponse.json(
         { success: false, message: '해당 매장의 휴가만 승인할 수 있습니다.' },
         { headers }

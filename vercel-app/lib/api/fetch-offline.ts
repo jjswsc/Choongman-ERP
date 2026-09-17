@@ -85,6 +85,7 @@ const LEGACY_QUEUE_WHITELIST = new Set([
   '/api/estimateNoticeRecipients',
   '/api/noticeTemplates',
   '/api/processLeaveApproval',
+  '/api/saveLeaveApprovers',
   '/api/processAttendanceApproval',
   '/api/createAttendanceFromSchedule',
   '/api/approveNoClockOut',
@@ -242,6 +243,7 @@ function getQueueDomain(path: string): 'pos' | 'erp' | 'accounting' | 'hr' | nul
     path.startsWith('/api/submitAttendance') ||
     path.startsWith('/api/requestLeave') ||
     path.startsWith('/api/processLeaveApproval') ||
+    path.startsWith('/api/saveLeaveApprovers') ||
     path.startsWith('/api/processAttendanceApproval') ||
     path.startsWith('/api/saveWorkLog')
   ) {

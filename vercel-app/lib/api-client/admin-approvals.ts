@@ -88,6 +88,40 @@ export async function processLeaveApproval(params: { id: number; decision: strin
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export type LeaveApproverPerson = {
+  employeeId: number
+  name: string
+  nick: string
+  store: string
+  role: string
+  employeeCode: string
+}
+
+export async function getLeaveApprovers() {
+  const res = await apiFetchWithOffline('/api/getLeaveApprovers')
+  return res.json() as Promise<{
+    success: boolean
+    canEdit?: boolean
+    global: LeaveApproverPerson[]
+    byStore: Record<string, LeaveApproverPerson[]>
+    message?: string
+  }>
+}
+
+export async function saveLeaveApprovers(params: {
+  action: 'add' | 'remove'
+  scope: 'all' | 'store'
+  employeeId: number
+  store?: string
+}) {
+  const res = await apiFetchWithOffline('/api/saveLeaveApprovers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function getAttendancePendingList(params: {
   startStr: string
   endStr: string

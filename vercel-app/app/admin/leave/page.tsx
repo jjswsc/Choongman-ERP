@@ -6,6 +6,7 @@ import { Suspense } from "react"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import { Calendar } from "lucide-react"
 import { AdminLeaveApproval } from "@/components/admin/admin-leave-approval"
+import { AdminLeaveApprovers } from "@/components/admin/admin-leave-approvers"
 import { AdminLeaveStats } from "@/components/admin/admin-leave-stats"
 import { HrPageShell } from "@/components/hr/hr-page-shell"
 import {
@@ -21,11 +22,15 @@ import { useT } from "@/lib/i18n"
 function AdminLeavePageInner() {
   const { lang } = useLang()
   const t = useT(lang)
-  const [tab, setTab] = useAdminUrlTab("tab", ["approval", "stats"] as const, "approval")
+  const [tab, setTab] = useAdminUrlTab(
+    "tab",
+    ["approval", "stats", "approvers"] as const,
+    "approval"
+  )
 
   return (
     <HrPageShell icon={Calendar} title={t("adminLeave")} subtitle={t("adminLeaveSub")}>
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "approval" | "stats")} className={adminTabsRootCn}>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "approval" | "stats" | "approvers")} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
                 <TabsTrigger value="approval" className={adminTabsTriggerCn}>
@@ -34,6 +39,9 @@ function AdminLeavePageInner() {
                 <TabsTrigger value="stats" className={adminTabsTriggerCn}>
                   {t("leave_tab_stats")}
                 </TabsTrigger>
+                <TabsTrigger value="approvers" className={adminTabsTriggerCn}>
+                  {t("leaveApproversTab") || "승인자"}
+                </TabsTrigger>
               </TabsList>
           </AdminTabsBarWithHelp>
           <TabsContent value="approval" className={adminTabsContentCn}>
@@ -41,6 +49,9 @@ function AdminLeavePageInner() {
           </TabsContent>
           <TabsContent value="stats" className={adminTabsContentCn}>
             <AdminLeaveStats />
+          </TabsContent>
+          <TabsContent value="approvers" className={adminTabsContentCn}>
+            <AdminLeaveApprovers />
           </TabsContent>
         </Tabs>
     </HrPageShell>

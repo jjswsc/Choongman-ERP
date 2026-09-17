@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { assignLeaveRowToEmployeeForStats } from '@/lib/leave-request-utils'
 import { requireAuth } from '@/lib/verify-auth'
-import { hasOfficeStaffScope } from '@/lib/permissions'
-import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  canApproveLeaveForStore,
+  isLeaveGlobalApprover,
+} from '@/lib/leave-approval-access'
+import { loadLeaveApproverRows } from '@/lib/leave-approval-access-server'
+import { isDirectorRole } from '@/lib/permissions'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
@@ -63,26 +67,45 @@ export async function GET(request: NextRequest) {
   let store = String(searchParams.get('store') || '').trim()
   const status = String(searchParams.get('status') || '대기').trim()
   const typeFilter = String(searchParams.get('type') || searchParams.get('typeFilter') || '').trim()
-  const userStore = String(auth.store || '').trim()
-  const userRole = String(auth.role || '').toLowerCase()
-  const allowedStores =
-    (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
-      .map((s) => String(s || '').trim())
-      .filter(Boolean)
-      .concat(userStore)
   const dateFilterType = String(searchParams.get('dateFilterType') || 'leave').trim() as 'request' | 'leave'
 
   if (store === 'undefined' || store === 'null') store = ''
   if (store === 'All') store = ''
 
-  const isOfficeLevel = hasOfficeStaffScope(userRole, userStore)
-  if (!isOfficeLevel) {
-    if (!store) {
-      store = String(allowedStores[0] || '').trim()
-    } else {
-      const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, store))
-      if (!allowed) {
-        return NextResponse.json([], { status: 403, headers })
+  const approverRows = await loadLeaveApproverRows(tenantScope)
+  const leaveAuth = {
+    role: auth.role,
+    store: auth.store,
+    employeeId: auth.employeeId,
+    allowedStores: auth.allowedStores,
+  }
+  const eid =
+    auth.employeeId != null && Number.isFinite(Number(auth.employeeId))
+      ? Math.floor(Number(auth.employeeId))
+      : 0
+  const canSeeAllStores =
+    isDirectorRole(String(auth.role || '')) ||
+    (eid > 0 && isLeaveGlobalApprover(eid, approverRows))
+
+  if (store) {
+    if (!canApproveLeaveForStore(leaveAuth, store, approverRows)) {
+      return NextResponse.json([], { status: 403, headers })
+    }
+  } else if (!canSeeAllStores) {
+    const userRole = String(auth.role || '').toLowerCase()
+    const isManagerLike = userRole.includes('manager') || userRole.includes('franchisee')
+    if (isManagerLike) {
+      const allowed = [
+        ...(Array.isArray(auth.allowedStores) ? auth.allowedStores : []),
+        String(auth.store || ''),
+      ]
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+      // 승인 가능한 매장만 — 단일 매장이면 DB 필터로 좁힘
+      const approvable = allowed.filter((s) => canApproveLeaveForStore(leaveAuth, s, approverRows))
+      if (approvable.length === 1) store = approvable[0]
+      else if (approvable.length === 0) {
+        return NextResponse.json([], { headers })
       }
     }
   }
@@ -258,6 +281,7 @@ export async function GET(request: NextRequest) {
       if (endStr && filterBy > endStr) continue
 
       const st = String(r.store || '').trim()
+      if (!canApproveLeaveForStore(leaveAuth, st, approverRows)) continue
       const nm = String(r.name || '').trim()
       const eid = r.employee_id != null && Number.isFinite(Number(r.employee_id)) ? Math.floor(Number(r.employee_id)) : 0
       const codeFromId = eid > 0 ? codeByEmployeeId[eid] || '' : ''

@@ -20,6 +20,9 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "해당 매장의 휴가만 승인할 수 있습니다.": "leaveStoreOnly",
   "반려 사유를 입력해 주세요.": "leaveRejectReasonRequired",
   "해당 날짜는 휴가일입니다. 긴급 인정할 수 없습니다.": "leaveDayCannotEmergencyApprove",
+  "휴가 승인자 설정 권한이 없습니다.": "leaveApproversNoEditPerm",
+  "이미 등록된 승인자입니다.": "leaveApproversAlready",
+  "leave_approvers 테이블이 없습니다. sql/leave_approvers_01_create.sql 을 실행하세요.": "leaveApproversTableMissing",
 
   // 사용 확정
   "✅ 사용 확정 완료": "confirmUsageDone",

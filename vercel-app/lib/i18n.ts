@@ -804,6 +804,9 @@ export const i18n = {
     selectApproveOrReject: '승인 또는 반려를 선택해 주세요.',
     leaveRequestNotFound: '해당 휴가 신청을 찾을 수 없습니다.',
     leaveStoreOnly: '해당 매장의 휴가만 승인할 수 있습니다.',
+    leaveApproversNoEditPerm: '휴가 승인자 설정 권한이 없습니다.',
+    leaveApproversTableMissing:
+      'leave_approvers 테이블이 없습니다. sql/leave_approvers_01_create.sql 을 실행하세요.',
     leaveDayCannotEmergencyApprove: '해당 날짜는 휴가일입니다. 긴급 인정할 수 없습니다.',
     leaveDayCannotSchedule: '해당 요일은 휴가일이라 스케줄을 넣을 수 없습니다.',
     attRecordNotFound: '해당 기록을 찾을 수 없습니다.',
@@ -1851,9 +1854,9 @@ export const i18n = {
     helpHow_admin_attendance:
       '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 오늘 출근 현황을 봅니다.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~31:00, 자정 이후는 24:00~·익일 07:00은 31:00)에서 고릅니다. 저장 전에 같은 날 동일 직원 중복을 검사하며, 오류가 나도 기존 표는 지우지 않습니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
     helpSum_admin_leave:
-      '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다. 통계 기본은 재직 직원만 보이며, 사이드바 배지는 최근 휴가일 기준 미승인만 표시합니다.',
+      '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다. 「승인자」탭에서 전체 승인자·매장 승인자를 지정할 수 있습니다. 통계 기본은 재직 직원만 보이며, 사이드바 배지는 최근 휴가일 기준 미승인만 표시합니다.',
     helpHow_admin_leave:
-      '① [승인]: 대기 목록에서 증명서 확인 후 승인·반려합니다.\n② [통계]: 기간·매장별 사용·잔여 연차를 조회합니다. 기본은 재직 직원만 보이며, 검색에서 퇴사·전체로 바꿀 수 있습니다.\n③ 급여 관리에서 월별로 링크해 들어올 수 있습니다.\n④ 사이드바 배지는 최근 30일(휴가일)~미래 미승인만 집계합니다.',
+      '① [승인]: 대기 목록에서 증명서 확인 후 승인·반려합니다.\n② [통계]: 기간·매장별 사용·잔여 연차를 조회합니다. 기본은 재직 직원만 보이며, 검색에서 퇴사·전체로 바꿀 수 있습니다.\n③ [승인자]: 전체 승인자(모든 매장)와 매장별 승인자를 지정합니다. 매장에 한 명이라도 지정되면 그 목록(+전체 승인자·Director)만 승인합니다. 미지정 매장은 점장·가맹점주 폴백입니다.\n④ 급여 관리에서 월별로 링크해 들어올 수 있습니다.\n⑤ 사이드바 배지는 최근 30일(휴가일)~미래 미승인만 집계합니다.',
     helpSum_admin_hr_calendar:
       '재직 직원의 생일·입사·N년·퇴사일을 월별 캘린더와 목록으로 확인합니다.',
     helpHow_admin_hr_calendar:
@@ -2607,7 +2610,23 @@ export const i18n = {
     holiday_action_required: 'action을 지정해주세요. (add/update/delete)',
     holiday_query_fail: '조회 실패.',
     adminLeave: '휴가 관리',
-    adminLeaveSub: '휴가 승인·반려와 사용·잔여 통계를 관리합니다.',
+    adminLeaveSub: '휴가 승인·반려와 사용·잔여 통계, 승인자를 관리합니다.',
+    leaveApproversTab: '승인자',
+    leaveApproversGlobal: '전체 승인자',
+    leaveApproversGlobalHint:
+      '모든 매장 휴가를 승인·반려할 수 있습니다. Director는 목록과 무관하게 항상 승인할 수 있습니다.',
+    leaveApproversStore: '매장 승인자',
+    leaveApproversStoreHint:
+      '해당 매장만 승인합니다. 이 매장에 한 명이라도 지정되면 점장 role만으로는 승인되지 않습니다. 미지정 매장은 기존처럼 점장·가맹점주가 승인합니다.',
+    leaveApproversEmpty: '등록된 승인자가 없습니다.',
+    leaveApproversEmptyFallback:
+      '지정된 승인자가 없습니다. 이 매장은 점장·가맹점주 폴백이 적용됩니다.',
+    leaveApproversPickStore: '매장을 선택하세요.',
+    leaveApproversAddManagers: '이 매장 점장 추가',
+    leaveApproversAdd: '승인자 추가',
+    leaveApproversSearch: '이름·닉네임·코드 검색',
+    leaveApproversAlready: '등록됨',
+    leaveApproversViewOnly: '승인자 목록은 본사에서만 수정할 수 있습니다.',
     adminAccountingPurchaseOrder: 'PO 관리',
     adminAccountingPurchaseOrderTitle: 'PO 관리',
     adminAccountingPurchaseOrderSub: '로얄티·배달·Grab GP 등 매장 청구를 발주서로 기록합니다. [청구 비율 설정]에서 비율을 저장한 뒤, 본사 발주 탭에서 POS 매출 연동으로 줄을 넣을 수 있습니다. 매장 간 청구(Silom→The Street 등)는 발행 매장에서 해당 매장을 선택하세요. Draft는 발주 내역의 연필 버튼으로 수정한 뒤 승인하세요. FlowAccount 등과 소수점이 다르면 합계란 연필 아이콘으로 소계·VAT·합계를 수동 보정할 수 있습니다.',
@@ -9155,6 +9174,9 @@ Only matters the employee must handle personally on a working day:
     selectApproveOrReject: 'Please select Approve or Reject.',
     leaveRequestNotFound: 'Leave request not found.',
     leaveStoreOnly: 'You can only approve leave for your store.',
+    leaveApproversNoEditPerm: 'You do not have permission to edit leave approvers.',
+    leaveApproversTableMissing:
+      'leave_approvers table is missing. Run sql/leave_approvers_01_create.sql.',
     leaveDayCannotEmergencyApprove: 'This date is a leave day. Emergency approval is not allowed.',
     leaveDayCannotSchedule: 'Cannot schedule this person on a leave day.',
     attRecordNotFound: 'Record not found.',
@@ -10200,9 +10222,9 @@ Only matters the employee must handle personally on a working day:
     helpHow_admin_attendance:
       '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: see who is on shift now.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–31:00; after midnight use 24:00+, and 07:00 next morning is 31:00). Save validates same-day duplicate staff first and does not clear the week on validation errors.\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
     helpSum_admin_leave:
-      'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Stats default to current staff. Sidebar badges count only recent unapproved leave dates.',
+      'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Use the Approvers tab for global and per-store approvers. Stats default to current staff. Sidebar badges count only recent unapproved leave dates.',
     helpHow_admin_leave:
-      '① Approval: review certificates, then approve or reject pending requests.\n② Stats: query usage and remaining leave by period and store. Default list is current staff; choose Resigned or All to include former employees.\n③ Payroll may deep-link here by month.\n④ Sidebar badges count pending leave from the last 30 leave-days through future dates only.',
+      '① Approval: review certificates, then approve or reject pending requests.\n② Stats: query usage and remaining leave by period and store. Default list is current staff; choose Resigned or All to include former employees.\n③ Approvers: set global approvers (all stores) and per-store approvers. Once a store has any designated approver, only that list (+ global + Director) can approve. Stores with none keep manager/franchisee fallback.\n④ Payroll may deep-link here by month.\n⑤ Sidebar badges count pending leave from the last 30 leave-days through future dates only.',
     helpSum_admin_hr_calendar:
       'View birthdays, hire dates, work anniversaries, and resignations on a monthly calendar and list.',
     helpHow_admin_hr_calendar:
@@ -10958,7 +10980,23 @@ Only matters the employee must handle personally on a working day:
     holiday_action_required: 'Please specify action (add/update/delete).',
     holiday_query_fail: 'Query failed.',
     adminLeave: 'Leave',
-    adminLeaveSub: 'Approve or reject leave and review usage and balance statistics.',
+    adminLeaveSub: 'Approve or reject leave, review balances, and manage leave approvers.',
+    leaveApproversTab: 'Approvers',
+    leaveApproversGlobal: 'Global approvers',
+    leaveApproversGlobalHint:
+      'Can approve leave for every store. Directors can always approve regardless of this list.',
+    leaveApproversStore: 'Store approvers',
+    leaveApproversStoreHint:
+      'Approve leave for this store only. Once anyone is listed for a store, manager role alone is not enough. Stores with no list keep manager/franchisee fallback.',
+    leaveApproversEmpty: 'No approvers registered.',
+    leaveApproversEmptyFallback:
+      'No designated approvers. This store uses manager/franchisee fallback.',
+    leaveApproversPickStore: 'Select a store.',
+    leaveApproversAddManagers: 'Add this store’s managers',
+    leaveApproversAdd: 'Add approver',
+    leaveApproversSearch: 'Search name, nick, or code',
+    leaveApproversAlready: 'Already added',
+    leaveApproversViewOnly: 'Only head office can edit the approver list.',
     adminAccountingPurchaseOrder: 'PO management',
     adminAccountingPurchaseOrderTitle: 'PO management',
     adminAccountingPurchaseOrderSub:
@@ -18379,9 +18417,9 @@ orderItemQty: 'จำนวน',
     helpHow_admin_attendance:
       'กรอง อนุมัติ ปรับเวลา — แท็บช่วยเหลือมีกฎ ตารางงานเลือกเริ่มพักได้ตามช่วงที่แสดง รวมหลังเที่ยงคืนถึงเช้า (เช่น 22:00–07:00 คือ 22:00–31:00) บันทึกจะตรวจพนักงานซ้ำในวันเดียวกันก่อน และถ้าผิดพลาดจะไม่ลบตารางเดิมครับ',
     helpSum_admin_leave:
-      'อนุมัติ/ปฏิเสธการลา และดูสถิติการใช้ ค่าเริ่มต้นแสดงพนักงานที่ยังปฏิบัติงานอยู่ครับ',
+      'อนุมัติ/ปฏิเสธการลา และดูสถิติการใช้ ค่าเริ่มต้นแสดงพนักงานที่ยังปฏิบัติงานอยู่ครับ แท็บผู้มีสิทธิ์อนุมัติกำหนดผู้อนุมัติทั้งระบบและรายสาขาได้ครับ',
     helpHow_admin_leave:
-      'แท็บอนุมัติ และแท็บสถิติตามช่วงและสาขา ค่าเริ่มต้นแสดงพนักงานที่ยังทำงาน เลือก «ออกแล้ว» หรือ «ทั้งหมด» เพื่อดูผู้ที่ลาออกแล้วครับ',
+      'แท็บอนุมัติ และแท็บสถิติตามช่วงและสาขา ค่าเริ่มต้นแสดงพนักงานที่ยังทำงาน เลือก «ออกแล้ว» หรือ «ทั้งหมด» เพื่อดูผู้ที่ลาออกแล้วครับ แท็บผู้มีสิทธิ์อนุมัติ: กำหนดผู้อนุมัติทั้งหมด/รายสาขา เมื่อมีรายชื่อแล้วเฉพาะคนในรายการ (+ผู้อนุมัติทั้งหมด+Director) อนุมัติได้ สาขาที่ยังไม่กำหนดใช้สิทธิ์ผู้จัดการตามเดิมครับ',
     helpSum_admin_hr_calendar:
       'Monthly birthdays, hire dates, anniversaries, resignations.',
     helpHow_admin_hr_calendar:
@@ -19094,7 +19132,23 @@ orderItemQty: 'จำนวน',
     holiday_action_required: 'กรุณาระบุ action (add/update/delete)',
     holiday_query_fail: 'ค้นหาล้มเหลว',
     adminLeave: 'การลางาน',
-    adminLeaveSub: 'อนุมัติ/ปฏิเสธการลา และสถิติการใช้/คงเหลือ',
+    adminLeaveSub: 'อนุมัติ/ปฏิเสธการลา สถิติการใช้/คงเหลือ และผู้มีสิทธิ์อนุมัติ',
+    leaveApproversTab: 'ผู้มีสิทธิ์อนุมัติ',
+    leaveApproversGlobal: 'ผู้อนุมัติทั้งหมด',
+    leaveApproversGlobalHint:
+      'อนุมัติการลาได้ทุกสาขา Director อนุมัติได้เสมอแม้ไม่อยู่ในรายการครับ',
+    leaveApproversStore: 'ผู้อนุมัติตามสาขา',
+    leaveApproversStoreHint:
+      'อนุมัติเฉพาะสาขานั้น เมื่อมีชื่อในรายการแล้วสิทธิ์ผู้จัดการอย่างเดียวไม่พอ สาขาที่ยังไม่กำหนดใช้สิทธิ์ผู้จัดการ/เจ้าของสาขาตามเดิมครับ',
+    leaveApproversEmpty: 'ยังไม่มีผู้อนุมัติ',
+    leaveApproversEmptyFallback:
+      'ยังไม่มีผู้อนุมัติที่กำหนด สาขานี้ใช้สิทธิ์ผู้จัดการ/เจ้าของสาขาตามเดิมครับ',
+    leaveApproversPickStore: 'เลือกสาขาครับ',
+    leaveApproversAddManagers: 'เพิ่มผู้จัดการสาขานี้',
+    leaveApproversAdd: 'เพิ่มผู้อนุมัติ',
+    leaveApproversSearch: 'ค้นหาชื่อ นามแฝง หรือรหัส',
+    leaveApproversAlready: 'เพิ่มแล้ว',
+    leaveApproversViewOnly: 'เฉพาะสำนักงานใหญ่แก้ไขรายชื่อผู้อนุมัติได้ครับ',
     adminAccountingPurchaseOrder: 'จัดการ PO',
     adminAccountingPurchaseOrderTitle: 'จัดการ PO',
     adminAccountingPurchaseOrderSub:
