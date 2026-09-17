@@ -24,14 +24,15 @@ import {
   type HrPolicyListItem,
 } from "@/lib/api-client"
 import { useTranslatedTextMap } from "@/lib/use-ui-translate"
-import { bangkokTodayYmd } from "@/lib/bangkok-date"
+import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
+import { MY_NOTICES_DB_FETCH_LIMIT } from "@/lib/my-notices-query"
 import { isNoticeReadStatus } from "@/lib/notice-read-status"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 import { Megaphone, Bell, Search, FileText, RefreshCw, BookOpen } from "lucide-react"
 import { PwaInstallBanner } from "@/components/pwa-install-banner"
 
 /** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
-const NOTICE_SERVER_FETCH_CAP = 100
+const NOTICE_SERVER_FETCH_CAP = MY_NOTICES_DB_FETCH_LIMIT
 
 const PushNotificationSetup = dynamic(
   () => import("@/components/push-notification-setup").then((m) => ({ default: m.PushNotificationSetup })),
@@ -50,7 +51,7 @@ export function HomeTab() {
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<'All' | 'Unread' | 'Read'>('Unread') // 첫화면: 미확인 기본
-  const [dateFrom, setDateFrom] = useState(() => bangkokTodayYmd())
+  const [dateFrom, setDateFrom] = useState(() => bangkokInclusivePeriod(bangkokTodayYmd(), 30).startYmd)
   const [dateTo, setDateTo] = useState(() => bangkokTodayYmd())
   const [unreadTotal, setUnreadTotal] = useState<number | null>(null)
   const [confirmingId, setConfirmingId] = useState<number | null>(null)

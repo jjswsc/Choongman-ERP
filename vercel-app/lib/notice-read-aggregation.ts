@@ -68,8 +68,24 @@ export function noticeMeetsMinUnreadDays(
   return days >= n
 }
 
+/**
+ * 발주 승인·반려·보류 알림. 매장 수신함(ประกาศ)에서 본사 공지를 가리지 않도록 제외한다.
+ * 푸시(sendNoticeToRecipients)는 그대로 나간다.
+ */
+export function isPurchaseOrderDecisionNotice(title: string, content: string): boolean {
+  const t = String(title || '').trim()
+  const c = String(content || '').trim()
+  const text = `${t}\n${c}`
+  if (/주문\s*#\s*\d+/.test(t) && /(승인|반려|보류)/.test(text)) return true
+  if (/คำสั่งซื้อ\s*#\s*\d+/.test(t)) return true
+  if (/^order\s*#\s*\d+/i.test(t) && /(approved|rejected|on hold|\bhold\b|denied)/i.test(text)) return true
+  if (/발주가\s*(승인|반려|보류)/.test(text)) return true
+  return false
+}
+
 /** getSentNotices / admin과 동일한 “물류/주문” 공지 식별 */
 export function isOrderRelatedNotice(title: string, content: string): boolean {
+  if (isPurchaseOrderDecisionNotice(title, content)) return true
   const t = (title || '').toLowerCase()
   const c = (content || '').toLowerCase()
   const text = t + ' ' + c

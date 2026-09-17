@@ -5,6 +5,8 @@ import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pa
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
 import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { isPurchaseOrderDecisionNotice, noticeCreatedYmdBangkok } from '@/lib/notice-read-aggregation'
+import { buildMyNoticesDbFilter, MY_NOTICES_DB_FETCH_LIMIT } from '@/lib/my-notices-query'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
@@ -28,7 +30,7 @@ export interface NoticeItem {
   scheduledAt?: string
 }
 
-const DB_FETCH_LIMIT = 100
+const DB_FETCH_LIMIT = MY_NOTICES_DB_FETCH_LIMIT
 
 export interface MyNoticesPageResult {
   items: NoticeItem[]
@@ -124,7 +126,13 @@ async function getMyNoticesHandler(
     scheduled_at?: string | null
   }[] | null
 
-  const noticesBase = 'id=gte.0'
+  const noticesBase = buildMyNoticesDbFilter({
+    listMode: opts.listMode,
+    dateFrom: opts.dateFrom,
+    dateTo: opts.dateTo,
+    rangeStart: opts.rangeStart,
+    rangeEnd: opts.rangeEnd,
+  })
   const noticesFilter = appendSaasTenantFilter(noticesBase, tenantScope, 'notices')
   try {
     rows = (await supabaseSelectFilter('notices', noticesFilter, {
@@ -181,6 +189,8 @@ async function getMyNoticesHandler(
       const sch = new Date(row.scheduled_at).getTime()
       if (!isNaN(sch) && sch > nowMs) continue
     }
+    // 발주 승인·반려·보류는 푸시로만 두고, ประกาศ 목록에서는 본사 공지가 보이도록 제외
+    if (isPurchaseOrderDecisionNotice(row.title || '', row.content || '')) continue
 
     let att: unknown[] = []
     if (row.attachments) {
@@ -195,7 +205,7 @@ async function getMyNoticesHandler(
         ? row.created_at
         : new Date(row.created_at).toISOString()
       : ''
-    const dateStr = created ? created.slice(0, 10) : ''
+    const dateStr = noticeCreatedYmdBangkok(created)
     built.push({
       id: row.id,
       date: dateStr,

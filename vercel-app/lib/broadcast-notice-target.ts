@@ -1,6 +1,7 @@
 /**
  * 공지/인사규정 등 "브로드캐스트 대상" 수신자 판정 — getMyNotices·notice-read-aggregation·getMyHrPolicies 공통
  */
+import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 export type BroadcastTargetRow = {
   target_store?: string | null
@@ -40,6 +41,38 @@ export function parseTargetRecipientKeys(
   }
 }
 
+const ALL_STORE_LABELS = new Set(["전체", "all", "ทั้งหมด", "*"])
+
+function isAllStoresTarget(raw: string): boolean {
+  const t = String(raw || "").trim()
+  if (!t) return true
+  return ALL_STORE_LABELS.has(t) || ALL_STORE_LABELS.has(t.toLowerCase())
+}
+
+function targetStoreMatchesEmployee(targetStores: string, myStore: string): boolean {
+  if (!myStore) return false
+  if (isAllStoresTarget(targetStores)) return true
+  if (targetStores.indexOf(myStore) > -1) return true
+  const parts = targetStores
+    .split(/[,;|]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return storesMatchForGradeLookup(targetStores, myStore)
+  return parts.some((p) => p === myStore || storesMatchForGradeLookup(p, myStore))
+}
+
+function recipientKeyMatchesEmployee(
+  recipientStore: string,
+  recipientName: string,
+  myStore: string,
+  myName: string
+): boolean {
+  if (recipientName.trim() !== myName.trim()) return false
+  const rs = recipientStore.trim()
+  const ms = myStore.trim()
+  return rs === ms || storesMatchForGradeLookup(rs, ms)
+}
+
 /**
  * aggregateNoticeReadStats.employeeReceivesBroadcastNotice 와 동일
  */
@@ -52,16 +85,13 @@ export function employeeReceivesBroadcast(emp: EmployeeTargetContext, row: Broad
   const targetStores = String(row.target_store || "전체").trim()
   const targetJobs = String(row.target_role || "전체").trim()
   const targetPerms = String(row.target_permission_group || "").trim()
-  const storeMatch = targetStores === "전체" || targetStores.indexOf(myStore) > -1
+  const storeMatch = targetStoreMatchesEmployee(targetStores, myStore)
   const jobList = String(targetJobs || "전체")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
-  const jobMatch =
-    !targetJobs ||
-    targetJobs.trim() === "전체" ||
-    jobList.length === 0 ||
-    Boolean(myJob && jobList.indexOf(myJob.toLowerCase()) >= 0)
+  const allJobs = !targetJobs || isAllStoresTarget(targetJobs) || jobList.length === 0
+  const jobMatch = allJobs || Boolean(myJob && jobList.indexOf(myJob.toLowerCase()) >= 0)
   const permList = targetPerms
     ? targetPerms
         .split(",")
@@ -88,7 +118,10 @@ export function employeeIsTargetedForRow(
       const recipients = JSON.parse(String(recipientsRaw)) as string[]
       if (Array.isArray(recipients) && recipients.length > 0) {
         const myKey = `${store}|${name}`
-        return recipients.includes(myKey)
+        if (recipients.includes(myKey)) return true
+        return parseTargetRecipientKeys(String(recipientsRaw)).some((r) =>
+          recipientKeyMatchesEmployee(r.store, r.name, store, name)
+        )
       }
     } catch {
       // 원본: catch 시 아래 else 없이 통과 — 항목 포함
@@ -107,14 +140,24 @@ export function findEmployeeContextFromRoster(
 ): { myJob: string; myRole: string } {
   let myJob = ""
   let myRole = ""
+  let aliasJob = ""
+  let aliasRole = ""
   for (let i = 0; i < (employees || []).length; i++) {
     const s = String(employees[i].store || "").trim()
     const n = String(employees[i].name || "").trim()
-    if (s === store && n === name) {
-      myJob = String(employees[i].job || employees[i].role || "").trim()
-      myRole = String(employees[i].role || "").trim().toLowerCase()
+    if (n !== name) continue
+    const job = String(employees[i].job || employees[i].role || "").trim()
+    const role = String(employees[i].role || "").trim().toLowerCase()
+    if (s === store) {
+      myJob = job
+      myRole = role
       break
     }
+    if (!aliasJob && storesMatchForGradeLookup(s, store)) {
+      aliasJob = job
+      aliasRole = role
+    }
   }
-  return { myJob, myRole }
+  if (myJob || myRole) return { myJob, myRole }
+  return { myJob: aliasJob, myRole: aliasRole }
 }

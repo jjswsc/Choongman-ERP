@@ -6219,7 +6219,7 @@ export const i18n = {
     adminNoNoticesFound: '조회된 공지가 없습니다.',
     adminNoticeDateHint2: '날짜 범위를 변경하여 다시 조회해 보세요.',
     adminNoticeTruncatedLimitHint:
-      '서버에서 최근 공지 {max}건까지만 불러옵니다. 더 보려면 기간을 나눠 검색하세요.',
+      '선택한 기간에서 최근 공지 {max}건까지 불러옵니다. 더 보려면 기간을 나눠 검색하세요.',
     adminViewAll: '전체 보기',
     adminMyAccount: '내 계정',
     adminProfile: '프로필 설정',
@@ -14568,7 +14568,7 @@ Only matters the employee must handle personally on a working day:
     adminNoNoticesFound: 'No notices found.',
     adminNoticeDateHint2: 'Try changing the date range.',
     adminNoticeTruncatedLimitHint:
-      'The server loads at most the {max} most recent notices. Narrow the date range and search again to see more.',
+      'The server loads at most the {max} most recent notices in the selected date range. Narrow the range and search again to see more.',
     adminViewAll: 'View All',
     adminMyAccount: 'My Account',
     adminProfile: 'Profile',
@@ -22021,7 +22021,7 @@ orderItemQty: 'จำนวน',
     adminNoNoticesFound: 'ไม่พบประกาศ',
     adminNoticeDateHint2: 'ลองเปลี่ยนช่วงวัน',
     adminNoticeTruncatedLimitHint:
-      'เซิร์ฟเวอร์ดึงประกาศล่าสุดได้สูงสุด {max} รายการ หากต้องการดูเพิ่มให้แบ่งช่วงวันแล้วค้นหาใหม่',
+      'เซิร์ฟเวอร์ดึงประกาศล่าสุดในช่วงวันที่เลือกได้สูงสุด {max} รายการ หากต้องการดูเพิ่มให้แบ่งช่วงวันแล้วค้นหาใหม่ครับ',
     adminViewAll: 'ดูทั้งหมด',
     adminMyAccount: 'บัญชีของฉัน',
     adminProfile: 'โปรไฟล์',

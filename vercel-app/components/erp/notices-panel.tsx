@@ -11,11 +11,11 @@ import { useAuth } from "@/lib/auth-context"
 import { getMyNotices, confirmNoticeRead, type NoticeItem, type NoticeAttachment } from "@/lib/api-client"
 import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
+import { MY_NOTICES_DB_FETCH_LIMIT } from "@/lib/my-notices-query"
+import { bangkokTodayYmd } from "@/lib/bangkok-date"
 
 /** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
-const NOTICE_SERVER_FETCH_CAP = 100
-
-import { bangkokTodayYmd } from "@/lib/bangkok-date"
+const NOTICE_SERVER_FETCH_CAP = MY_NOTICES_DB_FETCH_LIMIT
 
 function todayStr() {
   return bangkokTodayYmd()
