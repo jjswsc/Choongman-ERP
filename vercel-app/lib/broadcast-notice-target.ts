@@ -73,6 +73,16 @@ function recipientKeyMatchesEmployee(
   return rs === ms || storesMatchForGradeLookup(rs, ms)
 }
 
+/** notice_reads 행이 이 직원 것인지 — 매장 표기(CM The Street / CM The street) 차이 허용 */
+export function noticeReadRowMatchesEmployee(
+  readStore: string,
+  readName: string,
+  myStore: string,
+  myName: string
+): boolean {
+  return recipientKeyMatchesEmployee(readStore, readName, myStore, myName)
+}
+
 /**
  * aggregateNoticeReadStats.employeeReceivesBroadcastNotice 와 동일
  */

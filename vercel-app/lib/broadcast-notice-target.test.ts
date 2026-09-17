@@ -3,6 +3,7 @@ import {
   employeeIsTargetedForRow,
   employeeReceivesBroadcast,
   findEmployeeContextFromRoster,
+  noticeReadRowMatchesEmployee,
 } from './broadcast-notice-target'
 
 describe('employeeReceivesBroadcast store matching', () => {
@@ -60,5 +61,19 @@ describe('findEmployeeContextFromRoster', () => {
     )
     expect(ctx.myJob).toBe('Cashier')
     expect(ctx.myRole).toBe('staff')
+  })
+})
+
+describe('noticeReadRowMatchesEmployee', () => {
+  it('treats The Street store spelling as the same reader', () => {
+    expect(
+      noticeReadRowMatchesEmployee('CM The street', 'Somchai', 'CM The Street', 'Somchai')
+    ).toBe(true)
+  })
+
+  it('does not apply another store’s read to this employee', () => {
+    expect(noticeReadRowMatchesEmployee('CM Silom', 'Somchai', 'CM The Street', 'Somchai')).toBe(
+      false
+    )
   })
 })

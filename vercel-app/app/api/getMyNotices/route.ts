@@ -3,9 +3,9 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { NOTICE_LIST_COLS, NOTICE_LIST_COLS_LEGACY } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
-import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
+import { employeeIsTargetedForRow, findEmployeeContextFromRoster, noticeReadRowMatchesEmployee } from '@/lib/broadcast-notice-target'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
-import { isPurchaseOrderDecisionNotice, noticeCreatedYmdBangkok } from '@/lib/notice-read-aggregation'
+import { noticeCreatedYmdBangkok } from '@/lib/notice-read-aggregation'
 import { buildMyNoticesDbFilter, MY_NOTICES_DB_FETCH_LIMIT } from '@/lib/my-notices-query'
 import {
   appendSaasTenantFilter,
@@ -83,19 +83,19 @@ async function getMyNoticesHandler(
 
   const readMap: Record<number, string> = {}
   try {
-    const readsBase = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
+    const readsBase = `name=eq.${encodeURIComponent(name)}`
     const readsFilter = appendSaasTenantFilter(readsBase, tenantScope, 'notice_reads')
-    let readRows: { notice_id: number; status?: string }[] | null = null
+    let readRows: { notice_id: number; store?: string; name?: string; status?: string }[] | null = null
     try {
       readRows = (await supabaseSelectFilter('notice_reads', readsFilter, {
-        select: 'notice_id,status',
+        select: 'notice_id,store,name,status',
         limit: 5000,
       })) as typeof readRows
     } catch (e) {
       if (isMissingSaasTenantColumnError(e)) {
         markSaasTenantColumnMissing('notice_reads')
         readRows = (await supabaseSelectFilter('notice_reads', readsBase, {
-          select: 'notice_id,status',
+          select: 'notice_id,store,name,status',
           limit: 5000,
         })) as typeof readRows
       } else {
@@ -103,7 +103,11 @@ async function getMyNoticesHandler(
       }
     }
     for (let i = 0; i < (readRows || []).length; i++) {
-      readMap[readRows![i].notice_id] = readRows![i].status || '확인'
+      const r = readRows![i]
+      if (!noticeReadRowMatchesEmployee(String(r.store || ''), String(r.name || ''), store, name)) continue
+      const nid = Number(r.notice_id)
+      if (!Number.isFinite(nid) || nid <= 0) continue
+      readMap[nid] = r.status || '확인'
     }
   } catch {
     /* ignore */
@@ -189,8 +193,6 @@ async function getMyNoticesHandler(
       const sch = new Date(row.scheduled_at).getTime()
       if (!isNaN(sch) && sch > nowMs) continue
     }
-    // 발주·수령·출고 운영 알림은 푸시로만 두고, ประกาศ 목록에서는 본사 공지가 보이도록 제외
-    if (isPurchaseOrderDecisionNotice(row.title || '', row.content || '')) continue
 
     let att: unknown[] = []
     if (row.attachments) {
@@ -212,7 +214,7 @@ async function getMyNoticesHandler(
       title: row.title || '',
       content: row.content || '',
       sender: row.sender || '',
-      status: readMap[row.id] || 'New',
+      status: readMap[Number(row.id)] || 'New',
       attachments: att,
       isUrgent: Boolean(row.is_urgent),
       expiresAt: row.expires_at ? String(row.expires_at) : undefined,
