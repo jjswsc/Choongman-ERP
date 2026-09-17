@@ -612,6 +612,31 @@ export function partitionPurchaseTaxReviewForSave<T extends { docDate?: string; 
   return { viewMonth, toSave, leftover }
 }
 
+/** 검수 배열을 PDF 페이지(스캔) 순으로 맞춘다. 같은 페이지는 원래 순서를 유지한다. */
+export function purchaseTaxReviewRowsInScanOrder<T extends { page?: number }>(rows: T[]): T[] {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const pa = Number(a.row.page) || 0
+      const pb = Number(b.row.page) || 0
+      if (pa !== pb) return pa - pb
+      return a.index - b.index
+    })
+    .map((x) => x.row)
+}
+
+/** 등록함·엑셀: 발행일, 그다음 저장(스캔) 순. 같은 날 번호순으로 뒤섞지 않는다. */
+export function sortPurchaseTaxInvoicesForRegister<T extends { docDate?: string; id?: number }>(
+  rows: T[]
+): T[] {
+  return [...rows].sort((a, b) => {
+    const da = String(a.docDate || '')
+    const db = String(b.docDate || '')
+    if (da !== db) return da.localeCompare(db)
+    return (Number(a.id) || 0) - (Number(b.id) || 0)
+  })
+}
+
 export type PurchaseTaxReviewFlag = 'vat' | 'month' | 'tin' | 'amount'
 
 export function purchaseTaxReviewFlags(

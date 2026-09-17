@@ -14,6 +14,8 @@ import {
   parsePurchaseTaxInvoiceVisionPayload,
   purchaseTaxDocMonthMismatch,
   partitionPurchaseTaxReviewForSave,
+  purchaseTaxReviewRowsInScanOrder,
+  sortPurchaseTaxInvoicesForRegister,
   purchaseTaxInvoiceDedupeKey,
   uniquePositiveIds,
   fixOcrInvoiceLetterIPrefix,
@@ -197,6 +199,25 @@ describe('purchase tax invoice helpers', () => {
     expect(part.leftover.map((r) => r.invoiceNo)).toEqual(['C'])
   })
 
+  it('saves review rows in PDF page order, not invoice-number order', () => {
+    const ordered = purchaseTaxReviewRowsInScanOrder([
+      { page: 29, invoiceNo: 'IV-2430' },
+      { page: 27, invoiceNo: 'IV-2427' },
+      { page: 27, invoiceNo: 'IV-2384' },
+      { page: 28, invoiceNo: 'INV-99442' },
+    ])
+    expect(ordered.map((r) => r.invoiceNo)).toEqual(['IV-2427', 'IV-2384', 'INV-99442', 'IV-2430'])
+  })
+
+  it('lists the register by date then save id, not invoice number', () => {
+    const ordered = sortPurchaseTaxInvoicesForRegister([
+      { id: 155, docDate: '2026-08-25', invoiceNo: 'IV20260825-2427' },
+      { id: 150, docDate: '2026-08-25', invoiceNo: 'INV-20260699442' },
+      { id: 149, docDate: '2026-08-24', invoiceNo: 'ZZ-LAST-DAY' },
+    ])
+    expect(ordered.map((r) => r.invoiceNo)).toEqual(['ZZ-LAST-DAY', 'INV-20260699442', 'IV20260825-2427'])
+  })
+
   it('exports the staff 8-column Thai headers', () => {
     expect([...PURCHASE_TAX_INVOICE_EXCEL_HEADERS]).toEqual([
       'ลำดับที่',
@@ -231,6 +252,30 @@ describe('purchase tax invoice helpers', () => {
     expect(aoa[0]).toEqual([...PURCHASE_TAX_INVOICE_EXCEL_HEADERS])
     expect(aoa[1]?.[0]).toBe(1)
     expect(aoa[1]?.[1]).toBe('2026-07-15')
+  })
+
+  it('exports Excel in date then save-id order like the register', () => {
+    const base = {
+      storeName: 'CM Office',
+      buyerTaxId: '0105566137147',
+      taxMonth: '2026-08',
+      sellerName: 'Seller Co',
+      sellerTaxId: '0105558123456',
+      sellerBranch: SELLER_BRANCH_HQ,
+      netAmount: 100,
+      vatAmount: 7,
+      totalAmount: 107,
+      source: 'pdf' as const,
+      inboundBatchId: null,
+      attachmentUrls: [] as string[],
+      memo: '',
+    }
+    const aoa = buildPurchaseTaxInvoiceThaiAoa([
+      { ...base, id: 155, docDate: '2026-08-25', invoiceNo: 'IV-2427' },
+      { ...base, id: 150, docDate: '2026-08-25', invoiceNo: 'INV-99442' },
+      { ...base, id: 149, docDate: '2026-08-24', invoiceNo: 'ZZ-OLD' },
+    ])
+    expect(aoa.slice(1).map((row) => row[2])).toEqual(['ZZ-OLD', 'INV-99442', 'IV-2427'])
   })
 
   it('formats PP.30 cards to 2 decimal places', () => {

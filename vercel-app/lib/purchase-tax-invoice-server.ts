@@ -25,6 +25,7 @@ import {
   purchaseTaxInvoiceDedupeKey,
   roundPurchaseTaxAmounts,
   serializeAttachmentUrls,
+  sortPurchaseTaxInvoicesForRegister,
   taxMonthFromDocDate,
   validatePurchaseTaxInvoiceInput,
   type PurchaseTaxInvoiceInput,
@@ -129,11 +130,13 @@ export async function listPurchaseTaxInvoices(params: {
 
   const rows = (await supabaseSelectFilterAllPages('purchase_tax_invoices', parts.join('&'), {
     select: SELECT_COLS,
-    order: 'doc_date.asc',
+    order: 'doc_date.asc,id.asc',
     pageSize: 2000,
     maxRows: 20000,
   })) as DbRow[]
-  return (rows || []).map(mapDbRow).filter((r): r is PurchaseTaxInvoiceRow => !!r)
+  return sortPurchaseTaxInvoicesForRegister(
+    (rows || []).map(mapDbRow).filter((r): r is PurchaseTaxInvoiceRow => !!r)
+  )
 }
 
 async function findByDedupe(

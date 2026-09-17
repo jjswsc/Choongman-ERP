@@ -29,6 +29,8 @@ import {
   findPurchaseInvoiceConflict,
   purchaseTaxDocMonthMismatch,
   partitionPurchaseTaxReviewForSave,
+  purchaseTaxReviewRowsInScanOrder,
+  sortPurchaseTaxInvoicesForRegister,
   purchaseTaxInvoiceHasExtractedFields,
   purchaseTaxPp30Compare,
   purchaseTaxReviewFlags,
@@ -410,7 +412,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       ])
       if (res.error) setError("msg_load_fail")
       setTableMissing(!!res.tableMissing)
-      setRows(res.rows)
+      setRows(sortPurchaseTaxInvoicesForRegister(res.rows))
       setSelectedIds(new Set())
       setPp30Vat(
         summary?.vat
@@ -1205,7 +1207,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
 
   const saveReview = async () => {
     const { viewMonth, toSave, leftover } = partitionPurchaseTaxReviewForSave(reviewRows, filingYearMonth)
-    const payload = toSave.map((r) => ({
+    const payload = purchaseTaxReviewRowsInScanOrder(toSave).map((r) => ({
         storeName: r.storeName,
         docDate: r.docDate,
         invoiceNo: r.invoiceNo,

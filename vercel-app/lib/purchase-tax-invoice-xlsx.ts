@@ -6,19 +6,13 @@ import { applyErpDownloadFontToWorkbook } from '@/lib/erp-excel-export'
 import {
   gregorianYmdToBuddhistHint,
   PURCHASE_TAX_INVOICE_EXCEL_HEADERS,
+  sortPurchaseTaxInvoicesForRegister,
   type PurchaseTaxInvoiceRow,
 } from '@/lib/purchase-tax-invoice-core'
 
 export function buildPurchaseTaxInvoiceThaiAoa(rows: PurchaseTaxInvoiceRow[]): (string | number)[][] {
   const header = [...PURCHASE_TAX_INVOICE_EXCEL_HEADERS]
-  const body = [...rows]
-    .sort((a, b) => {
-      const da = String(a.docDate || '')
-      const db = String(b.docDate || '')
-      if (da !== db) return da.localeCompare(db)
-      return String(a.invoiceNo || '').localeCompare(String(b.invoiceNo || ''))
-    })
-    .map((r, i) => [
+  const body = sortPurchaseTaxInvoicesForRegister(rows).map((r, i) => [
       i + 1,
       String(r.docDate || '').slice(0, 10),
       String(r.invoiceNo || ''),
