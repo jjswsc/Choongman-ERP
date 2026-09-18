@@ -111,7 +111,7 @@ export const I18N_STORE_ADMIN_KO = pack({
   helpSum_admin_store_visit:
     '본사 직원의 매장 방문 목록·당일 현황·방문 통계(부서·직원·목적·매장)를 조회하는 화면입니다.',
   helpHow_admin_store_visit:
-    '①「방문 목록」: 기간·매장·부서·직원·목적으로 방문 이력을 검색·정렬합니다.\n②「당일 방문 현황」: 오늘(방콕) 진행 중·완료 방문을 타임라인·매장별로 봅니다. 자동 갱신을 켤 수 있습니다.\n③「매장 방문 통계」: 기간별 방문 시간·횟수·히트맵·추이 차트를 확인합니다.',
+    '①「방문 목록」: 기간·매장·부서·직원·목적으로 방문 이력을 검색·정렬합니다.\n②「당일 방문 현황」: 오늘(방콕) 진행 중·완료 방문을 타임라인·매장별로 봅니다. 08시 전에 시작한 방문도 달력 오늘 구간에 포함됩니다. 자동 갱신을 켤 수 있습니다.\n③「매장 방문 통계」: 기간별 방문 시간·횟수·히트맵·추이 차트를 확인합니다.',
   helpSum_admin_store_repairs:
     '매장 시설·장비 A/S 티켓을 접수·처리·완료하고, KPI·진행 로그·사진·업체 정보를 관리하는 화면입니다. 사이드바 배지는 최근 30일·3일+ 미착수(접수)만 표시합니다.',
   helpHow_admin_store_repairs:
@@ -210,7 +210,7 @@ export const I18N_STORE_ADMIN_EN = pack({
   helpSum_admin_store_visit:
     'Field visit list, today snapshot, and visit analytics by department, employee, purpose, and store.',
   helpHow_admin_store_visit:
-    '① Visit List: filter by period, store, department, employee, purpose; sort columns.\n② Today: timeline of active and completed visits (Bangkok); optional auto-refresh.\n③ Visit Stats: duration, counts, heatmap, and trend charts.',
+    '① Visit List: filter by period, store, department, employee, purpose; sort columns.\n② Today: timeline of active and completed visits (Bangkok). Visits started before 08:00 still appear on the calendar-day view. Optional auto-refresh.\n③ Visit Stats: duration, counts, heatmap, and trend charts.',
   helpSum_admin_store_repairs:
     'Store facility/equipment repair tickets with KPI dashboard, progress log, photos, and vendors. Sidebar badges show only Received tickets that are 3+ days old within the last 30 days.',
   helpHow_admin_store_repairs:

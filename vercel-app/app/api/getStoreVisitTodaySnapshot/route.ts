@@ -6,8 +6,6 @@ import { canViewAllStoreVisitActivity } from "@/lib/permissions"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import {
   attendanceBusinessDateStrBangkok,
-  attendanceBusinessDayBoundsMs,
-  segmentOverlapsAttendanceBusinessDay,
   addDayBangkok,
 } from "@/lib/attendance-utils"
 import {
@@ -16,6 +14,7 @@ import {
   pairVisitEventsForPerson,
   type StoreVisitEventRow,
 } from "@/lib/store-visit-pairing"
+import { visitSegmentVisibleOnBusinessDay } from "@/lib/store-visit-today-snapshot"
 
 const TZ = "Asia/Bangkok"
 
@@ -76,12 +75,11 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  /** 근태와 동일: 자정~07:59는 전날 근무일. "오늘" 스냅샷 기준일 */
+  /** 근태와 동일: 자정~07:59는 전날 근무일. "오늘" 스냅샷 기준일·창 시작점 */
   const businessToday = attendanceBusinessDateStrBangkok(Date.now())
   /** 짝 맞춤용 넉넉한 visit_date 범위 */
   const minD = addDayBangkok(businessToday, -2)
   const maxD = addDayBangkok(businessToday, 2)
-  const { startMs: winStart, endMsExclusive: winEndEx } = attendanceBusinessDayBoundsMs(businessToday)
   const nowMs = Date.now()
 
   try {
@@ -139,10 +137,7 @@ export async function GET(request: NextRequest) {
       })
 
       for (const c of completed) {
-        if (
-          attendanceBusinessDateStrBangkok(c.startMs) === businessToday &&
-          segmentOverlapsAttendanceBusinessDay(c.startMs, c.endMs, false, winStart, winEndEx, nowMs)
-        ) {
+        if (visitSegmentVisibleOnBusinessDay(c.startMs, c.endMs, false, businessToday, nowMs)) {
           segmentsOut.push({
             name: showName,
             department: dept,
@@ -156,10 +151,7 @@ export async function GET(request: NextRequest) {
       }
 
       for (const p of open) {
-        if (
-          attendanceBusinessDateStrBangkok(p.startMs) === businessToday &&
-          segmentOverlapsAttendanceBusinessDay(p.startMs, null, true, winStart, winEndEx, nowMs)
-        ) {
+        if (visitSegmentVisibleOnBusinessDay(p.startMs, null, true, businessToday, nowMs)) {
           segmentsOut.push({
             name: showName,
             department: dept,
