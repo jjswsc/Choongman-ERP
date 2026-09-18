@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
+  formatSalesAmount,
   isSalesHeavyTopicSkippedOnLongRange,
   isSalesLongRangeQuery,
   isSalesPeriodGroupAllowedOnLongRange,
   resolveDefaultSalesLanding,
   resolveSalesPeriodGroupForFastQuery,
   salesWaterfallGross,
+  sumDisplayedSalesAmounts,
 } from "@/components/tabs/sales-management-shared"
 
 describe("salesWaterfallGross", () => {
@@ -80,5 +82,32 @@ describe("resolveDefaultSalesLanding", () => {
       topicId: "analysis-period",
       periodGroup: "day",
     })
+  })
+})
+
+describe("sumDisplayedSalesAmounts", () => {
+  it("ties out integer rows: total equals sum of independently rounded lines (Silom 1฿)", () => {
+    // 화면은 행마다 Math.round. 세 행이 *.6이면 표시 합 33, 합 후 반올림은 32.
+    const rows = [{ sales: 10.6 }, { sales: 10.6 }, { sales: 10.6 }]
+    expect(sumDisplayedSalesAmounts(rows)).toBe(33)
+    expect(formatSalesAmount(sumDisplayedSalesAmounts(rows))).toBe("33")
+    expect(formatSalesAmount(rows.reduce((a, r) => a + r.sales, 0))).toBe("32")
+  })
+
+  it("Silom credit card table: displayed lines 463,712 not 463,711", () => {
+    const rows = [
+      { sales: 162_922.6 },
+      { sales: 126_083.6 },
+      { sales: 113_371.6 },
+      { sales: 37_294 },
+      { sales: 14_513 },
+      { sales: 5_792 },
+      { sales: 2_246 },
+      { sales: 990 },
+      { sales: 498 },
+    ]
+    expect(rows.map((r) => Math.round(r.sales)).reduce((a, n) => a + n, 0)).toBe(463_712)
+    expect(Math.round(rows.reduce((a, r) => a + r.sales, 0))).toBe(463_711)
+    expect(sumDisplayedSalesAmounts(rows)).toBe(463_712)
   })
 })

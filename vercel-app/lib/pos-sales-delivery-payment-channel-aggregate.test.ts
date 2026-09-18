@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateDeliveryPaymentChannelSales } from '@/lib/pos-sales-delivery-payment-channel-aggregate'
+import {
+  aggregateDeliveryPaymentChannelSales,
+  sumDeliveryPaymentChannelSales,
+} from '@/lib/pos-sales-delivery-payment-channel-aggregate'
 
 describe('aggregateDeliveryPaymentChannelSales', () => {
   it('splits payment_delivery_app by delivery_app_code', () => {
@@ -50,5 +53,11 @@ describe('aggregateDeliveryPaymentChannelSales', () => {
     ])
     expect(rows.find((r) => r.channelKey === 'foodpanda')?.sales).toBe(50)
     expect(rows.find((r) => r.channelKey === 'robinhood')?.sales).toBe(75)
+  })
+})
+
+describe('sumDeliveryPaymentChannelSales', () => {
+  it('sums independently rounded lines so the table total ties out', () => {
+    expect(sumDeliveryPaymentChannelSales([{ sales: 10.6 }, { sales: 10.6 }, { sales: 10.6 }])).toBe(33)
   })
 })

@@ -97,6 +97,11 @@ export function creditPaymentBucketToRows(
   return result.sort((a, b) => b.sales - a.sales)
 }
 
+/** 화면 정수 바트(행별 반올림 합)와 맞춘다. 합을 먼저 구한 뒤 반올림하면 1฿ 어긋날 수 있음 */
 export function sumCreditPaymentChannelSales(rows: { sales: number }[]): number {
-  return roundBaht(rows.reduce((a, r) => a + Number(r.sales ?? 0), 0))
+  return rows.reduce((a, r) => {
+    const v = Number(r.sales ?? 0)
+    if (!Number.isFinite(v)) return a
+    return a + Math.round(v)
+  }, 0)
 }

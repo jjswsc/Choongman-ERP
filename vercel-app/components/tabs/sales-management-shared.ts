@@ -156,10 +156,20 @@ export function periodPaymentAmount(row: PeriodPaymentRow, field: PeriodPaymentF
   return Number(row[field] ?? 0) || 0
 }
 
-export function formatSalesAmount(n: number) {
+/** 매출 관리 화면 정수 바트 표시와 동일한 반올림 */
+export function roundSalesAmount(n: number): number {
   const v = Number(n ?? 0)
-  if (!Number.isFinite(v)) return "0"
-  return Math.round(v).toLocaleString()
+  if (!Number.isFinite(v)) return 0
+  return Math.round(v)
+}
+
+export function formatSalesAmount(n: number) {
+  return roundSalesAmount(n).toLocaleString()
+}
+
+/** 행별 정수 반올림 후 합산 — 합계를 다시 반올림하면 1฿ 어긋날 수 있음 */
+export function sumDisplayedSalesAmounts(rows: { sales: number }[]): number {
+  return rows.reduce((a, r) => a + roundSalesAmount(r.sales), 0)
 }
 
 export function formatSalesPct(n: number) {

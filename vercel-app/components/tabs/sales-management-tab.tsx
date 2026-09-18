@@ -146,6 +146,7 @@ import {
   EMPTY_POS_SALES_BY_PROMO,
   formatSalesAmount,
   formatSalesPct,
+  sumDisplayedSalesAmounts,
   filterStoreRowsBySalesSelection,
   I18N_KO,
   mapPosSalesPeriodRowToChartRow,
@@ -4857,7 +4858,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           <tr className="font-semibold">
                             <td className="py-2 pr-4">{tr("salesTotalLabel", "합계")}</td>
                             <td className="py-2 text-right font-erp-numeric">
-                              {formatSalesAmount(paymentBreakdownData.deliveryTotal)}
+                              {formatSalesAmount(sumDisplayedSalesAmounts(deliveryPaymentChannelRows))}
                             </td>
                           </tr>
                         </tbody>
@@ -4886,7 +4887,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           <tr className="font-semibold">
                             <td className="py-2 pr-4">{tr("salesTotalLabel", "합계")}</td>
                             <td className="py-2 text-right font-erp-numeric">
-                              {formatSalesAmount(paymentBreakdownData.creditTotal)}
+                              {formatSalesAmount(sumDisplayedSalesAmounts(creditPaymentChannelRows))}
                             </td>
                           </tr>
                         </tbody>
