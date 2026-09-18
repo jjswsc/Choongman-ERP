@@ -10,6 +10,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ListFilter,
+  X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react"
 import {
   Select,
@@ -23,6 +27,17 @@ import { Input } from "@/components/ui/input"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
 import { cn } from "@/lib/utils"
 import { ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
+import { VendorColumnFilter } from "@/components/erp/vendor-column-filter"
+import {
+  type VendorColumnFilters,
+  type VendorListSortDir,
+  type VendorListSortKey,
+  applyVendorColumnFilters,
+  sortVendorListRows,
+  uniqueVendorColumnOptions,
+  vendorColumnOptionRows,
+  vendorListDisplayName,
+} from "@/lib/vendor-sort"
 
 export interface Vendor {
   code: string
@@ -77,6 +92,99 @@ export function VendorTable({
 }: VendorTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const [sortKey, setSortKey] = React.useState<VendorListSortKey>("name")
+  const [sortDir, setSortDir] = React.useState<VendorListSortDir>("asc")
+  const [columnFilters, setColumnFilters] = React.useState<VendorColumnFilters>({})
+
+  const typeLabel = React.useCallback(
+    (type: string) => {
+      if (type === "purchase") return t("vendorTypePurchase")
+      if (type === "sales") return t("vendorTypeSales")
+      if (type === "related") return tOr(t, "vendorTypeRelated", "관련당사자")
+      return t("vendorTypeBoth")
+    },
+    [t]
+  )
+
+  const columnFilteredVendors = React.useMemo(
+    () => applyVendorColumnFilters(vendors, columnFilters),
+    [vendors, columnFilters]
+  )
+
+  const sortedVendors = React.useMemo(
+    () => sortVendorListRows(columnFilteredVendors, sortKey, sortDir, typeLabel),
+    [columnFilteredVendors, sortKey, sortDir, typeLabel]
+  )
+
+  const handleClearSearch = () => {
+    setSearchTerm("")
+    setColumnFilters({})
+    onSearch()
+  }
+
+  const handleSort = (key: VendorListSortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
+      return
+    }
+    setSortKey(key)
+    setSortDir("asc")
+  }
+
+  const setColumnFilter = (key: VendorListSortKey, next: Set<string> | null) => {
+    setColumnFilters((prev) => ({ ...prev, [key]: next }))
+  }
+
+  const filterProps = {
+    searchPlaceholder: t("vendorColFilterSearch"),
+    selectAllLabel: t("vendorColFilterSelectAll"),
+    clearLabel: t("vendorColFilterClear"),
+    sortAscLabel: t("vendorColSortAsc"),
+    sortDescLabel: t("vendorColSortDesc"),
+    filterLabel: t("vendorColFilter"),
+  }
+
+  const filterHeader = (key: VendorListSortKey, label: string) => (
+    <div className="flex min-w-0 items-center gap-0.5">
+      {sortHeader(key, label)}
+      <VendorColumnFilter
+        options={uniqueVendorColumnOptions(vendorColumnOptionRows(vendors, columnFilters, key), key, typeLabel)}
+        selected={columnFilters[key] ?? null}
+        onChange={(next) => setColumnFilter(key, next)}
+        onSortAsc={() => {
+          setSortKey(key)
+          setSortDir("asc")
+        }}
+        onSortDesc={() => {
+          setSortKey(key)
+          setSortDir("desc")
+        }}
+        {...filterProps}
+      />
+    </div>
+  )
+
+  const sortIcon = (key: VendorListSortKey) => {
+    if (sortKey !== key) {
+      return <ArrowUpDown className="h-3 w-3 shrink-0 opacity-45" aria-hidden />
+    }
+    return sortDir === "asc" ? (
+      <ArrowUp className="h-3 w-3 shrink-0" aria-hidden />
+    ) : (
+      <ArrowDown className="h-3 w-3 shrink-0" aria-hidden />
+    )
+  }
+
+  const sortHeader = (key: VendorListSortKey, label: string) => (
+    <button
+      type="button"
+      className="inline-flex max-w-full items-center gap-1 rounded text-[11px] font-bold text-muted-foreground hover:text-foreground"
+      onClick={() => handleSort(key)}
+    >
+      <span className="truncate">{label}</span>
+      {sortIcon(key)}
+    </button>
+  )
 
   return (
     <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
@@ -86,7 +194,11 @@ export function VendorTable({
         </div>
         <h3 className="text-sm font-bold text-card-foreground">{t("vendorList")}</h3>
         <span className="ml-1 rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
-          {hasSearched ? `${vendors.length} ${t("vendorCount")}` : "-"}
+          {hasSearched
+            ? columnFilteredVendors.length !== vendors.length
+              ? `${columnFilteredVendors.length} / ${vendors.length} ${t("vendorCount")}`
+              : `${vendors.length} ${t("vendorCount")}`
+            : "-"}
         </span>
       </div>
 
@@ -97,9 +209,22 @@ export function VendorTable({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={t("vendorSearchPh")}
-            className="h-9 pl-9 text-xs"
+            className="h-9 pl-9 pr-9 text-xs"
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
           />
+          {searchTerm ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground hover:text-destructive"
+              onClick={handleClearSearch}
+              title={t("vendorBtnClose")}
+              aria-label={t("vendorBtnClose")}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          ) : null}
         </div>
         <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as VendorTypeFilter)}>
           <SelectTrigger className="h-9 w-[140px] text-xs">
@@ -121,8 +246,8 @@ export function VendorTable({
       <div className={cn(ADMIN_TABLE_SCROLL_VIEWPORT_CN, "max-h-[calc(100vh-14rem)]")}>
         <table className="w-full text-left text-sm table-fixed">
           <colgroup>
-            <col className="w-[72px]" />
-            <col className="w-[88px]" />
+            <col className="w-[96px]" />
+            <col className="w-[112px]" />
             <col />
             <col className="w-[140px]" />
             <col className="w-[120px]" />
@@ -131,9 +256,15 @@ export function VendorTable({
           </colgroup>
           <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
             <tr className="border-b bg-muted/30">
-              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColCode")}</th>
-              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColType")}</th>
-              <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColName")}</th>
+              <th className="px-4 py-3" aria-sort={sortKey === "code" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                {filterHeader("code", t("vendorColCode"))}
+              </th>
+              <th className="px-4 py-3" aria-sort={sortKey === "type" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                {filterHeader("type", t("vendorColType"))}
+              </th>
+              <th className="px-4 py-3" aria-sort={sortKey === "name" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                {filterHeader("name", t("vendorColName"))}
+              </th>
               <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground">
                 {t("expensePayeeBankName") || "Bank"}
               </th>
@@ -159,7 +290,7 @@ export function VendorTable({
                   <div className="py-10 text-center text-sm text-muted-foreground">{t("loading")}</div>
                 </td>
               </tr>
-            ) : vendors.length === 0 ? (
+            ) : columnFilteredVendors.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-0">
                   <LogisticsEmptyState
@@ -170,7 +301,7 @@ export function VendorTable({
                 </td>
               </tr>
             ) : (
-              vendors.map((vendor, idx) => (
+              sortedVendors.map((vendor, idx) => (
                 <tr
                   key={vendor.code}
                   className={cn(
@@ -193,29 +324,15 @@ export function VendorTable({
                         vendor.type === "related" && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
                       )}
                     >
-                      {vendor.type === "purchase"
-                        ? t("vendorTypePurchase")
-                        : vendor.type === "sales"
-                          ? t("vendorTypeSales")
-                          : vendor.type === "related"
-                            ? tOr(t, "vendorTypeRelated", "관련당사자")
-                            : t("vendorTypeBoth")}
+                      {typeLabel(vendor.type)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className="text-sm font-medium text-foreground whitespace-nowrap"
-                      title={
-                        (vendor.type === "sales" || vendor.type === "both") &&
-                        (vendor.gps_name?.trim() || vendor.sales_outlet?.trim())
-                          ? vendor.gps_name?.trim() || vendor.sales_outlet
-                          : vendor.name
-                      }
+                      title={vendorListDisplayName(vendor)}
                     >
-                      {(vendor.type === "sales" || vendor.type === "both") &&
-                      (vendor.gps_name?.trim() || vendor.sales_outlet?.trim())
-                        ? vendor.gps_name?.trim() || vendor.sales_outlet
-                        : vendor.name}
+                      {vendorListDisplayName(vendor)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -305,7 +422,15 @@ export function VendorTable({
 
       <div className="flex items-center justify-between border-t bg-muted/10 px-6 py-3">
         <span className="text-[11px] text-muted-foreground">
-          {t("vendorTotal")} <span className="font-bold text-foreground">{hasSearched ? vendors.length : 0}</span> {t("vendorTotalCount")}
+          {t("vendorTotal")}{" "}
+          <span className="font-bold text-foreground">
+            {hasSearched
+              ? columnFilteredVendors.length !== vendors.length
+                ? `${columnFilteredVendors.length} / ${vendors.length}`
+                : vendors.length
+              : 0}
+          </span>{" "}
+          {t("vendorTotalCount")}
         </span>
         <div className="flex items-center gap-1">
           <Button variant="outline" size="icon" className="h-7 w-7" disabled>
