@@ -11,6 +11,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
 import { useErpPageActive, useErpTabActive } from "@/lib/erp-page-visibility"
 import { ERP_DOWNLOAD_FONT_SIZE_PT } from "@/lib/erp-excel-export"
+import { exportPayslipHtmlToPdf } from "@/lib/payslip-pdf"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getTodayAttendanceTypes,
@@ -146,6 +147,7 @@ export function HrTab() {
   const [companyName, setCompanyName] = useState("")
   const [payrollLoading, setPayrollLoading] = useState(false)
   const [payrollPreviewOpen, setPayrollPreviewOpen] = useState(false)
+  const [payrollPdfDownloading, setPayrollPdfDownloading] = useState(false)
 
   const pageActive = useErpPageActive()
   const tabActive = useErpTabActive()
@@ -469,17 +471,21 @@ ${payrollData.pay_date ? `<dt>${t("pay_pay_date_label")}</dt><dd>${payrollData.p
     setPayrollPreviewOpen(true)
   }
 
-  const handleDownloadPayroll = () => {
+  const handleDownloadPayroll = async () => {
     const html = getPayrollHtml()
-    if (!html) return
-    const fn = `payslip_${payrollData!.month}_${(payrollData!.name || "payroll").replace(/\s+/g, "_")}.html`
-    const blob = new Blob(["\uFEFF" + html], { type: "text/html;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = fn
-    a.click()
-    URL.revokeObjectURL(url)
+    if (!html || !payrollData) return
+    setPayrollPdfDownloading(true)
+    try {
+      await exportPayslipHtmlToPdf({
+        html,
+        month: payrollData.month,
+        employeeName: payrollData.name || "payroll",
+      })
+    } catch (err) {
+      await appAlert(t("msg_error_prefix") + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setPayrollPdfDownloading(false)
+    }
   }
 
   if (!auth?.store || !auth?.user) {
@@ -913,9 +919,15 @@ ${payrollData.pay_date ? `<dt>${t("pay_pay_date_label")}</dt><dd>${payrollData.p
                 />
               </div>
               <p className="text-xs text-muted-foreground mt-2">{t("payMyPrintHint")}</p>
-              <Button className="w-full mt-3" onClick={handleDownloadPayroll}>
+              <Button
+                className="w-full mt-3"
+                onClick={() => void handleDownloadPayroll()}
+                disabled={payrollPdfDownloading}
+              >
                 <Download className="h-4 w-4 mr-2" />
-                {t("payMyDownloadFile")}
+                {payrollPdfDownloading
+                  ? t("loading")
+                  : t("payMyDownloadPdf") || t("payMyDownloadFile")}
               </Button>
             </>
           )}
