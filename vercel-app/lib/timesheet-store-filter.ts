@@ -20,6 +20,7 @@ export function filterHrAttendanceStorePickerOptions(stores: string[]): string[]
 /**
  * 시간표·당일 실시간 근무 API에 넘길 매장 키.
  * 오피스는 All로 바꾸지 않는다(본사 근무 조회가 비는 원인).
+ * 오피스가 아직 매장을 고르지 않았으면 빈 값(자동 전체 조회 금지).
  */
 export function resolveTimesheetQueryStore(params: {
   authStore?: string | null
@@ -31,7 +32,8 @@ export function resolveTimesheetQueryStore(params: {
   if (!authStore) return ''
   if (!params.isOfficeStaff) return params.resolveStoreKey(authStore) || authStore
   const raw = String(params.pickedStore || '').trim()
-  if (!raw || raw === TIMESHEET_ALL_STORE) return TIMESHEET_ALL_STORE
+  if (!raw) return ''
+  if (raw === TIMESHEET_ALL_STORE) return TIMESHEET_ALL_STORE
   return params.resolveStoreKey(raw) || raw
 }
 

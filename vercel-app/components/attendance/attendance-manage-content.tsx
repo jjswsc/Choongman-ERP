@@ -278,7 +278,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
         if (prev && st.includes(prev)) return prev
         const resolved = prev ? resolveStoreKey(prev) : ""
         if (resolved && st.includes(resolved)) return resolved
-        return firstStore
+        return prev
       })
       setScheduleStore((prev) => (prev && st.includes(prev) ? prev : firstStore))
     }
@@ -1255,7 +1255,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
             </div>
             <div className="w-full max-w-4xl">
               <RealtimeWork
-                storeFilter={todayStore || stores.find((s) => s !== "All") || ""}
+                storeFilter={todayStore}
                 storeList={stores.filter((s) => s !== "All")}
               />
             </div>

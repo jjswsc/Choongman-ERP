@@ -39,6 +39,17 @@ describe('resolveTimesheetQueryStore', () => {
     ).toBe(TIMESHEET_ALL_STORE)
   })
 
+  it('office staff with no store picked does not fall back to All', () => {
+    expect(
+      resolveTimesheetQueryStore({
+        authStore: 'CM Office',
+        isOfficeStaff: true,
+        pickedStore: '',
+        resolveStoreKey,
+      })
+    ).toBe('')
+  })
+
   it('branch staff is locked to login store', () => {
     expect(
       resolveTimesheetQueryStore({

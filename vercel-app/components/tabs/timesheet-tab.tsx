@@ -53,9 +53,8 @@ export function TimesheetTab() {
     if (fromBar !== TIMESHEET_ALL_STORE) {
       const resolved = resolveStoreKey(fromBar) || fromBar
       setPickedStore(hrStores.includes(resolved) ? resolved : fromBar)
-      return
     }
-    setPickedStore(TIMESHEET_ALL_STORE)
+    // 전체 매장은 직접 고른 뒤에만 — 첫 화면에서 전 매장 자동 조회하지 않음
   }, [isOffice, viewStore, hrStores, resolveStoreKey])
 
   const storeFilter = React.useMemo(
@@ -63,7 +62,7 @@ export function TimesheetTab() {
       resolveTimesheetQueryStore({
         authStore: auth?.store,
         isOfficeStaff: isOffice,
-        pickedStore: pickedStore || TIMESHEET_ALL_STORE,
+        pickedStore,
         resolveStoreKey,
       }),
     [auth?.store, isOffice, pickedStore, resolveStoreKey]
@@ -128,12 +127,8 @@ export function TimesheetTab() {
 
         {/* Content - 선택한 매장만 조회, 로딩 완료 후 표시 */}
         <div className="flex min-w-0 flex-col gap-4 p-3 md:p-4">
-          {storeFilter ? (
-            <>
-              <RealtimeWork storeFilter={storeFilter} storeList={branchStoreList} />
-              <WeeklySchedule storeFilter={storeFilter} storeList={branchStoreList} />
-            </>
-          ) : null}
+          <RealtimeWork storeFilter={storeFilter} storeList={branchStoreList} />
+          <WeeklySchedule storeFilter={storeFilter} storeList={branchStoreList} />
           <MyAttendance />
         </div>
       </div>

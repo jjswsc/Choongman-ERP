@@ -438,7 +438,7 @@ export const i18n = {
     goToStaffMobile: '현장앱',
     adminDesktopPreferredBanner:
       '이 화면은 PC에서 보시는 것이 편합니다. 폰에서는 표를 좌우로 밀어 확인하세요.',
-    adminTableScrollHint: '표를 좌우로 밀어 보세요',
+    adminTableScrollHint: '표를 위·아래·좌우로 밀어 보세요',
     logout: '로그아웃',
     // 시간표
     scheduleToday: '당일 실시간 근무',
@@ -1858,7 +1858,7 @@ export const i18n = {
     helpSum_admin_attendance:
       '출퇴근 기록 조회·승인, 지각·조퇴·연장 조정, 당일 실시간 근무, 주간 스케줄 조회·작성을 한 화면에서 처리합니다. 사이드바 배지는 GPS·강제퇴근 등 미승인만 표시합니다.',
     helpHow_admin_attendance:
-      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 시간대별 근무·휴게 도트로 오늘 출근 현황을 봅니다. 휴대폰에서는 표를 좌우로 밀어 보세요.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~31:00, 자정 이후는 24:00~·익일 07:00은 31:00)에서 고릅니다. 저장 전에 같은 날 동일 직원 중복을 검사하며, 오류가 나도 기존 표는 지우지 않습니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
+      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 매장을 고른 뒤 검색을 누르면 시간대별 근무·휴게 도트가 나옵니다. 휴대폰에서는 표를 위·아래·좌우로 밀어 보세요.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~31:00, 자정 이후는 24:00~·익일 07:00은 31:00)에서 고릅니다. 저장 전에 같은 날 동일 직원 중복을 검사하며, 오류가 나도 기존 표는 지우지 않습니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
     helpSum_admin_leave:
       '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다. 「승인자」탭에서 전체 승인자·매장 승인자를 지정할 수 있습니다. 통계 기본은 재직 직원만 보이며, 사이드바 배지는 최근 휴가일 기준 미승인만 표시합니다.',
     helpHow_admin_leave:
@@ -8822,7 +8822,7 @@ Only matters the employee must handle personally on a working day:
     goToStaffMobile: 'Field app',
     adminDesktopPreferredBanner:
       'This screen works best on a PC. On phone, swipe the table sideways to see more columns.',
-    adminTableScrollHint: 'Swipe the table sideways',
+    adminTableScrollHint: 'Swipe the table up, down, or sideways',
     logout: 'Logout',
     scheduleToday: "Today's Schedule",
     scheduleTodayEmpty: 'No schedule for this date/store.',
@@ -10238,7 +10238,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_attendance:
       'Review and approve clock-in/out, adjust late/early/OT, view today’s live status, and browse or edit weekly schedules in one place. Sidebar badges show only unapproved GPS/forced items.',
     helpHow_admin_attendance:
-      '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: hour-by-hour work/break dots for who is on shift. On a phone, swipe the table sideways.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–31:00; after midnight use 24:00+, and 07:00 next morning is 31:00). Save validates same-day duplicate staff first and does not clear the week on validation errors.\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
+      '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: pick a store, then tap Search to see hour-by-hour work/break dots. On a phone, swipe the table up, down, or sideways.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–31:00; after midnight use 24:00+, and 07:00 next morning is 31:00). Save validates same-day duplicate staff first and does not clear the week on validation errors.\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
     helpSum_admin_leave:
       'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Use the Approvers tab for global and per-store approvers. Stats default to current staff. Sidebar badges count only recent unapproved leave dates.',
     helpHow_admin_leave:

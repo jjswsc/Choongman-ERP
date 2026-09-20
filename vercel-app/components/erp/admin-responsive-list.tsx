@@ -140,7 +140,7 @@ export function AdminTableScroll({
     <div className="relative min-w-0 max-w-full">
       {hint ? (
         <p className="mb-1.5 text-[10px] leading-snug text-muted-foreground md:hidden">
-          {tOr(t, "adminTableScrollHint", "표를 좌우로 밀어 보세요")}
+          {tOr(t, "adminTableScrollHint", "표를 위·아래·좌우로 밀어 보세요")}
         </p>
       ) : null}
       <div
@@ -148,7 +148,7 @@ export function AdminTableScroll({
         className={cn(
           // min-w-0: 그리드/플렉스 자식이 표 min-width만큼 커져 부모 overflow-clip에 잘리는 것 방지
           "min-w-0 max-w-full overflow-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]",
-          lockViewport ? ADMIN_TABLE_SCROLL_VIEWPORT_CN : "touch-pan-x",
+          lockViewport ? cn(ADMIN_TABLE_SCROLL_VIEWPORT_CN, "touch-manipulation") : "touch-pan-x",
           className
         )}
       >

@@ -30,6 +30,7 @@ import {
   findAttendanceForRealtimeScheduleRow,
 } from "@/lib/today-realtime-join"
 import { useErpPolling, useErpTabActive } from "@/lib/erp-page-visibility"
+import { hasOfficeStaffScope } from "@/lib/permissions"
 import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import { cn } from "@/lib/utils"
 
@@ -205,14 +206,20 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   const { posStores: storeListFromHook, resolveStoreKey, formatStoreLabel } = useStoreList()
   React.useEffect(() => {
     if (auth?.store && storeListProp.length === 0 && storeListFromHook.length > 0) {
-      setStoreFilter(auth.store)
       const unique = Array.from(new Set([auth.store, ...storeListFromHook])).filter(Boolean).sort()
       setStoreList(unique)
+      if (!hasOfficeStaffScope(auth.role || "", auth.store)) {
+        setStoreFilter(auth.store)
+      }
     }
-  }, [auth?.store, storeListProp.length, storeListFromHook])
+  }, [auth?.store, auth?.role, storeListProp.length, storeListFromHook])
+
+  const isOfficeStaff = hasOfficeStaffScope(auth?.role || "", auth?.store)
+  const canSearch = Boolean(String(storeFilterFinal || "").trim() || (!isOfficeStaff && auth?.store))
 
   const loadTodayData = React.useCallback(() => {
-    let store = storeFilterFinal || auth?.store
+    let store = String(storeFilterFinal || "").trim()
+    if (!store && !isOfficeStaff) store = String(auth?.store || "").trim()
     if (!store) return
     setHasSearched(true)
     setLoadError(null)
@@ -247,22 +254,29 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         setLoadError(errors.length > 0 ? errors.join(" · ") : null)
       })
       .finally(() => setLoading(false))
-  }, [storeFilterFinal, auth?.store, date, t, resolveStoreKey])
+  }, [storeFilterFinal, isOfficeStaff, auth?.store, date, t, resolveStoreKey])
 
-  // 매장·날짜 준비되면 자동 조회 (모바일에서 검색 버튼 없이 바로 보이게)
+  // 매장·날짜가 바뀌면 이전 조회 결과를 지움 — 검색을 다시 눌러야 함
+  const queryKey = `${storeFilterFinal}|${date}`
+  const prevQueryKeyRef = React.useRef(queryKey)
   React.useEffect(() => {
-    if (!(storeFilterFinal || auth?.store)) return
-    loadTodayData()
-  }, [loadTodayData, storeFilterFinal, auth?.store])
+    if (prevQueryKeyRef.current === queryKey) return
+    prevQueryKeyRef.current = queryKey
+    setHasSearched(false)
+    setSchedule([])
+    setAttendance([])
+    setQueriedStore("")
+    setLoadError(null)
+  }, [queryKey])
 
-  // 관리자 숨은 탭 → 당일 탭으로 돌아올 때 강제 재조회(폰 keep-alive)
+  // 이미 검색한 뒤에만, 숨은 탭 → 당일 탭으로 돌아올 때 재조회(폰 keep-alive)
   const wasTabActiveRef = React.useRef(tabActive)
   React.useEffect(() => {
-    if (tabActive && !wasTabActiveRef.current && (storeFilterFinal || auth?.store)) {
+    if (tabActive && !wasTabActiveRef.current && hasSearched && canSearch) {
       loadTodayData()
     }
     wasTabActiveRef.current = tabActive
-  }, [tabActive, loadTodayData, storeFilterFinal, auth?.store])
+  }, [tabActive, hasSearched, canSearch, loadTodayData])
 
   // 당일 조회 중일 때 실시간 반영: 60초마다 출퇴근 데이터 재조회(관리자 트래픽 절감)
   const isViewingToday = date === todayStr() || date === todayStrBangkok()
@@ -430,7 +444,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" className="h-9 rounded-lg px-4 text-xs font-semibold" onClick={loadTodayData} disabled={loading}>
+        <Button size="sm" className="h-9 rounded-lg px-4 text-xs font-semibold" onClick={loadTodayData} disabled={loading || !canSearch}>
           <Search className="mr-1.5 h-3.5 w-3.5" />
           {loading ? t("loading") : t("search")}
         </Button>
@@ -458,7 +472,9 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         {!hasSearched ? (
           <div className="rounded-xl border border-dashed border-border py-8 text-center">
             <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground/30" />
-            <p className="mt-2 text-xs text-muted-foreground">{t("scheduleLoadHint")}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {canSearch ? t("scheduleLoadHint") : t("scheduleStorePlaceholder")}
+            </p>
           </div>
         ) : loading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
@@ -478,21 +494,21 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
           </div>
         ) : (
           <AdminTableScroll
-            className="overscroll-x-contain rounded-xl border"
-            lockViewport={false}
+            className="max-h-[min(65dvh,560px)] overscroll-contain rounded-xl border md:max-h-[calc(100vh-380px)]"
+            lockViewport
           >
             <table className="w-max min-w-full border-collapse text-left">
-              {/* 헤더: 구역 | 이름 | 9 | 10 | ... | 21 — 휴대폰에서도 동일 격자, 이름열 고정 + 좌우 스와이프 */}
+              {/* 헤더: 구역 | 이름 | 9 | 10 | ... | 21 — 휴대폰에서도 동일 격자, 이름열 고정 + 상하·좌우 스와이프 */}
               <thead>
                 <tr className="bg-muted/50">
-                  <th className="sticky left-0 z-20 w-[72px] min-w-[72px] border-b border-r border-border bg-muted px-1.5 py-2 text-[11px] font-bold text-muted-foreground md:px-3 md:py-2.5">
+                  <th className="sticky top-0 left-0 z-30 w-[72px] min-w-[72px] border-b border-r border-border bg-muted px-1.5 py-2 text-[11px] font-bold text-muted-foreground md:px-3 md:py-2.5">
                     {t("scheduleArea") || "구역"}
                   </th>
-                  <th className="sticky left-[72px] z-20 w-[80px] min-w-[80px] border-b border-r border-border bg-muted px-1.5 py-2 text-[11px] font-bold text-muted-foreground shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)] md:px-3 md:py-2.5">
+                  <th className="sticky top-0 left-[72px] z-30 w-[80px] min-w-[80px] border-b border-r border-border bg-muted px-1.5 py-2 text-[11px] font-bold text-muted-foreground shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)] md:px-3 md:py-2.5">
                     {t("scheduleName") || "이름"}
                   </th>
                   {hours.map((h) => (
-                    <th key={h} className="border-b border-r border-border px-0 py-2 text-center text-[10px] font-bold tabular-nums text-muted-foreground w-[28px] min-w-[28px] last:border-r-0">
+                    <th key={h} className="sticky top-0 z-20 border-b border-r border-border bg-muted px-0 py-2 text-center text-[10px] font-bold tabular-nums text-muted-foreground w-[28px] min-w-[28px] last:border-r-0">
                       {formatRealtimeLinearHourLabel(h)}
                     </th>
                   ))}
