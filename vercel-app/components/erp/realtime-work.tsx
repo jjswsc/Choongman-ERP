@@ -1,11 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-  AdminDesktopOnly,
-  AdminMobileOnly,
-  AdminTableScroll,
-} from "@/components/erp/admin-responsive-list"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Search, Radio, CalendarDays } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -402,7 +398,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   }
 
   return (
-    <div className="rounded-2xl border bg-card shadow-sm">
+    <div className="min-w-0 rounded-2xl border bg-card shadow-sm">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[hsl(215,80%,50%)]/10">
@@ -440,8 +436,8 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         </Button>
       </div>
 
-      {/* 테이블 / 모바일 카드 */}
-      <div className="px-4 pb-4">
+      {/* 시간대 격자 — 관리자·모바일 동일, 좁은 화면은 좌우 스와이프 */}
+      <div className="min-w-0 px-2 pb-4 md:px-4">
         {queriedStore ? (
           <p className="mb-2 text-[10px] text-muted-foreground">
             {t("store")}:{" "}
@@ -481,100 +477,20 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
             </Button>
           </div>
         ) : (
-          <>
-            <AdminMobileOnly className="divide-y divide-border/60 rounded-xl border border-border/60">
-              {personKeys.map((key) => {
-                const p = byPerson[key]
-                const isLeave = !!p.leaveType
-                const att = findAttendanceForRealtimeScheduleRow(attendance, attLookup, {
-                  joinKey: p.joinKey,
-                  store: p.store,
-                  employeeCode: p.employeeCode,
-                  employeeId: p.employeeId,
-                  scheduleName: p.scheduleName,
-                  nick: p.nick,
-                  displayLabel: p.name,
-                })
-                const inDec = parseTimeToDecimal(p.pIn)
-                const dateKey = String(date ?? "").trim().slice(0, 10)
-                const todayKey = todayStrBangkok().trim().slice(0, 10)
-                const nowH =
-                  dateKey === todayKey ? nowDecimalHoursSinceBangkokDateMidnight(dateKey) : null
-                const hasProblem = !isLeave && !!att && attendanceSummaryIndicatesProblem(att)
-                const noShow =
-                  !isLeave && !att && inDec != null && nowH != null && nowH >= inDec
-                const statusTone = isLeave
-                  ? "leave"
-                  : hasProblem || noShow
-                    ? "problem"
-                    : att
-                      ? "normal"
-                      : "pending"
-                return (
-                  <div key={key} className="space-y-1.5 px-3 py-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{p.name}</p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {p.store}
-                          {" · "}
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold",
-                              zoneStyle[p.area] || "bg-muted text-muted-foreground"
-                            )}
-                          >
-                            {areaLabel(p.area)}
-                          </span>
-                        </p>
-                      </div>
-                      {isLeave ? (
-                        <span className="shrink-0 rounded bg-violet-200 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800 dark:bg-violet-800 dark:text-violet-200">
-                          {t("scheduleLeave")}
-                        </span>
-                      ) : (
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                            statusTone === "problem" && "bg-red-500/15 text-red-700 dark:text-red-300",
-                            statusTone === "normal" && "bg-blue-500/15 text-blue-700 dark:text-blue-300",
-                            statusTone === "pending" && "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {statusTone === "problem"
-                            ? t("scheduleTodayProblem")
-                            : statusTone === "normal"
-                              ? t("scheduleTodayNormal")
-                              : t("scheduleTodayPending")}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] tabular-nums text-muted-foreground">
-                      {p.pIn || "-"} – {p.pOut || "-"}
-                      {p.pBS && p.pBE ? ` · ${t("scheduleBreak")} ${p.pBS}–${p.pBE}` : ""}
-                    </p>
-                    {att ? (
-                      <p className="text-[11px] tabular-nums text-foreground/90">
-                        {att.inTimeStr || "-"}
-                        {att.outTimeStr ? ` → ${att.outTimeStr}` : ""}
-                      </p>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </AdminMobileOnly>
-            <AdminDesktopOnly>
           <AdminTableScroll
             className="overscroll-x-contain rounded-xl border"
-            hint={false}
             lockViewport={false}
           >
-            <table className="w-full border-collapse text-left">
-              {/* 헤더: 구역 | 이름 | 9 | 10 | ... | 21 */}
+            <table className="w-max min-w-full border-collapse text-left">
+              {/* 헤더: 구역 | 이름 | 9 | 10 | ... | 21 — 휴대폰에서도 동일 격자, 이름열 고정 + 좌우 스와이프 */}
               <thead>
                 <tr className="bg-muted/50">
-                  <th className="border-b border-r border-border px-3 py-2.5 text-[11px] font-bold text-muted-foreground w-[72px]">{t("scheduleArea") || "구역"}</th>
-                  <th className="border-b border-r border-border px-3 py-2.5 text-[11px] font-bold text-muted-foreground w-[80px]">{t("scheduleName") || "이름"}</th>
+                  <th className="sticky left-0 z-20 w-[72px] min-w-[72px] border-b border-r border-border bg-muted px-1.5 py-2 text-[11px] font-bold text-muted-foreground md:px-3 md:py-2.5">
+                    {t("scheduleArea") || "구역"}
+                  </th>
+                  <th className="sticky left-[72px] z-20 w-[80px] min-w-[80px] border-b border-r border-border bg-muted px-1.5 py-2 text-[11px] font-bold text-muted-foreground shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)] md:px-3 md:py-2.5">
+                    {t("scheduleName") || "이름"}
+                  </th>
                   {hours.map((h) => (
                     <th key={h} className="border-b border-r border-border px-0 py-2 text-center text-[10px] font-bold tabular-nums text-muted-foreground w-[28px] min-w-[28px] last:border-r-0">
                       {formatRealtimeLinearHourLabel(h)}
@@ -591,6 +507,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                   const todayKey = todayStrBangkok().trim().slice(0, 10)
                   const nowHoursSinceViewingMidnight =
                     dateKey === todayKey ? nowDecimalHoursSinceBangkokDateMidnight(dateKey) : null
+                  const showStoreOnRow = queriedStore === "All"
                   return personKeys.map((key) => {
                   const p = byPerson[key]
                   const isLeave = !!p.leaveType
@@ -620,31 +537,38 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                   /** 출근 있을 때만 행 단위 톤(미출근은 칸별 workToneWithoutAttendance) */
                   const attWorkTone: WorkMarkTone = !att ? "normal" : hasProblem ? "problem" : "normal"
                   const rowBg = isLeave
-                    ? "bg-violet-50/80 dark:bg-violet-950/40"
+                    ? "bg-violet-50 dark:bg-violet-950/80"
                     : hasProblem
-                      ? "bg-red-50/60 dark:bg-red-950/40"
+                      ? "bg-red-50 dark:bg-red-950/70"
                       : "bg-white dark:bg-card"
 
                   return (
                     <tr key={key} className={cn("border-b border-border last:border-b-0", rowBg)}>
-                      <td className="border-r border-border px-2 py-2 align-middle">
+                      <td className={cn("sticky left-0 z-10 overflow-hidden border-r border-border px-1.5 py-2 align-middle md:px-2", rowBg)}>
                         <span
                           className={cn(
-                            "inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold",
+                            "inline-flex max-w-full items-center truncate rounded px-1.5 py-0.5 text-[10px] font-bold md:px-2",
                             zoneStyle[p.area] || "bg-muted text-muted-foreground"
                           )}
                         >
                           {areaLabel(p.area)}
                         </span>
                       </td>
-                      <td className="border-r border-border px-2 py-2 text-[13px] font-bold text-foreground align-middle">
-                        <span className="inline-flex items-center gap-1.5 flex-wrap">
-                          {p.name}
-                          {isLeave && (
-                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-violet-200 dark:bg-violet-800 text-violet-800 dark:text-violet-200">
-                              {t("scheduleLeave")}
+                      <td className={cn("sticky left-[72px] z-10 border-r border-border px-1.5 py-2 text-[13px] font-bold text-foreground align-middle shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)] md:px-2", rowBg)}>
+                        <span className="inline-flex min-w-0 flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1.5 flex-wrap">
+                            {p.name}
+                            {isLeave && (
+                              <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-violet-200 dark:bg-violet-800 text-violet-800 dark:text-violet-200">
+                                {t("scheduleLeave")}
+                              </span>
+                            )}
+                          </span>
+                          {showStoreOnRow ? (
+                            <span className="truncate text-[10px] font-medium text-muted-foreground">
+                              {formatStoreLabel(p.store) || p.store}
                             </span>
-                          )}
+                          ) : null}
                         </span>
                       </td>
                       {isLeave ? (
@@ -700,8 +624,6 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
               </tbody>
             </table>
           </AdminTableScroll>
-            </AdminDesktopOnly>
-          </>
         )}
       </div>
 

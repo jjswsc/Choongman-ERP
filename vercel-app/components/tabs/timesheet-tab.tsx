@@ -96,8 +96,8 @@ export function TimesheetTab() {
   )
 
   return (
-    <div className="min-h-dvh bg-background">
-      <div className="mx-auto max-w-lg">
+    <div className="min-h-dvh min-w-0 bg-background">
+      <div className="mx-auto min-w-0 max-w-lg">
         {/* Page header */}
         <div className="sticky top-0 z-20 border-b bg-card/80 px-4 py-3 backdrop-blur-lg">
           <h1 className="text-base font-bold text-card-foreground">{t("tabTimesheet")}</h1>
@@ -127,7 +127,7 @@ export function TimesheetTab() {
         </div>
 
         {/* Content - 선택한 매장만 조회, 로딩 완료 후 표시 */}
-        <div className="flex flex-col gap-4 p-4">
+        <div className="flex min-w-0 flex-col gap-4 p-3 md:p-4">
           {storeFilter ? (
             <>
               <RealtimeWork storeFilter={storeFilter} storeList={branchStoreList} />

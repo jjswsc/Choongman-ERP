@@ -79,7 +79,7 @@ function DashboardMain() {
     useMarketingMaterialPendingCount(effectiveStore)
 
   return (
-    <div className="mx-auto min-h-screen max-w-lg bg-background">
+    <div className="mx-auto min-h-screen min-w-0 max-w-lg bg-background">
       <AppHeader />
       <OfflineBanner offlineMsg={t("offlineBannerMobileCached")} offlineOnly />
       <MobileStoreSelectorBar />
