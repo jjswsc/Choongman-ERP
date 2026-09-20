@@ -3196,7 +3196,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           </div>
           {!isHoursPanel ? (
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <div className="flex w-full flex-row items-center gap-2 sm:w-auto">
               <Input
                 type="date"
                 value={startStr}
@@ -3205,9 +3205,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   userSelectedRef.current.dateRange = `${v}~${endStr}`
                   setStartStr(v)
                 }}
-                className="h-9 w-full text-[13px] sm:w-[172px]"
+                className="h-9 min-w-0 flex-1 text-[13px] sm:w-[172px] sm:flex-none"
               />
-              <span className="hidden text-slate-500 sm:inline">~</span>
+              <span className="shrink-0 text-slate-500">~</span>
               <Input
                 type="date"
                 value={endStr}
@@ -3216,7 +3216,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   userSelectedRef.current.dateRange = `${startStr}~${v}`
                   setEndStr(v)
                 }}
-                className="h-9 w-full text-[13px] sm:w-[172px]"
+                className="h-9 min-w-0 flex-1 text-[13px] sm:w-[172px] sm:flex-none"
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -3246,21 +3246,30 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 }
               />
             </div>
-            <Button
-              size="sm"
-              onClick={() => loadAllAnalytics()}
-              disabled={!canQuerySales || loading}
-              title={
-                canMultiStorePicker && selectedStores.length === 0
-                  ? tr("salesQueryNeedStore", "매장을 선택해 주세요.")
-                  : undefined
-              }
-            >
-              {tr("salesQuery", "조회")}
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={saveCurrentPreset}>
-              {tr("salesSavePreset", "조건 저장")}
-            </Button>
+            <div className="flex w-full gap-2 sm:contents">
+              <Button
+                size="sm"
+                className="min-w-0 flex-[3] sm:flex-initial"
+                onClick={() => loadAllAnalytics()}
+                disabled={!canQuerySales || loading}
+                title={
+                  canMultiStorePicker && selectedStores.length === 0
+                    ? tr("salesQueryNeedStore", "매장을 선택해 주세요.")
+                    : undefined
+                }
+              >
+                {tr("salesQuery", "조회")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="min-w-0 flex-[2] sm:flex-initial"
+                onClick={saveCurrentPreset}
+              >
+                {tr("salesSavePreset", "조건 저장")}
+              </Button>
+            </div>
             {showSalesResults ? (
               <Button
                 type="button"
@@ -3273,15 +3282,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               </Button>
             ) : null}
           </div>
-          ) : null}
-
-          {!isHoursPanel ? (
-            <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
-              {tr(
-                "salesExcludeTestOfficePosNote",
-                "본사·오피스 POS 주문은 테스트용이라 매출 관리 집계·매장 목록에 포함되지 않습니다. 본사 매출은 손익(물류 출고)에서 확인하세요."
-              )}
-            </p>
           ) : null}
 
           {!isHoursPanel && canMultiStorePicker && selectedStores.length === 0 && posBizDayStoreChoices.length > 0 ? (

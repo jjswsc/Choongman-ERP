@@ -196,9 +196,6 @@ function StoreSalesBody() {
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-3">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {t("mobileStoreSalesManagementSub")}
-            </p>
             <Suspense fallback={<SalesTabFallback />}>
               <SalesManagementTab offlineAware />
             </Suspense>
