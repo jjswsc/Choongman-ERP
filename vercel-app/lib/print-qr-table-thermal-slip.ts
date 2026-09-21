@@ -2,7 +2,9 @@
  * POS 영수증 프린터로 테이블 QR 주문 슬립 출력 (웹 iframe · Windows 하이브리드 공통).
  */
 import QRCode from 'qrcode'
+import type { PosPrinterSettings } from '@/lib/api-client'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
+import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
 import { buildQrTableThermalSlipHtml } from '@/lib/qr-table-thermal-slip-html'
 
 export async function printQrTableThermalSlip(input: {
@@ -11,6 +13,7 @@ export async function printQrTableThermalSlip(input: {
   storeLabel?: string
   scanTh?: string
   scanEn?: string
+  printerSettings?: PosPrinterSettings | null
 }): Promise<void> {
   const url = String(input.url || '').trim()
   const tableName = String(input.tableName || '').trim()
@@ -35,5 +38,9 @@ export async function printQrTableThermalSlip(input: {
     title: `QR ${tableName}`,
     printRole: 'receipt',
     printReceiptKind: 'hall_order',
+    escPosCutOverride: resolveEscPosCutOverride(input.printerSettings, {
+      printRole: 'receipt',
+      printReceiptKind: 'hall_order',
+    }),
   })
 }

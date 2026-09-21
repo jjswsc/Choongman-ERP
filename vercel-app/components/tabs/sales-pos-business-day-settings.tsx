@@ -20,7 +20,35 @@ function pad2(n: number) {
   return String(n).padStart(2, '0')
 }
 
+const BIZ_HOURS_TARGET_KEY = 'cm_pos_biz_hours_target_v1'
+
 type Target = { kind: 'global' } | { kind: 'store'; code: string }
+
+function readBizHoursTarget(canEditGlobal: boolean, storeChoices: string[]): Target {
+  if (typeof sessionStorage !== 'undefined') {
+    try {
+      const raw = String(sessionStorage.getItem(BIZ_HOURS_TARGET_KEY) || '').trim()
+      if (raw === '__global__' && canEditGlobal) return { kind: 'global' }
+      if (raw && storeChoices.includes(raw)) return { kind: 'store', code: raw }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (canEditGlobal) return { kind: 'global' }
+  return { kind: 'store', code: storeChoices[0] || '' }
+}
+
+function writeBizHoursTarget(target: Target): void {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(
+      BIZ_HOURS_TARGET_KEY,
+      target.kind === 'global' ? '__global__' : target.code
+    )
+  } catch {
+    /* ignore */
+  }
+}
 
 export function SalesPosBusinessDaySettings({
   tr,
@@ -33,11 +61,10 @@ export function SalesPosBusinessDaySettings({
   canEditStore: boolean
   storeChoices: string[]
 }) {
-  const initialTarget = React.useMemo((): Target => {
-    if (canEditGlobal) return { kind: 'global' }
-    if (storeChoices.length === 1) return { kind: 'store', code: storeChoices[0] }
-    return { kind: 'store', code: storeChoices[0] || '' }
-  }, [canEditGlobal, storeChoices])
+  const initialTarget = React.useMemo(
+    (): Target => readBizHoursTarget(canEditGlobal, storeChoices),
+    [canEditGlobal, storeChoices]
+  )
 
   const [target, setTarget] = React.useState<Target>(initialTarget)
   const [hour, setHour] = React.useState(8)
@@ -55,6 +82,10 @@ export function SalesPosBusinessDaySettings({
   React.useEffect(() => {
     setTarget(initialTarget)
   }, [initialTarget])
+
+  React.useEffect(() => {
+    writeBizHoursTarget(target)
+  }, [target])
 
   React.useEffect(() => {
     if (canEditGlobal) return

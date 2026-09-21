@@ -52,6 +52,7 @@ import {
 import {
   printPosHtmlDocument,
   resolveAfterReceiptToKitchenDelayMs,
+  resolveAfterKitchenToReceiptDelayMs,
   resolveBetweenKitchenSlipsDelayMs,
   POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS,
 } from '@/lib/pos-print-html'
@@ -500,9 +501,10 @@ export async function printKitchenForOrder(
       slips.flatMap((slip) => slip.items),
       printAllQrGuestHall
     )
+    const hallPrintCtx = { ...ctx, printerSettings: settings }
     if (!slips.length) {
       if (hallLines.length) {
-        await printQrNoKitchenLinesToHall(order, ctx, hallLines as Array<Record<string, unknown>>)
+        await printQrNoKitchenLinesToHall(order, hallPrintCtx, hallLines as Array<Record<string, unknown>>)
         ctx.logPosPrintDebug?.('kitchen_autoprint_qr_hall_only', {
           orderId,
           lines: hallLines.length,
@@ -539,7 +541,7 @@ export async function printKitchenForOrder(
         memoLine: memoLine || null,
         escapeHtml,
         design: slipDesign,
-        printerSettings: ctx.printerSettings,
+        printerSettings: settings,
         optionNameByCode: optionNameByCodeForPrint,
         printColorAdjust: 'exact',
         ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
@@ -561,7 +563,8 @@ export async function printKitchenForOrder(
     }
     if (hallLines.length) {
       try {
-        await printQrNoKitchenLinesToHall(order, ctx, hallLines as Array<Record<string, unknown>>)
+        await new Promise((resolve) => setTimeout(resolve, resolveAfterKitchenToReceiptDelayMs()))
+        await printQrNoKitchenLinesToHall(order, hallPrintCtx, hallLines as Array<Record<string, unknown>>)
         ctx.logPosPrintDebug?.('kitchen_autoprint_qr_hall', {
           orderId,
           lines: hallLines.length,

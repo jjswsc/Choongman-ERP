@@ -468,7 +468,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posEscPosCutSectionHint:
       '하이브리드(Choongman POS)에서 ESC/POS 절단을 켜면, 드라이버가 자동 절단하지 않는 프린터에서도 잘립니다. 웹 브라우저만 쓰는 매장은 적용되지 않습니다. 태블릿과 메인 POS가 같은 열전사로 거의 동시에 찍을 때 홀·결제 절단을 끄면 출력이 한 롤로 이어붙을 수 있어 기본값은 켭니다.',
     posEscPosCutKitchen: '주방 주문서 인쇄 후 절단',
-    posEscPosCutHall: '홀 주문서·터미널 주문서 인쇄 후 절단',
+    posEscPosCutHall: '홀·터미널·QR 주문서 인쇄 후 절단',
     posEscPosCutPayment: '결제 영수증 인쇄 후 절단',
     posReceiptDesignStyleLabel: '헤더 스타일',
     posReceiptDesignStyleBadge: '배지형',
@@ -4075,7 +4075,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
     posEscPosCutKitchen: 'Cut after kitchen order slip print',
-    posEscPosCutHall: 'Cut after hall / terminal order slip print',
+    posEscPosCutHall: 'Cut after hall / terminal / QR order slip print',
     posEscPosCutPayment: 'Cut after payment receipt print',
     posReceiptDesignStyleLabel: 'Header style',
     posReceiptDesignStyleBadge: 'Badge',
@@ -8755,7 +8755,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posEscPosCutSectionHint:
       'เมื่อเปิดตัด ESC/POS ในไฮบริด (Choongman POS) จะตัดได้แม้ไดรเวอร์จะไม่ตัดอัตโนมัติ ร้านที่ใช้เว็บเบราว์เซอร์อย่างเดียวจะไม่ถูกนำไปใช้ หลายเครื่องพิมพ์เครื่องความร้อนเครื่องเดียวเกือบพร้อมกัน ถ้าปิดตัดฮอลล์หรือใบเสร็จบิลอาจต่อเป็นม้วนเดียว—ค่าเริ่มต้นจึงเปิดไว้',
     posEscPosCutKitchen: 'ตัดหลังพิมพ์ใบสั่งครัว',
-    posEscPosCutHall: 'ตัดหลังพิมพ์ใบสั่งหน้าร้าน/เทอร์มินัล',
+    posEscPosCutHall: 'ตัดหลังพิมพ์ใบสั่งหน้าร้าน/เทอร์มินัล/QR',
     posEscPosCutPayment: 'ตัดหลังพิมพ์ใบเสร็จรับเงิน',
     posReceiptDesignStyleLabel: 'รูปแบบส่วนหัว',
     posReceiptDesignStyleBadge: 'แบบแบดจ์',
@@ -11778,7 +11778,7 @@ export const I18N_POS_MM: Record<string, string> = {
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
     posEscPosCutKitchen: 'Cut after kitchen order slip print',
-    posEscPosCutHall: 'Cut after hall / terminal order slip print',
+    posEscPosCutHall: 'Cut after hall / terminal / QR order slip print',
     posEscPosCutPayment: 'Cut after payment receipt print',
     posReceiptDesignStyleLabel: 'Header style',
     posReceiptDesignStyleBadge: 'Badge',
@@ -14834,7 +14834,7 @@ export const I18N_POS_LA: Record<string, string> = {
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
     posEscPosCutKitchen: 'Cut after kitchen order slip print',
-    posEscPosCutHall: 'Cut after hall / terminal order slip print',
+    posEscPosCutHall: 'Cut after hall / terminal / QR order slip print',
     posEscPosCutPayment: 'Cut after payment receipt print',
     posReceiptDesignStyleLabel: 'Header style',
     posReceiptDesignStyleBadge: 'Badge',
@@ -17979,7 +17979,7 @@ export const I18N_POS_KH: Record<string, string> = {
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
     posEscPosCutKitchen: 'Cut after kitchen order slip print',
-    posEscPosCutHall: 'Cut after hall / terminal order slip print',
+    posEscPosCutHall: 'Cut after hall / terminal / QR order slip print',
     posEscPosCutPayment: 'Cut after payment receipt print',
     posReceiptDesignStyleLabel: 'Header style',
     posReceiptDesignStyleBadge: 'Badge',
@@ -21127,7 +21127,7 @@ export const I18N_POS_VI: Record<string, string> = {
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
     posEscPosCutKitchen: 'Cut after kitchen order slip print',
-    posEscPosCutHall: 'Cut after hall / terminal order slip print',
+    posEscPosCutHall: 'Cut after hall / terminal / QR order slip print',
     posEscPosCutPayment: 'Cut after payment receipt print',
     posReceiptDesignStyleLabel: 'Header style',
     posReceiptDesignStyleBadge: 'Badge',
@@ -24219,7 +24219,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posEscPosCutSectionHint:
       'When ESC/POS cut is enabled in the hybrid (Choongman POS) app, the slip is cut even if the printer driver does not auto-cut. Not applied for browser-only stores. If multiple devices hit the same thermal printer almost together, disabling hall/payment cuts can merge two jobs into one long strip—the defaults leave these on.',
     posEscPosCutKitchen: 'Cut after kitchen order slip print',
-    posEscPosCutHall: 'Cut after hall / terminal order slip print',
+    posEscPosCutHall: 'Cut after hall / terminal / QR order slip print',
     posEscPosCutPayment: 'Cut after payment receipt print',
     posReceiptDesignStyleLabel: 'Header style',
     posReceiptDesignStyleBadge: 'Badge',
