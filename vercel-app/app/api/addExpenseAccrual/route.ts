@@ -208,7 +208,13 @@ export async function POST(request: NextRequest) {
     if ((withdrawalCategory === 'purchase_payment' || withdrawalCategory === 'purchase_advance') && !inputPayeeCode) {
       return NextResponse.json({ success: false, message: '매입처를 입력해 주세요.' }, { status: 400, headers })
     }
-    if ((withdrawalCategory === 'expense' || withdrawalCategory === 'expense_advance') && !inputPayeeCode && !inputPayeeName) {
+    if (
+      (withdrawalCategory === 'expense' ||
+        withdrawalCategory === 'expense_advance' ||
+        withdrawalCategory === 'fixed_asset') &&
+      !inputPayeeCode &&
+      !inputPayeeName
+    ) {
       return NextResponse.json({ success: false, message: '지급처 코드/식별값을 입력해 주세요.' }, { status: 400, headers })
     }
     if (withdrawalCategory === 'transfer_to_petty' && !storeName) {

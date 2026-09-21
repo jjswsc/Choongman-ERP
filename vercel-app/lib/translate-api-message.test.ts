@@ -106,6 +106,21 @@ describe('translateApiMessage tenant schema', () => {
     ).toBe('LEAVE_DUP')
   })
 
+  it('translates expense payment vendor-code required', () => {
+    const te = (k: string) =>
+      ({
+        expensePaymentVendorCodeRequired: 'VENDOR_REQUIRED',
+        expensePayeeRequired: 'PAYEE_REQUIRED',
+      }[k] || k)
+    expect(
+      translateApiMessage(
+        '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
+        te
+      )
+    ).toBe('VENDOR_REQUIRED')
+    expect(translateApiMessage('지급처 코드/식별값을 입력해 주세요.', te)).toBe('PAYEE_REQUIRED')
+  })
+
   it('translates PostgREST missing-column JSON', () => {
     const t2 = (k: string) =>
       k === 'dbColumnMissing'

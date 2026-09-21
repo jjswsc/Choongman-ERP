@@ -271,6 +271,8 @@ const ACCOUNTING_ADMIN_KEYS = {
   cardApiBillHeaderOnly: '',
   cardApiAllocationLineRequired: '',
   cardApiAllocationSumMismatch: '',
+  expensePaymentVendorCodeRequired: '',
+  wm_fixedAssetPayeeHint: '',
 } as const
 
 type AccountingAdminKey = keyof typeof ACCOUNTING_ADMIN_KEYS
@@ -561,6 +563,9 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   cardApiBillHeaderOnly: '통장 연동 카드 대금(총액) 건만 배분할 수 있습니다.',
   cardApiAllocationLineRequired: '계정과목·금액을 1건 이상 입력해 주세요.',
   cardApiAllocationSumMismatch: '배분 합계(฿{sum})가 카드 대금 총액(฿{total})과 일치해야 합니다.',
+  expensePaymentVendorCodeRequired:
+    '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
+  wm_fixedAssetPayeeHint: '거래처 마스터에서 판매처를 선택하세요. 통장 「지출관리 연결」에 필요합니다.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
@@ -838,6 +843,9 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   cardApiBillHeaderOnly: 'Only bank-linked card bill (header) rows can be allocated.',
   cardApiAllocationLineRequired: 'Enter at least one account and amount.',
   cardApiAllocationSumMismatch: 'Allocation total (฿{sum}) must match the card bill total (฿{total}).',
+  expensePaymentVendorCodeRequired:
+    'Vendor code is missing. Register the payee in vendor master, link it on the payment plan, then try again.',
+  wm_fixedAssetPayeeHint: 'Select the seller from vendor master. Required to link the bank withdrawal.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
@@ -1115,6 +1123,9 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   cardApiBillHeaderOnly: 'แบ่งได้เฉพาะรายการค่าบัตรรวมที่เชื่อมธนาคาร',
   cardApiAllocationLineRequired: 'กรอกบัญชีและจำนวนเงินอย่างน้อย 1 รายการ',
   cardApiAllocationSumMismatch: 'ยอดแบ่ง (฿{sum}) ต้องตรงกับยอดรวมบัตร (฿{total})',
+  expensePaymentVendorCodeRequired:
+    'ยังไม่มีรหัสคู่ค้าครับ กรุณาลงทะเบียนผู้ขายในมาสเตอร์คู่ค้าแล้วผูกกับแผนจ่าย แล้วลองอีกครั้งครับ',
+  wm_fixedAssetPayeeHint: 'เลือกผู้ขายจากมาสเตอร์คู่ค้าครับ ต้องมีเพื่อเชื่อมรายการถอนธนาคาร',
 })
 
 export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {

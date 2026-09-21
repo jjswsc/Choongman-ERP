@@ -4,6 +4,7 @@
 
 import { ACCOUNT_SUBJECT_HEADER_MESSAGE_KO } from '@/lib/account-subject-header-messages'
 import { BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE } from '@/lib/bank-expense-via-expense-mgmt'
+import { EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE } from '@/lib/expense-payment-vendor-code'
 
 /** API message(한글) -> i18n key 매핑 */
 const API_MESSAGE_TO_KEY: Record<string, string> = {
@@ -191,6 +192,9 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "반려된 지급 예정은 집행할 수 없습니다.": "rejectedPlanCannotExecute",
   "지급 처리되었습니다.": "paymentProcessed",
   [BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE]: "bankExpenseViaExpenseMgmt",
+  [EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE]: "expensePaymentVendorCodeRequired",
+  "지급처 코드/식별값을 입력해 주세요.": "expensePayeeRequired",
+  "매입처를 입력해 주세요.": "inAlertSelectVendor",
   "지출 발생 ID가 필요합니다.": "expenseAccrualIdRequired",
   "지급 금액을 입력해 주세요.": "expensePaymentAmountRequired",
   "지급 수단은 bank 또는 petty 이어야 합니다.": "expensePaymentMethodInvalid",

@@ -34,7 +34,10 @@ import { registerPettyReplenishFromBankTransaction, collectLinkedBankTransaction
 import { registerCardExpenseFromBankTransaction } from '@/lib/card-bank-expense-link-server'
 import { isPrepaymentAccrualCategory, parseCardAccountIdFromPayeeCode } from '@/lib/prepayment-accrual-categories'
 import { requireAuth } from '@/lib/verify-auth'
-import { resolveVendorCodeLoose } from '@/lib/vendor-code-policy'
+import {
+  EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE,
+  resolveExpensePaymentVendorCode,
+} from '@/lib/expense-payment-vendor-code'
 import {
   INTERNAL_BANK_SOURCE_MARKER,
   bankCategoryForWithdrawalCategory,
@@ -403,16 +406,11 @@ async function linkMultipleExpenseAccrualsToExistingBank(params: {
   const paymentMemo = memo || `지출 지급(${ordered.length}건)`
   const linkedBankMemo = String(bankRow.memo || '').trim()
 
-  let firstVendorCode =
-    firstDecoded.payeeCode && !firstDecoded.payeeCode.startsWith('auto_') && !firstDecoded.payeeCode.startsWith('card_')
-      ? firstDecoded.payeeCode.trim()
-      : ''
-  if (!firstVendorCode) {
-    firstVendorCode =
-      (await resolveVendorCodeLoose(firstDecoded.payeeCode)) ||
-      (await resolveVendorCodeLoose(first.payee_name)) ||
-      ''
-  }
+  const firstVendorCode = await resolveExpensePaymentVendorCode({
+    payeeCode: firstDecoded.payeeCode,
+    payeeName: first.payee_name,
+    withdrawalCategory: firstCategory,
+  })
 
   await updateBankTransactionWithIdentityFallback(existingBankId, {
     note: composeBankNoteForExpenseAccrualLink(String(bankRow.note || ''), Number(first.id || 0), firstCategory),
@@ -446,25 +444,16 @@ async function linkMultipleExpenseAccrualsToExistingBank(params: {
     const remaining = remainingById.get(expenseAccrualId) || 0
     const decoded = decodePayeeCode(source.payee_code)
     const withdrawalCategory = decoded.withdrawalCategory
-    let vendorCode =
-      decoded.payeeCode && !decoded.payeeCode.startsWith('auto_') && !decoded.payeeCode.startsWith('card_')
-        ? decoded.payeeCode.trim()
-        : ''
-    if (!vendorCode) {
-      if (isTaxSettlementWithdrawalCategory(withdrawalCategory)) {
-        vendorCode = decoded.payeeCode || `tax_${withdrawalCategory}`
-      } else {
-        vendorCode =
-          (await resolveVendorCodeLoose(decoded.payeeCode)) ||
-          (await resolveVendorCodeLoose(source.payee_name)) ||
-          ''
-      }
-    }
+    const vendorCode = await resolveExpensePaymentVendorCode({
+      payeeCode: decoded.payeeCode,
+      payeeName: source.payee_name,
+      withdrawalCategory,
+    })
     if (!vendorCode) {
       return NextResponse.json(
         {
           success: false,
-          message: '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
+          message: EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE,
         },
         { status: 400, headers }
       )
@@ -738,27 +727,21 @@ export async function POST(request: NextRequest) {
     }
     const bankCategory = mapWithdrawalCategoryToBankCategory(withdrawalCategory)
     const note = `expense_accrual_id:${expenseAccrualId};withdrawal_category:${withdrawalCategory}`
-    let vendorCode =
-      payeeCode && !payeeCode.startsWith('auto_') && !payeeCode.startsWith('card_') ? payeeCode.trim() : ''
+    let vendorCode = ''
     if (!isPrepay) {
+      vendorCode = await resolveExpensePaymentVendorCode({
+        payeeCode,
+        payeeName: source.payee_name,
+        withdrawalCategory,
+      })
       if (!vendorCode) {
-        vendorCode =
-          (await resolveVendorCodeLoose(payeeCode)) ||
-          (await resolveVendorCodeLoose(source.payee_name))
-      }
-      if (!vendorCode) {
-        if (isTaxSettlementWithdrawalCategory(withdrawalCategory)) {
-          vendorCode = payeeCode || `tax_${withdrawalCategory}`
-        } else {
-          return NextResponse.json(
-            {
-              success: false,
-              message:
-                '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
-            },
-            { status: 400, headers }
-          )
-        }
+        return NextResponse.json(
+          {
+            success: false,
+            message: EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE,
+          },
+          { status: 400, headers }
+        )
       }
     } else {
       vendorCode = String(source.store_name || payeeCode || '').trim() || `prepay_${withdrawalCategory}`

@@ -1108,7 +1108,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       const resolved = resolvePurchaseVendorPayee(vendorCode)
       code = resolved.code
       name = resolved.name
-    } else if (categoryMain === "expense") {
+    } else if (categoryMain === "expense" || categoryMain === "fixed_asset") {
       if (!code && !name) {
         await appAlert(tt("expensePayeeRequired", "Please select or enter a payee."))
         return
@@ -1467,7 +1467,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("wm_transferAccountSubjectRequired", "이체 계정과목을 선택해 주세요."))
       return
     }
-    if (categoryMain === "expense") {
+    if (categoryMain === "expense" || categoryMain === "fixed_asset") {
       const code = payeeCode.trim() || vendorCode.trim()
       const name = payeeName.trim() || code
       if (!code && !name) {
@@ -1612,7 +1612,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       await appAlert(tt("expenseStoreSelect", "Please select a store."))
       return
     }
-    if (categoryMain === "expense") {
+    if (categoryMain === "expense" || categoryMain === "fixed_asset") {
       const code = payeeCode.trim()
       const name = payeeName.trim()
       if (!code && !name) {
@@ -3451,7 +3451,14 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                   className="h-9 w-full max-w-[140px]"
                 />
               </ExpenseRegisterField>
-              <ExpenseRegisterField label={tt("vendor", "Payee")} className="sm:col-span-2 lg:col-span-2 xl:col-span-2">
+              <ExpenseRegisterField
+                label={tt("vendor", "Payee")}
+                className="sm:col-span-2 lg:col-span-2 xl:col-span-2"
+                hint={tt(
+                  "wm_fixedAssetPayeeHint",
+                  "Select the seller from vendor master. Required to link the bank withdrawal."
+                )}
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   <Select
                     value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
@@ -3723,8 +3730,10 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
                     (!transferToCardAccountId || transferCardAccountsForStore.length === 0)) ||
                   (isBankLinkMode &&
                     ((categoryMain === "purchase" && !vendorCode.trim()) ||
-                      (categoryMain === "expense" &&
-                        !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode))))
+                      ((categoryMain === "expense" || categoryMain === "fixed_asset") &&
+                        !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode)))) ||
+                  (categoryMain === "fixed_asset" &&
+                    !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode))
                 }
               >
                 {categoryMain === "transfer" && transferKind === "bank_to_card" ? (
