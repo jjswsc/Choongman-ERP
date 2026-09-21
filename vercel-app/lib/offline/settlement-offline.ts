@@ -11,7 +11,8 @@ import { writePosBusinessOpenLocal } from '@/lib/pos-business-open-local'
 import { getBangkokDateStr } from '@/lib/pos-business-day'
 import { OFFICE_STORES } from '@/lib/permissions'
 import { aliasKeysForStore } from '@/lib/store-vendor-tax-link'
-import { normStoreKey } from '@/lib/store-list-keys'
+import { extractStoreDisplayTail, normStoreKey } from '@/lib/store-list-keys'
+import { addPosStoreCodeVariants } from '@/lib/pos-store-code-variants'
 
 /** 영업 시작 저장 직후 POS 터미널 게이트가 캐시·상태를 다시 읽도록 알림 */
 export const POS_BUSINESS_OPEN_UPDATED_EVENT = 'cm-pos-business-open-updated'
@@ -49,7 +50,16 @@ export function settlementStoreCacheKeys(storeCode: string): string[] {
   const probe = normStoreKey(trimmed)
   const officeLike = OFFICE_STORES.some((o) => normStoreKey(o) === probe)
   const officeAliases = officeLike ? OFFICE_STORES.filter(Boolean) : []
-  return uniqueStoreCacheKeys([trimmed, ...aliases, ...officeAliases])
+  const variantSet = new Set<string>()
+  addPosStoreCodeVariants(variantSet, trimmed)
+  const displayTail = extractStoreDisplayTail(trimmed)
+  return uniqueStoreCacheKeys([
+    trimmed,
+    ...Array.from(variantSet),
+    displayTail,
+    ...aliases,
+    ...officeAliases,
+  ])
 }
 
 /** 서버·큐 미반영 시에도 로컬 시제(cash_actual)가 API 응답으로 지워지지 않도록 병합 */

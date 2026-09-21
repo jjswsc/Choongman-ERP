@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
+import { isPosBusinessOpenRecorded, shouldKeepPosBusinessOpenOnQuietRecheck } from '@/lib/pos-business-open-gate'
 
 describe('isPosBusinessOpenRecorded', () => {
   it('returns false when settlement is missing', () => {
@@ -50,5 +50,37 @@ describe('isPosBusinessOpenRecorded', () => {
         closed: false,
       })
     ).toBe(true)
+  })
+})
+
+describe('shouldKeepPosBusinessOpenOnQuietRecheck', () => {
+  it('keeps a completed open when quiet recheck reports never_opened', () => {
+    expect(
+      shouldKeepPosBusinessOpenOnQuietRecheck({
+        previouslyAllowed: true,
+        resultAllowed: false,
+        blockReason: 'never_opened',
+      })
+    ).toBe(true)
+  })
+
+  it('blocks when a new business day is confirmed', () => {
+    expect(
+      shouldKeepPosBusinessOpenOnQuietRecheck({
+        previouslyAllowed: true,
+        resultAllowed: false,
+        blockReason: 'new_business_day',
+      })
+    ).toBe(false)
+  })
+
+  it('does not keep closed when this session was never open', () => {
+    expect(
+      shouldKeepPosBusinessOpenOnQuietRecheck({
+        previouslyAllowed: false,
+        resultAllowed: false,
+        blockReason: 'never_opened',
+      })
+    ).toBe(false)
   })
 })

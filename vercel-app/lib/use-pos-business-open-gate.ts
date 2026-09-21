@@ -5,12 +5,16 @@ import {
   checkPosBusinessOpenClient,
   type PosBusinessOpenBlockReason,
 } from '@/lib/pos-business-open-gate-client'
+import { shouldKeepPosBusinessOpenOnQuietRecheck } from '@/lib/pos-business-open-gate'
 import { POS_BUSINESS_OPEN_UPDATED_EVENT } from '@/lib/offline/settlement-offline'
 import { useStoreList } from '@/lib/api-client'
 import { normStoreKey } from '@/lib/store-list-keys'
+import { addPosStoreCodeVariants } from '@/lib/pos-store-code-variants'
 import { isPollTargetVisible } from '@/lib/use-visible-polling'
 
 export const POS_BUSINESS_OPEN_RECHECK_MS = 5 * 60_000
+/** 저장 직후 IndexedDB·API 반영 지연을 넘는 짧은 낙관 통과 */
+export const POS_BUSINESS_OPEN_OPTIMISTIC_MS = 120_000
 
 export type PosBusinessOpenGateState = {
   loading: boolean
@@ -24,6 +28,38 @@ export type PosBusinessOpenGateState = {
   refresh: () => Promise<void>
 }
 
+function storeKeysForOpenEvent(store: string, resolveStoreKey: (raw: string) => string): Set<string> {
+  const out = new Set<string>()
+  const add = (raw: string) => {
+    const t = String(raw || '').trim()
+    if (!t) return
+    const bucket = new Set<string>()
+    addPosStoreCodeVariants(bucket, t)
+    for (const v of bucket) {
+      const k = normStoreKey(v)
+      if (k) out.add(k)
+    }
+  }
+  add(store)
+  add(resolveStoreKey(store) || store)
+  return out
+}
+
+function posBusinessOpenEventStoreMatches(
+  savedStore: string,
+  currentStore: string,
+  resolveStoreKey: (raw: string) => string
+): boolean {
+  if (!savedStore || !currentStore) return false
+  if (savedStore === currentStore || normStoreKey(savedStore) === normStoreKey(currentStore)) return true
+  const savedKeys = storeKeysForOpenEvent(savedStore, resolveStoreKey)
+  const currentKeys = storeKeysForOpenEvent(currentStore, resolveStoreKey)
+  for (const k of currentKeys) {
+    if (savedKeys.has(k)) return true
+  }
+  return false
+}
+
 export function usePosBusinessOpenGate(
   storeCode: string | null | undefined,
   options?: { skip?: boolean }
@@ -31,6 +67,7 @@ export function usePosBusinessOpenGate(
   const skip = options?.skip ?? false
   const { resolveStoreKey, legacyToCanonical, storeLabels } = useStoreList()
   const optimisticUntilRef = useRef(0)
+  const allowedRef = useRef(skip)
   const [loading, setLoading] = useState(!skip)
   const [allowed, setAllowed] = useState(skip)
   const [settlementClosed, setSettlementClosed] = useState(false)
@@ -40,6 +77,7 @@ export function usePosBusinessOpenGate(
 
   const refresh = useCallback(async (opts?: { quiet?: boolean }) => {
     if (skip) {
+      allowedRef.current = true
       setAllowed(true)
       setSettlementClosed(false)
       setBlockReason('none')
@@ -49,6 +87,7 @@ export function usePosBusinessOpenGate(
     }
     const store = String(storeCode ?? '').trim()
     if (!store) {
+      allowedRef.current = false
       setAllowed(false)
       setSettlementClosed(false)
       setBusinessDateYmd('')
@@ -67,16 +106,27 @@ export function usePosBusinessOpenGate(
       })
       setBusinessDateYmd(result.businessDateYmd)
       setSettlementClosed(Boolean(result.settlementClosed))
-      if (result.allowed || Date.now() < optimisticUntilRef.current) {
+      const keepOptimistic = Date.now() < optimisticUntilRef.current
+      const keepPrevious =
+        Boolean(opts?.quiet) &&
+        shouldKeepPosBusinessOpenOnQuietRecheck({
+          previouslyAllowed: allowedRef.current,
+          resultAllowed: result.allowed,
+          blockReason: result.blockReason,
+        })
+      if (result.allowed || keepOptimistic || keepPrevious) {
+        allowedRef.current = true
         setAllowed(true)
-        setBlockReason('none')
+        if (result.allowed || keepOptimistic) setBlockReason('none')
       } else {
+        allowedRef.current = false
         setAllowed(false)
         setBlockReason(result.blockReason)
       }
       setPrevBusinessDateYmd(result.prevBusinessDateYmd)
     } catch {
       if (!opts?.quiet) {
+        allowedRef.current = false
         setAllowed(false)
         setSettlementClosed(false)
         setBlockReason('never_opened')
@@ -102,16 +152,13 @@ export function usePosBusinessOpenGate(
       const savedStore = String(detail?.storeCode ?? '').trim()
       const savedDate = String(detail?.settleDate ?? '').trim().slice(0, 10)
       if (store && savedStore && savedDate) {
-        const storeMatch =
-          savedStore === store ||
-          normStoreKey(savedStore) === normStoreKey(store) ||
-          normStoreKey(resolveStoreKey(savedStore)) === normStoreKey(resolveStoreKey(store))
-        if (storeMatch) {
+        if (posBusinessOpenEventStoreMatches(savedStore, store, resolveStoreKey)) {
           if (detail?.closed === true) {
             setSettlementClosed(true)
             setLoading(false)
           } else {
-            optimisticUntilRef.current = Date.now() + 8000
+            optimisticUntilRef.current = Date.now() + POS_BUSINESS_OPEN_OPTIMISTIC_MS
+            allowedRef.current = true
             setAllowed(true)
             setSettlementClosed(false)
             setBlockReason('none')

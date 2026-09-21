@@ -424,7 +424,13 @@ export default function PosOrderPage() {
 
   React.useEffect(() => {
     const def = auth?.store || effectiveStores[0] || "ST01"
-    if (!storeCode && def) setStoreCode(resolveStoreKey(def) || def)
+    if (!def) return
+    const resolved = resolveStoreKey(def) || def
+    if (!storeCode) {
+      setStoreCode(resolved)
+      return
+    }
+    if (storeCode === def && resolved !== def) setStoreCode(resolved)
   }, [auth?.store, effectiveStores, storeCode, resolveStoreKey])
 
   const loadTodaySales = React.useCallback(() => {

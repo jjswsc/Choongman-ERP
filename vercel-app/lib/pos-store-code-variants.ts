@@ -1,9 +1,17 @@
 /** POS store_code 문자열 변형 — 클라이언트·서버 공통(순수 함수). */
 
+import { extractStoreDisplayTail } from '@/lib/store-list-keys'
+import { storeCodeIdentityForms } from '@/lib/pos-operating-store-code'
+
 export function addPosStoreCodeVariants(set: Set<string>, raw: string) {
   const v = String(raw || '').trim()
   if (!v || v.toLowerCase() === 'all') return
   set.add(v)
+  for (const form of storeCodeIdentityForms(v)) {
+    if (form) set.add(form)
+  }
+  const displayTail = extractStoreDisplayTail(v)
+  if (displayTail && displayTail !== v) set.add(displayTail)
   const partnerStripped = v.replace(/^partner\s*store\s*id\s*[-:]\s*/i, '').trim()
   if (partnerStripped && partnerStripped !== v) set.add(partnerStripped)
   const numeric = (partnerStripped || v).match(/\b(\d{3,6})\b/)?.[1] || ''

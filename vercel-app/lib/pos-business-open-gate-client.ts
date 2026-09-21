@@ -11,13 +11,15 @@ import { getFromCache } from '@/lib/offline/cache'
 import { readPosBusinessOpenLocal } from '@/lib/pos-business-open-local'
 import { isOnline, shouldPreferOfflineCache } from '@/lib/offline/network'
 import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
+import type { PosBusinessOpenBlockReason } from '@/lib/pos-business-open-gate'
 import { getBangkokDateStr } from '@/lib/pos-business-day'
 import { OFFICE_STORES } from '@/lib/permissions'
 import { aliasKeysForStore } from '@/lib/store-vendor-tax-link'
-import { normStoreKey } from '@/lib/store-list-keys'
+import { extractStoreDisplayTail, normStoreKey } from '@/lib/store-list-keys'
+import { addPosStoreCodeVariants } from '@/lib/pos-store-code-variants'
 import type { PosSettlement } from '@/lib/api-client'
 
-export type PosBusinessOpenBlockReason = 'none' | 'never_opened' | 'new_business_day'
+export type { PosBusinessOpenBlockReason }
 
 export type PosBusinessOpenCheckClientResult = {
   allowed: boolean
@@ -76,9 +78,15 @@ function buildStoreLookupCandidates(
     options?.storeLabels,
     options?.legacyToCanonical
   )
+  const variantSet = new Set<string>()
+  addPosStoreCodeVariants(variantSet, trimmed)
+  addPosStoreCodeVariants(variantSet, canonical)
+  const displayTail = extractStoreDisplayTail(trimmed)
   return uniqueStoreCandidates([
     canonical,
     trimmed,
+    displayTail,
+    ...Array.from(variantSet),
     ...aliases,
     ...headOfficeAliasCandidates(canonical),
     ...headOfficeAliasCandidates(trimmed),

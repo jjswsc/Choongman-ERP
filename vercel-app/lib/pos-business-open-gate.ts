@@ -11,3 +11,19 @@ export function isPosBusinessOpenRecorded(
   const n = Number(settlement.cashActual)
   return settlement.cashActual != null && Number.isFinite(n)
 }
+
+export type PosBusinessOpenBlockReason = 'none' | 'never_opened' | 'new_business_day'
+
+/**
+ * 5분 주기 quiet 재확인 — 이미 개점한 세션을 조회 실패(never_opened)로 다시 막지 않는다.
+ * 새 영업일(new_business_day)만 차단으로 내린다.
+ */
+export function shouldKeepPosBusinessOpenOnQuietRecheck(params: {
+  previouslyAllowed: boolean
+  resultAllowed: boolean
+  blockReason: PosBusinessOpenBlockReason
+}): boolean {
+  if (params.resultAllowed) return true
+  if (!params.previouslyAllowed) return false
+  return params.blockReason !== 'new_business_day'
+}

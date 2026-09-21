@@ -107,4 +107,18 @@ describe('checkPosBusinessOpenServer', () => {
     expect(result.blockReason).toBe('none')
     expect(result.businessDateYmd).toBe('2026-06-05')
   })
+
+  it('allows Omni tenant-prefixed store_code when opening cash is on stripped code', async () => {
+    resolvePosStoreFilterCandidatesMock.mockResolvedValue([])
+    supabaseSelectFilterMock.mockImplementation(async (_table: string, filter: string) => {
+      if (filter.includes('1001')) {
+        return [{ store_code: '1001', settle_date: '2026-06-05', cash_actual: 1800, closed: false }]
+      }
+      return []
+    })
+
+    const result = await checkPosBusinessOpenServer('malatang01:1001')
+    expect(result.allowed).toBe(true)
+    expect(result.blockReason).toBe('none')
+  })
 })
