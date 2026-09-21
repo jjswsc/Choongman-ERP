@@ -4,7 +4,7 @@
 
 import { ACCOUNT_SUBJECT_HEADER_MESSAGE_KO } from '@/lib/account-subject-header-messages'
 import { BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE } from '@/lib/bank-expense-via-expense-mgmt'
-import { EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE } from '@/lib/expense-payment-vendor-code'
+import { EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE } from '@/lib/expense-payment-vendor-messages'
 
 /** API message(한글) -> i18n key 매핑 */
 const API_MESSAGE_TO_KEY: Record<string, string> = {

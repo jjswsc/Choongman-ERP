@@ -1,8 +1,8 @@
 import { isTaxSettlementWithdrawalCategory } from '@/lib/bank-transaction-note-meta'
+import { EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE } from '@/lib/expense-payment-vendor-messages'
 import { resolveVendorCodeLoose } from '@/lib/vendor-code-policy'
 
-export const EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE =
-  '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.'
+export { EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE }
 
 export function isPlaceholderPayeeCode(payeeCode: string | null | undefined): boolean {
   const c = String(payeeCode || '').trim()
