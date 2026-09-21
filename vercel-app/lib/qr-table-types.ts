@@ -121,7 +121,8 @@ export function orderLooksLikeQrTableGuestOrder(
 }
 
 /**
- * 손님 폰 QR 추가주문은 홀 체크빌을 찍지 않고 주방만 출력.
+ * Realtime 홀 체크빌은 건너뛴다. QR 손님 전표는 pos_print_jobs 워커가 홀·주방을 찍는다.
+ * (Realtime과 잡이 동시에 찍히면 홀이 두 장 나감.)
  * 델타가 비었거나 POS 직원이 담은 줄이 섞이면 false.
  */
 export function shouldSkipHallAutoprintForQrGuestAddon(
@@ -137,28 +138,55 @@ export function excludeQrTableGuestOrderLines<T extends { source?: unknown; id?:
   return (lines || []).filter((it) => !isQrTableGuestOrderLine(it))
 }
 
+type QrGuestHallLine = {
+  id?: unknown
+  source?: unknown
+  kitchenPrinter?: number | null
+  isBuffetEntry?: unknown
+}
+
+function isQrGuestHallCandidate<T extends QrGuestHallLine>(it: T): boolean {
+  if (!isQrTableGuestOrderLine(it)) return false
+  if (isQrBuffetPackageKitchenSkipLine(it)) return false
+  return true
+}
+
 /**
- * QR 손님 줄 중 주방 미인쇄(kitchen_printer=0, 음료 등)만 홀(หน้าร้าน) 전표로 보낸다.
- * 이미 주방 슬립에 들어간 줄·뷔페 입장료는 제외.
+ * QR 손님 줄 중 주방에 안 오른 줄(음료 kitchen_printer=0, 또는 라우트 0)만 홀(หน้าร้าน)로.
+ * 뷔페 입장료·이미 주방 슬립에 들어간 줄은 제외.
  */
-export function pickQrGuestNoKitchenLinesForHallPrint<
-  T extends {
-    id?: unknown
-    source?: unknown
-    kitchenPrinter?: number | null
-    isBuffetEntry?: unknown
-  },
->(allLines: T[], kitchenSlipItems: Array<{ id?: unknown }>): T[] {
+export function pickQrGuestNoKitchenLinesForHallPrint<T extends QrGuestHallLine>(
+  allLines: T[],
+  kitchenSlipItems: Array<{ id?: unknown }>
+): T[] {
   const printedIds = new Set(
     (kitchenSlipItems || []).map((it) => String(it.id ?? '').trim()).filter(Boolean)
   )
   return (allLines || []).filter((it) => {
-    if (!isQrTableGuestOrderLine(it)) return false
-    if (isQrBuffetPackageKitchenSkipLine(it)) return false
+    if (!isQrGuestHallCandidate(it)) return false
     const id = String(it.id ?? '').trim()
     if (id && printedIds.has(id)) return false
-    return Number(it.kitchenPrinter) === 0
+    const kp = Number(it.kitchenPrinter)
+    if (kp === 0) return true
+    // 카탈로그 라우트 0 등으로 주방 슬립에 안 올랐는데 라인 kitchenPrinter 가 비어 있는 음료
+    return !Number.isFinite(kp) || kp < 0
   })
+}
+
+/**
+ * QR 손님 홀 전표.
+ * - printAllGuestLines: POS 「주문/추가주문 시 영수증」과 같이 음식+음료 모두 หน้าร้าน
+ * - 아니면 주방 미인쇄 줄만
+ */
+export function pickQrGuestLinesForHallAutoprint<T extends QrGuestHallLine>(
+  allLines: T[],
+  kitchenSlipItems: Array<{ id?: unknown }>,
+  printAllGuestLines: boolean
+): T[] {
+  if (!printAllGuestLines) {
+    return pickQrGuestNoKitchenLinesForHallPrint(allLines, kitchenSlipItems)
+  }
+  return (allLines || []).filter((it) => isQrGuestHallCandidate(it))
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   markNewlyPrepaidQrExtraLines,
   orderLooksLikeQrTableGuestOrder,
   planQrGuestAddonAutoprint,
+  pickQrGuestLinesForHallAutoprint,
   pickQrGuestNoKitchenLinesForHallPrint,
   resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
@@ -102,6 +103,35 @@ describe('pickQrGuestNoKitchenLinesForHallPrint', () => {
         [{ id: 'qr-coke' }]
       )
     ).toEqual([])
+  })
+
+  it('sends QR drinks missing kitchenPrinter when they are not on the kitchen slip', () => {
+    expect(
+      pickQrGuestNoKitchenLinesForHallPrint(
+        [{ id: 'qr-coke', source: 'qr_table', name: 'Coke' }],
+        []
+      ).map((it) => it.id)
+    ).toEqual(['qr-coke'])
+  })
+})
+
+describe('pickQrGuestLinesForHallAutoprint', () => {
+  const lines = [
+    { id: 'qr-food', source: 'qr_table', name: 'Chicken', kitchenPrinter: 1 as const },
+    { id: 'qr-coke', source: 'qr_table', name: 'Coke', kitchenPrinter: 0 as const },
+    { id: 'buffet-entry-1', source: 'qr_table', name: 'Buffet', isBuffetEntry: true, kitchenPrinter: 0 as const },
+  ]
+
+  it('prints only no-kitchen QR lines when receipt autoprint is off', () => {
+    expect(
+      pickQrGuestLinesForHallAutoprint(lines, [{ id: 'qr-food' }], false).map((it) => it.id)
+    ).toEqual(['qr-coke'])
+  })
+
+  it('prints all QR guest lines to hall when receipt autoprint is on', () => {
+    expect(
+      pickQrGuestLinesForHallAutoprint(lines, [{ id: 'qr-food' }], true).map((it) => it.id)
+    ).toEqual(['qr-food', 'qr-coke'])
   })
 })
 

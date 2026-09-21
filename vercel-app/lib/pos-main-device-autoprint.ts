@@ -62,7 +62,7 @@ import { buildPosCustomerMemoLineForPrint } from '@/lib/pos-member-portal-takeou
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { escapeHtml } from '@/lib/utils'
 import { posKitchenGuestSpread } from '@/lib/pos-terminal-auto-print'
-import { pickQrGuestNoKitchenLinesForHallPrint } from '@/lib/qr-table-types'
+import { isQrTableGuestOrderLine, pickQrGuestLinesForHallAutoprint } from '@/lib/qr-table-types'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 import type { LangCode } from '@/lib/lang-context'
 import type { PosPricingAdjustments } from '@/lib/pos-pricing'
@@ -489,14 +489,16 @@ export async function printKitchenForOrder(
       kitchenItemsWithResolvedPromo(items as Record<string, unknown>[], ctx) as typeof items,
       buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
     )
-    const hallLines = pickQrGuestNoKitchenLinesForHallPrint(
+    const printAllQrGuestHall = (opts?.kitchenLines || []).some((it) => isQrTableGuestOrderLine(it))
+    const hallLines = pickQrGuestLinesForHallAutoprint(
       items as Array<{
         id?: unknown
         source?: unknown
         kitchenPrinter?: number | null
         isBuffetEntry?: unknown
       }>,
-      slips.flatMap((slip) => slip.items)
+      slips.flatMap((slip) => slip.items),
+      printAllQrGuestHall
     )
     if (!slips.length) {
       if (hallLines.length) {
@@ -560,7 +562,7 @@ export async function printKitchenForOrder(
     if (hallLines.length) {
       try {
         await printQrNoKitchenLinesToHall(order, ctx, hallLines as Array<Record<string, unknown>>)
-        ctx.logPosPrintDebug?.('kitchen_autoprint_qr_hall_drinks', {
+        ctx.logPosPrintDebug?.('kitchen_autoprint_qr_hall', {
           orderId,
           lines: hallLines.length,
         })

@@ -546,6 +546,11 @@ export function buildKitchenSlipGroups<T extends KitchenSlipRoutingItem>(
       }
     }
 
+    const itemKp = Number((it as KitchenSlipRoutingItem).kitchenPrinter)
+    if (itemKp === 0 || itemKp === 1 || itemKp === 2 || itemKp === 3) {
+      return itemKp === 0 ? 0 : clampPrinterIndex(itemKp, mode)
+    }
+
     return 1
   }
 

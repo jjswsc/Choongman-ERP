@@ -75,6 +75,14 @@ describe('buildKitchenSlipGroups printer overlay', () => {
     expect(slips).toHaveLength(0)
   })
 
+  it('uses item.kitchenPrinter 0 when catalog has no route for that menu', () => {
+    const items: KitchenSlipRoutingItem[] = [
+      { id: 'qr-coke', name: 'Coke', qty: 1, menuId: 'midCoke', kitchenPrinter: 0 },
+    ]
+    const slips = buildKitchenSlipGroups(items, baseOpts())
+    expect(slips).toHaveLength(0)
+  })
+
   it('routes by menu code when order menuId differs from printer settings id', () => {
     const items: KitchenSlipRoutingItem[] = [
       {
