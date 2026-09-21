@@ -7,10 +7,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateEtaxXml, type EtaxInvoiceInput } from '@/lib/etax-xml'
 import { signEtaxXml } from '@/lib/etax-sign'
-import { resolveHeadOfficeFromVendorRow } from '@/lib/head-office-defaults'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { fetchSalesTypesVendorsForInvoice } from '@/lib/invoice-vendor-clients'
+import { loadInvoiceSellerAndBillTo } from '@/lib/invoice-vendor-clients'
+import { resolveInventoryTenantScope } from '@/lib/inventory-tenant-scope'
 import { isOutboundBillableForInvoice } from '@/lib/outbound-billable-delivery'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 interface OutboundGroup {
   date: string
@@ -27,54 +27,6 @@ interface InvoiceDataClient {
   address: string
   taxId: string
   phone: string
-}
-
-async function getInvoiceData(): Promise<{
-  company: { companyName: string; address: string; taxId: string; phone: string }
-  clients: Record<string, InvoiceDataClient>
-}> {
-  let companyRows = (await supabaseSelectFilter('vendors', 'type=eq.본사', { limit: 1 })) as {
-    name?: string
-    addr?: string
-    tax_id?: string
-    phone?: string
-    memo?: string
-  }[] | null
-  if (!companyRows?.length) {
-    companyRows = (await supabaseSelectFilter('vendors', 'type=eq.Head Office', { limit: 1 })) as typeof companyRows
-  }
-  const resolved = resolveHeadOfficeFromVendorRow(companyRows?.[0])
-  const company = {
-    companyName: resolved.companyName,
-    address: resolved.address,
-    taxId: resolved.taxId,
-    phone: resolved.phone,
-  }
-
-  const clients: Record<string, InvoiceDataClient> = {}
-  const clientRows = await fetchSalesTypesVendorsForInvoice()
-  for (const r of clientRows) {
-    const companyName = String(r.name || '').trim()
-    const gpsName = String((r as { gps_name?: string }).gps_name || '').trim()
-    const salesOutlet = String((r as { sales_outlet?: string }).sales_outlet || '').trim()
-    const displayName = salesOutlet || gpsName || companyName
-    if (!companyName && !gpsName && !salesOutlet) continue
-    const entry: InvoiceDataClient = {
-      companyName: companyName || displayName,
-      address: String(r.addr || '').trim() || '-',
-      taxId: String((r as { tax_id?: string }).tax_id || '').trim() || '-',
-      phone: String(r.phone || '').trim() || '-',
-    }
-    const keysToAdd = [companyName, gpsName, salesOutlet].filter(Boolean)
-    if (gpsName && gpsName.match(/^CM\s+/i)) keysToAdd.push(gpsName.replace(/^CM\s+/i, ''))
-    for (const k of keysToAdd) {
-      if (k) {
-        clients[k] = entry
-        clients[k.toLowerCase()] = entry
-      }
-    }
-  }
-  return { company, clients }
 }
 
 function findClient(clients: Record<string, InvoiceDataClient>, target: string): InvoiceDataClient {
@@ -112,7 +64,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { company, clients } = await getInvoiceData()
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const scope = await resolveInventoryTenantScope({ auth })
+    const { company, clients } = await loadInvoiceSellerAndBillTo(scope)
     const results: { refKey: string; invoiceNo: string; xml: string }[] = []
 
     for (const g of groups) {

@@ -5991,9 +5991,10 @@ export const i18n = {
     adminComplaints: '컴플레인 일지',
     adminSettings: '시스템 설정',
     settings_head_office: '본사 정보',
-    settings_head_office_desc: '주문 승인·출고 인보이스 인쇄 시 사용되는 본사 정보입니다. 거래처의 \'본사\' 행에 저장됩니다.',
+    settings_head_office_desc: '주문 승인·출고 인보이스 인쇄 시 사용되는 본사 정보입니다. 이 회사(테넌트)의 거래처 본사 행에만 저장되며, 다른 회사와 공유되지 않습니다.',
     headOfficeUpdated: '본사 정보가 수정되었습니다.',
     headOfficeSaved: '본사 정보가 등록되었습니다.',
+    headOfficeTenantUnique: '본사 정보(code=HQ)가 테넌트별로 저장되지 않습니다. Omni DB에 sql/inventory_tenant_id.sql 을 실행해 주세요.',
     menuPermissionSaved: '메뉴 권한이 저장되었습니다.',
     settings_company_name: '회사명',
     settings_tax_id: '사업자번호/Tax ID',
@@ -7929,6 +7930,10 @@ export const i18n = {
       '매입·매출 거래처 마스터를 등록·수정합니다. 입고·발주·지출에서 거래처를 쓰려면 여기에 먼저 등록해야 합니다. Omni Manager는 Officer와 같이 이 메뉴를 사용할 수 있습니다.',
     helpHow_admin_vendors:
       '① 검색 후 신규 등록하거나 행을 열어 수정합니다. 검색창 ×로 검색어를 지우면 전체 목록이 다시 보입니다. 코드·구분·거래처명 열의 필터 아이콘으로 값을 고르고, 제목을 눌러 정렬할 수 있습니다.\n② 입고·발주용은 유형을 매입(purchase)으로 저장합니다.\n③ 품목 관리에서 거래처를 연결한 뒤 입고·재고를 진행합니다.\n④ 충만 매장 매니저·가맹점주는 이 메뉴가 숨겨집니다. Omni Manager는 Officer와 동일합니다.',
+    helpSum_admin_settings:
+      '본사(Head Office) 회사명·세무·주소와 메뉴 권한·알림 등을 설정합니다. Omni에서는 회사(테넌트)마다 본사 정보가 따로 저장되며, 다른 회사 설정과 공유되지 않습니다.',
+    helpHow_admin_settings:
+      '① Head Office 탭에서 이 회사의 상호·Tax ID·주소·전화·계좌를 저장합니다. 주문 승인·인보이스 FROM에 쓰입니다.\n② 다른 회사(테넌트) ID로 로그인한 Settings는 이 화면과 다른 본사 행을 봅니다. 한 회사에서 저장해도 다른 회사는 바뀌지 않습니다.\n③ 메뉴 권한·알림·데이터 조회 상한·가맹 복수 매장은 해당 탭에서 저장합니다.\n④ 권한에 따라 일부 탭이 보이지 않을 수 있습니다.',
     helpSum_admin_company_documents:
       '매장별 계약·면허·세무 등 회사 문서를 Drive 링크 또는 파일 업로드로 등록하고, KPI·만료·공문 필터로 검색·관리하는 화면입니다.',
     helpHow_admin_company_documents:
@@ -14374,9 +14379,10 @@ Only matters the employee must handle personally on a working day:
     adminComplaints: 'Complaints',
     adminSettings: 'Settings',
     settings_head_office: 'Head Office',
-    settings_head_office_desc: 'Company info used for order approval and invoice. Stored in vendors \'Head Office\'.',
+    settings_head_office_desc: 'Company info used for order approval and invoice. Stored in this company\'s Head Office vendor row only — not shared with other companies.',
     headOfficeUpdated: 'Head office updated.',
     headOfficeSaved: 'Head office registered.',
+    headOfficeTenantUnique: 'Head Office could not be saved per company. Run sql/inventory_tenant_id.sql on the Omni DB.',
     menuPermissionSaved: 'Menu permissions saved.',
     settings_company_name: 'Company Name',
     settings_tax_id: 'Tax ID',
@@ -16315,6 +16321,10 @@ orderItemQty: 'Qty',
       'Register and edit purchase/sales vendors. Add the vendor here before inbound, purchase orders, or expenses. On Omni, Manager has the same access as Officer.',
     helpHow_admin_vendors:
       '① Search, then create a vendor or open a row to edit. Use × in the search box to clear and see the full list. Use the filter icon on Code, Type, or Vendor Name to pick values, or click the heading to sort.\n② For inbound/PO use type purchase.\n③ Link items to the vendor in Item management, then run inbound/stock.\n④ Choongman store managers and franchisees do not see this menu. Omni Manager is treated as Officer.',
+    helpSum_admin_settings:
+      'Set this company Head Office name, tax, address, menu permissions, and notifications. On Omni each tenant stores its own Head Office; it is not shared with other companies.',
+    helpHow_admin_settings:
+      '① On the Head Office tab save this company legal name, Tax ID, address, phone, and bank/memo. Order approval and invoice FROM use these fields.\n② Settings opened under another company (tenant) ID uses a different Head Office row. Saving here does not change the other company.\n③ Menu permissions, notifications, data query limits, and franchisee multi-store are on their own tabs.\n④ Some tabs may be hidden by role.',
     helpSum_admin_company_documents:
       'Register and manage company documents per store via Drive links or uploads; use KPI, expiry, and correspondence filters to search and track compliance.',
     helpHow_admin_company_documents:
@@ -21970,6 +21980,11 @@ orderItemQty: 'จำนวน',
     visit_chart_input_time: 'ชั่วโมง',
     adminComplaints: 'ร้องเรียน',
     adminSettings: 'ตั้งค่า',
+    settings_head_office: 'สำนักงานใหญ่',
+    settings_head_office_desc: 'ข้อมูลบริษัทสำหรับอนุมัติออเดอร์และพิมพ์ใบแจ้งหนี้ บันทึกในรายการผู้ขาย Head Office ของบริษัทนี้เท่านั้น ไม่ใช้ร่วมกับบริษัทอื่น',
+    headOfficeUpdated: 'อัปเดตข้อมูลสำนักงานใหญ่แล้ว',
+    headOfficeSaved: 'บันทึกข้อมูลสำนักงานใหญ่แล้ว',
+    headOfficeTenantUnique: 'ยังบันทึก Head Office แยกตามบริษัทไม่ได้ โปรดรัน sql/inventory_tenant_id.sql บน Omni DB',
     adminWelcome: 'ยินดีต้อนรับ',
     adminWelcomeSub: ' ดูสถานะวันนี้',
     adminUnapprovedOrders: 'คำสั่งซื้อรออนุมัติ',

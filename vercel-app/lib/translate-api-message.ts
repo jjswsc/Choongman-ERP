@@ -116,6 +116,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 본사 정보
   "본사 정보가 수정되었습니다.": "headOfficeUpdated",
   "본사 정보가 등록되었습니다.": "headOfficeSaved",
+  "본사 정보(code=HQ)가 테넌트별로 저장되지 않습니다. Omni DB에 sql/inventory_tenant_id.sql 을 실행해 주세요.": "headOfficeTenantUnique",
 
   // 메뉴 권한
   "메뉴 권한이 저장되었습니다.": "menuPermissionSaved",

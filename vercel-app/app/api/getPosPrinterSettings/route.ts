@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizeKitchenOptionGroupKey } from '@/lib/pos-kitchen-slip-option-group-choices'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+  type InventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
+import { fetchHeadOfficeVendorRow } from '@/lib/head-office-vendor'
 import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
 import { parsePosDeviceRoleLimitsRow } from '@/lib/pos-device-role-limits'
 import { parseKitchenRouteMapDb, alignKitchenCategoryRouteKeyMap } from '@/lib/pos-kitchen-slip-routing'
@@ -56,7 +65,31 @@ function fillKbankMidFromChoongmanDefaults(
   }
 }
 
-async function getStoreReceiptBizFallback(storeCode: string): Promise<{
+async function selectVendorBizOne(
+  filter: string,
+  scope: InventoryTenantScope
+): Promise<VendorBizInfo | null> {
+  if (isInventoryTenantQueryBlocked(scope)) return null
+  try {
+    const rows = (await supabaseSelectFilter(
+      'vendors',
+      appendInventoryTenantFilter(filter, scope),
+      { limit: 1 }
+    )) as VendorBizInfo[] | null
+    return rows?.[0] || null
+  } catch (err) {
+    if (isMissingInventoryTenantIdColumnError(err)) {
+      markInventoryTenantIdColumnMissing()
+      if (scope.enforce) return null
+    }
+    throw err
+  }
+}
+
+async function getStoreReceiptBizFallback(
+  storeCode: string,
+  scope: InventoryTenantScope
+): Promise<{
   receiptBizName: string
   receiptBizTaxId: string
   receiptBizAbn: string
@@ -64,17 +97,16 @@ async function getStoreReceiptBizFallback(storeCode: string): Promise<{
   receiptBizAddress: string
   receiptBizPhone: string
 }> {
-  const s = String(storeCode || '').trim()
-  if (!s) {
-    return {
-      receiptBizName: '',
-      receiptBizTaxId: '',
-      receiptBizAbn: '',
-      receiptBizOwner: '',
-      receiptBizAddress: '',
-      receiptBizPhone: '',
-    }
+  const empty = {
+    receiptBizName: '',
+    receiptBizTaxId: '',
+    receiptBizAbn: '',
+    receiptBizOwner: '',
+    receiptBizAddress: '',
+    receiptBizPhone: '',
   }
+  const s = String(storeCode || '').trim()
+  if (!s) return empty
 
   const variants = Array.from(new Set([
     s,
@@ -84,22 +116,26 @@ async function getStoreReceiptBizFallback(storeCode: string): Promise<{
 
   let row: VendorBizInfo | null = null
   for (const v of variants) {
-    const byGps = (await supabaseSelectFilter('vendors', `gps_name=eq.${encodeURIComponent(v)}`, { limit: 1 })) as VendorBizInfo[] | null
-    if (byGps?.length) { row = byGps[0]; break }
+    row = await selectVendorBizOne(`gps_name=eq.${encodeURIComponent(v)}`, scope)
+    if (row) break
   }
   if (!row) {
     for (const v of variants) {
-      const byName = (await supabaseSelectFilter('vendors', `name=eq.${encodeURIComponent(v)}`, { limit: 1 })) as VendorBizInfo[] | null
-      if (byName?.length) { row = byName[0]; break }
+      row = await selectVendorBizOne(`name=eq.${encodeURIComponent(v)}`, scope)
+      if (row) break
     }
   }
   if (!row) {
-    const hq = (await supabaseSelectFilter('vendors', 'type=eq.본사', { limit: 1 })) as VendorBizInfo[] | null
-    row = hq?.[0] || null
-  }
-  if (!row) {
-    const hqEn = (await supabaseSelectFilter('vendors', 'type=eq.Head Office', { limit: 1 })) as VendorBizInfo[] | null
-    row = hqEn?.[0] || null
+    const hq = await fetchHeadOfficeVendorRow(scope)
+    row = hq
+      ? {
+          name: hq.name,
+          tax_id: hq.tax_id,
+          ceo: hq.ceo,
+          addr: hq.addr,
+          phone: hq.phone,
+        }
+      : null
   }
 
   return {
@@ -408,7 +444,11 @@ export async function GET(request: NextRequest) {
       ? (raw.kitchen3_categories as string[]).filter((c) => typeof c === 'string')
       : []
 
-    const fallback = await getStoreReceiptBizFallback(storeCode)
+    const inventoryScope = await resolveInventoryTenantScope({
+      auth: authResult.auth,
+      storeCode,
+    })
+    const fallback = await getStoreReceiptBizFallback(storeCode, inventoryScope)
 
     const fromConnected = await listMainDeviceTokensForStore(storeCode)
     const legacy =

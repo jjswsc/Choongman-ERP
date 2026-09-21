@@ -9,9 +9,18 @@ import {
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+import {
+  appendInventoryTenantFilter,
+  isInventoryTenantQueryBlocked,
+  isMissingInventoryTenantIdColumnError,
+  markInventoryTenantIdColumnMissing,
+  resolveInventoryTenantScope,
+  type InventoryTenantScope,
+} from '@/lib/inventory-tenant-scope'
+import { fetchHeadOfficeVendorRow } from '@/lib/head-office-vendor'
 
 /** 매장별 회사명 조회 (vendors gps_name 또는 name 일치, 없으면 본사) */
-async function getStoreCompanyName(store: string): Promise<string> {
+async function getStoreCompanyName(store: string, scope: InventoryTenantScope): Promise<string> {
   const storeTrim = String(store || '').trim()
   if (!storeTrim) return ''
   const vendorCode = await resolveVendorCodeFromStore(storeTrim)
@@ -19,26 +28,41 @@ async function getStoreCompanyName(store: string): Promise<string> {
     const linkedName = await lookupVendorNameByCode(vendorCode)
     if (linkedName) return linkedName
   }
+  if (isInventoryTenantQueryBlocked(scope)) return ''
+  const selectOne = async (filter: string): Promise<{ name?: string }[] | null> => {
+    try {
+      return (await supabaseSelectFilter(
+        'vendors',
+        appendInventoryTenantFilter(filter, scope),
+        { limit: 1 }
+      )) as { name?: string }[] | null
+    } catch (err) {
+      if (isMissingInventoryTenantIdColumnError(err)) {
+        markInventoryTenantIdColumnMissing()
+        if (scope.enforce) return []
+      }
+      throw err
+    }
+  }
   try {
-    let rows = (await supabaseSelectFilter('vendors', `gps_name=eq.${encodeURIComponent(storeTrim)}`, { limit: 1 })) as { name?: string }[]
+    let rows = await selectOne(`gps_name=eq.${encodeURIComponent(storeTrim)}`)
     if (!rows?.length && !storeTrim.match(/^CM\s+/i)) {
-      rows = (await supabaseSelectFilter('vendors', `gps_name=eq.${encodeURIComponent('CM ' + storeTrim)}`, { limit: 1 })) as { name?: string }[]
+      rows = await selectOne(`gps_name=eq.${encodeURIComponent('CM ' + storeTrim)}`)
     }
     if (!rows?.length && storeTrim.match(/^CM\s+/i)) {
-      rows = (await supabaseSelectFilter('vendors', `gps_name=eq.${encodeURIComponent(storeTrim.replace(/^CM\s+/i, ''))}`, { limit: 1 })) as { name?: string }[]
+      rows = await selectOne(`gps_name=eq.${encodeURIComponent(storeTrim.replace(/^CM\s+/i, ''))}`)
     }
     if (rows?.length && rows[0]?.name) return String(rows[0].name).trim()
-    rows = (await supabaseSelectFilter('vendors', `name=eq.${encodeURIComponent(storeTrim)}`, { limit: 1 })) as { name?: string }[]
+    rows = await selectOne(`name=eq.${encodeURIComponent(storeTrim)}`)
     if (!rows?.length && !storeTrim.match(/^CM\s+/i)) {
-      rows = (await supabaseSelectFilter('vendors', `name=eq.${encodeURIComponent('CM ' + storeTrim)}`, { limit: 1 })) as { name?: string }[]
+      rows = await selectOne(`name=eq.${encodeURIComponent('CM ' + storeTrim)}`)
     }
     if (!rows?.length && storeTrim.match(/^CM\s+/i)) {
-      rows = (await supabaseSelectFilter('vendors', `name=eq.${encodeURIComponent(storeTrim.replace(/^CM\s+/i, ''))}`, { limit: 1 })) as { name?: string }[]
+      rows = await selectOne(`name=eq.${encodeURIComponent(storeTrim.replace(/^CM\s+/i, ''))}`)
     }
     if (rows?.length && rows[0]?.name) return String(rows[0].name).trim()
-    rows = (await supabaseSelectFilter('vendors', 'type=eq.본사', { limit: 1 })) as { name?: string }[]
-    if (!rows?.length) rows = (await supabaseSelectFilter('vendors', 'type=eq.Head Office', { limit: 1 })) as { name?: string }[]
-    return rows?.[0] ? String(rows[0].name || '').trim() : ''
+    const hq = await fetchHeadOfficeVendorRow(scope)
+    return hq ? String(hq.name || '').trim() : ''
   } catch {
     return ''
   }
@@ -139,7 +163,8 @@ export async function GET(request: NextRequest) {
     }
 
     const storeName = String(r.store || '').trim()
-    const companyName = await getStoreCompanyName(storeName)
+    const inventoryScope = await resolveInventoryTenantScope({ auth })
+    const companyName = await getStoreCompanyName(storeName, inventoryScope)
 
     const data = {
       month: String(r.month || ''),
