@@ -61,6 +61,7 @@ import { useOnlineStatus } from '@/lib/offline'
 import { savePosSettlementWithOffline } from '@/lib/offline'
 import { useAuth } from '@/lib/auth-context'
 import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
+import { writePosOperatingStore } from '@/lib/pos-operating-store-session'
 import { ADMIN_UI_LANG_OPTIONS, type LangCode, useLang } from '@/lib/lang-context'
 import { tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
@@ -411,6 +412,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     const trimmed = String(raw || '').trim()
     return trimmed ? resolveStoreKey(trimmed) || trimmed : ''
   }, [canSearchAll, storeFilter, auth?.store, resolveStoreKey])
+
+  React.useEffect(() => {
+    if (effectiveStore) writePosOperatingStore(effectiveStore)
+  }, [effectiveStore])
 
   React.useEffect(() => {
     userPickedSettleDateRef.current = false

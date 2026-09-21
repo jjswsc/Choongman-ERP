@@ -121,4 +121,19 @@ describe('checkPosBusinessOpenServer', () => {
     expect(result.allowed).toBe(true)
     expect(result.blockReason).toBe('none')
   })
+
+  it('falls back to eq lookup when in() filter fails for numeric store + date', async () => {
+    resolvePosStoreFilterCandidatesMock.mockResolvedValue([])
+    supabaseSelectFilterMock.mockImplementation(async (_table: string, filter: string) => {
+      if (filter.includes('in.(')) throw new Error('bad in list')
+      if (filter.includes('store_code=eq.1001') && filter.includes('settle_date=eq.2026-06-05')) {
+        return [{ store_code: '1001', settle_date: '2026-06-05', cash_actual: 10000, closed: false }]
+      }
+      return []
+    })
+
+    const result = await checkPosBusinessOpenServer('1001')
+    expect(result.allowed).toBe(true)
+    expect(result.blockReason).toBe('none')
+  })
 })

@@ -38,6 +38,7 @@ import { localizeApiMessage } from "@/lib/translate-api-message"
 import { PosBusinessOpenGateBlock } from "@/components/pos/pos-business-open-gate-block"
 import { usePosBusinessOpenGate } from "@/lib/use-pos-business-open-gate"
 import { ensurePosBusinessOpenForOrder } from "@/lib/pos-business-open-gate-client"
+import { readPosOperatingStore, writePosOperatingStore } from "@/lib/pos-operating-store-session"
 import { joinPosI18nAllLangs } from "@/lib/pos-i18n-all-langs"
 import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import {
@@ -423,15 +424,33 @@ export default function PosOrderPage() {
   const [isMainPosDevice] = usePosMainDevice(storeCode || null)
 
   React.useEffect(() => {
-    const def = auth?.store || effectiveStores[0] || "ST01"
+    const sessionStore = readPosOperatingStore()
+    const loginDef = auth?.store || effectiveStores[0] || "ST01"
+    const def = sessionStore || loginDef
     if (!def) return
     const resolved = resolveStoreKey(def) || def
     if (!storeCode) {
       setStoreCode(resolved)
       return
     }
+    if (sessionStore) {
+      const sessionResolved = resolveStoreKey(sessionStore) || sessionStore
+      const loginResolved = resolveStoreKey(loginDef) || loginDef
+      if (
+        sessionResolved &&
+        storeCode !== sessionResolved &&
+        (storeCode === loginDef || storeCode === loginResolved)
+      ) {
+        setStoreCode(sessionResolved)
+      }
+      return
+    }
     if (storeCode === def && resolved !== def) setStoreCode(resolved)
   }, [auth?.store, effectiveStores, storeCode, resolveStoreKey])
+
+  React.useEffect(() => {
+    if (storeCode) writePosOperatingStore(storeCode)
+  }, [storeCode])
 
   const loadTodaySales = React.useCallback(() => {
     if (!storeCode) return
@@ -2169,7 +2188,10 @@ export default function PosOrderPage() {
               <span className="shrink-0 text-xs text-slate-600 w-12">
                 {t("store") || "매장"}
               </span>
-              <Select value={storeCode || effectiveStores[0]} onValueChange={setStoreCode} disabled={!canSearchAll}>
+              <Select value={storeCode || effectiveStores[0]} onValueChange={(v) => {
+                setStoreCode(v)
+                writePosOperatingStore(v)
+              }} disabled={!canSearchAll}>
                 <SelectTrigger className="h-8 flex-1 border-slate-200 bg-white text-sm text-slate-800">
                   <SelectValue />
                 </SelectTrigger>

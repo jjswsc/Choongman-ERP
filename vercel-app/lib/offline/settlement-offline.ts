@@ -8,6 +8,7 @@ import { getFromCache, setCache } from './cache'
 import { getPosSettlement, type PosCloseRun, type PosSettlement } from '@/lib/api-client'
 import { isPosBusinessOpenRecorded } from '@/lib/pos-business-open-gate'
 import { writePosBusinessOpenLocal } from '@/lib/pos-business-open-local'
+import { writePosOperatingStore } from '@/lib/pos-operating-store-session'
 import { getBangkokDateStr } from '@/lib/pos-business-day'
 import { OFFICE_STORES } from '@/lib/permissions'
 import { aliasKeysForStore } from '@/lib/store-vendor-tax-link'
@@ -177,6 +178,7 @@ export async function persistPosBusinessOpenAfterSave(params: {
     return out
   })()
   if (dates.length === 0) return
+  writePosOperatingStore(storeCode)
 
   for (const persistStore of storeCodes) {
     for (const settleDate of dates) {

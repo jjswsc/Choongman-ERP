@@ -4,6 +4,7 @@ import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
 import { POS_BUSINESS_OPEN_REQUIRED_CODE } from '@/lib/pos-business-open-gate'
 import { resolvePosStoreFilterCandidates } from '@/lib/pos-store-filter-candidates'
 import { addPosStoreCodeVariants } from '@/lib/pos-store-code-variants'
+import { postgrestInQuotedList } from '@/lib/postgrest-in-list'
 import { normStoreKey } from '@/lib/store-list-keys'
 
 export type PosBusinessOpenCheckResult =
@@ -61,23 +62,42 @@ export async function checkPosBusinessOpenServer(storeCode: string): Promise<Pos
   const dates = uniqueNonEmpty([...todayDates, prevBusinessDateYmd])
 
   let rows: { store_code?: string; settle_date?: string; cash_actual?: number | null; closed?: boolean }[] = []
-  const selectOpenRows = async (storeCodes: string[]) => {
-    const storeIn = storeCodes.map((c) => encodeURIComponent(c)).join(',')
-    const dateIn = dates.map((d) => encodeURIComponent(d)).join(',')
+  const selectOpenRowsIn = async (storeCodes: string[]) => {
+    const storeIn = postgrestInQuotedList(storeCodes)
+    const dateIn = postgrestInQuotedList(dates)
+    if (!storeIn || !dateIn) return []
     return ((await supabaseSelectFilter(
       'pos_settlements',
       `store_code=in.(${storeIn})&settle_date=in.(${dateIn})`,
       { limit: 80, select: 'store_code,settle_date,cash_actual,closed' }
     )) as typeof rows) || []
   }
-  try {
-    rows = await selectOpenRows(candidates)
-  } catch {
-    try {
-      rows = await selectOpenRows([store])
-    } catch {
-      rows = []
+  const selectOpenRowsEq = async (storeCodes: string[]) => {
+    const found: typeof rows = []
+    for (const sc of storeCodes.slice(0, 8)) {
+      for (const d of dates) {
+        try {
+          const batch =
+            ((await supabaseSelectFilter(
+              'pos_settlements',
+              `store_code=eq.${encodeURIComponent(sc)}&settle_date=eq.${encodeURIComponent(d)}`,
+              { limit: 4, select: 'store_code,settle_date,cash_actual,closed' }
+            )) as typeof rows) || []
+          found.push(...batch)
+        } catch {
+          /* next pair */
+        }
+      }
     }
+    return found
+  }
+  try {
+    rows = await selectOpenRowsIn(candidates)
+  } catch {
+    rows = []
+  }
+  if (rows.length === 0) {
+    rows = await selectOpenRowsEq(candidates.length > 0 ? candidates : [store])
   }
 
   const ymd = (raw: unknown) => String(raw ?? '').trim().slice(0, 10)
@@ -122,14 +142,17 @@ export async function loadPosBusinessOpenStatus(
   const calendarYmd = getBangkokDateStr()
   const dates = uniqueNonEmpty([businessDateYmd, calendarYmd])
   try {
-    const dateIn = dates.map((d) => encodeURIComponent(d)).join(',')
-    const rows = (await supabaseSelectFilter(
-      'pos_settlements',
-      `store_code=eq.${encodeURIComponent(store)}&settle_date=in.(${dateIn})`,
-      { limit: 8, select: 'cash_actual,settle_date' }
-    )) as { cash_actual?: number | null; settle_date?: string }[] | null
-    const isOpen = (rows || []).some((r) => isCashActualRecorded(r.cash_actual))
-    return { businessDateYmd, isOpen }
+    for (const d of dates) {
+      const rows = (await supabaseSelectFilter(
+        'pos_settlements',
+        `store_code=eq.${encodeURIComponent(store)}&settle_date=eq.${encodeURIComponent(d)}`,
+        { limit: 4, select: 'cash_actual,settle_date' }
+      )) as { cash_actual?: number | null; settle_date?: string }[] | null
+      if ((rows || []).some((r) => isCashActualRecorded(r.cash_actual))) {
+        return { businessDateYmd, isOpen: true }
+      }
+    }
+    return { businessDateYmd, isOpen: false }
   } catch {
     return { businessDateYmd, isOpen: false }
   }
