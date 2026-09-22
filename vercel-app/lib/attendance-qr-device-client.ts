@@ -152,8 +152,9 @@ export function buildAttendanceQrClientHint(): string {
 
 export const ATTENDANCE_QR_KIOSK_PATH = '/kiosk/attendance-qr'
 
+/** switch=1: 직원 세션이 남아 있어도 로그인 폼을 보여 매니저로 전환 가능하게 함 (자동 복귀 루프 방지) */
 export function attendanceQrKioskLoginHref(): string {
-  return `/pos/login?redirect=${encodeURIComponent(ATTENDANCE_QR_KIOSK_PATH)}`
+  return `/pos/login?redirect=${encodeURIComponent(ATTENDANCE_QR_KIOSK_PATH)}&switch=1`
 }
 
 /** POS/관리자 로그인 ?redirect= 은 출퇴근 QR 키오스크 경로만 허용 (오픈 리다이렉트 방지) */

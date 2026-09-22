@@ -13,9 +13,9 @@ describe("safeAttendanceQrKioskRedirect", () => {
     expect(safeAttendanceQrKioskRedirect("/kiosk/attendance-qr?x=1")).toBe("")
   })
 
-  it("builds POS login href that returns to the kiosk", () => {
+  it("builds POS login href that returns to the kiosk and forces account switch", () => {
     expect(attendanceQrKioskLoginHref()).toBe(
-      `/pos/login?redirect=${encodeURIComponent(ATTENDANCE_QR_KIOSK_PATH)}`
+      `/pos/login?redirect=${encodeURIComponent(ATTENDANCE_QR_KIOSK_PATH)}&switch=1`
     )
   })
 })
