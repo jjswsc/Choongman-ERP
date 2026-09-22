@@ -32,8 +32,8 @@ import {
 } from "@/lib/api-client"
 import {
   addDayBangkok,
-  getBangkokHour,
   getDayOfWeekBangkok,
+  isAttendanceOvernightClockOut,
 } from "@/lib/attendance-utils"
 
 const DAY_KEYS = ["scheduleSun", "scheduleMon", "scheduleTue", "scheduleWed", "scheduleThu", "scheduleFri", "scheduleSat"] as const
@@ -148,7 +148,7 @@ function pairAttendanceSessions(logs: AttendanceLogItem[]): AttendanceSession[] 
       })
     } else if (type === "퇴근") {
       const outCalDate = toDateStrBangkok(ts)
-      const isOvernightOut = getBangkokHour(ts) < 7
+      const isOvernightOut = isAttendanceOvernightClockOut(ts)
       const targetWorkDate = isOvernightOut ? addDayBangkok(outCalDate, -1) : outCalDate
       for (let i = sessions.length - 1; i >= 0; i--) {
         const s = sessions[i]

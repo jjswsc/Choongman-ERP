@@ -1858,7 +1858,7 @@ export const i18n = {
     helpSum_admin_attendance:
       '출퇴근 기록 조회·승인, 지각·조퇴·연장 조정, 당일 실시간 근무, 주간 스케줄 조회·작성을 한 화면에서 처리합니다. 사이드바 배지는 GPS·강제퇴근 등 미승인만 표시합니다.',
     helpHow_admin_attendance:
-      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다.\n② [당일 실시간]: 매장을 고른 뒤 검색을 누르면 시간대별 근무·휴게 도트가 나옵니다. 휴대폰에서는 표를 위·아래·좌우로 밀어 보세요.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~31:00, 자정 이후는 24:00~·익일 07:00은 31:00)에서 고릅니다. 저장 전에 같은 날 동일 직원 중복을 검사하며, 오류가 나도 기존 표는 지우지 않습니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
+      '① [근태 기록/승인]: 기간·매장·직원·상태로 조회 후 승인·조정합니다. 야간(22:00–08:00)은 익일 08시대 퇴근까지 출근일로 묶입니다.\n② [당일 실시간]: 매장을 고른 뒤 검색을 누르면 시간대별 근무·휴게 도트가 나옵니다. 휴대폰에서는 표를 위·아래·좌우로 밀어 보세요.\n③ [스케줄 조회]·[스케줄 작성]: 주간 근무표를 확인·편집합니다. 일괄입력 휴게 시작은 시간표 범위(기본 06:00~31:00, 자정 이후는 24:00~·익일 07:00은 31:00)에서 고릅니다. 저장 전에 같은 날 동일 직원 중복을 검사하며, 오류가 나도 기존 표는 지우지 않습니다.\n④ 사이드바 숫자는 위치미확인·강제퇴근처럼 아직 승인 안 된 건만이며, 지각·연장·조퇴 조정은 이 화면에서 기간 조회해 처리합니다.\n⑤ [도움말] 탭에서 승인·조정·연장 규칙을 확인합니다.',
     helpSum_admin_leave:
       '휴가 신청 승인·반려와 기간별 연차·병가 등 사용·잔여 통계를 관리합니다. 「승인자」탭에서 전체 승인자·매장 승인자를 지정할 수 있습니다. 통계 기본은 재직 직원만 보이며, 사이드바 배지는 최근 휴가일 기준 미승인만 표시합니다.',
     helpHow_admin_leave:
@@ -6183,7 +6183,7 @@ export const i18n = {
     att_help_ot: '연장(O.T): 계획 퇴근 시각보다 30분 이상 늦게 퇴근하면 자동으로 연장으로 잡힙니다. 조정 칸에 인정할 연장 분을 입력 후 승인하면 급여에 연장수당이 반영됩니다.',
     att_help_diff: '차이: 실제 근무시간 − 계획 근무시간(분). 계획 대비 더/덜 근무한 분을 숫자(예: +6, -6)로 표시합니다.',
     att_help_late_ot: '지각/조퇴/연장: 지각 = 출근 지각한 분(빨간색), 조퇴 = 계획보다 일찍 퇴근한 분(주황), 연장 = 인정된 연장 분(파란색). 차이는 총 결과, 이 칸은 지각·조퇴·연장을 구분해 표시합니다.',
-    att_help_status: '상태: 정상(검정), 지각·조퇴(주황), 퇴근미기록(빨강), 연장(30분 이상 시 연장 표시). 조퇴는 계획보다 적게 근무한 경우(차이 음수)에 표시됩니다. 연장 30분 이상이면 승인/반려로 인정 분을 조정할 수 있습니다. 상태 필터로 전체·정상 제외·미기록·연장·지각 등 목록을 필터할 수 있습니다.',
+    att_help_status: '상태: 정상(검정), 지각·조퇴(주황), 퇴근미기록(빨강), 연장(30분 이상 시 연장 표시). 조퇴는 계획보다 적게 근무한 경우(차이 음수)에 표시됩니다. 야간(22:00–08:00 등) 퇴근은 익일 08시대까지 출근한 날 근무로 묶이며, 그 경우 조퇴로 보지 않습니다. 연장 30분 이상이면 승인/반려로 인정 분을 조정할 수 있습니다. 상태 필터로 전체·정상 제외·미기록·연장·지각 등 목록을 필터할 수 있습니다.',
     att_help_no_record: '미기록: 해당 기간에 출퇴근 기록이 없는 직원·날짜 목록입니다. 긴급 승인으로 출퇴근을 대신 기록할 수 있습니다.',
     tab_att_schedule: '스케줄 작성',
     tab_att_view: '스케줄 조회',
@@ -10243,7 +10243,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_attendance:
       'Review and approve clock-in/out, adjust late/early/OT, view today’s live status, and browse or edit weekly schedules in one place. Sidebar badges show only unapproved GPS/forced items.',
     helpHow_admin_attendance:
-      '① Records & approval: filter by period, store, employee, and status, then approve or adjust.\n② Today live: pick a store, then tap Search to see hour-by-hour work/break dots. On a phone, swipe the table up, down, or sideways.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–31:00; after midnight use 24:00+, and 07:00 next morning is 31:00). Save validates same-day duplicate staff first and does not clear the week on validation errors.\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
+      '① Records & approval: filter by period, store, employee, and status, then approve or adjust. Overnight (22:00–08:00) clock-out until 08:59 next morning stays on the clock-in date.\n② Today live: pick a store, then tap Search to see hour-by-hour work/break dots. On a phone, swipe the table up, down, or sideways.\n③ Schedule view / edit: review or edit weekly rosters. Batch break start follows the grid (default 06:00–31:00; after midnight use 24:00+, and 07:00 next morning is 31:00). Save validates same-day duplicate staff first and does not clear the week on validation errors.\n④ Sidebar counts are GPS/forced unapproved only; late/OT/early adjustments are handled here by date filter.\n⑤ Help tab: read approval, adjustment, and OT rules.',
     helpSum_admin_leave:
       'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Use the Approvers tab for global and per-store approvers. Stats default to current staff. Sidebar badges count only recent unapproved leave dates.',
     helpHow_admin_leave:
@@ -14627,7 +14627,7 @@ Only matters the employee must handle personally on a working day:
     att_help_ot: 'O.T: If clock-out is 30+ min after planned time, it is treated as overtime. Enter approved OT minutes and Approve to apply to payroll.',
     att_help_diff: 'Difference: Actual work time minus planned work time (minutes). Shown as a number (e.g. +6, -6).',
     att_help_late_ot: 'Late/Early/OT: Late = minutes late to clock-in (red). Early = minutes left before plan (amber). OT = approved overtime (blue). Difference is the total; this column breaks it down.',
-    att_help_status: 'Status: Normal (black), Late/Early leave (amber), No checkout (red), Overtime (when 30+ min). Early leave shows when actual work is less than planned (negative difference). Use Approve/Reject to adjust. Status filter: filter list by All, Except Normal, No record, Overtime, Late, etc.',
+    att_help_status: 'Status: Normal (black), Late/Early leave (amber), No checkout (red), Overtime (when 30+ min). Early leave shows when actual work is less than planned (negative difference). Overnight shifts (e.g. 22:00–08:00) stay on the clock-in date; clock-out until 08:59 next morning is not early leave. Use Approve/Reject to adjust. Status filter: filter list by All, Except Normal, No record, Overtime, Late, etc.',
     att_help_no_record: 'No record: List of employees/dates with no attendance in the period. Use emergency approve to record clock-in/out.',
     att_min_unit: ' min',
     att_hour_unit: ' h',
@@ -18455,7 +18455,7 @@ orderItemQty: 'จำนวน',
     helpSum_admin_attendance:
       'Attendance records, approval, schedule view/edit in one place.',
     helpHow_admin_attendance:
-      'กรอง อนุมัติ ปรับเวลา — แท็บวันนี้ดูเป็นตารางชั่วโมง(จุด) เหมือนจอคอม มือถือปัดซ้ายขวาได้ครับ แท็บช่วยเหลือมีกฎ ตารางงานเลือกเริ่มพักได้ตามช่วงที่แสดง รวมหลังเที่ยงคืนถึงเช้า (เช่น 22:00–07:00 คือ 22:00–31:00) บันทึกจะตรวจพนักงานซ้ำในวันเดียวกันก่อน และถ้าผิดพลาดจะไม่ลบตารางเดิมครับ',
+      'กรอง อนุมัติ ปรับเวลา — กะดึก 22:00–08:00 นับวันที่เข้างาน รวมลงออกถึง 08:59 น. เช้าวันถัดไปครับ แท็บวันนี้ดูเป็นตารางชั่วโมง(จุด) เหมือนจอคอม มือถือปัดซ้ายขวาได้ครับ แท็บช่วยเหลือมีกฎ ตารางงานเลือกเริ่มพักได้ตามช่วงที่แสดง รวมหลังเที่ยงคืนถึงเช้า (เช่น 22:00–07:00 คือ 22:00–31:00) บันทึกจะตรวจพนักงานซ้ำในวันเดียวกันก่อน และถ้าผิดพลาดจะไม่ลบตารางเดิมครับ',
     helpSum_admin_leave:
       'อนุมัติ/ปฏิเสธการลา และดูสถิติการใช้ ค่าเริ่มต้นแสดงพนักงานที่ยังปฏิบัติงานอยู่ครับ แท็บผู้มีสิทธิ์อนุมัติกำหนดผู้อนุมัติทั้งระบบและรายสาขาได้ครับ',
     helpHow_admin_leave:
@@ -22120,7 +22120,7 @@ orderItemQty: 'จำนวน',
     att_help_ot: 'OT: ออกเกิน 30 นาทีจากแผน = ล่วงเวลา ใส่นาทีที่อนุมัติแล้วกดอนุมัติ → ชำระค่าล่วงเวลา',
     att_help_diff: 'ผลต่าง: ชั่วโมงทำงานจริง − ตามแผน (นาที) แสดงเกิน/ขาดจากแผน',
     att_help_late_ot: 'สาย/OT: สาย = นาทีที่มาสาย (แดง), OT = นาทีล่วงเวลาที่อนุมัติ (น้ำเงิน)',
-    att_help_status: 'สถานะ: ปกติ(ดำ), สาย/กลับก่อน(ส้ม), ไม่ลงออก(แดง), ล่วงเวลา(เมื่อ 30+ นาที)',
+    att_help_status: 'สถานะ: ปกติ(ดำ), สาย/ออกก่อน(ส้ม), ไม่ลงออก(แดง), ล่วงเวลา(เมื่อ 30+ นาที). กะดึก (เช่น 22:00–08:00) นับวันที่เข้างาน ลงออกถึง 08:59 น. ของวันถัดไปไม่ถือว่าออกก่อนครับ',
     att_help_no_record: 'ไม่มีบันทึก: รายการที่ไม่มีเข้างานในช่วงที่เลือก ใช้อนุมัติฉุกเฉินเพื่อบันทึกแทน',
     att_min_unit: ' นาที',
     att_hour_unit: ' ชม.',

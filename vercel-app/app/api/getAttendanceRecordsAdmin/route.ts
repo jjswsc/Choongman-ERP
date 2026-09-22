@@ -4,9 +4,12 @@ import {
   ATTENDANCE_LOG_ADMIN_GRID_COLS,
 } from '@/lib/postgrest-narrow-select'
 import {
+  attendanceOvernightOutFetchEndExclusiveUtcIso,
   attendanceStoreNamePostgrestFilter,
   attendanceStoreNamePostgrestFilterFragments,
   bangkokDateRangeToUtc,
+  isAttendanceOvernightClockOut,
+  isAttendanceOvernightClockOutAfterRangeEnd,
   parsePlanToMinutes,
   plannedWorkMinutesFromPlans,
   resolveScheduleForEmployeeDay,
@@ -65,14 +68,6 @@ function addDay(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + delta)
   return d.toISOString().slice(0, 10)
-}
-
-/** log_at(ISO) → 방콕 기준 시각의 시(hour) 0~23 */
-function getBangkokHour(iso: string): number {
-  if (!iso) return 12
-  const d = new Date(iso)
-  const str = d.toLocaleTimeString('en-US', { timeZone: TZ, hour: '2-digit', hour12: false })
-  return parseInt(str, 10) || 0
 }
 
 /** log_at(ISO) → 방콕 기준 분(minute of day) 0~1439 */
@@ -182,8 +177,8 @@ export async function GET(request: NextRequest) {
   /** 전일 미퇴근 마감 퇴근을 전날 행에 붙이려면 하루 전 로그가 필요함 (getPayrollCalc buildAttendanceSummary와 동일 취지) */
   const fetchStartStr = addDay(startStr, -1)
   const { startISO } = bangkokDateRangeToUtc(fetchStartStr, endStr)
-  // 자정 넘김 퇴근(익일 00:00~06:59 방콕) 포함: log_at 조회 끝을 익일 07:00 방콕(= 익일 00:00 UTC)까지 연장
-  const logEndISOExclusive = addDay(endStr, 1) + 'T00:00:00.000Z'
+  // 자정 넘김 퇴근(익일 00:00~08:59 방콕, 22:00–08:00 근무) 포함
+  const logEndISOExclusive = attendanceOvernightOutFetchEndExclusiveUtcIso(endStr)
 
   const isAllStores = !storeFilter || storeFilter === 'All' || storeFilter.toLowerCase() === 'all' || storeFilter === '전체' || storeFilter === '전체 매장'
   const isAllEmployeesByName = !employeeFilter || employeeFilter === 'All' || employeeFilter === '전체 직원'
@@ -565,8 +560,7 @@ export async function GET(request: NextRequest) {
       if (!rowDate || rowDate < fetchStartStr) continue
       // 조회 구간 밖 날짜: 익일 새벽 퇴근(자정 넘김)만 허용 → 전날 행에 붙이기 위함
       if (rowDate > endStr) {
-        const isOvernightOutForRange = type === '퇴근' && getBangkokHour(logAt) <= 7 && rowDate === addDay(endStr, 1)
-        if (!isOvernightOutForRange) continue
+        if (!isAttendanceOvernightClockOutAfterRangeEnd(type, logAt, rowDate, endStr)) continue
       }
       const rowStore = String(r.store_name || '').trim()
       const name = String(r.name || '').trim()
@@ -616,8 +610,7 @@ export async function GET(request: NextRequest) {
           }
         }
       } else if (type === '퇴근') {
-        const bangkokHour = getBangkokHour(logAt)
-        const isOvernightOut = bangkokHour <= 7
+        const isOvernightOut = isAttendanceOvernightClockOut(logAt)
         const prevDayKey = eid > 0 ? `${addDay(rowDate, -1)}|${rowStore}|#${eid}` : `${addDay(rowDate, -1)}|${rowStore}|${name}`
         const prevRec = byKey[prevDayKey]
 
@@ -632,7 +625,7 @@ export async function GET(request: NextRequest) {
           prevRec.outApproved = approved || ''
           if (needsOutApproval) prevRec.outId = r.id ?? null
           prevRec.outLogId = r.id ?? null
-        } else if (!isOvernightOut && (!rec.outTime || logAt > (rec.outTime || ''))) {
+        } else if (!rec.outTime || logAt > (rec.outTime || '')) {
           rec.outTime = logAt
           rec.earlyMinFromDb =
             r.early_min != null && Number.isFinite(Number(r.early_min))

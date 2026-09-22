@@ -4,7 +4,7 @@ import {
   ATTENDANCE_LOG_PAYROLL_COLS,
   ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
 } from '@/lib/postgrest-narrow-select'
-import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
+import { bangkokDateRangeToUtc, toDateStrBangkok, attendanceOvernightOutFetchEndExclusiveUtcIso, isAttendanceOvernightClockOutAfterRangeEnd } from '@/lib/attendance-utils'
 import {
   calcSSO,
   clockOutCountsForPayroll,
@@ -53,7 +53,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
   const lastDay = new Date(parseInt(monthStr.slice(0, 4), 10), parseInt(monthStr.slice(5, 7), 10), 0)
   const endStr = lastDay.toISOString().slice(0, 10)
   const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
-  const logEndISOExclusive = addDayBangkok(endStr, 1) + 'T00:00:00.000Z'
+  const logEndISOExclusive = attendanceOvernightOutFetchEndExclusiveUtcIso(endStr)
 
   type AttRow = {
     log_at?: string
@@ -116,8 +116,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     const logAt = r.log_at || ''
     if (!rowDate || rowDate < startStr) continue
     if (rowDate > endStr) {
-      const allowOvernightOut = type === '퇴근' && getBangkokHour(logAt) <= 7 && rowDate === addDayBangkok(endStr, 1)
-      if (!allowOvernightOut) continue
+      if (!isAttendanceOvernightClockOutAfterRangeEnd(type, logAt, rowDate, endStr)) continue
     }
     const store = String(r.store_name || '').trim()
     const name = String(r.name || '').trim()
@@ -155,9 +154,9 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     }
   }
 
-  // 자정 넘김: 익일 퇴근만 있는 날 → 전날(출근일)에 합침
+  // 자정 넘김: 익일 새벽·오전 퇴근을 전날(출근일)에 합침. 연속 야간은 당일 저녁 출근보다 이른 아침 퇴근도 전날로 이동.
   for (const [dayKey, v] of Object.entries(byDay)) {
-    if (v.outMs != null && v.inMs == null) {
+    if (v.outMs != null && (v.inMs == null || v.outMs < v.inMs)) {
       const parts = dayKey.split('|')
       const rowDate = parts[0]
       const attKey = parts.slice(1).join('|')
@@ -170,6 +169,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
         prev.otMin = v.otMin
         prev.earlyMin = v.earlyMin || 0
         v.outMs = null
+        v.breakMin = 0
       }
     }
   }

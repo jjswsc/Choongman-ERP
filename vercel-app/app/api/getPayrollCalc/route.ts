@@ -32,15 +32,17 @@ import { isOfficePayrollStoreFilter } from '@/lib/office-payroll-access'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
-  bangkokDateRangeToUtc,
-  toDateStrBangkok,
-  getBangkokHour,
-  getDayOfWeekBangkok,
   addDayBangkok,
+  attendanceOvernightOutFetchEndExclusiveUtcIso,
+  bangkokDateRangeToUtc,
+  getDayOfWeekBangkok,
+  isAttendanceOvernightClockOut,
+  isAttendanceOvernightClockOutAfterRangeEnd,
   iterBangkokYmdInclusive,
   plannedWorkMinutesFromPlans,
   resolveScheduleForEmployeeDay,
   scheduleDateKey,
+  toDateStrBangkok,
 } from '@/lib/attendance-utils'
 import { resolvePayrollPeriodForMonth } from '@/lib/payroll-cycle-settings'
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
@@ -385,13 +387,11 @@ function buildAttendanceSummary(
     const type = String(r.log_type || '').trim()
     const logAt = r.log_at || ''
     if (!rowDate) continue
-    // 기간 시작일 07시 전 퇴근 = 직전 주기 야간근무. 새 주기에 넣으면 출근 없이 퇴근만 잡힘.
-    if (rowDate === startStr && type === '퇴근' && getBangkokHour(logAt) <= 7) continue
+    // 기간 시작일 08:59 이전 퇴근 = 직전 주기 야간근무. 새 주기에 넣으면 출근 없이 퇴근만 잡힘.
+    if (rowDate === startStr && type === '퇴근' && isAttendanceOvernightClockOut(logAt)) continue
     if (rowDate < startStr) continue
     if (rowDate > endStr) {
-      const allowOvernightOut =
-        type === '퇴근' && getBangkokHour(logAt) <= 7 && rowDate === addDayBangkok(endStr, 1)
-      if (!allowOvernightOut) continue
+      if (!isAttendanceOvernightClockOutAfterRangeEnd(type, logAt, rowDate, endStr)) continue
     }
 
     const store = String(r.store_name || '').trim()
@@ -454,8 +454,7 @@ function buildAttendanceSummary(
       }
     } else if (type === '퇴근') {
       const logAtStr = r.log_at || ''
-      const bangkokHour = getBangkokHour(logAtStr)
-      const isOvernightOut = bangkokHour <= 7
+      const isOvernightOut = isAttendanceOvernightClockOut(logAtStr)
       const prevDayKey = dayBucketKey(addCalendarDay(rowDate, -1), store, name, employeeId)
       const prev = byDay[prevDayKey]
       const applyClockOut = (target: (typeof byDay)[string]) => {
@@ -499,7 +498,7 @@ function buildAttendanceSummary(
       }
       if (isOvernightOut && prev?.inMs != null && prev.outMs == null) {
         applyClockOut(prev)
-      } else if (!isOvernightOut) {
+      } else {
         applyClockOut(v)
       }
     } else if (type === '휴식종료') {
@@ -777,7 +776,7 @@ export async function GET(request: NextRequest) {
     const startStr = cyclePeriod.start || `${normMonth}-01`
     const endStr = cyclePeriod.end || startStr
     const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
-    const logEndISOExclusive = `${addDayBangkok(endStr, 1)}T00:00:00.000Z`
+    const logEndISOExclusive = attendanceOvernightOutFetchEndExclusiveUtcIso(endStr)
 
     // attendance_allowance·sso_exempt 미적용 DB는 후보 순으로 내려가며 조회 (42703 등)
     const empPayrollSelectCandidatesBase = [

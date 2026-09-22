@@ -258,8 +258,50 @@ export function scheduleDateKey(val: string | Date | null | undefined): string {
 export function getBangkokHour(iso: string | Date | null | undefined): number {
   if (iso == null) return 12
   const d = new Date(iso)
-  const str = d.toLocaleTimeString('en-US', { timeZone: ATTENDANCE_TZ, hour: '2-digit', hour12: false })
-  return parseInt(str, 10) || 0
+  if (isNaN(d.getTime())) return 12
+  const str = d.toLocaleTimeString('en-GB', { timeZone: ATTENDANCE_TZ, hour: '2-digit', hour12: false })
+  const m = String(str).match(/(\d{1,2})/)
+  let h = m ? parseInt(m[1], 10) : 12
+  if (h === 24) h = 0
+  if (!Number.isFinite(h)) return 12
+  return Math.max(0, Math.min(23, h))
+}
+
+/**
+ * 야간 근무 퇴근으로 보는 방콕 시(hour) 상한(포함).
+ * 22:00–08:00 근무는 익일 08:00~08:59에 찍힌 퇴근이 정상 마감이다.
+ * 07시까지만 보면 08시대 퇴근이 누락·당일 저녁 출근과 섞여 조퇴(약 510분)로 오탐된다.
+ */
+export const ATTENDANCE_OVERNIGHT_CLOCK_OUT_MAX_HOUR = 8
+
+/** 방콕 00:00~08:59 퇴근 → 전날 야간 세션 마감 */
+export function isAttendanceOvernightClockOut(iso: string | Date | null | undefined): boolean {
+  const h = getBangkokHour(iso)
+  return h >= 0 && h <= ATTENDANCE_OVERNIGHT_CLOCK_OUT_MAX_HOUR
+}
+
+/**
+ * 근태 로그 조회 끝(미포함) UTC ISO.
+ * 종료일 익일 10:00 방콕까지 — 08:00 퇴근과 약간의 OT를 전날 행에 붙이기 위함.
+ * (이전: 익일 07:00 방콕 = `YYYY-MM-DDT00:00:00.000Z` → 22:00–08:00 퇴근이 잘림)
+ */
+export function attendanceOvernightOutFetchEndExclusiveUtcIso(endYmd: string): string {
+  const s = String(endYmd || '').trim().slice(0, 10)
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : todayStrBangkok()
+  const nextCal = addDayBangkok(day, 1)
+  return new Date(`${nextCal}T10:00:00+07:00`).toISOString()
+}
+
+/** 조회 종료일 다음날 새벽·오전 퇴근만 허용 (그 외 익일 로그는 제외) */
+export function isAttendanceOvernightClockOutAfterRangeEnd(
+  logType: string,
+  logAt: string | Date | null | undefined,
+  rowDate: string,
+  rangeEndYmd: string
+): boolean {
+  if (String(logType || '').trim() !== '퇴근') return false
+  if (!isAttendanceOvernightClockOut(logAt)) return false
+  return rowDate === addDayBangkok(rangeEndYmd, 1)
 }
 
 /**

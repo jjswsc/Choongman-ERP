@@ -25,7 +25,7 @@ import {
   type AttendanceDailyRow,
   type TodayAttendanceState,
 } from "@/lib/api-client"
-import { todayStrBangkok, daysAgoStrBangkok, ATTENDANCE_TZ } from "@/lib/attendance-utils"
+import { todayStrBangkok, daysAgoStrBangkok, ATTENDANCE_TZ, isAttendanceOvernightClockOut } from "@/lib/attendance-utils"
 import { translateLeaveTypeFromDb } from "@/lib/leave-type-i18n"
 import { cn, compressImageForUpload } from "@/lib/utils"
 import { canEmployeeUseAttendanceQr } from "@/lib/attendance-qr-pilot"
@@ -37,11 +37,7 @@ import { Users, Sun, Moon, Coffee, Play, Clock, Wallet, Search, Download, Image 
 
 function getAttendanceDateRange() {
   const today = todayStrBangkok()
-  const bangkokHour = parseInt(
-    new Date().toLocaleString("en-US", { timeZone: ATTENDANCE_TZ, hour: "2-digit", hour12: false }),
-    10
-  )
-  if (bangkokHour >= 0 && bangkokHour <= 7) {
+  if (isAttendanceOvernightClockOut(new Date())) {
     return { startDate: daysAgoStrBangkok(1), endDate: today }
   }
   return { startDate: today, endDate: today }

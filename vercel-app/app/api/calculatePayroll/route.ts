@@ -4,7 +4,7 @@ import {
   ATTENDANCE_LOG_PAYROLL_COLS,
   ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
 } from '@/lib/postgrest-narrow-select'
-import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
+import { bangkokDateRangeToUtc, toDateStrBangkok, attendanceOvernightOutFetchEndExclusiveUtcIso, isAttendanceOvernightClockOutAfterRangeEnd } from '@/lib/attendance-utils'
 import {
   calcSSO,
   clockOutCountsForPayroll,
@@ -85,7 +85,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
   const lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0)
   const endStr = lastDay.toISOString().slice(0, 10)
   const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
-  const logEndISOExclusive = addDayBangkok(endStr, 1) + 'T00:00:00.000Z'
+  const logEndISOExclusive = attendanceOvernightOutFetchEndExclusiveUtcIso(endStr)
 
   const attRows = (await (async () => {
     try {
@@ -145,8 +145,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     const logAt = r.log_at || ''
     if (!rowDate || rowDate < startStr) continue
     if (rowDate > endStr) {
-      const allowOvernightOut = type === '퇴근' && getBangkokHour(logAt) <= 7 && rowDate === addDayBangkok(endStr, 1)
-      if (!allowOvernightOut) continue
+      if (!isAttendanceOvernightClockOutAfterRangeEnd(type, logAt, rowDate, endStr)) continue
     }
     const store = String(r.store_name || '').trim()
     const name = String(r.name || '').trim()
@@ -187,10 +186,10 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     }
   }
 
-  // 자정 넘김: 익일 퇴근만 있는 날 → 전날(출근일)에 합침
+  // 자정 넘김: 익일 새벽·오전 퇴근을 전날(출근일)에 합침. 연속 야간은 아침 퇴근이 당일 저녁 출근보다 일러도 전날로 이동.
   for (const dk of Object.keys(byDay)) {
     const v = byDay[dk]
-    if (v.outMs != null && v.inMs == null) {
+    if (v.outMs != null && (v.inMs == null || v.outMs < v.inMs)) {
       const rowDate = dk.slice(0, 10)
       const attKey = dk.slice(11)
       const prevKey = addDay(rowDate, -1) + '_' + attKey
@@ -202,6 +201,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
         prev.otMin = v.otMin
         prev.earlyMin = v.earlyMin || 0
         v.outMs = null
+        v.breakMin = 0
       }
     }
   }

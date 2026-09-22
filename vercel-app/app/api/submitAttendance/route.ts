@@ -8,6 +8,8 @@ import {
   getOpenBreakStartMs,
   hasUnclosedClockWorkSession,
   addDayBangkok,
+  isAttendanceOvernightClockOut,
+  parsePlanToMinutes,
 } from '@/lib/attendance-utils'
 import { fetchMergedAttendanceLogsForEmployee } from '@/lib/attendance-log-fetch-server'
 import { extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
@@ -27,12 +29,6 @@ const TZ = 'Asia/Bangkok'
 
 function todayStr() {
   return new Date().toLocaleDateString('en-CA', { timeZone: TZ })
-}
-
-/** 방콕 기준 현재 시(hour) 0~23. 자정 넘김 퇴근 판별용 */
-function getBangkokHour(): number {
-  const str = new Date().toLocaleTimeString('en-US', { timeZone: TZ, hour: '2-digit', hour12: false })
-  return parseInt(str, 10) || 0
 }
 
 /** 날짜 YYYY-MM-DD에 delta일 더한 날짜 */
@@ -261,11 +257,10 @@ export async function POST(request: NextRequest) {
         }
       }
       // 퇴근·휴식시작·휴식종료(재개)는 출근 기록이 있어야만 기록 가능
-      // 1) 당일 출근, 2) 자정 넘김 00~07시: 전날 출근, 3) 미종료 세션: 전날 출근 후 퇴근 누락 → 익일 퇴근 허용
+      // 1) 당일 출근, 2) 자정 넘김 00~08시: 전날 출근, 3) 미종료 세션: 전날 출근 후 퇴근 누락 → 익일 퇴근 허용
       if (logType === '퇴근' || logType === '휴식시작' || logType === '휴식종료') {
-        const bangkokHour = getBangkokHour()
         const validDates = [todayStrVal]
-        if (bangkokHour >= 0 && bangkokHour <= 7) {
+        if (isAttendanceOvernightClockOut(nowTime)) {
           validDates.push(addDays(todayStrVal, -1))
         }
         const hasInValidDate = (logs || []).some(
@@ -540,9 +535,12 @@ export async function POST(request: NextRequest) {
       }
     } else if (logType === '퇴근' && planOut) {
       planTime = planOut
-      // 전날 스케줄 사용 시: plan_in_prev_day면 익일 퇴근(오늘날짜), 아니면 당일 퇴근(전날날짜)
+      // 전날 스케줄: 야간(plan_out < plan_in 또는 plan_in_prev_day)이면 익일 퇴근(오늘날짜)
+      const inMin = parsePlanToMinutes(planIn)
+      const outMin = parsePlanToMinutes(planOut)
+      const overnightPlan = outMin > 0 && inMin > 0 && outMin < inMin
       const pOutDateStr =
-        usedYesterdaySchedule && !schRows?.[0]?.plan_in_prev_day
+        usedYesterdaySchedule && !overnightPlan && !schRows?.[0]?.plan_in_prev_day
           ? (() => {
               const d = new Date(todayStrVal + 'T12:00:00Z')
               d.setUTCDate(d.getUTCDate() - 1)

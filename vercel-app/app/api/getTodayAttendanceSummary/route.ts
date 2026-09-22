@@ -4,8 +4,8 @@ import {
   attendanceStoreNamePostgrestVariantsFilter,
   bangkokDateRangeToUtc,
   toDateStrBangkok,
-  getBangkokHour,
   addDayBangkok,
+  isAttendanceOvernightClockOut,
 } from '@/lib/attendance-utils'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
       id?: number
     }
 
-    // dateStr ~ dateStr+1 조회 (자정 넘김 퇴근 포함: 익일 00~06시)
+    // dateStr ~ dateStr+1 조회 (자정 넘김 퇴근 포함: 익일 00~08시, 22:00–08:00 근무)
     const nextDayStr = addDayBangkok(dateStr, 1)
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(dateStr, nextDayStr)
     const logFilter = `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
@@ -178,9 +178,9 @@ export async function GET(request: NextRequest) {
       const type = String(r.log_type || '').trim()
       const logAt = r.log_at || ''
 
-      // 익일 00~07시 퇴근만 자정 넘김으로 허용 (그 외 익일 로그는 무시)
+      // 익일 00~08시 퇴근만 자정 넘김으로 허용 (22:00–08:00 근무 포함)
       if (rowDate === nextDayStr) {
-        if (type !== '퇴근' || getBangkokHour(logAt) > 7) continue
+        if (type !== '퇴근' || !isAttendanceOvernightClockOut(logAt)) continue
       } else if (rowDate !== dateStr) {
         continue
       }
