@@ -33,6 +33,7 @@ DECLARE
     'erp_stores',
     'stock_logs',
     'items',
+    'payroll_records',
     'vendors',
     'receivable_transactions',
     'payable_transactions',

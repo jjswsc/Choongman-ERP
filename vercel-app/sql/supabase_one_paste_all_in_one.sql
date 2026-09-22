@@ -942,9 +942,23 @@ COMMENT ON COLUMN public.pos_orders.guest_count IS
 ALTER TABLE public.pos_orders
   ADD COLUMN IF NOT EXISTS idempotency_key_hash TEXT;
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_orders_idempotency_key_hash
-  ON public.pos_orders(idempotency_key_hash)
-  WHERE idempotency_key_hash IS NOT NULL;
+-- tenant_id 있으면 법인별 유니크. 재실행 시 전역 인덱스(ux_pos_orders_idempotency_key_hash)는 제거.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'tenant_id'
+  ) THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_orders_tenant_idempotency_key_hash
+      ON public.pos_orders (coalesce(tenant_id, ''), idempotency_key_hash)
+      WHERE idempotency_key_hash IS NOT NULL;
+    DROP INDEX IF EXISTS public.ux_pos_orders_idempotency_key_hash;
+  ELSE
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_orders_idempotency_key_hash
+      ON public.pos_orders(idempotency_key_hash)
+      WHERE idempotency_key_hash IS NOT NULL;
+  END IF;
+END $$;
 
 -- ------------------------------------------------------------
 -- (5) POS 다중 쿠폰 — pos_multi_coupon.sql

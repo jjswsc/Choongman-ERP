@@ -85,9 +85,16 @@ function writeIdempotencyHit(key: string, id: number, orderNo: string) {
   idempotencyCache.set(key, { id, orderNo, at: Date.now() })
 }
 
-async function readIdempotencyHitFromDb(keyHash: string): Promise<{ id: number; orderNo: string } | null> {
+async function readIdempotencyHitFromDb(
+  keyHash: string,
+  tenantId: string
+): Promise<{ id: number; orderNo: string } | null> {
   try {
-    const rows = (await supabaseSelectFilter('pos_orders', `idempotency_key_hash=eq.${encodeURIComponent(keyHash)}`, {
+    const tid = tenantId.trim()
+    const filter = tid
+      ? `idempotency_key_hash=eq.${encodeURIComponent(keyHash)}&tenant_id=eq.${encodeURIComponent(tid)}`
+      : `idempotency_key_hash=eq.${encodeURIComponent(keyHash)}`
+    const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: 1,
       select: 'id,order_no',
     })) as { id?: number; order_no?: string }[] | null
@@ -208,24 +215,6 @@ export async function POST(req: NextRequest) {
     const idempotencyBody = String(body.localOrderNo ?? body.local_order_no ?? '').trim()
     const idempotencyKey = idempotencyHeader || idempotencyBody
     const idempotencyKeyHash = idempotencyKey ? sha256Hex(idempotencyKey) : null
-    if (idempotencyKey) {
-      if (idempotencyKeyHash) {
-        const dbHit = await readIdempotencyHitFromDb(idempotencyKeyHash)
-        if (dbHit) {
-          return NextResponse.json(
-            { success: true, orderId: dbHit.id, orderNo: dbHit.orderNo, duplicate: true },
-            { headers }
-          )
-        }
-      }
-      const hit = readIdempotencyHit(idempotencyKey)
-      if (hit) {
-        return NextResponse.json(
-          { success: true, orderId: hit.id, orderNo: hit.orderNo, duplicate: true },
-          { headers }
-        )
-      }
-    }
     const storeCode = String(body.storeCode ?? '').trim()
     const orderType = coercePosOrderTypeForDb(
       String(body.orderType ?? body.order_type ?? '')
@@ -315,6 +304,27 @@ export async function POST(req: NextRequest) {
         { success: false, message: tenantWriteErr, retryAfterQueue: false },
         { status: 403, headers }
       )
+    }
+
+    const idemTenantId = tenantScope.enforce ? tenantScope.tenantId : ''
+    const idemCacheKey = idempotencyKey ? `${idemTenantId}\n${idempotencyKey}` : ''
+    if (idempotencyKey) {
+      if (idempotencyKeyHash) {
+        const dbHit = await readIdempotencyHitFromDb(idempotencyKeyHash, idemTenantId)
+        if (dbHit) {
+          return NextResponse.json(
+            { success: true, orderId: dbHit.id, orderNo: dbHit.orderNo, duplicate: true },
+            { headers }
+          )
+        }
+      }
+      const hit = readIdempotencyHit(idemCacheKey)
+      if (hit) {
+        return NextResponse.json(
+          { success: true, orderId: hit.id, orderNo: hit.orderNo, duplicate: true },
+          { headers }
+        )
+      }
     }
 
     const orderQuota = await assertSaasOrderQuotaAllowed({
@@ -664,7 +674,7 @@ export async function POST(req: NextRequest) {
           'savePosOrder'
         )) as { id?: number }[]
       } else if (idempotencyKeyHash && isIdempotencyUniqueViolation(insertErr)) {
-        const dbHit = await readIdempotencyHitFromDb(idempotencyKeyHash)
+        const dbHit = await readIdempotencyHitFromDb(idempotencyKeyHash, idemTenantId)
         if (dbHit) {
           return NextResponse.json(
             { success: true, orderId: dbHit.id, orderNo: dbHit.orderNo, duplicate: true },
@@ -678,7 +688,7 @@ export async function POST(req: NextRequest) {
     }
     const created = inserted[0]
     if (idempotencyKey && Number(created?.id) > 0) {
-      writeIdempotencyHit(idempotencyKey, Number(created.id), orderNo)
+      writeIdempotencyHit(idemCacheKey, Number(created.id), orderNo)
     }
 
     if (linkposPayment && Number(created?.id) > 0) {

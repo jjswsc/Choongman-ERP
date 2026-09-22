@@ -128,11 +128,24 @@ ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS linkpos_approved_amount N
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS linkpos_requested_at TEXT;
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS linkpos_responded_at TEXT;
 
--- idempotency (savePosOrder)
+-- idempotency (savePosOrder) — 법인별. 전역 유니크는 다른 법인 같은 키를 막거나 주문을 섞음.
 ALTER TABLE public.pos_orders ADD COLUMN IF NOT EXISTS idempotency_key_hash TEXT;
-CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_orders_idempotency_key_hash
-  ON public.pos_orders(idempotency_key_hash)
-  WHERE idempotency_key_hash IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'pos_orders' AND column_name = 'tenant_id'
+  ) THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_orders_tenant_idempotency_key_hash
+      ON public.pos_orders (coalesce(tenant_id, ''), idempotency_key_hash)
+      WHERE idempotency_key_hash IS NOT NULL;
+    DROP INDEX IF EXISTS public.ux_pos_orders_idempotency_key_hash;
+  ELSE
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_orders_idempotency_key_hash
+      ON public.pos_orders (idempotency_key_hash)
+      WHERE idempotency_key_hash IS NOT NULL;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_pos_orders_store ON public.pos_orders(store_code);
 CREATE INDEX IF NOT EXISTS idx_pos_orders_store_created_at
