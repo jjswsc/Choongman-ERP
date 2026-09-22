@@ -214,6 +214,27 @@ export function hallSubstitutionQrGuestOptions(
   })
 }
 
+/**
+ * Dosirak/Katsu 등 `add`·`soup` 단계만 있는 선택 추가(스프 등).
+ * 피커에서는 보여 주되, 건너뛰면 본메뉴만 담을 수 있어야 한다.
+ */
+export function isQrGuestOptionalAddonOnlyOption(
+  opt: Pick<QrGuestMenuOption, 'optionStepValues'> | null | undefined
+): boolean {
+  const keys = Object.keys(opt?.optionStepValues || {})
+    .map((k) => String(k || '').trim().toLowerCase())
+    .filter(Boolean)
+  if (keys.length === 0) return false
+  return keys.every((k) => k === 'add' || k === 'soup')
+}
+
+/** 미선택 시 주문을 막아야 하는 홀 치환 옵션 (선택 추가만 있는 행 제외) */
+export function hallSubstitutionQrGuestOptionsRequiringPick(
+  options: QrGuestMenuOption[] | null | undefined
+): QrGuestMenuOption[] {
+  return hallSubstitutionQrGuestOptions(options).filter((o) => !isQrGuestOptionalAddonOnlyOption(o))
+}
+
 export function qrGuestMenuNeedsOptionPicker(menu: {
   options?: QrGuestMenuOption[] | null
   isBanban?: boolean
@@ -327,7 +348,7 @@ export function resolveQrGuestLineOption(params: {
   requireOption?: boolean
 }): QrGuestResolvedLineOption {
   const menuName = String(params.menuName || '').trim() || '—'
-  const required = hallSubstitutionQrGuestOptions(params.menuOptions)
+  const required = hallSubstitutionQrGuestOptionsRequiringPick(params.menuOptions)
   const requested = [...(params.optionIds || [])]
     .map((n) => Math.floor(Number(n) || 0))
     .filter((n) => n > 0)

@@ -4,6 +4,8 @@ import {
   extractQrGuestOptionIds,
   findQrGuestImplicitChickenDefault,
   groupQrGuestSentLinesByTime,
+  hallSubstitutionQrGuestOptionsRequiringPick,
+  isQrGuestOptionalAddonOnlyOption,
   qrGuestMenuNeedsOptionPicker,
   resolveQrGuestLineOption,
   splitQrGuestMenusByTier,
@@ -117,6 +119,43 @@ describe('extractQrGuestOptionIds', () => {
 
   it('splits multistep compose ids joined with + (Dosirak add soup)', () => {
     expect(extractQrGuestOptionIds({ id: '101+202' })).toEqual([101, 202])
+  })
+})
+
+describe('isQrGuestOptionalAddonOnlyOption', () => {
+  it('treats add/soup-only step rows as skippable add-ons', () => {
+    expect(isQrGuestOptionalAddonOnlyOption({ optionStepValues: { add: 'Small Kimchi Soup' } })).toBe(true)
+    expect(isQrGuestOptionalAddonOnlyOption({ optionStepValues: { soup: 'Miso' } })).toBe(true)
+    expect(isQrGuestOptionalAddonOnlyOption({ optionStepValues: { part: 'Boneless' } })).toBe(false)
+    expect(
+      isQrGuestOptionalAddonOnlyOption({ optionStepValues: { part: 'Wing', add: 'Small Kimchi Soup' } })
+    ).toBe(false)
+  })
+
+  it('excludes optional add-ons from options that require a pick', () => {
+    const opts = [
+      {
+        id: 1,
+        menuId: 10,
+        name: 'Small Kimchi Soup',
+        optionCode: '',
+        priceModifier: 30,
+        optionType: 'substitution' as const,
+        sortOrder: 0,
+        optionStepValues: { add: 'Small Kimchi Soup' },
+      },
+      {
+        id: 2,
+        menuId: 10,
+        name: 'M - Boneless',
+        optionCode: '',
+        priceModifier: 0,
+        optionType: 'substitution' as const,
+        sortOrder: 1,
+        optionStepValues: { part: 'Boneless' },
+      },
+    ]
+    expect(hallSubstitutionQrGuestOptionsRequiringPick(opts).map((o) => o.id)).toEqual([2])
   })
 })
 
@@ -237,6 +276,45 @@ describe('resolveQrGuestLineOption', () => {
       optionIds: [8],
     })
     expect(r).toMatchObject({ ok: true, name: 'Soy Sauce Chicken (M - Boneless)', price: 0 })
+  })
+
+  it('allows skipping optional Small Kimchi Soup (Chicken Katsu / Dosirak add)', () => {
+    const soupOnly = [
+      {
+        id: 55,
+        menuId: 88,
+        name: 'Small Kimchi Soup',
+        optionCode: 'ADD-SOUP',
+        priceModifier: 30,
+        optionType: 'substitution' as const,
+        sortOrder: 0,
+        optionStepValues: { add: 'Small Kimchi Soup' },
+      },
+    ]
+    const skipped = resolveQrGuestLineOption({
+      menuId: 88,
+      menuName: 'Chicken Katsu',
+      menuPrice: 199,
+      buffetIncluded: false,
+      menuOptions: soupOnly,
+      optionIds: [],
+    })
+    expect(skipped).toMatchObject({ ok: true, name: 'Chicken Katsu', price: 199, optionIds: [] })
+
+    const withSoup = resolveQrGuestLineOption({
+      menuId: 88,
+      menuName: 'Chicken Katsu',
+      menuPrice: 199,
+      buffetIncluded: false,
+      menuOptions: soupOnly,
+      optionIds: [55],
+    })
+    expect(withSoup).toMatchObject({
+      ok: true,
+      name: 'Chicken Katsu (Small Kimchi Soup)',
+      price: 229,
+      optionIds: [55],
+    })
   })
 })
 

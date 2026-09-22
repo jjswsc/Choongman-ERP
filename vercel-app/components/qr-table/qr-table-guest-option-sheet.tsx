@@ -18,7 +18,11 @@ import {
   isBanbanFlavorWhitelistMissing,
   isBanbanMenu,
 } from '@/lib/pos-banban-utils'
-import { extractQrGuestOptionIds, findQrGuestImplicitChickenDefault } from '@/lib/qr-table-guest-menu'
+import {
+  extractQrGuestOptionIds,
+  findQrGuestImplicitChickenDefault,
+  hallSubstitutionQrGuestOptionsRequiringPick,
+} from '@/lib/qr-table-guest-menu'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 
 export type QrGuestOptionPick = {
@@ -243,7 +247,21 @@ export function QrTableGuestOptionSheet({
                   )
                   if (implicit) optionIds = [implicit.id]
                 }
-                if (options.some((o) => o.optionType !== 'additive') && optionIds.length === 0 && !defaultDisplay) {
+                const mustPick = hallSubstitutionQrGuestOptionsRequiringPick(
+                  options.map((o) => ({
+                    id: Math.floor(Number(o.id) || 0),
+                    menuId: Math.floor(Number(o.menuId) || 0),
+                    name: o.name,
+                    optionCode: String(o.optionCode || ''),
+                    priceModifier: Number(o.priceModifier) || 0,
+                    optionType: o.optionType === 'additive' ? 'additive' : 'substitution',
+                    sortOrder: Number(o.sortOrder) || 0,
+                    optionStepValues: o.optionStepValues,
+                    sellHall: o.sellHall !== false,
+                  }))
+                )
+                // 선택 추가(스프 등)만 있으면 건너뛰기 → 본메뉴 담기 허용
+                if (mustPick.length > 0 && optionIds.length === 0 && !defaultDisplay) {
                   return
                 }
                 onPick({ optionIds, optionName })
