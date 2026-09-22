@@ -20,6 +20,7 @@ import {
   qrTableStaffOpenSession,
   qrTableStaffSessionByTable,
 } from '@/lib/api-client/qr-table'
+import { getPosPrinterSettings } from '@/lib/api-client/pos-table-printer'
 import { printQrTableThermalSlip } from '@/lib/print-qr-table-thermal-slip'
 import { pickQrTokenForTable, resolveQrTableGuestUrl } from '@/lib/qr-table-thermal-slip-html'
 import { QR_FLOOR_SESSION_HINTS_POLL_MS } from '@/lib/qr-table-poll-interval'
@@ -188,12 +189,14 @@ export function QrTableSessionPanel(props: {
         await appAlert(tr('qrTablePrintNoToken', '이 테이블 QR이 없습니다. 관리자 화면에서 레이아웃 기준 생성을 먼저 해 주세요.'))
         return
       }
+      const printerSettings = await getPosPrinterSettings({ storeCode }).catch(() => null)
       await printQrTableThermalSlip({
         tableName,
         url: resolveQrTableGuestUrl(token),
         storeLabel: String(storeLabel || '').trim() || storeCode,
         scanTh: tr('qrTableScanTh', 'สแกนเพื่อสั่งอาหาร'),
         scanEn: tr('qrTableScanEn', 'Scan to order from your phone'),
+        printerSettings,
       })
     } catch (e) {
       const msg = e instanceof Error ? e.message : ''

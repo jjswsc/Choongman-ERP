@@ -8,7 +8,8 @@ import { escapeHtml } from '@/lib/utils'
 
 /** 본문 폭. 우측은 열전사 비인쇄영역 대비 패딩으로 확보 */
 export const QR_TABLE_THERMAL_SLIP_BODY_WIDTH_MM = 76
-export const QR_TABLE_THERMAL_SLIP_PADDING_MM = { t: 2, r: 14, b: 8, l: 4 } as const
+/** 하단 여백: 커터 위치까지 피드 여유 (Zywell 등 HTML 인쇄 직후 RAW 절단) */
+export const QR_TABLE_THERMAL_SLIP_PADDING_MM = { t: 2, r: 14, b: 12, l: 4 } as const
 /** 스캔 가능한 QR 한 변(mm). 80mm 롤에서 우측 여백을 뺀 본문 안에 맞춤 */
 export const QR_TABLE_THERMAL_SLIP_QR_MM = 48
 

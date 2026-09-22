@@ -908,10 +908,14 @@ const POST_HTML_PRINT_SPOOL_FLUSH_MS_RESOLVED = readConfigInt(
   0,
   10000
 );
-/** 영수증 role 전용 스풀 flush (지정 없으면 공통값 사용) */
+/**
+ * 영수증·홀·QR role 전용 스풀 flush.
+ * QR 비트맵 직후 RAW 절단이 USB에 너무 빨리 붙으면 Zywell 등에서 절단만 유실되는 사례가 있어
+ * 기본 120ms → 450ms (주방 공통 350ms보다 약간 길게).
+ */
 const POST_HTML_PRINT_SPOOL_FLUSH_MS_RECEIPT = readConfigInt(
-  process.env.WINDOWS_POS_PRINT_SPOOL_FLUSH_MS_RECEIPT || runtimeConfig.postHtmlPrintSpoolFlushMsReceipt || 120,
-  120,
+  process.env.WINDOWS_POS_PRINT_SPOOL_FLUSH_MS_RECEIPT || runtimeConfig.postHtmlPrintSpoolFlushMsReceipt || 450,
+  450,
   0,
   10000
 );
@@ -3428,8 +3432,14 @@ if (!gotLock) {
           if (!device && result.printStage === "dialog") {
             console.warn("[cm-pos] skip ESC/POS cut: dialog fallback without resolved printer name");
           } else if (device) {
-            if (isReceiptRole) {
-              /** 절단은 백그라운드 — IPC·다음 인쇄 큐를 붙잡지 않음 (RAW 포트 지연 시 ~10s+ 체감 방지) */
+            const receiptKind = payload?.printReceiptKind;
+            /**
+             * 홀·터미널·QR(`hall_order`): 직원이 바로 뜯어쓰므로 절단 완료를 기다림.
+             * 결제(`payment`)·kind 미지정(구버전): 기존처럼 지연 — 결제 큐 체감·회귀 방지.
+             * 주방: 항상 await (기존과 동일).
+             */
+            const awaitCut = !isReceiptRole || receiptKind === "hall_order";
+            if (isReceiptRole && !awaitCut) {
               out.cutOk = true;
               out.cutDeferred = true;
               void sendEscPosCutForPrinter(device, { timeoutMs: 4000 }).then((cutRes) => {
@@ -3438,7 +3448,9 @@ if (!gotLock) {
                 }
               });
             } else {
-              const cutRes = await sendEscPosCutForPrinter(device, { timeoutMs: 8000 });
+              const cutRes = await sendEscPosCutForPrinter(device, {
+                timeoutMs: isReceiptRole ? 6000 : 8000,
+              });
               out.cutOk = Boolean(cutRes.ok);
               if (cutRes.reason) out.cutReason = String(cutRes.reason);
               if (!cutRes.ok) {

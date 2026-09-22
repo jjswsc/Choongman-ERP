@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectAllPages, supabaseSelectFilter } from '@/lib/supabase-server'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 import {
   type PosOptionGroupRow,
@@ -218,9 +218,13 @@ export async function GET(request: NextRequest) {
     const storeCodesByMenuId = new Map<number, string[]>()
     let scopeSchemaReady = true
     try {
-      const scopeRows = (await supabaseSelect('pos_menu_store_scopes', {
-        limit: 100000,
+      // 한 방 select는 PostgREST max-rows(흔히 1000)에 잘리면 매장 스코프가 부분만 로드된다.
+      // 정렬 없이 잘리면 메뉴·매장 조합이 요청마다 달라져, 특정 매장에서만 특정 메뉴가 갑자기 사라진다.
+      const scopeRows = (await supabaseSelectAllPages('pos_menu_store_scopes', {
+        order: 'store_code.asc,menu_id.asc',
         select: 'menu_id,store_code,enabled',
+        pageSize: 3000,
+        maxRows: 500000,
       })) as { menu_id?: number | null; store_code?: string | null; enabled?: boolean | null }[]
       for (const row of scopeRows || []) {
         if (row.enabled === false) continue
