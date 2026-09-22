@@ -408,6 +408,23 @@ describe('applyLayoutExtract', () => {
     expect(got.fields.netAmount).toBe(1148.36)
     expect(got.fields.vatAmount).toBe(80.38)
   })
+
+  it('유효한 텍스트 TIN·금액을 borderline 좌표가 덮지 않는다', () => {
+    const tin = applyLayoutExtract(
+      { sellerTaxId: '0105559082715' },
+      { sellerTaxId: { value: '0105533116116', confidence: 62, source: 'tin-labeled' } }
+    )
+    expect(tin.fields.sellerTaxId).toBe('0105559082715')
+    const amt = applyLayoutExtract(
+      { netAmount: 1000, vatAmount: 70 },
+      {
+        netAmount: { value: 2000, confidence: 60, source: 'amount-triple' },
+        vatAmount: { value: 140, confidence: 60, source: 'amount-triple' },
+      }
+    )
+    expect(amt.fields.netAmount).toBe(1000)
+    expect(amt.fields.vatAmount).toBe(70)
+  })
 })
 
 describe('purchaseTaxLayoutWeakRegions', () => {

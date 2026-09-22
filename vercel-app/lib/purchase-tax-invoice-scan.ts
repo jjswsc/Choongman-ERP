@@ -9,7 +9,6 @@ import { roundMoney2 } from '@/lib/invoice-vat-total'
 import {
   findInvoiceTokenInText,
   invoiceMatchesVendorHint,
-  purchaseTaxLayoutWeakRegions,
   restoreInvoiceWithVendorHint,
   type LayoutExtract,
   type VendorInvoiceHint,
@@ -1907,41 +1906,30 @@ function invoiceConflictsWithVendorHint(
   return !invoiceMatchesVendorHint(row.invoiceNo, vh)
 }
 
-/** 1차 판독 뒤 고배율이 필요한 영역. 비면 고배율을 건너뛴다. */
+/**
+ * 1차 판독 뒤 고배율 영역.
+ * confidence/weak-layout으로 영역을 바꾸지 않는다 — 같으면 항상 같은 3영역(또는 스킵).
+ */
 export function purchaseTaxInvoiceHiresRegionNames(
   row: ExtractedPurchaseTaxInvoiceFields | null | undefined,
   hint?: PurchaseTaxInvoiceScanHint,
-  layout?: LayoutExtract
+  _layout?: LayoutExtract
 ): Array<'head-left' | 'head-right' | 'tail'> {
-  const weak = purchaseTaxLayoutWeakRegions(layout)
   const complete = purchaseTaxInvoiceTextExtractIsComplete(row, hint)
   const mismatch = invoiceConflictsWithVendorHint(row, hint)
-  if (complete && !weak.length && !mismatch) return []
-  const needHead =
-    mismatch ||
-    !row?.invoiceNo ||
-    !invoiceNoLooksPlausible(row.invoiceNo) ||
-    !row.sellerTaxId ||
-    row.sellerTaxId.length !== 13
-  const needTail = row?.netAmount == null || row?.vatAmount == null
-  const names = new Set<'head-left' | 'head-right' | 'tail'>(weak)
-  if (needHead) {
-    names.add('head-left')
-    names.add('head-right')
-  }
-  if (needTail) names.add('tail')
-  if (!names.size) names.add('head-left').add('head-right').add('tail')
-  const order: Array<'head-left' | 'head-right' | 'tail'> = ['head-left', 'head-right', 'tail']
-  return order.filter((n) => names.has(n))
+  if (complete && !mismatch) return []
+  return ['head-left', 'head-right', 'tail']
 }
 
-/** 번호·TIN만 있고 금액이 비면 합계 크롭을 한 번 더 돌린다. 흐릿한 값도 다시 본다. */
+/**
+ * 희소 OCR이 더 필요한가.
+ * layout confidence는 재스캔마다 흔들리므로 게이트에 쓰지 않는다.
+ */
 export function purchaseTaxInvoiceNeedsSparseOcr(
   row: ExtractedPurchaseTaxInvoiceFields | null | undefined,
   hint?: PurchaseTaxInvoiceScanHint,
-  layout?: LayoutExtract
+  _layout?: LayoutExtract
 ): boolean {
-  if (purchaseTaxLayoutWeakRegions(layout).length) return true
   if (invoiceConflictsWithVendorHint(row, hint)) return true
   if (purchaseTaxInvoiceTextExtractIsComplete(row, hint)) return false
   return true

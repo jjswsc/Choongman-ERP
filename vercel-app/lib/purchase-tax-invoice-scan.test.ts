@@ -252,13 +252,13 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
     )
   })
 
-  it('asks for tail-only hires when only amounts are missing', () => {
+  it('asks for all three hires regions when incomplete — not confidence-gated', () => {
     expect(
       purchaseTaxInvoiceHiresRegionNames(
         { invoiceNo: 'NX2026-07-0177', sellerTaxId: '0105561016821' },
         { buyerTaxId: BUYER }
       )
-    ).toEqual(['tail'])
+    ).toEqual(['head-left', 'head-right', 'tail'])
     expect(
       purchaseTaxInvoiceHiresRegionNames(
         { invoiceNo: 'NX2026-07-0177', sellerTaxId: '0105561016821', netAmount: 8320, vatAmount: 582.4 },
@@ -268,19 +268,21 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
     expect(purchaseTaxInvoiceHiresRegionNames({ netAmount: 100, vatAmount: 7 }, { buyerTaxId: BUYER })).toEqual([
       'head-left',
       'head-right',
+      'tail',
     ])
     const shaky = { invoiceNo: 'RV248070123', sellerTaxId: SELLER, netAmount: 100, vatAmount: 7 }
     expect(purchaseTaxInvoiceNeedsSparseOcr(shaky, { buyerTaxId: BUYER })).toBe(false)
+    // layout confidence alone must not force sparse (reproducibility)
     expect(
       purchaseTaxInvoiceNeedsSparseOcr(shaky, { buyerTaxId: BUYER }, {
         invoiceNo: { value: 'RV248070123', confidence: 62, source: 'tax-invoice-no' },
       })
-    ).toBe(true)
+    ).toBe(false)
     expect(
       purchaseTaxInvoiceHiresRegionNames(shaky, { buyerTaxId: BUYER }, {
         invoiceNo: { value: 'RV248070123', confidence: 62, source: 'tax-invoice-no' },
       })
-    ).toEqual(['head-left', 'head-right'])
+    ).toEqual([])
     const hints = buildVendorInvoiceHints([
       { sellerTaxId: SELLER, invoiceNo: 'RV269070486' },
       { sellerTaxId: SELLER, invoiceNo: 'RV269070512' },
@@ -290,7 +292,28 @@ describe('parsePurchaseTaxInvoiceFromPdfText', () => {
     expect(purchaseTaxInvoiceHiresRegionNames(barcode, { buyerTaxId: BUYER, vendorHints: hints })).toEqual([
       'head-left',
       'head-right',
+      'tail',
     ])
+  })
+
+  it('extracts the same fields twice from the same text and hint', () => {
+    const text = [
+      'บริษัท แพนฟู้ด จำกัด',
+      'เลขประจำตัวผู้เสียภาษีอากร 0745538001265',
+      'เลขที่ / INVOICE NO. IV690807-0378',
+      'วันที่ / DATE 07/08/2026',
+      'มูลค่าสินค้าคิดภาษี 1,700.00',
+      'ภาษีมูลค่าเพิ่ม VAT 7% 119.00',
+      'รวมเงินทั้งสิ้น 1,819.00',
+    ].join('\n')
+    const hint = { buyerTaxId: '0105568080622', taxMonth: '2026-08' }
+    const a = extractPurchaseTaxInvoiceFromScanText(text, hint)
+    const b = extractPurchaseTaxInvoiceFromScanText(text, hint)
+    expect(a).toEqual(b)
+    expect(a?.invoiceNo).toBe('IV690807-0378')
+    expect(a?.sellerTaxId).toBe('0745538001265')
+    expect(a?.netAmount).toBe(1700)
+    expect(a?.vatAmount).toBe(119)
   })
 
   it('reads hyphenated seller TIN', () => {

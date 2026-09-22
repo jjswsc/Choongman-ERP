@@ -1219,7 +1219,8 @@ export function applyLayoutExtract(
       Boolean(baseNo) &&
       !sameNo(baseNo, no.value) &&
       (textInvoiceBeatsLayout(baseNo!, no.value) ||
-        (layoutWeak && invoiceNoQuality(baseNo) >= invoiceNoQuality(no.value)))
+        (layoutWeak && invoiceNoQuality(baseNo) >= invoiceNoQuality(no.value)) ||
+        (no.confidence < 70 && invoiceNoQuality(baseNo!) > invoiceNoQuality(no.value)))
     if (!keepBase) {
       if (baseNo && !sameNo(baseNo, no.value)) disagreed.push('invoiceNo')
       if (baseNo !== no.value) usedLayout.push('invoiceNo')
@@ -1229,9 +1230,14 @@ export function applyLayoutExtract(
 
   const tin = usable(extract.sellerTaxId)
   if (tin) {
-    if (fields.sellerTaxId && fields.sellerTaxId !== tin.value) disagreed.push('sellerTaxId')
-    if (fields.sellerTaxId !== tin.value) usedLayout.push('sellerTaxId')
-    fields.sellerTaxId = tin.value
+    const baseTin = digitsTin13(fields.sellerTaxId)
+    const baseTinOk = baseTin.length === 13 && thaiTinChecksumOk(baseTin)
+    // 텍스트 TIN이 이미 유효하면 borderline 좌표 TIN으로 덮지 않는다
+    if (!(baseTinOk && tin.confidence < 70)) {
+      if (fields.sellerTaxId && fields.sellerTaxId !== tin.value) disagreed.push('sellerTaxId')
+      if (fields.sellerTaxId !== tin.value) usedLayout.push('sellerTaxId')
+      fields.sellerTaxId = tin.value
+    }
   }
 
   // 금액은 공급가·부가세·합계가 서로 맞을 때만 나오므로 셋을 함께 갈아 끼운다
@@ -1244,10 +1250,11 @@ export function applyLayoutExtract(
       fields.vatAmount > 0 &&
       !purchaseTaxVatLooksWrong(fields.netAmount, fields.vatAmount)
     const layoutOk = !purchaseTaxVatLooksWrong(net.value, vat.value)
+    const layoutBorderline = net.confidence < 70 || vat.confidence < 70
     const changed =
       Math.abs((fields.netAmount ?? -1) - net.value) > 0.01 || Math.abs((fields.vatAmount ?? -1) - vat.value) > 0.01
-    if (baseOk && !layoutOk && changed) {
-      // 텍스트 금액이 7%를 통과하는데 좌표가 깨진 숫자를 가져온 경우
+    if (baseOk && (!layoutOk || layoutBorderline) && changed) {
+      // 텍스트 7% 통과 + 좌표 깨짐/borderline → 텍스트 유지
     } else {
       if (fields.netAmount !== undefined && Math.abs(fields.netAmount - net.value) > 0.01) disagreed.push('netAmount')
       if (changed) usedLayout.push('amounts')

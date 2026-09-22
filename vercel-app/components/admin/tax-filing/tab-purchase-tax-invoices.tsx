@@ -780,51 +780,52 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       vendorProfiles = []
     }
     const learnedProfiles = readLearnedSellerProfiles()
+    /** 스캔 시작 시 고정. 이번 배치 extracted를 넣으면 앞 페이지 OCR이 뒤 페이지를 오염시킨다. */
+    const frozenVendorHints = buildVendorInvoiceHints([
+      ...learnedInvoiceHistory(learnedProfiles),
+      ...rows,
+    ])
+    const frozenLearnedNets = netsByTin(learnedProfiles)
     const sellerKnown = (): Array<{ sellerTaxId?: string; sellerName?: string; sellerBranch?: string }> => [
       ...learnedProfiles,
       ...vendorProfiles,
       ...rows,
-      ...extracted,
     ]
-
-    /** 검수 기억 + 저장된 행 + 이번 배치에서 이미 읽은 행 → 거래처별 번호 꼴 */
-    const vendorHints = () =>
-      buildVendorInvoiceHints([...learnedInvoiceHistory(learnedProfiles), ...rows, ...extracted])
-    const learnedNets = () => netsByTin(learnedProfiles)
     const scanHint = (pageText: string): PurchaseTaxInvoiceScanHint => ({
       ...hint,
       pageText,
-      vendorHints: vendorHints(),
-      learnedNetsByTin: learnedNets(),
+      vendorHints: frozenVendorHints,
+      learnedNetsByTin: frozenLearnedNets,
     })
 
     const ingestLocalPage = (page: number, pageText: string, layout?: OcrPageLayout) => {
       const known = sellerKnown()
+      const withHint = scanHint(pageText)
       const blocks = splitScanTextIntoInvoiceBlocks(pageText)
       if (blocks.length >= 2) {
         const locals = blocks.map((block) =>
           fillSellerFromProfiles(
             repairExtractedPurchaseTaxInvoice(
               extractPurchaseTaxInvoiceFromScanText(block, scanHint(block)) || {},
-              scanHint(pageText)
+              withHint
             ),
             known
           )
         )
         const collapsed = collapseExtractedInvoices(locals).map((row) =>
-          fillSellerFromProfiles(repairExtractedPurchaseTaxInvoice(row, scanHint(pageText)), known)
+          fillSellerFromProfiles(repairExtractedPurchaseTaxInvoice(row, withHint), known)
         )
         for (const local of collapsed) {
           pushFromParsed(local, page, purchaseTaxInvoiceHasExtractedFields(local) ? undefined : "ptiPdfEmptyPage")
         }
         return
       }
-      const textOnly = extractPurchaseTaxInvoiceFromScanText(pageText, hint) || {}
+      const textOnly = extractPurchaseTaxInvoiceFromScanText(pageText, withHint) || {}
       const layoutFields = layout
-        ? applyLayoutExtract(textOnly, extractFromLayout(layout, hint.buyerTaxId, vendorHints())).fields
+        ? applyLayoutExtract(textOnly, extractFromLayout(layout, hint.buyerTaxId, frozenVendorHints)).fields
         : textOnly
       const local = fillSellerFromProfiles(
-        repairExtractedPurchaseTaxInvoice(layoutFields, scanHint(pageText)),
+        repairExtractedPurchaseTaxInvoice(layoutFields, withHint),
         known
       )
       if (local && purchaseTaxInvoiceHasExtractedFields(local)) {
@@ -835,19 +836,20 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     }
 
     const extractIsComplete = (pageText: string) =>
-      purchaseTaxInvoiceTextExtractIsComplete(extractPurchaseTaxInvoiceFromScanText(pageText, hint), hint)
+      purchaseTaxInvoiceTextExtractIsComplete(
+        extractPurchaseTaxInvoiceFromScanText(pageText, scanHint(pageText)),
+        scanHint(pageText)
+      )
 
     const ensureOcrSession = async () => {
       if (!hasSharedTaxInvoiceOcrSession()) setPdfBusy({ key: "ptiOcrLoading" })
       return getSharedTaxInvoiceOcrSession()
     }
     /**
-     * 좌표 판독이 더 필요한가. 번호·세금번호·금액 중 하나라도 비면 고배율로 다시 본다.
-     * 스캔본은 지면 전체를 2200px 로 읽으면 A4 기준 150DPI 라, 작게 찍힌 번호·금액이
-     * 아예 판독에서 빠지는 일이 잦다.
+     * 좌표·텍스트 병합. 힌트는 스캔 시작 스냅샷만 쓴다.
+     * 스캔본 고배율은 필드가 비면 항상 같은 3영역을 돌려 OCR confidence 분기를 없앤다.
      */
     const mergePageExtract = (pageText: string, layout?: OcrPageLayout) => {
-      const vh = vendorHints()
       const withHint = scanHint(pageText)
       const textOnly = extractPurchaseTaxInvoiceFromScanText(pageText, withHint)
       if (!layout) {
@@ -856,7 +858,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
           layoutExtract: undefined,
         }
       }
-      const layoutExtract = extractFromLayout(layout, hint.buyerTaxId, vh)
+      const layoutExtract = extractFromLayout(layout, hint.buyerTaxId, frozenVendorHints)
       return {
         row: repairExtractedPurchaseTaxInvoice(
           applyLayoutExtract(textOnly || {}, layoutExtract).fields,
@@ -881,8 +883,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       const layouts = [page.layout]
       let pageText = [withQr, page.text].filter((s) => String(s || "").trim()).join("\n")
       let { row: extractedRow, layoutExtract } = mergePageExtract(pageText, page.layout)
-      if (source && purchaseTaxInvoiceNeedsSparseOcr(extractedRow, scanHint(pageText), layoutExtract)) {
-        const regionNames = purchaseTaxInvoiceHiresRegionNames(extractedRow, scanHint(pageText), layoutExtract)
+      const withHint = () => scanHint(pageText)
+      if (source && purchaseTaxInvoiceNeedsSparseOcr(extractedRow, withHint(), layoutExtract)) {
+        const regionNames = purchaseTaxInvoiceHiresRegionNames(extractedRow, withHint(), layoutExtract)
         if (regionNames.length) {
           setPdfBusy({
             key: "ptiOcrPageHires",
@@ -898,7 +901,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         }
       }
       const layout = mergeTaxInvoiceLayouts(layouts)
-      if (purchaseTaxInvoiceNeedsSparseOcr(extractedRow, scanHint(pageText), layoutExtract)) {
+      if (purchaseTaxInvoiceNeedsSparseOcr(extractedRow, withHint(), layoutExtract)) {
         const extra = await ocr.recognizeSparseCrops(work)
         pageText = [pageText, extra].filter((s) => String(s || "").trim()).join("\n")
       }
