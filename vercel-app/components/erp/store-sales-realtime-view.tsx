@@ -85,6 +85,11 @@ export type StoreSalesRealtimeViewProps = {
   salesStoreCodes?: string[]
   /** 부모「검색」토큰 — 당일 매출만 강제 재조회(테이블은 부모가 refetch) */
   refreshToken?: number
+  /** 카드 안「검색」— 부모 갱신(미결제 테이블·당일 매출) */
+  onLiveSearch?: () => void | Promise<void>
+  searchBusy?: boolean
+  /** 검색 시각. 예: `마지막 갱신: 2026-09-22 23:48:19` */
+  lastUpdatedLabel?: string | null
   /** 부모가 미결제 테이블 합계를 이미 조회하면 여기서 다시 치지 않음(당일 차트와 숫자 공유) */
   parentOpenTableTotals?: {
     tableTotal: number
@@ -111,6 +116,9 @@ export function StoreSalesRealtimeView({
   hideByStoreSection: _hideByStoreSection = false,
   salesStoreCodes,
   refreshToken,
+  onLiveSearch,
+  searchBusy = false,
+  lastUpdatedLabel = null,
   parentOpenTableTotals = null,
   parentOwnsOpenTables = false,
   className,
@@ -524,20 +532,37 @@ export function StoreSalesRealtimeView({
       ) : null}
 
       <section className="rounded-xl border border-border/80 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-sm">
-        <p className="text-xs font-medium text-muted-foreground">
-          {tr("mobileStoreSalesConfirmedTotal", "확정 매출")}
-          {salesRefreshing ? (
-            <span className="ml-2 text-[10px] font-normal">{t("loading")}</span>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-muted-foreground">
+              {tr("mobileStoreSalesConfirmedTotal", "확정 매출")}
+              {salesRefreshing ? (
+                <span className="ml-2 text-[10px] font-normal">{t("loading")}</span>
+              ) : null}
+            </p>
+            <p
+              className={cn(
+                "mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl",
+                salesRefreshing && "animate-pulse"
+              )}
+            >
+              {todaySales != null ? formatBahtInt(todaySales.completedTotal) : "—"}
+            </p>
+          </div>
+          {onLiveSearch ? (
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <LiveSalesSearchButton
+                onClick={onLiveSearch}
+                busy={searchBusy}
+                label={t("search")}
+                title={t("search")}
+              />
+              {lastUpdatedLabel ? (
+                <p className="text-[11px] text-muted-foreground">{lastUpdatedLabel}</p>
+              ) : null}
+            </div>
           ) : null}
-        </p>
-        <p
-          className={cn(
-            "mt-1 text-3xl font-bold tabular-nums tracking-tight text-foreground sm:text-4xl",
-            salesRefreshing && "animate-pulse"
-          )}
-        >
-          {todaySales != null ? formatBahtInt(todaySales.completedTotal) : "—"}
-        </p>
+        </div>
         {summaryMetricsGrid}
         {showSalesCharts ? (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">

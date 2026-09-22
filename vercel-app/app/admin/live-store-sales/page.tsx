@@ -21,7 +21,6 @@ import { StoreSalesRealtimeView } from "@/components/erp/store-sales-realtime-vi
 import { PosRevenueRealtimeDashboard } from "@/components/erp/pos-revenue-realtime-dashboard"
 import { AdminSalesDashboardCharts } from "@/components/erp/admin-sales-dashboard-charts"
 import { SalesPageHeader } from "@/components/erp/sales-page-header"
-import { LiveSalesSearchButton } from "@/components/erp/live-sales-search-button"
 import { getPosOpenTableTotals } from "@/lib/api-client"
 import { flattenOpenTableTotalLookup } from "@/lib/pos-open-table-totals"
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
@@ -272,24 +271,14 @@ export default function AdminLiveStoreSalesPage() {
     }
   }, [refetchStores, isAllStoresTableTotal, effectiveStoreCode, loadParentOpenTables])
 
-  const headerActions = (
-    <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+  const lastUpdatedLabel = lastUpdated
+    ? `${t("liveStoreSalesLastUpdated")}: ${getBangkokDateTimeString(lastUpdated)}`
+    : null
+
+  const headerActions =
+    dashboardStats.unapprovedOrders > 0 ? (
       <AdminDashboardPendingOrdersAlert count={dashboardStats.unapprovedOrders} />
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <LiveSalesSearchButton
-          onClick={runSearch}
-          busy={searchBusy}
-          label={t("search")}
-          title={t("search")}
-        />
-      </div>
-      {lastUpdated ? (
-        <p className="text-[11px] text-muted-foreground">
-          {t("liveStoreSalesLastUpdated")}: {getBangkokDateTimeString(lastUpdated)}
-        </p>
-      ) : null}
-    </div>
-  )
+    ) : null
 
   const showRealtimeBlock =
     showBranchRealtime || showFranchiseAllRealtime || showOfficeAllRealtime
@@ -337,6 +326,9 @@ export default function AdminLiveStoreSalesPage() {
                 salesStoreCodes={franchiseSalesStoreCodes}
                 parentOwnsOpenTables
                 parentOpenTableTotals={parentOpenTableTotals}
+                onLiveSearch={runSearch}
+                searchBusy={searchBusy}
+                lastUpdatedLabel={lastUpdatedLabel}
               />
             ) : null}
           </TabsContent>
@@ -349,6 +341,8 @@ export default function AdminLiveStoreSalesPage() {
               tableTotalByStore={tableTotalByStore}
               refreshToken={refreshToken}
               onLiveSearch={runSearch}
+              searchBusy={searchBusy}
+              lastUpdatedLabel={lastUpdatedLabel}
             />
           </TabsContent>
 
@@ -362,6 +356,8 @@ export default function AdminLiveStoreSalesPage() {
               tableTotalLoading={parentOpenTableTotals == null && loadingTables}
               refreshToken={refreshToken}
               onLiveSearch={runSearch}
+              searchBusy={searchBusy}
+              lastUpdatedLabel={lastUpdatedLabel}
             />
           </TabsContent>
         </Tabs>

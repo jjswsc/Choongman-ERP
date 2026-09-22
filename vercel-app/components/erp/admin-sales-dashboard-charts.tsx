@@ -81,8 +81,12 @@ export type AdminSalesDashboardChartsProps = {
   tableTotalByStore?: Record<string, number>
   /** 부모 자동 갱신 토큰 */
   refreshToken?: number
-  /** 있으면 탭 안 검색도 상단과 같이 미결제 테이블까지 다시 조회 */
+  /** 있으면 이「검색」이 미결제 테이블까지 다시 조회 */
   onLiveSearch?: () => void | Promise<void>
+  /** 부모 검색이 미결제 테이블까지 끝나는 동안 */
+  searchBusy?: boolean
+  /** 검색 시각. 예: `마지막 갱신: 2026-09-22 23:48:19` */
+  lastUpdatedLabel?: string | null
 }
 
 function resolveStoresParam(storeCode: string): string[] | undefined {
@@ -117,6 +121,8 @@ export function AdminSalesDashboardCharts({
   tableTotalByStore,
   refreshToken,
   onLiveSearch,
+  searchBusy = false,
+  lastUpdatedLabel = null,
 }: AdminSalesDashboardChartsProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -388,15 +394,20 @@ export function AdminSalesDashboardCharts({
             <span className="font-medium text-foreground">{businessDayYmd}</span>
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <LiveSalesSearchButton
-            onClick={handleSearch}
-            busy={loading}
-            label={tr("search", "검색")}
-          />
-          <Button asChild size="sm" variant="secondary">
-            <Link href={salesMgmtHref}>{tr("adminSalesManagement", "매출 관리")}</Link>
-          </Button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <LiveSalesSearchButton
+              onClick={handleSearch}
+              busy={loading || searchBusy}
+              label={tr("search", "검색")}
+            />
+            <Button asChild size="sm" variant="secondary">
+              <Link href={salesMgmtHref}>{tr("adminSalesManagement", "매출 관리")}</Link>
+            </Button>
+          </div>
+          {lastUpdatedLabel ? (
+            <p className="text-[11px] text-muted-foreground">{lastUpdatedLabel}</p>
+          ) : null}
         </div>
       </div>
 
