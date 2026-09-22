@@ -183,6 +183,7 @@ export async function settlePosOrderPaymentFast(params: {
   if (idempotencyKey) {
     const duplicated = await reserveRequestIdempotencyKey({
       scope: idempotencyScope,
+      tenantId: auth.tenantId,
       key: idempotencyKey,
       payload: { id, source: fromOfflineQueueSync ? 'offline_queue' : 'api', settleFast: true },
     })
@@ -194,7 +195,7 @@ export async function settlePosOrderPaymentFast(params: {
 
   const releaseIdempotencyOnFailure = async () => {
     if (!idempotencyReserved || !idempotencyKey) return
-    await releaseRequestIdempotencyKey({ scope: idempotencyScope, key: idempotencyKey })
+    await releaseRequestIdempotencyKey({ scope: idempotencyScope, key: idempotencyKey, tenantId: auth.tenantId })
     idempotencyReserved = false
   }
 

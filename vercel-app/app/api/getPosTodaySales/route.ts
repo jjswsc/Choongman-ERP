@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     searchParams.get('forceFetch') === '1' || searchParams.get('forceFetch') === 'true'
 
   try {
-    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const bizCtx = await loadPosBusinessDaySettingsContext({ storeCode })
     const hours = resolvePosBusinessHoursFromContext(bizCtx, storeCode)
     const todayYmd = getPosBusinessDateStrFromConfig(new Date(), hours)
     const startStr = startStrParam || todayYmd

@@ -140,7 +140,7 @@ export async function fetchPosSalesAnalyticsAgg(params: {
     return []
   }
 
-  const bizCtx = params.bizCtx ?? (await loadPosBusinessDaySettingsContext())
+  const bizCtx = params.bizCtx ?? (await loadPosBusinessDaySettingsContext(tenantScope?.tenantId))
   const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
   const expanded =
     params.storeCodes && params.storeCodes.length > 0

@@ -514,6 +514,7 @@ export async function POST(request: NextRequest) {
         if (idempotencyKey) {
           const duplicated = await reserveRequestIdempotencyKey({
             scope: 'cancel-approved-order-without-outbound',
+            tenantId: authResult.auth.tenantId,
             key: idempotencyKey,
             payload: { orderId },
           })
@@ -590,6 +591,7 @@ export async function POST(request: NextRequest) {
     if (idempotencyKey) {
       const duplicated = await reserveRequestIdempotencyKey({
         scope: 'delete-outbound-soft',
+        tenantId: authResult.auth.tenantId,
         key: idempotencyKey,
         payload: { mode, orderId, referenceNo, stockLogIds: stockLogIds.slice(0, 100) },
       })

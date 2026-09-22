@@ -11,6 +11,7 @@ import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 import { postStorePurchaseJournal, hasJournalForSource } from '@/lib/accounting-posting'
 import { computeOrderHqReceivableTotal } from '@/lib/order-receivable-hq'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import { resolveOrderReceiveIdempotencyKey } from '@/lib/order-receive-idempotency'
 import {
   filterNewHqOutboundRows,
@@ -251,8 +252,10 @@ export async function POST(request: NextRequest) {
       receivedQtys: receivedQtysRaw,
       receiveYmd: today,
     })
+    const receiveTenant = await resolveSaasTenantScope({ storeCode: store })
     const duplicated = await reserveRequestIdempotencyKey({
       scope: `process_order_receive:${orderId}`,
+      tenantId: receiveTenant.tenantId,
       key: idempotencyKey,
       payload: {
         orderId,

@@ -6,7 +6,9 @@ import {
   normalizeVendorCode,
   type VendorTaxLinkInput,
 } from '@/lib/store-vendor-tax-link'
-import { supabaseSelect, supabaseSelectFilter, supabaseUpsertMerge } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { appendSaasTenantFilter, resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { storeRowFilter, upsertMergeTenantStore } from '@/lib/saas-store-conflict'
 
 export type StoreTaxFilingProfile = {
   storeCode: string
@@ -222,9 +224,11 @@ export async function canonicalizeStoreCodeForTaxProfile(storeKey: string): Prom
   return id.storeCode || raw
 }
 
-export async function fetchStoreTaxFilingProfiles(): Promise<StoreTaxFilingProfile[]> {
+export async function fetchStoreTaxFilingProfiles(tenantId?: string | null): Promise<StoreTaxFilingProfile[]> {
   try {
-    const rows = (await supabaseSelectFilter('store_tax_filing_profiles', '', {
+    const tenantScope = await resolveSaasTenantScope({ auth: tenantId ? { tenantId } : null })
+    const filter = appendSaasTenantFilter('store_code=not.is.null', tenantScope, 'store_tax_filing_profiles')
+    const rows = (await supabaseSelectFilter('store_tax_filing_profiles', filter, {
       select:
         'store_code,vendor_code,taxpayer_name,tax_id,branch_no,place_of_business,sso_account_no,sso_branch_code,sso_office_address,sso_postcode,sso_phone,sso_fax,sso_email,updated_at,updated_by',
       order: 'store_code.asc',
@@ -236,13 +240,20 @@ export async function fetchStoreTaxFilingProfiles(): Promise<StoreTaxFilingProfi
   }
 }
 
-export async function fetchStoreTaxFilingProfileByCode(storeCode: string): Promise<StoreTaxFilingProfile | null> {
+export async function fetchStoreTaxFilingProfileByCode(
+  storeCode: string,
+  tenantId?: string | null
+): Promise<StoreTaxFilingProfile | null> {
   const code = String(storeCode || '').trim()
   if (!code) return null
   try {
+    const tenantScope = await resolveSaasTenantScope({
+      auth: tenantId ? { tenantId } : null,
+      storeCode: code,
+    })
     const rows = (await supabaseSelectFilter(
       'store_tax_filing_profiles',
-      `store_code=eq.${encodeURIComponent(code)}`,
+      storeRowFilter('store_code', code, tenantScope, 'store_tax_filing_profiles'),
       {
         select:
           'store_code,vendor_code,taxpayer_name,tax_id,branch_no,place_of_business,sso_account_no,sso_branch_code,sso_office_address,sso_postcode,sso_phone,sso_fax,sso_email,updated_at,updated_by',
@@ -275,10 +286,11 @@ export async function resolveStoreTaxFilingProfile(
       | 'ssoFax'
       | 'ssoEmail'
     >
-  >
+  >,
+  tenantId?: string | null
 ): Promise<StoreTaxFilingProfile> {
   const storeCode = await canonicalizeStoreCodeForTaxProfile(storeKey)
-  const fromDb = storeCode ? await fetchStoreTaxFilingProfileByCode(storeCode) : null
+  const fromDb = storeCode ? await fetchStoreTaxFilingProfileByCode(storeCode, tenantId) : null
   const resolvedKey = storeCode || String(storeKey || '').trim()
   const [resolvedVendor, branchAddrs] = await Promise.all([
     resolveVendorTaxProfile({
@@ -332,6 +344,7 @@ export async function upsertStoreTaxFilingProfile(input: {
   ssoFax?: string
   ssoEmail?: string
   updatedBy?: string
+  tenantId?: string | null
 }): Promise<StoreTaxFilingProfile> {
   const storeCode = await canonicalizeStoreCodeForTaxProfile(input.storeCode)
   if (!storeCode) throw new Error('INVALID_STORE_CODE')
@@ -361,6 +374,10 @@ export async function upsertStoreTaxFilingProfile(input: {
     updated_at: new Date().toISOString(),
   }
 
-  await supabaseUpsertMerge('store_tax_filing_profiles', 'store_code', row)
+  const tenantScope = await resolveSaasTenantScope({
+    auth: input.tenantId ? { tenantId: input.tenantId } : null,
+    storeCode,
+  })
+  await upsertMergeTenantStore('store_tax_filing_profiles', 'store_code', row, tenantScope)
   return mapStoreTaxFilingProfileRow(row)
 }

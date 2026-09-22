@@ -93,7 +93,11 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       console.warn('purchaseTaxInvoices inbound sync:', e)
     }
-    const rows = await listPurchaseTaxInvoices({ taxMonth, storeFilter })
+    const rows = await listPurchaseTaxInvoices({
+      taxMonth,
+      storeFilter,
+      tenantId: authResult.auth.tenantId,
+    })
     if (exportXlsx) {
       const wb = buildPurchaseTaxInvoiceThaiWorkbook(rows, { taxMonth })
       const buf = await writeErpXlsxWorkbookToBuffer(wb)

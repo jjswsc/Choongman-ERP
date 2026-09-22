@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(rpcSummary, { headers })
     }
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const bizCtx = await loadPosBusinessDaySettingsContext({ storeCode: stores[0] || null })
     const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
     filter = await appendStoreCodeFilterAsync(filter, stores)

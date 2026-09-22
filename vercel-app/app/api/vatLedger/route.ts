@@ -213,7 +213,7 @@ export async function GET(request: NextRequest) {
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
-    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'
     const scopedStoreFilter = !!storeFilter && storeFilter !== 'All'
     const dbStoreNames = scopedStoreFilter ? storeScope.dbStoreNameValues || [] : []

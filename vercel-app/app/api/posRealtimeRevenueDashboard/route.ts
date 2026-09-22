@@ -204,7 +204,7 @@ export async function GET(request: NextRequest) {
     )
     const nowMs = Date.now()
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const bizCtx = await loadPosBusinessDaySettingsContext(auth?.tenantId)
     const hours = resolvePosBusinessHoursFromContext(
       bizCtx,
       stores.length === 1 ? stores[0] : ''

@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
       pageSize: 4000,
       maxRows: 100000,
     })) as VatLedgerRow[] | null
-    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const storeFilteredRows = (rows || []).filter((row) => storeScope.matches(String(row.store_name || '')))
     const filteredRows =
       filingStatus === ''

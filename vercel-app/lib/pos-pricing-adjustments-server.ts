@@ -4,6 +4,8 @@ import {
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
 import { resolvePosStoreFilterCandidates } from '@/lib/pos-store-filter-candidates'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { storeRowFilter } from '@/lib/saas-store-conflict'
 
 const PRINTER_PRICING_SELECT =
   'vat_rate,vat_mode,service_rate,service_mode,card_rate,card_mode,card_base_mode,other_rate,other_mode,fee_stack_mode,fee_stack_order,payment_total_rounding_mode,round_payment_total_to_whole_baht'
@@ -24,10 +26,15 @@ function adjustmentsLookConfigured(adj: PosPricingAdjustments): boolean {
  * 매장코드 별칭(숫자↔표시명)도 순회해 요율 행을 찾는다.
  */
 export async function loadPosPricingAdjustmentsForStore(
-  storeCode: string
+  storeCode: string,
+  tenantId?: string | null
 ): Promise<PosPricingAdjustments> {
   const code = String(storeCode ?? '').trim()
   if (!code) return posPricingAdjustmentsFromPrinterSettingsDbRow(null)
+  const tenantScope = await resolveSaasTenantScope({
+    auth: tenantId ? { tenantId } : null,
+    storeCode: code,
+  })
   try {
     const candidates = await resolvePosStoreFilterCandidates(code).catch(() => [] as string[])
     const codes = [
@@ -41,7 +48,7 @@ export async function loadPosPricingAdjustmentsForStore(
     for (const c of codes) {
       const rows = (await supabaseSelectFilterStrippingUnknownColumns(
         'pos_printer_settings',
-        `store_code=eq.${encodeURIComponent(c)}`,
+        storeRowFilter('store_code', c, tenantScope, 'pos_printer_settings'),
         { limit: 1, select: PRINTER_PRICING_SELECT },
         'loadPosPricingAdjustmentsForStore'
       )) as Record<string, unknown>[] | null

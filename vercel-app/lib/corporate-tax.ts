@@ -183,7 +183,7 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
   const endDate = monthEnd(period.endMonth)
   const taxRate = Number(input.taxRate)
   const appliedTaxRate = Number.isFinite(taxRate) && taxRate >= 0 ? taxRate : 0.2
-  const taxScope = await resolveTaxScopeStoreCodes(scope.storeFilter)
+  const taxScope = await resolveTaxScopeStoreCodes(scope.storeFilter, input.tenantId)
 
   let revenue = 0
   let expense = 0

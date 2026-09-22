@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   if (!write.ok) return write.response
 
   try {
-    const settings = await loadQrOrderStoreSettings(storeCode)
+    const settings = await loadQrOrderStoreSettings(storeCode, authResult.auth.tenantId)
     const tiers = await loadBuffetTiersForStore(storeCode, { includeInactive: true, withMenus: true })
     const tokens = await listQrTokensForStore(storeCode, req.nextUrl.origin)
     return applyPosApiCors(NextResponse.json({ success: true, settings, tiers, tokens }, { headers }))
@@ -69,7 +69,7 @@ export async function PUT(req: NextRequest) {
       printBrandColor: body.printBrandColor != null ? String(body.printBrandColor) : '',
       printAccentColor: body.printAccentColor != null ? String(body.printAccentColor) : '',
       printBrandLine: body.printBrandLine != null ? String(body.printBrandLine) : '',
-    })
+    }, write.auth.tenantId)
     return applyPosApiCors(NextResponse.json({ success: true, settings }, { headers }))
   } catch (e) {
     const msg = schemaErrorMessage(e)

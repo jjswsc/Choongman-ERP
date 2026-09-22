@@ -83,17 +83,6 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
   /** 지정 시 PostgREST status=in.(...) — 미결제 테이블 등 경량 조회 */
   statusIn?: string[]
 }): Promise<PosSalesFetchedRows> {
-  const bizCtx = await loadPosBusinessDaySettingsContext()
-  const dateBucket = params.dateBucket === 'calendar' ? 'calendar' : 'business'
-  const { startISO, endISOExclusive } =
-    dateBucket === 'calendar'
-      ? posSalesBangkokCalendarRangeUtcEnvelope(params.startStr, params.endStr, 1)
-      : posSalesBusinessDateRangeUtcEnvelope(bizCtx, params.startStr, params.endStr)
-  const expanded =
-    params.storeCodes && params.storeCodes.length > 0
-      ? await expandSalesStoreCodesForFilterAsync(params.storeCodes)
-      : []
-
   const {
     appendSaasTenantFilter,
     isSaasTenantQueryBlocked,
@@ -117,6 +106,20 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
       storeCode: params.storeCodes?.[0] ?? null,
     })
   }
+
+  const bizCtx = await loadPosBusinessDaySettingsContext({
+    tenantId: tenantScope?.tenantId,
+    storeCode: params.storeCodes?.[0] ?? null,
+  })
+  const dateBucket = params.dateBucket === 'calendar' ? 'calendar' : 'business'
+  const { startISO, endISOExclusive } =
+    dateBucket === 'calendar'
+      ? posSalesBangkokCalendarRangeUtcEnvelope(params.startStr, params.endStr, 1)
+      : posSalesBusinessDateRangeUtcEnvelope(bizCtx, params.startStr, params.endStr)
+  const expanded =
+    params.storeCodes && params.storeCodes.length > 0
+      ? await expandSalesStoreCodesForFilterAsync(params.storeCodes)
+      : []
 
   if (tenantScope && isSaasTenantQueryBlocked(tenantScope, 'pos_orders')) {
     return { rows: [], truncated: false, bizCtx }

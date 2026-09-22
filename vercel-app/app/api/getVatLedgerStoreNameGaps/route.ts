@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
-    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const report = await analyzeVatLedgerStoreNameGaps({
       months: period.months,
       storeFilter: storeFilter || 'All',

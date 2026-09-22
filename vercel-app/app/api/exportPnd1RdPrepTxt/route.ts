@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
     // entity:/taxid: 는 store_name=eq 가 아니라 스코프 매처로 필터 (빈 TXT 원인)
-    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const rows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', monthFilter, {
       select: '*',
       pageSize: 4000,

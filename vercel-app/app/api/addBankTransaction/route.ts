@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
     if (idempotencyKey) {
       const duplicate = await reserveRequestIdempotencyKey({
         scope: 'addBankTransaction',
+        tenantId: auth.tenantId,
         key: idempotencyKey,
         payload: {
           accountId: body.accountId ?? body.account_id ?? null,

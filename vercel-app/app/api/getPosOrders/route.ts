@@ -400,7 +400,7 @@ export async function GET(request: NextRequest) {
     let bizDayUtcRange: { startISO: string; endISOExclusive: string } | null = null
     let posBizDayFilterCtx: PosBusinessDaySettingsContext | null = null
     if (posBizDayScope && startDate && endDate) {
-      posBizDayFilterCtx = await loadPosBusinessDaySettingsContext()
+      posBizDayFilterCtx = await loadPosBusinessDaySettingsContext(tenantScope.tenantId)
       bizDayUtcRange =
         startDate === endDate
           ? posBusinessDayUtcEnvelopeBangkokYmd(startDate, posBizDayFilterCtx)

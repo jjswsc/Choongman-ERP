@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
     if (idempotencyKey) {
       const duplicate = await reserveRequestIdempotencyKey({
         scope: 'savePurchaseOrder',
+        tenantId: auth.tenantId,
         key: idempotencyKey,
         payload: {
           vendorCode: body.vendorCode ?? null,

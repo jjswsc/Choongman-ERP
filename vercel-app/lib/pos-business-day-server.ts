@@ -1,4 +1,10 @@
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { resolveSaasTenantScope, type SaasTenantScope } from '@/lib/saas-tenant-scope'
+import {
+  tenantScopedSettingsKey,
+  tenantScopedSettingsKeys,
+  type TenantSettingsScope,
+} from '@/lib/tenant-system-settings'
 import {
   normalizePosBusinessHours,
   POS_BUSINESS_DAY_DEFAULT_HOURS,
@@ -18,12 +24,38 @@ export type PosBusinessDaySettingsContext = {
   byNormKey: Map<string, PosBusinessHoursConfig>
 }
 
-let cache: { at: number; ctx: PosBusinessDaySettingsContext } | null = null
+type BusinessDayCacheEntry = { at: number; ctx: PosBusinessDaySettingsContext }
+const cacheByTenant = new Map<string, BusinessDayCacheEntry>()
 /** 영업일 설정은 자주 바뀌지 않음. 저장 시 invalidatePosBusinessDayServerCache()로 즉시 반영 */
 const TTL_MS = 300_000
 
+export type PosBusinessDayLoadHint = {
+  tenantId?: string | null
+  storeCode?: string | null
+}
+
 export function invalidatePosBusinessDayServerCache(): void {
-  cache = null
+  cacheByTenant.clear()
+}
+
+async function resolveBusinessDayScope(
+  hint?: PosBusinessDayLoadHint | string | null
+): Promise<SaasTenantScope> {
+  if (typeof hint === 'string' || hint == null) {
+    return resolveSaasTenantScope({ auth: hint ? { tenantId: hint } : null })
+  }
+  return resolveSaasTenantScope({
+    auth: hint.tenantId ? { tenantId: hint.tenantId } : null,
+    storeCode: hint.storeCode,
+  })
+}
+
+function toSettingsScope(scope: SaasTenantScope): TenantSettingsScope {
+  return { enforce: scope.enforce, tenantId: scope.tenantId }
+}
+
+function cacheKeyFor(scope: TenantSettingsScope): string {
+  return scope.enforce && scope.tenantId ? scope.tenantId : ''
 }
 
 function parseByStoreJson(raw: unknown): Map<string, PosBusinessHoursConfig> {
@@ -49,34 +81,48 @@ function parseByStoreJson(raw: unknown): Map<string, PosBusinessHoursConfig> {
   return map
 }
 
-export async function loadPosBusinessDaySettingsContext(): Promise<PosBusinessDaySettingsContext> {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.ctx
+export async function loadPosBusinessDaySettingsContext(
+  hint?: PosBusinessDayLoadHint | string | null
+): Promise<PosBusinessDaySettingsContext> {
+  const settingsScope = toSettingsScope(await resolveBusinessDayScope(hint))
+  const cacheKey = cacheKeyFor(settingsScope)
+  const cached = cacheByTenant.get(cacheKey)
+  if (cached && Date.now() - cached.at < TTL_MS) return cached.ctx
   try {
-    const orFilter = `or=(key.eq.${encodeURIComponent(POS_BUSINESS_DAY_KEY_GLOBAL)},key.eq.${encodeURIComponent(POS_BUSINESS_DAY_KEY_BY_STORE)})`
+    const lookupKeys = [
+      ...new Set([
+        ...tenantScopedSettingsKeys(POS_BUSINESS_DAY_KEY_GLOBAL, settingsScope),
+        ...tenantScopedSettingsKeys(POS_BUSINESS_DAY_KEY_BY_STORE, settingsScope),
+      ]),
+    ]
+    const orFilter = `or=(${lookupKeys.map((k) => `key.eq.${encodeURIComponent(k)}`).join(',')})`
     const rows = (await supabaseSelectFilter('system_settings', orFilter, {
-      limit: 10,
+      limit: Math.max(lookupKeys.length, 4),
+      select: 'key,value_json',
     })) as { key?: string; value_json?: unknown }[] | null
 
-    let globalDefault = POS_BUSINESS_DAY_DEFAULT_HOURS
-    const byNormKey = new Map<string, PosBusinessHoursConfig>()
+    const byKey = new Map<string, unknown>()
     for (const row of rows || []) {
-      const k = String(row.key || '')
-      if (k === POS_BUSINESS_DAY_KEY_GLOBAL) {
-        globalDefault = normalizePosBusinessHours(row.value_json)
-      } else if (k === POS_BUSINESS_DAY_KEY_BY_STORE) {
-        const m = parseByStoreJson(row.value_json)
-        for (const [nk, c] of m) byNormKey.set(nk, c)
-      }
+      const k = String(row.key || '').trim()
+      if (k) byKey.set(k, row.value_json)
     }
+    const globalKey = tenantScopedSettingsKeys(POS_BUSINESS_DAY_KEY_GLOBAL, settingsScope).find((k) =>
+      byKey.has(k)
+    )
+    const storeKey = tenantScopedSettingsKeys(POS_BUSINESS_DAY_KEY_BY_STORE, settingsScope).find((k) =>
+      byKey.has(k)
+    )
+    const globalDefault = globalKey ? normalizePosBusinessHours(byKey.get(globalKey)) : POS_BUSINESS_DAY_DEFAULT_HOURS
+    const byNormKey = storeKey ? parseByStoreJson(byKey.get(storeKey)) : new Map<string, PosBusinessHoursConfig>()
     const ctx: PosBusinessDaySettingsContext = { globalDefault, byNormKey }
-    cache = { at: Date.now(), ctx }
+    cacheByTenant.set(cacheKey, { at: Date.now(), ctx })
     return ctx
   } catch {
     const ctx: PosBusinessDaySettingsContext = {
       globalDefault: POS_BUSINESS_DAY_DEFAULT_HOURS,
       byNormKey: new Map(),
     }
-    cache = { at: Date.now(), ctx }
+    cacheByTenant.set(cacheKey, { at: Date.now(), ctx })
     return ctx
   }
 }
@@ -103,7 +149,7 @@ export function resolvePosBusinessDayStartFromContext(
 
 /** 매장 코드 기준 적용 영업 시간(전사 기본 또는 매장 덮어쓰기) */
 export async function loadPosBusinessHoursForServer(storeCode?: string | null): Promise<PosBusinessHoursConfig> {
-  const ctx = await loadPosBusinessDaySettingsContext()
+  const ctx = await loadPosBusinessDaySettingsContext({ storeCode })
   return resolvePosBusinessHoursFromContext(ctx, storeCode)
 }
 
@@ -184,14 +230,30 @@ export function authCanSavePosBusinessDayForStore(auth: JwtPayload, storeCode: s
   return authAllowedStoreNormKeys(auth).has(nk)
 }
 
-export async function readPosBusinessDayByStoreJson(): Promise<Record<string, PosBusinessHoursConfig>> {
+async function readSettingJson(baseKey: string, hint?: PosBusinessDayLoadHint | string | null): Promise<unknown | null> {
+  const settingsScope = toSettingsScope(await resolveBusinessDayScope(hint))
+  const keys = tenantScopedSettingsKeys(baseKey, settingsScope)
+  const filter = `or=(${keys.map((k) => `key.eq.${encodeURIComponent(k)}`).join(',')})`
+  const rows = (await supabaseSelectFilter('system_settings', filter, {
+    limit: keys.length,
+    select: 'key,value_json',
+  })) as { key?: string; value_json?: unknown }[] | null
+  const byKey = new Map<string, unknown>()
+  for (const row of rows || []) {
+    const k = String(row.key || '').trim()
+    if (k) byKey.set(k, row.value_json)
+  }
+  for (const candidate of keys) {
+    if (byKey.has(candidate)) return byKey.get(candidate) ?? null
+  }
+  return null
+}
+
+export async function readPosBusinessDayByStoreJson(
+  hint?: PosBusinessDayLoadHint | string | null
+): Promise<Record<string, PosBusinessHoursConfig>> {
   try {
-    const rows = (await supabaseSelectFilter(
-      'system_settings',
-      `key.eq.${encodeURIComponent(POS_BUSINESS_DAY_KEY_BY_STORE)}`,
-      { limit: 1 }
-    )) as { value_json?: unknown }[] | null
-    const m = parseByStoreJson(rows?.[0]?.value_json)
+    const m = parseByStoreJson(await readSettingJson(POS_BUSINESS_DAY_KEY_BY_STORE, hint))
     const o: Record<string, PosBusinessHoursConfig> = {}
     for (const [k, v] of m) o[k] = v
     return o
@@ -208,7 +270,10 @@ function serializeHoursForJson(c: PosBusinessHoursConfig): { start: { hour: numb
   }
 }
 
-export async function writePosBusinessDayByStoreJson(stores: Record<string, PosBusinessHoursConfig>): Promise<void> {
+export async function writePosBusinessDayByStoreJson(
+  stores: Record<string, PosBusinessHoursConfig>,
+  hint?: PosBusinessDayLoadHint | string | null
+): Promise<void> {
   const normalized: Record<string, { start: { hour: number; minute: number }; end: { hour: number; minute: number } }> =
     {}
   for (const [k, v] of Object.entries(stores)) {
@@ -216,11 +281,12 @@ export async function writePosBusinessDayByStoreJson(stores: Record<string, PosB
     if (!nk) continue
     normalized[nk] = serializeHoursForJson(v)
   }
+  const settingsScope = toSettingsScope(await resolveBusinessDayScope(hint))
   await supabaseUpsert(
     'system_settings',
     [
       {
-        key: POS_BUSINESS_DAY_KEY_BY_STORE,
+        key: tenantScopedSettingsKey(POS_BUSINESS_DAY_KEY_BY_STORE, settingsScope),
         value_json: { v: 1 as const, stores: normalized },
         updated_at: new Date().toISOString(),
       },
@@ -232,26 +298,31 @@ export async function writePosBusinessDayByStoreJson(stores: Record<string, PosB
 
 export async function upsertPosBusinessDayStoreOverride(
   storeCode: string,
-  config: PosBusinessHoursConfig | null
+  config: PosBusinessHoursConfig | null,
+  hint?: PosBusinessDayLoadHint | string | null
 ): Promise<void> {
   const nk = normStoreKey(storeCode)
   if (!nk) return
-  const current = await readPosBusinessDayByStoreJson()
+  const current = await readPosBusinessDayByStoreJson(hint ?? { storeCode })
   if (config == null) {
     delete current[nk]
   } else {
     current[nk] = normalizePosBusinessHours(config)
   }
-  await writePosBusinessDayByStoreJson(current)
+  await writePosBusinessDayByStoreJson(current, hint ?? { storeCode })
 }
 
-export async function upsertPosBusinessDayGlobal(config: PosBusinessHoursConfig): Promise<void> {
+export async function upsertPosBusinessDayGlobal(
+  config: PosBusinessHoursConfig,
+  hint?: PosBusinessDayLoadHint | string | null
+): Promise<void> {
   const c = normalizePosBusinessHours(config)
+  const settingsScope = toSettingsScope(await resolveBusinessDayScope(hint))
   await supabaseUpsert(
     'system_settings',
     [
       {
-        key: POS_BUSINESS_DAY_KEY_GLOBAL,
+        key: tenantScopedSettingsKey(POS_BUSINESS_DAY_KEY_GLOBAL, settingsScope),
         value_json: serializeHoursForJson(c),
         updated_at: new Date().toISOString(),
       },

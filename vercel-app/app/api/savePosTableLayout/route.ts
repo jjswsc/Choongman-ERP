@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { resolveSaasTenantScope, stampSaasTenantId } from '@/lib/saas-tenant-scope'
+import { storeRowFilter } from '@/lib/saas-store-conflict'
 import {
   normalizePosFloorLabels,
   normalizePosTableColor,
@@ -15,12 +18,15 @@ import {
   type PosTableLayoutDbRow,
 } from '@/lib/pos-table-layout-store-match'
 
-async function findExistingPosTableLayoutRow(storeCode: string): Promise<PosTableLayoutDbRow | null> {
+async function findExistingPosTableLayoutRow(
+  storeCode: string,
+  tenantScope: Awaited<ReturnType<typeof resolveSaasTenantScope>>
+): Promise<PosTableLayoutDbRow | null> {
   for (const code of posTableLayoutStoreCodeCandidates(storeCode)) {
     try {
       const result = (await supabaseSelectFilter(
         'pos_table_layouts',
-        `store_code=ilike.${encodeURIComponent(code)}`,
+        storeRowFilter('store_code', code, tenantScope, 'pos_table_layouts', 'ilike'),
         { limit: 1 }
       )) as PosTableLayoutDbRow[] | null
       if (result?.[0]) return result[0]
@@ -74,7 +80,12 @@ export async function POST(req: NextRequest) {
       })
 
     // get과 동일 매칭으로 기존 행을 찾아 UPDATE — 표기만 다른 store_code에 INSERT하면 조회가 옛 1개 레이아웃을 반환할 수 있음
-    const existing = await findExistingPosTableLayoutRow(storeCode)
+    const auth = await tryVerifyBearerFromRequest(req)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode,
+    })
+    const existing = await findExistingPosTableLayoutRow(storeCode, tenantScope)
     const persistStoreCode = String(existing?.store_code ?? storeCode).trim() || storeCode
 
     let floorLabels: PosFloorLabels = {}
@@ -89,14 +100,18 @@ export async function POST(req: NextRequest) {
     if (existing?.store_code) {
       await supabaseUpdateByFilter(
         'pos_table_layouts',
-        `store_code=eq.${encodeURIComponent(persistStoreCode)}`,
+        storeRowFilter('store_code', persistStoreCode, tenantScope, 'pos_table_layouts'),
         { layout_json: layoutJson, updated_at: new Date().toISOString() }
       )
     } else {
-      await supabaseInsert('pos_table_layouts', {
-        store_code: persistStoreCode,
-        layout_json: layoutJson,
-      })
+      await supabaseInsert(
+        'pos_table_layouts',
+        stampSaasTenantId(
+          { store_code: persistStoreCode, layout_json: layoutJson },
+          tenantScope,
+          'pos_table_layouts'
+        )
+      )
     }
 
     return NextResponse.json({ success: true, storeCode: persistStoreCode }, { headers })

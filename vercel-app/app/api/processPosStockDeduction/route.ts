@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
     if (idempotencyKey) {
       const duplicate = await reserveRequestIdempotencyKey({
         scope: 'processPosStockDeduction',
+        tenantId: authGate.auth.tenantId,
         key: idempotencyKey,
         payload: { orderId: body?.orderId ?? body?.id ?? null },
       })

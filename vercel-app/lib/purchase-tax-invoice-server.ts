@@ -14,6 +14,7 @@ import {
   vatLedgerRowForSchemaError,
 } from '@/lib/vat-ledger-invoice-evidence'
 import { parseTaxScopeFilter } from '@/lib/tax-entity-scope'
+import { appendSaasTenantFilter, resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import {
   digitsTin13,
   formatSellerBranch,
@@ -96,12 +97,13 @@ export async function resolveBuyerTaxIdForStore(storeName: string): Promise<stri
   return digitsTin13(profile.taxId)
 }
 
-async function loadEntityBuyerTaxId(entityCode: string): Promise<string> {
+async function loadEntityBuyerTaxId(entityCode: string, tenantId?: string | null): Promise<string> {
   if (!entityCode) return ''
   try {
+    const scope = await resolveSaasTenantScope({ auth: tenantId ? { tenantId } : null })
     const rows = (await supabaseSelectFilter(
       'tax_entities',
-      `entity_code=eq.${encodeURIComponent(entityCode)}`,
+      appendSaasTenantFilter(`entity_code=eq.${encodeURIComponent(entityCode)}`, scope, 'tax_entities'),
       { select: 'tax_id', limit: 1 }
     )) as { tax_id?: string | null }[] | null
     return normalizeStoreTaxId(rows?.[0]?.tax_id)
@@ -113,6 +115,7 @@ async function loadEntityBuyerTaxId(entityCode: string): Promise<string> {
 export async function listPurchaseTaxInvoices(params: {
   taxMonth: string
   storeFilter?: string
+  tenantId?: string | null
 }): Promise<PurchaseTaxInvoiceRow[]> {
   const taxMonth = String(params.taxMonth || '').slice(0, 7)
   if (!/^\d{4}-\d{2}$/.test(taxMonth)) return []
@@ -121,7 +124,7 @@ export async function listPurchaseTaxInvoices(params: {
   if (parsed.kind === 'taxid' && parsed.value.length === 13) {
     parts.push(`buyer_tax_id=eq.${encodeURIComponent(parsed.value)}`)
   } else if (parsed.kind === 'entity') {
-    const tin = await loadEntityBuyerTaxId(parsed.value)
+    const tin = await loadEntityBuyerTaxId(parsed.value, params.tenantId)
     if (tin.length === 13) parts.push(`buyer_tax_id=eq.${encodeURIComponent(tin)}`)
     else if (!tin) return []
   } else if (parsed.kind === 'store' && parsed.value) {

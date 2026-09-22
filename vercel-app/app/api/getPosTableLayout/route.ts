@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { appendSaasTenantFilter, resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { storeRowFilter } from '@/lib/saas-store-conflict'
 import { parsePosTableLayoutJson } from '@/lib/pos-table-layout-payload'
 import {
   matchPosTableLayoutRow,
@@ -19,12 +22,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const auth = await tryVerifyBearerFromRequest(request)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode,
+    })
     let rows: PosTableLayoutDbRow[] | null = null
     for (const code of posTableLayoutStoreCodeCandidates(storeCode)) {
       try {
         const result = (await supabaseSelectFilter(
           'pos_table_layouts',
-          `store_code=ilike.${encodeURIComponent(code)}`,
+          storeRowFilter('store_code', code, tenantScope, 'pos_table_layouts', 'ilike'),
           { limit: 1 }
         )) as PosTableLayoutDbRow[] | null
         rows = result
@@ -39,10 +47,16 @@ export async function GET(request: NextRequest) {
     if (!rows?.length) {
       let allRows: PosTableLayoutDbRow[] | null = null
       try {
-        allRows = (await supabaseSelect('pos_table_layouts', {
-          limit: 50,
-          select: 'store_code,layout_json,updated_at',
-        })) as PosTableLayoutDbRow[] | null
+        const fallbackFilter = appendSaasTenantFilter('store_code=not.is.null', tenantScope, 'pos_table_layouts')
+        allRows = fallbackFilter
+          ? ((await supabaseSelectFilter('pos_table_layouts', fallbackFilter, {
+              limit: 50,
+              select: 'store_code,layout_json,updated_at',
+            })) as PosTableLayoutDbRow[] | null)
+          : ((await supabaseSelect('pos_table_layouts', {
+              limit: 50,
+              select: 'store_code,layout_json,updated_at',
+            })) as PosTableLayoutDbRow[] | null)
       } catch {
         // RLS 등으로 SELECT 실패 시 빈 배열 반환
       }

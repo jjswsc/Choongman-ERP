@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { appendSaasTenantFilter, resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import { formatTaxEntityScopeLabel } from '@/lib/tax-entity-scope'
 import { normalizeStoreTaxId } from '@/lib/store-tax-filing-profile'
 
@@ -41,16 +42,22 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const entities = (await supabaseSelectFilter('tax_entities', '', {
+    const tenantScope = await resolveSaasTenantScope({
+      auth: { tenantId: authResult.auth.tenantId, company: authResult.auth.company },
+    })
+    const entityFilter = appendSaasTenantFilter('', tenantScope, 'tax_entities')
+    const linkFilter = appendSaasTenantFilter('', tenantScope, 'tax_entity_stores')
+    const profileFilter = appendSaasTenantFilter('', tenantScope, 'store_tax_filing_profiles')
+    const entities = (await supabaseSelectFilter('tax_entities', entityFilter, {
       select: 'entity_code,entity_name,tax_id,is_active',
       order: 'entity_code.asc',
       limit: 5000,
     })) as TaxEntityRow[] | null
-    const links = (await supabaseSelectFilter('tax_entity_stores', '', {
+    const links = (await supabaseSelectFilter('tax_entity_stores', linkFilter, {
       select: 'entity_code,store_code',
       limit: 10000,
     })) as TaxEntityStoreRow[] | null
-    const profiles = (await supabaseSelectFilter('store_tax_filing_profiles', '', {
+    const profiles = (await supabaseSelectFilter('store_tax_filing_profiles', profileFilter, {
       select: 'store_code,tax_id',
       limit: 5000,
     })) as StoreTaxProfileRow[] | null

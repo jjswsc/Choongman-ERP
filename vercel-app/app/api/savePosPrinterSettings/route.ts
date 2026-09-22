@@ -5,7 +5,6 @@ import {
   supabaseSelect,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
-  supabaseUpsertMerge,
 } from '@/lib/supabase-server'
 import { normalizeKitchenRouteMapInput } from '@/lib/pos-kitchen-slip-routing'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
@@ -20,6 +19,8 @@ import {
 import { LINKPOS_FORCE_MANUAL_CARD, isLinkposCardApiEnabled } from '@/lib/linkpos-card-api-enabled'
 import { normalizePosQrDisplayMode } from '@/lib/pos-qr-display-mode'
 import { sanitizeChoongmanStoreKbankOverride } from '@/lib/kbank-store-merchant-defaults'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { storeRowFilter, upsertMergeTenantStore } from '@/lib/saas-store-conflict'
 
 /** POS 주문/결산 직원 등: 고객 화면·듀얼 모니터 컬럼만 갱신 (나머지는 DB 기존값 유지) */
 const CUSTOMER_DISPLAY_ONLY_DB_KEYS = new Set([
@@ -77,7 +78,11 @@ function extractMissingColumnName(error: unknown): string | null {
   return m?.[1] || null
 }
 
-async function upsertWithMissingColumnFallback(storeCode: string, patch: Record<string, unknown>) {
+async function upsertWithMissingColumnFallback(
+  storeCode: string,
+  patch: Record<string, unknown>,
+  tenantScope: Awaited<ReturnType<typeof resolveSaasTenantScope>>
+) {
   const workingPatch: Record<string, unknown> = { ...patch }
   const skipped: string[] = []
   // PGRST204: 컬럼 1개씩 제거 후 재시도. 상한 = patch 키 수(스키마 갭이 커도 존재하는 컬럼은 저장)
@@ -85,10 +90,12 @@ async function upsertWithMissingColumnFallback(storeCode: string, patch: Record<
 
   for (let i = 0; i < maxRetries; i++) {
     try {
-      await supabaseUpsertMerge('pos_printer_settings', 'store_code', {
-        store_code: storeCode,
-        ...workingPatch,
-      })
+      await upsertMergeTenantStore(
+        'pos_printer_settings',
+        'store_code',
+        { store_code: storeCode, ...workingPatch },
+        tenantScope
+      )
       if (skipped.length > 0) {
         console.warn(
           `savePosPrinterSettings: skipped ${skipped.length} missing column(s): ${skipped.join(', ')}`
@@ -204,6 +211,10 @@ export async function POST(req: NextRequest) {
     const requestedStoreCode = String(body?.storeCode ?? '').trim()
     const office = hasOfficeStaffScope(actorRole, authStore)
     const storeCode = office ? requestedStoreCode : requestedStoreCode || authStore
+    const tenantScope = await resolveSaasTenantScope({
+      auth: { tenantId: authResult.auth.tenantId, company: authResult.auth.company },
+      storeCode,
+    })
     const kitchenMode = Math.min(3, Math.max(1, Number(body?.kitchenMode) || 1))
     const kitchen1Categories = Array.isArray(body?.kitchen1Categories)
       ? body.kitchen1Categories.filter((c: unknown) => typeof c === 'string')
@@ -397,7 +408,7 @@ export async function POST(req: NextRequest) {
     }
     const previousRows = (await supabaseSelectFilter(
       'pos_printer_settings',
-      `store_code=eq.${encodeURIComponent(storeCode)}`,
+      storeRowFilter('store_code', storeCode, tenantScope, 'pos_printer_settings'),
       { limit: 1 }
     )) as Record<string, unknown>[] | null
     const previous = previousRows?.[0] || {}
@@ -564,7 +575,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await upsertWithMissingColumnFallback(storeCode, patch)
+    await upsertWithMissingColumnFallback(storeCode, patch, tenantScope)
     try {
       const changedKeys = Object.keys(patch).filter((key) => {
         if (key === 'updated_at') return false

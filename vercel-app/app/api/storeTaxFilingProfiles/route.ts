@@ -40,10 +40,10 @@ export async function GET(request: NextRequest) {
     const storeCode = String(new URL(request.url).searchParams.get('storeCode') || '').trim()
     if (storeCode) {
       const { resolveStoreTaxFilingProfile } = await import('@/lib/store-tax-filing-profile')
-      const profile = await resolveStoreTaxFilingProfile(storeCode)
+      const profile = await resolveStoreTaxFilingProfile(storeCode, undefined, authResult.auth.tenantId)
       return NextResponse.json({ profile }, { headers })
     }
-    const profiles = await fetchStoreTaxFilingProfiles()
+    const profiles = await fetchStoreTaxFilingProfiles(authResult.auth.tenantId)
     return NextResponse.json({ profiles }, { headers })
   } catch (e) {
     console.error('storeTaxFilingProfiles GET:', e)
@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
       ssoFax,
       ssoEmail,
       updatedBy: actor,
+      tenantId: authResult.auth.tenantId,
     })
 
     await writeAccountingComplianceAudit({

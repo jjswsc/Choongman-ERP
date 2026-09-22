@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
-    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const matchesStore = (name: string) => storeScope.matches(name)
     const probeOnly = String(searchParams.get('probeOnly') || '').trim() === '1'
     if (probeOnly) {

@@ -258,7 +258,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const bizCtx = await loadPosBusinessDaySettingsContext({ storeCode: stores[0] || null })
     const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     const attemptFilter = [
       `created_at=gte.${encodeURIComponent(startISO)}`,

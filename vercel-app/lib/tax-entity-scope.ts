@@ -3,6 +3,7 @@ import 'server-only'
 import { resolveErpStoreIdentity } from '@/lib/erp-store-identity'
 import { normalizeStoreTaxId } from '@/lib/store-tax-filing-profile'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { appendSaasTenantFilter, resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 
 export {
   cleanTaxEntityDisplayName,
@@ -36,12 +37,19 @@ export function parseTaxScopeFilter(filter: string): { kind: 'all' | 'store' | '
   return { kind: 'store', value: raw }
 }
 
-async function loadEntityTaxId(entityCode: string): Promise<string> {
+async function withTenantFilter(base: string, table: string, tenantId?: string | null): Promise<string> {
+  const id = String(tenantId || '').trim()
+  if (!id) return base
+  const scope = await resolveSaasTenantScope({ auth: { tenantId: id } })
+  return appendSaasTenantFilter(base, scope, table) || base
+}
+
+async function loadEntityTaxId(entityCode: string, tenantId?: string | null): Promise<string> {
   if (!entityCode) return ''
   try {
     const rows = (await supabaseSelectFilter(
       'tax_entities',
-      `entity_code=eq.${encodeURIComponent(entityCode)}`,
+      await withTenantFilter(`entity_code=eq.${encodeURIComponent(entityCode)}`, 'tax_entities', tenantId),
       { select: 'tax_id', limit: 1 }
     )) as { tax_id?: string | null }[] | null
     return normalizeStoreTaxId(rows?.[0]?.tax_id)
@@ -54,13 +62,17 @@ async function loadEntityTaxId(entityCode: string): Promise<string> {
  * 법인에 매핑된 매장 + (법인 tax_id가 있으면) 같은 사업자번호 프로필 매장.
  * tax_entity_stores에 본사만 있어도 지점이 같은 TIN이면 합산에 포함.
  */
-async function loadEntityStoreCodes(entityCode: string): Promise<Set<string>> {
+async function loadEntityStoreCodes(entityCode: string, tenantId?: string | null): Promise<Set<string>> {
   if (!entityCode) return new Set<string>()
   const out = new Set<string>()
   try {
     const rows = (await supabaseSelectFilter(
       'tax_entity_stores',
-      `entity_code=eq.${encodeURIComponent(entityCode)}`,
+      await withTenantFilter(
+        `entity_code=eq.${encodeURIComponent(entityCode)}`,
+        'tax_entity_stores',
+        tenantId
+      ),
       { select: 'entity_code,store_code', limit: 5000 }
     )) as TaxEntityStoreRow[] | null
     for (const r of rows || []) {
@@ -70,20 +82,20 @@ async function loadEntityStoreCodes(entityCode: string): Promise<Set<string>> {
   } catch {
     /* ignore */
   }
-  const taxId = await loadEntityTaxId(entityCode)
+  const taxId = await loadEntityTaxId(entityCode, tenantId)
   if (taxId.length === 13) {
-    const byTin = await loadStoreCodesByTaxId(taxId)
+    const byTin = await loadStoreCodesByTaxId(taxId, tenantId)
     for (const code of byTin) out.add(code)
   }
   return out
 }
 
-async function loadStoreCodesByTaxId(taxId: string): Promise<Set<string>> {
+async function loadStoreCodesByTaxId(taxId: string, tenantId?: string | null): Promise<Set<string>> {
   const want = normalizeStoreTaxId(taxId)
   if (want.length !== 13) return new Set<string>()
   try {
     // 저장 형식이 숫자만/하이픈 혼재할 수 있어 넓게 가져온 뒤 정규화 비교
-    const rows = (await supabaseSelectFilter('store_tax_filing_profiles', '', {
+    const rows = (await supabaseSelectFilter('store_tax_filing_profiles', await withTenantFilter('', 'store_tax_filing_profiles', tenantId), {
       select: 'store_code,tax_id',
       limit: 5000,
     })) as StoreTaxProfileRow[] | null
@@ -113,7 +125,10 @@ export type TaxScopeStoreCodes = {
  * - All: storeCodes=null
  * - store/taxid/entity: storeCodes=매핑된 코드 배열(없으면 빈 배열)
  */
-export async function resolveTaxScopeStoreCodes(scopeFilter: string): Promise<TaxScopeStoreCodes> {
+export async function resolveTaxScopeStoreCodes(
+  scopeFilter: string,
+  tenantId?: string | null
+): Promise<TaxScopeStoreCodes> {
   const rawFilter = normalizeScopeToken(scopeFilter)
   const parsed = parseTaxScopeFilter(rawFilter)
   if (parsed.kind === 'all') {
@@ -129,8 +144,8 @@ export async function resolveTaxScopeStoreCodes(scopeFilter: string): Promise<Ta
   }
   const set =
     parsed.kind === 'taxid'
-      ? await loadStoreCodesByTaxId(parsed.value)
-      : await loadEntityStoreCodes(parsed.value)
+      ? await loadStoreCodesByTaxId(parsed.value, tenantId)
+      : await loadEntityStoreCodes(parsed.value, tenantId)
   return { storeCodes: Array.from(set), kind: parsed.kind, rawFilter }
 }
 
@@ -141,8 +156,11 @@ export async function resolveTaxScopeStoreCodes(scopeFilter: string): Promise<Ta
  * - taxid:0105...: 같은 사업자번호 묶음
  * - entity:omni-foodtech-01: 법인 엔티티 매핑 묶음
  */
-export async function createTaxStoreScopeMatcher(scopeFilter: string): Promise<TaxStoreScopeMatcher> {
-  const resolved = await resolveTaxScopeStoreCodes(scopeFilter)
+export async function createTaxStoreScopeMatcher(
+  scopeFilter: string,
+  tenantId?: string | null
+): Promise<TaxStoreScopeMatcher> {
+  const resolved = await resolveTaxScopeStoreCodes(scopeFilter, tenantId)
   if (resolved.kind === 'all') return async () => true
   if (!resolved.storeCodes || resolved.storeCodes.length === 0) return async () => false
 

@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
   let idempotencyReserved = false
   let idempotencyKey = ''
   let idempotencyScope = ''
+  let idempotencyTenantId = ''
 
   try {
     const authResult = await requireAuth(req, 'any')
@@ -88,6 +89,7 @@ export async function POST(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth!
+    idempotencyTenantId = String(auth.tenantId || '')
     const fromOfflineQueueSync =
       String(req.headers.get('x-cm-offline-queue-sync') ?? '').trim().toLowerCase() === '1'
     let body: Record<string, unknown>
@@ -159,6 +161,7 @@ export async function POST(req: NextRequest) {
     if (idempotencyKey) {
       const duplicated = await reserveRequestIdempotencyKey({
         scope: idempotencyScope,
+        tenantId: idempotencyTenantId,
         key: idempotencyKey,
         payload: { id, source: fromOfflineQueueSync ? 'offline_queue' : 'api' },
       })
@@ -991,7 +994,11 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error('updatePosOrder:', e)
     if (idempotencyReserved && idempotencyKey) {
-      await releaseRequestIdempotencyKey({ scope: idempotencyScope, key: idempotencyKey })
+      await releaseRequestIdempotencyKey({
+        scope: idempotencyScope,
+        key: idempotencyKey,
+        tenantId: idempotencyTenantId,
+      })
     }
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json(

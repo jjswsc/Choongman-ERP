@@ -9,8 +9,8 @@ import {
   supabaseInsert,
   supabaseSelectFilter,
   supabaseUpdate,
-  supabaseUpsert,
 } from '@/lib/supabase-server'
+import { storeRowFilter, upsertRowsTenantStore } from '@/lib/saas-store-conflict'
 import { requireAuth } from '@/lib/verify-auth'
 import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
@@ -216,7 +216,7 @@ async function savePayrollRecordsChunk(
 
   if (withoutEid.length > 0) {
     try {
-      await supabaseUpsert('payroll_records', withoutEid, 'month,store,name')
+      await upsertRowsTenantStore('payroll_records', 'month,store,name', withoutEid, tenantScope)
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
       if (/23505|duplicate|unique/i.test(em)) {
@@ -225,7 +225,8 @@ async function savePayrollRecordsChunk(
           const store = String(r.store || '').trim()
           const cand = (await supabaseSelectFilter(
             'payroll_records',
-            `month=eq.${encodeURIComponent(monthStr)}&name=eq.${encodeURIComponent(name)}`,
+            storeRowFilter('name', name, tenantScope, 'payroll_records') +
+              `&month=eq.${encodeURIComponent(monthStr)}`,
             { select: 'id,store', limit: 30 }
           )) as { id: number; store: string }[] | null
           const hit = (cand || []).find(
@@ -456,12 +457,13 @@ export async function POST(request: NextRequest) {
                     const { employee_id: _eid, employee_code: _ecode, ...rest } = r
                     return rest
                   })
-                  await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
+                  await upsertRowsTenantStore('payroll_records', 'month,store,name', fallbackChunk, tenantScope)
                 } else if (isMissingPayrollColumnError(em3) && /early_min|early_ded/i.test(em3)) {
-                  await supabaseUpsert(
+                  await upsertRowsTenantStore(
                     'payroll_records',
+                    'month,store,name',
                     withoutPeriod.map(withoutEarlyLeaveCols),
-                    'month,store,name'
+                    tenantScope
                   )
                 } else {
                   throw e3
@@ -472,7 +474,7 @@ export async function POST(request: NextRequest) {
                 const { employee_id: _eid, employee_code: _ecode, ...rest } = r
                 return rest
               })
-              await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
+              await upsertRowsTenantStore('payroll_records', 'month,store,name', fallbackChunk, tenantScope)
             } else {
               throw e2
             }
@@ -482,7 +484,7 @@ export async function POST(request: NextRequest) {
             const { employee_id: _eid, employee_code: _ecode, published_at: _p, ...rest } = r
             return withoutPeriodDateCols(rest)
           })
-          await supabaseUpsert('payroll_records', fallbackChunk, 'month,store,name')
+          await upsertRowsTenantStore('payroll_records', 'month,store,name', fallbackChunk, tenantScope)
         } else {
           throw e
         }

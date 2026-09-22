@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     const startDate = `${taxMonth}-01`
     const [y, m] = taxMonth.split('-').map(Number)
     const endDate = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
-    const scope = await resolveTaxScopeStoreCodes(storeFilter || 'All')
+    const scope = await resolveTaxScopeStoreCodes(storeFilter || 'All', authResult.auth.tenantId)
 
     // entity/taxid인데 매핑 매장이 0이면 빈 결과
     if (scope.storeCodes && scope.storeCodes.length === 0) {

@@ -5,6 +5,7 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { appendMembersTenantFilter, resolveMembersTenantScope } from '@/lib/members-tenant-scope'
 
 function toText(v: unknown): string {
   return String(v ?? '').trim()
@@ -87,17 +88,20 @@ async function loadMemberById(id: number): Promise<MemberRow | null> {
 }
 
 /** 회원번호(M004719) 또는 숫자 ID로 회원 조회 */
-export async function resolveMemberRef(refRaw: string): Promise<MemberRow | null> {
+export async function resolveMemberRef(refRaw: string, tenantId?: string | null): Promise<MemberRow | null> {
   const ref = toText(refRaw)
   if (!ref) return null
+  const memberScope = await resolveMembersTenantScope({
+    auth: tenantId ? { tenantId } : null,
+  })
+  const byNoFilter = appendMembersTenantFilter(
+    `member_no=eq.${encodeURIComponent(ref.toUpperCase())}`,
+    memberScope
+  )
   const asId = Number(ref.replace(/^M/i, '').replace(/^0+/, '') || ref)
   if (/^M?\d+$/i.test(ref.replace(/\s/g, ''))) {
     if (ref.toUpperCase().startsWith('M')) {
-      const byNo = (await supabaseSelectFilter(
-        'members',
-        `member_no=eq.${encodeURIComponent(ref.toUpperCase())}`,
-        { limit: 1 }
-      )) as MemberRow[]
+      const byNo = (await supabaseSelectFilter('members', byNoFilter, { limit: 1 })) as MemberRow[]
       if (byNo?.[0]) return byNo[0]
     }
     if (Number.isFinite(asId) && asId > 0) {
@@ -105,11 +109,7 @@ export async function resolveMemberRef(refRaw: string): Promise<MemberRow | null
       if (byId) return byId
     }
   }
-  const byNoLoose = (await supabaseSelectFilter(
-    'members',
-    `member_no=eq.${encodeURIComponent(ref.toUpperCase())}`,
-    { limit: 1 }
-  )) as MemberRow[]
+  const byNoLoose = (await supabaseSelectFilter('members', byNoFilter, { limit: 1 })) as MemberRow[]
   return byNoLoose?.[0] ?? null
 }
 

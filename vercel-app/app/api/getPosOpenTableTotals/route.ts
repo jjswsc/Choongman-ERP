@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const stores = await resolvePosSalesStoresFromRequest(request, requested)
-    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const bizCtx = await loadPosBusinessDaySettingsContext({ storeCode: stores[0] || null })
     const hours = resolvePosBusinessHoursFromContext(
       bizCtx,
       stores.length === 1 ? stores[0]! : ''

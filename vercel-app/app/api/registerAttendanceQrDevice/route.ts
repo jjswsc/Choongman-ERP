@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpsert } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { canRegisterAttendanceQrDevice } from '@/lib/permissions'
 import { canAuthManageAttendanceQrStore } from '@/lib/attendance-qr-device-server'
-import {
-  assertSaasTenantWritable,
-  isMissingSaasTenantColumnError,
-  markSaasTenantColumnMissing,
-  resolveSaasTenantScope,
-  stampSaasTenantId,
-} from '@/lib/saas-tenant-scope'
+import { assertSaasTenantWritable, resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { upsertRowsTenantStore } from '@/lib/saas-store-conflict'
 
 /** 매니저·본사: 이 기기를 출퇴근 QR 표시 단말로 등록 */
 export async function POST(req: NextRequest) {
@@ -69,29 +63,21 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date().toISOString()
-    const row = stampSaasTenantId(
-      {
-        store_code: storeCode,
-        device_token: deviceToken,
-        role: 'attendance_display',
-        last_seen_at: now,
-        ...(displayLabel ? { display_label: displayLabel } : {}),
-        ...(clientHint ? { client_hint: clientHint } : {}),
-      },
-      tenantScope,
-      'pos_connected_devices'
+    await upsertRowsTenantStore(
+      'pos_connected_devices',
+      'store_code,device_token',
+      [
+        {
+          store_code: storeCode,
+          device_token: deviceToken,
+          role: 'attendance_display',
+          last_seen_at: now,
+          ...(displayLabel ? { display_label: displayLabel } : {}),
+          ...(clientHint ? { client_hint: clientHint } : {}),
+        },
+      ],
+      tenantScope
     )
-    try {
-      await supabaseUpsert('pos_connected_devices', [row], 'store_code,device_token')
-    } catch (e) {
-      if (isMissingSaasTenantColumnError(e) && 'tenant_id' in row) {
-        markSaasTenantColumnMissing('pos_connected_devices')
-        const { tenant_id: _t, ...withoutTenant } = row
-        await supabaseUpsert('pos_connected_devices', [withoutTenant], 'store_code,device_token')
-      } else {
-        throw e
-      }
-    }
 
     return NextResponse.json({ success: true, storeCode, deviceToken }, { headers })
   } catch (e) {

@@ -511,7 +511,7 @@ export async function upsertPosVatLedgerDraft(params: {
     // 실시간 저장 경로: 매장 영업일 설정이 있으면 영업일, 없으면 방콕 달력
     try {
       const { loadPosBusinessDaySettingsContext } = await import('@/lib/pos-business-day-server')
-      const bizCtx = await loadPosBusinessDaySettingsContext()
+      const bizCtx = await loadPosBusinessDaySettingsContext({ storeCode: params.storeCode })
       const hours = resolvePosBusinessHoursFromContext(bizCtx, String(params.storeCode || ''))
       const created = String(params.createdAtIso || '').trim()
       const createdDate = created ? new Date(created) : new Date()

@@ -4,6 +4,7 @@ import {
   supabaseDeleteByFilter,
   supabaseUpsert,
 } from '@/lib/supabase-server'
+import { upsertRowsTenantStore } from '@/lib/saas-store-conflict'
 import {
   supabaseInsertWithPgrst204Fallback,
   supabaseUpdateByFilterWithPgrst204Fallback,
@@ -994,14 +995,15 @@ export async function upsertPosMenuFromBody(
       try {
         await supabaseDeleteByFilter('pos_menu_store_scopes', `menu_id=eq.${encodeURIComponent(savedMenuId)}`)
         if (normalizedStoreCodes.length > 0) {
-          await supabaseUpsert(
+          await upsertRowsTenantStore(
             'pos_menu_store_scopes',
+            'store_code,menu_id',
             normalizedStoreCodes.map((storeCode) => ({
               menu_id: Number(savedMenuId),
               store_code: storeCode,
               enabled: true,
             })),
-            'store_code,menu_id'
+            catalogScope
           )
         }
       } catch (scopeErr: unknown) {

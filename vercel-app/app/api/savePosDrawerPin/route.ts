@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseUpsertMerge } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { hashPassword, verifyPassword } from '@/lib/password'
 import { isValidPosDrawerPin } from '@/lib/pos-drawer-pin'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { canAccessPosPrinters, canAccessPosSettlement } from '@/lib/permissions'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { storeRowFilter, upsertMergeTenantStore } from '@/lib/saas-store-conflict'
 
 function canManagePosDrawerPin(role: string, store?: string): boolean {
   return canAccessPosPrinters(role, store) || canAccessPosSettlement(role)
@@ -36,9 +38,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'store_required' }, { headers })
     }
 
+    const tenantScope = await resolveSaasTenantScope({
+      auth: { tenantId: auth.tenantId, company: auth.company },
+      storeCode,
+    })
     const rows = (await supabaseSelectFilter(
       'pos_printer_settings',
-      `store_code=eq.${encodeURIComponent(storeCode)}`,
+      storeRowFilter('store_code', storeCode, tenantScope, 'pos_printer_settings'),
       { limit: 1, select: 'drawer_pin_hash' }
     )) as { drawer_pin_hash?: string | null }[] | null
 
@@ -57,11 +63,12 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: false, message: 'pos_drawer_pin_wrong' }, { headers })
         }
       }
-      await supabaseUpsertMerge('pos_printer_settings', 'store_code', {
-        store_code: storeCode,
-        drawer_pin_hash: null,
-        updated_at: new Date().toISOString(),
-      })
+      await upsertMergeTenantStore(
+        'pos_printer_settings',
+        'store_code',
+        { store_code: storeCode, drawer_pin_hash: null, updated_at: new Date().toISOString() },
+        tenantScope
+      )
       return NextResponse.json({ success: true, cleared: true }, { headers })
     }
 
@@ -80,11 +87,12 @@ export async function POST(req: NextRequest) {
     }
 
     const drawer_pin_hash = await hashPassword(newPin)
-    await supabaseUpsertMerge('pos_printer_settings', 'store_code', {
-      store_code: storeCode,
-      drawer_pin_hash,
-      updated_at: new Date().toISOString(),
-    })
+    await upsertMergeTenantStore(
+      'pos_printer_settings',
+      'store_code',
+      { store_code: storeCode, drawer_pin_hash, updated_at: new Date().toISOString() },
+      tenantScope
+    )
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

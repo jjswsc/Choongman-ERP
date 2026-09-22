@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter, supabaseInsertMany } from '@/lib/supabase-server'
+import { storeRowFilter } from '@/lib/saas-store-conflict'
 import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 import {
   buildScheduleEmployeeRoster,
@@ -77,7 +78,10 @@ export async function POST(request: NextRequest) {
     let employeeRows: ScheduleEmployeeRowInput[] = []
     for (const sel of empSelectCandidates) {
       try {
-        employeeRows = (await supabaseSelectFilter('employees', `store=ilike.${encodeURIComponent(store)}`, {
+        employeeRows = (await supabaseSelectFilter(
+          'employees',
+          storeRowFilter('store', store, tenantScope, 'employees', 'ilike'),
+          {
           select: sel,
           limit: 5000,
           order: 'id.asc',

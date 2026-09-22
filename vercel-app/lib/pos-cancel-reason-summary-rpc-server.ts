@@ -112,7 +112,7 @@ export async function fetchPosCancelReasonSummaryAgg(params: {
     return mapCancelReasonAggRowsToSummary([])
   }
 
-  const bizCtx = await loadPosBusinessDaySettingsContext()
+  const bizCtx = await loadPosBusinessDaySettingsContext(tenantScope?.tenantId)
   const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
   const expanded =
     params.storeCodes && params.storeCodes.length > 0

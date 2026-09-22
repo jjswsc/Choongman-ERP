@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     })) as { id?: number; status?: string; expense_date?: string; store_name?: string | null }[] | null
 
     const storeScope =
-      storeFilter && storeFilter !== 'All' ? await createAccountingStoreScopeMatcher(storeFilter) : null
+      storeFilter && storeFilter !== 'All' ? await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId) : null
     const officeScope = !!storeFilter && isHeadOfficeLikeStoreName(storeFilter)
 
     let ok = 0

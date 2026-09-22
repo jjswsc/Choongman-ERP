@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 import { dedupeStoreCodesForPicker } from '@/lib/erp-store-list-grab-enrich'
 import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 import { fetchErpStoresMaster } from '@/lib/erp-store-master'
@@ -48,7 +49,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ posOptions: [] }, { headers })
     }
 
-    const bizCtx = await loadPosBusinessDaySettingsContext()
+    const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const bizCtx = await loadPosBusinessDaySettingsContext(auth?.tenantId)
     const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
 
     try {

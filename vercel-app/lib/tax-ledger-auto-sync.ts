@@ -297,6 +297,7 @@ export async function syncIncrementalVatLedgersFromExpenseAndBank(params: {
 export async function syncTaxVatLedgersFromStockAndExpenses(params: {
   months: string[]
   storeFilter?: string
+  tenantId?: string | null
   /** true면 POS 매출 동기화 생략(이미 별도 수행한 경우) */
   skipPos?: boolean
 }): Promise<{
@@ -336,7 +337,7 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
 
   const monthFilter = buildTaxMonthPostgrestFilter(validMonths)
   const storeFilter = normalizeStoreFilter(params.storeFilter)
-  const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+  const storeScope = await createAccountingStoreScopeMatcher(storeFilter, params.tenantId)
   const useEvidenceColumns = await probeVatLedgerEvidenceColumns()
   const startYmd = monthStartYmd(validMonths[0])
   const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
@@ -651,6 +652,7 @@ export async function syncTaxVatLedgersFromStockAndExpenses(params: {
 export async function syncTaxWithholdingLedgersFromExpenses(params: {
   months: string[]
   storeFilter?: string
+  tenantId?: string | null
 }): Promise<{ upserted: number; deleted: number }> {
   const validMonths = (params.months || [])
     .map((m) => String(m || '').slice(0, 7))
@@ -658,7 +660,7 @@ export async function syncTaxWithholdingLedgersFromExpenses(params: {
   if (validMonths.length === 0) return { upserted: 0, deleted: 0 }
 
   const storeFilter = normalizeStoreFilter(params.storeFilter)
-  const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined)
+  const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined, params.tenantId)
   const startYmd = monthStartYmd(validMonths[0])
   const endYmd = monthEndYmd(validMonths[validMonths.length - 1])
   const expParts = [
@@ -1001,6 +1003,7 @@ export async function syncTaxWithholdingLedgerForPurchaseOrder(poId: number): Pr
 export async function syncTaxWithholdingLedgersFromPayroll(params: {
   months: string[]
   storeFilter?: string
+  tenantId?: string | null
 }): Promise<{ upserted: number; deleted: number }> {
   const validMonths = (params.months || [])
     .map((m) => String(m || '').slice(0, 7))
@@ -1010,7 +1013,7 @@ export async function syncTaxWithholdingLedgersFromPayroll(params: {
   const payrollMonthFilter = buildPayrollMonthPostgrestFilter(validMonths)
   const taxMonthFilter = buildTaxMonthPostgrestFilter(validMonths)
   const storeFilter = normalizeStoreFilter(params.storeFilter)
-  const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined)
+  const storeScope = await createAccountingStoreScopeMatcher(storeFilter || undefined, params.tenantId)
   // exact store=eq 만 쓰면 표기 차이(True Digital vs CM True Digital)로 0건 → 별칭 in.() + JS matches
   let payrollFilter = payrollMonthFilter
   if (storeFilter && storeScope.dbStoreNameValues.length > 0) {

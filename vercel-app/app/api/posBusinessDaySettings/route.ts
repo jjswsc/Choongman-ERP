@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const storeParam = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
-    const ctx = await loadPosBusinessDaySettingsContext()
+    const ctx = await loadPosBusinessDaySettingsContext({ storeCode: storeParam || null })
     const effective = resolvePosBusinessHoursFromContext(ctx, storeParam || null)
     const nk = normStoreKey(storeParam)
     const hasStoreOverride = Boolean(nk && ctx.byNormKey.has(nk))
@@ -137,8 +137,8 @@ export async function POST(request: NextRequest) {
       if (!authCanSavePosBusinessDayForStore(auth, storeCode)) {
         return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
       }
-      await upsertPosBusinessDayStoreOverride(storeCode, null)
-      const ctx = await loadPosBusinessDaySettingsContext()
+      await upsertPosBusinessDayStoreOverride(storeCode, null, auth.tenantId)
+      const ctx = await loadPosBusinessDaySettingsContext(auth.tenantId)
       const eff = resolvePosBusinessHoursFromContext(ctx, storeCode)
       return NextResponse.json({ success: true, ...dtoFromHours(eff), storeCode, reset: true }, { headers })
     }
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
       if (!authCanSavePosBusinessDayForStore(auth, storeCode)) {
         return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403, headers })
       }
-      await upsertPosBusinessDayStoreOverride(storeCode, hours)
+      await upsertPosBusinessDayStoreOverride(storeCode, hours, auth.tenantId)
       return NextResponse.json({ success: true, ...dtoFromHours(hours), storeCode }, { headers })
     }
 
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         { status: 403, headers }
       )
     }
-    await upsertPosBusinessDayGlobal(hours)
+    await upsertPosBusinessDayGlobal(hours, auth.tenantId)
     return NextResponse.json({ success: true, ...dtoFromHours(hours) }, { headers })
   } catch (e) {
     console.error('posBusinessDaySettings POST:', e)

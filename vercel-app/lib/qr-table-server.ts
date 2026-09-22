@@ -24,6 +24,8 @@ import {
 } from '@/lib/qr-table-guest-menu'
 import { isBanbanMenu, overlayBanbanFlavorMenuIds } from '@/lib/pos-banban-utils'
 import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { selectFilterOptionalTenant, storeRowFilter, upsertRowsTenantStore } from '@/lib/saas-store-conflict'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
 import {
   supabaseSelectFilter,
@@ -306,23 +308,38 @@ async function computeQrTableOrderFinancials(storeCode: string, items: Array<Rec
   return { subtotal, pricing }
 }
 
-export async function loadQrOrderStoreSettings(storeCode: string): Promise<QrOrderStoreSettings> {
+export async function loadQrOrderStoreSettings(
+  storeCode: string,
+  tenantId?: string | null
+): Promise<QrOrderStoreSettings> {
   const code = String(storeCode || '').trim()
   if (!code) return defaultQrOrderStoreSettings('')
-  const rows = (await supabaseSelectFilter('pos_qr_order_store_settings', `store_code=eq.${encodeURIComponent(code)}`, {
-    limit: 1,
-  })) as DbSettings[]
+  const tenantScope = await resolveSaasTenantScope({
+    auth: tenantId ? { tenantId } : null,
+    storeCode: code,
+  })
+  const rows = (await supabaseSelectFilter(
+    'pos_qr_order_store_settings',
+    storeRowFilter('store_code', code, tenantScope, 'pos_qr_order_store_settings'),
+    { limit: 1 }
+  )) as DbSettings[]
   return mapSettings(rows?.[0], code)
 }
 
 export async function upsertQrOrderStoreSettings(
-  settings: QrOrderStoreSettings
+  settings: QrOrderStoreSettings,
+  tenantId?: string | null
 ): Promise<QrOrderStoreSettings> {
   const storeCode = String(settings.storeCode || '').trim()
   if (!storeCode) throw new Error('store_required')
+  const tenantScope = await resolveSaasTenantScope({
+    auth: tenantId ? { tenantId } : null,
+    storeCode,
+  })
   const now = getBangkokDateTimeString()
-  await supabaseUpsert(
+  await upsertRowsTenantStore(
     'pos_qr_order_store_settings',
+    'store_code',
     [
       {
         store_code: storeCode,
@@ -340,9 +357,9 @@ export async function upsertQrOrderStoreSettings(
         updated_at: now,
       },
     ],
-    'store_code'
+    tenantScope
   )
-  return loadQrOrderStoreSettings(storeCode)
+  return loadQrOrderStoreSettings(storeCode, tenantId)
 }
 
 export async function loadBuffetTiersForStore(
@@ -903,9 +920,11 @@ async function loadPosMenusByIds(menuIds: number[]): Promise<DbMenu[]> {
 
 async function loadHallMenusForStore(storeCode: string): Promise<DbMenu[]> {
   const code = String(storeCode || '').trim()
-  const scopes = (await supabaseSelectFilter(
+  const tenantScope = await resolveSaasTenantScope({ storeCode: code })
+  const scopes = (await selectFilterOptionalTenant(
     'pos_menu_store_scopes',
     `store_code=eq.${encodeURIComponent(code)}`,
+    tenantScope,
     { limit: 20000, select: 'menu_id' }
   )) as Array<{ menu_id?: number }>
   const menuIds = [...new Set((scopes || []).map((s) => Number(s.menu_id || 0)).filter(Boolean))]
@@ -1103,14 +1122,16 @@ async function loadCartMenusByIdsForStore(
   if (!ids.length) return out
 
   const code = String(storeCode || '').trim()
+  const tenantScope = await resolveSaasTenantScope({ storeCode: code })
   const [menuRows, scopedRows, anyScopeRow] = await Promise.all([
     loadPosMenusByIds(ids),
-    supabaseSelectFilter(
+    selectFilterOptionalTenant(
       'pos_menu_store_scopes',
       `store_code=eq.${encodeURIComponent(code)}&menu_id=in.(${ids.join(',')})`,
+      tenantScope,
       { limit: ids.length + 10, select: 'menu_id' }
     ) as Promise<Array<{ menu_id?: number }>>,
-    supabaseSelectFilter('pos_menu_store_scopes', `store_code=eq.${encodeURIComponent(code)}`, {
+    selectFilterOptionalTenant('pos_menu_store_scopes', `store_code=eq.${encodeURIComponent(code)}`, tenantScope, {
       limit: 1,
       select: 'menu_id',
     }) as Promise<Array<{ menu_id?: number }>>,

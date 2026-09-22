@@ -245,7 +245,10 @@ export function buildStoreScopeAliasKeys(
 
 export { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
 
-export async function createAccountingStoreScopeMatcher(storeFilter?: string | null) {
+export async function createAccountingStoreScopeMatcher(
+  storeFilter?: string | null,
+  tenantId?: string | null
+) {
   const requested = normalizeStoreFilter(storeFilter)
   if (!requested) {
     return {
@@ -271,7 +274,7 @@ export async function createAccountingStoreScopeMatcher(storeFilter?: string | n
   const requestedLower = requested.toLowerCase()
   if (requestedLower.startsWith('entity:') || requestedLower.startsWith('taxid:')) {
     const { resolveTaxScopeStoreCodes } = await import('@/lib/tax-entity-scope')
-    const resolved = await resolveTaxScopeStoreCodes(requested)
+    const resolved = await resolveTaxScopeStoreCodes(requested, tenantId)
     const codes = (resolved.storeCodes || []).map((c) => String(c || '').trim()).filter(Boolean)
     if (!codes.length) {
       return {

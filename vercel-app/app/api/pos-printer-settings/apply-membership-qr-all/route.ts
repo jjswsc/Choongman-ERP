@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { canAccessPosPrinters, hasOfficeStaffScope } from '@/lib/permissions'
-import { supabaseUpdateByFilter, supabaseUpsertMerge } from '@/lib/supabase-server'
+import { supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { appendSaasTenantFilter, resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { upsertMergeTenantStore } from '@/lib/saas-store-conflict'
 import {
   POS_MEMBERSHIP_POINTS_MANUAL_QR_LINK,
   POS_MEMBERSHIP_POINTS_MANUAL_QR_TEXT_DEFAULT,
@@ -53,8 +55,13 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
-    // 기존 설정 행 전부 갱신
-    await supabaseUpdateByFilter('pos_printer_settings', 'store_code=not.is.null', patch)
+    const tenantScope = await resolveSaasTenantScope({
+      auth: { tenantId: auth.tenantId, company: auth.company },
+    })
+    const existingFilter =
+      appendSaasTenantFilter('store_code=not.is.null', tenantScope, 'pos_printer_settings') ||
+      'store_code=not.is.null'
+    await supabaseUpdateByFilter('pos_printer_settings', existingFilter, patch)
 
     const codes = Array.from(
       new Set(
@@ -67,10 +74,12 @@ export async function POST(req: NextRequest) {
     // 매장 목록에 있으나 설정 행이 없는 경우 upsert로 생성·보강
     let upserted = 0
     for (const storeCode of codes) {
-      await supabaseUpsertMerge('pos_printer_settings', 'store_code', {
-        store_code: storeCode,
-        ...patch,
-      })
+      await upsertMergeTenantStore(
+        'pos_printer_settings',
+        'store_code',
+        { store_code: storeCode, ...patch },
+        tenantScope
+      )
       upserted += 1
     }
 

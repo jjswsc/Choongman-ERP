@@ -5,6 +5,15 @@ type ReserveRequestKeyInput = {
   scope: string
   key: string
   payload?: unknown
+  /** Omni: 같은 클라이언트 키가 다른 법인 저장을 건너뛰지 않게 스코프에 붙인다. */
+  tenantId?: string | null
+}
+
+function scopeWithTenant(scope: string, tenantId?: string | null): string {
+  const base = String(scope || '').trim()
+  const tid = String(tenantId || '').trim()
+  if (!tid) return base.slice(0, 120)
+  return `${tid}:${base}`.slice(0, 120)
 }
 
 function sha256Hex(value: string): string {
@@ -28,7 +37,7 @@ function isMissingTableError(msg: string): boolean {
 export async function reserveRequestIdempotencyKey(
   input: ReserveRequestKeyInput
 ): Promise<boolean> {
-  const scope = String(input.scope || '').trim().slice(0, 120)
+  const scope = scopeWithTenant(input.scope, input.tenantId)
   const key = String(input.key || '').trim()
   if (!scope || !key) return false
 
@@ -59,8 +68,9 @@ export async function reserveRequestIdempotencyKey(
 export async function releaseRequestIdempotencyKey(input: {
   scope: string
   key: string
+  tenantId?: string | null
 }): Promise<void> {
-  const scope = String(input.scope || '').trim().slice(0, 120)
+  const scope = scopeWithTenant(input.scope, input.tenantId)
   const key = String(input.key || '').trim()
   if (!scope || !key) return
 

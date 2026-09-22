@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
-    const storeScope = await createAccountingStoreScopeMatcher(storeFilter)
+    const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'
     const forceSync = ['1', 'true', 'yes'].includes(
       String(searchParams.get('forceSync') || '').trim().toLowerCase()

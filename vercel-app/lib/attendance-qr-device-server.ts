@@ -1,4 +1,5 @@
-import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { upsertRowsTenantStore } from '@/lib/saas-store-conflict'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import {
   isNativeOfficeRole,
@@ -127,17 +128,7 @@ export async function touchAttendanceQrDevice(params: {
     scope,
     'pos_connected_devices'
   )
-  try {
-    await supabaseUpsert('pos_connected_devices', [upsertRow], 'store_code,device_token')
-  } catch (e) {
-    if (isMissingSaasTenantColumnError(e) && 'tenant_id' in upsertRow) {
-      markSaasTenantColumnMissing('pos_connected_devices')
-      const { tenant_id: _t, ...withoutTenant } = upsertRow
-      await supabaseUpsert('pos_connected_devices', [withoutTenant], 'store_code,device_token')
-    } else {
-      throw e
-    }
-  }
+  await upsertRowsTenantStore('pos_connected_devices', 'store_code,device_token', [upsertRow], scope)
 }
 
 export function canAuthManageAttendanceQrStore(params: {

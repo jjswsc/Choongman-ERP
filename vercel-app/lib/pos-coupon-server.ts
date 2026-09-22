@@ -3,6 +3,7 @@ import { expandTruncatedCouponCodeCandidates } from '@/lib/member-coupon-qr'
 import { cancelOtherIssuedMemberCouponIssues } from '@/lib/member-portal-coupon-repair'
 import { resolveMemberIdsSharingPhone } from '@/lib/members-server'
 import { resolveMemberRef } from '@/lib/member-merge-server'
+import { resolveMembersTenantScope } from '@/lib/members-tenant-scope'
 import { isPosCompletionStatus } from '@/lib/pos-order-policy'
 import { posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
 import { loadPosLoyaltySettings } from '@/lib/pos-loyalty-settings-server'
@@ -660,7 +661,8 @@ export async function persistPosOrderCouponRedemptions(params: {
     }
     orderMemberNo = String(orderRows?.[0]?.member_no ?? '').trim().toUpperCase()
     if (!memberId && orderMemberNo) {
-      const ref = await resolveMemberRef(orderMemberNo)
+      const memberScope = await resolveMembersTenantScope({ storeCode })
+      const ref = await resolveMemberRef(orderMemberNo, memberScope.tenantId)
       memberId = Math.max(0, Math.trunc(Number(ref?.id ?? 0) || 0)) || undefined
     }
   } catch {
@@ -726,7 +728,8 @@ export async function persistPosOrderCouponRedemptions(params: {
     } else {
       let scopeMemberIds = memberIdsForRedeem
       if (!scopeMemberIds.length && orderMemberNo) {
-        const ref = await resolveMemberRef(orderMemberNo)
+        const memberScope = await resolveMembersTenantScope({ storeCode })
+        const ref = await resolveMemberRef(orderMemberNo, memberScope.tenantId)
         if (ref?.id) {
           scopeMemberIds = await resolveMemberIdsSharingPhone(ref.id)
         }

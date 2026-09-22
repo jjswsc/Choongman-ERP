@@ -1,4 +1,6 @@
-import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { storeRowFilter, upsertRowsTenantStore } from '@/lib/saas-store-conflict'
 import {
   checkCanAssignMainFromRows,
   checkCanRegisterAsOrderFromRows,
@@ -15,28 +17,42 @@ type DeviceRow = {
   last_seen_at?: string
 }
 
-async function listStoreDevices(storeCode: string): Promise<DeviceRow[]> {
+async function listStoreDevices(storeCode: string, tenantId?: string | null): Promise<DeviceRow[]> {
   const s = String(storeCode || '').trim()
   if (!s) return []
+  const tenantScope = await resolveSaasTenantScope({
+    auth: tenantId ? { tenantId } : null,
+    storeCode: s,
+  })
   const rows = (await supabaseSelectFilter(
     'pos_connected_devices',
-    `store_code=eq.${encodeURIComponent(s)}`,
+    storeRowFilter('store_code', s, tenantScope, 'pos_connected_devices'),
     { limit: 200 }
   )) as DeviceRow[] | null
   return Array.isArray(rows) ? rows : []
 }
 
-export async function listStoreDevicesForRoleLimits(storeCode: string): Promise<DeviceRow[]> {
-  return listStoreDevices(storeCode)
+export async function listStoreDevicesForRoleLimits(
+  storeCode: string,
+  tenantId?: string | null
+): Promise<DeviceRow[]> {
+  return listStoreDevices(storeCode, tenantId)
 }
 
-export async function getPosDeviceRoleLimits(storeCode: string): Promise<PosDeviceRoleLimits> {
+export async function getPosDeviceRoleLimits(
+  storeCode: string,
+  tenantId?: string | null
+): Promise<PosDeviceRoleLimits> {
   const s = String(storeCode || '').trim()
   if (!s) return { ...DEFAULT_POS_DEVICE_ROLE_LIMITS }
+  const tenantScope = await resolveSaasTenantScope({
+    auth: tenantId ? { tenantId } : null,
+    storeCode: s,
+  })
   try {
     const rows = (await supabaseSelectFilter(
       'pos_printer_settings',
-      `store_code=eq.${encodeURIComponent(s)}`,
+      storeRowFilter('store_code', s, tenantScope, 'pos_printer_settings'),
       { limit: 1, select: 'main_device_max_count,order_device_max_count,main_device_role_locked' }
     )) as {
       main_device_max_count?: unknown
@@ -97,12 +113,17 @@ export async function assertCanRegisterAsOrder(
 /** 관리자 지정: 메인 슬롯이 찼을 때 다른 메인 기기를 주문 단말로 내림 */
 export async function demoteOtherMainDevices(
   storeCode: string,
-  keepDeviceToken: string
+  keepDeviceToken: string,
+  tenantId?: string | null
 ): Promise<number> {
   const s = String(storeCode || '').trim()
   const keep = String(keepDeviceToken || '').trim()
   if (!s || !keep) return 0
-  const rows = await listStoreDevices(s)
+  const tenantScope = await resolveSaasTenantScope({
+    auth: tenantId ? { tenantId } : null,
+    storeCode: s,
+  })
+  const rows = await listStoreDevices(s, tenantId)
   const now = new Date().toISOString()
   const others = rows.filter(
     (r) =>
@@ -111,15 +132,16 @@ export async function demoteOtherMainDevices(
       String(r.device_token ?? '').trim().length > 0
   )
   if (others.length === 0) return 0
-  await supabaseUpsert(
+  await upsertRowsTenantStore(
     'pos_connected_devices',
+    'store_code,device_token',
     others.map((r) => ({
       store_code: s,
       device_token: String(r.device_token ?? '').trim(),
       role: 'order',
       last_seen_at: String(r.last_seen_at ?? now),
     })),
-    'store_code,device_token'
+    tenantScope
   )
   return others.length
 }

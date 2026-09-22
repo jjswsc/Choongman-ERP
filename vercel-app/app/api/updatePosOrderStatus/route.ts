@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
     if (idempotencyKey) {
       const duplicated = await reserveRequestIdempotencyKey({
         scope: `update_pos_order_status:${id}`,
+        tenantId: auth.tenantId,
         key: idempotencyKey,
         payload: { id, status, source: fromOfflineQueueSync ? 'offline_queue' : 'api' },
       })
