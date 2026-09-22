@@ -241,7 +241,7 @@ export function qrGuestCartLineKey(menuId: number, optionIds: number[], banbanPa
   return ids.length ? `${mid}:${ids.join('+')}` : String(mid)
 }
 
-/** 피커가 합성 id(bbq-123-456)를 줄 때 실제 옵션 id만 추출 */
+/** 피커가 합성 id(bbq-123-456, 123+456)를 줄 때 실제 옵션 id만 추출 */
 export function extractQrGuestOptionIds(
   opt: { id?: string | number | null } | null | undefined,
   pendingSizeOpt?: { id?: string | number | null } | null
@@ -254,11 +254,16 @@ export function extractQrGuestOptionIds(
   const pushRaw = (raw: string | number | null | undefined) => {
     const s = String(raw ?? '').trim()
     if (!s) return
-    if (/^bbq-/i.test(s)) {
-      for (const part of s.slice(4).split('-')) pushToken(part)
-      return
+    // 다단계 피커 합성(`resolvePosOptionPickerMatch` → id join "+") + 레거시 bbq-a-b
+    for (const segment of s.split('+')) {
+      const part = segment.trim()
+      if (!part) continue
+      if (/^bbq-/i.test(part)) {
+        for (const token of part.slice(4).split('-')) pushToken(token)
+        continue
+      }
+      pushToken(part)
     }
-    pushToken(s)
   }
   pushRaw(opt?.id)
   pushRaw(pendingSizeOpt?.id)

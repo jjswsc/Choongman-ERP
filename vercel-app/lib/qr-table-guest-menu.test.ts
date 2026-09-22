@@ -114,6 +114,10 @@ describe('extractQrGuestOptionIds', () => {
   it('splits bbq merged ids and pending size', () => {
     expect(extractQrGuestOptionIds({ id: 'bbq-11-22' }, { id: '11' })).toEqual([11, 22])
   })
+
+  it('splits multistep compose ids joined with + (Dosirak add soup)', () => {
+    expect(extractQrGuestOptionIds({ id: '101+202' })).toEqual([101, 202])
+  })
 })
 
 describe('resolveQrGuestLineOption', () => {
