@@ -63,7 +63,7 @@ import { buildPosCustomerMemoLineForPrint } from '@/lib/pos-member-portal-takeou
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { escapeHtml } from '@/lib/utils'
 import { posKitchenGuestSpread } from '@/lib/pos-terminal-auto-print'
-import { isQrTableGuestOrderLine, pickQrGuestLinesForHallAutoprint } from '@/lib/qr-table-types'
+import { isQrTableGuestOrderLine, pickQrGuestLinesForHallAutoprint, buildQrGuestCumulativeHallPrintItems } from '@/lib/qr-table-types'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 import type { LangCode } from '@/lib/lang-context'
 import type { PosPricingAdjustments } from '@/lib/pos-pricing'
@@ -277,38 +277,94 @@ async function printQrNoKitchenLinesToHall(
   hallLines: Array<Record<string, unknown>>
 ): Promise<void> {
   const orderId = Number(order.id ?? 0)
-  const items: PosOrder['items'] = hallLines.map((it) => ({
-    id: String(it.id ?? '').trim() || `qr-hall-${orderId}`,
-    name: stripQrKitchenSourceBracketTags(String(it.name ?? '')),
-    price: Number(it.price ?? 0) || 0,
-    qty: Number(it.qty ?? it.quantity ?? 1) || 1,
-    ...(String(it.menuId ?? '').trim() ? { menuId: String(it.menuId).trim() } : {}),
-    ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
-  }))
-  const drinkSubtotal = items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.qty || 0), 0)
-  const lineIds = items
+  const newLineIds = hallLines
     .map((it) => String(it.id ?? '').trim())
     .filter(Boolean)
-    .sort()
-    .join(',')
-  const payload = {
-    ...hallOrderReceiptPayloadFromPosOrder(
-      {
-        ...order,
-        items,
-        subtotal: drinkSubtotal,
-        total: drinkSubtotal,
-        discountAmt: 0,
-        couponDiscountAmt: 0,
-      },
-      ctx.pricingAdjustments,
-      {
-        ...ctx.posReceiptLineOpts,
-        orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, ctx.t),
-        storeCodeFallback: ctx.storeCode,
+
+  let liveItems: Array<Record<string, unknown>> = []
+  if (Number.isFinite(orderId) && orderId > 0) {
+    try {
+      const list = await getPosOrders({
+        orderId,
+        storeCode: String(ctx.storeCode || order.storeCode || '').trim() || undefined,
+      })
+      const live = list[0]
+      if (live?.items?.length) {
+        liveItems = live.items as unknown as Array<Record<string, unknown>>
+        if (live.orderNo && !order.orderNo) order = { ...order, orderNo: live.orderNo }
+        if (live.tableName && !order.tableName) order = { ...order, tableName: live.tableName }
+        if (live.memo && !order.memo) order = { ...order, memo: live.memo }
+        if (live.guestCount != null && order.guestCount == null) {
+          order = { ...order, guestCount: live.guestCount }
+        }
       }
-    ),
-    _autoPrintDedupeKey: `order:${orderId}:hall:qr-nokitchen:${lineIds || '0'}`,
+    } catch (e) {
+      console.error('qr hall cumulative fetch:', e)
+    }
+  }
+
+  // 잡이 UPDATE보다 먼저면 DB에 신규 줄이 없을 수 있음 → 잡 줄·order.items·DB를 id로 합침
+  const byId = new Map<string, Record<string, unknown>>()
+  const mergeRows = [
+    ...((Array.isArray(order.items) ? order.items : []) as unknown as Array<Record<string, unknown>>),
+    ...liveItems,
+    ...hallLines,
+  ]
+  for (const it of mergeRows) {
+    const id = String(it?.id ?? '').trim()
+    if (!id) continue
+    byId.set(id, it)
+  }
+
+  const built = buildQrGuestCumulativeHallPrintItems({
+    allOrderItems: [...byId.values()],
+    newLineIds,
+  })
+  if (!built.items.length) return
+
+  const items: PosOrder['items'] = built.items.map((it) => ({
+    id: it.id,
+    name: stripQrKitchenSourceBracketTags(it.name),
+    price: it.price,
+    qty: it.qty,
+    ...(it.menuId ? { menuId: it.menuId } : {}),
+    ...(it.note ? { note: it.note } : {}),
+    ...(it.isAddon ? { isAddon: true as const } : {}),
+  })) as PosOrder['items']
+
+  const hallPayloadBase = hallOrderReceiptPayloadFromPosOrder(
+    {
+      ...order,
+      items,
+      subtotal: built.subtotal,
+      total: built.subtotal,
+      discountAmt: 0,
+      couponDiscountAmt: 0,
+    },
+    ctx.pricingAdjustments,
+    {
+      ...ctx.posReceiptLineOpts,
+      orderTypeLabel: resolvePosOrderTypeReceiptLabel(order.orderType, ctx.t),
+      storeCodeFallback: ctx.storeCode,
+    }
+  )
+  // hallOrderReceiptPayloadFromPosOrder 는 isAddon 을 보존하지 않음 → 덮어씀
+  const payload = {
+    ...hallPayloadBase,
+    items: items.map((it) => ({
+      id: String(it.id ?? ''),
+      name: String(it.name ?? ''),
+      price: Number(it.price ?? 0) || 0,
+      qty: Number(it.qty ?? 1) || 1,
+      ...(String((it as { menuId?: string }).menuId ?? '').trim()
+        ? { menuId: String((it as { menuId?: string }).menuId).trim() }
+        : {}),
+      ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      ...((it as { isAddon?: boolean }).isAddon ? { isAddon: true as const } : {}),
+    })),
+    subtotal: built.subtotal,
+    total: built.subtotal,
+    _autoPrintDedupeKey: `order:${orderId}:hall:qr-nokitchen:${built.newLineIdsKey || '0'}`,
   }
   await printHallReceiptPayload(payload, ctx)
 }

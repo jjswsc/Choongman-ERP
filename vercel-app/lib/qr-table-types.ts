@@ -189,6 +189,62 @@ export function pickQrGuestLinesForHallAutoprint<T extends QrGuestHallLine>(
   return (allLines || []).filter((it) => isQrGuestHallCandidate(it))
 }
 
+export type QrGuestCumulativeHallPrintItem = {
+  id: string
+  name: string
+  price: number
+  qty: number
+  menuId?: string
+  note?: string
+  /** 추가분이 있을 때만 신규 줄에 true — 홀 전표 `>` 표시 */
+  isAddon?: true
+}
+
+/**
+ * QR 홀 전표용: 같은 주문의 손님 줄 전체 + 이번 제출분만 isAddon.
+ * 입장료·직원 POS 줄 제외. 신규만 있는 첫 전표는 isAddon 없음.
+ */
+export function buildQrGuestCumulativeHallPrintItems(
+  params: {
+    allOrderItems: Array<Record<string, unknown>>
+    newLineIds: Iterable<string>
+  }
+): {
+  items: QrGuestCumulativeHallPrintItem[]
+  newLineIdsKey: string
+  subtotal: number
+} {
+  const newIds = new Set(
+    [...params.newLineIds].map((id) => String(id ?? '').trim()).filter(Boolean)
+  )
+  const newLineIdsKey = [...newIds].sort().join(',')
+  const candidates = (params.allOrderItems || []).filter((it) => isQrGuestHallCandidate(it))
+  const hasPrevious = candidates.some((it) => {
+    const id = String(it.id ?? '').trim()
+    return Boolean(id) && !newIds.has(id)
+  })
+  const items: QrGuestCumulativeHallPrintItem[] = []
+  for (const it of candidates) {
+    const id = String(it.id ?? '').trim()
+    if (!id) continue
+    const qty = Math.max(1, Number(it.qty ?? it.quantity ?? 1) || 1)
+    const price = Number(it.price ?? 0) || 0
+    const menuId = String(it.menuId ?? '').trim()
+    const note = String(it.note ?? '').trim()
+    items.push({
+      id,
+      name: String(it.name ?? ''),
+      price,
+      qty,
+      ...(menuId ? { menuId } : {}),
+      ...(note ? { note } : {}),
+      ...(hasPrevious && newIds.has(id) ? { isAddon: true as const } : {}),
+    })
+  }
+  const subtotal = items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.qty || 0), 0)
+  return { items, newLineIdsKey, subtotal }
+}
+
 /**
  * 홀 직원 줄과 QR 손님이 한 UPDATE에 섞이면, 홀·Realtime 주방은 직원 줄만 찍는다.
  * QR 줄은 pos_print_jobs 가 주방을 담당한다.

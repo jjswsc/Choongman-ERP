@@ -7,6 +7,7 @@ import {
   planQrGuestAddonAutoprint,
   pickQrGuestLinesForHallAutoprint,
   pickQrGuestNoKitchenLinesForHallPrint,
+  buildQrGuestCumulativeHallPrintItems,
   resolveDineInAddonKitchenDelayMs,
   shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipHallAutoprintForQrGuestAddon,
@@ -132,6 +133,65 @@ describe('pickQrGuestLinesForHallAutoprint', () => {
     expect(
       pickQrGuestLinesForHallAutoprint(lines, [{ id: 'qr-food' }], true).map((it) => it.id)
     ).toEqual(['qr-food', 'qr-coke'])
+  })
+})
+
+describe('buildQrGuestCumulativeHallPrintItems', () => {
+  const previous = [
+    { id: 'qr-old-food', source: 'qr_table', name: 'Soy Combo', price: 169, qty: 1 },
+    { id: 'qr-old-coke', source: 'qr_table', name: 'Pepsi', price: 30, qty: 1 },
+  ]
+  const newest = [
+    { id: 'qr-new-food', source: 'qr_table', name: 'Gochujang Combo', price: 169, qty: 1 },
+    { id: 'qr-new-coke', source: 'qr_table', name: 'Pepsi Zero', price: 30, qty: 1 },
+  ]
+  const buffet = {
+    id: 'buffet-entry-9',
+    source: 'qr_table',
+    name: 'Buffet',
+    price: 499,
+    qty: 2,
+    isBuffetEntry: true,
+  }
+
+  it('includes previous + new guest lines and marks only new as isAddon', () => {
+    const built = buildQrGuestCumulativeHallPrintItems({
+      allOrderItems: [...previous, ...newest, buffet],
+      newLineIds: newest.map((it) => it.id),
+    })
+    expect(built.items.map((it) => it.id)).toEqual([
+      'qr-old-food',
+      'qr-old-coke',
+      'qr-new-food',
+      'qr-new-coke',
+    ])
+    expect(built.items.filter((it) => it.isAddon).map((it) => it.id)).toEqual([
+      'qr-new-food',
+      'qr-new-coke',
+    ])
+    expect(built.subtotal).toBe(169 + 30 + 169 + 30)
+    expect(built.newLineIdsKey).toBe('qr-new-coke,qr-new-food')
+  })
+
+  it('does not mark isAddon on the first hall slip (no previous guest lines)', () => {
+    const built = buildQrGuestCumulativeHallPrintItems({
+      allOrderItems: [...newest, buffet],
+      newLineIds: newest.map((it) => it.id),
+    })
+    expect(built.items.every((it) => !it.isAddon)).toBe(true)
+    expect(built.items).toHaveLength(2)
+  })
+
+  it('excludes buffet entry and staff POS lines', () => {
+    const built = buildQrGuestCumulativeHallPrintItems({
+      allOrderItems: [
+        buffet,
+        { id: 'cart-1', name: 'Staff Coke', price: 30, qty: 1 },
+        ...newest,
+      ],
+      newLineIds: newest.map((it) => it.id),
+    })
+    expect(built.items.map((it) => it.id)).toEqual(['qr-new-food', 'qr-new-coke'])
   })
 })
 
