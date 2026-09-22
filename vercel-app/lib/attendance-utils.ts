@@ -259,9 +259,14 @@ export function getBangkokHour(iso: string | Date | null | undefined): number {
   if (iso == null) return 12
   const d = new Date(iso)
   if (isNaN(d.getTime())) return 12
-  const str = d.toLocaleTimeString('en-GB', { timeZone: ATTENDANCE_TZ, hour: '2-digit', hour12: false })
-  const m = String(str).match(/(\d{1,2})/)
-  let h = m ? parseInt(m[1], 10) : 12
+  const hourPart = new Intl.DateTimeFormat('en-US', {
+    timeZone: ATTENDANCE_TZ,
+    hour: 'numeric',
+    hourCycle: 'h23',
+  })
+    .formatToParts(d)
+    .find((p) => p.type === 'hour')
+  let h = hourPart ? parseInt(hourPart.value, 10) : NaN
   if (h === 24) h = 0
   if (!Number.isFinite(h)) return 12
   return Math.max(0, Math.min(23, h))
@@ -269,10 +274,10 @@ export function getBangkokHour(iso: string | Date | null | undefined): number {
 
 /**
  * 야간 근무 퇴근으로 보는 방콕 시(hour) 상한(포함).
- * 22:00–08:00 근무는 익일 08:00~08:59에 찍힌 퇴근이 정상 마감이다.
- * 07시까지만 보면 08시대 퇴근이 누락·당일 저녁 출근과 섞여 조퇴(약 510분)로 오탐된다.
+ * 22:00–08:00은 익일 08시대, 19:00–05:00은 익일 05시대에 퇴근한다.
+ * 연속 야간은 시각뿐 아니라 전날 미종료 출근 세션으로도 붙인다.
  */
-export const ATTENDANCE_OVERNIGHT_CLOCK_OUT_MAX_HOUR = 8
+export const ATTENDANCE_OVERNIGHT_CLOCK_OUT_MAX_HOUR = 9
 
 /** 방콕 00:00~08:59 퇴근 → 전날 야간 세션 마감 */
 export function isAttendanceOvernightClockOut(iso: string | Date | null | undefined): boolean {
@@ -282,14 +287,13 @@ export function isAttendanceOvernightClockOut(iso: string | Date | null | undefi
 
 /**
  * 근태 로그 조회 끝(미포함) UTC ISO.
- * 종료일 익일 10:00 방콕까지 — 08:00 퇴근과 약간의 OT를 전날 행에 붙이기 위함.
- * (이전: 익일 07:00 방콕 = `YYYY-MM-DDT00:00:00.000Z` → 22:00–08:00 퇴근이 잘림)
+ * 종료일 익일 12:00 방콕까지 — 08:00 퇴근·오전 OT를 전날 행에 붙이기 위함.
  */
 export function attendanceOvernightOutFetchEndExclusiveUtcIso(endYmd: string): string {
   const s = String(endYmd || '').trim().slice(0, 10)
   const day = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : todayStrBangkok()
   const nextCal = addDayBangkok(day, 1)
-  return new Date(`${nextCal}T10:00:00+07:00`).toISOString()
+  return new Date(`${nextCal}T12:00:00+07:00`).toISOString()
 }
 
 /** 조회 종료일 다음날 새벽·오전 퇴근만 허용 (그 외 익일 로그는 제외) */
@@ -302,6 +306,54 @@ export function isAttendanceOvernightClockOutAfterRangeEnd(
   if (String(logType || '').trim() !== '퇴근') return false
   if (!isAttendanceOvernightClockOut(logAt)) return false
   return rowDate === addDayBangkok(rangeEndYmd, 1)
+}
+
+/**
+ * 전날 미종료 출근이 있으면 이번 퇴근을 전날 세션에 붙인다.
+ * 연속 야간: 당일 저녁 출근보다 이른 아침 퇴근은 시각(07/08시)과 무관하게 전날 마감.
+ */
+export function shouldAttachClockOutToOpenPreviousShift(params: {
+  clockOutIso: string
+  todayInIso?: string | null
+  prevInIso?: string | null
+  prevOutIso?: string | null
+}): boolean {
+  if (!params.prevInIso || params.prevOutIso) return false
+  const outMs = new Date(params.clockOutIso).getTime()
+  const prevInMs = new Date(params.prevInIso).getTime()
+  if (!Number.isFinite(outMs) || !Number.isFinite(prevInMs) || outMs <= prevInMs) return false
+  if (!params.todayInIso) {
+    return isAttendanceOvernightClockOut(params.clockOutIso) || outMs - prevInMs <= 16 * 60 * 60 * 1000
+  }
+  const todayInMs = new Date(params.todayInIso).getTime()
+  if (!Number.isFinite(todayInMs)) return isAttendanceOvernightClockOut(params.clockOutIso)
+  return outMs < todayInMs
+}
+
+/** 익일 버킷의 퇴근이 그 날 출근보다 이르면(연속 야간 아침 마감) 전날 행에서 가져온다 */
+export function isMorningCloseClockOut(outIso: string | null | undefined, inIso: string | null | undefined): boolean {
+  if (!outIso) return false
+  if (!inIso) return true
+  const outMs = new Date(outIso).getTime()
+  const inMs = new Date(inIso).getTime()
+  return Number.isFinite(outMs) && Number.isFinite(inMs) && outMs < inMs
+}
+
+/**
+ * 출퇴근 구간에서 순근무 분. 계획 휴게가 있는데 휴게를 안 찍으면 계획 휴게를 빼
+ * (19:00–05:00 등 야간이 실근무 10h vs 계획 8.5h로 OT가 되는 오탐 방지).
+ */
+export function netWorkMinutesFromSpan(params: {
+  inMs: number
+  outMs: number
+  clockedBreakMin?: number
+  plannedBreakMin?: number
+}): number {
+  if (!Number.isFinite(params.inMs) || !Number.isFinite(params.outMs) || params.outMs <= params.inMs) return 0
+  const span = Math.floor((params.outMs - params.inMs) / 60000)
+  const clocked = Math.max(0, Number(params.clockedBreakMin) || 0)
+  const planned = Math.max(0, Number(params.plannedBreakMin) || 0)
+  return Math.max(0, span - Math.max(clocked, planned))
 }
 
 /**
@@ -511,6 +563,15 @@ export function parsePlanToMinutes(plan: string | null | undefined): number {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
 }
 
+/** 스케줄 휴게 분. 00:00 시작·야간 휴게(23:00–00:30)도 포함. 낮 시간 역전(14:00–13:00)은 오입력으로 보고 0 */
+export function plannedBreakMinutesFromPlans(breakStart: string, breakEnd: string): number {
+  const bsMin = parsePlanToMinutes(breakStart)
+  let beMin = parsePlanToMinutes(breakEnd)
+  if (beMin > 0 && beMin <= bsMin && bsMin >= 18 * 60) beMin += 24 * 60
+  if (beMin > bsMin) return beMin - bsMin
+  return 0
+}
+
 /**
  * 스케줄상 순수 근무 분(휴게 차감). 급여 getPayrollCalc·근태 그리드 차이(분) 계산에 공통 사용.
  * plan_out이 당일 시각으로 새벽(예: 02:00)이고 plan_in이 오후면 익일 퇴근으로 간주(plan_in_prev_day 미체크 DB 보정).
@@ -528,11 +589,7 @@ export function plannedWorkMinutesFromPlans(
     outMin += 24 * 60
   }
   if (inMin >= outMin) return 0
-  let workMin = outMin - inMin
-  const bsMin = parsePlanToMinutes(breakStart)
-  const beMin = parsePlanToMinutes(breakEnd)
-  if (bsMin && beMin && beMin > bsMin) workMin -= beMin - bsMin
-  return Math.max(0, workMin)
+  return Math.max(0, outMin - inMin - plannedBreakMinutesFromPlans(breakStart, breakEnd))
 }
 
 export type ScheduleRowForPlan = {

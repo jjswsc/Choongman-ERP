@@ -8,12 +8,15 @@ import {
   attendanceStoreNamePostgrestFilter,
   attendanceStoreNamePostgrestFilterFragments,
   bangkokDateRangeToUtc,
-  isAttendanceOvernightClockOut,
   isAttendanceOvernightClockOutAfterRangeEnd,
+  isMorningCloseClockOut,
+  netWorkMinutesFromSpan,
   parsePlanToMinutes,
+  plannedBreakMinutesFromPlans,
   plannedWorkMinutesFromPlans,
   resolveScheduleForEmployeeDay,
   scheduleDateKey,
+  shouldAttachClockOutToOpenPreviousShift,
 } from '@/lib/attendance-utils'
 import { resolveAttendanceEmployeeIdentity } from '@/lib/attendance-employee-resolve-server'
 import { attendanceLogRowMatchesEmployee } from '@/lib/attendance-log-fetch-server'
@@ -68,6 +71,22 @@ function addDay(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + delta)
   return d.toISOString().slice(0, 10)
+}
+
+function lookupDayRec<T>(
+  byKey: Record<string, T>,
+  date: string,
+  store: string,
+  employeeId: number,
+  name: string
+): T | undefined {
+  if (employeeId > 0) {
+    const byId = byKey[`${date}|${store}|#${employeeId}`]
+    if (byId) return byId
+  }
+  const nm = String(name || '').trim()
+  if (nm) return byKey[`${date}|${store}|${nm}`]
+  return undefined
 }
 
 /** log_at(ISO) → 방콕 기준 분(minute of day) 0~1439 */
@@ -610,11 +629,14 @@ export async function GET(request: NextRequest) {
           }
         }
       } else if (type === '퇴근') {
-        const isOvernightOut = isAttendanceOvernightClockOut(logAt)
-        const prevDayKey = eid > 0 ? `${addDay(rowDate, -1)}|${rowStore}|#${eid}` : `${addDay(rowDate, -1)}|${rowStore}|${name}`
-        const prevRec = byKey[prevDayKey]
-
-        if (isOvernightOut && prevRec?.inTime && !prevRec.outTime) {
+        const prevRec = lookupDayRec(byKey, addDay(rowDate, -1), rowStore, eid, name)
+        const attachToPrev = shouldAttachClockOutToOpenPreviousShift({
+          clockOutIso: logAt,
+          todayInIso: rec.inTime,
+          prevInIso: prevRec?.inTime,
+          prevOutIso: prevRec?.outTime,
+        })
+        if (attachToPrev && prevRec) {
           prevRec.outTime = logAt
           prevRec.earlyMinFromDb =
             r.early_min != null && Number.isFinite(Number(r.early_min))
@@ -638,16 +660,29 @@ export async function GET(request: NextRequest) {
           rec.outLogId = r.id ?? null
         }
       } else if (type === '휴식종료') {
+        const prevRec = lookupDayRec(byKey, addDay(rowDate, -1), rowStore, eid, name)
+        const attachToPrev = shouldAttachClockOutToOpenPreviousShift({
+          clockOutIso: logAt,
+          todayInIso: rec.inTime,
+          prevInIso: prevRec?.inTime,
+          prevOutIso: prevRec?.outTime,
+        })
+        const breakTarget = attachToPrev && prevRec ? prevRec : rec
         const breakLogKey = `${String(logAt).slice(0, 19)}|${Number(r.break_min) || 0}`
-        if (!rec.breakSeen.has(breakLogKey)) {
-          rec.breakSeen.add(breakLogKey)
-          rec.breakMin += Number(r.break_min) || 0
+        if (!breakTarget.breakSeen.has(breakLogKey)) {
+          breakTarget.breakSeen.add(breakLogKey)
+          breakTarget.breakMin += Number(r.break_min) || 0
         }
       }
     }
 
     // 익일 아침에 찍힌 "전일 세션 마감" 퇴근이 당일 버킷에 출근보다 먼저 잡히는 경우 → 전날로 이동 (급여 집계와 동일)
-    for (const rec of Object.values(byKey)) {
+    const recsByDate = Object.values(byKey).sort((a, b) => {
+      const d = String(a.date).localeCompare(String(b.date))
+      if (d !== 0) return d
+      return String(a.name).localeCompare(String(b.name))
+    })
+    for (const rec of recsByDate) {
       if (!rec.outTime) continue
       const inMs = rec.inTime ? new Date(rec.inTime).getTime() : NaN
       const outMs = new Date(rec.outTime).getTime()
@@ -655,11 +690,7 @@ export async function GET(request: NextRequest) {
         Number.isFinite(outMs) &&
         (!rec.inTime || (Number.isFinite(inMs) && outMs < inMs))
       if (!shouldCarryToPrev) continue
-      const prevKey =
-        rec.employeeId > 0
-          ? `${addDay(rec.date, -1)}|${rec.store}|#${rec.employeeId}`
-          : `${addDay(rec.date, -1)}|${rec.store}|${rec.name}`
-      const prevRec = byKey[prevKey]
+      const prevRec = lookupDayRec(byKey, addDay(rec.date, -1), rec.store, rec.employeeId, rec.name)
       if (!prevRec?.inTime || prevRec.outTime) continue
       prevRec.outTime = rec.outTime
       prevRec.earlyMinFromDb = rec.earlyMinFromDb
@@ -680,7 +711,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result: AttendanceDailyRow[] = []
-    for (const rec of Object.values(byKey)) {
+    for (const rec of recsByDate) {
       if (rec.date < startStr || rec.date > endStr) continue
       if (!rec.inTime) continue
       const dateForRow = rec.date
@@ -698,18 +729,10 @@ export async function GET(request: NextRequest) {
       const inLogIdForRow = rec.inLogId
       const inStatusForRow = rec.inStatus || ''
 
-      if (!outTimeForRow) {
-        const nextDay = (() => {
-          const d = new Date(rec.date + 'T12:00:00')
-          d.setDate(d.getDate() + 1)
-          return d.toISOString().slice(0, 10)
-        })()
-        const nextKey =
-          rec.employeeId > 0
-            ? `${nextDay}|${rec.store}|#${rec.employeeId}`
-            : `${nextDay}|${rec.store}|${rec.name}`
-        const nextRec = byKey[nextKey]
-        if (nextRec && nextRec.outTime && !nextRec.inTime) {
+      if (!outTimeForRow || isMorningCloseClockOut(outTimeForRow, inTimeForRow)) {
+        const nextDay = addDay(rec.date, 1)
+        const nextRec = lookupDayRec(byKey, nextDay, rec.store, rec.employeeId, rec.name)
+        if (nextRec && isMorningCloseClockOut(nextRec.outTime, nextRec.inTime)) {
           outTimeForRow = nextRec.outTime
           earlyMinDb = nextRec.earlyMinFromDb
           otMinForRow = nextRec.otMin
@@ -718,16 +741,25 @@ export async function GET(request: NextRequest) {
           outIdForRow = nextRec.outId
           outLogIdForRow = nextRec.outLogId
           breakMinForRow += nextRec.breakMin
-          // 자정 넘김 근무: 행은 출근한 날(오늘) 기준 유지, 퇴근만 익일 기록 사용
+          nextRec.outTime = null
+          nextRec.earlyMinFromDb = null
+          nextRec.otMin = null
+          nextRec.status = ''
+          nextRec.outApproved = ''
+          nextRec.outId = null
+          nextRec.outLogId = null
+          nextRec.breakMin = 0
+        } else if (isMorningCloseClockOut(outTimeForRow, inTimeForRow)) {
+          outTimeForRow = null
         }
       }
 
-      let actualWorkMin = 0
-      if (inTimeForRow && outTimeForRow) {
-        const inMs = new Date(inTimeForRow).getTime()
-        const outMs = new Date(outTimeForRow).getTime()
-        actualWorkMin = Math.max(0, Math.floor((outMs - inMs) / 60000) - breakMinForRow)
-      }
+      const inMsForWork = inTimeForRow ? new Date(inTimeForRow).getTime() : NaN
+      const outMsForWork = outTimeForRow ? new Date(outTimeForRow).getTime() : NaN
+      let actualWorkMin =
+        Number.isFinite(inMsForWork) && Number.isFinite(outMsForWork)
+          ? Math.max(0, Math.floor((outMsForWork - inMsForWork) / 60000) - breakMinForRow)
+          : 0
 
       const sch = resolveScheduleForEmployeeDay(
         dateForRow,
@@ -746,11 +778,16 @@ export async function GET(request: NextRequest) {
       const plannedWorkMin = sch
         ? plannedWorkMinutesFromPlans(planIn, planOut, planBS, planBE, planInPrevDay)
         : 0
-      const plannedBreakMin =
-        sch && parsePlanToMinutes(planBE) > parsePlanToMinutes(planBS)
-          ? Math.max(0, parsePlanToMinutes(planBE) - parsePlanToMinutes(planBS))
-          : 0
+      const plannedBreakMin = sch ? plannedBreakMinutesFromPlans(planBS, planBE) : 0
       const plannedWorkHrs = Math.round((plannedWorkMin / 60) * 100) / 100
+      if (Number.isFinite(inMsForWork) && Number.isFinite(outMsForWork)) {
+        actualWorkMin = netWorkMinutesFromSpan({
+          inMs: inMsForWork,
+          outMs: outMsForWork,
+          clockedBreakMin: breakMinForRow,
+          plannedBreakMin,
+        })
+      }
       const actualWorkHrs = actualWorkMin / 60
       const diffMin = Math.round(actualWorkMin - plannedWorkMin)
       const breakOverMin = Math.max(0, Math.round(breakMinForRow - plannedBreakMin))
@@ -793,21 +830,17 @@ export async function GET(request: NextRequest) {
         ? Math.min(Math.max(0, Math.round(earlyMinDb as number)), computedEarlyMin)
         : computedEarlyMin
 
-      // 연장: 차이가 음수(조퇴)면 OT 없음.
-      // DB ot_min=0이 "기본값(미조정)"일 수 있어, 조정 이력/승인 상태가 없으면 diff 기반 계산을 우선한다.
+      // 연장: 자동 저장된 DB ot_min(야간 08시 퇴근 오탐 등)은 쓰지 않고, 관리자 조정 이력이 있을 때만 DB 값을 쓴다.
       const hasOtAdjustment = hasMetricAdjustment(outLogIdForRow ?? null, 'ot_min')
       const otFromDb =
         otMinForRow != null && Number.isFinite(Number(otMinForRow))
           ? Math.max(0, Math.round(Number(otMinForRow)))
           : null
-      const shouldUseDbOt =
-        otFromDb != null &&
-        (otFromDb > 0 || hasOtAdjustment || approvedOut)
       const effectiveOtMinRaw =
         actualWorkMin <= 0 || plannedWorkMin <= 0 || diffMin < 0
           ? 0
-          : shouldUseDbOt
-            ? (otFromDb as number)
+          : hasOtAdjustment && otFromDb != null
+            ? otFromDb
             : Math.max(0, diffMin)
       // 급여 기준과 동일: OT 30분 미만은 0분으로 표시/반영
       const displayOtMin = diffMin < 0 ? 0 : otMinutesForPayroll(Math.max(0, effectiveOtMinRaw))

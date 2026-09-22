@@ -155,7 +155,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
   }
 
   // 자정 넘김: 익일 새벽·오전 퇴근을 전날(출근일)에 합침. 연속 야간은 당일 저녁 출근보다 이른 아침 퇴근도 전날로 이동.
-  for (const [dayKey, v] of Object.entries(byDay)) {
+  for (const [dayKey, v] of Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b))) {
     if (v.outMs != null && (v.inMs == null || v.outMs < v.inMs)) {
       const parts = dayKey.split('|')
       const rowDate = parts[0]

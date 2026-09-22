@@ -39,9 +39,12 @@ import {
   isAttendanceOvernightClockOut,
   isAttendanceOvernightClockOutAfterRangeEnd,
   iterBangkokYmdInclusive,
+  netWorkMinutesFromSpan,
+  plannedBreakMinutesFromPlans,
   plannedWorkMinutesFromPlans,
   resolveScheduleForEmployeeDay,
   scheduleDateKey,
+  shouldAttachClockOutToOpenPreviousShift,
   toDateStrBangkok,
 } from '@/lib/attendance-utils'
 import { resolvePayrollPeriodForMonth } from '@/lib/payroll-cycle-settings'
@@ -454,7 +457,6 @@ function buildAttendanceSummary(
       }
     } else if (type === '퇴근') {
       const logAtStr = r.log_at || ''
-      const isOvernightOut = isAttendanceOvernightClockOut(logAtStr)
       const prevDayKey = dayBucketKey(addCalendarDay(rowDate, -1), store, name, employeeId)
       const prev = byDay[prevDayKey]
       const applyClockOut = (target: (typeof byDay)[string]) => {
@@ -496,21 +498,40 @@ function buildAttendanceSummary(
           })
         }
       }
-      if (isOvernightOut && prev?.inMs != null && prev.outMs == null) {
+      if (
+        shouldAttachClockOutToOpenPreviousShift({
+          clockOutIso: logAtStr,
+          todayInIso: v.inMs != null ? new Date(v.inMs).toISOString() : null,
+          prevInIso: prev?.inMs != null ? new Date(prev.inMs).toISOString() : null,
+          prevOutIso: prev?.outMs != null ? new Date(prev.outMs).toISOString() : null,
+        }) &&
+        prev
+      ) {
         applyClockOut(prev)
       } else {
         applyClockOut(v)
       }
     } else if (type === '휴식종료') {
+      const prevDayKeyBr = dayBucketKey(addCalendarDay(rowDate, -1), store, name, employeeId)
+      const prevBr = byDay[prevDayKeyBr]
+      const breakTarget =
+        shouldAttachClockOutToOpenPreviousShift({
+          clockOutIso: logAt,
+          todayInIso: v.inMs != null ? new Date(v.inMs).toISOString() : null,
+          prevInIso: prevBr?.inMs != null ? new Date(prevBr.inMs).toISOString() : null,
+          prevOutIso: prevBr?.outMs != null ? new Date(prevBr.outMs).toISOString() : null,
+        }) && prevBr
+          ? prevBr
+          : v
       const breakLogKey = `${String(logAt).slice(0, 19)}|${Number(r.break_min) || 0}`
-      if (!v.breakSeen.has(breakLogKey)) {
-        v.breakSeen.add(breakLogKey)
-        v.breakMin += Number(r.break_min) || 0
+      if (!breakTarget.breakSeen.has(breakLogKey)) {
+        breakTarget.breakSeen.add(breakLogKey)
+        breakTarget.breakMin += Number(r.break_min) || 0
       }
     }
   }
 
-  for (const [dayKey, v] of Object.entries(byDay)) {
+  for (const [dayKey, v] of Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b))) {
     const shouldCarryOutToPrev =
       v.outMs != null && (v.inMs == null || (v.inMs != null && v.outMs < v.inMs))
     if (shouldCarryOutToPrev) {
@@ -595,9 +616,8 @@ function buildAttendanceSummary(
       dayLines[attKey] = { late: [], early: [], ot: [] }
     }
 
-    const minWork = Math.max(0, Math.floor((v.outMs! - v.inMs!) / 60000) - v.breakMin)
-    map[attKey].workMin += minWork
-    const sch = resolveScheduleForEmployeeDay(rowDate, v.store, v.employeeId, v.name, scheduleMap, minWork, 'payroll')
+    const spanWork = Math.max(0, Math.floor((v.outMs! - v.inMs!) / 60000) - v.breakMin)
+    const sch = resolveScheduleForEmployeeDay(rowDate, v.store, v.employeeId, v.name, scheduleMap, spanWork, 'payroll')
     const plannedWorkMin = sch
       ? plannedWorkMinutesFromPlans(
           String(sch.plan_in || ''),
@@ -607,6 +627,16 @@ function buildAttendanceSummary(
           !!sch.plan_in_prev_day
         )
       : 0
+    const plannedBreakMin = sch
+      ? plannedBreakMinutesFromPlans(String(sch.break_start || ''), String(sch.break_end || ''))
+      : 0
+    const minWork = netWorkMinutesFromSpan({
+      inMs: v.inMs!,
+      outMs: v.outMs!,
+      clockedBreakMin: v.breakMin,
+      plannedBreakMin,
+    })
+    map[attKey].workMin += minWork
     const diffMin = plannedWorkMin > 0 ? Math.round(minWork - plannedWorkMin) : 0
     // 출근 지각 분은 일일 순근무 차이(diff)와 무관하게 집계(연장과 상쇄하지 않음)
     const dayLateMin = v.lateMin || 0
@@ -627,9 +657,7 @@ function buildAttendanceSummary(
       plannedWorkMin > 0
         ? diffMin < 0
           ? 0
-          : v.otMinExplicit != null
-            ? Math.max(0, v.otMinExplicit)
-            : diffBasedOt
+          : diffBasedOt
         : v.otMinExplicit != null
           ? Math.max(0, v.otMinExplicit)
           : Number(v.otMin) || 0

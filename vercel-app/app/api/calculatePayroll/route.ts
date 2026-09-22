@@ -187,7 +187,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
   }
 
   // 자정 넘김: 익일 새벽·오전 퇴근을 전날(출근일)에 합침. 연속 야간은 아침 퇴근이 당일 저녁 출근보다 일러도 전날로 이동.
-  for (const dk of Object.keys(byDay)) {
+  for (const dk of Object.keys(byDay).sort()) {
     const v = byDay[dk]
     if (v.outMs != null && (v.inMs == null || v.outMs < v.inMs)) {
       const rowDate = dk.slice(0, 10)
