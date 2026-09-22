@@ -18,7 +18,7 @@ import {
   resolvePointEarnChannel,
 } from '@/lib/member-point-earn-policy'
 import { loadMemberPointEarnBonusPolicy } from '@/lib/member-point-earn-policy-server'
-import { normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
+import { addPosTierPoints, normalizeMemberPoints, roundMemberPointsEarn } from '@/lib/member-points-math'
 import { resolveMemberPortalTenantScope } from '@/lib/member-portal-tenant-scope'
 import {
   isPosOrderPaymentCompleteForTotal,
@@ -646,12 +646,7 @@ export async function applyLoyaltyOnOrder(params: {
   // persistPosOrderCouponRedemptions 한 곳에서만 수행한다. 여기서 중복 처리하면
   // 결제·재처리마다 phantom used 행이 쌓여 회원앱에 중복 쿠폰이 남는다.
 
-  const nextTierPoints = roundMemberPointsEarn(
-    Math.max(
-      roundMemberPointsEarn(member.tier_points),
-      roundMemberPointsEarn(member.line_tier_points)
-    ) + (appliedEarn > 0 ? appliedEarn : 0)
-  )
+  const nextTierPoints = addPosTierPoints(member.tier_points, appliedEarn)
 
   if (!shouldInsertUse && !shouldInsertEarn) {
     /** 이미 원장에 적립된 주문 — 영수증/주문 point_earned 동기화용으로 기존 적립분을 반환 */

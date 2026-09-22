@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addPosTierPoints,
   formatMemberPointsDisplay,
   normalizeMemberPoints,
   roundMemberPointsEarn,
@@ -19,5 +20,11 @@ describe('member-points-math', () => {
 
   it('normalizes signed ledger amounts', () => {
     expect(normalizeMemberPoints(-2.59)).toBe(-2.59)
+  })
+
+  it('adds only this earn to POS tier points and leaves LINE points out', () => {
+    expect(addPosTierPoints(62.36, 16.74)).toBe(79.1)
+    expect(addPosTierPoints(79.1, 0)).toBe(79.1)
+    expect(addPosTierPoints(0, 16.74)).toBe(16.74)
   })
 })
