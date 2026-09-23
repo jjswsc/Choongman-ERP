@@ -56,6 +56,7 @@ export type POSTileType =
   | "attendance"
   | "sales"
   | "members"
+  | "menu-sold-out"
   | "business"
   | "cash"
   | "petty-cash"
@@ -118,6 +119,7 @@ export const DEFAULT_TILES: POSTile[] = [
   { id: "m2", type: "receipt", label: "영수증 관리", labelEn: "Receipts", labelKey: "posReceiptManage", icon: "receipt", variant: "default", size: "medium", enabled: true, order: 11, group: "other" },
   { id: "m3", type: "attendance", label: "근태 관리", labelEn: "Attendance", labelKey: "posAttendanceManage", icon: "clock", variant: "default", size: "medium", enabled: true, order: 12, group: "other" },
   { id: "m3b", type: "members", label: "회원 관리", labelEn: "Members", labelKey: "posMemberManage", icon: "users", variant: "default", size: "medium", enabled: true, order: 12.5, group: "other" },
+  { id: "m3c", type: "menu-sold-out", label: "메뉴 품절", labelEn: "Menu Sold Out", labelKey: "posMenuSoldOutManage", icon: "circle-off", variant: "default", size: "medium", enabled: true, order: 12.7, group: "other" },
   { id: "m4", type: "business", label: "영업 관리", labelEn: "Business", labelKey: "posBusinessManage", icon: "folder-open", variant: "default", size: "medium", enabled: true, order: 13, group: "other" },
   { id: "m5", type: "cash", label: "시재 관리", labelEn: "Cash", labelKey: "posCashManage", icon: "wallet", variant: "default", size: "medium", enabled: true, order: 14, group: "other" },
   { id: "m5b", type: "petty-cash", label: "패티 캐쉬", labelEn: "Petty Cash", labelKey: "adminPettyCash", icon: "banknote", variant: "default", size: "medium", enabled: true, order: 14.5, group: "other" },

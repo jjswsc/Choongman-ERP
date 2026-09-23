@@ -616,11 +616,23 @@ export async function deletePosMenu(params: { id: string }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-export async function updatePosMenuSoldOut(params: { id: string; soldOut: boolean }) {
+export async function updatePosMenuSoldOut(params: {
+  id: string
+  soldOut: boolean
+  storeCode?: string | null
+}) {
   const res = await apiFetchWithOffline('/api/updatePosMenuSoldOut', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify({ id: params.id, soldOut: params.soldOut }),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const data = (await res.json()) as {
+    success: boolean
+    message?: string
+    soldOutDate?: string | null
+  }
+  if (data?.success) {
+    void refreshPosMenusCatalogCache({ storeCode: params.storeCode })
+  }
+  return data
 }

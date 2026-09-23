@@ -3155,17 +3155,23 @@ export default function PosMenusPage() {
     await appAlert(nextActive ? t("posMenuUseAgainDone") : t("posMenuUnusedDone"))
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = bangkokTodayStr
   const handleSoldOutToggle = async (menu: PosMenu) => {
     const isSoldOut = menu.soldOutDate === todayStr
     setSoldOutTogglingId(menu.id)
     try {
       const res = await updatePosMenuSoldOut({ id: menu.id, soldOut: !isSoldOut })
       if (res.success) {
+        const nextDate =
+          res.soldOutDate != null
+            ? String(res.soldOutDate).slice(0, 10)
+            : !isSoldOut
+              ? todayStr
+              : null
         setMenus((prev) =>
           prev.map((m) =>
             m.id === menu.id
-              ? { ...m, soldOutDate: !isSoldOut ? todayStr : null }
+              ? { ...m, soldOutDate: nextDate }
               : m
           )
         )

@@ -19,6 +19,7 @@ import {
   ArrowUpCircle,
   LogOut,
   Users,
+  CircleOff,
 } from "lucide-react"
 
 const iconMap = {
@@ -38,6 +39,7 @@ const iconMap = {
   "arrow-up-circle": ArrowUpCircle,
   "log-out": LogOut,
   users: Users,
+  "circle-off": CircleOff,
 } as const
 
 interface POSTileProps {
