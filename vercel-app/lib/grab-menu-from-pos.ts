@@ -40,6 +40,7 @@ import {
   type PosDeliveryMenuPolicy,
   type PosDeliveryPolicyBundle,
 } from '@/lib/pos-delivery-policy'
+import { loadStoreMenuSoldOutMap, isMenuSoldOutForStore } from '@/lib/pos-menu-store-sold-out-server'
 import { grabSellingTimeWindowForSlot } from '@/lib/grab-selling-time-window'
 import {
   normalizePromotionCategoryMain,
@@ -270,11 +271,21 @@ function isBanbanMenuRow(menu: MenuRow): boolean {
 
 function isGrabBanbanFlavorAvailable(
   menu: MenuRow,
-  policy: PosDeliveryMenuPolicy | undefined
+  policy: PosDeliveryMenuPolicy | undefined,
+  storeSoldOut?: { byMenuId: Map<number, string>; schemaReady: boolean }
 ): boolean {
   if (menu.is_active === false) return false
   if (menu.sell_delivery === false) return false
-  if (isSoldOutDate(menu.sold_out_date)) return false
+  if (
+    isMenuSoldOutForStore({
+      menuId: Number(menu.id || 0),
+      globalSoldOutDate: menu.sold_out_date,
+      storeMap: storeSoldOut?.byMenuId ?? null,
+      useStoreScope: !!storeSoldOut?.schemaReady,
+    })
+  ) {
+    return false
+  }
   if (policy && !policy.enabled) return false
   if (policy && !isMenuAvailableByDeliveryPolicy(policy)) return false
   return true
@@ -808,7 +819,13 @@ export async function buildGrabMenuFromPos(params: {
     merchantID: params.merchantID,
     partnerMerchantID: params.partnerMerchantID,
   })
-  const resolved = await resolvePolicyBundleForGrabMenu(storeGuess)
+  const [resolved, storeSoldOutLoad] = await Promise.all([
+    resolvePolicyBundleForGrabMenu(storeGuess),
+    loadStoreMenuSoldOutMap(storeGuess).catch(() => ({
+      byMenuId: new Map<number, string>(),
+      schemaReady: false,
+    })),
+  ])
   const { policyBundle } = resolved
   const menuPolicyMap = buildMenuPolicyMap(policyBundle?.menuPolicies || [])
   const categoryOrderMap = buildCategoryOrderMap(policyBundle?.categoryOrders || [])
@@ -1079,7 +1096,9 @@ export async function buildGrabMenuFromPos(params: {
               return menus.find((m) => Number(m.id ?? 0) === id)
             })
             .filter((m): m is MenuRow => !!m)
-            .filter((m) => isGrabBanbanFlavorAvailable(m, menuPolicyMap.get(Number(m.id ?? 0))))
+            .filter((m) =>
+              isGrabBanbanFlavorAvailable(m, menuPolicyMap.get(Number(m.id ?? 0)), storeSoldOutLoad)
+            )
             .slice(0, 30)
         : []
       const banbanModifierGroups =
@@ -1116,7 +1135,12 @@ export async function buildGrabMenuFromPos(params: {
             })
           : []
 
-      const soldOut = isSoldOutDate(menu.sold_out_date)
+      const soldOut = isMenuSoldOutForStore({
+        menuId: Number(menu.id || 0),
+        globalSoldOutDate: menu.sold_out_date,
+        storeMap: storeSoldOutLoad.byMenuId,
+        useStoreScope: storeSoldOutLoad.schemaReady,
+      })
       const active = menu.is_active !== false
       const available = active && !soldOut && isMenuAvailableByDeliveryPolicy(policy)
       const deliveryPrice = menu.price_delivery != null ? menu.price_delivery : menu.price

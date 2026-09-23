@@ -626,9 +626,12 @@ export default function PosMenusPage() {
     const setBusy = setLoadingState ?? (() => {})
     setBusy(true)
     try {
-      // 세 API를 동시에 호출해 대기 시간 단축 (순차 호출 대비)
+      const storeForSoldOut =
+        !canSearchAllStores && auth?.store
+          ? String(auth.store).trim()
+          : String(effectivePricingStore || "").trim() || undefined
       const [list, catRes, config] = await Promise.all([
-        getPosMenus({ fresh: true }),
+        getPosMenus({ fresh: true, storeCode: storeForSoldOut || undefined }),
         getPosMenuCategories().catch(() => ({ categories: [] as string[], mainCategories: [] as string[] })),
         getPosMenuCategoriesConfig().catch(() => null),
       ])
@@ -645,7 +648,7 @@ export default function PosMenusPage() {
     } finally {
       setBusy(false)
     }
-  }, [t])
+  }, [t, canSearchAllStores, auth?.store, effectivePricingStore])
 
   const handleDownloadPosMenuTemplate = React.useCallback(async () => {
     try {
@@ -3161,7 +3164,11 @@ export default function PosMenusPage() {
     const isSoldOut = isPosMenuSoldOut(menu.soldOutDate)
     setSoldOutTogglingId(menu.id)
     try {
-      const res = await updatePosMenuSoldOut({ id: menu.id, soldOut: !isSoldOut })
+      const res = await updatePosMenuSoldOut({
+        id: menu.id,
+        soldOut: !isSoldOut,
+        storeCode: String(auth?.store || effectivePricingStore || "").trim() || null,
+      })
       if (res.success) {
         const nextDate =
           res.soldOutDate != null

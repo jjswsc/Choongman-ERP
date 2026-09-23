@@ -23,6 +23,7 @@ import {
   isPosCatalogTenantQueryBlocked,
   resolvePosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
+import { loadStoreMenuSoldOutMap, resolveMenuSoldOutDate } from '@/lib/pos-menu-store-sold-out-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
@@ -239,6 +240,24 @@ export async function GET(request: NextRequest) {
       scopeSchemaReady = false
     }
 
+    const useStoreSoldOutScope = !!requestedStoreCode
+    let storeSoldOutByMenuId: Map<number, string> | null = null
+    if (useStoreSoldOutScope) {
+      try {
+        const soldOutLoad = await loadStoreMenuSoldOutMap(requestedStoreCode)
+        storeSoldOutByMenuId = soldOutLoad.schemaReady ? soldOutLoad.byMenuId : null
+      } catch {
+        storeSoldOutByMenuId = null
+      }
+    }
+    const resolveSoldOut = (menuId: number, globalDate: string | null | undefined) =>
+      resolveMenuSoldOutDate({
+        menuId,
+        globalSoldOutDate: globalDate,
+        storeMap: storeSoldOutByMenuId,
+        useStoreScope: useStoreSoldOutScope && storeSoldOutByMenuId != null,
+      })
+
     const list = (typedRows || []).flatMap((row) => {
       const rowMenuId = Number(row.id || 0)
       const scopedStores = normalizeMenuScopeStoreCodes(
@@ -313,7 +332,7 @@ export async function GET(request: NextRequest) {
         vatIncluded: !!row.vat_included,
         isActive: row.is_active !== false,
         sortOrder: Number(row.sort_order) ?? 0,
-        soldOutDate: row.sold_out_date ? String(row.sold_out_date).slice(0, 10) : null,
+        soldOutDate: resolveSoldOut(rowMenuId, row.sold_out_date),
         optionSelectionGroups,
         optionSelectionConfig,
         kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,
@@ -409,7 +428,7 @@ export async function GET(request: NextRequest) {
           vatIncluded: !!row.vat_included,
           isActive: row.is_active !== false,
           sortOrder: Number(row.sort_order) ?? 0,
-          soldOutDate: row.sold_out_date ? String(row.sold_out_date).slice(0, 10) : null,
+          soldOutDate: resolveSoldOut(rowMenuId, row.sold_out_date),
           optionSelectionGroups,
           optionSelectionConfig,
           kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,

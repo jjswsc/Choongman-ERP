@@ -23,6 +23,7 @@ import {
   resolveQrGuestLineOption,
 } from '@/lib/qr-table-guest-menu'
 import { isBanbanMenu, overlayBanbanFlavorMenuIds } from '@/lib/pos-banban-utils'
+import { loadStoreMenuSoldOutMap, isMenuSoldOutForStore } from '@/lib/pos-menu-store-sold-out-server'
 import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
 import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import { selectFilterOptionalTenant, storeRowFilter, upsertRowsTenantStore } from '@/lib/saas-store-conflict'
@@ -1573,10 +1574,6 @@ function menuImageUrl(m: DbMenu): string {
   return String(m.image || m.image_url || '').trim()
 }
 
-function isMenuSoldOut(soldOutDate: string | null | undefined): boolean {
-  return !!String(soldOutDate || '').trim().slice(0, 10)
-}
-
 export async function loadQrMenusForSession(session: QrTableSession) {
   if (!session.entryPaid && session.status !== 'active') {
     throw new Error('entry_not_ready')
@@ -1588,6 +1585,10 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   ])
   const limitExtras = extraAllow.size > 0
   const menus = await loadHallMenusForStore(session.storeCode)
+  const soldOutLoad = await loadStoreMenuSoldOutMap(session.storeCode).catch(() => ({
+    byMenuId: new Map<number, string>(),
+    schemaReady: false,
+  }))
   menus.sort((a, b) => {
     const mainA = normalizePromotionCategoryMain(a.category_main)
     const mainB = normalizePromotionCategoryMain(b.category_main)
@@ -1614,7 +1615,12 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   for (const m of menus) {
     const id = Number(m.id || 0)
     if (!id) continue
-    const soldOut = isMenuSoldOut(m.sold_out_date)
+    const soldOut = isMenuSoldOutForStore({
+      menuId: id,
+      globalSoldOutDate: m.sold_out_date,
+      storeMap: soldOutLoad.byMenuId,
+      useStoreScope: soldOutLoad.schemaReady,
+    })
     const isIncluded = included.has(id)
     const categoryMain = normalizePromotionCategoryMain(m.category_main)
     const category = String(m.category || '').trim()
@@ -1718,7 +1724,8 @@ export async function submitQrCart(params: {
     .filter((id) => id > 0)
   const optionLookupIds = [...requestedIds, ...flavorIds]
 
-  const [included, extraAllow, byId, optionsByMenuId, flavorIdsByBanban, orderRows] = await Promise.all([
+  const [included, extraAllow, byId, optionsByMenuId, flavorIdsByBanban, orderRows, soldOutLoad] =
+    await Promise.all([
     tierId > 0 ? loadIncludedMenuIdSet(tierId, requestedIds) : Promise.resolve(new Set<number>()),
     tierId > 0
       ? loadExtraMenuAllowForCart(tierId, requestedIds)
@@ -1752,6 +1759,10 @@ export async function submitQrCart(params: {
         updated_at?: string
       }>
     >,
+    loadStoreMenuSoldOutMap(session.storeCode).catch(() => ({
+      byMenuId: new Map<number, string>(),
+      schemaReady: false,
+    })),
   ])
 
   const order = orderRows?.[0]
@@ -1771,8 +1782,16 @@ export async function submitQrCart(params: {
     if (!menuId || !qty) continue
     const menu = byId.get(menuId)
     if (!menu) throw new Error(`menu_not_found:${menuId}`)
-    if (isMenuSoldOut(menu.sold_out_date)) throw new Error(`menu_sold_out:${menuId}`)
-    const isIncluded = included.has(menuId)
+    if (
+      isMenuSoldOutForStore({
+        menuId,
+        globalSoldOutDate: menu.sold_out_date,
+        storeMap: soldOutLoad.byMenuId,
+        useStoreScope: soldOutLoad.schemaReady,
+      })
+    ) {
+      throw new Error(`menu_sold_out:${menuId}`)
+    }    const isIncluded = included.has(menuId)
     if (!isIncluded && extraAllow.restricted && !extraAllow.allowed.has(menuId)) {
       throw new Error(`menu_not_in_extras:${menuId}`)
     }

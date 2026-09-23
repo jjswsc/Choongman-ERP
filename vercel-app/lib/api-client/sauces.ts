@@ -624,12 +624,19 @@ export async function updatePosMenuSoldOut(params: {
   const res = await apiFetchWithOffline('/api/updatePosMenuSoldOut', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: params.id, soldOut: params.soldOut }),
+    body: JSON.stringify({
+      id: params.id,
+      soldOut: params.soldOut,
+      storeCode: params.storeCode || undefined,
+    }),
   })
   const data = (await res.json()) as {
     success: boolean
     message?: string
     soldOutDate?: string | null
+    storeCode?: string
+    scope?: 'store' | 'global'
+    code?: string
   }
   if (data?.success) {
     void refreshPosMenusCatalogCache({ storeCode: params.storeCode })

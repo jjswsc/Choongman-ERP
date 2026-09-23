@@ -142,7 +142,7 @@ export function PosMenuSoldOutContent() {
               </h1>
               <p className="truncate text-xs text-muted-foreground">
                 {t('posMenuSoldOutManageHint') ||
-                  '품절 시 POS·QR에서 주문 불가. 다시 열 때까지 유지.'}
+                  '이 매장만 품절. POS·QR 주문 불가. 다시 열 때까지 유지.'}
               </p>
             </div>
           </div>
