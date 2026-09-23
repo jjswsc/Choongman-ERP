@@ -3,13 +3,23 @@ import {
   remainingBankSurplusAfterApplies,
   roundReceivableMoney,
 } from '@/lib/bank-receivable-link'
-import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { postgrestStoreNameIlikeOrFilter } from '@/lib/evaluation-postgrest-filters'
+import { supabaseInsert, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 /** 통장 과납 선수금 Receive 적요 — 미배정 입금과 구분 */
 export const BANK_SURPLUS_CREDIT_MEMO_PREFIX = '과납 선수금'
 
 export function isBankSurplusCreditMemo(memo: string | undefined | null): boolean {
   return String(memo || '').trim().startsWith(BANK_SURPLUS_CREDIT_MEMO_PREFIX)
+}
+
+/** 과납 선수금 Receive — 미배정「통장 수령」과 구분하는 PostgREST memo 필터 */
+function bankSurplusCreditMemoFilter(): string {
+  return `memo=like.${encodeURIComponent(`${BANK_SURPLUS_CREDIT_MEMO_PREFIX}%`)}`
+}
+
+function storeNameScopeFilter(storeName: string): string | null {
+  return postgrestStoreNameIlikeOrFilter(String(storeName || '').trim())
 }
 
 export type StoreCreditItem = {
@@ -55,39 +65,25 @@ export async function loadStoreCreditItemsForStore(storeName: string): Promise<S
   const store = String(storeName || '').trim()
   if (!store) return []
 
-  const creditRows = (await supabaseSelectFilter(
-    'receivable_transactions',
-    `ref_type=eq.StoreCredit&amount=gt.0`,
-    {
-      select: 'id,store_name,amount,trans_date,memo',
-      order: 'trans_date.asc,id.asc',
-      limit: 500,
-    }
-  )) as StoreCreditRow[] | null
+  const storeFilter = storeNameScopeFilter(store)
+  const filter = storeFilter
+    ? `ref_type=eq.StoreCredit&amount=gt.0&${storeFilter}`
+    : `ref_type=eq.StoreCredit&amount=gt.0`
 
+  const creditRows = (await supabaseSelectFilterAllPages('receivable_transactions', filter, {
+    select: 'id,store_name,amount,trans_date,memo',
+    order: 'trans_date.asc,id.asc',
+  })) as StoreCreditRow[]
+
+  // SQL ilike는 CM 접두·대소문 변형만 — 최종은 receivableStoreMatchesBank 로 한 번 더 좁힘
   const scoped = (creditRows || []).filter((r) =>
     receivableStoreMatchesBank(String(r.store_name || ''), store)
   )
   if (scoped.length === 0) return []
 
-  const creditIds = scoped.map((r) => Number(r.id || 0)).filter((id) => id > 0)
-  const appliedByCredit = new Map<number, number>()
-  for (let i = 0; i < creditIds.length; i += 80) {
-    const chunk = creditIds.slice(i, i + 80)
-    const applyRows = (await supabaseSelectFilter(
-      'receivable_transactions',
-      `ref_type=eq.CreditApply&ref_id=in.(${chunk.join(',')})`,
-      { select: 'ref_id,amount', limit: Math.max(chunk.length * 3, 100) }
-    )) as CreditApplyRow[] | null
-    for (const row of applyRows || []) {
-      const cid = Number(row.ref_id || 0)
-      if (!cid) continue
-      appliedByCredit.set(
-        cid,
-        roundReceivableMoney((appliedByCredit.get(cid) || 0) + Math.abs(Number(row.amount) || 0))
-      )
-    }
-  }
+  const appliedByCredit = await loadCreditApplyAbsByRefId(
+    scoped.map((r) => Number(r.id || 0)).filter((id) => id > 0)
+  )
 
   const out: StoreCreditItem[] = []
   for (const row of scoped) {
@@ -113,11 +109,11 @@ async function loadCreditApplyAbsByRefId(creditIds: number[]): Promise<Map<numbe
   for (let i = 0; i < creditIds.length; i += 80) {
     const chunk = creditIds.slice(i, i + 80)
     if (chunk.length === 0) continue
-    const applyRows = (await supabaseSelectFilter(
+    const applyRows = (await supabaseSelectFilterAllPages(
       'receivable_transactions',
       `ref_type=eq.CreditApply&ref_id=in.(${chunk.join(',')})`,
-      { select: 'ref_id,amount', limit: Math.max(chunk.length * 3, 100) }
-    )) as CreditApplyRow[] | null
+      { select: 'ref_id,amount', order: 'id.asc' }
+    )) as CreditApplyRow[]
     for (const row of applyRows || []) {
       const cid = Number(row.ref_id || 0)
       if (!cid) continue
@@ -157,15 +153,24 @@ export async function loadBankSurplusCreditItemsForStore(
   const store = String(storeName || '').trim()
   if (!store) return []
 
-  const rows = (await supabaseSelectFilter(
-    'receivable_transactions',
-    `ref_type=eq.Receive&ref_id=is.null&amount=lt.0`,
-    {
-      select: 'id,store_name,amount,trans_date,memo,bank_transaction_id',
-      order: 'trans_date.asc,id.asc',
-      limit: 500,
-    }
-  )) as SurplusReceiveRow[] | null
+  // 전 매장 Receive 500건 ASC는 미배정「통장 수령」과 섞여 최근 과납이 잘릴 수 있음.
+  // memo·매장·bank_transaction_id 로 먼저 좁히고 페이지 전체 조회.
+  const storeFilter = storeNameScopeFilter(store)
+  const filter = [
+    'ref_type=eq.Receive',
+    'ref_id=is.null',
+    'amount=lt.0',
+    'bank_transaction_id=not.is.null',
+    bankSurplusCreditMemoFilter(),
+    storeFilter,
+  ]
+    .filter(Boolean)
+    .join('&')
+
+  const rows = (await supabaseSelectFilterAllPages('receivable_transactions', filter, {
+    select: 'id,store_name,amount,trans_date,memo,bank_transaction_id',
+    order: 'trans_date.asc,id.asc',
+  })) as SurplusReceiveRow[]
 
   const scoped = (rows || []).filter(
     (row) =>
