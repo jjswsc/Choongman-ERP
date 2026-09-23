@@ -6,7 +6,7 @@ import {
   setPosBusinessHoursClient,
   type PosBusinessHoursConfig,
 } from '@/lib/pos-business-day'
-import { getPosSettlementWithCache, settlementStoreCacheKeys } from '@/lib/offline/settlement-offline'
+import { getPosSettlementWithCache, settlementStoreCacheKeys, persistPosBusinessOpenAfterSave, resolvePosBusinessOpenSettleDates } from '@/lib/offline/settlement-offline'
 import { getFromCache } from '@/lib/offline/cache'
 import { readPosBusinessOpenLocal } from '@/lib/pos-business-open-local'
 import { isOnline, shouldPreferOfflineCache } from '@/lib/offline/network'
@@ -118,7 +118,8 @@ async function isBusinessOpenForStoreDate(storeCode: string, settleDate: string)
   } catch {
     /* fall through — API 직접 조회 */
   }
-  if (!isOnline() || shouldPreferOfflineCache()) return false
+  /** 오프라인 선호여도 브라우저 온라인이면 시재 API를 한 번 더 본다 (0원 개점·구캐시) */
+  if (!isOnline()) return false
   try {
     const data = await getPosSettlement({ storeCode, settleDate })
     return isPosBusinessOpenRecorded(normalizeSettlement(data.settlement))
@@ -231,6 +232,18 @@ export async function checkPosBusinessOpenClient(params: {
       if (remote?.success && remote.allowed) {
         allowedToday = true
         closedToday = Boolean(remote.settlementClosed)
+        const openYmd = String(remote.businessDateYmd || businessDateYmd || '').trim().slice(0, 10)
+        if (openYmd) {
+          try {
+            await persistPosBusinessOpenAfterSave({
+              storeCode: store,
+              settleDates: resolvePosBusinessOpenSettleDates(openYmd),
+              cashActual: 0,
+            })
+          } catch {
+            /* 로컬 반영 실패해도 이번 판정은 허용 */
+          }
+        }
       } else if (remote?.success && remote.blockReason === 'new_business_day') {
         return {
           allowed: false,

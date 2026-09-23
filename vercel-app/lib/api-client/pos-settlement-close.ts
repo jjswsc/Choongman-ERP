@@ -125,6 +125,8 @@ export async function getPosSettlement(params: {
 export async function getPosBusinessOpenStatus(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', String(params.storeCode || '').trim())
+  /** SW·중간 캐시가 개점 전 응답을 붙잡지 않게 */
+  q.set('_', String(Date.now()))
   const res = await apiFetchWithOffline('/api/getPosBusinessOpenStatus?' + q.toString(), { cache: 'no-store' })
   return res.json() as Promise<{
     success?: boolean

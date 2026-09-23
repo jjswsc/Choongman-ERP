@@ -9098,24 +9098,20 @@ export default function PosTerminalPage() {
     setServingTableId(null)
     setSelectedTableId(tableId)
   }
-  const handleAddItemToCart = useCallback((item: CartPanelAddItemPayload) => {
-    if (!isPosDemo && businessOpenBlocked) {
-      void appAlert(
-        joinPosI18nAllLangs(
-          'posBusinessOpenRequiredBody',
-          '오늘 POS를 시작하려면 먼저 영업 관리 > 영업 시작에서 돈통 시제를 입력·저장해 주세요.'
-        )
-      )
-      return
-    }
-    // CartPanel ref가 있으면 addItem으로 위임 (패널 내부 setCartItems = setTerminalCartLines)
-    if (cartRef.current?.addItem) {
-      cartRef.current.addItem(item)
-    } else {
-      // 패널 마운트 전/전환 중이면 state 직접 갱신
-      setTerminalCartLines((prev) => mergeCartPanelAddItem(prev, item))
-    }
-  }, [businessOpenBlocked, isPosDemo])
+  const handleAddItemToCart = useCallback(
+    (item: CartPanelAddItemPayload) => {
+      void (async () => {
+        /** React 게이트 state가 stale여도 서버·캐시를 다시 본다 (0원 시재·Refresh 직후) */
+        if (!isPosDemo && !(await ensureBusinessOpenForOrder())) return
+        if (cartRef.current?.addItem) {
+          cartRef.current.addItem(item)
+        } else {
+          setTerminalCartLines((prev) => mergeCartPanelAddItem(prev, item))
+        }
+      })()
+    },
+    [ensureBusinessOpenForOrder, isPosDemo]
+  )
 
   const renderTerminalCartPanel = (
     debugOwner: 'inline-mobile' | 'side-panel' | 'inline-delivery' | 'inline-takeout'

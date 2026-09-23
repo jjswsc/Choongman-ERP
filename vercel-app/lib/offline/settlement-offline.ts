@@ -253,7 +253,10 @@ export async function getPosSettlementWithCache(params: {
 
   if (shouldPreferOfflineCache()) {
     const cached = await readCached()
-    if (cached) return cached
+    /** 개점(cash_actual)이 캐시에 있을 때만 네트워크 생략 — 빈/구캐시로 Order를 막지 않음 */
+    if (cached && isPosBusinessOpenRecorded(normalizeSettlementSingle(cached.settlement))) {
+      return cached
+    }
   }
 
   if (isOnline()) {

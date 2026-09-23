@@ -1029,11 +1029,7 @@ export default function PosOrderPage() {
     return hall
   }
 
-  const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionDisplayName?: string) => {
-    if (businessOpenBlocked) {
-      void ensureBusinessOpenForOrder()
-      return
-    }
+  const pushCartLineWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionDisplayName?: string) => {
     const cartId = opt ? `${menu.id}-${opt.id}` : menu.id
     const optBracket = opt ? resolvePosCartOptionDisplayName(menu, opt, storeCode || undefined) : ""
     const name = opt
@@ -1062,6 +1058,17 @@ export default function PosOrderPage() {
     setOptionPickerMenu(null)
     setOptionPickerStep(0)
     setOptionPickerSelections({})
+  }
+
+  const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionDisplayName?: string) => {
+    if (businessOpenBlocked) {
+      void (async () => {
+        if (!(await ensureBusinessOpenForOrder())) return
+        pushCartLineWithOption(menu, opt, defaultOptionDisplayName)
+      })()
+      return
+    }
+    pushCartLineWithOption(menu, opt, defaultOptionDisplayName)
   }
 
   const addToCart = async (menu: PosMenu) => {
