@@ -19,7 +19,6 @@ import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession } from '@/lib/q
 import { buffetTierDisplayName } from '@/lib/qr-table-types'
 import {
   aggregateQrGuestSentLines,
-  groupQrGuestSentLinesByTime,
   qrGuestCartLineKey,
   qrGuestMenuNeedsOptionPicker,
   type QrGuestMenuOption,
@@ -123,15 +122,6 @@ function toOrderSummary(order: {
     balanceDue: Number(order.balanceDue || 0),
     items: (Array.isArray(order.items) ? order.items : []) as OrderSummaryItem[],
   }
-}
-
-function ClockIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
-      <path d="M12 7.75V12l3 1.75" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
 }
 
 function GuestLangPickerGrid({
@@ -834,11 +824,6 @@ export function QrTableGuestApp({ token }: { token: string }) {
       return sum + unit * line.qty
     }, 0)
   }, [cart, menuById])
-  const displayTotal = Math.round((Number(orderSummary?.total || 0) + cartTotal) * 100) / 100
-  const sentGroups = React.useMemo(
-    () => groupQrGuestSentLinesByTime(orderSummary?.items, session?.createdAt),
-    [orderSummary, session?.createdAt]
-  )
 
   const mainCategories = React.useMemo(() => {
     const set = new Set<string>()
@@ -1149,101 +1134,25 @@ export function QrTableGuestApp({ token }: { token: string }) {
         </div>
       ) : null}
 
-      {historyOpen ? (
-        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/45" onClick={() => setHistoryOpen(false)}>
-          <div
-            className="flex max-h-[82dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-center pt-2.5">
-              <span className="h-1.5 w-10 rounded-full bg-stone-200" />
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-1">
-              <div>
-                <p className="text-base font-semibold">{g('orderHistory')}</p>
-                {sentLines.length > 0 ? (
-                  <p className="text-xs text-stone-500">
-                    {g('orderHistoryItemCount').replace(
-                      '{n}',
-                      String(sentLines.reduce((n, l) => n + l.qty, 0))
-                    )}
-                  </p>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                className="rounded-full bg-stone-100 px-3 py-1.5 text-sm font-medium text-stone-700"
-                onClick={() => setHistoryOpen(false)}
-              >
-                {g('close')}
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
-              {sentGroups.length === 0 ? (
-                <p className="py-10 text-center text-sm text-stone-500">{g('orderHistoryEmpty')}</p>
-              ) : (
-                <div className="space-y-3">
-                  {sentGroups.map((group, gi) => {
-                    const timedIndex = sentGroups.slice(0, gi + 1).filter((x) => x.timeLabel).length
-                    const itemCount = group.lines.reduce((n, l) => n + l.qty, 0)
-                    return (
-                      <section
-                        key={group.key}
-                        className="overflow-hidden rounded-2xl border border-stone-100 bg-stone-50/90"
-                      >
-                        <div className="flex items-center gap-2 border-b border-stone-100 bg-white/90 px-3 py-2">
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--qr-brand,#b45309)]/10 text-[var(--qr-brand,#b45309)]">
-                            <ClockIcon className="h-3.5 w-3.5" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="font-semibold tabular-nums tracking-wide text-stone-800">
-                              {group.timeLabel || g('orderHistoryNoTime')}
-                            </p>
-                            <p className="text-[11px] text-stone-500">
-                              {group.timeLabel
-                                ? `${g('orderRound').replace('{n}', String(timedIndex))} · `
-                                : ''}
-                              {g('orderHistoryItemCount').replace('{n}', String(itemCount))}
-                            </p>
-                          </div>
-                        </div>
-                        <ul>
-                          {group.lines.map((line, li) => (
-                            <li
-                              key={`${group.key}-${line.buffetIncluded ? 'in' : 'ex'}-${line.name}-${line.price}-${li}`}
-                              className={`flex items-start justify-between gap-3 px-3 py-2.5 ${
-                                li > 0 ? 'border-t border-stone-100' : ''
-                              }`}
-                            >
-                              <div className="min-w-0">
-                                <p className="font-medium leading-snug">{guestLabel(line.name)}</p>
-                                <p className="mt-0.5 text-xs text-stone-500">
-                                  {line.buffetIncluded ? g('included') : `฿${line.price.toLocaleString()}`}
-                                </p>
-                              </div>
-                              <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-sm font-semibold tabular-nums text-stone-800 shadow-sm ring-1 ring-stone-200">
-                                ×{line.qty}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-            {orderSummary && sentGroups.length > 0 ? (
-              <div className="border-t border-stone-200 bg-white px-4 py-3">
-                <p className="flex items-center justify-between text-sm font-semibold">
-                  <span>{g('total')}</span>
-                  <span className="tabular-nums">฿{Number(orderSummary.total || 0).toLocaleString()}</span>
-                </p>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      <QrTableGuestOrderHistorySheet
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        items={orderSummary?.items || []}
+        sessionCreatedAt={session?.createdAt}
+        tableName={tableName}
+        orderId={orderSummary?.orderId ?? null}
+        g={g}
+        labelFor={guestLabel}
+        onAddMenu={() => {
+          setHistoryOpen(false)
+          setOrderDoneOpen(false)
+          setStatusOpen(false)
+        }}
+        onViewStatus={() => {
+          setHistoryOpen(false)
+          setStatusOpen(true)
+        }}
+      />
 
       {error ? <p className="mx-4 mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
 
@@ -1405,42 +1314,35 @@ export function QrTableGuestApp({ token }: { token: string }) {
               })}
             </div>
           ) : null}
-          <div>
+          <div className="px-3 pt-1">
             {listSections.map((section) => (
-              <div key={section.key || 'flat'}>
+              <div key={section.key || 'flat'} className="mb-3">
                 {section.title ? (
-                  <h2 className="px-3 pb-1 pt-4 text-[1.35rem] font-black uppercase tracking-wide text-stone-900">
+                  <h2 className="px-0.5 pb-2 pt-3 text-[1.25rem] font-black uppercase tracking-wide text-stone-900">
                     {section.title}
                   </h2>
                 ) : null}
-                <ul className="divide-y divide-stone-100/80">
+                <div className="grid grid-cols-2 gap-2.5">
                   {section.items.map((m) => (
-                    <li key={m.menuId} className={`flex gap-3 px-3 py-2.5 ${m.soldOut ? 'opacity-55' : ''}`}>
-                      <div className="flex min-w-0 flex-1 gap-2.5">
-                        {m.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={m.imageUrl}
-                            alt=""
-                            className="h-[4.25rem] w-[4.25rem] shrink-0 rounded-xl object-cover bg-stone-100 shadow-sm"
-                          />
-                        ) : (
-                          <div className="h-[4.25rem] w-[4.25rem] shrink-0 rounded-xl bg-stone-200/60" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[15px] font-semibold leading-snug">{guestMenuName(m)}</p>
-                          {guestMenuDesc(m) ? (
-                            <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{guestMenuDesc(m)}</p>
-                          ) : null}
-                          {cartLinesForMenu(m.menuId).some((line) => line.optionName) ? (
-                            <p className="mt-0.5 text-[11px] leading-snug text-[var(--qr-brand,#b45309)]">
-                              {cartLinesForMenu(m.menuId)
-                                .filter((line) => line.optionName)
-                                .map((line) => `${guestLabel(line.optionName)} ×${line.qty}`)
-                                .join(' · ')}
-                            </p>
-                          ) : null}
-                          <p className="mt-1 text-[15px] font-bold">
+                    <article
+                      key={m.menuId}
+                      className={`flex flex-col overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm ${m.soldOut ? 'opacity-55' : ''}`}
+                    >
+                      {m.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={m.imageUrl} alt="" className="aspect-square w-full object-cover bg-stone-100" />
+                      ) : (
+                        <div className="aspect-square w-full bg-stone-200/60" />
+                      )}
+                      <div className="flex flex-1 flex-col gap-1 p-2.5">
+                        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-stone-900">
+                          {guestMenuName(m)}
+                        </p>
+                        {guestMenuDesc(m) ? (
+                          <p className="line-clamp-2 text-[11px] text-stone-500">{guestMenuDesc(m)}</p>
+                        ) : null}
+                        <div className="mt-auto flex items-end justify-between gap-1 pt-1">
+                          <p className="text-sm font-bold text-[var(--qr-brand,#b45309)]">
                             {m.soldOut ? (
                               <span className="text-red-600">{g('soldOut')}</span>
                             ) : m.buffetIncluded ? (
@@ -1449,66 +1351,40 @@ export function QrTableGuestApp({ token }: { token: string }) {
                               `฿${m.price.toLocaleString()}`
                             )}
                           </p>
+                          <div className="flex items-center gap-1">
+                            {qtyForMenu(m.menuId) > 0 ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-100 text-base font-bold"
+                                  disabled={m.soldOut}
+                                  onClick={() => decMenu(m.menuId)}
+                                >
+                                  −
+                                </button>
+                                <span className="w-4 text-center text-xs font-semibold tabular-nums">
+                                  {qtyForMenu(m.menuId)}
+                                </span>
+                              </>
+                            ) : null}
+                            <button
+                              type="button"
+                              className={`flex h-8 w-8 items-center justify-center rounded-full text-lg text-white shadow-sm disabled:opacity-40 ${brandBtn}`}
+                              disabled={m.soldOut}
+                              onClick={() => requestAddMenu(m)}
+                              aria-label="+"
+                            >
+                              +
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 self-center">
-                        <button
-                          type="button"
-                          className="h-9 w-9 rounded-full bg-white text-lg shadow-sm disabled:opacity-40"
-                          disabled={m.soldOut || qtyForMenu(m.menuId) <= 0}
-                          onClick={() => decMenu(m.menuId)}
-                        >
-                          −
-                        </button>
-                        <span className="w-5 text-center text-sm tabular-nums">{qtyForMenu(m.menuId)}</span>
-                        <button
-                          type="button"
-                          className={`h-9 w-9 rounded-full text-lg text-white shadow-sm disabled:opacity-40 ${brandBtn}`}
-                          disabled={m.soldOut}
-                          onClick={() => requestAddMenu(m)}
-                        >
-                          +
-                        </button>
-                      </div>
-                    </li>
+                    </article>
                   ))}
-                </ul>
+                </div>
               </div>
             ))}
           </div>
-
-          {orderSummary ? (
-            <div className="mx-4 mt-4 rounded-2xl border border-stone-200 bg-white p-3.5 text-sm shadow-sm">
-              <p className="font-medium">{g('currentOrder')}</p>
-              {sentLines.length > 0 ? (
-                <ul className="mt-2 space-y-1 text-stone-700">
-                  {sentLines.map((line) => (
-                    <li key={`${line.buffetIncluded ? 'in' : 'ex'}-${line.name}-${line.price}`} className="flex justify-between gap-2">
-                      <span className="min-w-0 truncate">
-                        {guestLabel(line.name)}
-                        {line.buffetIncluded ? ` · ${g('included')}` : ''}
-                      </span>
-                      <span className="shrink-0 tabular-nums">
-                        ×{line.qty}
-                        {line.buffetIncluded ? '' : ` · ฿${(line.price * line.qty).toLocaleString()}`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-1 text-xs text-stone-500">{g('orderHistoryEmpty')}</p>
-              )}
-              <p className="mt-2">
-                {g('total')} ฿{displayTotal.toLocaleString()}
-              </p>
-              <p>
-                {g('paidQr')} ฿{Number(orderSummary.paymentQr || 0).toLocaleString()}
-              </p>
-              <p className="font-semibold">
-                {g('balance')} ฿{Number(orderSummary.balanceDue || 0).toLocaleString()}
-              </p>
-            </div>
-          ) : null}
 
           {qrPayload ? (
             <div className="mx-4 mt-3 rounded-2xl border border-amber-200 bg-white p-3 text-center shadow-sm">
@@ -1751,6 +1627,34 @@ export function QrTableGuestApp({ token }: { token: string }) {
           ) : null}
         </QrTableGuestSwipeSheet>
       ) : null}
+
+      <QrTableGuestOrderDoneScreen
+        open={orderDoneOpen}
+        tableName={tableName}
+        orderId={orderSummary?.orderId ?? null}
+        timeLabel={latestOrderTimeLabel(orderSummary?.items || [], session?.createdAt)}
+        g={g}
+        brandBtn={brandBtn}
+        onViewStatus={() => {
+          setOrderDoneOpen(false)
+          setStatusOpen(true)
+        }}
+        onMoreMenu={() => setOrderDoneOpen(false)}
+      />
+
+      <QrTableGuestOrderStatusSheet
+        open={statusOpen}
+        onClose={() => setStatusOpen(false)}
+        items={orderSummary?.items || []}
+        orderId={orderSummary?.orderId ?? null}
+        timeLabel={latestOrderTimeLabel(orderSummary?.items || [], session?.createdAt)}
+        g={g}
+        brandBtn={brandBtn}
+        onMoreMenu={() => {
+          setStatusOpen(false)
+          setOrderDoneOpen(false)
+        }}
+      />
 
       <GuestLangSheet
         open={langSheetOpen}

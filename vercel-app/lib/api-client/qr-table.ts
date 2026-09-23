@@ -117,6 +117,7 @@ export async function qrTableSubmitCart(sessionAuth: string, lines: QrCartLineIn
     orderId?: number
     addedCount?: number
     order?: {
+      orderId?: number | null
       total: number
       paymentQr: number
       balanceDue: number
@@ -135,6 +136,7 @@ export async function qrTableGetOrder(sessionAuth: string) {
     message?: string
     session?: QrTableSession
     order?: {
+      orderId?: number | null
       total: number
       paymentQr: number
       balanceDue: number
