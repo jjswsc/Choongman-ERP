@@ -25,6 +25,8 @@ import {
 import { isBanbanMenu, overlayBanbanFlavorMenuIds } from '@/lib/pos-banban-utils'
 import { loadStoreMenuSoldOutMap, isMenuSoldOutForStore } from '@/lib/pos-menu-store-sold-out-server'
 import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
+import { loadMemberTenantId } from '@/lib/member-portal-tenant-scope'
+import { ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
 import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import { selectFilterOptionalTenant, storeRowFilter, upsertRowsTenantStore } from '@/lib/saas-store-conflict'
 import { supabaseInsertWithPgrst204Fallback } from '@/lib/supabase-pgrst204-retry'
@@ -112,6 +114,8 @@ type DbSession = {
   pending_entry_partner_txn_id?: string | null
   pending_extras_partner_txn_id?: string | null
   pending_extras_amount?: number | string | null
+  pending_bill_partner_txn_id?: string | null
+  pending_bill_amount?: number | string | null
   staff_call_at?: string | null
   staff_call_note?: string | null
   closed_at?: string | null
@@ -2265,3 +2269,256 @@ export async function getGuestOrderSummary(session: QrTableSession): Promise<QrG
     status: order.status,
   })
 }
+
+/** 게스트 테이블 잔액(전액) PromptPay QR — 결제 완료 시 주문 paid → 카운터 영수증 자동인쇄 */
+export async function issueBillPayQr(sessionId: number): Promise<{
+  partnerTransactionId: string
+  qrPayload: string
+  qrAmount: number
+  balanceDue: number
+  orderId: number | null
+}> {
+  const session = await loadSessionById(sessionId)
+  if (!session) throw new Error('session_not_found')
+  if (session.status !== 'active') throw new Error('session_closed')
+  if (!session.entryPaid) throw new Error('entry_not_ready')
+  if (!session.posOrderId) throw new Error('order_missing')
+
+  const summary = await getGuestOrderSummary(session)
+  if (String(summary.status || '').toLowerCase() === 'paid') throw new Error('order_already_paid')
+  const amount = Math.max(0, Math.round(summary.balanceDue * 100) / 100)
+  if (amount < 1) throw new Error('nothing_to_pay')
+
+  // 별도메뉴 선결제 대기 중이면 잔액 QR과 충돌 방지
+  const sessRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${sessionId}`, {
+    limit: 1,
+    select: 'pending_extras_amount',
+  })) as Array<{ pending_extras_amount?: number | string | null }>
+  if (asNum(sessRows?.[0]?.pending_extras_amount) >= 1) throw new Error('extras_pay_pending')
+
+  const tenantId = await resolveTenantIdForStoreCode(session.storeCode)
+  const gen = await generateMemberPortalKbankQr({
+    amount,
+    orderId: session.posOrderId,
+    storeCode: session.storeCode,
+    tenantId: tenantId || undefined,
+    partnerTransactionId: `QTB${session.id}${Date.now()}`.slice(0, 32),
+  })
+  if (!gen.ok || !gen.qrPayload) throw new Error(gen.statusMessage || 'qr_failed')
+
+  await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${sessionId}`, {
+    pending_bill_partner_txn_id: gen.partnerTransactionId,
+    pending_bill_amount: amount,
+    updated_at: getBangkokDateTimeString(),
+  })
+
+  return {
+    partnerTransactionId: gen.partnerTransactionId,
+    qrPayload: gen.qrPayload,
+    qrAmount: amount,
+    balanceDue: amount,
+    orderId: summary.orderId,
+  }
+}
+
+export async function pollBillPayStatus(sessionId: number): Promise<{
+  paid: boolean
+  balanceDue: number
+  order?: QrGuestOrderSummary
+}> {
+  const session = await loadSessionById(sessionId)
+  if (!session) throw new Error('session_not_found')
+  if (!session.posOrderId) throw new Error('order_missing')
+
+  const summary = await getGuestOrderSummary(session)
+  if (String(summary.status || '').toLowerCase() === 'paid' || summary.balanceDue < 0.005) {
+    return { paid: true, balanceDue: 0, order: summary }
+  }
+
+  const sessRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${sessionId}`, {
+    limit: 1,
+    select: 'pending_bill_partner_txn_id,pending_bill_amount',
+  })) as Array<{
+    pending_bill_partner_txn_id?: string | null
+    pending_bill_amount?: number | string | null
+  }>
+  const partnerTxn = String(sessRows?.[0]?.pending_bill_partner_txn_id || '').trim()
+  const amount = asNum(sessRows?.[0]?.pending_bill_amount)
+  if (!partnerTxn || amount < 0.005) {
+    return { paid: false, balanceDue: summary.balanceDue, order: summary }
+  }
+
+  const runtime = await resolveKbankRuntimeForStoreCode(session.storeCode)
+  try {
+    const result = await checkKbankQrStatus(
+      {
+        orderId: session.posOrderId || undefined,
+        partnerTransactionId: partnerTxn,
+        originalTransactionId: partnerTxn,
+        payload: { origPartnerTxnUid: partnerTxn },
+      },
+      { runtime }
+    )
+    const response =
+      result.response && typeof result.response === 'object'
+        ? (result.response as Record<string, unknown>)
+        : {}
+    const normalized = normalizeKbankTxnStatusToPos(response.txnStatus ?? response.status, response.statusCode)
+    if (normalized === 'approved') {
+      await finalizeBillPayByQr(session, amount)
+      const next = await getGuestOrderSummary({ ...session })
+      return { paid: true, balanceDue: 0, order: next }
+    }
+  } catch {
+    /* pending */
+  }
+  return { paid: false, balanceDue: summary.balanceDue, order: summary }
+}
+
+async function finalizeBillPayByQr(
+  session: QrTableSession & { secretHash?: string },
+  amount: number
+) {
+  if (!session.posOrderId) return
+  const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+    limit: 1,
+    select: 'id,payment_qr,payment_cash,payment_card,payment_other,total,status',
+  })) as Array<{
+    id?: number
+    payment_qr?: number
+    payment_cash?: number
+    payment_card?: number
+    payment_other?: number
+    total?: number
+    status?: string
+  }>
+  const order = orderRows?.[0]
+  if (!order?.id) return
+  if (String(order.status || '').toLowerCase() === 'paid') {
+    await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+      pending_bill_partner_txn_id: null,
+      pending_bill_amount: 0,
+      updated_at: getBangkokDateTimeString(),
+    })
+    await closeQrTableSessionsForPosOrder({ orderId: order.id, reason: 'paid' })
+    return
+  }
+
+  const payAmt = Math.max(0, asNum(amount))
+  const nextQr = Math.round((asNum(order.payment_qr) + payAmt) * 100) / 100
+  const nowBkk = getBangkokDateTimeString()
+  const paidAtIso = new Date().toISOString()
+
+  // unpaid → paid: POS Realtime이 카운터 결제 영수증 자동인쇄
+  await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+    payment_qr: nextQr,
+    status: 'paid',
+    paid_at: paidAtIso,
+    updated_at: nowBkk,
+  })
+  await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+    pending_bill_partner_txn_id: null,
+    pending_bill_amount: 0,
+    status: 'closed',
+    closed_at: nowBkk,
+    updated_at: nowBkk,
+  })
+
+  try {
+    await ensurePosOrderLoyaltyApplied(session.posOrderId)
+  } catch {
+    /* loyalty optional — do not undo paid */
+  }
+}
+
+/** 게스트 회원 로그인 → 테이블 주문에 member_id 연결 (포인트 적립용, 로그인은 선택) */
+export async function linkMemberToQrTableOrder(
+  sessionId: number,
+  member: { id: number; memberNo?: string; name?: string }
+): Promise<{
+  orderId: number
+  memberId: number
+  memberNo: string
+  memberName: string
+  alreadyLinked: boolean
+}> {
+  const session = await loadSessionById(sessionId)
+  if (!session) throw new Error('session_not_found')
+  if (session.status !== 'active' && session.status !== 'awaiting_entry') {
+    throw new Error('session_closed')
+  }
+  if (!session.posOrderId) throw new Error('order_missing')
+
+  const memberId = Math.trunc(Number(member.id) || 0)
+  if (!(memberId > 0)) throw new Error('member_required')
+
+  const storeTenant = (await resolveTenantIdForStoreCode(session.storeCode)) || ''
+  const memberTenant = (await loadMemberTenantId(memberId)) || ''
+  if (storeTenant && memberTenant && storeTenant !== memberTenant) {
+    throw new Error('member_tenant_mismatch')
+  }
+
+  const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+    limit: 1,
+    select: 'id,member_id,member_no,status,store_code',
+  })) as Array<{
+    id?: number
+    member_id?: number | null
+    member_no?: string | null
+    status?: string
+    store_code?: string | null
+  }>
+  const order = orderRows?.[0]
+  if (!order?.id) throw new Error('order_missing')
+
+  const existingId = Math.max(0, Math.trunc(Number(order.member_id) || 0))
+  const memberNo = String(member.memberNo || '').trim()
+  const memberName = String(member.name || '').trim()
+
+  if (existingId > 0 && existingId !== memberId) {
+    throw new Error('member_conflict')
+  }
+
+  if (existingId === memberId) {
+    const status = String(order.status || '').toLowerCase()
+    if (status === 'paid' || status === 'completed') {
+      try {
+        await ensurePosOrderLoyaltyApplied(order.id)
+      } catch {
+        /* ignore */
+      }
+    }
+    return {
+      orderId: order.id,
+      memberId,
+      memberNo: String(order.member_no || memberNo).trim(),
+      memberName,
+      alreadyLinked: true,
+    }
+  }
+
+  const nowBkk = getBangkokDateTimeString()
+  await supabaseUpdateByFilter('pos_orders', `id=eq.${order.id}`, {
+    member_id: memberId,
+    member_no: memberNo || null,
+    updated_at: nowBkk,
+  })
+
+  const status = String(order.status || '').toLowerCase()
+  if (status === 'paid' || status === 'completed') {
+    try {
+      await ensurePosOrderLoyaltyApplied(order.id)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return {
+    orderId: order.id,
+    memberId,
+    memberNo,
+    memberName,
+    alreadyLinked: false,
+  }
+}
+

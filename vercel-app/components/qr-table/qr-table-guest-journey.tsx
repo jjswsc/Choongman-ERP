@@ -35,13 +35,27 @@ export function QrTableGuestOrderDoneScreen(props: {
   tableName: string
   orderId: number | null
   timeLabel: string
+  balanceDue?: number
   g: (key: string) => string
   brandBtn: string
   onViewStatus: () => void
   onMoreMenu: () => void
+  onPayBill?: () => void
 }) {
-  const { open, tableName, orderId, timeLabel, g, brandBtn, onViewStatus, onMoreMenu } = props
+  const {
+    open,
+    tableName,
+    orderId,
+    timeLabel,
+    balanceDue = 0,
+    g,
+    brandBtn,
+    onViewStatus,
+    onMoreMenu,
+    onPayBill,
+  } = props
   if (!open) return null
+  const canPay = balanceDue >= 1 && onPayBill
   return (
     <div className="fixed inset-0 z-[45] flex flex-col bg-[var(--qr-accent,#faf7f2)] pt-[env(safe-area-inset-top)]">
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-8">
@@ -77,6 +91,14 @@ export function QrTableGuestOrderDoneScreen(props: {
               <span className="text-stone-500">{g('timeLabel')}</span>
               <span className="font-semibold tabular-nums text-stone-900">{timeLabel || '—'}</span>
             </div>
+            {canPay ? (
+              <div className="flex items-center justify-between gap-2 border-t border-stone-100 pt-2.5 text-sm">
+                <span className="text-stone-500">{g('balance')}</span>
+                <span className="font-bold tabular-nums text-[var(--qr-brand,#b45309)]">
+                  ฿{Math.round(balanceDue).toLocaleString()}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-4 w-full rounded-2xl bg-emerald-50 px-4 py-3 text-left text-sm text-emerald-800 ring-1 ring-emerald-100">
@@ -86,12 +108,22 @@ export function QrTableGuestOrderDoneScreen(props: {
         </div>
 
         <div className="mt-6 space-y-2.5">
-          <button type="button" className={`w-full rounded-2xl py-3.5 text-[15px] font-semibold ${brandBtn}`} onClick={onViewStatus}>
+          {canPay ? (
+            <button type="button" className={`w-full rounded-2xl py-3.5 text-[15px] font-semibold ${brandBtn}`} onClick={onPayBill}>
+              {g('payBill')}
+              {` · ฿${Math.round(balanceDue).toLocaleString()}`}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={`w-full rounded-2xl py-3.5 text-[15px] font-semibold ${canPay ? 'border-2 border-[var(--qr-brand,#b45309)] bg-white text-[var(--qr-brand,#b45309)]' : brandBtn}`}
+            onClick={onViewStatus}
+          >
             {g('viewOrderStatus')}
           </button>
           <button
             type="button"
-            className="w-full rounded-2xl border-2 border-[var(--qr-brand,#b45309)] bg-white py-3.5 text-[15px] font-semibold text-[var(--qr-brand,#b45309)]"
+            className="w-full rounded-2xl border-2 border-stone-200 bg-white py-3.5 text-[15px] font-semibold text-stone-800"
             onClick={onMoreMenu}
           >
             {g('moreMenu')}
@@ -283,10 +315,12 @@ export function QrTableGuestOrderHistorySheet(props: {
   sessionCreatedAt?: string | null
   tableName: string
   orderId: number | null
+  balanceDue?: number
   g: (key: string) => string
   labelFor: (raw: string) => string
   onAddMenu: () => void
   onViewStatus: () => void
+  onPayBill?: () => void
 }) {
   const {
     open,
@@ -295,10 +329,12 @@ export function QrTableGuestOrderHistorySheet(props: {
     sessionCreatedAt,
     tableName,
     orderId,
+    balanceDue = 0,
     g,
     labelFor,
     onAddMenu,
     onViewStatus,
+    onPayBill,
   } = props
   const [tab, setTab] = React.useState<'current' | 'past'>('current')
   const rounds = React.useMemo(
@@ -308,6 +344,7 @@ export function QrTableGuestOrderHistorySheet(props: {
   // groups are oldest→newest; current = last
   const current = rounds.length > 0 ? rounds[rounds.length - 1] : null
   const past = rounds.length > 1 ? rounds.slice(0, -1).reverse() : []
+  const canPay = balanceDue >= 1 && onPayBill
 
   React.useEffect(() => {
     if (open) setTab('current')
@@ -356,6 +393,25 @@ export function QrTableGuestOrderHistorySheet(props: {
       }
     >
       <div className="space-y-3 px-4 py-2 pb-6">
+        {canPay ? (
+          <div className="rounded-2xl border border-[var(--qr-brand,#b45309)]/25 bg-[var(--qr-brand,#b45309)]/10 px-4 py-3">
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="text-stone-600">{g('balance')}</span>
+              <span className="font-bold tabular-nums text-[var(--qr-brand,#b45309)]">
+                ฿{Math.round(balanceDue).toLocaleString()}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-stone-600">{g('payBillReceiptHint')}</p>
+            <button
+              type="button"
+              className="mt-2.5 w-full rounded-xl bg-[var(--qr-brand,#b45309)] py-2.5 text-sm font-semibold text-white"
+              onClick={onPayBill}
+            >
+              {g('payBill')}
+              {` · ฿${Math.round(balanceDue).toLocaleString()}`}
+            </button>
+          </div>
+        ) : null}
         {tab === 'current' ? (
           current ? (
             <OrderRoundCard
@@ -407,4 +463,93 @@ export function latestOrderTimeLabel(
   const last = rounds[rounds.length - 1]
   if (last?.timeLabel) return last.timeLabel
   return formatQrGuestOrderClock(sessionCreatedAt || null) || ''
+}
+
+/** 8 — 테이블 PromptPay 잔액 결제 */
+export function QrTableGuestBillPaySheet(props: {
+  open: boolean
+  onClose: () => void
+  amount: number
+  qrPayload: string
+  busy?: boolean
+  g: (key: string) => string
+  renderQr: (payload: string) => React.ReactNode
+}) {
+  const { open, onClose, amount, qrPayload, busy, g, renderQr } = props
+  return (
+    <QrTableGuestSwipeSheet
+      open={open}
+      onClose={onClose}
+      zClass="z-[48]"
+      initialSnap="full"
+      ariaLabel={g('payBillTitle')}
+      header={
+        <div className="px-4 pb-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-base font-semibold">{g('payBillTitle')}</p>
+            <button
+              type="button"
+              className="rounded-full bg-stone-100 px-3 py-1.5 text-sm font-semibold"
+              onClick={onClose}
+            >
+              {g('close')}
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-3 px-4 pb-6 pt-1">
+        <div className="rounded-2xl bg-[var(--qr-brand,#b45309)]/10 px-4 py-3 text-sm text-stone-800 ring-1 ring-[var(--qr-brand,#b45309)]/20">
+          <p className="font-semibold">{g('payBillHint')}</p>
+          <p className="mt-1 text-xs text-stone-600">{g('payBillReceiptHint')}</p>
+        </div>
+        <p className="text-center text-sm text-stone-600">{g('amount')}</p>
+        <p className="text-center text-3xl font-bold tabular-nums text-[var(--qr-brand,#b45309)]">
+          ฿{Math.round(amount).toLocaleString()}
+        </p>
+        {qrPayload ? (
+          <div className="flex justify-center py-2">{renderQr(qrPayload)}</div>
+        ) : (
+          <p className="py-10 text-center text-sm text-stone-500">{busy ? g('loading') : g('showQr')}</p>
+        )}
+        <p className="text-center text-sm font-medium text-stone-600">{g('payBillWaiting')}</p>
+      </div>
+    </QrTableGuestSwipeSheet>
+  )
+}
+
+/** 결제 완료 안내 (영수증은 카운터) */
+export function QrTableGuestBillPaidScreen(props: {
+  open: boolean
+  g: (key: string) => string
+  brandBtn: string
+  onClose: () => void
+}) {
+  const { open, g, brandBtn, onClose } = props
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[49] flex flex-col bg-[var(--qr-accent,#faf7f2)] pt-[env(safe-area-inset-top)]">
+      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center">
+        <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg">
+          <svg className="h-10 w-10" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M6.5 12.5l3.5 3.5 7.5-8"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <h2 className="text-xl font-bold text-stone-900">{g('payBillDoneTitle')}</h2>
+        <p className="mt-2 text-sm text-stone-600">{g('payBillDoneHint')}</p>
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-950">
+          <p className="font-semibold">{g('payBillReceiptHint')}</p>
+        </div>
+        <button type="button" className={`mt-8 w-full rounded-2xl py-3.5 text-[15px] font-semibold ${brandBtn}`} onClick={onClose}>
+          {g('close')}
+        </button>
+      </div>
+    </div>
+  )
 }

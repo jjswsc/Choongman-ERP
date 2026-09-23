@@ -18,13 +18,22 @@ export function mapQrError(e: unknown): NextResponse {
       ? 404
       : msg === 'session_forbidden' || msg === 'store_disabled'
         ? 403
-        : msg === 'table_busy' || msg === 'already_paid' || msg === 'order_closed' || msg === 'session_device_limit'
+        : msg === 'table_busy' ||
+            msg === 'already_paid' ||
+            msg === 'order_already_paid' ||
+            msg === 'order_closed' ||
+            msg === 'session_device_limit' ||
+            msg === 'nothing_to_pay' ||
+            msg === 'extras_pay_pending' ||
+            msg === 'member_conflict'
           ? 409
           : msg === 'staff_open_required' ||
               msg === 'entry_not_ready' ||
               msg === 'entry_requires_prepay' ||
               msg === 'session_expired' ||
-              msg === 'session_closed'
+              msg === 'session_closed' ||
+              msg === 'member_tenant_mismatch' ||
+              msg === 'member_required'
             ? 422
             : 400
   return qrError(msg, status)

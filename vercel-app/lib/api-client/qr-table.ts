@@ -189,6 +189,66 @@ export async function qrTablePollExtrasPay(sessionAuth: string) {
   return parseJson<{ success: boolean; paid?: boolean; message?: string }>(res)
 }
 
+export async function qrTableIssueBillQr(sessionAuth: string) {
+  const res = await fetch('/api/qr-table/bill/pay/qr', {
+    method: 'POST',
+    headers: sessionHeaders(sessionAuth),
+  })
+  return parseJson<{
+    success: boolean
+    message?: string
+    partnerTransactionId?: string
+    qrPayload?: string
+    qrAmount?: number
+    balanceDue?: number
+    orderId?: number | null
+  }>(res)
+}
+
+export async function qrTablePollBillPay(sessionAuth: string) {
+  const res = await fetch('/api/qr-table/bill/pay/status', {
+    cache: 'no-store',
+    headers: sessionHeaders(sessionAuth),
+  })
+  return parseJson<{
+    success: boolean
+    paid?: boolean
+    balanceDue?: number
+    order?: {
+      orderId?: number | null
+      total: number
+      paymentQr: number
+      balanceDue: number
+      items: Array<Record<string, unknown>>
+      status?: string
+    }
+    message?: string
+  }>(res)
+}
+
+export async function qrTableLinkMember(sessionAuth: string) {
+  const res = await fetch('/api/qr-table/member/link', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: sessionHeaders(sessionAuth),
+  })
+  return parseJson<{
+    success: boolean
+    message?: string
+    orderId?: number
+    memberId?: number
+    memberNo?: string
+    memberName?: string
+    alreadyLinked?: boolean
+    member?: {
+      id: number
+      memberNo: string
+      name: string
+      pointBalance?: number
+    }
+  }>(res)
+}
+
 export async function qrTableAdminGet(storeCode: string) {
   const res = await apiFetch(`/api/qr-table/admin?storeCode=${encodeURIComponent(storeCode)}`)
   return parseJson<{

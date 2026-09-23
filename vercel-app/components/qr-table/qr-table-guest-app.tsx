@@ -8,9 +8,12 @@ import {
   qrTableGetMenus,
   qrTableGetOrder,
   qrTableGetSession,
+  qrTableIssueBillQr,
   qrTableIssueEntryQr,
   qrTableIssueExtrasQr,
+  qrTableLinkMember,
   qrTableOpenSession,
+  qrTablePollBillPay,
   qrTablePollEntryPay,
   qrTablePollExtrasPay,
   qrTableSubmitCart,
@@ -24,6 +27,8 @@ import {
   type QrGuestMenuOption,
 } from '@/lib/qr-table-guest-menu'
 import {
+  QrTableGuestBillPaidScreen,
+  QrTableGuestBillPaySheet,
   QrTableGuestOrderDoneScreen,
   QrTableGuestOrderHistorySheet,
   QrTableGuestOrderStatusSheet,
@@ -36,6 +41,10 @@ import {
   QR_GUEST_LANG_OPTIONS,
   type QrGuestLang,
 } from '@/lib/i18n-qr-table-guest'
+import {
+  QrTableGuestMemberLoginSheet,
+  type QrGuestMemberInfo,
+} from '@/components/qr-table/qr-table-guest-member-sheet'
 import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
 import { QrTableGuestCategoryNav } from '@/components/qr-table/qr-table-guest-category-nav'
 import { normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
@@ -352,6 +361,15 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [finalConfirmOpen, setFinalConfirmOpen] = React.useState(false)
   const [orderDoneOpen, setOrderDoneOpen] = React.useState(false)
   const [statusOpen, setStatusOpen] = React.useState(false)
+  const [billPayOpen, setBillPayOpen] = React.useState(false)
+  const [billPaidOpen, setBillPaidOpen] = React.useState(false)
+  const [billQrPayload, setBillQrPayload] = React.useState('')
+  const [billQrAmount, setBillQrAmount] = React.useState(0)
+  const [member, setMember] = React.useState<QrGuestMemberInfo | null>(null)
+  const [memberLoginOpen, setMemberLoginOpen] = React.useState(false)
+  const [memberBusy, setMemberBusy] = React.useState(false)
+  const [memberError, setMemberError] = React.useState('')
+  const [memberLinked, setMemberLinked] = React.useState(false)
   const submitLockRef = React.useRef(false)
   const [callOpen, setCallOpen] = React.useState(false)
   const [historyOpen, setHistoryOpen] = React.useState(false)
@@ -360,6 +378,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [langSheetOpen, setLangSheetOpen] = React.useState(false)
   const [descByLang, setDescByLang] = React.useState<Record<string, Record<string, string>>>({})
   const extrasPayPollRef = React.useRef<number | null>(null)
+  const billPayPollRef = React.useRef<number | null>(null)
 
   const clearExtrasPayPoll = React.useCallback(() => {
     if (extrasPayPollRef.current != null) {
@@ -368,7 +387,20 @@ export function QrTableGuestApp({ token }: { token: string }) {
     }
   }, [])
 
-  React.useEffect(() => () => clearExtrasPayPoll(), [clearExtrasPayPoll])
+  const clearBillPayPoll = React.useCallback(() => {
+    if (billPayPollRef.current != null) {
+      window.clearInterval(billPayPollRef.current)
+      billPayPollRef.current = null
+    }
+  }, [])
+
+  React.useEffect(
+    () => () => {
+      clearExtrasPayPoll()
+      clearBillPayPoll()
+    },
+    [clearExtrasPayPoll, clearBillPayPoll]
+  )
 
   const g = React.useCallback((key: string) => qrGuestT(lang, key), [lang])
 
@@ -383,6 +415,17 @@ export function QrTableGuestApp({ token }: { token: string }) {
     if (msg === 'invalid_token') return g('invalidToken')
     if (msg === 'option_required' || msg.startsWith('option_not_')) return g('optionRequired')
     if (msg === 'banban_required' || msg === 'banban_flavor_missing') return g('banbanRequired')
+    if (msg === 'order_already_paid' || msg === 'already_paid') return g('orderAlreadyPaid')
+    if (msg === 'nothing_to_pay') return g('nothingToPay')
+    if (msg === 'extras_pay_pending') return g('extrasPayPending')
+    if (msg === 'member_conflict') return g('memberConflict')
+    if (msg === 'member_tenant_mismatch') return g('memberTenantMismatch')
+    if (msg === 'member_required') return g('memberRequired')
+    if (msg === 'not_found' || msg === 'login_not_found') return g('memberNotFound')
+    if (msg === 'missing_phone') return g('memberMissingPhone')
+    if (msg === 'missing_birth') return g('memberMissingBirth')
+    if (msg === 'inactive') return g('memberInactive')
+    if (msg === 'rate_limited') return g('memberRateLimited')
     return msg
   }
 
@@ -798,6 +841,184 @@ export function QrTableGuestApp({ token }: { token: string }) {
     }
   }
 
+  async function openBillPay() {
+    if (!sessionAuth) return
+    const due = Number(orderSummary?.balanceDue || 0)
+    if (due < 1) {
+      showToast(g('payBillDoneHint'))
+      return
+    }
+    setOrderDoneOpen(false)
+    setStatusOpen(false)
+    setHistoryOpen(false)
+    setCallOpen(false)
+    setBillPaidOpen(false)
+    setBillPayOpen(true)
+    setBillQrPayload('')
+    setBillQrAmount(due)
+    setBusy(true)
+    clearBillPayPoll()
+    try {
+      const qr = await qrTableIssueBillQr(sessionAuth)
+      if (!qr?.success) {
+        setBillPayOpen(false)
+        setError(humanizeApiError(qr?.message || 'qr_failed'))
+        return
+      }
+      setBillQrPayload(String(qr.qrPayload || ''))
+      setBillQrAmount(Number(qr.qrAmount || due))
+      billPayPollRef.current = window.setInterval(async () => {
+        const st = await qrTablePollBillPay(sessionAuth)
+        if (st?.paid) {
+          clearBillPayPoll()
+          setBillQrPayload('')
+          setBillPayOpen(false)
+          setBillPaidOpen(true)
+          if (st.order) {
+            setOrderSummary(toOrderSummary(st.order))
+          } else {
+            const order = await qrTableGetOrder(sessionAuth)
+            if (order?.success && order.order) {
+              setOrderSummary(toOrderSummary(order.order))
+            }
+          }
+        }
+      }, QR_TABLE_GUEST_PAY_POLL_MS)
+    } catch (e) {
+      setBillPayOpen(false)
+      setError(humanizeApiError(e instanceof Error ? e.message : 'qr_failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function linkMemberToOrder(auth = sessionAuth) {
+    if (!auth) return false
+    try {
+      const res = await qrTableLinkMember(auth)
+      if (!res.success) {
+        const msg = String(res.message || '')
+        if (msg === 'order_missing') {
+          setMemberLinked(false)
+          return false
+        }
+        setMemberError(humanizeApiError(msg || 'member_required'))
+        return false
+      }
+      if (res.member) {
+        setMember({
+          id: res.member.id,
+          memberNo: res.member.memberNo,
+          name: res.member.name,
+          pointBalance: res.member.pointBalance,
+        })
+      }
+      setMemberLinked(true)
+      setMemberError('')
+      return true
+    } catch (e) {
+      setMemberError(humanizeApiError(e instanceof Error ? e.message : 'member_required'))
+      return false
+    }
+  }
+
+  async function refreshMemberSession(auth = sessionAuth) {
+    try {
+      const res = await fetch('/api/member-portal/me', { cache: 'no-store', credentials: 'same-origin' })
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean
+        member?: { id: number; memberNo?: string; name?: string; fullName?: string; pointBalance?: number }
+      }
+      if (!data.success || !data.member?.id) {
+        setMember(null)
+        setMemberLinked(false)
+        return
+      }
+      setMember({
+        id: data.member.id,
+        memberNo: String(data.member.memberNo || ''),
+        name: String(data.member.name || data.member.fullName || ''),
+        pointBalance: data.member.pointBalance,
+      })
+      if (auth) {
+        await linkMemberToOrder(auth)
+      }
+    } catch {
+      setMember(null)
+      setMemberLinked(false)
+    }
+  }
+
+  async function handleMemberLogin(phone: string, birthDate: string) {
+    setMemberBusy(true)
+    setMemberError('')
+    try {
+      if (!phone) {
+        setMemberError(g('memberMissingPhone'))
+        return
+      }
+      if (!birthDate) {
+        setMemberError(g('memberMissingBirth'))
+        return
+      }
+      const res = await fetch('/api/member-portal/auth/phone-birth', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, birthDate, deviceLabel: 'qr-table-guest' }),
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean
+        code?: string
+        message?: string
+        member?: { id: number; memberNo?: string; name?: string; fullName?: string; pointBalance?: number }
+      }
+      if (!data.success) {
+        setMemberError(humanizeApiError(data.code || data.message || 'memberLoginFailed'))
+        return
+      }
+      if (data.member?.id) {
+        setMember({
+          id: data.member.id,
+          memberNo: String(data.member.memberNo || ''),
+          name: String(data.member.name || data.member.fullName || ''),
+          pointBalance: data.member.pointBalance,
+        })
+      }
+      const linked = await linkMemberToOrder()
+      if (linked) {
+        setMemberLoginOpen(false)
+        showToast(g('memberLinkedHint'), 4200)
+      }
+    } catch (e) {
+      setMemberError(humanizeApiError(e instanceof Error ? e.message : 'memberLoginFailed'))
+    } finally {
+      setMemberBusy(false)
+    }
+  }
+
+  async function handleMemberLogout() {
+    setMemberBusy(true)
+    try {
+      await fetch('/api/member-portal/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+      })
+    } catch {
+      /* ignore */
+    } finally {
+      setMember(null)
+      setMemberLinked(false)
+      setMemberBusy(false)
+    }
+  }
+
+  React.useEffect(() => {
+    if (!sessionAuth) return
+    void refreshMemberSession(sessionAuth)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- boot once per sessionAuth
+  }, [sessionAuth])
+
   const selectedTier = tiers.filter((t) => t.active !== false)
   const listRaw = tab === 'included' ? includedMenus : extraMenus
   const uncategorizedLabel = g('uncategorized')
@@ -1058,6 +1279,42 @@ export function QrTableGuestApp({ token }: { token: string }) {
             </h1>
           </div>
           <div className="flex items-center gap-1.5">
+            {sessionAuth ? (
+              member ? (
+                <button
+                  type="button"
+                  disabled={memberBusy}
+                  className="max-w-[8.5rem] truncate rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800"
+                  onClick={() => {
+                    void handleMemberLogout().then(() => showToast(g('memberLogout'), 2800))
+                  }}
+                  title={g('memberLogout')}
+                >
+                  {g('memberLogout')} · {(member.name || member.memberNo || '').slice(0, 8)}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
+                  onClick={() => {
+                    setMemberError('')
+                    setMemberLoginOpen(true)
+                  }}
+                >
+                  {g('memberLogin')}
+                </button>
+              )
+            ) : null}
+            {step === 'menu' && sessionAuth && Number(orderSummary?.balanceDue || 0) >= 1 ? (
+              <button
+                type="button"
+                disabled={busy}
+                className="rounded-full bg-[var(--qr-brand,#b45309)] px-2.5 py-1 text-[11px] font-semibold text-white"
+                onClick={() => void openBillPay()}
+              >
+                {g('payBill')}
+              </button>
+            ) : null}
             {step === 'menu' && sessionAuth ? (
               <button
                 type="button"
@@ -1141,6 +1398,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         sessionCreatedAt={session?.createdAt}
         tableName={tableName}
         orderId={orderSummary?.orderId ?? null}
+        balanceDue={Number(orderSummary?.balanceDue || 0)}
         g={g}
         labelFor={guestLabel}
         onAddMenu={() => {
@@ -1152,6 +1410,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
           setHistoryOpen(false)
           setStatusOpen(true)
         }}
+        onPayBill={() => void openBillPay()}
       />
 
       {error ? <p className="mx-4 mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
@@ -1636,6 +1895,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         tableName={tableName}
         orderId={orderSummary?.orderId ?? null}
         timeLabel={latestOrderTimeLabel(orderSummary?.items || [], session?.createdAt)}
+        balanceDue={Number(orderSummary?.balanceDue || 0)}
         g={g}
         brandBtn={brandBtn}
         onViewStatus={() => {
@@ -1643,6 +1903,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
           setStatusOpen(true)
         }}
         onMoreMenu={() => setOrderDoneOpen(false)}
+        onPayBill={() => void openBillPay()}
       />
 
       <QrTableGuestOrderStatusSheet
@@ -1657,6 +1918,42 @@ export function QrTableGuestApp({ token }: { token: string }) {
           setStatusOpen(false)
           setOrderDoneOpen(false)
         }}
+      />
+
+      <QrTableGuestBillPaySheet
+        open={billPayOpen}
+        onClose={() => {
+          clearBillPayPoll()
+          setBillPayOpen(false)
+          setBillQrPayload('')
+        }}
+        amount={billQrAmount}
+        qrPayload={billQrPayload}
+        busy={busy}
+        g={g}
+        renderQr={(payload) => (
+          <GuestPayQrImg alt="Bill PromptPay QR" className="mx-auto h-56 w-56 object-contain" payload={payload} />
+        )}
+      />
+
+      <QrTableGuestBillPaidScreen
+        open={billPaidOpen}
+        g={g}
+        brandBtn={brandBtn}
+        onClose={() => setBillPaidOpen(false)}
+      />
+
+      <QrTableGuestMemberLoginSheet
+        open={memberLoginOpen}
+        onClose={() => {
+          setMemberLoginOpen(false)
+          setMemberError('')
+        }}
+        g={g}
+        brandBtn={brandBtn}
+        busy={memberBusy}
+        error={memberError}
+        onSubmit={handleMemberLogin}
       />
 
       <GuestLangSheet
