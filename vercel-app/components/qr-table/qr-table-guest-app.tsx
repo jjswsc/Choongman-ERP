@@ -32,6 +32,7 @@ import {
   type QrGuestLang,
 } from '@/lib/i18n-qr-table-guest'
 import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
+import { QrTableGuestCategoryNav } from '@/components/qr-table/qr-table-guest-category-nav'
 import { PosQrGuidelineCard } from '@/components/pos/pos-qr-guideline-card'
 import type { PosMenu, PosMenuOption } from '@/lib/api-client'
 import {
@@ -351,7 +352,6 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [lang, setLang] = React.useState<QrGuestLang>('th')
   const [langSheetOpen, setLangSheetOpen] = React.useState(false)
   const [descByLang, setDescByLang] = React.useState<Record<string, Record<string, string>>>({})
-  const [catSheetOpen, setCatSheetOpen] = React.useState(false)
   const extrasPayPollRef = React.useRef<number | null>(null)
 
   const clearExtrasPayPoll = React.useCallback(() => {
@@ -766,10 +766,15 @@ export function QrTableGuestApp({ token }: { token: string }) {
     [orderSummary]
   )
   const cartQty = cart.reduce((n, line) => n + line.qty, 0)
+  const menuById = React.useMemo(() => {
+    const map = new Map<number, MenuItem>()
+    for (const m of [...includedMenus, ...extraMenus]) map.set(m.menuId, m)
+    return map
+  }, [includedMenus, extraMenus])
+
   const cartTotal = React.useMemo(() => {
-    const menus = [...includedMenus, ...extraMenus]
     return cart.reduce((sum, line) => {
-      const m = menus.find((x) => x.menuId === line.menuId)
+      const m = menuById.get(line.menuId)
       if (!m || m.buffetIncluded) return sum
       const modifier = (line.optionIds || []).reduce((n, id) => {
         const opt = (m.options || []).find((o) => o.id === id)
@@ -778,7 +783,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       const unit = Math.max(0, Number(m.price) || Number(m.listPrice) || 0) + modifier
       return sum + unit * line.qty
     }, 0)
-  }, [cart, includedMenus, extraMenus])
+  }, [cart, menuById])
   const displayTotal = Math.round((Number(orderSummary?.total || 0) + cartTotal) * 100) / 100
   const sentGroups = React.useMemo(
     () => groupQrGuestSentLinesByTime(orderSummary?.items, session?.createdAt),
@@ -849,17 +854,24 @@ export function QrTableGuestApp({ token }: { token: string }) {
       if (subCategory) setSubCategory('')
       return
     }
-    // 빈 값 = 카테고리 전체 허용. 잘못된 값만 첫 카테고리로 교정
+    // 소분류 2개 이상: Grab 섹션 헤더 모드 — 칩 필터 없이 전체 표시
+    if (subCategories.length >= 2) {
+      if (subCategory) setSubCategory('')
+      return
+    }
+    // 소분류 1개: 빈 값 = 전체. 잘못된 값만 교정
     if (subCategory && !subCategories.includes(subCategory)) {
       setSubCategory(subCategories[0])
     }
   }, [mainCategories, mainCategory, subCategories, subCategory])
 
   const q = search.trim().toLowerCase()
+  /** 소분류 2개 이상이면 Grab식 섹션 헤더 — 칩 필터 대신 전체 + 헤더 분리 */
+  const useSubSections = subCategories.length >= 2
   const list = listRaw.filter((m) => {
     const main = String(m.categoryMain || '').trim() || uncategorizedLabel
     if (mainCategory && main !== mainCategory) return false
-    if (subCategory) {
+    if (!useSubSections && subCategory) {
       const sub = String(m.category || '').trim()
       if (sub !== subCategory) return false
     }
@@ -879,6 +891,46 @@ export function QrTableGuestApp({ token }: { token: string }) {
         .includes(q)
     )
   })
+
+  const listSections = React.useMemo(() => {
+    if (!useSubSections) {
+      return [{ key: '', title: '', items: list }] as {
+        key: string
+        title: string
+        items: typeof list
+      }[]
+    }
+    const bySub = new Map<string, typeof list>()
+    const emptyKey = ''
+    for (const m of list) {
+      const sub = String(m.category || '').trim() || emptyKey
+      const arr = bySub.get(sub) || []
+      arr.push(m)
+      bySub.set(sub, arr)
+    }
+    const orderedKeys = [
+      ...subCategories.filter((s) => bySub.has(s)),
+      ...(bySub.has(emptyKey) ? [emptyKey] : []),
+    ]
+    for (const k of bySub.keys()) {
+      if (!orderedKeys.includes(k)) orderedKeys.push(k)
+    }
+    return orderedKeys.map((k) => ({
+      key: k || '__uncat',
+      title: k ? guestLabel(k) : g('uncategorized'),
+      items: bySub.get(k) || [],
+    }))
+  }, [list, useSubSections, subCategories, g, lang])
+
+  function cartLineUnitPrice(line: CartLine): number | null {
+    const m = menuById.get(line.menuId)
+    if (!m || m.buffetIncluded) return null
+    const modifier = (line.optionIds || []).reduce((n, id) => {
+      const opt = (m.options || []).find((o) => o.id === id)
+      return n + (opt ? Number(opt.priceModifier) || 0 : 0)
+    }, 0)
+    return Math.max(0, Number(m.price) || Number(m.listPrice) || 0) + modifier
+  }
 
   function toPosMenu(m: MenuItem): PosMenu {
     return {
@@ -960,11 +1012,10 @@ export function QrTableGuestApp({ token }: { token: string }) {
   }
 
   const brandBtn = 'bg-[var(--qr-brand,#b45309)] text-white'
-  const catFilterLabel = [mainCategory, subCategory].filter(Boolean).join(' · ') || g('allCategories')
 
   return (
     <div className="mx-auto min-h-dvh max-w-lg bg-[var(--qr-accent,#faf7f2)] text-stone-900" style={brandCss(settings)}>
-      <header className="sticky top-0 z-10 border-b border-stone-200/80 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-stone-200/80 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="flex items-center justify-between gap-2 px-3 py-1.5">
           <div className="min-w-0">
             <h1 className="truncate text-[15px] font-semibold leading-tight">
@@ -996,18 +1047,32 @@ export function QrTableGuestApp({ token }: { token: string }) {
         </div>
         {step === 'menu' ? (
           <div className="flex items-center gap-1.5 border-t border-stone-100 px-3 py-1.5">
-            <button
-              type="button"
-              className="flex min-h-8 max-w-[46%] shrink-0 items-center gap-1 rounded-full bg-stone-900 px-2.5 text-[12px] font-semibold text-white touch-manipulation"
-              aria-expanded={catSheetOpen}
-              aria-haspopup="dialog"
-              onClick={() => setCatSheetOpen(true)}
-            >
-              <span className="min-w-0 truncate">{catFilterLabel}</span>
-              <svg className="h-3.5 w-3.5 shrink-0 opacity-80" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+            {includedMenus.length > 0 ? (
+              <div className="flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  className={`min-h-8 rounded-full px-2.5 text-[11px] font-semibold touch-manipulation ${
+                    tab === 'included'
+                      ? 'bg-[var(--qr-brand,#b45309)]/15 text-[var(--qr-brand,#b45309)]'
+                      : 'bg-stone-100 text-stone-700'
+                  }`}
+                  onClick={() => switchTab('included')}
+                >
+                  {g('included')}
+                </button>
+                <button
+                  type="button"
+                  className={`min-h-8 rounded-full px-2.5 text-[11px] font-semibold touch-manipulation ${
+                    tab === 'extras'
+                      ? 'bg-[var(--qr-brand,#b45309)]/15 text-[var(--qr-brand,#b45309)]'
+                      : 'bg-stone-100 text-stone-700'
+                  }`}
+                  onClick={() => switchTab('extras')}
+                >
+                  {g('extras')}
+                </button>
+              </div>
+            ) : null}
             <input
               className="min-h-8 min-w-0 flex-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 text-[13px]"
               placeholder={g('search')}
@@ -1263,51 +1328,104 @@ export function QrTableGuestApp({ token }: { token: string }) {
       ) : null}
 
       {step === 'menu' ? (
-        <section className="pb-24">
-          <ul className="divide-y divide-stone-100/80">
-            {list.map((m) => (
-              <li key={m.menuId} className={`flex gap-2.5 px-3 py-2 ${m.soldOut ? 'opacity-55' : ''}`}>
-                <div className="flex min-w-0 flex-1 gap-2">
-                {m.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover bg-stone-100 shadow-sm" />
-                ) : (
-                  <div className="h-14 w-14 shrink-0 rounded-xl bg-stone-200/60" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium leading-snug">{guestMenuName(m)}</p>
-                  {guestMenuDesc(m) ? <p className="mt-0.5 line-clamp-1 text-xs text-stone-500">{guestMenuDesc(m)}</p> : null}
-                  {cartLinesForMenu(m.menuId).some((line) => line.optionName) ? (
-                    <p className="mt-0.5 text-[11px] leading-snug text-[var(--qr-brand,#b45309)]">
-                      {cartLinesForMenu(m.menuId)
-                        .filter((line) => line.optionName)
-                        .map((line) => `${guestLabel(line.optionName)} ×${line.qty}`)
-                        .join(' · ')}
-                    </p>
-                  ) : null}
-                  <p className="mt-1 text-sm font-semibold">
-                    {m.soldOut ? (
-                      <span className="text-red-600">{g('soldOut')}</span>
-                    ) : m.buffetIncluded ? (
-                      <span className="text-emerald-700">{g('included')}</span>
-                    ) : (
-                      `฿${m.price.toLocaleString()}`
-                    )}
-                  </p>
-                </div>
-                </div>
-                <div className="flex items-center gap-1.5 self-center">
-                  <button type="button" className="h-8 w-8 rounded-full bg-white text-lg shadow-sm disabled:opacity-40" disabled={m.soldOut || qtyForMenu(m.menuId) <= 0} onClick={() => decMenu(m.menuId)}>
-                    −
+        <section className="pb-[calc(9.5rem+env(safe-area-inset-bottom))]">
+          {!useSubSections && subCategories.length > 0 ? (
+            <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain border-b border-stone-100 bg-white/80 px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {['', ...subCategories].map((c) => {
+                const selected = c ? subCategory === c : !subCategory
+                const label = c || g('allCategories')
+                const count = subCategoryCounts.get(c) || 0
+                return (
+                  <button
+                    key={c || 'all'}
+                    type="button"
+                    className={`flex min-h-9 shrink-0 items-center gap-1 rounded-full px-3.5 text-[13px] font-semibold touch-manipulation ${
+                      selected
+                        ? 'bg-stone-900 text-white shadow-sm'
+                        : 'bg-white text-stone-700 ring-1 ring-stone-200'
+                    }`}
+                    onClick={() => setSubCategory(c)}
+                  >
+                    <span>{c ? guestLabel(label) : label}</span>
+                    <span className={`tabular-nums text-[11px] ${selected ? 'text-white/70' : 'text-stone-400'}`}>
+                      {count}
+                    </span>
                   </button>
-                  <span className="w-5 text-center text-sm tabular-nums">{qtyForMenu(m.menuId)}</span>
-                  <button type="button" className={`h-8 w-8 rounded-full text-lg text-white shadow-sm disabled:opacity-40 ${brandBtn}`} disabled={m.soldOut} onClick={() => requestAddMenu(m)}>
-                    +
-                  </button>
-                </div>
-              </li>
+                )
+              })}
+            </div>
+          ) : null}
+          <div>
+            {listSections.map((section) => (
+              <div key={section.key || 'flat'}>
+                {section.title ? (
+                  <h2 className="px-3 pb-1 pt-4 text-[1.35rem] font-black uppercase tracking-wide text-stone-900">
+                    {section.title}
+                  </h2>
+                ) : null}
+                <ul className="divide-y divide-stone-100/80">
+                  {section.items.map((m) => (
+                    <li key={m.menuId} className={`flex gap-3 px-3 py-2.5 ${m.soldOut ? 'opacity-55' : ''}`}>
+                      <div className="flex min-w-0 flex-1 gap-2.5">
+                        {m.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={m.imageUrl}
+                            alt=""
+                            className="h-[4.25rem] w-[4.25rem] shrink-0 rounded-xl object-cover bg-stone-100 shadow-sm"
+                          />
+                        ) : (
+                          <div className="h-[4.25rem] w-[4.25rem] shrink-0 rounded-xl bg-stone-200/60" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[15px] font-semibold leading-snug">{guestMenuName(m)}</p>
+                          {guestMenuDesc(m) ? (
+                            <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{guestMenuDesc(m)}</p>
+                          ) : null}
+                          {cartLinesForMenu(m.menuId).some((line) => line.optionName) ? (
+                            <p className="mt-0.5 text-[11px] leading-snug text-[var(--qr-brand,#b45309)]">
+                              {cartLinesForMenu(m.menuId)
+                                .filter((line) => line.optionName)
+                                .map((line) => `${guestLabel(line.optionName)} ×${line.qty}`)
+                                .join(' · ')}
+                            </p>
+                          ) : null}
+                          <p className="mt-1 text-[15px] font-bold">
+                            {m.soldOut ? (
+                              <span className="text-red-600">{g('soldOut')}</span>
+                            ) : m.buffetIncluded ? (
+                              <span className="text-emerald-700">{g('included')}</span>
+                            ) : (
+                              `฿${m.price.toLocaleString()}`
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 self-center">
+                        <button
+                          type="button"
+                          className="h-9 w-9 rounded-full bg-white text-lg shadow-sm disabled:opacity-40"
+                          disabled={m.soldOut || qtyForMenu(m.menuId) <= 0}
+                          onClick={() => decMenu(m.menuId)}
+                        >
+                          −
+                        </button>
+                        <span className="w-5 text-center text-sm tabular-nums">{qtyForMenu(m.menuId)}</span>
+                        <button
+                          type="button"
+                          className={`h-9 w-9 rounded-full text-lg text-white shadow-sm disabled:opacity-40 ${brandBtn}`}
+                          disabled={m.soldOut}
+                          onClick={() => requestAddMenu(m)}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
 
           {orderSummary ? (
             <div className="mx-4 mt-4 rounded-2xl border border-stone-200 bg-white p-3.5 text-sm shadow-sm">
@@ -1352,17 +1470,30 @@ export function QrTableGuestApp({ token }: { token: string }) {
             </div>
           ) : null}
 
-          <div className="fixed inset-x-0 bottom-0 mx-auto max-w-lg border-t border-stone-200 bg-white/95 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur">
-            <button
-              type="button"
-              disabled={busy || cart.length === 0}
-              onClick={requestSubmit}
-              className={`w-full rounded-2xl py-3 font-semibold disabled:opacity-50 ${brandBtn}`}
-            >
-              {busy ? g('sendingKitchen') : g('sendKitchen')}
-              {!busy && cartQty > 0 ? ` · ${cartQty}` : ''}
-              {!busy && cartTotal >= 1 ? ` · ฿${Math.round(cartTotal).toLocaleString()}` : ''}
-            </button>
+          <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-lg border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+            <div className="px-2 pt-2">
+              <button
+                type="button"
+                disabled={busy || cart.length === 0}
+                onClick={requestSubmit}
+                className={`w-full rounded-2xl py-3 font-semibold disabled:opacity-50 ${brandBtn}`}
+              >
+                {busy ? g('sendingKitchen') : g('sendKitchen')}
+                {!busy && cartQty > 0 ? ` · ${cartQty}` : ''}
+                {!busy && cartTotal >= 1 ? ` · ฿${Math.round(cartTotal).toLocaleString()}` : ''}
+              </button>
+            </div>
+            <QrTableGuestCategoryNav
+              categories={mainCategories}
+              selected={mainCategory}
+              counts={mainCategoryCounts}
+              labelFor={guestLabel}
+              ariaLabel={g('mainCategory')}
+              onSelect={(c) => {
+                setMainCategory(c)
+                setSubCategory('')
+              }}
+            />
           </div>
         </section>
       ) : null}
@@ -1374,35 +1505,73 @@ export function QrTableGuestApp({ token }: { token: string }) {
           onClick={() => setSubmitConfirmOpen(false)}
         >
           <div
-            className="w-full max-w-lg rounded-t-3xl bg-white p-4 shadow-2xl"
+            className="flex max-h-[min(85dvh,36rem)] w-full max-w-lg flex-col rounded-t-3xl bg-white shadow-2xl"
             role="dialog"
             aria-modal="true"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-base font-semibold">{g('confirmSendKitchen')}</p>
-            <p className="mt-1 text-sm text-stone-600">{g('confirmSendKitchenHint')}</p>
-            {cartQty > 0 ? (
-              <p className="mt-2 text-sm font-semibold tabular-nums">
-                {cartQty}
-                {cartTotal >= 1 ? ` · ฿${Math.round(cartTotal).toLocaleString()}` : ''}
-              </p>
+            <div className="shrink-0 px-4 pt-4">
+              <p className="text-base font-semibold">{g('confirmSendKitchen')}</p>
+              <p className="mt-1 text-sm text-stone-600">{g('confirmSendKitchenHint')}</p>
+            </div>
+            {cart.length > 0 ? (
+              <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
+                {cart.map((line) => {
+                  const m = menuById.get(line.menuId)
+                  const unit = cartLineUnitPrice(line)
+                  const name = m ? guestMenuName(m) : `#${line.menuId}`
+                  return (
+                    <li
+                      key={line.key}
+                      className="flex items-start justify-between gap-3 rounded-xl bg-stone-50 px-3 py-2.5 text-sm"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold leading-snug text-stone-900">{name}</p>
+                        {line.optionName ? (
+                          <p className="mt-0.5 text-[12px] text-[var(--qr-brand,#b45309)]">
+                            {guestLabel(line.optionName)}
+                          </p>
+                        ) : null}
+                        <p className="mt-0.5 text-xs tabular-nums text-stone-500">×{line.qty}</p>
+                      </div>
+                      <div className="shrink-0 text-right font-semibold tabular-nums text-stone-900">
+                        {m?.buffetIncluded ? (
+                          <span className="text-emerald-700">{g('included')}</span>
+                        ) : unit != null ? (
+                          `฿${Math.round(unit * line.qty).toLocaleString()}`
+                        ) : (
+                          '—'
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
             ) : null}
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className="rounded-2xl bg-stone-100 py-3 font-semibold text-stone-800"
-                onClick={() => setSubmitConfirmOpen(false)}
-              >
-                {g('cancel')}
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                className={`rounded-2xl py-3 font-semibold disabled:opacity-50 ${brandBtn}`}
-                onClick={() => void handleSubmit()}
-              >
-                {g('confirm')}
-              </button>
+            <div className="shrink-0 border-t border-stone-100 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+              {cartQty > 0 ? (
+                <p className="mb-3 text-sm font-bold tabular-nums">
+                  {cartQty}
+                  {cartTotal >= 1 ? ` · ฿${Math.round(cartTotal).toLocaleString()}` : ''}
+                </p>
+              ) : null}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="rounded-2xl bg-stone-100 py-3.5 text-[15px] font-semibold text-stone-800"
+                  onClick={() => setSubmitConfirmOpen(false)}
+                >
+                  {g('cancel')}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className={`rounded-2xl py-3.5 text-[15px] font-semibold disabled:opacity-50 ${brandBtn}`}
+                  onClick={() => void handleSubmit()}
+                >
+                  {g('confirm')}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1414,134 +1583,6 @@ export function QrTableGuestApp({ token }: { token: string }) {
         onChange={changeLang}
         onClose={() => setLangSheetOpen(false)}
       />
-
-      {catSheetOpen && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45"
-              role="presentation"
-              onClick={() => setCatSheetOpen(false)}
-            >
-              <div
-                className="flex max-h-[80dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl"
-                role="dialog"
-                aria-modal="true"
-                aria-label={g('mainCategory')}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex justify-center pt-2.5">
-                  <span className="h-1.5 w-10 rounded-full bg-stone-200" />
-                </div>
-                <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-1">
-                  <p className="text-base font-semibold">{g('menuTab')}</p>
-                  <button
-                    type="button"
-                    className="rounded-full bg-stone-100 px-3 py-1.5 text-sm font-semibold"
-                    onClick={() => setCatSheetOpen(false)}
-                  >
-                    {g('close')}
-                  </button>
-                </div>
-                <div className="space-y-3 overflow-y-auto overscroll-contain px-4 pb-3">
-                  {includedMenus.length > 0 ? (
-                    <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        className={`min-h-10 flex-1 rounded-xl text-sm font-semibold touch-manipulation ${
-                          tab === 'included' ? 'bg-[var(--qr-brand)]/15 text-[var(--qr-brand)]' : 'bg-stone-100 text-stone-800'
-                        }`}
-                        onClick={() => switchTab('included')}
-                      >
-                        {g('included')}
-                      </button>
-                      <button
-                        type="button"
-                        className={`min-h-10 flex-1 rounded-xl text-sm font-semibold touch-manipulation ${
-                          tab === 'extras' ? 'bg-[var(--qr-brand)]/15 text-[var(--qr-brand)]' : 'bg-stone-100 text-stone-800'
-                        }`}
-                        onClick={() => switchTab('extras')}
-                      >
-                        {g('extras')}
-                      </button>
-                    </div>
-                  ) : null}
-                  {mainCategories.length > 0 ? (
-                    <div>
-                      <p className="mb-1.5 text-xs font-medium text-stone-500">{g('mainCategory')}</p>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {mainCategories.map((c) => {
-                          const selected = mainCategory === c
-                          const count = mainCategoryCounts.get(c) || 0
-                          return (
-                            <button
-                              key={c}
-                              type="button"
-                              className={`flex min-h-11 items-center justify-between gap-1 rounded-2xl px-3 text-left text-sm font-semibold touch-manipulation ${
-                                selected
-                                  ? 'bg-[var(--qr-brand,#b45309)] text-white shadow-sm'
-                                  : 'bg-[#fff7ed] text-stone-800 ring-1 ring-amber-100'
-                              }`}
-                              onClick={() => {
-                                setMainCategory(c)
-                                setSubCategory('')
-                                const hasSub = listRaw.some((m) => {
-                                  const main = String(m.categoryMain || '').trim() || uncategorizedLabel
-                                  return main === c && Boolean(String(m.category || '').trim())
-                                })
-                                if (!hasSub) setCatSheetOpen(false)
-                              }}
-                            >
-                              <span className="min-w-0 truncate">{guestLabel(c)}</span>
-                              <span className={`shrink-0 tabular-nums text-[11px] ${selected ? 'text-white/75' : 'text-stone-400'}`}>
-                                {count}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-                  {subCategories.length > 0 ? (
-                    <div>
-                      <p className="mb-1.5 text-xs font-medium text-stone-500">
-                        {g('subCategory')}
-                        {mainCategory ? ` · ${mainCategory}` : ''}
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {['', ...subCategories].map((c) => {
-                          const selected = c ? subCategory === c : !subCategory
-                          const label = c || g('allCategories')
-                          const count = subCategoryCounts.get(c) || 0
-                          return (
-                            <button
-                              key={c || 'all'}
-                              type="button"
-                              className={`flex min-h-9 items-center gap-1 rounded-full px-3 text-[13px] font-semibold touch-manipulation ${
-                                selected
-                                  ? 'bg-stone-900 text-white shadow-sm'
-                                  : 'bg-white text-stone-700 ring-1 ring-stone-200'
-                              }`}
-                              onClick={() => {
-                                setSubCategory(c)
-                                setCatSheetOpen(false)
-                              }}
-                            >
-                              <span>{c ? guestLabel(label) : label}</span>
-                              <span className={`tabular-nums text-[11px] ${selected ? 'text-white/70' : 'text-stone-400'}`}>
-                                {count}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>,
-            document.body
-          )
-        : null}
 
       <QrTableGuestOptionSheet
         open={!!optionMenu}
