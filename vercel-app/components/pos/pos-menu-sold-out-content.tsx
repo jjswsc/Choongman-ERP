@@ -12,6 +12,7 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
+import { isPosMenuSoldOut } from '@/lib/pos-menu-sold-out'
 import { canAccessPosOrder } from '@/lib/permissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +20,7 @@ import { cn } from '@/lib/utils'
 
 type FilterMode = 'all' | 'selling' | 'soldOut'
 
-/** POS 매장용 당일 품절 토글 — QR·터미널과 동일 sold_out_date */
+/** POS 매장용 품절 토글 — sold_out_date 있으면 수동 해제 전까지 유지 (QR·터미널 공통) */
 export function PosMenuSoldOutContent() {
   const { auth, initialized } = useAuth()
   const router = useRouter()
@@ -61,16 +62,11 @@ export function PosMenuSoldOutContent() {
     void load()
   }, [initialized, auth?.role, router, load])
 
-  const isSoldOutToday = React.useCallback(
-    (m: PosMenu) => String(m.soldOutDate || '').slice(0, 10) === todayStr,
-    [todayStr]
-  )
-
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase()
     return menus
       .filter((m) => {
-        const sold = isSoldOutToday(m)
+        const sold = isPosMenuSoldOut(m.soldOutDate)
         if (filter === 'selling' && sold) return false
         if (filter === 'soldOut' && !sold) return false
         if (!q) return true
@@ -83,20 +79,20 @@ export function PosMenuSoldOutContent() {
         )
       })
       .sort((a, b) => {
-        const aSold = isSoldOutToday(a) ? 0 : 1
-        const bSold = isSoldOutToday(b) ? 0 : 1
+        const aSold = isPosMenuSoldOut(a.soldOutDate) ? 0 : 1
+        const bSold = isPosMenuSoldOut(b.soldOutDate) ? 0 : 1
         if (aSold !== bSold) return aSold - bSold
         return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)
       })
-  }, [menus, search, filter, isSoldOutToday])
+  }, [menus, search, filter])
 
   const soldOutCount = React.useMemo(
-    () => menus.filter((m) => isSoldOutToday(m)).length,
-    [menus, isSoldOutToday]
+    () => menus.filter((m) => isPosMenuSoldOut(m.soldOutDate)).length,
+    [menus]
   )
 
   const handleToggle = async (menu: PosMenu) => {
-    const nextSoldOut = !isSoldOutToday(menu)
+    const nextSoldOut = !isPosMenuSoldOut(menu.soldOutDate)
     setTogglingId(menu.id)
     try {
       const res = await updatePosMenuSoldOut({
@@ -146,7 +142,7 @@ export function PosMenuSoldOutContent() {
               </h1>
               <p className="truncate text-xs text-muted-foreground">
                 {t('posMenuSoldOutManageHint') ||
-                  '당일 품절 시 POS·QR에서 주문 불가. 다음날 자동 해제.'}
+                  '품절 시 POS·QR에서 주문 불가. 다시 열 때까지 유지.'}
               </p>
             </div>
           </div>
@@ -225,7 +221,7 @@ export function PosMenuSoldOutContent() {
         ) : (
           <ul className="space-y-2">
             {filtered.map((menu) => {
-              const sold = isSoldOutToday(menu)
+              const sold = isPosMenuSoldOut(menu.soldOutDate)
               const busy = togglingId === menu.id
               return (
                 <li key={menu.id}>

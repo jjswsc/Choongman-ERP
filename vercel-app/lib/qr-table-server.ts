@@ -1573,10 +1573,8 @@ function menuImageUrl(m: DbMenu): string {
   return String(m.image || m.image_url || '').trim()
 }
 
-function isMenuSoldOutToday(soldOutDate: string | null | undefined): boolean {
-  const d = String(soldOutDate || '').trim().slice(0, 10)
-  if (!d) return false
-  return d === getBangkokTodayDateString()
+function isMenuSoldOut(soldOutDate: string | null | undefined): boolean {
+  return !!String(soldOutDate || '').trim().slice(0, 10)
 }
 
 export async function loadQrMenusForSession(session: QrTableSession) {
@@ -1616,7 +1614,7 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   for (const m of menus) {
     const id = Number(m.id || 0)
     if (!id) continue
-    const soldOut = isMenuSoldOutToday(m.sold_out_date)
+    const soldOut = isMenuSoldOut(m.sold_out_date)
     const isIncluded = included.has(id)
     const categoryMain = normalizePromotionCategoryMain(m.category_main)
     const category = String(m.category || '').trim()
@@ -1773,7 +1771,7 @@ export async function submitQrCart(params: {
     if (!menuId || !qty) continue
     const menu = byId.get(menuId)
     if (!menu) throw new Error(`menu_not_found:${menuId}`)
-    if (isMenuSoldOutToday(menu.sold_out_date)) throw new Error(`menu_sold_out:${menuId}`)
+    if (isMenuSoldOut(menu.sold_out_date)) throw new Error(`menu_sold_out:${menuId}`)
     const isIncluded = included.has(menuId)
     if (!isIncluded && extraAllow.restricted && !extraAllow.allowed.has(menuId)) {
       throw new Error(`menu_not_in_extras:${menuId}`)

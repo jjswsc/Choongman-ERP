@@ -30,6 +30,7 @@ import { formatAppliedCouponsDiscountReason, summarizeLegacyCouponFields } from 
 import { savePosOrderWithOffline } from "@/lib/offline"
 import { newPosOrderClientRequestId } from "@/lib/pos-order-client-request-id"
 import { getBangkokDateStr, getPosBusinessDateStr } from "@/lib/pos-business-day"
+import { isPosMenuSoldOut } from "@/lib/pos-menu-sold-out"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
@@ -812,7 +813,7 @@ export default function PosOrderPage() {
 
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
-    const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
+    const notSoldOut = active.filter((m) => !isPosMenuSoldOut(m.soldOutDate))
     const visibleByOrderType = notSoldOut.filter((m) =>
       orderType === "delivery"
         ? m.sellDelivery !== false

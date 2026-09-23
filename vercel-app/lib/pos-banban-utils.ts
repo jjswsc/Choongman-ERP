@@ -1,4 +1,5 @@
 import type { PosMenu } from '@/lib/api-client'
+import { isPosMenuSoldOut } from '@/lib/pos-menu-sold-out'
 
 /**
  * 공백·하이픈 등 제거한 메뉴 코드 키 (예: `C0 24`, `C-024` → `c024`)
@@ -151,10 +152,9 @@ function isAvailableBanbanFlavorMenu(
   banbanMenu: PosMenu,
   opts?: { todayStr?: string; includeSoldOut?: boolean }
 ): boolean {
-  const todayStr = String(opts?.todayStr ?? '').trim()
   return (
     menu.isActive !== false &&
-    (opts?.includeSoldOut === true || !todayStr || !menu.soldOutDate || menu.soldOutDate !== todayStr) &&
+    (opts?.includeSoldOut === true || !isPosMenuSoldOut(menu.soldOutDate)) &&
     !isBanbanMenu(menu) &&
     String(menu.id) !== String(banbanMenu.id) &&
     !isExcludedFromBanbanFlavorPick(menu)

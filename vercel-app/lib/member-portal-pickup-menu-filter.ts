@@ -1,5 +1,6 @@
 import type { PosMenu, PosMenuOption } from "@/lib/api-client"
 import { isBanbanMenu } from "@/lib/pos-banban-utils"
+import { isPosMenuSoldOut } from "@/lib/pos-menu-sold-out"
 import { computeChickenMultistepRowPrice } from "@/lib/pos-chicken-option-inference"
 import { resolveChickenOptionPickerPlan } from "@/lib/pos-chicken-option-picker-plan"
 
@@ -18,10 +19,10 @@ function optionSellMemberAllowed(opt: PosMenuOption): boolean {
 }
 
 /** 회원앱 픽업 주문에 노출할 메뉴 — sell_member(미설정 시 포장·배달전용 규칙 폴백) */
-export function isMemberPortalPickupMenu(menu: PosMenu, todayYmd: string): boolean {
+export function isMemberPortalPickupMenu(menu: PosMenu, _todayYmd?: string): boolean {
   if (menu.isActive === false) return false
   if (isBanbanMenu(menu)) return false
-  if (menu.soldOutDate && menu.soldOutDate === todayYmd) return false
+  if (isPosMenuSoldOut(menu.soldOutDate)) return false
   return menuSellMemberAllowed(menu)
 }
 

@@ -20,6 +20,7 @@ import {
   type PosPromoWithItems,
 } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
+import { isPosMenuSoldOut } from '@/lib/pos-menu-sold-out'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -459,7 +460,7 @@ export function PosTerminalMenuScreen({
 
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
-    const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
+    const notSoldOut = active.filter((m) => !isPosMenuSoldOut(m.soldOutDate))
     const visibleByOrderType = notSoldOut.filter((m) =>
       orderType === 'delivery'
         ? m.sellDelivery !== false

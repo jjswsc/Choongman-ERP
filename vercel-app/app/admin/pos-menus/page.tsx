@@ -132,6 +132,7 @@ import {
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { translatePosMenuLineForReceipt, chickenPartDedupeKey, prettyChickenPartLibraryLabel } from "@/lib/pos-print-translate"
 import { sortByCode } from "@/lib/sort-utils"
+import { isPosMenuSoldOut } from "@/lib/pos-menu-sold-out"
 import { isStrictBonelessBbqChickenCode } from "@/lib/pos-bbq-option-guard"
 import {
   inferOptionSelectionGroupsFromOptions,
@@ -3157,7 +3158,7 @@ export default function PosMenusPage() {
 
   const todayStr = bangkokTodayStr
   const handleSoldOutToggle = async (menu: PosMenu) => {
-    const isSoldOut = menu.soldOutDate === todayStr
+    const isSoldOut = isPosMenuSoldOut(menu.soldOutDate)
     setSoldOutTogglingId(menu.id)
     try {
       const res = await updatePosMenuSoldOut({ id: menu.id, soldOut: !isSoldOut })
@@ -3199,7 +3200,7 @@ export default function PosMenusPage() {
       const matchCategory = categoryFilter === "all" || categoryEq
       const mainEq = (m.categoryMain ?? "") === mainCategoryFilter
       const matchMainCategory = mainCategoryFilter === "all" || mainEq
-      const isSoldOut = String(m.soldOutDate || "").slice(0, 10) === todayStr
+      const isSoldOut = isPosMenuSoldOut(m.soldOutDate)
       const matchSoldOut =
         soldOutFilter === "all" ||
         (soldOutFilter === "selling" && !isSoldOut) ||
@@ -3207,7 +3208,7 @@ export default function PosMenusPage() {
       return matchTerm && matchCategory && matchMainCategory && matchSoldOut
     })
     return sortByCode(filtered, (m) => m.code)
-  }, [menus, searchTerm, categoryFilter, mainCategoryFilter, soldOutFilter, todayStr])
+  }, [menus, searchTerm, categoryFilter, mainCategoryFilter, soldOutFilter])
 
   const handleDownloadFilteredMenusExcel = React.useCallback(async () => {
     if (filteredMenus.length === 0) {
@@ -5354,7 +5355,7 @@ export default function PosMenusPage() {
                   ) : (
                     filteredMenus.map((m, idx) => {
                       const isEditingRow = editingId === m.id
-                      const isSoldOutToday = m.soldOutDate === todayStr
+                      const isSoldOutToday = isPosMenuSoldOut(m.soldOutDate)
                       const isExpanded = expandedMenuId === m.id
                       const expanded = isExpanded ? expandedMenuData : null
                       const expandedRows = (() => {
