@@ -1,19 +1,18 @@
-import { after } from 'next/server'
 import { notifyMemberPointLineForPaidOrder } from '@/lib/member-point-line-notify'
 
 type PaidOrderNotifyParams = Parameters<typeof notifyMemberPointLineForPaidOrder>[0]
 
-/** 결제 응답을 막지 않도록 after()로 보낸다. 요청 스코프가 아니면 기존처럼 기다린다. */
+/**
+ * LINE push는 응답을 반환하기 전에 끝낸다.
+ * next/server `after()`는 onClose 이후에만 실행되는데, Vercel에서는 그 콜백이
+ * 함수 종료와 함께 버려져 포인트는 적립되고 알림만 안 나갔다.
+ */
 export async function scheduleNotifyMemberPointLineForPaidOrder(
   params: PaidOrderNotifyParams
 ): Promise<void> {
-  const run = () =>
-    notifyMemberPointLineForPaidOrder(params).catch((err) => {
-      console.warn('member-point-line-notify: scheduled_failed', err)
-    })
   try {
-    after(run)
-  } catch {
-    await run()
+    await notifyMemberPointLineForPaidOrder(params)
+  } catch (err) {
+    console.warn('member-point-line-notify: scheduled_failed', err)
   }
 }

@@ -86,15 +86,33 @@ async function resolveMemberPointNotifyProfile(memberId: number): Promise<Member
   }
 }
 
-async function wasPointLineNotifySent(orderId: number): Promise<boolean> {
+function pointLineNotifyEventId(orderId: number, memberId: number): string {
+  return `point_line_notify:order:${orderId}:member:${memberId}`
+}
+
+/** 주문 단위로만 기록하던 이전 키. 같은 회원에게 한 번 더 보내지 않기 위해 함께 본다. */
+function legacyPointLineNotifyEventId(orderId: number): string {
+  return `point_line_notify:order:${orderId}`
+}
+
+async function wasPointLineNotifySent(orderId: number, memberId: number): Promise<boolean> {
   try {
-    const eventId = `point_line_notify:order:${orderId}`
+    const specific = pointLineNotifyEventId(orderId, memberId)
+    const legacy = legacyPointLineNotifyEventId(orderId)
     const rows = (await supabaseSelectFilter(
       'member_events',
-      `event_id=eq.${encodeURIComponent(eventId)}`,
-      { limit: 1, select: 'id' }
-    )) as Array<{ id?: number }>
-    return Boolean(rows?.[0]?.id)
+      `or=(event_id.eq.${encodeURIComponent(specific)},event_id.eq.${encodeURIComponent(legacy)})`,
+      { limit: 5, select: 'event_id,member_id' }
+    )) as Array<{ event_id?: string | null; member_id?: number | null }>
+    for (const row of rows || []) {
+      const eventId = String(row.event_id || '')
+      if (eventId === specific) return true
+      if (eventId === legacy) {
+        const recordedMemberId = Number(row.member_id || 0)
+        if (!recordedMemberId || recordedMemberId === memberId) return true
+      }
+    }
+    return false
   } catch {
     return false
   }
@@ -103,10 +121,10 @@ async function wasPointLineNotifySent(orderId: number): Promise<boolean> {
 async function markPointLineNotifySent(orderId: number, memberId: number): Promise<void> {
   try {
     await createMemberEvent({
-      eventId: `point_line_notify:order:${orderId}`,
+      eventId: pointLineNotifyEventId(orderId, memberId),
       eventType: 'point_line_notify',
       memberId,
-      payload: { orderId },
+      payload: { orderId, memberId },
       status: 'processed',
     })
   } catch {
@@ -251,7 +269,7 @@ export async function notifyMemberPointLineForPaidOrder(params: {
   }
   if (earned <= 0 && used <= 0) return { sent: false, reason: 'no_points' }
 
-  if (await wasPointLineNotifySent(orderId)) {
+  if (await wasPointLineNotifySent(orderId, memberId)) {
     return { sent: false, reason: 'already_sent' }
   }
 
