@@ -9,14 +9,57 @@ export function normalizePromotionCategoryMain(raw: string | undefined | null): 
   return s === LEGACY_PROMOTION_MAIN_CATEGORY ? PROMOTION_MAIN_CATEGORY : s
 }
 
-/** POS 대분류 탭: 레거시 한글과 Promotion 중복 제거 후 정렬 */
+/**
+ * 손님·POS 대분류 탭 선호 순서 (나머지·미매칭은 뒤로 localeCompare).
+ * Promotion → Chicken → Korean → Side → Drinks
+ */
+export function posMainCategoryTabRank(name: string): number {
+  const key = String(name ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+  if (
+    key === 'promotion' ||
+    key === LEGACY_PROMOTION_MAIN_CATEGORY.toLowerCase() ||
+    key.includes('promo') ||
+    key.includes('โปรโม') ||
+    key.includes('โปรโมช') ||
+    (key.includes('โปร') && !key.includes('ไก่'))
+  ) {
+    return 0
+  }
+  if (key.includes('chicken') || key.includes('치킨') || key.includes('ไก่')) return 1
+  if (key.includes('korean') || key.includes('한식') || key.includes('อาหารเกาหลี')) return 2
+  if (
+    key.includes('side') ||
+    key.includes('사이드') ||
+    key.includes('ของว่าง') ||
+    key.includes('snack') ||
+    key.includes('fries')
+  ) {
+    return 3
+  }
+  if (
+    key.includes('drink') ||
+    key.includes('beverage') ||
+    key.includes('음료') ||
+    key.includes('เครื่องดื่ม')
+  ) {
+    return 4
+  }
+  return 100
+}
+
+/** POS 대분류 탭: 레거시 한글과 Promotion 중복 제거 후 선호 순서로 정렬 */
 export function normalizePosMainCategoryTabs(mains: Iterable<string>): string[] {
   const out = new Set<string>()
   for (const x of mains) {
     const n = normalizePromotionCategoryMain(String(x ?? '').trim())
     if (n) out.add(n)
   }
-  return Array.from(out).sort()
+  return Array.from(out).sort(
+    (a, b) => posMainCategoryTabRank(a) - posMainCategoryTabRank(b) || a.localeCompare(b)
+  )
 }
 
 /** 카테고리 설정에 없을 때 쓰는 기본 소분류 (영문 표기) */

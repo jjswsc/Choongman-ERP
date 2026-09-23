@@ -25,6 +25,12 @@ import {
   type QrGuestMenuOption,
 } from '@/lib/qr-table-guest-menu'
 import {
+  QrTableGuestOrderDoneScreen,
+  QrTableGuestOrderHistorySheet,
+  QrTableGuestOrderStatusSheet,
+  latestOrderTimeLabel,
+} from '@/components/qr-table/qr-table-guest-journey'
+import {
   normalizeQrGuestLang,
   qrGuestLangOption,
   qrGuestT,
@@ -33,6 +39,8 @@ import {
 } from '@/lib/i18n-qr-table-guest'
 import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
 import { QrTableGuestCategoryNav } from '@/components/qr-table/qr-table-guest-category-nav'
+import { normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
+import { QrTableGuestSwipeSheet } from '@/components/qr-table/qr-table-guest-swipe-sheet'
 import { PosQrGuidelineCard } from '@/components/pos/pos-qr-guideline-card'
 import type { PosMenu, PosMenuOption } from '@/lib/api-client'
 import {
@@ -86,11 +94,15 @@ type OrderSummaryItem = {
   price?: number
   buffetIncluded?: boolean
   cancelled?: boolean
+  cancelledAt?: string
   addedAt?: string
+  servedAt?: string
+  imageUrl?: string
   isBuffetEntry?: boolean
 }
 
 type OrderSummaryState = {
+  orderId: number | null
   total: number
   paymentQr: number
   balanceDue: number
@@ -98,12 +110,14 @@ type OrderSummaryState = {
 }
 
 function toOrderSummary(order: {
+  orderId?: number | null
   total?: number
   paymentQr?: number
   balanceDue?: number
   items?: unknown
 }): OrderSummaryState {
   return {
+    orderId: order.orderId != null && Number(order.orderId) > 0 ? Number(order.orderId) : null,
     total: Number(order.total || 0),
     paymentQr: Number(order.paymentQr || 0),
     balanceDue: Number(order.balanceDue || 0),
@@ -344,7 +358,10 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [qrPayload, setQrPayload] = React.useState('')
   const [qrAmount, setQrAmount] = React.useState(0)
   const [busy, setBusy] = React.useState(false)
-  const [submitConfirmOpen, setSubmitConfirmOpen] = React.useState(false)
+  const [cartSheetOpen, setCartSheetOpen] = React.useState(false)
+  const [finalConfirmOpen, setFinalConfirmOpen] = React.useState(false)
+  const [orderDoneOpen, setOrderDoneOpen] = React.useState(false)
+  const [statusOpen, setStatusOpen] = React.useState(false)
   const submitLockRef = React.useRef(false)
   const [callOpen, setCallOpen] = React.useState(false)
   const [historyOpen, setHistoryOpen] = React.useState(false)
@@ -647,10 +664,45 @@ export function QrTableGuestApp({ token }: { token: string }) {
     })
   }
 
+  function incCartLine(key: string) {
+    setCart((prev) =>
+      prev.map((line) => (line.key === key ? { ...line, qty: Math.min(99, line.qty + 1) } : line))
+    )
+  }
+
+  function decCartLine(key: string) {
+    setCart((prev) =>
+      prev
+        .map((line) => (line.key === key ? { ...line, qty: line.qty - 1 } : line))
+        .filter((line) => line.qty > 0)
+    )
+  }
+
+  function removeCartLine(key: string) {
+    setCart((prev) => prev.filter((line) => line.key !== key))
+  }
+
   function requestSubmit() {
     if (submitLockRef.current || busy || cart.length === 0) return
-    setSubmitConfirmOpen(true)
+    setFinalConfirmOpen(false)
+    setCartSheetOpen(true)
   }
+
+  function requestFinalConfirm() {
+    if (submitLockRef.current || busy || cart.length === 0) return
+    setFinalConfirmOpen(true)
+  }
+
+  function closeCartSheets() {
+    setFinalConfirmOpen(false)
+    setCartSheetOpen(false)
+  }
+
+  React.useEffect(() => {
+    if (cart.length === 0 && (cartSheetOpen || finalConfirmOpen)) {
+      closeCartSheets()
+    }
+  }, [cart.length, cartSheetOpen, finalConfirmOpen])
 
   async function handleSubmit() {
     const lines = cart.map((line) => ({
@@ -662,7 +714,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
     }))
     if (!lines.length || submitLockRef.current) return
     submitLockRef.current = true
-    setSubmitConfirmOpen(false)
+    closeCartSheets()
     setBusy(true)
     setError('')
     const extrasPrepay = session?.extrasPaymentModeResolved === 'prepay' || extrasChoice === 'prepay'
@@ -704,8 +756,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       if (extrasTotal >= 1) {
         showToast(g('extrasPayThenKitchen'), 5600)
       } else {
-        showToast(`${g('sentKitchen')} · ${g('sentKitchenHint')}`)
-        setHistoryOpen(true)
+        setOrderDoneOpen(true)
       }
     } catch (e) {
       setError(humanizeApiError(e instanceof Error ? e.message : 'submit_failed'))
@@ -726,8 +777,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
             if (st?.paid) {
               clearExtrasPayPoll()
               setQrPayload('')
-              showToast(`${g('sentKitchen')} · ${g('sentKitchenHint')}`)
-              setHistoryOpen(true)
+              setOrderDoneOpen(true)
               const order = await qrTableGetOrder(auth)
               if (order?.success && order.order) {
                 setOrderSummary(toOrderSummary(order.order))
@@ -798,7 +848,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       if (main) set.add(main)
       else hasEmpty = true
     }
-    const list = [...set].sort((a, b) => a.localeCompare(b))
+    const list = normalizePosMainCategoryTabs(set)
     if (hasEmpty) list.push(uncategorizedLabel)
     return list
   }, [listRaw, uncategorizedLabel])
@@ -1498,83 +1548,208 @@ export function QrTableGuestApp({ token }: { token: string }) {
         </section>
       ) : null}
 
-      {submitConfirmOpen ? (
-        <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-black/45"
-          role="presentation"
-          onClick={() => setSubmitConfirmOpen(false)}
-        >
-          <div
-            className="flex max-h-[min(85dvh,36rem)] w-full max-w-lg flex-col rounded-t-3xl bg-white shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="shrink-0 px-4 pt-4">
-              <p className="text-base font-semibold">{g('confirmSendKitchen')}</p>
-              <p className="mt-1 text-sm text-stone-600">{g('confirmSendKitchenHint')}</p>
+      {cartSheetOpen ? (
+        <QrTableGuestSwipeSheet
+          open={cartSheetOpen}
+          onClose={closeCartSheets}
+          zClass="z-40"
+          initialSnap="mid"
+          ariaLabel={g('cartTitle')}
+          header={
+            <div className="flex items-center justify-between gap-3 px-4 pb-2">
+              <p className="text-base font-semibold">{g('cartTitle')}</p>
+              <button
+                type="button"
+                className="rounded-full bg-stone-100 px-3 py-1.5 text-sm font-semibold text-stone-700"
+                onClick={closeCartSheets}
+              >
+                {g('close')}
+              </button>
             </div>
-            {cart.length > 0 ? (
-              <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
-                {cart.map((line) => {
-                  const m = menuById.get(line.menuId)
-                  const unit = cartLineUnitPrice(line)
-                  const name = m ? guestMenuName(m) : `#${line.menuId}`
-                  return (
-                    <li
-                      key={line.key}
-                      className="flex items-start justify-between gap-3 rounded-xl bg-stone-50 px-3 py-2.5 text-sm"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold leading-snug text-stone-900">{name}</p>
-                        {line.optionName ? (
-                          <p className="mt-0.5 text-[12px] text-[var(--qr-brand,#b45309)]">
-                            {guestLabel(line.optionName)}
-                          </p>
-                        ) : null}
-                        <p className="mt-0.5 text-xs tabular-nums text-stone-500">×{line.qty}</p>
-                      </div>
-                      <div className="shrink-0 text-right font-semibold tabular-nums text-stone-900">
+          }
+          footer={
+            <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+              <div className="mb-3 flex items-baseline justify-between gap-2">
+                <span className="text-sm font-medium text-stone-600">{g('totalPay')}</span>
+                <span className="text-lg font-bold tabular-nums text-[var(--qr-brand,#b45309)]">
+                  {cartTotal >= 1 ? `฿${Math.round(cartTotal).toLocaleString()}` : cartQty > 0 ? g('included') : '—'}
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={busy || cart.length === 0}
+                className={`w-full rounded-2xl py-3.5 text-[15px] font-semibold disabled:opacity-50 ${brandBtn}`}
+                onClick={requestFinalConfirm}
+              >
+                {g('placeOrder')}
+                {cartQty > 0 ? ` · ${cartQty}` : ''}
+              </button>
+            </div>
+          }
+        >
+          {cart.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-stone-500">{g('orderHistoryEmpty')}</p>
+          ) : (
+            <ul className="space-y-2 px-4 py-2">
+              {cart.map((line) => {
+                const m = menuById.get(line.menuId)
+                const unit = cartLineUnitPrice(line)
+                const name = m ? guestMenuName(m) : `#${line.menuId}`
+                const lineTotal = unit != null ? Math.round(unit * line.qty) : null
+                return (
+                  <li
+                    key={line.key}
+                    className="flex gap-2.5 rounded-2xl border border-stone-100 bg-white p-2.5 shadow-sm"
+                  >
+                    {m?.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={m.imageUrl}
+                        alt=""
+                        className="h-16 w-16 shrink-0 rounded-xl object-cover bg-stone-100"
+                      />
+                    ) : (
+                      <div className="h-16 w-16 shrink-0 rounded-xl bg-stone-200/60" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[15px] font-semibold leading-snug text-stone-900">{name}</p>
+                      {line.optionName ? (
+                        <p className="mt-0.5 text-[12px] text-[var(--qr-brand,#b45309)]">
+                          {guestLabel(line.optionName)}
+                        </p>
+                      ) : null}
+                      <p className="mt-1 text-sm font-bold tabular-nums text-stone-800">
                         {m?.buffetIncluded ? (
                           <span className="text-emerald-700">{g('included')}</span>
-                        ) : unit != null ? (
-                          `฿${Math.round(unit * line.qty).toLocaleString()}`
+                        ) : lineTotal != null ? (
+                          `฿${lineTotal.toLocaleString()}`
                         ) : (
                           '—'
                         )}
+                      </p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 rounded-full bg-stone-50 px-1 py-0.5 ring-1 ring-stone-200">
+                          <button
+                            type="button"
+                            className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-lg shadow-sm"
+                            aria-label="−"
+                            onClick={() => decCartLine(line.key)}
+                          >
+                            −
+                          </button>
+                          <span className="w-6 text-center text-sm font-semibold tabular-nums">{line.qty}</span>
+                          <button
+                            type="button"
+                            className={`flex h-8 w-8 items-center justify-center rounded-full text-lg text-white shadow-sm ${brandBtn}`}
+                            aria-label="+"
+                            onClick={() => incCartLine(line.key)}
+                          >
+                            +
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          className="ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[12px] font-semibold text-red-600"
+                          onClick={() => removeCartLine(line.key)}
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <path
+                              d="M5 7h14M10 7V5h4v2m-6 3v8m4-8v8M7 7l1 12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2l1-12"
+                              stroke="currentColor"
+                              strokeWidth="1.7"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                          {g('deleteItem')}
+                        </button>
                       </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
-            <div className="shrink-0 border-t border-stone-100 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-              {cartQty > 0 ? (
-                <p className="mb-3 text-sm font-bold tabular-nums">
-                  {cartQty}
-                  {cartTotal >= 1 ? ` · ฿${Math.round(cartTotal).toLocaleString()}` : ''}
-                </p>
-              ) : null}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  className="rounded-2xl bg-stone-100 py-3.5 text-[15px] font-semibold text-stone-800"
-                  onClick={() => setSubmitConfirmOpen(false)}
-                >
-                  {g('cancel')}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className={`rounded-2xl py-3.5 text-[15px] font-semibold disabled:opacity-50 ${brandBtn}`}
-                  onClick={() => void handleSubmit()}
-                >
-                  {g('confirm')}
-                </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </QrTableGuestSwipeSheet>
+      ) : null}
+
+      {finalConfirmOpen ? (
+        <QrTableGuestSwipeSheet
+          open={finalConfirmOpen}
+          onClose={() => setFinalConfirmOpen(false)}
+          zClass="z-50"
+          initialSnap="mid"
+          ariaLabel={g('confirmSendKitchen')}
+          header={
+            <div className="px-4 pb-2 pt-1 text-center">
+              <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--qr-brand,#b45309)]/12 text-[var(--qr-brand,#b45309)]">
+                <span className="text-lg font-black" aria-hidden>
+                  !
+                </span>
               </div>
+              <p className="text-base font-semibold text-stone-900">{g('confirmSendKitchen')}</p>
+              <p className="mt-1 text-sm text-stone-600">{g('confirmSendKitchenHint')}</p>
             </div>
-          </div>
-        </div>
+          }
+          footer={
+            <div className="grid grid-cols-2 gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+              <button
+                type="button"
+                className="rounded-2xl bg-stone-100 py-3.5 text-[15px] font-semibold text-stone-800"
+                onClick={() => setFinalConfirmOpen(false)}
+              >
+                {g('cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={busy || cart.length === 0}
+                className={`rounded-2xl py-3.5 text-[15px] font-semibold disabled:opacity-50 ${brandBtn}`}
+                onClick={() => void handleSubmit()}
+              >
+                {busy ? g('sendingKitchen') : g('confirm')}
+              </button>
+            </div>
+          }
+        >
+          <ul className="space-y-2 px-4 py-2">
+            {cart.map((line) => {
+              const m = menuById.get(line.menuId)
+              const unit = cartLineUnitPrice(line)
+              const name = m ? guestMenuName(m) : `#${line.menuId}`
+              return (
+                <li
+                  key={line.key}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-stone-50 px-3 py-2.5 text-sm"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold leading-snug">{name}</p>
+                    {line.optionName ? (
+                      <p className="mt-0.5 text-[12px] text-[var(--qr-brand,#b45309)]">
+                        {guestLabel(line.optionName)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-semibold tabular-nums">×{line.qty}</p>
+                    {m?.buffetIncluded ? (
+                      <p className="text-xs text-emerald-700">{g('included')}</p>
+                    ) : unit != null ? (
+                      <p className="text-xs tabular-nums text-stone-500">
+                        ฿{Math.round(unit * line.qty).toLocaleString()}
+                      </p>
+                    ) : null}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          {cartQty > 0 ? (
+            <p className="px-4 pb-3 text-center text-sm font-bold tabular-nums text-stone-800">
+              {cartQty}
+              {cartTotal >= 1 ? ` · ฿${Math.round(cartTotal).toLocaleString()}` : ''}
+            </p>
+          ) : null}
+        </QrTableGuestSwipeSheet>
       ) : null}
 
       <GuestLangSheet

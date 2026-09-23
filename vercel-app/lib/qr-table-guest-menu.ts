@@ -26,7 +26,10 @@ export type QrGuestSentLineInput = {
   price?: number
   buffetIncluded?: boolean
   cancelled?: boolean
+  cancelledAt?: unknown
   addedAt?: unknown
+  servedAt?: unknown
+  imageUrl?: unknown
   isBuffetEntry?: boolean
 }
 
@@ -35,6 +38,28 @@ export type QrGuestSentTimeGroup = {
   addedAt: string | null
   timeLabel: string
   lines: QrGuestSentLine[]
+}
+
+export type QrGuestOrderPhase = 'empty' | 'received' | 'cooking' | 'partial_served' | 'served'
+
+export type QrGuestTimelineStepId = 'received' | 'cooking' | 'ready' | 'served'
+
+export type QrGuestTimelineStep = {
+  id: QrGuestTimelineStepId
+  state: 'done' | 'current' | 'upcoming'
+}
+
+export type QrGuestHistoryLine = QrGuestSentLine & {
+  imageUrl?: string
+  served?: boolean
+}
+
+export type QrGuestHistoryRound = {
+  key: string
+  addedAt: string | null
+  timeLabel: string
+  lines: QrGuestHistoryLine[]
+  allServed: boolean
 }
 
 /** 같은 전송(주방 슬립 1장)으로 묶을 허용 오차 — 레거시 QR id의 Date.now() 드리프트 대비 */
@@ -47,6 +72,7 @@ function lineQty(raw: QrGuestSentLineInput): number {
 
 function toSentLine(raw: QrGuestSentLineInput): QrGuestSentLine | null {
   if (raw?.cancelled === true) return null
+  if (String(raw?.cancelledAt || '').trim()) return null
   const qty = lineQty(raw)
   if (!qty) return null
   return {
@@ -55,6 +81,61 @@ function toSentLine(raw: QrGuestSentLineInput): QrGuestSentLine | null {
     price: Math.max(0, Number(raw.price) || 0),
     buffetIncluded: raw.buffetIncluded === true,
   }
+}
+
+/** 활성(미취소) 라인 기준 손님용 진행 단계 */
+export function resolveQrGuestOrderPhase(
+  items: QrGuestSentLineInput[] | null | undefined
+): QrGuestOrderPhase {
+  const active = (items || []).filter((raw) => {
+    if (raw?.cancelled === true) return false
+    if (String(raw?.cancelledAt || '').trim()) return false
+    return lineQty(raw) > 0
+  })
+  if (active.length === 0) return 'empty'
+  let served = 0
+  for (const raw of active) {
+    if (String(raw.servedAt || '').trim()) served += 1
+  }
+  if (served === 0) return 'cooking'
+  if (served >= active.length) return 'served'
+  return 'partial_served'
+}
+
+/** 목업 4단계 타임라인 — 실데이터: 접수 / 조리·일부서빙 / 서빙완료 */
+export function buildQrGuestOrderTimeline(
+  phase: QrGuestOrderPhase
+): QrGuestTimelineStep[] {
+  if (phase === 'empty') {
+    return [
+      { id: 'received', state: 'upcoming' },
+      { id: 'cooking', state: 'upcoming' },
+      { id: 'ready', state: 'upcoming' },
+      { id: 'served', state: 'upcoming' },
+    ]
+  }
+  if (phase === 'served') {
+    return [
+      { id: 'received', state: 'done' },
+      { id: 'cooking', state: 'done' },
+      { id: 'ready', state: 'done' },
+      { id: 'served', state: 'done' },
+    ]
+  }
+  if (phase === 'partial_served') {
+    return [
+      { id: 'received', state: 'done' },
+      { id: 'cooking', state: 'done' },
+      { id: 'ready', state: 'current' },
+      { id: 'served', state: 'upcoming' },
+    ]
+  }
+  return [
+    { id: 'received', state: 'done' },
+    { id: 'cooking', state: 'current' },
+    { id: 'ready', state: 'upcoming' },
+    { id: 'served', state: 'upcoming' },
+  ]
 }
 
 function sentLineKey(line: QrGuestSentLine): string {
@@ -157,6 +238,59 @@ export function groupQrGuestSentLinesByTime(
       addedAt,
       timeLabel: formatQrGuestOrderClock(addedAt),
       lines: bucket.lines,
+    }
+  })
+}
+
+/** 라운드별 카드용 — 최신 라운드(배열 끝) = 현재 주문 */
+export function groupQrGuestHistoryRounds(
+  items: QrGuestSentLineInput[] | null | undefined,
+  fallbackCreatedAt?: string | null
+): QrGuestHistoryRound[] {
+  const groups = groupQrGuestSentLinesByTime(items, fallbackCreatedAt)
+  const byTime = new Map<string, QrGuestSentLineInput[]>()
+  for (const raw of items || []) {
+    if (raw?.cancelled === true) continue
+    if (String(raw?.cancelledAt || '').trim()) continue
+    if (!lineQty(raw)) continue
+    const ms = resolveQrGuestLineAddedAtMs(raw, fallbackCreatedAt)
+    const matched = groups.find((g) => {
+      if (!g.addedAt || ms == null) return !g.addedAt && ms == null
+      const gms = parseBangkokWallClockToMs(g.addedAt)
+      return gms != null && Math.abs(gms - ms) <= QR_GUEST_ORDER_CLUSTER_MS
+    })
+    const key = matched?.key || (ms == null ? 'unknown' : `t-${ms}`)
+    const arr = byTime.get(key) || []
+    arr.push(raw)
+    byTime.set(key, arr)
+  }
+  return groups.map((g) => {
+    const raws = byTime.get(g.key) || []
+    const lines: QrGuestHistoryLine[] = []
+    for (const raw of raws) {
+      const base = toSentLine(raw)
+      if (!base) continue
+      const served = Boolean(String(raw.servedAt || '').trim())
+      const imageUrl = String(raw.imageUrl || '').trim() || undefined
+      const prev = lines.find(
+        (l) =>
+          l.name === base.name &&
+          l.price === base.price &&
+          l.buffetIncluded === base.buffetIncluded &&
+          Boolean(l.served) === served
+      )
+      if (prev) prev.qty += base.qty
+      else lines.push({ ...base, served, imageUrl })
+    }
+    const outLines =
+      lines.length > 0 ? lines : g.lines.map((l) => ({ ...l, served: false as boolean }))
+    const allServed = outLines.length > 0 && outLines.every((l) => l.served)
+    return {
+      key: g.key,
+      addedAt: g.addedAt,
+      timeLabel: g.timeLabel,
+      lines: outLines,
+      allServed,
     }
   })
 }

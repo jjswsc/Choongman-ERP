@@ -17,7 +17,7 @@ import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { resolvePosMenuDescriptionForChannel } from '@/lib/pos-menu-display-description'
 import { parsePosMenuI18nMap } from '@/lib/pos-menu-guest-i18n'
-import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
+import { normalizePromotionCategoryMain, posMainCategoryTabRank } from '@/lib/pos-promo-constants'
 import {
   type QrGuestMenuOption,
   resolveQrGuestLineOption,
@@ -1592,7 +1592,11 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   menus.sort((a, b) => {
     const mainA = normalizePromotionCategoryMain(a.category_main)
     const mainB = normalizePromotionCategoryMain(b.category_main)
-    if (mainA !== mainB) return mainA.localeCompare(mainB)
+    if (mainA !== mainB) {
+      const rank = posMainCategoryTabRank(mainA) - posMainCategoryTabRank(mainB)
+      if (rank !== 0) return rank
+      return mainA.localeCompare(mainB)
+    }
     const catA = String(a.category || '').trim()
     const catB = String(b.category || '').trim()
     if (catA !== catB) return catA.localeCompare(catB)
