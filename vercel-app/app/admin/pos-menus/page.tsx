@@ -3199,7 +3199,7 @@ export default function PosMenusPage() {
       const matchCategory = categoryFilter === "all" || categoryEq
       const mainEq = (m.categoryMain ?? "") === mainCategoryFilter
       const matchMainCategory = mainCategoryFilter === "all" || mainEq
-      const isSoldOut = !!(m.soldOutDate && String(m.soldOutDate).trim())
+      const isSoldOut = String(m.soldOutDate || "").slice(0, 10) === todayStr
       const matchSoldOut =
         soldOutFilter === "all" ||
         (soldOutFilter === "selling" && !isSoldOut) ||
@@ -3207,7 +3207,7 @@ export default function PosMenusPage() {
       return matchTerm && matchCategory && matchMainCategory && matchSoldOut
     })
     return sortByCode(filtered, (m) => m.code)
-  }, [menus, searchTerm, categoryFilter, mainCategoryFilter, soldOutFilter])
+  }, [menus, searchTerm, categoryFilter, mainCategoryFilter, soldOutFilter, todayStr])
 
   const handleDownloadFilteredMenusExcel = React.useCallback(async () => {
     if (filteredMenus.length === 0) {
