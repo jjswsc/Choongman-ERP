@@ -1314,74 +1314,77 @@ export function QrTableGuestApp({ token }: { token: string }) {
               })}
             </div>
           ) : null}
-          <div className="px-3 pt-1">
+          <div className="space-y-2.5 px-3 pt-1 pb-1">
             {listSections.map((section) => (
-              <div key={section.key || 'flat'} className="mb-3">
+              <div key={section.key || 'flat'}>
                 {section.title ? (
                   <h2 className="px-0.5 pb-2 pt-3 text-[1.25rem] font-black uppercase tracking-wide text-stone-900">
                     {section.title}
                   </h2>
                 ) : null}
-                <div className="grid grid-cols-2 gap-2.5">
+                <ul className="space-y-2.5">
                   {section.items.map((m) => (
-                    <article
+                    <li
                       key={m.menuId}
-                      className={`flex flex-col overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm ${m.soldOut ? 'opacity-55' : ''}`}
+                      className={`flex gap-3 rounded-2xl border border-stone-100 bg-white p-2.5 shadow-sm ${m.soldOut ? 'opacity-55' : ''}`}
                     >
                       {m.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={m.imageUrl} alt="" className="aspect-square w-full object-cover bg-stone-100" />
+                        <img
+                          src={m.imageUrl}
+                          alt=""
+                          className="h-[4.75rem] w-[4.75rem] shrink-0 rounded-2xl object-cover bg-stone-100"
+                        />
                       ) : (
-                        <div className="aspect-square w-full bg-stone-200/60" />
+                        <div className="h-[4.75rem] w-[4.75rem] shrink-0 rounded-2xl bg-stone-200/60" />
                       )}
-                      <div className="flex flex-1 flex-col gap-1 p-2.5">
-                        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-stone-900">
-                          {guestMenuName(m)}
-                        </p>
+                      <div className="min-w-0 flex-1 self-center">
+                        <p className="text-[15px] font-semibold leading-snug text-stone-900">{guestMenuName(m)}</p>
                         {guestMenuDesc(m) ? (
-                          <p className="line-clamp-2 text-[11px] text-stone-500">{guestMenuDesc(m)}</p>
+                          <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{guestMenuDesc(m)}</p>
                         ) : null}
-                        <div className="mt-auto flex items-end justify-between gap-1 pt-1">
-                          <p className="text-sm font-bold text-[var(--qr-brand,#b45309)]">
-                            {m.soldOut ? (
-                              <span className="text-red-600">{g('soldOut')}</span>
-                            ) : m.buffetIncluded ? (
-                              <span className="text-emerald-700">{g('included')}</span>
-                            ) : (
-                              `฿${m.price.toLocaleString()}`
-                            )}
+                        {cartLinesForMenu(m.menuId).some((line) => line.optionName) ? (
+                          <p className="mt-0.5 text-[11px] leading-snug text-[var(--qr-brand,#b45309)]">
+                            {cartLinesForMenu(m.menuId)
+                              .filter((line) => line.optionName)
+                              .map((line) => `${guestLabel(line.optionName)} ×${line.qty}`)
+                              .join(' · ')}
                           </p>
-                          <div className="flex items-center gap-1">
-                            {qtyForMenu(m.menuId) > 0 ? (
-                              <>
-                                <button
-                                  type="button"
-                                  className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-100 text-base font-bold"
-                                  disabled={m.soldOut}
-                                  onClick={() => decMenu(m.menuId)}
-                                >
-                                  −
-                                </button>
-                                <span className="w-4 text-center text-xs font-semibold tabular-nums">
-                                  {qtyForMenu(m.menuId)}
-                                </span>
-                              </>
-                            ) : null}
-                            <button
-                              type="button"
-                              className={`flex h-8 w-8 items-center justify-center rounded-full text-lg text-white shadow-sm disabled:opacity-40 ${brandBtn}`}
-                              disabled={m.soldOut}
-                              onClick={() => requestAddMenu(m)}
-                              aria-label="+"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
+                        ) : null}
+                        <p className="mt-1 text-[15px] font-bold tabular-nums text-stone-900">
+                          {m.soldOut ? (
+                            <span className="text-red-600">{g('soldOut')}</span>
+                          ) : m.buffetIncluded ? (
+                            <span className="text-emerald-700">{g('included')}</span>
+                          ) : (
+                            `฿${m.price.toLocaleString()}`
+                          )}
+                        </p>
                       </div>
-                    </article>
+                      <div className="flex shrink-0 items-center gap-1.5 self-center">
+                        <button
+                          type="button"
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 text-lg font-bold text-stone-700 disabled:opacity-40"
+                          disabled={m.soldOut || qtyForMenu(m.menuId) <= 0}
+                          onClick={() => decMenu(m.menuId)}
+                          aria-label="−"
+                        >
+                          −
+                        </button>
+                        <span className="w-5 text-center text-sm font-semibold tabular-nums">{qtyForMenu(m.menuId)}</span>
+                        <button
+                          type="button"
+                          className={`flex h-9 w-9 items-center justify-center rounded-full text-lg text-white shadow-sm disabled:opacity-40 ${brandBtn}`}
+                          disabled={m.soldOut}
+                          onClick={() => requestAddMenu(m)}
+                          aria-label="+"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             ))}
           </div>
