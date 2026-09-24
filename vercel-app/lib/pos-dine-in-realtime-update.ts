@@ -116,9 +116,12 @@ export function shouldAutoprintPaymentReceiptOnRealtimeUpdate(
       if (isPosOrderPaidLikeStatus(String(prior.status ?? ''))) return false
       return true
     }
-    // 로컬 prior 없음: QR 테이블 주문은 unpaid→paid 원격 결제 가능성이 높아 1회 허용
-    // (재인쇄는 printedPaymentReceiptIds / claim 가드가 막음)
-    if (String(newRow.created_by ?? '').startsWith('qr_table:')) return true
+    // PK-only OLD + prior 없음: 백필·메모 UPDATE가 qr_table 이라고 재인쇄되면 안 됨.
+    // unpaid→paid 원격 결제는 paid_at 이 수 분 이내일 때만 1회 허용.
+    const paidAtMs = Date.parse(String(newRow.paid_at ?? ''))
+    if (Number.isFinite(paidAtMs) && Date.now() - paidAtMs < 3 * 60 * 1000) {
+      return true
+    }
     return false
   }
 

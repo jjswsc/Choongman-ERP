@@ -183,7 +183,7 @@ describe('shouldAutoprintPaymentReceiptOnRealtimeUpdate', () => {
     ).toBe(true)
   })
 
-  it('allows PK-only OLD for qr_table created_by without localPrior', () => {
+  it('allows PK-only OLD when paid_at is very recent (remote pay without prior)', () => {
     expect(
       shouldAutoprintPaymentReceiptOnRealtimeUpdate(
         { id: 1 },
@@ -195,9 +195,28 @@ describe('shouldAutoprintPaymentReceiptOnRealtimeUpdate', () => {
           payment_qr: 20,
           payment_other: 0,
           created_by: 'qr_table:123',
+          paid_at: new Date().toISOString(),
         }
       )
     ).toBe(true)
+  })
+
+  it('skips PK-only OLD for qr_table when paid_at is old (SQL backfill flood)', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        { id: 1 },
+        {
+          id: 1,
+          status: 'completed',
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 144,
+          payment_other: 0,
+          created_by: 'qr_table:129',
+          paid_at: '2026-09-24T05:56:59.408Z',
+        }
+      )
+    ).toBe(false)
   })
 
   it('skips PK-only OLD when localPrior was already paid', () => {

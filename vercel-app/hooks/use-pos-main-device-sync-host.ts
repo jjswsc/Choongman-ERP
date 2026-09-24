@@ -881,6 +881,10 @@ export function usePosMainDeviceSyncHost(): void {
       }
       seenOrderIdsRef.current.add(orderId)
       bumpLastSeenOrderId(storeCode, orderId)
+      paymentStatusPriorByOrderIdRef.current.set(orderId, {
+        status: String(row.status ?? ''),
+        paymentSum: posOrderRowPaymentSum(row),
+      })
 
       const inferredOrderType = inferPosOrderTypeFromRow({
         order_type: String(row.order_type ?? ''),
