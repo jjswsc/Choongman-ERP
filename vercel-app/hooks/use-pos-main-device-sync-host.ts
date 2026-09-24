@@ -1576,6 +1576,8 @@ export function usePosMainDeviceSyncHost(): void {
       try {
         const runPaymentReceiptScan = async () => {
           await seedPaymentReceiptIdsForStore(storeCode)
+          // seed 실패 시 당일 paid 전체를 찍어 폭주함 — seeded 될 때만 스캔
+          if (!paymentReceiptScanSeededRef.current) return
           if (!autoPrint.receiptOnPayment) return
           if (
             !shouldUseMainPosHeavyOrderScanFallback({
