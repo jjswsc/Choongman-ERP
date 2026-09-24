@@ -16,7 +16,9 @@ type PosOrderPaidAtSource = Pick<
   | 'paymentOther'
   | 'paymentDeliveryApp'
   | 'paymentCrypto'
->
+> & {
+  total?: number
+}
 
 export function posOrderPaymentSumFromAmounts(row: {
   paymentCash?: number
@@ -78,25 +80,27 @@ export function resolvePosOrderPaidAt(order: PosOrderPaidAtSource): string {
   const storedPaidAt = parseValidIso(order.paidAt)
   const linkposAt = parseValidIso(order.linkposRespondedAt)
   const paymentSum = posOrderPaymentSum(order as PosOrder)
-  const hasPayment =
-    paymentSum > 0.005 || isPosOrderPaidLikeStatus(String(order.status ?? ''))
+  const total = Math.max(0, Number(order.total ?? 0) || 0)
+  const statusPaid = isPosOrderPaidLikeStatus(String(order.status ?? ''))
+  /** 입장료 등 부분입금만 있는 ready/pending 은 결제일시로 표시하지 않음 */
+  const fullySettled =
+    statusPaid || (total > 0 && isPosOrderPaymentCompleteForTotal(total, paymentSum))
 
-  if (storedPaidAt) return storedPaidAt
+  if (storedPaidAt && (statusPaid || fullySettled)) return storedPaidAt
 
-  if (linkposAt && hasPayment) return linkposAt
+  if (!fullySettled) return ''
 
-  if (hasPayment) {
-    const updatedAt = parseValidIso(order.updatedAt)
-    if (updatedAt) {
-      if (!createdAt) return updatedAt
-      const u = new Date(updatedAt).getTime()
-      const c = new Date(createdAt).getTime()
-      if (u > c) return updatedAt
-    }
-    return ''
+  if (linkposAt) return linkposAt
+
+  const updatedAt = parseValidIso(order.updatedAt)
+  if (updatedAt) {
+    if (!createdAt) return updatedAt
+    const u = new Date(updatedAt).getTime()
+    const c = new Date(createdAt).getTime()
+    if (u > c) return updatedAt
   }
 
-  return createdAt ?? ''
+  return ''
 }
 
 export function resolvePosOrderPaidAtDate(order: PosOrderPaidAtSource): Date {

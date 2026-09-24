@@ -270,6 +270,10 @@ export function usePosMainDeviceSyncHost(): void {
   const t = useT(lang)
   const { refetchStores, clearTableOrder } = usePosStore()
   const { legacyToCanonical, storeLabels, posStores } = useStoreList()
+  /** Realtime OLD가 PK만일 때 unpaid→paid 증명용 */
+  const paymentStatusPriorByOrderIdRef = useRef<Map<number, { status: string; paymentSum: number }>>(
+    new Map()
+  )
 
   const [menus, setMenus] = useState<PosMenu[]>([])
   const [menuOptions, setMenuOptions] = useState<PosMenuOption[]>([])
@@ -1070,6 +1074,17 @@ export function usePosMainDeviceSyncHost(): void {
       if (!isCurrentStoreOrder(row.store_code)) return
 
       const oldRow = payload.old as Record<string, unknown> | undefined
+      const localPaymentPrior = paymentStatusPriorByOrderIdRef.current.get(orderId) ?? null
+      if (
+        Object.prototype.hasOwnProperty.call(row, 'status') ||
+        Object.prototype.hasOwnProperty.call(row, 'payment_qr') ||
+        Object.prototype.hasOwnProperty.call(row, 'payment_cash')
+      ) {
+        paymentStatusPriorByOrderIdRef.current.set(orderId, {
+          status: String(row.status ?? ''),
+          paymentSum: posOrderRowPaymentSum(row),
+        })
+      }
       const inferredOrderType = inferPosOrderTypeFromRow({
         order_type: String(row.order_type ?? ''),
         memo: String(row.memo ?? ''),
@@ -1176,25 +1191,32 @@ export function usePosMainDeviceSyncHost(): void {
       }
 
       if (
-        wantPayment &&
         !packagingOnlyUpdate &&
-        shouldAutoprintPaymentReceiptOnRealtimeUpdate(oldRow, row) &&
-        claimMainPosPaymentReceiptAutoprint(orderId, String(row.store_code ?? storeCode).trim())
+        shouldAutoprintPaymentReceiptOnRealtimeUpdate(oldRow, row, { localPrior: localPaymentPrior })
       ) {
+        // 인쇄 ON/OFF와 무관 — QR 원격 결제 시 테이블 즉시 비움 + 알림
         playPosPaymentCompleteBeep()
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('cm-pos-remote-order-paid', { detail: { orderId } }))
         }
-        void getPosOrders({ orderId, storeCode })
-          .then((list) => {
-            const order = list[0]
-            if (!order?.items?.length) return
-            if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) return
-            return printPaymentReceiptIfEnabled(order)
-          })
-          .catch(() => {
-            /* ignore */
-          })
+        const tableName = String(row.table_name ?? '').trim()
+        if (tableName) clearTableOrder(storeCode, tableName)
+        refetchStores({ scope: 'current' })
+        if (
+          wantPayment &&
+          claimMainPosPaymentReceiptAutoprint(orderId, String(row.store_code ?? storeCode).trim())
+        ) {
+          void getPosOrders({ orderId, storeCode })
+            .then((list) => {
+              const order = list[0]
+              if (!order?.items?.length) return
+              if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) return
+              return printPaymentReceiptIfEnabled(order)
+            })
+            .catch(() => {
+              /* ignore */
+            })
+        }
       }
 
       if (

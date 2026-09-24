@@ -2337,8 +2337,14 @@ export async function pollBillPayStatus(sessionId: number): Promise<{
   if (!session.posOrderId) throw new Error('order_missing')
 
   const summary = await getGuestOrderSummary(session)
-  if (String(summary.status || '').toLowerCase() === 'paid' || summary.balanceDue < 0.005) {
+  if (String(summary.status || '').toLowerCase() === 'paid') {
     return { paid: true, balanceDue: 0, order: summary }
+  }
+  // 잔액 0인데 status 미결제면 paid로 확정·세션 종료 (테이블 미닫힘 방지)
+  if (summary.balanceDue < 0.005) {
+    await finalizeBillPayByQr(session, 0)
+    const next = await getGuestOrderSummary({ ...session })
+    return { paid: true, balanceDue: 0, order: next }
   }
 
   const sessRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${sessionId}`, {

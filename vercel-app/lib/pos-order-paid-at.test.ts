@@ -49,7 +49,7 @@ describe('resolvePosOrderPaidAt', () => {
     ).toBe('2026-06-01T05:39:10.000Z')
   })
 
-  it('falls back to created_at for unpaid pending orders', () => {
+  it('returns empty for unpaid pending (do not show receive time as paid time)', () => {
     expect(
       resolvePosOrderPaidAt({
         ...base,
@@ -57,10 +57,10 @@ describe('resolvePosOrderPaidAt', () => {
         paymentQr: 0,
         updatedAt: '2026-06-01T05:20:00.000Z',
       })
-    ).toBe('2026-06-01T05:03:02.000Z')
+    ).toBe('')
   })
 
-  it('uses updated_at when status is ready but payment exists', () => {
+  it('uses updated_at when status is ready but fully paid', () => {
     expect(
       resolvePosOrderPaidAt({
         ...base,
@@ -69,6 +69,18 @@ describe('resolvePosOrderPaidAt', () => {
         updatedAt: '2026-06-01T05:38:00.000Z',
       })
     ).toBe('2026-06-01T05:38:00.000Z')
+  })
+
+  it('returns empty for ready with only partial QR (entry prepay)', () => {
+    expect(
+      resolvePosOrderPaidAt({
+        ...base,
+        status: 'ready',
+        total: 438,
+        paymentQr: 199,
+        updatedAt: '2026-06-01T05:38:00.000Z',
+      })
+    ).toBe('')
   })
 
   it('does not use created_at as paid time when updated_at equals created_at', () => {

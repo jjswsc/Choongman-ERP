@@ -5478,6 +5478,8 @@ export default function PosTerminalPage() {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('cm-pos-remote-order-paid', { detail: { orderId } }))
         }
+        const paidTableName = String(row.table_name ?? '').trim()
+        if (paidTableName && currentStoreId) clearTableOrder(currentStoreId, paidTableName)
         refetchCurrentStore()
         void getPosOrders({ orderId, storeCode: currentStoreId })
           .then((list) => {

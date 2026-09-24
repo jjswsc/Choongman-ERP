@@ -557,7 +557,7 @@ export function TableOrderPanel({
   }
 
   const handleServeComplete = async () => {
-    if (!order || order.status === 'completed') return
+    if (!order || order.status === 'completed' || order.status === 'paid') return
     if (isDemo && onDemoOrderReplace) {
       onDemoOrderReplace({ ...order, status: 'ready' })
       onServed?.()

@@ -287,8 +287,13 @@ export async function POST(req: NextRequest) {
         { status: 409, headers }
       )
     }
-    if (isPosCompletionStatus(prevStatus) && !isPosCompletionStatus(nextStatus) && !isPosReversalStatus(nextStatus)) {
-      // 오프라인 큐 재전송: 서버는 이미 completed 인데 큐에 paid 등 예전 단계 갱신만 남은 경우 → 큐 제거용 성공
+    if (
+      (prevStatus === 'paid' || isPosCompletionStatus(prevStatus)) &&
+      !isPosCompletionStatus(nextStatus) &&
+      !isPosReversalStatus(nextStatus) &&
+      nextStatus !== 'paid'
+    ) {
+      // 오프라인 큐 재전송: 서버는 이미 completed/paid 인데 큐에 ready 등 예전 단계만 남은 경우
       if (fromOfflineQueueSync) {
         return NextResponse.json(
           { success: true, noop: true, message: 'skip_stale_status_replay' },
@@ -296,7 +301,13 @@ export async function POST(req: NextRequest) {
         )
       }
       return NextResponse.json(
-        { success: false, message: '완료 주문은 취소/환불 상태로만 변경할 수 있습니다.' },
+        {
+          success: false,
+          message:
+            prevStatus === 'paid'
+              ? '결제 완료 주문은 취소/환불 상태로만 변경할 수 있습니다.'
+              : '완료 주문은 취소/환불 상태로만 변경할 수 있습니다.',
+        },
         { status: 409, headers }
       )
     }
