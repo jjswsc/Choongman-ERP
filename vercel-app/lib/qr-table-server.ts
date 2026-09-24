@@ -7,7 +7,13 @@ import {
 } from '@/lib/bangkok-time'
 import { generateMemberPortalKbankQr } from '@/lib/member-portal-kbank-qr'
 import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
-import { normalizeKbankTxnStatusToPos } from '@/lib/payments/kbank-api-reference'
+import {
+  extractKbankPaymentTxnNo,
+  extractKbankQrSessionTxnNo,
+  isKbankPaymentTxnNo,
+  isKbankQrSessionTxnNo,
+  normalizeKbankTxnStatusToPos,
+} from '@/lib/payments/kbank-api-reference'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { loadPosPricingAdjustmentsForStore } from '@/lib/pos-pricing-adjustments-server'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
@@ -2365,7 +2371,15 @@ export async function pollBillPayStatus(sessionId: number): Promise<{
         : {}
     const normalized = normalizeKbankTxnStatusToPos(response.txnStatus ?? response.status, response.statusCode)
     if (normalized === 'approved') {
-      await finalizeBillPayByQr(session, amount)
+      await recordQrBillPayKbankAttempts({
+        orderId: session.posOrderId,
+        partnerTxn,
+        amount,
+        response,
+        statusCode: String(response.statusCode || ''),
+        statusMessage: String(response.statusMessage || response.txnStatus || 'approved'),
+      })
+      await finalizeBillPayByQr(session, amount, response)
       const next = await getGuestOrderSummary({ ...session })
       return { paid: true, balanceDue: 0, order: next }
     }
@@ -2375,9 +2389,78 @@ export async function pollBillPayStatus(sessionId: number): Promise<{
   return { paid: false, balanceDue: summary.balanceDue, order: summary }
 }
 
+function resolveQrBillPayVoidTxnFields(
+  response: Record<string, unknown>,
+  partnerTxn: string
+): { approval_code: string; trace_no: string } {
+  const paymentTxn = extractKbankPaymentTxnNo(response).trim()
+  if (isKbankPaymentTxnNo(paymentTxn)) {
+    return { approval_code: paymentTxn.slice(0, 20), trace_no: paymentTxn.slice(0, 40) }
+  }
+  const sessionTxn = extractKbankQrSessionTxnNo(response).trim() || partnerTxn.trim()
+  if (isKbankQrSessionTxnNo(sessionTxn) || sessionTxn) {
+    return {
+      approval_code: sessionTxn.slice(0, 20),
+      trace_no: sessionTxn.slice(0, 40),
+    }
+  }
+  return { approval_code: partnerTxn.slice(0, 20), trace_no: partnerTxn.slice(0, 40) }
+}
+
+/** Void·매출정정용 — Generate attempt 승인 + STATUS attempt 기록 */
+async function recordQrBillPayKbankAttempts(params: {
+  orderId: number
+  partnerTxn: string
+  amount: number
+  response: Record<string, unknown>
+  statusCode?: string
+  statusMessage?: string
+}) {
+  const { orderId, partnerTxn, amount, response, statusCode, statusMessage } = params
+  if (!(orderId > 0) || !partnerTxn) return
+  const txnFields = resolveQrBillPayVoidTxnFields(response, partnerTxn)
+  const nowIso = new Date().toISOString()
+  try {
+    await supabaseUpdateByFilter(
+      'pos_payment_attempts',
+      `local_tx_id=eq.${encodeURIComponent(partnerTxn.slice(0, 40))}`,
+      {
+        order_id: orderId,
+        status: 'approved',
+        response_code: statusCode || null,
+        response_text: statusMessage || 'approved',
+        approved_amount: amount,
+        ...txnFields,
+      }
+    )
+  } catch (e) {
+    console.error('recordQrBillPayKbankAttempts update generate:', e)
+  }
+  try {
+    await supabaseInsert('pos_payment_attempts', {
+      order_id: orderId,
+      local_tx_id: `QTBCHK${Date.now()}`.slice(0, 40),
+      provider: 'kbank_qr_api',
+      mode: 'openapi',
+      tx_code: 'STATUS',
+      bank_id: 'KBANK',
+      request_amount: amount,
+      approved_amount: amount,
+      response_code: statusCode || null,
+      response_text: statusMessage || 'approved',
+      status: 'approved',
+      ...txnFields,
+      created_at: nowIso,
+    })
+  } catch (e) {
+    console.error('recordQrBillPayKbankAttempts insert status:', e)
+  }
+}
+
 async function finalizeBillPayByQr(
   session: QrTableSession & { secretHash?: string },
-  amount: number
+  amount: number,
+  bankResponse?: Record<string, unknown>
 ) {
   if (!session.posOrderId) return
   const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
@@ -2409,12 +2492,25 @@ async function finalizeBillPayByQr(
   const nowBkk = getBangkokDateTimeString()
   const paidAtIso = new Date().toISOString()
 
+  const sessRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+    limit: 1,
+    select: 'pending_bill_partner_txn_id',
+  })) as Array<{ pending_bill_partner_txn_id?: string | null }>
+  const partnerTxn = String(sessRows?.[0]?.pending_bill_partner_txn_id || '').trim()
+  const linkposPatch: Record<string, string> = {}
+  if (bankResponse && partnerTxn) {
+    const txnFields = resolveQrBillPayVoidTxnFields(bankResponse, partnerTxn)
+    if (txnFields.approval_code) linkposPatch.linkpos_approval_code = txnFields.approval_code
+    if (txnFields.trace_no) linkposPatch.linkpos_trace_no = txnFields.trace_no
+  }
+
   // unpaid → paid: POS Realtime이 카운터 결제 영수증 자동인쇄
   await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     payment_qr: nextQr,
     status: 'paid',
     paid_at: paidAtIso,
     updated_at: nowBkk,
+    ...linkposPatch,
   })
   await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
     pending_bill_partner_txn_id: null,

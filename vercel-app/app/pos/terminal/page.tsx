@@ -419,6 +419,7 @@ import {
   type StoreAutoPrintFlags,
 } from '@/lib/pos-terminal-auto-print'
 import { getPosIncomingWavDataUri } from '@/lib/pos-incoming-order-sound'
+import { playPosPaymentCompleteBeep } from '@/lib/pos-payment-complete-sound'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
 
 
@@ -2522,6 +2523,11 @@ export default function PosTerminalPage() {
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   /** 결제 영수증 자동 인쇄 중복 방지(메인: 로컬 결제 + Realtime UPDATE/INSERT) */
   const printedPaymentReceiptIdsRef = useRef<Set<number>>(new Set())
+  /**
+   * Realtime OLD가 PK만일 때 unpaid→paid 증명용.
+   * INSERT/UPDATE에서 status·결제합을 본 스냅샷을 유지한다.
+   */
+  const paymentStatusPriorByOrderIdRef = useRef<Map<number, { status: string; paymentSum: number }>>(new Map())
   /** 배달 주문 할인·합계 변경 후 홀 주문서 재인쇄 중복 방지 */
   const printedHallDiscountReprintKeysRef = useRef<Set<string>>(new Set())
   /** 주방 주문서 자동 인쇄 중복 방지(수락/Realtime/폴링 동시 발화) */
@@ -2540,6 +2546,7 @@ export default function PosTerminalPage() {
   const paymentReceiptScanSeededRef = useRef(false)
   useEffect(() => {
     printedPaymentReceiptIdsRef.current = new Set()
+    paymentStatusPriorByOrderIdRef.current = new Map()
     printedKitchenSlipKeysRef.current = new Map()
     promptedPendingDeliveryOrderIdsRef.current = new Set()
     deferredIncomingDeliveryQueueRef.current = []
@@ -5321,6 +5328,18 @@ export default function PosTerminalPage() {
       if (!isCurrentStoreOrder(row.store_code)) return
       const rowStore = String(row.store_code ?? currentStoreId ?? '').trim()
       const oldRowForAutoprint = payload.old as Record<string, unknown> | undefined
+      const localPaymentPrior = paymentStatusPriorByOrderIdRef.current.get(orderId) ?? null
+      // status/결제 필드가 있는 NEW면 prior 갱신(다음 UPDATE의 PK-only OLD 대비)
+      if (
+        Object.prototype.hasOwnProperty.call(row, 'status') ||
+        Object.prototype.hasOwnProperty.call(row, 'payment_qr') ||
+        Object.prototype.hasOwnProperty.call(row, 'payment_cash')
+      ) {
+        paymentStatusPriorByOrderIdRef.current.set(orderId, {
+          status: String(row.status ?? ''),
+          paymentSum: posOrderRowPaymentSum(row),
+        })
+      }
       const inferredOrderType = inferPosOrderTypeFromRow({
         order_type: String(row.order_type ?? ''),
         memo: String(row.memo ?? ''),
@@ -5449,9 +5468,17 @@ export default function PosTerminalPage() {
       if (
         wantPayment &&
         !packagingOnlyUpdate &&
-        shouldAutoprintPaymentReceiptOnRealtimeUpdate(oldRowForAutoprint, row) &&
+        shouldAutoprintPaymentReceiptOnRealtimeUpdate(oldRowForAutoprint, row, {
+          localPrior: localPaymentPrior,
+        }) &&
         !printedPaymentReceiptIdsRef.current.has(orderId)
       ) {
+        playPosPaymentCompleteBeep()
+        cartRef.current?.closePaymentModalIfOrderPaid?.(orderId)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('cm-pos-remote-order-paid', { detail: { orderId } }))
+        }
+        refetchCurrentStore()
         void getPosOrders({ orderId, storeCode: currentStoreId })
           .then((list) => {
             const order = list[0] as PosOrder | undefined

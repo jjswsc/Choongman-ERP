@@ -166,6 +166,57 @@ describe('shouldAutoprintPaymentReceiptOnRealtimeUpdate', () => {
     ).toBe(false)
   })
 
+  it('allows PK-only OLD when localPrior proves unpaid→paid (QR table bill pay)', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        { id: 1 },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 20,
+          payment_other: 0,
+        },
+        { localPrior: { status: 'pending', paymentSum: 0 } }
+      )
+    ).toBe(true)
+  })
+
+  it('allows PK-only OLD for qr_table created_by without localPrior', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        { id: 1 },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 20,
+          payment_other: 0,
+          created_by: 'qr_table:123',
+        }
+      )
+    ).toBe(true)
+  })
+
+  it('skips PK-only OLD when localPrior was already paid', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        { id: 1 },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 20,
+          payment_other: 0,
+        },
+        { localPrior: { status: 'paid', paymentSum: 20 } }
+      )
+    ).toBe(false)
+  })
+
   it('allows unpaid→paid with payment appearing', () => {
     expect(
       shouldAutoprintPaymentReceiptOnRealtimeUpdate(

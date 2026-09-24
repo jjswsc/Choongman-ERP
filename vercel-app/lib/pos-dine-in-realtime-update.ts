@@ -93,12 +93,16 @@ export function posOrderRealtimePricingFieldsChanged(
 /**
  * Realtime UPDATE로 결제 영수증 자동 인쇄할지.
  * — 이미 paid 인 주문에 collab backfill·메모·포장상태 등 비결제 UPDATE가 오면 재인쇄 금지.
- * — OLD 가 PK만 있으면(REPLICA IDENTITY DEFAULT) 전환을 증명할 수 없어 false (폴링 seed/fallback에 맡김).
+ * — OLD 가 PK만 있으면(REPLICA IDENTITY DEFAULT) 로컬 prior(미결제였음)로만 전환을 증명.
  * — 로컬 결제 직후 인쇄는 checkout 경로가 담당.
  */
 export function shouldAutoprintPaymentReceiptOnRealtimeUpdate(
   oldRow: Record<string, unknown> | null | undefined,
-  newRow: Record<string, unknown>
+  newRow: Record<string, unknown>,
+  opts?: {
+    /** Realtime OLD가 PK만일 때 보조 — INSERT/이전 UPDATE에서 본 미결제 스냅샷 */
+    localPrior?: { status?: string; paymentSum?: number } | null
+  }
 ): boolean {
   if (!isPosOrderPaidLikeStatus(String(newRow.status ?? ''))) return false
   if (posOrderRowPaymentSum(newRow) <= 0) return false
@@ -106,7 +110,17 @@ export function shouldAutoprintPaymentReceiptOnRealtimeUpdate(
 
   const oldHasStatus = posOrderRealtimeRowHasField(oldRow, 'status')
   const oldHasPayment = PAYMENT_AMT_FIELD_KEYS.some((key) => posOrderRealtimeRowHasField(oldRow, key))
-  if (!oldHasStatus && !oldHasPayment) return false
+  if (!oldHasStatus && !oldHasPayment) {
+    const prior = opts?.localPrior
+    if (prior) {
+      if (isPosOrderPaidLikeStatus(String(prior.status ?? ''))) return false
+      return true
+    }
+    // 로컬 prior 없음: QR 테이블 주문은 unpaid→paid 원격 결제 가능성이 높아 1회 허용
+    // (재인쇄는 printedPaymentReceiptIds / claim 가드가 막음)
+    if (String(newRow.created_by ?? '').startsWith('qr_table:')) return true
+    return false
+  }
 
   // 이미 결제 완료 상태였으면 (협업 backfill·세금계산서 외 필드 등) 재인쇄하지 않음
   if (oldHasStatus && isPosOrderPaidLikeStatus(String(oldRow.status ?? ''))) return false

@@ -155,6 +155,7 @@ import {
   type GrabCancelUiParams,
 } from '@/lib/pos-main-device-grab-cancel-ui'
 import { playPosIncomingOrderBeep } from '@/lib/pos-incoming-order-sound'
+import { playPosPaymentCompleteBeep } from '@/lib/pos-payment-complete-sound'
 import { appAlert } from '@/lib/app-message'
 import { consumePosSelfInitiatedGrabCancel } from '@/lib/pos-grab-cancel-alert-suppress'
 import {
@@ -1180,6 +1181,10 @@ export function usePosMainDeviceSyncHost(): void {
         shouldAutoprintPaymentReceiptOnRealtimeUpdate(oldRow, row) &&
         claimMainPosPaymentReceiptAutoprint(orderId, String(row.store_code ?? storeCode).trim())
       ) {
+        playPosPaymentCompleteBeep()
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('cm-pos-remote-order-paid', { detail: { orderId } }))
+        }
         void getPosOrders({ orderId, storeCode })
           .then((list) => {
             const order = list[0]

@@ -5225,6 +5225,25 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setIsExistingOrderCheckout(false)
   }
 
+  const closePaymentModalIfOrderPaid = (orderId: number) => {
+    const id = Math.trunc(Number(orderId) || 0)
+    if (!(id > 0)) return
+    const openId = checkoutExistingPosOrderIdRef.current
+    if (openId == null || openId !== id) return
+    setShowPaymentModal(false)
+    setCheckoutDepositAmt(0)
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onRemotePaid = (ev: Event) => {
+      const id = Math.trunc(Number((ev as CustomEvent<{ orderId?: number }>).detail?.orderId) || 0)
+      if (id > 0) closePaymentModalIfOrderPaid(id)
+    }
+    window.addEventListener('cm-pos-remote-order-paid', onRemotePaid as EventListener)
+    return () => window.removeEventListener('cm-pos-remote-order-paid', onRemotePaid as EventListener)
+  }, [])
+
   const imperativeApiRef = useRef<CartPanelHandle | null>(null)
   imperativeApiRef.current = {
     addItem,
@@ -5232,6 +5251,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     openDineInPaymentFromOrder,
     openTakeoutPaymentFromOrder,
     openDeliveryPaymentFromOrder,
+    closePaymentModalIfOrderPaid,
   }
 
   useImperativeHandle(
@@ -5242,6 +5262,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       openDineInPaymentFromOrder: (p) => imperativeApiRef.current?.openDineInPaymentFromOrder(p),
       openTakeoutPaymentFromOrder: (p) => imperativeApiRef.current?.openTakeoutPaymentFromOrder(p),
       openDeliveryPaymentFromOrder: (p) => imperativeApiRef.current?.openDeliveryPaymentFromOrder(p),
+      closePaymentModalIfOrderPaid: (id) => imperativeApiRef.current?.closePaymentModalIfOrderPaid(id),
     }),
     []
   )
@@ -5254,6 +5275,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       openDineInPaymentFromOrder: (p) => imperativeApiRef.current?.openDineInPaymentFromOrder(p),
       openTakeoutPaymentFromOrder: (p) => imperativeApiRef.current?.openTakeoutPaymentFromOrder(p),
       openDeliveryPaymentFromOrder: (p) => imperativeApiRef.current?.openDeliveryPaymentFromOrder(p),
+      closePaymentModalIfOrderPaid: (id) => imperativeApiRef.current?.closePaymentModalIfOrderPaid(id),
     }
     ;(api as CartPanelHandle & { __debug?: Record<string, string> }).__debug = {
       instanceId: instanceIdRef.current,

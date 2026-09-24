@@ -139,4 +139,6 @@ export interface CartPanelHandle {
     orderMemo?: string
     depositAmt?: number
   }) => void
+  /** QR 테이블 등 원격 결제 완료 시 열려 있는 결제 모달 닫기 */
+  closePaymentModalIfOrderPaid: (orderId: number) => void
 }
