@@ -253,7 +253,7 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     statusServed: 'เสิร์ฟแล้ว',
     statusCookingBanner: 'กำลังเตรียมอาหารให้ครับ',
     statusCookingSub: 'กำลังทำให้อร่อยครับ!',
-    statusComplete: 'ออเดอร์เสร็จแล้ว',
+    statusComplete: 'สั่งเรียบร้อยแล้ว',
     statusCompleteSub: 'ขอบคุณที่ใช้บริการครับ!',
     currentOrderTab: 'ออเดอร์ปัจจุบัน',
     pastOrderTab: 'ออเดอร์ก่อนหน้า',

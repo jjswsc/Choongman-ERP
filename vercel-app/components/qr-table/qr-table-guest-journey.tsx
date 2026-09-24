@@ -246,7 +246,8 @@ function OrderRoundCard(props: {
   onViewStatus?: () => void
 }) {
   const { round, tableName, orderId, roundIndex, isCurrent, g, labelFor, onAddMenu, onViewStatus } = props
-  const cooking = isCurrent && !round.allServed
+  // 이전 라운드도 미서빙이면 조리 중 — isCurrent만 보면 "เสร็จแล้ว"로 오해됨
+  const cooking = !round.allServed
   return (
     <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center gap-2 border-b border-stone-100 px-3 py-2.5 text-xs">
@@ -264,7 +265,7 @@ function OrderRoundCard(props: {
       >
         <CheckCircle className={`mt-0.5 h-5 w-5 shrink-0 ${cooking ? 'text-emerald-600' : 'text-stone-400'}`} />
         <div>
-          <p className="text-sm font-semibold">{cooking ? g('statusCooking') : g('statusComplete')}</p>
+          <p className="text-sm font-semibold">{cooking ? g('statusCooking') : g('statusServed')}</p>
           <p className="text-[11px] opacity-90">{cooking ? g('statusCookingSub') : g('statusCompleteSub')}</p>
         </div>
       </div>
