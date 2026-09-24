@@ -4,6 +4,7 @@ import {
   inferPrevQtySnapshotExcludingRecentQrGuestLines,
   markNewlyPrepaidQrExtraLines,
   orderLooksLikeQrTableGuestOrder,
+  parseQrTableSessionIdFromCreatedBy,
   planQrGuestAddonAutoprint,
   pickQrGuestLinesForHallAutoprint,
   pickQrGuestNoKitchenLinesForHallPrint,
@@ -55,6 +56,14 @@ describe('orderLooksLikeQrTableGuestOrder', () => {
     expect(orderLooksLikeQrTableGuestOrder('qr_table:9', [])).toBe(true)
     expect(orderLooksLikeQrTableGuestOrder(null, [{ id: 'qr-9-1-1', source: 'qr_table' }])).toBe(true)
     expect(orderLooksLikeQrTableGuestOrder('pos', [{ id: 'cart-1' }])).toBe(false)
+  })
+})
+
+describe('parseQrTableSessionIdFromCreatedBy', () => {
+  it('parses session id from qr_table created_by', () => {
+    expect(parseQrTableSessionIdFromCreatedBy('qr_table:119475')).toBe(119475)
+    expect(parseQrTableSessionIdFromCreatedBy('member_portal:1')).toBeNull()
+    expect(parseQrTableSessionIdFromCreatedBy('')).toBeNull()
   })
 })
 
@@ -206,7 +215,7 @@ describe('shouldSkipQrTableSessionOpenAutoprint', () => {
     expect(
       shouldSkipQrTableSessionOpenAutoprint({
         createdBy: null,
-        memo: '[QR테이블] Buffet / 2pax',
+        memo: '[QR Table] Buffet / 2pax',
         items: [{ id: 'buffet-entry-3', source: 'qr_table' }],
       })
     ).toBe(true)

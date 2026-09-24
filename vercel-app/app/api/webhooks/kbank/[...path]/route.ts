@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { finalizeMemberPortalPrepaidOrder } from '@/lib/member-portal-checkout-server'
+import { finalizeQrTableBillPayFromOrderId } from '@/lib/qr-table-server'
+import { isQrTableCreatedBy } from '@/lib/qr-table-types'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
   extractKbankPaymentTxnNo,
@@ -304,13 +306,34 @@ export async function POST(
 
   try {
     if (matchedOrderId && normalized === 'approved') {
-      const finalized = await finalizeMemberPortalPrepaidOrder({
-        orderId: matchedOrderId,
-        paymentQr: amount,
-        partnerTransactionId: primaryLocalTxId || partnerTransactionId || undefined,
-      })
-      if (!finalized.ok) {
-        await supabaseUpdateByFilter('pos_orders', `id=eq.${matchedOrderId}`, { status: 'paid' })
+      let createdBy = ''
+      try {
+        const orderMeta = (await supabaseSelectFilter('pos_orders', `id=eq.${matchedOrderId}`, {
+          limit: 1,
+          select: 'created_by',
+        })) as Array<{ created_by?: string | null }>
+        createdBy = String(orderMeta?.[0]?.created_by || '')
+      } catch {
+        /* ignore */
+      }
+
+      if (isQrTableCreatedBy(createdBy)) {
+        // QR 테이블: status=paid만 찍으면 payment_qr·세션이 비어 영수증 채널/플로어 QR이 남음
+        await finalizeQrTableBillPayFromOrderId({
+          orderId: matchedOrderId,
+          paymentQrAmount: amount,
+          partnerTransactionId: primaryLocalTxId || partnerTransactionId || undefined,
+          bankResponse: body,
+        })
+      } else {
+        const finalized = await finalizeMemberPortalPrepaidOrder({
+          orderId: matchedOrderId,
+          paymentQr: amount,
+          partnerTransactionId: primaryLocalTxId || partnerTransactionId || undefined,
+        })
+        if (!finalized.ok) {
+          await supabaseUpdateByFilter('pos_orders', `id=eq.${matchedOrderId}`, { status: 'paid' })
+        }
       }
     }
   } catch (e) {

@@ -58,7 +58,9 @@ import {
   QR_TABLE_CREATED_BY_PREFIX,
   buffetTierDisplayName,
   defaultQrOrderStoreSettings,
+  isQrTableCreatedBy,
   markNewlyPrepaidQrExtraLines,
+  parseQrTableSessionIdFromCreatedBy,
   type QrBuffetTier,
   type QrCartLineInput,
   type QrOrderMode,
@@ -1372,7 +1374,9 @@ async function createOrEnsurePosOrderForSession(
 ): Promise<number> {
   if (session.posOrderId) return session.posOrderId
 
-  const now = getBangkokDateTimeString()
+  /** items.addedAt 은 손님 UI용 방콕 벽시계; pos_orders.created_at 은 timestamptz → ISO(UTC) */
+  const nowBkk = getBangkokDateTimeString()
+  const nowIso = new Date().toISOString()
   const items: Array<Record<string, unknown>> = []
   if (tier && session.tierId) {
     items.push({
@@ -1386,7 +1390,7 @@ async function createOrEnsurePosOrderForSession(
       buffetTierId: tier.id,
       source: 'qr_table',
       kitchenPrinter: 0,
-      addedAt: now,
+      addedAt: nowBkk,
     })
   }
 
@@ -1395,8 +1399,8 @@ async function createOrEnsurePosOrderForSession(
   const tenantId = (await resolveTenantIdForStoreCode(session.storeCode)) || ''
   const orderNo = await allocateNextPosOrderNo(session.storeCode, { tenantId })
   const memo = tier
-    ? `[QR테이블] ${buffetTierDisplayName(tier)} / ${session.guestCount}pax`
-    : `[QR테이블] à la carte / ${session.guestCount}pax`
+    ? `[QR Table] ${buffetTierDisplayName(tier)} / ${session.guestCount}pax`
+    : `[QR Table] à la carte / ${session.guestCount}pax`
 
   const row = enrichPosOrderRowForSaaS(
     {
@@ -1423,8 +1427,8 @@ async function createOrEnsurePosOrderForSession(
       payment_delivery_app: 0,
       guest_count: session.guestCount,
       created_by: `${QR_TABLE_CREATED_BY_PREFIX}${session.id}`,
-      created_at: now,
-      updated_at: now,
+      created_at: nowIso,
+      updated_at: nowIso,
     },
     { tenantId }
   )
@@ -1697,12 +1701,12 @@ export async function closeQrTableSessionsForPosOrder(params: {
     )) as Array<{ id?: number }>
     const ids = (rows || []).map((r) => Number(r.id || 0)).filter(Boolean)
     if (!ids.length) return 0
-    const now = getBangkokDateTimeString()
+    const nowIso = new Date().toISOString()
     for (const id of ids) {
       await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${id}`, {
         status: 'closed',
-        closed_at: now,
-        updated_at: now,
+        closed_at: nowIso,
+        updated_at: nowIso,
       })
     }
     void params.reason
@@ -2338,7 +2342,20 @@ export async function pollBillPayStatus(sessionId: number): Promise<{
 
   const summary = await getGuestOrderSummary(session)
   if (String(summary.status || '').toLowerCase() === 'paid') {
-    return { paid: true, balanceDue: 0, order: summary }
+    // 웹훅이 status=paid만 찍고 payment_qr/세션을 안 닫은 경우 → 백필·종료
+    const sessRowsEarly = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${sessionId}`, {
+      limit: 1,
+      select: 'pending_bill_amount,status',
+    })) as Array<{ pending_bill_amount?: number | string | null; status?: string | null }>
+    const pendingAmt = asNum(sessRowsEarly?.[0]?.pending_bill_amount)
+    const sessOpen = ['awaiting_entry', 'active'].includes(
+      String(sessRowsEarly?.[0]?.status || '').toLowerCase()
+    )
+    if (sessOpen || pendingAmt >= 0.005 || summary.paymentQr < 0.005) {
+      await finalizeBillPayByQr(session, Math.max(pendingAmt, summary.total, 0))
+    }
+    const next = await getGuestOrderSummary({ ...session })
+    return { paid: true, balanceDue: 0, order: next }
   }
   // 잔액 0인데 status 미결제면 paid로 확정·세션 종료 (테이블 미닫힘 방지)
   if (summary.balanceDue < 0.005) {
@@ -2471,7 +2488,7 @@ async function finalizeBillPayByQr(
   if (!session.posOrderId) return
   const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     limit: 1,
-    select: 'id,payment_qr,payment_cash,payment_card,payment_other,total,status',
+    select: 'id,payment_qr,payment_cash,payment_card,payment_other,total,status,paid_at',
   })) as Array<{
     id?: number
     payment_qr?: number
@@ -2480,23 +2497,41 @@ async function finalizeBillPayByQr(
     payment_other?: number
     total?: number
     status?: string
+    paid_at?: string | null
   }>
   const order = orderRows?.[0]
   if (!order?.id) return
+
+  const nowIso = new Date().toISOString()
+  const paySum =
+    asNum(order.payment_cash) +
+    asNum(order.payment_card) +
+    asNum(order.payment_qr) +
+    asNum(order.payment_other)
+  const total = asNum(order.total)
+  const gap = Math.max(0, Math.round((total - paySum) * 100) / 100)
+  const requested = Math.max(0, asNum(amount))
+  const payAmt = requested >= 0.005 ? requested : gap
+
   if (String(order.status || '').toLowerCase() === 'paid') {
+    // 웹훅 status-only: 채널 합이 total 미만이면 payment_qr에 잔액 백필 (입장료 QR은 유지)
+    if (gap >= 0.005) {
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${order.id}`, {
+        payment_qr: Math.round((asNum(order.payment_qr) + gap) * 100) / 100,
+        paid_at: order.paid_at || nowIso,
+        updated_at: nowIso,
+      })
+    }
     await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
       pending_bill_partner_txn_id: null,
       pending_bill_amount: 0,
-      updated_at: getBangkokDateTimeString(),
+      updated_at: nowIso,
     })
     await closeQrTableSessionsForPosOrder({ orderId: order.id, reason: 'paid' })
     return
   }
 
-  const payAmt = Math.max(0, asNum(amount))
   const nextQr = Math.round((asNum(order.payment_qr) + payAmt) * 100) / 100
-  const nowBkk = getBangkokDateTimeString()
-  const paidAtIso = new Date().toISOString()
 
   const sessRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
     limit: 1,
@@ -2514,16 +2549,16 @@ async function finalizeBillPayByQr(
   await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     payment_qr: nextQr,
     status: 'paid',
-    paid_at: paidAtIso,
-    updated_at: nowBkk,
+    paid_at: nowIso,
+    updated_at: nowIso,
     ...linkposPatch,
   })
   await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
     pending_bill_partner_txn_id: null,
     pending_bill_amount: 0,
     status: 'closed',
-    closed_at: nowBkk,
-    updated_at: nowBkk,
+    closed_at: nowIso,
+    updated_at: nowIso,
   })
 
   try {
@@ -2531,6 +2566,140 @@ async function finalizeBillPayByQr(
   } catch {
     /* loyalty optional — do not undo paid */
   }
+}
+
+/**
+ * KBank 웹훅 등 — orderId만으로 QR 테이블 계산서 결제 확정(payment_qr 기록 + 세션 종료).
+ * member_portal finalize 와 달리 created_by=qr_table: 전용.
+ */
+export async function finalizeQrTableBillPayFromOrderId(params: {
+  orderId: number
+  paymentQrAmount?: number
+  partnerTransactionId?: string
+  bankResponse?: Record<string, unknown>
+}): Promise<{ ok: boolean; reason?: string }> {
+  const orderId = Math.trunc(Number(params.orderId || 0))
+  if (!orderId) return { ok: false, reason: 'bad_order_id' }
+
+  const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${orderId}`, {
+    limit: 1,
+    select:
+      'id,created_by,payment_qr,payment_cash,payment_card,payment_other,total,status,paid_at',
+  })) as Array<{
+    id?: number
+    created_by?: string | null
+    payment_qr?: number
+    payment_cash?: number
+    payment_card?: number
+    payment_other?: number
+    total?: number
+    status?: string
+    paid_at?: string | null
+  }>
+  const order = orderRows?.[0]
+  if (!order?.id) return { ok: false, reason: 'order_not_found' }
+  if (!isQrTableCreatedBy(order.created_by)) return { ok: false, reason: 'not_qr_table' }
+
+  let session: (QrTableSession & { secretHash: string }) | null = null
+  const sidFromCreatedBy = parseQrTableSessionIdFromCreatedBy(order.created_by)
+  if (sidFromCreatedBy) {
+    session = await loadSessionById(sidFromCreatedBy)
+  }
+  if (!session) {
+    const sessRows = (await supabaseSelectFilter('pos_qr_table_sessions', `pos_order_id=eq.${orderId}`, {
+      limit: 1,
+      order: 'id.desc',
+      select: 'id',
+    })) as Array<{ id?: number }>
+    const sid = Math.trunc(Number(sessRows?.[0]?.id || 0))
+    if (sid > 0) session = await loadSessionById(sid)
+  }
+
+  let amount = Math.max(0, asNum(params.paymentQrAmount))
+  let partnerTxn = String(params.partnerTransactionId || '').trim()
+  if (session) {
+    const pendingRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+      limit: 1,
+      select: 'pending_bill_partner_txn_id,pending_bill_amount',
+    })) as Array<{
+      pending_bill_partner_txn_id?: string | null
+      pending_bill_amount?: number | string | null
+    }>
+    amount = Math.max(amount, asNum(pendingRows?.[0]?.pending_bill_amount))
+    if (!partnerTxn) {
+      partnerTxn = String(pendingRows?.[0]?.pending_bill_partner_txn_id || '').trim()
+    }
+  }
+
+  const paySum =
+    asNum(order.payment_cash) +
+    asNum(order.payment_card) +
+    asNum(order.payment_qr) +
+    asNum(order.payment_other)
+  const gap = Math.max(0, Math.round((asNum(order.total) - paySum) * 100) / 100)
+  amount = Math.max(amount, gap)
+
+  if (session && partnerTxn && params.bankResponse) {
+    try {
+      await recordQrBillPayKbankAttempts({
+        orderId,
+        partnerTxn,
+        amount,
+        response: params.bankResponse,
+        statusCode: String(
+          (params.bankResponse.statusCode as string | undefined) ||
+            (params.bankResponse.status as string | undefined) ||
+            ''
+        ),
+        statusMessage: String(
+          (params.bankResponse.statusMessage as string | undefined) ||
+            (params.bankResponse.txnStatus as string | undefined) ||
+            'approved'
+        ),
+      })
+    } catch (e) {
+      console.error('finalizeQrTableBillPayFromOrderId attempts:', e)
+    }
+  }
+
+  if (session) {
+    if (!session.posOrderId) {
+      session = { ...session, posOrderId: orderId }
+    }
+    await finalizeBillPayByQr(session, amount, params.bankResponse)
+    return { ok: true }
+  }
+
+  // 세션 행이 없어도 주문 payment_qr·paid 보정 + (있다면) 세션 종료
+  const nowIso = new Date().toISOString()
+  const status = String(order.status || '').toLowerCase()
+  if (status === 'paid' || status === 'completed') {
+    if (gap >= 0.005) {
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
+        payment_qr: Math.round((asNum(order.payment_qr) + gap) * 100) / 100,
+        paid_at: order.paid_at || nowIso,
+        updated_at: nowIso,
+      })
+    }
+  } else {
+    const requested = Math.max(0, asNum(params.paymentQrAmount), amount)
+    const payAmt = requested >= 0.005 ? requested : gap
+    if (payAmt >= 0.005 || gap < 0.005) {
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
+        payment_qr: Math.round((asNum(order.payment_qr) + payAmt) * 100) / 100,
+        status: 'paid',
+        paid_at: nowIso,
+        updated_at: nowIso,
+      })
+    }
+  }
+  await closeQrTableSessionsForPosOrder({ orderId, reason: 'paid' })
+  try {
+    await ensurePosOrderLoyaltyApplied(orderId)
+  } catch {
+    /* optional */
+  }
+  return { ok: true }
 }
 
 /** 게스트 회원 로그인 → 테이블 주문에 member_id 연결 (포인트 적립용, 로그인은 선택) */

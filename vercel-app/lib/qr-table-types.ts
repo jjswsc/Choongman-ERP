@@ -91,6 +91,15 @@ export function isQrTableCreatedBy(createdBy: string | null | undefined): boolea
   return String(createdBy || '').startsWith(QR_TABLE_CREATED_BY_PREFIX)
 }
 
+/** `qr_table:{sessionId}` → session id (없으면 null) */
+export function parseQrTableSessionIdFromCreatedBy(
+  createdBy: string | null | undefined
+): number | null {
+  if (!isQrTableCreatedBy(createdBy)) return null
+  const id = Math.trunc(Number(String(createdBy).slice(QR_TABLE_CREATED_BY_PREFIX.length)))
+  return id > 0 ? id : null
+}
+
 /** 손님 폰 QR로 넣은 줄(패키지 입장료·메뉴). POS 직원이 담은 줄은 해당 없음. */
 export function isQrTableGuestOrderLine(it: { source?: unknown; id?: unknown } | null | undefined): boolean {
   if (!it) return false
@@ -281,7 +290,8 @@ export function shouldSkipQrTableSessionOpenAutoprint(params: {
 }): boolean {
   if (isQrTableCreatedBy(params.createdBy)) return true
   const memo = String(params.memo || '')
-  const memoLooksQr = /\[QR테이블\]|\[QR table\]/i.test(memo)
+  /** Legacy `[QR테이블]` kept so older open orders still skip session-open autoprint */
+  const memoLooksQr = /\[QR테이블\]|\[QR Table\]/i.test(memo)
   const items = Array.isArray(params.items) ? params.items : []
   if (memoLooksQr && (items.length === 0 || items.every((it) => isQrTableGuestOrderLine(it)))) {
     return true
