@@ -120,6 +120,8 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
       optionCode1?: string
       optionCode2?: string
       note?: string
+      addedAt?: string | null
+      isBuffetEntry?: boolean
       servedAt?: string | null
       servedBy?: string | null
       cancelledAt?: string | null
@@ -142,7 +144,8 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
   >()
 
   for (let i = 0; i < rows.length; i += 1) {
-    const it = rows[i] as PosOrderItem
+    const it = rows[i] as PosOrderItem & { addedAt?: string | null; isBuffetEntry?: boolean }
+    const addedAt = String(it.addedAt ?? '').trim()
     const menuId1 = String(it.menuId1 ?? '').trim()
     const menuId2 = String(it.menuId2 ?? '').trim()
     const parentMenuId = String(it.menuId ?? '').trim()
@@ -183,6 +186,7 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
     const mergedPrev = merged.get(dedupeKey)
     if (mergedPrev) {
       mergedPrev.quantity += qty
+      if (addedAt && (!mergedPrev.addedAt || addedAt < mergedPrev.addedAt)) mergedPrev.addedAt = addedAt
       continue
     }
     const safeId = idRaw || `line-${i}`
@@ -204,6 +208,8 @@ function normalizePosOrderItemsForUi(rows: PosOrderItem[]): Order['items'] {
       ...(optionCode2 ? { optionCode2 } : {}),
       ...(optionCode1 || optionCode2 ? { optionCode: optionCode1 || optionCode2 } : {}),
       ...(note ? { note } : {}),
+      ...(addedAt ? { addedAt } : {}),
+      ...(it.isBuffetEntry === true ? { isBuffetEntry: true } : {}),
       servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
       servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
       cancelledAt: typeof it.cancelledAt === 'string' ? it.cancelledAt : null,

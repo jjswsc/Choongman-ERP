@@ -14,6 +14,7 @@ import { PosAdvanceOrderPanel } from '@/components/pos/pos-advance-order-panel'
 import { PosAdvanceDepositDialog } from '@/components/pos/pos-advance-deposit-dialog'
 import { OrderBarList, type OrderBarItem, type OrderBarStatus } from '@/components/pos/order-bar-list'
 import { resolveOrderBarCookElapsedEndAt } from '@/lib/pos-order-bar-cook-elapsed'
+import { posTableCookClockIso } from '@/lib/pos-table-cook-clock'
 import { PosTerminalMenuScreen } from '@/components/pos/pos-terminal-menu-screen'
 import type { PosTerminalParentCatalog } from '@/components/pos/pos-terminal-menu-screen'
 import {
@@ -12063,11 +12064,7 @@ export default function PosTerminalPage() {
                                 ...items.map((it) => getItemTarget({ id: String(it.id || ''), name: String(it.name || '') }))
                               )
                             : 0
-                          const createdAt = order.createdAt
-                            ? (order.createdAt instanceof Date
-                                ? order.createdAt.toISOString()
-                                : String(order.createdAt))
-                            : undefined
+                          const createdAt = posTableCookClockIso(order)
                           const guestCount = Math.max(0, Math.trunc(Number(order.guestCount ?? 0) || 0))
                           return { status, createdAt, targetMin, guestCount: guestCount > 0 ? guestCount : undefined }
                         }}

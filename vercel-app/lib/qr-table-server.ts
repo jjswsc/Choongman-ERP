@@ -21,6 +21,8 @@ import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
+import { parsePosOrderItemsJson } from '@/lib/pos-order-item-map'
+import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 import { resolvePosMenuDescriptionForChannel } from '@/lib/pos-menu-display-description'
 import { parsePosMenuI18nMap } from '@/lib/pos-menu-guest-i18n'
 import { normalizePromotionCategoryMain, posMainCategoryTabRank } from '@/lib/pos-promo-constants'
@@ -1374,6 +1376,9 @@ async function createOrEnsurePosOrderForSession(
 ): Promise<number> {
   if (session.posOrderId) return session.posOrderId
 
+  const existingOpenId = await findOpenDineInOrderIdForTable(session.storeCode, session.tableName)
+  if (existingOpenId > 0) return existingOpenId
+
   /** items.addedAt 은 손님 UI용 방콕 벽시계; pos_orders.created_at 은 timestamptz → ISO(UTC) */
   const nowBkk = getBangkokDateTimeString()
   const nowIso = new Date().toISOString()
@@ -1686,6 +1691,93 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   }
 }
 
+const OPEN_DINE_IN_ORDER_STATUSES = ['pending', 'cooking', 'ready'] as const
+
+function isOpenDineInOrderType(orderType: unknown): boolean {
+  const type = String(orderType || '').trim().toLowerCase().replace(/-/g, '_')
+  return !type || type === 'dine_in'
+}
+
+function posOrderItemsHaveFood(raw: unknown): boolean {
+  return parsePosOrderItemsJson(raw).some((it) => {
+    if (String(it.cancelledAt ?? it.cancelled_at ?? '').trim()) return false
+    return !isQrBuffetPackageKitchenSkipLine(it)
+  })
+}
+
+/** 같은 테이블에 이미 열린 홀 주문이 있으면 QR은 새 주문을 만들지 않고 그 주문에 붙인다. */
+async function findOpenDineInOrderIdForTable(storeCode: string, tableName: string): Promise<number> {
+  const code = String(storeCode || '').trim()
+  const table = String(tableName || '').trim()
+  if (!code || !table) return 0
+  const rows = (await supabaseSelectFilter(
+    'pos_orders',
+    `store_code=eq.${encodeURIComponent(code)}&table_name=eq.${encodeURIComponent(table)}&status=in.(${OPEN_DINE_IN_ORDER_STATUSES.join(',')})`,
+    { limit: 8, order: 'id.desc', select: 'id,order_type,status' }
+  )) as Array<{ id?: number; order_type?: string; status?: string }>
+  for (const row of rows || []) {
+    const id = Math.trunc(Number(row.id || 0))
+    if (!id) continue
+    if (!isOpenDineInOrderType(row.order_type)) continue
+    const status = String(row.status || '').trim().toLowerCase()
+    if (!OPEN_DINE_IN_ORDER_STATUSES.includes(status as (typeof OPEN_DINE_IN_ORDER_STATUSES)[number])) continue
+    return id
+  }
+  return 0
+}
+
+/**
+ * 홀 결제·취소 시 그 테이블에 남아 있는 QR 세션을 닫고,
+ * 음식 없이 QR만 열어 생긴 빈 주문은 취소한다. 이미 결제된 주문은 건드리지 않는다.
+ */
+async function cancelEmptyQrShellOrdersOnTable(params: {
+  storeCode: string
+  tableName: string
+  keepOrderId: number
+}): Promise<void> {
+  const rows = (await supabaseSelectFilter(
+    'pos_orders',
+    `store_code=eq.${encodeURIComponent(params.storeCode)}&table_name=eq.${encodeURIComponent(params.tableName)}&status=in.(${OPEN_DINE_IN_ORDER_STATUSES.join(',')})`,
+    {
+      limit: 20,
+      select:
+        'id,status,order_type,created_by,memo,items_json,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app',
+    }
+  )) as Array<{
+    id?: number
+    order_type?: string
+    created_by?: string
+    memo?: string
+    items_json?: unknown
+    payment_cash?: number
+    payment_card?: number
+    payment_qr?: number
+    payment_other?: number
+    payment_delivery_app?: number
+  }>
+  const nowIso = new Date().toISOString()
+  for (const row of rows || []) {
+    const id = Math.trunc(Number(row.id || 0))
+    if (!id || id === params.keepOrderId) continue
+    if (!isOpenDineInOrderType(row.order_type)) continue
+    const paid =
+      Number(row.payment_cash || 0) +
+      Number(row.payment_card || 0) +
+      Number(row.payment_qr || 0) +
+      Number(row.payment_other || 0) +
+      Number(row.payment_delivery_app || 0)
+    if (paid > 0.005) continue
+    if (posOrderItemsHaveFood(row.items_json)) continue
+    const qrShell =
+      isQrTableCreatedBy(row.created_by) || /\[QR테이블\]|\[QR Table\]/i.test(String(row.memo || ''))
+    if (!qrShell) continue
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, {
+      status: 'cancelled',
+      updated_at: nowIso,
+    })
+  }
+}
+
 /** POS 결제·취소·환불 시 연결된 QR 세션을 closed 로 전환 (Realtime 영수증과 무관). */
 export async function closeQrTableSessionsForPosOrder(params: {
   orderId: number
@@ -1694,13 +1786,31 @@ export async function closeQrTableSessionsForPosOrder(params: {
   const orderId = Math.trunc(Number(params.orderId || 0))
   if (!orderId) return 0
   try {
-    const rows = (await supabaseSelectFilter(
+    const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${orderId}`, {
+      limit: 1,
+      select: 'id,store_code,table_name,order_type',
+    })) as Array<{ store_code?: string; table_name?: string; order_type?: string }>
+    const storeCode = String(orderRows?.[0]?.store_code || '').trim()
+    const tableName = String(orderRows?.[0]?.table_name || '').trim()
+    const dineIn = isOpenDineInOrderType(orderRows?.[0]?.order_type)
+    const byOrder = (await supabaseSelectFilter(
       'pos_qr_table_sessions',
       `pos_order_id=eq.${orderId}&status=in.(awaiting_entry,active)`,
       { limit: 50, select: 'id' }
     )) as Array<{ id?: number }>
-    const ids = (rows || []).map((r) => Number(r.id || 0)).filter(Boolean)
-    if (!ids.length) return 0
+    const byTable =
+      dineIn && storeCode && tableName
+        ? ((await supabaseSelectFilter(
+            'pos_qr_table_sessions',
+            `store_code=eq.${encodeURIComponent(storeCode)}&table_name=eq.${encodeURIComponent(tableName)}&status=in.(awaiting_entry,active)`,
+            { limit: 50, select: 'id' }
+          )) as Array<{ id?: number }>)
+        : []
+    const ids = Array.from(
+      new Set(
+        [...(byOrder || []), ...(byTable || [])].map((r) => Math.trunc(Number(r.id || 0))).filter((id) => id > 0)
+      )
+    )
     const nowIso = new Date().toISOString()
     for (const id of ids) {
       await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${id}`, {
@@ -1708,6 +1818,9 @@ export async function closeQrTableSessionsForPosOrder(params: {
         closed_at: nowIso,
         updated_at: nowIso,
       })
+    }
+    if (dineIn && storeCode && tableName) {
+      await cancelEmptyQrShellOrdersOnTable({ storeCode, tableName, keepOrderId: orderId })
     }
     void params.reason
     return ids.length

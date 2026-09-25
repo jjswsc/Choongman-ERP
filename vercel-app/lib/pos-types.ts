@@ -97,6 +97,10 @@ export interface OrderItem {
   optionCode?: string
   quantity: number
   price: number
+  /** QR·추가주문 줄이 실제 들어온 시각. 바닥 조리 시계는 이 값부터 센다. */
+  addedAt?: string | null
+  /** 뷔페 입장료 줄. 음식이 아니므로 조리 시계를 시작하지 않는다. */
+  isBuffetEntry?: boolean
   /** 줄 단위 메모 (주방·items_json) */
   note?: string
   options?: string[]
