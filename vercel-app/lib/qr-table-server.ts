@@ -1710,9 +1710,11 @@ async function findOpenDineInOrderIdForTable(storeCode: string, tableName: strin
   const code = String(storeCode || '').trim()
   const table = String(tableName || '').trim()
   if (!code || !table) return 0
+  /** 오늘 POS 목록에 없는 며칠 전 미종료 주문에 붙으면 바닥 타일이 비어 보인다. */
+  const sinceIso = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString()
   const rows = (await supabaseSelectFilter(
     'pos_orders',
-    `store_code=eq.${encodeURIComponent(code)}&table_name=eq.${encodeURIComponent(table)}&status=in.(${OPEN_DINE_IN_ORDER_STATUSES.join(',')})`,
+    `store_code=eq.${encodeURIComponent(code)}&table_name=eq.${encodeURIComponent(table)}&status=in.(${OPEN_DINE_IN_ORDER_STATUSES.join(',')})&created_at=gte.${encodeURIComponent(sinceIso)}`,
     { limit: 8, order: 'id.desc', select: 'id,order_type,status' }
   )) as Array<{ id?: number; order_type?: string; status?: string }>
   for (const row of rows || []) {

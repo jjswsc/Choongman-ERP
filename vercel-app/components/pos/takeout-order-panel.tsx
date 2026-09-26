@@ -134,6 +134,7 @@ export function TakeoutOrderPanel({
   const [itemCancelled, setItemCancelled] = useState<Record<string, boolean>>({})
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
   const [checklistOpen, setChecklistOpen] = useState(false)
+  const [closeAfterPack, setCloseAfterPack] = useState(false)
   const [checklistSubmitting, setChecklistSubmitting] = useState(false)
   const [checklistGroups, setChecklistGroups] = useState<PosOrderPackagingChecklistGroup[]>([])
 
@@ -449,12 +450,27 @@ export function TakeoutOrderPanel({
     if (!order || order.status === 'completed' || order.status === 'ready') return
     const id = Number(order.id)
     if (Number.isNaN(id)) return
+    const alsoComplete = isPaid || orderPaymentsSum(order) > 0.005
+    setCloseAfterPack(alsoComplete)
     const completeReady = async () => {
       try {
-        await updatePosOrderStatus({ id, status: 'ready' })
+        const readyRes = await updatePosOrderStatus({ id, status: 'ready' })
+        if (!readyRes.success && !readyRes.statusAlreadyApplied) {
+          await appAlert(localizeApiMessage(readyRes.message, t, t('processFail') || '처리 실패', lang))
+          return
+        }
+        if (alsoComplete) {
+          const done = await updatePosOrderStatus({ id, status: 'completed' })
+          if (!done.success && !done.statusAlreadyApplied) {
+            await appAlert(localizeApiMessage(done.message, t, t('processFail') || '처리 실패', lang))
+            return
+          }
+          onOrderDismissed?.(order)
+          onClose?.()
+        }
         onPackaged?.()
       } catch (e) {
-        console.error('updatePosOrderStatus:', e)
+        await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
       }
     }
     try {
@@ -475,7 +491,7 @@ export function TakeoutOrderPanel({
       setChecklistGroups(checklistRes.groups)
       setChecklistOpen(true)
     } catch (e) {
-      console.error('packaging checklist:', e)
+      await appAlert(i18nTr(ti, 'posUnexpectedErrorDetail', { detail: String(e) }))
     }
   }
 
@@ -860,7 +876,9 @@ export function TakeoutOrderPanel({
                 disabled={!allPackaged}
               >
                 {allPackaged
-                  ? (t('posDeliveryPackagingComplete') || '포장 완료')
+                  ? (isPaid || orderPaymentsSum(order) > 0.005
+                      ? (t('posTakeoutPickupComplete') || '수령 완료')
+                      : (t('posDeliveryPackagingComplete') || '포장 완료'))
                   : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeLineEntries.length || order.items.length})`}
               </Button>
               {canCancel && (
@@ -917,7 +935,20 @@ export function TakeoutOrderPanel({
           if (Number.isNaN(id)) return
           setChecklistSubmitting(true)
           try {
-            await updatePosOrderStatus({ id, status: 'ready' })
+            const readyRes = await updatePosOrderStatus({ id, status: 'ready' })
+            if (!readyRes.success && !readyRes.statusAlreadyApplied) {
+              await appAlert(localizeApiMessage(readyRes.message, t, t('processFail') || '처리 실패', lang))
+              return
+            }
+            if (closeAfterPack) {
+              const done = await updatePosOrderStatus({ id, status: 'completed' })
+              if (!done.success && !done.statusAlreadyApplied) {
+                await appAlert(localizeApiMessage(done.message, t, t('processFail') || '처리 실패', lang))
+                return
+              }
+              onOrderDismissed?.(order)
+              onClose?.()
+            }
             console.info('[packaging-checklist] takeout confirmed', {
               orderId: id,
               checkedCount: checkedItemIds.length,
