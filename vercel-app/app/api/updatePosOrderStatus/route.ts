@@ -27,6 +27,7 @@ import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
 import { rollbackPosOrderCouponRedemptions, redeemMemberCouponIssuesForPaidOrder } from '@/lib/pos-coupon-server'
 import { posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
 import { notifyMemberPortalPickupReady } from '@/lib/member-portal-pickup-notify'
+import { POS_PAID_STATUS_DOWNGRADE_BLOCKED_MESSAGE } from '@/lib/pos-takeout-pack-status'
 import { ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
 import {
   shouldRunPosAccountingSideEffectsForStore,
@@ -305,7 +306,7 @@ export async function POST(req: NextRequest) {
           success: false,
           message:
             prevStatus === 'paid'
-              ? '결제 완료 주문은 취소/환불 상태로만 변경할 수 있습니다.'
+              ? POS_PAID_STATUS_DOWNGRADE_BLOCKED_MESSAGE
               : '완료 주문은 취소/환불 상태로만 변경할 수 있습니다.',
         },
         { status: 409, headers }
@@ -551,6 +552,12 @@ export async function POST(req: NextRequest) {
 
     if (nextStatus === 'ready' && prevStatus !== 'ready') {
       void notifyMemberPortalPickupReady(id).catch((notifyErr) => {
+        console.error('updatePosOrderStatus member portal pickup notify:', notifyErr)
+      })
+    }
+    // 선결제(paid) 포장은 ready 로 되돌릴 수 없어 completed 로 바로 닫는다. 픽업 LINE 은 그때 한 번 보낸다.
+    if (nextStatus === 'completed' && prevStatus === 'paid') {
+      void notifyMemberPortalPickupReady(id, { alsoWhenCompleted: true }).catch((notifyErr) => {
         console.error('updatePosOrderStatus member portal pickup notify:', notifyErr)
       })
     }

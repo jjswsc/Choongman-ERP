@@ -55,6 +55,10 @@ import {
 } from '@/lib/pos-order-line-cancel-execute'
 import { kitchenRoutingItemFromOrderItem, type PosKitchenReprintPayload } from '@/lib/pos-kitchen-slip-routing'
 import { PosLineCancelQtyDialog } from '@/components/pos/pos-line-cancel-qty-dialog'
+import {
+  isPaidStatusDowngradeBlockedMessage,
+  resolveTakeoutPackStatusSteps,
+} from '@/lib/pos-takeout-pack-status'
 
 export interface TakeoutOrderPanelProps {
   orderLabel: string
@@ -134,7 +138,6 @@ export function TakeoutOrderPanel({
   const [itemCancelled, setItemCancelled] = useState<Record<string, boolean>>({})
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
   const [checklistOpen, setChecklistOpen] = useState(false)
-  const [closeAfterPack, setCloseAfterPack] = useState(false)
   const [checklistSubmitting, setChecklistSubmitting] = useState(false)
   const [checklistGroups, setChecklistGroups] = useState<PosOrderPackagingChecklistGroup[]>([])
 
@@ -417,6 +420,31 @@ export function TakeoutOrderPanel({
     }
   }
 
+  const applyTakeoutPackStatuses = async (
+    id: number,
+    alsoComplete: boolean
+  ): Promise<'done' | 'ready' | 'failed'> => {
+    const steps = resolveTakeoutPackStatusSteps({
+      currentStatus: String(order?.status ?? ''),
+      alsoComplete,
+    })
+    for (const step of steps) {
+      const res = await updatePosOrderStatus({ id, status: step })
+      if (res.success || res.statusAlreadyApplied) continue
+      if (step === 'ready' && isPaidStatusDowngradeBlockedMessage(res.message)) {
+        const done = await updatePosOrderStatus({ id, status: 'completed' })
+        if (!done.success && !done.statusAlreadyApplied) {
+          await appAlert(localizeApiMessage(done.message, t, t('processFail') || '처리 실패', lang))
+          return 'failed'
+        }
+        return 'done'
+      }
+      await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
+      return 'failed'
+    }
+    return steps[steps.length - 1] === 'completed' ? 'done' : 'ready'
+  }
+
   const handleHandoverComplete = async () => {
     if (!order || order.status !== 'ready') return
     const id = Number(order.id)
@@ -451,20 +479,11 @@ export function TakeoutOrderPanel({
     const id = Number(order.id)
     if (Number.isNaN(id)) return
     const alsoComplete = isPaid || orderPaymentsSum(order) > 0.005
-    setCloseAfterPack(alsoComplete)
     const completeReady = async () => {
       try {
-        const readyRes = await updatePosOrderStatus({ id, status: 'ready' })
-        if (!readyRes.success && !readyRes.statusAlreadyApplied) {
-          await appAlert(localizeApiMessage(readyRes.message, t, t('processFail') || '처리 실패', lang))
-          return
-        }
-        if (alsoComplete) {
-          const done = await updatePosOrderStatus({ id, status: 'completed' })
-          if (!done.success && !done.statusAlreadyApplied) {
-            await appAlert(localizeApiMessage(done.message, t, t('processFail') || '처리 실패', lang))
-            return
-          }
+        const outcome = await applyTakeoutPackStatuses(id, alsoComplete)
+        if (outcome === 'failed') return
+        if (outcome === 'done') {
           onOrderDismissed?.(order)
           onClose?.()
         }
@@ -935,20 +954,9 @@ export function TakeoutOrderPanel({
           if (Number.isNaN(id)) return
           setChecklistSubmitting(true)
           try {
-            const readyRes = await updatePosOrderStatus({ id, status: 'ready' })
-            if (!readyRes.success && !readyRes.statusAlreadyApplied) {
-              await appAlert(localizeApiMessage(readyRes.message, t, t('processFail') || '처리 실패', lang))
-              return
-            }
-            if (closeAfterPack) {
-              const done = await updatePosOrderStatus({ id, status: 'completed' })
-              if (!done.success && !done.statusAlreadyApplied) {
-                await appAlert(localizeApiMessage(done.message, t, t('processFail') || '처리 실패', lang))
-                return
-              }
-              onOrderDismissed?.(order)
-              onClose?.()
-            }
+            const alsoComplete = isPaid || orderPaymentsSum(order) > 0.005
+            const outcome = await applyTakeoutPackStatuses(id, alsoComplete)
+            if (outcome === 'failed') return
             console.info('[packaging-checklist] takeout confirmed', {
               orderId: id,
               checkedCount: checkedItemIds.length,
@@ -956,6 +964,10 @@ export function TakeoutOrderPanel({
               totalRequiredCount,
             })
             setChecklistOpen(false)
+            if (outcome === 'done') {
+              onOrderDismissed?.(order)
+              onClose?.()
+            }
             onPackaged?.()
           } finally {
             setChecklistSubmitting(false)

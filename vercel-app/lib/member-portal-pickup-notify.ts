@@ -15,8 +15,12 @@ type PosOrderNotifyRow = {
   created_by?: string | null
 }
 
-/** POS에서 ready 전환 시 회원앱 픽업 주문에 LINE 푸시 (실패해도 상태 변경은 유지) */
-export async function notifyMemberPortalPickupReady(orderId: number): Promise<void> {
+/** POS에서 ready 전환 시 회원앱 픽업 주문에 LINE 푸시 (실패해도 상태 변경은 유지).
+ * 선결제 주문은 ready 를 거치지 않고 paid → completed 이므로 alsoWhenCompleted 로 같은 알림을 보낸다. */
+export async function notifyMemberPortalPickupReady(
+  orderId: number,
+  opts?: { alsoWhenCompleted?: boolean }
+): Promise<void> {
   const id = Math.trunc(Number(orderId || 0))
   if (!id) return
 
@@ -28,7 +32,9 @@ export async function notifyMemberPortalPickupReady(orderId: number): Promise<vo
   if (!order?.id) return
 
   const status = String(order.status || '').trim().toLowerCase()
-  if (status !== 'ready') return
+  const allowed =
+    status === 'ready' || (opts?.alsoWhenCompleted === true && status === 'completed')
+  if (!allowed) return
 
   const meta = resolveMemberPortalTakeoutMeta({
     memo: order.memo,
