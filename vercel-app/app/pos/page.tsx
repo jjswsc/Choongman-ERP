@@ -391,7 +391,7 @@ function POSMainPageInner() {
           pushPosRouteWithFallback('/pos/menu-sold-out')
           break
         case 'members':
-          navigatePosOfflineAware('/admin/employees', (p) => router.push(p))
+          pushPosRouteWithFallback('/pos/member-points')
           break
         case 'sales':
           pushPosRouteWithFallback('/pos/sales')
