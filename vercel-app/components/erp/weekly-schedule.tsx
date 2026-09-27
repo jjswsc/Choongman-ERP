@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { useStoreList, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/api-client"
+import { useStoreList, getWeeklySchedule, getScheduleEditLog, type WeeklyScheduleItem, type ScheduleEditChange } from "@/lib/api-client"
+import { SchedulePersonEditMark, ScheduleWeekEditLine } from "@/components/attendance/schedule-edit-log-panel"
 import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
 import { normalizeEmployeeNameFields } from "@/lib/employee-display-name"
 import { cn, displayLabelShort } from "@/lib/utils"
@@ -115,6 +116,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const [storeFilter, setStoreFilter] = React.useState("")
   const storeFilterFinal = storeFilterProp || storeFilter
   const [date, setDate] = React.useState(() => getMondayOfWeekBangkok())
+  const [editChanges, setEditChanges] = React.useState<ScheduleEditChange[]>([])
   const [areaFilter, setAreaFilter] = React.useState("all")
   const [schedule, setSchedule] = React.useState<WeeklyScheduleItem[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -318,6 +320,9 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       .then((list) => setSchedule(list || []))
       .catch(() => setSchedule([]))
       .finally(() => setLoading(false))
+    getScheduleEditLog({ store: storeParam, monday: date })
+      .then((rows) => setEditChanges(rows))
+      .catch(() => setEditChanges([]))
   }, [auth?.store, storeFilterFinal, date, areaFilter])
 
   const handleStoreChange = (v: string) => {
@@ -350,7 +355,18 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     ? `${dayStrs[0].replace(/-/g, ".")} ~ ${dayStrs[6].slice(5).replace(/-/g, ".")}`
     : ""
 
-  const byPerson: Record<string, { name: string; store: string; area: string; byDate: Record<string, WeeklyScheduleItem> }> = {}
+  const byPerson: Record<
+    string,
+    {
+      name: string
+      legalName: string
+      store: string
+      area: string
+      employeeId?: number
+      employeeCode?: string
+      byDate: Record<string, WeeklyScheduleItem>
+    }
+  > = {}
   for (const r of schedule) {
     const st = String(r.store || "").trim()
     const rawName = String(r.name || "").trim()
@@ -361,13 +377,18 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     if (!byPerson[mergeKey]) {
       byPerson[mergeKey] = {
         name: String(r.nick || canonical || rawName).trim() || rawName,
+        legalName: canonical || rawName,
         store: st,
         area: String(r.area || "Service"),
+        employeeId: r.employeeId,
+        employeeCode: empCode || undefined,
         byDate: {},
       }
     } else {
       const nk = String(r.nick || "").trim()
       if (nk) byPerson[mergeKey].name = nk
+      if (!byPerson[mergeKey].employeeId && r.employeeId) byPerson[mergeKey].employeeId = r.employeeId
+      if (!byPerson[mergeKey].employeeCode && empCode) byPerson[mergeKey].employeeCode = empCode
       if (!scheduleRowIsLeave(r)) {
         byPerson[mergeKey].area = String(r.area || byPerson[mergeKey].area || "Service")
       }
@@ -396,8 +417,11 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     /** 집계 키(store|API name) — 닉네임이 같아도 직원별로 유일 */
     personKey: string
     name: string
+    legalName: string
     store: string
     area: string
+    employeeId?: number
+    employeeCode?: string
     workDays: string[]
     breakDays: string[]
     leaveDays: (string | undefined)[]
@@ -428,7 +452,18 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       breakDays.push(breakStr)
       if (workStr) dailyCount[i]++
     }
-    persons.push({ personKey: key, name: p.name, store: p.store, area: p.area, workDays, breakDays, leaveDays })
+    persons.push({
+      personKey: key,
+      name: p.name,
+      legalName: p.legalName,
+      store: p.store,
+      area: p.area,
+      employeeId: p.employeeId,
+      employeeCode: p.employeeCode,
+      workDays,
+      breakDays,
+      leaveDays,
+    })
   }
 
   // 전체 매장 선택 시 매장별로 그룹화
@@ -658,7 +693,10 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={goPrevWeek}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="text-xs font-bold text-card-foreground">{weekRangeStr}</span>
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-xs font-bold text-card-foreground">{weekRangeStr}</span>
+          {hasSearched ? <ScheduleWeekEditLine changes={editChanges} /> : null}
+        </div>
         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={goNextWeek}>
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -710,7 +748,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               style={{ minWidth: "max(720px, max-content, calc(100% + 1px))" }}
             >
               {/* 요일 헤더 */}
-              <div className="grid gap-1 mb-2 print-schedule-grid" style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}>
+              <div className="grid gap-1 mb-2 print-schedule-grid" style={{ gridTemplateColumns: "112px repeat(7, minmax(72px, 80px))" }}>
                 <div className="shrink-0" />
                 {dayLabels.map((day, i) => (
                   <div key={day} className="flex flex-col items-center gap-0.5 shrink-0 min-w-[72px]">
@@ -767,10 +805,10 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                           "grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors print-schedule-grid print-schedule-person outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                           scheduleHScrollDragging ? "cursor-grabbing" : "cursor-grab"
                         )}
-                        style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}
+                        style={{ gridTemplateColumns: "112px repeat(7, minmax(72px, 80px))" }}
                       >
                         {/* 이름 + 부서 + 접기 버튼 */}
-                        <div className="flex flex-col items-start justify-center shrink-0 min-w-[72px]">
+                        <div className="flex flex-col items-start justify-center shrink-0 min-w-[112px]">
                           <div className="flex items-center gap-1">
                             <span className="text-[13px] font-bold text-card-foreground leading-tight print-schedule-person-name">{displayLabelShort(p.name)}</span>
                             {!isCollapsed && (
@@ -789,6 +827,13 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                               </span>
                             )}
                           </div>
+                          <SchedulePersonEditMark
+                            changes={editChanges}
+                            employeeId={p.employeeId}
+                            employeeCode={p.employeeCode}
+                            names={[p.name, p.legalName]}
+                            store={p.store}
+                          />
                           <span className="text-[10px] font-medium text-muted-foreground leading-tight mt-0.5 print-schedule-person-area">
                             {areaLabel(p.area)}
                           </span>

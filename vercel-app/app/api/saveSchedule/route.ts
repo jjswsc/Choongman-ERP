@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseDeleteByFilter, supabaseInsertMany } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseDeleteByFilter, supabaseInsertMany } from '@/lib/supabase-server'
 import { storeRowFilter } from '@/lib/saas-store-conflict'
 import { normalizeEmployeeCodeForMatch } from '@/lib/employee-display-name'
 import {
@@ -17,6 +17,86 @@ import {
   resolveSaasTenantScope,
   stampSaasTenantId,
 } from '@/lib/saas-tenant-scope'
+import { diffScheduleWeek, type ScheduleSlotSnapshot } from '@/lib/schedule-edit-diff'
+
+function scheduleRowToSnapshot(row: Record<string, unknown>): ScheduleSlotSnapshot {
+  const eid = Number(row.employee_id)
+  return {
+    date: String(row.schedule_date || '').slice(0, 10),
+    employeeId: Number.isFinite(eid) ? Math.floor(eid) : 0,
+    employeeCode: String(row.employee_code || '').trim(),
+    name: String(row.name || '').trim(),
+    planIn: String(row.plan_in || '').trim(),
+    planOut: String(row.plan_out || '').trim(),
+    breakStart: String(row.break_start || '').trim(),
+    breakEnd: String(row.break_end || '').trim(),
+    area: String(row.memo || '').trim(),
+    planInPrevDay: !!row.plan_in_prev_day,
+  }
+}
+
+function isMissingScheduleEditLogTable(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /schedule_edit_logs|42P01|PGRST205|does not exist/i.test(msg)
+}
+
+async function writeScheduleEditLogs(params: {
+  store: string
+  monday: string
+  before: ScheduleSlotSnapshot[]
+  after: ScheduleSlotSnapshot[]
+  auth: { name?: string; role?: string; store?: string; employeeId?: number; employeeCode?: string; tenantId?: string } | null
+  tenantScope: Parameters<typeof stampSaasTenantId>[1]
+}) {
+  const diffs = diffScheduleWeek(params.before, params.after)
+  if (diffs.length === 0) return
+  const actorId = Number(params.auth?.employeeId)
+  const rows: Record<string, unknown>[] = diffs.map((d) =>
+    stampSaasTenantId(
+      {
+        store_name: params.store,
+        week_monday: params.monday,
+        schedule_date: d.date,
+        employee_id: d.employeeId > 0 ? d.employeeId : null,
+        employee_code: d.employeeCode || null,
+        employee_name: d.employeeName || '-',
+        field_name: d.fieldName,
+        before_value: d.beforeValue,
+        after_value: d.afterValue,
+        actor_name: String(params.auth?.name || '').trim() || null,
+        actor_role: String(params.auth?.role || '').trim() || null,
+        actor_store: String(params.auth?.store || '').trim() || null,
+        actor_employee_id: Number.isFinite(actorId) && actorId > 0 ? Math.floor(actorId) : null,
+        actor_employee_code: String(params.auth?.employeeCode || '').trim() || null,
+      },
+      params.tenantScope,
+      'schedule_edit_logs'
+    )
+  )
+  const CHUNK = 50
+  for (let k = 0; k < rows.length; k += CHUNK) {
+    let payload = rows.slice(k, k + CHUNK)
+    for (;;) {
+      try {
+        await supabaseInsertMany('schedule_edit_logs', payload)
+        break
+      } catch (e) {
+        if (isMissingScheduleEditLogTable(e)) return
+        if (isMissingSaasTenantColumnError(e) && payload.some((r) => 'tenant_id' in r)) {
+          markSaasTenantColumnMissing('schedule_edit_logs')
+          payload = payload.map((r) => {
+            const rest: Record<string, unknown> = { ...r }
+            delete rest.tenant_id
+            return rest
+          })
+          continue
+        }
+        console.warn('saveSchedule edit log:', e)
+        return
+      }
+    }
+  }
+}
 
 /** 타임존 영향 없이 로컬 날짜만 사용 (toISOString 시 UTC로 밀릴 수 있음 방지) */
 function addDays(dateStr: string, days: number): string {
@@ -116,16 +196,35 @@ export async function POST(request: NextRequest) {
       tenantScope,
       'schedules'
     )
+    let existingSlots: ScheduleSlotSnapshot[] = []
+    try {
+      const existingRows = (await supabaseSelectFilterAllPages('schedules', existingFilter, {
+        order: 'schedule_date.asc',
+        pageSize: 2000,
+        maxRows: 20000,
+      })) as Record<string, unknown>[]
+      existingSlots = existingRows.map(scheduleRowToSnapshot)
+    } catch (e) {
+      console.warn('saveSchedule existing read:', e)
+    }
     await supabaseDeleteByFilter('schedules', existingFilter)
 
+    const toInsert: Record<string, unknown>[] = []
     if (rows.length === 0) {
+      await writeScheduleEditLogs({
+        store,
+        monday,
+        before: existingSlots,
+        after: [],
+        auth,
+        tenantScope,
+      })
       return NextResponse.json(
         { success: true, message: `${store} 해당 주 시간표가 삭제되었습니다.` },
         { headers }
       )
     }
 
-    const toInsert: Record<string, unknown>[] = []
     for (const s of rows) {
       const dateStr = String(s.date || '').trim().slice(0, 10)
       if (!dateStr) continue
@@ -190,6 +289,15 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    await writeScheduleEditLogs({
+      store,
+      monday,
+      before: existingSlots,
+      after: toInsert.map(scheduleRowToSnapshot),
+      auth,
+      tenantScope,
+    })
 
     return NextResponse.json(
       { success: true, message: `${store} 주간 시간표가 저장되었습니다!` },

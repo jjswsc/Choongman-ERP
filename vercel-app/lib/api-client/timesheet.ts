@@ -94,6 +94,33 @@ export async function saveSchedule(params: {
   return res.json() as Promise<{ success: boolean; message?: string; duplicateNames?: string }>
 }
 
+export interface ScheduleEditChange {
+  id: number
+  storeName: string
+  scheduleDate: string
+  employeeId: number
+  employeeCode: string
+  employeeName: string
+  fieldName: string
+  beforeValue: string
+  afterValue: string
+  actorName: string
+  createdAt: string
+}
+
+export async function getScheduleEditLog(params: { store: string; monday: string }) {
+  const q = new URLSearchParams({
+    store: params.store,
+    monday: params.monday,
+  })
+  const res = await apiFetchWithOffline(`/api/getScheduleEditLog?${q}`)
+  const raw: unknown = await res.json()
+  if (raw && typeof raw === 'object' && Array.isArray((raw as { changes?: unknown }).changes)) {
+    return (raw as { changes: ScheduleEditChange[] }).changes
+  }
+  return []
+}
+
 export interface MyAttendanceSummary {
   normalDays: number
   otHours: number

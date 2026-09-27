@@ -29,6 +29,12 @@ import {
 } from '@/lib/attendance-logs-schema-compat'
 import { otMinutesForPayroll } from '@/lib/payroll-utils'
 import {
+  breakSpanIsOffPlan,
+  formatPlanHm,
+  pairBreakPunches,
+  type BreakPunch,
+} from '@/lib/attendance-break-window'
+import {
   buildAttendanceDisplayMapsFromEmployees,
   normalizeEmployeeCodeForMatch,
   normalizeEmployeeNameForGradeMatch,
@@ -71,6 +77,19 @@ function addDay(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() + delta)
   return d.toISOString().slice(0, 10)
+}
+
+function pushBreakEvent(target: { breakEvents: BreakPunch[] }, type: BreakPunch['type'], at: string) {
+  const stamp = String(at || '').slice(0, 19)
+  if (!stamp) return
+  if (target.breakEvents.some((e) => e.type === type && String(e.at).slice(0, 19) === stamp)) return
+  target.breakEvents.push({ type, at })
+}
+
+function moveBreakEvents(from: { breakEvents: BreakPunch[] }, to: { breakEvents: BreakPunch[] }) {
+  if (!from.breakEvents.length) return
+  for (const ev of from.breakEvents) pushBreakEvent(to, ev.type, ev.at)
+  from.breakEvents = []
 }
 
 function lookupDayRec<T>(
@@ -116,6 +135,11 @@ export interface AttendanceDailyRow {
   outTimeStr: string
   breakMin: number
   breakOverMin: number
+  /** 근무표 휴게 HH:mm. 없으면 빈 문자열 */
+  planBreakStart?: string
+  planBreakEnd?: string
+  /** 휴식시작–휴식종료. offPlan = 시작이 예정 구간 밖 */
+  breakSpans?: { start: string; end: string; offPlan: boolean }[]
   actualWorkHrs: number
   plannedWorkHrs: number
   diffMin: number
@@ -555,6 +579,7 @@ export async function GET(request: NextRequest) {
         inTime: string | null
         outTime: string | null
         breakMin: number
+        breakEvents: BreakPunch[]
         lateMin: number
         /** 퇴근 로그 early_min (NULL=미설정·계산값 사용, 0=조정으로 면제) */
         earlyMinFromDb: number | null
@@ -597,6 +622,7 @@ export async function GET(request: NextRequest) {
           inTime: null,
           outTime: null,
           breakMin: 0,
+          breakEvents: [],
           lateMin: 0,
           earlyMinFromDb: null,
           otMin: null,
@@ -659,7 +685,7 @@ export async function GET(request: NextRequest) {
           if (needsOutApproval) rec.outId = r.id ?? null
           rec.outLogId = r.id ?? null
         }
-      } else if (type === '휴식종료') {
+      } else if (type === '휴식시작' || type === '휴식종료') {
         const prevRec = lookupDayRec(byKey, addDay(rowDate, -1), rowStore, eid, name)
         const attachToPrev = shouldAttachClockOutToOpenPreviousShift({
           clockOutIso: logAt,
@@ -668,10 +694,13 @@ export async function GET(request: NextRequest) {
           prevOutIso: prevRec?.outTime,
         })
         const breakTarget = attachToPrev && prevRec ? prevRec : rec
-        const breakLogKey = `${String(logAt).slice(0, 19)}|${Number(r.break_min) || 0}`
-        if (!breakTarget.breakSeen.has(breakLogKey)) {
-          breakTarget.breakSeen.add(breakLogKey)
-          breakTarget.breakMin += Number(r.break_min) || 0
+        pushBreakEvent(breakTarget, type === '휴식시작' ? 'start' : 'end', logAt)
+        if (type === '휴식종료') {
+          const breakLogKey = `${String(logAt).slice(0, 19)}|${Number(r.break_min) || 0}`
+          if (!breakTarget.breakSeen.has(breakLogKey)) {
+            breakTarget.breakSeen.add(breakLogKey)
+            breakTarget.breakMin += Number(r.break_min) || 0
+          }
         }
       }
     }
@@ -700,6 +729,7 @@ export async function GET(request: NextRequest) {
       prevRec.outId = rec.outId
       prevRec.outLogId = rec.outLogId
       prevRec.breakMin += rec.breakMin
+      moveBreakEvents(rec, prevRec)
       rec.outTime = null
       rec.earlyMinFromDb = null
       rec.otMin = null
@@ -718,6 +748,7 @@ export async function GET(request: NextRequest) {
       const inTimeForRow = rec.inTime
       let outTimeForRow = rec.outTime
       let breakMinForRow = rec.breakMin
+      let breakEventsForRow = rec.breakEvents.slice()
       const lateMinForRow = rec.lateMin
       let earlyMinDb = rec.earlyMinFromDb
       let otMinForRow = rec.otMin
@@ -741,6 +772,8 @@ export async function GET(request: NextRequest) {
           outIdForRow = nextRec.outId
           outLogIdForRow = nextRec.outLogId
           breakMinForRow += nextRec.breakMin
+          breakEventsForRow = breakEventsForRow.concat(nextRec.breakEvents)
+          nextRec.breakEvents = []
           nextRec.outTime = null
           nextRec.earlyMinFromDb = null
           nextRec.otMin = null
@@ -791,6 +824,17 @@ export async function GET(request: NextRequest) {
       const actualWorkHrs = actualWorkMin / 60
       const diffMin = Math.round(actualWorkMin - plannedWorkMin)
       const breakOverMin = Math.max(0, Math.round(breakMinForRow - plannedBreakMin))
+      const breakSpans = pairBreakPunches(breakEventsForRow).map((sp) => ({
+        start: sp.startIso ? toTimeStr(sp.startIso) : '',
+        end: sp.endIso ? toTimeStr(sp.endIso) : '',
+        offPlan: breakSpanIsOffPlan({
+          scheduleDate: dateForRow,
+          planStart: planBS,
+          planEnd: planBE,
+          startIso: sp.startIso,
+          endIso: sp.endIso,
+        }),
+      }))
 
       const approval = outTimeForRow ? (outApprovedForRow || '대기') : '대기'
       const isPending = inIdForRow != null || outIdForRow != null
@@ -900,6 +944,9 @@ export async function GET(request: NextRequest) {
         outTimeStr: outTimeForRow ? (sameMinute ? toTimeStrWithSec(outTimeForRow) : outStr) : '-',
         breakMin: breakMinForRow,
         breakOverMin,
+        planBreakStart: formatPlanHm(planBS),
+        planBreakEnd: formatPlanHm(planBE),
+        breakSpans,
         actualWorkHrs: Math.round(actualWorkHrs * 100) / 100,
         plannedWorkHrs: Math.round(plannedWorkHrs * 100) / 100,
         diffMin,

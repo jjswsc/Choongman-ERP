@@ -245,6 +245,9 @@ export interface AttendanceDailyRow {
   outTimeStr: string
   breakMin: number
   breakOverMin?: number
+  planBreakStart?: string
+  planBreakEnd?: string
+  breakSpans?: { start: string; end: string; offPlan: boolean }[]
   actualWorkHrs: number
   plannedWorkHrs: number
   diffMin: number

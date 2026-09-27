@@ -787,6 +787,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_over_min")} <span className="text-[10px] text-muted-foreground">(M)</span></th>
+                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">{t("att_col_break_window")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_actual_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_planned_hrs")} <span className="text-[10px] text-muted-foreground">(H)</span></th>
                       {allowEdit && (
@@ -871,6 +872,26 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                             (row.breakOverMin ?? 0) > 0 ? "font-semibold text-red-600" : "text-muted-foreground"
                           )}>
                             {row.breakOverMin ?? 0}
+                          </td>
+                          <td className="px-2 py-2.5 text-center text-[11px] leading-tight whitespace-nowrap">
+                            <div className="text-muted-foreground">
+                              {t("att_break_plan_prefix")}{" "}
+                              {row.planBreakStart && row.planBreakEnd ? `${row.planBreakStart}–${row.planBreakEnd}` : "-"}
+                            </div>
+                            {(row.breakSpans ?? []).length === 0 ? (
+                              <div>
+                                {t("att_break_actual_prefix")} -
+                              </div>
+                            ) : (
+                              (row.breakSpans ?? []).map((sp, spanIdx) => (
+                                <div
+                                  key={spanIdx}
+                                  className={sp.offPlan ? "font-semibold text-red-600" : undefined}
+                                >
+                                  {t("att_break_actual_prefix")} {sp.start || "?"}–{sp.end || "…"}
+                                </div>
+                              ))
+                            )}
                           </td>
                           <td className="px-3 py-2.5 text-center">{row.actualWorkHrs}</td>
                           <td className="px-3 py-2.5 text-center">{row.plannedWorkHrs}</td>

@@ -25,6 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { getAdminEmployeeList, getWeeklySchedule, saveSchedule, type AdminEmployeeItem } from "@/lib/api-client"
+import { SchedulePersonEditMark, ScheduleWeekEditLine, useScheduleEditChanges } from "@/components/attendance/schedule-edit-log-panel"
 import { getMondayOfWeekBangkok, addDaysSchedule, todayStrBangkok } from "@/lib/attendance-utils"
 import { cn, displayLabelShort } from "@/lib/utils"
 import { findStaffForScheduleSlotName } from "@/lib/employee-display-name"
@@ -239,6 +240,7 @@ export function AdminScheduleEdit({
   const [isFullscreen, setIsFullscreen] = React.useState(false)
 
   const store = storeFilter === "All" || !storeFilter ? "" : storeFilter
+  const { changes: editChanges, reload: reloadEditLog } = useScheduleEditChanges(store, monday, !!store && !!monday)
   const isOffice = store.toLowerCase().includes("office") || store.includes("오피스") || store.includes("본사")
   const areas = isOffice ? (["Office"] as const) : (["Service", "Kitchen"] as const)
 
@@ -524,6 +526,7 @@ export function AdminScheduleEdit({
     saveSchedule({ store, monday: nextMonday, rows })
       .then(async (r) => {
         if (r.success) {
+          reloadEditLog()
           await appAlert(translateApiMessage(r.message, t) || (t("att_saved") || "저장되었습니다."))
           setMonday(nextMonday)
         } else if (r.message === "schedule_dup_area" && r.duplicateNames) {
@@ -558,7 +561,10 @@ export function AdminScheduleEdit({
     setSaving(true)
     saveSchedule({ store, monday, rows })
       .then(async (r) => {
-        if (r.success) await appAlert(translateApiMessage(r.message, t) || t("att_saved"))
+        if (r.success) {
+          reloadEditLog()
+          await appAlert(translateApiMessage(r.message, t) || t("att_saved"))
+        }
         else if (r.message === "schedule_dup_area" && r.duplicateNames) {
           await appAlert(t("schedule_dup_area").replace("{names}", r.duplicateNames))
         } else {
@@ -750,6 +756,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
 
   return (
     <div className="space-y-4">
+      {store ? <ScheduleWeekEditLine changes={editChanges} /> : null}
       {/* Smart tool */}
       <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-4">
         <h6 className="mb-3 font-bold text-primary">{t("att_smart_tool")}</h6>
@@ -898,6 +905,14 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                 {s.employeeCode ? (
                   <span className="ml-1 text-[10px] opacity-80">{s.employeeCode}</span>
                 ) : null}
+                <SchedulePersonEditMark
+                  changes={editChanges}
+                  employeeId={s.id}
+                  employeeCode={s.employeeCode}
+                  names={[s.nick, s.name]}
+                  store={store}
+                  className={selectedStaff && staffSlotKey(selectedStaff) === slotKey ? "text-primary-foreground/90" : undefined}
+                />
               </button>
             )})}
           </div>
