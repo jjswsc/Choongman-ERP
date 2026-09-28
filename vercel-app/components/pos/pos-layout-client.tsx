@@ -5,6 +5,12 @@ import { navigatePosOfflineAware, replacePosOfflineAware } from "@/lib/pos-offli
 import { useRouter, usePathname } from "next/navigation"
 import { ArrowLeft, ChevronDown, ChevronUp, Home } from "lucide-react"
 import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
+import {
+  hasRecentChunkRecovery,
+  recoverFromChunkLoadError,
+  shouldAutoResetStuckAuthShell,
+  STUCK_AUTH_SHELL_RECOVER_MS,
+} from "@/lib/chunk-load-recovery"
 import { PosHybridPrintDiagnosticsButton } from "@/components/pos/pos-hybrid-print-diagnostics"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
@@ -194,6 +200,29 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     setShellMinimizeAvailable(typeof window.cmPosShell?.minimizeWindow === "function")
     setShellQuitAvailable(typeof window.cmPosShell?.quitApp === "function")
   }, [])
+
+  const showingAuthShell = !isPosLoginPage && !isCustomerDisplayPage && (!initialized || !auth)
+
+  /** 정전 뒤 스피너만 남으면 흰 화면 복구가 안 돈다. 하이브리드만 Reset Cache 와 같이 연다. */
+  useEffect(() => {
+    if (!showingAuthShell) return
+    const started = Date.now()
+    const tid = window.setTimeout(() => {
+      if (
+        !shouldAutoResetStuckAuthShell({
+          showingAuthShell: true,
+          isHybridShell: isCmPosHybridShell(),
+          elapsedMs: Date.now() - started,
+          recentRecovery: hasRecentChunkRecovery(),
+          online: typeof navigator === "undefined" ? true : navigator.onLine !== false,
+        })
+      ) {
+        return
+      }
+      void recoverFromChunkLoadError()
+    }, STUCK_AUTH_SHELL_RECOVER_MS)
+    return () => window.clearTimeout(tid)
+  }, [showingAuthShell])
 
   /** 로그인 후 POS 홈부터 Second Monitor 자동 오픈 (터미널 진입 전에 열리도록) */
   useEffect(() => {

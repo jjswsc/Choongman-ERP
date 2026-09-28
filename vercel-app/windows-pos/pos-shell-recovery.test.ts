@@ -5,6 +5,7 @@ const recovery = require("./pos-shell-recovery.js") as {
   DOM_BLANK_PROBE_JS: string
   nextLiveBlankHits: (prev: number, isBlank: boolean) => number
   decideLiveBlankAction: (opts: Record<string, unknown>) => string
+  decideStalledMainLoadAction: (opts: Record<string, unknown>) => string
   decideRendererGoneAction: (opts: Record<string, unknown>) => string
   shouldOpenAtLogin: (opts: Record<string, unknown>) => boolean
   shouldRelaunchAfterAllWindowsClosed: (opts: Record<string, unknown>) => boolean
@@ -102,6 +103,33 @@ describe("pos-shell-recovery", () => {
         maxRecoveries: 3,
       })
     ).toBe("offline")
+  })
+
+  it("clears cache when the app URL is open but the document never finishes", () => {
+    expect(
+      recovery.decideStalledMainLoadAction({
+        stillLoading: true,
+        recoveriesInWindow: 0,
+        isOnline: true,
+      })
+    ).toBe("clear-cache")
+    expect(
+      recovery.decideStalledMainLoadAction({
+        stillLoading: true,
+        recoveriesInWindow: 0,
+        isOnline: false,
+      })
+    ).toBe("cache-reload")
+    expect(recovery.decideStalledMainLoadAction({ stillLoading: false, isOnline: true })).toBe("wait")
+    expect(
+      recovery.decideStalledMainLoadAction({
+        stillLoading: true,
+        recoveriesInWindow: 3,
+        maxRecoveries: 3,
+        isOnline: true,
+      })
+    ).toBe("offline")
+    expect(recovery.decideStalledMainLoadAction({ stillLoading: true, cooldown: true })).toBe("wait")
   })
 
   it("does not touch the page while loading, cooling down, or on offline.html", () => {

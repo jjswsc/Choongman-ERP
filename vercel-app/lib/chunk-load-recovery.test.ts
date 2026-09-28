@@ -9,8 +9,10 @@ import {
   isHybridCacheResetSkippedOffline,
   recoverFromChunkLoadError,
   shouldClearBuildRelatedCache,
+  shouldAutoResetStuckAuthShell,
   shouldRecoverStaleBundleEvent,
   shouldWipeCachesForChunkRecovery,
+  STUCK_AUTH_SHELL_RECOVER_MS,
 } from "@/lib/chunk-load-recovery"
 
 describe("isChunkLoadError", () => {
@@ -80,6 +82,57 @@ describe("shouldRecoverStaleBundleEvent", () => {
 
   it("does not wipe caches while offline", () => {
     expect(shouldRecoverStaleBundleEvent(new Error("Loading chunk 1 failed"), false, false)).toBe(false)
+  })
+})
+
+describe("shouldAutoResetStuckAuthShell", () => {
+  it("resets only a hybrid spinner that has been up past the wait, while online", () => {
+    expect(STUCK_AUTH_SHELL_RECOVER_MS).toBe(30_000)
+    expect(
+      shouldAutoResetStuckAuthShell({
+        showingAuthShell: true,
+        isHybridShell: true,
+        elapsedMs: STUCK_AUTH_SHELL_RECOVER_MS,
+        recentRecovery: false,
+        online: true,
+      })
+    ).toBe(true)
+    expect(
+      shouldAutoResetStuckAuthShell({
+        showingAuthShell: true,
+        isHybridShell: true,
+        elapsedMs: STUCK_AUTH_SHELL_RECOVER_MS - 1,
+        recentRecovery: false,
+        online: true,
+      })
+    ).toBe(false)
+    expect(
+      shouldAutoResetStuckAuthShell({
+        showingAuthShell: true,
+        isHybridShell: false,
+        elapsedMs: STUCK_AUTH_SHELL_RECOVER_MS,
+        recentRecovery: false,
+        online: true,
+      })
+    ).toBe(false)
+    expect(
+      shouldAutoResetStuckAuthShell({
+        showingAuthShell: true,
+        isHybridShell: true,
+        elapsedMs: STUCK_AUTH_SHELL_RECOVER_MS,
+        recentRecovery: false,
+        online: false,
+      })
+    ).toBe(false)
+    expect(
+      shouldAutoResetStuckAuthShell({
+        showingAuthShell: false,
+        isHybridShell: true,
+        elapsedMs: STUCK_AUTH_SHELL_RECOVER_MS,
+        recentRecovery: true,
+        online: true,
+      })
+    ).toBe(false)
   })
 })
 

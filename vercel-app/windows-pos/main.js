@@ -1782,6 +1782,17 @@ function schedulePosDomBlankWatchdog() {
   }, posDomBlankCheckMs());
 }
 
+function isPosMainFrameLoading() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  try {
+    return typeof mainWindow.webContents.isLoadingMainFrame === "function"
+      ? Boolean(mainWindow.webContents.isLoadingMainFrame())
+      : Boolean(mainWindow.webContents.isLoading());
+  } catch {
+    return false;
+  }
+}
+
 /** POS URL 로드 시작 후 일정 시간 안에 화면이 확정되지 않으면 offline.html 로 폴백 */
 function schedulePosMainLoadWatchdog() {
   clearPosMainLoadWatchdog();
@@ -1790,8 +1801,24 @@ function schedulePosMainLoadWatchdog() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     try {
       const u = mainWindow.webContents.getURL() || "";
-      if (ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN)) return;
       if (u.includes("offline.html")) return;
+      if (ALLOWED_ORIGIN && u.startsWith(ALLOWED_ORIGIN)) {
+        const action = posShellRecovery.decideStalledMainLoadAction({
+          stillLoading: isPosMainFrameLoading(),
+          recoveriesInWindow: currentLiveBlankRecoveries(),
+          maxRecoveries: POS_LIVE_BLANK_MAX_RECOVERIES,
+          isOnline: isSystemOnline(),
+        });
+        if (action === "wait") return;
+        console.warn("[cm-pos] main URL load stalled on app origin", action);
+        try {
+          mainWindow.webContents.stop();
+        } catch {
+          /* ignore */
+        }
+        applyLiveBlankAction(action);
+        return;
+      }
       console.warn("[cm-pos] main URL load watchdog: no usable page, showing offline fallback");
       loadOfflineFallbackPage();
     } catch (e) {

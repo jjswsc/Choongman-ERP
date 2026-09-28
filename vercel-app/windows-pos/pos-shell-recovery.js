@@ -42,6 +42,21 @@ function decideLiveBlankAction(opts) {
 }
 
 /**
+ * 주소는 이미 앱인데 본문 load 가 끝나지 않음.
+ * 정전 뒤 캐시·Wi-Fi가 반쯤 죽으면 스피너만 그려지고 did-finish-load 가 안 온다.
+ * 그때 “주소가 맞다”고 두면 직원이 Reset Cache 를 눌러야 한다.
+ * @returns {'wait'|'clear-cache'|'cache-reload'|'offline'}
+ */
+function decideStalledMainLoadAction(opts) {
+  const o = opts || {};
+  const recoveriesInWindow = Math.max(0, Number(o.recoveriesInWindow) || 0);
+  const maxRecoveries = Math.max(1, Number(o.maxRecoveries) || 3);
+  if (o.onOfflinePage || o.cooldown) return "wait";
+  if (!o.stillLoading) return "wait";
+  return liveBlankRecoverAction(o, recoveriesInWindow, maxRecoveries);
+}
+
+/**
  * @returns {'ignore'|'clear-cache'|'cache-reload'|'offline'}
  */
 function decideRendererGoneAction(opts) {
@@ -92,6 +107,7 @@ module.exports = {
   DOM_BLANK_PROBE_JS,
   nextLiveBlankHits,
   decideLiveBlankAction,
+  decideStalledMainLoadAction,
   decideRendererGoneAction,
   shouldOpenAtLogin,
   shouldRelaunchAfterAllWindowsClosed,
