@@ -23,6 +23,21 @@ import { CRM_SEGMENT_LABEL_KEYS } from "@/lib/i18n-crm-segments"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import { useErpAllowUrlSync, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import {
+  applyCrmDatePreset,
+  clampCrmDormantDays,
+  clampCrmRecentDays,
+  crmCutoffDateFromDays,
+  crmDormantDateBounds,
+  crmRecentDateBounds,
+  CRM_DATE_PRESET_IDS,
+  isCrmCutoffOrderValid,
+  matchCrmDatePreset,
+  resolveCrmDormantCutoff,
+  resolveCrmRecentCutoff,
+  type CrmDatePresetId,
+} from "@/lib/crm-dashboard-dates"
 import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 
 type SegmentRow = {
@@ -58,19 +73,24 @@ export default function CrmSegmentsPage() {
   const initialStore = searchParams.get("store") || searchParams.get("storeCode") || ""
   const initialDays = Number(searchParams.get("days") || searchParams.get("recentDays") || 30)
   const initialDormant = Number(searchParams.get("dormantDays") || 90)
+  const todayBangkok = React.useMemo(() => getBangkokTodayDateString(), [])
+  const recentBounds = React.useMemo(() => crmRecentDateBounds(todayBangkok), [todayBangkok])
+  const dormantBounds = React.useMemo(() => crmDormantDateBounds(todayBangkok), [todayBangkok])
+  const initialRecent = clampCrmRecentDays(initialDays)
+  const initialDormantDays = clampCrmDormantDays(initialDormant)
 
   const [segment, setSegment] = React.useState<CrmSegmentKey>(
     isSegmentKey(initialSeg) ? initialSeg : "recent30"
   )
   const [storeCode, setStoreCode] = React.useState(initialStore)
-  const [recentDays, setRecentDays] = React.useState(
-    Number.isFinite(initialDays) ? Math.max(7, Math.min(365, initialDays)) : 30
+  const [recentDays, setRecentDays] = React.useState(initialRecent)
+  const [dormantDays, setDormantDays] = React.useState(initialDormantDays)
+  const [draftRecentDate, setDraftRecentDate] = React.useState(() =>
+    crmCutoffDateFromDays(initialRecent, todayBangkok)
   )
-  const [dormantDays, setDormantDays] = React.useState(
-    Number.isFinite(initialDormant) ? Math.max(14, Math.min(720, initialDormant)) : 90
+  const [draftDormantDate, setDraftDormantDate] = React.useState(() =>
+    crmCutoffDateFromDays(initialDormantDays, todayBangkok)
   )
-  const [draftRecentDays, setDraftRecentDays] = React.useState(String(recentDays))
-  const [draftDormantDays, setDraftDormantDays] = React.useState(String(dormantDays))
   const [storeOptions, setStoreOptions] = React.useState<string[]>([])
   const [rows, setRows] = React.useState<SegmentRow[]>([])
   const [counts, setCounts] = React.useState<Partial<Record<CrmSegmentKey, number>>>({})
@@ -148,17 +168,17 @@ export default function CrmSegmentsPage() {
     if (store != null) setStoreCode(store)
     const days = Number(searchParams.get("days") || searchParams.get("recentDays") || NaN)
     if (Number.isFinite(days)) {
-      const n = Math.max(7, Math.min(365, days))
+      const n = clampCrmRecentDays(days)
       setRecentDays(n)
-      setDraftRecentDays(String(n))
+      setDraftRecentDate(crmCutoffDateFromDays(n, todayBangkok))
     }
     const dorm = Number(searchParams.get("dormantDays") || NaN)
     if (Number.isFinite(dorm)) {
-      const n = Math.max(14, Math.min(720, dorm))
+      const n = clampCrmDormantDays(dorm)
       setDormantDays(n)
-      setDraftDormantDays(String(n))
+      setDraftDormantDate(crmCutoffDateFromDays(n, todayBangkok))
     }
-  }, [allowSegmentsUrlSync, searchParams])
+  }, [allowSegmentsUrlSync, searchParams, todayBangkok])
 
   React.useEffect(() => {
     setFilterDraft("")
@@ -209,15 +229,35 @@ export default function CrmSegmentsPage() {
     setFilterQ(filterDraft.trim())
   }
 
-  const applyDayStore = (e?: React.FormEvent) => {
+  const applyDateStore = (e?: React.FormEvent) => {
     e?.preventDefault()
-    const nextRecent = Math.max(7, Math.min(365, Number(draftRecentDays) || 30))
-    const nextDormant = Math.max(14, Math.min(720, Number(draftDormantDays) || 90))
-    setDraftRecentDays(String(nextRecent))
-    setDraftDormantDays(String(nextDormant))
-    setRecentDays(nextRecent)
-    setDormantDays(nextDormant)
+    const nextRecent = resolveCrmRecentCutoff(draftRecentDate, todayBangkok)
+    const nextDormant = resolveCrmDormantCutoff(draftDormantDate, todayBangkok)
+    if (!isCrmCutoffOrderValid(nextRecent.date, nextDormant.date)) {
+      setDraftRecentDate(nextRecent.date)
+      setDraftDormantDate(nextDormant.date)
+      return
+    }
+    setDraftRecentDate(nextRecent.date)
+    setDraftDormantDate(nextDormant.date)
+    setRecentDays(nextRecent.days)
+    setDormantDays(nextDormant.days)
   }
+
+  const applyPreset = (id: CrmDatePresetId) => {
+    const applied = applyCrmDatePreset(id, todayBangkok)
+    setDraftRecentDate(applied.recent.date)
+    setDraftDormantDate(applied.dormant.date)
+    setRecentDays(applied.recent.days)
+    setDormantDays(applied.dormant.days)
+  }
+
+  const cutoffOrderValid = isCrmCutoffOrderValid(draftRecentDate, draftDormantDate)
+  const activePreset = matchCrmDatePreset(
+    resolveCrmRecentCutoff(draftRecentDate, todayBangkok).days,
+    resolveCrmDormantCutoff(draftDormantDate, todayBangkok).days,
+    todayBangkok
+  )
 
   return (
     <div className="flex-1 overflow-auto">
@@ -247,52 +287,79 @@ export default function CrmSegmentsPage() {
               ))}
             </div>
 
-            <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" onSubmit={applyDayStore}>
-              <div className="space-y-1.5">
-                <Label className="text-xs">{t("crmSegStoreFilter")}</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={storeCode}
-                  onChange={(e) => setStoreCode(e.target.value)}
+            <div className="flex flex-wrap gap-2">
+              {CRM_DATE_PRESET_IDS.map((id) => (
+                <Button
+                  key={id}
+                  type="button"
+                  size="sm"
+                  variant={activePreset === id ? "default" : "outline"}
+                  onClick={() => applyPreset(id)}
                 >
-                  <option value="">{t("crmDashStoreAll")}</option>
-                  {storeOptions.map((code) => (
-                    <option key={code} value={code}>
-                      {code}
-                    </option>
-                  ))}
-                  <option value="__unset__">—</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">{t("crmDashRecentDays")}</Label>
-                <Input
-                  type="number"
-                  min={7}
-                  max={365}
-                  value={draftRecentDays}
-                  onChange={(e) => setDraftRecentDays(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">{t("crmDashDormantDays")}</Label>
-                <Input
-                  type="number"
-                  min={14}
-                  max={720}
-                  value={draftDormantDays}
-                  onChange={(e) => setDraftDormantDays(e.target.value)}
-                />
-              </div>
-              <div className="flex items-end gap-2 sm:col-span-2">
-                <Button type="submit" size="sm">
-                  <Search className="mr-1 h-4 w-4" />
-                  {t("btn_query")}
+                  {t(
+                    id === "d7_30"
+                      ? "crmDashPreset7_30"
+                      : id === "d30_90"
+                        ? "crmDashPreset30_90"
+                        : id === "d60_180"
+                          ? "crmDashPreset60_180"
+                          : "crmDashPresetThisMonth"
+                  )}
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => load()} disabled={loading}>
-                  {loading ? t("crmSeg_querying") : t("adminOpsCenterReload")}
-                </Button>
+              ))}
+            </div>
+
+            <form className="space-y-2" onSubmit={applyDateStore}>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("crmSegStoreFilter")}</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={storeCode}
+                    onChange={(e) => setStoreCode(e.target.value)}
+                  >
+                    <option value="">{t("crmDashStoreAll")}</option>
+                    {storeOptions.map((code) => (
+                      <option key={code} value={code}>
+                        {code}
+                      </option>
+                    ))}
+                    <option value="__unset__">—</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("crmDashRecentDays")}</Label>
+                  <Input
+                    type="date"
+                    min={recentBounds.min}
+                    max={recentBounds.max}
+                    value={draftRecentDate}
+                    onChange={(e) => setDraftRecentDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("crmDashDormantDays")}</Label>
+                  <Input
+                    type="date"
+                    min={dormantBounds.min}
+                    max={dormantBounds.max}
+                    value={draftDormantDate}
+                    onChange={(e) => setDraftDormantDate(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end gap-2 sm:col-span-2">
+                  <Button type="submit" size="sm" disabled={!cutoffOrderValid}>
+                    <Search className="mr-1 h-4 w-4" />
+                    {t("btn_query")}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => load()} disabled={loading}>
+                    {loading ? t("crmSeg_querying") : t("adminOpsCenterReload")}
+                  </Button>
+                </div>
               </div>
+              {!cutoffOrderValid ? (
+                <p className="text-xs text-destructive">{t("crmDashCutoffOrderInvalid")}</p>
+              ) : null}
             </form>
 
             <form className="flex flex-wrap items-center gap-2" onSubmit={runFilterSearch}>

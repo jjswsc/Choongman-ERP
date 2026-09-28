@@ -27,7 +27,31 @@ export type CrmSummary = {
   avgOrderAmount: number
 }
 
-export async function getCrmSummary(params?: { recentDays?: number; dormantDays?: number }): Promise<CrmSummary> {
+export async function getCrmSummary(params?: {
+  recentDays?: number
+  dormantDays?: number
+  storeCode?: string
+}): Promise<CrmSummary> {
+  const recentDays = clampDays(params?.recentDays, 30, 7, 365)
+  const dormantDays = clampDays(params?.dormantDays, 90, 14, 720)
+  const storeCode = toText(params?.storeCode)
+  const storeRpc =
+    storeCode && storeCode !== 'All' && storeCode !== '__all__' ? storeCode : null
+
+  const mapRow = (row: {
+    total_members?: number
+    recent_active_members?: number
+    dormant_members?: number
+    total_lifetime_amount?: number
+    avg_order_amount?: number
+  }): CrmSummary => ({
+    totalMembers: Number(row.total_members || 0),
+    recentActiveMembers: Number(row.recent_active_members || 0),
+    dormantMembers: Number(row.dormant_members || 0),
+    totalLifetimeAmount: Number(row.total_lifetime_amount || 0),
+    avgOrderAmount: Number(row.avg_order_amount || 0),
+  })
+
   try {
     const rows = (await supabaseRpc<Array<{
       total_members?: number
@@ -36,28 +60,70 @@ export async function getCrmSummary(params?: { recentDays?: number; dormantDays?
       total_lifetime_amount?: number
       avg_order_amount?: number
     }>>('get_member_crm_summary', {
-      p_recent_days: Number(params?.recentDays || 30),
-      p_dormant_days: Number(params?.dormantDays || 90),
+      p_recent_days: recentDays,
+      p_dormant_days: dormantDays,
+      p_store_code: storeRpc,
     })) || []
-    const row = rows[0] || {}
+    if (rows[0]) return mapRow(rows[0])
+  } catch {
+    /* 3인자 RPC 미배포 → 2인자 재시도(전체) 또는 select fallback */
+  }
+
+  if (!storeRpc) {
+    try {
+      const rows = (await supabaseRpc<Array<{
+        total_members?: number
+        recent_active_members?: number
+        dormant_members?: number
+        total_lifetime_amount?: number
+        avg_order_amount?: number
+      }>>('get_member_crm_summary', {
+        p_recent_days: recentDays,
+        p_dormant_days: dormantDays,
+      })) || []
+      if (rows[0]) return mapRow(rows[0])
+    } catch {
+      /* select fallback below */
+    }
+  }
+
+  try {
+    const storePart = storeFilterPart(storeCode)
+    const todayBangkok = getBangkokTodayDateString()
+    const recentStart = getBangkokStartOfDayUtcIso(addBangkokCalendarDays(todayBangkok, -recentDays))
+    const dormantBefore = getBangkokStartOfDayUtcIso(addBangkokCalendarDays(todayBangkok, -dormantDays))
+    const members = (
+      storePart
+        ? await supabaseSelectFilter('members', storePart, { limit: 100000, select: 'id,lifetime_amount' })
+        : await supabaseSelect('members', { limit: 100000, select: 'id,lifetime_amount' })
+    ) as Array<{ id?: number; lifetime_amount?: number }>
+    const totalMembers = members.length
+    const totalLifetimeAmount = members.reduce((a, b) => a + Number(b.lifetime_amount || 0), 0)
+    const dormantFilter =
+      andFilters(
+        storePart,
+        `or=(last_visited_at.is.null,last_visited_at.lt.${encodeURIComponent(dormantBefore)})`
+      ) || `or=(last_visited_at.is.null,last_visited_at.lt.${encodeURIComponent(dormantBefore)})`
+    const recentFilter =
+      andFilters(storePart, `last_visited_at=gte.${encodeURIComponent(recentStart)}`) ||
+      `last_visited_at=gte.${encodeURIComponent(recentStart)}`
+    const [dormantMembers, recentActiveMembers] = await Promise.all([
+      countOrZero('members', dormantFilter),
+      countOrZero('members', recentFilter),
+    ])
     return {
-      totalMembers: Number(row.total_members || 0),
-      recentActiveMembers: Number(row.recent_active_members || 0),
-      dormantMembers: Number(row.dormant_members || 0),
-      totalLifetimeAmount: Number(row.total_lifetime_amount || 0),
-      avgOrderAmount: Number(row.avg_order_amount || 0),
+      totalMembers,
+      recentActiveMembers,
+      dormantMembers,
+      totalLifetimeAmount,
+      avgOrderAmount: 0,
     }
   } catch {
-    const members = (await supabaseSelect('members', { limit: 100000, select: 'id,lifetime_amount' })) as Array<{
-      id?: number
-      lifetime_amount?: number
-    }>
-    const totalLifetimeAmount = (members || []).reduce((a, b) => a + Number(b.lifetime_amount || 0), 0)
     return {
-      totalMembers: members.length,
+      totalMembers: 0,
       recentActiveMembers: 0,
       dormantMembers: 0,
-      totalLifetimeAmount,
+      totalLifetimeAmount: 0,
       avgOrderAmount: 0,
     }
   }

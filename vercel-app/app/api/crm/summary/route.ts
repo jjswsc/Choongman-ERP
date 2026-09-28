@@ -8,7 +8,12 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const recentDays = Number(searchParams.get('recentDays') || 30)
   const dormantDays = Number(searchParams.get('dormantDays') || 90)
-  const summary = await getCrmSummary({ recentDays, dormantDays })
+  const storeCode = String(searchParams.get('storeCode') || '').trim()
+  const summary = await getCrmSummary({
+    recentDays,
+    dormantDays,
+    storeCode: storeCode || undefined,
+  })
   return NextResponse.json({ success: true, summary })
 }
 

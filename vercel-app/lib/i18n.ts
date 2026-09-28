@@ -7987,11 +7987,11 @@ export const i18n = {
     helpSum_admin_crm:
       '지휘(우선순위) 화면입니다. KPI·오늘 할 일·매장 비교로 「어디를 먼저 챙길지」를 보고, 대상 목록·CSV·캠페인은「고객 세그먼트」에서 실행합니다.',
     helpHow_admin_crm:
-      '① 최근활동·휴면 일수를 입력한 뒤「검색」하면 KPI와 세그먼트 수가 같은 일수로 맞춰집니다.\n② 「오늘 할 일」에서 휴면·이탈위험·신규 상위 회원을 열고 쿠폰 지급으로 바로 이동합니다.\n③ 「매장 비교」로 가입 매장별 활성·신규·휴면을 본 뒤, 카드/행에서 세그먼트 화면으로 딥링크합니다.\n④ 생일±7일·미사용 포인트 세그먼트도 미리보기 카드에서 확인할 수 있습니다.',
+      '① 프리셋(7/30·30/90·60/180·이번 달) 또는 최근활동·휴면 기준일을 고른 뒤「검색」하면 KPI·세그먼트 수가 같은 날짜로 맞춰집니다. 매장 필터도 KPI에 반영됩니다.\n② 최근활동 기준일은 휴면 기준일보다 이후여야 합니다(이탈위험 구간).\n③ 「오늘 할 일」에서 휴면·이탈위험·신규 상위 회원을 열고 쿠폰 지급으로 바로 이동합니다.\n④ 「매장 비교」로 가입 매장별 활성·신규·휴면을 본 뒤, 카드/행에서 세그먼트 화면으로 딥링크합니다.',
     helpSum_admin_crm_segments:
       '실행(대상 작업) 화면입니다. 세그먼트별 전체 목록·가입 매장 필터·CSV·쿠폰/캠페인을 처리합니다. 우선순위는 CRM 대시보드에서 잡습니다.',
     helpHow_admin_crm_segments:
-      '① 칩으로 최근방문·휴면·신규·VIP·이탈위험·생일±7일·미사용포인트를 선택합니다.\n② 가입 매장·(대시보드에서 넘긴) 일수 쿼리를 반영해 목록을 조회합니다.\n③ CSV로 내보내고, 회원 상세·쿠폰 지급·캠페인 만들기로 이어갑니다.\n④ URL `?segment=&store=&days=` 딥링크로 대시보드와 연결됩니다.',
+      '① 칩으로 최근방문·휴면·신규·VIP·이탈위험·생일±7일·미사용포인트를 선택합니다.\n② 가입 매장·프리셋/기준일(대시보드에서 넘긴 값)을 반영해 목록을 조회합니다. 최근활동일은 휴면일보다 이후여야 합니다.\n③ CSV로 내보내고, 회원 상세·쿠폰 지급·캠페인 만들기로 이어갑니다.\n④ URL `?segment=&store=&days=` 딥링크로 대시보드와 연결됩니다.',
     helpSum_admin_crm_rfm:
       '고객별 Recency/Frequency/Monetary 점수를 산출해 고객가치를 비교하는 화면입니다.',
     helpHow_admin_crm_rfm:
@@ -16396,11 +16396,11 @@ orderItemQty: 'Qty',
     helpSum_admin_crm:
       'Command (priority) screen: KPIs, today’s actions, and store comparison. Run full lists, CSV, and campaigns in Customer Segments.',
     helpHow_admin_crm:
-      '① Set recent/dormant day thresholds and Search — KPIs and segment counts use the same windows.\n② Today’s actions lists top dormant / at-risk / new members with links to member detail and coupon issue.\n③ Store comparison shows active/new/dormant by join store; cards and rows deep-link to Segments.\n④ Birthday ±7d and idle-points segments appear in the preview cards.',
+      '① Use presets (7/30, 30/90, 60/180, this month) or pick cutoff dates, then Search — KPIs and segment counts share those dates. Store filter also applies to KPIs.\n② Recent-activity date must be after the dormant date (at-risk window).\n③ Today’s actions lists top dormant / at-risk / new members with links to member detail and coupon issue.\n④ Store comparison shows active/new/dormant by join store; cards and rows deep-link to Segments.',
     helpSum_admin_crm_segments:
       'Execution (audience) screen: full segment lists, join-store filter, CSV, and coupon/campaign actions. Set priorities on the CRM dashboard.',
     helpHow_admin_crm_segments:
-      '① Pick a chip: recent, dormant, new, VIP, at-risk, birthday ±7d, or idle points.\n② Apply join-store filter and day params passed from the dashboard.\n③ Export CSV or open member / coupon / campaign flows.\n④ Deep links: `?segment=&store=&days=`.',
+      '① Pick a chip: recent, dormant, new, VIP, at-risk, birthday ±7d, or idle points.\n② Apply join-store filter and cutoff presets/dates from the dashboard. Recent date must be after dormant date.\n③ Export CSV or open member / coupon / campaign flows.\n④ Deep links: `?segment=&store=&days=`.',
     helpSum_admin_crm_rfm:
       'RFM scoring screen to compare customer value with Recency/Frequency/Monetary.',
     helpHow_admin_crm_rfm:

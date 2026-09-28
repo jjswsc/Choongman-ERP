@@ -25,7 +25,21 @@ import {
 import { CRM_SEGMENT_LABEL_KEYS } from "@/lib/i18n-crm-segments"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getBangkokDateTimeString } from "@/lib/bangkok-time"
+import { getBangkokDateTimeString, getBangkokTodayDateString } from "@/lib/bangkok-time"
+import {
+  applyCrmDatePreset,
+  crmCutoffDateFromDays,
+  crmDormantDateBounds,
+  crmRecentDateBounds,
+  CRM_DATE_PRESET_IDS,
+  CRM_DORMANT_DAYS_DEFAULT,
+  CRM_RECENT_DAYS_DEFAULT,
+  isCrmCutoffOrderValid,
+  matchCrmDatePreset,
+  resolveCrmDormantCutoff,
+  resolveCrmRecentCutoff,
+  type CrmDatePresetId,
+} from "@/lib/crm-dashboard-dates"
 
 type Summary = {
   totalMembers: number
@@ -55,11 +69,12 @@ type StoreStat = {
 
 const ACTION_SEGMENTS: CrmSegmentKey[] = ["dormant90", "atRisk", "new30"]
 
-async function loadSummary(recentDays: number, dormantDays: number): Promise<Summary> {
+async function loadSummary(recentDays: number, dormantDays: number, storeCode?: string): Promise<Summary> {
   const q = new URLSearchParams({
     recentDays: String(recentDays),
     dormantDays: String(dormantDays),
   })
+  if (storeCode) q.set("storeCode", storeCode)
   const res = await apiFetch(`/api/crm/summary?${q}`, { cache: "no-store" })
   if (!res.ok) {
     return { totalMembers: 0, recentActiveMembers: 0, dormantMembers: 0, totalLifetimeAmount: 0, avgOrderAmount: 0 }
@@ -85,10 +100,19 @@ function formatVisit(v?: string): string {
 export default function CrmDashboardPage() {
   const { lang } = useLang()
   const t = useT(lang)
-  const [draftRecentDays, setDraftRecentDays] = React.useState("30")
-  const [draftDormantDays, setDraftDormantDays] = React.useState("90")
-  const [recentDays, setRecentDays] = React.useState(30)
-  const [dormantDays, setDormantDays] = React.useState(90)
+  const todayBangkok = React.useMemo(() => getBangkokTodayDateString(), [])
+  const recentBounds = React.useMemo(() => crmRecentDateBounds(todayBangkok), [todayBangkok])
+  const dormantBounds = React.useMemo(() => crmDormantDateBounds(todayBangkok), [todayBangkok])
+  const [draftRecentDate, setDraftRecentDate] = React.useState(() =>
+    crmCutoffDateFromDays(CRM_RECENT_DAYS_DEFAULT, todayBangkok)
+  )
+  const [draftDormantDate, setDraftDormantDate] = React.useState(() =>
+    crmCutoffDateFromDays(CRM_DORMANT_DAYS_DEFAULT, todayBangkok)
+  )
+  const [recentDays, setRecentDays] = React.useState(CRM_RECENT_DAYS_DEFAULT)
+  const [dormantDays, setDormantDays] = React.useState(CRM_DORMANT_DAYS_DEFAULT)
+  const [recentDate, setRecentDate] = React.useState(draftRecentDate)
+  const [dormantDate, setDormantDate] = React.useState(draftDormantDate)
   const [storeFilter, setStoreFilter] = React.useState("")
   const [summary, setSummary] = React.useState<Summary>({
     totalMembers: 0,
@@ -130,7 +154,7 @@ export default function CrmDashboardPage() {
         })
 
         const [sum, segRes, storeRes, ...queueRes] = await Promise.all([
-          loadSummary(nextRecent, nextDormant),
+          loadSummary(nextRecent, nextDormant, nextStore || undefined),
           apiFetch(`/api/crm/segment-counts?${countQ}`, { cache: "no-store" }),
           apiFetch(`/api/crm/store-stats?${storeQ}`, { cache: "no-store" }),
           ...ACTION_SEGMENTS.map((seg) => {
@@ -174,18 +198,46 @@ export default function CrmDashboardPage() {
     // 최초 1회만 — 검색 버튼으로만 재조회
   }, [])
 
+  const cutoffOrderValid = isCrmCutoffOrderValid(draftRecentDate, draftDormantDate)
+  const activePreset = matchCrmDatePreset(
+    resolveCrmRecentCutoff(draftRecentDate, todayBangkok).days,
+    resolveCrmDormantCutoff(draftDormantDate, todayBangkok).days,
+    todayBangkok
+  )
+
   const runSearch = React.useCallback(
     (e?: React.FormEvent) => {
       e?.preventDefault()
-      const nextRecent = Math.max(7, Math.min(365, Number(draftRecentDays) || 30))
-      const nextDormant = Math.max(14, Math.min(720, Number(draftDormantDays) || 90))
-      setDraftRecentDays(String(nextRecent))
-      setDraftDormantDays(String(nextDormant))
-      setRecentDays(nextRecent)
-      setDormantDays(nextDormant)
-      void refresh(nextRecent, nextDormant, storeFilter)
+      const nextRecent = resolveCrmRecentCutoff(draftRecentDate, todayBangkok)
+      const nextDormant = resolveCrmDormantCutoff(draftDormantDate, todayBangkok)
+      if (!isCrmCutoffOrderValid(nextRecent.date, nextDormant.date)) {
+        setDraftRecentDate(nextRecent.date)
+        setDraftDormantDate(nextDormant.date)
+        return
+      }
+      setDraftRecentDate(nextRecent.date)
+      setDraftDormantDate(nextDormant.date)
+      setRecentDate(nextRecent.date)
+      setDormantDate(nextDormant.date)
+      setRecentDays(nextRecent.days)
+      setDormantDays(nextDormant.days)
+      void refresh(nextRecent.days, nextDormant.days, storeFilter)
     },
-    [draftRecentDays, draftDormantDays, storeFilter, refresh]
+    [draftRecentDate, draftDormantDate, todayBangkok, storeFilter, refresh]
+  )
+
+  const applyPreset = React.useCallback(
+    (id: CrmDatePresetId) => {
+      const applied = applyCrmDatePreset(id, todayBangkok)
+      setDraftRecentDate(applied.recent.date)
+      setDraftDormantDate(applied.dormant.date)
+      setRecentDate(applied.recent.date)
+      setDormantDate(applied.dormant.date)
+      setRecentDays(applied.recent.days)
+      setDormantDays(applied.dormant.days)
+      void refresh(applied.recent.days, applied.dormant.days, storeFilter)
+    },
+    [todayBangkok, storeFilter, refresh]
   )
 
   const dormantRate =
@@ -214,58 +266,90 @@ export default function CrmDashboardPage() {
           border="border-slate-200/70"
           iconClass="bg-indigo-500/10 text-indigo-600"
           actions={
-            <Button variant="outline" size="sm" onClick={() => runSearch()} disabled={loading}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => runSearch()}
+              disabled={loading || !cutoffOrderValid}
+            >
               <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               {t("adminOpsCenterReload")}
             </Button>
           }
         />
 
-        <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" onSubmit={runSearch}>
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t("crmDashRecentDays")}</Label>
-            <Input
-              type="number"
-              min={7}
-              max={365}
-              value={draftRecentDays}
-              onChange={(e) => setDraftRecentDays(e.target.value)}
-            />
+        <form className="space-y-3" onSubmit={runSearch}>
+          <div className="flex flex-wrap gap-2">
+            {CRM_DATE_PRESET_IDS.map((id) => (
+              <Button
+                key={id}
+                type="button"
+                size="sm"
+                variant={activePreset === id ? "default" : "outline"}
+                disabled={loading}
+                onClick={() => applyPreset(id)}
+              >
+                {t(
+                  id === "d7_30"
+                    ? "crmDashPreset7_30"
+                    : id === "d30_90"
+                      ? "crmDashPreset30_90"
+                      : id === "d60_180"
+                        ? "crmDashPreset60_180"
+                        : "crmDashPresetThisMonth"
+                )}
+              </Button>
+            ))}
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t("crmDashDormantDays")}</Label>
-            <Input
-              type="number"
-              min={14}
-              max={720}
-              value={draftDormantDays}
-              onChange={(e) => setDraftDormantDays(e.target.value)}
-            />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("crmDashRecentDays")}</Label>
+              <Input
+                type="date"
+                min={recentBounds.min}
+                max={recentBounds.max}
+                value={draftRecentDate}
+                onChange={(e) => setDraftRecentDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("crmDashDormantDays")}</Label>
+              <Input
+                type="date"
+                min={dormantBounds.min}
+                max={dormantBounds.max}
+                value={draftDormantDate}
+                onChange={(e) => setDraftDormantDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("crmDashStoreFilter")}</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={storeFilter}
+                onChange={(e) => setStoreFilter(e.target.value)}
+              >
+                <option value="">{t("crmDashStoreAll")}</option>
+                {storeOptions.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+                {storeStats.some((s) => s.storeCode === "__unset__") ? (
+                  <option value="__unset__">—</option>
+                ) : null}
+              </select>
+            </div>
+            <div className="flex items-end sm:col-span-2">
+              <Button type="submit" disabled={loading || !cutoffOrderValid}>
+                <Search className="mr-1.5 h-4 w-4" />
+                {loading ? t("loading") : t("btn_query")}
+              </Button>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t("crmDashStoreFilter")}</Label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={storeFilter}
-              onChange={(e) => setStoreFilter(e.target.value)}
-            >
-              <option value="">{t("crmDashStoreAll")}</option>
-              {storeOptions.map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-              {storeStats.some((s) => s.storeCode === "__unset__") ? (
-                <option value="__unset__">—</option>
-              ) : null}
-            </select>
-          </div>
-          <div className="flex items-end sm:col-span-2">
-            <Button type="submit" disabled={loading}>
-              <Search className="mr-1.5 h-4 w-4" />
-              {loading ? t("loading") : t("btn_query")}
-            </Button>
-          </div>
+          {!cutoffOrderValid ? (
+            <p className="text-xs text-destructive">{t("crmDashCutoffOrderInvalid")}</p>
+          ) : null}
         </form>
 
         {updatedAt ? (
@@ -277,13 +361,13 @@ export default function CrmDashboardPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <CrmKpiCard label={t("crmDashKpiTotal")} value={summary.totalMembers.toLocaleString()} href="/admin/members" />
           <CrmKpiCard
-            label={`${t("crmDashKpiRecent")} (${recentDays}${t("days")})`}
+            label={`${t("crmDashKpiRecent")} (${recentDate})`}
             value={summary.recentActiveMembers.toLocaleString()}
             tone="success"
             href={segmentHref("recent30")}
           />
           <CrmKpiCard
-            label={`${t("crmDashKpiDormant")} (${dormantDays}${t("days")})`}
+            label={`${t("crmDashKpiDormant")} (${dormantDate})`}
             value={summary.dormantMembers.toLocaleString()}
             tone="warning"
             hint={`${t("crmDashDormantRate")}: ${dormantRate}`}
