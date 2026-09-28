@@ -28,6 +28,7 @@ import { TaxFilingCitTab } from "@/components/admin/tax-filing/tab-cit"
 import { TaxFilingSsoTab } from "@/components/admin/tax-filing/tab-sso"
 import { TaxFilingStoreProfilesTab } from "@/components/admin/tax-filing/tab-store-profiles"
 import { TaxFilingPurchaseTaxInvoicesTab } from "@/components/admin/tax-filing/tab-purchase-tax-invoices"
+import { TaxFilingBooksTab } from "@/components/admin/tax-filing/tab-books"
 import {
   TaxEntityStoreScopeFilters,
   type TaxEntityScopeOption,
@@ -81,6 +82,7 @@ function useFilingTabFilters(
     [isManager, managerStore]
   )
 
+  const books = useYmStoreFilter(defaultYm, defaultStore)
   const pp30 = useYmStoreFilter(defaultYm, defaultStore)
   const purchaseTaxInv = useYmStoreFilter(defaultYm, defaultStore)
   const pp36 = useYmStoreFilter(defaultYm, defaultStore)
@@ -95,6 +97,7 @@ function useFilingTabFilters(
 
   React.useEffect(() => {
     if (isManager && managerStore) {
+      books.setStore(managerStore)
       pp30.setStore(managerStore)
       purchaseTaxInv.setStore(managerStore)
       pp36.setStore(managerStore)
@@ -188,6 +191,7 @@ function useFilingTabFilters(
 
   const tabProps = React.useMemo(
     () => ({
+      books: pick(books),
       pp30: pick(pp30),
       purchaseTaxInv: pick(purchaseTaxInv),
       pp36: pick(pp36),
@@ -200,6 +204,8 @@ function useFilingTabFilters(
       sso: pick(sso),
     }),
     [
+      books.filingYearMonth,
+      books.filingStoreFilter,
       pp30.filingYearMonth,
       pp30.filingStoreFilter,
       purchaseTaxInv.filingYearMonth,
@@ -336,6 +342,7 @@ export function TaxFilingShell() {
 
   const [ssoSearchTick, setSsoSearchTick] = React.useState(0)
   const [ptiSearchTick, setPtiSearchTick] = React.useState(0)
+  const [booksSearchTick, setBooksSearchTick] = React.useState(0)
 
   const { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore } = useFilingTabFilters(
     storeOptions,
@@ -361,6 +368,9 @@ export function TaxFilingShell() {
       >
         <AdminTabsBarWithHelp className="relative z-30">
           <TabsList className={adminTabsListRowCn}>
+            <TabsTrigger value="books" className={adminTabsTriggerCn}>
+              {t("taxBooksTab")}
+            </TabsTrigger>
             <TabsTrigger value="storeProfiles" className={adminTabsTriggerCn}>
               {t("taxFilingTabStoreProfiles")}
             </TabsTrigger>
@@ -397,6 +407,21 @@ export function TaxFilingShell() {
           </TabsList>
         </AdminTabsBarWithHelp>
 
+        <TabsContent value="books" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
+          <FilingFiltersCard
+            tabKey="books"
+            yearMonth={tabProps.books.filingYearMonth}
+            onYearMonthChange={tabProps.books.onFilingYearMonthChange}
+            storeFilter={tabProps.books.filingStoreFilter}
+            onStoreFilterChange={tabProps.books.onFilingStoreFilterChange}
+            onSearch={() => setBooksSearchTick((n) => n + 1)}
+          />
+          <TaxFilingBooksTab
+            filingYearMonth={tabProps.books.filingYearMonth}
+            filingStoreFilter={tabProps.books.filingStoreFilter}
+            searchTick={booksSearchTick}
+          />
+        </TabsContent>
         <TabsContent value="storeProfiles" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
           <TaxFilingStoreProfilesTab
             filingStoreFilter={storeProfilesStore}

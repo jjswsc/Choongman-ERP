@@ -16,6 +16,8 @@ import {
 import { linesForPosChannelSettlement } from '@/lib/pos-channel-settlement'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { uniqueAccountingPeriodChecks } from '@/lib/accounting-period-mutation-guard'
+import { assertTaxAccountingPeriodOpen } from '@/lib/tax-book-period-server'
+import { TAX_BOOK, voucherKindForSourceType } from '@/lib/tax-book'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
 
 type JournalLineInput = {
@@ -36,6 +38,10 @@ type PostJournalParams = {
   memo?: string
   postedBy?: string | null
   lines: JournalLineInput[]
+  /** tax면 세무 장부. 매장 마감과 따로 법인 기간만 잠근다. */
+  book?: 'tax' | null
+  voucherKind?: string | null
+  taxEntityCode?: string | null
 }
 
 function monthOf(dateYmd: string): string {
@@ -141,7 +147,10 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
     throw new Error(`분개 차대 불일치: debit=${debitSum}, credit=${creditSum}`)
   }
 
-  if (await isAccountingPeriodClosed(monthOf(accountingDate), params.storeName)) {
+  const isTaxBook = params.book === TAX_BOOK
+  if (isTaxBook) {
+    await assertTaxAccountingPeriodOpen(String(params.taxEntityCode || ''), monthOf(accountingDate))
+  } else if (await isAccountingPeriodClosed(monthOf(accountingDate), params.storeName)) {
     throw new Error('ACCOUNTING_PERIOD_CLOSED')
   }
 
@@ -153,6 +162,13 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
     store_name: params.storeName || null,
     memo: params.memo || null,
     posted_by: params.postedBy || null,
+    ...(isTaxBook
+      ? {
+          book: TAX_BOOK,
+          voucher_kind: params.voucherKind || voucherKindForSourceType(params.sourceType),
+          tax_entity_code: String(params.taxEntityCode || '').trim() || null,
+        }
+      : {}),
   })) as { id?: number }[]
   const entryId = Number(inserted?.[0]?.id || 0)
   if (!entryId) return null
@@ -182,7 +198,9 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
     })
   )
 
-  await upsertLedgerBalances(accountingDate, params.storeName || 'All', lines)
+  if (!isTaxBook) {
+    await upsertLedgerBalances(accountingDate, params.storeName || 'All', lines)
+  }
   return entryId
 }
 

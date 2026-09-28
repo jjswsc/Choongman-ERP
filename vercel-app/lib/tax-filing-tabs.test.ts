@@ -7,6 +7,7 @@ import {
 
 describe('resolveTaxFilingTab', () => {
   it('keeps canonical tabs', () => {
+    expect(resolveTaxFilingTab('books')).toBe('books')
     expect(resolveTaxFilingTab('purchaseTaxInv')).toBe('purchaseTaxInv')
     expect(resolveTaxFilingTab('pp30')).toBe(TAX_FILING_DEFAULT_TAB)
     expect(resolveTaxFilingTab('sso')).toBe('sso')

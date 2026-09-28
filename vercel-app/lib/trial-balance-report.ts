@@ -41,14 +41,22 @@ export async function computeTrialBalanceReport(input: IncomeScopeInput): Promis
 
   const jeFilter = `accounting_date=gte.${encodeURIComponent(startStr)}&accounting_date=lte.${encodeURIComponent(endStr)}`
   const entries = (await supabaseSelectFilterAllPages('journal_entries', jeFilter, {
-    select: 'id,store_name',
+    select: 'id,store_name,source_type',
     order: 'accounting_date.asc',
     pageSize: 8000,
     maxRows: 1_000_000,
-  })) as { id?: number; store_name?: string | null }[] | null
+  })) as { id?: number; store_name?: string | null; source_type?: string | null }[] | null
 
+  const selected = scope.selectedStoresOnly
   const ids = (entries || [])
-    .filter((e) => storeMatch(e.store_name, storeFilter, storeIndex))
+    .filter((e) => {
+      // 세무 장부(tax_*)는 기업 시산·기존 마감에 넣지 않는다.
+      if (String(e.source_type || '').startsWith('tax_')) return false
+      if (selected && selected.length > 1) {
+        return selected.some((s) => storeMatch(e.store_name, s, storeIndex))
+      }
+      return storeMatch(e.store_name, storeFilter, storeIndex)
+    })
     .map((e) => Number(e.id))
     .filter((id) => id > 0)
 

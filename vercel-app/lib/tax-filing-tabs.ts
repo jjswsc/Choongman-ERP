@@ -1,4 +1,5 @@
 export const TAX_FILING_TABS = [
+  "books",
   "pp30",
   "purchaseTaxInv",
   "pp36",
