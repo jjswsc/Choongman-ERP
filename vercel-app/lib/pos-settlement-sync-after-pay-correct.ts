@@ -1,3 +1,4 @@
+import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
 import { isPosPaidLikeStatus } from '@/lib/pos-order-policy'
@@ -6,6 +7,34 @@ import {
   supabaseSelectFilterStrippingUnknownColumns,
   supabaseUpdateByFilterWithPgrst204Fallback,
 } from '@/lib/supabase-pgrst204-retry'
+
+/** 정산 영수증 Memo용 — 영문 코드 대신 매장 직원이 읽기 쉬운 태국어 문장 */
+export function formatPayCorrectSettlementSyncMemo(params: {
+  who: string
+  reason: string
+  cashBefore: number
+  cashAfter: number
+  at?: Date
+}): string {
+  const when = getBangkokDateTimeString(params.at ?? new Date())
+  const who = String(params.who || '').trim() || '-'
+  const reason = String(params.reason || '').trim().slice(0, 120)
+  const cash = `เงินสด ${round2(params.cashBefore)}→${round2(params.cashAfter)}`
+  const reasonPart = reason ? ` · เหตุผล: ${reason}` : ''
+  return `แก้ช่องทางชำระ — อัปเดตยอดปิดร้าน · ${when} · ${who} · ${cash}${reasonPart}`
+}
+
+/** 「현금 맞추기」 동기화 시 정산 Memo */
+export function formatSettlementCashReconcileMemo(params: {
+  who: string
+  cashBefore: number
+  cashAfter: number
+  at?: Date
+}): string {
+  const when = getBangkokDateTimeString(params.at ?? new Date())
+  const who = String(params.who || '').trim() || '-'
+  return `จัดยอดเงินสดให้ตรงออเดอร์ · ${when} · ${who} · เงินสด ${round2(params.cashBefore)}→${round2(params.cashAfter)}`
+}
 
 export type SettlementPaymentAmts = {
   cashAmt: number
@@ -235,7 +264,12 @@ export async function syncPosSettlementAfterPayCorrect(params: {
     }
   }
 
-  const stamp = `[PAY_CORRECT_SETTLEMENT_SYNC ${new Date().toISOString()} ${params.who}] cash ${savedCashBefore}→${nextCash} | ${String(params.reason || '').slice(0, 120)}`
+  const stamp = formatPayCorrectSettlementSyncMemo({
+    who: params.who,
+    reason: params.reason,
+    cashBefore: savedCashBefore,
+    cashAfter: nextCash,
+  })
   const nextMemo = appendPosInternalMemoStamp(String(row.memo ?? ''), stamp)
 
   await supabaseUpdateByFilterWithPgrst204Fallback(
@@ -324,7 +358,11 @@ export async function reconcilePosSettlementCashAmtToLive(params: {
   }
 
   const who = String(params.who || 'system').trim() || 'system'
-  const stamp = `[SETTLEMENT_CASH_RECONCILE ${new Date().toISOString()} ${who}] ${savedCashBefore}→${liveCash}`
+  const stamp = formatSettlementCashReconcileMemo({
+    who,
+    cashBefore: savedCashBefore,
+    cashAfter: liveCash,
+  })
   const nextMemo = appendPosInternalMemoStamp(String(row.memo ?? ''), stamp)
 
   await supabaseUpdateByFilterWithPgrst204Fallback(

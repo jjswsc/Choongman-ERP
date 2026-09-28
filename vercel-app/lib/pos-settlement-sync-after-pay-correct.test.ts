@@ -3,7 +3,40 @@ import {
   applySettlementBreakdownDelta,
   buildSettlementCashReconcile,
   computePayCorrectSettlementDeltas,
+  formatPayCorrectSettlementSyncMemo,
+  formatSettlementCashReconcileMemo,
 } from '@/lib/pos-settlement-sync-after-pay-correct'
+
+describe('formatPayCorrectSettlementSyncMemo', () => {
+  it('uses Thai plain language and Bangkok wall time', () => {
+    const memo = formatPayCorrectSettlementSyncMemo({
+      who: 'Onpimon Inthongchuay MB013',
+      reason: 'รับเงินผิดประเภท',
+      cashBefore: 0,
+      cashAfter: 298,
+      at: new Date('2026-09-25T07:48:44.924Z'),
+    })
+    expect(memo).toBe(
+      'แก้ช่องทางชำระ — อัปเดตยอดปิดร้าน · 2026-09-25 14:48:44 · Onpimon Inthongchuay MB013 · เงินสด 0→298 · เหตุผล: รับเงินผิดประเภท'
+    )
+    expect(memo).not.toMatch(/PAY_CORRECT_SETTLEMENT_SYNC/)
+  })
+})
+
+describe('formatSettlementCashReconcileMemo', () => {
+  it('uses Thai plain language', () => {
+    const memo = formatSettlementCashReconcileMemo({
+      who: 'system',
+      cashBefore: 100,
+      cashAfter: 150,
+      at: new Date('2026-09-27T12:05:05.998Z'),
+    })
+    expect(memo).toBe(
+      'จัดยอดเงินสดให้ตรงออเดอร์ · 2026-09-27 19:05:05 · system · เงินสด 100→150'
+    )
+    expect(memo).not.toMatch(/SETTLEMENT_CASH_RECONCILE/)
+  })
+})
 
 describe('computePayCorrectSettlementDeltas', () => {
   it('card → cash moves amounts correctly', () => {
