@@ -115,6 +115,7 @@ import { cn } from "@/lib/utils"
 
 type Props = {
   filingYearMonth: string
+  filingEndMonth?: string
   filingStoreFilter: string
   filingSearchTick?: number
   storeChoices?: string[]
@@ -308,6 +309,7 @@ function defaultStoreFromFilter(storeFilter: string, fallback: string): string {
 
 export function TaxFilingPurchaseTaxInvoicesTab({
   filingYearMonth,
+  filingEndMonth,
   filingStoreFilter,
   filingSearchTick = 0,
   storeChoices = [],
@@ -395,22 +397,31 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     }
   }, [canWrite])
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (fromMonth: string, toMonth: string) => {
     setLoading(true)
     setError("")
     try {
       const [res, summary] = await Promise.all([
         getPurchaseTaxInvoices({
-          taxMonth: filingYearMonth,
+          taxMonth: fromMonth,
+          endMonth: toMonth,
           storeFilter: filingStoreFilter,
         }),
         getThaiTaxFilingSummary({
           userRole: String(auth?.role || ""),
-          yearMonth: filingYearMonth,
+          yearMonth: fromMonth,
+          endMonth: toMonth,
           storeFilter: filingStoreFilter,
         }).catch(() => null),
       ])
-      if (res.error) setError("msg_load_fail")
+      if (res.error) {
+        const code = String(res.error)
+        setError(
+          code === "RANGE_ORDER" || code === "RANGE_TOO_LONG" || code === "INVALID_YEAR_MONTH"
+            ? `taxBooksErr_${code}`
+            : "msg_load_fail"
+        )
+      }
       setTableMissing(!!res.tableMissing)
       setRows(sortPurchaseTaxInvoicesForRegister(res.rows))
       setSelectedIds(new Set())
@@ -428,11 +439,24 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     } finally {
       setLoading(false)
     }
-  }, [filingYearMonth, filingStoreFilter, auth?.role])
+  }, [filingStoreFilter, auth?.role])
+
+  const queryRef = React.useRef({ from: filingYearMonth, to: filingEndMonth || filingYearMonth })
+
+  const reload = React.useCallback(async () => {
+    const q = queryRef.current
+    await load(q.from, q.to)
+  }, [load])
 
   React.useEffect(() => {
-    void load()
-  }, [load, filingSearchTick])
+    if (filingSearchTick < 1) return
+    const from = filingYearMonth
+    const to = filingEndMonth || filingYearMonth
+    queryRef.current = { from, to }
+    void load(from, to)
+    // 검색 버튼을 누른 횟수만 본다. 월·매장 입력은 그때의 값으로 고정한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filingSearchTick])
 
   React.useEffect(() => {
     setForm((prev) => ({
@@ -590,7 +614,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         return
       }
       setForm(emptyForm(defaultStoreFromFilter(filingStoreFilter, fallbackStore), filingYearMonth))
-      await load()
+      await reload()
     } finally {
       setSaving(false)
     }
@@ -607,7 +631,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     if (form.id === id) {
       setForm(emptyForm(defaultStoreFromFilter(filingStoreFilter, fallbackStore), filingYearMonth))
     }
-    await load()
+    await reload()
   }
 
   const toggleSelected = (id: number, checked: boolean) => {
@@ -648,7 +672,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     if (form.id && deletedFormIds.includes(form.id)) {
       setForm(emptyForm(defaultStoreFromFilter(filingStoreFilter, fallbackStore), filingYearMonth))
     }
-    await load()
+    await reload()
   }
 
   const onDeleteSelected = async () => {
@@ -1249,7 +1273,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         return
       }
       setSaveNotice(parts.join(" "))
-      await load()
+      await reload()
     } finally {
       setSaving(false)
     }
@@ -1325,6 +1349,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         <CardContent className="pt-4 pb-4 space-y-2 text-sm">
           <p>{t("ptiHint")}</p>
           <p className="text-xs text-muted-foreground">{t("ptiDateBeHint")}</p>
+          {filingSearchTick < 1 ? <p className="text-sm text-muted-foreground">{t("taxBooksSearchFirst")}</p> : null}
           {tableMissing ? <p className="text-sm text-destructive">{t("ptiTableMissing")}</p> : null}
         </CardContent>
       </Card>
@@ -1353,7 +1378,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       ) : null}
 
       <div className="flex flex-wrap gap-2 items-center">
-        <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+        <Button type="button" variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
           {t("search")}
         </Button>
         <Button type="button" variant="secondary" size="sm" onClick={onExport} disabled={!rows.length}>

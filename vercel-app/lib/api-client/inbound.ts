@@ -75,6 +75,8 @@ export async function updateInboundBatch(params: {
     spec?: string
     qty: number | string
     cost?: number | string
+    /** KRW 총액 분배 시 기록할 바트 단가 */
+    thbUnitCost?: number
   }[]
 }) {
   const res = await apiFetchWithOffline('/api/updateInboundBatch', {
@@ -103,6 +105,7 @@ export async function registerInboundBatch(
     spec?: string
     qty: number | string
     cost?: number | string
+    thbUnitCost?: number
   }[],
   storeName?: string,
   options?: {

@@ -16,5 +16,6 @@ CREATE INDEX IF NOT EXISTS idx_journal_entries_tax_book
 INSERT INTO public.account_subjects (code, name, name_en, type, p_and_l_section, sort_order, statement_type, normal_side)
 VALUES
   ('1360', '매입세액', 'Input VAT', 'asset', NULL, 8, 'bs', 'debit'),
+  ('1395', '세무부가세대체', 'Tax VAT clearing', 'asset', NULL, 9, 'bs', 'debit'),
   ('5310', '급여', 'Salaries', 'expense', 'expense', 120, 'pl', 'debit')
 ON CONFLICT (code) DO NOTHING;

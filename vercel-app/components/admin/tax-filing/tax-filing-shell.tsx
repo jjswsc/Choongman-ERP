@@ -121,6 +121,10 @@ function useFilingTabFilters(
       onStoreFilterChange,
       onSearch,
       searchDisabled,
+      fromMonth,
+      toMonth,
+      onFromMonthChange,
+      onToMonthChange,
     }: {
       tabKey: FilingTabKey
       yearMonth: string
@@ -129,10 +133,36 @@ function useFilingTabFilters(
       onStoreFilterChange: (v: string) => void
       onSearch?: () => void
       searchDisabled?: boolean
+      fromMonth?: string
+      toMonth?: string
+      onFromMonthChange?: (v: string) => void
+      onToMonthChange?: (v: string) => void
     }) => (
       <Card className="border-border/80">
         <CardContent className="pt-4 pb-4">
           <div className="flex flex-wrap gap-3 items-end">
+            {onFromMonthChange && onToMonthChange ? (
+              <>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">{t("taxBooksFromMonth")}</div>
+                  <Input
+                    type="month"
+                    className="h-9 w-[160px]"
+                    value={fromMonth || yearMonth}
+                    onChange={(e) => onFromMonthChange(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">{t("taxBooksToMonth")}</div>
+                  <Input
+                    type="month"
+                    className="h-9 w-[160px]"
+                    value={toMonth || yearMonth}
+                    onChange={(e) => onToMonthChange(e.target.value)}
+                  />
+                </div>
+              </>
+            ) : (
             <div>
               <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
               <Input
@@ -142,6 +172,7 @@ function useFilingTabFilters(
                 onChange={(e) => onYearMonthChange(e.target.value)}
               />
             </div>
+            )}
             {isOffice ? (
               <TaxEntityStoreScopeFilters
                 idPrefix={`${tabKey}-shell`}
@@ -343,6 +374,8 @@ export function TaxFilingShell() {
   const [ssoSearchTick, setSsoSearchTick] = React.useState(0)
   const [ptiSearchTick, setPtiSearchTick] = React.useState(0)
   const [booksSearchTick, setBooksSearchTick] = React.useState(0)
+  const [booksToMonth, setBooksToMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
+  const [purchaseToMonth, setPurchaseToMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
 
   const { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore } = useFilingTabFilters(
     storeOptions,
@@ -412,12 +445,17 @@ export function TaxFilingShell() {
             tabKey="books"
             yearMonth={tabProps.books.filingYearMonth}
             onYearMonthChange={tabProps.books.onFilingYearMonthChange}
+            fromMonth={tabProps.books.filingYearMonth}
+            toMonth={booksToMonth}
+            onFromMonthChange={tabProps.books.onFilingYearMonthChange}
+            onToMonthChange={setBooksToMonth}
             storeFilter={tabProps.books.filingStoreFilter}
             onStoreFilterChange={tabProps.books.onFilingStoreFilterChange}
             onSearch={() => setBooksSearchTick((n) => n + 1)}
           />
           <TaxFilingBooksTab
-            filingYearMonth={tabProps.books.filingYearMonth}
+            fromMonth={tabProps.books.filingYearMonth}
+            toMonth={booksToMonth}
             filingStoreFilter={tabProps.books.filingStoreFilter}
             searchTick={booksSearchTick}
           />
@@ -445,12 +483,17 @@ export function TaxFilingShell() {
             tabKey="purchaseTaxInv"
             yearMonth={tabProps.purchaseTaxInv.filingYearMonth}
             onYearMonthChange={tabProps.purchaseTaxInv.onFilingYearMonthChange}
+            fromMonth={tabProps.purchaseTaxInv.filingYearMonth}
+            toMonth={purchaseToMonth}
+            onFromMonthChange={tabProps.purchaseTaxInv.onFilingYearMonthChange}
+            onToMonthChange={setPurchaseToMonth}
             storeFilter={tabProps.purchaseTaxInv.filingStoreFilter}
             onStoreFilterChange={tabProps.purchaseTaxInv.onFilingStoreFilterChange}
             onSearch={() => setPtiSearchTick((n) => n + 1)}
           />
           <TaxFilingPurchaseTaxInvoicesTab
             filingYearMonth={tabProps.purchaseTaxInv.filingYearMonth}
+            filingEndMonth={purchaseToMonth}
             filingStoreFilter={tabProps.purchaseTaxInv.filingStoreFilter}
             filingSearchTick={ptiSearchTick}
             storeChoices={storeOptions.filter((s) => s !== "All")}

@@ -85,6 +85,7 @@ import { cn, roundErp3, formatErpCostInputString, formatErpNum } from "@/lib/uti
 import { buildItemTaxMapFromRows, computeInboundBatchAmounts } from "@/lib/inbound-payable-amount"
 import {
   type InboundSourceCurrency,
+  allocateInboundThbByKrwLines,
   formatInboundFxRateInput,
   parseInboundFxRate,
   thbUnitCostFromKrw,
@@ -154,6 +155,8 @@ export default function InboundPage() {
   const [inQty, setInQty] = React.useState("")
   const [sourceCurrency, setSourceCurrency] = React.useState<InboundSourceCurrency>("THB")
   const [fxRate, setFxRate] = React.useState("")
+  /** KRW 입고: 출금 바트 공급가 총액. 수량×원화 단가 비율로 줄을 나눈다 */
+  const [thbSupplyTotal, setThbSupplyTotal] = React.useState("")
   const [cart, setCart] = React.useState<InboundCartItem[]>([])
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [selectedItem, setSelectedItem] = React.useState<AdminItem | null>(null)
@@ -416,6 +419,7 @@ export default function InboundPage() {
           setFromPoInboundDateDraft(inboundDate)
           setSourceCurrency("THB")
           setFxRate("")
+          setThbSupplyTotal("")
           setFromPoDateDialogOpen(true)
           setTabValue("new")
         }
@@ -508,6 +512,7 @@ export default function InboundPage() {
     setInQty("")
     setSourceCurrency("THB")
     setFxRate("")
+    setThbSupplyTotal("")
   }, [])
 
   const resolveInboundStoreName = React.useCallback((): string | undefined => {
@@ -529,6 +534,30 @@ export default function InboundPage() {
     return inStore.trim()
   }, [isOffice, auth?.store, inStore, salesVendors, includeCanonicalHq, storeOptions.stores])
 
+  const krwAllocation = React.useMemo(() => {
+    if (sourceCurrency !== "KRW") return null
+    const total = parseFloat(String(thbSupplyTotal).replace(/,/g, ""))
+    if (!Number.isFinite(total) || total <= 0 || !cart.length) return null
+    const lines: { qty: number; krwUnit: number }[] = []
+    for (const c of cart) {
+      const costRaw = String(c.cost ?? "").replace(/,/g, "").trim()
+      const qtyRaw = String(c.qty ?? "").replace(/,/g, "").trim()
+      if (!costRaw || !qtyRaw) return null
+      const qty = parseFloat(qtyRaw)
+      const krwUnit = parseFloat(costRaw)
+      if (!Number.isFinite(qty) || qty <= 0) return null
+      if (!Number.isFinite(krwUnit) || krwUnit < 0) return null
+      lines.push({ qty, krwUnit })
+    }
+    return allocateInboundThbByKrwLines(lines, total)
+  }, [sourceCurrency, thbSupplyTotal, cart])
+
+  React.useEffect(() => {
+    if (!krwAllocation) return
+    const next = formatInboundFxRateInput(krwAllocation.fxRate)
+    setFxRate((prev) => (prev === next ? prev : next))
+  }, [krwAllocation])
+
   const handleSave = async () => {
     if (!cart.length) {
       await appAlert(t("inAlertNoList"))
@@ -539,7 +568,7 @@ export default function InboundPage() {
       await appAlert(t("inAlertInboundDate"))
       return
     }
-    const parsedFx = parseInboundFxRate(fxRate)
+    const parsedFx = krwAllocation?.fxRate ?? parseInboundFxRate(fxRate)
     const fxErr = validateInboundFxHeader(sourceCurrency, parsedFx)
     if (fxErr) {
       await appAlert(t("inAlertFxRequired"))
@@ -562,7 +591,7 @@ export default function InboundPage() {
     if (!await appConfirm(msg)) return
     setSaving(true)
     try {
-      const list = cart.map((c) => ({
+      const list = cart.map((c, i) => ({
         date: inboundYmd,
         vendor: inVendor.trim() || c.vendor,
         code: c.code,
@@ -570,6 +599,7 @@ export default function InboundPage() {
         spec: c.spec,
         qty: c.qty,
         cost: c.cost ? parseFloat(String(c.cost).replace(/,/g, "")) : undefined,
+        ...(krwAllocation ? { thbUnitCost: krwAllocation.lines[i]?.thbUnit } : {}),
       }))
       const storeName = resolveInboundStoreName()
       const vendorCode = purchaseVendors.find((v) => v.name === (inVendor.trim() || cart[0]?.vendor))?.code
@@ -619,6 +649,7 @@ export default function InboundPage() {
           setFromPoOrderDate("")
           setSourceCurrency("THB")
           setFxRate("")
+          setThbSupplyTotal("")
         } else {
           await appAlert(translateApiMessage(res.message, t) || t("inSaveFailed"))
         }
@@ -1029,14 +1060,17 @@ export default function InboundPage() {
       items.map((it) => ({ code: it.code, tax: it.taxType }))
     )
     const fxNum = parseInboundFxRate(fxRate)
-    const lines = cart.map((c) => {
+    const lines = cart.map((c, i) => {
       const rawCost = parseFloat(String(c.cost).replace(/,/g, "")) || 0
+      const allocatedUnit = krwAllocation?.lines[i]?.thbUnit
       const unitCost =
-        sourceCurrency === "KRW"
-          ? fxNum != null
-            ? thbUnitCostFromKrw(rawCost, fxNum)
-            : 0
-          : rawCost
+        allocatedUnit != null
+          ? allocatedUnit
+          : sourceCurrency === "KRW"
+            ? fxNum != null
+              ? thbUnitCostFromKrw(rawCost, fxNum)
+              : 0
+            : rawCost
       return {
         code: c.code,
         qty: parseFloat(String(c.qty).replace(/,/g, "")) || 0,
@@ -1046,7 +1080,7 @@ export default function InboundPage() {
     })
     const { netTotal, vatTotal, grossTotal } = computeInboundBatchAmounts(lines, taxByCode)
     return { net: netTotal, vat: vatTotal, gross: grossTotal }
-  }, [cart, items, inDate, sourceCurrency, fxRate])
+  }, [cart, items, inDate, sourceCurrency, fxRate, krwAllocation])
 
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "summary" | "guide">("new")
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
@@ -1416,6 +1450,7 @@ export default function InboundPage() {
         setInInvoiceNo(String(b.invoiceNo || "").trim())
         setInStore(storeValue)
         setSourceCurrency(String(b.sourceCurrency || "").toUpperCase() === "KRW" ? "KRW" : "THB")
+        setThbSupplyTotal("")
         setFxRate(
           b.fxRate != null && Number(b.fxRate) > 0 ? formatInboundFxRateInput(Number(b.fxRate)) : ""
         )
@@ -1917,14 +1952,18 @@ export default function InboundPage() {
                     totals={cartTotals}
                     sourceCurrency={sourceCurrency}
                     fxRate={fxRate}
+                    thbAllocation={krwAllocation}
+                    thbSupplyTotal={thbSupplyTotal}
                     onSourceCurrencyChange={(next) => {
                       if (next === sourceCurrency) return
                       setSourceCurrency(next)
+                      setThbSupplyTotal("")
                       if (next === "THB") setFxRate("")
                       // 통화 전환 시 단가 단위가 달라지므로 비워 오입력 방지
                       setCart((prev) => prev.map((c) => ({ ...c, cost: "" })))
                     }}
                     onFxRateChange={setFxRate}
+                    onThbSupplyTotalChange={setThbSupplyTotal}
                     onUpdateCost={handleUpdateCartCost}
                     onUpdateQty={handleUpdateCartQty}
                     onRemove={handleRemoveFromCart}

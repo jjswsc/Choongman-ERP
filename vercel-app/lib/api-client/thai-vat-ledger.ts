@@ -10,6 +10,7 @@ export async function getVatLedger(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
   /** true면 POS 매출 원장 재동기화 후 조회 */
@@ -18,6 +19,7 @@ export async function getVatLedger(params: {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   q.set('storeFilter', params.storeFilter || 'All')
   if (params.forceSync) q.set('forceSync', '1')
@@ -170,11 +172,13 @@ export async function getVatLedgerStoreNameGaps(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/getVatLedgerStoreNameGaps?${q}`)
   const data = (await res.json()) as { report?: VatLedgerStoreNameGapsReportDto; error?: string }
@@ -189,11 +193,13 @@ export async function getIntercompanyVatReconcile(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/ops/intercompany-vat-reconcile?${q}`)
   const data = (await res.json()) as { report?: IntercompanyVatReconcileReportDto; error?: string }
@@ -209,6 +215,7 @@ export async function probeIntercompanyVatReconcileApplicable(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   storeFilter: string
 }) {
   const q = new URLSearchParams({
@@ -219,6 +226,7 @@ export async function probeIntercompanyVatReconcileApplicable(params: {
   })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   const res = await apiFetchWithOffline(`/api/ops/intercompany-vat-reconcile?${q}`)
   const data = (await res.json()) as { applicable?: boolean; error?: string }
   if (!res.ok) {
@@ -263,12 +271,14 @@ export async function getPp36Ledger(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/pp36Ledger?${q}`)
@@ -302,12 +312,14 @@ export async function getWithholdingTaxLedger(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/withholdingTaxLedger?${q}`)
@@ -337,12 +349,14 @@ export async function getPnd54Ledger(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/pnd54Ledger?${q}`)
@@ -390,8 +404,9 @@ export type PurchaseTaxInvoiceDto = {
   memo: string
 }
 
-export async function getPurchaseTaxInvoices(params: { taxMonth: string; storeFilter?: string }) {
+export async function getPurchaseTaxInvoices(params: { taxMonth: string; endMonth?: string; storeFilter?: string }) {
   const q = new URLSearchParams({ taxMonth: params.taxMonth })
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   q.set('storeFilter', params.storeFilter || 'All')
   const res = await apiFetchWithOffline(`/api/purchaseTaxInvoices?${q}`)
   const data = (await res.json()) as {

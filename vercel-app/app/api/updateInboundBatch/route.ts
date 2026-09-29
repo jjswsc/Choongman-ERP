@@ -49,6 +49,8 @@ type InboundLineBody = {
   spec?: string
   qty?: number | string
   cost?: number | string
+  thbUnitCost?: number | string
+  thb_unit_cost?: number | string
 }
 
 async function resolveVendorCode(vendorName: string, preferred?: string | null): Promise<string | null> {
@@ -221,6 +223,7 @@ export async function POST(request: NextRequest) {
         costRaw: item.cost,
         sourceCurrency,
         fxRate,
+        thbUnitCostRaw: item.thbUnitCost ?? item.thb_unit_cost,
       })
       if (!resolved.ok) {
         return NextResponse.json({ success: false, message: resolved.message }, { status: 400, headers })

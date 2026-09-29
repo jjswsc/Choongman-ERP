@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
-import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { buildTaxMonthPostgrestFilter, filingPeriodFromSearchParams } from '@/lib/thai-tax-period'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import {
   syncIncrementalVatLedgersFromExpenseAndBank,
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const period = filingPeriodFromSearchParams(searchParams, yearMonth, periodType)
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'
     const forceSync = ['1', 'true', 'yes'].includes(

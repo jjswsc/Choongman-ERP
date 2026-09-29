@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
-import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { buildTaxMonthPostgrestFilter, filingPeriodFromSearchParams } from '@/lib/thai-tax-period'
 import { validatePnd1Rows, type Pnd1SourceRow } from '@/lib/pnd1-rd-prep-txt'
 import { matchesPnd1FilingForm } from '@/lib/withholding-tax-csv'
 import { requireAuth } from '@/lib/verify-auth'
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const period = filingPeriodFromSearchParams(searchParams, yearMonth, periodType)
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const rows = (await supabaseSelectFilterAllPages('withholding_tax_ledger_entries', monthFilter, {

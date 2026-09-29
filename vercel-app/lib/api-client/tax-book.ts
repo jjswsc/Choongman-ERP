@@ -37,9 +37,19 @@ export type TaxBookEntriesResponse = {
   diff?: number
 }
 
-export async function getTaxBookEntries(params: { yearMonth: string; scopeFilter: string; view: 'vouchers' | 'ledger' | 'trial' }) {
+export async function getTaxBookEntries(params: {
+  yearMonth?: string
+  fromMonth?: string
+  toMonth?: string
+  scopeFilter: string
+  view: 'vouchers' | 'ledger' | 'trial'
+}) {
+  const fromMonth = params.fromMonth || params.yearMonth || ''
+  const toMonth = params.toMonth || fromMonth
   const q = new URLSearchParams({
-    yearMonth: params.yearMonth,
+    yearMonth: fromMonth,
+    fromMonth,
+    toMonth,
     scopeFilter: params.scopeFilter,
     view: params.view,
   })
@@ -48,7 +58,7 @@ export async function getTaxBookEntries(params: { yearMonth: string; scopeFilter
 }
 
 export async function postTaxBookEntry(body: {
-  action: 'payroll' | 'inventory' | 'adjustment' | 'closing' | 'unlock'
+  action: 'payroll' | 'inventory' | 'vat' | 'adjustment' | 'closing' | 'unlock'
   yearMonth: string
   scopeFilter: string
   memo?: string

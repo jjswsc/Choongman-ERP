@@ -15,6 +15,7 @@ import {
   upsertPurchaseTaxInvoice,
 } from '@/lib/purchase-tax-invoice-server'
 import { syncInboundBatchPurchaseTaxInvoicesForMonths } from '@/lib/purchase-tax-invoice-inbound-sync'
+import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import {
   digitsTin13,
   formatSellerBranch,
@@ -81,13 +82,22 @@ export async function GET(request: NextRequest) {
 
   const sp = new URL(request.url).searchParams
   const taxMonth = String(sp.get('taxMonth') || sp.get('yearMonth') || '').slice(0, 7)
+  const endMonth = String(sp.get('endMonth') || taxMonth).slice(0, 7)
   const storeFilter = String(sp.get('storeFilter') || 'All').trim() || 'All'
   const exportXlsx = sp.get('export') === 'xlsx' || sp.get('format') === 'xlsx'
+
+  let periodMonths = [taxMonth]
+  try {
+    periodMonths = getThaiTaxFilingPeriodRange({ yearMonth: taxMonth, endMonth }).months
+  } catch (e) {
+    const code = e instanceof Error ? e.message : 'INVALID_YEAR_MONTH'
+    return NextResponse.json({ error: code }, { status: 400, headers })
+  }
 
   try {
     try {
       await syncInboundBatchPurchaseTaxInvoicesForMonths({
-        months: [taxMonth],
+        months: periodMonths,
         storeFilter,
       })
     } catch (e) {
@@ -95,6 +105,7 @@ export async function GET(request: NextRequest) {
     }
     const rows = await listPurchaseTaxInvoices({
       taxMonth,
+      endMonth,
       storeFilter,
       tenantId: authResult.auth.tenantId,
     })

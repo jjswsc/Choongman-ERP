@@ -9,6 +9,15 @@ import {
 
 export type TaxBridgeLineKey = 'sales' | 'cogs' | 'payroll' | 'outputVat' | 'inputVat' | 'pnd1' | 'net'
 
+export type TaxBridgeReason =
+  | 'pos_vs_tax_invoice'
+  | 'inventory_vs_purchase_invoice'
+  | 'not_on_tax_book'
+  | 'payroll_not_posted'
+  | 'vat_not_posted'
+  | 'wht_not_posted'
+  | 'nondeductible_or_limit'
+
 export type TaxBridgeLine = {
   key: TaxBridgeLineKey
   management: number
@@ -18,6 +27,8 @@ export type TaxBridgeLine = {
   /** 기업회계 − 세무 장부. 세무 장부가 비어 있으면 기업회계 − 현재 분개. */
   diff: number
   hole: boolean
+  /** 차이가 오류가 아닌 이유. 구멍이 없으면 null. */
+  reason: TaxBridgeReason | null
 }
 
 export type TaxBridgeInput = {
@@ -36,6 +47,12 @@ export type TaxBridgeInput = {
   filing: {
     outputVat: number
     outputNet: number
+    /** 매입세금계산서 공급가 */
+    inputNet: number
+    /** 포스 자동 매출 공급가 */
+    posOutputNet: number
+    /** 포스 자동을 뺀 매출 공급가(세금계산서 등) */
+    taxInvoiceOutputNet: number
     inputVat: number
     payrollWht: number
   }
@@ -45,6 +62,7 @@ export type TaxBridgeReport = {
   lines: TaxBridgeLine[]
   holes: TaxBridgeLineKey[]
   recognition: TaxBookRecognition
+  salesSplit: { posNet: number; taxInvoiceNet: number; purchaseNet: number }
 }
 
 function signedBalance(row: TrialBalanceRow | undefined, normal: 'debit' | 'credit'): number {
@@ -85,7 +103,7 @@ function line(input: {
     !taxAmountsClose(management, journal) ||
     (filing != null && input.schemaReady && !taxAmountsClose(filing, taxBook)) ||
     (input.schemaReady && !taxAmountsClose(management, taxBook) && input.key !== 'outputVat' && input.key !== 'inputVat' && input.key !== 'pnd1')
-  return { key: input.key, management, journal, filing, taxBook, diff, hole }
+  return { key: input.key, management, journal, filing, taxBook, diff, hole, reason: null }
 }
 
 export function buildTaxManagementBridge(input: TaxBridgeInput): TaxBridgeReport {
@@ -117,7 +135,7 @@ export function buildTaxManagementBridge(input: TaxBridgeInput): TaxBridgeReport
       key: 'cogs',
       management: input.management.cogs,
       journal: journalCogs,
-      filing: null,
+      filing: input.filing.inputNet,
       taxBook: taxCogs,
       schemaReady: input.schemaReady,
     }),
@@ -174,6 +192,8 @@ export function buildTaxManagementBridge(input: TaxBridgeInput): TaxBridgeReport
   pnd.hole = input.schemaReady ? !taxAmountsClose(pnd.filing || 0, pnd.taxBook) : !taxAmountsClose(pnd.filing || 0, pnd.journal)
   pnd.diff = roundTaxAmount((pnd.filing || 0) - (input.schemaReady ? pnd.taxBook : pnd.journal))
 
+  attachBridgeReasons(lines)
+
   const recognition = recognizeTaxBook({
     schemaReady: input.schemaReady,
     taxEntryCount: input.taxEntryCount,
@@ -189,5 +209,34 @@ export function buildTaxManagementBridge(input: TaxBridgeInput): TaxBridgeReport
     lines,
     holes: lines.filter((l) => l.hole).map((l) => l.key),
     recognition,
+    salesSplit: {
+      posNet: roundTaxAmount(input.filing.posOutputNet || 0),
+      taxInvoiceNet: roundTaxAmount(input.filing.taxInvoiceOutputNet || 0),
+      purchaseNet: roundTaxAmount(input.filing.inputNet || 0),
+    },
+  }
+}
+
+function attachBridgeReasons(lines: TaxBridgeLine[]): void {
+  const byKey = new Map(lines.map((ln) => [ln.key, ln]))
+  for (const ln of lines) {
+    if (!ln.hole) {
+      ln.reason = null
+      continue
+    }
+    if (ln.key === 'sales') {
+      ln.reason = taxAmountsClose(ln.management, ln.filing ?? ln.management) ? 'not_on_tax_book' : 'pos_vs_tax_invoice'
+    } else if (ln.key === 'cogs') {
+      ln.reason = taxAmountsClose(ln.management, ln.filing ?? ln.management) ? 'not_on_tax_book' : 'inventory_vs_purchase_invoice'
+    } else if (ln.key === 'payroll') {
+      ln.reason = 'payroll_not_posted'
+    } else if (ln.key === 'outputVat' || ln.key === 'inputVat') {
+      ln.reason = 'vat_not_posted'
+    } else if (ln.key === 'pnd1') {
+      ln.reason = 'wht_not_posted'
+    } else if (ln.key === 'net') {
+      const explained = Boolean(byKey.get('sales')?.hole || byKey.get('cogs')?.hole || byKey.get('payroll')?.hole)
+      ln.reason = explained ? null : 'nondeductible_or_limit'
+    }
   }
 }

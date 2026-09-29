@@ -94,6 +94,8 @@ export interface AccountingComplianceSummaryTabProps {
   // Filters & common
   taxMonth: string
   setTaxMonth: (v: string) => void
+  taxMonthTo: string
+  setTaxMonthTo: (v: string) => void
   storeTb: string
   setStoreTb: ((v: string) => void) | undefined
   isOffice: boolean
@@ -342,6 +344,8 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
     lang,
     taxMonth,
     setTaxMonth,
+    taxMonthTo,
+    setTaxMonthTo,
     storeTb,
     setStoreTb,
     isOffice,
@@ -548,12 +552,21 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
         {!isEmbeddedPp36Section ? (
         <div className="relative z-0 flex max-w-full flex-nowrap items-end gap-2 overflow-x-auto pb-1">
           <div className="shrink-0">
-            <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
+            <div className="text-xs text-muted-foreground mb-1">{t("taxBooksFromMonth")}</div>
             <Input
               type="month"
               className="h-9 w-[160px]"
               value={taxMonth}
               onChange={(e) => setTaxMonth(e.target.value)}
+            />
+          </div>
+          <div className="shrink-0">
+            <div className="text-xs text-muted-foreground mb-1">{t("taxBooksToMonth")}</div>
+            <Input
+              type="month"
+              className="h-9 w-[160px]"
+              value={taxMonthTo}
+              onChange={(e) => setTaxMonthTo(e.target.value)}
             />
           </div>
           {isOffice ? (

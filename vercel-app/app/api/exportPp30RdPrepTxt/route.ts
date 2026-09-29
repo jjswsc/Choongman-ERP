@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
-import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { buildTaxMonthPostgrestFilter, filingPeriodFromSearchParams } from '@/lib/thai-tax-period'
 import type { VatLedgerRow } from '@/lib/vat-ledger-csv'
 import { buildRdFilingTxtFilename, rdDigitsOnly } from '@/lib/rd-filing-common'
 import { pp30LedgerToRdPrepTxt } from '@/lib/pp30-rd-prep-txt'
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const period = filingPeriodFromSearchParams(searchParams, yearMonth, periodType)
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const rows = (await supabaseSelectFilterAllPages('vat_ledger_entries', monthFilter, {

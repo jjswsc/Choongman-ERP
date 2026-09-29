@@ -10,6 +10,7 @@ export function getExportVatLedgerCsvUrl(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
   excludePosAuto?: boolean
@@ -17,6 +18,7 @@ export function getExportVatLedgerCsvUrl(params: {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.excludePosAuto) q.set('excludePosAuto', '1')
@@ -31,6 +33,7 @@ export function getExportWithholdingTaxLedgerCsvUrl(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
   format?: 'raw' | 'submission'
@@ -39,6 +42,7 @@ export function getExportWithholdingTaxLedgerCsvUrl(params: {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.format) q.set('format', params.format)
@@ -54,12 +58,14 @@ export function getExportPp36LedgerCsvUrl(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (typeof window !== 'undefined') {
@@ -73,12 +79,14 @@ export function getExportPnd54LedgerCsvUrl(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (typeof window !== 'undefined') {
@@ -92,6 +100,7 @@ export function getExportPnd1RdPrepTxtUrl(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
   filingForm?: 'pnd1' | 'pnd1a' | 'all'
@@ -105,6 +114,7 @@ export function getExportPnd1RdPrepTxtUrl(params: {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.filingForm) q.set('filingForm', params.filingForm)
@@ -124,6 +134,7 @@ export function getExportPnd53RdFilingTxtUrl(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
   formHint?: 'PND3' | 'PND53' | 'ALL'
@@ -138,6 +149,7 @@ export function getExportPnd53RdFilingTxtUrl(params: {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.formHint) q.set('formHint', params.formHint)
@@ -158,6 +170,7 @@ export function getExportPp30RdPrepTxtUrl(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
   payerTaxId?: string
@@ -174,6 +187,7 @@ export function getExportPp30RdPrepTxtUrl(params: {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.payerTaxId) q.set('payerTaxId', params.payerTaxId)
@@ -295,6 +309,7 @@ export async function validatePnd1RdPrep(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
   filingForm?: 'pnd1' | 'pnd1a' | 'all'
@@ -302,6 +317,7 @@ export async function validatePnd1RdPrep(params: {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.filingForm) q.set('filingForm', params.filingForm)
@@ -314,6 +330,7 @@ export async function validatePnd3Pnd53(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   filingStatus?: 'all' | 'draft' | 'submitted'
   storeFilter?: string
   formHint?: 'PND3' | 'PND53' | 'ALL'
@@ -321,6 +338,7 @@ export async function validatePnd3Pnd53(params: {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.filingStatus) q.set('filingStatus', params.filingStatus)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.formHint) q.set('formHint', params.formHint)
@@ -333,11 +351,13 @@ export async function getPayrollWhtTinGaps(params: {
   taxMonth: string
   yearMonth?: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   storeFilter?: string
 }) {
   const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.periodType) q.set('periodType', params.periodType)
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/getPayrollWhtTinGaps?${q}`)
   return res.json() as Promise<PayrollWhtTinGapResult>

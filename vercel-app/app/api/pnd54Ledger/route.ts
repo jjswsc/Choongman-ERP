@@ -13,7 +13,7 @@ import {
 } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { canonicalLedgerStoreName } from '@/lib/erp-store-identity'
-import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { buildTaxMonthPostgrestFilter, filingPeriodFromSearchParams } from '@/lib/thai-tax-period'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const period = filingPeriodFromSearchParams(searchParams, yearMonth, periodType)
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const rows = (await supabaseSelectFilterAllPages(PND54_TABLE, monthFilter, {

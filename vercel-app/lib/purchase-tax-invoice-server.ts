@@ -14,6 +14,7 @@ import {
   vatLedgerRowForSchemaError,
 } from '@/lib/vat-ledger-invoice-evidence'
 import { parseTaxScopeFilter } from '@/lib/tax-entity-scope'
+import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { appendSaasTenantFilter, resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import {
   digitsTin13,
@@ -114,13 +115,15 @@ async function loadEntityBuyerTaxId(entityCode: string, tenantId?: string | null
 
 export async function listPurchaseTaxInvoices(params: {
   taxMonth: string
+  endMonth?: string
   storeFilter?: string
   tenantId?: string | null
 }): Promise<PurchaseTaxInvoiceRow[]> {
   const taxMonth = String(params.taxMonth || '').slice(0, 7)
   if (!/^\d{4}-\d{2}$/.test(taxMonth)) return []
+  const period = getThaiTaxFilingPeriodRange({ yearMonth: taxMonth, endMonth: params.endMonth })
   const parsed = parseTaxScopeFilter(String(params.storeFilter || ''))
-  const parts = [`tax_month=eq.${encodeURIComponent(taxMonth)}`]
+  const parts = [buildTaxMonthPostgrestFilter(period.months)]
   if (parsed.kind === 'taxid' && parsed.value.length === 13) {
     parts.push(`buyer_tax_id=eq.${encodeURIComponent(parsed.value)}`)
   } else if (parsed.kind === 'entity') {

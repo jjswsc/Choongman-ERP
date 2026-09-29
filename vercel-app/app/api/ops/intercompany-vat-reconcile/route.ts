@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
 import { analyzeIntercompanyVatReconcile, probeStoreHasHqOutboundSupply } from '@/lib/intercompany-vat-reconcile'
-import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { filingPeriodFromSearchParams } from '@/lib/thai-tax-period'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const period = filingPeriodFromSearchParams(searchParams, yearMonth, periodType)
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const matchesStore = (name: string) => storeScope.matches(name)
     const probeOnly = String(searchParams.get('probeOnly') || '').trim() === '1'

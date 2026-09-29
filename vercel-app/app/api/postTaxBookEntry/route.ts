@@ -6,6 +6,7 @@ import {
   postTaxIncomeExpenseClosing,
   postTaxInventoryCogsJournal,
   postTaxPayrollJournal,
+  postTaxVatSummaryJournal,
 } from '@/lib/tax-book-posting'
 import { setTaxAccountingPeriodClosed, TAX_BOOK_SCHEMA_MISSING, TAX_PERIOD_CLOSED } from '@/lib/tax-book-period-server'
 import { loadTaxBookJournalHeads, loadTaxBookLines, summarizeTaxBookTrial } from '@/lib/tax-book-server'
@@ -71,6 +72,28 @@ export async function POST(request: NextRequest) {
         gross: totals.gross,
         tax: totals.wht,
         sso: totals.sso,
+        postedBy: actor,
+      })
+      return NextResponse.json({ success: true, entryId: id, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD }, { headers })
+    }
+
+    if (action === 'vat') {
+      const bridge = await loadTaxManagementBridge({
+        yearMonth,
+        scopeFilter,
+        userRole: auth.role,
+        userStore: auth.store,
+        allowedStores: auth.allowedStores,
+        tenantId: auth.tenantId,
+      })
+      const outputVat = bridge.report.lines.find((l) => l.key === 'outputVat')?.filing || 0
+      const inputVat = bridge.report.lines.find((l) => l.key === 'inputVat')?.filing || 0
+      if (outputVat <= 0 && inputVat <= 0) throw new Error('NO_AMOUNT')
+      const id = await postTaxVatSummaryJournal({
+        yearMonth,
+        taxEntityCode,
+        outputVat,
+        inputVat,
         postedBy: actor,
       })
       return NextResponse.json({ success: true, entryId: id, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD }, { headers })

@@ -7,6 +7,7 @@ import {
   taxInventoryCogsLines,
   taxJournalBalanced,
   taxPayrollJournalLines,
+  taxVatSummaryLines,
   type TaxJournalLineDraft,
 } from '@/lib/tax-book'
 import { assertTaxAccountingPeriodOpen } from '@/lib/tax-book-period-server'
@@ -15,6 +16,7 @@ import { deleteTaxBookSource, taxBookClosingLines, taxBookMonthSourceId } from '
 const TAX_PAYROLL = 'tax_payroll'
 const TAX_INVENTORY = 'tax_inventory_cogs'
 const TAX_ADJUSTMENT = 'tax_adjustment'
+const TAX_VAT = 'tax_vat_summary'
 const TAX_CLOSING = 'tax_income_expense_closing'
 
 async function postTaxLines(input: {
@@ -104,6 +106,35 @@ export async function postTaxInventoryCogsJournal(input: {
     sourceType: TAX_INVENTORY,
     sourceId: taxBookMonthSourceId(input.yearMonth),
     memo: `세무 장부 매출원가 ${input.yearMonth}`,
+    postedBy: input.postedBy,
+    lines,
+    replace: true,
+  })
+}
+
+export async function postTaxVatSummaryJournal(input: {
+  yearMonth: string
+  taxEntityCode: string
+  outputVat: number
+  inputVat: number
+  postedBy: string | null
+}): Promise<number | null> {
+  const lines = taxVatSummaryLines({
+    outputVat: input.outputVat,
+    inputVat: input.inputVat,
+    names: {
+      input: accountLine(TAX_ACCOUNTS.inputVat).accountName,
+      output: accountLine(TAX_ACCOUNTS.outputVat).accountName,
+      clearing: accountLine(TAX_ACCOUNTS.vatClearing).accountName,
+    },
+  })
+  if (!lines.length) return null
+  return postTaxLines({
+    yearMonth: input.yearMonth,
+    taxEntityCode: input.taxEntityCode,
+    sourceType: TAX_VAT,
+    sourceId: taxBookMonthSourceId(input.yearMonth),
+    memo: `세무 장부 부가세 ${input.yearMonth}`,
     postedBy: input.postedBy,
     lines,
     replace: true,

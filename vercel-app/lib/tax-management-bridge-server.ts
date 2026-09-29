@@ -14,6 +14,7 @@ import {
   taxBookClosingLines,
 } from '@/lib/tax-book-server'
 import { createTaxStoreScopeMatcher, resolveTaxScopeStoreCodes } from '@/lib/tax-entity-scope'
+import { isPosAutoVatOutputRow } from '@/lib/vat-ledger-pos'
 import { computeTrialBalanceReport } from '@/lib/trial-balance-report'
 
 export type TaxManagementBridgePayload = {
@@ -38,7 +39,15 @@ function emptyBridge(schemaReady: boolean): TaxBridgeReport {
     taxBookDebit: 0,
     taxBookCredit: 0,
     taxEntryCount: 0,
-    filing: { outputVat: 0, outputNet: 0, inputVat: 0, payrollWht: 0 },
+    filing: {
+      outputVat: 0,
+      outputNet: 0,
+      inputNet: 0,
+      posOutputNet: 0,
+      taxInvoiceOutputNet: 0,
+      inputVat: 0,
+      payrollWht: 0,
+    },
   })
 }
 
@@ -126,6 +135,9 @@ export async function loadTaxManagementBridge(input: {
     filing: {
       outputVat: filing.outputVat,
       outputNet: filing.outputNet,
+      inputNet: filing.inputNet,
+      posOutputNet: filing.posOutputNet,
+      taxInvoiceOutputNet: filing.taxInvoiceOutputNet,
       inputVat: filing.inputVat,
       payrollWht: payroll.wht,
     },
@@ -149,7 +161,14 @@ async function sumVatFiling(
   yearMonth: string,
   scopeFilter: string,
   tenantId?: string | null
-): Promise<{ outputVat: number; outputNet: number; inputVat: number }> {
+): Promise<{
+  outputVat: number
+  outputNet: number
+  inputVat: number
+  inputNet: number
+  posOutputNet: number
+  taxInvoiceOutputNet: number
+}> {
   const matcher = await createTaxStoreScopeMatcher(scopeFilter, tenantId)
   let rows: {
     direction?: string | null
@@ -157,13 +176,15 @@ async function sumVatFiling(
     net_amount?: number | string | null
     store_name?: string | null
     vat_status?: string | null
+    memo?: string | null
+    counterparty_name?: string | null
   }[] = []
   try {
     rows = (await supabaseSelectFilterAllPages(
       'vat_ledger_entries',
       `tax_month=eq.${encodeURIComponent(yearMonth)}`,
       {
-        select: 'direction,vat_amount,net_amount,store_name,vat_status',
+        select: 'direction,vat_amount,net_amount,store_name,vat_status,memo,counterparty_name',
         pageSize: 4000,
         maxRows: 200000,
       }
@@ -174,6 +195,9 @@ async function sumVatFiling(
   let outputVat = 0
   let outputNet = 0
   let inputVat = 0
+  let inputNet = 0
+  let posOutputNet = 0
+  let taxInvoiceOutputNet = 0
   for (const row of rows) {
     const status = String(row.vat_status || '').toLowerCase()
     if (/void|cancel|삭제|취소/.test(status)) continue
@@ -184,14 +208,20 @@ async function sumVatFiling(
     if (direction === 'output') {
       outputVat += vat
       outputNet += net
+      if (isPosAutoVatOutputRow(row)) posOutputNet += net
+      else taxInvoiceOutputNet += net
     } else if (direction === 'input') {
       inputVat += vat
+      inputNet += net
     }
   }
   return {
     outputVat: roundTaxAmount(outputVat),
     outputNet: roundTaxAmount(outputNet),
     inputVat: roundTaxAmount(inputVat),
+    inputNet: roundTaxAmount(inputNet),
+    posOutputNet: roundTaxAmount(posOutputNet),
+    taxInvoiceOutputNet: roundTaxAmount(taxInvoiceOutputNet),
   }
 }
 

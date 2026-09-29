@@ -4,13 +4,18 @@ import {
   TAX_CLOSE_LOCKS_STORE_PERIOD,
   formatTaxVoucherNo,
   recognizeTaxBook,
+  resolveTaxBookMonthRange,
   taxEntityKeyFromScope,
+  buildTaxBookStatements,
+  preferLockedTaxBookProfit,
   taxInventoryCogsLines,
   taxJournalBalanced,
   taxPayrollJournalLines,
+  taxVatSummaryLines,
   voucherKindForSourceType,
 } from './tax-book'
 import { buildTaxManagementBridge } from './tax-management-bridge'
+import { getThaiTaxFilingPeriodRange } from './thai-tax-period'
 import type { TrialBalanceRow } from './trial-balance-report'
 
 function row(code: string, debit: number, credit: number): TrialBalanceRow {
@@ -41,6 +46,65 @@ describe('tax book rules', () => {
     expect(taxInventoryCogsLines(0)).toEqual([])
   })
 
+  it('posts filing VAT onto the tax book without copying POS sales', () => {
+    const lines = taxVatSummaryLines({ outputVat: 200, inputVat: 80 })
+    expect(taxJournalBalanced(lines)).toBe(true)
+    expect(lines.find((l) => l.accountCode === '2180')?.amount).toBe(200)
+    expect(lines.find((l) => l.accountCode === '1360')?.amount).toBe(80)
+    expect(lines.find((l) => l.accountCode === '4110')).toBeUndefined()
+    expect(taxVatSummaryLines({ outputVat: 50, inputVat: 50 }).some((l) => l.accountCode === '1395')).toBe(false)
+    expect(taxVatSummaryLines({ outputVat: 0, inputVat: 0 })).toEqual([])
+  })
+
+  it('builds tax statements from tax-book rows and keeps profit after closing', () => {
+    const open = buildTaxBookStatements([
+      { accountCode: '1130', accountName: '매출채권', debit: 1000, credit: 0 },
+      { accountCode: '4110', accountName: '매출', debit: 0, credit: 1000 },
+      { accountCode: '5110', accountName: '원가', debit: 400, credit: 0 },
+      { accountCode: '1460', accountName: '재고', debit: 0, credit: 400 },
+    ])
+    expect(open.netIncome).toBe(600)
+    expect(open.revenue).toBe(1000)
+    expect(open.balanced).toBe(true)
+    const closed = buildTaxBookStatements([
+      { accountCode: '1130', accountName: '매출채권', debit: 1000, credit: 0 },
+      { accountCode: '1460', accountName: '재고', debit: 0, credit: 400 },
+      { accountCode: '3120', accountName: '이익잉여금', debit: 0, credit: 600 },
+      { accountCode: '1360', accountName: '매입세액', debit: 80, credit: 0 },
+      { accountCode: '1395', accountName: '대체', debit: 120, credit: 0 },
+      { accountCode: '2180', accountName: '부가세예수금', debit: 0, credit: 200 },
+    ])
+    expect(closed.netIncome).toBe(600)
+    expect(closed.revenue).toBe(0)
+    expect(closed.balanced).toBe(true)
+  })
+
+  it('uses locked tax-book profit for CIT only when every month is closed', () => {
+    const partial = preferLockedTaxBookProfit({
+      journalRevenue: 1000,
+      journalExpense: 400,
+      journalEntryCount: 3,
+      months: [
+        { closed: true, schemaReady: true, netIncome: 500, entryCount: 2 },
+        { closed: false, schemaReady: true, netIncome: 0, entryCount: 0 },
+      ],
+    })
+    expect(partial.source).toBe('journals')
+    expect(partial.partial).toBe(true)
+    expect(partial.revenue - partial.expense).toBe(600)
+    const locked = preferLockedTaxBookProfit({
+      journalRevenue: 1000,
+      journalExpense: 400,
+      journalEntryCount: 3,
+      months: [
+        { closed: true, schemaReady: true, netIncome: 500, entryCount: 2 },
+        { closed: true, schemaReady: true, netIncome: 100, entryCount: 1 },
+      ],
+    })
+    expect(locked.source).toBe('tax_book')
+    expect(locked.revenue - locked.expense).toBe(600)
+  })
+
   it('recognizes a month only when the tax trial balances and VAT ties', () => {
     expect(
       recognizeTaxBook({
@@ -68,6 +132,32 @@ describe('tax book rules', () => {
     ).toBe(false)
   })
 
+  it('resolves a month or a period and rejects a backwards or oversized range', () => {
+    const one = resolveTaxBookMonthRange('2026-09', '2026-09')
+    expect(one.ok).toBe(true)
+    if (one.ok) {
+      expect(one.singleMonth).toBe(true)
+      expect(one.months).toEqual(['2026-09'])
+    }
+    const span = resolveTaxBookMonthRange('2026-01', '2026-03')
+    expect(span.ok).toBe(true)
+    if (span.ok) {
+      expect(span.months).toEqual(['2026-01', '2026-02', '2026-03'])
+      expect(span.startDate).toBe('2026-01-01')
+      expect(span.endDate).toBe('2026-03-31')
+    }
+    expect(resolveTaxBookMonthRange('2026-04', '2026-02')).toEqual({ ok: false, error: 'RANGE_ORDER' })
+    expect(resolveTaxBookMonthRange('2024-01', '2026-02')).toEqual({ ok: false, error: 'RANGE_TOO_LONG' })
+  })
+
+  it('uses a custom filing range when the end month differs', () => {
+    const span = getThaiTaxFilingPeriodRange({ yearMonth: '2026-01', periodType: 'monthly', endMonth: '2026-03' })
+    expect(span.months).toEqual(['2026-01', '2026-02', '2026-03'])
+    const half = getThaiTaxFilingPeriodRange({ yearMonth: '2026-02', periodType: 'half_year' })
+    expect(half.months).toEqual(['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'])
+    expect(() => getThaiTaxFilingPeriodRange({ yearMonth: '2026-04', endMonth: '2026-02' })).toThrow('RANGE_ORDER')
+  })
+
   it('does not lock the store accounting period', () => {
     expect(TAX_CLOSE_LOCKS_STORE_PERIOD).toBe(false)
   })
@@ -83,7 +173,15 @@ describe('tax management bridge', () => {
       taxBookDebit: 0,
       taxBookCredit: 0,
       taxEntryCount: 0,
-      filing: { outputVat: 70, outputNet: 1000, inputVat: 28, payrollWht: 30 },
+      filing: {
+        outputVat: 70,
+        outputNet: 1000,
+        inputNet: 80,
+        posOutputNet: 900,
+        taxInvoiceOutputNet: 100,
+        inputVat: 28,
+        payrollWht: 30,
+      },
     })
     expect(report.holes).toContain('payroll')
     expect(report.holes).toContain('cogs')
@@ -92,6 +190,29 @@ describe('tax management bridge', () => {
     const sales = report.lines.find((l) => l.key === 'sales')
     expect(sales?.management).toBe(1000)
     expect(sales?.journal).toBe(1000)
+    expect(sales?.reason).toBe('not_on_tax_book')
+    expect(report.lines.find((l) => l.key === 'cogs')?.reason).toBe('inventory_vs_purchase_invoice')
+    expect(report.lines.find((l) => l.key === 'outputVat')?.reason).toBe('vat_not_posted')
+    expect(report.salesSplit.posNet).toBe(900)
+    const matched = buildTaxManagementBridge({
+      schemaReady: true,
+      management: { sales: 1000, cogs: 0, payroll: 0, netProfit: 100 },
+      journalRows: [row('4110', 0, 1000)],
+      taxBookRows: [row('4110', 0, 1000)],
+      taxBookDebit: 1000,
+      taxBookCredit: 1000,
+      taxEntryCount: 1,
+      filing: {
+        outputVat: 0,
+        outputNet: 1000,
+        inputNet: 0,
+        posOutputNet: 0,
+        taxInvoiceOutputNet: 1000,
+        inputVat: 0,
+        payrollWht: 0,
+      },
+    })
+    expect(matched.lines.find((l) => l.key === 'net')?.reason).toBe('nondeductible_or_limit')
   })
 })
 

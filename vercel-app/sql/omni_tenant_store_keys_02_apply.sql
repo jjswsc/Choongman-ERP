@@ -372,15 +372,15 @@ BEGIN
     IF dup > 0 THEN
       RAISE EXCEPTION 'members 법인+회원번호 중복 %건', dup;
     END IF;
-    IF NOT EXISTS (
-      SELECT 1 FROM pg_constraint
-      WHERE conrelid = 'public.members'::regclass
-        AND conname = 'members_tenant_member_no_key'
-    ) THEN
+    -- CREATE UNIQUE INDEX 는 pg_constraint 가 아니라 인덱스다. 이름만 있으면 건너뛴다.
+    IF to_regclass('public.members_tenant_member_no_key') IS NULL THEN
       ALTER TABLE public.members DROP CONSTRAINT IF EXISTS members_member_no_key;
       DROP INDEX IF EXISTS public.members_member_no_key;
       CREATE UNIQUE INDEX members_tenant_member_no_key
         ON public.members (tenant_id, member_no);
+    ELSE
+      ALTER TABLE public.members DROP CONSTRAINT IF EXISTS members_member_no_key;
+      DROP INDEX IF EXISTS public.members_member_no_key;
     END IF;
   END IF;
 END $$;

@@ -13,7 +13,7 @@ import {
   assertCanWriteAccountingCompliance,
 } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
-import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { buildTaxMonthPostgrestFilter, filingPeriodFromSearchParams } from '@/lib/thai-tax-period'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { writeAccountingComplianceAudit } from '@/lib/accounting-compliance-audit'
 import { syncIncrementalVatLedgersFromExpenseAndBank, syncTaxVatLedgersFromStockAndExpenses } from '@/lib/tax-ledger-auto-sync'
@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const period = filingPeriodFromSearchParams(searchParams, yearMonth, periodType)
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)
     const syncStoreFilter = storeScope.requestedCanonical || storeFilter || 'All'

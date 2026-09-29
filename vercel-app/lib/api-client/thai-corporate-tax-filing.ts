@@ -106,6 +106,7 @@ export async function getThaiTaxFilingSummary(params: {
   userRole: string
   yearMonth: string
   periodType?: 'monthly' | 'half_year' | 'annual'
+  endMonth?: string
   storeFilter?: string
 }) {
   const q = new URLSearchParams({
@@ -113,6 +114,7 @@ export async function getThaiTaxFilingSummary(params: {
     yearMonth: params.yearMonth,
     periodType: params.periodType || 'monthly',
   })
+  if (params.endMonth) q.set('endMonth', params.endMonth)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetchWithOffline(`/api/getThaiTaxFilingSummary?${q}`)
   return res.json() as Promise<ThaiTaxFilingSummary>
@@ -139,6 +141,7 @@ export type CorporateTaxComputationData = {
   months: string[]
   storeFilter: string
   accountingProfit: number
+  accountingProfitSource?: 'tax_book' | 'journals'
   taxAddBack: number
   taxDeduction: number
   taxableIncome: number

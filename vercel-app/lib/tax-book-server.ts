@@ -1,10 +1,10 @@
-import { getBangkokMonthRange } from '@/lib/bangkok-time'
 import { accountLine } from '@/lib/chart-of-accounts-mapping'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
 import { supabaseDeleteByFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import {
   TAX_BOOK,
   formatTaxVoucherNo,
+  resolveTaxBookMonthRange,
   roundTaxAmount,
   voucherKindForSourceType,
   type TaxVoucherKind,
@@ -53,10 +53,15 @@ export function taxBookMonthSourceId(yearMonth: string): number {
 
 export async function loadTaxBookJournalHeads(input: {
   taxEntityCode: string
-  yearMonth: string
+  yearMonth?: string
+  fromMonth?: string
+  toMonth?: string
 }): Promise<{ schemaReady: boolean; heads: JournalHead[] }> {
   const entity = String(input.taxEntityCode || '').trim()
-  const { startStr, endStr } = getBangkokMonthRange(input.yearMonth)
+  const range = resolveTaxBookMonthRange(input.fromMonth || input.yearMonth || '', input.toMonth || input.yearMonth || input.fromMonth)
+  if (!range.ok) throw new Error(range.error)
+  const startStr = range.startDate
+  const endStr = range.endDate
   if (!entity) return { schemaReady: true, heads: [] }
   const filter = [
     `book=eq.${TAX_BOOK}`,
@@ -154,12 +159,15 @@ export function toTaxBookEntries(
     .map((h) => {
       const id = Number(h.id || 0)
       const kind = (String(h.voucher_kind || '').trim() || voucherKindForSourceType(h.source_type)) as TaxVoucherKind
-      seqByKind[kind] = (seqByKind[kind] || 0) + 1
+      const dated = String(h.accounting_date || '').slice(0, 7)
+      const ym = /^\d{4}-\d{2}$/.test(dated) ? dated : yearMonth
+      const seqKey = `${ym}:${kind}`
+      seqByKind[seqKey] = (seqByKind[seqKey] || 0) + 1
       const tot = totals.get(id) || { debit: 0, credit: 0 }
       return {
         id,
         entryNo: String(h.entry_no || ''),
-        voucherNo: formatTaxVoucherNo(kind, yearMonth, seqByKind[kind]),
+        voucherNo: formatTaxVoucherNo(kind, ym, seqByKind[seqKey]),
         voucherKind: kind,
         accountingDate: String(h.accounting_date || '').slice(0, 10),
         sourceType: String(h.source_type || ''),

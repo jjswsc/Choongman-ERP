@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tr, useT } from "@/lib/i18n"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 export function EmployeeCsvImportDialog({ onImported }: { onImported?: () => void }) {
@@ -34,12 +34,31 @@ export function EmployeeCsvImportDialog({ onImported }: { onImported?: () => voi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ csv }),
       })
-      const json = (await res.json()) as { success?: boolean; message?: string; count?: number }
+      const json = (await res.json()) as {
+        success?: boolean
+        message?: string
+        added?: number
+        updated?: number
+        skippedCodes?: number
+        skippedRows?: number
+      }
       if (!json.success) {
         await appAlert(json.message || t("msg_empty_result"))
         return
       }
-      await appAlert(json.message || t("emp_csv_import_ok"))
+      const parts = [
+        tr(t, "emp_csv_import_ok_detail", {
+          added: json.added ?? 0,
+          updated: json.updated ?? 0,
+        }),
+      ]
+      if ((json.skippedCodes ?? 0) > 0) {
+        parts.push(tr(t, "emp_csv_import_code_skipped", { n: json.skippedCodes ?? 0 }))
+      }
+      if ((json.skippedRows ?? 0) > 0) {
+        parts.push(tr(t, "emp_csv_import_rows_skipped", { n: json.skippedRows ?? 0 }))
+      }
+      await appAlert(parts.join("\n"))
       setOpen(false)
       setFile(null)
       onImported?.()
@@ -61,7 +80,7 @@ export function EmployeeCsvImportDialog({ onImported }: { onImported?: () => voi
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("emp_csv_import_title")}</DialogTitle>
-          <DialogDescription className="text-amber-800 dark:text-amber-200">{t("emp_csv_import_warn")}</DialogDescription>
+          <DialogDescription>{t("emp_csv_import_warn")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground">{t("emp_csv_import_pick")}</label>

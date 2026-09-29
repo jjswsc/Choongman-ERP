@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { taxEntityKeyFromScope } from '@/lib/tax-book'
+import { resolveTaxBookMonthRange, taxEntityKeyFromScope } from '@/lib/tax-book'
 import {
   loadTaxBookJournalHeads,
   loadTaxBookLines,
@@ -29,17 +29,20 @@ export async function GET(request: NextRequest) {
   }
   const { searchParams } = new URL(request.url)
   const yearMonth = String(searchParams.get('yearMonth') || '').trim()
+  const fromMonth = String(searchParams.get('fromMonth') || yearMonth).trim()
+  const toMonth = String(searchParams.get('toMonth') || yearMonth).trim()
   const scopeFilter = String(searchParams.get('scopeFilter') || '').trim()
   const view = String(searchParams.get('view') || 'vouchers').trim()
-  if (!/^\d{4}-\d{2}$/.test(yearMonth)) {
-    return NextResponse.json({ error: 'INVALID_YEAR_MONTH' }, { status: 400, headers })
+  const range = resolveTaxBookMonthRange(fromMonth, toMonth)
+  if (!range.ok) {
+    return NextResponse.json({ error: range.error }, { status: 400, headers })
   }
   const taxEntityCode = taxEntityKeyFromScope(scopeFilter)
   if (!taxEntityCode) {
     return NextResponse.json({ error: 'NEED_TAX_ENTITY', schemaReady: true, vouchers: [], ledger: [], trial: [] }, { status: 400, headers })
   }
   try {
-    const heads = await loadTaxBookJournalHeads({ taxEntityCode, yearMonth })
+    const heads = await loadTaxBookJournalHeads({ taxEntityCode, fromMonth: range.from, toMonth: range.to })
     if (!heads.schemaReady) {
       return NextResponse.json({ schemaReady: false, vouchers: [], ledger: [], trial: [] }, { headers })
     }
@@ -49,9 +52,11 @@ export async function GET(request: NextRequest) {
       {
         schemaReady: true,
         taxEntityCode,
-        yearMonth,
-        vouchers: view === 'ledger' ? [] : toTaxBookEntries(yearMonth, heads.heads, lines),
-        ledger: view === 'vouchers' ? [] : toTaxBookLedger(yearMonth, heads.heads, lines),
+        yearMonth: range.from,
+        fromMonth: range.from,
+        toMonth: range.to,
+        vouchers: view === 'ledger' ? [] : toTaxBookEntries(range.from, heads.heads, lines),
+        ledger: view === 'vouchers' ? [] : toTaxBookLedger(range.from, heads.heads, lines),
         trial: trial.rows,
         totalDebit: trial.totalDebit,
         totalCredit: trial.totalCredit,

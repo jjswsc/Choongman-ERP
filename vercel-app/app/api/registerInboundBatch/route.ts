@@ -64,6 +64,8 @@ export async function POST(request: NextRequest) {
       spec?: string
       qty?: number | string
       cost?: number | string
+      thbUnitCost?: number | string
+      thb_unit_cost?: number | string
     }[]
 
     if (!list.length) {
@@ -112,6 +114,7 @@ export async function POST(request: NextRequest) {
         costRaw: item.cost,
         sourceCurrency,
         fxRate,
+        thbUnitCostRaw: item.thbUnitCost ?? item.thb_unit_cost,
       })
       if (!resolved.ok) {
         return NextResponse.json({ success: false, message: resolved.message }, { status: 400, headers })

@@ -172,6 +172,15 @@ export const CHART_OF_ACCOUNTS_BY_CODE: Record<string, AccountMeta> = {
     normalSide: 'debit',
     vatRelated: true,
   },
+  '1395': {
+    code: '1395',
+    nameKo: '세무부가세대체',
+    nameEn: 'Tax VAT clearing',
+    tfrsNpaesGroupKo: '유동자산 — 부가세',
+    statement: 'bs',
+    normalSide: 'debit',
+    vatRelated: true,
+  },
   '5110': {
     code: '5110',
     nameKo: '매출원가',

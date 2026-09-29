@@ -7,6 +7,8 @@ export const TAX_SOURCE_PREFIX = 'tax_'
 export const TAX_ACCOUNTS = {
   inputVat: '1360',
   outputVat: '2180',
+  /** 세액만 올릴 때 차대를 맞추는 대체 계정. 손익을 바꾸지 않는다. */
+  vatClearing: '1395',
   wht: '2190',
   sso: '2195',
   payables: '2110',
@@ -32,7 +34,14 @@ export function isTaxBookSourceType(sourceType: string | null | undefined): bool
 export function voucherKindForSourceType(sourceType: string | null | undefined): TaxVoucherKind {
   const s = String(sourceType || '').trim()
   if (s === 'tax_income_expense_closing' || s === 'closing_income_expense') return 'closing'
-  if (s === 'tax_payroll' || s === 'tax_inventory_cogs' || s === 'tax_adjustment' || s === 'depreciation' || s === 'expense_accrual') {
+  if (
+    s === 'tax_payroll' ||
+    s === 'tax_inventory_cogs' ||
+    s === 'tax_vat_summary' ||
+    s === 'tax_adjustment' ||
+    s === 'depreciation' ||
+    s === 'expense_accrual'
+  ) {
     return 'general'
   }
   if (s === 'pos_order' || s === 'pos_day_close' || s === 'pos_order_reversal') return 'sales'
@@ -72,6 +81,61 @@ export function taxEntityKeyFromScope(scopeFilter: string | null | undefined): s
     return tin.length === 13 ? `tin:${tin}` : null
   }
   return null
+}
+
+export const TAX_BOOK_RANGE_MAX_MONTHS = 24
+
+export type TaxBookMonthRange =
+  | { ok: false; error: 'INVALID_YEAR_MONTH' | 'RANGE_ORDER' | 'RANGE_TOO_LONG' }
+  | {
+      ok: true
+      from: string
+      to: string
+      months: string[]
+      startDate: string
+      endDate: string
+      singleMonth: boolean
+    }
+
+function monthEndDate(yearMonth: string): string {
+  const y = Number(yearMonth.slice(0, 4))
+  const m = Number(yearMonth.slice(5, 7))
+  const d = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return `${yearMonth}-${String(d).padStart(2, '0')}`
+}
+
+function nextYearMonth(yearMonth: string): string {
+  let y = Number(yearMonth.slice(0, 4))
+  let m = Number(yearMonth.slice(5, 7)) + 1
+  if (m > 12) {
+    m = 1
+    y += 1
+  }
+  return `${y}-${String(m).padStart(2, '0')}`
+}
+
+/** 장부 조회 기간. 시작·종료가 같으면 한 달이다. */
+export function resolveTaxBookMonthRange(fromMonth: string, toMonth?: string): TaxBookMonthRange {
+  const from = String(fromMonth || '').trim().slice(0, 7)
+  const to = String(toMonth || fromMonth || '').trim().slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(from) || !/^\d{4}-\d{2}$/.test(to)) return { ok: false, error: 'INVALID_YEAR_MONTH' }
+  if (to < from) return { ok: false, error: 'RANGE_ORDER' }
+  const months: string[] = []
+  let cursor = from
+  while (cursor <= to) {
+    months.push(cursor)
+    if (months.length > TAX_BOOK_RANGE_MAX_MONTHS) return { ok: false, error: 'RANGE_TOO_LONG' }
+    cursor = nextYearMonth(cursor)
+  }
+  return {
+    ok: true,
+    from,
+    to,
+    months,
+    startDate: `${from}-01`,
+    endDate: monthEndDate(to),
+    singleMonth: from === to,
+  }
 }
 
 export function roundTaxAmount(v: number): number {
@@ -189,6 +253,182 @@ export function taxInventoryCogsLines(cogs: number, names?: { cogs?: string; inv
       amount,
     },
   ]
+}
+
+/** 신고 매출세액·매입세액을 세무 장부 한 장에 올린다. 포스 매출을 다시 넣지 않는다. */
+export function taxVatSummaryLines(input: {
+  outputVat: number
+  inputVat: number
+  names?: { input?: string; output?: string; clearing?: string }
+}): TaxJournalLineDraft[] {
+  const output = roundTaxAmount(Math.max(0, input.outputVat))
+  const inputVat = roundTaxAmount(Math.max(0, input.inputVat))
+  if (output <= 0 && inputVat <= 0) return []
+  const lines: TaxJournalLineDraft[] = []
+  if (inputVat > 0) {
+    lines.push({
+      accountCode: TAX_ACCOUNTS.inputVat,
+      accountName: input.names?.input || '매입세액',
+      side: 'debit',
+      amount: inputVat,
+    })
+  }
+  if (output > 0) {
+    lines.push({
+      accountCode: TAX_ACCOUNTS.outputVat,
+      accountName: input.names?.output || '부가세예수금',
+      side: 'credit',
+      amount: output,
+    })
+  }
+  const plug = roundTaxAmount(output - inputVat)
+  if (plug > 0.009) {
+    lines.push({
+      accountCode: TAX_ACCOUNTS.vatClearing,
+      accountName: input.names?.clearing || '세무부가세대체',
+      side: 'debit',
+      amount: plug,
+    })
+  } else if (plug < -0.009) {
+    lines.push({
+      accountCode: TAX_ACCOUNTS.vatClearing,
+      accountName: input.names?.clearing || '세무부가세대체',
+      side: 'credit',
+      amount: roundTaxAmount(-plug),
+    })
+  }
+  return lines
+}
+
+export type TaxBookStatementLine = {
+  accountCode: string
+  accountName: string | null
+  amount: number
+  section: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
+}
+
+export type TaxBookStatements = {
+  revenue: number
+  expense: number
+  /** 미마감이면 수익−비용. 마감 후면 이익잉여금 대체액까지 포함한 순이익. */
+  netIncome: number
+  retainedEarnings: number
+  assets: number
+  liabilities: number
+  equity: number
+  unclosedProfit: number
+  balanced: boolean
+  incomeLines: TaxBookStatementLine[]
+  balanceLines: TaxBookStatementLine[]
+}
+
+function statementSection(code: string): TaxBookStatementLine['section'] | null {
+  const c = String(code || '').trim()
+  if (c.startsWith('1')) return 'asset'
+  if (c.startsWith('2')) return 'liability'
+  if (c.startsWith('3')) return 'equity'
+  if (c.startsWith('4')) return 'revenue'
+  if (c.startsWith('5')) return 'expense'
+  return null
+}
+
+function normalAmount(section: TaxBookStatementLine['section'], debit: number, credit: number): number {
+  const netDebit = roundTaxAmount((Number(debit) || 0) - (Number(credit) || 0))
+  if (section === 'asset' || section === 'expense') return netDebit
+  return roundTaxAmount(-netDebit)
+}
+
+/** 세무 손익·재무상태는 book=tax 시산만 사용한다. 기업회계 집계를 읽지 않는다. */
+export function buildTaxBookStatements(
+  rows: { accountCode: string; accountName?: string | null; debit: number; credit: number }[]
+): TaxBookStatements {
+  const incomeLines: TaxBookStatementLine[] = []
+  const balanceLines: TaxBookStatementLine[] = []
+  let revenue = 0
+  let expense = 0
+  let assets = 0
+  let liabilities = 0
+  let equity = 0
+  let retainedEarnings = 0
+  for (const row of rows) {
+    const section = statementSection(row.accountCode)
+    if (!section) continue
+    const amount = normalAmount(section, row.debit, row.credit)
+    if (Math.abs(amount) < 0.005) continue
+    const line: TaxBookStatementLine = {
+      accountCode: row.accountCode,
+      accountName: row.accountName ?? null,
+      amount,
+      section,
+    }
+    if (section === 'revenue' || section === 'expense') incomeLines.push(line)
+    else balanceLines.push(line)
+    if (section === 'revenue') revenue += amount
+    else if (section === 'expense') expense += amount
+    else if (section === 'asset') assets += amount
+    else if (section === 'liability') liabilities += amount
+    else equity += amount
+    if (row.accountCode === TAX_ACCOUNTS.retainedEarnings) retainedEarnings += amount
+  }
+  revenue = roundTaxAmount(revenue)
+  expense = roundTaxAmount(expense)
+  assets = roundTaxAmount(assets)
+  liabilities = roundTaxAmount(liabilities)
+  equity = roundTaxAmount(equity)
+  retainedEarnings = roundTaxAmount(retainedEarnings)
+  const unclosedProfit = roundTaxAmount(revenue - expense)
+  const netIncome = roundTaxAmount(unclosedProfit + retainedEarnings)
+  const balanced = taxAmountsClose(assets, liabilities + equity + unclosedProfit, 0.05)
+  return {
+    revenue,
+    expense,
+    netIncome,
+    retainedEarnings,
+    assets,
+    liabilities,
+    equity,
+    unclosedProfit,
+    balanced,
+    incomeLines,
+    balanceLines,
+  }
+}
+
+export type LockedTaxBookMonth = {
+  closed: boolean
+  schemaReady: boolean
+  netIncome: number
+  entryCount: number
+}
+
+/** 기간의 달이 모두 세무 마감일 때만 그 순이익을 법인세 출발 금액으로 쓴다. */
+export function preferLockedTaxBookProfit(input: {
+  journalRevenue: number
+  journalExpense: number
+  journalEntryCount: number
+  months: LockedTaxBookMonth[]
+}): {
+  revenue: number
+  expense: number
+  entryCount: number
+  source: 'tax_book' | 'journals'
+  partial: boolean
+} {
+  const journals = {
+    revenue: roundTaxAmount(input.journalRevenue),
+    expense: roundTaxAmount(input.journalExpense),
+    entryCount: input.journalEntryCount,
+    source: 'journals' as const,
+    partial: input.months.some((m) => m.closed),
+  }
+  if (!input.months.length || !input.months.every((m) => m.schemaReady && m.closed)) return journals
+  return {
+    revenue: roundTaxAmount(input.months.reduce((s, m) => s + m.netIncome, 0)),
+    expense: 0,
+    entryCount: input.months.reduce((s, m) => s + m.entryCount, 0),
+    source: 'tax_book',
+    partial: false,
+  }
 }
 
 export function taxJournalBalanced(lines: TaxJournalLineDraft[]): boolean {

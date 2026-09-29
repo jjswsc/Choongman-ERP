@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
 import { createAccountingStoreScopeMatcher } from '@/lib/accounting-store-scope'
-import { buildTaxMonthPostgrestFilter, getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
+import { buildTaxMonthPostgrestFilter, filingPeriodFromSearchParams } from '@/lib/thai-tax-period'
 import { pnd1LedgerToRdPrepTxt, type Pnd1SourceRow } from '@/lib/pnd1-rd-prep-txt'
 import { enrichRdPrepLedgerPayeeAddresses } from '@/lib/rd-prep-payee-address-server'
 import { buildPnd1RdPrepReviewWorkbook, buildPnd1RdPrepXlsxFilename } from '@/lib/pnd1-rd-prep-xlsx'
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const period = getThaiTaxFilingPeriodRange({ yearMonth, periodType })
+    const period = filingPeriodFromSearchParams(searchParams, yearMonth, periodType)
     const monthFilter = buildTaxMonthPostgrestFilter(period.months)
     // entity:/taxid: 는 store_name=eq 가 아니라 스코프 매처로 필터 (빈 TXT 원인)
     const storeScope = await createAccountingStoreScopeMatcher(storeFilter, authResult.auth.tenantId)

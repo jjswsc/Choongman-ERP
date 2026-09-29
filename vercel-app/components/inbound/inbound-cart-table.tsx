@@ -17,6 +17,7 @@ import {
   normalizeInboundFxRateInput,
   parseInboundFxRate,
   thbUnitCostFromKrw,
+  type InboundThbAllocation,
 } from "@/lib/inbound-fx"
 
 export type InboundCartLine = {
@@ -39,8 +40,12 @@ type InboundCartTableProps = {
   totals?: { net: number; vat: number; gross: number } | null
   sourceCurrency?: InboundSourceCurrency
   fxRate?: string
+  /** 원화 비율로 나눈 바트 공급가. 있으면 줄 금액은 이 값을 보여 준다 */
+  thbAllocation?: InboundThbAllocation | null
+  thbSupplyTotal?: string
   onSourceCurrencyChange?: (currency: InboundSourceCurrency) => void
   onFxRateChange?: (fxRate: string) => void
+  onThbSupplyTotalChange?: (total: string) => void
   onUpdateCost: (idx: number, cost: string) => void
   onUpdateQty?: (idx: number, qty: string) => void
   onRemove: (idx: number) => void
@@ -56,8 +61,11 @@ export function InboundCartTable({
   totals = null,
   sourceCurrency = "THB",
   fxRate = "",
+  thbAllocation = null,
+  thbSupplyTotal = "",
   onSourceCurrencyChange,
   onFxRateChange,
+  onThbSupplyTotalChange,
   onUpdateCost,
   onUpdateQty,
   onRemove,
@@ -94,14 +102,26 @@ export function InboundCartTable({
     [onFxRateChange]
   )
 
-  const handleFxRateFieldChange = (next: string) => {
+  const clearThbSplit = () => {
     setThbAmountAnchor(false)
     setThbAmountDrafts({})
+    if (thbSupplyTotal) onThbSupplyTotalChange?.("")
+  }
+
+  const handleFxRateFieldChange = (next: string) => {
+    clearThbSplit()
     onFxRateChange?.(normalizeInboundFxRateInput(next))
+  }
+
+  const handleThbSupplyTotalChange = (raw: string) => {
+    setThbAmountAnchor(false)
+    setThbAmountDrafts({})
+    onThbSupplyTotalChange?.(normalizeErpDecimalInput(raw))
   }
 
   const handleCostChange = (idx: number, cost: string) => {
     onUpdateCost(idx, cost)
+    if (thbAllocation) return
     const thbDraft = thbAmountDrafts[idx]
     if (thbAmountAnchor && thbDraft) {
       applyFxFromLine(cost, cart[idx]?.qty ?? "", thbDraft)
@@ -110,6 +130,7 @@ export function InboundCartTable({
 
   const handleQtyChange = (idx: number, qty: string) => {
     onUpdateQty?.(idx, qty)
+    if (thbAllocation) return
     if (!thbAmountAnchor) {
       setThbAmountDrafts((prev) => {
         if (!(idx in prev)) return prev
@@ -125,6 +146,7 @@ export function InboundCartTable({
 
   const handleThbAmountChange = (idx: number, raw: string) => {
     const next = normalizeErpDecimalInput(raw)
+    if (thbSupplyTotal) onThbSupplyTotalChange?.("")
     setThbAmountDrafts((prev) => ({ ...prev, [idx]: next }))
     setThbAmountAnchor(true)
     applyFxFromLine(cart[idx]?.cost ?? "", cart[idx]?.qty ?? "", next)
@@ -225,9 +247,36 @@ export function InboundCartTable({
                 />
               </div>
             ) : null}
+            {isKrw && onThbSupplyTotalChange ? (
+              <div className="min-w-[140px] flex-1 max-w-[200px]">
+                <label className="text-[11px] font-semibold text-muted-foreground">{t("inThbSupplyTotal")}</label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={thbSupplyTotal}
+                  onChange={(e) => handleThbSupplyTotalChange(e.target.value)}
+                  onBlur={() => {
+                    const formatted = formatErpCostInputString(thbSupplyTotal)
+                    if (formatted && formatted !== thbSupplyTotal) onThbSupplyTotalChange(formatted)
+                  }}
+                  placeholder={t("inThbSupplyTotalPlaceholder")}
+                  className="mt-1 h-8 text-right text-sm"
+                  disabled={saving}
+                />
+              </div>
+            ) : null}
           </div>
           {isKrw ? (
-            <p className="text-[11px] text-muted-foreground leading-snug">{t("inFxRateHint")}</p>
+            <div className="space-y-1">
+              <p className="text-[11px] text-muted-foreground leading-snug">{t("inFxRateHint")}</p>
+              {thbAllocation && Math.abs(thbAllocation.appliedThb - thbAllocation.requestedThb) >= 0.01 ? (
+                <p className="text-[11px] text-amber-700 leading-snug">
+                  {t("inThbSupplyTotalGap")
+                    .replace("{requested}", formatErpNum(thbAllocation.requestedThb))
+                    .replace("{applied}", formatErpNum(thbAllocation.appliedThb))}
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -267,9 +316,23 @@ export function InboundCartTable({
               cart.map((c, idx) => {
                 const qtyNum = parseFloat(String(c.qty).replace(/,/g, "")) || 0
                 const costNum = parseFloat(String(c.cost).replace(/,/g, "")) || 0
-                const unitThb =
-                  isKrw && fxNum != null ? thbUnitCostFromKrw(costNum, fxNum) : isKrw ? 0 : costNum
-                const amount = roundErp3(qtyNum * unitThb)
+                const allocated = thbAllocation?.lines[idx]
+                const unitThb = allocated
+                  ? allocated.thbUnit
+                  : isKrw && fxNum != null
+                    ? thbUnitCostFromKrw(costNum, fxNum)
+                    : isKrw
+                      ? 0
+                      : costNum
+                const amount = allocated ? allocated.thbAmount : roundErp3(qtyNum * unitThb)
+                const lineDraft = thbAmountDrafts[idx]
+                const editingLineThb =
+                  lineDraft != null && (thbAmountFocusIdx === idx || (!allocated && thbAmountAnchor))
+                const thbFieldValue = editingLineThb
+                  ? lineDraft
+                  : amount === 0 && !fxNum && !allocated
+                    ? ""
+                    : formatErpCostInputString(amount)
                 return (
                   <tr key={idx} className="border-b last:border-b-0 hover:bg-muted/20">
                     <td className="px-4 py-2.5">
@@ -307,14 +370,7 @@ export function InboundCartTable({
                         <Input
                           type="text"
                           inputMode="decimal"
-                          value={
-                            thbAmountDrafts[idx] != null &&
-                            (thbAmountFocusIdx === idx || thbAmountAnchor)
-                              ? thbAmountDrafts[idx]
-                              : amount === 0 && !fxNum
-                                ? ""
-                                : formatErpCostInputString(amount)
-                          }
+                          value={thbFieldValue}
                           onFocus={() => setThbAmountFocusIdx(idx)}
                           onChange={(e) => handleThbAmountChange(idx, e.target.value)}
                           onBlur={() => {

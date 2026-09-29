@@ -2,6 +2,9 @@ import { getThaiTaxFilingPeriodRange } from '@/lib/thai-tax-period'
 import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import { buildTaxBookStatements, preferLockedTaxBookProfit, taxEntityKeyFromScope } from '@/lib/tax-book'
+import { readTaxAccountingPeriod } from '@/lib/tax-book-period-server'
+import { loadTaxBookJournalHeads, loadTaxBookLines, summarizeTaxBookTrial } from '@/lib/tax-book-server'
 import { createTaxStoreScopeMatcher, resolveTaxScopeStoreCodes } from '@/lib/tax-entity-scope'
 
 type JournalEntryLite = {
@@ -29,6 +32,8 @@ export type CorporateTaxComputation = {
   months: string[]
   storeFilter: string
   accountingProfit: number
+  /** tax_book = 마감된 세무 장부 순이익. journals = 기존 분개 합. */
+  accountingProfitSource: 'tax_book' | 'journals'
   taxAddBack: number
   taxDeduction: number
   taxableIncome: number
@@ -216,6 +221,45 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
     }
   }
 
+  let accountingProfitSource: CorporateTaxComputation['accountingProfitSource'] = 'journals'
+  let taxBookPartialLock = false
+  const taxEntityCode = taxEntityKeyFromScope(scope.storeFilter)
+  if (taxEntityCode && period.months.length > 0) {
+    const lockedMonths = []
+    for (const month of period.months) {
+      const lock = await readTaxAccountingPeriod(taxEntityCode, month)
+      if (!lock.schemaReady || !lock.isClosed) {
+        lockedMonths.push({ closed: Boolean(lock.isClosed), schemaReady: lock.schemaReady, netIncome: 0, entryCount: 0 })
+        continue
+      }
+      const heads = await loadTaxBookJournalHeads({ taxEntityCode, yearMonth: month })
+      if (!heads.schemaReady) {
+        lockedMonths.push({ closed: false, schemaReady: false, netIncome: 0, entryCount: 0 })
+        continue
+      }
+      const rawLines = await loadTaxBookLines(heads.heads.map((h) => Number(h.id || 0)))
+      const trial = summarizeTaxBookTrial(rawLines)
+      const statement = buildTaxBookStatements(trial.rows)
+      lockedMonths.push({
+        closed: true,
+        schemaReady: true,
+        netIncome: statement.netIncome,
+        entryCount: heads.heads.length,
+      })
+    }
+    const picked = preferLockedTaxBookProfit({
+      journalRevenue: revenue,
+      journalExpense: expense,
+      journalEntryCount: entryCount,
+      months: lockedMonths,
+    })
+    revenue = picked.revenue
+    expense = picked.expense
+    entryCount = picked.entryCount
+    accountingProfitSource = picked.source
+    taxBookPartialLock = picked.partial
+  }
+
   const accountingProfit = revenue - expense
 
   let adjustmentRows: TaxAdjustmentRow[] = []
@@ -263,6 +307,7 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
   if (!Number.isFinite(taxableIncome) || taxableIncome < 0) validationErrors.push('INVALID_TAXABLE_INCOME')
   if (!Number.isFinite(filingTaxDue) || filingTaxDue < 0) validationErrors.push('INVALID_FILING_TAX_DUE')
   if (!entryCount) validationWarnings.push('NO_JOURNAL_ENTRIES_IN_PERIOD')
+  if (taxBookPartialLock) validationWarnings.push('TAX_BOOK_PARTIAL_LOCK')
   if (period.periodType === 'annual' && period.months.length !== 12) validationWarnings.push('ANNUAL_MONTH_COUNT_MISMATCH')
   if (period.periodType === 'half_year' && period.months.length !== 6) {
     validationWarnings.push('HALF_YEAR_MONTH_COUNT_MISMATCH')
@@ -275,6 +320,7 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
     months: period.months,
     storeFilter: scope.storeFilter,
     accountingProfit: toFixed2(accountingProfit),
+    accountingProfitSource,
     taxAddBack: toFixed2(taxAddBack),
     taxDeduction: toFixed2(taxDeduction),
     taxableIncome: toFixed2(taxableIncome),

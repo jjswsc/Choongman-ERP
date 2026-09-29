@@ -22,10 +22,39 @@ function ym(y: number, m: number): string {
   return `${y}-${String(m).padStart(2, '0')}`
 }
 
+function nextYearMonth(yearMonth: string): string {
+  const { y, m } = parseYearMonth(yearMonth)
+  return m === 12 ? ym(y + 1, 1) : ym(y, m + 1)
+}
+
+/** 시작·종료 월이 다르면 그 구간을 쓴다. 같거나 비어 있으면 월/반기/연 구분을 따른다. */
 export function getThaiTaxFilingPeriodRange(input: {
   yearMonth: string
   periodType?: FilingPeriodType
+  endMonth?: string
 }): FilingPeriodRange {
+  const start = String(input.yearMonth || '').slice(0, 7)
+  const end = String(input.endMonth || '').slice(0, 7)
+  if (/^\d{4}-\d{2}$/.test(end) && end !== start) {
+    parseYearMonth(start)
+    parseYearMonth(end)
+    if (end < start) throw new Error('RANGE_ORDER')
+    const months: string[] = []
+    let cursor = start
+    while (cursor <= end) {
+      months.push(cursor)
+      if (months.length > 24) throw new Error('RANGE_TOO_LONG')
+      cursor = nextYearMonth(cursor)
+    }
+    return {
+      periodType: 'monthly',
+      periodKey: `${start}_${end}`,
+      startMonth: start,
+      endMonth: end,
+      months,
+    }
+  }
+
   const { y, m } = parseYearMonth(input.yearMonth)
   const periodType = (input.periodType || 'monthly') as FilingPeriodType
 
@@ -70,6 +99,19 @@ export function getThaiTaxFilingPeriodRange(input: {
  * PostgREST 월 조건 — `in.(YYYY-MM)` 하이픈 토큰 파싱 이슈를 피하기 위해 eq / or 만 사용.
  * appendStoreNameFilter 등과 `&`로 이어 붙일 수 있음.
  */
+export function filingPeriodFromSearchParams(
+  searchParams: { get(name: string): string | null },
+  yearMonth: string,
+  periodType: FilingPeriodType
+): FilingPeriodRange {
+  const endMonth = String(searchParams.get('endMonth') || '').trim().slice(0, 7)
+  return getThaiTaxFilingPeriodRange({
+    yearMonth,
+    periodType,
+    endMonth: /^\d{4}-\d{2}$/.test(endMonth) ? endMonth : undefined,
+  })
+}
+
 export function buildMonthColumnPostgrestFilter(months: string[], column: string): string {
   const col = String(column || '').trim()
   if (!col) throw new Error('INVALID_MONTH_COLUMN')

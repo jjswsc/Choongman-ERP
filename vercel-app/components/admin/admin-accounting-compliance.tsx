@@ -306,6 +306,8 @@ export function AdminAccountingCompliance({
   const isEmbeddedPp36Section = embeddedPp36Section === true
 
   const [internalTaxMonth, setInternalTaxMonth] = React.useState(ymNow)
+  const [taxMonthTo, setTaxMonthTo] = React.useState(ymNow)
+  const [citQueried, setCitQueried] = React.useState(false)
   const taxMonth = externalFiling ? filingYearMonth : internalTaxMonth
   const setTaxMonth = externalFiling ? onFilingYearMonthChange : setInternalTaxMonth
 
@@ -1104,6 +1106,7 @@ export function AdminAccountingCompliance({
           userRole: role,
           taxMonth,
           yearMonth: taxMonth,
+          endMonth: taxMonthTo,
           periodType,
           filingStatus: ledgerStatusFilter,
           storeFilter: storeFilterForApi,
@@ -1150,6 +1153,7 @@ export function AdminAccountingCompliance({
     canUse,
     role,
     taxMonth,
+    taxMonthTo,
     periodType,
     ledgerStatusFilter,
     storeFilterForApi,
@@ -1242,10 +1246,11 @@ export function AdminAccountingCompliance({
     try {
       const data = await withClientTimeout(
         getWithholdingTaxLedger({
-        userRole: role,
-        taxMonth,
-        yearMonth: taxMonth,
-        periodType,
+          userRole: role,
+          taxMonth,
+          yearMonth: taxMonth,
+          endMonth: taxMonthTo,
+          periodType,
         filingStatus: ledgerStatusFilter,
         storeFilter: storeFilterForApi,
         }),
@@ -1263,7 +1268,7 @@ export function AdminAccountingCompliance({
     } finally {
       if (seq === whtLoadSeqRef.current) setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForApi, mapWht])
+  }, [canUse, role, taxMonth, taxMonthTo, periodType, ledgerStatusFilter, storeFilterForApi, mapWht])
 
   const loadPp36 = React.useCallback(async () => {
     if (!canUse) return
@@ -1274,6 +1279,7 @@ export function AdminAccountingCompliance({
           userRole: role,
           taxMonth,
           yearMonth: taxMonth,
+          endMonth: taxMonthTo,
           periodType,
           filingStatus: ledgerStatusFilter,
           storeFilter: storeFilterForApi,
@@ -1286,7 +1292,7 @@ export function AdminAccountingCompliance({
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForApi, mapPp36])
+  }, [canUse, role, taxMonth, taxMonthTo, periodType, ledgerStatusFilter, storeFilterForApi, mapPp36])
 
   const loadPnd54 = React.useCallback(async () => {
     if (!canUse) return
@@ -1297,6 +1303,7 @@ export function AdminAccountingCompliance({
           userRole: role,
           taxMonth,
           yearMonth: taxMonth,
+          endMonth: taxMonthTo,
           periodType,
           filingStatus: ledgerStatusFilter,
           storeFilter: storeFilterForApi,
@@ -1309,7 +1316,7 @@ export function AdminAccountingCompliance({
     } finally {
       setLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, ledgerStatusFilter, storeFilterForApi, mapPnd54])
+  }, [canUse, role, taxMonth, taxMonthTo, periodType, ledgerStatusFilter, storeFilterForApi, mapPnd54])
 
   const loadTaxSummary = React.useCallback(async () => {
     if (!canUse) return
@@ -1318,9 +1325,10 @@ export function AdminAccountingCompliance({
     try {
       const data = await withClientTimeout(
         getThaiTaxFilingSummary({
-        userRole: role,
-        yearMonth: taxMonth,
-        periodType,
+          userRole: role,
+          yearMonth: taxMonth,
+          endMonth: taxMonthTo,
+          periodType,
         storeFilter: storeFilterForApi,
         }),
         PP30_FETCH_TIMEOUT_MS
@@ -1337,7 +1345,7 @@ export function AdminAccountingCompliance({
     } finally {
       if (seq === taxSummaryLoadSeqRef.current) setSummaryLoading(false)
     }
-  }, [canUse, role, taxMonth, periodType, storeFilterForApi])
+  }, [canUse, role, taxMonth, taxMonthTo, periodType, storeFilterForApi])
 
   const loadVatRef = React.useRef(loadVat)
   const loadWhtRef = React.useRef(loadWht)
@@ -1352,6 +1360,7 @@ export function AdminAccountingCompliance({
 
   const loadCit = React.useCallback(async () => {
     if (!canUse) return
+    setCitQueried(true)
     setLoading(true)
     try {
       const data = await getCorporateTaxComputation({
@@ -2283,17 +2292,9 @@ export function AdminAccountingCompliance({
     setTaxSummary(null)
     setPnd91Summary(null)
   }, [
-    taxMonth,
-    storeFilterForApi,
-    periodType,
-    ledgerStatusFilter,
     pp30Queried,
     tab,
     canUse,
-    pp30SubView,
-    loadVat,
-    loadWht,
-    loadTaxSummary,
   ])
 
   React.useEffect(() => {
@@ -2323,17 +2324,9 @@ export function AdminAccountingCompliance({
     tab,
     pp30Queried,
     pp30SubView,
-    taxMonth,
-    storeFilterForApi,
-    periodType,
-    ledgerStatusFilter,
     pp30SearchSeq,
     whtFocusMode,
   ])
-
-  React.useEffect(() => {
-    if (canUse && tab === "cit") void loadCit()
-  }, [canUse, tab, loadCit])
 
   React.useEffect(() => {
     if (canUse && tab === "workflow") void loadWorkflow()
@@ -4879,6 +4872,8 @@ export function AdminAccountingCompliance({
             lang={lang}
             taxMonth={taxMonth}
             setTaxMonth={setTaxMonth}
+            taxMonthTo={taxMonthTo}
+            setTaxMonthTo={setTaxMonthTo}
             storeTb={storeTb}
             setStoreTb={setStoreTb}
             isOffice={isOffice}
@@ -5231,11 +5226,18 @@ export function AdminAccountingCompliance({
               ) : null
             }
           />
-          <Card>
+          {!citQueried ? <p className="text-sm text-muted-foreground">{t("taxBooksSearchFirst")}</p> : null}
+          {citQueried ? <Card>
             <CardContent className="pt-6 text-sm space-y-2">
               <div>
                 {t("accCompCitAccountingProfit")}: {(citData?.accountingProfit || 0).toLocaleString()}
               </div>
+              {citData?.accountingProfitSource === "tax_book" ? (
+                <div className="text-muted-foreground">{t("accCompCitTaxBookProfit")}</div>
+              ) : null}
+              {citData?.validation?.warnings?.includes("TAX_BOOK_PARTIAL_LOCK") ? (
+                <div className="text-muted-foreground">{t("accCompCitTaxBookPartial")}</div>
+              ) : null}
               <div>
                 {t("accCompCitTaxAddBacks")}: {(citData?.taxAddBack || 0).toLocaleString()}
               </div>
@@ -5264,7 +5266,7 @@ export function AdminAccountingCompliance({
                 {t("accCompCitPdfPeriod")}: {citData?.pdfMeta?.periodLabel || citData?.periodKey || "-"}
               </div>
             </CardContent>
-          </Card>
+          </Card> : null}
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">{t("accCompCitAdjustmentsDraftTitle")}</CardTitle>

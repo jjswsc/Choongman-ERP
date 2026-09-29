@@ -365,17 +365,28 @@ export function EmployeeForm({
         )}
 
         <div className={cn("flex-1 space-y-2 overflow-y-auto", embedded ? "px-0 py-1" : "px-4 py-3")}>
-          <div className="rounded-lg border border-primary/25 bg-primary/5 px-2 py-2 flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold whitespace-nowrap">{t("emp_label_employee_code")}</span>
-            {form.row > 0 && String(form.employeeCode || "").trim() ? (
-              <span className="text-sm font-mono font-bold tabular-nums tracking-wide text-primary">
-                {String(form.employeeCode).trim()}
-              </span>
-            ) : form.row > 0 ? (
-              <span className="text-sm text-muted-foreground">—</span>
-            ) : (
-              <span className="text-sm text-muted-foreground">{t("emp_employee_code_auto_note")}</span>
-            )}
+          <div className="space-y-1">
+            <FormField
+              label={t("emp_label_employee_code")}
+              hint={t("emp_employee_code_auto_note")}
+              labelWidth="w-[7.5rem]"
+            >
+              <Input
+                value={form.employeeCode}
+                onChange={(e) =>
+                  update(
+                    "employeeCode",
+                    e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5)
+                  )
+                }
+                className={cn(fieldInputCn, "font-mono uppercase tracking-wide")}
+                placeholder="ST001"
+                maxLength={5}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </FormField>
+            <p className="px-1 text-xs text-muted-foreground">{t("emp_employee_code_auto_note")}</p>
           </div>
 
           <Accordion type="multiple" defaultValue={["basic"]} className="space-y-2">
