@@ -27,6 +27,13 @@ import {
   type QrGuestMenuOption,
 } from '@/lib/qr-table-guest-menu'
 import {
+  formatQrPromoSelectionSummary,
+  qrPromoNeedsGuestChoice,
+  type QrGuestPromoCompose,
+  type QrPromoPick,
+} from '@/lib/qr-table-promo'
+import { QrTableGuestSetSheet } from '@/components/qr-table/qr-table-guest-set-sheet'
+import {
   QrTableGuestBillPaidScreen,
   QrTableGuestBillPaySheet,
   QrTableGuestOrderDoneScreen,
@@ -82,6 +89,7 @@ type MenuItem = {
   optionSelectionGroups?: string[]
   optionSelectionConfig?: PosMenu['optionSelectionConfig']
   options?: QrGuestMenuOption[]
+  promo?: QrGuestPromoCompose | null
 }
 
 type CartLine = {
@@ -92,6 +100,8 @@ type CartLine = {
   optionName: string
   menuId1?: number
   menuId2?: number
+  promoPicks?: QrPromoPick[]
+  setDetail?: string
 }
 
 type OrderSummaryItem = {
@@ -350,6 +360,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [extraMenus, setExtraMenus] = React.useState<MenuItem[]>([])
   const [cart, setCart] = React.useState<CartLine[]>([])
   const [optionMenu, setOptionMenu] = React.useState<MenuItem | null>(null)
+  const [setMenu, setSetMenu] = React.useState<MenuItem | null>(null)
   const [tab, setTab] = React.useState<'included' | 'extras'>('included')
   const [mainCategory, setMainCategory] = React.useState('')
   const [subCategory, setSubCategory] = React.useState('')
@@ -414,6 +425,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
     if (msg === 'session_device_limit') return g('sessionDeviceLimit')
     if (msg === 'invalid_token') return g('invalidToken')
     if (msg === 'option_required' || msg.startsWith('option_not_')) return g('optionRequired')
+    if (msg === 'promo_choice_required') return g('setChoiceRequired')
     if (msg === 'banban_required' || msg === 'banban_flavor_missing') return g('banbanRequired')
     if (msg === 'order_already_paid' || msg === 'already_paid') return g('orderAlreadyPaid')
     if (msg === 'nothing_to_pay') return g('nothingToPay')
@@ -649,12 +661,14 @@ export function QrTableGuestApp({ token }: { token: string }) {
     return cart.filter((line) => line.menuId === menuId)
   }
 
-  function addCartLine(menu: MenuItem, pick?: QrGuestOptionPick) {
+  function addCartLine(menu: MenuItem, pick?: QrGuestOptionPick, promoPicks?: QrPromoPick[]) {
     if (menu.soldOut) return
     const optionIds = pick?.optionIds || []
     const banban =
       pick?.menuId1 && pick?.menuId2 ? { menuId1: pick.menuId1, menuId2: pick.menuId2 } : undefined
-    const key = qrGuestCartLineKey(menu.menuId, optionIds, banban)
+    const picks = promoPicks && promoPicks.length ? promoPicks : undefined
+    const key = qrGuestCartLineKey(menu.menuId, optionIds, banban, picks)
+    const setDetail = formatQrPromoSelectionSummary(menu.promo?.lines, picks)
     setCart((prev) => {
       const i = prev.findIndex((line) => line.key === key)
       if (i >= 0) {
@@ -672,14 +686,21 @@ export function QrTableGuestApp({ token }: { token: string }) {
           optionName: pick?.optionName || '',
           menuId1: pick?.menuId1,
           menuId2: pick?.menuId2,
+          ...(picks ? { promoPicks: picks } : {}),
+          ...(setDetail ? { setDetail } : {}),
         },
       ]
     })
     setOptionMenu(null)
+    setSetMenu(null)
   }
 
   function requestAddMenu(menu: MenuItem) {
     if (menu.soldOut) return
+    if (qrPromoNeedsGuestChoice(menu.promo?.lines)) {
+      setSetMenu(menu)
+      return
+    }
     if (qrGuestMenuNeedsOptionPicker(menu)) {
       setOptionMenu(menu)
       return
@@ -744,6 +765,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       optionIds: line.optionIds.length ? line.optionIds : undefined,
       menuId1: line.menuId1,
       menuId2: line.menuId2,
+      promoPicks: line.promoPicks && line.promoPicks.length ? line.promoPicks : undefined,
     }))
     if (!lines.length || submitLockRef.current) return
     submitLockRef.current = true
@@ -1602,11 +1624,18 @@ export function QrTableGuestApp({ token }: { token: string }) {
                         {guestMenuDesc(m) ? (
                           <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">{guestMenuDesc(m)}</p>
                         ) : null}
-                        {cartLinesForMenu(m.menuId).some((line) => line.optionName) ? (
+                        {formatQrPromoSelectionSummary(m.promo?.lines) ? (
+                          <p className="mt-0.5 line-clamp-2 text-xs text-stone-500">
+                            {formatQrPromoSelectionSummary(m.promo?.lines)}
+                          </p>
+                        ) : qrPromoNeedsGuestChoice(m.promo?.lines) ? (
+                          <p className="mt-0.5 text-xs text-stone-500">{g('setChoose')}</p>
+                        ) : null}
+                        {cartLinesForMenu(m.menuId).some((line) => line.optionName || line.setDetail) ? (
                           <p className="mt-0.5 text-[11px] leading-snug text-[var(--qr-brand,#b45309)]">
                             {cartLinesForMenu(m.menuId)
-                              .filter((line) => line.optionName)
-                              .map((line) => `${guestLabel(line.optionName)} ×${line.qty}`)
+                              .filter((line) => line.optionName || line.setDetail)
+                              .map((line) => `${line.setDetail || guestLabel(line.optionName)} ×${line.qty}`)
                               .join(' · ')}
                           </p>
                         ) : null}
@@ -1751,6 +1780,9 @@ export function QrTableGuestApp({ token }: { token: string }) {
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="text-[15px] font-semibold leading-snug text-stone-900">{name}</p>
+                      {line.setDetail ? (
+                        <p className="mt-0.5 line-clamp-3 text-[12px] leading-snug text-stone-500">{line.setDetail}</p>
+                      ) : null}
                       {line.optionName ? (
                         <p className="mt-0.5 text-[12px] text-[var(--qr-brand,#b45309)]">
                           {guestLabel(line.optionName)}
@@ -1861,6 +1893,9 @@ export function QrTableGuestApp({ token }: { token: string }) {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold leading-snug">{name}</p>
+                    {line.setDetail ? (
+                      <p className="mt-0.5 line-clamp-3 text-[12px] leading-snug text-stone-500">{line.setDetail}</p>
+                    ) : null}
                     {line.optionName ? (
                       <p className="mt-0.5 text-[12px] text-[var(--qr-brand,#b45309)]">
                         {guestLabel(line.optionName)}
@@ -1961,6 +1996,17 @@ export function QrTableGuestApp({ token }: { token: string }) {
         lang={lang}
         onChange={changeLang}
         onClose={() => setLangSheetOpen(false)}
+      />
+
+      <QrTableGuestSetSheet
+        open={!!setMenu}
+        menuName={setMenu ? guestMenuName(setMenu) : ''}
+        lines={setMenu?.promo?.lines || []}
+        t={g}
+        onClose={() => setSetMenu(null)}
+        onPick={(picks) => {
+          if (setMenu) addCartLine(setMenu, undefined, picks)
+        }}
       />
 
       <QrTableGuestOptionSheet

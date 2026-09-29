@@ -271,14 +271,19 @@ function OrderRoundCard(props: {
       </div>
       <ul className="px-3 py-2">
         {round.lines.map((line, i) => (
-          <li key={`${round.key}-${line.name}-${i}`} className="flex items-center gap-2.5 py-2">
+          <li key={`${round.key}-${line.name}-${line.detail || ''}-${i}`} className="flex items-start gap-2.5 py-2">
             {line.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={line.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover bg-stone-100" />
             ) : (
               <div className="h-11 w-11 shrink-0 rounded-lg bg-stone-200/70" />
             )}
-            <p className="min-w-0 flex-1 truncate text-sm font-medium">{labelFor(line.name)}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{labelFor(line.name)}</p>
+              {line.detail ? (
+                <p className="mt-0.5 line-clamp-3 text-[11px] leading-snug text-stone-500">{line.detail}</p>
+              ) : null}
+            </div>
             <span className="shrink-0 text-sm font-semibold tabular-nums text-stone-700">x{line.qty}</span>
           </li>
         ))}

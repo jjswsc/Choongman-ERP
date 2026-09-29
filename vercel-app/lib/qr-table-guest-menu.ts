@@ -10,6 +10,7 @@ import {
   menuHasChickenSizeProfile,
 } from '@/lib/pos-chicken-option-inference'
 import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
+import { formatQrOrderPromoDetail } from '@/lib/qr-table-promo'
 
 export type QrGuestSentLine = {
   name: string
@@ -31,6 +32,7 @@ export type QrGuestSentLineInput = {
   servedAt?: unknown
   imageUrl?: unknown
   isBuffetEntry?: boolean
+  promoItems?: unknown
 }
 
 export type QrGuestSentTimeGroup = {
@@ -52,6 +54,8 @@ export type QrGuestTimelineStep = {
 export type QrGuestHistoryLine = QrGuestSentLine & {
   imageUrl?: string
   served?: boolean
+  /** 세트 구성 (메뉴명 · 옵션) */
+  detail?: string
 }
 
 export type QrGuestHistoryRound = {
@@ -272,15 +276,17 @@ export function groupQrGuestHistoryRounds(
       if (!base) continue
       const served = Boolean(String(raw.servedAt || '').trim())
       const imageUrl = String(raw.imageUrl || '').trim() || undefined
+      const detail = formatQrOrderPromoDetail(raw.promoItems) || undefined
       const prev = lines.find(
         (l) =>
           l.name === base.name &&
           l.price === base.price &&
           l.buffetIncluded === base.buffetIncluded &&
-          Boolean(l.served) === served
+          Boolean(l.served) === served &&
+          (l.detail || '') === (detail || '')
       )
       if (prev) prev.qty += base.qty
-      else lines.push({ ...base, served, imageUrl })
+      else lines.push({ ...base, served, imageUrl, ...(detail ? { detail } : {}) })
     }
     const outLines =
       lines.length > 0 ? lines : g.lines.map((l) => ({ ...l, served: false as boolean }))
@@ -382,18 +388,36 @@ export function qrGuestMenuNeedsOptionPicker(menu: {
   return hallSubstitutionQrGuestOptions(menu.options).length > 0
 }
 
-export function qrGuestCartLineKey(menuId: number, optionIds: number[], banbanPair?: { menuId1: number; menuId2: number }): string {
+export function qrGuestCartLineKey(
+  menuId: number,
+  optionIds: number[],
+  banbanPair?: { menuId1: number; menuId2: number },
+  promoPicks?: Array<{ menuId: number; optionId?: number | null; quantity?: number }> | null
+): string {
   const mid = Math.floor(Number(menuId) || 0)
+  let base: string
   if (banbanPair) {
     const a = Math.min(banbanPair.menuId1, banbanPair.menuId2)
     const b = Math.max(banbanPair.menuId1, banbanPair.menuId2)
-    return `${mid}:banban:${a}+${b}`
+    base = `${mid}:banban:${a}+${b}`
+  } else {
+    const ids = [...optionIds]
+      .map((n) => Math.floor(Number(n) || 0))
+      .filter((n) => n > 0)
+      .sort((a, b) => a - b)
+    base = ids.length ? `${mid}:${ids.join('+')}` : String(mid)
   }
-  const ids = [...optionIds]
-    .map((n) => Math.floor(Number(n) || 0))
-    .filter((n) => n > 0)
-    .sort((a, b) => a - b)
-  return ids.length ? `${mid}:${ids.join('+')}` : String(mid)
+  const picks = (promoPicks || [])
+    .map((pick) => {
+      const menu = Math.floor(Number(pick.menuId) || 0)
+      if (!menu) return ''
+      const option = Math.floor(Number(pick.optionId) || 0)
+      const qty = Math.max(1, Math.floor(Number(pick.quantity) || 1))
+      return `${menu}:${option || '-'}:${qty}`
+    })
+    .filter(Boolean)
+    .sort()
+  return picks.length ? `${base}|set:${picks.join(',')}` : base
 }
 
 /** 피커가 합성 id(bbq-123-456, 123+456)를 줄 때 실제 옵션 id만 추출 */

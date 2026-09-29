@@ -30,6 +30,12 @@ import {
   type QrGuestMenuOption,
   resolveQrGuestLineOption,
 } from '@/lib/qr-table-guest-menu'
+import {
+  parseQrPromoPicks,
+  resolveQrSetOrderSnapshot,
+  type QrGuestPromoCompose,
+  type QrGuestPromoLine,
+} from '@/lib/qr-table-promo'
 import { isBanbanMenu, overlayBanbanFlavorMenuIds } from '@/lib/pos-banban-utils'
 import { loadStoreMenuSoldOutMap, isMenuSoldOutForStore } from '@/lib/pos-menu-store-sold-out-server'
 import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
@@ -163,6 +169,7 @@ type DbMenu = {
   banban_flavor_menu_ids?: unknown
   option_selection_groups?: unknown
   option_selection_config?: unknown
+  promo_id?: number | string | null
 }
 
 function asNum(v: unknown): number {
@@ -1166,6 +1173,142 @@ async function loadCartMenusByIdsForStore(
   return out
 }
 
+async function loadQrPromoComposeByPromoIds(
+  rawIds: Array<number | string | null | undefined>
+): Promise<Map<string, QrGuestPromoCompose>> {
+  const promoIds = [
+    ...new Set(
+      rawIds
+        .map((id) => String(id ?? '').trim())
+        .filter((id) => id && id !== '0' && /^\d+$/.test(id))
+    ),
+  ]
+  const out = new Map<string, QrGuestPromoCompose>()
+  if (!promoIds.length) return out
+
+  type PromoRow = { id?: number | string; code?: string | null }
+  type ItemRow = {
+    promo_id?: number | string
+    menu_id?: number | string
+    option_id?: number | string | null
+    option_code?: string | null
+    quantity?: number
+    choice_group?: string | null
+    choice_pick_count?: number | null
+  }
+  const codeById = new Map<string, string>()
+  try {
+    const promos = (await supabaseSelectFilter('pos_promos', `id=in.(${promoIds.join(',')})`, {
+      limit: promoIds.length + 5,
+      select: 'id,code',
+    })) as PromoRow[]
+    for (const row of promos || []) {
+      const id = String(row.id ?? '').trim()
+      if (!id) continue
+      codeById.set(id, String(row.code || '').trim())
+    }
+  } catch (e) {
+    console.error('qr_table promo codes:', e)
+  }
+
+  const itemSelectAttempts = [
+    'promo_id,menu_id,option_id,option_code,quantity,choice_group,choice_pick_count',
+    'promo_id,menu_id,option_id,quantity,choice_group,choice_pick_count',
+    'promo_id,menu_id,option_id,quantity',
+  ]
+  let itemRows: ItemRow[] = []
+  for (const select of itemSelectAttempts) {
+    try {
+      itemRows = (await supabaseSelectFilter('pos_promo_items', `promo_id=in.(${promoIds.join(',')})`, {
+        limit: 2000,
+        order: 'sort_order.asc,id.asc',
+        select,
+      })) as ItemRow[]
+      break
+    } catch {
+      itemRows = []
+    }
+  }
+
+  const menuIds = new Set<number>()
+  const optionIds = new Set<number>()
+  for (const row of itemRows || []) {
+    const menuId = Math.floor(Number(row.menu_id) || 0)
+    const optionId = Math.floor(Number(row.option_id) || 0)
+    if (menuId) menuIds.add(menuId)
+    if (optionId) optionIds.add(optionId)
+  }
+  const menuNameById = new Map<number, string>()
+  const optionById = new Map<number, { name: string; code: string }>()
+  if (menuIds.size) {
+    const ids = [...menuIds]
+    try {
+      const menus = (await supabaseSelectFilter('pos_menus', `id=in.(${ids.join(',')})`, {
+        limit: ids.length + 10,
+        select: 'id,name',
+      })) as Array<{ id?: number; name?: string }>
+      for (const row of menus || []) {
+        const id = Math.floor(Number(row.id) || 0)
+        const name = String(row.name || '').trim()
+        if (id && name) menuNameById.set(id, name)
+      }
+    } catch (e) {
+      console.error('qr_table promo menu names:', e)
+    }
+  }
+  if (optionIds.size) {
+    const ids = [...optionIds]
+    try {
+      const options = (await supabaseSelectFilter('pos_menu_options', `id=in.(${ids.join(',')})`, {
+        limit: ids.length + 10,
+        select: 'id,name,option_code',
+      })) as Array<{ id?: number; name?: string; option_code?: string | null }>
+      for (const row of options || []) {
+        const id = Math.floor(Number(row.id) || 0)
+        if (!id) continue
+        optionById.set(id, {
+          name: String(row.name || '').trim(),
+          code: String(row.option_code || '').trim(),
+        })
+      }
+    } catch (e) {
+      console.error('qr_table promo option names:', e)
+    }
+  }
+
+  const linesByPromo = new Map<string, QrGuestPromoLine[]>()
+  for (const row of itemRows || []) {
+    const promoId = String(row.promo_id ?? '').trim()
+    const menuId = Math.floor(Number(row.menu_id) || 0)
+    if (!promoId || !menuId) continue
+    const optionId = Math.floor(Number(row.option_id) || 0)
+    const option = optionId ? optionById.get(optionId) : undefined
+    const optionCode = String(row.option_code || option?.code || '').trim()
+    const line: QrGuestPromoLine = {
+      menuId,
+      menuName: menuNameById.get(menuId) || '',
+      optionId: optionId > 0 ? optionId : null,
+      optionName: option?.name || '',
+      optionCode,
+      quantity: Math.min(20, Math.max(1, Math.floor(Number(row.quantity) || 1))),
+      choiceGroup: String(row.choice_group || '').trim() || null,
+      choicePickCount:
+        row.choice_pick_count != null && Number.isFinite(Number(row.choice_pick_count))
+          ? Math.max(1, Math.floor(Number(row.choice_pick_count)))
+          : null,
+    }
+    const list = linesByPromo.get(promoId) || []
+    list.push(line)
+    linesByPromo.set(promoId, list)
+  }
+  for (const promoId of promoIds) {
+    const lines = linesByPromo.get(promoId) || []
+    if (!lines.length) continue
+    out.set(promoId, { id: promoId, code: codeById.get(promoId) || '', lines })
+  }
+  return out
+}
+
 export type QrGuestOrderSummary = {
   orderId: number | null
   items: Array<Record<string, unknown>>
@@ -1625,12 +1768,16 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   })
 
   const menuIds = menus.map((m) => Number(m.id || 0)).filter((id) => id > 0)
-  const [optionsByMenuId, flavorIdsByBanban] = await Promise.all([
+  const [optionsByMenuId, flavorIdsByBanban, promoById] = await Promise.all([
     loadHallOptionsByMenuIds(menuIds).catch((e) => {
       console.error('qr_table menus options load:', e)
       return new Map<number, QrGuestMenuOption[]>()
     }),
     loadBanbanFlavorIdsByMenuId(menuIds),
+    loadQrPromoComposeByPromoIds(menus.map((m) => m.promo_id)).catch((e) => {
+      console.error('qr_table menus promo load:', e)
+      return new Map<string, QrGuestPromoCompose>()
+    }),
   ])
 
   const includedMenus = []
@@ -1680,6 +1827,7 @@ export async function loadQrMenusForSession(session: QrTableSession) {
         'dine_in'
       ),
       kitchenPrinter: m.kitchen_printer ?? null,
+      promo: promoById.get(String(m.promo_id ?? '').trim()) || null,
     }
     if (tierId > 0 && isIncluded) includedMenus.push(item)
     else if (!limitExtras || extraAllow.has(id)) extraMenus.push(item)
@@ -1898,6 +2046,13 @@ export async function submitQrCart(params: {
     })),
   ])
 
+  let promoComposeById = new Map<string, QrGuestPromoCompose>()
+  try {
+    promoComposeById = await loadQrPromoComposeByPromoIds([...byId.values()].map((m) => m.promo_id))
+  } catch (e) {
+    console.error('qr_table cart promo load:', e)
+  }
+
   const order = orderRows?.[0]
   if (!order?.id) throw new Error('order_missing')
   const status = String(order.status || '').toLowerCase()
@@ -1979,6 +2134,25 @@ export async function submitQrCart(params: {
     }
     if (!isIncluded) extrasSubtotal += unitPrice * qty
     const guestNote = String(line.note || '').slice(0, 200).trim()
+    const promoId = String(menu.promo_id ?? '').trim()
+    const promoCompose = promoId && promoId !== '0' ? promoComposeById.get(promoId) : undefined
+    let promoFields: Record<string, unknown> = {}
+    if (promoCompose && promoCompose.lines.length > 0) {
+      const resolved = resolveQrSetOrderSnapshot({
+        promoId,
+        promoCode: promoCompose.code,
+        lines: promoCompose.lines,
+        picks: parseQrPromoPicks(line.promoPicks),
+      })
+      if (!resolved.ok) throw new Error(resolved.error)
+      if (resolved.promoItems.length > 0) {
+        promoFields = {
+          promoId: resolved.promoId,
+          ...(resolved.promoCode ? { promoCode: resolved.promoCode } : {}),
+          promoItems: resolved.promoItems,
+        }
+      }
+    }
     newLines.push({
       id: `qr-${session.id}-${menuId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       menuId: String(menuId),
@@ -1998,6 +2172,7 @@ export async function submitQrCart(params: {
       ...(optionName ? { optionName } : {}),
       ...(optionIds ? { optionIds } : {}),
       ...(menuId1 && menuId2 ? { menuId1: String(menuId1), menuId2: String(menuId2), isBanban: true } : {}),
+      ...promoFields,
     })
   }
   if (!newLines.length) throw new Error('empty_cart')

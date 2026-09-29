@@ -3,6 +3,7 @@ import {
   aggregateQrGuestSentLines,
   extractQrGuestOptionIds,
   findQrGuestImplicitChickenDefault,
+  groupQrGuestHistoryRounds,
   groupQrGuestSentLinesByTime,
   hallSubstitutionQrGuestOptionsRequiringPick,
   isQrGuestOptionalAddonOnlyOption,
@@ -87,6 +88,24 @@ describe('groupQrGuestSentLinesByTime', () => {
     )
     expect(groups.map((g) => g.timeLabel)).toEqual(['09:31:04', '09:34:19', '09:38:50', '09:40:18'])
     expect(groups[0].lines[0].name).toBe('[Buffet] Buffet 299 x 2')
+  })
+})
+
+describe('groupQrGuestHistoryRounds set detail', () => {
+  it('keeps set composition under the parent line', () => {
+    const rounds = groupQrGuestHistoryRounds([
+      {
+        name: 'SEOUL คุ้ม! 2',
+        qty: 1,
+        price: 299,
+        addedAt: '2026-09-29 16:48:42',
+        promoItems: [
+          { menuName: 'Soy Garlic Chicken', optionName: 'S Boneless', quantity: 1 },
+          { menuName: 'Rice', quantity: 1 },
+        ],
+      },
+    ])
+    expect(rounds[0]?.lines[0]?.detail).toBe('Soy Garlic Chicken (S Boneless) · Rice')
   })
 })
 

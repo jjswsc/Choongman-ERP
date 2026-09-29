@@ -82,6 +82,8 @@ export type QrCartLineInput = {
   /** 반반 — 맛 메뉴 id */
   menuId1?: number
   menuId2?: number
+  /** 세트 선택 그룹에서 손님이 고른 구성. 고정 구성만인 세트는 생략 가능. */
+  promoPicks?: Array<{ menuId: number; optionId?: number | null; quantity?: number }>
 }
 
 export const QR_TABLE_SESSION_COOKIE = 'cm_qr_table_session'
