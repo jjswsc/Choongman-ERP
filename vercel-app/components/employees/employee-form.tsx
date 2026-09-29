@@ -573,13 +573,19 @@ export function EmployeeForm({
                         className={fieldDateCn}
                       />
                     </FormField>
-                    <FormField label={t("emp_label_pin")} variant="sensitive">
+                    <FormField
+                      label={t("emp_label_pin")}
+                      variant="sensitive"
+                      hint={form.row > 0 ? t("emp_pin_keep_ph") : undefined}
+                    >
                       <Input
                         type="password"
+                        name="cm-staff-pin"
+                        autoComplete="new-password"
                         value={form.pw}
                         onChange={(e) => update("pw", e.target.value)}
                         className={fieldSensitiveCn}
-                        placeholder={t("emp_pin_ph")}
+                        placeholder={form.row > 0 ? t("emp_pin_keep_ph") : t("emp_pin_ph")}
                       />
                     </FormField>
                     <FormField label={t("emp_label_role")}>
@@ -899,7 +905,7 @@ export function EmployeeForm({
         </div>
 
         <div className={cn("shrink-0 border-t bg-card/95 backdrop-blur-sm", embedded ? "px-0 py-3" : "px-4 py-3")}>
-          <Button className="h-10 w-full text-base font-semibold shadow-sm" onClick={onSave} disabled={saving || !form.name}>
+          <Button type="button" className="h-10 w-full text-base font-semibold shadow-sm" onClick={onSave} disabled={saving || !form.name}>
             {saving ? t("loading") : "💾 " + t("emp_save")}
           </Button>
         </div>

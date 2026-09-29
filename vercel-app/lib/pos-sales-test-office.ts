@@ -46,6 +46,36 @@ export function filterPosSalesStoreOptionsForManagement(storeCodes: string[]): s
 }
 
 /**
+ * SaaS: 매출 매장 선택은 그 회사 erp_stores만.
+ * tenantStoreCodes가 null이면 충만처럼 발견한 코드를 그대로 둔다.
+ */
+export function scopePosSalesStoreCodesToTenant(
+  discovered: string[],
+  tenantStoreCodes: string[] | null
+): string[] {
+  if (!tenantStoreCodes) {
+    return discovered.map((s) => String(s || '').trim()).filter(Boolean)
+  }
+  const allow = new Set(
+    tenantStoreCodes.map((s) => String(s || '').trim()).filter(Boolean)
+  )
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const code of allow) {
+    if (seen.has(code)) continue
+    seen.add(code)
+    out.push(code)
+  }
+  for (const raw of discovered) {
+    const code = String(raw || '').trim()
+    if (!code || !allow.has(code) || seen.has(code)) continue
+    seen.add(code)
+    out.push(code)
+  }
+  return out
+}
+
+/**
  * POS 터미널·테이블/주문 스냅샷용 매장 목록.
  * CM Office 등 본사 시연 매장은 포함하고, 매출 집계용 본사 제외(`filterPosSalesStoreOptionsForManagement`)와 분리한다.
  */

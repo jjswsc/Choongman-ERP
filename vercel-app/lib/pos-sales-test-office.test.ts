@@ -6,6 +6,7 @@ import {
   isPosSalesTestOfficeStoreCode,
   isSandboxStoreCode,
   isLoginExcludedStoreKey,
+  scopePosSalesStoreCodesToTenant,
 } from './pos-sales-test-office'
 
 describe('buildPosTerminalStoreCodes', () => {
@@ -27,6 +28,21 @@ describe('filterPosTerminalStoreOptions', () => {
 
   it('still excludes literal test sandbox code', () => {
     expect(filterPosTerminalStoreOptions(['test', 'CM Office'])).toEqual(['CM Office'])
+  })
+})
+
+describe('scopePosSalesStoreCodesToTenant', () => {
+  it('drops other companies and keeps this tenant store even with no orders', () => {
+    expect(
+      scopePosSalesStoreCodesToTenant(
+        ['1000', '1001', 'jsw_seongwon', 'omnifoodtech-demo_test'],
+        ['1001']
+      )
+    ).toEqual(['1001'])
+  })
+
+  it('leaves the discovered list alone when there is no tenant scope', () => {
+    expect(scopePosSalesStoreCodesToTenant(['1000', '1001'], null)).toEqual(['1000', '1001'])
   })
 })
 

@@ -12,27 +12,44 @@ import { filterRowsByPosSalesBusinessDateRange, posSalesBusinessDateRangeUtcEnve
 import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { dedupeStoreCodesForPicker } from '@/lib/erp-store-list-grab-enrich'
-import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
-import { fetchErpStoresMaster } from '@/lib/erp-store-master'
+import { filterPosSalesStoreOptionsForManagement, scopePosSalesStoreCodesToTenant } from '@/lib/pos-sales-test-office'
+import { fetchErpStoresMaster, fetchErpStoresMasterForTenant, type ErpStoreMasterRow } from '@/lib/erp-store-master'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
+import { shouldEnforceSaasForAuth } from '@/lib/saas/saas-enforce'
+import type { JwtPayload } from '@/lib/jwt-auth'
 
 const POS_SALES_FILTER_OPTIONS_SCAN_MAX_ROWS = 1_000_000
 
-async function mergeErpStoreCodesIntoSet(posSet: Set<string>): Promise<void> {
-  try {
-    const masters = await fetchErpStoresMaster()
-    for (const row of masters || []) {
-      const code = String(row.store_code ?? '').trim()
-      if (code) posSet.add(code)
-    }
-  } catch {
-    // erp_stores 미배포 시 pos_orders DISTINCT만 사용
+async function mergeErpStoreCodesIntoSet(posSet: Set<string>, masters: ErpStoreMasterRow[]): Promise<void> {
+  for (const row of masters || []) {
+    const code = String(row.store_code ?? '').trim()
+    if (code) posSet.add(code)
   }
 }
 
-async function finalizePosOptions(posSet: Set<string>): Promise<string[]> {
-  const masters = await fetchErpStoresMaster()
+async function finalizePosOptions(posSet: Set<string>, masters: ErpStoreMasterRow[]): Promise<string[]> {
   const deduped = dedupeStoreCodesForPicker(Array.from(posSet), masters)
   return filterPosSalesStoreOptionsForManagement(deduped).sort()
+}
+
+/** Omni는 로그인 회사 매장만. 충만은 기존처럼 전체. */
+async function salesStoreMastersForAuth(auth: JwtPayload | null): Promise<{
+  masters: ErpStoreMasterRow[]
+  tenantCodes: string[] | null
+}> {
+  const tenantId = String(auth?.tenantId || '').trim()
+  if (!tenantId || isLegacyChoongmanErpSupabase() || !shouldEnforceSaasForAuth(tenantId)) {
+    try {
+      return { masters: await fetchErpStoresMaster(), tenantCodes: null }
+    } catch {
+      return { masters: [], tenantCodes: null }
+    }
+  }
+  const masters = await fetchErpStoresMasterForTenant(tenantId, String(auth?.company || ''))
+  return {
+    masters,
+    tenantCodes: masters.map((row) => String(row.store_code || '').trim()).filter(Boolean),
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -50,6 +67,8 @@ export async function GET(request: NextRequest) {
     }
 
     const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const { masters, tenantCodes } = await salesStoreMastersForAuth(auth)
+    if (tenantCodes) headers.set('Cache-Control', 'private, no-store')
     const bizCtx = await loadPosBusinessDaySettingsContext(auth?.tenantId)
     const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
 
@@ -63,8 +82,9 @@ export async function GET(request: NextRequest) {
         const p = String(r.store_code ?? '').trim()
         if (p) posSet.add(p)
       }
-      await mergeErpStoreCodesIntoSet(posSet)
-      const posOptions = await finalizePosOptions(posSet)
+      await mergeErpStoreCodesIntoSet(posSet, masters)
+      const scoped = scopePosSalesStoreCodesToTenant(Array.from(posSet), tenantCodes)
+      const posOptions = await finalizePosOptions(new Set(scoped), masters)
       return NextResponse.json({ posOptions, source: 'rpc' as const }, { headers })
     } catch (_rpcErr) {
       const filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
@@ -81,8 +101,9 @@ export async function GET(request: NextRequest) {
         const p = String(r.store_code ?? '').trim()
         if (p) posSet.add(p)
       }
-      await mergeErpStoreCodesIntoSet(posSet)
-      const posOptions = await finalizePosOptions(posSet)
+      await mergeErpStoreCodesIntoSet(posSet, masters)
+      const scoped = scopePosSalesStoreCodesToTenant(Array.from(posSet), tenantCodes)
+      const posOptions = await finalizePosOptions(new Set(scoped), masters)
       if (rowsRaw.length >= POS_SALES_FILTER_OPTIONS_SCAN_MAX_ROWS) headers.set('X-Sales-Truncated', '1')
 
       return NextResponse.json({ posOptions, source: 'select' as const }, { headers })

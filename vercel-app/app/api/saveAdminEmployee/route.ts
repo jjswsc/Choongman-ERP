@@ -264,6 +264,23 @@ export async function POST(req: NextRequest) {
     }
     const changeReason = String((d as { changeReason?: unknown }).changeReason ?? body.changeReason ?? '').trim()
     const codeRaw = normalizeEmployeeCodeInput((d as { employeeCode?: unknown }).employeeCode ?? d.employee_code)
+    const editingRowId = Number(d.row) || 0
+    /** 예전 코드(admin 등)를 바꾸지 않고 이름·PIN만 고칠 수 있게 한다. */
+    let keepExistingCode = false
+    if (codeRaw && editingRowId > 0 && !EMPLOYEE_CODE_RE.test(codeRaw)) {
+      try {
+        const prevCodeRows = (await supabaseSelectFilter(
+          'employees',
+          appendSaasTenantFilter(`id=eq.${editingRowId}`, tenantScope, 'employees'),
+          { limit: 1, select: 'employee_code' }
+        )) as { employee_code?: string | null }[]
+        const prevNorm = normalizeEmployeeCodeInput(prevCodeRows?.[0]?.employee_code)
+        if (prevNorm && prevNorm === codeRaw) keepExistingCode = true
+      } catch (e) {
+        const em = e instanceof Error ? e.message : String(e)
+        if (!/employee_code|42703|column/i.test(em)) throw e
+      }
+    }
     const payload: Record<string, unknown> = {
       store: requiredStore,
       name: nameNorm.name,
@@ -323,7 +340,7 @@ export async function POST(req: NextRequest) {
     if (employmentStatus === 'resigned') {
       if (!payload.resign_date) payload.resign_date = bangkokTodayDateStr()
     }
-    if (codeRaw) {
+    if (codeRaw && !keepExistingCode) {
       if (!EMPLOYEE_CODE_RE.test(codeRaw)) {
         return NextResponse.json(
           { success: false, message: '❌ 직원 코드는 영문 2글자 + 숫자 3자리 형식(예: AB001)이어야 합니다.' },

@@ -3239,10 +3239,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 storeSearch={storeSearch}
                 setStoreSearch={setStoreSearch}
                 singleStoreLabel={
-                  canMultiStorePicker
-                    ? undefined
-                    : posStoreDisplayName(selectedStores[0] ?? auth?.store ?? "") ||
-                      tr("salesSelectStoreAll", "매장(전체)")
+                  posBizDayStoreChoices.length === 1
+                    ? posStoreDisplayName(posBizDayStoreChoices[0]!)
+                    : canMultiStorePicker
+                      ? undefined
+                      : posStoreDisplayName(selectedStores[0] ?? auth?.store ?? "") ||
+                        tr("salesSelectStoreAll", "매장(전체)")
                 }
               />
             </div>
