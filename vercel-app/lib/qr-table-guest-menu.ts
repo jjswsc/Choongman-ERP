@@ -388,6 +388,21 @@ export function qrGuestMenuNeedsOptionPicker(menu: {
   return hallSubstitutionQrGuestOptions(menu.options).length > 0
 }
 
+/**
+ * QR 반반 단가.
+ * 맛 2개는 그대로 고르고, 금액은 반반 메뉴 홀 단가(포스터 순살가)를 쓴다.
+ * 맛 메뉴 기본가(사이즈 S)를 평균 내면 홀 순살보다 싼 금액이 나간다.
+ */
+export function qrGuestBanbanUnitPrice(params: {
+  buffetIncluded: boolean
+  banbanMenuPrice: number
+}): number {
+  if (params.buffetIncluded) return 0
+  const price = Number(params.banbanMenuPrice)
+  if (!Number.isFinite(price) || price < 0) return 0
+  return price
+}
+
 export function qrGuestCartLineKey(
   menuId: number,
   optionIds: number[],

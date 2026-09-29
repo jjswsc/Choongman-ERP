@@ -7,6 +7,7 @@ import {
   groupQrGuestSentLinesByTime,
   hallSubstitutionQrGuestOptionsRequiringPick,
   isQrGuestOptionalAddonOnlyOption,
+  qrGuestBanbanUnitPrice,
   qrGuestMenuNeedsOptionPicker,
   resolveQrGuestLineOption,
   splitQrGuestMenusByTier,
@@ -124,6 +125,26 @@ describe('qrGuestMenuNeedsOptionPicker', () => {
 
   it('is true for banban even without options', () => {
     expect(qrGuestMenuNeedsOptionPicker({ name: 'Banban Chicken', isBanban: true, options: [] })).toBe(true)
+  })
+})
+
+describe('qrGuestBanbanUnitPrice', () => {
+  it('uses the banban hall price, not the average of flavor size-S prices', () => {
+    expect(
+      qrGuestBanbanUnitPrice({
+        buffetIncluded: false,
+        banbanMenuPrice: 259,
+      })
+    ).toBe(259)
+  })
+
+  it('stays free when the banban menu is included in the buffet', () => {
+    expect(
+      qrGuestBanbanUnitPrice({
+        buffetIncluded: true,
+        banbanMenuPrice: 259,
+      })
+    ).toBe(0)
   })
 })
 

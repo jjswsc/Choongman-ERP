@@ -28,6 +28,7 @@ import { parsePosMenuI18nMap } from '@/lib/pos-menu-guest-i18n'
 import { normalizePromotionCategoryMain, posMainCategoryTabRank } from '@/lib/pos-promo-constants'
 import {
   type QrGuestMenuOption,
+  qrGuestBanbanUnitPrice,
   resolveQrGuestLineOption,
 } from '@/lib/qr-table-guest-menu'
 import {
@@ -2113,7 +2114,10 @@ export async function submitQrCart(params: {
       const n1 = String(flavor1.name || '').trim()
       const n2 = String(flavor2.name || '').trim()
       lineName = `${lineName} (${n1} / ${n2})`
-      if (!isIncluded) unitPrice = Math.round((asNum(flavor1.price) + asNum(flavor2.price)) / 2)
+      unitPrice = qrGuestBanbanUnitPrice({
+        buffetIncluded: isIncluded,
+        banbanMenuPrice: asNum(menu.price),
+      })
     } else {
       const resolved = resolveQrGuestLineOption({
         menuId,
