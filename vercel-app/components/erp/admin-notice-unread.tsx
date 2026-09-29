@@ -42,6 +42,23 @@ function defaultPayrollMonth(): string {
   return bangkokTodayYmd().slice(0, 7)
 }
 
+function UnreadFilterField({
+  label,
+  className,
+  children,
+}: {
+  label: string
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <span className="text-xs font-medium leading-4 text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  )
+}
+
 export function AdminNoticeUnread() {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -307,33 +324,32 @@ export function AdminNoticeUnread() {
           <p className="text-xs text-muted-foreground mt-1">{t("noticeUnreadTabDesc")}</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 text-xs">
-          <div>
-            <span className="text-[10px] text-muted-foreground block mb-1">
-              {t("noticeReaderStatsRangeHint")}
-            </span>
-            <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-12">
+          <UnreadFilterField
+            label={t("noticeReaderStatsRangeHint")}
+            className="sm:col-span-2 xl:col-span-4"
+          >
+            <div className="flex min-w-0 items-center gap-1.5">
               <Input
                 type="date"
                 value={statsStart}
                 onChange={(e) => setStatsStart(e.target.value)}
-                className="date-input-compact h-9 text-xs flex-1 min-w-[7rem]"
+                className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs"
+                style={{ minWidth: 0, maxWidth: "none" }}
               />
-              <span className="text-muted-foreground">~</span>
+              <span className="shrink-0 text-xs text-muted-foreground">~</span>
               <Input
                 type="date"
                 value={statsEnd}
                 onChange={(e) => setStatsEnd(e.target.value)}
-                className="date-input-compact h-9 text-xs flex-1 min-w-[7rem]"
+                className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs"
+                style={{ minWidth: 0, maxWidth: "none" }}
               />
             </div>
-          </div>
-          <div>
-            <span className="text-[10px] text-muted-foreground block mb-1">
-              {t("stockFilterStore") || t("store")}
-            </span>
+          </UnreadFilterField>
+          <UnreadFilterField label={t("stockFilterStore") || t("store")} className="xl:col-span-2">
             <Select value={statsStore || t("noticeFilterAll")} onValueChange={setStatsStore}>
-              <SelectTrigger className="h-9 text-xs w-full">
+              <SelectTrigger className="h-9 w-full text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -344,16 +360,13 @@ export function AdminNoticeUnread() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div>
-            <span className="text-[10px] text-muted-foreground block mb-1">
-              {t("noticeReaderStatsTypeLabel")}
-            </span>
+          </UnreadFilterField>
+          <UnreadFilterField label={t("noticeReaderStatsTypeLabel")} className="xl:col-span-2">
             <Select
               value={statsType}
               onValueChange={(v) => setStatsType(v as "all" | "notice" | "order")}
             >
-              <SelectTrigger className="h-9 text-xs w-full">
+              <SelectTrigger className="h-9 w-full text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -362,16 +375,13 @@ export function AdminNoticeUnread() {
                 <SelectItem value="order">{t("noticeReaderStatsTypeOrder")}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div>
-            <span className="text-[10px] text-muted-foreground block mb-1">
-              {t("noticeUnreadMinDaysLabel")}
-            </span>
+          </UnreadFilterField>
+          <UnreadFilterField label={t("noticeUnreadMinDaysLabel")} className="xl:col-span-2">
             <Select
               value={String(minUnreadDays)}
               onValueChange={(v) => setMinUnreadDays(Math.max(0, Math.floor(Number(v) || 0)))}
             >
-              <SelectTrigger className="h-9 text-xs w-full">
+              <SelectTrigger className="h-9 w-full text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -383,11 +393,8 @@ export function AdminNoticeUnread() {
                 <SelectItem value="14">{t("noticeUnreadMinDays14")}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div>
-            <span className="text-[10px] text-muted-foreground block mb-1">
-              {t("noticeReaderStatsMinMiss")}
-            </span>
+          </UnreadFilterField>
+          <UnreadFilterField label={t("noticeReaderStatsMinMiss")} className="xl:col-span-2">
             <Input
               type="number"
               min={1}
@@ -396,12 +403,12 @@ export function AdminNoticeUnread() {
               onChange={(e) =>
                 setStatsMinMissed(Math.max(1, Math.min(99, Math.floor(Number(e.target.value) || 1))))
               }
-              className="h-9 text-xs w-full"
+              className="h-9 w-full text-xs"
             />
-          </div>
+          </UnreadFilterField>
         </div>
 
-        <div className="flex flex-wrap gap-2 items-end">
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="button" className="h-9" onClick={runReaderStats} disabled={statsLoading}>
             {statsLoading ? t("loading") : t("noticeReaderStatsRun")}
           </Button>
@@ -414,18 +421,26 @@ export function AdminNoticeUnread() {
           >
             {t("noticeExportCsv")}
           </Button>
-          <div className="flex items-center gap-2 ml-auto flex-wrap">
-            <div>
-              <span className="text-[10px] text-muted-foreground block mb-1">
-                {t("noticeUnreadPayrollMonth")}
-              </span>
-              <Input
-                type="month"
-                value={payrollMonth}
-                onChange={(e) => setPayrollMonth(e.target.value.slice(0, 7))}
-                className="h-9 text-xs w-[10.5rem]"
-              />
-            </div>
+          {statsNoticeCount > 0 && !statsLoading ? (
+            <p className="text-xs text-muted-foreground sm:ml-auto">
+              {t("noticeCountPrefix")} {statsNoticeCount} {t("noticeCountSuffix")}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-md border bg-muted/40 px-3 py-3 sm:flex-row sm:items-end sm:justify-between">
+          <UnreadFilterField label={t("noticeUnreadPayrollMonth")} className="w-full sm:w-44">
+            <Input
+              type="month"
+              value={payrollMonth}
+              onChange={(e) => setPayrollMonth(e.target.value.slice(0, 7))}
+              className="h-9 w-full text-xs"
+            />
+          </UnreadFilterField>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {t("noticeUnreadSelectedCount")} {selectedRows.length}
+            </span>
             <Button
               type="button"
               variant="destructive"
@@ -438,7 +453,7 @@ export function AdminNoticeUnread() {
             <Button
               type="button"
               variant="outline"
-              className="h-9"
+              className="h-9 bg-background"
               disabled={selectedRows.length === 0 || applying}
               onClick={() => openConfirm("remove")}
             >
@@ -449,14 +464,8 @@ export function AdminNoticeUnread() {
 
         {actionMsg ? <p className="text-xs text-muted-foreground">{actionMsg}</p> : null}
         {statsTruncated ? (
-          <p className="text-[10px] text-amber-600 dark:text-amber-500">
+          <p className="text-xs text-amber-600 dark:text-amber-500">
             {t("noticeReaderStatsTruncated")}
-          </p>
-        ) : null}
-        {statsNoticeCount > 0 && !statsLoading ? (
-          <p className="text-[10px] text-muted-foreground">
-            {t("noticeCountPrefix")} {statsNoticeCount} {t("noticeCountSuffix")} · {t("noticeUnreadSelectedCount")}{" "}
-            {selectedRows.length}
           </p>
         ) : null}
       </div>
