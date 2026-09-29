@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  isLegacyPosPromoItemUniqueIndexError,
+  POS_PROMO_ITEM_CHOICE_GROUP_INDEX_MESSAGE,
+  posPromoItemDuplicateFilter,
+} from '@/lib/pos-promo-item-dup'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
 /** POS 프로모션 구성 메뉴 저장 */
@@ -112,14 +117,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
-    const dupFilter =
+    const dupFilter = posPromoItemDuplicateFilter({
+      promoId,
+      menuId,
+      optionId,
+      choiceGroup,
+    })
+    const dupFilterLegacy =
       optionId == null
         ? `promo_id=eq.${promoId}&menu_id=eq.${menuId}&option_id=is.null`
         : `promo_id=eq.${promoId}&menu_id=eq.${menuId}&option_id=eq.${optionId}`
-    const dup = (await supabaseSelectFilter('pos_promo_items', dupFilter, {
-      select: 'id,quantity',
-      limit: 1,
-    })) as { id?: number; quantity?: number }[] | null
+    let dup: { id?: number; quantity?: number }[] | null
+    try {
+      dup = (await supabaseSelectFilter('pos_promo_items', dupFilter, {
+        select: 'id,quantity',
+        limit: 1,
+      })) as { id?: number; quantity?: number }[] | null
+    } catch {
+      dup = (await supabaseSelectFilter('pos_promo_items', dupFilterLegacy, {
+        select: 'id,quantity',
+        limit: 1,
+      })) as { id?: number; quantity?: number }[] | null
+    }
 
     if (dup?.[0]?.id) {
       const mergePayload = {
@@ -140,15 +159,23 @@ export async function POST(req: NextRequest) {
 
     try {
       await supabaseInsert('pos_promo_items', rowWithChoice)
-    } catch {
+    } catch (insertErr) {
+      if (isLegacyPosPromoItemUniqueIndexError(insertErr)) throw insertErr
       try {
         await supabaseInsert('pos_promo_items', rowBase)
-      } catch {
+      } catch (insertErr2) {
+        if (isLegacyPosPromoItemUniqueIndexError(insertErr2)) throw insertErr2
         await supabaseInsert('pos_promo_items', stripOptionCode(rowBase))
       }
     }
     return NextResponse.json({ success: true, message: '추가되었습니다.' }, { headers })
   } catch (e) {
+    if (isLegacyPosPromoItemUniqueIndexError(e)) {
+      return NextResponse.json(
+        { success: false, message: POS_PROMO_ITEM_CHOICE_GROUP_INDEX_MESSAGE },
+        { headers }
+      )
+    }
     console.error('savePosPromoItem:', e)
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '저장 실패' },

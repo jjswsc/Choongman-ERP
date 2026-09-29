@@ -2853,6 +2853,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posSetTabAlertNeedLinesForSlot: '먼저 슬롯에 넣을 구성 줄을 1개 이상 추가해 주세요.',
     posSetTabAlertSlotNameRequired: '슬롯 이름을 입력해 주세요.',
     posSetTabAlertSlotNameDuplicate: '같은 슬롯 이름이 이미 있습니다.',
+    posPromoSameMenuNeedsChoiceGroupIndex:
+      '같은 메뉴를 다른 선택 그룹에 저장하려면 데이터베이스 인덱스를 먼저 갱신해야 합니다.',
     posSetTabAlertSlotPresetExists: '이미 생성된 슬롯입니다.',
     posSetTabAlertNeedLinesFirst: '먼저 구성 줄을 추가해 주세요.',
     posSetTabAlertAutoSuggestNoMatch: '자동 추천할 줄이 없거나 카테고리 규칙과 맞는 항목이 없습니다.',
@@ -6948,6 +6950,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posSetTabAlertNeedLinesForSlot: 'Add at least one bundle line before assigning a slot.',
     posSetTabAlertSlotNameRequired: 'Enter a slot name.',
     posSetTabAlertSlotNameDuplicate: 'A slot with this name already exists.',
+    posPromoSameMenuNeedsChoiceGroupIndex:
+      'Saving the same menu in another choice group needs a database index update first.',
     posSetTabAlertSlotPresetExists: 'This preset slot is already created.',
     posSetTabAlertNeedLinesFirst: 'Add bundle lines first.',
     posSetTabAlertAutoSuggestNoMatch: 'No lines to auto-assign, or no items match the category rules.',
@@ -9366,6 +9370,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posSetTabAlertNeedLinesForSlot: 'เพิ่มแถวในชุดอย่างน้อย 1 แถวก่อน แล้วค่อยกำหนดช่อง',
     posSetTabAlertSlotNameRequired: 'กรุณากรอกชื่อช่อง',
     posSetTabAlertSlotNameDuplicate: 'มีชื่อช่องนี้อยู่แล้ว',
+    posPromoSameMenuNeedsChoiceGroupIndex:
+      'ต้องอัปเดตดัชนีฐานข้อมูลก่อน จึงจะบันทึกเมนูเดียวกันคนละช่องเลือกได้',
     posSetTabAlertSlotPresetExists: 'สร้างช่องนี้ไว้แล้ว',
     posSetTabAlertNeedLinesFirst: 'เพิ่มแถวในชุดก่อน',
     posSetTabAlertAutoSuggestNoMatch: 'ไม่มีแถวให้แนะนำอัตโนมัติ หรือไม่มีรายการที่ตรงกับกฎหมวดหมู่',
@@ -12185,6 +12191,8 @@ export const I18N_POS_MM: Record<string, string> = {
     posSetTabAlertNeedLinesForSlot: 'Add at least one bundle line before assigning a slot.',
     posSetTabAlertSlotNameRequired: 'Enter a slot name.',
     posSetTabAlertSlotNameDuplicate: 'A slot with this name already exists.',
+    posPromoSameMenuNeedsChoiceGroupIndex:
+      'Saving the same menu in another choice group needs a database index update first.',
     posSetTabAlertSlotPresetExists: 'This preset slot is already created.',
     posSetTabAlertNeedLinesFirst: 'Add bundle lines first.',
     posSetTabAlertAutoSuggestNoMatch: 'No lines to auto-assign, or no items match the category rules.',
@@ -15270,6 +15278,8 @@ export const I18N_POS_LA: Record<string, string> = {
     posSetTabAlertNeedLinesForSlot: 'Add at least one bundle line before assigning a slot.',
     posSetTabAlertSlotNameRequired: 'Enter a slot name.',
     posSetTabAlertSlotNameDuplicate: 'A slot with this name already exists.',
+    posPromoSameMenuNeedsChoiceGroupIndex:
+      'Saving the same menu in another choice group needs a database index update first.',
     posSetTabAlertSlotPresetExists: 'This preset slot is already created.',
     posSetTabAlertNeedLinesFirst: 'Add bundle lines first.',
     posSetTabAlertAutoSuggestNoMatch: 'No lines to auto-assign, or no items match the category rules.',
@@ -18398,6 +18408,8 @@ export const I18N_POS_KH: Record<string, string> = {
     posSetTabAlertNeedLinesForSlot: 'Add at least one bundle line before assigning a slot.',
     posSetTabAlertSlotNameRequired: 'Enter a slot name.',
     posSetTabAlertSlotNameDuplicate: 'A slot with this name already exists.',
+    posPromoSameMenuNeedsChoiceGroupIndex:
+      'Saving the same menu in another choice group needs a database index update first.',
     posSetTabAlertSlotPresetExists: 'This preset slot is already created.',
     posSetTabAlertNeedLinesFirst: 'Add bundle lines first.',
     posSetTabAlertAutoSuggestNoMatch: 'No lines to auto-assign, or no items match the category rules.',
@@ -21572,6 +21584,8 @@ export const I18N_POS_VI: Record<string, string> = {
     posSetTabAlertNeedLinesForSlot: 'Thêm ít nhất một dòng vào bộ trước khi gán nhóm.',
     posSetTabAlertSlotNameRequired: 'Nhập tên nhóm.',
     posSetTabAlertSlotNameDuplicate: 'Tên nhóm này đã tồn tại.',
+    posPromoSameMenuNeedsChoiceGroupIndex:
+      'Cần cập nhật chỉ mục cơ sở dữ liệu trước khi lưu cùng một món ở nhóm chọn khác.',
     posSetTabAlertSlotPresetExists: 'Nhóm preset này đã được tạo.',
     posSetTabAlertNeedLinesFirst: 'Thêm các dòng vào bộ trước.',
     posSetTabAlertAutoSuggestNoMatch: 'Không có dòng để gợi ý, hoặc không có món khớp quy tắc danh mục.',
@@ -24693,6 +24707,8 @@ export const I18N_POS_MS: Record<string, string> = {
     posSetTabAlertNeedLinesForSlot: 'Tambah sekurang-kurangnya satu baris bungkus sebelum menetapkan slot.',
     posSetTabAlertSlotNameRequired: 'Masukkan nama slot.',
     posSetTabAlertSlotNameDuplicate: 'Nama slot ini sudah wujud.',
+    posPromoSameMenuNeedsChoiceGroupIndex:
+      'Indeks pangkalan data perlu dikemas kini dahulu sebelum menyimpan menu yang sama dalam kumpulan pilihan lain.',
     posSetTabAlertSlotPresetExists: 'Slot pratetap ini sudah dicipta.',
     posSetTabAlertNeedLinesFirst: 'Tambah baris bungkus dahulu.',
     posSetTabAlertAutoSuggestNoMatch: 'Tiada baris untuk dicadangkan, atau tiada item sepadan dengan peraturan kategori.',

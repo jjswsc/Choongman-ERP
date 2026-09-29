@@ -361,8 +361,13 @@ export function PosSetMenuInquiryTab({
           promoId: Number(newId),
           menuId: Number(it.menuId),
           optionId: it.optionId ? Number(it.optionId) : null,
+          optionCode: it.optionCode?.trim() || null,
           quantity: Number(it.quantity) || 1,
           sortOrder: i,
+          choiceGroup: String(it.choiceGroup ?? '').trim() || null,
+          choicePickCount: String(it.choiceGroup ?? '').trim()
+            ? Math.max(1, Number(it.choicePickCount) || 1)
+            : null,
         })
         if (!ir.success) {
           await appAlert(translateApiMessage(ir.message, t) || ir.message || t("msg_save_fail_detail"))

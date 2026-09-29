@@ -10,9 +10,14 @@ CREATE INDEX IF NOT EXISTS idx_pos_promos_active_sort
 CREATE INDEX IF NOT EXISTS idx_pos_promo_items_promo_id
   ON public.pos_promo_items (promo_id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_promo_items_promo_menu_option
+-- 같은 메뉴·옵션이라도 선택 그룹(choice_group)이 다르면 별도 행.
+-- 구 인덱스(그룹 무시)가 남아 있으면 메인/사이드에 같은 메뉴를 넣어도 한 줄로 합쳐진다.
+DROP INDEX IF EXISTS public.ux_pos_promo_items_promo_menu_option;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pos_promo_items_promo_menu_option_group
   ON public.pos_promo_items (
     promo_id,
     menu_id,
-    COALESCE(option_id, -1)
+    COALESCE(option_id, -1),
+    COALESCE(choice_group, '')
   );

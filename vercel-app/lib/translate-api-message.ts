@@ -3,6 +3,7 @@
  */
 
 import { ACCOUNT_SUBJECT_HEADER_MESSAGE_KO } from '@/lib/account-subject-header-messages'
+import { POS_PROMO_ITEM_CHOICE_GROUP_INDEX_MESSAGE } from '@/lib/pos-promo-item-dup'
 import { BANK_EXPENSE_VIA_EXPENSE_MGMT_MESSAGE } from '@/lib/bank-expense-via-expense-mgmt'
 import { EXPENSE_PAYMENT_VENDOR_CODE_REQUIRED_MESSAGE } from '@/lib/expense-payment-vendor-messages'
 
@@ -71,6 +72,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "승인·취소된 발주는 수정할 수 없습니다.": "poEditNotDraft",
   "이 발주를 수정할 권한이 없습니다.": "poEditForbidden",
   "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.": "posMenuPromoLinkedEdit",
+  [POS_PROMO_ITEM_CHOICE_GROUP_INDEX_MESSAGE]: "posPromoSameMenuNeedsChoiceGroupIndex",
 
   // POS 메뉴 노출 매장
   "신규 메뉴는 노출 매장을 1개 이상 선택해야 합니다.": "posMenuVisibleStoresRequiredNewMenu",
