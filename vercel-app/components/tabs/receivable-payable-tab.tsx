@@ -59,6 +59,8 @@ import {
   filterLedgerPairGroupsForDisplay,
   sortLedgerPairGroupsDesc,
   isPayableWithholdingRow,
+  ledgerAccrualStatusById,
+  payableLineSettlementKind,
   type ReceivableLedgerDatePair,
   type PayableLedgerDatePair,
 } from "@/lib/receivable-payable-period-totals"
@@ -1933,12 +1935,14 @@ export function ReceivablePayableTab() {
     const typeReceive = isRec ? (t("recTypeReceive") || "Receive") : (t("payTypePayment") || "Payment")
     const typeOpening = t("recTypeOpening") || "Opening Balance"
     const statusRec = (r: { ref_type?: string }) => r.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")
-    const statusPay = (r: { ref_type?: string }) =>
-      isPayableWithholdingRow(r.ref_type)
+    const payStatusText = (kind: "withholding" | "paid" | "partial" | "unpaid") =>
+      kind === "withholding"
         ? (t("payStatusWithholding") || "WHT")
-        : r.ref_type === "Payment"
+        : kind === "paid"
           ? (t("payStatusPaid") || "Paid")
-          : (t("payStatusUnpaid") || "Unpaid")
+          : kind === "partial"
+            ? (t("payStatusPartial") || "Partial")
+            : (t("payStatusUnpaid") || "Unpaid")
     const header = isRec
       ? [
           entityCol,
@@ -1966,6 +1970,17 @@ export function ReceivablePayableTab() {
       const displayItems = filterItemsByUnpaid(item.items, isRec)
       if (displayItems.length === 0) continue
       const name = isRec ? (item.storeName ?? "") : formatVendorDisplay(item.vendorCode)
+      const payableStatusById = isRec
+        ? new Map<number, "settled" | "open" | "partial" | "standalone">()
+        : ledgerAccrualStatusById(
+            groupPayableLedgerRowsWithLinks(
+              item.items ?? [],
+              (item.settlementLinks ?? []).map((l) => ({
+                payment_id: l.paymentId,
+                accrual_id: l.accrualId,
+              }))
+            )
+          )
       const typeLabel = (ref: string) =>
         ref === "Opening"
           ? typeOpening
@@ -2022,7 +2037,7 @@ export function ReceivablePayableTab() {
                 typeLabel(row.ref_type || ""),
                 invPayable,
                 formatAttributedStoreLabel((row as { attributed_store?: string }).attributed_store),
-                statusPay(row),
+                payStatusText(payableLineSettlementKind(row, payableStatusById)),
                 String(formatMoneyBaht(row.amount ?? 0)),
                 getMemo(row.memo) || "",
               ]
@@ -2122,6 +2137,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
               if (displayItems.length === 0) return null
               const name = isRec ? (item.storeName ?? "") : formatVendorDisplay(item.vendorCode)
               const key = isRec ? (item.storeName ?? `rec-${idx}`) : (item.vendorCode ?? `pay-${idx}`)
+              const payableStatusById = isRec
+                ? new Map<number, "settled" | "open" | "partial" | "standalone">()
+                : ledgerAccrualStatusById(
+                    groupPayableLedgerRowsWithLinks(
+                      item.items ?? [],
+                      (item.settlementLinks ?? []).map((l) => ({
+                        payment_id: l.paymentId,
+                        accrual_id: l.accrualId,
+                      }))
+                    )
+                  )
               return (
                 <div key={key} className="break-inside-avoid">
                   <h2 className="font-semibold text-sm mb-1">{name}</h2>
@@ -2162,6 +2188,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                               ? (t("poInvoiceNotReceived") || "Not Received")
                               : "-")
                           : null
+                        const payKind = isRec ? null : payableLineSettlementKind(row, payableStatusById)
                         return (
                         <tr key={i} className="border-b border-border/50">
                           <td className="py-1 px-2">{row.trans_date || "-"}</td>
@@ -2190,7 +2217,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                               {formatAttributedStoreLabel((row as { attributed_store?: string }).attributed_store)}
                             </td>
                           )}
-                          <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")) : (isPayableWithholdingRow(row.ref_type) ? (t("payStatusWithholding") || "WHT") : row.ref_type === "Payment" ? (t("payStatusPaid") || "Paid") : (t("payStatusUnpaid") || "Unpaid"))}</td>
+                          <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")) : payKind === "withholding" ? (t("payStatusWithholding") || "WHT") : payKind === "paid" ? (t("payStatusPaid") || "Paid") : payKind === "partial" ? (t("payStatusPartial") || "Partial") : (t("payStatusUnpaid") || "Unpaid")}</td>
                           {isRec && (
                             <td className="py-1 px-2 text-center text-sm">
                               {row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO"
@@ -3320,6 +3347,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             accrual_id: l.accrualId,
                           }))
                           const payableAllGroups = groupPayableLedgerRowsWithLinks(allItems, payableSettlementLinkRows)
+                          const payableAccrualStatus = ledgerAccrualStatusById(payableAllGroups)
                           const payableRowGroupMeta = buildLedgerRowGroupMeta(payableAllGroups)
                           const payablePairGroups = sortLedgerPairGroupsDesc(
                             filterLedgerPairGroupsForDisplay(payableAllGroups, tableItems, filterUnpaidOnly)
@@ -3444,6 +3472,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     const payRowLinkStatus =
                                       row.id != null ? payableRowLinkStatus(row.id, payableSettlementLinkRows) : "open"
                                     const rowPairMeta = row.id != null ? payableRowGroupMeta.get(row.id) : undefined
+                                    const payKind = payableLineSettlementKind(row, payableAccrualStatus)
                                     return (
                                       <React.Fragment key={row.id ?? rowKey}>
                                         <tr
@@ -3525,17 +3554,21 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           <td className="py-1.5 px-4 w-[95px] text-center">
                                             <span className={cn(
                                               "text-sm font-medium px-2 py-0.5 rounded",
-                                              isPayableWithholdingRow(row.ref_type)
+                                              payKind === "withholding"
                                                 ? "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300"
-                                                : row.ref_type === "Payment"
+                                                : payKind === "paid"
                                                   ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                                                  : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                                                  : payKind === "partial"
+                                                    ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300"
+                                                    : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
                                             )}>
-                                              {isPayableWithholdingRow(row.ref_type)
+                                              {payKind === "withholding"
                                                 ? (t("payStatusWithholding") || "원천세")
-                                                : row.ref_type === "Payment"
+                                                : payKind === "paid"
                                                   ? (t("payStatusPaid") || "지급")
-                                                  : (t("payStatusUnpaid") || "미지급")}
+                                                  : payKind === "partial"
+                                                    ? (t("payStatusPartial") || "일부지급")
+                                                    : (t("payStatusUnpaid") || "미지급")}
                                             </span>
                                           </td>
                                           <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{fmtBahtSigned(row.amount)}</td>

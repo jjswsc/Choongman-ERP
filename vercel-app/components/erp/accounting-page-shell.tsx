@@ -19,7 +19,7 @@ export function AccountingPageShell({
   icon: Icon,
   title,
   subtitle,
-  maxWidthClass = "max-w-7xl",
+  maxWidthClass = "max-w-none",
   className,
   hideHeader = false,
 }: AccountingPageShellProps) {

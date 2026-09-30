@@ -2890,7 +2890,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                   <AccountingDataTable
                     id="bank-query-list-wrap"
                     className="max-h-[70vh] min-h-[320px]"
-                    minWidthClass="min-w-[1335px] table-fixed"
+                    minWidthClass="min-w-[1480px] w-full table-fixed"
                   >
                     {loading ? (
                       <tbody>
@@ -2914,9 +2914,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <col style={{ width: "108px" }} />
                           <col style={{ width: "64px" }} />
                           <col style={{ width: "130px" }} />
-                          <col style={{ width: "130px" }} />
-                          <col style={{ width: "88px" }} />
-                          <col style={{ width: "88px" }} />
+                          <col style={{ width: "240px" }} />
+                          <col style={{ width: "112px" }} />
+                          <col style={{ width: "112px" }} />
                           <col style={{ width: "120px" }} />
                           <col style={{ width: "168px" }} />
                           <col style={{ width: "32px" }} />
@@ -3080,7 +3080,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 if (vendorOptions.length === 0) void loadPurchaseVendorOptions(true)
                               }}
                                   >
-                                    <SelectTrigger className="h-8 text-xs max-w-[140px]">
+                                    <SelectTrigger className="h-8 w-full text-xs">
                                       <SelectValue placeholder={t("inVendorPlaceholder") || "거래처"} />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -3104,9 +3104,10 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     </SelectContent>
                                   </Select>
                                   {r.transType === "withdraw" && cat === "purchase_payment" && r.id ? (
-                                    <div className="mt-1 flex items-center gap-1" title={t("bankPurchaseWhtHint") || "통장 금액은 실이체입니다. 원천세는 거래처 잔액에서 따로 빠집니다."}>
+                                    <div className="mt-1 space-y-1" title={t("bankPurchaseWhtHint") || "통장 금액은 실이체입니다. 원천세는 거래처 잔액에서 따로 빠집니다."}>
+                                      <div className="flex items-center gap-1">
                                       <Input
-                                        className="h-7 w-12 text-xs px-1"
+                                        className="h-8 w-16 shrink-0 text-sm tabular-nums px-1.5"
                                         inputMode="decimal"
                                         aria-label={t("bankPurchaseWhtRate") || "WHT %"}
                                         placeholder="%"
@@ -3117,7 +3118,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         onChange={(e) => setQueryRowEdit(r.id!, "withholdingTaxRate", e.target.value)}
                                       />
                                       <Input
-                                        className="h-7 w-[88px] text-xs px-1"
+                                        className="h-8 min-w-0 flex-1 text-sm tabular-nums px-1.5"
                                         inputMode="decimal"
                                         aria-label={t("bankPurchaseWhtAmount") || "WHT"}
                                         placeholder={t("bankPurchaseWhtAmount") || "WHT"}
@@ -3135,11 +3136,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                           })
                                         }}
                                       />
+                                      </div>
                                       <Button
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        className="h-7 px-1.5 text-[10px]"
+                                        className="h-8 w-full px-2 text-xs"
                                         onClick={() => {
                                           const rateRaw = edits?.withholdingTaxRate ?? (r.withholdingTaxRate != null ? String(r.withholdingTaxRate) : "3")
                                           const rate = Number(String(rateRaw).replace(/,/g, "")) || 3

@@ -274,6 +274,7 @@ type LedgerPairRow = {
   ref_id?: number
   amount?: number
   trans_date?: string
+  bank_transaction_id?: number | null
 }
 
 export type { LedgerPairRow }
@@ -375,16 +376,157 @@ export function groupReceivableLedgerRows(
   )
 }
 
-/** 같은 매입처 그룹 내 매입·지급 행을 짝지어 블록 단위로 반환 */
+const PAYABLE_WHT_MATCH_EPS = 0.5
+
+function payableBankId(row: LedgerPairRow): number {
+  const id = Number(row.bank_transaction_id || 0)
+  return Number.isFinite(id) && id > 0 ? id : 0
+}
+
+/**
+ * 통장 실이체와 같은 통장의 원천세를 한 묶음으로 보고, 입고 총액과 같으면 지급 완료로 짝짓는다.
+ * 원천세 행 자체는 금액이 같은 입고와 1:1로 붙지 않는다.
+ * 같은 날 입고가 여러 줄이고 그 합이 한 지급 묶음과 같으면 함께 지급 완료로 본다.
+ */
 export function groupPayableLedgerRows(
   items: LedgerPairRow[] | undefined
 ): LedgerPairGroup<LedgerPairRow>[] {
-  return groupLedgerRowsByAccrualSettlement(
-    items ?? [],
+  const rows = items ?? []
+  const used = new Set<number>()
+  const groups: LedgerPairGroup<LedgerPairRow>[] = []
+  let nextGroupId = 1
+
+  const whtByBank = new Map<number, LedgerPairRow[]>()
+  for (const row of rows) {
+    if (!isPayableWithholdingRow(row.ref_type)) continue
+    const bankId = payableBankId(row)
+    if (!bankId) continue
+    const list = whtByBank.get(bankId) ?? []
+    list.push(row)
+    whtByBank.set(bankId, list)
+  }
+
+  const payments = rows
+    .filter((row) => String(row.ref_type || '') === 'Payment')
+    .sort((a, b) => sliceYmd(a.trans_date).localeCompare(sliceYmd(b.trans_date)))
+  const usedPayment = new Set<LedgerPairRow>()
+
+  const takeBundle = (grossTarget: number) => {
+    let best: { payment: LedgerPairRow; wht: LedgerPairRow[]; gross: number } | null = null
+    let bestDiff = Infinity
+    for (const payment of payments) {
+      if (usedPayment.has(payment)) continue
+      const bankId = payableBankId(payment)
+      const wht = (bankId ? whtByBank.get(bankId) ?? [] : []).filter(
+        (row) => row.id == null || !used.has(row.id)
+      )
+      const gross = roundMoney(
+        Math.abs(Number(payment.amount ?? 0)) +
+          wht.reduce((sum, row) => sum + Math.abs(Number(row.amount ?? 0)), 0)
+      )
+      const diff = Math.abs(gross - grossTarget)
+      if (diff <= PAYABLE_WHT_MATCH_EPS && diff < bestDiff) {
+        best = { payment, wht, gross }
+        bestDiff = diff
+      }
+    }
+    if (!best) return null
+    usedPayment.add(best.payment)
+    return best
+  }
+
+  const pushCovered = (accrualList: LedgerPairRow[], settlements: LedgerPairRow[]) => {
+    const accrualAmt = accrualList.reduce((sum, row) => sum + Math.max(0, Number(row.amount ?? 0)), 0)
+    const settledAmt = settlements.reduce((sum, row) => sum + Math.abs(Number(row.amount ?? 0)), 0)
+    const closeEnough =
+      accrualAmt > 0 &&
+      settlements.length > 0 &&
+      Math.abs(accrualAmt - settledAmt) <= PAYABLE_WHT_MATCH_EPS
+    const resolved = resolveLedgerPairStatusForAmounts(accrualAmt, settlements)
+    const status = closeEnough ? 'settled' : resolved.status
+    const openAmount = closeEnough ? 0 : resolved.openAmount
+    groups.push({
+      groupId: nextGroupId++,
+      accrual: accrualList[0] ?? null,
+      accruals: accrualList.length > 1 ? accrualList : undefined,
+      settlements,
+      status,
+      openAmount,
+    })
+    for (const row of accrualList) {
+      if (row.id != null) used.add(row.id)
+    }
+    for (const row of settlements) {
+      if (row.id != null) used.add(row.id)
+    }
+  }
+
+  const accruals = rows
+    .filter((row) => isPayableAccrualRow(row.ref_type, Number(row.amount ?? 0)))
+    .sort((a, b) => sliceYmd(a.trans_date).localeCompare(sliceYmd(b.trans_date)))
+
+  const unmatchedAccruals: LedgerPairRow[] = []
+  for (const accrual of accruals) {
+    const target = roundMoney(Math.abs(Number(accrual.amount ?? 0)))
+    const bundle = takeBundle(target)
+    if (!bundle) {
+      unmatchedAccruals.push(accrual)
+      continue
+    }
+    pushCovered([accrual], [bundle.payment, ...bundle.wht])
+  }
+
+  const byDate = new Map<string, LedgerPairRow[]>()
+  for (const accrual of unmatchedAccruals) {
+    const date = sliceYmd(accrual.trans_date)
+    const list = byDate.get(date) ?? []
+    list.push(accrual)
+    byDate.set(date, list)
+  }
+  for (const list of byDate.values()) {
+    if (list.length < 2) continue
+    const sum = roundMoney(list.reduce((total, row) => total + Math.max(0, Number(row.amount ?? 0)), 0))
+    const bundle = takeBundle(sum)
+    if (!bundle) continue
+    pushCovered(list, [bundle.payment, ...bundle.wht])
+  }
+
+  const remaining = rows.filter((row) => row.id == null || !used.has(row.id))
+  const autoGroups = groupLedgerRowsByAccrualSettlement(
+    remaining,
     isPayableAccrualRow,
     isPayableSettlementRow,
     false
   )
+  for (const group of autoGroups) {
+    groups.push({ ...group, groupId: nextGroupId++ })
+  }
+  return groups
+}
+
+export function ledgerAccrualStatusById<T extends { id?: number }>(
+  groups: LedgerPairGroup<T>[]
+): Map<number, LedgerPairStatus> {
+  const map = new Map<number, LedgerPairStatus>()
+  for (const group of groups) {
+    const accrualRows = group.accruals?.length ? group.accruals : group.accrual ? [group.accrual] : []
+    for (const accrual of accrualRows) {
+      if (accrual.id != null) map.set(accrual.id, group.status)
+    }
+  }
+  return map
+}
+
+export function payableLineSettlementKind(
+  row: { id?: number; ref_type?: string },
+  statusByAccrualId: Map<number, LedgerPairStatus>
+): 'withholding' | 'paid' | 'partial' | 'unpaid' {
+  if (isPayableWithholdingRow(row.ref_type)) return 'withholding'
+  if (String(row.ref_type || '') === 'Payment') return 'paid'
+  const status = row.id != null ? statusByAccrualId.get(row.id) : undefined
+  if (status === 'settled') return 'paid'
+  if (status === 'partial') return 'partial'
+  return 'unpaid'
 }
 
 export function buildLedgerRowGroupMeta<T extends { id?: number }>(

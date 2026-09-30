@@ -3,7 +3,8 @@ import {
   type LedgerPairRow,
   isPayableAccrualRow,
   isPayableSettlementRow,
-  groupLedgerRowsByAccrualSettlement,
+  isPayableWithholdingRow,
+  groupPayableLedgerRows,
   resolveLedgerPairStatusForAmounts,
 } from '@/lib/receivable-payable-period-totals'
 
@@ -188,12 +189,7 @@ export function groupPayableLedgerRowsWithLinks(
   const rows = items ?? []
   const linkRows = links ?? []
   if (linkRows.length === 0) {
-    return groupLedgerRowsByAccrualSettlement(
-      rows,
-      isPayableAccrualRow,
-      isPayableSettlementRow,
-      false
-    )
+    return groupPayableLedgerRows(rows)
   }
 
   const byId = new Map<number, LedgerPairRow>()
@@ -221,6 +217,20 @@ export function groupPayableLedgerRowsWithLinks(
       if (isPayableAccrualRow(row.ref_type, amount)) accruals.push(row)
       else if (isPayableSettlementRow(row.ref_type, amount)) settlements.push(row)
     }
+    const linkedBankIds = new Set(
+      settlements
+        .map((row) => Number(row.bank_transaction_id || 0))
+        .filter((id) => Number.isFinite(id) && id > 0)
+    )
+    if (linkedBankIds.size > 0) {
+      for (const row of rows) {
+        if (!isPayableWithholdingRow(row.ref_type)) continue
+        const bankId = Number(row.bank_transaction_id || 0)
+        if (!linkedBankIds.has(bankId)) continue
+        if (row.id != null && used.has(row.id)) continue
+        settlements.push(row)
+      }
+    }
     accruals.sort((a, b) => String(a.trans_date || '').localeCompare(String(b.trans_date || '')))
     settlements.sort((a, b) => String(a.trans_date || '').localeCompare(String(b.trans_date || '')))
     if (accruals.length > 0 || settlements.length > 0) {
@@ -229,12 +239,7 @@ export function groupPayableLedgerRowsWithLinks(
   }
 
   const remaining = rows.filter((r) => r.id == null || !used.has(r.id))
-  const autoGroups = groupLedgerRowsByAccrualSettlement(
-    remaining,
-    isPayableAccrualRow,
-    isPayableSettlementRow,
-    false
-  )
+  const autoGroups = groupPayableLedgerRows(remaining)
   for (const g of autoGroups) {
     groups.push({ ...g, groupId: nextGroupId.value++ })
   }

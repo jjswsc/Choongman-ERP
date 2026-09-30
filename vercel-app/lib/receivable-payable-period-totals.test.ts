@@ -123,7 +123,7 @@ describe('groupPayableLedgerRows', () => {
     expect(groups[0].status).toBe('settled')
   })
 
-  it('keeps withholding out of the payment pair and still reduces the net', () => {
+  it('keeps withholding out of amount pairing until it shares a bank payment', () => {
     const rows = [
       { id: 1, ref_type: 'Inbound', amount: 104860, trans_date: '2026-07-20' },
       { id: 2, ref_type: 'Payment', amount: -101920, trans_date: '2026-07-21' },
@@ -138,6 +138,30 @@ describe('groupPayableLedgerRows', () => {
     expect(totals.periodNet).toBe(0)
     expect(totals.salesSum).toBe(104860)
     expect(totals.receiveSum).toBe(104860)
+  })
+
+  it('marks an inbound paid when the same bank payment plus withholding equals the gross', () => {
+    const groups = groupPayableLedgerRows([
+      { id: 1, ref_type: 'Inbound', amount: 104860, trans_date: '2026-07-20' },
+      { id: 2, ref_type: 'Payment', amount: -101920, trans_date: '2026-07-21', bank_transaction_id: 9656 },
+      { id: 3, ref_type: 'Withholding', amount: -2940, trans_date: '2026-07-21', bank_transaction_id: 9656 },
+    ])
+    const inbound = groups.find((g) => g.accrual?.id === 1)
+    expect(inbound?.status).toBe('settled')
+    expect(inbound?.openAmount).toBe(0)
+    expect(inbound?.settlements.map((row) => row.id).sort()).toEqual([2, 3])
+  })
+
+  it('marks same-day inbounds paid when one payment plus withholding covers their sum', () => {
+    const groups = groupPayableLedgerRows([
+      { id: 1, ref_type: 'Inbound', amount: 111718.7, trans_date: '2026-03-20' },
+      { id: 2, ref_type: 'Inbound', amount: 92041.4, trans_date: '2026-03-20' },
+      { id: 3, ref_type: 'Payment', amount: -198047.2, trans_date: '2026-03-20', bank_transaction_id: 1 },
+      { id: 4, ref_type: 'Withholding', amount: -5712.69, trans_date: '2026-03-20', bank_transaction_id: 1 },
+    ])
+    const covered = groups.find((g) => (g.accruals?.length ?? 0) > 1)
+    expect(covered?.status).toBe('settled')
+    expect(covered?.accruals?.map((row) => row.id).sort()).toEqual([1, 2])
   })
 })
 
