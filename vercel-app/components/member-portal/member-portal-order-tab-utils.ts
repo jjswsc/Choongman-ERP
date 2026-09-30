@@ -11,6 +11,7 @@ import {
   uniqueSubcategoriesForMainMenu,
 } from "@/lib/pos-promo-constants"
 import { mainCategoryMatches } from "@/lib/pos-menu-categories"
+import type { PosCategoryTabOrder } from "@/lib/pos-category-tab-order"
 
 // ── Types ──
 
@@ -118,7 +119,11 @@ export function menuMatchesSubcategory(
   return mainCategoryMatches(main, menu.categoryMain, menu.code) && subOk
 }
 
-export function buildAllMenuSections(menus: PosMenu[], mainTabs: string[]): MenuListSection[] {
+export function buildAllMenuSections(
+  menus: PosMenu[],
+  mainTabs: string[],
+  tabOrder?: PosCategoryTabOrder | null
+): MenuListSection[] {
   const sections: MenuListSection[] = []
   const used = new Set<string>()
   for (const main of mainTabs) {
@@ -127,7 +132,8 @@ export function buildAllMenuSections(menus: PosMenu[], mainTabs: string[]): Menu
       menus
         .filter((m) => mainCategoryMatches(main, m.categoryMain, m.code))
         .map((m) => String(m.category || "").trim())
-        .filter(Boolean)
+        .filter(Boolean),
+      tabOrder?.subsByMain?.[main]
     )
     for (const sub of subs) {
       const items = menus.filter((m) => menuMatchesSubcategory(m, main, sub))

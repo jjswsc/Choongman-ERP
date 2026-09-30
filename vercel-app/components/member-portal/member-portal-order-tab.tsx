@@ -56,11 +56,12 @@ import { readMemberPortalCheckoutDraft } from "@/lib/member-portal-checkout-draf
 import { MemberPortalDeliveryAppLogo } from "@/components/member-portal/member-portal-delivery-app-logo"
 import {
   PROMOTION_MAIN_CATEGORY,
-  normalizePosMainCategoryTabs,
+  orderPosMainCategoryTabs,
   normalizePromotionSubcategory,
   promotionSubcategoriesEqual,
   uniqueSubcategoriesForMainMenu,
 } from "@/lib/pos-promo-constants"
+import { emptyPosCategoryTabOrder, sanitizePosCategoryTabOrder, type PosCategoryTabOrder } from "@/lib/pos-category-tab-order"
 import {
   type StoreRow,
   type DeliveryLinks,
@@ -325,6 +326,7 @@ export function MemberPortalOrderTab({
   const [orderMessage, setOrderMessage] = React.useState("")
   const [orderError, setOrderError] = React.useState("")
   const [catalogMainCategories, setCatalogMainCategories] = React.useState<string[]>([])
+  const [categoryTabOrder, setCategoryTabOrder] = React.useState<PosCategoryTabOrder>(emptyPosCategoryTabOrder)
   const [activeMainCategory, setActiveMainCategory] = React.useState("")
   const [activeSubCategory, setActiveSubCategory] = React.useState("")
   const [storeSearch, setStoreSearch] = React.useState("")
@@ -429,11 +431,14 @@ export function MemberPortalOrderTab({
       .map((m) => String(m.categoryMain || "").trim())
       .filter(Boolean)
     const fromApi = catalogMainCategories
-    const merged = normalizePosMainCategoryTabs([...(fromApi.length > 0 ? fromApi : fromMenus)])
+    const merged = orderPosMainCategoryTabs(
+      fromApi.length > 0 ? fromApi : fromMenus,
+      categoryTabOrder.mains
+    )
     return merged.filter((main) =>
       packagingMenus.some((m) => mainCategoryMatches(main, m.categoryMain, m.code))
     )
-  }, [packagingMenus, catalogMainCategories])
+  }, [packagingMenus, catalogMainCategories, categoryTabOrder])
 
   const subCategoriesForMain = React.useMemo(() => {
     if (!activeMainCategory) return [] as string[]
@@ -441,8 +446,12 @@ export function MemberPortalOrderTab({
       .filter((m) => mainCategoryMatches(activeMainCategory, m.categoryMain, m.code))
       .map((m) => String(m.category || "").trim())
       .filter(Boolean)
-    return uniqueSubcategoriesForMainMenu(activeMainCategory, fromMain)
-  }, [packagingMenus, activeMainCategory])
+    return uniqueSubcategoriesForMainMenu(
+      activeMainCategory,
+      fromMain,
+      categoryTabOrder.subsByMain[activeMainCategory]
+    )
+  }, [packagingMenus, activeMainCategory, categoryTabOrder])
 
   React.useEffect(() => {
     if (!activeMainCategory) {
@@ -467,7 +476,7 @@ export function MemberPortalOrderTab({
 
   const menuListSections = React.useMemo((): MenuListSection[] => {
     if (!activeMainCategory) {
-      return buildAllMenuSections(packagingMenus, mainCategoryTabs)
+      return buildAllMenuSections(packagingMenus, mainCategoryTabs, categoryTabOrder)
     }
     if (!activeSubCategory) return []
     return [
@@ -483,6 +492,7 @@ export function MemberPortalOrderTab({
     filteredPackagingMenus,
     mainCategoryTabs,
     packagingMenus,
+    categoryTabOrder,
   ])
 
   const showCategoryNav = mainCategoryTabs.length > 0
@@ -515,6 +525,7 @@ export function MemberPortalOrderTab({
         )
       )
       setCatalogMainCategories(apiMains.length > 0 ? apiMains : derivedMains)
+      setCategoryTabOrder(sanitizePosCategoryTabOrder(cats?.tabOrder))
     } catch {
       setMenus([])
       setMenuOptions([])
@@ -534,6 +545,7 @@ export function MemberPortalOrderTab({
     setActiveMainCategory("")
     setActiveSubCategory("")
     setCatalogMainCategories([])
+    setCategoryTabOrder(emptyPosCategoryTabOrder())
     setStoreSearch("")
     setCartSheetOpen(false)
     setCartConfirmOpen(false)

@@ -3,7 +3,10 @@
  */
 import { apiFetch } from '../api/fetch'
 import { apiFetchWithOffline } from '../api/fetch-offline'
-import { fetchPosCatalogCached, notifyPosCatalogUpdated, posMenusCatalogCacheKey } from '../offline/pos-catalog-offline'
+import { fetchPosCatalogCached, notifyPosCatalogUpdated, posMenusCatalogCacheKey, ERP_POS_CATALOG_CATEGORIES_CACHE_KEY } from '../offline/pos-catalog-offline'
+import { getFromErpCache, setErpCache } from '../offline/cache'
+import type { PosCategoryTabOrder } from '../pos-category-tab-order'
+import { sanitizePosCategoryTabOrder } from '../pos-category-tab-order'
 import type { PosMenuUpsertApiBody } from '../pos-menu-upsert-server'
 import { jsonAsArray } from '../safe-api-json'
 import { parsePosMutationResponse } from './helpers'
@@ -240,12 +243,66 @@ export async function getNextPosMenuCode(mainCategory: string) {
   return res.json() as Promise<{ code: string | null; message?: string }>
 }
 
-export async function getPosMenuCategories() {
-  return fetchPosCatalogCached<{ categories: string[]; mainCategories: string[] }>(
-    'erp:posCatalog:categories',
+export type PosMenuCategoryList = {
+  categories: string[]
+  mainCategories: string[]
+  tabOrder?: PosCategoryTabOrder
+}
+
+export async function persistPosMenuCategoryTabOrderCache(tabOrder: PosCategoryTabOrder) {
+  const key = ERP_POS_CATALOG_CATEGORIES_CACHE_KEY
+  const prev = await getFromErpCache<PosMenuCategoryList>(key).catch(() => null)
+  const next: PosMenuCategoryList = {
+    categories: prev?.categories || [],
+    mainCategories: prev?.mainCategories || [],
+    ...(prev || {}),
+    tabOrder: sanitizePosCategoryTabOrder(tabOrder),
+  }
+  await setErpCache(key, next)
+  notifyPosCatalogUpdated(key, next)
+}
+
+export async function getPosMenuCategories(params?: { fresh?: boolean }) {
+  const fallback: PosMenuCategoryList = {
+    categories: [],
+    mainCategories: [],
+    tabOrder: sanitizePosCategoryTabOrder(null),
+  }
+  if (params?.fresh) {
+    const res = await apiFetchWithOffline('/api/getPosMenuCategories', { cache: 'no-store' })
+    const data = (await res.json().catch(() => fallback)) as PosMenuCategoryList
+    const next: PosMenuCategoryList = {
+      categories: Array.isArray(data?.categories) ? data.categories : [],
+      mainCategories: Array.isArray(data?.mainCategories) ? data.mainCategories : [],
+      tabOrder: sanitizePosCategoryTabOrder(data?.tabOrder),
+    }
+    await setErpCache(ERP_POS_CATALOG_CATEGORIES_CACHE_KEY, next).catch(() => {})
+    notifyPosCatalogUpdated(ERP_POS_CATALOG_CATEGORIES_CACHE_KEY, next)
+    return next
+  }
+  return fetchPosCatalogCached<PosMenuCategoryList>(
+    ERP_POS_CATALOG_CATEGORIES_CACHE_KEY,
     '/api/getPosMenuCategories',
-    { categories: [], mainCategories: [] }
+    fallback
   )
+}
+
+export async function savePosMenuSortOrders(params: {
+  storeCode?: string | null
+  updates: { id: string | number; sortOrder: number }[]
+}) {
+  const res = await apiFetchWithOffline('/api/savePosMenuSortOrders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeCode: params.storeCode || undefined,
+      updates: params.updates.map((row) => ({
+        id: Number(row.id),
+        sortOrder: row.sortOrder,
+      })),
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; updated?: number; message?: string }>
 }
 
 

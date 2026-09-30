@@ -88,11 +88,13 @@ import {
 import { translateReceiptTableDisplayName } from "@/lib/pos-print-translate"
 import {
   PROMOTION_MAIN_CATEGORY,
-  normalizePosMainCategoryTabs,
+  orderPosMainCategoryTabs,
   normalizePromotionSubcategory,
   promotionSubcategoriesEqual,
   uniqueSubcategoriesForMainMenu,
 } from "@/lib/pos-promo-constants"
+import { emptyPosCategoryTabOrder, sanitizePosCategoryTabOrder, type PosCategoryTabOrder } from "@/lib/pos-category-tab-order"
+import { ERP_POS_CATALOG_CATEGORIES_CACHE_KEY } from "@/lib/offline/pos-catalog-offline"
 import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceGroup } from "@/lib/pos-promo-choice"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { isPromoVisibleInContext, shouldShowStandalonePromoTile } from "@/lib/pos-promo-visibility"
@@ -240,6 +242,18 @@ export default function PosOrderPage() {
   const [deliveryMenuImageByMenuId, setDeliveryMenuImageByMenuId] = React.useState<Record<string, string>>({})
   const [_categories, setCategories] = React.useState<string[]>([])
   const [mainCategories, setMainCategories] = React.useState<string[]>([])
+  const [categoryTabOrder, setCategoryTabOrder] = React.useState<PosCategoryTabOrder>(emptyPosCategoryTabOrder)
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ cacheKey?: string; data?: { tabOrder?: unknown } }>).detail
+      if (detail?.cacheKey !== ERP_POS_CATALOG_CATEGORIES_CACHE_KEY) return
+      const saved = sanitizePosCategoryTabOrder(detail.data?.tabOrder)
+      setCategoryTabOrder(saved)
+      setMainCategories((prev) => orderPosMainCategoryTabs(prev, saved.mains))
+    }
+    window.addEventListener("cm-erp-pos-catalog-updated", handler as EventListener)
+    return () => window.removeEventListener("cm-erp-pos-catalog-updated", handler as EventListener)
+  }, [])
   const [selectedMainCategory, setSelectedMainCategory] = React.useState<string>("")
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -607,7 +621,11 @@ export default function PosOrderPage() {
 
   const loadMenusAndPromos = React.useCallback(() => {
     setLoading(true)
-    const emptyCats = { categories: [] as string[], mainCategories: [] as string[] }
+    const emptyCats = {
+      categories: [] as string[],
+      mainCategories: [] as string[],
+      tabOrder: emptyPosCategoryTabOrder(),
+    }
     Promise.allSettled([
       getPosMenus({ storeCode: storeCode || undefined }),
       getPosMenuCategories(),
@@ -631,7 +649,9 @@ export default function PosOrderPage() {
         const promoCategories = [...new Set((promoList || []).map((p) => p.category).filter(Boolean))]
         const merged = [...new Set([...(finalCats || []), ...promoCategories])].sort()
         setCategories(merged)
-        const mainMerged = normalizePosMainCategoryTabs([...(finalMains || []), PROMOTION_MAIN_CATEGORY])
+        const savedOrder = sanitizePosCategoryTabOrder(catRes.tabOrder)
+        setCategoryTabOrder(savedOrder)
+        const mainMerged = orderPosMainCategoryTabs([...(finalMains || []), PROMOTION_MAIN_CATEGORY], savedOrder.mains)
         setMainCategories(mainMerged)
         setSelectedMainCategory((prev) => (mainMerged.includes(prev) ? prev : ""))
         setSelectedCategory((prev) => {
@@ -785,12 +805,16 @@ export default function PosOrderPage() {
       .filter((m) => (m.categoryMain ?? "") === selectedMainCategory)
       .map((m) => m.category)
       .filter(Boolean) as string[]
-    const arr = uniqueSubcategoriesForMainMenu(selectedMainCategory, fromMain)
+    const arr = uniqueSubcategoriesForMainMenu(
+      selectedMainCategory,
+      fromMain,
+      categoryTabOrder.subsByMain[selectedMainCategory]
+    )
     if (arr.length > 0) return arr
     const fromCategory = menus.filter((m) => (m.category ?? "") === selectedMainCategory)
     if (fromCategory.length > 0) return [selectedMainCategory]
     return []
-  }, [menus, selectedMainCategory])
+  }, [menus, selectedMainCategory, categoryTabOrder])
 
   React.useEffect(() => {
     if (categoriesForSelectedMain.length === 0) return

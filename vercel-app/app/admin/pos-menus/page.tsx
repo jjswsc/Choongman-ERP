@@ -127,6 +127,7 @@ import {
   normalizePromotionCategoryMain,
   normalizePromotionSubcategory,
   promotionSubcategoriesEqual,
+  orderPosMainCategoryTabs,
   uniqueSubcategoriesForMainMenu,
 } from "@/lib/pos-promo-constants"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
@@ -3509,9 +3510,12 @@ export default function PosMenusPage() {
     )
     const fromMenus = new Set(menus.map((m) => m.categoryMain).filter((c): c is string => typeof c === "string" && c !== ""))
     const fromDb = new Set(allMainCategories)
-    return Array.from(new Set([...preset, ...fromDb, ...fromMenus]))
-      .filter((c): c is string => typeof c === "string")
-      .sort()
+    const names = Array.from(new Set([...preset, ...fromDb, ...fromMenus])).filter(
+      (c): c is string => typeof c === "string"
+    )
+    const savedMains = categoriesConfig?.tabOrder?.mains
+    if (savedMains && savedMains.length > 0) return orderPosMainCategoryTabs(names, savedMains)
+    return names.sort()
   }, [menus, allMainCategories, categoriesConfig])
 
   const categoriesByMain = React.useMemo(() => {
@@ -3523,10 +3527,7 @@ export default function PosMenusPage() {
       .map((m) => m.category)
       .filter((c): c is string => typeof c === "string" && c !== "")
     const raw = Array.from(new Set([...preset, ...fromMenus])).filter((c): c is string => typeof c === "string")
-    if (main === PROMOTION_MAIN_CATEGORY) {
-      return uniqueSubcategoriesForMainMenu(main, raw)
-    }
-    return raw.sort()
+    return uniqueSubcategoriesForMainMenu(main, raw, categoriesConfig?.tabOrder?.subsByMain?.[main])
   }, [formData.categoryMain, menus, categories, categoriesConfig])
 
   /** 옵션 구성 탭: 대분류 선택 시 해당 대분류에 속한 소분류만 */
@@ -3539,10 +3540,7 @@ export default function PosMenusPage() {
       .map((m) => m.category)
       .filter((c): c is string => typeof c === "string" && c !== "")
     const raw = Array.from(new Set([...preset, ...fromMenus])).filter((c): c is string => typeof c === "string")
-    if (main === PROMOTION_MAIN_CATEGORY) {
-      return uniqueSubcategoriesForMainMenu(main, raw)
-    }
-    return raw.sort()
+    return uniqueSubcategoriesForMainMenu(main, raw, categoriesConfig?.tabOrder?.subsByMain?.[main])
   }, [mainCategoryFilter, menus, categories, categoriesConfig])
 
   const deliveryCategoryRows = React.useMemo(() => {

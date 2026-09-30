@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getPosMenuCategoriesConfig, savePosMenuCategoriesConfig, type PosMenuCategoriesConfig } from "@/lib/api-client"
+import { renamePosCategoryTabOrderLabel, sanitizePosCategoryTabOrder, type PosCategoryTabOrder } from "@/lib/pos-category-tab-order"
+import { orderPosMainCategoryTabs, uniqueSubcategoriesForMainMenu } from "@/lib/pos-promo-constants"
 import { Pencil, FolderTree, ArrowUp, ArrowDown } from "lucide-react"
 import {
   adminTabsBarCn,
@@ -106,6 +108,9 @@ export function PosMenuCategorySettingsDialog({
       const res = await savePosMenuCategoriesConfig({
         mainCategories: newMains,
         categoriesByMain: newCategoriesByMain,
+        tabOrder: editingMain
+          ? renamePosCategoryTabOrderLabel(config.tabOrder, editingMain, name, { kind: "main" })
+          : config.tabOrder,
         applyToMenus: false,
       })
       if (res?.success) {
@@ -158,6 +163,13 @@ export function PosMenuCategorySettingsDialog({
       const res = await savePosMenuCategoriesConfig({
         mainCategories: config.mainCategories,
         categoriesByMain: newCategoriesByMain,
+        tabOrder:
+          isEditMode && editingSub
+            ? renamePosCategoryTabOrderLabel(config.tabOrder, editingSub.sub, name, {
+                kind: "sub",
+                main,
+              })
+            : config.tabOrder,
         applyToMenus: false,
       })
       if (res?.success) {
@@ -199,6 +211,8 @@ export function PosMenuCategorySettingsDialog({
     const res = await savePosMenuCategoriesConfig({
       mainCategories: nextConfig.mainCategories,
       categoriesByMain: nextConfig.categoriesByMain,
+      codePrefixByMain: nextConfig.codePrefixByMain,
+      tabOrder: nextConfig.tabOrder,
       applyToMenus: false,
     })
     if (!res?.success) {
@@ -213,18 +227,37 @@ export function PosMenuCategorySettingsDialog({
     onSaved?.()
   }, [onSaved, refreshConfigFromServer, t])
 
+  const orderedMains = React.useMemo(
+    () => orderPosMainCategoryTabs(config?.mainCategories || [], config?.tabOrder?.mains),
+    [config]
+  )
+
+  const orderedSubsForMain = React.useCallback(
+    (main: string) =>
+      uniqueSubcategoriesForMainMenu(
+        main,
+        config?.categoriesByMain[main] || [],
+        config?.tabOrder?.subsByMain?.[main]
+      ),
+    [config]
+  )
+
   const moveMainCategory = async (main: string, direction: "up" | "down") => {
     if (!config) return
-    const idx = config.mainCategories.indexOf(main)
+    const idx = orderedMains.indexOf(main)
     if (idx < 0) return
     const targetIdx = direction === "up" ? idx - 1 : idx + 1
-    if (targetIdx < 0 || targetIdx >= config.mainCategories.length) return
-    const newMains = [...config.mainCategories]
+    if (targetIdx < 0 || targetIdx >= orderedMains.length) return
+    const newMains = [...orderedMains]
     const [picked] = newMains.splice(idx, 1)
     newMains.splice(targetIdx, 0, picked)
+    const tabOrder: PosCategoryTabOrder = {
+      ...sanitizePosCategoryTabOrder(config.tabOrder),
+      mains: newMains,
+    }
     setSaving(true)
     try {
-      await saveConfig({ ...config, mainCategories: newMains })
+      await saveConfig({ ...config, tabOrder })
     } catch (e) {
       await appAlert(e instanceof Error ? e.message : (t("msg_save_fail_detail") || "저장에 실패했습니다."))
     } finally {
@@ -234,7 +267,7 @@ export function PosMenuCategorySettingsDialog({
 
   const moveSubCategory = async (main: string, sub: string, direction: "up" | "down") => {
     if (!config) return
-    const subs = config.categoriesByMain[main] || []
+    const subs = orderedSubsForMain(main)
     const idx = subs.indexOf(sub)
     if (idx < 0) return
     const targetIdx = direction === "up" ? idx - 1 : idx + 1
@@ -242,15 +275,14 @@ export function PosMenuCategorySettingsDialog({
     const newSubs = [...subs]
     const [picked] = newSubs.splice(idx, 1)
     newSubs.splice(targetIdx, 0, picked)
+    const current = sanitizePosCategoryTabOrder(config.tabOrder)
+    const tabOrder: PosCategoryTabOrder = {
+      ...current,
+      subsByMain: { ...current.subsByMain, [main]: newSubs },
+    }
     setSaving(true)
     try {
-      await saveConfig({
-        ...config,
-        categoriesByMain: {
-          ...config.categoriesByMain,
-          [main]: newSubs,
-        },
-      })
+      await saveConfig({ ...config, tabOrder })
     } catch (e) {
       await appAlert(e instanceof Error ? e.message : (t("msg_save_fail_detail") || "저장에 실패했습니다."))
     } finally {
@@ -312,7 +344,7 @@ export function PosMenuCategorySettingsDialog({
                 </div>
               ) : (
                 <ul className="divide-y">
-                  {config.mainCategories.map((m, idx) => (
+                  {orderedMains.map((m, idx) => (
                     <li key={m} className="flex items-center justify-between gap-2 px-4 py-2">
                       <span className="font-medium">{m}</span>
                       <div className="flex gap-1 shrink-0">
@@ -333,7 +365,7 @@ export function PosMenuCategorySettingsDialog({
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => moveMainCategory(m, "down")}
-                          disabled={saving || idx === config.mainCategories.length - 1}
+                          disabled={saving || idx === orderedMains.length - 1}
                           title="아래로 이동"
                         >
                           <ArrowDown className="h-3.5 w-3.5" />
@@ -415,8 +447,8 @@ export function PosMenuCategorySettingsDialog({
                 </div>
               ) : (
                 <ul className="divide-y">
-                  {config.mainCategories.flatMap((main) =>
-                    (config.categoriesByMain[main] || []).map((sub, idx, arr) => (
+                  {orderedMains.flatMap((main) =>
+                    orderedSubsForMain(main).map((sub, idx, arr) => (
                       <li key={`${main}-${sub}`} className="flex items-center justify-between gap-2 px-4 py-2">
                         <span className="text-muted-foreground text-xs">{main}</span>
                         <span className="font-medium flex-1">{translatePosMenuCategoryLabel(sub, t)}</span>

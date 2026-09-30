@@ -14,6 +14,8 @@ import {
 
 /** getPosMenus / fetchPosCatalogCached 와 동일 키 — 백그라운드 갱신 시 UI 동기화에 사용 */
 export const ERP_POS_CATALOG_MENUS_CACHE_KEY = 'erp:posCatalog:menus' as const
+/** 대분류·소분류 표시 순서(tabOrder)가 포함된 카테고리 캐시 */
+export const ERP_POS_CATALOG_CATEGORIES_CACHE_KEY = 'erp:posCatalog:categories:v2' as const
 
 function readClientTenantHint(): string {
   if (typeof window === 'undefined') return ''

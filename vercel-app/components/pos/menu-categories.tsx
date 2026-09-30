@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { getPosMenus, getPosMenuCategories, type PosMenu } from '@/lib/api-client'
-import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
+import { PROMOTION_MAIN_CATEGORY, orderPosMainCategoryTabs } from '@/lib/pos-promo-constants'
+import { sanitizePosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 import { translatePosMenuCategoryLabel } from '@/lib/pos-menu-category-label'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -36,7 +37,10 @@ export function MenuCategories({ onItemSelect }: MenuCategoriesProps) {
       .then(([menusList, catRes]) => {
         setMenus(Array.isArray(menusList) ? menusList : [])
         setCategories(catRes.categories ?? [])
-        const mains = normalizePosMainCategoryTabs([...(catRes.mainCategories ?? []), PROMOTION_MAIN_CATEGORY])
+        const mains = orderPosMainCategoryTabs(
+          [...(catRes.mainCategories ?? []), PROMOTION_MAIN_CATEGORY],
+          sanitizePosCategoryTabOrder(catRes.tabOrder).mains
+        )
         setMainCategories(mains)
         if (mains.length) setSelectedCategory(mains[0])
         else if (catRes.categories?.length) setSelectedCategory(catRes.categories[0])

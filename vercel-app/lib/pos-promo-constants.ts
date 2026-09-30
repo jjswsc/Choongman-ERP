@@ -50,16 +50,51 @@ export function posMainCategoryTabRank(name: string): number {
   return 100
 }
 
-/** POS 대분류 탭: 레거시 한글과 Promotion 중복 제거 후 선호 순서로 정렬 */
-export function normalizePosMainCategoryTabs(mains: Iterable<string>): string[] {
+/** 대분류 탭 이름만 모은다. 순서는 바꾸지 않는다. */
+export function dedupePosMainCategoryTabs(mains: Iterable<string>): string[] {
   const out = new Set<string>()
   for (const x of mains) {
     const n = normalizePromotionCategoryMain(String(x ?? '').trim())
     if (n) out.add(n)
   }
-  return Array.from(out).sort(
-    (a, b) => posMainCategoryTabRank(a) - posMainCategoryTabRank(b) || a.localeCompare(b)
-  )
+  return Array.from(out)
+}
+
+function orderLabelsBySavedList(
+  items: string[],
+  saved: readonly string[],
+  fallback: (a: string, b: string) => number
+): string[] {
+  const rank = new Map<string, number>()
+  saved.forEach((name, index) => {
+    if (!rank.has(name)) rank.set(name, index)
+  })
+  return items.slice().sort((a, b) => {
+    const ia = rank.has(a) ? (rank.get(a) as number) : 1_000_000
+    const ib = rank.has(b) ? (rank.get(b) as number) : 1_000_000
+    if (ia !== ib) return ia - ib
+    return fallback(a, b)
+  })
+}
+
+/** POS 대분류 탭: 저장된 순서가 있으면 그 순서, 없으면 선호 순서 */
+export function orderPosMainCategoryTabs(
+  mains: Iterable<string>,
+  savedOrder?: readonly string[] | null
+): string[] {
+  const base = dedupePosMainCategoryTabs(mains)
+  const fallback = (a: string, b: string) =>
+    posMainCategoryTabRank(a) - posMainCategoryTabRank(b) || a.localeCompare(b)
+  const saved = (savedOrder || [])
+    .map((name) => normalizePromotionCategoryMain(String(name ?? '').trim()))
+    .filter(Boolean)
+  if (saved.length === 0) return base.slice().sort(fallback)
+  return orderLabelsBySavedList(base, saved, fallback)
+}
+
+/** POS 대분류 탭: 레거시 한글과 Promotion 중복 제거 후 선호 순서로 정렬 */
+export function normalizePosMainCategoryTabs(mains: Iterable<string>): string[] {
+  return orderPosMainCategoryTabs(mains)
 }
 
 /** 카테고리 설정에 없을 때 쓰는 기본 소분류 (영문 표기) */
@@ -84,25 +119,44 @@ export function promotionSubcategoriesEqual(a: string | null | undefined, b: str
   return normalizePromotionSubcategory(a) === normalizePromotionSubcategory(b)
 }
 
-/** 대분류별 소분류 탭/필터용 목록 (Promotion은 한글·영문 중복 제거 후 표준 영문으로 통일) */
-export function uniqueSubcategoriesForMainMenu(main: string, subs: string[]): string[] {
+/** 대분류별 소분류 탭/필터용 목록. savedOrder가 있으면 그 순서, 없으면 기존 기본 정렬 */
+export function uniqueSubcategoriesForMainMenu(
+  main: string,
+  subs: string[],
+  savedOrder?: readonly string[] | null
+): string[] {
   const nonEmpty = subs.map((s) => String(s ?? '').trim()).filter(Boolean)
-  if (main !== PROMOTION_MAIN_CATEGORY) {
-    return [...new Set(nonEmpty)].sort()
-  }
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const s of nonEmpty) {
-    const c = normalizePromotionSubcategory(s)
-    if (!seen.has(c)) {
-      seen.add(c)
-      out.push(c)
+  const isPromotion = main === PROMOTION_MAIN_CATEGORY
+  let base: string[]
+  let fallback: (a: string, b: string) => number
+  if (!isPromotion) {
+    base = [...new Set(nonEmpty)]
+    fallback = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
+  } else {
+    const seen = new Set<string>()
+    base = []
+    for (const s of nonEmpty) {
+      const c = normalizePromotionSubcategory(s)
+      if (!seen.has(c)) {
+        seen.add(c)
+        base.push(c)
+      }
     }
+    const order = [...PROMOTION_DEFAULT_SUBCATEGORIES] as string[]
+    const rank = (x: string) => {
+      const i = order.indexOf(x as (typeof PROMOTION_DEFAULT_SUBCATEGORIES)[number])
+      return i >= 0 ? i : 999
+    }
+    fallback = (a, b) => rank(a) - rank(b) || a.localeCompare(b)
   }
-  const order = [...PROMOTION_DEFAULT_SUBCATEGORIES] as string[]
-  const rank = (x: string) => {
-    const i = order.indexOf(x)
-    return i >= 0 ? i : 999
+  const saved = (savedOrder || [])
+    .map((name) => {
+      const text = String(name ?? '').trim()
+      return text ? (isPromotion ? normalizePromotionSubcategory(text) : text) : ''
+    })
+    .filter(Boolean)
+  if (saved.length === 0) {
+    return isPromotion ? base.slice().sort(fallback) : base.slice().sort()
   }
-  return out.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+  return orderLabelsBySavedList(base, saved, fallback)
 }

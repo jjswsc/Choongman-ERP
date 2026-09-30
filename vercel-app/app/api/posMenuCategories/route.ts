@@ -17,11 +17,17 @@ import {
   resolvePosCatalogTenantScope,
   type PosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
+import {
+  emptyPosCategoryTabOrder,
+  sanitizePosCategoryTabOrder,
+  type PosCategoryTabOrder,
+} from '@/lib/pos-category-tab-order'
 
 export interface PosMenuCategoriesConfig {
   mainCategories: string[]
   categoriesByMain: Record<string, string[]>
   codePrefixByMain?: Record<string, string>
+  tabOrder?: PosCategoryTabOrder
 }
 
 function defaultConfigForScope(scope: PosCatalogTenantScope): PosMenuCategoriesConfig {
@@ -194,11 +200,17 @@ export async function GET(request: NextRequest) {
         merged.mainCategories,
         merged.codePrefixByMain || raw.codePrefixByMain || {}
       )
-      return NextResponse.json({ ...merged, codePrefixByMain }, { headers })
+      return NextResponse.json(
+        { ...merged, codePrefixByMain, tabOrder: sanitizePosCategoryTabOrder(raw.tabOrder) },
+        { headers }
+      )
     }
     const fallback = defaultConfigForScope(catalogScope)
     const { codePrefixByMain } = ensureCodePrefixesForMains(fallback.mainCategories, {})
-    return NextResponse.json({ ...fallback, codePrefixByMain }, { headers })
+    return NextResponse.json(
+      { ...fallback, codePrefixByMain, tabOrder: emptyPosCategoryTabOrder() },
+      { headers }
+    )
   } catch (e) {
     console.error('getPosMenuCategories:', e)
     return NextResponse.json(fallbackPosMenuCategoriesConfig(true), { headers })
@@ -224,6 +236,52 @@ export async function POST(request: NextRequest) {
       categoriesByMain?: Record<string, string[]>
       codePrefixByMain?: Record<string, string>
       applyToMenus?: boolean
+      tabOrder?: unknown
+      tabOrderOnly?: boolean
+    }
+
+    if (body.tabOrderOnly) {
+      const oldRows = (await supabaseSelectFilter(
+        'system_settings',
+        `key=eq.${encodeURIComponent(settingsKey)}`,
+        { limit: 1 }
+      )) as { key?: string; value_json?: PosMenuCategoriesConfig & { tabOrder?: unknown } }[] | null
+      const rawOld = oldRows?.[0]?.value_json
+      const base =
+        rawOld &&
+        typeof rawOld === 'object' &&
+        Array.isArray(rawOld.mainCategories) &&
+        typeof rawOld.categoriesByMain === 'object'
+          ? rawOld
+          : defaultConfigForScope(catalogScope)
+      const tabOrder = sanitizePosCategoryTabOrder(body.tabOrder)
+      await supabaseUpsert(
+        'system_settings',
+        [
+          {
+            key: settingsKey,
+            value_json: {
+              ...(base && typeof base === 'object' ? base : {}),
+              mainCategories: base.mainCategories,
+              categoriesByMain: base.categoriesByMain,
+              codePrefixByMain: base.codePrefixByMain || {},
+              tabOrder,
+            },
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        'key'
+      )
+      return NextResponse.json(
+        {
+          success: true,
+          mainCategories: base.mainCategories,
+          categoriesByMain: base.categoriesByMain,
+          codePrefixByMain: base.codePrefixByMain || {},
+          tabOrder,
+        },
+        { headers }
+      )
     }
 
     const scopeDefault = defaultConfigForScope(catalogScope)
@@ -291,7 +349,12 @@ export async function POST(request: NextRequest) {
       newConfigBase.mainCategories,
       newConfigBase.codePrefixByMain || prefixesAfterRename
     )
-    const newConfig: PosMenuCategoriesConfig = { ...newConfigBase, codePrefixByMain }
+    const oldTabOrder = sanitizePosCategoryTabOrder(
+      rawOld && typeof rawOld === 'object' ? (rawOld as { tabOrder?: unknown }).tabOrder : undefined
+    )
+    const tabOrder =
+      body.tabOrder !== undefined ? sanitizePosCategoryTabOrder(body.tabOrder) : oldTabOrder
+    const newConfig: PosMenuCategoriesConfig = { ...newConfigBase, codePrefixByMain, tabOrder }
     let menusUpdated = 0
 
     if (body.applyToMenus) {
@@ -305,9 +368,11 @@ export async function POST(request: NextRequest) {
         {
           key: settingsKey,
           value_json: {
+            ...(rawOld && typeof rawOld === 'object' ? rawOld : {}),
             mainCategories: newConfig.mainCategories,
             categoriesByMain: newConfig.categoriesByMain,
             codePrefixByMain: newConfig.codePrefixByMain,
+            tabOrder: newConfig.tabOrder,
           },
           updated_at: new Date().toISOString(),
         },
@@ -321,6 +386,7 @@ export async function POST(request: NextRequest) {
         mainCategories: newConfig.mainCategories,
         categoriesByMain: newConfig.categoriesByMain,
         codePrefixByMain: newConfig.codePrefixByMain,
+        tabOrder: newConfig.tabOrder,
         menusUpdated,
       },
       { headers }

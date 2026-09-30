@@ -25,7 +25,10 @@ import { parsePosOrderItemsJson } from '@/lib/pos-order-item-map'
 import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 import { resolvePosMenuDescriptionForChannel } from '@/lib/pos-menu-display-description'
 import { parsePosMenuI18nMap } from '@/lib/pos-menu-guest-i18n'
-import { normalizePromotionCategoryMain, posMainCategoryTabRank } from '@/lib/pos-promo-constants'
+import { normalizePromotionCategoryMain, normalizePromotionSubcategory, posMainCategoryTabRank, PROMOTION_MAIN_CATEGORY } from '@/lib/pos-promo-constants'
+import { readPosCategoryTabOrder } from '@/lib/pos-category-tab-order-server'
+import { resolvePosCatalogTenantScope } from '@/lib/pos-catalog-tenant-scope'
+import type { PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 import {
   type QrGuestMenuOption,
   qrGuestBanbanUnitPrice,
@@ -1748,25 +1751,13 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   ])
   const limitExtras = extraAllow.size > 0
   const menus = await loadHallMenusForStore(session.storeCode)
+  const catalogScope = await resolvePosCatalogTenantScope({ storeCode: session.storeCode })
+  const tabOrder = await readPosCategoryTabOrder(catalogScope)
   const soldOutLoad = await loadStoreMenuSoldOutMap(session.storeCode).catch(() => ({
     byMenuId: new Map<number, string>(),
     schemaReady: false,
   }))
-  menus.sort((a, b) => {
-    const mainA = normalizePromotionCategoryMain(a.category_main)
-    const mainB = normalizePromotionCategoryMain(b.category_main)
-    if (mainA !== mainB) {
-      const rank = posMainCategoryTabRank(mainA) - posMainCategoryTabRank(mainB)
-      if (rank !== 0) return rank
-      return mainA.localeCompare(mainB)
-    }
-    const catA = String(a.category || '').trim()
-    const catB = String(b.category || '').trim()
-    if (catA !== catB) return catA.localeCompare(catB)
-    const so = asNum(a.sort_order) - asNum(b.sort_order)
-    if (so !== 0) return so
-    return asNum(a.id) - asNum(b.id)
-  })
+  menus.sort((a, b) => compareQrMenuDisplayOrder(a, b, tabOrder))
 
   const menuIds = menus.map((m) => Number(m.id || 0)).filter((id) => id > 0)
   const [optionsByMenuId, flavorIdsByBanban, promoById] = await Promise.all([
@@ -1836,8 +1827,50 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   return {
     includedMenus: overlayBanbanFlavorMenuIds(includedMenus, flavorIdsByBanban),
     extraMenus: overlayBanbanFlavorMenuIds(extraMenus, flavorIdsByBanban),
+    categoryTabOrder: tabOrder,
     mode: tierId > 0 ? 'buffet' : 'a_la_carte',
   }
+}
+
+function savedLabelRank(label: string, saved: readonly string[] | undefined, fallback: number): number {
+  if (!saved || saved.length === 0) return fallback
+  const index = saved.indexOf(label)
+  return index >= 0 ? index : 1_000_000 + fallback
+}
+
+function compareQrMenuDisplayOrder(
+  a: { category_main?: string | null; category?: string | null; sort_order?: number | null; id?: number | null },
+  b: { category_main?: string | null; category?: string | null; sort_order?: number | null; id?: number | null },
+  tabOrder: PosCategoryTabOrder
+): number {
+  const mainA = normalizePromotionCategoryMain(a.category_main)
+  const mainB = normalizePromotionCategoryMain(b.category_main)
+  if (mainA !== mainB) {
+    const rankA = savedLabelRank(mainA, tabOrder.mains, posMainCategoryTabRank(mainA))
+    const rankB = savedLabelRank(mainB, tabOrder.mains, posMainCategoryTabRank(mainB))
+    if (rankA !== rankB) return rankA - rankB
+    return mainA.localeCompare(mainB)
+  }
+  const catA =
+    mainA === PROMOTION_MAIN_CATEGORY
+      ? normalizePromotionSubcategory(a.category)
+      : String(a.category || '').trim()
+  const catB =
+    mainA === PROMOTION_MAIN_CATEGORY
+      ? normalizePromotionSubcategory(b.category)
+      : String(b.category || '').trim()
+  if (catA !== catB) {
+    const savedSubs = tabOrder.subsByMain[mainA]
+    const fallback = catA < catB ? -1 : 1
+    if (!savedSubs || savedSubs.length === 0) return fallback
+    const rankA = savedLabelRank(catA, savedSubs, 0)
+    const rankB = savedLabelRank(catB, savedSubs, 0)
+    if (rankA !== rankB) return rankA - rankB
+    return fallback
+  }
+  const so = asNum(a.sort_order) - asNum(b.sort_order)
+  if (so !== 0) return so
+  return asNum(a.id) - asNum(b.id)
 }
 
 const OPEN_DINE_IN_ORDER_STATUSES = ['pending', 'cooking', 'ready'] as const

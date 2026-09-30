@@ -12,6 +12,9 @@ import {
   savePosMenuScreenConfig,
   savePosMenu,
   savePosMenuOption,
+  savePosMenuCategoryTabOrder,
+  savePosMenuSortOrders,
+  persistPosMenuCategoryTabOrderCache,
   syncPosMenuImageCrossChannels,
   uploadPosMenuImage,
   POS_MENU_UPLOAD_TOO_LARGE,
@@ -46,12 +49,19 @@ import {
 } from '@/lib/pos-banban-utils'
 import {
   PROMOTION_MAIN_CATEGORY,
-  normalizePosMainCategoryTabs,
+  orderPosMainCategoryTabs,
   normalizePromotionCategoryMain,
   normalizePromotionSubcategory,
   promotionSubcategoriesEqual,
   uniqueSubcategoriesForMainMenu,
 } from '@/lib/pos-promo-constants'
+import {
+  emptyPosCategoryTabOrder,
+  sanitizePosCategoryTabOrder,
+  type PosCategoryTabOrder,
+} from '@/lib/pos-category-tab-order'
+import { notifyPosCatalogUpdated, posMenusCatalogCacheKey, ERP_POS_CATALOG_CATEGORIES_CACHE_KEY } from '@/lib/offline/pos-catalog-offline'
+import { setErpCache } from '@/lib/offline/cache'
 import { translatePosMenuCategoryLabel } from '@/lib/pos-menu-category-label'
 import { isPromoVisibleInContext, shouldShowStandalonePromoTile } from '@/lib/pos-promo-visibility'
 import { buildPromoRegularPriceById } from '@/lib/pos-promo-cut-price'
@@ -136,6 +146,68 @@ export interface PosTerminalMenuScreenProps {
   parentCatalog?: PosTerminalParentCatalog | null
 }
 
+function swapListItem<T>(list: T[], index: number, direction: -1 | 1): T[] | null {
+  const target = index + direction
+  if (index < 0 || target < 0 || index >= list.length || target >= list.length) return null
+  const next = list.slice()
+  const picked = next[index]
+  next[index] = next[target]
+  next[target] = picked
+  return next
+}
+
+function MenuOrderArrows({
+  upLabel,
+  downLabel,
+  disableUp,
+  disableDown,
+  onUp,
+  onDown,
+}: {
+  upLabel: string
+  downLabel: string
+  disableUp?: boolean
+  disableDown?: boolean
+  onUp: () => void
+  onDown: () => void
+}) {
+  const press = (event: React.SyntheticEvent, fn: () => void, disabled?: boolean) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!disabled) fn()
+  }
+  return (
+    <span className="inline-flex shrink-0 flex-col">
+      <span
+        role="button"
+        tabIndex={disableUp ? -1 : 0}
+        aria-label={upLabel}
+        title={upLabel}
+        className={cn('rounded p-0.5 text-current', disableUp ? 'pointer-events-none opacity-30' : 'hover:bg-black/10')}
+        onClick={(event) => press(event, onUp, disableUp)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') press(event, onUp, disableUp)
+        }}
+      >
+        <ArrowUp className="h-3 w-3" />
+      </span>
+      <span
+        role="button"
+        tabIndex={disableDown ? -1 : 0}
+        aria-label={downLabel}
+        title={downLabel}
+        className={cn('rounded p-0.5 text-current', disableDown ? 'pointer-events-none opacity-30' : 'hover:bg-black/10')}
+        onClick={(event) => press(event, onDown, disableDown)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') press(event, onDown, disableDown)
+        }}
+      >
+        <ArrowDown className="h-3 w-3" />
+      </span>
+    </span>
+  )
+}
+
 type PromoChoiceDialogState = {
   promo: PosPromoWithItems
   fixedItems: { menuId: string; optionId: string | null; quantity: number }[]
@@ -183,6 +255,8 @@ export function PosTerminalMenuScreen({
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
   const [deliveryMenuImageByMenuId, setDeliveryMenuImageByMenuId] = React.useState<Record<string, string>>({})
   const [mainCategories, setMainCategories] = React.useState<string[]>([])
+  const [tabOrder, setTabOrder] = React.useState<PosCategoryTabOrder>(emptyPosCategoryTabOrder)
+  const orderSavingRef = React.useRef(false)
   const [selectedMainCategory, setSelectedMainCategory] = React.useState('')
   const [selectedCategory, setSelectedCategory] = React.useState('')
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
@@ -270,7 +344,7 @@ export function PosTerminalMenuScreen({
     (
       list: PosMenu[],
       promoList: PosPromoWithItems[],
-      catRes: { categories: string[]; mainCategories: string[] }
+      catRes: { categories: string[]; mainCategories: string[]; tabOrder?: PosCategoryTabOrder }
     ) => {
       const derivedCats = Array.from(new Set(list.map((m) => String(m.category || '').trim()).filter(Boolean)))
       const derivedMains = Array.from(
@@ -278,7 +352,9 @@ export function PosTerminalMenuScreen({
       )
       const finalCats = (catRes.categories || []).length > 0 ? (catRes.categories || []) : derivedCats
       const finalMains = (catRes.mainCategories || []).length > 0 ? (catRes.mainCategories || []) : derivedMains
-      const mains = normalizePosMainCategoryTabs([...finalMains, PROMOTION_MAIN_CATEGORY])
+      const savedOrder = sanitizePosCategoryTabOrder(catRes.tabOrder)
+      setTabOrder(savedOrder)
+      const mains = orderPosMainCategoryTabs([...finalMains, PROMOTION_MAIN_CATEGORY], savedOrder.mains)
       setMainCategories(mains)
       setSelectedMainCategory(mains[0] ?? '')
       const firstSub =
@@ -305,7 +381,7 @@ export function PosTerminalMenuScreen({
       fromParent
         ? Promise.resolve(fromParent.menus)
         : getPosMenus({ storeCode: storeCode || undefined }),
-      getPosMenuCategories(),
+      getPosMenuCategories(isAdminMode ? { fresh: true } : undefined),
       fromParent ? Promise.resolve(fromParent.options) : getPosMenuOptions({ forCodeMap: true }),
       fromParent ? Promise.resolve(fromParent.promos) : getPosPromosWithItems({ storeCode: storeCode || undefined }),
     ])
@@ -325,7 +401,7 @@ export function PosTerminalMenuScreen({
       promoList,
       catRes
     )
-  }, [storeCode, useParentCatalog, parentCatalog, applyMenuCatalogTabs])
+  }, [storeCode, useParentCatalog, parentCatalog, applyMenuCatalogTabs, isAdminMode])
 
   React.useEffect(() => {
     if (!useParentCatalog || !parentCatalog) return
@@ -412,12 +488,16 @@ export function PosTerminalMenuScreen({
       .filter((m) => (m.categoryMain ?? '') === selectedMainCategory)
       .map((m) => m.category)
       .filter(Boolean) as string[]
-    const arr = uniqueSubcategoriesForMainMenu(selectedMainCategory, fromMain)
+    const arr = uniqueSubcategoriesForMainMenu(
+      selectedMainCategory,
+      fromMain,
+      tabOrder.subsByMain[selectedMainCategory]
+    )
     if (arr.length > 0) return arr
     const fromCategory = menus.filter((m) => (m.category ?? '') === selectedMainCategory)
     if (fromCategory.length > 0) return [selectedMainCategory]
     return []
-  }, [menus, selectedMainCategory])
+  }, [menus, selectedMainCategory, tabOrder])
 
   React.useEffect(() => {
     if (categoriesForSelectedMain.length === 0) return
@@ -427,6 +507,137 @@ export function PosTerminalMenuScreen({
         categoriesForSelectedMain.some((c) => promotionSubcategoriesEqual(c, selectedCategory)))
     if (!valid) setSelectedCategory(categoriesForSelectedMain[0])
   }, [categoriesForSelectedMain, selectedCategory, selectedMainCategory])
+
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ cacheKey?: string; data?: { tabOrder?: unknown } }>).detail
+      if (detail?.cacheKey !== ERP_POS_CATALOG_CATEGORIES_CACHE_KEY) return
+      const saved = sanitizePosCategoryTabOrder(detail.data?.tabOrder)
+      setTabOrder(saved)
+      setMainCategories((prev) => orderPosMainCategoryTabs(prev, saved.mains))
+    }
+    window.addEventListener('cm-erp-pos-catalog-updated', handler as EventListener)
+    return () => window.removeEventListener('cm-erp-pos-catalog-updated', handler as EventListener)
+  }, [])
+
+  const saveTabOrder = React.useCallback(
+    async (next: PosCategoryTabOrder, rollback: () => void) => {
+      if (orderSavingRef.current) return
+      orderSavingRef.current = true
+      try {
+        const res = await savePosMenuCategoryTabOrder(next)
+        if (!res?.success) {
+          rollback()
+          await appAlert(localizeApiMessage(res?.message, t, t('posSaveFail') || '저장 실패', lang))
+          return
+        }
+        await persistPosMenuCategoryTabOrderCache(next)
+      } catch (error) {
+        rollback()
+        await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(error) }))
+      } finally {
+        orderSavingRef.current = false
+      }
+    },
+    [lang, t]
+  )
+
+  const moveMainCategory = (index: number, direction: -1 | 1) => {
+    if (!isAdminMode) return
+    const nextMains = swapListItem(mainCategories, index, direction)
+    if (!nextMains) return
+    const prevMains = mainCategories
+    const prevOrder = tabOrder
+    const nextOrder: PosCategoryTabOrder = { ...tabOrder, mains: nextMains }
+    setMainCategories(nextMains)
+    setTabOrder(nextOrder)
+    void saveTabOrder(nextOrder, () => {
+      setMainCategories(prevMains)
+      setTabOrder(prevOrder)
+    })
+  }
+
+  const moveSubCategory = (index: number, direction: -1 | 1) => {
+    if (!isAdminMode || !selectedMainCategory) return
+    const nextSubs = swapListItem(categoriesForSelectedMain, index, direction)
+    if (!nextSubs) return
+    const prevOrder = tabOrder
+    const nextOrder: PosCategoryTabOrder = {
+      ...tabOrder,
+      subsByMain: { ...tabOrder.subsByMain, [selectedMainCategory]: nextSubs },
+    }
+    setTabOrder(nextOrder)
+    void saveTabOrder(nextOrder, () => setTabOrder(prevOrder))
+  }
+
+  const categoryMenus = React.useMemo(() => {
+    if (!selectedMainCategory || !selectedCategory) return [] as PosMenu[]
+    const subOk = (cat: string | undefined) =>
+      selectedMainCategory === PROMOTION_MAIN_CATEGORY
+        ? promotionSubcategoriesEqual(cat, selectedCategory)
+        : (cat ?? '').trim() === selectedCategory
+    const byMainAndSub = menus.filter(
+      (menu) => (menu.categoryMain ?? '') === selectedMainCategory && subOk(menu.category)
+    )
+    if (byMainAndSub.length > 0) return byMainAndSub
+    return menus.filter((menu) => subOk(menu.category))
+  }, [menus, selectedCategory, selectedMainCategory])
+
+  const moveMenuInCategory = (menuId: string, direction: -1 | 1) => {
+    if (!isAdminMode || searchKeyword.trim()) return
+    const visibleIndex = filteredMenus.findIndex((menu) => menu.id === menuId)
+    const nextVisible = swapListItem(filteredMenus, visibleIndex, direction)
+    if (!nextVisible) return
+    const visibleIds = new Set(filteredMenus.map((menu) => menu.id))
+    let visibleCursor = 0
+    const reorderedCategory = categoryMenus.map((menu) => {
+      if (!visibleIds.has(menu.id)) return menu
+      const next = nextVisible[visibleCursor]
+      visibleCursor += 1
+      return next
+    })
+    const sortById = new Map(reorderedCategory.map((menu, index) => [menu.id, (index + 1) * 10]))
+    const slots: number[] = []
+    menus.forEach((menu, index) => {
+      if (sortById.has(menu.id)) slots.push(index)
+    })
+    const prevMenus = menus
+    const nextMenus = menus.slice()
+    slots.forEach((slot, index) => {
+      const source = reorderedCategory[index]
+      nextMenus[slot] = { ...source, sortOrder: sortById.get(source.id) ?? source.sortOrder }
+    })
+    setMenus(nextMenus)
+    if (orderSavingRef.current) {
+      setMenus(prevMenus)
+      return
+    }
+    orderSavingRef.current = true
+    void savePosMenuSortOrders({
+      storeCode,
+      updates: reorderedCategory.map((menu) => ({
+        id: menu.id,
+        sortOrder: sortById.get(menu.id) ?? menu.sortOrder,
+      })),
+    })
+      .then(async (res) => {
+        if (!res?.success) {
+          setMenus(prevMenus)
+          await appAlert(localizeApiMessage(res?.message, t, t('posSaveFail') || '저장 실패', lang))
+          return
+        }
+        const cacheKey = posMenusCatalogCacheKey(storeCode || null)
+        await setErpCache(cacheKey, nextMenus)
+        notifyPosCatalogUpdated(cacheKey, nextMenus)
+      })
+      .catch(async (error) => {
+        setMenus(prevMenus)
+        await appAlert(i18nTr(t, 'posUnexpectedErrorDetail', { detail: String(error) }))
+      })
+      .finally(() => {
+        orderSavingRef.current = false
+      })
+  }
 
   React.useEffect(() => {
     setListPage(0)
@@ -1023,8 +1234,12 @@ export function PosTerminalMenuScreen({
       .filter((m) => (m.categoryMain ?? '') === menuEditForm.categoryMain)
       .map((m) => m.category)
       .filter(Boolean) as string[]
-    return uniqueSubcategoriesForMainMenu(menuEditForm.categoryMain, fromMenus)
-  }, [menus, menuEditForm.categoryMain])
+    return uniqueSubcategoriesForMainMenu(
+      menuEditForm.categoryMain,
+      fromMenus,
+      tabOrder.subsByMain[menuEditForm.categoryMain]
+    )
+  }, [menus, menuEditForm.categoryMain, tabOrder])
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -1243,9 +1458,9 @@ export function PosTerminalMenuScreen({
               role="group"
               aria-label={t('posMainCategory') || '대분류'}
             >
-              {mainCategories.map((main) => (
+              {mainCategories.map((main, mainIndex) => (
+                <div key={main} className={cn(isAdminMode ? 'flex items-stretch gap-1' : 'shrink-0')}>
                 <button
-                  key={main}
                   type="button"
                   onClick={() => {
                     setSelectedMainCategory(main)
@@ -1254,7 +1469,7 @@ export function PosTerminalMenuScreen({
                   className={cn(
                     isAdminMode
                       ? cn(
-                          'rounded-md border px-3 py-2 text-left font-semibold transition whitespace-nowrap leading-none',
+                          'min-w-0 flex-1 rounded-md border px-3 py-2 text-left font-semibold transition whitespace-nowrap leading-none',
                           selectedMainCategory === main
                             ? 'border-primary bg-primary text-primary-foreground'
                             : 'border-border bg-background hover:bg-muted'
@@ -1273,6 +1488,17 @@ export function PosTerminalMenuScreen({
                 >
                   {main}
                 </button>
+                {isAdminMode && (
+                  <MenuOrderArrows
+                    upLabel={t('posMenuEditMoveUp')}
+                    downLabel={t('posMenuEditMoveDown')}
+                    disableUp={mainIndex === 0}
+                    disableDown={mainIndex === mainCategories.length - 1}
+                    onUp={() => moveMainCategory(mainIndex, -1)}
+                    onDown={() => moveMainCategory(mainIndex, 1)}
+                  />
+                )}
+                </div>
               ))}
             </div>
             {isAdminMode && (
@@ -1288,15 +1514,15 @@ export function PosTerminalMenuScreen({
               role="group"
               aria-label={t('posCategory') || '카테고리'}
             >
-              {categoriesForSelectedMain.map((cat) => (
+              {categoriesForSelectedMain.map((cat, catIndex) => (
+                <div key={cat} className={cn(isAdminMode ? 'flex items-stretch gap-1' : 'shrink-0')}>
                 <button
-                  key={cat}
                   type="button"
                   onClick={() => setSelectedCategory(cat)}
                   className={cn(
                     isAdminMode
                       ? cn(
-                          'rounded-md border px-3 py-1.5 text-left transition whitespace-nowrap leading-none',
+                          'min-w-0 flex-1 rounded-md border px-3 py-1.5 text-left transition whitespace-nowrap leading-none',
                           selectedCategory === cat
                             ? 'border-sky-600 bg-sky-500 text-white'
                             : 'border-border bg-background hover:bg-muted'
@@ -1315,6 +1541,17 @@ export function PosTerminalMenuScreen({
                 >
                   {translatePosMenuCategoryLabel(cat, t)}
                 </button>
+                {isAdminMode && (
+                  <MenuOrderArrows
+                    upLabel={t('posMenuEditMoveUp')}
+                    downLabel={t('posMenuEditMoveDown')}
+                    disableUp={catIndex === 0}
+                    disableDown={catIndex === categoriesForSelectedMain.length - 1}
+                    onUp={() => moveSubCategory(catIndex, -1)}
+                    onDown={() => moveSubCategory(catIndex, 1)}
+                  />
+                )}
+                </div>
               ))}
             </div>
           </div>
@@ -1399,7 +1636,7 @@ export function PosTerminalMenuScreen({
               </button>
               )
             })}
-            {filteredMenus.map((m) => {
+            {filteredMenus.map((m, menuIndex) => {
               const menuDesc = showMenuDescriptions
                 ? resolvePosMenuDescriptionForChannel(m, descriptionChannel)
                 : ''
@@ -1419,6 +1656,18 @@ export function PosTerminalMenuScreen({
                 data-menu-card="menu"
               >
                 <div className="relative h-[80px] w-full shrink-0 overflow-hidden rounded-lg bg-slate-100 min-[400px]:h-[92px]">
+                  {isAdminMode && (
+                    <span className="absolute left-1 top-1 z-10 rounded border bg-background/90 p-0.5 text-slate-700 shadow">
+                      <MenuOrderArrows
+                        upLabel={t('posMenuEditMoveUp')}
+                        downLabel={t('posMenuEditMoveDown')}
+                        disableUp={menuIndex === 0 || Boolean(searchKeyword.trim())}
+                        disableDown={menuIndex === filteredMenus.length - 1 || Boolean(searchKeyword.trim())}
+                        onUp={() => moveMenuInCategory(m.id, -1)}
+                        onDown={() => moveMenuInCategory(m.id, 1)}
+                      />
+                    </span>
+                  )}
                   {isAdminMode && (
                     <span
                       role="button"
@@ -1489,6 +1738,7 @@ export function PosTerminalMenuScreen({
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted">
                   <tr>
+                    <th className="w-8 px-1 py-1" />
                     <th className="px-2 py-1 text-left">{t('menu') || '메뉴'}</th>
                     <th className="px-2 py-1 text-right">{t('price') || '단가'}</th>
                     <th className="px-2 py-1 text-center">{t('add') || '추가'}</th>
@@ -1497,6 +1747,25 @@ export function PosTerminalMenuScreen({
                 <tbody>
                   {pagedRows.map((row) => (
                     <tr key={row.id} className="border-t">
+                      <td className="px-1 py-1 text-center">
+                        {row.rowType === 'menu' && row.menu ? (
+                          <MenuOrderArrows
+                            upLabel={t('posMenuEditMoveUp')}
+                            downLabel={t('posMenuEditMoveDown')}
+                            disableUp={
+                              Boolean(searchKeyword.trim()) ||
+                              filteredMenus.findIndex((menu) => menu.id === row.menu?.id) <= 0
+                            }
+                            disableDown={
+                              Boolean(searchKeyword.trim()) ||
+                              filteredMenus.findIndex((menu) => menu.id === row.menu?.id) < 0 ||
+                              filteredMenus.findIndex((menu) => menu.id === row.menu?.id) >= filteredMenus.length - 1
+                            }
+                            onUp={() => row.menu && moveMenuInCategory(row.menu.id, -1)}
+                            onDown={() => row.menu && moveMenuInCategory(row.menu.id, 1)}
+                          />
+                        ) : null}
+                      </td>
                       <td className="px-2 py-1.5">
                         <span style={{ fontSize: `${screenConfig.menuListFontSize}px` }}>
                           {row.rowType === 'promo'
@@ -1536,7 +1805,7 @@ export function PosTerminalMenuScreen({
                   ))}
                   {pagedRows.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="px-2 py-6 text-center text-muted-foreground">
+                      <td colSpan={4} className="px-2 py-6 text-center text-muted-foreground">
                         {t('posNoMenus') || '등록된 메뉴가 없습니다.'}
                       </td>
                     </tr>

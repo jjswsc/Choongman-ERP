@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { normalizePosMainCategoryTabs, posMainCategoryTabRank } from '@/lib/pos-promo-constants'
+import {
+  normalizePosMainCategoryTabs,
+  orderPosMainCategoryTabs,
+  posMainCategoryTabRank,
+  uniqueSubcategoriesForMainMenu,
+} from '@/lib/pos-promo-constants'
+import { sanitizePosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 
 describe('posMainCategoryTabRank / normalizePosMainCategoryTabs', () => {
   it('ranks Promotion → Chicken → Korean → Side → Drinks', () => {
@@ -26,5 +32,33 @@ describe('posMainCategoryTabRank / normalizePosMainCategoryTabs', () => {
       'Chicken',
       'Drinks',
     ])
+  })
+
+  it('uses a saved main-category order and keeps unknown names after it', () => {
+    expect(orderPosMainCategoryTabs(['Promotion', 'Chicken', 'Side Dish', 'Mart'], ['Mart', 'Side Dish', 'Chicken', 'Promotion'])).toEqual([
+      'Mart',
+      'Side Dish',
+      'Chicken',
+      'Promotion',
+    ])
+  })
+
+  it('uses a saved subcategory order', () => {
+    expect(uniqueSubcategoriesForMainMenu('Side Dish', ['DRINKS', 'Noodle', 'Rice'], ['Rice', 'DRINKS', 'Noodle'])).toEqual([
+      'Rice',
+      'DRINKS',
+      'Noodle',
+    ])
+  })
+
+  it('keeps alphabetical subcategories when no order is saved', () => {
+    expect(uniqueSubcategoriesForMainMenu('Side Dish', ['Rice', 'DRINKS', 'Noodle'])).toEqual(['DRINKS', 'Noodle', 'Rice'])
+  })
+
+  it('drops blank labels from a saved tab order', () => {
+    expect(sanitizePosCategoryTabOrder({ mains: [' Promotion ', '', 'Chicken'], subsByMain: { 'Side Dish': ['Rice', 'Rice'] } })).toEqual({
+      mains: ['Promotion', 'Chicken'],
+      subsByMain: { 'Side Dish': ['Rice'] },
+    })
   })
 })

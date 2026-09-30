@@ -68,6 +68,7 @@ export async function qrTableGetMenus(sessionAuth: string) {
     session?: QrTableSession
     includedMenus?: MenuLike[]
     extraMenus?: MenuLike[]
+    categoryTabOrder?: { mains?: string[]; subsByMain?: Record<string, string[]> }
   }>(res)
 }
 

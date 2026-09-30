@@ -4,11 +4,15 @@
 import { apiFetchWithOffline } from '../api/fetch-offline'
 import { jsonAsArray } from '../safe-api-json'
 
+import type { PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
+
 export interface PosMenuCategoriesConfig {
   mainCategories: string[]
   categoriesByMain: Record<string, string[]>
   /** 대분류 → 메뉴 코드 접두사 (자동 발급) */
   codePrefixByMain?: Record<string, string>
+  /** Menu Screen에서 저장한 표시 순서. 없으면 기존 기본 정렬 */
+  tabOrder?: PosCategoryTabOrder
 }
 
 export type DeliveryAppCode = 'grab' | 'lineman' | 'shopee'
@@ -71,6 +75,7 @@ export async function savePosMenuCategoriesConfig(params: {
   categoriesByMain: Record<string, string[]>
   codePrefixByMain?: Record<string, string>
   applyToMenus?: boolean
+  tabOrder?: PosCategoryTabOrder
 }) {
   const res = await apiFetchWithOffline('/api/posMenuCategories', {
     method: 'POST',
@@ -82,7 +87,21 @@ export async function savePosMenuCategoriesConfig(params: {
     mainCategories: string[]
     categoriesByMain: Record<string, string[]>
     codePrefixByMain?: Record<string, string>
+    tabOrder?: PosCategoryTabOrder
     menusUpdated?: number
+    message?: string
+  }>
+}
+
+export async function savePosMenuCategoryTabOrder(tabOrder: PosCategoryTabOrder) {
+  const res = await apiFetchWithOffline('/api/posMenuCategories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tabOrderOnly: true, tabOrder }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    tabOrder?: PosCategoryTabOrder
     message?: string
   }>
 }

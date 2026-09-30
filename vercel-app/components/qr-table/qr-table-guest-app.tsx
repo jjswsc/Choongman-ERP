@@ -54,7 +54,8 @@ import {
 } from '@/components/qr-table/qr-table-guest-member-sheet'
 import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
 import { QrTableGuestCategoryNav } from '@/components/qr-table/qr-table-guest-category-nav'
-import { normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
+import { orderPosMainCategoryTabs, uniqueSubcategoriesForMainMenu } from '@/lib/pos-promo-constants'
+import { emptyPosCategoryTabOrder, sanitizePosCategoryTabOrder, type PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 import { QrTableGuestSwipeSheet } from '@/components/qr-table/qr-table-guest-swipe-sheet'
 import { PosQrGuidelineCard } from '@/components/pos/pos-qr-guideline-card'
 import type { PosMenu, PosMenuOption } from '@/lib/api-client'
@@ -358,6 +359,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [session, setSession] = React.useState<QrTableSession | null>(null)
   const [includedMenus, setIncludedMenus] = React.useState<MenuItem[]>([])
   const [extraMenus, setExtraMenus] = React.useState<MenuItem[]>([])
+  const [categoryTabOrder, setCategoryTabOrder] = React.useState<PosCategoryTabOrder>(emptyPosCategoryTabOrder)
   const [cart, setCart] = React.useState<CartLine[]>([])
   const [optionMenu, setOptionMenu] = React.useState<MenuItem | null>(null)
   const [setMenu, setSetMenu] = React.useState<MenuItem | null>(null)
@@ -548,6 +550,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       }
       setIncludedMenus((menus.includedMenus || []) as MenuItem[])
       setExtraMenus((menus.extraMenus || []) as MenuItem[])
+      setCategoryTabOrder(sanitizePosCategoryTabOrder(menus.categoryTabOrder))
       setSession(menus.session || null)
       if (!(menus.includedMenus || []).length) setTab('extras')
       const order = await qrTableGetOrder(sessionAuth)
@@ -1076,10 +1079,10 @@ export function QrTableGuestApp({ token }: { token: string }) {
       if (main) set.add(main)
       else hasEmpty = true
     }
-    const list = normalizePosMainCategoryTabs(set)
+    const list = orderPosMainCategoryTabs(set, categoryTabOrder.mains)
     if (hasEmpty) list.push(uncategorizedLabel)
     return list
-  }, [listRaw, uncategorizedLabel])
+  }, [listRaw, uncategorizedLabel, categoryTabOrder])
 
   const subCategories = React.useMemo(() => {
     if (!mainCategory) return [] as string[]
@@ -1090,8 +1093,12 @@ export function QrTableGuestApp({ token }: { token: string }) {
       const sub = String(m.category || '').trim()
       if (sub) set.add(sub)
     }
-    return [...set].sort((a, b) => a.localeCompare(b))
-  }, [listRaw, mainCategory, uncategorizedLabel])
+    return uniqueSubcategoriesForMainMenu(
+      mainCategory,
+      [...set],
+      categoryTabOrder.subsByMain[mainCategory]
+    )
+  }, [listRaw, mainCategory, uncategorizedLabel, categoryTabOrder])
 
   const mainCategoryCounts = React.useMemo(() => {
     const map = new Map<string, number>()

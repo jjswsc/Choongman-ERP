@@ -8,6 +8,8 @@ import {
   isPosCatalogTenantQueryBlocked,
   resolvePosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
+import { readPosCategoryTabOrder } from '@/lib/pos-category-tab-order-server'
+import { emptyPosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 
 const EMPTY = { categories: [] as string[], mainCategories: [] as string[] }
 
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
     const auth = await getVerifiedAuth(request, { skipSaasGate: true })
     const catalogScope = await resolvePosCatalogTenantScope({ auth })
     if (isPosCatalogTenantQueryBlocked(catalogScope)) {
-      return NextResponse.json(EMPTY, { headers })
+      return NextResponse.json({ ...EMPTY, tabOrder: emptyPosCategoryTabOrder() }, { headers })
     }
 
     const tenantFilter = appendPosCatalogTenantFilter('', catalogScope)
@@ -60,7 +62,7 @@ export async function GET(request: NextRequest) {
     } catch (colErr) {
       if (tenantFilter && isMissingTenantIdColumnError(colErr)) {
         console.error('getPosMenuCategories: pos_menus.tenant_id missing — run sql/pos_catalog_tenant_id.sql')
-        return NextResponse.json(EMPTY, { headers })
+        return NextResponse.json({ ...EMPTY, tabOrder: emptyPosCategoryTabOrder() }, { headers })
       }
       try {
         rows = (
@@ -76,15 +78,16 @@ export async function GET(request: NextRequest) {
         ) as { category?: string }[] | null
       } catch (fallbackErr) {
         if (tenantFilter && isMissingTenantIdColumnError(fallbackErr)) {
-          return NextResponse.json(EMPTY, { headers })
+          return NextResponse.json({ ...EMPTY, tabOrder: emptyPosCategoryTabOrder() }, { headers })
         }
         throw fallbackErr
       }
     }
 
-    return NextResponse.json(distinctCategoriesFromRows(rows), { headers })
+    const tabOrder = await readPosCategoryTabOrder(catalogScope)
+    return NextResponse.json({ ...distinctCategoriesFromRows(rows), tabOrder }, { headers })
   } catch (e) {
     console.error('getPosMenuCategories:', e)
-    return NextResponse.json(EMPTY, { headers })
+    return NextResponse.json({ ...EMPTY, tabOrder: emptyPosCategoryTabOrder() }, { headers })
   }
 }

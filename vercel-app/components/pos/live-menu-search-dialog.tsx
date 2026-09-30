@@ -33,7 +33,8 @@ import {
 } from '@/lib/api-client'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { useVisiblePolling } from '@/lib/use-visible-polling'
-import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
+import { PROMOTION_MAIN_CATEGORY, orderPosMainCategoryTabs } from '@/lib/pos-promo-constants'
+import { sanitizePosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 import { CheckCircle2 } from 'lucide-react'
 
 const ORDERS_POLL_MS = 60_000
@@ -297,7 +298,10 @@ export function LiveMenuSearchDialog({
           limit: 500,
         }),
       ])
-      const mains = normalizePosMainCategoryTabs([...(catCfg.mainCategories || []), PROMOTION_MAIN_CATEGORY])
+      const mains = orderPosMainCategoryTabs(
+        [...(catCfg.mainCategories || []), PROMOTION_MAIN_CATEGORY],
+        sanitizePosCategoryTabOrder(catCfg.tabOrder).mains
+      )
       let activeMenus = (menuList || []).filter((m) => m.isActive)
       if (isDemo) {
         const firstMain = mains[0] ?? ''
