@@ -140,6 +140,24 @@ describe('pos-kitchen-slip-html', () => {
       expect(html).toContain('less spicy')
     })
 
+    it('세트 구성과 같은 메뉴는 note에 한 번 더 찍지 않는다', () => {
+      const html = formatKitchenSlipItemRowHtml(
+        {
+          name: 'SEOUL คุ้ม 1',
+          qty: 1,
+          note: 'KIMCHI FRIED RICE\nKimchi 30 g.',
+          promoComposeLines: ['Snow Onion (Size S) x1', 'KIMCHI FRIED RICE x1', 'Kimchi 30 g. x1'],
+        },
+        noEsc,
+        close
+      )
+      expect(html).toContain('- Snow Onion (Size S) x1')
+      expect(html).toContain('- KIMCHI FRIED RICE x1')
+      expect(html).toContain('- Kimchi 30 g. x1')
+      expect(html.split('KIMCHI FRIED RICE').length - 1).toBe(1)
+      expect(html.split('Kimchi 30 g.').length - 1).toBe(1)
+    })
+
     it('세트 구성품은 홀 주문서처럼 들여쓴 줄로 표시한다', () => {
       const html = formatKitchenSlipItemRowHtml(
         {

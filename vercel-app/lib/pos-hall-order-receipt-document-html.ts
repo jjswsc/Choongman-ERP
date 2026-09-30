@@ -16,6 +16,7 @@ import {
 import {
   collectGrabHallReceiptOptionLines,
   collectGrabPrintOptionLines,
+  dropGrabOptionLinesCoveredByPromoCompose,
   enrichGrabPromoItemsForPrint,
   formatGrabOptionFragmentForPrint,
   formatGrabOrderLineNoteForPrint,
@@ -759,6 +760,10 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       const promoComposeLinesExpanded = promoComposeLines.flatMap(
         (line) => expandBanbanComposeLineForPrint(line) ?? [line]
       )
+      const lineOptionTokensForPrint = dropGrabOptionLinesCoveredByPromoCompose(
+        lineOptionTokens,
+        promoComposeLinesExpanded
+      )
       const promoComposeHtml =
         promoComposeLinesExpanded.length > 0
           ? '<div class="receipt-line-note">' +
@@ -766,11 +771,13 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
             c('div')
           : ''
       const optionHtml =
-        lineOptionTokens.length > 0
-          ? '<div class="receipt-line-note">' + lineOptionTokens.map((opt) => '- ' + esc(opt)).join('<br/>') + c('div')
+        lineOptionTokensForPrint.length > 0
+          ? '<div class="receipt-line-note">' +
+            lineOptionTokensForPrint.map((opt) => '- ' + esc(opt)).join('<br/>') +
+            c('div')
           : ''
       const noteHtml =
-        lineNote && !lineNoteDuplicatesOptions(lineNote, lineOptionTokens)
+        lineNote && !lineNoteDuplicatesOptions(lineNote, lineOptionTokensForPrint)
           ? '<div class="receipt-line-note">' + esc(lineNoteLabel) + ': ' + esc(lineNote) + c('div')
           : ''
       const lineDiscount = Math.max(0, Number(lineDiscountAlloc[idx] ?? 0) || 0)

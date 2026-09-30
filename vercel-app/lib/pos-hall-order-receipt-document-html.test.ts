@@ -998,4 +998,43 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('Chicken')
     expect(html).toContain('Item: Buffet')
   })
+
+  it('Huamak GF-152 SEOUL set prints each component once', () => {
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '20260930067',
+        storeCode: 'CM Huamak',
+        orderType: 'delivery',
+        tableName: 'Grab #GF-152',
+        memo: 'grab_order:GF-152',
+        items: [
+          {
+            id: 'grab:gf-152',
+            name: 'SEOUL คุ้ม 1',
+            price: 328,
+            qty: 1,
+            deliveryAppCode: 'grab',
+            note: 'mods:KIMCHI FRIED RICE,Kimchi 30 g. · eco:no plastic cutlery requested',
+            promoItems: [
+              { menuId: '11', menuName: 'Snow Onion', optionName: 'Size S', quantity: 1 },
+              { menuId: '22', menuName: 'KIMCHI FRIED RICE', quantity: 1 },
+              { menuId: '33', menuName: 'Kimchi 30 g.', quantity: 1 },
+            ],
+          },
+        ],
+        subtotal: 328,
+        discountAmt: 29,
+        total: 299,
+      },
+      t: (k) => k,
+      lang: 'th',
+    })
+    expect(html).toContain('SEOUL')
+    expect(html).toContain('Snow Onion (Size S) x1')
+    expect(html).toContain('KIMCHI FRIED RICE x1')
+    expect(html).toContain('Kimchi 30 g. x1')
+    expect(html.split('KIMCHI FRIED RICE').length - 1).toBe(1)
+    expect(html.split('Kimchi 30 g.').length - 1).toBe(1)
+    expect(html).toContain('CUTLERY: NO')
+  })
 })

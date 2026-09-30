@@ -26,6 +26,7 @@ import {
   grabSelectionIncludesExplicitSize,
   ensureGrabSidedishModifiersPreservedInNote,
   collectGrabHallReceiptOptionLines,
+  dropGrabOptionLinesCoveredByPromoCompose,
   grabPromoSnapshotIncludesModifierLabel,
 } from '@/lib/grab-pos-order-enrich'
 
@@ -606,6 +607,24 @@ describe('collectGrabHallReceiptOptionLines', () => {
       optionNameByCode: catalog.optionNameByCode,
     })
     expect(lines).toContain('Pickled Radish 30 g.')
+  })
+})
+
+describe('dropGrabOptionLinesCoveredByPromoCompose', () => {
+  it('drops set components already printed as compose lines (Huamak SEOUL GF-152)', () => {
+    const kept = dropGrabOptionLinesCoveredByPromoCompose(
+      ['KIMCHI FRIED RICE', 'Kimchi 30 g.', 'less spicy'],
+      ['Snow Onion (Size S) x1', 'KIMCHI FRIED RICE x1', 'Kimchi 30 g. x1']
+    )
+    expect(kept).toEqual(['less spicy'])
+  })
+
+  it('does not treat Rice as the same line as KIMCHI FRIED RICE', () => {
+    const kept = dropGrabOptionLinesCoveredByPromoCompose(
+      ['Rice'],
+      ['KIMCHI FRIED RICE x1']
+    )
+    expect(kept).toEqual(['Rice'])
   })
 })
 

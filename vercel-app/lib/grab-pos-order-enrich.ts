@@ -675,6 +675,45 @@ export function collectGrabHallReceiptOptionLines(input: {
   return out
 }
 
+function stripGrabPrintQtySuffix(raw: string): string {
+  return String(raw ?? '').replace(/\s*x\s*[\d.]+\s*$/iu, '').trim()
+}
+
+function grabPrintLineIdentityKey(raw: string): string {
+  return normalizePromoLookupText(stripGrabPrintQtySuffix(raw).replace(/\([^)]*\)/g, ' '))
+}
+
+/**
+ * 세트 구성 줄(`KIMCHI FRIED RICE x1`)과 같은 메뉴가 옵션 칩(`KIMCHI FRIED RICE`)으로
+ * 한 번 더 찍히지 않게 한다. 구성에 없는 요청·사이드는 유지한다.
+ */
+export function dropGrabOptionLinesCoveredByPromoCompose(
+  optionLines: string[],
+  promoComposeLines: string[]
+): string[] {
+  const compose = (promoComposeLines ?? []).map((s) => String(s ?? '').trim()).filter(Boolean)
+  if (!optionLines?.length || compose.length === 0) return optionLines
+  const composeIdentities = new Set(compose.map(grabPrintLineIdentityKey).filter(Boolean))
+  const composeParenKeys = new Set(
+    compose
+      .map((line) => {
+        const plain = stripGrabPrintQtySuffix(line)
+        const matched = /\(([^)]+)\)/u.exec(plain)
+        return matched?.[1] ? normalizePromoLookupText(matched[1]) : ''
+      })
+      .filter(Boolean)
+  )
+  return optionLines.filter((line) => {
+    const raw = String(line ?? '').trim()
+    if (!raw) return false
+    const identity = grabPrintLineIdentityKey(raw)
+    if (identity && composeIdentities.has(identity)) return false
+    const rawKey = normalizePromoLookupText(stripGrabPrintQtySuffix(raw))
+    if (rawKey && composeParenKeys.has(rawKey)) return false
+    return true
+  })
+}
+
 /** Grab 1회용 수저·포크 선택 — `eco:` note 청크 */
 export function isGrabEcoCutleryNoteChunk(chunk: string): boolean {
   return /^eco:/i.test(String(chunk ?? '').trim())

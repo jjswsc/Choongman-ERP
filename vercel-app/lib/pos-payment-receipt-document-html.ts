@@ -43,6 +43,7 @@ import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receip
 import {
   buildOptionNameByCodeFromMenus,
   collectGrabPrintOptionLines,
+  dropGrabOptionLinesCoveredByPromoCompose,
   enrichGrabPromoItemsForPrint,
   formatGrabOptionFragmentForPrint,
   formatGrabOrderLineNoteForPrint,
@@ -979,9 +980,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
               translatePosMenuLineForReceipt(banban.flavor2, t),
             ]
           : []
-        const receiptOptionLines = banban
-          ? filterReceiptOptionLinesForBanban(baseOptionLine, banban)
-          : baseOptionLine
+        const receiptOptionLines = dropGrabOptionLinesCoveredByPromoCompose(
+          banban ? filterReceiptOptionLinesForBanban(baseOptionLine, banban) : baseOptionLine,
+          promoComposeLinesExpanded
+        )
         const lineNote = grabInbound
           ? resolveGrabPrintNoteRequestWithoutEco(grabPrintNote, optionNameByCode, t)
           : normalizePosLineNote(String(it.note ?? ''), { keepOptionSummary: false })
@@ -1324,9 +1326,10 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                       ),
                     ]
                   : []
-            const receiptOptionLines = banban
-              ? filterReceiptOptionLinesForBanban(baseOptionLine, banban)
-              : baseOptionLine
+            const receiptOptionLines = dropGrabOptionLinesCoveredByPromoCompose(
+              banban ? filterReceiptOptionLinesForBanban(baseOptionLine, banban) : baseOptionLine,
+              promoComposeLinesExpanded
+            )
             const noteHtml =
               lineNote &&
               !lineNoteDuplicatesOptions(lineNote, [...receiptOptionLines, ...banbanFlavorLines])

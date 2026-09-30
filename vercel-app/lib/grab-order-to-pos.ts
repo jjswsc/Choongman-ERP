@@ -29,7 +29,9 @@ import {
   enrichGrabPromoItemsWithDefaultSizeFromCatalog,
   grabSelectionIncludesExplicitSize,
   resolveGrabEcoCutleryNoteTokenFromOrder,
+  dropGrabOptionLinesCoveredByPromoCompose,
   ensureGrabSidedishModifiersPreservedInNote,
+  formatGrabPromoComposeLinesForPrint,
   grabPromoSnapshotIncludesModifierLabel,
   type GrabPosCatalog,
 } from '@/lib/grab-pos-order-enrich'
@@ -1003,6 +1005,26 @@ async function buildPosItems(order: Record<string, unknown>): Promise<PosItem[]>
         }
         banbanFlavorsToken = banbanIngest.banbanFlavorsNoteToken
       }
+    }
+    if (promoItemsSnapshot?.length) {
+      const composePreview = promoItemsSnapshot.flatMap((row) => {
+        const named = row as { menuName?: string; optionName?: string; quantity?: number }
+        return formatGrabPromoComposeLinesForPrint(
+          {
+            menuName: String(named.menuName ?? ''),
+            optionName: String(named.optionName ?? ''),
+            quantity: Math.max(1, Number(named.quantity) || 1),
+            parentItemName: itemName,
+          },
+          true
+        )
+      })
+      const keptModifiers = dropGrabOptionLinesCoveredByPromoCompose(
+        modifierNamesForNote,
+        composePreview
+      )
+      modifierNamesForNote.length = 0
+      modifierNamesForNote.push(...keptModifiers)
     }
     if (!banbanFlavorsToken) {
       itemName = formatGrabKitchenDisplayName(itemName, modifierNamesForNote)
