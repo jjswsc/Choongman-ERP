@@ -304,6 +304,12 @@ function extractOptionCodesFromModifier(mod: Record<string, unknown>): string[] 
   return Array.from(out)
 }
 
+/** submit_order 본문에 메뉴가 있으면 Grab listOrders 재조회 없이 바로 저장한다. */
+export function grabSubmitPayloadHasLineItems(order: Record<string, unknown> | null | undefined): boolean {
+  const items = order?.items
+  return Array.isArray(items) && items.length > 0
+}
+
 /** Grab submit_order: `modifiers[]` + `modifierGroups[].modifiers[]` (API는 name 없이 id만 올 수 있음) */
 function flattenGrabOrderItemModifiers(item: Record<string, unknown>): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = []

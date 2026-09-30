@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
 import { reserveGrabWebhookEvent } from '@/lib/grab-webhook-idempotency'
-import { persistGrabOrderToPos, resolveGrabStoreCode } from '@/lib/grab-order-to-pos'
+import {
+  grabSubmitPayloadHasLineItems,
+  persistGrabOrderToPos,
+  resolveGrabStoreCode,
+} from '@/lib/grab-order-to-pos'
 import { grabListOrdersByIds } from '@/lib/grab-partner-api'
 import { getPosDeliveryPolicyBundle, resolveOrderAcceptanceMode } from '@/lib/pos-delivery-policy'
 
@@ -56,15 +60,14 @@ export async function POST(req: NextRequest) {
   const acceptanceMode = resolveOrderAcceptanceMode(policyBundle)
   const initialStatus = acceptanceMode === 'auto' ? 'cooking' : 'pending'
   let orderPayload: Record<string, unknown> = body
-  if (merchantID) {
+  const submitHasItems = grabSubmitPayloadHasLineItems(body)
+  // 메뉴가 이미 있으면 listOrders를 기다리지 않는다. Grab 조회가 느리면 전표가 1분까지 늦어진다.
+  if (merchantID && !submitHasItems) {
     try {
       const listed = await grabListOrdersByIds({ merchantID, orderIDs: [orderID] })
       const fullOrder = (listed?.orders || []).find((o) => String(o.orderID || '').trim() === orderID)
-      if (fullOrder) {
-        const fullItems = (fullOrder as { items?: unknown }).items
-        if (Array.isArray(fullItems) && fullItems.length > 0) {
-          orderPayload = fullOrder as Record<string, unknown>
-        }
+      if (fullOrder && grabSubmitPayloadHasLineItems(fullOrder as Record<string, unknown>)) {
+        orderPayload = fullOrder as Record<string, unknown>
       }
     } catch (e) {
       logGrabWebhook('submit_order', req, {
@@ -117,6 +120,7 @@ export async function POST(req: NextRequest) {
     duplicate: persisted.duplicate,
     acceptanceMode,
     initialStatus,
+    listOrdersPrefetch: submitHasItems ? 'skipped_has_items' : 'fetched',
   })
 
   return new NextResponse(null, { status: 204 })
