@@ -194,6 +194,12 @@ function pickPromoIdFromCodeToken(
 
 function pickPromoIdFromLinkedMenu(it: Record<string, unknown>, menus: PosMenu[] | undefined): string | null {
   if (!menus?.length) return null
+  const menuId = coerceNonEmptyId(it.menuId) ?? coerceNonEmptyId(it.menu_id)
+  if (menuId) {
+    const byMenu = menus.find((m) => String(m.id) === menuId)
+    const fromMenu = coerceNonEmptyId(byMenu?.promoId)
+    if (fromMenu) return fromMenu
+  }
   const lineName = String(it.name ?? '').trim().toLowerCase()
   const lineIdRaw = String(it.id ?? '').trim().toLowerCase()
   const hasExplicitPromoToken =

@@ -191,6 +191,30 @@ describe('buildQrGuestCumulativeHallPrintItems', () => {
     expect(built.items).toHaveLength(2)
   })
 
+  it('keeps set composition on the hall slip', () => {
+    const built = buildQrGuestCumulativeHallPrintItems({
+      allOrderItems: [
+        {
+          id: 'qr-seoul-1',
+          source: 'qr_table',
+          name: 'SEOUL คุ้ม! 1',
+          price: 299,
+          qty: 1,
+          menuId: '501',
+          promoId: '88',
+          promoCode: 'SEOUL-1',
+          promoItems: [
+            { menuId: '11', optionId: '3', menuName: 'Soy Garlic Chicken', optionName: 'S Boneless', quantity: 1 },
+            { menuId: '22', optionId: null, menuName: 'Rice', quantity: 1 },
+          ],
+        },
+      ],
+      newLineIds: ['qr-seoul-1'],
+    })
+    expect(built.items[0]?.promoId).toBe('88')
+    expect(built.items[0]?.promoItems?.map((row) => row.menuName)).toEqual(['Soy Garlic Chicken', 'Rice'])
+  })
+
   it('excludes buffet entry and staff POS lines', () => {
     const built = buildQrGuestCumulativeHallPrintItems({
       allOrderItems: [

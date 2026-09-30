@@ -6,7 +6,7 @@ import {
   receiptModalDataFromPosOrderForPayment,
   receiptModalDataFromPosOrderReprint,
 } from '@/lib/pos-payment-receipt-from-order'
-import type { PosOrder, PosPromoWithItems } from '@/lib/api-client'
+import type { PosMenu, PosOrder, PosPromoWithItems } from '@/lib/api-client'
 import { posPricingAdjustmentsFromPrinterSettings } from '@/lib/pos-pricing'
 import { buildPosPaymentReceiptDocumentHtml } from '@/lib/pos-payment-receipt-document-html'
 import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
@@ -232,6 +232,34 @@ describe('enrichPosOrderLikeItemsWithPromoSnapshot partial set', () => {
       { promoCatalogById, menus: [] }
     )
     expect((enriched[0] as { promoItems?: unknown[] }).promoItems).toHaveLength(3)
+  })
+
+  it('fills set lines from the mirror menu when the QR slip has no promo snapshot', () => {
+    const promoCatalogById = new Map<string, PosPromoWithItems>([
+      [
+        '88',
+        {
+          id: '88',
+          code: 'SEOUL-1',
+          name: 'SEOUL คุ้ม! 1',
+          items: [
+            { menuId: '11', optionId: '3', quantity: 1, menuName: 'Soy Garlic Chicken' },
+            { menuId: '22', optionId: null, quantity: 1, menuName: 'Rice' },
+          ],
+        } as PosPromoWithItems,
+      ],
+    ])
+    const enriched = enrichPosOrderLikeItemsWithPromoSnapshot(
+      [{ id: 'qr-session-501-1', name: 'SEOUL คุ้ม! 1', menuId: '501', price: 299, qty: 1 }],
+      {
+        promoCatalogById,
+        menus: [{ id: '501', promoId: '88', name: 'SEOUL คุ้ม! 1' } as PosMenu],
+      }
+    )
+    expect((enriched[0] as { promoItems?: Array<{ menuName?: string }> }).promoItems?.map((row) => row.menuName)).toEqual([
+      'Soy Garlic Chicken',
+      'Rice',
+    ])
   })
 
   it('does not attach promo snapshot to QR buffet package entry', () => {

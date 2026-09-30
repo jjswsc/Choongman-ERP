@@ -207,8 +207,56 @@ export type QrGuestCumulativeHallPrintItem = {
   qty: number
   menuId?: string
   note?: string
+  promoId?: string
+  promoCode?: string
+  promoItems?: Array<{
+    menuId: string
+    optionId: string | null
+    optionCode?: string | null
+    optionName?: string | null
+    menuName?: string | null
+    quantity: number
+  }>
   /** 추가분이 있을 때만 신규 줄에 true — 홀 전표 `>` 표시 */
   isAddon?: true
+}
+
+function qrHallPromoFieldsFromOrderLine(it: Record<string, unknown>): Pick<
+  QrGuestCumulativeHallPrintItem,
+  'promoId' | 'promoCode' | 'promoItems'
+> {
+  const promoId = String(it.promoId ?? it.promo_id ?? '').trim()
+  const promoCode = String(it.promoCode ?? it.promo_code ?? '').trim()
+  const raw = it.promoItems ?? it.promo_items
+  const promoItems = Array.isArray(raw)
+    ? raw.flatMap((row) => {
+        if (!row || typeof row !== 'object') return []
+        const rec = row as Record<string, unknown>
+        const menuId = String(rec.menuId ?? rec.menu_id ?? '').trim()
+        if (!menuId) return []
+        const optionIdRaw = rec.optionId ?? rec.option_id
+        const optionId =
+          optionIdRaw != null && String(optionIdRaw).trim() ? String(optionIdRaw).trim() : null
+        const optionCode = String(rec.optionCode ?? rec.option_code ?? '').trim()
+        const optionName = String(rec.optionName ?? rec.option_name ?? '').trim()
+        const menuName = String(rec.menuName ?? rec.menu_name ?? '').trim()
+        return [
+          {
+            menuId,
+            optionId,
+            ...(optionCode ? { optionCode } : {}),
+            ...(optionName ? { optionName } : {}),
+            ...(menuName ? { menuName } : {}),
+            quantity: Math.max(1, Number(rec.quantity ?? rec.qty ?? 1) || 1),
+          },
+        ]
+      })
+    : []
+  return {
+    ...(promoId ? { promoId } : {}),
+    ...(promoCode ? { promoCode } : {}),
+    ...(promoItems.length > 0 ? { promoItems } : {}),
+  }
 }
 
 /**
@@ -249,6 +297,7 @@ export function buildQrGuestCumulativeHallPrintItems(
       qty,
       ...(menuId ? { menuId } : {}),
       ...(note ? { note } : {}),
+      ...qrHallPromoFieldsFromOrderLine(it),
       ...(hasPrevious && newIds.has(id) ? { isAddon: true as const } : {}),
     })
   }

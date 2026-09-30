@@ -329,6 +329,9 @@ async function printQrNoKitchenLinesToHall(
     qty: it.qty,
     ...(it.menuId ? { menuId: it.menuId } : {}),
     ...(it.note ? { note: it.note } : {}),
+    ...(it.promoId ? { promoId: it.promoId } : {}),
+    ...(it.promoCode ? { promoCode: it.promoCode } : {}),
+    ...(it.promoItems && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
     ...(it.isAddon ? { isAddon: true as const } : {}),
   })) as PosOrder['items']
 
@@ -360,6 +363,13 @@ async function printQrNoKitchenLinesToHall(
         ? { menuId: String((it as { menuId?: string }).menuId).trim() }
         : {}),
       ...(String(it.note ?? '').trim() ? { note: String(it.note).trim() } : {}),
+      ...(String((it as { promoId?: string }).promoId ?? '').trim()
+        ? { promoId: String((it as { promoId?: string }).promoId).trim() }
+        : {}),
+      ...(String((it as { promoCode?: string }).promoCode ?? '').trim()
+        ? { promoCode: String((it as { promoCode?: string }).promoCode).trim() }
+        : {}),
+      ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
       ...((it as { isAddon?: boolean }).isAddon ? { isAddon: true as const } : {}),
     })),
     subtotal: built.subtotal,
