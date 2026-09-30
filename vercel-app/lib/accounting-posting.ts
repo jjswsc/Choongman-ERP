@@ -482,6 +482,46 @@ export async function postExpenseAccrualJournal(params: {
   })
 }
 
+/** 매입 지급 원천세: 채무 차변 / 원천세예수금(2190) 대변. 통장 금액 분개와 출처를 나눈다. */
+export async function syncPurchasePaymentWhtJournal(params: {
+  bankTransactionId: number
+  transDate: string
+  whtAmount: number
+  storeName?: string | null
+  postedBy?: string | null
+}): Promise<void> {
+  const bankId = Math.floor(Number(params.bankTransactionId) || 0)
+  if (bankId <= 0) return
+  const wht = Math.round(Math.max(0, Math.abs(Number(params.whtAmount) || 0)) * 100) / 100
+  const closed = (e: unknown) => e instanceof Error && e.message === 'ACCOUNTING_PERIOD_CLOSED'
+  try {
+    await deleteJournalEntriesBySource('bank_purchase_wht', bankId)
+  } catch (e) {
+    if (closed(e)) return
+    throw e
+  }
+  if (wht <= 0) return
+  const transDate = String(params.transDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(transDate)) return
+  try {
+    await postJournalEntry({
+      accountingDate: transDate,
+      sourceType: 'bank_purchase_wht',
+      sourceId: bankId,
+      storeName: params.storeName || null,
+      memo: '매입 지급 원천세',
+      postedBy: params.postedBy || null,
+      lines: [
+        { ...GL.payables(), side: 'debit', amount: wht, memo: '원천세 상계' },
+        { ...accountLine('2190'), side: 'credit', amount: wht, memo: '원천세예수금' },
+      ],
+    })
+  } catch (e) {
+    if (closed(e)) return
+    throw e
+  }
+}
+
 export async function postPayableSettlementJournal(params: {
   sourceType: 'bank_transaction' | 'petty_cash'
   sourceId?: number

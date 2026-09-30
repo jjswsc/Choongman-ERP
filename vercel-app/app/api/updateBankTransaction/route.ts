@@ -10,6 +10,7 @@ import { syncBorrowingFromBankDeposit } from '@/lib/borrowing-ledger'
 import { isLoanBorrowDepositCategory } from '@/lib/bank-loan-categories'
 import { bankDepositSavedCategories } from '@/lib/bank-import-deposit-category'
 import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
+import { applyBankPurchasePaymentWht } from '@/lib/purchase-payment-wht-sync'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
   bankNoteUserDisplayText,
@@ -168,11 +169,19 @@ export async function POST(request: NextRequest) {
       const rid = refId != null && refId !== '' && !isNaN(Number(refId)) ? Number(refId) : null
       patch.ref_id = rid != null && rid > 0 ? rid : null
     }
-    if (transType === 'deposit' && withholdingTaxAmount !== undefined) {
+    const leavingPurchasePayment =
+      transType === 'withdraw' &&
+      prevCategory === 'purchase_payment' &&
+      finalCategoryLower !== 'purchase_payment'
+    const purchaseWhtEditable = transType === 'withdraw' && finalCategoryLower === 'purchase_payment'
+    if (leavingPurchasePayment) {
+      patch.withholding_tax_amount = null
+      patch.withholding_tax_rate = null
+    } else if ((transType === 'deposit' || purchaseWhtEditable) && withholdingTaxAmount !== undefined) {
       const wht = Math.max(0, Number(withholdingTaxAmount) || 0)
       patch.withholding_tax_amount = wht > 0 ? wht : null
     }
-    if (transType === 'deposit' && withholdingTaxRate !== undefined) {
+    if (!leavingPurchasePayment && (transType === 'deposit' || purchaseWhtEditable) && withholdingTaxRate !== undefined) {
       const rate = Number(withholdingTaxRate)
       patch.withholding_tax_rate =
         Number.isFinite(rate) && rate > 0 ? rate : null
@@ -329,6 +338,20 @@ export async function POST(request: NextRequest) {
         })
       } catch (feeErr) {
         console.warn('updateBankTransaction auto channel fee:', feeErr)
+      }
+    }
+
+    const whtTouched = withholdingTaxAmount !== undefined || withholdingTaxRate !== undefined
+    const categoryTouched = category !== undefined && finalCategoryLower !== prevCategory
+    const vendorTouched = vendorCode !== undefined && finalCategoryLower === 'purchase_payment'
+    if (
+      transType === 'withdraw' &&
+      (leavingPurchasePayment || (finalCategoryLower === 'purchase_payment' && (whtTouched || categoryTouched || vendorTouched)))
+    ) {
+      try {
+        await applyBankPurchasePaymentWht(bankTxId)
+      } catch (whtErr) {
+        console.error('updateBankTransaction purchase WHT:', whtErr)
       }
     }
 

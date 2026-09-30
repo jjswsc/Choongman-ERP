@@ -9,6 +9,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { upsertReceivableFromBankReceive } from '@/lib/receivable-payable'
 import { syncBorrowingFromBankDeposit } from '@/lib/borrowing-ledger'
 import { bankDepositSavedCategories } from '@/lib/bank-import-deposit-category'
+import { applyBankPurchasePaymentWht } from '@/lib/purchase-payment-wht-sync'
 import { syncTaxWithholdingLedgerForBankTransaction } from '@/lib/tax-ledger-auto-sync'
 import {
   assertPosRevenueDepositCategorySafe,
@@ -246,11 +247,12 @@ export async function POST(request: NextRequest) {
     }
     if (refType) row.ref_type = refType
     if (refId != null && !isNaN(Number(refId))) row.ref_id = Number(refId)
-    if (transType === 'deposit' && withholdingTaxAmount !== undefined) {
+    const purchaseWhtOnCreate = transType === 'withdraw' && validCategory === 'purchase_payment'
+    if ((transType === 'deposit' || purchaseWhtOnCreate) && withholdingTaxAmount !== undefined) {
       const wht = Math.max(0, Number(withholdingTaxAmount) || 0)
       row.withholding_tax_amount = wht > 0 ? wht : null
     }
-    if (transType === 'deposit' && withholdingTaxRate !== undefined) {
+    if ((transType === 'deposit' || purchaseWhtOnCreate) && withholdingTaxRate !== undefined) {
       const rate = Number(withholdingTaxRate)
       row.withholding_tax_rate = Number.isFinite(rate) && rate > 0 ? rate : null
     }
@@ -292,6 +294,13 @@ export async function POST(request: NextRequest) {
         await syncTaxWithholdingLedgerForBankTransaction(bankId)
       } catch (whtErr) {
         console.warn('addBankTransaction WHT sync:', whtErr)
+      }
+    }
+    if (bankId && transType === 'withdraw' && validCategory === 'purchase_payment') {
+      try {
+        await applyBankPurchasePaymentWht(bankId)
+      } catch (whtErr) {
+        console.warn('addBankTransaction purchase WHT:', whtErr)
       }
     }
 

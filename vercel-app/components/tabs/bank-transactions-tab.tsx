@@ -1,6 +1,7 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
+import { suggestPurchaseWhtFromNetPayment } from "@/lib/purchase-payment-wht"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtmlDownload } from "@/lib/erp-excel-export"
@@ -501,11 +502,14 @@ export function BankTransactionsTab() {
       if (edits.expenseDate !== undefined) payload.expenseDate = edits.expenseDate || undefined
       if (edits.vendorCode !== undefined) payload.vendorCode = edits.vendorCode || undefined
       if (edits.storeName !== undefined) payload.storeName = edits.storeName === "__none__" ? "" : edits.storeName || undefined
-      if (r.transType === "deposit" && edits.withholdingTaxAmount !== undefined) {
+      const whtCategory = String(edits.category ?? r.category ?? "").toLowerCase()
+      const whtEditable =
+        r.transType === "deposit" || (r.transType === "withdraw" && whtCategory === "purchase_payment")
+      if (whtEditable && edits.withholdingTaxAmount !== undefined) {
         const w = Math.max(0, Number(String(edits.withholdingTaxAmount).replace(/,/g, "")) || 0)
         payload.withholdingTaxAmount = w > 0 ? w : null
       }
-      if (r.transType === "deposit" && edits.withholdingTaxRate !== undefined) {
+      if (whtEditable && edits.withholdingTaxRate !== undefined) {
         const rate = Number(String(edits.withholdingTaxRate).replace(/,/g, ""))
         payload.withholdingTaxRate = Number.isFinite(rate) && rate > 0 ? rate : null
       }
@@ -3058,6 +3062,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <td className="p-2 align-middle">
                                 {(r.transType === "withdraw" && cat === "purchase_payment") ||
                                 (r.transType === "deposit" && (cat === "loan" || cat === "loan_borrow")) ? (
+                                  <>
                                   <Select
                                     value={(edits?.vendorCode ?? r.vendorCode ?? "") || "__none__"}
                                     onValueChange={(v) => {
@@ -3098,6 +3103,61 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                         ))}
                                     </SelectContent>
                                   </Select>
+                                  {r.transType === "withdraw" && cat === "purchase_payment" && r.id ? (
+                                    <div className="mt-1 flex items-center gap-1" title={t("bankPurchaseWhtHint") || "통장 금액은 실이체입니다. 원천세는 거래처 잔액에서 따로 빠집니다."}>
+                                      <Input
+                                        className="h-7 w-12 text-xs px-1"
+                                        inputMode="decimal"
+                                        aria-label={t("bankPurchaseWhtRate") || "WHT %"}
+                                        placeholder="%"
+                                        value={
+                                          edits?.withholdingTaxRate ??
+                                          (r.withholdingTaxRate != null ? String(r.withholdingTaxRate) : "3")
+                                        }
+                                        onChange={(e) => setQueryRowEdit(r.id!, "withholdingTaxRate", e.target.value)}
+                                      />
+                                      <Input
+                                        className="h-7 w-[88px] text-xs px-1"
+                                        inputMode="decimal"
+                                        aria-label={t("bankPurchaseWhtAmount") || "WHT"}
+                                        placeholder={t("bankPurchaseWhtAmount") || "WHT"}
+                                        value={
+                                          edits?.withholdingTaxAmount ??
+                                          (r.withholdingTaxAmount != null ? String(r.withholdingTaxAmount) : "")
+                                        }
+                                        onChange={(e) => setQueryRowEdit(r.id!, "withholdingTaxAmount", e.target.value)}
+                                        onBlur={(e) => {
+                                          const latest = queryRowEdits[r.id!]
+                                          if (!latest) return
+                                          void handleQueryRowSave(r, {
+                                            ...latest,
+                                            withholdingTaxAmount: e.target.value,
+                                          })
+                                        }}
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 px-1.5 text-[10px]"
+                                        onClick={() => {
+                                          const rateRaw = edits?.withholdingTaxRate ?? (r.withholdingTaxRate != null ? String(r.withholdingTaxRate) : "3")
+                                          const rate = Number(String(rateRaw).replace(/,/g, "")) || 3
+                                          const suggested = suggestPurchaseWhtFromNetPayment(Math.abs(Number(r.amount) || 0), rate)
+                                          const merged: QueryRowEdit = {
+                                            ...(queryRowEdits[r.id!] || {}),
+                                            withholdingTaxRate: String(rate),
+                                            withholdingTaxAmount: String(suggested),
+                                          }
+                                          setQueryRowEdits((prev) => ({ ...prev, [r.id!]: merged }))
+                                          void handleQueryRowSave(r, merged)
+                                        }}
+                                      >
+                                        {t("bankPurchaseWhtSuggest") || "3%"}
+                                      </Button>
+                                    </div>
+                                  ) : null}
+                                  </>
                                 ) : r.transType === "deposit" && cat === "receivable_receive" ? (
                                   <Select
                                     value={(edits?.storeName ?? r.storeName ?? "") || "__none__"}

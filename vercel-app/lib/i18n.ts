@@ -2773,6 +2773,10 @@ export const i18n = {
     poWhtEditHint: '본사 청구(수입) 시 매장이 원천징수한 금액·율입니다. 저장 시 미수·원천징수 원장에 반영됩니다.',
     bankDepositWhtAmount: '원천징수',
     bankDepositWhtHint: '입금액은 실수령(순액) 기준. 여기에 상대가 원천징수한 금액을 입력하면 수입(inbound) 원장에 반영됩니다.',
+    bankPurchaseWhtAmount: '원천세',
+    bankPurchaseWhtRate: '원천세 %',
+    bankPurchaseWhtSuggest: '3% 제안',
+    bankPurchaseWhtHint: '통장 금액은 실이체입니다. 여기 원천세는 거래처 채무에서 따로 빠지고, 원천세 원장(2190)에 남습니다. 3% 제안은 실지급에서 부가세 7%·원천세 3%를 역산한 값이라, 세금계산서와 다르면 금액을 고치세요.',
     whtDirectionInbound: '수입(상대 공제)',
     whtDirectionOutbound: '지출(당사 공제)',
     accCompWhtDirection: '방향',
@@ -2857,7 +2861,7 @@ export const i18n = {
     payFilterUnpaidOnly: '미지급만',
     payFilterUnpaidOnlyEmpty: '미지급만 필터 적용 시 해당하는 내역이 없습니다.',
     payLedgerHint:
-      '※ 매입채무는 입고(매입 관리) 또는 지출 발생등록 시 발생하고, 실제 지급은 「지출관리」에서 통장·패티 연결(지급예정 집행)할 때만 「지급」 행으로 차감됩니다. 통장에서 「매입 대금」으로만 분류하면 미지급에 반영되지 않습니다. 입고 행의 「지급여부」는 건별 정산이 아니라 유형 표시입니다. 인보이스 열은 ภ.พ.30(부가세) 참고용이며 지급 여부와 무관합니다.',
+      '※ 매입채무는 입고(매입 관리) 또는 지출 발생등록 시 발생하고, 실제 지급은 「지출관리」에서 통장·패티 연결(지급예정 집행)할 때만 「지급」 행으로 차감됩니다. 통장에서 「매입 대금」으로만 분류하면 미지급에 반영되지 않습니다. 매입 대금 행의 원천세는 지급 금액(실이체)과 따로 빠져 거래처 잔액을 줄이고 원천세 원장에 남습니다. 입고 행의 「지급여부」는 건별 정산이 아니라 유형 표시입니다. 인보이스 열은 ภ.พ.30(부가세) 참고용이며 지급 여부와 무관합니다.',
     payColInvoiceVat: '인보이스(부가세)',
     purchasePaymentViaExpenseOnly:
       '지출 관련 통장 출금은 분류만 저장됩니다. 조회 탭 「지출관리 연결」로 지급예정·지출등록과 연결한 뒤 회계 처리가 완료됩니다.',
@@ -2920,6 +2924,8 @@ export const i18n = {
     payTypePO: '발주',
     payTypeInbound: '매입',
     payTypePayment: '지급',
+    payTypeWithholding: '원천세',
+    payStatusWithholding: '원천세',
     recStatusReceived: '수령',
     recStatusUnpaid: '미수',
     recBulkSyncConfirmAll:
@@ -4710,7 +4716,7 @@ export const i18n = {
     helpSum_admin_bank_transactions:
       '은행 CSV·조회·인보이스·적요 규칙으로 통장을 반영하고, 미수·미지급·차입금과 맞물립니다. 임원이 회사에 빌려준 입금은 「차입 수령」+관련당사자(매출 4110 금지). 통장 변경 시 계좌 추가(삭제 금지), 삭제·등록 이력은 본사·회계가 계좌 관리에서 확인합니다.',
     helpHow_admin_bank_transactions:
-      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ 매장 통장: QR은 용도에서 「QR」을 고르면 됩니다(노란 칩과 같음). Grab·라인맨·카드는 노란 칩. 저장하면 분개는 자동입니다. QR은 끝. Grab·라인맨·카드는 수수료도 저장 시 자동(POS GROSS−입금액)이며, 금액이 틀리면 「수수료 수정」만 누르세요. 주말(금~월) 카드 입금이 그날 POS보다 크면 옆날 매출을 합쳐 수수료를 맞춥니다. 폐유는 「기타수익」, 시재 현금 입금은 「현금시재입금」. 배달앱·카드·현금 유형으로 저장하면 매출이 두 번 잡힐 수 있습니다.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 입금이 인보이스보다 많으면 과납분은 다음 입금 상계용 선수금으로 자동 적립됩니다. 다음 입금이 부족하면 선수금이 자동 적용되어 Director 승인 없이 연결됩니다.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다.',
+      '① 계좌·기간을 정한 뒤 CSV 미리보기에서 출금 용도·계정과목·거래처를 확인하고 저장합니다.\n② 통장을 바꿀 때 기존 계좌를 삭제하지 말고 「계좌 추가」로 새 계좌를 등록하세요. 계좌 삭제는 본사·회계만 가능하며 삭제자·시각이 감사 로그에 남습니다.\n③ 매장 통장: QR은 용도에서 「QR」을 고르면 됩니다(노란 칩과 같음). Grab·라인맨·카드는 노란 칩. 저장하면 분개는 자동입니다. QR은 끝. Grab·라인맨·카드는 수수료도 저장 시 자동(POS GROSS−입금액)이며, 금액이 틀리면 「수수료 수정」만 누르세요. 주말(금~월) 카드 입금이 그날 POS보다 크면 옆날 매출을 합쳐 수수료를 맞춥니다. 폐유는 「기타수익」, 시재 현금 입금은 「현금시재입금」. 배달앱·카드·현금 유형으로 저장하면 매출이 두 번 잡힐 수 있습니다.\n④ 매출 수령 입금은 매장 미수 잔액에 먼저 반영됩니다. 인보이스별 정리는 「미수 연결」로 하면 미수금 수금확인에 자동 반영됩니다. 금액이 다르면 사유를 입력해 연결할 수 있습니다(฿1 이하 소액 / 그 이상은 Director·오피스 급여 담당 승인). 입금이 인보이스보다 많으면 과납분은 다음 입금 상계용 선수금으로 자동 적립됩니다. 다음 입금이 부족하면 선수금이 자동 적용되어 Director 승인 없이 연결됩니다.\n⑤ 지출 관리에서 같은 출금 줄을 연결할 예정이면 도움말 상세 ⑤의 용도 표를 따르세요. PND·ภ.พ.30·PP.30 등 세무서 납부는 용도 「세금」을 고르고 계정과목은 비운 뒤 「지출관리 연결」하세요(비용으로 넣으면 손익에 잡힘). 지출관리에서 세금을 먼저 등록한 뒤 Statement를 가져오면, 같은 날짜·금액·PP.30 적요가 맞을 때 미분류 줄을 새로 만들지 않고 기존 세금 줄에 은행 적요를 합칩니다. 한 번 송금이면 지출도 1건이 기본입니다. 영수증 2장은 그 한 건에 첨부하세요. 계정과목·원천세율이 달라 이미 2건으로 넣었으면 「지출관리 연결」에서 「두 건 합산 검색」으로 기간을 찾아 합계=출금액으로 연결합니다.\n⑥ 잔액이 맞지 않으면 기간·중복·용도 착오를 점검합니다. 계산 잔액 아래 기초잔액은 조회 시작일 직전 잔액입니다. 매입 대금 출금은 거래처 칸의 원천세에 금액을 저장하면 실이체액은 그대로 두고 거래처 채무만 줄며, 원천세 원장에 남습니다.',
     bankManualS3PosReceivable:
       'POS 자동분개 매장: 카드·배달앱·QR 입금은 「매출 수령」+ 매장. revenue_delivery/revenue_card는 4110 이중 인식 위험.',
     bankPosReceivableDepositTitle: 'POS 자동분개 매장 — 입금 분류',
@@ -11182,6 +11188,10 @@ Only matters the employee must handle personally on a working day:
     poWhtEditHint: 'For HQ billing (income): amount withheld by the store. Updates receivable and WHT ledger.',
     bankDepositWhtAmount: 'WHT',
     bankDepositWhtHint: 'Deposit amount is net received. Enter counterparty WHT here for inbound ledger sync.',
+    bankPurchaseWhtAmount: 'WHT',
+    bankPurchaseWhtRate: 'WHT %',
+    bankPurchaseWhtSuggest: 'Suggest 3%',
+    bankPurchaseWhtHint: 'The bank amount stays the actual transfer. WHT entered here reduces the vendor balance and is posted to the withholding ledger (2190). Suggest 3% reverses VAT 7% and WHT 3% from the net payment — edit it if the tax invoice differs.',
     whtDirectionInbound: 'Income (withheld from you)',
     whtDirectionOutbound: 'Expense (you withheld)',
     accCompWhtDirection: 'Direction',
@@ -11264,7 +11274,7 @@ Only matters the employee must handle personally on a working day:
     payFilterUnpaidOnly: 'Unpaid only',
     payFilterUnpaidOnlyEmpty: 'No items when unpaid-only filter is applied.',
     payLedgerHint:
-      '※ Payables accrue on inbound (purchase) or expense accruals; “Payment” rows appear only when you link bank/petty via Expense Management (payment run). Classifying a bank withdrawal as purchase_payment alone does not update payables. “Paid” on inbound lines is a row type label, not per-line settlement. The invoice column is for VAT (PP30) only—not payment status.',
+      '※ Payables accrue on inbound (purchase) or expense accruals; “Payment” rows appear only when you link bank/petty via Expense Management (payment run). Classifying a bank withdrawal as purchase_payment alone does not update payables. WHT on a purchase-payment row is separate from the bank transfer: it reduces the vendor balance and stays on the withholding ledger. “Paid” on inbound lines is a row type label, not per-line settlement. The invoice column is for VAT (PP30) only—not payment status.',
     payColInvoiceVat: 'Invoice (VAT)',
     purchasePaymentViaExpenseOnly:
       'Expense-related bank withdrawals are classified only on save. Open the Query tab and use “Link expense mgmt” to connect a payment plan or expense register before accounting is posted.',
@@ -11328,6 +11338,8 @@ Only matters the employee must handle personally on a working day:
     payTypePO: 'PO',
     payTypeInbound: 'Inbound',
     payTypePayment: 'Paid',
+    payTypeWithholding: 'WHT',
+    payStatusWithholding: 'WHT',
     recStatusReceived: 'Received',
     recStatusUnpaid: 'Unpaid',
     recBulkSyncConfirmAll:
@@ -13123,7 +13135,7 @@ Only matters the employee must handle personally on a working day:
     helpSum_admin_bank_transactions:
       'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables/borrowings. Officer deposits to the company: Borrowing in + related party (do not post as sales 4110). When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
     helpHow_admin_bank_transactions:
-      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Store bank: pick QR in the category list (same as the yellow chip). Grab/LINE MAN/card: yellow chip, then save — journals post automatically. QR is done. Grab/LINE MAN/card fees also post on save (POS GROSS − deposit); click Fee edit only if the amount is wrong. If a Fri–Mon card deposit is larger than that day’s POS, weekend days are summed to match the fee. Used-oil is Other income. Putting till cash into the bank is Cash to bank. Hiding Delivery/Card/Cash is expected; saving those types can double-count sales.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). If the deposit is larger than invoices, the extra is saved as store credit for the next billing. A later shortfall applies that credit automatically (no Director approval).\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date.',
+      '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Store bank: pick QR in the category list (same as the yellow chip). Grab/LINE MAN/card: yellow chip, then save — journals post automatically. QR is done. Grab/LINE MAN/card fees also post on save (POS GROSS − deposit); click Fee edit only if the amount is wrong. If a Fri–Mon card deposit is larger than that day’s POS, weekend days are summed to match the fee. Used-oil is Other income. Putting till cash into the bank is Cash to bank. Hiding Delivery/Card/Cash is expected; saving those types can double-count sales.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). If the deposit is larger than invoices, the extra is saved as store credit for the next billing. A later shortfall applies that credit automatically (no Director approval).\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date. On a purchase-payment withdrawal, save WHT next to the vendor: the transfer amount stays as paid, the vendor balance drops by the WHT, and the withholding ledger keeps the tax.',
     bankManualS3PosReceivable:
       'POS auto-journal stores: card/delivery/QR deposits → Sales collection + store. Avoid revenue_* categories (double 4110).',
     bankPosReceivableDepositTitle: 'POS auto-journal — deposit category',
@@ -19410,7 +19422,7 @@ orderItemQty: 'จำนวน',
     payTypeInbound: 'รับเข้า (ซื้อ)',
     payColInvoiceVat: 'ใบแจ้งหนี้ (VAT)',
     payLedgerHint:
-      '※ เจ้าหนี้เกิดเมื่อรับเข้า การจ่ายจริงคือแถว「จ่ายเงิน」(โอนธนาคาร·ค่าใช้จ่าย) คอลัมน์ใบแจ้งหนี้สำหรับ ภ.พ.30 อ้างอิง',
+      '※ เจ้าหนี้เกิดเมื่อรับเข้า การจ่ายจริงคือแถว「จ่ายเงิน」(โอนธนาคาร·ค่าใช้จ่าย) หัก ณ ที่จ่ายบนรายการจ่ายค่าสินค้าแยกจากยอดโอน ลดยอดเจ้าหนี้ และเข้าสมุดหัก ณ ที่จ่าย คอลัมน์ใบแจ้งหนี้สำหรับ ภ.พ.30 อ้างอิงครับ',
     payClickInvoiceForLines: 'คลิกเพื่อแสดงรายการรับเข้า/สั่งซื้อ',
     recClickOrderForLines: 'คลิกเพื่อแสดงรายการสินค้าในคำสั่งซื้อ',
     recClickForceForLines: 'คลิกเพื่อแสดงรายการส่งออกบังคับ',
@@ -19442,6 +19454,8 @@ orderItemQty: 'จำนวน',
     recTypeReceive: 'รับเงิน',
     payTypePO: 'สั่งซื้อ',
     payTypePayment: 'จ่ายเงิน',
+    payTypeWithholding: 'หัก ณ ที่จ่าย',
+    payStatusWithholding: 'WHT',
     recStatusReceived: 'รับแล้ว',
     recStatusUnpaid: 'ค้างรับ',
     recBulkSyncConfirmAll:
@@ -34689,6 +34703,10 @@ orderItemQty: 'ຈຳນວນ',
     poWhtEditHint: 'For HQ billing (income): amount withheld by the store. Updates receivable and WHT ledger.',
     bankDepositWhtAmount: 'WHT',
     bankDepositWhtHint: 'Deposit amount is net received. Enter counterparty WHT here for inbound ledger sync.',
+    bankPurchaseWhtAmount: 'WHT',
+    bankPurchaseWhtRate: 'WHT %',
+    bankPurchaseWhtSuggest: 'Suggest 3%',
+    bankPurchaseWhtHint: 'The bank amount stays the actual transfer. WHT entered here reduces the vendor balance and is posted to the withholding ledger (2190). Suggest 3% reverses VAT 7% and WHT 3% from the net payment — edit it if the tax invoice differs.',
     whtDirectionInbound: 'Income (withheld from you)',
     whtDirectionOutbound: 'Expense (you withheld)',
     accCompWhtDirection: 'Direction',

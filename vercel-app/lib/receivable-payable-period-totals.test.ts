@@ -4,6 +4,7 @@ import {
   pairPayableLedgerDates,
   groupReceivableLedgerRows,
   groupPayableLedgerRows,
+  isPayableSettlementRow,
   buildLedgerRowGroupMeta,
   periodTotalsReconcile,
   priorCumulativeBalance,
@@ -120,6 +121,23 @@ describe('groupPayableLedgerRows', () => {
     ])
     expect(groups).toHaveLength(1)
     expect(groups[0].status).toBe('settled')
+  })
+
+  it('keeps withholding out of the payment pair and still reduces the net', () => {
+    const rows = [
+      { id: 1, ref_type: 'Inbound', amount: 104860, trans_date: '2026-07-20' },
+      { id: 2, ref_type: 'Payment', amount: -101920, trans_date: '2026-07-21' },
+      { id: 3, ref_type: 'Withholding', amount: -2940, trans_date: '2026-07-21' },
+    ]
+    expect(isPayableSettlementRow('Withholding', -2940)).toBe(false)
+    const groups = groupPayableLedgerRows(rows)
+    const inbound = groups.find((g) => g.accrual?.id === 1)
+    expect(inbound?.status).toBe('open')
+    expect(inbound?.settlements).toHaveLength(0)
+    const totals = sumReceivablePayablePeriodAmounts(rows)
+    expect(totals.periodNet).toBe(0)
+    expect(totals.salesSum).toBe(104860)
+    expect(totals.receiveSum).toBe(104860)
   })
 })
 

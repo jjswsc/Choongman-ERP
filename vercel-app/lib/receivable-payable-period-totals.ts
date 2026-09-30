@@ -153,7 +153,15 @@ export function isPayableAccrualRow(refType: string | undefined, amount: number)
   return false
 }
 
+/** 매입 지급 시 원천세 상계. 금액은 음수라 잔액에서는 빠지지만, 통장 지급과 금액으로 짝짓지 않는다. */
+export const PAYABLE_WITHHOLDING_REF_TYPE = 'Withholding'
+
+export function isPayableWithholdingRow(refType: string | undefined): boolean {
+  return String(refType || '') === PAYABLE_WITHHOLDING_REF_TYPE
+}
+
 export function isPayableSettlementRow(refType: string | undefined, amount: number): boolean {
+  if (isPayableWithholdingRow(refType)) return false
   if (String(refType || '') === 'Payment') return true
   return amount < 0
 }

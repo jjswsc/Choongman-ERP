@@ -58,6 +58,7 @@ import {
   buildLedgerRowGroupMeta,
   filterLedgerPairGroupsForDisplay,
   sortLedgerPairGroupsDesc,
+  isPayableWithholdingRow,
   type ReceivableLedgerDatePair,
   type PayableLedgerDatePair,
 } from "@/lib/receivable-payable-period-totals"
@@ -1701,6 +1702,7 @@ export function ReceivablePayableTab() {
     if (refType === "PO") return t("payTypePO") || "발주"
     if (refType === "Inbound") return t("payTypeInbound") || tt("payTypeInbound", "입고")
     if (refType === "Payment") return t("payTypePayment") || "지급"
+    if (isPayableWithholdingRow(refType)) return t("payTypeWithholding") || "원천세"
     return refType || "—"
   }
 
@@ -1931,7 +1933,12 @@ export function ReceivablePayableTab() {
     const typeReceive = isRec ? (t("recTypeReceive") || "Receive") : (t("payTypePayment") || "Payment")
     const typeOpening = t("recTypeOpening") || "Opening Balance"
     const statusRec = (r: { ref_type?: string }) => r.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")
-    const statusPay = (r: { ref_type?: string }) => r.ref_type === "Payment" ? (t("payStatusPaid") || "Paid") : (t("payStatusUnpaid") || "Unpaid")
+    const statusPay = (r: { ref_type?: string }) =>
+      isPayableWithholdingRow(r.ref_type)
+        ? (t("payStatusWithholding") || "WHT")
+        : r.ref_type === "Payment"
+          ? (t("payStatusPaid") || "Paid")
+          : (t("payStatusUnpaid") || "Unpaid")
     const header = isRec
       ? [
           entityCol,
@@ -1968,6 +1975,8 @@ export function ReceivablePayableTab() {
               ? typeForceOutbound
               : ref === "Inbound"
                 ? typeInbound
+              : isPayableWithholdingRow(ref)
+                ? (t("payTypeWithholding") || "WHT")
               : ref === (isRec ? "Order" : "PO")
                 ? typeOrder
                 : typeReceive
@@ -2044,6 +2053,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
           ? (t("recTypeForceOutbound") || "Forced Outbound")
           : ref === "Inbound"
             ? (t("payTypeInbound") || tt("payTypeInbound", "Inbound"))
+          : isPayableWithholdingRow(ref)
+            ? (t("payTypeWithholding") || "WHT")
           : ref === (isRec ? "Order" : "PO")
             ? isRec
               ? (t("recTypeOrder") || "Order")
@@ -2179,7 +2190,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                               {formatAttributedStoreLabel((row as { attributed_store?: string }).attributed_store)}
                             </td>
                           )}
-                          <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "Paid") : (t("payStatusUnpaid") || "Unpaid"))}</td>
+                          <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "Received") : (t("recStatusUnpaid") || "Unpaid")) : (isPayableWithholdingRow(row.ref_type) ? (t("payStatusWithholding") || "WHT") : row.ref_type === "Payment" ? (t("payStatusPaid") || "Paid") : (t("payStatusUnpaid") || "Unpaid"))}</td>
                           {isRec && (
                             <td className="py-1 px-2 text-center text-sm">
                               {row.ref_type === "Order" || row.ref_type === "ForceOutbound" || row.ref_type === "AccountingPO"
@@ -3514,9 +3525,17 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                           <td className="py-1.5 px-4 w-[95px] text-center">
                                             <span className={cn(
                                               "text-sm font-medium px-2 py-0.5 rounded",
-                                              row.ref_type === "Payment" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                                              isPayableWithholdingRow(row.ref_type)
+                                                ? "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300"
+                                                : row.ref_type === "Payment"
+                                                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                                  : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
                                             )}>
-                                              {row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")}
+                                              {isPayableWithholdingRow(row.ref_type)
+                                                ? (t("payStatusWithholding") || "원천세")
+                                                : row.ref_type === "Payment"
+                                                  ? (t("payStatusPaid") || "지급")
+                                                  : (t("payStatusUnpaid") || "미지급")}
                                             </span>
                                           </td>
                                           <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{fmtBahtSigned(row.amount)}</td>

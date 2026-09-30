@@ -671,6 +671,59 @@ export async function upsertPayableFromBankPurchasePayment(params: {
   return true
 }
 
+/** 매입 통장 지급 1건당 원천세 상계 행 1개. 금액은 음수라 거래처 잔액에서 빠지고, 통장 지급 행 금액은 그대로다. */
+export async function syncPayableWithholdingFromBankPayment(params: {
+  bankTransactionId: number
+  vendorCode: string
+  whtAmount: number
+  whtRate?: number | null
+  transDate: string
+  memo?: string | null
+}): Promise<void> {
+  const bankId = Math.floor(Number(params.bankTransactionId) || 0)
+  if (bankId <= 0) return
+
+  const existing = (await supabaseSelectFilter(
+    'payable_transactions',
+    `bank_transaction_id=eq.${bankId}&ref_type=eq.Withholding`,
+    { order: 'id.asc', limit: 20, select: 'id' }
+  )) as { id?: number }[] | null
+  const ids = (existing || []).map((row) => Number(row.id || 0)).filter((id) => id > 0)
+
+  const wht = Math.round(Math.max(0, Math.abs(Number(params.whtAmount) || 0)) * 100) / 100
+  const vendorCode = String(params.vendorCode || '').trim()
+  const transDate = String(params.transDate || '').slice(0, 10)
+  if (wht <= 0 || !vendorCode || !/^\d{4}-\d{2}-\d{2}$/.test(transDate)) {
+    for (const id of ids) {
+      await supabaseDeleteByFilter('payable_transactions', `id=eq.${id}`)
+    }
+    return
+  }
+
+  const rate = Number(params.whtRate)
+  const rateLabel = Number.isFinite(rate) && rate > 0 ? `${rate}%` : ''
+  const memo = String(params.memo || (rateLabel ? `원천세 ${rateLabel}` : '원천세')).slice(0, 240)
+  const row = {
+    vendor_code: vendorCode,
+    amount: -wht,
+    ref_type: 'Withholding',
+    ref_id: null,
+    trans_date: transDate,
+    memo,
+    bank_transaction_id: bankId,
+  }
+
+  if (ids.length > 0) {
+    await supabaseUpdate('payable_transactions', ids[0], row)
+    for (let i = 1; i < ids.length; i++) {
+      await supabaseDeleteByFilter('payable_transactions', `id=eq.${ids[i]}`)
+    }
+    return
+  }
+
+  await supabaseInsert('payable_transactions', row)
+}
+
 /**
  * 통장 `receivable_receive` 저장 시 본사 B2B 미수금 보조원장(Receive) 생성 여부.
  * POS 매장이라도 채널 정산 적요(Grab·카드·QR 등)가 아니면 B2B 수금으로 보조원장에 반영한다.
