@@ -140,6 +140,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // schedule_date는 근무 시작일(주간 시간표와 동일). plan_in_prev_day는 퇴근만 익일이라는 표시.
+    // 다음날 야간 행을 오늘에 합치면, 오늘은 휴무이고 내일 밤 근무인 직원이 실시간 격자에 나타난다.
     const dateFilter = `schedule_date=eq.${dateStr}`
     let scheduleRows: SchRow[] = []
     if (isAll) {
@@ -148,21 +150,6 @@ export async function GET(request: NextRequest) {
       const filter = `${dateFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
       scheduleRows = await fetchScheduleChunk(filter)
     }
-    // 자정 넘는 근무: schedule_date=다음날 + plan_in_prev_day → 당일에도 포함 (당일 18:00~익일 02:00 등)
-    const nextDay = (() => {
-      const d = new Date(dateStr + 'T12:00:00')
-      d.setDate(d.getDate() + 1)
-      return d.toISOString().slice(0, 10)
-    })()
-    const prevDayFilter = `schedule_date=eq.${nextDay}&plan_in_prev_day=eq.true`
-    let prevDayRows: SchRow[] = []
-    if (isAll) {
-      prevDayRows = await fetchScheduleChunk(prevDayFilter)
-    } else {
-      const filter = `${prevDayFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
-      prevDayRows = await fetchScheduleChunk(filter)
-    }
-    scheduleRows = [...scheduleRows, ...prevDayRows]
 
     let empList: EmpRowForRealtimeJoin[] = []
     const empSelectCandidates = [
