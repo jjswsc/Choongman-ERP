@@ -44,6 +44,27 @@ describe('calcPromoRegularPriceForGrabCut', () => {
     })
     expect(regular).toBe(169)
   })
+
+  it('sums only choice_pick_count lines, not every candidate', () => {
+    const regular = calcPromoRegularPriceForGrabCut({
+      items: [
+        { menuId: '1', optionId: null, quantity: 1 },
+        { menuId: '2', optionId: null, quantity: 1, choiceGroup: 'main', choicePickCount: 1 },
+        { menuId: '3', optionId: null, quantity: 1, choiceGroup: 'main', choicePickCount: 1 },
+        { menuId: '4', optionId: null, quantity: 1, choiceGroup: 'side', choicePickCount: 1 },
+        { menuId: '5', optionId: null, quantity: 1, choiceGroup: 'side', choicePickCount: 1 },
+      ],
+      menus: [
+        { id: '1', price: 200, priceDelivery: 253 },
+        { id: '2', price: 300, priceDelivery: 400 },
+        { id: '3', price: 80, priceDelivery: 100 },
+        { id: '4', price: 150, priceDelivery: 200 },
+        { id: '5', price: 40, priceDelivery: 50 },
+      ],
+      optionsByMenuId: {},
+    })
+    expect(regular).toBe(853)
+  })
 })
 
 describe('buildPromoRegularPriceById', () => {

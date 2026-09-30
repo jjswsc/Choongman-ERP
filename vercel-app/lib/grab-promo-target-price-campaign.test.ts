@@ -8,6 +8,8 @@ import {
   grabConsumerPriceFromPercentageMajor,
   grabPercentageDiscountMatchesSale,
   classifyGrabCampaignApiError,
+  collectGrabPromoCutPriceTargets,
+  GRAB_PROMO_CUT_PRICE_ITEM_SELECT,
   grabCampaignDiscountMatchesTarget,
   grabCampaignNeedsDiscountTypeMigration,
   grabCampaignNeedsFixPriceRoundingMigration,
@@ -441,6 +443,57 @@ describe('classifyGrabCampaignApiError', () => {
         new Error('campaign start time too close for now | invalid_argument')
       )
     ).toBe('START_TIME_INVALID')
+  })
+})
+
+describe('Grab promo cut price choice groups', () => {
+  it('loads choice_group columns so candidate menus are not all summed', () => {
+    expect(GRAB_PROMO_CUT_PRICE_ITEM_SELECT).toContain('choice_group')
+    expect(GRAB_PROMO_CUT_PRICE_ITEM_SELECT).toContain('choice_pick_count')
+  })
+
+  it('uses the delivery choice-aware full price (Party Set 853, not every candidate)', () => {
+    const items = [
+      { promo_id: 83, menu_id: 1, quantity: 1, choice_group: null, choice_pick_count: null },
+      { promo_id: 83, menu_id: 2, quantity: 1, choice_group: 'main', choice_pick_count: 1 },
+      { promo_id: 83, menu_id: 3, quantity: 1, choice_group: 'main', choice_pick_count: 1 },
+      { promo_id: 83, menu_id: 4, quantity: 1, choice_group: 'side', choice_pick_count: 1 },
+      { promo_id: 83, menu_id: 5, quantity: 1, choice_group: 'side', choice_pick_count: 1 },
+    ]
+    const targets = collectGrabPromoCutPriceTargets({
+      promos: [
+        {
+          id: 83,
+          code: 'PARTY',
+          name: 'Party Set',
+          price: 399,
+          price_delivery: 499,
+          is_active: true,
+          channel_delivery: true,
+          delivery_app_codes: ['grab'],
+          valid_from: null,
+          valid_to: null,
+        },
+      ],
+      itemsByPromoId: new Map([[83, items]]),
+      mirrorByPromoId: new Map([
+        [83, { id: 469, code: '260947-s01', promo_id: 83, sell_delivery: true, is_active: true }],
+      ]),
+      menus: [
+        { id: 469, price: 399, price_delivery: 499 },
+        { id: 1, price: 200, price_delivery: 253 },
+        { id: 2, price: 300, price_delivery: 400 },
+        { id: 3, price: 80, price_delivery: 100 },
+        { id: 4, price: 150, price_delivery: 200 },
+        { id: 5, price: 40, price_delivery: 50 },
+      ],
+      optionsByMenuId: {},
+    })
+    expect(targets).toHaveLength(1)
+    expect(targets[0]?.promoId).toBe(83)
+    expect(targets[0]?.salePrice).toBe(499)
+    expect(targets[0]?.regularPrice).toBe(853)
+    expect(targets[0]?.grabItemId).toBe('item-469-260947-s01')
   })
 })
 

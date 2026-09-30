@@ -157,11 +157,21 @@ type PromoRow = {
   grab_campaign_end_time_bkk?: string | null
 }
 
+/**
+ * 컷프라이스 정가 합산용 구성 행.
+ * `choice_group` / `choice_pick_count` 를 빼면 선택 후보를 전부 더해
+ * 배달 정가(예: Party Set 853)가 수천 바트로 부풀어 Grab 캠페인 할인이 거절된다.
+ */
+export const GRAB_PROMO_CUT_PRICE_ITEM_SELECT =
+  'promo_id,menu_id,option_id,quantity,choice_group,choice_pick_count'
+
 type PromoItemRow = {
   promo_id?: number
   menu_id?: number | string
   option_id?: number | string | null
   quantity?: number | null
+  choice_group?: string | null
+  choice_pick_count?: number | null
 }
 
 type MirrorMenuRow = {
@@ -685,7 +695,7 @@ async function loadPromoBundle(): Promise<{
       order: 'id.asc',
     }).catch(() => []) as Promise<PromoRow[]>,
     supabaseSelectAllPages('pos_promo_items', {
-      select: 'promo_id,menu_id,option_id,quantity',
+      select: GRAB_PROMO_CUT_PRICE_ITEM_SELECT,
       pageSize: 5000,
       order: 'promo_id.asc,sort_order.asc',
     }).catch(() => []) as Promise<PromoItemRow[]>,
