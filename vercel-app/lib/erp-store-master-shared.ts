@@ -51,13 +51,41 @@ export type ErpStoreMasterRow = {
   address?: string | null
 }
 
+/** erp_stores.aliases — POS·로그인 제외, 통장 계좌 매장만 */
+export const ERP_STORE_ALIAS_BANK_ONLY = 'bank_only'
+
+export function erpStoreMasterIsBankOnly(row: { aliases?: string[] | null } | null | undefined): boolean {
+  return (row?.aliases || []).some(
+    (a) => String(a || '').trim().toLowerCase() === ERP_STORE_ALIAS_BANK_ONLY
+  )
+}
+
+export function bankOnlyStoreCodesFromMasters(masters: ErpStoreMasterRow[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const row of masters || []) {
+    if (!erpStoreMasterIsBankOnly(row)) continue
+    const code = String(row.store_code || '').trim()
+    if (!code || seen.has(code)) continue
+    seen.add(code)
+    out.push(code)
+  }
+  return out
+}
+
 /** display_name·aliases·code 각각 → norm → store_code */
 export function buildLegacyToCanonicalMap(masters: ErpStoreMasterRow[]): Record<string, string> {
   const m: Record<string, string> = {}
   for (const row of masters) {
     const code = String(row.store_code || '').trim()
     if (!code) continue
-    const keys = [code, String(row.display_name || '').trim(), ...(row.aliases || []).map((a) => String(a || '').trim())]
+    const keys = [
+      code,
+      String(row.display_name || '').trim(),
+      ...(row.aliases || [])
+        .map((a) => String(a || '').trim())
+        .filter((a) => a.toLowerCase() !== ERP_STORE_ALIAS_BANK_ONLY),
+    ]
     for (const k of keys) {
       const nk = normStoreKey(k)
       if (nk) m[nk] = code

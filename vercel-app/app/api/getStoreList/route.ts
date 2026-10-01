@@ -6,6 +6,7 @@ import {
   fetchErpStoresMasterForTenant,
   loadEmployeesForStoreList,
 } from '@/lib/erp-store-master'
+import { bankOnlyStoreCodesFromMasters } from '@/lib/erp-store-master-shared'
 import { enrichStoreListWithGrabMap } from '@/lib/erp-store-list-grab-enrich'
 import { filterPosSalesStoreOptionsForManagement } from '@/lib/pos-sales-test-office'
 import { getVerifiedAuth } from '@/lib/verify-auth'
@@ -49,13 +50,19 @@ export async function GET(request: NextRequest) {
 
     const built = enrichStoreListWithGrabMap(buildStoreListFromEmployees(empList, masters), masters)
 
-    const operationalStores = filterPosSalesStoreOptionsForManagement(built.stores)
+    const bankOnlyStores = bankOnlyStoreCodesFromMasters(masters)
+    const bankOnlySet = new Set(bankOnlyStores)
+    const withoutBankOnly = (codes: string[]) => codes.filter((s) => !bankOnlySet.has(String(s || '').trim()))
+
+    const operationalStores = filterPosSalesStoreOptionsForManagement(withoutBankOnly(built.stores))
 
     return NextResponse.json(
       {
         stores: operationalStores,
         /** POS 터미널·본사 시연(CM Office) 등 — 매장 검색/집계용 `stores`와 분리 */
-        allStores: built.stores,
+        allStores: withoutBankOnly(built.stores),
+        /** 법인 공용 통장 등 — POS/로그인 제외, 통장 계좌 매장만 */
+        bankOnlyStores,
         users: built.users,
         staffByStore: built.staffByStore,
         storeLabels: built.storeLabels,
@@ -70,6 +77,7 @@ export async function GET(request: NextRequest) {
       {
         stores: [],
         allStores: [],
+        bankOnlyStores: [],
         users: {},
         staffByStore: {},
         storeLabels: {},

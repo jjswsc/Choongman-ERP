@@ -15,6 +15,7 @@ let cache: {
   data: {
     stores: string[]
     allStores?: string[]
+    bankOnlyStores?: string[]
     users: Record<string, string[]>
     staffByStore?: StaffByStore
     storeLabels?: Record<string, string>
@@ -40,6 +41,7 @@ function clientStoreListScopeKey(): string {
 export function useStoreList() {
   const [stores, setStores] = useState<string[]>([])
   const [allStores, setAllStores] = useState<string[]>([])
+  const [bankOnlyStores, setBankOnlyStores] = useState<string[]>([])
   const [users, setUsers] = useState<Record<string, string[]>>({})
   const [staffByStore, setStaffByStore] = useState<StaffByStore>({})
   const [storeLabels, setStoreLabels] = useState<Record<string, string>>({})
@@ -57,9 +59,16 @@ export function useStoreList() {
     [catalogStores, storeLabels]
   )
 
+  /** 통장 계좌 등록용 — POS 매장 + 법인 공용(bank_only) */
+  const bankAccountStores = useMemo(
+    () => dedupeOfficeStoreOptions([...posStores, ...bankOnlyStores]),
+    [posStores, bankOnlyStores]
+  )
+
   const resolveStoreKey = useCallback(
-    (raw: string) => resolveStoreListKey(raw, catalogStores, legacyToCanonical),
-    [catalogStores, legacyToCanonical]
+    (raw: string) =>
+      resolveStoreListKey(raw, [...catalogStores, ...bankOnlyStores], legacyToCanonical),
+    [catalogStores, bankOnlyStores, legacyToCanonical]
   )
 
   const formatStoreLabel = useCallback(
@@ -67,19 +76,25 @@ export function useStoreList() {
     [storeLabels]
   )
 
+  const applyPayload = useCallback(
+    (payload: NonNullable<(typeof cache)['data']>) => {
+      setStores(payload.stores)
+      setAllStores(Array.isArray(payload.allStores) ? payload.allStores : payload.stores)
+      setBankOnlyStores(Array.isArray(payload.bankOnlyStores) ? payload.bankOnlyStores : [])
+      setUsers(payload.users)
+      setStaffByStore(payload.staffByStore || {})
+      setStoreLabels(payload.storeLabels || {})
+      setLegacyToCanonical(payload.legacyToCanonical || {})
+      setUsedMaster(payload.usedMaster ?? false)
+    },
+    []
+  )
+
   const load = useCallback(() => {
     const scopeKey = clientStoreListScopeKey()
     const now = Date.now()
     if (cache.data && cache.scopeKey === scopeKey && cache.expiry > now) {
-      setStores(cache.data.stores)
-      setAllStores(
-        Array.isArray(cache.data.allStores) ? cache.data.allStores : cache.data.stores
-      )
-      setUsers(cache.data.users)
-      setStaffByStore(cache.data.staffByStore || {})
-      setStoreLabels(cache.data.storeLabels || {})
-      setLegacyToCanonical(cache.data.legacyToCanonical || {})
-      setUsedMaster(cache.data.usedMaster ?? false)
+      applyPayload(cache.data)
       setLoading(false)
       return
     }
@@ -89,6 +104,7 @@ export function useStoreList() {
         const payload = {
           stores: d.stores || [],
           allStores: Array.isArray(d.allStores) ? d.allStores : d.stores || [],
+          bankOnlyStores: Array.isArray(d.bankOnlyStores) ? d.bankOnlyStores : [],
           users: d.users || {},
           staffByStore: d.staffByStore || {},
           storeLabels: d.storeLabels || {},
@@ -96,29 +112,16 @@ export function useStoreList() {
           usedMaster: d.usedMaster ?? false,
         }
         cache = { scopeKey, data: payload, expiry: Date.now() + CACHE_TTL_MS }
-        setStores(payload.stores)
-        setAllStores(payload.allStores || payload.stores)
-        setUsers(payload.users)
-        setStaffByStore(payload.staffByStore)
-        setStoreLabels(payload.storeLabels)
-        setLegacyToCanonical(payload.legacyToCanonical)
-        setUsedMaster(payload.usedMaster)
+        applyPayload(payload)
       })
       .catch(() => {
         if (cache.data && cache.scopeKey === scopeKey) {
-          setStores(cache.data.stores)
-          setAllStores(
-        Array.isArray(cache.data.allStores) ? cache.data.allStores : cache.data.stores
-      )
-          setUsers(cache.data.users)
-          setStaffByStore(cache.data.staffByStore || {})
-          setStoreLabels(cache.data.storeLabels || {})
-          setLegacyToCanonical(cache.data.legacyToCanonical || {})
-          setUsedMaster(cache.data.usedMaster ?? false)
+          applyPayload(cache.data)
           return
         }
         setStores([])
         setAllStores([])
+        setBankOnlyStores([])
         setUsers({})
         setStaffByStore({})
         setStoreLabels({})
@@ -126,7 +129,7 @@ export function useStoreList() {
         setUsedMaster(false)
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [applyPayload])
 
   useEffect(() => {
     load()
@@ -148,6 +151,9 @@ export function useStoreList() {
     /** 운영(가맹) 매장만 — 매출·회계·대부분 ERP 선택 */
     stores,
     allStores,
+    bankOnlyStores,
+    /** 통장 계좌 매장(가맹 + 법인 공용 bank_only) */
+    bankAccountStores,
     /** POS·인사·본사 창고·미수미지급·세무(SSO) 등 — CM Office 포함, test/HQ 제외 */
     posStores,
     posStoreOptions,

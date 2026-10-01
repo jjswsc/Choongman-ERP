@@ -8,7 +8,7 @@ import { getFromErpCache, setErpCache, deleteErpCache, deleteErpCacheByPrefix } 
 import { apiFetch } from '../api/fetch'
 
 const CACHE_KEYS = {
-  STORE_LIST_PREFIX: 'erp:storeList:v3:',
+  STORE_LIST_PREFIX: 'erp:storeList:v4:',
   /** @deprecated v2 was global (cross-tenant leak risk on Omni); kept only for cleanup */
   STORE_LIST_LEGACY: 'erp:storeList:v2',
   VENDORS_PURCHASE: 'erp:vendorsPurchase',
@@ -34,6 +34,8 @@ export interface StoreListData {
   stores: string[]
   /** POS 터미널·본사 시연용 — test/HQ/Office 제외 전 dedupe 목록 */
   allStores?: string[]
+  /** 법인 공용 통장 등 — POS/로그인 제외 */
+  bankOnlyStores?: string[]
   users: Record<string, string[]>
   staffByStore?: Record<string, { name: string; nick: string; job?: string; role?: string }[]>
   /** erp_stores 사용 시 code → 표시명 */

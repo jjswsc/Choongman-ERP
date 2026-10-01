@@ -216,7 +216,7 @@ export function BankTransactionsTab() {
     return v
   }, [t])
   const asDisplayName = (a: AccountSubjectItem) => (lang === 'ko' ? a.name : (a.nameEn || a.name))
-  const { posStores: storeList } = useStoreList()
+  const { posStores: storeList, bankAccountStores } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "")
   const canDeleteBankAccountUi = canDeleteBankAccount(auth?.role || "")
@@ -1756,7 +1756,11 @@ export function BankTransactionsTab() {
     }
   }
 
-  const storeOptions = isOffice ? (storeList || []) : [auth?.store || ""].filter(Boolean)
+  const storeOptions = isOffice
+    ? bankAccountStores.length > 0
+      ? bankAccountStores
+      : storeList || []
+    : [auth?.store || ""].filter(Boolean)
   const storeOptionsDeduped = React.useMemo(() => {
     const seen = new Set<string>()
     const result: string[] = []
