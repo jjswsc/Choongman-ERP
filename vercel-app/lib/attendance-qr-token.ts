@@ -3,6 +3,15 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 /** 방콕 기준 QR 버킷 길이(시간). 2시간마다 QR payload 갱신 */
 export const ATTENDANCE_QR_BUCKET_HOURS = 2
 
+/** 고정 QR 서명에 쓰는 버킷. 시간 창과 겹치지 않는 값 */
+export const ATTENDANCE_QR_FIXED_BUCKET_MS = 0
+
+export type AttendanceQrMode = 'rotating' | 'fixed'
+
+export function parseAttendanceQrMode(raw: unknown): AttendanceQrMode {
+  return raw === 'fixed' ? 'fixed' : 'rotating'
+}
+
 const TOKEN_PREFIX = 'cmatt1'
 
 function getAttendanceQrSecret(): string {
@@ -44,28 +53,10 @@ function signPayload(storeCode: string, bucketStartMs: number): string {
   return createHmac('sha256', getAttendanceQrSecret()).update(body, 'utf8').digest('base64url')
 }
 
-/** QR에 인코딩할 문자열 (직원 스캔용 — phase 2 submitAttendance에서 검증) */
-export function buildAttendanceQrPayload(storeCode: string, at: Date = new Date()): {
-  qrPayload: string
-  bucketStartMs: number
-  expiresAt: string
-} {
-  const store = String(storeCode || '').trim()
-  if (!store) throw new Error('store_required')
-  const bucketStartMs = attendanceQrBucketStartMs(at)
-  const sig = signPayload(store, bucketStartMs)
-  const qrPayload = `${TOKEN_PREFIX}.${encodeURIComponent(store)}.${bucketStartMs}.${sig}`
-  return {
-    qrPayload,
-    bucketStartMs,
-    expiresAt: attendanceQrBucketExpiresAt(bucketStartMs).toISOString(),
-  }
-}
-
-/** phase 2: submitAttendance qrToken 검증용 */
-export function verifyAttendanceQrPayload(qrPayload: string, at: Date = new Date()): {
+function parseSignedPayload(qrPayload: string): {
   ok: boolean
   storeCode?: string
+  bucketStartMs?: number
   reason?: string
 } {
   const raw = String(qrPayload || '').trim()
@@ -89,9 +80,74 @@ export function verifyAttendanceQrPayload(qrPayload: string, at: Date = new Date
   } catch {
     return { ok: false, reason: 'bad_signature' }
   }
+  return { ok: true, storeCode, bucketStartMs }
+}
+
+/** QR에 인코딩할 문자열. rotating=방콕 2시간 버킷, fixed=매장 고정 */
+export function buildAttendanceQrPayload(
+  storeCode: string,
+  at: Date = new Date(),
+  mode: AttendanceQrMode = 'rotating'
+): {
+  qrPayload: string
+  bucketStartMs: number
+  expiresAt: string | null
+  mode: AttendanceQrMode
+} {
+  const store = String(storeCode || '').trim()
+  if (!store) throw new Error('store_required')
+  const resolved = parseAttendanceQrMode(mode)
+  const bucketStartMs =
+    resolved === 'fixed' ? ATTENDANCE_QR_FIXED_BUCKET_MS : attendanceQrBucketStartMs(at)
+  const sig = signPayload(store, bucketStartMs)
+  const qrPayload = `${TOKEN_PREFIX}.${encodeURIComponent(store)}.${bucketStartMs}.${sig}`
+  return {
+    qrPayload,
+    bucketStartMs,
+    expiresAt:
+      resolved === 'fixed' ? null : attendanceQrBucketExpiresAt(bucketStartMs).toISOString(),
+    mode: resolved,
+  }
+}
+
+/** 서명만 확인. 만료·고정/변동 판정은 verifyAttendanceQrPayload */
+export function readAttendanceQrPayload(qrPayload: string): {
+  ok: boolean
+  storeCode?: string
+  bucketStartMs?: number
+  reason?: string
+} {
+  return parseSignedPayload(qrPayload)
+}
+
+/** submitAttendance qrToken 검증. mode 기본값은 변동(2시간) */
+export function verifyAttendanceQrPayload(
+  qrPayload: string,
+  at: Date = new Date(),
+  mode: AttendanceQrMode = 'rotating'
+): {
+  ok: boolean
+  storeCode?: string
+  reason?: string
+} {
+  const parsed = parseSignedPayload(qrPayload)
+  if (!parsed.ok || !parsed.storeCode || parsed.bucketStartMs == null) {
+    return { ok: false, reason: parsed.reason || 'invalid_format' }
+  }
+  const { storeCode, bucketStartMs } = parsed
+  const resolved = parseAttendanceQrMode(mode)
+  if (resolved === 'fixed') {
+    if (bucketStartMs !== ATTENDANCE_QR_FIXED_BUCKET_MS) {
+      return { ok: false, storeCode, reason: 'mode_mismatch' }
+    }
+    return { ok: true, storeCode }
+  }
+  if (bucketStartMs === ATTENDANCE_QR_FIXED_BUCKET_MS) {
+    return { ok: false, storeCode, reason: 'mode_mismatch' }
+  }
   const nowBucket = attendanceQrBucketStartMs(at)
   if (bucketStartMs !== nowBucket) {
-    return { ok: false, reason: 'expired_bucket' }
+    return { ok: false, storeCode, reason: 'expired_bucket' }
   }
   return { ok: true, storeCode }
 }

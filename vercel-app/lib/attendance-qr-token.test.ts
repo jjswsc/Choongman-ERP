@@ -27,6 +27,25 @@ describe('attendance-qr-token', () => {
     expect(v.reason).toBe('expired_bucket')
   })
 
+  it('rejects a fixed QR while the store is rotating', () => {
+    const fixed = buildAttendanceQrPayload('CM Test', new Date('2026-06-08T10:00:00+07:00'), 'fixed')
+    expect(fixed.expiresAt).toBeNull()
+    expect(fixed.bucketStartMs).toBe(0)
+    const v = verifyAttendanceQrPayload(fixed.qrPayload, new Date('2026-06-08T11:00:00+07:00'))
+    expect(v.ok).toBe(false)
+    expect(v.reason).toBe('mode_mismatch')
+  })
+
+  it('accepts a fixed QR only while the store stays fixed', () => {
+    const at = new Date('2026-06-08T10:00:00+07:00')
+    const later = new Date('2026-12-01T03:15:00+07:00')
+    const fixed = buildAttendanceQrPayload('CM Ekkamai', at, 'fixed')
+    expect(verifyAttendanceQrPayload(fixed.qrPayload, later, 'fixed').ok).toBe(true)
+    const rotating = buildAttendanceQrPayload('CM Ekkamai', at, 'rotating')
+    expect(verifyAttendanceQrPayload(rotating.qrPayload, at, 'fixed').ok).toBe(false)
+    expect(verifyAttendanceQrPayload(rotating.qrPayload, at, 'fixed').reason).toBe('mode_mismatch')
+  })
+
   it('aligns bucket to 2-hour windows in Bangkok', () => {
     const bucket759 = attendanceQrBucketStartMs(new Date('2026-06-08T07:59:00+07:00'))
     const bucket600 = attendanceQrBucketStartMs(new Date('2026-06-08T06:00:00+07:00'))

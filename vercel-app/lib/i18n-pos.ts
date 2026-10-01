@@ -3569,6 +3569,17 @@ export const I18N_POS_KO: Record<string, string> = {
     posDepositUseLaterHint: '메뉴 없이 예약금만 걸어 둡니다. 방문 때 회원 선택 또는 같은 전화로 결제하면 차감됩니다.',
     posDepositRefund: '환불',
     posDepositErrName: '비회원은 이름을 입력해 주세요.',
+    attendanceQrModeLabel: '출퇴근 QR',
+    attendanceQrModeRotating: '2시간마다 변경',
+    attendanceQrModeFixed: '고정',
+    attendanceQrModeRotatingHint: '방콕시간 기준 2시간마다 QR이 바뀝니다(0시, 2시, …). 기본값입니다.',
+    attendanceQrModeFixedHint: 'QR이 바뀌지 않습니다. 화면을 캡처하면 매장 밖에서도 출퇴근할 수 있습니다.',
+    attendanceQrModeFixedConfirm:
+      '고정 QR은 화면을 캡처해 매장 밖에서도 출퇴근에 쓸 수 있습니다.\n이 매장을 고정으로 바꿀까요?',
+    attendanceQrModeSchemaMissing:
+      '출퇴근 QR 설정 테이블이 아직 없습니다. Supabase에 SQL을 적용한 뒤 다시 저장해 주세요.',
+    attendanceQrKioskFootnote: 'QR은 2시간마다 바뀝니다. 이 화면을 매장에 켜 두세요.',
+    attendanceQrKioskFootnoteFixed: '이 QR은 고정입니다. 매장 화면에만 켜 두세요.',
 }
 export const I18N_POS_EN: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -7138,6 +7149,19 @@ export const I18N_POS_EN: Record<string, string> = {
     posDepositUseLaterHint: 'Hold a deposit with no menu. At the visit, select the member or the same phone to deduct it.',
     posDepositRefund: 'Refund',
     posDepositErrName: 'Enter a name for non-members.',
+    attendanceQrModeLabel: 'Attendance QR',
+    attendanceQrModeRotating: 'Changes every 2 hours',
+    attendanceQrModeFixed: 'Fixed',
+    attendanceQrModeRotatingHint:
+      'The QR changes every 2 hours on Bangkok time (00:00, 02:00, …). This is the default.',
+    attendanceQrModeFixedHint:
+      'The QR does not change. A screenshot can be used to clock in away from the store.',
+    attendanceQrModeFixedConfirm:
+      'A fixed QR can be screenshotted and used to clock in away from the store.\nSwitch this store to a fixed QR?',
+    attendanceQrModeSchemaMissing:
+      'The attendance QR settings table is not ready yet. Apply the SQL in Supabase, then save again.',
+    attendanceQrKioskFootnote: 'The QR changes every 2 hours. Keep this screen open at the store.',
+    attendanceQrKioskFootnoteFixed: 'This QR is fixed. Keep this screen open at the store only.',
 }
 export const I18N_POS_TH: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -10556,6 +10580,19 @@ export const I18N_POS_TH: Record<string, string> = {
     posDepositUseLaterHint: 'เก็บมัดจำโดยไม่ต้องเลือกเมนู ตอนมาเลือกสมาชิกหรือเบอร์เดิมแล้วหักจากบิลได้ครับ',
     posDepositRefund: 'คืนเงิน',
     posDepositErrName: 'กรุณากรอกชื่อลูกค้าครับ',
+    attendanceQrModeLabel: 'QR ลงเวลา',
+    attendanceQrModeRotating: 'เปลี่ยนทุก 2 ชม.',
+    attendanceQrModeFixed: 'คงที่',
+    attendanceQrModeRotatingHint:
+      'QR เปลี่ยนทุก 2 ชั่วโมงตามเวลาไทย (00:00, 02:00, …) ค่าเริ่มต้นครับ',
+    attendanceQrModeFixedHint:
+      'QR ไม่เปลี่ยน พนักงานอาจแคปหน้าจอแล้วนำไปลงเวลาโดยไม่ต้องอยู่ที่ร้านได้ครับ',
+    attendanceQrModeFixedConfirm:
+      'ถ้าล็อก QR ให้คงที่ พนักงานสามารถแคปหน้าจอแล้วนำไปลงเวลาโดยไม่ต้องอยู่ที่ร้านได้ครับ\nเปลี่ยนสาขานี้เป็น QR คงที่หรือไม่ครับ',
+    attendanceQrModeSchemaMissing:
+      'ยังไม่มีตารางตั้งค่า QR ลงเวลา กรุณาให้สำนักงานใหญ่รัน SQL ก่อน แล้วบันทึกอีกครั้งครับ',
+    attendanceQrKioskFootnote: 'QR เปลี่ยนทุก 2 ชั่วโมง เปิดหน้านี้ค้างไว้ที่ร้านครับ',
+    attendanceQrKioskFootnoteFixed: 'QR นี้คงที่ เปิดหน้านี้ค้างไว้ที่ร้านเท่านั้นครับ',
 }
 export const I18N_POS_MM: Record<string, string> = {
     posMenuImageUploadTooLarge:

@@ -5,6 +5,7 @@ import {
   touchAttendanceQrDevice,
 } from '@/lib/attendance-qr-device-server'
 import { buildAttendanceQrPayload, ATTENDANCE_QR_BUCKET_HOURS } from '@/lib/attendance-qr-token'
+import { fetchAttendanceQrStoreMode } from '@/lib/attendance-qr-mode-server'
 import {
   ATTENDANCE_QR_DEVICE_HEADERS,
 } from '@/lib/attendance-qr-device-client'
@@ -52,6 +53,10 @@ export async function GET(req: NextRequest) {
     }
 
     const resolvedStoreCode = device.store_code
+    const modeScope = await resolveSaasTenantScope({
+      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
+      storeCode: resolvedStoreCode,
+    })
 
     const clientHint = String(req.headers.get('X-Cm-Client-Hint') || '').trim()
     await touchAttendanceQrDevice({
@@ -61,7 +66,12 @@ export async function GET(req: NextRequest) {
       ...(clientHint ? { clientHint } : {}),
     })
 
-    const { qrPayload, expiresAt, bucketStartMs } = buildAttendanceQrPayload(resolvedStoreCode)
+    const { mode } = await fetchAttendanceQrStoreMode(resolvedStoreCode, modeScope)
+    const { qrPayload, expiresAt, bucketStartMs } = buildAttendanceQrPayload(
+      resolvedStoreCode,
+      new Date(),
+      mode
+    )
     return NextResponse.json(
       {
         success: true,
@@ -69,7 +79,8 @@ export async function GET(req: NextRequest) {
         qrPayload,
         expiresAt,
         bucketStartMs,
-        bucketHours: ATTENDANCE_QR_BUCKET_HOURS,
+        bucketHours: mode === 'fixed' ? 0 : ATTENDANCE_QR_BUCKET_HOURS,
+        mode,
         displayLabel: device.display_label ?? null,
       },
       { headers }

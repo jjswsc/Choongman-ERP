@@ -369,6 +369,8 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/getAttendanceQrDevices", module: "pos_device" },
   { prefix: "/api/checkAttendanceQrDevice", module: "pos_device" },
   { prefix: "/api/getAttendanceQrDisplay", module: "pos_device" },
+  { prefix: "/api/getAttendanceQrMode", module: "pos_device" },
+  { prefix: "/api/saveAttendanceQrMode", module: "pos_device" },
   { prefix: "/api/getItems", module: "logistics" },
   { prefix: "/api/getItem", module: "logistics" },
   { prefix: "/api/saveItem", module: "logistics" },

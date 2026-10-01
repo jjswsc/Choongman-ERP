@@ -4,7 +4,7 @@ import * as React from "react"
 import QRCode from "qrcode"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tOr, useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
 import {
   checkAttendanceQrDevice,
@@ -53,6 +53,7 @@ export function AttendanceQrKiosk() {
   const [qrDataUrl, setQrDataUrl] = React.useState("")
   const [statusLine, setStatusLine] = React.useState("")
   const [registeredLabel, setRegisteredLabel] = React.useState<string | null>(null)
+  const [qrMode, setQrMode] = React.useState<"rotating" | "fixed">("rotating")
 
   const canRegister = canRegisterAttendanceQrDevice(auth?.role || "")
   const canPickStore = canPickAttendanceQrStoreFilter(auth?.role || "", auth?.store || "")
@@ -104,6 +105,7 @@ export function AttendanceQrKiosk() {
       errorCorrectionLevel: "M",
     })
     setQrDataUrl(url)
+    setQrMode(res.mode === "fixed" ? "fixed" : "rotating")
     setRegisteredLabel(res.displayLabel ?? null)
     setStatusLine("")
     return true
@@ -311,8 +313,9 @@ export function AttendanceQrKiosk() {
       </div>
       {statusLine ? <p className="mt-4 text-center text-sm text-red-600">{statusLine}</p> : null}
       <p className="mt-6 max-w-sm text-center text-xs text-slate-400">
-        {t("attendanceQrKioskFootnote") ||
-          "QR 코드는 랜덤하게 변경됩니다. 이 화면을 매장에 고정해 두세요."}
+        {qrMode === "fixed"
+          ? tOr(t, "attendanceQrKioskFootnoteFixed", "이 QR은 고정입니다. 매장 화면에만 켜 두세요.")
+          : tOr(t, "attendanceQrKioskFootnote", "QR은 2시간마다 바뀝니다. 이 화면을 매장에 켜 두세요.")}
       </p>
     </div>
   )

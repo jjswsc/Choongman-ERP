@@ -103,6 +103,29 @@ export interface AttendanceQrDeviceItem {
   clientHint: string | null
 }
 
+export async function getAttendanceQrMode(params: { storeCode: string }) {
+  const q = new URLSearchParams({ storeCode: params.storeCode })
+  const res = await apiFetch('/api/getAttendanceQrMode?' + q.toString())
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    mode?: 'rotating' | 'fixed'
+    schemaMissing?: boolean
+  }>
+}
+
+export async function saveAttendanceQrMode(params: {
+  storeCode: string
+  mode: 'rotating' | 'fixed'
+}) {
+  const res = await apiFetch('/api/saveAttendanceQrMode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; mode?: 'rotating' | 'fixed' }>
+}
+
 export async function getAttendanceQrDevices(params: { storeCode: string }) {
   const q = new URLSearchParams({ storeCode: params.storeCode })
   const res = await apiFetch('/api/getAttendanceQrDevices?' + q.toString())
@@ -170,6 +193,7 @@ export async function getAttendanceQrDisplay(params: { storeCode?: string; devic
     expiresAt?: string
     bucketStartMs?: number
     bucketHours?: number
+    mode?: 'rotating' | 'fixed'
     displayLabel?: string | null
   }>
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
-import { verifyAttendanceQrPayload } from '@/lib/attendance-qr-token'
+import { verifySubmittedAttendanceQr } from '@/lib/attendance-qr-mode-server'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { addDayBangkok } from '@/lib/attendance-utils'
 import {
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (attendanceQrToken) {
-      const qrVerified = verifyAttendanceQrPayload(attendanceQrToken)
+      const qrVerified = await verifySubmittedAttendanceQr(attendanceQrToken)
       if (!qrVerified.ok || !qrVerified.storeCode) {
         return NextResponse.json(
           {

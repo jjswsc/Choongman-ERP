@@ -13,7 +13,7 @@ import {
 } from '@/lib/attendance-utils'
 import { fetchMergedAttendanceLogsForEmployee } from '@/lib/attendance-log-fetch-server'
 import { extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
-import { verifyAttendanceQrPayload } from '@/lib/attendance-qr-token'
+import { verifySubmittedAttendanceQr } from '@/lib/attendance-qr-mode-server'
 import { canEmployeeUseAttendanceQr, isAttendanceQrRequiredForAllStores } from '@/lib/attendance-qr-pilot'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
@@ -341,7 +341,7 @@ export async function POST(request: NextRequest) {
           { headers }
         )
       }
-      const qrVerified = verifyAttendanceQrPayload(attendanceQrToken)
+      const qrVerified = await verifySubmittedAttendanceQr(attendanceQrToken)
       if (!qrVerified.ok || !qrVerified.storeCode) {
         return NextResponse.json(
           {
