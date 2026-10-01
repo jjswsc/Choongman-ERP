@@ -257,7 +257,7 @@ export const I18N_MARKETING_HUB_KO: Record<string, string> = {
     '① 월간: 선택 월·캠페인별 비용 요약과 CSV 다운로드.\n② 성과: KPI 목표 대비 POS 주문 실적 차트.\n③ 비용: 예산 대비 실비·초과 알림.\n④ 캘린더: 리포트 허브 내 통합 일정.',
   helpSum_admin_marketing_integrations: 'LINE OA 테스트와 Facebook(Meta)·TikTok 광고 계정 연결 화면입니다.',
   helpHow_admin_marketing_integrations:
-    '① LINE Segment/Group API 테스트로 연결을 확인합니다.\n② Meta: Vercel env·SQL 후 Facebook 연결 → 페이지 선택 → 동기화. Instagram은 페이지에 비즈니스 계정이 묶여 있으면 같이 들어옵니다.\n③ TikTok: TIKTOK_APP_ID/SECRET·SQL 후 TikTok 연결 → Advertiser 선택 → 동기화(방콕 최근 28일).\n④ Redirect URI·도메인은 docs/META-TIKTOK-INTEGRATION-CHECKLIST.md 를 따릅니다.',
+    '① LINE Segment/Group API 테스트로 연결을 확인합니다.\n② Meta: Vercel env·SQL 후 Facebook 연결 → 페이지 선택 → 동기화. Instagram은 페이지에 비즈니스 계정이 묶여 있으면 같이 들어옵니다.\n③ TikTok: TIKTOK_APP_ID/SECRET·SQL 후 TikTok 연결 → Advertiser 선택 → 동기화(방콕 최근 28일).\n④ Redirect URI·주간 운영: docs/META-TIKTOK-INTEGRATION-CHECKLIST.md , docs/META-OPS-PLAYBOOK.md .\n⑤ 캠페인 성과 탭에서 Meta 광고 캠페인을 매핑하면 ROAS와 함께 보입니다.',
   marketingTikTokConnected: '연결됨',
   marketingTikTokDisconnected: '미연결',
   marketingTikTokConnect: 'TikTok 연결',
@@ -536,7 +536,7 @@ export const I18N_MARKETING_HUB_EN: Record<string, string> = {
     '① Monthly: cost summary and CSV.\n② Performance: KPI target vs POS orders.\n③ Costs: budget vs actual.\n④ Calendar tab inside report hub.',
   helpSum_admin_marketing_integrations: 'LINE OA tests and Facebook (Meta) / TikTok ad-account connection.',
   helpHow_admin_marketing_integrations:
-    '① Test LINE Segment/Group APIs.\n② Meta: set Vercel env + SQL, Connect Facebook, pick a Page if needed, Sync. Instagram comes with the Page if linked.\n③ TikTok: set TIKTOK_APP_ID/SECRET + SQL, Connect TikTok, pick Advertiser if needed, Sync (last 28 Bangkok days).\n④ Redirect URIs: docs/META-TIKTOK-INTEGRATION-CHECKLIST.md.',
+    '① Test LINE Segment/Group APIs.\n② Meta: set Vercel env + SQL, Connect Facebook, pick a Page if needed, Sync. Instagram comes with the Page if linked.\n③ TikTok: set TIKTOK_APP_ID/SECRET + SQL, Connect TikTok, pick Advertiser if needed, Sync (last 28 Bangkok days).\n④ Redirect URIs and weekly ops: docs/META-TIKTOK-INTEGRATION-CHECKLIST.md , docs/META-OPS-PLAYBOOK.md .\n⑤ Map a Meta Ads campaign on the campaign Results tab to see ROAS together.',
   marketingTikTokConnected: 'Connected',
   marketingTikTokDisconnected: 'Not connected',
   marketingTikTokConnect: 'Connect TikTok',
@@ -808,7 +808,7 @@ export const I18N_MARKETING_HUB_TH: Record<string, string> = {
     '① รายเดือน: สรุปต้นทุนและ CSV\n② ผลงาน: KPI เทียบออเดอร์ POS\n③ ต้นทุน: งบเทียบจริง\n④ ปฏิทินในรายงาน',
   helpSum_admin_marketing_integrations: 'ทดสอบ LINE OA และเชื่อม Facebook (Meta)·TikTok Ads',
   helpHow_admin_marketing_integrations:
-    '① ทดสอบ LINE Segment/Group API\n② Meta: ใส่ env·SQL แล้วเชื่อม Facebook เลือกเพจถ้ามีหลายเพจ Instagram ตามมาถ้าผูกบัญชีธุรกิจครับ\n③ TikTok: ใส่ TIKTOK_APP_ID/SECRET·SQL แล้วเชื่อม TikTok เลือก Advertiser แล้วซิงค์ (28 วันกรุงเทพ)\n④ Redirect URI ดู docs/META-TIKTOK-INTEGRATION-CHECKLIST.md ครับ',
+    '① ทดสอบ LINE Segment/Group API\n② Meta: ใส่ env·SQL แล้วเชื่อม Facebook เลือกเพจถ้ามีหลายเพจ Instagram ตามมาถ้าผูกบัญชีธุรกิจครับ\n③ TikTok: ใส่ TIKTOK_APP_ID/SECRET·SQL แล้วเชื่อม TikTok เลือก Advertiser แล้วซิงค์ (28 วันกรุงเทพ)\n④ Redirect URI และการใช้งานรายสัปดาห์: docs/META-TIKTOK-INTEGRATION-CHECKLIST.md , docs/META-OPS-PLAYBOOK.md\n⑤ ที่แท็บผลลัพธ์ของแคมเปญ ให้ผูก Meta Ads เพื่อดู ROAS คู่กันครับ',
   marketingTikTokConnected: 'เชื่อมแล้ว',
   marketingTikTokDisconnected: 'ยังไม่เชื่อม',
   marketingTikTokConnect: 'เชื่อม TikTok',

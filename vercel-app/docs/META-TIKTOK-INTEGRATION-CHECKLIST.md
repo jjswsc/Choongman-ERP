@@ -83,3 +83,9 @@
 ### B5. 직원 전달용 한 줄
 
 > TikTok 앱 redirect에 `https://choongman-erp.vercel.app/api/tiktok/oauth/callback` (또는 Omni 도메인) 등록 → Vercel에 `TIKTOK_APP_ID`·`TIKTOK_APP_SECRET` → SQL 실행 → ERP에서 TikTok 연결·동기화.
+
+---
+
+## C. 연결 후 활용 (운영)
+
+주간 동기화·캠페인 매핑·직원 LINE 안내는 [META-OPS-PLAYBOOK.md](./META-OPS-PLAYBOOK.md) 를 따릅니다.
