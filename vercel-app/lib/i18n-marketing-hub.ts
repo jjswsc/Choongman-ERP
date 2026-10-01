@@ -864,20 +864,22 @@ export const I18N_MARKETING_HUB_TH: Record<string, string> = {
   marketingMetaAutoMapOk: 'จับคู่แคมเปญ Meta Ads กับ ERP แล้ว {n} รายการครับ',
   marketingMetaAutoMapNone: 'ไม่มีรายการให้จับคู่อัตโนมัติ ซิงค์ก่อนแล้วเช็คชื่อ Ads กับหัวข้อ ERP ครับ',
   marketingChannelDashTitle: 'สรุปผลตามช่องทาง',
-  marketingChannelDashSub: 'Meta (FB/IG) · TikTok ค่าใช้จ่าย/การแสดงผลล่าสุด',
+  marketingChannelDashSub: 'Meta (FB/IG) · TikTok — ค่าใช้จ่ายและการแสดงผลล่าสุดครับ',
   marketingChannelDashSync: 'ซิงค์ช่องทาง',
   marketingChannelDashConnectTikTok: 'ไปเชื่อม TikTok',
   marketingInfluencerCampaignLink: 'แคมเปญ ERP ที่เชื่อม',
-  marketingBudgetAlertHint: 'ถ้าค่าใช้ Meta+ERP Ads+อินฟลู รวมกัน ≥80% ของงบ ระบบจะแจ้งสำนักงานใหญ่ตอนซิงค์รายสัปดาห์ครับ',
+  marketingBudgetAlertHint: 'ถ้าค่าใช้ Meta + ERP Ads + อินฟลู รวมกัน ≥80% ของงบ ระบบจะแจ้งสำนักงานใหญ่ตอนซิงค์รายสัปดาห์ครับ',
+
   marketingInfluencerAdsTitle: 'อินฟลู × ค่าโฆษณา',
-  marketingInfluencerAdsSub: 'สรุป Ads/Meta/อินฟลู ในแคมเปญ ERP เดียวกัน',
-  marketingInfluencerAdsPaid: 'โฆษณาเสียเงิน',
+  marketingInfluencerAdsSub: 'สรุปค่าโฆษณา Ads/Meta และค่าอินฟลูในแคมเปญ ERP เดียวกันครับ',
+  marketingInfluencerAdsPaid: 'ค่าโฆษณา',
   marketingInfluencerAdsInfl: 'อินฟลู',
-  marketingInfluencerAdsCombined: 'รวมค่าใช้',
+  marketingInfluencerAdsCombined: 'รวมค่าใช้จ่าย',
   marketingInfluencerAdsBudget: 'งบ',
   marketingInfluencerAdsCampaignBudget: 'งบแคมเปญ',
-  marketingInfluencerAdsOverBudget: 'ใช้ ≥80% ของงบ',
+  marketingInfluencerAdsOverBudget: 'ใช้แล้ว ≥80% ของงบ',
 }
+
 
 
 /** mm · la · kh · vi · ms — UI 현지화 + LINE env(EN 기술 문서) */
