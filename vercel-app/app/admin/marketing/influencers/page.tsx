@@ -44,6 +44,7 @@ import { MarketingInfluencersOverviewTab } from "@/components/marketing/marketin
 import { MarketingInfluencersDirectoryTab } from "@/components/marketing/marketing-influencers-directory-tab"
 import { MarketingLinkedCampaignStrip } from "@/components/marketing/marketing-linked-campaign-strip"
 import { MarketingHubRecordScheduleCard } from "@/components/marketing/marketing-hub-record-schedule-card"
+import { MarketingInfluencerAdsPanel } from "@/components/marketing/marketing-influencer-ads-panel"
 
 const HIRE_TYPE_OPTIONS = [
   { value: "pay", labelKey: "marketingHireTypePay" as const },
@@ -593,6 +594,12 @@ export default function MarketingInfluencersPage() {
             onRefresh={refreshAllLists}
             disabled={loading}
           />
+
+          {campaignFilter.trim() ? (
+            <div className="px-2 pb-2 sm:px-4">
+              <MarketingInfluencerAdsPanel campaignId={campaignFilter} />
+            </div>
+          ) : null}
 
           <TabsContent value="compose" className={adminTabsContentCn}>
             {loading && (

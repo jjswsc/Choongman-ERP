@@ -275,6 +275,23 @@ export const I18N_MARKETING_HUB_KO: Record<string, string> = {
   marketingTikTokOauthFail: 'TikTok 연결에 실패했습니다.',
   marketingTikTokDiagTableMissing:
     'Supabase에 marketing_tiktok_connections 테이블이 없습니다. sql/marketing_tiktok_connections.sql 을 실행하세요.',
+  marketingMetaAutoMap: '캠페인 자동 매핑',
+  marketingMetaAutoMapOk: 'Meta 광고 캠페인 {n}건을 ERP 캠페인에 매핑했습니다.',
+  marketingMetaAutoMapNone: '자동 매핑할 항목이 없습니다. 동기화 후 Ads 이름과 ERP 주제가 비슷한지 확인하세요.',
+  marketingChannelDashTitle: '채널 성과 요약',
+  marketingChannelDashSub: 'Meta(FB/IG) · TikTok 최근 동기화 실비·노출',
+  marketingChannelDashSync: '채널 동기화',
+  marketingChannelDashConnectTikTok: 'TikTok 연결하러 가기',
+  marketingInfluencerCampaignLink: '연결 ERP 캠페인',
+  marketingBudgetAlertHint: '예산 대비 Meta·ERP Ads·인플루언서 실비 합이 80% 이상이면 주간 동기화 시 본사 알림이 갑니다.',
+  marketingInfluencerAdsTitle: '인플루언서 × 광고 비용',
+  marketingInfluencerAdsSub: '같은 ERP 캠페인에 묶인 유료 Ads·Meta·인플루언서 비용 요약',
+  marketingInfluencerAdsPaid: '유료 광고',
+  marketingInfluencerAdsInfl: '인플루언서',
+  marketingInfluencerAdsCombined: '합계 실비',
+  marketingInfluencerAdsBudget: '예산',
+  marketingInfluencerAdsCampaignBudget: '캠페인 예산',
+  marketingInfluencerAdsOverBudget: '예산 80% 이상',
 }
 
 export const I18N_MARKETING_HUB_EN: Record<string, string> = {
@@ -554,6 +571,23 @@ export const I18N_MARKETING_HUB_EN: Record<string, string> = {
   marketingTikTokOauthFail: 'TikTok connection failed.',
   marketingTikTokDiagTableMissing:
     'Missing marketing_tiktok_connections. Run sql/marketing_tiktok_connections.sql in Supabase.',
+  marketingMetaAutoMap: 'Auto-map campaigns',
+  marketingMetaAutoMapOk: 'Mapped {n} Meta Ads campaigns to ERP campaigns.',
+  marketingMetaAutoMapNone: 'Nothing to auto-map. Sync first and check Ads names vs ERP topics.',
+  marketingChannelDashTitle: 'Channel performance',
+  marketingChannelDashSub: 'Meta (FB/IG) · TikTok latest synced spend & impressions',
+  marketingChannelDashSync: 'Sync channels',
+  marketingChannelDashConnectTikTok: 'Connect TikTok',
+  marketingInfluencerCampaignLink: 'Linked ERP campaign',
+  marketingBudgetAlertHint: 'Weekly sync notifies HQ when Meta + ERP Ads + influencer spend is ≥80% of campaign budget.',
+  marketingInfluencerAdsTitle: 'Influencer × ads spend',
+  marketingInfluencerAdsSub: 'Paid Ads, Meta, and influencer cost for the same ERP campaign',
+  marketingInfluencerAdsPaid: 'Paid ads',
+  marketingInfluencerAdsInfl: 'Influencers',
+  marketingInfluencerAdsCombined: 'Combined spend',
+  marketingInfluencerAdsBudget: 'Budget',
+  marketingInfluencerAdsCampaignBudget: 'Campaign budget',
+  marketingInfluencerAdsOverBudget: '≥80% of budget',
 }
 
 export const I18N_MARKETING_HUB_TH: Record<string, string> = {
@@ -826,6 +860,23 @@ export const I18N_MARKETING_HUB_TH: Record<string, string> = {
   marketingTikTokOauthFail: 'เชื่อม TikTok ไม่สำเร็จครับ',
   marketingTikTokDiagTableMissing:
     'ยังไม่มีตาราง marketing_tiktok_connections ให้รัน sql/marketing_tiktok_connections.sql ใน Supabase ครับ',
+  marketingMetaAutoMap: 'จับคู่แคมเปญอัตโนมัติ',
+  marketingMetaAutoMapOk: 'จับคู่แคมเปญ Meta Ads กับ ERP แล้ว {n} รายการครับ',
+  marketingMetaAutoMapNone: 'ไม่มีรายการให้จับคู่อัตโนมัติ ซิงค์ก่อนแล้วเช็คชื่อ Ads กับหัวข้อ ERP ครับ',
+  marketingChannelDashTitle: 'สรุปผลตามช่องทาง',
+  marketingChannelDashSub: 'Meta (FB/IG) · TikTok ค่าใช้จ่าย/การแสดงผลล่าสุด',
+  marketingChannelDashSync: 'ซิงค์ช่องทาง',
+  marketingChannelDashConnectTikTok: 'ไปเชื่อม TikTok',
+  marketingInfluencerCampaignLink: 'แคมเปญ ERP ที่เชื่อม',
+  marketingBudgetAlertHint: 'ถ้าค่าใช้ Meta+ERP Ads+อินฟลู รวมกัน ≥80% ของงบ ระบบจะแจ้งสำนักงานใหญ่ตอนซิงค์รายสัปดาห์ครับ',
+  marketingInfluencerAdsTitle: 'อินฟลู × ค่าโฆษณา',
+  marketingInfluencerAdsSub: 'สรุป Ads/Meta/อินฟลู ในแคมเปญ ERP เดียวกัน',
+  marketingInfluencerAdsPaid: 'โฆษณาเสียเงิน',
+  marketingInfluencerAdsInfl: 'อินฟลู',
+  marketingInfluencerAdsCombined: 'รวมค่าใช้',
+  marketingInfluencerAdsBudget: 'งบ',
+  marketingInfluencerAdsCampaignBudget: 'งบแคมเปญ',
+  marketingInfluencerAdsOverBudget: 'ใช้ ≥80% ของงบ',
 }
 
 

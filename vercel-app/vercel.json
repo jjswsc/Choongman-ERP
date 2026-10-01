@@ -35,6 +35,10 @@
     {
       "path": "/api/qr-table/cron/expire-sessions",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/marketing-ads-sync",
+      "schedule": "0 2 * * 1"
     }
   ],
   "headers": [

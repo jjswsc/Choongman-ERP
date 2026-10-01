@@ -89,3 +89,21 @@ export async function selectMetaPage(pageId: string) {
   })
   return res.json() as Promise<{ success: boolean; message?: string; pageId?: string; pageName?: string }>
 }
+
+export async function autoMapMetaCampaigns(params?: { dryRun?: boolean; syncFirst?: boolean }) {
+  const res = await apiFetchWithOffline("/api/meta/auto-map", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      dryRun: params?.dryRun === true,
+      syncFirst: params?.syncFirst !== false,
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    applied?: number
+    suggestions?: { campaignId: number; topic: string; metaCampaignName: string; score: number }[]
+    diagnostics?: string[]
+  }>
+}

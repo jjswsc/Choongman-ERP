@@ -51,6 +51,8 @@ import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
 import { MarketingHubCampaignContextStrip } from "@/components/marketing/marketing-hub-campaign-context-strip"
 import { MarketingAdsOverviewTab } from "@/components/marketing/marketing-ads-overview-tab"
 import { MarketingMetaInsightsPanel } from "@/components/marketing/marketing-meta-insights-panel"
+import { MarketingChannelDashboardPanel } from "@/components/marketing/marketing-channel-dashboard-panel"
+import { MarketingInfluencerAdsPanel } from "@/components/marketing/marketing-influencer-ads-panel"
 import { MarketingAdOptionsDialog } from "@/components/marketing/marketing-ad-options-dialog"
 import { MarketingLinkedCampaignStrip } from "@/components/marketing/marketing-linked-campaign-strip"
 import { MarketingHubRecordScheduleCard } from "@/components/marketing/marketing-hub-record-schedule-card"
@@ -427,6 +429,12 @@ export default function MarketingAdsPage() {
             disabled={loading}
           />
 
+          {campaignFilter.trim() ? (
+            <div className="px-2 pb-2 sm:px-4">
+              <MarketingInfluencerAdsPanel campaignId={campaignFilter} />
+            </div>
+          ) : null}
+
           <TabsContent value="compose" className={adminTabsContentCn}>
             {loading && (
               <div className="mb-6 space-y-3 rounded-xl border bg-card/50 p-4">
@@ -761,7 +769,10 @@ export default function MarketingAdsPage() {
             </Card>
           </TabsContent>
           <TabsContent value="meta" className={adminTabsContentCn}>
-            <MarketingMetaInsightsPanel />
+            <div className="space-y-4">
+              <MarketingChannelDashboardPanel />
+              <MarketingMetaInsightsPanel />
+            </div>
           </TabsContent>
         </Tabs>
     </MarketingPageShell>

@@ -14,6 +14,7 @@ import {
   listMetaPages,
   selectMetaPage,
   syncMetaAds,
+  autoMapMetaCampaigns,
 } from "@/lib/api-client/marketing-meta"
 import {
   disconnectTikTok,
@@ -345,6 +346,7 @@ export default function MarketingIntegrationsPage() {
                 {t("marketingMetaChangePage")}
               </Button>
             ) : null}
+            <p className="mb-3 text-xs text-muted-foreground">{t("marketingBudgetAlertHint")}</p>
             <ul className="text-sm text-muted-foreground space-y-1 mb-3">
               <li>{t("marketingIntegrationMetaEnvLine1")}</li>
               <li>{t("marketingIntegrationMetaEnvLine2")}</li>
@@ -368,6 +370,33 @@ export default function MarketingIntegrationsPage() {
                 {metaBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
                 {t("marketingMetaSync")}
               </Button>
+              {metaStatus?.connected ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={metaBusy}
+                  onClick={() => {
+                    setMetaBusy(true)
+                    void autoMapMetaCampaigns({ syncFirst: true })
+                      .then(async (r) => {
+                        if (!r.success) {
+                          await appAlert(r.message || t("marketingWsSaveFail"))
+                          return
+                        }
+                        const n = Number(r.applied || 0)
+                        await appAlert(
+                          n > 0
+                            ? i18nTr(t, "marketingMetaAutoMapOk", { n })
+                            : t("marketingMetaAutoMapNone")
+                        )
+                        await loadMeta()
+                      })
+                      .finally(() => setMetaBusy(false))
+                  }}
+                >
+                  {t("marketingMetaAutoMap")}
+                </Button>
+              ) : null}
               {metaStatus?.connected && metaStatus.source === "oauth" ? (
                 <Button
                   variant="outline"
