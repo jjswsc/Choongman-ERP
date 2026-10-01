@@ -29,7 +29,11 @@ import {
   stripDisallowedKbankActionPayloadFields,
 } from '@/lib/payments/kbank-api-reference'
 import type { KbankRuntimeEnv } from '@/lib/payments/kbank-runtime-env'
-import { kbankRuntimeField, mustKbankRuntimeField } from '@/lib/payments/kbank-runtime-env'
+import {
+  kbankOAuthTokenCacheKey,
+  kbankRuntimeField,
+  mustKbankRuntimeField,
+} from '@/lib/payments/kbank-runtime-env'
 import {
   clearSharedKbankAccessToken,
   readSharedKbankAccessToken,
@@ -218,7 +222,7 @@ const cachedKbankTokens = new Map<string, CachedKbankToken>()
 const inFlightKbankTokenPromises = new Map<string, Promise<KbankTokenResponse>>()
 
 function tokenCacheKey(ctx: KbankCtx): string {
-  return ctx.runtime?.cacheKey || 'env-default'
+  return kbankOAuthTokenCacheKey(ctx.runtime?.cacheKey)
 }
 
 function setLocalKbankTokenCache(key: string, token: KbankTokenResponse, expiresAtMs: number): void {

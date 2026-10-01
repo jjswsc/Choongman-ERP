@@ -1,6 +1,17 @@
+/**
+ * OAuth token cache key. KBank allows 5 token grants / 30 min per app + outbound IP.
+ * Every store on the same consumer must share one key. Merchant / shop IDs are QR fields only.
+ * Legacy keys appended `|store:{code}` and each store burned its own token.
+ */
+export function kbankOAuthTokenCacheKey(cacheKey: string | undefined | null): string {
+  const raw = String(cacheKey || '').trim()
+  const base = raw.split('|store:')[0]?.trim() || ''
+  return base || 'env-default'
+}
+
 /** KBank API 호출에 쓰는 런타임 자격 — env 또는 tenant DB에서 resolve */
 export type KbankRuntimeEnv = {
-  /** 토큰 캐시 키 */
+  /** OAuth 토큰 캐시 키. 매장별이 아니라 앱(consumer) 단위. */
   cacheKey: string
   consumerId: string
   consumerSecret: string

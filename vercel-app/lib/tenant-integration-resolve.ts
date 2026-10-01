@@ -190,6 +190,7 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
   }
 
   // 충만 매장별 MID 기본값 (Huamak / Seacon / Future Park / Ekkamai / Silom / MBK / True Digital / The Street / Union Mall). 아래 관리자·SaaS DB가 있으면 그 값이 우선.
+  // 토큰 캐시 키는 매장으로 나누지 않는다. OAuth 한도(5회/30분)는 앱+IP 기준이고, MID는 QR 본문에만 쓴다.
   if (storeCode) {
     const defaults = lookupChoongmanKbankStoreDefaults(storeCode)
     if (defaults) {
@@ -198,9 +199,6 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
         partnerShopId: defaults.partnerShopId,
         terminalId: defaults.terminalId,
       })
-      if (!runtime.cacheKey.includes('|store:')) {
-        runtime = { ...runtime, cacheKey: `${runtime.cacheKey}|store:${storeCode}` }
-      }
     }
   }
 
@@ -208,7 +206,6 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
     const storeRow = await loadTenantStoreIntegration(tenantId, storeCode, 'kbank')
     if (storeRow) {
       runtime = applyStoreKbankConfig(runtime, storeRow.config as StoreKbankConfig)
-      runtime = { ...runtime, cacheKey: `${runtime.cacheKey}|store:${storeCode}` }
     }
   }
 
@@ -217,9 +214,6 @@ export async function resolveKbankRuntime(scope?: IntegrationScope): Promise<Kba
     const fromPrinter = await loadPosPrinterKbankConfig(storeCode)
     if (fromPrinter) {
       runtime = applyStoreKbankConfig(runtime, fromPrinter)
-      if (!runtime.cacheKey.includes('|store:')) {
-        runtime = { ...runtime, cacheKey: `${runtime.cacheKey}|store:${storeCode}` }
-      }
     }
     runtime = applyStoreKbankConfig(
       runtime,

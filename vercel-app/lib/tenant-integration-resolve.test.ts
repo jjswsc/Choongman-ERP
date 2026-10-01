@@ -1,4 +1,6 @@
+import { kbankOAuthTokenCacheKey } from '@/lib/payments/kbank-runtime-env'
 import {
+  applyStoreKbankConfig,
   buildGrabStoreMapFromRows,
   kbankRuntimeFromProcessEnv,
   mergeKbankTenantConfig,
@@ -41,6 +43,24 @@ describe('kbank runtime merge', () => {
     expect(merged.partnerId).toBe('tenant-partner')
     expect(merged.openapiBaseUrl).toBe('https://kbank.example.test')
     expect(merged.cacheKey).toBe('tenant:acme')
+  })
+
+  it('keeps one OAuth cache key when store merchant fields change', () => {
+    const base = kbankRuntimeFromProcessEnv()
+    const street = applyStoreKbankConfig(base, {
+      merchantId: 'KB000002350209',
+      partnerShopId: 'SJGLB00012',
+    })
+    const silom = applyStoreKbankConfig(base, {
+      merchantId: 'KB000000000001',
+      partnerShopId: 'SJGLB00001',
+    })
+    expect(street.cacheKey).toBe('env-default')
+    expect(silom.cacheKey).toBe(street.cacheKey)
+    expect(street.merchantId).toBe('KB000002350209')
+    expect(kbankOAuthTokenCacheKey(street.cacheKey)).toBe('env-default')
+    expect(kbankOAuthTokenCacheKey('env-default|store:THE_STREET')).toBe('env-default')
+    expect(kbankOAuthTokenCacheKey('tenant:acme|store:SILOM|store:SILOM')).toBe('tenant:acme')
   })
 })
 
