@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
   const toMonth = String(searchParams.get('toMonth') || yearMonth).trim()
   const scopeFilter = String(searchParams.get('scopeFilter') || '').trim()
   const view = String(searchParams.get('view') || 'vouchers').trim()
+  const accountCode = String(searchParams.get('accountCode') || '').trim()
   const range = resolveTaxBookMonthRange(fromMonth, toMonth)
   if (!range.ok) {
     return NextResponse.json({ error: range.error }, { status: 400, headers })
@@ -48,6 +49,10 @@ export async function GET(request: NextRequest) {
     }
     const lines = await loadTaxBookLines(heads.heads.map((h) => Number(h.id || 0)))
     const trial = summarizeTaxBookTrial(lines)
+    const ledgerAll = view === 'vouchers' ? [] : toTaxBookLedger(range.from, heads.heads, lines)
+    const ledger = accountCode
+      ? ledgerAll.filter((ln) => String(ln.accountCode || '') === accountCode)
+      : ledgerAll
     return NextResponse.json(
       {
         schemaReady: true,
@@ -55,8 +60,9 @@ export async function GET(request: NextRequest) {
         yearMonth: range.from,
         fromMonth: range.from,
         toMonth: range.to,
+        accountCode: accountCode || null,
         vouchers: view === 'ledger' ? [] : toTaxBookEntries(range.from, heads.heads, lines),
-        ledger: view === 'vouchers' ? [] : toTaxBookLedger(range.from, heads.heads, lines),
+        ledger,
         trial: trial.rows,
         totalDebit: trial.totalDebit,
         totalCredit: trial.totalCredit,

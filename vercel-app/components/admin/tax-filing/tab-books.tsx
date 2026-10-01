@@ -10,9 +10,18 @@ import {
   getTaxManagementBridge,
   postTaxBookEntry,
   type TaxBookEntriesResponse,
+  type TaxBookPostAction,
   type TaxManagementBridgeResponse,
 } from "@/lib/api-client/tax-book"
+import {
+  buildErpExcelHtmlDocument,
+  erpExcelSimpleTableStyle,
+  triggerErpExcelHtmlDownload,
+} from "@/lib/erp-excel-export"
 import { buildTaxBookStatements, resolveTaxBookMonthRange } from "@/lib/tax-book"
+import { buildTaxCloseChecklist, type TaxCloseChecklistStepId } from "@/lib/tax-close-checklist"
+import { parseFlowTrialBalanceSheet } from "@/lib/tax-book-opening-parse"
+import type { ExternalTrialBalanceRow } from "@/lib/tax-book-opening"
 import type { TaxBridgeLineKey } from "@/lib/tax-management-bridge"
 import { cn } from "@/lib/utils"
 
@@ -32,6 +41,31 @@ function lineLabel(t: (k: string) => string, key: TaxBridgeLineKey): string {
 type AdjLine = { accountCode: string; side: "debit" | "credit"; amount: string }
 
 type BooksQuery = { from: string; to: string; scope: string; tick: number }
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+function downloadStatementTable(opts: {
+  title: string
+  filename: string
+  headers: string[]
+  rows: (string | number)[][]
+}) {
+  const head = opts.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")
+  const body = opts.rows
+    .map((row) => `<tr>${row.map((c) => `<td>${escapeHtml(String(c))}</td>`).join("")}</tr>`)
+    .join("")
+  const html = buildErpExcelHtmlDocument(
+    `<h3>${escapeHtml(opts.title)}</h3><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`,
+    erpExcelSimpleTableStyle({ includeTh: true, fullWidth: true })
+  )
+  triggerErpExcelHtmlDownload(html, opts.filename)
+}
 
 export function TaxFilingBooksTab(props: {
   fromMonth: string
@@ -55,6 +89,13 @@ export function TaxFilingBooksTab(props: {
     { accountCode: "", side: "credit", amount: "" },
   ])
   const [openingInventory, setOpeningInventory] = React.useState("")
+  const [inventoryPreview, setInventoryPreview] = React.useState<number | null>(null)
+  const [inventoryConfirmed, setInventoryConfirmed] = React.useState(false)
+  const [cogsPreview, setCogsPreview] = React.useState<number | null>(null)
+  const [ledgerAccount, setLedgerAccount] = React.useState<string | null>(null)
+  const [openingDate, setOpeningDate] = React.useState("2026-07-01")
+  const [trialUploadRows, setTrialUploadRows] = React.useState<ExternalTrialBalanceRow[] | null>(null)
+  const [trialUploadName, setTrialUploadName] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     if (props.searchTick < 1) return
@@ -73,48 +114,53 @@ export function TaxFilingBooksTab(props: {
       scope: props.filingStoreFilter || "All",
       tick: props.searchTick,
     })
-  }, [props.searchTick])
+  }, [props.searchTick, props.fromMonth, props.toMonth, props.filingStoreFilter])
 
-  const load = React.useCallback(async (q: BooksQuery) => {
-    const single = q.from === q.to
-    setLoading(true)
-    setMessage(null)
-    try {
-      if (single) {
-        const data = await getTaxManagementBridge({
-          yearMonth: q.from,
-          scopeFilter: q.scope,
-        })
-        if (data.error && !data.report) {
-          setMessage(data.error)
+  const load = React.useCallback(
+    async (q: BooksQuery, opts?: { ledgerAccount?: string | null }) => {
+      const single = q.from === q.to
+      const acct = opts?.ledgerAccount !== undefined ? opts.ledgerAccount : ledgerAccount
+      setLoading(true)
+      setMessage(null)
+      try {
+        if (single) {
+          const data = await getTaxManagementBridge({
+            yearMonth: q.from,
+            scopeFilter: q.scope,
+          })
+          if (data.error && !data.report) {
+            setMessage(data.error)
+            setBridge(null)
+            return
+          }
+          setBridge(data)
+        } else {
           setBridge(null)
-          return
         }
-        setBridge(data)
-      } else {
-        setBridge(null)
-      }
-      if (!single || view !== "bridge") {
-        const entryView = view === "vouchers" || view === "ledger" ? view : "trial"
-        const book = await getTaxBookEntries({
-          fromMonth: q.from,
-          toMonth: q.to,
-          scopeFilter: q.scope,
-          view: entryView,
-        })
-        if (book.error && !book.trial?.length && !book.vouchers?.length && !book.ledger?.length) {
-          setMessage(book.error)
+        if (!single || view !== "bridge") {
+          const entryView = view === "vouchers" || view === "ledger" ? view : "trial"
+          const book = await getTaxBookEntries({
+            fromMonth: q.from,
+            toMonth: q.to,
+            scopeFilter: q.scope,
+            view: entryView,
+            accountCode: view === "ledger" && acct ? acct : undefined,
+          })
+          if (book.error && !book.trial?.length && !book.vouchers?.length && !book.ledger?.length) {
+            setMessage(book.error)
+          }
+          setEntries(book)
+        } else {
+          setEntries(null)
         }
-        setEntries(book)
-      } else {
-        setEntries(null)
+      } catch (e) {
+        setMessage(e instanceof Error ? e.message : String(e))
+      } finally {
+        setLoading(false)
       }
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : String(e))
-    } finally {
-      setLoading(false)
-    }
-  }, [view])
+    },
+    [view, ledgerAccount]
+  )
 
   React.useEffect(() => {
     if (!query) return
@@ -123,22 +169,66 @@ export function TaxFilingBooksTab(props: {
 
   const statements = React.useMemo(() => buildTaxBookStatements(entries?.trial || []), [entries?.trial])
 
-  const post = async (action: "payroll" | "inventory" | "vat" | "adjustment" | "closing" | "unlock" | "opening") => {
+  const sourceTypes = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const v of entries?.vouchers || []) {
+      if (v.sourceType) set.add(v.sourceType)
+    }
+    return set
+  }, [entries?.vouchers])
+
+  const checklist = React.useMemo(() => {
+    const holes = (bridge?.report?.lines || []).filter((l) => l.hole).length
+    const split = bridge?.report?.salesSplit
+    const hasBsBalance = (entries?.trial || []).some(
+      (r) => /^[123]/.test(String(r.accountCode || "")) && (Number(r.debit) || 0) + (Number(r.credit) || 0) > 0.009
+    )
+    const salesNet = split?.taxInvoiceNet || 0
+    const purchaseNet = split?.purchaseNet || 0
+    const outputVat = bridge?.report?.lines.find((l) => l.key === "outputVat")?.filing || 0
+    const inputVat = bridge?.report?.lines.find((l) => l.key === "inputVat")?.filing || 0
+    const payrollMgt = bridge?.report?.lines.find((l) => l.key === "payroll")?.management || 0
+    const cogsMgt = bridge?.report?.lines.find((l) => l.key === "cogs")?.management || 0
+    return buildTaxCloseChecklist({
+      hasOpening: sourceTypes.has("tax_opening") || hasBsBalance,
+      hasVatSummary: sourceTypes.has("tax_vat_summary") || (outputVat <= 0 && inputVat <= 0),
+      hasSalesSummary: sourceTypes.has("tax_sales_summary") || salesNet <= 0,
+      hasPurchaseSummary: sourceTypes.has("tax_purchase_summary") || purchaseNet <= 0,
+      hasPayroll: sourceTypes.has("tax_payroll") || payrollMgt <= 0,
+      hasInventoryCogs: sourceTypes.has("tax_inventory_cogs") || cogsMgt <= 0,
+      bridgeHoles: holes,
+      recognition: bridge?.report?.recognition || null,
+      periodClosed: Boolean(bridge?.periodClosed),
+      schemaReady: bridge ? bridge.schemaReady !== false : entries ? entries.schemaReady !== false : true,
+      entityReady: Boolean(bridge?.taxEntityCode || (entries && entries.error !== "NEED_TAX_ENTITY")),
+    })
+  }, [bridge, entries, sourceTypes])
+
+  const parseInventoryAmount = (): number | undefined => {
+    const invRaw = openingInventory.trim()
+    if (invRaw === "") return undefined
+    const n = Number(invRaw)
+    return Number.isFinite(n) && n >= 0 ? n : undefined
+  }
+
+  const post = async (action: TaxBookPostAction) => {
     setPosting(true)
     setMessage(null)
     try {
-      const invRaw = openingInventory.trim()
-      const inventoryAmount = invRaw === "" ? undefined : Number(invRaw)
+      const inventoryAmount = parseInventoryAmount()
       const res = await postTaxBookEntry({
         action,
         yearMonth: query?.from || props.fromMonth,
         scopeFilter: query?.scope || props.filingStoreFilter || "All",
         memo,
-        accountingDate: action === "opening" ? "2026-07-01" : undefined,
+        accountingDate: action === "opening" ? openingDate : undefined,
         inventoryAmount:
-          action === "opening" && inventoryAmount != null && Number.isFinite(inventoryAmount) && inventoryAmount >= 0
-            ? inventoryAmount
+          action === "opening" || action === "inventory"
+            ? inventoryAmount ?? (inventoryPreview != null && inventoryConfirmed ? inventoryPreview : undefined)
             : undefined,
+        inventoryConfirmed:
+          action === "inventory" || action === "opening" ? inventoryConfirmed || inventoryAmount != null : undefined,
+        trialBalanceRows: action === "opening" && trialUploadRows?.length ? trialUploadRows : undefined,
         lines:
           action === "adjustment"
             ? adj
@@ -152,6 +242,15 @@ export function TaxFilingBooksTab(props: {
       })
       if (!res.success) {
         setMessage(res.error || t("accCompUnknownError"))
+      } else if (action === "inventoryPreview") {
+        setInventoryPreview(res.inventoryAmount ?? null)
+        setCogsPreview(res.cogsPreview ?? null)
+        if (res.inventoryAmount != null && openingInventory.trim() === "") {
+          setOpeningInventory(String(res.inventoryAmount))
+        }
+        setMessage(
+          `${t("taxBooksInventoryPreviewDone")} ${money(res.inventoryAmount)} · COGS ${money(res.cogsPreview)}`
+        )
       } else {
         setMessage(
           action === "opening"
@@ -167,11 +266,42 @@ export function TaxFilingBooksTab(props: {
     }
   }
 
+  const drillToLedger = (accountCode: string) => {
+    setLedgerAccount(accountCode)
+    setView("ledger")
+    if (query) void load(query, { ledgerAccount: accountCode })
+  }
+
+  const onTrialFile = async (file: File | null) => {
+    if (!file) {
+      setTrialUploadRows(null)
+      setTrialUploadName(null)
+      return
+    }
+    try {
+      const XLSX = await import("xlsx")
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf, { type: "array" })
+      const sheet = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as unknown[][]
+      const parsed = parseFlowTrialBalanceSheet(rows)
+      setTrialUploadRows(parsed)
+      setTrialUploadName(file.name)
+      setMessage(parsed.length ? `${t("taxBooksTrialUploadRows")} ${parsed.length}` : t("taxBooksTrialUploadEmpty"))
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   const singleMonth = Boolean(query && query.from === query.to)
   const entityMissing =
     (bridge != null && !bridge.taxEntityCode) || message === "NEED_TAX_ENTITY" || entries?.error === "NEED_TAX_ENTITY"
   const closed = Boolean(singleMonth && bridge?.periodClosed)
   const schemaReady = bridge ? bridge.schemaReady !== false : entries ? entries.schemaReady !== false : true
+  const canPost = !posting && !closed && !entityMissing && schemaReady && singleMonth
+  const ymLabel = query?.from || props.fromMonth
+
+  const stepLabel = (id: TaxCloseChecklistStepId): string => t(`taxBooksCheck_${id}`)
 
   return (
     <div className="space-y-3">
@@ -183,7 +313,10 @@ export function TaxFilingBooksTab(props: {
             type="button"
             size="sm"
             variant={view === key ? "default" : "outline"}
-            onClick={() => setView(key)}
+            onClick={() => {
+              if (key !== "ledger") setLedgerAccount(null)
+              setView(key)
+            }}
           >
             {t(`taxBooksView_${key}`)}
           </Button>
@@ -193,13 +326,25 @@ export function TaxFilingBooksTab(props: {
       {rangeError ? <p className="text-sm text-amber-700 dark:text-amber-400">{t(`taxBooksErr_${rangeError}`)}</p> : null}
       {query && !singleMonth ? <p className="text-sm text-muted-foreground">{t("taxBooksRangePosting")}</p> : null}
       {loading ? <p className="text-sm text-muted-foreground">{t("accCompPp30AdjLoadingChannels")}</p> : null}
-      {message && message !== "NEED_TAX_ENTITY" ? <p className="text-sm">{t(`taxBooksErr_${message}`) !== `taxBooksErr_${message}` ? t(`taxBooksErr_${message}`) : message}</p> : null}
-      {(bridge?.schemaReady === false || entries?.schemaReady === false) ? <p className="text-sm text-amber-700 dark:text-amber-400">{t("taxBooksSchemaMissing")}</p> : null}
+      {message && message !== "NEED_TAX_ENTITY" ? (
+        <p className="text-sm">
+          {t(`taxBooksErr_${message}`) !== `taxBooksErr_${message}` ? t(`taxBooksErr_${message}`) : message}
+        </p>
+      ) : null}
+      {bridge?.schemaReady === false || entries?.schemaReady === false ? (
+        <p className="text-sm text-amber-700 dark:text-amber-400">{t("taxBooksSchemaMissing")}</p>
+      ) : null}
       {entityMissing ? <p className="text-sm text-muted-foreground">{t("taxBooksNeedEntity")}</p> : null}
       {closed ? <p className="text-sm">{t("taxBooksPeriodClosed")}</p> : null}
       {bridge?.report?.recognition ? (
-        <p className={cn("text-sm font-medium", bridge.report.recognition.recognized ? "text-emerald-700" : "text-muted-foreground")}>
+        <p
+          className={cn(
+            "text-sm font-medium",
+            bridge.report.recognition.recognized ? "text-emerald-700" : "text-muted-foreground"
+          )}
+        >
           {bridge.report.recognition.recognized ? t("taxBooksRecognized") : t("taxBooksNotRecognized")}
+          {closed ? ` · ${t("taxBooksPeriodClosed")}` : ""}
         </p>
       ) : null}
 
@@ -226,14 +371,17 @@ export function TaxFilingBooksTab(props: {
                   <td className="py-2 pr-3 text-right tabular-nums">{ln.filing == null ? "—" : money(ln.filing)}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{money(ln.taxBook)}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{money(ln.diff)}</td>
-                  <td className="py-2 text-xs text-muted-foreground">{ln.reason ? t(`taxBooksReason_${ln.reason}`) : ""}</td>
+                  <td className="py-2 text-xs text-muted-foreground">
+                    {ln.reason ? t(`taxBooksReason_${ln.reason}`) : ""}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <p className="mt-2 text-xs text-muted-foreground">
             {t("taxBooksPosNet")} {money(bridge.report.salesSplit.posNet)} · {t("taxBooksTaxInvoiceNet")}{" "}
-            {money(bridge.report.salesSplit.taxInvoiceNet)} · {t("taxBooksPurchaseNet")} {money(bridge.report.salesSplit.purchaseNet)}
+            {money(bridge.report.salesSplit.taxInvoiceNet)} · {t("taxBooksPurchaseNet")}{" "}
+            {money(bridge.report.salesSplit.purchaseNet)}
           </p>
         </div>
       ) : null}
@@ -249,51 +397,131 @@ export function TaxFilingBooksTab(props: {
             money(v.debit),
             t("taxBooksPosted"),
           ])}
-          headers={[t("taxBooksColDate"), t("taxBooksColDoc"), t("taxBooksColKind"), t("taxBooksMemo"), t("taxBooksDebit"), t("taxBooksColStatus")]}
+          headers={[
+            t("taxBooksColDate"),
+            t("taxBooksColDoc"),
+            t("taxBooksColKind"),
+            t("taxBooksMemo"),
+            t("taxBooksDebit"),
+            t("taxBooksColStatus"),
+          ]}
         />
       ) : null}
 
       {view === "ledger" ? (
-        <EntryTable
-          empty={t("taxBooksNoRows")}
-          rows={(entries?.ledger || []).map((ln) => [
-            ln.accountCode,
-            ln.accountName || "",
-            ln.accountingDate,
-            ln.voucherNo,
-            ln.memo || "",
-            money(ln.debit),
-            money(ln.credit),
-          ])}
-          headers={[t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksColDate"), t("taxBooksColDoc"), t("taxBooksMemo"), t("taxBooksDebit"), t("taxBooksCredit")]}
-        />
+        <div className="space-y-2">
+          {ledgerAccount ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm">
+                {t("taxBooksLedgerFilter")} <span className="font-medium">{ledgerAccount}</span>
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setLedgerAccount(null)
+                  if (query) void load(query, { ledgerAccount: null })
+                }}
+              >
+                {t("taxBooksLedgerClear")}
+              </Button>
+            </div>
+          ) : null}
+          <EntryTable
+            empty={t("taxBooksNoRows")}
+            rows={(entries?.ledger || []).map((ln) => [
+              ln.accountCode,
+              ln.accountName || "",
+              ln.accountingDate,
+              ln.voucherNo,
+              ln.memo || "",
+              money(ln.debit),
+              money(ln.credit),
+            ])}
+            headers={[
+              t("taxBooksAccount"),
+              t("taxBooksColItem"),
+              t("taxBooksColDate"),
+              t("taxBooksColDoc"),
+              t("taxBooksMemo"),
+              t("taxBooksDebit"),
+              t("taxBooksCredit"),
+            ]}
+          />
+        </div>
       ) : null}
 
       {view === "trial" && entries?.trial ? (
         <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                downloadStatementTable({
+                  title: `${t("taxBooksView_trial")} ${ymLabel}`,
+                  filename: `tax-trial-${ymLabel}.xls`,
+                  headers: [t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksDebit"), t("taxBooksCredit")],
+                  rows: entries.trial.map((r) => [r.accountCode, r.accountName || "", r.debit, r.credit]),
+                })
+              }
+            >
+              {t("taxBooksExportExcel")}
+            </Button>
+          </div>
           <p className="text-sm text-muted-foreground">
-            {t("taxBooksDebit")} {money(entries.totalDebit)} · {t("taxBooksCredit")} {money(entries.totalCredit)} · {t("taxBooksColDiff")} {money(entries.diff)}
+            {t("taxBooksDebit")} {money(entries.totalDebit)} · {t("taxBooksCredit")} {money(entries.totalCredit)} ·{" "}
+            {t("taxBooksColDiff")} {money(entries.diff)}
           </p>
-          <EntryTable
+          <p className="text-xs text-muted-foreground">{t("taxBooksTrialDrillHint")}</p>
+          <ClickableTrialTable
             empty={t("taxBooksNoRows")}
-            rows={entries.trial.map((r) => [r.accountCode, r.accountName || "", money(r.debit), money(r.credit)])}
+            rows={entries.trial}
             headers={[t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksDebit"), t("taxBooksCredit")]}
+            onAccountClick={drillToLedger}
           />
         </div>
       ) : null}
 
       {view === "taxIncome" && !loading ? (
         <div className="space-y-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              downloadStatementTable({
+                title: `${t("taxBooksView_taxIncome")} ${ymLabel}`,
+                filename: `tax-income-${ymLabel}.xls`,
+                headers: [t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksColKind"), t("taxBooksAmount")],
+                rows: statements.incomeLines.map((ln) => [
+                  ln.accountCode,
+                  ln.accountName || "",
+                  t(`taxBooksSection_${ln.section}`),
+                  ln.amount,
+                ]),
+              })
+            }
+          >
+            {t("taxBooksExportExcel")}
+          </Button>
           <p className="text-sm">
-            {t("taxBooksRevenue")} {money(statements.revenue)} · {t("taxBooksExpense")} {money(statements.expense)} · {t("taxBooksIncomeNet")}{" "}
-            {money(statements.netIncome)}
+            {t("taxBooksRevenue")} {money(statements.revenue)} · {t("taxBooksExpense")} {money(statements.expense)} ·{" "}
+            {t("taxBooksIncomeNet")} {money(statements.netIncome)}
           </p>
           {Math.abs(statements.retainedEarnings) > 0.01 ? (
             <p className="text-sm text-muted-foreground">{t("taxBooksClosedIntoEquity")}</p>
           ) : null}
           <EntryTable
             empty={t("taxBooksNoRows")}
-            rows={statements.incomeLines.map((ln) => [ln.accountCode, ln.accountName || "", t(`taxBooksSection_${ln.section}`), money(ln.amount)])}
+            rows={statements.incomeLines.map((ln) => [
+              ln.accountCode,
+              ln.accountName || "",
+              t(`taxBooksSection_${ln.section}`),
+              money(ln.amount),
+            ])}
             headers={[t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksColKind"), t("taxBooksAmount")]}
           />
         </div>
@@ -301,17 +529,44 @@ export function TaxFilingBooksTab(props: {
 
       {view === "taxBalance" && !loading ? (
         <div className="space-y-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              downloadStatementTable({
+                title: `${t("taxBooksView_taxBalance")} ${ymLabel}`,
+                filename: `tax-balance-${ymLabel}.xls`,
+                headers: [t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksColKind"), t("taxBooksAmount")],
+                rows: statements.balanceLines.map((ln) => [
+                  ln.accountCode,
+                  ln.accountName || "",
+                  t(`taxBooksSection_${ln.section}`),
+                  ln.amount,
+                ]),
+              })
+            }
+          >
+            {t("taxBooksExportExcel")}
+          </Button>
           <p className="text-sm">
-            {t("taxBooksAssets")} {money(statements.assets)} · {t("taxBooksLiabilities")} {money(statements.liabilities)} · {t("taxBooksEquity")}{" "}
-            {money(statements.equity)}
-            {Math.abs(statements.unclosedProfit) > 0.01 ? ` · ${t("taxBooksIncomeNet")} ${money(statements.unclosedProfit)}` : ""}
+            {t("taxBooksAssets")} {money(statements.assets)} · {t("taxBooksLiabilities")} {money(statements.liabilities)}{" "}
+            · {t("taxBooksEquity")} {money(statements.equity)}
+            {Math.abs(statements.unclosedProfit) > 0.01
+              ? ` · ${t("taxBooksIncomeNet")} ${money(statements.unclosedProfit)}`
+              : ""}
           </p>
           <p className={cn("text-sm", statements.balanced ? "text-emerald-700" : "text-amber-700")}>
             {statements.balanced ? t("taxBooksStatementBalanced") : t("taxBooksStatementUnbalanced")}
           </p>
           <EntryTable
             empty={t("taxBooksNoRows")}
-            rows={statements.balanceLines.map((ln) => [ln.accountCode, ln.accountName || "", t(`taxBooksSection_${ln.section}`), money(ln.amount)])}
+            rows={statements.balanceLines.map((ln) => [
+              ln.accountCode,
+              ln.accountName || "",
+              t(`taxBooksSection_${ln.section}`),
+              money(ln.amount),
+            ])}
             headers={[t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksColKind"), t("taxBooksAmount")]}
           />
         </div>
@@ -319,49 +574,140 @@ export function TaxFilingBooksTab(props: {
 
       {view === "closing" ? (
         <div className="space-y-3">
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-sm font-medium">{t("taxBooksChecklistTitle")}</p>
+            <ol className="space-y-1.5 text-sm">
+              {checklist.map((step, idx) => (
+                <li key={step.id} className="flex flex-wrap items-center gap-2">
+                  <span className="tabular-nums text-muted-foreground w-5">{idx + 1}.</span>
+                  <span
+                    className={cn(
+                      "inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-xs font-medium",
+                      step.done
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {step.done ? "✓" : "·"}
+                  </span>
+                  <span>{stepLabel(step.id)}</span>
+                  {step.id === "recognize" && bridge?.report?.recognition ? (
+                    <span className="text-xs text-muted-foreground">
+                      {bridge.report.recognition.recognized ? t("taxBooksRecognized") : t("taxBooksNotRecognized")}
+                    </span>
+                  ) : null}
+                  {step.id === "close" && closed ? (
+                    <span className="text-xs text-emerald-700">{t("taxBooksPeriodClosed")}</span>
+                  ) : null}
+                  {step.id === "bridge" && step.detail ? (
+                    <span className="text-xs text-amber-700">
+                      {t("taxBooksBridgeHoles")} {step.detail}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          </div>
+
           <p className="text-sm">
-            {t("taxBooksClosingNet")} {money(bridge?.closingNetIncome)} · {t("taxBooksClosingLines")} {bridge?.closingLineCount ?? 0}
+            {t("taxBooksClosingNet")} {money(bridge?.closingNetIncome)} · {t("taxBooksClosingLines")}{" "}
+            {bridge?.closingLineCount ?? 0}
           </p>
           <p className="text-sm text-muted-foreground">{t("taxBooksCitUsesLockedProfit")}</p>
+
           <div className="space-y-2 rounded-md border border-dashed p-3">
             <p className="text-sm font-medium">{t("taxBooksPostOpening")}</p>
             <p className="text-xs text-muted-foreground">{t("taxBooksOpeningInventoryHint")}</p>
             <div className="flex flex-wrap gap-2 items-end">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">{t("taxBooksOpeningDate")}</div>
+                <Input className="h-9 w-[150px]" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} />
+              </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">{t("taxBooksOpeningInventory")}</div>
                 <Input
                   className="h-9 w-[180px]"
                   inputMode="decimal"
                   value={openingInventory}
-                  onChange={(e) => setOpeningInventory(e.target.value)}
+                  onChange={(e) => {
+                    setOpeningInventory(e.target.value)
+                    setInventoryConfirmed(false)
+                  }}
                   placeholder="1460"
                 />
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={posting || closed || entityMissing || !schemaReady || !singleMonth}
-                onClick={() => void post("opening")}
-              >
-                {t("taxBooksPostOpening")}
+              <Button type="button" size="sm" variant="outline" disabled={posting || !singleMonth} onClick={() => void post("inventoryPreview")}>
+                {t("taxBooksInventoryPreview")}
               </Button>
             </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={inventoryConfirmed}
+                  onChange={(e) => setInventoryConfirmed(e.target.checked)}
+                />
+                {t("taxBooksInventoryConfirm")}
+              </label>
+              {inventoryPreview != null ? (
+                <span className="text-xs text-muted-foreground">
+                  {t("taxBooksInventoryPreviewDone")} {money(inventoryPreview)}
+                  {cogsPreview != null ? ` · COGS ${money(cogsPreview)}` : ""}
+                </span>
+              ) : null}
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">{t("taxBooksTrialUploadHint")}</p>
+              <Input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="h-9 max-w-md"
+                onChange={(e) => void onTrialFile(e.target.files?.[0] || null)}
+              />
+              {trialUploadName ? (
+                <p className="text-xs text-muted-foreground">
+                  {trialUploadName}
+                  {trialUploadRows ? ` · ${trialUploadRows.length}` : ""}
+                </p>
+              ) : null}
+            </div>
+            <Button type="button" size="sm" variant="secondary" disabled={!canPost} onClick={() => void post("opening")}>
+              {t("taxBooksPostOpening")}
+            </Button>
           </div>
+
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" disabled={posting || closed || entityMissing || !schemaReady || !singleMonth} onClick={() => void post("vat")}>
+            <Button type="button" size="sm" disabled={!canPost} onClick={() => void post("vat")}>
               {t("taxBooksPostVat")}
             </Button>
-            <Button type="button" size="sm" disabled={posting || closed || entityMissing || !schemaReady || !singleMonth} onClick={() => void post("payroll")}>
+            <Button type="button" size="sm" disabled={!canPost} onClick={() => void post("sales")}>
+              {t("taxBooksPostSales")}
+            </Button>
+            <Button type="button" size="sm" disabled={!canPost} onClick={() => void post("purchase")}>
+              {t("taxBooksPostPurchase")}
+            </Button>
+            <Button type="button" size="sm" disabled={!canPost} onClick={() => void post("payroll")}>
               {t("taxBooksPostPayroll")}
             </Button>
-            <Button type="button" size="sm" variant="secondary" disabled={posting || closed || entityMissing || !schemaReady || !singleMonth} onClick={() => void post("inventory")}>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={!canPost || (!inventoryConfirmed && parseInventoryAmount() == null)}
+              onClick={() => void post("inventory")}
+            >
               {t("taxBooksPostInventory")}
             </Button>
-            <Button type="button" size="sm" disabled={posting || closed || entityMissing || !schemaReady || !singleMonth} onClick={() => void post("closing")}>
+            <Button type="button" size="sm" disabled={!canPost} onClick={() => void post("closing")}>
               {t("taxBooksPostClosing")}
             </Button>
-            <Button type="button" size="sm" variant="outline" disabled={posting || !closed || entityMissing || !singleMonth} onClick={() => void post("unlock")}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={posting || !closed || entityMissing || !singleMonth}
+              onClick={() => void post("unlock")}
+            >
               {t("taxBooksUnlock")}
             </Button>
           </div>
@@ -383,7 +729,9 @@ export function TaxFilingBooksTab(props: {
                   value={ln.side}
                   onChange={(e) =>
                     setAdj((rows) =>
-                      rows.map((row, i) => (i === idx ? { ...row, side: e.target.value === "credit" ? "credit" : "debit" } : row))
+                      rows.map((row, i) =>
+                        i === idx ? { ...row, side: e.target.value === "credit" ? "credit" : "debit" } : row
+                      )
                     )
                   }
                 >
@@ -410,7 +758,7 @@ export function TaxFilingBooksTab(props: {
               >
                 {t("taxBooksAddLine")}
               </Button>
-              <Button type="button" size="sm" disabled={posting || closed || entityMissing || !schemaReady || !singleMonth} onClick={() => void post("adjustment")}>
+              <Button type="button" size="sm" disabled={!canPost} onClick={() => void post("adjustment")}>
                 {t("taxBooksSaveAdjustment")}
               </Button>
             </div>
@@ -443,6 +791,53 @@ function EntryTable({ headers, rows, empty }: { headers: string[]; rows: string[
                   {cell}
                 </td>
               ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ClickableTrialTable({
+  headers,
+  rows,
+  empty,
+  onAccountClick,
+}: {
+  headers: string[]
+  rows: { accountCode: string; accountName: string | null; debit: number; credit: number }[]
+  empty: string
+  onAccountClick: (code: string) => void
+}) {
+  if (!rows.length) return <p className="text-sm text-muted-foreground">{empty}</p>
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left text-muted-foreground">
+            {headers.map((h) => (
+              <th key={h} className="py-2 pr-3">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.accountCode} className="border-b">
+              <td className="py-2 pr-3">
+                <button
+                  type="button"
+                  className="text-left text-primary underline-offset-2 hover:underline"
+                  onClick={() => onAccountClick(r.accountCode)}
+                >
+                  {r.accountCode}
+                </button>
+              </td>
+              <td className="py-2 pr-3">{r.accountName || ""}</td>
+              <td className="py-2 pr-3 tabular-nums">{money(r.debit)}</td>
+              <td className="py-2 pr-3 tabular-nums">{money(r.credit)}</td>
             </tr>
           ))}
         </tbody>

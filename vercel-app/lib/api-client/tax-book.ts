@@ -1,6 +1,7 @@
 import { apiFetchWithOffline } from '../api/fetch-offline'
 import type { TaxBridgeLine, TaxBridgeReport } from '@/lib/tax-management-bridge'
 import type { TaxBookEntryRow, TaxBookLedgerLine } from '@/lib/tax-book-server'
+import type { ExternalTrialBalanceRow } from '@/lib/tax-book-opening'
 import type { TrialBalanceRow } from '@/lib/trial-balance-report'
 
 export type TaxManagementBridgeResponse = {
@@ -35,6 +36,7 @@ export type TaxBookEntriesResponse = {
   totalDebit?: number
   totalCredit?: number
   diff?: number
+  accountCode?: string | null
 }
 
 export async function getTaxBookEntries(params: {
@@ -43,6 +45,7 @@ export async function getTaxBookEntries(params: {
   toMonth?: string
   scopeFilter: string
   view: 'vouchers' | 'ledger' | 'trial'
+  accountCode?: string
 }) {
   const fromMonth = params.fromMonth || params.yearMonth || ''
   const toMonth = params.toMonth || fromMonth
@@ -53,18 +56,33 @@ export async function getTaxBookEntries(params: {
     scopeFilter: params.scopeFilter,
     view: params.view,
   })
+  if (params.accountCode) q.set('accountCode', params.accountCode)
   const res = await apiFetchWithOffline(`/api/getTaxBookEntries?${q}`)
   return res.json() as Promise<TaxBookEntriesResponse>
 }
 
+export type TaxBookPostAction =
+  | 'payroll'
+  | 'inventory'
+  | 'inventoryPreview'
+  | 'vat'
+  | 'sales'
+  | 'purchase'
+  | 'adjustment'
+  | 'closing'
+  | 'unlock'
+  | 'opening'
+
 export async function postTaxBookEntry(body: {
-  action: 'payroll' | 'inventory' | 'vat' | 'adjustment' | 'closing' | 'unlock' | 'opening'
+  action: TaxBookPostAction
   yearMonth: string
   scopeFilter: string
   memo?: string
   unlockReason?: string
   inventoryAmount?: number
+  inventoryConfirmed?: boolean
   accountingDate?: string
+  trialBalanceRows?: ExternalTrialBalanceRow[]
   lines?: { accountCode: string; accountName?: string; side: 'debit' | 'credit'; amount: number }[]
 }) {
   const res = await apiFetchWithOffline('/api/postTaxBookEntry', {
@@ -82,6 +100,10 @@ export async function postTaxBookEntry(body: {
     flowInventory?: number
     inventoryDelta?: number
     lineCount?: number
+    asOfDate?: string
+    locationCount?: number
+    cogsPreview?: number
+    cogs?: number
   }>
 }
 

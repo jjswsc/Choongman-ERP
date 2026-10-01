@@ -31,6 +31,8 @@ describe('tax book rules', () => {
   it('maps voucher kinds and document numbers', () => {
     expect(voucherKindForSourceType('tax_payroll')).toBe('general')
     expect(voucherKindForSourceType('tax_income_expense_closing')).toBe('closing')
+    expect(voucherKindForSourceType('tax_sales_summary')).toBe('sales')
+    expect(voucherKindForSourceType('tax_purchase_summary')).toBe('purchase')
     expect(voucherKindForSourceType('pos_order')).toBe('sales')
     expect(formatTaxVoucherNo('sales', '2026-09', 2)).toBe('SV2026090002')
   })

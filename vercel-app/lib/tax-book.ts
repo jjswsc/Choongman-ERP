@@ -34,9 +34,10 @@ export function isTaxBookSourceType(sourceType: string | null | undefined): bool
 export function voucherKindForSourceType(sourceType: string | null | undefined): TaxVoucherKind {
   const s = String(sourceType || '').trim()
   if (s === 'tax_income_expense_closing' || s === 'closing_income_expense') return 'closing'
+  if (s === 'tax_sales_summary') return 'sales'
+  if (s === 'tax_purchase_summary' || s === 'tax_inventory_cogs') return 'purchase'
   if (
     s === 'tax_payroll' ||
-    s === 'tax_inventory_cogs' ||
     s === 'tax_vat_summary' ||
     s === 'tax_adjustment' ||
     s === 'tax_opening' ||
@@ -299,6 +300,52 @@ export function taxVatSummaryLines(input: {
     })
   }
   return lines
+}
+
+/** 신고 매출 공급가를 세무 장부에 한 장으로 올린다. 포스 건별 복제 금지. */
+export function taxSalesSummaryLines(input: {
+  netAmount: number
+  names?: { receivable?: string; revenue?: string }
+}): TaxJournalLineDraft[] {
+  const amount = roundTaxAmount(Math.max(0, input.netAmount))
+  if (amount <= 0) return []
+  return [
+    {
+      accountCode: '1130',
+      accountName: input.names?.receivable || '매출채권',
+      side: 'debit',
+      amount,
+    },
+    {
+      accountCode: TAX_ACCOUNTS.revenue,
+      accountName: input.names?.revenue || '매출',
+      side: 'credit',
+      amount,
+    },
+  ]
+}
+
+/** 신고 매입 공급가(매입세금계산서)를 세무 장부에 한 장으로 올린다. 원가(5110)가 아니라 재고로 올려 COGS 전기와 겹치지 않는다. */
+export function taxPurchaseSummaryLines(input: {
+  netAmount: number
+  names?: { inventory?: string; payable?: string }
+}): TaxJournalLineDraft[] {
+  const amount = roundTaxAmount(Math.max(0, input.netAmount))
+  if (amount <= 0) return []
+  return [
+    {
+      accountCode: TAX_ACCOUNTS.inventory,
+      accountName: input.names?.inventory || '재고자산',
+      side: 'debit',
+      amount,
+    },
+    {
+      accountCode: TAX_ACCOUNTS.payables,
+      accountName: input.names?.payable || '매입채무',
+      side: 'credit',
+      amount,
+    },
+  ]
 }
 
 export type TaxBookStatementLine = {

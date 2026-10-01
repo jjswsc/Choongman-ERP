@@ -7,6 +7,8 @@ import {
   taxInventoryCogsLines,
   taxJournalBalanced,
   taxPayrollJournalLines,
+  taxPurchaseSummaryLines,
+  taxSalesSummaryLines,
   taxVatSummaryLines,
   type TaxJournalLineDraft,
 } from '@/lib/tax-book'
@@ -18,6 +20,8 @@ const TAX_INVENTORY = 'tax_inventory_cogs'
 const TAX_ADJUSTMENT = 'tax_adjustment'
 const TAX_OPENING = 'tax_opening'
 const TAX_VAT = 'tax_vat_summary'
+const TAX_SALES = 'tax_sales_summary'
+const TAX_PURCHASE = 'tax_purchase_summary'
 const TAX_CLOSING = 'tax_income_expense_closing'
 
 async function postTaxLines(input: {
@@ -138,6 +142,58 @@ export async function postTaxVatSummaryJournal(input: {
     sourceType: TAX_VAT,
     sourceId: taxBookMonthSourceId(input.yearMonth),
     memo: `세무 장부 부가세 ${input.yearMonth}`,
+    postedBy: input.postedBy,
+    lines,
+    replace: true,
+  })
+}
+
+export async function postTaxSalesSummaryJournal(input: {
+  yearMonth: string
+  taxEntityCode: string
+  netAmount: number
+  postedBy: string | null
+}): Promise<number | null> {
+  const lines = taxSalesSummaryLines({
+    netAmount: input.netAmount,
+    names: {
+      receivable: accountLine('1130').accountName,
+      revenue: accountLine(TAX_ACCOUNTS.revenue).accountName,
+    },
+  })
+  if (!lines.length) return null
+  return postTaxLines({
+    yearMonth: input.yearMonth,
+    taxEntityCode: input.taxEntityCode,
+    sourceType: TAX_SALES,
+    sourceId: taxBookMonthSourceId(input.yearMonth),
+    memo: `세무 장부 매출요약 ${input.yearMonth}`,
+    postedBy: input.postedBy,
+    lines,
+    replace: true,
+  })
+}
+
+export async function postTaxPurchaseSummaryJournal(input: {
+  yearMonth: string
+  taxEntityCode: string
+  netAmount: number
+  postedBy: string | null
+}): Promise<number | null> {
+  const lines = taxPurchaseSummaryLines({
+    netAmount: input.netAmount,
+    names: {
+      inventory: accountLine(TAX_ACCOUNTS.inventory).accountName,
+      payable: accountLine(TAX_ACCOUNTS.payables).accountName,
+    },
+  })
+  if (!lines.length) return null
+  return postTaxLines({
+    yearMonth: input.yearMonth,
+    taxEntityCode: input.taxEntityCode,
+    sourceType: TAX_PURCHASE,
+    sourceId: taxBookMonthSourceId(input.yearMonth),
+    memo: `세무 장부 매입요약 ${input.yearMonth}`,
     postedBy: input.postedBy,
     lines,
     replace: true,
