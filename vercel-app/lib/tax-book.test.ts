@@ -16,6 +16,11 @@ import {
 } from './tax-book'
 import { buildTaxManagementBridge } from './tax-management-bridge'
 import { getThaiTaxFilingPeriodRange } from './thai-tax-period'
+import {
+  buildTaxOpeningBalanceLines,
+  SJ_GLOBAL_FLOW_INVENTORY_2026_06_30,
+  SJ_GLOBAL_FLOW_TB_2026_06_30,
+} from './tax-book-opening'
 import type { TrialBalanceRow } from './trial-balance-report'
 
 function row(code: string, debit: number, credit: number): TrialBalanceRow {
@@ -160,6 +165,25 @@ describe('tax book rules', () => {
 
   it('does not lock the store accounting period', () => {
     expect(TAX_CLOSE_LOCKS_STORE_PERIOD).toBe(false)
+  })
+
+  it('builds a balanced S&J opening voucher with ERP inventory override', () => {
+    const same = buildTaxOpeningBalanceLines({
+      rows: SJ_GLOBAL_FLOW_TB_2026_06_30,
+      inventoryAmount: SJ_GLOBAL_FLOW_INVENTORY_2026_06_30,
+    })
+    expect(taxJournalBalanced(same.lines)).toBe(true)
+    expect(same.flowInventory).toBe(SJ_GLOBAL_FLOW_INVENTORY_2026_06_30)
+    expect(same.inventoryDelta).toBe(0)
+    expect(same.lines.find((l) => l.accountCode === '1460')?.amount).toBe(SJ_GLOBAL_FLOW_INVENTORY_2026_06_30)
+
+    const erp = buildTaxOpeningBalanceLines({
+      rows: SJ_GLOBAL_FLOW_TB_2026_06_30,
+      inventoryAmount: 5_000_000,
+    })
+    expect(taxJournalBalanced(erp.lines)).toBe(true)
+    expect(erp.inventoryDelta).toBeCloseTo(5_000_000 - SJ_GLOBAL_FLOW_INVENTORY_2026_06_30, 2)
+    expect(erp.lines.find((l) => l.accountCode === '1460')?.amount).toBe(5_000_000)
   })
 })
 

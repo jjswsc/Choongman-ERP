@@ -54,6 +54,7 @@ export function TaxFilingBooksTab(props: {
     { accountCode: "", side: "debit", amount: "" },
     { accountCode: "", side: "credit", amount: "" },
   ])
+  const [openingInventory, setOpeningInventory] = React.useState("")
 
   React.useEffect(() => {
     if (props.searchTick < 1) return
@@ -122,15 +123,22 @@ export function TaxFilingBooksTab(props: {
 
   const statements = React.useMemo(() => buildTaxBookStatements(entries?.trial || []), [entries?.trial])
 
-  const post = async (action: "payroll" | "inventory" | "vat" | "adjustment" | "closing" | "unlock") => {
+  const post = async (action: "payroll" | "inventory" | "vat" | "adjustment" | "closing" | "unlock" | "opening") => {
     setPosting(true)
     setMessage(null)
     try {
+      const invRaw = openingInventory.trim()
+      const inventoryAmount = invRaw === "" ? undefined : Number(invRaw)
       const res = await postTaxBookEntry({
         action,
         yearMonth: query?.from || props.fromMonth,
         scopeFilter: query?.scope || props.filingStoreFilter || "All",
         memo,
+        accountingDate: action === "opening" ? "2026-07-01" : undefined,
+        inventoryAmount:
+          action === "opening" && inventoryAmount != null && Number.isFinite(inventoryAmount) && inventoryAmount >= 0
+            ? inventoryAmount
+            : undefined,
         lines:
           action === "adjustment"
             ? adj
@@ -145,7 +153,11 @@ export function TaxFilingBooksTab(props: {
       if (!res.success) {
         setMessage(res.error || t("accCompUnknownError"))
       } else {
-        setMessage(t("accCompPp30AdjSaved"))
+        setMessage(
+          action === "opening"
+            ? `${t("taxBooksOpeningDone")} (${t("taxBooksAccount")} ${res.lineCount ?? "—"} · 1460 ${money(res.inventoryAmount)})`
+            : t("accCompPp30AdjSaved")
+        )
         if (query) await load(query)
       }
     } catch (e) {
@@ -311,6 +323,31 @@ export function TaxFilingBooksTab(props: {
             {t("taxBooksClosingNet")} {money(bridge?.closingNetIncome)} · {t("taxBooksClosingLines")} {bridge?.closingLineCount ?? 0}
           </p>
           <p className="text-sm text-muted-foreground">{t("taxBooksCitUsesLockedProfit")}</p>
+          <div className="space-y-2 rounded-md border border-dashed p-3">
+            <p className="text-sm font-medium">{t("taxBooksPostOpening")}</p>
+            <p className="text-xs text-muted-foreground">{t("taxBooksOpeningInventoryHint")}</p>
+            <div className="flex flex-wrap gap-2 items-end">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">{t("taxBooksOpeningInventory")}</div>
+                <Input
+                  className="h-9 w-[180px]"
+                  inputMode="decimal"
+                  value={openingInventory}
+                  onChange={(e) => setOpeningInventory(e.target.value)}
+                  placeholder="1460"
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={posting || closed || entityMissing || !schemaReady || !singleMonth}
+                onClick={() => void post("opening")}
+              >
+                {t("taxBooksPostOpening")}
+              </Button>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" disabled={posting || closed || entityMissing || !schemaReady || !singleMonth} onClick={() => void post("vat")}>
               {t("taxBooksPostVat")}

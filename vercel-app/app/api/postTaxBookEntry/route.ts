@@ -5,9 +5,17 @@ import {
   postTaxAdjustmentJournal,
   postTaxIncomeExpenseClosing,
   postTaxInventoryCogsJournal,
+  postTaxOpeningJournal,
   postTaxPayrollJournal,
   postTaxVatSummaryJournal,
 } from '@/lib/tax-book-posting'
+import {
+  buildTaxOpeningBalanceLines,
+  SJ_GLOBAL_FLOW_TB_2026_06_30,
+  SJ_GLOBAL_OPENING_DATE,
+  SJ_GLOBAL_TAX_ENTITY,
+} from '@/lib/tax-book-opening'
+import { loadHqWarehouseInventoryValue } from '@/lib/tax-book-opening-inventory-server'
 import { setTaxAccountingPeriodClosed, TAX_BOOK_SCHEMA_MISSING, TAX_PERIOD_CLOSED } from '@/lib/tax-book-period-server'
 import { loadTaxBookJournalHeads, loadTaxBookLines, summarizeTaxBookTrial } from '@/lib/tax-book-server'
 import { loadTaxManagementBridge, loadTaxPayrollTotals } from '@/lib/tax-management-bridge-server'
@@ -38,6 +46,8 @@ export async function POST(request: NextRequest) {
     scopeFilter?: string
     memo?: string
     unlockReason?: string
+    inventoryAmount?: number
+    accountingDate?: string
     lines?: { accountCode?: string; accountName?: string; side?: string; amount?: number }[]
   }
   const action = String(body.action || '').trim()
@@ -132,6 +142,49 @@ export async function POST(request: NextRequest) {
         lines,
       })
       return NextResponse.json({ success: true, entryId: id, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD }, { headers })
+    }
+
+    if (action === 'opening') {
+      if (taxEntityCode !== SJ_GLOBAL_TAX_ENTITY) throw new Error('NEED_TAX_ENTITY')
+      const openingDate = String(body.accountingDate || SJ_GLOBAL_OPENING_DATE).slice(0, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(openingDate)) throw new Error('INVALID_YEAR_MONTH')
+      let inventoryAmount = Number(body.inventoryAmount)
+      let inventorySource: 'body' | 'erp' = 'body'
+      if (!Number.isFinite(inventoryAmount) || inventoryAmount < 0) {
+        const inv = await loadHqWarehouseInventoryValue({
+          asOfDate: '2026-06-30',
+          tenantId: auth.tenantId,
+        })
+        inventoryAmount = inv.amount
+        inventorySource = 'erp'
+      }
+      const built = buildTaxOpeningBalanceLines({
+        rows: SJ_GLOBAL_FLOW_TB_2026_06_30,
+        inventoryAmount,
+      })
+      const id = await postTaxOpeningJournal({
+        yearMonth: openingDate.slice(0, 7),
+        taxEntityCode,
+        accountingDate: openingDate,
+        memo:
+          String(body.memo || '').trim() ||
+          `FlowAccount→세무 기초 ${openingDate} (재고 ERP ${inventoryAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })})`,
+        postedBy: actor,
+        lines: built.lines,
+      })
+      return NextResponse.json(
+        {
+          success: true,
+          entryId: id,
+          locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD,
+          inventoryAmount,
+          inventorySource,
+          flowInventory: built.flowInventory,
+          inventoryDelta: built.inventoryDelta,
+          lineCount: built.lines.length,
+        },
+        { headers }
+      )
     }
 
     if (action === 'closing') {

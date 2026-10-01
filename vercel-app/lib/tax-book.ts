@@ -39,6 +39,7 @@ export function voucherKindForSourceType(sourceType: string | null | undefined):
     s === 'tax_inventory_cogs' ||
     s === 'tax_vat_summary' ||
     s === 'tax_adjustment' ||
+    s === 'tax_opening' ||
     s === 'depreciation' ||
     s === 'expense_accrual'
   ) {

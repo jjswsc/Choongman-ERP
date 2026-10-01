@@ -16,6 +16,7 @@ import { deleteTaxBookSource, taxBookClosingLines, taxBookMonthSourceId } from '
 const TAX_PAYROLL = 'tax_payroll'
 const TAX_INVENTORY = 'tax_inventory_cogs'
 const TAX_ADJUSTMENT = 'tax_adjustment'
+const TAX_OPENING = 'tax_opening'
 const TAX_VAT = 'tax_vat_summary'
 const TAX_CLOSING = 'tax_income_expense_closing'
 
@@ -28,6 +29,7 @@ async function postTaxLines(input: {
   postedBy: string | null
   lines: TaxJournalLineDraft[]
   replace: boolean
+  accountingDate?: string
 }): Promise<number | null> {
   const entity = String(input.taxEntityCode || '').trim()
   const ym = String(input.yearMonth || '').slice(0, 7)
@@ -41,8 +43,9 @@ async function postTaxLines(input: {
     })
   }
   const { endStr } = getBangkokMonthRange(ym)
+  const accountingDate = String(input.accountingDate || endStr).slice(0, 10)
   return postJournalEntry({
-    accountingDate: endStr,
+    accountingDate,
     sourceType: input.sourceType,
     sourceId: input.sourceId,
     storeName: entity,
@@ -157,6 +160,31 @@ export async function postTaxAdjustmentJournal(input: {
     postedBy: input.postedBy,
     lines: input.lines,
     replace: false,
+  })
+}
+
+/** 법인 세무 장부 기초(이관) 전표. 같은 법인·기준일은 덮어쓴다. */
+export async function postTaxOpeningJournal(input: {
+  yearMonth: string
+  taxEntityCode: string
+  accountingDate: string
+  memo: string
+  postedBy: string | null
+  lines: TaxJournalLineDraft[]
+}): Promise<number | null> {
+  const ymd = String(input.accountingDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) throw new Error('INVALID_YEAR_MONTH')
+  const sourceId = Number(ymd.replace(/-/g, '')) || taxBookMonthSourceId(input.yearMonth)
+  return postTaxLines({
+    yearMonth: input.yearMonth,
+    taxEntityCode: input.taxEntityCode,
+    sourceType: TAX_OPENING,
+    sourceId,
+    memo: input.memo || `세무 장부 기초 ${ymd}`,
+    postedBy: input.postedBy,
+    lines: input.lines,
+    replace: true,
+    accountingDate: ymd,
   })
 }
 

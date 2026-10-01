@@ -58,11 +58,13 @@ export async function getTaxBookEntries(params: {
 }
 
 export async function postTaxBookEntry(body: {
-  action: 'payroll' | 'inventory' | 'vat' | 'adjustment' | 'closing' | 'unlock'
+  action: 'payroll' | 'inventory' | 'vat' | 'adjustment' | 'closing' | 'unlock' | 'opening'
   yearMonth: string
   scopeFilter: string
   memo?: string
   unlockReason?: string
+  inventoryAmount?: number
+  accountingDate?: string
   lines?: { accountCode: string; accountName?: string; side: 'debit' | 'credit'; amount: number }[]
 }) {
   const res = await apiFetchWithOffline('/api/postTaxBookEntry', {
@@ -70,7 +72,17 @@ export async function postTaxBookEntry(body: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return res.json() as Promise<{ success?: boolean; error?: string; entryId?: number | null; locked?: boolean }>
+  return res.json() as Promise<{
+    success?: boolean
+    error?: string
+    entryId?: number | null
+    locked?: boolean
+    inventoryAmount?: number
+    inventorySource?: string
+    flowInventory?: number
+    inventoryDelta?: number
+    lineCount?: number
+  }>
 }
 
 export type { TaxBridgeLine }
