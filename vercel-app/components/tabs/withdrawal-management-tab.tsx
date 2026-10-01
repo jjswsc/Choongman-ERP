@@ -148,7 +148,8 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     return v
   }, [t])
   const { auth } = useAuth()
-  const { posStores: stores } = useStoreList()
+  /** 법인 공용(bank_only) 포함 — Asia Commerce 등 통장·지출 매장 */
+  const { bankAccountStores: stores } = useStoreList()
 
   const [transferKind, setTransferKind] = React.useState<TransferKind>("bank_to_petty")
   const [transferToCardAccountId, setTransferToCardAccountId] = React.useState<string>("")

@@ -102,7 +102,8 @@ export function ExpenseRegisterSearchTab() {
   const searchParams = useSearchParams()
   const allowExpenseUrlSync = useErpAllowUrlSync("/admin/expense-management")
   const pageActiveRef = useErpPageActiveRef()
-  const { posStores: stores } = useStoreList()
+  /** 법인 공용(bank_only) 포함 — Asia Commerce 등 */
+  const { bankAccountStores: stores } = useStoreList()
   const asDisplayName = (a: AccountSubjectItem) => (lang === "ko" ? a.name : (a.nameEn || a.name))
 
   const defaultMonthRange = React.useMemo(() => getBangkokMonthRange(), [])

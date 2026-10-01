@@ -137,7 +137,8 @@ export function ExpenseManagementTab() {
   }, [t])
   const { auth } = useAuth()
   useSyncOfficePayrollAccess()
-  const { posStores: stores } = useStoreList()
+  /** 법인 공용(bank_only) 포함 — Asia Commerce 등 */
+  const { bankAccountStores: stores } = useStoreList()
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()
