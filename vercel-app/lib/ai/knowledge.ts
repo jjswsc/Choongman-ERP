@@ -112,12 +112,12 @@ async function retrieveVectorChunks(
   scoped: AiScopedAuth,
   limit: number
 ): Promise<AiKnowledgeChunk[]> {
-  const embedding = await embedQuery(`${query}\n`.slice(0, 4000))
-  if (!embedding?.length) return []
-
-  const filterStore = isOfficeRole(scoped.role) ? "All" : scoped.store || "All"
-
   try {
+    const embedding = await embedQuery(`${query}\n`.slice(0, 4000))
+    if (!embedding?.length) return []
+
+    const filterStore = isOfficeRole(scoped.role) ? "All" : scoped.store || "All"
+
     const rows = (await supabaseRpc<
       {
         id?: number
@@ -151,6 +151,7 @@ async function retrieveVectorChunks(
       .filter((c) => canReadChunk(c, scoped))
       .slice(0, limit)
   } catch {
+    // embedding/RPC 실패 시 키워드 검색만으로 진행 (ask 전체가 빈 500이 되지 않게)
     return []
   }
 }
