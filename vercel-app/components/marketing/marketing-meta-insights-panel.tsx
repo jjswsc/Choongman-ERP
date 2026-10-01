@@ -22,9 +22,13 @@ function diagnoseLabel(code: string, t: (k: string) => string): string {
   if (code === "page_insights_need_page_token") return t("marketingMetaDiagNeedPageToken")
   if (code === "no_ad_account_id") return t("marketingMetaDiagNoAdAccount")
   if (code === "page_insights_all_zero" || code === "ads_insights_all_zero") return t("marketingMetaDiagZero")
+  if (code === "ads_insights_empty_campaigns_listed") return t("marketingMetaDiagNoSpendCampaigns")
+  if (code === "ads_campaigns_empty") return t("marketingMetaDiagNoCampaigns")
+  if (code.startsWith("ads_campaigns_listed:")) return t("marketingMetaDiagCampaignsListed")
   if (code === "instagram_not_linked") return t("marketingMetaDiagIgNotLinked")
   if (code === "meta_not_mapped") return t("marketingMetaDiagNotMapped")
   if (code.startsWith("ads_insights:") || code.startsWith("page_insights:") || code.startsWith("instagram_link:")) return code
+  if (code.startsWith("ads_insights_fallback:") || code.startsWith("ads_campaigns:")) return code
   return code
 }
 
