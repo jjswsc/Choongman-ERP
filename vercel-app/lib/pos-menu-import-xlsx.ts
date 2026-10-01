@@ -150,7 +150,7 @@ export async function buildPosMenuImportTemplateBlob(): Promise<Blob> {
     1,
     1,
     0,
-    'size|part',
+    '',
     '',
     '',
     0,

@@ -77,6 +77,15 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // POS 메뉴 노출 매장
   "신규 메뉴는 노출 매장을 1개 이상 선택해야 합니다.": "posMenuVisibleStoresRequiredNewMenu",
   "노출 매장을 1개 이상 선택해 주세요.": "posMenuVisibleStoresPickAtLeastOne",
+  "노출 매장(Store)을 1개 이상 선택해 저장해 주세요. 매장을 지정하지 않으면 POS에 메뉴가 표시되지 않습니다.":
+    "posMenuVisibleStoresRequiredNewMenu",
+  "노출 매장을 모두 해제할 수 없습니다. POS에 메뉴가 사라집니다. 최소 1개 매장을 남겨 주세요.":
+    "posMenuVisibleStoresPickAtLeastOne",
+  "코드와 메뉴명이 필요합니다.": "posMenuImportCodeNameRequired",
+  "menus 배열이 필요합니다.": "posMenuImportMenusArrayRequired",
+  "업로드할 행이 없습니다.": "posMenuImportNoRows",
+  "이미 존재하는 메뉴 코드입니다.": "posMenuCodeDuplicate",
+  "업로드 실패": "msg_upload_fail",
   pos_business_open_required: "posBusinessOpenRequiredBody",
   pos_drawer_pin_invalid_format: "posDrawerPinInvalidFormat",
   pos_drawer_pin_wrong: "posDrawerPinWrong",
@@ -403,6 +412,22 @@ export function translateApiMessage(
     return t("msg_upload_fail") + trimmed.slice("업로드 준비 실패:".length)
   if (trimmed.startsWith("업로드 실패:"))
     return t("msg_upload_fail") + trimmed.slice("업로드 실패:".length)
+  const importMaxRowsMatch = trimmed.match(/^한 번에 최대 (\d+)행까지 업로드할 수 있습니다\.$/)
+  if (importMaxRowsMatch) {
+    return (t("posMenuImportMaxRows") || "You can upload up to {max} rows at a time.").replace(
+      "{max}",
+      importMaxRowsMatch[1]!
+    )
+  }
+  if (/^신규 \d+건, 갱신 \d+건, 건너뜀\/실패 \d+건$/.test(trimmed)) {
+    const m = trimmed.match(/^신규 (\d+)건, 갱신 (\d+)건, 건너뜀\/실패 (\d+)건$/)
+    if (m) {
+      return (t("posMenuImportSummary") || "Inserted {inserted}, updated {updated}, skipped/failed {skipped}")
+        .replace("{inserted}", m[1]!)
+        .replace("{updated}", m[2]!)
+        .replace("{skipped}", m[3]!)
+    }
+  }
   if (trimmed.startsWith("action은 approve 또는 reject 이어야 합니다."))
     return t("approveRejectActionRequired")
   if (trimmed.startsWith("승인 권한이 없습니다."))

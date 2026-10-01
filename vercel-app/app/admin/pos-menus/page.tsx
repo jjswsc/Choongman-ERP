@@ -673,29 +673,72 @@ export default function PosMenusPage() {
       if (!file) return
       setMenuImportBusy(true)
       try {
+        const storeCodesForImport =
+          selectedStoreCodes.length > 0
+            ? selectedStoreCodes
+            : defaultScopeStoreCodes
+        if (storeCodesForImport.length === 0) {
+          await appAlert(
+            t("posMenuImportNeedStores") ||
+              t("posMenuVisibleStoresRequiredNewMenu") ||
+              "신규 메뉴는 노출 매장을 1개 이상 선택해야 합니다."
+          )
+          return
+        }
         const { parsePosMenuImportWorkbook } = await import("@/lib/pos-menu-import-xlsx")
         const menus = await parsePosMenuImportWorkbook(file)
         if (menus.length === 0) {
           await appAlert(
-            "업로드할 유효한 행이 없습니다. 첫 행은 양식과 동일한 영문 헤더(code, name, …)인지 확인해 주세요."
+            t("posMenuImportNoValidRows") ||
+              "업로드할 유효한 행이 없습니다. 첫 행은 양식과 동일한 영문 헤더(code, name, …)인지 확인해 주세요."
           )
           return
         }
-        const ok = await appConfirm(
-          `총 ${menus.length}행을 반영합니다. 동일 메뉴 코드는 덮어씁니다. 프로모션 연동 메뉴는 건너뜁니다. 계속할까요?`
+        const confirmMsg = (
+          t("posMenuImportConfirm") ||
+          "총 {count}행을 반영합니다. 노출 매장: {stores}. 동일 메뉴 코드는 덮어씁니다. 프로모션 연동 메뉴는 건너뜁니다. 계속할까요?"
         )
+          .replace("{count}", String(menus.length))
+          .replace("{stores}", storeCodesForImport.join(", "))
+        const ok = await appConfirm(confirmMsg)
         if (!ok) return
-        const r = await importPosMenus(menus)
+        const r = await importPosMenus(menus, { storeCodes: storeCodesForImport })
         await refreshPosMenusCatalogCache()
         await loadMenusAndCategories()
+        const summary = (
+          t("posMenuImportSummary") ||
+          "신규 {inserted}건, 갱신 {updated}건, 건너뜀·실패 {skipped}건"
+        )
+          .replace("{inserted}", String(r.inserted ?? 0))
+          .replace("{updated}", String(r.updated ?? 0))
+          .replace("{skipped}", String(r.skipped ?? 0))
+        const rowErrors = (r.errorDetails?.length ? r.errorDetails : null)
+          ? r.errorDetails!.slice(0, 20).map((ed) => {
+              const detail = translateApiMessage(ed.message, t) || ed.message
+              if (ed.code) {
+                return (
+                  t("posMenuImportRowErrorWithCode") ||
+                  "{line}행 ({code}): {detail}"
+                )
+                  .replace("{line}", String(ed.line))
+                  .replace("{code}", ed.code)
+                  .replace("{detail}", detail)
+              }
+              return (t("posMenuImportRowError") || "{line}행: {detail}")
+                .replace("{line}", String(ed.line))
+                .replace("{detail}", detail)
+            })
+          : (r.errors || []).slice(0, 20).map((line) => translateApiMessage(line, t) || line)
         const detailLines = [
-          `신규 ${r.inserted ?? 0}건, 갱신 ${r.updated ?? 0}건, 건너뜀·실패 ${r.skipped ?? 0}건`,
-          ...(r.errors?.length ? ["", ...r.errors.slice(0, 20)] : []),
-          r.errorsTruncated ? "\n… (오류 일부만 표시)" : "",
+          summary,
+          ...(rowErrors.length ? ["", ...rowErrors] : []),
+          r.errorsTruncated
+            ? `\n${t("posMenuImportErrorsTruncated") || "… (오류 일부만 표시)"}`
+            : "",
         ].join("\n")
         const title = r.success
-          ? "일괄 반영이 완료되었습니다."
-          : "일부 행만 반영되었거나 모두 건너뛰었습니다."
+          ? t("posMenuImportDone") || "일괄 반영이 완료되었습니다."
+          : t("posMenuImportPartial") || "일부 행만 반영되었거나 모두 건너뛰었습니다."
         await appAlert(`${title}\n\n${detailLines}`)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -704,7 +747,7 @@ export default function PosMenusPage() {
         setMenuImportBusy(false)
       }
     },
-    [t, loadMenusAndCategories]
+    [t, loadMenusAndCategories, selectedStoreCodes, defaultScopeStoreCodes]
   )
 
   const refreshSetTabAfterSave = React.useCallback(() => {

@@ -366,15 +366,22 @@ export type ImportPosMenusResult = {
   updated?: number
   skipped?: number
   errors?: string[]
+  errorDetails?: { line: number; code?: string; message: string }[]
   errorsTruncated?: boolean
 }
 
 /** POS 메뉴 일괄 업로드 (코드 기준 갱신·신규). 관리자 전용 — 온라인만. */
-export async function importPosMenus(menus: PosMenuUpsertApiBody[]): Promise<ImportPosMenusResult> {
+export async function importPosMenus(
+  menus: PosMenuUpsertApiBody[],
+  opts?: { storeCodes?: string[] }
+): Promise<ImportPosMenusResult> {
+  const storeCodes = Array.isArray(opts?.storeCodes)
+    ? opts!.storeCodes.map((x) => String(x || '').trim()).filter(Boolean)
+    : []
   const res = await apiFetch('/api/importPosMenus', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ menus }),
+    body: JSON.stringify({ menus, storeCodes }),
   })
   const data = (await res.json().catch(() => ({}))) as ImportPosMenusResult
   if (!res.ok) {
