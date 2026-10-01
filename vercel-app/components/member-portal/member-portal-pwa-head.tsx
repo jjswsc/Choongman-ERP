@@ -5,6 +5,7 @@ import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { getMemberPwaAssets, isErpManifestHref } from "@/lib/member-portal-pwa"
 import {
   MEMBER_PORTAL_SHELL_RELOAD_KEY,
+  isMemberPortalStaleCacheName,
   shouldReloadMemberPortalAfterSwUnregister,
   shouldReloadMemberPortalForNewBuild,
 } from "@/lib/member-portal-shell-refresh"
@@ -46,10 +47,22 @@ function markReloadedThisSession(): void {
   }
 }
 
+async function wipeMemberPortalCaches(): Promise<void> {
+  if (typeof caches === "undefined" || !caches.keys) return
+  try {
+    const keys = await caches.keys()
+    await Promise.all(
+      keys.filter((name) => isMemberPortalStaleCacheName(name)).map((name) => caches.delete(name))
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * /m/* — 루트 ERP manifest·SW·apple-touch-icon이 회원 PWA 설치에 끼어들지 않도록 정리.
  * (동일 도메인에 CM ERP 홈 화면 바로가기가 있으면 "이미 설치됨" + ERP 아이콘으로 보일 수 있음)
- * SW가 /m HTML을 프리캐시하면 배포 후에도 옛 홈이 남으므로, 제어 중이던 SW는 해제 후 한 번 새로고침한다.
+ * SW가 /m HTML을 프리캐시하면 배포 후에도 옛 홈이 남으므로, 제어 중이던 SW는 해제·캐시 삭제 후 한 번 새로고침한다.
  */
 export function MemberPortalPwaHead() {
   const brand = useAppBrandConfig()
@@ -78,6 +91,7 @@ export function MemberPortalPwaHead() {
           /* ignore */
         }
       }
+      await wipeMemberPortalCaches()
       if (cancelled) return
 
       const reloaded = alreadyReloadedThisSession()

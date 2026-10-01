@@ -432,9 +432,12 @@ export function MemberPortalApp() {
 
     ;(async () => {
       setLoading(true)
+      /** SW·네트워크 지연 시에도 로그인 UI가 영구 스피너에 갇히지 않게 */
+      const safety = window.setTimeout(() => setLoading(false), 12000)
       try {
         await loadSession()
       } finally {
+        window.clearTimeout(safety)
         setLoading(false)
       }
     })()

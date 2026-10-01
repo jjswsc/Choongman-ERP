@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { MemberPortalPwaHead } from "@/components/member-portal/member-portal-pwa-head"
 import { getServerAppBrandConfig } from "@/lib/app-brand-server"
 import { getMemberPwaAssets } from "@/lib/member-portal-pwa"
+import { memberPortalShellBootstrapInlineScript } from "@/lib/member-portal-shell-refresh"
 
 export const dynamic = "force-dynamic"
 
@@ -39,6 +40,8 @@ export const viewport: Viewport = {
 export default function MemberPortalLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[100dvh] overflow-x-hidden bg-[#faf7f2] text-stone-900 antialiased">
+      {/* React 청크가 깨져도 SW 오염을 한 번 걷어 낸다 */}
+      <script dangerouslySetInnerHTML={{ __html: memberPortalShellBootstrapInlineScript() }} />
       <MemberPortalPwaHead />
       {children}
     </div>

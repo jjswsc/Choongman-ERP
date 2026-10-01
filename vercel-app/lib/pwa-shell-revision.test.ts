@@ -7,8 +7,9 @@ describe('PWA_SHELL_REVISION', () => {
     expect(PWA_SHELL_REVISION).not.toMatch(/^[0-9a-f]{40}$/i)
   })
 
-  it('keeps member-app shell revision separate from POS login shell', () => {
+  it('keeps member-app shell id separate and marks no-precache era', () => {
     expect(PWA_MEMBER_SHELL_REVISION.length).toBeGreaterThan(0)
     expect(PWA_MEMBER_SHELL_REVISION).not.toBe(PWA_SHELL_REVISION)
+    expect(PWA_MEMBER_SHELL_REVISION).toMatch(/no-precache/i)
   })
 })

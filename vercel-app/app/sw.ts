@@ -305,8 +305,12 @@ const posTerminalDocumentNetworkFirst = {
   }),
 }
 
-/** 회원앱 HTML — 프리캐시된 옛 /m 때문에 배포 후에도 홈 UI가 안 바뀌지 않게 네트워크 우선 */
-const memberPortalDocumentNetworkFirst = {
+/**
+ * 회원앱 HTML — NetworkOnly.
+ * 예전에 프리캐시·NetworkFirst로 /m 을 붙잡으면 배포 후 깨진 청크를 가리키는 옛 HTML이
+ * 남고, Design iframe·/m 이 스피너에 고착된다. 회원 API도 네트워크 필수라 오프라인 셸 이득이 작다.
+ */
+const memberPortalDocumentNetworkOnly = {
   matcher({
     sameOrigin,
     url: { pathname },
@@ -321,17 +325,7 @@ const memberPortalDocumentNetworkFirst = {
     return pathname.startsWith("/m") && request.destination === "document"
   },
   method: "GET" as const,
-  handler: new NetworkFirst({
-    cacheName: "member-portal-document",
-    networkTimeoutSeconds: 8,
-    plugins: [
-      new ExpirationPlugin({
-        maxEntries: 6,
-        maxAgeSeconds: 24 * 60 * 60,
-        maxAgeFrom: "last-used",
-      }),
-    ],
-  }),
+  handler: new NetworkOnly(),
 }
 
 /** POS 로그인 문서 — 오프라인 cold start(하이브리드·PWA)에서 프리캐시·캐시 우선 */
@@ -505,7 +499,7 @@ const serwist = new Serwist({
     posLoginDocumentForceNetworkOnly,
     posLoginDocumentNetworkFirst,
     posTerminalDocumentNetworkFirst,
-    memberPortalDocumentNetworkFirst,
+    memberPortalDocumentNetworkOnly,
     loginPagesGetNetworkOnly,
     downloadsBinaryNetworkOnly,
     nextStaticBuildAssets,
@@ -560,13 +554,7 @@ const serwist = new Serwist({
           )
         },
       },
-      {
-        url: "/m",
-        matcher({ request }) {
-          const pathname = new URL(request.url).pathname
-          return request.destination === "document" && pathname.startsWith("/m")
-        },
-      },
+      /** `/m` 오프라인 폴백 없음 — 프리캐시하지 않으며, 깨진 HTML 폴백이 스피너 고착을 재발시킴 */
     ],
   },
 })

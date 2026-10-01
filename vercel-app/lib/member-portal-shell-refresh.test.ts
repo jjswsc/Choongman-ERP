@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MEMBER_PORTAL_SHELL_RELOAD_KEY,
+  isMemberPortalStaleCacheName,
+  memberPortalShellBootstrapInlineScript,
   shouldReloadMemberPortalAfterSwUnregister,
   shouldReloadMemberPortalForNewBuild,
 } from '@/lib/member-portal-shell-refresh'
@@ -31,5 +34,24 @@ describe('shouldReloadMemberPortalForNewBuild', () => {
         alreadyReloaded: true,
       })
     ).toBe(false)
+  })
+})
+
+describe('isMemberPortalStaleCacheName', () => {
+  it('matches serwist / member-portal document caches', () => {
+    expect(isMemberPortalStaleCacheName('serwist-precache-v2')).toBe(true)
+    expect(isMemberPortalStaleCacheName('member-portal-document')).toBe(true)
+    expect(isMemberPortalStaleCacheName('workbox-runtime')).toBe(true)
+    expect(isMemberPortalStaleCacheName('unrelated-images')).toBe(false)
+  })
+})
+
+describe('memberPortalShellBootstrapInlineScript', () => {
+  it('embeds the v2 reload key and does not reference React', () => {
+    const src = memberPortalShellBootstrapInlineScript()
+    expect(src).toContain(MEMBER_PORTAL_SHELL_RELOAD_KEY)
+    expect(src).toContain('serviceWorker')
+    expect(src).toContain('unregister')
+    expect(src).not.toContain('React')
   })
 })
