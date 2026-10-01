@@ -8,7 +8,22 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { getLineOaGroupV2List, getLineOaGroups, getLineOaSegments } from "@/lib/api-client"
-import { disconnectMeta, getMetaConnectionStatus, listMetaPages, selectMetaPage, syncMetaAds } from "@/lib/api-client/marketing-meta"
+import {
+  disconnectMeta,
+  getMetaConnectionStatus,
+  listMetaPages,
+  selectMetaPage,
+  syncMetaAds,
+} from "@/lib/api-client/marketing-meta"
+import {
+  disconnectTikTok,
+  getTikTokConnectionStatus,
+  listTikTokAdvertisers,
+  selectTikTokAdvertiser,
+  syncTikTokAds,
+  type TikTokAdvertiserChoice,
+  type TikTokConnectionStatus,
+} from "@/lib/api-client/marketing-tiktok"
 import { appAlert } from "@/lib/app-message"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
@@ -29,6 +44,10 @@ export default function MarketingIntegrationsPage() {
   const [metaBusy, setMetaBusy] = React.useState(false)
   const [metaPages, setMetaPages] = React.useState<MetaPageChoice[]>([])
   const [showPagePick, setShowPagePick] = React.useState(false)
+  const [tiktokStatus, setTikTokStatus] = React.useState<TikTokConnectionStatus | null>(null)
+  const [tiktokBusy, setTikTokBusy] = React.useState(false)
+  const [tiktokAdvertisers, setTikTokAdvertisers] = React.useState<TikTokAdvertiserChoice[]>([])
+  const [showAdvertiserPick, setShowAdvertiserPick] = React.useState(false)
 
   const loadMeta = React.useCallback(async () => {
     try {
@@ -47,9 +66,30 @@ export default function MarketingIntegrationsPage() {
     }
   }, [])
 
+  const loadTikTok = React.useCallback(async () => {
+    try {
+      const st = await getTikTokConnectionStatus()
+      setTikTokStatus(st)
+      if (st.connected || st.pendingAdvertiserPick) {
+        const adv = await listTikTokAdvertisers().catch(() => ({
+          advertisers: [] as TikTokAdvertiserChoice[],
+          pendingPick: false,
+        }))
+        setTikTokAdvertisers(Array.isArray(adv.advertisers) ? adv.advertisers : [])
+        setShowAdvertiserPick(Boolean(st.pendingAdvertiserPick || adv.pendingPick))
+      } else {
+        setTikTokAdvertisers([])
+        setShowAdvertiserPick(false)
+      }
+    } catch {
+      setTikTokStatus({ connected: false, source: "none" })
+    }
+  }, [])
+
   React.useEffect(() => {
     void loadMeta()
-  }, [loadMeta])
+    void loadTikTok()
+  }, [loadMeta, loadTikTok])
 
   React.useEffect(() => {
     const code = searchParams.get("meta")
@@ -62,6 +102,19 @@ export default function MarketingIntegrationsPage() {
     else if (code === "nopage") void appAlert(t("marketingMetaOauthNoPage"))
     else if (code === "config") void appAlert(t("marketingMetaOauthConfig"))
     else if (code !== "ok") void appAlert(t("marketingMetaOauthFail"))
+  }, [searchParams, t])
+
+  React.useEffect(() => {
+    const code = searchParams.get("tiktok")
+    if (!code) return
+    if (code === "ok") void appAlert(t("marketingTikTokOauthOk"))
+    else if (code === "pick") {
+      setShowAdvertiserPick(true)
+      void appAlert(t("marketingTikTokOauthPick"))
+    }
+    else if (code === "noadv") void appAlert(t("marketingTikTokOauthNoAdv"))
+    else if (code === "config") void appAlert(t("marketingTikTokOauthConfig"))
+    else if (code !== "ok") void appAlert(t("marketingTikTokOauthFail"))
   }, [searchParams, t])
 
   const testSegmentList = async () => {
@@ -350,20 +403,107 @@ export default function MarketingIntegrationsPage() {
               <div>
                 <h3 className="font-semibold">TikTok Ads</h3>
                 <p className="text-xs text-muted-foreground">{t("marketingIntegrationTikTokSubtitle")}</p>
+                {tiktokStatus?.advertiserName ? (
+                  <p className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    Advertiser: {tiktokStatus.advertiserName} · {tiktokStatus.advertiserId}
+                  </p>
+                ) : null}
               </div>
               </div>
-              <Badge variant="secondary">{t("marketingIntegrationStatusUnknown")}</Badge>
+              <Badge
+                className={cn(
+                  "shrink-0",
+                  tiktokStatus?.connected ? "bg-amber-500 text-white" : "bg-muted text-muted-foreground"
+                )}
+              >
+                {tiktokStatus?.connected ? t("marketingTikTokConnected") : t("marketingTikTokDisconnected")}
+              </Badge>
             </div>
+            <p className="mb-3 text-xs text-muted-foreground">{t("marketingTikTokConnectSteps")}</p>
+            {showAdvertiserPick && tiktokAdvertisers.length > 0 ? (
+              <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+                <p className="mb-2 text-sm font-medium">{t("marketingTikTokPickAdvertiser")}</p>
+                <p className="mb-2 text-xs text-muted-foreground">{t("marketingTikTokPickAdvertiserHint")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {tiktokAdvertisers.map((a) => (
+                    <Button
+                      key={a.id}
+                      type="button"
+                      size="sm"
+                      variant={tiktokStatus?.advertiserId === a.id ? "default" : "outline"}
+                      disabled={tiktokBusy}
+                      onClick={() => {
+                        setTikTokBusy(true)
+                        void selectTikTokAdvertiser(a.id)
+                          .then(async (r) => {
+                            if (!r.success) await appAlert(r.message || t("marketingWsSaveFail"))
+                            await loadTikTok()
+                          })
+                          .finally(() => setTikTokBusy(false))
+                      }}
+                    >
+                      {a.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : tiktokStatus?.connected && tiktokAdvertisers.length > 1 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mb-3 h-8 text-xs"
+                onClick={() => setShowAdvertiserPick(true)}
+              >
+                {t("marketingTikTokChangeAdvertiser")}
+              </Button>
+            ) : null}
             <ul className="text-sm text-muted-foreground space-y-1 mb-3">
               <li>{t("marketingIntegrationTikTokEnvLine1")}</li>
               <li>{t("marketingIntegrationTikTokEnvLine2")}</li>
+              <li>{t("marketingIntegrationTikTokEnvLine3")}</li>
             </ul>
-            <Button variant="outline" size="sm" asChild>
-              <a href="https://business-api.tiktok.com/portal/docs" target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                {t("marketingIntegrationTikTokDevBtn")}
-              </a>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" asChild>
+                <a href="/api/tiktok/oauth/start">{t("marketingTikTokConnect")}</a>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={tiktokBusy}
+                onClick={() => {
+                  setTikTokBusy(true)
+                  void syncTikTokAds()
+                    .then(loadTikTok)
+                    .finally(() => setTikTokBusy(false))
+                }}
+              >
+                {tiktokBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                {t("marketingTikTokSync")}
+              </Button>
+              {tiktokStatus?.connected && tiktokStatus.source === "oauth" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive"
+                  disabled={tiktokBusy}
+                  onClick={() => {
+                    setTikTokBusy(true)
+                    void disconnectTikTok()
+                      .then(loadTikTok)
+                      .finally(() => setTikTokBusy(false))
+                  }}
+                >
+                  {t("marketingTikTokDisconnect")}
+                </Button>
+              ) : null}
+              <Button variant="outline" size="sm" asChild>
+                <a href="https://business-api.tiktok.com/portal/docs" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                  {t("marketingIntegrationTikTokDevBtn")}
+                </a>
+              </Button>
+            </div>
           </div>
         </div>
     </MarketingPageShell>

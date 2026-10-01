@@ -59,3 +59,5 @@
 3. `omnifoodtech.com` / `www` / `app` 서브도메인 **301·Primary** 정책이 팀 기대와 일치하는지.
 
 상세 체크리스트는 [STORE-OPEN-SETUP.md — §4 내부용/판매용 도메인 분리](./STORE-OPEN-SETUP.md#4-내부용판매용-도메인-분리-운영-saas-판매용)를 따릅니다.
+
+Meta·TikTok OAuth Redirect URI·env는 [META-TIKTOK-INTEGRATION-CHECKLIST.md](./META-TIKTOK-INTEGRATION-CHECKLIST.md)를 따릅니다.

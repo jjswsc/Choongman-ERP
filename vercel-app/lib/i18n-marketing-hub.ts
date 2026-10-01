@@ -78,9 +78,10 @@ export const I18N_MARKETING_HUB_KO: Record<string, string> = {
   marketingIntegrationTikTokDevBtn: 'TikTok for Business API',
   marketingIntegrationMetaEnvLine1: '• META_APP_ID, META_APP_SECRET, META_ACCESS_TOKEN (선택 폴백)',
   marketingIntegrationMetaEnvLine2: '• META_AD_ACCOUNT_ID, META_PAGE_ID, META_TOKEN_ENCRYPTION_KEY',
-  marketingIntegrationMetaEnvLine3: '• OAuth 콜백: /api/meta/oauth/callback — 권한 read_insights, ads_read, pages_read_engagement, instagram_basic',
-  marketingIntegrationTikTokEnvLine1: '• TIKTOK_ACCESS_TOKEN, TIKTOK_ADS_ACCOUNT_ID',
-  marketingIntegrationTikTokEnvLine2: '• OAuth 인증 플로우 구현 필요',
+  marketingIntegrationMetaEnvLine3: '• OAuth 콜백: /api/meta/oauth/callback — Redirect URI는 docs/META-TIKTOK-INTEGRATION-CHECKLIST.md 도메인 표 참고',
+  marketingIntegrationTikTokEnvLine1: '• TIKTOK_APP_ID, TIKTOK_APP_SECRET, TIKTOK_TOKEN_ENCRYPTION_KEY (없으면 META 키 폴백)',
+  marketingIntegrationTikTokEnvLine2: '• TIKTOK_ADVERTISER_ID(또는 TIKTOK_ADS_ACCOUNT_ID), TIKTOK_ACCESS_TOKEN (선택 폴백)',
+  marketingIntegrationTikTokEnvLine3: '• OAuth 콜백: /api/tiktok/oauth/callback — Redirect URI는 docs/META-TIKTOK-INTEGRATION-CHECKLIST.md 도메인 표 참고',
   marketingIntegrationLineEnvDoc:
     '• 메시징: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` (기존 /api/line/webhook)\n' +
     '• 회원 포털 LINE 로그인: `LINE_LOGIN_CHANNEL_ID`, `LINE_LOGIN_CHANNEL_SECRET` (미설정 시 `LINE_CHANNEL_SECRET` 폴백). **Channel ID는 숫자만** (예: 2004403638) — LINE Login 채널 Basic settings 값. **U로 시작하는 사용자 ID는 사용 불가**\n' +
@@ -254,9 +255,26 @@ export const I18N_MARKETING_HUB_KO: Record<string, string> = {
   helpSum_admin_marketing_report: '월간 리포트·KPI 성과·비용·캘린더를 한 허브에서 봅니다.',
   helpHow_admin_marketing_report:
     '① 월간: 선택 월·캠페인별 비용 요약과 CSV 다운로드.\n② 성과: KPI 목표 대비 POS 주문 실적 차트.\n③ 비용: 예산 대비 실비·초과 알림.\n④ 캘린더: 리포트 허브 내 통합 일정.',
-  helpSum_admin_marketing_integrations: 'LINE OA 테스트와 Facebook(Meta) 페이지·광고 계정 연결 화면입니다.',
+  helpSum_admin_marketing_integrations: 'LINE OA 테스트와 Facebook(Meta)·TikTok 광고 계정 연결 화면입니다.',
   helpHow_admin_marketing_integrations:
-    '① LINE Segment/Group API 테스트로 연결을 확인합니다.\n② Vercel env와 Supabase SQL을 넣은 뒤 Facebook 연결을 누릅니다. 페이지가 여러 개면 이 화면에서 고릅니다. Instagram은 그 페이지에 비즈니스 계정으로 묶여 있으면 같이 들어옵니다.\n③ 연결 후 「데이터 동기화」. Insights가 0이면 페이지 토큰·앱 모드·권한을 안내 문구에서 확인합니다.',
+    '① LINE Segment/Group API 테스트로 연결을 확인합니다.\n② Meta: Vercel env·SQL 후 Facebook 연결 → 페이지 선택 → 동기화. Instagram은 페이지에 비즈니스 계정이 묶여 있으면 같이 들어옵니다.\n③ TikTok: TIKTOK_APP_ID/SECRET·SQL 후 TikTok 연결 → Advertiser 선택 → 동기화(방콕 최근 28일).\n④ Redirect URI·도메인은 docs/META-TIKTOK-INTEGRATION-CHECKLIST.md 를 따릅니다.',
+  marketingTikTokConnected: '연결됨',
+  marketingTikTokDisconnected: '미연결',
+  marketingTikTokConnect: 'TikTok 연결',
+  marketingTikTokDisconnect: '연결 해제',
+  marketingTikTokSync: '데이터 동기화',
+  marketingTikTokConnectSteps:
+    '연결 순서: ① Vercel에 TIKTOK_APP_ID, TIKTOK_APP_SECRET ② Supabase에 marketing_tiktok_connections SQL ③ 이 화면에서 TikTok 연결 ④ Advertiser가 여러 개면 고르기 ⑤ 데이터 동기화',
+  marketingTikTokPickAdvertiser: 'Advertiser 선택',
+  marketingTikTokPickAdvertiserHint: '이 TikTok 계정에 광고주가 여러 개입니다. 실비·성과를 가져올 Advertiser를 고르세요.',
+  marketingTikTokChangeAdvertiser: '다른 Advertiser로 바꾸기',
+  marketingTikTokOauthOk: 'TikTok Advertiser가 연결되었습니다.',
+  marketingTikTokOauthPick: 'Advertiser가 여러 개입니다. 아래에서 고르세요.',
+  marketingTikTokOauthNoAdv: '연결할 TikTok Advertiser가 없습니다. Ads 계정 권한을 확인하세요.',
+  marketingTikTokOauthConfig: 'TIKTOK_APP_ID / TIKTOK_APP_SECRET 환경 변수를 확인하세요.',
+  marketingTikTokOauthFail: 'TikTok 연결에 실패했습니다.',
+  marketingTikTokDiagTableMissing:
+    'Supabase에 marketing_tiktok_connections 테이블이 없습니다. sql/marketing_tiktok_connections.sql 을 실행하세요.',
 }
 
 export const I18N_MARKETING_HUB_EN: Record<string, string> = {
@@ -338,9 +356,10 @@ export const I18N_MARKETING_HUB_EN: Record<string, string> = {
   marketingIntegrationTikTokDevBtn: 'TikTok for Business API',
   marketingIntegrationMetaEnvLine1: '• META_APP_ID, META_APP_SECRET, META_ACCESS_TOKEN (optional fallback)',
   marketingIntegrationMetaEnvLine2: '• META_AD_ACCOUNT_ID, META_PAGE_ID, META_TOKEN_ENCRYPTION_KEY',
-  marketingIntegrationMetaEnvLine3: '• OAuth callback: /api/meta/oauth/callback — scopes read_insights, ads_read, pages_read_engagement, instagram_basic',
-  marketingIntegrationTikTokEnvLine1: '• TIKTOK_ACCESS_TOKEN, TIKTOK_ADS_ACCOUNT_ID',
-  marketingIntegrationTikTokEnvLine2: '• OAuth authorization flow implementation required',
+  marketingIntegrationMetaEnvLine3: '• OAuth callback: /api/meta/oauth/callback — see domain table in docs/META-TIKTOK-INTEGRATION-CHECKLIST.md',
+  marketingIntegrationTikTokEnvLine1: '• TIKTOK_APP_ID, TIKTOK_APP_SECRET, TIKTOK_TOKEN_ENCRYPTION_KEY (falls back to META key)',
+  marketingIntegrationTikTokEnvLine2: '• TIKTOK_ADVERTISER_ID (or TIKTOK_ADS_ACCOUNT_ID), TIKTOK_ACCESS_TOKEN (optional fallback)',
+  marketingIntegrationTikTokEnvLine3: '• OAuth callback: /api/tiktok/oauth/callback — see domain table in docs/META-TIKTOK-INTEGRATION-CHECKLIST.md',
   marketingIntegrationLineEnvDoc:
     '• Messaging: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` (existing /api/line/webhook)\n' +
     '• Member portal LINE login: `LINE_LOGIN_CHANNEL_ID`, `LINE_LOGIN_CHANNEL_SECRET` (falls back to `LINE_CHANNEL_SECRET` if unset). **Channel ID must be numeric only** (e.g. 2004403638) — from LINE Login channel Basic settings. **User IDs starting with U cannot be used**\n' +
@@ -515,9 +534,26 @@ export const I18N_MARKETING_HUB_EN: Record<string, string> = {
   helpSum_admin_marketing_report: 'Monthly report, KPI performance, costs, and calendar hub.',
   helpHow_admin_marketing_report:
     '① Monthly: cost summary and CSV.\n② Performance: KPI target vs POS orders.\n③ Costs: budget vs actual.\n④ Calendar tab inside report hub.',
-  helpSum_admin_marketing_integrations: 'LINE OA tests and Facebook (Meta) page/ad-account connection.',
+  helpSum_admin_marketing_integrations: 'LINE OA tests and Facebook (Meta) / TikTok ad-account connection.',
   helpHow_admin_marketing_integrations:
-    '① Test LINE Segment/Group APIs.\n② Set Vercel env and run the Supabase SQL, then Connect Facebook. If there are several Pages, pick one here. Instagram comes with the same connection if a business account is linked to that Page.\n③ After connect, Sync data. If Insights are 0, check page token, app mode, and scopes.',
+    '① Test LINE Segment/Group APIs.\n② Meta: set Vercel env + SQL, Connect Facebook, pick a Page if needed, Sync. Instagram comes with the Page if linked.\n③ TikTok: set TIKTOK_APP_ID/SECRET + SQL, Connect TikTok, pick Advertiser if needed, Sync (last 28 Bangkok days).\n④ Redirect URIs: docs/META-TIKTOK-INTEGRATION-CHECKLIST.md.',
+  marketingTikTokConnected: 'Connected',
+  marketingTikTokDisconnected: 'Not connected',
+  marketingTikTokConnect: 'Connect TikTok',
+  marketingTikTokDisconnect: 'Disconnect',
+  marketingTikTokSync: 'Sync data',
+  marketingTikTokConnectSteps:
+    'Steps: ① Vercel TIKTOK_APP_ID, TIKTOK_APP_SECRET ② Run marketing_tiktok_connections SQL ③ Connect TikTok here ④ Pick Advertiser if several ⑤ Sync data',
+  marketingTikTokPickAdvertiser: 'Pick Advertiser',
+  marketingTikTokPickAdvertiserHint: 'This TikTok account has several advertisers. Pick which one to sync spend and performance from.',
+  marketingTikTokChangeAdvertiser: 'Change Advertiser',
+  marketingTikTokOauthOk: 'TikTok Advertiser connected.',
+  marketingTikTokOauthPick: 'Several Advertisers. Pick one below.',
+  marketingTikTokOauthNoAdv: 'No TikTok Advertiser available. Check Ads account permissions.',
+  marketingTikTokOauthConfig: 'Check TIKTOK_APP_ID / TIKTOK_APP_SECRET env vars.',
+  marketingTikTokOauthFail: 'TikTok connection failed.',
+  marketingTikTokDiagTableMissing:
+    'Missing marketing_tiktok_connections. Run sql/marketing_tiktok_connections.sql in Supabase.',
 }
 
 export const I18N_MARKETING_HUB_TH: Record<string, string> = {
@@ -599,9 +635,10 @@ export const I18N_MARKETING_HUB_TH: Record<string, string> = {
   marketingIntegrationTikTokDevBtn: 'TikTok for Business API',
   marketingIntegrationMetaEnvLine1: '• META_APP_ID, META_APP_SECRET, META_ACCESS_TOKEN (สำรองได้)',
   marketingIntegrationMetaEnvLine2: '• META_AD_ACCOUNT_ID, META_PAGE_ID, META_TOKEN_ENCRYPTION_KEY',
-  marketingIntegrationMetaEnvLine3: '• OAuth callback: /api/meta/oauth/callback — สิทธิ์ read_insights, ads_read, pages_read_engagement, instagram_basic',
-  marketingIntegrationTikTokEnvLine1: '• TIKTOK_ACCESS_TOKEN, TIKTOK_ADS_ACCOUNT_ID',
-  marketingIntegrationTikTokEnvLine2: '• ต้องทำขั้นตอน OAuth เพิ่มครับ',
+  marketingIntegrationMetaEnvLine3: '• OAuth callback: /api/meta/oauth/callback — ดูตารางโดเมนใน docs/META-TIKTOK-INTEGRATION-CHECKLIST.md',
+  marketingIntegrationTikTokEnvLine1: '• TIKTOK_APP_ID, TIKTOK_APP_SECRET, TIKTOK_TOKEN_ENCRYPTION_KEY (ไม่มีจะใช้คีย์ META)',
+  marketingIntegrationTikTokEnvLine2: '• TIKTOK_ADVERTISER_ID (หรือ TIKTOK_ADS_ACCOUNT_ID), TIKTOK_ACCESS_TOKEN (สำรองได้)',
+  marketingIntegrationTikTokEnvLine3: '• OAuth callback: /api/tiktok/oauth/callback — ดูตารางโดเมนใน docs/META-TIKTOK-INTEGRATION-CHECKLIST.md',
   marketingIntegrationLineEnvDoc:
     '• Messaging: `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` (/api/line/webhook เดิม)\n' +
     '• LINE login สมาชิก: `LINE_LOGIN_CHANNEL_ID`, `LINE_LOGIN_CHANNEL_SECRET` (ไม่ตั้งจะ fallback `LINE_CHANNEL_SECRET`). **Channel ID ต้องเป็นตัวเลขเท่านั้น** — จาก Basic settings ของ LINE Login. **ห้ามใช้ User ID ขึ้นต้น U**\n' +
@@ -769,9 +806,26 @@ export const I18N_MARKETING_HUB_TH: Record<string, string> = {
   helpSum_admin_marketing_report: 'รายงานรายเดือน KPI ต้นทุน ปฏิทิน',
   helpHow_admin_marketing_report:
     '① รายเดือน: สรุปต้นทุนและ CSV\n② ผลงาน: KPI เทียบออเดอร์ POS\n③ ต้นทุน: งบเทียบจริง\n④ ปฏิทินในรายงาน',
-  helpSum_admin_marketing_integrations: 'ทดสอบ LINE OA และเชื่อมเพจ/บัญชีโฆษณา Facebook (Meta)',
+  helpSum_admin_marketing_integrations: 'ทดสอบ LINE OA และเชื่อม Facebook (Meta)·TikTok Ads',
   helpHow_admin_marketing_integrations:
-    '① ทดสอบ LINE Segment/Group API\n② ใส่ env ใน Vercel และรัน SQL ใน Supabase แล้วกดเชื่อม Facebook ถ้ามีหลายเพจให้เลือกในหน้านี้ Instagram จะตามมาถ้าผูกบัญชีธุรกิจกับเพจนั้นครับ\n③ เชื่อมแล้วกดซิงค์ข้อมูล ถ้า Insights เป็น 0 ให้ตรวจ page token โหมดแอป และสิทธิ์ครับ',
+    '① ทดสอบ LINE Segment/Group API\n② Meta: ใส่ env·SQL แล้วเชื่อม Facebook เลือกเพจถ้ามีหลายเพจ Instagram ตามมาถ้าผูกบัญชีธุรกิจครับ\n③ TikTok: ใส่ TIKTOK_APP_ID/SECRET·SQL แล้วเชื่อม TikTok เลือก Advertiser แล้วซิงค์ (28 วันกรุงเทพ)\n④ Redirect URI ดู docs/META-TIKTOK-INTEGRATION-CHECKLIST.md ครับ',
+  marketingTikTokConnected: 'เชื่อมแล้ว',
+  marketingTikTokDisconnected: 'ยังไม่เชื่อม',
+  marketingTikTokConnect: 'เชื่อม TikTok',
+  marketingTikTokDisconnect: 'ยกเลิกการเชื่อม',
+  marketingTikTokSync: 'ซิงค์ข้อมูล',
+  marketingTikTokConnectSteps:
+    'ขั้นตอน: ① ใส่ TIKTOK_APP_ID, TIKTOK_APP_SECRET ใน Vercel ② รัน SQL marketing_tiktok_connections ③ กดเชื่อม TikTok ④ ถ้ามีหลาย Advertiser ให้เลือก ⑤ ซิงค์ข้อมูลครับ',
+  marketingTikTokPickAdvertiser: 'เลือก Advertiser',
+  marketingTikTokPickAdvertiserHint: 'บัญชีนี้มี Advertiser หลายตัว เลือกตัวที่จะดึงค่าใช้จ่ายและผลงานครับ',
+  marketingTikTokChangeAdvertiser: 'เปลี่ยน Advertiser',
+  marketingTikTokOauthOk: 'เชื่อม TikTok Advertiser แล้วครับ',
+  marketingTikTokOauthPick: 'มี Advertiser หลายตัว ให้เลือกด้านล่างครับ',
+  marketingTikTokOauthNoAdv: 'ไม่พบ TikTok Advertiser ตรวจสิทธิ์บัญชีโฆษณาครับ',
+  marketingTikTokOauthConfig: 'ตรวจ TIKTOK_APP_ID / TIKTOK_APP_SECRET ครับ',
+  marketingTikTokOauthFail: 'เชื่อม TikTok ไม่สำเร็จครับ',
+  marketingTikTokDiagTableMissing:
+    'ยังไม่มีตาราง marketing_tiktok_connections ให้รัน sql/marketing_tiktok_connections.sql ใน Supabase ครับ',
 }
 
 
@@ -820,7 +874,7 @@ export const I18N_MARKETING_HUB_MM = hubFromEn({
   marketingIntegrationTestGroupV2Btn: 'Group V2 စာရင်း စမ်းသပ်',
   marketingIntegrationMetaSubtitle: 'Marketing API → actual spend, reach, click (ROAS)',
   marketingIntegrationTikTokSubtitle: 'TikTok Marketing API → sync spend and performance',
-  marketingIntegrationTikTokEnvLine2: 'OAuth authorization flow လိုအပ်',
+  marketingIntegrationTikTokEnvLine2: 'OAuth + sync available in ERP',
   helpSum_admin_marketing: 'စျေးကွက် KPI·လက်ရှိကမ်ပိန်း·ဘတ်ဂျက် hub',
   helpHow_admin_marketing:
     '① KPI ကတ်များ စစ်ဆေး ② အမြန်လင့်ခ် ③ submenu မှ အသေးစိတ်မျက်နှာပြင်',
@@ -879,7 +933,7 @@ export const I18N_MARKETING_HUB_LA = hubFromEn({
   marketingIntegrationTestGroupV2Btn: 'ທົດສອບ Group V2',
   marketingIntegrationMetaSubtitle: 'Marketing API → ຄ່າໃຊ້ຈິງ ROAS',
   marketingIntegrationTikTokSubtitle: 'TikTok Marketing API → ຊິງຄ໌ຄ່າໃຊ້ຈ່າຍ',
-  marketingIntegrationTikTokEnvLine2: 'ຕ້ອງ implement OAuth',
+  marketingIntegrationTikTokEnvLine2: 'OAuth + sync ໃນ ERP ແລ້ວ',
   helpSum_admin_marketing: 'ສູນ KPI ການຕະຫຼາດ ແລະລິ້ງດ່ວນ',
   helpHow_admin_marketing: '① KPI ② ລິ້ງດ່ວນ ③ ເມນູຍ່ອຍ',
   helpSum_admin_marketing_campaigns: 'ສ້າງ/ແກ້ໄຂ/ລາຍການ/A-B ແຄມເປນ',
@@ -937,7 +991,7 @@ export const I18N_MARKETING_HUB_KH = hubFromEn({
   marketingIntegrationTestGroupV2Btn: 'ធ្វើតេស្ត Group V2',
   marketingIntegrationMetaSubtitle: 'Marketing API → ROAS',
   marketingIntegrationTikTokSubtitle: 'TikTok Marketing API → ធ្វើសមកាលកម្ម',
-  marketingIntegrationTikTokEnvLine2: 'ត្រូវការ OAuth flow',
+  marketingIntegrationTikTokEnvLine2: 'OAuth + sync មានក្នុង ERP',
   helpSum_admin_marketing: 'មជ្ឈមណ្ឌល KPI ទីផ្សារ',
   helpHow_admin_marketing: '① KPI ② តំណរហ័ស ③ ម៉ឺនុយ',
   helpSum_admin_marketing_campaigns: 'បង្កើត/កែ/បញ្ជី/A-B',
@@ -995,7 +1049,7 @@ export const I18N_MARKETING_HUB_VI = hubFromEn({
   marketingIntegrationTestGroupV2Btn: 'Thử danh sách Group V2',
   marketingIntegrationMetaSubtitle: 'Marketing API → ROAS',
   marketingIntegrationTikTokSubtitle: 'TikTok Marketing API → đồng bộ chi phí',
-  marketingIntegrationTikTokEnvLine2: 'Cần triển khai luồng OAuth',
+  marketingIntegrationTikTokEnvLine2: 'OAuth + sync có trong ERP',
   helpSum_admin_marketing: 'Trung tâm KPI marketing',
   helpHow_admin_marketing: '① KPI ② Liên kết nhanh ③ Menu phụ',
   helpSum_admin_marketing_campaigns: 'Tạo/sửa/danh sách/A-B chiến dịch',
@@ -1053,7 +1107,7 @@ export const I18N_MARKETING_HUB_MS = hubFromEn({
   marketingIntegrationTestGroupV2Btn: 'Uji senarai Group V2',
   marketingIntegrationMetaSubtitle: 'Marketing API → ROAS',
   marketingIntegrationTikTokSubtitle: 'TikTok Marketing API → segerak perbelanjaan',
-  marketingIntegrationTikTokEnvLine2: 'Aliran OAuth perlu dilaksanakan',
+  marketingIntegrationTikTokEnvLine2: 'OAuth + sync tersedia dalam ERP',
   helpSum_admin_marketing: 'Hab KPI pemasaran',
   helpHow_admin_marketing: '① KPI ② Pautan pantas ③ Submenu',
   helpSum_admin_marketing_campaigns: 'Cipta/sunting/senarai/A-B kempen',
