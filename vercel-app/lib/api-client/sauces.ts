@@ -372,9 +372,10 @@ export type ImportPosMenusResult = {
 
 /**
  * 한 번에 전부 보내면 서버 시간 제한(504)으로 뒤쪽 행이 저장되지 않는다.
- * 169행 근처에서 끊긴 업로드가 있어, 요청당 이 행 수만큼 나눈다.
+ * 이미 있는 행은 서버가 건너뛰므로, 없는 메뉴만 이 크기만큼 저장한다.
  */
-const POS_MENU_IMPORT_CHUNK_SIZE = 40
+const POS_MENU_IMPORT_CHUNK_SIZE = 15
+const POS_MENU_IMPORT_TIMEOUT_MS = 35000
 
 function importPosMenusStatus(err: unknown): number | null {
   const status = (err as { status?: number })?.status
@@ -382,10 +383,12 @@ function importPosMenusStatus(err: unknown): number | null {
 }
 
 function isImportTimeoutError(err: unknown): boolean {
+  const name = (err as { name?: string })?.name
+  if (name === 'AbortError') return true
   const status = importPosMenusStatus(err)
   if (status === 502 || status === 503 || status === 504) return true
   const msg = err instanceof Error ? err.message : String(err)
-  return /\b50[234]\b|timeout|FUNCTION_INVOCATION_TIMEOUT/i.test(msg)
+  return /\b50[234]\b|timeout|FUNCTION_INVOCATION_TIMEOUT|aborted/i.test(msg)
 }
 
 function mergeImportPosMenusResults(parts: ImportPosMenusResult[]): ImportPosMenusResult {
@@ -419,18 +422,25 @@ async function importPosMenusRequest(
   storeCodes: string[],
   lineOffset: number
 ): Promise<ImportPosMenusResult> {
-  const res = await apiFetch('/api/importPosMenus', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ menus, storeCodes, lineOffset }),
-  })
-  const data = (await res.json().catch(() => ({}))) as ImportPosMenusResult
-  if (!res.ok) {
-    const err = new Error(data.message || `요청 실패 (${res.status})`) as Error & { status?: number }
-    err.status = res.status
-    throw err
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), POS_MENU_IMPORT_TIMEOUT_MS)
+  try {
+    const res = await apiFetch('/api/importPosMenus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ menus, storeCodes, lineOffset }),
+      signal: controller.signal,
+    })
+    const data = (await res.json().catch(() => ({}))) as ImportPosMenusResult
+    if (!res.ok) {
+      const err = new Error(data.message || `요청 실패 (${res.status})`) as Error & { status?: number }
+      err.status = res.status
+      throw err
+    }
+    return data
+  } finally {
+    clearTimeout(timer)
   }
-  return data
 }
 
 /** 504면 같은 행을 반으로 나눠 다시 보낸다. 코드 기준 갱신이라 앞부분 재저장은 안전하다. */
@@ -453,24 +463,26 @@ async function importPosMenusChunkResilient(
 /** POS 메뉴 일괄 업로드 (코드 기준 갱신·신규). 관리자 전용 — 온라인만. */
 export async function importPosMenus(
   menus: PosMenuUpsertApiBody[],
-  opts?: { storeCodes?: string[] }
+  opts?: { storeCodes?: string[]; onProgress?: (progress: { done: number; total: number }) => void }
 ): Promise<ImportPosMenusResult> {
   const storeCodes = Array.isArray(opts?.storeCodes)
     ? opts!.storeCodes.map((x) => String(x || '').trim()).filter(Boolean)
     : []
+  const total = menus.length
+  const report = (done: number) => opts?.onProgress?.({ done: Math.min(done, total), total })
   if (menus.length <= POS_MENU_IMPORT_CHUNK_SIZE) {
-    return importPosMenusChunkResilient(menus, storeCodes, 0)
+    report(0)
+    const result = await importPosMenusChunkResilient(menus, storeCodes, 0)
+    report(total)
+    return result
   }
   const parts: ImportPosMenusResult[] = []
   try {
     for (let i = 0; i < menus.length; i += POS_MENU_IMPORT_CHUNK_SIZE) {
-      parts.push(
-        await importPosMenusChunkResilient(
-          menus.slice(i, i + POS_MENU_IMPORT_CHUNK_SIZE),
-          storeCodes,
-          i
-        )
-      )
+      report(i)
+      const slice = menus.slice(i, i + POS_MENU_IMPORT_CHUNK_SIZE)
+      parts.push(await importPosMenusChunkResilient(slice, storeCodes, i))
+      report(i + slice.length)
     }
   } catch (err) {
     if (parts.length === 0) throw err

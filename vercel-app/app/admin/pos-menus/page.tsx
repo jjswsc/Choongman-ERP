@@ -211,6 +211,7 @@ export default function PosMenusPage() {
   const [loading, setLoading] = React.useState(false)
   const [refreshLoading, setRefreshLoading] = React.useState(false)
   const [menuImportBusy, setMenuImportBusy] = React.useState(false)
+  const [menuImportProgress, setMenuImportProgress] = React.useState<{ done: number; total: number } | null>(null)
   const menuImportInputRef = React.useRef<HTMLInputElement>(null)
   const [formData, setFormData] = React.useState(emptyForm)
   const [editingId, setEditingId] = React.useState<string | null>(null)
@@ -672,6 +673,7 @@ export default function PosMenusPage() {
       e.target.value = ""
       if (!file) return
       setMenuImportBusy(true)
+      setMenuImportProgress(null)
       try {
         const storeCodesForImport =
           selectedStoreCodes.length > 0
@@ -702,7 +704,10 @@ export default function PosMenusPage() {
           .replace("{stores}", storeCodesForImport.join(", "))
         const ok = await appConfirm(confirmMsg)
         if (!ok) return
-        const r = await importPosMenus(menus, { storeCodes: storeCodesForImport })
+        const r = await importPosMenus(menus, {
+          storeCodes: storeCodesForImport,
+          onProgress: setMenuImportProgress,
+        })
         await refreshPosMenusCatalogCache()
         await loadMenusAndCategories()
         const summary = (
@@ -745,6 +750,7 @@ export default function PosMenusPage() {
         await appAlert(translateApiMessage(msg, t) || msg)
       } finally {
         setMenuImportBusy(false)
+        setMenuImportProgress(null)
       }
     },
     [t, loadMenusAndCategories, selectedStoreCodes, defaultScopeStoreCodes]
@@ -5316,7 +5322,11 @@ export default function PosMenusPage() {
                   onClick={() => menuImportInputRef.current?.click()}
                 >
                   <Upload className={cn("h-3.5 w-3.5 mr-1.5", menuImportBusy && "animate-pulse")} />
-                  {menuImportBusy ? (t("loading") || "처리 중…") : t("posMenuImportUpload")}
+                  {menuImportBusy
+                    ? menuImportProgress
+                      ? `${t("loading") || "Loading"} ${menuImportProgress.done}/${menuImportProgress.total}`
+                      : (t("loading") || "처리 중…")
+                    : t("posMenuImportUpload")}
                 </Button>
                 <Button
                   variant="outline"

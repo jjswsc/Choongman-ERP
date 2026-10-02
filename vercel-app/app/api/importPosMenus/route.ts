@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { upsertPosMenuFromBody, type PosMenuUpsertApiBody } from '@/lib/pos-menu-upsert-server'
 import { persistImportedPosMenuCategories } from '@/lib/pos-menu-category-import-server'
+import { loadPosMenuImportSnapshots } from '@/lib/pos-menu-import-existing-server'
+import { isPosMenuImportRowUnchanged } from '@/lib/pos-menu-import-unchanged'
 import { resolvePosCatalogTenantScope } from '@/lib/pos-catalog-tenant-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
@@ -84,6 +86,10 @@ export async function POST(req: NextRequest) {
     const errorDetails: { line: number; code?: string; message: string }[] = []
 
     const categoryPairs: { categoryMain: string; category: string }[] = []
+    const existingByCode = await loadPosMenuImportSnapshots(
+      (menus as PosMenuUpsertApiBody[]).map((row) => String(row?.code ?? '')),
+      catalogScope
+    )
 
     for (let i = 0; i < menus.length; i++) {
       const row = menus[i] as PosMenuUpsertApiBody
@@ -99,6 +105,12 @@ export async function POST(req: NextRequest) {
         errors.push(`${line}행: ${message}`)
         errorDetails.push({ line, code: code || undefined, message })
         skipped++
+        continue
+      }
+
+      const existing = existingByCode?.get(code.toLowerCase())
+      if (existing && isPosMenuImportRowUnchanged(existing, { ...row, code, name }, storeCodes)) {
+        updated++
         continue
       }
 
