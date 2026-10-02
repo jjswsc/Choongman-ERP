@@ -5,11 +5,14 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Smartphone, X } from "lucide-react"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 
-/** 모바일에서 홈 화면에 추가 유도 - 설치 시 알림 설정에 "CM ERP"가 별도 앱으로 표시됨 */
+/** 모바일에서 홈 화면에 추가 유도. 설치되면 알림 설정에 브랜드 이름이 별도 앱으로 표시됨 */
 export function PwaInstallBanner() {
   const { lang } = useLang()
   const t = useT(lang)
+  const brand = useAppBrandConfig()
+  const appLabel = brand.key === "omnifoodtech" ? "OmniFoodTech" : "CM ERP"
   const [visible, setVisible] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState<{ prompt: () => Promise<{ outcome: string }> } | null>(null)
 
@@ -54,29 +57,30 @@ export function PwaInstallBanner() {
 
   if (!visible) return null
 
+  const desc = t("pwaInstallDesc").split("{app}").join(appLabel)
+
   return (
     <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs">
       <Smartphone className="h-4 w-4 shrink-0 text-primary" />
       <div className="flex-1 min-w-0">
         <p className="font-medium text-foreground">
-          {t("pwaInstallTitle") || "앱으로 설치하기"}
+          {t("pwaInstallTitle")}
         </p>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          {(t("pwaInstallDesc") || "홈 화면에 추가하면 'CM ERP'가 휴대폰 앱 목록·알림 설정에 표시됩니다.")
-            .replace("CM ERP", "CM ERP")}
+          {desc}
         </p>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         {deferredPrompt ? (
           <Button size="sm" className="h-7 text-[11px]" onClick={handleInstall}>
-            {t("pwaInstallBtn") || "설치"}
+            {t("pwaInstallBtn")}
           </Button>
         ) : (
           <span className="text-[11px] text-muted-foreground">
-            {lang === "ko" ? "⋮ 메뉴 → 홈 화면에 추가" : "Menu → Add to Home Screen"}
+            {t("pwaInstallMenuHint")}
           </span>
         )}
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleDismiss} aria-label="닫기">
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleDismiss} aria-label={t("pwaInstallDismiss")}>
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
