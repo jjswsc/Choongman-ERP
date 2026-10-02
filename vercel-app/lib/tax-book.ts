@@ -84,7 +84,13 @@ export function taxEntityKeyFromScope(scopeFilter: string | null | undefined): s
   const lower = raw.toLowerCase()
   if (lower.startsWith('entity:')) {
     const code = raw.slice(7).trim()
-    return code || null
+    if (!code) return null
+    // UI 법인 스코프(entity:choongman-0105…) → 기초 전표 키 tin:0105…
+    const choongmanTin = /^choongman-(\d{13})$/i.exec(code)
+    if (choongmanTin) return `tin:${choongmanTin[1]}`
+    const bareTin = /^(\d{13})$/.exec(code)
+    if (bareTin) return `tin:${bareTin[1]}`
+    return code
   }
   if (lower.startsWith('taxid:')) {
     const tin = raw.slice(6).replace(/\D/g, '')
