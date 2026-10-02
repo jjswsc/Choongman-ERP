@@ -14,8 +14,6 @@ import {
   type TaxManagementBridgeResponse,
 } from "@/lib/api-client/tax-book"
 import {
-  buildErpExcelHtmlDocument,
-  erpExcelSimpleTableStyle,
   triggerErpExcelHtmlDownload,
 } from "@/lib/erp-excel-export"
 import { buildTaxBookStatements, resolveTaxBookMonthRange } from "@/lib/tax-book"
@@ -23,6 +21,15 @@ import { buildTaxCloseChecklist, type TaxCloseChecklistStepId } from "@/lib/tax-
 import { parseFlowTrialBalanceSheet } from "@/lib/tax-book-opening-parse"
 import type { ExternalTrialBalanceRow } from "@/lib/tax-book-opening"
 import type { TaxBridgeLineKey } from "@/lib/tax-management-bridge"
+import {
+  buildFlowBalanceSheetHtml,
+  buildFlowIncomeStatementHtml,
+  buildFlowTrialBalanceHtml,
+  printFlowReportHtml,
+  taxBookFlowReportScreenCss,
+  wrapFlowReportForExcel,
+  type TaxBookFlowReportMeta,
+} from "@/lib/tax-book-flow-report"
 import { cn } from "@/lib/utils"
 
 type BooksView = "bridge" | "vouchers" | "ledger" | "trial" | "taxIncome" | "taxBalance" | "closing"
@@ -41,31 +48,6 @@ function lineLabel(t: (k: string) => string, key: TaxBridgeLineKey): string {
 type AdjLine = { accountCode: string; side: "debit" | "credit"; amount: string }
 
 type BooksQuery = { from: string; to: string; scope: string; tick: number }
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-}
-
-function downloadStatementTable(opts: {
-  title: string
-  filename: string
-  headers: string[]
-  rows: (string | number)[][]
-}) {
-  const head = opts.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")
-  const body = opts.rows
-    .map((row) => `<tr>${row.map((c) => `<td>${escapeHtml(String(c))}</td>`).join("")}</tr>`)
-    .join("")
-  const html = buildErpExcelHtmlDocument(
-    `<h3>${escapeHtml(opts.title)}</h3><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`,
-    erpExcelSimpleTableStyle({ includeTh: true, fullWidth: true })
-  )
-  triggerErpExcelHtmlDownload(html, opts.filename)
-}
 
 export function TaxFilingBooksTab(props: {
   fromMonth: string
@@ -300,8 +282,60 @@ export function TaxFilingBooksTab(props: {
   const schemaReady = bridge ? bridge.schemaReady !== false : entries ? entries.schemaReady !== false : true
   const canPost = !posting && !closed && !entityMissing && schemaReady && singleMonth
   const ymLabel = query?.from || props.fromMonth
+  const scopeLabel = query?.scope || props.filingStoreFilter || "All"
+  const reportMeta: TaxBookFlowReportMeta = React.useMemo(() => {
+    const company =
+      bridge?.taxEntityCode ||
+      (scopeLabel.startsWith("entity:") || scopeLabel.startsWith("taxid:") || scopeLabel.startsWith("store:")
+        ? scopeLabel
+        : scopeLabel)
+    const from = query?.from || props.fromMonth
+    const to = query?.to || props.toMonth
+    return {
+      companyName: company,
+      asOfLabel:
+        from === to
+          ? `As at / สิ้นสุด ณ ${from}-01 ~ month end`
+          : `Period ${from} ~ ${to}`,
+      periodLabel: from === to ? `Year-month ${from}` : undefined,
+    }
+  }, [bridge?.taxEntityCode, scopeLabel, query?.from, query?.to, props.fromMonth, props.toMonth])
 
   const stepLabel = (id: TaxCloseChecklistStepId): string => t(`taxBooksCheck_${id}`)
+
+  const exportFlow = (kind: "trial" | "income" | "balance") => {
+    let inner = ""
+    let filename = ""
+    if (kind === "trial") {
+      inner = buildFlowTrialBalanceHtml(reportMeta, entries?.trial || [], {
+        debit: entries?.totalDebit || 0,
+        credit: entries?.totalCredit || 0,
+      })
+      filename = `tax-trial-flow-${ymLabel}.xls`
+    } else if (kind === "income") {
+      inner = buildFlowIncomeStatementHtml(reportMeta, statements)
+      filename = `tax-income-flow-${ymLabel}.xls`
+    } else {
+      inner = buildFlowBalanceSheetHtml(reportMeta, statements)
+      filename = `tax-balance-flow-${ymLabel}.xls`
+    }
+    triggerErpExcelHtmlDownload(wrapFlowReportForExcel(inner), filename)
+  }
+
+  const printFlow = (kind: "trial" | "income" | "balance") => {
+    let inner = ""
+    if (kind === "trial") {
+      inner = buildFlowTrialBalanceHtml(reportMeta, entries?.trial || [], {
+        debit: entries?.totalDebit || 0,
+        credit: entries?.totalCredit || 0,
+      })
+    } else if (kind === "income") {
+      inner = buildFlowIncomeStatementHtml(reportMeta, statements)
+    } else {
+      inner = buildFlowBalanceSheetHtml(reportMeta, statements)
+    }
+    printFlowReportHtml(inner)
+  }
 
   return (
     <div className="space-y-3">
@@ -454,121 +488,63 @@ export function TaxFilingBooksTab(props: {
 
       {view === "trial" && entries?.trial ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                downloadStatementTable({
-                  title: `${t("taxBooksView_trial")} ${ymLabel}`,
-                  filename: `tax-trial-${ymLabel}.xls`,
-                  headers: [t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksDebit"), t("taxBooksCredit")],
-                  rows: entries.trial.map((r) => [r.accountCode, r.accountName || "", r.debit, r.credit]),
-                })
-              }
-            >
+          <div className="flex flex-wrap gap-2 no-print">
+            <Button type="button" size="sm" variant="outline" onClick={() => exportFlow("trial")}>
               {t("taxBooksExportExcel")}
             </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => printFlow("trial")}>
+              {t("taxBooksPrint")}
+            </Button>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {t("taxBooksDebit")} {money(entries.totalDebit)} · {t("taxBooksCredit")} {money(entries.totalCredit)} ·{" "}
-            {t("taxBooksColDiff")} {money(entries.diff)}
-          </p>
-          <p className="text-xs text-muted-foreground">{t("taxBooksTrialDrillHint")}</p>
-          <ClickableTrialTable
-            empty={t("taxBooksNoRows")}
-            rows={entries.trial}
-            headers={[t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksDebit"), t("taxBooksCredit")]}
-            onAccountClick={drillToLedger}
+          <p className="text-xs text-muted-foreground no-print">{t("taxBooksTrialDrillHint")}</p>
+          <style dangerouslySetInnerHTML={{ __html: taxBookFlowReportScreenCss() }} />
+          <div
+            dangerouslySetInnerHTML={{
+              __html: buildFlowTrialBalanceHtml(reportMeta, entries.trial, {
+                debit: entries.totalDebit || 0,
+                credit: entries.totalCredit || 0,
+              }),
+            }}
           />
+          <div className="no-print rounded-md border border-dashed p-2">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">{t("taxBooksLedgerFilter")}</p>
+            <ClickableTrialTable
+              empty={t("taxBooksNoRows")}
+              rows={entries.trial}
+              headers={[t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksDebit"), t("taxBooksCredit")]}
+              onAccountClick={drillToLedger}
+            />
+          </div>
         </div>
       ) : null}
 
       {view === "taxIncome" && !loading ? (
         <div className="space-y-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              downloadStatementTable({
-                title: `${t("taxBooksView_taxIncome")} ${ymLabel}`,
-                filename: `tax-income-${ymLabel}.xls`,
-                headers: [t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksColKind"), t("taxBooksAmount")],
-                rows: statements.incomeLines.map((ln) => [
-                  ln.accountCode,
-                  ln.accountName || "",
-                  t(`taxBooksSection_${ln.section}`),
-                  ln.amount,
-                ]),
-              })
-            }
-          >
-            {t("taxBooksExportExcel")}
-          </Button>
-          <p className="text-sm">
-            {t("taxBooksRevenue")} {money(statements.revenue)} · {t("taxBooksExpense")} {money(statements.expense)} ·{" "}
-            {t("taxBooksIncomeNet")} {money(statements.netIncome)}
-          </p>
-          {Math.abs(statements.retainedEarnings) > 0.01 ? (
-            <p className="text-sm text-muted-foreground">{t("taxBooksClosedIntoEquity")}</p>
-          ) : null}
-          <EntryTable
-            empty={t("taxBooksNoRows")}
-            rows={statements.incomeLines.map((ln) => [
-              ln.accountCode,
-              ln.accountName || "",
-              t(`taxBooksSection_${ln.section}`),
-              money(ln.amount),
-            ])}
-            headers={[t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksColKind"), t("taxBooksAmount")]}
-          />
+          <div className="flex flex-wrap gap-2 no-print">
+            <Button type="button" size="sm" variant="outline" onClick={() => exportFlow("income")}>
+              {t("taxBooksExportExcel")}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => printFlow("income")}>
+              {t("taxBooksPrint")}
+            </Button>
+          </div>
+          <style dangerouslySetInnerHTML={{ __html: taxBookFlowReportScreenCss() }} />
+          <div dangerouslySetInnerHTML={{ __html: buildFlowIncomeStatementHtml(reportMeta, statements) }} />
         </div>
       ) : null}
 
       {view === "taxBalance" && !loading ? (
         <div className="space-y-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              downloadStatementTable({
-                title: `${t("taxBooksView_taxBalance")} ${ymLabel}`,
-                filename: `tax-balance-${ymLabel}.xls`,
-                headers: [t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksColKind"), t("taxBooksAmount")],
-                rows: statements.balanceLines.map((ln) => [
-                  ln.accountCode,
-                  ln.accountName || "",
-                  t(`taxBooksSection_${ln.section}`),
-                  ln.amount,
-                ]),
-              })
-            }
-          >
-            {t("taxBooksExportExcel")}
-          </Button>
-          <p className="text-sm">
-            {t("taxBooksAssets")} {money(statements.assets)} · {t("taxBooksLiabilities")} {money(statements.liabilities)}{" "}
-            · {t("taxBooksEquity")} {money(statements.equity)}
-            {Math.abs(statements.unclosedProfit) > 0.01
-              ? ` · ${t("taxBooksIncomeNet")} ${money(statements.unclosedProfit)}`
-              : ""}
-          </p>
-          <p className={cn("text-sm", statements.balanced ? "text-emerald-700" : "text-amber-700")}>
-            {statements.balanced ? t("taxBooksStatementBalanced") : t("taxBooksStatementUnbalanced")}
-          </p>
-          <EntryTable
-            empty={t("taxBooksNoRows")}
-            rows={statements.balanceLines.map((ln) => [
-              ln.accountCode,
-              ln.accountName || "",
-              t(`taxBooksSection_${ln.section}`),
-              money(ln.amount),
-            ])}
-            headers={[t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksColKind"), t("taxBooksAmount")]}
-          />
+          <div className="flex flex-wrap gap-2 no-print">
+            <Button type="button" size="sm" variant="outline" onClick={() => exportFlow("balance")}>
+              {t("taxBooksExportExcel")}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => printFlow("balance")}>
+              {t("taxBooksPrint")}
+            </Button>
+          </div>
+          <style dangerouslySetInnerHTML={{ __html: taxBookFlowReportScreenCss() }} />
+          <div dangerouslySetInnerHTML={{ __html: buildFlowBalanceSheetHtml(reportMeta, statements) }} />
         </div>
       ) : null}
 
