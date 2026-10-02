@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { filterAdsForCampaign, materialStatusForColumn, uniqueMetaAdsCampaigns } from "./marketing-meta-match"
+import type { MetaAdInsightRow } from "./meta-graph"
 
 describe("filterAdsForCampaign", () => {
   const ads = [
@@ -43,11 +44,61 @@ describe("filterAdsForCampaign", () => {
     expect(filterAdsForCampaign(ads, { topic: "Unused name" })).toEqual([])
   })
 
-  it("lists unique Ads Manager campaigns", () => {
-    expect(uniqueMetaAdsCampaigns(ads)).toEqual([
-      { id: "c1", name: "Summer Mala Boost" },
-      { id: "c2", name: "Other Brand" },
+  it("lists unique Ads Manager campaigns newest first and skips Post titles", () => {
+    const mixed: MetaAdInsightRow[] = [
+      {
+        adId: "1",
+        adName: "A",
+        campaignId: "120204228099400502",
+        campaignName: "การโปรโมท Choongman Thailand ในวันที่ [21/12/2023]",
+        impressions: 1,
+        reach: 1,
+        clicks: 0,
+        ctr: 0,
+        spend: 10,
+      },
+      {
+        adId: "2",
+        adName: "B",
+        campaignId: "120204779795250502",
+        campaignName: "การโปรโมท Choongman Thailand ในวันที่ [10/1/2024]",
+        impressions: 1,
+        reach: 1,
+        clicks: 0,
+        ctr: 0,
+        spend: 20,
+      },
+      {
+        adId: "3",
+        adName: "C",
+        campaignId: "120207857090790502",
+        campaignName: 'โพสต์: "CHOONGMAN NO.1"',
+        impressions: 1,
+        reach: 1,
+        clicks: 0,
+        ctr: 0,
+        spend: 5,
+      },
+      {
+        adId: "4",
+        adName: "D",
+        campaignId: "c1",
+        campaignName: "Summer Mala Boost",
+        impressions: 10,
+        reach: 8,
+        clicks: 1,
+        ctr: 0.1,
+        spend: 100,
+      },
+    ]
+    expect(uniqueMetaAdsCampaigns(mixed).map((x) => x.id)).toEqual([
+      "120204779795250502",
+      "120204228099400502",
+      "c1",
     ])
+    expect(uniqueMetaAdsCampaigns(mixed, { includeOrganicPosts: true }).map((x) => x.id)).toContain(
+      "120207857090790502"
+    )
   })
 })
 
