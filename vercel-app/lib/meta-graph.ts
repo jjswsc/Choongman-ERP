@@ -133,7 +133,7 @@ export async function fetchMetaAdsAndPageInsights(params: {
     since && until
       ? { time_range: JSON.stringify({ since, until }) }
       : { date_preset: "last_28d" }
-  let dateRange: { since?: string; until?: string; preset?: string } =
+  const dateRange: { since?: string; until?: string; preset?: string } =
     since && until ? { since, until } : { preset: "last_28d" }
 
   if (!params.grantedScopes.includes("read_insights") && params.tokenKind !== "env") {
