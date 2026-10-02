@@ -70,7 +70,15 @@ export function formatTaxVoucherNo(kind: TaxVoucherKind, yearMonth: string, seq:
   return `${VOUCHER_PREFIX[kind]}${ym}${String(n).padStart(4, '0')}`
 }
 
-/** entity:code / taxid:13digits 만 세무 장부 키. 매장 단건·All은 법인 마감 대상이 아니다. */
+/** 본사 매장 선택 시 법인(tin) 세무 장부로 연결 */
+const TAX_BOOK_HQ_STORE_TIN: Record<string, string> = {
+  'CM True Digital': '0105566228126',
+  'CM Silom': '0105568080622',
+  'CM Office': '0105566137147',
+  'CM Office HQ': '0105566137147',
+}
+
+/** entity:code / taxid:13digits / store:매장코드 만 세무 장부 키. All은 법인 마감 대상이 아니다. */
 export function taxEntityKeyFromScope(scopeFilter: string | null | undefined): string | null {
   const raw = String(scopeFilter || '').trim()
   const lower = raw.toLowerCase()
@@ -81,6 +89,17 @@ export function taxEntityKeyFromScope(scopeFilter: string | null | undefined): s
   if (lower.startsWith('taxid:')) {
     const tin = raw.slice(6).replace(/\D/g, '')
     return tin.length === 13 ? `tin:${tin}` : null
+  }
+  if (lower.startsWith('store:')) {
+    const code = raw.slice(6).trim()
+    if (!code) return null
+    const hqTin = TAX_BOOK_HQ_STORE_TIN[code]
+    return hqTin ? `tin:${hqTin}` : `store:${code}`
+  }
+  // 매장 코드 단독
+  if (raw && raw !== 'All' && raw !== '*' && !raw.includes(':')) {
+    const hqTin = TAX_BOOK_HQ_STORE_TIN[raw]
+    return hqTin ? `tin:${hqTin}` : `store:${raw}`
   }
   return null
 }

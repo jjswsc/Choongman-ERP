@@ -40,7 +40,10 @@ describe('tax book rules', () => {
   it('accepts only an entity or 13-digit TIN as the tax book key', () => {
     expect(taxEntityKeyFromScope('entity:omni-foodtech-01')).toBe('omni-foodtech-01')
     expect(taxEntityKeyFromScope('taxid:0105551234567')).toBe('tin:0105551234567')
-    expect(taxEntityKeyFromScope('Silom')).toBeNull()
+    expect(taxEntityKeyFromScope('CM True Digital')).toBe('tin:0105566228126')
+    expect(taxEntityKeyFromScope('CM Silom')).toBe('tin:0105568080622')
+    expect(taxEntityKeyFromScope('CM MBK')).toBe('store:CM MBK')
+    expect(taxEntityKeyFromScope('store:CM MBK')).toBe('store:CM MBK')
     expect(taxEntityKeyFromScope('All')).toBeNull()
   })
 
