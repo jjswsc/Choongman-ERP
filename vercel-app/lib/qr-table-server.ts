@@ -29,6 +29,7 @@ import { normalizePromotionCategoryMain, normalizePromotionSubcategory, posMainC
 import { readPosCategoryTabOrder } from '@/lib/pos-category-tab-order-server'
 import { resolvePosCatalogTenantScope } from '@/lib/pos-catalog-tenant-scope'
 import type { PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
+import { resolveQrBillPaySettlement } from '@/lib/qr-table-bill-pay'
 import {
   type QrGuestMenuOption,
   qrGuestBanbanUnitPrice,
@@ -2263,6 +2264,7 @@ export async function submitQrCart(params: {
   let nextItems: Array<Record<string, unknown>> = []
   let subtotal = 0
   let pricing = { vatFeeAmt: 0, serviceFeeAmt: 0, finalTotal: 0 }
+  let didMutateItems = false
   const maxCartWriteAttempts = 5
   for (let attempt = 0; attempt < maxCartWriteAttempts; attempt++) {
     const latestRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
@@ -2303,10 +2305,25 @@ export async function submitQrCart(params: {
         patch
       )
       if (!Array.isArray(casRows) || casRows.length === 0) continue
+      didMutateItems = true
       break
     }
     await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, patch)
+    didMutateItems = true
     break
+  }
+
+  // 메뉴가 실제로 추가된 뒤에만 대기 중 계산 QR 무효화(재시도 제출로 발행 QR을 지우지 않음)
+  if (didMutateItems) {
+    try {
+      await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+        pending_bill_partner_txn_id: null,
+        pending_bill_amount: 0,
+        updated_at: getBangkokDateTimeString(),
+      })
+    } catch (e) {
+      console.error('qr_table_submit clear pending bill:', e)
+    }
   }
 
   const orderSummary = buildGuestOrderSummaryFromOrderRow({
@@ -2660,6 +2677,7 @@ export async function issueBillPayQr(sessionId: number): Promise<{
 
 export async function pollBillPayStatus(sessionId: number): Promise<{
   paid: boolean
+  partialPaid?: boolean
   balanceDue: number
   order?: QrGuestOrderSummary
 }> {
@@ -2679,7 +2697,8 @@ export async function pollBillPayStatus(sessionId: number): Promise<{
       String(sessRowsEarly?.[0]?.status || '').toLowerCase()
     )
     if (sessOpen || pendingAmt >= 0.005 || summary.paymentQr < 0.005) {
-      await finalizeBillPayByQr(session, Math.max(pendingAmt, summary.total, 0))
+      // pending만 반영(summary.total로 부풀리지 않음). 0이면 이미 paid 분기에서 gap 보정.
+      await finalizeBillPayByQr(session, pendingAmt)
     }
     const next = await getGuestOrderSummary({ ...session })
     return { paid: true, balanceDue: 0, order: next }
@@ -2729,9 +2748,17 @@ export async function pollBillPayStatus(sessionId: number): Promise<{
         statusCode: String(response.statusCode || ''),
         statusMessage: String(response.statusMessage || response.txnStatus || 'approved'),
       })
-      await finalizeBillPayByQr(session, amount, response)
+      const fin = await finalizeBillPayByQr(session, amount, response)
       const next = await getGuestOrderSummary({ ...session })
-      return { paid: true, balanceDue: 0, order: next }
+      if (fin.fullyPaid) {
+        return { paid: true, balanceDue: 0, order: next }
+      }
+      return {
+        paid: false,
+        partialPaid: fin.payAmt >= 0.005,
+        balanceDue: next.balanceDue,
+        order: next,
+      }
     }
   } catch {
     /* pending */
@@ -2811,40 +2838,40 @@ async function finalizeBillPayByQr(
   session: QrTableSession & { secretHash?: string },
   amount: number,
   bankResponse?: Record<string, unknown>
-) {
-  if (!session.posOrderId) return
+): Promise<{ fullyPaid: boolean; payAmt: number }> {
+  if (!session.posOrderId) return { fullyPaid: false, payAmt: 0 }
   const orderRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
     limit: 1,
-    select: 'id,payment_qr,payment_cash,payment_card,payment_other,total,status,paid_at',
+    select: 'id,payment_qr,payment_cash,payment_card,payment_other,payment_delivery_app,total,status,paid_at',
   })) as Array<{
     id?: number
     payment_qr?: number
     payment_cash?: number
     payment_card?: number
     payment_other?: number
+    payment_delivery_app?: number
     total?: number
     status?: string
     paid_at?: string | null
   }>
   const order = orderRows?.[0]
-  if (!order?.id) return
+  if (!order?.id) return { fullyPaid: false, payAmt: 0 }
 
   const nowIso = new Date().toISOString()
-  const paySum =
+  const priorPaySum =
     asNum(order.payment_cash) +
     asNum(order.payment_card) +
     asNum(order.payment_qr) +
-    asNum(order.payment_other)
-  const total = asNum(order.total)
-  const gap = Math.max(0, Math.round((total - paySum) * 100) / 100)
-  const requested = Math.max(0, asNum(amount))
-  const payAmt = requested >= 0.005 ? requested : gap
+    asNum(order.payment_other) +
+    asNum(order.payment_delivery_app)
+  const orderTotal = asNum(order.total)
+  const remainBefore = Math.max(0, Math.round((orderTotal - priorPaySum) * 100) / 100)
 
   if (String(order.status || '').toLowerCase() === 'paid') {
     // 웹훅 status-only: 채널 합이 total 미만이면 payment_qr에 잔액 백필 (입장료 QR은 유지)
-    if (gap >= 0.005) {
+    if (remainBefore >= 0.005) {
       await supabaseUpdateByFilter('pos_orders', `id=eq.${order.id}`, {
-        payment_qr: Math.round((asNum(order.payment_qr) + gap) * 100) / 100,
+        payment_qr: Math.round((asNum(order.payment_qr) + remainBefore) * 100) / 100,
         paid_at: order.paid_at || nowIso,
         updated_at: nowIso,
       })
@@ -2855,10 +2882,20 @@ async function finalizeBillPayByQr(
       updated_at: nowIso,
     })
     await closeQrTableSessionsForPosOrder({ orderId: order.id, reason: 'paid' })
-    return
+    return { fullyPaid: true, payAmt: remainBefore }
   }
 
-  const nextQr = Math.round((asNum(order.payment_qr) + payAmt) * 100) / 100
+  const settlement = resolveQrBillPaySettlement({
+    orderTotal,
+    paymentCash: order.payment_cash,
+    paymentCard: order.payment_card,
+    paymentQr: order.payment_qr,
+    paymentOther: order.payment_other,
+    paymentDeliveryApp: order.payment_delivery_app,
+    paidAmount: amount,
+  })
+  const payAmt = settlement.payAmt
+  const nextQr = settlement.nextPaymentQr
 
   const sessRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
     limit: 1,
@@ -2870,6 +2907,21 @@ async function finalizeBillPayByQr(
     const txnFields = resolveQrBillPayVoidTxnFields(bankResponse, partnerTxn)
     if (txnFields.approval_code) linkposPatch.linkpos_approval_code = txnFields.approval_code
     if (txnFields.trace_no) linkposPatch.linkpos_trace_no = txnFields.trace_no
+  }
+
+  if (!settlement.markPaid) {
+    // 부분 입금: 영수증 자동인쇄(unpaid→paid) 금지. 세션·주문은 열어 두고 잔액 재결제.
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+      payment_qr: nextQr,
+      updated_at: nowIso,
+      ...linkposPatch,
+    })
+    await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+      pending_bill_partner_txn_id: null,
+      pending_bill_amount: 0,
+      updated_at: nowIso,
+    })
+    return { fullyPaid: false, payAmt }
   }
 
   // unpaid → paid: POS Realtime이 카운터 결제 영수증 자동인쇄
@@ -2893,6 +2945,7 @@ async function finalizeBillPayByQr(
   } catch {
     /* loyalty optional — do not undo paid */
   }
+  return { fullyPaid: true, payAmt }
 }
 
 /**
@@ -2944,6 +2997,7 @@ export async function finalizeQrTableBillPayFromOrderId(params: {
 
   let amount = Math.max(0, asNum(params.paymentQrAmount))
   let partnerTxn = String(params.partnerTransactionId || '').trim()
+  let pendingAmt = 0
   if (session) {
     const pendingRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
       limit: 1,
@@ -2952,19 +3006,24 @@ export async function finalizeQrTableBillPayFromOrderId(params: {
       pending_bill_partner_txn_id?: string | null
       pending_bill_amount?: number | string | null
     }>
-    amount = Math.max(amount, asNum(pendingRows?.[0]?.pending_bill_amount))
+    pendingAmt = asNum(pendingRows?.[0]?.pending_bill_amount)
     if (!partnerTxn) {
       partnerTxn = String(pendingRows?.[0]?.pending_bill_partner_txn_id || '').trim()
     }
   }
-
-  const paySum =
-    asNum(order.payment_cash) +
-    asNum(order.payment_card) +
-    asNum(order.payment_qr) +
-    asNum(order.payment_other)
-  const gap = Math.max(0, Math.round((asNum(order.total) - paySum) * 100) / 100)
-  amount = Math.max(amount, gap)
+  // 은행 입금액·발행 QR만 인정. 주문 잔액(gap)으로 부풀리면 미결제 메뉴까지 paid 처리됨.
+  if (amount >= 0.005 && pendingAmt >= 0.005) {
+    amount = Math.min(amount, pendingAmt)
+  } else if (amount < 0.005 && pendingAmt >= 0.005) {
+    amount = pendingAmt
+  } else if (amount < 0.005) {
+    const paySum =
+      asNum(order.payment_cash) +
+      asNum(order.payment_card) +
+      asNum(order.payment_qr) +
+      asNum(order.payment_other)
+    amount = Math.max(0, Math.round((asNum(order.total) - paySum) * 100) / 100)
+  }
 
   if (session && partnerTxn && params.bankResponse) {
     try {
@@ -3000,25 +3059,42 @@ export async function finalizeQrTableBillPayFromOrderId(params: {
   // 세션 행이 없어도 주문 payment_qr·paid 보정 + (있다면) 세션 종료
   const nowIso = new Date().toISOString()
   const status = String(order.status || '').toLowerCase()
+  const settle = resolveQrBillPaySettlement({
+    orderTotal: asNum(order.total),
+    paymentCash: order.payment_cash,
+    paymentCard: order.payment_card,
+    paymentQr: order.payment_qr,
+    paymentOther: order.payment_other,
+    paidAmount: amount,
+  })
   if (status === 'paid' || status === 'completed') {
-    if (gap >= 0.005) {
+    const priorSum =
+      asNum(order.payment_cash) +
+      asNum(order.payment_card) +
+      asNum(order.payment_qr) +
+      asNum(order.payment_other)
+    const remainBefore = Math.max(0, Math.round((asNum(order.total) - priorSum) * 100) / 100)
+    if (remainBefore >= 0.005) {
       await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
-        payment_qr: Math.round((asNum(order.payment_qr) + gap) * 100) / 100,
+        payment_qr: Math.round((asNum(order.payment_qr) + remainBefore) * 100) / 100,
         paid_at: order.paid_at || nowIso,
         updated_at: nowIso,
       })
     }
-  } else {
-    const requested = Math.max(0, asNum(params.paymentQrAmount), amount)
-    const payAmt = requested >= 0.005 ? requested : gap
-    if (payAmt >= 0.005 || gap < 0.005) {
-      await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
-        payment_qr: Math.round((asNum(order.payment_qr) + payAmt) * 100) / 100,
-        status: 'paid',
-        paid_at: nowIso,
-        updated_at: nowIso,
-      })
-    }
+  } else if (settle.markPaid) {
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
+      payment_qr: settle.nextPaymentQr,
+      status: 'paid',
+      paid_at: nowIso,
+      updated_at: nowIso,
+    })
+  } else if (settle.payAmt >= 0.005) {
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
+      payment_qr: settle.nextPaymentQr,
+      updated_at: nowIso,
+    })
+    // 부분 입금이면 세션을 paid 이유로 닫지 않음
+    return { ok: true }
   }
   await closeQrTableSessionsForPosOrder({ orderId, reason: 'paid' })
   try {

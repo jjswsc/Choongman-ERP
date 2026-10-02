@@ -214,6 +214,7 @@ export async function qrTablePollBillPay(sessionAuth: string) {
   return parseJson<{
     success: boolean
     paid?: boolean
+    partialPaid?: boolean
     balanceDue?: number
     order?: {
       orderId?: number | null

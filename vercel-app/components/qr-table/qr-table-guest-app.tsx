@@ -20,6 +20,7 @@ import {
 } from '@/lib/api-client/qr-table'
 import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession } from '@/lib/qr-table-types'
 import { buffetTierDisplayName } from '@/lib/qr-table-types'
+import { isQrBillPayAmountStale } from '@/lib/qr-table-bill-pay'
 import {
   aggregateQrGuestSentLines,
   qrGuestCartLineKey,
@@ -891,7 +892,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
         return
       }
       setBillQrPayload(String(qr.qrPayload || ''))
-      setBillQrAmount(Number(qr.qrAmount || due))
+      const issuedAmount = Number(qr.qrAmount || due)
+      setBillQrAmount(issuedAmount)
       billPayPollRef.current = window.setInterval(async () => {
         const st = await qrTablePollBillPay(sessionAuth)
         if (st?.paid) {
@@ -907,6 +909,27 @@ export function QrTableGuestApp({ token }: { token: string }) {
               setOrderSummary(toOrderSummary(order.order))
             }
           }
+          return
+        }
+        if (st?.order) {
+          setOrderSummary(toOrderSummary(st.order))
+        }
+        const liveDue = Number(st?.balanceDue ?? 0)
+        if (st?.partialPaid) {
+          clearBillPayPoll()
+          setBillQrPayload('')
+          setBillPayOpen(false)
+          showToast(
+            g('payBillPartialHint').replace(/\{n\}/g, String(Math.round(liveDue))),
+            7200
+          )
+          return
+        }
+        if (isQrBillPayAmountStale({ issuedQrAmount: issuedAmount, currentBalanceDue: liveDue })) {
+          clearBillPayPoll()
+          setBillQrPayload('')
+          setBillPayOpen(false)
+          showToast(g('payBillAmountChanged'), 7200)
         }
       }, QR_TABLE_GUEST_PAY_POLL_MS)
     } catch (e) {
