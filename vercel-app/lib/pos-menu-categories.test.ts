@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   mergePromotionIntoCategoriesConfig,
+  mergeImportedMenuCategoriesIntoConfig,
   resolveConfiguredCategoriesForMain,
   POS_CATEGORIES_BY_MAIN,
   fallbackPosMenuCategoriesConfig,
@@ -52,6 +53,59 @@ describe('mergePromotionIntoCategoriesConfig', () => {
       },
     })
     expect(merged.categoriesByMain.Chicken).toEqual([])
+  })
+})
+
+describe('mergeImportedMenuCategoriesIntoConfig', () => {
+  it('adds mains and subs from an import onto an empty Omni config and keeps Promotion', () => {
+    const merged = mergeImportedMenuCategoriesIntoConfig(emptyPosMenuCategoriesConfig(), [
+      { categoryMain: 'Dessert', category: 'Cake' },
+      { categoryMain: 'Beverage', category: 'Coffee' },
+      { categoryMain: 'Merchandise', category: 'Watta' },
+      { categoryMain: 'Merchandise', category: 'Pavement' },
+    ])
+    expect(merged.mainCategories).toEqual([
+      'Dessert',
+      'Beverage',
+      'Merchandise',
+      PROMOTION_MAIN_CATEGORY,
+    ])
+    expect(merged.categoriesByMain.Dessert).toEqual(['Cake'])
+    expect(merged.categoriesByMain.Beverage).toEqual(['Coffee'])
+    expect(merged.categoriesByMain.Merchandise).toEqual(['Watta', 'Pavement'])
+    expect(merged.categoriesByMain[PROMOTION_MAIN_CATEGORY]).toEqual([
+      ...PROMOTION_DEFAULT_SUBCATEGORIES,
+    ])
+  })
+
+  it('appends only missing names and does not remove categories already in settings', () => {
+    const merged = mergeImportedMenuCategoriesIntoConfig(
+      {
+        mainCategories: ['Beverage', PROMOTION_MAIN_CATEGORY],
+        categoriesByMain: {
+          Beverage: ['Coffee'],
+          [PROMOTION_MAIN_CATEGORY]: ['Set'],
+        },
+      },
+      [
+        { categoryMain: 'Beverage', category: 'Coffee' },
+        { categoryMain: 'Beverage', category: 'Tea' },
+        { categoryMain: 'Food', category: 'Snack' },
+      ]
+    )
+    expect(merged.mainCategories).toEqual(['Beverage', PROMOTION_MAIN_CATEGORY, 'Food'])
+    expect(merged.categoriesByMain.Beverage).toEqual(['Coffee', 'Tea'])
+    expect(merged.categoriesByMain.Food).toEqual(['Snack'])
+    expect(merged.categoriesByMain[PROMOTION_MAIN_CATEGORY]).toEqual(['Set'])
+  })
+
+  it('skips a subcategory that has no main category', () => {
+    const merged = mergeImportedMenuCategoriesIntoConfig(emptyPosMenuCategoriesConfig(), [
+      { categoryMain: '', category: 'Coffee' },
+      { categoryMain: 'Food', category: '' },
+    ])
+    expect(merged.mainCategories).toEqual(['Food', PROMOTION_MAIN_CATEGORY])
+    expect(merged.categoriesByMain.Food).toEqual([])
   })
 })
 

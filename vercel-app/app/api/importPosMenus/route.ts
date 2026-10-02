@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { upsertPosMenuFromBody, type PosMenuUpsertApiBody } from '@/lib/pos-menu-upsert-server'
+import { persistImportedPosMenuCategories } from '@/lib/pos-menu-category-import-server'
 import { resolvePosCatalogTenantScope } from '@/lib/pos-catalog-tenant-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
+/** 한 요청에 메뉴를 너무 많이 넣으면 게이트웨이 504로 중간부터 저장이 끊긴다. 클라이언트는 40행씩 나눈다. */
+export const maxDuration = 60
+
 const MAX_ROWS = 2000
+
+function parseLineOffset(raw: unknown): number {
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return 0
+  return Math.min(Math.floor(n), 100000)
+}
 
 function normalizeStoreCodes(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
@@ -33,9 +43,10 @@ export async function POST(req: NextRequest) {
     String(auth.name || '').trim() || String(auth.employeeCode || '').trim() || 'importPosMenus'
 
   try {
-    const body = (await req.json()) as { menus?: unknown; storeCodes?: unknown }
+    const body = (await req.json()) as { menus?: unknown; storeCodes?: unknown; lineOffset?: unknown }
     const menus = body.menus
     const storeCodes = normalizeStoreCodes(body.storeCodes)
+    const lineOffset = parseLineOffset(body.lineOffset)
     if (!Array.isArray(menus)) {
       return NextResponse.json(
         { success: false, message: 'menus 배열이 필요합니다.' },
@@ -72,9 +83,15 @@ export async function POST(req: NextRequest) {
     const errors: string[] = []
     const errorDetails: { line: number; code?: string; message: string }[] = []
 
+    const categoryPairs: { categoryMain: string; category: string }[] = []
+
     for (let i = 0; i < menus.length; i++) {
       const row = menus[i] as PosMenuUpsertApiBody
-      const line = i + 1
+      const line = lineOffset + i + 1
+      categoryPairs.push({
+        categoryMain: String(row?.categoryMain ?? ''),
+        category: String(row?.category ?? ''),
+      })
       const code = String(row?.code ?? '').trim()
       const name = String(row?.name ?? '').trim()
       if (!code || !name) {
@@ -115,6 +132,14 @@ export async function POST(req: NextRequest) {
         updated++
       } else {
         inserted++
+      }
+    }
+
+    if (inserted + updated > 0) {
+      try {
+        await persistImportedPosMenuCategories({ catalogScope, pairs: categoryPairs })
+      } catch (categoryErr) {
+        console.error('importPosMenus categories:', categoryErr)
       }
     }
 

@@ -7,6 +7,8 @@ import {
   PROMOTION_DEFAULT_SUBCATEGORIES,
   PROMOTION_MAIN_CATEGORY,
   LEGACY_PROMOTION_MAIN_CATEGORY,
+  normalizePromotionCategoryMain,
+  normalizePromotionSubcategory,
   uniqueSubcategoriesForMainMenu,
 } from '@/lib/pos-promo-constants'
 
@@ -53,6 +55,59 @@ export function mergePromotionIntoCategoriesConfig(cfg: PosMenuCategoriesConfigS
     },
     ...(cfg.codePrefixByMain ? { codePrefixByMain: { ...cfg.codePrefixByMain } } : {}),
   }
+}
+
+export type ImportedMenuCategoryPair = {
+  categoryMain?: string | null
+  category?: string | null
+}
+
+function normalizeImportedSubcategory(main: string, raw: string): string {
+  const sub = String(raw ?? '').trim()
+  if (!sub) return ''
+  return main === PROMOTION_MAIN_CATEGORY ? normalizePromotionSubcategory(sub) : sub
+}
+
+/**
+ * 엑셀 일괄 업로드에 있는 대분류·소분류를 카테고리 설정에 합친다.
+ * 이미 있는 이름은 유지하고, 없는 이름만 뒤에 붙인다. 기존 항목은 지우지 않는다.
+ */
+export function mergeImportedMenuCategoriesIntoConfig(
+  config: PosMenuCategoriesConfigShape,
+  pairs: ImportedMenuCategoryPair[]
+): PosMenuCategoriesConfigShape {
+  const mains: string[] = []
+  for (const raw of config.mainCategories) {
+    const main = normalizePromotionCategoryMain(raw)
+    if (main && !mains.includes(main)) mains.push(main)
+  }
+
+  const categoriesByMain: Record<string, string[]> = {}
+  for (const [rawMain, subs] of Object.entries(config.categoriesByMain || {})) {
+    const main = normalizePromotionCategoryMain(rawMain)
+    if (!main) continue
+    const list = categoriesByMain[main] ? [...categoriesByMain[main]] : []
+    for (const rawSub of subs || []) {
+      const sub = normalizeImportedSubcategory(main, rawSub)
+      if (sub && !list.includes(sub)) list.push(sub)
+    }
+    categoriesByMain[main] = list
+  }
+
+  for (const pair of pairs) {
+    const main = normalizePromotionCategoryMain(String(pair.categoryMain ?? ''))
+    if (!main) continue
+    if (!mains.includes(main)) mains.push(main)
+    if (!categoriesByMain[main]) categoriesByMain[main] = []
+    const sub = normalizeImportedSubcategory(main, String(pair.category ?? ''))
+    if (sub && !categoriesByMain[main].includes(sub)) categoriesByMain[main].push(sub)
+  }
+
+  return mergePromotionIntoCategoriesConfig({
+    mainCategories: mains,
+    categoriesByMain,
+    ...(config.codePrefixByMain ? { codePrefixByMain: { ...config.codePrefixByMain } } : {}),
+  })
 }
 
 /**
