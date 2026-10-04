@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanApproveAccountingCompliance, assertCanApproveAccountingPeriodUnlock } from '@/lib/accounting-auth'
-import { TAX_CLOSE_LOCKS_STORE_PERIOD, taxEntityKeyFromScope, taxJournalBalanced } from '@/lib/tax-book'
+import {
+  TAX_CLOSE_LOCKS_STORE_PERIOD,
+  resolveTaxBookAsOfRange,
+  taxEntityKeyFromScope,
+  taxJournalBalanced,
+} from '@/lib/tax-book'
 import {
   postTaxAdjustmentJournal,
   postTaxIncomeExpenseClosing,
@@ -372,7 +377,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'closing') {
-      const heads = await loadTaxBookJournalHeads({ taxEntityCode, yearMonth })
+      const asOf = resolveTaxBookAsOfRange(yearMonth)
+      if (!asOf.ok) throw new Error(asOf.error)
+      const heads = await loadTaxBookJournalHeads({
+        taxEntityCode,
+        fromMonth: asOf.from,
+        toMonth: asOf.to,
+      })
       if (!heads.schemaReady) throw new Error(TAX_BOOK_SCHEMA_MISSING)
       const rawLines = await loadTaxBookLines(heads.heads.map((h) => Number(h.id || 0)))
       const trial = summarizeTaxBookTrial(rawLines)

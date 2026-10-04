@@ -82,6 +82,18 @@ export function TaxFilingBooksTab(props: {
   const [openingDate, setOpeningDate] = React.useState("2026-07-01")
   const [trialUploadRows, setTrialUploadRows] = React.useState<ExternalTrialBalanceRow[] | null>(null)
   const [trialUploadName, setTrialUploadName] = React.useState<string | null>(null)
+  const loadSeqRef = React.useRef(0)
+  const lastEnsureTickRef = React.useRef(0)
+  const searchPropsRef = React.useRef({
+    fromMonth: props.fromMonth,
+    toMonth: props.toMonth,
+    scope: props.filingStoreFilter || "All",
+  })
+  searchPropsRef.current = {
+    fromMonth: props.fromMonth,
+    toMonth: props.toMonth,
+    scope: props.filingStoreFilter || "All",
+  }
 
   React.useEffect(() => {
     if (!props.focusViewTick || !props.focusView) return
@@ -90,9 +102,11 @@ export function TaxFilingBooksTab(props: {
     if (props.focusView !== "ledger") setLedgerAccount(null)
   }, [props.focusViewTick, props.focusView])
 
+  // 검색 버튼을 눌렀을 때만 조건 확정 (월·매장만 바꾸면 자동 재조회하지 않음)
   React.useEffect(() => {
     if (props.searchTick < 1) return
-    const range = resolveTaxBookMonthRange(props.fromMonth, props.toMonth)
+    const { fromMonth, toMonth, scope } = searchPropsRef.current
+    const range = resolveTaxBookMonthRange(fromMonth, toMonth)
     if (!range.ok) {
       setRangeError(range.error)
       setQuery(null)
@@ -104,40 +118,53 @@ export function TaxFilingBooksTab(props: {
     setQuery({
       from: range.from,
       to: range.to,
-      scope: props.filingStoreFilter || "All",
+      scope,
       tick: props.searchTick,
     })
-  }, [props.searchTick, props.fromMonth, props.toMonth, props.filingStoreFilter])
+  }, [props.searchTick])
 
   const load = React.useCallback(
-    async (q: BooksQuery, opts?: { ledgerAccount?: string | null }) => {
+    async (q: BooksQuery, opts?: { ledgerAccount?: string | null; ensureFiling?: boolean }) => {
       const single = q.from === q.to
       const acct = opts?.ledgerAccount !== undefined ? opts.ledgerAccount : ledgerAccount
+      const doEnsure =
+        opts?.ensureFiling === true ||
+        (single && q.tick > 0 && q.tick !== lastEnsureTickRef.current)
+      const seq = ++loadSeqRef.current
       setLoading(true)
       setMessage(null)
       try {
         if (single) {
-          const data = await getTaxManagementBridge({
-            yearMonth: q.from,
-            scopeFilter: q.scope,
-          })
-          if (data.error && !data.report) {
-            setMessage(data.error)
-            setBridge(null)
-          } else {
-            setBridge(data)
-            // 신고 요약 전표(부가세·매출·매입·급여) 자동 전기 — 금액 없으면 건너뜀
-            if (data.taxEntityCode && !data.periodClosed && data.schemaReady !== false) {
-              try {
-                await postTaxBookEntry({
+          try {
+            const data = await getTaxManagementBridge({
+              yearMonth: q.from,
+              scopeFilter: q.scope,
+            })
+            if (seq !== loadSeqRef.current) return
+            if (data.error && !data.report) {
+              setMessage(data.error)
+              setBridge(null)
+            } else {
+              setBridge(data)
+              if (
+                doEnsure &&
+                data.taxEntityCode &&
+                !data.periodClosed &&
+                data.schemaReady !== false
+              ) {
+                const ensured = await postTaxBookEntry({
                   action: "ensureFiling",
                   yearMonth: q.from,
                   scopeFilter: q.scope,
                 })
-              } catch {
-                /* 조회는 계속 */
+                if (seq !== loadSeqRef.current) return
+                if (ensured?.success) lastEnsureTickRef.current = q.tick
               }
             }
+          } catch (e) {
+            if (seq !== loadSeqRef.current) return
+            setMessage(e instanceof Error ? e.message : String(e))
+            setBridge(null)
           }
         } else {
           setBridge(null)
@@ -150,14 +177,16 @@ export function TaxFilingBooksTab(props: {
           view: entryView,
           accountCode: view === "ledger" && acct ? acct : undefined,
         })
+        if (seq !== loadSeqRef.current) return
         if (book.error && !book.trial?.length && !book.vouchers?.length && !book.ledger?.length) {
           setMessage(book.error)
         }
         setEntries(book)
       } catch (e) {
+        if (seq !== loadSeqRef.current) return
         setMessage(e instanceof Error ? e.message : String(e))
       } finally {
-        setLoading(false)
+        if (seq === loadSeqRef.current) setLoading(false)
       }
     },
     [view, ledgerAccount]
@@ -268,9 +297,9 @@ export function TaxFilingBooksTab(props: {
   }
 
   const drillToLedger = (accountCode: string) => {
+    // view·ledgerAccount 변경 → load identity 변경 → effect 1회만 조회 (이중 fetch 방지)
     setLedgerAccount(accountCode)
     setView("ledger")
-    if (query) void load(query, { ledgerAccount: accountCode })
   }
 
   const onTrialFile = async (file: File | null) => {
@@ -476,10 +505,7 @@ export function TaxFilingBooksTab(props: {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  setLedgerAccount(null)
-                  if (query) void load(query, { ledgerAccount: null })
-                }}
+                onClick={() => setLedgerAccount(null)}
               >
                 {t("taxBooksLedgerClear")}
               </Button>

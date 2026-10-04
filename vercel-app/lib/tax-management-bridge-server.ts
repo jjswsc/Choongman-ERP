@@ -5,7 +5,7 @@ import {
 } from '@/lib/accounting-payroll-pl'
 import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { buildTaxManagementBridge, type TaxBridgeReport } from '@/lib/tax-management-bridge'
-import { roundTaxAmount, taxEntityKeyFromScope } from '@/lib/tax-book'
+import { resolveTaxBookAsOfRange, roundTaxAmount, taxEntityKeyFromScope } from '@/lib/tax-book'
 import { readTaxAccountingPeriod } from '@/lib/tax-book-period-server'
 import {
   loadTaxBookJournalHeads,
@@ -103,7 +103,13 @@ export async function loadTaxManagementBridge(input: {
   let taxCredit = 0
   let taxEntryCount = 0
   if (taxEntityCode) {
-    const heads = await loadTaxBookJournalHeads({ taxEntityCode, yearMonth })
+    // 시산 API와 같이 연초~해당 월 누적(기초 포함). 해당 월 발생분만 보면 조정표 tax 열이 비게 된다.
+    const asOf = resolveTaxBookAsOfRange(yearMonth)
+    const heads = await loadTaxBookJournalHeads({
+      taxEntityCode,
+      fromMonth: asOf.ok ? asOf.from : yearMonth,
+      toMonth: yearMonth,
+    })
     schemaReady = heads.schemaReady
     if (schemaReady) {
       const lines = await loadTaxBookLines(heads.heads.map((h) => Number(h.id || 0)))

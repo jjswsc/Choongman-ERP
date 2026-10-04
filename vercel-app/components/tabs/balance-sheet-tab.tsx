@@ -860,7 +860,11 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                   </div>
                 </div>
               ) : !isRangeCompare ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query")}</p>
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {(props.queryToken ?? 0) > 0
+                    ? t("inNoData") || t("msg_click_query")
+                    : t("msg_click_query")}
+                </p>
               ) : null}
             </>
           )}

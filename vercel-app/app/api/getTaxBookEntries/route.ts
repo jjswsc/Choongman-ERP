@@ -43,39 +43,40 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'NEED_TAX_ENTITY', schemaReady: true, vouchers: [], ledger: [], trial: [] }, { status: 400, headers })
   }
   try {
-    // 전표 목록 = 선택 기간 발생분. 시산·원장·세무 FS = 연초~종료월 누적(as-of).
     const activity = range
     const asOf = resolveTaxBookAsOfRange(range.to)
     if (!asOf.ok) {
       return NextResponse.json({ error: asOf.error }, { status: 400, headers })
     }
-    const headsRange = view === 'vouchers' ? activity : asOf
-    const heads = await loadTaxBookJournalHeads({
-      taxEntityCode,
-      fromMonth: headsRange.from,
-      toMonth: headsRange.to,
-    })
-    if (!heads.schemaReady) {
-      return NextResponse.json({ schemaReady: false, vouchers: [], ledger: [], trial: [] }, { headers })
-    }
-    const lines = await loadTaxBookLines(heads.heads.map((h) => Number(h.id || 0)))
-    const trial = summarizeTaxBookTrial(lines)
-    const ledgerAll = view === 'vouchers' ? [] : toTaxBookLedger(asOf.from, heads.heads, lines)
-    const ledger = accountCode
-      ? ledgerAll.filter((ln) => String(ln.accountCode || '') === accountCode)
-      : ledgerAll
-    // 전표 목록은 선택 기간만. trial 뷰에서도 checklist용으로 같은 기간 전표를 내려준다.
-    let voucherHeads = heads.heads
-    let voucherLines = lines
-    if (view !== 'vouchers') {
-      const activityHeads = await loadTaxBookJournalHeads({
+
+    // 시산·원장·세무 FS는 항상 연초~종료월 누적. 전표 목록은 선택 기간 발생분.
+    const [asOfHeads, activityHeads] = await Promise.all([
+      loadTaxBookJournalHeads({
+        taxEntityCode,
+        fromMonth: asOf.from,
+        toMonth: asOf.to,
+      }),
+      loadTaxBookJournalHeads({
         taxEntityCode,
         fromMonth: activity.from,
         toMonth: activity.to,
-      })
-      voucherHeads = activityHeads.heads
-      voucherLines = await loadTaxBookLines(voucherHeads.map((h) => Number(h.id || 0)))
+      }),
+    ])
+    if (!asOfHeads.schemaReady || !activityHeads.schemaReady) {
+      return NextResponse.json({ schemaReady: false, vouchers: [], ledger: [], trial: [] }, { headers })
     }
+
+    const [asOfLines, activityLines] = await Promise.all([
+      loadTaxBookLines(asOfHeads.heads.map((h) => Number(h.id || 0))),
+      loadTaxBookLines(activityHeads.heads.map((h) => Number(h.id || 0))),
+    ])
+    const trial = summarizeTaxBookTrial(asOfLines)
+    const ledgerAll =
+      view === 'vouchers' ? [] : toTaxBookLedger(asOf.from, asOfHeads.heads, asOfLines)
+    const ledger = accountCode
+      ? ledgerAll.filter((ln) => String(ln.accountCode || '') === accountCode)
+      : ledgerAll
+
     return NextResponse.json(
       {
         schemaReady: true,
@@ -85,7 +86,8 @@ export async function GET(request: NextRequest) {
         toMonth: range.to,
         asOfFromMonth: asOf.from,
         accountCode: accountCode || null,
-        vouchers: view === 'ledger' ? [] : toTaxBookEntries(activity.from, voucherHeads, voucherLines),
+        // 체크리스트·전표 탭용: 선택 기간 발생분 (ledger 뷰에서도 유지)
+        vouchers: toTaxBookEntries(activity.from, activityHeads.heads, activityLines),
         ledger,
         trial: trial.rows,
         totalDebit: trial.totalDebit,

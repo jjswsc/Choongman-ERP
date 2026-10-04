@@ -1383,7 +1383,13 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
             <Button
               size="sm"
               variant={showExpenseDetails ? "default" : "outline"}
-              onClick={() => setShowExpenseDetails((v) => !v)}
+              onClick={() => {
+                setShowExpenseDetails((v) => !v)
+                // queryToken effect는 token만 보므로 토글 후 즉시 재조회
+                if ((props.queryToken ?? 0) > 0 || !props.hideControls) {
+                  window.setTimeout(() => runIncomeFetchRef.current(), 0)
+                }
+              }}
             >
               {showExpenseDetails ? t("pL_expenseDetailOn") : t("pL_expenseDetailOff")}
             </Button>
@@ -2698,7 +2704,11 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                   />
                 </div>
               ) : !isRangeCompare && !data ? (
-                <AccountingEmptyState>{t("msg_click_query") || "Click Query button."}</AccountingEmptyState>
+                <AccountingEmptyState>
+                  {(props.queryToken ?? 0) > 0
+                    ? t("inNoData") || "No data found."
+                    : t("msg_click_query") || "Click Query button."}
+                </AccountingEmptyState>
               ) : null}
             </>
           )}
