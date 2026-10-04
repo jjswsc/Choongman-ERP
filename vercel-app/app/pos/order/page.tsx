@@ -3280,13 +3280,14 @@ export default function PosOrderPage() {
       </Dialog>
 
       <Dialog open={!!promoChoiceDialog} onOpenChange={(open) => !open && setPromoChoiceDialog(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>세트 구성 선택</DialogTitle>
+        <DialogContent className="flex max-h-[min(92dvh,900px)] max-w-lg flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b px-4 py-3 pr-10">
+            <DialogTitle>{t('posMenuSetComposeDialogTitle')}</DialogTitle>
           </DialogHeader>
           {promoChoiceDialog ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">{promoChoiceDialog.promo.name}</p>
+            <>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3">
+              <p className="text-sm font-medium">{promoChoiceDialog.promo.name}</p>
               {promoChoiceDialog.groups.map((group) => {
                 const selected = promoChoiceDialog.selectedRowKeysByGroup[group.key] || []
                 return (
@@ -3326,15 +3327,16 @@ export default function PosOrderPage() {
                   </div>
                 )
               })}
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setPromoChoiceDialog(null)}>
-                  취소
-                </Button>
-                <Button type="button" onClick={() => void confirmPromoChoice()}>
-                  담기
-                </Button>
-              </DialogFooter>
             </div>
+            <div className="flex shrink-0 justify-end gap-2 border-t bg-background px-4 py-3">
+              <Button type="button" variant="outline" className="min-h-11 min-w-24" onClick={() => setPromoChoiceDialog(null)}>
+                {t('posCancel')}
+              </Button>
+              <Button type="button" className="min-h-11 min-w-28" onClick={() => void confirmPromoChoice()}>
+                {t('posConfirm')}
+              </Button>
+            </div>
+            </>
           ) : null}
         </DialogContent>
       </Dialog>
