@@ -519,6 +519,20 @@ export function normalizeKbankTxnStatusToPos(
   return 'failed'
 }
 
+/**
+ * Inquiry JSON 전체. 최상위 txnStatus가 없고 data.txnStatus=PAID 인 응답도 승인.
+ * QR 테이블 폴링이 최상위만 보면 입금 후에도 주문이 열린 채로 남는다.
+ */
+export function isKbankInquiryPayloadApproved(raw: unknown): boolean {
+  const response =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  return isKbankInquiryResponseApproved(
+    response.txnStatus ?? response.status,
+    response,
+    response.statusCode
+  )
+}
+
 /** Inquiry/check-status API 응답에서 승인 여부 (top-level status + nested data.txnStatus). */
 export function isKbankInquiryResponseApproved(
   status: unknown,

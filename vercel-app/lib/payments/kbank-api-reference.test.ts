@@ -23,6 +23,7 @@ import {
   formatKbankVoidInquiryFailureMessage,
   resolveKbankInquiryTxnNoForRequest,
   resolveKbankVoidTxnNoForRequest,
+  isKbankInquiryPayloadApproved,
   isKbankInquiryResponseApproved,
   isKbankPaymentAttemptApproved,
   normalizeKbankWebhookPaymentStatus,
@@ -226,6 +227,10 @@ describe('kbank-api-reference', () => {
       )
     ).toBe(true)
     expect(isKbankInquiryResponseApproved('pending', { txnStatus: 'REQUESTED' }, '00')).toBe(false)
+    expect(
+      isKbankInquiryPayloadApproved({ statusCode: '00', data: { txnStatus: 'PAID' } })
+    ).toBe(true)
+    expect(isKbankInquiryPayloadApproved({ statusCode: '00', txnStatus: 'REQUESTED' })).toBe(false)
   })
 
   it('detects payment attempt approved from trace and amount (CC callback)', () => {

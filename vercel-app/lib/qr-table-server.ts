@@ -10,9 +10,9 @@ import { checkKbankQrStatus } from '@/lib/payments/kbank-client'
 import {
   extractKbankPaymentTxnNo,
   extractKbankQrSessionTxnNo,
+  isKbankInquiryPayloadApproved,
   isKbankPaymentTxnNo,
   isKbankQrSessionTxnNo,
-  normalizeKbankTxnStatusToPos,
 } from '@/lib/payments/kbank-api-reference'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { loadPosPricingAdjustmentsForStore } from '@/lib/pos-pricing-adjustments-server'
@@ -792,6 +792,60 @@ export type QrFloorSessionHint = {
   posOrderId: number | null
 }
 
+const qrPayReconcileAt = new Map<number, number>()
+const QR_PAY_RECONCILE_GAP_MS = 25_000
+const QR_PAY_RECONCILE_MAX = 2
+const QR_PAY_RECONCILE_TIMEOUT_MS = 4_000
+
+function sessionHasPendingQrPay(row: DbSession): boolean {
+  if (String(row.pending_bill_partner_txn_id || '').trim() && asNum(row.pending_bill_amount) >= 1) return true
+  if (String(row.pending_extras_partner_txn_id || '').trim() && asNum(row.pending_extras_amount) >= 1) {
+    return true
+  }
+  if (String(row.pending_entry_partner_txn_id || '').trim() && row.entry_paid !== true) return true
+  return false
+}
+
+/** 손님 폰이 QR을 닫아도, 켜진 POS 홀 조회가 입금을 확인해 테이블을 닫는다. */
+async function reconcilePendingQrPays(rows: DbSession[]): Promise<Set<number>> {
+  const closed = new Set<number>()
+  const now = Date.now()
+  const due: DbSession[] = []
+  for (const row of rows) {
+    const id = Math.floor(Number(row.id || 0))
+    if (!id || !sessionHasPendingQrPay(row)) continue
+    const last = qrPayReconcileAt.get(id) || 0
+    if (now - last < QR_PAY_RECONCILE_GAP_MS) continue
+    qrPayReconcileAt.set(id, now)
+    due.push(row)
+    if (due.length >= QR_PAY_RECONCILE_MAX) break
+  }
+  await Promise.all(
+    due.map(async (row) => {
+      const id = Math.floor(Number(row.id || 0))
+      try {
+        if (String(row.pending_bill_partner_txn_id || '').trim() && asNum(row.pending_bill_amount) >= 1) {
+          const result = await pollBillPayStatus(id, { timeoutMs: QR_PAY_RECONCILE_TIMEOUT_MS })
+          if (result.paid) closed.add(id)
+          return
+        }
+        if (String(row.pending_extras_partner_txn_id || '').trim() && asNum(row.pending_extras_amount) >= 1) {
+          const result = await pollExtrasPayStatus(id, { timeoutMs: QR_PAY_RECONCILE_TIMEOUT_MS })
+          if (result.paid) closed.add(id)
+          return
+        }
+        if (String(row.pending_entry_partner_txn_id || '').trim() && row.entry_paid !== true) {
+          const result = await pollEntryPayStatus(id, { timeoutMs: QR_PAY_RECONCILE_TIMEOUT_MS })
+          if (result.entryPaid) closed.add(id)
+        }
+      } catch {
+        /* 홀 배지는 유지. 다음 폴링에서 다시 조회 */
+      }
+    })
+  )
+  return closed
+}
+
 /**
  * POS 홀 배지용 활성 QR 세션 맵.
  * QR 미사용 매장은 세션 조회·만료 루프를 건너뛴다 (Vercel Fluid CPU 절감).
@@ -813,13 +867,15 @@ export async function listActiveQrSessionsForStore(
         limit: 500,
         order: 'id.desc',
         select:
-          'id,store_code,table_name,status,entry_paid,staff_call_at,pos_order_id,created_at,guest_count,tier_id,tier_price_snapshot,entry_total,entry_payment_mode_resolved,extras_payment_mode_resolved,entry_paid_at,entry_payment_channel,opened_by,token_id,updated_at,staff_call_note',
+          'id,store_code,table_name,status,entry_paid,staff_call_at,pos_order_id,created_at,guest_count,tier_id,tier_price_snapshot,entry_total,entry_payment_mode_resolved,extras_payment_mode_resolved,entry_paid_at,entry_payment_channel,opened_by,token_id,updated_at,staff_call_note,pending_entry_partner_txn_id,pending_extras_partner_txn_id,pending_extras_amount,pending_bill_partner_txn_id,pending_bill_amount',
       }
     )) as DbSession[]
+    const closedPaid = await reconcilePendingQrPays(rows || [])
     const out: QrFloorSessionHint[] = []
     const seen = new Set<string>()
     const now = getBangkokDateTimeString()
     for (const row of rows || []) {
+      if (closedPaid.has(Math.floor(Number(row.id || 0)))) continue
       const mapped = mapSession(row)
       // settings는 위에서 1회만 로드 — 행마다 loadQrOrderStoreSettings 호출하지 않음
       let live: QrTableSession | null = mapped
@@ -1695,7 +1751,10 @@ export async function issueEntryPayQr(sessionId: number): Promise<{
   }
 }
 
-export async function pollEntryPayStatus(sessionId: number): Promise<{
+export async function pollEntryPayStatus(
+  sessionId: number,
+  opts?: { timeoutMs?: number }
+): Promise<{
   entryPaid: boolean
   status: QrSessionStatus
 }> {
@@ -1719,14 +1778,13 @@ export async function pollEntryPayStatus(sessionId: number): Promise<{
         originalTransactionId: partnerTxn,
         payload: { origPartnerTxnUid: partnerTxn },
       },
-      { runtime }
+      { runtime, ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}) }
     )
     const response =
       result.response && typeof result.response === 'object'
         ? (result.response as Record<string, unknown>)
         : {}
-    const normalized = normalizeKbankTxnStatusToPos(response.txnStatus ?? response.status, response.statusCode)
-    if (normalized === 'approved') {
+    if (isKbankInquiryPayloadApproved(response)) {
       await markEntryPaidByQr(sessionId, asNum(rows?.[0]?.entry_total) || session.entryTotal)
       const next = await loadSessionById(sessionId)
       return { entryPaid: true, status: next?.status || 'active' }
@@ -2473,7 +2531,10 @@ export async function issueExtrasPayQr(sessionId: number): Promise<{
   }
 }
 
-export async function pollExtrasPayStatus(sessionId: number): Promise<{ paid: boolean }> {
+export async function pollExtrasPayStatus(
+  sessionId: number,
+  opts?: { timeoutMs?: number }
+): Promise<{ paid: boolean }> {
   const session = await loadSessionById(sessionId)
   if (!session) throw new Error('session_not_found')
   if (!session.posOrderId) throw new Error('order_missing')
@@ -2498,14 +2559,13 @@ export async function pollExtrasPayStatus(sessionId: number): Promise<{ paid: bo
         originalTransactionId: partnerTxn,
         payload: { origPartnerTxnUid: partnerTxn },
       },
-      { runtime }
+      { runtime, ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}) }
     )
     const response =
       result.response && typeof result.response === 'object'
         ? (result.response as Record<string, unknown>)
         : {}
-    const normalized = normalizeKbankTxnStatusToPos(response.txnStatus ?? response.status, response.statusCode)
-    if (normalized === 'approved') {
+    if (isKbankInquiryPayloadApproved(response)) {
       await finalizeExtrasPrepay(session, amount)
       return { paid: true }
     }
@@ -2675,7 +2735,10 @@ export async function issueBillPayQr(sessionId: number): Promise<{
   }
 }
 
-export async function pollBillPayStatus(sessionId: number): Promise<{
+export async function pollBillPayStatus(
+  sessionId: number,
+  opts?: { timeoutMs?: number }
+): Promise<{
   paid: boolean
   partialPaid?: boolean
   balanceDue: number
@@ -2732,14 +2795,13 @@ export async function pollBillPayStatus(sessionId: number): Promise<{
         originalTransactionId: partnerTxn,
         payload: { origPartnerTxnUid: partnerTxn },
       },
-      { runtime }
+      { runtime, ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}) }
     )
     const response =
       result.response && typeof result.response === 'object'
         ? (result.response as Record<string, unknown>)
         : {}
-    const normalized = normalizeKbankTxnStatusToPos(response.txnStatus ?? response.status, response.statusCode)
-    if (normalized === 'approved') {
+    if (isKbankInquiryPayloadApproved(response)) {
       await recordQrBillPayKbankAttempts({
         orderId: session.posOrderId,
         partnerTxn,
@@ -2925,13 +2987,17 @@ async function finalizeBillPayByQr(
   }
 
   // unpaid → paid: POS Realtime이 카운터 결제 영수증 자동인쇄
-  await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
-    payment_qr: nextQr,
-    status: 'paid',
-    paid_at: nowIso,
-    updated_at: nowIso,
-    ...linkposPatch,
-  })
+  await supabaseUpdateByFilter(
+    'pos_orders',
+    `id=eq.${session.posOrderId}&status=not.in.(paid,completed)`,
+    {
+      payment_qr: nextQr,
+      status: 'paid',
+      paid_at: nowIso,
+      updated_at: nowIso,
+      ...linkposPatch,
+    }
+  )
   await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
     pending_bill_partner_txn_id: null,
     pending_bill_amount: 0,

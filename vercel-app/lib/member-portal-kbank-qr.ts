@@ -1,6 +1,7 @@
 import { generateKbankQr } from '@/lib/payments/kbank-client'
 import {
   extractKbankQrResponseMeta,
+  extractKbankQrSessionTxnNo,
   maskKbankMessageForLog,
   resolveKbankDisplayQrTypeDetails,
   resolveKbankQrTypeCode,
@@ -104,6 +105,7 @@ export async function generateMemberPortalKbankQr(params: {
     emvPayload: qrPayload,
   })
 
+  const sessionTxnNo = extractKbankQrSessionTxnNo(responseData).slice(0, 40)
   try {
     await supabaseInsert('pos_payment_attempts', {
       order_id: orderId > 0 ? orderId : null,
@@ -114,6 +116,7 @@ export async function generateMemberPortalKbankQr(params: {
       bank_id: 'KBANK',
       request_amount: amount,
       approved_amount: 0,
+      ...(sessionTxnNo ? { trace_no: sessionTxnNo } : {}),
       request_raw: JSON.stringify(result.requestBodyMasked || {}),
       response_raw: JSON.stringify(result.responseBodyMasked || maskKbankMessageForLog(responseData)),
       response_code: result.statusCode || null,

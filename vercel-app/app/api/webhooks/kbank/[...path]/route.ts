@@ -6,6 +6,7 @@ import { isQrTableCreatedBy } from '@/lib/qr-table-types'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import {
   extractKbankPaymentTxnNo,
+  extractKbankQrSessionTxnNo,
   isKbankPaymentTxnNo,
   normalizeKbankWebhookPaymentStatus,
 } from '@/lib/payments/kbank-api-reference'
@@ -299,6 +300,22 @@ export async function POST(
       }
       if (hit?.[0]?.order_id != null) matchedOrderId = Number(hit[0].order_id)
       if (matchedAttemptId) break
+    }
+    if (!matchedOrderId) {
+      const sessionTxn = extractKbankQrSessionTxnNo(body)
+      const txnLookups = [sessionTxn, paymentTxnNo].filter(Boolean)
+      for (const txn of txnLookups) {
+        const hit = (await supabaseSelectFilter(
+          'pos_payment_attempts',
+          `trace_no=eq.${encodeURIComponent(txn)}`,
+          { limit: 1, order: 'created_at.desc', select: 'id,order_id,local_tx_id' }
+        )) as { id?: number; order_id?: number | null; local_tx_id?: string | null }[]
+        if (hit?.[0]?.order_id == null) continue
+        if (hit[0].id != null) matchedAttemptId = String(hit[0].id)
+        matchedOrderId = Number(hit[0].order_id)
+        matchedLocalTxId = String(hit[0].local_tx_id || '')
+        break
+      }
     }
   } catch {
     /* noop */
