@@ -13,9 +13,14 @@ import type { IncomeStatementMonthManualOverrides } from "@/lib/income-statement
 export type FinancialStatementsTabId = "income" | "balance" | "reconcile" | "margin"
 
 export type FinancialStatementsPageViewCache = {
+  /** 필터 바 초안(검색 버튼 전에도 바뀔 수 있음) */
   yearMonthStart: string
   yearMonthEnd: string
   storeFilter: string
+  /** 마지막 검색으로 확정된 조건 — 탭 조회는 이 값만 사용 */
+  appliedYearMonthStart?: string
+  appliedYearMonthEnd?: string
+  appliedStoreFilter?: string
   queryToken: number
   tab: FinancialStatementsTabId
 }

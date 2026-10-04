@@ -103,12 +103,34 @@ export default function FinancialStatementsPage() {
   })
   const [tab, setTab] = useAdminUrlTab("tab", FS_TABS, "income")
   const [queryToken, setQueryToken] = React.useState(() => cachedPage?.queryToken ?? 0)
+  /** 검색 버튼으로 확정된 조건. 날짜·매장만 바꾸면 여기가 안 바뀌어 자동조회되지 않음 */
+  const [appliedQuery, setAppliedQuery] = React.useState<{
+    yearMonthStart: string
+    yearMonthEnd: string
+    storeFilter: string
+  } | null>(() => {
+    if (!cachedPage || cachedPage.queryToken <= 0) return null
+    return {
+      yearMonthStart: cachedPage.appliedYearMonthStart || cachedPage.yearMonthStart,
+      yearMonthEnd: cachedPage.appliedYearMonthEnd || cachedPage.yearMonthEnd,
+      storeFilter: cachedPage.appliedStoreFilter || cachedPage.storeFilter,
+    }
+  })
   const searchParams = useSearchParams()
   const pageActive = useErpPageActive()
   const pageActiveRef = useErpPageActiveRef()
   const urlAppliedRef = React.useRef(false)
   const tabRestoredRef = React.useRef(false)
   const storeSyncedFromViewRef = React.useRef(false)
+
+  const runQuery = React.useCallback(() => {
+    setAppliedQuery({
+      yearMonthStart,
+      yearMonthEnd,
+      storeFilter,
+    })
+    setQueryToken((v) => v + 1)
+  }, [yearMonthStart, yearMonthEnd, storeFilter])
 
   React.useEffect(() => {
     if (!pageActive) return
@@ -162,15 +184,18 @@ export default function FinancialStatementsPage() {
 
   React.useEffect(() => {
     // remount 직후 queryToken=0으로 캐시를 지우면 복원 전에 스냅샷이 사라짐
-    if (queryToken <= 0) return
+    if (queryToken <= 0 || !appliedQuery) return
     financialStatementsPageViewCache.save({
       yearMonthStart,
       yearMonthEnd,
       storeFilter,
+      appliedYearMonthStart: appliedQuery.yearMonthStart,
+      appliedYearMonthEnd: appliedQuery.yearMonthEnd,
+      appliedStoreFilter: appliedQuery.storeFilter,
       queryToken,
       tab,
     })
-  }, [yearMonthStart, yearMonthEnd, storeFilter, queryToken, tab])
+  }, [yearMonthStart, yearMonthEnd, storeFilter, appliedQuery, queryToken, tab])
 
   const franchiseStoreOptions = React.useMemo(
     () => buildFinancialStatementFranchiseStoreOptions(storeList, storeLabels),
@@ -292,7 +317,7 @@ export default function FinancialStatementsPage() {
                 </AdminFilterField>
               ) : null}
 
-              <Button size="sm" className="h-9 w-full sm:w-auto" onClick={() => setQueryToken((v) => v + 1)}>
+              <Button size="sm" className="h-9 w-full sm:w-auto" onClick={runQuery}>
                 <Search className="h-4 w-4 mr-1" />
                 {t("btn_query")}
               </Button>
@@ -323,37 +348,37 @@ export default function FinancialStatementsPage() {
 
           <TabsContent value="income" className={cn(adminTabsContentCn, "space-y-3 max-sm:px-3 max-sm:py-3")}>
             <IncomeStatementTab
-              yearMonth={yearMonthEnd}
-              yearMonthStart={yearMonthStart}
-              yearMonthEnd={yearMonthEnd}
-              storeFilter={storeFilter}
+              yearMonth={appliedQuery?.yearMonthEnd ?? yearMonthEnd}
+              yearMonthStart={appliedQuery?.yearMonthStart ?? yearMonthStart}
+              yearMonthEnd={appliedQuery?.yearMonthEnd ?? yearMonthEnd}
+              storeFilter={appliedQuery?.storeFilter ?? storeFilter}
               hideControls
               queryToken={queryToken}
             />
           </TabsContent>
           <TabsContent value="balance" className={cn(adminTabsContentCn, "space-y-3")}>
             <BalanceSheetTab
-              yearMonth={yearMonthEnd}
-              yearMonthStart={yearMonthStart}
-              yearMonthEnd={yearMonthEnd}
-              storeFilter={storeFilter}
+              yearMonth={appliedQuery?.yearMonthEnd ?? yearMonthEnd}
+              yearMonthStart={appliedQuery?.yearMonthStart ?? yearMonthStart}
+              yearMonthEnd={appliedQuery?.yearMonthEnd ?? yearMonthEnd}
+              storeFilter={appliedQuery?.storeFilter ?? storeFilter}
               hideControls
               queryToken={queryToken}
             />
           </TabsContent>
           <TabsContent value="reconcile" className={cn(adminTabsContentCn, "space-y-3")}>
             <LedgerReconciliationTab
-              yearMonth={yearMonthEnd}
-              storeFilter={storeFilter}
+              yearMonth={appliedQuery?.yearMonthEnd ?? yearMonthEnd}
+              storeFilter={appliedQuery?.storeFilter ?? storeFilter}
               hideControls
               queryToken={queryToken}
             />
           </TabsContent>
           <TabsContent value="margin" className={cn(adminTabsContentCn, "space-y-3")}>
             <ManagementMarginTab
-              yearMonthStart={yearMonthStart}
-              yearMonthEnd={yearMonthEnd}
-              storeFilter={storeFilter}
+              yearMonthStart={appliedQuery?.yearMonthStart ?? yearMonthStart}
+              yearMonthEnd={appliedQuery?.yearMonthEnd ?? yearMonthEnd}
+              storeFilter={appliedQuery?.storeFilter ?? storeFilter}
               queryToken={queryToken}
             />
           </TabsContent>

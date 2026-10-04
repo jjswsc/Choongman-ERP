@@ -696,7 +696,7 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
     '거래처 코드가 없습니다. 지급 예정의 지급처를 거래처 마스터에 등록·연결한 뒤 다시 시도해 주세요.',
   wm_fixedAssetPayeeHint: '거래처 마스터에서 판매처를 선택하세요. 통장 「지출관리 연결」에 필요합니다.',
   taxBooksTab: '장부',
-  taxBooksSubHint: '기업회계는 매장 성적표이고, 이 장부는 법인 세무 결산입니다. 시작·종료 월을 정한 뒤 검색을 눌러 조회합니다. 금액이 다른 이유가 조정표에 남습니다.',
+  taxBooksSubHint: '기업회계는 매장 성적표이고, 이 장부는 법인 세무 결산입니다. 검색하면 그 달 신고 요약(부가세·매출·매입·급여) 전표가 자동으로 만들어집니다. 시산·원장·세무 손익/재무상태는 연초~종료월 누적(기초 포함)입니다. 전표 목록만 선택 기간 발생분입니다.',
   taxBooksFromMonth: '시작 월',
   taxBooksToMonth: '종료 월',
   taxBooksSearchFirst: '검색을 누르면 조회됩니다. 월을 바꿔도 검색 전에는 다시 불러오지 않습니다.',
@@ -749,7 +749,7 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   taxBooksAmount: '금액',
   taxBooksDebit: '차변',
   taxBooksCredit: '대변',
-  taxBooksNoRows: '세무 장부 전표가 없습니다.',
+  taxBooksNoRows: '이 기간에 발생한 세무 전표가 없습니다. 검색 시 신고 요약은 자동 전기됩니다. 기초·누적은 시산에서 확인하세요.',
   taxBooksPosted: '전기됨',
   taxBooksClosingNet: '마감 순이익',
   taxBooksClosingLines: '마감 줄',
@@ -823,7 +823,7 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   taxBooksStatusApproved: 'Approved',
   taxBooksColTotal: '합계',
   taxBooksColDescription: 'Description',
-  taxBooksJvListHint: 'FlowAccount 전표 목록과 같습니다. 문서번호·적요·합계·Approved만 보입니다. 원장은 시산에서 계정 코드를 누르면 됩니다.',
+  taxBooksJvListHint: '선택 기간에 생긴 전표만 보입니다(검색 시 부가세·매출·매입·급여 요약 자동 전기). 7/1 기초는 시산·재무상태에서 누적으로 확인합니다.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
@@ -1105,7 +1105,7 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
     'Vendor code is missing. Register the payee in vendor master, link it on the payment plan, then try again.',
   wm_fixedAssetPayeeHint: 'Select the seller from vendor master. Required to link the bank withdrawal.',
   taxBooksTab: 'Books',
-  taxBooksSubHint: 'Management accounts are the store scorecard. This book is the company tax close. Set the start and end month, then press Search. Differences stay on the bridge.',
+  taxBooksSubHint: 'Management accounts are the store scorecard. This book is the company tax close. Search auto-posts that month’s filing summaries (VAT, sales, purchase, payroll). Trial, ledger, and tax statements are year-to-date through the end month (including opening). The voucher list shows only activity in the selected period.',
   taxBooksFromMonth: 'From',
   taxBooksToMonth: 'To',
   taxBooksSearchFirst: 'Press Search to load. Changing the months does not reload until you search again.',
@@ -1158,7 +1158,7 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   taxBooksAmount: 'Amount',
   taxBooksDebit: 'Debit',
   taxBooksCredit: 'Credit',
-  taxBooksNoRows: 'No tax book vouchers.',
+  taxBooksNoRows: 'No tax vouchers in this period. Search auto-posts filing summaries. Opening and YTD balances are on the trial balance.',
   taxBooksPosted: 'Posted',
   taxBooksClosingNet: 'Closing net',
   taxBooksClosingLines: 'Closing lines',
@@ -1232,7 +1232,7 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   taxBooksStatusApproved: 'Approved',
   taxBooksColTotal: 'Total',
   taxBooksColDescription: 'Description',
-  taxBooksJvListHint: 'Same layout as FlowAccount vouchers: date, doc no., description, total, Approved. Drill to the ledger from the trial balance.',
+  taxBooksJvListHint: 'Shows vouchers posted in the selected period (Search auto-posts VAT/sales/purchase/payroll summaries). July 1 opening balances appear on the trial balance and tax balance sheet.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
@@ -1514,7 +1514,7 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
     'ยังไม่มีรหัสคู่ค้าครับ กรุณาลงทะเบียนผู้ขายในมาสเตอร์คู่ค้าแล้วผูกกับแผนจ่าย แล้วลองอีกครั้งครับ',
   wm_fixedAssetPayeeHint: 'เลือกผู้ขายจากมาสเตอร์คู่ค้าครับ ต้องมีเพื่อเชื่อมรายการถอนธนาคาร',
   taxBooksTab: 'สมุดบัญชี',
-  taxBooksSubHint: 'บัญชีบริหารคือผลประกอบการร้าน สมุดนี้คือปิดบัญชีภาษีของนิติบุคคลครับ ตั้งเดือนเริ่มกับเดือนสิ้นสุด แล้วกดค้นหา ยอดต่างกันได้ และเหตุผลอยู่ที่ตารางกระทบยอด',
+  taxBooksSubHint: 'บัญชีบริหารคือผลประกอบการร้าน สมุดนี้คือปิดบัญชีภาษีครับ กดค้นหาแล้วระบบลงสรุปยื่น (VAT ขาย ซื้อ เงินเดือน) ให้อัตโนมัติ งบทดลอง/แยกประเภท/งบภาษีเป็นยอดสะสมต้นปีถึงเดือนสิ้นสุด (รวมยอดยกมา) รายการใบสำคัญแสดงเฉพาะที่เกิดในช่วงที่เลือกครับ',
   taxBooksFromMonth: 'เดือนเริ่ม',
   taxBooksToMonth: 'เดือนสิ้นสุด',
   taxBooksSearchFirst: 'กดค้นหาก่อนครับ เปลี่ยนเดือนก็ยังไม่ดึงข้อมูลจนกว่าจะกดค้นหาอีกครั้ง',
@@ -1567,7 +1567,7 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   taxBooksAmount: 'จำนวนเงิน',
   taxBooksDebit: 'เดบิต',
   taxBooksCredit: 'เครดิต',
-  taxBooksNoRows: 'ยังไม่มีใบสำคัญในบัญชีภาษี',
+  taxBooksNoRows: 'ยังไม่มีใบสำคัญในช่วงนี้ครับ กดค้นหาแล้วระบบลงสรุปที่ยื่นให้อัตโนมัติ ยอดยกมาดูได้ที่งบทดลอง',
   taxBooksPosted: 'ลงบัญชีแล้ว',
   taxBooksClosingNet: 'กำไรปิดบัญชี',
   taxBooksClosingLines: 'บรรทัดปิดบัญชี',
@@ -1641,7 +1641,7 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   taxBooksStatusApproved: 'Approved',
   taxBooksColTotal: 'ยอดรวม',
   taxBooksColDescription: 'Description',
-  taxBooksJvListHint: 'รูปแบบเดียวกับ FlowAccount: วันที่ เลขที่ คำอธิบาย ยอดรวม Approved ดูแยกประเภทได้จากงบทดลองครับ',
+  taxBooksJvListHint: 'แสดงใบสำคัญที่เกิดในช่วงที่เลือก (ค้นหาแล้วลงสรุป VAT/ขาย/ซื้อ/เงินเดือนอัตโนมัติ) ยอดยกมา 1 ก.ค. ดูที่งบทดลองและงบดุลภาษีครับ',
 })
 
 export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {

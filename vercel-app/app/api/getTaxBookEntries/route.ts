@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCanManageAccountingCompliance } from '@/lib/accounting-auth'
-import { resolveTaxBookMonthRange, taxEntityKeyFromScope } from '@/lib/tax-book'
+import { resolveTaxBookAsOfRange, resolveTaxBookMonthRange, taxEntityKeyFromScope } from '@/lib/tax-book'
 import {
   loadTaxBookJournalHeads,
   loadTaxBookLines,
@@ -43,16 +43,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'NEED_TAX_ENTITY', schemaReady: true, vouchers: [], ledger: [], trial: [] }, { status: 400, headers })
   }
   try {
-    const heads = await loadTaxBookJournalHeads({ taxEntityCode, fromMonth: range.from, toMonth: range.to })
+    // 전표 목록 = 선택 기간 발생분. 시산·원장·세무 FS = 연초~종료월 누적(as-of).
+    const activity = range
+    const asOf = resolveTaxBookAsOfRange(range.to)
+    if (!asOf.ok) {
+      return NextResponse.json({ error: asOf.error }, { status: 400, headers })
+    }
+    const headsRange = view === 'vouchers' ? activity : asOf
+    const heads = await loadTaxBookJournalHeads({
+      taxEntityCode,
+      fromMonth: headsRange.from,
+      toMonth: headsRange.to,
+    })
     if (!heads.schemaReady) {
       return NextResponse.json({ schemaReady: false, vouchers: [], ledger: [], trial: [] }, { headers })
     }
     const lines = await loadTaxBookLines(heads.heads.map((h) => Number(h.id || 0)))
     const trial = summarizeTaxBookTrial(lines)
-    const ledgerAll = view === 'vouchers' ? [] : toTaxBookLedger(range.from, heads.heads, lines)
+    const ledgerAll = view === 'vouchers' ? [] : toTaxBookLedger(asOf.from, heads.heads, lines)
     const ledger = accountCode
       ? ledgerAll.filter((ln) => String(ln.accountCode || '') === accountCode)
       : ledgerAll
+    // 전표 목록은 선택 기간만. trial 뷰에서도 checklist용으로 같은 기간 전표를 내려준다.
+    let voucherHeads = heads.heads
+    let voucherLines = lines
+    if (view !== 'vouchers') {
+      const activityHeads = await loadTaxBookJournalHeads({
+        taxEntityCode,
+        fromMonth: activity.from,
+        toMonth: activity.to,
+      })
+      voucherHeads = activityHeads.heads
+      voucherLines = await loadTaxBookLines(voucherHeads.map((h) => Number(h.id || 0)))
+    }
     return NextResponse.json(
       {
         schemaReady: true,
@@ -60,8 +83,9 @@ export async function GET(request: NextRequest) {
         yearMonth: range.from,
         fromMonth: range.from,
         toMonth: range.to,
+        asOfFromMonth: asOf.from,
         accountCode: accountCode || null,
-        vouchers: view === 'ledger' ? [] : toTaxBookEntries(range.from, heads.heads, lines),
+        vouchers: view === 'ledger' ? [] : toTaxBookEntries(activity.from, voucherHeads, voucherLines),
         ledger,
         trial: trial.rows,
         totalDebit: trial.totalDebit,

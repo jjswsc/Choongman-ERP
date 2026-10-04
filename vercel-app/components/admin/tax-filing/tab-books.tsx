@@ -124,28 +124,36 @@ export function TaxFilingBooksTab(props: {
           if (data.error && !data.report) {
             setMessage(data.error)
             setBridge(null)
-            return
+          } else {
+            setBridge(data)
+            // 신고 요약 전표(부가세·매출·매입·급여) 자동 전기 — 금액 없으면 건너뜀
+            if (data.taxEntityCode && !data.periodClosed && data.schemaReady !== false) {
+              try {
+                await postTaxBookEntry({
+                  action: "ensureFiling",
+                  yearMonth: q.from,
+                  scopeFilter: q.scope,
+                })
+              } catch {
+                /* 조회는 계속 */
+              }
+            }
           }
-          setBridge(data)
         } else {
           setBridge(null)
         }
-        if (!single || view !== "bridge") {
-          const entryView = view === "vouchers" || view === "ledger" ? view : "trial"
-          const book = await getTaxBookEntries({
-            fromMonth: q.from,
-            toMonth: q.to,
-            scopeFilter: q.scope,
-            view: entryView,
-            accountCode: view === "ledger" && acct ? acct : undefined,
-          })
-          if (book.error && !book.trial?.length && !book.vouchers?.length && !book.ledger?.length) {
-            setMessage(book.error)
-          }
-          setEntries(book)
-        } else {
-          setEntries(null)
+        const entryView = view === "vouchers" || view === "ledger" ? view : "trial"
+        const book = await getTaxBookEntries({
+          fromMonth: q.from,
+          toMonth: q.to,
+          scopeFilter: q.scope,
+          view: entryView,
+          accountCode: view === "ledger" && acct ? acct : undefined,
+        })
+        if (book.error && !book.trial?.length && !book.vouchers?.length && !book.ledger?.length) {
+          setMessage(book.error)
         }
+        setEntries(book)
       } catch (e) {
         setMessage(e instanceof Error ? e.message : String(e))
       } finally {

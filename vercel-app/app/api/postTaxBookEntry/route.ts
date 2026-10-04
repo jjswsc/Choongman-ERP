@@ -136,6 +136,73 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, entryId: id, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD }, { headers })
     }
 
+    if (action === 'ensureFiling') {
+      // 장부 검색 시 신고 요약(부가세·매출·매입·급여)을 덮어쓰기 전기. 금액 없으면 건너뜀.
+      const bridge = await loadTaxManagementBridge({
+        yearMonth,
+        scopeFilter,
+        userRole: auth.role,
+        userStore: auth.store,
+        allowedStores: auth.allowedStores,
+        tenantId: auth.tenantId,
+      })
+      if (bridge.periodClosed) {
+        return NextResponse.json(
+          { success: true, posted: [], locked: true, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD },
+          { headers }
+        )
+      }
+      const posted: string[] = []
+      const outputVat = bridge.report.lines.find((l) => l.key === 'outputVat')?.filing || 0
+      const inputVat = bridge.report.lines.find((l) => l.key === 'inputVat')?.filing || 0
+      if (outputVat > 0 || inputVat > 0) {
+        await postTaxVatSummaryJournal({
+          yearMonth,
+          taxEntityCode,
+          outputVat,
+          inputVat,
+          postedBy: actor,
+        })
+        posted.push('vat')
+      }
+      const salesNet = bridge.report.salesSplit.taxInvoiceNet || 0
+      if (salesNet > 0) {
+        await postTaxSalesSummaryJournal({
+          yearMonth,
+          taxEntityCode,
+          netAmount: salesNet,
+          postedBy: actor,
+        })
+        posted.push('sales')
+      }
+      const purchaseNet = bridge.report.salesSplit.purchaseNet || 0
+      if (purchaseNet > 0) {
+        await postTaxPurchaseSummaryJournal({
+          yearMonth,
+          taxEntityCode,
+          netAmount: purchaseNet,
+          postedBy: actor,
+        })
+        posted.push('purchase')
+      }
+      const totals = await loadTaxPayrollTotals({ yearMonth, scopeFilter, tenantId: auth.tenantId })
+      if (totals.gross > 0) {
+        await postTaxPayrollJournal({
+          yearMonth,
+          taxEntityCode,
+          gross: totals.gross,
+          tax: totals.wht,
+          sso: totals.sso,
+          postedBy: actor,
+        })
+        posted.push('payroll')
+      }
+      return NextResponse.json(
+        { success: true, posted, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD },
+        { headers }
+      )
+    }
+
     if (action === 'vat') {
       const bridge = await loadTaxManagementBridge({
         yearMonth,

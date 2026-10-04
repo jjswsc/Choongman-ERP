@@ -165,6 +165,16 @@ export function resolveTaxBookMonthRange(fromMonth: string, toMonth?: string): T
   }
 }
 
+/**
+ * 시산·원장·세무 손익/재무상태용: 해당 연 1월 ~ 종료월(말일)까지 누적.
+ * 전표 목록(기간 발생분)과 달리 기초(7/1)가 8월 조회에도 잡힌다.
+ */
+export function resolveTaxBookAsOfRange(toMonth: string): TaxBookMonthRange {
+  const to = String(toMonth || '').trim().slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(to)) return { ok: false, error: 'INVALID_YEAR_MONTH' }
+  return resolveTaxBookMonthRange(`${to.slice(0, 4)}-01`, to)
+}
+
 export function roundTaxAmount(v: number): number {
   return Math.round((Number(v) || 0) * 100) / 100
 }

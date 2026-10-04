@@ -68,6 +68,7 @@ export type TaxBookPostAction =
   | 'vat'
   | 'sales'
   | 'purchase'
+  | 'ensureFiling'
   | 'adjustment'
   | 'closing'
   | 'unlock'
@@ -104,6 +105,7 @@ export async function postTaxBookEntry(body: {
     locationCount?: number
     cogsPreview?: number
     cogs?: number
+    posted?: string[]
   }>
 }
 

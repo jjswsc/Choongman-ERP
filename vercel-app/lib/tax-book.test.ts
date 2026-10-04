@@ -4,6 +4,7 @@ import {
   TAX_CLOSE_LOCKS_STORE_PERIOD,
   formatTaxVoucherNo,
   recognizeTaxBook,
+  resolveTaxBookAsOfRange,
   resolveTaxBookMonthRange,
   taxEntityKeyFromScope,
   buildTaxBookStatements,
@@ -159,6 +160,14 @@ describe('tax book rules', () => {
     }
     expect(resolveTaxBookMonthRange('2026-04', '2026-02')).toEqual({ ok: false, error: 'RANGE_ORDER' })
     expect(resolveTaxBookMonthRange('2024-01', '2026-02')).toEqual({ ok: false, error: 'RANGE_TOO_LONG' })
+    const asOf = resolveTaxBookAsOfRange('2026-08')
+    expect(asOf.ok).toBe(true)
+    if (asOf.ok) {
+      expect(asOf.from).toBe('2026-01')
+      expect(asOf.to).toBe('2026-08')
+      expect(asOf.startDate).toBe('2026-01-01')
+      expect(asOf.endDate).toBe('2026-08-31')
+    }
   })
 
   it('uses a custom filing range when the end month differs', () => {
