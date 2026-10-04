@@ -14,6 +14,16 @@ import {
 } from '@/lib/tax-book'
 import { assertTaxAccountingPeriodOpen } from '@/lib/tax-book-period-server'
 import { deleteTaxBookSource, taxBookClosingLines, taxBookMonthSourceId } from '@/lib/tax-book-server'
+import {
+  taxBookMemoClosing,
+  taxBookMemoInventoryCogs,
+  taxBookMemoOpening,
+  taxBookMemoPayroll,
+  taxBookMemoPurchase,
+  taxBookMemoSales,
+  taxBookMemoVat,
+  taxBookMemoAdjustment,
+} from '@/lib/tax-book-voucher-memo'
 
 const TAX_PAYROLL = 'tax_payroll'
 const TAX_INVENTORY = 'tax_inventory_cogs'
@@ -89,7 +99,7 @@ export async function postTaxPayrollJournal(input: {
     taxEntityCode: input.taxEntityCode,
     sourceType: TAX_PAYROLL,
     sourceId: taxBookMonthSourceId(input.yearMonth),
-    memo: `세무 장부 급여 ${input.yearMonth}`,
+    memo: taxBookMemoPayroll(input.yearMonth),
     postedBy: input.postedBy,
     lines,
     replace: true,
@@ -112,7 +122,7 @@ export async function postTaxInventoryCogsJournal(input: {
     taxEntityCode: input.taxEntityCode,
     sourceType: TAX_INVENTORY,
     sourceId: taxBookMonthSourceId(input.yearMonth),
-    memo: `세무 장부 매출원가 ${input.yearMonth}`,
+    memo: taxBookMemoInventoryCogs(input.yearMonth),
     postedBy: input.postedBy,
     lines,
     replace: true,
@@ -141,7 +151,7 @@ export async function postTaxVatSummaryJournal(input: {
     taxEntityCode: input.taxEntityCode,
     sourceType: TAX_VAT,
     sourceId: taxBookMonthSourceId(input.yearMonth),
-    memo: `세무 장부 부가세 ${input.yearMonth}`,
+    memo: taxBookMemoVat(input.yearMonth),
     postedBy: input.postedBy,
     lines,
     replace: true,
@@ -167,7 +177,7 @@ export async function postTaxSalesSummaryJournal(input: {
     taxEntityCode: input.taxEntityCode,
     sourceType: TAX_SALES,
     sourceId: taxBookMonthSourceId(input.yearMonth),
-    memo: `세무 장부 매출요약 ${input.yearMonth}`,
+    memo: taxBookMemoSales(input.yearMonth),
     postedBy: input.postedBy,
     lines,
     replace: true,
@@ -193,7 +203,7 @@ export async function postTaxPurchaseSummaryJournal(input: {
     taxEntityCode: input.taxEntityCode,
     sourceType: TAX_PURCHASE,
     sourceId: taxBookMonthSourceId(input.yearMonth),
-    memo: `세무 장부 매입요약 ${input.yearMonth}`,
+    memo: taxBookMemoPurchase(input.yearMonth),
     postedBy: input.postedBy,
     lines,
     replace: true,
@@ -212,7 +222,7 @@ export async function postTaxAdjustmentJournal(input: {
     taxEntityCode: input.taxEntityCode,
     sourceType: TAX_ADJUSTMENT,
     sourceId: Date.now(),
-    memo: input.memo || `세무 조정 ${input.yearMonth}`,
+    memo: taxBookMemoAdjustment(input.yearMonth, input.memo),
     postedBy: input.postedBy,
     lines: input.lines,
     replace: false,
@@ -236,7 +246,7 @@ export async function postTaxOpeningJournal(input: {
     taxEntityCode: input.taxEntityCode,
     sourceType: TAX_OPENING,
     sourceId,
-    memo: input.memo || `세무 장부 기초 ${ymd}`,
+    memo: input.memo || taxBookMemoOpening(ymd),
     postedBy: input.postedBy,
     lines: input.lines,
     replace: true,
@@ -257,7 +267,7 @@ export async function postTaxIncomeExpenseClosing(input: {
     taxEntityCode: input.taxEntityCode,
     sourceType: TAX_CLOSING,
     sourceId: taxBookMonthSourceId(input.yearMonth),
-    memo: `세무 결산 ${input.yearMonth}`,
+    memo: taxBookMemoClosing(input.yearMonth),
     postedBy: input.postedBy,
     lines: preview.lines.map((ln) => ({
       accountCode: ln.accountCode,

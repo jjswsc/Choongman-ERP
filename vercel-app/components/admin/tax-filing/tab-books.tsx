@@ -54,6 +54,9 @@ export function TaxFilingBooksTab(props: {
   toMonth: string
   filingStoreFilter: string
   searchTick: number
+  /** 신고 탭 등에서 전표 목록으로 바로 열 때 */
+  focusView?: BooksView | null
+  focusViewTick?: number
 }) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -78,6 +81,13 @@ export function TaxFilingBooksTab(props: {
   const [openingDate, setOpeningDate] = React.useState("2026-07-01")
   const [trialUploadRows, setTrialUploadRows] = React.useState<ExternalTrialBalanceRow[] | null>(null)
   const [trialUploadName, setTrialUploadName] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!props.focusViewTick || !props.focusView) return
+    if (!VIEWS.includes(props.focusView)) return
+    setView(props.focusView)
+    if (props.focusView !== "ledger") setLedgerAccount(null)
+  }, [props.focusViewTick, props.focusView])
 
   React.useEffect(() => {
     if (props.searchTick < 1) return
@@ -421,25 +431,29 @@ export function TaxFilingBooksTab(props: {
       ) : null}
 
       {view === "vouchers" ? (
-        <EntryTable
-          empty={t("taxBooksNoRows")}
-          rows={(entries?.vouchers || []).map((v) => [
-            v.accountingDate,
-            v.voucherNo,
-            t(`taxBooksKind_${v.voucherKind}`) || v.voucherKind,
-            v.memo || "",
-            money(v.debit),
-            t("taxBooksPosted"),
-          ])}
-          headers={[
-            t("taxBooksColDate"),
-            t("taxBooksColDoc"),
-            t("taxBooksColKind"),
-            t("taxBooksMemo"),
-            t("taxBooksDebit"),
-            t("taxBooksColStatus"),
-          ]}
-        />
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">{t("taxBooksJvListHint")}</p>
+          <VoucherJvTable
+            empty={t("taxBooksNoRows")}
+            statusLabel={t("taxBooksStatusApproved")}
+            headers={[
+              t("taxBooksColDate"),
+              t("taxBooksColDoc"),
+              t("taxBooksColKind"),
+              t("taxBooksColDescription"),
+              t("taxBooksColTotal"),
+              t("taxBooksColStatus"),
+            ]}
+            rows={(entries?.vouchers || []).map((v) => ({
+              id: v.id,
+              date: v.accountingDate,
+              docNo: v.voucherNo,
+              kind: t(`taxBooksKind_${v.voucherKind}`) || v.voucherKind,
+              description: v.memo || "",
+              total: money(Math.max(Number(v.debit) || 0, Number(v.credit) || 0)),
+            }))}
+          />
+        </div>
       ) : null}
 
       {view === "ledger" ? (
@@ -767,6 +781,52 @@ function EntryTable({ headers, rows, empty }: { headers: string[]; rows: string[
                   {cell}
                 </td>
               ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** FlowAccount JV 목록형: 일자·문서번호·종류·Description·합계·Approved */
+function VoucherJvTable({
+  headers,
+  rows,
+  empty,
+  statusLabel,
+}: {
+  headers: string[]
+  rows: { id: number; date: string; docNo: string; kind: string; description: string; total: string }[]
+  empty: string
+  statusLabel: string
+}) {
+  if (!rows.length) return <p className="text-sm text-muted-foreground">{empty}</p>
+  return (
+    <div className="overflow-x-auto rounded-md border">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-muted/40 text-left text-muted-foreground">
+            {headers.map((h) => (
+              <th key={h} className="px-3 py-2 font-medium">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
+              <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.date}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 font-medium">{r.docNo}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.kind}</td>
+              <td className="max-w-[28rem] px-3 py-2.5">{r.description || "—"}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">{r.total}</td>
+              <td className="whitespace-nowrap px-3 py-2.5">
+                <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                  {statusLabel}
+                </span>
+              </td>
             </tr>
           ))}
         </tbody>

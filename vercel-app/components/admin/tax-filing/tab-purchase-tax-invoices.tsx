@@ -20,6 +20,7 @@ import {
   type PurchaseTaxInvoiceDto,
   apiFetch,
 } from "@/lib/api-client"
+import { TaxBooksFilingBridge } from "@/components/admin/tax-filing/tax-books-filing-bridge"
 import {
   digitsTin13,
   formatPp30Amount2,
@@ -120,6 +121,7 @@ type Props = {
   filingSearchTick?: number
   storeChoices?: string[]
   onFilingYearMonthChange?: (yearMonth: string) => void
+  onOpenTaxBooksVouchers?: () => void
 }
 
 type FormState = {
@@ -314,6 +316,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   filingSearchTick = 0,
   storeChoices = [],
   onFilingYearMonthChange,
+  onOpenTaxBooksVouchers,
 }: Props) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -1345,6 +1348,12 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         }
       }}
     >
+      <TaxBooksFilingBridge
+        yearMonth={filingYearMonth}
+        scopeFilter={filingStoreFilter}
+        mode="purchase"
+        onOpenVouchers={onOpenTaxBooksVouchers}
+      />
       <Card className="border-border/80">
         <CardContent className="pt-4 pb-4 space-y-2 text-sm">
           <p>{t("ptiHint")}</p>

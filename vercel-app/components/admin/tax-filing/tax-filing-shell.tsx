@@ -375,6 +375,8 @@ export function TaxFilingShell() {
   const [ptiSearchTick, setPtiSearchTick] = React.useState(0)
   const [booksSearchTick, setBooksSearchTick] = React.useState(0)
   const [booksToMonth, setBooksToMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
+  const [booksFocusView, setBooksFocusView] = React.useState<"vouchers" | null>(null)
+  const [booksFocusViewTick, setBooksFocusViewTick] = React.useState(0)
   const [purchaseToMonth, setPurchaseToMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
 
   const { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore } = useFilingTabFilters(
@@ -386,6 +388,24 @@ export function TaxFilingShell() {
     storeOptionLabel,
     t,
     t("search")
+  )
+
+  const openTaxBooksVouchers = React.useCallback(
+    (yearMonth: string, scopeFilter: string) => {
+      const ym = String(yearMonth || "").trim().slice(0, 7)
+      tabProps.books.onFilingYearMonthChange(ym)
+      setBooksToMonth(ym)
+      tabProps.books.onFilingStoreFilterChange(scopeFilter || "All")
+      setBooksFocusView("vouchers")
+      setBooksFocusViewTick((n) => n + 1)
+      setTab("books")
+      setBooksSearchTick((n) => n + 1)
+    },
+    [
+      tabProps.books.onFilingYearMonthChange,
+      tabProps.books.onFilingStoreFilterChange,
+      setTab,
+    ]
   )
 
   return (
@@ -458,6 +478,8 @@ export function TaxFilingShell() {
             toMonth={booksToMonth}
             filingStoreFilter={tabProps.books.filingStoreFilter}
             searchTick={booksSearchTick}
+            focusView={booksFocusView}
+            focusViewTick={booksFocusViewTick}
           />
         </TabsContent>
         <TabsContent value="storeProfiles" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>
@@ -471,6 +493,9 @@ export function TaxFilingShell() {
             {...tabProps.pp30}
             onOpenStoreProfiles={() =>
               openStoreProfilesFrom(setTab, setStoreProfilesStore, tabProps.pp30.filingStoreFilter)
+            }
+            onOpenTaxBooksVouchers={() =>
+              openTaxBooksVouchers(tabProps.pp30.filingYearMonth, tabProps.pp30.filingStoreFilter)
             }
           />
         </TabsContent>
@@ -498,6 +523,12 @@ export function TaxFilingShell() {
             filingSearchTick={ptiSearchTick}
             storeChoices={storeOptions.filter((s) => s !== "All")}
             onFilingYearMonthChange={tabProps.purchaseTaxInv.onFilingYearMonthChange}
+            onOpenTaxBooksVouchers={() =>
+              openTaxBooksVouchers(
+                tabProps.purchaseTaxInv.filingYearMonth,
+                tabProps.purchaseTaxInv.filingStoreFilter
+              )
+            }
           />
         </TabsContent>
         <TabsContent value="pp36" className={cn(adminTabsContentCn, "relative z-0 space-y-3")}>

@@ -394,6 +394,14 @@ const ACCOUNTING_ADMIN_KEYS = {
   taxBooksErr_NEED_INVENTORY_CONFIRM: '',
   taxBooksErr_NEED_TRIAL_ROWS: '',
   taxBooksErr_NO_AMOUNT: '',
+  taxBooksBridgeTitle: '',
+  taxBooksBridgeHint: '',
+  taxBooksOpenVouchers: '',
+  taxBooksBridgePosted: '',
+  taxBooksStatusApproved: '',
+  taxBooksColTotal: '',
+  taxBooksColDescription: '',
+  taxBooksJvListHint: '',
 } as const
 
 type AccountingAdminKey = keyof typeof ACCOUNTING_ADMIN_KEYS
@@ -808,6 +816,14 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   taxBooksErr_NEED_INVENTORY_CONFIRM: '재고액을 미리보기한 뒤 확정해 주세요.',
   taxBooksErr_NEED_TRIAL_ROWS: '이 법인은 시산 엑셀 업로드가 필요합니다.',
   taxBooksErr_NO_AMOUNT: '전기할 금액이 없습니다.',
+  taxBooksBridgeTitle: '신고 → 세무 장부',
+  taxBooksBridgeHint: '신고 금액을 확인한 뒤 한 번에 세무 전표로 반영합니다. 전표 목록에서 Description(적요)과 승인 상태를 확인하세요.',
+  taxBooksOpenVouchers: '전표 목록 보기',
+  taxBooksBridgePosted: '세무 장부에 반영했습니다. 전표 목록에서 확인하세요.',
+  taxBooksStatusApproved: 'Approved',
+  taxBooksColTotal: '합계',
+  taxBooksColDescription: 'Description',
+  taxBooksJvListHint: 'FlowAccount 전표 목록과 같습니다. 문서번호·적요·합계·Approved만 보입니다. 원장은 시산에서 계정 코드를 누르면 됩니다.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
@@ -1209,6 +1225,14 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   taxBooksErr_NEED_INVENTORY_CONFIRM: 'Preview and confirm the inventory amount first.',
   taxBooksErr_NEED_TRIAL_ROWS: 'This entity needs a trial-balance upload.',
   taxBooksErr_NO_AMOUNT: 'Nothing to post for this amount.',
+  taxBooksBridgeTitle: 'Filing → tax books',
+  taxBooksBridgeHint: 'After you check filing amounts, post them into tax vouchers in one click. Then open the voucher list for Description and Approved status.',
+  taxBooksOpenVouchers: 'Open voucher list',
+  taxBooksBridgePosted: 'Posted to the tax book. Check the voucher list.',
+  taxBooksStatusApproved: 'Approved',
+  taxBooksColTotal: 'Total',
+  taxBooksColDescription: 'Description',
+  taxBooksJvListHint: 'Same layout as FlowAccount vouchers: date, doc no., description, total, Approved. Drill to the ledger from the trial balance.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
@@ -1610,6 +1634,14 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   taxBooksErr_NEED_INVENTORY_CONFIRM: 'กรุณาดูตัวอย่างแล้วยืนยันมูลค่าสินค้าก่อนครับ',
   taxBooksErr_NEED_TRIAL_ROWS: 'นิติบุคคลนี้ต้องอัปโหลดงบทดลอง',
   taxBooksErr_NO_AMOUNT: 'ไม่มียอดให้ลง',
+  taxBooksBridgeTitle: 'ยื่นภาษี → บัญชีภาษี',
+  taxBooksBridgeHint: 'ตรวจยอดที่ยื่นแล้วกดลงบัญชีภาษีทีเดียว แล้วเปิดรายการใบสำคัญเพื่อดู Description และสถานะ Approved ครับ',
+  taxBooksOpenVouchers: 'ดูรายการใบสำคัญ',
+  taxBooksBridgePosted: 'ลงบัญชีภาษีแล้วครับ ตรวจในรายการใบสำคัญได้',
+  taxBooksStatusApproved: 'Approved',
+  taxBooksColTotal: 'ยอดรวม',
+  taxBooksColDescription: 'Description',
+  taxBooksJvListHint: 'รูปแบบเดียวกับ FlowAccount: วันที่ เลขที่ คำอธิบาย ยอดรวม Approved ดูแยกประเภทได้จากงบทดลองครับ',
 })
 
 export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {

@@ -246,6 +246,23 @@ describe('tax management bridge', () => {
   })
 })
 
+describe('tax book Flow-style voucher memos', () => {
+  it('formats Record … descriptions with MM/YYYY', async () => {
+    const {
+      formatYmSlash,
+      taxBookMemoVat,
+      taxBookMemoOpening,
+      taxBookSourceKindKey,
+    } = await import('./tax-book-voucher-memo')
+    expect(formatYmSlash('2026-07')).toBe('07/2026')
+    expect(taxBookMemoVat('2026-07')).toContain('P.P. 30')
+    expect(taxBookMemoVat('2026-07')).toContain('07/2026')
+    expect(taxBookMemoOpening('2026-07-01')).toContain('2026-07-01')
+    expect(taxBookSourceKindKey('tax_vat_summary')).toBe('vat')
+    expect(taxBookSourceKindKey('tax_opening')).toBe('opening')
+  })
+})
+
 describe('management reports stay off the tax book', () => {
   it('income statement code does not read tax periods or tax-only journals', () => {
     const src = readFileSync(new URL('./accounting-reports.ts', import.meta.url), 'utf8')
