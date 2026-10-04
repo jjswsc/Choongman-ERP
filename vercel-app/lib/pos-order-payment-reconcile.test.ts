@@ -50,6 +50,7 @@ describe('pos-order-payment-reconcile', () => {
       paymentQr: 200,
       paymentOther: 0,
       paymentDeliveryApp: 50,
+      paymentCrypto: 0,
     })
   })
 
@@ -64,6 +65,7 @@ describe('pos-order-payment-reconcile', () => {
         paymentQr: 1231,
         paymentOther: 0,
         paymentDeliveryApp: 0,
+        paymentCrypto: 0,
       },
     })
     expect(out.reconciledGap).toBe(229)
@@ -83,6 +85,7 @@ describe('pos-order-payment-reconcile', () => {
         paymentQr: 0,
         paymentOther: 0,
         paymentDeliveryApp: 0,
+        paymentCrypto: 0,
       },
     })
     expect(out.reconciledGap).toBe(1414)
@@ -100,6 +103,7 @@ describe('pos-order-payment-reconcile', () => {
         paymentQr: 0,
         paymentOther: 0,
         paymentDeliveryApp: 300,
+        paymentCrypto: 0,
       },
     })
     expect(out.reconciledGap).toBe(200)

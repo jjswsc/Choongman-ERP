@@ -55,7 +55,7 @@ describe('qr guest i18n', () => {
     expect(qrGuestT('my', 'languageBar')).toBe('ဘာသာစကား')
     expect(qrGuestT('hi', 'languageBar')).toBe('भाषा')
     expect(qrGuestT('ar', 'languageBar')).toBe('اللغة')
-    expect(qrGuestT('pt', 'sendKitchen')).toBe('Concluir pedido')
+    expect(qrGuestT('pt', 'sendKitchen')).toBe('Ver carrinho')
     expect(qrGuestT('hi', 'sendKitchen')).toMatch(/[\u0900-\u097F]/)
     expect(qrGuestT('ar', 'sendKitchen')).toMatch(/[\u0600-\u06FF]/)
   })
