@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildDineInAddKitchenAutoPrintDedupeKey,
   buildDineInAddKitchenPrintDedupeSuffix,
+  buildDineInQtySnapshotMap,
   buildKitchenCartLinesFromSnapshotDelta,
+  capDineInAddonSnapshotForLineConsolidation,
   collectDineInSnapshotIncreasedKeys,
   filterKitchenCartLinesForDineInAdd,
   kitchenSlipSourceItemsForAddOrderReceipt,
@@ -337,6 +339,71 @@ describe('buildKitchenCartLinesFromSnapshotDelta', () => {
     const prev = new Map([[key, 1]])
     const next = new Map([[key, 3]])
     expect(buildKitchenCartLinesFromSnapshotDelta(cart, prev, next, resolveKey)).toEqual(cart)
+  })
+})
+
+describe('capDineInAddonSnapshotForLineConsolidation', () => {
+  const resolveKey = (line: { id?: string; name?: string; price?: number; note?: string }) =>
+    resolveDineInKitchenSnapshotItemKey(line)
+
+  it('drops a line whose qty rose only because an identical unserved line was merged', () => {
+    const chicken = { name: 'Chicken Katsu', price: 169, note: '' }
+    const prevItems = [
+      { id: 'a', ...chicken, qty: 1 },
+      { id: 'b', ...chicken, qty: 1 },
+    ]
+    const nextItems = [
+      { id: 'a', ...chicken, qty: 2 },
+      { id: 'dak', name: 'DAKGALBI CHICKEN BOWL', price: 139, qty: 1 },
+    ]
+    const prev = buildDineInQtySnapshotMap(prevItems, resolveKey)
+    const next = buildDineInQtySnapshotMap(nextItems, resolveKey)
+    const capped = capDineInAddonSnapshotForLineConsolidation({
+      items: nextItems,
+      prevLineQty: prev,
+      newLineQty: next,
+      resolveLineKey: resolveKey,
+    })
+    expect(capped).not.toBeNull()
+    expect(capped?.kitchenLines.map((line) => line.name)).toEqual(['DAKGALBI CHICKEN BOWL'])
+    expect(capped?.changedLineKeys).toEqual(new Set([resolveKey(nextItems[1])]))
+  })
+
+  it('still prints a real extra portion of the same menu', () => {
+    const chicken = { name: 'Chicken Katsu', price: 169, note: '' }
+    const prevItems = [{ id: 'a', ...chicken, qty: 2 }]
+    const nextItems = [
+      { id: 'a', ...chicken, qty: 3 },
+      { id: 'dak', name: 'DAKGALBI CHICKEN BOWL', price: 139, qty: 1 },
+    ]
+    const prev = buildDineInQtySnapshotMap(prevItems, resolveKey)
+    const next = buildDineInQtySnapshotMap(nextItems, resolveKey)
+    const capped = capDineInAddonSnapshotForLineConsolidation({
+      items: nextItems,
+      prevLineQty: prev,
+      newLineQty: next,
+      resolveLineKey: resolveKey,
+    })
+    expect(capped?.kitchenLines).toEqual([
+      { id: 'a', ...chicken, qty: 1, quantity: 1 },
+      nextItems[1],
+    ])
+  })
+
+  it('returns null when the previous snapshot has no content totals', () => {
+    const prev = new Map([['a', 1]])
+    const next = new Map([
+      ['a', 2],
+      ['dak', 1],
+    ])
+    expect(
+      capDineInAddonSnapshotForLineConsolidation({
+        items: [{ id: 'a', name: 'Chicken Katsu', price: 169, qty: 2 }],
+        prevLineQty: prev,
+        newLineQty: next,
+        resolveLineKey: (line) => String(line.id ?? ''),
+      })
+    ).toBeNull()
   })
 })
 

@@ -183,6 +183,59 @@ export function resolveDineInKitchenSnapshotItemKey(
   return `sig:${name}\u001f${price}\u001f${menuId}\u001f${optionCode}\u001f${note}`
 }
 
+/**
+ * 합석·추가주문 저장이 미서빙 동일 메뉴를 한 줄로 합칠 때 쓰는 내용 키.
+ * 줄 id 수량은 늘어도 이 키의 합계가 그대로면 새 조리가 아니다.
+ */
+export function dineInLineConsolidationContentKey(
+  line: {
+    name?: unknown
+    price?: unknown
+    note?: unknown
+    promoId?: unknown
+    promoCode?: unknown
+  },
+  formatNote: DineInNoteNormalizer = defaultDineInNoteNormalize
+): string {
+  const name = String(line.name ?? '').trim()
+  const price = Number(line.price ?? 0) || 0
+  const note = formatNote(String(line.note ?? '').trim())
+  const promoId = String(line.promoId ?? '').trim()
+  const promoCode = String(line.promoCode ?? '').trim()
+  return [name, price, note, promoId, promoCode].join('\u001f')
+}
+
+const contentQtyByLineSnapshot = new WeakMap<Map<string, number>, Map<string, number>>()
+
+export function buildDineInContentQtySnapshotMap(
+  items: ReadonlyArray<{
+    name?: unknown
+    price?: unknown
+    note?: unknown
+    qty?: unknown
+    quantity?: unknown
+    promoId?: unknown
+    promoCode?: unknown
+  }>,
+  formatNote: DineInNoteNormalizer = defaultDineInNoteNormalize
+): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const it of items) {
+    const key = dineInLineConsolidationContentKey(it, formatNote)
+    if (!key.trim()) continue
+    map.set(key, (map.get(key) ?? 0) + lineQty(it as KitchenComparableLine))
+  }
+  return map
+}
+
+/** 줄 id 스냅샷을 만든 직후의 내용별 수량. 복사된 Map 에는 없다. */
+export function dineInContentQtyForLineSnapshot(
+  lineQty: Map<string, number> | null | undefined
+): Map<string, number> | undefined {
+  if (!lineQty) return undefined
+  return contentQtyByLineSnapshot.get(lineQty)
+}
+
 export function buildDineInQtySnapshotMap(
   items: Array<{
     id?: unknown
@@ -195,8 +248,11 @@ export function buildDineInQtySnapshotMap(
     menuId1?: unknown
     optionCode?: unknown
     optionCode1?: unknown
+    promoId?: unknown
+    promoCode?: unknown
   }>,
-  resolveKey: (item: (typeof items)[number]) => string
+  resolveKey: (item: (typeof items)[number]) => string,
+  opts?: { formatNote?: DineInNoteNormalizer }
 ): Map<string, number> {
   const map = new Map<string, number>()
   for (const it of items) {
@@ -204,7 +260,50 @@ export function buildDineInQtySnapshotMap(
     if (!key) continue
     map.set(key, (map.get(key) ?? 0) + lineQty(it as KitchenComparableLine))
   }
+  contentQtyByLineSnapshot.set(
+    map,
+    buildDineInContentQtySnapshotMap(items, opts?.formatNote ?? defaultDineInNoteNormalize)
+  )
   return map
+}
+
+export type DineInAddonSnapshotCap<T> = {
+  changedLineKeys: Set<string>
+  kitchenLines: T[]
+}
+
+/**
+ * 줄 id 수량은 늘었지만 같은 메뉴 합계는 그대로인 경우(1+1 → 한 줄 2)를 주방 추가분에서 뺀다.
+ * 이전 스냅샷에 내용 수량이 없으면 null — 호출부는 줄 id diff 를 유지한다.
+ */
+export function capDineInAddonSnapshotForLineConsolidation<T extends KitchenComparableLine>(params: {
+  items: T[]
+  prevLineQty: Map<string, number>
+  newLineQty: Map<string, number>
+  resolveLineKey: (line: T) => string
+  formatNote?: DineInNoteNormalizer
+}): DineInAddonSnapshotCap<T> | null {
+  const prevContent = dineInContentQtyForLineSnapshot(params.prevLineQty)
+  if (!prevContent) return null
+  const formatNote = params.formatNote ?? defaultDineInNoteNormalize
+  const newContent = buildDineInContentQtySnapshotMap(params.items, formatNote)
+  const increasedContent = collectDineInSnapshotIncreasedKeys(prevContent, newContent)
+  const increasedLines = collectDineInSnapshotIncreasedKeys(params.prevLineQty, params.newLineQty)
+  const changedLineKeys = new Set<string>()
+  for (const line of params.items) {
+    const contentKey = dineInLineConsolidationContentKey(line, formatNote)
+    if (!increasedContent.has(contentKey)) continue
+    const lineKey = params.resolveLineKey(line)
+    if (!lineKey || !increasedLines.has(lineKey)) continue
+    changedLineKeys.add(lineKey)
+  }
+  const kitchenLines = buildKitchenCartLinesFromSnapshotDelta(
+    params.items,
+    prevContent,
+    newContent,
+    (line) => dineInLineConsolidationContentKey(line, formatNote)
+  )
+  return { changedLineKeys, kitchenLines }
 }
 
 /** Realtime/폴링 스냅샷 diff — 증가한 key만, 증가분 qty로 주방 줄 생성 */

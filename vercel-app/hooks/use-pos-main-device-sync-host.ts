@@ -136,6 +136,7 @@ import {
   buildDineInAddKitchenPrintDedupeSuffix,
   buildDineInQtySnapshotMap,
   buildKitchenCartLinesFromSnapshotDelta,
+  capDineInAddonSnapshotForLineConsolidation,
   collectDineInSnapshotIncreasedKeys,
   resolveDineInKitchenSnapshotItemKey,
 } from '@/lib/pos-kitchen-dine-in-delta'
@@ -248,8 +249,10 @@ function buildDineInQtySnapshot(
   items: Array<{ id?: string; name?: string; qty?: number; note?: string; menuId?: string; optionCode?: string }>,
   formatNote: (note?: string | null) => string
 ): Map<string, number> {
-  return buildDineInQtySnapshotMap(items, (it) =>
-    resolveDineInKitchenSnapshotItemKey(it, { formatNote })
+  return buildDineInQtySnapshotMap(
+    items,
+    (it) => resolveDineInKitchenSnapshotItemKey(it, { formatNote }),
+    { formatNote }
   )
 }
 
@@ -1323,7 +1326,17 @@ export function usePosMainDeviceSyncHost(): void {
           triggerMainPosPollNowRef.current?.({ force: true })
           return
         }
-        const changedSet = collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
+        const consolidationCap = capDineInAddonSnapshotForLineConsolidation({
+          items,
+          prevLineQty: prevQtyById,
+          newLineQty: newQtyById,
+          resolveLineKey: (it) =>
+            resolveDineInKitchenSnapshotItemKey(it, { formatNote: formatLineNoteForPrint }),
+          formatNote: formatLineNoteForPrint,
+        })
+        const changedSet =
+          consolidationCap?.changedLineKeys ??
+          collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
         if (changedSet.size === 0) {
           dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
           return
@@ -1361,12 +1374,14 @@ export function usePosMainDeviceSyncHost(): void {
           ...(it.addedAt ? { addedAt: it.addedAt } : {}),
           ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
         }))
-        const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
-          cartLikeNew,
-          prevQtyById,
-          newQtyById,
-          (line) => resolveDineInKitchenSnapshotItemKey(line)
-        )
+        const kitchenCartLines =
+          consolidationCap?.kitchenLines ??
+          buildKitchenCartLinesFromSnapshotDelta(
+            cartLikeNew,
+            prevQtyById,
+            newQtyById,
+            (line) => resolveDineInKitchenSnapshotItemKey(line)
+          )
         const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
         const discountAmt = Number(addonRow.discount_amt ?? 0)
         const couponDiscountAmt = Number(addonRow.coupon_discount_amt ?? 0)
@@ -1852,12 +1867,22 @@ export function usePosMainDeviceSyncHost(): void {
                     dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
                     continue
                   }
-                  const changedIds = [...newQtyById.keys()].filter((id) => {
-                    const prevQty = Number(prevQtyById.get(id) ?? 0)
-                    const nextQty = Number(newQtyById.get(id) ?? 0)
-                    if (prevQty <= 0) return nextQty > 0
-                    return nextQty > prevQty
+                  const consolidationCap = capDineInAddonSnapshotForLineConsolidation({
+                    items,
+                    prevLineQty: prevQtyById,
+                    newLineQty: newQtyById,
+                    resolveLineKey: (it) =>
+                      resolveDineInKitchenSnapshotItemKey(it, { formatNote: formatLineNoteForPrint }),
+                    formatNote: formatLineNoteForPrint,
                   })
+                  const changedIds = consolidationCap
+                    ? [...consolidationCap.changedLineKeys]
+                    : [...newQtyById.keys()].filter((id) => {
+                        const prevQty = Number(prevQtyById.get(id) ?? 0)
+                        const nextQty = Number(newQtyById.get(id) ?? 0)
+                        if (prevQty <= 0) return nextQty > 0
+                        return nextQty > prevQty
+                      })
                   if (changedIds.length === 0) {
                     dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
                     continue
@@ -1881,12 +1906,14 @@ export function usePosMainDeviceSyncHost(): void {
                     ...(it.source ? { source: it.source } : {}),
                     ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
                   }))
-                  const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
-                    cartLikeNew,
-                    prevQtyById,
-                    newQtyById,
-                    (line) => resolveDineInKitchenSnapshotItemKey(line)
-                  )
+                  const kitchenCartLines =
+                    consolidationCap?.kitchenLines ??
+                    buildKitchenCartLinesFromSnapshotDelta(
+                      cartLikeNew,
+                      prevQtyById,
+                      newQtyById,
+                      (line) => resolveDineInKitchenSnapshotItemKey(line)
+                    )
                   dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
                   refetchStores({ scope: 'all' })
                   const receiptPrintItemsRemote = items.map((it) => ({

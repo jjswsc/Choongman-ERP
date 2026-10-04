@@ -176,6 +176,7 @@ import {
   buildDineInAddKitchenPrintDedupeSuffix,
   buildDineInQtySnapshotMap,
   buildKitchenCartLinesFromSnapshotDelta,
+  capDineInAddonSnapshotForLineConsolidation,
   collectDineInSnapshotIncreasedKeys,
   resolveDineInKitchenLinesForAddSubmit,
   resolveDineInKitchenSnapshotItemKey,
@@ -4048,8 +4049,10 @@ export default function PosTerminalPage() {
         optionCode?: unknown
       }>
     ): Map<string, number> =>
-      buildDineInQtySnapshotMap(items, (it) =>
-        resolveDineInKitchenSnapshotItemKey(it, { formatNote: formatLineNoteForPrint })
+      buildDineInQtySnapshotMap(
+        items,
+        (it) => resolveDineInKitchenSnapshotItemKey(it, { formatNote: formatLineNoteForPrint }),
+        { formatNote: formatLineNoteForPrint }
       ),
     []
   )
@@ -5584,7 +5587,15 @@ export default function PosTerminalPage() {
         return
       }
 
-      const changedSet = collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
+      const consolidationCap = capDineInAddonSnapshotForLineConsolidation({
+        items,
+        prevLineQty: prevQtyById,
+        newLineQty: newQtyById,
+        resolveLineKey: (it) => resolveDineInSnapshotItemKey(it),
+        formatNote: formatLineNoteForPrint,
+      })
+      const changedSet =
+        consolidationCap?.changedLineKeys ?? collectDineInSnapshotIncreasedKeys(prevQtyById, newQtyById)
       const changedIds = [...changedSet]
       if (changedIds.length === 0) {
         dineInRemoteItemQtySnapshotRef.current.set(orderId, newQtyById)
@@ -5636,12 +5647,14 @@ export default function PosTerminalPage() {
         qty: it.qty,
         ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
       }))
-      const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
-        cartLikeNew,
-        prevQtyById,
-        newQtyById,
-        (line) => resolveDineInSnapshotItemKey(line)
-      )
+      const kitchenCartLines =
+        consolidationCap?.kitchenLines ??
+        buildKitchenCartLinesFromSnapshotDelta(
+          cartLikeNew,
+          prevQtyById,
+          newQtyById,
+          (line) => resolveDineInSnapshotItemKey(line)
+        )
 
       const mergeSubtotal = items.reduce((s, i) => s + i.price * i.qty, 0)
       const discountAmt = Number(row.discount_amt ?? 0)
@@ -6114,12 +6127,21 @@ export default function PosTerminalPage() {
                   dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
                   continue
                 }
-                const changedIds = [...newQtyById.keys()].filter((id) => {
-                  const prevQty = Number(prevQtyById.get(id) ?? 0)
-                  const nextQty = Number(newQtyById.get(id) ?? 0)
-                  if (prevQty <= 0) return nextQty > 0
-                  return nextQty > prevQty
+                const consolidationCap = capDineInAddonSnapshotForLineConsolidation({
+                  items,
+                  prevLineQty: prevQtyById,
+                  newLineQty: newQtyById,
+                  resolveLineKey: (it) => resolveDineInSnapshotItemKey(it),
+                  formatNote: formatLineNoteForPrint,
                 })
+                const changedIds = consolidationCap
+                  ? [...consolidationCap.changedLineKeys]
+                  : [...newQtyById.keys()].filter((id) => {
+                      const prevQty = Number(prevQtyById.get(id) ?? 0)
+                      const nextQty = Number(newQtyById.get(id) ?? 0)
+                      if (prevQty <= 0) return nextQty > 0
+                      return nextQty > prevQty
+                    })
                 if (changedIds.length === 0) {
                   dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
                   continue
@@ -6152,12 +6174,14 @@ export default function PosTerminalPage() {
                   qty: it.qty,
                   ...(it.note ? { note: formatLineNoteForPrint(it.note) } : {}),
                 }))
-                const kitchenCartLines = buildKitchenCartLinesFromSnapshotDelta(
-                  cartLikeNew,
-                  prevQtyById,
-                  newQtyById,
-                  (line) => resolveDineInSnapshotItemKey(line)
-                )
+                const kitchenCartLines =
+                  consolidationCap?.kitchenLines ??
+                  buildKitchenCartLinesFromSnapshotDelta(
+                    cartLikeNew,
+                    prevQtyById,
+                    newQtyById,
+                    (line) => resolveDineInSnapshotItemKey(line)
+                  )
                 dineInRemoteItemQtySnapshotRef.current.set(oid, newQtyById)
                 refetchCurrentStore()
                 const receiptPrintItemsRemote = items.map((it) => ({
