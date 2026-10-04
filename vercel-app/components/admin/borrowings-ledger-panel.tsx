@@ -11,6 +11,7 @@ import { getBorrowingLedger, type BorrowingLedgerLine, type BorrowingPartyBalanc
 import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { AccountingEmptyState } from "@/components/admin/accounting-result-primitives"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 
 export function BorrowingsLedgerPanel() {
   const { lang } = useLang()
@@ -95,7 +96,7 @@ export function BorrowingsLedgerPanel() {
                 <span className="font-semibold">{tOr(t, "bs_borrowings", "차입금")}</span>
                 <span className="font-mono tabular-nums font-semibold">{formatBaht(total)}</span>
               </div>
-              <div className="overflow-x-auto border rounded-md">
+              <AdminTableScroll lockViewport={false} className="rounded-md border">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40">
@@ -122,9 +123,9 @@ export function BorrowingsLedgerPanel() {
                     )}
                   </tbody>
                 </table>
-              </div>
-              <div className="overflow-x-auto border rounded-md">
-                <table className="w-full text-sm">
+              </AdminTableScroll>
+              <AdminTableScroll lockViewport={false} className="rounded-md border">
+                <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40">
                       <th className="text-left p-2">{tOr(t, "date", "날짜")}</th>
@@ -158,7 +159,7 @@ export function BorrowingsLedgerPanel() {
                     )}
                   </tbody>
                 </table>
-              </div>
+              </AdminTableScroll>
             </div>
           )}
         </CardContent>

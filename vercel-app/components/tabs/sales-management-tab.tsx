@@ -3822,7 +3822,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             showInsightPanel={showInsightPanel}
           />
 
-          <div className="mt-6 overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-lg border p-4">
+          <div className="mt-6 max-h-[calc(100dvh-380px)] min-h-[200px] overflow-auto rounded-lg border p-4">
             {isHoursPanel ? (
               <SalesPosBusinessDaySettings
                 tr={tr}
@@ -3893,7 +3893,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                  <table className="mt-4 w-full min-w-[1480px] text-sm">
+                  <AdminTableScroll className="mt-4" lockViewport={false}>
+                  <table className="w-full min-w-[1480px] text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
                         <th className="py-2 text-left">
@@ -4021,6 +4022,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       )}
                     </tbody>
                   </table>
+                  </AdminTableScroll>
                   <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
                     {tr(
                       "salesAmountBreakdownFootnote",

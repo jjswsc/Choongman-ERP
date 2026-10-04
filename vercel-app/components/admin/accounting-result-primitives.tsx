@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import {
   accountingEmptyStateCn,
   accountingLedgerEntryGridCn,
@@ -75,9 +76,9 @@ export function AccountingTableShell({
   className?: string
 }) {
   return (
-    <div className={cn(accountingResultTableShellCn, className)}>
+    <AdminTableScroll lockViewport={false} className={cn(accountingResultTableShellCn, className)}>
       <table className={accountingResultTableCn}>{children}</table>
-    </div>
+    </AdminTableScroll>
   )
 }
 

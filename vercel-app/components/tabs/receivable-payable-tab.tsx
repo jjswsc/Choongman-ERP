@@ -2457,7 +2457,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       ready={contentTab === "receivable"}
                       pendingLabel={tabPanelPendingLabel}
                     >
-                    <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
+                    <AdminTableScroll lockViewport={false} className="w-full">
                       {/* 헤더: 출고처, 매출금액, 수령금액, 기간 순잔액, 누적 잔액 */}
                       <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
                         <div className={ledgerSummaryHeaderCellCn}>{(t("outColStore") || "출고처")}</div>
@@ -3190,7 +3190,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           </div>
                         </div>
                       ) : null}
-                    </div>
+                    </AdminTableScroll>
                     </TabPanelHeavyContent>
                   )}
               </div>
@@ -3311,7 +3311,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       ready={contentTab === "payable"}
                       pendingLabel={tabPanelPendingLabel}
                     >
-                    <div className="w-full overflow-x-auto touch-pan-x overscroll-x-contain">
+                    <AdminTableScroll lockViewport={false} className="w-full">
                       {/* 헤더: 매입처, 매입금액, 지급금액, 기간 순잔액, 누적 잔액 */}
                       <div className={cn(amountGridCols, "px-4 py-2 border-b bg-muted/50 font-semibold text-sm")}>
                         <div className={ledgerSummaryHeaderCellCn}>{(t("vendor") || "매입처")}</div>
@@ -3722,7 +3722,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           </div>
                         </div>
                       ) : null}
-                    </div>
+                    </AdminTableScroll>
                     </TabPanelHeavyContent>
                   )}
             </CardContent>

@@ -5,7 +5,7 @@ export const ADMIN_BADGE_WARNING_CN = 'bg-amber-50 text-amber-700'
 export const ADMIN_BADGE_DANGER_CN = 'bg-rose-50 text-rose-700'
 export const ADMIN_BADGE_NEUTRAL_CN = 'bg-muted text-muted-foreground'
 
-export const ADMIN_DIALOG_SCROLL_CN = 'max-h-[90vh] overflow-y-auto'
+export const ADMIN_DIALOG_SCROLL_CN = 'max-h-[90dvh] overflow-y-auto'
 export const ADMIN_PANEL_WARNING_CN =
   'rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100'
 
@@ -21,13 +21,13 @@ export const ADMIN_NUMERIC_CN = 'font-erp-numeric tabular-nums lining-nums'
  */
 export const ADMIN_TABLE_SCROLL_CN = 'min-h-0 overflow-auto [scrollbar-gutter:stable]'
 
-/** 필터·탭이 있는 관리자 목록 테이블 (뷰포트 높이 기준) */
+/** 필터·탭이 있는 관리자 목록 테이블 (뷰포트 높이 기준 — dvh: 폴드·모바일 브라우저 크롬 대응) */
 export const ADMIN_TABLE_SCROLL_VIEWPORT_CN =
-  'min-h-[200px] max-h-[calc(100vh-380px)] overflow-auto [scrollbar-gutter:stable]'
+  'min-h-[200px] max-h-[calc(100dvh-380px)] overflow-auto [scrollbar-gutter:stable]'
 
 /** 필터·요약이 많은 목록 테이블 (출고 내역 등) */
 export const ADMIN_TABLE_SCROLL_VIEWPORT_TALL_CN =
-  'min-h-[200px] max-h-[calc(100vh-440px)] overflow-auto [scrollbar-gutter:stable]'
+  'min-h-[200px] max-h-[calc(100dvh-440px)] overflow-auto [scrollbar-gutter:stable]'
 
 /** 중형 패널·요약 테이블 */
 export const ADMIN_TABLE_SCROLL_PANEL_CN =

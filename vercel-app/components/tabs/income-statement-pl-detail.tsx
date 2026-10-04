@@ -40,6 +40,7 @@ import {
 } from "@/lib/accounting-result-ui"
 import { cn } from "@/lib/utils"
 import { AccountingPeriodChip } from "@/components/admin/accounting-result-primitives"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import {
   lineDisplayAmount,
   purchaseVendorRowLabel,
@@ -266,7 +267,7 @@ export function IncomePlDetailTableContent({
           </ul>
         </div>
       )}
-      <div className={accountingPlTableShellCn}>
+      <AdminTableScroll lockViewport={false} className={accountingPlTableShellCn}>
       <table className={accountingPlTableCn}>
         <thead>
           <tr className={accountingPlTheadCn}>
@@ -718,7 +719,7 @@ export function IncomePlDetailTableContent({
           )}
         </tbody>
       </table>
-      </div>
+      </AdminTableScroll>
 
       <IncomePurchaseDrillDialog
         open={purchaseDrillOpen}

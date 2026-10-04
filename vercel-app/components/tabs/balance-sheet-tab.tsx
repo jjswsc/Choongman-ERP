@@ -582,7 +582,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                         {t("inNoData") || "No data found."}
                       </p>
                     ) : (
-                      <div className={accountingBsCompareShellCn}>
+                      <AdminTableScroll lockViewport={false} className={accountingBsCompareShellCn}>
                         <table className="w-full min-w-max text-sm border-collapse">
                           <thead>
                             <tr className={accountingBsCompareTheadCn}>
@@ -632,7 +632,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                             })}
                           </tbody>
                         </table>
-                      </div>
+                      </AdminTableScroll>
                     )}
                   </div>
                 </div>

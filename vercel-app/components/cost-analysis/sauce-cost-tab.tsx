@@ -575,7 +575,7 @@ export function SauceCostTab({ canEdit = true }: { canEdit?: boolean }) {
       {/** Radix: 중첩 Dialog(배합 재료 추가 등)가 열리려면 바깥 Dialog는 modal={false} 필요 */}
       <Dialog open={editOpen} onOpenChange={setEditOpen} modal={false}>
         {/** 상단 고정: 판매/매장 전환 시 높이 변해도 화면 중앙 기준으로 위치가 흔들리지 않음 */}
-        <DialogContent className="max-w-4xl max-h-[min(90vh,calc(100vh-2.5rem))] overflow-y-auto top-[5vh] max-sm:top-4 translate-y-0">
+        <DialogContent className="max-w-4xl max-h-[min(90dvh,calc(100dvh-2.5rem))] overflow-y-auto top-[5vh] max-sm:top-4 translate-y-0">
           <DialogHeader>
             <DialogTitle>{editing ? (t("posCostSauceEdit") || "배합 수정") : (t("posCostSauceNew") || "배합 추가")}</DialogTitle>
           </DialogHeader>

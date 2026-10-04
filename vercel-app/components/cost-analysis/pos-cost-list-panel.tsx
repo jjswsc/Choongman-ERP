@@ -495,7 +495,7 @@ export function PosCostListPanel({
 
           <div className="rounded-xl border bg-card overflow-hidden">
             <AdminDesktopOnly>
-            <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(70vh,900px)]")}>
+            <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(70dvh,900px)]")}>
               <table className="w-full text-sm min-w-[980px] table-fixed">
                 <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm shadow-sm">
                   <tr className="border-b">
@@ -671,7 +671,7 @@ export function PosCostListPanel({
               </table>
             </div>
             </AdminDesktopOnly>
-            <AdminMobileOnly className="max-h-[min(70vh,900px)] overflow-y-auto divide-y divide-border/60">
+            <AdminMobileOnly className="max-h-[min(70dvh,900px)] overflow-y-auto divide-y divide-border/60">
               {sortedFlatList.map((r) => {
                 const key = rowKey(r)
                 const m = computePosCostRowMetrics(r, settings.misePercent, settings.costRatioCautionMax, vatView)

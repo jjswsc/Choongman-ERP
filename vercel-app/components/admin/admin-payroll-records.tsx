@@ -611,7 +611,7 @@ ${rows.map((row, ri) => {
         )}
 
         {hasResult && (
-          <AdminTableScroll className="-mx-2" hint={false}>
+          <AdminTableScroll className="-mx-2">
             <table className="w-full text-sm border-collapse min-w-[900px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">

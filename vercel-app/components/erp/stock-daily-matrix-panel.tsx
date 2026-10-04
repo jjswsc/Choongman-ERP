@@ -1,7 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+} from "@/components/erp/admin-responsive-list"
 import Link from "next/link"
 import {
   ArrowDownToLine,
@@ -32,11 +36,9 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { appAlert } from "@/lib/app-message"
 import { addBangkokCalendarDays, getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { useIsMobile } from "@/hooks/use-mobile"
-import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN, ADMIN_PANEL_WARNING_CN, ADMIN_TABLE_SCROLL_CN } from "@/lib/admin-ui-standards"
+import { ADMIN_BTN_XS_CN, ADMIN_NUMERIC_CN, ADMIN_PANEL_WARNING_CN } from "@/lib/admin-ui-standards"
 import {
   getHqWarehouseDailyStockMatrix,
-  type HqWarehouseDailyItemRow,
   type HqWarehouseDailyStockMatrixResult,
   type HqWarehouseMovementColumn,
   type HqWarehouseDayInvoice,
@@ -116,7 +118,6 @@ type StockDailyMatrixPanelProps = {
 export function StockDailyMatrixPanel({ storeTargets }: StockDailyMatrixPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const isMobile = useIsMobile()
   const defaultRange = React.useMemo(() => getBangkokMonthRange(), [])
 
   const [startStr, setStartStr] = React.useState(defaultRange.startStr)
@@ -503,38 +504,60 @@ export function StockDailyMatrixPanel({ storeTargets }: StockDailyMatrixPanelPro
         </div>
       )}
 
-      {isMobile && filteredItems.length > 0 && (
-        <div className="space-y-3 print:hidden">
+      {filteredItems.length > 0 && (
+        <AdminMobileOnly className="space-y-3 print:hidden">
           <h3 className="text-sm font-semibold">{t("stockDailyMatrixMobileTitle")}</h3>
-          {filteredItems.map((row) => (
-            <div key={row.code} className="rounded-xl border bg-card p-4 space-y-2 shadow-sm">
-              <div className="flex justify-between gap-2">
-                <div>
-                  <p className="font-mono text-xs text-muted-foreground">{row.code}</p>
-                  <p className="font-medium">{row.name}</p>
+          {filteredItems.map((row) => {
+            const dayOutCols = columns.filter((c) => c.kind === "out" && row.cells[c.key])
+            return (
+              <div key={row.code} className="space-y-2 rounded-xl border bg-card p-4 shadow-sm">
+                <div className="flex justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs text-muted-foreground">{row.code}</p>
+                    <p className="font-medium">{row.name}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs text-muted-foreground">{t("stockDailyMatrixBalance")}</p>
+                    <p className={cn("text-lg font-semibold text-primary", ADMIN_NUMERIC_CN)}>{formatNum(row.balance)}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">{t("stockDailyMatrixBalance")}</p>
-                  <p className={cn("text-lg font-semibold text-primary", ADMIN_NUMERIC_CN)}>{formatNum(row.balance)}</p>
+                <div className="flex flex-wrap gap-3 text-xs">
+                  <span>IN {formatNum(row.totalIn)}</span>
+                  <span>OUT {formatNum(row.totalOut)}</span>
+                  {row.outChangePct != null && <span>{row.outChangePct}%</span>}
                 </div>
+                <MiniSparkline values={row.sparkline} />
+                {dayOutCols.length > 0 ? (
+                  <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1 [-webkit-overflow-scrolling:touch]">
+                    {dayOutCols.map((c) => (
+                      <Link
+                        key={c.key}
+                        href={buildDrillHref(c.ymd, c.store)}
+                        className="shrink-0 rounded-lg border bg-muted/30 px-2.5 py-1.5 text-center"
+                        title={t("stockDailyMatrixDrillOutbound")}
+                      >
+                        <span className="block text-[10px] text-muted-foreground">
+                          {formatYmdShort(c.ymd, useThaiDate)}
+                        </span>
+                        <span className={cn("block text-xs font-semibold text-sky-700", ADMIN_NUMERIC_CN)}>
+                          {formatNum(row.cells[c.key])}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-              <div className="flex flex-wrap gap-3 text-xs">
-                <span>IN {formatNum(row.totalIn)}</span>
-                <span>OUT {formatNum(row.totalOut)}</span>
-                {row.outChangePct != null && <span>{row.outChangePct}%</span>}
-              </div>
-              <MiniSparkline values={row.sparkline} />
-            </div>
-          ))}
-        </div>
+            )
+          })}
+        </AdminMobileOnly>
       )}
 
-      {!isMobile && filteredItems.length > 0 && (
-        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+      {filteredItems.length > 0 && (
+        <AdminDesktopOnly className="overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="border-b bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground print:hidden">
             {filteredItems.length} items · {t("stockDailyMatrixScrollHint")}
           </div>
-          <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(72vh,760px)]")}>
+          <AdminTableScroll className="max-h-[min(72dvh,760px)]" hint={false} lockViewport={false}>
             <table className="w-full text-[12px] border-collapse min-w-[960px]">
               <thead className="sticky top-0 z-20">
                 <tr className="border-b">
@@ -603,8 +626,8 @@ export function StockDailyMatrixPanel({ storeTargets }: StockDailyMatrixPanelPro
                 })}
               </tbody>
             </table>
-          </div>
-        </div>
+          </AdminTableScroll>
+        </AdminDesktopOnly>
       )}
 
       {data && data.dayInvoices.length > 0 && (

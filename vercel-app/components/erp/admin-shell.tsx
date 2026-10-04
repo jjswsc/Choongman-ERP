@@ -25,7 +25,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <ErpNavFavoritesProvider>
             <SidebarProvider>
               <ErpSidebar />
-              <SidebarInset className="min-w-0 overflow-x-clip">
+              <SidebarInset
+                className="min-w-0 overflow-x-clip"
+                style={{
+                  paddingTop: "env(safe-area-inset-top, 0px)",
+                  paddingBottom: "env(safe-area-inset-bottom, 0px)",
+                  paddingLeft: "env(safe-area-inset-left, 0px)",
+                  paddingRight: "env(safe-area-inset-right, 0px)",
+                }}
+              >
                 <ErpHeader />
                 <AdminDesktopPreferredBanner />
                 <OfflineBanner pendingLabel={t("offlineBannerPendingData")} />

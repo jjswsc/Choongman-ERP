@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import {
   accountingResultTableCn,
   accountingResultTableShellCn,
@@ -28,11 +29,16 @@ export function AccountingDataTable({
   id?: string
 }) {
   return (
-    <div id={id} className={cn(accountingResultTableShellCn, "overflow-auto", className)}>
-      <table className={cn(accountingResultTableCn, minWidthClass, tableClassName)}>
-        {children}
-      </table>
-    </div>
+    <AdminTableScroll
+      className={cn(accountingResultTableShellCn, className)}
+      lockViewport={false}
+    >
+      <div id={id}>
+        <table className={cn(accountingResultTableCn, minWidthClass, tableClassName)}>
+          {children}
+        </table>
+      </div>
+    </AdminTableScroll>
   )
 }
 
@@ -86,17 +92,11 @@ export function AccountingTbodyRow({
   className?: string
   id?: string
 }) {
-  return <tr id={id} className={cn(accountingResultTbodyRowCn, className)}>{children}</tr>
-}
-
-export function AccountingTfootRow({
-  children,
-  className,
-}: {
-  children: React.ReactNode
-  className?: string
-}) {
-  return <tr className={cn(accountingResultTfootRowCn, className)}>{children}</tr>
+  return (
+    <tr id={id} className={cn(accountingResultTbodyRowCn, className)}>
+      {children}
+    </tr>
+  )
 }
 
 export function AccountingTd({
@@ -119,4 +119,14 @@ export function AccountingTd({
       {children}
     </td>
   )
+}
+
+export function AccountingTfootRow({
+  children,
+  className,
+}: {
+  children: React.ReactNode
+  className?: string
+}) {
+  return <tr className={cn(accountingResultTfootRowCn, className)}>{children}</tr>
 }

@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { PanelLeftIcon } from "lucide-react"
 import { Slot } from "radix-ui"
 
-import { useIsMobile } from "@/hooks/use-mobile"
+import { SIDEBAR_COMPACT_MAX_WIDTH, useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -87,6 +87,27 @@ function SidebarProvider({
     },
     [setOpenProp, open]
   )
+
+  // 쿠키 복원 + 폴드/컴팩트 폭에서는 기본 아이콘 rail(넓은 PC 기본 펼침은 유지)
+  React.useLayoutEffect(() => {
+    if (openProp !== undefined) return
+    const raw = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+      ?.split("=")[1]
+    if (raw === "true" || raw === "false") {
+      _setOpen(raw === "true")
+      return
+    }
+    if (window.innerWidth < SIDEBAR_COMPACT_MAX_WIDTH) {
+      _setOpen(false)
+    }
+  }, [openProp])
+
+  // 커버→펼침 전환 시 Sheet 열린 상태가 남지 않게 (다시 접을 때 갑작스런 Sheet 방지)
+  React.useEffect(() => {
+    if (!isMobile) setOpenMobile(false)
+  }, [isMobile])
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {

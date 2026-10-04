@@ -234,7 +234,7 @@ export default function PosScreenConfigPage() {
                   </div>
                   <div
                     className="flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-lg border border-border"
-                    style={{ height: "calc(100vh - 16rem)" }}
+                    style={{ height: "calc(100dvh - 16rem)" }}
                   >
                     <PosTerminalMenuScreen
                       mode="admin-config"

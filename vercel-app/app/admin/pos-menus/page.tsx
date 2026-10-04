@@ -140,7 +140,8 @@ import {
   normalizeOptionGroupsForMenu,
   syncOptionSelectionConfigToGroupKeys,
 } from "@/lib/pos-option-selection-groups"
-import { ADMIN_BTN_XS_CN, ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
+import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 import { resolvePosMenuImageUrlPayloadForSave } from "@/lib/pos-menu-image-storage-path"
 import {
   isPosMenuStoreScopeCompatibilityModeForBrand,
@@ -5386,7 +5387,7 @@ export default function PosMenusPage() {
                 className="h-9 flex-1 text-xs"
               />
             </div>
-            <div className={cn(ADMIN_TABLE_SCROLL_VIEWPORT_CN, "max-h-[calc(100vh-14rem)]")}>
+            <AdminTableScroll className="max-h-[calc(100dvh-14rem)]">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
                   <tr className="border-b bg-muted/30">
@@ -5593,7 +5594,7 @@ export default function PosMenusPage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </AdminTableScroll>
           </div>
           )}
         </div>

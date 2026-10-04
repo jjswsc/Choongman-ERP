@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useT } from "@/lib/i18n"
@@ -393,8 +394,8 @@ export function TaxFilingBooksTab(props: {
       ) : null}
 
       {view === "bridge" && bridge?.report ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <AdminTableScroll lockViewport={false}>
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b text-left text-muted-foreground">
                 <th className="py-2 pr-3">{t("taxBooksColItem")}</th>
@@ -427,7 +428,7 @@ export function TaxFilingBooksTab(props: {
             {money(bridge.report.salesSplit.taxInvoiceNet)} · {t("taxBooksPurchaseNet")}{" "}
             {money(bridge.report.salesSplit.purchaseNet)}
           </p>
-        </div>
+        </AdminTableScroll>
       ) : null}
 
       {view === "vouchers" ? (
@@ -762,7 +763,7 @@ export function TaxFilingBooksTab(props: {
 function EntryTable({ headers, rows, empty }: { headers: string[]; rows: string[][]; empty: string }) {
   if (!rows.length) return <p className="text-sm text-muted-foreground">{empty}</p>
   return (
-    <div className="overflow-x-auto">
+    <AdminTableScroll lockViewport={false}>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-muted-foreground">
@@ -785,7 +786,7 @@ function EntryTable({ headers, rows, empty }: { headers: string[]; rows: string[
           ))}
         </tbody>
       </table>
-    </div>
+    </AdminTableScroll>
   )
 }
 
@@ -803,7 +804,7 @@ function VoucherJvTable({
 }) {
   if (!rows.length) return <p className="text-sm text-muted-foreground">{empty}</p>
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <AdminTableScroll lockViewport={false} className="rounded-md border">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b bg-muted/40 text-left text-muted-foreground">
@@ -831,7 +832,7 @@ function VoucherJvTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </AdminTableScroll>
   )
 }
 
@@ -848,7 +849,7 @@ function ClickableTrialTable({
 }) {
   if (!rows.length) return <p className="text-sm text-muted-foreground">{empty}</p>
   return (
-    <div className="overflow-x-auto">
+    <AdminTableScroll lockViewport={false}>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-muted-foreground">
@@ -878,6 +879,6 @@ function ClickableTrialTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </AdminTableScroll>
   )
 }

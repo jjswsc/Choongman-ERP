@@ -494,7 +494,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
           </div>
         ) : (
           <AdminTableScroll
-            className="max-h-[min(65dvh,560px)] overscroll-contain rounded-xl border md:max-h-[calc(100vh-380px)]"
+            className="max-h-[min(65dvh,560px)] overscroll-contain rounded-xl border md:max-h-[calc(100dvh-380px)]"
             lockViewport
           >
             <table className="w-max min-w-full border-collapse text-left">

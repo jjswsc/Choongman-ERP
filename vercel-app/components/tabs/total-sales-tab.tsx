@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -1393,7 +1394,7 @@ export function TotalSalesTab() {
             </p>
           ) : null}
 
-          <div className="overflow-auto max-h-[calc(100vh-520px)] rounded-lg border">
+          <AdminTableScroll className="max-h-[calc(100dvh-520px)] rounded-lg border">
             <table
               className={
                 compareChannels
@@ -1596,7 +1597,7 @@ export function TotalSalesTab() {
                 )}
               </tbody>
             </table>
-          </div>
+          </AdminTableScroll>
           </>
           ) : null}
         </CardContent>

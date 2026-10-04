@@ -6,7 +6,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT, tOr } from "@/lib/i18n"
 import { ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
 
-/** md 이상(데스크톱)만 표시 — 표·다열 그리드용 */
+/** md 이상(데스크톱·폴드 펼침)만 표시 — 표·다열 그리드용. md = 700px (globals / use-mobile) */
 export function AdminDesktopOnly({
   children,
   className,
@@ -17,7 +17,7 @@ export function AdminDesktopOnly({
   return <div className={cn("hidden md:block", className)}>{children}</div>
 }
 
-/** md 미만(폰)만 표시 — 카드 리스트용 */
+/** md 미만(폰·커버)만 표시 — 카드 리스트용 */
 export function AdminMobileOnly({
   children,
   className,

@@ -5,7 +5,6 @@ import { buildErpExcelHtmlDocument, erpExcelSimpleTableStyle, triggerErpExcelHtm
 import {
   Search,
   BarChart3,
-  Package,
   Edit3,
   ImageIcon,
   Printer,
@@ -29,7 +28,13 @@ import type { StockStatusItem } from "@/lib/api-client"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
 import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
-import { ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+  ADMIN_MOBILE_CARD_LIST_CN,
+  ADMIN_MOBILE_CARD_ROW_CN,
+} from "@/components/erp/admin-responsive-list"
 
 function hasValidImage(url: string | undefined): boolean {
   if (!url || typeof url !== "string") return false
@@ -335,7 +340,76 @@ ${filteredList.map((r) => {
         </AdminFilterBar>
       </div>
 
-      <div className={ADMIN_TABLE_SCROLL_VIEWPORT_CN} ref={tableRef}>
+      <AdminMobileOnly className={cn(ADMIN_MOBILE_CARD_LIST_CN, "rounded-lg border border-border/60 bg-card")}>
+        {loading ? (
+          <div className="px-3 py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
+        ) : filteredList.length === 0 ? (
+          <div className="px-3 py-8">
+            <LogisticsEmptyState
+              icon={BarChart3}
+              title={storeFilter ? t("stockNoData") : t("stockSelectStoreHint")}
+              className="border-0 bg-transparent py-6"
+            />
+          </div>
+        ) : (
+          filteredList.map((row) => {
+            const isLow = row.safeQty > 0 && row.qty < row.safeQty
+            const cost = row.cost ?? row.price ?? 0
+            const amount = cost * row.qty
+            return (
+              <div key={`${row.store}-${row.code}`} className={ADMIN_MOBILE_CARD_ROW_CN}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-[10px] text-primary">{row.code}</p>
+                    <p className="truncate text-sm font-medium">{row.name}</p>
+                    {row.spec ? <p className="truncate text-[11px] text-muted-foreground">{row.spec}</p> : null}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={cn("text-base font-bold tabular-nums", row.qty < 0 ? "text-destructive" : "")}>
+                      {row.qty.toLocaleString()}
+                    </p>
+                    <p className="text-[11px] tabular-nums text-muted-foreground">{amount.toLocaleString()}</p>
+                    {isLow ? (
+                      <span className="mt-0.5 inline-flex rounded-md bg-destructive/10 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
+                        {t("stockLow")}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                {(canAdjust || onToggleOrderDisabled) && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {onToggleOrderDisabled != null && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 text-[11px]"
+                        onClick={() => onToggleOrderDisabled(row)}
+                      >
+                        {row.orderDisabled ? t("itemsOrderResume") : t("itemsOrderDisabled")}
+                      </Button>
+                    )}
+                    {canAdjust && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 text-[11px]"
+                        onClick={() => onAdjust(row)}
+                      >
+                        <Edit3 className="mr-1 h-3 w-3" />
+                        {t("stockBtnAdjust")}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
+      </AdminMobileOnly>
+
+      <AdminDesktopOnly>
+      <AdminTableScroll>
+      <div ref={tableRef}>
         <table className="w-full text-left text-sm">
           <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
             <tr className="border-b bg-muted/30">
@@ -532,6 +606,8 @@ ${filteredList.map((r) => {
           )}
         </table>
       </div>
+      </AdminTableScroll>
+      </AdminDesktopOnly>
 
       {imagePreview && (
         <div
@@ -539,7 +615,7 @@ ${filteredList.map((r) => {
           onClick={() => { setImagePreview(null); setImageLoadError(false) }}
         >
           <div
-            className="relative max-h-[90vh] max-w-[90vw] rounded-xl bg-card p-4 shadow-xl"
+            className="relative max-h-[90dvh] max-w-[90vw] rounded-xl bg-card p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-2 text-xs font-semibold text-muted-foreground">{imagePreview.name}</p>

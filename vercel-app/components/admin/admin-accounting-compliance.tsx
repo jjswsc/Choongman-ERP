@@ -4415,7 +4415,8 @@ export function AdminAccountingCompliance({
             <CardHeader>
               <CardTitle className="text-base">{t("accCompChartTitle")}</CardTitle>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
+            <CardContent>
+              <AdminTableScroll lockViewport={false}>
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b">
@@ -4436,6 +4437,7 @@ export function AdminAccountingCompliance({
                   ))}
                 </tbody>
               </table>
+              </AdminTableScroll>
             </CardContent>
           </Card>
 
@@ -4839,7 +4841,8 @@ export function AdminAccountingCompliance({
             </span>
           </div>
           <Card>
-            <CardContent className="p-0 overflow-x-auto">
+            <CardContent className="p-0">
+              <AdminTableScroll lockViewport={false} className="p-0">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40">
@@ -4862,6 +4865,7 @@ export function AdminAccountingCompliance({
                   ))}
                 </tbody>
               </table>
+              </AdminTableScroll>
             </CardContent>
           </Card>
         </TabsContent>
@@ -5491,7 +5495,8 @@ export function AdminAccountingCompliance({
                 {t("accCompKt20kMonthlySummaryTitle")}
               </CardTitle>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
+            <CardContent>
+              <AdminTableScroll lockViewport={false}>
               <table className="w-full text-sm border-collapse min-w-[980px]">
                 <thead>
                   <tr className="border-b bg-muted/40">
@@ -5548,6 +5553,7 @@ export function AdminAccountingCompliance({
                   {t("accCompKt20kNoData")}
                 </div>
               ) : null}
+              </AdminTableScroll>
             </CardContent>
           </Card>
         </TabsContent>
@@ -5669,8 +5675,9 @@ export function AdminAccountingCompliance({
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6 overflow-x-auto">
-              <table className="w-full text-sm">
+            <CardContent className="pt-6">
+              <AdminTableScroll lockViewport={false}>
+              <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b">
                     <th className="text-left p-2">{t("accCompColFiling")}</th>
@@ -5716,6 +5723,7 @@ export function AdminAccountingCompliance({
                   })}
                 </tbody>
               </table>
+              </AdminTableScroll>
             </CardContent>
           </Card>
         </TabsContent>

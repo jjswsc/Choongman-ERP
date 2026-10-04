@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
+import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { useLang } from "@/lib/lang-context"
 import { tr, useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -1541,7 +1542,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
 
       {reviewRows.length ? (
         <Card>
-          <CardContent className="pt-4 pb-4 space-y-2 overflow-x-auto">
+          <CardContent className="space-y-2 pt-4 pb-4">
             <div className="flex flex-wrap items-center gap-2">
               <div className="text-sm font-medium">{t("ptiPdfReview")}</div>
               <span className="text-xs tabular-nums text-muted-foreground">
@@ -1578,7 +1579,8 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 </Button>
               </div>
             </div>
-            <table className="w-full text-xs">
+            <AdminTableScroll lockViewport={false}>
+            <table className="w-full min-w-[960px] text-xs">
               <thead>
                 <tr className="text-left text-muted-foreground">
                   <th className="p-1 w-[4.5rem]">{t("ptiColPage")}</th>
@@ -1649,6 +1651,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 })}
               </tbody>
             </table>
+            </AdminTableScroll>
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" size="sm" onClick={() => void saveReview()} disabled={saving || !reviewStats.keep}>
                 {t("ptiPdfSave")}
@@ -1669,8 +1672,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       ) : null}
 
       <Card>
-        <CardContent className="p-2 overflow-x-auto">
-          <table className="w-full text-sm">
+        <CardContent className="p-2">
+          <AdminTableScroll lockViewport={false}>
+          <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-muted/30">
               <tr>
                 {canWrite ? (
@@ -1745,11 +1749,12 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               ) : null}
             </tbody>
           </table>
+          </AdminTableScroll>
         </CardContent>
       </Card>
 
       <Dialog open={previewPage != null} onOpenChange={(open) => { if (!open) setPreviewPage(null) }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{tr(t, "ptiPreviewTitle", { n: String(previewPage || "") })}</DialogTitle>
           </DialogHeader>

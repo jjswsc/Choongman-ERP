@@ -330,8 +330,8 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
         )}
       </div>
       <Card>
-        <CardContent className="pt-6 overflow-x-auto">
-          <div className="mb-3 grid grid-cols-1 lg:grid-cols-2 gap-2 text-sm">
+        <CardContent className="space-y-3 pt-6">
+          <div className="grid grid-cols-1 gap-2 text-sm lg:grid-cols-2">
             <div>
               <div className="text-xs text-muted-foreground mb-1">{t("accCompUnlockReasonRequired")}</div>
               <Input
@@ -351,7 +351,8 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
               />
             </div>
           </div>
-          <table className="w-full text-sm">
+          <AdminTableScroll lockViewport={false}>
+          <table className="w-full min-w-[520px] text-sm">
             <thead>
               <tr className="border-b">
                 <th className="text-left p-2">{t("accCompColYearMonth")}</th>
@@ -392,6 +393,7 @@ export function AccountingCompliancePeriodTab(props: AccountingCompliancePeriodT
               ))}
             </tbody>
           </table>
+          </AdminTableScroll>
         </CardContent>
       </Card>
       <Card className="mt-3">

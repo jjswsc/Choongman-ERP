@@ -232,7 +232,7 @@ export function PosCostAuditPanel({ allowed }: Props) {
       ) : (
         <div className="rounded-xl border bg-card overflow-hidden">
           <AdminDesktopOnly>
-          <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(65vh,800px)]")}>
+          <div className={cn(ADMIN_TABLE_SCROLL_CN, "max-h-[min(65dvh,800px)]")}>
             <table className="w-full text-sm min-w-[960px]">
               <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
                 <tr className="border-b">
@@ -302,7 +302,7 @@ export function PosCostAuditPanel({ allowed }: Props) {
             </table>
           </div>
           </AdminDesktopOnly>
-          <AdminMobileOnly className="max-h-[min(65vh,800px)] overflow-y-auto divide-y divide-border/60">
+          <AdminMobileOnly className="max-h-[min(65dvh,800px)] overflow-y-auto divide-y divide-border/60">
             {filteredAuditRows.map((r) => {
               const isUpdate = r.actionType === "update"
               const bQty = r.beforeQuantity

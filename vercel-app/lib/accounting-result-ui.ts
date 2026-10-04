@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils"
 
 /** 회계·세무 검색 결과 영역 공통 스타일 */
 export const accountingResultTableShellCn =
-  "overflow-x-auto rounded-lg border border-border/80 bg-card shadow-sm"
+  "rounded-lg border border-border/80 bg-card shadow-sm"
 
 export const accountingResultTableCn = "w-full text-sm border-collapse min-w-max"
 
@@ -59,7 +59,7 @@ export const accountingFinancialTotalRowCn = "border-t-2 border-border font-semi
 
 /** 손익계산서 — 좁은 화면에서 행을 카드형 flex로 전환 (인쇄 시 테이블 복원) */
 const accountingPlRowMobileCn =
-  "max-sm:flex max-sm:flex-wrap max-sm:items-baseline max-sm:justify-between max-sm:gap-x-2 max-sm:gap-y-0.5 max-sm:px-3 max-sm:py-2.5 print:table-row print:px-0 print:py-0"
+  "max-md:flex max-md:flex-wrap max-md:items-baseline max-md:justify-between max-md:gap-x-2 max-md:gap-y-0.5 max-md:px-3 max-md:py-2.5 print:table-row print:px-0 print:py-0"
 
 /** 손익계산서 문서 카드 — 대형 보고서/PPT 톤 (탭 폭 전체 사용) */
 export const accountingPlDocumentCn =
@@ -68,14 +68,14 @@ export const accountingPlDocumentCn =
 export const accountingPlTitleCn = "text-lg sm:text-xl font-bold tracking-tight text-foreground"
 
 export const accountingPlTableShellCn =
-  "w-full min-w-0 overflow-x-auto overscroll-x-contain rounded-xl border border-border/70 bg-card shadow-[0_2px_16px_-4px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_2px_16px_-4px_rgba(0,0,0,0.4)] [-webkit-overflow-scrolling:touch]"
+  "w-full min-w-0 rounded-xl border border-border/70 bg-card shadow-[0_2px_16px_-4px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[0_2px_16px_-4px_rgba(0,0,0,0.4)]"
 
-export const accountingPlTableCn = "w-full text-sm border-collapse max-sm:block print:table"
+export const accountingPlTableCn = "w-full text-sm border-collapse max-md:block print:table"
 
-export const accountingPlTbodyCn = "max-sm:block print:table-row-group"
+export const accountingPlTbodyCn = "max-md:block print:table-row-group"
 
 export const accountingPlTheadCn =
-  "border-b-2 border-border/60 bg-gradient-to-r from-muted/95 via-muted/60 to-muted/95 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] max-sm:hidden print:table-header-group"
+  "border-b-2 border-border/60 bg-gradient-to-r from-muted/95 via-muted/60 to-muted/95 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] max-md:hidden print:table-header-group"
 
 /** 회계 리스트·드릴다운 — 섹션 제목(테이블 위) */
 export const accountingResultSectionTitleCn = "text-sm font-bold text-foreground mb-1.5"
@@ -89,13 +89,13 @@ export const accountingPlThCn =
 export const accountingPlThRightCn = cn(accountingPlThCn, "text-right pl-3 pr-4 sm:pl-5 sm:pr-8")
 
 export const accountingPlTdLabelCn =
-  "pl-3 pr-2 py-2.5 sm:pl-8 sm:pr-5 sm:py-3 align-middle max-sm:min-w-0 max-sm:flex-1 max-sm:break-words max-sm:p-0 print:table-cell print:pl-8 print:pr-5 print:py-3"
+  "pl-3 pr-2 py-2.5 sm:pl-8 sm:pr-5 sm:py-3 align-middle max-md:min-w-0 max-md:flex-1 max-md:break-words max-md:p-0 print:table-cell print:pl-8 print:pr-5 print:py-3"
 
 export const accountingPlTdAmountCn =
-  "pl-2 pr-3 py-2.5 sm:pl-5 sm:pr-6 sm:py-3 text-right font-mono tabular-nums align-middle whitespace-nowrap max-sm:shrink-0 max-sm:p-0 max-sm:text-[13px] print:table-cell print:pl-5 print:pr-6 print:py-3 print:text-sm"
+  "pl-2 pr-3 py-2.5 sm:pl-5 sm:pr-6 sm:py-3 text-right font-mono tabular-nums align-middle whitespace-nowrap max-md:shrink-0 max-md:p-0 max-md:text-[13px] print:table-cell print:pl-5 print:pr-6 print:py-3 print:text-sm"
 
 export const accountingPlTdPctCn =
-  "pl-2 pr-3 py-2.5 sm:pl-5 sm:pr-8 sm:py-3 text-right tabular-nums text-muted-foreground align-middle whitespace-nowrap max-sm:basis-full max-sm:p-0 max-sm:pt-0.5 max-sm:text-xs print:table-cell print:basis-auto print:pl-5 print:pr-8 print:py-3 print:pt-3 print:text-sm"
+  "pl-2 pr-3 py-2.5 sm:pl-5 sm:pr-8 sm:py-3 text-right tabular-nums text-muted-foreground align-middle whitespace-nowrap max-md:basis-full max-md:p-0 max-md:pt-0.5 max-md:text-xs print:table-cell print:basis-auto print:pl-5 print:pr-8 print:py-3 print:pt-3 print:text-sm"
 
 /** 매출 구간 */
 export const accountingPlSalesRowCn = cn(
@@ -127,7 +127,7 @@ export const accountingPlSubRowCn = cn(
 )
 
 export const accountingPlSubTdLabelCn =
-  "pl-6 pr-2 py-2 text-sm text-muted-foreground align-middle sm:pl-14 sm:pr-5 sm:py-2.5 max-sm:min-w-0 max-sm:flex-1 max-sm:break-words max-sm:p-0 max-sm:pl-2 print:table-cell print:pl-14 print:pr-5 print:py-2.5"
+  "pl-6 pr-2 py-2 text-sm text-muted-foreground align-middle sm:pl-14 sm:pr-5 sm:py-2.5 max-md:min-w-0 max-md:flex-1 max-md:break-words max-md:p-0 max-md:pl-2 print:table-cell print:pl-14 print:pr-5 print:py-2.5"
 
 export const accountingPlGrossProfitRowCn = cn(
   "border-y-2 border-primary/30 bg-gradient-to-r from-primary/12 via-primary/6 to-primary/12 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.5)]",
@@ -140,10 +140,10 @@ export const accountingPlNetProfitRowCn = cn(
 )
 
 /** 들여쓰기 보조 행(기초/기말재고·매입 등) — 데스크톱만 깊게 */
-export const accountingPlIndentLabelCn = "max-sm:pl-0 sm:pl-10"
+export const accountingPlIndentLabelCn = "max-md:pl-0 sm:pl-10"
 
 /** 비용 원천 세부 — 데스크톱만 깊게 */
-export const accountingPlDeepIndentLabelCn = "max-sm:pl-2 sm:pl-12"
+export const accountingPlDeepIndentLabelCn = "max-md:pl-2 sm:pl-12"
 
 /** 재무제표 공통 문서 카드 (손익·재무상태표) */
 export const accountingFsDocumentCn = accountingPlDocumentCn
@@ -183,7 +183,7 @@ export const accountingBsBalanceCheckWarnCn =
   "rounded-xl border border-amber-300/80 bg-gradient-to-r from-amber-50/90 via-amber-50/60 to-amber-50/90 px-4 py-3 text-sm text-amber-900 shadow-sm dark:from-amber-950/40 dark:via-amber-950/25 dark:to-amber-950/40 dark:text-amber-100"
 
 export const accountingBsCompareShellCn =
-  "w-full overflow-x-auto overflow-hidden rounded-lg border border-border/70 bg-card shadow-[0_2px_12px_-2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.4)] dark:shadow-[0_2px_12px_-2px_rgba(0,0,0,0.35)]"
+  "w-full min-w-0 overflow-hidden rounded-lg border border-border/70 bg-card shadow-[0_2px_12px_-2px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.4)] dark:shadow-[0_2px_12px_-2px_rgba(0,0,0,0.35)]"
 
 export const accountingBsCompareTheadCn =
   "border-b bg-gradient-to-r from-muted/90 via-muted/55 to-muted/90 text-muted-foreground"

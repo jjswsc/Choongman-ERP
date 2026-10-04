@@ -599,7 +599,7 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
                 <AdminTableSkeleton columns={canSearchAll ? 7 : 6} rows={6} />
               ) : (
               <div
-                className="overflow-auto max-h-[calc(100vh-320px)] min-h-[200px] rounded-xl border"
+                className="overflow-auto max-h-[calc(100dvh-320px)] min-h-[200px] rounded-xl border"
                 data-tour="pos-tour-cash-ledger-table"
               >
                 <table className="w-full min-w-[400px] text-sm">
@@ -785,7 +785,7 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
             <AdminTableSkeleton columns={canSearchAll ? 7 : 6} rows={8} className="mb-4" />
           ) : (
           <div
-            className="overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-xl border"
+            className="overflow-auto max-h-[calc(100dvh-380px)] min-h-[200px] rounded-xl border"
             data-tour="pos-tour-cash-ledger-table"
           >
             <table className="w-full min-w-[400px] text-sm">

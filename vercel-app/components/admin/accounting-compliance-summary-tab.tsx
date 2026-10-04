@@ -1152,7 +1152,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               onAdjustmentResult={onSalesAdjustmentResult}
             />
             <Card>
-              <CardContent className="p-2 overflow-x-auto space-y-3">
+              <CardContent className="space-y-3 p-2">
                 {posFilingOutputSummaries.length > 0 ? (
                   <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2 text-sm">
                     <div className="font-medium text-foreground">{t("accCompPosSalesAutoTitle")}</div>
@@ -1567,7 +1567,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
               </Button>
             </div>
             <Card>
-              <CardContent className="p-2 overflow-x-auto space-y-3">
+              <CardContent className="space-y-3 p-2">
                 {vatInputViewMode === "vendor" ? (
                   <AdminTableScroll className="rounded-md border border-border/70" hint={false}>
                     <table className="w-full text-sm">
@@ -2209,7 +2209,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">{t("accCompPnd5354SubPnd54")}</CardTitle>
                 </CardHeader>
-                <CardContent className="p-2 overflow-x-auto space-y-2">
+                <CardContent className="space-y-2 p-2">
                   <div className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-xs text-muted-foreground leading-relaxed">
                     {t("accCompWhtAmountsEditableHint")}
                   </div>
@@ -2704,7 +2704,7 @@ export function AccountingComplianceSummaryTab(props: AccountingComplianceSummar
                   <CardTitle className="text-sm">{t("accCompPnd5354SubPnd53")}</CardTitle>
                 </CardHeader>
               ) : null}
-              <CardContent className={isPnd5354CompactList ? "p-0 overflow-x-auto" : "p-2 overflow-x-auto"}>
+              <CardContent className={isPnd5354CompactList ? "p-0" : "p-2"}>
                 {isPnd5354CompactList ? (
                   <table className="w-full text-sm border-collapse min-w-[960px]">
                     <thead>

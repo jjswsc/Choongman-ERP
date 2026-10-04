@@ -23,7 +23,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { LogisticsEmptyState } from "@/components/erp/logistics-ui"
-import { ADMIN_NUMERIC_CN, ADMIN_TABLE_SCROLL_VIEWPORT_CN } from "@/lib/admin-ui-standards"
+import {
+  AdminDesktopOnly,
+  AdminMobileOnly,
+  AdminTableScroll,
+  ADMIN_MOBILE_CARD_LIST_CN,
+  ADMIN_MOBILE_CARD_ROW_CN,
+} from "@/components/erp/admin-responsive-list"
+import { ADMIN_NUMERIC_CN } from "@/lib/admin-ui-standards"
 import { cn } from "@/lib/utils"
 import type { Product } from "@/app/admin/items/page"
 
@@ -135,8 +142,55 @@ export function ItemTable({
         </Button>
       </div>
 
-      {/* Table */}
-      <div className={cn(ADMIN_TABLE_SCROLL_VIEWPORT_CN, "max-h-[calc(100vh-14rem)]")}>
+      <AdminMobileOnly className={cn(ADMIN_MOBILE_CARD_LIST_CN, "rounded-lg border border-border/60 bg-card")}>
+        {!hasSearched ? (
+          <div className="px-3 py-8">
+            <LogisticsEmptyState icon={Search} title={t("itemsSearchHint")} className="border-0 bg-transparent py-6" />
+          </div>
+        ) : loading ? (
+          <div className="px-3 py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
+        ) : products.length === 0 ? (
+          <div className="px-3 py-8">
+            <LogisticsEmptyState icon={ListFilter} title={t("itemsNoResults")} className="border-0 bg-transparent py-6" />
+          </div>
+        ) : (
+          products.map((product) => (
+            <div key={product.code} className={ADMIN_MOBILE_CARD_ROW_CN}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] text-primary">{product.code}</p>
+                  <p className={cn("truncate text-sm font-medium", product.orderDisabled && "line-through text-muted-foreground")}>
+                    {product.name}
+                  </p>
+                  {product.spec ? <p className="truncate text-[11px] text-muted-foreground">{product.spec}</p> : null}
+                </div>
+                <p className={cn("shrink-0 text-sm font-semibold", ADMIN_NUMERIC_CN)}>
+                  {product.price > 0 ? product.price.toLocaleString() : "-"}
+                </p>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {onToggleOrderDisabled != null && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2 text-[11px]"
+                    onClick={() => onToggleOrderDisabled(product)}
+                  >
+                    {product.orderDisabled ? t("itemsOrderResume") : t("itemsUnusedBadge")}
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="h-8 px-2 text-[11px]" onClick={() => onEdit(product)}>
+                  <Pencil className="mr-1 h-3 w-3" />
+                  {t("itemsBtnEdit")}
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </AdminMobileOnly>
+
+      <AdminDesktopOnly>
+      <AdminTableScroll className="max-h-[calc(100dvh-14rem)]">
         <table className="w-full text-left text-sm">
           <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
             <tr className="border-b bg-muted/30">
@@ -264,7 +318,8 @@ export function ItemTable({
             )}
           </tbody>
         </table>
-      </div>
+      </AdminTableScroll>
+      </AdminDesktopOnly>
 
       {/* 이미지 미리보기 모달 */}
       {imagePreview && (
@@ -273,7 +328,7 @@ export function ItemTable({
           onClick={() => { setImagePreview(null); setImageLoadError(false) }}
         >
           <div
-            className="relative max-h-[90vh] max-w-[90vw] rounded-xl bg-card p-4 shadow-xl"
+            className="relative max-h-[90dvh] max-w-[90vw] rounded-xl bg-card p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-2 text-xs font-semibold text-muted-foreground">{imagePreview.name}</p>

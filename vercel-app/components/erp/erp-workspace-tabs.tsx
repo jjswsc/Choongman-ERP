@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { usePointerCoarse } from "@/hooks/use-pointer-coarse"
 
 function tabLabelFallback(href: string): string {
   const path = href.split("?")[0] || href
@@ -64,6 +65,7 @@ export function ErpWorkspaceTabs() {
   const [lruHint, setLruHint] = React.useState<string | null>(null)
   const [dragOverHref, setDragOverHref] = React.useState<string | null>(null)
   const dragFromRef = React.useRef<string | null>(null)
+  const pointerCoarse = usePointerCoarse()
 
   const routerActiveHref = resolveErpWorkspaceTabHref(
     normalizeErpHref(pathname || "", searchParams.toString() ? `?${searchParams.toString()}` : "")
@@ -147,7 +149,8 @@ export function ErpWorkspaceTabs() {
                 setDragOverHref(null)
               }}
               className={cn(
-                "group relative flex h-8 max-w-[10.5rem] shrink-0 cursor-grab items-stretch active:cursor-grabbing sm:max-w-[13rem]",
+                "group relative flex max-w-[9.5rem] shrink-0 cursor-grab items-stretch active:cursor-grabbing sm:max-w-[13rem]",
+                pointerCoarse ? "h-10" : "h-8",
                 index > 0 && "-ml-1",
                 active ? "z-20" : "z-10 hover:z-[15]",
                 isDropTarget && "z-30"
@@ -239,8 +242,9 @@ export function ErpWorkspaceTabs() {
                 <button
                   type="button"
                   className={cn(
-                    "mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-opacity hover:bg-muted hover:text-foreground",
-                    active
+                    "mr-1 inline-flex shrink-0 items-center justify-center rounded-full text-muted-foreground transition-opacity hover:bg-muted hover:text-foreground",
+                    pointerCoarse ? "h-8 w-8" : "h-5 w-5",
+                    active || pointerCoarse
                       ? "opacity-80"
                       : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                   )}
@@ -251,7 +255,7 @@ export function ErpWorkspaceTabs() {
                     closeWorkspaceTab(tab.href)
                   }}
                 >
-                  <X className="h-3 w-3" />
+                  <X className={pointerCoarse ? "h-3.5 w-3.5" : "h-3 w-3"} />
                 </button>
               </div>
             </div>

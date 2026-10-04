@@ -109,6 +109,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  /** 폴드·노치 기기 safe-area (PC는 0). AdminShell 등이 env(safe-area-inset-*) 사용 */
+  viewportFit: "cover",
 }
 
 export default async function RootLayout({

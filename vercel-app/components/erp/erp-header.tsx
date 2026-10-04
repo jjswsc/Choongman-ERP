@@ -22,6 +22,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Bell, User, Smartphone, ArrowLeft, Languages } from "lucide-react"
+import { usePointerCoarse } from "@/hooks/use-pointer-coarse"
+import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useLang, ADMIN_UI_LANG_OPTIONS } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -73,18 +75,23 @@ export function ErpHeader() {
   }
 
   const staffMobileLabel = t("goToStaffMobile") || t("goToMobile") || "현장 모바일"
+  const pointerCoarse = usePointerCoarse()
+  const iconBtnCn = cn(
+    "shrink-0 text-muted-foreground hover:text-foreground",
+    pointerCoarse ? "h-10 w-10" : "h-8 w-8"
+  )
 
   return (
-    <header className="sticky top-0 z-30 flex h-12 items-center gap-1 border-b border-border bg-muted px-1.5 shadow-sm print:hidden pointer-events-none sm:gap-1.5 sm:px-3">
+    <header className="sticky top-0 z-30 flex h-12 items-center gap-1 border-b border-border bg-muted px-1.5 shadow-sm print:hidden pointer-events-none sm:gap-1.5 sm:px-3 max-md:h-14">
       <div className="pointer-events-auto flex min-w-0 flex-1 items-end gap-0.5 self-stretch pt-1.5 sm:gap-1">
         <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
-          <SidebarTrigger className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" />
+          <SidebarTrigger className={cn(iconBtnCn, "hover:bg-transparent")} />
           {showBackButton ? (
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-background/80 hover:text-foreground"
+              className={cn(iconBtnCn, "hover:bg-background/80")}
               onClick={goBack}
               title={t("posBack") || "뒤로가기"}
             >
@@ -103,21 +110,25 @@ export function ErpHeader() {
       </div>
 
       <div className="pointer-events-auto flex shrink-0 items-center gap-0.5 sm:gap-1.5">
+        {/* 커버: 현장 모바일·자동번역은 계정 메뉴로 옮겨 탭 공간 확보 */}
         <Link
           href="/"
-          className="flex h-8 shrink-0 items-center gap-1 rounded-md px-1.5 text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+          className={cn(
+            "hidden shrink-0 items-center gap-1 rounded-md px-1.5 text-muted-foreground hover:bg-muted hover:text-foreground sm:flex lg:hidden",
+            pointerCoarse ? "h-10" : "h-8"
+          )}
           title={`${brand.appName} · ${staffMobileLabel}`}
         >
           <Smartphone className="h-4 w-4 shrink-0" />
-          <span className="max-w-[4.5rem] truncate text-[10px] font-medium sm:hidden">
-            {staffMobileLabel}
-          </span>
         </Link>
         <Button
           type="button"
           variant={autoTranslateEnabled ? "default" : "outline"}
           size="sm"
-          className="h-8 gap-1 px-1.5 text-xs sm:gap-1.5 sm:px-2"
+          className={cn(
+            "hidden gap-1 px-1.5 text-xs sm:inline-flex sm:gap-1.5 sm:px-2",
+            pointerCoarse ? "h-10" : "h-8"
+          )}
           onClick={() => setAutoTranslateEnabled(!autoTranslateEnabled)}
           title={`${autoTranslateLabel} ${autoTranslateEnabled ? "ON" : "OFF"}`}
         >
@@ -145,7 +156,10 @@ export function ErpHeader() {
               }}
             >
               <SelectTrigger
-                className="h-8 w-[min(9rem,28vw)] text-xs sm:w-[min(12rem,32vw)]"
+                className={cn(
+                  "w-[min(7.5rem,26vw)] text-xs sm:w-[min(12rem,32vw)]",
+                  pointerCoarse ? "h-10" : "h-8"
+                )}
                 aria-label={t("header_view_store")}
               >
                 <SelectValue placeholder={t("header_view_store")} />
@@ -176,8 +190,12 @@ export function ErpHeader() {
             setLang(v as LangCode)
           }}
         >
-          {/* 기존 대비 약 70% 폭 */}
-          <SelectTrigger className="h-8 min-w-[3.15rem] max-w-[4.9rem] px-1.5 text-xs sm:min-w-[5.25rem] sm:max-w-[7rem]">
+          <SelectTrigger
+            className={cn(
+              "min-w-[2.75rem] max-w-[4.2rem] px-1.5 text-xs sm:min-w-[5.25rem] sm:max-w-[7rem]",
+              pointerCoarse ? "h-10" : "h-8"
+            )}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -192,7 +210,7 @@ export function ErpHeader() {
         <Button
           variant="ghost"
           size="icon"
-          className="hidden h-8 w-8 text-muted-foreground hover:text-foreground sm:inline-flex"
+          className={cn("hidden text-muted-foreground hover:text-foreground sm:inline-flex", iconBtnCn)}
         >
           <Bell className="h-4 w-4" />
           <span className="sr-only">{t("header_notifications")}</span>
@@ -202,7 +220,10 @@ export function ErpHeader() {
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="flex h-8 items-center gap-1.5 rounded-lg px-1 text-muted-foreground hover:text-foreground sm:px-1.5"
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-1 text-muted-foreground hover:text-foreground sm:px-1.5",
+                pointerCoarse ? "h-10" : "h-8"
+              )}
             >
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground sm:h-7 sm:w-7">
                 <User className="h-3.5 w-3.5" />
@@ -217,9 +238,23 @@ export function ErpHeader() {
               </div>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuLabel className="text-xs">{t("adminMyAccount")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild className="text-xs cursor-pointer sm:hidden">
+              <Link href="/">
+                <Smartphone className="mr-2 h-3.5 w-3.5" />
+                {staffMobileLabel}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-xs cursor-pointer sm:hidden"
+              onClick={() => setAutoTranslateEnabled(!autoTranslateEnabled)}
+            >
+              <Languages className="mr-2 h-3.5 w-3.5" />
+              {autoTranslateLabel} {autoTranslateEnabled ? "ON" : "OFF"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="sm:hidden" />
             <DropdownMenuItem asChild className="text-xs cursor-pointer">
               <Link href="/admin/profile">{t("adminProfile")}</Link>
             </DropdownMenuItem>
