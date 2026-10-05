@@ -92,13 +92,21 @@ export function MarketingMetaInsightsPanel({
   const ig = payload?.instagram || status?.instagram || status?.lastSync?.instagram
   const allAds = payload?.ads || []
   const campaignFilterOn = Boolean(matchTopic || metaCampaignId || metaCampaignName)
-  const ads = campaignFilterOn
+  const matched = campaignFilterOn
     ? filterAdsForCampaign(allAds, {
         topic: matchTopic,
         metaCampaignId,
         metaCampaignName,
       })
     : allAds
+  // 매핑용 카탈로그(실적 0)는 목록에 섞이면 「덜 가져옴」처럼 보이므로 실적 표에서는 제외
+  const hasDelivery = (a: (typeof matched)[number]) =>
+    Boolean(a.adId) || a.impressions > 0 || a.spend > 0 || a.reach > 0 || a.clicks > 0
+  const ads = matched
+    .filter(hasDelivery)
+    .slice()
+    .sort((a, b) => (b.spend || 0) - (a.spend || 0) || (b.impressions || 0) - (a.impressions || 0))
+  const catalogOnly = matched.length - ads.length
   const totals = campaignFilterOn
     ? ads.reduce(
         (acc, a) => {
@@ -111,11 +119,20 @@ export function MarketingMetaInsightsPanel({
         { ads: 0, impressions: 0, reach: 0, spend: 0 }
       )
     : payload?.adsTotals
+  const dateRangeLabel = (() => {
+    const dr = payload?.dateRange || status?.lastSync?.dateRange
+    if (!dr) return ""
+    if (dr.since && dr.until) return `${dr.since} ~ ${dr.until}`
+    if (dr.preset === "last_90d") return t("marketingMetaRangeLast90")
+    if (dr.preset === "last_28d") return t("marketingMetaRangeLast28")
+    return dr.preset || ""
+  })()
   const diagnostics = [
     ...(payload?.diagnostics?.length ? payload.diagnostics : status?.diagnostics || []),
-    ...(campaignFilterOn && allAds.length > 0 && ads.length === 0 ? ["meta_not_mapped"] : []),
+    ...(campaignFilterOn && allAds.length > 0 && matched.length === 0 ? ["meta_not_mapped"] : []),
   ]
   const plat = payload?.platformSpend
+  const tableLimit = 80
 
   return (
     <div className="rounded-xl border bg-card p-4">
@@ -132,6 +149,11 @@ export function MarketingMetaInsightsPanel({
           <div>
             <h3 className="text-sm font-semibold">{t("marketingMetaAdsTitle")}</h3>
             <p className="text-[11px] text-muted-foreground">{t("marketingMetaAdsSubtitle")}</p>
+            {dateRangeLabel ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {t("marketingMetaRangeLabel")}: {dateRangeLabel}
+              </p>
+            ) : null}
             <p className="mt-0.5 text-[11px] text-muted-foreground">{t("marketingMetaOneConnectHint")}</p>
           </div>
         </div>
@@ -210,6 +232,12 @@ export function MarketingMetaInsightsPanel({
           </div>
           {!compact && ads.length > 0 ? (
             <div className="overflow-x-auto">
+              <p className="mb-2 text-[11px] text-muted-foreground">{t("marketingMetaTableHint")}</p>
+              {catalogOnly > 0 ? (
+                <p className="mb-2 text-[11px] text-muted-foreground">
+                  {t("marketingMetaCatalogHidden").replace("{n}", String(catalogOnly))}
+                </p>
+              ) : null}
               <table className="w-full text-left text-xs">
                 <thead className="text-muted-foreground">
                   <tr>
@@ -222,9 +250,9 @@ export function MarketingMetaInsightsPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {ads.slice(0, 40).map((a) => (
-                    <tr key={a.adId || a.adName} className="border-t">
-                      <td className="py-1.5 pr-2">{a.adName || a.adId}</td>
+                  {ads.slice(0, tableLimit).map((a, i) => (
+                    <tr key={`${a.adId || a.campaignId || a.adName}-${i}`} className="border-t">
+                      <td className="py-1.5 pr-2">{a.adName || a.adId || "—"}</td>
                       <td className="py-1.5 pr-2 text-muted-foreground">{a.campaignName}</td>
                       <td className="py-1.5 pr-2 tabular-nums">{a.impressions.toLocaleString()}</td>
                       <td className="py-1.5 pr-2 tabular-nums">{a.reach.toLocaleString()}</td>
@@ -234,6 +262,13 @@ export function MarketingMetaInsightsPanel({
                   ))}
                 </tbody>
               </table>
+              {ads.length > tableLimit ? (
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  {t("marketingMetaTableTruncated")
+                    .replace("{shown}", String(tableLimit))
+                    .replace("{total}", String(ads.length))}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </>
