@@ -1,6 +1,7 @@
 /**
  * 미수금 보조원장 — 클라이언트·서버 공용 순수 함수 (supabase 없음)
  */
+import { isOfficeStoreVariant } from '@/lib/office-store-canonical'
 import { normalizeReceivableStoreKey, pickReceivableDisplayStoreName, receivableStoreGroupKey } from '@/lib/receivable-store-key'
 
 export const RECEIVABLE_LEDGER_SELECT =
@@ -46,7 +47,14 @@ export function buildReceivableAccrualStoreIndex(_rows: ReceivableTransactionRow
   return { accrualStoreByDateAmount: new Map() }
 }
 
-/** 미수금 행의 필터·집계용 store_name — 행에 기록된 매장만 (추측 금지) */
+/** 채권자가 비어 있거나 본사면 본사 장부. 매장 발행 청구는 그 매장 장부. */
+export function isHqOwnedReceivable(r: ReceivableTransactionRow): boolean {
+  const creditor = String(r.creditor_store ?? '').trim()
+  if (!creditor) return true
+  return isOfficeStoreVariant(creditor)
+}
+
+/** 미수금 행의 필터·집계용 store_name — 행에 기록된 채무자(거래처)만 */
 export function resolveReceivableAttributedStore(
   r: ReceivableTransactionRow,
   _maps?: ReceivableAttributionMaps
@@ -119,27 +127,29 @@ export function filterReceivableRows(
   if (storeManagerScope?.trim()) {
     return rows.filter((r) => receivableRowVisibleToStoreManager(r, storeManagerScope))
   }
-  if (!storeFilter?.trim() || isAllFilterToken(storeFilter)) return rows
+  if (!storeFilter?.trim() || isAllFilterToken(storeFilter)) {
+    // 전체: 본사가 각 거래처에 가진 미수. 매장이 발행한 청구는 그 매장 장부에만 둔다.
+    if (!filterByVendorLink) return rows
+    return rows.filter((r) => isHqOwnedReceivable(r))
+  }
 
-  const debtorRows = rows.filter((r) =>
-    matchesReceivableParty(
-      resolveReceivableAttributedStore(r, attributionMaps),
-      storeFilter,
-      vendorMaps,
-      filterByVendorLink
+  if (!filterByVendorLink) {
+    return rows.filter((r) =>
+      matchesReceivableParty(
+        resolveReceivableAttributedStore(r, attributionMaps),
+        storeFilter,
+        vendorMaps,
+        false
+      )
     )
-  )
-  if (!filterByVendorLink) return debtorRows
+  }
 
-  // 매출처를 고르면, 그 매장이 청구 주체인 미수(가진 채권)가 있을 때 그것만 보여 준다.
-  // 없으면 본사→그 매출처 청구(채무자 store_name)로 떨어진다.
-  const creditorRows = rows.filter((r) => {
+  // 매장을 고르면 그 매장 장부. 거래처(채무자)별 미수만. 본사→그 매장 청구는 넣지 않는다.
+  return rows.filter((r) => {
     const creditor = String(r.creditor_store ?? '').trim()
-    if (!creditor) return false
+    if (!creditor || isOfficeStoreVariant(creditor)) return false
     return matchesReceivableParty(creditor, storeFilter, vendorMaps, true)
   })
-  if (creditorRows.length > 0) return creditorRows
-  return debtorRows
 }
 
 export function receivableRowsOnOrAfterStart(

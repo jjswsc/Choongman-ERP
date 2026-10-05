@@ -249,6 +249,39 @@ describe('filterPayableRowsByStore', () => {
     expect(officeScoped[0].bank_transaction_id).toBe(5871)
   })
 
+  it('nets each vendor inside the selected store and leaves HQ inbound on office', () => {
+    const m = maps({
+      locationByInboundId: new Map([
+        [1, 'CM Ekkamai'],
+        [2, '입고등록'],
+      ]),
+      storeByBankId: new Map([
+        [7, 'CM Ekkamai'],
+        [9, 'CM Office'],
+      ]),
+    })
+    const rows: PayableTransactionRow[] = [
+      { vendor_code: '1079', ref_type: 'Inbound', ref_id: 1, amount: 1000, trans_date: '2026-01-01' },
+      {
+        vendor_code: '1079',
+        ref_type: 'Payment',
+        bank_transaction_id: 7,
+        amount: -400,
+        trans_date: '2026-01-02',
+      },
+      { vendor_code: '1079', ref_type: 'Inbound', ref_id: 2, amount: 9000, trans_date: '2026-01-01' },
+      {
+        vendor_code: '1079',
+        ref_type: 'Payment',
+        bank_transaction_id: 9,
+        amount: -9000,
+        trans_date: '2026-01-02',
+      },
+    ]
+    expect(cumulativeBalanceByVendor(filterPayableRowsByStore(rows, 'CM Ekkamai', m))).toEqual({ '1079': 600 })
+    expect(cumulativeBalanceByVendor(filterPayableRowsByStore(rows, 'CM Office', m))).toEqual({ '1079': 0 })
+  })
+
   it('treats CM Office filter and 입고등록 inbound as the same office scope', () => {
     const m = maps({
       locationByInboundId: new Map([[77, '입고등록']]),
