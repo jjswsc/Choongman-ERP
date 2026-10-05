@@ -239,6 +239,24 @@ describe("filterAdsForCampaign", () => {
       year: "all",
       includeOrganicPosts: false,
     })
+    const withNamed = uniqueMetaAdsCampaigns([
+      {
+        adId: "",
+        adName: "",
+        campaignId: "n2026",
+        campaignName: "New Menu",
+        impressions: 0,
+        reach: 0,
+        clicks: 0,
+        ctr: 0,
+        spend: 0,
+        createdTime: "2026-09-01T00:00:00+0700",
+      },
+    ])
+    expect(metaCampaignPickerInitialView(withNamed, 2026)).toEqual({
+      year: "all",
+      includeOrganicPosts: false,
+    })
   })
 
   it("keeps a named 2025 title in 2026 when it delivered this year", () => {
