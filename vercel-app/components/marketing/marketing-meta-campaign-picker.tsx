@@ -1,7 +1,10 @@
 "use client"
 
 import * as React from "react"
+import { Loader2, RotateCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { syncMetaAds } from "@/lib/api-client/marketing-meta"
 import { bangkokTodayYmd } from "@/lib/bangkok-date"
 import type { MetaAdInsightRow } from "@/lib/meta-graph"
 import {
@@ -20,18 +23,21 @@ export function MarketingMetaCampaignPicker({
   campaignName,
   t,
   onChange,
+  onAdsRefresh,
 }: {
   ads: MetaAdInsightRow[]
   campaignId: string
   campaignName: string
   t: (k: string) => string
   onChange: (next: { id: string; name: string }) => void
+  onAdsRefresh?: (ads: MetaAdInsightRow[]) => void
 }) {
   const bangkokYear = Number(bangkokTodayYmd().slice(0, 4))
   const [query, setQuery] = React.useState("")
   const [year, setYear] = React.useState<YearFilter>("all")
   const [includePosts, setIncludePosts] = React.useState(false)
   const [custom, setCustom] = React.useState(false)
+  const [syncing, setSyncing] = React.useState(false)
   const yearInit = React.useRef(false)
 
   const all = React.useMemo(
@@ -52,6 +58,10 @@ export function MarketingMetaCampaignPicker({
     () => filterMetaCampaignOptions(all, { query, year, includeOrganicPosts: includePosts }),
     [all, query, year, includePosts]
   )
+  const yearOnlyPosts =
+    typeof year === "number" &&
+    shown.length > 0 &&
+    shown.every((o) => o.organicPost)
 
   React.useEffect(() => {
     if (yearInit.current || !all.length) return
@@ -67,8 +77,32 @@ export function MarketingMetaCampaignPicker({
 
   const selected = pool.find((o) => o.id === campaignId) || all.find((o) => o.id === campaignId)
 
+  const syncNow = async () => {
+    if (!onAdsRefresh) return
+    setSyncing(true)
+    try {
+      const r = await syncMetaAds()
+      if (r.success && r.payload?.ads) {
+        onAdsRefresh(r.payload.ads)
+        yearInit.current = false
+      }
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   if (!all.length) {
-    return <p className="mt-1 text-[11px] text-muted-foreground">{t("marketingMetaMapSyncFirst")}</p>
+    return (
+      <div className="mt-1 space-y-2">
+        <p className="text-[11px] text-muted-foreground">{t("marketingMetaMapSyncFirst")}</p>
+        {onAdsRefresh ? (
+          <Button type="button" size="sm" variant="outline" disabled={syncing} onClick={() => void syncNow()}>
+            {syncing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RotateCw className="mr-1 h-3.5 w-3.5" />}
+            {t("marketingMetaSync")}
+          </Button>
+        ) : null}
+      </div>
+    )
   }
 
   const pick = (o: MetaAdsCampaignOption) => {
@@ -78,12 +112,21 @@ export function MarketingMetaCampaignPicker({
 
   return (
     <div className="mt-1 space-y-2">
-      <Input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={t("marketingMetaMapSearchPh")}
-        aria-label={t("marketingMetaMapSearchPh")}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          className="min-w-[12rem] flex-1"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("marketingMetaMapSearchPh")}
+          aria-label={t("marketingMetaMapSearchPh")}
+        />
+        {onAdsRefresh ? (
+          <Button type="button" size="sm" variant="outline" disabled={syncing} onClick={() => void syncNow()}>
+            {syncing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RotateCw className="mr-1 h-3.5 w-3.5" />}
+            {t("marketingMetaSync")}
+          </Button>
+        ) : null}
+      </div>
       <div className="flex flex-wrap gap-1">
         <YearChip active={year === "all"} onClick={() => setYear("all")}>
           {t("marketingMetaMapYearAll")}
@@ -110,6 +153,9 @@ export function MarketingMetaCampaignPicker({
           .replace("{shown}", String(shown.length))
           .replace("{total}", String(pool.length))}
       </p>
+      {yearOnlyPosts ? (
+        <p className="text-[11px] text-amber-700 dark:text-amber-400">{t("marketingMetaMapOnlyPostsHint")}</p>
+      ) : null}
       {selected ? (
         <p className="truncate text-[11px] text-foreground">
           {t("marketingMetaMapSelected")}: {selected.name}

@@ -319,6 +319,7 @@ export function MarketingCampaignOverviewPanel({
             campaignId={metaCampaignId}
             campaignName={metaCampaignName}
             t={t}
+            onAdsRefresh={setMetaAds}
             onChange={(next) => {
               setMetaCampaignId(next.id)
               setMetaCampaignName(next.name)

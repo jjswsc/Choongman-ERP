@@ -206,7 +206,7 @@ describe("filterAdsForCampaign", () => {
     expect(filterMetaCampaignOptions(options, { year: 2025 }).map((o) => o.id)).toEqual(["seoul"])
   })
 
-  it("opens boosted posts when the current year has no named campaign", () => {
+  it("starts on all years when the current year only has boosted posts", () => {
     const options = uniqueMetaAdsCampaigns(
       [
         {
@@ -236,9 +236,29 @@ describe("filterAdsForCampaign", () => {
       { includeOrganicPosts: true }
     )
     expect(metaCampaignPickerInitialView(options, 2026)).toEqual({
-      year: 2026,
-      includeOrganicPosts: true,
+      year: "all",
+      includeOrganicPosts: false,
     })
+  })
+
+  it("keeps a named 2025 title in 2026 when it delivered this year", () => {
+    const options = uniqueMetaAdsCampaigns([
+      {
+        adId: "1",
+        adName: "A",
+        campaignId: "spent",
+        campaignName: "การโปรโมท Choongman Thailand ในวันที่ [8/8/2025]",
+        impressions: 10,
+        reach: 8,
+        clicks: 1,
+        ctr: 0.1,
+        spend: 50,
+        createdTime: "2025-08-08T00:00:00+0700",
+        deliveredYears: [2026],
+      },
+    ])
+    expect(filterMetaCampaignOptions(options, { year: 2026 }).map((o) => o.id)).toEqual(["spent"])
+    expect(filterMetaCampaignOptions(options, { year: 2025 }).map((o) => o.id)).toEqual(["spent"])
   })
 })
 

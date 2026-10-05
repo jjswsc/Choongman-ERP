@@ -10,6 +10,8 @@ export type MetaAdInsightRow = {
   clicks: number
   ctr: number
   spend: number
+  createdTime?: string
+  deliveredYears?: number[]
 }
 
 export type MetaSyncPayload = {

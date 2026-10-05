@@ -127,15 +127,54 @@ export async function metaGraphGetAllPages<T>(
   return { ok: true, data, error: null, pages, truncated: Boolean(next) }
 }
 
+/** 실적 조회 구간이 걸친 연도. last_28d / last_90d 는 방콕 오늘 기준. */
+export function yearsCoveredByMetaRange(params: {
+  since?: string
+  until?: string
+  preset?: string
+  todayYmd?: string
+}): number[] {
+  const today = String(params.todayYmd || bangkokTodayYmd()).trim()
+  const until = String(params.until || "").trim() || today
+  let since = String(params.since || "").trim()
+  const preset = String(params.preset || "").trim()
+  if (!since) {
+    if (preset === "last_90d") since = addBangkokCalendarDays(until, -89)
+    else if (preset === "last_28d" || !preset) since = addBangkokCalendarDays(until, -27)
+    else since = until
+  }
+  const y0 = Number(since.slice(0, 4))
+  const y1 = Number(until.slice(0, 4))
+  if (!Number.isFinite(y0) || !Number.isFinite(y1)) return []
+  const lo = Math.min(y0, y1)
+  const hi = Math.max(y0, y1)
+  const out: number[] = []
+  for (let y = lo; y <= hi; y += 1) {
+    if (y >= 2000 && y <= 2100) out.push(y)
+  }
+  return out
+}
+
+function markDeliveredYears(row: MetaAdInsightRow, years: number[] | undefined) {
+  if (!years?.length) return
+  const cur = row.deliveredYears || []
+  const next = [...cur]
+  for (const y of years) {
+    if (y >= 2000 && y <= 2100 && !next.includes(y)) next.push(y)
+  }
+  row.deliveredYears = next
+}
+
 /** 캠페인 카탈로그를 매핑 목록에 합친다. 이미 있는 ID의 실적은 유지하고, 생성 시각만 비어 있으면 채운다. */
 export function appendMetaCampaignCatalog(
   ads: MetaAdInsightRow[],
-  rows: { id?: string; name?: string; created_time?: string }[] | undefined,
+  rows: { id?: string; name?: string; created_time?: string; updated_time?: string }[] | undefined,
   opts?: { createdTimeFallback?: string; deliveredYear?: number }
 ): number {
   const fallback = String(opts?.createdTimeFallback || "").trim()
   const deliveredYear = opts?.deliveredYear
   const createdById = new Map<string, string>()
+  const updatedYearsById = new Map<string, number[]>()
   const rowIds = new Set<string>()
   for (const c of rows || []) {
     const id = String(c.id || "").trim()
@@ -143,17 +182,20 @@ export function appendMetaCampaignCatalog(
     rowIds.add(id)
     const created = String(c.created_time || "").trim() || fallback
     if (created) createdById.set(id, created)
+    const years: number[] = []
+    if (deliveredYear) years.push(deliveredYear)
+    const updatedY = Number(String(c.updated_time || "").trim().slice(0, 4))
+    if (updatedY >= 2000 && updatedY <= 2100) years.push(updatedY)
+    if (years.length) updatedYearsById.set(id, years)
   }
-  const markDelivered = (a: MetaAdInsightRow) => {
-    if (!deliveredYear) return
-    const cur = a.deliveredYears || []
-    if (!cur.includes(deliveredYear)) a.deliveredYears = [...cur, deliveredYear]
+  const markRow = (a: MetaAdInsightRow, id: string) => {
+    if (!a.createdTime && createdById.has(id)) a.createdTime = createdById.get(id)
+    markDeliveredYears(a, updatedYearsById.get(id))
   }
   for (const a of ads) {
     const id = String(a.campaignId || "").trim()
     if (!id || !rowIds.has(id)) continue
-    if (!a.createdTime && createdById.has(id)) a.createdTime = createdById.get(id)
-    markDelivered(a)
+    markRow(a, id)
   }
   const seen = new Set(ads.map((a) => String(a.campaignId || "").trim()).filter(Boolean))
   let added = 0
@@ -174,7 +216,7 @@ export function appendMetaCampaignCatalog(
       spend: 0,
       createdTime: createdById.get(id),
     }
-    markDelivered(row)
+    markRow(row, id)
     ads.push(row)
     added += 1
   }
@@ -277,9 +319,12 @@ export async function fetchMetaAdsAndPageInsights(params: {
   if (act) {
     const insightFields =
       "ad_id,ad_name,campaign_id,campaign_name,impressions,reach,clicks,ctr,spend"
-    const pushInsightRows = (rows: Record<string, unknown>[] | undefined) => {
+    const pushInsightRows = (
+      rows: Record<string, unknown>[] | undefined,
+      deliveryYears?: number[]
+    ) => {
       for (const row of rows || []) {
-        ads.push({
+        const item: MetaAdInsightRow = {
           adId: String(row.ad_id || ""),
           adName: String(row.ad_name || ""),
           campaignId: String(row.campaign_id || ""),
@@ -289,7 +334,9 @@ export async function fetchMetaAdsAndPageInsights(params: {
           clicks: num(row.clicks),
           ctr: num(row.ctr),
           spend: num(row.spend),
-        })
+        }
+        markDeliveredYears(item, deliveryYears)
+        ads.push(item)
       }
     }
 
@@ -299,6 +346,11 @@ export async function fetchMetaAdsAndPageInsights(params: {
       if (error) diagnostics.push(`${label}_page:${error.message || "error"}`)
     }
 
+    const insightYears = yearsCoveredByMetaRange({
+      since,
+      until,
+      preset: dateRange.preset,
+    })
     const adInsights = await metaGraphGetAllPages<Record<string, unknown>>(`${act}/insights`, adsToken, {
       level: "ad",
       ...dateQuery,
@@ -308,7 +360,7 @@ export async function fetchMetaAdsAndPageInsights(params: {
     if (!adInsights.ok) {
       diagnostics.push(`ads_insights:${adInsights.error?.message || "error"}`)
     } else {
-      pushInsightRows(adInsights.data)
+      pushInsightRows(adInsights.data, insightYears)
       notePages("ads_insights", adInsights.pages, adInsights.truncated, adInsights.error)
     }
 
@@ -322,7 +374,7 @@ export async function fetchMetaAdsAndPageInsights(params: {
       })
       if (campInsights.ok) {
         for (const row of campInsights.data || []) {
-          ads.push({
+          const item: MetaAdInsightRow = {
             adId: "",
             adName: "",
             campaignId: String(row.campaign_id || ""),
@@ -332,7 +384,9 @@ export async function fetchMetaAdsAndPageInsights(params: {
             clicks: num(row.clicks),
             ctr: num(row.ctr),
             spend: num(row.spend),
-          })
+          }
+          markDeliveredYears(item, insightYears)
+          ads.push(item)
         }
         notePages("ads_insights_campaign", campInsights.pages, campInsights.truncated, campInsights.error)
       } else if (!adInsights.ok) {
@@ -349,8 +403,11 @@ export async function fetchMetaAdsAndPageInsights(params: {
         limit: META_GRAPH_PAGE_LIMIT,
       })
       if (fallback.ok && fallback.data.length) {
-        pushInsightRows(fallback.data)
         dateRange.preset = "last_90d"
+        pushInsightRows(
+          fallback.data,
+          yearsCoveredByMetaRange({ preset: "last_90d", until: bangkokTodayYmd() })
+        )
         diagnostics.push("ads_insights_fallback:last_90d")
         notePages("ads_insights", fallback.pages, fallback.truncated, fallback.error)
       }
@@ -359,17 +416,18 @@ export async function fetchMetaAdsAndPageInsights(params: {
     const today = bangkokTodayYmd()
     const yearStart = `${today.slice(0, 4)}-01-01`
     const yearStartUnix = Math.floor(new Date(`${yearStart}T00:00:00+07:00`).getTime() / 1000) - 1
-    const campaignFields = "id,name,status,effective_status,created_time"
+    const campaignFields = "id,name,status,effective_status,created_time,updated_time"
     const mergeCatalog = async (
       label: string,
       query: Record<string, string | undefined>,
       catalogOpts?: { createdTimeFallback?: string; deliveredYear?: number }
     ): Promise<number | null> => {
-      const page = await metaGraphGetAllPages<{ id?: string; name?: string; created_time?: string }>(
-        `${act}/campaigns`,
-        adsToken,
-        query
-      )
+      const page = await metaGraphGetAllPages<{
+        id?: string
+        name?: string
+        created_time?: string
+        updated_time?: string
+      }>(`${act}/campaigns`, adsToken, query)
       if (!page.ok) {
         diagnostics.push(`${label}:${page.error?.message || "error"}`)
         return null
@@ -381,7 +439,12 @@ export async function fetchMetaAdsAndPageInsights(params: {
       return added
     }
 
+    // 필터 없이 먼저(삭제·보관 제외가 Meta 기본). 이어서 종료·보관도 보탠다.
     await mergeCatalog("ads_campaigns", {
+      fields: campaignFields,
+      limit: META_GRAPH_PAGE_LIMIT,
+    })
+    await mergeCatalog("ads_campaigns_active", {
       fields: campaignFields,
       limit: META_GRAPH_PAGE_LIMIT,
       filtering: JSON.stringify([
@@ -392,7 +455,6 @@ export async function fetchMetaAdsAndPageInsights(params: {
         },
       ]),
     })
-    // 종료(completed)·보관은 기본 목록에 없다. 올해 만든 것만 매핑용으로 보탠다.
     const createdThisYear = JSON.stringify([
       { field: "created_time", operator: "GREATER_THAN", value: yearStartUnix },
     ])

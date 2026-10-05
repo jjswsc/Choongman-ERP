@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { appendMetaCampaignCatalog, metaGraphGetAllPages, type MetaAdInsightRow } from "./meta-graph"
+import {
+  appendMetaCampaignCatalog,
+  metaGraphGetAllPages,
+  yearsCoveredByMetaRange,
+  type MetaAdInsightRow,
+} from "./meta-graph"
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -8,6 +13,13 @@ function jsonResponse(body: unknown, status = 200) {
     json: async () => body,
   }
 }
+
+describe("yearsCoveredByMetaRange", () => {
+  it("maps last_28d around Bangkok today into the current year", () => {
+    expect(yearsCoveredByMetaRange({ preset: "last_28d", todayYmd: "2026-10-05" })).toEqual([2026])
+    expect(yearsCoveredByMetaRange({ since: "2025-12-20", until: "2026-01-10" })).toEqual([2025, 2026])
+  })
+})
 
 describe("appendMetaCampaignCatalog", () => {
   it("adds a 2026 campaign without changing spend already stored", () => {
