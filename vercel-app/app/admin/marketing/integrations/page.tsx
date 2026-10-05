@@ -11,10 +11,13 @@ import { getLineOaGroupV2List, getLineOaGroups, getLineOaSegments } from "@/lib/
 import {
   disconnectMeta,
   getMetaConnectionStatus,
+  listMetaAdAccounts,
   listMetaPages,
+  selectMetaAdAccount,
   selectMetaPage,
   syncMetaAds,
   autoMapMetaCampaigns,
+  type MetaAdAccountChoice,
 } from "@/lib/api-client/marketing-meta"
 import {
   disconnectTikTok,
@@ -32,6 +35,12 @@ import { IntegrationEnvDocList } from "@/lib/marketing-integration-env-doc"
 import { useSearchParams } from "next/navigation"
 import type { MetaConnectionStatus, MetaPageChoice } from "@/lib/api-client/marketing-meta"
 
+function stripActId(id: string): string {
+  return String(id || "")
+    .trim()
+    .replace(/^act_/i, "")
+}
+
 export default function MarketingIntegrationsPage() {
   const t = useT(useLang().lang)
   const searchParams = useSearchParams()
@@ -45,6 +54,8 @@ export default function MarketingIntegrationsPage() {
   const [metaBusy, setMetaBusy] = React.useState(false)
   const [metaPages, setMetaPages] = React.useState<MetaPageChoice[]>([])
   const [showPagePick, setShowPagePick] = React.useState(false)
+  const [metaAdAccounts, setMetaAdAccounts] = React.useState<MetaAdAccountChoice[]>([])
+  const [showAdAccountPick, setShowAdAccountPick] = React.useState(false)
   const [tiktokStatus, setTikTokStatus] = React.useState<TikTokConnectionStatus | null>(null)
   const [tiktokBusy, setTikTokBusy] = React.useState(false)
   const [tiktokAdvertisers, setTikTokAdvertisers] = React.useState<TikTokAdvertiserChoice[]>([])
@@ -58,9 +69,19 @@ export default function MarketingIntegrationsPage() {
         const pages = await listMetaPages().catch(() => ({ pages: [] as MetaPageChoice[], pendingPick: false }))
         setMetaPages(Array.isArray(pages.pages) ? pages.pages : [])
         setShowPagePick(Boolean(st.pendingPagePick || pages.pendingPick))
+        const ads = await listMetaAdAccounts().catch(() => ({
+          accounts: [] as MetaAdAccountChoice[],
+          currentAdAccountId: st.adAccountId || "",
+          pendingPick: false,
+        }))
+        setMetaAdAccounts(Array.isArray(ads.accounts) ? ads.accounts : [])
+        const cur = stripActId(ads.currentAdAccountId || st.adAccountId || "")
+        setShowAdAccountPick(Boolean(ads.pendingPick || (!cur && (ads.accounts || []).length > 0)))
       } else {
         setMetaPages([])
         setShowPagePick(false)
+        setMetaAdAccounts([])
+        setShowAdAccountPick(false)
       }
     } catch {
       setMetaStatus({ connected: false, source: "none" })
@@ -295,6 +316,11 @@ export default function MarketingIntegrationsPage() {
                     Instagram: @{metaStatus.instagram?.username || metaStatus.lastSync?.instagram?.username}
                   </p>
                 ) : null}
+                {metaStatus?.adAccountId ? (
+                  <p className="mt-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    {t("marketingMetaAdAccountLabel")}: {stripActId(metaStatus.adAccountId)}
+                  </p>
+                ) : null}
               </div>
               </div>
               <Badge
@@ -344,6 +370,52 @@ export default function MarketingIntegrationsPage() {
                 onClick={() => setShowPagePick(true)}
               >
                 {t("marketingMetaChangePage")}
+              </Button>
+            ) : null}
+            {showAdAccountPick && metaAdAccounts.length > 0 ? (
+              <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+                <p className="mb-2 text-sm font-medium">{t("marketingMetaPickAdAccount")}</p>
+                <p className="mb-2 text-xs text-muted-foreground">{t("marketingMetaPickAdAccountHint")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {metaAdAccounts.map((a) => {
+                    const selected = stripActId(metaStatus?.adAccountId || "") === stripActId(a.id)
+                    return (
+                      <Button
+                        key={a.id}
+                        type="button"
+                        size="sm"
+                        variant={selected ? "default" : "outline"}
+                        disabled={metaBusy}
+                        onClick={() => {
+                          setMetaBusy(true)
+                          void selectMetaAdAccount(a.id)
+                            .then(async (r) => {
+                              if (!r.success) {
+                                await appAlert(r.message || t("marketingWsSaveFail"))
+                                return
+                              }
+                              await appAlert(t("marketingMetaAdAccountSaved"))
+                              await loadMeta()
+                            })
+                            .finally(() => setMetaBusy(false))
+                        }}
+                      >
+                        {a.name}
+                        {a.accountId ? ` (${a.accountId})` : ""}
+                      </Button>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : metaStatus?.connected && metaAdAccounts.length > 1 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mb-3 h-8 text-xs"
+                onClick={() => setShowAdAccountPick(true)}
+              >
+                {t("marketingMetaChangeAdAccount")}
               </Button>
             ) : null}
             <p className="mb-3 text-xs text-muted-foreground">{t("marketingBudgetAlertHint")}</p>

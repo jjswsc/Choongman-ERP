@@ -92,6 +92,33 @@ export async function selectMetaPage(pageId: string) {
   return res.json() as Promise<{ success: boolean; message?: string; pageId?: string; pageName?: string }>
 }
 
+export type MetaAdAccountChoice = {
+  id: string
+  accountId: string
+  name: string
+  currency?: string
+  accountStatus?: number | null
+}
+
+export async function listMetaAdAccounts() {
+  const res = await apiFetchWithOffline("/api/meta/ad-accounts", { cache: "no-store" })
+  return res.json() as Promise<{
+    accounts: MetaAdAccountChoice[]
+    currentAdAccountId?: string
+    pendingPick?: boolean
+    message?: string
+  }>
+}
+
+export async function selectMetaAdAccount(adAccountId: string) {
+  const res = await apiFetchWithOffline("/api/meta/ad-accounts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adAccountId }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; adAccountId?: string; name?: string }>
+}
+
 export async function autoMapMetaCampaigns(params?: { dryRun?: boolean; syncFirst?: boolean }) {
   const res = await apiFetchWithOffline("/api/meta/auto-map", {
     method: "POST",

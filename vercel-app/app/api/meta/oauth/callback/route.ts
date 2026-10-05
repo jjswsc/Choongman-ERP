@@ -78,11 +78,29 @@ export async function GET(req: NextRequest) {
       return integrationsRedirect(req, { meta: "nopage" })
     }
 
-    const acts = await metaGraphGet<{ data?: { id?: string }[] }>("me/adaccounts", userToken, {
-      fields: "id",
-      limit: "5",
+    const acts = await metaGraphGet<{ data?: { id?: string; account_id?: string }[] }>(
+      "me/adaccounts",
+      userToken,
+      {
+        fields: "id,account_id,name",
+        limit: "50",
+      }
+    )
+    const envAd = metaEnvFallback().adAccountId.replace(/^act_/i, "").trim()
+    const actRows = acts.json?.data || []
+    const envAdMatch = actRows.find((a) => {
+      const raw = String(a.id || a.account_id || "").replace(/^act_/i, "")
+      return envAd && raw === envAd
     })
-    const adAccountId = metaEnvFallback().adAccountId || String(acts.json?.data?.[0]?.id || "")
+    // 계정이 여러 개면 첫 계정을 자동 고르지 않는다. 연동 화면에서 고르게 한다.
+    const adAccountId =
+      (envAdMatch
+        ? String(envAdMatch.id || envAdMatch.account_id || "")
+        : envAd
+          ? `act_${envAd}`
+          : actRows.length === 1
+            ? String(actRows[0]?.id || actRows[0]?.account_id || "")
+            : "") || ""
 
     const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
     if (!picked?.id || !picked.access_token) {
