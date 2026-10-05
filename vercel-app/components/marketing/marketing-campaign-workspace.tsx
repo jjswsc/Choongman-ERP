@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import {
   BarChart2,
   ClipboardList,
@@ -40,7 +40,6 @@ import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 
 export function MarketingCampaignWorkspace({ campaignId }: { campaignId: string }) {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
   const [tab, setTab] = useAdminUrlTab(
@@ -58,11 +57,6 @@ export function MarketingCampaignWorkspace({ campaignId }: { campaignId: string 
       setCampaignNo(c?.campaignNo || "")
     })
   }, [campaignId])
-
-  React.useEffect(() => {
-    const parsed = parseMarketingCampaignWorkspaceTab(searchParams.get("tab") || tab)
-    if (parsed !== tab) setTab(parsed)
-  }, [searchParams, tab, setTab])
 
   const items: { id: MarketingCampaignWorkspaceTab; icon: typeof LayoutGrid; label: string }[] = [
     { id: "overview", icon: LayoutGrid, label: t("marketingWsTabOverview") },
@@ -91,7 +85,7 @@ export function MarketingCampaignWorkspace({ campaignId }: { campaignId: string 
         onValueChange={(v) => setTab(parseMarketingCampaignWorkspaceTab(v))}
         className={adminTabsRootCn}
       >
-        <div className={cn(adminTabsBarCn, "sticky top-0 z-10 px-2 py-2.5 sm:px-4")}>
+        <div className={cn(adminTabsBarCn, "sticky top-0 z-20 px-2 py-2.5 sm:px-4")}>
           <div className={adminTabsScrollCn}>
             <TabsList className={adminTabsListRowCn}>
               {items.map((item) => (
