@@ -72,6 +72,57 @@ export type MetaAdInsightRow = {
   clicks: number
   ctr: number
   spend: number
+  /** 캠페인 생성 시각 (Ads Manager). 이름에 연도가 없어도 연도 필터에 쓴다. */
+  createdTime?: string
+}
+
+/** 캠페인·인사이트 한 페이지. Meta는 limit 상한이 100인 경우가 많다. */
+export const META_GRAPH_PAGE_LIMIT = "100"
+/** 한 동기화에서 따라갈 최대 페이지. 20 × 100 = 2,000건. */
+export const META_GRAPH_MAX_PAGES = 20
+
+type MetaGraphPage<T> = { data?: T[]; paging?: { next?: string } }
+
+export async function metaGraphGetAllPages<T>(
+  path: string,
+  accessToken: string,
+  query?: Record<string, string | undefined>,
+  opts?: { maxPages?: number }
+): Promise<{
+  ok: boolean
+  data: T[]
+  error: MetaGraphError | null
+  pages: number
+  truncated: boolean
+}> {
+  const maxPages = opts?.maxPages ?? META_GRAPH_MAX_PAGES
+  const first = await metaGraphGet<MetaGraphPage<T>>(path, accessToken, query)
+  if (!first.ok || !first.json) {
+    return { ok: false, data: [], error: first.error, pages: 0, truncated: false }
+  }
+  const data: T[] = [...(first.json.data || [])]
+  let next = String(first.json.paging?.next || "").trim()
+  let pages = 1
+  const seenNext = new Set<string>()
+  while (next && pages < maxPages) {
+    if (seenNext.has(next)) break
+    seenNext.add(next)
+    const res = await fetch(next, { cache: "no-store" })
+    const json = (await res.json().catch(() => null)) as { error?: MetaGraphError } & MetaGraphPage<T>
+    if (!res.ok || json?.error) {
+      return {
+        ok: true,
+        data,
+        error: json?.error || { message: `HTTP ${res.status}` },
+        pages,
+        truncated: true,
+      }
+    }
+    data.push(...(json.data || []))
+    next = String(json.paging?.next || "").trim()
+    pages += 1
+  }
+  return { ok: true, data, error: null, pages, truncated: Boolean(next) }
 }
 
 export type MetaPageInsightTotals = {
@@ -186,36 +237,35 @@ export async function fetchMetaAdsAndPageInsights(params: {
       }
     }
 
-    let insights = await metaGraphGet<{ data?: Record<string, unknown>[] }>(
-      `${act}/insights`,
-      adsToken,
-      {
-        level: "ad",
-        ...dateQuery,
-        fields: insightFields,
-        limit: "200",
-      }
-    )
-    if (!insights.ok) {
-      diagnostics.push(`ads_insights:${insights.error?.message || "error"}`)
+    const notePages = (label: string, pages: number, truncated: boolean, error: MetaGraphError | null) => {
+      if (pages > 1) diagnostics.push(`${label}_pages:${pages}`)
+      if (truncated) diagnostics.push(`${label}_truncated`)
+      if (error) diagnostics.push(`${label}_page:${error.message || "error"}`)
+    }
+
+    const adInsights = await metaGraphGetAllPages<Record<string, unknown>>(`${act}/insights`, adsToken, {
+      level: "ad",
+      ...dateQuery,
+      fields: insightFields,
+      limit: META_GRAPH_PAGE_LIMIT,
+    })
+    if (!adInsights.ok) {
+      diagnostics.push(`ads_insights:${adInsights.error?.message || "error"}`)
     } else {
-      pushInsightRows(insights.json?.data)
+      pushInsightRows(adInsights.data)
+      notePages("ads_insights", adInsights.pages, adInsights.truncated, adInsights.error)
     }
 
     // 광고 집행 실적이 없어도 캠페인 목록은 가져와 매핑에 쓴다.
     if (!ads.length) {
-      const campInsights = await metaGraphGet<{ data?: Record<string, unknown>[] }>(
-        `${act}/insights`,
-        adsToken,
-        {
-          level: "campaign",
-          ...dateQuery,
-          fields: "campaign_id,campaign_name,impressions,reach,clicks,ctr,spend",
-          limit: "200",
-        }
-      )
+      const campInsights = await metaGraphGetAllPages<Record<string, unknown>>(`${act}/insights`, adsToken, {
+        level: "campaign",
+        ...dateQuery,
+        fields: "campaign_id,campaign_name,impressions,reach,clicks,ctr,spend",
+        limit: META_GRAPH_PAGE_LIMIT,
+      })
       if (campInsights.ok) {
-        for (const row of campInsights.json?.data || []) {
+        for (const row of campInsights.data || []) {
           ads.push({
             adId: "",
             adName: "",
@@ -228,36 +278,36 @@ export async function fetchMetaAdsAndPageInsights(params: {
             spend: num(row.spend),
           })
         }
-      } else if (!insights.ok) {
+        notePages("ads_insights_campaign", campInsights.pages, campInsights.truncated, campInsights.error)
+      } else if (!adInsights.ok) {
         diagnostics.push(`ads_insights_campaign:${campInsights.error?.message || "error"}`)
       }
     }
 
     // last_28d가 비면 last_90d 한 번 더 (실적 없는 계정이면 여전히 0)
     if (!ads.length && !(since && until)) {
-      insights = await metaGraphGet<{ data?: Record<string, unknown>[] }>(
-        `${act}/insights`,
-        adsToken,
-        {
-          level: "ad",
-          date_preset: "last_90d",
-          fields: insightFields,
-          limit: "200",
-        }
-      )
-      if (insights.ok && (insights.json?.data || []).length) {
-        pushInsightRows(insights.json?.data)
+      const fallback = await metaGraphGetAllPages<Record<string, unknown>>(`${act}/insights`, adsToken, {
+        level: "ad",
+        date_preset: "last_90d",
+        fields: insightFields,
+        limit: META_GRAPH_PAGE_LIMIT,
+      })
+      if (fallback.ok && fallback.data.length) {
+        pushInsightRows(fallback.data)
         dateRange.preset = "last_90d"
         diagnostics.push("ads_insights_fallback:last_90d")
+        notePages("ads_insights", fallback.pages, fallback.truncated, fallback.error)
       }
     }
 
-    const campaigns = await metaGraphGet<{
-      data?: { id?: string; name?: string; effective_status?: string; status?: string }[]
+    const campaigns = await metaGraphGetAllPages<{
+      id?: string
+      name?: string
+      created_time?: string
     }>(`${act}/campaigns`, adsToken, {
-      fields: "id,name,status,effective_status",
-      limit: "200",
-      // ACTIVE + paused도 매핑용으로 포함
+      fields: "id,name,status,effective_status,created_time",
+      limit: META_GRAPH_PAGE_LIMIT,
+      // ACTIVE + paused도 매핑용으로 포함. 보관(ARCHIVED)은 제외.
       filtering: JSON.stringify([
         {
           field: "effective_status",
@@ -269,11 +319,20 @@ export async function fetchMetaAdsAndPageInsights(params: {
     if (!campaigns.ok) {
       diagnostics.push(`ads_campaigns:${campaigns.error?.message || "error"}`)
     } else {
-      const seen = new Set(
-        ads.map((a) => String(a.campaignId || "").trim()).filter(Boolean)
-      )
+      notePages("ads_campaigns", campaigns.pages, campaigns.truncated, campaigns.error)
+      const createdById = new Map<string, string>()
+      for (const c of campaigns.data || []) {
+        const id = String(c.id || "").trim()
+        const created = String(c.created_time || "").trim()
+        if (id && created) createdById.set(id, created)
+      }
+      for (const a of ads) {
+        const id = String(a.campaignId || "").trim()
+        if (id && !a.createdTime && createdById.has(id)) a.createdTime = createdById.get(id)
+      }
+      const seen = new Set(ads.map((a) => String(a.campaignId || "").trim()).filter(Boolean))
       let added = 0
-      for (const c of campaigns.json?.data || []) {
+      for (const c of campaigns.data || []) {
         const id = String(c.id || "").trim()
         const name = String(c.name || "").trim()
         if (!id || seen.has(id)) continue
@@ -288,11 +347,12 @@ export async function fetchMetaAdsAndPageInsights(params: {
           clicks: 0,
           ctr: 0,
           spend: 0,
+          createdTime: createdById.get(id),
         })
         added += 1
       }
       if (added) diagnostics.push(`ads_campaigns_listed:${added}`)
-      if (!(campaigns.json?.data || []).length) diagnostics.push("ads_campaigns_empty")
+      if (!(campaigns.data || []).length) diagnostics.push("ads_campaigns_empty")
     }
 
     const plat = await metaGraphGet<{ data?: { publisher_platform?: string; spend?: unknown }[] }>(

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { filterAdsForCampaign, materialStatusForColumn, uniqueMetaAdsCampaigns } from "./marketing-meta-match"
+import {
+  filterAdsForCampaign,
+  filterMetaCampaignOptions,
+  materialStatusForColumn,
+  metaCampaignYear,
+  parseMetaPromoDateMs,
+  uniqueMetaAdsCampaigns,
+} from "./marketing-meta-match"
 import type { MetaAdInsightRow } from "./meta-graph"
 
 describe("filterAdsForCampaign", () => {
@@ -99,6 +106,64 @@ describe("filterAdsForCampaign", () => {
     expect(uniqueMetaAdsCampaigns(mixed, { includeOrganicPosts: true }).map((x) => x.id)).toContain(
       "120207857090790502"
     )
+  })
+
+  it("reads US month/day names and created_time as a year", () => {
+    expect(new Date(parseMetaPromoDateMs("[11/27/2023] Promoting") || 0).getUTCMonth()).toBe(10)
+    expect(metaCampaignYear("[11/27/2023] Promoting")).toBe(2023)
+    expect(metaCampaignYear("Instagram Upgrade Taste", "2026-03-02T10:00:00+0700")).toBe(2026)
+  })
+
+  it("filters the campaign list by year, name, and id", () => {
+    const options = uniqueMetaAdsCampaigns(
+      [
+        {
+          adId: "",
+          adName: "",
+          campaignId: "old",
+          campaignName: "การโปรโมท Choongman Thailand ในวันที่ [8/8/2025]",
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          ctr: 0,
+          spend: 0,
+        },
+        {
+          adId: "",
+          adName: "",
+          campaignId: "new2026",
+          campaignName: "New Menu Bangkok",
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          ctr: 0,
+          spend: 0,
+          createdTime: "2026-09-01T00:00:00+0700",
+        },
+        {
+          adId: "",
+          adName: "",
+          campaignId: "post1",
+          campaignName: 'โพสต์: "2026 lunch"',
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          ctr: 0,
+          spend: 0,
+          createdTime: "2026-09-02T00:00:00+0700",
+        },
+      ],
+      { includeOrganicPosts: true }
+    )
+    expect(filterMetaCampaignOptions(options, { year: 2026 }).map((o) => o.id)).toEqual(["new2026"])
+    expect(filterMetaCampaignOptions(options, { year: 2026, includeOrganicPosts: true }).map((o) => o.id)).toEqual([
+      "new2026",
+      "post1",
+    ])
+    expect(filterMetaCampaignOptions(options, { query: "new2026", includeOrganicPosts: true }).map((o) => o.id)).toEqual([
+      "new2026",
+    ])
+    expect(filterMetaCampaignOptions(options, { query: "choongman" }).map((o) => o.id)).toEqual(["old"])
   })
 })
 

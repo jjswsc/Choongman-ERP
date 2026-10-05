@@ -29,7 +29,8 @@ import {
 import { STATUS_OPTIONS, DEFAULT_DELIVERY_APPS, parseCampaignFormat, serializeCampaignFormat, type ChannelState } from "@/app/admin/marketing/campaigns/campaigns-utils"
 import { marketingCampaignWorkspaceHref } from "@/lib/marketing-campaign-create-ui"
 import { getMetaConnectionStatus } from "@/lib/api-client/marketing-meta"
-import { uniqueMetaAdsCampaigns } from "@/lib/marketing-meta-match"
+import type { MetaAdInsightRow } from "@/lib/meta-graph"
+import { MarketingMetaCampaignPicker } from "@/components/marketing/marketing-meta-campaign-picker"
 
 export function MarketingCampaignOverviewPanel({
   campaignId,
@@ -65,7 +66,7 @@ export function MarketingCampaignOverviewPanel({
   const [costOther, setCostOther] = React.useState("")
   const [metaCampaignName, setMetaCampaignName] = React.useState("")
   const [metaCampaignId, setMetaCampaignId] = React.useState("")
-  const [metaAdsOptions, setMetaAdsOptions] = React.useState<{ id: string; name: string }[]>([])
+  const [metaAds, setMetaAds] = React.useState<MetaAdInsightRow[]>([])
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -110,8 +111,8 @@ export function MarketingCampaignOverviewPanel({
 
   React.useEffect(() => {
     void getMetaConnectionStatus()
-      .then((st) => setMetaAdsOptions(uniqueMetaAdsCampaigns(st.lastSync?.ads || [])))
-      .catch(() => setMetaAdsOptions([]))
+      .then((st) => setMetaAds(st.lastSync?.ads || []))
+      .catch(() => setMetaAds([]))
   }, [])
 
   React.useEffect(() => {
@@ -313,56 +314,16 @@ export function MarketingCampaignOverviewPanel({
         </div>
         <div>
           <Label>{t("marketingMetaMapLabel")}</Label>
-          {metaAdsOptions.length > 0 ? (
-            <select
-              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-              value={
-                metaAdsOptions.some((o) => o.id === metaCampaignId)
-                  ? metaCampaignId
-                  : metaCampaignName || metaCampaignId
-                    ? "__custom__"
-                    : ""
-              }
-              onChange={(e) => {
-                const v = e.target.value
-                if (!v) {
-                  setMetaCampaignId("")
-                  setMetaCampaignName("")
-                  return
-                }
-                if (v === "__custom__") {
-                  setMetaCampaignId("")
-                  return
-                }
-                const hit = metaAdsOptions.find((o) => o.id === v)
-                setMetaCampaignId(v)
-                setMetaCampaignName(hit?.name || "")
-              }}
-            >
-              <option value="">{t("marketingMetaMapNone")}</option>
-              {metaAdsOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                  {o.id && o.id !== o.name ? ` (${o.id})` : ""}
-                </option>
-              ))}
-              <option value="__custom__">{t("marketingMetaMapCustom")}</option>
-            </select>
-          ) : (
-            <p className="mt-1 text-[11px] text-muted-foreground">{t("marketingMetaMapSyncFirst")}</p>
-          )}
-          {metaAdsOptions.length === 0 ||
-          (!metaAdsOptions.some((o) => o.id === metaCampaignId) && (metaCampaignName || metaCampaignId)) ? (
-            <Input
-              className="mt-2"
-              value={metaCampaignName}
-              onChange={(e) => {
-                setMetaCampaignName(e.target.value)
-                if (metaAdsOptions.some((o) => o.id === metaCampaignId)) setMetaCampaignId("")
-              }}
-              placeholder={t("marketingMetaMapPh")}
-            />
-          ) : null}
+          <MarketingMetaCampaignPicker
+            ads={metaAds}
+            campaignId={metaCampaignId}
+            campaignName={metaCampaignName}
+            t={t}
+            onChange={(next) => {
+              setMetaCampaignId(next.id)
+              setMetaCampaignName(next.name)
+            }}
+          />
         </div>
       </div>
 
