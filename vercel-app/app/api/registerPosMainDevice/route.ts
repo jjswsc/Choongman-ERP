@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { upsertRowsTenantStore } from '@/lib/saas-store-conflict'
 import { syncLegacyMainDeviceToken } from '@/lib/pos-main-devices-server'
 import { assertCanSelfRegisterMain, listStoreDevicesForRoleLimits } from '@/lib/pos-device-role-limits-server'
 import {
@@ -31,7 +33,13 @@ export async function POST(req: NextRequest) {
     const exists = Array.isArray(rows) ? rows.length > 0 : !!rows
 
     if (exists) {
-      const deviceRows = await listStoreDevicesForRoleLimits(storeCode)
+      const tenantScope = await resolveSaasTenantScope({
+        auth: authGate.auth
+          ? { tenantId: authGate.auth.tenantId, company: authGate.auth.company }
+          : null,
+        storeCode,
+      })
+      const deviceRows = await listStoreDevicesForRoleLimits(storeCode, tenantScope.tenantId)
       const storeTokens = deviceRows.map((r) => String(r.device_token ?? '').trim()).filter(Boolean)
       const isNewForTenant = await resolveSaasPosDeviceNewForTenant({
         storeCode,
@@ -59,8 +67,9 @@ export async function POST(req: NextRequest) {
       }
 
       const now = new Date().toISOString()
-      await supabaseUpsert(
+      await upsertRowsTenantStore(
         'pos_connected_devices',
+        'store_code,device_token',
         [
           {
             store_code: storeCode,
@@ -69,9 +78,9 @@ export async function POST(req: NextRequest) {
             last_seen_at: now,
           },
         ],
-        'store_code,device_token'
+        tenantScope
       )
-      await syncLegacyMainDeviceToken(storeCode)
+      await syncLegacyMainDeviceToken(storeCode, tenantScope.tenantId)
     }
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

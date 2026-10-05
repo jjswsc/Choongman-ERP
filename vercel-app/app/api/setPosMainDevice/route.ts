@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { upsertRowsTenantStore } from '@/lib/saas-store-conflict'
 import { syncLegacyMainDeviceToken } from '@/lib/pos-main-devices-server'
 import {
   assertCanAssignMain,
@@ -30,6 +32,13 @@ export async function POST(req: NextRequest) {
     const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
     if (!authGate.ok) return authGate.response
 
+    const tenantScope = await resolveSaasTenantScope({
+      auth: authGate.auth
+        ? { tenantId: authGate.auth.tenantId, company: authGate.auth.company }
+        : null,
+      storeCode,
+    })
+
     const settingsRows = await supabaseSelectFilter(
       'pos_printer_settings',
       `store_code=eq.${encodeURIComponent(storeCode)}`,
@@ -43,7 +52,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const rows = await listStoreDevicesForRoleLimits(storeCode)
+    const rows = await listStoreDevicesForRoleLimits(storeCode, tenantScope.tenantId)
     const storeTokens = rows.map((r) => String(r.device_token ?? '').trim()).filter(Boolean)
     const isNewForTenant = await resolveSaasPosDeviceNewForTenant({
       storeCode,
@@ -64,7 +73,7 @@ export async function POST(req: NextRequest) {
 
     let limitCheck = await assertCanAssignMain(storeCode, deviceToken)
     if (!limitCheck.ok && limitCheck.code === 'MAIN_LIMIT') {
-      await demoteOtherMainDevices(storeCode, deviceToken)
+      await demoteOtherMainDevices(storeCode, deviceToken, tenantScope.tenantId)
       limitCheck = await assertCanAssignMain(storeCode, deviceToken)
     }
     if (!limitCheck.ok) {
@@ -75,8 +84,9 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date().toISOString()
-    await supabaseUpsert(
+    await upsertRowsTenantStore(
       'pos_connected_devices',
+      'store_code,device_token',
       [
         {
           store_code: storeCode,
@@ -85,9 +95,9 @@ export async function POST(req: NextRequest) {
           last_seen_at: now,
         },
       ],
-      'store_code,device_token'
+      tenantScope
     )
-    await syncLegacyMainDeviceToken(storeCode)
+    await syncLegacyMainDeviceToken(storeCode, tenantScope.tenantId)
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
