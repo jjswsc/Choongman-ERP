@@ -90,30 +90,87 @@ function metaCampaignSortKey(id: string, name: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** ERP 캠페인과 Meta Ads campaign_name / id 매칭. 매핑·이름 겹침이 없으면 빈 배열. */
+/** ERP 캠페인에 연결한 Meta Ads 캠페인(또는 게시물 홍보) 1건 */
+export type MetaCampaignLink = { id: string; name: string }
+
+/**
+ * DB TEXT(meta_campaign_id / name) ↔ 다중 링크.
+ * 1건: 기존처럼 평문 id·name. 2건 이상: id 컬럼에 JSON 배열, name은 " | " 조인(표시용).
+ */
+export function parseMetaCampaignLinks(idRaw?: string | null, nameRaw?: string | null): MetaCampaignLink[] {
+  const id = String(idRaw || "").trim()
+  const name = String(nameRaw || "").trim()
+  if (id.startsWith("[")) {
+    try {
+      const arr = JSON.parse(id) as unknown
+      if (Array.isArray(arr)) {
+        const out: MetaCampaignLink[] = []
+        for (const x of arr) {
+          if (!x || typeof x !== "object") continue
+          const o = x as Record<string, unknown>
+          const lid = String(o.id ?? "").trim()
+          const lname = String(o.name ?? "").trim()
+          if (!lid && !lname) continue
+          out.push({ id: lid, name: lname || lid })
+        }
+        if (out.length) return out
+      }
+    } catch {
+      /* legacy plain text */
+    }
+  }
+  if (!id && !name) return []
+  return [{ id, name: name || id }]
+}
+
+export function serializeMetaCampaignLinks(links: MetaCampaignLink[]): { id: string; name: string } {
+  const clean = links
+    .map((l) => ({ id: String(l.id || "").trim(), name: String(l.name || "").trim() }))
+    .filter((l) => l.id || l.name)
+  if (!clean.length) return { id: "", name: "" }
+  if (clean.length === 1) return { id: clean[0].id, name: clean[0].name || clean[0].id }
+  return {
+    id: JSON.stringify(clean),
+    name: clean.map((l) => l.name || l.id).join(" | "),
+  }
+}
+
+function adMatchesMetaLink(a: MetaAdInsightRow, link: MetaCampaignLink): boolean {
+  const id = String(link.id || "").trim().toLowerCase()
+  const mappedName = normalizeMetaName(link.name || "")
+  if (id) {
+    if (
+      String(a.campaignId || "").toLowerCase() === id ||
+      String(a.adId || "").toLowerCase() === id ||
+      normalizeMetaName(a.campaignName) === id
+    ) {
+      return true
+    }
+  }
+  if (!mappedName) return false
+  const n = normalizeMetaName(a.campaignName)
+  return n === mappedName || n.includes(mappedName) || mappedName.includes(n)
+}
+
+/** ERP 캠페인과 Meta Ads campaign_name / id 매칭. 매핑·이름 겹침이 없으면 빈 배열. 다중 링크는 OR. */
 export function filterAdsForCampaign(
   ads: MetaAdInsightRow[],
   campaign: { topic?: string; metaCampaignId?: string; metaCampaignName?: string }
 ): MetaAdInsightRow[] {
-  const id = String(campaign.metaCampaignId || "").trim().toLowerCase()
-  const mappedName = normalizeMetaName(campaign.metaCampaignName || "")
+  const links = parseMetaCampaignLinks(campaign.metaCampaignId, campaign.metaCampaignName)
+  if (links.length) {
+    const out: MetaAdInsightRow[] = []
+    const seen = new Set<string>()
+    for (const a of ads) {
+      const key = `${a.campaignId || ""}|${a.adId || ""}|${a.campaignName || ""}`
+      if (seen.has(key)) continue
+      if (!links.some((link) => adMatchesMetaLink(a, link))) continue
+      seen.add(key)
+      out.push(a)
+    }
+    return out
+  }
   const topic = normalizeMetaName(campaign.topic || "")
-  if (id) {
-    const byId = ads.filter(
-      (a) =>
-        String(a.campaignId || "").toLowerCase() === id ||
-        String(a.adId || "").toLowerCase() === id ||
-        normalizeMetaName(a.campaignName) === id
-    )
-    if (byId.length) return byId
-  }
-  if (mappedName) {
-    const byMap = ads.filter((a) => {
-      const n = normalizeMetaName(a.campaignName)
-      return n === mappedName || n.includes(mappedName) || mappedName.includes(n)
-    })
-    if (byMap.length) return byMap
-  }
   if (!topic) return []
   return ads.filter((a) => {
     const n = normalizeMetaName(a.campaignName)

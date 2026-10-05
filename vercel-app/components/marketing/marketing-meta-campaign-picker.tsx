@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Loader2, RotateCw } from "lucide-react"
+import { Loader2, RotateCw, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { appAlert } from "@/lib/app-message"
@@ -12,8 +12,11 @@ import {
   countMetaCampaignsByYear,
   filterMetaCampaignOptions,
   metaCampaignPickerInitialView,
+  parseMetaCampaignLinks,
+  serializeMetaCampaignLinks,
   uniqueMetaAdsCampaigns,
   type MetaAdsCampaignOption,
+  type MetaCampaignLink,
 } from "@/lib/marketing-meta-match"
 import { cn } from "@/lib/utils"
 
@@ -42,6 +45,15 @@ export function MarketingMetaCampaignPicker({
   const [syncing, setSyncing] = React.useState(false)
   const [syncNote, setSyncNote] = React.useState("")
   const yearInit = React.useRef(false)
+
+  const selected = React.useMemo(
+    () => parseMetaCampaignLinks(campaignId, campaignName),
+    [campaignId, campaignName]
+  )
+  const selectedIds = React.useMemo(
+    () => new Set(selected.map((l) => l.id).filter(Boolean)),
+    [selected]
+  )
 
   const all = React.useMemo(
     () => uniqueMetaAdsCampaigns(ads, { includeOrganicPosts: true }),
@@ -83,7 +95,27 @@ export function MarketingMetaCampaignPicker({
     if (campaignName && !campaignId) setCustom(true)
   }, [campaignName, campaignId])
 
-  const selected = pool.find((o) => o.id === campaignId) || all.find((o) => o.id === campaignId)
+  const emit = (links: MetaCampaignLink[]) => {
+    onChange(serializeMetaCampaignLinks(links))
+  }
+
+  const toggle = (o: MetaAdsCampaignOption) => {
+    setCustom(false)
+    const exists = selectedIds.has(o.id)
+    if (exists) {
+      emit(selected.filter((l) => l.id !== o.id))
+      return
+    }
+    emit([...selected.filter((l) => l.id !== o.id), { id: o.id, name: o.name }])
+  }
+
+  const removeLink = (link: MetaCampaignLink) => {
+    emit(
+      selected.filter((l) =>
+        link.id ? l.id !== link.id : !(l.name === link.name && !l.id)
+      )
+    )
+  }
 
   const syncNow = async () => {
     if (!onAdsRefresh) return
@@ -124,13 +156,9 @@ export function MarketingMetaCampaignPicker({
     )
   }
 
-  const pick = (o: MetaAdsCampaignOption) => {
-    setCustom(false)
-    onChange({ id: o.id, name: o.name })
-  }
-
   return (
     <div className="mt-1 space-y-2">
+      <p className="text-[11px] text-muted-foreground">{t("marketingMetaMapMultiHint")}</p>
       <div className="flex flex-wrap items-center gap-2">
         <Input
           className="min-w-[12rem] flex-1"
@@ -176,17 +204,38 @@ export function MarketingMetaCampaignPicker({
         <p className="text-[11px] text-amber-700 dark:text-amber-400">{t("marketingMetaMapOnlyPostsHint")}</p>
       ) : null}
       {syncNote ? <p className="text-[11px] text-amber-700 dark:text-amber-400">{syncNote}</p> : null}
-      {selected ? (
-        <p className="truncate text-[11px] text-foreground">
-          {t("marketingMetaMapSelected")}: {selected.name}
-        </p>
+      {selected.length ? (
+        <div className="space-y-1">
+          <p className="text-[11px] text-foreground">
+            {t("marketingMetaMapSelected")}: {selected.length}
+            {t("marketingMetaMapSelectedCountSuffix")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {selected.map((link) => (
+              <span
+                key={link.id || link.name}
+                className="inline-flex max-w-full items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-[11px]"
+              >
+                <span className="min-w-0 truncate">{link.name || link.id}</span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label={t("marketingMetaMapRemoveOne")}
+                  onClick={() => removeLink(link)}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
       ) : null}
       <div className="max-h-60 overflow-y-auto rounded-md border border-input">
         {shown.length === 0 ? (
           <p className="px-2 py-3 text-[11px] text-muted-foreground">{t("marketingMetaMapEmpty")}</p>
         ) : (
           shown.map((o) => {
-            const active = o.id === campaignId
+            const active = selectedIds.has(o.id)
             return (
               <button
                 key={o.id}
@@ -195,8 +244,19 @@ export function MarketingMetaCampaignPicker({
                   "flex w-full items-start gap-2 border-b border-input px-2 py-1.5 text-left text-xs last:border-b-0 hover:bg-muted",
                   active && "bg-muted font-medium"
                 )}
-                onClick={() => pick(o)}
+                onClick={() => toggle(o)}
               >
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px]",
+                    active
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-muted-foreground/40"
+                  )}
+                  aria-hidden
+                >
+                  {active ? "✓" : ""}
+                </span>
                 <span className="min-w-0 flex-1 break-words">{o.name}</span>
                 <span className="shrink-0 tabular-nums text-muted-foreground">{o.year ?? "—"}</span>
               </button>
@@ -210,7 +270,7 @@ export function MarketingMetaCampaignPicker({
           className="text-[11px] text-muted-foreground underline"
           onClick={() => {
             setCustom(false)
-            onChange({ id: "", name: "" })
+            emit([])
           }}
         >
           {t("marketingMetaMapNone")}
@@ -220,7 +280,7 @@ export function MarketingMetaCampaignPicker({
           className="text-[11px] text-muted-foreground underline"
           onClick={() => {
             setCustom(true)
-            onChange({ id: "", name: campaignName })
+            if (!selected.length) emit([{ id: "", name: campaignName || "" }])
           }}
         >
           {t("marketingMetaMapCustom")}
@@ -228,8 +288,8 @@ export function MarketingMetaCampaignPicker({
       </div>
       {custom || (campaignName && !campaignId) ? (
         <Input
-          value={campaignName}
-          onChange={(e) => onChange({ id: "", name: e.target.value })}
+          value={selected.length === 1 && !selected[0].id ? selected[0].name : campaignName}
+          onChange={(e) => emit([{ id: "", name: e.target.value }])}
           placeholder={t("marketingMetaMapPh")}
         />
       ) : null}

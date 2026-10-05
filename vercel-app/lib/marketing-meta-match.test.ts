@@ -5,7 +5,9 @@ import {
   materialStatusForColumn,
   metaCampaignPickerInitialView,
   metaCampaignYear,
+  parseMetaCampaignLinks,
   parseMetaPromoDateMs,
+  serializeMetaCampaignLinks,
   uniqueMetaAdsCampaigns,
 } from "./marketing-meta-match"
 import type { MetaAdInsightRow } from "./meta-graph"
@@ -46,6 +48,20 @@ describe("filterAdsForCampaign", () => {
 
   it("matches by Meta campaign id", () => {
     expect(filterAdsForCampaign(ads, { metaCampaignId: "c2" }).map((a) => a.adId)).toEqual(["2"])
+  })
+
+  it("matches multiple Meta campaign links (JSON)", () => {
+    const packed = serializeMetaCampaignLinks([
+      { id: "c1", name: "Summer Mala Boost" },
+      { id: "c2", name: "Other Brand" },
+    ])
+    expect(parseMetaCampaignLinks(packed.id, packed.name)).toHaveLength(2)
+    expect(
+      filterAdsForCampaign(ads, {
+        metaCampaignId: packed.id,
+        metaCampaignName: packed.name,
+      }).map((a) => a.adId)
+    ).toEqual(["1", "2"])
   })
 
   it("returns empty when nothing overlaps", () => {

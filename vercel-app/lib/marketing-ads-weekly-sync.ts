@@ -10,6 +10,7 @@ import {
   supabaseUpdateByFilter,
 } from "@/lib/supabase-server"
 import { suggestMetaCampaignMappings } from "@/lib/marketing-meta-auto-map"
+import { filterAdsForCampaign } from "@/lib/marketing-meta-match"
 import { loadMetaConnectionRow, syncMetaConnection } from "@/lib/meta-connection-server"
 import { syncTikTokConnection, loadTikTokConnectionRow } from "@/lib/tiktok-connection-server"
 import { getAllManagers, sendNoticeToRecipients, type NoticeRecipient } from "@/lib/send-notice-util"
@@ -206,15 +207,11 @@ export async function runMarketingAdsWeeklySync(tenantScope: SaasTenantScope): P
   for (const c of campaigns) {
     const budget = num(c.budget_total)
     if (budget <= 0) continue
-    const mappedId = String(c.meta_campaign_id || "").trim()
-    const mappedName = String(c.meta_campaign_name || "").trim()
-    const metaSpend = ads
-      .filter((a) => {
-        if (mappedId && String(a.campaignId || "") === mappedId) return true
-        if (mappedName && String(a.campaignName || "").trim() === mappedName) return true
-        return false
-      })
-      .reduce((s, a) => s + num(a.spend), 0)
+    const metaSpend = filterAdsForCampaign(ads, {
+      metaCampaignId: c.meta_campaign_id || undefined,
+      metaCampaignName: c.meta_campaign_name || undefined,
+      topic: String(c.topic || ""),
+    }).reduce((s, a) => s + num(a.spend), 0)
     const spend =
       metaSpend + (erpAdsByCampaign.get(c.id) || 0) + (inflByCampaign.get(c.id) || 0)
     if (spend <= 0) continue

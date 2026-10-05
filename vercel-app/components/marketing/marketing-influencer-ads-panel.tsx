@@ -15,6 +15,7 @@ import {
   type MarketingInfluencer,
   type MarketingCampaign,
 } from "@/lib/api-client"
+import { filterAdsForCampaign } from "@/lib/marketing-meta-match"
 import { cn } from "@/lib/utils"
 
 function fmt(n: number) {
@@ -65,16 +66,12 @@ export function MarketingInfluencerAdsPanel({
         setCampaign(c)
         setAds(adRows || [])
         setInfluencers(inflRows || [])
-        const mappedId = String(c?.metaCampaignId || "").trim()
-        const mappedName = String(c?.metaCampaignName || "").trim()
         const insights = meta?.lastSync?.ads || []
-        const spend = insights
-          .filter((a) => {
-            if (mappedId && String(a.campaignId || "") === mappedId) return true
-            if (mappedName && String(a.campaignName || "").trim() === mappedName) return true
-            return false
-          })
-          .reduce((s, a) => s + num(a.spend), 0)
+        const spend = filterAdsForCampaign(insights, {
+          metaCampaignId: c?.metaCampaignId,
+          metaCampaignName: c?.metaCampaignName,
+          topic: c?.topic,
+        }).reduce((s, a) => s + num(a.spend), 0)
         setMetaSpend(spend)
       })
       .finally(() => {
