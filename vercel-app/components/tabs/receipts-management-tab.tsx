@@ -115,6 +115,7 @@ import {
   resolvePosOrderDisplayDiscountAmt,
   resolvePosOrderDisplayTotal,
 } from '@/lib/pos-order-coupon-fields'
+import { posReceiptOrderMatchesAmountQuery } from '@/lib/pos-receipt-list-search'
 import {
   buildKitchenPrintTrackingId,
   clearKitchenPrintFailure,
@@ -556,7 +557,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           o.items?.some(
             (it: { name?: string }) =>
               it.name && String(it.name).toLowerCase().includes(term)
-          )
+          ) ||
+          posReceiptOrderMatchesAmountQuery(o, appliedSearchTerm)
       )
     }
     if (appliedSegmentDeliveryCode && appliedSegmentDeliveryCode !== '__all__') {
@@ -1782,13 +1784,18 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
               </SelectContent>
             </Select>
             <Input
-              placeholder={t('posSearchPh') || '주문번호, 메뉴, 메모 검색'}
+              placeholder={t('posReceiptListSearchPh') || t('posSearchPh') || '주문번호, 메뉴, 금액'}
+              title={t('posReceiptSearchAmountHint')}
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value
+                setSearchTerm(next)
+                if (!next.trim()) setAppliedSearchTerm('')
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') runReceiptSearch()
               }}
-              className="h-9 w-[min(11rem,30vw)] max-w-[200px] shrink-0"
+              className="h-9 w-[min(16rem,42vw)] max-w-[260px] shrink-0"
             />
             <Select value={segmentDeliveryCode || '__all__'} onValueChange={(v) => setSegmentDeliveryCode(v)}>
               <SelectTrigger
@@ -1820,6 +1827,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                 '조회 날짜는 마감·결산과 같은 POS 영업일 기준입니다(매장 영업 시작 시각~익일 시작 전).'}{' '}
               {t('posReceiptListSortPaidHint') ||
                 '목록은 결제·완료 시각 기준 최신순이며, 접수 시각과 다를 수 있습니다.'}{' '}
+              {t('posReceiptSearchAmountHint')}{' '}
               {t('posReceiptAttachMemberListHint')}
             </p>
           </div>
@@ -1888,7 +1896,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                 {sortedFilteredOrders.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
-                      {t('itemsNoResults') || '조회된 내역이 없습니다.'}
+                      {orders.length > 0 &&
+                      (appliedSearchTerm.trim() ||
+                        (appliedSegmentDeliveryCode && appliedSegmentDeliveryCode !== '__all__'))
+                        ? t('posReceiptSearchNoMatch')
+                        : t('posNoOrder') || '주문이 없습니다.'}
                     </td>
                   </tr>
                 ) : (

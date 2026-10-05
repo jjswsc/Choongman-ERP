@@ -547,6 +547,10 @@ export const I18N_POS_KO: Record<string, string> = {
     posReceiptListSortPaidHint:
       '목록은 결제·완료 시각 기준 최신순이며, 접수 시각과 다를 수 있습니다.',
     posReceiptAttachMemberListHint: '결제 후 포인트는 주문을 연 다음 「회원 적립」을 누르면 됩니다.',
+    posReceiptListSearchPh: '주문번호, 테이블, 메뉴, 금액',
+    posReceiptSearchAmountHint:
+      '금액은 같은 칸에 입력합니다. 목록 합계 또는 현금·카드·QR·배달앱 결제액과 같으면 찾습니다. 예: 350 또는 1,234.50',
+    posReceiptSearchNoMatch: '검색 조건에 맞는 영수증이 없습니다.',
     posMemberPointsTitle: '회원 적립',
     posMemberPointsHint:
       '손님을 찾은 뒤 오늘·어제 결제 영수증에 연결하면, 결제 금액만큼 포인트가 적립됩니다.',
@@ -4182,6 +4186,10 @@ export const I18N_POS_EN: Record<string, string> = {
     posReceiptListSortPaidHint:
       'The list is sorted by payment/completion time (newest first), which may differ from order time.',
     posReceiptAttachMemberListHint: 'To add points after payment, expand the order and tap Add member points.',
+    posReceiptListSearchPh: 'Order no, table, menu, or amount',
+    posReceiptSearchAmountHint:
+      'Type an amount in the same box. It keeps receipts whose total, or a cash, card, QR, or delivery-app payment, equals that number. Example: 350 or 1,234.50',
+    posReceiptSearchNoMatch: 'No receipts match this search.',
     posMemberPointsTitle: 'Member points',
     posMemberPointsHint:
       'Find the customer, then link a paid receipt from today or yesterday. Points follow the bill amount.',
@@ -8977,6 +8985,10 @@ export const I18N_POS_TH: Record<string, string> = {
     posReceiptListSortPaidHint:
       'เรียงตามเวลาชำระ/ปิดบิลล่าสุดก่อน อาจไม่ตรงกับเวลารับออเดอร์',
     posReceiptAttachMemberListHint: 'ถ้าชำระแล้วค่อยสะสมคะแนน ให้เปิดบิลแล้วกด 「สะสมคะแนน」ครับ',
+    posReceiptListSearchPh: 'เลขออเดอร์ โต๊ะ เมนู หรือยอดเงิน',
+    posReceiptSearchAmountHint:
+      'พิมพ์ยอดในช่องค้นหาเดิมได้ครับ ระบบจะแสดงบิลที่ยอดรวม หรือยอดชำระ (เงินสด บัตร QR แอปเดลิเวอรี) ตรงกับตัวเลขนั้น เช่น 350 หรือ 1,234.50',
+    posReceiptSearchNoMatch: 'ไม่พบบิลที่ตรงกับคำค้นครับ',
     posMemberPointsTitle: 'สะสมคะแนนสมาชิก',
     posMemberPointsHint:
       'ค้นหาลูกค้า แล้วผูกกับบิลที่ชำระวันนี้หรือเมื่อวาน คะแนนคิดจากยอดบิลครับ',
@@ -13794,6 +13806,10 @@ export const I18N_POS_MM: Record<string, string> = {
     posGrabCampaignCancel: 'Cancel',
     posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
     posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
+    posReceiptListSearchPh: 'Order no, table, menu, or amount',
+    posReceiptSearchAmountHint: 'Type an amount in the same box. It keeps receipts whose total, or a cash, card, QR, or delivery-app payment, equals that number. Example: 350 or 1,234.50',
+    posReceiptSearchNoMatch: 'No receipts match this search.',
+    posTodayDepositCash: 'Today deposit cash',
 }
 export const I18N_POS_LA: Record<string, string> = {
     posMenuImageUploadTooLarge:
@@ -16933,6 +16949,9 @@ export const I18N_POS_LA: Record<string, string> = {
     posGrabCampaignCancel: 'Cancel',
     posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
     posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
+    posReceiptListSearchPh: 'Order no, table, menu, or amount',
+    posReceiptSearchAmountHint: 'Type an amount in the same box. It keeps receipts whose total, or a cash, card, QR, or delivery-app payment, equals that number. Example: 350 or 1,234.50',
+    posReceiptSearchNoMatch: 'No receipts match this search.',
 }
 export const I18N_POS_KH: Record<string, string> = {
     posOfflineSaved: 'ម៉ូដអុឡាញ — ការកម្មង់ត្រូវបានរក្សាទុកក្នុងម៉ាស៊ីន នឹងធ្វើសមកាលកម្មពេលភ្ជាប់អ៊ីនធឺណិត។',
@@ -20107,6 +20126,9 @@ export const I18N_POS_KH: Record<string, string> = {
     posGrabCampaignCancel: 'Cancel',
     posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
     posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
+    posReceiptListSearchPh: 'Order no, table, menu, or amount',
+    posReceiptSearchAmountHint: 'Type an amount in the same box. It keeps receipts whose total, or a cash, card, QR, or delivery-app payment, equals that number. Example: 350 or 1,234.50',
+    posReceiptSearchNoMatch: 'No receipts match this search.',
 }
 export const I18N_POS_VI: Record<string, string> = {
     posOfflineSaved:
@@ -23250,6 +23272,9 @@ export const I18N_POS_VI: Record<string, string> = {
     posGrabCampaignCancel: 'Cancel',
     posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
     posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
+    posReceiptListSearchPh: 'Order no, table, menu, or amount',
+    posReceiptSearchAmountHint: 'Type an amount in the same box. It keeps receipts whose total, or a cash, card, QR, or delivery-app payment, equals that number. Example: 350 or 1,234.50',
+    posReceiptSearchNoMatch: 'No receipts match this search.',
 }
 export const I18N_POS_MS: Record<string, string> = {
     posOfflineSaved:
@@ -26397,4 +26422,7 @@ export const I18N_POS_MS: Record<string, string> = {
     posGrabCampaignCancel: 'Cancel',
     posGrabCampaignCancelConfirm: 'Cancel this Grab campaign?\\nIf a new promo did not update, cancel the old campaign first, then menu sync will be sent again.',
     posGrabCampaignCancelDone: 'Campaign cancelled. Grab menu update was sent.',
+    posReceiptListSearchPh: 'Order no, table, menu, or amount',
+    posReceiptSearchAmountHint: 'Type an amount in the same box. It keeps receipts whose total, or a cash, card, QR, or delivery-app payment, equals that number. Example: 350 or 1,234.50',
+    posReceiptSearchNoMatch: 'No receipts match this search.',
 }
