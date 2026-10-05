@@ -34,6 +34,32 @@ function pushYear(years: Set<number>, year: number | null | undefined) {
   if (year != null && year >= 2000 && year <= 2100) years.add(year)
 }
 
+/** Meta created_time / updated_time — ISO·unix·일반 날짜 문자열 */
+export function yearFromMetaTimestamp(raw: string | number | undefined | null): number | null {
+  if (raw == null || raw === "") return null
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const ms = raw > 1e12 ? raw : raw * 1000
+    const y = new Date(ms).getUTCFullYear()
+    return y >= 2000 && y <= 2100 ? y : null
+  }
+  const s = String(raw).trim()
+  if (!s) return null
+  const iso = s.match(/^(20\d{2})(?:[-T\s]|$)/)
+  if (iso) return Number(iso[1])
+  if (/^\d{9,13}$/.test(s)) {
+    const n = Number(s)
+    const ms = n > 1e12 ? n : n * 1000
+    const y = new Date(ms).getUTCFullYear()
+    return y >= 2000 && y <= 2100 ? y : null
+  }
+  const t = Date.parse(s)
+  if (Number.isFinite(t)) {
+    const y = new Date(t).getUTCFullYear()
+    return y >= 2000 && y <= 2100 ? y : null
+  }
+  return null
+}
+
 /**
  * 목록 필터에 쓸 연도. 제목 날짜와 생성 시각을 같이 둔다.
  * 게시물 홍보(โพสต์/Post) 본문에 적힌 연도는 쓰지 않는다.
@@ -42,8 +68,7 @@ export function metaCampaignYears(name: string, createdTime?: string, extra?: nu
   const years = new Set<number>()
   const ms = parseMetaPromoDateMs(name)
   if (ms != null) pushYear(years, new Date(ms).getUTCFullYear())
-  const created = String(createdTime || "").trim().match(/^(20\d{2})/)
-  if (created) pushYear(years, Number(created[1]))
+  pushYear(years, yearFromMetaTimestamp(createdTime))
   if (!isMetaOrganicPostCampaignName(name)) {
     const inName = String(name || "").match(/(?:^|[^\d])(20\d{2})(?:[^\d]|$)/)
     if (inName) pushYear(years, Number(inName[1]))
@@ -167,17 +192,33 @@ export function uniqueMetaAdsCampaigns(
 }
 
 /**
- * 초기 필터. 올해에 이름 있는 Ads 캠페인이 있을 때만 그 해를 연다.
- * 게시물 홍보만 있으면 전체 목록부터 보여 누락처럼 보이지 않게 한다.
+ * 초기 필터는 항상 전체.
+ * 연도 버튼은 Meta 캠페인 연도(제목·생성·집행)이지 ERP 캠페인 기간이 아니다.
+ * 2026 ERP 캠페인에 예년 제목 Ads를 연결하는 경우가 많아 올해로 자동 좁히면 누락처럼 보인다.
  */
 export function metaCampaignPickerInitialView(
-  options: MetaAdsCampaignOption[],
-  bangkokYear: number
+  _options: MetaAdsCampaignOption[],
+  _bangkokYear: number
 ): { year: number | "all"; includeOrganicPosts: boolean } {
-  const inYear = (options || []).filter((o) => o.years.includes(bangkokYear))
-  const named = inYear.some((o) => !o.organicPost)
-  if (!named) return { year: "all", includeOrganicPosts: false }
-  return { year: bangkokYear, includeOrganicPosts: false }
+  return { year: "all", includeOrganicPosts: false }
+}
+
+/** 연도 칩에 붙일 건수 (게시물 제외 / 포함) */
+export function countMetaCampaignsByYear(
+  options: MetaAdsCampaignOption[],
+  includeOrganicPosts = false
+): Map<number | "none", number> {
+  const map = new Map<number | "none", number>()
+  for (const o of options || []) {
+    if (!includeOrganicPosts && o.organicPost) continue
+    const years = o.years?.length ? o.years : o.year != null ? [o.year] : []
+    if (!years.length) {
+      map.set("none", (map.get("none") || 0) + 1)
+      continue
+    }
+    for (const y of years) map.set(y, (map.get(y) || 0) + 1)
+  }
+  return map
 }
 
 /** 이름·ID·연도로 캠페인 목록을 좁힌다. */

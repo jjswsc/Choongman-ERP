@@ -9,6 +9,7 @@ import { syncMetaAds } from "@/lib/api-client/marketing-meta"
 import { bangkokTodayYmd } from "@/lib/bangkok-date"
 import type { MetaAdInsightRow } from "@/lib/meta-graph"
 import {
+  countMetaCampaignsByYear,
   filterMetaCampaignOptions,
   metaCampaignPickerInitialView,
   uniqueMetaAdsCampaigns,
@@ -56,6 +57,7 @@ export function MarketingMetaCampaignPicker({
     return [...set].sort((a, b) => b - a)
   }, [all])
   const postCount = React.useMemo(() => all.filter((o) => o.organicPost).length, [all])
+  const yearCounts = React.useMemo(() => countMetaCampaignsByYear(all, includePosts), [all, includePosts])
   const shown = React.useMemo(
     () => filterMetaCampaignOptions(all, { query, year, includeOrganicPosts: includePosts }),
     [all, query, year, includePosts]
@@ -64,6 +66,10 @@ export function MarketingMetaCampaignPicker({
     typeof year === "number" &&
     shown.length > 0 &&
     shown.every((o) => o.organicPost)
+  const namedInYear =
+    typeof year === "number"
+      ? shown.filter((o) => !o.organicPost).length
+      : pool.filter((o) => !o.organicPost).length
 
   React.useEffect(() => {
     if (yearInit.current || !all.length) return
@@ -146,11 +152,11 @@ export function MarketingMetaCampaignPicker({
         </YearChip>
         {years.map((y) => (
           <YearChip key={y} active={year === y} onClick={() => setYear(y)}>
-            {String(y)}
+            {`${y} (${yearCounts.get(y) || 0})`}
           </YearChip>
         ))}
         <YearChip active={year === "none"} onClick={() => setYear("none")}>
-          {t("marketingMetaMapYearNone")}
+          {`${t("marketingMetaMapYearNone")} (${yearCounts.get("none") || 0})`}
         </YearChip>
       </div>
       <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -166,7 +172,7 @@ export function MarketingMetaCampaignPicker({
           .replace("{shown}", String(shown.length))
           .replace("{total}", String(pool.length))}
       </p>
-      {yearOnlyPosts ? (
+      {yearOnlyPosts || (typeof year === "number" && namedInYear === 0) ? (
         <p className="text-[11px] text-amber-700 dark:text-amber-400">{t("marketingMetaMapOnlyPostsHint")}</p>
       ) : null}
       {syncNote ? <p className="text-[11px] text-amber-700 dark:text-amber-400">{syncNote}</p> : null}

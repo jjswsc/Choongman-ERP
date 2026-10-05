@@ -165,6 +165,31 @@ function markDeliveredYears(row: MetaAdInsightRow, years: number[] | undefined) 
   row.deliveredYears = next
 }
 
+function yearFromMetaClock(raw: string | number | undefined | null): number | null {
+  if (raw == null || raw === "") return null
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const ms = raw > 1e12 ? raw : raw * 1000
+    const y = new Date(ms).getUTCFullYear()
+    return y >= 2000 && y <= 2100 ? y : null
+  }
+  const s = String(raw).trim()
+  if (!s) return null
+  const iso = s.match(/^(20\d{2})(?:[-T\s]|$)/)
+  if (iso) return Number(iso[1])
+  if (/^\d{9,13}$/.test(s)) {
+    const n = Number(s)
+    const ms = n > 1e12 ? n : n * 1000
+    const y = new Date(ms).getUTCFullYear()
+    return y >= 2000 && y <= 2100 ? y : null
+  }
+  const t = Date.parse(s)
+  if (Number.isFinite(t)) {
+    const y = new Date(t).getUTCFullYear()
+    return y >= 2000 && y <= 2100 ? y : null
+  }
+  return null
+}
+
 /** 캠페인 카탈로그를 매핑 목록에 합친다. 이미 있는 ID의 실적은 유지하고, 생성 시각만 비어 있으면 채운다. */
 export function appendMetaCampaignCatalog(
   ads: MetaAdInsightRow[],
@@ -184,8 +209,8 @@ export function appendMetaCampaignCatalog(
     if (created) createdById.set(id, created)
     const years: number[] = []
     if (deliveredYear) years.push(deliveredYear)
-    const updatedY = Number(String(c.updated_time || "").trim().slice(0, 4))
-    if (updatedY >= 2000 && updatedY <= 2100) years.push(updatedY)
+    const updatedY = yearFromMetaClock(c.updated_time)
+    if (updatedY != null) years.push(updatedY)
     if (years.length) updatedYearsById.set(id, years)
   }
   const markRow = (a: MetaAdInsightRow, id: string) => {
@@ -479,27 +504,64 @@ export async function fetchMetaAdsAndPageInsights(params: {
         { field: "created_time", operator: "GREATER_THAN", value: yearStartUnix },
       ]),
     })
-    // 올해 집행 실적이 있는 캠페인. 합계(최근 28일)는 바꾸지 않도록 실적 0으로만 넣는다.
-    const ytd = await metaGraphGetAllPages<Record<string, unknown>>(`${act}/insights`, adsToken, {
-      level: "campaign",
-      time_range: JSON.stringify({ since: yearStart, until: today }),
-      fields: "campaign_id,campaign_name",
-      limit: META_GRAPH_PAGE_LIMIT,
-    })
-    if (!ytd.ok) {
-      diagnostics.push(`ads_campaigns_ytd:${ytd.error?.message || "error"}`)
-    } else {
-      notePages("ads_campaigns_ytd", ytd.pages, ytd.truncated, ytd.error)
-      const added = appendMetaCampaignCatalog(
-        ads,
-        (ytd.data || []).map((row) => ({
-          id: String(row.campaign_id || ""),
-          name: String(row.campaign_name || ""),
-        })),
-        { deliveredYear: Number(today.slice(0, 4)) }
-      )
-      if (added) diagnostics.push(`ads_campaigns_ytd_listed:${added}`)
+    // 올해·최근 90일 집행 캠페인에 연도 태그를 붙인다. (last_28d에 없어도 2026 목록에 나오게)
+    const deliveryYear = Number(today.slice(0, 4))
+    const markSpendCatalog = async (
+      label: string,
+      query: Record<string, string | undefined>,
+      years: number[]
+    ) => {
+      const page = await metaGraphGetAllPages<Record<string, unknown>>(`${act}/insights`, adsToken, query)
+      if (!page.ok) {
+        diagnostics.push(`${label}:${page.error?.message || "error"}`)
+        return
+      }
+      notePages(label, page.pages, page.truncated, page.error)
+      const rows = (page.data || []).map((row) => ({
+        id: String(row.campaign_id || ""),
+        name: String(row.campaign_name || ""),
+      }))
+      for (const y of years) {
+        const added = appendMetaCampaignCatalog(ads, rows, { deliveredYear: y })
+        if (added) diagnostics.push(`${label}_listed_${y}:${added}`)
+      }
+      // 이미 ads에 있는 ID에도 deliveredYears만 보강
+      const ids = new Set(rows.map((r) => r.id).filter(Boolean))
+      for (const a of ads) {
+        const id = String(a.campaignId || "").trim()
+        if (id && ids.has(id)) markDeliveredYears(a, years)
+      }
     }
+    await markSpendCatalog(
+      "ads_campaigns_ytd",
+      {
+        level: "campaign",
+        time_range: JSON.stringify({ since: yearStart, until: today }),
+        fields: "campaign_id,campaign_name,spend",
+        limit: META_GRAPH_PAGE_LIMIT,
+      },
+      [deliveryYear]
+    )
+    await markSpendCatalog(
+      "ads_campaigns_this_year",
+      {
+        level: "campaign",
+        date_preset: "this_year",
+        fields: "campaign_id,campaign_name,spend",
+        limit: META_GRAPH_PAGE_LIMIT,
+      },
+      [deliveryYear]
+    )
+    await markSpendCatalog(
+      "ads_campaigns_last_90d",
+      {
+        level: "campaign",
+        date_preset: "last_90d",
+        fields: "campaign_id,campaign_name,spend",
+        limit: META_GRAPH_PAGE_LIMIT,
+      },
+      yearsCoveredByMetaRange({ preset: "last_90d", todayYmd: today })
+    )
 
     const plat = await metaGraphGet<{ data?: { publisher_platform?: string; spend?: unknown }[] }>(
       `${act}/insights`,
