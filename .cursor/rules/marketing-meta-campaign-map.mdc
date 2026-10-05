@@ -1,0 +1,31 @@
+---
+description: Meta Ads 캠페인 매핑 목록·연도 필터 회귀 방지
+globs: vercel-app/lib/meta-graph.ts,vercel-app/lib/marketing-meta-match.ts,vercel-app/components/marketing/marketing-meta-campaign-picker.tsx,vercel-app/lib/meta-connection-server.ts,vercel-app/lib/api-client/marketing-meta.ts
+alwaysApply: false
+---
+
+# Meta Ads 캠페인 매핑 — 회귀 금지
+
+캠페인 개요의 Meta 연결 드롭다운은 `last_sync_json.ads`만 본다. 연도·상태·페이지네이션을 잘못 잡으면 「2026이 없다」「2건만 나온다」가 재발한다.
+
+## 절대 원칙
+
+1. **연도 필터는 제목만 보지 않는다.** `metaCampaignYears`에 제목 날짜 + `createdTime` + `deliveredYears`를 모두 쓴다. 제목에 `[8/8/2025]`가 있어도 2026에 집행·생성·수정되면 2026 목록에 남아야 한다.
+2. **캠페인 목록은 첫 페이지만 가져오지 않는다.** `metaGraphGetAllPages`로 `paging.next`를 따른다. `limit`만 키우고 끝내면 안 된다.
+3. **ACTIVE/PAUSED만으로 끝내면 안 된다.** 종료(`is_completed`)·보관·올해 insights(YTD)·최근 실적 구간 연도 태깅이 필요하다.
+4. **`โพสต์:` / `Post:` 게시물 홍보는 기본 숨김**이되, 올해에 이름 있는 Ads 캠페인이 없으면 초기 필터를 `ทั้งหมด`로 두고 「게시물만 있음」 안내를 한다. 게시물만 자동으로 연도를 열어 누락처럼 보이게 하지 않는다.
+5. **동기화 결과는 DB에 남겨야 한다.** OAuth는 `upsertMetaConnection`, env 연결 행이 있으면 `last_sync_json`만이라도 갱신. 화면만 바꾸고 저장을 빼면 새로고침 후 예전 목록으로 돌아간다.
+6. **동기화 실패·truncate는 조용히 넘기지 않는다.** 피커의 동기화 버튼은 실패 알림, `_truncated` 진단은 사용자에게 보이게 한다.
+
+## 검증 시나리오 (코드 변경 시)
+
+- [ ] 제목 2025 + `deliveredYears: [2026]` → 2026 필터에 포함
+- [ ] 제목 2025 + `createdTime` 2026 → 2026 필터에 포함
+- [ ] `paging.next`가 있으면 2페이지 이상 합쳐짐 (`meta-graph-pages.test.ts`)
+- [ ] 올해가 게시물 홍보뿐이면 초기 뷰는 `year: "all"`
+- [ ] 피커에서 동기화 실패 시 알림
+
+## 만지지 말 것
+
+- 실적 합계(`adsTotals`)에 카탈로그 폴백(실적 0) 행을 넣지 않는다.
+- 연도 추론용으로 게시물 본문 속 아무 연도나 쓰지 않는다(`โพสต์:`는 이름 속 연도 제외).

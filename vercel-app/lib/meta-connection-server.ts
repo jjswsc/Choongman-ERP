@@ -202,6 +202,8 @@ export async function syncMetaConnection(
     until: range?.until,
   })
 
+  // OAuth는 토큰·동기화 결과를 함께 저장. env만 쓰는 경우에도 last_sync는 남겨
+  // 새로고침 후 캠페인 목록이 예전 동기화로 되돌아가지 않게 한다.
   if (live.source === "oauth") {
     await upsertMetaConnection(tenantScope, {
       pageId,
@@ -213,6 +215,17 @@ export async function syncMetaConnection(
       grantedScopes: live.grantedScopes.join(","),
       lastSync: payload,
     })
+  } else if (live.source === "env" && row?.id) {
+    await supabaseUpdateByFilter(
+      "marketing_meta_connections",
+      `id=eq.${row.id}`,
+      {
+        ad_account_id: normalizeAdAccountId(adAccountId),
+        last_synced_at: payload.syncedAt,
+        last_sync_json: payload,
+        updated_at: new Date().toISOString(),
+      }
+    )
   }
 
   return payload

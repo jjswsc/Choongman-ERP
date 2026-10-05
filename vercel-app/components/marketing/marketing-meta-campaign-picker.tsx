@@ -4,6 +4,7 @@ import * as React from "react"
 import { Loader2, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { appAlert } from "@/lib/app-message"
 import { syncMetaAds } from "@/lib/api-client/marketing-meta"
 import { bangkokTodayYmd } from "@/lib/bangkok-date"
 import type { MetaAdInsightRow } from "@/lib/meta-graph"
@@ -38,6 +39,7 @@ export function MarketingMetaCampaignPicker({
   const [includePosts, setIncludePosts] = React.useState(false)
   const [custom, setCustom] = React.useState(false)
   const [syncing, setSyncing] = React.useState(false)
+  const [syncNote, setSyncNote] = React.useState("")
   const yearInit = React.useRef(false)
 
   const all = React.useMemo(
@@ -80,12 +82,23 @@ export function MarketingMetaCampaignPicker({
   const syncNow = async () => {
     if (!onAdsRefresh) return
     setSyncing(true)
+    setSyncNote("")
     try {
       const r = await syncMetaAds()
-      if (r.success && r.payload?.ads) {
-        onAdsRefresh(r.payload.ads)
-        yearInit.current = false
+      if (!r.success || !r.payload) {
+        await appAlert(r.message || t("marketingMetaMapSyncFail"))
+        return
       }
+      onAdsRefresh(r.payload.ads || [])
+      yearInit.current = false
+      const diag = r.payload.diagnostics || []
+      if (diag.some((d) => d.includes("_truncated"))) {
+        setSyncNote(t("marketingMetaMapSyncTruncated"))
+      } else if (diag.includes("no_ad_account_id")) {
+        setSyncNote(t("marketingMetaDiagNoAdAccount"))
+      }
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : t("marketingMetaMapSyncFail"))
     } finally {
       setSyncing(false)
     }
@@ -156,6 +169,7 @@ export function MarketingMetaCampaignPicker({
       {yearOnlyPosts ? (
         <p className="text-[11px] text-amber-700 dark:text-amber-400">{t("marketingMetaMapOnlyPostsHint")}</p>
       ) : null}
+      {syncNote ? <p className="text-[11px] text-amber-700 dark:text-amber-400">{syncNote}</p> : null}
       {selected ? (
         <p className="truncate text-[11px] text-foreground">
           {t("marketingMetaMapSelected")}: {selected.name}
