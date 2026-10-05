@@ -71,17 +71,21 @@ export type PurchasePayableLedgerFilterOptions = {
  * 미지급금(매입) 원장 — 입고·매입 지급·기초이월만.
  * - 발주(PO)는 제외: 매입채무는 입고(검수 완료) 기준으로 확정한다(회계 규칙). 발주 미지급 행이 입고와
  *   같이 남으면 이중 계상되므로, 발주는 미지급금에 넣지 않는다(발주 예정은 발주 관리에서 확인).
- * - 일반 경비·급여 지출발생(expense_accrual)은 제외. 매입대금 지급예정 경유 Payment 는 포함.
+ * - 일반 경비·급여 지출발생은 제외. 매입대금·매입선급 지출 발생(청구)과 그 지급은 포함한다.
  */
 export function isPurchasePayableLedgerRow(
   r: PayableTransactionRow,
   options?: PurchasePayableLedgerFilterOptions
 ): boolean {
   const refType = String(r.ref_type || '').trim()
-  if (refType === 'Expense' || refType === 'InteriorExpense') return false
-  if (refType === 'PO') return false
-
   const accrualId = r.expense_accrual_id != null ? Number(r.expense_accrual_id) : 0
+  // 매입대금·매입선급으로 등록한 지출 발생은 청구다. 통장 지급과 같은 거래처 잔액에서 상계한다.
+  // 급여·일반 경비 지출 발생은 매입 원장에 넣지 않는다.
+  if (refType === 'Expense') {
+    return accrualId > 0 && (options?.purchaseAccrualIds?.has(accrualId) ?? false)
+  }
+  if (refType === 'InteriorExpense') return false
+  if (refType === 'PO') return false
 
   if (refType === 'Payment') {
     if (accrualId <= 0) return true
@@ -157,7 +161,10 @@ export async function filterPurchasePayableLedgerRowsAsync(
   rows: PayableTransactionRow[]
 ): Promise<PayableTransactionRow[]> {
   const accrualIds = rows
-    .filter((r) => String(r.ref_type || '') === 'Payment' && Number(r.expense_accrual_id || 0) > 0)
+    .filter((r) => {
+      const refType = String(r.ref_type || '')
+      return (refType === 'Payment' || refType === 'Expense') && Number(r.expense_accrual_id || 0) > 0
+    })
     .map((r) => Number(r.expense_accrual_id))
   const purchaseAccrualIds = await loadPurchasePaymentAccrualIds(accrualIds)
   const bankCategoryById = await loadBankCategoryByIdForPayables(rows)

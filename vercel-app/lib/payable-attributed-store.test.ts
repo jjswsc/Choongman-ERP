@@ -153,6 +153,30 @@ describe('isPurchasePayableLedgerRow', () => {
     ).toBe(false)
   })
 
+  it('includes a purchase-payment expense bill and still drops payroll', () => {
+    const bill = {
+      vendor_code: 'HQ',
+      amount: 1167918,
+      ref_type: 'Expense',
+      expense_accrual_id: 5,
+      trans_date: '2026-03-01',
+    }
+    expect(isPurchasePayableLedgerRow(bill)).toBe(false)
+    expect(isPurchasePayableLedgerRow(bill, { purchaseAccrualIds: new Set([5]) })).toBe(true)
+    expect(
+      isPurchasePayableLedgerRow(
+        {
+          vendor_code: 'EMPID:42',
+          amount: 147375,
+          ref_type: 'Expense',
+          expense_accrual_id: 99,
+          trans_date: '2026-05-01',
+        },
+        { purchaseAccrualIds: new Set([5]) }
+      )
+    ).toBe(false)
+  })
+
   it('includes inbound, payment, and opening rows', () => {
     expect(
       isPurchasePayableLedgerRow({
