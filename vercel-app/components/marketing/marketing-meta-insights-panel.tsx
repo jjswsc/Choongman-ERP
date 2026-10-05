@@ -5,8 +5,11 @@ import Link from "next/link"
 import { Facebook, Instagram, Loader2, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { bangkokTodayYmd } from "@/lib/bangkok-date"
+import { addBangkokCalendarDays } from "@/lib/bangkok-time"
 import {
   getMetaConnectionStatus,
   syncMetaAds,
@@ -14,6 +17,18 @@ import {
   type MetaSyncPayload,
 } from "@/lib/api-client/marketing-meta"
 import { filterAdsForCampaign } from "@/lib/marketing-meta-match"
+import { cn } from "@/lib/utils"
+import { appAlert } from "@/lib/app-message"
+
+type RangePreset = "last_7d" | "last_28d" | "last_90d" | "this_year" | "custom"
+
+function rangeForPreset(preset: Exclude<RangePreset, "custom">): { since: string; until: string } {
+  const until = bangkokTodayYmd()
+  if (preset === "last_7d") return { since: addBangkokCalendarDays(until, -6), until }
+  if (preset === "last_90d") return { since: addBangkokCalendarDays(until, -89), until }
+  if (preset === "this_year") return { since: `${until.slice(0, 4)}-01-01`, until }
+  return { since: addBangkokCalendarDays(until, -27), until }
+}
 
 function diagnoseLabel(code: string, t: (k: string) => string): string {
   if (code === "not_connected") return t("marketingMetaDiagNotConnected")
@@ -34,8 +49,8 @@ function diagnoseLabel(code: string, t: (k: string) => string): string {
 
 export function MarketingMetaInsightsPanel({
   compact,
-  since,
-  until,
+  since: sinceProp,
+  until: untilProp,
   matchTopic,
   metaCampaignId,
   metaCampaignName,
@@ -53,6 +68,26 @@ export function MarketingMetaInsightsPanel({
   const [payload, setPayload] = React.useState<MetaSyncPayload | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [syncing, setSyncing] = React.useState(false)
+  const initial = rangeForPreset("last_28d")
+  const [preset, setPreset] = React.useState<RangePreset>(
+    sinceProp && untilProp ? "custom" : "last_28d"
+  )
+  const [rangeSince, setRangeSince] = React.useState(sinceProp || initial.since)
+  const [rangeUntil, setRangeUntil] = React.useState(untilProp || initial.until)
+
+  React.useEffect(() => {
+    if (!sinceProp || !untilProp) return
+    setPreset("custom")
+    setRangeSince(sinceProp.slice(0, 10))
+    setRangeUntil(untilProp.slice(0, 10))
+  }, [sinceProp, untilProp])
+
+  const applyPreset = (next: Exclude<RangePreset, "custom">) => {
+    const r = rangeForPreset(next)
+    setPreset(next)
+    setRangeSince(r.since)
+    setRangeUntil(r.until)
+  }
 
   const applyStatus = React.useCallback((s: MetaConnectionStatus) => {
     setStatus(s)
@@ -79,11 +114,27 @@ export function MarketingMetaInsightsPanel({
   }, [load])
 
   const sync = async () => {
+    const since = rangeSince.trim()
+    const until = rangeUntil.trim()
+    if (!since || !until) {
+      await appAlert(t("marketingMetaRangeNeedBoth"))
+      return
+    }
+    if (since > until) {
+      await appAlert(t("marketingMetaRangeInvalid"))
+      return
+    }
     setSyncing(true)
     try {
       const r = await syncMetaAds({ since, until })
+      if (!r.success) {
+        await appAlert(r.message || t("marketingMetaMapSyncFail"))
+        return
+      }
       if (r.payload) setPayload(r.payload)
       await load()
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : t("marketingMetaMapSyncFail"))
     } finally {
       setSyncing(false)
     }
@@ -99,7 +150,6 @@ export function MarketingMetaInsightsPanel({
         metaCampaignName,
       })
     : allAds
-  // 매핑용 카탈로그(실적 0)는 목록에 섞이면 「덜 가져옴」처럼 보이므로 실적 표에서는 제외
   const hasDelivery = (a: (typeof matched)[number]) =>
     Boolean(a.adId) || a.impressions > 0 || a.spend > 0 || a.reach > 0 || a.clicks > 0
   const ads = matched
@@ -134,6 +184,13 @@ export function MarketingMetaInsightsPanel({
   const plat = payload?.platformSpend
   const tableLimit = 80
 
+  const presetChips: { key: Exclude<RangePreset, "custom">; label: string }[] = [
+    { key: "last_7d", label: t("marketingMetaRangeLast7") },
+    { key: "last_28d", label: t("marketingMetaRangeLast28") },
+    { key: "last_90d", label: t("marketingMetaRangeLast90") },
+    { key: "this_year", label: t("marketingMetaRangeThisYear") },
+  ]
+
   return (
     <div className="rounded-xl border bg-card p-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
@@ -151,26 +208,21 @@ export function MarketingMetaInsightsPanel({
             <p className="text-[11px] text-muted-foreground">{t("marketingMetaAdsSubtitle")}</p>
             {dateRangeLabel ? (
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                {t("marketingMetaRangeLabel")}: {dateRangeLabel}
+                {t("marketingMetaSyncedRange")}: {dateRangeLabel}
               </p>
             ) : null}
             <p className="mt-0.5 text-[11px] text-muted-foreground">{t("marketingMetaOneConnectHint")}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={status?.connected ? "default" : "secondary"}>
-            {status?.connected ? t("marketingMetaConnected") : t("marketingMetaDisconnected")}
-          </Badge>
-          <Button variant="outline" size="sm" className="h-8" onClick={() => void sync()} disabled={syncing || loading}>
-            {syncing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RotateCw className="mr-1 h-3.5 w-3.5" />}
-            {t("marketingMetaSync")}
-          </Button>
-        </div>
+        <Badge variant={status?.connected ? "default" : "secondary"}>
+          {status?.connected ? t("marketingMetaConnected") : t("marketingMetaDisconnected")}
+        </Badge>
       </div>
 
       {status?.pageName || status?.pageId ? (
         <p className="mb-2 text-xs text-muted-foreground">
           Facebook: {status.pageName || "—"} · {status.pageId}
+          {status.adAccountId ? ` · ${t("marketingMetaAdAccountLabel")} ${String(status.adAccountId).replace(/^act_/i, "")}` : ""}
           {status.lastSyncedAt ? ` · ${String(status.lastSyncedAt).slice(0, 16).replace("T", " ")}` : ""}
         </p>
       ) : null}
@@ -181,6 +233,72 @@ export function MarketingMetaInsightsPanel({
         </p>
       ) : status?.connected ? (
         <p className="mb-3 text-xs text-amber-800 dark:text-amber-200">{t("marketingMetaDiagIgNotLinked")}</p>
+      ) : null}
+
+      {status?.connected ? (
+        <div className="mb-3 space-y-2 rounded-lg border bg-muted/20 p-3">
+          <p className="text-xs font-medium">{t("marketingMetaRangePickTitle")}</p>
+          <p className="text-[11px] text-muted-foreground">{t("marketingMetaRangePickHint")}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {presetChips.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-[11px]",
+                  preset === p.key
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-input text-muted-foreground hover:bg-muted"
+                )}
+                onClick={() => applyPreset(p.key)}
+              >
+                {p.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-[11px]",
+                preset === "custom"
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-input text-muted-foreground hover:bg-muted"
+              )}
+              onClick={() => setPreset("custom")}
+            >
+              {t("marketingMetaRangeCustom")}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="mb-1 block text-[10px] text-muted-foreground">{t("marketingMetaRangeFrom")}</label>
+              <Input
+                type="date"
+                className="h-9 w-[10.5rem]"
+                value={rangeSince}
+                onChange={(e) => {
+                  setPreset("custom")
+                  setRangeSince(e.target.value)
+                }}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] text-muted-foreground">{t("marketingMetaRangeTo")}</label>
+              <Input
+                type="date"
+                className="h-9 w-[10.5rem]"
+                value={rangeUntil}
+                onChange={(e) => {
+                  setPreset("custom")
+                  setRangeUntil(e.target.value)
+                }}
+              />
+            </div>
+            <Button size="sm" className="h-9" onClick={() => void sync()} disabled={syncing || loading}>
+              {syncing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RotateCw className="mr-1 h-3.5 w-3.5" />}
+              {t("marketingMetaSync")}
+            </Button>
+          </div>
+        </div>
       ) : null}
 
       {plat && (plat.facebook > 0 || plat.instagram > 0 || plat.other > 0) ? (
