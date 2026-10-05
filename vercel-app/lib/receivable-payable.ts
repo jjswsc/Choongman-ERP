@@ -475,24 +475,24 @@ export function payablePatchFromBankPurchasePayment(params: {
 
 /**
  * 통장 출금 용도 변경 시 미지급 Payment 동기화 분기.
- * 매입대금(purchase_payment) 분류만으로는 Payment를 만들지 않음 — 지출관리 연동 행만 유지·동기화.
+ * 매입대금 + 거래처면 지급 행을 만들거나 갱신한다. 지출관리에 이미 묶인 행이 있으면 그 행만 갱신한다.
+ * 매입대금에서 다른 용도로 바꿀 때만, 지출예정에 안 묶인 지급 행을 지운다.
  */
 export function resolvePayableSyncAfterBankCategoryChange(params: {
   prevCategory: string
   nextCategory: string
   hasLinkedPayment: boolean
   vendorCode: string
-}): { deleteStandalonePayment: boolean; syncExistingPayment: boolean } {
+}): { deleteStandalonePayment: boolean; syncExistingPayment: boolean; createStandalonePayment: boolean } {
   const prev = String(params.prevCategory || '').toLowerCase()
   const next = String(params.nextCategory || '').toLowerCase()
   const wasPurchasePay = prev === 'purchase_payment'
   const isPurchasePay = next === 'purchase_payment'
   const vendor = String(params.vendorCode || '').trim()
-  // 매입대금 관련 출금: 분류만으로 생긴 orphan(Payment, expense_accrual_id 없음) 제거
-  const deleteStandalonePayment = wasPurchasePay || isPurchasePay
-  // 이미 지출관리 등으로 연동된 Payment만 거래처·금액 동기화 (신규 생성 없음)
+  const deleteStandalonePayment = wasPurchasePay && !isPurchasePay
   const syncExistingPayment = Boolean(vendor) && params.hasLinkedPayment
-  return { deleteStandalonePayment, syncExistingPayment }
+  const createStandalonePayment = isPurchasePay && Boolean(vendor) && !params.hasLinkedPayment
+  return { deleteStandalonePayment, syncExistingPayment, createStandalonePayment }
 }
 
 /** 통장 매입대금 분류 저장 시 — 기존(지출관리 연동) Payment만 갱신. 없으면 생성하지 않음. */
@@ -552,7 +552,7 @@ export async function syncPayableLedgerFromBankPurchasePayment(params: {
   }
 }
 
-/** 통장 출금 용도 변경 시 미지급 Payment 갱신·orphan 삭제 (통장·지출검색 공통). 분류만으로 신규 생성하지 않음. */
+/** 통장 출금 용도 변경 시 미지급 Payment 생성·갱신. 매입대금+거래처면 지급 행이 생긴다. */
 export async function syncPayableLedgerAfterBankWithdrawCategoryChange(params: {
   bankTransactionId: number
   prevCategory: string
@@ -570,7 +570,7 @@ export async function syncPayableLedgerAfterBankWithdrawCategoryChange(params: {
   const wasPurchasePay = prev === 'purchase_payment'
   const isPurchasePay = next === 'purchase_payment'
 
-  if (wasPurchasePay || isPurchasePay) {
+  if (wasPurchasePay && !isPurchasePay) {
     await supabaseDeleteByFilter(
       'payable_transactions',
       `bank_transaction_id=eq.${bankId}&ref_type=eq.Payment&expense_accrual_id=is.null`
@@ -584,21 +584,35 @@ export async function syncPayableLedgerAfterBankWithdrawCategoryChange(params: {
   )) as { id?: number }[]
   const hasLinkedPayment = Boolean(linkedPaymentRows?.length)
   const vendorCode = String(params.vendorCode || '').trim()
-  const { syncExistingPayment } = resolvePayableSyncAfterBankCategoryChange({
+  const { syncExistingPayment, createStandalonePayment } = resolvePayableSyncAfterBankCategoryChange({
     prevCategory: prev,
     nextCategory: next,
     hasLinkedPayment,
     vendorCode,
   })
+  const amountAbs = Math.abs(Number(params.amountAbs) || 0)
+  if (!amountAbs) return
+  const memoText = String(params.bankMemo || '').trim()
+  const paymentMemo = memoText ? `통장 지급: ${memoText.slice(0, 200)}` : '통장 지급'
+
+  if (createStandalonePayment) {
+    await upsertPayableFromBankPurchasePayment({
+      bankTransactionId: bankId,
+      vendorCode,
+      amountAbs,
+      transDate: params.transDate,
+      memo: paymentMemo,
+    })
+    return
+  }
   if (!syncExistingPayment) return
 
-  const memoText = String(params.bankMemo || '').trim()
   await syncPayableLedgerFromBankPurchasePayment({
     bankTransactionId: bankId,
     vendorCode,
-    amountAbs: Math.abs(Number(params.amountAbs) || 0),
+    amountAbs,
     transDate: params.transDate,
-    memo: memoText ? `통장 지급: ${memoText.slice(0, 200)}` : '통장 지급',
+    memo: paymentMemo,
   })
 }
 

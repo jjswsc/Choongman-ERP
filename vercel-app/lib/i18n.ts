@@ -2863,7 +2863,7 @@ export const i18n = {
     payFilterUnpaidOnly: '미지급만',
     payFilterUnpaidOnlyEmpty: '미지급만 필터 적용 시 해당하는 내역이 없습니다.',
     payLedgerHint:
-      '※ 매입채무는 입고(매입 관리) 또는 지출 발생등록 시 발생하고, 실제 지급은 「지출관리」에서 통장·패티 연결(지급예정 집행)할 때만 「지급」 행으로 차감됩니다. 통장에서 「매입 대금」으로만 분류하면 미지급에 반영되지 않습니다. 매입 대금 행의 원천세는 지급 금액(실이체)과 따로 빠져 거래처 잔액을 줄이고 원천세 원장에 남습니다. 입고 행은 같은 통장의 지급과 원천세를 합쳐 입고 금액과 같으면 지급으로 표시됩니다. 인보이스 열은 ภ.พ.30(부가세) 참고용이며 지급 여부와 무관합니다.',
+      '※ 매입채무는 입고(매입 관리) 또는 지출 발생등록 시 발생합니다. 통장에서 「매입 대금」으로 저장하고 거래처를 고르면 그 거래처 미지급에서 지급으로 차감됩니다. 입고 건과 짝을 맞추려면 「지출관리 연결」을 사용하세요. 매입 대금 행의 원천세는 지급 금액(실이체)과 따로 빠져 거래처 잔액을 줄이고 원천세 원장에 남습니다. 입고 행은 같은 통장의 지급과 원천세를 합쳐 입고 금액과 같으면 지급으로 표시됩니다. 인보이스 열은 ภ.พ.30(부가세) 참고용이며 지급 여부와 무관합니다.',
     payColInvoiceVat: '인보이스(부가세)',
     purchasePaymentViaExpenseOnly:
       '지출 관련 통장 출금은 분류만 저장됩니다. 조회 탭 「지출관리 연결」로 지급예정·지출등록과 연결한 뒤 회계 처리가 완료됩니다.',
@@ -11282,7 +11282,7 @@ Only matters the employee must handle personally on a working day:
     payFilterUnpaidOnly: 'Unpaid only',
     payFilterUnpaidOnlyEmpty: 'No items when unpaid-only filter is applied.',
     payLedgerHint:
-      '※ Payables accrue on inbound (purchase) or expense accruals; “Payment” rows appear only when you link bank/petty via Expense Management (payment run). Classifying a bank withdrawal as purchase_payment alone does not update payables. WHT on a purchase-payment row is separate from the bank transfer: it reduces the vendor balance and stays on the withholding ledger. An inbound line shows Paid when the bank transfer plus withholding on that same payment equals the invoice, or the same-day invoices together. The invoice column is for VAT (PP30) only—not payment status.',
+      '※ Payables accrue on inbound (purchase) or expense accruals. Saving a bank withdrawal as purchase payment and choosing a vendor posts a payment that reduces that vendor balance. Use Expense Management link to pair the payment with a specific inbound. WHT on a purchase-payment row is separate from the bank transfer: it reduces the vendor balance and stays on the withholding ledger. An inbound line shows Paid when the bank transfer plus withholding on that same payment equals the invoice, or the same-day invoices together. The invoice column is for VAT (PP30) only—not payment status.',
     payColInvoiceVat: 'Invoice (VAT)',
     purchasePaymentViaExpenseOnly:
       'Expense-related bank withdrawals are classified only on save. Open the Query tab and use “Link expense mgmt” to connect a payment plan or expense register before accounting is posted.',

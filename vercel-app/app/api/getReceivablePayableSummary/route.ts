@@ -16,6 +16,7 @@ import {
   scopePayableLedgerRows,
 } from '@/lib/payable-attributed-store'
 import { groupReceivableRowsByStore, scopeReceivableLedger } from '@/lib/receivable-ledger-scope'
+import { ensurePurchasePaymentPayablesBackfilled } from '@/lib/payable-bank-backfill-server'
 import { resolveSaasTenantScope, type SaasTenantScope } from '@/lib/saas-tenant-scope'
 
 function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
@@ -64,6 +65,7 @@ async function getPayableSummary(params: {
   tenantScope: SaasTenantScope
 }): Promise<{ list: { vendorCode: string; balance: number; count: number }[]; totalAmount: number }> {
   const { vendorFilter, endStr, storeFilter } = params
+  await ensurePurchasePaymentPayablesBackfilled(params.tenantScope)
   const ledgerRows = await filterPurchasePayableLedgerRowsAsync(
     await loadPayableTransactionsToEnd({
       vendorFilter: vendorFilter || undefined,

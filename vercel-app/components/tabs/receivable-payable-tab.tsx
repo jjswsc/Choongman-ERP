@@ -351,7 +351,7 @@ export function ReceivablePayableTab() {
   React.useEffect(() => {
     setTabUi(tab)
   }, [tab])
-  // 미수금: 매출처만 (매장은 미수금 없음 - 본사가 매출처에게 받을 돈)
+  // 미수금: 매출처. 그 매장이 직접 청구한 채권이 있으면 그 잔액, 없으면 본사→매출처 청구.
   const [salesOutletFilter, setSalesOutletFilter] = React.useState("All")
   const [salesVendors, setSalesVendors] = React.useState<{ code: string; name: string }[]>([])
   const [salesOutletSearch, setSalesOutletSearch] = React.useState("")

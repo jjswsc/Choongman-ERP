@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import { syncPayableLedgerAfterBankWithdrawCategoryChange } from '@/lib/receivable-payable'
 import { syncExpenseAccrualInputVatLedger } from '@/lib/expense-input-vat-ledger'
 import { syncInvoiceBackedBankInputVatLedgerForBankId } from '@/lib/invoice-backed-input-vat-ledger'
 import { updateVatLedgerEntryEvidence } from '@/lib/vat-ledger-invoice-evidence'
@@ -26,6 +27,11 @@ export async function POST(request: NextRequest) {
     const existing = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTxId}`, { limit: 1 })) as {
       id?: number
       category?: string
+      trans_type?: string
+      trans_date?: string
+      amount?: number
+      memo?: string | null
+      vendor_code?: string | null
       purchase_order_id?: number
       invoice_received?: boolean | null
       invoice_no?: string | null
@@ -53,6 +59,25 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpdate('bank_transactions', bankTxId, patch)
+
+    const bankCategory = String(existing[0].category || '').toLowerCase()
+    const vendorCode = String(existing[0].vendor_code || '').trim()
+    if (
+      invoiceReceived === true &&
+      String(existing[0].trans_type || '').toLowerCase() === 'withdraw' &&
+      bankCategory === 'purchase_payment' &&
+      vendorCode
+    ) {
+      await syncPayableLedgerAfterBankWithdrawCategoryChange({
+        bankTransactionId: bankTxId,
+        prevCategory: bankCategory,
+        nextCategory: bankCategory,
+        vendorCode,
+        amountAbs: Math.abs(Number(existing[0].amount) || 0),
+        transDate: String(existing[0].trans_date || '').slice(0, 10),
+        bankMemo: String(existing[0].memo || ''),
+      })
+    }
 
     // 연동: purchase_order_id가 있으면 발주서 인보이스도 동기화
     const poIdRaw = patch.purchase_order_id !== undefined ? patch.purchase_order_id : existing[0].purchase_order_id

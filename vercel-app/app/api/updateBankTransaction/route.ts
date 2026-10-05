@@ -277,7 +277,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 매입 지급(미지급): 지출관리 연동 Payment만 거래처 동기화. purchase_payment 분류만으로는 Payment 미생성.
+    // 매입 지급(미지급): 매입대금+거래처면 Payment를 만들거나 갱신. 지출관리에 묶인 행이 있으면 그 행만 갱신.
     if (transType === 'withdraw') {
       const bankMemo = String(existing[0].memo || '').trim()
       await syncPayableLedgerAfterBankWithdrawCategoryChange({

@@ -44,4 +44,21 @@ describe('filterReceivableRows', () => {
     expect(ekkamai.map((r) => r.store_name)).toEqual(['CM Ekkamai'])
     expect(union.map((r) => r.store_name)).toEqual(['CM Union Mall'])
   })
+
+  it('uses the store as creditor when that store has issued its own receivables', () => {
+    const vendorMaps = buildReceivableVendorMapsFromRows([
+      { code: '1043', name: 'CM Ekkamai', sales_outlet: 'CM Ekkamai', gps_name: '' },
+    ])
+    const withIssued: ReceivableTransactionRow[] = [
+      { id: 1, store_name: 'CM Ekkamai', amount: 26000, ref_type: 'Order' },
+      { id: 2, store_name: 'CM The Street', creditor_store: 'CM Ekkamai', amount: 500, ref_type: 'AccountingPO' },
+    ]
+    const filtered = filterReceivableRows(withIssued, {
+      storeFilter: '1043',
+      vendorMaps,
+      attributionMaps: emptyAttribution,
+      filterByVendorLink: true,
+    })
+    expect(filtered.map((r) => r.id)).toEqual([2])
+  })
 })

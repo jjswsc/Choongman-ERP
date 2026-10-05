@@ -34,6 +34,7 @@ import {
   applyBankAccountMetaToReceivableGroups,
   collectBankTransactionIdsFromReceivableGroups,
 } from '@/lib/receivable-unallocated-bank'
+import { ensurePurchasePaymentPayablesBackfilled } from '@/lib/payable-bank-backfill-server'
 import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 
 function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
@@ -87,6 +88,7 @@ export async function GET(request: NextRequest) {
 
   try {
     if (type === 'payable') {
+      await ensurePurchasePaymentPayablesBackfilled(tenantScope)
       const ledgerRows = await filterPurchasePayableLedgerRowsAsync(
         await loadPayableTransactionsToEnd({
           vendorFilter: vendorFilter || undefined,

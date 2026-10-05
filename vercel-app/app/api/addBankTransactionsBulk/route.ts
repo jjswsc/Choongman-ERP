@@ -11,7 +11,7 @@ import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guar
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
-import { upsertReceivableFromBankReceive } from '@/lib/receivable-payable'
+import { syncPayableLedgerAfterBankWithdrawCategoryChange, upsertReceivableFromBankReceive } from '@/lib/receivable-payable'
 import { syncBorrowingFromBankDeposit } from '@/lib/borrowing-ledger'
 import { bankDepositSavedCategories, isBankDepositWithoutChannelGl } from '@/lib/bank-import-deposit-category'
 import {
@@ -391,7 +391,17 @@ export async function POST(request: NextRequest) {
           storeName: store || null,
         })
       }
-      // purchase_payment: 분류만 저장. 미지급 Payment는 지출관리 연결 시에만 생성.
+      if (bankId && transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) {
+        await syncPayableLedgerAfterBankWithdrawCategoryChange({
+          bankTransactionId: bankId,
+          prevCategory: '',
+          nextCategory: 'purchase_payment',
+          vendorCode,
+          amountAbs: Math.abs(amount),
+          transDate,
+          bankMemo: memo || '',
+        })
+      }
 
       try {
         if (transType === 'deposit') {

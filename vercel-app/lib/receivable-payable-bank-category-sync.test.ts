@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { resolvePayableSyncAfterBankCategoryChange } from './receivable-payable'
 
 describe('resolvePayableSyncAfterBankCategoryChange', () => {
-  it('does not create payable when classifying as purchase_payment alone', () => {
+  it('creates a payable payment when classifying as purchase_payment with a vendor', () => {
     expect(
       resolvePayableSyncAfterBankCategoryChange({
         prevCategory: 'expense',
@@ -10,10 +10,10 @@ describe('resolvePayableSyncAfterBankCategoryChange', () => {
         hasLinkedPayment: false,
         vendorCode: '1020',
       })
-    ).toEqual({ deleteStandalonePayment: true, syncExistingPayment: false })
+    ).toEqual({ deleteStandalonePayment: false, syncExistingPayment: false, createStandalonePayment: true })
   })
 
-  it('removes standalone payable when leaving or staying on purchase_payment', () => {
+  it('removes standalone payable only when leaving purchase_payment', () => {
     expect(
       resolvePayableSyncAfterBankCategoryChange({
         prevCategory: 'purchase_payment',
@@ -21,7 +21,7 @@ describe('resolvePayableSyncAfterBankCategoryChange', () => {
         hasLinkedPayment: false,
         vendorCode: '1020',
       })
-    ).toEqual({ deleteStandalonePayment: true, syncExistingPayment: false })
+    ).toEqual({ deleteStandalonePayment: true, syncExistingPayment: false, createStandalonePayment: false })
 
     expect(
       resolvePayableSyncAfterBankCategoryChange({
@@ -30,7 +30,7 @@ describe('resolvePayableSyncAfterBankCategoryChange', () => {
         hasLinkedPayment: false,
         vendorCode: '1020',
       })
-    ).toEqual({ deleteStandalonePayment: true, syncExistingPayment: false })
+    ).toEqual({ deleteStandalonePayment: false, syncExistingPayment: false, createStandalonePayment: true })
   })
 
   it('syncs existing expense-linked payment when vendor present', () => {
@@ -41,7 +41,7 @@ describe('resolvePayableSyncAfterBankCategoryChange', () => {
         hasLinkedPayment: true,
         vendorCode: '1020',
       })
-    ).toEqual({ deleteStandalonePayment: true, syncExistingPayment: true })
+    ).toEqual({ deleteStandalonePayment: false, syncExistingPayment: true, createStandalonePayment: false })
   })
 
   it('skips sync without vendor', () => {
@@ -52,7 +52,7 @@ describe('resolvePayableSyncAfterBankCategoryChange', () => {
         hasLinkedPayment: true,
         vendorCode: '',
       })
-    ).toEqual({ deleteStandalonePayment: true, syncExistingPayment: false })
+    ).toEqual({ deleteStandalonePayment: false, syncExistingPayment: false, createStandalonePayment: false })
   })
 
   it('does not delete standalone when unrelated category change without purchase_payment', () => {
@@ -63,6 +63,6 @@ describe('resolvePayableSyncAfterBankCategoryChange', () => {
         hasLinkedPayment: true,
         vendorCode: '1020',
       })
-    ).toEqual({ deleteStandalonePayment: false, syncExistingPayment: true })
+    ).toEqual({ deleteStandalonePayment: false, syncExistingPayment: true, createStandalonePayment: false })
   })
 })

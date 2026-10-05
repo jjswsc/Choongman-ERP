@@ -93,6 +93,18 @@ export function matchesReceivableStoreByVendorLink(
   return aliasesByCode.has(storeNorm)
 }
 
+function matchesReceivableParty(
+  partyName: string | null | undefined,
+  storeFilter: string,
+  vendorMaps: ReceivableVendorMaps,
+  filterByVendorLink: boolean
+): boolean {
+  if (matchesReceivableStoreNorm(partyName, storeFilter)) return true
+  return filterByVendorLink
+    ? matchesReceivableStoreByVendorLink(partyName, storeFilter, vendorMaps)
+    : false
+}
+
 export function filterReceivableRows(
   rows: ReceivableTransactionRow[],
   params: {
@@ -108,13 +120,26 @@ export function filterReceivableRows(
     return rows.filter((r) => receivableRowVisibleToStoreManager(r, storeManagerScope))
   }
   if (!storeFilter?.trim() || isAllFilterToken(storeFilter)) return rows
-  return rows.filter((r) => {
-    const resolvedStore = resolveReceivableAttributedStore(r, attributionMaps)
-    if (matchesReceivableStoreNorm(resolvedStore, storeFilter)) return true
-    return filterByVendorLink
-      ? matchesReceivableStoreByVendorLink(resolvedStore, storeFilter, vendorMaps)
-      : false
+
+  const debtorRows = rows.filter((r) =>
+    matchesReceivableParty(
+      resolveReceivableAttributedStore(r, attributionMaps),
+      storeFilter,
+      vendorMaps,
+      filterByVendorLink
+    )
+  )
+  if (!filterByVendorLink) return debtorRows
+
+  // 매출처를 고르면, 그 매장이 청구 주체인 미수(가진 채권)가 있을 때 그것만 보여 준다.
+  // 없으면 본사→그 매출처 청구(채무자 store_name)로 떨어진다.
+  const creditorRows = rows.filter((r) => {
+    const creditor = String(r.creditor_store ?? '').trim()
+    if (!creditor) return false
+    return matchesReceivableParty(creditor, storeFilter, vendorMaps, true)
   })
+  if (creditorRows.length > 0) return creditorRows
+  return debtorRows
 }
 
 export function receivableRowsOnOrAfterStart(
