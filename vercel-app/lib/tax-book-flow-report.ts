@@ -24,6 +24,94 @@ export type TaxBookFlowReportMeta = {
   asOfLabel: string
   periodLabel?: string
   unitLabel?: string
+  /** UI 언어 — 리포트 제목·헤더 로케일 */
+  lang?: string
+}
+
+function flowCopy(lang: string | undefined) {
+  const l = lang || 'en'
+  if (l === 'ko') {
+    return {
+      unit: '단위: 바트',
+      trial: '시산표',
+      income: '세무 손익계산서',
+      balance: '세무 재무상태표',
+      code: '계정코드',
+      name: '계정명',
+      item: '항목',
+      debit: '차변',
+      credit: '대변',
+      amount: '금액',
+      total: '합계',
+      revenue: '수익',
+      expenses: '비용',
+      revenueTotal: '수익 합계',
+      expenseTotal: '비용 합계',
+      netIncome: '순이익(손실)',
+      assets: '자산',
+      liabilities: '부채',
+      equity: '자본',
+      unclosed: '미마감 순이익(손실)',
+      equityPlusNi: '자본+순이익 합계',
+      le: '부채+자본',
+      balanced: '재무상태표 차대가 맞습니다',
+      unbalanced: '재무상태표 차대가 맞지 않습니다',
+    }
+  }
+  if (l === 'th') {
+    return {
+      unit: 'หน่วย: บาท',
+      trial: 'งบทดลอง',
+      income: 'งบกำไรขาดทุน (ภาษี)',
+      balance: 'งบฐานะการเงิน (ภาษี)',
+      code: 'รหัสบัญชี',
+      name: 'ชื่อบัญชี',
+      item: 'รายการ',
+      debit: 'เดบิต',
+      credit: 'เครดิต',
+      amount: 'จำนวนเงิน',
+      total: 'รวม',
+      revenue: 'รายได้',
+      expenses: 'ค่าใช้จ่าย',
+      revenueTotal: 'รวมรายได้',
+      expenseTotal: 'รวมค่าใช้จ่าย',
+      netIncome: 'กำไร(ขาดทุน)สุทธิ',
+      assets: 'สินทรัพย์',
+      liabilities: 'หนี้สิน',
+      equity: 'ส่วนของเจ้าของ',
+      unclosed: 'กำไร(ขาดทุน)สุทธิที่ยังไม่ปิด',
+      equityPlusNi: 'รวมส่วนของเจ้าของ+กำไร',
+      le: 'หนี้สิน+ทุน',
+      balanced: 'งบดุลลงตัว',
+      unbalanced: 'งบดุลยังไม่ลงตัว',
+    }
+  }
+  return {
+    unit: 'Unit: THB',
+    trial: 'Trial Balance',
+    income: 'Tax Income Statement',
+    balance: 'Tax Balance Sheet',
+    code: 'Account',
+    name: 'Account name',
+    item: 'Item',
+    debit: 'Debit',
+    credit: 'Credit',
+    amount: 'Amount',
+    total: 'Total',
+    revenue: 'Revenue',
+    expenses: 'Expenses',
+    revenueTotal: 'Total revenue',
+    expenseTotal: 'Total expenses',
+    netIncome: 'Net income (loss)',
+    assets: 'Assets',
+    liabilities: 'Liabilities',
+    equity: 'Equity',
+    unclosed: 'Unclosed net income (loss)',
+    equityPlusNi: 'Equity + net income',
+    le: 'Liabilities + equity',
+    balanced: 'Balanced',
+    unbalanced: 'Unbalanced',
+  }
 }
 
 /** 화면·인쇄용 CSS (플로우 리포트 느낌: 회사명·제목·표) */
@@ -50,7 +138,8 @@ export function taxBookFlowReportScreenCss(): string {
 }
 
 function headerBlock(meta: TaxBookFlowReportMeta, title: string): string {
-  const unit = meta.unitLabel || 'หน่วย:บาท / Unit: THB'
+  const copy = flowCopy(meta.lang)
+  const unit = meta.unitLabel || copy.unit
   return `<div class="tb-flow-company">${esc(meta.companyName)}</div>
 <div class="tb-flow-title">${esc(title)}</div>
 <div class="tb-flow-meta">${esc(meta.asOfLabel)}${meta.periodLabel ? ` · ${esc(meta.periodLabel)}` : ''}<br/>${esc(unit)}</div>`
@@ -61,6 +150,7 @@ export function buildFlowTrialBalanceHtml(
   rows: TrialBalanceRow[],
   totals: { debit: number; credit: number }
 ): string {
+  const copy = flowCopy(meta.lang)
   const body = rows
     .map(
       (r) =>
@@ -68,15 +158,16 @@ export function buildFlowTrialBalanceHtml(
     )
     .join('')
   return `<div class="tb-flow">
-${headerBlock(meta, 'งบทดลอง / Trial Balance')}
+${headerBlock(meta, copy.trial)}
 <table>
-<thead><tr><th>รหัสบัญชี<br/>Account</th><th>ชื่อบัญชี<br/>Account name</th><th>เดบิต<br/>Debit</th><th>เครดิต<br/>Credit</th></tr></thead>
+<thead><tr><th>${esc(copy.code)}</th><th>${esc(copy.name)}</th><th>${esc(copy.debit)}</th><th>${esc(copy.credit)}</th></tr></thead>
 <tbody>${body}
-<tr class="total"><td colspan="2">รวม / Total</td><td class="num">${money(totals.debit)}</td><td class="num">${money(totals.credit)}</td></tr>
+<tr class="total"><td colspan="2">${esc(copy.total)}</td><td class="num">${money(totals.debit)}</td><td class="num">${money(totals.credit)}</td></tr>
 </tbody></table></div>`
 }
 
 export function buildFlowIncomeStatementHtml(meta: TaxBookFlowReportMeta, st: TaxBookStatements): string {
+  const copy = flowCopy(meta.lang)
   const revRows = st.incomeLines
     .filter((l) => l.section === 'revenue')
     .map(
@@ -92,21 +183,22 @@ export function buildFlowIncomeStatementHtml(meta: TaxBookFlowReportMeta, st: Ta
     )
     .join('')
   return `<div class="tb-flow">
-${headerBlock(meta, 'งบกำไรขาดทุน / Income Statement')}
+${headerBlock(meta, copy.income)}
 <table>
-<thead><tr><th>รหัสบัญชี</th><th>รายการ</th><th>จำนวนเงิน</th></tr></thead>
+<thead><tr><th>${esc(copy.code)}</th><th>${esc(copy.item)}</th><th>${esc(copy.amount)}</th></tr></thead>
 <tbody>
-<tr class="section"><td colspan="3">รายได้ / Revenue</td></tr>
+<tr class="section"><td colspan="3">${esc(copy.revenue)}</td></tr>
 ${revRows || `<tr><td colspan="3">—</td></tr>`}
-<tr class="total"><td colspan="2">รวมรายได้</td><td class="num">${money(st.revenue)}</td></tr>
-<tr class="section"><td colspan="3">ค่าใช้จ่าย / Expenses</td></tr>
+<tr class="total"><td colspan="2">${esc(copy.revenueTotal)}</td><td class="num">${money(st.revenue)}</td></tr>
+<tr class="section"><td colspan="3">${esc(copy.expenses)}</td></tr>
 ${expRows || `<tr><td colspan="3">—</td></tr>`}
-<tr class="total"><td colspan="2">รวมค่าใช้จ่าย</td><td class="num">${money(st.expense)}</td></tr>
-<tr class="total"><td colspan="2">กำไร(ขาดทุน)สุทธิ / Net income</td><td class="num">${money(st.netIncome)}</td></tr>
+<tr class="total"><td colspan="2">${esc(copy.expenseTotal)}</td><td class="num">${money(st.expense)}</td></tr>
+<tr class="total"><td colspan="2">${esc(copy.netIncome)}</td><td class="num">${money(st.netIncome)}</td></tr>
 </tbody></table></div>`
 }
 
 export function buildFlowBalanceSheetHtml(meta: TaxBookFlowReportMeta, st: TaxBookStatements): string {
+  const copy = flowCopy(meta.lang)
   const block = (section: 'asset' | 'liability' | 'equity', title: string) => {
     const rows = st.balanceLines
       .filter((l) => l.section === section)
@@ -119,26 +211,26 @@ export function buildFlowBalanceSheetHtml(meta: TaxBookFlowReportMeta, st: TaxBo
       section === 'asset' ? st.assets : section === 'liability' ? st.liabilities : st.equity
     return `<tr class="section"><td colspan="3">${esc(title)}</td></tr>
 ${rows || `<tr><td colspan="3">—</td></tr>`}
-<tr class="total"><td colspan="2">รวม</td><td class="num">${money(total)}</td></tr>`
+<tr class="total"><td colspan="2">${esc(copy.total)}</td><td class="num">${money(total)}</td></tr>`
   }
   const equityPlusProfit = st.equity + (Math.abs(st.unclosedProfit) > 0.01 ? st.unclosedProfit : 0)
   return `<div class="tb-flow">
-${headerBlock(meta, 'งบฐานะการเงิน / Balance Sheet')}
+${headerBlock(meta, copy.balance)}
 <table>
-<thead><tr><th>รหัสบัญชี</th><th>รายการ</th><th>จำนวนเงิน</th></tr></thead>
+<thead><tr><th>${esc(copy.code)}</th><th>${esc(copy.item)}</th><th>${esc(copy.amount)}</th></tr></thead>
 <tbody>
-${block('asset', 'สินทรัพย์ / Assets')}
-${block('liability', 'หนี้สิน / Liabilities')}
-${block('equity', 'ส่วนของเจ้าของ / Equity')}
+${block('asset', copy.assets)}
+${block('liability', copy.liabilities)}
+${block('equity', copy.equity)}
 ${
   Math.abs(st.unclosedProfit) > 0.01
-    ? `<tr><td></td><td>กำไร(ขาดทุน)สุทธิที่ยังไม่ปิด</td><td class="num">${money(st.unclosedProfit)}</td></tr>
-<tr class="total"><td colspan="2">รวมส่วนของเจ้าของ+กำไร</td><td class="num">${money(equityPlusProfit)}</td></tr>`
+    ? `<tr><td></td><td>${esc(copy.unclosed)}</td><td class="num">${money(st.unclosedProfit)}</td></tr>
+<tr class="total"><td colspan="2">${esc(copy.equityPlusNi)}</td><td class="num">${money(equityPlusProfit)}</td></tr>`
     : ''
 }
-<tr class="total"><td colspan="2">หนี้สิน+ทุน / L+E${Math.abs(st.unclosedProfit) > 0.01 ? '+NI' : ''}</td><td class="num">${money(st.liabilities + equityPlusProfit)}</td></tr>
+<tr class="total"><td colspan="2">${esc(copy.le)}${Math.abs(st.unclosedProfit) > 0.01 ? '+NI' : ''}</td><td class="num">${money(st.liabilities + equityPlusProfit)}</td></tr>
 </tbody></table>
-<p class="tb-flow-meta">${st.balanced ? 'งบดุลลงตัว / Balanced' : 'งบดุลยังไม่ลงตัว / Unbalanced'}</p>
+<p class="tb-flow-meta">${st.balanced ? esc(copy.balanced) : esc(copy.unbalanced)}</p>
 </div>`
 }
 

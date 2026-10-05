@@ -402,6 +402,14 @@ const ACCOUNTING_ADMIN_KEYS = {
   taxBooksColTotal: '',
   taxBooksColDescription: '',
   taxBooksJvListHint: '',
+  taxBooksMemo_vat: '',
+  taxBooksMemo_salesSummary: '',
+  taxBooksMemo_purchaseSummary: '',
+  taxBooksMemo_payroll: '',
+  taxBooksMemo_inventory: '',
+  taxBooksMemo_closing: '',
+  taxBooksMemo_opening: '',
+  taxBooksMemo_adjustment: '',
 } as const
 
 type AccountingAdminKey = keyof typeof ACCOUNTING_ADMIN_KEYS
@@ -824,6 +832,14 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   taxBooksColTotal: '합계',
   taxBooksColDescription: 'Description',
   taxBooksJvListHint: '선택 기간에 생긴 전표만 보입니다(검색 시 부가세·매출·매입·급여 요약 자동 전기). 7/1 기초는 시산·재무상태에서 누적으로 확인합니다.',
+  taxBooksMemo_vat: '월별 세무신고 P.P.30 부가세 반영 ({{ym}})',
+  taxBooksMemo_salesSummary: '신고 매출 공급가 요약 전기 ({{ym}})',
+  taxBooksMemo_purchaseSummary: '신고 매입 공급가 요약 전기 ({{ym}})',
+  taxBooksMemo_payroll: '미지급 급여 반영 ({{ym}})',
+  taxBooksMemo_inventory: '재고 매출원가 반영 ({{ym}})',
+  taxBooksMemo_closing: '수익·비용 결산 분개 ({{ym}})',
+  taxBooksMemo_opening: 'FlowAccount 기초잔액 ({{date}})',
+  taxBooksMemo_adjustment: '조정 일반전표 ({{ym}})',
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
@@ -1233,6 +1249,14 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   taxBooksColTotal: 'Total',
   taxBooksColDescription: 'Description',
   taxBooksJvListHint: 'Shows vouchers posted in the selected period (Search auto-posts VAT/sales/purchase/payroll summaries). July 1 opening balances appear on the trial balance and tax balance sheet.',
+  taxBooksMemo_vat: 'Record VAT from Monthly Tax Filing P.P. 30 for the period of {{ym}}',
+  taxBooksMemo_salesSummary: 'Record sales base summary from tax filing for the period of {{ym}}',
+  taxBooksMemo_purchaseSummary: 'Record purchase base summary from tax filing for the period of {{ym}}',
+  taxBooksMemo_payroll: 'Record accrued payroll for the period of {{ym}}',
+  taxBooksMemo_inventory: 'Record inventory COGS for the period of {{ym}}',
+  taxBooksMemo_closing: 'Closing entries — Revenue and Expenses for the period of {{ym}}',
+  taxBooksMemo_opening: 'Opening balances from FlowAccount as at {{date}}',
+  taxBooksMemo_adjustment: 'Adjusting journal entry for the period of {{ym}}',
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
@@ -1642,6 +1666,14 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   taxBooksColTotal: 'ยอดรวม',
   taxBooksColDescription: 'Description',
   taxBooksJvListHint: 'แสดงใบสำคัญที่เกิดในช่วงที่เลือก (ค้นหาแล้วลงสรุป VAT/ขาย/ซื้อ/เงินเดือนอัตโนมัติ) ยอดยกมา 1 ก.ค. ดูที่งบทดลองและงบดุลภาษีครับ',
+  taxBooksMemo_vat: 'ลง VAT จากแบบ ภ.พ.30 ประจำเดือน สำหรับงวด {{ym}}',
+  taxBooksMemo_salesSummary: 'ลงสรุปฐานขายจากเอกสารยื่น สำหรับงวด {{ym}}',
+  taxBooksMemo_purchaseSummary: 'ลงสรุปฐานซื้อจากเอกสารยื่น สำหรับงวด {{ym}}',
+  taxBooksMemo_payroll: 'ลงเงินเดือนค้างจ่าย สำหรับงวด {{ym}}',
+  taxBooksMemo_inventory: 'ลงต้นทุนสินค้าคงเหลือ สำหรับงวด {{ym}}',
+  taxBooksMemo_closing: 'ปิดบัญชีรายได้และค่าใช้จ่าย สำหรับงวด {{ym}}',
+  taxBooksMemo_opening: 'ยอดยกมาจาก FlowAccount ณ วันที่ {{date}}',
+  taxBooksMemo_adjustment: 'ใบสำคัญปรับปรุง สำหรับงวด {{ym}}',
 })
 
 export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {

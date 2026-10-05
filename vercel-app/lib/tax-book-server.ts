@@ -30,6 +30,7 @@ export type TaxBookLedgerLine = {
   accountingDate: string
   voucherNo: string
   memo: string | null
+  sourceType?: string | null
   debit: number
   credit: number
 }
@@ -207,6 +208,7 @@ export function toTaxBookLedger(
         accountingDate: String(head?.accounting_date || '').slice(0, 10),
         voucherNo: entry?.voucherNo || '',
         memo: ln.memo != null ? String(ln.memo) : head?.memo != null ? String(head.memo) : null,
+        sourceType: head?.source_type != null ? String(head.source_type) : entry?.sourceType || null,
         debit: credit ? 0 : roundTaxAmount(amt),
         credit: credit ? roundTaxAmount(amt) : 0,
       }

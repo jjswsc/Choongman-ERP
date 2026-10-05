@@ -31,6 +31,11 @@ import {
   wrapFlowReportForExcel,
   type TaxBookFlowReportMeta,
 } from "@/lib/tax-book-flow-report"
+import {
+  displayTaxBookAccountName,
+  formatTaxBookMemoDisplay,
+  formatTaxFilingYearMonthLabel,
+} from "@/lib/tax-book-display"
 import { cn } from "@/lib/utils"
 
 type BooksView = "bridge" | "vouchers" | "ledger" | "trial" | "taxIncome" | "taxBalance" | "closing"
@@ -197,7 +202,15 @@ export function TaxFilingBooksTab(props: {
     void load(query)
   }, [query, load])
 
-  const statements = React.useMemo(() => buildTaxBookStatements(entries?.trial || []), [entries?.trial])
+  const localizedTrial = React.useMemo(
+    () =>
+      (entries?.trial || []).map((r) => ({
+        ...r,
+        accountName: displayTaxBookAccountName(lang, r.accountCode, r.accountName),
+      })),
+    [entries?.trial, lang]
+  )
+  const statements = React.useMemo(() => buildTaxBookStatements(localizedTrial), [localizedTrial])
 
   const sourceTypes = React.useMemo(() => {
     const set = new Set<string>()
@@ -339,15 +352,26 @@ export function TaxFilingBooksTab(props: {
         : scopeLabel)
     const from = query?.from || props.fromMonth
     const to = query?.to || props.toMonth
+    const fromLabel = formatTaxFilingYearMonthLabel(from, lang)
+    const toLabel = formatTaxFilingYearMonthLabel(to, lang)
     return {
       companyName: company,
+      lang,
       asOfLabel:
         from === to
-          ? `As at / สิ้นสุด ณ ${from}-01 ~ month end`
-          : `Period ${from} ~ ${to}`,
-      periodLabel: from === to ? `Year-month ${from}` : undefined,
+          ? lang === "th"
+            ? `สิ้นสุด ณ ${toLabel}`
+            : lang === "ko"
+              ? `${toLabel} 말`
+              : `As at ${to}`
+          : lang === "th"
+            ? `ช่วง ${fromLabel} – ${toLabel}`
+            : lang === "ko"
+              ? `${fromLabel} ~ ${toLabel}`
+              : `Period ${from} ~ ${to}`,
+      periodLabel: from === to ? fromLabel : `${fromLabel} ~ ${toLabel}`,
     }
-  }, [bridge?.taxEntityCode, scopeLabel, query?.from, query?.to, props.fromMonth, props.toMonth])
+  }, [bridge?.taxEntityCode, scopeLabel, query?.from, query?.to, props.fromMonth, props.toMonth, lang])
 
   const stepLabel = (id: TaxCloseChecklistStepId): string => t(`taxBooksCheck_${id}`)
 
@@ -355,7 +379,7 @@ export function TaxFilingBooksTab(props: {
     let inner = ""
     let filename = ""
     if (kind === "trial") {
-      inner = buildFlowTrialBalanceHtml(reportMeta, entries?.trial || [], {
+      inner = buildFlowTrialBalanceHtml(reportMeta, localizedTrial, {
         debit: entries?.totalDebit || 0,
         credit: entries?.totalCredit || 0,
       })
@@ -373,7 +397,7 @@ export function TaxFilingBooksTab(props: {
   const printFlow = (kind: "trial" | "income" | "balance") => {
     let inner = ""
     if (kind === "trial") {
-      inner = buildFlowTrialBalanceHtml(reportMeta, entries?.trial || [], {
+      inner = buildFlowTrialBalanceHtml(reportMeta, localizedTrial, {
         debit: entries?.totalDebit || 0,
         credit: entries?.totalCredit || 0,
       })
@@ -487,7 +511,10 @@ export function TaxFilingBooksTab(props: {
               date: v.accountingDate,
               docNo: v.voucherNo,
               kind: t(`taxBooksKind_${v.voucherKind}`) || v.voucherKind,
-              description: v.memo || "",
+              description: formatTaxBookMemoDisplay(t, v.memo, {
+                sourceType: v.sourceType,
+                accountingDate: v.accountingDate,
+              }),
               total: money(Math.max(Number(v.debit) || 0, Number(v.credit) || 0)),
             }))}
           />
@@ -515,10 +542,13 @@ export function TaxFilingBooksTab(props: {
             empty={t("taxBooksNoRows")}
             rows={(entries?.ledger || []).map((ln) => [
               ln.accountCode,
-              ln.accountName || "",
+              displayTaxBookAccountName(lang, ln.accountCode, ln.accountName),
               ln.accountingDate,
               ln.voucherNo,
-              ln.memo || "",
+              formatTaxBookMemoDisplay(t, ln.memo, {
+                sourceType: ln.sourceType,
+                accountingDate: ln.accountingDate,
+              }),
               money(ln.debit),
               money(ln.credit),
             ])}
@@ -549,7 +579,7 @@ export function TaxFilingBooksTab(props: {
           <style dangerouslySetInnerHTML={{ __html: taxBookFlowReportScreenCss() }} />
           <div
             dangerouslySetInnerHTML={{
-              __html: buildFlowTrialBalanceHtml(reportMeta, entries.trial, {
+              __html: buildFlowTrialBalanceHtml(reportMeta, localizedTrial, {
                 debit: entries.totalDebit || 0,
                 credit: entries.totalCredit || 0,
               }),
@@ -559,7 +589,7 @@ export function TaxFilingBooksTab(props: {
             <p className="mb-2 text-xs font-medium text-muted-foreground">{t("taxBooksLedgerFilter")}</p>
             <ClickableTrialTable
               empty={t("taxBooksNoRows")}
-              rows={entries.trial}
+              rows={localizedTrial}
               headers={[t("taxBooksAccount"), t("taxBooksColItem"), t("taxBooksDebit"), t("taxBooksCredit")]}
               onAccountClick={drillToLedger}
             />

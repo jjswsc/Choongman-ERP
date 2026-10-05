@@ -17,9 +17,16 @@ import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { apiFetch, useStoreList } from "@/lib/api-client"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
+import { formatTaxFilingYearMonthLabel } from "@/lib/tax-book-display"
 import { isManagerOrFranchiseeRole, isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { isHeadOfficeLikeStoreName } from "@/lib/internal-outbound"
 import { TaxFilingVatTab } from "@/components/admin/tax-filing/tab-vat"
@@ -74,7 +81,8 @@ function useFilingTabFilters(
   managerStore: string,
   storeOptionLabel: (code: string) => string,
   t: (key: string) => string,
-  tSearch: string
+  tSearch: string,
+  lang: string
 ) {
   const defaultYm = React.useCallback(() => getBangkokRecentYearMonths(1)[0], [])
   const defaultStore = React.useCallback(
@@ -112,6 +120,44 @@ function useFilingTabFilters(
     }
   }, [isManager, managerStore])
 
+  const yearMonthOptions = React.useMemo(
+    () =>
+      getBangkokRecentYearMonths(60).map((value) => ({
+        value,
+        label: formatTaxFilingYearMonthLabel(value, lang),
+      })),
+    [lang]
+  )
+
+  const MonthSelect = React.useCallback(
+    ({
+      label,
+      value,
+      onChange,
+    }: {
+      label: string
+      value: string
+      onChange: (v: string) => void
+    }) => (
+      <div>
+        <div className="text-xs text-muted-foreground mb-1">{label}</div>
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="h-9 w-[160px]">
+            <SelectValue>{formatTaxFilingYearMonthLabel(value, lang)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {yearMonthOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    ),
+    [lang, yearMonthOptions]
+  )
+
   const FilingFiltersCard = React.useCallback(
     ({
       tabKey,
@@ -143,35 +189,29 @@ function useFilingTabFilters(
           <div className="flex flex-wrap gap-3 items-end">
             {onFromMonthChange && onToMonthChange ? (
               <>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("taxBooksFromMonth")}</div>
-                  <Input
-                    type="month"
-                    className="h-9 w-[160px]"
-                    value={fromMonth || yearMonth}
-                    onChange={(e) => onFromMonthChange(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("taxBooksToMonth")}</div>
-                  <Input
-                    type="month"
-                    className="h-9 w-[160px]"
-                    value={toMonth || yearMonth}
-                    onChange={(e) => onToMonthChange(e.target.value)}
-                  />
-                </div>
+                <MonthSelect
+                  label={t("taxBooksFromMonth")}
+                  value={fromMonth || yearMonth}
+                  onChange={(v) => {
+                    onFromMonthChange(v)
+                    if (toMonth && v > toMonth) onToMonthChange(v)
+                  }}
+                />
+                <MonthSelect
+                  label={t("taxBooksToMonth")}
+                  value={toMonth || yearMonth}
+                  onChange={(v) => {
+                    onToMonthChange(v)
+                    if (fromMonth && v < fromMonth) onFromMonthChange(v)
+                  }}
+                />
               </>
             ) : (
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
-              <Input
-                type="month"
-                className="h-9 w-[160px]"
+              <MonthSelect
+                label={t("accCompYearMonth")}
                 value={yearMonth}
-                onChange={(e) => onYearMonthChange(e.target.value)}
+                onChange={onYearMonthChange}
               />
-            </div>
             )}
             {isOffice ? (
               <TaxEntityStoreScopeFilters
@@ -210,7 +250,17 @@ function useFilingTabFilters(
         </CardContent>
       </Card>
     ),
-    [isOffice, isManager, managerStore, storeOptionLabel, storeOptions, entityOptions, t, tSearch]
+    [
+      MonthSelect,
+      isOffice,
+      isManager,
+      managerStore,
+      storeOptionLabel,
+      storeOptions,
+      entityOptions,
+      t,
+      tSearch,
+    ]
   )
 
   const pick = (f: ReturnType<typeof useYmStoreFilter>): FilingFilterProps => ({
@@ -387,7 +437,8 @@ export function TaxFilingShell() {
     managerStore,
     storeOptionLabel,
     t,
-    t("search")
+    t("search"),
+    lang
   )
 
   const openTaxBooksVouchers = React.useCallback(
