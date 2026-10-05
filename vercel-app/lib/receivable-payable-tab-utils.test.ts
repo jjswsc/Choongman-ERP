@@ -4,6 +4,7 @@ import {
   filterReceivableCustomerOptions,
   isReceivableTaxInvoicePrintableRow,
   formatVendorDisplayLabel,
+  formatReceivableStoreDisplayLabel,
   mergeReceivableCustomerOptions,
   mergeReceivablePayableCumulativeByKey,
   receivablePayableListMatchesTab,
@@ -32,6 +33,34 @@ describe('formatVendorDisplayLabel', () => {
 
   it('falls back to the raw code when the vendor is missing', () => {
     expect(formatVendorDisplayLabel('1041', vendors)).toBe('1041')
+  })
+
+  it('uses API knownName when the client vendor list is incomplete', () => {
+    expect(formatVendorDisplayLabel('1070', vendors, 'Related Party Co.')).toBe(
+      'Related Party Co. (1070)'
+    )
+  })
+})
+
+describe('formatReceivableStoreDisplayLabel', () => {
+  it('replaces bare vendor code store names with vendorName', () => {
+    expect(
+      formatReceivableStoreDisplayLabel({
+        storeName: '1070',
+        vendorCode: '1070',
+        vendorName: 'Related Party Co.',
+      })
+    ).toBe('Related Party Co. (1070)')
+  })
+
+  it('keeps normal store names', () => {
+    expect(
+      formatReceivableStoreDisplayLabel({
+        storeName: 'CM True',
+        vendorCode: '1041',
+        vendorName: 'Jinwon f&b Co.,Ltd.',
+      })
+    ).toBe('CM True')
   })
 })
 

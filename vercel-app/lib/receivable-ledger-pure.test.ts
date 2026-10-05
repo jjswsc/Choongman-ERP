@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildReceivableVendorMapsFromRows,
   filterReceivableRows,
+  groupReceivableRowsByStore,
+  resolveReceivableStoreDisplayName,
   type ReceivableTransactionRow,
 } from './receivable-ledger-pure'
 
@@ -74,5 +76,48 @@ describe('filterReceivableRows', () => {
       filterByVendorLink: true,
     })
     expect(filtered.map((r) => r.id)).toEqual([2])
+  })
+})
+
+describe('resolveReceivableStoreDisplayName', () => {
+  it('maps bare vendor-code store_name to sales outlet / legal name', () => {
+    const vendorMaps = buildReceivableVendorMapsFromRows([
+      {
+        code: '1070',
+        name: 'Related Party Co., Ltd.',
+        sales_outlet: 'CM Related',
+        gps_name: '',
+      },
+    ])
+    expect(resolveReceivableStoreDisplayName('1070', vendorMaps)).toBe('CM Related')
+    expect(vendorMaps.storeToVendor.get('1070')?.name).toBe('Related Party Co., Ltd.')
+  })
+
+  it('keeps human store names unchanged', () => {
+    const vendorMaps = buildReceivableVendorMapsFromRows([
+      { code: '1042', name: 'Silom Co', sales_outlet: 'CM Silom', gps_name: '' },
+    ])
+    expect(resolveReceivableStoreDisplayName('CM Silom', vendorMaps)).toBe('CM Silom')
+  })
+
+  it('groups receivable rows under the human label when store_name is a code', () => {
+    const vendorMaps = buildReceivableVendorMapsFromRows([
+      {
+        code: '1070',
+        name: 'Related Party Co., Ltd.',
+        sales_outlet: '',
+        gps_name: '',
+      },
+    ])
+    const grouped = groupReceivableRowsByStore(
+      [{ id: 1, store_name: '1070', amount: 100, ref_type: 'Opening' }],
+      vendorMaps,
+      emptyAttribution,
+      { '1070': 100 }
+    )
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0].storeName).toBe('Related Party Co., Ltd.')
+    expect(grouped[0].vendorCode).toBe('1070')
+    expect(grouped[0].vendorName).toBe('Related Party Co., Ltd.')
   })
 })

@@ -14,6 +14,7 @@ import {
   groupReceivableRowsByStore,
   receivableRowsOnOrAfterStart,
   resolveReceivableAttributedStore,
+  resolveReceivableStoreDisplayName,
   RECEIVABLE_LEDGER_SELECT,
   type ReceivableAttributionMaps,
   type ReceivableTransactionRow,
@@ -39,6 +40,7 @@ export {
   mergeReceivableSummaryRows,
   receivableRowsOnOrAfterStart,
   resolveReceivableAttributedStore,
+  resolveReceivableStoreDisplayName,
   RECEIVABLE_LEDGER_SELECT,
   type ReceivableAttributionMaps,
   type ReceivableTransactionRow,
@@ -132,8 +134,11 @@ export function buildReceivableListWithCumulative(params: {
   return Array.from(groupKeys)
     .map((groupKey) => {
       const period = periodByKey.get(groupKey)
-      const storeName = period?.storeName || displayNames[groupKey] || groupKey
-      const vendor = vendorMaps.storeToVendor.get(normalizeReceivableStoreKey(storeName))
+      const rawStoreName = period?.storeName || displayNames[groupKey] || groupKey
+      const vendor =
+        vendorMaps.storeToVendor.get(normalizeReceivableStoreKey(rawStoreName)) ||
+        vendorMaps.storeToVendor.get(String(rawStoreName || '').trim().toLowerCase())
+      const storeName = resolveReceivableStoreDisplayName(rawStoreName, vendorMaps)
       return {
         storeName,
         vendorCode: period?.vendorCode ?? vendor?.code,
@@ -190,16 +195,22 @@ export function buildReceivableListForInvoiceFilter(params: {
   const unallocatedByGroup = sumUnallocatedBankReceiveByStoreGroup(params.scopedRows, params.attributionMaps)
 
   return scopedGrouped
-    .map((g) => ({
-      storeName: g.storeName,
-      vendorCode: g.vendorCode,
-      vendorName: g.vendorName,
-      balance: periodByKey.get(g.groupKey)?.balance ?? 0,
-      cumulativeBalance: g.cumulativeBalance,
-      unallocatedBankReceiveTotal: unallocatedByGroup[g.groupKey] ?? 0,
-      unallocatedBankDeposits: listUnallocatedBankReceives(params.scopedRows, params.attributionMaps, g.groupKey),
-      items: g.items,
-    }))
+    .map((g) => {
+      const storeName = resolveReceivableStoreDisplayName(g.storeName, params.vendorMaps)
+      const vendor =
+        params.vendorMaps.storeToVendor.get(normalizeReceivableStoreKey(g.storeName)) ||
+        params.vendorMaps.storeToVendor.get(String(g.storeName || '').trim().toLowerCase())
+      return {
+        storeName,
+        vendorCode: g.vendorCode ?? vendor?.code,
+        vendorName: g.vendorName ?? vendor?.name,
+        balance: periodByKey.get(g.groupKey)?.balance ?? 0,
+        cumulativeBalance: g.cumulativeBalance,
+        unallocatedBankReceiveTotal: unallocatedByGroup[g.groupKey] ?? 0,
+        unallocatedBankDeposits: listUnallocatedBankReceives(params.scopedRows, params.attributionMaps, g.groupKey),
+        items: g.items,
+      }
+    })
     .sort((a, b) => Math.abs(b.cumulativeBalance) - Math.abs(a.cumulativeBalance))
 }
 

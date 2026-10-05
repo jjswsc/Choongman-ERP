@@ -23,10 +23,39 @@ export type ReceivableTransactionRow = {
   bank_transaction_id?: number | null
 }
 
-export type ReceivableVendorEntry = { code: string; name: string }
+export type ReceivableVendorEntry = {
+  code: string
+  /** 법인명(거래처 자막·매칭용) */
+  name: string
+  /** 매장/표시용 — sales_outlet → gps_name → name */
+  label: string
+}
 export type ReceivableVendorMaps = {
   storeToVendor: Map<string, ReceivableVendorEntry>
   vendorCodeToStores: Map<string, Set<string>>
+}
+
+/** store_name이 거래처 코드만 있을 때 사람이 읽는 이름으로 치환 */
+export function resolveReceivableStoreDisplayName(
+  raw: string,
+  vendorMaps: ReceivableVendorMaps
+): string {
+  const store = String(raw || '').trim()
+  if (!store) return ''
+  const vendor =
+    vendorMaps.storeToVendor.get(normalizeReceivableStoreKey(store)) ||
+    vendorMaps.storeToVendor.get(normalizeVendorCode(store))
+  if (!vendor) return store
+  const code = String(vendor.code || '').trim()
+  const storeIsCode =
+    normalizeReceivableStoreKey(store) === normalizeReceivableStoreKey(code) ||
+    store.toLowerCase() === code.toLowerCase()
+  if (!storeIsCode) return store
+  const label = String(vendor.label || vendor.name || '').trim()
+  if (!label) return store
+  if (normalizeReceivableStoreKey(label) === normalizeReceivableStoreKey(code)) return store
+  if (label.toLowerCase() === code.toLowerCase()) return store
+  return label
 }
 
 export type ReceivableAttributionMaps = {
@@ -199,8 +228,11 @@ export function groupReceivableRowsByStore(
     byStore[groupKey].total += Number(r.amount ?? 0)
   }
   return Object.entries(byStore).map(([groupKey, v]) => {
-    const storeName = v.displayName
-    const vendor = vendorMaps.storeToVendor.get(normalizeReceivableStoreKey(storeName))
+    const rawStoreName = v.displayName
+    const vendor =
+      vendorMaps.storeToVendor.get(normalizeReceivableStoreKey(rawStoreName)) ||
+      vendorMaps.storeToVendor.get(normalizeVendorCode(rawStoreName))
+    const storeName = resolveReceivableStoreDisplayName(rawStoreName, vendorMaps)
     return {
       storeName,
       vendorCode: vendor?.code,
@@ -255,12 +287,17 @@ export function buildReceivableVendorMapsFromRows(
   const storeToVendor = new Map<string, ReceivableVendorEntry>()
   const vendorCodeToStores = new Map<string, Set<string>>()
   for (const v of vendors || []) {
-    const code = String(v.code || '').trim().toLowerCase()
-    const name = String(v.name || '').trim() || String(v.code || '').trim()
+    const codeRaw = String(v.code || '').trim()
+    const code = codeRaw.toLowerCase()
+    const legalName = String(v.name || '').trim()
     const gpsName = String(v.gps_name || '').trim()
     const salesOutlet = String(v.sales_outlet || '').trim()
     if (!code) continue
-    const entry = { code, name }
+    const label = salesOutlet || gpsName || legalName || codeRaw
+    const name = legalName || label
+    const entry: ReceivableVendorEntry = { code, name, label }
+    // store_name에 코드만 들어 있는 행도 이름으로 매칭·표시
+    addVendorStoreAlias(storeToVendor, vendorCodeToStores, codeRaw, entry)
     if (salesOutlet) addVendorStoreAlias(storeToVendor, vendorCodeToStores, salesOutlet, entry)
     if (gpsName) addVendorStoreAlias(storeToVendor, vendorCodeToStores, gpsName, entry)
     if (name) addVendorStoreAlias(storeToVendor, vendorCodeToStores, name, entry)

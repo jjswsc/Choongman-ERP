@@ -79,18 +79,38 @@ export function normalizeVendorLookupCode(code: string | undefined | null): stri
   return String(code || "").trim().toLowerCase()
 }
 
-/** 매입처 코드 → 표시명. 코드만 있으면 숫자/코드 그대로. */
+/** 매입처 코드 → 표시명. 목록·API knownName으로 보강. 없으면 코드 그대로. */
 export function formatVendorDisplayLabel(
   vendorCode: string | undefined | null,
-  vendors: Array<{ code?: string; name?: string }>
+  vendors: Array<{ code?: string; name?: string }>,
+  knownName?: string | null
 ): string {
   const raw = String(vendorCode || "").trim()
   if (!raw) return ""
   const key = raw.toLowerCase()
   const matched = vendors.find((x) => String(x.code || "").trim().toLowerCase() === key)
-  const name = String(matched?.name || "").trim()
+  const name = String(matched?.name || "").trim() || String(knownName || "").trim()
   if (!name || name.toLowerCase() === key) return raw
   return `${name} (${raw})`
+}
+
+/** 미수금 매출처 — store_name이 코드만이면 vendorName으로 표시 */
+export function formatReceivableStoreDisplayLabel(params: {
+  storeName?: string | null
+  vendorCode?: string | null
+  vendorName?: string | null
+}): string {
+  const store = String(params.storeName || "").trim()
+  if (!store) return ""
+  const code = String(params.vendorCode || "").trim()
+  const name = String(params.vendorName || "").trim()
+  if (!code || !name) return store
+  const storeIsCode =
+    store.toLowerCase() === code.toLowerCase() ||
+    normalizeVendorLookupCode(store) === normalizeVendorLookupCode(code)
+  if (!storeIsCode) return store
+  if (name.toLowerCase() === code.toLowerCase()) return store
+  return `${name} (${code})`
 }
 
 const RECEIVABLE_LIST_REF_TYPES = new Set(["Order", "ForceOutbound", "AccountingPO", "Receive"])

@@ -42,6 +42,39 @@ export async function createVendorNameResolver(): Promise<(raw: string) => strin
   }
 }
 
+/** 미지급 목록/요약 — type(매입·매출·관련당사자) 무관하게 코드→표시명 */
+export async function loadVendorDisplayNameByCode(): Promise<Map<string, string>> {
+  const rows = (await supabaseSelect('vendors', {
+    select: 'code,name,gps_name',
+    order: 'id.asc',
+    limit: 10000,
+  })) as VendorRow[] | null
+  const out = new Map<string, string>()
+  for (const row of rows || []) {
+    const code = String(row.code || '').trim()
+    if (!code) continue
+    const name = String(row.name || row.gps_name || '').trim()
+    if (!name || name.toLowerCase() === code.toLowerCase()) continue
+    out.set(code.toLowerCase(), name)
+  }
+  return out
+}
+
+export function attachPayableVendorDisplayNames<T extends { vendorCode?: string; vendorName?: string }>(
+  list: T[],
+  nameByCode: Map<string, string>
+): T[] {
+  return (list || []).map((item) => {
+    const code = String(item.vendorCode || '').trim()
+    if (!code) return item
+    const existing = String(item.vendorName || '').trim()
+    if (existing && existing.toLowerCase() !== code.toLowerCase()) return item
+    const name = nameByCode.get(code.toLowerCase())
+    if (!name) return item
+    return { ...item, vendorName: name }
+  })
+}
+
 /** 입고 등 vendorFilter — UI는 거래처명, 일부 API는 코드를 넘김. 둘 다 허용 */
 export function buildVendorFilterAliasesFromRows(
   vendorFilter: string,

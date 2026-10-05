@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildVendorFilterAliasesFromRows } from './vendor-name-normalizer'
+import { attachPayableVendorDisplayNames, buildVendorFilterAliasesFromRows } from './vendor-name-normalizer'
 
 function mockResolver(rows: { code?: string; name?: string }[]) {
   const codeToName = new Map<string, string>()
@@ -37,5 +37,25 @@ describe('buildVendorFilterAliasesFromRows', () => {
   it('falls back to raw filter when vendor is not in master (history-only name)', () => {
     const aliases = buildVendorFilterAliasesFromRows('Legacy Vendor', vendorRows, resolve)
     expect(aliases.has('Legacy Vendor')).toBe(true)
+  })
+})
+
+describe('attachPayableVendorDisplayNames', () => {
+  it('fills vendorName from the master map for bare codes', () => {
+    const nameByCode = new Map([['1070', 'Related Party Co.']])
+    const out = attachPayableVendorDisplayNames(
+      [{ vendorCode: '1070', balance: -100 }],
+      nameByCode
+    )
+    expect(out[0].vendorName).toBe('Related Party Co.')
+  })
+
+  it('keeps an existing non-code vendorName', () => {
+    const nameByCode = new Map([['1070', 'Related Party Co.']])
+    const out = attachPayableVendorDisplayNames(
+      [{ vendorCode: '1070', vendorName: 'Already Set', balance: -100 }],
+      nameByCode
+    )
+    expect(out[0].vendorName).toBe('Already Set')
   })
 })

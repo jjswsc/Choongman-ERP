@@ -106,7 +106,7 @@ import {
 } from "@/lib/manual-balance-transaction"
 import { cn } from "@/lib/utils"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
-import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
+import { getVendorsForPurchase, getVendorsForRelated, getVendorsForSales } from "@/lib/api-client"
 import {
   getReceivablePayableList,
   getReceivablePayableSummary,
@@ -152,6 +152,7 @@ import {
   mergeReceivableCustomerOptions,
   filterReceivableCustomerOptions,
   formatVendorDisplayLabel,
+  formatReceivableStoreDisplayLabel,
   receivablePayableListMatchesTab,
   resolveEffectivePayableStoreFilter,
   isOfficeLikeLabel,
@@ -330,6 +331,7 @@ export function ReceivablePayableTab() {
     [formatStoreLabel, resolveStoreKey]
   )
   const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
+  const [relatedVendors, setRelatedVendors] = React.useState<{ code: string; name: string }[]>([])
 
   const isManager = isManagerOrFranchiseeRole(auth?.role || "")
   const isManagerOnly = isManagerRole(auth?.role || "") // 매장 매니저: 수령 입력 불가
@@ -946,6 +948,9 @@ export function ReceivablePayableTab() {
 
   React.useEffect(() => {
     getVendorsForPurchase().then((rows) => setVendors(rows || []))
+    getVendorsForRelated()
+      .then((rows) => setRelatedVendors(rows || []))
+      .catch(() => setRelatedVendors([]))
   }, [])
 
   // 매출처 목록: vendor code + 표시명 (매장 마스터는 salesOutletOptions에서 합침)
@@ -1691,12 +1696,18 @@ export function ReceivablePayableTab() {
     : []
 
   const vendorDisplayRows = React.useMemo(
-    () => [...vendors, ...salesVendors, ...salesOutletOptions],
-    [vendors, salesVendors, salesOutletOptions]
+    () => [...vendors, ...salesVendors, ...relatedVendors, ...salesOutletOptions],
+    [vendors, salesVendors, relatedVendors, salesOutletOptions]
   )
   const formatVendorDisplay = React.useCallback(
-    (vendorCode?: string) => formatVendorDisplayLabel(vendorCode, vendorDisplayRows),
+    (vendorCode?: string, knownName?: string | null) =>
+      formatVendorDisplayLabel(vendorCode, vendorDisplayRows, knownName),
     [vendorDisplayRows]
+  )
+  const formatReceivableStoreDisplay = React.useCallback(
+    (item: { storeName?: string; vendorCode?: string; vendorName?: string }) =>
+      formatReceivableStoreDisplayLabel(item),
+    []
   )
 
   const formatPayableRefTypeLabel = (refType?: string) => {
@@ -1969,7 +1980,9 @@ export function ReceivablePayableTab() {
     for (const item of listData) {
       const displayItems = filterItemsByUnpaid(item.items, isRec)
       if (displayItems.length === 0) continue
-      const name = isRec ? (item.storeName ?? "") : formatVendorDisplay(item.vendorCode)
+      const name = isRec
+        ? formatReceivableStoreDisplay(item)
+        : formatVendorDisplay(item.vendorCode, item.vendorName)
       const payableStatusById = isRec
         ? new Map<number, "settled" | "open" | "partial" | "standalone">()
         : ledgerAccrualStatusById(
@@ -2135,7 +2148,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
             {listData.map((item, idx) => {
               const displayItems = filterItemsByUnpaid(item.items, isRec)
               if (displayItems.length === 0) return null
-              const name = isRec ? (item.storeName ?? "") : formatVendorDisplay(item.vendorCode)
+              const name = isRec
+                ? formatReceivableStoreDisplay(item)
+                : formatVendorDisplay(item.vendorCode, item.vendorName)
               const key = isRec ? (item.storeName ?? `rec-${idx}`) : (item.vendorCode ?? `pay-${idx}`)
               const payableStatusById = isRec
                 ? new Map<number, "settled" | "open" | "partial" | "standalone">()
@@ -2530,10 +2545,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:ml-2 [&>svg]:shrink-0">
                               <div className={cn(amountGridCols, "flex-1 min-w-0 w-full pr-1")}>
                                   <div className="flex flex-col items-start gap-0.5 min-w-0 text-left pr-2">
-                                    <span className="font-semibold break-words leading-snug">{item.storeName}</span>
-                                    {item.vendorCode && (
+                                    <span className="font-semibold break-words leading-snug">
+                                      {formatReceivableStoreDisplay(item)}
+                                    </span>
+                                    {item.vendorCode &&
+                                      formatReceivableStoreDisplay(item) !==
+                                        formatVendorDisplay(item.vendorCode, item.vendorName) && (
                                       <span className="text-xs text-muted-foreground">
-                                        {t("vendor") || "거래처"}: {item.vendorName === item.vendorCode ? item.vendorCode : `${item.vendorName} (${item.vendorCode})`}
+                                        {t("vendor") || "거래처"}:{" "}
+                                        {formatVendorDisplay(item.vendorCode, item.vendorName)}
                                       </span>
                                     )}
                                     {visibleUnallocatedTotal > 0.009 ? (
@@ -3371,7 +3391,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                             <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:ml-2 [&>svg]:shrink-0">
                               <div className={cn(amountGridCols, "flex-1 min-w-0 w-full pr-1")}>
                                   <div className="flex flex-col items-start gap-0.5 min-w-0 text-left pr-2">
-                                    <span className="font-semibold break-words leading-snug">{formatVendorDisplay(item.vendorCode)}</span>
+                                    <span className="font-semibold break-words leading-snug">
+                                      {formatVendorDisplay(item.vendorCode, item.vendorName)}
+                                    </span>
                                   </div>
                                   <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.salesSum)}</div>
                                   <div className="text-right tabular-nums whitespace-nowrap">{fmtBaht(period.receiveSum)}</div>
@@ -3602,7 +3624,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                                       e.stopPropagation()
                                                       setPayableLinkDialog({
                                                         vendorCode: item.vendorCode || "",
-                                                        vendorLabel: formatVendorDisplay(item.vendorCode),
+                                                        vendorLabel: formatVendorDisplay(item.vendorCode, item.vendorName),
                                                         items: allItems,
                                                         settlementLinks: item.settlementLinks,
                                                         anchorRow: row,

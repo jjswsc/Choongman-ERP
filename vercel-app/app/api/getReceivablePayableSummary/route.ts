@@ -18,6 +18,10 @@ import {
 import { groupReceivableRowsByStore, scopeReceivableLedger } from '@/lib/receivable-ledger-scope'
 import { ensurePurchasePaymentPayablesBackfilled } from '@/lib/payable-bank-backfill-server'
 import { resolveSaasTenantScope, type SaasTenantScope } from '@/lib/saas-tenant-scope'
+import {
+  attachPayableVendorDisplayNames,
+  loadVendorDisplayNameByCode,
+} from '@/lib/vendor-name-normalizer'
 
 function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
   const s = String(storeFilter || '').trim()
@@ -63,7 +67,10 @@ async function getPayableSummary(params: {
   endStr: string
   storeFilter?: string
   tenantScope: SaasTenantScope
-}): Promise<{ list: { vendorCode: string; balance: number; count: number }[]; totalAmount: number }> {
+}): Promise<{
+  list: { vendorCode: string; vendorName?: string; balance: number; count: number }[]
+  totalAmount: number
+}> {
   const { vendorFilter, endStr, storeFilter } = params
   await ensurePurchasePaymentPayablesBackfilled(params.tenantScope)
   const ledgerRows = await filterPurchasePayableLedgerRowsAsync(
@@ -74,7 +81,8 @@ async function getPayableSummary(params: {
     })
   )
   const { scopedRows } = await scopePayableLedgerRows(ledgerRows, storeFilter)
-  const list = aggregatePayableBalancesByVendor(scopedRows)
+  const vendorNames = await loadVendorDisplayNameByCode()
+  const list = attachPayableVendorDisplayNames(aggregatePayableBalancesByVendor(scopedRows), vendorNames)
   const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
   return { list, totalAmount }
 }

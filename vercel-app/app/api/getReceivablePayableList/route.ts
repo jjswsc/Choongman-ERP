@@ -36,6 +36,10 @@ import {
 } from '@/lib/receivable-unallocated-bank'
 import { ensurePurchasePaymentPayablesBackfilled } from '@/lib/payable-bank-backfill-server'
 import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import {
+  attachPayableVendorDisplayNames,
+  loadVendorDisplayNameByCode,
+} from '@/lib/vendor-name-normalizer'
 
 function isReceivableStoreFilterActive(storeFilter: string | undefined | null): boolean {
   const s = String(storeFilter || '').trim()
@@ -206,8 +210,13 @@ export async function GET(request: NextRequest) {
           .map((l) => ({ paymentId: l.payment_id, accrualId: l.accrual_id }))
         return settlementLinks.length > 0 ? { ...item, settlementLinks } : item
       })
+      const vendorNames = await loadVendorDisplayNameByCode()
+      const listWithVendorNames = attachPayableVendorDisplayNames(listWithLinks, vendorNames)
 
-      return NextResponse.json({ type: 'payable', list: listWithLinks, cumulativeByVendor }, { headers })
+      return NextResponse.json(
+        { type: 'payable', list: listWithVendorNames, cumulativeByVendor },
+        { headers }
+      )
     }
 
     // receivable — 종료일까지 단일 집계 후 기간 분리(목록·누적 일치)
