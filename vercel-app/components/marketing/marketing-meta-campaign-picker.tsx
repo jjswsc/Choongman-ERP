@@ -44,7 +44,7 @@ export function MarketingMetaCampaignPicker({
   )
   const years = React.useMemo(() => {
     const set = new Set<number>()
-    for (const o of all) if (o.year != null) set.add(o.year)
+    for (const o of all) for (const y of o.years?.length ? o.years : o.year != null ? [o.year] : []) set.add(y)
     return [...set].sort((a, b) => b - a)
   }, [all])
   const postCount = React.useMemo(() => all.filter((o) => o.organicPost).length, [all])

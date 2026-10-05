@@ -74,6 +74,8 @@ export type MetaAdInsightRow = {
   spend: number
   /** 캠페인 생성 시각 (Ads Manager). 이름에 연도가 없어도 연도 필터에 쓴다. */
   createdTime?: string
+  /** 이 해에 실제로 집행된 캠페인. 생성 연도와 달라도 그 해 목록에 넣는다. */
+  deliveredYears?: number[]
 }
 
 /** 캠페인·인사이트 한 페이지. Meta는 limit 상한이 100인 경우가 많다. */
@@ -129,18 +131,29 @@ export async function metaGraphGetAllPages<T>(
 export function appendMetaCampaignCatalog(
   ads: MetaAdInsightRow[],
   rows: { id?: string; name?: string; created_time?: string }[] | undefined,
-  opts?: { createdTimeFallback?: string }
+  opts?: { createdTimeFallback?: string; deliveredYear?: number }
 ): number {
   const fallback = String(opts?.createdTimeFallback || "").trim()
+  const deliveredYear = opts?.deliveredYear
   const createdById = new Map<string, string>()
+  const rowIds = new Set<string>()
   for (const c of rows || []) {
     const id = String(c.id || "").trim()
+    if (!id) continue
+    rowIds.add(id)
     const created = String(c.created_time || "").trim() || fallback
-    if (id && created) createdById.set(id, created)
+    if (created) createdById.set(id, created)
+  }
+  const markDelivered = (a: MetaAdInsightRow) => {
+    if (!deliveredYear) return
+    const cur = a.deliveredYears || []
+    if (!cur.includes(deliveredYear)) a.deliveredYears = [...cur, deliveredYear]
   }
   for (const a of ads) {
     const id = String(a.campaignId || "").trim()
-    if (id && !a.createdTime && createdById.has(id)) a.createdTime = createdById.get(id)
+    if (!id || !rowIds.has(id)) continue
+    if (!a.createdTime && createdById.has(id)) a.createdTime = createdById.get(id)
+    markDelivered(a)
   }
   const seen = new Set(ads.map((a) => String(a.campaignId || "").trim()).filter(Boolean))
   let added = 0
@@ -149,7 +162,7 @@ export function appendMetaCampaignCatalog(
     const name = String(c.name || "").trim()
     if (!id || seen.has(id)) continue
     seen.add(id)
-    ads.push({
+    const row: MetaAdInsightRow = {
       adId: "",
       adName: "",
       campaignId: id,
@@ -160,7 +173,9 @@ export function appendMetaCampaignCatalog(
       ctr: 0,
       spend: 0,
       createdTime: createdById.get(id),
-    })
+    }
+    markDelivered(row)
+    ads.push(row)
     added += 1
   }
   return added
@@ -348,8 +363,8 @@ export async function fetchMetaAdsAndPageInsights(params: {
     const mergeCatalog = async (
       label: string,
       query: Record<string, string | undefined>,
-      createdTimeFallback?: string
-    ) => {
+      catalogOpts?: { createdTimeFallback?: string; deliveredYear?: number }
+    ): Promise<number | null> => {
       const page = await metaGraphGetAllPages<{ id?: string; name?: string; created_time?: string }>(
         `${act}/campaigns`,
         adsToken,
@@ -357,12 +372,13 @@ export async function fetchMetaAdsAndPageInsights(params: {
       )
       if (!page.ok) {
         diagnostics.push(`${label}:${page.error?.message || "error"}`)
-        return
+        return null
       }
       notePages(label, page.pages, page.truncated, page.error)
-      const added = appendMetaCampaignCatalog(ads, page.data, { createdTimeFallback })
+      const added = appendMetaCampaignCatalog(ads, page.data, catalogOpts)
       if (added) diagnostics.push(`${label}_listed:${added}`)
       if (label === "ads_campaigns" && !(page.data || []).length) diagnostics.push("ads_campaigns_empty")
+      return added
     }
 
     await mergeCatalog("ads_campaigns", {
@@ -380,12 +396,19 @@ export async function fetchMetaAdsAndPageInsights(params: {
     const createdThisYear = JSON.stringify([
       { field: "created_time", operator: "GREATER_THAN", value: yearStartUnix },
     ])
-    await mergeCatalog("ads_campaigns_completed", {
+    const completedAdded = await mergeCatalog("ads_campaigns_completed", {
       fields: campaignFields,
       limit: META_GRAPH_PAGE_LIMIT,
       is_completed: "true",
       filtering: createdThisYear,
     })
+    if (completedAdded == null) {
+      await mergeCatalog("ads_campaigns_completed_all", {
+        fields: campaignFields,
+        limit: META_GRAPH_PAGE_LIMIT,
+        is_completed: "true",
+      })
+    }
     await mergeCatalog("ads_campaigns_archived", {
       fields: campaignFields,
       limit: META_GRAPH_PAGE_LIMIT,
@@ -411,7 +434,7 @@ export async function fetchMetaAdsAndPageInsights(params: {
           id: String(row.campaign_id || ""),
           name: String(row.campaign_name || ""),
         })),
-        { createdTimeFallback: `${yearStart}T00:00:00+07:00` }
+        { deliveredYear: Number(today.slice(0, 4)) }
       )
       if (added) diagnostics.push(`ads_campaigns_ytd_listed:${added}`)
     }

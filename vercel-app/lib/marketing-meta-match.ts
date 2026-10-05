@@ -30,19 +30,31 @@ export function parseMetaPromoDateMs(name: string): number | null {
   return Number.isFinite(t) ? t : null
 }
 
-/** 캠페인 이름 날짜, 이름 속 20xx, 생성 시각 순으로 연도 */
-export function metaCampaignYear(name: string, createdTime?: string): number | null {
+function pushYear(years: Set<number>, year: number | null | undefined) {
+  if (year != null && year >= 2000 && year <= 2100) years.add(year)
+}
+
+/**
+ * 목록 필터에 쓸 연도. 제목 날짜와 생성 시각을 같이 둔다.
+ * 게시물 홍보(โพสต์/Post) 본문에 적힌 연도는 쓰지 않는다.
+ */
+export function metaCampaignYears(name: string, createdTime?: string, extra?: number[]): number[] {
+  const years = new Set<number>()
   const ms = parseMetaPromoDateMs(name)
-  if (ms != null) return new Date(ms).getUTCFullYear()
-  const inName = String(name || "").match(/(?:^|[^\d])(20\d{2})(?:[^\d]|$)/)
-  if (inName) {
-    const y = Number(inName[1])
-    if (y >= 2000 && y <= 2100) return y
+  if (ms != null) pushYear(years, new Date(ms).getUTCFullYear())
+  const created = String(createdTime || "").trim().match(/^(20\d{2})/)
+  if (created) pushYear(years, Number(created[1]))
+  if (!isMetaOrganicPostCampaignName(name)) {
+    const inName = String(name || "").match(/(?:^|[^\d])(20\d{2})(?:[^\d]|$)/)
+    if (inName) pushYear(years, Number(inName[1]))
   }
-  const created = String(createdTime || "").trim()
-  const fromCreated = created.match(/^(20\d{2})/)
-  if (fromCreated) return Number(fromCreated[1])
-  return null
+  for (const y of extra || []) pushYear(years, y)
+  return [...years].sort((a, b) => b - a)
+}
+
+/** 표시용. 해당하는 연도 중 가장 최근. */
+export function metaCampaignYear(name: string, createdTime?: string, extra?: number[]): number | null {
+  return metaCampaignYears(name, createdTime, extra)[0] ?? null
 }
 
 function metaCampaignSortKey(id: string, name: string): number {
@@ -100,7 +112,10 @@ export function influencerStatusForColumn(col: "todo" | "doing" | "done"): strin
 export type MetaAdsCampaignOption = {
   id: string
   name: string
+  /** 표시용. years 중 가장 최근. */
   year: number | null
+  /** 제목·생성·집행 연도. 필터는 이 목록으로 맞춘다. */
+  years: number[]
   organicPost: boolean
 }
 
@@ -113,7 +128,7 @@ export function uniqueMetaAdsCampaigns(
   opts?: { includeOrganicPosts?: boolean }
 ): MetaAdsCampaignOption[] {
   const includePosts = opts?.includeOrganicPosts === true
-  const map = new Map<string, { name: string; spend: number; createdTime?: string }>()
+  const map = new Map<string, { name: string; spend: number; createdTime?: string; delivered: number[] }>()
   for (const a of ads || []) {
     const id = String(a.campaignId || "").trim()
     const name = String(a.campaignName || "").trim()
@@ -122,24 +137,32 @@ export function uniqueMetaAdsCampaigns(
     if (!includePosts && isMetaOrganicPostCampaignName(name)) continue
     const spend = Number(a.spend) || 0
     const createdTime = String(a.createdTime || "").trim()
+    const delivered = (a.deliveredYears || []).filter((y) => y >= 2000 && y <= 2100)
     const prev = map.get(key)
     if (!prev || spend > prev.spend || (!prev.name && name)) {
+      const prevDelivered = prev?.delivered || []
       map.set(key, {
         name: name || id,
         spend: Math.max(prev?.spend || 0, spend),
         createdTime: createdTime || prev?.createdTime,
+        delivered: [...new Set([...prevDelivered, ...delivered])],
       })
-    } else if (createdTime && !prev.createdTime) {
-      prev.createdTime = createdTime
+    } else {
+      if (createdTime && !prev.createdTime) prev.createdTime = createdTime
+      prev.delivered = [...new Set([...prev.delivered, ...delivered])]
     }
   }
   return [...map.entries()]
-    .map(([id, v]) => ({
-      id,
-      name: v.name,
-      year: metaCampaignYear(v.name, v.createdTime),
-      organicPost: isMetaOrganicPostCampaignName(v.name),
-    }))
+    .map(([id, v]) => {
+      const years = metaCampaignYears(v.name, v.createdTime, v.delivered)
+      return {
+        id,
+        name: v.name,
+        year: years[0] ?? null,
+        years,
+        organicPost: isMetaOrganicPostCampaignName(v.name),
+      }
+    })
     .sort((a, b) => metaCampaignSortKey(b.id, b.name) - metaCampaignSortKey(a.id, a.name))
 }
 
@@ -148,7 +171,7 @@ export function metaCampaignPickerInitialView(
   options: MetaAdsCampaignOption[],
   bangkokYear: number
 ): { year: number | "all"; includeOrganicPosts: boolean } {
-  const inYear = (options || []).filter((o) => o.year === bangkokYear)
+  const inYear = (options || []).filter((o) => o.years.includes(bangkokYear))
   if (!inYear.length) return { year: "all", includeOrganicPosts: false }
   const named = inYear.some((o) => !o.organicPost)
   return { year: bangkokYear, includeOrganicPosts: !named }
@@ -164,13 +187,14 @@ export function filterMetaCampaignOptions(
   const year = opts?.year ?? "all"
   const includePosts = opts?.includeOrganicPosts === true
   return (options || []).filter((o) => {
+    const years = o.years?.length ? o.years : o.year != null ? [o.year] : []
     if (!includePosts && o.organicPost) return false
-    if (year === "none" && o.year != null) return false
-    if (typeof year === "number" && o.year !== year) return false
+    if (year === "none" && years.length) return false
+    if (typeof year === "number" && !years.includes(year)) return false
     if (!qRaw) return true
     if (q && normalizeMetaName(o.name).includes(q)) return true
     if (o.id.toLowerCase().includes(qRaw)) return true
-    if (o.year != null && String(o.year) === qRaw) return true
+    if (years.some((y) => String(y) === qRaw)) return true
     return false
   })
 }
