@@ -8,9 +8,19 @@ export function normalizeMetaName(raw: string): string {
     .trim()
 }
 
-/** Meta Boost/유기 포스트 캠페인명 (โพสต์: / Post:) — 드롭다운에서 제외 */
+/** Meta Boost/유기 포스트 캠페인명 (โพสต์: / โพสต์บน Instagram: / Post: 등) */
+const META_ORGANIC_POST_PREFIX =
+  /^(โพสต์(?:บน\s*(?:instagram|facebook))?|post(?:\s+on\s+(?:instagram|facebook))?)\s*:/i
+
 export function isMetaOrganicPostCampaignName(name: string): boolean {
-  return /^(โพสต์|post)\s*:/i.test(String(name || "").trim())
+  return META_ORGANIC_POST_PREFIX.test(String(name || "").trim())
+}
+
+/** 플랫폼 접두어를 뺀 본문 — FB·IG 같은 내용 부스트를 한쪽으로 묶을 때 사용 */
+export function metaOrganicPostCoreName(name: string): string {
+  const s = String(name || "").trim()
+  if (!isMetaOrganicPostCampaignName(s)) return ""
+  return normalizeMetaName(s.replace(META_ORGANIC_POST_PREFIX, ""))
 }
 
 /** 「การโปรโมท … ในวันที่ [D/M/YYYY]」 또는 [M/D/YYYY] 에서 날짜 추출 (최신순 정렬용) */
@@ -147,9 +157,17 @@ function adMatchesMetaLink(a: MetaAdInsightRow, link: MetaCampaignLink): boolean
       return true
     }
   }
-  if (!mappedName) return false
   const n = normalizeMetaName(a.campaignName)
-  return n === mappedName || n.includes(mappedName) || mappedName.includes(n)
+  if (mappedName) {
+    if (n === mappedName || n.includes(mappedName) || mappedName.includes(n)) return true
+  }
+  // FB โพสต์: / IG โพสต์บน Instagram: 같은 본문이면 한 ERP 연결로 둘 다 합산
+  const linkCore = metaOrganicPostCoreName(link.name) || metaOrganicPostCoreName(link.id)
+  const adCore = metaOrganicPostCoreName(a.campaignName)
+  if (linkCore && adCore && linkCore.length >= 8 && adCore.length >= 8) {
+    if (linkCore === adCore || linkCore.includes(adCore) || adCore.includes(linkCore)) return true
+  }
+  return false
 }
 
 /** ERP 캠페인과 Meta Ads campaign_name / id 매칭. 매핑·이름 겹침이 없으면 빈 배열. 다중 링크는 OR. */

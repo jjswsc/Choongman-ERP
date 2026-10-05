@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   appendMetaCampaignCatalog,
+  applyCampaignInsightMetrics,
   metaGraphGetAllPages,
   yearsCoveredByMetaRange,
   type MetaAdInsightRow,
@@ -18,6 +19,54 @@ describe("yearsCoveredByMetaRange", () => {
   it("maps last_28d around Bangkok today into the current year", () => {
     expect(yearsCoveredByMetaRange({ preset: "last_28d", todayYmd: "2026-10-05" })).toEqual([2026])
     expect(yearsCoveredByMetaRange({ since: "2025-12-20", until: "2026-01-10" })).toEqual([2025, 2026])
+  })
+})
+
+describe("applyCampaignInsightMetrics", () => {
+  it("fills spend on catalog-only IG rows without double-counting ad-level campaigns", () => {
+    const ads: MetaAdInsightRow[] = [
+      {
+        adId: "fb-ad",
+        adName: "FB",
+        campaignId: "fb-c",
+        campaignName: "โพสต์: news",
+        impressions: 100,
+        reach: 80,
+        clicks: 1,
+        ctr: 0.1,
+        spend: 1596.99,
+      },
+      {
+        adId: "",
+        adName: "",
+        campaignId: "ig-c",
+        campaignName: "โพสต์บน Instagram: news",
+        impressions: 0,
+        reach: 0,
+        clicks: 0,
+        ctr: 0,
+        spend: 0,
+      },
+    ]
+    const n = applyCampaignInsightMetrics(ads, [
+      {
+        campaign_id: "fb-c",
+        campaign_name: "โพสต์: news",
+        spend: 9999,
+        impressions: 1,
+      },
+      {
+        campaign_id: "ig-c",
+        campaign_name: "โพสต์บน Instagram: news",
+        spend: 676.43,
+        impressions: 17229,
+        reach: 14825,
+      },
+    ])
+    expect(n).toBe(1)
+    expect(ads.find((a) => a.campaignId === "fb-c")?.spend).toBe(1596.99)
+    expect(ads.find((a) => a.campaignId === "ig-c")?.spend).toBe(676.43)
+    expect(ads.find((a) => a.campaignId === "ig-c")?.impressions).toBe(17229)
   })
 })
 

@@ -190,6 +190,69 @@ function yearFromMetaClock(raw: string | number | undefined | null): number | nu
   return null
 }
 
+/**
+ * 캠페인 단위 insights 실적을 채운다.
+ * ad 단위에 이미 집행 행이 있으면 건너뛰고, 카탈로그(฿0)만 있는 IG/FB 부스트에 spend를 넣는다.
+ */
+export function applyCampaignInsightMetrics(
+  ads: MetaAdInsightRow[],
+  rows: Record<string, unknown>[] | undefined,
+  deliveryYears?: number[]
+): number {
+  const hasAdLevel = new Set(
+    ads
+      .filter(
+        (a) =>
+          String(a.adId || "").trim() ||
+          (Number(a.spend) || 0) > 0 ||
+          (Number(a.impressions) || 0) > 0 ||
+          (Number(a.reach) || 0) > 0
+      )
+      .map((a) => String(a.campaignId || "").trim())
+      .filter(Boolean)
+  )
+  let updated = 0
+  for (const row of rows || []) {
+    const id = String(row.campaign_id || row.id || "").trim()
+    if (!id || hasAdLevel.has(id)) continue
+    const spend = num(row.spend)
+    const impressions = num(row.impressions)
+    const reach = num(row.reach)
+    const clicks = num(row.clicks)
+    if (spend <= 0 && impressions <= 0 && reach <= 0 && clicks <= 0) continue
+    const name = String(row.campaign_name || row.name || id).trim()
+    const existing = ads.find(
+      (a) => String(a.campaignId || "").trim() === id && !String(a.adId || "").trim()
+    )
+    if (existing) {
+      existing.spend = spend
+      existing.impressions = impressions
+      existing.reach = reach
+      existing.clicks = clicks
+      existing.ctr = num(row.ctr)
+      if (name) existing.campaignName = name
+      markDeliveredYears(existing, deliveryYears)
+    } else {
+      const item: MetaAdInsightRow = {
+        adId: "",
+        adName: "",
+        campaignId: id,
+        campaignName: name,
+        impressions,
+        reach,
+        clicks,
+        ctr: num(row.ctr),
+        spend,
+      }
+      markDeliveredYears(item, deliveryYears)
+      ads.push(item)
+    }
+    hasAdLevel.add(id)
+    updated += 1
+  }
+  return updated
+}
+
 /** 캠페인 카탈로그를 매핑 목록에 합친다. 이미 있는 ID의 실적은 유지하고, 생성 시각만 비어 있으면 채운다. */
 export function appendMetaCampaignCatalog(
   ads: MetaAdInsightRow[],
@@ -531,6 +594,7 @@ export async function fetchMetaAdsAndPageInsights(params: {
         const id = String(a.campaignId || "").trim()
         if (id && ids.has(id)) markDeliveredYears(a, years)
       }
+      applyCampaignInsightMetrics(ads, page.data, years)
     }
     await markSpendCatalog(
       "ads_campaigns_ytd",
@@ -562,6 +626,21 @@ export async function fetchMetaAdsAndPageInsights(params: {
       },
       yearsCoveredByMetaRange({ preset: "last_90d", todayYmd: today })
     )
+
+    // ad 단위에 빠진 캠페인 실적(특히 IG โพสต์ 부스트)을 campaign insights로 채운다.
+    const campFill = await metaGraphGetAllPages<Record<string, unknown>>(`${act}/insights`, adsToken, {
+      level: "campaign",
+      ...dateQuery,
+      fields: "campaign_id,campaign_name,impressions,reach,clicks,ctr,spend",
+      limit: META_GRAPH_PAGE_LIMIT,
+    })
+    if (campFill.ok) {
+      const filled = applyCampaignInsightMetrics(ads, campFill.data, insightYears)
+      if (filled) diagnostics.push(`ads_campaign_metrics_filled:${filled}`)
+      notePages("ads_campaign_metrics", campFill.pages, campFill.truncated, campFill.error)
+    } else {
+      diagnostics.push(`ads_campaign_metrics:${campFill.error?.message || "error"}`)
+    }
 
     const plat = await metaGraphGet<{ data?: { publisher_platform?: string; spend?: unknown }[] }>(
       `${act}/insights`,

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest"
 import {
   filterAdsForCampaign,
   filterMetaCampaignOptions,
+  isMetaOrganicPostCampaignName,
   materialStatusForColumn,
   metaCampaignPickerInitialView,
   metaCampaignYear,
+  metaOrganicPostCoreName,
   parseMetaCampaignLinks,
   parseMetaPromoDateMs,
   serializeMetaCampaignLinks,
@@ -62,6 +64,43 @@ describe("filterAdsForCampaign", () => {
         metaCampaignName: packed.name,
       }).map((a) => a.adId)
     ).toEqual(["1", "2"])
+  })
+
+  it("treats FB and IG organic boosts with the same body as one link family", () => {
+    expect(isMetaOrganicPostCampaignName("โพสต์บน Instagram: ข่าวดีสำหรับชาวรัชดา")).toBe(true)
+    expect(metaOrganicPostCoreName("โพสต์: ข่าวดีสำหรับชาวรัชดา")).toBe(
+      metaOrganicPostCoreName("โพสต์บน Instagram: ข่าวดีสำหรับชาวรัชดา")
+    )
+    const boosts = [
+      {
+        adId: "fb1",
+        adName: "A",
+        campaignId: "fb-c",
+        campaignName: "โพสต์: ข่าวดีสำหรับชาวรัชดา รัชดา!",
+        impressions: 10,
+        reach: 8,
+        clicks: 1,
+        ctr: 0.1,
+        spend: 1596.99,
+      },
+      {
+        adId: "ig1",
+        adName: "B",
+        campaignId: "ig-c",
+        campaignName: "โพสต์บน Instagram: ข่าวดีสำหรับชาวรัชดา รัชดา!",
+        impressions: 5,
+        reach: 4,
+        clicks: 0,
+        ctr: 0,
+        spend: 676.43,
+      },
+    ]
+    expect(
+      filterAdsForCampaign(boosts, {
+        metaCampaignId: "fb-c",
+        metaCampaignName: "โพสต์: ข่าวดีสำหรับชาวรัชดา รัชดา!",
+      }).map((a) => a.adId)
+    ).toEqual(["fb1", "ig1"])
   })
 
   it("returns empty when nothing overlaps", () => {
