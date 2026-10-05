@@ -6,6 +6,7 @@ import { bangkokTodayYmd } from "@/lib/bangkok-date"
 import type { MetaAdInsightRow } from "@/lib/meta-graph"
 import {
   filterMetaCampaignOptions,
+  metaCampaignPickerInitialView,
   uniqueMetaAdsCampaigns,
   type MetaAdsCampaignOption,
 } from "@/lib/marketing-meta-match"
@@ -43,19 +44,22 @@ export function MarketingMetaCampaignPicker({
   )
   const years = React.useMemo(() => {
     const set = new Set<number>()
-    for (const o of pool) if (o.year != null) set.add(o.year)
+    for (const o of all) if (o.year != null) set.add(o.year)
     return [...set].sort((a, b) => b - a)
-  }, [pool])
+  }, [all])
+  const postCount = React.useMemo(() => all.filter((o) => o.organicPost).length, [all])
   const shown = React.useMemo(
     () => filterMetaCampaignOptions(all, { query, year, includeOrganicPosts: includePosts }),
     [all, query, year, includePosts]
   )
 
   React.useEffect(() => {
-    if (yearInit.current || !pool.length) return
+    if (yearInit.current || !all.length) return
     yearInit.current = true
-    setYear(years.includes(bangkokYear) ? bangkokYear : "all")
-  }, [pool.length, years, bangkokYear])
+    const view = metaCampaignPickerInitialView(all, bangkokYear)
+    setYear(view.year)
+    setIncludePosts(view.includeOrganicPosts)
+  }, [all, bangkokYear])
 
   React.useEffect(() => {
     if (campaignName && !campaignId) setCustom(true)
@@ -99,7 +103,7 @@ export function MarketingMetaCampaignPicker({
           checked={includePosts}
           onChange={(e) => setIncludePosts(e.target.checked)}
         />
-        {t("marketingMetaMapIncludePosts")}
+        {t("marketingMetaMapIncludePosts")} ({postCount})
       </label>
       <p className="text-[11px] text-muted-foreground">
         {t("marketingMetaMapCount")

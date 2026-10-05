@@ -125,6 +125,47 @@ export async function metaGraphGetAllPages<T>(
   return { ok: true, data, error: null, pages, truncated: Boolean(next) }
 }
 
+/** 캠페인 카탈로그를 매핑 목록에 합친다. 이미 있는 ID의 실적은 유지하고, 생성 시각만 비어 있으면 채운다. */
+export function appendMetaCampaignCatalog(
+  ads: MetaAdInsightRow[],
+  rows: { id?: string; name?: string; created_time?: string }[] | undefined,
+  opts?: { createdTimeFallback?: string }
+): number {
+  const fallback = String(opts?.createdTimeFallback || "").trim()
+  const createdById = new Map<string, string>()
+  for (const c of rows || []) {
+    const id = String(c.id || "").trim()
+    const created = String(c.created_time || "").trim() || fallback
+    if (id && created) createdById.set(id, created)
+  }
+  for (const a of ads) {
+    const id = String(a.campaignId || "").trim()
+    if (id && !a.createdTime && createdById.has(id)) a.createdTime = createdById.get(id)
+  }
+  const seen = new Set(ads.map((a) => String(a.campaignId || "").trim()).filter(Boolean))
+  let added = 0
+  for (const c of rows || []) {
+    const id = String(c.id || "").trim()
+    const name = String(c.name || "").trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    ads.push({
+      adId: "",
+      adName: "",
+      campaignId: id,
+      campaignName: name || id,
+      impressions: 0,
+      reach: 0,
+      clicks: 0,
+      ctr: 0,
+      spend: 0,
+      createdTime: createdById.get(id),
+    })
+    added += 1
+  }
+  return added
+}
+
 export type MetaPageInsightTotals = {
   postEngagement: number
   newFollows: number
@@ -300,14 +341,33 @@ export async function fetchMetaAdsAndPageInsights(params: {
       }
     }
 
-    const campaigns = await metaGraphGetAllPages<{
-      id?: string
-      name?: string
-      created_time?: string
-    }>(`${act}/campaigns`, adsToken, {
-      fields: "id,name,status,effective_status,created_time",
+    const today = bangkokTodayYmd()
+    const yearStart = `${today.slice(0, 4)}-01-01`
+    const yearStartUnix = Math.floor(new Date(`${yearStart}T00:00:00+07:00`).getTime() / 1000) - 1
+    const campaignFields = "id,name,status,effective_status,created_time"
+    const mergeCatalog = async (
+      label: string,
+      query: Record<string, string | undefined>,
+      createdTimeFallback?: string
+    ) => {
+      const page = await metaGraphGetAllPages<{ id?: string; name?: string; created_time?: string }>(
+        `${act}/campaigns`,
+        adsToken,
+        query
+      )
+      if (!page.ok) {
+        diagnostics.push(`${label}:${page.error?.message || "error"}`)
+        return
+      }
+      notePages(label, page.pages, page.truncated, page.error)
+      const added = appendMetaCampaignCatalog(ads, page.data, { createdTimeFallback })
+      if (added) diagnostics.push(`${label}_listed:${added}`)
+      if (label === "ads_campaigns" && !(page.data || []).length) diagnostics.push("ads_campaigns_empty")
+    }
+
+    await mergeCatalog("ads_campaigns", {
+      fields: campaignFields,
       limit: META_GRAPH_PAGE_LIMIT,
-      // ACTIVE + paused도 매핑용으로 포함. 보관(ARCHIVED)은 제외.
       filtering: JSON.stringify([
         {
           field: "effective_status",
@@ -316,43 +376,44 @@ export async function fetchMetaAdsAndPageInsights(params: {
         },
       ]),
     })
-    if (!campaigns.ok) {
-      diagnostics.push(`ads_campaigns:${campaigns.error?.message || "error"}`)
+    // 종료(completed)·보관은 기본 목록에 없다. 올해 만든 것만 매핑용으로 보탠다.
+    const createdThisYear = JSON.stringify([
+      { field: "created_time", operator: "GREATER_THAN", value: yearStartUnix },
+    ])
+    await mergeCatalog("ads_campaigns_completed", {
+      fields: campaignFields,
+      limit: META_GRAPH_PAGE_LIMIT,
+      is_completed: "true",
+      filtering: createdThisYear,
+    })
+    await mergeCatalog("ads_campaigns_archived", {
+      fields: campaignFields,
+      limit: META_GRAPH_PAGE_LIMIT,
+      filtering: JSON.stringify([
+        { field: "effective_status", operator: "IN", value: ["ARCHIVED"] },
+        { field: "created_time", operator: "GREATER_THAN", value: yearStartUnix },
+      ]),
+    })
+    // 올해 집행 실적이 있는 캠페인. 합계(최근 28일)는 바꾸지 않도록 실적 0으로만 넣는다.
+    const ytd = await metaGraphGetAllPages<Record<string, unknown>>(`${act}/insights`, adsToken, {
+      level: "campaign",
+      time_range: JSON.stringify({ since: yearStart, until: today }),
+      fields: "campaign_id,campaign_name",
+      limit: META_GRAPH_PAGE_LIMIT,
+    })
+    if (!ytd.ok) {
+      diagnostics.push(`ads_campaigns_ytd:${ytd.error?.message || "error"}`)
     } else {
-      notePages("ads_campaigns", campaigns.pages, campaigns.truncated, campaigns.error)
-      const createdById = new Map<string, string>()
-      for (const c of campaigns.data || []) {
-        const id = String(c.id || "").trim()
-        const created = String(c.created_time || "").trim()
-        if (id && created) createdById.set(id, created)
-      }
-      for (const a of ads) {
-        const id = String(a.campaignId || "").trim()
-        if (id && !a.createdTime && createdById.has(id)) a.createdTime = createdById.get(id)
-      }
-      const seen = new Set(ads.map((a) => String(a.campaignId || "").trim()).filter(Boolean))
-      let added = 0
-      for (const c of campaigns.data || []) {
-        const id = String(c.id || "").trim()
-        const name = String(c.name || "").trim()
-        if (!id || seen.has(id)) continue
-        seen.add(id)
-        ads.push({
-          adId: "",
-          adName: "",
-          campaignId: id,
-          campaignName: name || id,
-          impressions: 0,
-          reach: 0,
-          clicks: 0,
-          ctr: 0,
-          spend: 0,
-          createdTime: createdById.get(id),
-        })
-        added += 1
-      }
-      if (added) diagnostics.push(`ads_campaigns_listed:${added}`)
-      if (!(campaigns.data || []).length) diagnostics.push("ads_campaigns_empty")
+      notePages("ads_campaigns_ytd", ytd.pages, ytd.truncated, ytd.error)
+      const added = appendMetaCampaignCatalog(
+        ads,
+        (ytd.data || []).map((row) => ({
+          id: String(row.campaign_id || ""),
+          name: String(row.campaign_name || ""),
+        })),
+        { createdTimeFallback: `${yearStart}T00:00:00+07:00` }
+      )
+      if (added) diagnostics.push(`ads_campaigns_ytd_listed:${added}`)
     }
 
     const plat = await metaGraphGet<{ data?: { publisher_platform?: string; spend?: unknown }[] }>(

@@ -3,6 +3,7 @@ import {
   filterAdsForCampaign,
   filterMetaCampaignOptions,
   materialStatusForColumn,
+  metaCampaignPickerInitialView,
   metaCampaignYear,
   parseMetaPromoDateMs,
   uniqueMetaAdsCampaigns,
@@ -164,6 +165,41 @@ describe("filterAdsForCampaign", () => {
       "new2026",
     ])
     expect(filterMetaCampaignOptions(options, { query: "choongman" }).map((o) => o.id)).toEqual(["old"])
+  })
+
+  it("opens boosted posts when the current year has no named campaign", () => {
+    const options = uniqueMetaAdsCampaigns(
+      [
+        {
+          adId: "",
+          adName: "",
+          campaignId: "old",
+          campaignName: "การโปรโมท [8/8/2025]",
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          ctr: 0,
+          spend: 0,
+        },
+        {
+          adId: "",
+          adName: "",
+          campaignId: "post2026",
+          campaignName: 'โพสต์: "lunch"',
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          ctr: 0,
+          spend: 0,
+          createdTime: "2026-04-01T00:00:00+07:00",
+        },
+      ],
+      { includeOrganicPosts: true }
+    )
+    expect(metaCampaignPickerInitialView(options, 2026)).toEqual({
+      year: 2026,
+      includeOrganicPosts: true,
+    })
   })
 })
 

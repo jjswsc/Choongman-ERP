@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { metaGraphGetAllPages } from "./meta-graph"
+import { appendMetaCampaignCatalog, metaGraphGetAllPages, type MetaAdInsightRow } from "./meta-graph"
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -8,6 +8,32 @@ function jsonResponse(body: unknown, status = 200) {
     json: async () => body,
   }
 }
+
+describe("appendMetaCampaignCatalog", () => {
+  it("adds a 2026 campaign without changing spend already stored", () => {
+    const ads: MetaAdInsightRow[] = [
+      {
+        adId: "a",
+        adName: "old",
+        campaignId: "old",
+        campaignName: "[8/8/2025] Promoting",
+        impressions: 3,
+        reach: 2,
+        clicks: 1,
+        ctr: 0.1,
+        spend: 40,
+      },
+    ]
+    const added = appendMetaCampaignCatalog(ads, [
+      { id: "old", name: "[8/8/2025] Promoting", created_time: "2025-08-08T00:00:00+0700" },
+      { id: "y2026", name: "New Menu", created_time: "2026-03-01T00:00:00+0700" },
+    ])
+    expect(added).toBe(1)
+    expect(ads.find((a) => a.campaignId === "old")?.spend).toBe(40)
+    expect(ads.find((a) => a.campaignId === "old")?.createdTime).toBe("2025-08-08T00:00:00+0700")
+    expect(ads.find((a) => a.campaignId === "y2026")?.campaignName).toBe("New Menu")
+  })
+})
 
 describe("metaGraphGetAllPages", () => {
   const originalFetch = globalThis.fetch

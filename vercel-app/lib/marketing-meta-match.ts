@@ -143,6 +143,17 @@ export function uniqueMetaAdsCampaigns(
     .sort((a, b) => metaCampaignSortKey(b.id, b.name) - metaCampaignSortKey(a.id, a.name))
 }
 
+/** 올해 캠페인이 게시물 홍보뿐이면 그 해와 함께 게시물을 연다. */
+export function metaCampaignPickerInitialView(
+  options: MetaAdsCampaignOption[],
+  bangkokYear: number
+): { year: number | "all"; includeOrganicPosts: boolean } {
+  const inYear = (options || []).filter((o) => o.year === bangkokYear)
+  if (!inYear.length) return { year: "all", includeOrganicPosts: false }
+  const named = inYear.some((o) => !o.organicPost)
+  return { year: bangkokYear, includeOrganicPosts: !named }
+}
+
 /** 이름·ID·연도로 캠페인 목록을 좁힌다. */
 export function filterMetaCampaignOptions(
   options: MetaAdsCampaignOption[],
