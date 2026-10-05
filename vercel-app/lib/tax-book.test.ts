@@ -38,6 +38,16 @@ describe('tax book rules', () => {
     expect(formatTaxVoucherNo('sales', '2026-09', 2)).toBe('SV2026090002')
   })
 
+  it('filters vouchers into the five Thai day books', async () => {
+    const { voucherMatchesDayBook } = await import('./tax-book')
+    expect(voucherMatchesDayBook('sales', 'all')).toBe(true)
+    expect(voucherMatchesDayBook('sales', 'sales')).toBe(true)
+    expect(voucherMatchesDayBook('sales', 'purchase')).toBe(false)
+    expect(voucherMatchesDayBook('closing', 'general')).toBe(true)
+    expect(voucherMatchesDayBook('payment', 'payment')).toBe(true)
+    expect(voucherMatchesDayBook('receipt', 'receipt')).toBe(true)
+  })
+
   it('accepts only an entity or 13-digit TIN as the tax book key', () => {
     expect(taxEntityKeyFromScope('entity:omni-foodtech-01')).toBe('omni-foodtech-01')
     expect(taxEntityKeyFromScope('entity:choongman-0105566228126')).toBe('tin:0105566228126')

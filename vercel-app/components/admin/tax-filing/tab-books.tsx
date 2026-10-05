@@ -17,7 +17,14 @@ import {
 import {
   triggerErpExcelHtmlDownload,
 } from "@/lib/erp-excel-export"
-import { buildTaxBookStatements, resolveTaxBookMonthRange } from "@/lib/tax-book"
+import {
+  buildTaxBookStatements,
+  resolveTaxBookMonthRange,
+  TAX_DAY_BOOK_FILTERS,
+  voucherMatchesDayBook,
+  type TaxDayBookFilter,
+  type TaxVoucherKind,
+} from "@/lib/tax-book"
 import { buildTaxCloseChecklist, type TaxCloseChecklistStepId } from "@/lib/tax-close-checklist"
 import { parseFlowTrialBalanceSheet } from "@/lib/tax-book-opening-parse"
 import type { ExternalTrialBalanceRow } from "@/lib/tax-book-opening"
@@ -84,6 +91,7 @@ export function TaxFilingBooksTab(props: {
   const [inventoryConfirmed, setInventoryConfirmed] = React.useState(false)
   const [cogsPreview, setCogsPreview] = React.useState<number | null>(null)
   const [ledgerAccount, setLedgerAccount] = React.useState<string | null>(null)
+  const [dayBook, setDayBook] = React.useState<TaxDayBookFilter>("all")
   const [openingDate, setOpeningDate] = React.useState("2026-07-01")
   const [trialUploadRows, setTrialUploadRows] = React.useState<ExternalTrialBalanceRow[] | null>(null)
   const [trialUploadName, setTrialUploadName] = React.useState<string | null>(null)
@@ -246,6 +254,32 @@ export function TaxFilingBooksTab(props: {
       entityReady: Boolean(bridge?.taxEntityCode || (entries && entries.error !== "NEED_TAX_ENTITY")),
     })
   }, [bridge, entries, sourceTypes])
+
+  const dayBookCounts = React.useMemo(() => {
+    const counts: Record<TaxDayBookFilter, number> = {
+      all: 0,
+      general: 0,
+      purchase: 0,
+      sales: 0,
+      payment: 0,
+      receipt: 0,
+    }
+    for (const v of entries?.vouchers || []) {
+      const kind = v.voucherKind as TaxVoucherKind
+      counts.all += 1
+      for (const filter of TAX_DAY_BOOK_FILTERS) {
+        if (filter === "all") continue
+        if (voucherMatchesDayBook(kind, filter)) counts[filter] += 1
+      }
+    }
+    return counts
+  }, [entries?.vouchers])
+
+  const filteredVouchers = React.useMemo(() => {
+    return (entries?.vouchers || []).filter((v) =>
+      voucherMatchesDayBook(v.voucherKind as TaxVoucherKind, dayBook)
+    )
+  }, [entries?.vouchers, dayBook])
 
   const parseInventoryAmount = (): number | undefined => {
     const invRaw = openingInventory.trim()
@@ -495,6 +529,21 @@ export function TaxFilingBooksTab(props: {
       {view === "vouchers" ? (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">{t("taxBooksJvListHint")}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {TAX_DAY_BOOK_FILTERS.map((key) => (
+              <Button
+                key={key}
+                type="button"
+                size="sm"
+                variant={dayBook === key ? "default" : "outline"}
+                onClick={() => setDayBook(key)}
+              >
+                {t(`taxBooksDayBook_${key}`)}
+                {query ? ` (${dayBookCounts[key]})` : ""}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">{t(`taxBooksDayBookHint_${dayBook}`)}</p>
           <VoucherJvTable
             empty={t("taxBooksNoRows")}
             statusLabel={t("taxBooksStatusApproved")}
@@ -506,7 +555,7 @@ export function TaxFilingBooksTab(props: {
               t("taxBooksColTotal"),
               t("taxBooksColStatus"),
             ]}
-            rows={(entries?.vouchers || []).map((v) => ({
+            rows={filteredVouchers.map((v) => ({
               id: v.id,
               date: v.accountingDate,
               docNo: v.voucherNo,

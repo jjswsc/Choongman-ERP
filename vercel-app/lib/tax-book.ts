@@ -22,6 +22,10 @@ export const TAX_ACCOUNTS = {
 export const TAX_VOUCHER_KINDS = ['sales', 'purchase', 'receipt', 'payment', 'general', 'closing'] as const
 export type TaxVoucherKind = (typeof TAX_VOUCHER_KINDS)[number]
 
+/** 일별장부(สมุดรายวัน) UI 필터. closing은 일반분개장에 포함한다. */
+export const TAX_DAY_BOOK_FILTERS = ['all', 'general', 'purchase', 'sales', 'payment', 'receipt'] as const
+export type TaxDayBookFilter = (typeof TAX_DAY_BOOK_FILTERS)[number]
+
 /** 세무 마감은 매장 accounting_periods를 잠그지 않는다. 기업 손익 집계도 바꾸지 않는다. */
 export const TAX_CLOSE_LOCKS_STORE_PERIOD = false
 
@@ -31,6 +35,14 @@ export function isTaxBookSourceType(sourceType: string | null | undefined): bool
   return String(sourceType || '').startsWith(TAX_SOURCE_PREFIX)
 }
 
+/**
+ * 전표 종류 → 일별장부.
+ * 일반: 기초·VAT요약·급여발생·조정·결산
+ * 매입: 매입요약·원가·입고
+ * 매출: 매출요약·POS
+ * 지급: 시재·카드·은행·채널정산·보증금환불
+ * 수취: 보증금수령 등 입금
+ */
 export function voucherKindForSourceType(sourceType: string | null | undefined): TaxVoucherKind {
   const s = String(sourceType || '').trim()
   if (s === 'tax_income_expense_closing' || s === 'closing_income_expense') return 'closing'
@@ -53,6 +65,17 @@ export function voucherKindForSourceType(sourceType: string | null | undefined):
   if (s === 'petty_cash' || s === 'card_transaction') return 'payment'
   if (s === 'bank_transaction' || s === 'pos_channel_settlement') return 'payment'
   return 'general'
+}
+
+export function voucherKindsForDayBook(filter: TaxDayBookFilter): TaxVoucherKind[] | null {
+  if (filter === 'all') return null
+  if (filter === 'general') return ['general', 'closing']
+  return [filter]
+}
+
+export function voucherMatchesDayBook(kind: TaxVoucherKind, filter: TaxDayBookFilter): boolean {
+  const kinds = voucherKindsForDayBook(filter)
+  return kinds == null || kinds.includes(kind)
 }
 
 const VOUCHER_PREFIX: Record<TaxVoucherKind, string> = {
