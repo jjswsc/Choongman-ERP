@@ -24,6 +24,7 @@ import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-
 import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
 import { resolveStockTakeKpiMonth, STOCK_VARIANCE_HIGH_PCT, summarizeVarianceKpi } from "@/lib/stock-take-kpi"
 import Link from "next/link"
+import { patchPosCostViewSession, readPosCostViewSession } from "@/lib/pos-cost-view-session"
 
 export interface StockIngredientVariancePanelProps {
   stores: string[]
@@ -77,6 +78,42 @@ export function StockIngredientVariancePanel({
   const [typeFilter, setTypeFilter] = React.useState<"all" | "food" | "packaging">("all")
   const [minAbsVarPct, setMinAbsVarPct] = React.useState(0)
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({})
+  const [viewReady, setViewReady] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    if (initialStartYmd || initialEndYmd) {
+      setViewReady(true)
+      return
+    }
+    if (!storeFilter.trim()) return
+    const saved = readPosCostViewSession().variance
+    if (saved && saved.storeFilter === storeFilter) {
+      setStartYmd(saved.startYmd)
+      setEndYmd(saved.endYmd)
+      setSearchTerm(saved.searchTerm)
+      setTypeFilter(saved.typeFilter)
+      setMinAbsVarPct(saved.minAbsVarPct)
+      setRows(saved.rows)
+      setMeta(saved.meta)
+    }
+    setViewReady(true)
+  }, [initialEndYmd, initialStartYmd, storeFilter])
+
+  React.useEffect(() => {
+    if (!viewReady) return
+    patchPosCostViewSession({
+      variance: {
+        startYmd,
+        endYmd,
+        storeFilter,
+        searchTerm,
+        typeFilter,
+        minAbsVarPct,
+        rows,
+        meta,
+      },
+    })
+  }, [viewReady, startYmd, endYmd, storeFilter, searchTerm, typeFilter, minAbsVarPct, rows, meta])
 
   const storeOnlyBlocked = isOfficeStockSelection(storeFilter)
 

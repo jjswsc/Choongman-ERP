@@ -48,6 +48,7 @@ import {
 } from "@/lib/financial-statement-store-options"
 import { useStoreList } from "@/lib/use-store-list"
 import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
+import { patchPosCostViewSession, readPosCostViewSession } from "@/lib/pos-cost-view-session"
 
 type Props = {
   rows: PosMenuCostAnalysisRow[]
@@ -104,17 +105,38 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<PosCostSalesWeightedResult | null>(null)
+  const [viewReady, setViewReady] = React.useState(false)
   const [expandedCategory, setExpandedCategory] = React.useState<string | null>(null)
 
   const [itemCode, setItemCode] = React.useState("")
   const [whatIfPct, setWhatIfPct] = React.useState(10)
 
+  React.useLayoutEffect(() => {
+    const saved = readPosCostViewSession().actual
+    if (saved) {
+      setStartStr(saved.startStr)
+      setEndStr(saved.endStr)
+      if (saved.storeFilter) setStoreFilter(saved.storeFilter)
+      setChannel(saved.channel)
+      setResult(saved.result)
+    }
+    setViewReady(true)
+  }, [])
+
   React.useEffect(() => {
+    if (!viewReady) return
     setStoreFilter((prev) => {
       if (prev !== FINANCIAL_STATEMENT_STORE_NONE) return prev
       return defaultStoreFilter
     })
-  }, [defaultStoreFilter])
+  }, [defaultStoreFilter, viewReady])
+
+  React.useEffect(() => {
+    if (!viewReady) return
+    patchPosCostViewSession({
+      actual: { startStr, endStr, storeFilter, channel, result },
+    })
+  }, [viewReady, startStr, endStr, storeFilter, channel, result])
 
   const itemUsage = React.useMemo(
     () => countMenusUsingItemCode(rows, itemCode),

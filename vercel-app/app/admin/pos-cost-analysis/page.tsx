@@ -49,12 +49,14 @@ import {
   posCostAnalysisRowKey,
 } from "@/lib/pos-cost-analysis-keys"
 import { useSearchParams } from "next/navigation"
+import { useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import {
   DEFAULT_POS_COST_LIST_SETTINGS,
   readPosCostSessionCache,
   writePosCostSessionCache,
   type PosCostListSettings,
 } from "@/lib/pos-cost-analysis-shared"
+import { patchPosCostViewSession, readPosCostViewSession } from "@/lib/pos-cost-view-session"
 import type { RowWithDisplayCode } from "@/components/cost-analysis/pos-cost-list-panel"
 
 let posCostAnalysisLoadSeq = 0
@@ -77,20 +79,24 @@ export default function PosCostAnalysisPage() {
     if (isManager && userStore) return [userStore]
     return all
   }, [rawStores, isManager, userStore])
-  const [varianceStoreFilter, setVarianceStoreFilter] = React.useState("")
+  const [varianceStoreFilter, setVarianceStoreFilter] = React.useState(
+    () => (searchParams.get("store") || "").trim()
+  )
   const storeSelectDisabled = isManager && !!userStore
   const urlStore = (searchParams.get("store") || "").trim()
   const urlStart = (searchParams.get("start") || "").trim()
   const urlEnd = (searchParams.get("end") || "").trim()
   const urlYmd = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
+  const pageActiveRef = useErpPageActiveRef()
 
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     if (isManager && userStore) {
       setVarianceStoreFilter(userStore)
       return
     }
     if (urlStore) setVarianceStoreFilter(urlStore)
-  }, [isManager, userStore, urlStore])
+  }, [isManager, userStore, urlStore, pageActiveRef])
 
   const [rows, setRows] = React.useState<PosMenuCostAnalysisRow[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -99,14 +105,41 @@ export default function PosCostAnalysisPage() {
   const [loadErrorAuth, setLoadErrorAuth] = React.useState(false)
   const [lastLoadedAt, setLastLoadedAt] = React.useState<string | null>(null)
   const initialListLoadRef = React.useRef(false)
+  const urlTab = (searchParams.get("tab") || "").trim()
   const [activeTab, setActiveTab] = React.useState(() => {
-    const tab = (searchParams.get("tab") || "").trim()
-    if (tab === "actual" || tab === "insights") return "actual"
-    if (tab === "variance") return "variance"
-    if (tab === "storeNormal") return "storeNormal"
-    if (tab === "list" || tab === "sauce" || tab === "calculator" || tab === "audit") return tab
+    if (urlTab === "actual" || urlTab === "insights") return "actual"
+    if (urlTab === "variance") return "variance"
+    if (urlTab === "storeNormal") return "storeNormal"
+    if (urlTab === "list" || urlTab === "sauce" || urlTab === "calculator" || urlTab === "audit") return urlTab
     return "list"
   })
+  const [tabReady, setTabReady] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    if (!pageActiveRef.current) return
+    if (!urlTab) {
+      const saved = readPosCostViewSession().activeTab
+      if (
+        saved === "actual" ||
+        saved === "variance" ||
+        saved === "storeNormal" ||
+        saved === "list" ||
+        saved === "sauce" ||
+        saved === "calculator" ||
+        saved === "audit"
+      ) {
+        setActiveTab(saved)
+      }
+      const savedStore = readPosCostViewSession().variance?.storeFilter || ""
+      if (savedStore && !urlStore) setVarianceStoreFilter(savedStore)
+    }
+    setTabReady(true)
+  }, [pageActiveRef, urlStore, urlTab])
+
+  React.useEffect(() => {
+    if (!tabReady || !pageActiveRef.current) return
+    patchPosCostViewSession({ activeTab })
+  }, [tabReady, activeTab, pageActiveRef])
   const [selectedForCalculator, setSelectedForCalculator] = React.useState<PosMenuCostAnalysisRow | null>(null)
   const [settings, setSettings] = React.useState<PosCostListSettings>(DEFAULT_POS_COST_LIST_SETTINGS)
 

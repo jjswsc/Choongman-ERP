@@ -27,6 +27,7 @@ import {
   combinedKindLabel,
   type SalesDiscountTr,
 } from "@/lib/sales-discount-analytics-labels"
+import { patchPosCostViewSession, readPosCostViewSession } from "@/lib/pos-cost-view-session"
 
 function pct(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—"
@@ -124,10 +125,30 @@ export function PosCostStoreNormalTab() {
   const [error, setError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<StoreNormalCostReport | null>(null)
   const [expanded, setExpanded] = React.useState<string | null>(null)
+  const [viewReady, setViewReady] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    const saved = readPosCostViewSession().storeNormal
+    if (saved) {
+      setStartStr(saved.startStr)
+      setEndStr(saved.endStr)
+      if (saved.storeFilter) setStoreFilter(saved.storeFilter)
+      setResult(saved.result)
+    }
+    setViewReady(true)
+  }, [])
 
   React.useEffect(() => {
+    if (!viewReady) return
     setStoreFilter((prev) => (prev !== FINANCIAL_STATEMENT_STORE_NONE ? prev : defaultStoreFilter))
-  }, [defaultStoreFilter])
+  }, [defaultStoreFilter, viewReady])
+
+  React.useEffect(() => {
+    if (!viewReady) return
+    patchPosCostViewSession({
+      storeNormal: { startStr, endStr, storeFilter, result },
+    })
+  }, [viewReady, startStr, endStr, storeFilter, result])
 
   React.useEffect(() => {
     if (queryToken <= 0) return

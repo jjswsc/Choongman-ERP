@@ -47,6 +47,7 @@ import {
   type PosCostListSettings,
   type PosCostSaleFilter,
 } from "@/lib/pos-cost-analysis-shared"
+import { patchPosCostViewSession, readPosCostViewSession } from "@/lib/pos-cost-view-session"
 import { PosCostListKpi } from "@/components/cost-analysis/pos-cost-list-kpi"
 import { PosCostVatViewSelect, usePosCostVatView } from "@/components/cost-analysis/pos-cost-vat-view-select"
 import { getMenuCost } from "@/lib/api-client"
@@ -111,12 +112,32 @@ export function PosCostListPanel({
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [mainCategoryFilter, setMainCategoryFilter] = React.useState("all")
   const [issueFilter, setIssueFilter] = React.useState<PosCostIssueFilter>("all")
+  const [listViewReady, setListViewReady] = React.useState(false)
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
   const [breakdownLoading, setBreakdownLoading] = React.useState<Set<string>>(new Set())
   const [listSort, setListSort] = React.useState<{ key: PosCostListSortKey; dir: "asc" | "desc" } | null>(
     null
   )
   const [vatView, setVatView] = usePosCostVatView()
+
+  React.useLayoutEffect(() => {
+    const saved = readPosCostViewSession().list
+    if (saved) {
+      setSearchTerm(saved.searchTerm)
+      setSaleFilter(saved.saleFilter)
+      setCategoryFilter(saved.categoryFilter)
+      setMainCategoryFilter(saved.mainCategoryFilter)
+      setIssueFilter(saved.issueFilter)
+    }
+    setListViewReady(true)
+  }, [])
+
+  React.useEffect(() => {
+    if (!listViewReady) return
+    patchPosCostViewSession({
+      list: { searchTerm, saleFilter, categoryFilter, mainCategoryFilter, issueFilter },
+    })
+  }, [listViewReady, searchTerm, saleFilter, categoryFilter, mainCategoryFilter, issueFilter])
 
   const setListSortKey = React.useCallback((key: PosCostListSortKey) => {
     setListSort((prev) => {
