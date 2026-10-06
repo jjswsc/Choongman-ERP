@@ -148,6 +148,10 @@ export async function POST(request: NextRequest) {
           transDate,
           transType,
           amountAbs: Math.abs(amt),
+          vatAmount:
+            vatAmountRaw !== undefined
+              ? Math.max(0, Math.abs(Number(vatAmountRaw) || 0))
+              : Math.max(0, Math.abs(Number((row as { vat_amount?: number }).vat_amount || 0) || 0)),
           memo: memo || String(row.memo || ''),
           storeName: store,
           postedBy: String(row.user_name || '').trim() || undefined,

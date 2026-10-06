@@ -489,6 +489,7 @@ export async function POST(request: NextRequest) {
         category,
         accountingDate: transDate,
         amountAbs: netWithdrawAmount,
+        vatAmount,
         memo: memo || undefined,
         storeName: store || undefined,
         postedBy: userName || undefined,

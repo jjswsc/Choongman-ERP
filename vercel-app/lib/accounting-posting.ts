@@ -17,7 +17,7 @@ import { linesForPosChannelSettlement } from '@/lib/pos-channel-settlement'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { uniqueAccountingPeriodChecks } from '@/lib/accounting-period-mutation-guard'
 import { assertTaxAccountingPeriodOpen, TAX_BOOK_SCHEMA_MISSING, TAX_PERIOD_CLOSED } from '@/lib/tax-book-period-server'
-import { TAX_BOOK, isTaxBookSourceType, taxEntityCodeFromStoreName, voucherKindForSourceType } from '@/lib/tax-book'
+import { TAX_ACCOUNTS, TAX_BOOK, isTaxBookSourceType, taxEntityCodeFromStoreName, taxPurchaseExpenseJournalLines, voucherKindForPaidExpense, voucherKindForSourceType } from '@/lib/tax-book'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
 import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
 
@@ -45,6 +45,36 @@ type PostJournalParams = {
   book?: 'tax' | null
   voucherKind?: string | null
   taxEntityCode?: string | null
+}
+
+function journalLinesFromPurchaseExpense(input: {
+  gross: number
+  vatAmount?: number
+  debitCode: string
+  debitName?: string
+  credit: ReturnType<typeof accountLine>
+  debitSubjectId?: number | null
+}): JournalLineInput[] {
+  const drafts = taxPurchaseExpenseJournalLines({
+    gross: input.gross,
+    vatAmount: input.vatAmount,
+    debitCode: input.debitCode,
+    debitName: input.debitName,
+    creditCode: input.credit.accountCode,
+    creditName: input.credit.accountName,
+  })
+  return drafts.map((ln) => ({
+    accountCode: ln.accountCode,
+    accountName: ln.accountName,
+    side: ln.side,
+    amount: ln.amount,
+    ...(ln.side === 'debit' &&
+    ln.accountCode !== TAX_ACCOUNTS.inputVat &&
+    input.debitSubjectId != null &&
+    Number(input.debitSubjectId) > 0
+      ? { accountSubjectId: Number(input.debitSubjectId) }
+      : {}),
+  }))
 }
 
 function monthOf(dateYmd: string): string {
@@ -378,6 +408,7 @@ export async function postPettyCashJournal(params: {
   transDate: string
   transType: string
   amountAbs: number
+  vatAmount?: number
   memo?: string
   storeName?: string
   postedBy?: string
@@ -436,8 +467,15 @@ export async function postPettyCashJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '시재 지출 자동분개',
     postedBy: params.postedBy || null,
-    voucherKind: 'purchase',
-    lines: [expenseLine, { ...prepayment, side: 'credit', amount }],
+    voucherKind: voucherKindForPaidExpense(params.vatAmount),
+    lines: journalLinesFromPurchaseExpense({
+      gross: amount,
+      vatAmount: params.vatAmount,
+      debitCode: expenseLine.accountCode,
+      debitName: expenseLine.accountName,
+      credit: prepayment,
+      debitSubjectId: expenseLine.accountSubjectId ?? null,
+    }),
   })
 }
 
@@ -507,6 +545,7 @@ export async function postExpenseAccrualJournal(params: {
   expenseAccrualId?: number
   accountingDate: string
   amountAbs: number
+  vatAmount?: number
   expenseAccountCode?: string
   expenseAccountName?: string
   expenseAccountSubjectId?: number | null
@@ -521,6 +560,17 @@ export async function postExpenseAccrualJournal(params: {
     params.expenseAccountSubjectId != null && Number(params.expenseAccountSubjectId) > 0
       ? Number(params.expenseAccountSubjectId)
       : undefined
+  const debitCode = params.expenseAccountCode || '5520'
+  const debitName = params.expenseAccountName || accountLine('5520').accountName
+  const lines = journalLinesFromPurchaseExpense({
+    gross: amount,
+    vatAmount: params.vatAmount,
+    debitCode,
+    debitName,
+    credit: GL.payables(),
+    debitSubjectId: sid ?? null,
+  })
+  if (lines.length < 2) return null
 
   return postJournalEntry({
     accountingDate: params.accountingDate,
@@ -530,17 +580,7 @@ export async function postExpenseAccrualJournal(params: {
     memo: params.memo || '지출 발생(미지급) 자동분개',
     postedBy: params.postedBy || null,
     voucherKind: 'purchase',
-    lines: [
-      {
-        ...accountLine(params.expenseAccountCode || '5520', {
-          nameKo: params.expenseAccountName || accountLine('5520').accountName,
-        }),
-        side: 'debit',
-        amount,
-        ...(sid != null ? { accountSubjectId: sid } : {}),
-      },
-      { ...GL.payables(), side: 'credit', amount },
-    ],
+    lines,
   })
 }
 
@@ -603,6 +643,7 @@ export async function postPayableSettlementJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '미지급금 지급 자동분개',
     postedBy: params.postedBy || null,
+    voucherKind: 'payment',
     lines: [
       { ...GL.payables(), side: 'debit', amount },
       { ...GL.cash(), side: 'credit', amount },
@@ -711,6 +752,7 @@ export async function postPosOrderJournal(params: {
     sourceId: params.posOrderId || null,
     storeName: params.storeName || null,
     memo: params.memo || 'POS 매출 자동분개',
+    voucherKind: 'sales',
     lines,
   })
 }
@@ -857,6 +899,7 @@ export async function postPosOrderReversalJournal(params: {
     sourceId: orderId,
     storeName: params.storeName || null,
     memo: params.memo || 'POS 주문 취소/환불 역분개',
+    voucherKind: 'sales',
     lines: reverseLines,
   })
 }
@@ -865,21 +908,28 @@ export async function postStorePurchaseJournal(params: {
   orderId: number
   transDate: string
   amount: number
+  vatAmount?: number
   storeName?: string
   memo?: string
 }) {
   const amt = Math.abs(Number(params.amount) || 0)
   if (amt <= 0) return null
+  const lines = journalLinesFromPurchaseExpense({
+    gross: amt,
+    vatAmount: params.vatAmount,
+    debitCode: GL.inventory().accountCode,
+    debitName: GL.inventory().accountName,
+    credit: GL.payables(),
+  })
+  if (lines.length < 2) return null
   return postJournalEntry({
     accountingDate: params.transDate,
     sourceType: 'store_purchase',
     sourceId: params.orderId,
     storeName: params.storeName || null,
     memo: params.memo || '매장 매입 자동분개',
-    lines: [
-      { ...GL.inventory(), side: 'debit', amount: amt },
-      { ...GL.payables(), side: 'credit', amount: amt },
-    ],
+    voucherKind: 'purchase',
+    lines,
   })
 }
 
@@ -962,6 +1012,8 @@ export async function postWithdrawalJournal(params: {
   expenseAccountName?: string
   /** 경비·고정자산 취득 등 사용자 선택 account_subjects.id (분개 라인에 그대로 연결) */
   expenseAccountSubjectId?: number | null
+  /** 세금계산서가 있을 때만 매입세(1360)를 나눈다 */
+  vatAmount?: number
   /** 이체 시 입금 계좌(통장→통장) */
   transferToAccountId?: number | null
   /** 이체 시 패티캐쉬 대상 매장(통장→패티) */
@@ -1012,15 +1064,14 @@ export async function postWithdrawalJournal(params: {
       ]
       break
     case 'expense':
-      lines = [
-        {
-          ...expense,
-          side: 'debit',
-          amount,
-          ...(expenseSubjectId != null ? { accountSubjectId: expenseSubjectId } : {}),
-        },
-        { ...cash, side: 'credit', amount },
-      ]
+      lines = journalLinesFromPurchaseExpense({
+        gross: amount,
+        vatAmount: params.vatAmount,
+        debitCode: expense.accountCode,
+        debitName: expense.accountName,
+        credit: cash,
+        debitSubjectId: expenseSubjectId ?? null,
+      })
       break
     case 'expense_advance':
       lines = [
@@ -1029,15 +1080,14 @@ export async function postWithdrawalJournal(params: {
       ]
       break
     case 'fixed_asset':
-      lines = [
-        {
-          ...fixedAsset,
-          side: 'debit',
-          amount,
-          ...(expenseSubjectId != null ? { accountSubjectId: expenseSubjectId } : {}),
-        },
-        { ...cash, side: 'credit', amount },
-      ]
+      lines = journalLinesFromPurchaseExpense({
+        gross: amount,
+        vatAmount: params.vatAmount,
+        debitCode: fixedAsset.accountCode,
+        debitName: fixedAsset.accountName,
+        credit: cash,
+        debitSubjectId: expenseSubjectId ?? null,
+      })
       break
     case 'transfer':
       if (params.transferToAccountId) {
@@ -1144,6 +1194,13 @@ export async function postWithdrawalJournal(params: {
 
   if (lines.length < 2) return null
 
+  const voucherKind =
+    params.category === 'purchase_payment' || params.category === 'purchase_advance'
+      ? 'payment'
+      : params.category === 'expense' || params.category === 'fixed_asset'
+        ? voucherKindForPaidExpense(params.vatAmount)
+        : undefined
+
   return postJournalEntry({
     accountingDate: params.accountingDate,
     sourceType: params.sourceType,
@@ -1151,6 +1208,7 @@ export async function postWithdrawalJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '출금 관리 자동분개',
     postedBy: params.postedBy || null,
+    voucherKind,
     lines,
   })
 }

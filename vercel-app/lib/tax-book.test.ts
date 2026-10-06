@@ -17,6 +17,9 @@ import {
   taxJournalBalanced,
   taxPayrollJournalLines,
   taxVatSummaryLines,
+  taxGrossVatSplit,
+  taxPurchaseExpenseJournalLines,
+  voucherKindForPaidExpense,
   voucherKindForSourceType,
 } from './tax-book'
 import { buildTaxManagementBridge } from './tax-management-bridge'
@@ -49,7 +52,7 @@ describe('tax book rules', () => {
     expect(voucherKindForSourceType('expense_accrual')).toBe('purchase')
     expect(voucherKindForSourceType('depreciation')).toBe('general')
     expect(voucherKindForSourceType('store_purchase')).toBe('purchase')
-    expect(voucherKindForSourceType('petty_cash')).toBe('purchase')
+    expect(voucherKindForSourceType('petty_cash')).toBe('payment')
     expect(voucherKindForSourceType('pos_deposit_receive')).toBe('receipt')
     expect(voucherKindForSourceType('tax_adjustment')).toBe('general')
   })
@@ -69,6 +72,31 @@ describe('tax book rules', () => {
     expect(voucherKindForDayBookFilter('receipt')).toBe('receipt')
     expect(voucherKindForDayBookFilter('all')).toBe('general')
     expect(voucherKindForDayBookFilter('general')).toBe('general')
+  })
+
+  it('splits purchase/expense VAT and maps cash expenses to PV vs PP', () => {
+    expect(taxGrossVatSplit(107000, 7000)).toEqual({ gross: 107000, vat: 7000, net: 100000 })
+    expect(taxGrossVatSplit(100000, 0)).toEqual({ gross: 100000, vat: 0, net: 100000 })
+    const withVat = taxPurchaseExpenseJournalLines({
+      gross: 107000,
+      vatAmount: 7000,
+      debitCode: '1460',
+      debitName: '재고',
+      creditCode: '2110',
+      creditName: '매입채무',
+    })
+    expect(taxJournalBalanced(withVat)).toBe(true)
+    expect(withVat.find((l) => l.accountCode === '1360')?.amount).toBe(7000)
+    expect(withVat.find((l) => l.accountCode === '1460')?.amount).toBe(100000)
+    const noVat = taxPurchaseExpenseJournalLines({
+      gross: 100000,
+      vatAmount: 0,
+      debitCode: '5520',
+      creditCode: '1110',
+    })
+    expect(noVat.some((l) => l.accountCode === '1360')).toBe(false)
+    expect(voucherKindForPaidExpense(7000)).toBe('purchase')
+    expect(voucherKindForPaidExpense(0)).toBe('payment')
   })
 
   it('accepts only an entity or 13-digit TIN as the tax book key', () => {

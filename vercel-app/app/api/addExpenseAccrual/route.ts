@@ -561,6 +561,7 @@ export async function POST(request: NextRequest) {
           expenseAccrualId,
           accountingDate: expenseDate,
           amountAbs: amount,
+          vatAmount,
           expenseAccountCode: subjectCode,
           expenseAccountName: subjectName,
           expenseAccountSubjectId:

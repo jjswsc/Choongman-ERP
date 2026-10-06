@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
           transDate: transDate.slice(0, 10),
           transType,
           amountAbs: Math.abs(amount),
+          vatAmount: Math.max(0, Math.abs(Number(vatAmountRaw) || 0)),
           memo,
           storeName: store,
           postedBy: userName || undefined,

@@ -37,11 +37,11 @@ export function isTaxBookSourceType(sourceType: string | null | undefined): bool
 
 /**
  * 전표 종류 → 일별장부 (회계 표준).
- * JV 일반: 계정 조정(ปรับปรุงบัญชี) · 기초 · 결산
- * PV 매입: 매입 · 비용(ค่าใช้จ่าย/ซื้อ)
- * SV 매출: 상품·서비스 매출
- * RV 수취: 매출 대금 수금(รับเข้า ขายสินค้าหรือบริการ)
- * PP 지급: 그 외 출금
+ * JV 일반: 계정 조정
+ * PV 매입: 입고·지출 발생(VAT 있으면 매입세 분리)
+ * SV 매출: POS 시스템 매출 인식(현금매출만 쓰지 않음)
+ * RV 수취: 매출 대금 실제 입금
+ * PP 지급: 채무 지급 · VAT 없는 현금 비용
  */
 export function voucherKindForSourceType(sourceType: string | null | undefined): TaxVoucherKind {
   const s = String(sourceType || '').trim()
@@ -51,8 +51,7 @@ export function voucherKindForSourceType(sourceType: string | null | undefined):
     s === 'tax_purchase_summary' ||
     s === 'tax_inventory_cogs' ||
     s === 'store_purchase' ||
-    s === 'expense_accrual' ||
-    s === 'petty_cash'
+    s === 'expense_accrual'
   ) {
     return 'purchase'
   }
@@ -69,7 +68,7 @@ export function voucherKindForSourceType(sourceType: string | null | undefined):
   if (s === 'pos_order' || s === 'pos_day_close' || s === 'pos_order_reversal') return 'sales'
   if (s === 'pos_deposit_receive' || s === 'pos_channel_settlement') return 'receipt'
   if (s === 'pos_deposit_refund' || s === 'pos_deposit_forfeit') return 'payment'
-  if (s === 'card_transaction' || s === 'bank_transaction') return 'payment'
+  if (s === 'petty_cash' || s === 'card_transaction' || s === 'bank_transaction') return 'payment'
   return 'general'
 }
 
@@ -297,6 +296,61 @@ export type TaxJournalLineDraft = {
   accountName: string
   side: 'debit' | 'credit'
   amount: number
+}
+
+/** 총액(세금포함)과 매입세. VAT가 없거나 0이면 vat=0. */
+export function taxGrossVatSplit(gross: number, vatAmount?: number): { gross: number; vat: number; net: number } {
+  const g = roundTaxAmount(Math.max(0, Number(gross) || 0))
+  const v = roundTaxAmount(Math.min(Math.max(0, Number(vatAmount) || 0), g))
+  return { gross: g, vat: v, net: roundTaxAmount(g - v) }
+}
+
+/** 현금 지급 비용: VAT 있으면 PV, 없으면 PP (VAT 줄 없음). */
+export function voucherKindForPaidExpense(vatAmount?: number): TaxVoucherKind {
+  return roundTaxAmount(Math.max(0, Number(vatAmount) || 0)) > 0 ? 'purchase' : 'payment'
+}
+
+/**
+ * 매입·비용 발생/지급.
+ * VAT 있음: Dr 순액 + Dr 매입세(1360) / Cr 채무 또는 현금(총액)
+ * VAT 없음: Dr 총액 / Cr 채무 또는 현금 — 매입세 줄 없음
+ */
+export function taxPurchaseExpenseJournalLines(input: {
+  gross: number
+  vatAmount?: number
+  debitCode: string
+  debitName?: string
+  creditCode: string
+  creditName?: string
+  inputVatName?: string
+}): TaxJournalLineDraft[] {
+  const { gross, vat, net } = taxGrossVatSplit(input.gross, input.vatAmount)
+  if (gross <= 0) return []
+  const debitCode = String(input.debitCode || '').trim() || '5520'
+  const creditCode = String(input.creditCode || '').trim() || TAX_ACCOUNTS.payables
+  const lines: TaxJournalLineDraft[] = [
+    {
+      accountCode: debitCode,
+      accountName: input.debitName || debitCode,
+      side: 'debit',
+      amount: vat > 0 ? net : gross,
+    },
+  ]
+  if (vat > 0) {
+    lines.push({
+      accountCode: TAX_ACCOUNTS.inputVat,
+      accountName: input.inputVatName || '매입세액',
+      side: 'debit',
+      amount: vat,
+    })
+  }
+  lines.push({
+    accountCode: creditCode,
+    accountName: input.creditName || creditCode,
+    side: 'credit',
+    amount: gross,
+  })
+  return lines
 }
 
 export function taxPayrollJournalLines(input: {

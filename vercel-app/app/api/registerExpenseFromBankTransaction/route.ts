@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
           if (subject?.[0]?.name) subjectName = String(subject[0].name)
         }
         const accrualRows = (await supabaseSelectFilter('expense_accruals', `id=eq.${accrualId}`, {
-          select: 'id,store_name,expense_date,memo,payee_name,created_by,amount',
+          select: 'id,store_name,expense_date,memo,payee_name,created_by,amount,vat_amount',
           limit: 1,
         })) as {
           id?: number
@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
           payee_name?: string | null
           created_by?: string | null
           amount?: number
+          vat_amount?: number | null
         }[] | null
         const accrualRow = accrualRows?.[0]
         const expenseDate = String(accrualRow?.expense_date || bankRow.trans_date || '').slice(0, 10)
@@ -179,6 +180,7 @@ export async function POST(request: NextRequest) {
             expenseAccrualId: accrualId,
             accountingDate: expenseDate,
             amountAbs: Math.abs(Number(accrualRow?.amount || linkedAmount)),
+            vatAmount: Number(linkedVat ?? accrualRow?.vat_amount ?? 0) || 0,
             expenseAccountCode: subjectCode,
             expenseAccountName: subjectName,
             expenseAccountSubjectId: asId,
@@ -294,6 +296,7 @@ export async function POST(request: NextRequest) {
         expenseAccrualId,
         accountingDate: expenseDate,
         amountAbs: amount,
+        vatAmount: vatAmount ?? 0,
         expenseAccountCode: subjectCode,
         expenseAccountName: subjectName,
         expenseAccountSubjectId:
