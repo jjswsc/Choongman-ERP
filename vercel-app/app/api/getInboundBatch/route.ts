@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { authorizeInboundBatchMutation } from '@/lib/inbound-store-access'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import {
   appendInventoryTenantFilter,
@@ -47,6 +48,13 @@ export async function GET(request: NextRequest) {
     const batch = batchRows?.[0]
     if (!batch) {
       return NextResponse.json({ error: 'Batch not found' }, { status: 404, headers })
+    }
+    const access = authorizeInboundBatchMutation(
+      auth ? { role: auth.role, store: auth.store, allowedStores: auth.allowedStores } : null,
+      batch.location
+    )
+    if (!access.ok) {
+      return NextResponse.json({ error: access.message }, { status: access.status, headers })
     }
 
     const itemRows = (await supabaseSelectFilter(

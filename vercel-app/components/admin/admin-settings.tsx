@@ -858,7 +858,7 @@ export function AdminSettings() {
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminVendors")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminOrders")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_view_no_edit")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminStock")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_stock_note")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminInbound")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminInbound")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_inbound_note")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminOutbound")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_outbound_note")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminForce")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminEmployees")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_employees_note")}</td></tr>

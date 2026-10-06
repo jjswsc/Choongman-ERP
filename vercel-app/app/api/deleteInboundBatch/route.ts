@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { authorizeInboundBatchMutation } from '@/lib/inbound-store-access'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 import { assertAccountingDateOpen } from '@/lib/accounting-posting'
 import {
@@ -40,6 +41,13 @@ export async function POST(request: NextRequest) {
     )) as { id?: number; batch_date?: string | null; location?: string | null }[]
     if (!batchRows?.length) {
       return NextResponse.json({ success: false, message: '해당 입고 배치가 없습니다.' }, { status: 404, headers })
+    }
+    const access = authorizeInboundBatchMutation(
+      auth ? { role: auth.role, store: auth.store, allowedStores: auth.allowedStores } : null,
+      batchRows[0].location
+    )
+    if (!access.ok) {
+      return NextResponse.json({ success: false, message: access.message }, { status: access.status, headers })
     }
 
     await assertAccountingDateOpen(

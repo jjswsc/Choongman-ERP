@@ -40,6 +40,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
+import { canCorrectOwnStoreInbound } from "@/lib/inbound-store-access"
 import { canPickInboundStore } from "@/lib/permissions"
 import {
   getAdminItems,
@@ -228,6 +229,10 @@ export default function InboundPage() {
 
   const isOffice = React.useMemo(() => {
     return canPickInboundStore(auth?.role || "", auth?.store)
+  }, [auth?.role, auth?.store])
+  /** 지점 매니저·가맹점주: 자기 매장 입고 오입력 수정·삭제. 목록은 이미 자기 매장만 온다. */
+  const canCorrectInbound = React.useMemo(() => {
+    return canCorrectOwnStoreInbound(auth?.role || "", auth?.store)
   }, [auth?.role, auth?.store])
 
   const purchaseVendors = React.useMemo(() => {
@@ -2031,8 +2036,8 @@ export default function InboundPage() {
               <InboundTable
                 rows={inboundTableRows}
                 loading={historyLoading}
-                onEdit={isOffice ? handleEditRow : undefined}
-                onDelete={isOffice ? handleDeleteRow : undefined}
+                onEdit={canCorrectInbound ? handleEditRow : undefined}
+                onDelete={canCorrectInbound ? handleDeleteRow : undefined}
                 onInvoiceReceivedToggle={isOffice ? handleInvoiceReceivedToggle : undefined}
                 onPrint={isOffice ? printInbound : undefined}
                 onExcel={isOffice ? exportInboundExcel : undefined}

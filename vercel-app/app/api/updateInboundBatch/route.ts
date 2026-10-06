@@ -23,6 +23,7 @@ import {
   validateInboundFxHeader,
 } from '@/lib/inbound-fx'
 import { resolveInboundPersistLocation } from '@/lib/office-store-canonical'
+import { authorizeInboundBatchMutation } from '@/lib/inbound-store-access'
 import { canPickInboundStore } from '@/lib/permissions'
 import { getServerAppBrandConfig } from '@/lib/app-brand-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
@@ -115,6 +116,13 @@ export async function POST(request: NextRequest) {
     }[] | null
     if (!existing?.[0]?.id) {
       return NextResponse.json({ success: false, message: '입고 배치를 찾을 수 없습니다.' }, { status: 404, headers })
+    }
+    const access = authorizeInboundBatchMutation(
+      auth ? { role: auth.role, store: auth.store, allowedStores: auth.allowedStores } : null,
+      existing[0].location
+    )
+    if (!access.ok) {
+      return NextResponse.json({ success: false, message: access.message }, { status: access.status, headers })
     }
 
     const list = (Array.isArray(body.list) ? body.list : null) as InboundLineBody[] | null
