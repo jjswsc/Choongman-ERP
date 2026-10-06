@@ -55,14 +55,17 @@ export type StoreNormalCostRow = {
   storeDiscount: number
   unclassifiedDiscount: number
   bomCost: number
+  /** 정상 원가 ÷ 정가 */
   normalCostPctOfGross: number
-  /** 이론 원가율 = 정상 원가 ÷ 실수령 */
+  /** 정상 원가 ÷ 실수령. 화면 이론 원가율은 쓰지 않는다 */
   normalCostPctOfNet: number
+  /** 이론 원가율 = (정상 원가 ÷ 정가) + 할인% */
+  theoryCostPct: number
   accountingSales: number | null
   accountingCogs: number | null
   /** 실제 원가율 = 손익 매출원가 ÷ 손익 매출(부가세 제외) */
   plCostPct: number | null
-  /** 실제 원가율 − 이론 원가율 */
+  /** 실제 원가율 − 이론 원가율(정가 대비 + 할인%) */
   vsPlPct: number | null
   /** 손익 매출원가 − 정상 원가(BOM) */
   vsPlAmt: number | null
@@ -236,10 +239,15 @@ export function buildStoreNormalCostRow(params: {
     params.accountingCogs == null || !Number.isFinite(params.accountingCogs)
       ? null
       : round2(params.accountingCogs)
+  const normalCostPctOfGross = pctOf(bomCost, grossSales)
+  const discountSharePct = pctOf(totalDiscount, grossSales)
+  const theoryCostPct = round2(normalCostPctOfGross + discountSharePct)
   const normalCostPctOfNet = pctOf(bomCost, netSales)
   const plCostPct =
-    accountingCogs != null && accountingSales != null ? pctOf(accountingCogs, accountingSales) : null
-  const vsPlPct = plCostPct == null ? null : round2(plCostPct - normalCostPctOfNet)
+    accountingCogs != null && accountingSales != null && accountingSales > 0.0001
+      ? pctOf(accountingCogs, accountingSales)
+      : null
+  const vsPlPct = plCostPct == null ? null : round2(plCostPct - theoryCostPct)
   const vsPlAmt = accountingCogs == null ? null : round2(accountingCogs - bomCost)
 
   const matched = Math.max(0, params.matchedLineQty)
@@ -258,13 +266,14 @@ export function buildStoreNormalCostRow(params: {
     netSales,
     totalDiscount,
     netSharePct: pctOf(netSales, grossSales),
-    discountSharePct: pctOf(totalDiscount, grossSales),
+    discountSharePct,
     hqDiscount: discounts.hqDiscount,
     storeDiscount: discounts.storeDiscount,
     unclassifiedDiscount: discounts.unclassifiedDiscount,
     bomCost,
-    normalCostPctOfGross: pctOf(bomCost, grossSales),
+    normalCostPctOfGross,
     normalCostPctOfNet,
+    theoryCostPct,
     accountingSales,
     accountingCogs,
     plCostPct,

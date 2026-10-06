@@ -97,7 +97,14 @@ async function loadAccountingPl(params: {
       data: report as unknown as IncomeStatementData,
       vatMode: 'excluded',
     })
-    sales += Number(view.sales) || 0
+    let monthSales = Number(view.sales) || 0
+    if (monthSales <= 0.0001) {
+      const amounts = report.displayAmounts
+      const net = Number(amounts?.salesNet) || 0
+      const gross = Number(amounts?.salesGross) || Number(report.sales) || 0
+      monthSales = net > 0.0001 ? net : gross
+    }
+    sales += monthSales
     cogs += Number(view.cogs) || 0
   }
   return { sales: round2(sales), cogs: round2(cogs) }
@@ -203,6 +210,9 @@ export async function computePosStoreNormalCost(params: {
       })
       accountingSales = pl?.sales ?? null
       accountingCogs = pl?.cogs ?? null
+      if (!(accountingSales != null && accountingSales > 0.0001) && slice.netSales > 0.0001) {
+        accountingSales = round2(slice.netSales)
+      }
     } catch {
       usageWarnings.push('ACCOUNTING_LOAD_FAILED')
     }

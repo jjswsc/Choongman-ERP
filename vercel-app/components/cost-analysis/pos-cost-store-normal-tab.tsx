@@ -72,11 +72,20 @@ function actualCostPct(row: StoreNormalCostRow): number | null {
   return null
 }
 
+function theoryPct(row: StoreNormalCostRow): number | null {
+  if (row.theoryCostPct != null && Number.isFinite(row.theoryCostPct)) return row.theoryCostPct
+  const gross = Number(row.grossSales)
+  if (!(gross > 0.0001)) return null
+  const discount = discountAmount(row)
+  const bom = Number(row.bomCost)
+  if (!Number.isFinite(bom)) return null
+  return ((bom + discount) / gross) * 100
+}
+
 function gapPct(row: StoreNormalCostRow): number | null {
   const actual = actualCostPct(row)
-  const theory = row.normalCostPctOfNet
-  if (row.vsPlPct != null && Number.isFinite(row.vsPlPct) && actual != null) return row.vsPlPct
-  if (actual == null || theory == null || !Number.isFinite(theory)) return null
+  const theory = theoryPct(row)
+  if (actual == null || theory == null) return null
   return Math.round((actual - theory) * 100) / 100
 }
 
@@ -167,22 +176,25 @@ export function PosCostStoreNormalTab() {
 
   const kpi = React.useMemo(() => {
     const rows = result?.rows ?? []
-    let net = 0
+    let gross = 0
+    let discount = 0
     let bom = 0
     let plSales = 0
     let plCogs = 0
     let higherPl = 0
     for (const row of rows) {
-      net += row.netSales
+      gross += row.grossSales
+      discount += discountAmount(row)
       bom += row.bomCost
-      if (row.accountingSales != null && row.accountingCogs != null) {
-        plSales += row.accountingSales
+      const sales = row.accountingSales
+      if (sales != null && sales > 0.0001 && row.accountingCogs != null) {
+        plSales += sales
         plCogs += row.accountingCogs
       }
       if ((gapPct(row) ?? 0) > 0.5) higherPl += 1
     }
     return {
-      normalPct: net > 0.0001 ? (bom / net) * 100 : null,
+      normalPct: gross > 0.0001 ? ((bom + discount) / gross) * 100 : null,
       plPct: plSales > 0.0001 ? (plCogs / plSales) * 100 : null,
       higherPl,
       stores: rows.length,
@@ -290,8 +302,6 @@ export function PosCostStoreNormalTab() {
                   <th className="px-2 py-2 w-8" />
                   <th className="px-2 py-2">{t("posCostStoreNormalColStore")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColGross")}</th>
-                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColNet")}</th>
-                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColNetPct")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColDiscount")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColDiscountPct")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColTheoryPct")}</th>
@@ -306,8 +316,8 @@ export function PosCostStoreNormalTab() {
                   const open = expanded === row.storeCode
                   const storeName = labelForStore(storeLabels, row.storeCode)
                   const discount = discountAmount(row)
-                  const netPct = shareOfGross(row.netSales, row.grossSales, row.netSharePct)
                   const discPct = shareOfGross(discount, row.grossSales, row.discountSharePct)
+                  const theory = theoryPct(row)
                   const actual = actualCostPct(row)
                   const gap = gapPct(row)
                   const plHot = gap != null && gap > 0.5
@@ -338,11 +348,9 @@ export function PosCostStoreNormalTab() {
                           ) : null}
                         </td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.grossSales)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.netSales)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(netPct)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(discount)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(discPct)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(row.normalCostPctOfNet)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(theory)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.bomCost)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.accountingCogs)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(actual)}</td>
@@ -358,7 +366,7 @@ export function PosCostStoreNormalTab() {
                       </tr>
                       {open ? (
                         <tr className="border-b bg-muted/20">
-                          <td colSpan={12} className="px-4 py-3 space-y-2">
+                          <td colSpan={10} className="px-4 py-3 space-y-2">
                             {row.holdReasons.length > 0 ? (
                               <ul className="list-disc pl-4 text-amber-800 dark:text-amber-200">
                                 {row.holdReasons.map((reason) => (
