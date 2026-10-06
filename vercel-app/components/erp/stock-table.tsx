@@ -27,6 +27,7 @@ import { useT } from "@/lib/i18n"
 import type { StockStatusItem } from "@/lib/api-client"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { AdminFilterBar, AdminFilterField } from "@/components/erp/admin-filter-bar"
+import { formatMoney2 } from "@/lib/financial-amount-format"
 import { LogisticsEmptyState, LogisticsTableSkeleton } from "@/components/erp/logistics-ui"
 import {
   AdminDesktopOnly,
@@ -181,14 +182,14 @@ export function StockTable({
 <colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
 <tr><td class="head">${escapeXml(t("stockColDate"))}</td><td colspan="6">${escapeXml(dateStr)}</td></tr>
 <tr><td class="head">${escapeXml(t("stockFilterStore"))}</td><td colspan="6">${escapeXml(storeFilter || t("stockFilterStoreAll"))}</td></tr>
-<tr><td class="head">${escapeXml(t("stockTotalAmount"))}</td><td colspan="6">${escapeXml(totalAmount.toLocaleString())}</td></tr>
+<tr><td class="head">${escapeXml(t("stockTotalAmount"))}</td><td colspan="6">${escapeXml(formatMoney2(totalAmount))}</td></tr>
 <tr></tr>
 <tr class="head">${headerCells.map((h) => `<td>${escapeXml(h)}</td>`).join("")}</tr>
 ${filteredList.map((r) => {
   const cost = r.cost ?? r.price ?? 0
   const amount = cost * r.qty
   const isLow = r.safeQty > 0 && r.qty < r.safeQty
-  return `<tr><td>${escapeXml(r.code)}</td><td>${escapeXml(r.name)}</td><td>${escapeXml(r.spec)}</td><td>${r.qty}</td><td>${r.safeQty > 0 ? r.safeQty : ""}</td><td>${amount.toLocaleString()}</td><td>${escapeXml(isLow ? t("stockLow") : "-")}</td></tr>`
+  return `<tr><td>${escapeXml(r.code)}</td><td>${escapeXml(r.name)}</td><td>${escapeXml(r.spec)}</td><td>${r.qty}</td><td>${r.safeQty > 0 ? r.safeQty : ""}</td><td>${formatMoney2(amount)}</td><td>${escapeXml(isLow ? t("stockLow") : "-")}</td></tr>`
 }).join("")}
 </table>`
     const html = buildErpExcelHtmlDocument(tableBody, erpExcelSimpleTableStyle({ withHead: true }))
@@ -213,7 +214,7 @@ ${filteredList.map((r) => {
       <div className="hidden print:block border-b px-6 py-3 text-sm">
         <span className="font-semibold">{t("stockFilterDate")}:</span> {stockDateFilter || "-"} |{" "}
         <span className="font-semibold">{t("stockFilterStore")}:</span> {storeFilter || t("stockFilterStoreAll")} |{" "}
-        <span className="font-semibold">{t("stockTotalAmount")}:</span> {totalAmount.toLocaleString()}
+        <span className="font-semibold">{t("stockTotalAmount")}:</span> {formatMoney2(totalAmount)}
       </div>
       <div className="border-b bg-muted/20 px-6 py-3 print:hidden">
         <AdminFilterBar className="border-0 bg-transparent p-0 items-end">
@@ -368,7 +369,7 @@ ${filteredList.map((r) => {
                     <p className={cn("text-base font-bold tabular-nums", row.qty < 0 ? "text-destructive" : "")}>
                       {row.qty.toLocaleString()}
                     </p>
-                    <p className="text-[11px] tabular-nums text-muted-foreground">{amount.toLocaleString()}</p>
+                    <p className="text-[11px] tabular-nums text-muted-foreground">{formatMoney2(amount)}</p>
                     {isLow ? (
                       <span className="mt-0.5 inline-flex rounded-md bg-destructive/10 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
                         {t("stockLow")}
@@ -540,7 +541,7 @@ ${filteredList.map((r) => {
                     </td>
                     <td className="px-5 py-3 text-right">
                       <span className="text-sm tabular-nums text-foreground">
-                        {amount.toLocaleString()}
+                        {formatMoney2(amount)}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-center">
@@ -599,7 +600,7 @@ ${filteredList.map((r) => {
               <tr className="border-t-2 bg-muted/20 font-bold">
                 <td colSpan={5} className="px-5 py-3 text-right">{t("stockTotalAmount")}</td>
                 <td className="px-5 py-3"></td>
-                <td className="px-5 py-3 text-right tabular-nums">{totalAmount.toLocaleString()}</td>
+                <td className="px-5 py-3 text-right tabular-nums">{formatMoney2(totalAmount)}</td>
                 <td colSpan={(canAdjust || onToggleOrderDisabled) ? 2 : 1}></td>
               </tr>
             </tfoot>
@@ -651,7 +652,7 @@ ${filteredList.map((r) => {
         <span className="text-[11px] text-muted-foreground">
           {t("stockTotal")} <span className="font-bold text-foreground">{filteredList.length}</span> {t("stockCountUnit")}
           {filteredList.length > 0 && (
-            <> · {t("stockTotalAmount")} <span className="font-bold text-foreground">{totalAmount.toLocaleString()}</span></>
+            <> · {t("stockTotalAmount")} <span className="font-bold text-foreground">{formatMoney2(totalAmount)}</span></>
           )}
         </span>
       </div>

@@ -20,6 +20,11 @@ export async function downloadIncomeStatementXlsx(
     aoa.push([r.label, r.amount ?? '', r.pct])
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa)
+  const dataStart = headerLines.length + 2
+  for (let r = dataStart; r < aoa.length; r++) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c: 1 })]
+    if (cell && cell.t === 'n') cell.z = '#,##0.00'
+  }
   ws['!cols'] = [{ wch: 40 }, { wch: 18 }, { wch: 14 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'P&L')

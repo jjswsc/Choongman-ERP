@@ -1,11 +1,18 @@
-/**
- * 손익·재무상태표 등 금액 표시: 바트 단위 정수(반올림).
- */
+import { roundMoney2 } from '@/lib/invoice-vat-total'
+
+/** 손익·재무상태표·재고금액: 바트 소수 둘째 자리(0.01). */
 export function roundFinancialAmount(n: number | null | undefined): number {
-  return Math.round(Number(n) || 0)
+  return roundMoney2(Number(n) || 0)
 }
 
+export function formatMoney2(n: number | null | undefined): string {
+  return roundFinancialAmount(n).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+/** 화면 통화. 이름은 기존 호출부 호환용이며, 표시는 소수 둘째 자리입니다. */
 export function formatBahtInteger(n: number | null | undefined): string {
-  const v = roundFinancialAmount(n)
-  return `฿${v.toLocaleString()}`
+  return `฿${formatMoney2(n)}`
 }
