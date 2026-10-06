@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildStoreNormalCostRow,
   classifyStoreNormalCostDiscount,
+  resolveStoreNormalAccounting,
 } from '@/lib/pos-store-normal-cost'
 
 const base = {
@@ -66,5 +67,24 @@ describe('buildStoreNormalCostRow', () => {
     expect(row.totalDiscount).toBe(180)
     expect(row.discountSharePct).toBe(18)
     expect(row.theoryCostPct).toBe(37.5)
+  })
+})
+
+describe('resolveStoreNormalAccounting', () => {
+  it('uses the income-statement VAT mode so included and excluded rates stay with their own amounts', () => {
+    const row = buildStoreNormalCostRow({
+      ...base,
+      discountKinds: [],
+      accountingSales: 1129873.65,
+      accountingCogs: 477155.46,
+      accountingSalesIncluded: 1207969,
+      accountingCogsIncluded: 496416.33,
+    })
+    const included = resolveStoreNormalAccounting(row, 'included')
+    const excluded = resolveStoreNormalAccounting(row, 'excluded')
+    expect(included.cogs).toBe(496416.33)
+    expect(Number(included.costPct?.toFixed(1))).toBe(41.1)
+    expect(excluded.cogs).toBe(477155.46)
+    expect(Number(excluded.costPct?.toFixed(1))).toBe(42.2)
   })
 })

@@ -9,7 +9,14 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { tOr, useT } from "@/lib/i18n"
 import { getPosStoreNormalCost } from "@/lib/api-client"
-import type { StoreNormalCostReport, StoreNormalCostRow } from "@/lib/pos-store-normal-cost"
+import {
+  resolveStoreNormalAccounting,
+  type StoreNormalCostReport,
+  type StoreNormalCostRow,
+  type StoreNormalVatMode,
+} from "@/lib/pos-store-normal-cost"
+import { readIncomeStatementDisplayPrefs } from "@/lib/income-statement-display"
+import { useErpPageActive } from "@/lib/erp-page-visibility"
 import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { resolveStockTakeKpiMonth } from "@/lib/stock-take-kpi"
 import { cn } from "@/lib/utils"
@@ -59,18 +66,12 @@ function shareOfGross(part: number, gross: number, given?: number | null): numbe
   return (part / gross) * 100
 }
 
-function actualCostPct(row: StoreNormalCostRow): number | null {
-  if (row.plCostPct != null && Number.isFinite(row.plCostPct)) return row.plCostPct
-  if (
-    row.accountingSales != null &&
-    row.accountingCogs != null &&
-    Number.isFinite(row.accountingSales) &&
-    Number.isFinite(row.accountingCogs) &&
-    row.accountingSales > 0.0001
-  ) {
-    return (row.accountingCogs / row.accountingSales) * 100
-  }
-  return null
+function actualCostPct(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): number | null {
+  return resolveStoreNormalAccounting(row, vatMode).costPct
+}
+
+function plCogsAmount(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): number | null {
+  return resolveStoreNormalAccounting(row, vatMode).cogs
 }
 
 function theoryPct(row: StoreNormalCostRow): number | null {
@@ -80,8 +81,8 @@ function theoryPct(row: StoreNormalCostRow): number | null {
   return (bom / net) * 100
 }
 
-function gapPct(row: StoreNormalCostRow): number | null {
-  const actual = actualCostPct(row)
+function gapPct(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): number | null {
+  const actual = actualCostPct(row, vatMode)
   const theory = theoryPct(row)
   if (actual == null || theory == null) return null
   return Math.round((actual - theory) * 100) / 100
@@ -92,6 +93,8 @@ const USAGE_WARN_KEY: Record<string, string> = {
 }
 
 export function PosCostStoreNormalTab() {
+  const pageActive = useErpPageActive()
+  const [plVatMode, setPlVatMode] = React.useState<StoreNormalVatMode>("included")
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -126,6 +129,10 @@ export function PosCostStoreNormalTab() {
   const [result, setResult] = React.useState<StoreNormalCostReport | null>(null)
   const [expanded, setExpanded] = React.useState<string | null>(null)
   const [viewReady, setViewReady] = React.useState(false)
+
+  React.useEffect(() => {
+    setPlVatMode(readIncomeStatementDisplayPrefs().vatMode)
+  }, [pageActive])
 
   React.useLayoutEffect(() => {
     const saved = readPosCostViewSession().storeNormal
@@ -202,12 +209,12 @@ export function PosCostStoreNormalTab() {
     for (const row of rows) {
       net += row.netSales
       bom += row.bomCost
-      const sales = row.accountingSales
-      if (sales != null && sales > 0.0001 && row.accountingCogs != null) {
-        plSales += sales
-        plCogs += row.accountingCogs
+      const pl = resolveStoreNormalAccounting(row, plVatMode)
+      if (pl.sales != null && pl.sales > 0.0001 && pl.cogs != null) {
+        plSales += pl.sales
+        plCogs += pl.cogs
       }
-      if ((gapPct(row) ?? 0) > 0.5) higherPl += 1
+      if ((gapPct(row, plVatMode) ?? 0) > 0.5) higherPl += 1
     }
     return {
       normalPct: net > 0.0001 ? (bom / net) * 100 : null,
@@ -215,7 +222,7 @@ export function PosCostStoreNormalTab() {
       higherPl,
       stores: rows.length,
     }
-  }, [result])
+  }, [result, plVatMode])
 
   const holdLabel = () => t("posCostStoreNormalHoldBom")
 
@@ -335,8 +342,8 @@ export function PosCostStoreNormalTab() {
                   const discount = discountAmount(row)
                   const discPct = shareOfGross(discount, row.grossSales, row.discountSharePct)
                   const theory = theoryPct(row)
-                  const actual = actualCostPct(row)
-                  const gap = gapPct(row)
+                  const actual = actualCostPct(row, plVatMode)
+                  const gap = gapPct(row, plVatMode)
                   const plHot = gap != null && gap > 0.5
                   return (
                     <React.Fragment key={row.storeCode}>
@@ -370,7 +377,7 @@ export function PosCostStoreNormalTab() {
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.netSales)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.bomCost)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(theory)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.accountingCogs)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(plCogsAmount(row, plVatMode))}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(actual)}</td>
                         <td
                           className={cn(

@@ -61,9 +61,13 @@ export type StoreNormalCostRow = {
   normalCostPctOfNet: number
   /** 이론 원가율 = 정상 원가 ÷ 실수령. 정가 기준 원가율을 할인 후 남은 금액으로 다시 나눈 값 */
   theoryCostPct: number
+  /** 손익 매출·매출원가 (부가세 제외). 화면은 손익계산서 VAT 설정을 따른다 */
   accountingSales: number | null
   accountingCogs: number | null
-  /** 실제 원가율 = 손익 매출원가 ÷ 손익 매출(부가세 제외) */
+  /** 손익 매출·매출원가 (부가세 포함). 손익계산서 VAT 포함과 같은 금액 */
+  accountingSalesIncluded?: number | null
+  accountingCogsIncluded?: number | null
+  /** 실제 원가율 = 손익 매출원가 ÷ 손익 매출(부가세 제외 보관값) */
   plCostPct: number | null
   /** 실제 원가율 − 이론 원가율(실수령) */
   vsPlPct: number | null
@@ -105,6 +109,34 @@ function round2(n: number): number {
 function pctOf(part: number, whole: number): number {
   if (whole <= 0.0001) return 0
   return round2((part / whole) * 100)
+}
+
+function finiteMoney(n: number | null | undefined): number | null {
+  if (n == null || !Number.isFinite(n)) return null
+  return round2(n)
+}
+
+export type StoreNormalVatMode = 'included' | 'excluded'
+
+/** 손익계산서 VAT 토글과 같은 매출·매출원가. 포함 금액이 없으면 제외로 내려간다. */
+export function resolveStoreNormalAccounting(
+  row: Pick<
+    StoreNormalCostRow,
+    'accountingSales' | 'accountingCogs' | 'accountingSalesIncluded' | 'accountingCogsIncluded'
+  >,
+  vatMode: StoreNormalVatMode
+): { sales: number | null; cogs: number | null; costPct: number | null } {
+  const useIncluded = vatMode === 'included'
+  const sales = useIncluded ? (row.accountingSalesIncluded ?? null) : row.accountingSales
+  const cogs = useIncluded ? (row.accountingCogsIncluded ?? null) : row.accountingCogs
+  const salesOk = sales != null && Number.isFinite(sales) ? sales : null
+  const cogsOk = cogs != null && Number.isFinite(cogs) ? cogs : null
+  if (useIncluded && (salesOk == null || cogsOk == null)) {
+    return resolveStoreNormalAccounting(row, 'excluded')
+  }
+  const costPct =
+    salesOk != null && cogsOk != null && salesOk > 0.0001 ? (cogsOk / salesOk) * 100 : null
+  return { sales: salesOk, cogs: cogsOk, costPct }
 }
 
 export function classifyStoreNormalCostDiscount(
@@ -220,6 +252,8 @@ export function buildStoreNormalCostRow(params: {
   combinedDiscount?: number | null
   accountingSales: number | null
   accountingCogs: number | null
+  accountingSalesIncluded?: number | null
+  accountingCogsIncluded?: number | null
   usageWarnings?: string[]
 }): StoreNormalCostRow {
   const discounts = splitStoreNormalCostDiscounts(params.discountKinds)
@@ -239,6 +273,8 @@ export function buildStoreNormalCostRow(params: {
     params.accountingCogs == null || !Number.isFinite(params.accountingCogs)
       ? null
       : round2(params.accountingCogs)
+  const accountingSalesIncluded = finiteMoney(params.accountingSalesIncluded)
+  const accountingCogsIncluded = finiteMoney(params.accountingCogsIncluded)
   const normalCostPctOfGross = pctOf(bomCost, grossSales)
   const discountSharePct = pctOf(totalDiscount, grossSales)
   const normalCostPctOfNet = pctOf(bomCost, netSales)
@@ -276,6 +312,8 @@ export function buildStoreNormalCostRow(params: {
     theoryCostPct,
     accountingSales,
     accountingCogs,
+    accountingSalesIncluded,
+    accountingCogsIncluded,
     plCostPct,
     vsPlPct,
     vsPlAmt,

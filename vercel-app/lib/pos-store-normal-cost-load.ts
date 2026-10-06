@@ -75,14 +75,33 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise
   return out
 }
 
+function monthSalesForVat(
+  viewSales: number,
+  report: { sales?: number; displayAmounts?: { salesNet?: number; salesGross?: number } },
+  vatMode: 'included' | 'excluded'
+): number {
+  const monthSales = Number(viewSales) || 0
+  if (monthSales > 0.0001) return monthSales
+  const amounts = report.displayAmounts
+  const net = Number(amounts?.salesNet) || 0
+  const gross = Number(amounts?.salesGross) || Number(report.sales) || 0
+  if (vatMode === 'included') return gross > 0.0001 ? gross : net
+  return net > 0.0001 ? net : gross
+}
+
 async function loadAccountingPl(params: {
   storeCode: string
   months: string[]
   auth: AccountingStoreAuthScope
-}): Promise<{ sales: number; cogs: number } | null> {
+}): Promise<{
+  excluded: { sales: number; cogs: number }
+  included: { sales: number; cogs: number }
+} | null> {
   if (!params.months.length) return null
-  let sales = 0
-  let cogs = 0
+  let excludedSales = 0
+  let excludedCogs = 0
+  let includedSales = 0
+  let includedCogs = 0
   for (const yearMonth of params.months) {
     const report = await computeIncomeStatementReport({
       yearMonth,
@@ -93,21 +112,18 @@ async function loadAccountingPl(params: {
       tenantId: params.auth.tenantId,
       includeDebug: false,
     })
-    const view = buildIncomeStatementViewNumbers({
-      data: report as unknown as IncomeStatementData,
-      vatMode: 'excluded',
-    })
-    let monthSales = Number(view.sales) || 0
-    if (monthSales <= 0.0001) {
-      const amounts = report.displayAmounts
-      const net = Number(amounts?.salesNet) || 0
-      const gross = Number(amounts?.salesGross) || Number(report.sales) || 0
-      monthSales = net > 0.0001 ? net : gross
-    }
-    sales += monthSales
-    cogs += Number(view.cogs) || 0
+    const data = report as unknown as IncomeStatementData
+    const excluded = buildIncomeStatementViewNumbers({ data, vatMode: 'excluded' })
+    const included = buildIncomeStatementViewNumbers({ data, vatMode: 'included' })
+    excludedSales += monthSalesForVat(excluded.sales, report, 'excluded')
+    excludedCogs += Number(excluded.cogs) || 0
+    includedSales += monthSalesForVat(included.sales, report, 'included')
+    includedCogs += Number(included.cogs) || 0
   }
-  return { sales: round2(sales), cogs: round2(cogs) }
+  return {
+    excluded: { sales: round2(excludedSales), cogs: round2(excludedCogs) },
+    included: { sales: round2(includedSales), cogs: round2(includedCogs) },
+  }
 }
 
 function emptyReport(params: {
@@ -202,14 +218,18 @@ export async function computePosStoreNormalCost(params: {
     const usageWarnings: string[] = []
     let accountingSales: number | null = null
     let accountingCogs: number | null = null
+    let accountingSalesIncluded: number | null = null
+    let accountingCogsIncluded: number | null = null
     try {
       const pl = await loadAccountingPl({
         storeCode,
         months,
         auth: params.auth,
       })
-      accountingSales = pl?.sales ?? null
-      accountingCogs = pl?.cogs ?? null
+      accountingSales = pl?.excluded.sales ?? null
+      accountingCogs = pl?.excluded.cogs ?? null
+      accountingSalesIncluded = pl?.included.sales ?? null
+      accountingCogsIncluded = pl?.included.cogs ?? null
       if (!(accountingSales != null && accountingSales > 0.0001) && slice.netSales > 0.0001) {
         accountingSales = round2(slice.netSales)
       }
@@ -233,6 +253,8 @@ export async function computePosStoreNormalCost(params: {
       combinedDiscount: slice.totalDiscount,
       accountingSales,
       accountingCogs,
+      accountingSalesIncluded,
+      accountingCogsIncluded,
       usageWarnings,
     })
   })
