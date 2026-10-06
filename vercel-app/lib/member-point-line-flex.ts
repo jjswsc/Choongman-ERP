@@ -1,11 +1,10 @@
+import { isOfficeStoreVariant } from '@/lib/office-store-canonical'
 import { formatMemberPointsDisplay } from '@/lib/member-points-math'
 
 const BRAND_NAME = 'Choongman Chicken'
 const HEADER_NAVY = '#0B2A4A'
 const HEADER_REWARDS = '#7FE8D0'
 const TEXT_MUTED = '#6B7280'
-const TEXT_TITLE = '#1E3A8A'
-const TEXT_BALANCE = '#1D4ED8'
 const TEXT_FOOTER = '#64748B'
 const FOOTER_BG = '#E8EEF4'
 const EARN_COLOR = '#16A34A'
@@ -60,7 +59,21 @@ export function formatBangkokThaiBuddhistDateTime(at: Date = new Date()): string
   const hour = String(parts.hour ?? '').padStart(2, '0')
   const minute = String(parts.minute ?? '').padStart(2, '0')
   const monthLabel = THAI_SHORT_MONTHS[month - 1] ?? ''
-  return `${day} ${monthLabel} ${year} ${hour}:${minute}`
+  return `${day} ${monthLabel} ${year} · ${hour}:${minute} น.`
+}
+
+/** 카드 สาขา. 본사 주문은 사진 문구 Online (Office). 그 외는 매장 표시명. */
+export function memberPointLineBranchLabel(storeCode?: string, displayName?: string): string {
+  const code = String(storeCode || '').trim()
+  const name = String(displayName || '').trim()
+  if (isOfficeStoreVariant(code) || isOfficeStoreVariant(name)) return 'Online (Office)'
+  return name || code
+}
+
+export function formatMemberPointLineOrderAmount(raw: number): string {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return ''
+  return `B ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export function formatMemberLineHonorificName(raw: string | undefined): string {
@@ -81,27 +94,48 @@ function resolveHeadline(params: { earned: number; used: number }): {
   title: string
   delta: string
   deltaColor: string
+  boxColor: string
+  caption: string
 } {
   const earned = Number(params.earned || 0)
   const used = Number(params.used || 0)
   if (earned > 0 && used > 0) {
     return {
-      title: 'คุณอัปเดตแต้ม',
-      delta: `+${formatMemberPointsDisplay(earned)} / -${formatMemberPointsDisplay(used)} แต้ม`,
+      title: 'คุณอัปเดตแต้มแล้ว',
+      delta: `+${formatMemberPointsDisplay(earned)} / -${formatMemberPointsDisplay(used)}`,
       deltaColor: TEXT_DARK,
+      boxColor: '#F3F4F6',
+      caption: 'แต้มสะสม',
     }
   }
   if (earned > 0) {
     return {
-      title: 'คุณได้รับแต้ม',
-      delta: `+${formatMemberPointsDisplay(earned)} แต้ม`,
+      title: 'คุณได้รับแต้มแล้ว',
+      delta: `+${formatMemberPointsDisplay(earned)}`,
       deltaColor: EARN_COLOR,
+      boxColor: '#E8F6EE',
+      caption: 'แต้มสะสม',
     }
   }
   return {
-    title: 'คุณใช้แต้ม',
-    delta: `-${formatMemberPointsDisplay(used)} แต้ม`,
+    title: 'คุณใช้แต้มแล้ว',
+    delta: `-${formatMemberPointsDisplay(used)}`,
     deltaColor: USE_COLOR,
+    boxColor: '#FEF2F2',
+    caption: 'แต้มที่ใช้',
+  }
+}
+
+function detailRow(label: string, value: string): Record<string, unknown> {
+  return {
+    type: 'box',
+    layout: 'horizontal',
+    margin: 'md',
+    alignItems: 'center',
+    contents: [
+      flexText({ text: label, size: 'sm', color: TEXT_MUTED, flex: 4, wrap: false }),
+      flexText({ text: value, size: 'sm', color: TEXT_DARK, align: 'end', flex: 6, wrap: true }),
+    ],
   }
 }
 
@@ -111,6 +145,8 @@ export function buildMemberPointLineFlexMessage(params: {
   balanceAfter: number
   tierCode?: string
   storeCode?: string
+  storeLabel?: string
+  orderAmount?: number
   orderNo?: string
   memberName?: string
   reason?: string
@@ -122,9 +158,21 @@ export function buildMemberPointLineFlexMessage(params: {
   const reason = String(params.reason || '').trim() || defaultMemberPointNotifyReason(params)
   const balance = formatMemberPointsDisplay(params.balanceAfter)
   const stamp = formatBangkokThaiBuddhistDateTime(params.occurredAt ?? new Date())
+  const tier = String(params.tierCode || '').trim()
+  const branch = memberPointLineBranchLabel(params.storeCode, params.storeLabel)
+  const orderAmount =
+    params.orderAmount != null && Number.isFinite(Number(params.orderAmount))
+      ? formatMemberPointLineOrderAmount(Number(params.orderAmount))
+      : ''
 
   const altParts = [greeting, headline.title, headline.delta, `คงเหลือ ${balance} แต้ม`].filter(Boolean)
   const altText = `${BRAND_NAME}: ${altParts.join(' · ')}`.slice(0, 400)
+
+  const detailRows: Record<string, unknown>[] = []
+  if (tier) detailRows.push(detailRow('ระดับสมาชิก', tier))
+  if (orderAmount) detailRows.push(detailRow('ยอดคำสั่งซื้อ', orderAmount))
+  if (branch) detailRows.push(detailRow('สาขา', branch))
+  if (reason) detailRows.push(detailRow('รายการ', reason))
 
   const bubble: Record<string, unknown> = {
     type: 'bubble',
@@ -155,53 +203,76 @@ export function buildMemberPointLineFlexMessage(params: {
     body: {
       type: 'box',
       layout: 'vertical',
-      spacing: 'sm',
       contents: [
         flexText({
           text: greeting,
           size: 'sm',
-          color: TEXT_TITLE,
+          color: TEXT_MUTED,
         }),
-        flexText({
-          text: headline.title,
-          size: 'md',
-          weight: 'bold',
-          color: TEXT_TITLE,
-          margin: 'xs',
-        }),
-        flexText({
-          text: headline.delta,
-          size: 'xxl',
-          weight: 'bold',
-          color: headline.deltaColor,
+        {
+          type: 'box',
+          layout: 'vertical',
           margin: 'md',
-        }),
-        {
-          type: 'box',
-          layout: 'horizontal',
-          spacing: 'sm',
-          margin: 'lg',
+          paddingAll: '16px',
+          backgroundColor: headline.boxColor,
+          cornerRadius: '12px',
           contents: [
-            flexText({ text: 'เหตุผล', size: 'sm', color: TEXT_MUTED, flex: 2 }),
-            flexText({ text: reason, size: 'sm', color: TEXT_MUTED, flex: 5, wrap: true }),
-          ],
-        },
-        {
-          type: 'box',
-          layout: 'horizontal',
-          spacing: 'sm',
-          margin: 'sm',
-          contents: [
-            flexText({ text: 'แต้มคงเหลือ', size: 'sm', color: TEXT_MUTED, flex: 2 }),
             flexText({
-              text: `${balance} แต้ม`,
+              text: headline.title,
               size: 'sm',
+              color: TEXT_DARK,
+              align: 'center',
+              wrap: false,
+            }),
+            flexText({
+              text: headline.delta,
+              size: '3xl',
               weight: 'bold',
-              color: TEXT_BALANCE,
-              flex: 5,
+              color: headline.deltaColor,
+              align: 'center',
+              margin: 'sm',
+              wrap: false,
+            }),
+            flexText({
+              text: headline.caption,
+              size: 'xs',
+              color: TEXT_MUTED,
+              align: 'center',
+              margin: 'sm',
+              wrap: false,
             }),
           ],
         },
+        {
+          type: 'box',
+          layout: 'horizontal',
+          margin: 'lg',
+          alignItems: 'center',
+          contents: [
+            flexText({ text: 'แต้มคงเหลือ', size: 'sm', color: TEXT_MUTED, flex: 4, wrap: false }),
+            flexText({
+              text: balance,
+              size: 'xl',
+              weight: 'bold',
+              color: HEADER_NAVY,
+              align: 'end',
+              flex: 4,
+              wrap: false,
+            }),
+            flexText({
+              text: 'แต้ม',
+              size: 'xs',
+              color: HEADER_NAVY,
+              align: 'end',
+              flex: 2,
+              margin: 'sm',
+              wrap: false,
+            }),
+          ],
+        },
+        ...(detailRows.length
+          ? [{ type: 'separator', margin: 'md', color: '#E5E7EB' }, ...detailRows]
+          : []),
       ],
       paddingAll: '20px',
     },
@@ -211,19 +282,21 @@ export function buildMemberPointLineFlexMessage(params: {
       spacing: 'xs',
       contents: [
         flexText({
-          text: `ขอบคุณที่ใช้บริการ ${BRAND_NAME} 🍗`,
+          text: 'ขอบคุณที่อร่อยไปด้วยกัน',
           size: 'xs',
           color: TEXT_FOOTER,
+          align: 'center',
           wrap: true,
         }),
         flexText({
           text: stamp,
           size: 'xxs',
           color: TEXT_FOOTER,
+          align: 'center',
         }),
       ],
       backgroundColor: FOOTER_BG,
-      paddingAll: '12px',
+      paddingAll: '14px',
     },
   }
 
