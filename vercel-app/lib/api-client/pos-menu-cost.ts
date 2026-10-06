@@ -4,7 +4,10 @@
 import { apiFetch } from '../api/fetch'
 import { apiFetchWithOffline } from '../api/fetch-offline'
 import { jsonAsArray } from '../safe-api-json'
+import type { StoreNormalCostReport } from '@/lib/pos-store-normal-cost'
 import { parsePosMutationResponse } from './helpers'
+
+export type { StoreNormalCostReport as PosStoreNormalCostResult }
 
 export interface PosMenuIngredient {
   id: string
@@ -378,6 +381,24 @@ export type PosCostSalesWeightedResult = {
     reason: 'missing_menu_id' | 'missing_bom'
     lineQty: number
   }[]
+}
+
+export async function getPosStoreNormalCost(params: {
+  startStr: string
+  endStr: string
+  storeFilter?: string
+}): Promise<StoreNormalCostReport> {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetchWithOffline(`/api/getPosStoreNormalCost?${q}`)
+  const data = (await res.json()) as StoreNormalCostReport & { error?: string }
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`)
+  }
+  return data
 }
 
 export async function getPosCostSalesWeighted(params: {

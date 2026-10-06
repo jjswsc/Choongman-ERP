@@ -139,7 +139,8 @@ function lineLabel(row: Record<string, unknown>): { menuLabel: string; optionLab
 /** 주문 라인들을 메뉴 기여 + 품목 이론 소진으로 집계 */
 function aggregateTheoreticalFromOrders(
   index: PosMenuBomIndex,
-  orderRows: { items_json?: string }[]
+  orderRows: { items_json?: string }[],
+  options?: { trackContributions?: boolean }
 ): {
   byItem: Record<string, number>
   typeByItem: Record<string, 'food' | 'packaging'>
@@ -153,6 +154,7 @@ function aggregateTheoreticalFromOrders(
   let unmatchedOrderLines = 0
   let orderCount = 0
 
+  const trackContributions = options?.trackContributions !== false
   const addContribution = (
     itemCode: string,
     menuId: string,
@@ -161,6 +163,7 @@ function aggregateTheoreticalFromOrders(
     optionLabel: string,
     qty: number
   ) => {
+    if (!trackContributions) return
     if (!(qty > 0) || !itemCode) return
     let byMenu = contributions.get(itemCode)
     if (!byMenu) {
@@ -688,6 +691,73 @@ export async function computeIngredientUsageVariance(params: {
     unmatchedOrderLines: theo.unmatchedOrderLines,
     orderCount: theo.orderCount,
     rows,
+    warnings,
+  }
+}
+
+/** 메뉴 기여 없이 재료 수량만. 매장 정상 원가 탭용. */
+export function aggregateTheoreticalIngredientQty(
+  index: PosMenuBomIndex,
+  orderRows: { items_json?: string }[]
+): {
+  byItem: Record<string, number>
+  typeByItem: Record<string, 'food' | 'packaging'>
+} {
+  const theo = aggregateTheoreticalFromOrders(index, orderRows, { trackContributions: false })
+  return { byItem: theo.byItem, typeByItem: theo.typeByItem }
+}
+
+export type IngredientActualUsageRow = {
+  item_code: string
+  actual_usage_qty: number
+  has_adjustment: boolean
+}
+
+/** 기초+입고−출고−기말. 메뉴별 기여는 만들지 않는다. */
+export async function fetchIngredientActualUsageRows(params: {
+  store: string
+  startYmd: string
+  endYmd: string
+  tenantId?: string
+}): Promise<{
+  rows: IngredientActualUsageRow[]
+  source: 'rpc' | 'fallback' | 'none'
+  warnings: string[]
+}> {
+  const warnings: string[] = []
+  const store = String(params.store || '').trim()
+  const startYmd = String(params.startYmd || '').trim().slice(0, 10)
+  const endYmd = String(params.endYmd || '').trim().slice(0, 10)
+  if (!store || !/^\d{4}-\d{2}-\d{2}$/.test(startYmd) || !/^\d{4}-\d{2}-\d{2}$/.test(endYmd)) {
+    return { rows: [], source: 'none', warnings: ['BAD_RANGE'] }
+  }
+  if (isOfficeStockSelection(store)) {
+    return { rows: [], source: 'none', warnings: ['STORE_ONLY'] }
+  }
+  const tenantScope = await resolveInventoryTenantScope({
+    auth: params.tenantId ? { tenantId: params.tenantId } : undefined,
+    storeCode: store,
+  })
+  if (isInventoryTenantQueryBlocked(tenantScope)) {
+    return { rows: [], source: 'none', warnings: ['TENANT_BLOCKED'] }
+  }
+  const patterns = getStockLocationPatterns(store)
+  if (!patterns.length) {
+    return { rows: [], source: 'none', warnings: ['NO_LOCATION'] }
+  }
+  const { dayStartUtcIso, nextDayStartUtcIso } = getBangkokDateRangeUtc(startYmd, endYmd)
+  const rpcRows = await fetchActualViaRpc(patterns, dayStartUtcIso, nextDayStartUtcIso, tenantScope)
+  const actualRows = rpcRows
+    ? rpcRows
+    : await fetchActualFallback(patterns, startYmd, endYmd, tenantScope)
+  if (!rpcRows) warnings.push('ACTUAL_RPC_FALLBACK')
+  return {
+    rows: actualRows.map((r) => ({
+      item_code: r.item_code,
+      actual_usage_qty: r.actual_usage_qty,
+      has_adjustment: r.has_adjustment,
+    })),
+    source: rpcRows ? 'rpc' : 'fallback',
     warnings,
   }
 }

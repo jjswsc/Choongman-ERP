@@ -9,6 +9,7 @@ import {
   FlaskConical,
   List,
   Scale,
+  Store,
 } from "lucide-react"
 import { StockIngredientVariancePanel } from "@/components/erp/stock-ingredient-variance-panel"
 import {
@@ -24,6 +25,7 @@ import { SauceCostTab } from "@/components/cost-analysis/sauce-cost-tab"
 import { PosCostListPanel } from "@/components/cost-analysis/pos-cost-list-panel"
 import { PosCostAuditPanel } from "@/components/cost-analysis/pos-cost-audit-panel"
 import { PosCostActualTab } from "@/components/cost-analysis/pos-cost-actual-tab"
+import { PosCostStoreNormalTab } from "@/components/cost-analysis/pos-cost-store-normal-tab"
 import { useAuth } from "@/lib/auth-context"
 import {
   canAccessPosCostAnalysis,
@@ -101,6 +103,7 @@ export default function PosCostAnalysisPage() {
     const tab = (searchParams.get("tab") || "").trim()
     if (tab === "actual" || tab === "insights") return "actual"
     if (tab === "variance") return "variance"
+    if (tab === "storeNormal") return "storeNormal"
     if (tab === "list" || tab === "sauce" || tab === "calculator" || tab === "audit") return tab
     return "list"
   })
@@ -279,6 +282,10 @@ export default function PosCostAnalysisPage() {
                 <Scale className={adminTabsIconCn} aria-hidden />
                 {t("posCostTabVariance")}
               </TabsTrigger>
+              <TabsTrigger value="storeNormal" className={adminTabsTriggerCn}>
+                <Store className={adminTabsIconCn} aria-hidden />
+                {t("posCostTabStoreNormal")}
+              </TabsTrigger>
               <TabsTrigger value="sauce" className={adminTabsTriggerCn}>
                 <FlaskConical className={adminTabsIconCn} aria-hidden />
                 {t("posCostTabSauce")}
@@ -321,6 +328,10 @@ export default function PosCostAnalysisPage() {
               canEdit={canEdit}
               onSettingsSaved={setSettings}
             />
+          </TabsContent>
+
+          <TabsContent value="storeNormal" className={cn(adminTabsContentCn, "space-y-4")}>
+            <PosCostStoreNormalTab />
           </TabsContent>
 
           <TabsContent value="variance" className={cn(adminTabsContentCn, "space-y-4")}>
