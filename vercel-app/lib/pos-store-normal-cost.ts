@@ -59,13 +59,13 @@ export type StoreNormalCostRow = {
   normalCostPctOfGross: number
   /** 정상 원가 ÷ 실수령. 화면 이론 원가율은 쓰지 않는다 */
   normalCostPctOfNet: number
-  /** 이론 원가율 = (정상 원가 ÷ 정가) + 할인% */
+  /** 이론 원가율 = 정상 원가 ÷ 실수령. 정가 기준 원가율을 할인 후 남은 금액으로 다시 나눈 값 */
   theoryCostPct: number
   accountingSales: number | null
   accountingCogs: number | null
   /** 실제 원가율 = 손익 매출원가 ÷ 손익 매출(부가세 제외) */
   plCostPct: number | null
-  /** 실제 원가율 − 이론 원가율(정가 대비 + 할인%) */
+  /** 실제 원가율 − 이론 원가율(실수령) */
   vsPlPct: number | null
   /** 손익 매출원가 − 정상 원가(BOM) */
   vsPlAmt: number | null
@@ -241,8 +241,8 @@ export function buildStoreNormalCostRow(params: {
       : round2(params.accountingCogs)
   const normalCostPctOfGross = pctOf(bomCost, grossSales)
   const discountSharePct = pctOf(totalDiscount, grossSales)
-  const theoryCostPct = round2(normalCostPctOfGross + discountSharePct)
   const normalCostPctOfNet = pctOf(bomCost, netSales)
+  const theoryCostPct = normalCostPctOfNet
   const plCostPct =
     accountingCogs != null && accountingSales != null && accountingSales > 0.0001
       ? pctOf(accountingCogs, accountingSales)

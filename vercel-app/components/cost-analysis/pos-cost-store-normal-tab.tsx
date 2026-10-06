@@ -73,13 +73,10 @@ function actualCostPct(row: StoreNormalCostRow): number | null {
 }
 
 function theoryPct(row: StoreNormalCostRow): number | null {
-  if (row.theoryCostPct != null && Number.isFinite(row.theoryCostPct)) return row.theoryCostPct
-  const gross = Number(row.grossSales)
-  if (!(gross > 0.0001)) return null
-  const discount = discountAmount(row)
+  const net = Number(row.netSales)
   const bom = Number(row.bomCost)
-  if (!Number.isFinite(bom)) return null
-  return ((bom + discount) / gross) * 100
+  if (!(net > 0.0001) || !Number.isFinite(bom)) return null
+  return (bom / net) * 100
 }
 
 function gapPct(row: StoreNormalCostRow): number | null {
@@ -176,15 +173,13 @@ export function PosCostStoreNormalTab() {
 
   const kpi = React.useMemo(() => {
     const rows = result?.rows ?? []
-    let gross = 0
-    let discount = 0
+    let net = 0
     let bom = 0
     let plSales = 0
     let plCogs = 0
     let higherPl = 0
     for (const row of rows) {
-      gross += row.grossSales
-      discount += discountAmount(row)
+      net += row.netSales
       bom += row.bomCost
       const sales = row.accountingSales
       if (sales != null && sales > 0.0001 && row.accountingCogs != null) {
@@ -194,7 +189,7 @@ export function PosCostStoreNormalTab() {
       if ((gapPct(row) ?? 0) > 0.5) higherPl += 1
     }
     return {
-      normalPct: gross > 0.0001 ? ((bom + discount) / gross) * 100 : null,
+      normalPct: net > 0.0001 ? (bom / net) * 100 : null,
       plPct: plSales > 0.0001 ? (plCogs / plSales) * 100 : null,
       higherPl,
       stores: rows.length,
@@ -304,8 +299,9 @@ export function PosCostStoreNormalTab() {
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColGross")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColDiscount")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColDiscountPct")}</th>
-                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColTheoryPct")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColNet")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColBom")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColTheoryPct")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColCogs")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColActualPct")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColVsPct")}</th>
@@ -350,8 +346,9 @@ export function PosCostStoreNormalTab() {
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.grossSales)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(discount)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(discPct)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(theory)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.netSales)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.bomCost)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(theory)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.accountingCogs)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(actual)}</td>
                         <td
@@ -366,7 +363,7 @@ export function PosCostStoreNormalTab() {
                       </tr>
                       {open ? (
                         <tr className="border-b bg-muted/20">
-                          <td colSpan={10} className="px-4 py-3 space-y-2">
+                          <td colSpan={11} className="px-4 py-3 space-y-2">
                             {row.holdReasons.length > 0 ? (
                               <ul className="list-disc pl-4 text-amber-800 dark:text-amber-200">
                                 {row.holdReasons.map((reason) => (
