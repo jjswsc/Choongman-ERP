@@ -89,6 +89,7 @@ import {
 import { PL_FRANCHISE_EXPENSE_SUBJECT_CODES } from '@/lib/accounting-po-franchise-billing-pl-shared'
 import {
   accumulateNetByItemTax,
+  sumInventoryQtyCostBuckets,
   emptyNetVatBuckets,
   grossFromNetVatBuckets,
   mergeNetVatBuckets,
@@ -1630,15 +1631,10 @@ async function getInventoryVatBuckets(
   excludeHq = false,
   tenantId?: string
 ): Promise<NetVatBuckets> {
-  const buckets = emptyNetVatBuckets()
   const asOfUtcIso = resolveInventoryAsOfUtcIso(cutoffDate, isBefore)
   const locationPatterns = await resolveInventoryLocationPatterns(locationFilter, excludeHq, tenantId)
   const byItem = await fetchStoreStockQtyByItem(locationPatterns, asOfUtcIso, tenantId)
-  for (const [code, qty] of Object.entries(byItem)) {
-    const unit = itemUnitCostMap[code] ?? 0
-    accumulateNetByItemTax(buckets, code, qty * unit, itemTaxMap)
-  }
-  return buckets
+  return sumInventoryQtyCostBuckets(byItem, itemUnitCostMap, itemTaxMap)
 }
 
 async function getHqOutboundSalesVatBuckets(

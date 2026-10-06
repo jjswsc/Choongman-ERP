@@ -39,6 +39,25 @@ export function resolveItemTaxType(
   return taxMap.get(code) ?? 'taxable'
 }
 
+/**
+ * 재고 현황 합계와 동일하게 수량×단가를 더한다.
+ * 줄마다 반올림하지 않고, 마이너스 수량도 빼지 않는다. 표시 시 netTotalFromBuckets가 한 번만 반올림한다.
+ */
+export function sumInventoryQtyCostBuckets(
+  byItem: Record<string, number>,
+  unitCostByCode: Record<string, number>,
+  taxMap: ReadonlyMap<string, ItemTaxType>
+): NetVatBuckets {
+  const buckets = emptyNetVatBuckets()
+  for (const [code, qty] of Object.entries(byItem)) {
+    const amt = (Number(qty) || 0) * (Number(unitCostByCode[code]) || 0)
+    if (!amt) continue
+    if (isItemVatExempt(resolveItemTaxType(taxMap, code))) buckets.exemptNet += amt
+    else buckets.taxableNet += amt
+  }
+  return buckets
+}
+
 export function accumulateNetByItemTax(
   buckets: NetVatBuckets,
   itemCode: string,
