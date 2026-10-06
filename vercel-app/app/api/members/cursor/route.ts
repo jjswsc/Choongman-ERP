@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { listMembersCursor } from '@/lib/members-server'
+import { listMembersCursorPage } from '@/lib/members-server'
 import type { MemberSearchFieldDraft } from '@/lib/member-search-filter'
 import { resolveMembersTenantScope } from '@/lib/members-tenant-scope'
 import { requireAuth } from '@/lib/verify-auth'
@@ -28,17 +28,20 @@ export async function GET(req: NextRequest) {
     const limit = Number(searchParams.get('limit') || 100)
     const status = searchParams.get('status') || 'active'
     const tierCode = searchParams.get('tierCode') || ''
-    const rows = await listMembersCursor({
+    const lineReach = searchParams.get('lineReach') || ''
+    const page = await listMembersCursorPage({
       q,
       fields,
       afterId: afterId || undefined,
       limit,
       status,
       tierCode: tierCode || undefined,
+      lineReach: lineReach || undefined,
       tenantScope,
     })
+    const rows = page.rows
     const nextCursor = rows.length > 0 ? rows[rows.length - 1].id : null
-    return NextResponse.json({ success: true, rows, nextCursor })
+    return NextResponse.json({ success: true, rows, nextCursor, hasMore: page.hasMore })
   } catch (e) {
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : 'cursor 조회 실패', rows: [], nextCursor: null },

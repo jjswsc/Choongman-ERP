@@ -600,9 +600,15 @@ export async function supabaseDeleteByFilter(
  * 실제 row는 거의 가져오지 않고 Content-Range 헤더에서 total count 반환.
  * egress 최소화용.
  */
-export async function supabaseCountFilter(table: string, filter: string): Promise<number> {
+export async function supabaseCountFilter(
+  table: string,
+  filter: string,
+  select = 'id'
+): Promise<number> {
   const { url, key } = getConfig()
-  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?select=id&${filter}`
+  const selectParam = encodeURIComponent(select || 'id')
+  const filterParam = String(filter || '').trim()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?select=${selectParam}${filterParam ? `&${filterParam}` : ''}`
   const res = await supabaseFetch(pathStr, {
     method: 'GET',
     headers: {

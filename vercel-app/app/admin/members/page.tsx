@@ -327,6 +327,18 @@ function SelectedMemberBar({
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-semibold">{member.name || member.phone || `#${member.id}`}</p>
             <Badge variant="outline">{member.tierCode || "—"}</Badge>
+            <Badge
+              variant="outline"
+              className={
+                (member.lineReachable ?? member.lineLinked)
+                  ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700"
+                  : "text-muted-foreground"
+              }
+            >
+              {(member.lineReachable ?? member.lineLinked)
+                ? t("memberLineReachable")
+                : t("memberLineUnreachable")}
+            </Badge>
             <Badge variant={active ? "default" : "secondary"}>
               {active ? t("crmMemberStatusActive") : t("crmMemberStatusInactive")}
             </Badge>

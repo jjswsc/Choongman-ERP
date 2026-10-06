@@ -32,6 +32,11 @@ import {
   stampMembersTenantId,
   type MembersTenantScope,
 } from '@/lib/members-tenant-scope'
+import {
+  isActiveLineProviderIdentity,
+  parseMemberLineReach,
+  type MemberLineReach,
+} from '@/lib/member-line-reach'
 
 export type { MembersTenantScope } from '@/lib/members-tenant-scope'
 
@@ -55,6 +60,8 @@ export type MemberSummary = {
   source: string
   status: string
   lineLinked: boolean
+  /** active LINE identity — 푸시 수신 가능 */
+  lineReachable?: boolean
   lineUserId?: string
   lineDisplayName?: string
   tierCode?: string
@@ -329,6 +336,7 @@ function toMemberSummary(
     source,
     status: toText(member.status) || 'active',
     lineLinked: Boolean(lineIdentity?.provider_user_id),
+    lineReachable: isActiveLineProviderIdentity(lineIdentity),
     lineUserId: toText(lineIdentity?.provider_user_id),
     lineDisplayName,
     tierCode: toText(member.tier_code) || 'BRONZE',
@@ -362,9 +370,17 @@ async function getLineIdentities(memberIds: number[]): Promise<Map<number, Membe
   for (const row of rows || []) {
     const memberId = Number(row.member_id || 0)
     if (!memberId) continue
-    if (!map.has(memberId)) map.set(memberId, row)
+    const prev = map.get(memberId)
+    if (!prev || lineIdentityPreference(row) > lineIdentityPreference(prev)) {
+      map.set(memberId, row)
+    }
   }
   return map
+}
+
+function lineIdentityPreference(row: MemberIdentityRow): number {
+  if (isActiveLineProviderIdentity(row)) return 2
+  return toText(row.provider_user_id) ? 1 : 0
 }
 
 async function getLatestMemberEvents(memberIds: number[]): Promise<Map<number, { eventType: string; processedAt: string }>> {
@@ -534,7 +550,75 @@ async function mapMemberRowsToSummaries(rows: MemberRow[]): Promise<MemberSummar
   })
 }
 
-export async function listMembersCursor(params?: {
+const LINE_REACH_EMBED_SELECT = `${MEMBER_LIST_SELECT},member_identities!inner(id)`
+const LINE_REACH_EMBED_FILTER =
+  'member_identities.provider=eq.line&member_identities.status=eq.active&member_identities.provider_user_id=not.eq.'
+const LINE_REACH_COUNT_SELECT = 'id,member_identities!inner(id)'
+
+function joinMemberFilters(parts: Array<string | null | undefined | false>): string {
+  return parts.filter((part): part is string => Boolean(part && String(part).trim())).join('&')
+}
+
+async function selectMemberListRows(
+  filter: string,
+  limit: number,
+  select = MEMBER_LIST_SELECT
+): Promise<MemberRow[]> {
+  return (await supabaseSelectFilter('members', filter, {
+    order: 'id.desc',
+    limit,
+    select,
+  })) as MemberRow[]
+}
+
+export type MemberCursorPage = { rows: MemberSummary[]; hasMore: boolean }
+
+async function scanMembersForLineReach(params: {
+  baseParts: string[]
+  tenantScope: MembersTenantScope
+  lineReach: Exclude<MemberLineReach, 'all'>
+  limit: number
+  afterId: number | null
+}): Promise<{ rows: MemberRow[]; hasMore: boolean }> {
+  const batch = 200
+  const maxBatches = 40
+  const collected: MemberRow[] = []
+  let cursor = params.afterId
+  let capped = false
+  for (let i = 0; i < maxBatches && collected.length < params.limit; i++) {
+    const parts = [...params.baseParts]
+    if (cursor) parts.push(`id=lt.${cursor}`)
+    const filter = appendMembersTenantFilter(joinMemberFilters(parts) || 'id=gt.0', params.tenantScope)
+    let batchRows: MemberRow[]
+    try {
+      batchRows = await selectMemberListRows(filter, batch)
+    } catch (err) {
+      if (isMissingMembersTenantIdColumnError(err)) {
+        markMembersTenantIdColumnMissing()
+        if (params.tenantScope.enforce) return { rows: [], hasMore: false }
+      }
+      throw err
+    }
+    if (!batchRows.length) break
+    const ids = batchRows.map((row) => Number(row.id || 0)).filter((id) => id > 0)
+    const lineMap = await getLineIdentities(ids)
+    for (const row of batchRows) {
+      const reachable = isActiveLineProviderIdentity(lineMap.get(Number(row.id || 0)))
+      const match = params.lineReach === 'reachable' ? reachable : !reachable
+      if (!match) continue
+      collected.push(row)
+      if (collected.length >= params.limit) break
+    }
+    cursor = Number(batchRows[batchRows.length - 1]?.id || 0) || cursor
+    const sourceRemains = batchRows.length >= batch
+    if (collected.length >= params.limit || !sourceRemains) break
+    if (i === maxBatches - 1) capped = true
+  }
+  const page = collected.slice(0, params.limit)
+  return { rows: page, hasMore: page.length >= params.limit || capped }
+}
+
+export type MemberListCursorParams = {
   q?: string
   fields?: MemberSearchFieldDraft
   afterId?: number
@@ -543,10 +627,15 @@ export async function listMembersCursor(params?: {
   status?: string
   /** 등급 코드. 비우면 전체. BRONZE는 null/빈 tier_code 포함 */
   tierCode?: string
+  /** all | reachable | unreachable. 수신 가능 = active LINE identity */
+  lineReach?: string
   tenantScope?: MembersTenantScope
-}): Promise<MemberSummary[]> {
+}
+
+export async function listMembersCursorPage(params?: MemberListCursorParams): Promise<MemberCursorPage> {
+  const empty: MemberCursorPage = { rows: [], hasMore: false }
   const tenantScope = params?.tenantScope ?? LEGACY_MEMBERS_TENANT_SCOPE
-  if (isMembersTenantQueryBlocked(tenantScope)) return []
+  if (isMembersTenantQueryBlocked(tenantScope)) return empty
 
   const q = toText(params?.q)
   const fields = normalizeMemberSearchFields(params?.fields)
@@ -556,6 +645,72 @@ export async function listMembersCursor(params?: {
   const statusFilter = memberListStatusFilter(statusRaw)
   const tierRaw = toText(params?.tierCode).toUpperCase()
   const tierFilter = memberListTierFilter(tierRaw)
+  const lineReach = parseMemberLineReach(params?.lineReach)
+  const tenantRpc =
+    tenantScope.enforce && tenantScope.tenantId ? { p_tenant_id: tenantScope.tenantId } : {}
+
+  const finish = async (rows: MemberRow[], hasMore: boolean): Promise<MemberCursorPage> => ({
+    rows: await mapMemberRowsToSummaries(rows),
+    hasMore,
+  })
+
+  if (lineReach !== 'all') {
+    if (!hasMemberSearchFields(fields)) {
+      try {
+        const rows = (await supabaseRpc<MemberRow[]>('get_member_list_line_reach_cursor', {
+          p_after_id: afterId,
+          p_limit: limit,
+          p_q: q || null,
+          p_status: statusRaw === 'all' ? '' : statusRaw,
+          p_tier_code: tierRaw || null,
+          p_line_reach: lineReach,
+          ...tenantRpc,
+        })) as MemberRow[]
+        if (Array.isArray(rows) && rows.length > 0 && rows[0] && !('status' in rows[0])) {
+          throw new Error('get_member_list_line_reach_cursor missing status column')
+        }
+        const list = Array.isArray(rows) ? rows : []
+        return finish(list, list.length >= limit)
+      } catch {
+        /* SQL 미배포 시 PostgREST/스캔 */
+      }
+    }
+
+    const parts: string[] = []
+    if (hasMemberSearchFields(fields)) {
+      const andFilter = buildMemberSearchPostgrestAndFilter(fields)
+      if (andFilter) parts.push(andFilter)
+    } else if (q) {
+      parts.push(buildMemberSearchPostgrestOrFilter(q))
+    }
+    if (statusFilter) parts.push(statusFilter)
+    if (tierFilter) parts.push(tierFilter)
+
+    if (lineReach === 'reachable') {
+      try {
+        const filter = appendMembersTenantFilter(
+          joinMemberFilters([...parts, afterId ? `id=lt.${afterId}` : null, LINE_REACH_EMBED_FILTER]),
+          tenantScope
+        )
+        const rows = await selectMemberListRows(filter, limit, LINE_REACH_EMBED_SELECT)
+        return finish(rows, rows.length >= limit)
+      } catch (err) {
+        if (isMissingMembersTenantIdColumnError(err)) {
+          markMembersTenantIdColumnMissing()
+          if (tenantScope.enforce) return empty
+        }
+      }
+    }
+
+    const scanned = await scanMembersForLineReach({
+      baseParts: parts,
+      tenantScope,
+      lineReach,
+      limit,
+      afterId,
+    })
+    return finish(scanned.rows, scanned.hasMore)
+  }
 
   // 필드 AND 검색은 RPC(p_q 단일)과 맞지 않아 PostgREST AND 경로 사용
   if (hasMemberSearchFields(fields)) {
@@ -565,29 +720,23 @@ export async function listMembersCursor(params?: {
     if (andFilter) filterParts.push(andFilter)
     if (statusFilter) filterParts.push(statusFilter)
     if (tierFilter) filterParts.push(tierFilter)
-    if (!filterParts.length) return []
+    if (!filterParts.length) return empty
     try {
-      const rows = (await supabaseSelectFilter(
-        'members',
+      const rows = await selectMemberListRows(
         appendMembersTenantFilter(filterParts.join('&'), tenantScope),
-        {
-          order: 'id.desc',
-          limit,
-          select: MEMBER_LIST_SELECT,
-        }
-      )) as MemberRow[]
-      return mapMemberRowsToSummaries(rows)
+        limit
+      )
+      return finish(rows, rows.length >= limit)
     } catch (err) {
       if (isMissingMembersTenantIdColumnError(err)) {
         markMembersTenantIdColumnMissing()
-        if (tenantScope.enforce) return []
+        if (tenantScope.enforce) return empty
       }
       throw err
     }
   }
 
   // RPC가 status를 반환하지 않으면 inactive가 전부 active로 보이는 버그가 남는다.
-  // status를 포함하는 PostgREST를 우선 사용하고, RPC는 status 컬럼이 있을 때만 사용.
   try {
     const rows = (await supabaseRpc<MemberRow[]>('get_member_list_cursor', {
       p_after_id: afterId,
@@ -595,46 +744,111 @@ export async function listMembersCursor(params?: {
       p_q: q || null,
       p_status: statusRaw === 'all' ? '' : statusRaw,
       p_tier_code: tierRaw || null,
-      ...(tenantScope.enforce && tenantScope.tenantId
-        ? { p_tenant_id: tenantScope.tenantId }
-        : {}),
+      ...tenantRpc,
     })) as MemberRow[]
     if (Array.isArray(rows) && rows.length > 0 && rows[0] && !('status' in rows[0])) {
       throw new Error('get_member_list_cursor missing status column')
     }
-    return mapMemberRowsToSummaries(rows)
+    const list = Array.isArray(rows) ? rows : []
+    return finish(list, list.length >= limit)
   } catch {
     if (!q) {
       const filterParts = [afterId ? `id.lt.${afterId}` : null, statusFilter, tierFilter].filter(
         Boolean
       ) as string[]
       try {
-        const rows = (await supabaseSelectFilter(
-          'members',
+        const rows = await selectMemberListRows(
           appendMembersTenantFilter(filterParts.join('&') || 'id=gt.0', tenantScope),
-          {
-            order: 'id.desc',
-            limit,
-            select: MEMBER_LIST_SELECT,
-          }
-        )) as MemberRow[]
-        return mapMemberRowsToSummaries(rows)
+          limit
+        )
+        return finish(rows, rows.length >= limit)
       } catch (err) {
         if (isMissingMembersTenantIdColumnError(err)) {
           markMembersTenantIdColumnMissing()
-          if (tenantScope.enforce) return []
+          if (tenantScope.enforce) return empty
         }
         throw err
       }
     }
     const batchLimit = Math.max(limit, afterId ? limit + 500 : limit)
     const rows = await listMembers({ q, limit: batchLimit, status: statusRaw, tenantScope })
-    // cursor는 id 내림차순이므로 afterId보다 작은 id만
     let filtered = afterId ? rows.filter((m) => m.id < afterId) : rows
     if (tierRaw) {
       filtered = filtered.filter((m) => String(m.tierCode || 'BRONZE').toUpperCase() === tierRaw)
     }
-    return filtered.slice(0, limit)
+    const page = filtered.slice(0, limit)
+    return { rows: page, hasMore: page.length >= limit }
+  }
+}
+
+export async function listMembersCursor(params?: MemberListCursorParams): Promise<MemberSummary[]> {
+  const page = await listMembersCursorPage(params)
+  return page.rows
+}
+
+export type MemberLineReachStats = {
+  total: number
+  reachable: number
+  unreachable: number
+}
+
+/** 등급·상태(와 테넌트) 기준 전체 회원 대비 LINE 수신 가능 수. 검색어는 빼 둔다. */
+export async function getMemberLineReachStats(params?: {
+  status?: string
+  tierCode?: string
+  tenantScope?: MembersTenantScope
+}): Promise<MemberLineReachStats> {
+  const tenantScope = params?.tenantScope ?? LEGACY_MEMBERS_TENANT_SCOPE
+  if (isMembersTenantQueryBlocked(tenantScope)) {
+    return { total: 0, reachable: 0, unreachable: 0 }
+  }
+  const statusRaw = toText(params?.status) || 'active'
+  const tierRaw = toText(params?.tierCode).toUpperCase()
+  const tenantRpc =
+    tenantScope.enforce && tenantScope.tenantId ? { p_tenant_id: tenantScope.tenantId } : {}
+  try {
+    const raw = await supabaseRpc<MemberLineReachStats[] | MemberLineReachStats>(
+      'get_member_line_reach_stats',
+      {
+        p_status: statusRaw === 'all' ? '' : statusRaw,
+        p_tier_code: tierRaw && tierRaw !== 'ALL' ? tierRaw : null,
+        ...tenantRpc,
+      }
+    )
+    const row = Array.isArray(raw) ? raw[0] : raw
+    if (row && Number.isFinite(Number(row.total))) {
+      const total = Number(row.total || 0)
+      const reachable = Number(row.reachable || 0)
+      return {
+        total,
+        reachable,
+        unreachable: Number(row.unreachable ?? Math.max(0, total - reachable)),
+      }
+    }
+  } catch {
+    /* RPC 미배포 — count fallback */
+  }
+
+  const base = appendMembersTenantFilter(
+    joinMemberFilters([memberListStatusFilter(statusRaw), memberListTierFilter(tierRaw)]) || 'id=gt.0',
+    tenantScope
+  )
+  const total = await supabaseCountFilter('members', base)
+  let reachable = 0
+  try {
+    reachable = await supabaseCountFilter(
+      'members',
+      joinMemberFilters([base, LINE_REACH_EMBED_FILTER]),
+      LINE_REACH_COUNT_SELECT
+    )
+  } catch {
+    reachable = 0
+  }
+  const cappedReachable = Math.min(total, Math.max(0, reachable))
+  return {
+    total,
+    reachable: cappedReachable,
+    unreachable: Math.max(0, total - cappedReachable),
   }
 }
 

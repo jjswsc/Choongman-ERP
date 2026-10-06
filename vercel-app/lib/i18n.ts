@@ -6487,7 +6487,8 @@ export const i18n = {
     windowsInstallerCopyFail: '클립보드 복사에 실패했습니다. 아래 주소를 직접 복사해 주세요:\n\n',
     memberList: '회원 리스트',
     memberManagementTitle: '회원 관리',
-    memberManagementSub: '목록에서 회원을 고르면 좌측 프로필·포인트·메모에서 작업합니다. LINE OA는 선택 연동 채널입니다.',
+    memberManagementSub:
+      '목록에서 회원을 고르면 좌측 프로필·포인트·메모에서 작업합니다. 상단 통계에서 LINE 메시지 수신 가능·불가를 확인할 수 있습니다.',
     memberProfileTab: '프로필',
     memberPointsTab: '포인트',
     memberNotesSelectHint: '회원을 선택하면 운영 메모를 작성할 수 있습니다.',
@@ -6605,6 +6606,17 @@ export const i18n = {
     memberCrmColumnHint: 'CRM 파일 컬럼 예시: LINE display name, phone number, full name, date of birth',
     memberSource: '등록 소스',
     memberLineLinked: 'LINE 연결',
+    memberLineReachCol: 'LINE 수신',
+    memberLineReachFilter: 'LINE 수신',
+    memberLineReachAll: '전체',
+    memberLineReachable: '수신 가능',
+    memberLineUnreachable: '수신 불가',
+    memberLineReachStatsTotal: '전체 회원',
+    memberLineReachStatsReachable: 'LINE 수신 가능',
+    memberLineReachStatsUnreachable: 'LINE 수신 불가',
+    memberLineReachShare: '{pct}%',
+    memberLineReachStatsHint:
+      '수신 가능은 LINE 계정이 연결되고 친구 상태인 회원입니다. 언팔로우하면 수신 불가로 바뀝니다. 숫자는 위의 등급·상태 필터 기준이며, 검색어와는 따로 집계합니다.',
     age: '나이',
     memberTier: '등급',
     memberUpdateReason: '업데이트 원인',
@@ -7983,9 +7995,9 @@ export const i18n = {
     helpHow_admin_employees:
       '① 직원 목록: 화면 진입 시 재직 중 목록이 자동으로 불러와집니다. 매장·직무·등급·재직·검색어로 좁힌 뒤「조회」로 다시 적용할 수 있습니다. 화면에 보이는 목록은「CSV 보내기」로 저장하고, 본사는「CSV 일괄 등록」으로 새 직원을 추가하거나 같은 사람(직원 코드 또는 매장+이름)만 고칠 수 있습니다. 가져오기는 기존 직원과 PIN을 지우지 않습니다. 표에서 행을 클릭하거나 연필을 누르면 우측 패널에 그 직원이 열리고,「신규」로 빈 등록 패널을 열 수 있습니다. 저장 전 필수(※)와 날짜·숫자 형식을 확인합니다. 휴지통(삭제)은 없습니다. 퇴사 시 퇴사일만 입력하면「퇴사」상태로 조회됩니다.\n② 권한: 매장 매니저·가맹점주는 보통 자기 매장 위주이며 Officer/Director 역할 부여 등은 본사(디렉터) 정책에 따릅니다. 가맹 복수 매장이 켜져 있으면 본사에서 허용한 경우에만「추가 매장」을 편집할 수 있습니다.\n③ 직원 입력 이력: 기간·작업·담당자로 직원 등록·수정·퇴사 처리 기록을 조회합니다. 행을 클릭하면 항목별 변경 전·후를 확인할 수 있습니다(비밀번호는 기록하지 않음).\n④ 인원 이동·적정 인원: 기간·매장 기준으로 이동·편성·목표 인원을 봅니다.\n⑤ 직원 평가: 상단「직원 평가」탭 안에서 하위 탭(평가 입력·직원평가분석·평가 목록·경고서·평가 항목 설정)을 고릅니다. 분석·목록·경고서에서 직원 행을 열면「평가 입력」하위 탭으로 이동합니다. 항목 설정은 본사 위주입니다.\n⑥ 급여·근태 등 다른 메뉴에서 직원 링크로 들어온 경우에도 목록을 조회한 뒤 같은 패널로 수정합니다.\n⑦ 자세한 단계는「도움말」본문을 보고, 끝나면「화면으로 돌아가기」로 목록으로 돌아갑니다.',
     helpSum_admin_members:
-      '목록에서 회원을 선택해 좌측 프로필·포인트·메모로 실행하는 회원 운영 화면입니다. 가입일시 표시·가입일 기간 검색을 지원합니다.',
+      '목록에서 회원을 선택해 좌측 프로필·포인트·메모로 실행하는 회원 운영 화면입니다. LINE 메시지 수신 가능·불가 통계와 목록 필터를 함께 봅니다.',
     helpHow_admin_members:
-      '① 상단「신규 등록」또는 목록에서 회원을 선택합니다. 선택 시 스티키 바에서 프로필·포인트·쿠폰·방문으로 바로 갑니다.\n② 좌측「프로필」: 기본/연락/가입(가입일시·채널·추천)/상태 저장과 운영 메모. 병합은「고급」에 접혀 있습니다.\n③ 좌측「포인트」: KPI·빠른 +/-칩·금액 계산·원장.\n④ 우측 목록: 검색(상세에 가입일 시작·종료)·등급/상태 필터(전체 DB 기준)·CSV. CRM 가져오기·LINE 리셋은 본사(오피스)만「고급 · 위험 작업」을 펼쳐 사용합니다.',
+      '① 상단「신규 등록」또는 목록에서 회원을 선택합니다. 선택 시 스티키 바에서 프로필·포인트·쿠폰·방문으로 바로 갑니다.\n② 좌측「프로필」: 기본/연락/가입(가입일시·채널·추천)/상태 저장과 운영 메모. 병합은「고급」에 접혀 있습니다.\n③ 좌측「포인트」: KPI·빠른 +/-칩·금액 계산·원장.\n④ 우측 목록: 검색(상세에 가입일 시작·종료)·등급/상태/LINE 수신 필터. 통계 카드를 누르면 수신 가능·불가로 목록이 좁혀집니다. CSV에 LINE 수신 열이 포함됩니다. CRM 가져오기·LINE 리셋은 본사(오피스)만「고급 · 위험 작업」을 펼쳐 사용합니다.',
     helpSum_admin_members_points:
       '(메뉴 통합) 포인트 조회·조정은 「회원 리스트」화면의 포인트 탭으로 이동했습니다. 적립 규칙은 등급 관리에서 설정합니다.',
     helpHow_admin_members_points:
@@ -14920,7 +14932,8 @@ orderItemQty: 'Qty',
     windowsInstallerCopyFail: 'Could not copy to the clipboard. Please copy this URL manually:\n\n',
     memberList: 'Member List',
     memberManagementTitle: 'Member management',
-    memberManagementSub: 'Select a member, then work in Profile, Points, and notes on the left. LINE OA is optional sync.',
+    memberManagementSub:
+      'Select a member, then work in Profile, Points, and notes on the left. Stats above the list show who can receive LINE messages.',
     memberProfileTab: 'Profile',
     memberPointsTab: 'Points',
     memberNotesSelectHint: 'Select a member to write operational notes.',
@@ -15038,6 +15051,17 @@ orderItemQty: 'Qty',
     memberCrmColumnHint: 'CRM columns example: LINE display name, phone number, full name, date of birth',
     memberSource: 'Source',
     memberLineLinked: 'LINE linked',
+    memberLineReachCol: 'LINE',
+    memberLineReachFilter: 'LINE messages',
+    memberLineReachAll: 'All',
+    memberLineReachable: 'Can receive',
+    memberLineUnreachable: 'Cannot receive',
+    memberLineReachStatsTotal: 'All members',
+    memberLineReachStatsReachable: 'Can receive LINE',
+    memberLineReachStatsUnreachable: 'Cannot receive LINE',
+    memberLineReachShare: '{pct}%',
+    memberLineReachStatsHint:
+      'Can receive means a LINE account is linked and still a friend. Unfollow moves the member to cannot receive. Counts follow the tier and status filters above, separate from the search box.',
     age: 'Age',
     memberTier: 'Tier',
     memberUpdateReason: 'Update reason',
@@ -16418,9 +16442,9 @@ orderItemQty: 'Qty',
     helpHow_admin_employees:
       '① Employee list: active staff load automatically on entry. Narrow with store, job, grade, employment status, and search, then press Query to re-apply filters. Export CSV downloads the list on screen; head office can Import CSV to add new people or update a match (employee code, or store + name). Import does not delete existing employees or their PINs. Click a row or the pencil icon to open the right panel; use New for a blank profile. Check required fields (※) and date/number formats before Save. There is no trash/delete button—enter a resignation date so the person appears under Resigned.\n② Roles: store managers and franchisees usually work within their store scope; assigning Officer/Director follows head-office policy. If multi-store franchise is enabled, edit Extra stores only when head office allows it.\n③ Input history: review who changed employee records and when (passwords are not logged).\n④ Movement & headcount: review transfers and staffing targets by period and store.\n⑤ Employee Eval: open the top tab, then pick sub-tabs (entry, analytics, history, warning letters, item setup). Rows in analytics/history/warnings open Evaluation entry.\n⑥ Deep links from Payroll or Attendance still load the list first—then edit in the same panel.\n⑦ Open Help for the long guide, then Back to screen when you are done.',
     helpSum_admin_members:
-      'Pick a member from the list and run Profile, Points, and notes on the left. Shows joined-at and supports join-date range search.',
+      'Pick a member from the list and run Profile, Points, and notes on the left. Stats and filters show who can receive LINE messages.',
     helpHow_admin_members:
-      '① Use New member or select from the list. The sticky bar jumps to Profile, Points, coupons, or visits.\n② Profile tab: edit fields including joined-at, channel, referral, and operational notes; merge is under Advanced.\n③ Points tab: KPI strip, quick +/- chips, spend calc, and ledger.\n④ List: search (advanced: join date from/to), tier/status filters (full DB), CSV. CRM import and LINE reset are office-only under the collapsed Advanced · dangerous actions control.',
+      '① Use New member or select from the list. The sticky bar jumps to Profile, Points, coupons, or visits.\n② Profile tab: edit fields including joined-at, channel, referral, and operational notes; merge is under Advanced.\n③ Points tab: KPI strip, quick +/- chips, spend calc, and ledger.\n④ List: search (advanced: join date from/to), tier/status/LINE reach filters. Tap a stats card to narrow the list. CSV includes the LINE column. CRM import and LINE reset are office-only under Advanced · dangerous actions.',
     helpSum_admin_members_points:
       '(Merged) Point lookup and adjustment moved to the Points tab on Member list. Earn rules stay under Tier management.',
     helpHow_admin_members_points:

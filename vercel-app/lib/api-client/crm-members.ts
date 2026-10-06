@@ -24,6 +24,8 @@ export interface Member {
   source: string
   status: string
   lineLinked: boolean
+  /** active LINE identity — 메시지 수신 가능 */
+  lineReachable?: boolean
   lineUserId?: string
   lineDisplayName?: string
   tierCode?: string
@@ -413,6 +415,8 @@ export async function getMembersCursor(params?: {
   status?: string
   /** 등급 코드. 비우면 전체 */
   tierCode?: string
+  /** all | reachable | unreachable */
+  lineReach?: string
 }) {
   const q = new URLSearchParams()
   if (params?.q) q.set('q', params.q)
@@ -429,9 +433,35 @@ export async function getMembersCursor(params?: {
   if (params?.tierCode?.trim() && params.tierCode.trim().toLowerCase() !== 'all') {
     q.set('tierCode', params.tierCode.trim())
   }
+  if (params?.lineReach?.trim() && params.lineReach.trim().toLowerCase() !== 'all') {
+    q.set('lineReach', params.lineReach.trim())
+  }
   const suffix = q.toString()
   const res = await apiFetchWithOffline('/api/members/cursor' + (suffix ? `?${suffix}` : ''))
-  return res.json() as Promise<{ success: boolean; rows: Member[]; nextCursor: number | null; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    rows: Member[]
+    nextCursor: number | null
+    hasMore?: boolean
+    message?: string
+  }>
+}
+
+export async function getMemberLineReachStats(params?: { status?: string; tierCode?: string }) {
+  const q = new URLSearchParams()
+  if (params?.status?.trim()) q.set('status', params.status.trim())
+  if (params?.tierCode?.trim() && params.tierCode.trim().toLowerCase() !== 'all') {
+    q.set('tierCode', params.tierCode.trim())
+  }
+  const suffix = q.toString()
+  const res = await apiFetchWithOffline('/api/members/line-reach-stats' + (suffix ? `?${suffix}` : ''))
+  return res.json() as Promise<{
+    success: boolean
+    total: number
+    reachable: number
+    unreachable: number
+    message?: string
+  }>
 }
 
 export type MemberPointsSearchFilters = {

@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  getMemberLineReachStats,
   getMemberTiers,
   getMembersCursor,
   importLineCrmFile,
@@ -40,6 +41,49 @@ import { cn } from "@/lib/utils"
 import { AdminDesktopOnly, AdminMobileOnly } from "@/components/erp/admin-responsive-list"
 
 const MEMBER_PAGE_SIZE = 100
+
+type MemberLineReachFilter = "all" | "reachable" | "unreachable"
+
+type MemberLineReachStatsView = {
+  total: number
+  reachable: number
+  unreachable: number
+}
+
+function memberCanReceiveLine(member: Member): boolean {
+  if (typeof member.lineReachable === "boolean") return member.lineReachable
+  return Boolean(member.lineLinked)
+}
+
+function formatReachPct(part: number, total: number): string {
+  if (total <= 0) return "0"
+  const rounded = Math.round((part / total) * 1000) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+function MemberLineReachBadge({
+  member,
+  t,
+}: {
+  member: Member
+  t: ReturnType<typeof useT>
+}) {
+  const reachable = memberCanReceiveLine(member)
+  return (
+    <Badge
+      variant="outline"
+      title={member.lineDisplayName || undefined}
+      className={cn(
+        "shrink-0 text-[10px]",
+        reachable
+          ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700"
+          : "text-muted-foreground"
+      )}
+    >
+      {reachable ? t("memberLineReachable") : t("memberLineUnreachable")}
+    </Badge>
+  )
+}
 
 const MemberCrmHint = React.memo(function MemberCrmHint({ text }: { text: string }) {
   return <p className="text-[11px] text-muted-foreground">{text}</p>
@@ -303,7 +347,7 @@ const MemberListTable = React.memo(function MemberListTable({
     <>
     <AdminDesktopOnly>
     <div className="overflow-auto rounded-md border max-h-[min(70vh,720px)]">
-      <table className="w-full min-w-[920px] text-sm">
+      <table className="w-full min-w-[1040px] text-sm">
         <thead className="bg-muted/40 sticky top-0 z-10">
           <tr>
             <th className="whitespace-nowrap p-2 text-left">{t("name")}</th>
@@ -314,6 +358,7 @@ const MemberListTable = React.memo(function MemberListTable({
             <th className="whitespace-nowrap p-2 text-left">{t("memberTier")}</th>
             <th className="whitespace-nowrap p-2 text-right">{t("memberPointsBalance")}</th>
             <th className="whitespace-nowrap p-2 text-left">{t("status")}</th>
+            <th className="whitespace-nowrap p-2 text-left">{t("memberLineReachCol")}</th>
             <th className="hidden whitespace-nowrap p-2 text-left lg:table-cell">{t("birthDate")}</th>
             <th className="hidden whitespace-nowrap p-2 text-left xl:table-cell">{t("age")}</th>
           </tr>
@@ -353,6 +398,9 @@ const MemberListTable = React.memo(function MemberListTable({
                     {active ? t("crmMemberStatusActive") : t("crmMemberStatusInactive")}
                   </Badge>
                 </td>
+                <td className="whitespace-nowrap p-2">
+                  <MemberLineReachBadge member={m} t={t} />
+                </td>
                 <td className="hidden whitespace-nowrap p-2 text-xs lg:table-cell">{m.birthDate || "—"}</td>
                 <td className="hidden whitespace-nowrap p-2 text-xs xl:table-cell">{calcMemberAge(m.birthDate)}</td>
               </tr>
@@ -384,9 +432,12 @@ const MemberListTable = React.memo(function MemberListTable({
                     {m.phone || "—"} · {m.memberNo || "—"}
                   </p>
                 </div>
-                <Badge variant={active ? "default" : "secondary"} className="shrink-0 text-[10px]">
-                  {active ? t("crmMemberStatusActive") : t("crmMemberStatusInactive")}
-                </Badge>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <Badge variant={active ? "default" : "secondary"} className="text-[10px]">
+                    {active ? t("crmMemberStatusActive") : t("crmMemberStatusInactive")}
+                  </Badge>
+                  <MemberLineReachBadge member={m} t={t} />
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                 <Badge variant="outline" className="text-[10px]">{m.tierCode || "—"}</Badge>
@@ -446,6 +497,9 @@ export const MemberListPanel = React.memo(
     const [selectedImportFileName, setSelectedImportFileName] = React.useState("")
     const [filterTier, setFilterTier] = React.useState("all")
     const [filterStatus, setFilterStatus] = React.useState("active")
+    const [filterLine, setFilterLine] = React.useState<MemberLineReachFilter>("all")
+    const [lineStats, setLineStats] = React.useState<MemberLineReachStatsView | null>(null)
+    const [lineStatsLoading, setLineStatsLoading] = React.useState(true)
     const [tierOptions, setTierOptions] = React.useState<string[]>([])
     const importFileRef = React.useRef<HTMLInputElement | null>(null)
     const [joinStoreLabels, setJoinStoreLabels] = React.useState<Record<string, string>>({
@@ -491,12 +545,14 @@ export const MemberListPanel = React.memo(
     const pageIndexRef = React.useRef(pageIndex)
     const filterStatusRef = React.useRef(filterStatus)
     const filterTierRef = React.useRef(filterTier)
+    const filterLineRef = React.useRef(filterLine)
     appliedFieldsRef.current = appliedFields
     appliedQRef.current = appliedQ
     pageCursorsRef.current = pageCursors
     pageIndexRef.current = pageIndex
     filterStatusRef.current = filterStatus
     filterTierRef.current = filterTier
+    filterLineRef.current = filterLine
 
     const loadPage = React.useCallback(
       async (opts?: {
@@ -517,6 +573,7 @@ export const MemberListPanel = React.memo(
         setLoading(true)
         try {
           const tier = filterTierRef.current || "all"
+          const lineReach = filterLineRef.current || "all"
           const res = await getMembersCursor({
             q,
             name: fields.name,
@@ -530,6 +587,7 @@ export const MemberListPanel = React.memo(
             limit: MEMBER_PAGE_SIZE,
             status: filterStatusRef.current || "active",
             tierCode: tier !== "all" ? tier : undefined,
+            lineReach: lineReach !== "all" ? lineReach : undefined,
           })
           if (!res.success) {
             startTransition(() => {
@@ -542,7 +600,7 @@ export const MemberListPanel = React.memo(
           const rows = res.rows || []
           startTransition(() => {
             setMembers(rows)
-            setHasMore(rows.length >= MEMBER_PAGE_SIZE)
+            setHasMore(typeof res.hasMore === "boolean" ? res.hasMore : rows.length >= MEMBER_PAGE_SIZE)
           })
         } catch (e) {
           console.error("getMembersCursor:", e)
@@ -562,6 +620,30 @@ export const MemberListPanel = React.memo(
     const loadPageRef = React.useRef(loadPage)
     loadPageRef.current = loadPage
 
+    const loadLineStats = React.useCallback(async () => {
+      setLineStatsLoading(true)
+      try {
+        const tier = filterTierRef.current || "all"
+        const res = await getMemberLineReachStats({
+          status: filterStatusRef.current || "active",
+          tierCode: tier !== "all" ? tier : undefined,
+        })
+        if (!res.success) return
+        setLineStats({
+          total: Number(res.total || 0),
+          reachable: Number(res.reachable || 0),
+          unreachable: Number(res.unreachable || 0),
+        })
+      } catch {
+        /* 목록 조회는 계속 */
+      } finally {
+        setLineStatsLoading(false)
+      }
+    }, [])
+
+    const loadLineStatsRef = React.useRef(loadLineStats)
+    loadLineStatsRef.current = loadLineStats
+
     React.useEffect(() => {
       void loadPageRef.current()
     }, [])
@@ -580,6 +662,10 @@ export const MemberListPanel = React.memo(
         cursors: [undefined],
         isSearch: true,
       })
+    }, [filterStatus, filterTier, filterLine])
+
+    React.useEffect(() => {
+      void loadLineStatsRef.current()
     }, [filterStatus, filterTier])
 
     React.useImperativeHandle(
@@ -591,9 +677,10 @@ export const MemberListPanel = React.memo(
             fields: appliedFieldsRef.current,
             isSearch: true,
           })
+          void loadLineStats()
         },
       }),
-      [loadPage]
+      [loadLineStats, loadPage]
     )
 
     const runSearch = React.useCallback(
@@ -680,6 +767,7 @@ export const MemberListPanel = React.memo(
           t("memberPointsBalance"),
           t("memberPointsTierCumulative"),
           t("status"),
+          t("memberLineReachCol"),
         ],
         filteredMembers.map((m) => [
           m.name || "",
@@ -693,6 +781,7 @@ export const MemberListPanel = React.memo(
           String(Number(m.pointBalance || 0)),
           String(Number(m.tierPoints || 0)),
           m.status || "",
+          memberCanReceiveLine(m) ? t("memberLineReachable") : t("memberLineUnreachable"),
         ])
       )
     }
@@ -744,8 +833,71 @@ export const MemberListPanel = React.memo(
                 <SelectItem value="inactive">{t("crmMemberStatusInactive")}</SelectItem>
               </SelectContent>
             </Select>
+            <span className="text-xs font-medium text-muted-foreground">{t("memberLineReachFilter")}</span>
+            <Select value={filterLine} onValueChange={(value) => setFilterLine(value as MemberLineReachFilter)}>
+              <SelectTrigger className="h-8 w-[140px] bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("memberLineReachAll")}</SelectItem>
+                <SelectItem value="reachable">{t("memberLineReachable")}</SelectItem>
+                <SelectItem value="unreachable">{t("memberLineUnreachable")}</SelectItem>
+              </SelectContent>
+            </Select>
             <span className="text-[11px] text-muted-foreground">{t("memberTierFilterHint")}</span>
           </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {(
+              [
+                { key: "all" as const, label: t("memberLineReachStatsTotal"), count: lineStats?.total, tone: "" },
+                {
+                  key: "reachable" as const,
+                  label: t("memberLineReachStatsReachable"),
+                  count: lineStats?.reachable,
+                  tone: "border-emerald-600/40 bg-emerald-600/5",
+                },
+                {
+                  key: "unreachable" as const,
+                  label: t("memberLineReachStatsUnreachable"),
+                  count: lineStats?.unreachable,
+                  tone: "",
+                },
+              ] as const
+            ).map((card) => {
+              const selected = filterLine === card.key
+              const countLabel = lineStatsLoading || card.count == null ? "…" : card.count.toLocaleString()
+              const share =
+                card.key === "all" || lineStats == null
+                  ? ""
+                  : tr(t, "memberLineReachShare", {
+                      pct: formatReachPct(card.count || 0, lineStats.total),
+                    })
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  onClick={() => setFilterLine(card.key)}
+                  aria-pressed={selected}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-left transition hover:bg-muted/40",
+                    card.tone,
+                    selected && "ring-2 ring-primary/40"
+                  )}
+                >
+                  <p className="text-[11px] text-muted-foreground">{card.label}</p>
+                  <p className="text-lg font-semibold tabular-nums leading-tight">
+                    {countLabel}
+                    <span className="ml-1 text-xs font-medium text-muted-foreground">{t("memberCountUnit")}</span>
+                    {share ? (
+                      <span className="ml-2 text-xs font-medium text-muted-foreground">{share}</span>
+                    ) : null}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground">{t("memberLineReachStatsHint")}</p>
 
           <div className="space-y-2 rounded-xl border bg-card p-3">
             <p className="text-xs font-semibold text-muted-foreground">{t("memberDataToolsTitle")}</p>
@@ -823,6 +975,7 @@ export const MemberListPanel = React.memo(
                               cursors: [undefined],
                               isSearch: true,
                             })
+                            void loadLineStats()
                           } finally {
                             setImporting(false)
                           }
@@ -857,6 +1010,7 @@ export const MemberListPanel = React.memo(
                               cursors: [undefined],
                               isSearch: true,
                             })
+                            void loadLineStats()
                           } finally {
                             setResettingLine(false)
                           }
