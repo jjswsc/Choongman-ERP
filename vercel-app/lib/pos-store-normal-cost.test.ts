@@ -3,6 +3,7 @@ import {
   buildStoreNormalCostRow,
   classifyStoreNormalCostDiscount,
   resolveStoreNormalAccounting,
+  resolveStoreNormalPosSales,
 } from '@/lib/pos-store-normal-cost'
 
 const base = {
@@ -67,6 +68,43 @@ describe('buildStoreNormalCostRow', () => {
     expect(row.totalDiscount).toBe(180)
     expect(row.discountSharePct).toBe(18)
     expect(row.theoryCostPct).toBe(37.5)
+  })
+})
+
+describe('resolveStoreNormalPosSales', () => {
+  it('shows VAT-included list price and net receipts without changing the theoretical rate', () => {
+    const row = buildStoreNormalCostRow({
+      ...base,
+      discountKinds: [],
+      grossSales: 1196576.91,
+      netSales: 1128943.71,
+      bomCost: 384354.15,
+      combinedDiscount: 67633.2,
+      grossSalesIncluded: 1280337.29,
+      netSalesIncluded: 1207969.77,
+      totalDiscountIncluded: 72367.52,
+    })
+    const included = resolveStoreNormalPosSales(row, 'included')
+    const excluded = resolveStoreNormalPosSales(row, 'excluded')
+    expect(included.gross).toBe(1280337.29)
+    expect(included.net).toBe(1207969.77)
+    expect(included.discount).toBe(72367.52)
+    expect(excluded.net).toBe(1128943.71)
+    expect(Number(row.theoryCostPct.toFixed(1))).toBe(34)
+  })
+
+  it('grosses up cached rows that only have VAT-excluded sales', () => {
+    const row = buildStoreNormalCostRow({
+      ...base,
+      discountKinds: [],
+      grossSales: 1000,
+      netSales: 900,
+      combinedDiscount: 100,
+    })
+    const included = resolveStoreNormalPosSales(row, 'included')
+    expect(included.net).toBe(963)
+    expect(included.discount).toBe(107)
+    expect(included.gross).toBe(1070)
   })
 })
 

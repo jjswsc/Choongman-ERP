@@ -40,6 +40,10 @@ export type ManagementMarginChannelRow = {
 export type ManagementMarginPosSlice = {
   grossSalesBeforeDiscount: number
   netSales: number
+  /** 정가·실수령·통합 할인 (부가세 포함). 이론 원가율 분모는 제외 금액을 쓴다 */
+  grossSalesBeforeDiscountIncluded: number
+  netSalesIncluded: number
+  totalDiscountIncluded: number
   bundleDiscount: number
   paymentDiscount: number
   totalDiscount: number
@@ -93,6 +97,10 @@ function sumOrdersSalesExclVat(rows: OrderRow[]): number {
   return round2(rows.reduce((s, o) => s + resolvePosOrderSalesExclVat(o), 0))
 }
 
+function sumOrdersSalesInclVat(rows: OrderRow[]): number {
+  return round2(rows.reduce((s, o) => s + Math.max(0, Number(o.total) || 0), 0))
+}
+
 export function buildManagementMarginPosSlice(params: {
   orderRows: OrderRow[]
   catalog: PromoPricingCatalog
@@ -120,6 +128,9 @@ export function buildManagementMarginPosSlice(params: {
   const netSales = sumOrdersSalesExclVat(params.orderRows)
   const totalDiscount = toPosCostSalesExclVat(combined.totals.totalDiscount)
   const grossBefore = round2(netSales + totalDiscount)
+  const netSalesIncluded = sumOrdersSalesInclVat(params.orderRows)
+  const totalDiscountIncluded = round2(combined.totals.totalDiscount)
+  const grossBeforeIncluded = round2(netSalesIncluded + totalDiscountIncluded)
 
   const resolveContext = buildTheoreticalCostResolveContext({
     costIndex: params.costIndex,
@@ -179,6 +190,9 @@ export function buildManagementMarginPosSlice(params: {
   return {
     grossSalesBeforeDiscount: grossBefore,
     netSales,
+    grossSalesBeforeDiscountIncluded: grossBeforeIncluded,
+    netSalesIncluded,
+    totalDiscountIncluded,
     bundleDiscount: toPosCostSalesExclVat(combined.totals.bundleDiscount),
     paymentDiscount: toPosCostSalesExclVat(combined.totals.paymentDiscount),
     totalDiscount,

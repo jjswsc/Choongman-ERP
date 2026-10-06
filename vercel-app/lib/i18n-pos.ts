@@ -3179,7 +3179,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posCostTabVariance: '이론 vs 실소진',
     posCostTabStoreNormal: '매장 정상 원가',
     posCostStoreNormalHint:
-      '왼쪽부터 정가, 통합 할인, 할인%, 실수령입니다. 정가에서 할인을 빼면 실수령입니다. 이론 원가율은 정상 원가를 실수령으로 나눈 값입니다. 정가 기준 원가율을 할인 후 남은 금액으로 다시 나눈 것과 같습니다. 손익 매출원가와 실제 원가율은 손익계산서에서 고른 부가세 포함·제외와 같은 매출원가÷매출입니다. 차이는 실제 원가율에서 이론 원가율을 뺀 값입니다.',
+      '왼쪽부터 정가, 통합 할인, 할인%, 실수령입니다. 정가에서 할인을 빼면 실수령입니다. 정가·할인·실수령과 손익 매출원가·실제 원가율은 손익계산서에서 고른 부가세 포함·제외와 같습니다. 이론 원가율은 부가세 제외 정상 원가를 부가세 제외 실수령으로 나눈 값이라, 포함으로 봐도 7%를 곱하지 않습니다. 차이는 실제 원가율에서 이론 원가율을 뺀 값입니다.',
     posCostStoreNormalQuery: '조회',
     posCostStoreNormalPresetCount: '실사 월',
     posCostStoreNormalEmpty: '이 기간에 표시할 매장이 없습니다.',
@@ -6701,7 +6701,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostTabVariance: 'Theoretical vs actual',
     posCostTabStoreNormal: 'Store normal cost',
     posCostStoreNormalHint:
-      'Columns run list price, combined discount, discount %, then net receipts. Net receipts are list price after the discount. Theoretical cost % is normal cost divided by net receipts, the same as dividing the list-price cost % by what remains after the discount. P&L COGS and actual cost % use the same VAT mode as the income statement. The gap is actual minus theoretical.',
+      'Columns run list price, combined discount, discount %, then net receipts. Net receipts are list price after the discount. List price, discount, net receipts, P&L COGS, and actual cost % use the same VAT mode as the income statement. Theoretical cost % is always VAT-excluded normal cost divided by VAT-excluded net receipts, so it is not grossed up by 7%. The gap is actual minus theoretical.',
     posCostStoreNormalQuery: 'Query',
     posCostStoreNormalPresetCount: 'Count month',
     posCostStoreNormalEmpty: 'No stores to show for this period.',
@@ -7583,7 +7583,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posCostTabVariance: 'ทฤษฎี vs ใช้จริง',
     posCostTabStoreNormal: 'ต้นทุนปกติรายสาขา',
     posCostStoreNormalHint:
-      'เรียงจากซ้าย: ราคาเต็ม ส่วนลดรวม %ส่วนลด รับจริง รับจริงคือราคาเต็มหลังหักส่วนลด อัตราต้นทุนทฤษฎี = ต้นทุนปกติ÷รับจริง ซึ่งเท่ากับเอาอัตราตามราคาเต็มไปหารด้วยสัดส่วนที่เหลือหลังส่วนลด ต้นทุนขายและอัตราต้นทุนจริงใช้ฐาน VAT เดียวกับงบกำไรขาดทุน ส่วนต่าง = อัตราจริง − อัตราทฤษฎีครับ',
+      'เรียงจากซ้าย: ราคาเต็ม ส่วนลดรวม %ส่วนลด รับจริง รับจริงคือราคาเต็มหลังหักส่วนลด ราคาเต็ม ส่วนลด รับจริง ต้นทุนขาย และอัตราต้นทุนจริงใช้ฐาน VAT เดียวกับงบกำไรขาดทุน อัตราต้นทุนทฤษฎีคือต้นทุนปกติไม่รวม VAT หารรับจริงไม่รวม VAT จึงไม่คูณ 7% แม้หน้าจอจะแสดงยอดรวม VAT ส่วนต่าง = อัตราจริง − อัตราทฤษฎีครับ',
     posCostStoreNormalQuery: 'ค้นหา',
     posCostStoreNormalPresetCount: 'เดือนตรวจนับ',
     posCostStoreNormalEmpty: 'ไม่มีสาขาในช่วงนี้',

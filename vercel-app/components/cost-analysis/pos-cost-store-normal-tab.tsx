@@ -11,6 +11,8 @@ import { tOr, useT } from "@/lib/i18n"
 import { getPosStoreNormalCost } from "@/lib/api-client"
 import {
   resolveStoreNormalAccounting,
+  resolveStoreNormalDiscountAmount,
+  resolveStoreNormalPosSales,
   type StoreNormalCostReport,
   type StoreNormalCostRow,
   type StoreNormalVatMode,
@@ -50,14 +52,6 @@ function signedPct(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—"
   const sign = n > 0 ? "+" : ""
   return `${sign}${n.toFixed(1)}%`
-}
-
-function discountAmount(row: StoreNormalCostRow): number {
-  if (Number.isFinite(row.totalDiscount)) return row.totalDiscount
-  const gross = Number(row.grossSales)
-  const net = Number(row.netSales)
-  if (Number.isFinite(gross) && Number.isFinite(net)) return Math.round((gross - net) * 100) / 100
-  return 0
 }
 
 function shareOfGross(part: number, gross: number, given?: number | null): number | null {
@@ -339,8 +333,8 @@ export function PosCostStoreNormalTab() {
                 {result.rows.map((row) => {
                   const open = expanded === row.storeCode
                   const storeName = labelForStore(storeLabels, row.storeCode)
-                  const discount = discountAmount(row)
-                  const discPct = shareOfGross(discount, row.grossSales, row.discountSharePct)
+                  const sales = resolveStoreNormalPosSales(row, plVatMode)
+                  const discPct = shareOfGross(sales.discount, sales.gross)
                   const theory = theoryPct(row)
                   const actual = actualCostPct(row, plVatMode)
                   const gap = gapPct(row, plVatMode)
@@ -371,10 +365,10 @@ export function PosCostStoreNormalTab() {
                             </span>
                           ) : null}
                         </td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.grossSales)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(discount)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(sales.gross)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(sales.discount)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(discPct)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.netSales)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(sales.net)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.bomCost)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(theory)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(plCogsAmount(row, plVatMode))}</td>
@@ -413,7 +407,7 @@ export function PosCostStoreNormalTab() {
                                     <tr key={`${line.layer}-${line.kind}`} className="border-b border-border/40">
                                       <td className="py-1">{combinedKindLabel(line, tr)}</td>
                                       <td className="py-1">{bucketLabel(line.bucket)}</td>
-                                      <td className="py-1 text-right tabular-nums whitespace-nowrap">{money(line.amount)}</td>
+                                      <td className="py-1 text-right tabular-nums whitespace-nowrap">{money(resolveStoreNormalDiscountAmount(line, plVatMode))}</td>
                                     </tr>
                                   ))}
                                 </tbody>

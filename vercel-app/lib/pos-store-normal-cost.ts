@@ -20,6 +20,8 @@ export type StoreNormalCostDiscountLine = {
   bucket: StoreNormalCostDiscountBucket
   /** 부가세 제외 */
   amount: number
+  /** 부가세 포함. 집계 원천 */
+  amountIncluded?: number | null
 }
 
 export type StoreNormalCostKindAmount = {
@@ -45,6 +47,10 @@ export type StoreNormalCostRow = {
   orderCount: number
   grossSales: number
   netSales: number
+  /** 정가·실수령·통합 할인 (부가세 포함). 없으면 화면이 제외 금액×1.07로 본다 */
+  grossSalesIncluded?: number | null
+  netSalesIncluded?: number | null
+  totalDiscountIncluded?: number | null
   /** 통합 할인(부가세 제외). 정가 − 실수령 */
   totalDiscount: number
   /** 실수령 ÷ 정가 */
@@ -118,6 +124,45 @@ function finiteMoney(n: number | null | undefined): number | null {
 
 export type StoreNormalVatMode = 'included' | 'excluded'
 
+const THAI_VAT_GROSS_UP = 1.07
+
+function grossUpThaiVat(amount: number): number {
+  return round2((Number(amount) || 0) * THAI_VAT_GROSS_UP)
+}
+
+/** 정가·할인·실수령. 이론 원가율은 항상 제외 금액으로 따로 계산한다. */
+export function resolveStoreNormalPosSales(
+  row: Pick<
+    StoreNormalCostRow,
+    | 'grossSales'
+    | 'netSales'
+    | 'totalDiscount'
+    | 'grossSalesIncluded'
+    | 'netSalesIncluded'
+    | 'totalDiscountIncluded'
+  >,
+  vatMode: StoreNormalVatMode
+): { gross: number; discount: number; net: number } {
+  const grossEx = round2(Number(row.grossSales) || 0)
+  const netEx = round2(Number(row.netSales) || 0)
+  const discountEx = Number.isFinite(row.totalDiscount) ? round2(row.totalDiscount) : round2(grossEx - netEx)
+  if (vatMode !== 'included') {
+    return { gross: grossEx, discount: discountEx, net: netEx }
+  }
+  const net = finiteMoney(row.netSalesIncluded) ?? grossUpThaiVat(netEx)
+  const discount = finiteMoney(row.totalDiscountIncluded) ?? grossUpThaiVat(discountEx)
+  const gross = finiteMoney(row.grossSalesIncluded) ?? round2(net + discount)
+  return { gross, discount, net }
+}
+
+export function resolveStoreNormalDiscountAmount(
+  line: Pick<StoreNormalCostDiscountLine, 'amount' | 'amountIncluded'>,
+  vatMode: StoreNormalVatMode
+): number {
+  if (vatMode !== 'included') return round2(line.amount)
+  return finiteMoney(line.amountIncluded) ?? grossUpThaiVat(line.amount)
+}
+
 /** 손익계산서 VAT 토글과 같은 매출·매출원가. 포함 금액이 없으면 제외로 내려간다. */
 export function resolveStoreNormalAccounting(
   row: Pick<
@@ -170,7 +215,13 @@ export function splitStoreNormalCostDiscounts(
     if (bucket === 'hq') hq += amount
     else if (bucket === 'store') store += amount
     else other += amount
-    lines.push({ layer: row.layer, kind: row.kind, bucket, amount })
+    lines.push({
+      layer: row.layer,
+      kind: row.kind,
+      bucket,
+      amount,
+      amountIncluded: round2(Math.max(0, Number(row.discountAmount) || 0)),
+    })
   }
   lines.sort((a, b) => b.amount - a.amount)
   return {
@@ -254,6 +305,9 @@ export function buildStoreNormalCostRow(params: {
   accountingCogs: number | null
   accountingSalesIncluded?: number | null
   accountingCogsIncluded?: number | null
+  grossSalesIncluded?: number | null
+  netSalesIncluded?: number | null
+  totalDiscountIncluded?: number | null
   usageWarnings?: string[]
 }): StoreNormalCostRow {
   const discounts = splitStoreNormalCostDiscounts(params.discountKinds)
@@ -314,6 +368,9 @@ export function buildStoreNormalCostRow(params: {
     accountingCogs,
     accountingSalesIncluded,
     accountingCogsIncluded,
+    grossSalesIncluded: finiteMoney(params.grossSalesIncluded),
+    netSalesIncluded: finiteMoney(params.netSalesIncluded),
+    totalDiscountIncluded: finiteMoney(params.totalDiscountIncluded),
     plCostPct,
     vsPlPct,
     vsPlAmt,
