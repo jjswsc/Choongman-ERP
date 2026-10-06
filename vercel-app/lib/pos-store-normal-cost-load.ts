@@ -1,6 +1,7 @@
 import { computeIncomeStatementReport } from '@/lib/accounting-reports'
 import type { IncomeStatementData } from '@/lib/api-client/income-statement'
 import { buildIncomeStatementViewNumbers } from '@/lib/income-statement-display'
+import { mergeNetVatBuckets, type NetVatBuckets } from '@/lib/income-statement-item-vat'
 import {
   parseCommaSeparatedStoreFilter,
   resolveAccountingStoreFilterFromAuth,
@@ -15,7 +16,9 @@ import { buildManagementMarginPosSlice } from '@/lib/management-margin-pos-slice
 import { buildPosMenuCostIndex } from '@/lib/pos-menu-cost-index-server'
 import {
   buildStoreNormalCostRow,
+  mergeStoreNormalPurchaseVendors,
   type StoreNormalCostReport,
+  type StoreNormalPurchaseVendor,
 } from '@/lib/pos-store-normal-cost'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import {
@@ -96,12 +99,16 @@ async function loadAccountingPl(params: {
 }): Promise<{
   excluded: { sales: number; cogs: number }
   included: { sales: number; cogs: number }
+  purchaseVendors: StoreNormalPurchaseVendor[]
+  purchaseVatBuckets: NetVatBuckets | null
 } | null> {
   if (!params.months.length) return null
   let excludedSales = 0
   let excludedCogs = 0
   let includedSales = 0
   let includedCogs = 0
+  const vendorLists: StoreNormalPurchaseVendor[][] = []
+  let purchaseVatBuckets: NetVatBuckets | null = null
   for (const yearMonth of params.months) {
     const report = await computeIncomeStatementReport({
       yearMonth,
@@ -119,10 +126,17 @@ async function loadAccountingPl(params: {
     excludedCogs += Number(excluded.cogs) || 0
     includedSales += monthSalesForVat(included.sales, report, 'included')
     includedCogs += Number(included.cogs) || 0
+    vendorLists.push((report.purchaseByVendor ?? []) as StoreNormalPurchaseVendor[])
+    const buckets = report.displayAmounts?.purchasesStockVatBuckets
+    if (buckets) {
+      purchaseVatBuckets = purchaseVatBuckets ? mergeNetVatBuckets(purchaseVatBuckets, buckets) : buckets
+    }
   }
   return {
     excluded: { sales: round2(excludedSales), cogs: round2(excludedCogs) },
     included: { sales: round2(includedSales), cogs: round2(includedCogs) },
+    purchaseVendors: mergeStoreNormalPurchaseVendors(vendorLists),
+    purchaseVatBuckets,
   }
 }
 
@@ -220,8 +234,9 @@ export async function computePosStoreNormalCost(params: {
     let accountingCogs: number | null = null
     let accountingSalesIncluded: number | null = null
     let accountingCogsIncluded: number | null = null
+    let pl: Awaited<ReturnType<typeof loadAccountingPl>> = null
     try {
-      const pl = await loadAccountingPl({
+      pl = await loadAccountingPl({
         storeCode,
         months,
         auth: params.auth,
@@ -258,6 +273,8 @@ export async function computePosStoreNormalCost(params: {
       accountingCogs,
       accountingSalesIncluded,
       accountingCogsIncluded,
+      purchaseVendors: pl?.purchaseVendors,
+      purchaseVatBuckets: pl?.purchaseVatBuckets,
       usageWarnings,
     })
   })

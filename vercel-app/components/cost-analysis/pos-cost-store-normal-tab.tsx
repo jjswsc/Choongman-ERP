@@ -10,13 +10,15 @@ import { useLang } from "@/lib/lang-context"
 import { tOr, useT } from "@/lib/i18n"
 import { getPosStoreNormalCost } from "@/lib/api-client"
 import {
+  listStoreNormalPurchaseVendors,
   resolveStoreNormalAccounting,
-  resolveStoreNormalDiscountAmount,
+  resolveStoreNormalBom,
   resolveStoreNormalPosSales,
   type StoreNormalCostReport,
   type StoreNormalCostRow,
   type StoreNormalVatMode,
 } from "@/lib/pos-store-normal-cost"
+import { purchaseVendorRowLabel } from "@/components/tabs/income-statement-tab-utils"
 import { readIncomeStatementDisplayPrefs } from "@/lib/income-statement-display"
 import { useErpPageActive } from "@/lib/erp-page-visibility"
 import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
@@ -32,10 +34,6 @@ import {
 import { useStoreList } from "@/lib/use-store-list"
 import { labelForStore } from "@/lib/store-list-keys"
 import { formatMoney2 } from "@/lib/financial-amount-format"
-import {
-  combinedKindLabel,
-  type SalesDiscountTr,
-} from "@/lib/sales-discount-analytics-labels"
 import { patchPosCostViewSession, readPosCostViewSession } from "@/lib/pos-cost-view-session"
 
 function pct(n: number | null | undefined): string {
@@ -68,16 +66,16 @@ function plCogsAmount(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): num
   return resolveStoreNormalAccounting(row, vatMode).cogs
 }
 
-function theoryPct(row: StoreNormalCostRow): number | null {
-  const net = Number(row.netSales)
-  const bom = Number(row.bomCost)
+function theoryPct(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): number | null {
+  const net = resolveStoreNormalPosSales(row, vatMode).net
+  const bom = resolveStoreNormalBom(row.bomCost, vatMode)
   if (!(net > 0.0001) || !Number.isFinite(bom)) return null
   return (bom / net) * 100
 }
 
 function gapPct(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): number | null {
   const actual = actualCostPct(row, vatMode)
-  const theory = theoryPct(row)
+  const theory = theoryPct(row, vatMode)
   if (actual == null || theory == null) return null
   return Math.round((actual - theory) * 100) / 100
 }
@@ -93,13 +91,6 @@ export function PosCostStoreNormalTab() {
   const { lang } = useLang()
   const t = useT(lang)
   const { stores, storeLabels } = useStoreList()
-  const tr = React.useCallback<SalesDiscountTr>(
-    (key, fallback) => {
-      const value = t(key)
-      return value && value !== key ? value : fallback
-    },
-    [t]
-  )
 
   const franchiseStoreOptions = React.useMemo(
     () => buildFinancialStatementFranchiseStoreOptions(stores, storeLabels),
@@ -201,8 +192,8 @@ export function PosCostStoreNormalTab() {
     let plCogs = 0
     let higherPl = 0
     for (const row of rows) {
-      net += row.netSales
-      bom += row.bomCost
+      net += resolveStoreNormalPosSales(row, plVatMode).net
+      bom += resolveStoreNormalBom(row.bomCost, plVatMode)
       const pl = resolveStoreNormalAccounting(row, plVatMode)
       if (pl.sales != null && pl.sales > 0.0001 && pl.cogs != null) {
         plSales += pl.sales
@@ -219,12 +210,6 @@ export function PosCostStoreNormalTab() {
   }, [result, plVatMode])
 
   const holdLabel = () => t("posCostStoreNormalHoldBom")
-
-  const bucketLabel = (bucket: StoreNormalCostRow["discountLines"][number]["bucket"]) => {
-    if (bucket === "hq") return t("posCostStoreNormalBucketHq")
-    if (bucket === "store") return t("posCostStoreNormalBucketStore")
-    return t("posCostStoreNormalBucketOther")
-  }
 
   return (
     <div className="space-y-6">
@@ -335,7 +320,9 @@ export function PosCostStoreNormalTab() {
                   const storeName = labelForStore(storeLabels, row.storeCode)
                   const sales = resolveStoreNormalPosSales(row, plVatMode)
                   const discPct = shareOfGross(sales.discount, sales.gross)
-                  const theory = theoryPct(row)
+                  const bom = resolveStoreNormalBom(row.bomCost, plVatMode)
+                  const theory = theoryPct(row, plVatMode)
+                  const vendors = listStoreNormalPurchaseVendors(row, plVatMode)
                   const actual = actualCostPct(row, plVatMode)
                   const gap = gapPct(row, plVatMode)
                   const plHot = gap != null && gap > 0.5
@@ -369,7 +356,7 @@ export function PosCostStoreNormalTab() {
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(sales.discount)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(discPct)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(sales.net)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.bomCost)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(bom)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(theory)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(plCogsAmount(row, plVatMode))}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(actual)}</td>
@@ -393,27 +380,27 @@ export function PosCostStoreNormalTab() {
                                 ))}
                               </ul>
                             ) : null}
-                            {row.discountLines.length > 0 ? (
+                            {vendors.length > 0 ? (
                               <table className="w-full max-w-xl text-xs">
                                 <thead>
                                   <tr className="border-b">
-                                    <th className="py-1 text-left">{t("posCostStoreNormalDiscountKind")}</th>
-                                    <th className="py-1 text-left">{t("posCostStoreNormalDiscountBucket")}</th>
-                                    <th className="py-1 text-right">{t("posCostStoreNormalDiscountAmount")}</th>
+                                    <th className="py-1 text-left">{t("posCostStoreNormalVendor")}</th>
+                                    <th className="py-1 text-right">{t("posCostStoreNormalVendorAmount")}</th>
+                                    <th className="py-1 text-right">{t("posCostStoreNormalVendorShare")}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {row.discountLines.map((line) => (
-                                    <tr key={`${line.layer}-${line.kind}`} className="border-b border-border/40">
-                                      <td className="py-1">{combinedKindLabel(line, tr)}</td>
-                                      <td className="py-1">{bucketLabel(line.bucket)}</td>
-                                      <td className="py-1 text-right tabular-nums whitespace-nowrap">{money(resolveStoreNormalDiscountAmount(line, plVatMode))}</td>
+                                  {vendors.map((vendor) => (
+                                    <tr key={vendor.key} className="border-b border-border/40">
+                                      <td className="py-1">{purchaseVendorRowLabel(vendor, t)}</td>
+                                      <td className="py-1 text-right tabular-nums whitespace-nowrap">{money(vendor.amount)}</td>
+                                      <td className="py-1 text-right tabular-nums whitespace-nowrap">{pct(vendor.sharePct)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
                             ) : (
-                              <p className="text-muted-foreground">{t("posCostStoreNormalNoDiscount")}</p>
+                              <p className="text-muted-foreground">{t("posCostStoreNormalNoVendor")}</p>
                             )}
                             {row.usageWarnings.length > 0 ? (
                               <ul className="list-disc pl-4 text-muted-foreground">

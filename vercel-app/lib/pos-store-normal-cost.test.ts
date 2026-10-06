@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   buildStoreNormalCostRow,
   classifyStoreNormalCostDiscount,
+  listStoreNormalPurchaseVendors,
+  mergeStoreNormalPurchaseVendors,
   resolveStoreNormalAccounting,
+  resolveStoreNormalBom,
   resolveStoreNormalPosSales,
 } from '@/lib/pos-store-normal-cost'
 
@@ -105,6 +108,34 @@ describe('resolveStoreNormalPosSales', () => {
     expect(included.net).toBe(963)
     expect(included.discount).toBe(107)
     expect(included.gross).toBe(1070)
+  })
+})
+
+describe('resolveStoreNormalBom', () => {
+  it('adds 7% VAT to supply-price normal cost when the income statement is VAT included', () => {
+    expect(resolveStoreNormalBom(384354.15, 'excluded')).toBe(384354.15)
+    expect(resolveStoreNormalBom(384354.15, 'included')).toBe(411258.94)
+    const netIncluded = 1207969.77
+    expect(Number(((411258.94 / netIncluded) * 100).toFixed(1))).toBe(34)
+  })
+})
+
+describe('listStoreNormalPurchaseVendors', () => {
+  it('merges vendor amounts and shows each share of purchases', () => {
+    const vendors = mergeStoreNormalPurchaseVendors([
+      [{ key: 'hq', label: '본사', amount: 700, amountBasis: 'stock_net' }],
+      [{ key: 'hq', amount: 300, amountBasis: 'stock_net' }, { key: 'market', label: '시장', amount: 250, amountBasis: 'stock_net' }],
+    ])
+    const row = buildStoreNormalCostRow({
+      ...base,
+      discountKinds: [],
+      purchaseVendors: vendors,
+    })
+    const shown = listStoreNormalPurchaseVendors(row, 'excluded')
+    expect(shown.map((line) => [line.key, line.amount, Number(line.sharePct.toFixed(1))])).toEqual([
+      ['hq', 1000, 80],
+      ['market', 250, 20],
+    ])
   })
 })
 

@@ -3,6 +3,8 @@
  * 표의 할인은 통합 할인 한 칸. 실소진은 넣지 않는다.
  */
 import { getItemCostPerUnit } from '@/lib/item-cost-util'
+import { convertLineAmount, type IncomeStatementAmountBasisKind } from '@/lib/income-statement-display'
+import type { NetVatBuckets } from '@/lib/income-statement-item-vat'
 import { toPosCostSalesExclVat } from '@/lib/pos-cost-vat'
 import { STOCK_TAKE_COVERAGE_WARN } from '@/lib/stock-take-kpi'
 
@@ -83,7 +85,19 @@ export type StoreNormalCostRow = {
   matchedLineQty: number
   unmatchedLineQty: number
   discountLines: StoreNormalCostDiscountLine[]
+  /** 손익 매입 거래처. amount는 원천 금액이고 화면에서 부가세 기준으로 환산한다 */
+  purchaseVendors?: StoreNormalPurchaseVendor[]
+  /** 매입 품목 과세/면세 — 거래처 금액을 포함으로 볼 때 사용 */
+  purchaseVatBuckets?: NetVatBuckets | null
   usageWarnings: string[]
+}
+
+export type StoreNormalPurchaseVendor = {
+  key: string
+  label?: string
+  amount: number
+  amountBasis?: IncomeStatementAmountBasisKind
+  vatAmount?: number
 }
 
 export type IngredientUsageMoneyInput = {
@@ -153,6 +167,63 @@ export function resolveStoreNormalPosSales(
   const discount = finiteMoney(row.totalDiscountIncluded) ?? grossUpThaiVat(discountEx)
   const gross = finiteMoney(row.grossSalesIncluded) ?? round2(net + discount)
   return { gross, discount, net }
+}
+
+/** 정상 원가. 포함이면 공급가에 7%를 더한다. 이론 원가율은 이 금액÷같은 기준 실수령이다. */
+export function resolveStoreNormalBom(bomCost: number, vatMode: StoreNormalVatMode): number {
+  const bom = round2(Number(bomCost) || 0)
+  if (vatMode !== 'included') return bom
+  return round2(bom * THAI_VAT_GROSS_UP)
+}
+
+export function mergeStoreNormalPurchaseVendors(
+  lists: Array<StoreNormalPurchaseVendor[] | null | undefined>
+): StoreNormalPurchaseVendor[] {
+  const into = new Map<string, StoreNormalPurchaseVendor>()
+  for (const list of lists) {
+    for (const row of list ?? []) {
+      const key = String(row.key || '').trim()
+      const amount = Number(row.amount) || 0
+      if (!key || amount <= 0.0001) continue
+      const prev = into.get(key)
+      const vat = Number(row.vatAmount) || 0
+      if (!prev) {
+        into.set(key, {
+          key,
+          label: String(row.label || '').trim() || undefined,
+          amount: round2(amount),
+          amountBasis: row.amountBasis,
+          vatAmount: vat > 0.0001 ? round2(vat) : undefined,
+        })
+        continue
+      }
+      prev.amount = round2(prev.amount + amount)
+      const nextVat = (prev.vatAmount || 0) + vat
+      prev.vatAmount = nextVat > 0.0001 ? round2(nextVat) : prev.vatAmount
+      if (!prev.label && row.label) prev.label = String(row.label).trim() || undefined
+      if (!prev.amountBasis && row.amountBasis) prev.amountBasis = row.amountBasis
+    }
+  }
+  return [...into.values()].sort((a, b) => b.amount - a.amount || a.key.localeCompare(b.key))
+}
+
+export function listStoreNormalPurchaseVendors(
+  row: Pick<StoreNormalCostRow, 'purchaseVendors' | 'purchaseVatBuckets'>,
+  vatMode: StoreNormalVatMode
+): { key: string; label?: string; amount: number; sharePct: number }[] {
+  const lines = (row.purchaseVendors ?? [])
+    .map((vendor) => ({
+      key: vendor.key,
+      label: vendor.label,
+      amount: convertLineAmount(vendor.amount, vendor.amountBasis ?? 'stock_net', vatMode, row.purchaseVatBuckets, vendor.vatAmount),
+    }))
+    .filter((line) => line.amount > 0.0001)
+    .sort((a, b) => b.amount - a.amount || a.key.localeCompare(b.key))
+  const total = lines.reduce((sum, line) => sum + line.amount, 0)
+  return lines.map((line) => ({
+    ...line,
+    sharePct: total > 0.0001 ? (line.amount / total) * 100 : 0,
+  }))
 }
 
 export function resolveStoreNormalDiscountAmount(
@@ -308,6 +379,8 @@ export function buildStoreNormalCostRow(params: {
   grossSalesIncluded?: number | null
   netSalesIncluded?: number | null
   totalDiscountIncluded?: number | null
+  purchaseVendors?: StoreNormalPurchaseVendor[]
+  purchaseVatBuckets?: NetVatBuckets | null
   usageWarnings?: string[]
 }): StoreNormalCostRow {
   const discounts = splitStoreNormalCostDiscounts(params.discountKinds)
@@ -378,6 +451,8 @@ export function buildStoreNormalCostRow(params: {
     matchedLineQty: matched,
     unmatchedLineQty: unmatched,
     discountLines: discounts.lines,
+    purchaseVendors: mergeStoreNormalPurchaseVendors([params.purchaseVendors]),
+    purchaseVatBuckets: params.purchaseVatBuckets ?? null,
     usageWarnings: params.usageWarnings ?? [],
   }
 }
