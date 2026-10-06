@@ -322,6 +322,11 @@ export const i18n = {
     attQrScanRetry: '다시 시도',
     attQrHelp: '출근·퇴근·휴식·재개 버튼을 누른 뒤 매장 QR 키오스크를 스캔해 기록합니다.',
     attQrInvalid: 'QR 코드가 유효하지 않거나 만료되었습니다. 키오스크 QR을 다시 스캔해 주세요.',
+    attQrWrongCompany:
+      '이 QR은 다른 회사의 출퇴근 QR입니다. 이 회사 계정으로 키오스크에서 QR을 새로 만든 뒤, 그 화면을 스캔해 주세요.',
+    attQrExpired: '출퇴근 QR이 바뀌었습니다. 매장에 켜 둔 화면의 QR을 다시 스캔해 주세요.',
+    attQrModeMismatch:
+      '매장 QR 설정(고정/2시간 변경)과 스캔한 QR이 다릅니다. 매장 화면의 QR을 다시 스캔해 주세요.',
     attQrStoreMismatch: 'QR 매장과 소속 매장이 일치하지 않습니다.',
     attQrOfficePilotOnly: 'QR 출퇴근은 현재 오피스(본사) 직원 파일럿 중입니다. 매장 직원은 GPS로 출퇴근해 주세요.',
     attLocationTooFar: '위치 부적합! 매장 근처(999m 이내)가 아닙니다. (현재 거리: {m}m)',
@@ -8752,6 +8757,11 @@ export const i18n = {
     attQrScanRetry: 'Try again',
     attQrHelp: 'Tap a button, then scan your store attendance QR kiosk to record.',
     attQrInvalid: 'QR code is invalid or expired. Scan the kiosk QR again.',
+    attQrWrongCompany:
+      'This QR belongs to another company. Log in with this company, create a new attendance QR on the kiosk, then scan that screen.',
+    attQrExpired: 'The attendance QR has changed. Scan the QR on the store screen again.',
+    attQrModeMismatch:
+      'This QR does not match the store setting (fixed, or changes every 2 hours). Scan the QR on the store screen again.',
     attQrStoreMismatch: 'QR store does not match your assigned store.',
     attQrOfficePilotOnly: 'QR attendance is in office pilot only. Store staff should use GPS.',
     attLocationTooFar: 'Location unsuitable! Not within 999m of store. (Distance: {m}m)',
@@ -17156,6 +17166,13 @@ orderItemQty: 'Qty',
       'อนุญาตกล้องสำหรับเว็บไซต์นี้ใน Settings แล้วกด "ลองอีกครั้ง"',
     attQrScanRetry: 'ลองอีกครั้ง',
     attQrHelp: 'กดปุ่ม แล้วสแกน QR คiosk ลงเวลาในร้านเพื่อบันทึก',
+    attQrInvalid: 'QR ไม่ถูกต้องหรือหมดอายุ สแกน QR บนหน้าจอร้านอีกครั้ง',
+    attQrWrongCompany:
+      'QR นี้เป็นของอีกบริษัท ล็อกอินบริษัทนี้แล้วสร้าง QR ลงเวลาใหม่ที่หน้าจอร้าน จากนั้นสแกนหน้าจอนั้น',
+    attQrExpired: 'QR ลงเวลาเปลี่ยนแล้ว สแกน QR บนหน้าจอที่เปิดค้างไว้ในร้านอีกครั้ง',
+    attQrModeMismatch:
+      'QR ที่สแกนไม่ตรงกับการตั้งค่าร้าน (คงที่ หรือเปลี่ยนทุก 2 ชั่วโมง) สแกน QR บนหน้าจอร้านอีกครั้ง',
+    attQrStoreMismatch: 'ร้านใน QR ไม่ตรงกับร้านที่สังกัด',
     attGpsPendingSaved: 'รอการอนุมัติตำแหน่ง',
     attLocationTooFar: 'ตำแหน่งไม่เหมาะสม! ห่างจากสาขาเกิน 999ม. (ระยะทาง: {m}ม.)',
     attStoreGpsNotRegistered:

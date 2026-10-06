@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
 import { verifySubmittedAttendanceQr } from '@/lib/attendance-qr-mode-server'
+import { attendanceQrFailApiMessage } from '@/lib/attendance-qr-user-message'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
 import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
@@ -152,7 +153,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            msg: '❌ QR 코드가 유효하지 않거나 만료되었습니다. 키오스크 QR을 다시 스캔해 주세요.',
+            msg: attendanceQrFailApiMessage(qrVerified.reason),
           },
           { headers }
         )

@@ -14,6 +14,7 @@ import {
 import { fetchMergedAttendanceLogsForEmployee } from '@/lib/attendance-log-fetch-server'
 import { extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
 import { verifySubmittedAttendanceQr } from '@/lib/attendance-qr-mode-server'
+import { attendanceQrFailApiMessage } from '@/lib/attendance-qr-user-message'
 import { canEmployeeUseAttendanceQr, isAttendanceQrRequiredForAllStores } from '@/lib/attendance-qr-pilot'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
@@ -346,7 +347,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: '❌ QR 코드가 유효하지 않거나 만료되었습니다. 키오스크 QR을 다시 스캔해 주세요.',
+            message: attendanceQrFailApiMessage(qrVerified.reason),
           },
           { headers }
         )
