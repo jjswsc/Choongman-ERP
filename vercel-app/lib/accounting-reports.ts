@@ -4,7 +4,6 @@ import {
 } from '@/lib/accounting-bank-purchase-inbound-net'
 import {
   buildVendorPurchaseKeyIndex,
-  excludeBankPurchasesWhenDirectInboundPresent,
   normalizeVendorAmountMap,
   purchaseVendorKeyMatchesRaw,
   type VendorPurchaseKeyIndex,
@@ -12,7 +11,6 @@ import {
 } from '@/lib/accounting-purchase-vendor-key'
 import {
   buildHqVendorMatchIndex,
-  isHqVendorPurchaseKey,
   partitionPurchaseVendorMapByHqCodes,
   shouldSkipStoreInboundForHqPurchase,
   type HqVendorMatchIndex,
@@ -360,19 +358,6 @@ function enrichPurchaseByVendorLabels(
   })
 }
 
-/** 같은 기간에 직접입고와 통장 매입지급(purchase_payment) 모두 양수인 거래처 코드 */
-function collectInboundBankOverlapVendorKeys(
-  inbound: Record<string, number>,
-  bank: Record<string, number>
-): string[] {
-  const out: string[] = []
-  for (const k of Object.keys(inbound)) {
-    if ((Number(inbound[k]) || 0) > 0 && (Number(bank[k]) || 0) > 0) out.push(k)
-  }
-  out.sort()
-  return out
-}
-
 function mergeVendorAmountMap(target: Record<string, number>, add: Record<string, number>) {
   for (const [k, v] of Object.entries(add)) {
     const amt = Number(v) || 0
@@ -541,24 +526,6 @@ async function loadExpenseAccrualVatByBankIds(bankIds: number[]): Promise<Expens
   return out
 }
 
-function pickVendorVatForKeptAmounts(
-  vatByVendor: Record<string, number>,
-  keptAmounts: Record<string, number>
-): Record<string, number> {
-  const out: Record<string, number> = {}
-  for (const k of Object.keys(keptAmounts)) {
-    const v = Number(vatByVendor[k]) || 0
-    if (v > 0) out[k] = round2(v)
-  }
-  return out
-}
-
-function sumVendorMap(m: Record<string, number>): number {
-  let s = 0
-  for (const v of Object.values(m)) s += Number(v) || 0
-  return round2(s)
-}
-
 async function fetchBankWithdrawRowsForPl(
   accountIds: number[],
   startStr: string,
@@ -670,110 +637,6 @@ function appendPp30ExpenseSubject(
       amount: amt,
     },
   ]
-}
-
-/**
- * 통장 출금 중 category=purchase_payment — 손익 '매입' 거래처별 내역.
- * 입고 연동(bank_transaction_inbound_links)된 금액은 직접입고와 이중이므로 제외. 미연동분만 합산(통장만 등록한 매입 포함).
- */
-async function fetchBankPurchasePaymentsByVendor(params: {
-  isHQ: boolean
-  storeFilter: string
-  startStr: string
-  endStr: string
-}): Promise<{
-  byVendor: Record<string, number>
-  byVendorVat: Record<string, number>
-  fetched: number
-  truncated: boolean
-}> {
-  const { isHQ, storeFilter, startStr, endStr } = params
-  let accountIds: number[] = []
-  try {
-    if (isHQ) {
-      const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 2000 })) as
-        | { id?: number; store?: string }[]
-        | null
-      accountIds = (bankAccRows || [])
-        .filter((a) => isHqAccountingStoreRow(String(a.store || '')))
-        .map((a) => Number(a.id))
-        .filter((id) => !isNaN(id) && id > 0)
-    } else if (storeFilter !== 'All') {
-      const bankAccRows = (await supabaseSelectFilter(
-        'bank_accounts',
-        buildStoreFieldOrIlikeFragment('store', storeFilter),
-        { select: 'id', limit: 2000 }
-      )) as { id?: number }[] | null
-      accountIds = (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
-    } else {
-      const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id', limit: 2000 })) as { id?: number }[] | null
-      accountIds = (bankAccRows || []).map((a) => Number(a.id)).filter((id) => !isNaN(id) && id > 0)
-    }
-  } catch {
-    return { byVendor: {}, byVendorVat: {}, fetched: 0, truncated: false }
-  }
-  if (accountIds.length === 0) return { byVendor: {}, byVendorVat: {}, fetched: 0, truncated: false }
-  const idList = accountIds.join(',')
-  let btRows: {
-    id?: number
-    amount?: number
-    vat_amount?: number | null
-    vendor_code?: string
-    store?: string | null
-  }[] = []
-  try {
-    btRows = (await supabaseSelectFilterAllPages(
-      'bank_transactions',
-      `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&category=eq.purchase_payment`,
-      {
-        select: 'id,amount,vat_amount,vendor_code,store',
-        order: 'id.asc',
-        pageSize: 8000,
-        maxRows: ACCOUNTING_ROWS_MAX,
-      }
-    )) as {
-      id?: number
-      amount?: number
-      vat_amount?: number | null
-      vendor_code?: string
-      store?: string | null
-    }[]
-  } catch {
-    return { byVendor: {}, byVendorVat: {}, fetched: 0, truncated: false }
-  }
-  const linkedByBankId = await loadInboundLinkedAmountByBankId(
-    btRows.map((r) => Number(r.id)).filter((id) => id > 0)
-  )
-  const out: Record<string, number> = {}
-  const outVat: Record<string, number> = {}
-  for (const r of btRows) {
-    if (storeFilter !== 'All') {
-      const bts = String(r.store || '').trim()
-      if (isHQ) {
-        if (bts && !isHqAccountingStoreRow(bts)) continue
-      } else {
-        if (bts && !storeMatchesIncomeFilter(bts, storeFilter)) continue
-      }
-    }
-    const bankId = Number(r.id)
-    const grossAmt = Math.abs(Number(r.amount) || 0)
-    const netAmt = netBankPurchasePaymentForIncomeStatement(
-      Number(r.amount) || 0,
-      bankId > 0 ? linkedByBankId.get(bankId) || 0 : 0
-    )
-    if (netAmt <= 0) continue
-    const v = String(r.vendor_code || '').trim() || '__pl_vendor_unknown__'
-    out[v] = (out[v] || 0) + netAmt
-    // 입고 연동으로 일부만 남을 때 VAT도 비례 (명시 VAT만)
-    const vatFull = safePlCashVat(grossAmt, r.vat_amount).vat
-    if (vatFull > 0 && grossAmt > 0) {
-      const vatScaled = round2(vatFull * (netAmt / grossAmt))
-      const vat = safePlCashVat(netAmt, vatScaled).vat
-      if (vat > 0) outVat[v] = (outVat[v] || 0) + vat
-    }
-  }
-  const fetched = btRows.length
-  return { byVendor: out, byVendorVat: outVat, fetched, truncated: fetched >= ACCOUNTING_ROWS_MAX }
 }
 
 export function normalizeIncomeScope(input: IncomeScopeInput): {
@@ -1705,7 +1568,6 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   const { startStr, endStr, storeFilter, isHQ, yearMonth } = scope
   const warnings: string[] = []
   const limits: Record<string, { fetched: number; limit: number; total?: number }> = {}
-  let purchaseInboundBankOverlapVendorKeys: string[] = []
 
   const [itemUnitCostMap, subjectMeta, itemAccountSubjectMap, itemTaxMap] = await Promise.all([
     loadItemValuationUnitCostMap(),
@@ -1901,45 +1763,13 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       loadVendorPurchaseKeyIndex(),
     ])
     const inboundByVendorHq = normalizeVendorAmountMap(inboundHq.byVendor, vendorPurchaseKeyIndex)
-    const bankPayHqFetch = await fetchBankPurchasePaymentsByVendor({
-      isHQ: true,
-      storeFilter,
-      startStr,
-      endStr,
-    })
-    limits.bank_purchase_payment = {
-      fetched: bankPayHqFetch.fetched,
-      limit: ACCOUNTING_ROWS_MAX,
-    }
-    if (bankPayHqFetch.truncated) {
-      warnings.push(
-        `통장 매입지급 조회가 상한(${ACCOUNTING_ROWS_MAX})에 도달해 매입이 과소할 수 있습니다.`
-      )
-    }
-    const bankPayByVendorHqNorm = normalizeVendorAmountMap(bankPayHqFetch.byVendor, vendorPurchaseKeyIndex)
-    const bankPayVatHqNorm = normalizeVendorAmountMap(bankPayHqFetch.byVendorVat, vendorPurchaseKeyIndex)
-    purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
-      inboundByVendorHq,
-      bankPayByVendorHqNorm
-    )
-    const bankPayByVendorHq = excludeBankPurchasesWhenDirectInboundPresent(
-      inboundByVendorHq,
-      bankPayByVendorHqNorm
-    )
-    const bankPayVatByVendorHq = pickVendorVatForKeptAmounts(bankPayVatHqNorm, bankPayByVendorHq)
     const purchaseVendorMapHq: Record<string, number> = { ...inboundByVendorHq }
-    mergeVendorAmountMap(purchaseVendorMapHq, bankPayByVendorHq)
     mergeVendorAmountMap(purchaseVendorMapHq, cardBillPurchaseVendorMap)
-    mergeVendorAmountMap(purchaseVendorVatMapAccum, bankPayVatByVendorHq)
     mergeVendorAmountMap(purchaseVendorVatMapAccum, cardBillPurchaseVendorVatMap)
-    /** 거래처별: 직접입고(발생) + 통장 매입지급(입고 없는 거래처만) */
+    /** 본사 매입: 직접입고(물건)만. 통장 매입 대금은 정산이라 넣지 않음 */
     const inboundHqTotal = Object.values(inboundByVendorHq).reduce((a, b) => a + b, 0)
-    const bankHqTotal = Object.values(bankPayByVendorHq).reduce((a, b) => a + b, 0)
-    for (const k of Object.keys(bankPayByVendorHq)) bankPurchaseVendorKeys.add(k)
     purchasesStockNet += inboundHqTotal
-    purchasesBankGross += bankHqTotal
-    purchasesBankVat += sumVendorMap(bankPayVatByVendorHq)
-    purchases += inboundHqTotal + bankHqTotal
+    purchases += inboundHqTotal
     mergeExpenseSubjectMaps(expenseBySubjectMap, inboundHq.expenseBySubject)
     stockInboundExpense += sumExpenseSubjectAmounts(inboundHq.expenseBySubject)
 
@@ -2214,68 +2044,14 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       hqVendorIndex
     )
     for (const row of inboundHqExcluded) excludedHqVendorDupRaw.push(row)
-    const bankPayStoreFetch = await fetchBankPurchasePaymentsByVendor({
-      isHQ: false,
-      storeFilter,
-      startStr,
-      endStr,
-    })
-    limits.bank_purchase_payment = {
-      fetched: bankPayStoreFetch.fetched,
-      limit: ACCOUNTING_ROWS_MAX,
-    }
-    if (bankPayStoreFetch.truncated) {
-      warnings.push(
-        `통장 매입지급 조회가 상한(${ACCOUNTING_ROWS_MAX})에 도달해 매입이 과소할 수 있습니다.`
-      )
-    }
-    const bankPayByVendorStorePreHq: Record<string, number> = {}
-    const bankPayVatByVendorStorePreHq: Record<string, number> = {}
-    for (const [k, v] of Object.entries(bankPayStoreFetch.byVendor)) {
-      const amt = Number(v) || 0
-      if (amt <= 0) continue
-      if (isHqVendorPurchaseKey(k, hqVendorIndex)) {
-        excludedHqVendorDupRaw.push({ key: k, amount: amt })
-        continue
-      }
-      bankPayByVendorStorePreHq[k] = amt
-      const vat = Number(bankPayStoreFetch.byVendorVat[k]) || 0
-      if (vat > 0) bankPayVatByVendorStorePreHq[k] = vat
-    }
     const inboundByVendorStoreNorm = normalizeVendorAmountMap(inboundByVendorStore, vendorPurchaseKeyIndexStore)
-    const bankPayByVendorStoreNorm = normalizeVendorAmountMap(
-      bankPayByVendorStorePreHq,
-      vendorPurchaseKeyIndexStore
-    )
-    const bankPayVatByVendorStoreNorm = normalizeVendorAmountMap(
-      bankPayVatByVendorStorePreHq,
-      vendorPurchaseKeyIndexStore
-    )
-    purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
-      inboundByVendorStoreNorm,
-      bankPayByVendorStoreNorm
-    )
-    const bankPayByVendorStore = excludeBankPurchasesWhenDirectInboundPresent(
-      inboundByVendorStoreNorm,
-      bankPayByVendorStoreNorm
-    )
-    const bankPayVatByVendorStore = pickVendorVatForKeptAmounts(
-      bankPayVatByVendorStoreNorm,
-      bankPayByVendorStore
-    )
     const purchaseVendorMapStore: Record<string, number> = { ...inboundByVendorStoreNorm }
-    mergeVendorAmountMap(purchaseVendorMapStore, bankPayByVendorStore)
     mergeVendorAmountMap(purchaseVendorMapStore, cardBillPurchaseVendorMap)
-    mergeVendorAmountMap(purchaseVendorVatMapAccum, bankPayVatByVendorStore)
     mergeVendorAmountMap(purchaseVendorVatMapAccum, cardBillPurchaseVendorVatMap)
-    /** 본사 창고 출고 + 거래처별(직접입고 + 통장 매입지급, 본사 법인 제외) — 펼침 합계와 매입 총액 일치 */
+    /** 본사 창고 출고 + 직접입고. 통장 매입 대금은 정산이라 매입에 넣지 않음 */
     const inboundStoreTotal = Object.values(inboundByVendorStoreNorm).reduce((a, b) => a + b, 0)
-    const bankStoreTotal = Object.values(bankPayByVendorStore).reduce((a, b) => a + b, 0)
-    for (const k of Object.keys(bankPayByVendorStore)) bankPurchaseVendorKeys.add(k)
     purchasesStockNet += ordersPurchaseSubtotal + inboundStoreTotal
-    purchasesBankGross += bankStoreTotal
-    purchasesBankVat += sumVendorMap(bankPayVatByVendorStore)
-    purchases += ordersPurchaseSubtotal + inboundStoreTotal + bankStoreTotal
+    purchases += ordersPurchaseSubtotal + inboundStoreTotal
     mergeExpenseSubjectMaps(expenseBySubjectMap, inboundStore.expenseBySubject)
     stockInboundExpense += sumExpenseSubjectAmounts(inboundStore.expenseBySubject)
 
@@ -2696,16 +2472,12 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     diagnostics:
       input.includeDebug ||
       warnings.length > 0 ||
-      purchaseInboundBankOverlapVendorKeys.length > 0 ||
       purchaseHqOutboundBasis != null ||
       hqOutboundDuplicateLinesDeduped > 0 ||
       (purchaseExcludedHqBankPayments?.length ?? 0) > 0
         ? {
             warnings,
             limits,
-            ...(purchaseInboundBankOverlapVendorKeys.length > 0
-              ? { purchaseInboundBankOverlapVendorKeys }
-              : {}),
             ...(purchaseHqOutboundBasis ? { purchaseHqOutboundBasis } : {}),
             ...(hqOutboundDuplicateLinesDeduped > 0 ? { hqOutboundDuplicateLinesDeduped } : {}),
             ...(purchaseExcludedHqBankPayments?.length ? { purchaseExcludedHqBankPayments } : {}),
@@ -2732,6 +2504,8 @@ export type IncomeStatementPurchaseDrillBankRow = {
   kind: 'bank'
   id: number
   transDate: string
+  /** 손익에 반영한 인식일. 없으면 출금일 */
+  expenseDate?: string | null
   amount: number
   vendorCode: string | null
   memo: string | null
@@ -3078,13 +2852,14 @@ export async function computeIncomeStatementPurchaseDrillDown(
   }
 
   const bankAcc: IncomeStatementPurchaseDrillBankRow[] = []
-  /** 집계와 동일: 해당 거래처 직접입고가 있으면 통장 매입지급은 드릴에서 숨김 */
-  const includeBankPaymentsInDrill = inboundAcc.length === 0
+  /** 매입 합계는 입고·본사출고만. 통장 매입 대금은 상세에도 넣지 않음 */
+  const includeBankPaymentsInDrill = false
   if (includeBankPaymentsInDrill && accountIds.length > 0) {
     const idList = accountIds.join(',')
     let btRows: {
       id?: number
       trans_date?: string
+      expense_date?: string | null
       amount?: number
       vendor_code?: string
       memo?: string | null
@@ -3096,9 +2871,9 @@ export async function computeIncomeStatementPurchaseDrillDown(
     try {
       btRows = (await supabaseSelectFilterAllPages(
         'bank_transactions',
-        `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw&category=eq.purchase_payment`,
+        `account_id=in.(${idList})&trans_type=eq.withdraw&category=eq.purchase_payment&${buildBankWithdrawPlPeriodOrFilter(startStr, endStr)}`,
         {
-          select: 'id,trans_date,amount,vendor_code,memo,note,store,ref_type,ref_id',
+          select: 'id,trans_date,expense_date,amount,vendor_code,memo,note,store,ref_type,ref_id',
           order: 'trans_date.desc',
           pageSize: 8000,
           maxRows: ACCOUNTING_ROWS_MAX,
@@ -3111,6 +2886,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
       btRows.map((r) => Number(r.id)).filter((id) => id > 0)
     )
     for (const r of btRows) {
+      if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
       if (storeFilter !== 'All') {
         const bts = String(r.store || '').trim()
         if (isHQ) {
@@ -3132,6 +2908,7 @@ export async function computeIncomeStatementPurchaseDrillDown(
         kind: 'bank',
         id,
         transDate: String(r.trans_date || '').slice(0, 10),
+        expenseDate: r.expense_date ? String(r.expense_date).slice(0, 10) : null,
         amount: netAmt,
         vendorCode: r.vendor_code != null ? String(r.vendor_code).trim() || null : null,
         memo: r.memo != null ? String(r.memo) : null,
@@ -3411,7 +3188,8 @@ function bankWithdrawCountsTowardPlExpense(category: string | null | undefined):
   return !BANK_PL_EXCLUDED_WITHDRAW_CATEGORIES.has(String(category || 'expense').toLowerCase())
 }
 
-function bankExpenseInPlPeriod(
+/** 인식일이 있으면 그 달, 없으면 출금일. 비용·매입 대금 공통 */
+export function bankExpenseInPlPeriod(
   transDate: string,
   expenseDate: string | null | undefined,
   startStr: string,

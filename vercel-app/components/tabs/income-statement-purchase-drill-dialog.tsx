@@ -259,7 +259,16 @@ export function IncomePurchaseDrillDialog({
                       {purchaseDrillData.bankPayments.map((r) => (
                         <tr key={r.id} className="border-b border-border/60">
                           <td className="p-2 font-mono">{r.id}</td>
-                          <td className="p-2 whitespace-nowrap">{r.transDate}</td>
+                          <td
+                            className="p-2 whitespace-nowrap"
+                            title={
+                              r.expenseDate && r.expenseDate !== r.transDate
+                                ? `${t("date") || "날짜"} ${r.transDate}`
+                                : undefined
+                            }
+                          >
+                            {r.expenseDate || r.transDate}
+                          </td>
                           <td className="p-2 text-right font-mono">{formatBath(r.amount)}</td>
                           <td className="p-2 font-mono whitespace-nowrap">
                             {String(r.refType || "").toLowerCase() === "order" && r.refId ? (

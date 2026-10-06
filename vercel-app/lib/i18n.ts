@@ -13214,7 +13214,7 @@ Only matters the employee must handle personally on a working day:
     bankManualS6_2: 'If linked to PO, check on one side syncs both',
     bankManualS6_3: 'Direct purchase (no PO, e.g. supermarket) can also check invoice here',
     bankManualS7Title: '7. Accrual Basis (Recognition Date)',
-    bankManualS7_1: 'Jan sales, Feb receipt → sales date = Jan. Jan purchase paid in Feb → set the recognition date on the expense or purchase-payment row to Jan. P&L follows that month. If the same vendor already has inbound that month, the bank purchase payment is left out of purchases so it is not counted twice.',
+    bankManualS7_1: 'Jan sales received in Feb → set the sales recognition date to Jan. An expense withdrawal with a recognition date hits that month. P&L purchases follow the day goods were received or left the HQ warehouse, not the bank payment date.',
     bankManualS8Title: '8. Memo Keyword Rules',
     bankManualS8_1: 'If bank memo contains a keyword, category and account subject are auto-assigned. Add rules below; they override default matching when uploading CSV.',
     bankManualNotesTitle: 'Notes',
@@ -13928,9 +13928,9 @@ Only matters the employee must handle personally on a working day:
     bankRegisterLinkedOrderId: 'Linked order ID (optional)',
     bankRegisterLinkedOrderIdPlaceholder: 'e.g. 12345 (orders.id)',
     pL_purchaseCompositionNote:
-      'Purchases = (1) HQ warehouse outbound to stores (Outbound/Force outbound), (2) external-vendor cost from direct inbound, (3) bank purchase_payment for non–Head-Office vendors. HQ-type vendor inbound, purchase payments, and From HQ inbound are excluded to avoid doubling with outbound. General bank expenses hit expenses only, not purchases.',
+      'Purchases = (1) HQ warehouse outbound to the store (Outbound/Force outbound), (2) external-vendor cost from direct inbound. Both use the day the goods moved (Bangkok). Bank purchase payments are settlements and are not included. HQ-vendor direct inbound and From HQ inbound are left out so they are not double-counted with outbound.',
     pL_purchaseCompositionNoteHq:
-      'HQ purchases include only external-vendor direct inbound (입고등록) and bank purchase_payment. Warehouse outbound to franchise stores is revenue (logistics outbound), not purchases.',
+      'HQ purchases include only external-vendor direct inbound, by inbound date. Bank purchase payments are not included. Warehouse outbound to franchise stores is revenue (logistics outbound), not purchases.',
     pL_accountUnclassified: 'Account not set',
     pL_clickToExpand: 'Click to expand',
     pL_colAmount: 'Amount',

@@ -2411,7 +2411,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             })
           : undefined
       const expenseDate =
-        r.transType === "withdraw" && category === "expense"
+        r.transType === "withdraw" && (category === "expense" || category === "purchase_payment")
           ? edit?.expenseDate || r.transDate
           : undefined
       const vendorCode =
@@ -3311,7 +3311,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     onChange={(e) => r.id && setQueryRowEdit(r.id, "salesDate", e.target.value)}
                                     className="h-8 text-xs min-w-[112px] w-full max-w-[112px] mx-auto"
                                   />
-                                ) : r.transType === "withdraw" && cat === "expense" ? (
+                                ) : r.transType === "withdraw" && (cat === "expense" || cat === "purchase_payment") ? (
                                   <Input
                                     type="date"
                                     value={edits?.expenseDate ?? r.expenseDate ?? r.transDate}
@@ -4079,7 +4079,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               onChange={(e) => setImportRowEdit(idx, "salesDate", e.target.value)}
                               className="h-8 text-xs w-[110px]"
                             />
-                          ) : r.transType === "withdraw" && impCat === "expense" ? (
+                          ) : r.transType === "withdraw" && (impCat === "expense" || impCat === "purchase_payment") ? (
                             <Input
                               type="date"
                               value={importRowEdits[idx]?.expenseDate ?? r.transDate}

@@ -303,6 +303,7 @@ export type IncomeStatementPurchaseDrillBankRow = {
   kind: 'bank'
   id: number
   transDate: string
+  expenseDate?: string | null
   amount: number
   vendorCode: string | null
   memo: string | null
