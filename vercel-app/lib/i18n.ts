@@ -4777,7 +4777,7 @@ export const i18n = {
     bankManualS4_2: '매입 대금: 거래처 선택해 분류만 저장 → 미지급 반영은 「지출관리 연결」',
     bankManualS4_3: '대여·전도금·미분류: 손익 계산 제외 (나중에 정리)',
     bankManualS4_4: '계정과목: 임차료, 전기료, 급여 등 키워드 자동 매칭',
-    bankManualS4_5: '비용 인식일: 비우면 출금일. 매입 대금 인식일은 저장만 되며 손익 매입에는 반영되지 않습니다.',
+    bankManualS4_5: '비용 인식일: 비우면 출금일. 매입 대금 인식일이 있으면 그 달 매입, 없으면 출금일입니다. 같은 달 그 거래처 직접입고가 있으면 통장 금액은 매입에서 뺍니다.',
     bankManualS5Title: '5. 미수금·미지급금 연동',
     bankManualS5_1: '매출 수령 (입금) + 수령처 선택 → 해당 매장/판매처 미수금 차감',
     bankManualS5_2: '매입 대금 (출금) 분류 후 「지출관리 연결」→ 해당 거래처 미지급금 차감',
@@ -4786,7 +4786,7 @@ export const i18n = {
     bankManualS6_2: '발주서와 연결된 경우, 한쪽에서 체크하면 양쪽 동기화',
     bankManualS6_3: '발주서 없는 직접 구매(마트 등)도 통장 조회에서 인보이스 체크 가능',
     bankManualS7Title: '7. 발생주의 (인식일)',
-    bankManualS7_1: '1월 매출을 2월에 받으면 매출 인식일을 1월로 저장합니다. 비용 출금도 인식일이 있으면 그 달 비용입니다. 손익 매입(입고)은 통장 출금일·인식일과 무관하고, 물건이 입고되거나 본사 창고에서 나간 날 기준입니다.',
+    bankManualS7_1: '1월 매출을 2월에 받으면 매출 인식일을 1월로 저장합니다. 비용 출금도 인식일이 있으면 그 달 비용입니다. 매입 대금은 인식일이 있으면 그 달 매입이고, 없으면 출금일입니다. 본사 창고 출고와 직접입고는 물건이 움직인 날입니다.',
     bankManualS8Title: '8. 적요 키워드 규칙 설정',
     bankManualS8_1: '은행 적요에 특정 키워드가 포함되면 용도와 계정과목을 자동 지정합니다. 아래에서 규칙을 추가하면 CSV 업로드 시 기본 매칭보다 우선 적용됩니다.',
     bankManualNotesTitle: '유의사항',
@@ -5491,7 +5491,7 @@ export const i18n = {
       '아래 거래처는 같은 달에 직접 입고와 통장 「매입 지급」이 함께 있습니다. 손익 매입 합계에서는 해당 거래처의 통장 매입지급을 이미 빼 두었습니다(입고 금액만 반영). 금액이 다르면 입고·지급·연동을 점검하세요.',
     pL_diagHqOutboundBasis:
       '「본사 창고 출고」는 출고 관리 기간 총액(공급가, VAT 제외)과 동일 조건입니다 — 본사 창고 실제 출고 로그만, 단가는 invoice 스냅샷→발주 cart→items.price(본사→매장 판매가). 아래 「승인 발주」는 참고(미수령·직납·기간 차이로 출고 합계와 다를 수 있음).',
-    pL_diagExcludedHqBankTitle: '본사 거래처 직접입고 — 본사 출고와 겹쳐 매입 합계에서 제외',
+    pL_diagExcludedHqBankTitle: '본사 거래처 입고·통장 매입 대금 — 본사 출고와 겹쳐 매입 합계에서 제외',
     pL_diagExcludedHqBankHint:
       '거래처 마스터 유형이 본사(Head Office)인 코드의 직접 입고·「매입 지급」은 본사 창고→매장 출고 금액과 이중이 되지 않도록 매입 총액에 넣지 않습니다. 미지급 정산만 반영하려면 별도 확인하세요.',
     pL_diagHqCompareYearOnlyHint:
@@ -5503,9 +5503,9 @@ export const i18n = {
     bankRegisterLinkedOrderId: '연결 발주 ID (선택)',
     bankRegisterLinkedOrderIdPlaceholder: '예: 12345 (orders.id)',
     pL_purchaseCompositionNote:
-      '매입 구성: (1) 본사 창고에서 매장으로 나간 출고(Outbound/강제출고), (2) 직접 입고의 외부 거래처 원가. 둘 다 물건이 움직인 날(방콕)입니다. 통장 매입 대금은 정산이라 매입에 넣지 않습니다. 본사 유형 거래처의 직접 입고·From HQ 입고는 출고와 겹치지 않게 합계에서 뺍니다.',
+      '매입 구성: (1) 본사 창고에서 매장으로 나간 출고, (2) 직접입고가 있는 거래처는 입고 원가, (3) 그 달에 입고가 없는 거래처는 통장 매입 대금. 통장 금액은 인식일이 있으면 그 달, 없으면 출금일입니다. 같은 달 같은 거래처에 입고가 있으면 통장 금액은 매입에서 뺍니다. 지두방처럼 직접정산 품목은 본사 출고 로그가 없어도, 매장이 받은 날(출고일과 같은 수령일) 금액으로 매입에 넣습니다. 본사 유형 거래처의 통장 지급·직접입고는 본사 출고와 겹치지 않게 합계에서 뺍니다.',
     pL_purchaseCompositionNoteHq:
-      '본사 매입은 외부 거래처 직접입고(입고등록)만 포함합니다. 입고일 기준입니다. 통장 매입 대금은 넣지 않습니다. 가맹 매장으로의 창고 출고는 매출(물류 출고)이며 매입이 아닙니다.',
+      '본사 매입은 외부 거래처 직접입고와, 그 달에 입고가 없는 거래처의 통장 매입 대금입니다. 통장 금액은 인식일이 있으면 그 달, 없으면 출금일입니다. 가맹 매장으로의 창고 출고는 매출(물류 출고)이며 매입이 아닙니다.',
     pL_accountUnclassified: '계정 미지정',
     pL_clickToExpand: '클릭하여 펼치기',
     pL_colAmount: '금액',
@@ -13205,7 +13205,7 @@ Only matters the employee must handle personally on a working day:
     bankManualS4_2: 'Purchase payment: Select vendor to classify only → link via Expense Management for payables',
     bankManualS4_3: 'Loan, advance, unclassified: Excluded from P&L (reconcile later)',
     bankManualS4_4: 'Account subject: Rent, electricity, salary etc. by keyword',
-    bankManualS4_5: 'Expense recognition date: blank uses the withdrawal date. A date on a purchase payment is stored only and is not included in P&L purchases.',
+    bankManualS4_5: 'Expense recognition date: blank uses the withdrawal date. A purchase payment uses the recognition date for that month’s purchases, or the withdrawal date if blank. If that vendor already has direct inbound in the same month, the bank amount is left out of purchases.',
     bankManualS5Title: '5. Receivables & Payables',
     bankManualS5_1: 'Sales receive (deposit) + payee → Store/vendor receivable deducted',
     bankManualS5_2: 'Purchase payment (withdraw) + Expense Management link → Vendor payable deducted',
@@ -13214,7 +13214,7 @@ Only matters the employee must handle personally on a working day:
     bankManualS6_2: 'If linked to PO, check on one side syncs both',
     bankManualS6_3: 'Direct purchase (no PO, e.g. supermarket) can also check invoice here',
     bankManualS7Title: '7. Accrual Basis (Recognition Date)',
-    bankManualS7_1: 'Jan sales received in Feb → set the sales recognition date to Jan. An expense withdrawal with a recognition date hits that month. P&L purchases follow the day goods were received or left the HQ warehouse, not the bank payment date.',
+    bankManualS7_1: 'Jan sales received in Feb → set the sales recognition date to Jan. An expense withdrawal with a recognition date hits that month. A purchase payment uses the recognition date for purchases, or the withdrawal date if blank. HQ warehouse outbound and direct inbound still use the day the goods moved.',
     bankManualS8Title: '8. Memo Keyword Rules',
     bankManualS8_1: 'If bank memo contains a keyword, category and account subject are auto-assigned. Add rules below; they override default matching when uploading CSV.',
     bankManualNotesTitle: 'Notes',
@@ -13916,7 +13916,7 @@ Only matters the employee must handle personally on a working day:
       'These vendors have both direct inbound and bank “purchase payment” in the same month. The P&L purchase total already excludes that vendor’s bank purchase payments (inbound only). Compare amounts if inbound vs payment differ.',
     pL_diagHqOutboundBasis:
       'Store purchases (HQ warehouse → store outbound) match Outbound Management: ① invoice_unit_price on the stock log, else ② approved order cart unit price, else ③ item master selling price (items.price, HQ→store). Internal HQ cost (items.cost) is not used. If this differs from approved order totals, check direct delivery, partial receive, or price changes.',
-    pL_diagExcludedHqBankTitle: 'HQ-vendor direct inbound — excluded from purchases because HQ outbound already counts those goods',
+    pL_diagExcludedHqBankTitle: 'HQ-vendor inbound and bank purchase payments — excluded because HQ outbound already counts those goods',
     pL_diagExcludedHqBankHint:
       'Direct inbound and bank purchase_payment rows for vendors marked as Head Office are not added to purchase totals, to avoid double-counting with HQ warehouse outbound. Review separately if you only need to track AP settlement.',
     pL_diagHqCompareYearOnlyHint:
@@ -13928,9 +13928,9 @@ Only matters the employee must handle personally on a working day:
     bankRegisterLinkedOrderId: 'Linked order ID (optional)',
     bankRegisterLinkedOrderIdPlaceholder: 'e.g. 12345 (orders.id)',
     pL_purchaseCompositionNote:
-      'Purchases = (1) HQ warehouse outbound to the store (Outbound/Force outbound), (2) external-vendor cost from direct inbound. Both use the day the goods moved (Bangkok). Bank purchase payments are settlements and are not included. HQ-vendor direct inbound and From HQ inbound are left out so they are not double-counted with outbound.',
+      'Purchases = (1) HQ warehouse outbound to the store, (2) direct inbound when that vendor has inbound in the month, (3) bank purchase payments for vendors with no inbound that month. Bank amounts use the recognition date when set, otherwise the withdrawal date. A vendor with inbound in the same month keeps the inbound amount only. HQ-vendor bank payments and direct inbound are left out so they are not double-counted with outbound.',
     pL_purchaseCompositionNoteHq:
-      'HQ purchases include only external-vendor direct inbound, by inbound date. Bank purchase payments are not included. Warehouse outbound to franchise stores is revenue (logistics outbound), not purchases.',
+      'HQ purchases are external-vendor direct inbound plus bank purchase payments for vendors with no inbound that month. Bank amounts use the recognition date when set, otherwise the withdrawal date. Warehouse outbound to franchise stores is revenue, not purchases.',
     pL_accountUnclassified: 'Account not set',
     pL_clickToExpand: 'Click to expand',
     pL_colAmount: 'Amount',
@@ -21654,7 +21654,7 @@ orderItemQty: 'จำนวน',
     pL_diagInboundBankOverlap:
       'รหัสซัพพลายเออร์ด้านล่างมีทั้งรับเข้าสต็อกโดยตรงและรายการธนาคารประเภท «จ่ายค่าสินค้า» ในเดือนเดียวกัน หากบันทึกการซื้อเดียวกันทั้งสองทาง ยอดซื้ออาจซ้ำ—ควรคงไว้ทางใดทางหนึ่งหรือปรับตามนโยบาย',
     pL_purchaseCompositionNote:
-      'ยอดซื้อ = (1) สินค้าที่ออกจากคลังสำนักงานใหญ่ไปสาขา (2) ต้นทุนรับเข้าตรงจากซัพพลายเออร์ภายนอก ทั้งสองใช้วันที่สินค้าเคลื่อนไหว จ่ายค่าสินค้าทางธนาคารไม่นำเข้ายอดซื้อ การรับเข้าจากบริษัทแม่ไม่นับซ้ำกับสินค้าออกจากคลัง',
+      'ยอดซื้อ = (1) สินค้าออกจากคลังสำนักงานใหญ่ (2) รับเข้าตรงถ้ามีในเดือนนั้น (3) จ่ายค่าสินค้าทางธนาคารสำหรับซัพพลายเออร์ที่ไม่มีรับเข้าในเดือนนั้น ใช้วันรับรู้ถ้ามี ไม่เช่นนั้นใช้วันโอน จ่ายธนาคารของบริษัทแม่ไม่นับซ้ำกับสินค้าออกจากคลังครับ',
     pL_accountUnclassified: 'ไม่ระบุบัญชี',
     pL_clickToExpand: 'คลิกเพื่อขยาย',
     pL_colAmount: 'จำนวนเงิน',

@@ -1,5 +1,11 @@
+import { sqlIlikeContains, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
+import { storeCodeSearchVariants } from '@/lib/pos-sales-store-filter'
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
-import { INBOUND_HQ_LOCATION, getStockLocationPatterns } from '@/lib/stock-location-patterns'
+import {
+  INBOUND_HQ_LOCATION,
+  getStockLocationPatterns,
+  isOfficeStockSelection,
+} from '@/lib/stock-location-patterns'
 
 const STOCK_PURCHASE_FALLBACK_MAX_ROWS = 1_000_000
 
@@ -162,12 +168,45 @@ export async function fetchStockLogPurchaseAgg(params: {
   }
 }
 
-/** 손익 입고 location 패턴 — 재고 화면과 동일 alias */
+/**
+ * 매장 손익 입고 location — `CM MBK` / `CM-MBK` / `MBK` 처럼 표기가 달라도 같은 매장으로 찾는다.
+ * 재고 화면의 정확 일치 패턴은 입고가 빠지므로, 여기서만 포함 검색을 쓴다.
+ */
+export function purchaseStoreLocationIlikePatterns(store: string): string[] {
+  const raw = String(store || '').trim()
+  if (!raw) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const variant of [raw, ...storeCodeSearchVariants(raw)]) {
+    const pat = sqlIlikeContains(variant)
+    const key = pat.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(pat)
+  }
+  return out
+}
+
+/** SQL 포함 검색 뒤, 다른 매장 location 이 섞이지 않게 한 번 더 걸른다. */
+export function purchaseInboundLocationMatchesStore(
+  location: string,
+  locationFilter: string | null
+): boolean {
+  const filter = String(locationFilter || '').trim()
+  if (!filter || filter === 'All') return true
+  if (isOfficeStockSelection(filter)) return true
+  return storeMatchesIncomeFilter(location, filter)
+}
+
+/** 손익 입고 location 패턴. 매장은 표기 변형 포함, 본사 창고는 기존 별칭. */
 export async function resolvePurchaseLocationPatterns(
   locationFilter: string | null,
   excludeHqLocations: boolean
 ): Promise<string[]> {
-  if (locationFilter) return getStockLocationPatterns(locationFilter)
+  if (locationFilter) {
+    if (isOfficeStockSelection(locationFilter)) return getStockLocationPatterns(locationFilter)
+    return purchaseStoreLocationIlikePatterns(locationFilter)
+  }
   if (!excludeHqLocations) return []
   const patterns = await resolveDistinctNonOfficeLocationPatterns()
   // 빈 패턴이면 RPC가 전 location을 반환 → 본사 재고까지 매입에 섞임

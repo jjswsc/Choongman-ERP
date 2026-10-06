@@ -327,16 +327,21 @@ export async function POST(request: NextRequest) {
       const directMapKeys = itemsToInbound.map((it) => String(it.code || '').trim()).filter(Boolean)
       const directMap = directMapKeys.length > 0 ? await getDirectSettlementMap(directMapKeys) : {}
 
-      const inboundRows = itemsToInbound.map((item) => ({
-        location: store,
-        item_code: item.code,
-        item_name: item.name || '',
-        spec: item.spec || '-',
-        qty: Number(item.qty) || 0,
-        log_date: today,
-        vendor_target: 'From HQ',
-        log_type: 'Inbound',
-      }))
+      const inboundRows = itemsToInbound.map((item) => {
+        const p = Number(item.price)
+        return {
+          location: store,
+          item_code: item.code,
+          item_name: item.name || '',
+          spec: item.spec || '-',
+          qty: Number(item.qty) || 0,
+          log_date: today,
+          vendor_target: 'From HQ',
+          log_type: 'Inbound',
+          order_id: orderId,
+          invoice_unit_price: Number.isFinite(p) && p >= 0 ? p : null,
+        }
+      })
 
       const hqOutboundRows = itemsToInbound
         .filter((item) => !directMap[String(item.code || '').trim()])
@@ -450,16 +455,21 @@ export async function POST(request: NextRequest) {
       const itemCodes = itemsToInbound.map((it) => String(it.code || '').trim()).filter(Boolean)
       const directMap = itemCodes.length > 0 ? await getDirectSettlementMap(itemCodes) : {}
 
-      const inboundRows = itemsToInbound.map((item) => ({
-        location: store,
-        item_code: item.code,
-        item_name: item.name || '',
-        spec: item.spec || '-',
-        qty: Number(item.qty) || 0,
-        log_date: today,
-        vendor_target: 'From HQ',
-        log_type: 'Inbound',
-      }))
+      const inboundRows = itemsToInbound.map((item) => {
+        const p = Number((item as { price?: number }).price)
+        return {
+          location: store,
+          item_code: item.code,
+          item_name: item.name || '',
+          spec: item.spec || '-',
+          qty: Number(item.qty) || 0,
+          log_date: today,
+          vendor_target: 'From HQ',
+          log_type: 'Inbound',
+          order_id: orderId,
+          invoice_unit_price: Number.isFinite(p) && p >= 0 ? p : null,
+        }
+      })
 
       const hqOutboundRows = itemsToInbound
         .filter((item) => !directMap[String(item.code || '').trim()])

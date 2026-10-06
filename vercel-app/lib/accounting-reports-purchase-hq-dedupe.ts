@@ -80,3 +80,31 @@ export function shouldSkipStoreInboundForHqPurchase(
   if (excludeFromHqInbound && hqIndex && isHqVendorPurchaseKey(vendor, hqIndex)) return true
   return false
 }
+
+export function isFromHqInboundVendor(vendorTarget: string): boolean {
+  return String(vendorTarget || '').trim().toLowerCase() === 'from hq'
+}
+
+/**
+ * 직접정산(지두방) 수령 입고 단가.
+ * 출고 스냅샷(invoice)이 있으면 그 값. 없으면 본사→매장 판매가(items.price).
+ * 집계가 품목 원가(items.cost)로 떨어진 경우에만 판매가로 바꾼다.
+ */
+export function directSettlementStoreUnitPrice(params: {
+  invoiceUnitPrice?: number | null
+  aggregatedUnit?: number | null
+  masterPrice: number
+  masterCost: number
+}): number {
+  const invoice = Number(params.invoiceUnitPrice)
+  if (Number.isFinite(invoice) && invoice > 0) return invoice
+  const unit = Number(params.aggregatedUnit)
+  const price = Number(params.masterPrice) || 0
+  const cost = Number(params.masterCost) || 0
+  const unitOk = Number.isFinite(unit) && unit > 0
+  if (unitOk && price > 0 && cost > 0 && Math.abs(unit - cost) <= 0.05 && Math.abs(price - cost) > 0.05) {
+    return price
+  }
+  if (unitOk && !(cost > 0 && Math.abs(unit - cost) <= 0.05 && price > 0)) return unit
+  return price > 0 ? price : unitOk ? unit : 0
+}

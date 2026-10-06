@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildHqVendorMatchIndex,
+  directSettlementStoreUnitPrice,
   isHqVendorPurchaseKey,
   partitionPurchaseVendorMapByHqCodes,
   shouldSkipStoreInboundForHqPurchase,
@@ -67,5 +68,38 @@ describe('partitionPurchaseVendorMapByHqCodes', () => {
     )
     expect(kept).toEqual({ polar: 72_278 })
     expect(excluded.map((e) => e.amount).sort((a, b) => b - a)).toEqual([390_075, 8_800])
+  })
+})
+
+describe('directSettlementStoreUnitPrice', () => {
+  it('uses the order snapshot when the receive log has one', () => {
+    expect(
+      directSettlementStoreUnitPrice({
+        invoiceUnitPrice: 42,
+        aggregatedUnit: 10,
+        masterPrice: 40,
+        masterCost: 10,
+      })
+    ).toBe(42)
+  })
+
+  it('replaces item cost with the store selling price', () => {
+    expect(
+      directSettlementStoreUnitPrice({
+        aggregatedUnit: 10,
+        masterPrice: 40,
+        masterCost: 10,
+      })
+    ).toBe(40)
+  })
+
+  it('keeps a stored unit that is not the item cost', () => {
+    expect(
+      directSettlementStoreUnitPrice({
+        aggregatedUnit: 40,
+        masterPrice: 41,
+        masterCost: 10,
+      })
+    ).toBe(40)
   })
 })
