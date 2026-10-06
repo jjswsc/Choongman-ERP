@@ -73,7 +73,15 @@ export function memberPointLineBranchLabel(storeCode?: string, displayName?: str
 export function formatMemberPointLineOrderAmount(raw: number): string {
   const n = Number(raw)
   if (!Number.isFinite(n)) return ''
-  return `B ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `฿${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/** 카드 รายการ. dine-in / takeout / delivery 만 쓴다. */
+export function memberPointLineOrderChannelLabel(orderType?: string | null): string {
+  const ot = String(orderType || '').trim().toLowerCase()
+  if (ot === 'delivery') return 'เดลิเวอรี่'
+  if (ot === 'takeout' || ot === 'pickup') return 'ซื้อกลับบ้าน'
+  return 'ทานที่ร้าน'
 }
 
 export function formatMemberLineHonorificName(raw: string | undefined): string {
@@ -147,6 +155,7 @@ export function buildMemberPointLineFlexMessage(params: {
   storeCode?: string
   storeLabel?: string
   orderAmount?: number
+  orderType?: string
   orderNo?: string
   memberName?: string
   reason?: string
@@ -155,7 +164,9 @@ export function buildMemberPointLineFlexMessage(params: {
   const headline = resolveHeadline(params)
   const honorificName = formatMemberLineHonorificName(params.memberName)
   const greeting = honorificName ? `สวัสดี คุณ${honorificName}` : 'สวัสดีครับ'
-  const reason = String(params.reason || '').trim() || defaultMemberPointNotifyReason(params)
+  const reason = String(params.orderType || '').trim()
+    ? memberPointLineOrderChannelLabel(params.orderType)
+    : String(params.reason || '').trim() || memberPointLineOrderChannelLabel('')
   const balance = formatMemberPointsDisplay(params.balanceAfter)
   const stamp = formatBangkokThaiBuddhistDateTime(params.occurredAt ?? new Date())
   const tier = String(params.tierCode || '').trim()
@@ -282,7 +293,7 @@ export function buildMemberPointLineFlexMessage(params: {
       spacing: 'xs',
       contents: [
         flexText({
-          text: 'ขอบคุณที่อร่อยไปด้วยกัน',
+          text: `ขอบคุณที่ใช้บริการ ${BRAND_NAME}`,
           size: 'xs',
           color: TEXT_FOOTER,
           align: 'center',

@@ -4,6 +4,7 @@ import {
   defaultMemberPointNotifyReason,
   formatMemberLineHonorificName,
   memberPointLineBranchLabel,
+  memberPointLineOrderChannelLabel,
 } from '@/lib/member-point-line-flex'
 import { normStoreKey } from '@/lib/store-list-keys'
 import { pushLineMessagesToMember, resolvePreferredMemberLineUserId } from '@/lib/member-line-push-target'
@@ -206,19 +207,25 @@ async function resolvePointCardBranchLabel(storeCode?: string): Promise<string> 
   }
 }
 
-async function resolveOrderPointCardAmount(orderId: number): Promise<number | undefined> {
+async function resolveOrderPointCardFacts(orderId: number): Promise<{
+  orderAmount?: number
+  orderType: string
+}> {
   const id = Number(orderId || 0)
-  if (!id) return undefined
+  if (!id) return { orderType: '' }
   try {
     const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
       limit: 1,
-      select: 'total',
-    })) as Array<{ total?: number | null }>
-    const total = Number(rows?.[0]?.total)
-    if (!Number.isFinite(total)) return undefined
-    return Math.round(total * 100) / 100
+      select: 'total,order_type',
+    })) as Array<{ total?: number | null; order_type?: string | null }>
+    const row = rows?.[0]
+    const total = Number(row?.total)
+    return {
+      orderAmount: Number.isFinite(total) ? Math.round(total * 100) / 100 : undefined,
+      orderType: String(row?.order_type || '').trim(),
+    }
   } catch {
-    return undefined
+    return { orderType: '' }
   }
 }
 
@@ -231,6 +238,7 @@ async function deliverMemberPointLineNotify(params: {
   storeCode?: string
   storeLabel?: string
   orderAmount?: number
+  orderType?: string
   orderNo?: string
   memberName?: string
   reason?: string
@@ -243,7 +251,7 @@ async function deliverMemberPointLineNotify(params: {
   const cardParams = {
     ...params,
     memberName,
-    reason: String(params.reason || '').trim() || defaultMemberPointNotifyReason(params),
+    reason: memberPointLineOrderChannelLabel(params.orderType),
   }
 
   const flex = buildMemberPointLineFlexMessage(cardParams)
@@ -298,9 +306,9 @@ export async function notifyMemberPointLineForPaidOrder(params: {
   const member = await resolveMemberPointNotifyProfile(memberId)
   if (!member) return { sent: false, reason: 'member_not_found' }
 
-  const [storeLabel, orderAmount] = await Promise.all([
+  const [storeLabel, orderFacts] = await Promise.all([
     resolvePointCardBranchLabel(params.storeCode),
-    resolveOrderPointCardAmount(orderId),
+    resolveOrderPointCardFacts(orderId),
   ])
 
   const result = await deliverMemberPointLineNotify({
@@ -311,7 +319,8 @@ export async function notifyMemberPointLineForPaidOrder(params: {
     tierCode: member.tierCode,
     storeCode: params.storeCode,
     storeLabel,
-    orderAmount,
+    orderAmount: orderFacts.orderAmount,
+    orderType: orderFacts.orderType,
     orderNo: params.orderNo,
     memberName: member.name,
   })

@@ -5,6 +5,7 @@ import {
   formatMemberLineHonorificName,
   formatMemberPointLineOrderAmount,
   memberPointLineBranchLabel,
+  memberPointLineOrderChannelLabel,
 } from '@/lib/member-point-line-flex'
 import { buildMemberPointLineNotifyText } from '@/lib/member-point-line-notify'
 
@@ -75,12 +76,12 @@ describe('buildMemberPointLineFlexMessage', () => {
     expect(json).toContain('คุณได้รับแต้มแล้ว')
     expect(json).toContain('+20')
     expect(json).toContain('แต้มสะสม')
-    expect(json).toContain('ซื้อสินค้าที่ร้าน')
+    expect(json).toContain('ทานที่ร้าน')
     expect(json).toContain('รายการ')
     expect(json).toContain('60')
     expect(json).toContain('แต้มคงเหลือ')
     expect(json).toContain('8 ก.ย. 2569 · 15:06 น.')
-    expect(json).toContain('ขอบคุณที่อร่อยไปด้วยกัน')
+    expect(json).toContain('ขอบคุณที่ใช้บริการ Choongman Chicken')
     expect(json).toContain('#E8F6EE')
   })
 
@@ -92,6 +93,7 @@ describe('buildMemberPointLineFlexMessage', () => {
       tierCode: 'DIAMOND',
       storeCode: 'CM Office',
       orderAmount: 234,
+      orderType: 'dine_in',
       memberName: 'ประวัตร',
       occurredAt: new Date('2026-10-06T08:11:00.000Z'),
     })
@@ -100,7 +102,8 @@ describe('buildMemberPointLineFlexMessage', () => {
     expect(json).toContain('2,954.15')
     expect(json).toContain('DIAMOND')
     expect(json).toContain('ระดับสมาชิก')
-    expect(json).toContain('B 234.00')
+    expect(json).toContain('฿234.00')
+    expect(json).toContain('ทานที่ร้าน')
     expect(json).toContain('ยอดคำสั่งซื้อ')
     expect(json).toContain('Online (Office)')
     expect(json).toContain('สาขา')
@@ -114,7 +117,14 @@ describe('member point card labels', () => {
     expect(memberPointLineBranchLabel('CM Silom', 'สีลม')).toBe('สีลม')
   })
 
-  it('formats the order amount with a B prefix and 2 decimals', () => {
-    expect(formatMemberPointLineOrderAmount(234)).toBe('B 234.00')
+  it('formats the order amount with a baht sign and 2 decimals', () => {
+    expect(formatMemberPointLineOrderAmount(234)).toBe('฿234.00')
+  })
+
+  it('maps the order channel to dine-in, takeout, or delivery', () => {
+    expect(memberPointLineOrderChannelLabel('dine_in')).toBe('ทานที่ร้าน')
+    expect(memberPointLineOrderChannelLabel('takeout')).toBe('ซื้อกลับบ้าน')
+    expect(memberPointLineOrderChannelLabel('delivery')).toBe('เดลิเวอรี่')
+    expect(memberPointLineOrderChannelLabel('')).toBe('ทานที่ร้าน')
   })
 })
