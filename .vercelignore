@@ -1,0 +1,8 @@
+# CLI 배포 시 Git 미추적 대용량·임시물 제외 (Root Directory=vercel-app 이어도 업로드 루트는 저장소)
+tmp-*/
+tmp-*/
+**/chrome-profile/
+**/node_modules/
+.git/
+.cursor/
+agent-transcripts/

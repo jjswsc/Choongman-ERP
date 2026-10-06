@@ -2,6 +2,7 @@ import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { normalizeIncomeScope, type IncomeScopeInput } from '@/lib/accounting-reports'
 import { ensureErpStoreMatchIndex, storeMatchesIncomeFilterWithIndex } from '@/lib/accounting-store-match'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
+import { isTaxBookJournalHead } from '@/lib/tax-book'
 
 export type TrialBalanceRow = {
   accountCode: string
@@ -41,17 +42,17 @@ export async function computeTrialBalanceReport(input: IncomeScopeInput): Promis
 
   const jeFilter = `accounting_date=gte.${encodeURIComponent(startStr)}&accounting_date=lte.${encodeURIComponent(endStr)}`
   const entries = (await supabaseSelectFilterAllPages('journal_entries', jeFilter, {
-    select: 'id,store_name,source_type',
+    select: 'id,store_name,source_type,book',
     order: 'accounting_date.asc',
     pageSize: 8000,
     maxRows: 1_000_000,
-  })) as { id?: number; store_name?: string | null; source_type?: string | null }[] | null
+  })) as { id?: number; store_name?: string | null; source_type?: string | null; book?: string | null }[] | null
 
   const selected = scope.selectedStoresOnly
   const ids = (entries || [])
     .filter((e) => {
-      // 세무 장부(tax_*)는 기업 시산·기존 마감에 넣지 않는다.
-      if (String(e.source_type || '').startsWith('tax_')) return false
+      // 세무 장부(book=tax · tax_* 원천)는 기업 시산·기존 마감에 넣지 않는다.
+      if (isTaxBookJournalHead(e)) return false
       if (selected && selected.length > 1) {
         return selected.some((s) => storeMatch(e.store_name, s, storeIndex))
       }

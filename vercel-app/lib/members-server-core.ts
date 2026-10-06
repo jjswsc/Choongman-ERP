@@ -33,6 +33,7 @@ import {
   type MembersTenantScope,
 } from '@/lib/members-tenant-scope'
 import {
+  compareMemberLineIdentityRank,
   isActiveLineProviderIdentity,
   parseMemberLineReach,
   type MemberLineReach,
@@ -369,18 +370,13 @@ async function getLineIdentities(memberIds: number[]): Promise<Map<number, Membe
   const map = new Map<number, MemberIdentityRow>()
   for (const row of rows || []) {
     const memberId = Number(row.member_id || 0)
-    if (!memberId) continue
+    if (!memberId || !toText(row.provider_user_id)) continue
     const prev = map.get(memberId)
-    if (!prev || lineIdentityPreference(row) > lineIdentityPreference(prev)) {
+    if (!prev || compareMemberLineIdentityRank(row, prev) < 0) {
       map.set(memberId, row)
     }
   }
   return map
-}
-
-function lineIdentityPreference(row: MemberIdentityRow): number {
-  if (isActiveLineProviderIdentity(row)) return 2
-  return toText(row.provider_user_id) ? 1 : 0
 }
 
 async function getLatestMemberEvents(memberIds: number[]): Promise<Map<number, { eventType: string; processedAt: string }>> {

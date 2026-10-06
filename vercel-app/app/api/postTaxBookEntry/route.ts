@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { assertCanApproveAccountingCompliance, assertCanApproveAccountingPeriodUnlock } from '@/lib/accounting-auth'
 import {
   TAX_CLOSE_LOCKS_STORE_PERIOD,
+  TAX_VOUCHER_KINDS,
   resolveTaxBookAsOfRange,
   taxEntityKeyFromScope,
   taxJournalBalanced,
+  type TaxVoucherKind,
 } from '@/lib/tax-book'
 import {
   postTaxAdjustmentJournal,
   postTaxIncomeExpenseClosing,
   postTaxInventoryCogsJournal,
+  postTaxManualJournal,
   postTaxOpeningJournal,
   postTaxPayrollJournal,
   postTaxPurchaseSummaryJournal,
@@ -75,6 +78,9 @@ export async function POST(request: NextRequest) {
     accountingDate?: string
     trialBalanceRows?: ExternalTrialBalanceRow[]
     lines?: { accountCode?: string; accountName?: string; side?: string; amount?: number }[]
+    voucherKind?: string
+    entryNo?: string
+    postingStatus?: string
   }
   const action = String(body.action || '').trim()
   const yearMonth = String(body.yearMonth || '').trim()
@@ -142,68 +148,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'ensureFiling') {
-      // 장부 검색 시 신고 요약(부가세·매출·매입·급여)을 덮어쓰기 전기. 금액 없으면 건너뜀.
-      const bridge = await loadTaxManagementBridge({
-        yearMonth,
-        scopeFilter,
-        userRole: auth.role,
-        userStore: auth.store,
-        allowedStores: auth.allowedStores,
-        tenantId: auth.tenantId,
-      })
-      if (bridge.periodClosed) {
-        return NextResponse.json(
-          { success: true, posted: [], locked: true, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD },
-          { headers }
-        )
-      }
-      const posted: string[] = []
-      const outputVat = bridge.report.lines.find((l) => l.key === 'outputVat')?.filing || 0
-      const inputVat = bridge.report.lines.find((l) => l.key === 'inputVat')?.filing || 0
-      if (outputVat > 0 || inputVat > 0) {
-        await postTaxVatSummaryJournal({
-          yearMonth,
-          taxEntityCode,
-          outputVat,
-          inputVat,
-          postedBy: actor,
-        })
-        posted.push('vat')
-      }
-      const salesNet = bridge.report.salesSplit.taxInvoiceNet || 0
-      if (salesNet > 0) {
-        await postTaxSalesSummaryJournal({
-          yearMonth,
-          taxEntityCode,
-          netAmount: salesNet,
-          postedBy: actor,
-        })
-        posted.push('sales')
-      }
-      const purchaseNet = bridge.report.salesSplit.purchaseNet || 0
-      if (purchaseNet > 0) {
-        await postTaxPurchaseSummaryJournal({
-          yearMonth,
-          taxEntityCode,
-          netAmount: purchaseNet,
-          postedBy: actor,
-        })
-        posted.push('purchase')
-      }
-      const totals = await loadTaxPayrollTotals({ yearMonth, scopeFilter, tenantId: auth.tenantId })
-      if (totals.gross > 0) {
-        await postTaxPayrollJournal({
-          yearMonth,
-          taxEntityCode,
-          gross: totals.gross,
-          tax: totals.wht,
-          sso: totals.sso,
-          postedBy: actor,
-        })
-        posted.push('payroll')
-      }
+      // 거래별 자동 분개가 세무 장부에 들어가므로 월 요약(매출·매입·VAT·급여)을 검색 때 다시 올리지 않는다.
       return NextResponse.json(
-        { success: true, posted, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD },
+        { success: true, posted: [], skipped: 'txn_journals', locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD },
         { headers }
       )
     }
@@ -313,6 +260,32 @@ export async function POST(request: NextRequest) {
         memo: String(body.memo || '').trim(),
         postedBy: actor,
         lines,
+      })
+      return NextResponse.json({ success: true, entryId: id, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD }, { headers })
+    }
+
+    if (action === 'manual') {
+      const lines = (body.lines || [])
+        .map((ln) => ({
+          accountCode: String(ln.accountCode || '').trim(),
+          accountName: String(ln.accountName || ln.accountCode || '').trim(),
+          side: String(ln.side || '').toLowerCase() === 'credit' ? ('credit' as const) : ('debit' as const),
+          amount: Math.abs(Number(ln.amount) || 0),
+        }))
+        .filter((ln) => ln.accountCode && ln.amount > 0)
+      if (!taxJournalBalanced(lines)) throw new Error('UNBALANCED')
+      const kindRaw = String(body.voucherKind || 'general').trim() as TaxVoucherKind
+      const voucherKind = ((TAX_VOUCHER_KINDS as readonly string[]).includes(kindRaw) ? kindRaw : 'general') as TaxVoucherKind
+      const id = await postTaxManualJournal({
+        yearMonth,
+        taxEntityCode,
+        memo: String(body.memo || '').trim(),
+        postedBy: actor,
+        lines,
+        voucherKind,
+        accountingDate: body.accountingDate,
+        entryNo: String(body.entryNo || '').trim() || null,
+        postingStatus: String(body.postingStatus || '').toLowerCase() === 'draft' ? 'draft' : 'approved',
       })
       return NextResponse.json({ success: true, entryId: id, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD }, { headers })
     }

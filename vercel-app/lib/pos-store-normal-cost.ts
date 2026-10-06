@@ -1,18 +1,16 @@
 /**
- * 매장 정상 원가 — 판매 메뉴 BOM은 정상 원가, 할인은 본사/매장/미분류로 분리.
- * 매장 갭 = 식재 초과(실소진 − 재료환산 이론, 0 미만은 보상하지 않음) + 수동 할인.
- * 본사 할인·회계−실소진·엔진 차이는 점수에 넣지 않는다.
+ * 매장 정상 원가 — 판매 메뉴 BOM을 정상 원가로 두고 손익 매출원가율과 비교한다.
+ * 표의 할인은 통합 할인 한 칸. 실소진은 넣지 않는다.
  */
 import { getItemCostPerUnit } from '@/lib/item-cost-util'
 import { toPosCostSalesExclVat } from '@/lib/pos-cost-vat'
 import { STOCK_TAKE_COVERAGE_WARN } from '@/lib/stock-take-kpi'
 
-/** 원가 분석과 동일: 미매칭 수량 비중이 이 값 이상이면 갭 전체 보류 */
+/** 원가 분석과 동일: 미매칭 수량 비중이 이 값 이상이면 BOM 안내 */
 export const STORE_NORMAL_COST_BOM_UNMATCHED_HOLD_PCT = 10
-/** |BOM − 재료환산| / 재료환산(없으면 BOM) 이 이 값을 넘으면 식재 점수 보류 */
 export const STORE_NORMAL_COST_ENGINE_GAP_HOLD_PCT = 5
 
-export type StoreNormalCostHoldReason = 'bom_unmatched' | 'no_ending_count' | 'engine_gap'
+export type StoreNormalCostHoldReason = 'bom_unmatched'
 
 export type StoreNormalCostDiscountBucket = 'hq' | 'store' | 'unclassified'
 
@@ -47,28 +45,25 @@ export type StoreNormalCostRow = {
   orderCount: number
   grossSales: number
   netSales: number
+  /** 통합 할인(부가세 제외) */
+  totalDiscount: number
   hqDiscount: number
   storeDiscount: number
   unclassifiedDiscount: number
   bomCost: number
   normalCostPctOfGross: number
   normalCostPctOfNet: number
-  ingredientTheoryCost: number
-  actualUsageCost: number
-  /** 실소진 − 재료환산. 음수는 절감 표시이며 갭에서 빼지 않는다. */
-  foodVariance: number
+  accountingSales: number | null
   accountingCogs: number | null
-  /** 회계 매출원가 − 실소진. 단가·분류. 점수 아님 */
-  accountingGap: number | null
-  /** 패널티 후보. 보류면 null */
-  storeGap: number | null
-  storeGapPctOfNet: number | null
-  gapHeld: boolean
-  foodScoreHeld: boolean
+  /** 손익 원가율 = 매출원가 ÷ 손익 매출 */
+  plCostPct: number | null
+  /** 손익 원가율 − 정상 원가율(실수령) */
+  vsPlPct: number | null
+  /** 손익 매출원가 − 정상 원가(BOM) */
+  vsPlAmt: number | null
   holdReasons: StoreNormalCostHoldReason[]
   matchedLineQty: number
   unmatchedLineQty: number
-  engineGapPct: number | null
   discountLines: StoreNormalCostDiscountLine[]
   usageWarnings: string[]
 }
@@ -204,12 +199,6 @@ export function sumIngredientUsageMoney(params: IngredientUsageMoneyInput): Ingr
   }
 }
 
-function engineGapPercent(bomCost: number, ingredientTheoryCost: number): number | null {
-  const base = ingredientTheoryCost > 0.0001 ? ingredientTheoryCost : bomCost
-  if (base <= 0.0001) return null
-  return (Math.abs(bomCost - ingredientTheoryCost) / base) * 100
-}
-
 export function buildStoreNormalCostRow(params: {
   storeCode: string
   orderCount: number
@@ -219,9 +208,7 @@ export function buildStoreNormalCostRow(params: {
   matchedLineQty: number
   unmatchedLineQty: number
   discountKinds: StoreNormalCostKindAmount[]
-  ingredientTheoryCost: number
-  actualUsageCost: number
-  hasEndingCount: boolean
+  accountingSales: number | null
   accountingCogs: number | null
   usageWarnings?: string[]
 }): StoreNormalCostRow {
@@ -229,63 +216,49 @@ export function buildStoreNormalCostRow(params: {
   const grossSales = round2(params.grossSales)
   const netSales = round2(params.netSales)
   const bomCost = round2(params.bomCost)
-  const ingredientTheoryCost = round2(params.ingredientTheoryCost)
-  const actualUsageCost = round2(params.actualUsageCost)
-  const foodVariance = round2(actualUsageCost - ingredientTheoryCost)
+  const accountingSales =
+    params.accountingSales == null || !Number.isFinite(params.accountingSales)
+      ? null
+      : round2(params.accountingSales)
   const accountingCogs =
     params.accountingCogs == null || !Number.isFinite(params.accountingCogs)
       ? null
       : round2(params.accountingCogs)
-  const accountingGap =
-    accountingCogs == null ? null : round2(accountingCogs - actualUsageCost)
+  const normalCostPctOfNet = pctOf(bomCost, netSales)
+  const plCostPct =
+    accountingCogs != null && accountingSales != null ? pctOf(accountingCogs, accountingSales) : null
+  const vsPlPct = plCostPct == null ? null : round2(plCostPct - normalCostPctOfNet)
+  const vsPlAmt = accountingCogs == null ? null : round2(accountingCogs - bomCost)
 
   const matched = Math.max(0, params.matchedLineQty)
   const unmatched = Math.max(0, params.unmatchedLineQty)
   const lineTotal = matched + unmatched
   const unmatchedPct = lineTotal > 0 ? (unmatched / lineTotal) * 100 : 0
-  const engineGapPct = engineGapPercent(bomCost, ingredientTheoryCost)
-
   const holdReasons: StoreNormalCostHoldReason[] = []
   if (unmatched > 0 && unmatchedPct >= STORE_NORMAL_COST_BOM_UNMATCHED_HOLD_PCT) {
     holdReasons.push('bom_unmatched')
   }
-  if (!params.hasEndingCount) holdReasons.push('no_ending_count')
-  if (engineGapPct != null && engineGapPct > STORE_NORMAL_COST_ENGINE_GAP_HOLD_PCT) {
-    holdReasons.push('engine_gap')
-  }
-
-  const gapHeld = holdReasons.includes('bom_unmatched')
-  const foodScoreHeld =
-    gapHeld || holdReasons.includes('no_ending_count') || holdReasons.includes('engine_gap')
-  const penaltyFood = foodScoreHeld ? 0 : Math.max(0, foodVariance)
-  const storeGap = gapHeld ? null : round2(penaltyFood + discounts.storeDiscount)
-  const storeGapPctOfNet =
-    storeGap == null ? null : pctOf(storeGap, netSales)
 
   return {
     storeCode: params.storeCode,
     orderCount: params.orderCount,
     grossSales,
     netSales,
+    totalDiscount: round2(discounts.hqDiscount + discounts.storeDiscount + discounts.unclassifiedDiscount),
     hqDiscount: discounts.hqDiscount,
     storeDiscount: discounts.storeDiscount,
     unclassifiedDiscount: discounts.unclassifiedDiscount,
     bomCost,
     normalCostPctOfGross: pctOf(bomCost, grossSales),
-    normalCostPctOfNet: pctOf(bomCost, netSales),
-    ingredientTheoryCost,
-    actualUsageCost,
-    foodVariance,
+    normalCostPctOfNet,
+    accountingSales,
     accountingCogs,
-    accountingGap,
-    storeGap,
-    storeGapPctOfNet,
-    gapHeld,
-    foodScoreHeld,
+    plCostPct,
+    vsPlPct,
+    vsPlAmt,
     holdReasons,
     matchedLineQty: matched,
     unmatchedLineQty: unmatched,
-    engineGapPct: engineGapPct == null ? null : round2(engineGapPct),
     discountLines: discounts.lines,
     usageWarnings: params.usageWarnings ?? [],
   }

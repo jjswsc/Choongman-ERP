@@ -4,6 +4,7 @@ import { postJournalEntry } from '@/lib/accounting-posting'
 import {
   TAX_ACCOUNTS,
   TAX_BOOK,
+  TAX_VOUCHER_KINDS,
   taxInventoryCogsLines,
   taxJournalBalanced,
   taxPayrollJournalLines,
@@ -11,6 +12,7 @@ import {
   taxSalesSummaryLines,
   taxVatSummaryLines,
   type TaxJournalLineDraft,
+  type TaxVoucherKind,
 } from '@/lib/tax-book'
 import { assertTaxAccountingPeriodOpen } from '@/lib/tax-book-period-server'
 import { deleteTaxBookSource, taxBookClosingLines, taxBookMonthSourceId } from '@/lib/tax-book-server'
@@ -23,6 +25,7 @@ import {
   taxBookMemoSales,
   taxBookMemoVat,
   taxBookMemoAdjustment,
+  taxBookMemoWithStatus,
 } from '@/lib/tax-book-voucher-memo'
 
 const TAX_PAYROLL = 'tax_payroll'
@@ -33,6 +36,7 @@ const TAX_VAT = 'tax_vat_summary'
 const TAX_SALES = 'tax_sales_summary'
 const TAX_PURCHASE = 'tax_purchase_summary'
 const TAX_CLOSING = 'tax_income_expense_closing'
+const TAX_MANUAL = 'tax_manual'
 
 async function postTaxLines(input: {
   yearMonth: string
@@ -44,6 +48,8 @@ async function postTaxLines(input: {
   lines: TaxJournalLineDraft[]
   replace: boolean
   accountingDate?: string
+  voucherKind?: string | null
+  entryNo?: string | null
 }): Promise<number | null> {
   const entity = String(input.taxEntityCode || '').trim()
   const ym = String(input.yearMonth || '').slice(0, 7)
@@ -67,6 +73,8 @@ async function postTaxLines(input: {
     postedBy: input.postedBy,
     book: TAX_BOOK,
     taxEntityCode: entity,
+    voucherKind: input.voucherKind || undefined,
+    entryNo: input.entryNo || undefined,
     lines: input.lines.map((ln) => ({
       accountCode: ln.accountCode,
       accountName: ln.accountName,
@@ -226,6 +234,38 @@ export async function postTaxAdjustmentJournal(input: {
     postedBy: input.postedBy,
     lines: input.lines,
     replace: false,
+  })
+}
+
+export async function postTaxManualJournal(input: {
+  yearMonth: string
+  taxEntityCode: string
+  memo: string
+  postedBy: string | null
+  lines: TaxJournalLineDraft[]
+  voucherKind: TaxVoucherKind
+  accountingDate?: string
+  entryNo?: string | null
+  postingStatus?: 'draft' | 'approved'
+}): Promise<number | null> {
+  const kind = TAX_VOUCHER_KINDS.includes(input.voucherKind) ? input.voucherKind : 'general'
+  const status = input.postingStatus === 'draft' ? 'draft' : 'approved'
+  const memo = taxBookMemoWithStatus(
+    String(input.memo || '').trim() || taxBookMemoAdjustment(input.yearMonth),
+    status
+  )
+  return postTaxLines({
+    yearMonth: input.yearMonth,
+    taxEntityCode: input.taxEntityCode,
+    sourceType: TAX_MANUAL,
+    sourceId: Date.now(),
+    memo,
+    postedBy: input.postedBy,
+    lines: input.lines,
+    replace: false,
+    accountingDate: input.accountingDate,
+    voucherKind: kind,
+    entryNo: String(input.entryNo || '').trim() || null,
   })
 }
 

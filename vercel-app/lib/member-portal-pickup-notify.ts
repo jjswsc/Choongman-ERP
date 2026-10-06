@@ -1,4 +1,4 @@
-import { pushLineTextMessage } from '@/lib/line-messaging-server'
+import { pushLineMessagesToMember } from '@/lib/member-line-push-target'
 import { isMemberPortalPickupLineNotifyEnabledForStoreCode } from '@/lib/member-portal-pickup-settings'
 import { resolveMemberPortalTakeoutMeta } from '@/lib/pos-member-portal-takeout-label'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
@@ -48,14 +48,6 @@ export async function notifyMemberPortalPickupReady(
   const memberId = Math.trunc(Number(order.member_id || 0))
   if (!memberId) return
 
-  const identityRows = (await supabaseSelectFilter(
-    'member_identities',
-    `provider=eq.line&member_id=eq.${memberId}`,
-    { limit: 1, select: 'provider_user_id' }
-  )) as Array<{ provider_user_id?: string | null }>
-  const lineUserId = String(identityRows?.[0]?.provider_user_id || '').trim()
-  if (!lineUserId) return
-
   const orderNo = String(order.order_no || `POS-${id}`).trim()
   const storeCode = String(order.store_code || '').trim()
   const enabled = await isMemberPortalPickupLineNotifyEnabledForStoreCode(storeCode)
@@ -71,8 +63,11 @@ export async function notifyMemberPortalPickupReady(
     .filter(Boolean)
     .join('\n')
 
-  const result = await pushLineTextMessage({ userId: lineUserId, text })
-  if (!result.ok) {
+  const result = await pushLineMessagesToMember({
+    memberId,
+    messages: [{ type: 'text', text }],
+  })
+  if (!result.ok && result.message !== 'no_line_identity') {
     console.warn('member-portal-pickup-notify:', result.message || 'push_failed', { orderId: id })
   }
 }

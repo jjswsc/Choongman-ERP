@@ -40,6 +40,29 @@ export function taxBookMemoAdjustment(yearMonth: string, userMemo?: string): str
   return `Adjusting journal entry for the period of ${formatYmSlash(yearMonth)}`
 }
 
+export const TAX_BOOK_DRAFT_PREFIX = '[Draft] '
+
+export function taxBookMemoWithStatus(memo: string, status: 'draft' | 'approved'): string {
+  const body = String(memo || '').replace(/^\[Draft\]\s*/i, '').trim()
+  if (status === 'draft') return `${TAX_BOOK_DRAFT_PREFIX}${body}`
+  return body
+}
+
+export function taxBookStatusFromMemo(memo: string | null | undefined): 'draft' | 'approved' {
+  return /^\[Draft\]\s*/i.test(String(memo || '')) ? 'draft' : 'approved'
+}
+
+export function taxBookMemoWithoutStatus(memo: string | null | undefined): string {
+  return String(memo || '').replace(/^\[Draft\]\s*/i, '').trim()
+}
+
+export function isCustomTaxDocumentNo(entryNo: string | null | undefined): boolean {
+  const n = String(entryNo || '').trim()
+  if (!n) return false
+  if (/^JE-/i.test(n)) return false
+  return true
+}
+
 /** 목록·필터용 짧은 종류 라벨 키 접미사 */
 export function taxBookSourceKindKey(sourceType: string | null | undefined): string {
   const s = String(sourceType || '').trim()
@@ -50,6 +73,7 @@ export function taxBookSourceKindKey(sourceType: string | null | undefined): str
   if (s === 'tax_inventory_cogs') return 'inventory'
   if (s === 'tax_income_expense_closing') return 'closing'
   if (s === 'tax_opening') return 'opening'
-  if (s === 'tax_adjustment') return 'adjustment'
+  if (s === 'tax_adjustment' || s === 'tax_manual') return 'adjustment'
   return 'other'
 }
+

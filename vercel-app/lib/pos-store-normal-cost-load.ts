@@ -9,16 +9,10 @@ import {
 import { expandBangkokYearMonthsInclusive, getBangkokMonthRange } from '@/lib/bangkok-time'
 import { isFinancialStatementStoreNone } from '@/lib/financial-statement-store-options'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
-import {
-  aggregateTheoreticalIngredientQty,
-  fetchIngredientActualUsageRows,
-} from '@/lib/ingredient-usage-variance'
 import { buildManagementMarginPosSlice } from '@/lib/management-margin-pos-slice'
-import { buildPosMenuBomIndex } from '@/lib/pos-menu-bom-explode'
 import { buildPosMenuCostIndex } from '@/lib/pos-menu-cost-index-server'
 import {
   buildStoreNormalCostRow,
-  sumIngredientUsageMoney,
   type StoreNormalCostReport,
 } from '@/lib/pos-store-normal-cost'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
@@ -28,7 +22,6 @@ import {
 } from '@/lib/pos-sales-fetch-rows'
 import { loadPosSalesPromoPricingCatalog } from '@/lib/pos-sales-promo-pricing-catalog-server'
 import { isOfficeStore } from '@/lib/permissions'
-import { supabaseSelectAllPages } from '@/lib/supabase-server'
 
 type OrderRow = {
   store_code?: string
@@ -45,14 +38,6 @@ type OrderRow = {
   tier_discount_amt?: number | null
   member_tier_code?: string | null
   memo?: string | null
-}
-
-type ItemRow = {
-  code?: string
-  cost?: number
-  price?: number
-  total_quantity?: number | null
-  unit?: string
 }
 
 function round2(n: number): number {
@@ -88,13 +73,14 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise
   return out
 }
 
-async function loadAccountingCogs(params: {
+async function loadAccountingPl(params: {
   storeCode: string
   months: string[]
   auth: AccountingStoreAuthScope
-}): Promise<number | null> {
+}): Promise<{ sales: number; cogs: number } | null> {
   if (!params.months.length) return null
-  let sum = 0
+  let sales = 0
+  let cogs = 0
   for (const yearMonth of params.months) {
     const report = await computeIncomeStatementReport({
       yearMonth,
@@ -105,9 +91,10 @@ async function loadAccountingCogs(params: {
       tenantId: params.auth.tenantId,
       includeDebug: false,
     })
-    sum += Number(report.cogs) || 0
+    sales += Number(report.sales) || 0
+    cogs += Number(report.cogs) || 0
   }
-  return round2(sum)
+  return { sales: round2(sales), cogs: round2(cogs) }
 }
 
 function emptyReport(params: {
@@ -165,10 +152,9 @@ export async function computePosStoreNormalCost(params: {
     storeCode: storeCodes?.[0] ?? null,
   })
 
-  const [catalog, costIndex, bomIndex, fetchResult, itemsRaw] = await Promise.all([
+  const [catalog, costIndex, fetchResult] = await Promise.all([
     loadPosSalesPromoPricingCatalog(),
     buildPosMenuCostIndex(),
-    buildPosMenuBomIndex(),
     fetchPosSalesOrdersForBusinessRange({
       startStr,
       endStr,
@@ -177,10 +163,6 @@ export async function computePosStoreNormalCost(params: {
       queryLabel: 'posStoreNormalCost',
       tenantScope,
     }),
-    supabaseSelectAllPages('items', {
-      order: 'code.asc',
-      select: 'code,cost,price,total_quantity,unit',
-    }).catch(() => []) as Promise<ItemRow[]>,
   ])
 
   if (fetchResult.truncated) warnings.push('POS_TRUNCATED')
@@ -196,15 +178,6 @@ export async function computePosStoreNormalCost(params: {
 
   const explicit = (storeCodes ?? []).filter(isStoreCode)
   const storeList = explicit.length > 0 ? explicit : [...byStore.keys()]
-  const items = (itemsRaw || [])
-    .map((it) => ({
-      code: String(it.code || '').trim(),
-      cost: it.cost,
-      price: it.price,
-      total_quantity: it.total_quantity,
-      unit: it.unit,
-    }))
-    .filter((it) => it.code)
 
   const rows = await mapPool(storeList, 3, async (storeCode) => {
     const orders = byStore.get(storeCode) ?? []
@@ -214,43 +187,18 @@ export async function computePosStoreNormalCost(params: {
       costIndex,
     })
     const usageWarnings: string[] = []
-    let ingredientTheoryCost = 0
-    let actualUsageCost = 0
-    let hasEndingCount = false
-    try {
-      const qty = aggregateTheoreticalIngredientQty(bomIndex, orders)
-      const actual = await fetchIngredientActualUsageRows({
-        store: storeCode,
-        startYmd: startStr,
-        endYmd: endStr,
-        tenantId: params.auth.tenantId,
-      })
-      usageWarnings.push(...actual.warnings)
-      if (actual.source === 'none') hasEndingCount = false
-      const money = sumIngredientUsageMoney({
-        theoreticalQtyByCode: qty.byItem,
-        typeByCode: qty.typeByItem,
-        actualRows: actual.rows,
-        items,
-      })
-      ingredientTheoryCost = money.theoreticalCost
-      actualUsageCost = money.actualCost
-      hasEndingCount = actual.source !== 'none' && money.hasEndingCount
-    } catch {
-      usageWarnings.push('USAGE_LOAD_FAILED')
-      hasEndingCount = false
-    }
-
+    let accountingSales: number | null = null
     let accountingCogs: number | null = null
     try {
-      accountingCogs = await loadAccountingCogs({
+      const pl = await loadAccountingPl({
         storeCode,
         months,
         auth: params.auth,
       })
+      accountingSales = pl?.sales ?? null
+      accountingCogs = pl?.cogs ?? null
     } catch {
       usageWarnings.push('ACCOUNTING_LOAD_FAILED')
-      accountingCogs = null
     }
 
     return buildStoreNormalCostRow({
@@ -266,9 +214,7 @@ export async function computePosStoreNormalCost(params: {
         kind: k.kind,
         discountAmount: k.discountAmount,
       })),
-      ingredientTheoryCost,
-      actualUsageCost,
-      hasEndingCount,
+      accountingSales,
       accountingCogs,
       usageWarnings,
     })

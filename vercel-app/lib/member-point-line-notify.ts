@@ -3,7 +3,7 @@ import {
   defaultMemberPointNotifyReason,
   formatMemberLineHonorificName,
 } from '@/lib/member-point-line-flex'
-import { pushLineMessages, pushLineTextMessage } from '@/lib/line-messaging-server'
+import { pushLineMessagesToMember, resolvePreferredMemberLineUserId } from '@/lib/member-line-push-target'
 import { formatMemberPointsDisplay, roundMemberPointsEarn } from '@/lib/member-points-math'
 import { isMemberPointLineNotifyEnabled } from '@/lib/member-point-line-notify-settings'
 import { createMemberEvent } from '@/lib/members-server-core'
@@ -15,26 +15,6 @@ type MemberPointNotifyProfile = {
   name: string
   pointBalance: number
   tierCode: string
-}
-
-async function resolveMemberLineUserId(memberId: number): Promise<string> {
-  const rows = (await supabaseSelectFilter(
-    'member_identities',
-    `provider=eq.line&member_id=eq.${memberId}`,
-    { limit: 20, select: 'provider_user_id,status' }
-  )) as Array<{ provider_user_id?: string | null; status?: string | null }>
-  const list = rows || []
-  const pick = (wantActive: boolean) =>
-    list.find((row) => {
-      const uid = String(row.provider_user_id || '').trim()
-      if (!uid) return false
-      const active = String(row.status || '').trim().toLowerCase() === 'active'
-      return wantActive ? active : true
-    })
-  const active = pick(true)
-  if (active) return String(active.provider_user_id || '').trim()
-  const any = pick(false)
-  return String(any?.provider_user_id || '').trim()
 }
 
 export function buildMemberPointLineNotifyText(params: {
@@ -193,7 +173,7 @@ export async function getMemberPointLineNotifyReadiness(memberId: number): Promi
     }
   }
   const profile = await resolveMemberPointNotifyProfile(id)
-  const lineUserId = await resolveMemberLineUserId(id)
+  const lineUserId = await resolvePreferredMemberLineUserId(id)
   return {
     notifyEnabled,
     lineTokenConfigured,
@@ -217,9 +197,6 @@ async function deliverMemberPointLineNotify(params: {
   memberName?: string
   reason?: string
 }): Promise<{ ok: boolean; channel?: 'flex' | 'text'; message?: string }> {
-  const lineUserId = await resolveMemberLineUserId(params.memberId)
-  if (!lineUserId) return { ok: false, message: 'no_line_identity' }
-
   let memberName = String(params.memberName || '').trim()
   if (!memberName) {
     const profile = await resolveMemberPointNotifyProfile(params.memberId)
@@ -232,16 +209,23 @@ async function deliverMemberPointLineNotify(params: {
   }
 
   const flex = buildMemberPointLineFlexMessage(cardParams)
-  const flexResult = await pushLineMessages({
-    userId: lineUserId,
+  const flexResult = await pushLineMessagesToMember({
+    memberId: params.memberId,
     messages: [{ type: 'flex', altText: flex.altText, contents: flex.contents }],
   })
   if (flexResult.ok) return { ok: true, channel: 'flex' }
 
   const text = buildMemberPointLineNotifyText(cardParams)
-  const textResult = await pushLineTextMessage({ userId: lineUserId, text })
+  const textResult = await pushLineMessagesToMember({
+    memberId: params.memberId,
+    messages: [{ type: 'text', text }],
+  })
   if (textResult.ok) return { ok: true, channel: 'text' }
-  return { ok: false, message: textResult.message || flexResult.message || 'push_failed' }
+  const message = textResult.message || flexResult.message || 'push_failed'
+  if (message === 'no_line_identity' || flexResult.message === 'no_line_identity') {
+    return { ok: false, message: 'no_line_identity' }
+  }
+  return { ok: false, message }
 }
 
 /** 결제 완료 주문 — 원장/주문 기준으로 LINE 알림 1회 (member_events로 중복 방지) */

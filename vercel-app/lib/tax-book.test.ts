@@ -7,6 +7,8 @@ import {
   resolveTaxBookAsOfRange,
   resolveTaxBookMonthRange,
   taxEntityKeyFromScope,
+  taxEntityCodeFromStoreName,
+  isTaxBookJournalHead,
   buildTaxBookStatements,
   preferLockedTaxBookProfit,
   taxInventoryCogsLines,
@@ -30,6 +32,7 @@ function row(code: string, debit: number, credit: number): TrialBalanceRow {
 
 describe('tax book rules', () => {
   it('maps voucher kinds and document numbers', () => {
+    expect(voucherKindForSourceType('tax_manual')).toBe('general')
     expect(voucherKindForSourceType('tax_payroll')).toBe('general')
     expect(voucherKindForSourceType('tax_income_expense_closing')).toBe('closing')
     expect(voucherKindForSourceType('tax_sales_summary')).toBe('sales')
@@ -46,6 +49,13 @@ describe('tax book rules', () => {
     expect(voucherMatchesDayBook('closing', 'general')).toBe(true)
     expect(voucherMatchesDayBook('payment', 'payment')).toBe(true)
     expect(voucherMatchesDayBook('receipt', 'receipt')).toBe(true)
+    const { voucherKindForDayBookFilter } = await import('./tax-book')
+    expect(voucherKindForDayBookFilter('sales')).toBe('sales')
+    expect(voucherKindForDayBookFilter('purchase')).toBe('purchase')
+    expect(voucherKindForDayBookFilter('payment')).toBe('payment')
+    expect(voucherKindForDayBookFilter('receipt')).toBe('receipt')
+    expect(voucherKindForDayBookFilter('all')).toBe('general')
+    expect(voucherKindForDayBookFilter('general')).toBe('general')
   })
 
   it('accepts only an entity or 13-digit TIN as the tax book key', () => {
@@ -57,6 +67,19 @@ describe('tax book rules', () => {
     expect(taxEntityKeyFromScope('CM MBK')).toBe('store:CM MBK')
     expect(taxEntityKeyFromScope('store:CM MBK')).toBe('store:CM MBK')
     expect(taxEntityKeyFromScope('All')).toBeNull()
+  })
+
+  it('maps store journals onto the same tax-book keys as Flow openings', () => {
+    expect(taxEntityCodeFromStoreName('CM True Digital')).toBe('tin:0105566228126')
+    expect(taxEntityCodeFromStoreName('CM MBK')).toBe('store:CM MBK')
+    expect(taxEntityCodeFromStoreName('CM Future Park')).toBe('store:CM Future Park')
+    expect(taxEntityCodeFromStoreName('CM Ekkamai')).toBe('store:CM Ekkamai')
+    expect(taxEntityCodeFromStoreName('CM Office')).toBe('tin:0105566137147')
+    expect(taxEntityCodeFromStoreName('Unknown Branch')).toBe('store:Unknown Branch')
+    expect(taxEntityCodeFromStoreName('All')).toBeNull()
+    expect(isTaxBookJournalHead({ source_type: 'pos_order', book: 'tax' })).toBe(true)
+    expect(isTaxBookJournalHead({ source_type: 'pos_order', book: null })).toBe(false)
+    expect(isTaxBookJournalHead({ source_type: 'tax_opening', book: null })).toBe(true)
   })
 
   it('balances payroll and inventory journals', () => {
@@ -292,6 +315,6 @@ describe('management reports stay off the tax book', () => {
 
   it('store trial balance drops tax_ source types', () => {
     const src = readFileSync(new URL('./trial-balance-report.ts', import.meta.url), 'utf8')
-    expect(src.includes("startsWith('tax_')")).toBe(true)
+    expect(src.includes('isTaxBookJournalHead')).toBe(true)
   })
 })

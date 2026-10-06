@@ -23,3 +23,5 @@ backups/
 # 대용량 엑셀 (GitHub 100MB 제한)
 vercel-app/원가분석.xlsx
 vercel-app/*.xlsx
+.vercel
+.env*

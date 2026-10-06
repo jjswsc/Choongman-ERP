@@ -9,6 +9,7 @@ import {
   voucherKindForSourceType,
   type TaxVoucherKind,
 } from '@/lib/tax-book'
+import { isCustomTaxDocumentNo, taxBookStatusFromMemo } from '@/lib/tax-book-voucher-memo'
 import { isMissingTaxBookSchemaError, TAX_BOOK_SCHEMA_MISSING } from '@/lib/tax-book-period-server'
 import type { TrialBalanceRow } from '@/lib/trial-balance-report'
 
@@ -22,6 +23,7 @@ export type TaxBookEntryRow = {
   memo: string | null
   debit: number
   credit: number
+  postingStatus?: 'draft' | 'approved'
 }
 
 export type TaxBookLedgerLine = {
@@ -164,17 +166,20 @@ export function toTaxBookEntries(
       const ym = /^\d{4}-\d{2}$/.test(dated) ? dated : yearMonth
       const seqKey = `${ym}:${kind}`
       seqByKind[seqKey] = (seqByKind[seqKey] || 0) + 1
+      const generated = formatTaxVoucherNo(kind, ym, seqByKind[seqKey])
       const tot = totals.get(id) || { debit: 0, credit: 0 }
+      const memo = h.memo != null ? String(h.memo) : null
       return {
         id,
         entryNo: String(h.entry_no || ''),
-        voucherNo: formatTaxVoucherNo(kind, ym, seqByKind[seqKey]),
+        voucherNo: isCustomTaxDocumentNo(h.entry_no) ? String(h.entry_no).trim() : generated,
         voucherKind: kind,
         accountingDate: String(h.accounting_date || '').slice(0, 10),
         sourceType: String(h.source_type || ''),
-        memo: h.memo != null ? String(h.memo) : null,
+        memo,
         debit: roundTaxAmount(tot.debit),
         credit: roundTaxAmount(tot.credit),
+        postingStatus: taxBookStatusFromMemo(memo),
       }
     })
     .filter((row) => row.id > 0)

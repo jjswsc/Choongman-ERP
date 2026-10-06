@@ -1,7 +1,7 @@
 /** 세무 장부 UI 표시용 로케일 (DB에는 한국어 계정명·영문 적요를 유지). */
 
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
-import { formatYmSlash, taxBookSourceKindKey } from '@/lib/tax-book-voucher-memo'
+import { formatYmSlash, taxBookMemoWithoutStatus, taxBookSourceKindKey } from '@/lib/tax-book-voucher-memo'
 
 export function formatTaxFilingYearMonthLabel(yearMonth: string, lang: string): string {
   const ym = String(yearMonth || '').slice(0, 7)
@@ -70,8 +70,9 @@ export function formatTaxBookMemoDisplay(
   opts?: { sourceType?: string | null; accountingDate?: string | null }
 ): string {
   const resolved = resolveTaxBookMemoDisplay(memo, opts)
-  if (!resolved) return String(memo || '').trim()
+  const raw = taxBookMemoWithoutStatus(memo)
+  if (!resolved) return raw
   const template = t(resolved.key)
-  if (!template || template === resolved.key) return String(memo || '').trim()
+  if (!template || template === resolved.key) return raw
   return template.replace(/\{\{ym\}\}/g, resolved.ym).replace(/\{\{date\}\}/g, resolved.date)
 }

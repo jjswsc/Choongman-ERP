@@ -5,6 +5,7 @@ import {
   formatTaxFilingYearMonthLabel,
   resolveTaxBookMemoDisplay,
 } from './tax-book-display'
+import { taxBookMemoWithStatus, taxBookStatusFromMemo } from './tax-book-voucher-memo'
 
 describe('tax book display i18n', () => {
   it('formats year-month labels by language', () => {
@@ -37,5 +38,19 @@ describe('tax book display i18n', () => {
         sourceType: 'tax_vat_summary',
       })
     ).toBe('ลง VAT ภ.พ.30 งวด 07/2026')
+  })
+
+  it('strips draft prefix from displayed memos', () => {
+    const t = (k: string) => k
+    expect(
+      formatTaxBookMemoDisplay(t, '[Draft] Rent for October', { sourceType: 'tax_manual' })
+    ).toBe('Rent for October')
+  })
+
+  it('marks draft status from memo prefix', () => {
+    expect(taxBookMemoWithStatus('Rent', 'draft')).toBe('[Draft] Rent')
+    expect(taxBookMemoWithStatus('[Draft] Rent', 'approved')).toBe('Rent')
+    expect(taxBookStatusFromMemo('[Draft] Rent')).toBe('draft')
+    expect(taxBookStatusFromMemo('Rent')).toBe('approved')
   })
 })

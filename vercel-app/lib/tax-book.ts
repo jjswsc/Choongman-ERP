@@ -52,6 +52,7 @@ export function voucherKindForSourceType(sourceType: string | null | undefined):
     s === 'tax_payroll' ||
     s === 'tax_vat_summary' ||
     s === 'tax_adjustment' ||
+    s === 'tax_manual' ||
     s === 'tax_opening' ||
     s === 'depreciation' ||
     s === 'expense_accrual'
@@ -78,6 +79,11 @@ export function voucherMatchesDayBook(kind: TaxVoucherKind, filter: TaxDayBookFi
   return kinds == null || kinds.includes(kind)
 }
 
+export function voucherKindForDayBookFilter(filter: TaxDayBookFilter): TaxVoucherKind {
+  if (filter === 'purchase' || filter === 'sales' || filter === 'payment' || filter === 'receipt') return filter
+  return 'general'
+}
+
 const VOUCHER_PREFIX: Record<TaxVoucherKind, string> = {
   sales: 'SV',
   purchase: 'PU',
@@ -101,6 +107,46 @@ const TAX_BOOK_HQ_STORE_TIN: Record<string, string> = {
   'CM Office HQ': '0105566137147',
 }
 
+/**
+ * 매장 분개 → 세무 장부 키.
+ * 같은 TIN이어도 Flow가 매장별 장부였으면 store: 로 분리한다 (기초 전표와 동일).
+ */
+const TAX_BOOK_STORE_ENTITY: Record<string, string> = {
+  'CM True Digital': 'tin:0105566228126',
+  'CM MBK': 'store:CM MBK',
+  'CM Silom': 'tin:0105568080622',
+  'CM Future Park': 'store:CM Future Park',
+  'CM Ekkamai': 'store:CM Ekkamai',
+  'CM Office': 'tin:0105566137147',
+  'CM Office HQ': 'tin:0105566137147',
+}
+
+function tinKeyFromHqStore(storeCode: string): string | null {
+  const tin = TAX_BOOK_HQ_STORE_TIN[storeCode]
+  return tin ? `tin:${tin}` : null
+}
+
+export function taxEntityCodeFromStoreName(storeName: string | null | undefined): string | null {
+  const raw = String(storeName || '').trim()
+  if (!raw || raw === 'All' || raw === '*') return null
+  const lower = raw.toLowerCase()
+  if (
+    lower.startsWith('entity:') ||
+    lower.startsWith('taxid:') ||
+    lower.startsWith('store:') ||
+    lower.startsWith('tin:')
+  ) {
+    return taxEntityKeyFromScope(raw)
+  }
+  return TAX_BOOK_STORE_ENTITY[raw] || tinKeyFromHqStore(raw) || `store:${raw}`
+}
+
+/** 기업 시산·마감에 넣지 않을 세무 전표 (book=tax 또는 tax_* 원천). */
+export function isTaxBookJournalHead(row: { source_type?: string | null; book?: string | null }): boolean {
+  if (String(row.book || '').trim() === TAX_BOOK) return true
+  return isTaxBookSourceType(row.source_type)
+}
+
 /** entity:code / taxid:13digits / store:매장코드 만 세무 장부 키. All은 법인 마감 대상이 아니다. */
 export function taxEntityKeyFromScope(scopeFilter: string | null | undefined): string | null {
   const raw = String(scopeFilter || '').trim()
@@ -122,13 +168,15 @@ export function taxEntityKeyFromScope(scopeFilter: string | null | undefined): s
   if (lower.startsWith('store:')) {
     const code = raw.slice(6).trim()
     if (!code) return null
-    const hqTin = TAX_BOOK_HQ_STORE_TIN[code]
-    return hqTin ? `tin:${hqTin}` : `store:${code}`
+    return TAX_BOOK_STORE_ENTITY[code] || tinKeyFromHqStore(code) || `store:${code}`
+  }
+  if (lower.startsWith('tin:')) {
+    const tin = raw.slice(4).replace(/\D/g, '')
+    return tin.length === 13 ? `tin:${tin}` : raw
   }
   // 매장 코드 단독
-  if (raw && raw !== 'All' && raw !== '*' && !raw.includes(':')) {
-    const hqTin = TAX_BOOK_HQ_STORE_TIN[raw]
-    return hqTin ? `tin:${hqTin}` : `store:${raw}`
+  if (raw && raw !== 'All' && raw !== '*') {
+    return taxEntityCodeFromStoreName(raw)
   }
   return null
 }

@@ -16,9 +16,10 @@ import {
 import { linesForPosChannelSettlement } from '@/lib/pos-channel-settlement'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { uniqueAccountingPeriodChecks } from '@/lib/accounting-period-mutation-guard'
-import { assertTaxAccountingPeriodOpen } from '@/lib/tax-book-period-server'
-import { TAX_BOOK, voucherKindForSourceType } from '@/lib/tax-book'
+import { assertTaxAccountingPeriodOpen, TAX_BOOK_SCHEMA_MISSING, TAX_PERIOD_CLOSED } from '@/lib/tax-book-period-server'
+import { TAX_BOOK, isTaxBookSourceType, taxEntityCodeFromStoreName, voucherKindForSourceType } from '@/lib/tax-book'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
+import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
 
 type JournalLineInput = {
   accountCode: string
@@ -38,6 +39,8 @@ type PostJournalParams = {
   memo?: string
   postedBy?: string | null
   lines: JournalLineInput[]
+  /** 있으면 자동 JE- 번호 대신 사용 (세무 일별장부 문서번호) */
+  entryNo?: string | null
   /** tax면 세무 장부. 매장 마감과 따로 법인 기간만 잠근다. */
   book?: 'tax' | null
   voucherKind?: string | null
@@ -155,7 +158,7 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
   }
 
   const inserted = (await supabaseInsert('journal_entries', {
-    entry_no: mkEntryNo(params.sourceType, params.sourceId),
+    entry_no: String(params.entryNo || '').trim() || mkEntryNo(params.sourceType, params.sourceId),
     accounting_date: accountingDate,
     source_type: params.sourceType,
     source_id: params.sourceId ?? null,
@@ -200,11 +203,66 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
 
   if (!isTaxBook) {
     await upsertLedgerBalances(accountingDate, params.storeName || 'All', lines)
+    await mirrorJournalEntryToTaxBook(params, accountingDate, lines)
   }
   return entryId
 }
 
-import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
+async function taxJournalAlreadyMirrored(
+  sourceType: string,
+  sourceId: number,
+  taxEntityCode: string
+): Promise<boolean> {
+  if (!sourceId) return false
+  try {
+    const rows = (await supabaseSelectFilter(
+      'journal_entries',
+      [
+        `source_type=eq.${encodeURIComponent(sourceType)}`,
+        `source_id=eq.${sourceId}`,
+        `book=eq.${TAX_BOOK}`,
+        `tax_entity_code=eq.${encodeURIComponent(taxEntityCode)}`,
+      ].join('&'),
+      { select: 'id', limit: 1 }
+    )) as { id?: number }[] | null
+    return !!rows?.length
+  } catch {
+    return false
+  }
+}
+
+async function mirrorJournalEntryToTaxBook(
+  params: PostJournalParams,
+  accountingDate: string,
+  lines: JournalLineInput[]
+): Promise<void> {
+  if (isTaxBookSourceType(params.sourceType)) return
+  const taxEntityCode = taxEntityCodeFromStoreName(params.storeName)
+  if (!taxEntityCode) return
+  const sourceId = params.sourceId != null ? Number(params.sourceId) : 0
+  if (sourceId > 0 && (await taxJournalAlreadyMirrored(params.sourceType, sourceId, taxEntityCode))) return
+  try {
+    await postJournalEntry({
+      accountingDate,
+      sourceType: params.sourceType,
+      sourceId: params.sourceId ?? null,
+      storeName: params.storeName || null,
+      memo: params.memo,
+      postedBy: params.postedBy || null,
+      lines,
+      book: TAX_BOOK,
+      voucherKind: params.voucherKind || voucherKindForSourceType(params.sourceType),
+      taxEntityCode,
+    })
+  } catch (e) {
+    const code = e instanceof Error ? e.message : String(e)
+    if (code === TAX_PERIOD_CLOSED || code === TAX_BOOK_SCHEMA_MISSING || code === 'NEED_TAX_ENTITY') {
+      console.warn('tax journal mirror skipped:', code, params.sourceType, params.sourceId)
+      return
+    }
+    console.error('tax journal mirror failed:', e)
+  }
+}
 
 export async function postBankTransactionJournal(params: {
   bankTransactionId?: number
@@ -264,6 +322,7 @@ export async function postBankTransactionJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '통장 거래 자동분개',
     postedBy: params.postedBy || null,
+    voucherKind: params.transType === 'deposit' ? 'receipt' : 'payment',
     lines,
   })
 }

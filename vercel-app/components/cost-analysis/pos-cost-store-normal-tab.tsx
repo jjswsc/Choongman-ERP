@@ -39,13 +39,7 @@ function money(n: number | null | undefined): string {
 }
 
 const USAGE_WARN_KEY: Record<string, string> = {
-  USAGE_LOAD_FAILED: "posCostStoreNormalWarnUsage",
   ACCOUNTING_LOAD_FAILED: "posCostStoreNormalWarnAccounting",
-  NO_LOCATION: "posCostStoreNormalWarnNoLocation",
-  ACTUAL_RPC_FALLBACK: "posCostStoreNormalWarnRpc",
-  STORE_ONLY: "posCostStoreNormalWarnStoreOnly",
-  TENANT_BLOCKED: "posCostStoreNormalWarnTenant",
-  BAD_RANGE: "posCostStoreNormalWarnRange",
 }
 
 export function PosCostStoreNormalTab() {
@@ -73,9 +67,9 @@ export function PosCostStoreNormalTab() {
     return FINANCIAL_STATEMENT_STORE_NONE
   }, [auth?.store, franchiseStoreOptions])
 
-  const countMonth = React.useMemo(() => resolveStockTakeKpiMonth(), [])
-  const [startStr, setStartStr] = React.useState(countMonth.startYmd)
-  const [endStr, setEndStr] = React.useState(countMonth.endYmd)
+  const defaultMonth = React.useMemo(() => getBangkokMonthRange(), [])
+  const [startStr, setStartStr] = React.useState(defaultMonth.startStr)
+  const [endStr, setEndStr] = React.useState(getBangkokTodayDateString())
   const [storeFilter, setStoreFilter] = React.useState(defaultStoreFilter)
   const [queryToken, setQueryToken] = React.useState(0)
   const [loading, setLoading] = React.useState(false)
@@ -133,27 +127,27 @@ export function PosCostStoreNormalTab() {
     const rows = result?.rows ?? []
     let net = 0
     let bom = 0
-    let gapStores = 0
-    let held = 0
+    let plSales = 0
+    let plCogs = 0
+    let higherPl = 0
     for (const row of rows) {
       net += row.netSales
       bom += row.bomCost
-      if (row.gapHeld || row.foodScoreHeld) held += 1
-      if (row.storeGap != null && row.storeGap > 0.5) gapStores += 1
+      if (row.accountingSales != null && row.accountingCogs != null) {
+        plSales += row.accountingSales
+        plCogs += row.accountingCogs
+      }
+      if (row.vsPlPct != null && row.vsPlPct > 0.5) higherPl += 1
     }
     return {
       normalPct: net > 0.0001 ? (bom / net) * 100 : null,
-      gapStores,
-      held,
+      plPct: plSales > 0.0001 ? (plCogs / plSales) * 100 : null,
+      higherPl,
       stores: rows.length,
     }
   }, [result])
 
-  const holdLabel = (reason: StoreNormalCostRow["holdReasons"][number]) => {
-    if (reason === "bom_unmatched") return t("posCostStoreNormalHoldBom")
-    if (reason === "no_ending_count") return t("posCostStoreNormalHoldCount")
-    return t("posCostStoreNormalHoldEngine")
-  }
+  const holdLabel = () => t("posCostStoreNormalHoldBom")
 
   const bucketLabel = (bucket: StoreNormalCostRow["discountLines"][number]["bucket"]) => {
     if (bucket === "hq") return t("posCostStoreNormalBucketHq")
@@ -235,47 +229,45 @@ export function PosCostStoreNormalTab() {
               subLabel={t("posCostStoreNormalKpiNormalPctSub").replace("{n}", String(kpi.stores))}
             />
             <MetricCard
-              label={t("posCostStoreNormalKpiGapStores")}
-              value={String(kpi.gapStores)}
-              variant={kpi.gapStores > 0 ? "warning" : "default"}
+              label={t("posCostStoreNormalKpiPlPct")}
+              value={pct(kpi.plPct)}
+              subLabel={t("posCostStoreNormalKpiPlPctSub").replace("{n}", String(kpi.stores))}
             />
-            <MetricCard label={t("posCostStoreNormalKpiHeld")} value={String(kpi.held)} />
+            <MetricCard
+              label={t("posCostStoreNormalKpiHigherPl")}
+              value={String(kpi.higherPl)}
+              variant={kpi.higherPl > 0 ? "warning" : "default"}
+            />
           </div>
 
           <div className="max-h-[70vh] overflow-auto rounded-xl border bg-card">
-            <table className="w-full min-w-[1280px] text-xs">
+            <table className="w-full min-w-[960px] text-xs">
               <thead className="sticky top-0 z-10 bg-muted [&_th]:bg-muted">
                 <tr className="border-b text-left">
                   <th className="px-2 py-2 w-8" />
                   <th className="px-2 py-2">{t("posCostStoreNormalColStore")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColGross")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColHqDiscount")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColStoreDiscount")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColOtherDiscount")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColNet")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColBom")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColPctGross")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColPctNet")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColIngredient")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColActual")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColFoodVar")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColCogs")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColCogsGap")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColGap")}</th>
-                  <th className="px-2 py-2 text-right">{t("posCostStoreNormalColGapPct")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColGross")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColDiscount")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColNet")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColBom")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColPctNet")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColCogs")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColPlPct")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColVsPct")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColVsAmt")}</th>
                 </tr>
               </thead>
               <tbody>
                 {result.rows.map((row) => {
                   const open = expanded === row.storeCode
                   const storeName = labelForStore(storeLabels, row.storeCode)
-                  const gapHot = row.storeGap != null && row.storeGap > 0.5
+                  const plHot = row.vsPlPct != null && row.vsPlPct > 0.5
                   return (
                     <React.Fragment key={row.storeCode}>
                       <tr
                         className={cn(
                           "border-b border-border/60",
-                          gapHot && "bg-amber-50/80 dark:bg-amber-950/25"
+                          plHot && "bg-amber-50/80 dark:bg-amber-950/25"
                         )}
                       >
                         <td className="px-2 py-2">
@@ -290,63 +282,47 @@ export function PosCostStoreNormalTab() {
                         </td>
                         <td className="px-2 py-2 font-medium whitespace-nowrap" title={storeName !== row.storeCode ? row.storeCode : undefined}>
                           {storeName}
-                        </td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.grossSales)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.hqDiscount)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.storeDiscount)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.unclassifiedDiscount)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.netSales)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.bomCost)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{pct(row.normalCostPctOfGross)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{pct(row.normalCostPctOfNet)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.ingredientTheoryCost)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.actualUsageCost)}</td>
-                        <td
-                          className={cn(
-                            "px-2 py-2 text-right tabular-nums",
-                            row.foodVariance > 0.5 && "text-amber-800 dark:text-amber-200",
-                            row.foodVariance < -0.5 && "text-emerald-700 dark:text-emerald-300"
-                          )}
-                        >
-                          {money(row.foodVariance)}
-                          {row.foodVariance < -0.5 ? (
-                            <span className="ml-1 text-[10px]">{t("posCostStoreNormalSavings")}</span>
+                          {row.holdReasons.includes("bom_unmatched") ? (
+                            <span className="ml-1 text-[10px] font-normal text-amber-700 dark:text-amber-300">
+                              {t("posCostStoreNormalHeld")}
+                            </span>
                           ) : null}
                         </td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.accountingCogs)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">{money(row.accountingGap)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums">
-                          {row.storeGap == null ? (
-                            <span className="text-amber-700 dark:text-amber-300">{t("posCostStoreNormalHeld")}</span>
-                          ) : (
-                            <span>
-                              {money(row.storeGap)}
-                              {row.foodScoreHeld ? (
-                                <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-300">
-                                  {t("posCostStoreNormalFoodHeld")}
-                                </span>
-                              ) : null}
-                            </span>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.grossSales)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.totalDiscount)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.netSales)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.bomCost)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(row.normalCostPctOfNet)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.accountingCogs)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(row.plCostPct)}</td>
+                        <td
+                          className={cn(
+                            "px-2 py-2 text-right tabular-nums whitespace-nowrap",
+                            plHot && "text-amber-800 dark:text-amber-200",
+                            row.vsPlPct != null && row.vsPlPct < -0.5 && "text-emerald-700 dark:text-emerald-300"
                           )}
+                        >
+                          {row.vsPlPct == null ? "—" : `${row.vsPlPct > 0 ? "+" : ""}${row.vsPlPct.toFixed(1)}%p`}
                         </td>
-                        <td className="px-2 py-2 text-right tabular-nums">{pct(row.storeGapPctOfNet)}</td>
+                        <td
+                          className={cn(
+                            "px-2 py-2 text-right tabular-nums whitespace-nowrap",
+                            row.vsPlAmt != null && row.vsPlAmt > 0.5 && "text-amber-800 dark:text-amber-200",
+                            row.vsPlAmt != null && row.vsPlAmt < -0.5 && "text-emerald-700 dark:text-emerald-300"
+                          )}
+                        >
+                          {money(row.vsPlAmt)}
+                        </td>
                       </tr>
                       {open ? (
                         <tr className="border-b bg-muted/20">
-                          <td colSpan={17} className="px-4 py-3 space-y-2">
+                          <td colSpan={11} className="px-4 py-3 space-y-2">
                             {row.holdReasons.length > 0 ? (
                               <ul className="list-disc pl-4 text-amber-800 dark:text-amber-200">
                                 {row.holdReasons.map((reason) => (
-                                  <li key={reason}>{holdLabel(reason)}</li>
+                                  <li key={reason}>{holdLabel()}</li>
                                 ))}
                               </ul>
-                            ) : (
-                              <p className="text-muted-foreground">{t("posCostStoreNormalNoHold")}</p>
-                            )}
-                            {row.engineGapPct != null ? (
-                              <p className="tabular-nums text-muted-foreground">
-                                {t("posCostStoreNormalEngineGap").replace("{pct}", row.engineGapPct.toFixed(1))}
-                              </p>
                             ) : null}
                             {row.discountLines.length > 0 ? (
                               <table className="w-full max-w-xl text-xs">
@@ -362,7 +338,7 @@ export function PosCostStoreNormalTab() {
                                     <tr key={`${line.layer}-${line.kind}`} className="border-b border-border/40">
                                       <td className="py-1">{combinedKindLabel(line, tr)}</td>
                                       <td className="py-1">{bucketLabel(line.bucket)}</td>
-                                      <td className="py-1 text-right tabular-nums">{money(line.amount)}</td>
+                                      <td className="py-1 text-right tabular-nums whitespace-nowrap">{money(line.amount)}</td>
                                     </tr>
                                   ))}
                                 </tbody>

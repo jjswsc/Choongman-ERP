@@ -4,7 +4,7 @@ import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useT } from "@/lib/i18n"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { useLang } from "@/lib/lang-context"
 import {
   getTaxBookEntries,
@@ -21,6 +21,7 @@ import {
   buildTaxBookStatements,
   resolveTaxBookMonthRange,
   TAX_DAY_BOOK_FILTERS,
+  voucherKindForDayBookFilter,
   voucherMatchesDayBook,
   type TaxDayBookFilter,
   type TaxVoucherKind,
@@ -43,6 +44,7 @@ import {
   formatTaxBookMemoDisplay,
   formatTaxFilingYearMonthLabel,
 } from "@/lib/tax-book-display"
+import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 type BooksView = "bridge" | "vouchers" | "ledger" | "trial" | "taxIncome" | "taxBalance" | "closing"
@@ -92,6 +94,15 @@ export function TaxFilingBooksTab(props: {
   const [cogsPreview, setCogsPreview] = React.useState<number | null>(null)
   const [ledgerAccount, setLedgerAccount] = React.useState<string | null>(null)
   const [dayBook, setDayBook] = React.useState<TaxDayBookFilter>("all")
+  const [dayMemo, setDayMemo] = React.useState("")
+  const [dayDocNo, setDayDocNo] = React.useState("")
+  const [dayDate, setDayDate] = React.useState("")
+  const [dayStatus, setDayStatus] = React.useState<"draft" | "approved">("approved")
+  const [dayKind, setDayKind] = React.useState<TaxVoucherKind>("general")
+  const [dayAdj, setDayAdj] = React.useState<AdjLine[]>([
+    { accountCode: "", side: "debit", amount: "" },
+    { accountCode: "", side: "credit", amount: "" },
+  ])
   const [openingDate, setOpeningDate] = React.useState("2026-07-01")
   const [trialUploadRows, setTrialUploadRows] = React.useState<ExternalTrialBalanceRow[] | null>(null)
   const [trialUploadName, setTrialUploadName] = React.useState<string | null>(null)
@@ -343,6 +354,68 @@ export function TaxFilingBooksTab(props: {
     }
   }
 
+  React.useEffect(() => {
+    if (dayBook !== "all") setDayKind(voucherKindForDayBookFilter(dayBook))
+  }, [dayBook])
+
+  const dayDebit = dayAdj.reduce(
+    (s, ln) => s + (ln.side === "debit" ? Math.abs(Number(ln.amount) || 0) : 0),
+    0
+  )
+  const dayCredit = dayAdj.reduce(
+    (s, ln) => s + (ln.side === "credit" ? Math.abs(Number(ln.amount) || 0) : 0),
+    0
+  )
+  const dayBalanced = dayDebit > 0 && Math.abs(dayDebit - dayCredit) <= 0.01
+
+  const postManual = async () => {
+    setPosting(true)
+    setMessage(null)
+    try {
+      const lines = dayAdj
+        .map((ln) => ({
+          accountCode: ln.accountCode.trim(),
+          side: ln.side,
+          amount: Number(ln.amount) || 0,
+        }))
+        .filter((ln) => ln.accountCode && ln.amount > 0)
+      const defaultDate =
+        dayDate ||
+        (() => {
+          const today = getBangkokTodayDateString()
+          const from = query?.from || props.fromMonth
+          return today.slice(0, 7) === from ? today : `${from}-01`
+        })()
+      const res = await postTaxBookEntry({
+        action: "manual",
+        yearMonth: query?.from || props.fromMonth,
+        scopeFilter: query?.scope || props.filingStoreFilter || "All",
+        memo: dayMemo,
+        accountingDate: defaultDate,
+        voucherKind: dayBook === "all" ? dayKind : voucherKindForDayBookFilter(dayBook),
+        entryNo: dayDocNo.trim() || undefined,
+        postingStatus: dayStatus,
+        lines,
+      })
+      if (!res.success) {
+        setMessage(res.error || t("accCompUnknownError"))
+      } else {
+        setMessage(t("taxBooksEntrySaved"))
+        setDayMemo("")
+        setDayDocNo("")
+        setDayAdj([
+          { accountCode: "", side: "debit", amount: "" },
+          { accountCode: "", side: "credit", amount: "" },
+        ])
+        if (query) await load(query)
+      }
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPosting(false)
+    }
+  }
+
   const drillToLedger = (accountCode: string) => {
     // view·ledgerAccount 변경 → load identity 변경 → effect 1회만 조회 (이중 fetch 방지)
     setLedgerAccount(accountCode)
@@ -474,7 +547,9 @@ export function TaxFilingBooksTab(props: {
       {bridge?.schemaReady === false || entries?.schemaReady === false ? (
         <p className="text-sm text-amber-700 dark:text-amber-400">{t("taxBooksSchemaMissing")}</p>
       ) : null}
-      {entityMissing ? <p className="text-sm text-muted-foreground">{t("taxBooksNeedEntity")}</p> : null}
+      {entityMissing ? (
+        <p className="text-sm font-medium text-amber-700 dark:text-amber-400">{t("taxBooksNeedEntity")}</p>
+      ) : null}
       {closed ? <p className="text-sm">{t("taxBooksPeriodClosed")}</p> : null}
       {bridge?.report?.recognition ? (
         <p
@@ -544,9 +619,109 @@ export function TaxFilingBooksTab(props: {
             ))}
           </div>
           <p className="text-xs text-muted-foreground">{t(`taxBooksDayBookHint_${dayBook}`)}</p>
+          <div className="space-y-2 rounded-md border p-3">
+            <p className="text-sm font-medium">{t("taxBooksAddEntry")}</p>
+            <p className="text-xs text-muted-foreground">{t("taxBooksAddEntryHint")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                type="date"
+                className="w-40"
+                value={dayDate}
+                onChange={(e) => setDayDate(e.target.value)}
+              />
+              <Input
+                className="w-40"
+                value={dayDocNo}
+                placeholder={t("taxBooksColDoc")}
+                onChange={(e) => setDayDocNo(e.target.value)}
+              />
+              <Input
+                className="min-w-[12rem] flex-1"
+                value={dayMemo}
+                placeholder={t("taxBooksColDescription")}
+                onChange={(e) => setDayMemo(e.target.value)}
+              />
+              {dayBook === "all" ? (
+                <select
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={dayKind}
+                  onChange={(e) => setDayKind(e.target.value as TaxVoucherKind)}
+                >
+                  {(["general", "purchase", "sales", "payment", "receipt"] as TaxVoucherKind[]).map((k) => (
+                    <option key={k} value={k}>
+                      {t(`taxBooksDayBook_${k}`)}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={dayStatus}
+                onChange={(e) => setDayStatus(e.target.value === "draft" ? "draft" : "approved")}
+              >
+                <option value="approved">{t("taxBooksStatusApproved")}</option>
+                <option value="draft">{t("taxBooksStatusDraft")}</option>
+              </select>
+            </div>
+            {dayAdj.map((ln, idx) => (
+              <div key={idx} className="flex flex-wrap gap-2">
+                <Input
+                  className="w-28"
+                  value={ln.accountCode}
+                  placeholder={t("taxBooksAccount")}
+                  onChange={(e) =>
+                    setDayAdj((rows) => rows.map((row, i) => (i === idx ? { ...row, accountCode: e.target.value } : row)))
+                  }
+                />
+                <select
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={ln.side}
+                  onChange={(e) =>
+                    setDayAdj((rows) =>
+                      rows.map((row, i) =>
+                        i === idx ? { ...row, side: e.target.value === "credit" ? "credit" : "debit" } : row
+                      )
+                    )
+                  }
+                >
+                  <option value="debit">{t("taxBooksDebit")}</option>
+                  <option value="credit">{t("taxBooksCredit")}</option>
+                </select>
+                <Input
+                  className="w-32"
+                  inputMode="decimal"
+                  value={ln.amount}
+                  placeholder={t("taxBooksAmount")}
+                  onChange={(e) =>
+                    setDayAdj((rows) => rows.map((row, i) => (i === idx ? { ...row, amount: e.target.value } : row)))
+                  }
+                />
+              </div>
+            ))}
+            <p className="text-sm tabular-nums">
+              {t("taxBooksColTotal")} {money(Math.max(dayDebit, dayCredit))}
+              {dayDebit > 0 || dayCredit > 0
+                ? ` · Dr ${money(dayDebit)} / Cr ${money(dayCredit)}${dayBalanced ? "" : ` · ${t("taxBooksUnbalanced")}`}`
+                : ""}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setDayAdj((rows) => [...rows, { accountCode: "", side: "debit", amount: "" }])}
+              >
+                {t("taxBooksAddLine")}
+              </Button>
+              <Button type="button" size="sm" disabled={!canPost || !dayBalanced} onClick={() => void postManual()}>
+                {t("taxBooksSaveEntry")}
+              </Button>
+            </div>
+          </div>
           <VoucherJvTable
             empty={t("taxBooksNoRows")}
             statusLabel={t("taxBooksStatusApproved")}
+            draftLabel={t("taxBooksStatusDraft")}
             headers={[
               t("taxBooksColDate"),
               t("taxBooksColDoc"),
@@ -565,6 +740,7 @@ export function TaxFilingBooksTab(props: {
                 accountingDate: v.accountingDate,
               }),
               total: money(Math.max(Number(v.debit) || 0, Number(v.credit) || 0)),
+              status: v.postingStatus === "draft" ? "draft" : "approved",
             }))}
           />
         </div>
@@ -909,11 +1085,21 @@ function VoucherJvTable({
   rows,
   empty,
   statusLabel,
+  draftLabel,
 }: {
   headers: string[]
-  rows: { id: number; date: string; docNo: string; kind: string; description: string; total: string }[]
+  rows: {
+    id: number
+    date: string
+    docNo: string
+    kind: string
+    description: string
+    total: string
+    status?: "draft" | "approved"
+  }[]
   empty: string
   statusLabel: string
+  draftLabel: string
 }) {
   if (!rows.length) return <p className="text-sm text-muted-foreground">{empty}</p>
   return (
@@ -937,8 +1123,14 @@ function VoucherJvTable({
               <td className="max-w-[28rem] px-3 py-2.5">{r.description || "—"}</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">{r.total}</td>
               <td className="whitespace-nowrap px-3 py-2.5">
-                <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                  {statusLabel}
+                <span
+                  className={
+                    r.status === "draft"
+                      ? "inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                      : "inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                  }
+                >
+                  {r.status === "draft" ? draftLabel : statusLabel}
                 </span>
               </td>
             </tr>

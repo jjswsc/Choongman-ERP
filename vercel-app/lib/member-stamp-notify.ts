@@ -1,21 +1,6 @@
-import { pushLineTextMessage } from '@/lib/line-messaging-server'
+import { pushLineMessagesToMember } from '@/lib/member-line-push-target'
 import { createMemberEvent } from '@/lib/members-server-core'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-
-async function resolveMemberLineUserId(memberId: number): Promise<string> {
-  const base = `provider=eq.line&member_id=eq.${memberId}`
-  const activeRows = (await supabaseSelectFilter('member_identities', `${base}&status=eq.active`, {
-    limit: 1,
-    select: 'provider_user_id',
-  })) as Array<{ provider_user_id?: string | null }>
-  const active = String(activeRows?.[0]?.provider_user_id || '').trim()
-  if (active) return active
-  const rows = (await supabaseSelectFilter('member_identities', base, {
-    limit: 1,
-    select: 'provider_user_id',
-  })) as Array<{ provider_user_id?: string | null }>
-  return String(rows?.[0]?.provider_user_id || '').trim()
-}
 
 async function wasStampLineNotifySent(orderId: number): Promise<boolean> {
   try {
@@ -56,14 +41,16 @@ export async function notifyMemberStampLineMessage(params: {
   if (orderId > 0 && (await wasStampLineNotifySent(orderId))) {
     return { ok: false, reason: 'already_sent' }
   }
-  const lineUserId = await resolveMemberLineUserId(memberId)
-  if (!lineUserId) {
+  const text = params.lines.filter(Boolean).join('\n').slice(0, 5000)
+  if (!text) return { ok: false, reason: 'empty_text' }
+  const result = await pushLineMessagesToMember({
+    memberId,
+    messages: [{ type: 'text', text }],
+  })
+  if (!result.ok && result.message === 'no_line_identity') {
     console.warn('member-stamp-notify: no_line_identity', { memberId, orderId: orderId || undefined })
     return { ok: false, reason: 'no_line_identity' }
   }
-  const text = params.lines.filter(Boolean).join('\n').slice(0, 5000)
-  if (!text) return { ok: false, reason: 'empty_text' }
-  const result = await pushLineTextMessage({ userId: lineUserId, text })
   if (!result.ok) {
     console.warn('member-stamp-notify:', result.message || 'push_failed', { memberId, orderId: orderId || undefined })
     if (orderId > 0) {

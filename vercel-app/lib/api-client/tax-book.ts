@@ -70,6 +70,7 @@ export type TaxBookPostAction =
   | 'purchase'
   | 'ensureFiling'
   | 'adjustment'
+  | 'manual'
   | 'closing'
   | 'unlock'
   | 'opening'
@@ -85,6 +86,9 @@ export async function postTaxBookEntry(body: {
   accountingDate?: string
   trialBalanceRows?: ExternalTrialBalanceRow[]
   lines?: { accountCode: string; accountName?: string; side: 'debit' | 'credit'; amount: number }[]
+  voucherKind?: string
+  entryNo?: string
+  postingStatus?: 'draft' | 'approved'
 }) {
   const res = await apiFetchWithOffline('/api/postTaxBookEntry', {
     method: 'POST',
