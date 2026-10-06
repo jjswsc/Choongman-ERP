@@ -41,6 +41,17 @@ describe('tax book rules', () => {
     expect(voucherKindForSourceType('tax_purchase_summary')).toBe('purchase')
     expect(voucherKindForSourceType('pos_order')).toBe('sales')
     expect(formatTaxVoucherNo('sales', '2026-09', 2)).toBe('SV2026090002')
+    expect(formatTaxVoucherNo('purchase', '2026-09', 1)).toBe('PV2026090001')
+    expect(formatTaxVoucherNo('receipt', '2026-09', 1)).toBe('RV2026090001')
+    expect(formatTaxVoucherNo('payment', '2026-09', 1)).toBe('PP2026090001')
+    expect(formatTaxVoucherNo('general', '2026-09', 1)).toBe('JV2026090001')
+    expect(voucherKindForSourceType('pos_channel_settlement')).toBe('receipt')
+    expect(voucherKindForSourceType('expense_accrual')).toBe('purchase')
+    expect(voucherKindForSourceType('depreciation')).toBe('general')
+    expect(voucherKindForSourceType('store_purchase')).toBe('purchase')
+    expect(voucherKindForSourceType('petty_cash')).toBe('purchase')
+    expect(voucherKindForSourceType('pos_deposit_receive')).toBe('receipt')
+    expect(voucherKindForSourceType('tax_adjustment')).toBe('general')
   })
 
   it('filters vouchers into the five Thai day books', async () => {

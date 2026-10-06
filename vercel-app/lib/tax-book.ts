@@ -36,35 +36,40 @@ export function isTaxBookSourceType(sourceType: string | null | undefined): bool
 }
 
 /**
- * 전표 종류 → 일별장부.
- * 일반: 기초·VAT요약·급여발생·조정·결산
- * 매입: 매입요약·원가·입고
- * 매출: 매출요약·POS
- * 지급: 시재·카드·은행·채널정산·보증금환불
- * 수취: 보증금수령 등 입금
+ * 전표 종류 → 일별장부 (회계 표준).
+ * JV 일반: 계정 조정(ปรับปรุงบัญชี) · 기초 · 결산
+ * PV 매입: 매입 · 비용(ค่าใช้จ่าย/ซื้อ)
+ * SV 매출: 상품·서비스 매출
+ * RV 수취: 매출 대금 수금(รับเข้า ขายสินค้าหรือบริการ)
+ * PP 지급: 그 외 출금
  */
 export function voucherKindForSourceType(sourceType: string | null | undefined): TaxVoucherKind {
   const s = String(sourceType || '').trim()
   if (s === 'tax_income_expense_closing' || s === 'closing_income_expense') return 'closing'
   if (s === 'tax_sales_summary') return 'sales'
-  if (s === 'tax_purchase_summary' || s === 'tax_inventory_cogs') return 'purchase'
+  if (
+    s === 'tax_purchase_summary' ||
+    s === 'tax_inventory_cogs' ||
+    s === 'store_purchase' ||
+    s === 'expense_accrual' ||
+    s === 'petty_cash'
+  ) {
+    return 'purchase'
+  }
   if (
     s === 'tax_payroll' ||
     s === 'tax_vat_summary' ||
     s === 'tax_adjustment' ||
     s === 'tax_manual' ||
     s === 'tax_opening' ||
-    s === 'depreciation' ||
-    s === 'expense_accrual'
+    s === 'depreciation'
   ) {
     return 'general'
   }
   if (s === 'pos_order' || s === 'pos_day_close' || s === 'pos_order_reversal') return 'sales'
-  if (s === 'store_purchase') return 'purchase'
-  if (s === 'pos_deposit_receive') return 'receipt'
+  if (s === 'pos_deposit_receive' || s === 'pos_channel_settlement') return 'receipt'
   if (s === 'pos_deposit_refund' || s === 'pos_deposit_forfeit') return 'payment'
-  if (s === 'petty_cash' || s === 'card_transaction') return 'payment'
-  if (s === 'bank_transaction' || s === 'pos_channel_settlement') return 'payment'
+  if (s === 'card_transaction' || s === 'bank_transaction') return 'payment'
   return 'general'
 }
 
@@ -84,11 +89,12 @@ export function voucherKindForDayBookFilter(filter: TaxDayBookFilter): TaxVouche
   return 'general'
 }
 
+/** 회계 표준 코드: JV 일반 / SV 매출 / PV 매입 / RV 수취 / PP 지급 */
 const VOUCHER_PREFIX: Record<TaxVoucherKind, string> = {
   sales: 'SV',
-  purchase: 'PU',
-  receipt: 'RC',
-  payment: 'PM',
+  purchase: 'PV',
+  receipt: 'RV',
+  payment: 'PP',
   general: 'JV',
   closing: 'CL',
 }

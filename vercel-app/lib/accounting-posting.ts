@@ -397,6 +397,7 @@ export async function postPettyCashJournal(params: {
       storeName: params.storeName || null,
       memo: params.memo || '패티캐시 보충 자동분개',
       postedBy: params.postedBy || null,
+      voucherKind: 'payment',
       lines: [
         { ...prepayment, side: 'debit', amount, memo: params.storeName ? `패티보충(${params.storeName})` : '패티캐시 보충' },
         { ...GL.cash(), side: 'credit', amount },
@@ -435,6 +436,7 @@ export async function postPettyCashJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '시재 지출 자동분개',
     postedBy: params.postedBy || null,
+    voucherKind: 'purchase',
     lines: [expenseLine, { ...prepayment, side: 'credit', amount }],
   })
 }
@@ -527,6 +529,7 @@ export async function postExpenseAccrualJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '지출 발생(미지급) 자동분개',
     postedBy: params.postedBy || null,
+    voucherKind: 'purchase',
     lines: [
       {
         ...accountLine(params.expenseAccountCode || '5520', {
@@ -756,6 +759,7 @@ export async function postPosChannelSettlementJournal(params: {
     storeName: params.storeCode || null,
     memo: params.memo || `POS 채널 정산 (${params.channel})`,
     postedBy: params.postedBy || null,
+    voucherKind: 'receipt',
     lines,
   })
 }
