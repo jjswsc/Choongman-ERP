@@ -59,26 +59,32 @@ describe('pushLineMessagesToMember', () => {
     supabaseSelectFilterMock.mockResolvedValue([older, newer])
   })
 
-  it('does not call the profile API when only one LINE id is active', async () => {
-    supabaseSelectFilterMock.mockResolvedValue([
-      newer,
-      { ...older, status: 'inactive' },
-    ])
-    pushLineMessagesMock.mockResolvedValue({
-      ok: false,
-      message: 'line_push_400:{"message":"Failed to send messages"}',
-    })
+  it('checks Get profile before sending even when only one LINE id is active', async () => {
+    supabaseSelectFilterMock.mockResolvedValue([newer])
 
     const result = await pushLineMessagesToMember({
       memberId: 7359,
       messages: [{ type: 'text', text: 'hi' }],
     })
 
-    expect(getLineUserProfileMock).not.toHaveBeenCalled()
-    expect(setLineIdentityStatusMock).not.toHaveBeenCalled()
+    expect(getLineUserProfileMock).toHaveBeenCalledTimes(1)
+    expect(getLineUserProfileMock).toHaveBeenCalledWith('U-new-f245')
     expect(pushLineMessagesMock).toHaveBeenCalledTimes(1)
-    expect(pushLineMessagesMock.mock.calls[0]?.[0]?.userId).toBe('U-new-f245')
-    expect(result.ok).toBe(false)
+    expect(result).toEqual({ ok: true, userId: 'U-new-f245' })
+  })
+
+  it('does not push when the only LINE id profile is not 200', async () => {
+    supabaseSelectFilterMock.mockResolvedValue([older])
+
+    const result = await pushLineMessagesToMember({
+      memberId: 7359,
+      messages: [{ type: 'text', text: 'hi' }],
+    })
+
+    expect(getLineUserProfileMock).toHaveBeenCalledWith('U-old-b3e8')
+    expect(pushLineMessagesMock).not.toHaveBeenCalled()
+    expect(setLineIdentityStatusMock).not.toHaveBeenCalled()
+    expect(result).toEqual({ ok: false, message: 'line_profile_not_reachable' })
   })
 
   it('sends to the newest id when its profile exists and leaves the other id active', async () => {
@@ -169,7 +175,7 @@ describe('pushLineMessagesToMember', () => {
     expect(result.ok).toBe(false)
   })
 
-  it('pushes the newest id when every profile probe fails with 500', async () => {
+  it('does not push when every profile probe is not 200', async () => {
     supabaseSelectFilterMock.mockResolvedValue([
       { ...newer, provider_user_id: 'U-new-fail500' },
       { ...older, provider_user_id: 'U-old-fail500' },
@@ -180,9 +186,9 @@ describe('pushLineMessagesToMember', () => {
       messages: [{ type: 'text', text: 'hi' }],
     })
 
+    expect(pushLineMessagesMock).not.toHaveBeenCalled()
     expect(setLineIdentityStatusMock).not.toHaveBeenCalled()
-    expect(pushLineMessagesMock.mock.calls[0]?.[0]?.userId).toBe('U-new-fail500')
-    expect(result.ok).toBe(true)
+    expect(result).toEqual({ ok: false, message: 'line_profile_not_reachable' })
   })
 })
 

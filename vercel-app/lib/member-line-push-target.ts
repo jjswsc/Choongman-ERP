@@ -68,53 +68,43 @@ async function probeLineProfile(userId: string): Promise<ProfileProbe> {
 }
 
 /**
- * active가 2개 이상일 때만 프로필로 수신 가능 ID를 고른다.
- * 404는 inactive. 5xx·네트워크는 끄지 않고 다음을 본다. 전부 불통이면 null.
- * 프로필이 둘 다 200이면 최신 last_seen(첫 200)만 고르고 나머지는 유지한다.
+ * 후보가 하나여도 Get profile이 200인 ID만 보낸다.
+ * 200이 아니면 그 ID로는 푸시하지 않는다.
+ * 404이고 다음 후보가 있으면 그 ID만 inactive. 마지막 ID는 친구 재추가 후 같은 ID로 복구되므로 끄지 않는다.
  */
-async function pickVerifiedActiveCandidate(
-  active: MemberLinePushCandidate[]
-): Promise<MemberLinePushCandidate | null> {
-  let fallback: MemberLinePushCandidate | null = null
-  for (const candidate of active) {
-    const probe = await probeLineProfile(candidate.userId)
-    if (probe === 'ok') return candidate
-    if (probe === 'missing') {
-      await setLineIdentityStatus(candidate.userId, 'inactive')
-      continue
-    }
-    if (!fallback) fallback = candidate
-  }
-  return fallback
-}
-
 async function pushPool(
   pool: MemberLinePushCandidate[],
   messages: LinePushMessage[]
 ): Promise<{ ok: boolean; message?: string; userId?: string }> {
   if (!pool.length) return { ok: false, message: 'no_line_identity' }
-  let start = 0
-  if (pool.length >= 2 && pool.every((row) => row.active)) {
-    const picked = await pickVerifiedActiveCandidate(pool)
-    if (!picked) return { ok: false, message: 'no_line_identity' }
-    start = Math.max(0, pool.findIndex((row) => row.userId === picked.userId))
-  }
+  let sawUnreachableProfile = false
 
-  for (let i = start; i < pool.length; i += 1) {
+  for (let i = 0; i < pool.length; i += 1) {
     const candidate = pool[i]
+    const hasAnother = i < pool.length - 1
+    const probe = await probeLineProfile(candidate.userId)
+    if (probe !== 'ok') {
+      sawUnreachableProfile = true
+      if (probe === 'missing' && hasAnother) {
+        await setLineIdentityStatus(candidate.userId, 'inactive')
+      }
+      continue
+    }
+
     const result = await pushLineMessages({ userId: candidate.userId, messages })
     if (result.ok) return { ok: true, userId: candidate.userId }
-    const hasAnother = i < pool.length - 1
     if (isLineUserUnreachablePush(result.message) && hasAnother) {
       await setLineIdentityStatus(candidate.userId, 'inactive')
       continue
     }
     return { ok: false, message: result.message || 'push_failed', userId: candidate.userId }
   }
+
+  if (sawUnreachableProfile) return { ok: false, message: 'line_profile_not_reachable' }
   return { ok: false, message: 'push_failed' }
 }
 
-/** 회원 LINE 카드·텍스트. ID가 하나면 프로필 조회 없이 보낸다. */
+/** 회원 LINE 카드·텍스트. 프로필 200인 User ID만 보낸다. */
 export async function pushLineMessagesToMember(params: {
   memberId: number
   messages: LinePushMessage[]

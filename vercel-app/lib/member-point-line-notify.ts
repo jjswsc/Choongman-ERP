@@ -260,6 +260,12 @@ async function deliverMemberPointLineNotify(params: {
     messages: [{ type: 'flex', altText: flex.altText, contents: flex.contents }],
   })
   if (flexResult.ok) return { ok: true, channel: 'flex' }
+  if (
+    flexResult.message === 'line_profile_not_reachable' ||
+    flexResult.message === 'no_line_identity'
+  ) {
+    return { ok: false, message: flexResult.message }
+  }
 
   const text = buildMemberPointLineNotifyText(cardParams)
   const textResult = await pushLineMessagesToMember({
