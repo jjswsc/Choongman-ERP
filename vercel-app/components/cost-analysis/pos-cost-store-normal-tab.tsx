@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { tOr, useT } from "@/lib/i18n"
 import { getPosStoreNormalCost } from "@/lib/api-client"
 import type { StoreNormalCostReport, StoreNormalCostRow } from "@/lib/pos-store-normal-cost"
 import { getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
@@ -22,7 +22,7 @@ import {
 } from "@/lib/financial-statement-store-options"
 import { useStoreList } from "@/lib/use-store-list"
 import { labelForStore } from "@/lib/store-list-keys"
-import { formatBahtInteger as formatBaht } from "@/lib/financial-amount-format"
+import { formatMoney2 } from "@/lib/financial-amount-format"
 import {
   combinedKindLabel,
   type SalesDiscountTr,
@@ -35,7 +35,49 @@ function pct(n: number | null | undefined): string {
 
 function money(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—"
-  return `฿${formatBaht(n)}`
+  return `฿${formatMoney2(n)}`
+}
+
+function signedPct(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—"
+  const sign = n > 0 ? "+" : ""
+  return `${sign}${n.toFixed(1)}%`
+}
+
+function discountAmount(row: StoreNormalCostRow): number {
+  if (Number.isFinite(row.totalDiscount)) return row.totalDiscount
+  const gross = Number(row.grossSales)
+  const net = Number(row.netSales)
+  if (Number.isFinite(gross) && Number.isFinite(net)) return Math.round((gross - net) * 100) / 100
+  return 0
+}
+
+function shareOfGross(part: number, gross: number, given?: number | null): number | null {
+  if (given != null && Number.isFinite(given)) return given
+  if (!(gross > 0.0001) || !Number.isFinite(part)) return null
+  return (part / gross) * 100
+}
+
+function actualCostPct(row: StoreNormalCostRow): number | null {
+  if (row.plCostPct != null && Number.isFinite(row.plCostPct)) return row.plCostPct
+  if (
+    row.accountingSales != null &&
+    row.accountingCogs != null &&
+    Number.isFinite(row.accountingSales) &&
+    Number.isFinite(row.accountingCogs) &&
+    row.accountingSales > 0.0001
+  ) {
+    return (row.accountingCogs / row.accountingSales) * 100
+  }
+  return null
+}
+
+function gapPct(row: StoreNormalCostRow): number | null {
+  const actual = actualCostPct(row)
+  const theory = row.normalCostPctOfNet
+  if (row.vsPlPct != null && Number.isFinite(row.vsPlPct) && actual != null) return row.vsPlPct
+  if (actual == null || theory == null || !Number.isFinite(theory)) return null
+  return Math.round((actual - theory) * 100) / 100
 }
 
 const USAGE_WARN_KEY: Record<string, string> = {
@@ -137,7 +179,7 @@ export function PosCostStoreNormalTab() {
         plSales += row.accountingSales
         plCogs += row.accountingCogs
       }
-      if (row.vsPlPct != null && row.vsPlPct > 0.5) higherPl += 1
+      if ((gapPct(row) ?? 0) > 0.5) higherPl += 1
     }
     return {
       normalPct: net > 0.0001 ? (bom / net) * 100 : null,
@@ -162,25 +204,26 @@ export function PosCostStoreNormalTab() {
           <h3 className="text-sm font-semibold">{t("posCostTabStoreNormal")}</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t("posCostStoreNormalHint")}</p>
         </div>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="space-y-1.5">
+        <div className="flex flex-nowrap items-end gap-3 overflow-x-auto">
+          <div className="space-y-1.5 shrink-0">
             <Label className="text-xs">{t("posCostActualPeriodStart")}</Label>
             <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="h-9 w-[150px]" />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 shrink-0">
             <Label className="text-xs">{t("posCostActualPeriodEnd")}</Label>
             <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="h-9 w-[150px]" />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t("salesStore") || "매장"}</Label>
+          <div className="space-y-1.5 shrink-0">
+            <Label className="text-xs">{tOr(t, "posCostStoreNormalColStore", "매장")}</Label>
             <FinancialStatementStorePicker
               value={storeFilter}
               onChange={setStoreFilter}
               franchiseStoreOptions={franchiseStoreOptions}
-              allLabel={t("all") || "전체"}
+              allLabel={tOr(t, "all", "전체")}
+              className="w-[200px]"
             />
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
@@ -241,27 +284,33 @@ export function PosCostStoreNormalTab() {
           </div>
 
           <div className="max-h-[70vh] overflow-auto rounded-xl border bg-card">
-            <table className="w-full min-w-[960px] text-xs">
+            <table className="w-full min-w-[1100px] text-xs">
               <thead className="sticky top-0 z-10 bg-muted [&_th]:bg-muted">
                 <tr className="border-b text-left">
                   <th className="px-2 py-2 w-8" />
                   <th className="px-2 py-2">{t("posCostStoreNormalColStore")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColGross")}</th>
-                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColDiscount")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColNet")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColNetPct")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColDiscount")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColDiscountPct")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColTheoryPct")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColBom")}</th>
-                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColPctNet")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColCogs")}</th>
-                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColPlPct")}</th>
+                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColActualPct")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColVsPct")}</th>
-                  <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColVsAmt")}</th>
                 </tr>
               </thead>
               <tbody>
                 {result.rows.map((row) => {
                   const open = expanded === row.storeCode
                   const storeName = labelForStore(storeLabels, row.storeCode)
-                  const plHot = row.vsPlPct != null && row.vsPlPct > 0.5
+                  const discount = discountAmount(row)
+                  const netPct = shareOfGross(row.netSales, row.grossSales, row.netSharePct)
+                  const discPct = shareOfGross(discount, row.grossSales, row.discountSharePct)
+                  const actual = actualCostPct(row)
+                  const gap = gapPct(row)
+                  const plHot = gap != null && gap > 0.5
                   return (
                     <React.Fragment key={row.storeCode}>
                       <tr
@@ -289,34 +338,27 @@ export function PosCostStoreNormalTab() {
                           ) : null}
                         </td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.grossSales)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.totalDiscount)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.netSales)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.bomCost)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(netPct)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(discount)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(discPct)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(row.normalCostPctOfNet)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.bomCost)}</td>
                         <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{money(row.accountingCogs)}</td>
-                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(row.plCostPct)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{pct(actual)}</td>
                         <td
                           className={cn(
                             "px-2 py-2 text-right tabular-nums whitespace-nowrap",
                             plHot && "text-amber-800 dark:text-amber-200",
-                            row.vsPlPct != null && row.vsPlPct < -0.5 && "text-emerald-700 dark:text-emerald-300"
+                            gap != null && gap < -0.5 && "text-emerald-700 dark:text-emerald-300"
                           )}
                         >
-                          {row.vsPlPct == null ? "—" : `${row.vsPlPct > 0 ? "+" : ""}${row.vsPlPct.toFixed(1)}%p`}
-                        </td>
-                        <td
-                          className={cn(
-                            "px-2 py-2 text-right tabular-nums whitespace-nowrap",
-                            row.vsPlAmt != null && row.vsPlAmt > 0.5 && "text-amber-800 dark:text-amber-200",
-                            row.vsPlAmt != null && row.vsPlAmt < -0.5 && "text-emerald-700 dark:text-emerald-300"
-                          )}
-                        >
-                          {money(row.vsPlAmt)}
+                          {signedPct(gap)}
                         </td>
                       </tr>
                       {open ? (
                         <tr className="border-b bg-muted/20">
-                          <td colSpan={11} className="px-4 py-3 space-y-2">
+                          <td colSpan={12} className="px-4 py-3 space-y-2">
                             {row.holdReasons.length > 0 ? (
                               <ul className="list-disc pl-4 text-amber-800 dark:text-amber-200">
                                 {row.holdReasons.map((reason) => (

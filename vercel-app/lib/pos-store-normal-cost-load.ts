@@ -1,4 +1,6 @@
 import { computeIncomeStatementReport } from '@/lib/accounting-reports'
+import type { IncomeStatementData } from '@/lib/api-client/income-statement'
+import { buildIncomeStatementViewNumbers } from '@/lib/income-statement-display'
 import {
   parseCommaSeparatedStoreFilter,
   resolveAccountingStoreFilterFromAuth,
@@ -91,8 +93,12 @@ async function loadAccountingPl(params: {
       tenantId: params.auth.tenantId,
       includeDebug: false,
     })
-    sales += Number(report.sales) || 0
-    cogs += Number(report.cogs) || 0
+    const view = buildIncomeStatementViewNumbers({
+      data: report as unknown as IncomeStatementData,
+      vatMode: 'excluded',
+    })
+    sales += Number(view.sales) || 0
+    cogs += Number(view.cogs) || 0
   }
   return { sales: round2(sales), cogs: round2(cogs) }
 }
@@ -214,6 +220,7 @@ export async function computePosStoreNormalCost(params: {
         kind: k.kind,
         discountAmount: k.discountAmount,
       })),
+      combinedDiscount: slice.totalDiscount,
       accountingSales,
       accountingCogs,
       usageWarnings,

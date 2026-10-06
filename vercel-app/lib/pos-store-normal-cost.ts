@@ -45,19 +45,24 @@ export type StoreNormalCostRow = {
   orderCount: number
   grossSales: number
   netSales: number
-  /** 통합 할인(부가세 제외) */
+  /** 통합 할인(부가세 제외). 정가 − 실수령 */
   totalDiscount: number
+  /** 실수령 ÷ 정가 */
+  netSharePct: number
+  /** 통합 할인 ÷ 정가. 실수령%와 더하면 정가 100% */
+  discountSharePct: number
   hqDiscount: number
   storeDiscount: number
   unclassifiedDiscount: number
   bomCost: number
   normalCostPctOfGross: number
+  /** 이론 원가율 = 정상 원가 ÷ 실수령 */
   normalCostPctOfNet: number
   accountingSales: number | null
   accountingCogs: number | null
-  /** 손익 원가율 = 매출원가 ÷ 손익 매출 */
+  /** 실제 원가율 = 손익 매출원가 ÷ 손익 매출(부가세 제외) */
   plCostPct: number | null
-  /** 손익 원가율 − 정상 원가율(실수령) */
+  /** 실제 원가율 − 이론 원가율 */
   vsPlPct: number | null
   /** 손익 매출원가 − 정상 원가(BOM) */
   vsPlAmt: number | null
@@ -208,6 +213,8 @@ export function buildStoreNormalCostRow(params: {
   matchedLineQty: number
   unmatchedLineQty: number
   discountKinds: StoreNormalCostKindAmount[]
+  /** 정가에 이미 반영된 통합 할인. 없으면 종류별 합계 */
+  combinedDiscount?: number | null
   accountingSales: number | null
   accountingCogs: number | null
   usageWarnings?: string[]
@@ -215,6 +222,11 @@ export function buildStoreNormalCostRow(params: {
   const discounts = splitStoreNormalCostDiscounts(params.discountKinds)
   const grossSales = round2(params.grossSales)
   const netSales = round2(params.netSales)
+  const fromKinds = round2(discounts.hqDiscount + discounts.storeDiscount + discounts.unclassifiedDiscount)
+  const totalDiscount =
+    params.combinedDiscount != null && Number.isFinite(params.combinedDiscount)
+      ? round2(params.combinedDiscount)
+      : fromKinds
   const bomCost = round2(params.bomCost)
   const accountingSales =
     params.accountingSales == null || !Number.isFinite(params.accountingSales)
@@ -244,7 +256,9 @@ export function buildStoreNormalCostRow(params: {
     orderCount: params.orderCount,
     grossSales,
     netSales,
-    totalDiscount: round2(discounts.hqDiscount + discounts.storeDiscount + discounts.unclassifiedDiscount),
+    totalDiscount,
+    netSharePct: pctOf(netSales, grossSales),
+    discountSharePct: pctOf(totalDiscount, grossSales),
     hqDiscount: discounts.hqDiscount,
     storeDiscount: discounts.storeDiscount,
     unclassifiedDiscount: discounts.unclassifiedDiscount,

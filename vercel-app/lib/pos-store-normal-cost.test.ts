@@ -34,6 +34,9 @@ describe('buildStoreNormalCostRow', () => {
       ],
     })
     expect(row.totalDiscount).toBe(200)
+    expect(row.netSharePct).toBe(80)
+    expect(row.discountSharePct).toBe(20)
+    expect(row.netSharePct + row.discountSharePct).toBe(100)
     expect(row.normalCostPctOfNet).toBe(37.5)
     expect(row.plCostPct).toBe(47.5)
     expect(row.vsPlPct).toBe(10)
@@ -51,5 +54,15 @@ describe('buildStoreNormalCostRow', () => {
     expect(row.holdReasons).toContain('bom_unmatched')
     expect(row.plCostPct).toBe(47.5)
     expect(row.vsPlAmt).toBe(80)
+  })
+
+  it('uses the combined discount already inside list price when kind lines differ', () => {
+    const row = buildStoreNormalCostRow({
+      ...base,
+      combinedDiscount: 180,
+      discountKinds: [{ layer: 'payment', kind: 'manual', discountAmount: 107 }],
+    })
+    expect(row.totalDiscount).toBe(180)
+    expect(row.discountSharePct).toBe(18)
   })
 })
