@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   displayTaxBookAccountName,
+  formatTaxBookLedgerDate,
+  formatTaxBookLedgerPeriod,
   formatTaxBookMemoDisplay,
   formatTaxFilingYearMonthLabel,
+  localizeOperationalJournalMemo,
   resolveTaxBookMemoDisplay,
 } from './tax-book-display'
 import { taxBookMemoWithStatus, taxBookStatusFromMemo } from './tax-book-voucher-memo'
+import { taxBookCompanyNameFromScope } from './tax-entity-scope-label'
 
 describe('tax book display i18n', () => {
   it('formats year-month labels by language', () => {
@@ -19,6 +23,19 @@ describe('tax book display i18n', () => {
     expect(displayTaxBookAccountName('en', '1360', '매입세액')).toBe('Input VAT')
     expect(displayTaxBookAccountName('th', '1360', '매입세액')).toBe('ภาษีซื้อ')
     expect(displayTaxBookAccountName('th', '9999', '기타')).toBe('기타')
+    expect(displayTaxBookAccountName('th', '9999', '현금및예금')).toBe('เงินสดและเงินฝากธนาคาร')
+  })
+
+  it('formats ledger dates in Buddhist short form for Thai', () => {
+    expect(formatTaxBookLedgerDate('2026-01-03', 'th')).toBe('03/01/69')
+    expect(formatTaxBookLedgerPeriod('2026-01-01', '2026-12-31', 'th')).toBe('1 ม.ค. 2569 ถึง 31 ธ.ค. 2569')
+    expect(formatTaxBookLedgerDate('2026-01-03', 'ko')).toBe('2026.01.03')
+  })
+
+  it('translates system journal memos and leaves free text', () => {
+    expect(localizeOperationalJournalMemo('POS 매출 자동분개', 'th')).toBe('ขาย POS')
+    expect(localizeOperationalJournalMemo('패티보충(สาขาเอกมัย)', 'th')).toBe('เติมเงินสดย่อย (สาขาเอกมัย)')
+    expect(localizeOperationalJournalMemo('ค่าเช่าสำนักงาน', 'th')).toBeNull()
   })
 
   it('resolves stored English memos to i18n keys', () => {
@@ -45,6 +62,17 @@ describe('tax book display i18n', () => {
     expect(
       formatTaxBookMemoDisplay(t, '[Draft] Rent for October', { sourceType: 'tax_manual' })
     ).toBe('Rent for October')
+  })
+
+  it('uses the legal entity name on the report header', () => {
+    expect(
+      taxBookCompanyNameFromScope('entity:0105566228126', [
+        { value: 'entity:0105566228126', entityName: 'บริษัท จินวอน เอฟแอนด์บี จำกัด (สำนักงานใหญ่)', stores: ['Jinwon True'] },
+      ])
+    ).toBe('บริษัท จินวอน เอฟแอนด์บี จำกัด')
+    expect(taxBookCompanyNameFromScope('Jinwon True', [
+      { value: 'entity:0105566228126', entityName: 'Jinwon F&B', stores: ['Jinwon True'] },
+    ])).toBe('Jinwon F&B')
   })
 
   it('marks draft status from memo prefix', () => {

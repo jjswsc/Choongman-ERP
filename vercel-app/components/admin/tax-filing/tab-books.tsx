@@ -18,9 +18,13 @@ import {
   triggerErpExcelHtmlDownload,
 } from "@/lib/erp-excel-export"
 import {
+  buildTaxBookLedgerSections,
   buildTaxBookStatements,
+  filterTaxBookLedgerLines,
   resolveTaxBookMonthRange,
+  voucherKindForSourceType,
   TAX_DAY_BOOK_FILTERS,
+  type TaxBookLedgerScope,
   voucherKindForDayBookFilter,
   voucherMatchesDayBook,
   type TaxDayBookFilter,
@@ -33,6 +37,7 @@ import type { TaxBridgeLineKey } from "@/lib/tax-management-bridge"
 import {
   buildFlowBalanceSheetHtml,
   buildFlowIncomeStatementHtml,
+  buildFlowLedgerHtml,
   buildFlowTrialBalanceHtml,
   printFlowReportHtml,
   taxBookFlowReportScreenCss,
@@ -41,9 +46,12 @@ import {
 } from "@/lib/tax-book-flow-report"
 import {
   displayTaxBookAccountName,
+  formatTaxBookLedgerPeriod,
   formatTaxBookMemoDisplay,
   formatTaxFilingYearMonthLabel,
 } from "@/lib/tax-book-display"
+import { taxBookCompanyNameFromScope } from "@/lib/tax-entity-scope-label"
+import type { TaxEntityScopeOption } from "@/components/admin/tax-filing/tax-entity-store-scope-filters"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
@@ -64,10 +72,33 @@ type AdjLine = { accountCode: string; side: "debit" | "credit"; amount: string }
 
 type BooksQuery = { from: string; to: string; scope: string; tick: number }
 
+function isoDayBefore(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return ""
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  dt.setUTCDate(dt.getUTCDate() - 1)
+  const y = dt.getUTCFullYear()
+  const mo = String(dt.getUTCMonth() + 1).padStart(2, "0")
+  const d = String(dt.getUTCDate()).padStart(2, "0")
+  return `${y}-${mo}-${d}`
+}
+
+function ledgerScopeForMonths(fromMonth: string, toMonth: string): TaxBookLedgerScope {
+  const range = resolveTaxBookMonthRange(fromMonth, toMonth)
+  return {
+    dateFrom: range.ok ? range.startDate : "",
+    dateTo: range.ok ? range.endDate : "",
+    accountFrom: "",
+    accountTo: "",
+    allBusiness: true,
+  }
+}
+
 export function TaxFilingBooksTab(props: {
   fromMonth: string
   toMonth: string
   filingStoreFilter: string
+  entityOptions?: TaxEntityScopeOption[]
   searchTick: number
   /** 신고 탭 등에서 전표 목록으로 바로 열 때 */
   focusView?: BooksView | null
@@ -92,7 +123,13 @@ export function TaxFilingBooksTab(props: {
   const [inventoryPreview, setInventoryPreview] = React.useState<number | null>(null)
   const [inventoryConfirmed, setInventoryConfirmed] = React.useState(false)
   const [cogsPreview, setCogsPreview] = React.useState<number | null>(null)
-  const [ledgerAccount, setLedgerAccount] = React.useState<string | null>(null)
+  const [ledgerDraft, setLedgerDraft] = React.useState<TaxBookLedgerScope>(() =>
+    ledgerScopeForMonths(props.fromMonth, props.toMonth)
+  )
+  const [ledgerApplied, setLedgerApplied] = React.useState<TaxBookLedgerScope>(() =>
+    ledgerScopeForMonths(props.fromMonth, props.toMonth)
+  )
+  const ledgerTouchedRef = React.useRef(false)
   const [dayBook, setDayBook] = React.useState<TaxDayBookFilter>("all")
   const [dayMemo, setDayMemo] = React.useState("")
   const [dayDocNo, setDayDocNo] = React.useState("")
@@ -123,7 +160,6 @@ export function TaxFilingBooksTab(props: {
     if (!props.focusViewTick || !props.focusView) return
     if (!VIEWS.includes(props.focusView)) return
     setView(props.focusView)
-    if (props.focusView !== "ledger") setLedgerAccount(null)
   }, [props.focusViewTick, props.focusView])
 
   // 검색 버튼을 눌렀을 때만 조건 확정 (월·매장만 바꾸면 자동 재조회하지 않음)
@@ -147,10 +183,25 @@ export function TaxFilingBooksTab(props: {
     })
   }, [props.searchTick])
 
+  React.useEffect(() => {
+    if (query) return
+    if (ledgerTouchedRef.current) return
+    const next = ledgerScopeForMonths(props.fromMonth, props.toMonth)
+    setLedgerDraft(next)
+    setLedgerApplied(next)
+  }, [props.fromMonth, props.toMonth, query])
+
+  React.useEffect(() => {
+    if (!query) return
+    ledgerTouchedRef.current = false
+    const next = ledgerScopeForMonths(query.from, query.to)
+    setLedgerDraft(next)
+    setLedgerApplied(next)
+  }, [query])
+
   const load = React.useCallback(
-    async (q: BooksQuery, opts?: { ledgerAccount?: string | null; ensureFiling?: boolean }) => {
+    async (q: BooksQuery, opts?: { ensureFiling?: boolean }) => {
       const single = q.from === q.to
-      const acct = opts?.ledgerAccount !== undefined ? opts.ledgerAccount : ledgerAccount
       const doEnsure =
         opts?.ensureFiling === true ||
         (single && q.tick > 0 && q.tick !== lastEnsureTickRef.current)
@@ -199,7 +250,6 @@ export function TaxFilingBooksTab(props: {
           toMonth: q.to,
           scopeFilter: q.scope,
           view: entryView,
-          accountCode: view === "ledger" && acct ? acct : undefined,
         })
         if (seq !== loadSeqRef.current) return
         if (book.error && !book.trial?.length && !book.vouchers?.length && !book.ledger?.length) {
@@ -213,13 +263,39 @@ export function TaxFilingBooksTab(props: {
         if (seq === loadSeqRef.current) setLoading(false)
       }
     },
-    [view, ledgerAccount]
+    [view]
   )
 
   React.useEffect(() => {
     if (!query) return
     void load(query)
   }, [query, load])
+
+  const ledgerRows = React.useMemo(
+    () => filterTaxBookLedgerLines(entries?.ledger || [], ledgerApplied),
+    [entries?.ledger, ledgerApplied]
+  )
+  const ledgerSourceCount = entries?.ledger?.length || 0
+  const ledgerDebit = React.useMemo(
+    () => ledgerRows.reduce((sum, ln) => sum + (Number(ln.debit) || 0), 0),
+    [ledgerRows]
+  )
+  const ledgerCredit = React.useMemo(
+    () => ledgerRows.reduce((sum, ln) => sum + (Number(ln.credit) || 0), 0),
+    [ledgerRows]
+  )
+  const ledgerBeforeNet = React.useMemo(() => {
+    const start = ledgerApplied.dateFrom.trim()
+    if (!start) return null
+    const prior = filterTaxBookLedgerLines(entries?.ledger || [], {
+      ...ledgerApplied,
+      dateFrom: "",
+      dateTo: isoDayBefore(start),
+    })
+    const debit = prior.reduce((sum, ln) => sum + (Number(ln.debit) || 0), 0)
+    const credit = prior.reduce((sum, ln) => sum + (Number(ln.credit) || 0), 0)
+    return debit - credit
+  }, [entries?.ledger, ledgerApplied])
 
   const localizedTrial = React.useMemo(
     () =>
@@ -417,9 +493,33 @@ export function TaxFilingBooksTab(props: {
   }
 
   const drillToLedger = (accountCode: string) => {
-    // view·ledgerAccount 변경 → load identity 변경 → effect 1회만 조회 (이중 fetch 방지)
-    setLedgerAccount(accountCode)
+    const code = accountCode.trim()
+    ledgerTouchedRef.current = true
+    setLedgerDraft((prev) => ({ ...prev, accountFrom: code, accountTo: code, allBusiness: false }))
+    setLedgerApplied((prev) => ({ ...prev, accountFrom: code, accountTo: code, allBusiness: false }))
     setView("ledger")
+  }
+
+  const applyLedgerScope = (next: TaxBookLedgerScope) => {
+    let dateFrom = next.dateFrom.trim()
+    let dateTo = next.dateTo.trim()
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      const swap = dateFrom
+      dateFrom = dateTo
+      dateTo = swap
+    }
+    const accountFrom = next.accountFrom.trim()
+    const accountTo = next.accountTo.trim()
+    const applied: TaxBookLedgerScope = {
+      dateFrom,
+      dateTo,
+      accountFrom,
+      accountTo,
+      allBusiness: next.allBusiness || (!accountFrom && !accountTo),
+    }
+    ledgerTouchedRef.current = true
+    setLedgerDraft(applied)
+    setLedgerApplied(applied)
   }
 
   const onTrialFile = async (file: File | null) => {
@@ -453,10 +553,8 @@ export function TaxFilingBooksTab(props: {
   const scopeLabel = query?.scope || props.filingStoreFilter || "All"
   const reportMeta: TaxBookFlowReportMeta = React.useMemo(() => {
     const company =
-      bridge?.taxEntityCode ||
-      (scopeLabel.startsWith("entity:") || scopeLabel.startsWith("taxid:") || scopeLabel.startsWith("store:")
-        ? scopeLabel
-        : scopeLabel)
+      taxBookCompanyNameFromScope(scopeLabel, props.entityOptions || [], bridge?.taxEntityCode || "") ||
+      scopeLabel
     const from = query?.from || props.fromMonth
     const to = query?.to || props.toMonth
     const fromLabel = formatTaxFilingYearMonthLabel(from, lang)
@@ -478,7 +576,55 @@ export function TaxFilingBooksTab(props: {
               : `Period ${from} ~ ${to}`,
       periodLabel: from === to ? fromLabel : `${fromLabel} ~ ${toLabel}`,
     }
-  }, [bridge?.taxEntityCode, scopeLabel, query?.from, query?.to, props.fromMonth, props.toMonth, lang])
+  }, [bridge?.taxEntityCode, scopeLabel, props.entityOptions, query?.from, query?.to, props.fromMonth, props.toMonth, lang])
+
+  const ledgerSections = React.useMemo(() => {
+    const localized = (entries?.ledger || []).map((ln) => ({
+      ...ln,
+      accountName: displayTaxBookAccountName(lang, ln.accountCode, ln.accountName),
+      memo: formatTaxBookMemoDisplay(t, ln.memo, {
+        sourceType: ln.sourceType,
+        accountingDate: ln.accountingDate,
+        lang,
+      }),
+    }))
+    return buildTaxBookLedgerSections(localized, ledgerApplied)
+  }, [entries?.ledger, ledgerApplied, lang, t])
+
+  const ledgerReportInput = React.useMemo(() => {
+    const accountLabel = ledgerApplied.allBusiness
+      ? t("taxBooksLedgerAllBusiness")
+      : [ledgerApplied.accountFrom, ledgerApplied.accountTo].filter(Boolean).join(" – ")
+    return {
+      meta: {
+        ...reportMeta,
+        asOfLabel: formatTaxBookLedgerPeriod(ledgerApplied.dateFrom, ledgerApplied.dateTo, lang),
+        periodLabel: accountLabel,
+      },
+      labels: {
+        title: t("taxBooksLedgerReportTitle"),
+        date: t("taxBooksColDate"),
+        book: t("taxBooksColKind"),
+        voucher: t("taxBooksLedgerVoucher"),
+        description: t("taxBooksColDescription"),
+        debit: t("taxBooksDebit"),
+        credit: t("taxBooksCredit"),
+        balance: t("taxBooksLedgerBalance"),
+        total: t("taxBooksLedgerTotal"),
+        bookLabel: (sourceType: string | null | undefined) =>
+          t(`taxBooksDayBook_${voucherKindForSourceType(sourceType)}`) || "",
+      },
+    }
+  }, [reportMeta, ledgerApplied, lang, t])
+
+  const ledgerReportHtml = React.useMemo(
+    () => buildFlowLedgerHtml(ledgerReportInput.meta, ledgerSections, ledgerReportInput.labels),
+    [ledgerReportInput, ledgerSections]
+  )
+  const ledgerExcelHtml = React.useMemo(
+    () => buildFlowLedgerHtml(ledgerReportInput.meta, ledgerSections, ledgerReportInput.labels, { numeric: true }),
+    [ledgerReportInput, ledgerSections]
+  )
 
   const stepLabel = (id: TaxCloseChecklistStepId): string => t(`taxBooksCheck_${id}`)
 
@@ -526,10 +672,7 @@ export function TaxFilingBooksTab(props: {
             type="button"
             size="sm"
             variant={view === key ? "default" : "outline"}
-            onClick={() => {
-              if (key !== "ledger") setLedgerAccount(null)
-              setView(key)
-            }}
+            onClick={() => setView(key)}
           >
             {t(`taxBooksView_${key}`)}
           </Button>
@@ -738,6 +881,7 @@ export function TaxFilingBooksTab(props: {
               description: formatTaxBookMemoDisplay(t, v.memo, {
                 sourceType: v.sourceType,
                 accountingDate: v.accountingDate,
+                lang,
               }),
               total: money(Math.max(Number(v.debit) || 0, Number(v.credit) || 0)),
               status: v.postingStatus === "draft" ? "draft" : "approved",
@@ -748,45 +892,141 @@ export function TaxFilingBooksTab(props: {
 
       {view === "ledger" ? (
         <div className="space-y-2">
-          {ledgerAccount ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm">
-                {t("taxBooksLedgerFilter")} <span className="font-medium">{ledgerAccount}</span>
-              </p>
+          <div className="space-y-2 rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">{t("taxBooksLedgerRangeHint")}</p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">{t("taxBooksLedgerDateFrom")}</div>
+                <Input
+                  type="date"
+                  className="h-9 w-[150px]"
+                  value={ledgerDraft.dateFrom}
+                  onChange={(e) => {
+                    ledgerTouchedRef.current = true
+                    setLedgerDraft((prev) => ({ ...prev, dateFrom: e.target.value }))
+                  }}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">{t("taxBooksLedgerDateTo")}</div>
+                <Input
+                  type="date"
+                  className="h-9 w-[150px]"
+                  value={ledgerDraft.dateTo}
+                  onChange={(e) => {
+                    ledgerTouchedRef.current = true
+                    setLedgerDraft((prev) => ({ ...prev, dateTo: e.target.value }))
+                  }}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">{t("taxBooksLedgerAccountFrom")}</div>
+                <Input
+                  className="h-9 w-[150px]"
+                  inputMode="numeric"
+                  value={ledgerDraft.accountFrom}
+                  placeholder="4110"
+                  onChange={(e) => {
+                    ledgerTouchedRef.current = true
+                    const accountFrom = e.target.value
+                    setLedgerDraft((prev) => ({
+                      ...prev,
+                      accountFrom,
+                      allBusiness: accountFrom.trim() === "" && prev.accountTo.trim() === "",
+                    }))
+                  }}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">{t("taxBooksLedgerAccountTo")}</div>
+                <Input
+                  className="h-9 w-[150px]"
+                  inputMode="numeric"
+                  value={ledgerDraft.accountTo}
+                  placeholder="4110"
+                  onChange={(e) => {
+                    ledgerTouchedRef.current = true
+                    const accountTo = e.target.value
+                    setLedgerDraft((prev) => ({
+                      ...prev,
+                      accountTo,
+                      allBusiness: prev.accountFrom.trim() === "" && accountTo.trim() === "",
+                    }))
+                  }}
+                />
+              </div>
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
-                onClick={() => setLedgerAccount(null)}
+                variant={ledgerDraft.allBusiness ? "default" : "outline"}
+                onClick={() =>
+                  applyLedgerScope({
+                    ...ledgerDraft,
+                    accountFrom: "",
+                    accountTo: "",
+                    allBusiness: true,
+                  })
+                }
               >
-                {t("taxBooksLedgerClear")}
+                {t("taxBooksLedgerAllBusiness")}
+              </Button>
+              <Button type="button" size="sm" onClick={() => applyLedgerScope(ledgerDraft)}>
+                {t("search")}
               </Button>
             </div>
-          ) : null}
-          <EntryTable
-            empty={t("taxBooksNoRows")}
-            rows={(entries?.ledger || []).map((ln) => [
-              ln.accountCode,
-              displayTaxBookAccountName(lang, ln.accountCode, ln.accountName),
-              ln.accountingDate,
-              ln.voucherNo,
-              formatTaxBookMemoDisplay(t, ln.memo, {
-                sourceType: ln.sourceType,
-                accountingDate: ln.accountingDate,
-              }),
-              money(ln.debit),
-              money(ln.credit),
-            ])}
-            headers={[
-              t("taxBooksAccount"),
-              t("taxBooksColItem"),
-              t("taxBooksColDate"),
-              t("taxBooksColDoc"),
-              t("taxBooksMemo"),
-              t("taxBooksDebit"),
-              t("taxBooksCredit"),
-            ]}
-          />
+            {query ? (
+              <p className="text-xs text-muted-foreground">
+                {ledgerApplied.dateFrom || "—"} – {ledgerApplied.dateTo || "—"}
+                {" · "}
+                {ledgerApplied.allBusiness
+                  ? t("taxBooksLedgerAllBusiness")
+                  : `${ledgerApplied.accountFrom || "—"}${
+                      ledgerApplied.accountTo && ledgerApplied.accountTo !== ledgerApplied.accountFrom
+                        ? `–${ledgerApplied.accountTo}`
+                        : ""
+                    }`}
+                {" · "}
+                {ledgerBeforeNet != null && !ledgerApplied.allBusiness ? (
+                  <>
+                    {t("taxBooksLedgerBeforeRange")}{" "}
+                    {ledgerBeforeNet >= 0
+                      ? `${t("taxBooksDebit")} ${money(ledgerBeforeNet)}`
+                      : `${t("taxBooksCredit")} ${money(-ledgerBeforeNet)}`}
+                    {" · "}
+                  </>
+                ) : null}
+                {t("taxBooksDebit")} {money(ledgerDebit)} / {t("taxBooksCredit")} {money(ledgerCredit)}
+              </p>
+            ) : null}
+          </div>
+          {query && ledgerSourceCount > 0 && ledgerSections.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("taxBooksLedgerNoMatch")}</p>
+          ) : query && ledgerSections.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2 no-print">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    triggerErpExcelHtmlDownload(
+                      wrapFlowReportForExcel(ledgerExcelHtml),
+                      `tax-ledger_${ledgerApplied.dateFrom || "from"}_${ledgerApplied.dateTo || "to"}.xls`
+                    )
+                  }
+                >
+                  {t("taxBooksExportExcel")}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => printFlowReportHtml(ledgerReportHtml)}>
+                  {t("taxBooksPrint")}
+                </Button>
+              </div>
+              <style dangerouslySetInnerHTML={{ __html: taxBookFlowReportScreenCss() }} />
+              <div dangerouslySetInnerHTML={{ __html: ledgerReportHtml }} />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("taxBooksNoRows")}</p>
+          )}
         </div>
       ) : null}
 

@@ -4,6 +4,8 @@ import {
   TAX_CLOSE_LOCKS_STORE_PERIOD,
   formatTaxVoucherNo,
   recognizeTaxBook,
+  buildTaxBookLedgerSections,
+  filterTaxBookLedgerLines,
   resolveTaxBookAsOfRange,
   resolveTaxBookMonthRange,
   taxEntityKeyFromScope,
@@ -302,6 +304,100 @@ describe('tax book Flow-style voucher memos', () => {
     expect(taxBookMemoOpening('2026-07-01')).toContain('2026-07-01')
     expect(taxBookSourceKindKey('tax_vat_summary')).toBe('vat')
     expect(taxBookSourceKindKey('tax_opening')).toBe('opening')
+  })
+})
+
+describe('general ledger scope', () => {
+  const lines = [
+    { accountCode: '1130', accountingDate: '2026-09-30' },
+    { accountCode: '4110', accountingDate: '2026-10-02' },
+    { accountCode: '4120', accountingDate: '2026-10-15' },
+    { accountCode: '5110', accountingDate: '2026-10-20' },
+    { accountCode: '5310', accountingDate: '2026-11-01' },
+  ]
+
+  it('keeps the date range and every account when the whole business is selected', () => {
+    const rows = filterTaxBookLedgerLines(lines, {
+      dateFrom: '2026-10-01',
+      dateTo: '2026-10-31',
+      accountFrom: '',
+      accountTo: '',
+      allBusiness: true,
+    })
+    expect(rows.map((r) => r.accountCode)).toEqual(['4110', '4120', '5110'])
+  })
+
+  it('matches one account or a numeric account range', () => {
+    const one = filterTaxBookLedgerLines(lines, {
+      dateFrom: '2026-10-01',
+      dateTo: '2026-10-31',
+      accountFrom: '4110',
+      accountTo: '',
+      allBusiness: false,
+    })
+    expect(one.map((r) => r.accountCode)).toEqual(['4110'])
+
+    const range = filterTaxBookLedgerLines(lines, {
+      dateFrom: '2026-01-01',
+      dateTo: '2026-12-31',
+      accountFrom: '4100',
+      accountTo: '4199',
+      allBusiness: false,
+    })
+    expect(range.map((r) => r.accountCode)).toEqual(['4110', '4120'])
+  })
+
+  it('treats a short account number as a prefix range', () => {
+    const rows = filterTaxBookLedgerLines(lines, {
+      dateFrom: '',
+      dateTo: '',
+      accountFrom: '41',
+      accountTo: '',
+      allBusiness: false,
+    })
+    expect(rows.map((r) => r.accountCode)).toEqual(['4110', '4120'])
+  })
+})
+
+describe('general ledger report sections', () => {
+  const lines = [
+    { accountCode: '1111', accountName: 'Cash', accountingDate: '2025-12-31', voucherNo: 'OB', memo: 'open', sourceType: 'tax_opening', debit: 100, credit: 0 },
+    { accountCode: '1111', accountName: 'Cash', accountingDate: '2026-01-03', voucherNo: 'PV1', memo: 'pay', sourceType: 'bank_transaction', debit: 0, credit: 40 },
+    { accountCode: '1111', accountName: 'Cash', accountingDate: '2026-01-05', voucherNo: 'RV1', memo: 'recv', sourceType: 'pos_deposit_receive', debit: 10, credit: 0 },
+    { accountCode: '4110', accountName: 'Sales', accountingDate: '2025-12-01', voucherNo: 'S0', memo: 'old', sourceType: 'pos_order', debit: 0, credit: 25 },
+    { accountCode: '5110', accountName: 'COGS', accountingDate: '2026-02-01', voucherNo: 'C1', memo: 'later', sourceType: 'store_purchase', debit: 5, credit: 0 },
+  ]
+  const scope = {
+    dateFrom: '2026-01-01',
+    dateTo: '2026-01-31',
+    accountFrom: '',
+    accountTo: '',
+    allBusiness: true,
+  }
+
+  it('carries the opening balance and a running balance per account', () => {
+    const [cash, sales] = buildTaxBookLedgerSections(lines, scope)
+    expect(cash?.accountCode).toBe('1111')
+    expect(cash?.opening).toBe(100)
+    expect(cash?.lines.map((ln) => ln.balance)).toEqual([60, 70])
+    expect(cash?.periodDebit).toBe(10)
+    expect(cash?.periodCredit).toBe(40)
+    expect(cash?.closing).toBe(70)
+    expect(sales?.accountCode).toBe('4110')
+    expect(sales?.opening).toBe(-25)
+    expect(sales?.lines).toHaveLength(0)
+    expect(sales?.closing).toBe(-25)
+    expect(buildTaxBookLedgerSections(lines, scope).some((s) => s.accountCode === '5110')).toBe(false)
+  })
+
+  it('keeps only the accounts chosen in the search', () => {
+    const sections = buildTaxBookLedgerSections(lines, {
+      ...scope,
+      accountFrom: '4110',
+      accountTo: '4110',
+      allBusiness: false,
+    })
+    expect(sections.map((s) => s.accountCode)).toEqual(['4110'])
   })
 })
 

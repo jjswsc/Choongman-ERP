@@ -590,3 +590,179 @@ export function taxJournalBalanced(lines: TaxJournalLineDraft[]): boolean {
   const credit = lines.filter((l) => l.side === 'credit').reduce((s, l) => s + l.amount, 0)
   return lines.length >= 2 && taxAmountsClose(debit, credit, 0.01)
 }
+
+export type TaxBookLedgerScope = {
+  dateFrom: string
+  dateTo: string
+  accountFrom: string
+  accountTo: string
+  /** เลขที่บัญชีว่าง หรือเลือกดูทั้งกิจการ */
+  allBusiness: boolean
+}
+
+function ledgerAccountBound(bound: string, digits: number, side: 'low' | 'high'): number {
+  if (bound.length >= digits) return Number(bound)
+  const pad = digits - bound.length
+  return Number(bound + (side === 'low' ? '0' : '9').repeat(pad))
+}
+
+/** รหัสตรง ช่วงรหัส หรือรหัสที่ขึ้นต้นด้วยเลขที่สั้นกว่า (41 → 4100–4199) */
+export function taxBookAccountInRange(accountCode: string, fromRaw: string, toRaw: string): boolean {
+  const code = String(accountCode || '').trim()
+  const from = String(fromRaw || '').trim()
+  const to = String(toRaw || '').trim() || from
+  const lo = from || to
+  const hi = to || from
+  if (!code || !lo) return !lo
+  if (/^\d+$/.test(code) && /^\d+$/.test(lo) && /^\d+$/.test(hi)) {
+    const low = ledgerAccountBound(lo, code.length, 'low')
+    const high = ledgerAccountBound(hi, code.length, 'high')
+    const n = Number(code)
+    return n >= Math.min(low, high) && n <= Math.max(low, high)
+  }
+  const a = lo <= hi ? lo : hi
+  const b = lo <= hi ? hi : lo
+  return code >= a && code <= b
+}
+
+export function filterTaxBookLedgerLines<T extends { accountCode: string; accountingDate: string }>(
+  lines: T[],
+  scope: TaxBookLedgerScope
+): T[] {
+  let dateFrom = String(scope.dateFrom || '').trim().slice(0, 10)
+  let dateTo = String(scope.dateTo || '').trim().slice(0, 10)
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    const swap = dateFrom
+    dateFrom = dateTo
+    dateTo = swap
+  }
+  const accountFrom = String(scope.accountFrom || '').trim()
+  const accountTo = String(scope.accountTo || '').trim()
+  const all = scope.allBusiness || (!accountFrom && !accountTo)
+  return lines.filter((ln) => {
+    const date = String(ln.accountingDate || '').slice(0, 10)
+    if ((dateFrom || dateTo) && !date) return false
+    if (dateFrom && date < dateFrom) return false
+    if (dateTo && date > dateTo) return false
+    if (all) return true
+    return taxBookAccountInRange(ln.accountCode, accountFrom, accountTo)
+  })
+}
+
+export type TaxBookLedgerSectionInput = {
+  accountCode: string
+  accountName?: string | null
+  accountingDate: string
+  voucherNo: string
+  memo?: string | null
+  sourceType?: string | null
+  debit: number
+  credit: number
+}
+
+export type TaxBookLedgerMovement = {
+  accountingDate: string
+  voucherNo: string
+  memo: string
+  sourceType: string | null
+  debit: number
+  credit: number
+  /** เดบิตเป็นบวก เครดิตเป็นลบ */
+  balance: number
+}
+
+export type TaxBookLedgerAccountSection = {
+  accountCode: string
+  accountName: string
+  opening: number
+  lines: TaxBookLedgerMovement[]
+  periodDebit: number
+  periodCredit: number
+  closing: number
+}
+
+function ledgerDateBounds(scope: TaxBookLedgerScope): { dateFrom: string; dateTo: string } {
+  let dateFrom = String(scope.dateFrom || '').trim().slice(0, 10)
+  let dateTo = String(scope.dateTo || '').trim().slice(0, 10)
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    const swap = dateFrom
+    dateFrom = dateTo
+    dateTo = swap
+  }
+  return { dateFrom, dateTo }
+}
+
+/**
+ * 검색한 계정마다 ยอดยกมา · รายการในช่วง · ยอดคงเหลือ.
+ * ยอดก่อนวันเริ่มคือผลรวมเดบิต−เครดิตของรายการที่โหลดแล้วและอยู่ก่อนช่วง.
+ */
+export function buildTaxBookLedgerSections(
+  lines: TaxBookLedgerSectionInput[],
+  scope: TaxBookLedgerScope
+): TaxBookLedgerAccountSection[] {
+  const { dateFrom, dateTo } = ledgerDateBounds(scope)
+  const scoped = filterTaxBookLedgerLines(lines, { ...scope, dateFrom: '', dateTo: '' })
+  const groups = new Map<string, TaxBookLedgerSectionInput[]>()
+  for (const ln of scoped) {
+    const code = String(ln.accountCode || '').trim()
+    if (!code) continue
+    const list = groups.get(code)
+    if (list) list.push(ln)
+    else groups.set(code, [ln])
+  }
+  const sections: TaxBookLedgerAccountSection[] = []
+  for (const [accountCode, rows] of groups) {
+    const sorted = [...rows].sort(
+      (a, b) =>
+        String(a.accountingDate || '').localeCompare(String(b.accountingDate || '')) ||
+        String(a.voucherNo || '').localeCompare(String(b.voucherNo || ''))
+    )
+    let opening = 0
+    const movements: TaxBookLedgerMovement[] = []
+    let periodDebit = 0
+    let periodCredit = 0
+    let name = ''
+    for (const ln of sorted) {
+      const accountName = String(ln.accountName || '').trim()
+      if (accountName && !name) name = accountName
+      const date = String(ln.accountingDate || '').slice(0, 10)
+      const debit = roundTaxAmount(Math.abs(Number(ln.debit) || 0))
+      const credit = roundTaxAmount(Math.abs(Number(ln.credit) || 0))
+      if (dateFrom && date && date < dateFrom) {
+        opening = roundTaxAmount(opening + debit - credit)
+        continue
+      }
+      if (!date && (dateFrom || dateTo)) continue
+      if (dateFrom && date < dateFrom) continue
+      if (dateTo && date && date > dateTo) continue
+      periodDebit = roundTaxAmount(periodDebit + debit)
+      periodCredit = roundTaxAmount(periodCredit + credit)
+      movements.push({
+        accountingDate: date,
+        voucherNo: String(ln.voucherNo || ''),
+        memo: String(ln.memo || ''),
+        sourceType: ln.sourceType != null ? String(ln.sourceType) : null,
+        debit,
+        credit,
+        balance: 0,
+      })
+    }
+    if (!movements.length && Math.abs(opening) < 0.005) continue
+    let running = opening
+    for (const mv of movements) {
+      running = roundTaxAmount(running + mv.debit - mv.credit)
+      mv.balance = running
+    }
+    sections.push({
+      accountCode,
+      accountName: name || accountCode,
+      opening,
+      lines: movements,
+      periodDebit,
+      periodCredit,
+      closing: movements.length ? running : opening,
+    })
+  }
+  sections.sort((a, b) => a.accountCode.localeCompare(b.accountCode, undefined, { numeric: true }))
+  return sections
+}

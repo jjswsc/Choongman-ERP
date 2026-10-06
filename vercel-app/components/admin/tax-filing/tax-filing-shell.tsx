@@ -40,7 +40,7 @@ import {
   TaxEntityStoreScopeFilters,
   type TaxEntityScopeOption,
 } from "@/components/admin/tax-filing/tax-entity-store-scope-filters"
-import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope-label"
+import { cleanTaxEntityDisplayName, formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope-label"
 import { useAdminUrlTab } from "@/lib/use-admin-url-tab"
 import {
   TAX_FILING_DEFAULT_TAB,
@@ -379,6 +379,7 @@ export function TaxFilingShell() {
               const value = String(r.value || "").trim()
               return {
                 value,
+                entityName: cleanTaxEntityDisplayName(entityName),
                 label: formatTaxEntityScopeLabel({
                   entityName,
                   entityCode,
@@ -528,6 +529,7 @@ export function TaxFilingShell() {
             fromMonth={tabProps.books.filingYearMonth}
             toMonth={booksToMonth}
             filingStoreFilter={tabProps.books.filingStoreFilter}
+            entityOptions={taxEntityScopeOptions}
             searchTick={booksSearchTick}
             focusView={booksFocusView}
             focusViewTick={booksFocusViewTick}

@@ -2,7 +2,8 @@
  * 플로우 어카운트 리포트와 비슷한 시산·손익·재무상태 HTML (화면·엑셀·인쇄 공용).
  */
 
-import type { TaxBookStatements } from '@/lib/tax-book'
+import type { TaxBookLedgerAccountSection, TaxBookStatements } from '@/lib/tax-book'
+import { formatTaxBookLedgerDate } from '@/lib/tax-book-display'
 import type { TrialBalanceRow } from '@/lib/trial-balance-report'
 import { erpExcelRichTableCss } from '@/lib/erp-excel-export'
 
@@ -128,6 +129,7 @@ export function taxBookFlowReportScreenCss(): string {
 .tb-flow td.code { width: 5.5rem; white-space: nowrap; }
 .tb-flow tr.section td { background: #f1f5f9; font-weight: 700; border-left: 3px solid #0f2744; }
 .tb-flow tr.total td { background: #e8f4ff; font-weight: 700; border-top: 2px solid #0f2744; }
+.tb-flow tr.gap td { border: none; height: 10px; padding: 0; background: transparent; }
 .tb-flow-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 @media print {
   .tb-flow-toolbar, .no-print { display: none !important; }
@@ -234,6 +236,89 @@ ${
 </div>`
 }
 
+export type TaxBookLedgerReportLabels = {
+  title: string
+  date: string
+  book: string
+  voucher: string
+  description: string
+  debit: string
+  credit: string
+  balance: string
+  total: string
+  bookLabel: (sourceType: string | null | undefined) => string
+}
+
+function signedMoney(n: number): string {
+  if (!Number.isFinite(n) || Math.abs(n) < 0.005) return '0.00'
+  if (n < 0) return `(${money(-n)})`
+  return money(n)
+}
+
+function amountOrBlank(n: number): string {
+  if (!Number.isFinite(n) || Math.abs(n) < 0.005) return ''
+  return money(n)
+}
+
+/** 엑셀이 합계할 수 있는 숫자. 0은 빈칸. */
+function excelAmount(n: number, blankZero = false): string {
+  if (!Number.isFinite(n)) return ''
+  const rounded = Math.round(n * 100) / 100
+  if (blankZero && Math.abs(rounded) < 0.005) return ''
+  return rounded.toFixed(2)
+}
+
+/** 계정별 총계정원장. 계정 헤더의 마지막 칸이 이월잔액이고, 행마다 잔액이 이어진다. */
+export function buildFlowLedgerHtml(
+  meta: TaxBookFlowReportMeta,
+  sections: TaxBookLedgerAccountSection[],
+  labels: TaxBookLedgerReportLabels,
+  opts?: { numeric?: boolean }
+): string {
+  const numeric = opts?.numeric === true
+  const cols = 7
+  const debitCell = (n: number) => (numeric ? excelAmount(n, true) : amountOrBlank(n))
+  const balanceCell = (n: number) => (numeric ? excelAmount(n) : signedMoney(n))
+  const balanceClass = numeric ? 'bal' : 'num'
+  const body = sections
+    .map((sec) => {
+      const moves = sec.lines
+        .map(
+          (ln) => `<tr>
+<td>${esc(formatTaxBookLedgerDate(ln.accountingDate, meta.lang || 'en'))}</td>
+<td>${esc(labels.bookLabel(ln.sourceType))}</td>
+<td>${esc(ln.voucherNo)}</td>
+<td>${esc(ln.memo)}</td>
+<td class="num">${debitCell(ln.debit)}</td>
+<td class="num">${debitCell(ln.credit)}</td>
+<td class="${balanceClass}">${balanceCell(ln.balance)}</td>
+</tr>`
+        )
+        .join('')
+      return `<tr class="section"><td class="code">${esc(sec.accountCode)}</td><td colspan="5">${esc(sec.accountName)}</td><td class="${balanceClass}">${balanceCell(sec.opening)}</td></tr>
+${moves}
+<tr class="total"><td colspan="4">${esc(labels.total)}</td><td class="num">${numeric ? excelAmount(sec.periodDebit) : money(sec.periodDebit)}</td><td class="num">${numeric ? excelAmount(sec.periodCredit) : money(sec.periodCredit)}</td><td class="${balanceClass}">${balanceCell(sec.closing)}</td></tr>
+<tr class="gap"><td colspan="${cols}"></td></tr>`
+    })
+    .join('')
+  return `<div class="tb-flow">
+${headerBlock(meta, labels.title)}
+<table>
+<thead><tr>
+<th>${esc(labels.date)}</th>
+<th>${esc(labels.book)}</th>
+<th>${esc(labels.voucher)}</th>
+<th>${esc(labels.description)}</th>
+<th>${esc(labels.debit)}</th>
+<th>${esc(labels.credit)}</th>
+<th>${esc(labels.balance)}</th>
+</tr></thead>
+<tbody>
+${body || `<tr><td colspan="${cols}"></td></tr>`}
+</tbody></table>
+</div>`
+}
+
 /** 엑셀 HTML용 — 리치 CSS + 플로우 본문 */
 export function wrapFlowReportForExcel(innerHtml: string): string {
   return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
@@ -245,8 +330,10 @@ export function wrapFlowReportForExcel(innerHtml: string): string {
 .tb-flow th,.tb-flow td{border:1px solid #94a3b8;padding:6px 8px}
 .tb-flow th{background:#1e293b;color:#fff}
 .tb-flow td.num{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00"}
+.tb-flow td.bal{text-align:right;mso-number-format:"\\#\\,\\#\\#0\\.00;\\(\\#\\,\\#\\#0\\.00\\)"}
 .tb-flow tr.section td{background:#e2e8f0;font-weight:700}
 .tb-flow tr.total td{background:#f1f5f9;font-weight:700}
+.tb-flow tr.gap td{border:none;height:8px}
 </style></head><body>${innerHtml}</body></html>`
 }
 

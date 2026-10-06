@@ -12,6 +12,7 @@ import {
 export type TaxEntityScopeOption = {
   value: string
   label: string
+  entityName?: string
   stores?: string[]
 }
 

@@ -32,3 +32,19 @@ export function formatTaxEntityScopeLabel(input: {
   const parts = [taxId ? `TIN ${taxId}` : '', storePart].filter(Boolean)
   return parts.length ? `${name} (${parts.join(' · ')})` : name
 }
+
+/** 장부 보고서 머릿글. 스코프에 묶인 법인명이 있으면 그 이름, 없으면 매장명. */
+export function taxBookCompanyNameFromScope(
+  scope: string,
+  options: { value: string; entityName?: string | null; stores?: string[] }[],
+  fallback = ''
+): string {
+  const raw = String(scope || '').trim()
+  const owned =
+    options.find((e) => e.value === raw) ||
+    options.find((e) => (e.stores || []).some((s) => s === raw))
+  const named = cleanTaxEntityDisplayName(String(owned?.entityName || ''))
+  if (named) return named
+  if (raw && raw !== 'All' && raw !== '*' && !raw.startsWith('entity:') && !raw.startsWith('taxid:')) return raw
+  return String(fallback || '').trim()
+}
