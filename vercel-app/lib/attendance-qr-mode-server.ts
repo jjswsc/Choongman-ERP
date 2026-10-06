@@ -89,16 +89,33 @@ export async function saveAttendanceQrStoreMode(params: {
   )
 }
 
-/** 스캔 토큰을 그 매장의 현재 모드로 검증 */
+/**
+ * 스캔 토큰을 발급한 회사의 현재 모드로 검증.
+ * expectedScope 가 있으면 그 회사와 QR 회사가 다를 때 거절하고, 모드도 그 회사 설정으로 본다.
+ * (매장 코드만으로 회사를 고르면 코드가 같은 다른 회사 모드가 잡혀 고정 QR이 만료로 거절된다.)
+ */
 export async function verifySubmittedAttendanceQr(
   qrPayload: string,
-  at: Date = new Date()
-): Promise<{ ok: boolean; storeCode?: string; reason?: string }> {
+  at: Date = new Date(),
+  expectedScope?: SaasTenantScope | null
+): Promise<{ ok: boolean; storeCode?: string; tenantId?: string; reason?: string }> {
   const read = readAttendanceQrPayload(qrPayload)
   if (!read.ok || !read.storeCode) {
     return { ok: false, reason: read.reason || 'invalid_format' }
   }
-  const scope = await resolveSaasTenantScope({ storeCode: read.storeCode })
+  const expectedTenantId = String(expectedScope?.tenantId || '').trim()
+  const payloadTenantId = String(read.tenantId || '').trim()
+  if (expectedTenantId && payloadTenantId && expectedTenantId !== payloadTenantId) {
+    return { ok: false, storeCode: read.storeCode, tenantId: payloadTenantId, reason: 'tenant_mismatch' }
+  }
+  const modeTenantId = payloadTenantId || expectedTenantId
+  const scope: SaasTenantScope = modeTenantId
+    ? { enforce: true, tenantId: modeTenantId }
+    : expectedScope && !expectedScope.enforce
+      ? expectedScope
+      : await resolveSaasTenantScope({ storeCode: read.storeCode })
   const { mode } = await fetchAttendanceQrStoreMode(read.storeCode, scope)
-  return verifyAttendanceQrPayload(qrPayload, at, mode)
+  return verifyAttendanceQrPayload(qrPayload, at, mode, {
+    ...(expectedTenantId ? { expectedTenantId } : {}),
+  })
 }

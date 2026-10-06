@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
 import { verifySubmittedAttendanceQr } from '@/lib/attendance-qr-mode-server'
+import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { addDayBangkok } from '@/lib/attendance-utils'
 import {
@@ -136,7 +138,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (attendanceQrToken) {
-      const qrVerified = await verifySubmittedAttendanceQr(attendanceQrToken)
+      const visitAuth = await tryVerifyBearerFromRequest(request)
+      const visitTenantScope = await resolveSaasTenantScope({
+        auth: visitAuth ? { tenantId: visitAuth.tenantId, company: visitAuth.company } : null,
+        storeCode: storeNameTrim,
+      })
+      const qrVerified = await verifySubmittedAttendanceQr(
+        attendanceQrToken,
+        new Date(),
+        visitTenantScope
+      )
       if (!qrVerified.ok || !qrVerified.storeCode) {
         return NextResponse.json(
           {

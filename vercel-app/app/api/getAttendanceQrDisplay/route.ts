@@ -53,16 +53,18 @@ export async function GET(req: NextRequest) {
     }
 
     const resolvedStoreCode = device.store_code
-    const modeScope = await resolveSaasTenantScope({
-      auth: auth ? { tenantId: auth.tenantId, company: auth.company } : null,
-      storeCode: resolvedStoreCode,
-    })
+    const deviceTenantId = String(device.tenant_id || '').trim()
+    const signingTenantId =
+      deviceTenantId || (tenantScope.enforce ? String(tenantScope.tenantId || '').trim() : '')
+    const modeScope = signingTenantId
+      ? { enforce: true as const, tenantId: signingTenantId }
+      : tenantScope
 
     const clientHint = String(req.headers.get('X-Cm-Client-Hint') || '').trim()
     await touchAttendanceQrDevice({
       storeCode: resolvedStoreCode,
       deviceToken,
-      tenantScope,
+      tenantScope: modeScope,
       ...(clientHint ? { clientHint } : {}),
     })
 
@@ -70,7 +72,8 @@ export async function GET(req: NextRequest) {
     const { qrPayload, expiresAt, bucketStartMs } = buildAttendanceQrPayload(
       resolvedStoreCode,
       new Date(),
-      mode
+      mode,
+      signingTenantId || undefined
     )
     return NextResponse.json(
       {

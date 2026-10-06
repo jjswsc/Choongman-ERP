@@ -12,7 +12,10 @@ export function parseAttendanceQrMode(raw: unknown): AttendanceQrMode {
   return raw === 'fixed' ? 'fixed' : 'rotating'
 }
 
+/** 매장 코드만 서명. 충만 등 테넌트 없는 배포용 */
 const TOKEN_PREFIX = 'cmatt1'
+/** 회사(tenant) + 매장 코드 서명. 같은 매장 코드라도 회사가 다르면 QR이 달라진다 */
+const TOKEN_PREFIX_V2 = 'cmatt2'
 
 function getAttendanceQrSecret(): string {
   const explicit = String(process.env.ATTENDANCE_QR_HMAC_SECRET || '').trim()
@@ -48,20 +51,49 @@ export function attendanceQrBucketExpiresAt(bucketStartMs: number): Date {
   return new Date(bucketStartMs + ATTENDANCE_QR_BUCKET_HOURS * 60 * 60 * 1000)
 }
 
-function signPayload(storeCode: string, bucketStartMs: number): string {
-  const body = `${TOKEN_PREFIX}|${storeCode}|${bucketStartMs}`
+function signPayload(storeCode: string, bucketStartMs: number, tenantId?: string): string {
+  const tenant = String(tenantId || '').trim()
+  const body = tenant
+    ? `${TOKEN_PREFIX_V2}|${tenant}|${storeCode}|${bucketStartMs}`
+    : `${TOKEN_PREFIX}|${storeCode}|${bucketStartMs}`
   return createHmac('sha256', getAttendanceQrSecret()).update(body, 'utf8').digest('base64url')
+}
+
+function signaturesMatch(sig: string, expected: string): boolean {
+  try {
+    const a = Buffer.from(sig)
+    const b = Buffer.from(expected)
+    return a.length === b.length && timingSafeEqual(a, b)
+  } catch {
+    return false
+  }
 }
 
 function parseSignedPayload(qrPayload: string): {
   ok: boolean
   storeCode?: string
+  tenantId?: string
   bucketStartMs?: number
   reason?: string
 } {
   const raw = String(qrPayload || '').trim()
   const parts = raw.split('.')
-  if (parts.length !== 4 || parts[0] !== TOKEN_PREFIX) {
+  const prefix = parts[0]
+  if (prefix === TOKEN_PREFIX_V2) {
+    if (parts.length !== 5) return { ok: false, reason: 'invalid_format' }
+    const tenantId = decodeURIComponent(parts[1] || '').trim()
+    const storeCode = decodeURIComponent(parts[2] || '').trim()
+    const bucketStartMs = Number(parts[3])
+    const sig = String(parts[4] || '').trim()
+    if (!tenantId || !storeCode || !Number.isFinite(bucketStartMs) || !sig) {
+      return { ok: false, reason: 'invalid_format' }
+    }
+    if (!signaturesMatch(sig, signPayload(storeCode, bucketStartMs, tenantId))) {
+      return { ok: false, reason: 'bad_signature' }
+    }
+    return { ok: true, storeCode, tenantId, bucketStartMs }
+  }
+  if (parts.length !== 4 || prefix !== TOKEN_PREFIX) {
     return { ok: false, reason: 'invalid_format' }
   }
   const storeCode = decodeURIComponent(parts[1] || '').trim()
@@ -70,14 +102,7 @@ function parseSignedPayload(qrPayload: string): {
   if (!storeCode || !Number.isFinite(bucketStartMs) || !sig) {
     return { ok: false, reason: 'invalid_format' }
   }
-  const expected = signPayload(storeCode, bucketStartMs)
-  try {
-    const a = Buffer.from(sig)
-    const b = Buffer.from(expected)
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
-      return { ok: false, reason: 'bad_signature' }
-    }
-  } catch {
+  if (!signaturesMatch(sig, signPayload(storeCode, bucketStartMs))) {
     return { ok: false, reason: 'bad_signature' }
   }
   return { ok: true, storeCode, bucketStartMs }
@@ -87,26 +112,32 @@ function parseSignedPayload(qrPayload: string): {
 export function buildAttendanceQrPayload(
   storeCode: string,
   at: Date = new Date(),
-  mode: AttendanceQrMode = 'rotating'
+  mode: AttendanceQrMode = 'rotating',
+  tenantId?: string
 ): {
   qrPayload: string
   bucketStartMs: number
   expiresAt: string | null
   mode: AttendanceQrMode
+  tenantId?: string
 } {
   const store = String(storeCode || '').trim()
   if (!store) throw new Error('store_required')
+  const tenant = String(tenantId || '').trim()
   const resolved = parseAttendanceQrMode(mode)
   const bucketStartMs =
     resolved === 'fixed' ? ATTENDANCE_QR_FIXED_BUCKET_MS : attendanceQrBucketStartMs(at)
-  const sig = signPayload(store, bucketStartMs)
-  const qrPayload = `${TOKEN_PREFIX}.${encodeURIComponent(store)}.${bucketStartMs}.${sig}`
+  const sig = signPayload(store, bucketStartMs, tenant || undefined)
+  const qrPayload = tenant
+    ? `${TOKEN_PREFIX_V2}.${encodeURIComponent(tenant)}.${encodeURIComponent(store)}.${bucketStartMs}.${sig}`
+    : `${TOKEN_PREFIX}.${encodeURIComponent(store)}.${bucketStartMs}.${sig}`
   return {
     qrPayload,
     bucketStartMs,
     expiresAt:
       resolved === 'fixed' ? null : attendanceQrBucketExpiresAt(bucketStartMs).toISOString(),
     mode: resolved,
+    ...(tenant ? { tenantId: tenant } : {}),
   }
 }
 
@@ -114,6 +145,7 @@ export function buildAttendanceQrPayload(
 export function readAttendanceQrPayload(qrPayload: string): {
   ok: boolean
   storeCode?: string
+  tenantId?: string
   bucketStartMs?: number
   reason?: string
 } {
@@ -124,23 +156,29 @@ export function readAttendanceQrPayload(qrPayload: string): {
 export function verifyAttendanceQrPayload(
   qrPayload: string,
   at: Date = new Date(),
-  mode: AttendanceQrMode = 'rotating'
+  mode: AttendanceQrMode = 'rotating',
+  opts?: { expectedTenantId?: string }
 ): {
   ok: boolean
   storeCode?: string
+  tenantId?: string
   reason?: string
 } {
   const parsed = parseSignedPayload(qrPayload)
   if (!parsed.ok || !parsed.storeCode || parsed.bucketStartMs == null) {
     return { ok: false, reason: parsed.reason || 'invalid_format' }
   }
-  const { storeCode, bucketStartMs } = parsed
+  const { storeCode, bucketStartMs, tenantId } = parsed
+  const expectedTenantId = String(opts?.expectedTenantId || '').trim()
+  if (expectedTenantId && tenantId && expectedTenantId !== tenantId) {
+    return { ok: false, storeCode, tenantId, reason: 'tenant_mismatch' }
+  }
   const resolved = parseAttendanceQrMode(mode)
   if (resolved === 'fixed') {
     if (bucketStartMs !== ATTENDANCE_QR_FIXED_BUCKET_MS) {
       return { ok: false, storeCode, reason: 'mode_mismatch' }
     }
-    return { ok: true, storeCode }
+    return { ok: true, storeCode, ...(tenantId ? { tenantId } : {}) }
   }
   if (bucketStartMs === ATTENDANCE_QR_FIXED_BUCKET_MS) {
     return { ok: false, storeCode, reason: 'mode_mismatch' }
@@ -149,5 +187,5 @@ export function verifyAttendanceQrPayload(
   if (bucketStartMs !== nowBucket) {
     return { ok: false, storeCode, reason: 'expired_bucket' }
   }
-  return { ok: true, storeCode }
+  return { ok: true, storeCode, ...(tenantId ? { tenantId } : {}) }
 }

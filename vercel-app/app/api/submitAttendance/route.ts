@@ -341,7 +341,7 @@ export async function POST(request: NextRequest) {
           { headers }
         )
       }
-      const qrVerified = await verifySubmittedAttendanceQr(attendanceQrToken)
+      const qrVerified = await verifySubmittedAttendanceQr(attendanceQrToken, new Date(), tenantScope)
       if (!qrVerified.ok || !qrVerified.storeCode) {
         return NextResponse.json(
           {

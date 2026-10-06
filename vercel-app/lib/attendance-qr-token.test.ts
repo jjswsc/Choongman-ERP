@@ -46,6 +46,22 @@ describe('attendance-qr-token', () => {
     expect(verifyAttendanceQrPayload(rotating.qrPayload, at, 'fixed').reason).toBe('mode_mismatch')
   })
 
+  it('binds a payload to one company so the same store code is not shared', () => {
+    const at = new Date('2026-06-08T10:00:00+07:00')
+    const abc = buildAttendanceQrPayload('1000', at, 'fixed', 'abc-company')
+    const banjoo = buildAttendanceQrPayload('1000', at, 'fixed', 'banjoo')
+    expect(abc.qrPayload.startsWith('cmatt2.')).toBe(true)
+    expect(abc.qrPayload).not.toBe(banjoo.qrPayload)
+    expect(
+      verifyAttendanceQrPayload(abc.qrPayload, at, 'fixed', { expectedTenantId: 'abc-company' }).ok
+    ).toBe(true)
+    const cross = verifyAttendanceQrPayload(abc.qrPayload, at, 'fixed', {
+      expectedTenantId: 'banjoo',
+    })
+    expect(cross.ok).toBe(false)
+    expect(cross.reason).toBe('tenant_mismatch')
+  })
+
   it('aligns bucket to 2-hour windows in Bangkok', () => {
     const bucket759 = attendanceQrBucketStartMs(new Date('2026-06-08T07:59:00+07:00'))
     const bucket600 = attendanceQrBucketStartMs(new Date('2026-06-08T06:00:00+07:00'))

@@ -45,6 +45,30 @@ function clearCookie(name: string): void {
   }
 }
 
+function tenantKeySuffix(tenantId?: string): string {
+  const id = String(tenantId || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '')
+  return id ? `__${id}` : ''
+}
+
+function tokenKeys(tenantId?: string): { storage: string; cookie: string } {
+  const suffix = tenantKeySuffix(tenantId)
+  return {
+    storage: ATTENDANCE_QR_DEVICE_TOKEN_KEY + suffix,
+    cookie: ATTENDANCE_QR_DEVICE_TOKEN_COOKIE + suffix,
+  }
+}
+
+function storeKeys(tenantId?: string): { storage: string; cookie: string } {
+  const suffix = tenantKeySuffix(tenantId)
+  return {
+    storage: ATTENDANCE_QR_STORE_CODE_KEY + suffix,
+    cookie: ATTENDANCE_QR_STORE_CODE_COOKIE + suffix,
+  }
+}
+
 function readPersistedValue(storageKey: string, cookieKey: string): string {
   if (typeof window === 'undefined') return ''
   let fromStorage = ''
@@ -96,20 +120,20 @@ export function requestAttendanceQrPersistentStorage(): void {
   }
 }
 
-export function getOrCreateAttendanceQrDeviceToken(): string {
+/** tenantId 가 있으면 그 회사 키만 읽고 쓴다. 없으면 로그인 없이 켜 둔 키오스크용 공통 키. */
+export function readAttendanceQrDeviceToken(tenantId?: string): string {
+  const keys = tokenKeys(tenantId)
+  return readPersistedValue(keys.storage, keys.cookie)
+}
+
+export function getOrCreateAttendanceQrDeviceToken(tenantId?: string): string {
   if (typeof window === 'undefined') return ''
   try {
-    let token = readPersistedValue(
-      ATTENDANCE_QR_DEVICE_TOKEN_KEY,
-      ATTENDANCE_QR_DEVICE_TOKEN_COOKIE
-    )
+    const keys = tokenKeys(tenantId)
+    let token = readPersistedValue(keys.storage, keys.cookie)
     if (!token || token.length < 10) {
       token = `aqr-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
-      writePersistedValue(
-        ATTENDANCE_QR_DEVICE_TOKEN_KEY,
-        ATTENDANCE_QR_DEVICE_TOKEN_COOKIE,
-        token
-      )
+      writePersistedValue(keys.storage, keys.cookie, token)
     }
     return token
   } catch {
@@ -117,24 +141,19 @@ export function getOrCreateAttendanceQrDeviceToken(): string {
   }
 }
 
-export function writeAttendanceQrDeviceToken(deviceToken: string): void {
-  writePersistedValue(
-    ATTENDANCE_QR_DEVICE_TOKEN_KEY,
-    ATTENDANCE_QR_DEVICE_TOKEN_COOKIE,
-    deviceToken
-  )
+export function writeAttendanceQrDeviceToken(deviceToken: string, tenantId?: string): void {
+  const keys = tokenKeys(tenantId)
+  writePersistedValue(keys.storage, keys.cookie, deviceToken)
 }
 
-export function readAttendanceQrStoreCode(): string {
-  return readPersistedValue(ATTENDANCE_QR_STORE_CODE_KEY, ATTENDANCE_QR_STORE_CODE_COOKIE)
+export function readAttendanceQrStoreCode(tenantId?: string): string {
+  const keys = storeKeys(tenantId)
+  return readPersistedValue(keys.storage, keys.cookie)
 }
 
-export function writeAttendanceQrStoreCode(storeCode: string): void {
-  writePersistedValue(
-    ATTENDANCE_QR_STORE_CODE_KEY,
-    ATTENDANCE_QR_STORE_CODE_COOKIE,
-    storeCode
-  )
+export function writeAttendanceQrStoreCode(storeCode: string, tenantId?: string): void {
+  const keys = storeKeys(tenantId)
+  writePersistedValue(keys.storage, keys.cookie, storeCode)
 }
 
 export function buildAttendanceQrClientHint(): string {

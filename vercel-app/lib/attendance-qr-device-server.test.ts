@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest"
-import { canAuthManageAttendanceQrStore } from "@/lib/attendance-qr-device-server"
+import {
+  allowUnscopedAttendanceQrTokenLookup,
+  canAuthManageAttendanceQrStore,
+} from "@/lib/attendance-qr-device-server"
+
+describe("allowUnscopedAttendanceQrTokenLookup", () => {
+  it("does not cross into another company when the login tenant is known", () => {
+    expect(allowUnscopedAttendanceQrTokenLookup({ enforce: true, tenantId: "banjoo" })).toBe(false)
+  })
+
+  it("allows token-only lookup when the kiosk has no company context", () => {
+    expect(allowUnscopedAttendanceQrTokenLookup({ enforce: true, tenantId: "" })).toBe(true)
+    expect(allowUnscopedAttendanceQrTokenLookup({ enforce: false, tenantId: "" })).toBe(true)
+  })
+})
 
 describe("canAuthManageAttendanceQrStore", () => {
   it("lets Omni Manager register their own store", () => {

@@ -27,6 +27,15 @@ export type AttendanceQrDeviceRow = {
   created_at: string
   display_label?: string | null
   client_hint?: string | null
+  tenant_id?: string | null
+}
+
+/**
+ * 회사(tenant)를 알고 있으면 그 회사 행만 본다.
+ * 로그인·매장으로 회사를 특정할 수 없을 때만 토큰 단독 조회(키오스크가 로그인 없이 QR을 유지).
+ */
+export function allowUnscopedAttendanceQrTokenLookup(scope: SaasTenantScope): boolean {
+  return !(scope.enforce && String(scope.tenantId || '').trim())
 }
 
 async function resolveQrDeviceTenantScope(
@@ -91,11 +100,12 @@ export async function fetchAttendanceQrDeviceByToken(
     if (!isSaasTenantQueryBlocked(scope, 'pos_connected_devices')) {
       const scoped = await readAttendanceQrDeviceByTokenFilter(scopedFilter)
       if (scoped) return scoped
+      if (!allowUnscopedAttendanceQrTokenLookup(scope)) return null
     }
     /**
      * 키오스크 QR 표시는 로그인 없이 동작해야 한다.
-     * Omni에서 JWT/매장 없이 tenant 스코프가 비면 조회가 막혀 등록 직후에도 QR이 안 뜬다.
-     * device_token 은 추측 불가 비밀값이라 토큰만으로 1행 조회를 허용한다.
+     * 회사를 특정하지 못할 때만 토큰 단독 조회를 허용한다.
+     * 로그인한 회사가 있으면 다른 회사 단말로 넘어가지 않는다.
      */
     return await readAttendanceQrDeviceByTokenFilter(baseFilter)
   } catch (e) {
