@@ -54,7 +54,30 @@ export async function getTaxBookVoucherLines(params: { entryId: number; scopeFil
     view: 'voucher',
   })
   const res = await apiFetchWithOffline(`/api/getTaxBookEntries?${q}`)
-  return res.json() as Promise<{ schemaReady?: boolean; lines?: TaxBookVoucherLine[]; error?: string }>
+  return res.json() as Promise<{
+    schemaReady?: boolean
+    lines?: TaxBookVoucherLine[]
+    paidFromBank?: { accountCode: string; accountName: string; amount: number } | null
+    error?: string
+  }>
+}
+
+export async function updateTaxBookVoucherLines(body: {
+  entryId: number
+  scopeFilter: string
+  lines: { accountCode: string; accountName?: string; debit: number; credit: number; memo?: string }[]
+}) {
+  const res = await apiFetchWithOffline('/api/updateTaxBookVoucherLines', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.json() as Promise<{
+    success?: boolean
+    error?: string
+    lines?: TaxBookVoucherLine[]
+    settlementSkipped?: boolean
+  }>
 }
 
 export async function getTaxBookEntries(params: {

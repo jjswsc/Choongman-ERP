@@ -4,11 +4,12 @@ import { resolveTaxBookAsOfRange, resolveTaxBookMonthRange, taxEntityKeyFromScop
 import {
   loadTaxBookJournalHeads,
   loadTaxBookLines,
-  loadTaxBookVoucherLines,
+  loadTaxBookVoucherDetail,
   summarizeTaxBookTrial,
   toTaxBookEntries,
   toTaxBookLedger,
 } from '@/lib/tax-book-server'
+import { loadPaidBankCreditForExpenseAccrual } from '@/lib/paid-bank-credit-server'
 import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
@@ -37,11 +38,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'NEED_TAX_ENTITY', lines: [] }, { status: 400, headers })
     }
     try {
-      const lines = await loadTaxBookVoucherLines(entryId, detailEntity)
-      if (lines == null) {
+      const detail = await loadTaxBookVoucherDetail(entryId, detailEntity)
+      if (detail == null) {
         return NextResponse.json({ error: 'NOT_FOUND', lines: [] }, { status: 404, headers })
       }
-      return NextResponse.json({ schemaReady: true, lines }, { headers })
+      const paid =
+        detail.sourceType === 'expense_accrual' && detail.sourceId > 0
+          ? await loadPaidBankCreditForExpenseAccrual(detail.sourceId)
+          : null
+      return NextResponse.json(
+        {
+          schemaReady: true,
+          lines: detail.lines,
+          paidFromBank: paid
+            ? { accountCode: paid.accountCode, accountName: paid.accountName, amount: paid.amount }
+            : null,
+        },
+        { headers }
+      )
     } catch (e) {
       console.error('getTaxBookEntries detail:', e)
       return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500, headers })

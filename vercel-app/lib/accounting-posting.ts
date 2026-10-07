@@ -549,6 +549,9 @@ export async function postExpenseAccrualJournal(params: {
   expenseAccountCode?: string
   expenseAccountName?: string
   expenseAccountSubjectId?: number | null
+  /** 통장에서 이미 지급된 매입이면 매입채무 대신 그 계좌 */
+  creditCode?: string
+  creditName?: string
   memo?: string
   storeName?: string
   postedBy?: string
@@ -562,12 +565,16 @@ export async function postExpenseAccrualJournal(params: {
       : undefined
   const debitCode = params.expenseAccountCode || '5520'
   const debitName = params.expenseAccountName || accountLine('5520').accountName
+  const creditCode = String(params.creditCode || '').trim()
+  const credit = creditCode
+    ? accountLine(creditCode, { nameKo: String(params.creditName || '').trim() || undefined })
+    : GL.payables()
   const lines = journalLinesFromPurchaseExpense({
     gross: amount,
     vatAmount: params.vatAmount,
     debitCode,
     debitName,
-    credit: GL.payables(),
+    credit,
     debitSubjectId: sid ?? null,
   })
   if (lines.length < 2) return null

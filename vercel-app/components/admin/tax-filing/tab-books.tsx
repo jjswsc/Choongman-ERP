@@ -12,6 +12,7 @@ import {
   getTaxBookVoucherLines,
   getTaxManagementBridge,
   postTaxBookEntry,
+  updateTaxBookVoucherLines,
   type TaxBookEntriesResponse,
   type TaxBookPostAction,
   type TaxBookVoucherLine,
@@ -53,6 +54,7 @@ import {
   formatTaxBookMemoDisplay,
   formatTaxFilingYearMonthLabel,
 } from "@/lib/tax-book-display"
+import { linesWithPaidBankCredit } from "@/lib/paid-bank-credit"
 import { taxBookCompanyNameFromScope } from "@/lib/tax-entity-scope-label"
 import type { TaxEntityScopeOption } from "@/components/admin/tax-filing/tax-entity-store-scope-filters"
 import { useT } from "@/lib/i18n"
@@ -139,6 +141,11 @@ export function TaxFilingBooksTab(props: {
   const [openVoucher, setOpenVoucher] = React.useState<TaxBookEntriesResponse["vouchers"][number] | null>(null)
   const [voucherLines, setVoucherLines] = React.useState<TaxBookVoucherLine[] | null>(null)
   const [voucherLinesLoading, setVoucherLinesLoading] = React.useState(false)
+  const [paidFromBank, setPaidFromBank] = React.useState<{
+    accountCode: string
+    accountName: string
+    amount: number
+  } | null>(null)
   const [dayMemo, setDayMemo] = React.useState("")
   const [dayDocNo, setDayDocNo] = React.useState("")
   const [dayDate, setDayDate] = React.useState("")
@@ -384,18 +391,23 @@ export function TaxFilingBooksTab(props: {
   React.useEffect(() => {
     if (!openVoucher) {
       setVoucherLines(null)
+      setPaidFromBank(null)
       setVoucherLinesLoading(false)
       return
     }
     let cancelled = false
     setVoucherLines(null)
+    setPaidFromBank(null)
     setVoucherLinesLoading(true)
     void getTaxBookVoucherLines({
       entryId: openVoucher.id,
       scopeFilter: query?.scope || props.filingStoreFilter || "All",
     })
       .then((res) => {
-        if (!cancelled) setVoucherLines(res.lines || [])
+        if (!cancelled) {
+          setVoucherLines(res.lines || [])
+          setPaidFromBank(res.paidFromBank || null)
+        }
       })
       .catch(() => {
         if (!cancelled) setVoucherLines([])
@@ -963,6 +975,14 @@ export function TaxFilingBooksTab(props: {
                   t={t}
                   statusLabel={t("taxBooksStatusApproved")}
                   draftLabel={t("taxBooksStatusDraft")}
+                  paidFromBank={paidFromBank}
+                  locked={closed}
+                  scopeFilter={query?.scope || props.filingStoreFilter || "All"}
+                  onSaved={(next, notice) => {
+                    setVoucherLines(next)
+                    setMessage(notice || t("taxBooksLinesSaved"))
+                    if (query) void load(query)
+                  }}
                 />
               ) : null}
             </DialogContent>
@@ -1404,6 +1424,39 @@ function amountCell(n: number): string {
   return money(n)
 }
 
+type VoucherDraftLine = {
+  accountCode: string
+  accountName: string
+  debit: string
+  credit: string
+  memo: string
+}
+
+function parseDraftAmount(raw: string): number {
+  const n = Number(String(raw || "").replace(/,/g, "").trim())
+  return Number.isFinite(n) ? Math.abs(n) : 0
+}
+
+function draftFromLines(rows: TaxBookVoucherLine[]): VoucherDraftLine[] {
+  return rows.map((ln) => ({
+    accountCode: ln.accountCode,
+    accountName: ln.accountName || "",
+    debit: ln.debit ? String(ln.debit) : "",
+    credit: ln.credit ? String(ln.credit) : "",
+    memo: ln.memo || "",
+  }))
+}
+
+function voucherSaveErrorText(t: (key: string) => string, code: string): string {
+  if (code === "UNBALANCED") return t("taxBooksUnbalanced")
+  if (code === "ONE_SIDE") return t("taxBooksOneSide")
+  if (code === "TAX_PERIOD_CLOSED") return t("taxBooksPeriodLockedEdit")
+  if (code === "ACCOUNTING_APPROVAL_FORBIDDEN" || code === "ACCOUNTING_FORBIDDEN") return t("taxBooksEditForbidden")
+  const key = `taxBooksErr_${code}`
+  const msg = t(key)
+  return msg && msg !== key ? msg : code
+}
+
 function VoucherEntryDialogBody({
   voucher,
   lines,
@@ -1412,6 +1465,10 @@ function VoucherEntryDialogBody({
   t,
   statusLabel,
   draftLabel,
+  paidFromBank,
+  locked,
+  scopeFilter,
+  onSaved,
 }: {
   voucher: TaxBookEntriesResponse["vouchers"][number]
   lines: TaxBookVoucherLine[] | null
@@ -1420,6 +1477,10 @@ function VoucherEntryDialogBody({
   t: (key: string) => string
   statusLabel: string
   draftLabel: string
+  paidFromBank: { accountCode: string; accountName: string; amount: number } | null
+  locked: boolean
+  scopeFilter: string
+  onSaved: (lines: TaxBookVoucherLine[], notice?: string) => void
 }) {
   const kindLabel = t(`taxBooksKind_${voucher.voucherKind}`) || voucher.voucherKind
   const description = formatTaxBookMemoDisplay(t, voucher.memo, {
@@ -1427,29 +1488,147 @@ function VoucherEntryDialogBody({
     accountingDate: voucher.accountingDate,
     lang,
   })
-  const debitTotal = (lines || []).reduce((sum, ln) => sum + (Number(ln.debit) || 0), 0)
-  const creditTotal = (lines || []).reduce((sum, ln) => sum + (Number(ln.credit) || 0), 0)
-  const draft = voucher.postingStatus === "draft"
+  const bankPreview = React.useMemo(
+    () => linesWithPaidBankCredit(lines || [], locked ? null : paidFromBank),
+    [lines, locked, paidFromBank]
+  )
+  const shown = bankPreview.replaced ? bankPreview.lines : lines
+  const [editing, setEditing] = React.useState(false)
+  const [draft, setDraft] = React.useState<VoucherDraftLine[]>([])
+  const [saving, setSaving] = React.useState(false)
+  const [saveError, setSaveError] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    setEditing(false)
+    setSaveError(null)
+    setDraft(draftFromLines(shown || []))
+  }, [voucher.id, shown])
+  const debitTotal = (editing ? draft : shown || []).reduce((sum, ln) => {
+    return sum + (editing ? parseDraftAmount((ln as VoucherDraftLine).debit) : Number((ln as TaxBookVoucherLine).debit) || 0)
+  }, 0)
+  const creditTotal = (editing ? draft : shown || []).reduce((sum, ln) => {
+    return sum + (editing ? parseDraftAmount((ln as VoucherDraftLine).credit) : Number((ln as TaxBookVoucherLine).credit) || 0)
+  }, 0)
+  const statusDraft = voucher.postingStatus === "draft"
+  const payableStillShown = linesWithPaidBankCredit(lines || [], paidFromBank).replaced && locked
+
+  const saveRows = async (payload: { accountCode: string; accountName: string; debit: number; credit: number; memo: string }[]) => {
+    if (payload.some((ln) => ln.debit > 0.0001 && ln.credit > 0.0001)) {
+      setSaveError(t("taxBooksOneSide"))
+      return
+    }
+    const debit = payload.reduce((sum, ln) => sum + ln.debit, 0)
+    const credit = payload.reduce((sum, ln) => sum + ln.credit, 0)
+    if (payload.length < 2 || Math.abs(debit - credit) > 0.02) {
+      setSaveError(t("taxBooksUnbalanced"))
+      return
+    }
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await updateTaxBookVoucherLines({
+        entryId: voucher.id,
+        scopeFilter,
+        lines: payload,
+      })
+      if (!res.success) {
+        setSaveError(voucherSaveErrorText(t, String(res.error || "")))
+        return
+      }
+      setEditing(false)
+      onSaved(res.lines || [], res.settlementSkipped ? t("taxBooksSettlementLeft") : t("taxBooksLinesSaved"))
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveDraft = () => {
+    const payload = draft
+      .map((ln) => ({
+        accountCode: ln.accountCode.trim(),
+        accountName: ln.accountName.trim(),
+        debit: parseDraftAmount(ln.debit),
+        credit: parseDraftAmount(ln.credit),
+        memo: ln.memo.trim(),
+      }))
+      .filter((ln) => ln.accountCode && (ln.debit > 0 || ln.credit > 0))
+    void saveRows(payload)
+  }
   return (
     <>
-      <DialogHeader>
-        <DialogTitle>
-          {t("taxBooksVoucherDetailTitle")} {kindLabel}
-        </DialogTitle>
+      <DialogHeader className="pr-8">
+        <div className="flex items-start justify-between gap-2">
+          <DialogTitle>
+            {t("taxBooksVoucherDetailTitle")} {kindLabel}
+          </DialogTitle>
+          {!loading && lines?.length && !locked ? (
+            <div className="mr-6 flex shrink-0 gap-2">
+              {editing ? (
+                <>
+                  <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => setEditing(false)}>
+                    {t("taxBooksCancelEdit")}
+                  </Button>
+                  <Button type="button" size="sm" disabled={saving} onClick={saveDraft}>
+                    {t("taxBooksSaveEntry")}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {bankPreview.replaced ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={saving}
+                      onClick={() =>
+                        void saveRows(
+                          (shown || []).map((ln) => ({
+                            accountCode: ln.accountCode,
+                            accountName: ln.accountName || "",
+                            debit: ln.debit,
+                            credit: ln.credit,
+                            memo: ln.memo || "",
+                          }))
+                        )
+                      }
+                    >
+                      {t("taxBooksPaidBankSave")}
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setDraft(draftFromLines(shown || []))
+                      setSaveError(null)
+                      setEditing(true)
+                    }}
+                  >
+                    {t("taxBooksEditLines")}
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
         <DialogDescription className="sr-only">{voucher.voucherNo}</DialogDescription>
       </DialogHeader>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-base font-semibold text-primary">{voucher.voucherNo}</span>
         <span
           className={
-            draft
+            statusDraft
               ? "inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900"
               : "inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
           }
         >
-          {draft ? draftLabel : statusLabel}
+          {statusDraft ? draftLabel : statusLabel}
         </span>
       </div>
+      {bankPreview.replaced ? <p className="text-sm text-amber-800 dark:text-amber-300">{t("taxBooksPaidBankHint")}</p> : null}
+      {payableStillShown ? <p className="text-sm text-amber-800 dark:text-amber-300">{t("taxBooksPeriodLockedEdit")}</p> : null}
+      {saveError ? <p className="text-sm text-red-600">{saveError}</p> : null}
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-xs text-muted-foreground">{t("taxBooksColDate")}</dt>
@@ -1465,30 +1644,101 @@ function VoucherEntryDialogBody({
         <p className="mt-0.5 text-sm">{description || "—"}</p>
       </div>
       <div className="overflow-x-auto rounded-md border">
-        <table className="w-full min-w-[640px] text-sm">
+        <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="bg-sky-700 text-left text-white">
               <th className="px-3 py-2 font-medium">{t("taxBooksVoucherAccount")}</th>
               <th className="px-3 py-2 text-right font-medium">{t("taxBooksDebit")}</th>
               <th className="px-3 py-2 text-right font-medium">{t("taxBooksCredit")}</th>
               <th className="px-3 py-2 font-medium">{t("taxBooksVoucherLineMemo")}</th>
+              {editing ? <th className="px-3 py-2" /> : null}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={editing ? 5 : 4} className="px-3 py-6 text-center text-muted-foreground">
                   {t("taxBooksVoucherLinesLoading")}
                 </td>
               </tr>
-            ) : !lines?.length ? (
+            ) : editing ? (
+              draft.map((ln, idx) => (
+                <tr key={idx} className="border-t">
+                  <td className="px-2 py-2">
+                    <Input
+                      className="mb-1 h-8 w-24"
+                      value={ln.accountCode}
+                      placeholder={t("taxBooksAccount")}
+                      onChange={(e) =>
+                        setDraft((rows) => rows.map((row, i) => (i === idx ? { ...row, accountCode: e.target.value } : row)))
+                      }
+                    />
+                    <Input
+                      className="h-8 min-w-[10rem]"
+                      value={ln.accountName}
+                      placeholder={t("taxBooksAccountName")}
+                      onChange={(e) =>
+                        setDraft((rows) => rows.map((row, i) => (i === idx ? { ...row, accountName: e.target.value } : row)))
+                      }
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <Input
+                      className="h-8 w-28 text-right"
+                      inputMode="decimal"
+                      value={ln.debit}
+                      onChange={(e) =>
+                        setDraft((rows) =>
+                          rows.map((row, i) =>
+                            i === idx ? { ...row, debit: e.target.value, credit: e.target.value.trim() ? "" : row.credit } : row
+                          )
+                        )
+                      }
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <Input
+                      className="h-8 w-28 text-right"
+                      inputMode="decimal"
+                      value={ln.credit}
+                      onChange={(e) =>
+                        setDraft((rows) =>
+                          rows.map((row, i) =>
+                            i === idx ? { ...row, credit: e.target.value, debit: e.target.value.trim() ? "" : row.debit } : row
+                          )
+                        )
+                      }
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <Input
+                      className="h-8 min-w-[8rem]"
+                      value={ln.memo}
+                      onChange={(e) =>
+                        setDraft((rows) => rows.map((row, i) => (i === idx ? { ...row, memo: e.target.value } : row)))
+                      }
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDraft((rows) => rows.filter((_, i) => i !== idx))}
+                    >
+                      {t("taxBooksRemoveLine")}
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            ) : !shown?.length ? (
               <tr>
                 <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
                   {t("taxBooksVoucherLinesEmpty")}
                 </td>
               </tr>
             ) : (
-              lines.map((ln, idx) => {
+              shown.map((ln, idx) => {
                 const name = displayTaxBookAccountName(lang, ln.accountCode, ln.accountName)
                 const lineMemo = String(ln.memo || "").trim() || description
                 return (
@@ -1505,18 +1755,30 @@ function VoucherEntryDialogBody({
               })
             )}
           </tbody>
-          {!loading && lines?.length ? (
+          {!loading && (editing ? draft.length : shown?.length) ? (
             <tfoot>
               <tr className="border-t font-semibold">
                 <td className="px-3 py-2">{t("taxBooksColTotal")}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{money(debitTotal)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{money(creditTotal)}</td>
-                <td />
+                <td colSpan={editing ? 2 : 1} />
               </tr>
             </tfoot>
           ) : null}
         </table>
       </div>
+      {editing ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            setDraft((rows) => [...rows, { accountCode: "", accountName: "", debit: "", credit: "", memo: "" }])
+          }
+        >
+          {t("taxBooksAddLine")}
+        </Button>
+      ) : null}
     </>
   )
 }

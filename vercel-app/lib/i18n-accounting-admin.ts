@@ -450,6 +450,17 @@ const ACCOUNTING_ADMIN_KEYS = {
   taxBooksMemo_closing: '',
   taxBooksMemo_opening: '',
   taxBooksMemo_adjustment: '',
+  taxBooksEditLines: '',
+  taxBooksCancelEdit: '',
+  taxBooksAccountName: '',
+  taxBooksRemoveLine: '',
+  taxBooksPaidBankHint: '',
+  taxBooksPaidBankSave: '',
+  taxBooksOneSide: '',
+  taxBooksLinesSaved: '',
+  taxBooksPeriodLockedEdit: '',
+  taxBooksSettlementLeft: '',
+  taxBooksEditForbidden: '',
 } as const
 
 type AccountingAdminKey = keyof typeof ACCOUNTING_ADMIN_KEYS
@@ -920,6 +931,17 @@ export const I18N_ACCOUNTING_ADMIN_KO = pack({
   taxBooksMemo_closing: '수익·비용 결산 분개 ({{ym}})',
   taxBooksMemo_opening: 'FlowAccount 기초잔액 ({{date}})',
   taxBooksMemo_adjustment: '조정 일반전표 ({{ym}})',
+  taxBooksEditLines: '수정',
+  taxBooksCancelEdit: '취소',
+  taxBooksAccountName: '계정명',
+  taxBooksRemoveLine: '줄 삭제',
+  taxBooksPaidBankHint: '이 매입은 통장에서 이미 지급되었습니다. 대변은 매입채무가 아니라 지급한 계좌입니다. 저장하면 장부에 반영됩니다.',
+  taxBooksPaidBankSave: '지급 계좌로 저장',
+  taxBooksOneSide: '한 줄에는 차변 또는 대변만 입력하세요.',
+  taxBooksLinesSaved: '분개 라인을 저장했습니다.',
+  taxBooksPeriodLockedEdit: '마감된 기간이라 이 전표는 수정할 수 없습니다.',
+  taxBooksSettlementLeft: '매입채무를 정리한 지급 전표가 마감된 달에 있어 지우지 못했습니다. 지급 장부도 확인해 주세요.',
+  taxBooksEditForbidden: '본사·회계 권한에서만 분개를 수정할 수 있습니다.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_EN = pack({
@@ -1377,6 +1399,17 @@ export const I18N_ACCOUNTING_ADMIN_EN = pack({
   taxBooksMemo_closing: 'Closing entries — Revenue and Expenses for the period of {{ym}}',
   taxBooksMemo_opening: 'Opening balances from FlowAccount as at {{date}}',
   taxBooksMemo_adjustment: 'Adjusting journal entry for the period of {{ym}}',
+  taxBooksEditLines: 'Edit',
+  taxBooksCancelEdit: 'Cancel',
+  taxBooksAccountName: 'Account name',
+  taxBooksRemoveLine: 'Remove line',
+  taxBooksPaidBankHint: 'This purchase was already paid from the bank. The credit is that bank account, not trade payables. Save to update the book.',
+  taxBooksPaidBankSave: 'Save bank account',
+  taxBooksOneSide: 'Enter either a debit or a credit on each line.',
+  taxBooksLinesSaved: 'Journal lines saved.',
+  taxBooksPeriodLockedEdit: 'This period is closed, so this voucher cannot be edited.',
+  taxBooksSettlementLeft: 'A payment voucher that cleared payables is in a closed period and was left in place. Check the payment book too.',
+  taxBooksEditForbidden: 'Only head office or accounting can edit journal lines.',
 })
 
 export const I18N_ACCOUNTING_ADMIN_TH = pack({
@@ -1834,6 +1867,17 @@ export const I18N_ACCOUNTING_ADMIN_TH = pack({
   taxBooksMemo_closing: 'ปิดบัญชีรายได้และค่าใช้จ่าย สำหรับงวด {{ym}}',
   taxBooksMemo_opening: 'ยอดยกมาจาก FlowAccount ณ วันที่ {{date}}',
   taxBooksMemo_adjustment: 'ใบสำคัญปรับปรุง สำหรับงวด {{ym}}',
+  taxBooksEditLines: 'แก้ไข',
+  taxBooksCancelEdit: 'ยกเลิก',
+  taxBooksAccountName: 'ชื่อบัญชี',
+  taxBooksRemoveLine: 'ลบ',
+  taxBooksPaidBankHint: 'รายการนี้ตัดเงินจากธนาคารแล้วครับ เครดิตต้องเป็นบัญชีที่จ่าย ไม่ใช่เจ้าหนี้การค้า กดบันทึกเพื่อเก็บในสมุด',
+  taxBooksPaidBankSave: 'บันทึกเป็นบัญชีที่จ่าย',
+  taxBooksOneSide: 'แต่ละบรรทัดใส่ได้แค่เดบิตหรือเครดิตอย่างใดอย่างหนึ่งครับ',
+  taxBooksLinesSaved: 'บันทึก Dr./Cr. แล้วครับ',
+  taxBooksPeriodLockedEdit: 'งวดนี้ปิดบัญชีแล้ว แก้รายการไม่ได้ครับ',
+  taxBooksSettlementLeft: 'ใบจ่ายที่ตัดเจ้าหนี้ไว้อยู่ในงวดที่ปิดแล้ว จึงไม่ได้ลบครับ ตรวจสมุดรายวันจ่ายด้วย',
+  taxBooksEditForbidden: 'แก้ Dr./Cr. ได้เฉพาะสำนักงานใหญ่หรือบัญชีครับ',
 })
 
 export const I18N_ACCOUNTING_ADMIN_MM = mergeAccountingAdmin(I18N_ACCOUNTING_ADMIN_EN, {

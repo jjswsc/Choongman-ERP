@@ -9,8 +9,11 @@ import { upsertPayableFromBankPurchasePayment, buildBankLinkedPayablePaymentMemo
 import {
   deleteJournalEntriesBySource,
   postExpenseAccrualJournal,
-  postPayableSettlementJournal,
 } from '@/lib/accounting-posting'
+import {
+  deletePayableSettlementJournals,
+  journalCreditForBankAccount,
+} from '@/lib/paid-bank-credit-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { syncExpenseAccrualInvoiceEvidence } from '@/lib/expense-accrual-invoice-sync'
 import { vatSplitFromTaxInvoiceGross } from '@/lib/invoice-backed-input-vat-ledger'
@@ -176,6 +179,8 @@ export async function POST(request: NextRequest) {
         })
         try {
           await deleteJournalEntriesBySource('expense_accrual', accrualId)
+          await deletePayableSettlementJournals(bankTransactionId, 'all')
+          const bankCredit = await journalCreditForBankAccount(Number(bankRow.account_id || 0))
           await postExpenseAccrualJournal({
             expenseAccrualId: accrualId,
             accountingDate: expenseDate,
@@ -184,6 +189,8 @@ export async function POST(request: NextRequest) {
             expenseAccountCode: subjectCode,
             expenseAccountName: subjectName,
             expenseAccountSubjectId: asId,
+            creditCode: bankCredit.accountCode,
+            creditName: bankCredit.accountName,
             memo: memo || String(accrualRow?.memo || '') || `지출 발생 ${payeeName || payeeCode}`,
             storeName: String(accrualRow?.store_name || bankRow.store_name || bankRow.store || '').trim() || undefined,
             postedBy: String(accrualRow?.created_by || userName || '').trim() || undefined,
@@ -292,6 +299,7 @@ export async function POST(request: NextRequest) {
     })
 
     try {
+      const bankCredit = await journalCreditForBankAccount(Number(bankRow.account_id || 0))
       await postExpenseAccrualJournal({
         expenseAccrualId,
         accountingDate: expenseDate,
@@ -301,16 +309,9 @@ export async function POST(request: NextRequest) {
         expenseAccountName: subjectName,
         expenseAccountSubjectId:
           accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
+        creditCode: bankCredit.accountCode,
+        creditName: bankCredit.accountName,
         memo: `지출 발생(통장연결) ${payeeName || payeeCode}`,
-        storeName: effectiveStoreName || undefined,
-        postedBy: userName || undefined,
-      })
-      await postPayableSettlementJournal({
-        sourceType: 'bank_transaction',
-        sourceId: bankTransactionId,
-        accountingDate: expenseDate,
-        amountAbs: amount,
-        memo: `지출 지급 ${payeeName || payeeCode}`,
         storeName: effectiveStoreName || undefined,
         postedBy: userName || undefined,
       })

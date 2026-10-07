@@ -24,6 +24,8 @@ describe('tax book display i18n', () => {
     expect(displayTaxBookAccountName('th', '1360', '매입세액')).toBe('ภาษีซื้อ')
     expect(displayTaxBookAccountName('th', '9999', '기타')).toBe('기타')
     expect(displayTaxBookAccountName('th', '9999', '현금및예금')).toBe('เงินสดและเงินฝากธนาคาร')
+    expect(displayTaxBookAccountName('th', '1010', 'กสิกรไทย · สำนักงานใหญ่')).toBe('กสิกรไทย · สำนักงานใหญ่')
+    expect(displayTaxBookAccountName('th', '1010', '현금및예금')).toBe('เงินสดและเงินฝากธนาคาร')
   })
 
   it('formats ledger dates in Buddhist short form for Thai', () => {

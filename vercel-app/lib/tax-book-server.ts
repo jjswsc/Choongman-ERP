@@ -1,16 +1,27 @@
 import { accountLine } from '@/lib/chart-of-accounts-mapping'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
-import { supabaseDeleteByFilter, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
+import {
+  supabaseDeleteByFilter,
+  supabaseInsertMany,
+  supabaseSelectFilter,
+  supabaseSelectFilterAllPages,
+} from '@/lib/supabase-server'
 import {
   TAX_BOOK,
   formatTaxVoucherNo,
   resolveTaxBookMonthRange,
   roundTaxAmount,
+  taxJournalBalanced,
   voucherKindForSourceType,
   type TaxVoucherKind,
 } from '@/lib/tax-book'
 import { isCustomTaxDocumentNo, taxBookStatusFromMemo } from '@/lib/tax-book-voucher-memo'
-import { isMissingTaxBookSchemaError, TAX_BOOK_SCHEMA_MISSING } from '@/lib/tax-book-period-server'
+import {
+  assertTaxAccountingPeriodOpen,
+  isMissingTaxBookSchemaError,
+  TAX_BOOK_SCHEMA_MISSING,
+} from '@/lib/tax-book-period-server'
 import type { TrialBalanceRow } from '@/lib/trial-balance-report'
 
 export type TaxBookEntryRow = {
@@ -303,6 +314,101 @@ export async function deleteTaxBookSource(input: {
   const idList = ids.join(',')
   await supabaseDeleteByFilter('journal_lines', `journal_entry_id=in.(${idList})`)
   await supabaseDeleteByFilter('journal_entries', `id=in.(${idList})`)
+}
+
+export type TaxBookVoucherDetail = {
+  lines: TaxBookVoucherLineView[]
+  sourceType: string
+  sourceId: number
+  accountingDate: string
+}
+
+export async function loadTaxBookVoucherDetail(
+  entryId: number,
+  taxEntityCode: string
+): Promise<TaxBookVoucherDetail | null> {
+  const id = Number(entryId || 0)
+  const entity = String(taxEntityCode || '').trim()
+  if (!id || !entity) return null
+  const filter = [
+    `id=eq.${id}`,
+    `book=eq.${TAX_BOOK}`,
+    `tax_entity_code=eq.${encodeURIComponent(entity)}`,
+  ].join('&')
+  type VoucherHead = {
+    id?: number
+    source_type?: string | null
+    source_id?: number | null
+    accounting_date?: string | null
+  }
+  let heads: VoucherHead[] | null = null
+  try {
+    heads = (await supabaseSelectFilter('journal_entries', filter, {
+      select: 'id,source_type,source_id,accounting_date',
+      limit: 1,
+    })) as VoucherHead[] | null
+  } catch (e) {
+    if (isMissingTaxBookSchemaError(e)) {
+      return { lines: [], sourceType: '', sourceId: 0, accountingDate: '' }
+    }
+    throw e
+  }
+  const head = heads?.[0]
+  if (!head?.id) return null
+  const lines = await loadTaxBookVoucherLines(id, entity)
+  return {
+    lines: lines || [],
+    sourceType: String(head.source_type || ''),
+    sourceId: Number(head.source_id || 0),
+    accountingDate: String(head.accounting_date || '').slice(0, 10),
+  }
+}
+
+export async function replaceTaxBookVoucherLines(input: {
+  entryId: number
+  taxEntityCode: string
+  lines: { accountCode: string; accountName: string; side: 'debit' | 'credit'; amount: number; memo?: string | null }[]
+}): Promise<void> {
+  const id = Math.floor(Number(input.entryId) || 0)
+  const entity = String(input.taxEntityCode || '').trim()
+  if (!id || !entity) throw new Error('NOT_FOUND')
+  const drafts = input.lines
+    .map((ln) => ({
+      accountCode: String(ln.accountCode || '').trim(),
+      accountName: String(ln.accountName || '').trim() || String(ln.accountCode || '').trim(),
+      side: ln.side === 'credit' ? ('credit' as const) : ('debit' as const),
+      amount: roundTaxAmount(Math.abs(Number(ln.amount) || 0)),
+      memo: String(ln.memo || '').trim().slice(0, 500),
+    }))
+    .filter((ln) => ln.accountCode && ln.amount > 0)
+  if (!taxJournalBalanced(drafts)) throw new Error('UNBALANCED')
+  const heads = (await supabaseSelectFilter(
+    'journal_entries',
+    `id=eq.${id}&book=eq.${TAX_BOOK}&tax_entity_code=eq.${encodeURIComponent(entity)}`,
+    { select: 'id,accounting_date', limit: 1 }
+  )) as { id?: number; accounting_date?: string | null }[] | null
+  const head = heads?.[0]
+  if (!head?.id) throw new Error('NOT_FOUND')
+  const accountingDate = String(head.accounting_date || '').slice(0, 10)
+  await assertTaxAccountingPeriodOpen(entity, accountingDate.slice(0, 7))
+  const codeToSubjectId = await resolveAccountSubjectIdsByCodes(drafts.map((ln) => ln.accountCode))
+  await supabaseDeleteByFilter('journal_lines', `journal_entry_id=eq.${id}`)
+  await supabaseInsertMany(
+    'journal_lines',
+    drafts.map((ln, i) => {
+      const codeKey = ln.accountCode.trim().toUpperCase()
+      return {
+        journal_entry_id: id,
+        line_no: i + 1,
+        account_code: ln.accountCode,
+        account_name: ln.accountName,
+        side: ln.side,
+        amount: ln.amount,
+        memo: ln.memo || null,
+        account_subject_id: codeToSubjectId.get(codeKey) ?? null,
+      }
+    })
+  )
 }
 
 export function taxBookClosingLines(rows: TrialBalanceRow[]) {

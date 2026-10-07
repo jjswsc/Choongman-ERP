@@ -37,7 +37,16 @@ export function displayTaxBookAccountName(
   const fallback = String(fallbackName || '').trim()
   const meta = (code ? CHART_OF_ACCOUNTS_BY_CODE[code] : undefined) || (fallback ? CHART_BY_KO_NAME.get(fallback) : undefined)
   if (!meta) return fallback || code
+  if (fallback && !isCanonicalAccountName(meta, fallback)) return fallback
   return accountNameForLang(lang, meta, fallback, code)
+}
+
+function isCanonicalAccountName(
+  meta: { nameKo: string; nameEn: string; nameTh?: string },
+  name: string
+): boolean {
+  const n = name.trim()
+  return n === meta.nameKo || n === meta.nameEn || (meta.nameTh != null && n === meta.nameTh)
 }
 
 const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
