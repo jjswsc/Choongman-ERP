@@ -9,6 +9,7 @@ import {
   normalizePosChannelSettlementChannel,
   roundSettlementMoney,
 } from '@/lib/pos-channel-settlement'
+import { usesDailyCashSalesReceipt } from '@/lib/tax-book'
 import {
   assertBankDepositAllowedForChannelSettlement,
   BankSettlementGuardError,
@@ -193,6 +194,7 @@ export async function saveChannelSettlement(
     memo: input.memo || undefined,
     postedBy: input.postedBy || undefined,
     bankNetAlreadyPosted,
+    salesAlreadyOnCash: usesDailyCashSalesReceipt(storeCode, settleDate),
   })
 
   if (journalEntryId) {

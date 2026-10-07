@@ -30,6 +30,20 @@ describe('linesForPosChannelSettlement', () => {
     ])
   })
 
+  it('reduces cash by the fee when daily sales already hit cash', () => {
+    const lines = linesForPosChannelSettlement({
+      channel: 'card',
+      gross: 1000,
+      fee: 30,
+      net: 970,
+      salesAlreadyOnCash: true,
+    })
+    expect(lines.map((l) => [l.accountCode, l.side, l.amount])).toEqual([
+      ['5529', 'debit', 30],
+      ['1010', 'credit', 30],
+    ])
+  })
+
   it('skips fee-only journal when fee is ~0 (QR-like)', () => {
     expect(
       linesForPosChannelSettlement({

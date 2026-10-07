@@ -65,6 +65,8 @@ export function voucherKindForSourceType(sourceType: string | null | undefined):
   ) {
     return 'general'
   }
+  if (s === 'outbound_bill' || s === 'outbound_bill_force') return 'sales'
+  if (s === 'outbound_collection') return 'receipt'
   if (s === 'pos_order' || s === 'pos_day_close' || s === 'pos_order_reversal') return 'sales'
   if (s === 'pos_deposit_receive' || s === 'pos_channel_settlement') return 'receipt'
   if (s === 'pos_deposit_refund' || s === 'pos_deposit_forfeit') return 'payment'
@@ -102,6 +104,30 @@ export function formatTaxVoucherNo(kind: TaxVoucherKind, yearMonth: string, seq:
   const ym = String(yearMonth || '').replace('-', '').slice(0, 6)
   const n = Math.max(1, Math.floor(seq) || 1)
   return `${VOUCHER_PREFIX[kind]}${ym}${String(n).padStart(4, '0')}`
+}
+
+/** S&J(CM Office) 청구 매출이 올라가는 매장 키 */
+export const INVOICE_SALES_STORE = 'CM Office'
+
+/** 이 날짜(방콕)부터 지점 일일 판매는 RV·현금/은행. 그 전 포스 전표는 그대로 둔다. */
+export const DAILY_CASH_SALES_RV_FROM = '2026-10-08'
+
+export function isInvoiceSalesCompanyStore(storeName: string | null | undefined): boolean {
+  const raw = String(storeName || '').trim()
+  if (!raw) return false
+  if (raw === 'CM Office' || raw === 'CM Office HQ') return true
+  if (/s\s*&\s*j|เอสแอนด์เจ|sj\s*global/i.test(raw)) return true
+  return taxEntityCodeFromStoreName(raw) === 'tin:0105566137147'
+}
+
+/** 상품만 파는 지점의 당일 판매. 청구 법인(S&J)은 제외. */
+export function usesDailyCashSalesReceipt(
+  storeName: string | null | undefined,
+  salesDate: string | null | undefined
+): boolean {
+  if (isInvoiceSalesCompanyStore(storeName)) return false
+  const d = String(salesDate || '').trim().slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= DAILY_CASH_SALES_RV_FROM
 }
 
 /** 본사 매장 선택 시 법인(tin) 세무 장부로 연결 */
@@ -308,6 +334,138 @@ export function taxGrossVatSplit(gross: number, vatAmount?: number): { gross: nu
 /** 현금 지급 비용: VAT 있으면 PV, 없으면 PP (VAT 줄 없음). */
 export function voucherKindForPaidExpense(vatAmount?: number): TaxVoucherKind {
   return roundTaxAmount(Math.max(0, Number(vatAmount) || 0)) > 0 ? 'purchase' : 'payment'
+}
+
+/** 매입세(1360)가 있는 비용·매입만 PV. 없으면 PP. 월 요약 전표는 건드리지 않는다. */
+const EXPENSE_VAT_BOOK_SOURCES = new Set([
+  'expense_accrual',
+  'petty_cash',
+  'bank_transaction',
+  'card_transaction',
+  'store_purchase',
+])
+
+export function voucherKindForRecordedVat(
+  sourceType: string | null | undefined,
+  storedKind: string | null | undefined,
+  hasInputVat: boolean
+): TaxVoucherKind {
+  const source = String(sourceType || '').trim()
+  const stored = String(storedKind || '').trim()
+  const fallback = (
+    (TAX_VOUCHER_KINDS as readonly string[]).includes(stored) ? stored : voucherKindForSourceType(source)
+  ) as TaxVoucherKind
+  if (!EXPENSE_VAT_BOOK_SOURCES.has(source)) return fallback
+  if (source === 'bank_transaction' && fallback === 'receipt') return fallback
+  if (hasInputVat) return 'purchase'
+  if (fallback === 'purchase') return 'payment'
+  return fallback
+}
+
+/** 발행 문서번호(EXP·IV 등). 내부 JE- 번호는 참조가 아니다. */
+export function taxBookIssuedDocumentNo(entryNo: string | null | undefined): string {
+  const n = String(entryNo || '').trim()
+  if (!n || /^JE-/i.test(n)) return ''
+  return n
+}
+
+/**
+ * S&J วางบิล: 세금계산서 발행 시 SV.
+ * Dr 매출채권 / Cr 매출 / Cr 매출부가세
+ */
+export function taxInvoiceSalesJournalLines(input: {
+  gross: number
+  vatAmount?: number
+  receivableName?: string
+  revenueName?: string
+  outputVatName?: string
+}): TaxJournalLineDraft[] {
+  const { gross, vat, net } = taxGrossVatSplit(input.gross, input.vatAmount)
+  if (gross <= 0) return []
+  const lines: TaxJournalLineDraft[] = [
+    {
+      accountCode: '1130',
+      accountName: input.receivableName || '매출채권',
+      side: 'debit',
+      amount: gross,
+    },
+    {
+      accountCode: TAX_ACCOUNTS.revenue,
+      accountName: input.revenueName || '매출',
+      side: 'credit',
+      amount: vat > 0 ? net : gross,
+    },
+  ]
+  if (vat > 0) {
+    lines.push({
+      accountCode: TAX_ACCOUNTS.outputVat,
+      accountName: input.outputVatName || '부가세예수금',
+      side: 'credit',
+      amount: vat,
+    })
+  }
+  return lines
+}
+
+/** S&J 수금: RV. Dr 은행 / Cr 매출채권. 매출을 다시 올리지 않는다. */
+export function taxInvoiceCollectionJournalLines(input: {
+  amount: number
+  bankCode?: string
+  bankName?: string
+  receivableName?: string
+}): TaxJournalLineDraft[] {
+  const amount = roundTaxAmount(Math.max(0, Number(input.amount) || 0))
+  if (amount <= 0) return []
+  return [
+    {
+      accountCode: String(input.bankCode || '').trim() || '1010',
+      accountName: input.bankName || '현금및예금',
+      side: 'debit',
+      amount,
+    },
+    {
+      accountCode: '1130',
+      accountName: input.receivableName || '매출채권',
+      side: 'credit',
+      amount,
+    },
+  ]
+}
+
+/** 지점 일일 판매: 채권 없이 RV. Dr 현금·은행 / Cr 매출 / Cr 매출부가세 */
+export function taxDailyCashSalesJournalLines(input: {
+  gross: number
+  vatAmount?: number
+  bankCode?: string
+  bankName?: string
+  revenueName?: string
+  outputVatName?: string
+}): TaxJournalLineDraft[] {
+  const { gross, vat, net } = taxGrossVatSplit(input.gross, input.vatAmount)
+  if (gross <= 0) return []
+  const lines: TaxJournalLineDraft[] = [
+    {
+      accountCode: String(input.bankCode || '').trim() || '1010',
+      accountName: input.bankName || '현금및예금',
+      side: 'debit',
+      amount: gross,
+    },
+    {
+      accountCode: TAX_ACCOUNTS.revenue,
+      accountName: input.revenueName || '매출',
+      side: 'credit',
+      amount: vat > 0 ? net : gross,
+    },
+  ]
+  if (vat > 0) {
+    lines.push({
+      accountCode: TAX_ACCOUNTS.outputVat,
+      accountName: input.outputVatName || '부가세예수금',
+      side: 'credit',
+      amount: vat,
+    })
+  }
+  return lines
 }
 
 /**

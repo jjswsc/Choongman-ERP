@@ -70,12 +70,33 @@ export function linesForPosChannelSettlement(params: {
   fee: number
   net: number
   bankNetAlreadyPosted?: boolean
+  /** 일일 판매가 이미 현금/은행에 올라간 경우. 수수료만 현금에서 뺀다. */
+  salesAlreadyOnCash?: boolean
 }): ChannelSettlementJournalLine[] {
   const gross = roundSettlementMoney(Math.abs(Number(params.gross) || 0))
   const fee = roundSettlementMoney(Math.abs(Number(params.fee) || 0))
   const net = roundSettlementMoney(Math.abs(Number(params.net) || 0))
   const feeCode = feeAccountCodeForChannel(params.channel)
   const feeName = feeAccountNameForChannel(params.channel)
+  if (params.salesAlreadyOnCash) {
+    if (fee <= 0.02) return []
+    return [
+      {
+        accountCode: feeCode,
+        accountName: feeName,
+        side: 'debit',
+        amount: fee,
+        memo: '채널 정산 수수료',
+      },
+      {
+        accountCode: '1010',
+        accountName: '현금및예금',
+        side: 'credit',
+        amount: fee,
+        memo: '일일매출에서 수수료 차감',
+      },
+    ]
+  }
   if (params.bankNetAlreadyPosted) {
     if (fee <= 0.02) return []
     return [

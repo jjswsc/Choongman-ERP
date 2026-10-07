@@ -17,7 +17,10 @@ import { linesForPosChannelSettlement } from '@/lib/pos-channel-settlement'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { uniqueAccountingPeriodChecks } from '@/lib/accounting-period-mutation-guard'
 import { assertTaxAccountingPeriodOpen, TAX_BOOK_SCHEMA_MISSING, TAX_PERIOD_CLOSED } from '@/lib/tax-book-period-server'
-import { TAX_ACCOUNTS, TAX_BOOK, isTaxBookSourceType, taxEntityCodeFromStoreName, taxPurchaseExpenseJournalLines, voucherKindForPaidExpense, voucherKindForSourceType } from '@/lib/tax-book'
+import { TAX_ACCOUNTS, TAX_BOOK, isTaxBookSourceType, taxEntityCodeFromStoreName, taxPurchaseExpenseJournalLines, usesDailyCashSalesReceipt, voucherKindForPaidExpense, voucherKindForSourceType } from '@/lib/tax-book'
+import { isPosChannelSettlementMemo } from '@/lib/bank-import-deposit-category'
+import { defaultBankDepositSalesDate } from '@/lib/pos-channel-reconcile-match'
+import { inferPosBankChipKind } from '@/lib/pos-bank-chip-settlement'
 import { isCustomTaxDocumentNo } from '@/lib/tax-book-voucher-memo'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
 import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
@@ -329,6 +332,19 @@ export async function postBankTransactionJournal(params: {
 
   const cat = String(params.category || '').toLowerCase()
   if (shouldSkipBankAutoJournal(cat, params.transType)) return null
+  if (
+    params.transType === 'deposit' &&
+    cat === 'receivable_receive' &&
+    isPosChannelSettlementMemo(params.memo) &&
+    usesDailyCashSalesReceipt(
+      params.storeName,
+      defaultBankDepositSalesDate(String(params.transDate || ''), {
+        sameDay: inferPosBankChipKind(params.memo) === 'qr',
+      })
+    )
+  ) {
+    return null
+  }
 
   let expenseOverride: BankWithdrawExpenseOverride | null = null
   if (params.transType === 'withdraw') {
@@ -712,7 +728,8 @@ export async function postPosOrderJournal(params: {
   const paymentDeliveryApp = Math.max(0, Number(params.paymentDeliveryApp) || 0)
   const depositApplied = Math.max(0, Number(params.depositAppliedAmt) || 0)
   const paymentKnownTotal = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
-  const receivableLike = accountLine('1130', { nameKo: '결제대기자산' })
+  const dailyCash = usesDailyCashSalesReceipt(params.storeName, params.salesDate)
+  const receivableLike = dailyCash ? GL.cash() : accountLine('1130', { nameKo: '결제대기자산' })
   const depositLiability = accountLine('2160', { nameKo: '선수금부채' })
   const lines: JournalLineInput[] = []
 
@@ -726,7 +743,7 @@ export async function postPosOrderJournal(params: {
         ...receivableLike,
         side: 'debit',
         amount: cardLike,
-        memo: '카드/QR/배달앱 정산 예정',
+        memo: dailyCash ? '카드/QR/배달 일일매출' : '카드/QR/배달앱 정산 예정',
       })
     }
     lines.push({
@@ -753,7 +770,7 @@ export async function postPosOrderJournal(params: {
         ...receivableLike,
         side: 'debit',
         amount: cardLike,
-        memo: '카드/QR/배달앱 정산 예정',
+        memo: dailyCash ? '카드/QR/배달 일일매출' : '카드/QR/배달앱 정산 예정',
       })
     }
   } else {
@@ -780,8 +797,9 @@ export async function postPosOrderJournal(params: {
     sourceType: 'pos_order',
     sourceId: params.posOrderId || null,
     storeName: params.storeName || null,
-    memo: params.memo || 'POS 매출 자동분개',
-    voucherKind: 'sales',
+    memo: params.memo || (dailyCash ? 'POS 일일매출 수취분개' : 'POS 매출 자동분개'),
+    voucherKind: dailyCash ? 'receipt' : 'sales',
+    entryNo: dailyCash && params.posOrderId ? `POS${params.posOrderId}` : null,
     lines,
   })
 }
@@ -800,6 +818,7 @@ export async function postPosChannelSettlementJournal(params: {
   memo?: string
   postedBy?: string | null
   bankNetAlreadyPosted?: boolean
+  salesAlreadyOnCash?: boolean
 }): Promise<number | null> {
   const gross = Math.abs(Number(params.gross) || 0)
   const fee = Math.abs(Number(params.fee) || 0)
@@ -814,6 +833,7 @@ export async function postPosChannelSettlementJournal(params: {
     fee,
     net,
     bankNetAlreadyPosted: params.bankNetAlreadyPosted,
+    salesAlreadyOnCash: params.salesAlreadyOnCash,
   })
   const lines: JournalLineInput[] = built.map((line) => ({
     ...accountLine(line.accountCode, { nameKo: line.accountName }),
@@ -957,7 +977,7 @@ export async function postStorePurchaseJournal(params: {
     sourceId: params.orderId,
     storeName: params.storeName || null,
     memo: params.memo || '매장 매입 자동분개',
-    voucherKind: 'purchase',
+    voucherKind: voucherKindForPaidExpense(params.vatAmount),
     lines,
   })
 }

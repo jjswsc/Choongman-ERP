@@ -49,7 +49,9 @@ import {
   type TaxBookFlowReportMeta,
 } from "@/lib/tax-book-flow-report"
 import { getAccountSubjects } from "@/lib/api-client/chart-of-accounts"
+import { CHART_OF_ACCOUNTS_BY_CODE } from "@/lib/chart-of-accounts-mapping"
 import {
+  canonicalJournalAccountName,
   displayTaxBookAccountName,
   formatTaxBookLedgerPeriod,
   formatTaxBookMemoDisplay,
@@ -408,6 +410,9 @@ export function TaxFilingBooksTab(props: {
       if (docQ) {
         const docHit =
           String(v.voucherNo || "")
+            .toLowerCase()
+            .includes(docQ) ||
+          String(v.referenceNo || "")
             .toLowerCase()
             .includes(docQ) ||
           String(v.entryNo || "")
@@ -985,6 +990,7 @@ export function TaxFilingBooksTab(props: {
               id: v.id,
               date: v.accountingDate,
               docNo: v.voucherNo,
+              referenceNo: v.referenceNo,
               kind: t(`taxBooksKind_${v.voucherKind}`) || v.voucherKind,
               description: formatTaxBookMemoDisplay(t, v.memo, {
                 sourceType: v.sourceType,
@@ -1459,9 +1465,25 @@ function amountCell(n: number): string {
 type VoucherDraftLine = {
   accountCode: string
   accountName: string
+  canonicalName: string
   debit: string
   credit: string
   memo: string
+}
+
+function accountPickList(subjects: TaxBookAccountSubjectLabel[]): TaxBookAccountSubjectLabel[] {
+  const byCode = new Map(subjects.map((row) => [String(row.code || "").trim(), row]))
+  for (const meta of Object.values(CHART_OF_ACCOUNTS_BY_CODE)) {
+    if (!byCode.has(meta.code)) {
+      byCode.set(meta.code, {
+        code: meta.code,
+        name: meta.nameKo,
+        nameEn: meta.nameEn,
+        nameTh: meta.nameTh || null,
+      })
+    }
+  }
+  return [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code))
 }
 
 function parseDraftAmount(raw: string): number {
@@ -1469,14 +1491,23 @@ function parseDraftAmount(raw: string): number {
   return Number.isFinite(n) ? Math.abs(n) : 0
 }
 
-function draftFromLines(rows: TaxBookVoucherLine[]): VoucherDraftLine[] {
-  return rows.map((ln) => ({
-    accountCode: ln.accountCode,
-    accountName: ln.accountName || "",
-    debit: ln.debit ? String(ln.debit) : "",
-    credit: ln.credit ? String(ln.credit) : "",
-    memo: ln.memo || "",
-  }))
+function draftFromLines(
+  rows: TaxBookVoucherLine[],
+  lang: string,
+  subjects: TaxBookAccountSubjectLabel[]
+): VoucherDraftLine[] {
+  return rows.map((ln) => {
+    const stored = String(ln.accountName || "").trim()
+    const accountName = displayTaxBookAccountName(lang, ln.accountCode, stored, subjects)
+    return {
+      accountCode: ln.accountCode,
+      accountName,
+      canonicalName: stored || canonicalJournalAccountName(ln.accountCode, accountName, subjects),
+      debit: ln.debit ? String(ln.debit) : "",
+      credit: ln.credit ? String(ln.credit) : "",
+      memo: ln.memo || "",
+    }
+  })
 }
 
 function voucherSaveErrorText(t: (key: string) => string, code: string): string {
@@ -1487,6 +1518,73 @@ function voucherSaveErrorText(t: (key: string) => string, code: string): string 
   const key = `taxBooksErr_${code}`
   const msg = t(key)
   return msg && msg !== key ? msg : code
+}
+
+function AccountSearchField({
+  lang,
+  subjects,
+  placeholder,
+  onPick,
+}: {
+  lang: string
+  subjects: TaxBookAccountSubjectLabel[]
+  placeholder: string
+  onPick: (code: string, shownName: string, canonicalName: string) => void
+}) {
+  const [query, setQuery] = React.useState("")
+  const [open, setOpen] = React.useState(false)
+  const options = React.useMemo(() => accountPickList(subjects), [subjects])
+  const matches = React.useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return []
+    return options
+      .filter((row) => {
+        const shown = displayTaxBookAccountName(lang, row.code, row.name, options)
+        const blob = [row.code, row.name, row.nameEn, row.nameTh, shown].join(" ").toLowerCase()
+        return blob.includes(needle)
+      })
+      .slice(0, 8)
+  }, [query, options, lang])
+  return (
+    <div className="relative mb-1">
+      <Input
+        className="h-8 min-w-[12rem]"
+        value={query}
+        placeholder={placeholder}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setOpen(true)
+        }}
+        onBlur={() => {
+          window.setTimeout(() => setOpen(false), 160)
+        }}
+      />
+      {open && matches.length ? (
+        <ul className="mt-1 max-h-40 overflow-auto rounded-md border bg-popover p-1 text-sm shadow-md">
+          {matches.map((row) => {
+            const shown = displayTaxBookAccountName(lang, row.code, row.name, options)
+            return (
+              <li key={`${row.code}-${row.name}`}>
+                <button
+                  type="button"
+                  className="w-full rounded px-2 py-1 text-left hover:bg-muted"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onPick(row.code, shown, String(row.name || shown).trim())
+                    setQuery("")
+                    setOpen(false)
+                  }}
+                >
+                  {row.code} / {shown}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+    </div>
+  )
 }
 
 function VoucherEntryDialogBody({
@@ -1534,8 +1632,11 @@ function VoucherEntryDialogBody({
   React.useEffect(() => {
     setEditing(false)
     setSaveError(null)
-    setDraft(draftFromLines(shown || []))
-  }, [voucher.id, shown])
+  }, [voucher.id])
+  React.useEffect(() => {
+    if (editing) return
+    setDraft(draftFromLines(shown || [], lang, accountSubjects))
+  }, [voucher.id, shown, lang, accountSubjects, editing])
   const debitTotal = (editing ? draft : shown || []).reduce((sum, ln) => {
     return sum + (editing ? parseDraftAmount((ln as VoucherDraftLine).debit) : Number((ln as TaxBookVoucherLine).debit) || 0)
   }, 0)
@@ -1581,7 +1682,7 @@ function VoucherEntryDialogBody({
     const payload = draft
       .map((ln) => ({
         accountCode: ln.accountCode.trim(),
-        accountName: ln.accountName.trim(),
+        accountName: (ln.canonicalName || ln.accountName).trim(),
         debit: parseDraftAmount(ln.debit),
         credit: parseDraftAmount(ln.credit),
         memo: ln.memo.trim(),
@@ -1634,7 +1735,7 @@ function VoucherEntryDialogBody({
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setDraft(draftFromLines(shown || []))
+                      setDraft(draftFromLines(shown || [], lang, accountSubjects))
                       setSaveError(null)
                       setEditing(true)
                     }}
@@ -1670,7 +1771,7 @@ function VoucherEntryDialogBody({
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">{t("taxBooksVoucherRef")}</dt>
-          <dd className="mt-0.5">{voucher.entryNo || "—"}</dd>
+          <dd className="mt-0.5">{voucher.referenceNo || "—"}</dd>
         </div>
       </dl>
       <div>
@@ -1699,6 +1800,18 @@ function VoucherEntryDialogBody({
               draft.map((ln, idx) => (
                 <tr key={idx} className="border-t">
                   <td className="px-2 py-2">
+                    <AccountSearchField
+                      lang={lang}
+                      subjects={accountSubjects}
+                      placeholder={t("taxBooksAccountSearch")}
+                      onPick={(code, shownName, canonicalName) =>
+                        setDraft((rows) =>
+                          rows.map((row, i) =>
+                            i === idx ? { ...row, accountCode: code, accountName: shownName, canonicalName } : row
+                          )
+                        )
+                      }
+                    />
                     <Input
                       className="mb-1 h-8 w-24"
                       value={ln.accountCode}
@@ -1711,9 +1824,20 @@ function VoucherEntryDialogBody({
                       className="h-8 min-w-[10rem]"
                       value={ln.accountName}
                       placeholder={t("taxBooksAccountName")}
-                      onChange={(e) =>
-                        setDraft((rows) => rows.map((row, i) => (i === idx ? { ...row, accountName: e.target.value } : row)))
-                      }
+                      onChange={(e) => {
+                        const accountName = e.target.value
+                        setDraft((rows) =>
+                          rows.map((row, i) =>
+                            i === idx
+                              ? {
+                                  ...row,
+                                  accountName,
+                                  canonicalName: canonicalJournalAccountName(row.accountCode, accountName, accountSubjects),
+                                }
+                              : row
+                          )
+                        )
+                      }}
                     />
                   </td>
                   <td className="px-2 py-2">
@@ -1814,7 +1938,10 @@ function VoucherEntryDialogBody({
           size="sm"
           variant="outline"
           onClick={() =>
-            setDraft((rows) => [...rows, { accountCode: "", accountName: "", debit: "", credit: "", memo: "" }])
+            setDraft((rows) => [
+              ...rows,
+              { accountCode: "", accountName: "", canonicalName: "", debit: "", credit: "", memo: "" },
+            ])
           }
         >
           {t("taxBooksAddLine")}
@@ -1838,6 +1965,7 @@ function VoucherJvTable({
     id: number
     date: string
     docNo: string
+    referenceNo?: string
     kind: string
     description: string
     total: string
@@ -1872,6 +2000,9 @@ function VoucherJvTable({
                   onClick={() => onDocClick(r.id)}
                 >
                   {r.docNo}
+                  {r.referenceNo && r.referenceNo !== r.docNo ? (
+                    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{r.referenceNo}</span>
+                  ) : null}
                 </button>
               </td>
               <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.kind}</td>

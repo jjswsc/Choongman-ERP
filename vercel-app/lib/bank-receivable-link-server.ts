@@ -20,6 +20,7 @@ import {
   sumStoreCreditAvailable,
 } from '@/lib/bank-receivable-store-credit'
 import { isPosChannelSettlementMemo } from '@/lib/bank-import-deposit-category'
+import { deleteOutboundCollectionJournal, postOutboundCollectionJournal } from '@/lib/outbound-sales-journal'
 import {
   supabaseDeleteByFilter,
   supabaseInsert,
@@ -48,6 +49,7 @@ type BankTxRow = {
   memo?: string
   note?: string | null
   store_name?: string | null
+  account_id?: number | null
   store?: string | null
 }
 
@@ -169,7 +171,7 @@ export async function linkReceivableAccrualsFromBankTransaction(params: {
 
   const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
     limit: 1,
-    select: 'id,trans_type,category,amount,trans_date,memo,note,store_name,store',
+    select: 'id,trans_type,category,amount,trans_date,memo,note,store_name,store,account_id',
   })) as BankTxRow[] | null
   const bankRow = bankRows?.[0]
   if (!bankRow?.id) {
@@ -389,6 +391,15 @@ export async function linkReceivableAccrualsFromBankTransaction(params: {
       })
     }
 
+    await postLinkedOutboundCollections(
+      linkTargets.map((t, i) => ({
+        accrualId: t.accrualId,
+        invoiceNo: String(t.accrual.invoice_no || ''),
+        amount: allocations[i]?.fromBank || 0,
+      })),
+      transDate,
+      bankRow.account_id
+    )
     return { ok: true }
   }
 
@@ -414,7 +425,36 @@ export async function linkReceivableAccrualsFromBankTransaction(params: {
     await supabaseUpdate('receivable_transactions', accrualId, { receive_checked: true })
   }
 
+  await postLinkedOutboundCollections(
+    linkTargets.map((t) => ({
+      accrualId: t.accrualId,
+      invoiceNo: String(t.accrual.invoice_no || ''),
+      amount: t.remaining,
+    })),
+    transDate,
+    bankRow.account_id
+  )
   return { ok: true }
+}
+
+async function postLinkedOutboundCollections(
+  items: { accrualId: number; invoiceNo: string; amount: number }[],
+  accountingDate: string,
+  bankAccountId: number | null | undefined
+): Promise<void> {
+  for (const item of items) {
+    try {
+      await postOutboundCollectionJournal({
+        accrualId: item.accrualId,
+        invoiceNo: item.invoiceNo,
+        amount: item.amount,
+        accountingDate,
+        bankAccountId,
+      })
+    } catch (e) {
+      console.error('outbound collection journal:', item.accrualId, e)
+    }
+  }
 }
 
 /** @deprecated 단일 ID — 다중은 linkReceivableAccrualsFromBankTransaction 사용 */
@@ -728,6 +768,9 @@ export async function unlinkReceivableAccrualsFromBankTransaction(
 
   for (const accrualId of accrualIds) {
     await refreshReceivableAccrualReceiveChecked(accrualId)
+  }
+  for (const accrualId of accrualIds) {
+    await deleteOutboundCollectionJournal(accrualId)
   }
 
   return { ok: true, accrualIds }

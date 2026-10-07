@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { isOfficeRole } from '@/lib/permissions'
+import { postOutboundBillSalesJournals } from '@/lib/outbound-sales-journal'
 import { supabaseUpsert } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
     }))
 
     await supabaseUpsert('outbound_invoice_print_status', rows, 'invoice_no')
+    await postOutboundBillSalesJournals(invoiceNos)
     return NextResponse.json({ success: true, saved: rows.length })
   } catch (err) {
     console.error('markOutboundInvoicesPrinted:', err)

@@ -10,6 +10,7 @@ import {
   resolveTaxBookMonthRange,
   taxEntityKeyFromScope,
   taxEntityCodeFromStoreName,
+  usesDailyCashSalesReceipt,
   isTaxBookJournalHead,
   buildTaxBookStatements,
   preferLockedTaxBookProfit,
@@ -19,7 +20,12 @@ import {
   taxVatSummaryLines,
   taxGrossVatSplit,
   taxPurchaseExpenseJournalLines,
+  taxBookIssuedDocumentNo,
+  taxDailyCashSalesJournalLines,
+  taxInvoiceCollectionJournalLines,
+  taxInvoiceSalesJournalLines,
   voucherKindForPaidExpense,
+  voucherKindForRecordedVat,
   voucherKindForSourceType,
 } from './tax-book'
 import { buildTaxManagementBridge } from './tax-management-bridge'
@@ -42,6 +48,8 @@ describe('tax book rules', () => {
     expect(voucherKindForSourceType('tax_income_expense_closing')).toBe('closing')
     expect(voucherKindForSourceType('tax_sales_summary')).toBe('sales')
     expect(voucherKindForSourceType('tax_purchase_summary')).toBe('purchase')
+    expect(voucherKindForSourceType('outbound_bill')).toBe('sales')
+    expect(voucherKindForSourceType('outbound_collection')).toBe('receipt')
     expect(voucherKindForSourceType('pos_order')).toBe('sales')
     expect(formatTaxVoucherNo('sales', '2026-09', 2)).toBe('SV2026090002')
     expect(formatTaxVoucherNo('purchase', '2026-09', 1)).toBe('PV2026090001')
@@ -97,6 +105,23 @@ describe('tax book rules', () => {
     expect(noVat.some((l) => l.accountCode === '1360')).toBe(false)
     expect(voucherKindForPaidExpense(7000)).toBe('purchase')
     expect(voucherKindForPaidExpense(0)).toBe('payment')
+    expect(voucherKindForRecordedVat('expense_accrual', 'purchase', false)).toBe('payment')
+    expect(voucherKindForRecordedVat('expense_accrual', 'purchase', true)).toBe('purchase')
+    expect(voucherKindForRecordedVat('pos_order', 'sales', false)).toBe('sales')
+    expect(taxBookIssuedDocumentNo('EXP2026090041')).toBe('EXP2026090041')
+    expect(taxBookIssuedDocumentNo('JE-TAX-MIRROR-63437')).toBe('')
+    const sales = taxInvoiceSalesJournalLines({ gross: 107, vatAmount: 7 })
+    expect(taxJournalBalanced(sales)).toBe(true)
+    expect(sales.map((l) => `${l.side}:${l.accountCode}:${l.amount}`)).toEqual([
+      'debit:1130:107',
+      'credit:4110:100',
+      'credit:2180:7',
+    ])
+    const collected = taxInvoiceCollectionJournalLines({ amount: 107, bankCode: '1010' })
+    expect(collected.map((l) => l.accountCode)).toEqual(['1010', '1130'])
+    const daily = taxDailyCashSalesJournalLines({ gross: 107, vatAmount: 7 })
+    expect(daily.some((l) => l.accountCode === '1130')).toBe(false)
+    expect(taxJournalBalanced(daily)).toBe(true)
   })
 
   it('accepts only an entity or 13-digit TIN as the tax book key', () => {
@@ -116,6 +141,9 @@ describe('tax book rules', () => {
     expect(taxEntityCodeFromStoreName('CM Future Park')).toBe('store:CM Future Park')
     expect(taxEntityCodeFromStoreName('CM Ekkamai')).toBe('store:CM Ekkamai')
     expect(taxEntityCodeFromStoreName('CM Office')).toBe('tin:0105566137147')
+    expect(usesDailyCashSalesReceipt('CM Ekkamai', '2026-10-08')).toBe(true)
+    expect(usesDailyCashSalesReceipt('CM Ekkamai', '2026-10-07')).toBe(false)
+    expect(usesDailyCashSalesReceipt('CM Office', '2026-10-08')).toBe(false)
     expect(taxEntityCodeFromStoreName('Unknown Branch')).toBe('store:Unknown Branch')
     expect(taxEntityCodeFromStoreName('All')).toBeNull()
     expect(isTaxBookJournalHead({ source_type: 'pos_order', book: 'tax' })).toBe(true)

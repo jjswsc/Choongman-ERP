@@ -61,6 +61,22 @@ function matchingSubjectLabel(
   return hit || null
 }
 
+/** 화면 언어 계정명이 차트 표준이면 DB에는 한국어 계정명을 둔다. 은행 별칭은 그대로 둔다. */
+export function canonicalJournalAccountName(
+  accountCode: string,
+  editedName: string,
+  subjects?: TaxBookAccountSubjectLabel[] | null
+): string {
+  const code = String(accountCode || '').trim()
+  const edited = String(editedName || '').trim()
+  if (!edited) return ''
+  const labels = (['ko', 'en', 'th'] as const).map((lang) => displayTaxBookAccountName(lang, code, '', subjects))
+  if (labels.some((label) => label && label === edited)) {
+    return displayTaxBookAccountName('ko', code, '', subjects) || edited
+  }
+  return edited
+}
+
 export function displayTaxBookAccountName(
   lang: string,
   accountCode: string,

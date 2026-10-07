@@ -12,11 +12,12 @@ import {
   formatTaxVoucherNo,
   resolveTaxBookMonthRange,
   roundTaxAmount,
+  taxBookIssuedDocumentNo,
   taxJournalBalanced,
-  voucherKindForSourceType,
+  voucherKindForRecordedVat,
   type TaxVoucherKind,
 } from '@/lib/tax-book'
-import { isCustomTaxDocumentNo, taxBookStatusFromMemo } from '@/lib/tax-book-voucher-memo'
+import { taxBookStatusFromMemo } from '@/lib/tax-book-voucher-memo'
 import {
   assertTaxAccountingPeriodOpen,
   isMissingTaxBookSchemaError,
@@ -27,6 +28,8 @@ import type { TrialBalanceRow } from '@/lib/trial-balance-report'
 export type TaxBookEntryRow = {
   id: number
   entryNo: string
+  /** 발행 문서번호. 일별장부 번호(voucherNo)와 다르다. JE- 내부번호는 비운다. */
+  referenceNo: string
   voucherNo: string
   voucherKind: TaxVoucherKind
   accountingDate: string
@@ -210,9 +213,10 @@ export function summarizeTaxBookTrial(
 export function toTaxBookEntries(
   yearMonth: string,
   heads: JournalHead[],
-  lines: { journal_entry_id?: number; side?: string; amount?: number | string }[]
+  lines: { journal_entry_id?: number; account_code?: string; side?: string; amount?: number | string }[]
 ): TaxBookEntryRow[] {
   const totals = new Map<number, { debit: number; credit: number }>()
+  const inputVatIds = new Set<number>()
   for (const ln of lines) {
     const id = Number(ln.journal_entry_id || 0)
     if (!id) continue
@@ -221,12 +225,13 @@ export function toTaxBookEntries(
     if (String(ln.side || '').toLowerCase() === 'credit') cur.credit += amt
     else cur.debit += amt
     totals.set(id, cur)
+    if (amt > 0.0001 && String(ln.account_code || '').trim() === '1360') inputVatIds.add(id)
   }
   const seqByKind: Record<string, number> = {}
   return heads
     .map((h) => {
       const id = Number(h.id || 0)
-      const kind = (String(h.voucher_kind || '').trim() || voucherKindForSourceType(h.source_type)) as TaxVoucherKind
+      const kind = voucherKindForRecordedVat(h.source_type, h.voucher_kind, inputVatIds.has(id))
       const dated = String(h.accounting_date || '').slice(0, 7)
       const ym = /^\d{4}-\d{2}$/.test(dated) ? dated : yearMonth
       const seqKey = `${ym}:${kind}`
@@ -234,10 +239,12 @@ export function toTaxBookEntries(
       const generated = formatTaxVoucherNo(kind, ym, seqByKind[seqKey])
       const tot = totals.get(id) || { debit: 0, credit: 0 }
       const memo = h.memo != null ? String(h.memo) : null
+      const entryNo = String(h.entry_no || '')
       return {
         id,
-        entryNo: String(h.entry_no || ''),
-        voucherNo: isCustomTaxDocumentNo(h.entry_no) ? String(h.entry_no).trim() : generated,
+        entryNo,
+        referenceNo: taxBookIssuedDocumentNo(entryNo),
+        voucherNo: generated,
         voucherKind: kind,
         accountingDate: String(h.accounting_date || '').slice(0, 10),
         sourceType: String(h.source_type || ''),

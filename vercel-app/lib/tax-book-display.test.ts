@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canonicalJournalAccountName,
   displayTaxBookAccountName,
   formatTaxBookLedgerDate,
   formatTaxBookLedgerPeriod,
@@ -26,6 +27,8 @@ describe('tax book display i18n', () => {
     expect(displayTaxBookAccountName('th', '9999', '현금및예금')).toBe('เงินสดและเงินฝากธนาคาร')
     expect(displayTaxBookAccountName('th', '1010', 'กสิกรไทย · สำนักงานใหญ่')).toBe('กสิกรไทย · สำนักงานใหญ่')
     expect(displayTaxBookAccountName('th', '1010', '현금및예금')).toBe('เงินสดและเงินฝากธนาคาร')
+    expect(canonicalJournalAccountName('2110', 'เจ้าหนี้การค้า')).toBe('매입채무')
+    expect(canonicalJournalAccountName('1010', 'K-bank · 166-2-97079-0')).toBe('K-bank · 166-2-97079-0')
   })
 
   it('formats ledger dates in Buddhist short form for Thai', () => {
