@@ -172,6 +172,8 @@ export interface ExpenseSearchOverviewRow {
   invoiceReceived?: boolean
   invoiceNo?: string
   invoicePhotoUrl?: string
+  /** 이미지·PDF. 검색 화면에서 눌러 본다 */
+  attachmentUrls?: string[]
   documentNo?: string
   bankLinked?: boolean
   pettyLinked?: boolean

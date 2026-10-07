@@ -1,3 +1,4 @@
+import { mergeExpenseAttachmentUrlSources } from '@/lib/expense-attachment-urls'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { buildExpenseAccrualPlanDateFilters } from '@/lib/expense-accrual-plan-filters'
 import { expenseAccrualNetPayable } from '@/lib/expense-accrual-net'
@@ -41,6 +42,8 @@ export interface ExpenseSearchOverviewRow {
   invoiceReceived?: boolean
   invoiceNo?: string
   invoicePhotoUrl?: string
+  /** 이미지·PDF 첨부. invoice_photo_url(이미지)과 attachment_urls를 합친 값 */
+  attachmentUrls?: string[]
   documentNo?: string
   bankLinked?: boolean
   pettyLinked?: boolean
@@ -71,6 +74,7 @@ type ExpenseAccrualRow = {
   invoice_received?: boolean | null
   invoice_no?: string | null
   invoice_photo_url?: string | null
+  attachment_urls?: string | null
   document_no?: string | null
 }
 
@@ -89,6 +93,7 @@ type BankTxRow = {
   invoice_received?: boolean
   invoice_no?: string
   invoice_photo_url?: string
+  attachment_urls?: string | null
   document_no?: string | null
 }
 
@@ -114,7 +119,17 @@ type PayableLinkRow = {
 }
 
 const ACCRUAL_SELECT =
-  'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,invoice_received,invoice_no,invoice_photo_url,document_no'
+  'id,payee_code,payee_name,amount,vat_amount,withholding_tax_amount,expense_date,due_date,memo,account_subject_id,store_name,status,invoice_received,invoice_no,invoice_photo_url,attachment_urls,document_no'
+
+const BANK_TX_SELECT =
+  'id,account_id,trans_date,amount,memo,note,category,account_subject_id,expense_date,vendor_code,store_name,invoice_received,invoice_no,invoice_photo_url,attachment_urls,document_no'
+
+function attachmentUrlsForSearch(
+  invoicePhotoUrls: Array<string | null | undefined>,
+  attachmentJson: Array<string | null | undefined>
+): string[] {
+  return mergeExpenseAttachmentUrlSources(attachmentJson, invoicePhotoUrls)
+}
 
 const PAYABLE_LINK_SELECT =
   'bank_transaction_id,expense_accrual_id,petty_cash_transaction_id,amount'
@@ -283,8 +298,7 @@ async function fetchBankRegisterRows(
   return (await supabaseSelectFilter('bank_transactions', parts.join('&'), {
     order: 'trans_date.desc,id.desc',
     limit: 20000,
-    select:
-      'id,account_id,trans_date,amount,memo,note,category,account_subject_id,expense_date,vendor_code,store_name,invoice_received,invoice_no,invoice_photo_url,document_no',
+    select: BANK_TX_SELECT,
   })) as BankTxRow[]
 }
 
@@ -292,8 +306,7 @@ async function fetchBankRowsByIds(ids: number[]): Promise<BankTxRow[]> {
   if (ids.length === 0) return []
   const idList = ids.join(',')
   return (await supabaseSelectFilter('bank_transactions', `id=in.(${idList})`, {
-    select:
-      'id,account_id,trans_date,amount,memo,note,category,account_subject_id,expense_date,vendor_code,store_name,invoice_received,invoice_no,invoice_photo_url,document_no',
+    select: BANK_TX_SELECT,
     limit: ids.length,
   })) as BankTxRow[]
 }
@@ -509,6 +522,10 @@ export async function buildExpenseSearchOverview(params: {
       ['purchase_payment', 'purchase_advance'].includes(decoded.withdrawalCategory) && decoded.payeeCode
         ? decoded.payeeCode
         : undefined
+    const attachmentUrls = attachmentUrlsForSearch(
+      [row.invoice_photo_url, bank?.invoice_photo_url],
+      [row.attachment_urls, bank?.attachment_urls]
+    )
 
     rows.push({
       rowKey: `accrual-${accrualId}`,
@@ -538,6 +555,7 @@ export async function buildExpenseSearchOverview(params: {
       invoiceReceived: Boolean(row.invoice_received ?? bank?.invoice_received),
       invoiceNo: String(row.invoice_no || bank?.invoice_no || '').trim() || undefined,
       invoicePhotoUrl: String(row.invoice_photo_url || bank?.invoice_photo_url || '').trim() || undefined,
+      ...(attachmentUrls.length > 0 ? { attachmentUrls } : {}),
       documentNo: String(row.document_no || bank?.document_no || '').trim() || undefined,
       bankLinked: hasBank,
       pettyLinked: hasPetty,
@@ -584,6 +602,11 @@ export async function buildExpenseSearchOverview(params: {
       continue
     }
 
+    const bankAttachmentUrls = attachmentUrlsForSearch(
+      [bank.invoice_photo_url, linkedAccrual?.invoice_photo_url],
+      [bank.attachment_urls, linkedAccrual?.attachment_urls]
+    )
+
     rows.push({
       rowKey: `bank-${bankId}`,
       relation: linkedAccrualId > 0 ? 'paid_bank' : 'bank_only',
@@ -628,6 +651,7 @@ export async function buildExpenseSearchOverview(params: {
       invoiceReceived: Boolean(bank.invoice_received ?? linkedAccrual?.invoice_received),
       invoiceNo: String(bank.invoice_no || linkedAccrual?.invoice_no || '').trim() || undefined,
       invoicePhotoUrl: String(bank.invoice_photo_url || linkedAccrual?.invoice_photo_url || '').trim() || undefined,
+      ...(bankAttachmentUrls.length > 0 ? { attachmentUrls: bankAttachmentUrls } : {}),
       documentNo: String(bank.document_no || linkedAccrual?.document_no || '').trim() || undefined,
       bankLinked: plannedBankSet.has(bankId),
       pettyLinked: false,

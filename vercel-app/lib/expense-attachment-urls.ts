@@ -10,6 +10,29 @@ export type ExpenseAttachmentUrlsNormalizeResult =
   | { ok: true; json: string | null }
   | { ok: false; message: string }
 
+/**
+ * 목록 표시용. attachment_urls JSON과 단일 URL(invoice_photo_url)을 합치고 중복을 뺀다.
+ * PDF는 invoice_photo_url에 안 들어가므로 JSON 쪽을 먼저 넣는다.
+ */
+export function mergeExpenseAttachmentUrlSources(
+  jsonSources: Array<string | null | undefined>,
+  extraUrls: Array<string | null | undefined> = []
+): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const push = (u: string) => {
+    const s = u.trim()
+    if (!s || seen.has(s)) return
+    seen.add(s)
+    out.push(s)
+  }
+  for (const raw of jsonSources) {
+    for (const u of parseExpenseAttachmentUrls(raw)) push(u)
+  }
+  for (const u of extraUrls) push(String(u ?? ''))
+  return out
+}
+
 export function parseExpenseAttachmentUrls(raw: string | null | undefined): string[] {
   const s = String(raw ?? '').trim()
   if (!s) return []

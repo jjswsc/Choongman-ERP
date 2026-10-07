@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAX_EXPENSE_DATA_URL_CHARS,
+  mergeExpenseAttachmentUrlSources,
   normalizeExpenseAttachmentUrlsInput,
   parseExpenseAttachmentUrls,
 } from './expense-attachment-urls'
@@ -14,6 +15,22 @@ describe('expense-attachment-urls', () => {
   it('normalize accepts https storage urls', () => {
     const result = normalizeExpenseAttachmentUrlsInput(['https://cdn.example.com/a.pdf'])
     expect(result).toEqual({ ok: true, json: JSON.stringify(['https://cdn.example.com/a.pdf']) })
+  })
+
+  it('merge keeps pdf attachments that are not stored as invoice photo', () => {
+    const pdf = 'https://cdn.example.com/accruals/a.pdf'
+    const image = 'data:image/jpeg;base64,abc'
+    const merged = mergeExpenseAttachmentUrlSources(
+      [JSON.stringify([pdf, image])],
+      [image]
+    )
+    expect(merged).toEqual([pdf, image])
+  })
+
+  it('merge includes a lone invoice photo when attachment json is empty', () => {
+    expect(mergeExpenseAttachmentUrlSources([null, ''], ['https://cdn.example.com/b.jpg'])).toEqual([
+      'https://cdn.example.com/b.jpg',
+    ])
   })
 
   it('normalize rejects oversized data urls instead of silently dropping', () => {

@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Camera, Pencil, Trash2 } from "lucide-react"
+import { Search, Camera, FileText, Pencil, Trash2 } from "lucide-react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ExpenseSearchTimelineCell } from "@/components/erp/expense-search-timeline-cell"
@@ -40,7 +40,8 @@ import {
 import { EXPENSE_WITHDRAW_SUBJECT_FETCH } from "@/lib/account-subject-withdraw-options"
 import { useAuth } from "@/lib/auth-context"
 import { compressImageForUpload, cn } from "@/lib/utils"
-import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+import { ExpenseAttachmentPreviewItem } from "@/components/erp/expense-attachment-preview"
+import { expenseAttachmentKind } from "@/lib/expense-attachment-urls"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { expenseSearchViewCache } from "@/lib/expense-search-view-cache"
@@ -67,6 +68,20 @@ function getCategoryLabel(cat: string, t: (k: string) => string): string {
     dividend: t("wm_dividend") || "Dividend",
   }
   return map[cat] ?? cat
+}
+
+function searchRowAttachmentUrls(r: ExpenseSearchOverviewRow): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const push = (u?: string) => {
+    const s = String(u || "").trim()
+    if (!s || seen.has(s)) return
+    seen.add(s)
+    out.push(s)
+  }
+  for (const u of r.attachmentUrls || []) push(u)
+  push(r.invoicePhotoUrl)
+  return out
 }
 
 function relationBadgeClass(relation: ExpenseSearchRelation): string {
@@ -128,7 +143,7 @@ export function ExpenseRegisterSearchTab() {
   const [accountSubjects, setAccountSubjects] = React.useState<AccountSubjectItem[]>([])
   const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
-  const [invoicePhotoPreviewUrl, setInvoicePhotoPreviewUrl] = React.useState<string | null>(null)
+  const [attachmentPreview, setAttachmentPreview] = React.useState<{ urls: string[]; title: string } | null>(null)
   const [invoicePhotoUploadingId, setInvoicePhotoUploadingId] = React.useState<number | null>(null)
   const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
@@ -797,34 +812,55 @@ export function ExpenseRegisterSearchTab() {
                                 {r.invoiceNo}
                               </span>
                             ) : null}
-                            {r.bankTransactionId ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (r.invoicePhotoUrl) {
-                                    setInvoicePhotoPreviewUrl(r.invoicePhotoUrl!)
-                                  } else {
+                            {(() => {
+                              const urls = searchRowAttachmentUrls(r)
+                              const firstImage = urls.find((u) => expenseAttachmentKind(u) === "image")
+                              if (urls.length > 0) {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setAttachmentPreview({
+                                        urls,
+                                        title: r.payeeName || r.documentNo || tt("poInvoice", "Invoice"),
+                                      })
+                                    }
+                                    className="relative inline-flex h-8 w-8 items-center justify-center rounded text-green-600 hover:bg-muted shrink-0 overflow-hidden"
+                                    title={tt("expenseViewAttachment", "View attachment")}
+                                  >
+                                    {firstImage ? (
+                                      <img src={firstImage} alt="" className="h-6 w-6 object-cover rounded" />
+                                    ) : (
+                                      <FileText className="h-4 w-4" />
+                                    )}
+                                    {urls.length > 1 ? (
+                                      <span className="absolute bottom-0 right-0 rounded-sm bg-background/90 px-0.5 text-[9px] font-medium leading-none text-foreground">
+                                        {urls.length}
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                )
+                              }
+                              if (!r.bankTransactionId) return null
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => {
                                     invoicePhotoTargetRowRef.current = r
                                     fileInputRef.current?.click()
-                                  }
-                                }}
-                                disabled={invoicePhotoUploadingId === r.bankTransactionId}
-                                className={`inline-flex h-8 w-8 items-center justify-center rounded hover:bg-muted shrink-0 overflow-hidden ${r.invoicePhotoUrl ? "text-green-600" : "text-muted-foreground"}`}
-                                title={
-                                  r.invoicePhotoUrl
-                                    ? `${tt("poInvoice", "Invoice")} (${tt("clickToView", "click to view")})`
-                                    : tt("bankInvoicePhotoUpload", "Upload invoice image")
-                                }
-                              >
-                                {r.invoicePhotoUrl ? (
-                                  <img src={r.invoicePhotoUrl} alt="" className="h-6 w-6 object-cover rounded" />
-                                ) : invoicePhotoUploadingId === r.bankTransactionId ? (
-                                  <span className="text-xs">...</span>
-                                ) : (
-                                  <Camera className="h-4 w-4" />
-                                )}
-                              </button>
-                            ) : null}
+                                  }}
+                                  disabled={invoicePhotoUploadingId === r.bankTransactionId}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted shrink-0"
+                                  title={tt("bankInvoicePhotoUpload", "Upload invoice image")}
+                                >
+                                  {invoicePhotoUploadingId === r.bankTransactionId ? (
+                                    <span className="text-xs">...</span>
+                                  ) : (
+                                    <Camera className="h-4 w-4" />
+                                  )}
+                                </button>
+                              )
+                            })()}
                           </div>
                         </td>
                         <td className="p-2 text-muted-foreground text-sm max-w-[180px] truncate" title={r.memo}>
@@ -972,16 +1008,29 @@ export function ExpenseRegisterSearchTab() {
         </CardContent>
       </Card>
 
-      <Dialog open={!!invoicePhotoPreviewUrl} onOpenChange={(open) => !open && setInvoicePhotoPreviewUrl(null)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={!!attachmentPreview} onOpenChange={(open) => !open && setAttachmentPreview(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{tt("poInvoice", "Invoice")}</DialogTitle>
+            <DialogTitle>
+              {tt("expenseAttachmentTitle", "Attachments")}
+              {attachmentPreview?.title ? ` — ${attachmentPreview.title}` : ""}
+            </DialogTitle>
           </DialogHeader>
-          <ImageViewerWithRotate
-            src={invoicePhotoPreviewUrl || ""}
-            alt=""
-            imgClassName="max-h-[70vh] w-full object-contain rounded"
-          />
+          <div className="space-y-4">
+            {(attachmentPreview?.urls || []).map((url, i) => (
+              <div key={i} className="rounded-md border border-border/60 p-2">
+                <ExpenseAttachmentPreviewItem
+                  url={url}
+                  index={i}
+                  openFileLabel={tt("expenseOpenFile", "Open file")}
+                  corruptedPdfLabel={tt(
+                    "expenseAttachmentCorrupted",
+                    "This PDF may have been damaged while saving. Please re-attach it from Withdrawal Management."
+                  )}
+                />
+              </div>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
