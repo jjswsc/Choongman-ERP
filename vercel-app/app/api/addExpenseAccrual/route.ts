@@ -566,6 +566,7 @@ export async function POST(request: NextRequest) {
           expenseAccountName: subjectName,
           expenseAccountSubjectId:
             accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
+          entryNo: documentNo,
           memo: memo || `지출 발생 ${payeeName || payeeCode}`,
           storeName: storeName || undefined,
           postedBy: userName || undefined,

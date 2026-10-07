@@ -1425,7 +1425,15 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           return
         }
         onAccrualSaved?.({ expenseDate: transDate })
-        await appAlert(tt("wm_accrualSuccess", "Saved. Please check in the payment plan tab."))
+        const savedDocNo = String((res as { documentNo?: string }).documentNo || "").trim()
+        await appAlert(
+          savedDocNo
+            ? tt("wm_accrualSuccessWithDoc", "Registered. Document no. {{docNo}} — search this number in the day books.").replace(
+                /\{\{docNo\}\}/g,
+                savedDocNo
+              )
+            : tt("wm_accrualSuccess", "Saved. Please check in the payment plan tab.")
+        )
       }
     } catch (e) {
       await appAlert(
@@ -1889,8 +1897,20 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         setPayeeBankName("")
         setPayeeBankAccountNo("")
       }
+      const savedDocNo = String((res as { documentNo?: string }).documentNo || "").trim()
       if (res.fixedAssetId) {
-        await appAlert(tt("wm_successWithAsset", "Saved. Check auto-linking in the depreciation menu."))
+        await appAlert(
+          savedDocNo
+            ? `${tt("wm_successWithAsset", "Saved. Check auto-linking in the depreciation menu.")} (${tt("expenseDocumentNo", "Doc No.")} ${savedDocNo})`
+            : tt("wm_successWithAsset", "Saved. Check auto-linking in the depreciation menu.")
+        )
+      } else if (savedDocNo) {
+        await appAlert(
+          tt("wm_accrualSuccessWithDoc", "Registered. Document no. {{docNo}} — search this number in the day books.").replace(
+            /\{\{docNo\}\}/g,
+            savedDocNo
+          )
+        )
       } else {
         await appAlert(tt("success", "Saved."))
       }
@@ -2769,6 +2789,17 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
               </div>
             </ExpenseRegisterField>
           )}
+
+          {categoryMain && !isBankLinkMode && !isEditMode && (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "fixed_asset") ? (
+            <ExpenseRegisterField label={tt("expenseDocumentNo", "Doc No.")}>
+              <p className="text-sm text-muted-foreground">
+                {tt(
+                  "expenseDocumentNoAutoHint",
+                  "Document no. EXPyyyymm000x is issued automatically on save (continuous monthly sequence). Use it to search day books."
+                )}
+              </p>
+            </ExpenseRegisterField>
+          ) : null}
 
           {showRecurringTemplatesBar ? (
             <ExpenseRecurringTemplatesBar

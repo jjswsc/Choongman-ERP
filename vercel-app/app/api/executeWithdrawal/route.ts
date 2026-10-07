@@ -490,6 +490,7 @@ export async function POST(request: NextRequest) {
         accountingDate: transDate,
         amountAbs: netWithdrawAmount,
         vatAmount,
+        entryNo: documentNo,
         memo: memo || undefined,
         storeName: store || undefined,
         postedBy: userName || undefined,

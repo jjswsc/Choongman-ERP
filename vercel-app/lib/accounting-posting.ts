@@ -18,6 +18,7 @@ import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { uniqueAccountingPeriodChecks } from '@/lib/accounting-period-mutation-guard'
 import { assertTaxAccountingPeriodOpen, TAX_BOOK_SCHEMA_MISSING, TAX_PERIOD_CLOSED } from '@/lib/tax-book-period-server'
 import { TAX_ACCOUNTS, TAX_BOOK, isTaxBookSourceType, taxEntityCodeFromStoreName, taxPurchaseExpenseJournalLines, voucherKindForPaidExpense, voucherKindForSourceType } from '@/lib/tax-book'
+import { isCustomTaxDocumentNo } from '@/lib/tax-book-voucher-memo'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
 import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
 
@@ -187,8 +188,24 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
     throw new Error('ACCOUNTING_PERIOD_CLOSED')
   }
 
+  // entry_no UNIQUE: 회사·세무가 같은 EXP를 쓰면 미러가 실패한다.
+  // 일별장부 검색용 문서번호(EXP…)는 세무 전표에만 두고, 회사는 JE- 자동번호를 쓴다.
+  const requestedNo = String(params.entryNo || '').trim()
+  const willMirrorToTax =
+    !isTaxBook &&
+    !isTaxBookSourceType(params.sourceType) &&
+    !!taxEntityCodeFromStoreName(params.storeName)
+  const resolvedEntryNo = (() => {
+    if (!requestedNo) return mkEntryNo(params.sourceType, params.sourceId)
+    if (isTaxBook) return requestedNo
+    if (willMirrorToTax && isCustomTaxDocumentNo(requestedNo)) {
+      return mkEntryNo(params.sourceType, params.sourceId)
+    }
+    return requestedNo
+  })()
+
   const inserted = (await supabaseInsert('journal_entries', {
-    entry_no: String(params.entryNo || '').trim() || mkEntryNo(params.sourceType, params.sourceId),
+    entry_no: resolvedEntryNo,
     accounting_date: accountingDate,
     source_type: params.sourceType,
     source_id: params.sourceId ?? null,
@@ -283,6 +300,7 @@ async function mirrorJournalEntryToTaxBook(
       book: TAX_BOOK,
       voucherKind: params.voucherKind || voucherKindForSourceType(params.sourceType),
       taxEntityCode,
+      entryNo: String(params.entryNo || '').trim() || null,
     })
   } catch (e) {
     const code = e instanceof Error ? e.message : String(e)
@@ -552,6 +570,8 @@ export async function postExpenseAccrualJournal(params: {
   /** 통장에서 이미 지급된 매입이면 매입채무 대신 그 계좌 */
   creditCode?: string
   creditName?: string
+  /** 지출 문서번호 EXPyyyymmNNNN — 일별장부 검색용 */
+  entryNo?: string | null
   memo?: string
   storeName?: string
   postedBy?: string
@@ -587,6 +607,7 @@ export async function postExpenseAccrualJournal(params: {
     memo: params.memo || '지출 발생(미지급) 자동분개',
     postedBy: params.postedBy || null,
     voucherKind: 'purchase',
+    entryNo: String(params.entryNo || '').trim() || null,
     lines,
   })
 }
@@ -1021,6 +1042,8 @@ export async function postWithdrawalJournal(params: {
   expenseAccountSubjectId?: number | null
   /** 세금계산서가 있을 때만 매입세(1360)를 나눈다 */
   vatAmount?: number
+  /** 지출 문서번호 EXPyyyymmNNNN */
+  entryNo?: string | null
   /** 이체 시 입금 계좌(통장→통장) */
   transferToAccountId?: number | null
   /** 이체 시 패티캐쉬 대상 매장(통장→패티) */
@@ -1216,6 +1239,7 @@ export async function postWithdrawalJournal(params: {
     memo: params.memo || '출금 관리 자동분개',
     postedBy: params.postedBy || null,
     voucherKind,
+    entryNo: String(params.entryNo || '').trim() || null,
     lines,
   })
 }

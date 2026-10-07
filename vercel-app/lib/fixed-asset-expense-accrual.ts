@@ -250,6 +250,7 @@ export async function createExpenseAccrualForFixedAsset(
       expenseAccountCode: subjectCode,
       expenseAccountName: subjectName,
       expenseAccountSubjectId: subject?.id ?? null,
+      entryNo: documentNo,
       memo: `고정자산 취득 ${assetName}`,
       storeName,
       postedBy: String(params.createdBy || '').trim() || undefined,

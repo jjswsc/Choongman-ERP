@@ -44,6 +44,7 @@ type ExpenseAccrualRow = {
   account_subject_id?: number | null
   created_by?: string | null
   payee_name?: string | null
+  document_no?: string | null
 }
 
 type PayableRow = {
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
     }
 
     const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
-      select: 'id,status,payee_code,store_name,amount,expense_date,due_date,memo,account_subject_id,created_by,payee_name,vat_amount,withholding_tax_amount',
+      select: 'id,status,payee_code,store_name,amount,expense_date,due_date,memo,account_subject_id,created_by,payee_name,vat_amount,withholding_tax_amount,document_no',
       limit: 1,
     })) as ExpenseAccrualRow[] | null
     const row = rows?.[0]
@@ -472,6 +473,7 @@ export async function POST(request: NextRequest) {
           expenseAccountCode: subjectCode,
           expenseAccountName: subjectName,
           expenseAccountSubjectId: accountSubjectId,
+          entryNo: String(row.document_no || '').trim() || null,
           memo: memo || String(row.memo || '') || `지출 발생 ${payeeName || row.payee_name || payeeCode}`,
           storeName: storeName || String(row.store_name || '') || undefined,
           postedBy: String(row.created_by || '').trim() || undefined,

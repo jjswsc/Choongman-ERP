@@ -17,6 +17,7 @@ import {
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { syncExpenseAccrualInvoiceEvidence } from '@/lib/expense-accrual-invoice-sync'
 import { vatSplitFromTaxInvoiceGross } from '@/lib/invoice-backed-input-vat-ledger'
+import { allocateExpenseDocumentNo } from '@/lib/expense-document-no-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { canonicalOfficeStore } from '@/lib/office-store-canonical'
 
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
           if (subject?.[0]?.name) subjectName = String(subject[0].name)
         }
         const accrualRows = (await supabaseSelectFilter('expense_accruals', `id=eq.${accrualId}`, {
-          select: 'id,store_name,expense_date,memo,payee_name,created_by,amount,vat_amount',
+          select: 'id,store_name,expense_date,memo,payee_name,created_by,amount,vat_amount,document_no',
           limit: 1,
         })) as {
           id?: number
@@ -148,9 +149,18 @@ export async function POST(request: NextRequest) {
           created_by?: string | null
           amount?: number
           vat_amount?: number | null
+          document_no?: string | null
         }[] | null
         const accrualRow = accrualRows?.[0]
         const expenseDate = String(accrualRow?.expense_date || bankRow.trans_date || '').slice(0, 10)
+        let linkedDocumentNo = String(accrualRow?.document_no || '').trim() || null
+        if (!linkedDocumentNo) {
+          try {
+            linkedDocumentNo = await allocateExpenseDocumentNo(expenseDate)
+          } catch (docErr) {
+            console.warn('registerExpenseFromBankTransaction document_no:', docErr)
+          }
+        }
         await supabaseUpdate('expense_accruals', accrualId, {
           payee_code: `${payeeCode}::wm::expense`,
           payee_name: payeeName || payeeCode,
@@ -159,7 +169,11 @@ export async function POST(request: NextRequest) {
           status: 'done',
           ...invoiceFieldsFromBankRow(bankRow),
           ...(linkedVat != null ? { vat_amount: linkedVat } : {}),
+          ...(linkedDocumentNo ? { document_no: linkedDocumentNo } : {}),
         })
+        if (linkedDocumentNo) {
+          await supabaseUpdate('bank_transactions', bankTransactionId, { document_no: linkedDocumentNo })
+        }
         const allPayables = (await supabaseSelectFilter('payable_transactions', `expense_accrual_id=eq.${accrualId}`, {
           limit: 20,
         })) as { id?: number }[]
@@ -191,6 +205,7 @@ export async function POST(request: NextRequest) {
             expenseAccountSubjectId: asId,
             creditCode: bankCredit.accountCode,
             creditName: bankCredit.accountName,
+            entryNo: linkedDocumentNo,
             memo: memo || String(accrualRow?.memo || '') || `지출 발생 ${payeeName || payeeCode}`,
             storeName: String(accrualRow?.store_name || bankRow.store_name || bankRow.store || '').trim() || undefined,
             postedBy: String(accrualRow?.created_by || userName || '').trim() || undefined,
@@ -226,6 +241,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '통장 거래 정보가 올바르지 않습니다.' }, { status: 400, headers })
     }
 
+    let documentNo: string | null = null
+    try {
+      documentNo = await allocateExpenseDocumentNo(expenseDate)
+    } catch (docErr) {
+      console.error('registerExpenseFromBankTransaction document_no:', docErr)
+      return NextResponse.json(
+        { success: false, message: '문서번호 발급에 실패했습니다. expense_document_no SQL을 확인해 주세요.' },
+        { status: 500, headers }
+      )
+    }
+
     const accrualRow: Record<string, unknown> = {
       payee_code: payeeCode,
       payee_name: payeeName || payeeCode,
@@ -236,6 +262,7 @@ export async function POST(request: NextRequest) {
       store_name: effectiveStoreName,
       created_by: userName || null,
       status: 'done',
+      document_no: documentNo,
       ...invoiceFieldsFromBankRow(bankRow),
       ...(vatAmount != null ? { vat_amount: vatAmount } : {}),
     }
@@ -296,6 +323,7 @@ export async function POST(request: NextRequest) {
       expense_date: expenseDate,
       store: effectiveStoreName,
       account_subject_id: accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
+      document_no: documentNo,
     })
 
     try {
@@ -311,6 +339,7 @@ export async function POST(request: NextRequest) {
           accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
         creditCode: bankCredit.accountCode,
         creditName: bankCredit.accountName,
+        entryNo: documentNo,
         memo: `지출 발생(통장연결) ${payeeName || payeeCode}`,
         storeName: effectiveStoreName || undefined,
         postedBy: userName || undefined,

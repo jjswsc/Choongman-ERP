@@ -405,7 +405,16 @@ export function TaxFilingBooksTab(props: {
     return (entries?.vouchers || []).filter((v) => {
       if (!voucherMatchesDayBook(v.voucherKind as TaxVoucherKind, dayBook)) return false
       if (dateQ && v.accountingDate !== dateQ) return false
-      if (docQ && !String(v.voucherNo || "").toLowerCase().includes(docQ)) return false
+      if (docQ) {
+        const docHit =
+          String(v.voucherNo || "")
+            .toLowerCase()
+            .includes(docQ) ||
+          String(v.entryNo || "")
+            .toLowerCase()
+            .includes(docQ)
+        if (!docHit) return false
+      }
       return true
     })
   }, [entries?.vouchers, dayBook, voucherDateQuery, voucherDocQuery])
