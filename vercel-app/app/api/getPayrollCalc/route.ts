@@ -61,6 +61,7 @@ import {
   appendSaasTenantFilter,
   isSaasTenantQueryBlocked,
   resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
 } from '@/lib/saas-tenant-scope'
 
 const LATE_DED_HOURS_BASE = 208 // 지각/조퇴 공제 기준(기존 정책 유지)
@@ -907,18 +908,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const attLogBase = `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`
+    const pullAtt = (select: string) =>
+      selectWithSaasTenantFallback('attendance_logs', tenantScope, attLogBase, (scoped) =>
+        supabaseSelectFilterAllPages('attendance_logs', scoped, {
+          order: 'log_at.asc',
+          select,
+          pageSize: 2500,
+          maxRows: 120000,
+        })
+      )
     const loadAttRows = async () => {
       try {
-        return (await supabaseSelectFilterAllPages(
-          'attendance_logs',
-          `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-          {
-            order: 'log_at.asc',
-            select: ATTENDANCE_LOG_PAYROLL_COLS,
-            pageSize: 2500,
-            maxRows: 120000,
-          }
-        )) as {
+        return (await pullAtt(ATTENDANCE_LOG_PAYROLL_COLS)) as {
           id?: number | null
           log_at?: string
           store_name?: string
@@ -935,16 +937,7 @@ export async function GET(request: NextRequest) {
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (!/employee_id|employee_code|42703|column/i.test(em)) throw e
-        return (await supabaseSelectFilterAllPages(
-          'attendance_logs',
-          `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-          {
-            order: 'log_at.asc',
-            select: ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
-            pageSize: 2500,
-            maxRows: 120000,
-          }
-        )) as {
+        return (await pullAtt(ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE)) as {
           id?: number | null
           log_at?: string
           store_name?: string
@@ -960,17 +953,20 @@ export async function GET(request: NextRequest) {
         }[]
       }
     }
+    const schBase = `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}`
+    const pullSch = (select: string) =>
+      selectWithSaasTenantFallback('schedules', tenantScope, schBase, (scoped) =>
+        supabaseSelectFilterAllPages('schedules', scoped, {
+          order: 'schedule_date.asc',
+          select,
+          pageSize: 2500,
+          maxRows: 120000,
+        })
+      )
     const loadScheduleRows = async () => {
       try {
-        return (await supabaseSelectFilterAllPages(
-          'schedules',
-          `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}`,
-          {
-            order: 'schedule_date.asc',
-            select: 'schedule_date,store_name,name,employee_id,plan_in,plan_out,break_start,break_end,plan_in_prev_day',
-            pageSize: 2500,
-            maxRows: 120000,
-          }
+        return (await pullSch(
+          'schedule_date,store_name,name,employee_id,plan_in,plan_out,break_start,break_end,plan_in_prev_day'
         )) as {
           schedule_date?: string
           store_name?: string
@@ -985,15 +981,8 @@ export async function GET(request: NextRequest) {
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (!/employee_id|42703|column/i.test(em)) throw e
-        return (await supabaseSelectFilterAllPages(
-          'schedules',
-          `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}`,
-          {
-            order: 'schedule_date.asc',
-            select: 'schedule_date,store_name,name,plan_in,plan_out,break_start,break_end,plan_in_prev_day',
-            pageSize: 2500,
-            maxRows: 120000,
-          }
+        return (await pullSch(
+          'schedule_date,store_name,name,plan_in,plan_out,break_start,break_end,plan_in_prev_day'
         )) as {
           schedule_date?: string
           store_name?: string
@@ -1007,13 +996,18 @@ export async function GET(request: NextRequest) {
         }[]
       }
     }
+    const leaveBase = `leave_date=gte.${startStr}&leave_date=lte.${endStr}`
+    const pullLeave = (select: string) =>
+      selectWithSaasTenantFallback('leave_requests', tenantScope, leaveBase, (scoped) =>
+        supabaseSelectFilter('leave_requests', scoped, {
+          order: 'leave_date.asc',
+          limit: 1000,
+          select,
+        })
+      )
     const loadLeaveRows = async () => {
       try {
-        return (await supabaseSelectFilter(
-          'leave_requests',
-          `leave_date=gte.${startStr}&leave_date=lte.${endStr}`,
-          { order: 'leave_date.asc', limit: 1000, select: 'store,name,leave_date,type,status,employee_id' }
-        )) as {
+        return (await pullLeave('store,name,leave_date,type,status,employee_id')) as {
           store?: string
           name?: string
           leave_date?: string
@@ -1024,11 +1018,7 @@ export async function GET(request: NextRequest) {
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (!/employee_id|42703|column/i.test(em)) throw e
-        return (await supabaseSelectFilter(
-          'leave_requests',
-          `leave_date=gte.${startStr}&leave_date=lte.${endStr}`,
-          { order: 'leave_date.asc', limit: 1000, select: 'store,name,leave_date,type,status' }
-        )) as {
+        return (await pullLeave('store,name,leave_date,type,status')) as {
           store?: string
           name?: string
           leave_date?: string

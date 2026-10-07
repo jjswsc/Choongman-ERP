@@ -4,6 +4,13 @@ import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 function normalizeNameForSchedule(name: string): string {
   return normalizeEmployeeNameForGradeMatch(name)
@@ -62,6 +69,7 @@ export async function POST(request: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tenantScope = await resolveSaasTenantScope({ auth })
     const body = await request.json()
     const dateStr = String(body?.date || body?.dateStr || '').trim().slice(0, 10)
     const storeName = String(body?.store || body?.storeName || '').trim()
@@ -105,25 +113,30 @@ export async function POST(request: NextRequest) {
     const nextD = new Date(dateStr + 'T12:00:00')
     nextD.setDate(nextD.getDate() + 1)
     const nextDayStr = nextD.toISOString().slice(0, 10)
+    const pullAtt = (filter: string, select: string) =>
+      selectWithSaasTenantFallback('attendance_logs', tenantScope, filter, (scoped) =>
+        supabaseSelectFilter('attendance_logs', scoped, {
+          order: 'log_at.asc',
+          limit: 200,
+          select,
+        })
+      )
     const attRows = (await (async () => {
       if (employeeId > 0) {
         try {
-          return await supabaseSelectFilter(
-            'attendance_logs',
+          return await pullAtt(
             `store_name=ilike.${encodeURIComponent(storeName)}&employee_id=eq.${employeeId}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
-            { order: 'log_at.asc', limit: 200, select: 'id,log_type,log_at,status' }
+            'id,log_type,log_at,status'
           )
         } catch (e) {
           const em = e instanceof Error ? e.message : String(e)
           if (!/employee_id|42703|column/i.test(em)) throw e
         }
       }
-      const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
-      return await supabaseSelectFilter('attendance_logs', attFilter, {
-        order: 'log_at.asc',
-        limit: 200,
-        select: 'id,log_type,log_at,status',
-      })
+      return await pullAtt(
+        `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`,
+        'id,log_type,log_at,status'
+      )
     })()) as { id?: number; log_type?: string; log_at?: string; status?: string }[]
     const inLogs = (attRows || []).filter((r) => String(r.log_type || '').trim() === '출근')
     const outLogs = (attRows || []).filter((r) => String(r.log_type || '').trim() === '퇴근')
@@ -160,7 +173,9 @@ export async function POST(request: NextRequest) {
 
     // 스케줄: 같은 날·매장에서 이름 일치 또는 부분 일치(근태 풀네임 vs 스케줄 닉네임)
     const schFilter = `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}`
-    const schRowsAll = (await supabaseSelectFilter('schedules', schFilter, { limit: 500 })) as {
+    const schRowsAll = (await selectWithSaasTenantFallback('schedules', tenantScope, schFilter, (scoped) =>
+      supabaseSelectFilter('schedules', scoped, { limit: 500 })
+    )) as {
       name?: string
       employee_id?: number | null
       plan_in?: string
@@ -228,14 +243,26 @@ export async function POST(request: NextRequest) {
         approved: '승인완료',
       }
       if (employeeId > 0) payload.employee_id = employeeId
-      try {
-        await supabaseInsert('attendance_logs', payload)
-      } catch (e) {
-        const em = e instanceof Error ? e.message : String(e)
-        if (/employee_id|42703|column/i.test(em) && 'employee_id' in payload) {
-          const { employee_id: _eid, ...fallback } = payload
-          await supabaseInsert('attendance_logs', fallback)
-        } else {
+      let toInsert = stampSaasTenantId(payload, tenantScope, 'attendance_logs')
+      for (;;) {
+        try {
+          await supabaseInsert('attendance_logs', toInsert)
+          break
+        } catch (e) {
+          if (isMissingSaasTenantColumnError(e) && 'tenant_id' in toInsert) {
+            markSaasTenantColumnMissing('attendance_logs')
+            const next = { ...toInsert }
+            delete next.tenant_id
+            toInsert = next
+            continue
+          }
+          const em = e instanceof Error ? e.message : String(e)
+          if (/employee_id|42703|column/i.test(em) && 'employee_id' in toInsert) {
+            const next = { ...toInsert }
+            delete next.employee_id
+            toInsert = next
+            continue
+          }
           throw e
         }
       }

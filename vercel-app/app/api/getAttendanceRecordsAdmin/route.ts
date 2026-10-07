@@ -47,6 +47,7 @@ import {
   appendSaasTenantFilter,
   isSaasTenantQueryBlocked,
   resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
 } from '@/lib/saas-tenant-scope'
 
 const TZ = 'Asia/Bangkok'
@@ -286,10 +287,12 @@ export async function GET(request: NextRequest) {
     const fetchAttGrid = async (filter: string): Promise<AttRow[]> => {
       if (shouldSkipAttendanceLogEmployeeKeyFilter(filter)) return []
       const run = async (select: string) =>
-        (await supabaseSelectFilterAllPages('attendance_logs', filter, {
-          ...attGridPage,
-          select,
-        })) as AttRow[]
+        (await selectWithSaasTenantFallback('attendance_logs', tenantScope, filter, (scoped) =>
+          supabaseSelectFilterAllPages('attendance_logs', scoped, {
+            ...attGridPage,
+            select,
+          })
+        )) as AttRow[]
       let select = stripAttendanceLogSelectMissingColumns(ATTENDANCE_LOG_ADMIN_GRID_COLS)
       for (let i = 0; i < 4; i++) {
         try {
@@ -548,11 +551,13 @@ export async function GET(request: NextRequest) {
       schParts.push(attendanceStoreNamePostgrestFilter(storeFilter))
     }
     const schFilter = schParts.join('&')
-    const schRows = (await supabaseSelectFilterAllPages('schedules', schFilter, {
-      order: 'schedule_date.asc',
-      pageSize: 8000,
-      maxRows: 2_000_000,
-    })) as SchRow[]
+    const schRows = (await selectWithSaasTenantFallback('schedules', tenantScope, schFilter, (scoped) =>
+      supabaseSelectFilterAllPages('schedules', scoped, {
+        order: 'schedule_date.asc',
+        pageSize: 8000,
+        maxRows: 2_000_000,
+      })
+    )) as SchRow[]
     for (const s of schRows || []) {
       const d = scheduleDateKey(s.schedule_date)
       const store = String(s.store_name || '').trim()

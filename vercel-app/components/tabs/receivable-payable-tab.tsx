@@ -353,7 +353,7 @@ export function ReceivablePayableTab() {
   React.useEffect(() => {
     setTabUi(tab)
   }, [tab])
-  // 미수금: 전체는 본사→거래처. 매장을 고르면 그 매장→거래처 청구만.
+  // 미수금: 전체는 본사 미수. 매장/거래처를 고르면 그 채무자 잔액(본사 청구 포함)과 그 매장이 직접 청구한 미수.
   const [salesOutletFilter, setSalesOutletFilter] = React.useState("All")
   const [salesVendors, setSalesVendors] = React.useState<{ code: string; name: string }[]>([])
   const [salesOutletSearch, setSalesOutletSearch] = React.useState("")
@@ -2456,7 +2456,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         <p className="text-xs text-muted-foreground max-w-lg mx-auto leading-relaxed">
                           {tt(
                             "recStoreBookEmpty",
-                            "이 매장이 거래처에 청구한 미수가 없습니다. 본사가 이 매장에 가진 미수는 「전체 매출처」에서 봅니다."
+                            "선택한 매장·거래처의 미수 잔액이 없습니다."
                           )}
                         </p>
                       ) : purchaseVendorMatchForOutlet && canSelectStores ? (

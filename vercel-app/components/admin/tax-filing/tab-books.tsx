@@ -3,15 +3,18 @@
 import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { useLang } from "@/lib/lang-context"
 import {
   getTaxBookEntries,
+  getTaxBookVoucherLines,
   getTaxManagementBridge,
   postTaxBookEntry,
   type TaxBookEntriesResponse,
   type TaxBookPostAction,
+  type TaxBookVoucherLine,
   type TaxManagementBridgeResponse,
 } from "@/lib/api-client/tax-book"
 import {
@@ -131,6 +134,11 @@ export function TaxFilingBooksTab(props: {
   )
   const ledgerTouchedRef = React.useRef(false)
   const [dayBook, setDayBook] = React.useState<TaxDayBookFilter>("all")
+  const [voucherDateQuery, setVoucherDateQuery] = React.useState("")
+  const [voucherDocQuery, setVoucherDocQuery] = React.useState("")
+  const [openVoucher, setOpenVoucher] = React.useState<TaxBookEntriesResponse["vouchers"][number] | null>(null)
+  const [voucherLines, setVoucherLines] = React.useState<TaxBookVoucherLine[] | null>(null)
+  const [voucherLinesLoading, setVoucherLinesLoading] = React.useState(false)
   const [dayMemo, setDayMemo] = React.useState("")
   const [dayDocNo, setDayDocNo] = React.useState("")
   const [dayDate, setDayDate] = React.useState("")
@@ -363,10 +371,42 @@ export function TaxFilingBooksTab(props: {
   }, [entries?.vouchers])
 
   const filteredVouchers = React.useMemo(() => {
-    return (entries?.vouchers || []).filter((v) =>
-      voucherMatchesDayBook(v.voucherKind as TaxVoucherKind, dayBook)
-    )
-  }, [entries?.vouchers, dayBook])
+    const docQ = voucherDocQuery.trim().toLowerCase()
+    const dateQ = voucherDateQuery.trim()
+    return (entries?.vouchers || []).filter((v) => {
+      if (!voucherMatchesDayBook(v.voucherKind as TaxVoucherKind, dayBook)) return false
+      if (dateQ && v.accountingDate !== dateQ) return false
+      if (docQ && !String(v.voucherNo || "").toLowerCase().includes(docQ)) return false
+      return true
+    })
+  }, [entries?.vouchers, dayBook, voucherDateQuery, voucherDocQuery])
+
+  React.useEffect(() => {
+    if (!openVoucher) {
+      setVoucherLines(null)
+      setVoucherLinesLoading(false)
+      return
+    }
+    let cancelled = false
+    setVoucherLines(null)
+    setVoucherLinesLoading(true)
+    void getTaxBookVoucherLines({
+      entryId: openVoucher.id,
+      scopeFilter: query?.scope || props.filingStoreFilter || "All",
+    })
+      .then((res) => {
+        if (!cancelled) setVoucherLines(res.lines || [])
+      })
+      .catch(() => {
+        if (!cancelled) setVoucherLines([])
+      })
+      .finally(() => {
+        if (!cancelled) setVoucherLinesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [openVoucher, query?.scope, props.filingStoreFilter])
 
   const parseInventoryAmount = (): number | undefined => {
     const invRaw = openingInventory.trim()
@@ -861,10 +901,35 @@ export function TaxFilingBooksTab(props: {
               </Button>
             </div>
           </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <div className="mb-1 text-xs text-muted-foreground">{t("taxBooksVoucherFind")}</div>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  type="date"
+                  className="h-9 w-[150px]"
+                  aria-label={t("taxBooksVoucherSearchDate")}
+                  value={voucherDateQuery}
+                  onChange={(e) => setVoucherDateQuery(e.target.value)}
+                />
+                <Input
+                  className="h-9 w-[220px]"
+                  aria-label={t("taxBooksVoucherSearchDoc")}
+                  placeholder={t("taxBooksVoucherSearchDoc")}
+                  value={voucherDocQuery}
+                  onChange={(e) => setVoucherDocQuery(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
           <VoucherJvTable
             empty={t("taxBooksNoRows")}
             statusLabel={t("taxBooksStatusApproved")}
             draftLabel={t("taxBooksStatusDraft")}
+            onDocClick={(id) => {
+              const row = filteredVouchers.find((v) => v.id === id)
+              if (row) setOpenVoucher(row)
+            }}
             headers={[
               t("taxBooksColDate"),
               t("taxBooksColDoc"),
@@ -887,6 +952,21 @@ export function TaxFilingBooksTab(props: {
               status: v.postingStatus === "draft" ? "draft" : "approved",
             }))}
           />
+          <Dialog open={openVoucher != null} onOpenChange={(open) => !open && setOpenVoucher(null)}>
+            <DialogContent className="max-h-[min(85vh,720px)] max-w-3xl overflow-y-auto">
+              {openVoucher ? (
+                <VoucherEntryDialogBody
+                  voucher={openVoucher}
+                  lines={voucherLines}
+                  loading={voucherLinesLoading}
+                  lang={lang}
+                  t={t}
+                  statusLabel={t("taxBooksStatusApproved")}
+                  draftLabel={t("taxBooksStatusDraft")}
+                />
+              ) : null}
+            </DialogContent>
+          </Dialog>
         </div>
       ) : null}
 
@@ -1319,6 +1399,128 @@ function EntryTable({ headers, rows, empty }: { headers: string[]; rows: string[
   )
 }
 
+function amountCell(n: number): string {
+  if (!n) return ""
+  return money(n)
+}
+
+function VoucherEntryDialogBody({
+  voucher,
+  lines,
+  loading,
+  lang,
+  t,
+  statusLabel,
+  draftLabel,
+}: {
+  voucher: TaxBookEntriesResponse["vouchers"][number]
+  lines: TaxBookVoucherLine[] | null
+  loading: boolean
+  lang: string
+  t: (key: string) => string
+  statusLabel: string
+  draftLabel: string
+}) {
+  const kindLabel = t(`taxBooksKind_${voucher.voucherKind}`) || voucher.voucherKind
+  const description = formatTaxBookMemoDisplay(t, voucher.memo, {
+    sourceType: voucher.sourceType,
+    accountingDate: voucher.accountingDate,
+    lang,
+  })
+  const debitTotal = (lines || []).reduce((sum, ln) => sum + (Number(ln.debit) || 0), 0)
+  const creditTotal = (lines || []).reduce((sum, ln) => sum + (Number(ln.credit) || 0), 0)
+  const draft = voucher.postingStatus === "draft"
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>
+          {t("taxBooksVoucherDetailTitle")} {kindLabel}
+        </DialogTitle>
+        <DialogDescription className="sr-only">{voucher.voucherNo}</DialogDescription>
+      </DialogHeader>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-base font-semibold text-primary">{voucher.voucherNo}</span>
+        <span
+          className={
+            draft
+              ? "inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900"
+              : "inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
+          }
+        >
+          {draft ? draftLabel : statusLabel}
+        </span>
+      </div>
+      <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-xs text-muted-foreground">{t("taxBooksColDate")}</dt>
+          <dd className="mt-0.5 tabular-nums">{voucher.accountingDate || "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">{t("taxBooksVoucherRef")}</dt>
+          <dd className="mt-0.5">{voucher.entryNo || "—"}</dd>
+        </div>
+      </dl>
+      <div>
+        <div className="text-xs text-muted-foreground">{t("taxBooksColDescription")}</div>
+        <p className="mt-0.5 text-sm">{description || "—"}</p>
+      </div>
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="bg-sky-700 text-left text-white">
+              <th className="px-3 py-2 font-medium">{t("taxBooksVoucherAccount")}</th>
+              <th className="px-3 py-2 text-right font-medium">{t("taxBooksDebit")}</th>
+              <th className="px-3 py-2 text-right font-medium">{t("taxBooksCredit")}</th>
+              <th className="px-3 py-2 font-medium">{t("taxBooksVoucherLineMemo")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                  {t("taxBooksVoucherLinesLoading")}
+                </td>
+              </tr>
+            ) : !lines?.length ? (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                  {t("taxBooksVoucherLinesEmpty")}
+                </td>
+              </tr>
+            ) : (
+              lines.map((ln, idx) => {
+                const name = displayTaxBookAccountName(lang, ln.accountCode, ln.accountName)
+                const lineMemo = String(ln.memo || "").trim() || description
+                return (
+                  <tr key={`${ln.accountCode}-${idx}`} className="border-t">
+                    <td className="px-3 py-2">
+                      {ln.accountCode}
+                      {name ? ` / ${name}` : ""}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">{amountCell(ln.debit)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{amountCell(ln.credit)}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{lineMemo || "—"}</td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+          {!loading && lines?.length ? (
+            <tfoot>
+              <tr className="border-t font-semibold">
+                <td className="px-3 py-2">{t("taxBooksColTotal")}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{money(debitTotal)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{money(creditTotal)}</td>
+                <td />
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+    </>
+  )
+}
+
 /** FlowAccount JV 목록형: 일자·문서번호·종류·Description·합계·Approved */
 function VoucherJvTable({
   headers,
@@ -1326,6 +1528,7 @@ function VoucherJvTable({
   empty,
   statusLabel,
   draftLabel,
+  onDocClick,
 }: {
   headers: string[]
   rows: {
@@ -1340,6 +1543,7 @@ function VoucherJvTable({
   empty: string
   statusLabel: string
   draftLabel: string
+  onDocClick: (id: number) => void
 }) {
   if (!rows.length) return <p className="text-sm text-muted-foreground">{empty}</p>
   return (
@@ -1358,7 +1562,15 @@ function VoucherJvTable({
           {rows.map((r) => (
             <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
               <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.date}</td>
-              <td className="whitespace-nowrap px-3 py-2.5 font-medium">{r.docNo}</td>
+              <td className="whitespace-nowrap px-3 py-2.5 font-medium">
+                <button
+                  type="button"
+                  className="text-left text-primary underline-offset-2 hover:underline"
+                  onClick={() => onDocClick(r.id)}
+                >
+                  {r.docNo}
+                </button>
+              </td>
               <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">{r.kind}</td>
               <td className="max-w-[28rem] px-3 py-2.5">{r.description || "—"}</td>
               <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">{r.total}</td>

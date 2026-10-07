@@ -1,6 +1,6 @@
 import { accountLine } from '@/lib/chart-of-accounts-mapping'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
-import { supabaseDeleteByFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseDeleteByFilter, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import {
   TAX_BOOK,
   formatTaxVoucherNo,
@@ -84,6 +84,60 @@ export async function loadTaxBookJournalHeads(input: {
     if (isMissingTaxBookSchemaError(e)) return { schemaReady: false, heads: [] }
     throw e
   }
+}
+
+export type TaxBookVoucherLineView = {
+  accountCode: string
+  accountName: string | null
+  debit: number
+  credit: number
+  memo: string | null
+}
+
+/** 전표 한 장의 차대 라인. 다른 법인의 전표면 null. */
+export async function loadTaxBookVoucherLines(
+  entryId: number,
+  taxEntityCode: string
+): Promise<TaxBookVoucherLineView[] | null> {
+  const id = Number(entryId || 0)
+  const entity = String(taxEntityCode || '').trim()
+  if (!id || !entity) return null
+  const filter = [
+    `id=eq.${id}`,
+    `book=eq.${TAX_BOOK}`,
+    `tax_entity_code=eq.${encodeURIComponent(entity)}`,
+  ].join('&')
+  let heads: { id?: number }[] | null = null
+  try {
+    heads = (await supabaseSelectFilter('journal_entries', filter, {
+      select: 'id',
+      limit: 1,
+    })) as { id?: number }[] | null
+  } catch (e) {
+    if (isMissingTaxBookSchemaError(e)) return []
+    throw e
+  }
+  if (!heads?.length) return null
+  const lines = await loadTaxBookLines([id])
+  return lines
+    .map((ln) => {
+      const amt = Math.abs(Number(ln.amount) || 0)
+      const credit = String(ln.side || '').toLowerCase() === 'credit'
+      return {
+        accountCode: String(ln.account_code || '').trim(),
+        accountName: ln.account_name != null ? String(ln.account_name) : null,
+        debit: credit ? 0 : roundTaxAmount(amt),
+        credit: credit ? roundTaxAmount(amt) : 0,
+        memo: ln.memo != null ? String(ln.memo) : null,
+      }
+    })
+    .filter((ln) => ln.accountCode)
+    .sort((a, b) => {
+      const aDebit = a.debit > 0 ? 0 : 1
+      const bDebit = b.debit > 0 ? 0 : 1
+      if (aDebit !== bDebit) return aDebit - bDebit
+      return a.accountCode.localeCompare(b.accountCode)
+    })
 }
 
 export async function loadTaxBookLines(entryIds: number[]): Promise<

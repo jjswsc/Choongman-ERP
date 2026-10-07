@@ -4,6 +4,7 @@ import {
   assertSaasTenantWritable,
   authTenantMatchesStoreTenant,
   isSaasTenantQueryBlocked,
+  selectWithSaasTenantFallback,
   stampSaasTenantId,
   type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
@@ -22,6 +23,22 @@ describe('saas-tenant-scope', () => {
     expect(isSaasTenantQueryBlocked(orphan)).toBe(true)
     expect(assertSaasTenantWritable(orphan)).toMatch(/테넌트/)
     expect(isSaasTenantQueryBlocked(legacy)).toBe(false)
+  })
+
+  it('retries without tenant filter when the column is missing', async () => {
+    const hint = 'saas_tenant_fallback_probe'
+    let calls = 0
+    const result = await selectWithSaasTenantFallback(hint, enforced, 'id=gt.0', async (filter) => {
+      calls += 1
+      if (filter.includes('tenant_id')) {
+        throw new Error('column tenant_id of relation probe does not exist (42703)')
+      }
+      return filter
+    })
+    expect(result).toBe('id=gt.0')
+    expect(calls).toBe(2)
+    const again = await selectWithSaasTenantFallback(hint, enforced, 'id=gt.0', async (filter) => filter)
+    expect(again).toBe('id=gt.0')
   })
 
   it('detects cross-tenant store mismatch only when both sides known', () => {

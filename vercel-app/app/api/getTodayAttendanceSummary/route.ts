@@ -20,6 +20,7 @@ import {
   appendSaasTenantFilter,
   isSaasTenantQueryBlocked,
   resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
 } from '@/lib/saas-tenant-scope'
 
 /** 실시간 격자: 출근 요약 name 은 풀네임인데 스케줄 표시는 nick 일 때 조인 보강 */
@@ -110,20 +111,15 @@ export async function GET(request: NextRequest) {
     let rows: AttRow[] = []
     /** 직원·이벤트가 많은 매장에서 500건이면 당일 일부 출근 행이 잘려 실시간 격자만 미출근(빨강) 처리될 수 있음 */
     const LOG_DAY_LIMIT = 8000
-    const fetchLogs = async (select: string) => {
-      if (isAll) {
-        return (await supabaseSelectFilter('attendance_logs', logFilter, {
+    const logBase = isAll ? logFilter : `${logFilter}${storeFilter}`
+    const fetchLogs = async (select: string) =>
+      (await selectWithSaasTenantFallback('attendance_logs', tenantScope, logBase, (scoped) =>
+        supabaseSelectFilter('attendance_logs', scoped, {
           order: 'log_at.asc',
           limit: LOG_DAY_LIMIT,
           select,
-        })) as AttRow[]
-      }
-      return (await supabaseSelectFilter('attendance_logs', `${logFilter}${storeFilter}`, {
-        order: 'log_at.asc',
-        limit: LOG_DAY_LIMIT,
-        select,
-      })) as AttRow[]
-    }
+        })
+      )) as AttRow[]
     try {
       rows = await fetchLogs(logSelectWithIds)
     } catch (e) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestVariantsFilter } from '@/lib/attendance-utils'
 import {
   findStaffForScheduleSlotName,
@@ -27,6 +27,7 @@ import {
   isSaasTenantQueryBlocked,
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
 } from '@/lib/saas-tenant-scope'
 
 function toDateStr(val: string | Date | null | undefined): string {
@@ -171,7 +172,9 @@ export async function GET(request: NextRequest) {
     ] as const
     for (const sel of empSelectCandidates) {
       try {
-        empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 5000, select: sel })) as EmpRow[]
+        empList = (await selectWithSaasTenantFallback('employees', tenantScope, 'id=gt.0', (scoped) =>
+          supabaseSelectFilter('employees', scoped, { order: 'id.asc', limit: 5000, select: sel })
+        )) as EmpRow[]
         break
       } catch {
         continue

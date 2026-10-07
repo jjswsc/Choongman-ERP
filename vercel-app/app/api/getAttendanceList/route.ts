@@ -3,6 +3,7 @@ import { fetchMergedAttendanceLogsForEmployee } from '@/lib/attendance-log-fetch
 import { resolveAttendanceEmployeeIdentity } from '@/lib/attendance-employee-resolve-server'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -13,6 +14,7 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
   const { searchParams } = new URL(request.url)
   const startDate = String(searchParams.get('startDate') || searchParams.get('start') || '').trim()
   const endDate = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
@@ -56,6 +58,7 @@ export async function GET(request: NextRequest) {
       order: 'log_at.asc',
       limit: 500,
       select: 'id,log_at,log_type,status,late_min,ot_min,approved,employee_id,employee_code,name',
+      tenantScope,
     })
 
     const list: { timestamp: string; type: string; status: string; late_min?: number; ot_min?: number; approved?: string }[] = []

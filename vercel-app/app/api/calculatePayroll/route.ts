@@ -20,6 +20,8 @@ import {
   appendSaasTenantFilter,
   isSaasTenantQueryBlocked,
   resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
+  type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
 
 const LATE_DED_HOURS_BASE = 208
@@ -79,7 +81,10 @@ function payrollAttKey(store: string, name: string, employeeId?: number | null):
 }
 
 /** 귀속월 근태 집계: lateMin, otMin, workMin, workDays, workDates. 방콕 기준 + 자정 넘김은 출근일로 합침 */
-async function getAttendanceSummary(monthStr: string): Promise<Record<string, AttSummaryRow>> {
+async function getAttendanceSummary(
+  monthStr: string,
+  tenantScope: SaasTenantScope
+): Promise<Record<string, AttSummaryRow>> {
   const startStr = monthStr + '-01'
   const firstDay = new Date(monthStr + '-01T12:00:00')
   const lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0)
@@ -87,31 +92,23 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
   const { startISO } = bangkokDateRangeToUtc(startStr, endStr)
   const logEndISOExclusive = attendanceOvernightOutFetchEndExclusiveUtcIso(endStr)
 
+  const attBase = `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`
+  const loadAtt = (select: string) =>
+    selectWithSaasTenantFallback('attendance_logs', tenantScope, attBase, (scoped) =>
+      supabaseSelectFilterAllPages('attendance_logs', scoped, {
+        order: 'log_at.asc',
+        select,
+        pageSize: 2500,
+        maxRows: 120000,
+      })
+    )
   const attRows = (await (async () => {
     try {
-      return await supabaseSelectFilterAllPages(
-        'attendance_logs',
-        `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        {
-          order: 'log_at.asc',
-          select: ATTENDANCE_LOG_PAYROLL_COLS,
-          pageSize: 2500,
-          maxRows: 120000,
-        }
-      )
+      return await loadAtt(ATTENDANCE_LOG_PAYROLL_COLS)
     } catch (e) {
       const em = e instanceof Error ? e.message : String(e)
       if (!/employee_id|employee_code|42703|column/i.test(em)) throw e
-      return await supabaseSelectFilterAllPages(
-        'attendance_logs',
-        `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        {
-          order: 'log_at.asc',
-          select: ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
-          pageSize: 2500,
-          maxRows: 120000,
-        }
-      )
+      return await loadAtt(ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE)
     }
   })()) as {
     log_at?: string
@@ -317,7 +314,7 @@ export async function GET(request: NextRequest) {
 
     const hazEvalRules = await loadPayrollHazEvalGradeRules()
 
-    const attSummary = await getAttendanceSummary(monthStr)
+    const attSummary = await getAttendanceSummary(monthStr, tenantScope)
     const targetDate = new Date(monthStr + '-01')
     const targetMonth = targetDate.getMonth()
     const payrollYear = targetDate.getFullYear()

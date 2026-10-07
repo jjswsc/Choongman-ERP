@@ -73,6 +73,27 @@ export function appendSaasTenantFilter(
   return appendTenantFilter(baseFilter, { tenantId: scope.tenantId })
 }
 
+/**
+ * Omni 조회에 tenant_id 를 붙인다.
+ * 컬럼이 없는 레거시 DB면 한 번만 표시하고 필터 없이 다시 조회한다.
+ */
+export async function selectWithSaasTenantFallback<T>(
+  tableHint: string,
+  scope: SaasTenantScope | null | undefined,
+  baseFilter: string,
+  run: (filter: string) => Promise<T>
+): Promise<T> {
+  const scoped = scope ? appendSaasTenantFilter(baseFilter, scope, tableHint) : baseFilter
+  if (scoped === baseFilter) return run(baseFilter)
+  try {
+    return await run(scoped)
+  } catch (e) {
+    if (!isMissingSaasTenantColumnError(e)) throw e
+    markSaasTenantColumnMissing(tableHint)
+    return run(baseFilter)
+  }
+}
+
 export function buildSaasTenantFilter(scope: SaasTenantScope, tableHint = 'default'): string {
   if (!scope.enforce || !scope.tenantId || isSaasTenantColumnMissing(tableHint)) return ''
   return buildTenantFilter({ tenantId: scope.tenantId })

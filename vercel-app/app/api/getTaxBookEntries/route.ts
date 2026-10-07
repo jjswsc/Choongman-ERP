@@ -4,6 +4,7 @@ import { resolveTaxBookAsOfRange, resolveTaxBookMonthRange, taxEntityKeyFromScop
 import {
   loadTaxBookJournalHeads,
   loadTaxBookLines,
+  loadTaxBookVoucherLines,
   summarizeTaxBookTrial,
   toTaxBookEntries,
   toTaxBookLedger,
@@ -28,6 +29,24 @@ export async function GET(request: NextRequest) {
     throw e
   }
   const { searchParams } = new URL(request.url)
+  const entryId = Number(searchParams.get('entryId') || 0)
+  if (entryId > 0) {
+    const detailScope = String(searchParams.get('scopeFilter') || '').trim()
+    const detailEntity = taxEntityKeyFromScope(detailScope)
+    if (!detailEntity) {
+      return NextResponse.json({ error: 'NEED_TAX_ENTITY', lines: [] }, { status: 400, headers })
+    }
+    try {
+      const lines = await loadTaxBookVoucherLines(entryId, detailEntity)
+      if (lines == null) {
+        return NextResponse.json({ error: 'NOT_FOUND', lines: [] }, { status: 404, headers })
+      }
+      return NextResponse.json({ schemaReady: true, lines }, { headers })
+    } catch (e) {
+      console.error('getTaxBookEntries detail:', e)
+      return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500, headers })
+    }
+  }
   const yearMonth = String(searchParams.get('yearMonth') || '').trim()
   const fromMonth = String(searchParams.get('fromMonth') || yearMonth).trim()
   const toMonth = String(searchParams.get('toMonth') || yearMonth).trim()

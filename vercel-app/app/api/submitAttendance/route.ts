@@ -24,7 +24,9 @@ import {
   isMissingSaasTenantColumnError,
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
   stampSaasTenantId,
+  type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
 const TZ = 'Asia/Bangkok'
 
@@ -52,17 +54,20 @@ async function fetchSchedulePlanRows(params: {
   dateFilter: string
   empId: number
   empName: string
+  tenantScope: SaasTenantScope
 }): Promise<SchedulePlanRow[]> {
   const byName = `${params.dateFilter}&name=ilike.${encodeURIComponent(params.empName)}`
-  if (params.empId <= 0) {
-    return (await supabaseSelectFilter('schedules', byName, { limit: 5 })) as SchedulePlanRow[]
-  }
+  const pull = (filter: string) =>
+    selectWithSaasTenantFallback('schedules', params.tenantScope, filter, (scoped) =>
+      supabaseSelectFilter('schedules', scoped, { limit: 5 })
+    ) as Promise<SchedulePlanRow[]>
+  if (params.empId <= 0) return pull(byName)
   const byId = `${params.dateFilter}&employee_id=eq.${params.empId}`
   try {
-    return (await supabaseSelectFilter('schedules', byId, { limit: 5 })) as SchedulePlanRow[]
+    return await pull(byId)
   } catch (e) {
     if (extractAnyMissingColumn(e) !== 'employee_id') throw e
-    return (await supabaseSelectFilter('schedules', byName, { limit: 5 })) as SchedulePlanRow[]
+    return pull(byName)
   }
 }
 
@@ -71,19 +76,24 @@ async function selectAttendanceLogsByEmployee<T>(params: {
   empName: string
   storeIlike: string
   extraFilter?: string
+  tenantScope: SaasTenantScope
   opts: { order: string; limit: number; select: string }
 }): Promise<T[]> {
   const extra = params.extraFilter ? `&${params.extraFilter}` : ''
   const byName = `store_name=ilike.${params.storeIlike}&name=ilike.${encodeURIComponent(params.empName)}${extra}`
+  const pull = (filter: string) =>
+    selectWithSaasTenantFallback('attendance_logs', params.tenantScope, filter, (scoped) =>
+      supabaseSelectFilter('attendance_logs', scoped, params.opts)
+    ) as Promise<T[]>
   if (params.empId > 0) {
     const byId = `store_name=ilike.${params.storeIlike}&employee_id=eq.${params.empId}${extra}`
     try {
-      return (await supabaseSelectFilter('attendance_logs', byId, params.opts)) as T[]
+      return await pull(byId)
     } catch (e) {
       if (extractAnyMissingColumn(e) !== 'employee_id') throw e
     }
   }
-  return (await supabaseSelectFilter('attendance_logs', byName, params.opts)) as T[]
+  return pull(byName)
 }
 
 function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -229,6 +239,7 @@ export async function POST(request: NextRequest) {
         order: 'log_at.desc',
         limit: 100,
         select: 'id,log_at,log_type,employee_id,employee_code,name',
+        tenantScope,
       })
       const todayLogs = (logs || []).filter((r) => {
         const rowDate = r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
@@ -486,6 +497,7 @@ export async function POST(request: NextRequest) {
       dateFilter: scheduleDateFilter,
       empId,
       empName,
+      tenantScope,
     })
     if ((!schRows || schRows.length === 0) && logType === '출근') {
       const tomorrow = (() => {
@@ -497,6 +509,7 @@ export async function POST(request: NextRequest) {
         dateFilter: `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&${attendanceStoreNamePostgrestFilter(storeName)}`,
         empId,
         empName,
+        tenantScope,
       })
     }
     let usedYesterdaySchedule = false
@@ -511,6 +524,7 @@ export async function POST(request: NextRequest) {
         dateFilter: `schedule_date=eq.${yesterday}&${attendanceStoreNamePostgrestFilter(storeName)}`,
         empId,
         empName,
+        tenantScope,
       })
       usedYesterdaySchedule = !!(schRows && schRows.length > 0)
     }
@@ -568,6 +582,7 @@ export async function POST(request: NextRequest) {
         empId,
         empName,
         storeIlike: storeIlikeResume,
+        tenantScope,
         opts: { order: 'log_at.desc', limit: 50, select: 'log_at,log_type' },
       })
       const openBreakMs = getOpenBreakStartMs(allLogs)
@@ -604,6 +619,7 @@ export async function POST(request: NextRequest) {
         empName,
         storeIlike: storeIlikeResume,
         extraFilter: `log_type=eq.${encodeURIComponent('휴식종료')}`,
+        tenantScope,
         opts: { order: 'log_at.desc', limit: 1, select: 'log_at,break_min' },
       })
       const recent = recentResumeRows?.[0]

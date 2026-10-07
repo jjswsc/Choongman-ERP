@@ -8314,9 +8314,9 @@ export const i18n = {
     move_down: '아래로',
     receivableEmpty: '조회된 미수금이 없습니다.',
     recVsPayPoHint:
-      '※ 전체 매출처는 본사가 각 거래처에 가진 미수입니다. 매장을 고르면 그 매장이 각 거래처에 청구한 미수만 계산합니다. 본사→그 매장 청구는 전체 매출처에 남습니다.',
+      '매장·거래처를 고르면 그 미수 잔액이 나옵니다. 본사가 그 매장에 청구한 금액도 포함됩니다. 발주(PO) 승인 금액은 미지급금에만 나타납니다.',
     recStoreBookEmpty:
-      '이 매장이 거래처에 청구한 미수가 없습니다. 본사가 이 매장에 가진 미수는 「전체 매출처」에서 봅니다.',
+      '선택한 매장·거래처의 미수 잔액이 없습니다.',
     recEmptyMaybePoHint:
       '선택한 매출처 이름과 같은 매입 거래처가 있으면, 발주(PO) 승인 금액은 「미지급금」에만 나타납니다. 미수금에는 주문·수금 기준 잔액만 표시됩니다.',
     recGoToPayableBtn: '미지급금(매입) 탭에서 이 거래처 조회',
@@ -16759,9 +16759,8 @@ orderItemQty: 'Qty',
     move_down: 'down',
     receivableEmpty: 'No receivables found.',
     recVsPayPoHint:
-      'All outlets shows what HQ is owed by each customer. Choosing a store shows only what that store has billed each customer. HQ’s claim on that store stays under All outlets.',
-    recStoreBookEmpty:
-      'This store has not billed any customer. HQ’s receivable from this store is under All outlets.',
+      'Choosing an outlet shows that outlet’s outstanding receivable, including what HQ has billed it. PO-approved purchase amounts stay under Payables.',
+    recStoreBookEmpty: 'This outlet has no outstanding receivable.',
     recEmptyMaybePoHint:
       'If this outlet name also exists as a purchase vendor, PO-approved amounts show only under Payables. Receivables here reflect order/collection balances only.',
     recGoToPayableBtn: 'Open Payables tab for this vendor',
@@ -19442,6 +19441,7 @@ orderItemQty: 'จำนวน',
     receivableEmpty: 'ไม่พบยอดลูกหนี้จากการค้นหา',
     recVsPayPoHint:
       '※ การอนุมัติ PO และยอดเจ้าหนี้จากการซื้อจะไปที่แท็บ「เจ้าหนี้ (ซื้อ)」 แท็บนี้(ลูกหนี้)ใช้สำหรับเก็บเงินจากร้าน/ลูกค้าขาย (ออเดอร์·รับเงิน)',
+    recStoreBookEmpty: 'ไม่มียอดลูกหนี้ค้างของสาขาหรือลูกค้ารายนี้ครับ',
     recEmptyMaybePoHint:
       'ถ้าชื่อลูกค้าที่เลือกตรงกับผู้จัดส่ง(ซื้อ) ยอดจาก PO ที่อนุมัติจะอยู่ที่「เจ้าหนี้」เท่านั้น ลูกหนี้ที่นี่คิดจากออเดอร์/การรับเงิน',
     recGoToPayableBtn: 'ไปดูเจ้าหนี้ (ซื้อ) สำหรับรายนี้',

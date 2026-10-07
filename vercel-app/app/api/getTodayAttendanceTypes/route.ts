@@ -8,6 +8,7 @@ import { fetchMergedAttendanceLogsForEmployee } from '@/lib/attendance-log-fetch
 import { resolveAttendanceEmployeeIdentity } from '@/lib/attendance-employee-resolve-server'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { requireAuth } from '@/lib/verify-auth'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 
 const TZ = 'Asia/Bangkok'
 const DEFAULT_ATTENDANCE_STATE = {
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
   const { searchParams } = new URL(request.url)
   const userRole = String(auth.role || '').trim()
   const isScopedRole = !isOfficeRole(userRole) && !isAccountingRole(userRole)
@@ -72,6 +74,7 @@ export async function GET(request: NextRequest) {
       order: 'log_at.desc',
       limit: 100,
       select: 'id,log_at,log_type,employee_id,employee_code,name',
+      tenantScope,
     })
 
     const openSession = hasUnclosedClockWorkSession(logs)

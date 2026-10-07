@@ -173,10 +173,17 @@ export function filterReceivableRows(
     )
   }
 
-  // 매장을 고르면 그 매장 장부. 거래처(채무자)별 미수만. 본사→그 매장 청구는 넣지 않는다.
+  // 매장/거래처를 고르면 전체에서 보이던 그 채무자의 본사 미수와, 그 매장이 직접 청구한 미수를 함께 보여 준다.
   return rows.filter((r) => {
+    if (isHqOwnedReceivable(r)) {
+      return matchesReceivableParty(
+        resolveReceivableAttributedStore(r, attributionMaps),
+        storeFilter,
+        vendorMaps,
+        true
+      )
+    }
     const creditor = String(r.creditor_store ?? '').trim()
-    if (!creditor || isOfficeStoreVariant(creditor)) return false
     return matchesReceivableParty(creditor, storeFilter, vendorMaps, true)
   })
 }

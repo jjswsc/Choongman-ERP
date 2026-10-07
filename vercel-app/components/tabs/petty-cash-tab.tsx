@@ -36,7 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Camera, Download, Pencil, Save, Trash2, X, Landmark, Link2 } from "lucide-react"
+import { Search, Plus, Camera, Download, Pencil, Trash2, X, Landmark, Link2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -180,7 +180,6 @@ export function PettyCashTab({
   const [accountSubjectOptions, setAccountSubjectOptions] = useState<AccountSubjectItem[]>([])
   const [vendors, setVendors] = useState<VendorForPurchase[]>([])
   const [inlineSavingId, setInlineSavingId] = useState<number | null>(null)
-  const [pendingAccountSubjectByRowId, setPendingAccountSubjectByRowId] = useState<Record<number, string>>({})
   const [monthlySearchMode, setMonthlySearchMode] = useState<"month" | "period">("month")
   const [monthlyPeriodStart, setMonthlyPeriodStart] = useState(() => {
     const n = new Date()
@@ -717,7 +716,6 @@ export function PettyCashTab({
     })
       .then((data) => {
         setMonthlyData(data)
-        setPendingAccountSubjectByRowId({})
         const r =
           range?.startStr && range?.endStr
             ? { startStr: range.startStr, endStr: range.endStr }
@@ -889,16 +887,22 @@ export function PettyCashTab({
     setEditReceiptPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
   }
 
-  const handleInlineAccountSubjectChange = async (r: PettyCashItem, newAccountSubjectId: string | number | null) => {
-    if (!auth?.store) return
+  const patchPettyAccountSubject = (id: number, asId: number | null) => {
+    const patch = { accountSubjectId: asId, account_subject_id: asId }
+    setMonthlyData((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+    setListData((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  }
+
+  const handleInlineAccountSubjectChange = async (r: PettyCashItem, newAccountSubjectId: string) => {
+    if (!auth?.store || inlineSavingId === r.id) return
+    const currentRaw = r.accountSubjectId ?? r.account_subject_id
+    const current = currentRaw ? String(currentRaw) : "__none__"
+    if (newAccountSubjectId === current) return
     const asId = newAccountSubjectId === "" || newAccountSubjectId === "__none__" ? null : Number(newAccountSubjectId)
     if (asId !== null && isNaN(asId)) return
+    const prevId = current === "__none__" ? null : Number(current)
+    patchPettyAccountSubject(r.id, asId)
     setInlineSavingId(r.id)
-    setPendingAccountSubjectByRowId((prev) => {
-      const next = { ...prev }
-      delete next[r.id]
-      return next
-    })
     try {
       const res = await updatePettyCashTransaction({
         id: r.id,
@@ -910,13 +914,12 @@ export function PettyCashTab({
         userStore: auth.store,
         userRole: auth.role,
       })
-      if (res.success) {
-        loadMonthly()
-        loadList()
-      } else {
+      if (!res.success) {
+        patchPettyAccountSubject(r.id, prevId)
         await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "Update failed")
       }
     } catch {
+      patchPettyAccountSubject(r.id, prevId)
       await appAlert(t("msg_modify_fail") || "Update failed")
     } finally {
       setInlineSavingId(null)
@@ -1050,11 +1053,6 @@ export function PettyCashTab({
       })
       if (res.success) {
         if (editModalItem?.id === r.id) closeEditModal()
-        setPendingAccountSubjectByRowId((prev) => {
-          const next = { ...prev }
-          delete next[r.id]
-          return next
-        })
         loadMonthly()
         loadList()
         await appAlert(t("pettyDeleted") || t("delete") || "Deleted.")
@@ -2052,18 +2050,12 @@ ${rows.map((row, ri) => {
                           <td className="px-3 py-2.5 align-top" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1">
                               <Select
-                                value={pendingAccountSubjectByRowId[r.id] ?? ((r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "__none__")}
-                                onValueChange={(v) => {
-                                  const current = (r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "__none__"
-                                  setPendingAccountSubjectByRowId((prev) => {
-                                    if (v === current) { const n = { ...prev }; delete n[r.id]; return n }
-                                    return { ...prev, [r.id]: v }
-                                  })
-                                }}
+                                value={(r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "__none__"}
+                                onValueChange={(v) => { void handleInlineAccountSubjectChange(r, v) }}
                                 disabled={inlineSavingId === r.id}
                               >
-                                <SelectTrigger className="h-8 min-w-0 flex-1 text-[10px] border-dashed">
-                                  <SelectValue placeholder={inlineSavingId === r.id ? (t("loading") || "...") : (t("accountSubject") || "계정과목")} />
+                                <SelectTrigger className="h-8 w-full min-w-[7rem] text-[10px] border-dashed">
+                                  <SelectValue placeholder={t("accountSubject") || "계정과목"} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="__none__">—</SelectItem>
@@ -2072,19 +2064,6 @@ ${rows.map((row, ri) => {
                                   ))}
                                 </SelectContent>
                               </Select>
-                              {pendingAccountSubjectByRowId[r.id] !== undefined && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 shrink-0 text-primary hover:bg-primary/10"
-                                  onClick={() => handleInlineAccountSubjectChange(r, pendingAccountSubjectByRowId[r.id])}
-                                  disabled={inlineSavingId === r.id}
-                                  title={t("btnSave") || "저장"}
-                                >
-                                  <Save className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
                             </div>
                           </td>
                           <td className="px-3 py-2.5 text-center align-top truncate text-sm max-w-[8rem]" title={vendorDisplayName(r.vendorCode)}>

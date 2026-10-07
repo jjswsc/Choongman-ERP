@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { attendanceStoreNamePostgrestFilter } from '@/lib/attendance-utils'
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  isSaasTenantQueryBlocked,
+  resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
+} from '@/lib/saas-tenant-scope'
 
 const TZ = 'Asia/Bangkok'
 
@@ -56,6 +61,10 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (isSaasTenantQueryBlocked(tenantScope, 'attendance_logs')) {
+    return NextResponse.json([], { headers })
+  }
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim().slice(0, 10)
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
@@ -100,22 +109,16 @@ export async function GET(request: NextRequest) {
       break_end?: string
       plan_in_prev_day?: boolean
     }
-    const schFilter = `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}`
-    let schRows: SchRow[] = []
-    if (isAllStores) {
-      schRows = (await supabaseSelectFilterAllPages('schedules', schFilter, {
+    const schFilter = isAllStores
+      ? `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}`
+      : `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}&${attendanceStoreNamePostgrestFilter(storeFilter)}`
+    const schRows = (await selectWithSaasTenantFallback('schedules', tenantScope, schFilter, (scoped) =>
+      supabaseSelectFilterAllPages('schedules', scoped, {
         order: 'schedule_date.asc',
         pageSize: 8000,
         maxRows: 2_000_000,
-      })) as SchRow[]
-    } else {
-      const f = `${schFilter}&${attendanceStoreNamePostgrestFilter(storeFilter)}`
-      schRows = (await supabaseSelectFilterAllPages('schedules', f, {
-        order: 'schedule_date.asc',
-        pageSize: 8000,
-        maxRows: 2_000_000,
-      })) as SchRow[]
-    }
+      })
+    )) as SchRow[]
 
     // 출근이 있는 날짜|매장|직원 키 수집
     const endD = new Date(endStr + 'T23:59:59')
@@ -125,21 +128,21 @@ export async function GET(request: NextRequest) {
     const attFilter = isAllStores
       ? `log_at=gte.${startStr}&log_at=lt.${endExclusive}`
       : `${attendanceStoreNamePostgrestFilter(storeFilter)}&log_at=gte.${startStr}&log_at=lt.${endExclusive}`
-    const attRows = (await (async () => {
-      try {
-        return await supabaseSelectFilter('attendance_logs', attFilter, {
+    const pullAtt = (select: string) =>
+      selectWithSaasTenantFallback('attendance_logs', tenantScope, attFilter, (scoped) =>
+        supabaseSelectFilter('attendance_logs', scoped, {
           order: 'log_at.asc',
           limit: 2000,
-          select: 'log_at,store_name,name,employee_id,log_type',
+          select,
         })
+      )
+    const attRows = (await (async () => {
+      try {
+        return await pullAtt('log_at,store_name,name,employee_id,log_type')
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (!/employee_id|42703|column/i.test(em)) throw e
-        return await supabaseSelectFilter('attendance_logs', attFilter, {
-          order: 'log_at.asc',
-          limit: 2000,
-          select: 'log_at,store_name,name,log_type',
-        })
+        return await pullAtt('log_at,store_name,name,log_type')
       }
     })()) as AttRow[]
 
@@ -158,21 +161,17 @@ export async function GET(request: NextRequest) {
 
     // 승인된 휴가(연차/병가/무급휴가 등)가 있는 날짜·매장·직원은 미기록 목록에서 제외
     const leaveFilter = `leave_date=gte.${startStr}&leave_date=lte.${endStr}`
+    const pullLeave = (select: string) =>
+      selectWithSaasTenantFallback('leave_requests', tenantScope, leaveFilter, (scoped) =>
+        supabaseSelectFilter('leave_requests', scoped, { limit: 1000, select })
+      )
     const leaveRows = (await (async () => {
       try {
-        return await supabaseSelectFilter(
-          'leave_requests',
-          leaveFilter,
-          { limit: 1000, select: 'store,name,leave_date,status,employee_id' }
-        )
+        return await pullLeave('store,name,leave_date,status,employee_id')
       } catch (e) {
         const em = e instanceof Error ? e.message : String(e)
         if (!/employee_id|42703|column/i.test(em)) throw e
-        return await supabaseSelectFilter(
-          'leave_requests',
-          leaveFilter,
-          { limit: 1000, select: 'store,name,leave_date,status' }
-        )
+        return await pullLeave('store,name,leave_date,status')
       }
     })()) as { store?: string; name?: string; leave_date?: string; status?: string; employee_id?: number | null }[]
     const hasApprovedLeave = new Set<string>()
@@ -191,11 +190,13 @@ export async function GET(request: NextRequest) {
     const nickMap: Record<string, string> = {}
     const nickById: Record<number, string> = {}
     const codeById: Record<number, string> = {}
-    const empList = (await supabaseSelect('employees', {
-      order: 'id.asc',
-      limit: 5000,
-      select: 'id,store,name,nick,employee_code',
-    })) as { id?: number; store?: string; name?: string; nick?: string; employee_code?: string | null }[] | null
+    const empList = (await selectWithSaasTenantFallback('employees', tenantScope, 'id=gt.0', (scoped) =>
+      supabaseSelectFilter('employees', scoped, {
+        order: 'id.asc',
+        limit: 5000,
+        select: 'id,store,name,nick,employee_code',
+      })
+    )) as { id?: number; store?: string; name?: string; nick?: string; employee_code?: string | null }[] | null
     for (const e of empList || []) {
       const s = String(e.store || '').trim()
       const n = String(e.name || '').trim()

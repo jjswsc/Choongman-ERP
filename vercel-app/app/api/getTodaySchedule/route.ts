@@ -14,8 +14,10 @@ import { normalizeEmployeeCodeForMatch, normalizeEmployeeNameForGradeMatch } fro
 import { requireAuth } from '@/lib/verify-auth'
 import {
   appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
   isSaasTenantQueryBlocked,
   resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
 } from '@/lib/saas-tenant-scope'
 
 function toDateStr(val: string | Date | null | undefined): string {
@@ -143,13 +145,10 @@ export async function GET(request: NextRequest) {
     // schedule_date는 근무 시작일(주간 시간표와 동일). plan_in_prev_day는 퇴근만 익일이라는 표시.
     // 다음날 야간 행을 오늘에 합치면, 오늘은 휴무이고 내일 밤 근무인 직원이 실시간 격자에 나타난다.
     const dateFilter = `schedule_date=eq.${dateStr}`
-    let scheduleRows: SchRow[] = []
-    if (isAll) {
-      scheduleRows = await fetchScheduleChunk(dateFilter)
-    } else {
-      const filter = `${dateFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
-      scheduleRows = await fetchScheduleChunk(filter)
-    }
+    const scheduleBase = isAll ? dateFilter : `${dateFilter}&${attendanceStoreNamePostgrestVariantsFilter(store)}`
+    const scheduleRows = await selectWithSaasTenantFallback('schedules', tenantScope, scheduleBase, (scoped) =>
+      fetchScheduleChunk(scoped)
+    )
 
     let empList: EmpRowForRealtimeJoin[] = []
     const empSelectCandidates = [
@@ -191,20 +190,27 @@ export async function GET(request: NextRequest) {
     if (!isAll && store) {
       leaveFilter += `&${employeeStorePostgrestVariantsFilter(store)}`
     }
-    let leaveRows: { store?: string; name?: string; leave_date?: string; type?: string }[] = []
-    try {
-      leaveRows = (await supabaseSelectFilterAllPages('leave_requests', leaveFilter, {
-        order: 'leave_date.asc,store.asc,name.asc',
-        select: 'store,name,leave_date,type',
-        maxRows: 5000,
-      })) as typeof leaveRows
-    } catch {
-      leaveRows = (await supabaseSelectFilter('leave_requests', leaveFilter, {
-        order: 'leave_date.asc',
-        limit: 2000,
-        select: 'store,name,leave_date,type',
-      })) as typeof leaveRows
-    }
+    const leaveRows = (await selectWithSaasTenantFallback(
+      'leave_requests',
+      tenantScope,
+      leaveFilter,
+      async (scoped) => {
+        try {
+          return (await supabaseSelectFilterAllPages('leave_requests', scoped, {
+            order: 'leave_date.asc,store.asc,name.asc',
+            select: 'store,name,leave_date,type',
+            maxRows: 5000,
+          })) as { store?: string; name?: string; leave_date?: string; type?: string }[]
+        } catch (e) {
+          if (isMissingSaasTenantColumnError(e)) throw e
+          return (await supabaseSelectFilter('leave_requests', scoped, {
+            order: 'leave_date.asc',
+            limit: 2000,
+            select: 'store,name,leave_date,type',
+          })) as { store?: string; name?: string; leave_date?: string; type?: string }[]
+        }
+      }
+    )) as { store?: string; name?: string; leave_date?: string; type?: string }[]
     const leaveMerged: TodayScheduleOutRow[] = []
     for (const lr of leaveRows || []) {
       const storeVal = String(lr.store || '').trim()

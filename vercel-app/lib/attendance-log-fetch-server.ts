@@ -19,6 +19,7 @@ import {
   shouldSkipAttendanceLogEmployeeKeyFilter,
   stripAttendanceLogSelectMissingColumns,
 } from '@/lib/attendance-logs-schema-compat'
+import { selectWithSaasTenantFallback, type SaasTenantScope } from '@/lib/saas-tenant-scope'
 
 export type AttendanceLogFetchRow = {
   id?: number
@@ -95,22 +96,27 @@ type FetchParams = {
   order?: 'log_at.asc' | 'log_at.desc'
   limit?: number
   select?: string
+  /** Omni: 같은 매장코드라도 다른 회사 로그는 제외 */
+  tenantScope?: SaasTenantScope
 }
 
 const DEFAULT_SELECT = 'id,log_at,log_type,employee_id,employee_code,name'
 
 async function selectLogs(
   filter: string,
-  opts: { order: 'log_at.asc' | 'log_at.desc'; limit: number; select: string }
+  opts: { order: 'log_at.asc' | 'log_at.desc'; limit: number; select: string },
+  tenantScope?: SaasTenantScope
 ): Promise<AttendanceLogFetchRow[]> {
   if (shouldSkipAttendanceLogEmployeeKeyFilter(filter)) return []
   let select = stripAttendanceLogSelectMissingColumns(opts.select || DEFAULT_SELECT)
   for (let i = 0; i < 4; i++) {
     try {
-      return (await supabaseSelectFilter('attendance_logs', filter, {
-        ...opts,
-        select,
-      })) as AttendanceLogFetchRow[]
+      return (await selectWithSaasTenantFallback('attendance_logs', tenantScope, filter, (scoped) =>
+        supabaseSelectFilter('attendance_logs', scoped, {
+          ...opts,
+          select,
+        })
+      )) as AttendanceLogFetchRow[]
     } catch (e) {
       const missing = noteAttendanceLogsMissingColumnFromError(e)
       if (!missing) throw e
@@ -159,13 +165,14 @@ export async function fetchMergedAttendanceLogsForEmployee(
   const limit = params.limit ?? 100
   const select = params.select || DEFAULT_SELECT
   const selectOpts = { order, limit, select }
+  const tenantScope = params.tenantScope
 
   const fetches: Promise<AttendanceLogFetchRow[]>[] = []
 
   const pushForStoreFragments = (employeePart: string) => {
     const bases = storeFragments.length > 0 ? storeFragments.map((sf) => [sf, ...dateRangeParts]) : [dateRangeParts]
     for (const base of bases) {
-      fetches.push(selectLogs([...base, employeePart].join('&'), selectOpts))
+      fetches.push(selectLogs([...base, employeePart].join('&'), selectOpts, tenantScope))
     }
   }
 

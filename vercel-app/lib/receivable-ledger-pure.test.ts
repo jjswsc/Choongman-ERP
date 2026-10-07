@@ -16,7 +16,7 @@ describe('filterReceivableRows', () => {
     { id: 3, store_name: 'CM Union Mall', amount: 300, ref_type: 'Order' },
   ]
 
-  it('keeps HQ books on all outlets and store books on the selected outlet', () => {
+  it('keeps HQ books on all outlets and includes that outlet outstanding when selected', () => {
     const vendorMaps = buildReceivableVendorMapsFromRows([
       { code: '1042', name: 'Silom Co', sales_outlet: 'CM Silom', gps_name: '' },
       { code: '1043', name: 'CM Ekkamai', sales_outlet: 'CM Ekkamai', gps_name: '' },
@@ -40,10 +40,10 @@ describe('filterReceivableRows', () => {
       attributionMaps: emptyAttribution,
       filterByVendorLink: true,
     })
-    expect(silom.map((r) => r.id)).toEqual([2])
+    expect(silom.map((r) => r.id)).toEqual([1, 2])
   })
 
-  it('does not show HQ claims against a store as that store receivable', () => {
+  it('shows the HQ outstanding of the selected outlet', () => {
     const vendorMaps = buildReceivableVendorMapsFromRows([])
     const ekkamai = filterReceivableRows(rows, {
       storeFilter: 'CM Ekkamai',
@@ -57,8 +57,8 @@ describe('filterReceivableRows', () => {
       attributionMaps: emptyAttribution,
       filterByVendorLink: true,
     })
-    expect(ekkamai).toEqual([])
-    expect(union).toEqual([])
+    expect(ekkamai.map((r) => r.id)).toEqual([2])
+    expect(union.map((r) => r.id)).toEqual([3])
   })
 
   it('uses the store as creditor when that store has issued its own receivables', () => {
@@ -75,7 +75,7 @@ describe('filterReceivableRows', () => {
       attributionMaps: emptyAttribution,
       filterByVendorLink: true,
     })
-    expect(filtered.map((r) => r.id)).toEqual([2])
+    expect(filtered.map((r) => r.id)).toEqual([1, 2])
   })
 })
 

@@ -23,6 +23,8 @@ import {
   appendSaasTenantFilter,
   isSaasTenantQueryBlocked,
   resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
+  type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
 
 const LATE_DED_HOURS_BASE = 208
@@ -48,7 +50,11 @@ function payrollAttKey(store: string, name: string, employeeId?: number | null):
 }
 
 /** 근태 집계: 지각분, 연장분, 근무분, 출근일수 (store|name 기준). 방콕 기준 + 자정 넘김은 출근일로 합침 */
-async function getAttendanceSummary(monthStr: string, storeFilter?: string): Promise<Record<string, { lateMin: number; earlyMin: number; otMin: number; workMin: number; workDays: number }>> {
+async function getAttendanceSummary(
+  monthStr: string,
+  storeFilter: string | undefined,
+  tenantScope: SaasTenantScope
+): Promise<Record<string, { lateMin: number; earlyMin: number; otMin: number; workMin: number; workDays: number }>> {
   const startStr = monthStr + '-01'
   const lastDay = new Date(parseInt(monthStr.slice(0, 4), 10), parseInt(monthStr.slice(5, 7), 10), 0)
   const endStr = lastDay.toISOString().slice(0, 10)
@@ -75,38 +81,19 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     pageSize: 2500,
     maxRows: 120000,
   }
-  if (storeFilter) {
-    try {
-      attRows = (await supabaseSelectFilterAllPages(
-        'attendance_logs',
-        `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { ...attPages, select: ATTENDANCE_LOG_PAYROLL_COLS }
-      )) as AttRow[]
-    } catch (e) {
-      const em = e instanceof Error ? e.message : String(e)
-      if (!/employee_id|employee_code|42703|column/i.test(em)) throw e
-      attRows = (await supabaseSelectFilterAllPages(
-        'attendance_logs',
-        `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { ...attPages, select: ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE }
-      )) as AttRow[]
-    }
-  } else {
-    try {
-      attRows = (await supabaseSelectFilterAllPages(
-        'attendance_logs',
-        `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { ...attPages, select: ATTENDANCE_LOG_PAYROLL_COLS }
-      )) as AttRow[]
-    } catch (e) {
-      const em = e instanceof Error ? e.message : String(e)
-      if (!/employee_id|employee_code|42703|column/i.test(em)) throw e
-      attRows = (await supabaseSelectFilterAllPages(
-        'attendance_logs',
-        `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { ...attPages, select: ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE }
-      )) as AttRow[]
-    }
+  const attBase = storeFilter
+    ? `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`
+    : `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`
+  const loadAtt = (select: string) =>
+    selectWithSaasTenantFallback('attendance_logs', tenantScope, attBase, (scoped) =>
+      supabaseSelectFilterAllPages('attendance_logs', scoped, { ...attPages, select })
+    ) as Promise<AttRow[]>
+  try {
+    attRows = await loadAtt(ATTENDANCE_LOG_PAYROLL_COLS)
+  } catch (e) {
+    const em = e instanceof Error ? e.message : String(e)
+    if (!/employee_id|employee_code|42703|column/i.test(em)) throw e
+    attRows = await loadAtt(ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE)
   }
 
   const byDay: Record<string, { inMs: number | null; outMs: number | null; breakMin: number; outApproved: boolean; lateMin: number; earlyMin: number; otMin: number; breakSeen: Set<string> }> = {}
@@ -192,7 +179,8 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
 /** 공휴일 해당 월에 근무한 일수 (store|name -> 일수) */
 async function getHolidayWorkDaysMap(
   monthStr: string,
-  storeFilter?: string
+  storeFilter: string | undefined,
+  tenantScope: SaasTenantScope
 ): Promise<Record<string, number>> {
   const year = parseInt(monthStr.slice(0, 4), 10)
   const startStr = monthStr + '-01'
@@ -217,19 +205,12 @@ async function getHolidayWorkDaysMap(
     pageSize: 2500,
     maxRows: 120000,
   }
-  if (storeFilter) {
-    attRows = (await supabaseSelectFilterAllPages(
-      'attendance_logs',
-      `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`,
-      holPages
-    )) as AttRow[]
-  } else {
-    attRows = (await supabaseSelectFilterAllPages(
-      'attendance_logs',
-      `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`,
-      holPages
-    )) as AttRow[]
-  }
+  const holBase = storeFilter
+    ? `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
+    : `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
+  attRows = (await selectWithSaasTenantFallback('attendance_logs', tenantScope, holBase, (scoped) =>
+    supabaseSelectFilterAllPages('attendance_logs', scoped, holPages)
+  )) as AttRow[]
 
   const byDay: Record<string, boolean> = {}
   for (const r of attRows || []) {
@@ -398,8 +379,8 @@ export async function GET(request: NextRequest) {
 
     const hazEvalRules = await loadPayrollHazEvalGradeRules()
 
-    const attSummary = await getAttendanceSummary(monthStr, storeFilter || undefined)
-    const holidayWorkMap = await getHolidayWorkDaysMap(monthStr, storeFilter || undefined)
+    const attSummary = await getAttendanceSummary(monthStr, storeFilter || undefined, tenantScope)
+    const holidayWorkMap = await getHolidayWorkDaysMap(monthStr, storeFilter || undefined, tenantScope)
     const targetDate = new Date(monthStr + '-01')
     const targetMonth = targetDate.getMonth()
     const list: PayrollPreviewRow[] = []

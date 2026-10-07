@@ -39,6 +39,24 @@ export type TaxBookEntriesResponse = {
   accountCode?: string | null
 }
 
+export type TaxBookVoucherLine = {
+  accountCode: string
+  accountName: string | null
+  debit: number
+  credit: number
+  memo: string | null
+}
+
+export async function getTaxBookVoucherLines(params: { entryId: number; scopeFilter: string }) {
+  const q = new URLSearchParams({
+    entryId: String(params.entryId),
+    scopeFilter: params.scopeFilter || 'All',
+    view: 'voucher',
+  })
+  const res = await apiFetchWithOffline(`/api/getTaxBookEntries?${q}`)
+  return res.json() as Promise<{ schemaReady?: boolean; lines?: TaxBookVoucherLine[]; error?: string }>
+}
+
 export async function getTaxBookEntries(params: {
   yearMonth?: string
   fromMonth?: string
