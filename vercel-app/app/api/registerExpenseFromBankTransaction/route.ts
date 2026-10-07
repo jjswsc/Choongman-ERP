@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
         let linkedDocumentNo = String(accrualRow?.document_no || '').trim() || null
         if (!linkedDocumentNo) {
           try {
-            linkedDocumentNo = await allocateExpenseDocumentNo(expenseDate)
+            linkedDocumentNo = await allocateExpenseDocumentNo(expenseDate, { vatAmount: linkedVat })
           } catch (docErr) {
             console.warn('registerExpenseFromBankTransaction document_no:', docErr)
           }
@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
 
     let documentNo: string | null = null
     try {
-      documentNo = await allocateExpenseDocumentNo(expenseDate)
+      documentNo = await allocateExpenseDocumentNo(expenseDate, { vatAmount })
     } catch (docErr) {
       console.error('registerExpenseFromBankTransaction document_no:', docErr)
       return NextResponse.json(

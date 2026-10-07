@@ -570,7 +570,7 @@ export async function postExpenseAccrualJournal(params: {
   /** 통장에서 이미 지급된 매입이면 매입채무 대신 그 계좌 */
   creditCode?: string
   creditName?: string
-  /** 지출 문서번호 EXPyyyymmNNNN — 일별장부 검색용 */
+  /** 지출 문서번호 PVyyyymmNNNN / PPyyyymmNNNN — 일별장부 검색용 */
   entryNo?: string | null
   memo?: string
   storeName?: string
@@ -606,7 +606,8 @@ export async function postExpenseAccrualJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '지출 발생(미지급) 자동분개',
     postedBy: params.postedBy || null,
-    voucherKind: 'purchase',
+    /** VAT 있으면 매입(PV), 없으면 지급(PP) — 문서번호 접두와 동일 */
+    voucherKind: voucherKindForPaidExpense(params.vatAmount),
     entryNo: String(params.entryNo || '').trim() || null,
     lines,
   })

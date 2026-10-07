@@ -462,7 +462,9 @@ async function linkMultipleExpenseAccrualsToExistingBank(params: {
     let documentNo = String(source.document_no || '').trim() || null
     if (!documentNo) {
       try {
-        documentNo = await allocateExpenseDocumentNo(source.expense_date || transDate)
+        documentNo = await allocateExpenseDocumentNo(source.expense_date || transDate, {
+          vatAmount: source.vat_amount,
+        })
         await supabaseUpdate('expense_accruals', expenseAccrualId, { document_no: documentNo })
       } catch (docErr) {
         console.error('executeExpensePayment document_no:', docErr)
@@ -647,7 +649,9 @@ export async function POST(request: NextRequest) {
     let documentNo = String(source.document_no || '').trim() || null
     if (!documentNo) {
       try {
-        documentNo = await allocateExpenseDocumentNo(source.expense_date || transDate)
+        documentNo = await allocateExpenseDocumentNo(source.expense_date || transDate, {
+          vatAmount: source.vat_amount,
+        })
         await supabaseUpdate('expense_accruals', expenseAccrualId, { document_no: documentNo })
       } catch (docErr) {
         console.error('executeExpensePayment document_no:', docErr)

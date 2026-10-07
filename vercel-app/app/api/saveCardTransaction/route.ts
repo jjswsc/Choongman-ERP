@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
     let documentNo: string | null = null
     if (transType === 'expense') {
       try {
-        documentNo = await allocateExpenseDocumentNo(transDate)
+        documentNo = await allocateExpenseDocumentNo(transDate, { vatAmount: 0 })
       } catch (docErr) {
         console.error('saveCardTransaction document_no:', docErr)
         return NextResponse.json(

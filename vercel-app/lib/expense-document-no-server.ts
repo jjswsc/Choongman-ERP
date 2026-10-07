@@ -1,5 +1,12 @@
 import { supabaseRpc, supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
-import { bangkokYyyymmFromDate, buildExpenseDocumentNo, isExpenseDocumentNo } from '@/lib/expense-document-no'
+import {
+  bangkokYyyymmFromDate,
+  buildExpenseDocumentNo,
+  expenseDocumentPrefixForVat,
+  expenseDocumentSeqKey,
+  isExpenseDocumentNo,
+  type ExpenseDocumentPrefix,
+} from '@/lib/expense-document-no'
 
 function isMissingRpcError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
@@ -11,8 +18,9 @@ function isMissingRpcError(e: unknown): boolean {
   )
 }
 
-async function allocateViaFallback(yyyymm: string): Promise<string> {
-  const rows = (await supabaseSelectFilter('expense_document_seq', `yyyymm=eq.${yyyymm}`, {
+async function allocateViaFallback(prefix: ExpenseDocumentPrefix, yyyymm: string): Promise<string> {
+  const key = expenseDocumentSeqKey(prefix, yyyymm)
+  const rows = (await supabaseSelectFilter('expense_document_seq', `yyyymm=eq.${key}`, {
     select: 'yyyymm,last_seq',
     limit: 1,
   })) as { yyyymm?: string; last_seq?: number }[] | null
@@ -22,46 +30,60 @@ async function allocateViaFallback(yyyymm: string): Promise<string> {
     'expense_document_seq',
     [
       {
-        yyyymm,
+        yyyymm: key,
         last_seq: next,
         updated_at: new Date().toISOString(),
       },
     ],
     'yyyymm'
   )
-  return buildExpenseDocumentNo(yyyymm, next)
+  return buildExpenseDocumentNo(yyyymm, next, prefix)
+}
+
+export type AllocateExpenseDocumentNoOpts = {
+  vatAmount?: number | null
+  /** 명시 접두 (vatAmount보다 우선) */
+  prefix?: ExpenseDocumentPrefix | null
 }
 
 /**
- * 월별 공유 순번으로 EXP 문서번호 발급.
- * RPC `allocate_expense_document_no` 우선, 없으면 테이블 fallback.
+ * 월·접두(PV/PP)별 순번으로 문서번호 발급.
+ * VAT>0 → PV, 아니면 PP. RPC `allocate_voucher_document_no` 우선, 없으면 테이블 fallback.
  */
-export async function allocateExpenseDocumentNo(expenseDate?: string | null): Promise<string> {
+export async function allocateExpenseDocumentNo(
+  expenseDate?: string | null,
+  opts?: AllocateExpenseDocumentNoOpts
+): Promise<string> {
   const yyyymm = bangkokYyyymmFromDate(expenseDate)
+  const prefix: ExpenseDocumentPrefix =
+    opts?.prefix === 'PV' || opts?.prefix === 'PP'
+      ? opts.prefix
+      : expenseDocumentPrefixForVat(opts?.vatAmount)
+
   try {
-    const result = await supabaseRpc<string | string[] | { allocate_expense_document_no?: string }>(
-      'allocate_expense_document_no',
-      { p_yyyymm: yyyymm }
+    const result = await supabaseRpc<string | string[] | { allocate_voucher_document_no?: string }>(
+      'allocate_voucher_document_no',
+      { p_prefix: prefix, p_yyyymm: yyyymm }
     )
     const raw =
       typeof result === 'string'
         ? result
         : Array.isArray(result)
           ? String(result[0] || '')
-          : String((result as { allocate_expense_document_no?: string })?.allocate_expense_document_no || '')
+          : String((result as { allocate_voucher_document_no?: string })?.allocate_voucher_document_no || '')
     const doc = raw.trim()
     if (isExpenseDocumentNo(doc)) return doc
     if (doc) return doc
   } catch (e) {
     if (!isMissingRpcError(e)) {
-      console.warn('allocate_expense_document_no RPC failed, using fallback:', e)
+      console.warn('allocate_voucher_document_no RPC failed, using fallback:', e)
     }
   }
-  // fallback: 재시도 2회 (동시성 충돌 완화)
+
   let lastErr: unknown
   for (let i = 0; i < 3; i++) {
     try {
-      return await allocateViaFallback(yyyymm)
+      return await allocateViaFallback(prefix, yyyymm)
     } catch (e) {
       lastErr = e
     }

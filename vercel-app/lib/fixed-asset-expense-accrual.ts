@@ -177,7 +177,7 @@ export async function createExpenseAccrualForFixedAsset(
 
   let documentNo: string | null = null
   try {
-    documentNo = await allocateExpenseDocumentNo(acquisitionDate)
+    documentNo = await allocateExpenseDocumentNo(acquisitionDate, { vatAmount: 0 })
   } catch (docErr) {
     console.error('createExpenseAccrualForFixedAsset document_no:', docErr)
     return {

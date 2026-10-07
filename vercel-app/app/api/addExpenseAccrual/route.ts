@@ -357,7 +357,7 @@ export async function POST(request: NextRequest) {
 
     let documentNo: string | null = null
     try {
-      documentNo = await allocateExpenseDocumentNo(expenseDate)
+      documentNo = await allocateExpenseDocumentNo(expenseDate, { vatAmount })
     } catch (docErr) {
       console.error('addExpenseAccrual document_no:', docErr)
       return NextResponse.json(

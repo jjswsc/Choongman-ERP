@@ -291,7 +291,7 @@ export async function POST(request: NextRequest) {
       }
       if (!documentNo) {
         try {
-          documentNo = await allocateExpenseDocumentNo(transDate)
+          documentNo = await allocateExpenseDocumentNo(transDate, { vatAmount })
         } catch (docErr) {
           console.error('executeWithdrawal document_no:', docErr)
           return NextResponse.json(
