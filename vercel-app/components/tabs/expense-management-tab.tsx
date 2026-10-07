@@ -35,7 +35,7 @@ import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { useSyncOfficePayrollAccess } from "@/lib/use-office-payroll-access"
 import { useStoreList } from "@/lib/api-client"
-import { useErpPageActive, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { useErpPageActive } from "@/lib/erp-page-visibility"
 import {
   approveExpenseAccrual,
   deleteExpenseAccrual,
@@ -369,10 +369,6 @@ export function ExpenseManagementTab() {
     if (tab !== "plan") return
     void loadPlansRef.current()
   }, [tab, auth?.role, planRefreshToken])
-
-  useErpRefetchOnActivate(() => {
-    if (tab === "plan") void loadPlansRef.current()
-  })
 
   const openLinkBank = async (row: ExpenseAccrualPlanItem) => {
     const accountId = payBankById[row.id]

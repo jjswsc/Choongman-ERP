@@ -38,6 +38,7 @@ import {
   adminTabsContentCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { formatEmployeeDisplayName, normalizeEmployeeNameForGradeMatch } from "@/lib/employee-display-name"
 import {
@@ -199,6 +200,7 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
 export default function EmployeesPage() {
   const t = useT(useLang().lang)
   const searchParams = useSearchParams()
+  const pageActiveRef = useErpPageActiveRef()
   const router = useRouter()
   const { auth } = useAuth()
   useSyncOfficePayrollAccess()
@@ -423,6 +425,7 @@ export default function EmployeesPage() {
 
   /** 급여 관리 등에서 ?employeeId= 또는 ?employeeCode=&store=&name= 로 진입 시 목록 조회 후 수정 폼 오픈 */
   React.useEffect(() => {
+    if (!pageActiveRef.current) return
     const employeeId = searchParams.get("employeeId")?.trim()
     const employeeCode = searchParams.get("employeeCode")?.trim()
     const storeQ = searchParams.get("store")?.trim() || ""
@@ -463,7 +466,7 @@ export default function EmployeesPage() {
         router.replace("/admin/employees", { scroll: false })
       }
     })
-  }, [searchParams, loadEmployeeList, router, openEmployeeForm])
+  }, [searchParams, loadEmployeeList, router, openEmployeeForm, pageActiveRef])
 
   const jobOptions = React.useMemo(() => {
     if (apiJobOptions.length > 0) return apiJobOptions

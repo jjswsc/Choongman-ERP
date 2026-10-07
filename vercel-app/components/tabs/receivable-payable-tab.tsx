@@ -90,7 +90,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { useErpAllowUrlSync, useErpPageActiveRef, useErpRefetchOnActivate } from "@/lib/erp-page-visibility"
+import { useErpAllowUrlSync, useErpPageActiveRef } from "@/lib/erp-page-visibility"
 import {
   isManagerOrFranchiseeRole,
   isManagerRole,
@@ -1220,16 +1220,6 @@ export function ReceivablePayableTab() {
       })
     })
   }, [loadList, tabUi])
-
-  useErpRefetchOnActivate(() => {
-    if (!hasSearchedListRef.current) return
-    const type = tabUi === "receivable" || tabUi === "payable" ? tabUi : undefined
-    void loadList({
-      fresh: true,
-      skipCrossTabNotify: true,
-      overrides: type ? { type } : undefined,
-    })
-  })
 
   const handleLoadList = React.useCallback(() => {
     setHasSearchedList(true)

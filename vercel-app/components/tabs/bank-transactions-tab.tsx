@@ -33,7 +33,6 @@ import {
   useErpPageActive,
   useErpPageActiveRef,
   useErpTabActive,
-  useErpRefetchOnActivate,
 } from "@/lib/erp-page-visibility"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
@@ -1303,14 +1302,6 @@ export function BankTransactionsTab() {
     restoreListLoadedRef.current = true
     loadData()
   }, [accountId, loadData])
-
-  const hasSearchedRef = React.useRef(hasSearched)
-  hasSearchedRef.current = hasSearched
-  useErpRefetchOnActivate(() => {
-    // 조회한 적 있을 때만 복귀 시 갱신 — 빈 화면에서 불필요 호출·레이스 방지
-    if (!hasSearchedRef.current || !accountId) return
-    void loadData()
-  })
 
   React.useEffect(() => {
     const txId = restoreOpenRegisterTxIdRef.current
