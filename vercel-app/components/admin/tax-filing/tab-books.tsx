@@ -48,11 +48,13 @@ import {
   wrapFlowReportForExcel,
   type TaxBookFlowReportMeta,
 } from "@/lib/tax-book-flow-report"
+import { getAccountSubjects } from "@/lib/api-client/chart-of-accounts"
 import {
   displayTaxBookAccountName,
   formatTaxBookLedgerPeriod,
   formatTaxBookMemoDisplay,
   formatTaxFilingYearMonthLabel,
+  type TaxBookAccountSubjectLabel,
 } from "@/lib/tax-book-display"
 import { linesWithPaidBankCredit } from "@/lib/paid-bank-credit"
 import { taxBookCompanyNameFromScope } from "@/lib/tax-entity-scope-label"
@@ -111,6 +113,26 @@ export function TaxFilingBooksTab(props: {
 }) {
   const { lang } = useLang()
   const t = useT(lang)
+  const [accountSubjects, setAccountSubjects] = React.useState<TaxBookAccountSubjectLabel[]>([])
+  React.useEffect(() => {
+    let cancelled = false
+    void getAccountSubjects()
+      .then((rows) => {
+        if (cancelled) return
+        setAccountSubjects(
+          rows.map((row) => ({
+            code: row.code,
+            name: row.name,
+            nameEn: row.nameEn,
+            nameTh: row.nameTh,
+          }))
+        )
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const [view, setView] = React.useState<BooksView>("bridge")
   const [query, setQuery] = React.useState<BooksQuery | null>(null)
   const [rangeError, setRangeError] = React.useState<string | null>(null)
@@ -316,9 +338,9 @@ export function TaxFilingBooksTab(props: {
     () =>
       (entries?.trial || []).map((r) => ({
         ...r,
-        accountName: displayTaxBookAccountName(lang, r.accountCode, r.accountName),
+        accountName: displayTaxBookAccountName(lang, r.accountCode, r.accountName, accountSubjects),
       })),
-    [entries?.trial, lang]
+    [entries?.trial, lang, accountSubjects]
   )
   const statements = React.useMemo(() => buildTaxBookStatements(localizedTrial), [localizedTrial])
 
@@ -633,7 +655,7 @@ export function TaxFilingBooksTab(props: {
   const ledgerSections = React.useMemo(() => {
     const localized = (entries?.ledger || []).map((ln) => ({
       ...ln,
-      accountName: displayTaxBookAccountName(lang, ln.accountCode, ln.accountName),
+      accountName: displayTaxBookAccountName(lang, ln.accountCode, ln.accountName, accountSubjects),
       memo: formatTaxBookMemoDisplay(t, ln.memo, {
         sourceType: ln.sourceType,
         accountingDate: ln.accountingDate,
@@ -641,7 +663,7 @@ export function TaxFilingBooksTab(props: {
       }),
     }))
     return buildTaxBookLedgerSections(localized, ledgerApplied)
-  }, [entries?.ledger, ledgerApplied, lang, t])
+  }, [entries?.ledger, ledgerApplied, lang, t, accountSubjects])
 
   const ledgerReportInput = React.useMemo(() => {
     const accountLabel = ledgerApplied.allBusiness
@@ -972,6 +994,7 @@ export function TaxFilingBooksTab(props: {
                   lines={voucherLines}
                   loading={voucherLinesLoading}
                   lang={lang}
+                  accountSubjects={accountSubjects}
                   t={t}
                   statusLabel={t("taxBooksStatusApproved")}
                   draftLabel={t("taxBooksStatusDraft")}
@@ -1462,6 +1485,7 @@ function VoucherEntryDialogBody({
   lines,
   loading,
   lang,
+  accountSubjects,
   t,
   statusLabel,
   draftLabel,
@@ -1474,6 +1498,7 @@ function VoucherEntryDialogBody({
   lines: TaxBookVoucherLine[] | null
   loading: boolean
   lang: string
+  accountSubjects: TaxBookAccountSubjectLabel[]
   t: (key: string) => string
   statusLabel: string
   draftLabel: string
@@ -1739,8 +1764,15 @@ function VoucherEntryDialogBody({
               </tr>
             ) : (
               shown.map((ln, idx) => {
-                const name = displayTaxBookAccountName(lang, ln.accountCode, ln.accountName)
-                const lineMemo = String(ln.memo || "").trim() || description
+                const name = displayTaxBookAccountName(lang, ln.accountCode, ln.accountName, accountSubjects)
+                const lineMemoRaw = String(ln.memo || "").trim()
+                const lineMemo = lineMemoRaw
+                  ? formatTaxBookMemoDisplay(t, lineMemoRaw, {
+                      sourceType: voucher.sourceType,
+                      accountingDate: voucher.accountingDate,
+                      lang,
+                    })
+                  : description
                 return (
                   <tr key={`${ln.accountCode}-${idx}`} className="border-t">
                     <td className="px-3 py-2">

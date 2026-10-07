@@ -36,8 +36,23 @@ describe('tax book display i18n', () => {
 
   it('translates system journal memos and leaves free text', () => {
     expect(localizeOperationalJournalMemo('POS 매출 자동분개', 'th')).toBe('ขาย POS')
+    expect(localizeOperationalJournalMemo('POS 주문 완료 자동분개', 'th')).toBe('ขายจากออเดอร์ POS')
+    expect(localizeOperationalJournalMemo('주문 수령(본사정산분) 자동분개', 'en')).toBe('Order receipt (HQ settlement)')
+    expect(localizeOperationalJournalMemo('급여 발생(합산) 2026-09 CM Silom', 'th')).toBe('บันทึกเงินเดือนรวม 2026-09 CM Silom')
+    expect(localizeOperationalJournalMemo('grab 채권 소거', 'th')).toBe('ตัดลูกหนี้ grab')
     expect(localizeOperationalJournalMemo('패티보충(สาขาเอกมัย)', 'th')).toBe('เติมเงินสดย่อย (สาขาเอกมัย)')
     expect(localizeOperationalJournalMemo('ค่าเช่าสำนักงาน', 'th')).toBeNull()
+  })
+
+  it('translates system account aliases and subject master names', () => {
+    expect(displayTaxBookAccountName('th', '1130', '결제대기자산')).toBe('ลูกหนี้รอรับชำระ')
+    expect(displayTaxBookAccountName('th', '1130', '매출채권')).toBe('ลูกหนี้การค้า')
+    expect(displayTaxBookAccountName('th', '5520', '전기요금', [
+      { code: '5520', name: '전기요금', nameEn: 'Electricity', nameTh: 'ค่าไฟฟ้า' },
+    ])).toBe('ค่าไฟฟ้า')
+    expect(displayTaxBookAccountName('th', '1010', 'กสิกรไทย · สำนักงานใหญ่', [
+      { code: '1010', name: '현금및예금', nameEn: 'Cash', nameTh: 'เงินสดและเงินฝากธนาคาร' },
+    ])).toBe('กสิกรไทย · สำนักงานใหญ่')
   })
 
   it('resolves stored English memos to i18n keys', () => {

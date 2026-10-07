@@ -28,14 +28,58 @@ function accountNameForLang(
   return meta.nameEn || meta.nameKo || fallback || code
 }
 
+/** 계정과목 마스터에 태국어·영어가 있을 때 장부 표시에 쓴다. */
+export type TaxBookAccountSubjectLabel = {
+  code: string
+  name: string
+  nameEn?: string | null
+  nameTh?: string | null
+}
+
+function subjectNameForLang(lang: string, row: TaxBookAccountSubjectLabel): string {
+  const nameKo = String(row.name || '').trim()
+  const nameEn = String(row.nameEn || '').trim()
+  const nameTh = String(row.nameTh || '').trim()
+  if (lang === 'ko') return nameKo
+  if (lang === 'th') return nameTh || nameEn || nameKo
+  return nameEn || nameKo
+}
+
+function matchingSubjectLabel(
+  code: string,
+  fallback: string,
+  subjects: TaxBookAccountSubjectLabel[] | null | undefined
+): TaxBookAccountSubjectLabel | null {
+  if (!fallback || !subjects?.length) return null
+  const sameCode = code ? subjects.filter((row) => String(row.code || '').trim() === code) : subjects
+  const hit = sameCode.find((row) => {
+    const nameKo = String(row.name || '').trim()
+    const nameEn = String(row.nameEn || '').trim()
+    const nameTh = String(row.nameTh || '').trim()
+    return fallback === nameKo || (nameEn !== '' && fallback === nameEn) || (nameTh !== '' && fallback === nameTh)
+  })
+  return hit || null
+}
+
 export function displayTaxBookAccountName(
   lang: string,
   accountCode: string,
-  fallbackName?: string | null
+  fallbackName?: string | null,
+  subjects?: TaxBookAccountSubjectLabel[] | null
 ): string {
   const code = String(accountCode || '').trim()
   const fallback = String(fallbackName || '').trim()
+  const alias = fallback ? ACCOUNT_NAME_ALIAS[fallback] : undefined
+  if (alias) return phrase(lang, alias)
   const meta = (code ? CHART_OF_ACCOUNTS_BY_CODE[code] : undefined) || (fallback ? CHART_BY_KO_NAME.get(fallback) : undefined)
+  if (meta && (!fallback || isCanonicalAccountName(meta, fallback))) {
+    return accountNameForLang(lang, meta, fallback, code)
+  }
+  const subject = matchingSubjectLabel(code, fallback, subjects)
+  if (subject) {
+    const localized = subjectNameForLang(lang, subject)
+    if (localized && localized !== fallback) return localized
+  }
   if (!meta) return fallback || code
   if (fallback && !isCanonicalAccountName(meta, fallback)) return fallback
   return accountNameForLang(lang, meta, fallback, code)
@@ -113,6 +157,28 @@ const OPERATIONAL_MEMO_EXACT: Record<string, MemoPhrase> = {
   통장이체: { ko: '통장 이체', en: 'Bank transfer', th: 'โอนผ่านธนาคาร' },
   '패티캐시 회수': { ko: '시재 회수', en: 'Petty cash return', th: 'รับเงินสดย่อยคืน' },
   '출금 관리 자동분개': { ko: '출금', en: 'Withdrawal', th: 'ถอนเงิน' },
+  'POS 주문 완료 자동분개': { ko: 'POS 주문 완료', en: 'POS order completed', th: 'ขายจากออเดอร์ POS' },
+  '주문 수령(본사정산분) 자동분개': { ko: '주문 수령(본사정산)', en: 'Order receipt (HQ settlement)', th: 'รับสินค้า (ตัดบัญชีสำนักงานใหญ่)' },
+  '주문 수령(본사정산) 자동분개': { ko: '주문 수령(본사정산)', en: 'Order receipt (HQ settlement)', th: 'รับสินค้า (ตัดบัญชีสำนักงานใหญ่)' },
+  'POS 주문 환불 역분개': { ko: 'POS 환불', en: 'POS refund reversal', th: 'กลับรายการคืนเงิน POS' },
+  'POS 주문 취소 역분개': { ko: 'POS 취소', en: 'POS void reversal', th: 'กลับรายการยกเลิก POS' },
+  'POS 매출 백필 분개': { ko: 'POS 매출 백필', en: 'POS sales backfill', th: 'บันทึกขาย POS ย้อนหลัง' },
+  '매입/매출채권 백필 분개': { ko: '매입/매출채권 백필', en: 'Purchase and receivable backfill', th: 'บันทึกซื้อและลูกหนี้ย้อนหลัง' },
+  '지출발생(통장연결)': { ko: '지출(통장연결)', en: 'Expense (bank linked)', th: 'ค่าใช้จ่าย (ผูกบัญชีธนาคาร)' },
+  'POS 손님 예약금 수령': { ko: '예약금 수령', en: 'Customer deposit received', th: 'รับเงินมัดจำลูกค้า' },
+  'POS 손님 예약금 환불': { ko: '예약금 환불', en: 'Customer deposit refund', th: 'คืนเงินมัดจำลูกค้า' },
+  'POS 손님 예약금 몰수': { ko: '예약금 몰수', en: 'Customer deposit forfeited', th: 'ริบเงินมัดจำลูกค้า' },
+  '채널 정산 수수료': { ko: '채널 정산 수수료', en: 'Channel settlement fee', th: 'ค่าธรรมเนียมช่องทาง' },
+  원천세: { ko: '원천세', en: 'Withholding tax', th: 'ภาษีหัก ณ ที่จ่าย' },
+}
+
+/** 차트 표준명과 다른 시스템 계정명. 통장 별칭(กสิกร 등)은 여기 없으면 원문 유지. */
+const ACCOUNT_NAME_ALIAS: Record<string, MemoPhrase> = {
+  결제대기자산: { ko: '결제대기자산', en: 'Settlement receivable', th: 'ลูกหนี้รอรับชำระ' },
+  서비스처리비: { ko: '서비스처리비', en: 'Complimentary service cost', th: 'ค่าของแถม' },
+  'POS 마감 차이손실': { ko: 'POS 마감 차이손실', en: 'POS closing difference loss', th: 'ผลขาดทุนส่วนต่างปิดวัน POS' },
+  'POS 마감 차이이익': { ko: 'POS 마감 차이이익', en: 'POS closing difference gain', th: 'กำไรส่วนต่างปิดวัน POS' },
+  이체: { ko: '이체', en: 'Transfer', th: 'โอนเงิน' },
 }
 
 function phrase(lang: string, row: MemoPhrase): string {
@@ -154,6 +220,79 @@ export function localizeOperationalJournalMemo(memo: string, lang: string): stri
   if (external) return phrase(lang, { ko: `외부 이체(${external[1]})`, en: `External transfer (${external[1]})`, th: `โอนออกภายนอก (${external[1]})` })
   const card = /^카드충전\(계좌(.+)\)$/.exec(text)
   if (card) return phrase(lang, { ko: `카드 충전(계좌${card[1]})`, en: `Card top-up (account ${card[1]})`, th: `เติมเงินบัตร (บัญชี ${card[1]})` })
+  const payrollSum = /^급여 발생\(합산\)\s+(.+)$/.exec(text)
+  if (payrollSum) {
+    return phrase(lang, {
+      ko: `급여 발생(합산) ${payrollSum[1]}`,
+      en: `Payroll accrual (combined) ${payrollSum[1]}`,
+      th: `บันทึกเงินเดือนรวม ${payrollSum[1]}`,
+    })
+  }
+  const payroll = /^급여 발생\s+(.+)$/.exec(text)
+  if (payroll) {
+    return phrase(lang, {
+      ko: `급여 발생 ${payroll[1]}`,
+      en: `Payroll accrual ${payroll[1]}`,
+      th: `บันทึกเงินเดือนค้างจ่าย ${payroll[1]}`,
+    })
+  }
+  const sso = /^SSO 납부예정\s+(.+)$/.exec(text)
+  if (sso) {
+    return phrase(lang, {
+      ko: `SSO 납부예정 ${sso[1]}`,
+      en: `SSO payable ${sso[1]}`,
+      th: `ประกันสังคมรอจ่าย ${sso[1]}`,
+    })
+  }
+  const asset = /^고정자산 취득:?\s*(.+)$/.exec(text)
+  if (asset) {
+    return phrase(lang, {
+      ko: `고정자산 취득 ${asset[1]}`,
+      en: `Fixed asset purchase ${asset[1]}`,
+      th: `ซื้อสินทรัพย์ ${asset[1]}`,
+    })
+  }
+  const inbound = /^입고\s+(\d{4}-\d{2}-\d{2})\s+(.+)$/.exec(text)
+  if (inbound) {
+    return phrase(lang, {
+      ko: `입고 ${inbound[1]} ${inbound[2]}`,
+      en: `Goods receipt ${inbound[1]} ${inbound[2]}`,
+      th: `รับสินค้า ${inbound[1]} ${inbound[2]}`,
+    })
+  }
+  const bankExpense = /^지출 발생\(통장연결\)\s*(.*)$/.exec(text)
+  if (bankExpense) {
+    const who = bankExpense[1].trim()
+    return phrase(lang, {
+      ko: who ? `지출(통장연결) ${who}` : '지출(통장연결)',
+      en: who ? `Expense (bank linked) ${who}` : 'Expense (bank linked)',
+      th: who ? `ค่าใช้จ่าย (ผูกบัญชีธนาคาร) ${who}` : 'ค่าใช้จ่าย (ผูกบัญชีธนาคาร)',
+    })
+  }
+  const feeClear = /^([A-Za-z0-9_]+)\s+수수료 채권 소거$/.exec(text)
+  if (feeClear) {
+    return phrase(lang, {
+      ko: `${feeClear[1]} 수수료 채권 소거`,
+      en: `Clear ${feeClear[1]} fee receivable`,
+      th: `ตัดลูกหนี้ค่าธรรมเนียม ${feeClear[1]}`,
+    })
+  }
+  const settleIn = /^([A-Za-z0-9_]+)\s+정산 입금$/.exec(text)
+  if (settleIn) {
+    return phrase(lang, {
+      ko: `${settleIn[1]} 정산 입금`,
+      en: `${settleIn[1]} settlement deposit`,
+      th: `รับเงินชำระ ${settleIn[1]}`,
+    })
+  }
+  const clearRecv = /^([A-Za-z0-9_]+)\s+채권 소거$/.exec(text)
+  if (clearRecv) {
+    return phrase(lang, {
+      ko: `${clearRecv[1]} 채권 소거`,
+      en: `Clear ${clearRecv[1]} receivable`,
+      th: `ตัดลูกหนี้ ${clearRecv[1]}`,
+    })
+  }
   return null
 }
 
