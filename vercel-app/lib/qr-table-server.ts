@@ -22,6 +22,19 @@ import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-de
 import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { parsePosOrderItemsJson } from '@/lib/pos-order-item-map'
+import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
+import {
+  appendPosOrderMergedAbsorbStamp,
+  appendPosOrderMergedKeepStamp,
+} from '@/lib/pos-order-merge'
+import {
+  memoAlreadyAbsorbedOrder,
+  posOrderOpenPaymentSum,
+  qrTableNamesMatch,
+  remapAbsorbedPosOrderLine,
+  resolveQrBillAttach,
+  type QrBillAttachCandidate,
+} from '@/lib/qr-table-bill-attach'
 import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 import { resolvePosMenuDescriptionForChannel } from '@/lib/pos-menu-display-description'
 import { parsePosMenuI18nMap } from '@/lib/pos-menu-guest-i18n'
@@ -648,9 +661,16 @@ export async function loadActiveSessionForTable(
     `store_code=eq.${encodeURIComponent(code)}&table_name=eq.${encodeURIComponent(table)}&status=in.(awaiting_entry,active)`,
     { limit: 1, order: 'id.desc' }
   )) as DbSession[]
-  const row = rows?.[0]
-  if (!row) return null
-  return expireSessionIfStale(mapSession(row))
+  const exact = rows?.[0]
+  if (exact) return expireSessionIfStale(mapSession(exact))
+  const loose = (await supabaseSelectFilter(
+    'pos_qr_table_sessions',
+    `store_code=eq.${encodeURIComponent(code)}&status=in.(awaiting_entry,active)`,
+    { limit: 40, order: 'id.desc' }
+  )) as DbSession[]
+  const hit = (loose || []).find((row) => qrTableNamesMatch(row.table_name, table))
+  if (!hit) return null
+  return expireSessionIfStale(mapSession(hit))
 }
 
 export async function requireQrGuestSession(
@@ -1581,7 +1601,19 @@ async function createOrEnsurePosOrderForSession(
   if (session.posOrderId) return session.posOrderId
 
   const existingOpenId = await findOpenDineInOrderIdForTable(session.storeCode, session.tableName)
-  if (existingOpenId > 0) return existingOpenId
+  if (existingOpenId > 0) {
+    try {
+      await foldSeparateOpenBillsIntoOldest({
+        storeCode: session.storeCode,
+        tableName: session.tableName,
+        sessionId: session.id,
+        sessionOrderId: existingOpenId,
+      })
+    } catch (e) {
+      console.error('qr fold open bills:', e)
+    }
+    return existingOpenId
+  }
 
   /** items.addedAt 은 손님 UI용 방콕 벽시계; pos_orders.created_at 은 timestamptz → ISO(UTC) */
   const nowBkk = getBangkokDateTimeString()
@@ -1946,27 +1978,182 @@ function posOrderItemsHaveFood(raw: unknown): boolean {
   })
 }
 
-/** 같은 테이블에 이미 열린 홀 주문이 있으면 QR은 새 주문을 만들지 않고 그 주문에 붙인다. */
-async function findOpenDineInOrderIdForTable(storeCode: string, tableName: string): Promise<number> {
+const OPEN_DINE_IN_ATTACH_SELECT =
+  'id,order_type,status,table_name,created_at,order_no,memo,guest_count,items_json,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,subtotal,total,store_code,updated_at'
+
+type OpenDineInAttachRow = {
+  id?: number
+  order_type?: string
+  status?: string
+  table_name?: string
+  created_at?: string
+  order_no?: string
+  memo?: string
+  guest_count?: number
+  items_json?: unknown
+  discount_amt?: number
+  coupon_discount_amt?: number
+  payment_cash?: number
+  payment_card?: number
+  payment_qr?: number
+  payment_other?: number
+  payment_delivery_app?: number
+  subtotal?: number
+  total?: number
+  store_code?: string
+  updated_at?: string
+}
+
+function toQrBillAttachCandidate(row: OpenDineInAttachRow): QrBillAttachCandidate {
+  return {
+    id: Math.trunc(Number(row.id || 0)),
+    tableName: String(row.table_name || ''),
+    orderType: row.order_type,
+    status: row.status,
+    createdAt: row.created_at,
+    paymentSum: posOrderOpenPaymentSum(row),
+  }
+}
+
+async function listRecentOpenDineInOrders(storeCode: string): Promise<OpenDineInAttachRow[]> {
   const code = String(storeCode || '').trim()
-  const table = String(tableName || '').trim()
-  if (!code || !table) return 0
+  if (!code) return []
   /** 오늘 POS 목록에 없는 며칠 전 미종료 주문에 붙으면 바닥 타일이 비어 보인다. */
   const sinceIso = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString()
   const rows = (await supabaseSelectFilter(
     'pos_orders',
-    `store_code=eq.${encodeURIComponent(code)}&table_name=eq.${encodeURIComponent(table)}&status=in.(${OPEN_DINE_IN_ORDER_STATUSES.join(',')})&created_at=gte.${encodeURIComponent(sinceIso)}`,
-    { limit: 8, order: 'id.desc', select: 'id,order_type,status' }
-  )) as Array<{ id?: number; order_type?: string; status?: string }>
-  for (const row of rows || []) {
-    const id = Math.trunc(Number(row.id || 0))
-    if (!id) continue
-    if (!isOpenDineInOrderType(row.order_type)) continue
-    const status = String(row.status || '').trim().toLowerCase()
-    if (!OPEN_DINE_IN_ORDER_STATUSES.includes(status as (typeof OPEN_DINE_IN_ORDER_STATUSES)[number])) continue
-    return id
+    `store_code=eq.${encodeURIComponent(code)}&status=in.(${OPEN_DINE_IN_ORDER_STATUSES.join(',')})&created_at=gte.${encodeURIComponent(sinceIso)}`,
+    { limit: 200, order: 'id.desc', select: OPEN_DINE_IN_ATTACH_SELECT }
+  )) as OpenDineInAttachRow[]
+  return rows || []
+}
+
+/** 같은 테이블에 이미 열린 홀 주문이 있으면 QR은 새 주문을 만들지 않고 그 주문에 붙인다. `7`과 `7번`도 같은 테이블. */
+async function findOpenDineInOrderIdForTable(storeCode: string, tableName: string): Promise<number> {
+  const table = String(tableName || '').trim()
+  if (!String(storeCode || '').trim() || !table) return 0
+  const rows = await listRecentOpenDineInOrders(storeCode)
+  const attach = resolveQrBillAttach({
+    sessionOrderId: 0,
+    tableName: table,
+    openOrders: rows.map(toQrBillAttachCandidate),
+  })
+  return attach.targetOrderId > 0 ? attach.targetOrderId : 0
+}
+
+/**
+ * QR로 나중에 나온 음료 빌을 같은 테이블의 먼저 열린 음식 빌에 합친다.
+ * 세션은 닫지 않고 합쳐진 주문으로만 옮긴다.
+ */
+async function foldSeparateOpenBillsIntoOldest(params: {
+  storeCode: string
+  tableName: string
+  sessionId: number
+  sessionOrderId: number
+}): Promise<OpenDineInAttachRow | null> {
+  const tableName = String(params.tableName || '').trim()
+  const sessionOrderId = Math.trunc(Number(params.sessionOrderId) || 0)
+  if (!tableName) return null
+  const rows = await listRecentOpenDineInOrders(params.storeCode)
+  const attach = resolveQrBillAttach({
+    sessionOrderId,
+    tableName,
+    openOrders: rows.map(toQrBillAttachCandidate),
+  })
+  const keepId = Math.trunc(Number(attach.targetOrderId) || 0)
+  if (!keepId) return null
+  const keep = rows.find((row) => Math.trunc(Number(row.id || 0)) === keepId)
+  if (!keep?.id) return null
+  const absorbIds = attach.absorbOrderIds.filter((id) => id !== keepId)
+  if (absorbIds.length === 0) {
+    if (keepId !== sessionOrderId && params.sessionId > 0) {
+      await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${params.sessionId}`, {
+        pos_order_id: keepId,
+        updated_at: getBangkokDateTimeString(),
+      })
+      return keep
+    }
+    return null
   }
-  return 0
+
+  let items = parseItemsJson(keep.items_json)
+  let memo = String(keep.memo || '')
+  let guestCount = Math.max(0, Math.trunc(Number(keep.guest_count) || 0))
+  const absorbRows: OpenDineInAttachRow[] = []
+  for (const absorbId of absorbIds) {
+    const absorb = rows.find((row) => Math.trunc(Number(row.id || 0)) === absorbId)
+    if (!absorb?.id) continue
+    absorbRows.push(absorb)
+    guestCount = Math.max(guestCount, Math.max(0, Math.trunc(Number(absorb.guest_count) || 0)))
+    if (memoAlreadyAbsorbedOrder(memo, absorbId)) continue
+    const existingIds = new Set(items.map((line) => String(line.id ?? '').trim()).filter(Boolean))
+    const remapped = parseItemsJson(absorb.items_json)
+      .map((line, index) => remapAbsorbedPosOrderLine(line, absorbId, index))
+      .filter((line) => !existingIds.has(String(line.id ?? '').trim()))
+    items = consolidatePosOrderLinesAfterMerge([...items, ...remapped])
+    memo = appendPosOrderMergedKeepStamp(memo, { absorbOrderId: absorbId })
+  }
+
+  const { subtotal, pricing } = await computeQrTableOrderFinancials(params.storeCode, items)
+  const now = getBangkokDateTimeString()
+  await supabaseUpdateByFilter('pos_orders', `id=eq.${keepId}`, {
+    items_json: JSON.stringify(items),
+    subtotal,
+    vat: pricing.vatFeeAmt,
+    service_amt: pricing.serviceFeeAmt,
+    total: pricing.finalTotal,
+    guest_count: guestCount,
+    memo,
+    updated_at: now,
+  })
+
+  const sessionIds = new Set<number>()
+  if (params.sessionId > 0) sessionIds.add(params.sessionId)
+  try {
+    const sessions = (await supabaseSelectFilter(
+      'pos_qr_table_sessions',
+      `store_code=eq.${encodeURIComponent(params.storeCode)}&status=in.(awaiting_entry,active)`,
+      { limit: 40, select: 'id,table_name,pos_order_id' }
+    )) as Array<{ id?: number; table_name?: string; pos_order_id?: number | null }>
+    for (const row of sessions || []) {
+      const id = Math.trunc(Number(row.id || 0))
+      if (!id || !qrTableNamesMatch(row.table_name, tableName)) continue
+      const linked = Math.trunc(Number(row.pos_order_id || 0))
+      if (linked === keepId) continue
+      if (linked === sessionOrderId || absorbIds.includes(linked)) sessionIds.add(id)
+    }
+  } catch (e) {
+    console.error('qr fold list sessions:', e)
+  }
+  for (const id of sessionIds) {
+    await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${id}`, {
+      pos_order_id: keepId,
+      updated_at: now,
+    })
+  }
+
+  for (const absorb of absorbRows) {
+    const absorbId = Math.trunc(Number(absorb.id || 0))
+    if (!absorbId) continue
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${absorbId}`, {
+      status: 'cancelled',
+      memo: appendPosOrderMergedAbsorbStamp(absorb.memo, {
+        keepOrderId: keepId,
+        keepOrderNo: String(keep.order_no || ''),
+      }),
+      updated_at: now,
+    })
+  }
+
+  return {
+    ...keep,
+    items_json: JSON.stringify(items),
+    subtotal,
+    total: pricing.finalTotal,
+    guest_count: guestCount,
+    memo,
+    updated_at: now,
+  }
 }
 
 /**
@@ -2273,6 +2460,23 @@ export async function submitQrCart(params: {
   }
   if (!newLines.length) throw new Error('empty_cart')
 
+  let billOrderId = session.posOrderId
+  let billOrder = order
+  try {
+    const folded = await foldSeparateOpenBillsIntoOldest({
+      storeCode: session.storeCode,
+      tableName: String(session.tableName || order.table_name || ''),
+      sessionId: session.id,
+      sessionOrderId: session.posOrderId,
+    })
+    if (folded?.id) {
+      billOrderId = Math.trunc(Number(folded.id))
+      billOrder = folded
+    }
+  } catch (e) {
+    console.error('qr fold submit bills:', e)
+  }
+
   // Extras prepay: stash pending amount and do not kitchen-print until paid
   const extrasPrepay = session.extrasPaymentModeResolved === 'prepay' && extrasSubtotal > 0.005
   if (extrasPrepay) {
@@ -2294,18 +2498,18 @@ export async function submitQrCart(params: {
       const lineIds = newLines.map((line) => String(line.id || '')).filter(Boolean).join(',')
       await enqueueKitchenPrintJob({
         storeCode: session.storeCode,
-        orderId: session.posOrderId,
-        orderNo: String(order.order_no || '').trim() || null,
+        orderId: billOrderId,
+        orderNo: String(billOrder.order_no || '').trim() || null,
         source: 'qr_table_submit',
-        dedupeKey: `order:${session.posOrderId}:kitchen:qr:${lineIds || addedAt}`,
+        dedupeKey: `order:${billOrderId}:kitchen:qr:${lineIds || addedAt}`,
         payload: {
           action: 'update_order',
           orderType: 'dine_in',
           kitchenLines: kitchenDelta,
-          orderNo: String(order.order_no || '').trim(),
-          tableName: String(session.tableName || order.table_name || '').trim(),
-          memo: String(order.memo || '').trim(),
-          guestCount: Number(session.guestCount ?? order.guest_count ?? 0) || undefined,
+          orderNo: String(billOrder.order_no || '').trim(),
+          tableName: String(session.tableName || billOrder.table_name || '').trim(),
+          memo: String(billOrder.memo || '').trim(),
+          guestCount: Number(session.guestCount ?? billOrder.guest_count ?? 0) || undefined,
         },
       })
     } catch (e) {
@@ -2318,18 +2522,18 @@ export async function submitQrCart(params: {
   const myLineIds = new Set(newLines.map((line) => String(line.id || '').trim()).filter(Boolean))
   const hasAllMyLines = (items: Array<Record<string, unknown>>) =>
     newLines.every((nl) => items.some((row) => String(row.id || '').trim() === String(nl.id || '').trim()))
-  let liveOrder = order
+  let liveOrder = billOrder
   let nextItems: Array<Record<string, unknown>> = []
   let subtotal = 0
   let pricing = { vatFeeAmt: 0, serviceFeeAmt: 0, finalTotal: 0 }
   let didMutateItems = false
   const maxCartWriteAttempts = 5
   for (let attempt = 0; attempt < maxCartWriteAttempts; attempt++) {
-    const latestRows = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+    const latestRows = (await supabaseSelectFilter('pos_orders', `id=eq.${billOrderId}`, {
       limit: 1,
       select: cartOrderSelect,
     })) as typeof orderRows
-    const row = latestRows?.[0] ?? (attempt === 0 ? order : null)
+    const row = latestRows?.[0] ?? (attempt === 0 ? billOrder : null)
     if (!row?.id) throw new Error('order_missing')
     const st = String(row.status || '').toLowerCase()
     if (st === 'paid' || st === 'cancelled' || st === 'completed') throw new Error('order_closed')
@@ -2359,14 +2563,14 @@ export async function submitQrCart(params: {
     if (prevUpdatedAt && attempt < maxCartWriteAttempts - 1) {
       const casRows = await supabaseUpdateByFilterReturning(
         'pos_orders',
-        `id=eq.${session.posOrderId}&updated_at=eq.${encodeURIComponent(prevUpdatedAt)}`,
+        `id=eq.${billOrderId}&updated_at=eq.${encodeURIComponent(prevUpdatedAt)}`,
         patch
       )
       if (!Array.isArray(casRows) || casRows.length === 0) continue
       didMutateItems = true
       break
     }
-    await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, patch)
+    await supabaseUpdateByFilter('pos_orders', `id=eq.${billOrderId}`, patch)
     didMutateItems = true
     break
   }
@@ -2385,7 +2589,7 @@ export async function submitQrCart(params: {
   }
 
   const orderSummary = buildGuestOrderSummaryFromOrderRow({
-    orderId: session.posOrderId,
+    orderId: billOrderId,
     items: nextItems,
     subtotal,
     total: pricing.finalTotal,
@@ -2396,7 +2600,7 @@ export async function submitQrCart(params: {
     status: liveOrder.status,
   })
 
-  return { orderId: session.posOrderId, addedCount: newLines.length, order: orderSummary }
+  return { orderId: billOrderId, addedCount: newLines.length, order: orderSummary }
 }
 
 /** Staff: change guest count. Increase adds buffet entry qty; decrease staff-only (never below 1). */
