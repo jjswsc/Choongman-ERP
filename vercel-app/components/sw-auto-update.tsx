@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { isMemberPortalPath } from "@/lib/member-portal-path"
-import { hasRecentChunkRecovery, recoverFromChunkLoadError } from "@/lib/chunk-load-recovery"
+import {
+  hasRecentChunkRecovery,
+  recoverFromChunkLoadError,
+  shouldDeferPosAutoReload,
+} from "@/lib/chunk-load-recovery"
 import { isCmPosHybridShell } from "@/lib/cm-pos-shell"
 import {
   currentDocumentNextBuildStamp,
@@ -39,6 +43,7 @@ function isAdminPath(p: string) {
  *  - **Windows POS**: SW가 있으면 웹 POS와 같이 `controllerchange`로 갱신한다. SW가 아직 없으면
  *    같은 페이지 HTML의 webpack 스탬프를 5분마다 비교한다. 배포 감지 후 캐시 비우기는 온라인일 때만.
  *  - **POS(PWA)**: 키오스크·전체 화면이라 탭이 숨겨지지 않으므로 감지 후 짧은 유예(8초) 뒤 자동 새로고침.
+ *    주문(/pos/order)·결제(/pos/terminal) 중에는 장바구니가 지워지지 않게 미루고, 홈으로 나간 뒤에 갱신한다.
  *  - **ERP/관리자**: 탭 전환이 가능하므로 hidden 시 즉시 새로고침. 30초 내 hidden이 없으면 타이머 폴백.
  *  - **기타**: 탭이 숨겨질 때만 새로고침 (기존 동작).
  *  - IndexedDB·오프라인 큐 등은 건드리지 않는다.
@@ -52,6 +57,10 @@ export function SwAutoUpdate() {
     if (reloadingRef.current) return
     reloadingRef.current = true
     if (isPosPath(pathname)) {
+      if (shouldDeferPosAutoReload(pathname)) {
+        reloadingRef.current = false
+        return
+      }
       void recoverFromChunkLoadError().then((didReload) => {
         if (!didReload) reloadingRef.current = false
       })
@@ -163,6 +172,8 @@ export function SwAutoUpdate() {
     if (!updateReady) return
 
     if (isPosPath(pathname)) {
+      // 주문·결제 중에는 갱신을 미룬다. 홈 등으로 나가면 pathname이 바뀌며 그때 연다.
+      if (shouldDeferPosAutoReload(pathname)) return
       const tid = window.setTimeout(reloadOnce, POS_AUTO_RELOAD_DELAY_MS)
       return () => window.clearTimeout(tid)
     }

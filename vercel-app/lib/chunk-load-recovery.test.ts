@@ -5,11 +5,13 @@ import {
   hasHybridSilentCacheReset,
   HYBRID_CACHE_RESET_WAIT_MS,
   isChunkLoadError,
+  isHybridCacheResetCancelled,
   isStaleClientBundleError,
   isHybridCacheResetSkippedOffline,
   recoverFromChunkLoadError,
   shouldClearBuildRelatedCache,
   shouldAutoResetStuckAuthShell,
+  shouldDeferPosAutoReload,
   shouldRecoverStaleBundleEvent,
   shouldWipeCachesForChunkRecovery,
   STUCK_AUTH_SHELL_RECOVER_MS,
@@ -165,6 +167,25 @@ describe("didHybridCacheResetReload", () => {
     expect(isHybridCacheResetSkippedOffline({ ok: false, reason: "offline" })).toBe(true)
     expect(isHybridCacheResetSkippedOffline({ ok: false, reason: "busy" })).toBe(false)
   })
+
+  it("treats a dismissed cache dialog as cancelled", () => {
+    expect(isHybridCacheResetCancelled({ ok: false, reason: "cancelled" })).toBe(true)
+    expect(isHybridCacheResetCancelled({ ok: false, reason: "timeout" })).toBe(false)
+  })
+})
+
+describe("shouldDeferPosAutoReload", () => {
+  it("waits while an order or payment cart is on screen", () => {
+    expect(shouldDeferPosAutoReload("/pos/order")).toBe(true)
+    expect(shouldDeferPosAutoReload("/pos/order/")).toBe(true)
+    expect(shouldDeferPosAutoReload("/pos/terminal")).toBe(true)
+  })
+
+  it("reloads on the POS home and other screens", () => {
+    expect(shouldDeferPosAutoReload("/pos")).toBe(false)
+    expect(shouldDeferPosAutoReload("/pos/login")).toBe(false)
+    expect(shouldDeferPosAutoReload("/admin")).toBe(false)
+  })
 })
 
 describe("recoverFromChunkLoadError", () => {
@@ -238,6 +259,41 @@ describe("recoverFromChunkLoadError", () => {
     await recoverFromChunkLoadError()
     expect(replace).toHaveBeenCalledTimes(1)
     expect(String(replace.mock.calls[0]?.[0] ?? "")).toContain("_refresh=")
+  })
+
+  it("does not reload when the cashier cancels the cache dialog", async () => {
+    const resetCacheAndReload = vi.fn(async () => ({ ok: false, reason: "cancelled" }))
+    const replace = vi.fn()
+    vi.stubGlobal("window", {
+      cmPosShell: { resetCacheAndReload },
+      location: {
+        href: "https://x.example/pos/order?type=dine_in",
+        origin: "https://x.example",
+        replace,
+      },
+    })
+    const did = await recoverFromChunkLoadError()
+    expect(did).toBe(false)
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it("does not reload an in-progress order when the cache dialog is still open", async () => {
+    vi.useFakeTimers()
+    const resetCacheAndReload = vi.fn(() => new Promise(() => {}))
+    const replace = vi.fn()
+    vi.stubGlobal("window", {
+      cmPosShell: { resetCacheAndReload },
+      location: {
+        href: "https://x.example/pos/order",
+        origin: "https://x.example",
+        replace,
+      },
+    })
+    const pending = recoverFromChunkLoadError()
+    await vi.advanceTimersByTimeAsync(HYBRID_CACHE_RESET_WAIT_MS)
+    const did = await pending
+    expect(did).toBe(false)
+    expect(replace).not.toHaveBeenCalled()
   })
 
   it("falls through when hybrid Clear Cache hangs past the wait", async () => {

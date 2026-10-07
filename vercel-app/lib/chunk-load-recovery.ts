@@ -130,6 +130,34 @@ export function isHybridCacheResetSkippedOffline(result: unknown): boolean {
   return (result as { reason?: unknown }).reason === "offline"
 }
 
+export function isHybridCacheResetCancelled(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false
+  return (result as { reason?: unknown }).reason === "cancelled"
+}
+
+export function isHybridCacheResetTimedOut(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false
+  return (result as { reason?: unknown }).reason === "timeout"
+}
+
+/**
+ * 주문·결제 장바구니는 메모리에만 있다.
+ * 이 화면에서 캐시 초기화·새로고침을 하면 담아 둔 메뉴가 사라지므로, 홈으로 나간 뒤에 갱신한다.
+ */
+export function shouldDeferPosAutoReload(pathname: string): boolean {
+  const path = String(pathname || "").split("?")[0].replace(/\/+$/, "") || "/"
+  return path === "/pos/order" || path === "/pos/terminal"
+}
+
+function currentBrowserPathname(): string {
+  if (typeof window === "undefined") return ""
+  try {
+    return new URL(window.location.href).pathname
+  } catch {
+    return ""
+  }
+}
+
 export async function recoverFromChunkLoadError(): Promise<boolean> {
   const shell = typeof window !== "undefined" ? window.cmPosShell : undefined
   let systemOnline: boolean | null = null
@@ -152,6 +180,11 @@ export async function recoverFromChunkLoadError(): Promise<boolean> {
     )
     if (didHybridCacheResetReload(result)) return true
     if (isHybridCacheResetSkippedOffline(result)) return false
+    // 확인 창에서 Cancel, 또는 주문 화면에 창이 떠 있는 동안에는 아래에서 한 번 더 새로고침하지 않는다.
+    if (isHybridCacheResetCancelled(result)) return false
+    if (isHybridCacheResetTimedOut(result) && shouldDeferPosAutoReload(currentBrowserPathname())) {
+      return false
+    }
   }
   void unregisterServiceWorkers().catch(() => {})
   void deleteBuildRelatedCaches().catch(() => {})
