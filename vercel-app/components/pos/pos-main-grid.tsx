@@ -24,7 +24,16 @@ export function POSMainGrid({
     .sort((a, b) => a.order - b.order)
 
   const orderTiles = sortedTiles.filter((t) => t.group === "order")
+  const largeOrderTiles = orderTiles.filter((t) => t.size === "large")
+  const compactOrderTiles = orderTiles.filter((t) => t.size !== "large")
   const otherTiles = sortedTiles.filter((t) => t.group !== "order")
+
+  const tileLabel = (tile: POSTileType) =>
+    tile.labelKey
+      ? t(tile.labelKey)
+      : isKorean
+        ? tile.label
+        : (tile.labelEn ?? tile.sublabel ?? tile.label)
 
   const tourDataTourForTile = (type: string | undefined) => {
     switch (type) {
@@ -73,13 +82,13 @@ export function POSMainGrid({
           </header>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col p-2 min-[768px]:p-3 min-[1025px]:p-4">
             {/*
-              2행 고정: 위=Dine-in, 아래=Takeout|Delivery.
-              예전 3행+row-span-2는 짧은 뷰포트에서 하단 행이 min-h(88px)보다 작아져 overflow-hidden에 잘림.
+              2행 고정: 위=Dine-in(전폭), 아래=Takeout|Delivery.
+              아래 버튼을 같은 그리드의 row-start-2에 두면 2열을 넘는 순간 암시적 열이 생겨
+              Dine-in(col-span-2) 오른쪽에 빈칸이 남는다. 아래 행은 별도 그리드로 둔다.
             */}
             <div
               className={cn(
-                "grid w-full min-w-0 flex-1 grid-cols-2 gap-2 min-[1025px]:gap-3",
-                "[grid-template-columns:minmax(0,1fr)_minmax(0,1fr)]",
+                "grid w-full min-w-0 flex-1 grid-cols-1 gap-2 min-[1025px]:gap-3",
                 /* 하단 행 ≥ POSTile min-h(88px≈5.5rem) — 짧으면 버튼이 잘림 */
                 "grid-rows-[minmax(7.5rem,1fr)_minmax(5.5rem,auto)]",
                 "min-[1025px]:grid-rows-[minmax(10rem,1fr)_minmax(6rem,auto)]",
@@ -87,31 +96,36 @@ export function POSMainGrid({
                 "min-[921px]:min-h-0"
               )}
             >
-              {orderTiles.map((tile) => {
-                const isLarge = tile.size === "large"
-                return (
-                  <div
-                    key={tile.id}
-                    data-tour={tourDataTourForTile(tile.type)}
-                    className={cn(
-                      "min-h-0 min-w-0",
-                      isLarge ? "col-span-2 row-start-1" : "row-start-2"
-                    )}
-                  >
-                    <POSTile
-                      tile={tile}
-                      label={
-                        tile.labelKey
-                          ? t(tile.labelKey)
-                          : isKorean
-                            ? tile.label
-                            : (tile.labelEn ?? tile.sublabel ?? tile.label)
-                      }
-                      onClick={() => onTileClick?.(tile)}
-                    />
-                  </div>
-                )
-              })}
+              {largeOrderTiles.map((tile) => (
+                <div
+                  key={tile.id}
+                  data-tour={tourDataTourForTile(tile.type)}
+                  className="row-start-1 min-h-0 min-w-0"
+                >
+                  <POSTile
+                    tile={tile}
+                    label={tileLabel(tile)}
+                    onClick={() => onTileClick?.(tile)}
+                  />
+                </div>
+              ))}
+              {compactOrderTiles.length > 0 && (
+                <div className="row-start-2 grid min-h-0 min-w-0 grid-cols-2 gap-2 min-[1025px]:gap-3 [grid-template-columns:minmax(0,1fr)_minmax(0,1fr)]">
+                  {compactOrderTiles.map((tile) => (
+                    <div
+                      key={tile.id}
+                      data-tour={tourDataTourForTile(tile.type)}
+                      className="min-h-0 min-w-0"
+                    >
+                      <POSTile
+                        tile={tile}
+                        label={tileLabel(tile)}
+                        onClick={() => onTileClick?.(tile)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -148,13 +162,7 @@ export function POSMainGrid({
                 >
                   <POSTile
                     tile={tile}
-                    label={
-                      tile.labelKey
-                        ? t(tile.labelKey)
-                        : isKorean
-                          ? tile.label
-                          : (tile.labelEn ?? tile.sublabel ?? tile.label)
-                    }
+                    label={tileLabel(tile)}
                     onClick={() => onTileClick?.(tile)}
                   />
                 </div>

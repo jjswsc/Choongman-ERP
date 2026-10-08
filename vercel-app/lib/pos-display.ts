@@ -111,12 +111,11 @@ export const POS_SUBMENUS: Record<"business" | "operations", POSSubMenuItem[]> =
   ],
 }
 
-/** 주문: 매장/포장/배달 → 터미널. 관리: 매출→영수증→근태→영업관리(세부: 영업시작/마감)→시재관리(입금/출금/돈통)→운영관리(새로고침/로그아웃/설정) */
+/** 주문: 매장/포장/배달 → 터미널. QR 세션은 홀 테이블 화면의 QR 버튼(/pos/qr-open). 관리: 매출→영수증→근태→영업관리(세부: 영업시작/마감)→시재관리(입금/출금/돈통)→운영관리(새로고침/로그아웃/설정) */
 export const DEFAULT_TILES: POSTile[] = [
   { id: "1", type: "dine-in", label: "매장 주문", labelEn: "Dine In", labelKey: "posOrderTypeDineIn", icon: "utensils", variant: "primary", size: "large", enabled: true, order: 1, group: "order" },
   { id: "2", type: "takeout", label: "포장", labelEn: "Takeout", labelKey: "posOrderTypeTakeout", icon: "package", variant: "primary", size: "medium", enabled: true, order: 2, group: "order" },
   { id: "3", type: "delivery", label: "배달", labelEn: "Delivery", labelKey: "posOrderTypeDelivery", icon: "truck", variant: "accent", size: "medium", enabled: true, order: 3, group: "order" },
-  { id: "4", type: "qr-open", label: "QR 테이블 오픈", labelEn: "Open QR table", labelKey: "posQrTableOpenTile", icon: "qr-code", variant: "accent", size: "medium", enabled: true, order: 4, group: "order" },
   { id: "m1", type: "sales", label: "매출 관리", labelEn: "Sales", labelKey: "posSalesManage", icon: "bar-chart", variant: "default", size: "medium", enabled: true, order: 10, group: "other" },
   { id: "m2", type: "receipt", label: "영수증 관리", labelEn: "Receipts", labelKey: "posReceiptManage", icon: "receipt", variant: "default", size: "medium", enabled: true, order: 11, group: "other" },
   { id: "m3", type: "attendance", label: "근태 관리", labelEn: "Attendance", labelKey: "posAttendanceManage", icon: "clock", variant: "default", size: "medium", enabled: true, order: 12, group: "other" },
