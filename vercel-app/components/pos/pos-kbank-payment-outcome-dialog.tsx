@@ -18,6 +18,11 @@ type Props = {
   cardLabel?: string
   approvalCode?: string
   timeLabel?: string
+  /** โต๊ะ / 포장·배달 라벨 — success sticky에 크게 표시 */
+  tableLabel?: string
+  orderLabel?: string
+  /** i18n: t(key) — 없으면 태국어 기본 문구 */
+  t?: (key: string) => string
   onViewAllOrders?: () => void
   onCreateNewQr?: () => void
 }
@@ -37,6 +42,9 @@ export function PosKbankPaymentOutcomeDialog({
   cardLabel,
   approvalCode,
   timeLabel,
+  tableLabel,
+  orderLabel,
+  t,
   onViewAllOrders,
   onCreateNewQr,
 }: Props) {
@@ -45,27 +53,54 @@ export function PosKbankPaymentOutcomeDialog({
   const isCancelled = kind === 'cancelled'
   const [detailMode, setDetailMode] = useState(false)
 
+  const tr = (key: string, fallback: string) => {
+    if (!t) return fallback
+    const v = t(key)
+    return !v || v === key ? fallback : v
+  }
+
   useEffect(() => {
     if (open) setDetailMode(false)
   }, [open])
 
   const statusLabel = useMemo(() => {
-    if (isSuccess) return 'สำเร็จ'
-    if (isVoided) return 'Void สำเร็จ'
-    return 'ยกเลิกแล้ว'
-  }, [isSuccess, isVoided])
+    if (isSuccess) return tr('posKbankPaidStatusSuccess', 'สำเร็จ')
+    if (isVoided) return tr('posKbankPaidStatusVoided', 'Void สำเร็จ')
+    return tr('posKbankPaidStatusCancelled', 'ยกเลิกแล้ว')
+  }, [isSuccess, isVoided, t])
 
   const headline = useMemo(() => {
-    if (isSuccess) return 'ชำระสำเร็จ'
-    if (isVoided) return 'Void สำเร็จ'
-    return 'ยกเลิกสำเร็จ'
-  }, [isSuccess, isVoided])
+    if (isSuccess) return tr('posKbankPaidConfirmTitle', 'ชำระสำเร็จ')
+    if (isVoided) return tr('posKbankPaidStatusVoided', 'Void สำเร็จ')
+    return tr('posKbankPaidStatusCancelledOk', 'ยกเลิกสำเร็จ')
+  }, [isSuccess, isVoided, t])
 
-  const methodLabel = paymentMethod || (isSuccess ? 'ชำระด้วย QR' : '-')
+  const displayPlaceLabel = String(tableLabel || orderLabel || '').trim()
+  const methodLabel =
+    paymentMethod || (isSuccess ? tr('posKbankPaidMethodQr', 'ชำระด้วย QR') : '-')
   const toneClass = isSuccess ? 'emerald' : isVoided ? 'violet' : 'amber'
+
+  const successDismissGuard = isSuccess
+    ? {
+        hideCloseButton: true as const,
+        onPointerDownOutside: (e: Event) => e.preventDefault(),
+        onInteractOutside: (e: Event) => e.preventDefault(),
+        onEscapeKeyDown: (e: KeyboardEvent) => e.preventDefault(),
+      }
+    : {}
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[380px] border-0 bg-transparent p-0 shadow-none">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (isSuccess && !next) return
+        onOpenChange(next)
+      }}
+    >
+      <DialogContent
+        className="max-w-[380px] border-0 bg-transparent p-0 shadow-none"
+        {...successDismissGuard}
+      >
         {detailMode ? (
           <div className="rounded-2xl border border-[#e8e4d7] bg-[#fffef9] p-4 shadow-2xl">
             <div
@@ -99,6 +134,18 @@ export function PosKbankPaymentOutcomeDialog({
                   {headline}
                 </span>
               </div>
+              {displayPlaceLabel ? (
+                <p
+                  className={cn(
+                    'mt-2 text-center text-xl font-bold',
+                    isSuccess && 'text-[#1f6b2e]',
+                    isVoided && 'text-[#5b3ea6]',
+                    isCancelled && 'text-[#6d4f14]'
+                  )}
+                >
+                  {displayPlaceLabel}
+                </p>
+              ) : null}
               <p
                 className={cn(
                   'mt-1 text-center text-[44px] font-bold leading-none',
@@ -113,28 +160,36 @@ export function PosKbankPaymentOutcomeDialog({
 
             <div className="mt-3 space-y-2 border-b border-[#e8e4d7] pb-3 text-sm">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">สถานะ</span>
+                <span className="text-muted-foreground">{tr('posKbankPaidFieldStatus', 'สถานะ')}</span>
                 <span className="font-semibold">{statusLabel}</span>
               </div>
+              {displayPlaceLabel ? (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">{tr('posTable', 'โต๊ะ')}</span>
+                  <span className="font-semibold">{displayPlaceLabel}</span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">วิธีชำระ</span>
+                <span className="text-muted-foreground">{tr('posKbankPaidFieldMethod', 'วิธีชำระ')}</span>
                 <span className="font-semibold">{methodLabel}</span>
               </div>
               {cardLabel ? (
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">บัตร</span>
+                  <span className="text-muted-foreground">{tr('posKbankPaidFieldCard', 'บัตร')}</span>
                   <span className="font-semibold">{cardLabel}</span>
                 </div>
               ) : null}
               {approvalCode ? (
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">รหัสอนุมัติ</span>
+                  <span className="text-muted-foreground">
+                    {tr('posKbankPaidFieldApproval', 'รหัสอนุมัติ')}
+                  </span>
                   <span className="font-semibold">{approvalCode}</span>
                 </div>
               ) : null}
               {timeLabel ? (
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">เวลา</span>
+                  <span className="text-muted-foreground">{tr('posKbankPaidFieldTime', 'เวลา')}</span>
                   <span className="font-semibold">{timeLabel}</span>
                 </div>
               ) : null}
@@ -152,14 +207,14 @@ export function PosKbankPaymentOutcomeDialog({
                   className="h-11 flex-1 rounded-lg border-[#cfc9bb] bg-white text-[15px] font-medium hover:bg-[#f8f6ef]"
                   onClick={() => setDetailMode(false)}
                 >
-                  กลับ
+                  {tr('posKbankPaidBack', 'กลับ')}
                 </Button>
                 <Button
                   type="button"
                   className="h-11 flex-1 rounded-lg bg-[#1f6b2e] text-[15px] font-semibold hover:bg-[#1a5a27]"
                   onClick={() => onOpenChange(false)}
                 >
-                  เรียบร้อย
+                  {tr('posKbankPaidConfirmReceived', 'รับเงินแล้ว')}
                 </Button>
               </div>
             ) : (
@@ -173,7 +228,7 @@ export function PosKbankPaymentOutcomeDialog({
                     onOpenChange(false)
                   }}
                 >
-                  ดูรายการทั้งหมด
+                  {tr('posKbankPaidViewAllOrders', 'ดูรายการทั้งหมด')}
                 </Button>
                 <Button
                   type="button"
@@ -183,7 +238,7 @@ export function PosKbankPaymentOutcomeDialog({
                     onOpenChange(false)
                   }}
                 >
-                  สร้าง QR ใหม่
+                  {tr('posKbankPaidCreateNewQr', 'สร้าง QR ใหม่')}
                 </Button>
               </div>
             )}
@@ -211,6 +266,18 @@ export function PosKbankPaymentOutcomeDialog({
             >
               {headline}
             </p>
+            {displayPlaceLabel ? (
+              <p
+                className={cn(
+                  'mt-2 text-center text-xl font-bold tracking-tight',
+                  toneClass === 'emerald' && 'text-emerald-800',
+                  toneClass === 'violet' && 'text-violet-800',
+                  toneClass === 'amber' && 'text-amber-800'
+                )}
+              >
+                {displayPlaceLabel}
+              </p>
+            ) : null}
             <p
               className={cn(
                 'mt-1 text-center text-4xl font-bold leading-none',
@@ -221,15 +288,25 @@ export function PosKbankPaymentOutcomeDialog({
             >
               {formatBaht(amount)}
             </p>
+            {isSuccess ? (
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                {tr(
+                  'posKbankPaidConfirmHint',
+                  'พนักงานกดยืนยันรับเงินก่อนปิดหน้าต่างนี้ครับ'
+                )}
+              </p>
+            ) : null}
 
             <div className="mt-4 space-y-1.5 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-xs">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">สถานะ</span>
+                <span className="text-muted-foreground">{tr('posKbankPaidFieldStatus', 'สถานะ')}</span>
                 <span className="font-semibold">{statusLabel}</span>
               </div>
-            {approvalCode ? (
+              {approvalCode ? (
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">รหัสอนุมัติ</span>
+                  <span className="text-muted-foreground">
+                    {tr('posKbankPaidFieldApproval', 'รหัสอนุมัติ')}
+                  </span>
                   <span className="font-semibold">{approvalCode}</span>
                 </div>
               ) : null}
@@ -240,21 +317,43 @@ export function PosKbankPaymentOutcomeDialog({
             </div>
 
             <div className="mt-4 flex gap-2">
-              <Button
-                type="button"
-                className="h-11 flex-1 rounded-lg border-[#cfc9bb] bg-white text-[15px] font-medium hover:bg-[#f8f6ef]"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                รับทราบ
-              </Button>
-              <Button
-                type="button"
-                className="h-11 flex-1 rounded-lg bg-[#111827] text-[15px] font-semibold hover:bg-[#0b1220]"
-                onClick={() => setDetailMode(true)}
-              >
-                ดูรายละเอียด
-              </Button>
+              {isSuccess ? (
+                <>
+                  <Button
+                    type="button"
+                    className="h-12 flex-1 rounded-lg bg-[#1f6b2e] text-[15px] font-semibold hover:bg-[#1a5a27]"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    {tr('posKbankPaidConfirmReceived', 'รับเงินแล้ว')}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-12 flex-1 rounded-lg border-[#cfc9bb] bg-white text-[15px] font-medium hover:bg-[#f8f6ef]"
+                    variant="outline"
+                    onClick={() => setDetailMode(true)}
+                  >
+                    {tr('posKbankPaidViewDetails', 'ดูรายละเอียด')}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    className="h-11 flex-1 rounded-lg border-[#cfc9bb] bg-white text-[15px] font-medium hover:bg-[#f8f6ef]"
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    {tr('posKbankPaidAck', 'รับทราบ')}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-11 flex-1 rounded-lg bg-[#111827] text-[15px] font-semibold hover:bg-[#0b1220]"
+                    onClick={() => setDetailMode(true)}
+                  >
+                    {tr('posKbankPaidViewDetails', 'ดูรายละเอียด')}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         )}

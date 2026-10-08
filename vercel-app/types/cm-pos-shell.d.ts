@@ -99,7 +99,7 @@ declare global {
       closeCustomerDisplayWindow?: () => Promise<{ ok: boolean; reason?: string }>
       setCustomerDisplayState?: (payload: {
         storeCode: string
-        kind: 'idle' | 'ordering' | 'payment' | 'qr' | 'change'
+        kind: 'idle' | 'ordering' | 'payment' | 'qr' | 'change' | 'paid'
         updatedAt: string
         title?: string
         message?: string
@@ -135,11 +135,12 @@ declare global {
         idleMediaType?: "none" | "image" | "video"
         idleMediaUrl?: string
         changeAmountBaht?: number
+        tableLabel?: string
       }) => Promise<{ ok: boolean; reason?: string }>
       onCustomerDisplayState?: (
         handler: (payload: {
           storeCode: string
-          kind: 'idle' | 'ordering' | 'payment' | 'qr' | 'change'
+          kind: 'idle' | 'ordering' | 'payment' | 'qr' | 'change' | 'paid'
           updatedAt: string
           title?: string
           message?: string
@@ -172,6 +173,7 @@ declare global {
           idleMediaType?: "none" | "image" | "video"
           idleMediaUrl?: string
           changeAmountBaht?: number
+          tableLabel?: string
         }) => void
       ) => () => void
     }

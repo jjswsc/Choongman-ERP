@@ -1160,6 +1160,8 @@ export default function PosTerminalPage() {
   >({})
   /** partnerTxnUid → order id (QR 대기 중 결제금액이 올라간 주문 — Cancel 시 결제필드 클리어용) */
   const kbankPendingOrderIdRef = useRef<Record<string, number>>({})
+  /** partnerTxnUid → โต๊ะ/포장·배달 라벨 (성공 sticky 표시용) */
+  const kbankQrDisplayLabelByTxnRef = useRef<Record<string, string>>({})
   /** 콜백이 결제 후처리 등록보다 빠를 때 승인 정보 보관 (partnerTxnUid별). */
   const deferredKbankApprovalRef = useRef<
     Record<string, { txnNo?: string; cardBrands?: string[] }>
@@ -2418,11 +2420,12 @@ export default function PosTerminalPage() {
   const hasActiveOrderEntryCart =
     terminalCartLines.length > 0 &&
     (activeTab === 'tables' || activeTab === 'takeout' || activeTab === 'delivery')
-  /** 결제 모달·QR 대기·거스름 확인·홀/포장/배달 입력 중 — 신규 배달 자동 탭 전환 억제 */
+  /** 결제 모달·QR 대기·거스름·QR 성공 sticky·홀/포장/배달 입력 중 — 신규 배달 자동 탭 전환 억제 */
   const isIncomingDeliveryFocusLocked =
     tourPaymentModalOpen ||
     hasPendingPaymentFlow ||
     postPaymentCashChangeBaht != null ||
+    kbankOutcomeState?.kind === 'success' ||
     kbankCallbackState === 'waiting' ||
     hasActiveOrderEntryCart
   /**
@@ -2491,7 +2494,8 @@ export default function PosTerminalPage() {
     Boolean(servingTableId) ||
     Boolean(selectedTableId) ||
     hasPendingPaymentFlow ||
-    postPaymentCashChangeBaht != null
+    postPaymentCashChangeBaht != null ||
+    kbankOutcomeState?.kind === 'success'
   /**
    * 태블릿(좁은 화면): 서빙/배달/포장 상세를 메인 영역으로 채움.
    * 홀은 `servingTableId` 기준 — 주문 전송 직후 refetch로 `servingTable.order`가
@@ -3545,6 +3549,7 @@ export default function PosTerminalPage() {
     pendingKbankFinalizeRef.current = {}
     deferredKbankApprovalRef.current = {}
     kbankPendingOrderIdRef.current = {}
+    kbankQrDisplayLabelByTxnRef.current = {}
     setCustomerDisplayPaymentMessage('')
   }, [isKbankPilotStore, currentStoreId])
 
@@ -3712,10 +3717,15 @@ export default function PosTerminalPage() {
       String(effectiveCustomerDisplayQrPayload || '').trim().length > 0
     const showPostPayChange =
       postPaymentCashChangeBaht != null && Number.isFinite(postPaymentCashChangeBaht)
+    const showPostPayPaid =
+      kbankOutcomeState?.kind === 'success' && Number(kbankOutcomeState.amount || 0) >= 0
+    const paidPlaceLabel = String(
+      kbankOutcomeState?.tableLabel || kbankOutcomeState?.orderLabel || ''
+    ).trim()
 
     if (customerDisplayOrderItems.length > 0) {
       lastCustomerDisplayItemsRef.current = customerDisplayOrderItems
-    } else if (!showLiveKbankQr && !showPostPayQr && !hasPendingPaymentFlow) {
+    } else if (!showLiveKbankQr && !showPostPayQr && !hasPendingPaymentFlow && !showPostPayPaid) {
       lastCustomerDisplayItemsRef.current = []
     }
     const itemsForGuestScreen =
@@ -3733,6 +3743,17 @@ export default function PosTerminalPage() {
             '결제가 완료되었습니다. 아래 금액을 거슬러 주세요.',
           changeAmountBaht: postPaymentCashChangeBaht,
         }
+      : showPostPayPaid
+        ? {
+            ...base,
+            kind: 'paid',
+            title: customerDisplayT('posKbankPaidConfirmTitle') || 'ชำระสำเร็จ',
+            message:
+              customerDisplayT('posKbankPaidCustomerBody') ||
+              '결제가 완료되었습니다. 직원이 확인할 때까지 기다려 주세요.',
+            tableLabel: paidPlaceLabel || undefined,
+            totalAmount: Number(kbankOutcomeState?.amount || 0),
+          }
       : showPostPayQr
       ? {
           ...base,
@@ -3844,6 +3865,7 @@ export default function PosTerminalPage() {
     receiptLogoImageUrl,
     postPaymentQrUntil,
     postPaymentCashChangeBaht,
+    kbankOutcomeState,
     customerDisplayPaymentDraft,
     customerDisplayT,
     customerDisplayUiLang,
@@ -3855,6 +3877,7 @@ export default function PosTerminalPage() {
     if (hasPendingPaymentFlow || tourPaymentModalOpen) return
     if (String(liveKbankQrPayload || '').trim()) return
     if (postPaymentCashChangeBaht != null) return
+    if (kbankOutcomeState?.kind === 'success') return
     clearCartFromTerminal()
   }, [
     activeTab,
@@ -3864,6 +3887,7 @@ export default function PosTerminalPage() {
     tourPaymentModalOpen,
     liveKbankQrPayload,
     postPaymentCashChangeBaht,
+    kbankOutcomeState?.kind,
   ])
 
   const hasInitializedMainPosPollRef = useRef(false)
@@ -6802,6 +6826,7 @@ export default function PosTerminalPage() {
     delete pendingKbankFinalizeRef.current[key]
     delete deferredKbankApprovalRef.current[key]
     delete kbankPendingOrderIdRef.current[key]
+    delete kbankQrDisplayLabelByTxnRef.current[key]
   }, [])
 
   /** QR Cancel 성공 시: 이미지·세션 정리 + 주문에 미리 올려둔 payment_* 클리어(재결제 가능) */
@@ -6917,6 +6942,8 @@ export default function PosTerminalPage() {
       dedupeKey?: string
       paymentMethod?: string
       cardBrands?: string[]
+      tableLabel?: string
+      orderLabel?: string
     }) => {
       const refId = String(input.refId || '').trim()
       if (!refId) return
@@ -6955,6 +6982,12 @@ export default function PosTerminalPage() {
         amount: paidAmount,
       }))
       if (alreadyNotified) return
+      const placeLabel = String(
+        input.tableLabel ||
+          input.orderLabel ||
+          kbankQrDisplayLabelByTxnRef.current[refId] ||
+          ''
+      ).trim()
       openKbankOutcomeModal(
         {
           kind: 'success',
@@ -6966,6 +6999,7 @@ export default function PosTerminalPage() {
           cardLabel: brands.length > 0 ? brands.join(' / ') : undefined,
           approvalCode: input.approvalCode,
           timeLabel: input.timeLabel || formatPosDateTimeMedium(new Date(), lang),
+          ...(placeLabel ? { tableLabel: placeLabel, orderLabel: placeLabel } : {}),
         },
         input.dedupeKey || `success:${refId}`
       )
@@ -7273,6 +7307,16 @@ export default function PosTerminalPage() {
       const partnerTransactionId = String(generate.partnerTransactionId || partnerTransactionIdSeed)
         .trim()
         .slice(0, 32)
+      const placeLabel = String(
+        context?.orderLabel ||
+          selectedTable?.name ||
+          selectedTakeoutTargetLabel ||
+          selectedDeliveryTargetLabel ||
+          ''
+      ).trim()
+      if (placeLabel) {
+        kbankQrDisplayLabelByTxnRef.current[partnerTransactionId] = placeLabel
+      }
 
       const data = (generate.data || {}) as Record<string, unknown>
       const generatedInfo = extractKbankGenerateResponseInfo(data)
@@ -7497,6 +7541,9 @@ export default function PosTerminalPage() {
       lang,
       dualMonitorEnabled,
       auth?.user,
+      selectedTable?.name,
+      selectedTakeoutTargetLabel,
+      selectedDeliveryTargetLabel,
     ]
   )
 

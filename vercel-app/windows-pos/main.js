@@ -3561,7 +3561,9 @@ if (!gotLock) {
       }
       const storeCode = String(payload?.storeCode || customerDisplayConfig.storeCode || "").trim();
       const kindRaw = String(payload?.kind || "idle");
-      const kind = ["idle", "ordering", "payment", "qr", "change"].includes(kindRaw) ? kindRaw : "idle";
+      const kind = ["idle", "ordering", "payment", "qr", "change", "paid"].includes(kindRaw)
+        ? kindRaw
+        : "idle";
       const normalized = {
         storeCode,
         kind,
@@ -3586,6 +3588,7 @@ if (!gotLock) {
           payload?.changeAmountBaht != null && Number.isFinite(Number(payload.changeAmountBaht))
             ? Number(payload.changeAmountBaht)
             : undefined,
+        tableLabel: typeof payload?.tableLabel === "string" ? payload.tableLabel : undefined,
         breakdown:
           payload?.breakdown && typeof payload.breakdown === "object"
             ? {

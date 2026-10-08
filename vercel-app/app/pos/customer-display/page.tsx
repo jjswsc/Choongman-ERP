@@ -406,6 +406,54 @@ export default function PosCustomerDisplayPage() {
           </div>
         ) : null}
 
+        {current === "paid" ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-4 text-center">
+            {resolvedBrandLogo ? (
+              <img
+                src={resolvedBrandLogo}
+                alt=""
+                className="mb-6 h-16 max-w-[min(100%,280px)] object-contain"
+              />
+            ) : null}
+            <h2 className="text-3xl font-semibold md:text-4xl">
+              {state?.title || (t("posKbankPaidConfirmTitle") || "ชำระสำเร็จ")}
+            </h2>
+            {String(state?.tableLabel || "").trim() ? (
+              <p className="mt-4 text-2xl font-bold md:text-3xl">{state?.tableLabel}</p>
+            ) : null}
+            <p className="mt-3 max-w-xl text-lg opacity-90 md:text-xl">
+              {state?.message ||
+                (t("posKbankPaidCustomerBody") || "결제가 완료되었습니다. 직원이 확인할 때까지 기다려 주세요.")}
+            </p>
+            <div
+              className={
+                theme === "light"
+                  ? "mt-8 w-full max-w-lg rounded-2xl border border-emerald-300/70 bg-emerald-50 px-6 py-8"
+                  : "mt-8 w-full max-w-lg rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-6 py-8"
+              }
+            >
+              <p
+                className={
+                  theme === "light"
+                    ? "text-base font-semibold text-emerald-800"
+                    : "text-base font-semibold text-emerald-200"
+                }
+              >
+                {t("posKbankPaidAmountLabel") || "결제 금액"}
+              </p>
+              <p
+                className={
+                  theme === "light"
+                    ? "mt-3 text-5xl font-extrabold tabular-nums tracking-tight text-emerald-700 md:text-6xl"
+                    : "mt-3 text-5xl font-extrabold tabular-nums tracking-tight text-emerald-300 md:text-6xl"
+                }
+              >
+                {formatBahtNum(state?.totalAmount)} ฿
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         {current === "qr" ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="mb-4 flex shrink-0 items-center justify-between gap-3 md:mb-5">

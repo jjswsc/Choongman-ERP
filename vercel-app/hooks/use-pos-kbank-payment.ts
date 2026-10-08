@@ -219,6 +219,8 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
   const deferredKbankApprovalRef = useRef<
     Record<string, { txnNo?: string; cardBrands?: string[] }>
   >({})
+  /** partnerTxnUid → โต๊ะ/주문 라벨 (성공 sticky) */
+  const kbankQrDisplayLabelByTxnRef = useRef<Record<string, string>>({})
   const [linkposQrBridgeStatus, setLinkposQrBridgeStatus] = useState<'idle' | 'ok' | 'failed'>('idle')
 
   useEffect(() => {
@@ -520,6 +522,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
     if (!key) return
     delete pendingKbankFinalizeRef.current[key]
     delete deferredKbankApprovalRef.current[key]
+    delete kbankQrDisplayLabelByTxnRef.current[key]
   }, [])
 
   const clearKbankQrFromLinkpos = useCallback(() => {
@@ -561,6 +564,8 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       dedupeKey?: string
       paymentMethod?: string
       cardBrands?: string[]
+      tableLabel?: string
+      orderLabel?: string
     }) => {
       const refId = String(input.refId || '').trim()
       if (!refId) return
@@ -595,6 +600,12 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         amount: paidAmount,
       }))
       if (alreadyNotified) return
+      const placeLabel = String(
+        input.tableLabel ||
+          input.orderLabel ||
+          kbankQrDisplayLabelByTxnRef.current[refId] ||
+          ''
+      ).trim()
       openKbankOutcomeModal(
         {
           kind: 'success',
@@ -606,6 +617,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
           cardLabel: brands.length > 0 ? brands.join(' / ') : undefined,
           approvalCode: input.approvalCode,
           timeLabel: input.timeLabel || formatPosDateTimeMedium(new Date(), lang),
+          ...(placeLabel ? { tableLabel: placeLabel, orderLabel: placeLabel } : {}),
         },
         input.dedupeKey || `success:${refId}`
       )
@@ -621,6 +633,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       clearKbankQrFromLinkpos,
       clearKbankApiPause,
       setCustomerDisplayPaymentMessage,
+      currentStoreId,
     ]
   )
 
@@ -825,6 +838,10 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       const partnerTransactionId = String(generate.partnerTransactionId || partnerTransactionIdSeed)
         .trim()
         .slice(0, 32)
+      const placeLabel = String(context?.orderLabel || '').trim()
+      if (placeLabel) {
+        kbankQrDisplayLabelByTxnRef.current[partnerTransactionId] = placeLabel
+      }
 
       const data = (generate.data || {}) as Record<string, unknown>
       const generatedInfo = extractKbankGenerateResponseInfo(data)

@@ -35,6 +35,10 @@ export type KbankOutcomeState = {
   cardLabel?: string
   approvalCode?: string
   timeLabel?: string
+  /** โต๊ะ 표시명 (홀) */
+  tableLabel?: string
+  /** 포장·배달 등 주문 라벨 */
+  orderLabel?: string
 }
 
 type TaxInvoiceDialogsProps = {
@@ -346,6 +350,9 @@ export function PosTerminalDialogs({
         cardLabel={kbankOutcome.state?.cardLabel}
         approvalCode={kbankOutcome.state?.approvalCode}
         timeLabel={kbankOutcome.state?.timeLabel}
+        tableLabel={kbankOutcome.state?.tableLabel}
+        orderLabel={kbankOutcome.state?.orderLabel}
+        t={t}
         onViewAllOrders={kbankOutcome.onViewAllOrders}
         onCreateNewQr={kbankOutcome.onCreateNewQr}
       />
