@@ -61,12 +61,20 @@ import {
 import { linesWithPaidBankCredit } from "@/lib/paid-bank-credit"
 import { taxBookCompanyNameFromScope } from "@/lib/tax-entity-scope-label"
 import type { TaxEntityScopeOption } from "@/components/admin/tax-filing/tax-entity-store-scope-filters"
+import {
+  isTaxBooksView,
+  patchTaxFilingViewCache,
+  readTaxBooksResultCache,
+  shouldReuseRestoredTaxBooksSearch,
+  TAX_BOOKS_VIEWS,
+  type TaxBooksView,
+} from "@/lib/tax-filing-view-cache"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
-type BooksView = "bridge" | "vouchers" | "ledger" | "trial" | "taxIncome" | "taxBalance" | "closing"
+type BooksView = TaxBooksView
 
-const VIEWS: BooksView[] = ["bridge", "vouchers", "ledger", "trial", "taxIncome", "taxBalance", "closing"]
+const VIEWS: BooksView[] = [...TAX_BOOKS_VIEWS]
 
 function money(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—"
@@ -135,11 +143,19 @@ export function TaxFilingBooksTab(props: {
       cancelled = true
     }
   }, [])
-  const [view, setView] = React.useState<BooksView>("bridge")
-  const [query, setQuery] = React.useState<BooksQuery | null>(null)
+  const restoredBooks = React.useMemo(() => readTaxBooksResultCache(), [])
+  const restoredView = restoredBooks?.view
+  const [view, setView] = React.useState<BooksView>(() =>
+    isTaxBooksView(restoredView) ? restoredView : "bridge"
+  )
+  const [query, setQuery] = React.useState<BooksQuery | null>(() => restoredBooks?.query ?? null)
   const [rangeError, setRangeError] = React.useState<string | null>(null)
-  const [bridge, setBridge] = React.useState<TaxManagementBridgeResponse | null>(null)
-  const [entries, setEntries] = React.useState<TaxBookEntriesResponse | null>(null)
+  const [bridge, setBridge] = React.useState<TaxManagementBridgeResponse | null>(
+    () => restoredBooks?.bridge ?? null
+  )
+  const [entries, setEntries] = React.useState<TaxBookEntriesResponse | null>(
+    () => restoredBooks?.entries ?? null
+  )
   const [loading, setLoading] = React.useState(false)
   const [posting, setPosting] = React.useState(false)
   const [message, setMessage] = React.useState<string | null>(null)
@@ -153,15 +169,23 @@ export function TaxFilingBooksTab(props: {
   const [inventoryConfirmed, setInventoryConfirmed] = React.useState(false)
   const [cogsPreview, setCogsPreview] = React.useState<number | null>(null)
   const [ledgerDraft, setLedgerDraft] = React.useState<TaxBookLedgerScope>(() =>
-    ledgerScopeForMonths(props.fromMonth, props.toMonth)
+    restoredBooks?.ledgerDraft ?? ledgerScopeForMonths(props.fromMonth, props.toMonth)
   )
   const [ledgerApplied, setLedgerApplied] = React.useState<TaxBookLedgerScope>(() =>
-    ledgerScopeForMonths(props.fromMonth, props.toMonth)
+    restoredBooks?.ledgerApplied ?? ledgerScopeForMonths(props.fromMonth, props.toMonth)
   )
   const ledgerTouchedRef = React.useRef(false)
-  const [dayBook, setDayBook] = React.useState<TaxDayBookFilter>("all")
-  const [voucherDateQuery, setVoucherDateQuery] = React.useState("")
-  const [voucherDocQuery, setVoucherDocQuery] = React.useState("")
+  const [dayBook, setDayBook] = React.useState<TaxDayBookFilter>(() =>
+    restoredBooks?.dayBook && TAX_DAY_BOOK_FILTERS.includes(restoredBooks.dayBook)
+      ? restoredBooks.dayBook
+      : "all"
+  )
+  const [voucherDateQuery, setVoucherDateQuery] = React.useState(
+    () => restoredBooks?.voucherDateQuery || ""
+  )
+  const [voucherDocQuery, setVoucherDocQuery] = React.useState(
+    () => restoredBooks?.voucherDocQuery || ""
+  )
   const [openVoucher, setOpenVoucher] = React.useState<TaxBookEntriesResponse["vouchers"][number] | null>(null)
   const [voucherLines, setVoucherLines] = React.useState<TaxBookVoucherLine[] | null>(null)
   const [voucherLinesLoading, setVoucherLinesLoading] = React.useState(false)
@@ -202,8 +226,10 @@ export function TaxFilingBooksTab(props: {
   }, [props.focusViewTick, props.focusView])
 
   // 검색 버튼을 눌렀을 때만 조건 확정 (월·매장만 바꾸면 자동 재조회하지 않음)
+  // remount 직후 같은 tick이면 스냅샷 장부를 유지하고 다시 받지 않는다.
   React.useEffect(() => {
     if (props.searchTick < 1) return
+    if (shouldReuseRestoredTaxBooksSearch(restoredBooks?.query.tick, props.searchTick)) return
     const { fromMonth, toMonth, scope } = searchPropsRef.current
     const range = resolveTaxBookMonthRange(fromMonth, toMonth)
     if (!range.ok) {
@@ -220,7 +246,7 @@ export function TaxFilingBooksTab(props: {
       scope,
       tick: props.searchTick,
     })
-  }, [props.searchTick])
+  }, [props.searchTick, restoredBooks?.query.tick])
 
   React.useEffect(() => {
     if (query) return
@@ -232,11 +258,12 @@ export function TaxFilingBooksTab(props: {
 
   React.useEffect(() => {
     if (!query) return
+    if (restoredBooks?.query && query === restoredBooks.query) return
     ledgerTouchedRef.current = false
     const next = ledgerScopeForMonths(query.from, query.to)
     setLedgerDraft(next)
     setLedgerApplied(next)
-  }, [query])
+  }, [query, restoredBooks])
 
   const load = React.useCallback(
     async (q: BooksQuery, opts?: { ensureFiling?: boolean }) => {
@@ -307,8 +334,44 @@ export function TaxFilingBooksTab(props: {
 
   React.useEffect(() => {
     if (!query) return
+    if (
+      restoredBooks?.query &&
+      query === restoredBooks.query &&
+      view === restoredBooks.view
+    ) {
+      return
+    }
     void load(query)
-  }, [query, load])
+  }, [query, load, restoredBooks, view])
+
+  React.useEffect(() => {
+    if (!query || loading) return
+    if (!bridge && !entries) return
+    patchTaxFilingViewCache({
+      booksResult: {
+        view,
+        query,
+        bridge,
+        entries,
+        ledgerDraft,
+        ledgerApplied,
+        dayBook,
+        voucherDateQuery,
+        voucherDocQuery,
+      },
+    })
+  }, [
+    bridge,
+    dayBook,
+    entries,
+    ledgerApplied,
+    ledgerDraft,
+    loading,
+    query,
+    view,
+    voucherDateQuery,
+    voucherDocQuery,
+  ])
 
   const ledgerRows = React.useMemo(
     () => filterTaxBookLedgerLines(entries?.ledger || [], ledgerApplied),

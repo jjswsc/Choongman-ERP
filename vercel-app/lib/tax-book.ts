@@ -362,6 +362,95 @@ export function voucherKindForRecordedVat(
   return fallback
 }
 
+/** 차변 현금/은행(1010) + 대변 매출채권(1130). 채권을 지우는 입금이라 수취(RV). */
+export function journalClearsTradeReceivable(
+  lines: {
+    accountCode?: string
+    account_code?: string
+    side?: string
+    amount?: number | string
+    debit?: number
+    credit?: number
+  }[]
+): boolean {
+  let cashDebit = 0
+  let receivableCredit = 0
+  for (const ln of lines) {
+    const code = String(ln.accountCode || ln.account_code || '').trim()
+    const side = String(ln.side || '').toLowerCase()
+    const amt = Math.abs(Number(ln.amount) || 0)
+    const debit = side === 'credit' ? 0 : side === 'debit' ? amt || Math.abs(Number(ln.debit) || 0) : Math.abs(Number(ln.debit) || 0)
+    const credit = side === 'debit' ? 0 : side === 'credit' ? amt || Math.abs(Number(ln.credit) || 0) : Math.abs(Number(ln.credit) || 0)
+    if (code === '1010') cashDebit += debit
+    if (code === '1130') receivableCredit += credit
+  }
+  return cashDebit > 0.02 && receivableCredit > 0.02
+}
+
+export function voucherKindAfterLineSignals(
+  kind: TaxVoucherKind,
+  signals: { clearsTradeReceivable?: boolean }
+): TaxVoucherKind {
+  if (signals.clearsTradeReceivable && kind !== 'sales' && kind !== 'purchase') return 'receipt'
+  return kind
+}
+
+/**
+ * 패티캐시 지출의 비용 차변을, 패티 화면에 저장한 계정으로 바꾼다.
+ * 대변 전도금(1160)과 매입세(1360)는 그대로 둔다.
+ */
+export function applyRecordedPettyExpenseAccount<T extends {
+  accountCode?: string
+  account_code?: string
+  accountName?: string | null
+  account_name?: string | null
+  side?: string
+  debit?: number
+  credit?: number
+}>(
+  lines: T[],
+  recorded: { code: string; name: string } | null | undefined
+): T[] {
+  const code = String(recorded?.code || '').trim()
+  const name = String(recorded?.name || '').trim() || code
+  if (!code || code === '1360') return lines
+  const expenseIndexes: number[] = []
+  lines.forEach((ln, index) => {
+    const lineCode = String(ln.accountCode || ln.account_code || '').trim()
+    if (!isJournalDebitLine(ln) || lineCode === '1360' || lineCode === '1160' || lineCode === '1010') return
+    expenseIndexes.push(index)
+  })
+  const misc = expenseIndexes.find((index) => String(lines[index].accountCode || lines[index].account_code || '').trim() === '5520')
+  const target = misc != null ? misc : expenseIndexes.length === 1 ? expenseIndexes[0] : -1
+  if (target < 0) return lines
+  const current = String(lines[target].accountCode || lines[target].account_code || '').trim()
+  if (current === code) return lines
+  return lines.map((ln, index) => (index === target ? rewriteJournalAccount(ln, code, name) : ln))
+}
+
+function isJournalDebitLine(ln: { side?: string; debit?: number; credit?: number; amount?: number | string }): boolean {
+  const side = String(ln.side || '').toLowerCase()
+  if (side === 'debit') return true
+  if (side === 'credit') return false
+  return Number(ln.debit || 0) > 0 && Number(ln.credit || 0) <= 0
+}
+
+function rewriteJournalAccount<T extends {
+  accountCode?: string
+  account_code?: string
+  accountName?: string | null
+  account_name?: string | null
+}>(ln: T, code: string, name: string): T {
+  const next = { ...ln }
+  if ('account_code' in next) next.account_code = code
+  if ('accountCode' in next) next.accountCode = code
+  if (!('account_code' in next) && !('accountCode' in next)) next.accountCode = code
+  if ('account_name' in next) next.account_name = name
+  if ('accountName' in next) next.accountName = name
+  if (!('account_name' in next) && !('accountName' in next)) next.accountName = name
+  return next
+}
+
 /** 발행 문서번호(EXP·IV 등). 내부 JE- 번호는 참조가 아니다. */
 export function taxBookIssuedDocumentNo(entryNo: string | null | undefined): string {
   const n = String(entryNo || '').trim()

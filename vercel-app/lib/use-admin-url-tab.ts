@@ -26,7 +26,9 @@ function readTabFromSearchParams<T extends string>(
 export function useAdminUrlTab<T extends string>(
   paramKey: string,
   validValues: readonly T[],
-  defaultValue: T
+  defaultValue: T,
+  /** URL에 tab이 없을 때 첫 렌더에 쓸 값. 세션·조회 캐시 복원용 */
+  whenUrlEmpty?: T | null
 ): [T, (value: T) => void] {
   const router = useRouter()
   const pathname = usePathname() || "/admin"
@@ -34,9 +36,12 @@ export function useAdminUrlTab<T extends string>(
   const pageActive = useErpPageActive()
   const pageActiveRef = useErpPageActiveRef()
 
-  const [tab, setTabState] = React.useState<T>(() =>
-    readTabFromSearchParams(searchParams, paramKey, validValues, defaultValue)
-  )
+  const [tab, setTabState] = React.useState<T>(() => {
+    const raw = searchParams.get(paramKey)
+    if (raw && validValues.includes(raw as T)) return raw as T
+    if (whenUrlEmpty && validValues.includes(whenUrlEmpty)) return whenUrlEmpty
+    return defaultValue
+  })
 
   React.useEffect(() => {
     // pageActive를 deps에 넣으면 복귀 시 effect가 돌며 URL에 탭이 없을 때 default로 덮일 수 있음.

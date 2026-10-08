@@ -24,6 +24,9 @@ import {
   taxDailyCashSalesJournalLines,
   taxInvoiceCollectionJournalLines,
   taxInvoiceSalesJournalLines,
+  applyRecordedPettyExpenseAccount,
+  journalClearsTradeReceivable,
+  voucherKindAfterLineSignals,
   voucherKindForPaidExpense,
   voucherKindForRecordedVat,
   voucherKindForSourceType,
@@ -108,6 +111,37 @@ describe('tax book rules', () => {
     expect(voucherKindForRecordedVat('expense_accrual', 'purchase', false)).toBe('payment')
     expect(voucherKindForRecordedVat('expense_accrual', 'purchase', true)).toBe('purchase')
     expect(voucherKindForRecordedVat('pos_order', 'sales', false)).toBe('sales')
+    const clearing = [
+      { accountCode: '1010', side: 'debit' as const, amount: 11371.44 },
+      { accountCode: '1130', side: 'credit' as const, amount: 11371.44 },
+    ]
+    expect(journalClearsTradeReceivable(clearing)).toBe(true)
+    expect(journalClearsTradeReceivable([{ accountCode: '5520', side: 'debit', amount: 15 }, { accountCode: '1160', side: 'credit', amount: 15 }])).toBe(false)
+    expect(
+      voucherKindAfterLineSignals(voucherKindForRecordedVat('bank_transaction', 'payment', false), {
+        clearsTradeReceivable: true,
+      })
+    ).toBe('receipt')
+    const petty = applyRecordedPettyExpenseAccount(
+      [
+        { account_code: '5520', account_name: '기타경비', side: 'debit', amount: 15 },
+        { account_code: '1160', account_name: '선급금', side: 'credit', amount: 15 },
+      ],
+      { code: '5511', name: '은행수수료' }
+    )
+    expect(petty.map((ln) => ln.account_code)).toEqual(['5511', '1160'])
+    expect(petty[0].account_name).toBe('은행수수료')
+    const replenish = applyRecordedPettyExpenseAccount(
+      [
+        { account_code: '1160', account_name: '선급금', side: 'debit', amount: 5000 },
+        { account_code: '1010', account_name: '현금', side: 'credit', amount: 5000 },
+      ],
+      { code: '5511', name: '은행수수료' }
+    )
+    expect(replenish.map((ln) => ln.account_code)).toEqual(['1160', '1010'])
+    expect(
+      voucherKindAfterLineSignals('sales', { clearsTradeReceivable: true })
+    ).toBe('sales')
     expect(taxBookIssuedDocumentNo('EXP2026090041')).toBe('EXP2026090041')
     expect(taxBookIssuedDocumentNo('JE-TAX-MIRROR-63437')).toBe('')
     const sales = taxInvoiceSalesJournalLines({ gross: 107, vatAmount: 7 })

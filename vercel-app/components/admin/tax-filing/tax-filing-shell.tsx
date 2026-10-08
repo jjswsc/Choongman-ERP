@@ -51,6 +51,15 @@ import {
   resolveTaxFilingTab,
   writeStoredTaxFilingTab,
 } from "@/lib/tax-filing-tabs"
+import {
+  patchTaxFilingViewCache,
+  readTaxFilingViewCache,
+  resolveTaxFilingCachedTab,
+  taxFilingScopeOr,
+  taxFilingSearchTickOr,
+  taxFilingYearMonthOr,
+  type TaxFilingViewSnapshot,
+} from "@/lib/tax-filing-view-cache"
 
 type FilingTabKey = TaxFilingTabKey
 
@@ -82,26 +91,31 @@ function useFilingTabFilters(
   storeOptionLabel: (code: string) => string,
   t: (key: string) => string,
   tSearch: string,
-  lang: string
+  lang: string,
+  snap: TaxFilingViewSnapshot | null
 ) {
   const defaultYm = React.useCallback(() => getBangkokRecentYearMonths(1)[0], [])
   const defaultStore = React.useCallback(
     () => (isManager && managerStore ? managerStore : "All"),
     [isManager, managerStore]
   )
+  const ym = (value: string | undefined) => () => taxFilingYearMonthOr(value, defaultYm())
+  const scope = (value: string | undefined) => () => taxFilingScopeOr(value, defaultStore())
 
-  const books = useYmStoreFilter(defaultYm, defaultStore)
-  const pp30 = useYmStoreFilter(defaultYm, defaultStore)
-  const purchaseTaxInv = useYmStoreFilter(defaultYm, defaultStore)
-  const pp36 = useYmStoreFilter(defaultYm, defaultStore)
-  const pnd1 = useYmStoreFilter(defaultYm, defaultStore)
-  const pnd91 = useYmStoreFilter(defaultYm, defaultStore)
-  const pnd3 = useYmStoreFilter(defaultYm, defaultStore)
-  const pnd5051 = useYmStoreFilter(defaultYm, defaultStore)
-  const pnd53 = useYmStoreFilter(defaultYm, defaultStore)
-  const pnd54 = useYmStoreFilter(defaultYm, defaultStore)
-  const sso = useYmStoreFilter(defaultYm, defaultStore)
-  const [storeProfilesStore, setStoreProfilesStore] = React.useState(defaultStore)
+  const books = useYmStoreFilter(ym(snap?.booksFromMonth), scope(snap?.booksScope))
+  const pp30 = useYmStoreFilter(ym(snap?.pp30?.yearMonth), scope(snap?.pp30?.scope))
+  const purchaseTaxInv = useYmStoreFilter(ym(snap?.purchaseFromMonth), scope(snap?.purchaseScope))
+  const pp36 = useYmStoreFilter(ym(snap?.pp36?.yearMonth), scope(snap?.pp36?.scope))
+  const pnd1 = useYmStoreFilter(ym(snap?.pnd1?.yearMonth), scope(snap?.pnd1?.scope))
+  const pnd91 = useYmStoreFilter(ym(snap?.pnd91?.yearMonth), scope(snap?.pnd91?.scope))
+  const pnd3 = useYmStoreFilter(ym(snap?.pnd3?.yearMonth), scope(snap?.pnd3?.scope))
+  const pnd5051 = useYmStoreFilter(ym(snap?.pnd5051?.yearMonth), scope(snap?.pnd5051?.scope))
+  const pnd53 = useYmStoreFilter(ym(snap?.pnd53?.yearMonth), scope(snap?.pnd53?.scope))
+  const pnd54 = useYmStoreFilter(ym(snap?.pnd54?.yearMonth), scope(snap?.pnd54?.scope))
+  const sso = useYmStoreFilter(ym(snap?.ssoYearMonth), scope(snap?.ssoScope))
+  const [storeProfilesStore, setStoreProfilesStore] = React.useState(() =>
+    taxFilingScopeOr(snap?.storeProfilesStore, defaultStore())
+  )
 
   React.useEffect(() => {
     if (isManager && managerStore) {
@@ -335,7 +349,10 @@ export function TaxFilingShell() {
 
   const searchParams = useSearchParams()
   const allowUrlSync = useErpAllowUrlSync("/admin/tax-filing", "/admin/accounting-compliance")
-  const [tab, setTabUrl] = useAdminUrlTab("tab", TAX_FILING_TABS, TAX_FILING_DEFAULT_TAB)
+  const filingSnap = React.useMemo(() => readTaxFilingViewCache(), [])
+  const initialTab =
+    resolveTaxFilingCachedTab(filingSnap?.tab) || readStoredTaxFilingTab() || TAX_FILING_DEFAULT_TAB
+  const [tab, setTabUrl] = useAdminUrlTab("tab", TAX_FILING_TABS, TAX_FILING_DEFAULT_TAB, initialTab)
   const setTab = React.useCallback(
     (value: FilingTabKey) => {
       writeStoredTaxFilingTab(value)
@@ -422,13 +439,23 @@ export function TaxFilingShell() {
     [t]
   )
 
-  const [ssoSearchTick, setSsoSearchTick] = React.useState(0)
-  const [ptiSearchTick, setPtiSearchTick] = React.useState(0)
-  const [booksSearchTick, setBooksSearchTick] = React.useState(0)
-  const [booksToMonth, setBooksToMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
+  const [ssoSearchTick, setSsoSearchTick] = React.useState(() =>
+    taxFilingSearchTickOr(filingSnap?.ssoSearchTick)
+  )
+  const [ptiSearchTick, setPtiSearchTick] = React.useState(() =>
+    taxFilingSearchTickOr(filingSnap?.purchaseSearchTick)
+  )
+  const [booksSearchTick, setBooksSearchTick] = React.useState(() =>
+    taxFilingSearchTickOr(filingSnap?.booksSearchTick)
+  )
+  const [booksToMonth, setBooksToMonth] = React.useState(() =>
+    taxFilingYearMonthOr(filingSnap?.booksToMonth, getBangkokRecentYearMonths(1)[0])
+  )
   const [booksFocusView, setBooksFocusView] = React.useState<"vouchers" | null>(null)
   const [booksFocusViewTick, setBooksFocusViewTick] = React.useState(0)
-  const [purchaseToMonth, setPurchaseToMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
+  const [purchaseToMonth, setPurchaseToMonth] = React.useState(() =>
+    taxFilingYearMonthOr(filingSnap?.purchaseToMonth, getBangkokRecentYearMonths(1)[0])
+  )
 
   const { FilingFiltersCard, tabProps, storeProfilesStore, setStoreProfilesStore } = useFilingTabFilters(
     storeOptions,
@@ -439,8 +466,68 @@ export function TaxFilingShell() {
     storeOptionLabel,
     t,
     t("search"),
-    lang
+    lang,
+    filingSnap
   )
+
+  React.useEffect(() => {
+    patchTaxFilingViewCache({
+      tab,
+      booksFromMonth: tabProps.books.filingYearMonth,
+      booksToMonth,
+      booksScope: tabProps.books.filingStoreFilter,
+      booksSearchTick,
+      purchaseFromMonth: tabProps.purchaseTaxInv.filingYearMonth,
+      purchaseToMonth,
+      purchaseScope: tabProps.purchaseTaxInv.filingStoreFilter,
+      purchaseSearchTick: ptiSearchTick,
+      ssoYearMonth: tabProps.sso.filingYearMonth,
+      ssoScope: tabProps.sso.filingStoreFilter,
+      ssoSearchTick,
+      pp30: {
+        yearMonth: tabProps.pp30.filingYearMonth,
+        scope: tabProps.pp30.filingStoreFilter,
+      },
+      pp36: {
+        yearMonth: tabProps.pp36.filingYearMonth,
+        scope: tabProps.pp36.filingStoreFilter,
+      },
+      pnd1: {
+        yearMonth: tabProps.pnd1.filingYearMonth,
+        scope: tabProps.pnd1.filingStoreFilter,
+      },
+      pnd91: {
+        yearMonth: tabProps.pnd91.filingYearMonth,
+        scope: tabProps.pnd91.filingStoreFilter,
+      },
+      pnd3: {
+        yearMonth: tabProps.pnd3.filingYearMonth,
+        scope: tabProps.pnd3.filingStoreFilter,
+      },
+      pnd5051: {
+        yearMonth: tabProps.pnd5051.filingYearMonth,
+        scope: tabProps.pnd5051.filingStoreFilter,
+      },
+      pnd53: {
+        yearMonth: tabProps.pnd53.filingYearMonth,
+        scope: tabProps.pnd53.filingStoreFilter,
+      },
+      pnd54: {
+        yearMonth: tabProps.pnd54.filingYearMonth,
+        scope: tabProps.pnd54.filingStoreFilter,
+      },
+      storeProfilesStore,
+    })
+  }, [
+    booksSearchTick,
+    booksToMonth,
+    ptiSearchTick,
+    purchaseToMonth,
+    ssoSearchTick,
+    storeProfilesStore,
+    tab,
+    tabProps,
+  ])
 
   const openTaxBooksVouchers = React.useCallback(
     (yearMonth: string, scopeFilter: string) => {

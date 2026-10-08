@@ -3,8 +3,8 @@ import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import {
   assertAccountingDateOpen,
-  deleteJournalEntriesBySource,
   postPettyCashJournal,
+  syncPettyCashExpenseAccount,
 } from '@/lib/accounting-posting'
 import { syncPettyCashInvoiceEvidence } from '@/lib/petty-cash-invoice-sync'
 import { deletePettyCashInputVatLedger } from '@/lib/petty-input-vat-ledger'
@@ -141,29 +141,39 @@ export async function POST(request: NextRequest) {
         ? (patch.account_subject_id as number | null)
         : (row.account_subject_id ?? null)
     try {
-      await deleteJournalEntriesBySource('petty_cash', id, { memoIncludes: ['시재 지출 자동분개'] })
       if (transType === 'expense') {
-        await postPettyCashJournal({
+        const synced = await syncPettyCashExpenseAccount({
           pettyCashId: id,
-          transDate,
-          transType,
-          amountAbs: Math.abs(amt),
-          vatAmount:
-            vatAmountRaw !== undefined
-              ? Math.max(0, Math.abs(Number(vatAmountRaw) || 0))
-              : Math.max(0, Math.abs(Number((row as { vat_amount?: number }).vat_amount || 0) || 0)),
-          memo: memo || String(row.memo || ''),
-          storeName: store,
-          postedBy: String(row.user_name || '').trim() || undefined,
           accountSubjectId: finalAccountSubjectId,
         })
+        if (synced === 'missing') {
+          await postPettyCashJournal({
+            pettyCashId: id,
+            transDate,
+            transType,
+            amountAbs: Math.abs(amt),
+            vatAmount:
+              vatAmountRaw !== undefined
+                ? Math.max(0, Math.abs(Number(vatAmountRaw) || 0))
+                : Math.max(0, Math.abs(Number((row as { vat_amount?: number }).vat_amount || 0) || 0)),
+            memo: memo || String(row.memo || ''),
+            storeName: store,
+            postedBy: String(row.user_name || '').trim() || undefined,
+            accountSubjectId: finalAccountSubjectId,
+          })
+        }
       }
     } catch (postingErr) {
-      console.error('updatePettyCashTransaction reposting:', postingErr)
-      return NextResponse.json(
-        { success: false, message: postingErr instanceof Error ? postingErr.message : '분개 재처리 실패' },
-        { status: 500, headers }
-      )
+      const code = postingErr instanceof Error ? postingErr.message : String(postingErr)
+      if (code === 'ACCOUNTING_PERIOD_CLOSED' || code === 'TAX_PERIOD_CLOSED') {
+        console.warn('updatePettyCashTransaction journal kept, period closed:', id)
+      } else {
+        console.error('updatePettyCashTransaction reposting:', postingErr)
+        return NextResponse.json(
+          { success: false, message: postingErr instanceof Error ? postingErr.message : '분개 재처리 실패' },
+          { status: 500, headers }
+        )
+      }
     }
 
     if (transType === 'expense') {

@@ -1,3 +1,4 @@
+import { syncPettyCashExpenseAccount } from '@/lib/accounting-posting'
 import { accountLine } from '@/lib/chart-of-accounts-mapping'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
@@ -12,8 +13,11 @@ import {
   formatTaxVoucherNo,
   resolveTaxBookMonthRange,
   roundTaxAmount,
+  applyRecordedPettyExpenseAccount,
+  journalClearsTradeReceivable,
   taxBookIssuedDocumentNo,
   taxJournalBalanced,
+  voucherKindAfterLineSignals,
   voucherKindForRecordedVat,
   type TaxVoucherKind,
 } from '@/lib/tax-book'
@@ -56,6 +60,7 @@ type JournalHead = {
   entry_no?: string | null
   accounting_date?: string | null
   source_type?: string | null
+  source_id?: number | null
   voucher_kind?: string | null
   memo?: string | null
 }
@@ -88,7 +93,7 @@ export async function loadTaxBookJournalHeads(input: {
   ].join('&')
   try {
     const rows = (await supabaseSelectFilterAllPages('journal_entries', filter, {
-      select: 'id,entry_no,accounting_date,source_type,voucher_kind,memo',
+      select: 'id,entry_no,accounting_date,source_type,source_id,voucher_kind,memo',
       order: 'id.asc',
       pageSize: 2000,
       maxRows: 20000,
@@ -180,6 +185,47 @@ export async function loadTaxBookLines(entryIds: number[]): Promise<
   return out
 }
 
+type PettyAccountRow = { id?: number; account_subject_id?: number | null }
+type SubjectCodeRow = { id?: number; code?: string | null; name?: string | null }
+
+async function loadPettyCashRecordedAccounts(
+  pettyIds: number[]
+): Promise<Map<number, { code: string; name: string }>> {
+  const out = new Map<number, { code: string; name: string }>()
+  const ids = [...new Set(pettyIds.map((id) => Math.floor(Number(id) || 0)).filter((id) => id > 0))]
+  if (!ids.length) return out
+  const pettyRows: PettyAccountRow[] = []
+  for (let i = 0; i < ids.length; i += 150) {
+    const chunk = ids.slice(i, i + 150).join(',')
+    const rows = (await supabaseSelectFilter('petty_cash_transactions', `id=in.(${chunk})`, {
+      select: 'id,account_subject_id',
+      limit: 200,
+    })) as PettyAccountRow[] | null
+    pettyRows.push(...(rows || []))
+  }
+  const subjectIds = [...new Set(pettyRows.map((row) => Math.floor(Number(row.account_subject_id) || 0)).filter((id) => id > 0))]
+  if (!subjectIds.length) return out
+  const subjects = new Map<number, { code: string; name: string }>()
+  for (let i = 0; i < subjectIds.length; i += 150) {
+    const chunk = subjectIds.slice(i, i + 150).join(',')
+    const rows = (await supabaseSelectFilter('account_subjects', `id=in.(${chunk})`, {
+      select: 'id,code,name',
+      limit: 200,
+    })) as SubjectCodeRow[] | null
+    for (const row of rows || []) {
+      const id = Math.floor(Number(row.id) || 0)
+      const code = String(row.code || '').trim()
+      if (id > 0 && code) subjects.set(id, { code, name: String(row.name || code).trim() || code })
+    }
+  }
+  for (const row of pettyRows) {
+    const pettyId = Math.floor(Number(row.id) || 0)
+    const subject = subjects.get(Math.floor(Number(row.account_subject_id) || 0))
+    if (pettyId > 0 && subject) out.set(pettyId, subject)
+  }
+  return out
+}
+
 export function summarizeTaxBookTrial(
   lines: { account_code?: string; account_name?: string | null; side?: string; amount?: number | string }[]
 ): { rows: TrialBalanceRow[]; totalDebit: number; totalCredit: number } {
@@ -217,6 +263,8 @@ export function toTaxBookEntries(
 ): TaxBookEntryRow[] {
   const totals = new Map<number, { debit: number; credit: number }>()
   const inputVatIds = new Set<number>()
+  const clearsReceivableIds = new Set<number>()
+  const linesByEntry = new Map<number, typeof lines>()
   for (const ln of lines) {
     const id = Number(ln.journal_entry_id || 0)
     if (!id) continue
@@ -225,13 +273,22 @@ export function toTaxBookEntries(
     if (String(ln.side || '').toLowerCase() === 'credit') cur.credit += amt
     else cur.debit += amt
     totals.set(id, cur)
+    const bucket = linesByEntry.get(id)
+    if (bucket) bucket.push(ln)
+    else linesByEntry.set(id, [ln])
     if (amt > 0.0001 && String(ln.account_code || '').trim() === '1360') inputVatIds.add(id)
+  }
+  for (const [id, entryLines] of linesByEntry) {
+    if (journalClearsTradeReceivable(entryLines)) clearsReceivableIds.add(id)
   }
   const seqByKind: Record<string, number> = {}
   return heads
     .map((h) => {
       const id = Number(h.id || 0)
-      const kind = voucherKindForRecordedVat(h.source_type, h.voucher_kind, inputVatIds.has(id))
+      const kind = voucherKindAfterLineSignals(
+        voucherKindForRecordedVat(h.source_type, h.voucher_kind, inputVatIds.has(id)),
+        { clearsTradeReceivable: clearsReceivableIds.has(id) }
+      )
       const dated = String(h.accounting_date || '').slice(0, 7)
       const ym = /^\d{4}-\d{2}$/.test(dated) ? dated : yearMonth
       const seqKey = `${ym}:${kind}`
@@ -362,11 +419,26 @@ export async function loadTaxBookVoucherDetail(
   }
   const head = heads?.[0]
   if (!head?.id) return null
+  const sourceType = String(head.source_type || '')
+  const sourceId = Number(head.source_id || 0)
+  if (sourceType === 'petty_cash' && sourceId > 0) {
+    try {
+      await syncPettyCashExpenseAccount({ pettyCashId: sourceId })
+    } catch (e) {
+      console.warn('petty cash voucher account sync:', sourceId, e)
+    }
+  }
   const lines = await loadTaxBookVoucherLines(id, entity)
+  let shown = lines || []
+  if (sourceType === 'petty_cash' && sourceId > 0 && shown.length) {
+    const recorded = await loadPettyCashRecordedAccounts([sourceId])
+    const account = recorded.get(sourceId)
+    if (account) shown = applyRecordedPettyExpenseAccount(shown, account)
+  }
   return {
-    lines: lines || [],
-    sourceType: String(head.source_type || ''),
-    sourceId: Number(head.source_id || 0),
+    lines: shown,
+    sourceType,
+    sourceId,
     accountingDate: String(head.accounting_date || '').slice(0, 10),
   }
 }

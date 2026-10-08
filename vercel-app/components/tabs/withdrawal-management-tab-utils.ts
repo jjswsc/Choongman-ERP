@@ -36,7 +36,7 @@ export function categoryUsesAccountSubjectPicker(
   categoryMain: string,
   transferKind?: string
 ): boolean {
-  if (categoryMain === "expense" || categoryMain === "fixed_asset") return true
+  if (categoryMain === "expense" || categoryMain === "fixed_asset" || categoryMain === "purchase") return true
   if (categoryMain === "transfer" && transferKind === "bank_general") return true
   return false
 }

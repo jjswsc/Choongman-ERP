@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { extractAnyMissingColumn } from '@/lib/supabase-pgrst204-retry'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import { isAllowedPurchaseAccountSubject } from '@/lib/account-subject-withdraw-options'
 import {
   assertAccountingDateOpen,
   deleteJournalEntriesBySource,
@@ -270,10 +271,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '지급예정일 형식이 올바르지 않습니다.' }, { status: 400, headers })
     }
 
+    const isPurchaseAccrual =
+      withdrawalCategoryInput === 'purchase_payment' ||
+      withdrawalCategoryInput === 'purchase_advance' ||
+      categoryMain === 'purchase'
+    if (isPurchaseAccrual && !accountSubjectId) {
+      return NextResponse.json(
+        { success: false, message: '매입 계정과목을 선택해 주세요.' },
+        { status: 400, headers }
+      )
+    }
+
     if (accountSubjectId) {
       const hdr = await assertAccountSubjectNotHeader(accountSubjectId)
       if (!hdr.ok) {
         return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+      }
+      if (isPurchaseAccrual) {
+        const purchaseRows = (await supabaseSelectFilter(
+          'account_subjects',
+          `id=eq.${accountSubjectId}`,
+          { select: 'id,code,type,p_and_l_section,is_header', limit: 1 }
+        )) as { code?: string; type?: string; p_and_l_section?: string | null; is_header?: boolean }[] | null
+        const purchaseSubject = purchaseRows?.[0]
+        if (
+          !purchaseSubject ||
+          !isAllowedPurchaseAccountSubject({
+            code: purchaseSubject.code,
+            type: purchaseSubject.type,
+            pAndLSection: purchaseSubject.p_and_l_section,
+            isHeader: purchaseSubject.is_header,
+          })
+        ) {
+          return NextResponse.json(
+            { success: false, message: '매입 대금은 매출원가 계정(5111 식품원재료 등)만 선택할 수 있습니다.' },
+            { status: 400, headers }
+          )
+        }
       }
     }
 
