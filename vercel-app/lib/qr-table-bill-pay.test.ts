@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatQrBillPayAmountEq,
   isQrBillPayAmountStale,
+  resolveQrBillPayPendingReuse,
   resolveQrBillPaySettlement,
 } from '@/lib/qr-table-bill-pay'
 
@@ -58,5 +60,41 @@ describe('isQrBillPayAmountStale', () => {
     expect(isQrBillPayAmountStale({ issuedQrAmount: 50, currentBalanceDue: 150 })).toBe(true)
     expect(isQrBillPayAmountStale({ issuedQrAmount: 150, currentBalanceDue: 150 })).toBe(false)
     expect(isQrBillPayAmountStale({ issuedQrAmount: 50, currentBalanceDue: 50.01 })).toBe(false)
+  })
+})
+
+describe('resolveQrBillPayPendingReuse', () => {
+  it('reuses the same partner txn when balance is unchanged (slow-net retry)', () => {
+    expect(
+      resolveQrBillPayPendingReuse({
+        pendingPartnerTxnId: 'QTB12abc',
+        pendingAmount: 399,
+        currentBalanceDue: 399,
+      })
+    ).toEqual({ reuse: true, partnerTxnId: 'QTB12abc' })
+  })
+
+  it('does not reuse when amount changed or pending missing', () => {
+    expect(
+      resolveQrBillPayPendingReuse({
+        pendingPartnerTxnId: 'QTB12abc',
+        pendingAmount: 50,
+        currentBalanceDue: 150,
+      }).reuse
+    ).toBe(false)
+    expect(
+      resolveQrBillPayPendingReuse({
+        pendingPartnerTxnId: '',
+        pendingAmount: 100,
+        currentBalanceDue: 100,
+      }).reuse
+    ).toBe(false)
+  })
+})
+
+describe('formatQrBillPayAmountEq', () => {
+  it('formats amounts for PostgREST eq filters', () => {
+    expect(formatQrBillPayAmountEq(50)).toBe('50')
+    expect(formatQrBillPayAmountEq(50.1)).toBe('50.1')
   })
 })

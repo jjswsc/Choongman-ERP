@@ -431,6 +431,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
     if (msg === 'promo_choice_required') return g('setChoiceRequired')
     if (msg === 'banban_required' || msg === 'banban_flavor_missing') return g('banbanRequired')
     if (msg === 'order_already_paid' || msg === 'already_paid') return g('orderAlreadyPaid')
+    if (msg === 'guest_pay_disabled') return g('guestPayDisabled')
     if (msg === 'nothing_to_pay') return g('nothingToPay')
     if (msg === 'extras_pay_pending') return g('extrasPayPending')
     if (msg === 'member_conflict') return g('memberConflict')
@@ -502,7 +503,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
               setStep('menu')
               return
             }
-            if (claimed.session.entryPaymentModeResolved === 'prepay' && !claimed.session.entryPaid) {
+            if (
+              claimed.session.entryPaymentModeResolved === 'prepay' &&
+              !claimed.session.entryPaid &&
+              data.settings?.guestBillPayEnabled !== false
+            ) {
               setStep('pay_entry')
               return
             }
@@ -869,6 +874,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
   async function openBillPay() {
     if (!sessionAuth) return
+    if (settings?.guestBillPayEnabled === false) return
+    if (busy) return
     const due = Number(orderSummary?.balanceDue || 0)
     if (due < 1) {
       showToast(g('payBillDoneHint'))
@@ -1320,6 +1327,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
   }
 
   const brandBtn = 'bg-[var(--qr-brand,#b45309)] text-white'
+  const guestPayEnabled = settings?.guestBillPayEnabled !== false
+  const onPayBillHandler = guestPayEnabled ? () => void openBillPay() : undefined
 
   return (
     <div className="mx-auto min-h-dvh max-w-lg bg-[var(--qr-accent,#faf7f2)] text-stone-900" style={brandCss(settings)}>
@@ -1357,7 +1366,10 @@ export function QrTableGuestApp({ token }: { token: string }) {
                 </button>
               )
             ) : null}
-            {step === 'menu' && sessionAuth && Number(orderSummary?.balanceDue || 0) >= 1 ? (
+            {step === 'menu' &&
+            sessionAuth &&
+            guestPayEnabled &&
+            Number(orderSummary?.balanceDue || 0) >= 1 ? (
               <button
                 type="button"
                 disabled={busy}
@@ -1462,7 +1474,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
           setHistoryOpen(false)
           setStatusOpen(true)
         }}
-        onPayBill={() => void openBillPay()}
+        onPayBill={onPayBillHandler}
       />
 
       {error ? <p className="mx-4 mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
@@ -1532,7 +1544,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
             )}
           </div>
 
-          {settings?.entryPaymentMode === 'guest_choice' ? (
+          {guestPayEnabled && settings?.entryPaymentMode === 'guest_choice' ? (
             <div className="space-y-2">
               <p className="text-sm font-medium">{g('entryPayment')}</p>
               <div className="grid grid-cols-2 gap-2">
@@ -1546,7 +1558,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
             </div>
           ) : null}
 
-          {settings?.extrasPaymentMode === 'guest_choice' ? (
+          {guestPayEnabled && settings?.extrasPaymentMode === 'guest_choice' ? (
             <div className="space-y-2">
               <p className="text-sm font-medium">{g('extrasPayment')}</p>
               <div className="grid grid-cols-2 gap-2">
@@ -1968,7 +1980,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
           setStatusOpen(true)
         }}
         onMoreMenu={() => setOrderDoneOpen(false)}
-        onPayBill={() => void openBillPay()}
+        onPayBill={onPayBillHandler}
       />
 
       <QrTableGuestOrderStatusSheet

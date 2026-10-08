@@ -14,6 +14,8 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTableModeAlaCarteHint: '패키지 없이 메뉴 가격으로만 주문합니다.',
   qrTableModeBothHint: '패키지를 고르거나, 패키지 없이 메뉴만 주문할 수 있습니다.',
   qrTableRequireStaffOpen: '직원 세션 오픈 필수',
+  qrTableGuestBillPay: '손님 테이블 QR 결제',
+  qrTableGuestBillPayHint: '끄면 손님 폰 PromptPay(입장·별도·계산서)만 막고, 주문·카운터 결제는 유지합니다.',
   qrTableEntryPay: '패키지(입장) 결제',
   qrTableExtrasPay: '별도 메뉴 결제',
   qrTablePayPostpay: '후불 (POS)',
@@ -144,6 +146,9 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTableModeAlaCarteHint: 'Order by menu price only — no package.',
   qrTableModeBothHint: 'Guests can pick a package or order menu-only.',
   qrTableRequireStaffOpen: 'Require staff to open session',
+  qrTableGuestBillPay: 'Guest table QR payment',
+  qrTableGuestBillPayHint:
+    'Off = block guest-phone PromptPay (entry/extras/bill). Ordering and counter POS payment stay on.',
   qrTableEntryPay: 'Package payment',
   qrTableExtrasPay: 'Extras payment',
   qrTablePayPostpay: 'Pay later (POS)',
@@ -273,6 +278,9 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTableModeAlaCarteHint: 'ไม่มีแพ็กเกจ สั่งตามราคาเมนู',
   qrTableModeBothHint: 'เลือกแพ็กเกจได้ หรือสั่งเมนูอย่างเดียวก็ได้',
   qrTableRequireStaffOpen: 'ต้องให้พนักงานเปิดเซสชันก่อน',
+  qrTableGuestBillPay: 'ชำระเงิน QR ที่โต๊ะลูกค้า',
+  qrTableGuestBillPayHint:
+    'ปิด = บล็อก PromptPay บนมือถือลูกค้า (แพ็กเกจ/เมนูเพิ่ม/บิล) สั่งอาหารและชำระที่เคาน์เตอร์ยังใช้ได้',
   qrTableEntryPay: 'ชำระแพ็กเกจ',
   qrTableExtrasPay: 'ชำระเมนูเพิ่ม',
   qrTablePayPostpay: 'จ่ายทีหลัง (POS)',

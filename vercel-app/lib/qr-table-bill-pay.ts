@@ -60,3 +60,29 @@ export function isQrBillPayAmountStale(params: {
   const due = Math.max(0, asNum(params.currentBalanceDue))
   return due > issued + QR_TABLE_BILL_PAY_EPS
 }
+
+/**
+ * 느린 망·버튼 재시도 시 새 KBank partner txn을 만들지 않고 기존 pending을 재사용.
+ * 금액이 바뀌었으면(메뉴 추가 등) 재사용 금지 → 새 QR.
+ */
+export function resolveQrBillPayPendingReuse(params: {
+  pendingPartnerTxnId?: string | null
+  pendingAmount?: number | string | null
+  currentBalanceDue: number
+}): { reuse: boolean; partnerTxnId: string } {
+  const partnerTxnId = String(params.pendingPartnerTxnId || '').trim()
+  const pendingAmount = round2(Math.max(0, asNum(params.pendingAmount)))
+  const due = round2(Math.max(0, asNum(params.currentBalanceDue)))
+  if (!partnerTxnId || pendingAmount < 1 || due < 1) {
+    return { reuse: false, partnerTxnId: '' }
+  }
+  if (Math.abs(pendingAmount - due) > QR_TABLE_BILL_PAY_EPS) {
+    return { reuse: false, partnerTxnId: '' }
+  }
+  return { reuse: true, partnerTxnId }
+}
+
+/** payment_qr CAS 필터용 — PostgREST eq 에 넣을 숫자 문자열 */
+export function formatQrBillPayAmountEq(n: number): string {
+  return String(round2(Math.max(0, asNum(n))))
+}

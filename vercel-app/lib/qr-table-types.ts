@@ -15,6 +15,11 @@ export type QrOrderStoreSettings = {
   mode: QrOrderMode
   entryPaymentMode: QrPaymentMode
   extrasPaymentMode: QrPaymentMode
+  /**
+   * 손님 폰 테이블 QR 결제(입장·별도·계산서 PromptPay).
+   * false면 카운터 POS만 결제 — 주문/세션 오픈은 유지.
+   */
+  guestBillPayEnabled: boolean
   requireStaffOpen: boolean
   maxOpenMinutes: number
   allowReorderAfterPaid: boolean
@@ -467,6 +472,7 @@ export function defaultQrOrderStoreSettings(storeCode: string): QrOrderStoreSett
     mode: 'buffet',
     entryPaymentMode: 'postpay',
     extrasPaymentMode: 'postpay',
+    guestBillPayEnabled: true,
     requireStaffOpen: true,
     maxOpenMinutes: 240,
     allowReorderAfterPaid: false,

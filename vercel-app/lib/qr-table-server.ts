@@ -42,7 +42,11 @@ import { normalizePromotionCategoryMain, normalizePromotionSubcategory, posMainC
 import { readPosCategoryTabOrder } from '@/lib/pos-category-tab-order-server'
 import { resolvePosCatalogTenantScope } from '@/lib/pos-catalog-tenant-scope'
 import type { PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
-import { resolveQrBillPaySettlement } from '@/lib/qr-table-bill-pay'
+import {
+  formatQrBillPayAmountEq,
+  resolveQrBillPayPendingReuse,
+  resolveQrBillPaySettlement,
+} from '@/lib/qr-table-bill-pay'
 import {
   type QrGuestMenuOption,
   qrGuestBanbanUnitPrice,
@@ -104,6 +108,7 @@ type DbSettings = {
   mode?: string
   entry_payment_mode?: string
   extras_payment_mode?: string
+  guest_bill_pay_enabled?: boolean
   require_staff_open?: boolean
   max_open_minutes?: number
   allow_reorder_after_paid?: boolean
@@ -195,6 +200,12 @@ function asNum(v: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
+/** 손님 테이블 PromptPay 발행 전 — 매장 설정으로 일시 중지 가능 */
+async function assertGuestTableQrPayAllowed(storeCode: string): Promise<void> {
+  const settings = await loadQrOrderStoreSettings(storeCode)
+  if (settings.guestBillPayEnabled === false) throw new Error('guest_pay_disabled')
+}
+
 function mapSettings(row: DbSettings | null | undefined, storeCode: string): QrOrderStoreSettings {
   if (!row) return defaultQrOrderStoreSettings(storeCode)
   const mode = String(row.mode || 'buffet') as QrOrderMode
@@ -206,6 +217,8 @@ function mapSettings(row: DbSettings | null | undefined, storeCode: string): QrO
     mode: mode === 'a_la_carte' || mode === 'both' ? mode : 'buffet',
     entryPaymentMode: entry === 'prepay' || entry === 'guest_choice' ? entry : 'postpay',
     extrasPaymentMode: extras === 'prepay' || extras === 'guest_choice' ? extras : 'postpay',
+    /** 컬럼 미배포·null 이면 기존과 같이 허용 */
+    guestBillPayEnabled: row.guest_bill_pay_enabled !== false,
     requireStaffOpen: row.require_staff_open !== false,
     maxOpenMinutes: Math.max(30, Math.floor(asNum(row.max_open_minutes) || 240)),
     allowReorderAfterPaid: Boolean(row.allow_reorder_after_paid),
@@ -387,6 +400,7 @@ export async function upsertQrOrderStoreSettings(
         mode: settings.mode,
         entry_payment_mode: settings.entryPaymentMode,
         extras_payment_mode: settings.extrasPaymentMode,
+        guest_bill_pay_enabled: settings.guestBillPayEnabled !== false,
         require_staff_open: Boolean(settings.requireStaffOpen),
         max_open_minutes: Math.max(30, Math.floor(settings.maxOpenMinutes || 240)),
         allow_reorder_after_paid: Boolean(settings.allowReorderAfterPaid),
@@ -1529,8 +1543,13 @@ export async function openQrTableSession(params: {
     entryTotal = Math.round(tier.pricePerPerson * guestCount * 100) / 100
   }
 
-  const entryMode = resolvePaymentChoice(settings.entryPaymentMode, params.entryPaymentChoice)
-  const extrasMode = resolvePaymentChoice(settings.extrasPaymentMode, params.extrasPaymentChoice)
+  const guestPayOn = settings.guestBillPayEnabled !== false
+  const entryMode = guestPayOn
+    ? resolvePaymentChoice(settings.entryPaymentMode, params.entryPaymentChoice)
+    : 'postpay'
+  const extrasMode = guestPayOn
+    ? resolvePaymentChoice(settings.extrasPaymentMode, params.extrasPaymentChoice)
+    : 'postpay'
   // À la carte: no buffet entry fee — unlock immediately (postpay path) or via staff
   const effectiveEntryMode: QrResolvedPaymentMode =
     !tierId ? 'postpay' : entryMode
@@ -1754,6 +1773,7 @@ export async function issueEntryPayQr(sessionId: number): Promise<{
 }> {
   const session = await loadSessionById(sessionId)
   if (!session) throw new Error('session_not_found')
+  await assertGuestTableQrPayAllowed(session.storeCode)
   if (session.entryPaid) throw new Error('already_paid')
   if (session.entryPaymentModeResolved !== 'prepay') throw new Error('entry_not_prepay')
   if (!session.posOrderId) throw new Error('order_missing')
@@ -1761,13 +1781,22 @@ export async function issueEntryPayQr(sessionId: number): Promise<{
   const amount = Math.max(0, session.entryTotal)
   if (amount < 1) throw new Error('amount_below_minimum')
 
+  const pendingRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${sessionId}`, {
+    limit: 1,
+    select: 'pending_entry_partner_txn_id',
+  })) as Array<{ pending_entry_partner_txn_id?: string | null }>
+  const reuseEntryTxn = String(pendingRows?.[0]?.pending_entry_partner_txn_id || '').trim()
+  /** 입장료는 금액 고정 — 재시도 시 동일 partner txn 재사용(이중 입금 방지) */
+  const partnerTransactionId =
+    reuseEntryTxn || `QTE${session.id}${Date.now()}`.slice(0, 32)
+
   const tenantId = await resolveTenantIdForStoreCode(session.storeCode)
   const gen = await generateMemberPortalKbankQr({
     amount,
     orderId: session.posOrderId,
     storeCode: session.storeCode,
     tenantId: tenantId || undefined,
-    partnerTransactionId: `QTE${session.id}${Date.now()}`.slice(0, 32),
+    partnerTransactionId,
   })
   if (!gen.ok || !gen.qrPayload) throw new Error(gen.statusMessage || 'qr_failed')
 
@@ -2703,15 +2732,28 @@ export async function issueExtrasPayQr(sessionId: number): Promise<{
 }> {
   const session = await loadSessionById(sessionId)
   if (!session) throw new Error('session_not_found')
+  await assertGuestTableQrPayAllowed(session.storeCode)
   if (session.extrasPaymentModeResolved !== 'prepay') throw new Error('extras_not_prepay')
   if (!session.posOrderId) throw new Error('order_missing')
 
   const rows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${sessionId}`, {
     limit: 1,
-    select: 'pending_extras_amount',
-  })) as Array<{ pending_extras_amount?: number | string | null }>
+    select: 'pending_extras_amount,pending_extras_partner_txn_id',
+  })) as Array<{
+    pending_extras_amount?: number | string | null
+    pending_extras_partner_txn_id?: string | null
+  }>
   const amount = Math.max(0, asNum(rows?.[0]?.pending_extras_amount))
   if (amount < 1) throw new Error('amount_below_minimum')
+  const reuseExtras = resolveQrBillPayPendingReuse({
+    pendingPartnerTxnId: rows?.[0]?.pending_extras_partner_txn_id,
+    pendingAmount: amount,
+    currentBalanceDue: amount,
+  })
+  const partnerTransactionId =
+    reuseExtras.reuse && reuseExtras.partnerTxnId
+      ? reuseExtras.partnerTxnId
+      : `QTX${session.id}${Date.now()}`.slice(0, 32)
 
   const tenantId = await resolveTenantIdForStoreCode(session.storeCode)
   const gen = await generateMemberPortalKbankQr({
@@ -2719,7 +2761,7 @@ export async function issueExtrasPayQr(sessionId: number): Promise<{
     orderId: session.posOrderId,
     storeCode: session.storeCode,
     tenantId: tenantId || undefined,
-    partnerTransactionId: `QTX${session.id}${Date.now()}`.slice(0, 32),
+    partnerTransactionId,
   })
   if (!gen.ok || !gen.qrPayload) throw new Error(gen.statusMessage || 'qr_failed')
 
@@ -2898,6 +2940,7 @@ export async function issueBillPayQr(sessionId: number): Promise<{
 }> {
   const session = await loadSessionById(sessionId)
   if (!session) throw new Error('session_not_found')
+  await assertGuestTableQrPayAllowed(session.storeCode)
   if (session.status !== 'active') throw new Error('session_closed')
   if (!session.entryPaid) throw new Error('entry_not_ready')
   if (!session.posOrderId) throw new Error('order_missing')
@@ -2910,9 +2953,24 @@ export async function issueBillPayQr(sessionId: number): Promise<{
   // 별도메뉴 선결제 대기 중이면 잔액 QR과 충돌 방지
   const sessRows = (await supabaseSelectFilter('pos_qr_table_sessions', `id=eq.${sessionId}`, {
     limit: 1,
-    select: 'pending_extras_amount',
-  })) as Array<{ pending_extras_amount?: number | string | null }>
+    select: 'pending_extras_amount,pending_bill_partner_txn_id,pending_bill_amount',
+  })) as Array<{
+    pending_extras_amount?: number | string | null
+    pending_bill_partner_txn_id?: string | null
+    pending_bill_amount?: number | string | null
+  }>
   if (asNum(sessRows?.[0]?.pending_extras_amount) >= 1) throw new Error('extras_pay_pending')
+
+  const reuseBill = resolveQrBillPayPendingReuse({
+    pendingPartnerTxnId: sessRows?.[0]?.pending_bill_partner_txn_id,
+    pendingAmount: sessRows?.[0]?.pending_bill_amount,
+    currentBalanceDue: amount,
+  })
+  /** 느린 망·버튼 재시도: 잔액 동일하면 새 KBank QR/txn 을 만들지 않음(이중 스캔·이중 입금 방지) */
+  const partnerTransactionId =
+    reuseBill.reuse && reuseBill.partnerTxnId
+      ? reuseBill.partnerTxnId
+      : `QTB${session.id}${Date.now()}`.slice(0, 32)
 
   const tenantId = await resolveTenantIdForStoreCode(session.storeCode)
   const gen = await generateMemberPortalKbankQr({
@@ -2920,7 +2978,7 @@ export async function issueBillPayQr(sessionId: number): Promise<{
     orderId: session.posOrderId,
     storeCode: session.storeCode,
     tenantId: tenantId || undefined,
-    partnerTransactionId: `QTB${session.id}${Date.now()}`.slice(0, 32),
+    partnerTransactionId,
   })
   if (!gen.ok || !gen.qrPayload) throw new Error(gen.statusMessage || 'qr_failed')
 
@@ -3124,10 +3182,11 @@ async function finalizeBillPayByQr(
   if (!order?.id) return { fullyPaid: false, payAmt: 0 }
 
   const nowIso = new Date().toISOString()
+  const priorQr = asNum(order.payment_qr)
   const priorPaySum =
     asNum(order.payment_cash) +
     asNum(order.payment_card) +
-    asNum(order.payment_qr) +
+    priorQr +
     asNum(order.payment_other) +
     asNum(order.payment_delivery_app)
   const orderTotal = asNum(order.total)
@@ -3135,12 +3194,18 @@ async function finalizeBillPayByQr(
 
   if (String(order.status || '').toLowerCase() === 'paid') {
     // 웹훅 status-only: 채널 합이 total 미만이면 payment_qr에 잔액 백필 (입장료 QR은 유지)
+    // payment_qr CAS — poll+웹훅 동시 백필로 금액이 두 번 더해지지 않게
     if (remainBefore >= 0.005) {
-      await supabaseUpdateByFilter('pos_orders', `id=eq.${order.id}`, {
-        payment_qr: Math.round((asNum(order.payment_qr) + remainBefore) * 100) / 100,
-        paid_at: order.paid_at || nowIso,
-        updated_at: nowIso,
-      })
+      const nextBackfill = Math.round((priorQr + remainBefore) * 100) / 100
+      await supabaseUpdateByFilterReturning(
+        'pos_orders',
+        `id=eq.${order.id}&payment_qr=eq.${formatQrBillPayAmountEq(priorQr)}`,
+        {
+          payment_qr: nextBackfill,
+          paid_at: order.paid_at || nowIso,
+          updated_at: nowIso,
+        }
+      )
     }
     await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
       pending_bill_partner_txn_id: null,
@@ -3175,13 +3240,45 @@ async function finalizeBillPayByQr(
     if (txnFields.trace_no) linkposPatch.linkpos_trace_no = txnFields.trace_no
   }
 
+  /** payment_qr + status CAS — 웹훅·poll 동시 확정 시 한 번만 반영 */
+  const casFilter = `id=eq.${session.posOrderId}&status=not.in.(paid,completed)&payment_qr=eq.${formatQrBillPayAmountEq(priorQr)}`
+
   if (!settlement.markPaid) {
     // 부분 입금: 영수증 자동인쇄(unpaid→paid) 금지. 세션·주문은 열어 두고 잔액 재결제.
-    await supabaseUpdateByFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+    const partialRows = await supabaseUpdateByFilterReturning('pos_orders', casFilter, {
       payment_qr: nextQr,
       updated_at: nowIso,
       ...linkposPatch,
     })
+    if (!Array.isArray(partialRows) || partialRows.length === 0) {
+      // 다른 확정이 먼저 씀 — 재조회로 이미 반영됐으면 성공으로 취급(금액 재가산 금지)
+      const again = (await supabaseSelectFilter('pos_orders', `id=eq.${session.posOrderId}`, {
+        limit: 1,
+        select: 'payment_qr,payment_cash,payment_card,payment_other,payment_delivery_app,total,status',
+      })) as Array<{
+        payment_qr?: number
+        payment_cash?: number
+        payment_card?: number
+        payment_other?: number
+        payment_delivery_app?: number
+        total?: number
+        status?: string
+      }>
+      const row = again?.[0]
+      const settled = resolveQrBillPaySettlement({
+        orderTotal: asNum(row?.total),
+        paymentCash: row?.payment_cash,
+        paymentCard: row?.payment_card,
+        paymentQr: row?.payment_qr,
+        paymentOther: row?.payment_other,
+        paymentDeliveryApp: row?.payment_delivery_app,
+        paidAmount: 0,
+      })
+      return {
+        fullyPaid: settled.markPaid || String(row?.status || '').toLowerCase() === 'paid',
+        payAmt: 0,
+      }
+    }
     await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
       pending_bill_partner_txn_id: null,
       pending_bill_amount: 0,
@@ -3191,17 +3288,23 @@ async function finalizeBillPayByQr(
   }
 
   // unpaid → paid: POS Realtime이 카운터 결제 영수증 자동인쇄
-  await supabaseUpdateByFilter(
-    'pos_orders',
-    `id=eq.${session.posOrderId}&status=not.in.(paid,completed)`,
-    {
-      payment_qr: nextQr,
-      status: 'paid',
-      paid_at: nowIso,
+  const paidRows = await supabaseUpdateByFilterReturning('pos_orders', casFilter, {
+    payment_qr: nextQr,
+    status: 'paid',
+    paid_at: nowIso,
+    updated_at: nowIso,
+    ...linkposPatch,
+  })
+  if (!Array.isArray(paidRows) || paidRows.length === 0) {
+    // 이미 다른 경로에서 paid — payment_qr 재가산·Realtime 재트리거 금지
+    await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
+      pending_bill_partner_txn_id: null,
+      pending_bill_amount: 0,
       updated_at: nowIso,
-      ...linkposPatch,
-    }
-  )
+    })
+    await closeQrTableSessionsForPosOrder({ orderId: session.posOrderId, reason: 'paid' })
+    return { fullyPaid: true, payAmt: 0 }
+  }
   await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
     pending_bill_partner_txn_id: null,
     pending_bill_amount: 0,

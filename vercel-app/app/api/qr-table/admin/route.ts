@@ -62,6 +62,7 @@ export async function PUT(req: NextRequest) {
       mode: (String(body.mode || 'buffet') as QrOrderMode) || 'buffet',
       entryPaymentMode: (String(body.entryPaymentMode || 'postpay') as QrPaymentMode) || 'postpay',
       extrasPaymentMode: (String(body.extrasPaymentMode || 'postpay') as QrPaymentMode) || 'postpay',
+      guestBillPayEnabled: body.guestBillPayEnabled !== false,
       requireStaffOpen: body.requireStaffOpen !== false,
       maxOpenMinutes: Number(body.maxOpenMinutes || 240),
       allowReorderAfterPaid: Boolean(body.allowReorderAfterPaid),

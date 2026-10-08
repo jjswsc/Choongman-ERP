@@ -388,6 +388,24 @@ export function PosQrTableOrderContent() {
             </label>
           </div>
 
+          <label className="flex flex-col gap-1 rounded-md border px-3 py-2.5 text-sm">
+            <span className="flex items-center justify-between gap-3">
+              <span>{tr('qrTableGuestBillPay', '손님 테이블 QR 결제')}</span>
+              <input
+                type="checkbox"
+                className="h-4 w-4 shrink-0"
+                checked={settings.guestBillPayEnabled !== false}
+                onChange={(e) => setSettings((s) => ({ ...s, guestBillPayEnabled: e.target.checked }))}
+              />
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {tr(
+                'qrTableGuestBillPayHint',
+                '끄면 손님 폰 PromptPay(입장·별도·계산서)만 막고, 주문·카운터 결제는 유지합니다.'
+              )}
+            </span>
+          </label>
+
           {usesPackage ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <div>

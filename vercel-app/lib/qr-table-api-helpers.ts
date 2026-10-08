@@ -16,7 +16,7 @@ export function mapQrError(e: unknown): NextResponse {
   const status =
     msg === 'invalid_token' || msg === 'session_not_found' || msg === 'tier_not_found' || msg === 'order_missing'
       ? 404
-      : msg === 'session_forbidden' || msg === 'store_disabled'
+      : msg === 'session_forbidden' || msg === 'store_disabled' || msg === 'guest_pay_disabled'
         ? 403
         : msg === 'table_busy' ||
             msg === 'already_paid' ||
