@@ -136,6 +136,8 @@ async function runCompletionSideEffects(params: {
   paymentQr: number
   paymentOther: number
   paymentDeliveryApp: number
+  orderType?: string | null
+  deliveryAppCode?: string | null
   createdBy?: string
 }): Promise<void> {
   const { orderId, orderNo, storeCode, total, subtotal, vat, serviceAmount, createdAtIso, createdBy } = params
@@ -174,7 +176,9 @@ async function runCompletionSideEffects(params: {
           paymentOther: Number(params.paymentOther || 0),
           paymentDeliveryApp: Number(params.paymentDeliveryApp || 0),
           storeName: storeCode || undefined,
-          memo: 'POS 주문 완료 자동분개',
+          orderNo,
+          orderType: params.orderType,
+          deliveryAppCode: params.deliveryAppCode,
         })
       }
     } catch (postingErr) {
@@ -893,6 +897,8 @@ export async function POST(req: NextRequest) {
         paymentQr,
         paymentOther,
         paymentDeliveryApp,
+        orderType,
+        deliveryAppCode: delivery_app_code,
         createdBy,
       })
     }

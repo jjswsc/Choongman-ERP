@@ -1,6 +1,7 @@
 /** 세무 장부 UI 표시용 로케일 (DB에는 한국어 계정명·영문 적요를 유지). */
 
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
+import { localizePosOrderJournalMemo } from '@/lib/pos-order-journal-memo'
 import { formatYmSlash, taxBookMemoWithoutStatus, taxBookSourceKindKey } from '@/lib/tax-book-voucher-memo'
 
 export function formatTaxFilingYearMonthLabel(yearMonth: string, lang: string): string {
@@ -207,6 +208,8 @@ function phrase(lang: string, row: MemoPhrase): string {
 export function localizeOperationalJournalMemo(memo: string, lang: string): string | null {
   const text = String(memo || '').trim()
   if (!text) return null
+  const posMemo = localizePosOrderJournalMemo(text, lang)
+  if (posMemo) return posMemo
   const exact = OPERATIONAL_MEMO_EXACT[text]
   if (exact) return phrase(lang, exact)
   const petty = /^패티보충\((.+)\)$/.exec(text)

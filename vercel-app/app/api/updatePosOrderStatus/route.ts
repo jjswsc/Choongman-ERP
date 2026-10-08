@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by,memo,service_amt,paid_at,member_id',
+          'id,order_no,store_code,total,subtotal,vat,status,created_at,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,created_by,memo,service_amt,paid_at,member_id,order_type,delivery_app_code',
       },
       'updatePosOrderStatus'
     )) as {
@@ -143,6 +143,8 @@ export async function POST(req: NextRequest) {
       memo?: string
       paid_at?: string | null
       member_id?: number | null
+      order_type?: string | null
+      delivery_app_code?: string | null
     }[] | null
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
@@ -209,7 +211,9 @@ export async function POST(req: NextRequest) {
                 paymentOther: Number(prev?.payment_other || 0),
                 paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
                 storeName: storeCode || undefined,
-                memo: 'POS 주문 완료 자동분개',
+                orderNo,
+                orderType: prev?.order_type,
+                deliveryAppCode: prev?.delivery_app_code,
               })
             }
           } catch (postingErr) {
@@ -437,7 +441,9 @@ export async function POST(req: NextRequest) {
               paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
               depositAppliedAmt,
               storeName: storeCode || undefined,
-              memo: 'POS 주문 완료 자동분개',
+              orderNo,
+              orderType: prev?.order_type,
+              deliveryAppCode: prev?.delivery_app_code,
             })
           }
         } catch (postingErr) {
@@ -528,7 +534,9 @@ export async function POST(req: NextRequest) {
               paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
               depositAppliedAmt: applied,
               storeName: storeCode || undefined,
-              memo: 'POS 주문 완료 자동분개',
+              orderNo: String(prev?.order_no || `POS-${id}`),
+              orderType: prev?.order_type,
+              deliveryAppCode: prev?.delivery_app_code,
             })
           }
         }

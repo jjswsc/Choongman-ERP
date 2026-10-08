@@ -25,6 +25,10 @@ import { inferPosBankChipKind } from '@/lib/pos-bank-chip-settlement'
 import { isCustomTaxDocumentNo } from '@/lib/tax-book-voucher-memo'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
 import { shouldSkipBankAutoJournal } from '@/lib/bank-expense-via-expense-mgmt'
+import {
+  buildPosOrderCompletedJournalMemo,
+  POS_ORDER_COMPLETED_MEMO_PREFIX,
+} from '@/lib/pos-order-journal-memo'
 
 type JournalLineInput = {
   accountCode: string
@@ -806,6 +810,9 @@ export async function postPosOrderJournal(params: {
   /** 방문 시 선수금 적용액. payment_* 잔금과 합쳐 매출 차변을 구성(매출 이중인식 방지) */
   depositAppliedAmt?: number
   storeName?: string
+  orderNo?: string | null
+  orderType?: string | null
+  deliveryAppCode?: string | null
   memo?: string
 }) {
   const amount = Math.abs(Number(params.total) || 0)
@@ -887,12 +894,37 @@ export async function postPosOrderJournal(params: {
     lines.push({ ...accountLine('2180'), side: 'credit', amount: vatAmount })
   }
 
+  const explicitMemo = String(params.memo || '').trim()
+  const prefix =
+    explicitMemo && !explicitMemo.includes('|')
+      ? explicitMemo
+      : dailyCash
+        ? 'POS 일일매출 수취분개'
+        : POS_ORDER_COMPLETED_MEMO_PREFIX
+  const memo = explicitMemo.includes('|')
+    ? explicitMemo
+    : buildPosOrderCompletedJournalMemo(
+        {
+          storeName: params.storeName,
+          orderNo: params.orderNo,
+          orderType: params.orderType,
+          deliveryAppCode: params.deliveryAppCode,
+          paymentCash,
+          paymentCard,
+          paymentQr,
+          paymentOther,
+          paymentDeliveryApp,
+          depositAppliedAmt: depositApplied,
+        },
+        prefix
+      )
+
   return postJournalEntry({
     accountingDate: params.salesDate,
     sourceType: 'pos_order',
     sourceId: params.posOrderId || null,
     storeName: params.storeName || null,
-    memo: params.memo || (dailyCash ? 'POS 일일매출 수취분개' : 'POS 매출 자동분개'),
+    memo,
     voucherKind: dailyCash ? 'receipt' : 'sales',
     entryNo: dailyCash && params.posOrderId ? `POS${params.posOrderId}` : null,
     lines,

@@ -40,6 +40,9 @@ describe('tax book display i18n', () => {
   it('translates system journal memos and leaves free text', () => {
     expect(localizeOperationalJournalMemo('POS 매출 자동분개', 'th')).toBe('ขาย POS')
     expect(localizeOperationalJournalMemo('POS 주문 완료 자동분개', 'th')).toBe('ขายจากออเดอร์ POS')
+    expect(
+      localizeOperationalJournalMemo('POS 주문 완료 자동분개 | CM Silom | #A-1 | 현금 | Grab | 배달', 'th')
+    ).toBe('ขายจากออเดอร์ POS · CM Silom · #A-1 · เงินสด · Grab · เดลิเวอรี')
     expect(localizeOperationalJournalMemo('주문 수령(본사정산분) 자동분개', 'en')).toBe('Order receipt (HQ settlement)')
     expect(localizeOperationalJournalMemo('급여 발생(합산) 2026-09 CM Silom', 'th')).toBe('บันทึกเงินเดือนรวม 2026-09 CM Silom')
     expect(localizeOperationalJournalMemo('grab 채권 소거', 'th')).toBe('ตัดลูกหนี้ grab')
