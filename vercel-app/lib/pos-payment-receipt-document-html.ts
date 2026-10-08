@@ -86,6 +86,7 @@ import {
   fetchPrintAssetAsDataUri,
   isOfflineSafePrintImgSrc,
 } from '@/lib/pos-receipt-print-assets'
+import { normalizeReceiptLogoForPrint, receiptBrandLogoCss } from '@/lib/pos-receipt-logo-fit'
 
 /** 결제 영수증 전용: 2열 grid/table을 쓰지 않고 품명·금액을 세로 블록으로만 배치 (OEM 프린터 분열 방지) */
 function receiptPayLine(nameInnerHtml: string, amtInnerHtml: string, extraClass = ''): string {
@@ -459,6 +460,22 @@ export async function resolvePaymentReceiptMembershipQrSrc(params: {
   return resolveReceiptAssetUrl(String(params.receiptMembershipQrImageUrl || '').trim(), params.origin)
 }
 
+/** 원본 URL은 유지하고, 인쇄 HTML에 넣는 로고만 여백을 잘라 칸에 맞춘다. */
+async function resolvePrintLogoDataUri(
+  candidate: string,
+  sizeRaw: unknown,
+  origin: string | undefined,
+  timeoutMs: number
+): Promise<string> {
+  const raw = String(candidate || '').trim()
+  if (!raw) return ''
+  const dataUri = isOfflineSafePrintImgSrc(raw)
+    ? raw
+    : await fetchPrintAssetAsDataUri(raw, { timeoutMs, origin })
+  if (!dataUri) return ''
+  return normalizeReceiptLogoForPrint(dataUri, sizeRaw, { timeoutMs })
+}
+
 /** 인쇄용: 멤버십 QR·로고·도장을 로컬 data URI로 만든 뒤 HTML 생성 (Electron loadFile 지연 방지). */
 function isWindowsHybridPosShell(): boolean {
   return (
@@ -509,9 +526,7 @@ export async function buildPosPaymentReceiptDocumentHtmlAsync(
       membershipSrc = ''
     }
     const [logoDataUri, stampDataUri] = await Promise.all([
-      isOfflineSafePrintImgSrc(logoCandidate)
-        ? Promise.resolve(logoCandidate)
-        : fetchPrintAssetAsDataUri(logoCandidate, { timeoutMs: 350, origin }),
+      resolvePrintLogoDataUri(logoCandidate, d.receiptLogoSize, origin, 350),
       stampCandidate
         ? isOfflineSafePrintImgSrc(stampCandidate)
           ? Promise.resolve(stampCandidate)
@@ -540,7 +555,7 @@ export async function buildPosPaymentReceiptDocumentHtmlAsync(
           receiptMembershipQrImageUrl: d.receiptMembershipQrImageUrl,
           origin,
         }),
-    fetchPrintAssetAsDataUri(logoCandidate, { timeoutMs: 400, origin }),
+    resolvePrintLogoDataUri(logoCandidate, d.receiptLogoSize, origin, 400),
     fetchPrintAssetAsDataUri(stampCandidate, { timeoutMs: 400, origin }),
   ])
 
@@ -1436,11 +1451,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     printLayout: receiptPrintLayout,
     extraStyles: `
         ${PAYMENT_RECEIPT_MEMBER_BLOCK_CSS}
-        .receipt-brand-wrap { text-align: center; }
-        .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.35); }
-        .receipt-brand-logo.sm { width: 84px; }
-        .receipt-brand-logo.md { width: 108px; }
-        .receipt-brand-logo.lg { width: 132px; }
+        ${receiptBrandLogoCss({ filter: 'grayscale(100%) contrast(1.35)' })}
         .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; font-weight: 800; }
         .receipt-title-block { margin: 4px 0 9px 0; }
         .receipt-divider-strong { margin: 10px 0; }

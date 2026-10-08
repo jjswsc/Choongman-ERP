@@ -97,6 +97,12 @@ import {
   RECEIPT_INNER_INSET_RIGHT_MM,
   RECEIPT_TRAILING_BOTTOM_MM,
 } from "@/lib/pos-receipt-layout"
+import {
+  normalizeReceiptLogoForPrint,
+  RECEIPT_LOGO_MAX_HEIGHT_PX,
+  RECEIPT_LOGO_MAX_WIDTH_PX,
+  receiptBrandLogoCss,
+} from "@/lib/pos-receipt-logo-fit"
 import { POS_THERMAL_RECEIPT_WIDTH_MM, posThermalReceiptPageSizeRule } from "@/lib/pos-receipt-paper"
 import { resolvePosPrintLayoutCalibration } from "@/lib/pos-print-layout-calibration"
 import { PosScreenConfigStoreSelect } from "@/components/pos/pos-screen-config-store-select"
@@ -480,6 +486,21 @@ export default function PosPrintersPage() {
   const [receiptFooterPrimaryText, setReceiptFooterPrimaryText] = React.useState("")
   const [receiptFooterSecondaryText, setReceiptFooterSecondaryText] = React.useState("")
   const [receiptLogoImageUrl, setReceiptLogoImageUrl] = React.useState("")
+  const [fittedReceiptLogoSrc, setFittedReceiptLogoSrc] = React.useState("")
+  React.useEffect(() => {
+    const src = receiptLogoImageUrl.trim()
+    if (!src) {
+      setFittedReceiptLogoSrc("")
+      return
+    }
+    let cancelled = false
+    void normalizeReceiptLogoForPrint(src, receiptLogoSize).then((out) => {
+      if (!cancelled) setFittedReceiptLogoSrc(out || src)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [receiptLogoImageUrl, receiptLogoSize])
   const [receiptStampImageUrl, setReceiptStampImageUrl] = React.useState("")
   const [receiptShowStamp, setReceiptShowStamp] = React.useState(true)
   const [receiptStampOnlyTaxInvoice, setReceiptStampOnlyTaxInvoice] = React.useState(true)
@@ -1506,7 +1527,7 @@ export default function PosPrintersPage() {
 
   const buildReceiptHtml = React.useCallback(() => {
     const receiptLayout = resolvedPrintLayout.receipt
-    const logoUrl = receiptLogoImageUrl || `${window.location.origin}/company-stamp.png`
+    const logoUrl = fittedReceiptLogoSrc || receiptLogoImageUrl || `${window.location.origin}/company-stamp.png`
     const previewIsTaxInvoice = false
     const footerPrimary =
       receiptFooterPrimaryText.trim() ||
@@ -1543,10 +1564,7 @@ export default function PosPrintersPage() {
             body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-bottom: ${RECEIPT_TRAILING_BOTTOM_MM}mm; padding-left: ${receiptLayout.insetLeftMm}mm; padding-right: ${receiptLayout.insetRightMm}mm; }
             .receipt-content { width: 100%; max-width: 100%; margin-left: auto; margin-right: auto; box-sizing: border-box; padding: 0; position: relative; left: -${receiptLayout.contentNudgeLeftMm}mm; }
             .receipt-brand-badge { display: inline-block; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; }
-            .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; }
-            .receipt-brand-logo.sm { width: 84px; }
-            .receipt-brand-logo.md { width: 108px; }
-            .receipt-brand-logo.lg { width: 132px; }
+            ${receiptBrandLogoCss()}
             .brand { font-size: 14px; font-weight: 700; letter-spacing: 0.06em; }
             .receipt-section-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 2px; }
             .receipt-sub-title { text-align: center; font-size: 11px; color: #000; }
@@ -1577,7 +1595,7 @@ export default function PosPrintersPage() {
         </head>
         <body>
           <div class="receipt-content">
-          <div class="text-center">
+          <div class="text-center receipt-brand-wrap">
             <img class="receipt-brand-logo ${receiptLogoSize}" src="${escapeHtml(logoUrl)}" alt="Company logo" />
             <div class="receipt-muted">${escapeHtml(previewData.storeCode)}</div>
           </div>
@@ -1646,7 +1664,7 @@ export default function PosPrintersPage() {
         </body>
       </html>
     `
-  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptBizName, receiptBizTaxId, receiptBizAbn, receiptBizOwner, receiptBizAddress, receiptShowBizAddress, receiptBizPhone, receiptLogoImageUrl, receiptFooterPrimaryText, receiptFooterSecondaryText, receiptMembershipQrText, receiptShowMembershipQr, membershipQrPreviewSrc, receiptShowStamp, receiptStampImageUrl, receiptStampOnlyTaxInvoice, receiptShowThankYou, receiptShowCustomerCopy, receiptBarcode, itemBarcode, signatureLine, t, resolvedPrintLayout])
+  }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptBizName, receiptBizTaxId, receiptBizAbn, receiptBizOwner, receiptBizAddress, receiptShowBizAddress, receiptBizPhone, receiptLogoImageUrl, fittedReceiptLogoSrc, receiptFooterPrimaryText, receiptFooterSecondaryText, receiptMembershipQrText, receiptShowMembershipQr, membershipQrPreviewSrc, receiptShowStamp, receiptStampImageUrl, receiptStampOnlyTaxInvoice, receiptShowThankYou, receiptShowCustomerCopy, receiptBarcode, itemBarcode, signatureLine, t, resolvedPrintLayout])
 
   const buildKitchenSlipHtmlForSlip = React.useCallback(
     (slip: { label: string; items: { name: string; qty: number; note?: string }[] }) => {
@@ -2919,12 +2937,13 @@ export default function PosPrintersPage() {
                 <div className="font-mono text-xs">
                   <div className="text-center">
                     <img
-                      src={receiptLogoImageUrl || "/company-stamp.png"}
+                      src={fittedReceiptLogoSrc || receiptLogoImageUrl || "/company-stamp.png"}
                       alt={t("posReceiptLogoAlt")}
-                      className={cn(
-                        "mx-auto h-auto object-contain",
-                        receiptLogoSize === "sm" ? "w-20" : receiptLogoSize === "lg" ? "w-32" : "w-24"
-                      )}
+                      className="mx-auto h-auto w-auto object-contain"
+                      style={{
+                        maxWidth: RECEIPT_LOGO_MAX_WIDTH_PX[receiptLogoSize],
+                        maxHeight: RECEIPT_LOGO_MAX_HEIGHT_PX[receiptLogoSize],
+                      }}
                     />
                     <div className="mt-1 text-black">{previewData.storeCode}</div>
                   </div>
