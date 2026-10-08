@@ -9,6 +9,8 @@ import {
   appendStoreOpsScopeFilter,
   storeOpsIsStoreCheckedToday,
   storeOpsOpenComplaintBadgePostgrestFilter,
+  storeOpsOverdueActionBadgePostgrestFilter,
+  storeOpsPendingVerifyActionBadgePostgrestFilter,
   storeOpsStaleRepairBadgePostgrestFilter,
   storeOpsStoreInScope,
   storeOpsStoreNameScopePostgrestFilter,
@@ -43,14 +45,23 @@ export async function GET(request: NextRequest) {
 
     const staleRepairBase = storeOpsStaleRepairBadgePostgrestFilter({ todayYmd: today })
     const openComplaintBase = storeOpsOpenComplaintBadgePostgrestFilter({ todayYmd: today })
+    const overdueActionBase = storeOpsOverdueActionBadgePostgrestFilter({ todayYmd: today })
+    const pendingVerifyBase = storeOpsPendingVerifyActionBadgePostgrestFilter()
 
-    const [checkRows, staleRepairs, openComplaints, empList] = await Promise.all([
+    const [checkRows, staleRepairs, openComplaints, overdueActions, pendingVerifyActions, empList] =
+      await Promise.all([
       supabaseSelectFilter('check_results', `check_date=eq.${today}`, {
         select: 'store_name',
         limit: 5000,
       }) as Promise<{ store_name?: string }[]>,
       supabaseCountFilter('store_repair_tickets', appendStoreOpsScopeFilter(staleRepairBase, scopeFilter)),
       supabaseCountFilter('complaint_logs', appendStoreOpsScopeFilter(openComplaintBase, scopeFilter)),
+      supabaseCountFilter('store_action_items', appendStoreOpsScopeFilter(overdueActionBase, scopeFilter)).catch(
+        () => 0
+      ),
+      supabaseCountFilter('store_action_items', appendStoreOpsScopeFilter(pendingVerifyBase, scopeFilter)).catch(
+        () => 0
+      ),
       supabaseSelect('employees', {
         order: 'id.asc',
         select: 'store,name,nick,job,role,resign_date,employment_status',
@@ -93,6 +104,8 @@ export async function GET(request: NextRequest) {
         uncheckedToday,
         staleRepairs,
         openComplaints,
+        overdueActions,
+        pendingVerifyActions,
       },
       { headers }
     )
@@ -106,6 +119,8 @@ export async function GET(request: NextRequest) {
         uncheckedToday: 0,
         staleRepairs: 0,
         openComplaints: 0,
+        overdueActions: 0,
+        pendingVerifyActions: 0,
       },
       { status: 500, headers }
     )

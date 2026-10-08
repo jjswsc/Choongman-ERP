@@ -92,3 +92,21 @@ export function storeOpsOpenComplaintBadgePostgrestFilter(options?: {
   const startYmd = addBangkokCalendarDays(today, -(lookback - 1))
   return `log_date=gte.${encodeURIComponent(startYmd)}&status=eq.${encodeURIComponent('접수')}`
 }
+
+/**
+ * 개선 과제 배지 — open/in_progress 이고 due_date < 오늘(방콕).
+ * pending_verify는 별도(pendingVerifyActions)로 집계.
+ */
+export function storeOpsOverdueActionBadgePostgrestFilter(options?: { todayYmd?: string }): string {
+  const today = String(options?.todayYmd || getBangkokTodayDateString()).trim()
+  return [
+    `status=in.(open,in_progress)`,
+    `due_date=lt.${encodeURIComponent(today)}`,
+    `due_date=not.is.null`,
+  ].join('&')
+}
+
+/** 재확인 대기(pending_verify) */
+export function storeOpsPendingVerifyActionBadgePostgrestFilter(): string {
+  return `status=eq.${encodeURIComponent('pending_verify')}`
+}

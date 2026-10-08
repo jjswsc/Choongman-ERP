@@ -85,10 +85,19 @@ function logisticsNavBadge(
 
 function storeNavBadge(
   href: string,
-  totals: { uncheckedToday: number; staleRepairs: number; openComplaints: number }
+  totals: {
+    uncheckedToday: number
+    staleRepairs: number
+    openComplaints: number
+    overdueActions?: number
+    pendingVerifyActions?: number
+  }
 ): { n: number; variant: "default" | "destructive" | "warning" } | null {
+  const overdueActions = totals.overdueActions || 0
+  const pendingVerifyActions = totals.pendingVerifyActions || 0
   if (href === "/admin/store-ops") {
-    const n = totals.uncheckedToday + totals.staleRepairs + totals.openComplaints
+    const n =
+      totals.uncheckedToday + totals.staleRepairs + totals.openComplaints + overdueActions + pendingVerifyActions
     if (n > 0) return { n, variant: "warning" }
     return null
   }
@@ -97,6 +106,11 @@ function storeNavBadge(
   }
   if (href === "/admin/store-repairs" && totals.staleRepairs > 0) {
     return { n: totals.staleRepairs, variant: "destructive" }
+  }
+  if (href === "/admin/store-actions") {
+    const n = overdueActions + pendingVerifyActions
+    if (n > 0) return { n, variant: overdueActions > 0 ? "destructive" : "warning" }
+    return null
   }
   if (href === "/admin/complaints" && totals.openComplaints > 0) {
     return { n: totals.openComplaints, variant: "destructive" }
@@ -260,6 +274,7 @@ export function ErpSidebar() {
       !navPathname.startsWith("/admin/store-check") &&
       !navPathname.startsWith("/admin/store-visit") &&
       !navPathname.startsWith("/admin/store-repairs") &&
+      !navPathname.startsWith("/admin/store-actions") &&
       !navPathname.startsWith("/admin/complaints")
     ) {
       return

@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus, FileText, Wrench, Camera, X as XIcon, Loader2 } from "lucide-react"
+import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus, FileText, Wrench, ClipboardList, Camera, X as XIcon, Loader2 } from "lucide-react"
 import {
   AdminDesktopOnly,
   AdminMobileOnly,
@@ -123,6 +123,19 @@ export function AdminStoreCheck() {
     const title = `[점검FAIL] ${itemLabel}`.slice(0, 120)
     const q = new URLSearchParams({ tab: "new", store, title, category: "시설", priority: "보통" })
     return `/admin/store-repairs?${q.toString()}`
+  }
+
+  const actionPrefillHref = (store: string, itemLabel: string) => {
+    const title = `[점검FAIL] ${itemLabel}`.slice(0, 120)
+    const q = new URLSearchParams({
+      tab: "new",
+      store,
+      title,
+      category: "기타",
+      priority: "보통",
+      source: "check_fail",
+    })
+    return `/admin/store-actions?${q.toString()}`
   }
 
   const isHQ = auth?.role === "director" || auth?.role === "secretary" || auth?.role === "officer"
@@ -992,12 +1005,20 @@ export function AdminStoreCheck() {
                                   )}
                                 </td>
                                 <td className="p-2 text-center">
-                                  <Button asChild variant="outline" size="sm" className={ADMIN_BTN_XS_CN}>
-                                    <Link href={repairPrefillHref(x.store, itemPath)}>
-                                      <Wrench className="h-3 w-3 mr-1" />
-                                      {t("store_check_create_repair")}
-                                    </Link>
-                                  </Button>
+                                  <div className="flex flex-wrap items-center justify-center gap-1">
+                                    <Button asChild variant="outline" size="sm" className={ADMIN_BTN_XS_CN}>
+                                      <Link href={repairPrefillHref(x.store, itemPath)}>
+                                        <Wrench className="h-3 w-3 mr-1" />
+                                        {t("store_check_create_repair")}
+                                      </Link>
+                                    </Button>
+                                    <Button asChild variant="outline" size="sm" className={ADMIN_BTN_XS_CN}>
+                                      <Link href={actionPrefillHref(x.store, itemPath)}>
+                                        <ClipboardList className="h-3 w-3 mr-1" />
+                                        {t("store_check_create_action")}
+                                      </Link>
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             )})
@@ -1049,6 +1070,12 @@ export function AdminStoreCheck() {
                                     <Link href={repairPrefillHref(x.store, itemPath)}>
                                       <Wrench className="h-3.5 w-3.5" />
                                       {t("store_check_create_repair")}
+                                    </Link>
+                                  </Button>
+                                  <Button asChild variant="outline" size="sm" className="h-9 gap-1 text-xs">
+                                    <Link href={actionPrefillHref(x.store, itemPath)}>
+                                      <ClipboardList className="h-3.5 w-3.5" />
+                                      {t("store_check_create_action")}
                                     </Link>
                                   </Button>
                                 </div>

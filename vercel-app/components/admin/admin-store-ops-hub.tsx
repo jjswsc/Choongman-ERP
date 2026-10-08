@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ClipboardCheck, Copy, MapPin, MessageSquareWarning, RefreshCw, Scale, Wrench } from "lucide-react"
+import { ClipboardCheck, ClipboardList, Copy, MapPin, MessageSquareWarning, RefreshCw, Scale, Wrench } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -89,6 +89,18 @@ export function AdminStoreOpsHub() {
       className: "border-red-500/40",
     },
     {
+      label: t("store_ops_kpi_overdue_actions"),
+      value: summary?.overdueActions ?? "—",
+      sub:
+        summary?.pendingVerifyActions != null
+          ? `${t("store_ops_kpi_pending_verify")}: ${summary.pendingVerifyActions}`
+          : "",
+      href: "/admin/store-actions",
+      cta: t("store_ops_go_actions"),
+      icon: ClipboardList,
+      className: "border-rose-500/40",
+    },
+    {
       label: t("store_ops_kpi_open_complaints"),
       value: summary?.openComplaints ?? "—",
       sub: t("complaint_status_recv"),
@@ -127,7 +139,7 @@ export function AdminStoreOpsHub() {
           {loading ? t("loading") : t("store_refresh")}
         </Button>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
         {cards.map((k) => {
           const Icon = k.icon
           return (

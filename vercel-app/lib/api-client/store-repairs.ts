@@ -110,6 +110,8 @@ export type StoreOpsAlertSummary = {
   uncheckedToday: number
   staleRepairs: number
   openComplaints: number
+  overdueActions?: number
+  pendingVerifyActions?: number
 }
 
 export async function getStoreOpsAlertSummary(): Promise<StoreOpsAlertSummary> {

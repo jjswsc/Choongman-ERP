@@ -113,6 +113,7 @@ export const ERP_NAV_MENU_SECTIONS: ErpNavMenuSection[] = [
       { titleKey: "adminStoreCheck", icon: Store, href: "/admin/store-check" },
       { titleKey: "adminStoreVisit", icon: MapPin, href: "/admin/store-visit" },
       { titleKey: "adminStoreRepairs", icon: Wrench, href: "/admin/store-repairs" },
+      { titleKey: "adminStoreActions", icon: ClipboardList, href: "/admin/store-actions" },
       { titleKey: "adminComplaints", icon: MessageSquareWarning, href: "/admin/complaints" },
     ],
   },
