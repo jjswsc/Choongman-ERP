@@ -746,6 +746,23 @@ export async function markKitchenPrintJob(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export type PosTableQrPrintJobClaim = {
+  id: number
+  payload_json: Record<string, unknown> | null
+}
+
+export async function claimTableQrPrintJob(params: {
+  storeCode: string
+  workerId?: string
+}): Promise<{ success: boolean; job: PosTableQrPrintJobClaim | null; message?: string }> {
+  const res = await apiFetch('/api/posPrintJobs/claimTableQr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; job: PosTableQrPrintJobClaim | null; message?: string }>
+}
+
 export async function grabMarkOrderReadyApi(params: { orderID: string; markStatus: 1 | 2 }) {
   const res = await apiFetchWithOffline('/api/grab/markOrderReady', {
     method: 'POST',

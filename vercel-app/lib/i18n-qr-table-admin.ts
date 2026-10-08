@@ -79,6 +79,8 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTableSessionPrintQrHint: '영수증 프린터로 테이블 QR을 출력합니다. 손님이 스캔해 주문합니다.',
   qrTablePrintNoToken: '이 테이블 QR이 없습니다. 관리자 화면에서 레이아웃 기준 생성을 먼저 해 주세요.',
   qrTablePrintFailed: 'QR 인쇄에 실패했습니다.',
+  qrTablePrintQueuedMain:
+    '메인 POS 영수증 프린터로 인쇄 요청을 보냈습니다. 메인 POS가 켜져 있는지 확인해 주세요.',
   qrTableSessionConfirmEntry: '패키지 후불 확정 (메뉴 오픈)',
   qrTableSessionEntryConfirmed: '확정됨',
   qrTableSessionEntryPending: '미확정',
@@ -114,7 +116,7 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTableScanShortEn: 'Scan to order',
   posQrTableOpenTile: 'QR 테이블 오픈',
   posQrTableOpenHint:
-    '메인 POS가 아니어도 됩니다. 오더 태블릿과 직원 휴대폰에서 테이블을 열면, 손님이 테이블 QR을 스캔해 주문할 수 있습니다.',
+    '메인 POS가 아니어도 됩니다. 오더 태블릿과 직원 휴대폰에서 테이블을 열고 QR 인쇄를 누르면, 메인 POS 영수증 프린터로 나갑니다.',
   posQrTableOpenDisabled: '이 매장은 QR 테이블오더가 꺼져 있습니다.',
   posQrTableOpenClosed: '아직 안 열림',
   posQrTableOpenDone: '{name} 테이블을 열었습니다.',
@@ -206,6 +208,8 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTableSessionPrintQrHint: 'Print this table QR on the receipt printer so guests can scan to order.',
   qrTablePrintNoToken: 'No QR for this table. Generate table QR from the admin screen first.',
   qrTablePrintFailed: 'Could not print the table QR.',
+  qrTablePrintQueuedMain:
+    'Sent a print request to the main POS receipt printer. Make sure the main POS is on.',
   qrTableSessionConfirmEntry: 'Confirm package (open menu)',
   qrTableSessionEntryConfirmed: 'Confirmed',
   qrTableSessionEntryPending: 'Pending',
@@ -241,7 +245,7 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTableScanShortEn: 'Scan to order',
   posQrTableOpenTile: 'Open QR table',
   posQrTableOpenHint:
-    'This does not have to be the main POS. Open a table from an order tablet or a staff phone, then guests scan the table QR to order.',
+    'This does not have to be the main POS. Open a table from an order tablet or staff phone, then tap Print QR to send it to the main POS receipt printer.',
   posQrTableOpenDisabled: 'QR table order is off for this store.',
   posQrTableOpenClosed: 'Not open',
   posQrTableOpenDone: 'Opened table {name}.',
@@ -333,6 +337,8 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTableSessionPrintQrHint: 'พิมพ์ QR โต๊ะออกเครื่องพิมพ์ใบเสร็จ ให้ลูกค้าสแกนสั่งอาหารได้เลยครับ',
   qrTablePrintNoToken: 'ยังไม่มี QR ของโต๊ะนี้ กรุณาสร้าง QR จากหน้าจัดการก่อนครับ',
   qrTablePrintFailed: 'พิมพ์ QR ไม่สำเร็จครับ',
+  qrTablePrintQueuedMain:
+    'ส่งคำขอพิมพ์ไปที่เครื่องพิมพ์ใบเสร็จของ POS หลักแล้วครับ กรุณาตรวจว่าเครื่อง POS หลักเปิดอยู่',
   qrTableSessionConfirmEntry: 'ยืนยันแพ็กเกจ (เปิดเมนู)',
   qrTableSessionEntryConfirmed: 'ยืนยันแล้ว',
   qrTableSessionEntryPending: 'ยังไม่ยืนยัน',
@@ -368,7 +374,7 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTableScanShortEn: 'Scan to order',
   posQrTableOpenTile: 'เปิดโต๊ะ QR',
   posQrTableOpenHint:
-    'ไม่ต้องใช้เครื่อง POS หลักครับ เปิดโต๊ะจากแท็บเล็ตออเดอร์หรือมือถือพนักงาน แล้วลูกค้าสแกน QR ที่โต๊ะเพื่อสั่งอาหาร',
+    'ไม่ต้องใช้เครื่อง POS หลักครับ เปิดโต๊ะจากแท็บเล็ตออเดอร์หรือมือถือ แล้วกดพิมพ์ QR เพื่อส่งไปเครื่องพิมพ์ใบเสร็จที่ POS หลัก',
   posQrTableOpenDisabled: 'สาขานี้ยังปิดการสั่งอาหารด้วย QR',
   posQrTableOpenClosed: 'ยังไม่เปิด',
   posQrTableOpenDone: 'เปิดโต๊ะ {name} แล้วครับ',

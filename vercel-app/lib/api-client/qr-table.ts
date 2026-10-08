@@ -297,6 +297,22 @@ export async function qrTableStaffOpenSession(body: {
   return parseJson<{ success: boolean; session?: QrTableSession; message?: string }>(res)
 }
 
+/** 메인 POS 영수증 프린터로 테이블 QR 인쇄 요청 (오더 태블릿·휴대폰) */
+export async function qrTableStaffEnqueuePrintTableQr(body: {
+  storeCode: string
+  tableName: string
+  storeLabel?: string
+  scanTh?: string
+  scanEn?: string
+}) {
+  const res = await apiFetch('/api/qr-table/staff/print-table-qr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return parseJson<{ success: boolean; queued?: boolean; message?: string }>(res)
+}
+
 export async function qrTableStaffConfirmEntry(sessionId: number) {
   const res = await apiFetch('/api/qr-table/staff/confirm-entry-postpay', {
     method: 'POST',

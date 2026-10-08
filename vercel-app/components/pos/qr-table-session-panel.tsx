@@ -17,11 +17,15 @@ import {
   qrTableStaffAckCall,
   qrTableStaffAdjustGuests,
   qrTableStaffConfirmEntry,
+  qrTableStaffEnqueuePrintTableQr,
   qrTableStaffOpenSession,
   qrTableStaffSessionByTable,
 } from '@/lib/api-client/qr-table'
 import { getPosPrinterSettings } from '@/lib/api-client/pos-table-printer'
-import { printQrTableThermalSlip } from '@/lib/print-qr-table-thermal-slip'
+import {
+  printQrTableThermalSlip,
+  shouldQueueTableQrPrintToMainPos,
+} from '@/lib/print-qr-table-thermal-slip'
 import { pickQrTokenForTable, resolveQrTableGuestUrl } from '@/lib/qr-table-thermal-slip-html'
 import { QR_FLOOR_SESSION_HINTS_POLL_MS } from '@/lib/qr-table-poll-interval'
 import { useVisiblePolling } from '@/lib/use-visible-polling'
@@ -173,6 +177,37 @@ export function QrTableSessionPanel(props: {
     if (printing) return
     setPrinting(true)
     try {
+      const scanTh = tr('qrTableScanTh', 'สแกนเพื่อสั่งอาหาร')
+      const scanEn = tr('qrTableScanEn', 'Scan to order from your phone')
+      const label = String(storeLabel || '').trim() || storeCode
+
+      /** 오더 태블릿·휴대폰: 브라우저 about:blank 인쇄 대신 메인 POS 열전사로 큐잉 */
+      if (shouldQueueTableQrPrintToMainPos()) {
+        const queued = await qrTableStaffEnqueuePrintTableQr({
+          storeCode,
+          tableName,
+          storeLabel: label,
+          scanTh,
+          scanEn,
+        })
+        if (!queued.success) {
+          const msg = String(queued.message || '')
+          await appAlert(
+            msg === 'qr_print_no_token'
+              ? tr('qrTablePrintNoToken', '이 테이블 QR이 없습니다. 관리자 화면에서 레이아웃 기준 생성을 먼저 해 주세요.')
+              : tr('qrTablePrintFailed', 'QR 인쇄에 실패했습니다.')
+          )
+          return
+        }
+        await appAlert(
+          tr(
+            'qrTablePrintQueuedMain',
+            '메인 POS 영수증 프린터로 인쇄 요청을 보냈습니다. 메인 POS가 켜져 있는지 확인해 주세요.'
+          )
+        )
+        return
+      }
+
       let token = pickQrTokenForTable(tokens, tableName)
       if (!token) {
         const gen = await qrTableAdminAction({
@@ -193,9 +228,9 @@ export function QrTableSessionPanel(props: {
       await printQrTableThermalSlip({
         tableName,
         url: resolveQrTableGuestUrl(token),
-        storeLabel: String(storeLabel || '').trim() || storeCode,
-        scanTh: tr('qrTableScanTh', 'สแกนเพื่อสั่งอาหาร'),
-        scanEn: tr('qrTableScanEn', 'Scan to order from your phone'),
+        storeLabel: label,
+        scanTh,
+        scanEn,
         printerSettings,
       })
     } catch (e) {

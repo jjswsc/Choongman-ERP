@@ -2,12 +2,13 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Home, Loader2, Minus, Plus, QrCode, RefreshCw } from 'lucide-react'
+import { Home, Loader2, Minus, Plus, Printer, QrCode, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { useStoreList } from '@/lib/api-client'
 import { getPosTableLayout, type PosFloorLabels, type PosTableItem } from '@/lib/api-client/pos-table-printer'
 import {
   qrTableAdminGet,
+  qrTableStaffEnqueuePrintTableQr,
   qrTableStaffOpenSession,
   qrTableStaffSessionsMap,
 } from '@/lib/api-client/qr-table'
@@ -48,7 +49,7 @@ function defaultGuests(table: PosTableItem): number {
 /** 메인 POS가 아닌 오더 태블릿·직원 휴대폰에서 테이블 QR 세션을 연다. */
 export function PosQrTableOpenContent() {
   const { auth, initialized } = useAuth()
-  const { posStores } = useStoreList()
+  const { posStores, formatStoreLabel } = useStoreList()
   const router = useRouter()
   const { lang } = useLang()
   const t = useT(lang)
@@ -64,6 +65,7 @@ export function PosQrTableOpenContent() {
   const [tierId, setTierId] = React.useState('')
   const [floor, setFloor] = React.useState<number | 'all'>('all')
   const [openingId, setOpeningId] = React.useState<string | null>(null)
+  const [printingId, setPrintingId] = React.useState<string | null>(null)
   const [notice, setNotice] = React.useState('')
 
   const isAlaCarte = settings.mode === 'a_la_carte'
@@ -151,6 +153,37 @@ export function PosQrTableOpenContent() {
       })
   }, [tables, floor])
 
+  async function printTableQr(table: PosTableItem) {
+    const name = String(table.name || '').trim()
+    if (!storeCode || !name || printingId) return
+    setPrintingId(table.id)
+    try {
+      const res = await qrTableStaffEnqueuePrintTableQr({
+        storeCode,
+        tableName: name,
+        storeLabel: formatStoreLabel(storeCode),
+        scanTh: t('qrTableScanTh') || 'สแกนเพื่อสั่งอาหาร',
+        scanEn: t('qrTableScanEn') || 'Scan to order from your phone',
+      })
+      if (!res.success) {
+        const msg = String(res.message || '')
+        await appAlert(
+          msg === 'qr_print_no_token'
+            ? t('qrTablePrintNoToken') ||
+                '이 테이블 QR이 없습니다. 관리자 화면에서 레이아웃 기준 생성을 먼저 해 주세요.'
+            : t('qrTablePrintFailed') || 'QR 인쇄에 실패했습니다.'
+        )
+        return
+      }
+      setNotice(
+        t('qrTablePrintQueuedMain') ||
+          '메인 POS 영수증 프린터로 인쇄 요청을 보냈습니다. 메인 POS가 켜져 있는지 확인해 주세요.'
+      )
+    } finally {
+      setPrintingId(null)
+    }
+  }
+
   async function openTable(table: PosTableItem) {
     const name = String(table.name || '').trim()
     if (!storeCode || !name || openingId) return
@@ -213,7 +246,7 @@ export function PosQrTableOpenContent() {
           </h1>
           <p className="mt-1 text-xs leading-snug text-muted-foreground">
             {t('posQrTableOpenHint') ||
-              '메인 POS가 아니어도 됩니다. 오더 태블릿과 직원 휴대폰에서 테이블을 열면, 손님이 테이블 QR을 스캔해 주문할 수 있습니다.'}
+              '메인 POS가 아니어도 됩니다. 오더 태블릿과 직원 휴대폰에서 테이블을 열고 QR 인쇄를 누르면, 메인 POS 영수증 프린터로 나갑니다.'}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -319,6 +352,7 @@ export function PosQrTableOpenContent() {
                   const open = sessions[sessionKey(table.name)]
                   const count = guests[table.id] ?? defaultGuests(table)
                   const busy = openingId === table.id
+                  const printBusy = printingId === table.id
                   return (
                     <li
                       key={table.id}
@@ -365,6 +399,24 @@ export function PosQrTableOpenContent() {
                           <Plus className="h-4 w-4" />
                         </button>
                       </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 gap-1 touch-manipulation"
+                        disabled={printBusy || Boolean(printingId)}
+                        title={
+                          t('qrTableSessionPrintQrHint') ||
+                          '메인 POS 영수증 프린터로 테이블 QR을 출력합니다.'
+                        }
+                        onClick={() => void printTableQr(table)}
+                      >
+                        {printBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Printer className="h-4 w-4" aria-hidden />
+                        )}
+                        <span className="hidden sm:inline">{t('qrTableSessionPrintQr') || 'QR 인쇄'}</span>
+                      </Button>
                       <Button
                         type="button"
                         className="h-11 min-w-[5.5rem] touch-manipulation"

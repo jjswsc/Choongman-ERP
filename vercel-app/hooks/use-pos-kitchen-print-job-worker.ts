@@ -3,14 +3,18 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react'
 import {
   claimKitchenPrintJob,
+  claimTableQrPrintJob,
   markKitchenPrintJob,
   type PosKitchenPrintJobClaim,
   type PosOrder,
+  type PosTableQrPrintJobClaim,
 } from '@/lib/api-client'
 import {
   printKitchenForOrder,
   type PosMainDeviceAutoprintCtx,
 } from '@/lib/pos-main-device-autoprint'
+import { printQrTableThermalSlip } from '@/lib/print-qr-table-thermal-slip'
+import { tableQrPayloadFromPrintJob } from '@/lib/pos-table-qr-print-job'
 import {
   getKitchenPrintWorkerId,
   kitchenLinesFromPrintJobPayload,
@@ -74,8 +78,36 @@ async function printClaimedKitchenJob(
   }
 }
 
+async function printClaimedTableQrJob(
+  job: PosTableQrPrintJobClaim,
+  ctx: PosMainDeviceAutoprintCtx
+): Promise<void> {
+  const payload = tableQrPayloadFromPrintJob(job.payload_json)
+  if (!payload) {
+    await markKitchenPrintJob({ jobId: job.id, status: 'printed' })
+    return
+  }
+  try {
+    await printQrTableThermalSlip({
+      tableName: payload.tableName,
+      url: payload.url,
+      storeLabel: payload.storeLabel || ctx.storeCode,
+      scanTh: payload.scanTh,
+      scanEn: payload.scanEn,
+      printerSettings: ctx.printerSettings,
+    })
+    await markKitchenPrintJob({ jobId: job.id, status: 'printed' })
+    ctx.logPosPrintDebug?.('table_qr_job_printed', { jobId: job.id, tableName: payload.tableName })
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e || 'print_failed')
+    await markKitchenPrintJob({ jobId: job.id, status: 'failed', reason: reason.slice(0, 500) })
+    console.error('table QR print job:', e)
+  }
+}
+
 /**
  * QR/원격 주문의 pos_print_jobs 를 메인 POS가 바로 claim·인쇄.
+ * 테이블 QR 슬립(receipt)은 주방 자동인쇄 OFF여도 메인 POS에서 처리.
  * INSERT Realtime poke가 1차. 놓치면 30초(채널 장애 시 5초)마다 claim.
  * 오픈 전·마감 후·백그라운드 탭은 60초.
  */
@@ -94,7 +126,7 @@ export function usePosKitchenPrintJobWorker(opts: {
   const storeCodesKey = (opts.storeCodes || []).join('|')
 
   useEffect(() => {
-    if (!opts.enabled || !opts.storeCode || !opts.kitchenOnOrder) {
+    if (!opts.enabled || !opts.storeCode) {
       drainNowRef.current = () => {}
       return
     }
@@ -121,10 +153,19 @@ export function usePosKitchenPrintJobWorker(opts: {
       try {
         for (let i = 0; i < MAIN_POS_KITCHEN_JOB_DRAIN_MAX; i += 1) {
           if (cancelled) return
-          const res = await claimKitchenPrintJob({ storeCode: opts.storeCode, workerId })
-          const job = res.success ? res.job : null
-          if (!job?.id) break
-          await printClaimedKitchenJob(job, ctx)
+          const qrRes = await claimTableQrPrintJob({ storeCode: opts.storeCode, workerId })
+          const qrJob = qrRes.success ? qrRes.job : null
+          if (!qrJob?.id) break
+          await printClaimedTableQrJob(qrJob, ctx)
+        }
+        if (opts.kitchenOnOrder) {
+          for (let i = 0; i < MAIN_POS_KITCHEN_JOB_DRAIN_MAX; i += 1) {
+            if (cancelled) return
+            const res = await claimKitchenPrintJob({ storeCode: opts.storeCode, workerId })
+            const job = res.success ? res.job : null
+            if (!job?.id) break
+            await printClaimedKitchenJob(job, ctx)
+          }
         }
       } catch (e) {
         console.error('kitchen print job drain:', e)
