@@ -3,6 +3,7 @@ import {
   alignPaymentToRecomputedDue,
   coercePosPricingAdjustmentsFromBody,
   resolveAlignedDueTotal,
+  shouldRealignSettleFastDue,
 } from '@/lib/pos-order-payment-due-align'
 import type { PosPricingAdjustments } from '@/lib/pos-pricing'
 
@@ -59,6 +60,25 @@ describe('alignPaymentToRecomputedDue', () => {
     expect(aligned?.total).toBe(118)
   })
 
+  it('10% off 70 with VAT separate rounds 67.41 down to the paid 67', () => {
+    const aligned = alignPaymentToRecomputedDue({
+      items: [
+        { name: 'Coke Zero', price: 40, qty: 1 },
+        { name: 'coke', price: 30, qty: 1 },
+      ],
+      paymentSum: 67,
+      discountAmt: 7,
+      adjustments: {
+        vatRate: 7,
+        vatMode: 'separate',
+        serviceRate: 0,
+        paymentTotalRoundingMode: 'round',
+      },
+    })
+    expect(aligned?.total).toBe(67)
+    expect(aligned?.vat).toBe(4.41)
+  })
+
   it('returns null when adjustments omit store fees', () => {
     const aligned = alignPaymentToRecomputedDue({
       items: [{ name: 'Buffet 299', price: 299, qty: 2 }],
@@ -66,6 +86,37 @@ describe('alignPaymentToRecomputedDue', () => {
       adjustments: { paymentTotalRoundingMode: 'round', vatRate: 0, serviceRate: 0 },
     })
     expect(aligned).toBeNull()
+  })
+})
+
+describe('shouldRealignSettleFastDue', () => {
+  it('realigns when a payment discount drops the due below the stored total', () => {
+    expect(
+      shouldRealignSettleFastDue({
+        collectableDue: 75,
+        nextPaymentSum: 67,
+        incomingDiscountAmt: 7,
+      })
+    ).toBe('discount')
+  })
+
+  it('does not lower the stored total on a short payment without a discount', () => {
+    expect(
+      shouldRealignSettleFastDue({
+        collectableDue: 75,
+        nextPaymentSum: 67,
+        incomingDiscountAmt: 0,
+      })
+    ).toBeNull()
+  })
+
+  it('still realigns when payment exceeds the stored due', () => {
+    expect(
+      shouldRealignSettleFastDue({
+        collectableDue: 598,
+        nextPaymentSum: 704,
+      })
+    ).toBe('exceeds')
   })
 })
 

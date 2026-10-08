@@ -320,4 +320,48 @@ describe('receipt totals layout with Rounding', () => {
     expect(html).not.toContain('-7.00')
     expect(html).not.toContain('Rounding')
   })
+
+  it('VAT separate 10% discount prints Discount (10%) and Amount After Discount', () => {
+    const pricing = computePosPricing({
+      subtotal: 70,
+      discountAmt: 7,
+      adjustments: { vatRate: 7, vatMode: 'separate', paymentTotalRoundingMode: 'round' },
+    })
+    const receiptData: ReceiptModalData = {
+      orderNo: '003',
+      items: [
+        { id: '1', name: 'Coke Zero', price: 40, qty: 1 },
+        { id: '2', name: 'coke', price: 30, qty: 1 },
+      ],
+      subtotal: 70,
+      discountAmt: 7,
+      total: pricing.finalTotal,
+      storeCode: '1001',
+      orderType: 'dine_in',
+      vatFeeAmt: pricing.vatFeeAmt,
+      vatFeeMode: pricing.vatFeeMode,
+      ...receiptTaxDisplayFieldsFromPricing(pricing),
+      vatRate: 7,
+      paymentCash: 67,
+      receiptAutoPrintContext: 'payment',
+    }
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData,
+      menus: [],
+      orderTypeLabels: {},
+      t: (k) => k,
+      lang: 'en',
+      origin: '',
+      printerSettings: { vatRate: 7 } as never,
+      forceSimpleTextMode: true,
+    })
+    expect(pricing.finalTotal).toBe(67)
+    expect(pricing.vatFeeAmt).toBe(4.41)
+    expect(html).toMatch(/할인 \(10%\)<\/td><td class="simple-v">-7\.00/)
+    expect(html).toMatch(/Amount After Discount<\/td><td class="simple-v">63\.00/)
+    expect(html).toMatch(/Amount Before VAT<\/td><td class="simple-v">63\.00/)
+    expect(html).toMatch(/VAT \(7%\)<\/td><td class="simple-v">4\.41/)
+    expect(html).toContain('-0.41')
+    expect(html).toMatch(/TOTAL: 67\.00/)
+  })
 })

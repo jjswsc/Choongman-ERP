@@ -54,6 +54,7 @@ import {
   alignPaymentToRecomputedDue,
   coercePosPricingAdjustmentsFromBody,
   resolveAlignedDueTotal,
+  shouldRealignSettleFastDue,
 } from '@/lib/pos-order-payment-due-align'
 import type { JwtPayload } from '@/lib/jwt-auth'
 
@@ -439,8 +440,23 @@ async function settlePosOrderPaymentFastBody(params: {
     }
   }
 
+  const incomingDiscountAmt = Math.max(0, Number(body?.discountAmt ?? body?.discount_amt ?? 0) || 0)
+  const incomingCouponDiscountAmt = Math.max(
+    0,
+    Number(body?.couponDiscountAmt ?? body?.coupon_discount_amt ?? 0) || 0
+  )
+  const incomingPointUsed = Math.max(0, Number(body?.pointUsed ?? body?.point_used ?? 0) || 0)
+  const settleFastRealign = shouldRealignSettleFastDue({
+    collectableDue,
+    nextPaymentSum,
+    incomingDiscountAmt,
+    incomingCouponDiscountAmt,
+    incomingPointUsed,
+  })
   let settleFastAlignedDue: { total: number; vat: number; serviceAmt: number } | null = null
-  if (collectableDue > 0.02 && nextPaymentSum > collectableDue + 0.02) {
+  /** 할인으로 청구액이 내려간 경우에만 discount_amt를 남긴다. 요율 보정(exceeds)은 기존 할인을 덮지 않는다. */
+  let settleFastPersistDiscount = false
+  if (settleFastRealign) {
     const aligned = await alignSettleFastTotalIfPaymentMatchesRecomputedDue({
       orderId: id,
       storeCode: String(current?.store_code ?? ''),
@@ -454,7 +470,8 @@ async function settlePosOrderPaymentFastBody(params: {
     if (aligned && nextPaymentSum <= posOrderCollectableDue(aligned.total, depositHeld) + 0.02) {
       settleFastAlignedDue = aligned
       total = aligned.total
-    } else {
+      if (settleFastRealign === 'discount') settleFastPersistDiscount = true
+    } else if (settleFastRealign === 'exceeds') {
       await releaseIdempotencyOnFailure()
       return NextResponse.json(
         { success: false, message: 'payment_exceeds_total' },
@@ -566,12 +583,19 @@ async function settlePosOrderPaymentFastBody(params: {
    * body.items 는 무시한다.
    * 결제 UI는 항상 items 를 보내지만, enrich·total 재계산 없이 items_json 만 덮으면
    * 결제액/재고와 불일치가 난다. 품목은 주문·추가주문 저장 시점에 이미 DB에 있어야 한다.
-   * 합석 직후 DB total이 결제 모달보다 낮으면 위에서 재계산한 due로 total만 맞춘다.
+   * 합석 직후 DB total이 결제 모달보다 낮거나, 결제 때 할인을 넣어 청구액이 내려가면
+   * 재계산한 due로 total·vat를 맞춘다. 할인 경로는 discount_amt도 남긴다.
    */
   if (settleFastAlignedDue) {
     patch.total = settleFastAlignedDue.total
     patch.vat = settleFastAlignedDue.vat
     patch.service_amt = settleFastAlignedDue.serviceAmt
+  }
+  if (settleFastPersistDiscount) {
+    patch.discount_amt = incomingDiscountAmt
+    const discountReason = String(body?.discountReason ?? body?.discount_reason ?? '').trim()
+    if (discountReason) patch.discount_reason = discountReason
+    if (incomingCouponDiscountAmt > 0.02) patch.coupon_discount_amt = incomingCouponDiscountAmt
   }
 
   await updatePosOrderSettleFastPatch(id, patch)

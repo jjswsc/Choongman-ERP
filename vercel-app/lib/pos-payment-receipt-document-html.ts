@@ -7,8 +7,10 @@ import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { buildPosTaxInvoiceThermalHtml, parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import {
   buildPosReceiptTotalsLabels,
+  formatPosReceiptDiscountLabel,
   formatPosReceiptRoundingAmtText,
   POS_RECEIPT_TOTAL_EQ_RULE,
+  resolvePosReceiptAmountAfterDiscount,
   resolvePosReceiptAmountBeforeVat,
   resolvePosReceiptPrintFeeRates,
   resolvePosReceiptRoundingAmt,
@@ -75,6 +77,7 @@ import {
   shouldUseLegacyAlignedPaymentReceiptForStore,
 } from '@/lib/pos-receipt-store-flags'
 import { resolveCashTenderReceiptLines } from '@/lib/pos-receipt-cash-tender'
+import { collectPosPaymentTenderLabels } from '@/lib/pos-payment-tender-labels'
 import {
   buildPaymentReceiptMemberFooterHtml,
   PAYMENT_RECEIPT_MEMBER_BLOCK_CSS,
@@ -156,41 +159,37 @@ function collectReceiptPaymentMethodLabels(
   receiptData: ReceiptModalData,
   tr: (key: string, fallback: string) => string
 ): string[] {
-  const labels: string[] = []
-  const cash = Math.max(0, Number(receiptData.paymentCash ?? 0) || 0)
-  const card = Math.max(0, Number(receiptData.paymentCard ?? 0) || 0)
-  const qr = Math.max(0, Number(receiptData.paymentQr ?? 0) || 0)
-  const other = Math.max(0, Number(receiptData.paymentOther ?? 0) || 0)
   const del = Math.max(0, Number(receiptData.paymentDeliveryApp ?? 0) || 0)
-  const crypto = Math.max(0, Number(receiptData.paymentCrypto ?? 0) || 0)
-  const eps = 0.005
-  if (cash > eps) labels.push(tr('posPaymentCash', 'Cash'))
-  if (card > eps) labels.push(tr('posPaymentCard', 'Card'))
-  if (qr > eps) labels.push(tr('posPaymentQrCode', 'QR'))
-  if (other > eps) labels.push(tr('posPaymentOther', 'Other'))
-  if (del > eps) {
-    const ch = resolveReceiptDeliveryPaymentChannelCode({
-      deliveryAppCode: receiptData.deliveryAppCode,
-      deliveryPaymentChannel: receiptData.deliveryPaymentChannel,
-      tableName: receiptData.tableName,
-      memo: receiptData.memo,
-      orderNo: receiptData.orderNo,
-      itemDeliveryAppCodes: receiptData.items?.map((it) =>
-        'deliveryAppCode' in it ? (it as { deliveryAppCode?: string }).deliveryAppCode : undefined
-      ),
-    })
-    labels.push(
-      ch
-        ? `${tr('posPaymentDeliveryApp', 'Delivery app')} (${ch})`
-        : tr('posPaymentDeliveryApp', 'Delivery app')
-    )
-  }
-  if (crypto > eps) {
-    const meta = receiptData.paymentCryptoMeta as { asset?: string } | undefined
-    const asset = String(meta?.asset || '').toUpperCase()
-    labels.push(asset ? `${tr('posPaymentCrypto', 'Crypto')} (${asset})` : tr('posPaymentCrypto', 'Crypto'))
-  }
-  return labels
+  const ch =
+    del > 0.005
+      ? resolveReceiptDeliveryPaymentChannelCode({
+          deliveryAppCode: receiptData.deliveryAppCode,
+          deliveryPaymentChannel: receiptData.deliveryPaymentChannel,
+          tableName: receiptData.tableName,
+          memo: receiptData.memo,
+          orderNo: receiptData.orderNo,
+          itemDeliveryAppCodes: receiptData.items?.map((it) =>
+            'deliveryAppCode' in it ? (it as { deliveryAppCode?: string }).deliveryAppCode : undefined
+          ),
+        })
+      : ''
+  const meta = receiptData.paymentCryptoMeta as { asset?: string } | undefined
+  return collectPosPaymentTenderLabels(
+    {
+      paymentCash: receiptData.paymentCash,
+      paymentCard: receiptData.paymentCard,
+      paymentQr: receiptData.paymentQr,
+      paymentOther: receiptData.paymentOther,
+      paymentOtherBreakdown: receiptData.paymentOtherBreakdown,
+      paymentDeliveryApp: receiptData.paymentDeliveryApp,
+      paymentCrypto: receiptData.paymentCrypto,
+      paymentCryptoAsset: meta?.asset,
+      deliveryChannelLabel: ch,
+    },
+    tr,
+    null,
+    'receipt'
+  )
 }
 
 function buildCashTenderReceiptRowsHtml(
@@ -886,6 +885,22 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     vatRate: vatRatePrint,
     serviceRate: serviceRatePrint,
   })
+  const manualDiscountPrintAmt = grabInboundReceipt
+    ? 0
+    : Math.max(0, Number(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) || 0)
+  const discountPrintLabel = formatPosReceiptDiscountLabel(
+    discountReceiptLabel,
+    manualDiscountPrintAmt,
+    subtotalPrint
+  )
+  const discountForAfterAmt = grabInboundReceipt
+    ? 0
+    : showCouponDiscountRows
+      ? Math.max(0, couponDiscountTotal) + manualDiscountPrintAmt
+      : Math.max(0, Number(receiptData.discountAmt) || 0)
+  const amountAfterDiscountPrint = resolvePosReceiptAmountAfterDiscount(subtotalPrint, discountForAfterAmt)
+  const showAmountAfterDiscountRow = discountForAfterAmt > 0.02
+  const amountAfterDiscountLabel = tr('posReceiptAmountAfterDiscount', 'Amount After Discount')
   const vatPrintLabelEscaped = esc(totalsLabels.vatLabel)
   const roundingAmtText = formatPosReceiptRoundingAmtText(roundingPrint)
   const receiptTotalsEqRuleHtml = `<div class="receipt-total-eq-rule">${POS_RECEIPT_TOTAL_EQ_RULE}</div>`
@@ -1041,9 +1056,12 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
           }${
             !grabInbound &&
             (showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) > 0
-              ? `<tr><td class="simple-k">${esc(discountReceiptLabel)}</td><td class="simple-v">-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}</td></tr>`
+              ? `<tr><td class="simple-k">${esc(discountPrintLabel)}</td><td class="simple-v">-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}</td></tr>`
               : ''
           }`
+        : '',
+      showAmountAfterDiscountRow
+        ? `<tr><td class="simple-k">${esc(amountAfterDiscountLabel)}</td><td class="simple-v">${formatBahtNum(amountAfterDiscountPrint)}</td></tr>`
         : '',
       (receiptData.deliveryFee ?? 0) > 0
         ? `<tr><td class="simple-k">${esc(t('posDeliveryFee') || '배달 수수료')}</td><td class="simple-v">+${formatBahtNum(receiptData.deliveryFee)}</td></tr>`
@@ -1397,7 +1415,8 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
         <div class="receipt-divider"></div>
         ${paymentRowHtml(`<span class="receipt-muted">${esc(totalsLabels.subtotalLabel)}</span>`, formatBahtNum(subtotalPrint))}
         ${showCouponDiscountRows ? buildAppliedCouponDiscountRowsHtml(receiptData, tr, paymentRowHtml) : ''}
-        ${!grabInboundReceipt && (showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) > 0 ? paymentRowHtml(esc(discountReceiptLabel), `-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}`) : ''}
+        ${!grabInboundReceipt && (showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt) > 0 ? paymentRowHtml(esc(discountPrintLabel), `-${formatBahtNum(showCouponDiscountRows ? nonCouponDiscountAmt : receiptData.discountAmt)}`) : ''}
+        ${showAmountAfterDiscountRow ? paymentRowHtml(esc(amountAfterDiscountLabel), formatBahtNum(amountAfterDiscountPrint)) : ''}
         ${(receiptData.deliveryFee ?? 0) > 0 ? paymentRowHtml(esc(t('posDeliveryFee') || '배달 수수료'), `+${formatBahtNum(receiptData.deliveryFee)}`) : ''}
         ${(receiptData.packagingFee ?? 0) > 0 ? paymentRowHtml(esc(t('posPackagingFee') || '포장 수수료'), `+${formatBahtNum(receiptData.packagingFee)}`) : ''}
         ${showServiceFeeRow ? paymentRowHtml(esc(totalsLabels.serviceLabel), formatBahtNum(serviceFeeAmtPrint)) : ''}

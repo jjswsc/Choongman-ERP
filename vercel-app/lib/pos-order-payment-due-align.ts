@@ -9,6 +9,30 @@ import {
 const PAY_EPS = 0.02
 
 /**
+ * 결제액이 DB 청구액과 다를 때 settleFast가 품목·할인으로 합계를 다시 맞출지.
+ * - exceeds: 결제액이 DB 합계보다 큼 (합석·요율 누락). 재계산이 안 맞으면 거절.
+ * - discount: 결제 모달에서 할인을 넣어 결제액이 DB 합계보다 작음. 재계산이 결제액과 맞을 때만 합계·할인을 저장.
+ * 할인 없이 덜 낸 부분결제는 null — 기존 합계를 내리지 않는다.
+ */
+export function shouldRealignSettleFastDue(params: {
+  collectableDue: number
+  nextPaymentSum: number
+  incomingDiscountAmt?: number
+  incomingCouponDiscountAmt?: number
+  incomingPointUsed?: number
+}): 'exceeds' | 'discount' | null {
+  const due = Math.max(0, Number(params.collectableDue) || 0)
+  const pay = Math.max(0, Number(params.nextPaymentSum) || 0)
+  if (due > 0.02 && pay > due + PAY_EPS) return 'exceeds'
+  const discountSignal =
+    Math.max(0, Number(params.incomingDiscountAmt) || 0) > 0.02 ||
+    Math.max(0, Number(params.incomingCouponDiscountAmt) || 0) > 0.02 ||
+    Math.max(0, Number(params.incomingPointUsed) || 0) > 0.02
+  if (discountSignal && due > 0.02 && pay > 0.02 && pay + PAY_EPS < due) return 'discount'
+  return null
+}
+
+/**
  * 결제액이 청구 합계를 덮는지.
  * POS는 최종 합계를 정수 바트로 반올림하므로, 703.85 vs 704 같은 잔차는 허용한다.
  */

@@ -222,6 +222,41 @@ export function resolvePosReceiptRoundingAmt(params: {
   return round2(total - before - vat - card - other)
 }
 
+/**
+ * 소계 대비 할인이 정수 % (10·20·30 등)이면 그 퍼센트.
+ * 결제 모달 퍼센트 할인은 `Math.floor(소계 × % / 100)` 이라 내림값도 인정한다.
+ */
+export function inferPosReceiptDiscountPercent(discountAmt: number, subtotal: number): number | null {
+  const discount = Math.max(0, Number(discountAmt) || 0)
+  const base = Math.max(0, Number(subtotal) || 0)
+  if (discount <= 0.02 || base <= 0.02 || discount + 0.02 >= base) return null
+  const nearest = Math.round((discount / base) * 100)
+  if (nearest < 1 || nearest > 99) return null
+  const rawProduct = (base * nearest) / 100
+  const exact = round2(rawProduct)
+  if (Math.abs(discount - exact) <= 0.02) return nearest
+  /** 결제 모달은 퍼센트를 내림한다. 0.5를 깎아 만든 99≠50% 같은 우연은 퍼센트로 보지 않는다. */
+  const floored = Math.floor(rawProduct)
+  if (Math.abs(discount - floored) <= 0.02 && rawProduct - floored < 0.02) return nearest
+  return null
+}
+
+/** `Discount (10%)` — 정수 %가 아니면 기본 라벨만 */
+export function formatPosReceiptDiscountLabel(
+  baseLabel: string,
+  discountAmt: number,
+  subtotal: number
+): string {
+  const pct = inferPosReceiptDiscountPercent(discountAmt, subtotal)
+  if (pct == null) return baseLabel
+  return `${baseLabel} (${pct}%)`
+}
+
+/** Sub Total − 할인. 배달·봉사료를 더하기 전 금액 */
+export function resolvePosReceiptAmountAfterDiscount(subtotalPrint: number, discountAmt: number): number {
+  return round2(Math.max(0, Number(subtotalPrint) || 0) - Math.max(0, Number(discountAmt) || 0))
+}
+
 export function formatPosReceiptRoundingAmtText(rounding: number): string {
   const r = round2(rounding)
   if (Math.abs(r) < 0.005) return '0.00'

@@ -43,8 +43,10 @@ import { formatBahtNum } from '@/lib/utils'
 import { RECEIPT_AMOUNT_COL_MM, RECEIPT_GRID_COL_GAP_PX } from '@/lib/pos-receipt-layout'
 import {
   buildPosReceiptTotalsLabels,
+  formatPosReceiptDiscountLabel,
   formatPosReceiptRoundingAmtText,
   POS_RECEIPT_TOTAL_EQ_RULE,
+  resolvePosReceiptAmountAfterDiscount,
   resolvePosReceiptAmountBeforeVat,
   resolvePosReceiptPrintFeeRates,
   resolvePosReceiptRoundingAmt,
@@ -842,7 +844,13 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
   const discountRow =
     !grabInbound && effectiveDiscountAmt > 0.0001
       ? '<div class="receipt-row discount"><span>' +
-        esc(resolveHallOrderDiscountLabel(t, payload.discountReason)) +
+        esc(
+          formatPosReceiptDiscountLabel(
+            resolveHallOrderDiscountLabel(t, payload.discountReason),
+            effectiveDiscountAmt,
+            Math.max(0, Number(payload.subtotal) || 0)
+          )
+        ) +
         c('span') +
         '<span>-' +
         formatBahtNum(effectiveDiscountAmt) +
@@ -872,6 +880,20 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     receiptTaxableGrossForDisplay: payload.receiptTaxableGrossForDisplay,
     vatRatePercent: Number(printerSettings?.vatRate ?? payload.vatRate ?? 0) || undefined,
   })
+  const amountAfterDiscountPrint = resolvePosReceiptAmountAfterDiscount(
+    subtotalPrint,
+    grabInbound ? 0 : effectiveDiscountAmt
+  )
+  const amountAfterDiscountRow =
+    !grabInbound && effectiveDiscountAmt > 0.0001
+      ? '<div class="receipt-row"><span>' +
+        esc(tr('posReceiptAmountAfterDiscount', 'Amount After Discount')) +
+        c('span') +
+        '<span>' +
+        formatBahtNum(amountAfterDiscountPrint) +
+        c('span') +
+        c('div')
+      : ''
   const amountBeforeVatPrint = resolvePosReceiptAmountBeforeVat({
     subtotalPrint,
     discountAmtForPrint: grabInbound ? 0 : effectiveDiscountAmt,
@@ -1008,6 +1030,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     c('div') +
     subtotalRow +
     discountRow +
+    amountAfterDiscountRow +
     deliveryFeeRow +
     packagingFeeRow +
     serviceFeeRow +
