@@ -20,6 +20,7 @@ import {
   LogOut,
   Users,
   CircleOff,
+  QrCode,
 } from "lucide-react"
 
 const iconMap = {
@@ -40,6 +41,7 @@ const iconMap = {
   "log-out": LogOut,
   users: Users,
   "circle-off": CircleOff,
+  "qr-code": QrCode,
 } as const
 
 interface POSTileProps {

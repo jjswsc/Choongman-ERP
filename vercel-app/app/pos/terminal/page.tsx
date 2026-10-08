@@ -41,7 +41,7 @@ import {
   buildPosStoreCodeMatchVariants,
   posStoreCodeMatchesVariants,
 } from '@/lib/pos-store-code-match-variants'
-import { LayoutGrid, Bike, Package, Search } from 'lucide-react'
+import { LayoutGrid, Bike, Package, QrCode, Search } from 'lucide-react'
 import {
   getMembers,
   getPosMenus,
@@ -11739,9 +11739,26 @@ export default function PosTerminalPage() {
                 </div>
                 {/* 오른쪽 영역: 탭별 필터(준비중/결제완료/전체) + 실시간 메뉴 검색 — 배달/포장/테이블 동일 UI, 밑줄 정렬 */}
                 <div
-                  className="flex shrink-0 items-center gap-1 min-[640px]:gap-2 justify-end self-stretch min-h-0 min-[640px]:w-44"
+                  className={cn(
+                    'flex shrink-0 items-center gap-1 min-[640px]:gap-2 justify-end self-stretch min-h-0',
+                    activeTab === 'tables' ? 'min-[640px]:w-auto' : 'min-[640px]:w-44'
+                  )}
                   data-tour="pos-tour-toolbar-filters"
                 >
+                  {activeTab === 'tables' && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9 shrink-0 gap-1 px-2.5 touch-manipulation min-[640px]:h-8"
+                      title={t('posQrTableOpenTile') || 'QR 테이블 오픈'}
+                      aria-label={t('posQrTableOpenTile') || 'QR 테이블 오픈'}
+                      onClick={() => router.push('/pos/qr-open')}
+                    >
+                      <QrCode className="h-4 w-4 shrink-0" aria-hidden />
+                      <span className="hidden min-[880px]:inline">{t('posQrTableOpenTile') || 'QR 테이블 오픈'}</span>
+                    </Button>
+                  )}
                   {activeTab === 'tables' && (
                     <Select
                       value={tableListMode}

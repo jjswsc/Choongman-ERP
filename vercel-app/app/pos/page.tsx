@@ -264,6 +264,7 @@ function POSMainPageInner() {
           return canAccessAdmin(auth?.role || '')
         case 'attendance':
         case 'menu-sold-out':
+        case 'qr-open':
           return canAccessPosOrder(auth?.role || '')
         case 'business':
           // 직원(staff/pos_staff)도 영업 시작/마감 화면을 사용할 수 있게 허용
@@ -389,6 +390,9 @@ function POSMainPageInner() {
           break
         case 'menu-sold-out':
           pushPosRouteWithFallback('/pos/menu-sold-out')
+          break
+        case 'qr-open':
+          pushPosRouteWithFallback('/pos/qr-open')
           break
         case 'members':
           pushPosRouteWithFallback('/pos/member-points')

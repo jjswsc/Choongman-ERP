@@ -7975,7 +7975,7 @@ export const i18n = {
     helpSum_admin_pos_qr_table_order:
       '손님 폰으로 QR 주문하고, 인당 패키지(입장가·포함 메뉴 0฿)를 매장별로 켭니다. 같은 테이블 QR은 여러 대가 동시에 스캔해 주문할 수 있습니다. 패키지·포함 메뉴는 이 화면에서만 설정하면 됩니다.',
     helpHow_admin_pos_qr_table_order:
-      '① 매장을 고른 뒤「QR 테이블오더 사용」을 켭니다. Omni 파일럿은 직원 세션 오픈 필수·후불을 권장합니다.\n② 주문 방식에서「인당 패키지」를 고르고, 패키지를 추가합니다(이름·인당가·포함 메뉴 체크).\n③ 「레이아웃 기준 생성」후 PNG/PDF/인쇄로 테이블 카드를 부착합니다.\n④ POS에서「QR 인쇄」로 영수증 프린터에 테이블 QR을 찍거나,「QR 세션 오픈」후 손님이 /t/{token}으로 주문 → 퇴장 시 POS 결제. 한 테이블에서 여러 폰이 같이 주문할 수 있습니다.\n⑤ 선결제는 KBank PromptPay이며, 중간 입금 시에도 주문 status는 pending을 유지합니다.',
+      '① 매장을 고른 뒤「QR 테이블오더 사용」을 켭니다. Omni 파일럿은 직원 세션 오픈 필수·후불을 권장합니다.\n② 주문 방식에서「인당 패키지」를 고르고, 패키지를 추가합니다(이름·인당가·포함 메뉴 체크).\n③ 「레이아웃 기준 생성」후 PNG/PDF/인쇄로 테이블 카드를 부착합니다.\n④ 메인 POS·오더 태블릿·직원 휴대폰 어디서든 POS 홈「QR 테이블 오픈」또는 테이블 화면의 QR 버튼으로 세션을 엽니다. 손님이 /t/{token}으로 주문하고, 퇴장 시 POS에서 결제합니다. 영수증 프린터로 QR을 찍는 것은 메인 POS에서 합니다. 한 테이블에서 여러 폰이 같이 주문할 수 있습니다.\n⑤ 선결제는 KBank PromptPay이며, 중간 입금 시에도 주문 status는 pending을 유지합니다.',
     helpSum_admin_items:
       '품목 기본정보와 판매가/원가를 관리하고, 가격 이력과 가격 예약(지정일 자동 반영)을 조회·등록하는 화면입니다.',
     helpHow_admin_items:
@@ -16424,7 +16424,7 @@ orderItemQty: 'Qty',
     helpSum_admin_pos_qr_table_order:
       'Enable guest-phone QR ordering and per-person packages (entry price + included menus at ฿0) per store. Multiple phones can scan the same table QR and order together. Set packages and includes on this screen only.',
     helpHow_admin_pos_qr_table_order:
-      '① Pick a store and turn on QR table order. For Omni pilot, prefer require staff open + postpay.\n② Choose “Per-person package”, then add packages (name, price/pax, included menus).\n③ Generate QR from layout, then download PNG/PDF or print cards.\n④ On POS: Print QR to the receipt printer, or open QR session → guest orders via /t/{token} → close at POS. Several phones at one table can order at the same time.\n⑤ Prepay uses KBank PromptPay; keep order status pending until final close.',
+      '① Pick a store and turn on QR table order. For Omni pilot, prefer require staff open + postpay.\n② Choose “Per-person package”, then add packages (name, price/pax, included menus).\n③ Generate QR from layout, then download PNG/PDF or print cards.\n④ Open a session from the main POS, an order tablet, or a staff phone (POS home “Open QR table”, or the QR button on the table screen). Guests order via /t/{token} and pay at POS when they leave. Printing the QR slip on the receipt printer stays on the main POS. Several phones at one table can order at the same time.\n⑤ Prepay uses KBank PromptPay; keep order status pending until final close.',
     helpSum_admin_items:
       'Manage item basics and item price/cost, and review or register future price schedules from the price-history area.',
     helpHow_admin_items:
