@@ -423,7 +423,11 @@ export function TaxFilingBooksTab(props: {
     const hasBsBalance = (entries?.trial || []).some(
       (r) => /^[123]/.test(String(r.accountCode || "")) && (Number(r.debit) || 0) + (Number(r.credit) || 0) > 0.009
     )
-    const salesNet = split?.taxInvoiceNet || 0
+    const salesNet =
+      Number(bridge?.report?.lines.find((l) => l.key === "sales")?.management || 0) ||
+      split?.posNet ||
+      split?.taxInvoiceNet ||
+      0
     const purchaseNet = split?.purchaseNet || 0
     const outputVat = bridge?.report?.lines.find((l) => l.key === "outputVat")?.filing || 0
     const inputVat = bridge?.report?.lines.find((l) => l.key === "inputVat")?.filing || 0
@@ -900,7 +904,9 @@ export function TaxFilingBooksTab(props: {
             </tbody>
           </table>
           <p className="mt-2 text-xs text-muted-foreground">
-            {t("taxBooksPosNet")} {money(bridge.report.salesSplit.posNet)} · {t("taxBooksTaxInvoiceNet")}{" "}
+            {t("taxBooksSalesManagementNet")}{" "}
+            {money(bridge.report.lines.find((l) => l.key === "sales")?.management || 0)} · {t("taxBooksPosNet")}{" "}
+            {money(bridge.report.salesSplit.posNet)} · {t("taxBooksTaxInvoiceNet")}{" "}
             {money(bridge.report.salesSplit.taxInvoiceNet)} · {t("taxBooksPurchaseNet")}{" "}
             {money(bridge.report.salesSplit.purchaseNet)}
           </p>

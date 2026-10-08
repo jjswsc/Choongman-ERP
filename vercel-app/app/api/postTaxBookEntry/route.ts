@@ -186,7 +186,14 @@ export async function POST(request: NextRequest) {
         allowedStores: auth.allowedStores,
         tenantId: auth.tenantId,
       })
-      const netAmount = bridge.report.salesSplit.taxInvoiceNet || 0
+      // 매출관리(ยอดขายสุทธิ)와 동일 POS 공급가 — 세금계산서만이 아님
+      const managementSales = Number(
+        bridge.report.lines.find((l) => l.key === 'sales')?.management || 0
+      )
+      const netAmount =
+        managementSales > 0
+          ? managementSales
+          : bridge.report.salesSplit.posNet || bridge.report.salesSplit.taxInvoiceNet || 0
       if (netAmount <= 0) throw new Error('NO_AMOUNT')
       const id = await postTaxSalesSummaryJournal({
         yearMonth,
