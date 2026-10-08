@@ -28,8 +28,8 @@ describe('MAIN_POS_KITCHEN_JOB_POLL_MS', () => {
 })
 
 describe('MAIN_POS_TABLE_QR_JOB_POLL_MS', () => {
-  it('keeps table QR safety-net poll aligned with kitchen (Realtime is primary)', () => {
-    expect(MAIN_POS_TABLE_QR_JOB_POLL_MS).toBe(30_000)
+  it('aliases table QR safety-net interval to the unified print-job poll', () => {
+    expect(MAIN_POS_TABLE_QR_JOB_POLL_MS).toBe(MAIN_POS_KITCHEN_JOB_POLL_MS)
     expect(MAIN_POS_TABLE_QR_JOB_POLL_UNHEALTHY_MS).toBe(5_000)
     expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(30_000)
     expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(5_000)
