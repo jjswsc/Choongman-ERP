@@ -762,8 +762,20 @@ export function TaxFilingBooksTab(props: {
         credit: t("taxBooksCredit"),
         balance: t("taxBooksLedgerBalance"),
         total: t("taxBooksLedgerTotal"),
-        bookLabel: (sourceType: string | null | undefined) =>
-          t(`taxBooksDayBook_${voucherKindForSourceType(sourceType)}`) || "",
+        bookLabel: (voucherKindOrSourceType: string | null | undefined, sourceType?: string | null) => {
+          const kind = String(voucherKindOrSourceType || "").trim()
+          if (
+            kind === "sales" ||
+            kind === "purchase" ||
+            kind === "receipt" ||
+            kind === "payment" ||
+            kind === "general" ||
+            kind === "closing"
+          ) {
+            return t(`taxBooksDayBook_${kind}`) || ""
+          }
+          return t(`taxBooksDayBook_${voucherKindForSourceType(sourceType ?? voucherKindOrSourceType)}`) || ""
+        },
       },
     }
   }, [reportMeta, ledgerApplied, lang, t])

@@ -963,6 +963,8 @@ export type TaxBookLedgerSectionInput = {
   voucherNo: string
   memo?: string | null
   sourceType?: string | null
+  /** 일별장부 종류. 없으면 sourceType으로만 추정(통장 입금이 PP로 잘못 나올 수 있음) */
+  voucherKind?: TaxVoucherKind | string | null
   debit: number
   credit: number
 }
@@ -972,6 +974,7 @@ export type TaxBookLedgerMovement = {
   voucherNo: string
   memo: string
   sourceType: string | null
+  voucherKind?: TaxVoucherKind | string | null
   debit: number
   credit: number
   /** เดบิตเป็นบวก เครดิตเป็นลบ */
@@ -1049,6 +1052,7 @@ export function buildTaxBookLedgerSections(
         voucherNo: String(ln.voucherNo || ''),
         memo: String(ln.memo || ''),
         sourceType: ln.sourceType != null ? String(ln.sourceType) : null,
+        voucherKind: ln.voucherKind != null ? String(ln.voucherKind) : null,
         debit,
         credit,
         balance: 0,

@@ -246,7 +246,8 @@ export type TaxBookLedgerReportLabels = {
   credit: string
   balance: string
   total: string
-  bookLabel: (sourceType: string | null | undefined) => string
+  /** 일별장부 라벨. voucherKind 우선, 없으면 sourceType */
+  bookLabel: (voucherKindOrSourceType: string | null | undefined, sourceType?: string | null) => string
 }
 
 function signedMoney(n: number): string {
@@ -286,7 +287,7 @@ export function buildFlowLedgerHtml(
         .map(
           (ln) => `<tr>
 <td>${esc(formatTaxBookLedgerDate(ln.accountingDate, meta.lang || 'en'))}</td>
-<td>${esc(labels.bookLabel(ln.sourceType))}</td>
+<td>${esc(labels.bookLabel(ln.voucherKind, ln.sourceType))}</td>
 <td>${esc(ln.voucherNo)}</td>
 <td>${esc(ln.memo)}</td>
 <td class="num">${debitCell(ln.debit)}</td>
