@@ -155,7 +155,7 @@ function createDrainLane(opts: {
 /**
  * QR/원격 주문의 pos_print_jobs 를 메인 POS가 바로 claim·인쇄.
  * 테이블 QR(receipt)과 주방을 **별도 inFlight**로 돌려, 배달·주방 인쇄 중에도 QR이 대기하지 않음.
- * INSERT Realtime poke가 1차. QR은 5초(채널 장애 시 2초) 안전망, 주방은 30초(장애 시 5초).
+ * INSERT Realtime poke가 1차. QR·주방 안전망 모두 30초(채널 장애 시 5초).
  * 오픈 전·마감 후·백그라운드 탭은 60초.
  */
 export function usePosKitchenPrintJobWorker(opts: {

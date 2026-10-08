@@ -28,11 +28,11 @@ describe('MAIN_POS_KITCHEN_JOB_POLL_MS', () => {
 })
 
 describe('MAIN_POS_TABLE_QR_JOB_POLL_MS', () => {
-  it('polls table QR more often than kitchen so busy main POS still drains QR', () => {
-    expect(MAIN_POS_TABLE_QR_JOB_POLL_MS).toBe(5_000)
-    expect(MAIN_POS_TABLE_QR_JOB_POLL_UNHEALTHY_MS).toBe(2_000)
-    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(5_000)
-    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(2_000)
+  it('keeps table QR safety-net poll aligned with kitchen (Realtime is primary)', () => {
+    expect(MAIN_POS_TABLE_QR_JOB_POLL_MS).toBe(30_000)
+    expect(MAIN_POS_TABLE_QR_JOB_POLL_UNHEALTHY_MS).toBe(5_000)
+    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(30_000)
+    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(5_000)
   })
 })
 
