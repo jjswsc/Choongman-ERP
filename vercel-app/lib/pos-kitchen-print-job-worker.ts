@@ -13,6 +13,12 @@ export const MAIN_POS_KITCHEN_JOB_POLL_UNHEALTHY_MS = 5_000
 export const MAIN_POS_KITCHEN_JOB_POLL_PAUSED_MS = 60_000
 /** Realtime 정상 시 안전망 간격 — POLL_MS 와 같음 */
 export const MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS = MAIN_POS_KITCHEN_JOB_POLL_MS
+/**
+ * 테이블 QR(receipt) 전용 안전망 — 주방 drain/배달·결제 화면과 무관하게 짧게 본다.
+ * Realtime poke가 1차. 이 간격은 놓친 INSERT·busy 메인스레드 보완용.
+ */
+export const MAIN_POS_TABLE_QR_JOB_POLL_MS = 5_000
+export const MAIN_POS_TABLE_QR_JOB_POLL_UNHEALTHY_MS = 2_000
 
 export function resolveKitchenPrintJobPollMs(opts?: {
   realtimeChannelHealthy?: boolean
@@ -21,6 +27,13 @@ export function resolveKitchenPrintJobPollMs(opts?: {
 }): number {
   if (opts?.jobsInsertChannelHealthy === false) return MAIN_POS_KITCHEN_JOB_POLL_UNHEALTHY_MS
   return MAIN_POS_KITCHEN_JOB_POLL_MS
+}
+
+export function resolveTableQrPrintJobPollMs(opts?: {
+  jobsInsertChannelHealthy?: boolean
+}): number {
+  if (opts?.jobsInsertChannelHealthy === false) return MAIN_POS_TABLE_QR_JOB_POLL_UNHEALTHY_MS
+  return MAIN_POS_TABLE_QR_JOB_POLL_MS
 }
 /** QR enqueue 직후·주문 UPDATE 레이스를 흡수 */
 export const MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS = [0, 400, 1_200, 2_500] as const

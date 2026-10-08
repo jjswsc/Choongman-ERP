@@ -148,9 +148,11 @@ function posPrintJobsStoreRealtimeFilter(store: string): string | undefined {
   return `store_code=eq.${s}`
 }
 
-/** QR 주방 큐 INSERT — 주문 UI 갱신을 기다리지 않고 claim */
+export type PosPrintJobsInsertMeta = { jobType: 'kitchen' | 'receipt' }
+
+/** QR 주방·테이블 QR 큐 INSERT — 주문 UI 갱신을 기다리지 않고 claim */
 export function subscribePosPrintJobsInsert(
-  onInsert: () => void,
+  onInsert: (meta: PosPrintJobsInsertMeta) => void,
   options?: {
     store?: string
     storeCodes?: string[]
@@ -184,10 +186,10 @@ export function subscribePosPrintJobsInsert(
         const rowStore = String(row?.store_code ?? '').trim().toLowerCase()
         if (rowStore && stores.length > 0 && !stores.includes(rowStore)) return
         const jobType = String(row?.job_type ?? '').trim()
-        /** kitchen + 오더 단말 테이블 QR 슬립(receipt) — receipt만 무시하면 폴링(최대 ~30s)까지 대기 */
+        /** kitchen + 오더 단말 테이블 QR 슬립(receipt) — receipt만 무시하면 폴링까지 대기 */
         if (jobType !== 'kitchen' && jobType !== 'receipt') return
         if (String(row?.status ?? '').trim() !== 'queued') return
-        onInsert()
+        onInsert({ jobType })
       }
     )
   return attachSubscribeStatus(channel, options?.onStatus)

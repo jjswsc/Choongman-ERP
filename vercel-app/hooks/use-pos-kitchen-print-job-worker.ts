@@ -24,6 +24,7 @@ import {
   MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS,
   resolveKitchenPrintJobDedupeKey,
   resolveKitchenPrintJobPollMs,
+  resolveTableQrPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
 import { subscribePosPrintJobsInsert } from '@/lib/supabase-client'
 
@@ -105,10 +106,56 @@ async function printClaimedTableQrJob(
   }
 }
 
+function createDrainLane(opts: {
+  cancelled: () => boolean
+  runBatch: () => Promise<void>
+  pokeDelaysMs?: readonly number[]
+}): { poke: () => void; drain: () => Promise<void>; dispose: () => void } {
+  let inFlight = false
+  let pending = false
+  const pokeTimers: number[] = []
+  const dispose = () => {
+    while (pokeTimers.length) {
+      const id = pokeTimers.pop()
+      if (id != null) window.clearTimeout(id)
+    }
+  }
+  const drain = async () => {
+    if (opts.cancelled()) return
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+    if (inFlight) {
+      pending = true
+      return
+    }
+    inFlight = true
+    try {
+      await opts.runBatch()
+    } finally {
+      inFlight = false
+      if (!opts.cancelled() && pending) {
+        pending = false
+        void drain()
+      }
+    }
+  }
+  const delays = opts.pokeDelaysMs ?? MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS
+  const poke = () => {
+    dispose()
+    for (const delay of delays) {
+      pokeTimers.push(
+        window.setTimeout(() => {
+          void drain()
+        }, delay)
+      )
+    }
+  }
+  return { poke, drain, dispose }
+}
+
 /**
  * QR/원격 주문의 pos_print_jobs 를 메인 POS가 바로 claim·인쇄.
- * 테이블 QR 슬립(receipt)은 주방 자동인쇄 OFF여도 메인 POS에서 처리.
- * INSERT Realtime poke가 1차. 놓치면 30초(채널 장애 시 5초)마다 claim.
+ * 테이블 QR(receipt)과 주방을 **별도 inFlight**로 돌려, 배달·주방 인쇄 중에도 QR이 대기하지 않음.
+ * INSERT Realtime poke가 1차. QR은 5초(채널 장애 시 2초) 안전망, 주방은 30초(장애 시 5초).
  * 오픈 전·마감 후·백그라운드 탭은 60초.
  */
 export function usePosKitchenPrintJobWorker(opts: {
@@ -120,8 +167,6 @@ export function usePosKitchenPrintJobWorker(opts: {
   pauseIntervalPollRef?: MutableRefObject<boolean>
 }): () => void {
   const drainNowRef = useRef<() => void>(() => {})
-  const inFlightRef = useRef(false)
-  const pendingDrainRef = useRef(false)
 
   const storeCodesKey = (opts.storeCodes || []).join('|')
 
@@ -131,34 +176,37 @@ export function usePosKitchenPrintJobWorker(opts: {
       return
     }
     let cancelled = false
+    const isCancelled = () => cancelled
     const workerId = getKitchenPrintWorkerId(opts.storeCode)
-    const pokeTimers: number[] = []
-    const clearPokeTimers = () => {
-      while (pokeTimers.length) {
-        const id = pokeTimers.pop()
-        if (id != null) window.clearTimeout(id)
-      }
-    }
 
-    const drain = async () => {
-      if (cancelled) return
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
-      if (inFlightRef.current) {
-        pendingDrainRef.current = true
-        return
-      }
-      const ctx = opts.autoprintCtxRef.current
-      if (!ctx) return
-      inFlightRef.current = true
-      try {
-        for (let i = 0; i < MAIN_POS_KITCHEN_JOB_DRAIN_MAX; i += 1) {
-          if (cancelled) return
-          const qrRes = await claimTableQrPrintJob({ storeCode: opts.storeCode, workerId })
-          const qrJob = qrRes.success ? qrRes.job : null
-          if (!qrJob?.id) break
-          await printClaimedTableQrJob(qrJob, ctx)
+    const tableQrLane = createDrainLane({
+      cancelled: isCancelled,
+      pokeDelaysMs: MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS,
+      runBatch: async () => {
+        const ctx = opts.autoprintCtxRef.current
+        if (!ctx) return
+        try {
+          for (let i = 0; i < MAIN_POS_KITCHEN_JOB_DRAIN_MAX; i += 1) {
+            if (cancelled) return
+            const qrRes = await claimTableQrPrintJob({ storeCode: opts.storeCode, workerId })
+            const qrJob = qrRes.success ? qrRes.job : null
+            if (!qrJob?.id) break
+            await printClaimedTableQrJob(qrJob, ctx)
+          }
+        } catch (e) {
+          console.error('table QR print job drain:', e)
         }
-        if (opts.kitchenOnOrder) {
+      },
+    })
+
+    const kitchenLane = createDrainLane({
+      cancelled: isCancelled,
+      pokeDelaysMs: MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS,
+      runBatch: async () => {
+        if (!opts.kitchenOnOrder) return
+        const ctx = opts.autoprintCtxRef.current
+        if (!ctx) return
+        try {
           for (let i = 0; i < MAIN_POS_KITCHEN_JOB_DRAIN_MAX; i += 1) {
             if (cancelled) return
             const res = await claimKitchenPrintJob({ storeCode: opts.storeCode, workerId })
@@ -166,35 +214,25 @@ export function usePosKitchenPrintJobWorker(opts: {
             if (!job?.id) break
             await printClaimedKitchenJob(job, ctx)
           }
+        } catch (e) {
+          console.error('kitchen print job drain:', e)
         }
-      } catch (e) {
-        console.error('kitchen print job drain:', e)
-      } finally {
-        inFlightRef.current = false
-        if (!cancelled && pendingDrainRef.current) {
-          pendingDrainRef.current = false
-          void drain()
-        }
-      }
-    }
+      },
+    })
 
-    const poke = () => {
-      clearPokeTimers()
-      for (const delay of MAIN_POS_KITCHEN_JOB_POKE_RETRY_MS) {
-        pokeTimers.push(
-          window.setTimeout(() => {
-            void drain()
-          }, delay)
-        )
-      }
+    const pokeAll = () => {
+      tableQrLane.poke()
+      if (opts.kitchenOnOrder) kitchenLane.poke()
     }
+    drainNowRef.current = pokeAll
+    pokeAll()
 
-    drainNowRef.current = poke
-    poke()
     let jobsInsertHealthy = true
     const jobsChannel = subscribePosPrintJobsInsert(
-      () => {
-        if (!cancelled) poke()
+      (meta) => {
+        if (cancelled) return
+        if (meta.jobType === 'receipt') tableQrLane.poke()
+        else if (meta.jobType === 'kitchen' && opts.kitchenOnOrder) kitchenLane.poke()
       },
       {
         store: opts.storeCode,
@@ -205,25 +243,49 @@ export function usePosKitchenPrintJobWorker(opts: {
       }
     )
     if (!jobsChannel) jobsInsertHealthy = false
-    let pollTimer = 0
-    const scheduleNextPoll = () => {
+
+    let tableQrPollTimer = 0
+    let kitchenPollTimer = 0
+    const scheduleTableQrPoll = () => {
+      if (cancelled) return
+      const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      const paused = Boolean(opts.pauseIntervalPollRef?.current) || hidden
+      const delayMs = paused
+        ? MAIN_POS_KITCHEN_JOB_POLL_PAUSED_MS
+        : resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: jobsInsertHealthy })
+      tableQrPollTimer = window.setTimeout(() => {
+        /** 배달·결제 등 메인 UI busy여도 QR 안전망은 돌림(마감 pause만 스킵) */
+        if (!cancelled && !opts.pauseIntervalPollRef?.current) void tableQrLane.drain()
+        scheduleTableQrPoll()
+      }, delayMs)
+    }
+    const scheduleKitchenPoll = () => {
       if (cancelled) return
       const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
       const paused = Boolean(opts.pauseIntervalPollRef?.current) || hidden
       const delayMs = paused
         ? MAIN_POS_KITCHEN_JOB_POLL_PAUSED_MS
         : resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: jobsInsertHealthy })
-      pollTimer = window.setTimeout(() => {
-        if (!cancelled && !opts.pauseIntervalPollRef?.current) void drain()
-        scheduleNextPoll()
+      kitchenPollTimer = window.setTimeout(() => {
+        if (!cancelled && !opts.pauseIntervalPollRef?.current && opts.kitchenOnOrder) {
+          void kitchenLane.drain()
+        }
+        scheduleKitchenPoll()
       }, delayMs)
     }
-    scheduleNextPoll()
+    scheduleTableQrPoll()
+    scheduleKitchenPoll()
+
     const onVisibility = () => {
       if (cancelled) return
-      window.clearTimeout(pollTimer)
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') void drain()
-      scheduleNextPoll()
+      window.clearTimeout(tableQrPollTimer)
+      window.clearTimeout(kitchenPollTimer)
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void tableQrLane.drain()
+        if (opts.kitchenOnOrder) void kitchenLane.drain()
+      }
+      scheduleTableQrPoll()
+      scheduleKitchenPoll()
     }
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', onVisibility)
@@ -232,8 +294,10 @@ export function usePosKitchenPrintJobWorker(opts: {
     return () => {
       cancelled = true
       drainNowRef.current = () => {}
-      window.clearTimeout(pollTimer)
-      clearPokeTimers()
+      window.clearTimeout(tableQrPollTimer)
+      window.clearTimeout(kitchenPollTimer)
+      tableQrLane.dispose()
+      kitchenLane.dispose()
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', onVisibility)
       }

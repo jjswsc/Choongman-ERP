@@ -5,8 +5,11 @@ import {
   kitchenPrintJobOrderFieldsFromPayload,
   MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS,
   MAIN_POS_KITCHEN_JOB_POLL_MS,
+  MAIN_POS_TABLE_QR_JOB_POLL_MS,
+  MAIN_POS_TABLE_QR_JOB_POLL_UNHEALTHY_MS,
   resolveKitchenPrintJobDedupeKey,
   resolveKitchenPrintJobPollMs,
+  resolveTableQrPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
 import { posOrdersRealtimeChannelName, posPrintJobsInsertChannelName } from '@/lib/supabase-client'
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
@@ -21,6 +24,15 @@ describe('MAIN_POS_KITCHEN_JOB_POLL_MS', () => {
     expect(resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: true, realtimeRecentlyActive: true })).toBe(30_000)
     expect(resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(30_000)
     expect(resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(5_000)
+  })
+})
+
+describe('MAIN_POS_TABLE_QR_JOB_POLL_MS', () => {
+  it('polls table QR more often than kitchen so busy main POS still drains QR', () => {
+    expect(MAIN_POS_TABLE_QR_JOB_POLL_MS).toBe(5_000)
+    expect(MAIN_POS_TABLE_QR_JOB_POLL_UNHEALTHY_MS).toBe(2_000)
+    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(5_000)
+    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(2_000)
   })
 })
 
