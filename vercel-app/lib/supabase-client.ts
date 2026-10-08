@@ -183,7 +183,9 @@ export function subscribePosPrintJobsInsert(
         const row = (payload as { new?: Record<string, unknown> }).new
         const rowStore = String(row?.store_code ?? '').trim().toLowerCase()
         if (rowStore && stores.length > 0 && !stores.includes(rowStore)) return
-        if (String(row?.job_type ?? '').trim() !== 'kitchen') return
+        const jobType = String(row?.job_type ?? '').trim()
+        /** kitchen + 오더 단말 테이블 QR 슬립(receipt) — receipt만 무시하면 폴링(최대 ~30s)까지 대기 */
+        if (jobType !== 'kitchen' && jobType !== 'receipt') return
         if (String(row?.status ?? '').trim() !== 'queued') return
         onInsert()
       }

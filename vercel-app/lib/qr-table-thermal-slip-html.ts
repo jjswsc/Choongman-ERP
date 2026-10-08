@@ -4,6 +4,7 @@
  */
 import { posThermalReceiptPageSizeRule } from '@/lib/pos-receipt-paper'
 import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
+import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { escapeHtml } from '@/lib/utils'
 
 /** 본문 폭. 우측은 열전사 비인쇄영역 대비 패딩으로 확보 */
@@ -44,7 +45,11 @@ export function resolveQrTableGuestUrl(token: { token: string; publicUrl?: strin
 }
 
 export function buildQrTableThermalSlipHtml(input: QrTableThermalSlipInput): string {
-  const tableName = String(input.tableName || '').trim() || '—'
+  /** DB는 `30번`이어도 슬립에는 숫자만 (`번` 제거) */
+  const tableName =
+    translateReceiptTableDisplayName(String(input.tableName || '').trim()) ||
+    String(input.tableName || '').trim() ||
+    '—'
   const storeLabel = String(input.storeLabel || '').trim()
   const qrDataUrl = String(input.qrDataUrl || '').trim()
   if (!qrDataUrl.startsWith('data:image/')) {

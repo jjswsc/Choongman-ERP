@@ -36,6 +36,16 @@ describe('qr-table-thermal-slip-html', () => {
     expect(html).not.toContain('https://')
   })
 
+  it('strips Korean 번 from the slip table label', () => {
+    const html = buildQrTableThermalSlipHtml({
+      tableName: '30번',
+      qrDataUrl: QR_DATA,
+      storeLabel: 'CM Union Mall',
+    })
+    expect(html).toContain('>30<')
+    expect(html).not.toContain('30번')
+  })
+
   it('rejects remote QR images', () => {
     expect(() =>
       buildQrTableThermalSlipHtml({
