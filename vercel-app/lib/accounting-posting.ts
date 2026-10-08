@@ -4,6 +4,7 @@ import {
   supabaseInsert,
   supabaseInsertMany,
   supabaseSelectFilter,
+  supabaseUpdate,
   supabaseUpsert,
 } from '@/lib/supabase-server'
 import {
@@ -17,7 +18,7 @@ import { linesForPosChannelSettlement } from '@/lib/pos-channel-settlement'
 import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
 import { uniqueAccountingPeriodChecks } from '@/lib/accounting-period-mutation-guard'
 import { assertTaxAccountingPeriodOpen, TAX_BOOK_SCHEMA_MISSING, TAX_PERIOD_CLOSED } from '@/lib/tax-book-period-server'
-import { TAX_ACCOUNTS, TAX_BOOK, isTaxBookSourceType, taxEntityCodeFromStoreName, taxPurchaseExpenseJournalLines, usesDailyCashSalesReceipt, voucherKindForPaidExpense, voucherKindForSourceType } from '@/lib/tax-book'
+import { TAX_ACCOUNTS, TAX_BOOK, applyRecordedPettyExpenseAccount, isTaxBookSourceType, taxEntityCodeFromStoreName, taxPurchaseExpenseJournalLines, usesDailyCashSalesReceipt, voucherKindForPaidExpense, voucherKindForSourceType } from '@/lib/tax-book'
 import { isPosChannelSettlementMemo } from '@/lib/bank-import-deposit-category'
 import { defaultBankDepositSalesDate } from '@/lib/pos-channel-reconcile-match'
 import { inferPosBankChipKind } from '@/lib/pos-bank-chip-settlement'
@@ -511,6 +512,100 @@ export async function postPettyCashJournal(params: {
       debitSubjectId: expenseLine.accountSubjectId ?? null,
     }),
   })
+}
+
+/**
+ * 이미 있는 패티 지출 전표의 비용 차변만 계정과목으로 바꾼다.
+ * 전표를 지웠다 다시 만들지 않는다. 마감된 월은 건너뛴다.
+ */
+export async function syncPettyCashExpenseAccount(params: {
+  pettyCashId: number
+  accountSubjectId?: number | null
+}): Promise<'updated' | 'missing' | 'closed'> {
+  const pettyCashId = Math.floor(Number(params.pettyCashId) || 0)
+  if (pettyCashId <= 0) return 'missing'
+  const heads = (await supabaseSelectFilter(
+    'journal_entries',
+    `source_type=eq.petty_cash&source_id=eq.${pettyCashId}`,
+    { select: 'id,accounting_date,store_name,book,tax_entity_code', limit: 20 }
+  )) as {
+    id?: number
+    accounting_date?: string | null
+    store_name?: string | null
+    book?: string | null
+    tax_entity_code?: string | null
+  }[] | null
+  const entries = (heads || []).filter((row) => Number(row.id || 0) > 0)
+  if (!entries.length) return 'missing'
+
+  let subjectId = Math.floor(Number(params.accountSubjectId) || 0)
+  if (params.accountSubjectId == null) {
+    const pettyRows = (await supabaseSelectFilter('petty_cash_transactions', `id=eq.${pettyCashId}`, {
+      select: 'id,account_subject_id',
+      limit: 1,
+    })) as { account_subject_id?: number | null }[] | null
+    subjectId = Math.floor(Number(pettyRows?.[0]?.account_subject_id) || 0)
+  }
+  let recorded: { code: string; name: string } | null = null
+  if (subjectId > 0) {
+    const subjects = (await supabaseSelectFilter('account_subjects', `id=eq.${subjectId}`, {
+      select: 'id,code,name',
+      limit: 1,
+    })) as { code?: string | null; name?: string | null }[] | null
+    const subject = subjects?.[0]
+    const code = String(subject?.code || '').trim()
+    if (code) recorded = { code, name: String(subject?.name || code).trim() || code }
+  }
+  if (!recorded) return 'updated'
+
+  const entryIds = entries.map((row) => Number(row.id)).join(',')
+  const lines = (await supabaseSelectFilter('journal_lines', `journal_entry_id=in.(${entryIds})`, {
+    select: 'id,journal_entry_id,account_code,account_name,side,amount',
+    limit: 200,
+  })) as {
+    id?: number
+    journal_entry_id?: number
+    account_code?: string
+    account_name?: string | null
+    side?: string
+    amount?: number | string
+  }[] | null
+
+  let openEntries = 0
+  let closedEntries = 0
+  for (const entry of entries) {
+    const entryId = Number(entry.id || 0)
+    const date = String(entry.accounting_date || '').slice(0, 10)
+    try {
+      if (String(entry.book || '') === TAX_BOOK) {
+        await assertTaxAccountingPeriodOpen(String(entry.tax_entity_code || ''), monthOf(date))
+      } else {
+        await assertAccountingDateOpen(date, entry.store_name)
+      }
+      openEntries += 1
+    } catch (e) {
+      const code = e instanceof Error ? e.message : String(e)
+      if (code === 'ACCOUNTING_PERIOD_CLOSED' || code === TAX_PERIOD_CLOSED || code === TAX_BOOK_SCHEMA_MISSING) {
+        closedEntries += 1
+        continue
+      }
+      throw e
+    }
+    const entryLines = (lines || []).filter((ln) => Number(ln.journal_entry_id || 0) === entryId && Number(ln.id || 0) > 0)
+    const next = applyRecordedPettyExpenseAccount(entryLines, recorded)
+    for (let i = 0; i < entryLines.length; i += 1) {
+      const before = String(entryLines[i].account_code || '').trim()
+      const after = String(next[i]?.account_code || '').trim()
+      if (!after || after === before) continue
+      await supabaseUpdate('journal_lines', Number(entryLines[i].id), {
+        account_code: after,
+        account_name: String(next[i]?.account_name || recorded.name),
+        account_subject_id: subjectId,
+      })
+    }
+  }
+  if (openEntries === 0 && closedEntries > 0) return 'closed'
+  return 'updated'
 }
 
 export async function postCardTransactionJournal(params: {
