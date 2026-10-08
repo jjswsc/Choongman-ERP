@@ -380,6 +380,11 @@ type OptimisticOrderInput = {
   /** DB pos_orders.id — 있으면 배달/포장 바·목록 id와 일치 */
   serverOrderId?: number
   orderNo?: string
+  /**
+   * 서버 id로 치환할 때 제거할 로컬/클라이언트 orderNo(또는 id).
+   * Omni 조기 낙관적 반영(`pos-*`) → 실주문번호 교체용.
+   */
+  replaceOrderNo?: string
   orderType?: string
   tableName?: string
   /** 다층 매장: `table_name`에 층 접두가 없을 때 낙관적 병합·중복 제거용 */
@@ -1356,11 +1361,16 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
       ...(hasServerId ? { pendingListSync: true } : {}),
     }
 
+    const replaceOrderNo = String(input.replaceOrderNo || '').trim()
     setOrdersByStoreId((prev) => {
       const list = Array.isArray(prev[storeCode]) ? [...prev[storeCode]] : []
       const next = list.filter((o) => {
         if (hasServerId && String(o.id ?? '').trim() === String(serverOrderId)) return false
         if (orderNo && String(o.orderNo ?? '').trim() === orderNo) return false
+        if (replaceOrderNo) {
+          if (String(o.orderNo ?? '').trim() === replaceOrderNo) return false
+          if (String(o.id ?? '').trim() === replaceOrderNo) return false
+        }
         if (!orderNo && tableName && type === 'dine-in') {
           const floor = Math.min(
             3,

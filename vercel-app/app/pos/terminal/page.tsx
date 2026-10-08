@@ -9951,8 +9951,79 @@ export default function PosTerminalPage() {
                     pricingAdjustments,
                     items: incomingItems,
                   }
+                  /**
+                   * Omni 미결제 신규: 저장 API 응답 전에 테이블·서빙에 먼저 붙이고 버튼 잠금 해제.
+                   * 인쇄는 저장 성공 후에만(아래 공통 경로).
+                   */
+                  let omniEarlyOptimisticOrderNo: string | null = null
+                  if (isOmniPaymentFastPath) {
+                    omniEarlyOptimisticOrderNo = posSaveClientKey
+                    const earlyFloor =
+                      parsePosTableFloorFromLabel(payload.tableName) ??
+                      getTableFloor(selectedTableId ?? servingTableId)
+                    const earlyTotal = incomingItems.reduce(
+                      (acc, it) => acc + Number(it.price ?? 0) * resolveCartLineQuantityForSave(it),
+                      0
+                    )
+                    upsertOptimisticOrder({
+                      storeCode: currentStoreId,
+                      orderNo: omniEarlyOptimisticOrderNo,
+                      orderType: 'dine_in',
+                      tableName: payload.tableName,
+                      tableLayoutFloor: earlyFloor,
+                      memo: payload.memo,
+                      status: 'pending',
+                      total: earlyTotal - (payload.discountAmt ?? 0),
+                      items: incomingItems.map((it) => ({
+                        id: String(it.id ?? ''),
+                        name: String(it.name ?? ''),
+                        quantity: resolveCartLineQuantityForSave(it),
+                        price: Number(it.price ?? 0),
+                        ...(String((it as { menuId?: string }).menuId ?? '').trim()
+                          ? { menuId: String((it as { menuId?: string }).menuId).trim() }
+                          : {}),
+                        ...(String((it as { optionId?: string }).optionId ?? '').trim()
+                          ? { optionId: String((it as { optionId?: string }).optionId).trim() }
+                          : {}),
+                        ...(String((it as { note?: string }).note ?? '').trim()
+                          ? { note: String((it as { note?: string }).note).trim() }
+                          : {}),
+                      })),
+                    })
+                    const earlySubmittedTableId = selectedTableId ?? servingTableId
+                    replacePosCartItemsCache(
+                      getPosCartSessionKey({
+                        currentStoreId,
+                        orderType: 'dine-in',
+                        selectedTableId: earlySubmittedTableId ?? '',
+                        deliveryApp: null,
+                        deliveryOrderNo: null,
+                        takeoutLabel: null,
+                      }),
+                      []
+                    )
+                    replacePosCartItemsCache(buildTerminalCartSessionKeyForTab('tables'), [])
+                    pendingDineInOrderTableRef.current = String(payload.tableName ?? '').trim()
+                    clearCartFromTerminal()
+                    setSelectedTableId(null)
+                    setServingTableId(earlySubmittedTableId)
+                    posCartBackendBusyRef.current = false
+                    setPosCartBackendBusy(false)
+                    logPosPrintDebug('submit_omni_early_optimistic', {
+                      localOrderNo: omniEarlyOptimisticOrderNo,
+                      tableName: payload.tableName,
+                      items: incomingItems.length,
+                    })
+                  }
                   const res = await savePosOrderWithOffline(saveReq)
                   if (!res.success) {
+                    if (omniEarlyOptimisticOrderNo) {
+                      removeTerminalOrder(currentStoreId, {
+                        id: omniEarlyOptimisticOrderNo,
+                        orderNo: omniEarlyOptimisticOrderNo,
+                        tableName: payload.tableName,
+                      })
+                    }
                     const msg = localizeApiPopupMessage((res as { message?: string }).message, t('posOrderSaveFailed') || '주문 저장에 실패했습니다.')
                     await appAlert(msg)
                     return
@@ -9969,6 +10040,9 @@ export default function PosTerminalPage() {
                     upsertOptimisticOrder({
                       storeCode: currentStoreId,
                       orderNo: savedOrderNo,
+                      ...(omniEarlyOptimisticOrderNo
+                        ? { replaceOrderNo: omniEarlyOptimisticOrderNo }
+                        : {}),
                       orderType: 'dine_in',
                       tableName: payload.tableName,
                       tableLayoutFloor:
@@ -9997,10 +10071,37 @@ export default function PosTerminalPage() {
                       })),
                     })
                   }
+                  /** 서버 id 확정 시 조기 낙관적(pos-*) 행을 실주문으로 치환 */
+                  if (
+                    omniEarlyOptimisticOrderNo &&
+                    savedOrderId != null &&
+                    savedOrderId > 0 &&
+                    !queuedWithoutServerId
+                  ) {
+                    upsertOptimisticOrder({
+                      storeCode: currentStoreId,
+                      serverOrderId: savedOrderId,
+                      orderNo: savedOrderNo,
+                      replaceOrderNo: omniEarlyOptimisticOrderNo,
+                      orderType: 'dine_in',
+                      tableName: payload.tableName,
+                      tableLayoutFloor:
+                        parsePosTableFloorFromLabel(payload.tableName) ??
+                        getTableFloor(selectedTableId ?? servingTableId),
+                      memo: payload.memo,
+                      status: 'pending',
+                      total: incomingItems.reduce(
+                        (acc, it) => acc + Number(it.price ?? 0) * resolveCartLineQuantityForSave(it),
+                        0
+                      ) - (payload.discountAmt ?? 0),
+                      items: mapPosOrderItemsToTerminalOrderSnapshot(incomingItems),
+                    })
+                  }
                   logPosPrintDebug('submit_save_success_new_pos_order', {
                     orderId: savedOrderId,
                     orderNo: savedOrderNo,
                     queued,
+                    omniEarlyOptimistic: Boolean(omniEarlyOptimisticOrderNo),
                     incomingItems: incomingItems.length,
                   })
                 }

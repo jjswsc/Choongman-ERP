@@ -11,6 +11,7 @@ import { coercePosOrderTypeForDb, sanitizePosOrderTableNameForDb } from '@/lib/p
 import { parseDeliveryAppCodeFromItemsJson } from '@/lib/pos-delivery-order-meta'
 import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipients-server'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
+import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
 import { processPosStockDeduction } from '@/lib/pos-stock-deduction'
 import { hasJournalForSource, postPosOrderJournal } from '@/lib/accounting-posting'
 import { isPosCompletionStatus } from '@/lib/pos-order-policy'
@@ -331,9 +332,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const orderQuota = await assertSaasOrderQuotaAllowed({
-      tenantId: tenantScope.enforce ? tenantScope.tenantId : '',
-    })
+    /** 월쿼터 검사와 영업시간 로드를 겹침 — allocate 시 hours 재조회 생략 */
+    const [orderQuota, businessHoursForOrderNo] = await Promise.all([
+      assertSaasOrderQuotaAllowed({
+        tenantId: tenantScope.enforce ? tenantScope.tenantId : '',
+      }),
+      loadPosBusinessHoursForServer(storeCode),
+    ])
     if (!orderQuota.ok) {
       return NextResponse.json(
         {
@@ -583,6 +588,7 @@ export async function POST(req: NextRequest) {
     const allocateStartMs = Date.now()
     const orderNo = await allocateNextPosOrderNo(storeCode, {
       tenantId: tenantScope.enforce ? tenantScope.tenantId : '',
+      businessHours: businessHoursForOrderNo,
     })
     allocateOrderNoMs = Date.now() - allocateStartMs
     const row = enrichPosOrderRowForSaaS(

@@ -29,6 +29,22 @@ const ORDER_QUOTA_MESSAGE =
 const ORDER_QUOTA_UNAVAILABLE_MESSAGE =
   "Unable to verify SaaS monthly order quota. Try again or contact support."
 
+/** 연속 주문 시 COUNT 왕복 완화 (프로세스 메모리) */
+const MONTHLY_COUNT_TTL_MS = 45_000
+const LIMITS_TTL_MS = 60_000
+
+type CountCacheEntry = { at: number; used: number }
+type LimitsCacheEntry = { at: number; limits: TenantOrderQuotaLimit }
+
+const monthlyCountCache = new Map<string, CountCacheEntry>()
+const limitsCache = new Map<string, LimitsCacheEntry>()
+
+/** unit test / 배포 핫리로드용 */
+export function clearSaasOrderQuotaServerCaches(): void {
+  monthlyCountCache.clear()
+  limitsCache.clear()
+}
+
 /** 순수 판정 — unit test용 */
 export function evaluateSaasOrderQuotaBlock(params: {
   enforce: boolean
@@ -58,6 +74,8 @@ export async function loadTenantOrderQuotaLimit(
 ): Promise<TenantOrderQuotaLimit | null> {
   const id = String(tenantId || "").trim()
   if (!id) return null
+  const cached = limitsCache.get(id)
+  if (cached && Date.now() - cached.at < LIMITS_TTL_MS) return cached.limits
   try {
     const rows = (await supabaseSelectFilter(
       "v_tenant_admin_settings",
@@ -66,10 +84,12 @@ export async function loadTenantOrderQuotaLimit(
     )) as Array<{ monthly_order_quota?: unknown; allow_overage?: boolean | null }>
     const row = rows?.[0]
     const fallbackMax = DEFAULT_LIMITS_BY_TIER.starter.monthlyOrderQuota
-    return {
+    const limits: TenantOrderQuotaLimit = {
       monthlyOrderQuota: Math.max(0, Math.floor(Number(row?.monthly_order_quota ?? fallbackMax))),
       allowOverage: row?.allow_overage === true,
     }
+    limitsCache.set(id, { at: Date.now(), limits })
+    return limits
   } catch (e) {
     console.warn("loadTenantOrderQuotaLimit:", id, e)
     return null
@@ -80,13 +100,19 @@ export async function loadTenantOrderQuotaLimit(
 export async function countTenantMonthlyOrders(tenantId: string): Promise<number | null> {
   const id = String(tenantId || "").trim()
   if (!id) return 0
+  const cached = monthlyCountCache.get(id)
+  if (cached && Date.now() - cached.at < MONTHLY_COUNT_TTL_MS) return cached.used
   try {
     const monthStartIso = toBangkokStartIso(getBangkokMonthStartYmd())
     if (!monthStartIso) return 0
-    return await supabaseCountFilter(
+    const used = await supabaseCountFilter(
       "pos_orders",
       `tenant_id=eq.${encodeURIComponent(id)}&created_at=gte.${encodeURIComponent(monthStartIso)}`
     )
+    if (used != null && Number.isFinite(used)) {
+      monthlyCountCache.set(id, { at: Date.now(), used })
+    }
+    return used
   } catch (e) {
     console.warn("countTenantMonthlyOrders:", id, e)
     return null
@@ -94,9 +120,9 @@ export async function countTenantMonthlyOrders(tenantId: string): Promise<number
 }
 
 /**
- * POS 주문 신규 전 SaaS 월 쿼터 검사.
+ * POS 주문 생성 전 SaaS 월 쿼터 검사.
  * - tenantId 없음 → 허용
- * - allowOverage → 허용
+ * - allowOverage → COUNT 없이 허용
  * - 한도/사용량 조회 실패 → fail-closed
  */
 export async function assertSaasOrderQuotaAllowed(params: {
@@ -114,6 +140,11 @@ export async function assertSaasOrderQuotaAllowed(params: {
       monthlyOrderQuota: 0,
       limitsUnavailable: true,
     })
+  }
+
+  /** overage 허용 테넌트는 매 주문 COUNT가 불필요 (핫패스) */
+  if (limits.allowOverage) {
+    return { ok: true }
   }
 
   const used = await countTenantMonthlyOrders(tenantId)

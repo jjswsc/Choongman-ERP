@@ -16,6 +16,7 @@ import {
 import {
   getPosBusinessDateStrFromConfig,
   posBusinessDateYmdToUtcRange,
+  type PosBusinessHoursConfig,
 } from '@/lib/pos-business-day'
 import { loadPosBusinessHoursForServer } from '@/lib/pos-business-day-server'
 import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
@@ -37,6 +38,11 @@ export function storeCodeQueryVariants(storeCode: string): string[] {
 export type AllocatePosOrderNoOpts = {
   /** Omni: 테넌트별 카운터 분리. 충만은 '' */
   tenantId?: string | null
+  /**
+   * 이미 로드한 영업시간(예: 영업게이트와 동일 요청).
+   * 있으면 `loadPosBusinessHoursForServer` 재호출을 건너뛴다.
+   */
+  businessHours?: PosBusinessHoursConfig | null
 }
 
 /** 다음 order_no (DB 저장 문자열) — 영업일(operating day) 기준 */
@@ -46,7 +52,10 @@ export async function allocateNextPosOrderNo(
 ): Promise<string> {
   const slug = normalizeStoreSlugForOrderNo(storeCode)
   const tenantId = normalizeTenantId(opts?.tenantId) || ''
-  const businessHours = await loadPosBusinessHoursForServer(storeCode)
+  const businessHours =
+    opts?.businessHours != null
+      ? opts.businessHours
+      : await loadPosBusinessHoursForServer(storeCode)
   const businessDay = getPosBusinessDateStrFromConfig(new Date(), businessHours)
   const ymd = businessDay.replace(/-/g, '')
   /**
