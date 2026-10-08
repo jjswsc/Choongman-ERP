@@ -11,7 +11,7 @@ import { normalizeTitleKey } from '@/lib/store-action-items'
 export type StoreActionRecipient = { store: string; name: string; nick?: string }
 
 export type StoreActionScope = {
-  /** ë³¸ì‚¬Â·íšŒê³„Â·ì˜¤í”¼ìŠ¤Â·ìŠˆí¼ë°”ì´ì € â€” ì „ ë§¤ìž¥ */
+  /** 본사·회계·오피스·슈퍼바이저 — 전 매장 */
   all: boolean
   stores: string[]
   canVerify: boolean
@@ -42,7 +42,7 @@ export function resolveStoreActionScope(auth: JwtPayload): StoreActionScope {
   }
 }
 
-/** PostgREST store_name ë²”ìœ„ í•„í„°. ì „ ë§¤ìž¥ì´ë©´ '' */
+/** PostgREST store_name 범위 필터. 전 매장이면 '' */
 export function storeActionScopeFilter(scope: StoreActionScope): string {
   if (scope.all) return ''
   const f = storeOpsStoreNameScopePostgrestFilter(scope.stores)
@@ -62,7 +62,7 @@ export type StoreActionLogEvent =
   | 'verify_reject'
   | 'reassign'
 
-/** ë³€ê²½ ì´ë ¥ â€” í…Œì´ë¸” ë¯¸ìƒì„±(store_action_logs) ì‹œ ì¡°ìš©ížˆ ë¬´ì‹œ */
+/** 변경 이력 — 테이블 미생성(store_action_logs) 시 조용히 무시 */
 export async function appendStoreActionLog(params: {
   actionId: number
   actor: string
@@ -90,8 +90,8 @@ export async function appendStoreActionLog(params: {
 }
 
 /**
- * ìž¬ë°œ íŒì • â€” ê°™ì€ ë§¤ìž¥ì—ì„œ ì ê²€ í•­ëª© í‚¤(check_item_id)ê°€ ê°™ê±°ë‚˜,
- * í‚¤ê°€ ì—†ìœ¼ë©´ ê°™ì€ ì¹´í…Œê³ ë¦¬Â·ê°™ì€ ì œëª©. ì§ì „ ê±´ì„ parentë¡œ ì—°ê²°.
+ * 재발 판정 — 같은 매장에서 점검 항목 키(check_item_id)가 같거나,
+ * 키가 없으면 같은 카테고리·같은 제목. 직전 건을 parent로 연결.
  */
 export async function computeStoreActionRecurrence(params: {
   store: string
@@ -121,7 +121,7 @@ export async function computeStoreActionRecurrence(params: {
         }
       }
     } catch {
-      /* check_item_id ì»¬ëŸ¼ ë¯¸ë°°í¬ â€” ì œëª© ê¸°ì¤€ìœ¼ë¡œ í´ë°± */
+      /* check_item_id 컬럼 미배포 — 제목 기준으로 폴백 */
     }
   }
 
@@ -132,7 +132,7 @@ export async function computeStoreActionRecurrence(params: {
       'store_action_items',
       [
         `store_name=eq.${encodeURIComponent(store)}`,
-        `category=eq.${encodeURIComponent(params.category || 'ê¸°íƒ€')}`,
+        `category=eq.${encodeURIComponent(params.category || '기타')}`,
       ].join('&'),
       { select: 'id,title,repeat_count', limit: 200, order: 'id.desc' }
     )) as { id?: number; title?: string; repeat_count?: number }[]
@@ -155,7 +155,7 @@ export async function computeStoreActionRecurrence(params: {
 
 const V2_COLUMNS = ['check_item_id', 'parent_action_id'] as const
 
-/** INSERT â€” v2 ì»¬ëŸ¼ ë¯¸ë°°í¬ ì‹œ í•´ë‹¹ ì»¬ëŸ¼ ì œì™¸ í›„ ìž¬ì‹œë„. ìƒì„±ëœ id ë°˜í™˜ */
+/** INSERT — v2 컬럼 미배포 시 해당 컬럼 제외 후 재시도. 생성된 id 반환 */
 export async function insertStoreActionItemRow(row: Record<string, unknown>): Promise<number | null> {
   const pickId = (res: unknown): number | null => {
     const first = Array.isArray(res) ? res[0] : res
@@ -175,7 +175,7 @@ export async function insertStoreActionItemRow(row: Record<string, unknown>): Pr
 
 type EmployeeLite = { id?: number; name?: string; nick?: string; store?: string }
 
-/** ë‹´ë‹¹ìž/ìž¬í™•ì¸ìž â†’ í‘¸ì‹œ ìˆ˜ì‹ ìž(store|name). ì§ì› id ìš°ì„ , ì—†ìœ¼ë©´ ì´ë¦„ ë§¤ì¹­ */
+/** 담당자/재확인자 → 푸시 수신자(store|name). 직원 id 우선, 없으면 이름 매칭 */
 export async function resolveStoreActionRecipient(params: {
   userId?: string | number | null
   name?: string | null
@@ -212,7 +212,7 @@ export async function resolveStoreActionRecipient(params: {
   return null
 }
 
-/** ê°œì„  ê³¼ì œ í‘¸ì‹œ â€” ê³µì§€ í‘¸ì‹œ ì„¤ì •ì´ êº¼ì ¸ ìžˆìœ¼ë©´ ë°œì†¡í•˜ì§€ ì•ŠìŒ */
+/** 개선 과제 푸시 — 공지 푸시 설정이 꺼져 있으면 발송하지 않음 */
 export async function pushStoreActionNotice(params: {
   title: string
   body: string

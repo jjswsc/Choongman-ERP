@@ -28,6 +28,7 @@ import {
 } from '@/lib/stock-take-kpi'
 import { loadStockTakeKpiReport } from '@/lib/stock-take-kpi-report'
 import { runStoreActionDailyReminders, type StoreActionReminderResult } from '@/lib/store-action-reminders'
+import { runDailyPlanCron, type DailyPlanCronResult } from '@/lib/daily-plan-cron'
 
 export type AutoNoticesRunResult = {
   date: string
@@ -36,6 +37,7 @@ export type AutoNoticesRunResult = {
   stockTake: { ran: boolean; sent: number; skippedReason?: string }
   custom: { ran: number; sent: number; results: Array<{ id: string; sent: number; skippedReason?: string }> }
   storeActions?: StoreActionReminderResult
+  dailyPlans?: DailyPlanCronResult | { error: string }
 }
 
 /**
@@ -185,6 +187,14 @@ export async function runAutoNotices(base: Date = new Date()): Promise<AutoNotic
       verifiers: 0,
       skippedReason: `error:${e instanceof Error ? e.message : String(e)}`,
     }
+  }
+
+  // —— 직급별 일일 업무표 (18시 내일 생성·공개, 22시 자동 마감) ——
+  try {
+    result.dailyPlans = await runDailyPlanCron(today, hourBangkok)
+  } catch (e) {
+    console.error('auto-notices dailyPlans:', e)
+    result.dailyPlans = { error: e instanceof Error ? e.message : String(e) }
   }
 
   return result

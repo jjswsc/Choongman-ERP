@@ -46,6 +46,7 @@ import {
   I18N_STORE_ADMIN_TH,
   I18N_STORE_ADMIN_VI,
 } from "./i18n-store-admin"
+import { DAILY_PLAN_I18N_BY_LANG, I18N_DAILY_PLAN_EN } from "./i18n-daily-plan"
 import {
   I18N_MARKETING_HUB_EN,
   I18N_MARKETING_HUB_KH,
@@ -39585,7 +39586,8 @@ const i18nWithPosBackfill: Record<string, Record<string, string>> = Object.fromE
     const interiorPack = INTERIOR_ADMIN_BY_LANG[lang] ?? I18N_INTERIOR_ADMIN_EN
     const storeAdminPack = STORE_ADMIN_BY_LANG[lang] ?? I18N_STORE_ADMIN_EN
     const marketingHubPack = MARKETING_HUB_BY_LANG[lang] ?? I18N_MARKETING_HUB_EN
-    const merged = { ...base, ...accountingPack, ...interiorPack, ...storeAdminPack, ...marketingHubPack }
+    const dailyPlanPack = DAILY_PLAN_I18N_BY_LANG[lang] ?? I18N_DAILY_PLAN_EN
+    const merged = { ...base, ...accountingPack, ...interiorPack, ...storeAdminPack, ...marketingHubPack, ...dailyPlanPack }
     const enDict = enOrKoDict()
 
     for (const key of Object.keys(enDict)) {

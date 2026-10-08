@@ -59,6 +59,9 @@ const PettyCashTab = dynamic(
     loading: () => <DashboardTabLoading />,
   }
 )
+const DailyPlanTab = dynamic(() => import("@/components/tabs/daily-plan-tab").then((m) => m.DailyPlanTab), {
+  loading: () => <DashboardTabLoading />,
+})
 const RepairTab = dynamic(() => import("@/components/tabs/repair-tab").then((m) => m.RepairTab), {
   loading: () => <DashboardTabLoading />,
 })
@@ -90,6 +93,7 @@ function DashboardMain() {
       />
       <main className="pb-8">
         {activeTab === "home" && <HomeTab />}
+        {activeTab === "plan" && <DailyPlanTab onNavigate={setActiveTab} />}
         {activeTab === "orders" && (
           <OrderTab
             materialsPendingCount={materialsPendingCount}

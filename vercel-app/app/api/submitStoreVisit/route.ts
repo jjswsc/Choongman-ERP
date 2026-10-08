@@ -13,6 +13,7 @@ import {
   type StoreVisitEventRow,
   type StoreVisitOpen,
 } from '@/lib/store-visit-pairing'
+import { syncDailyPlanOnStoreVisit } from '@/lib/daily-plan-hooks'
 
 const TZ = 'Asia/Bangkok'
 
@@ -344,6 +345,20 @@ export async function POST(request: NextRequest) {
       memo: '',
     }
     await supabaseInsert('store_visits', row)
+
+    const visitBearer = await tryVerifyBearerFromRequest(request).catch(() => null)
+    const planPerson = { userName, employeeId: visitBearer?.employeeId ?? null, date: dateStr }
+    if (isStart) {
+      for (const o of openVisits.filter((x) => x.store !== storeNameTrim)) {
+        await syncDailyPlanOnStoreVisit({
+          ...planPerson,
+          store: o.store,
+          kind: 'end',
+          durationMin: Math.max(0, Math.floor((nowMs - o.startMs) / 60000)),
+        })
+      }
+    }
+    await syncDailyPlanOnStoreVisit({ ...planPerson, store: storeNameTrim, kind: isStart ? 'start' : 'end', durationMin })
 
     let msg = '✅ ' + visitType.replace('강제 ', '') + ' 완료!'
     if (durationMin !== null && durationMin > 0) msg += ` (${durationMin}분 체류)`

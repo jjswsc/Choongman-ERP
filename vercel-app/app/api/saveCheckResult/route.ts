@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdateByFilter, supabaseInsert } from '@/lib/supabase-server'
+import { syncDailyPlanOnStoreCheck } from '@/lib/daily-plan-hooks'
 
 /** 점검 결과 저장 (id 있으면 수정, 없으면 신규) */
 export async function POST(request: NextRequest) {
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
           memo,
           json_data: jsonData,
         })
+        await syncDailyPlanOnStoreCheck({ store, date: dateStr, inspector })
         return NextResponse.json({ success: true, result: 'UPDATED' })
       }
     }
@@ -46,6 +48,7 @@ export async function POST(request: NextRequest) {
           memo,
           json_data: jsonData,
         })
+        await syncDailyPlanOnStoreCheck({ store, date: dateStr, inspector })
         return NextResponse.json({ success: true, result: 'UPDATED' })
       }
     }
@@ -60,6 +63,7 @@ export async function POST(request: NextRequest) {
       memo,
       json_data: jsonData,
     })
+    await syncDailyPlanOnStoreCheck({ store, date: dateStr, inspector })
     return NextResponse.json({ success: true, result: 'SAVED' })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

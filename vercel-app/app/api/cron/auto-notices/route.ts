@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runAutoNotices } from '@/lib/auto-notice-runner'
 import { cronAuthErrorResponse, isCronAuthorized } from '@/lib/verify-cron-auth'
 
+export const maxDuration = 60
+
 /**
  * 자동 알림 cron — 매시 정각.
  * 실제 발송은 system_settings 규칙(방콕 시·월말 N일 전 등)으로 판정.

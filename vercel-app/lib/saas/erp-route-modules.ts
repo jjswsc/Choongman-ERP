@@ -26,6 +26,7 @@ export function resolveAdminPathSaasModule(pathname: string): SaasModuleKey | nu
     p.startsWith("/admin/store-visit") ||
     p.startsWith("/admin/store-repairs") ||
     p.startsWith("/admin/store-actions") ||
+    p.startsWith("/admin/daily-plans") ||
     p.startsWith("/admin/complaints")
   ) {
     return "store_ops"
@@ -272,6 +273,15 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/saveStoreAction", module: "store_ops" },
   { prefix: "/api/updateStoreAction", module: "store_ops" },
   { prefix: "/api/uploadStoreActionPhoto", module: "store_ops" },
+  { prefix: "/api/getMyDailyPlan", module: "store_ops" },
+  { prefix: "/api/updateDailyPlanItem", module: "store_ops" },
+  { prefix: "/api/closeDailyPlan", module: "store_ops" },
+  { prefix: "/api/getDailyPlanBoard", module: "store_ops" },
+  { prefix: "/api/getDailyPlanTimeSummary", module: "store_ops" },
+  { prefix: "/api/saveDailyPlanAssignment", module: "store_ops" },
+  { prefix: "/api/generateDailyPlans", module: "store_ops" },
+  { prefix: "/api/getRoutineTemplates", module: "store_ops" },
+  { prefix: "/api/saveRoutineTemplate", module: "store_ops" },
   { prefix: "/api/getStoreVisit", module: "store_ops" },
   { prefix: "/api/saveStoreVisit", module: "store_ops" },
   { prefix: "/api/validatePosCoupon", module: "pos_base" },

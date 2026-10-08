@@ -11,11 +11,14 @@ const STORE_ADMIN_KEYS = {
   helpHow_admin_store_repairs: '',
   helpSum_admin_store_actions: '',
   helpHow_admin_store_actions: '',
+  helpSum_admin_daily_plans: '',
+  helpHow_admin_daily_plans: '',
   helpSum_admin_complaints: '',
   helpHow_admin_complaints: '',
   storeSubnavAria: '',
   adminStoreOps: '',
   adminStoreActions: '',
+  adminDailyPlans: '',
   store_ops_page_sub: '',
   store_check_page_sub: '',
   complaint_page_sub: '',
@@ -246,6 +249,10 @@ export const I18N_STORE_ADMIN_KO = pack({
     '매장 개선 과제(CAPA) — 문제·조치·담당·기한·재확인을 추적합니다. 시설 A/S·고객 컴플레인과 분리되며, 기한 초과·재확인 대기는 사이드바 배지로 표시됩니다.',
   helpHow_admin_store_actions:
     '①「오늘」: 내 과제(담당·재확인)의 기한초과·재확인 대기·오늘 마감·7일 내 마감과 방문 추천 매장을 봅니다. 「LINE 붙여넣기」로 단톡방에 공유합니다.\n②「현황」: 등록일과 무관하게 현재 열린 과제 기준 KPI와 매장별 미완료 순위를 봅니다.\n③「목록」: 매장·상태·카테고리·내 과제로 검색하고 행을 눌러「처리」로 이동합니다. 기한초과는 빨강 강조입니다.\n④「처리」: 담당자가 조치 후「재확인 요청」, SV·본사가「확정」또는「반려」합니다(현장에서는 바로「현장 확인 완료」 가능). 담당자=재확인자 불가. 오른쪽에 변경 이력이 남습니다.\n⑤「신규」: 담당자·재확인자는 직원 목록에서 선택합니다. 카테고리를 고르면 기본 기한(청결 1일·교육 7일 등)과 조치 계획 템플릿이 채워집니다. 같은 점검 항목·같은 제목이 다시 등록되면 재발 횟수가 올라가고 이전 과제와 연결됩니다.\n⑥「성과」: 월별 매장·담당자·재확인자 기한 내 완료율, 평균 처리일, 재발 건수를 봅니다.\n⑦ 알림: 배정·재확인 요청·반려·완료 시 푸시가 가고, 매일 방콕 09시에 담당자(오늘·내일 마감, 기한초과)와 재확인자(아침 브리핑)에게 요약이 갑니다.\n⑧ 방문 QR 체크인 시 해당 매장 미완료 과제가 뜨고 현장 확인 완료/반려를 바로 할 수 있으며, 방문 종료 시 발견한 문제를 바로 등록할 수 있습니다.',
+  helpSum_admin_daily_plans:
+    '슈퍼바이저·매니저·직원의 하루 업무표(반복 루틴 + 방문 매장 + 본사 과제 + 개선 과제 + 전날 이월)를 만들고, 진행·지연·예상 대비 실제 시간을 봅니다. 마감하면 업무일지에 요약 1줄이 자동 기록됩니다.',
+  helpHow_admin_daily_plans:
+    '①「오늘 현황」: 날짜·직급별로 사람마다 완료/전체, 지연(시각이 지났는데 대기), 지금 하는 일, 실제/예상 시간을 봅니다. 행을 누르면 그 사람 업무표를 열어 대신 처리할 수 있습니다.\n②「내일 배정」: 사람을 고르고 슈퍼바이저는 방문 매장(누른 순서 = 동선), 본사 과제·예상 시간·브리핑을 입력합니다.「저장 + 공개」하면 바로 알림이 갑니다. 하루 7시간을 넘으면 빨간색으로 경고합니다.「LINE 붙여넣기」로 전체 배정을 단톡방에 공유합니다.\n③ 매일 방콕 18시에 내일 업무표가 자동 생성·공개되고 알림이 갑니다(슈퍼바이저·매니저 전원, 직원은 근무표가 있는 사람). 22시에 미마감 업무표를 자동 마감합니다(22시 이후 퇴근 근무는 다음 날 새벽).\n④「템플릿」: 직급·구역(홀/주방)·매장별 반복 항목을 관리합니다. 「매장별」 항목은 방문 매장마다 반복됩니다. 초안 → 파일럿 → 운영 순서로, 파일럿·운영만 생성에 쓰입니다.\n⑤「시간 분석」: 항목별 평균 예상 vs 실제와 못 한 비율을 보고 템플릿 예상 시간을 조정합니다.\n⑥ 자동 완료: 매장 방문 시작/종료(QR) → 방문 항목, 매장 점검 저장 → 점검 항목, 개선 과제 재확인 요청·확정·반려 → 해당 과제 항목.\n⑦ 직원은 모바일 [업무표] 탭에서 시작·완료·사진·못 한 사유를 남기고 마감합니다. 못 한 본사·이월 과제는 다음 날로 넘어갑니다.',
   helpSum_admin_complaints:
     '고객 컴플레인(클레임)을 접수·조사·처리하고, 유형·심각도별 현황을 조회하는 화면입니다. 사이드바 배지는 최근 30일 「접수」만 표시합니다.',
   helpHow_admin_complaints:
@@ -253,6 +260,7 @@ export const I18N_STORE_ADMIN_KO = pack({
   storeSubnavAria: '매장 관리 하위 메뉴',
   adminStoreOps: '매장 운영',
   adminStoreActions: '매장 개선 과제',
+  adminDailyPlans: '직급별 업무표',
   store_ops_page_sub: '점검·방문·A/S·개선과제·컴플레인·월말 실사 KPI 허브',
   store_check_page_sub: '매장 일일 점검 체크리스트',
   complaint_page_sub: '고객 컴플레인 접수·처리',
@@ -472,6 +480,10 @@ export const I18N_STORE_ADMIN_EN = pack({
     'Store action items (CAPA): track issue, action, owner, due date, and verification. Separate from facility repairs and customer complaints. Overdue and pending-verify items appear in sidebar badges.',
   helpHow_admin_store_actions:
     '① Today: your items (owner or verifier) — overdue, pending verify, due today, due within 7 days — plus suggested store visits. Use "Copy for LINE" to share.\n② Dashboard: KPIs on all currently open items (not limited by created date) and open items by store.\n③ List: filter by store/status/category/mine; overdue rows are red. Click a row to Process.\n④ Process: owner requests verify after action; SV/HQ confirms or rejects (or "Verified on site" directly). Owner cannot be the verifier. History is shown on the right.\n⑤ New: pick owner/verifier from the employee list. Choosing a category fills a default due date (cleanliness 1 day, training 7 days, etc.) and an action plan template. Re-registering the same check item or title increases the repeat count and links to the previous item.\n⑥ Scorecard: monthly on-time rate, average days, and repeats by store, owner, and verifier.\n⑦ Alerts: push on assignment, verify request, reject, and completion; every day at 09:00 Bangkok, owners get due today/tomorrow/overdue and verifiers get a morning briefing.\n⑧ Visit QR check-in shows open items with on-site verify/reject; ending a visit lets you register issues found.',
+  helpSum_admin_daily_plans:
+    'Daily plans for supervisors, managers and staff (routines + visit stores + HQ tasks + action items + carry-over), with progress, late items and estimated vs actual time. Closing a plan writes a one-line summary to the work log.',
+  helpHow_admin_daily_plans:
+    '① Today: per person completion, late items (time passed but still to do), current task and actual/estimated time by date and role. Click a row to open and act on that plan.\n② Assign tomorrow: pick a person; for supervisors choose visit stores (tap order = route), then HQ tasks, estimates and a briefing. "Save + publish" notifies them right away. Over 7 hours is flagged red. "Copy for LINE" shares all assignments.\n③ Every day at 18:00 Bangkok, tomorrow\'s plans are generated, published and pushed (all supervisors and managers; staff with a shift). At 22:00 open plans are auto-closed (shifts ending after 22:00 are closed early next morning).\n④ Templates: recurring items by role, area (service/kitchen) and store. "Per store" items repeat for each visit store. Draft → Pilot → Active; only pilot/active are used.\n⑤ Time analysis: average estimated vs actual and not-done rate per item, to tune template estimates.\n⑥ Auto-complete: store visit start/end (QR) → visit item; store check saved → check item; action verify request/confirm/reject → that action item.\n⑦ Staff use the mobile "My plan" tab to start, complete, add photos or a not-done reason, and close. Unfinished HQ/carried tasks move to the next day.',
   helpSum_admin_complaints:
     'Customer complaint intake, investigation, resolution, and KPI dashboard. Sidebar badges show only Received items in the last 30 days.',
   helpHow_admin_complaints:
@@ -479,6 +491,7 @@ export const I18N_STORE_ADMIN_EN = pack({
   storeSubnavAria: 'Store management sub-navigation',
   adminStoreOps: 'Store Operations',
   adminStoreActions: 'Store action items',
+  adminDailyPlans: 'Daily plans by role',
   store_ops_page_sub: 'Checks · visits · repairs · actions · complaints · month-end stock take',
   store_check_page_sub: 'Daily store checklist',
   complaint_page_sub: 'Customer complaint intake and resolution',
@@ -698,6 +711,10 @@ export const I18N_STORE_ADMIN_TH = pack({
     'งานปรับปรุงสาขา (CAPA) — บันทึกปัญหา แนวทางแก้ไข ผู้รับผิดชอบ กำหนดเวลา และผู้ตรวจยืนยัน แยกจากงานซ่อมและคำร้องลูกค้า งานเกินกำหนด/รอตรวจจะขึ้นแบดจ์ครับ',
   helpHow_admin_store_actions:
     '① วันนี้: งานของฉัน (ผู้รับผิดชอบ/ผู้ตรวจ) แยกเกินกำหนด รอตรวจ ครบกำหนดวันนี้ ภายใน 7 วัน และสาขาที่ควรเยี่ยม กด「คัดลอกไป LINE」เพื่อแชร์ครับ\n② ภาพรวม: KPI จากงานที่ยังเปิดทั้งหมด (ไม่ขึ้นกับวันที่ลงทะเบียน) และอันดับงานค้างตามสาขา\n③ รายการ: กรองสาขา/สถานะ/หมวด/งานของฉัน แถวเกินกำหนดเป็นสีแดง\n④ ดำเนินการ: ผู้รับผิดชอบขอตรวจยืนยันหลังแก้ SV/สำนักงานใหญ่ยืนยันหรือตีกลับ (หรือ「ตรวจหน้างานผ่าน」ได้ทันที) ผู้รับผิดชอบ≠ผู้ตรวจ ด้านขวาแสดงประวัติ\n⑤ ใหม่: เลือกผู้รับผิดชอบ/ผู้ตรวจจากรายชื่อพนักงาน เลือกหมวดแล้วระบบเติมกำหนดเสร็จและแนวทางแก้ไขให้ ถ้าหัวข้อตรวจหรือหัวข้อเดิมเกิดซ้ำ ระบบนับครั้งและเชื่อมงานก่อนหน้า\n⑥ ผลงาน: อัตราเสร็จทันกำหนด เวลาเฉลี่ย และงานเกิดซ้ำรายเดือน ตามสาขา ผู้รับผิดชอบ ผู้ตรวจ\n⑦ แจ้งเตือน: ส่งพุชเมื่อมอบหมาย ขอตรวจ ตีกลับ และเสร็จ ทุกวัน 09:00 (เวลาไทย) ส่งสรุปให้ผู้รับผิดชอบและผู้ตรวจ\n⑧ เมื่อเช็คอินเยี่ยมสาขา ระบบแสดงงานค้างและตรวจผ่าน/ตีกลับได้ทันที เมื่อจบการเยี่ยมลงทะเบียนปัญหาที่พบได้เลยครับ',
+  helpSum_admin_daily_plans:
+    'ตารางงานรายวันของซุปเปอร์ไวเซอร์ ผู้จัดการ และพนักงาน (งานประจำ + สาขาที่เยี่ยม + งานจากสำนักงานใหญ่ + งานปรับปรุง + งานยกมา) ดูความคืบหน้า งานล่าช้า และเวลาคาดเทียบเวลาจริง เมื่อปิดตารางงาน ระบบจะบันทึกสรุป 1 บรรทัดลงบันทึกงานให้อัตโนมัติครับ',
+  helpHow_admin_daily_plans:
+    '① วันนี้: ดูต่อคนว่าเสร็จกี่รายการ งานล่าช้า (เลยเวลาแต่ยังรอทำ) งานที่กำลังทำ และเวลาจริง/คาด กดแถวเพื่อเปิดตารางงานของคนนั้นครับ\n② มอบหมายพรุ่งนี้: เลือกคน ถ้าเป็นซุปเปอร์ไวเซอร์ให้เลือกสาขาที่จะเยี่ยม (ลำดับที่กด = เส้นทาง) แล้วใส่งานจากสำนักงานใหญ่ เวลาคาด และบรีฟ กด「บันทึก + เผยแพร่」จะแจ้งเตือนทันที เกิน 7 ชั่วโมงจะขึ้นสีแดง กด「คัดลอกไป LINE」เพื่อแชร์ทั้งหมด\n③ ทุกวัน 18:00 (เวลาไทย) ระบบสร้างและเผยแพร่ตารางงานพรุ่งนี้พร้อมแจ้งเตือน (ซุปเปอร์ไวเซอร์/ผู้จัดการทุกคน และพนักงานที่มีกะ) 22:00 ปิดตารางงานที่ยังไม่ปิดอัตโนมัติ (กะที่เลิกหลัง 22:00 จะปิดตอนเช้ามืดวันถัดไป)\n④ เทมเพลต: จัดการรายการประจำตามตำแหน่ง โซน (หน้าร้าน/ครัว) และสาขา รายการ「ต่อสาขา」จะซ้ำทุกสาขาที่เยี่ยม ร่าง → ทดลอง → ใช้งาน ใช้เฉพาะทดลอง/ใช้งาน\n⑤ วิเคราะห์เวลา: ดูเวลาคาดเฉลี่ยเทียบเวลาจริงและอัตราทำไม่ได้ เพื่อปรับเทมเพลต\n⑥ เสร็จอัตโนมัติ: เริ่ม/จบการเยี่ยมสาขา (QR) → รายการเยี่ยม, บันทึกการตรวจสาขา → รายการตรวจ, ขอตรวจ/ยืนยัน/ตีกลับงานปรับปรุง → รายการงานนั้น\n⑦ พนักงานใช้แท็บ [ตารางงาน] ในมือถือ กดเริ่ม เสร็จ ถ่ายรูป ใส่เหตุผลที่ทำไม่ได้ แล้วปิดงาน งานจากสำนักงานใหญ่/งานยกมาที่ยังไม่เสร็จจะไปอยู่วันถัดไปครับ',
   helpSum_admin_complaints:
     'รับเรื่อง สอบสวน และแก้ไขคำร้องของลูกค้า พร้อม KPI ตามประเภทและความรุนแรง',
   helpHow_admin_complaints:
@@ -705,6 +722,7 @@ export const I18N_STORE_ADMIN_TH = pack({
   storeSubnavAria: 'เมนูย่อยการจัดการร้าน',
   adminStoreOps: 'การดำเนินงานร้าน',
   adminStoreActions: 'งานปรับปรุงสาขา',
+  adminDailyPlans: 'ตารางงานตามตำแหน่ง',
   store_ops_page_sub: 'ศูนย์ KPI ตรวจ · เยี่ยม · ซ่อม · ปรับปรุง · คำร้อง · นับสต็อกสิ้นเดือน',
   store_check_page_sub: 'เช็กลิสต์ตรวจร้านรายวัน',
   complaint_page_sub: 'รับและแก้ไขคำร้องลูกค้า',

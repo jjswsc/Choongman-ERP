@@ -17,6 +17,7 @@ import {
   storeActionStoreAllowed,
   type StoreActionLogEvent,
 } from "@/lib/store-action-server"
+import { syncDailyPlanOnStoreAction } from "@/lib/daily-plan-hooks"
 
 /** 매장 개선 과제 수정·상태 전환·재확인(현장 확인 포함) */
 export async function POST(request: NextRequest) {
@@ -271,6 +272,19 @@ export async function POST(request: NextRequest) {
         title: "[개선 과제] 새 과제가 배정되었습니다",
         body: `${store} · ${title}\n기한: ${String(patch.due_date ?? prev.due_date ?? "-")}`,
         recipients: [await ownerRecipient()],
+      })
+    }
+
+    const resolvedByActor =
+      logEvent === "request_verify" ||
+      logEvent === "verify_pass" ||
+      logEvent === "verify_reject" ||
+      (nextStatus !== prevStatus && (nextStatus === "completed" || nextStatus === "cancelled"))
+    if (resolvedByActor) {
+      await syncDailyPlanOnStoreAction({
+        actionId: Number(rowOrId),
+        actorName,
+        actorEmployeeId: scope.actorEmployeeId,
       })
     }
 

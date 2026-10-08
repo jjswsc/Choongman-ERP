@@ -14,12 +14,14 @@ import {
   Banknote,
   Settings,
   Wrench,
+  ListChecks,
 } from "lucide-react"
 import { isPhysicalStoreForRepair } from "@/lib/store-repair-visibility"
 import { canViewAllStoreVisitActivity, hasOfficeStaffScope } from "@/lib/permissions"
 
 const tabs = [
   { id: "home", labelKey: "tabHome" as const, icon: Home },
+  { id: "plan", labelKey: "tabDailyPlan" as const, icon: ListChecks },
   { id: "orders", labelKey: "tabOrder" as const, icon: ClipboardList },
   { id: "usage", labelKey: "tabUsage" as const, icon: Package },
   { id: "hr", labelKey: "tabHr" as const, icon: Users },

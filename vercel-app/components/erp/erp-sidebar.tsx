@@ -275,6 +275,7 @@ export function ErpSidebar() {
       !navPathname.startsWith("/admin/store-visit") &&
       !navPathname.startsWith("/admin/store-repairs") &&
       !navPathname.startsWith("/admin/store-actions") &&
+      !navPathname.startsWith("/admin/daily-plans") &&
       !navPathname.startsWith("/admin/complaints")
     ) {
       return
