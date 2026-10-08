@@ -144,7 +144,11 @@ export async function loadPp30ChannelSalesFromSalesManagement(params: {
 
   for (const r of completed as Array<Record<string, unknown>>) {
     const storeCode = String(r.store_code || '').trim()
-    const bizDate = getPosBusinessDateStrFromConfig(r as never, resolveHours(storeCode))
+    const dt = String(r.created_at || r.paid_at || '').trim()
+    if (!dt) continue
+    const created = new Date(dt)
+    if (Number.isNaN(created.getTime())) continue
+    const bizDate = getPosBusinessDateStrFromConfig(created, resolveHours(storeCode))
     if (!isPosSalesBusinessYmdInInclusiveRange(bizDate, startStr, endStr)) continue
     const storeKey = storeCode.toLowerCase()
     if (storeKey && settlementStoreDays.has(`${storeKey}|${bizDate}`)) continue
