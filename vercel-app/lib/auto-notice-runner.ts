@@ -27,6 +27,7 @@ import {
   resolveStockTakeNoticePhase,
 } from '@/lib/stock-take-kpi'
 import { loadStockTakeKpiReport } from '@/lib/stock-take-kpi-report'
+import { runStoreActionDailyReminders, type StoreActionReminderResult } from '@/lib/store-action-reminders'
 
 export type AutoNoticesRunResult = {
   date: string
@@ -34,6 +35,7 @@ export type AutoNoticesRunResult = {
   workLog: { ran: boolean; reminded: number; skippedReason?: string }
   stockTake: { ran: boolean; sent: number; skippedReason?: string }
   custom: { ran: number; sent: number; results: Array<{ id: string; sent: number; skippedReason?: string }> }
+  storeActions?: StoreActionReminderResult
 }
 
 /**
@@ -170,6 +172,19 @@ export async function runAutoNotices(base: Date = new Date()): Promise<AutoNotic
   }
   if (Object.keys(customPatch).length > 0) {
     await saveAutoNoticeLastRun({ custom: customPatch })
+  }
+
+  // —— 매장 개선 과제 (방콕 9시, 하루 1회) ——
+  try {
+    result.storeActions = await runStoreActionDailyReminders(today, hourBangkok)
+  } catch (e) {
+    console.error('auto-notices storeActions:', e)
+    result.storeActions = {
+      ran: false,
+      owners: 0,
+      verifiers: 0,
+      skippedReason: `error:${e instanceof Error ? e.message : String(e)}`,
+    }
   }
 
   return result

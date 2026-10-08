@@ -4,6 +4,7 @@ import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { requireAuth } from "@/lib/verify-auth"
 import { mapStoreActionItemRow, type StoreActionItemRow } from "@/lib/store-action-item-map"
 import { STORE_ACTION_OPEN_STATUSES } from "@/lib/store-action-items"
+import { resolveStoreActionScope, storeActionStoreAllowed } from "@/lib/store-action-server"
 
 /** 방문 체크인용 — 특정 매장의 미완료 개선 과제 */
 export async function GET(request: NextRequest) {
@@ -13,6 +14,10 @@ export async function GET(request: NextRequest) {
   const store = String(new URL(request.url).searchParams.get("store") || "").trim()
   if (!store) {
     return NextResponse.json({ success: false, message: "매장이 필요합니다.", items: [] }, { status: 400 })
+  }
+  const scope = resolveStoreActionScope(authResult.auth)
+  if (!storeActionStoreAllowed(scope, store)) {
+    return NextResponse.json({ success: false, message: "권한이 없는 매장입니다.", items: [] }, { status: 403 })
   }
 
   const today = getBangkokTodayDateString()
@@ -40,6 +45,7 @@ export async function GET(request: NextRequest) {
       today,
       overdueCount: items.filter((x) => x.overdue).length,
       pendingVerifyCount: items.filter((x) => x.status === "pending_verify").length,
+      canVerify: scope.canVerify,
       items,
     })
   } catch (e) {

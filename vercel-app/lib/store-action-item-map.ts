@@ -28,6 +28,8 @@ export type StoreActionItemRow = {
   source_ref?: string
   linked_repair_ticket_id?: number | null
   repeat_count?: number | null
+  check_item_id?: string | null
+  parent_action_id?: number | null
   created_by?: string
   created_at?: string
   updated_at?: string
@@ -57,6 +59,8 @@ export type StoreActionItemDto = {
   sourceRef: string
   linkedRepairTicketId: number | null
   repeatCount: number
+  checkItemId: string
+  parentActionId: number | null
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -93,6 +97,11 @@ export function mapStoreActionItemRow(d: StoreActionItemRow, todayYmd: string): 
         ? Number(d.linked_repair_ticket_id)
         : null,
     repeatCount: Number(d.repeat_count || 0) || 0,
+    checkItemId: String(d.check_item_id || ""),
+    parentActionId:
+      d.parent_action_id != null && Number.isFinite(Number(d.parent_action_id))
+        ? Number(d.parent_action_id)
+        : null,
     createdBy: String(d.created_by || ""),
     createdAt: d.created_at ? String(d.created_at) : "",
     updatedAt: d.updated_at ? String(d.updated_at) : "",

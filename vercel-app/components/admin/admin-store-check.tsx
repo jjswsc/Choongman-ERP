@@ -54,9 +54,12 @@ import {
   deleteChecklistItem,
   uploadStoreCheckPhoto,
   translateTexts,
+  getStoreActionItems,
   type ChecklistItem,
   type CheckHistoryItem,
+  type StoreActionItem,
 } from "@/lib/api-client"
+import { storeCheckItemKey } from "@/lib/store-action-items"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -125,7 +128,7 @@ export function AdminStoreCheck() {
     return `/admin/store-repairs?${q.toString()}`
   }
 
-  const actionPrefillHref = (store: string, itemLabel: string) => {
+  const actionPrefillHref = (store: string, itemLabel: string, checkItem: string) => {
     const title = `[점검FAIL] ${itemLabel}`.slice(0, 120)
     const q = new URLSearchParams({
       tab: "new",
@@ -134,8 +137,60 @@ export function AdminStoreCheck() {
       category: "기타",
       priority: "보통",
       source: "check_fail",
+      checkItem,
     })
     return `/admin/store-actions?${q.toString()}`
+  }
+
+  const [openCheckActions, setOpenCheckActions] = useState<StoreActionItem[]>([])
+  useEffect(() => {
+    if (tab !== "failedSummary") return
+    let alive = true
+    void getStoreActionItems({ openOnly: true, sourceType: "check_fail" })
+      .then((rows) => {
+        if (alive) setOpenCheckActions(rows || [])
+      })
+      .catch(() => {
+        if (alive) setOpenCheckActions([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [tab, histList])
+
+  const findOpenCheckAction = (store: string, checkItem: string, itemLabel: string) => {
+    const title = `[점검FAIL] ${itemLabel}`.slice(0, 120)
+    return openCheckActions.find(
+      (a) => a.store === store && ((checkItem && a.checkItemId === checkItem) || a.title === title)
+    )
+  }
+
+  const actionCell = (store: string, itemPath: string, checkItem: string, mobile: boolean) => {
+    const existing = findOpenCheckAction(store, checkItem, itemPath)
+    if (existing) {
+      return (
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className={mobile ? "h-9 gap-1 text-xs border-amber-500 text-amber-700" : cn(ADMIN_BTN_XS_CN, "border-amber-500 text-amber-700")}
+        >
+          <Link href={`/admin/store-actions?tab=process&id=${existing.id}`}>
+            <ClipboardList className={mobile ? "h-3.5 w-3.5" : "h-3 w-3 mr-1"} />
+            {t("store_check_action_exists")}
+            {existing.overdue ? ` · ${t("action_overdue_badge")}` : ""}
+          </Link>
+        </Button>
+      )
+    }
+    return (
+      <Button asChild variant="outline" size="sm" className={mobile ? "h-9 gap-1 text-xs" : ADMIN_BTN_XS_CN}>
+        <Link href={actionPrefillHref(store, itemPath, checkItem)}>
+          <ClipboardList className={mobile ? "h-3.5 w-3.5" : "h-3 w-3 mr-1"} />
+          {t("store_check_create_action")}
+        </Link>
+      </Button>
+    )
   }
 
   const isHQ = auth?.role === "director" || auth?.role === "secretary" || auth?.role === "officer"
@@ -1012,12 +1067,7 @@ export function AdminStoreCheck() {
                                         {t("store_check_create_repair")}
                                       </Link>
                                     </Button>
-                                    <Button asChild variant="outline" size="sm" className={ADMIN_BTN_XS_CN}>
-                                      <Link href={actionPrefillHref(x.store, itemPath)}>
-                                        <ClipboardList className="h-3 w-3 mr-1" />
-                                        {t("store_check_create_action")}
-                                      </Link>
-                                    </Button>
+                                    {actionCell(x.store, itemPath, storeCheckItemKey(x.main, x.sub, x.name), false)}
                                   </div>
                                 </td>
                               </tr>
@@ -1072,12 +1122,7 @@ export function AdminStoreCheck() {
                                       {t("store_check_create_repair")}
                                     </Link>
                                   </Button>
-                                  <Button asChild variant="outline" size="sm" className="h-9 gap-1 text-xs">
-                                    <Link href={actionPrefillHref(x.store, itemPath)}>
-                                      <ClipboardList className="h-3.5 w-3.5" />
-                                      {t("store_check_create_action")}
-                                    </Link>
-                                  </Button>
+                                  {actionCell(x.store, itemPath, storeCheckItemKey(x.main, x.sub, x.name), true)}
                                 </div>
                               </div>
                             )

@@ -29,17 +29,11 @@ import {
   type StoreActionItem,
 } from "@/lib/api-client"
 import { translateVisitType, translateVisitPurpose } from "@/lib/visit-i18n"
-import { canViewAllStoreVisitActivity } from "@/lib/permissions"
+import { canViewAllStoreVisitActivity, hasOfficeStaffScope, isSupervisorRole } from "@/lib/permissions"
+import { VisitOpenActionsDialog } from "@/components/tabs/visit-open-actions-dialog"
+import { VisitNewActionsDialog } from "@/components/tabs/visit-new-actions-dialog"
 import { AttendanceQrScannerDialog } from "@/components/attendance/attendance-qr-scanner-dialog"
 import { MapPin, Building2, Target, LogIn, LogOut } from "lucide-react"
-import Link from "next/link"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
 
 const VISIT_PURPOSES = [
   { value: "정기점검", labelKey: "visitPurposeInspect" },
@@ -71,6 +65,23 @@ export function VisitTab() {
   const [openActionsStore, setOpenActionsStore] = useState("")
   const [openActions, setOpenActions] = useState<StoreActionItem[]>([])
   const [openActionsOverdue, setOpenActionsOverdue] = useState(0)
+  const [newActionsOpen, setNewActionsOpen] = useState(false)
+  const [newActionsStore, setNewActionsStore] = useState("")
+  const canVerifyActions =
+    hasOfficeStaffScope(auth?.role || "", auth?.store || "") || isSupervisorRole(auth?.role || "")
+
+  const loadOpenActions = useCallback(async (store: string) => {
+    setOpenActionsStore(store)
+    try {
+      const openRes = await getOpenStoreActionsByStore(store)
+      const items = Array.isArray(openRes.items) ? openRes.items : []
+      setOpenActions(items)
+      setOpenActionsOverdue(Number(openRes.overdueCount || 0) || items.filter((x) => x.overdue).length)
+    } catch {
+      setOpenActions([])
+      setOpenActionsOverdue(0)
+    }
+  }, [])
 
   const { stores: storeListRaw } = useStoreList()
   useEffect(() => {
@@ -162,21 +173,14 @@ export function VisitTab() {
         if (result.success) {
           if (type === "방문시작") {
             setActiveVisit({ storeName: store, purpose: purposeToSend })
-            try {
-              const openRes = await getOpenStoreActionsByStore(store)
-              const items = Array.isArray(openRes.items) ? openRes.items : []
-              setOpenActionsStore(store)
-              setOpenActions(items)
-              setOpenActionsOverdue(Number(openRes.overdueCount || 0) || items.filter((x) => x.overdue).length)
-              setOpenActionsOpen(true)
-            } catch {
-              setOpenActionsStore(store)
-              setOpenActions([])
-              setOpenActionsOverdue(0)
-              setOpenActionsOpen(true)
-            }
+            await loadOpenActions(store)
+            setOpenActionsOpen(true)
           } else {
             setActiveVisit(null)
+            if (canVerifyActions) {
+              setNewActionsStore(store)
+              setNewActionsOpen(true)
+            }
           }
           loadStatusAndLog()
           if (result.msg) {
@@ -194,6 +198,8 @@ export function VisitTab() {
     [
       activeVisit?.storeName,
       auth?.user,
+      canVerifyActions,
+      loadOpenActions,
       loadStatusAndLog,
       purpose,
       purposeEtcReason,
@@ -446,52 +452,24 @@ export function VisitTab() {
         hintKey="visitQrScanHint"
       />
 
-      <Dialog open={openActionsOpen} onOpenChange={setOpenActionsOpen}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-base">
-              {t("action_visit_open_title")}
-              {openActionsStore ? ` · ${openActionsStore}` : ""}
-            </DialogTitle>
-          </DialogHeader>
-          {openActionsOverdue > 0 ? (
-            <p className="text-xs font-semibold text-red-600">
-              {(t("action_visit_open_overdue") || "").replace("{n}", String(openActionsOverdue))}
-            </p>
-          ) : null}
-          {openActions.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-2">{t("action_visit_open_empty")}</p>
-          ) : (
-            <div className="space-y-2">
-              {openActions.map((item) => (
-                <div
-                  key={item.id}
-                  className={`rounded-lg border p-3 text-xs space-y-1 ${item.overdue ? "border-red-400 bg-red-50 dark:bg-red-950/30" : ""}`}
-                >
-                  <p className="font-semibold text-sm leading-snug">{item.title}</p>
-                  <p className="text-muted-foreground">
-                    {item.ownerName || "—"} · {item.dueDate || "—"} · {item.status}
-                    {item.repeatCount >= 2 ? ` · ×${item.repeatCount}` : ""}
-                  </p>
-                  {item.actionPlan ? (
-                    <p className="text-muted-foreground whitespace-pre-wrap line-clamp-3">{item.actionPlan}</p>
-                  ) : null}
-                  <Button asChild variant="outline" size="sm" className="h-8 mt-1">
-                    <Link href={`/admin/store-actions?tab=process&id=${item.id}`} onClick={() => setOpenActionsOpen(false)}>
-                      {t("action_visit_open_go")}
-                    </Link>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-          <DialogFooter>
-            <Button type="button" className="h-9" onClick={() => setOpenActionsOpen(false)}>
-              {t("action_visit_open_dismiss")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <VisitOpenActionsDialog
+        open={openActionsOpen}
+        onOpenChange={setOpenActionsOpen}
+        store={openActionsStore}
+        items={openActions}
+        overdueCount={openActionsOverdue}
+        canVerify={canVerifyActions}
+        t={t}
+        onChanged={() => void loadOpenActions(openActionsStore)}
+      />
+      <VisitNewActionsDialog
+        open={newActionsOpen}
+        onOpenChange={setNewActionsOpen}
+        store={newActionsStore}
+        verifierName={auth.user || ""}
+        verifierUserId={auth.employeeId != null && auth.employeeId > 0 ? String(auth.employeeId) : ""}
+        t={t}
+      />
     </div>
   )
 }

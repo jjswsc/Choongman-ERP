@@ -28,6 +28,8 @@ export type StoreActionItem = {
   sourceRef: string
   linkedRepairTicketId: number | null
   repeatCount: number
+  checkItemId: string
+  parentActionId: number | null
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -43,8 +45,13 @@ export async function getStoreActionItems(params: {
   category?: string
   priority?: string
   owner?: string
+  verifier?: string
+  sourceType?: string
+  mine?: boolean
   openOnly?: boolean
   overdueOnly?: boolean
+  /** 이 날짜(방콕) 이후 완료된 건 — 등록일 기간 무시 */
+  completedSince?: string
   q?: string
   id?: string | number
 }) {
@@ -56,6 +63,10 @@ export async function getStoreActionItems(params: {
   if (params.category) q.set("category", params.category)
   if (params.priority) q.set("priority", params.priority)
   if (params.owner) q.set("owner", params.owner)
+  if (params.verifier) q.set("verifier", params.verifier)
+  if (params.sourceType) q.set("sourceType", params.sourceType)
+  if (params.mine) q.set("mine", "1")
+  if (params.completedSince) q.set("completedSince", params.completedSince)
   if (params.openOnly) q.set("openOnly", "1")
   if (params.overdueOnly) q.set("overdueOnly", "1")
   if (params.q) q.set("q", params.q)
@@ -74,8 +85,72 @@ export async function getOpenStoreActionsByStore(store: string) {
     today?: string
     overdueCount?: number
     pendingVerifyCount?: number
+    canVerify?: boolean
     items: StoreActionItem[]
   }
+}
+
+export type StoreActionAssignee = {
+  id: number
+  name: string
+  nick: string
+  store: string
+  job: string
+  role: string
+  group: "store" | "hq"
+}
+
+export async function getStoreActionAssignees(store: string) {
+  const q = new URLSearchParams()
+  if (store) q.set("store", store)
+  const res = await apiFetchWithOffline(`/api/getStoreActionAssignees?${q}`)
+  const j = (await res.json()) as { success?: boolean; list?: StoreActionAssignee[] }
+  return Array.isArray(j.list) ? j.list : []
+}
+
+export type StoreActionLog = {
+  id: number
+  actor: string
+  event: string
+  fromStatus: string
+  toStatus: string
+  note: string
+  createdAt: string
+}
+
+export async function getStoreActionLogs(id: number | string) {
+  const res = await apiFetchWithOffline(`/api/getStoreActionLogs?id=${encodeURIComponent(String(id))}`)
+  const j = (await res.json()) as { success?: boolean; list?: StoreActionLog[] }
+  return Array.isArray(j.list) ? j.list : []
+}
+
+export type StoreActionScoreRow = {
+  key: string
+  total: number
+  completed: number
+  onTime: number
+  overdueOpen: number
+  open: number
+  repeat: number
+  onTimeRate: number
+  avgCloseDays: number | null
+}
+
+export type StoreActionScorecardResponse = {
+  success: boolean
+  message?: string
+  month?: string
+  startStr?: string
+  endStr?: string
+  byStore?: StoreActionScoreRow[]
+  byOwner?: StoreActionScoreRow[]
+  byVerifier?: StoreActionScoreRow[]
+  total?: StoreActionScoreRow
+}
+
+export async function getStoreActionScorecard(month: string) {
+  const res = await apiFetchWithOffline(`/api/getStoreActionScorecard?month=${encodeURIComponent(month)}`)
+  return (await res.json()) as StoreActionScorecardResponse
 }
 
 export async function saveStoreActionItem(data: Record<string, unknown>) {
@@ -84,7 +159,13 @@ export async function saveStoreActionItem(data: Record<string, unknown>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ data }),
   })
-  return res.json() as Promise<{ success: boolean; message?: string; repeatCount?: number }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    id?: number | null
+    repeatCount?: number
+    parentId?: number | null
+  }>
 }
 
 export async function updateStoreActionItem(

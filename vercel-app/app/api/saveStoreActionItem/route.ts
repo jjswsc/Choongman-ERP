@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { supabaseInsert, supabaseSelectFilter } from "@/lib/supabase-server"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { requireAuth } from "@/lib/verify-auth"
 import {
@@ -7,46 +6,23 @@ import {
   STORE_ACTION_PRIORITIES,
   STORE_ACTION_SOURCE_TYPES,
   normalizeStoreActionPhotoUrls,
-  normalizeTitleKey,
 } from "@/lib/store-action-items"
-
-async function computeRepeatCount(store: string, category: string, title: string): Promise<number> {
-  const titleKey = normalizeTitleKey(title)
-  if (!store || !titleKey) return 0
-  try {
-    const rows = (await supabaseSelectFilter(
-      "store_action_items",
-      [
-        `store_name=eq.${encodeURIComponent(store)}`,
-        `category=eq.${encodeURIComponent(category || "기타")}`,
-      ].join("&"),
-      {
-        select: "title,status,repeat_count",
-        limit: 200,
-        order: "id.desc",
-      }
-    )) as { title?: string; status?: string; repeat_count?: number }[]
-
-    let maxRepeat = 0
-    let similar = 0
-    for (const r of rows || []) {
-      if (normalizeTitleKey(String(r.title || "")) !== titleKey) continue
-      similar += 1
-      const rc = Number(r.repeat_count || 0) || 0
-      if (rc > maxRepeat) maxRepeat = rc
-    }
-    if (similar === 0) return 0
-    return Math.max(maxRepeat + 1, similar)
-  } catch {
-    return 0
-  }
-}
+import {
+  appendStoreActionLog,
+  computeStoreActionRecurrence,
+  insertStoreActionItemRow,
+  pushStoreActionNotice,
+  resolveStoreActionRecipient,
+  resolveStoreActionScope,
+  storeActionStoreAllowed,
+} from "@/lib/store-action-server"
 
 /** 매장 개선 과제 신규 등록 */
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request, "manager")
   if (authResult.errorResponse) return authResult.errorResponse
   const auth = authResult.auth
+  const scope = resolveStoreActionScope(auth)
 
   try {
     const body = await request.json()
@@ -60,6 +36,9 @@ export async function POST(request: NextRequest) {
 
     if (!store) {
       return NextResponse.json({ success: false, message: "매장을 선택하세요." }, { status: 400 })
+    }
+    if (!storeActionStoreAllowed(scope, store)) {
+      return NextResponse.json({ success: false, message: "권한이 없는 매장입니다." }, { status: 403 })
     }
     if (!title) {
       return NextResponse.json({ success: false, message: "제목을 입력하세요." }, { status: 400 })
@@ -92,11 +71,19 @@ export async function POST(request: NextRequest) {
     let sourceType = String(data.sourceType || data.source_type || "manual").trim() || "manual"
     if (!(STORE_ACTION_SOURCE_TYPES as readonly string[]).includes(sourceType)) sourceType = "manual"
 
+    const checkItemId = String(data.checkItemId || data.check_item_id || "").trim().slice(0, 200)
     const photoUrls = normalizeStoreActionPhotoUrls(data.photoUrls ?? data.photo_urls)
     const afterPhotoUrls = normalizeStoreActionPhotoUrls(data.afterPhotoUrls ?? data.after_photo_urls)
-    const repeatCount = await computeRepeatCount(store, category, title)
+    const { repeatCount, parentId } = await computeStoreActionRecurrence({
+      store,
+      category,
+      title,
+      checkItemId,
+    })
     const nowIso = new Date().toISOString()
     const createdBy = String(data.createdBy || data.created_by || auth.name || "").trim()
+    const ownerUserId = String(data.ownerUserId || data.owner_user_id || "").trim()
+    const verifierUserId = String(data.verifierUserId || data.verifier_user_id || "").trim()
 
     const insertRow: Record<string, unknown> = {
       store_name: store,
@@ -106,10 +93,10 @@ export async function POST(request: NextRequest) {
       priority,
       status: "open",
       owner_name: ownerName,
-      owner_user_id: String(data.ownerUserId || data.owner_user_id || "").trim() || null,
+      owner_user_id: ownerUserId || null,
       due_date: dueDate,
       verifier_name: verifierName,
-      verifier_user_id: String(data.verifierUserId || data.verifier_user_id || "").trim() || null,
+      verifier_user_id: verifierUserId || null,
       action_plan: String(data.actionPlan || data.action_plan || "").trim(),
       resolution_note: String(data.resolutionNote || data.resolution_note || "").trim(),
       photo_urls: photoUrls,
@@ -123,17 +110,44 @@ export async function POST(request: NextRequest) {
             ? Number(data.linked_repair_ticket_id)
             : null,
       repeat_count: repeatCount,
+      check_item_id: checkItemId,
+      parent_action_id: parentId,
       created_by: createdBy,
       created_at: nowIso,
       updated_at: nowIso,
     }
 
-    await supabaseInsert("store_action_items", insertRow)
+    const newId = await insertStoreActionItemRow(insertRow)
+
+    if (newId) {
+      await appendStoreActionLog({
+        actionId: newId,
+        actor: scope.actorName || createdBy,
+        event: "create",
+        toStatus: "open",
+        note: title,
+        detail: { ownerName, verifierName, dueDate, repeatCount, parentId, sourceType },
+      })
+    }
+
+    const owner = await resolveStoreActionRecipient({
+      userId: ownerUserId,
+      name: ownerName,
+      fallbackStore: store,
+    })
+    const repeatHint = repeatCount > 0 ? ` (재발 ${repeatCount}회)` : ""
+    await pushStoreActionNotice({
+      title: "[개선 과제] 새 과제가 배정되었습니다",
+      body: `${store} · ${title}${repeatHint}\n기한: ${dueDate} · 재확인: ${verifierName}`,
+      recipients: owner && owner.name.toLowerCase() !== scope.actorName.toLowerCase() ? [owner] : [],
+    })
 
     return NextResponse.json({
       success: true,
       message: "저장되었습니다.",
+      id: newId,
       repeatCount,
+      parentId,
       today: getBangkokTodayDateString(),
     })
   } catch (e) {

@@ -1,24 +1,28 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseSelectFilter, supabaseUpdateByFilter } from "@/lib/supabase-server"
 import { requireAuth } from "@/lib/verify-auth"
-import { hasOfficeStaffScope, isSupervisorRole } from "@/lib/permissions"
 import {
   STORE_ACTION_CATEGORIES,
   STORE_ACTION_PRIORITIES,
+  isStoreActionOpenStatus,
   isStoreActionStatus,
   normalizeStoreActionPhotoUrls,
 } from "@/lib/store-action-items"
 import type { StoreActionItemRow } from "@/lib/store-action-item-map"
+import {
+  appendStoreActionLog,
+  pushStoreActionNotice,
+  resolveStoreActionRecipient,
+  resolveStoreActionScope,
+  storeActionStoreAllowed,
+  type StoreActionLogEvent,
+} from "@/lib/store-action-server"
 
-function canVerifyStoreAction(role: string, store: string): boolean {
-  return hasOfficeStaffScope(role, store) || isSupervisorRole(role)
-}
-
-/** 매장 개선 과제 수정·상태 전환·재확인 */
+/** 매장 개선 과제 수정·상태 전환·재확인(현장 확인 포함) */
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request, "manager")
   if (authResult.errorResponse) return authResult.errorResponse
-  const auth = authResult.auth
+  const scope = resolveStoreActionScope(authResult.auth)
 
   try {
     const body = await request.json()
@@ -37,14 +41,18 @@ export async function POST(request: NextRequest) {
     if (!prev) {
       return NextResponse.json({ success: false, message: "해당 건을 찾을 수 없습니다." }, { status: 404 })
     }
+    if (!storeActionStoreAllowed(scope, String(prev.store_name || ""))) {
+      return NextResponse.json({ success: false, message: "권한이 없는 매장입니다." }, { status: 403 })
+    }
 
     const nowIso = new Date().toISOString()
-    const userRole = String(auth.role || "").toLowerCase()
-    const userStore = String(auth.store || "").trim()
-    const actorName = String(auth.name || "").trim()
-    const canVerify = canVerifyStoreAction(userRole, userStore)
+    const actorName = scope.actorName
+    const canVerify = scope.canVerify
+    const prevStatus = String(prev.status || "open")
 
     const patch: Record<string, unknown> = { updated_at: nowIso }
+    let logEvent: StoreActionLogEvent = "update"
+    let logNote = ""
 
     if (action === "verify_pass") {
       if (!canVerify) {
@@ -53,9 +61,9 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         )
       }
-      if (String(prev.status) !== "pending_verify") {
+      if (!isStoreActionOpenStatus(prevStatus)) {
         return NextResponse.json(
-          { success: false, message: "재확인 대기 상태에서만 완료 확정할 수 있습니다." },
+          { success: false, message: "진행 중인 과제만 완료 확정할 수 있습니다." },
           { status: 400 }
         )
       }
@@ -70,7 +78,12 @@ export async function POST(request: NextRequest) {
       patch.verified_at = nowIso
       patch.completed_at = nowIso
       patch.verifier_name = actorName || String(prev.verifier_name || "")
+      if (scope.actorEmployeeId) patch.verifier_user_id = String(scope.actorEmployeeId)
       patch.verification_note = String(data.verificationNote ?? data.verification_note ?? "").trim()
+      const afterUrls = normalizeStoreActionPhotoUrls(data.afterPhotoUrls ?? data.after_photo_urls)
+      if (afterUrls.length) patch.after_photo_urls = afterUrls
+      logEvent = "verify_pass"
+      logNote = String(patch.verification_note || "")
     } else if (action === "verify_reject") {
       if (!canVerify) {
         return NextResponse.json(
@@ -78,10 +91,20 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         )
       }
+      if (!isStoreActionOpenStatus(prevStatus)) {
+        return NextResponse.json(
+          { success: false, message: "진행 중인 과제만 반려할 수 있습니다." },
+          { status: 400 }
+        )
+      }
       patch.status = "in_progress"
       patch.verified_at = null
       patch.completed_at = null
       patch.verification_note = String(data.verificationNote ?? data.verification_note ?? "").trim()
+      const afterUrls = normalizeStoreActionPhotoUrls(data.afterPhotoUrls ?? data.after_photo_urls)
+      if (afterUrls.length) patch.after_photo_urls = afterUrls
+      logEvent = "verify_reject"
+      logNote = String(patch.verification_note || "")
     } else if (action === "request_verify") {
       patch.status = "pending_verify"
       patch.resolution_note = String(
@@ -89,9 +112,15 @@ export async function POST(request: NextRequest) {
       ).trim()
       const afterUrls = normalizeStoreActionPhotoUrls(data.afterPhotoUrls ?? data.after_photo_urls)
       if (afterUrls.length) patch.after_photo_urls = afterUrls
+      logEvent = "request_verify"
+      logNote = String(patch.resolution_note || "")
     } else {
       if (data.store != null || data.store_name != null) {
-        patch.store_name = String(data.store ?? data.store_name ?? "").trim()
+        const nextStore = String(data.store ?? data.store_name ?? "").trim()
+        if (nextStore && !storeActionStoreAllowed(scope, nextStore)) {
+          return NextResponse.json({ success: false, message: "권한이 없는 매장입니다." }, { status: 403 })
+        }
+        patch.store_name = nextStore
       }
       if (data.title != null) patch.title = String(data.title).trim()
       if (data.description != null) patch.description = String(data.description).trim()
@@ -164,7 +193,7 @@ export async function POST(request: NextRequest) {
           patch.completed_at = nowIso
           if (!patch.verifier_name) patch.verifier_name = actorName || String(prev.verifier_name || "")
         } else {
-          if (String(prev.status) === "completed" && !canVerify) {
+          if (prevStatus === "completed" && !canVerify) {
             return NextResponse.json(
               { success: false, message: "완료된 과제를 다시 열 권한이 없습니다." },
               { status: 403 }
@@ -184,10 +213,68 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
+
+      const ownerChanged =
+        patch.owner_name != null &&
+        String(patch.owner_name).toLowerCase() !== String(prev.owner_name || "").trim().toLowerCase()
+      if (ownerChanged) logEvent = "reassign"
+      else if (patch.status != null && patch.status !== prevStatus) logEvent = "status"
     }
 
     await supabaseUpdateByFilter("store_action_items", `id=eq.${encodeURIComponent(rowOrId)}`, patch)
-    return NextResponse.json({ success: true, message: "수정되었습니다." })
+
+    const nextStatus = String(patch.status ?? prevStatus)
+    const changedFields = Object.keys(patch).filter((k) => k !== "updated_at")
+    await appendStoreActionLog({
+      actionId: Number(rowOrId),
+      actor: actorName,
+      event: logEvent,
+      fromStatus: prevStatus,
+      toStatus: nextStatus,
+      note: logNote,
+      detail: { fields: changedFields },
+    })
+
+    const store = String(patch.store_name ?? prev.store_name ?? "")
+    const title = String(patch.title ?? prev.title ?? "")
+    const ownerRecipient = () =>
+      resolveStoreActionRecipient({
+        userId: String(patch.owner_user_id ?? prev.owner_user_id ?? ""),
+        name: String(patch.owner_name ?? prev.owner_name ?? ""),
+        fallbackStore: store,
+      })
+    if (logEvent === "request_verify") {
+      const verifier = await resolveStoreActionRecipient({
+        userId: String(prev.verifier_user_id || ""),
+        name: String(prev.verifier_name || ""),
+        fallbackStore: store,
+      })
+      await pushStoreActionNotice({
+        title: "[개선 과제] 재확인 요청",
+        body: `${store} · ${title}\n담당자 ${actorName}님이 조치 완료를 보고했습니다.`,
+        recipients: [verifier],
+      })
+    } else if (logEvent === "verify_reject") {
+      await pushStoreActionNotice({
+        title: "[개선 과제] 재확인 반려",
+        body: `${store} · ${title}${logNote ? `\n사유: ${logNote}` : ""}`,
+        recipients: [await ownerRecipient()],
+      })
+    } else if (logEvent === "verify_pass") {
+      await pushStoreActionNotice({
+        title: "[개선 과제] 완료 확정",
+        body: `${store} · ${title}\n재확인: ${actorName}`,
+        recipients: [await ownerRecipient()],
+      })
+    } else if (logEvent === "reassign") {
+      await pushStoreActionNotice({
+        title: "[개선 과제] 새 과제가 배정되었습니다",
+        body: `${store} · ${title}\n기한: ${String(patch.due_date ?? prev.due_date ?? "-")}`,
+        recipients: [await ownerRecipient()],
+      })
+    }
+
+    return NextResponse.json({ success: true, message: "수정되었습니다.", status: nextStatus })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error("updateStoreActionItem:", msg)
