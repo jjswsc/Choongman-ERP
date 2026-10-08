@@ -1,5 +1,6 @@
 /**
- * 기존 pos_order 분개 적요에 매장·주문번호·결제·채널을 채워 일별장부에서 구분 가능하게 한다.
+ * 기존 pos_order 분개 적요에 매장·주문번호·결제·채널을 채운다.
+ * 이미 `|` 가 있는 행은 skip (재실행 안전).
  * npx tsx scripts/backfill-pos-order-journal-memo.ts
  */
 import { config } from 'dotenv'
@@ -40,45 +41,66 @@ async function page<T>(path: string, offset: number, limit: number): Promise<T[]
   return text ? (JSON.parse(text) as T[]) : []
 }
 
+type OrderRow = {
+  id?: number
+  order_no?: string
+  store_code?: string
+  order_type?: string
+  delivery_app_code?: string
+  payment_cash?: number
+  payment_card?: number
+  payment_qr?: number
+  payment_other?: number
+  payment_delivery_app?: number
+}
+
+async function fetchOrdersByIds(ids: number[]): Promise<Map<number, OrderRow>> {
+  const out = new Map<number, OrderRow>()
+  if (!ids.length) return out
+  const chunk = 80
+  for (let i = 0; i < ids.length; i += chunk) {
+    const slice = ids.slice(i, i + chunk)
+    const rows = (await rest(
+      `pos_orders?id=in.(${slice.join(',')})&select=id,order_no,store_code,order_type,delivery_app_code,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app`
+    )) as OrderRow[]
+    for (const o of rows || []) {
+      const id = Number(o.id || 0)
+      if (id) out.set(id, o)
+    }
+  }
+  return out
+}
+
 async function main() {
   let updated = 0
   let skipped = 0
-  let offset = 0
+  const limit = 200
+  // `|` 없는 적요만 — 이미 소급된 행은 페이지 스킵 없이 제외
   for (;;) {
     const heads = await page<{
       id?: number
       source_id?: number
       memo?: string | null
-      book?: string | null
     }>(
-      `journal_entries?select=id,source_id,memo,book&source_type=eq.pos_order&accounting_date=gte.2026-07-01&order=id.asc`,
-      offset,
-      100
+      `journal_entries?select=id,source_id,memo&source_type=eq.pos_order&accounting_date=gte.2026-07-01&or=(memo.is.null,memo.not.like.*%7C*)&order=id.asc`,
+      0,
+      limit
     )
     if (!heads.length) break
-    for (const h of heads) {
-      const jid = Number(h.id || 0)
-      const oid = Number(h.source_id || 0)
+
+    const need = heads.filter((h) => Number(h.id || 0) > 0 && Number(h.source_id || 0) > 0)
+    const orderIds = [...new Set(need.map((h) => Number(h.source_id)))]
+    const orders = await fetchOrdersByIds(orderIds)
+    let batchUpdated = 0
+    for (const h of need) {
+      const jid = Number(h.id)
+      const oid = Number(h.source_id)
       const cur = String(h.memo || '').trim()
-      if (!jid || !oid) continue
       if (cur.includes('|')) {
         skipped += 1
         continue
       }
-      const orders = (await rest(
-        `pos_orders?id=eq.${oid}&select=id,order_no,store_code,order_type,delivery_app_code,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app&limit=1`
-      )) as {
-        order_no?: string
-        store_code?: string
-        order_type?: string
-        delivery_app_code?: string
-        payment_cash?: number
-        payment_card?: number
-        payment_qr?: number
-        payment_other?: number
-        payment_delivery_app?: number
-      }[]
-      const o = orders?.[0]
+      const o = orders.get(oid)
       if (!o) {
         skipped += 1
         continue
@@ -110,12 +132,13 @@ async function main() {
         body: JSON.stringify({ memo: next }),
       })
       updated += 1
+      batchUpdated += 1
     }
-    console.log('offset', offset, { updated, skipped })
-    if (heads.length < 100) break
-    offset += 100
+
+    console.log({ updated, skipped, batch: heads.length, batchUpdated })
+    if (batchUpdated === 0) break
   }
-  console.log({ updated, skipped })
+  console.log({ updated, skipped, done: true })
 }
 
 main().catch((e) => {
