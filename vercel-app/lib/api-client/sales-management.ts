@@ -813,7 +813,7 @@ export type PosSalesPaymentBreakdown = {
   deliveryTotal: number
   creditByChannel: { channelKey: string; sales: number }[]
   creditTotal: number
-  summary: { paymentKey: string; sales: number }[]
+  summary: { paymentKey: string; sales: number; label?: string }[]
   /** 결산 Cash vs 주문 payment_cash 합 불일치 시 안내 */
   cashReconcile?: {
     liveCash: number

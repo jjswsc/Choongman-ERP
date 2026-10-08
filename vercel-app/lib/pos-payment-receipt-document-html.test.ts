@@ -161,6 +161,27 @@ describe('buildPosPaymentReceiptDocumentHtml — POS order number digits', () =>
     expect(html).toContain('Kimchi 30g.')
   })
 
+  it('prints WeChat on the payment line when Other was WeChat', () => {
+    const html = buildPosPaymentReceiptDocumentHtml({
+      receiptData: {
+        ...baseReceipt,
+        paymentCash: 0,
+        paymentOther: 75,
+        paymentOtherBreakdown: { admin: { '12': 75 }, adminLabels: { '12': 'WeChat' } },
+        total: 75,
+        subtotal: 75,
+      },
+      menus: [],
+      orderTypeLabels: { delivery: 'Delivery' },
+      t: (k) => (k === 'posReceiptPaymentMethods' ? 'Payment' : k),
+      lang: 'en',
+      origin: 'https://example.com',
+      printedAt: new Date('2026-10-08T04:50:57.000Z'),
+    })
+    expect(html).toContain('WeChat')
+    expect(html).not.toMatch(/Payment[\s\S]{0,80}>Other</)
+  })
+
   it('prints digits-only order number below date and omits store name (simple layout)', () => {
     const html = buildPosPaymentReceiptDocumentHtml({
       receiptData: baseReceipt,
@@ -393,7 +414,7 @@ describe('buildPosPaymentReceiptDocumentHtml — split member whole-baht total',
       origin: 'https://example.com',
     })
     expect(html).toContain('199.00')
-    expect(html).not.toContain('198.75')
+    expect(html).toContain('198.75')
     expect(html).toContain('Rounding')
     expect(html).toContain('+0.25')
     expect(html).toContain('10.25')

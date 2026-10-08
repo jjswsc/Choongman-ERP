@@ -16,6 +16,8 @@ export type PosPaymentOtherBreakdown = {
   serviceComp?: number
   /** pos_payment_method_items.id → 금액 */
   admin?: Record<string, number>
+  /** 결제 시점 관리자 결제 라인 표시명 (합계에 포함하지 않음) */
+  adminLabels?: Record<string, string>
 }
 
 const EPS = 0.02
@@ -69,6 +71,19 @@ export function parsePaymentOtherBreakdown(raw: unknown): PosPaymentOtherBreakdo
     }
     if (Object.keys(m).length > 0) admin = m
   }
+  const labelsRaw = o.adminLabels ?? o.admin_labels
+  let adminLabels: Record<string, string> | undefined
+  if (labelsRaw && typeof labelsRaw === 'object' && !Array.isArray(labelsRaw)) {
+    const labels: Record<string, string> = {}
+    for (const [k, v] of Object.entries(labelsRaw as Record<string, unknown>)) {
+      const nk = String(k || '').trim()
+      const name = String(v ?? '').trim()
+      if (!nk || !name) continue
+      if (admin && !(nk in admin)) continue
+      labels[nk] = name.slice(0, 80)
+    }
+    if (Object.keys(labels).length > 0) adminLabels = labels
+  }
   const out: PosPaymentOtherBreakdown = {
     ...(num(o.trueMoney) > 0 ? { trueMoney: num(o.trueMoney) } : {}),
     ...(num(o.weChat) > 0 ? { weChat: num(o.weChat) } : {}),
@@ -81,6 +96,7 @@ export function parsePaymentOtherBreakdown(raw: unknown): PosPaymentOtherBreakdo
       ? { serviceComp: num(o.serviceComp ?? o.service_comp) }
       : {}),
     ...(admin ? { admin } : {}),
+    ...(adminLabels ? { adminLabels } : {}),
   }
   if (sumPaymentOtherBreakdown(out) <= 0) return null
   return out
@@ -125,5 +141,31 @@ export function paymentOtherBreakdownSearchTokens(b: PosPaymentOtherBreakdown | 
     parts.push('admin', 'wallet')
     parts.push(...Object.keys(b.admin).map((k) => String(k).toLowerCase()))
   }
+  if (b.adminLabels) {
+    for (const name of Object.values(b.adminLabels)) {
+      const s = String(name || '').trim().toLowerCase()
+      if (s) parts.push(s)
+    }
+  }
   return parts.join(' ')
+}
+
+/** 관리자 결제 라인 id → 화면 이름. 이미 저장된 adminLabels가 우선 */
+export function attachPaymentOtherAdminLabels(
+  raw: unknown,
+  nameById: Record<string, string> | null | undefined
+): PosPaymentOtherBreakdown | null {
+  const parsed = parsePaymentOtherBreakdown(raw)
+  if (!parsed?.admin) return parsed
+  const labels: Record<string, string> = { ...(parsed.adminLabels || {}) }
+  let changed = false
+  for (const id of Object.keys(parsed.admin)) {
+    if (String(labels[id] || '').trim()) continue
+    const name = String(nameById?.[id] || '').trim()
+    if (!name) continue
+    labels[id] = name.slice(0, 80)
+    changed = true
+  }
+  if (!changed) return parsed
+  return { ...parsed, adminLabels: labels }
 }

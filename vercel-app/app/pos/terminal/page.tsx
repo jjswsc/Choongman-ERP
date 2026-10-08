@@ -4396,12 +4396,14 @@ export default function PosTerminalPage() {
         }),
       }
       const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
+      const { enrichReceiptModalPaymentLabels } = await import('@/lib/pos-receipt-payment-labels')
       const hybridShell =
         typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function'
       /** 하이브리드: 회원 API enrich(최대 250ms) 생략 — 결제 직후 스냅샷이면 이미 충분 */
       const enrichedWithMember = hybridShell ? enriched : await enrichReceiptModalDataWithMember(enriched)
+      const enrichedWithPayLabels = await enrichReceiptModalPaymentLabels(enrichedWithMember)
       const receiptHtml = await buildPosPaymentReceiptDocumentHtmlAsync({
-        receiptData: enrichedWithMember,
+        receiptData: enrichedWithPayLabels,
         menus,
         optionNameByCode,
         orderTypeLabels: {

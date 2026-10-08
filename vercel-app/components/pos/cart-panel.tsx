@@ -1814,12 +1814,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const r2 = (n: number) => Math.round(Math.max(0, n) * 100) / 100
     if (useAdminPaymentLines) {
       const admin: Record<string, number> = {}
+      const adminLabels: Record<string, string> = {}
       for (const line of adminPaymentLines) {
         const v = r2(parseBahtAmount(payAdminLineAmounts[line.id] || '0') || 0)
-        if (v > 0.005) admin[String(line.id)] = v
+        if (v <= 0.005) continue
+        const id = String(line.id)
+        admin[id] = v
+        const name = String(line.name || '').trim()
+        if (name) adminLabels[id] = name
       }
       if (Object.keys(admin).length === 0) return undefined
-      return { admin }
+      return Object.keys(adminLabels).length > 0 ? { admin, adminLabels } : { admin }
     }
     const out: PosPaymentOtherBreakdown = {}
     const tm = r2(parseBahtAmount(payTrueMoney) || 0)

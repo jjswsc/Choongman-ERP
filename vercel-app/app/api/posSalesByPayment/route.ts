@@ -11,7 +11,7 @@ import {
   POS_SALES_PAYMENT_ROW_SELECT,
 } from '@/lib/pos-sales-fetch-rows'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
-import { parsePaymentOtherBreakdown, sumPaymentOtherBreakdown } from '@/lib/pos-payment-other-breakdown'
+import { accumulatePosOrderPaymentSales, sortPosPaymentSalesRows } from '@/lib/pos-payment-tender-labels'
 import {
   isPosSalesAnalyticsRpcTimeoutError,
   respondPosSalesAnalyticsTimeout,
@@ -83,59 +83,9 @@ export async function GET(request: NextRequest) {
     if (truncated) headers.set('X-Sales-Truncated', '1')
     headers.set('X-Pos-Sales-Source', 'fetch')
 
-    const byMethod: Record<string, number> = {}
-    for (const r of filterCompletedPosSalesRows(rows, orderTypesAllowed) as PaymentOrderRow[]) {
-      const cash = Number(r.payment_cash) || 0
-      const card = Number(r.payment_card) || 0
-      const qr = Number(r.payment_qr) || 0
-      const other = Number(r.payment_other) || 0
-      const deliveryApp = Number(r.payment_delivery_app) || 0
-      const crypto = Number(r.payment_crypto) || 0
-      const deliveryCh = String(r.delivery_payment_channel ?? '').trim().toLowerCase()
-      const orderType = String(r.order_type ?? '').trim().toLowerCase()
-      if (cash > 0) byMethod.cash = (byMethod.cash || 0) + cash
-      if (card > 0) byMethod.card = (byMethod.card || 0) + card
-      if (qr > 0) byMethod.qr = (byMethod.qr || 0) + qr
-      if (crypto > 0.005) byMethod.crypto = (byMethod.crypto || 0) + crypto
-      if (other > 0) {
-        const bo = parsePaymentOtherBreakdown(r.payment_other_breakdown)
-        if (bo && Math.abs(sumPaymentOtherBreakdown(bo) - other) <= 0.02) {
-          const add = (key: string, n: number) => {
-            if (n > 0.005) byMethod[key] = (byMethod[key] || 0) + n
-          }
-          add('other_truemoney', Number(bo.trueMoney) || 0)
-          add('other_wechat', Number(bo.weChat) || 0)
-          add('other_alipay', Number(bo.alipay) || 0)
-          add('other_unionpay', Number(bo.unionPay) || 0)
-          add('other_linepay', Number(bo.linePay) || 0)
-          add('other_shopeepay', Number(bo.shopeePay) || 0)
-          add('other_misc', Number(bo.misc) || 0)
-          if (bo.admin && typeof bo.admin === 'object') {
-            for (const [id, rawAmt] of Object.entries(bo.admin)) {
-              const nk = String(id || '').trim()
-              if (!nk) continue
-              add(`other_wallet_${nk.replace(/[^a-zA-Z0-9_-]/g, '_')}`, Number(rawAmt) || 0)
-            }
-          }
-        } else {
-          byMethod.other = (byMethod.other || 0) + other
-        }
-      }
-      if (deliveryApp > 0) {
-        byMethod.delivery_app = (byMethod.delivery_app || 0) + deliveryApp
-        if (orderType === 'dine_in' || deliveryCh === 'dine_in') {
-          byMethod.delivery_dine_in = (byMethod.delivery_dine_in || 0) + deliveryApp
-        } else if (deliveryCh === 'grab') byMethod.delivery_grab = (byMethod.delivery_grab || 0) + deliveryApp
-        else if (deliveryCh === 'lineman') byMethod.delivery_lineman = (byMethod.delivery_lineman || 0) + deliveryApp
-        else if (deliveryCh === 'shopee') byMethod.delivery_shopee = (byMethod.delivery_shopee || 0) + deliveryApp
-        else byMethod.delivery_unknown = (byMethod.delivery_unknown || 0) + deliveryApp
-      }
-    }
-
-    const result = Object.entries(byMethod)
-      .filter(([, v]) => v > 0)
-      .map(([paymentKey, sales]) => ({ paymentKey, sales }))
-      .sort((a, b) => b.sales - a.sales)
+    const result = sortPosPaymentSalesRows(
+      accumulatePosOrderPaymentSales(filterCompletedPosSalesRows(rows, orderTypesAllowed) as PaymentOrderRow[])
+    ).map(({ paymentKey, sales }) => ({ paymentKey, sales }))
 
     return NextResponse.json(result, { headers })
   } catch (e) {

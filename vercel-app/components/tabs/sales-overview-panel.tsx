@@ -111,7 +111,7 @@ export function SalesOverviewPanel({
   )
     .map((r) => ({
       key: r.paymentKey,
-      label: translatePaymentKey(r.paymentKey, tr),
+      label: String(r.label || '').trim() || translatePaymentKey(r.paymentKey, tr),
       sales: Number(r.sales ?? 0) || 0,
     }))
     .filter((r) => r.sales > 0)

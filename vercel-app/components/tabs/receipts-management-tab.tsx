@@ -38,6 +38,7 @@ import {
   updatePosOrder,
   updatePosOrderStatus,
   getPosPaymentAttempts,
+  getPosPaymentMethodItems,
   type PosOrder,
   type PosMenu,
   type PosPromoWithItems,
@@ -126,10 +127,13 @@ import {
   toKitchenPrintTrackingToken,
 } from '@/lib/pos-kitchen-print-tracking'
 import {
+  attachPaymentOtherAdminLabels,
   parsePaymentOtherBreakdown,
   paymentOtherBreakdownSearchTokens,
   type PosPaymentOtherBreakdown,
 } from '@/lib/pos-payment-other-breakdown'
+import { collectPosPaymentTenderLabels } from '@/lib/pos-payment-tender-labels'
+import { enrichReceiptModalPaymentLabels } from '@/lib/pos-receipt-payment-labels'
 import { isKbankQrEnabledForStore } from '@/lib/kbank-pilot-stores'
 import {
   evaluateKbankVoidEligibilityFromAttempts,
@@ -292,6 +296,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   const [segmentDeliveryCode, setSegmentDeliveryCode] = React.useState('__all__')
   const [appliedSegmentDeliveryCode, setAppliedSegmentDeliveryCode] = React.useState('__all__')
   const [orders, setOrders] = React.useState<PosOrder[]>([])
+  const [payMethodNameById, setPayMethodNameById] = React.useState<Record<string, string>>({})
   const [loading, setLoading] = React.useState(false)
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
   const [payCorrectOrder, setPayCorrectOrder] = React.useState<PosOrder | null>(null)
@@ -422,10 +427,13 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     if (!br?.admin || typeof br.admin !== 'object') return base
     const adminRows = Object.keys(br.admin).map((id) => ({
       key: `admin:${String(id)}`,
-      label: `Wallet (${String(id)})`,
+      label:
+        String(br.adminLabels?.[id] || '').trim() ||
+        String(payMethodNameById[id] || '').trim() ||
+        `Wallet (${String(id)})`,
     }))
     return [...base, ...adminRows]
-  }, [payCorrectOrder, t])
+  }, [payCorrectOrder, payMethodNameById, t])
 
   const catalogStoreKey = React.useMemo(() => {
     const nf = storeFilter ? resolveStoreKey(storeFilter) : ''
@@ -469,6 +477,39 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       cancel = true
     }
   }, [catalogStoreKey])
+
+  const payMethodStoreKey = React.useMemo(() => {
+    const codes = new Set<string>()
+    if (catalogStoreKey.trim()) codes.add(catalogStoreKey.trim())
+    for (const o of orders) {
+      const code = String(o.storeCode || '').trim()
+      if (code) codes.add(code)
+    }
+    return [...codes].sort().join(',')
+  }, [catalogStoreKey, orders])
+
+  React.useEffect(() => {
+    const codes = payMethodStoreKey.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 20)
+    if (codes.length === 0) return
+    let cancel = false
+    void Promise.all(codes.map((storeCode) => getPosPaymentMethodItems({ storeCode }).catch(() => []))).then(
+      (batches) => {
+        if (cancel) return
+        const map: Record<string, string> = {}
+        for (const items of batches) {
+          for (const it of items || []) {
+            const id = String(it?.id || '').trim()
+            const name = String(it?.name || '').trim()
+            if (id && name) map[id] = name
+          }
+        }
+        setPayMethodNameById(map)
+      }
+    )
+    return () => {
+      cancel = true
+    }
+  }, [payMethodStoreKey])
 
   React.useEffect(() => {
     getPosDeliveryApps({
@@ -671,6 +712,33 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
     })
   }, [offlineAware, loadOrders])
 
+  const receiptPaymentLabel = React.useCallback(
+    (o: PosOrder) => {
+      const labels = collectPosPaymentTenderLabels(
+        {
+          paymentCash: o.paymentCash,
+          paymentCard: o.paymentCard,
+          paymentQr: o.paymentQr,
+          paymentOther: o.paymentOther,
+          paymentOtherBreakdown: attachPaymentOtherAdminLabels(o.paymentOtherBreakdown, payMethodNameById),
+          paymentDeliveryApp: o.paymentDeliveryApp,
+          paymentCrypto: o.paymentCrypto,
+          paymentCryptoAsset:
+            o.paymentCryptoMeta && typeof o.paymentCryptoMeta === 'object'
+              ? String((o.paymentCryptoMeta as { asset?: string }).asset || '')
+              : '',
+          deliveryChannelLabel:
+            posDeliveryCodeToLabel(o.deliveryAppCode) || String(o.deliveryPaymentChannel || ''),
+        },
+        (key, fallback) => tOr(t, key, fallback),
+        payMethodNameById,
+        'list'
+      )
+      return labels.length > 0 ? labels.join(', ') : '-'
+    },
+    [payMethodNameById, t]
+  )
+
   const isToday = startStr === todayStr && endStr === todayStr && statusFilter === 'all'
   const todaySummary = React.useMemo(() => {
     if (!isToday || orders.length === 0) return null
@@ -838,9 +906,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         ...lineOpts,
         pricingAdjustments,
       })
-      const receiptRows = splitBatch ?? [
-        receiptModalDataFromPosOrderReprint(orderForPrint, lineOpts, pricingAdjustments),
-      ]
+      const receiptRows = await Promise.all(
+        (splitBatch ?? [
+          receiptModalDataFromPosOrderReprint(orderForPrint, lineOpts, pricingAdjustments),
+        ]).map((row) => enrichReceiptModalPaymentLabels(row))
+      )
       const { enrichReceiptModalDataWithMember } = await import('@/lib/pos-receipt-member-enrich-client')
       for (let idx = 0; idx < receiptRows.length; idx += 1) {
         const receiptData = await enrichReceiptModalDataWithMember(receiptRows[idx], orderForPrint)
@@ -1889,13 +1959,16 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                   <th className="px-4 py-3 text-left font-semibold">{t('posStatus') || '상태'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderDateTime')}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderPaidDateTime')}</th>
+                  <th className="px-4 py-3 text-left font-semibold">
+                    {tOr(t, 'posReceiptColPayment', 'Payment')}
+                  </th>
                   <th className="px-4 py-3 w-10" />
                 </tr>
               </thead>
               <tbody>
                 {sortedFilteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
                       {orders.length > 0 &&
                       (appliedSearchTerm.trim() ||
                         (appliedSegmentDeliveryCode && appliedSegmentDeliveryCode !== '__all__'))
@@ -1956,6 +2029,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                             return paidAt ? formatBangkokDateTime(paidAt) : '-'
                           })()}
                         </td>
+                        <td className="px-4 py-3 text-muted-foreground max-w-[180px]">
+                          <span className="line-clamp-2">{receiptPaymentLabel(o)}</span>
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
                             {isPayCorrectableOrder(o) && (
@@ -1984,7 +2060,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
                       </tr>
                       {expandedId === o.id && (
                         <tr className="border-b bg-muted/10">
-                          <td colSpan={9} className="px-4 py-4">
+                          <td colSpan={10} className="px-4 py-4">
                             <div className="space-y-2 text-xs">
                               {isPosOrderMergedAbsorbRow(o) ? (
                                 <div className="mb-2 pb-2 border-b text-muted-foreground">

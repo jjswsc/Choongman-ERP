@@ -5372,7 +5372,9 @@ export const i18n = {
     salesChannelTypeUnknown: '기타',
     salesPayCash: '현금',
     salesPayCard: '카드',
+    salesPayCredit: '신용카드',
     salesPayQr: 'QR',
+    salesPayQrPromptPay: 'QR PromptPay',
     salesPayOther: '기타',
     salesSelectPeriod: '기간을 선택해 주세요.',
     salesNoSalesData: '해당 기간 매출 데이터가 없습니다.',
@@ -5396,6 +5398,9 @@ export const i18n = {
     salesCreditVisa: 'Visa',
     salesPaymentBreakdownDeliveryTitle: '결제수단별 매출 — 배달',
     salesPaymentBreakdownCreditTitle: '결제수단별 매출 — 카드/지갑',
+    salesPaymentMethodSummaryTitle: '결제수단별 매출',
+    salesPaymentMethodSummaryHint:
+      '완료 주문 기준입니다. 현금, 신용카드, QR PromptPay, WeChat, Alipay, TrueMoney처럼 실제 받은 결제수단별로 나눕니다.',
     salesPaymentBreakdownFootnote:
       '배달·카드 표는 POS 결산에 저장한 breakdown(Visa/Grab 등)을 합산합니다. 결산 전 매장·미연동 건만 LINKPOS 또는 주문 배달액으로 보조합니다.',
     salesPaymentCashReconcileMismatch:
@@ -7918,7 +7923,7 @@ export const i18n = {
     helpSum_admin_sales_management:
       '기간·매장·채널·메뉴·할인·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다. 「채널 확인」에서 배달앱·QR·카드는 방콕 달력일로 맞추고, QR은 통장 입금일·배달/카드는 인식일(익일 입금)로 틀린 날을 찾습니다.',
     helpHow_admin_sales_management:
-      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측·채널 확인)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「일자/시간 추이」·「매장·기간 목록」에서는 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n④ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑤ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑥ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑦ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑧ 채널 확인 → 배달앱: 행을 펼쳐 방콕 달력일과 통장 인식일(익일 입금)의 POS 예상입금 vs 매장 통장 4111/4112/4113을 비교하고, 「틀린 날짜만」으로 차이를 찾습니다.\n⑨ 채널 확인 → KBank QR: 당일 마감은 POS QR, 통장은 매장 통장 4130을 입금일(달력)로 맞춰 틀린 날을 찾습니다. 자정 이후는 영업일 마감과 날짜가 다를 수 있습니다.\n⑩ 채널 확인 → 카드: POS 카드와 매장 통장 4120~4124를 방콕 달력일 vs 통장 인식일로 비교합니다(정산은 보통 익일).\n⑪ 채널 확인 → 현금: POS 현금을 시재와 맞추고, 매장 통장 4140을 영업일·인식일로 비교합니다.\n⑫ 기간이 31일을 넘어도 연·월·주·일·시간대·요일 집계는 선택할 수 있습니다. 직전·전주 비교와 메뉴·채널 확인은 생략하니, 그 리포트는 한 달 이내로 나눠 조회하세요.',
+      '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측·채널 확인)와 주제 버튼으로 리포트를 고릅니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「일자/시간 추이」·「매장·기간 목록」에서는 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n④ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑤ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑥ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑦ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑧ 채널 확인 → 배달앱: 행을 펼쳐 방콕 달력일과 통장 인식일(익일 입금)의 POS 예상입금 vs 매장 통장 4111/4112/4113을 비교하고, 「틀린 날짜만」으로 차이를 찾습니다.\n⑨ 채널 확인 → KBank QR: 당일 마감은 POS QR, 통장은 매장 통장 4130을 입금일(달력)로 맞춰 틀린 날을 찾습니다. 자정 이후는 영업일 마감과 날짜가 다를 수 있습니다.\n⑩ 채널 확인 → 카드: POS 카드와 매장 통장 4120~4124를 방콕 달력일 vs 통장 인식일로 비교합니다(정산은 보통 익일).\n⑪ 채널 확인 → 현금: POS 현금을 시재와 맞추고, 매장 통장 4140을 영업일·인식일로 비교합니다.\n⑫ 기간이 31일을 넘어도 연·월·주·일·시간대·요일 집계는 선택할 수 있습니다. 직전·전주 비교와 메뉴·채널 확인은 생략하니, 그 리포트는 한 달 이내로 나눠 조회하세요.\n⑬ 「결제/카드」는 완료 주문 기준 현금·신용카드·QR PromptPay·WeChat·Alipay·TrueMoney 등 결제수단별 매출을 보여 줍니다.',
     salesSubnavAria: '매출 관리 메뉴',
     salesTopicHintLabel: '이 리포트',
     salesOverviewIntro:
@@ -13816,7 +13821,9 @@ Only matters the employee must handle personally on a working day:
     salesChannelTypeUnknown: 'Other',
     salesPayCash: 'Cash',
     salesPayCard: 'Card',
+    salesPayCredit: 'Credit',
     salesPayQr: 'QR',
+    salesPayQrPromptPay: 'QR PromptPay',
     salesPayOther: 'Other',
     salesSelectPeriod: 'Select period.',
     salesNoSalesData: 'No sales data for this period.',
@@ -13840,6 +13847,9 @@ Only matters the employee must handle personally on a working day:
     salesCreditVisa: 'Visa',
     salesPaymentBreakdownDeliveryTitle: 'Sales Report by Card Type — Delivery',
     salesPaymentBreakdownCreditTitle: 'Sales Report by Card Type — Credit Card',
+    salesPaymentMethodSummaryTitle: 'Sales by payment method',
+    salesPaymentMethodSummaryHint:
+      'From completed orders. Split by the tender actually received: Cash, Credit, QR PromptPay, WeChat, Alipay, TrueMoney, and other saved methods.',
     salesPaymentBreakdownFootnote:
       'Delivery & card tables sum POS settlement breakdowns (Visa/Grab etc.). LINKPOS or order delivery amounts fill gaps before settlement is saved.',
     salesPaymentCashReconcileMismatch:
@@ -16365,7 +16375,7 @@ orderItemQty: 'Qty',
     helpSum_admin_sales_management:
       'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. Channel check matches delivery apps, QR, and card on Bangkok calendar dates (QR uses bank deposit date; delivery/card use recognition date for next-day payout) so you can find mismatched days.',
     helpHow_admin_sales_management:
-      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic; read the hint under the topic buttons.\n③ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n④ Reuse filters via URL or Save preset.\n⑤ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑥ Business hours tab adjusts POS business-day boundaries.\n⑦ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑧ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑨ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑩ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑪ Channel check → Cash: match POS cash to the drawer vs store account subject 4140 on POS business day and bank recognition date.\n⑫ Ranges longer than 31 days still allow year/month/week/day/hour/weekday aggregation. Prior-period / prior-week comparison, menu, and channel check are skipped — split those into one month or less.',
+      '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic; read the hint under the topic buttons.\n③ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n④ Reuse filters via URL or Save preset.\n⑤ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑥ Business hours tab adjusts POS business-day boundaries.\n⑦ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑧ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑨ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑩ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑪ Channel check → Cash: match POS cash to the drawer vs store account subject 4140 on POS business day and bank recognition date.\n⑫ Ranges longer than 31 days still allow year/month/week/day/hour/weekday aggregation. Prior-period / prior-week comparison, menu, and channel check are skipped — split those into one month or less.\n⑬ Payment/Card lists completed-order sales by tender: Cash, Credit, QR PromptPay, WeChat, Alipay, TrueMoney, and other saved methods.',
     salesSubnavAria: 'Sales menu',
     salesTopicHintLabel: 'This report',
     salesOverviewIntro:
@@ -21623,7 +21633,9 @@ orderItemQty: 'จำนวน',
     salesChannelTypeUnknown: 'อื่นๆ',
     salesPayCash: 'เงินสด',
     salesPayCard: 'บัตร',
+    salesPayCredit: 'บัตรเครดิต',
     salesPayQr: 'QR',
+    salesPayQrPromptPay: 'QR PromptPay',
     salesPayOther: 'อื่นๆ',
     salesSelectPeriod: 'เลือกช่วงเวลา',
     salesNoSalesData: 'ไม่มีข้อมูลยอดขายในช่วงนี้',
@@ -21647,6 +21659,9 @@ orderItemQty: 'จำนวน',
     salesCreditVisa: 'Visa',
     salesPaymentBreakdownDeliveryTitle: 'รายงานตามการชำระ — เดลิเวอรี',
     salesPaymentBreakdownCreditTitle: 'รายงานตามการชำระ — บัตรเครดิต',
+    salesPaymentMethodSummaryTitle: 'ยอดขายตามประเภทการชำระ',
+    salesPaymentMethodSummaryHint:
+      'จากออเดอร์ที่ปิดแล้ว แยกตามช่องทางที่รับจริง เช่น เงินสด บัตรเครดิต QR PromptPay WeChat Alipay TrueMoney ครับ',
     salesPaymentBreakdownFootnote:
       'ตารางเดลิเวอรี·บัตรรวม breakdown จาก POS ปิดยอด (Visa/Grab ฯลฯ) ก่อนปิดยอดใช้ LINKPOS หรือยอดเดลิเวอรีจากออเดอร์ช่วยเติม',
     salesPaymentCashReconcileMismatch:

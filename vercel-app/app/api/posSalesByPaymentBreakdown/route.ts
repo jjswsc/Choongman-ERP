@@ -42,6 +42,29 @@ import {
   isPosSalesAnalyticsRpcTimeoutError,
   tryFetchPosSalesAnalyticsAgg,
 } from '@/lib/pos-sales-analytics-rpc-server'
+import {
+  accumulatePosOrderPaymentSales,
+  sortPosPaymentSalesRows,
+  type PosPaymentSalesBucketRow,
+} from '@/lib/pos-payment-tender-labels'
+
+async function loadPaymentMethodNames(): Promise<Record<string, string>> {
+  const map: Record<string, string> = {}
+  try {
+    const rows = (await supabaseSelectFilter('pos_payment_method_items', 'id=gte.1', {
+      select: 'id,name',
+      limit: 5000,
+    })) as { id?: number | string; name?: string }[] | null
+    for (const r of rows || []) {
+      const id = String(r.id ?? '').trim()
+      const name = String(r.name ?? '').trim()
+      if (id && name) map[id] = name
+    }
+  } catch {
+    /* 이름 조회 실패 시 영수증에 저장된 adminLabels 또는 Other로 표시 */
+  }
+  return map
+}
 
 function normalizeToken(s: string): string {
   return String(s || '').toLowerCase().replace(/\s+/g, '')
@@ -322,8 +345,15 @@ export async function GET(request: NextRequest) {
       if (!isPosSalesAnalyticsRpcTimeoutError(e)) throw e
     }
 
-    let summary: { paymentKey: string; sales: number }[]
-    if (summaryRpc) {
+    let summary: PosPaymentSalesBucketRow[]
+    const detailedSummary = sortPosPaymentSalesRows(
+      accumulatePosOrderPaymentSales(paidRows, await loadPaymentMethodNames())
+    )
+    if (!truncated) {
+      headers.set('X-Pos-Sales-Payment-Summary', 'orders')
+      summary = detailedSummary
+    } else if (summaryRpc) {
+      headers.set('X-Pos-Sales-Payment-Summary', 'rpc')
       summary = summaryRpc
         .map((r) => ({
           paymentKey: String(r.payment_key ?? r.bucket_key ?? '').trim(),
@@ -331,24 +361,8 @@ export async function GET(request: NextRequest) {
         }))
         .filter((r) => r.paymentKey && r.sales > 0)
     } else {
-      const byMethod: Record<string, number> = {}
-      for (const r of paidRows as Array<Record<string, unknown>>) {
-        const cash = Number(r.payment_cash) || 0
-        const card = Number(r.payment_card) || 0
-        const qr = Number(r.payment_qr) || 0
-        const other = Number(r.payment_other) || 0
-        const deliveryApp = Number(r.payment_delivery_app) || 0
-        const crypto = Number(r.payment_crypto) || 0
-        if (cash > 0) byMethod.cash = (byMethod.cash || 0) + cash
-        if (card > 0) byMethod.card = (byMethod.card || 0) + card
-        if (qr > 0) byMethod.qr = (byMethod.qr || 0) + qr
-        if (other > 0) byMethod.other = (byMethod.other || 0) + other
-        if (deliveryApp > 0) byMethod.delivery_app = (byMethod.delivery_app || 0) + deliveryApp
-        if (crypto > 0.005) byMethod.crypto = (byMethod.crypto || 0) + crypto
-      }
-      summary = Object.entries(byMethod)
-        .filter(([, v]) => v > 0)
-        .map(([paymentKey, sales]) => ({ paymentKey, sales }))
+      headers.set('X-Pos-Sales-Payment-Summary', 'orders-truncated')
+      summary = detailedSummary
     }
 
     const liveCashFromSummary = Math.max(
@@ -381,7 +395,7 @@ export async function GET(request: NextRequest) {
         deliveryTotal: sumDeliveryPaymentChannelSales(deliveryByChannel),
         creditByChannel,
         creditTotal: sumCreditPaymentChannelSales(creditByChannel),
-        summary: summary.sort((a, b) => b.sales - a.sales),
+        summary: sortPosPaymentSalesRows(summary),
         cashReconcile,
       },
       { headers }
