@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-09T09:07:41.717Z",
-  "entryCount": 1989,
+  "generatedAt": "2026-10-09T10:37:57.562Z",
+  "entryCount": 1992,
   "entries": [
     {
       "path": "app/admin/grab-integration/page.tsx",
@@ -4428,14 +4428,28 @@
     },
     {
       "path": "app/api/importInfluencerProfilesXlsx/route.ts",
-      "line": 28,
+      "line": 38,
       "kind": "maxDurationSec",
       "value": 60,
       "apiLabel": "importInfluencerProfilesXlsx"
     },
     {
       "path": "app/api/importInfluencerProfilesXlsx/route.ts",
-      "line": 111,
+      "line": 222,
+      "kind": "limit",
+      "value": 5000,
+      "apiLabel": "importInfluencerProfilesXlsx"
+    },
+    {
+      "path": "app/api/importInfluencerProfilesXlsx/route.ts",
+      "line": 280,
+      "kind": "limit",
+      "value": 8000,
+      "apiLabel": "importInfluencerProfilesXlsx"
+    },
+    {
+      "path": "app/api/importInfluencerProfilesXlsx/route.ts",
+      "line": 379,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "importInfluencerProfilesXlsx"
@@ -4666,28 +4680,35 @@
     },
     {
       "path": "app/api/marketingInfluencers/route.ts",
-      "line": 261,
+      "line": 274,
       "kind": "limit",
       "value": 1,
       "apiLabel": "marketingInfluencers"
     },
     {
       "path": "app/api/marketingInfluencers/route.ts",
-      "line": 302,
+      "line": 320,
       "kind": "limit",
       "value": 1,
       "apiLabel": "marketingInfluencers"
     },
     {
       "path": "app/api/marketingInfluencerSalesLift/route.ts",
-      "line": 32,
+      "line": 36,
       "kind": "maxDurationSec",
       "value": 60,
       "apiLabel": "marketingInfluencerSalesLift"
     },
     {
       "path": "app/api/marketingInfluencerSalesLift/route.ts",
-      "line": 86,
+      "line": 91,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "marketingInfluencerSalesLift"
+    },
+    {
+      "path": "app/api/marketingInfluencerSalesLift/route.ts",
+      "line": 97,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "marketingInfluencerSalesLift"
@@ -7738,333 +7759,333 @@
       "apiLabel": "lib:accounting-posting"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 331,
+      "path": "lib/accounting-reports-balance-sheet.ts",
+      "line": 53,
       "kind": "limit",
-      "value": 20000,
-      "apiLabel": "lib:accounting-reports"
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-balance-sheet"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 343,
+      "path": "lib/accounting-reports-balance-sheet.ts",
+      "line": 62,
       "kind": "limit",
-      "value": 20000,
-      "apiLabel": "lib:accounting-reports"
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-balance-sheet"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 415,
+      "path": "lib/accounting-reports-balance-sheet.ts",
+      "line": 66,
       "kind": "limit",
-      "value": 20000,
-      "apiLabel": "lib:accounting-reports"
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-balance-sheet"
     },
     {
-      "path": "lib/accounting-reports.ts",
+      "path": "lib/accounting-reports-balance-sheet.ts",
+      "line": 172,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-balance-sheet"
+    },
+    {
+      "path": "lib/accounting-reports-drilldown.ts",
+      "line": 296,
+      "kind": "pageSize",
+      "value": 8000,
+      "apiLabel": "lib:accounting-reports-drilldown"
+    },
+    {
+      "path": "lib/accounting-reports-drilldown.ts",
+      "line": 344,
+      "kind": "pageSize",
+      "value": 8000,
+      "apiLabel": "lib:accounting-reports-drilldown"
+    },
+    {
+      "path": "lib/accounting-reports-drilldown.ts",
+      "line": 433,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-drilldown"
+    },
+    {
+      "path": "lib/accounting-reports-drilldown.ts",
+      "line": 444,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-drilldown"
+    },
+    {
+      "path": "lib/accounting-reports-drilldown.ts",
+      "line": 448,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-drilldown"
+    },
+    {
+      "path": "lib/accounting-reports-drilldown.ts",
       "line": 479,
       "kind": "pageSize",
       "value": 8000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 527,
-      "kind": "pageSize",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 549,
-      "kind": "pageSize",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 584,
-      "kind": "pageSize",
-      "value": 8000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 605,
+      "path": "lib/accounting-reports-drilldown.ts",
+      "line": 574,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 616,
+      "path": "lib/accounting-reports-drilldown.ts",
+      "line": 586,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 620,
+      "path": "lib/accounting-reports-drilldown.ts",
+      "line": 590,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 647,
+      "path": "lib/accounting-reports-drilldown.ts",
+      "line": 855,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-drilldown"
+    },
+    {
+      "path": "lib/accounting-reports-expense-routing.ts",
+      "line": 54,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-expense-routing"
+    },
+    {
+      "path": "lib/accounting-reports-expense-routing.ts",
+      "line": 100,
       "kind": "pageSize",
       "value": 8000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-expense-routing"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 704,
-      "kind": "limit",
+      "path": "lib/accounting-reports-expense-routing.ts",
+      "line": 201,
+      "kind": "pageSize",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-expense-routing"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 715,
-      "kind": "limit",
+      "path": "lib/accounting-reports-expense-routing.ts",
+      "line": 282,
+      "kind": "pageSize",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-expense-routing"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 719,
-      "kind": "limit",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 743,
+      "path": "lib/accounting-reports-income.ts",
+      "line": 374,
       "kind": "pageSize",
       "value": 8000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-income"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 836,
-      "kind": "limit",
-      "value": 500,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 840,
-      "kind": "limit",
-      "value": 10000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 978,
+      "path": "lib/accounting-reports-income.ts",
+      "line": 428,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-income"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 1046,
-      "kind": "limit",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 1092,
-      "kind": "pageSize",
-      "value": 8000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 1193,
-      "kind": "pageSize",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 1274,
-      "kind": "pageSize",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 1584,
-      "kind": "pageSize",
-      "value": 8000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 1592,
-      "kind": "pageSize",
-      "value": 8000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 1697,
-      "kind": "limit",
-      "value": 5000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 1707,
-      "kind": "limit",
-      "value": 5000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 2033,
-      "kind": "pageSize",
-      "value": 8000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 2087,
-      "kind": "limit",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
-    },
-    {
-      "path": "lib/accounting-reports.ts",
-      "line": 2199,
+      "path": "lib/accounting-reports-income.ts",
+      "line": 540,
       "kind": "limit",
       "value": 2000000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-income"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 2213,
+      "path": "lib/accounting-reports-income.ts",
+      "line": 554,
       "kind": "pageSize",
       "value": 8000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-income"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 2383,
+      "path": "lib/accounting-reports-income.ts",
+      "line": 724,
       "kind": "pageSize",
       "value": 8000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-income"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 2437,
+      "path": "lib/accounting-reports-income.ts",
+      "line": 778,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-income"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 2439,
+      "path": "lib/accounting-reports-income.ts",
+      "line": 780,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-income"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3021,
+      "path": "lib/accounting-reports-inventory.ts",
+      "line": 93,
       "kind": "pageSize",
       "value": 8000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-inventory"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3069,
+      "path": "lib/accounting-reports-inventory.ts",
+      "line": 101,
       "kind": "pageSize",
       "value": 8000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-inventory"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3158,
+      "path": "lib/accounting-reports-inventory.ts",
+      "line": 206,
       "kind": "limit",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "value": 5000,
+      "apiLabel": "lib:accounting-reports-inventory"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3169,
+      "path": "lib/accounting-reports-inventory.ts",
+      "line": 216,
       "kind": "limit",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "value": 5000,
+      "apiLabel": "lib:accounting-reports-inventory"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3173,
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 66,
       "kind": "limit",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "value": 20000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3204,
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 78,
+      "kind": "limit",
+      "value": 20000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
+    },
+    {
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 150,
+      "kind": "limit",
+      "value": 20000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
+    },
+    {
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 214,
       "kind": "pageSize",
       "value": 8000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3362,
-      "kind": "limit",
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 262,
+      "kind": "pageSize",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3371,
-      "kind": "limit",
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 284,
+      "kind": "pageSize",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3375,
-      "kind": "limit",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 319,
+      "kind": "pageSize",
+      "value": 8000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3481,
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 340,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3585,
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 351,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3597,
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 355,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3601,
-      "kind": "limit",
-      "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 382,
+      "kind": "pageSize",
+      "value": 8000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
-      "path": "lib/accounting-reports.ts",
-      "line": 3866,
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 439,
       "kind": "limit",
       "value": 2000,
-      "apiLabel": "lib:accounting-reports"
+      "apiLabel": "lib:accounting-reports-purchase-sources"
+    },
+    {
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 450,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
+    },
+    {
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 454,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
+    },
+    {
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 478,
+      "kind": "pageSize",
+      "value": 8000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
+    },
+    {
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 543,
+      "kind": "limit",
+      "value": 500,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
+    },
+    {
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 547,
+      "kind": "limit",
+      "value": 10000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
+    },
+    {
+      "path": "lib/accounting-reports-purchase-sources.ts",
+      "line": 685,
+      "kind": "limit",
+      "value": 2000,
+      "apiLabel": "lib:accounting-reports-purchase-sources"
     },
     {
       "path": "lib/accounting-stock-purchase-agg.ts",
@@ -9468,7 +9489,7 @@
     },
     {
       "path": "lib/i18n-marketing-hub.ts",
-      "line": 966,
+      "line": 1066,
       "kind": "limit",
       "value": 5,
       "apiLabel": "lib:i18n-marketing-hub"
@@ -11421,7 +11442,7 @@
     },
     {
       "path": "lib/pos-main-device-autoprint.ts",
-      "line": 721,
+      "line": 723,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-main-device-autoprint"
