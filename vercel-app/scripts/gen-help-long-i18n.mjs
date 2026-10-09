@@ -132,7 +132,7 @@ function outObj(type) {
 
 const header = `/**
  * Admin 상세 도움말 — \`helpLongWhat_*\` / \`helpLongHow_*\` (ko/en).
- * \`i18n.ts\`의 ko/en 객체에 spread 합니다. 재생성: \`node vercel-app/scripts/gen-help-long-i18n.mjs\`
+ * \`i18n-locales/ko.ts\`·\`en.ts\`에 spread 합니다. 재생성: \`node vercel-app/scripts/gen-help-long-i18n.mjs\`
  */
 `
 

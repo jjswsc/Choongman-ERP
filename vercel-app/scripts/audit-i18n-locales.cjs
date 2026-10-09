@@ -1,5 +1,5 @@
 /**
- * i18n.ts 로케일별 점검
+ * lib/i18n-locales/<lang>.ts 로케일별 점검
  * - 중복 키: 동일 로케일 객체 안에 같은 키가 두 번이면 JS는 마지막 값만 사용 → 번역이 덮어써짐.
  * - 스크립트 혼입: 참고용(의도적 다국어 표기, ฿, posLang*, 카테고리명 POS추가옵션 등)은 오탐이 많음.
  *
@@ -10,31 +10,16 @@ const fs = require("fs")
 const path = require("path")
 
 const root = path.resolve(__dirname, "..")
-const i18nPath = path.join(root, "lib", "i18n.ts")
-const src = fs.readFileSync(i18nPath, "utf8")
+const localesDir = path.join(root, "lib", "i18n-locales")
 
 const langs = ["ko", "en", "th", "mm", "la", "kh", "vi", "ms"]
 
-function extractLangBlock(source, lang, nextLangs) {
-  const startRe = new RegExp(`\\n\\s*${lang}:\\s*\\{`)
-  const m = source.match(startRe)
-  if (!m || m.index == null) return { text: "", startLine: 0 }
-  const start = m.index + m[0].length
-  let end = source.length
-  for (const n of nextLangs) {
-    const re = new RegExp(`\\n\\s*${n}:\\s*\\{`)
-    const mm = source.slice(start).match(re)
-    if (mm && mm.index != null) {
-      end = start + mm.index
-      break
-    }
-  }
-  const text = source.slice(start, end)
-  const startLine = src.slice(0, start).split(/\r?\n/).length
-  return { text, startLine }
+function extractLangBlock(lang) {
+  const text = fs.readFileSync(path.join(localesDir, `${lang}.ts`), "utf8")
+  return { text, startLine: 1 }
 }
 
-const RE_KEY_LINE = /^    ([A-Za-z0-9_]+):/
+const RE_KEY_LINE = /^  ([A-Za-z0-9_]+):/
 
 const RE_HANGUL = /[\uAC00-\uD7A3\u3131-\u3163]/
 const RE_THAI = /[\u0E00-\u0E7F]/
@@ -80,7 +65,7 @@ const strict = process.argv.includes("--strict")
 
 for (let i = 0; i < langs.length; i++) {
   const lang = langs[i]
-  const { text, startLine } = extractLangBlock(src, lang, langs.slice(i + 1))
+  const { text, startLine } = extractLangBlock(lang)
   if (!text) continue
 
   const blockLines = text.split(/\r?\n/)
@@ -116,7 +101,7 @@ for (let i = 0; i < langs.length; i++) {
   })
 }
 
-console.log("=== i18n.ts 로케일 감사 ===\n")
+console.log("=== i18n-locales 로케일 감사 ===\n")
 
 if (issues.duplicates.length) {
   console.log(`[중복 키] ${issues.duplicates.length}건 (동일 로케일에서 나중 줄이 이깁니다)\n`)
