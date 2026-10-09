@@ -25,3 +25,15 @@ vercel-app/원가분석.xlsx
 vercel-app/*.xlsx
 .vercel
 .env*
+
+# 임시 작업물 (레포 밖 C:\CM_ERP_archive 로 보관)
+# tmp-flow-zips/ 는 FLOW 기초잔액 스크립트가 읽는 회계 원본 — 커밋 금지
+tmp-*/
+tmp-*.txt
+temp_*
+*_diff.txt
+old_files_backup/
+erp-ui/
+vercel-app/tmp-*.txt
+vercel-app/*.bak
+vercel-app/scripts/__tmp-*
