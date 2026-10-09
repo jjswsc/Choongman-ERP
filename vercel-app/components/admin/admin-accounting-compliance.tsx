@@ -2,11 +2,9 @@
 
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import * as React from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
   adminTabsContentCn,
@@ -25,8 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Landmark, ExternalLink, Save, Plus, Trash2, Download, CalendarClock, ChevronDown, Printer } from "lucide-react"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ExternalLink, Save } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr } from "@/lib/i18n"
@@ -37,10 +34,6 @@ import {
   canWriteAccountingCompliance,
 } from "@/lib/accounting-auth"
 import { THAI_FILING_DEFINITIONS, type ThaiFilingType } from "@/lib/thai-filing-scope"
-import {
-  THAI_FILING_SCHEDULE_SECTIONS,
-  THAI_FILING_SCHEDULE_TABLE_ROWS,
-} from "@/lib/thai-filing-schedule-guide"
 import { THAI_GOV_FILING_CHANNELS, GOV_INTEGRATION_PHASES } from "@/lib/thai-gov-filing-channels"
 import { CHART_OF_ACCOUNTS_BY_CODE } from "@/lib/chart-of-accounts-mapping"
 import {
@@ -98,7 +91,6 @@ import {
   type ThaiTaxFilingSummary,
   getCorporateTaxComputation,
   type CorporateTaxComputationData,
-  getExportCorporateTaxPackageCsvUrl,
   getAccountingWorkflowStatus,
   getSsoSubmissionHistory,
   saveAccountingWorkflowStatus,
@@ -137,24 +129,6 @@ import {
   isThaiTaxId13,
   type VendorTaxLinkInput,
 } from "@/lib/store-vendor-tax-link"
-import { StoreVendorTaxLinkBanner } from "@/components/admin/tax-filing/store-vendor-tax-link-banner"
-import {
-  AccountingEmptyState,
-  AccountingPeriodChip,
-  AccountingStatCard,
-  AccountingStatGrid,
-  AccountingTableBodyRow,
-  AccountingTableFootRow,
-  AccountingTableHead,
-  AccountingTableShell,
-} from "@/components/admin/accounting-result-primitives"
-import {
-  accountingLedgerEntryGridCn,
-  accountingResultTdCn,
-  accountingResultTdRightCn,
-  accountingResultThCn,
-  accountingResultThRightCn,
-} from "@/lib/accounting-result-ui"
 import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import type {
@@ -166,13 +140,11 @@ import type {
   Kt20kSummaryResponse,
   Kt20kReasonTag,
   SsoPayrollPreview,
-  SsoSubmissionMeta,
   EtaxTimestampMeta,
   EtaxStepKey,
   AdminAccountingComplianceProps,
 } from "./admin-accounting-compliance-types"
 import {
-  PND1_ISSUE_CODES,
   KT20K_REASON_TAGS,
   KT20K_TAGS_QUERY_KEY,
   KT20K_TOL_QUERY_KEY,
@@ -180,23 +152,20 @@ import {
   KT20K_STORE_QUERY_KEY,
   KT20K_TAB_QUERY_KEY,
   PP30_FETCH_TIMEOUT_MS,
-  SSO_WORKFLOW_NOTE_PREFIX,
-  ETAX_TIMESTAMP_NOTE_PREFIX,
 } from "./admin-accounting-compliance-types"
 import {
   ymNow,
-  emptyVat,
-  emptyWht,
-  emptyPp36,
-  emptyPnd54,
-  normalizeLedgerFilingStatus,
+  mapVatEntries,
+  mapWhtEntries,
+  mapPp36Entries,
+  mapPnd54Entries,
+  computeVatInputClaimable,
+  computeVatSettlement,
   formatBangkokDateTime,
   daysFromNow,
   withClientTimeout,
-  asNum,
   buildSsoPayrollPreview,
   parseAttachmentUrlsFromInput,
-  displayNameFromUrl,
   parseSsoWorkflowNote,
   buildSsoWorkflowNote,
   parseEtaxTimestampWorkflowNote,
@@ -215,18 +184,10 @@ import {
 } from "@/lib/thai-sso-sps1-10-export"
 import {
   downloadThaiSsoOfficialUploadFromPayrollXlsx,
-  mapPayrollRowToOfficialUploadRow,
-  resolveSsoOfficialUploadColumnLabel,
-  SSO_OFFICIAL_UPLOAD_COLUMN_HELP,
   type SsoOfficialUploadSheet,
 } from "@/lib/thai-sso-official-upload-export"
 import { DEFAULT_SSO_FILING_WAGE_MODE, type SsoFilingWageMode } from "@/lib/payroll-utils"
-import {
-  readPnd91ChecklistEntry,
-  readPnd91ChecklistForScope,
-  writePnd91ChecklistEntry,
-  type Pnd91ChecklistStatus,
-} from "@/lib/pnd91-checklist-storage"
+import { readPnd91ChecklistForScope } from "@/lib/pnd91-checklist-storage"
 import { consolidatePosOutputRowsForTaxExport, isPosAutoVatOutputRow, isStockAutoVatRow } from "@/lib/vat-ledger-pos"
 import { formatTaxEntityScopeLabel } from "@/lib/tax-entity-scope-label"
 import type { VatLedgerRow } from "@/lib/vat-ledger-csv"
@@ -238,6 +199,11 @@ import {
 import { AccountingCompliancePeriodTab } from "./accounting-compliance-period-tab"
 import { AccountingComplianceSummaryTab } from "./accounting-compliance-summary-tab"
 import { AccountingComplianceSsoTab } from "./accounting-compliance-sso-tab"
+import { AccountingComplianceScopeTab } from "./accounting-compliance-scope-tab"
+import { AccountingComplianceTrialTab } from "./accounting-compliance-trial-tab"
+import { AccountingComplianceCitTab } from "./accounting-compliance-cit-tab"
+import { AccountingComplianceKt20kTab } from "./accounting-compliance-kt20k-tab"
+import { AccountingComplianceWorkflowTab } from "./accounting-compliance-workflow-tab"
 
 export function AdminAccountingCompliance({
   initialTab = "scope",
@@ -983,32 +949,7 @@ export function AdminAccountingCompliance({
   }, [canUse, role, yearMonthTb, storeTb, auth?.store, t])
 
   const mapVat = React.useCallback(
-    (entries: Record<string, unknown>[]): VatDraft[] =>
-      entries.map((r) => ({
-        id: r.id != null ? Number(r.id) : undefined,
-        doc_date: String(r.doc_date || "").slice(0, 10),
-        tax_month: String(r.tax_month || taxMonth).slice(0, 7),
-        direction: String(r.direction || "").trim().toLowerCase() === "input" ? "input" : "output",
-        counterparty_name: String(r.counterparty_name || ""),
-        counterparty_tax_id: String(r.counterparty_tax_id || ""),
-        invoice_number: String(r.invoice_number || ""),
-        net_amount: String(r.net_amount ?? ""),
-        vat_amount: String(r.vat_amount ?? ""),
-        total_amount: String(r.total_amount ?? ""),
-        vat_status: String(r.vat_status || ""),
-        invoice_evidence_status:
-          r.invoice_evidence_status === "received" ||
-          r.invoice_evidence_status === "not_required" ||
-          r.invoice_evidence_status === "unobtainable"
-            ? (r.invoice_evidence_status as "received" | "not_required" | "unobtainable")
-            : "required_pending",
-        invoice_evidence_reason_code: String(r.invoice_evidence_reason_code || ""),
-        filing_status: normalizeLedgerFilingStatus(r.filing_status),
-        submitted_at: String(r.submitted_at || ""),
-        submitted_by: String(r.submitted_by || ""),
-        memo: String(r.memo || ""),
-        store_name: String(r.store_name || ""),
-      })),
+    (entries: Record<string, unknown>[]): VatDraft[] => mapVatEntries(entries, taxMonth),
     [taxMonth]
   )
 
@@ -1170,72 +1111,17 @@ export function AdminAccountingCompliance({
   }, [tab, taxMonth, storeFilterForLedger, loadPp30PeriodClose])
 
   const mapWht = React.useCallback(
-    (entries: Record<string, unknown>[]): WhtDraft[] =>
-      entries.map((r) => ({
-        id: r.id != null ? Number(r.id) : undefined,
-        payment_date: String(r.payment_date || "").slice(0, 10),
-        tax_month: String(r.tax_month || taxMonth).slice(0, 7),
-        payee_name: String(r.payee_name || ""),
-        payee_tax_id: String(r.payee_tax_id || ""),
-        income_type: String(r.income_type || ""),
-        gross_amount: String(r.gross_amount ?? ""),
-        wht_rate: String(r.wht_rate ?? ""),
-        wht_amount: String(r.wht_amount ?? ""),
-        form_hint: String(r.form_hint || ""),
-        certificate_no: String(r.certificate_no || ""),
-        filing_status: normalizeLedgerFilingStatus(r.filing_status),
-        submitted_at: String(r.submitted_at || ""),
-        submitted_by: String(r.submitted_by || ""),
-        memo: String(r.memo || ""),
-        store_name: String(r.store_name || ""),
-        direction: String(r.direction || "").toLowerCase() === "inbound" ? "inbound" : "outbound",
-        source_type: String(r.source_type || ""),
-        source_id: r.source_id != null ? Number(r.source_id) || 0 : 0,
-      })),
+    (entries: Record<string, unknown>[]): WhtDraft[] => mapWhtEntries(entries, taxMonth),
     [taxMonth]
   )
 
   const mapPp36 = React.useCallback(
-    (entries: Record<string, unknown>[]): Pp36Draft[] =>
-      entries.map((r) => ({
-        id: r.id != null ? Number(r.id) : undefined,
-        doc_date: String(r.doc_date || "").slice(0, 10),
-        tax_month: String(r.tax_month || taxMonth).slice(0, 7),
-        supplier_name: String(r.supplier_name || ""),
-        supplier_country: String(r.supplier_country || ""),
-        supplier_tax_id: String(r.supplier_tax_id || ""),
-        service_desc: String(r.service_desc || ""),
-        taxable_amount: String(r.taxable_amount ?? ""),
-        vat_rate: String(r.vat_rate ?? "7"),
-        vat_amount: String(r.vat_amount ?? ""),
-        filing_status: normalizeLedgerFilingStatus(r.filing_status),
-        submitted_at: String(r.submitted_at || ""),
-        submitted_by: String(r.submitted_by || ""),
-        memo: String(r.memo || ""),
-        store_name: String(r.store_name || ""),
-      })),
+    (entries: Record<string, unknown>[]): Pp36Draft[] => mapPp36Entries(entries, taxMonth),
     [taxMonth]
   )
 
   const mapPnd54 = React.useCallback(
-    (entries: Record<string, unknown>[]): Pnd54Draft[] =>
-      entries.map((r) => ({
-        id: r.id != null ? Number(r.id) : undefined,
-        payment_date: String(r.payment_date || "").slice(0, 10),
-        tax_month: String(r.tax_month || taxMonth).slice(0, 7),
-        payee_name: String(r.payee_name || ""),
-        payee_country: String(r.payee_country || ""),
-        payee_tax_id: String(r.payee_tax_id || ""),
-        income_type: String(r.income_type || ""),
-        gross_amount: String(r.gross_amount ?? ""),
-        wht_rate: String(r.wht_rate ?? ""),
-        wht_amount: String(r.wht_amount ?? ""),
-        filing_status: normalizeLedgerFilingStatus(r.filing_status),
-        submitted_at: String(r.submitted_at || ""),
-        submitted_by: String(r.submitted_by || ""),
-        memo: String(r.memo || ""),
-        store_name: String(r.store_name || ""),
-      })),
+    (entries: Record<string, unknown>[]): Pnd54Draft[] => mapPnd54Entries(entries, taxMonth),
     [taxMonth]
   )
 
@@ -3127,23 +3013,7 @@ export function AdminAccountingCompliance({
     () => vatInputRows.filter((r) => ledgerStatusFilter === "all" || r.filing_status === ledgerStatusFilter),
     [vatInputRows, ledgerStatusFilter]
   )
-  const vatInputClaimable = React.useMemo(() => {
-    const claimableRows = vatInputRowsFiltered.filter(
-      (r) => r.invoice_evidence_status === "received" || r.invoice_evidence_status === "not_required"
-    )
-    const pendingRows = vatInputRowsFiltered.filter((r) => r.invoice_evidence_status === "required_pending")
-    const unobtainableRows = vatInputRowsFiltered.filter((r) => r.invoice_evidence_status === "unobtainable")
-    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
-    return {
-      claimableVat: round2(claimableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0)),
-      claimableNet: round2(claimableRows.reduce((sum, r) => sum + (Number(r.net_amount) || 0), 0)),
-      pendingVat: round2(pendingRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0)),
-      unobtainableVat: round2(unobtainableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0)),
-      claimableCount: claimableRows.length,
-      pendingCount: pendingRows.length,
-      unobtainableCount: unobtainableRows.length,
-    }
-  }, [vatInputRowsFiltered])
+  const vatInputClaimable = React.useMemo(() => computeVatInputClaimable(vatInputRowsFiltered), [vatInputRowsFiltered])
   const nonPosOutputCount = React.useMemo(
     () => vatOutputRowsFiltered.filter((r) => !isPosAutoVatOutputRow(r)).length,
     [vatOutputRowsFiltered]
@@ -3225,60 +3095,10 @@ export function AdminAccountingCompliance({
       ),
     [vatInputVendorSummaries]
   )
-  const vatSettlement = React.useMemo(() => {
-    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
-    const outputNet = round2(vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.net_amount || 0), 0))
-    const outputVat = round2(vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0))
-    const outputTotal = round2(vatOutputRowsFiltered.reduce((sum, row) => sum + Number(row.total_amount || 0), 0))
-    const inputNet = round2(vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.net_amount || 0), 0))
-    const inputVat = round2(vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0))
-    const inputTotal = round2(vatInputRowsFiltered.reduce((sum, row) => sum + Number(row.total_amount || 0), 0))
-    let posOutputVat = 0
-    let posOutputNet = 0
-    let posOutputCount = 0
-    let otherOutputVat = 0
-    let otherOutputNet = 0
-    let otherOutputCount = 0
-    for (const row of vatOutputRowsFiltered) {
-      const vat = Number(row.vat_amount || 0)
-      const net = Number(row.net_amount || 0)
-      if (isPosAutoVatOutputRow(row)) {
-        posOutputVat += vat
-        posOutputNet += net
-        posOutputCount += 1
-      } else {
-        otherOutputVat += vat
-        otherOutputNet += net
-        otherOutputCount += 1
-      }
-    }
-    // 신고 예상액: 증빙 공제 가능한 매입 VAT만 차감 (대기·불가 제외)
-    const claimableInputVat = vatInputClaimable.claimableVat
-    const payableVat = round2(outputVat - claimableInputVat)
-    return {
-      outputNet,
-      outputVat,
-      outputTotal,
-      inputNet,
-      inputVat,
-      inputTotal,
-      claimableInputVat,
-      claimableInputNet: vatInputClaimable.claimableNet,
-      claimableInputCount: vatInputClaimable.claimableCount,
-      payableVat,
-      dueVat: payableVat > 0 ? payableVat : 0,
-      creditVat: payableVat < 0 ? Math.abs(payableVat) : 0,
-      outputCount: vatOutputRowsFiltered.length,
-      inputCount: vatInputRowsFiltered.length,
-      posOutputVat: round2(posOutputVat),
-      posOutputNet: round2(posOutputNet),
-      posOutputCount,
-      otherOutputVat: round2(otherOutputVat),
-      otherOutputNet: round2(otherOutputNet),
-      otherOutputCount,
-      summaryPayableVat: Number(taxSummary?.vat?.payableVat || 0),
-    }
-  }, [vatOutputRowsFiltered, vatInputRowsFiltered, vatInputClaimable, taxSummary?.vat?.payableVat])
+  const vatSettlement = React.useMemo(
+    () => computeVatSettlement(vatOutputRowsFiltered, vatInputRowsFiltered, vatInputClaimable, taxSummary?.vat?.payableVat),
+    [vatOutputRowsFiltered, vatInputRowsFiltered, vatInputClaimable, taxSummary?.vat?.payableVat]
+  )
   const vatFilteredStats = React.useMemo(() => {
     const all = [...vatOutputRowsFiltered, ...vatInputRowsFiltered]
     let missingTaxIdCount = 0
@@ -4340,283 +4160,21 @@ export function AdminAccountingCompliance({
         )}
 
         <TabsContent value="scope" className={cn(tabsContentClass, "space-y-3")}>
-          <Card className="border-amber-200/70 dark:border-amber-900/45">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CalendarClock className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                {t("accCompSchedGuideTitle")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <p className="text-xs text-muted-foreground leading-relaxed">{t("accCompSchedGuideDisclaimer")}</p>
-              <div className="space-y-3">
-                {THAI_FILING_SCHEDULE_SECTIONS.map((s) => (
-                  <div
-                    key={s.titleKey}
-                    className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 dark:bg-muted/10"
-                  >
-                    <div className="font-medium text-foreground">{t(s.titleKey)}</div>
-                    <p className="mt-1.5 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
-                      {t(s.bodyKey)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <div>
-                <div className="font-medium text-sm mb-2">{t("accCompSched_tbl_title")}</div>
-                <AdminTableScroll className="rounded-md border border-border/80" hint={false}>
-                  <table className="w-full text-sm border-collapse min-w-[520px]">
-                    <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="text-left p-2 font-medium">{t("accCompSched_tbl_h_item")}</th>
-                        <th className="text-left p-2 font-medium">{t("accCompSched_tbl_h_period")}</th>
-                        <th className="text-left p-2 font-medium">{t("accCompSched_tbl_h_deadline")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {THAI_FILING_SCHEDULE_TABLE_ROWS.map(([itemKey, periodKey, deadlineKey], idx) => (
-                        <tr key={idx} className="border-b border-border/50 last:border-0">
-                          <td className="p-2 align-top font-medium">{t(itemKey)}</td>
-                          <td className="p-2 align-top text-muted-foreground">{t(periodKey)}</td>
-                          <td className="p-2 align-top text-muted-foreground">{t(deadlineKey)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </AdminTableScroll>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Landmark className="h-4 w-4" />
-                {t("accCompTabScope")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <p className="text-muted-foreground">{t("accCompPhaseNote")}</p>
-              <ul className="list-disc pl-5 space-y-2">
-                {THAI_FILING_DEFINITIONS.map((d) => (
-                  <li key={d.id}>
-                    <span className="font-medium">
-                      {lang === "th" ? d.labelTh : lang === "ko" ? d.labelKo : d.labelEn}
-                    </span>
-                    {d.rdFormHint ? (
-                      <span className="text-muted-foreground"> ({d.rdFormHint})</span>
-                    ) : null}
-                    <div className="text-muted-foreground text-xs mt-0.5">{d.frequencyKo}</div>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("accCompChartTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AdminTableScroll lockViewport={false}>
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2">{t("accCompColCode")}</th>
-                    <th className="text-left p-2">{t("accCompChartColKo")}</th>
-                    <th className="text-left p-2">{t("accCompChartColEn")}</th>
-                    <th className="text-left p-2">{t("accCompChartColTfrs")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {chartList.map((c) => (
-                    <tr key={c.code} className="border-b border-border/60">
-                      <td className="p-2 font-mono">{c.code}</td>
-                      <td className="p-2">{c.nameKo}</td>
-                      <td className="p-2">{c.nameEn}</td>
-                      <td className="p-2 text-muted-foreground">{c.tfrsNpaesGroupKo}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </AdminTableScroll>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                {t("accCompKt20kVsPnd1aTitle")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {kt20kData?.reconciliation ? (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-xs text-muted-foreground">
-                      {t("accCompKt20kDiffToleranceLabel")}
-                    </div>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="w-[140px] h-8"
-                      value={kt20kDiffTolerance}
-                      onChange={(e) => setKt20kDiffTolerance(e.target.value)}
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-                    <div className="rounded border border-border/60 p-2">
-                      <div className="text-muted-foreground">{t("accCompKt20kCardTotalWage1")}</div>
-                      <div className="font-medium text-sm">
-                        {kt20kData.reconciliation.annual.kt20kTotalWage.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="rounded border border-border/60 p-2">
-                      <div className="text-muted-foreground">{t("accCompKt20kCardPnd1aLedgerGross")}</div>
-                      <div className="font-medium text-sm">
-                        {kt20kData.reconciliation.annual.pnd1aLedgerGross.toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="rounded border border-border/60 p-2">
-                      <div className="text-muted-foreground">{t("accCompKt20kCardDiffTotalMinusPnd1a")}</div>
-                      <div
-                        className={`font-medium text-sm ${
-                          Math.abs(kt20kData.reconciliation.annual.diffTotalVsPnd1a) > 0.0001
-                            ? "text-amber-600"
-                            : "text-emerald-600"
-                        }`}
-                      >
-                        {kt20kData.reconciliation.annual.diffTotalVsPnd1a.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <AdminTableScroll className="rounded border border-border/60" hint={false}>
-                    <table className="w-full text-sm min-w-[760px]">
-                      <thead>
-                        <tr className="border-b bg-muted/40">
-                          <th className="text-left p-2">{t("month")}</th>
-                          <th className="text-right p-2">{t("accCompKt20kCol1TotalWage")}</th>
-                          <th className="text-right p-2">{t("accCompKt20kColPnd1aGross")}</th>
-                          <th className="text-right p-2">{t("accCompKt20kColDiff1MinusPnd1a")}</th>
-                          <th className="text-right p-2">{t("accCompKt20kColDiff3MinusPnd1a")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {kt20kMonthlyDiffRows.map((r) => (
-                          <tr key={r.month} className="border-b border-border/40">
-                            <td className="p-2 font-mono">{r.month}</td>
-                            <td className="p-2 text-right">{r.kt20kTotalWage.toLocaleString()}</td>
-                            <td className="p-2 text-right">{r.pnd1aLedgerGross.toLocaleString()}</td>
-                            <td className="p-2 text-right">{r.diffTotalVsPnd1a.toLocaleString()}</td>
-                            <td className="p-2 text-right">{r.diffNetVsPnd1a.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                        {!kt20kMonthlyDiffRows.length ? (
-                          <tr>
-                            <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {t("accCompKt20kNoMonthlyDiff")}
-                            </td>
-                          </tr>
-                        ) : null}
-                      </tbody>
-                    </table>
-                  </AdminTableScroll>
-
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      {t("accCompKt20kReasonTagQuickFilter")}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={kt20kReasonTagFilter.length === 0 ? "default" : "outline"}
-                        onClick={() => setKt20kReasonTagFilter([])}
-                      >
-                        {t("all")}
-                      </Button>
-                      {KT20K_REASON_TAGS.map((tag) => {
-                        const cnt = kt20kReasonTagCountMap[tag] || 0
-                        return (
-                          <Button
-                            key={tag}
-                            type="button"
-                            size="sm"
-                            variant={kt20kReasonTagFilter.includes(tag) ? "default" : "outline"}
-                            onClick={() => toggleKt20kReasonTag(tag)}
-                            disabled={cnt === 0}
-                            title={
-                              cnt === 0
-                                ? lang === "th"
-                                  ? "ไม่พบรายการในเงื่อนไขปัจจุบัน"
-                                  : t("accCompKt20kNoTagInFilter")
-                                : ""
-                            }
-                            className="justify-between"
-                          >
-                            <span>{kt20kReasonTagLabel(tag)}</span>
-                            <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                              {cnt.toLocaleString()}
-                            </span>
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <AdminTableScroll className="rounded border border-border/60" hint={false}>
-                    <table className="w-full text-sm min-w-[760px]">
-                      <thead>
-                        <tr className="border-b bg-muted/40">
-                          <th className="text-left p-2">{t("store")}</th>
-                          <th className="text-left p-2">{t("accCompColName")}</th>
-                          <th className="text-right p-2">{t("accCompKt20kTotal")}</th>
-                          <th className="text-right p-2">{t("accCompKt20kColPnd1aGross")}</th>
-                          <th className="text-right p-2">{t("accCompDiff")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {kt20kEmployeeDiffRows.map((r) => (
-                          <tr key={r.employeeKey} className="border-b border-border/40">
-                            <td className="p-2">{r.store || "-"}</td>
-                            <td className="p-2">{r.name || "-"}</td>
-                            <td className="p-2 text-right">{r.kt20kTotalWage.toLocaleString()}</td>
-                            <td className="p-2 text-right">{r.pnd1aLedgerGross.toLocaleString()}</td>
-                            <td className="p-2 text-right">
-                              <div>{r.diff.toLocaleString()}</div>
-                              {r.reasonTags?.length ? (
-                                <div className="mt-1 flex flex-wrap justify-end gap-1">
-                                  {r.reasonTags.map((tag) => (
-                                    <span
-                                      key={tag}
-                                      className="rounded bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 px-1.5 py-0.5 text-[10px]"
-                                    >
-                                      {kt20kReasonTagLabel(tag)}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </td>
-                          </tr>
-                        ))}
-                        {!kt20kEmployeeDiffRows.length ? (
-                          <tr>
-                            <td colSpan={5} className="p-3 text-center text-muted-foreground">
-                              {t("accCompKt20kNoEmployeeDiff")}
-                            </td>
-                          </tr>
-                        ) : null}
-                      </tbody>
-                    </table>
-                  </AdminTableScroll>
-                </>
-              ) : (
-                <div className="text-xs text-muted-foreground">
-                  {t("accCompKt20kNoReconcileData")}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <AccountingComplianceScopeTab
+            chartList={chartList}
+            kt20kData={kt20kData}
+            kt20kDiffTolerance={kt20kDiffTolerance}
+            kt20kEmployeeDiffRows={kt20kEmployeeDiffRows}
+            kt20kMonthlyDiffRows={kt20kMonthlyDiffRows}
+            kt20kReasonTagCountMap={kt20kReasonTagCountMap}
+            kt20kReasonTagFilter={kt20kReasonTagFilter}
+            kt20kReasonTagLabel={kt20kReasonTagLabel}
+            lang={lang}
+            setKt20kDiffTolerance={setKt20kDiffTolerance}
+            setKt20kReasonTagFilter={setKt20kReasonTagFilter}
+            t={t}
+            toggleKt20kReasonTag={toggleKt20kReasonTag}
+          />
         </TabsContent>
 
         <TabsContent value="channels" className={cn(tabsContentClass, "space-y-3")}>
@@ -4798,76 +4356,20 @@ export function AdminAccountingCompliance({
         </TabsContent>
 
         <TabsContent value="trial" className={cn(tabsContentClass, "space-y-3")}>
-          <div className="flex flex-wrap gap-2 items-end">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
-              <Input
-                type="month"
-                className="h-9 w-[160px]"
-                value={yearMonthTb}
-                onChange={(e) => setYearMonthTb(e.target.value)}
-              />
-            </div>
-            {isOffice && (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
-                <Select value={storeTb} onValueChange={setStoreTb}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {storeOptions.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {storeOptionLabel(s)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <Button type="button" variant="secondary" onClick={() => void loadTrial()} disabled={loading}>
-              {t("search")}
-            </Button>
-          </div>
-          <div className="text-sm flex flex-wrap gap-4">
-            <span>
-              {t("accCompTrialDebit")}: <b>{tbTotals.debit.toLocaleString()}</b>
-            </span>
-            <span>
-              {t("accCompTrialCredit")}: <b>{tbTotals.credit.toLocaleString()}</b>
-            </span>
-            <span>
-              {t("accCompTrialDiff")}: <b>{tbTotals.diff.toLocaleString()}</b>
-            </span>
-          </div>
-          <Card>
-            <CardContent className="p-0">
-              <AdminTableScroll lockViewport={false} className="p-0">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40">
-                    <th className="text-left p-2">{t("accCompColCode")}</th>
-                    <th className="text-left p-2">{t("accCompColName")}</th>
-                    <th className="text-right p-2">{t("accCompColDebit")}</th>
-                    <th className="text-right p-2">{t("accCompColCredit")}</th>
-                    <th className="text-right p-2">{t("accCompColNetDr")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tbRows.map((r) => (
-                    <tr key={r.accountCode} className="border-b border-border/50">
-                      <td className="p-2 font-mono">{r.accountCode}</td>
-                      <td className="p-2">{r.accountName}</td>
-                      <td className="p-2 text-right">{r.debit.toLocaleString()}</td>
-                      <td className="p-2 text-right">{r.credit.toLocaleString()}</td>
-                      <td className="p-2 text-right">{r.netDebit.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </AdminTableScroll>
-            </CardContent>
-          </Card>
+          <AccountingComplianceTrialTab
+            isOffice={isOffice}
+            loading={loading}
+            loadTrial={loadTrial}
+            setStoreTb={setStoreTb}
+            setYearMonthTb={setYearMonthTb}
+            storeOptionLabel={storeOptionLabel}
+            storeOptions={storeOptions}
+            storeTb={storeTb}
+            t={t}
+            tbRows={tbRows}
+            tbTotals={tbTotals}
+            yearMonthTb={yearMonthTb}
+          />
         </TabsContent>
 
         <TabsContent value="summary" className={cn(tabsContentClass, "space-y-3")}>
@@ -5051,301 +4553,47 @@ export function AdminAccountingCompliance({
 
 
         <TabsContent value="cit" className={cn(tabsContentClass, "space-y-3")}>
-          <div className="flex flex-wrap gap-2 items-end">
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">{t("accCompPeriodType")}</div>
-              <Select value={periodType} onValueChange={(v) => setPeriodType(v as "monthly" | "half_year" | "annual")}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {!isCitFilingShell ? (
-                    <SelectItem value="monthly">{t("accCompPeriodMonthly")}</SelectItem>
-                  ) : null}
-                  <SelectItem value="half_year">{t("accCompPeriodHalfYear")}</SelectItem>
-                  <SelectItem value="annual">{t("accCompPeriodAnnual")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {periodType === "annual" ? (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">{t("accCompCitFiscalYear")}</div>
-                <Select
-                  value={String(citFiscalYear)}
-                  onValueChange={(v) => setCitFiscalYear(Number(v))}
-                >
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {citFiscalYearOptions.map((y) => (
-                      <SelectItem key={y} value={String(y)}>
-                        {y}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : isCitFilingShell && periodType === "half_year" ? (
-              <>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompCitFiscalYear")}</div>
-                  <Select
-                    value={String(citFiscalYear)}
-                    onValueChange={(v) => setCitHalfYearControls({ year: Number(v) })}
-                  >
-                    <SelectTrigger className="w-[120px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {citFiscalYearOptions.map((y) => (
-                        <SelectItem key={y} value={String(y)}>
-                          {y}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">{t("accCompCitHalfYearSlot")}</div>
-                  <Select
-                    value={citHalfYearSlot}
-                    onValueChange={(v) => setCitHalfYearControls({ slot: v as "H1" | "H2" })}
-                  >
-                    <SelectTrigger className="w-[150px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="H1">{t("accCompCitHalfH1")}</SelectItem>
-                      <SelectItem value="H2">{t("accCompCitHalfH2")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            ) : !isCitFilingShell ? (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
-                <Input
-                  type="month"
-                  className="h-9 w-[160px]"
-                  value={taxMonth}
-                  onChange={(e) => setTaxMonth(e.target.value)}
-                />
-              </div>
-            ) : null}
-            {isOffice ? (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
-                <Select value={storeTb} onValueChange={setStoreTb}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {storeOptions.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {storeOptionLabel(s)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : isManager && managerStore ? (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
-                <div className="flex h-9 min-w-[140px] max-w-[220px] items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground">
-                  <span className="truncate">{managerStore}</span>
-                </div>
-              </div>
-            ) : null}
-            <Button type="button" variant="secondary" onClick={() => void loadCit()} disabled={loading}>
-              {t("search")}
-            </Button>
-            <Button type="button" variant="outline" asChild>
-              <a
-                href={getExportCorporateTaxPackageCsvUrl({
-                  userRole: role,
-                  yearMonth: citYearMonthForApi,
-                  periodType,
-                  storeFilter: storeTb,
-                  userStore: auth?.store,
-                })}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {t("accCompCitPackageCsv")}
-              </a>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!citData || loading || citPdfExporting || !citPdfValidation.isValid}
-              onClick={() => void exportCitPdf()}
-            >
-              <Download className="h-4 w-4 mr-1" />
-              {citPdfExporting ? t("pL_exportBusy") : t("accCompCitPackagePdf")}
-            </Button>
-          </div>
-          {citData && citPdfValidation.warnings.length > 0 ? (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
-              {citPdfValidation.warnings
-                .map((c) => resolveCitPdfCodeLabel("accCompCitPdfWarn_", c))
-                .join(" / ")}
-            </div>
-          ) : null}
-          {citPdfHint ? (
-            <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              {citPdfHint}
-            </div>
-          ) : null}
-          {isCitFilingShell && citData?.months?.length ? (
-            <div className="rounded-md border border-border/70 bg-muted/15 px-3 py-2 text-sm">
-              <div className="text-muted-foreground mb-1">{t("accCompCitPeriodMonths")}</div>
-              <div className="flex flex-wrap gap-1.5">
-                {citData.months.map((m) => (
-                  <span
-                    key={m}
-                    className="inline-flex items-center rounded-md border border-border/60 bg-background px-2 py-0.5 font-mono tabular-nums"
-                  >
-                    {m}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          <StoreVendorTaxLinkBanner
-            t={t}
-            tr={tr}
-            loading={taxLinkMetaLoading}
-            storeFilter={storeFilterForLedger}
+          <AccountingComplianceCitTab
+            auth={auth}
+            citAdjustmentsDraft={citAdjustmentsDraft}
+            citData={citData}
+            citFiscalYear={citFiscalYear}
+            citFiscalYearOptions={citFiscalYearOptions}
+            citHalfYearSlot={citHalfYearSlot}
+            citKt20kTinMissing={citKt20kTinMissing}
+            citPdfExporting={citPdfExporting}
+            citPdfHint={citPdfHint}
+            citPdfValidation={citPdfValidation}
+            citQueried={citQueried}
+            citYearMonthForApi={citYearMonthForApi}
+            exportCitPdf={exportCitPdf}
+            isCitFilingShell={isCitFilingShell}
+            isManager={isManager}
             isOffice={isOffice}
-            storeLinkEval={pp30StoreLinkEval}
-            vendorLinkCounts={pp30VendorLinkCounts}
+            loadCit={loadCit}
+            loading={loading}
+            managerStore={managerStore}
             onOpenStoreProfiles={onOpenStoreProfiles}
-            showProfileShortcut
-            extra={
-              citKt20kTinMissing ? (
-                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 leading-relaxed">
-                  {t("accCompCitKt20kTinMissing")}
-                </div>
-              ) : null
-            }
+            periodType={periodType}
+            pp30StoreLinkEval={pp30StoreLinkEval}
+            pp30VendorLinkCounts={pp30VendorLinkCounts}
+            resolveCitPdfCodeLabel={resolveCitPdfCodeLabel}
+            role={role}
+            saveCitAdjustmentsDraft={saveCitAdjustmentsDraft}
+            setCitAdjustmentsDraft={setCitAdjustmentsDraft}
+            setCitFiscalYear={setCitFiscalYear}
+            setCitHalfYearControls={setCitHalfYearControls}
+            setPeriodType={setPeriodType}
+            setStoreTb={setStoreTb}
+            setTaxMonth={setTaxMonth}
+            storeFilterForLedger={storeFilterForLedger}
+            storeOptionLabel={storeOptionLabel}
+            storeOptions={storeOptions}
+            storeTb={storeTb}
+            t={t}
+            taxLinkMetaLoading={taxLinkMetaLoading}
+            taxMonth={taxMonth}
           />
-          {!citQueried ? <p className="text-sm text-muted-foreground">{t("taxBooksSearchFirst")}</p> : null}
-          {citQueried ? <Card>
-            <CardContent className="pt-6 text-sm space-y-2">
-              <div>
-                {t("accCompCitAccountingProfit")}: {(citData?.accountingProfit || 0).toLocaleString()}
-              </div>
-              {citData?.accountingProfitSource === "tax_book" ? (
-                <div className="text-muted-foreground">{t("accCompCitTaxBookProfit")}</div>
-              ) : null}
-              {citData?.validation?.warnings?.includes("TAX_BOOK_PARTIAL_LOCK") ? (
-                <div className="text-muted-foreground">{t("accCompCitTaxBookPartial")}</div>
-              ) : null}
-              <div>
-                {t("accCompCitTaxAddBacks")}: {(citData?.taxAddBack || 0).toLocaleString()}
-              </div>
-              <div>
-                {t("accCompCitTaxDeductions")}: {(citData?.taxDeduction || 0).toLocaleString()}
-              </div>
-              <div>
-                {t("accCompCitTaxableIncome")}: {(citData?.taxableIncome || 0).toLocaleString()}
-              </div>
-              <div>
-                {t("accCompCitTaxRate")}: {((citData?.taxRate || 0) * 100).toFixed(2)}%
-              </div>
-              <div>
-                {t("accCompCitEstimated")}: {(citData?.estimatedTax || 0).toLocaleString()}
-              </div>
-              <div>
-                {t("accCompCitFilingFormLabel")}: {String(citData?.pdfMeta?.formCode || citData?.filingForm || "-").toUpperCase()}
-              </div>
-              <div>
-                {t("accCompCitProjectedAnnualTaxableIncome")}: {(citData?.projectedAnnualTaxableIncome || 0).toLocaleString()}
-              </div>
-              <div>
-                {t("accCompCitFilingTaxDue")}: {(citData?.filingTaxDue || 0).toLocaleString()}
-              </div>
-              <div>
-                {t("accCompCitPdfPeriod")}: {citData?.pdfMeta?.periodLabel || citData?.periodKey || "-"}
-              </div>
-            </CardContent>
-          </Card> : null}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">{t("accCompCitAdjustmentsDraftTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setCitAdjustmentsDraft((prev) => [
-                      ...prev,
-                      { adjustmentType: "add_back", itemName: "", amount: "", memo: "" },
-                    ])
-                  }
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  {t("accCompVatAdd")}
-                </Button>
-                <Button type="button" size="sm" onClick={() => void saveCitAdjustmentsDraft()}>
-                  {t("accCompSave")}
-                </Button>
-              </div>
-              {(citAdjustmentsDraft || []).map((row, idx) => (
-                <div key={`cit-adj-${idx}`} className="grid grid-cols-1 md:grid-cols-5 gap-2 rounded border p-2">
-                  <Select
-                    value={row.adjustmentType}
-                    onValueChange={(v) =>
-                      setCitAdjustmentsDraft((prev) =>
-                        prev.map((x, i) => (i === idx ? { ...x, adjustmentType: v as "add_back" | "deduction" } : x))
-                      )
-                    }
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="add_back">{t("accCompCitAdjustmentTypeAddBack")}</SelectItem>
-                      <SelectItem value="deduction">{t("accCompCitAdjustmentTypeDeduction")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    placeholder={t("accCompCitAdjustmentsItem")}
-                    value={row.itemName}
-                    onChange={(e) =>
-                      setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, itemName: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder={t("accCompCitAdjustmentsAmount")}
-                    value={row.amount}
-                    onChange={(e) =>
-                      setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))
-                    }
-                  />
-                  <Input
-                    placeholder={t("accCompCitAdjustmentsMemo")}
-                    value={row.memo}
-                    onChange={(e) =>
-                      setCitAdjustmentsDraft((prev) => prev.map((x, i) => (i === idx ? { ...x, memo: e.target.value } : x)))
-                    }
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => setCitAdjustmentsDraft((prev) => prev.filter((_, i) => i !== idx))}
-                  >
-                    {t("accCompDelete")}
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="sso" className={cn(tabsContentClass, "space-y-3")}>
@@ -5401,331 +4649,52 @@ export function AdminAccountingCompliance({
         </TabsContent>
 
         <TabsContent value="kt20k" className={cn(tabsContentClass, "space-y-3")}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("accCompKt20kTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <p className="text-muted-foreground">
-                {t("accCompKt20kMvpScaffoldNote")}
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-2">
-                <Input
-                  placeholder={t("accCompKt20kPhCompanyTaxId")}
-                  value={kt20kEmployer.companyTaxId}
-                  onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyTaxId: e.target.value }))}
-                  disabled={kt20kSettingsLoading || kt20kSettingsSaving}
-                />
-                <Input
-                  className="lg:col-span-2"
-                  placeholder={t("accCompKt20kPhCompanyName")}
-                  value={kt20kEmployer.companyName}
-                  onChange={(e) => setKt20kEmployer((p) => ({ ...p, companyName: e.target.value }))}
-                  disabled={kt20kSettingsLoading || kt20kSettingsSaving}
-                />
-                <Input
-                  placeholder={t("accCompKt20kPhSsoProvince")}
-                  value={kt20kEmployer.ssoProvince}
-                  onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoProvince: e.target.value }))}
-                  disabled={kt20kSettingsLoading || kt20kSettingsSaving}
-                />
-                <Input
-                  placeholder={t("accCompKt20kPhSsoPhone")}
-                  value={kt20kEmployer.ssoPhone}
-                  onChange={(e) => setKt20kEmployer((p) => ({ ...p, ssoPhone: e.target.value }))}
-                  disabled={kt20kSettingsLoading || kt20kSettingsSaving}
-                />
-                <Input
-                  placeholder={t("accCompKt20kPhBusinessCode5")}
-                  value={kt20kEmployer.businessCode5}
-                  onChange={(e) => setKt20kEmployer((p) => ({ ...p, businessCode5: e.target.value }))}
-                  disabled={kt20kSettingsLoading || kt20kSettingsSaving}
-                />
-                <Input
-                  placeholder={t("accCompKt20kPhFundRatePercent")}
-                  value={kt20kEmployer.fundRatePercent}
-                  onChange={(e) => setKt20kEmployer((p) => ({ ...p, fundRatePercent: e.target.value }))}
-                  disabled={kt20kSettingsLoading || kt20kSettingsSaving}
-                />
-              </div>
-              <div className="flex flex-wrap gap-2 items-end">
-                <Input
-                  type="number"
-                  className="w-[140px]"
-                  value={kt20kYear}
-                  onChange={(e) => setKt20kYear(e.target.value)}
-                />
-                {isOffice && !externalFiling ? (
-                  <Select value={storeTb} onValueChange={setStoreTb}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {storeOptions.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {storeOptionLabel(s)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : null}
-                <Button type="button" variant="secondary" onClick={() => void loadKt20k()} disabled={kt20kLoading}>
-                  {kt20kLoading ? t("loading") : t("search")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void saveKt20kEmployerSettings()}
-                  disabled={kt20kSettingsSaving || kt20kSettingsLoading}
-                >
-                  {kt20kSettingsSaving ? t("loading") : t("accCompKt20kSaveSettings")}
-                </Button>
-                <Button type="button" variant="outline" asChild>
-                  <a href={kt20kExportUrl} target="_blank" rel="noopener noreferrer">
-                    {t("accCompVatExport")}
-                  </a>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                {t("accCompKt20kMonthlySummaryTitle")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AdminTableScroll lockViewport={false}>
-              <table className="w-full text-sm border-collapse min-w-[980px]">
-                <thead>
-                  <tr className="border-b bg-muted/40">
-                    <th className="text-left p-2">{t("month")}</th>
-                    <th className="text-right p-2">{t("accCompKt20kEmployees")}</th>
-                    <th className="text-right p-2">{t("accCompKt20kSalary")}</th>
-                    <th className="text-right p-2">{t("accCompKt20kDailyWage")}</th>
-                    <th className="text-right p-2">{t("accCompKt20kOtherComp")}</th>
-                    <th className="text-right p-2">{t("accCompKt20kTotalWage1")}</th>
-                    <th className="text-right p-2">{t("accCompKt20kExcessOver20k2")}</th>
-                    <th className="text-right p-2">{t("accCompKt20kNetWage3")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(kt20kData?.rows || []).map((r) => (
-                    <tr key={r.month} className="border-b border-border/50">
-                      <td className="p-2 font-mono">{r.month}</td>
-                      <td className="p-2 text-right">{r.employeeCount.toLocaleString()}</td>
-                      <td className="p-2 text-right">{r.salaryAmount.toLocaleString()}</td>
-                      <td className="p-2 text-right">{r.dailyWageAmount.toLocaleString()}</td>
-                      <td className="p-2 text-right">{r.otherCompAmount.toLocaleString()}</td>
-                      <td className="p-2 text-right">{r.totalWage.toLocaleString()}</td>
-                      <td className="p-2 text-right">{r.excessOver20000.toLocaleString()}</td>
-                      <td className="p-2 text-right">{r.netWageToReport.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                {kt20kData?.annual ? (
-                  <tfoot>
-                    <tr className="border-t-2 bg-muted/30 font-medium">
-                      <td className="p-2">{t("annual")}</td>
-                      <td className="p-2 text-right">{kt20kData.annual.employeeCountPeak.toLocaleString()}</td>
-                      <td className="p-2 text-right">{kt20kData.annual.salaryAmount.toLocaleString()}</td>
-                      <td className="p-2 text-right">{kt20kData.annual.dailyWageAmount.toLocaleString()}</td>
-                      <td className="p-2 text-right">{kt20kData.annual.otherCompAmount.toLocaleString()}</td>
-                      <td className="p-2 text-right">{kt20kData.annual.totalWage.toLocaleString()}</td>
-                      <td className="p-2 text-right">{kt20kData.annual.excessOver20000.toLocaleString()}</td>
-                      <td className="p-2 text-right">{kt20kData.annual.netWageToReport.toLocaleString()}</td>
-                    </tr>
-                  </tfoot>
-                ) : null}
-              </table>
-              {kt20kData?.warnings?.length ? (
-                <div className="mt-3 rounded-md border border-dashed border-border/70 bg-muted/15 p-2 text-xs space-y-1">
-                  {kt20kData.warnings.map((w, idx) => (
-                    <div key={idx} className="text-muted-foreground">
-                      - {w}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {!kt20kLoading && !kt20kData ? (
-                <div className="p-6 text-center text-muted-foreground text-sm">
-                  {t("accCompKt20kNoData")}
-                </div>
-              ) : null}
-              </AdminTableScroll>
-            </CardContent>
-          </Card>
+          <AccountingComplianceKt20kTab
+            externalFiling={externalFiling}
+            isOffice={isOffice}
+            kt20kData={kt20kData}
+            kt20kEmployer={kt20kEmployer}
+            kt20kExportUrl={kt20kExportUrl}
+            kt20kLoading={kt20kLoading}
+            kt20kSettingsLoading={kt20kSettingsLoading}
+            kt20kSettingsSaving={kt20kSettingsSaving}
+            kt20kYear={kt20kYear}
+            loadKt20k={loadKt20k}
+            saveKt20kEmployerSettings={saveKt20kEmployerSettings}
+            setKt20kEmployer={setKt20kEmployer}
+            setKt20kYear={setKt20kYear}
+            setStoreTb={setStoreTb}
+            storeOptionLabel={storeOptionLabel}
+            storeOptions={storeOptions}
+            storeTb={storeTb}
+            t={t}
+          />
         </TabsContent>
 
         <TabsContent value="workflow" className={cn(tabsContentClass, "space-y-3")}>
-          <div className="text-[11px] text-muted-foreground">{t("accCompWorkflowPermissionNote")}</div>
-          <div className="flex flex-wrap gap-2 items-end">
-            {!externalFiling ? (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">{t("accCompYearMonth")}</div>
-                <Input
-                  type="month"
-                  className="h-9 w-[160px]"
-                  value={taxMonth}
-                  onChange={(e) => setTaxMonth(e.target.value)}
-                />
-              </div>
-            ) : null}
-            {isOffice && !externalFiling ? (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">{t("accCompStore")}</div>
-                <Select value={storeTb} onValueChange={setStoreTb}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {storeOptions.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {storeOptionLabel(s)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                void loadWorkflow()
-                void loadWorkflowReminders()
-              }}
-              disabled={loading}
-            >
-              {t("search")}
-            </Button>
-          </div>
-          {workflowFallbackUsed ? (
-            <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
-              {t("accCompWorkflowPeriodKeyFallback")}
-            </div>
-          ) : null}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t("accCompFilingCalendarTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="text-muted-foreground">
-                {tr(t, "accCompFilingCalendarIntro", { month: taxMonth, store: storeTb })}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded border border-rose-300 bg-rose-50 px-2 py-1 text-rose-700">
-                  {t("accCompReminderSeverityCritical")} {Number(workflowReminderSummary?.critical || 0).toLocaleString()}
-                </span>
-                <span className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-700">
-                  {t("accCompReminderSeverityWarn")} {Number(workflowReminderSummary?.warn || 0).toLocaleString()}
-                </span>
-                <span className="rounded border border-slate-300 bg-slate-50 px-2 py-1 text-slate-700">
-                  {t("accCompReminderSeverityInfo")} {Number(workflowReminderSummary?.info || 0).toLocaleString()}
-                </span>
-              </div>
-              {workflowReminderRows.length ? (
-                <AdminTableScroll className="rounded border border-border/60" hint={false}>
-                  <table className="w-full text-[11px]">
-                    <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-left p-1.5">{t("accCompReminderColSeverity")}</th>
-                        <th className="text-left p-1.5">{t("accCompReminderColFiling")}</th>
-                        <th className="text-left p-1.5">{t("accCompReminderColPeriodMonth")}</th>
-                        <th className="text-left p-1.5">{t("accCompReminderColDueBangkok")}</th>
-                        <th className="text-left p-1.5">{t("accCompReminderColStatus")}</th>
-                        <th className="text-left p-1.5">{t("accCompReminderColMessage")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workflowReminderRows.map((r, idx) => (
-                        <tr key={`${r.filingType}-${r.yearMonth}-${idx}`} className="border-b border-border/40">
-                          <td className="p-1.5">
-                            <span
-                              className={cn(
-                                "rounded px-1.5 py-0.5",
-                                r.severity === "critical"
-                                  ? "bg-rose-100 text-rose-700"
-                                  : r.severity === "warn"
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-slate-100 text-slate-700"
-                              )}
-                            >
-                              {r.severity === "critical"
-                                ? t("accCompReminderSeverityCritical")
-                                : r.severity === "warn"
-                                  ? t("accCompReminderSeverityWarn")
-                                  : t("accCompReminderSeverityInfo")}
-                            </span>
-                          </td>
-                          <td className="p-1.5">{r.filingLabelKo}</td>
-                          <td className="p-1.5">{r.yearMonth}</td>
-                          <td className="p-1.5">{r.dueDateBangkok}</td>
-                          <td className="p-1.5">{workflowStatusLabel(r.status)}</td>
-                          <td className="p-1.5 text-muted-foreground">{r.messageKo}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </AdminTableScroll>
-              ) : (
-                <div className="text-muted-foreground">{t("accCompReminderEmpty")}</div>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <AdminTableScroll lockViewport={false}>
-              <table className="w-full text-sm min-w-[640px]">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2">{t("accCompColFiling")}</th>
-                    <th className="text-left p-2">{t("accCompColStatus")}</th>
-                    <th className="text-right p-2">{t("accCompColAction")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {THAI_FILING_DEFINITIONS.map((d) => {
-                    const row = workflowRows.find((r) => r.filing_type === d.id)
-                    const status = row?.status || "todo"
-                    return (
-                      <tr key={d.id} className="border-b border-border/50">
-                        <td className="p-2">{lang === "th" ? d.labelTh : lang === "ko" ? d.labelKo : d.labelEn}</td>
-                        <td className="p-2">{workflowStatusLabel(status)}</td>
-                        <td className="p-2 text-right">
-                          <div className="inline-flex gap-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void upsertWorkflowStatus(d.id, "in_progress")}
-                              disabled={!canWriteCompliance}
-                            >
-                              {t("accCompWorkflowStart")}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void upsertWorkflowStatus(d.id, "review")}
-                              disabled={!canApproveCompliance}
-                            >
-                              {t("accCompWorkflowReview")}
-                            </Button>
-                            <Button type="button" size="sm" onClick={() => void upsertWorkflowStatus(d.id, "done")} disabled={!canApproveCompliance}>
-                              {t("accCompWorkflowDone")}
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              </AdminTableScroll>
-            </CardContent>
-          </Card>
+          <AccountingComplianceWorkflowTab
+            canApproveCompliance={canApproveCompliance}
+            canWriteCompliance={canWriteCompliance}
+            externalFiling={externalFiling}
+            isOffice={isOffice}
+            lang={lang}
+            loading={loading}
+            loadWorkflow={loadWorkflow}
+            loadWorkflowReminders={loadWorkflowReminders}
+            setStoreTb={setStoreTb}
+            setTaxMonth={setTaxMonth}
+            storeOptionLabel={storeOptionLabel}
+            storeOptions={storeOptions}
+            storeTb={storeTb}
+            t={t}
+            taxMonth={taxMonth}
+            upsertWorkflowStatus={upsertWorkflowStatus}
+            workflowFallbackUsed={workflowFallbackUsed}
+            workflowReminderRows={workflowReminderRows}
+            workflowReminderSummary={workflowReminderSummary}
+            workflowRows={workflowRows}
+            workflowStatusLabel={workflowStatusLabel}
+          />
         </TabsContent>
       </Tabs>
     </div>
