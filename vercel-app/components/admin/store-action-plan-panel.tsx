@@ -6,6 +6,7 @@ import { CalendarPlus, CalendarRange } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { appAlert } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import {
   addStoreActionToDailyPlan,
@@ -50,7 +51,7 @@ export function StoreActionPlanPanel({
     try {
       const res = await addStoreActionToDailyPlan({ actionId, date, who })
       if (!res.success) {
-        await appAlert(res.messageKey ? t(res.messageKey) : res.message || t("dp_save_fail"))
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
         return
       }
       await appAlert(

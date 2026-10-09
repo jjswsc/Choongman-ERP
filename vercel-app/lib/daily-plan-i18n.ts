@@ -129,6 +129,18 @@ export function dailyPlanLinkHref(
   }
 }
 
+/** 저장된 제목 앞말(생성 시 한국어 고정, 중복 키에 쓰임) → 화면 언어 */
+const TITLE_PREFIX_KEYS: [string, string][] = [
+  ["[재확인] ", "dp_prefix_verify"],
+  ["[개선] ", "dp_prefix_action"],
+]
+
+export function dailyPlanItemTitle(title: string, t: T): string {
+  const s = String(title || "")
+  for (const [p, k] of TITLE_PREFIX_KEYS) if (s.startsWith(p)) return `${t(k)} ${s.slice(p.length)}`
+  return s
+}
+
 const LINE_MARK: Record<string, string> = { done: "✅", skipped: "⏭️", doing: "▶️", todo: "▫️" }
 
 /** 한 사람 일정 → LINE 붙여넣기 문구 (표 없이 시간순) */
@@ -150,7 +162,7 @@ export function buildDailyPlanLineText(b: DailyPlanBundle, t: T): string {
       continue
     }
     const why = it.status === "skipped" && it.skip_reason ? ` (${it.skip_reason})` : ""
-    lines.push(`${LINE_MARK[it.status] || "▫️"} ${at} ${it.title}${why}`)
+    lines.push(`${LINE_MARK[it.status] || "▫️"} ${at} ${dailyPlanItemTitle(it.title, t)}${why}`)
   }
   lines.push("", `${t("dp_col_progress")} ${summary.done}/${summary.total} (${summary.doneRate}%)`)
   return lines.join("\n")

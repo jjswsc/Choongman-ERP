@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import {
   getRoutineTemplates,
@@ -131,7 +132,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
         items: edit.items.filter((i) => i.title.trim()),
       })
       if (!res.success) {
-        await appAlert(res.message || t("dp_save_fail"))
+        await appAlert(translateApiMessage(res.message, t) || t("dp_save_fail"))
         return
       }
       await appAlert(t("dp_saved_ok"))
@@ -147,7 +148,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
     if (!(await appConfirm(t("dp_tpl_archive_confirm")))) return
     const res = await saveRoutineTemplate({ id: edit.id, deleteTemplate: true })
     if (!res.success) {
-      await appAlert(res.message || t("dp_save_fail"))
+      await appAlert(translateApiMessage(res.message, t) || t("dp_save_fail"))
       return
     }
     setEdit(null)

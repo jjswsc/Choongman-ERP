@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { appAlert, appPrompt } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import {
   updateDailyPlanItem,
@@ -24,7 +25,7 @@ import {
   type DailyPlanItemAction,
 } from "@/lib/api-client"
 import { getBangkokDateTimeString, getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
+import { dailyPlanItemTitle, dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
 import {
   DAILY_PLAN_LATE_GRACE_MINUTES,
   computePlanTimeline,
@@ -130,7 +131,7 @@ export function DailyPlanItems(props: {
     try {
       const res = await updateDailyPlanItem({ action, itemId: item.id, ...extra })
       if (!res.success) {
-        await appAlert(res.messageKey ? t(res.messageKey) : res.message || t("dp_save_fail"))
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
         return
       }
       onChanged()
@@ -167,7 +168,7 @@ export function DailyPlanItems(props: {
     try {
       const up = await uploadStoreActionPhoto(item.store_name || plan.store_name || plan.employee_store, file)
       if (!up.success || !up.url) {
-        await appAlert(up.message || t("dp_save_fail"))
+        await appAlert(translateApiMessage(up.message, t) || t("dp_save_fail"))
         return
       }
       await run(item, "photo", { photoUrl: up.url })
@@ -268,7 +269,7 @@ export function DailyPlanItems(props: {
                   <span className="ml-auto font-medium">{label.itemStatus(it.status)}</span>
                 </div>
                 <p className={cn("mt-1 text-sm font-medium", it.status === "done" && "line-through decoration-1")}>
-                  {isVisit ? `📍 ${t("dp_visit_title")} · ${it.title}` : it.title}
+                  {isVisit ? `📍 ${t("dp_visit_title")} · ${it.title}` : dailyPlanItemTitle(it.title, t)}
                 </p>
                 {it.description ? (
                   <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">{it.description}</p>

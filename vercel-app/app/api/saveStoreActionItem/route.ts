@@ -136,10 +136,10 @@ export async function POST(request: NextRequest) {
       name: ownerName,
       fallbackStore: store,
     })
-    const repeatHint = repeatCount > 0 ? ` (재발 ${repeatCount}회)` : ""
+    const repeatHint = repeatCount > 0 ? ` (재발 ${repeatCount}회 · เกิดซ้ำ ${repeatCount} ครั้ง)` : ""
     await pushStoreActionNotice({
-      title: "[개선 과제] 새 과제가 배정되었습니다",
-      body: `${store} · ${title}${repeatHint}\n기한: ${dueDate} · 재확인: ${verifierName}`,
+      title: "[개선 과제] 새 과제 배정 · มีงานปรับปรุงใหม่ครับ",
+      body: `${store} · ${title}${repeatHint}\n기한 · กำหนดเสร็จ: ${dueDate}\n재확인 · ผู้ตรวจยืนยัน: ${verifierName}`,
       recipients: owner && owner.name.toLowerCase() !== scope.actorName.toLowerCase() ? [owner] : [],
     })
 

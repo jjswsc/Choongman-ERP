@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Copy, Lock, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -101,7 +102,7 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
     try {
       const res = await closeDailyPlan(today.plan.id)
       if (!res.success || !res.result) {
-        await appAlert(res.messageKey ? t(res.messageKey) : res.message || t("dp_save_fail"))
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
         return
       }
       const r = res.result

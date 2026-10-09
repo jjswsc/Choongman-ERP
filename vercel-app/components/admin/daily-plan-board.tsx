@@ -17,7 +17,13 @@ import {
   type DailyPlanBundle,
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { buildDailyPlanLineText, dailyPlanLabelers, dailyPlanLinkHref, minutesLabel } from "@/lib/daily-plan-i18n"
+import {
+  buildDailyPlanLineText,
+  dailyPlanItemTitle,
+  dailyPlanLabelers,
+  dailyPlanLinkHref,
+  minutesLabel,
+} from "@/lib/daily-plan-i18n"
 import { DailyPlanItems } from "@/components/daily-plan/daily-plan-items"
 
 type T = (k: string) => string
@@ -170,7 +176,11 @@ export function DailyPlanBoard({ t }: { t: T }) {
                           {r.late}
                         </td>
                         <td className="max-w-[220px] truncate p-1.5">
-                          {r.doingTitle ? `▶ ${r.doingTitle}` : r.nextTitle ? `… ${r.nextTitle}` : "—"}
+                          {r.doingTitle
+                            ? `▶ ${dailyPlanItemTitle(r.doingTitle, t)}`
+                            : r.nextTitle
+                              ? `… ${dailyPlanItemTitle(r.nextTitle, t)}`
+                              : "—"}
                         </td>
                         <td className="p-1.5 text-right tabular-nums">
                           {minutesLabel(r.actualMinutes, t)} / {minutesLabel(r.estMinutes, t)}

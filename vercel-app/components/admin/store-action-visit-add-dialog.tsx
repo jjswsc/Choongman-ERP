@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { appAlert } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { addVisitToDailyPlan, getDailyPlanBoard, type DailyPlanCandidate } from "@/lib/api-client"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
@@ -58,7 +59,7 @@ export function StoreActionVisitAddDialog({
     try {
       const res = await addVisitToDailyPlan({ store, date, employeeId: empId })
       if (!res.success) {
-        await appAlert(res.messageKey ? t(res.messageKey) : res.message || t("dp_save_fail"))
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
         return
       }
       await appAlert(

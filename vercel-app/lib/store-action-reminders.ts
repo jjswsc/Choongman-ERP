@@ -128,15 +128,15 @@ export async function runStoreActionDailyReminders(
     const r = await resolve(b.item.ownerUserId, b.item.ownerName, b.item.store)
     if (!r) continue
     const head = [
-      b.overdue.length ? `기한초과 ${b.overdue.length}건` : '',
-      b.dueToday.length ? `오늘 마감 ${b.dueToday.length}건` : '',
-      b.dueTomorrow.length ? `내일 마감 ${b.dueTomorrow.length}건` : '',
+      b.overdue.length ? `기한초과 · เกินกำหนด ${b.overdue.length}` : '',
+      b.dueToday.length ? `오늘 마감 · ครบกำหนดวันนี้ ${b.dueToday.length}` : '',
+      b.dueTomorrow.length ? `내일 마감 · ครบกำหนดพรุ่งนี้ ${b.dueTomorrow.length}` : '',
     ]
       .filter(Boolean)
       .join(' · ')
     const lines = [...b.overdue, ...b.dueToday, ...b.dueTomorrow].slice(0, 4).map(lineOf)
     ownerSent += await pushStoreActionNotice({
-      title: '[개선 과제] 오늘 처리할 과제',
+      title: '[개선 과제] 오늘 처리할 과제 · งานปรับปรุงที่ต้องทำวันนี้ครับ',
       body: [head, ...lines].join('\n'),
       recipients: [r],
     })
@@ -154,8 +154,8 @@ export async function runStoreActionDailyReminders(
       .map(([s, n]) => `${s}(${n})`)
       .join(', ')
     verifierSent += await pushStoreActionNotice({
-      title: '[개선 과제] 아침 브리핑',
-      body: `재확인 대기 ${b.pending.length}건 · 기한초과 ${b.overdue.length}건\n매장: ${storeLine}`,
+      title: '[개선 과제] 아침 브리핑 · สรุปงานเช้านี้ครับ',
+      body: `재확인 대기 · รอตรวจยืนยัน ${b.pending.length} / 기한초과 · เกินกำหนด ${b.overdue.length}\n매장 · สาขา: ${storeLine}`,
       recipients: [r],
     })
   }

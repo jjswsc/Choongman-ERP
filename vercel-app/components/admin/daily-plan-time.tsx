@@ -9,6 +9,7 @@ import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { cn } from "@/lib/utils"
 import { applyRoutineEstimate, getDailyPlanTimeSummary, type DailyPlanTimeRow } from "@/lib/api-client"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
 
@@ -85,7 +86,7 @@ export function DailyPlanTime({ t }: { t: T }) {
     try {
       const res = await applyRoutineEstimate({ roleScope: r.roleScope, title: r.title, estMinutes: minutes })
       if (!res.success) {
-        await appAlert(res.message || t("dp_save_fail"))
+        await appAlert(translateApiMessage(res.message, t) || t("dp_save_fail"))
         return
       }
       await appAlert(

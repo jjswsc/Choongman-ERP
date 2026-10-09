@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { appAlert, appConfirm } from "@/lib/app-message"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import {
   generateDailyPlans,
@@ -150,7 +151,7 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
         publish,
       })
       if (!res.success) {
-        await appAlert(res.messageKey ? t(res.messageKey) : res.message || t("dp_save_fail"))
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
         return
       }
       await appAlert(publish ? t("dp_published_ok") : t("dp_saved_ok"))
@@ -166,7 +167,7 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
     try {
       const res = await generateDailyPlans(date)
       if (!res.success || !res.result) {
-        await appAlert(res.message || t("dp_save_fail"))
+        await appAlert(translateApiMessage(res.message, t) || t("dp_save_fail"))
         return
       }
       const r = res.result

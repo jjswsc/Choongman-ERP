@@ -205,13 +205,13 @@ export function AdminStoreActions() {
           dueDate: categoryParam
             ? addDaysYmd(getBangkokTodayDateString(), storeActionDefaultDueDays(category))
             : f.dueDate,
-          description: titleParam ? `[점검 연계] ${titleParam}` : f.description,
+          description: titleParam ? `${t("action_desc_from_check")} ${titleParam}` : f.description,
           sourceType: sourceParam === "check_fail" ? "check_fail" : sourceParam || f.sourceType,
           checkItemId: checkItemParam || f.checkItemId,
         }
       })
     }
-  }, [searchParams])
+  }, [searchParams, t])
 
   const loadList = useCallback(async () => {
     setListLoading(true)

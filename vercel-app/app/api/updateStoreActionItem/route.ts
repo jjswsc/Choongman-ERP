@@ -251,26 +251,26 @@ export async function POST(request: NextRequest) {
         fallbackStore: store,
       })
       await pushStoreActionNotice({
-        title: "[개선 과제] 재확인 요청",
-        body: `${store} · ${title}\n담당자 ${actorName}님이 조치 완료를 보고했습니다.`,
+        title: "[개선 과제] 재확인 요청 · ขอตรวจยืนยันครับ",
+        body: `${store} · ${title}\n담당자 ${actorName}님이 조치 완료를 보고했습니다 · ${actorName} แจ้งว่าแก้ไขเสร็จแล้วครับ`,
         recipients: [verifier],
       })
     } else if (logEvent === "verify_reject") {
       await pushStoreActionNotice({
-        title: "[개선 과제] 재확인 반려",
-        body: `${store} · ${title}${logNote ? `\n사유: ${logNote}` : ""}`,
+        title: "[개선 과제] 재확인 반려 · งานถูกตีกลับครับ",
+        body: `${store} · ${title}${logNote ? `\n사유 · เหตุผล: ${logNote}` : ""}`,
         recipients: [await ownerRecipient()],
       })
     } else if (logEvent === "verify_pass") {
       await pushStoreActionNotice({
-        title: "[개선 과제] 완료 확정",
-        body: `${store} · ${title}\n재확인: ${actorName}`,
+        title: "[개선 과제] 완료 확정 · ยืนยันเสร็จแล้วครับ",
+        body: `${store} · ${title}\n재확인 · ผู้ตรวจยืนยัน: ${actorName}`,
         recipients: [await ownerRecipient()],
       })
     } else if (logEvent === "reassign") {
       await pushStoreActionNotice({
-        title: "[개선 과제] 새 과제가 배정되었습니다",
-        body: `${store} · ${title}\n기한: ${String(patch.due_date ?? prev.due_date ?? "-")}`,
+        title: "[개선 과제] 새 과제 배정 · มีงานปรับปรุงใหม่ครับ",
+        body: `${store} · ${title}\n기한 · กำหนดเสร็จ: ${String(patch.due_date ?? prev.due_date ?? "-")}`,
         recipients: [await ownerRecipient()],
       })
     }
