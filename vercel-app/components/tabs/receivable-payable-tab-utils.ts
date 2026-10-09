@@ -41,6 +41,19 @@ export function bangkokTodayStr() {
   return new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 10)
 }
 
+/** 원장 행 펼침·품목 캐시 키 (id 없으면 ref 기준) */
+export function transactionLineRowKey(
+  mode: "pay" | "rec",
+  row: { id?: number; ref_type?: string; ref_id?: number }
+): string {
+  return row.id != null ? `${mode}-${row.id}` : `${mode}-${row.ref_type ?? "x"}-${row.ref_id ?? "0"}`
+}
+
+/** 엑셀(HTML 표) 셀 텍스트 이스케이프 */
+export function escapeXml(s: string): string {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+}
+
 /** 미수·미지급 화면 금액 — 소수 둘째 자리 고정(정렬·가독) */
 export function fmtBaht(n: number | null | undefined): string {
   return `฿${formatMoneyBaht(Number(n ?? 0))}`

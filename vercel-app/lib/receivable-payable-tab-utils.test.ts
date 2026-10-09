@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   collectReceivableTaxInvoicePrintTargets,
+  escapeXml,
   filterReceivableCustomerOptions,
+  transactionLineRowKey,
   isReceivableTaxInvoicePrintableRow,
   formatVendorDisplayLabel,
   formatReceivableStoreDisplayLabel,
@@ -14,6 +16,28 @@ import {
   resolveEffectivePayableStoreFilter,
   resolveReceivableTaxInvoicePrintSource,
 } from '@/components/tabs/receivable-payable-tab-utils'
+
+describe('transactionLineRowKey', () => {
+  it('uses row id when present', () => {
+    expect(transactionLineRowKey('pay', { id: 12, ref_type: 'PO', ref_id: 3 })).toBe('pay-12')
+    expect(transactionLineRowKey('rec', { id: 0 })).toBe('rec-0')
+  })
+
+  it('falls back to ref type and ref id', () => {
+    expect(transactionLineRowKey('rec', { ref_type: 'Order', ref_id: 77 })).toBe('rec-Order-77')
+    expect(transactionLineRowKey('pay', {})).toBe('pay-x-0')
+  })
+})
+
+describe('escapeXml', () => {
+  it('escapes markup characters', () => {
+    expect(escapeXml('<a href="x">R&D</a>')).toBe('&lt;a href=&quot;x&quot;&gt;R&amp;D&lt;/a&gt;')
+  })
+
+  it('treats null-ish as empty', () => {
+    expect(escapeXml(undefined as unknown as string)).toBe('')
+  })
+})
 
 describe('formatVendorDisplayLabel', () => {
   const vendors = [
