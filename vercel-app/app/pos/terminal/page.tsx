@@ -11,6 +11,7 @@ import { useQrFloorSessionHints } from '@/lib/use-qr-floor-session-hints'
 import { DeliveryOrderPanel } from '@/components/pos/delivery-order-panel'
 import { TakeoutOrderPanel } from '@/components/pos/takeout-order-panel'
 import { PosAdvanceOrderPanel } from '@/components/pos/pos-advance-order-panel'
+import { PosAddonExistingItems } from '@/components/pos/pos-addon-existing-items'
 import { PosAdvanceDepositDialog } from '@/components/pos/pos-advance-deposit-dialog'
 import { OrderBarList, type OrderBarItem, type OrderBarStatus } from '@/components/pos/order-bar-list'
 import { resolveOrderBarCookElapsedEndAt } from '@/lib/pos-order-bar-cook-elapsed'
@@ -12157,11 +12158,12 @@ export default function PosTerminalPage() {
                   )}
                 >
                   {currentStoreId && String(selectedTable?.name || '').trim() ? (
-                    <div className="shrink-0 pb-3">
+                    <div className="shrink-0 pb-2">
                       <QrTableSessionPanel
                         storeCode={currentStoreId}
                         tableName={String(selectedTable?.name || '').trim()}
                         storeLabel={formatStoreLabel(currentStoreId || '')}
+                        hideGuestControls
                         onChanged={() => {
                           const openedFromEmpty = selectedTableId
                           void Promise.resolve(refetchCurrentStore()).then(() => {
@@ -12658,23 +12660,11 @@ export default function PosTerminalPage() {
             />
           ) : activeTab === 'tables' && servingTableId ? (
             isDineInAddOrderMode ? (
-              <div className="flex flex-col flex-1 min-h-0">
-                {/* 카트(주문 버튼) 최소 높이 확보 — 기존 테이블 패널이 카트를 밀어내지 않게 */}
-                <div
-                  className={cn(
-                    'min-h-0 overflow-hidden',
-                    isNarrowViewport ? 'flex-[1.35] min-h-[240px]' : 'flex-1'
-                  )}
-                >
+              // 추가 주문 중엔 기존 주문(접힘) + 카트만 — 서빙·결제 패널은 카트 ←(테이블 선택 해제)로 나가면 다시 보인다
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                {servingTable?.order ? <PosAddonExistingItems order={servingTable.order} t={t} /> : null}
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   {renderTerminalCartPanel('side-panel')}
-                </div>
-                <div
-                  className={cn(
-                    'min-h-0 overflow-hidden border-t border-border',
-                    isNarrowViewport ? 'max-h-[36%] min-h-0 shrink-0' : 'flex-1'
-                  )}
-                >
-                  {dineInTableOrderPanel}
                 </div>
               </div>
             ) : (

@@ -943,6 +943,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [paymentTableNameOverride, setPaymentTableNameOverride] = useState<string | null>(null)
   const [isPrepaid, setIsPrepaid] = useState(false)
   const [showAdvanceDepositDialog, setShowAdvanceDepositDialog] = useState(false)
+  /** 예약금은 메뉴 없이 따로 받는 돈 — 기존 주문에 추가 주문 중에는 숨긴다 */
+  const showDineInDepositButton =
+    orderType === 'dine-in' &&
+    Boolean(onAdvanceDeposit) &&
+    normalizeExistingPosOrderId(selectedTable?.order?.id) == null &&
+    normalizeExistingPosOrderId(pendingOrderId) == null
   const [checkoutDepositAmt, setCheckoutDepositAmt] = useState(0)
   const [checkoutDepositPhone, setCheckoutDepositPhone] = useState('')
   const prevSelectedTableIdRef = useRef<string | null>(selectedTable?.id ?? null)
@@ -6257,7 +6263,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               {t('posTourTableGuestRequired') || '테이블 주문은 인원을 먼저 선택해야 주문할 수 있습니다.'}
             </p>
           )}
-          {orderType === 'dine-in' && selectedTable && (
+          {orderType === 'dine-in' && (selectedTable || showDineInDepositButton) && (
+          <div
+            className={cn(
+              'grid gap-2',
+              selectedTable && showDineInDepositButton ? 'grid-cols-[minmax(0,2fr)_minmax(0,1fr)]' : 'grid-cols-1'
+            )}
+          >
+          {selectedTable && (
             <Button
               data-tour="pos-tour-cart-order"
               className="w-full h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
@@ -6304,16 +6317,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               {t('posOrderButton') || '주문'}
             </Button>
           )}
-          {orderType === 'dine-in' && onAdvanceDeposit && (
+          {showDineInDepositButton && (
             <Button
               type="button"
               variant="outline"
-              className="w-full h-11 text-base font-semibold border-amber-400 text-amber-900 hover:bg-amber-50 dark:text-amber-100"
+              className="w-full h-12 text-base font-semibold border-amber-400 text-amber-900 hover:bg-amber-50 dark:text-amber-100"
               disabled={posBackendActionInFlight}
               onClick={() => setShowAdvanceDepositDialog(true)}
             >
               {t('posDepositButton') || 'มัดจำ'}
             </Button>
+          )}
+          </div>
           )}
           {orderType === 'takeout' && (
             <div className={cn('w-full grid gap-2', onAdvanceDeposit ? 'grid-cols-3' : 'grid-cols-2')}>

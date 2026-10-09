@@ -810,7 +810,7 @@ export function TableOrderPanel({
   const renderTotalRow = () => (
     <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
       <span className="flex min-w-0 items-baseline gap-2 text-base font-medium">
-        <span className="truncate">{t('posInputTotal') || '합계'}</span>
+        <span className="truncate">{t('posTotal') || '합계'}</span>
         <span className="font-bold tabular-nums">{order ? order.total.toLocaleString() : 0} ฿</span>
       </span>
       {!listExpanded ? (

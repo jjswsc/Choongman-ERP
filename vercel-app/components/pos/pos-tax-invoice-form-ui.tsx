@@ -56,7 +56,7 @@ export function PosOrderTaxInvoiceStatusButton({
       onClick={() => onOpen?.()}
       disabled={disabled}
       className={cn(
-        'inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px]',
+        'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-0.5 text-[11px]',
         hasTaxInvoice
           ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
           : 'bg-amber-100 text-amber-800 dark:bg-amber-900/35 dark:text-amber-200',

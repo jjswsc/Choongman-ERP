@@ -51,8 +51,10 @@ export function QrTableSessionPanel(props: {
   /** 슬립 상단 매장명. 없으면 storeCode */
   storeLabel?: string
   onChanged?: () => void
+  /** 세션이 열린 뒤 인원·입장료 줄 숨김 (메뉴·추가 주문 화면 — 인원은 서빙 패널에서 조정) */
+  hideGuestControls?: boolean
 }) {
-  const { storeCode, tableName, storeLabel, onChanged } = props
+  const { storeCode, tableName, storeLabel, onChanged, hideGuestControls } = props
   const { lang } = useLang()
   const t = useT(lang)
   const tr = (k: string, fb: string) => tOr(t, k, fb)
@@ -318,7 +320,7 @@ export function QrTableSessionPanel(props: {
         </div>
         {session ? (
           <>
-            {sessionIsBuffet ? (
+            {sessionIsBuffet && !hideGuestControls ? (
               <>
                 <div className="flex items-center gap-1 text-xs text-slate-700">
                   <span className="text-[11px] text-slate-500">{tr('qrTableSessionGuests', '인원')}</span>
@@ -359,18 +361,18 @@ export function QrTableSessionPanel(props: {
             ) : null}
 
             {orderBalance && orderBalance.orderId ? (
-              <span className="flex basis-full flex-wrap items-center gap-x-1.5 text-[11px] text-slate-600">
-                <span>
+              <span className="inline-flex flex-wrap items-center gap-x-1 text-[11px] text-slate-600">
+                <span className="whitespace-nowrap">
                   {tr('qrTableSessionOrderTotal', '주문 합계')} ฿
                   {Number(orderBalance.total || 0).toLocaleString()}
                 </span>
                 <span className="text-slate-300">·</span>
-                <span>
+                <span className="whitespace-nowrap">
                   {tr('qrTableSessionPaidQr', 'QR 입금')} ฿
                   {Number(orderBalance.paymentQr || 0).toLocaleString()}
                 </span>
                 <span className="text-slate-300">·</span>
-                <span className="font-semibold text-amber-900">
+                <span className="whitespace-nowrap font-semibold text-amber-900">
                   {tr('qrTableSessionBalanceDue', '잔액')} ฿
                   {Number(orderBalance.balanceDue || 0).toLocaleString()}
                 </span>
