@@ -31,6 +31,8 @@ import { setTaxAccountingPeriodClosed, TAX_BOOK_SCHEMA_MISSING, TAX_PERIOD_CLOSE
 import { loadTaxBookJournalHeads, loadTaxBookLines, summarizeTaxBookTrial } from '@/lib/tax-book-server'
 import { loadTaxManagementBridge, loadTaxPayrollTotals } from '@/lib/tax-management-bridge-server'
 import { requireAuth } from '@/lib/verify-auth'
+import { isPvPpDocumentNo, normalizeVoucherDocumentNo } from '@/lib/expense-document-no'
+import { isVoucherDocumentNoTaken } from '@/lib/expense-document-no-server'
 
 export const maxDuration = 120
 
@@ -46,6 +48,7 @@ function statusFor(code: string): number {
     return 400
   }
   if (code === TAX_PERIOD_CLOSED) return 409
+  if (code === 'DUPLICATE_DOCUMENT_NO') return 409
   if (code === TAX_BOOK_SCHEMA_MISSING) return 409
   if (code === 'ACCOUNTING_FORBIDDEN' || code === 'ACCOUNTING_APPROVAL_FORBIDDEN' || code === 'ACCOUNTING_UNLOCK_APPROVAL_FORBIDDEN') return 403
   return 500
@@ -283,6 +286,11 @@ export async function POST(request: NextRequest) {
       if (!taxJournalBalanced(lines)) throw new Error('UNBALANCED')
       const kindRaw = String(body.voucherKind || 'general').trim() as TaxVoucherKind
       const voucherKind = ((TAX_VOUCHER_KINDS as readonly string[]).includes(kindRaw) ? kindRaw : 'general') as TaxVoucherKind
+      let entryNo = String(body.entryNo || '').trim() || null
+      if (entryNo && isPvPpDocumentNo(entryNo)) {
+        entryNo = normalizeVoucherDocumentNo(entryNo)
+        if (await isVoucherDocumentNoTaken(entryNo)) throw new Error('DUPLICATE_DOCUMENT_NO')
+      }
       const id = await postTaxManualJournal({
         yearMonth,
         taxEntityCode,
@@ -291,7 +299,7 @@ export async function POST(request: NextRequest) {
         lines,
         voucherKind,
         accountingDate: body.accountingDate,
-        entryNo: String(body.entryNo || '').trim() || null,
+        entryNo,
         postingStatus: String(body.postingStatus || '').toLowerCase() === 'draft' ? 'draft' : 'approved',
       })
       return NextResponse.json({ success: true, entryId: id, locksStorePeriod: TAX_CLOSE_LOCKS_STORE_PERIOD }, { headers })

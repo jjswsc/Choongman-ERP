@@ -1,5 +1,6 @@
 import { syncPettyCashExpenseAccount } from '@/lib/accounting-posting'
 import { accountLine } from '@/lib/chart-of-accounts-mapping'
+import { isExpenseDocumentNo, normalizeVoucherDocumentNo } from '@/lib/expense-document-no'
 import { buildIncomeExpenseClosingPreview } from '@/lib/income-expense-closing'
 import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
 import {
@@ -32,7 +33,7 @@ import type { TrialBalanceRow } from '@/lib/trial-balance-report'
 export type TaxBookEntryRow = {
   id: number
   entryNo: string
-  /** 발행 문서번호. 일별장부 번호(voucherNo)와 다르다. JE- 내부번호는 비운다. */
+  /** 발행 문서번호. 지출 PV/PP(구형 EXP)는 voucherNo와 같다. JE- 내부번호는 비운다. */
   referenceNo: string
   voucherNo: string
   voucherKind: TaxVoucherKind
@@ -283,6 +284,12 @@ export function toTaxBookEntries(
   for (const [id, entryLines] of linesByEntry) {
     if (journalClearsTradeReceivable(entryLines)) clearsReceivableIds.add(id)
   }
+  // 지출에서 발급한 PV/PP(구형 EXP) 번호는 그대로 일별장부 번호로 쓰고, 자동 순번은 그 번호를 건너뛴다.
+  const issuedVoucherNo = (entryNo: string | null | undefined): string => {
+    const issued = taxBookIssuedDocumentNo(entryNo)
+    return isExpenseDocumentNo(issued) ? normalizeVoucherDocumentNo(issued) : ''
+  }
+  const takenVoucherNos = new Set(heads.map((h) => issuedVoucherNo(h.entry_no)).filter(Boolean))
   const seqByKind: Record<string, number> = {}
   return heads
     .map((h) => {
@@ -291,19 +298,24 @@ export function toTaxBookEntries(
         voucherKindForRecordedVat(h.source_type, h.voucher_kind, inputVatIds.has(id)),
         { clearsTradeReceivable: clearsReceivableIds.has(id) }
       )
-      const dated = String(h.accounting_date || '').slice(0, 7)
-      const ym = /^\d{4}-\d{2}$/.test(dated) ? dated : yearMonth
-      const seqKey = `${ym}:${kind}`
-      seqByKind[seqKey] = (seqByKind[seqKey] || 0) + 1
-      const generated = formatTaxVoucherNo(kind, ym, seqByKind[seqKey])
+      const entryNo = String(h.entry_no || '')
+      let voucherNo = issuedVoucherNo(entryNo)
+      if (!voucherNo) {
+        const dated = String(h.accounting_date || '').slice(0, 7)
+        const ym = /^\d{4}-\d{2}$/.test(dated) ? dated : yearMonth
+        const seqKey = `${ym}:${kind}`
+        do {
+          seqByKind[seqKey] = (seqByKind[seqKey] || 0) + 1
+          voucherNo = formatTaxVoucherNo(kind, ym, seqByKind[seqKey])
+        } while (takenVoucherNos.has(voucherNo))
+      }
       const tot = totals.get(id) || { debit: 0, credit: 0 }
       const memo = h.memo != null ? String(h.memo) : null
-      const entryNo = String(h.entry_no || '')
       return {
         id,
         entryNo,
         referenceNo: taxBookIssuedDocumentNo(entryNo),
-        voucherNo: generated,
+        voucherNo,
         voucherKind: kind,
         accountingDate: String(h.accounting_date || '').slice(0, 10),
         sourceType: String(h.source_type || ''),

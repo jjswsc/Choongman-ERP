@@ -43,6 +43,15 @@ export function isExpenseDocumentNo(value: string | undefined | null): boolean {
   return RE_VOUCHER_DOC_NO.test(String(value || '').trim())
 }
 
+export function normalizeVoucherDocumentNo(value: string | undefined | null): string {
+  return String(value || '').trim().toUpperCase()
+}
+
+/** 중복 잠금 대상: PV(매입)·PP(지급) 접두 문서번호만 */
+export function isPvPpDocumentNo(value: string | undefined | null): boolean {
+  return /^(PV|PP)/.test(normalizeVoucherDocumentNo(value))
+}
+
 export function parseExpenseDocumentNo(
   value: string | undefined | null
 ): { prefix: 'PV' | 'PP' | 'EXP'; yyyymm: string; seq: number } | null {

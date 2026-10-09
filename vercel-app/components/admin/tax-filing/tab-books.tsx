@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { isPvPpDocumentNo, normalizeVoucherDocumentNo } from "@/lib/expense-document-no"
 import { useLang } from "@/lib/lang-context"
 import {
   getTaxBookEntries,
@@ -598,6 +599,16 @@ export function TaxFilingBooksTab(props: {
     0
   )
   const dayBalanced = dayDebit > 0 && Math.abs(dayDebit - dayCredit) <= 0.01
+  const dayDocNoDuplicate = React.useMemo(() => {
+    if (!isPvPpDocumentNo(dayDocNo)) return false
+    const doc = normalizeVoucherDocumentNo(dayDocNo)
+    return (entries?.vouchers || []).some(
+      (v) =>
+        normalizeVoucherDocumentNo(v.voucherNo) === doc ||
+        normalizeVoucherDocumentNo(v.referenceNo) === doc ||
+        normalizeVoucherDocumentNo(v.entryNo) === doc
+    )
+  }, [dayDocNo, entries?.vouchers])
 
   const postManual = async () => {
     setPosting(true)
@@ -629,7 +640,7 @@ export function TaxFilingBooksTab(props: {
         lines,
       })
       if (!res.success) {
-        setMessage(res.error || t("accCompUnknownError"))
+        setMessage(res.error ? voucherSaveErrorText(t, res.error) : t("accCompUnknownError"))
       } else {
         setMessage(t("taxBooksEntrySaved"))
         setDayMemo("")
@@ -942,9 +953,10 @@ export function TaxFilingBooksTab(props: {
                 onChange={(e) => setDayDate(e.target.value)}
               />
               <Input
-                className="w-40"
+                className={cn("w-40", dayDocNoDuplicate && "border-destructive")}
                 value={dayDocNo}
                 placeholder={t("taxBooksColDoc")}
+                aria-invalid={dayDocNoDuplicate || undefined}
                 onChange={(e) => setDayDocNo(e.target.value)}
               />
               <Input
@@ -975,6 +987,9 @@ export function TaxFilingBooksTab(props: {
                 <option value="draft">{t("taxBooksStatusDraft")}</option>
               </select>
             </div>
+            {dayDocNoDuplicate ? (
+              <p className="text-xs text-destructive">{t("taxBooksErr_DUPLICATE_DOCUMENT_NO")}</p>
+            ) : null}
             {dayAdj.map((ln, idx) => (
               <div key={idx} className="flex flex-wrap gap-2">
                 <Input
@@ -1025,7 +1040,12 @@ export function TaxFilingBooksTab(props: {
               >
                 {t("taxBooksAddLine")}
               </Button>
-              <Button type="button" size="sm" disabled={!canPost || !dayBalanced} onClick={() => void postManual()}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!canPost || !dayBalanced || dayDocNoDuplicate}
+                onClick={() => void postManual()}
+              >
                 {t("taxBooksSaveEntry")}
               </Button>
             </div>

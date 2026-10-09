@@ -4,6 +4,8 @@ import {
   expenseDocumentPrefixForVat,
   expenseDocumentSeqKey,
   isExpenseDocumentNo,
+  isPvPpDocumentNo,
+  normalizeVoucherDocumentNo,
   parseExpenseDocumentNo,
   remapExpDocumentNoToPvPp,
 } from '@/lib/expense-document-no'
@@ -36,5 +38,13 @@ describe('expense-document-no PV/PP', () => {
     expect(remapExpDocumentNoToPvPp('EXP2026080476', 100)).toBe('PV2026080476')
     expect(remapExpDocumentNoToPvPp('EXP2026080476', 0)).toBe('PP2026080476')
     expect(remapExpDocumentNoToPvPp('PV2026080476', 0)).toBe('PV2026080476')
+  })
+
+  it('locks only PV/PP numbers, case-insensitive', () => {
+    expect(isPvPpDocumentNo(' pv2026100004 ')).toBe(true)
+    expect(isPvPpDocumentNo('PP2026100013')).toBe(true)
+    expect(isPvPpDocumentNo('RV2026100001')).toBe(false)
+    expect(isPvPpDocumentNo('SV2026100001')).toBe(false)
+    expect(normalizeVoucherDocumentNo(' pv2026100004 ')).toBe('PV2026100004')
   })
 })
