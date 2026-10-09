@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **649**개 · 접두어 그룹 **90**개
+- `sql/` 최상위: **650**개 · 접두어 그룹 **90**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **46**개
 
@@ -314,7 +314,7 @@
 
 </details>
 
-<details><summary><code>marketing_*</code> (34)</summary>
+<details><summary><code>marketing_*</code> (35)</summary>
 
 - [`marketing_ads_content_detail.sql`](../sql/marketing_ads_content_detail.sql)
 - [`marketing_ads_period_end.sql`](../sql/marketing_ads_period_end.sql)
@@ -337,6 +337,7 @@
 - [`marketing_influencer_profiles_03_rls.sql`](../sql/marketing_influencer_profiles_03_rls.sql) — rls
 - [`marketing_influencer_profiles_04_backfill_preview.sql`](../sql/marketing_influencer_profiles_04_backfill_preview.sql) — preview, backfill
 - [`marketing_influencer_profiles_05_backfill.sql`](../sql/marketing_influencer_profiles_05_backfill.sql) — backfill
+- [`marketing_influencer_profiles_06_post_job_columns.sql`](../sql/marketing_influencer_profiles_06_post_job_columns.sql)
 - [`marketing_influencers_contact_menus.sql`](../sql/marketing_influencers_contact_menus.sql)
 - [`marketing_material_deployments.sql`](../sql/marketing_material_deployments.sql)
 - [`marketing_material_gifts.sql`](../sql/marketing_material_gifts.sql)
