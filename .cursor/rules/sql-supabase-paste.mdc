@@ -47,6 +47,24 @@ SELECT ...
 \`\`\`
 ```
 
+## 적용 기록 (`sql_applied_log`)
+
+새로 만드는 **적용형** SQL 파일(DDL·apply·backfill·UPDATE/DELETE)은 맨 끝에 아래 블록을 붙인다(파일명만 교체). 미리보기·검증 SELECT 파일에는 붙이지 않는다. 테이블이 없는 DB에서도 본 작업이 롤백되지 않도록 `to_regclass`로 감싼 형태를 그대로 쓴다.
+
+```sql
+DO $$ BEGIN
+  IF to_regclass('public.sql_applied_log') IS NOT NULL THEN
+    INSERT INTO public.sql_applied_log (file_name) VALUES ('파일명.sql')
+    ON CONFLICT (file_name) DO UPDATE
+      SET last_applied_at = now(), run_count = public.sql_applied_log.run_count + 1;
+  END IF;
+END $$;
+```
+
+- 테이블: [`vercel-app/sql/sql_applied_log_01_table.sql`](vercel-app/sql/sql_applied_log_01_table.sql) · 가이드: [`vercel-app/sql/SUPABASE_EDITOR_RUNBOOK.md`](vercel-app/sql/SUPABASE_EDITOR_RUNBOOK.md) §0
+- 옛 루트 `supabase_*.sql`은 `vercel-app/sql/legacy/`, 진단 전용 `diagnose_*`는 `vercel-app/sql/archive/diagnose/`에 있다.
+- SQL 파일을 추가·이동하면 `npm run sql:index`로 [`vercel-app/docs/SQL-INDEX.md`](vercel-app/docs/SQL-INDEX.md) 자동 목록을 갱신한다.
+
 ## 금지
 
 - 경로 문자열만 단독 제시 (`vercel-app/sql/foo.sql` 텍스트만)

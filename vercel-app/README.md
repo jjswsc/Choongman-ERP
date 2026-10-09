@@ -90,8 +90,8 @@ npm run dev
 
 1. **Supabase 프로젝트** 생성 (supabase.com)
 2. **스키마 적용**:
-   - `supabase_schema.sql` → Supabase SQL Editor에서 실행
-   - `supabase_migration_consolidated.sql` → 동일하게 실행 (중복 제거, 유니크 제약, 추가 테이블)
+   - `sql/legacy/supabase_schema.sql` → Supabase SQL Editor에서 실행
+   - `sql/legacy/supabase_migration_consolidated.sql` → 동일하게 실행 (중복 제거, 유니크 제약, 추가 테이블)
    - **한 번에 붙여넣기(추천)**: `sql/supabase_one_paste_all_in_one.sql` — 회계·POS·결산·CRM·RPC 전체
    - **실행 가이드(증상별)**: `sql/SUPABASE_EDITOR_RUNBOOK.md` — Editor에 쌓인 SQL 정리·필요한 파일만 복사
    - **운영 DB 일괄(구버전)**: `sql/supabase_one_paste_accounting_and_pos_printer_cut_clean.sql`

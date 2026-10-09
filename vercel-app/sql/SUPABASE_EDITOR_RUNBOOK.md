@@ -5,6 +5,27 @@ SQL Editor에 스크립트를 **계속 쌓아두지 말고**, 이 문서에서 �
 
 > 파일 전체 목록·키워드 검색: [`docs/SQL-INDEX.md`](../docs/SQL-INDEX.md)
 
+## 0. 적용 기록 (`sql_applied_log`)
+
+어떤 파일을 어느 DB에 실행했는지 DB에 남깁니다. 충만·Omni DB 각각 **1회** 실행:
+
+- 테이블 생성: [`sql_applied_log_01_table.sql`](./sql_applied_log_01_table.sql)
+- 최근 기록 조회: [`sql_applied_log_02_recent.sql`](./sql_applied_log_02_recent.sql)
+
+새로 만드는 **적용형 SQL**(DDL·apply·backfill·update) 파일 맨 끝에는 아래 블록을 붙입니다(파일명만 교체). 미리보기·검증용 SELECT 파일에는 붙이지 않습니다.
+
+```sql
+DO $$ BEGIN
+  IF to_regclass('public.sql_applied_log') IS NOT NULL THEN
+    INSERT INTO public.sql_applied_log (file_name) VALUES ('파일명.sql')
+    ON CONFLICT (file_name) DO UPDATE
+      SET last_applied_at = now(), run_count = public.sql_applied_log.run_count + 1;
+  END IF;
+END $$;
+```
+
+- 옛 루트 `supabase_*.sql`은 [`legacy/`](./legacy/)로, 진단 전용 `diagnose_*`는 [`archive/diagnose/`](./archive/diagnose/)로 옮겼습니다.
+
 ---
 
 ## 1. 원칙 (Editor 정리)
@@ -65,7 +86,7 @@ Supabase SQL Editor → 아래 파일 **전체** 복사 → Run:
 
 | 순서 | 파일 | 내용 |
 |:---:|---|---|
-| 0 | [`supabase_schema.sql`](../../supabase_schema.sql) + [`supabase_migration_consolidated.sql`](../../supabase_migration_consolidated.sql) | 기본 스키마 |
+| 0 | [`legacy/supabase_schema.sql`](./legacy/supabase_schema.sql) + [`legacy/supabase_migration_consolidated.sql`](./legacy/supabase_migration_consolidated.sql) | 기본 스키마 |
 | 1 | [`supabase_one_paste_all_in_one.sql`](./supabase_one_paste_all_in_one.sql) | **아래 3~12를 한 번에 포함** |
 
 <details>
@@ -73,8 +94,8 @@ Supabase SQL Editor → 아래 파일 **전체** 복사 → Run:
 
 | 순서 | 파일 | 내용 |
 |:---:|---|---|
-| 1 | [`../../supabase_schema.sql`](../../supabase_schema.sql) | 기본 ERP/POS 스키마 |
-| 2 | [`../../supabase_migration_consolidated.sql`](../../supabase_migration_consolidated.sql) | 통합 마이그레이션 |
+| 1 | [`legacy/supabase_schema.sql`](./legacy/supabase_schema.sql) | 기본 ERP/POS 스키마 |
+| 2 | [`legacy/supabase_migration_consolidated.sql`](./legacy/supabase_migration_consolidated.sql) | 통합 마이그레이션 |
 | 3 | [`supabase_one_paste_accounting_and_pos_printer_cut_clean.sql`](./supabase_one_paste_accounting_and_pos_printer_cut_clean.sql) | 회계·세무·POS 주문 컬럼·쿠폰·프린터·치킨 옵션 UI |
 | 4 | [`pos_settlements_bootstrap.sql`](./pos_settlements_bootstrap.sql) | POS 결산 테이블 |
 | 5 | [`pos_orders_rls_bootstrap.sql`](./pos_orders_rls_bootstrap.sql) | POS 조회/저장 RLS |
@@ -236,7 +257,7 @@ Supabase SQL Editor → **아래 순서대로 파일 전체를 각각 Run** (재
 **1번 one-shot**을 쓰면 2~4는 중복이므로 **5~11**만 이어서 실행하면 됩니다.
 
 **Omni POS(터미널·시재·주문)** 를 쓰려면 **11번 `omni_pos_choongman_parity.sql`을 반드시 실행**하세요.  
-장기(메뉴·프린터·Grab·회계 RPC): [`supabase_migration_consolidated.sql`](../../supabase_migration_consolidated.sql) → [`supabase_one_paste_all_in_one.sql`](./supabase_one_paste_all_in_one.sql) → [`supabase_one_paste_phase2.sql`](./supabase_one_paste_phase2.sql) (충만과 동일 체인, Omni 전용 Supabase에만).
+장기(메뉴·프린터·Grab·회계 RPC): [`legacy/supabase_migration_consolidated.sql`](./legacy/supabase_migration_consolidated.sql) → [`supabase_one_paste_all_in_one.sql`](./supabase_one_paste_all_in_one.sql) → [`supabase_one_paste_phase2.sql`](./supabase_one_paste_phase2.sql) (충만과 동일 체인, Omni 전용 Supabase에만).
 
 배포 후 확인:
 
