@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(__dirname, "..")
-const i18nPath = path.join(root, "lib", "i18n.ts")
+const localesDir = path.join(root, "lib", "i18n-locales")
 const sidebarPath = path.join(root, "components", "erp", "erp-sidebar.tsx")
 
 /** 푸터 `t("logout")` 등 `titleKey:`에 없는 키 */
@@ -44,27 +44,20 @@ function collectSidebarTitleKeys(tsx) {
   return keys
 }
 
-const RE_LANG = /^\s{2}(ko|en|th|mm|la|kh|vi|ms):\s*\{/
-const RE_KV4 = /^\s{4}([a-zA-Z0-9_]+):/
+const LANGS = ["ko", "en", "th", "mm", "la", "kh", "vi", "ms"]
+const RE_KV2 = /^\s{2}([a-zA-Z0-9_]+):/
 
 const sidebarTsx = fs.readFileSync(sidebarPath, "utf8")
 const keys = collectSidebarTitleKeys(sidebarTsx)
 
-const text = fs.readFileSync(i18nPath, "utf8")
-const lines = text.split(/\r?\n/)
-let current = null
 const byLang = {}
-
-for (const line of lines) {
-  const m = line.match(RE_LANG)
-  if (m) {
-    current = m[1]
-    byLang[current] = byLang[current] || new Set()
-    continue
+for (const lang of LANGS) {
+  const lines = fs.readFileSync(path.join(localesDir, `${lang}.ts`), "utf8").split(/\r?\n/)
+  byLang[lang] = new Set()
+  for (const line of lines) {
+    const k = line.match(RE_KV2)
+    if (k) byLang[lang].add(k[1])
   }
-  if (!current) continue
-  const k = line.match(RE_KV4)
-  if (k) byLang[current].add(k[1])
 }
 
 const enK = byLang.en || byLang.ko

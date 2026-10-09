@@ -1,9 +1,13 @@
 const fs = require("fs")
 const path = require("path")
 
-const POS_I18N_PATH = path.resolve(__dirname, "..", "lib", "i18n-pos.ts")
+const POS_I18N_DIR = path.resolve(__dirname, "..", "lib", "i18n-pos-locales")
 
 const LANGS = ["ko", "en", "th", "mm", "la", "kh", "vi", "ms"]
+
+function posI18nPath(lang) {
+  return path.join(POS_I18N_DIR, `${lang}.ts`)
+}
 
 const LANG_TO_EXPORT = {
   ko: "I18N_POS_KO",
@@ -18,8 +22,8 @@ const LANG_TO_EXPORT = {
 
 const EXPORT_ORDER = LANGS.map((lang) => LANG_TO_EXPORT[lang])
 
-function readPosI18nSource() {
-  return fs.readFileSync(POS_I18N_PATH, "utf8")
+function readPosI18nSource(lang) {
+  return fs.readFileSync(posI18nPath(lang), "utf8")
 }
 
 function getExportRange(source, exportName) {
@@ -105,9 +109,10 @@ function collectUsedPosKeys(rootDir) {
   return used
 }
 
-function getPosDictKeysByLang(source = readPosI18nSource()) {
+function getPosDictKeysByLang() {
   const dictKeys = {}
   for (const lang of LANGS) {
+    const source = readPosI18nSource(lang)
     const range = getExportRange(source, LANG_TO_EXPORT[lang])
     const block = range ? source.slice(range.bodyStart, range.end) : ""
     dictKeys[lang] = extractPosKeys(block)
@@ -116,7 +121,8 @@ function getPosDictKeysByLang(source = readPosI18nSource()) {
 }
 
 module.exports = {
-  POS_I18N_PATH,
+  POS_I18N_DIR,
+  posI18nPath,
   LANGS,
   LANG_TO_EXPORT,
   readPosI18nSource,

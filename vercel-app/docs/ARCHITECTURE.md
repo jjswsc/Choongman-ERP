@@ -96,8 +96,9 @@
 ### lib/i18n.ts
 
 - `useT(lang)` → `t("key")`로 번역.
-- lang: `ko` | `en` | `th` | `mm` | `la`
+- lang: `ko` | `en` | `th` | `mm` | `la` | `kh` | `vi` | `ms`
 - 키는 `I18nKeys`로 타입 정의.
+- 언어별 사전 본문은 `lib/i18n-locales/<lang>.ts`, POS 문구는 `lib/i18n-pos-locales/<lang>.ts`. `lib/i18n.ts`는 조합·폴백 로직만 둔다.
 
 ### lib/supabase-server.ts
 

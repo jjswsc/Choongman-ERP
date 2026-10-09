@@ -1,24 +1,34 @@
-# i18n.ts 인코딩·대량 수정 안전 규칙
+# i18n 인코딩·대량 수정 안전 규칙
 
 ## 배경
 
-`lib/i18n.ts`는 6만 줄 이상. UTF-8 손상 시 ko/th 등이 전부 `???`로 표시되어 **전 매장 UI 장애**가 발생했다.
+번역 사전은 수만 줄 규모다. UTF-8 손상 시 ko/th 등이 전부 `???`로 표시되어 **전 매장 UI 장애**가 발생했다.
+
+## 파일 구조
+
+| 파일 | 역할 |
+|---|---|
+| `lib/i18n.ts` | 언어 사전 조합·화면별 팩 병합·`useT`/`tr`/`tOr` (약 200줄) — **import 경로는 항상 `@/lib/i18n`** |
+| `lib/i18n-locales/<lang>.ts` | 언어별 기본 사전 `I18N_BASE_<LANG>` (ko, en, th, mm, la, kh, vi, ms) |
+| `lib/i18n-pos-locales/<lang>.ts` | POS 문구 `I18N_POS_<LANG>` (`lib/i18n-pos.ts`는 re-export만) |
+| `lib/i18n-*-admin.ts` 등 | 화면별 satellite 팩 |
 
 ## 원칙
 
-1. **신규 UI 문자열은 satellite 파일 우선** — `i18n-*-admin.ts` 등에 추가 후 `i18n.ts`에는 import + spread만.
-2. **`i18n.ts` 직접 대량 치환·패치 금지** — patch/sync 스크립트 실행 전 git diff로 ko `welcome`/`all`/`search` 확인.
-3. **저장은 항상 UTF-8** — `fs.writeFileSync(path, content, "utf8")` 또는 `writeI18nFileSync()` (`scripts/lib/i18n-encoding-guard.mjs`).
+1. **신규 UI 문자열은 satellite 파일 우선** — `i18n-*-admin.ts` 등에 추가 후 `i18n-locales/<lang>.ts`에는 import + spread만.
+2. **로케일 파일 직접 대량 치환·패치 금지** — 스크립트 실행 전후 git diff로 ko `welcome`/`all`/`search`, th `welcome`, mm `all` 확인.
+3. **저장은 항상 UTF-8** — `fs.writeFileSync(path, content, "utf8")` 또는 `writeI18nLocaleFileSync()` (`scripts/lib/i18n-encoding-guard.mjs`). PowerShell `Set-Content`/`Out-File` 금지.
 4. **커밋 전·CI** — `npm run i18n:encoding:check` 통과 필수 (`build:prep`에 포함).
+5. **구조 리팩터링 시** — `npx tsx scripts/i18n-snapshot.mts --write` → 작업 → `--check`로 사전 값이 그대로인지 확인.
 
 ## 손상 징후
 
-- 파일 헤더 `공통 번역` → `?? ??`
+- `lib/i18n.ts` 헤더 `공통 번역` → `?? ??`
 - `welcome: '?????!'`, `all: '??'`
 - en만 정상, ko/th/mm 등 비ASCII 로케일만 `?`
 
 ## 복구
 
-1. `git show <good-commit>:vercel-app/lib/i18n.ts` 로 ko 블록 샘플 확인
-2. satellite merge(import/spread/`i18nWithPosBackfill`)만 재적용
+1. `git log -- vercel-app/lib/i18n-locales/<lang>.ts`에서 정상 커밋 확인
+2. `git checkout <good-commit> -- vercel-app/lib/i18n-locales/<lang>.ts` (손상된 언어 파일만)
 3. `node scripts/check-i18n-encoding.mjs` 통과 후 배포

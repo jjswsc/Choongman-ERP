@@ -14,6 +14,8 @@
     "icons:pos": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-pos-icons.ps1",
     "icons:member": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-member-icons.ps1",
     "gen:limits": "node scripts/extract-api-limits.mjs",
+    "sql:index": "node scripts/gen-sql-index.mjs",
+    "i18n:snapshot": "tsx scripts/i18n-snapshot.mts",
     "build:prep": "npm run i18n:encoding:check && npm run i18n:pos:sync && npm run pos:tour:doc:sync && npm run gen:limits",
     "build:next": "node --max-old-space-size=4096 node_modules/next/dist/bin/next build --webpack",
     "build:fast": "npm run build:next && npm run postbuild",

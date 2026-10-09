@@ -3,8 +3,8 @@
 ## 메뉴/도움말 동기화 (필수)
 
 - [ ] `components/erp/erp-sidebar.tsx`에 CRM 메뉴(`href`, `titleKey`)를 추가/수정했다.
-- [ ] `lib/i18n.ts`에 메뉴 라벨 키를 추가했다. (최소 `ko`, `en`)
-- [ ] `lib/i18n.ts`에 `helpSum_*` / `helpHow_*` 키를 같은 경로 기준으로 추가했다.
+- [ ] `lib/i18n-locales/ko.ts`·`en.ts`에 메뉴 라벨 키를 추가했다. (최소 `ko`, `en`)
+- [ ] `lib/i18n-locales/ko.ts`·`en.ts`에 `helpSum_*` / `helpHow_*` 키를 같은 경로 기준으로 추가했다.
 - [ ] 경로가 `/admin/crm/...` 처럼 변경되면 `hrefToHelpSummaryKey` 규칙(`-` -> `_`, `/` -> `_`)과 일치하는지 확인했다.
 - [ ] 임베디드 긴 도움말이 필요한 경우에만 `lib/admin-help-registry.ts`의 `EMBEDDED_BY_HREF`와 `components/erp/erp-page-help.tsx`를 함께 갱신했다.
 

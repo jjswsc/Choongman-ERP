@@ -1,40 +1,29 @@
 /**
- * i18n.ts UTF-8 손상(??? 치환) 조기 감지·안전 저장
- * - patch/sync 스크립트는 writeI18nFileSync 사용
- * - CI·build:prep은 assertI18nEncodingOk 사용
+ * i18n UTF-8 손상(??? 치환) 조기 감지
+ * - 대상: lib/i18n.ts(헤더) + lib/i18n-locales/<lang>.ts + lib/i18n-pos-locales/<lang>.ts
+ * - CI·build:prep: check-i18n-encoding.mjs → assertI18nEncodingOk
+ * - 스크립트로 로케일 파일을 쓸 때: writeI18nLocaleFileSync
  */
 import fs from "fs"
+import path from "path"
 
-const KO_ANCHORS = {
-  all: /전체/,
-  search: /검색/,
-  welcome: /환영/,
+/** 로케일별 앵커: 손상되면 ASCII `?` 로 바뀌는 대표 키 */
+const ANCHORS = {
+  ko: { all: /전체/, search: /검색/, welcome: /환영/ },
+  th: { welcome: /[\u0E00-\u0E7F]/ },
+  mm: { all: /[\u1000-\u109F]/ },
 }
 
-const TH_ANCHORS = {
-  welcome: /[\u0E00-\u0E7F]/,
+/** POS 사전에서 비ASCII 스크립트가 반드시 1개 이상 있어야 하는 언어 */
+const POS_SCRIPT = {
+  ko: /[\uAC00-\uD7A3]/,
+  th: /[\u0E00-\u0E7F]/,
+  mm: /[\u1000-\u109F]/,
 }
 
-function extractLangBlock(source, lang, nextLangs) {
-  const startRe = new RegExp(`\\n\\s*${lang}:\\s*\\{`)
-  const m = source.match(startRe)
-  if (!m || m.index == null) return ""
-  const start = m.index + m[0].length
-  let end = source.length
-  for (const n of nextLangs) {
-    const re = new RegExp(`\\n\\s*${n}:\\s*\\{`)
-    const mm = source.slice(start).match(re)
-    if (mm && mm.index != null) {
-      end = start + mm.index
-      break
-    }
-  }
-  return source.slice(start, end)
-}
-
-function extractScalarValue(block, key) {
-  const re = new RegExp(`^    ${key}: '((?:\\\\'|[^'])*)'`, "m")
-  const m = block.match(re)
+function extractScalarValue(source, key) {
+  const re = new RegExp(`^\\s{2}${key}: '((?:\\\\'|[^'])*)'`, "m")
+  const m = source.match(re)
   return m?.[1]?.replace(/\\'/g, "'") ?? null
 }
 
@@ -46,45 +35,40 @@ function isQuestionMarkCorruption(value) {
 }
 
 /**
- * @param {string} src i18n.ts 전체 내용
+ * @param {{ i18nTs: string, locales: Record<string, string>, posLocales: Record<string, string> }} src
  * @returns {{ ok: true } | { ok: false, errors: string[] }}
  */
-export function assertI18nEncodingOk(src) {
+export function assertI18nEncodingOk({ i18nTs, locales, posLocales }) {
   const errors = []
 
-  if (!src.includes("공통 번역")) {
-    errors.push("header missing '공통 번역' (possible ASCII ? replacement)")
+  if (!i18nTs.includes("공통 번역")) {
+    errors.push("lib/i18n.ts header missing '공통 번역' (possible ASCII ? replacement)")
   }
 
-  const koBlock = extractLangBlock(src, "ko", ["en", "th", "mm", "la", "kh", "vi", "ms"])
-  for (const [key, pattern] of Object.entries(KO_ANCHORS)) {
-    const val = extractScalarValue(koBlock, key)
-    if (val == null) {
-      errors.push(`ko.${key} missing`)
+  for (const [lang, anchors] of Object.entries(ANCHORS)) {
+    const source = locales[lang]
+    if (source == null) {
+      errors.push(`lib/i18n-locales/${lang}.ts missing`)
       continue
     }
-    if (isQuestionMarkCorruption(val)) {
-      errors.push(`ko.${key} looks corrupted: '${val}'`)
-      continue
-    }
-    if (!pattern.test(val)) {
-      errors.push(`ko.${key} expected Korean anchor, got '${val}'`)
+    for (const [key, pattern] of Object.entries(anchors)) {
+      const val = extractScalarValue(source, key)
+      if (val == null) {
+        errors.push(`${lang}.${key} missing`)
+      } else if (isQuestionMarkCorruption(val)) {
+        errors.push(`${lang}.${key} looks corrupted: '${val}'`)
+      } else if (!pattern.test(val)) {
+        errors.push(`${lang}.${key} expected native script, got '${val}'`)
+      }
     }
   }
 
-  const thBlock = extractLangBlock(src, "th", ["mm", "la", "kh", "vi", "ms"])
-  for (const [key, pattern] of Object.entries(TH_ANCHORS)) {
-    const val = extractScalarValue(thBlock, key)
-    if (val == null) {
-      errors.push(`th.${key} missing`)
-      continue
-    }
-    if (isQuestionMarkCorruption(val)) {
-      errors.push(`th.${key} looks corrupted: '${val}'`)
-      continue
-    }
-    if (!pattern.test(val)) {
-      errors.push(`th.${key} expected Thai script in welcome`)
+  for (const [lang, pattern] of Object.entries(POS_SCRIPT)) {
+    const source = posLocales[lang]
+    if (source == null) {
+      errors.push(`lib/i18n-pos-locales/${lang}.ts missing`)
+    } else if (!pattern.test(source)) {
+      errors.push(`lib/i18n-pos-locales/${lang}.ts has no native script (possible ASCII ? replacement)`)
     }
   }
 
@@ -92,13 +76,31 @@ export function assertI18nEncodingOk(src) {
   return { ok: true }
 }
 
-/** @param {string} filePath @param {string} content */
-export function writeI18nFileSync(filePath, content) {
-  const result = assertI18nEncodingOk(content)
+/** @param {string} libDir vercel-app/lib 절대경로 */
+export function readI18nSources(libDir) {
+  const readDir = (dir) => {
+    const out = {}
+    for (const f of fs.readdirSync(dir)) {
+      if (f.endsWith(".ts")) out[f.slice(0, -3)] = fs.readFileSync(path.join(dir, f), "utf8")
+    }
+    return out
+  }
+  return {
+    i18nTs: fs.readFileSync(path.join(libDir, "i18n.ts"), "utf8"),
+    locales: readDir(path.join(libDir, "i18n-locales")),
+    posLocales: readDir(path.join(libDir, "i18n-pos-locales")),
+  }
+}
+
+/** 로케일 파일 1개 저장 후 전체 인코딩 재검사 — 실패 시 원본 복구 */
+export function writeI18nLocaleFileSync(libDir, filePath, content) {
+  const before = fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null
+  fs.writeFileSync(filePath, content, "utf8")
+  const result = assertI18nEncodingOk(readI18nSources(libDir))
   if (!result.ok) {
-    console.error("i18n.ts encoding guard blocked write:")
+    if (before != null) fs.writeFileSync(filePath, before, "utf8")
+    console.error("i18n encoding guard blocked write:")
     for (const e of result.errors) console.error(`  - ${e}`)
     process.exit(1)
   }
-  fs.writeFileSync(filePath, content, "utf8")
 }

@@ -11,7 +11,7 @@ SQL 파일 빠른 탐색: [SQL-INDEX.md](./SQL-INDEX.md)
 3. **supabase_receivable_payable.sql** - 미수금/미지급금 트랜잭션 테이블 (선택)
 4. **scripts/migrate_vendors_balance_to_payable.sql** - vendors.balance → 기초잔액 이전 (1회, 선택)
 
-※ 위치: 프로젝트 루트 (`c:\CM_ERP\`)
+※ 위치: 1~3번 `supabase_*.sql`은 `vercel-app/sql/legacy/` (예전 프로젝트 루트에서 이동), 4번은 프로젝트 루트 `scripts/`
 
 ## 2. 주요 테이블 (기능별)
 
@@ -101,6 +101,8 @@ purchase_orders.location_code   → warehouse_locations.location_code
 ```
 
 ## 4. 마이그레이션·스크립트
+
+`supabase_*.sql`은 `vercel-app/sql/legacy/`에 있습니다.
 
 | 파일 | 용도 |
 |------|------|
