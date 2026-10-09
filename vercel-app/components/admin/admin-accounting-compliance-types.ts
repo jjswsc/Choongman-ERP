@@ -256,3 +256,50 @@ export type AdminAccountingComplianceProps = {
   /** 세무 신고 P.N.D.50/51 탭 — 반기·연간 신고 주기 전용 필터 */
   citFilingShell?: boolean
 }
+
+export type CitAdjustmentDraft = {
+  adjustmentType: "add_back" | "deduction"
+  itemName: string
+  amount: string
+  memo: string
+}
+
+export type Kt20kEmployerDraft = {
+  companyTaxId: string
+  companyName: string
+  ssoProvince: string
+  ssoPhone: string
+  businessCode5: string
+  fundRatePercent: string
+}
+
+export type Kt20kEmployeeDiffRow = {
+  employeeKey: string
+  name: string
+  store: string
+  kt20kTotalWage: number
+  pnd1aLedgerGross: number
+  diff: number
+  reasonTags: string[]
+}
+
+export type Kt20kMonthlyDiffRow = {
+  month: string
+  kt20kTotalWage: number
+  kt20kNetWage: number
+  pnd1aLedgerGross: number
+  diffTotalVsPnd1a: number
+  diffNetVsPnd1a: number
+}
+
+export type WorkflowReminderRow = {
+  filingType: string
+  filingLabelKo: string
+  periodType: "monthly" | "half_year" | "annual"
+  yearMonth: string
+  dueDateBangkok: string
+  daysToDue: number
+  severity: "info" | "warn" | "critical"
+  status: string
+  messageKo: string
+}

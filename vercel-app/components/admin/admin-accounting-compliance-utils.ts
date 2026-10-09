@@ -9,6 +9,7 @@ import type {
   EtaxStepKey,
 } from "./admin-accounting-compliance-types"
 import { SSO_WORKFLOW_NOTE_PREFIX, ETAX_TIMESTAMP_NOTE_PREFIX } from "./admin-accounting-compliance-types"
+import { isPosAutoVatOutputRow } from "@/lib/vat-ledger-pos"
 
 export function ymNow(): string {
   const n = new Date()
@@ -122,6 +123,189 @@ export function emptyPnd54(taxMonth: string, defaultStoreName: string): Pnd54Dra
 
 export function normalizeLedgerFilingStatus(v: unknown): "draft" | "submitted" {
   return String(v || "").trim().toLowerCase() === "submitted" ? "submitted" : "draft"
+}
+
+export function mapVatEntries(entries: Record<string, unknown>[], taxMonth: string): VatDraft[] {
+  return entries.map((r) => ({
+    id: r.id != null ? Number(r.id) : undefined,
+    doc_date: String(r.doc_date || "").slice(0, 10),
+    tax_month: String(r.tax_month || taxMonth).slice(0, 7),
+    direction: String(r.direction || "").trim().toLowerCase() === "input" ? "input" : "output",
+    counterparty_name: String(r.counterparty_name || ""),
+    counterparty_tax_id: String(r.counterparty_tax_id || ""),
+    invoice_number: String(r.invoice_number || ""),
+    net_amount: String(r.net_amount ?? ""),
+    vat_amount: String(r.vat_amount ?? ""),
+    total_amount: String(r.total_amount ?? ""),
+    vat_status: String(r.vat_status || ""),
+    invoice_evidence_status:
+      r.invoice_evidence_status === "received" ||
+      r.invoice_evidence_status === "not_required" ||
+      r.invoice_evidence_status === "unobtainable"
+        ? (r.invoice_evidence_status as "received" | "not_required" | "unobtainable")
+        : "required_pending",
+    invoice_evidence_reason_code: String(r.invoice_evidence_reason_code || ""),
+    filing_status: normalizeLedgerFilingStatus(r.filing_status),
+    submitted_at: String(r.submitted_at || ""),
+    submitted_by: String(r.submitted_by || ""),
+    memo: String(r.memo || ""),
+    store_name: String(r.store_name || ""),
+  }))
+}
+
+export function mapWhtEntries(entries: Record<string, unknown>[], taxMonth: string): WhtDraft[] {
+  return entries.map((r) => ({
+    id: r.id != null ? Number(r.id) : undefined,
+    payment_date: String(r.payment_date || "").slice(0, 10),
+    tax_month: String(r.tax_month || taxMonth).slice(0, 7),
+    payee_name: String(r.payee_name || ""),
+    payee_tax_id: String(r.payee_tax_id || ""),
+    income_type: String(r.income_type || ""),
+    gross_amount: String(r.gross_amount ?? ""),
+    wht_rate: String(r.wht_rate ?? ""),
+    wht_amount: String(r.wht_amount ?? ""),
+    form_hint: String(r.form_hint || ""),
+    certificate_no: String(r.certificate_no || ""),
+    filing_status: normalizeLedgerFilingStatus(r.filing_status),
+    submitted_at: String(r.submitted_at || ""),
+    submitted_by: String(r.submitted_by || ""),
+    memo: String(r.memo || ""),
+    store_name: String(r.store_name || ""),
+    direction: String(r.direction || "").toLowerCase() === "inbound" ? "inbound" : "outbound",
+    source_type: String(r.source_type || ""),
+    source_id: r.source_id != null ? Number(r.source_id) || 0 : 0,
+  }))
+}
+
+export function mapPp36Entries(entries: Record<string, unknown>[], taxMonth: string): Pp36Draft[] {
+  return entries.map((r) => ({
+    id: r.id != null ? Number(r.id) : undefined,
+    doc_date: String(r.doc_date || "").slice(0, 10),
+    tax_month: String(r.tax_month || taxMonth).slice(0, 7),
+    supplier_name: String(r.supplier_name || ""),
+    supplier_country: String(r.supplier_country || ""),
+    supplier_tax_id: String(r.supplier_tax_id || ""),
+    service_desc: String(r.service_desc || ""),
+    taxable_amount: String(r.taxable_amount ?? ""),
+    vat_rate: String(r.vat_rate ?? "7"),
+    vat_amount: String(r.vat_amount ?? ""),
+    filing_status: normalizeLedgerFilingStatus(r.filing_status),
+    submitted_at: String(r.submitted_at || ""),
+    submitted_by: String(r.submitted_by || ""),
+    memo: String(r.memo || ""),
+    store_name: String(r.store_name || ""),
+  }))
+}
+
+export function mapPnd54Entries(entries: Record<string, unknown>[], taxMonth: string): Pnd54Draft[] {
+  return entries.map((r) => ({
+    id: r.id != null ? Number(r.id) : undefined,
+    payment_date: String(r.payment_date || "").slice(0, 10),
+    tax_month: String(r.tax_month || taxMonth).slice(0, 7),
+    payee_name: String(r.payee_name || ""),
+    payee_country: String(r.payee_country || ""),
+    payee_tax_id: String(r.payee_tax_id || ""),
+    income_type: String(r.income_type || ""),
+    gross_amount: String(r.gross_amount ?? ""),
+    wht_rate: String(r.wht_rate ?? ""),
+    wht_amount: String(r.wht_amount ?? ""),
+    filing_status: normalizeLedgerFilingStatus(r.filing_status),
+    submitted_at: String(r.submitted_at || ""),
+    submitted_by: String(r.submitted_by || ""),
+    memo: String(r.memo || ""),
+    store_name: String(r.store_name || ""),
+  }))
+}
+
+export function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100
+}
+
+export type VatInputClaimable = {
+  claimableVat: number
+  claimableNet: number
+  pendingVat: number
+  unobtainableVat: number
+  claimableCount: number
+  pendingCount: number
+  unobtainableCount: number
+}
+
+/** 매입 VAT 중 증빙 수령·불요 건만 공제 가능, 대기·불가는 따로 집계 */
+export function computeVatInputClaimable(inputRows: VatDraft[]): VatInputClaimable {
+  const claimableRows = inputRows.filter(
+    (r) => r.invoice_evidence_status === "received" || r.invoice_evidence_status === "not_required"
+  )
+  const pendingRows = inputRows.filter((r) => r.invoice_evidence_status === "required_pending")
+  const unobtainableRows = inputRows.filter((r) => r.invoice_evidence_status === "unobtainable")
+  return {
+    claimableVat: round2(claimableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0)),
+    claimableNet: round2(claimableRows.reduce((sum, r) => sum + (Number(r.net_amount) || 0), 0)),
+    pendingVat: round2(pendingRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0)),
+    unobtainableVat: round2(unobtainableRows.reduce((sum, r) => sum + (Number(r.vat_amount) || 0), 0)),
+    claimableCount: claimableRows.length,
+    pendingCount: pendingRows.length,
+    unobtainableCount: unobtainableRows.length,
+  }
+}
+
+export function computeVatSettlement(
+  outputRows: VatDraft[],
+  inputRows: VatDraft[],
+  claimable: VatInputClaimable,
+  summaryPayableVat: number | null | undefined
+) {
+  const outputNet = round2(outputRows.reduce((sum, row) => sum + Number(row.net_amount || 0), 0))
+  const outputVat = round2(outputRows.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0))
+  const outputTotal = round2(outputRows.reduce((sum, row) => sum + Number(row.total_amount || 0), 0))
+  const inputNet = round2(inputRows.reduce((sum, row) => sum + Number(row.net_amount || 0), 0))
+  const inputVat = round2(inputRows.reduce((sum, row) => sum + Number(row.vat_amount || 0), 0))
+  const inputTotal = round2(inputRows.reduce((sum, row) => sum + Number(row.total_amount || 0), 0))
+  let posOutputVat = 0
+  let posOutputNet = 0
+  let posOutputCount = 0
+  let otherOutputVat = 0
+  let otherOutputNet = 0
+  let otherOutputCount = 0
+  for (const row of outputRows) {
+    const vat = Number(row.vat_amount || 0)
+    const net = Number(row.net_amount || 0)
+    if (isPosAutoVatOutputRow(row)) {
+      posOutputVat += vat
+      posOutputNet += net
+      posOutputCount += 1
+    } else {
+      otherOutputVat += vat
+      otherOutputNet += net
+      otherOutputCount += 1
+    }
+  }
+  // 신고 예상액: 증빙 공제 가능한 매입 VAT만 차감 (대기·불가 제외)
+  const claimableInputVat = claimable.claimableVat
+  const payableVat = round2(outputVat - claimableInputVat)
+  return {
+    outputNet,
+    outputVat,
+    outputTotal,
+    inputNet,
+    inputVat,
+    inputTotal,
+    claimableInputVat,
+    claimableInputNet: claimable.claimableNet,
+    claimableInputCount: claimable.claimableCount,
+    payableVat,
+    dueVat: payableVat > 0 ? payableVat : 0,
+    creditVat: payableVat < 0 ? Math.abs(payableVat) : 0,
+    outputCount: outputRows.length,
+    inputCount: inputRows.length,
+    posOutputVat: round2(posOutputVat),
+    posOutputNet: round2(posOutputNet),
+    posOutputCount,
+    otherOutputVat: round2(otherOutputVat),
+    otherOutputNet: round2(otherOutputNet),
+    otherOutputCount,
+    summaryPayableVat: Number(summaryPayableVat || 0),
+  }
 }
 
 export function formatBangkokDateTime(v: string): string {
