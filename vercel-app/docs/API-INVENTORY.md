@@ -3,7 +3,7 @@
 > 이 파일은 `npm run api:inventory`로 생성합니다. 직접 수정하지 마세요.
 > 신규 라우트 규칙: [`.cursor/rules/api-route-conventions.mdc`](../../.cursor/rules/api-route-conventions.mdc) · 검사: `npm run api:check`
 
-- 라우트 수: **898**
+- 라우트 수: **899**
 - 도메인 그룹 수: **177** (평면 camelCase 라우트는 이름에서 동사를 뗀 첫 단어로 추정)
 - 외부 호출(웹훅·크론): **22** — 경로 변경 금지
 
@@ -39,8 +39,8 @@
 - [pos](#pos) (126)
 - [member-portal](#member-portal) (56)
 - [interior](#interior) (41)
+- [store](#store) (26)
 - [marketing](#marketing) (25)
-- [store](#store) (25)
 - [qr-table](#qr-table) (24)
 - [bank](#bank) (20)
 - [members](#members) (17)
@@ -452,6 +452,37 @@
 | `/api/saveInteriorVendorTrack` | POST |  |
 | `/api/saveInteriorWorkPackage` | POST |  |
 
+### store
+
+| 경로 | 메서드 | 비고 |
+|---|---|---|
+| `/api/addStoreRepairProgressLog` | POST |  |
+| `/api/deleteStorePurchaseJournal` | POST |  |
+| `/api/getStoreActionAssignees` | GET |  |
+| `/api/getStoreActionItems` | GET |  |
+| `/api/getStoreActionLogs` | GET |  |
+| `/api/getStoreActionScorecard` | GET |  |
+| `/api/getStoreGpsCheck` | GET |  |
+| `/api/getStoreJobHeadcount` | GET |  |
+| `/api/getStoreList` | OPTIONS, GET |  |
+| `/api/getStoreOpsAlertSummary` | GET |  |
+| `/api/getStorePurchaseJournal` | GET |  |
+| `/api/getStoreRepairProgressLogs` | GET |  |
+| `/api/getStoreRepairTicketList` | GET |  |
+| `/api/getStoreVisitHistory` | GET |  |
+| `/api/getStoreVisitRecords` | GET |  |
+| `/api/getStoreVisitStats` | GET |  |
+| `/api/getStoreVisitTodaySnapshot` | GET |  |
+| `/api/saveStoreActionItem` | POST |  |
+| `/api/saveStoreActionItems` | POST |  |
+| `/api/saveStoreJobHeadcount` | POST |  |
+| `/api/saveStoreRepairTicket` | POST |  |
+| `/api/storeActionDailyPlan` | GET, POST |  |
+| `/api/storeTaxFilingProfiles` | GET, POST |  |
+| `/api/submitStoreVisit` | POST |  |
+| `/api/updateStoreActionItem` | POST |  |
+| `/api/updateStoreRepairTicket` | POST |  |
+
 ### marketing
 
 | 경로 | 메서드 | 비고 |
@@ -481,36 +512,6 @@
 | `/api/marketingMaterialLookup` | GET |  |
 | `/api/marketingMaterials` | GET, POST |  |
 | `/api/marketingMaterialStoreChecks` | GET, POST |  |
-
-### store
-
-| 경로 | 메서드 | 비고 |
-|---|---|---|
-| `/api/addStoreRepairProgressLog` | POST |  |
-| `/api/deleteStorePurchaseJournal` | POST |  |
-| `/api/getStoreActionAssignees` | GET |  |
-| `/api/getStoreActionItems` | GET |  |
-| `/api/getStoreActionLogs` | GET |  |
-| `/api/getStoreActionScorecard` | GET |  |
-| `/api/getStoreGpsCheck` | GET |  |
-| `/api/getStoreJobHeadcount` | GET |  |
-| `/api/getStoreList` | OPTIONS, GET |  |
-| `/api/getStoreOpsAlertSummary` | GET |  |
-| `/api/getStorePurchaseJournal` | GET |  |
-| `/api/getStoreRepairProgressLogs` | GET |  |
-| `/api/getStoreRepairTicketList` | GET |  |
-| `/api/getStoreVisitHistory` | GET |  |
-| `/api/getStoreVisitRecords` | GET |  |
-| `/api/getStoreVisitStats` | GET |  |
-| `/api/getStoreVisitTodaySnapshot` | GET |  |
-| `/api/saveStoreActionItem` | POST |  |
-| `/api/saveStoreJobHeadcount` | POST |  |
-| `/api/saveStoreRepairTicket` | POST |  |
-| `/api/storeActionDailyPlan` | GET, POST |  |
-| `/api/storeTaxFilingProfiles` | GET, POST |  |
-| `/api/submitStoreVisit` | POST |  |
-| `/api/updateStoreActionItem` | POST |  |
-| `/api/updateStoreRepairTicket` | POST |  |
 
 ### qr-table
 
