@@ -504,7 +504,18 @@ describe('general ledger report sections', () => {
 
 describe('management reports stay off the tax book', () => {
   it('income statement code does not read tax periods or tax-only journals', () => {
-    const src = readFileSync(new URL('./accounting-reports.ts', import.meta.url), 'utf8')
+    const src = [
+      'accounting-reports',
+      'accounting-reports-shared',
+      'accounting-reports-purchase-sources',
+      'accounting-reports-expense-routing',
+      'accounting-reports-inventory',
+      'accounting-reports-income',
+      'accounting-reports-drilldown',
+      'accounting-reports-balance-sheet',
+    ]
+      .map((name) => readFileSync(new URL(`./${name}.ts`, import.meta.url), 'utf8'))
+      .join('\n')
     expect(src.includes('tax_accounting_periods')).toBe(false)
     expect(src.includes('tax_payroll')).toBe(false)
     expect(src.includes("book=eq.tax")).toBe(false)
