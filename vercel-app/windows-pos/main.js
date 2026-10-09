@@ -919,6 +919,13 @@ const POST_HTML_PRINT_SPOOL_FLUSH_MS_RECEIPT = readConfigInt(
   0,
   10000
 );
+/** 영수증 early-return 뒤 RAW 절단 전에 HTML 인쇄 콜백을 기다리는 상한 */
+const RECEIPT_CUT_WAIT_FOR_PRINT_JOB_MS = readConfigInt(
+  process.env.WINDOWS_POS_RECEIPT_CUT_WAIT_MS || runtimeConfig.receiptCutWaitForPrintJobMs || 8000,
+  8000,
+  0,
+  20000
+);
 const PRINT_HTML_SILENT_RETRY_COUNT = readConfigInt(
   process.env.WINDOWS_POS_PRINT_HTML_RETRY || runtimeConfig.printHtmlSilentRetryCount || 1,
   1,
@@ -2522,6 +2529,8 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         printStage,
         warnings,
         usedDevice: usedDeviceOut,
+        /** IPC로 직렬화 불가 — 호출부에서 꺼내 쓰고 반환 객체에서 제거할 것 */
+        ...(backgroundPrintJob ? { pendingPrintJob: backgroundPrintJob } : {}),
       };
     } catch (e) {
       htmlPrintFailureStreak = Math.min(htmlPrintFailureStreak + 1, 6);
@@ -3436,13 +3445,28 @@ if (!gotLock) {
           ? payload.printRole
           : undefined;
       const isReceiptRole = printRole === "receipt";
-      const result = await printHtmlDocumentInHiddenWindow(html, {
+      const { pendingPrintJob, ...result } = await printHtmlDocumentInHiddenWindow(html, {
         preferDialog: Boolean(payload?.preferDialog),
         printRole,
         kitchenStation: Number.isFinite(kitchenStation) ? Math.min(3, Math.max(1, kitchenStation)) : undefined,
         deviceName: typeof payload?.deviceName === "string" ? payload.deviceName : "",
       });
       const out = { ...result };
+      /**
+       * 영수증 early-return(2.2s) 시 HTML 작업이 아직 스풀러에 안 들어갔을 수 있음.
+       * 그때 RAW 절단을 먼저 보내면 절단이 전표보다 앞서 나가 "가끔 안 잘림"이 된다(QR 비트맵 전표에서 빈발).
+       * @returns {Promise<boolean>} false면 늦게 실패가 확정된 인쇄 → 절단 생략
+       */
+      const waitForHtmlJobSpooled = async () => {
+        if (!pendingPrintJob) return true;
+        const late = await Promise.race([
+          Promise.resolve(pendingPrintJob).catch(() => null),
+          delayMs(RECEIPT_CUT_WAIT_FOR_PRINT_JOB_MS).then(() => null),
+        ]);
+        if (late && late.success === false) return false;
+        await delayMs(POST_HTML_PRINT_SPOOL_FLUSH_MS_RECEIPT);
+        return true;
+      };
       const sendCut = shouldSendEscPosRawCut(payload);
       /** 스풀 안정화는 printHtmlDocumentInHiddenWindow 성공 시 이미 수행됨(절단 직전 중복 대기 제거) */
       if (result.ok && !Boolean(payload?.preferDialog) && sendCut) {
@@ -3469,11 +3493,23 @@ if (!gotLock) {
             if (isReceiptRole && !awaitCut) {
               out.cutOk = true;
               out.cutDeferred = true;
-              void sendEscPosCutForPrinter(device, { timeoutMs: 4000 }).then((cutRes) => {
-                if (!cutRes.ok) {
-                  console.warn("[cm-pos] ESC/POS cut (deferred) failed:", cutRes.reason || "");
-                }
-              });
+              void waitForHtmlJobSpooled()
+                .then((spooled) => {
+                  if (!spooled) {
+                    console.warn("[cm-pos] skip ESC/POS cut (deferred): html print failed after early-return");
+                    return { ok: true };
+                  }
+                  return sendEscPosCutForPrinter(device, { timeoutMs: 4000 });
+                })
+                .then((cutRes) => {
+                  if (!cutRes.ok) {
+                    console.warn("[cm-pos] ESC/POS cut (deferred) failed:", cutRes.reason || "");
+                  }
+                });
+            } else if (!(await waitForHtmlJobSpooled())) {
+              out.cutOk = false;
+              out.cutReason = "html_print_failed_after_early_return";
+              console.warn("[cm-pos] skip ESC/POS cut: html print failed after early-return");
             } else {
               const cutRes = await sendEscPosCutForPrinter(device, {
                 timeoutMs: isReceiptRole ? 6000 : 8000,

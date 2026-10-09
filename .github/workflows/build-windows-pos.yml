@@ -1,0 +1,51 @@
+# Windows 하이브리드 POS(Electron) 설치 파일 빌드
+# - 로컬 PC에 Smart App Control이 켜져 있으면 electron-builder가 서명 없는 NSIS 언인스톨러를
+#   실행하지 못해(spawn UNKNOWN) 빌드가 막힌다 → GitHub 호스티드 Windows에서 빌드
+# - 결과 setup.exe는 아티팩트로만 올린다. 공개는 로컬에서 scripts/publish-windows-pos.ps1 -DistDir 로.
+# - 수동 실행 전용(workflow_dispatch) — 푸시마다 Windows 러너 분을 쓰지 않음
+
+name: Build Windows POS
+
+on:
+  workflow_dispatch:
+    inputs:
+      brand:
+        description: "choongman | omnifoodtech"
+        type: choice
+        options: [choongman, omnifoodtech]
+        default: choongman
+      pos_url:
+        description: "비우면 build-windows-pos.ps1 기본값(충만 /pos/login)"
+        type: string
+        default: ""
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: vercel-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build installer
+        shell: powershell
+        env:
+          POS_BRAND: ${{ inputs.brand }}
+          POS_URL: ${{ inputs.pos_url }}
+        run: |
+          $buildArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/build-windows-pos.ps1", "-Brand", $env:POS_BRAND)
+          if ("$env:POS_URL".Trim() -ne "") { $buildArgs += @("-PosUrl", "$env:POS_URL".Trim()) }
+          & powershell @buildArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-pos-${{ inputs.brand }}-setup
+          path: vercel-app/windows-pos/dist*/*Setup*.exe
+          if-no-files-found: error
+          retention-days: 7
