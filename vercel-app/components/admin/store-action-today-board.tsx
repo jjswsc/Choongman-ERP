@@ -1,14 +1,22 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Copy, RefreshCw } from "lucide-react"
+import { CalendarPlus, Copy, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { appAlert } from "@/lib/app-message"
-import { getStoreActionItems, type StoreActionItem } from "@/lib/api-client"
+import {
+  getStoreActionItems,
+  getStoreActionPlanLinks,
+  getStoreVisitCoverage,
+  type StoreActionItem,
+  type StoreActionPlanLink,
+  type StoreVisitCoverage,
+} from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { addDaysYmd, storeActionLabelers } from "@/lib/store-action-i18n"
 import { cn } from "@/lib/utils"
+import { StoreActionVisitAddDialog } from "@/components/admin/store-action-visit-add-dialog"
 
 type Group = { key: string; title: string; tone: string; rows: StoreActionItem[] }
 
@@ -23,6 +31,10 @@ export function StoreActionTodayBoard(props: {
   const [mineOnly, setMineOnly] = useState(true)
   const [rows, setRows] = useState<StoreActionItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [planLinks, setPlanLinks] = useState<Record<string, StoreActionPlanLink[]>>({})
+  const [coverage, setCoverage] = useState<Map<string, StoreVisitCoverage>>(new Map())
+  const [visitStore, setVisitStore] = useState<string | null>(null)
+  const [coverageKey, setCoverageKey] = useState(0)
   const today = getBangkokTodayDateString()
   const weekEnd = addDaysYmd(today, 7)
   const label = storeActionLabelers(t)
@@ -30,9 +42,12 @@ export function StoreActionTodayBoard(props: {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      setRows(await getStoreActionItems({ openOnly: true, mine: mineOnly }))
+      const list = await getStoreActionItems({ openOnly: true, mine: mineOnly })
+      setRows(list)
+      setPlanLinks(await getStoreActionPlanLinks(list.map((r) => r.id)).catch(() => ({})))
     } catch {
       setRows([])
+      setPlanLinks({})
     } finally {
       setLoading(false)
     }
@@ -72,6 +87,26 @@ export function StoreActionTodayBoard(props: {
       .sort((a, b) => b.w - a.w)
       .slice(0, 8)
   }, [rows, today])
+
+  const rankStoresKey = visitRank.map((v) => v.store).join("|")
+  useEffect(() => {
+    const stores = rankStoresKey ? rankStoresKey.split("|") : []
+    if (stores.length === 0) return
+    let alive = true
+    void getStoreVisitCoverage(stores)
+      .then((r) => {
+        if (alive) setCoverage(new Map(r.list.map((c) => [c.store, c])))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [rankStoresKey, coverageKey])
+
+  const nextPlanOf = (id: number) => {
+    const ls = planLinks[String(id)] || []
+    return ls.find((l) => l.date >= today && l.itemStatus !== "done") || null
+  }
 
   const copyLine = async () => {
     const lines: string[] = [`${t("action_today_line_head")} (${today})`, ""]
@@ -129,15 +164,48 @@ export function StoreActionTodayBoard(props: {
         <Card>
           <CardContent className="p-3">
             <p className="mb-1 text-xs font-semibold">{t("action_today_visit_rank")}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {visitRank.map((v) => (
-                <span key={v.store} className="rounded border px-2 py-0.5 text-[11px]">
-                  {v.store}
-                  {v.overdue ? <span className="ml-1 text-red-600">●{v.overdue}</span> : null}
-                  {v.pending ? <span className="ml-1 text-amber-600">●{v.pending}</span> : null}
-                  {v.today ? <span className="ml-1 text-blue-600">●{v.today}</span> : null}
-                </span>
-              ))}
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {visitRank.map((v) => {
+                const c = coverage.get(v.store)
+                const gap = v.overdue > 0 && !!c && !c.plannedSoon
+                return (
+                  <div
+                    key={v.store}
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded border px-2 py-1 text-[11px]",
+                      gap && "border-red-500/60 bg-red-50 dark:bg-red-950/20"
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {v.store}
+                        {v.overdue ? <span className="ml-1 text-red-600">●{v.overdue}</span> : null}
+                        {v.pending ? <span className="ml-1 text-amber-600">●{v.pending}</span> : null}
+                        {v.today ? <span className="ml-1 text-blue-600">●{v.today}</span> : null}
+                      </p>
+                      {c ? (
+                        <p className="truncate text-muted-foreground">
+                          {t("dp_cov_last")}: {c.lastVisitDate ? `${c.lastVisitDate} ${c.lastVisitBy}` : "—"}
+                          {" · "}
+                          {t("dp_cov_next")}: {c.nextPlanDate ? `${c.nextPlanDate} ${c.nextPlanBy}` : "—"}
+                        </p>
+                      ) : null}
+                      {gap ? <p className="font-semibold text-red-600">{t("dp_cov_gap_warn")}</p> : null}
+                    </div>
+                    {canVerify ? (
+                      <Button
+                        size="sm"
+                        variant={gap ? "default" : "outline"}
+                        className="h-7 shrink-0 px-2 text-[11px]"
+                        onClick={() => setVisitStore(v.store)}
+                      >
+                        <CalendarPlus className="mr-1 h-3 w-3" />
+                        {t("dp_visit_add_short")}
+                      </Button>
+                    ) : null}
+                  </div>
+                )
+              })}
             </div>
           </CardContent>
         </Card>
@@ -170,6 +238,14 @@ export function StoreActionTodayBoard(props: {
                       {r.store} · {r.ownerName} · {label.status(r.status)}
                       {r.repeatCount > 0 ? ` · ${t("action_repeat_n").replace("{n}", String(r.repeatCount))}` : ""}
                     </div>
+                    {(() => {
+                      const p = nextPlanOf(r.id)
+                      return p ? (
+                        <div className="mt-0.5 text-blue-700 dark:text-blue-300">
+                          📅 {p.date === today ? t("dp_today") : p.date} · {p.employeeName}
+                        </div>
+                      ) : null
+                    })()}
                   </button>
                 ))
               )}
@@ -177,6 +253,13 @@ export function StoreActionTodayBoard(props: {
           </Card>
         ))}
       </div>
+
+      <StoreActionVisitAddDialog
+        store={visitStore}
+        t={t}
+        onClose={() => setVisitStore(null)}
+        onAdded={() => setCoverageKey((k) => k + 1)}
+      />
     </div>
   )
 }

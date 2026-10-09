@@ -37,7 +37,54 @@ type Body = {
   storeName?: string
   status?: string
   note?: string
+  travelMinutes?: number | string
   items?: ItemIn[]
+  /** 시간 분석 제안 적용 — 같은 직급 템플릿(보관 제외)의 같은 이름 항목 예상 분 일괄 변경 */
+  applyEstimate?: { roleScope?: string; title?: string; estMinutes?: number | string }
+}
+
+async function applyEstimate(input: NonNullable<Body['applyEstimate']>, actor: string, now: string) {
+  const role = pick(input.roleScope, DAILY_PLAN_ROLES, 'supervisor')
+  const title = String(input.title || '').trim()
+  const est = Math.max(1, Math.min(480, Math.round(Number(input.estMinutes) || 0)))
+  if (!title) return { updated: 0, templates: 0 }
+  const tpls = ((await supabaseSelectFilter(
+    'routine_templates',
+    `role_scope=eq.${role}&status=in.(draft,pilot,active)`,
+    { select: 'id,version', limit: 500 }
+  )) || []) as { id?: number; version?: number }[]
+  if (tpls.length === 0) return { updated: 0, templates: 0 }
+  const items = ((await supabaseSelectFilter(
+    'routine_template_items',
+    `template_id=in.(${tpls.map((x) => Number(x.id)).join(',')})&title=eq.${encodeURIComponent(title)}`,
+    { select: 'id,template_id', limit: 500 }
+  )) || []) as { id?: number; template_id?: number }[]
+  if (items.length === 0) return { updated: 0, templates: 0 }
+  await supabaseUpdateByFilter('routine_template_items', `id=in.(${items.map((i) => Number(i.id)).join(',')})`, {
+    est_minutes: est,
+  })
+  const touched = new Set(items.map((i) => Number(i.template_id)))
+  for (const tpl of tpls.filter((x) => touched.has(Number(x.id)))) {
+    await supabaseUpdateByFilter('routine_templates', `id=eq.${Number(tpl.id)}`, {
+      version: Number(tpl.version || 1) + 1,
+      updated_by: actor,
+      updated_at: now,
+    })
+  }
+  return { updated: items.length, templates: touched.size }
+}
+
+/** travel_minutes 컬럼 미배포(daily_plans_04 전)면 그 필드 없이 다시 시도 */
+async function withTravelFallback<T>(header: Record<string, unknown>, run: (h: Record<string, unknown>) => Promise<T>): Promise<T> {
+  try {
+    return await run(header)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!/travel_minutes/.test(msg)) throw e
+    const rest = { ...header }
+    delete rest.travel_minutes
+    return run(rest)
+  }
 }
 
 function pick<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
@@ -59,6 +106,11 @@ export async function POST(request: NextRequest) {
     const id = Number(body.id || 0)
     const now = new Date().toISOString()
 
+    if (body.applyEstimate) {
+      const r = await applyEstimate(body.applyEstimate, scope.actorName, now)
+      return NextResponse.json({ success: true, ...r })
+    }
+
     if (body.deleteTemplate) {
       if (!id) return NextResponse.json({ success: false, message: 'id required' }, { status: 400 })
       await supabaseUpdateByFilter('routine_templates', `id=eq.${id}`, {
@@ -79,6 +131,7 @@ export async function POST(request: NextRequest) {
       store_name: String(body.storeName || '').trim(),
       status: pick(body.status, ROUTINE_TEMPLATE_STATUSES, 'draft'),
       note: String(body.note || '').trim().slice(0, 1000),
+      travel_minutes: Math.max(0, Math.min(240, Math.round(Number(body.travelMinutes ?? 30) || 0))),
       updated_by: scope.actorName,
       updated_at: now,
     }
@@ -107,15 +160,17 @@ export async function POST(request: NextRequest) {
         limit: 1,
       })) as { id?: number; version?: number }[]
       if (!cur?.[0]) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
-      await supabaseUpdateByFilter('routine_templates', `id=eq.${id}`, {
-        ...header,
-        version: Number(cur[0].version || 1) + 1,
-      })
+      await withTravelFallback(header, (h) =>
+        supabaseUpdateByFilter('routine_templates', `id=eq.${id}`, {
+          ...h,
+          version: Number(cur[0].version || 1) + 1,
+        })
+      )
       await supabaseDeleteByFilter('routine_template_items', `template_id=eq.${id}`)
     } else {
-      const res = (await supabaseInsert('routine_templates', { ...header, version: 1, created_at: now })) as
-        | Record<string, unknown>[]
-        | Record<string, unknown>
+      const res = (await withTravelFallback(header, (h) =>
+        supabaseInsert('routine_templates', { ...h, version: 1, created_at: now })
+      )) as Record<string, unknown>[] | Record<string, unknown>
       const row = Array.isArray(res) ? res[0] : res
       templateId = Number(row?.id || 0)
       if (!templateId) return NextResponse.json({ success: false, message: '저장 실패' }, { status: 500 })

@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { RefreshCw } from "lucide-react"
+import { Copy, RefreshCw } from "lucide-react"
+import { appAlert } from "@/lib/app-message"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -16,7 +17,7 @@ import {
   type DailyPlanBundle,
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { dailyPlanLabelers, dailyPlanLinkHref, minutesLabel } from "@/lib/daily-plan-i18n"
+import { buildDailyPlanLineText, dailyPlanLabelers, dailyPlanLinkHref, minutesLabel } from "@/lib/daily-plan-i18n"
 import { DailyPlanItems } from "@/components/daily-plan/daily-plan-items"
 
 type T = (k: string) => string
@@ -207,16 +208,34 @@ export function DailyPlanBoard({ t }: { t: T }) {
               {detail.plan.briefing_note ? (
                 <p className="rounded bg-muted p-2 text-xs whitespace-pre-wrap">{detail.plan.briefing_note}</p>
               ) : null}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={async () => {
+                  const text = buildDailyPlanLineText(detail, t)
+                  try {
+                    await navigator.clipboard.writeText(text)
+                    await appAlert(t("dp_line_copied"))
+                  } catch {
+                    await appAlert(text)
+                  }
+                }}
+              >
+                <Copy className="mr-1 h-3.5 w-3.5" />
+                {t("dp_line_copy")}
+              </Button>
               <DailyPlanItems
                 plan={detail.plan}
                 items={detail.items}
                 t={t}
+                travelMinutes={detail.travelMinutes}
                 onChanged={() => {
                   void openDetail(detail.plan.id)
                   void load()
                 }}
-                onLink={(it) => {
-                  const href = dailyPlanLinkHref(it.link_type, it.store_name)
+                onLink={(it, kind) => {
+                  const href = dailyPlanLinkHref(it, kind)
                   if (href) window.open(href, "_blank")
                 }}
               />

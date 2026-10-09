@@ -10,9 +10,11 @@ import {
   getDailyPlanFor,
   getDailyPlanItems,
   loadPlanEmployeeById,
+  loadTravelMinutesByTemplate,
   normalizePlanRow,
   planItemLite,
   resolveDailyPlanScope,
+  travelMinutesOfPlan,
   type DailyPlanRow,
 } from '@/lib/daily-plan-server'
 
@@ -31,11 +33,16 @@ async function findOwnPlan(date: string, employeeId: number | null, name: string
 
 async function withItems(plan: DailyPlanRow | null) {
   if (!plan) return null
-  const items = await getDailyPlanItems(plan.id)
-  return { plan, items, summary: summarizePlanItems(items.map(planItemLite)) }
+  const [items, travel] = await Promise.all([getDailyPlanItems(plan.id), loadTravelMinutesByTemplate([plan.template_id])])
+  return {
+    plan,
+    items,
+    summary: summarizePlanItems(items.map(planItemLite)),
+    travelMinutes: travelMinutesOfPlan(plan, travel),
+  }
 }
 
-/** 내 업무표 (오늘이면 없을 때 자동 생성) + 공개된 내일 업무표 미리보기. planId 지정 시 권한 내 타인 업무표 */
+/** 내 일정표 (오늘이면 없을 때 자동 생성) + 공개된 내일 일정표 미리보기. planId 지정 시 권한 내 타인 일정표 */
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request, 'any')
   if (authResult.errorResponse) return authResult.errorResponse

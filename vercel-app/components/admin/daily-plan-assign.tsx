@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Copy, Plus, RefreshCw, Send, Sparkles, Trash2 } from "lucide-react"
+import { Copy, Lightbulb, Plus, RefreshCw, Send, Sparkles, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,10 +11,12 @@ import { cn } from "@/lib/utils"
 import {
   generateDailyPlans,
   getDailyPlanBoard,
+  getVisitSuggestions,
   saveDailyPlanAssignment,
   useStoreList,
   type DailyPlanBoardRow,
   type DailyPlanCandidate,
+  type VisitSuggestionDto,
 } from "@/lib/api-client"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
@@ -22,12 +24,19 @@ import { dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
 type T = (k: string) => string
 type TaskDraft = { title: string; store: string; estMinutes: number }
 
+/** 주간 보기에서 넘어올 때 날짜·사람 미리 선택 */
+export type DailyPlanAssignPreset = { date: string; employeeId: number; nonce: number }
+
 const ROLE_ORDER = ["supervisor", "manager", "staff"]
 
-export function DailyPlanAssign({ t }: { t: T }) {
+export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignPreset | null }) {
   const label = dailyPlanLabelers(t)
   const { stores: storeList } = useStoreList()
-  const [date, setDate] = useState(() => addBangkokCalendarDays(getBangkokTodayDateString(), 1))
+  const [date, setDate] = useState(() => preset?.date || addBangkokCalendarDays(getBangkokTodayDateString(), 1))
+  const [loadedDate, setLoadedDate] = useState("")
+  const [pendingSelect, setPendingSelect] = useState<number | null>(preset?.employeeId ?? null)
+  const [suggest, setSuggest] = useState<VisitSuggestionDto[] | null>(null)
+  const [suggestLoading, setSuggestLoading] = useState(false)
   const [plans, setPlans] = useState<DailyPlanBoardRow[]>([])
   const [candidates, setCandidates] = useState<DailyPlanCandidate[]>([])
   const [canAssignAll, setCanAssignAll] = useState(false)
@@ -46,6 +55,7 @@ export function DailyPlanAssign({ t }: { t: T }) {
       setPlans(Array.isArray(res.plans) ? res.plans : [])
       setCandidates(Array.isArray(res.candidates) ? res.candidates : [])
       setCanAssignAll(!!res.canAssignAll)
+      setLoadedDate(date)
     } finally {
       setLoading(false)
     }
@@ -54,6 +64,12 @@ export function DailyPlanAssign({ t }: { t: T }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!preset) return
+    setDate(preset.date)
+    setPendingSelect(preset.employeeId)
+  }, [preset])
 
   const planByEmp = useMemo(() => new Map(plans.map((p) => [p.employee_id, p])), [plans])
 
@@ -87,8 +103,9 @@ export function DailyPlanAssign({ t }: { t: T }) {
   const selected = people.find((p) => p.id === selectedId) || null
   const selectedPlan = selectedId != null ? planByEmp.get(selectedId) : undefined
 
-  const selectPerson = (id: number) => {
+  const selectPerson = useCallback((id: number) => {
     setSelectedId(id)
+    setSuggest(null)
     const p = planByEmp.get(id)
     setRouteStores(p?.route_stores || [])
     setTasks(
@@ -97,6 +114,24 @@ export function DailyPlanAssign({ t }: { t: T }) {
         .map((h) => ({ title: h.title, store: h.store, estMinutes: h.estMinutes }))
     )
     setBriefing(p?.briefing_note || "")
+  }, [planByEmp])
+
+  useEffect(() => {
+    if (pendingSelect == null || loading || loadedDate !== date) return
+    selectPerson(pendingSelect)
+    setPendingSelect(null)
+  }, [pendingSelect, loading, loadedDate, date, selectPerson])
+
+  const loadSuggest = async () => {
+    if (!selected) return
+    setSuggestLoading(true)
+    try {
+      const r = await getVisitSuggestions(selected.id, date)
+      setSuggest(r.list)
+      if (!r.hasCandidates) await appAlert(t("dp_suggest_no_stores"))
+    } finally {
+      setSuggestLoading(false)
+    }
   }
 
   const toggleStore = (s: string) =>
@@ -148,7 +183,7 @@ export function DailyPlanAssign({ t }: { t: T }) {
   }
 
   const copyLine = async () => {
-    const lines: string[] = [`📋 ${t("dp_line_title")} ${date}`]
+    const lines: string[] = [`📅 ${t("dp_line_title")} ${date}`]
     for (const role of ROLE_ORDER) {
       const list = plans.filter((p) => p.role_scope === role)
       if (list.length === 0) continue
@@ -270,7 +305,53 @@ export function DailyPlanAssign({ t }: { t: T }) {
 
                 {selected.planRole === "supervisor" ? (
                   <div className="space-y-1">
-                    <p className="text-xs font-semibold">{t("dp_route_stores")}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-1">
+                      <p className="text-xs font-semibold">{t("dp_route_stores")}</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={suggestLoading}
+                        onClick={() => void loadSuggest()}
+                      >
+                        <Lightbulb className="mr-1 h-3 w-3" />
+                        {t("dp_suggest_btn")}
+                      </Button>
+                    </div>
+                    {suggest ? (
+                      <div className="rounded border border-dashed p-2">
+                        <p className="mb-1 text-[11px] text-muted-foreground">{t("dp_suggest_hint")}</p>
+                        {suggest.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">{t("dp_suggest_empty")}</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {suggest.map((s) => (
+                              <button
+                                key={s.store}
+                                type="button"
+                                onClick={() => toggleStore(s.store)}
+                                className={cn(
+                                  "rounded border px-2 py-0.5 text-left text-[11px]",
+                                  routeStores.includes(s.store)
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "hover:bg-muted"
+                                )}
+                              >
+                                {s.store}
+                                {s.overdue ? <span className="ml-1 text-red-600">●{s.overdue}</span> : null}
+                                {s.pendingVerify ? <span className="ml-1 text-amber-600">●{s.pendingVerify}</span> : null}
+                                {s.dueSoon ? <span className="ml-1 text-blue-600">●{s.dueSoon}</span> : null}
+                                <span className="ml-1 opacity-70">
+                                  {s.daysSinceVisit == null
+                                    ? t("dp_never_visited")
+                                    : t("dp_days_ago").replace("{n}", String(s.daysSinceVisit))}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
                     {routeStores.length > 0 ? (
                       <p className="text-xs">{routeStores.map((s, i) => `${i + 1}. ${s}`).join("  ")}</p>
                     ) : (

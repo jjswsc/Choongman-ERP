@@ -74,6 +74,7 @@ import { StoreActionPersonSelect } from "@/components/admin/store-action-person-
 import { StoreActionTimeline } from "@/components/admin/store-action-timeline"
 import { StoreActionTodayBoard } from "@/components/admin/store-action-today-board"
 import { StoreActionScorecard } from "@/components/admin/store-action-scorecard"
+import { StoreActionPlanPanel } from "@/components/admin/store-action-plan-panel"
 
 type TabKey = "today" | "dash" | "list" | "process" | "new" | "score"
 const TAB_KEYS: TabKey[] = ["today", "dash", "list", "process", "new", "score"]
@@ -866,7 +867,16 @@ export function AdminStoreActions() {
                 </div>
                 {!canVerify ? <p className="text-[11px] text-muted-foreground">{t("action_verify_hq_only")}</p> : null}
               </div>
-              <StoreActionTimeline actionId={edit.id} refreshKey={refreshKey} t={t} />
+              <div className="space-y-3">
+                <StoreActionPlanPanel
+                  key={edit.id}
+                  actionId={edit.id}
+                  open={isStoreActionOpenStatus(edit.status)}
+                  canVerify={canVerify}
+                  t={t}
+                />
+                <StoreActionTimeline actionId={edit.id} refreshKey={refreshKey} t={t} />
+              </div>
             </div>
           )}
         </TabsContent>

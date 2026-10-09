@@ -5,7 +5,7 @@ import { generateDailyPlansForDate, resolveDailyPlanScope } from '@/lib/daily-pl
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/
 
-/** 날짜 업무표 즉시 생성 (평소에는 18시 크론이 내일 것을 생성). 본사·슈퍼바이저 */
+/** 날짜 일정표 즉시 생성 (평소에는 18시 크론이 내일 것을 생성). 본사·슈퍼바이저 */
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse

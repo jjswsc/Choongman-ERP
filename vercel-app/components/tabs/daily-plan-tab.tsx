@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDown, ChevronUp, Lock, RefreshCw } from "lucide-react"
+import { ChevronDown, ChevronUp, Copy, Lock, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { appAlert, appConfirm } from "@/lib/app-message"
@@ -10,8 +10,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { closeDailyPlan, getMyDailyPlan, type DailyPlanBundle, type DailyPlanItem } from "@/lib/api-client"
-import { dailyPlanLabelers, dailyPlanLinkHref, minutesLabel } from "@/lib/daily-plan-i18n"
-import { DailyPlanItems } from "@/components/daily-plan/daily-plan-items"
+import { buildDailyPlanLineText, dailyPlanLabelers, dailyPlanLinkHref, minutesLabel } from "@/lib/daily-plan-i18n"
+import { DailyPlanItems, type DailyPlanLinkKind } from "@/components/daily-plan/daily-plan-items"
 
 function PlanHeader({ bundle, t }: { bundle: DailyPlanBundle; t: (k: string) => string }) {
   const label = dailyPlanLabelers(t)
@@ -72,13 +72,24 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
     void load()
   }, [load])
 
-  const onLink = (it: DailyPlanItem) => {
-    if (it.link_type === "store_visit" && onNavigate) {
+  const onLink = (it: DailyPlanItem, kind: DailyPlanLinkKind) => {
+    if (kind === "open" && it.link_type === "store_visit" && onNavigate) {
       onNavigate("visit")
       return
     }
-    const href = dailyPlanLinkHref(it.link_type, it.store_name)
+    const href = dailyPlanLinkHref(it, kind)
     if (href) router.push(href)
+  }
+
+  const copyLine = async () => {
+    if (!today) return
+    const text = buildDailyPlanLineText(today, t)
+    try {
+      await navigator.clipboard.writeText(text)
+      await appAlert(t("dp_line_copied"))
+    } catch {
+      await appAlert(text)
+    }
   }
 
   const onClose = async () => {
@@ -110,9 +121,17 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
     <div className="space-y-3 px-3 py-3">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold">{t("tabDailyPlan")}</h2>
-        <Button size="sm" variant="ghost" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-        </Button>
+        <div className="flex items-center gap-1">
+          {today ? (
+            <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => void copyLine()}>
+              <Copy className="mr-1 h-3.5 w-3.5" />
+              {t("dp_line_copy")}
+            </Button>
+          ) : null}
+          <Button size="sm" variant="ghost" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </Button>
+        </div>
       </div>
 
       {notReady ? <p className="text-xs text-amber-600">{t("dp_not_ready")}</p> : null}
@@ -132,7 +151,14 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
             </CardContent>
           </Card>
 
-          <DailyPlanItems plan={today.plan} items={today.items} t={t} onChanged={() => void load()} onLink={onLink} />
+          <DailyPlanItems
+            plan={today.plan}
+            items={today.items}
+            t={t}
+            travelMinutes={today.travelMinutes}
+            onChanged={() => void load()}
+            onLink={onLink}
+          />
 
           {today.plan.status === "closed" ? (
             <p className="flex items-center justify-center gap-1 rounded bg-muted p-2 text-xs text-muted-foreground">
@@ -157,14 +183,21 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
               onClick={() => setShowTomorrow((v) => !v)}
             >
               <span>
-                📋 {t("dp_tomorrow_preview")} · {tomorrow.summary.total} · {minutesLabel(tomorrow.summary.estTotal, t)}
+                📅 {t("dp_tomorrow_preview")} · {tomorrow.summary.total} · {minutesLabel(tomorrow.summary.estTotal, t)}
               </span>
               {showTomorrow ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
             {showTomorrow ? (
               <>
                 <PlanHeader bundle={tomorrow} t={t} />
-                <DailyPlanItems plan={tomorrow.plan} items={tomorrow.items} t={t} readOnly onChanged={() => void load()} />
+                <DailyPlanItems
+                  plan={tomorrow.plan}
+                  items={tomorrow.items}
+                  t={t}
+                  travelMinutes={tomorrow.travelMinutes}
+                  readOnly
+                  onChanged={() => void load()}
+                />
               </>
             ) : null}
           </CardContent>

@@ -56,6 +56,7 @@ function blankTemplate(): RoutineTemplateDto {
     status: "draft",
     version: 0,
     note: "",
+    travelMinutes: 30,
     updatedBy: "",
     updatedAt: "",
     items: [blankItem()],
@@ -126,6 +127,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
         storeName: edit.storeName,
         status: edit.status,
         note: edit.note,
+        travelMinutes: edit.travelMinutes,
         items: edit.items.filter((i) => i.title.trim()),
       })
       if (!res.success) {
@@ -154,7 +156,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
 
   if (edit) {
     const fixed = fixedMinutes(edit)
-    const per = perStoreMinutes(edit)
+    const per = perStoreMinutes(edit) + (edit.roleScope === "supervisor" ? Number(edit.travelMinutes) || 0 : 0)
     return (
       <Card>
         <CardContent className="space-y-3 p-3">
@@ -223,9 +225,21 @@ export function DailyPlanTemplates({ t }: { t: T }) {
               onChange={(e) => setEdit({ ...edit, note: e.target.value })}
               placeholder={t("dp_tpl_note")}
               rows={1}
-              className="lg:col-span-3"
+              className="lg:col-span-2"
               disabled={!canEdit}
             />
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span className="shrink-0">{t("dp_tpl_travel")}</span>
+              <Input
+                type="number"
+                min={0}
+                max={240}
+                value={edit.travelMinutes}
+                onChange={(e) => setEdit({ ...edit, travelMinutes: Math.max(0, Number(e.target.value) || 0) })}
+                className="h-9 w-20"
+                disabled={!canEdit}
+              />
+            </label>
           </div>
 
           <p className={cn("text-xs", fixed + per > DAILY_PLAN_WORKDAY_MINUTES ? "text-red-600" : "text-muted-foreground")}>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { canViewDailyPlan, closeDailyPlan, getDailyPlanById, resolveDailyPlanScope } from '@/lib/daily-plan-server'
 
-/** 업무표 마감 — 합계 계산, 업무일지 요약 1행 기록, 미완료 과제 다음 날 이월 */
+/** 일정표 마감 — 합계 계산, 업무일지 요약 1행 기록, 미완료 과제 다음 날 이월 */
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request, 'any')
   if (authResult.errorResponse) return authResult.errorResponse

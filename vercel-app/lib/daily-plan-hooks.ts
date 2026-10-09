@@ -3,18 +3,20 @@ import 'server-only'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
-import { computeActualMinutes } from '@/lib/daily-plan-generate'
+import { addDaysYmdUtc, computeActualMinutes } from '@/lib/daily-plan-generate'
 import {
+  addActionItemToPlan,
   normalizePlanItemRow,
   normalizePlanRow,
   touchDailyPlanProgress,
+  type ActionForPlan,
   type DailyPlanItemRow,
   type DailyPlanRow,
 } from '@/lib/daily-plan-server'
 
 /**
- * 다른 화면의 실제 기록 → 업무표 항목 자동 완료.
- * 업무표 테이블 미배포·실패 시에도 원래 요청은 성공해야 하므로 모든 훅은 예외를 삼킨다.
+ * 다른 화면의 실제 기록 → 일정표 항목 자동 완료.
+ * 일정표 테이블 미배포·실패 시에도 원래 요청은 성공해야 하므로 모든 훅은 예외를 삼킨다.
  */
 
 async function findPlansForPerson(
@@ -122,7 +124,7 @@ export async function syncDailyPlanOnStoreVisit(params: {
   }
 }
 
-/** 매장 점검 저장 → 그날 해당 매장 점검 항목 완료 (점검자 본인 업무표 우선, 없으면 해당 매장 점검 항목 전체) */
+/** 매장 점검 저장 → 그날 해당 매장 점검 항목 완료 (점검자 본인 일정표 우선, 없으면 해당 매장 점검 항목 전체) */
 export async function syncDailyPlanOnStoreCheck(params: { store: string; date: string; inspector?: string }): Promise<void> {
   try {
     const store = String(params.store || '').trim()
@@ -158,7 +160,50 @@ export async function syncDailyPlanOnStoreCheck(params: { store: string; date: s
   }
 }
 
-/** 개선 과제 재확인 요청·완료·반려 → 처리한 사람의 오늘 업무표에서 그 과제 항목 완료 */
+/**
+ * 개선 과제 등록 →
+ * 1) 등록한 사람 오늘 일정의 그 매장 「개선 과제 등록」 루틴 항목 완료
+ * 2) 담당자의 오늘·내일 일정이 이미 있고 기한이 그 다음 날까지면 과제 항목 추가
+ */
+export async function syncDailyPlanOnStoreActionCreated(params: {
+  action: ActionForPlan
+  ownerName: string
+  ownerUserId?: string | null
+  actorName: string
+  actorEmployeeId?: number | null
+}): Promise<void> {
+  try {
+    const { action } = params
+    if (!action.id) return
+    const today = getBangkokTodayDateString()
+    const actorPlans = await findPlansForPerson(today, { name: params.actorName, employeeId: params.actorEmployeeId })
+    for (const plan of actorPlans) {
+      const rows = (await supabaseSelectFilter(
+        'daily_plan_items',
+        `plan_id=eq.${plan.id}&source=eq.routine&link_type=eq.store_actions&status=in.(todo,doing)`,
+        { order: 'sort_order.desc', limit: 20 }
+      )) as Record<string, unknown>[]
+      const target = (rows || [])
+        .map(normalizePlanItemRow)
+        .find((it) => storesMatchForGradeLookup(it.store_name, action.store))
+      if (target) {
+        await markItemDone(target)
+        await touchDailyPlanProgress(plan.id)
+      }
+    }
+
+    const ownerId = Number(params.ownerUserId || 0)
+    for (const date of [today, addDaysYmdUtc(today, 1)]) {
+      if (!action.dueDate || action.dueDate > addDaysYmdUtc(date, 1)) continue
+      const plans = await findPlansForPerson(date, { name: params.ownerName, employeeId: ownerId > 0 ? ownerId : null })
+      for (const plan of plans) await addActionItemToPlan(plan, action, 'owner')
+    }
+  } catch (e) {
+    console.warn('syncDailyPlanOnStoreActionCreated:', e instanceof Error ? e.message : e)
+  }
+}
+
+/** 개선 과제 재확인 요청·완료·반려 → 처리한 사람의 오늘 일정표에서 그 과제 항목 완료 */
 export async function syncDailyPlanOnStoreAction(params: {
   actionId: number
   actorName: string

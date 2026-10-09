@@ -40,6 +40,7 @@ function tpl(p: Partial<RoutineTemplate>): RoutineTemplate {
     status: "pilot",
     version: 1,
     note: "",
+    travelMinutes: 30,
     updatedBy: "",
     updatedAt: "",
     items: [],

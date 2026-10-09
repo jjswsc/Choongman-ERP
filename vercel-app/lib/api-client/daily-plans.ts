@@ -1,5 +1,5 @@
 /**
- * 직급별 일일 업무표 API
+ * 직급별 일일 일정표 API
  */
 import { apiFetch } from "../api/fetch"
 import { apiFetchWithOffline } from "../api/fetch-offline"
@@ -60,7 +60,13 @@ export type DailyPlanSummary = {
   doneRate: number
 }
 
-export type DailyPlanBundle = { plan: DailyPlan; items: DailyPlanItem[]; summary: DailyPlanSummary }
+export type DailyPlanBundle = {
+  plan: DailyPlan
+  items: DailyPlanItem[]
+  summary: DailyPlanSummary
+  /** 매장 간 이동 분 (템플릿) */
+  travelMinutes?: number
+}
 
 export type MyDailyPlanResponse = {
   success?: boolean
@@ -227,6 +233,7 @@ export type RoutineTemplateDto = {
   status: string
   version: number
   note: string
+  travelMinutes: number
   updatedBy: string
   updatedAt: string
   items: RoutineTemplateItemDto[]
@@ -244,6 +251,126 @@ export async function saveRoutineTemplate(data: Partial<RoutineTemplateDto> & { 
     body: JSON.stringify(data),
   })
   return (await res.json()) as { success?: boolean; message?: string; id?: number }
+}
+
+/** 시간 분석 제안 적용 — 같은 직급 템플릿의 같은 이름 항목 예상 분 변경 */
+export async function applyRoutineEstimate(data: { roleScope: string; title: string; estMinutes: number }) {
+  const res = await apiFetch("/api/saveRoutineTemplate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ applyEstimate: data }),
+  })
+  return (await res.json()) as { success?: boolean; message?: string; updated?: number; templates?: number }
+}
+
+export type DailyPlanWeekCell = {
+  id: number
+  date: string
+  employeeId: number
+  employeeName: string
+  employeeStore: string
+  role: string
+  position: string
+  store: string
+  route: string[]
+  status: string
+  published: boolean
+  shiftIn: string
+  shiftOut: string
+  total: number
+  done: number
+}
+
+export async function getDailyPlanWeek(start: string) {
+  const res = await apiFetchWithOffline(`/api/getDailyPlanWeek?start=${encodeURIComponent(start)}`)
+  return (await res.json()) as {
+    success?: boolean
+    start: string
+    end: string
+    today: string
+    list: DailyPlanWeekCell[]
+    notReady?: boolean
+  }
+}
+
+export type StoreActionPlanLink = {
+  planId: number
+  date: string
+  employeeName: string
+  itemStatus: string
+  planStatus: string
+}
+
+export async function getStoreActionPlanLinks(ids: number[]) {
+  if (ids.length === 0) return {} as Record<string, StoreActionPlanLink[]>
+  const res = await apiFetchWithOffline(`/api/storeActionDailyPlan?ids=${ids.slice(0, 300).join(",")}`)
+  const j = (await res.json()) as { success?: boolean; links?: Record<string, StoreActionPlanLink[]> }
+  return j.links || {}
+}
+
+export async function addStoreActionToDailyPlan(data: { actionId: number; date: string; who: "owner" | "verifier" | "me" }) {
+  const res = await apiFetch("/api/storeActionDailyPlan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  return (await res.json()) as {
+    success?: boolean
+    message?: string
+    messageKey?: string
+    added?: boolean
+    employeeName?: string
+    date?: string
+  }
+}
+
+export type StoreVisitCoverage = {
+  store: string
+  lastVisitDate: string
+  lastVisitBy: string
+  nextPlanDate: string
+  nextPlanBy: string
+  plannedSoon: boolean
+}
+
+export async function getStoreVisitCoverage(stores: string[]) {
+  if (stores.length === 0) return { list: [] as StoreVisitCoverage[], windowDays: 3 }
+  const q = new URLSearchParams({ mode: "coverage", stores: stores.slice(0, 100).join(",") })
+  const res = await apiFetchWithOffline(`/api/dailyPlanVisits?${q}`)
+  const j = (await res.json()) as { list?: StoreVisitCoverage[]; windowDays?: number }
+  return { list: Array.isArray(j.list) ? j.list : [], windowDays: j.windowDays || 3 }
+}
+
+export type VisitSuggestionDto = {
+  store: string
+  score: number
+  overdue: number
+  pendingVerify: number
+  dueSoon: number
+  daysSinceVisit: number | null
+}
+
+export async function getVisitSuggestions(employeeId: number, date: string) {
+  const q = new URLSearchParams({ mode: "suggest", employeeId: String(employeeId), date })
+  const res = await apiFetchWithOffline(`/api/dailyPlanVisits?${q}`)
+  const j = (await res.json()) as { list?: VisitSuggestionDto[]; hasCandidates?: boolean }
+  return { list: Array.isArray(j.list) ? j.list : [], hasCandidates: !!j.hasCandidates }
+}
+
+export async function addVisitToDailyPlan(data: { store: string; date: string; employeeId?: number }) {
+  const res = await apiFetch("/api/dailyPlanVisits", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  return (await res.json()) as {
+    success?: boolean
+    message?: string
+    messageKey?: string
+    added?: boolean
+    employeeName?: string
+    date?: string
+  }
 }
 
 export type DailyPlanTimeRow = {

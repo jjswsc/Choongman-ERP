@@ -8,15 +8,23 @@ import {
   dailyPlanScopeFilter,
   isOwnDailyPlan,
   loadActivePlanEmployees,
+  loadTravelMinutesByTemplate,
   normalizePlanItemRow,
   normalizePlanRow,
   resolveDailyPlanScope,
+  travelMinutesOfPlan,
   type DailyPlanItemRow,
 } from '@/lib/daily-plan-server'
+import {
+  DAILY_PLAN_LATE_GRACE_MINUTES,
+  computePlanTimeline,
+  hmToMin,
+  lateMinutes,
+} from '@/lib/daily-plan-timeline'
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/
 
-/** 날짜별 업무표 현황 — 진행률·예상/실제·지연 항목. candidates=1 이면 배정 가능한 직원 목록 포함 */
+/** 날짜별 일정표 현황 — 진행률·예상/실제·지연 항목. candidates=1 이면 배정 가능한 직원 목록 포함 */
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
@@ -60,13 +68,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const travel = await loadTravelMinutesByTemplate(plans.map((p) => p.template_id))
+    const nowMin = hmToMin(nowHm) ?? 0
     const list = plans.map((p) => {
       const items = itemsByPlan.get(p.id) || []
       const work = items.filter((i) => i.source !== 'visit')
       const done = work.filter((i) => i.status === 'done')
+      const { slots } = computePlanTimeline(
+        items.map((i) => ({ id: i.id, source: i.source, storeName: i.store_name, timeSlot: i.time_slot, estMinutes: i.est_minutes })),
+        { shiftIn: p.shift_in, travelMinutes: travelMinutesOfPlan(p, travel) }
+      )
       const late =
         date === today
-          ? work.filter((i) => i.status === 'todo' && i.time_slot && i.time_slot < nowHm).length
+          ? items.filter((i) => lateMinutes(slots.get(i.id), i.status, nowMin, DAILY_PLAN_LATE_GRACE_MINUTES) > 0).length
           : date < today
             ? work.filter((i) => i.status === 'todo' || i.status === 'doing').length
             : 0

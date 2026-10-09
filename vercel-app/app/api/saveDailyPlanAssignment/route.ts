@@ -26,7 +26,7 @@ type Body = {
 }
 
 /**
- * 업무표 배정 — 방문 매장(슈퍼바이저)·본사 과제·브리핑 저장.
+ * 일정표 배정 — 방문 매장(슈퍼바이저)·본사 과제·브리핑 저장.
  * 미착수 루틴·방문·개선과제 항목은 재생성, 미착수 본사 과제는 새 목록으로 교체. publish면 공개 + 푸시.
  */
 export async function POST(request: NextRequest) {
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
     const existing = await getDailyPlanFor(date, emp.id)
     if (existing?.status === 'closed') {
-      return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 업무표입니다.' }, { status: 409 })
+      return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 일정표입니다.' }, { status: 409 })
     }
 
     const routeStores = Array.isArray(body.routeStores)
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       regenerate: true,
       force: true,
     })
-    if (!plan) return NextResponse.json({ success: false, message: '업무표를 만들 수 없습니다.' }, { status: 500 })
+    if (!plan) return NextResponse.json({ success: false, message: '일정표를 만들 수 없습니다.' }, { status: 500 })
 
     let pushed = 0
     if (body.publish) {
@@ -89,8 +89,8 @@ export async function POST(request: NextRequest) {
       })
       pushed = await pushStoreActionNotice({
         title: firstPublish
-          ? '📋 업무표 배정 · มีตารางงานใหม่ครับ'
-          : '📋 업무표 변경 · ตารางงานมีการเปลี่ยนแปลงครับ',
+          ? '📅 일정표 배정 · มีตารางงานใหม่ครับ'
+          : '📅 일정표 변경 · ตารางงานมีการเปลี่ยนแปลงครับ',
         body: `${date} · ${(routeStores || plan.route_stores || []).join(', ') || plan.store_name}`.slice(0, 180),
         recipients: [planRecipient(plan)],
       })

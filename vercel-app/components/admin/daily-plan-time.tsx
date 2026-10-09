@@ -7,7 +7,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { cn } from "@/lib/utils"
-import { getDailyPlanTimeSummary, type DailyPlanTimeRow } from "@/lib/api-client"
+import { applyRoutineEstimate, getDailyPlanTimeSummary, type DailyPlanTimeRow } from "@/lib/api-client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
 
@@ -24,6 +25,7 @@ export function DailyPlanTime({ t }: { t: T }) {
   const [role, setRole] = useState("all")
   const [rows, setRows] = useState<DailyPlanTimeRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [applying, setApplying] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -67,6 +69,33 @@ export function DailyPlanTime({ t }: { t: T }) {
     if (r.avgActual > r.avgEst * (1 + DRIFT_RATIO)) return "over"
     if (r.avgActual < r.avgEst * (1 - DRIFT_RATIO)) return "under"
     return null
+  }
+
+  const applyEstimate = async (r: DailyPlanTimeRow) => {
+    const minutes = Math.max(1, Math.round(r.avgActual))
+    const ok = await appConfirm(
+      t("dp_apply_estimate_confirm")
+        .replace("{title}", r.title)
+        .replace("{from}", String(r.avgEst))
+        .replace("{to}", String(minutes))
+    )
+    if (!ok) return
+    const key = `${r.roleScope}|${r.title}`
+    setApplying(key)
+    try {
+      const res = await applyRoutineEstimate({ roleScope: r.roleScope, title: r.title, estMinutes: minutes })
+      if (!res.success) {
+        await appAlert(res.message || t("dp_save_fail"))
+        return
+      }
+      await appAlert(
+        (res.updated || 0) > 0
+          ? t("dp_apply_estimate_done").replace("{n}", String(res.updated || 0))
+          : t("dp_apply_estimate_none")
+      )
+    } finally {
+      setApplying(null)
+    }
   }
 
   return (
@@ -177,11 +206,25 @@ export function DailyPlanTime({ t }: { t: T }) {
                         </td>
                         <td className="p-1.5 text-right tabular-nums">{minutesLabel(r.actualSum, t)}</td>
                         <td className="p-1.5 text-[11px]">
-                          {d === "over"
-                            ? t("dp_suggest_more").replace("{n}", String(r.avgActual))
-                            : d === "under"
-                              ? t("dp_suggest_less").replace("{n}", String(r.avgActual))
-                              : ""}
+                          {d ? (
+                            <div className="flex items-center gap-1">
+                              <span>
+                                {t(d === "over" ? "dp_suggest_more" : "dp_suggest_less").replace(
+                                  "{n}",
+                                  String(r.avgActual)
+                                )}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[11px]"
+                                disabled={applying != null}
+                                onClick={() => void applyEstimate(r)}
+                              >
+                                {t("dp_apply_estimate")}
+                              </Button>
+                            </div>
+                          ) : null}
                         </td>
                       </tr>
                     )

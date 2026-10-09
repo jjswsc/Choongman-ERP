@@ -24,6 +24,8 @@ import { resolveWorkLogEmployeeById } from '@/lib/work-log-name-server'
 import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
 import { writeWorkLogAudit } from '@/lib/work-log-audit'
 import { pushStoreActionNotice, type StoreActionRecipient } from '@/lib/store-action-server'
+import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
+import { DAILY_PLAN_DEFAULT_TRAVEL_MINUTES, suggestVisitStores } from '@/lib/daily-plan-timeline'
 import {
   addDaysYmdUtc,
   buildDailyPlanItems,
@@ -98,6 +100,8 @@ export type PlanEmployee = {
   store: string
   job: string
   role: string
+  /** 슈퍼바이저 담당 매장 등 추가 매장 */
+  extraStores: string[]
 }
 
 // ─── 권한 ───────────────────────────────────────────
@@ -174,6 +178,7 @@ type EmployeeDbRow = {
   store?: string
   job?: string
   role?: string
+  extra_stores?: unknown
   resign_date?: string | null
   employment_status?: string | null
 }
@@ -186,14 +191,17 @@ function toPlanEmployee(e: EmployeeDbRow): PlanEmployee {
     store: String(e.store || '').trim(),
     job: String(e.job || '').trim(),
     role: String(e.role || '').trim(),
+    extraStores: parseExtraStoresColumn(e.extra_stores),
   }
 }
+
+const EMPLOYEE_SELECT = 'id,name,nick,store,job,role,extra_stores'
 
 export async function loadActivePlanEmployees(): Promise<PlanEmployee[]> {
   const today = getBangkokTodayDateString()
   const rows = ((await supabaseSelect('employees', {
     order: 'id.asc',
-    select: 'id,name,nick,store,job,role,resign_date,employment_status',
+    select: `${EMPLOYEE_SELECT},resign_date,employment_status`,
     limit: 5000,
   })) || []) as EmployeeDbRow[]
   return rows
@@ -209,10 +217,33 @@ export async function loadActivePlanEmployees(): Promise<PlanEmployee[]> {
 export async function loadPlanEmployeeById(id: number): Promise<PlanEmployee | null> {
   if (!Number.isFinite(id) || id <= 0) return null
   const rows = (await supabaseSelectFilter('employees', `id=eq.${id}`, {
-    select: 'id,name,nick,store,job,role',
+    select: EMPLOYEE_SELECT,
     limit: 1,
   })) as EmployeeDbRow[]
   return rows?.[0] ? toPlanEmployee(rows[0]) : null
+}
+
+/** 직원 id 우선, 없으면 이름·닉네임 (같은 매장 우선) */
+export async function findPlanEmployee(params: {
+  userId?: string | number | null
+  name?: string | null
+  store?: string | null
+}): Promise<PlanEmployee | null> {
+  const id = Number(params.userId || 0)
+  if (id > 0) {
+    const e = await loadPlanEmployeeById(id)
+    if (e) return e
+  }
+  const name = String(params.name || '').trim()
+  if (!name) return null
+  const enc = encodeURIComponent(name)
+  const rows = ((await supabaseSelectFilter('employees', `or=(name.eq.${enc},nick.eq.${enc})`, {
+    select: EMPLOYEE_SELECT,
+    limit: 10,
+  })) || []) as EmployeeDbRow[]
+  const store = String(params.store || '').trim().toLowerCase()
+  const hit = rows.find((r) => String(r.store || '').trim().toLowerCase() === store) || rows[0]
+  return hit ? toPlanEmployee(hit) : null
 }
 
 /** 슈퍼바이저 > 매니저 > 직원. 본사 소속(슈퍼바이저 제외)은 자동 생성 대상 아님(null) */
@@ -234,8 +265,14 @@ type TemplateDbRow = {
   status?: string
   version?: number
   note?: string
+  travel_minutes?: number | null
   updated_by?: string
   updated_at?: string
+}
+
+function travelOf(v: unknown): number {
+  const n = Number(v)
+  return Number.isFinite(n) && v != null ? Math.max(0, Math.min(240, Math.round(n))) : DAILY_PLAN_DEFAULT_TRAVEL_MINUTES
 }
 
 type TemplateItemDbRow = {
@@ -299,10 +336,64 @@ export async function loadRoutineTemplates(opts: { usableOnly?: boolean } = {}):
     status: String(r.status || 'draft'),
     version: Number(r.version || 1),
     note: String(r.note || ''),
+    travelMinutes: travelOf(r.travel_minutes),
     updatedBy: String(r.updated_by || ''),
     updatedAt: String(r.updated_at || ''),
     items: byTpl.get(Number(r.id || 0)) || [],
   }))
+}
+
+/** 템플릿별 매장 간 이동 분 (컬럼 미배포면 기본값) */
+export async function loadTravelMinutesByTemplate(templateIds: (number | null)[]): Promise<Map<number, number>> {
+  const ids = [...new Set(templateIds.filter((x): x is number => !!x && x > 0))]
+  const out = new Map<number, number>()
+  if (ids.length === 0) return out
+  try {
+    const rows = ((await supabaseSelectFilter('routine_templates', `id=in.(${ids.join(',')})`, {
+      limit: ids.length,
+    })) || []) as TemplateDbRow[]
+    for (const r of rows) out.set(Number(r.id), travelOf(r.travel_minutes))
+  } catch {
+    /* 템플릿 조회 실패 시 기본값 */
+  }
+  return out
+}
+
+export function travelMinutesOfPlan(plan: Pick<DailyPlanRow, 'template_id'>, map: Map<number, number>): number {
+  return (plan.template_id && map.get(plan.template_id)) ?? DAILY_PLAN_DEFAULT_TRAVEL_MINUTES
+}
+
+// ─── 매장 방문 기록 ────────────────────────────────
+
+export type LastVisit = { date: string; name: string }
+
+/** 매장별 마지막 방문 시작 (since 이후) */
+export async function loadLastVisitByStore(sinceYmd: string): Promise<Map<string, LastVisit>> {
+  const out = new Map<string, LastVisit>()
+  try {
+    const rows = ((await supabaseSelectFilter(
+      'store_visits',
+      `visit_date=gte.${sinceYmd}&visit_type=in.(${encodeURIComponent('방문시작')},${encodeURIComponent('강제 방문시작')})`,
+      { select: 'visit_date,name,store_name', order: 'visit_date.desc', limit: 20000 }
+    )) || []) as { visit_date?: string; name?: string; store_name?: string }[]
+    for (const r of rows) {
+      const store = String(r.store_name || '').trim()
+      const date = String(r.visit_date || '').slice(0, 10)
+      if (!store || !date) continue
+      const cur = out.get(store)
+      if (!cur || date > cur.date) out.set(store, { date, name: String(r.name || '').trim() })
+    }
+  } catch (e) {
+    console.warn('loadLastVisitByStore:', e instanceof Error ? e.message : e)
+  }
+  return out
+}
+
+/** 슈퍼바이저 담당 매장 — 대표 매장 + 추가 매장 중 본사 제외 */
+export function supervisorCandidateStores(emp: PlanEmployee): string[] {
+  return [...new Set([emp.store, ...emp.extraStores].map((s) => String(s || '').trim()))].filter(
+    (s) => s && !isOfficeStore(s)
+  )
 }
 
 // ─── 개선 과제 ─────────────────────────────────────
@@ -331,7 +422,7 @@ export async function loadOpenActionsLite(): Promise<OpenActionLite[]> {
   }
 }
 
-// ─── 업무표 조회 ───────────────────────────────────
+// ─── 일정표 조회 ───────────────────────────────────
 
 export function normalizePlanRow(r: Record<string, unknown>): DailyPlanRow {
   const route = Array.isArray(r.route_stores) ? (r.route_stores as unknown[]).map((s) => String(s || '').trim()).filter(Boolean) : []
@@ -459,7 +550,7 @@ function carryFromItem(i: DailyPlanItemRow): CarryLite {
   }
 }
 
-/** 전날 마감된 업무표의 미완료 본사·이월 과제 (employee_id → 목록) */
+/** 전날 마감된 일정표의 미완료 본사·이월 과제 (employee_id → 목록) */
 async function loadCarryMap(date: string, employeeIds?: number[]): Promise<Map<number, CarryLite[]>> {
   const out = new Map<number, CarryLite[]>()
   const prev = addDaysYmdUtc(date, -1)
@@ -518,16 +609,19 @@ export type EnsurePlanParams = {
   hqTasks?: HqTaskInput[]
   briefing?: string
   actor: string
-  /** 기존 업무표의 미착수 루틴·방문·과제 항목 재생성 */
+  /** 기존 일정표의 미착수 루틴·방문·과제 항목 재생성 */
   regenerate?: boolean
-  /** 항목이 없어도 업무표 생성 (배정 화면) */
+  /** 항목이 없어도 일정표 생성 (배정 화면) */
   force?: boolean
   /** 호출 측에서 이미 없음을 확인함 */
   knownMissing?: boolean
   ctx?: DailyPlanGenContext
 }
 
-/** 업무표 보장 — 없으면 생성, regenerate면 미착수 항목 재생성. 마감된 업무표는 건드리지 않음 */
+/** 개선 과제 화면에서 직접 넣은 항목 — 재생성 때 지우지 않음 */
+export const MANUAL_BLOCK = 'manual'
+
+/** 일정표 보장 — 없으면 생성, regenerate면 미착수 항목 재생성. 마감된 일정표는 건드리지 않음 */
 export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: DailyPlanRow | null; created: boolean }> {
   const existing = p.knownMissing ? null : await getDailyPlanFor(p.date, p.employee.id)
   if (existing && (existing.status === 'closed' || !p.regenerate)) return { plan: existing, created: false }
@@ -600,7 +694,7 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
   const replaceSources = ['routine', 'visit', 'action', ...(p.hqTasks ? ['hq_task'] : [])]
   await supabaseDeleteByFilter(
     'daily_plan_items',
-    `plan_id=eq.${existing.id}&status=eq.todo&source=in.(${replaceSources.join(',')})`
+    `plan_id=eq.${existing.id}&status=eq.todo&source=in.(${replaceSources.join(',')})&block=neq.${MANUAL_BLOCK}`
   )
   const kept = await getDailyPlanItems(existing.id)
   const keptKeys = new Set(kept.map(itemRowKey))
@@ -635,21 +729,54 @@ type ScheduleLite = {
 
 export type GeneratePlansResult = { created: number; existing: number; skipped: number; failed: number }
 
+function routeOf(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((s) => String(s || '').trim()).filter(Boolean) : []
+}
+
+/** 방문 매장이 정해지지 않은 슈퍼바이저 — 담당 매장 중 과제·미방문 기준 자동 동선 (다른 사람과 겹치지 않게) */
+export async function suggestRoutesForSupervisors(
+  date: string,
+  supervisors: PlanEmployee[],
+  actions: OpenActionLite[],
+  takenStores: string[]
+): Promise<Map<number, string[]>> {
+  const out = new Map<number, string[]>()
+  const withStores = supervisors.filter((e) => supervisorCandidateStores(e).length > 0)
+  if (withStores.length === 0) return out
+  const last = await loadLastVisitByStore(addDaysYmdUtc(date, -60))
+  const lastVisitByStore = new Map([...last].map(([s, v]) => [s, v.date]))
+  const taken = [...takenStores]
+  for (const emp of withStores) {
+    const picks = suggestVisitStores({
+      candidates: supervisorCandidateStores(emp),
+      actions,
+      lastVisitByStore,
+      dateYmd: date,
+      exclude: taken,
+    }).map((p) => p.store)
+    if (picks.length === 0) continue
+    taken.push(...picks)
+    out.set(emp.id, picks)
+  }
+  return out
+}
+
 async function runInBatches<T>(list: T[], size: number, fn: (x: T) => Promise<void>): Promise<void> {
   for (let i = 0; i < list.length; i += size) {
     await Promise.all(list.slice(i, i + size).map(fn))
   }
 }
 
-/** 날짜 업무표 일괄 생성 — 슈퍼바이저·매니저 전원 + 그날 근무표가 있는 직원 */
+/** 날짜 일정표 일괄 생성 — 슈퍼바이저·매니저 전원 + 그날 근무표가 있는 직원 */
 export async function generateDailyPlansForDate(date: string, actor: string): Promise<GeneratePlansResult> {
   const result: GeneratePlansResult = { created: 0, existing: 0, skipped: 0, failed: 0 }
   const [employees, ctx, existingRows, schedules] = await Promise.all([
     loadActivePlanEmployees(),
     loadDailyPlanGenContext(),
-    supabaseSelectFilter('daily_plans', `plan_date=eq.${date}`, { select: 'employee_id', limit: 5000 }) as Promise<
-      { employee_id?: number }[]
-    >,
+    supabaseSelectFilter('daily_plans', `plan_date=eq.${date}`, {
+      select: 'employee_id,route_stores',
+      limit: 5000,
+    }) as Promise<{ employee_id?: number; route_stores?: unknown }[]>,
     supabaseSelectFilter('schedules', `schedule_date=eq.${date}`, {
       select: 'employee_id,name,store_name,plan_in,plan_out,memo',
       limit: 5000,
@@ -683,6 +810,13 @@ export async function generateDailyPlansForDate(date: string, actor: string): Pr
     targets.push({ emp, role, store, position, s })
   }
 
+  const autoRoutes = await suggestRoutesForSupervisors(
+    date,
+    targets.filter((t) => t.role === 'supervisor' && !existingIds.has(t.emp.id)).map((t) => t.emp),
+    ctx.actions,
+    (existingRows || []).flatMap((r) => routeOf(r.route_stores))
+  )
+
   await runInBatches(targets, 5, async (t) => {
     if (existingIds.has(t.emp.id)) {
       result.existing += 1
@@ -697,6 +831,7 @@ export async function generateDailyPlansForDate(date: string, actor: string): Pr
         position: t.position,
         shiftIn: String(t.s?.plan_in || ''),
         shiftOut: String(t.s?.plan_out || ''),
+        routeStores: autoRoutes.get(t.emp.id),
         actor,
         knownMissing: true,
         ctx,
@@ -711,7 +846,7 @@ export async function generateDailyPlansForDate(date: string, actor: string): Pr
   return result
 }
 
-/** 한 사람 업무표를 그 자리에서 보장 (근무표에서 매장·구역·시간 반영). 대상 아님/항목 없음이면 null */
+/** 한 사람 일정표를 그 자리에서 보장 (근무표에서 매장·구역·시간 반영). 대상 아님/항목 없음이면 null */
 export async function ensureDailyPlanOnDemand(
   date: string,
   employee: PlanEmployee,
@@ -731,10 +866,27 @@ export async function ensureDailyPlanOnDemand(
     s = undefined
   }
   if (role === 'staff' && !s) return null
+  let routeStores: string[] | undefined
+  if (role === 'supervisor' && supervisorCandidateStores(employee).length > 0) {
+    const [actions, others] = await Promise.all([
+      loadOpenActionsLite(),
+      supabaseSelectFilter('daily_plans', `plan_date=eq.${date}`, { select: 'route_stores', limit: 5000 }).catch(
+        () => []
+      ) as Promise<{ route_stores?: unknown }[]>,
+    ])
+    const routes = await suggestRoutesForSupervisors(
+      date,
+      [employee],
+      actions,
+      (others || []).flatMap((r) => routeOf(r.route_stores))
+    )
+    routeStores = routes.get(employee.id)
+  }
   const r = await ensureDailyPlan({
     date,
     employee,
     role,
+    routeStores,
     store: role === 'staff' ? String(s?.store_name || employee.store).trim() : employee.store,
     position: role === 'staff' ? primaryAreaForDisplay(s?.memo, employee.job).toLowerCase() : 'all',
     shiftIn: String(s?.plan_in || ''),
@@ -742,6 +894,80 @@ export async function ensureDailyPlanOnDemand(
     actor,
   })
   return r.plan
+}
+
+// ─── 개선 과제 → 일정 추가 ─────────────────────────
+
+export type ActionForPlan = { id: number; store: string; title: string; dueDate: string }
+
+/** 같은 매장 항목 뒤, 없으면 마지막 고정 시각 항목(마감 보고 등) 앞 */
+function sortOrderNear(items: DailyPlanItemRow[], store: string): number {
+  const key = store.trim().toLowerCase()
+  const same = items.filter((i) => key && i.store_name.trim().toLowerCase() === key)
+  if (same.length > 0) return same[same.length - 1].sort_order + 1
+  const last = items[items.length - 1]
+  if (last && last.time_slot) return last.sort_order - 1
+  return (last?.sort_order || 0) + 10
+}
+
+/** 일정에 개선 과제 항목 추가(이미 있으면 그대로). 재생성 때 지워지지 않도록 manual 구간 */
+export async function addActionItemToPlan(
+  plan: DailyPlanRow,
+  action: ActionForPlan,
+  kind: 'owner' | 'verify'
+): Promise<{ added: boolean; itemId: number | null }> {
+  if (plan.status === 'closed') return { added: false, itemId: null }
+  const items = await getDailyPlanItems(plan.id)
+  const found = items.find((i) => i.source === 'action' && i.ref_id === String(action.id))
+  if (found) return { added: false, itemId: found.id }
+  const draft: PlanItemDraft = {
+    source: 'action',
+    refId: String(action.id),
+    storeName: action.store,
+    timeSlot: '',
+    block: MANUAL_BLOCK,
+    category: '당일 과제',
+    title: `${kind === 'verify' ? '[재확인]' : '[개선]'} ${action.title}`,
+    description: action.dueDate ? `due ${action.dueDate}` : '',
+    estMinutes: kind === 'verify' ? 10 : 20,
+    linkType: 'store_actions',
+    photoRequired: false,
+    sortOrder: sortOrderNear(items, action.store),
+  }
+  const res = (await supabaseInsert('daily_plan_items', draftToRow(plan.id, draft))) as
+    | Record<string, unknown>[]
+    | Record<string, unknown>
+  const row = Array.isArray(res) ? res[0] : res
+  const est = summarizePlanItems([
+    ...items.map(planItemLite),
+    { ...draft, status: 'todo', actualMinutes: null, skipReason: '' },
+  ]).estTotal
+  await supabaseUpdateByFilter('daily_plans', `id=eq.${plan.id}`, { est_total: est, updated_at: new Date().toISOString() })
+  return { added: true, itemId: row?.id != null ? Number(row.id) : null }
+}
+
+/** 슈퍼바이저 일정에 방문 매장 추가 — 없으면 일정 생성, 있으면 미착수 항목 재생성 */
+export async function addVisitStoreToPlan(params: {
+  date: string
+  employee: PlanEmployee
+  store: string
+  actor: string
+}): Promise<{ plan: DailyPlanRow | null; added: boolean; closed?: boolean }> {
+  const store = params.store.trim()
+  const existing = await getDailyPlanFor(params.date, params.employee.id)
+  if (existing?.status === 'closed') return { plan: existing, added: false, closed: true }
+  const route = existing?.route_stores || []
+  if (route.some((s) => s.trim().toLowerCase() === store.toLowerCase())) return { plan: existing, added: false }
+  const r = await ensureDailyPlan({
+    date: params.date,
+    employee: params.employee,
+    role: 'supervisor',
+    routeStores: [...route, store],
+    actor: params.actor,
+    regenerate: true,
+    force: true,
+  })
+  return { plan: r.plan, added: true }
 }
 
 // ─── 공개·푸시 ─────────────────────────────────────
@@ -752,7 +978,7 @@ export function planRecipient(plan: Pick<DailyPlanRow, 'employee_store' | 'emplo
   return store && name ? { store, name } : null
 }
 
-/** 미공개 업무표 공개 + 푸시. 공개된 건수 반환 */
+/** 미공개 일정표 공개 + 푸시. 공개된 건수 반환 */
 export async function publishDailyPlansForDate(date: string, pushTitle: string, pushBody: string): Promise<number> {
   const rows = ((await supabaseUpdateByFilterReturning(
     'daily_plans',
@@ -806,7 +1032,7 @@ async function writeDailyPlanWorkLog(plan: DailyPlanRow, items: DailyPlanItemRow
   return id
 }
 
-/** 미완료 본사·이월 과제를 다음 날 업무표(이미 있으면)에 추가 */
+/** 미완료 본사·이월 과제를 다음 날 일정표(이미 있으면)에 추가 */
 async function carryToNextPlan(plan: DailyPlanRow, items: DailyPlanItemRow[]): Promise<number> {
   const carry = selectCarryItems(items)
   if (carry.length === 0) return 0
@@ -887,7 +1113,7 @@ export async function closeDailyPlan(plan: DailyPlanRow, opts: { actor: string; 
   }
 }
 
-/** 항목 변경 후 업무표 상태(planned → in_progress) 갱신 */
+/** 항목 변경 후 일정표 상태(planned → in_progress) 갱신 */
 export async function touchDailyPlanProgress(planId: number): Promise<void> {
   await supabaseUpdateByFilter('daily_plans', `id=eq.${planId}&status=eq.planned`, {
     status: 'in_progress',

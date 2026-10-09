@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
       }
       if (plan.status === 'closed') {
-        return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 업무표입니다.' }, { status: 409 })
+        return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 일정표입니다.' }, { status: 409 })
       }
       const title = String(body.title || '').trim().slice(0, 300)
       if (!title) return NextResponse.json({ success: false, message: 'title required' }, { status: 400 })
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
     }
     if (plan.status === 'closed') {
-      return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 업무표입니다.' }, { status: 409 })
+      return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 일정표입니다.' }, { status: 409 })
     }
 
     if (action === 'remove') {

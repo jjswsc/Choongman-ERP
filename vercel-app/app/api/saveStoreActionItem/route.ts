@@ -16,6 +16,7 @@ import {
   resolveStoreActionScope,
   storeActionStoreAllowed,
 } from "@/lib/store-action-server"
+import { syncDailyPlanOnStoreActionCreated } from "@/lib/daily-plan-hooks"
 
 /** 매장 개선 과제 신규 등록 */
 export async function POST(request: NextRequest) {
@@ -141,6 +142,16 @@ export async function POST(request: NextRequest) {
       body: `${store} · ${title}${repeatHint}\n기한: ${dueDate} · 재확인: ${verifierName}`,
       recipients: owner && owner.name.toLowerCase() !== scope.actorName.toLowerCase() ? [owner] : [],
     })
+
+    if (newId) {
+      await syncDailyPlanOnStoreActionCreated({
+        action: { id: newId, store, title, dueDate },
+        ownerName,
+        ownerUserId,
+        actorName: scope.actorName || createdBy,
+        actorEmployeeId: scope.actorEmployeeId,
+      })
+    }
 
     return NextResponse.json({
       success: true,

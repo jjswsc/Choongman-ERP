@@ -1,4 +1,7 @@
-/** 일일 업무표 표시 라벨 (DB 값 → i18n 키) */
+/** 일일 일정표 표시 라벨 (DB 값 → i18n 키) */
+
+import type { DailyPlanBundle } from "@/lib/api-client/daily-plans"
+import { computePlanTimeline, minToHm } from "@/lib/daily-plan-timeline"
 
 type T = (k: string) => string
 
@@ -83,8 +86,32 @@ export function dailyPlanLabelers(t: T) {
   }
 }
 
-/** 업무 항목에서 이동할 화면 — 모바일은 탭 전환, 관리자는 경로 */
-export function dailyPlanLinkHref(linkType: string, store: string): string | null {
+/** 일정 분류 → 개선 과제 분류 */
+const ACTION_CATEGORY_OF: Record<string, string> = {
+  인원: "인력",
+  시설: "시설연계",
+  교육: "교육",
+  "재고·발주": "재고·발주",
+  청결: "청결",
+  고객: "서비스",
+}
+
+/** 일정 항목에서 이동할 화면. kind=new_action 이면 그 매장 개선 과제 등록(방문 출처) */
+export function dailyPlanLinkHref(
+  item: { link_type: string; store_name: string; source?: string; ref_id?: string; category?: string },
+  kind: "open" | "new_action" = "open"
+): string | null {
+  const linkType = item.link_type
+  const store = item.store_name
+  if (kind === "new_action") {
+    const q = new URLSearchParams({ tab: "new", source: "visit" })
+    if (store) q.set("store", store)
+    q.set("category", ACTION_CATEGORY_OF[String(item.category || "")] || "기타")
+    return `/admin/store-actions?${q}`
+  }
+  if (item.source === "action" && item.ref_id && /^\d+$/.test(item.ref_id)) {
+    return `/admin/store-actions?id=${item.ref_id}`
+  }
   const q = store ? `?store=${encodeURIComponent(store)}` : ""
   switch (linkType) {
     case "store_check":
@@ -100,6 +127,33 @@ export function dailyPlanLinkHref(linkType: string, store: string): string | nul
     default:
       return null
   }
+}
+
+const LINE_MARK: Record<string, string> = { done: "✅", skipped: "⏭️", doing: "▶️", todo: "▫️" }
+
+/** 한 사람 일정 → LINE 붙여넣기 문구 (표 없이 시간순) */
+export function buildDailyPlanLineText(b: DailyPlanBundle, t: T): string {
+  const { plan, items, summary } = b
+  const { slots } = computePlanTimeline(
+    items.map((i) => ({ id: i.id, source: i.source, storeName: i.store_name, timeSlot: i.time_slot, estMinutes: i.est_minutes })),
+    { shiftIn: plan.shift_in, travelMinutes: b.travelMinutes }
+  )
+  const lines = [`📅 **${t("dp_line_title")} ${plan.plan_date}** · ${plan.employee_name}`]
+  const route = plan.route_stores || []
+  if (route.length > 0) lines.push(`📍 ${route.join(" → ")}`)
+  lines.push("")
+  for (const it of items) {
+    const s = slots.get(it.id)
+    const at = s ? (s.end > s.start && it.source !== "visit" ? `${minToHm(s.start)}–${minToHm(s.end)}` : minToHm(s.start)) : ""
+    if (it.source === "visit") {
+      lines.push(`🚗 ${at} **${t("dp_visit_title")} ${it.title}**`)
+      continue
+    }
+    const why = it.status === "skipped" && it.skip_reason ? ` (${it.skip_reason})` : ""
+    lines.push(`${LINE_MARK[it.status] || "▫️"} ${at} ${it.title}${why}`)
+  }
+  lines.push("", `${t("dp_col_progress")} ${summary.done}/${summary.total} (${summary.doneRate}%)`)
+  return lines.join("\n")
 }
 
 export function minutesLabel(n: number, t: T): string {

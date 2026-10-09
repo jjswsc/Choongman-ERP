@@ -1,4 +1,4 @@
-/** 일일 업무표 — 템플릿 선택·항목 생성·요약 (순수 함수, DB 없음) */
+/** 일일 일정표 — 템플릿 선택·항목 생성·요약 (순수 함수, DB 없음) */
 
 export const DAILY_PLAN_ROLES = ["supervisor", "manager", "staff"] as const
 export type DailyPlanRole = (typeof DAILY_PLAN_ROLES)[number]
@@ -25,7 +25,7 @@ export const DAILY_PLAN_LINK_TYPES = [
 
 export const DAILY_PLAN_CATEGORIES = ["인원", "시설", "교육", "재고·발주", "청결", "당일 과제", "고객", "기타"] as const
 
-/** 하루 기준 근무 분(7시간) — 업무표 총 예상 시간 비교용 */
+/** 하루 기준 근무 분(7시간) — 일정표 총 예상 시간 비교용 */
 export const DAILY_PLAN_WORKDAY_MINUTES = 420
 
 export type RoutineTemplateItem = {
@@ -52,6 +52,8 @@ export type RoutineTemplate = {
   status: string
   version: number
   note: string
+  /** 매장 간 이동 분 */
+  travelMinutes: number
   updatedBy: string
   updatedAt: string
   items: RoutineTemplateItem[]
@@ -160,7 +162,7 @@ function matchesPerson(
   return n === norm(employee.name) || (!!employee.nick && n === norm(employee.nick))
 }
 
-/** 업무표에 넣을 개선 과제 — 담당 과제(기한초과·오늘·내일), SV는 재확인 대기·담당 매장 기한초과 */
+/** 일정표에 넣을 개선 과제 — 담당 과제(기한초과·오늘·내일), SV는 재확인 대기·담당 매장 기한초과 */
 export function selectActionsForPlan(params: {
   actions: OpenActionLite[]
   role: DailyPlanRole
@@ -208,7 +210,7 @@ export function planItemDraftKey(d: Pick<PlanItemDraft, "source" | "storeName" |
 }
 
 /**
- * 업무표 항목 생성.
+ * 일정표 항목 생성.
  * 순서: 템플릿 머리(매장 항목 이전) → 당일 과제(본사·이월·매장 무관 과제) → 매장별(방문 + 매장 항목 + 매장 과제) → 템플릿 꼬리
  */
 export function buildDailyPlanItems(params: {
@@ -410,7 +412,7 @@ export function buildDailyPlanWorkLogContent(params: {
 }): string {
   const s = summarizePlanItems(params.items)
   const lines = [
-    `[일일 업무표 ${params.dateYmd}] 완료 ${s.done}/${s.total} (${s.doneRate}%) · 예상 ${s.estTotal}분 / 실제 ${s.actualTotal}분${params.auto ? " · 자동 마감" : ""}`,
+    `[일일 일정표 ${params.dateYmd}] 완료 ${s.done}/${s.total} (${s.doneRate}%) · 예상 ${s.estTotal}분 / 실제 ${s.actualTotal}분${params.auto ? " · 자동 마감" : ""}`,
   ]
   const pending = params.items.filter((i) => i.source !== "visit" && i.status !== "done")
   if (pending.length > 0) {

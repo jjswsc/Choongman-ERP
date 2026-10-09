@@ -189,7 +189,7 @@ export async function runAutoNotices(base: Date = new Date()): Promise<AutoNotic
     }
   }
 
-  // —— 직급별 일일 업무표 (18시 내일 생성·공개, 22시 자동 마감) ——
+  // —— 직급별 일일 일정표 (18시 내일 생성·공개, 22시 자동 마감) ——
   try {
     result.dailyPlans = await runDailyPlanCron(today, hourBangkok)
   } catch (e) {
