@@ -24,6 +24,6 @@ alwaysApply: false
 
 ## 3. 검사
 
-- `npm run api:check` — 기준선에 없는 새 라우트만 규칙 검사(GitHub Actions `Build Vercel App`에서 실행).
+- `npm run api:check` — 기준선에 없는 새 라우트만 규칙 검사. GitHub Actions `Build Vercel App`에서는 lint·test·build **뒤에 경고 전용**(`continue-on-error`)으로 돈다 — 위반이 있어도 배포 검증은 막지 않으니, Actions 로그의 경고를 보고 고친다.
 - 라우트를 삭제했으면 `npm run api:check -- --prune`으로 기준선에서 제거한다. **위반 라우트를 기준선에 직접 추가하지 않는다.**
 - 라우트를 추가·삭제한 PR에서는 `npm run api:inventory`로 목록 문서도 갱신한다.
