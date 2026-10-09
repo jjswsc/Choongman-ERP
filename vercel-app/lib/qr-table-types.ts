@@ -265,8 +265,9 @@ function qrHallPromoFieldsFromOrderLine(it: Record<string, unknown>): Pick<
 }
 
 /**
- * QR 홀 전표용: 같은 주문의 손님 줄 전체 + 이번 제출분만 isAddon.
- * 입장료·직원 POS 줄 제외. 신규만 있는 첫 전표는 isAddon 없음.
+ * QR 홀 전표용: 같은 주문의 줄 전체(QR 손님 + 직원 POS 추가분) + 이번 제출분만 isAddon.
+ * 직원 줄을 빼면 전표 합계가 실제 청구액과 달라진다. 뷔페 입장료 줄만 제외.
+ * 신규만 있는 첫 전표는 isAddon 없음.
  */
 export function buildQrGuestCumulativeHallPrintItems(
   params: {
@@ -282,7 +283,7 @@ export function buildQrGuestCumulativeHallPrintItems(
     [...params.newLineIds].map((id) => String(id ?? '').trim()).filter(Boolean)
   )
   const newLineIdsKey = [...newIds].sort().join(',')
-  const candidates = (params.allOrderItems || []).filter((it) => isQrGuestHallCandidate(it))
+  const candidates = (params.allOrderItems || []).filter((it) => !isQrBuffetPackageKitchenSkipLine(it))
   const hasPrevious = candidates.some((it) => {
     const id = String(it.id ?? '').trim()
     return Boolean(id) && !newIds.has(id)

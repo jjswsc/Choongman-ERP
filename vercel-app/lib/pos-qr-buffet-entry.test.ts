@@ -215,16 +215,34 @@ describe('buildQrGuestCumulativeHallPrintItems', () => {
     expect(built.items[0]?.promoItems?.map((row) => row.menuName)).toEqual(['Soy Garlic Chicken', 'Rice'])
   })
 
-  it('excludes buffet entry and staff POS lines', () => {
+  it('excludes buffet entry but keeps staff POS lines so the total matches the bill', () => {
     const built = buildQrGuestCumulativeHallPrintItems({
       allOrderItems: [
         buffet,
-        { id: 'cart-1', name: 'Staff Coke', price: 30, qty: 1 },
+        ...previous,
+        { id: '56-staff-pepsi', name: 'Pepsi Zero Sugar', price: 30, qty: 3 },
         ...newest,
       ],
       newLineIds: newest.map((it) => it.id),
     })
-    expect(built.items.map((it) => it.id)).toEqual(['qr-new-food', 'qr-new-coke'])
+    expect(built.items.map((it) => it.id)).toEqual([
+      'qr-old-food',
+      'qr-old-coke',
+      '56-staff-pepsi',
+      'qr-new-food',
+      'qr-new-coke',
+    ])
+    expect(built.items.filter((it) => it.isAddon).map((it) => it.id)).toEqual(['qr-new-food', 'qr-new-coke'])
+    expect(built.subtotal).toBe(169 + 30 + 90 + 169 + 30)
+  })
+
+  it('marks new QR lines as addon when only staff lines came before', () => {
+    const built = buildQrGuestCumulativeHallPrintItems({
+      allOrderItems: [{ id: 'cart-1', name: 'Staff Coke', price: 30, qty: 1 }, ...newest],
+      newLineIds: newest.map((it) => it.id),
+    })
+    expect(built.items.map((it) => it.id)).toEqual(['cart-1', 'qr-new-food', 'qr-new-coke'])
+    expect(built.items.filter((it) => it.isAddon)).toHaveLength(2)
   })
 })
 

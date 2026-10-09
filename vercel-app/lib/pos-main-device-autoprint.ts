@@ -282,6 +282,8 @@ async function printQrNoKitchenLinesToHall(
     .filter(Boolean)
 
   let liveItems: Array<Record<string, unknown>> = []
+  let discountAmt = 0
+  let couponDiscountAmt = 0
   if (Number.isFinite(orderId) && orderId > 0) {
     try {
       const list = await getPosOrders({
@@ -291,6 +293,8 @@ async function printQrNoKitchenLinesToHall(
       const live = list[0]
       if (live?.items?.length) {
         liveItems = live.items as unknown as Array<Record<string, unknown>>
+        discountAmt = Math.max(0, Number(live.discountAmt ?? 0) || 0)
+        couponDiscountAmt = Math.max(0, Number(live.couponDiscountAmt ?? 0) || 0)
         if (live.orderNo && !order.orderNo) order = { ...order, orderNo: live.orderNo }
         if (live.tableName && !order.tableName) order = { ...order, tableName: live.tableName }
         if (live.memo && !order.memo) order = { ...order, memo: live.memo }
@@ -340,9 +344,9 @@ async function printQrNoKitchenLinesToHall(
       ...order,
       items,
       subtotal: built.subtotal,
-      total: built.subtotal,
-      discountAmt: 0,
-      couponDiscountAmt: 0,
+      total: 0,
+      discountAmt,
+      couponDiscountAmt,
     },
     ctx.pricingAdjustments,
     {
@@ -372,8 +376,6 @@ async function printQrNoKitchenLinesToHall(
       ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
       ...((it as { isAddon?: boolean }).isAddon ? { isAddon: true as const } : {}),
     })),
-    subtotal: built.subtotal,
-    total: built.subtotal,
     _autoPrintDedupeKey: `order:${orderId}:hall:qr-nokitchen:${built.newLineIdsKey || '0'}`,
   }
   await printHallReceiptPayload(payload, ctx)
