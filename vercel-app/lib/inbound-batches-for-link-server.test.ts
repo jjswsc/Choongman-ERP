@@ -7,23 +7,33 @@ import {
 } from './inbound-batches-for-link-server'
 
 describe('buildInboundVendorOrFilter', () => {
-  it('builds vendor_code and vendor_name eq clauses', () => {
+  it('builds vendor_code and vendor_name in clauses with quoted values', () => {
     const clause = buildInboundVendorOrFilter(['1016', 'Sawasdee Plastic'])
-    expect(clause).toContain('vendor_code.eq.1016')
-    expect(clause).toContain('vendor_name.eq.1016')
-    expect(clause).toContain('vendor_name.eq.Sawasdee%20Plastic')
-    expect(clause.startsWith('&or=(')).toBe(true)
+    expect(decodeURIComponent(clause)).toBe(
+      '&or=(vendor_code.in.("1016","Sawasdee Plastic"),vendor_name.in.("1016","Sawasdee Plastic"))'
+    )
   })
 
-  it('encodes commas in vendor names for PostgREST', () => {
-    const clause = buildInboundVendorOrFilter(['Sawaddee Plastic (Thailand) Co.,Ltd.'])
-    expect(clause).toContain('Co.%2CLtd.')
-    expect(clause).not.toMatch(/Co.,Ltd/)
+  it('quotes vendor names containing commas and parentheses (PGRST100 regression)', () => {
+    const clause = buildInboundVendorOrFilter(['1021', 'C.A.P. Intertrade Co.,Ltd.', 'Sawaddee Plastic (Thailand) Co.,Ltd.'])
+    const decoded = decodeURIComponent(clause)
+    expect(decoded).toContain('"C.A.P. Intertrade Co.,Ltd."')
+    expect(decoded).toContain('"Sawaddee Plastic (Thailand) Co.,Ltd."')
+    expect(decoded).not.toMatch(/\.eq\./)
+  })
+
+  it('escapes double quotes inside values', () => {
+    const decoded = decodeURIComponent(buildInboundVendorOrFilter(['A "B" Co']))
+    expect(decoded).toContain('"A \\"B\\" Co"')
   })
 
   it('dedupes case-insensitive values', () => {
-    const clause = buildInboundVendorOrFilter(['1016', '1016'])
-    expect(clause.match(/vendor_code\.eq\.1016/g)?.length).toBe(1)
+    const decoded = decodeURIComponent(buildInboundVendorOrFilter(['1016', '1016']))
+    expect(decoded.match(/"1016"/g)?.length).toBe(2)
+  })
+
+  it('returns empty string when no values', () => {
+    expect(buildInboundVendorOrFilter(['', '  '])).toBe('')
   })
 })
 

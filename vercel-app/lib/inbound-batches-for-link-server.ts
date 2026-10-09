@@ -1,4 +1,5 @@
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { postgrestQuotedInList } from '@/lib/office-store-canonical'
 
 const INBOUND_LINK_REMAIN_EPS = 0.01
 const INBOUND_BATCH_VENDOR_LIMIT = 500
@@ -12,9 +13,13 @@ export type InboundBatchLinkRow = {
   location?: string
 }
 
-/** PostgREST or=(vendor_code.eq.X,vendor_name.eq.Y,...) — 값 내 쉼표는 encodeURIComponent로 이스케이프 */
+/**
+ * PostgREST or=(vendor_code.in.("X","Y"),vendor_name.in.("X","Y")).
+ * PostgREST는 URL 디코딩 후 논리 트리를 파싱하므로 %2C 인코딩만으로는 `Co.,Ltd.`의 쉼표·괄호가
+ * 구분자로 해석된다 — 값은 반드시 큰따옴표로 감싼다.
+ */
 export function buildInboundVendorOrFilter(matchValues: string[]): string {
-  const parts: string[] = []
+  const values: string[] = []
   const seen = new Set<string>()
   for (const raw of matchValues) {
     const trimmed = String(raw || '').trim()
@@ -22,12 +27,11 @@ export function buildInboundVendorOrFilter(matchValues: string[]): string {
     const key = trimmed.toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
-    const enc = encodeURIComponent(trimmed)
-    parts.push(`vendor_code.eq.${enc}`)
-    parts.push(`vendor_name.eq.${enc}`)
+    values.push(encodeURIComponent(postgrestQuotedInList([trimmed])))
   }
-  if (!parts.length) return ''
-  return `&or=(${parts.join(',')})`
+  if (!values.length) return ''
+  const list = values.join(',')
+  return `&or=(vendor_code.in.(${list}),vendor_name.in.(${list}))`
 }
 
 export async function resolveInboundVendorMatchValues(

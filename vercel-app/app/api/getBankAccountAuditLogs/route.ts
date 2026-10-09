@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { canViewBankAccountAuditLogs } from '@/lib/permissions'
+import { isMissingAuditTableError } from '@/lib/bank-account-audit'
 
 type AuditRow = {
   id?: number
@@ -76,6 +77,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, list }, { headers })
   } catch (e) {
+    if (isMissingAuditTableError(e)) {
+      console.warn('bank_account_audit_logs table missing — run sql/bank_account_audit_logs.sql')
+      return NextResponse.json({ success: true, list: [] }, { headers })
+    }
     console.error('getBankAccountAuditLogs:', e)
     return NextResponse.json({ success: true, list: [] }, { headers })
   }

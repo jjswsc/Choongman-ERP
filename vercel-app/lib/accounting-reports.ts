@@ -26,6 +26,7 @@ import {
 } from '@/lib/accounting-balance-summaries'
 import { sumBorrowingsBalance } from '@/lib/borrowing-ledger'
 import { getGlBalancesAsOf, glBalanceForCode } from '@/lib/gl-balance-as-of'
+import { mapWithConcurrency } from '@/lib/map-with-concurrency'
 import { sumCompletedPosSalesTotal } from '@/lib/accounting-pos-sales'
 import {
   fetchStockLogPurchaseAgg,
@@ -3289,6 +3290,50 @@ function getMonthsFromYearStart(yearMonth: string): string[] {
   return months
 }
 
+/** 월별 손익 1건이 Supabase 조회를 여러 번 하므로 병렬은 소수로 제한 (maxDuration 120초 내 연초~12월) */
+export const MONTHLY_INCOME_REPORT_CONCURRENCY = 3
+
+const INCOME_REPORT_SHARE_TTL_MS = 30_000
+const INCOME_REPORT_SHARE_MAX_ENTRIES = 200
+const incomeReportShare = new Map<string, { at: number; promise: Promise<IncomeStatementReport> }>()
+
+/**
+ * 같은 인스턴스에 동시에 들어온 대차대조표(월별 비교 → 월마다 연초~해당월)·관리마진 요청이
+ * 동일 조건의 월 손익을 반복 계산하지 않도록 진행 중·직후(30초) 결과를 공유한다.
+ */
+export function computeIncomeStatementReportShared(input: IncomeScopeInput): Promise<IncomeStatementReport> {
+  const key = JSON.stringify([
+    input.yearMonth ?? null,
+    input.storeFilter ?? null,
+    input.userStore ?? null,
+    input.userRole ?? null,
+    input.allowedStores ?? null,
+    input.tenantId ?? null,
+    Boolean(input.includeDebug),
+  ])
+  const now = Date.now()
+  const hit = incomeReportShare.get(key)
+  if (hit && now - hit.at < INCOME_REPORT_SHARE_TTL_MS) return hit.promise
+
+  if (incomeReportShare.size >= INCOME_REPORT_SHARE_MAX_ENTRIES) {
+    for (const [k, v] of incomeReportShare) {
+      if (now - v.at >= INCOME_REPORT_SHARE_TTL_MS) incomeReportShare.delete(k)
+    }
+    while (incomeReportShare.size >= INCOME_REPORT_SHARE_MAX_ENTRIES) {
+      const oldest = incomeReportShare.keys().next().value
+      if (oldest === undefined) break
+      incomeReportShare.delete(oldest)
+    }
+  }
+
+  const promise = computeIncomeStatementReport(input)
+  incomeReportShare.set(key, { at: now, promise })
+  promise.catch(() => {
+    if (incomeReportShare.get(key)?.promise === promise) incomeReportShare.delete(key)
+  })
+  return promise
+}
+
 const UNPOSTED_WITHDRAW_CATEGORIES = ['transfer', 'loan', 'advance', 'correction'] as const
 
 export async function computeBalanceSheetReport(input: IncomeScopeInput): Promise<BalanceSheetReport> {
@@ -3403,26 +3448,21 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
     /* RPC·select 폴백 실패 시 보조원장 유지 */
   }
 
-  const currentIncome = await computeIncomeStatementReport({
-    yearMonth,
-    storeFilter,
-    userStore: input.userStore,
-    userRole: input.userRole,
-    includeDebug: false,
-  })
-
-  const months = getMonthsFromYearStart(yearMonth)
-  let retainedEarningsYtd = 0
-  for (const ym of months) {
-    const income = await computeIncomeStatementReport({
+  const incomeForMonth = (ym: string) =>
+    computeIncomeStatementReportShared({
       yearMonth: ym,
       storeFilter,
       userStore: input.userStore,
       userRole: input.userRole,
       includeDebug: false,
     })
-    retainedEarningsYtd += income.netProfit
-  }
+
+  const months = getMonthsFromYearStart(yearMonth)
+  const ytdNetProfits = await mapWithConcurrency(months, MONTHLY_INCOME_REPORT_CONCURRENCY, async (ym) =>
+    (await incomeForMonth(ym)).netProfit
+  )
+  const retainedEarningsYtd = ytdNetProfits.reduce((sum, n) => sum + n, 0)
+  const currentIncome = await incomeForMonth(yearMonth)
 
   const openingCapital = 0
   const equityTotal = openingCapital + retainedEarningsYtd

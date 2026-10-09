@@ -1,10 +1,12 @@
 import {
-  computeIncomeStatementReport,
+  computeIncomeStatementReportShared,
   loadAccountSubjectMeta,
   loadItemAccountSubjectMap,
+  MONTHLY_INCOME_REPORT_CONCURRENCY,
   normalizeIncomeScope,
   type IncomeScopeInput,
 } from '@/lib/accounting-reports'
+import { mapWithConcurrency } from '@/lib/map-with-concurrency'
 import { mergeIncomeStatementReports } from '@/lib/accounting-income-statement-merge'
 import { fetchStockLogPurchaseAgg, resolvePurchaseLocationPatterns } from '@/lib/accounting-stock-purchase-agg'
 import { getBangkokDateRangeUtc, getBangkokMonthRange, expandBangkokYearMonthsInclusive, priorBangkokPeriodMonths } from '@/lib/bangkok-time'
@@ -377,28 +379,18 @@ export async function computeManagementMarginBridge(
     ? expandBangkokYearMonthsInclusive(priorMeta.startYm, priorMeta.endYm)
     : []
 
-  const [incomeReports, priorIncomeReports] = await Promise.all([
-    Promise.all(
-      months.map((ym) =>
-        computeIncomeStatementReport({
-          ...input,
-          yearMonth: ym,
-          includeDebug: false,
-        })
-      )
-    ),
-    priorMonths.length > 0
-      ? Promise.all(
-          priorMonths.map((ym) =>
-            computeIncomeStatementReport({
-              ...input,
-              yearMonth: ym,
-              includeDebug: false,
-            })
-          )
-        )
-      : Promise.resolve([]),
-  ])
+  const allIncomeReports = await mapWithConcurrency(
+    [...months, ...priorMonths],
+    MONTHLY_INCOME_REPORT_CONCURRENCY,
+    (ym) =>
+      computeIncomeStatementReportShared({
+        ...input,
+        yearMonth: ym,
+        includeDebug: false,
+      })
+  )
+  const incomeReports = allIncomeReports.slice(0, months.length)
+  const priorIncomeReports = allIncomeReports.slice(months.length)
   const mergedIncome =
     incomeReports.length === 1
       ? incomeReports[0]

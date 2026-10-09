@@ -19,9 +19,9 @@ function cut(v: string | null | undefined, max: number): string | null {
   return s.slice(0, max)
 }
 
-function isMissingAuditTableError(e: unknown): boolean {
+export function isMissingAuditTableError(e: unknown): boolean {
   const msg = String(e || '').toLowerCase()
-  return msg.includes('bank_account_audit_logs') || msg.includes('42p01')
+  return msg.includes('bank_account_audit_logs') || msg.includes('42p01') || msg.includes('pgrst205')
 }
 
 export function actorFromAuth(auth: JwtPayload): BankAccountAuditActor {
