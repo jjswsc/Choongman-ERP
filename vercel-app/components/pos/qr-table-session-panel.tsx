@@ -246,6 +246,8 @@ export function QrTableSessionPanel(props: {
   const printBusy = busy || printing
   const callKind = session?.staffCallAt ? normalizeQrStaffCallKind(session.staffCallNote) : null
   const callKindLabel = callKind ? qrStaffCallKindLabel(callKind, tr) : ''
+  /** 뷔페만 QR 인원이 입장료 줄 수량을 바꾼다 — 일반 주문 QR은 테이블 패널 인원 버튼으로 충분 */
+  const sessionIsBuffet = Boolean(session?.tierId) && Number(session?.tierPriceSnapshot ?? 0) > 0
 
   const badge =
     !session
@@ -280,61 +282,84 @@ export function QrTableSessionPanel(props: {
       {/* 한 줄 툴바 */}
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 px-2.5 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white"
+            title={tr('qrTableSessionTitle', 'QR 테이블오더')}
+          >
             <QrCode className="h-3.5 w-3.5" aria-hidden />
+            <span className="sr-only">{tr('qrTableSessionTitle', 'QR 테이블오더')}</span>
           </span>
-          <span className="truncate text-xs font-semibold tracking-tight text-slate-800">
-            {tr('qrTableSessionTitle', 'QR 테이블오더')}
-          </span>
+          {session ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 px-2 text-xs"
+              disabled={printBusy}
+              title={printQrHint}
+              onClick={() => void printTableQr()}
+            >
+              <Printer className="mr-1 h-3.5 w-3.5" aria-hidden />
+              {printQrLabel}
+            </Button>
+          ) : null}
           {badge ? (
-            <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${badge.className}`}>
+            <span
+              className={`min-w-0 truncate rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${badge.className}`}
+              title={
+                session?.posOrderId
+                  ? tr('qrTableSessionOrderNo', '주문 #{id}').replace('{id}', String(session.posOrderId))
+                  : undefined
+              }
+            >
               {badge.label}
+              {session?.posOrderId ? ` · #${session.posOrderId}` : ''}
             </span>
           ) : null}
         </div>
-
-        <div className="mx-0.5 hidden h-5 w-px bg-slate-200 sm:block" aria-hidden />
-
         {session ? (
           <>
-            <div className="flex items-center gap-1 text-xs text-slate-700">
-              <span className="text-[11px] text-slate-500">{tr('qrTableSessionGuests', '인원')}</span>
-              <button
-                type="button"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
-                disabled={busy}
-                onClick={() => void changeGuests(-1)}
-                aria-label="−"
-              >
-                −
-              </button>
-              <span className="min-w-[1.25rem] text-center text-sm font-semibold tabular-nums">{session.guestCount}</span>
-              <button
-                type="button"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
-                disabled={busy}
-                onClick={() => void changeGuests(1)}
-                aria-label="+"
-              >
-                +
-              </button>
-            </div>
+            {sessionIsBuffet ? (
+              <>
+                <div className="flex items-center gap-1 text-xs text-slate-700">
+                  <span className="text-[11px] text-slate-500">{tr('qrTableSessionGuests', '인원')}</span>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    disabled={busy}
+                    onClick={() => void changeGuests(-1)}
+                    aria-label="−"
+                  >
+                    −
+                  </button>
+                  <span className="min-w-[1.25rem] text-center text-sm font-semibold tabular-nums">{session.guestCount}</span>
+                  <button
+                    type="button"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    disabled={busy}
+                    onClick={() => void changeGuests(1)}
+                    aria-label="+"
+                  >
+                    +
+                  </button>
+                </div>
 
-            <span className="text-xs font-semibold tabular-nums text-slate-800">
-              ฿{session.entryTotal.toLocaleString()}
-            </span>
-            <span
-              className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
-                session.entryPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
-              }`}
-            >
-              {session.entryPaid
-                ? tr('qrTableSessionEntryConfirmed', '입장확정')
-                : tr('qrTableSessionEntryPending', '미확정')}
-            </span>
+                <span className="text-xs font-semibold tabular-nums text-slate-800">
+                  ฿{session.entryTotal.toLocaleString()}
+                </span>
+                <span
+                  className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${
+                    session.entryPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
+                  }`}
+                >
+                  {session.entryPaid
+                    ? tr('qrTableSessionEntryConfirmed', '입장확정')
+                    : tr('qrTableSessionEntryPending', '미확정')}
+                </span>
+              </>
+            ) : null}
 
             {orderBalance && orderBalance.orderId ? (
-              <span className="hidden items-center gap-1.5 text-[11px] text-slate-600 md:inline-flex">
+              <span className="flex basis-full flex-wrap items-center gap-x-1.5 text-[11px] text-slate-600">
                 <span>
                   {tr('qrTableSessionOrderTotal', '주문 합계')} ฿
                   {Number(orderBalance.total || 0).toLocaleString()}
@@ -352,18 +377,7 @@ export function QrTableSessionPanel(props: {
               </span>
             ) : null}
 
-            <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 px-3 text-xs"
-                disabled={printBusy}
-                title={printQrHint}
-                onClick={() => void printTableQr()}
-              >
-                <Printer className="mr-1 h-3.5 w-3.5" aria-hidden />
-                {printQrLabel}
-              </Button>
+            <div className="ml-auto flex flex-wrap items-center gap-1.5 empty:hidden">
               {session.staffCallAt ? (
                 <Button size="sm" variant="destructive" className="h-8 px-3 text-xs font-semibold" disabled={busy} onClick={() => void ackCall()}>
                   {callKindLabel} · {tr('qrTableSessionAckCall', '확인')}
@@ -373,11 +387,6 @@ export function QrTableSessionPanel(props: {
                 <Button size="sm" className="h-8 px-3 text-xs" disabled={busy} onClick={() => void confirmEntry()}>
                   {tr('qrTableSessionConfirmEntry', '입장 후불 확정')}
                 </Button>
-              ) : null}
-              {session.posOrderId ? (
-                <span className="text-[10px] text-slate-400">
-                  {tr('qrTableSessionOrderNo', '주문 #{id}').replace('{id}', String(session.posOrderId))}
-                </span>
               ) : null}
             </div>
           </>
@@ -452,22 +461,6 @@ export function QrTableSessionPanel(props: {
           {callKindLabel}
           {callKind === 'other' && session.staffCallNote ? ` · ${session.staffCallNote}` : ''}
         </p>
-      ) : null}
-      {session && orderBalance && orderBalance.orderId ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-slate-100 px-2.5 py-1 text-[11px] text-slate-600 md:hidden">
-          <span>
-            {tr('qrTableSessionOrderTotal', '주문 합계')} ฿
-            {Number(orderBalance.total || 0).toLocaleString()}
-          </span>
-          <span>
-            {tr('qrTableSessionPaidQr', 'QR 입금')} ฿
-            {Number(orderBalance.paymentQr || 0).toLocaleString()}
-          </span>
-          <span className="font-semibold text-amber-900">
-            {tr('qrTableSessionBalanceDue', '잔액')} ฿
-            {Number(orderBalance.balanceDue || 0).toLocaleString()}
-          </span>
-        </div>
       ) : null}
     </div>
   )

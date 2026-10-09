@@ -1,11 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   getPosDepositHistory,
   type PosDepositHeldHolder,
@@ -19,6 +18,7 @@ const KIND_KEY: Record<string, string> = {
   forfeit: 'posDepositKindForfeit',
 }
 
+/** 상단 툴바 버튼 — 누르면 예약금(จอง / มัดจำ) 팝업 */
 export function PosAdvanceOrderPanel(props: {
   t: (k: string) => string
   lang?: string
@@ -54,36 +54,58 @@ export function PosAdvanceOrderPanel(props: {
     loadHeld()
   }, [loadHeld, reloadToken])
 
+  const title = t('posDepositQueueTitle') || 'จอง / มัดจำ'
+
+  /** 환불·받기는 별도 확인/입력 모달을 띄우므로 이 팝업을 먼저 닫는다 */
+  const runRefund = (holder: { memberId?: number; phone: string }) => {
+    if (!onRefund) return
+    setOpen(false)
+    void Promise.resolve(onRefund(holder)).then(() => loadHeld())
+  }
+
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <Card className="border-amber-200/80 bg-amber-50/40 dark:border-amber-900/50 dark:bg-amber-950/20">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 py-2 px-3 space-y-0">
-          <CollapsibleTrigger asChild>
-            <button
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="relative h-9 shrink-0 gap-1 px-2.5 touch-manipulation min-[640px]:h-8"
+        title={title}
+        aria-label={title}
+        onClick={() => {
+          setOpen(true)
+          loadHeld()
+        }}
+      >
+        <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
+        <span className="hidden min-[880px]:inline">{title}</span>
+        {heldHolders.length > 0 ? (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold leading-none text-white">
+            {heldHolders.length > 9 ? '9+' : heldHolders.length}
+          </span>
+        ) : null}
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarClock className="h-5 w-5 shrink-0 text-amber-600" aria-hidden />
+              {title}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Button
               type="button"
-              className="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 text-left"
+              className="h-11 w-full text-base font-semibold"
+              disabled={busy}
+              onClick={() => {
+                setOpen(false)
+                onReceive()
+              }}
             >
-              {open ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              )}
-              <CardTitle className="text-sm font-semibold">
-                {t('posDepositQueueTitle') || 'จอง / มัดจำ'}
-                {heldHolders.length > 0 ? (
-                  <span className="ml-1.5 text-xs font-medium text-amber-800 dark:text-amber-200">
-                    {heldHolders.length}
-                  </span>
-                ) : null}
-              </CardTitle>
-            </button>
-          </CollapsibleTrigger>
-          <Button type="button" size="sm" className="h-8 shrink-0" disabled={busy} onClick={() => onReceive()}>
-            {t('posDepositButton') || 'มัดจำ'}
-          </Button>
-        </CardHeader>
-        <CollapsibleContent>
-          <CardContent className="space-y-3 px-3 pb-3 pt-0">
+              {t('posDepositButton') || 'มัดจำ'}
+            </Button>
             <p className="text-xs text-muted-foreground">
               {t('posDepositUseLaterHint') ||
                 '메뉴 없이 예약금만 걸어 둡니다. 방문 때 회원 선택 또는 같은 전화로 결제하면 차감됩니다.'}
@@ -95,7 +117,7 @@ export function PosAdvanceOrderPanel(props: {
                 {t('posDepositQueueEmpty') || '아직 걸어 둔 예약금이 없습니다.'}
               </p>
             ) : (
-              <div className="rounded-md border bg-background p-2 text-xs space-y-1.5 max-h-44 overflow-auto">
+              <div className="max-h-72 space-y-1.5 overflow-auto rounded-md border bg-background p-2 text-sm">
                 {heldHolders.map((holder) => (
                   <div
                     key={`${holder.memberId || 0}-${holder.guestPhone}`}
@@ -106,23 +128,19 @@ export function PosAdvanceOrderPanel(props: {
                         {holder.guestName || holder.guestPhone || (t('posDepositHeld') || 'มัดจำ')}
                       </p>
                       {holder.guestPhone ? (
-                        <p className="truncate tabular-nums text-muted-foreground">{holder.guestPhone}</p>
+                        <p className="truncate text-xs tabular-nums text-muted-foreground">{holder.guestPhone}</p>
                       ) : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <span className="tabular-nums font-semibold">{holder.held.toLocaleString()} ฿</span>
+                      <span className="font-semibold tabular-nums">{holder.held.toLocaleString()} ฿</span>
                       {onRefund && (
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="h-7 text-xs"
+                          className="h-8 text-xs"
                           disabled={busy}
-                          onClick={() => {
-                            void Promise.resolve(
-                              onRefund({ memberId: holder.memberId, phone: holder.guestPhone })
-                            ).then(() => loadHeld())
-                          }}
+                          onClick={() => runRefund({ memberId: holder.memberId, phone: holder.guestPhone })}
                         >
                           {t('posDepositRefund') || '환불'}
                         </Button>
@@ -143,6 +161,7 @@ export function PosAdvanceOrderPanel(props: {
                 type="button"
                 size="sm"
                 variant="outline"
+                className="h-9"
                 disabled={historyBusy || phoneQuery.replace(/\D/g, '').length < 8}
                 onClick={() => {
                   setHistoryBusy(true)
@@ -158,7 +177,7 @@ export function PosAdvanceOrderPanel(props: {
               </Button>
             </div>
             {historyRows.length > 0 && (
-              <div className="rounded-md border bg-background p-2 text-xs space-y-1 max-h-36 overflow-auto">
+              <div className="max-h-48 space-y-1 overflow-auto rounded-md border bg-background p-2 text-xs">
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium">
                     {(t('posDepositHeld') || '보유')} {held.toLocaleString()} ฿
@@ -172,7 +191,7 @@ export function PosAdvanceOrderPanel(props: {
                       disabled={busy}
                       onClick={() => {
                         const memberId = historyRows.find((r) => Number(r.memberId) > 0)?.memberId
-                        void Promise.resolve(onRefund({ memberId, phone: phoneQuery })).then(() => loadHeld())
+                        runRefund({ memberId, phone: phoneQuery })
                       }}
                     >
                       {t('posDepositRefund') || '환불'}
@@ -190,9 +209,9 @@ export function PosAdvanceOrderPanel(props: {
                 ))}
               </div>
             )}
-          </CardContent>
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

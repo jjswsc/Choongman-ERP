@@ -11917,10 +11917,22 @@ export default function PosTerminalPage() {
                 <div
                   className={cn(
                     'flex shrink-0 items-center gap-1 min-[640px]:gap-2 justify-end self-stretch min-h-0',
-                    activeTab === 'tables' ? 'min-[640px]:w-auto' : 'min-[640px]:w-44'
+                    activeTab === 'delivery' ? 'min-[640px]:w-44' : 'min-[640px]:w-auto'
                   )}
                   data-tour="pos-tour-toolbar-filters"
                 >
+                  {(activeTab === 'tables' ||
+                    (activeTab === 'takeout' && selectedTakeoutTargetId !== 'takeout-draft')) && (
+                    <PosAdvanceOrderPanel
+                      t={t}
+                      lang={lang}
+                      storeCode={currentStoreId}
+                      busy={posCartBackendBusy}
+                      reloadToken={depositQueueTick}
+                      onReceive={() => setShowPosDepositDialog(true)}
+                      onRefund={handleRefundPosDeposit}
+                    />
+                  )}
                   {activeTab === 'tables' && (
                     <Button
                       type="button"
@@ -12201,17 +12213,6 @@ export default function PosTerminalPage() {
                 </div>
               ) : (
                 <>
-                  <div className="shrink-0 pb-3">
-                    <PosAdvanceOrderPanel
-                      t={t}
-                      lang={lang}
-                      storeCode={currentStoreId}
-                      busy={posCartBackendBusy}
-                      reloadToken={depositQueueTick}
-                      onReceive={() => setShowPosDepositDialog(true)}
-                      onRefund={handleRefundPosDeposit}
-                    />
-                  </div>
                   {loadingTables && (
                     <div className="h-full flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm min-h-[min(420px,50vh)]">
                       {t('loading')}
@@ -12378,19 +12379,6 @@ export default function PosTerminalPage() {
 
             {/* 포장 탭 — 배달 TabsContent와 동일(고정 min-h 없음) */}
             <TabsContent value="takeout" className="flex-1 m-0 min-w-0 p-4 min-h-0 overflow-auto">
-              {selectedTakeoutTargetId !== 'takeout-draft' ? (
-                <div className="mb-3">
-                  <PosAdvanceOrderPanel
-                    t={t}
-                    lang={lang}
-                    storeCode={currentStoreId}
-                    busy={posCartBackendBusy}
-                    reloadToken={depositQueueTick}
-                    onReceive={() => setShowPosDepositDialog(true)}
-                    onRefund={handleRefundPosDeposit}
-                  />
-                </div>
-              ) : null}
               {selectedTakeoutTargetId === 'takeout-draft' ? (
                 <PosBusinessOpenGateBlock
                   blocked={businessOpenBlocked}
