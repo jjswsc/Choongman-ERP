@@ -55,11 +55,14 @@ import {
   uploadStoreCheckPhoto,
   translateTexts,
   getStoreActionItems,
+  getOpenStoreActionsByStore,
   type ChecklistItem,
   type CheckHistoryItem,
   type StoreActionItem,
 } from "@/lib/api-client"
 import { storeCheckItemKey } from "@/lib/store-action-items"
+import { addDaysYmd } from "@/lib/store-action-i18n"
+import { StoreCheckIssueDialog, StoreCheckIssuesPanel } from "@/components/admin/store-check-issues"
 import { ADMIN_BTN_XS_CN, ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -196,6 +199,41 @@ export function AdminStoreCheck() {
   const isHQ = auth?.role === "director" || auth?.role === "secretary" || auth?.role === "officer"
   const isManager = isManagerRole(auth?.role || "")
   const inspectorName = auth?.user || auth?.store || ""
+  const myName = auth?.user || ""
+  const me = myName.trim().toLowerCase()
+  const myEmployeeId = auth?.employeeId != null && auth.employeeId > 0 ? String(auth.employeeId) : ""
+
+  const [issues, setIssues] = useState<StoreActionItem[]>([])
+  const [closedIssues, setClosedIssues] = useState<StoreActionItem[]>([])
+  const [issuesLoading, setIssuesLoading] = useState(false)
+  const [issueCanVerify, setIssueCanVerify] = useState(false)
+  const [prevCheck, setPrevCheck] = useState<CheckHistoryItem | null>(null)
+  const [issueStore, setIssueStore] = useState("")
+  const [issueDialogIdx, setIssueDialogIdx] = useState<number | null>(null)
+
+  const loadIssues = useCallback(async (store: string, date: string) => {
+    if (!store) return
+    setIssueStore(store)
+    setIssuesLoading(true)
+    try {
+      const [openRes, closedRows, hist] = await Promise.all([
+        getOpenStoreActionsByStore(store).catch(() => null),
+        getStoreActionItems({
+          store,
+          completedSince: addDaysYmd(getBangkokTodayDateString(), -30),
+        }).catch(() => [] as StoreActionItem[]),
+        getCheckHistory({ startStr: addDaysYmd(date, -180), endStr: addDaysYmd(date, -1), store }).catch(
+          () => [] as CheckHistoryItem[]
+        ),
+      ])
+      setIssues(openRes?.success ? openRes.items || [] : [])
+      setIssueCanVerify(!!openRes?.canVerify)
+      setClosedIssues((closedRows || []).filter((r) => r.status === "completed").slice(0, 30))
+      setPrevCheck([...(hist || [])].sort((a, b) => b.date.localeCompare(a.date))[0] || null)
+    } finally {
+      setIssuesLoading(false)
+    }
+  }, [])
 
   // 로그인 언어로 점검 항목/비고/항목요약 자동 번역
   useEffect(() => {
@@ -268,6 +306,9 @@ export function AdminStoreCheck() {
     }
     setLoadFormLoading(true)
     setCheckRows([])
+    setIssues([])
+    setClosedIssues([])
+    setPrevCheck(null)
     setEditId("")
     setViewOnlyMode(false)
     setTotalMemo("")
@@ -300,6 +341,7 @@ export function AdminStoreCheck() {
         afterPhotos: [],
       }))
       setCheckRows(rows)
+      void loadIssues(storeSelect, dateSelect)
     } catch {
       setCheckRows([])
     } finally {
@@ -341,6 +383,7 @@ export function AdminStoreCheck() {
     rows.sort((a, b) => a.id - b.id)
     setCheckRows(rows)
     setTab("check")
+    void loadIssues(h.store, h.date)
   }
 
   const handleSaveCheck = async () => {
@@ -552,6 +595,17 @@ export function AdminStoreCheck() {
 
   const tr = (s: string) => (s && transMap[s]) || s || ""
 
+  const rowKey = (r: CheckRow) => storeCheckItemKey(r.main, r.sub, r.name)
+  const rowLabel = (r: CheckRow) => [tr(r.main), tr(r.sub), tr(r.name)].filter(Boolean).join(" > ")
+  const issueKeys = checkRows.map((r) => ({ key: rowKey(r), label: rowLabel(r) }))
+  const issuesByKey = new Map<string, StoreActionItem[]>()
+  for (const it of issues) {
+    if (!it.checkItemId) continue
+    issuesByKey.set(it.checkItemId, [...(issuesByKey.get(it.checkItemId) || []), it])
+  }
+  const issueRow = issueDialogIdx != null ? checkRows[issueDialogIdx] : undefined
+  const reloadIssues = () => void loadIssues(issueStore || storeSelect, dateSelect)
+
   const updateSettingItem = (idx: number, field: "main" | "sub" | "name" | "use", value: string | boolean) => {
     setSettingItems((prev) =>
       prev.map((it, i) =>
@@ -648,6 +702,24 @@ export function AdminStoreCheck() {
                     </Button>
                   </div>
                 )}
+                {checkRows.length > 0 && issueStore ? (
+                  <StoreCheckIssuesPanel
+                    items={issues}
+                    closed={closedIssues}
+                    prevCheck={prevCheck}
+                    keys={issueKeys}
+                    canVerify={issueCanVerify}
+                    me={me}
+                    loading={issuesLoading}
+                    t={t}
+                    tr={tr}
+                    onAddForKey={(key) => {
+                      const idx = checkRows.findIndex((r) => rowKey(r) === key)
+                      if (idx >= 0) setIssueDialogIdx(idx)
+                    }}
+                    onChanged={reloadIssues}
+                  />
+                ) : null}
                 <div className="border rounded-md overflow-auto max-h-[420px]">
                   <table className="w-full text-xs border-collapse">
                     <thead className="sticky top-0 bg-muted z-10">
@@ -659,12 +731,13 @@ export function AdminStoreCheck() {
                         <th className="p-2 text-center w-24 font-medium">{t("store_check")}</th>
                         <th className="p-2 text-center w-40 font-medium">{t("store_remark")}</th>
                         <th className="p-2 text-center w-20 font-medium">{t("store_check_photo_btn")}</th>
+                        <th className="p-2 text-center w-28 font-medium">{t("check_issue_col")}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {checkRows.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                          <td colSpan={8} className="p-8 text-center text-muted-foreground">
                             {t("store_load_hint")}
                           </td>
                         </tr>
@@ -758,6 +831,26 @@ export function AdminStoreCheck() {
                                 <span className="text-muted-foreground text-[11px]">-</span>
                               )}
                             </td>
+                            <td className="p-2 text-center">
+                              {(() => {
+                                const n = issuesByKey.get(rowKey(r))?.length || 0
+                                if (r.val !== "X" && n === 0) {
+                                  return <span className="text-muted-foreground text-[11px]">-</span>
+                                }
+                                return (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={cn(ADMIN_BTN_XS_CN, "gap-1", n > 0 && "border-amber-500 text-amber-700")}
+                                    disabled={!storeSelect}
+                                    onClick={() => setIssueDialogIdx(idx)}
+                                  >
+                                    <ClipboardList className="h-3 w-3" />
+                                    {n > 0 ? t("check_issue_open_n").replace("{n}", String(n)) : t("check_issue_btn")}
+                                  </Button>
+                                )
+                              })()}
+                            </td>
                           </tr>
                         ))
                       )}
@@ -790,6 +883,22 @@ export function AdminStoreCheck() {
                 )}
               </CardContent>
             </Card>
+            <StoreCheckIssueDialog
+              open={issueRow != null}
+              onOpenChange={(open) => !open && setIssueDialogIdx(null)}
+              store={storeSelect}
+              date={dateSelect}
+              itemKey={issueRow ? rowKey(issueRow) : ""}
+              itemLabel={issueRow ? tr(issueRow.name) || rowLabel(issueRow) : ""}
+              checkPhotos={issueRow?.beforePhotos || []}
+              existing={issueRow ? issuesByKey.get(rowKey(issueRow)) || [] : []}
+              canVerify={issueCanVerify}
+              me={me}
+              myName={myName}
+              myEmployeeId={myEmployeeId}
+              t={t}
+              onChanged={reloadIssues}
+            />
             <Dialog open={remarkModalIdx !== null} onOpenChange={(open) => !open && setRemarkModalIdx(null)}>
               <DialogContent className={cn("max-w-md", ADMIN_DIALOG_SCROLL_CN)}>
                 <DialogHeader>
