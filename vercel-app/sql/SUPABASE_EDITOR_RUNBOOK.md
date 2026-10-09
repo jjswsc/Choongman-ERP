@@ -259,6 +259,8 @@ Supabase SQL Editor → **아래 순서대로 파일 전체를 각각 Run** (재
 **Omni POS(터미널·시재·주문)** 를 쓰려면 **11번 `omni_pos_choongman_parity.sql`을 반드시 실행**하세요.  
 장기(메뉴·프린터·Grab·회계 RPC): [`legacy/supabase_migration_consolidated.sql`](./legacy/supabase_migration_consolidated.sql) → [`supabase_one_paste_all_in_one.sql`](./supabase_one_paste_all_in_one.sql) → [`supabase_one_paste_phase2.sql`](./supabase_one_paste_phase2.sql) (충만과 동일 체인, Omni 전용 Supabase에만).
 
+Vercel(Omni) 로그에 `42703` / `PGRST205` / `PGRST202` 가 뜨면: [`omni_missing_columns_42703_patch.sql`](./omni_missing_columns_42703_patch.sql), [`omni_missing_objects_01_apply.sql`](./omni_missing_objects_01_apply.sql) → [`omni_missing_objects_02_verify.sql`](./omni_missing_objects_02_verify.sql) (휴가 반려사유·공지 대상 컬럼, push_tokens, pos_menu_boards, 홍보물 체크, 매장 수리, 인테리어 + 대시보드 RPC) → [`omni_missing_objects_03_apply.sql`](./omni_missing_objects_03_apply.sql) → [`omni_missing_objects_04_verify.sql`](./omni_missing_objects_04_verify.sql) (휴가 employee_id, 마케팅 판촉물·배치·사은품).
+
 배포 후 확인:
 
 - SaaS Admin `/saas-admin` → 고객사 목록·usage·한도 표시

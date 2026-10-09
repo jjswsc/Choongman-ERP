@@ -34,6 +34,8 @@ type MemberRow = {
   point_balance?: number | null
   tier_points?: number | null
   line_tier_points?: number | null
+  line_current_points?: number | null
+  line_total_points?: number | null
   lifetime_amount?: number | null
   last_visited_at?: string | null
 }
@@ -343,6 +345,13 @@ export async function mergeMembers(params: {
     line_tier_points: Number(target.line_tier_points || 0) + Number(source.line_tier_points || 0),
     lifetime_amount: Number(target.lifetime_amount || 0) + Number(source.lifetime_amount || 0),
   }
+  // 이월 원장 행이 target으로 옮겨지므로 기준값도 합산 — 아니면 포인트 동기화가 source 이월분을 차감한다
+  const sourceLineCarry: Record<string, unknown> = {}
+  for (const field of ['line_current_points', 'line_total_points'] as const) {
+    if (!(field in target) || !(field in source)) continue
+    targetPatch[field] = Number(target[field] || 0) + Number(source[field] || 0)
+    sourceLineCarry[field] = 0
+  }
   if (!toText(target.full_name) && toText(source.full_name)) targetPatch.full_name = source.full_name
   if (!toText(target.phone) && toText(source.phone)) targetPatch.phone = source.phone
   if (!toText(target.email) && toText(source.email)) targetPatch.email = source.email
@@ -380,6 +389,7 @@ export async function mergeMembers(params: {
     point_balance: 0,
     tier_points: 0,
     line_tier_points: 0,
+    ...sourceLineCarry,
     lifetime_amount: 0,
     updated_at: now,
   })

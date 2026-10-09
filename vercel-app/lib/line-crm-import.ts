@@ -2,6 +2,9 @@ import crypto from 'crypto'
 import * as XLSX from 'xlsx'
 import { createMember } from '@/lib/members-server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
+import { getMemberPointRetentionCutoffIso } from '@/lib/member-point-expiry'
+import { loadMemberPointRetentionYears } from '@/lib/member-point-expiry-policy-server'
+import { expireMemberPointsForMember } from '@/lib/member-point-expiry-server'
 import { normalizeMemberPoints } from '@/lib/member-points-math'
 import { memberPhoneLookupVariants, canonicalMemberPhoneForStorage } from '@/lib/member-phone-lookup'
 import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
@@ -667,6 +670,7 @@ export async function processLineCrmImport(params: {
   }
 
   const now = getBangkokDateTimeString()
+  const pointCutoffIso = getMemberPointRetentionCutoffIso(new Date(), await loadMemberPointRetentionYears())
   const rowLogs: Record<string, unknown>[] = []
   let successCount = 0
   let failedCount = 0
@@ -796,6 +800,10 @@ export async function processLineCrmImport(params: {
           status: 'issued',
           issued_at: now,
         })
+      }
+
+      if (Object.keys(pointPatch).length > 0 || (parsed.reportType === 'point' && row.points !== 0)) {
+        await expireMemberPointsForMember(memberId, pointCutoffIso)
       }
 
       if (canWriteImportLog) {

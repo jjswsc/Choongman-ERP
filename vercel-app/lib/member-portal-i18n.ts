@@ -436,6 +436,8 @@ export type MemberPortalKey =
   | 'pointKind_adjust'
   | 'pointKind_expire'
   | 'pointKind_redeem'
+  | 'pointNote_lineOpening'
+  | 'pointNote_lineOpeningUsed'
   | 'coupon_issued'
   | 'coupon_used'
   | 'coupon_expired'
@@ -1841,6 +1843,16 @@ const MS: Record<MemberPortalKey, Dict> = {
   pointKind_adjust: { en: 'Adjust', th: 'ปรับ', ko: '조정' },
   pointKind_expire: { en: 'Expired', th: 'หมดอายุ', ko: '만료' },
   pointKind_redeem: { en: 'Redeemed', th: 'แลกคูปอง', ko: '쿠폰 교환' },
+  pointNote_lineOpening: {
+    en: 'Points carried over from the previous LINE system',
+    th: 'แต้มสะสมเดิมจากระบบ LINE',
+    ko: '이전 LINE 시스템 이월 포인트',
+  },
+  pointNote_lineOpeningUsed: {
+    en: 'Points already used in the previous LINE system',
+    th: 'แต้มที่ใช้ไปแล้วในระบบ LINE เดิม',
+    ko: '이전 LINE 시스템에서 사용한 포인트',
+  },
   coupon_issued: { en: 'Ready', th: 'พร้อมใช้', ko: '사용 가능' },
   coupon_used: { en: 'Used', th: 'ใช้แล้ว', ko: '사용됨' },
   coupon_expired: { en: 'Expired', th: 'หมดอายุ', ko: '만료' },
@@ -2064,6 +2076,15 @@ export function memberPortalPointKindLabel(lang: LangCode, kind: string): string
   if (k === 'expire') return memberPortalT(lang, 'pointKind_expire')
   if (k === 'redeem') return memberPortalT(lang, 'pointKind_redeem')
   return kind || '-'
+}
+
+export function memberPortalPointNoteLabel(lang: LangCode, note: string): string {
+  const n = String(note || '').trim()
+  if (n.startsWith('line_opening_used')) return memberPortalT(lang, 'pointNote_lineOpeningUsed')
+  if (n.startsWith('line_opening') || n.startsWith('LINE CRM import')) {
+    return memberPortalT(lang, 'pointNote_lineOpening')
+  }
+  return n || '-'
 }
 
 export function memberPortalCouponStatusLabel(lang: LangCode, status: string): string {

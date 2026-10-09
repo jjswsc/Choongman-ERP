@@ -26,7 +26,7 @@ import {
   type PortalPointRow,
   type PortalVisitRow,
 } from "@/components/member-portal/portal-ui"
-import { memberPortalPointKindLabel } from "@/lib/member-portal-i18n"
+import { memberPortalPointKindLabel, memberPortalPointNoteLabel } from "@/lib/member-portal-i18n"
 import { isMemberPortalCouponReady } from "@/lib/member-portal-coupon-status"
 import { cn } from "@/lib/utils"
 
@@ -481,7 +481,7 @@ export function MemberPortalPrivilegeTab({
                           {formatPoints(p.points)}
                         </p>
                         <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>
-                          {memberPortalPointKindLabel(lang, p.kind)} · {p.note || "-"}
+                          {memberPortalPointKindLabel(lang, p.kind)} · {memberPortalPointNoteLabel(lang, p.note)}
                         </p>
                       </div>
                       <p className={`text-xs ${MP_CARD_TEXT_MUTED}`}>

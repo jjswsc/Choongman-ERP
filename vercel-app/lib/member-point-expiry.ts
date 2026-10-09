@@ -21,7 +21,72 @@ function isPositiveCredit(kind: string, points: number): boolean {
 
 function isNegativeDebit(kind: string, points: number): boolean {
   if (points >= 0) return false
-  return kind === 'use' || kind === 'adjust' || kind === 'reverse' || kind === 'expire'
+  return (
+    kind === 'use' || kind === 'redeem' || kind === 'adjust' || kind === 'reverse' || kind === 'expire'
+  )
+}
+
+/** LINE CRM 이월 포인트 원장 메모 — 회원 잔액을 원장 재생으로 재산정하므로 이월분도 원장 행이 있어야 한다 */
+export const LINE_OPENING_CREDIT_NOTE = 'line_opening_balance'
+export const LINE_OPENING_USED_NOTE = 'line_opening_used'
+
+/** 이 값을 넘는 LINE 이월은 엑셀 오입력 가능성이 커 자동 반영하지 않는다 (관리자 수동 확인) */
+export const LINE_OPENING_MAX_AUTO_POINTS = 5000
+
+const LINE_CARRYOVER_NOTE_PREFIXES = ['line_opening', 'LINE CRM import']
+
+export function isLineCarryoverLedgerNote(note: unknown): boolean {
+  const n = String(note ?? '').trim()
+  return LINE_CARRYOVER_NOTE_PREFIXES.some((prefix) => n.startsWith(prefix))
+}
+
+/**
+ * members.line_* 값과 원장의 LINE 이월 행을 맞추기 위해 추가할 원장 행.
+ * 등급 누적분(lineTierPoints)을 +로 넣고, LINE에서 이미 쓴 만큼(tier − current)을 −로 넣어
+ * 재생 결과가 잔액 = lineCurrentPoints, 등급 포인트 = lineTierPoints 가 되게 한다.
+ */
+export function planLineOpeningLedgerRows(params: {
+  lineCurrentPoints: unknown
+  lineTierPoints: unknown
+  ledger: Array<Pick<MemberPointLedgerEntry, 'points'> & { note?: string | null }>
+}): Array<{ points: number; note: string }> {
+  const current = roundMemberPointsEarn(params.lineCurrentPoints)
+  const tierTarget = Math.max(current, roundMemberPointsEarn(params.lineTierPoints))
+  if (tierTarget <= 0 || tierTarget > LINE_OPENING_MAX_AUTO_POINTS) return []
+
+  let credited = 0
+  let net = 0
+  for (const row of params.ledger) {
+    if (!isLineCarryoverLedgerNote(row.note)) continue
+    const p = normalizeMemberPoints(row.points)
+    net += p
+    if (p > 0) credited += p
+  }
+
+  const rows: Array<{ points: number; note: string }> = []
+  const addCredit = normalizeMemberPoints(tierTarget - credited)
+  if (addCredit > 0) {
+    rows.push({ points: addCredit, note: LINE_OPENING_CREDIT_NOTE })
+    net += addCredit
+  }
+  const over = normalizeMemberPoints(net - current)
+  if (over > 0) rows.push({ points: -over, note: LINE_OPENING_USED_NOTE })
+  else if (over < 0) rows.push({ points: -over, note: LINE_OPENING_CREDIT_NOTE })
+  return rows
+}
+
+/** 이월 행 시각 — LINE 내보내기 시점(POS 적립보다 앞) 우선, 소멸 기준일보다 과거면 기준일로 */
+export function resolveLineOpeningCreatedAt(params: {
+  lineExportedAt?: string | null
+  earliestLedgerAt?: string | null
+  cutoffIso: string
+  now: string
+}): string {
+  const picked =
+    normalizeBangkokDateTimeCompareKey(params.lineExportedAt) ||
+    normalizeBangkokDateTimeCompareKey(params.earliestLedgerAt) ||
+    params.now
+  return isBangkokDateTimeBefore(picked, params.cutoffIso) ? params.cutoffIso : picked
 }
 
 export function getMemberPointRetentionCutoffIso(

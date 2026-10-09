@@ -2,6 +2,8 @@ import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import {
   computeMemberPointExpiryState,
   getMemberPointRetentionCutoffIso,
+  planLineOpeningLedgerRows,
+  resolveLineOpeningCreatedAt,
   type MemberPointLedgerEntry,
 } from '@/lib/member-point-expiry'
 import {
@@ -21,8 +23,58 @@ import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/
 
 type MemberRow = {
   id?: number
+  status?: string | null
   point_balance?: number | null
   tier_points?: number | null
+  line_current_points?: number | null
+  line_total_points?: number | null
+  line_tier_points?: number | null
+  line_exported_at?: string | null
+}
+
+type LedgerRow = MemberPointLedgerEntry & { note?: string | null }
+
+async function loadLedger(memberId: number): Promise<LedgerRow[]> {
+  return ((await supabaseSelectFilter('member_points_ledger', `member_id=eq.${memberId}`, {
+    order: 'created_at.asc,id.asc',
+    limit: 50000,
+    select: 'id,kind,points,note,created_at',
+  })) || []) as LedgerRow[]
+}
+
+/** LINE CRM 이월 포인트가 원장에 없으면 추가 — 없으면 아래 원장 재생이 이월분을 지운다 */
+async function syncLineOpeningLedger(
+  member: MemberRow,
+  ledger: LedgerRow[],
+  cutoffIso: string
+): Promise<boolean> {
+  const id = Number(member.id || 0)
+  if (!id) return false
+  const lineTier = Number(member.line_tier_points || 0) > 0 ? member.line_tier_points : member.line_total_points
+  const rows = planLineOpeningLedgerRows({
+    lineCurrentPoints: member.line_current_points,
+    lineTierPoints: lineTier,
+    ledger,
+  })
+  if (rows.length === 0) return false
+  const createdAt = resolveLineOpeningCreatedAt({
+    lineExportedAt: member.line_exported_at,
+    earliestLedgerAt: ledger[0]?.created_at,
+    cutoffIso,
+    now: getBangkokDateTimeString(),
+  })
+  for (const row of rows) {
+    await supabaseInsert('member_points_ledger', {
+      member_id: id,
+      order_id: null,
+      kind: 'adjust',
+      points: row.points,
+      amount: 0,
+      note: row.note,
+      created_at: createdAt,
+    })
+  }
+  return true
 }
 
 export async function expireMemberPointsForMember(
@@ -38,14 +90,16 @@ export async function expireMemberPointsForMember(
   const members = (await supabaseSelectFilter('members', `id=eq.${id}`, { limit: 1 })) as MemberRow[]
   const member = members?.[0]
   if (!member) return { expired: 0, tierPoints: 0, pointBalance: 0, tierRecalculated: false }
+  if (String(member.status || '').trim() === 'inactive') {
+    return { expired: 0, tierPoints: 0, pointBalance: 0, tierRecalculated: false }
+  }
 
-  const ledger = (await supabaseSelectFilter('member_points_ledger', `member_id=eq.${id}`, {
-    order: 'created_at.asc,id.asc',
-    limit: 50000,
-    select: 'id,kind,points,created_at',
-  })) as MemberPointLedgerEntry[]
+  let ledger = await loadLedger(id)
+  if (await syncLineOpeningLedger(member, ledger, resolvedCutoff)) {
+    ledger = await loadLedger(id)
+  }
 
-  const { tierPoints, pointBalance, expirePoints } = computeMemberPointExpiryState(ledger || [], resolvedCutoff)
+  const { tierPoints, pointBalance, expirePoints } = computeMemberPointExpiryState(ledger, resolvedCutoff)
   const prevBalance = roundMemberPointsEarn(member.point_balance)
   const prevTierPoints = roundMemberPointsEarn(member.tier_points)
 
