@@ -51,6 +51,7 @@ jobs:
         run: |
           cd vercel-app
           npm ci
+          npm run api:check
           npx eslint . --quiet
           npm run test
           npm run build
