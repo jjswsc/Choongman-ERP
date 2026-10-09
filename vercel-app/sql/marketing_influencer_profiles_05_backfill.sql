@@ -1,6 +1,7 @@
 -- 인플루언서 명부 5/5: 기존 업로드 기록으로 명부 생성 + profile_id 채우기 (한 트랜잭션, 이 블록 전체를 한 번에 Run)
 -- 04 미리보기로 묶음 확인 후 실행. 재실행해도 profile_id 가 비어 있는 행만 처리
 -- marketing_* 테이블만 대상이라 pos_orders Realtime·자동인쇄와 무관
+-- marketing_influencers.tenant_id 는 DB에 따라 없을 수 있어 to_jsonb(i)->>'tenant_id' 로 읽음
 
 BEGIN;
 
@@ -8,7 +9,7 @@ CREATE TEMP TABLE _inf_profile_bf ON COMMIT DROP AS
 WITH src AS (
   SELECT
     i.id,
-    coalesce(i.tenant_id, '') AS tid,
+    coalesce(to_jsonb(i)->>'tenant_id', '') AS tid,
     lower(coalesce(substring(i.platform_links->>'tiktok' FROM '@([A-Za-z0-9._]+)'), '')) AS tt,
     lower(coalesce(substring(i.platform_links->>'instagram' FROM 'instagram\.com/([A-Za-z0-9._]+)'), '')) AS ig,
     lower(trim(coalesce(i.contact_name, ''))) AS cn,
