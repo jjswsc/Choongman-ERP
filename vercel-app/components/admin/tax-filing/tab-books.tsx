@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { isPvPpDocumentNo, normalizeVoucherDocumentNo } from "@/lib/expense-document-no"
+import { suggestAccountCodes } from "@/lib/tax-book-account-suggest"
 import { useLang } from "@/lib/lang-context"
 import {
   getTaxBookEntries,
@@ -144,6 +145,7 @@ export function TaxFilingBooksTab(props: {
       cancelled = true
     }
   }, [])
+  const ledgerAccountOptions = React.useMemo(() => accountPickList(accountSubjects), [accountSubjects])
   const restoredBooks = React.useMemo(() => readTaxBooksResultCache(), [])
   const restoredView = restoredBooks?.view
   const [view, setView] = React.useState<BooksView>(() =>
@@ -1133,7 +1135,7 @@ export function TaxFilingBooksTab(props: {
         <div className="space-y-2">
           <div className="space-y-2 rounded-md border p-3">
             <p className="text-xs text-muted-foreground">{t("taxBooksLedgerRangeHint")}</p>
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-wrap items-end gap-3 pb-4">
               <div>
                 <div className="mb-1 text-xs text-muted-foreground">{t("taxBooksLedgerDateFrom")}</div>
                 <Input
@@ -1160,37 +1162,48 @@ export function TaxFilingBooksTab(props: {
               </div>
               <div>
                 <div className="mb-1 text-xs text-muted-foreground">{t("taxBooksLedgerAccountFrom")}</div>
-                <Input
-                  className="h-9 w-[150px]"
-                  inputMode="numeric"
+                <LedgerAccountCodeInput
+                  lang={lang}
+                  options={ledgerAccountOptions}
                   value={ledgerDraft.accountFrom}
                   placeholder="4110"
-                  onChange={(e) => {
+                  onChange={(accountFrom) => {
                     ledgerTouchedRef.current = true
-                    const accountFrom = e.target.value
                     setLedgerDraft((prev) => ({
                       ...prev,
                       accountFrom,
                       allBusiness: accountFrom.trim() === "" && prev.accountTo.trim() === "",
                     }))
                   }}
+                  onPick={(code) => {
+                    ledgerTouchedRef.current = true
+                    setLedgerDraft((prev) => ({
+                      ...prev,
+                      accountFrom: code,
+                      accountTo: prev.accountTo.trim() ? prev.accountTo : code,
+                      allBusiness: false,
+                    }))
+                  }}
                 />
               </div>
               <div>
                 <div className="mb-1 text-xs text-muted-foreground">{t("taxBooksLedgerAccountTo")}</div>
-                <Input
-                  className="h-9 w-[150px]"
-                  inputMode="numeric"
+                <LedgerAccountCodeInput
+                  lang={lang}
+                  options={ledgerAccountOptions}
                   value={ledgerDraft.accountTo}
                   placeholder="4110"
-                  onChange={(e) => {
+                  onChange={(accountTo) => {
                     ledgerTouchedRef.current = true
-                    const accountTo = e.target.value
                     setLedgerDraft((prev) => ({
                       ...prev,
                       accountTo,
                       allBusiness: prev.accountFrom.trim() === "" && accountTo.trim() === "",
                     }))
+                  }}
+                  onPick={(code) => {
+                    ledgerTouchedRef.current = true
+                    setLedgerDraft((prev) => ({ ...prev, accountTo: code, allBusiness: false }))
                   }}
                 />
               </div>
@@ -1682,6 +1695,109 @@ function AccountSearchField({
               </li>
             )
           })}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+/** 숫자를 치면 그 번호로 시작하는 계정만 추려 보여 주는 계정번호 입력 */
+function LedgerAccountCodeInput({
+  lang,
+  options,
+  value,
+  placeholder,
+  onChange,
+  onPick,
+}: {
+  lang: string
+  options: TaxBookAccountSubjectLabel[]
+  value: string
+  placeholder: string
+  onChange: (value: string) => void
+  onPick: (code: string) => void
+}) {
+  const [open, setOpen] = React.useState(false)
+  const [active, setActive] = React.useState(0)
+  const shownName = React.useCallback(
+    (row: TaxBookAccountSubjectLabel) => displayTaxBookAccountName(lang, row.code, row.name, options),
+    [lang, options]
+  )
+  const matches = React.useMemo(
+    () => suggestAccountCodes(options, value, shownName),
+    [options, value, shownName]
+  )
+  const exact = React.useMemo(
+    () => options.find((row) => row.code === value.trim()) || null,
+    [options, value]
+  )
+  React.useEffect(() => {
+    setActive(0)
+  }, [value])
+  const pick = (row: TaxBookAccountSubjectLabel) => {
+    onPick(row.code)
+    setOpen(false)
+  }
+  const showList = open && matches.length > 0 && !(matches.length === 1 && exact)
+  return (
+    <div className="relative">
+      <Input
+        className="h-9 w-[150px]"
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          onChange(e.target.value)
+          setOpen(true)
+        }}
+        onBlur={() => {
+          window.setTimeout(() => setOpen(false), 160)
+        }}
+        onKeyDown={(e) => {
+          if (!showList) return
+          if (e.key === "ArrowDown") {
+            e.preventDefault()
+            setActive((i) => Math.min(i + 1, matches.length - 1))
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault()
+            setActive((i) => Math.max(i - 1, 0))
+          } else if (e.key === "Enter") {
+            e.preventDefault()
+            const row = matches[active]
+            if (row) pick(row)
+          } else if (e.key === "Escape") {
+            setOpen(false)
+          }
+        }}
+      />
+      {exact ? (
+        <div
+          className="absolute left-0 top-full mt-0.5 max-w-[150px] truncate text-[11px] text-muted-foreground"
+          title={shownName(exact)}
+        >
+          {shownName(exact)}
+        </div>
+      ) : null}
+      {showList ? (
+        <ul className="absolute left-0 top-10 z-50 max-h-64 min-w-[18rem] overflow-auto rounded-md border bg-popover p-1 text-sm shadow-md">
+          {matches.map((row, idx) => (
+            <li key={`${row.code}-${row.name}`}>
+              <button
+                type="button"
+                className={cn(
+                  "w-full rounded px-2 py-1 text-left hover:bg-muted",
+                  idx === active && "bg-muted"
+                )}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setActive(idx)}
+                onClick={() => pick(row)}
+              >
+                <span className="font-medium tabular-nums">{row.code}</span>
+                <span className="text-muted-foreground"> / {shownName(row)}</span>
+              </button>
+            </li>
+          ))}
         </ul>
       ) : null}
     </div>
