@@ -1,5 +1,7 @@
 /** 일일 일정표 — 템플릿 선택·항목 생성·요약 (순수 함수, DB 없음) */
 
+import { dailyPlanItemTitle, koThText } from "@/lib/daily-plan-i18n"
+
 export const DAILY_PLAN_ROLES = ["supervisor", "manager", "staff"] as const
 export type DailyPlanRole = (typeof DAILY_PLAN_ROLES)[number]
 
@@ -412,15 +414,16 @@ export function buildDailyPlanWorkLogContent(params: {
 }): string {
   const s = summarizePlanItems(params.items)
   const lines = [
-    `[일일 일정표 ${params.dateYmd}] 완료 ${s.done}/${s.total} (${s.doneRate}%) · 예상 ${s.estTotal}분 / 실제 ${s.actualTotal}분${params.auto ? " · 자동 마감" : ""}`,
+    `[일일 일정표 · ตารางงาน ${params.dateYmd}] 완료 · เสร็จ ${s.done}/${s.total} (${s.doneRate}%)${params.auto ? " · 자동 마감 · ปิดอัตโนมัติ" : ""}`,
+    `예상 · ประมาณ ${s.estTotal}분(นาที) / 실제 · จริง ${s.actualTotal}분(นาที)`,
   ]
   const pending = params.items.filter((i) => i.source !== "visit" && i.status !== "done")
   if (pending.length > 0) {
-    lines.push("미완료:")
+    lines.push("미완료 · ยังไม่เสร็จ:")
     for (const i of pending.slice(0, 20)) {
       const where = i.storeName ? `${i.storeName} · ` : ""
-      const why = i.status === "skipped" && i.skipReason ? ` (사유: ${i.skipReason})` : ""
-      lines.push(`- ${where}${i.title}${why}`)
+      const why = i.status === "skipped" && i.skipReason ? ` (사유 · เหตุผล: ${i.skipReason})` : ""
+      lines.push(`- ${where}${dailyPlanItemTitle(i.title, koThText)}${why}`)
     }
   }
   return lines.join("\n")

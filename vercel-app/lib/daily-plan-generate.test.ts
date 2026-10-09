@@ -179,9 +179,10 @@ describe("summary and work log", () => {
   })
   it("lists unfinished items with reasons", () => {
     const text = buildDailyPlanWorkLogContent({ dateYmd: "2026-10-08", items, auto: true })
-    expect(text).toContain("완료 1/3 (33%)")
+    expect(text).toContain("완료 · เสร็จ 1/3 (33%)")
     expect(text).toContain("자동 마감")
-    expect(text).toContain("- A · 청결 (사유: 정전)")
+    expect(text).toContain("- A · 청결 (사유 · เหตุผล: 정전)")
+    expect(text).toContain("ปิดอัตโนมัติ")
     expect(text).toContain("- 교육")
   })
   it("carries only unfinished hq/carry items", () => {

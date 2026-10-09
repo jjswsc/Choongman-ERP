@@ -21,6 +21,7 @@ import {
   travelMinutesOfPlan,
   type DailyPlanRow,
 } from '@/lib/daily-plan-server'
+import { dailyPlanItemTitle, koThText } from '@/lib/daily-plan-i18n'
 
 /** 방콕 18시 — 내일 일정표 생성·공개·푸시 */
 export const DAILY_PLAN_PUBLISH_HOUR_BANGKOK = 18
@@ -145,10 +146,11 @@ async function runLateAlerts(today: string): Promise<DailyPlanCronResult['late']
     if (fresh.length === 0) continue
     const first = fresh[0]
     const firstAt = minToHm(slots.get(first.id)?.start ?? nowMin)
-    const what = first.source === 'visit' ? `방문 ${first.title}` : first.title
+    const what = first.source === 'visit' ? `${koThText('dp_visit_title')} ${first.title}` : dailyPlanItemTitle(first.title, koThText)
+    const more = fresh.length - 1
     await pushStoreActionNotice({
       title: `⏰ 일정 지연 ${fresh.length}건 · งานล่าช้า ${fresh.length} รายการครับ`,
-      body: `${firstAt} ${what}${fresh.length > 1 ? ` 외 ${fresh.length - 1}건` : ''}\n앱 [일정표]에서 시작하거나 못 함 사유를 남겨 주세요 · กรุณาเริ่มงานหรือระบุเหตุผลในแท็บตารางงานครับ`,
+      body: `${firstAt} ${what}${more > 0 ? ` 외 ${more}건 · และอีก ${more} รายการ` : ''}\n앱 [일정표]에서 시작하거나 못 함 사유를 남겨 주세요 · กรุณาเริ่มงานหรือระบุเหตุผลในแท็บตารางงานครับ`,
       recipients: [planRecipient(plan)],
     })
     await supabaseUpdateByFilter('daily_plan_items', `id=in.(${fresh.map((i) => i.id).join(',')})`, {

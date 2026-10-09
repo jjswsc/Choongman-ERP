@@ -2,6 +2,7 @@
 
 import type { DailyPlanBundle } from "@/lib/api-client/daily-plans"
 import { computePlanTimeline, minToHm } from "@/lib/daily-plan-timeline"
+import { I18N_DAILY_PLAN_KO, I18N_DAILY_PLAN_TH } from "@/lib/i18n-daily-plan"
 
 type T = (k: string) => string
 
@@ -139,6 +140,11 @@ export function dailyPlanItemTitle(title: string, t: T): string {
   const s = String(title || "")
   for (const [p, k] of TITLE_PREFIX_KEYS) if (s.startsWith(p)) return `${t(k)} ${s.slice(p.length)}`
   return s
+}
+
+/** 푸시·업무일지처럼 받는 사람 언어를 모를 때 — 한국어 · 태국어 병기 */
+export function koThText(k: string): string {
+  return `${I18N_DAILY_PLAN_KO[k] ?? k} · ${I18N_DAILY_PLAN_TH[k] ?? k}`
 }
 
 const LINE_MARK: Record<string, string> = { done: "✅", skipped: "⏭️", doing: "▶️", todo: "▫️" }
