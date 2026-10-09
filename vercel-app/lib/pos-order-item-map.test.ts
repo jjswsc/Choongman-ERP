@@ -103,16 +103,26 @@ describe('mergeDineInAddonCartPosItemsWithExisting', () => {
     ])
   })
 
-  it('consolidates duplicate unserved beer lines when add-order appends new cart ids', () => {
+  it('consolidates duplicates within one add-order but keeps the earlier round separate', () => {
     const existing = [
-      { id: 'line-beer-1', name: 'Singha 630 ML.', price: 140, qty: 1, quantity: 1 },
+      {
+        id: 'line-beer-1',
+        name: 'Singha 630 ML.',
+        price: 140,
+        qty: 1,
+        quantity: 1,
+        addedAt: '2026-10-09 17:26:17',
+      },
     ]
     const fromCart = [
       { id: 'cart-99-abc', name: 'Singha 630 ML.', price: 140, qty: 1, quantity: 1 },
       { id: 'cart-99-def', name: 'Singha 630 ML.', price: 140, qty: 1, quantity: 1 },
     ]
-    expect(mergeDineInAddonCartPosItemsWithExisting(existing, fromCart)).toMatchObject([
-      { id: 'line-beer-1', name: 'Singha 630 ML.', price: 140, qty: 3, quantity: 3 },
+    expect(
+      mergeDineInAddonCartPosItemsWithExisting(existing, fromCart, '2026-10-09 18:10:18')
+    ).toMatchObject([
+      { id: 'line-beer-1', qty: 1, quantity: 1, addedAt: '2026-10-09 17:26:17' },
+      { id: 'cart-99-abc', qty: 2, quantity: 2, addedAt: '2026-10-09 18:10:18' },
     ])
   })
 

@@ -1,6 +1,7 @@
 import type { PosOrderItem } from '@/lib/api-client'
 import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
 import type { OrderItem } from '@/lib/pos-types'
+import { posLineAddedAtWallNow } from '@/lib/pos-order-rounds'
 
 export type CartLineForPosOrder = {
   id: string
@@ -35,6 +36,7 @@ export type CartLineForPosOrder = {
   }[]
   /** 결제 시점 줄별 할인 스냅샷(영수증·재인쇄) */
   lineDiscountAmt?: number
+  addedAt?: string | null
 }
 
 /** 기존 주문 줄을 카트에 올릴 때 붙는 임시 prefix 제거 */
@@ -139,6 +141,7 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
       ...(menuId2 ? { menuId2 } : {}),
       ...(optionId2 ? { optionId2 } : {}),
       ...(optionCode2 ? { optionCode2 } : {}),
+      ...(String(i.addedAt ?? '').trim() ? { addedAt: String(i.addedAt).trim() } : {}),
       ...(i.orderType ? { orderType: i.orderType } : {}),
       ...(i.deliveryAppCode ? { deliveryAppCode: i.deliveryAppCode } : {}),
       ...(i.promoId
@@ -219,6 +222,7 @@ export function orderUiItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] 
       ...(menuId2 ? { menuId2 } : {}),
       ...(optionId2 ? { optionId2 } : {}),
       ...(optionCode2 ? { optionCode2 } : {}),
+      ...(String(i.addedAt ?? '').trim() ? { addedAt: String(i.addedAt).trim() } : {}),
       ...(i.servedAt ? { servedAt: i.servedAt } : {}),
       ...(i.servedBy ? { servedBy: i.servedBy } : {}),
       ...(i.cancelledAt ? { cancelledAt: i.cancelledAt } : {}),
@@ -257,9 +261,19 @@ export function isDineInAddonOnlyIncomingCart(
  * 저장 직전 미서빙·동일 메뉴 줄은 수량을 합산한다(합석·영수증 표시와 동일 규칙).
  * 카트에 기존 id가 하나라도 있으면 카트를 전체 스냅샷으로 보고(수량·삭제 반영) 그대로 둔다.
  */
-export function mergeDineInAddonCartPosItemsWithExisting(existing: PosOrderItem[], fromCart: PosOrderItem[]): PosOrderItem[] {
-  if (fromCart.length === 0) return existing
+export function mergeDineInAddonCartPosItemsWithExisting(
+  existing: PosOrderItem[],
+  fromCartRaw: PosOrderItem[],
+  nowWall: string = posLineAddedAtWallNow()
+): PosOrderItem[] {
+  if (fromCartRaw.length === 0) return existing
   const baseIds = new Set(existing.map((b) => normPosOrderItemId(b.id)).filter(Boolean))
+  /** 이번에 담은 줄에 시각을 찍어 회차를 남긴다(기존 미서빙 같은 메뉴와 합치지 않음) */
+  const fromCart = fromCartRaw.map((c) => {
+    const lineAddedAt = String((c as { addedAt?: unknown }).addedAt ?? '').trim()
+    if (lineAddedAt || baseIds.has(normPosOrderItemId(c.id))) return c
+    return { ...c, addedAt: nowWall } as PosOrderItem
+  })
   const allCartLinesAreNewIds = fromCart.every((c) => !baseIds.has(normPosOrderItemId(c.id)))
   let merged: PosOrderItem[]
   if (allCartLinesAreNewIds) {
@@ -298,7 +312,8 @@ export function mergeDineInAddonCartPosItemsWithExisting(existing: PosOrderItem[
   }
   /** 미서빙·동일 메뉴 줄은 수량 합산(합석 규칙과 동일) — 추가 주문·영수증 중복 방지 */
   const consolidated = consolidatePosOrderLinesAfterMerge(
-    merged as unknown as Record<string, unknown>[]
+    merged as unknown as Record<string, unknown>[],
+    { keepRoundsSeparate: true }
   ) as unknown as PosOrderItem[]
   return consolidated.map((line) => {
     const q = resolveCartLineQuantityForSave(line as { quantity?: unknown; qty?: unknown })

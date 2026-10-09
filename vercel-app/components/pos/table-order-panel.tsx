@@ -1,7 +1,7 @@
 'use client'
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -38,6 +38,9 @@ import {
   Combine,
   LayoutGrid,
   ArrowLeft,
+  MoveHorizontal,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { useT, tr as i18nTr } from '@/lib/i18n'
@@ -69,6 +72,12 @@ import type { PosKitchenReprintPayload } from '@/lib/pos-kitchen-slip-routing'
 import { buildOrderItemsWithPromoDisplayEnrichment } from '@/lib/pos-order-set-display-items'
 import { buildPosOrderLineKeys, getPosOrderLineByKey } from '@/lib/pos-order-line-keys'
 import { PosLineCancelQtyDialog } from '@/components/pos/pos-line-cancel-qty-dialog'
+import {
+  computePosOrderLineRounds,
+  countPosOrderRounds,
+  formatPosOrderRoundLabel,
+} from '@/lib/pos-order-rounds'
+import { usePosCheckerViewPrefs } from '@/hooks/use-pos-checker-view-prefs'
 
 export interface TableOrderPanelProps {
   tableName: string
@@ -176,6 +185,19 @@ export function TableOrderPanel({
   const [guestSaving, setGuestSaving] = useState(false)
 
   const lineKeys = useMemo(() => buildPosOrderLineKeys(order?.items ?? []), [order?.items])
+  const checkerView = usePosCheckerViewPrefs()
+  const lineRounds = useMemo(
+    () => computePosOrderLineRounds(order?.items ?? [], { orderCreatedAt: order?.createdAt }),
+    [order?.items, order?.createdAt]
+  )
+  const roundCount = useMemo(() => countPosOrderRounds(lineRounds), [lineRounds])
+  /** 회차가 2개 이상이면 회차 순으로 묶어 보여준다(같은 회차 안에서는 주문 순서 유지) */
+  const displayOrder = useMemo(() => {
+    const idx = displayItems.map((_, i) => i)
+    if (roundCount < 2) return idx
+    return idx.sort((a, b) => (lineRounds[a]?.round ?? 1) - (lineRounds[b]?.round ?? 1) || a - b)
+  }, [displayItems, lineRounds, roundCount])
+  const roundTemplate = t('posOrderRoundN')
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -718,6 +740,84 @@ export function TableOrderPanel({
     setGuestDirectOpen(false)
   }
 
+  const checkerViewToolbar = (
+    <div className="flex shrink-0 items-center justify-end gap-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 w-9 p-0"
+        disabled={!checkerView.canZoomOut}
+        onClick={checkerView.zoomOut}
+        aria-label={tr('posCheckerZoomOut', '글자 작게')}
+        title={tr('posCheckerZoomOut', '글자 작게')}
+      >
+        <ZoomOut className="h-4 w-4" aria-hidden />
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 w-9 p-0"
+        disabled={!checkerView.canZoomIn}
+        onClick={checkerView.zoomIn}
+        aria-label={tr('posCheckerZoomIn', '글자 크게')}
+        title={tr('posCheckerZoomIn', '글자 크게')}
+      >
+        <ZoomIn className="h-4 w-4" aria-hidden />
+      </Button>
+      <Button
+        type="button"
+        variant={checkerView.width === 'normal' ? 'outline' : 'secondary'}
+        size="sm"
+        className="hidden h-8 w-9 p-0 min-[921px]:inline-flex"
+        onClick={checkerView.cycleWidth}
+        aria-label={tr('posCheckerWidth', '패널 폭')}
+        title={tr('posCheckerWidth', '패널 폭')}
+      >
+        <MoveHorizontal className="h-4 w-4" aria-hidden />
+      </Button>
+    </div>
+  )
+
+  const renderRoundHeader = (itemPos: number) => {
+    if (roundCount < 2) return null
+    const itemIndex = displayOrder[itemPos]
+    const round = lineRounds[itemIndex]
+    if (!round) return null
+    const prevIndex = itemPos > 0 ? displayOrder[itemPos - 1] : undefined
+    if (prevIndex != null && lineRounds[prevIndex]?.round === round.round) return null
+    let total = 0
+    let served = 0
+    displayOrder.forEach((idx) => {
+      if (lineRounds[idx]?.round !== round.round) return
+      const key = lineKeys[idx] ?? `line-${idx}`
+      if (itemCancelled[key]) return
+      total += 1
+      if (itemServed[key]) served += 1
+    })
+    const done = total > 0 && served >= total
+    const latest = round.round === roundCount
+    return (
+      <li
+        key={`round-${round.round}`}
+        className={cn(
+          'sticky top-0 z-10 flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-sm font-bold shadow-sm',
+          done
+            ? 'border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-100'
+            : latest
+              ? 'border-amber-400 bg-amber-100 text-amber-950 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-100'
+              : 'border-border bg-muted text-foreground'
+        )}
+      >
+        <span className="truncate">{formatPosOrderRoundLabel(round, roundTemplate)}</span>
+        <span className="shrink-0 tabular-nums">
+          {served}/{total}
+        </span>
+      </li>
+    )
+  }
+
   return (
     <div className="h-full flex flex-col border-l border-border bg-card" data-tour="pos-tour-serving-panel">
       <div className="px-3 py-2.5 border-b flex items-center justify-between gap-2">
@@ -899,8 +999,9 @@ export function TableOrderPanel({
                 <CheckCircle className="w-5 h-5 shrink-0" />
                 <span>{t('posTableStatusServed') || '서빙 완료'}</span>
               </div>
+              {checkerViewToolbar}
               <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
-                <ul className="p-1.5 space-y-1">
+                <ul className="p-1.5 space-y-1" style={{ zoom: checkerView.zoom }}>
                   {order.items.map((item) => {
                     const cancelled = itemCancelled[item.id]
                     const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
@@ -1032,9 +1133,11 @@ export function TableOrderPanel({
             </>
           ) : (
             <>
+              {checkerViewToolbar}
               <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
-                <ul className="p-1.5 space-y-1">
-                  {displayItems.map((item, itemIndex) => {
+                <ul className="p-1.5 space-y-1" style={{ zoom: checkerView.zoom }}>
+                  {displayOrder.map((itemIndex, itemPos) => {
+                    const item = displayItems[itemIndex]
                     const lineKey = lineKeys[itemIndex] ?? `line-${itemIndex}`
                     const served = itemServed[lineKey]
                     const cancelled = itemCancelled[lineKey]
@@ -1047,8 +1150,9 @@ export function TableOrderPanel({
                     const optionPartT = optionPart ? translatePosMenuLineForReceipt(optionPart, t) : undefined
                     const fullNameT = translatePosMenuLineForReceipt(item.name, t)
                     return (
+                      <Fragment key={lineKey}>
+                      {renderRoundHeader(itemPos)}
                       <li
-                        key={lineKey}
                         className={cn(
                           'grid cursor-default grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-1.5 gap-y-1 py-1.5 px-2 rounded-md border border-border/50 transition-shadow',
                           cancelled && 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40',
@@ -1170,6 +1274,7 @@ export function TableOrderPanel({
                           </div>
                         )}
                       </li>
+                      </Fragment>
                     )
                   })}
                 </ul>

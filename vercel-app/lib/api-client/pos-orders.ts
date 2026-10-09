@@ -21,6 +21,10 @@ export interface PosOrderItem {
   quantity?: number
   /** 줄 단위 메모 (주방·영수증) */
   note?: string
+  /** 줄이 주문에 들어온 시각(방콕 "YYYY-MM-DD HH:mm:ss") — 주문 회차 계산 */
+  addedAt?: string | null
+  /** `qr_table` 등 줄 출처 */
+  source?: string
   servedAt?: string | null
   servedBy?: string | null
   cancelledAt?: string | null

@@ -167,6 +167,7 @@ import {
 import { POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS, resolveAfterReceiptToKitchenDelayMs } from '@/lib/pos-print-html'
 import { coercePosReceiptLineDiscountAmt } from '@/lib/pos-receipt-line-discount'
 import { usePosKitchenPrintJobWorker } from '@/hooks/use-pos-kitchen-print-job-worker'
+import { resolveAddonRoundLabel } from '@/lib/pos-order-rounds'
 
 type RealtimeParsedPosOrderItem = {
   id: string
@@ -1430,6 +1431,12 @@ export function usePosMainDeviceSyncHost(): void {
           otherFeeAmt: pricing.otherFeeAmt,
           otherFeeMode: pricing.otherFeeMode,
           ...posGuestCountSpread(addonRow.guest_count),
+          roundLabel: resolveAddonRoundLabel({
+            items,
+            addonLineIds: hallAddonLinesRemote.map((it) => it.id),
+            template: tPrint('posOrderRoundN'),
+            orderCreatedAt: addonRow.created_at,
+          }),
         }
         dineInRemoteItemQtySnapshotRef.current.set(addonOrderId, newQtyById)
         if (autoPrint.kitchenOnOrder && kitchenRealtimeLines.length > 0) {
@@ -1962,6 +1969,12 @@ export function usePosMainDeviceSyncHost(): void {
                     otherFeeAmt: pricing.otherFeeAmt,
                     otherFeeMode: pricing.otherFeeMode,
                     ...posGuestCountSpread(o.guestCount),
+                    roundLabel: resolveAddonRoundLabel({
+                      items,
+                      addonLineIds: hallAddonLinesRemote.map((it) => String(it.id ?? '')),
+                      template: tPrint('posOrderRoundN'),
+                      orderCreatedAt: o.createdAt,
+                    }),
                   }
                   if (printHallAddon) {
                     void printHallReceiptPayload(receiptPayloadRemote, autoprintCtx)

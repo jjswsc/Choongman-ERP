@@ -3251,4 +3251,5 @@ export const I18N_POS_KH: Record<string, string> = {
     posQrTableOpenHint: 'This does not have to be the main POS. Open a table from an order tablet or a staff phone, then guests scan the table QR to order.',
     posQrTableOpenNeedPackage: 'Select a package first.',
     posQrTableOpenTile: 'Open QR table',
+    posOrderRoundN: 'Round {n}',
 }

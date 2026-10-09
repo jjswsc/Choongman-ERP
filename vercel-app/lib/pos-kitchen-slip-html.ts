@@ -739,6 +739,8 @@ export function buildKitchenSlipHtml(params: {
   guestCount?: number
   /** `guestCount` 표시용 라벨(번역). 없으면 `Guests` */
   guestCountLabel?: string
+  /** 같은 테이블 주문 회차 (예: "รอบที่ 2 · 18:10") */
+  roundLabel?: string
 }): string {
   const {
     label,
@@ -756,6 +758,7 @@ export function buildKitchenSlipHtml(params: {
     printLayout,
     guestCount,
     guestCountLabel,
+    roundLabel,
   } = params
   const paperCss = getKitchenSlipPaperCss(design, printColorAdjust, printLayout)
   const classCss = kitchenSlipClassCss(design)
@@ -778,6 +781,10 @@ export function buildKitchenSlipHtml(params: {
         '</strong>' +
         c('div')
       : ''
+  const roundText = String(roundLabel ?? '').trim()
+  const roundRowHtml = roundText
+    ? '<div class="k-row" style="font-size:1.35em;font-weight:800;">' + escapeHtml(roundText) + c('div')
+    : ''
   return (
     '<!DOCTYPE html><html><head><meta charset="utf-8"/>' +
     '<meta name="viewport" content="width=device-width,initial-scale=1"/>' +
@@ -797,6 +804,7 @@ export function buildKitchenSlipHtml(params: {
     escapeHtml(orderTypeLabel) +
     '</span>' +
     c('div') +
+    roundRowHtml +
     '<div class="k-row">' +
     escapeHtml(storeCode + tablePart) +
     c('div') +
@@ -845,6 +853,7 @@ export function buildKitchenSlipDocumentHtml(params: {
   optionNameByCode?: Map<string, string> | Record<string, string>
   /** 주방 슬립 수저·포크 체크리스트 번역 */
   t?: (key: string) => string
+  roundLabel?: string
 }): string {
   const {
     label,
@@ -866,6 +875,7 @@ export function buildKitchenSlipDocumentHtml(params: {
     guestCountLabel,
     optionNameByCode,
     t: _t,
+    roundLabel,
   } = params
   const itemsHtml = buildKitchenSlipItemsHtml(
     items,
@@ -892,5 +902,6 @@ export function buildKitchenSlipDocumentHtml(params: {
     printLayout: kitchenPrintLayout,
     guestCount,
     guestCountLabel,
+    roundLabel,
   })
 }

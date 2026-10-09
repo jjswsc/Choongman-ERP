@@ -66,7 +66,11 @@ async function printClaimedKitchenJob(
       guestCount: header.guestCount,
       deliveryAppCode: header.deliveryAppCode,
     } as PosOrder
-    await printKitchenForOrder(orderForKitchen, ctx, { kitchenLines, dedupeKey })
+    await printKitchenForOrder(orderForKitchen, ctx, {
+      kitchenLines,
+      dedupeKey,
+      ...(header.round ? { round: header.round } : {}),
+    })
     await markKitchenPrintJob({ jobId: job.id, status: 'printed' })
     ctx.logPosPrintDebug?.('kitchen_job_printed', { orderId, jobId: job.id, lines: kitchenLines.length })
     ctx.onRefetchStores?.('current')

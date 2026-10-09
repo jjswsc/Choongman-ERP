@@ -64,6 +64,11 @@ import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from
 import { escapeHtml } from '@/lib/utils'
 import { posKitchenGuestSpread } from '@/lib/pos-terminal-auto-print'
 import { isQrTableGuestOrderLine, pickQrGuestLinesForHallAutoprint, buildQrGuestCumulativeHallPrintItems } from '@/lib/qr-table-types'
+import {
+  formatPosOrderRoundLabel,
+  resolvePosOrderRoundForLineIds,
+  type PosOrderRound,
+} from '@/lib/pos-order-rounds'
 import { shouldForceSimplePaymentReceiptForStore } from '@/lib/pos-receipt-store-flags'
 import type { LangCode } from '@/lib/lang-context'
 import type { PosPricingAdjustments } from '@/lib/pos-pricing'
@@ -130,6 +135,8 @@ export type HallReceiptPrintPayload = {
   otherFeeAmt?: number
   otherFeeMode?: 'included' | 'separate'
   guestCount?: number
+  /** 같은 테이블 주문 회차 (예: "รอบที่ 2 · 18:10") */
+  roundLabel?: string
   _autoPrintDedupeKey?: string
 }
 
@@ -274,7 +281,8 @@ function kitchenSlipItemsForPrint(
 async function printQrNoKitchenLinesToHall(
   order: PosOrder,
   ctx: PosMainDeviceAutoprintCtx,
-  hallLines: Array<Record<string, unknown>>
+  hallLines: Array<Record<string, unknown>>,
+  roundFromJob?: PosOrderRound
 ): Promise<void> {
   const orderId = Number(order.id ?? 0)
   const newLineIds = hallLines
@@ -282,6 +290,7 @@ async function printQrNoKitchenLinesToHall(
     .filter(Boolean)
 
   let liveItems: Array<Record<string, unknown>> = []
+  let liveCreatedAt: string | undefined
   let discountAmt = 0
   let couponDiscountAmt = 0
   if (Number.isFinite(orderId) && orderId > 0) {
@@ -293,6 +302,7 @@ async function printQrNoKitchenLinesToHall(
       const live = list[0]
       if (live?.items?.length) {
         liveItems = live.items as unknown as Array<Record<string, unknown>>
+        liveCreatedAt = live.createdAt
         discountAmt = Math.max(0, Number(live.discountAmt ?? 0) || 0)
         couponDiscountAmt = Math.max(0, Number(live.couponDiscountAmt ?? 0) || 0)
         if (live.orderNo && !order.orderNo) order = { ...order, orderNo: live.orderNo }
@@ -307,11 +317,11 @@ async function printQrNoKitchenLinesToHall(
     }
   }
 
-  // 잡이 UPDATE보다 먼저면 DB에 신규 줄이 없을 수 있음 → 잡 줄·order.items·DB를 id로 합침
+  // 잡이 UPDATE보다 먼저면 DB에 신규 줄이 없을 수 있음 → DB·잡 줄·order.items 를 id로 합침(주문 순서 유지)
   const byId = new Map<string, Record<string, unknown>>()
   const mergeRows = [
-    ...((Array.isArray(order.items) ? order.items : []) as unknown as Array<Record<string, unknown>>),
     ...liveItems,
+    ...((Array.isArray(order.items) ? order.items : []) as unknown as Array<Record<string, unknown>>),
     ...hallLines,
   ]
   for (const it of mergeRows) {
@@ -320,11 +330,17 @@ async function printQrNoKitchenLinesToHall(
     byId.set(id, it)
   }
 
+  const allOrderItems = [...byId.values()]
   const built = buildQrGuestCumulativeHallPrintItems({
-    allOrderItems: [...byId.values()],
+    allOrderItems,
     newLineIds,
   })
   if (!built.items.length) return
+  const round =
+    roundFromJob ??
+    resolvePosOrderRoundForLineIds(allOrderItems, newLineIds, { orderCreatedAt: liveCreatedAt }) ??
+    undefined
+  const roundLabel = formatPosOrderRoundLabel(round, ctx.tPrint('posOrderRoundN'))
 
   const items: PosOrder['items'] = built.items.map((it) => ({
     id: it.id,
@@ -376,6 +392,7 @@ async function printQrNoKitchenLinesToHall(
       ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
       ...((it as { isAddon?: boolean }).isAddon ? { isAddon: true as const } : {}),
     })),
+    ...(roundLabel ? { roundLabel } : {}),
     _autoPrintDedupeKey: `order:${orderId}:hall:qr-nokitchen:${built.newLineIdsKey || '0'}`,
   }
   await printHallReceiptPayload(payload, ctx)
@@ -526,7 +543,7 @@ export async function printHallReceiptPayload(
 export async function printKitchenForOrder(
   order: PosOrder,
   ctx: PosMainDeviceAutoprintCtx,
-  opts?: { kitchenLines?: Array<Record<string, unknown>>; dedupeKey?: string }
+  opts?: { kitchenLines?: Array<Record<string, unknown>>; dedupeKey?: string; round?: PosOrderRound }
 ): Promise<void> {
   const orderId = Number(order.id ?? 0)
   if (!Number.isFinite(orderId) || orderId <= 0) throw new Error('invalid_order_id')
@@ -570,9 +587,15 @@ export async function printKitchenForOrder(
       printAllQrGuestHall
     )
     const hallPrintCtx = { ...ctx, printerSettings: settings }
+    const roundLabel = formatPosOrderRoundLabel(opts?.round, ki.t('posOrderRoundN'))
     if (!slips.length) {
       if (hallLines.length) {
-        await printQrNoKitchenLinesToHall(order, hallPrintCtx, hallLines as Array<Record<string, unknown>>)
+        await printQrNoKitchenLinesToHall(
+          order,
+          hallPrintCtx,
+          hallLines as Array<Record<string, unknown>>,
+          opts?.round
+        )
         ctx.logPosPrintDebug?.('kitchen_autoprint_qr_hall_only', {
           orderId,
           lines: hallLines.length,
@@ -613,6 +636,7 @@ export async function printKitchenForOrder(
         optionNameByCode: optionNameByCodeForPrint,
         printColorAdjust: 'exact',
         ...posKitchenGuestSpread(order.guestCount, ki.t('posOrderGuestCount')),
+        ...(roundLabel ? { roundLabel } : {}),
       })
       await printPosHtmlDocument(html, {
         title: slip.label,
@@ -632,7 +656,12 @@ export async function printKitchenForOrder(
     if (hallLines.length) {
       try {
         await new Promise((resolve) => setTimeout(resolve, resolveAfterKitchenToReceiptDelayMs()))
-        await printQrNoKitchenLinesToHall(order, hallPrintCtx, hallLines as Array<Record<string, unknown>>)
+        await printQrNoKitchenLinesToHall(
+          order,
+          hallPrintCtx,
+          hallLines as Array<Record<string, unknown>>,
+          opts?.round
+        )
         ctx.logPosPrintDebug?.('kitchen_autoprint_qr_hall', {
           orderId,
           lines: hallLines.length,

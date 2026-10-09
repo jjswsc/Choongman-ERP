@@ -190,6 +190,8 @@ import {
   shouldSkipDineInKitchenAddonBecausePayment,
   shouldSkipQrTableSessionOpenAutoprint,
 } from '@/lib/qr-table-types'
+import { resolveAddonRoundLabel } from '@/lib/pos-order-rounds'
+import { posCheckerPanelWidthClass, usePosCheckerViewPrefs } from '@/hooks/use-pos-checker-view-prefs'
 import { usePosMainDeviceSyncOwnedByLayout } from '@/hooks/use-pos-main-device-sync-owned-by-layout'
 import { isPosMainDeviceSyncOwnedByLayout } from '@/lib/pos-main-device-sync-owner'
 import {
@@ -1076,6 +1078,7 @@ export default function PosTerminalPage() {
   const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
   const printLang = receiptPrintLang && validPrintLangs.includes(receiptPrintLang) ? receiptPrintLang : lang
   const tPrint = useT(printLang)
+  const checkerViewPrefs = usePosCheckerViewPrefs()
   const [vatRate, setVatRate] = useState(7)
   const [vatMode, setVatMode] = useState<'included' | 'separate'>('included')
   const [serviceRate, setServiceRate] = useState(0)
@@ -5749,6 +5752,12 @@ export default function PosTerminalPage() {
         otherFeeAmt: pricing.otherFeeAmt,
         otherFeeMode: pricing.otherFeeMode,
         ...posGuestCountSpread(row.guest_count),
+        roundLabel: resolveAddonRoundLabel({
+          items,
+          addonLineIds: hallAddonLinesRemote.map((it) => String(it.id ?? '')),
+          template: tPrint('posOrderRoundN'),
+          orderCreatedAt: row.created_at,
+        }),
       }
 
       const kitchenDedupeKey = buildDineInAddKitchenAutoPrintDedupeKey(orderId, kitchenRealtimeLines, {
@@ -6273,6 +6282,12 @@ export default function PosTerminalPage() {
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
                   ...posGuestCountSpread(o.guestCount),
+                  roundLabel: resolveAddonRoundLabel({
+                    items,
+                    addonLineIds: hallAddonLinesRemote.map((it) => String(it.id ?? '')),
+                    template: tPrint('posOrderRoundN'),
+                    orderCreatedAt: o.createdAt,
+                  }),
                 }
                 logPosPrintDebug('poll_meta_remote_dine_in_add_receipt', {
                   orderId: oid,
@@ -12783,7 +12798,12 @@ export default function PosTerminalPage() {
                       : narrowStackedMenuWithCart
                         ? 'shrink-0 border-t min-h-[280px] max-h-[46vh]'
                         : 'shrink-0 border-t min-h-[180px] max-h-[50vh]'
-                  : 'w-72 shrink-0 border-l min-h-0'
+                  : cn(
+                      activeTab === 'tables' && servingTableId
+                        ? posCheckerPanelWidthClass(checkerViewPrefs.width)
+                        : 'w-72',
+                      'shrink-0 border-l min-h-0'
+                    )
               )}
             >
               {panelContent}

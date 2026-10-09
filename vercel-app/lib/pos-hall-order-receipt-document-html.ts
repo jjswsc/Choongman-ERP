@@ -159,6 +159,8 @@ export type HallOrderPayload = {
   guestCount?: number
   /** 주문 전체 취소 void 영수증 */
   voidReceiptMode?: boolean
+  /** 같은 테이블 주문 회차 (예: "รอบที่ 2 · 18:10") */
+  roundLabel?: string
 }
 
 /** 홀 주문서·결제 영수증이 같은 할인 금액을 쓰도록 정규화(쿠폰·플랫폼 차액 포함). */
@@ -610,6 +612,10 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         c('span') +
         c('div')
       : ''
+  const roundText = String(payload.roundLabel ?? '').trim()
+  const roundRow = roundText
+    ? '<div class="receipt-meta-row" style="font-size:1.25em;font-weight:800;">' + esc(roundText) + c('div')
+    : ''
   const dateRow =
     '<div class="receipt-meta-row"><span class="receipt-meta-label">' +
     esc(tr('date', 'Date')) +
@@ -1006,6 +1012,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
     '<div class="receipt-divider">' +
     c('div') +
     '<div class="text-xs">' +
+    roundRow +
     tableRow +
     guestRow +
     dateRow +

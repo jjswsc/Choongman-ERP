@@ -28,7 +28,8 @@ import {
   coercePaymentOtherBreakdownForSave,
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
-import { resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import { parsePosOrderItemsJson, resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import { carryOverPosLineAddedAt, resolvePosOrderRoundForLineIds } from '@/lib/pos-order-rounds'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich-server'
 import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-regular-price-server'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
@@ -177,7 +178,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,payment_crypto,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json,created_by',
+          'id,order_no,store_code,status,point_earned,order_type,table_name,memo,discount_amt,discount_reason,service_amt,service_reason,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,payment_crypto,delivery_payment_channel,delivery_app_code,member_id,member_no,coupon_code,coupon_discount_amt,applied_coupons,point_used,point_earned,guest_count,subtotal,vat,total,paid_at,items_json,created_by,created_at',
       },
       'updatePosOrder'
     )) as {
@@ -215,6 +216,7 @@ export async function POST(req: NextRequest) {
       paid_at?: string | null
       items_json?: unknown
       created_by?: string | null
+      created_at?: string | null
     }[] | null
 
     if (!existing?.length) {
@@ -338,6 +340,15 @@ export async function POST(req: NextRequest) {
       itemsWithOption,
       current?.order_type ?? body?.orderType ?? body?.order_type
     )
+    const isDineInForRounds =
+      coercePosOrderTypeForDb(String(current?.order_type ?? body?.orderType ?? body?.order_type ?? '')) ===
+      'dine_in'
+    if (isDineInForRounds) {
+      items = carryOverPosLineAddedAt(
+        parsePosOrderItemsJson(current?.items_json),
+        items as Array<Record<string, unknown>>
+      ) as typeof items
+    }
 
     let subtotal = 0
     for (const it of items) {
@@ -925,6 +936,13 @@ export async function POST(req: NextRequest) {
       { formatNote: (note: string) => formatGrabLineNoteForKitchenPrint(note) }
     )
     if (kitchenDeltaLines.length > 0) {
+      const kitchenRound = isDineInForRounds
+        ? resolvePosOrderRoundForLineIds(
+            items as Array<Record<string, unknown>>,
+            kitchenDeltaLines.map((line) => String((line as { id?: unknown }).id ?? '')),
+            { orderCreatedAt: current?.created_at }
+          )
+        : null
       const kitchenEnqueuePromise = enqueueKitchenPrintJob({
         storeCode: String(current?.store_code || '').trim(),
         orderId: id,
@@ -943,6 +961,7 @@ export async function POST(req: NextRequest) {
           memo: String(current?.memo || '').trim(),
           guestCount: Number(current?.guest_count || 0) || undefined,
           ...(deliveryAppCode ? { deliveryAppCode } : {}),
+          ...(kitchenRound ? { roundNo: kitchenRound.round, roundAtMs: kitchenRound.atMs } : {}),
         },
       })
       if (deferUnpaidSideEffects) {

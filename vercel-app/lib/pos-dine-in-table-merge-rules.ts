@@ -98,14 +98,19 @@ function cloneLineForOutput(line: Record<string, unknown>): Record<string, unkno
 }
 
 export function consolidatePosOrderLinesAfterMerge(
-  linesInOrder: Record<string, unknown>[]
+  linesInOrder: Record<string, unknown>[],
+  opts?: { keepRoundsSeparate?: boolean }
 ): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = []
+  const identity = (line: Record<string, unknown>) =>
+    opts?.keepRoundsSeparate
+      ? posMergeLineIdentityKey(line) + '\u001f' + String(line.addedAt ?? '').trim()
+      : posMergeLineIdentityKey(line)
   for (const line of linesInOrder) {
-    const key = posMergeLineIdentityKey(line)
+    const key = identity(line)
     const unserved = posMergeLineIsUnserved(line)
     if (unserved) {
-      const idx = out.findIndex((o) => posMergeLineIsUnserved(o) && posMergeLineIdentityKey(o) === key)
+      const idx = out.findIndex((o) => posMergeLineIsUnserved(o) && identity(o) === key)
       if (idx >= 0) {
         const prev = out[idx]
         const qty = Math.round((lineQty(prev) + lineQty(line)) * 1000) / 1000

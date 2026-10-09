@@ -1,5 +1,6 @@
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
 import { coercePosOrderTypeForDb, type PosOrderTypeValue } from '@/lib/pos-sales-order-type-filter'
+import type { PosOrderRound } from '@/lib/pos-order-rounds'
 
 /**
  * 인쇄 큐 claim 안전망 — INSERT Realtime poke(0/400/1200/2500ms)가 1차.
@@ -106,8 +107,11 @@ export function kitchenPrintJobOrderFieldsFromPayload(
   orderType: PosOrderTypeValue
   deliveryAppCode?: string
   guestCount?: number
+  round?: PosOrderRound
 } {
   const guestCount = Math.floor(Number(payload?.guestCount ?? 0) || 0)
+  const roundNo = Math.floor(Number(payload?.roundNo ?? 0) || 0)
+  const roundAtMs = Number(payload?.roundAtMs ?? NaN)
   const deliveryAppCode = String(payload?.deliveryAppCode ?? payload?.delivery_app_code ?? '')
     .trim()
     .toLowerCase()
@@ -120,5 +124,8 @@ export function kitchenPrintJobOrderFieldsFromPayload(
     ),
     ...(deliveryAppCode ? { deliveryAppCode } : {}),
     ...(guestCount > 0 ? { guestCount } : {}),
+    ...(roundNo > 0
+      ? { round: { round: roundNo, atMs: Number.isFinite(roundAtMs) && roundAtMs > 0 ? roundAtMs : null } }
+      : {}),
   }
 }

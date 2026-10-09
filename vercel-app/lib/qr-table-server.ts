@@ -18,6 +18,7 @@ import { computePosPricing } from '@/lib/pos-pricing'
 import { loadPosPricingAdjustmentsForStore } from '@/lib/pos-pricing-adjustments-server'
 import { allocateNextPosOrderNo } from '@/lib/pos-order-no-server'
 import { enqueueKitchenPrintJob } from '@/lib/pos-print-job-queue'
+import { resolvePosOrderRoundForLineIds } from '@/lib/pos-order-rounds'
 import { filterKitchenCartLinesForDineInAdd } from '@/lib/pos-kitchen-dine-in-delta'
 import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
@@ -2544,6 +2545,10 @@ export async function submitQrCart(params: {
     // 합계 계산·pos_orders UPDATE 보다 먼저 큐에 넣어, 홀 화면보다 주방이 먼저 나가게
     try {
       const lineIds = newLines.map((line) => String(line.id || '')).filter(Boolean).join(',')
+      const kitchenRound = resolvePosOrderRoundForLineIds(
+        [...parseItemsJson((billOrder as { items_json?: unknown }).items_json), ...newLines],
+        newLines.map((line) => String(line.id || ''))
+      )
       await enqueueKitchenPrintJob({
         storeCode: session.storeCode,
         orderId: billOrderId,
@@ -2558,6 +2563,7 @@ export async function submitQrCart(params: {
           tableName: String(session.tableName || billOrder.table_name || '').trim(),
           memo: String(billOrder.memo || '').trim(),
           guestCount: Number(session.guestCount ?? billOrder.guest_count ?? 0) || undefined,
+          ...(kitchenRound ? { roundNo: kitchenRound.round, roundAtMs: kitchenRound.atMs } : {}),
         },
       })
     } catch (e) {
