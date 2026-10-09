@@ -1,20 +1,20 @@
 {
-    "version":  "0.1.18",
+    "version":  "0.1.19",
     "files":  [
                   {
                       "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
                       "name":  "cm-pos-windows-choongman-latest-setup.exe",
-                      "sha256":  "1b8366fc6966b258b1d3098475c956f11c2038dfe3c28f2a17e711c9c6e66f74"
+                      "sha256":  "30cd00e24b0f12b645964e99272e981b86feed469fbf0c49c5edeee82c016b2d"
                   },
                   {
-                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.18-setup.exe",
-                      "name":  "cm-pos-windows-choongman-0.1.18-setup.exe",
-                      "sha256":  "1b8366fc6966b258b1d3098475c956f11c2038dfe3c28f2a17e711c9c6e66f74"
+                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.19-setup.exe",
+                      "name":  "cm-pos-windows-choongman-0.1.19-setup.exe",
+                      "sha256":  "30cd00e24b0f12b645964e99272e981b86feed469fbf0c49c5edeee82c016b2d"
                   }
               ],
-    "publishedAtUtc":  "2026-09-09T15:19:00.7770457Z",
+    "installerSha256":  "30cd00e24b0f12b645964e99272e981b86feed469fbf0c49c5edeee82c016b2d",
+    "publishedAtUtc":  "2026-10-09T14:23:46.8083659Z",
+    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.19-setup.exe",
     "brand":  "choongman",
-    "installerSha256":  "1b8366fc6966b258b1d3098475c956f11c2038dfe3c28f2a17e711c9c6e66f74",
-    "notes":  "White-screen auto Clear Cache, reopen after crash, start at Windows login.",
-    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.18-setup.exe"
+    "notes":  "QR/hall slip paper cut no longer fires before the slip prints (fixes intermittent no-cut)."
 }
