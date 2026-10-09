@@ -92,20 +92,28 @@ function isColumnSchemaError(e: unknown): boolean {
   )
 }
 
-/** profile_id 컬럼 미배포(SQL 02 전) DB에서도 저장되도록 한 번만 컬럼 제외 재시도 */
+const OPTIONAL_COLUMNS = ['profile_id', 'payment_status', 'paid_at'] as const
+
+/** profile_id(SQL 02)·지급 상태(SQL 06) 컬럼 미배포 DB에서도 저장되도록 한 번만 컬럼 제외 재시도 */
 async function withoutProfileColumnFallback<T>(
   row: Record<string, unknown>,
   run: (r: Record<string, unknown>) => Promise<T>
 ): Promise<T> {
-  try {
-    return await run(row)
-  } catch (e) {
-    if (!isColumnSchemaError(e) || !String(e).includes('profile_id')) throw e
-    const rest = { ...row }
-    delete rest.profile_id
-    return run(rest)
+  let cur = row
+  for (let i = 0; i < OPTIONAL_COLUMNS.length; i++) {
+    try {
+      return await run(cur)
+    } catch (e) {
+      const hit = OPTIONAL_COLUMNS.filter((c) => c in cur && String(e).includes(c))
+      if (!isColumnSchemaError(e) || !hit.length) throw e
+      cur = { ...cur }
+      for (const c of hit) delete cur[c]
+    }
   }
+  return run(cur)
 }
+
+const PAYMENT_STATUSES = new Set(['', 'unpaid', 'billed', 'paid'])
 
 function normalizeStoreName(val: unknown): string {
   return String(val ?? '').trim()
@@ -166,6 +174,9 @@ export async function GET(req: NextRequest) {
       publishDate: row.publish_date ? parseDate(row.publish_date) : null,
       platformLinks: parsePlatformLinks(row.platform_links),
       note: String(row.note ?? ''),
+      paymentStatus: String(row.payment_status ?? ''),
+      paidAt: row.paid_at ? parseDate(row.paid_at) : null,
+      externalRef: String(row.external_ref ?? ''),
       expenseAccrualId:
         row.expense_accrual_id != null && row.expense_accrual_id !== ''
           ? String(row.expense_accrual_id)
@@ -228,6 +239,8 @@ export async function POST(req: NextRequest) {
       vendorCode?: string
       vendor_code?: string
       profileId?: string | null
+      paymentStatus?: string
+      paidAt?: string | null
     }
 
     const name = String(body.name ?? '').trim()
@@ -291,6 +304,11 @@ export async function POST(req: NextRequest) {
       platform_links: platformLinks,
       note: String(body.note ?? '').trim(),
     }, tenantScope, 'marketing_influencers')
+    if (body.paymentStatus !== undefined) {
+      const ps = String(body.paymentStatus ?? '').trim()
+      row.payment_status = PAYMENT_STATUSES.has(ps) ? ps : ''
+    }
+    if (body.paidAt !== undefined) row.paid_at = body.paidAt ? parseDate(body.paidAt) : null
 
     let recordId = editingId || ''
     let expenseSyncMessage: string | undefined

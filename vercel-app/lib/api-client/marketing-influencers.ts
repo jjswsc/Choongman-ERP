@@ -47,6 +47,11 @@ export interface MarketingInfluencer {
   publishDate: string | null
   platformLinks: Record<string, string>
   note: string
+  /** 지급 상태: '' | unpaid | billed | paid */
+  paymentStatus?: string
+  paidAt?: string | null
+  /** 시트 가져오기 행 키 */
+  externalRef?: string
   expenseAccrualId?: string | null
 }
 
@@ -79,6 +84,8 @@ export async function saveMarketingInfluencer(params: {
   publishDate?: string | null
   platformLinks?: Record<string, string>
   note?: string
+  paymentStatus?: string
+  paidAt?: string | null
   vendorCode?: string
   userRole?: string
   userName?: string
@@ -151,6 +158,25 @@ export type InfluencerProfileImportPreviewRow = {
   changedFields: string[]
 }
 
+export type InfluencerPostImportPreviewRow = {
+  action: 'insert' | 'update' | 'unchanged'
+  matchedId: string | null
+  externalRef: string
+  source: 'tracker' | 'hired'
+  sourceRow: number
+  name: string
+  contactName: string
+  store: string
+  shootingDate: string | null
+  publishDate: string | null
+  status: string
+  paymentStatus: string
+  budget: number
+  actualCost: number
+  linkCount: number
+  changedFields: string[]
+}
+
 export type InfluencerProfileImportResult = {
   success: boolean
   message?: string
@@ -166,9 +192,20 @@ export type InfluencerProfileImportResult = {
     toInsert: number
     toUpdate: number
     unchanged: number
+    posts?: {
+      trackerSheet: string
+      hiredSheet: string
+      trackerRows: number
+      hiredLinkRows: number
+      total: number
+      toInsert: number
+      toUpdate: number
+      unchanged: number
+    }
   }
   warnings?: string[]
   preview?: InfluencerProfileImportPreviewRow[]
+  postsPreview?: InfluencerPostImportPreviewRow[]
 }
 
 export async function importInfluencerProfilesXlsx(
@@ -208,6 +245,8 @@ export async function getMarketingInfluencerSalesLift(params: {
     to?: string
     todayYmd?: string
     timedOut?: boolean
+    /** 대조군(다른 매장 합계) 계산 여부 — 전 매장 권한일 때만 */
+    hasControl?: boolean
     skippedNoStoreOrDate?: number
   }>
 }

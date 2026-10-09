@@ -155,6 +155,8 @@ export default function MarketingInfluencersPage() {
     youtube: "",
     lemon8: "",
     note: "",
+    paymentStatus: "",
+    paidAt: "",
   })
   const [hubDesignStart, setHubDesignStart] = React.useState("")
   const [hubDesignEnd, setHubDesignEnd] = React.useState("")
@@ -474,6 +476,8 @@ export default function MarketingInfluencersPage() {
       youtube: "",
       lemon8: "",
       note: "",
+      paymentStatus: "",
+      paidAt: "",
     })
   }
 
@@ -509,6 +513,8 @@ export default function MarketingInfluencersPage() {
       youtube: links.youtube || "",
       lemon8: links.lemon8 || "",
       note: i.note || "",
+      paymentStatus: i.paymentStatus || "",
+      paidAt: i.paidAt || "",
     })
   }
 
@@ -582,6 +588,8 @@ export default function MarketingInfluencersPage() {
         publishDate: form.publishDate.trim() || null,
         platformLinks: Object.keys(platformLinks).length > 0 ? platformLinks : undefined,
         note: form.note.trim(),
+        paymentStatus: form.paymentStatus,
+        paidAt: form.paidAt.trim() || null,
         userRole: auth?.role,
         userName: auth?.user,
         userStore: auth?.store,
@@ -1041,6 +1049,34 @@ export default function MarketingInfluencersPage() {
                         className="mt-1"
                       />
                       <p className="mt-1 text-[10px] text-muted-foreground">{t("marketingFieldHqPayableSyncHint")}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">{t("mktInfFieldPaymentStatus")}</label>
+                      <select
+                        value={form.paymentStatus}
+                        onChange={(e) => setForm((f) => ({ ...f, paymentStatus: e.target.value }))}
+                        className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                      >
+                        <option value="">{t("mktInfPayNone")}</option>
+                        <option value="unpaid">{t("mktInfPay_unpaid")}</option>
+                        <option value="billed">{t("mktInfPay_billed")}</option>
+                        <option value="paid">{t("mktInfPay_paid")}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">{t("mktInfFieldPaidAt")}</label>
+                      <Input
+                        type="date"
+                        value={form.paidAt}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            paidAt: e.target.value,
+                            paymentStatus: e.target.value && !f.paymentStatus ? "paid" : f.paymentStatus,
+                          }))
+                        }
+                        className="mt-1"
+                      />
                     </div>
                     {PLATFORM_KEYS.map((key) => (
                       <div key={key} className="sm:col-span-2">

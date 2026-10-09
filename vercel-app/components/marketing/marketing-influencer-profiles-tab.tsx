@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { FileSpreadsheet, Pencil, Plus, Save, Search, Send, Trash2, X } from "lucide-react"
+import { FileSpreadsheet, Link2, Pencil, Plus, Save, Search, Send, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,11 +20,15 @@ import {
 } from "@/lib/api-client"
 import {
   INFLUENCER_PIPELINE_STATUSES,
+  extractUrls,
   formatFollowersShort,
+  normalizeTiktokHandle,
   parseFollowersCount,
+  tiktokVideoPostedYmd,
   type InfluencerPipelineStatus,
 } from "@/lib/marketing-influencer-profile"
-import { addDaysYmd, diffDaysYmd } from "@/lib/marketing-influencer-sales-lift"
+import { addDaysYmd, diffDaysYmd, isSalesLiftRowSettled } from "@/lib/marketing-influencer-sales-lift"
+import { InfluencerPaymentBadge, InfluencerPostLinkIcons } from "@/components/marketing/marketing-influencer-post-badges"
 
 type TFn = (key: string) => string
 
@@ -163,6 +167,11 @@ function profileSearchBlob(p: MarketingInfluencerProfile): string {
     p.contactPhone,
     p.note,
     p.rateIncludes,
+    p.rateTiktok,
+    p.rateInstagram,
+    p.rateFacebook,
+    p.ratePackage,
+    p.extraCost,
     p.preferredStore,
     ...p.contentCategories,
   ]
@@ -185,13 +194,26 @@ function SocialCell({ url, followers, handle }: { url: string; followers: number
   )
 }
 
+function postStatusKey(status: string): string {
+  if (status === "draft") return "marketingAdsStatusDraft"
+  if (status === "ongoing") return "marketingAdsStatusOngoing"
+  return "marketingAdsStatusFinish"
+}
+
+/** 게시일 — 미입력이면 TikTok 영상 링크 시각으로 추정 */
+function postDate(p: MarketingInfluencer): string {
+  return (p.publishDate || "").trim() || tiktokVideoPostedYmd(p.platformLinks?.tiktok) || ""
+}
+
+type ProfileSort = "name" | "updated" | "followers" | "rate" | "inquired" | "uploads"
+
 function ProfileLiftSummary({ t, profileId, posts }: { t: TFn; profileId: string; posts: MarketingInfluencer[] }) {
   const [loading, setLoading] = React.useState(false)
   const [rows, setRows] = React.useState<InfluencerSalesLiftRow[] | null>(null)
   const [error, setError] = React.useState("")
 
   const run = React.useCallback(async () => {
-    const dates = posts.map((p) => (p.publishDate || "").trim()).filter(Boolean).sort()
+    const dates = posts.map(postDate).filter(Boolean).sort()
     if (!dates.length) return
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
     let from = dates[0]!
@@ -210,7 +232,7 @@ function ProfileLiftSummary({ t, profileId, posts }: { t: TFn; profileId: string
   }, [posts, profileId])
 
   const agg = React.useMemo(() => {
-    const usable = (rows || []).filter((r) => r.lift && !r.lift.pending && !r.lift.overlap && !r.lift.noSales && !r.lift.notStarted)
+    const usable = (rows || []).filter(isSalesLiftRowSettled)
     let inc = 0
     let cost = 0
     let liftSum = 0
@@ -226,7 +248,7 @@ function ProfileLiftSummary({ t, profileId, posts }: { t: TFn; profileId: string
     return { n: usable.length, inc, cost, avgLift: liftN ? liftSum / liftN : null, roi: cost > 0 ? inc / cost : null }
   }, [rows])
 
-  if (!posts.some((p) => (p.publishDate || "").trim())) {
+  if (!posts.some((p) => postDate(p))) {
     return <p className="text-[11px] text-muted-foreground">{t("mktInfPublishDateRequiredForLift")}</p>
   }
   if (rows == null) {
@@ -276,6 +298,11 @@ export function MarketingInfluencerProfilesTab(props: {
   const [storeFilter, setStoreFilter] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("")
   const [search, setSearch] = React.useState("")
+  const [sortBy, setSortBy] = React.useState<ProfileSort>("name")
+  const [uploadsFilter, setUploadsFilter] = React.useState<"" | "has" | "none">("")
+  const [urlAddOpen, setUrlAddOpen] = React.useState(false)
+  const [urlAddText, setUrlAddText] = React.useState("")
+  const [urlAddBusy, setUrlAddBusy] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const [formOpen, setFormOpen] = React.useState(false)
   const [form, setForm] = React.useState<ProfileForm>(emptyForm)
@@ -320,13 +347,74 @@ export function MarketingInfluencerProfilesTab(props: {
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase()
+    const tokens = q.split(/\s+/).filter(Boolean)
+    const uploadsOf = (p: MarketingInfluencerProfile) => postsByProfile.get(p.id)?.length ?? 0
+    const maxFollowers = (p: MarketingInfluencerProfile) =>
+      Math.max(p.tiktokFollowers || 0, p.instagramFollowers || 0, p.facebookFollowers || 0)
+    const byName = (a: MarketingInfluencerProfile, b: MarketingInfluencerProfile) => a.displayName.localeCompare(b.displayName)
+    const cmp: Record<ProfileSort, (a: MarketingInfluencerProfile, b: MarketingInfluencerProfile) => number> = {
+      name: byName,
+      updated: (a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "") || byName(a, b),
+      followers: (a, b) => maxFollowers(b) - maxFollowers(a) || byName(a, b),
+      rate: (a, b) => (a.rateMinThb ?? Infinity) - (b.rateMinThb ?? Infinity) || byName(a, b),
+      inquired: (a, b) => (b.rateInquiredAt || "").localeCompare(a.rateInquiredAt || "") || byName(a, b),
+      uploads: (a, b) => uploadsOf(b) - uploadsOf(a) || byName(a, b),
+    }
     return profiles
       .filter((p) => !statusFilter || p.pipelineStatus === statusFilter)
       .filter((p) => !storeFilter || p.preferredStore === storeFilter)
       .filter((p) => !categoryFilter || p.contentCategories.includes(categoryFilter))
-      .filter((p) => !q || profileSearchBlob(p).includes(q))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName))
-  }, [profiles, statusFilter, storeFilter, categoryFilter, search])
+      .filter((p) => !uploadsFilter || (uploadsFilter === "has" ? uploadsOf(p) > 0 : uploadsOf(p) === 0))
+      .filter((p) => {
+        if (!tokens.length) return true
+        const blob = profileSearchBlob(p)
+        return tokens.every((tk) => blob.includes(tk.replace(/^@/, "")))
+      })
+      .sort(cmp[sortBy])
+  }, [profiles, postsByProfile, statusFilter, storeFilter, categoryFilter, uploadsFilter, search, sortBy])
+
+  const handleIndex = React.useMemo(() => {
+    const m = new Map<string, MarketingInfluencerProfile>()
+    for (const p of profiles) if (p.tiktokHandle) m.set(p.tiktokHandle, p)
+    return m
+  }, [profiles])
+
+  const formDuplicate = React.useMemo(() => {
+    const h = normalizeTiktokHandle(form.tiktokUrl)
+    const hit = h ? handleIndex.get(h) : undefined
+    return hit && hit.id !== editingId ? hit : null
+  }, [form.tiktokUrl, handleIndex, editingId])
+
+  const urlAddPreview = React.useMemo(() => {
+    const handles: string[] = []
+    for (const u of [...extractUrls(urlAddText), ...urlAddText.split(/[\s,]+/).filter((x) => x.startsWith("@"))]) {
+      const h = normalizeTiktokHandle(u)
+      if (h && !handles.includes(h)) handles.push(h)
+    }
+    return { fresh: handles.filter((h) => !handleIndex.has(h)), existing: handles.filter((h) => handleIndex.has(h)) }
+  }, [urlAddText, handleIndex])
+
+  const runUrlAdd = async () => {
+    if (!urlAddPreview.fresh.length) return
+    setUrlAddBusy(true)
+    let ok = 0
+    const failed: string[] = []
+    try {
+      for (const h of urlAddPreview.fresh) {
+        const res = await saveMarketingInfluencerProfile({ displayName: h, tiktokUrl: `https://www.tiktok.com/@${h}` })
+        if (res.success) ok++
+        else failed.push(`@${h}`)
+      }
+      await appAlert(
+        fill(t("mktInfUrlAddDone"), { ok, skip: urlAddPreview.existing.length }) + (failed.length ? `\n${failed.join(", ")}` : "")
+      )
+      setUrlAddText("")
+      setUrlAddOpen(false)
+      await onReload()
+    } finally {
+      setUrlAddBusy(false)
+    }
+  }
 
   const openNew = () => {
     setEditingId(null)
@@ -453,6 +541,10 @@ export function MarketingInfluencerProfilesTab(props: {
           <FileSpreadsheet className="mr-1.5 h-4 w-4" />
           {importBusy ? t("loading") : t("mktInfBtnImportXlsx")}
         </Button>
+        <Button type="button" size="sm" variant="outline" onClick={() => setUrlAddOpen((v) => !v)}>
+          <Link2 className="mr-1.5 h-4 w-4" />
+          {t("mktInfBtnAddByUrls")}
+        </Button>
         <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => void onPickFile(e)} />
         <div className="ml-auto flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
           {INFLUENCER_PIPELINE_STATUSES.filter((st) => statusCounts.get(st)).map((st) => (
@@ -469,6 +561,35 @@ export function MarketingInfluencerProfilesTab(props: {
           ))}
         </div>
       </div>
+
+      {urlAddOpen ? (
+        <div className="space-y-2 rounded-xl border border-border/80 bg-muted/10 p-3">
+          <p className="text-xs text-muted-foreground">{t("mktInfUrlAddHint")}</p>
+          <Textarea
+            className="min-h-[90px] text-xs"
+            value={urlAddText}
+            placeholder={"https://www.tiktok.com/@...\n@handle"}
+            onChange={(e) => setUrlAddText(e.target.value)}
+          />
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span>{fill(t("mktInfUrlAddPreview"), { fresh: urlAddPreview.fresh.length, existing: urlAddPreview.existing.length })}</span>
+            {urlAddPreview.existing.length ? (
+              <span className="text-muted-foreground">
+                ({urlAddPreview.existing.map((h) => `@${h}`).join(", ")})
+              </span>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              className="ml-auto h-8"
+              disabled={urlAddBusy || urlAddPreview.fresh.length === 0}
+              onClick={() => void runUrlAdd()}
+            >
+              {urlAddBusy ? t("loading") : fill(t("mktInfUrlAddConfirm"), { n: urlAddPreview.fresh.length })}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {importPreview?.success && s ? (
         <div className="space-y-3 rounded-xl border border-primary/30 bg-primary/[0.04] p-3 sm:p-4">
@@ -495,7 +616,12 @@ export function MarketingInfluencerProfilesTab(props: {
                   </select>
                 </label>
               ) : null}
-              <Button type="button" size="sm" disabled={importBusy || s.toInsert + s.toUpdate === 0} onClick={() => void confirmImport()}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={importBusy || s.toInsert + s.toUpdate + (s.posts?.toInsert ?? 0) + (s.posts?.toUpdate ?? 0) === 0}
+                onClick={() => void confirmImport()}
+              >
                 <Save className="mr-1.5 h-4 w-4" />
                 {t("mktInfImportConfirm")}
               </Button>
@@ -522,6 +648,20 @@ export function MarketingInfluencerProfilesTab(props: {
               unchanged: s.unchanged,
             })}
           </p>
+          {s.posts ? (
+            <p className="text-xs">
+              {s.posts.total > 0
+                ? fill(t("mktInfImportPostsSummary"), {
+                    tracker: s.posts.trackerRows,
+                    hired: s.posts.hiredLinkRows,
+                    total: s.posts.total,
+                    insert: s.posts.toInsert,
+                    update: s.posts.toUpdate,
+                    unchanged: s.posts.unchanged,
+                  })
+                : t("mktInfImportPostsNone")}
+            </p>
+          ) : null}
           {(importPreview.warnings || []).length > 0 ? (
             <details className="rounded-md border border-amber-500/40 bg-amber-500/[0.06] px-3 py-2 text-[11px]">
               <summary className="cursor-pointer font-medium text-amber-900 dark:text-amber-200">
@@ -576,6 +716,67 @@ export function MarketingInfluencerProfilesTab(props: {
               </tbody>
             </table>
           </div>
+          {(importPreview.postsPreview || []).length > 0 ? (
+            <div className="max-h-80 overflow-auto rounded-md border bg-background">
+              <div className="sticky top-0 z-10 border-b bg-muted/80 px-2 py-1.5 text-[11px] font-semibold">
+                {t("mktInfImportPostsTitle")}
+              </div>
+              <table className="w-full min-w-[760px] border-collapse text-xs">
+                <thead className="bg-muted/50">
+                  <tr className="text-left text-[10px] text-muted-foreground">
+                    <th className="px-2 py-1.5" />
+                    <th className="px-2 py-1.5">{t("mktInfFieldDisplayName")}</th>
+                    <th className="px-2 py-1.5">{t("marketingInfluencersFieldStore")}</th>
+                    <th className="px-2 py-1.5">{t("mktInfLiftColPublish")}</th>
+                    <th className="px-2 py-1.5">{t("mktInfFieldStatus")}</th>
+                    <th className="px-2 py-1.5">{t("mktInfFieldPaymentStatus")}</th>
+                    <th className="px-2 py-1.5 text-right">{t("mktInfLiftColCost")}</th>
+                    <th className="px-2 py-1.5 text-right">{t("mktInfImportLinks")}</th>
+                    <th className="px-2 py-1.5">{t("mktInfImportRows")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(importPreview.postsPreview || []).map((r, i) => (
+                    <tr key={i} className="border-t border-border/40">
+                      <td className="px-2 py-1">
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                            r.action === "insert" && "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/35 dark:text-emerald-200",
+                            r.action === "update" && "bg-sky-100 text-sky-900 dark:bg-sky-900/35 dark:text-sky-200",
+                            r.action === "unchanged" && "bg-muted text-muted-foreground"
+                          )}
+                          title={r.changedFields.join(", ")}
+                        >
+                          {t(`mktInfImportAction_${r.action}`)}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1">
+                        <div className="font-medium">{r.contactName || r.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{r.name}</div>
+                      </td>
+                      <td className="px-2 py-1">{r.store ? formatStoreLabel(r.store) : "—"}</td>
+                      <td className="whitespace-nowrap px-2 py-1">
+                        {r.publishDate || "—"}
+                        {r.shootingDate ? <div className="text-[10px] text-muted-foreground">{t("mktInfShootingShort")} {r.shootingDate}</div> : null}
+                      </td>
+                      <td className="px-2 py-1">{t(postStatusKey(r.status))}</td>
+                      <td className="px-2 py-1">
+                        <InfluencerPaymentBadge t={t} status={r.paymentStatus} />
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums">
+                        {r.actualCost > 0 ? `฿${r.actualCost.toLocaleString()}` : r.budget > 0 ? <span className="text-muted-foreground">฿{r.budget.toLocaleString()}</span> : "—"}
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums">{r.linkCount || "—"}</td>
+                      <td className="px-2 py-1 text-muted-foreground">
+                        {r.source === "tracker" ? "Tracker" : "Hired"} {r.sourceRow}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -649,6 +850,14 @@ export function MarketingInfluencerProfilesTab(props: {
               />
             </div>
           </div>
+          {formDuplicate ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-950 dark:text-amber-100">
+              {fill(t("mktInfDuplicateHandleWarn"), { name: formDuplicate.displayName, handle: formDuplicate.tiktokHandle })}
+              <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => openEdit(formDuplicate)}>
+                {t("mktInfDuplicateOpen")}
+              </Button>
+            </div>
+          ) : null}
           <div className="flex gap-2">
             <Button type="button" onClick={() => void handleSave()} disabled={saving}>
               <Save className="mr-2 h-4 w-4" />
@@ -695,6 +904,28 @@ export function MarketingInfluencerProfilesTab(props: {
             {categories.map((c) => (
               <option key={c} value={c}>
                 {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="w-32">
+          <Label className="text-[10px] text-muted-foreground">{t("mktInfColUploads")}</Label>
+          <select
+            className={cn(selectCn, "h-8 text-xs")}
+            value={uploadsFilter}
+            onChange={(e) => setUploadsFilter(e.target.value as "" | "has" | "none")}
+          >
+            <option value="">{t("all")}</option>
+            <option value="has">{t("mktInfFilterUploadsHas")}</option>
+            <option value="none">{t("mktInfFilterUploadsNone")}</option>
+          </select>
+        </div>
+        <div className="w-40">
+          <Label className="text-[10px] text-muted-foreground">{t("mktInfSortLabel")}</Label>
+          <select className={cn(selectCn, "h-8 text-xs")} value={sortBy} onChange={(e) => setSortBy(e.target.value as ProfileSort)}>
+            {(["name", "updated", "followers", "rate", "inquired", "uploads"] as const).map((k) => (
+              <option key={k} value={k}>
+                {t(`mktInfSort_${k}`)}
               </option>
             ))}
           </select>
@@ -836,15 +1067,20 @@ export function MarketingInfluencerProfilesTab(props: {
                             {uploads.length === 0 ? (
                               <p className="text-[11px] text-muted-foreground">{t("mktInfDetailNoUploads")}</p>
                             ) : (
-                              <ul className="space-y-0.5 text-xs">
+                              <ul className="space-y-1 text-xs">
                                 {[...uploads]
-                                  .sort((a, b) => (b.publishDate || "").localeCompare(a.publishDate || ""))
+                                  .sort((a, b) => postDate(b).localeCompare(postDate(a)))
                                   .map((u) => (
-                                    <li key={u.id} className="flex flex-wrap gap-x-3 text-muted-foreground">
-                                      <span className="font-medium text-foreground">{u.publishDate || "—"}</span>
+                                    <li key={u.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-muted-foreground">
+                                      <span className="font-medium text-foreground">
+                                        {u.publishDate || (postDate(u) ? `~${postDate(u)}` : "—")}
+                                      </span>
                                       <span>{u.branchReview ? formatStoreLabel(u.branchReview) : "—"}</span>
+                                      <span>{t(postStatusKey(u.status))}</span>
+                                      <InfluencerPaymentBadge t={t} status={u.paymentStatus || ""} />
                                       <span>{u.campaignNo?.trim() || t("mktInfCampaignNone")}</span>
                                       {(u.actualCost ?? 0) > 0 ? <span>฿{(u.actualCost ?? 0).toLocaleString()}</span> : null}
+                                      <InfluencerPostLinkIcons links={u.platformLinks} />
                                     </li>
                                   ))}
                               </ul>

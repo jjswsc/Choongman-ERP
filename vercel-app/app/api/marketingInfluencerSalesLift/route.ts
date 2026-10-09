@@ -2,6 +2,7 @@
  * 인플루언서 업로드 매출 효과 — 업로드일 기준 협업 매장의 전 N일 vs 후 N일
  * GET ?from=YYYY-MM-DD&to=YYYY-MM-DD(업로드일 범위)&window=7|14|30&store=&campaignId=&unlinked=1&profileId=
  * 매출은 get_pos_sales_analytics_agg(영업일 기준) 매장별 일 집계, 매장당 RPC 1회.
+ * 전 매장 조회 권한이면 전 매장 합계 RPC 1회를 더 불러 "다른 매장 추세(대조군)"를 뺀 순효과도 계산.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
@@ -25,9 +26,12 @@ import {
   diffDaysYmd,
   influencerPostCost,
   normalizeSalesLiftWindow,
+  salesLiftSeries,
   type DailyStoreSales,
   type InfluencerSalesLiftRow,
 } from '@/lib/marketing-influencer-sales-lift'
+import { tiktokVideoPostedYmd } from '@/lib/marketing-influencer-profile'
+import { canSelectAllStoresForPosSalesManagement } from '@/lib/permissions'
 
 export const maxDuration = 60
 
@@ -75,16 +79,33 @@ export async function GET(req: NextRequest) {
   const profileId = String(searchParams.get('profileId') ?? '').trim()
 
   try {
-    const parts = [`publish_date=gte.${from}`, `publish_date=lte.${to}`]
-    if (storeFilter) parts.push(`branch_review=eq.${encodeURIComponent(storeFilter)}`)
-    if (/^\d+$/.test(profileId)) parts.push(`profile_id=eq.${profileId}`)
-    if (campaignId) parts.push(`campaign_id=eq.${encodeURIComponent(campaignId)}`)
-    else if (unlinked) parts.push('campaign_id=is.null')
+    const common: string[] = []
+    if (storeFilter) common.push(`branch_review=eq.${encodeURIComponent(storeFilter)}`)
+    if (/^\d+$/.test(profileId)) common.push(`profile_id=eq.${profileId}`)
+    if (campaignId) common.push(`campaign_id=eq.${encodeURIComponent(campaignId)}`)
+    else if (unlinked) common.push('campaign_id=is.null')
 
-    const posts = ((await supabaseSelectFilter(TABLE, appendSaasTenantFilter(parts.join('&'), tenantScope, TABLE), {
-      order: 'publish_date.desc,id.desc',
-      limit: 2000,
-    })) || []) as Record<string, unknown>[]
+    const dated = ((await supabaseSelectFilter(
+      TABLE,
+      appendSaasTenantFilter([`publish_date=gte.${from}`, `publish_date=lte.${to}`, ...common].join('&'), tenantScope, TABLE),
+      { order: 'publish_date.desc,id.desc', limit: 2000 }
+    )) || []) as Record<string, unknown>[]
+    // 게시일 미입력이어도 TikTok 영상 링크가 있으면 영상 ID 시각으로 추정
+    const undated = ((await supabaseSelectFilter(
+      TABLE,
+      appendSaasTenantFilter(['publish_date=is.null', ...common].join('&'), tenantScope, TABLE),
+      { order: 'id.desc', limit: 2000 }
+    )) || []) as Record<string, unknown>[]
+    const estimatedIds = new Set<string>()
+    const posts = [...dated]
+    for (const p of undated) {
+      const links = p.platform_links && typeof p.platform_links === 'object' ? (p.platform_links as Record<string, unknown>) : {}
+      const est = tiktokVideoPostedYmd(links.tiktok)
+      if (est && est >= from && est <= to) {
+        estimatedIds.add(String(p.id ?? ''))
+        posts.push({ ...p, publish_date: est })
+      }
+    }
 
     const base = posts
       .map((p) => ({
@@ -161,8 +182,54 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 대조군: 전 매장 합계 − 해당 매장 (전 매장 조회 권한이 있을 때만)
+    let allDaily: Map<string, DailyStoreSales> | null = null
+    if (base.length && canSelectAllStoresForPosSalesManagement(String(auth.role || ''), String(auth.store || ''))) {
+      const minPublish = base.reduce((m, p) => (p.publishDate < m ? p.publishDate : m), base[0]!.publishDate)
+      const maxPublish = base.reduce((m, p) => (p.publishDate > m ? p.publishDate : m), base[0]!.publishDate)
+      const startStr = addDaysYmd(minPublish, -windowDays)
+      const endCandidate = addDaysYmd(maxPublish, windowDays - 1)
+      const endStr = endCandidate < yesterday ? endCandidate : yesterday
+      if (endStr >= startStr) {
+        try {
+          const rows = await tryFetchPosSalesAnalyticsAgg({
+            request: req,
+            startStr,
+            endStr,
+            aggMode: 'period',
+            periodGroup: 'day',
+          })
+          if (rows) {
+            allDaily = new Map()
+            for (const r of rows) {
+              const k = String(r.bucket_key ?? '').trim()
+              if (k) allDaily.set(k, { sales: num(r.total), orders: Math.max(0, Math.trunc(num(r.order_count))) })
+            }
+          }
+        } catch (e) {
+          if (isPosSalesAnalyticsRpcTimeoutError(e)) timedOut = true
+        }
+      }
+    }
+    const controlByStore = new Map<string, Map<string, DailyStoreSales> | null>()
+    const controlFor = (store: string): Map<string, DailyStoreSales> | null => {
+      if (controlByStore.has(store)) return controlByStore.get(store)!
+      const own = dailyByStore.get(store)
+      let ctl: Map<string, DailyStoreSales> | null = null
+      if (allDaily && own) {
+        ctl = new Map()
+        for (const [d, a] of allDaily) {
+          const o = own.get(d)
+          ctl.set(d, { sales: Math.max(0, a.sales - (o?.sales ?? 0)), orders: Math.max(0, a.orders - (o?.orders ?? 0)) })
+        }
+      }
+      controlByStore.set(store, ctl)
+      return ctl
+    }
+
     const rows: InfluencerSalesLiftRow[] = base.map((p) => {
       const daily = dailyByStore.get(p.store)
+      const controlDaily = daily ? controlFor(p.store) : null
       return {
         id: p.id,
         profileId: p.profileId,
@@ -173,6 +240,7 @@ export async function GET(req: NextRequest) {
         publishDate: p.publishDate,
         actualCost: p.actualCost,
         unavailable: daily == null,
+        publishDateEstimated: estimatedIds.has(p.id),
         lift: daily
           ? computeSalesLift({
               publishYmd: p.publishDate,
@@ -181,13 +249,27 @@ export async function GET(req: NextRequest) {
               daily,
               cost: p.cost,
               overlap: overlaps.has(p.id),
+              controlDaily,
             })
           : null,
+        series: daily
+          ? salesLiftSeries({ publishYmd: p.publishDate, windowDays, todayYmd, daily, controlDaily })
+          : undefined,
       }
     })
 
     return NextResponse.json(
-      { success: true, rows, windowDays, from, to, todayYmd, timedOut, skippedNoStoreOrDate: posts.length - base.length },
+      {
+        success: true,
+        rows,
+        windowDays,
+        from,
+        to,
+        todayYmd,
+        timedOut,
+        hasControl: allDaily != null,
+        skippedNoStoreOrDate: dated.length - base.filter((p) => !estimatedIds.has(p.id)).length,
+      },
       { headers }
     )
   } catch (e) {
