@@ -18,6 +18,8 @@ export type PosMainDeviceMeta = {
   roleLocked: boolean
   mainDeviceMaxCount: number
   orderDeviceMaxCount: number
+  /** 매장에 메인 POS 토큰이 1대 이상 등록됨 — 주문 단말 배달 팝업 억제 판단용 */
+  hasMainDevice: boolean
 }
 
 /** localStorage 미설정: 서버 목록과 병합. '0'/'false': 사용자가 주문 단말로 명시 → 서버에 토큰이 남아 있어도 메인 UI로 두지 않음 */
@@ -245,8 +247,13 @@ export function usePosMainDevice(
   }, [storeCode, deviceToken, isMain])
 
   const meta = React.useMemo(
-    () => ({ roleLocked, mainDeviceMaxCount, orderDeviceMaxCount }),
-    [roleLocked, mainDeviceMaxCount, orderDeviceMaxCount]
+    () => ({
+      roleLocked,
+      mainDeviceMaxCount,
+      orderDeviceMaxCount,
+      hasMainDevice: isMain || serverMainTokens.length > 0,
+    }),
+    [roleLocked, mainDeviceMaxCount, orderDeviceMaxCount, isMain, serverMainTokens]
   )
 
   return [isMain, setValue, meta]

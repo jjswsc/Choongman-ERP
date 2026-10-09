@@ -2524,6 +2524,9 @@ export default function PosTerminalPage() {
     Boolean(servingTable?.order)
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice, mainDeviceMeta] = usePosMainDevice(currentStoreId || null)
+  /** 메인 POS가 따로 있는 매장의 주문 단말(태블릿 등) — 배달 유입·Grab 취소 팝업으로 홀 주문 입력을 끊지 않음 */
+  const isOrderTerminalWithMainPosRef = useRef(false)
+  isOrderTerminalWithMainPosRef.current = !isMainPosDevice && mainDeviceMeta.hasMainDevice
   const layoutOwnsMainPosSync = usePosMainDeviceSyncOwnedByLayout()
   const posSessionStartedAtRef = useRef<number>(Date.now())
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
@@ -3374,6 +3377,10 @@ export default function PosTerminalPage() {
       }
       const status = String(params.status ?? '').trim().toLowerCase()
       if (status === 'cancelled' || status === 'refunded') return
+      if (isOrderTerminalWithMainPosRef.current) {
+        refetchStores({ scope: 'all' })
+        return
+      }
       if (promptedPendingDeliveryOrderIdsRef.current.has(orderId)) return
       if (deferredIncomingDeliveryQueueRef.current.some((entry) => entry.orderId === orderId)) return
 
@@ -3440,6 +3447,10 @@ export default function PosTerminalPage() {
       if (consumePosSelfInitiatedGrabCancel(orderId)) return
       if (promptedGrabCustomerCancelIdsRef.current.has(orderId)) return
       promptedGrabCustomerCancelIdsRef.current.add(orderId)
+      if (isOrderTerminalWithMainPosRef.current) {
+        refetchCurrentStore()
+        return
+      }
 
       playIncomingOrderBeep()
       if (typeof window !== 'undefined') {
