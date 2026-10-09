@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-09T07:53:01.861Z",
+  "generatedAt": "2026-10-09T09:07:41.717Z",
   "entryCount": 1989,
   "entries": [
     {
@@ -6143,14 +6143,14 @@
     },
     {
       "path": "app/api/saveCheckResult/route.ts",
-      "line": 22,
+      "line": 40,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveCheckResult"
     },
     {
       "path": "app/api/saveCheckResult/route.ts",
-      "line": 39,
+      "line": 46,
       "kind": "limit",
       "value": 1,
       "apiLabel": "saveCheckResult"
@@ -13171,28 +13171,28 @@
     },
     {
       "path": "lib/store-action-server.ts",
-      "line": 114,
+      "line": 120,
       "kind": "limit",
       "value": 200,
       "apiLabel": "lib:store-action-server"
     },
     {
       "path": "lib/store-action-server.ts",
-      "line": 137,
+      "line": 145,
       "kind": "limit",
       "value": 200,
       "apiLabel": "lib:store-action-server"
     },
     {
       "path": "lib/store-action-server.ts",
-      "line": 190,
+      "line": 199,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:store-action-server"
     },
     {
       "path": "lib/store-action-server.ts",
-      "line": 200,
+      "line": 209,
       "kind": "limit",
       "value": 5,
       "apiLabel": "lib:store-action-server"
