@@ -168,6 +168,20 @@ export async function saveStoreActionItem(data: Record<string, unknown>) {
   }>
 }
 
+/** 여러 건 한 번에 등록 — 모두 검증 후 저장 */
+export async function saveStoreActionItems(items: Record<string, unknown>[]) {
+  const res = await apiFetchWithOffline("/api/saveStoreActionItems", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    created?: { id: number | null; title: string; repeatCount: number }[]
+  }>
+}
+
 export async function updateStoreActionItem(
   rowOrId: string | number,
   data: Record<string, unknown>,

@@ -92,28 +92,35 @@ export async function appendStoreActionLog(params: {
 /**
  * 재발 판정 — 같은 매장에서 점검 항목 키(check_item_id)가 같거나,
  * 키가 없으면 같은 카테고리·같은 제목. 직전 건을 parent로 연결.
+ * excludeSourceRef: 같은 점검(같은 출처)에서 함께 등록한 문제는 재발로 세지 않음.
  */
 export async function computeStoreActionRecurrence(params: {
   store: string
   category: string
   title: string
   checkItemId?: string
+  excludeSourceRef?: string
 }): Promise<{ repeatCount: number; parentId: number | null }> {
   const store = String(params.store || '').trim()
   if (!store) return { repeatCount: 0, parentId: null }
   const checkItemId = String(params.checkItemId || '').trim()
+  const exclude = String(params.excludeSourceRef || '').trim()
+  const keep = <T extends { source_ref?: string | null }>(rows: T[] | null | undefined): T[] =>
+    (rows || []).filter((r) => !exclude || String(r.source_ref || '') !== exclude)
 
   if (checkItemId) {
     try {
-      const rows = (await supabaseSelectFilter(
-        'store_action_items',
-        [
-          `store_name=eq.${encodeURIComponent(store)}`,
-          `check_item_id=eq.${encodeURIComponent(checkItemId)}`,
-        ].join('&'),
-        { select: 'id,repeat_count', limit: 200, order: 'id.desc' }
-      )) as { id?: number; repeat_count?: number }[]
-      if (rows && rows.length > 0) {
+      const rows = keep(
+        (await supabaseSelectFilter(
+          'store_action_items',
+          [
+            `store_name=eq.${encodeURIComponent(store)}`,
+            `check_item_id=eq.${encodeURIComponent(checkItemId)}`,
+          ].join('&'),
+          { select: 'id,repeat_count,source_ref', limit: 200, order: 'id.desc' }
+        )) as { id?: number; repeat_count?: number; source_ref?: string | null }[]
+      )
+      if (rows.length > 0) {
         const maxRepeat = Math.max(...rows.map((r) => Number(r.repeat_count || 0) || 0))
         return {
           repeatCount: Math.max(maxRepeat + 1, rows.length),
@@ -128,18 +135,20 @@ export async function computeStoreActionRecurrence(params: {
   const titleKey = normalizeTitleKey(params.title)
   if (!titleKey) return { repeatCount: 0, parentId: null }
   try {
-    const rows = (await supabaseSelectFilter(
-      'store_action_items',
-      [
-        `store_name=eq.${encodeURIComponent(store)}`,
-        `category=eq.${encodeURIComponent(params.category || '기타')}`,
-      ].join('&'),
-      { select: 'id,title,repeat_count', limit: 200, order: 'id.desc' }
-    )) as { id?: number; title?: string; repeat_count?: number }[]
+    const rows = keep(
+      (await supabaseSelectFilter(
+        'store_action_items',
+        [
+          `store_name=eq.${encodeURIComponent(store)}`,
+          `category=eq.${encodeURIComponent(params.category || '기타')}`,
+        ].join('&'),
+        { select: 'id,title,repeat_count,source_ref', limit: 200, order: 'id.desc' }
+      )) as { id?: number; title?: string; repeat_count?: number; source_ref?: string | null }[]
+    )
     let maxRepeat = 0
     let similar = 0
     let parentId: number | null = null
-    for (const r of rows || []) {
+    for (const r of rows) {
       if (normalizeTitleKey(String(r.title || '')) !== titleKey) continue
       similar += 1
       if (parentId == null) parentId = Number(r.id || 0) || null
