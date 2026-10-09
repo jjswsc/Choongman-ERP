@@ -14,8 +14,6 @@
     "icons:pos": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-pos-icons.ps1",
     "icons:member": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-member-icons.ps1",
     "gen:limits": "node scripts/extract-api-limits.mjs",
-    "api:inventory": "node scripts/gen-api-inventory.mjs",
-    "api:check": "node scripts/check-api-route-naming.mjs",
     "sql:index": "node scripts/gen-sql-index.mjs",
     "i18n:snapshot": "tsx scripts/i18n-snapshot.mts",
     "build:prep": "npm run i18n:encoding:check && npm run i18n:pos:sync && npm run pos:tour:doc:sync && npm run gen:limits",
