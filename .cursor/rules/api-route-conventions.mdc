@@ -1,0 +1,29 @@
+---
+description: Next.js API 라우트(app/api) 추가·이동 시 경로 규칙
+globs: vercel-app/app/api/**
+alwaysApply: false
+---
+
+# API 라우트 규칙
+
+전체 목록: [`vercel-app/docs/API-INVENTORY.md`](vercel-app/docs/API-INVENTORY.md) (`npm run api:inventory`로 재생성)
+
+## 1. 기존 경로는 옮기지 않는다
+
+- 기존 라우트(약 900개)는 [`vercel-app/scripts/api-route-baseline.json`](vercel-app/scripts/api-route-baseline.json)에 동결되어 있다. camelCase 평면 경로(`/api/getPosOrders` 등)라도 **이름·위치를 바꾸지 않는다.**
+- 이유: 매장 POS(Windows·Android·PWA)에 캐시된 화면, 서비스워커, 외부 등록 URL이 옛 경로를 호출한다.
+- **절대 이동 금지**: `app/api/webhooks/**`(Grab·ShopeeFood·KBank에 등록된 URL), `vercel.json`의 `crons[].path`. 바꾸면 주문 수신·정산이 끊긴다.
+
+## 2. 새 라우트
+
+- 위치: `app/api/<domain>/<action>/route.ts` (최소 2단계). 하위 경로 추가 가능: `app/api/<domain>/<resource>/[id]/route.ts`
+- 모든 세그먼트 **kebab-case** (`pos/sales-by-payment`), 동적 세그먼트는 `[id]`, `[...path]`
+- 도메인 예: `pos`, `qr-table`, `member-portal`, `members`, `crm`, `marketing`, `accounting`, `bank`, `tax`, `hr`, `payroll`, `stock`, `orders`, `interior`, `store`, `saas`, `ai`, `grab`, `line-oa`, `cron`, `webhooks`
+- 기존 도메인 폴더가 있으면 그 안에 넣는다(예: 이미 있는 `qr-table/`, `member-portal/`, `crm/`).
+- 같은 기능의 GET/POST는 한 `route.ts`에 메서드로 나눈다(`getX`/`saveX` 라우트를 따로 만들지 않는다).
+
+## 3. 검사
+
+- `npm run api:check` — 기준선에 없는 새 라우트만 규칙 검사. GitHub Actions `Build Vercel App`에서는 lint·test·build **뒤에 경고 전용**(`continue-on-error`)으로 돈다 — 위반이 있어도 배포 검증은 막지 않으니, Actions 로그의 경고를 보고 고친다.
+- 라우트를 삭제했으면 `npm run api:check -- --prune`으로 기준선에서 제거한다. **위반 라우트를 기준선에 직접 추가하지 않는다.**
+- 라우트를 추가·삭제한 PR에서는 `npm run api:inventory`로 목록 문서도 갱신한다.

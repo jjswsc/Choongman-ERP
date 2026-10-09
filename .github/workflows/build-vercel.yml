@@ -54,3 +54,10 @@ jobs:
           npx eslint . --quiet
           npm run test
           npm run build
+
+      # 이름 규칙 위반은 경고만 — 위반이 lint·test·build 검증을 막지 않도록 맨 뒤·비차단
+      - name: API route naming (warning only)
+        continue-on-error: true
+        run: |
+          cd vercel-app
+          npm run api:check
