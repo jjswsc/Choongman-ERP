@@ -1,6 +1,6 @@
 /**
  * Admin 상세 도움말 — `helpLongWhat_*` / `helpLongHow_*` (ko/en).
- * `i18n.ts`의 ko/en 객체에 spread 합니다. 재생성: `node vercel-app/scripts/gen-help-long-i18n.mjs`
+ * `i18n-locales/ko.ts`·`en.ts`에 spread 합니다. 재생성: `node vercel-app/scripts/gen-help-long-i18n.mjs`
  */
 export const I18N_HELP_LONG_KO: Record<string, string> = {
   helpLongWhat_admin: '「관리자 대시보드(홈)」과 관련된 업무 범위, 권한, 접점(매장·법인·회계 마감)이 조직마다 다릅니다. 본 화면에서 보이는 지점(매장) 범위, 필드, 탭은 팀(운영/회계)에서 정한 정책·역할(권한)에 따라 달라질 수 있으며, 외부(은행, POS, 클라우드)와의 연동 지연이나 동시 편집이 있을 수 있으니 저장 전에 조회(새로고침)로 최신인지 확인하십시오. 개인·급여·고객·세무 데이터는 목적(범위)에 맞게 사용하고, 엑셀·캡처 유출(승인되지 않은 공유 채널)에 유의하십시오.',

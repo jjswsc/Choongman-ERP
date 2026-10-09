@@ -1,8 +1,7 @@
 const fs = require("fs")
 const path = require("path")
 
-const i18nPath = path.join(__dirname, "../lib/i18n.ts")
-const src = fs.readFileSync(i18nPath, "utf8")
+const localesDir = path.join(__dirname, "../lib/i18n-locales")
 const langs = ["ko", "en", "th", "mm", "la", "kh", "vi", "ms"]
 
 const files = [
@@ -19,19 +18,7 @@ for (const f of files) {
 }
 
 function extractBlock(lang) {
-  const marker = `\n  ${lang}: {`
-  const start = src.indexOf(marker)
-  if (start < 0) return ""
-  let i = src.indexOf("{", start)
-  let depth = 0
-  for (; i < src.length; i++) {
-    if (src[i] === "{") depth++
-    else if (src[i] === "}") {
-      depth--
-      if (depth === 0) return src.slice(src.indexOf("{", start), i + 1)
-    }
-  }
-  return ""
+  return fs.readFileSync(path.join(localesDir, `${lang}.ts`), "utf8")
 }
 
 const blocks = {}

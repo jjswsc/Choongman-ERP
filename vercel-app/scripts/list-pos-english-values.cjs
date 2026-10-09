@@ -1,18 +1,11 @@
 const fs = require("fs")
 const path = require("path")
 
-const i18nPath = path.resolve(__dirname, "..", "lib", "i18n.ts")
-const src = fs.readFileSync(i18nPath, "utf8")
+const localesDir = path.resolve(__dirname, "..", "lib", "i18n-locales")
 const langs = ["vi", "ms", "kh"]
 
 function getBlock(lang) {
-  const startRe = new RegExp(`\\n\\s*${lang}:\\s*\\{`)
-  const m = startRe.exec(src)
-  if (!m || m.index == null) return ""
-  const start = m.index + m[0].length
-  const end = src.indexOf("\n  } as Record<string, string>,", start)
-  if (end < 0) return ""
-  return src.slice(start, end)
+  return fs.readFileSync(path.join(localesDir, `${lang}.ts`), "utf8")
 }
 
 function isLikelyEnglish(v) {
