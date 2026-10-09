@@ -4,7 +4,6 @@ import { appAlert } from "@/lib/app-message"
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -13,15 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Wallet, ArrowLeft, Plus, AlertCircle, Link2 } from "lucide-react"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { AlertCircle } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useErpPageActive, useErpTabActive } from "@/lib/erp-page-visibility"
@@ -70,17 +61,14 @@ import { expenseSearchViewCache } from "@/lib/expense-search-view-cache"
 import { PURCHASE_PAYMENT_VIA_EXPENSE_ONLY_MESSAGE } from "@/lib/bank-purchase-payment-via-expense"
 import { storesMatchForGradeLookup } from "@/lib/grade-store-key-variants"
 import { useSearchParams, useRouter } from "next/navigation"
-import { isOfficeStore } from "@/lib/permissions"
-import { CANONICAL_OFFICE_STORE, canonicalOfficeStore } from "@/lib/office-store-canonical"
+import { canonicalOfficeStore } from "@/lib/office-store-canonical"
 import { moneyInputStringFromAmount, normalizeMoneyInputString, parseMoneyAmount } from "@/lib/money-amount"
 import { getBangkokMonthRange } from "@/lib/bangkok-time"
 import { encodeCardPayeeCode, parseCardAccountIdFromPayeeCode } from "@/lib/prepayment-accrual-categories"
 import { memoLooksLikeCardBill } from "@/lib/card-bill-memo"
 import { readLastCardAccountId, writeLastCardAccountId } from "@/lib/card-last-account"
-import { VendorRdSearchButton } from "@/components/erp/vendor-rd-search"
 import {
   QuickAddVendorDialog,
-  QuickAddVendorTriggerButton,
   type QuickAddVendorResult,
 } from "@/components/erp/quick-add-vendor-dialog"
 import {
@@ -98,7 +86,6 @@ import {
   type ExpenseWhtItem,
 } from "@/lib/expense-wht-items"
 import {
-  ExpenseWhtItemsEditor,
   draftsFromExpenseWhtItems,
   expenseWhtItemsFromDrafts,
   type ExpenseWhtItemDraft,
@@ -114,11 +101,7 @@ import {
   type ExpenseOcrFieldPayload,
 } from "@/components/erp/expense-document-attach-panel"
 import { ExpenseRecurringTemplatesBar } from "@/components/erp/expense-recurring-templates-bar"
-import {
-  ExpenseRegisterField,
-  ExpenseRegisterFieldRow,
-  ExpenseRegisterSection,
-} from "@/components/erp/expense-register-form-field"
+import { ExpenseRegisterField } from "@/components/erp/expense-register-form-field"
 import { suggestAccountSubjectId, suggestVendorFromHint } from "@/lib/expense-ocr-suggestions"
 import {
   type ExpenseDocumentType,
@@ -131,15 +114,29 @@ import {
   isSelectableStoreOption,
   withdrawalCategoryFromTransferKind,
   transferKindFromWithdrawalCategory,
-  isTransferPrepaymentKind,
   categoryUsesAccountSubjectPicker,
   CATEGORY_MAIN_OPTIONS,
   DELIVERY_APP_FEE_PRESETS,
   CARD_FEE_PRESETS,
   resolveMonthEndDate,
+  mapCategoryToMainSub,
+  resolveWithdrawalCategory,
+  pickOfficeStore,
+  resolveStoreInList,
+  type QuickAddVendorSeed,
   type TransferKind,
   type WithdrawalManagementTabProps,
+  type WithdrawalVendorOption,
 } from "./withdrawal-management-tab-utils"
+import { WithdrawalSubTypeFields } from "./withdrawal-management-sub-type-fields"
+import { WithdrawalPurchaseExpenseFields } from "./withdrawal-management-purchase-expense-fields"
+import { WithdrawalTransferFields } from "./withdrawal-management-transfer-fields"
+import { WithdrawalFixedAssetFields } from "./withdrawal-management-fixed-asset-fields"
+import { WithdrawalAmountFields } from "./withdrawal-management-amount-fields"
+import { WithdrawalSubmitActions } from "./withdrawal-management-submit-actions"
+import { WithdrawalCardBillPickDialog } from "./withdrawal-management-card-bill-pick-dialog"
+import { WithdrawalDeliveryFeeDialog } from "./withdrawal-management-delivery-fee-dialog"
+import { WithdrawalCardFeeDialog } from "./withdrawal-management-card-fee-dialog"
 
 export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved }: WithdrawalManagementTabProps = {}) {
   const { lang } = useLang()
@@ -228,12 +225,12 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [payeeName, setPayeeName] = React.useState("")
   const [payeeManual, setPayeeManual] = React.useState(false)
   const [quickAddVendorOpen, setQuickAddVendorOpen] = React.useState(false)
-  const [quickAddVendorSeed, setQuickAddVendorSeed] = React.useState<{
-    name: string
-    taxId: string
-    bankName: string
-    bankAccountNo: string
-  }>({ name: "", taxId: "", bankName: "", bankAccountNo: "" })
+  const [quickAddVendorSeed, setQuickAddVendorSeed] = React.useState<QuickAddVendorSeed>({
+    name: "",
+    taxId: "",
+    bankName: "",
+    bankAccountNo: "",
+  })
   const [payeeAccountHolder, setPayeeAccountHolder] = React.useState("")
   const [payeeBankName, setPayeeBankName] = React.useState("")
   const [payeeBankAccountNo, setPayeeBankAccountNo] = React.useState("")
@@ -245,16 +242,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   const [inboundLinkAmounts, setInboundLinkAmounts] = React.useState<Record<number, string>>({})
   const [inboundLinkLoading, setInboundLinkLoading] = React.useState(false)
 
-  const [vendors, setVendors] = React.useState<
-    {
-      code: string
-      name: string
-      bankAccountNo?: string | null
-      bankName?: string | null
-      taxId?: string
-      address?: string
-    }[]
-  >([])
+  const [vendors, setVendors] = React.useState<WithdrawalVendorOption[]>([])
   const [relatedVendors, setRelatedVendors] = React.useState<
     { code: string; name: string; bankAccountNo?: string | null; bankName?: string | null }[]
   >([])
@@ -292,27 +280,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     if (categoryMain === "purchase") setExpensePayMode("later")
     if (categoryMain === "fixed_asset") setExpensePayMode("later")
   }, [categoryMain, isExistingBankTxMode])
-
-  const mapCategoryToMainSub = React.useCallback((catRaw: string): { main: string; sub: string } => {
-    const c = String(catRaw || "").trim().toLowerCase()
-    if (c === "purchase_payment") return { main: "purchase", sub: "normal" }
-    if (c === "purchase_advance") return { main: "purchase", sub: "advance" }
-    if (c === "expense") return { main: "expense", sub: "normal" }
-    if (c === "expense_advance") return { main: "expense", sub: "advance" }
-    if (c === "fixed_asset") return { main: "fixed_asset", sub: "" }
-    if (c === "bank_card_bill" || c === "transfer_to_petty") return { main: "transfer", sub: "" }
-    if (c === "transfer" || c.startsWith("transfer_")) return { main: "transfer", sub: "" }
-    if (c === "loan_repayment") return { main: "loan", sub: "repayment" }
-    if (c === "loan_given") return { main: "loan", sub: "given" }
-    if (c === "tax_vat") return { main: "tax", sub: "vat" }
-    if (c === "tax_withholding") return { main: "tax", sub: "withholding" }
-    if (c === "tax_corporate") return { main: "tax", sub: "corporate" }
-    if (c === "tax_sso") return { main: "tax", sub: "sso" }
-    if (c === "tax") return { main: "tax", sub: "withholding" }
-    if (c === "correction") return { main: "correction", sub: "" }
-    if (c === "dividend") return { main: "dividend", sub: "" }
-    return { main: "expense", sub: "normal" }
-  }, [])
 
   React.useEffect(() => {
     if (hasAppliedParams.current) return
@@ -462,7 +429,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
         if (payeeBankAccountNoParam != null) setPayeeBankAccountNo(payeeBankAccountNoParam)
       }
     }
-  }, [searchParams, mapCategoryToMainSub, applyDocumentType])
+  }, [searchParams, applyDocumentType])
 
   React.useEffect(() => {
     if (!isBankLinkMode || bankLinkStorePinned.current) return
@@ -559,13 +526,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     })
   }, [categoryMain, transferKind, transferCardAccountsForStore])
 
-  const pickOfficeStore = React.useCallback((list: string[]) => {
-    if (list.length === 0) return ""
-    if (list.includes(CANONICAL_OFFICE_STORE)) return CANONICAL_OFFICE_STORE
-    const office = list.find((s) => isOfficeStore(s))
-    return office ? canonicalOfficeStore(office) : list[0]
-  }, [])
-
   const availableStores = React.useMemo(() => {
     const merged = Array.from(
       new Set(
@@ -585,17 +545,9 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       })
   }, [auth?.store, stores])
 
-  const resolveStoreInList = React.useCallback((name: string, list: string[]) => {
-    const n = String(name || "").trim()
-    if (!n) return ""
-    if (list.includes(n)) return n
-    const fuzzy = list.find((s) => storesMatchForGradeLookup(s, n))
-    return fuzzy || n
-  }, [])
-
   const displayStoreName = React.useMemo(
     () => resolveStoreInList(storeName, availableStores),
-    [storeName, availableStores, resolveStoreInList]
+    [storeName, availableStores]
   )
 
   const storeSelectOptions = React.useMemo(() => {
@@ -622,7 +574,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
       }
     }
     setStoreName(pickOfficeStore(availableStores))
-  }, [availableStores, pickOfficeStore, storeName, resolveStoreInList])
+  }, [availableStores, storeName])
 
   const withdrawalPageActive = useErpPageActive()
   const withdrawalTabActive = useErpTabActive()
@@ -736,7 +688,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
           return first ? String(first.id) : ""
         })
       })
-  }, [storeName, auth?.role, auth?.store, availableStores, pickOfficeStore, isExistingBankTxMode, searchParams])
+  }, [storeName, auth?.role, auth?.store, availableStores, isExistingBankTxMode, searchParams])
 
   const currentMain = CATEGORY_MAIN_OPTIONS.find((c) => c.value === categoryMain)
   const hasSub = currentMain && currentMain.sub.length > 0
@@ -1009,7 +961,7 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
   )
 
   const openQuickAddVendor = React.useCallback(
-    (seed?: Partial<{ name: string; taxId: string; bankName: string; bankAccountNo: string }>) => {
+    (seed?: Partial<QuickAddVendorSeed>) => {
       setQuickAddVendorSeed({
         name: (seed?.name ?? payeeName).trim(),
         taxId: (seed?.taxId ?? "").trim(),
@@ -1062,23 +1014,6 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
     lastBankAutofillCodeRef.current = code
     applyVendorBankFields(code, force)
   }, [categoryMain, vendorCode, payeeCode, payeeManual, applyVendorBankFields])
-
-  const resolveWithdrawalCategory = React.useCallback((main: string, sub: string): string => {
-    if (main === "purchase") return sub === "advance" ? "purchase_advance" : "purchase_payment"
-    if (main === "expense") return sub === "advance" ? "expense_advance" : "expense"
-    if (main === "fixed_asset") return "fixed_asset"
-    if (main === "transfer") return "transfer"
-    if (main === "loan") return sub === "given" ? "loan_given" : "loan_repayment"
-    if (main === "tax") {
-      if (sub === "vat") return "tax_vat"
-      if (sub === "corporate") return "tax_corporate"
-      if (sub === "sso") return "tax_sso"
-      return "tax_withholding"
-    }
-    if (main === "correction") return "correction"
-    if (main === "dividend") return "dividend"
-    return "expense"
-  }, [])
 
   const getAutoPayeeName = React.useCallback((withdrawalCategory: string): string => {
     const map: Record<string, string> = {
@@ -2926,836 +2861,145 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
 
           <div className="space-y-4">
           {hasSub && !hasTaxSub && !hasLoanSub && (categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "loan") && (
-            <div className="flex flex-wrap items-end gap-x-5 gap-y-3 w-full">
-              <ExpenseRegisterField label={tt("wm_subType", "Detail")} className="w-[140px]">
-                <Select value={categorySub} onValueChange={setCategorySub}>
-                  <SelectTrigger className="w-full h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="normal">{tt("wm_normal", "Normal")}</SelectItem>
-                    <SelectItem value="advance">{tt("wm_advance", "Advance")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </ExpenseRegisterField>
-              {categoryMain === "purchase" && (
-                <ExpenseRegisterField
-                  label={tt("wm_accountSubject", "Account Subject")}
-                  className="min-w-[220px] max-w-[360px] flex-1"
-                >
-                  <Select
-                    value={accountSubjectId || "__none__"}
-                    onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {purchaseSubjectOptions.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)}>
-                          {s.code}{" "}
-                          {lang === "th" && s.nameTh
-                            ? s.nameTh
-                            : lang === "ko"
-                              ? s.name
-                              : getSubjectLabel(s)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </ExpenseRegisterField>
-              )}
-              {showAdvanceInstallments && (
-                <>
-                  <ExpenseRegisterField label={tt("wm_advanceInstallments", "Installments")} className="w-[90px]">
-                    <Input type="number" min={1} value={advanceInstallments} onChange={(e) => setAdvanceInstallments(e.target.value)} className="w-full h-9" />
-                  </ExpenseRegisterField>
-                  <ExpenseRegisterField label={tt("wm_advanceInstallmentCurrent", "Current Installment")} className="w-[160px]">
-                    <div className="flex items-center gap-2">
-                      <Input type="number" min={1} value={advanceInstallmentCurrent} onChange={(e) => setAdvanceInstallmentCurrent(e.target.value)} className="w-[70px] h-9" />
-                      <span className="text-sm font-medium tabular-nums text-muted-foreground">({advanceInstallmentCurrent}/{advanceInstallments})</span>
-                    </div>
-                  </ExpenseRegisterField>
-                </>
-              )}
-              {categoryMain === "expense" && (
-                <div className="ml-auto flex flex-wrap gap-2 pb-0.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-9"
-                    disabled={isAccrualAmountsLocked}
-                    onClick={() => setDeliveryFeeDialogOpen(true)}
-                  >
-                    {tt("pL_expenseSourceDeliveryApps", "배달앱 수수료")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-9"
-                    disabled={isAccrualAmountsLocked}
-                    onClick={() => setCardFeeDialogOpen(true)}
-                  >
-                    {tt("pL_expenseSourceCardFees", "카드 수수료")}
-                  </Button>
-                </div>
-              )}
-            </div>
+            <WithdrawalSubTypeFields
+              accountSubjectId={accountSubjectId}
+              advanceInstallmentCurrent={advanceInstallmentCurrent}
+              advanceInstallments={advanceInstallments}
+              categoryMain={categoryMain}
+              categorySub={categorySub}
+              getSubjectLabel={getSubjectLabel}
+              isAccrualAmountsLocked={isAccrualAmountsLocked}
+              lang={lang}
+              purchaseSubjectOptions={purchaseSubjectOptions}
+              setAccountSubjectId={setAccountSubjectId}
+              setAdvanceInstallmentCurrent={setAdvanceInstallmentCurrent}
+              setAdvanceInstallments={setAdvanceInstallments}
+              setCardFeeDialogOpen={setCardFeeDialogOpen}
+              setCategorySub={setCategorySub}
+              setDeliveryFeeDialogOpen={setDeliveryFeeDialogOpen}
+              showAdvanceInstallments={showAdvanceInstallments}
+              tt={tt}
+            />
           )}
           {(categoryMain === "purchase" || categoryMain === "expense" || categoryMain === "loan") && (
-            <>
-              {categoryMain === "purchase" && (
-                <ExpenseRegisterSection>
-                  <ExpenseRegisterFieldRow cols="payee">
-                  <ExpenseRegisterField label={tt("vendor", "Vendor")} className="sm:col-span-2 xl:col-span-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select
-                        value={vendorCode}
-                        onValueChange={(v) => {
-                          if (v === "__add_vendor__") {
-                            openQuickAddVendor()
-                            return
-                          }
-                          setVendorCode(v)
-                          const resolved = resolvePurchaseVendorPayee(v)
-                          if (resolved.code) {
-                            setPayeeCode(resolved.code)
-                            setPayeeName(resolved.name)
-                            setPayeeManual(false)
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="h-9 w-full min-w-[160px] max-w-[240px]">
-                          <SelectValue placeholder={tt("vendor", "Select Vendor")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__add_vendor__" className="text-primary font-medium">
-                            <span className="inline-flex items-center gap-1.5">
-                              <Plus className="h-3.5 w-3.5" />
-                              {tt("vendorQuickAdd", "Add vendor")}
-                            </span>
-                          </SelectItem>
-                          {vendors.map((v) => (
-                            <SelectItem key={v.code} value={v.code}>
-                              {v.name} ({v.code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <QuickAddVendorTriggerButton onClick={() => openQuickAddVendor()} />
-                      <VendorRdSearchButton
-                        triggerSize="sm"
-                        triggerVariant="outline"
-                        triggerClassName="h-9"
-                        onPick={(c) => {
-                          const matched = vendors.find(
-                            (v) =>
-                              String((v as { taxId?: string; tax_id?: string }).taxId || (v as { tax_id?: string }).tax_id || "").replace(/\D/g, "") ===
-                                c.taxId ||
-                              v.name.trim() === c.name.trim()
-                          )
-                          if (matched) {
-                            setVendorCode(matched.code)
-                            setPayeeCode(matched.code)
-                            setPayeeName(matched.name)
-                            setPayeeManual(false)
-                          } else {
-                            openQuickAddVendor({ name: c.name, taxId: c.taxId })
-                          }
-                        }}
-                      />
-                    </div>
-                  </ExpenseRegisterField>
-                  {vendorCode && (
-                    <>
-                      <ExpenseRegisterField label={tt("expensePayeeAccountHolder", "Account holder")}>
-                        <Input
-                          className="h-9 w-full"
-                          value={payeeAccountHolder}
-                          onChange={(e) => setPayeeAccountHolder(e.target.value)}
-                          placeholder={vendors.find((x) => x.code === vendorCode)?.name || ""}
-                        />
-                      </ExpenseRegisterField>
-                      <ExpenseRegisterField label={tt("expensePayeeBankName", "Bank")}>
-                        <Input
-                          className="h-9 w-full"
-                          value={payeeBankName}
-                          onChange={(e) => setPayeeBankName(e.target.value)}
-                          placeholder="K-BANK"
-                        />
-                      </ExpenseRegisterField>
-                      <ExpenseRegisterField label={tt("inv_account_no", "Account")}>
-                        <Input
-                          className="h-9 w-full"
-                          value={payeeBankAccountNo}
-                          onChange={(e) => setPayeeBankAccountNo(e.target.value)}
-                          placeholder={
-                            vendors.find((x) => x.code === vendorCode)?.bankAccountNo || "—"
-                          }
-                        />
-                      </ExpenseRegisterField>
-                    </>
-                  )}
-                  </ExpenseRegisterFieldRow>
-                  {vendorCode ? (
-                    <p className="text-[11px] leading-snug text-muted-foreground -mt-1">
-                      {tt(
-                        "expensePayeeBankRegisterHint",
-                        "Saved on this expense for bank transfer. Also updates the vendor master when a vendor is selected."
-                      )}
-                    </p>
-                  ) : null}
-                </ExpenseRegisterSection>
-              )}
-              {categoryMain === "purchase" && vendorCode && !isBankLinkMode && !isEditMode && (
-                <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      {tt("adminInbound", "Inbound")} {tt("inboundLinkLabel", "Link")} ({tt("optional", "Optional")})
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-[11px]"
-                      onClick={loadInboundBatchesForLink}
-                      disabled={inboundLinkLoading}
-                    >
-                      {tt("store_refresh", "Refresh")}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {tt("inboundLinkAtRegisterHint", "You can link here when registering (optional). You can also link or edit later in the Bank tab.")}
-                  </p>
-                  {inboundLinkLoading ? (
-                    <p className="text-sm text-muted-foreground py-2">{tt("loading", "Loading...")}</p>
-                  ) : inboundBatchesForLink.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">{tt("inboundNoBatches", "No inbound batches for this vendor.")}</p>
-                  ) : (
-                    <>
-                      <div className="border rounded-md divide-y max-h-[200px] overflow-y-auto">
-                        {inboundBatchesForLink.map((b) => (
-                          <div key={b.id} className="flex items-center justify-between gap-2 p-2">
-                            <div className="flex-1 min-w-0 text-sm">
-                              <span>{b.batchDate}</span>
-                              <span className="text-muted-foreground ml-2">
-                                {b.vendorName} · {(b.totalAmount || 0).toLocaleString()} ฿
-                              </span>
-                            </div>
-                            <Input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="0"
-                              className="w-24 h-8 text-right"
-                              value={inboundLinkAmounts[b.id] || ""}
-                              onChange={(e) => {
-                                const next = String(e.target.value).replace(/[^\d.,]/g, "").replace(/,/g, "")
-                                const parts = next.split(".")
-                                const normalized = parts.length <= 1
-                                  ? next
-                                  : `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`
-                                setInboundLinkAmounts((prev) => ({ ...prev, [b.id]: normalized }))
-                              }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {isLaterPayment
-                          ? tt(
-                              "inboundLinkAccrualHelp",
-                              "For pay-later registration, linked batch amounts are used as the total when the total field is empty."
-                            )
-                          : tt(
-                              "inboundLinkRegisterHelp",
-                              "Enter amounts by batch to match the withdrawal amount for auto-linking. Leave blank to link later in Bank tab."
-                            )}
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
-              {categoryMain === "expense" && (
-                <ExpenseRegisterSection>
-                  <ExpenseRegisterFieldRow cols="payee">
-                  <ExpenseRegisterField label={tt("vendor", "Payee")} className="sm:col-span-2 xl:col-span-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select
-                        value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
-                        onValueChange={(v) => {
-                          if (v === "__add_vendor__") {
-                            openQuickAddVendor()
-                            return
-                          }
-                          if (v === "__manual__") {
-                            setPayeeManual(true)
-                            setPayeeCode("")
-                            setPayeeName("")
-                          } else if (v !== "__none__") {
-                            setPayeeManual(false)
-                            setPayeeCode(v)
-                            const found = vendors.find((x) => x.code === v)
-                            setPayeeName(found?.name || v)
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="w-full min-w-[140px] max-w-[200px] h-9">
-                          <SelectValue placeholder={tt("vendor", "Payee")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__add_vendor__" className="text-primary font-medium">
-                            <span className="inline-flex items-center gap-1.5">
-                              <Plus className="h-3.5 w-3.5" />
-                              {tt("vendorQuickAdd", "Add vendor")}
-                            </span>
-                          </SelectItem>
-                          <SelectItem value="__manual__">{tt("bankRegisterPayeeManual", "Enter Manually")}</SelectItem>
-                          <SelectItem value="__none__">-</SelectItem>
-                          {vendors.map((v) => (
-                            <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {payeeManual ? (
-                        <>
-                          <Input
-                            className="w-[120px] h-9"
-                            value={payeeCode}
-                            onChange={(e) => setPayeeCode(e.target.value)}
-                            placeholder={tt("expensePayeeCode", "Code")}
-                          />
-                          <Input
-                            className="w-[160px] h-9"
-                            value={payeeName}
-                            onChange={(e) => setPayeeName(e.target.value)}
-                            placeholder={tt("expensePayeeName", "Payee Name")}
-                          />
-                        </>
-                      ) : (
-                        <Input
-                          className="w-[160px] h-9"
-                          value={payeeName}
-                          onChange={(e) => setPayeeName(e.target.value)}
-                          placeholder={tt("expensePayeeName", "Payee Name")}
-                        />
-                      )}
-                      <QuickAddVendorTriggerButton onClick={() => openQuickAddVendor()} />
-                      <VendorRdSearchButton
-                        triggerSize="sm"
-                        triggerVariant="outline"
-                        triggerClassName="h-9"
-                        initialQuery={payeeName}
-                        onPick={(c) => {
-                          const matched = vendors.find(
-                            (v) =>
-                              String((v as { taxId?: string; tax_id?: string }).taxId || (v as { tax_id?: string }).tax_id || "").replace(/\D/g, "") ===
-                                c.taxId ||
-                              v.name.trim() === c.name.trim()
-                          )
-                          if (matched) {
-                            setPayeeManual(false)
-                            setPayeeCode(matched.code)
-                            setPayeeName(matched.name)
-                          } else {
-                            openQuickAddVendor({ name: c.name, taxId: c.taxId })
-                          }
-                        }}
-                      />
-                    </div>
-                  </ExpenseRegisterField>
-                  <ExpenseRegisterField label={tt("expensePayeeAccountHolder", "Account holder")}>
-                    <Input
-                      className="h-9 w-full"
-                      value={payeeAccountHolder}
-                      onChange={(e) => setPayeeAccountHolder(e.target.value)}
-                      placeholder={payeeName || ""}
-                    />
-                  </ExpenseRegisterField>
-                  <ExpenseRegisterField label={tt("expensePayeeBankName", "Bank")}>
-                    <Input
-                      className="h-9 w-full"
-                      value={payeeBankName}
-                      onChange={(e) => setPayeeBankName(e.target.value)}
-                      placeholder="K-BANK"
-                    />
-                  </ExpenseRegisterField>
-                  <ExpenseRegisterField label={tt("inv_account_no", "Account")}>
-                    <Input
-                      className="h-9 w-full"
-                      value={payeeBankAccountNo}
-                      onChange={(e) => setPayeeBankAccountNo(e.target.value)}
-                    />
-                  </ExpenseRegisterField>
-                  <ExpenseRegisterField label={tt("wm_accountSubject", "Account Subject")}>
-                    <Select
-                      value={accountSubjectId || "__none__"}
-                      onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {isLaterPayment ? <SelectItem value="__none__">-</SelectItem> : null}
-                        {expenseSubjectOptions.map((s) => (
-                          <SelectItem key={s.id} value={String(s.id)}>
-                            {s.code} {getSubjectLabel(s)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </ExpenseRegisterField>
-                  </ExpenseRegisterFieldRow>
-                </ExpenseRegisterSection>
-              )}
-            </>
+            <WithdrawalPurchaseExpenseFields
+              accountSubjectId={accountSubjectId}
+              categoryMain={categoryMain}
+              expenseSubjectOptions={expenseSubjectOptions}
+              getSubjectLabel={getSubjectLabel}
+              inboundBatchesForLink={inboundBatchesForLink}
+              inboundLinkAmounts={inboundLinkAmounts}
+              inboundLinkLoading={inboundLinkLoading}
+              isBankLinkMode={isBankLinkMode}
+              isEditMode={isEditMode}
+              isLaterPayment={isLaterPayment}
+              loadInboundBatchesForLink={loadInboundBatchesForLink}
+              openQuickAddVendor={openQuickAddVendor}
+              payeeAccountHolder={payeeAccountHolder}
+              payeeBankAccountNo={payeeBankAccountNo}
+              payeeBankName={payeeBankName}
+              payeeCode={payeeCode}
+              payeeManual={payeeManual}
+              payeeName={payeeName}
+              resolvePurchaseVendorPayee={resolvePurchaseVendorPayee}
+              setAccountSubjectId={setAccountSubjectId}
+              setInboundLinkAmounts={setInboundLinkAmounts}
+              setPayeeAccountHolder={setPayeeAccountHolder}
+              setPayeeBankAccountNo={setPayeeBankAccountNo}
+              setPayeeBankName={setPayeeBankName}
+              setPayeeCode={setPayeeCode}
+              setPayeeManual={setPayeeManual}
+              setPayeeName={setPayeeName}
+              setVendorCode={setVendorCode}
+              tt={tt}
+              vendorCode={vendorCode}
+              vendors={vendors}
+            />
           )}
 
           {categoryMain === "transfer" && (
-            <div className="rounded-lg border border-border/60 bg-muted/15 p-4 space-y-4 max-w-3xl">
-              <ExpenseRegisterField
-                label={tt("wm_transferKind", "이체 유형")}
-                hint={
-                  isBankLinkMode
-                    ? transferKind === "bank_to_card"
-                      ? tt(
-                          "wm_transferKindHintBankToCardLink",
-                          "통장에서 이미 나간 출금입니다. 저장하면 카드 탭 연동 대기열에 등록됩니다."
-                        )
-                      : transferKind === "bank_to_petty"
-                        ? tt(
-                            "wm_transferKindHintBankToPettyLink",
-                            "통장에서 이미 나간 출금입니다. 저장하면 패티 캐쉬 탭 연동 대기열에 등록됩니다."
-                          )
-                        : tt(
-                            "wm_transferKindHintBankGeneralLink",
-                            "통장에서 이미 나간 일반 이체입니다. 이체 계정과목을 선택한 뒤 저장하세요."
-                          )
-                    : transferKind === "bank_to_card"
-                      ? tt(
-                          "wm_transferKindHintBankToCard",
-                          "카드·금액 입력 후 지급예정 저장 → 승인 → 통장 송금 건과 연동하세요. (통장에서는 「지급예정 선택」도 가능)"
-                        )
-                      : transferKind === "bank_to_petty"
-                        ? tt(
-                            "wm_transferKindHintBankToPetty",
-                            "매장·금액 입력 후 지급예정 저장 → 승인 → 통장 송금 건과 연동하세요. (분개: 1160/1010)"
-                          )
-                        : tt(
-                            "wm_transferKindHintBankGeneral",
-                            "이체용 계정과목·금액 입력 후 저장하면 통장 출금으로 등록됩니다."
-                          )
-                }
-              >
-                <Select
-                  value={transferKind}
-                  onValueChange={(v) => {
-                    setTransferKind(v as TransferKind)
-                    if (v !== "bank_to_card") setTransferToCardAccountId("")
-                    if (v !== "bank_general") {
-                      setAccountSubjectId("")
-                      setTransferBankAccountNo("")
-                      setTransferBankRecipientName("")
-                    }
-                    if (v !== "bank_to_petty") setTransferToPettyStore("")
-                  }}
-                >
-                  <SelectTrigger className="h-9 w-full max-w-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bank_to_petty">{tt("wm_transferKindBankToPetty", "통장 → 패티캐시")}</SelectItem>
-                    <SelectItem value="bank_to_card">{tt("wm_transferKindBankToCard", "통장 → 카드 대금")}</SelectItem>
-                    <SelectItem value="bank_general">{tt("wm_transferKindBankGeneral", "일반 이체")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </ExpenseRegisterField>
-
-              <ExpenseRegisterField
-                label={tt("bankAccount", "Account")}
-                className="max-w-md"
-                hint={
-                  !storeName
-                    ? tt("expenseStoreSelect", "매장을 먼저 선택하세요.")
-                    : undefined
-                }
-              >
-                <Select value={accountId || "__none__"} onValueChange={(v) => setAccountId(v === "__none__" ? "" : v)} disabled={isBankLinkMode}>
-                  <SelectTrigger className="h-9 w-full">
-                    <SelectValue placeholder={tt("bankAccount", "Select Account")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">—</SelectItem>
-                    {transferBankAccountsForStore.map((a) => (
-                      <SelectItem key={a.id} value={String(a.id)}>
-                        {a.bankName ? `[${a.bankName}] ` : ""}{a.name}{a.store ? ` (${a.store})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </ExpenseRegisterField>
-
-              {transferKind === "bank_to_petty" && (
-                <ExpenseRegisterField
-                  label={tt("wm_transferToPetty", "패티캐시 매장")}
-                  className="max-w-md"
-                  hint={tt("pettyBankLinkJournalHint", "분개: 차변·대변 현금(1010) — 내부 자금 이동")}
-                >
-                  <Select
-                    value={transferToPettyStore || "__none__"}
-                    onValueChange={(v) => setTransferToPettyStore(v === "__none__" ? "" : v)}
-                    disabled={isBankLinkMode}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={tt("wm_transferToPetty", "패티캐시 매장")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">—</SelectItem>
-                      {pettyCashStoreOptions.map((st) => (
-                        <SelectItem key={st} value={st}>{st}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </ExpenseRegisterField>
-              )}
-
-              {transferKind === "bank_general" && (
-                <>
-                  <ExpenseRegisterField label={tt("wm_transferAccountSubject", "이체 계정과목")} className="max-w-md">
-                    <Select value={accountSubjectId || "__none__"} onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}>
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder={tt("wm_transferAccountSubjectPlaceholder", "이체 계정과목 선택")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">—</SelectItem>
-                        {transferSubjects.map((s) => (
-                          <SelectItem key={s.id} value={String(s.id)}>
-                            {s.code} {getSubjectLabel(s)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </ExpenseRegisterField>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 max-w-xl">
-                    <ExpenseRegisterField label={tt("inv_account_no", "계좌번호")}>
-                      <Input
-                        value={transferBankAccountNo}
-                        onChange={(e) => setTransferBankAccountNo(e.target.value)}
-                        placeholder={tt("wm_transferAccountNoPlaceholder", "계좌번호 입력")}
-                        className="h-9"
-                        readOnly={isBankLinkMode}
-                      />
-                    </ExpenseRegisterField>
-                    <ExpenseRegisterField label={tt("wm_transferRecipient", "받는 사람")}>
-                      <Input
-                        value={transferBankRecipientName}
-                        onChange={(e) => setTransferBankRecipientName(e.target.value)}
-                        placeholder={tt("wm_transferRecipientPlaceholder", "받는 사람 입력")}
-                        className="h-9"
-                        readOnly={isBankLinkMode}
-                      />
-                    </ExpenseRegisterField>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {tt(
-                      "wm_transferGeneralInputHint",
-                      "계정과목으로 내부 이체하거나, 외부 계좌·받는 사람을 입력해 외부 이체로 등록할 수 있습니다."
-                    )}
-                  </p>
-                </>
-              )}
-
-              {transferKind === "bank_to_card" && (
-                <>
-                <ExpenseRegisterField
-                  label={tt("wm_transferToCardCharge", "연결할 카드")}
-                  className="max-w-md"
-                  hint={
-                    transferCardAccountsForStore.length === 0
-                      ? tt("cardManagementNoCardsHint", "연결할 카드가 없습니다. 위에서 카드를 먼저 등록하세요.")
-                      : tt("wm_transferCardLinkAfterHint", "어느 카드로 쓴 지출인지 지정합니다. 출금 연결 후 계정과목·텍스인보이스를 맞춥니다.")
-                  }
-                >
-                  <Select
-                    value={transferToCardAccountId || "__none__"}
-                    onValueChange={(v) => {
-                      const id = v === "__none__" ? "" : v
-                      setTransferToCardAccountId(id)
-                      if (id) writeLastCardAccountId(id)
-                    }}
-                  >
-                    <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={tt("cardManagementSelectCard", "Select Card")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">—</SelectItem>
-                      {transferCardAccountsForStore.map((a) => (
-                        <SelectItem key={a.id} value={String(a.id)}>
-                          {a.name}{a.store ? ` (${a.store})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </ExpenseRegisterField>
-                </>
-              )}
-            </div>
+            <WithdrawalTransferFields
+              accountId={accountId}
+              accountSubjectId={accountSubjectId}
+              getSubjectLabel={getSubjectLabel}
+              isBankLinkMode={isBankLinkMode}
+              pettyCashStoreOptions={pettyCashStoreOptions}
+              setAccountId={setAccountId}
+              setAccountSubjectId={setAccountSubjectId}
+              setTransferBankAccountNo={setTransferBankAccountNo}
+              setTransferBankRecipientName={setTransferBankRecipientName}
+              setTransferKind={setTransferKind}
+              setTransferToCardAccountId={setTransferToCardAccountId}
+              setTransferToPettyStore={setTransferToPettyStore}
+              storeName={storeName}
+              transferBankAccountNo={transferBankAccountNo}
+              transferBankAccountsForStore={transferBankAccountsForStore}
+              transferBankRecipientName={transferBankRecipientName}
+              transferCardAccountsForStore={transferCardAccountsForStore}
+              transferKind={transferKind}
+              transferSubjects={transferSubjects}
+              transferToCardAccountId={transferToCardAccountId}
+              transferToPettyStore={transferToPettyStore}
+              tt={tt}
+            />
           )}
           </div>
 
           {categoryMain === "fixed_asset" && (
-            <ExpenseRegisterSection>
-              <ExpenseRegisterFieldRow cols="auto">
-              <ExpenseRegisterField label={tt("wm_assetName", "Asset Name")}>
-                <Input
-                  value={assetName}
-                  onChange={(e) => setAssetName(e.target.value)}
-                  placeholder={tt("wm_assetNamePlaceholder", "Vehicle, equipment, etc.")}
-                  className="h-9 w-full"
-                />
-              </ExpenseRegisterField>
-              <ExpenseRegisterField label={tt("wm_assetCode", "Asset Code")}>
-                <Input
-                  value={assetCode}
-                  onChange={(e) => setAssetCode(e.target.value)}
-                  placeholder={tt("wm_assetCodePlaceholder", "FA-001 (optional)")}
-                  className="h-9 w-full"
-                />
-              </ExpenseRegisterField>
-              <ExpenseRegisterField label={tt("wm_usefulLife", "Useful Life (months)")}>
-                <Input
-                  value={usefulLifeMonths}
-                  onChange={(e) => setUsefulLifeMonths(e.target.value)}
-                  type="number"
-                  min={1}
-                  className="h-9 w-full max-w-[140px]"
-                />
-              </ExpenseRegisterField>
-              <ExpenseRegisterField
-                label={tt("vendor", "Payee")}
-                className="sm:col-span-2 lg:col-span-2 xl:col-span-2"
-                hint={tt(
-                  "wm_fixedAssetPayeeHint",
-                  "Select the seller from vendor master. Required to link the bank withdrawal."
-                )}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select
-                    value={payeeManual ? "__manual__" : (payeeCode || "__none__")}
-                    onValueChange={(v) => {
-                      if (v === "__add_vendor__") {
-                        openQuickAddVendor()
-                        return
-                      }
-                      if (v === "__manual__") {
-                        setPayeeManual(true)
-                        setPayeeCode("")
-                        setPayeeName("")
-                      } else if (v !== "__none__") {
-                        setPayeeManual(false)
-                        setPayeeCode(v)
-                        const found = vendors.find((x) => x.code === v)
-                        setPayeeName(found?.name || v)
-                      } else {
-                        setPayeeManual(false)
-                        setPayeeCode("")
-                        setPayeeName("")
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full min-w-[140px] max-w-[200px] h-9">
-                      <SelectValue placeholder={tt("vendor", "Payee")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__add_vendor__" className="text-primary font-medium">
-                        <span className="inline-flex items-center gap-1.5">
-                          <Plus className="h-3.5 w-3.5" />
-                          {tt("vendorQuickAdd", "Add vendor")}
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="__manual__">{tt("bankRegisterPayeeManual", "Enter Manually")}</SelectItem>
-                      <SelectItem value="__none__">-</SelectItem>
-                      {vendors.map((v) => (
-                        <SelectItem key={v.code} value={v.code}>{v.name} ({v.code})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {payeeManual ? (
-                    <>
-                      <Input
-                        className="w-[120px] h-9"
-                        value={payeeCode}
-                        onChange={(e) => setPayeeCode(e.target.value)}
-                        placeholder={tt("expensePayeeCode", "Code")}
-                      />
-                      <Input
-                        className="w-[160px] h-9"
-                        value={payeeName}
-                        onChange={(e) => setPayeeName(e.target.value)}
-                        placeholder={tt("expensePayeeName", "Payee Name")}
-                      />
-                    </>
-                  ) : (
-                    <Input
-                      className="w-[160px] h-9"
-                      value={payeeName}
-                      onChange={(e) => setPayeeName(e.target.value)}
-                      placeholder={tt("expensePayeeName", "Payee Name")}
-                    />
-                  )}
-                  <QuickAddVendorTriggerButton onClick={() => openQuickAddVendor()} />
-                  <VendorRdSearchButton
-                    triggerSize="sm"
-                    triggerVariant="outline"
-                    triggerClassName="h-9"
-                    initialQuery={payeeName}
-                    onPick={(c) => {
-                      const matched = vendors.find(
-                        (v) =>
-                          String((v as { taxId?: string; tax_id?: string }).taxId || (v as { tax_id?: string }).tax_id || "").replace(/\D/g, "") ===
-                            c.taxId ||
-                          v.name.trim() === c.name.trim()
-                      )
-                      if (matched) {
-                        setPayeeManual(false)
-                        setPayeeCode(matched.code)
-                        setPayeeName(matched.name)
-                      } else {
-                        openQuickAddVendor({ name: c.name, taxId: c.taxId })
-                      }
-                    }}
-                  />
-                </div>
-              </ExpenseRegisterField>
-              <ExpenseRegisterField label={tt("wm_accountSubject", "Account Subject")}>
-                <Select
-                  value={accountSubjectId || "__none__"}
-                  onValueChange={(v) => setAccountSubjectId(v === "__none__" ? "" : v)}
-                >
-                  <SelectTrigger className="h-9 w-full">
-                    <SelectValue placeholder={tt("wm_accountSubjectPlaceholder", "Select Account Subject")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {assetSubjectOptions.map((s) => (
-                      <SelectItem key={s.id} value={String(s.id)}>
-                        {s.code} {getSubjectLabel(s)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </ExpenseRegisterField>
-              </ExpenseRegisterFieldRow>
-            </ExpenseRegisterSection>
+            <WithdrawalFixedAssetFields
+              accountSubjectId={accountSubjectId}
+              assetCode={assetCode}
+              assetName={assetName}
+              assetSubjectOptions={assetSubjectOptions}
+              getSubjectLabel={getSubjectLabel}
+              openQuickAddVendor={openQuickAddVendor}
+              payeeCode={payeeCode}
+              payeeManual={payeeManual}
+              payeeName={payeeName}
+              setAccountSubjectId={setAccountSubjectId}
+              setAssetCode={setAssetCode}
+              setAssetName={setAssetName}
+              setPayeeCode={setPayeeCode}
+              setPayeeManual={setPayeeManual}
+              setPayeeName={setPayeeName}
+              setUsefulLifeMonths={setUsefulLifeMonths}
+              tt={tt}
+              usefulLifeMonths={usefulLifeMonths}
+              vendors={vendors}
+            />
           )}
 
-          <div className="border-t border-border/60 pt-5 space-y-4">
-            <ExpenseRegisterFieldRow cols="auto" className="max-w-6xl">
-              {!isLaterPayment && showBankAccountOutsideTransfer && (
-                <ExpenseRegisterField label={tt("bankAccount", "Account")}>
-                  <Select
-                    value={accountId || "__none__"}
-                    onValueChange={(v) => setAccountId(v === "__none__" ? "" : v)}
-                    disabled={isExistingBankTxMode}
-                  >
-                    <SelectTrigger className="w-full h-9">
-                      <SelectValue placeholder={tt("bankAccount", "Select Account")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bankAccounts.map((a) => (
-                        <SelectItem key={a.id} value={String(a.id)}>
-                          {a.bankName ? `[${a.bankName}] ` : ""}{a.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </ExpenseRegisterField>
-              )}
-              <ExpenseRegisterField
-                label={
-                  activeFeeVatMode && categoryMain === "expense"
-                    ? feeAmountFieldLabel(activeFeeVatMode)
-                    : supportsExpenseDocs
-                      ? tt("expenseAccrualGrossTotal", "Total (incl. tax)")
-                      : tt("amount", "Amount")
-                }
-                hint={
-                  feeAmountPreview ? (
-                    <span className="tabular-nums">
-                      {tt("expenseFeeWithdrawPreview", "Withdrawal")} ฿{feeAmountPreview.gross.toLocaleString()}
-                      {feeAmountPreview.vat > 0
-                        ? ` (${tt("expenseAccrualVat", "VAT")} ฿${feeAmountPreview.vat.toLocaleString()} · ${tt("expenseFeeNetLabel", "Net")} ฿${feeAmountPreview.net.toLocaleString()})`
-                        : ""}
-                    </span>
-                  ) : activeFeeVatMode ? (
-                    feeVatModeLabel(activeFeeVatMode)
-                  ) : undefined
-                }
-              >
-                <Input
-                  value={amount}
-                  onChange={(e) => handleMoneyInputChange(e.target.value, setAmount)}
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="0"
-                  className={`w-full max-w-[160px] h-9 ${isBankLinkMode || isAccrualAmountsLocked ? "bg-muted/50 cursor-default" : ""}`}
-                  readOnly={isBankLinkMode || isAccrualAmountsLocked}
-                />
-              </ExpenseRegisterField>
-              <ExpenseRegisterField label={tt("date", "Date")}>
-                <Input
-                  type="date"
-                  value={transDate}
-                  onChange={(e) => setTransDate(e.target.value)}
-                  className={`w-full max-w-[180px] h-9 ${isBankLinkMode || isAccrualAmountsLocked ? "bg-muted/50 cursor-default" : ""}`}
-                  readOnly={isBankLinkMode || isAccrualAmountsLocked}
-                />
-              </ExpenseRegisterField>
-              <ExpenseRegisterField label={tt("memo", "Memo")} className="sm:col-span-2 lg:col-span-1 xl:col-span-1">
-                <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={tt("memo", "Memo")} className="h-9 w-full" />
-              </ExpenseRegisterField>
-              <ExpenseRegisterField label={tt("bankMemoLabel", "Bank Memo")} className="sm:col-span-2 lg:col-span-2">
-                <Input
-                  value={bankMemo}
-                  readOnly
-                  title={bankMemo || undefined}
-                  placeholder={tt("bankMemoFromBank", "Memo from bank transaction")}
-                  className="h-9 w-full bg-muted/50 cursor-default"
-                />
-              </ExpenseRegisterField>
-            </ExpenseRegisterFieldRow>
-            {supportsExpenseDocs && (
-              <ExpenseRegisterSection className="max-w-6xl bg-muted/15">
-                <ExpenseRegisterFieldRow cols="dense">
-                <ExpenseRegisterField label={tt("expenseAccrualVat", "VAT")}>
-                  <Input
-                    value={accrualVatAmount}
-                    onChange={(e) => handleMoneyInputChange(e.target.value, setAccrualVatAmount)}
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0"
-                    className={`h-9 w-full ${isAccrualAmountsLocked ? "bg-muted/50 cursor-default" : ""}`}
-                    readOnly={isAccrualAmountsLocked}
-                  />
-                </ExpenseRegisterField>
-                <ExpenseRegisterField label={tt("expenseAccrualNetPayableLabel", "Net Payable")}>
-                  <div className="flex h-9 items-center">
-                    <span className="text-sm font-semibold tabular-nums">
-                      ฿{(accrualNetPreview ?? 0).toLocaleString()}
-                    </span>
-                  </div>
-                </ExpenseRegisterField>
-                </ExpenseRegisterFieldRow>
-                <ExpenseWhtItemsEditor
-                  items={accrualWhtItems}
-                  onChange={setAccrualWhtItems}
-                  remainingBase={remainingWhtBase}
-                  disabled={isAccrualAmountsLocked}
-                  tt={tt}
-                />
-              </ExpenseRegisterSection>
-            )}
-          </div>
+          <WithdrawalAmountFields
+            accountId={accountId}
+            accrualNetPreview={accrualNetPreview}
+            accrualVatAmount={accrualVatAmount}
+            accrualWhtItems={accrualWhtItems}
+            activeFeeVatMode={activeFeeVatMode}
+            amount={amount}
+            bankAccounts={bankAccounts}
+            bankMemo={bankMemo}
+            categoryMain={categoryMain}
+            feeAmountFieldLabel={feeAmountFieldLabel}
+            feeAmountPreview={feeAmountPreview}
+            feeVatModeLabel={feeVatModeLabel}
+            handleMoneyInputChange={handleMoneyInputChange}
+            isAccrualAmountsLocked={isAccrualAmountsLocked}
+            isBankLinkMode={isBankLinkMode}
+            isExistingBankTxMode={isExistingBankTxMode}
+            isLaterPayment={isLaterPayment}
+            memo={memo}
+            remainingWhtBase={remainingWhtBase}
+            setAccountId={setAccountId}
+            setAccrualVatAmount={setAccrualVatAmount}
+            setAccrualWhtItems={setAccrualWhtItems}
+            setAmount={setAmount}
+            setMemo={setMemo}
+            setTransDate={setTransDate}
+            showBankAccountOutsideTransfer={showBankAccountOutsideTransfer}
+            supportsExpenseDocs={supportsExpenseDocs}
+            transDate={transDate}
+            tt={tt}
+          />
 
           {supportsExpenseDocs ? (
             <ExpenseDocumentAttachPanel
@@ -3784,344 +3028,84 @@ export function WithdrawalManagementTab({ onAccrualSaved, onBatchWithdrawalSaved
             </p>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3 pt-2">
-              {supportsExpenseDocs ? (
-                <label className="flex items-center gap-2 text-sm cursor-pointer select-none mr-1">
-                  <Checkbox
-                    checked={autoCreateWhtCert}
-                    onCheckedChange={(v) => setAutoCreateWhtCert(v === true)}
-                    disabled={saving}
-                  />
-                  <span className="text-muted-foreground leading-snug max-w-[280px]">
-                    {tt(
-                      "expenseAccrualAutoWhtCert",
-                      "Auto-create withholding tax certificate (50 ทวิ)"
-                    )}
-                  </span>
-                </label>
-              ) : null}
-              <Button
-                type="button"
-                onClick={handleSubmit}
-                disabled={
-                  saving ||
-                  !categoryMain ||
-                  (categoryMain === "transfer" &&
-                    transferKind === "bank_to_card" &&
-                    (!transferToCardAccountId || transferCardAccountsForStore.length === 0)) ||
-                  (isBankLinkMode &&
-                    ((categoryMain === "purchase" && !vendorCode.trim()) ||
-                      ((categoryMain === "expense" || categoryMain === "fixed_asset") &&
-                        !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode)))) ||
-                  (categoryMain === "fixed_asset" &&
-                    !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode))
-                }
-              >
-                {categoryMain === "transfer" && transferKind === "bank_to_card" ? (
-                  <Link2 className="h-4 w-4 mr-1" />
-                ) : (
-                  <Wallet className="h-4 w-4 mr-1" />
-                )}
-                {saving
-                  ? tt("loading", "Processing...")
-                  : isEditMode
-                    ? tt("btnSave", "Save")
-                    : isBankLinkMode
-                    ? categoryMain === "transfer" && transferKind === "bank_to_card"
-                      ? tt("wm_transferLinkThisBill", "이 출금을 카드에 연결")
-                      : categoryMain === "transfer" && isTransferPrepaymentKind(transferKind)
-                      ? tt("wm_transferLinkBank", "통장 연동")
-                      : tt("btnSave", "Save")
-                    : categoryMain === "transfer" && transferKind === "bank_to_card"
-                      ? tt("wm_transferLinkExistingBill", "이미 나간 출금 연결")
-                    : isLaterPayment
-                      ? isEditAccrualMode
-                        ? tt("btnSave", "Save")
-                        : tt("wm_registerAccrual", "Register Accrual")
-                      : tt("wm_execute", "Register Withdrawal")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  const q = new URLSearchParams()
-                  q.set("tab", returnTabParam || (isBankLinkMode ? "query" : "input"))
-                  if (accountId) q.set("accountId", accountId)
-                  const start = (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) ? startStrParam : (transDate || todayStrBkk())
-                  const end = (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) ? endStrParam : (transDate || todayStrBkk())
-                  q.set("startStr", start)
-                  q.set("endStr", end)
-                  if (returnOpenRegisterTxIdParam && Number(returnOpenRegisterTxIdParam) > 0) {
-                    q.set("openRegisterTxId", returnOpenRegisterTxIdParam)
-                  }
-                  router.push(`/admin/bank-transactions?${q.toString()}`)
-                }}
-              >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                {tt("wm_backToBank", "Back to Bank Screen")}
-              </Button>
-            </div>
+          <WithdrawalSubmitActions
+            accountId={accountId}
+            autoCreateWhtCert={autoCreateWhtCert}
+            categoryMain={categoryMain}
+            endStrParam={endStrParam}
+            handleSubmit={handleSubmit}
+            isBankLinkMode={isBankLinkMode}
+            isEditAccrualMode={isEditAccrualMode}
+            isEditMode={isEditMode}
+            isLaterPayment={isLaterPayment}
+            payeeCode={payeeCode}
+            payeeManual={payeeManual}
+            payeeName={payeeName}
+            returnOpenRegisterTxIdParam={returnOpenRegisterTxIdParam}
+            returnTabParam={returnTabParam}
+            router={router}
+            saving={saving}
+            setAutoCreateWhtCert={setAutoCreateWhtCert}
+            startStrParam={startStrParam}
+            supportsExpenseDocs={supportsExpenseDocs}
+            transDate={transDate}
+            transferCardAccountsForStore={transferCardAccountsForStore}
+            transferKind={transferKind}
+            transferToCardAccountId={transferToCardAccountId}
+            tt={tt}
+            vendorCode={vendorCode}
+          />
         </CardContent>
       </Card>
 
-      <Dialog open={cardBillPickOpen} onOpenChange={setCardBillPickOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{tt("expenseRegisterCardBillPickTitle", "카드대금 연동할 통장 출금 선택")}</DialogTitle>
-            <DialogDescription>
-              {tt(
-                "expenseRegisterCardBillPickHint",
-                "미연결 출금 중 카드 월 대금으로 처리할 건을 선택하세요."
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          {cardBillPickRangeText ? (
-            <p className="text-xs text-muted-foreground">
-              {tt("cardManagementPickRangeHint", "선택한 통장에서 전후 1개월 미연결 출금입니다. 적요로 찾을 수 있습니다.")}
-              {" · "}
-              {cardBillPickRangeText}
-            </p>
-          ) : null}
-          <Input
-            className="h-9"
-            value={cardBillPickQuery}
-            onChange={(e) => setCardBillPickQuery(e.target.value)}
-            placeholder={tt("search", "Search")}
-          />
-          {cardBillPickLoading ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">{t("loading")}</p>
-          ) : cardBillPickRows.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              {tt("expenseRegisterCardBillPickEmpty", "연결할 통장 출금이 없습니다. 통장 계좌·기간을 확인하세요.")}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {cardBillPickRows
-                .filter((row) => {
-                  const q = cardBillPickQuery.trim().toLowerCase()
-                  if (!q) return true
-                  return `${row.memo || ""} ${row.transDate} ${row.amount}`.toLowerCase().includes(q)
-                })
-                .map((row) => {
-                  const entered = parseMoneyAmount(amount)
-                  const amountMatch = entered > 0 && Math.abs(row.amount - entered) < 0.01
-                  return (
-                <div key={row.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold tabular-nums">฿{row.amount.toLocaleString()}</p>
-                    <p className="text-[11px] text-muted-foreground">{row.transDate}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{row.memo || "—"}</p>
-                    {row.likelyCardBill ? (
-                      <p className="text-[10px] text-amber-800 mt-1">
-                        {tt("cardManagementLikelyCardBill", "카드대금 추정")}
-                      </p>
-                    ) : null}
-                    {amountMatch ? (
-                      <p className="text-[10px] text-green-700 mt-1">
-                        {tt("expenseRegisterCardBillAmountMatch", "입력 금액과 같음")}
-                      </p>
-                    ) : null}
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8 shrink-0"
-                    disabled={cardBillPickSavingId != null}
-                    onClick={() => void handlePickCardBillWithdrawal(row)}
-                  >
-                    {cardBillPickSavingId === row.id
-                      ? "..."
-                      : tt("expenseRegisterCardBillQueue", "통장 카드대금 연동")}
-                  </Button>
-                </div>
-                  )
-                })}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <WithdrawalCardBillPickDialog
+        amount={amount}
+        cardBillPickLoading={cardBillPickLoading}
+        cardBillPickOpen={cardBillPickOpen}
+        cardBillPickQuery={cardBillPickQuery}
+        cardBillPickRangeText={cardBillPickRangeText}
+        cardBillPickRows={cardBillPickRows}
+        cardBillPickSavingId={cardBillPickSavingId}
+        handlePickCardBillWithdrawal={handlePickCardBillWithdrawal}
+        setCardBillPickOpen={setCardBillPickOpen}
+        setCardBillPickQuery={setCardBillPickQuery}
+        t={t}
+        tt={tt}
+      />
 
-      <Dialog open={deliveryFeeDialogOpen} onOpenChange={setDeliveryFeeDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{tt("pL_expenseSourceDeliveryApps", "배달앱 수수료")}</DialogTitle>
-            <DialogDescription>
-              {tt(
-                "deliveryFeeDialogDesc",
-                "앱별 빠른 입력 또는 월별 일괄 등록. 계정과목 5528(배달앱수수료)로 손익계산서에 반영됩니다. (나중에 지급=등록 시점, 즉시 지급=출금 등록 시점)"
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {renderFeeVatModePicker(deliveryFeeVatMode, setDeliveryFeeVatMode)}
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-              <div className="text-sm font-medium">
-                {tt("deliveryFeePresetTitle", "배달앱 수수료 (빠른 입력)")}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {DELIVERY_APP_FEE_PRESETS.map((preset) => (
-                  <Button
-                    key={preset.id}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8"
-                    onClick={() => applyDeliveryFeePreset(preset)}
-                  >
-                    {preset.name}
-                  </Button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {tt(
-                  "deliveryFeePresetHint",
-                  "앱 버튼을 누르면 거래처·적요가 채워집니다. 금액 입력 후 아래 출금 등록을 진행하세요."
-                )}
-              </p>
-            </div>
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-              <div className="text-sm font-medium">
-                {tt("deliveryFeeBatchTitle", "배달앱 수수료 (월별 일괄)")}
-              </div>
-              <div className="flex flex-wrap items-end gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    {tt("deliveryFeeBatchMonth", "대상 월")}
-                  </Label>
-                  <Input
-                    type="month"
-                    value={deliveryFeeMonth}
-                    onChange={(e) => setDeliveryFeeMonth(e.target.value)}
-                    className="h-9 w-[140px] mt-1"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground pb-1">
-                  {tt("deliveryFeeBatchDateHint", "전기일은 해당 월 말일(방콕)로 자동 설정됩니다.")}
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {DELIVERY_APP_FEE_PRESETS.map((preset) => (
-                  <div key={`dlg-batch-${preset.id}`}>
-                    <Label className="text-xs text-muted-foreground">
-                      {preset.name} · {feeAmountFieldLabel(deliveryFeeVatMode)}
-                    </Label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      value={deliveryFeeAmounts[preset.id] || ""}
-                      onChange={(e) => handleDeliveryFeeAmountChange(preset.id, e.target.value)}
-                      placeholder="0"
-                      className="h-9 mt-1"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  onClick={handleRegisterDeliveryFeeBatch}
-                  disabled={deliveryFeeSaving}
-                >
-                  {deliveryFeeSaving
-                    ? tt("loading", "처리 중...")
-                    : tt("deliveryFeeBatchRegister", "월별 배달앱 수수료 등록")}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <WithdrawalDeliveryFeeDialog
+        applyDeliveryFeePreset={applyDeliveryFeePreset}
+        deliveryFeeAmounts={deliveryFeeAmounts}
+        deliveryFeeDialogOpen={deliveryFeeDialogOpen}
+        deliveryFeeMonth={deliveryFeeMonth}
+        deliveryFeeSaving={deliveryFeeSaving}
+        deliveryFeeVatMode={deliveryFeeVatMode}
+        feeAmountFieldLabel={feeAmountFieldLabel}
+        handleDeliveryFeeAmountChange={handleDeliveryFeeAmountChange}
+        handleRegisterDeliveryFeeBatch={handleRegisterDeliveryFeeBatch}
+        renderFeeVatModePicker={renderFeeVatModePicker}
+        setDeliveryFeeDialogOpen={setDeliveryFeeDialogOpen}
+        setDeliveryFeeMonth={setDeliveryFeeMonth}
+        setDeliveryFeeVatMode={setDeliveryFeeVatMode}
+        tt={tt}
+      />
 
-      <Dialog open={cardFeeDialogOpen} onOpenChange={setCardFeeDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{tt("pL_expenseSourceCardFees", "카드 수수료")}</DialogTitle>
-            <DialogDescription>
-              {tt(
-                "cardFeeDialogDesc",
-                "유형별 빠른 입력 또는 월별 일괄 등록. 계정과목 5529(카드수수료)로 손익계산서에 반영됩니다. (나중에 지급=등록 시점, 즉시 지급=출금 등록 시점)"
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {renderFeeVatModePicker(cardFeeVatMode, setCardFeeVatMode)}
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-              <div className="text-sm font-medium">
-                {tt("cardFeePresetTitle", "카드 수수료 (빠른 입력)")}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {CARD_FEE_PRESETS.map((preset) => (
-                  <Button
-                    key={preset.id}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8"
-                    onClick={() => applyCardFeePreset(preset)}
-                  >
-                    {tt(preset.nameKey, preset.name)}
-                  </Button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {tt(
-                  "cardFeePresetHint",
-                  "유형 버튼을 누르면 거래처·적요가 채워집니다."
-                )}
-              </p>
-            </div>
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-              <div className="text-sm font-medium">
-                {tt("cardFeeBatchTitle", "카드 수수료 (월별 일괄)")}
-              </div>
-              <div className="flex flex-wrap items-end gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">
-                    {tt("cardFeeBatchMonth", "대상 월")}
-                  </Label>
-                  <Input
-                    type="month"
-                    value={cardFeeMonth}
-                    onChange={(e) => setCardFeeMonth(e.target.value)}
-                    className="h-9 w-[140px] mt-1"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground pb-1">
-                  {tt("cardFeeBatchDateHint", "전기일은 해당 월 말일(방콕)로 자동 설정됩니다.")}
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {CARD_FEE_PRESETS.map((preset) => (
-                  <div key={`dlg-card-batch-${preset.id}`}>
-                    <Label className="text-xs text-muted-foreground">
-                      {tt(preset.nameKey, preset.name)} · {feeAmountFieldLabel(cardFeeVatMode)}
-                    </Label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      value={cardFeeAmounts[preset.id] || ""}
-                      onChange={(e) => handleCardFeeAmountChange(preset.id, e.target.value)}
-                      placeholder="0"
-                      className="h-9 mt-1"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  onClick={handleRegisterCardFeeBatch}
-                  disabled={cardFeeSaving}
-                >
-                  {cardFeeSaving
-                    ? tt("loading", "처리 중...")
-                    : tt("cardFeeBatchRegister", "월별 카드 수수료 등록")}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <WithdrawalCardFeeDialog
+        applyCardFeePreset={applyCardFeePreset}
+        cardFeeAmounts={cardFeeAmounts}
+        cardFeeDialogOpen={cardFeeDialogOpen}
+        cardFeeMonth={cardFeeMonth}
+        cardFeeSaving={cardFeeSaving}
+        cardFeeVatMode={cardFeeVatMode}
+        feeAmountFieldLabel={feeAmountFieldLabel}
+        handleCardFeeAmountChange={handleCardFeeAmountChange}
+        handleRegisterCardFeeBatch={handleRegisterCardFeeBatch}
+        renderFeeVatModePicker={renderFeeVatModePicker}
+        setCardFeeDialogOpen={setCardFeeDialogOpen}
+        setCardFeeMonth={setCardFeeMonth}
+        setCardFeeVatMode={setCardFeeVatMode}
+        tt={tt}
+      />
 
       <QuickAddVendorDialog
         open={quickAddVendorOpen}
