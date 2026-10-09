@@ -890,6 +890,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posCheckerZoomIn: 'ขยายตัวอักษร',
     posCheckerZoomOut: 'ย่อตัวอักษร',
     posCheckerWidth: 'ความกว้างหน้าต่าง (ปกติ/กว้าง/กว้างมาก)',
+    posCheckerListExpand: 'ขยายรายการ',
+    posCheckerListRestore: 'ย่อกลับ',
     posTableElapsedHint: 'นาทีหลังสั่ง',
     posTableOrderClockHint: 'เวลา',
     posDeliveryPackagingComplete: 'แพ็คเสร็จ',

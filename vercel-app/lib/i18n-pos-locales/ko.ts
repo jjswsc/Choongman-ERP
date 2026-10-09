@@ -1569,6 +1569,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posCheckerZoomIn: '글자 크게',
     posCheckerZoomOut: '글자 작게',
     posCheckerWidth: '패널 폭 (보통/넓게/아주 넓게)',
+    posCheckerListExpand: '목록 크게',
+    posCheckerListRestore: '원래대로',
     posTableElapsedHint: '주문 후 경과(분)',
     posTableOrderClockHint: '주문 시각',
     posDeliveryPackagingComplete: '포장 완료',

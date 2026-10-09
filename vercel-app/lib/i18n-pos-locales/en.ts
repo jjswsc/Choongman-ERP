@@ -1578,6 +1578,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posCheckerZoomIn: 'Larger text',
     posCheckerZoomOut: 'Smaller text',
     posCheckerWidth: 'Panel width (normal/wide/extra wide)',
+    posCheckerListExpand: 'Expand list',
+    posCheckerListRestore: 'Restore',
     posTableElapsedHint: 'Elapsed (min) since order',
     posTableOrderClockHint: 'Order time',
     posDeliveryPackagingComplete: 'Packaging complete',

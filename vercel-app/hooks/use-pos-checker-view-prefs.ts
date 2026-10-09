@@ -11,9 +11,10 @@ export type PosCheckerWidth = (typeof POS_CHECKER_WIDTHS)[number]
 
 export const POS_CHECKER_ZOOMS = [1, 1.15, 1.3, 1.5] as const
 
-type Prefs = { width: PosCheckerWidth; zoomIdx: number }
+/** expanded: 목록 크게 — 패널 위·아래 부가 영역을 숨기고 주문 목록에 높이를 몰아준다 */
+type Prefs = { width: PosCheckerWidth; zoomIdx: number; expanded: boolean }
 
-const DEFAULT_PREFS: Prefs = { width: 'normal', zoomIdx: 0 }
+const DEFAULT_PREFS: Prefs = { width: 'normal', zoomIdx: 0, expanded: false }
 
 function parsePrefs(raw: string): Prefs {
   if (!raw) return DEFAULT_PREFS
@@ -26,7 +27,7 @@ function parsePrefs(raw: string): Prefs {
       POS_CHECKER_ZOOMS.length - 1,
       Math.max(0, Math.trunc(Number(obj.zoomIdx ?? 0) || 0))
     )
-    return { width, zoomIdx }
+    return { width, zoomIdx, expanded: obj.expanded === true }
   } catch {
     return DEFAULT_PREFS
   }
@@ -83,8 +84,15 @@ export function usePosCheckerViewPrefs() {
   const zoomIn = useCallback(() => stepZoom(1), [stepZoom])
   const zoomOut = useCallback(() => stepZoom(-1), [stepZoom])
 
+  const toggleExpanded = useCallback(() => {
+    const cur = parsePrefs(readRaw())
+    writePrefs({ ...cur, expanded: !cur.expanded })
+  }, [])
+
   return {
     width: prefs.width,
+    expanded: prefs.expanded,
+    toggleExpanded,
     zoom: POS_CHECKER_ZOOMS[prefs.zoomIdx] ?? 1,
     canZoomIn: prefs.zoomIdx < POS_CHECKER_ZOOMS.length - 1,
     canZoomOut: prefs.zoomIdx > 0,

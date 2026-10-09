@@ -1,7 +1,7 @@
 'use client'
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -38,6 +38,8 @@ import {
   Combine,
   LayoutGrid,
   ArrowLeft,
+  Maximize2,
+  Minimize2,
   MoveHorizontal,
   ZoomIn,
   ZoomOut,
@@ -51,7 +53,6 @@ import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { QrTableSessionPanel } from '@/components/pos/qr-table-session-panel'
 import {
-  PosOrderTaxInvoiceEntryRow,
   PosOrderTaxInvoiceStatusButton,
 } from '@/components/pos/pos-tax-invoice-form-ui'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
@@ -740,8 +741,34 @@ export function TableOrderPanel({
     setGuestDirectOpen(false)
   }
 
-  const checkerViewToolbar = (
+  const listExpanded = checkerView.expanded && !isPaidPrepaid
+
+  const renderCheckerViewToolbar = (leading?: ReactNode) => (
     <div className="flex shrink-0 items-center justify-end gap-1">
+      <div className="mr-auto flex min-w-0 items-center">{leading}</div>
+      <Button
+        type="button"
+        variant={listExpanded ? 'secondary' : 'outline'}
+        size="sm"
+        className="h-8 gap-1 px-2 text-xs font-semibold"
+        onClick={checkerView.toggleExpanded}
+        title={
+          listExpanded
+            ? tr('posCheckerListRestore', '원래대로')
+            : tr('posCheckerListExpand', '목록 크게')
+        }
+      >
+        {listExpanded ? (
+          <Minimize2 className="h-4 w-4 shrink-0" aria-hidden />
+        ) : (
+          <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+        )}
+        <span className="truncate">
+          {listExpanded
+            ? tr('posCheckerListRestore', '원래대로')
+            : tr('posCheckerListExpand', '목록 크게')}
+        </span>
+      </Button>
       <Button
         type="button"
         variant="outline"
@@ -777,6 +804,22 @@ export function TableOrderPanel({
       >
         <MoveHorizontal className="h-4 w-4" aria-hidden />
       </Button>
+    </div>
+  )
+
+  const renderTotalRow = () => (
+    <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
+      <span className="flex min-w-0 items-baseline gap-2 text-base font-medium">
+        <span className="truncate">{t('posInputTotal') || '합계'}</span>
+        <span className="font-bold tabular-nums">{order ? order.total.toLocaleString() : 0} ฿</span>
+      </span>
+      {!listExpanded ? (
+        <PosOrderTaxInvoiceStatusButton
+          hasTaxInvoice={hasTaxInvoice}
+          onOpen={onOpenTaxInvoice}
+          t={(key, fallback) => t(key) || fallback || key}
+        />
+      ) : null}
     </div>
   )
 
@@ -882,8 +925,8 @@ export function TableOrderPanel({
           ) : null}
         </div>
       ) : (
-        <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
-          {order.type === 'dine-in' && storeCode ? (
+        <div className="flex-1 min-h-0 p-2.5 flex flex-col gap-2">
+          {order.type === 'dine-in' && storeCode && !listExpanded ? (
             <QrTableSessionPanel
               storeCode={storeCode}
               tableName={String(tableName || '').trim()}
@@ -891,7 +934,7 @@ export function TableOrderPanel({
               onChanged={onServed}
             />
           ) : null}
-          {order.type === 'dine-in' && (
+          {order.type === 'dine-in' && !listExpanded && (
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -995,13 +1038,14 @@ export function TableOrderPanel({
             </>
           ) : isServedReadyForPayment ? (
             <>
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-base rounded-lg bg-muted/50 p-3">
-                <CheckCircle className="w-5 h-5 shrink-0" />
-                <span>{t('posTableStatusServed') || '서빙 완료'}</span>
-              </div>
-              {checkerViewToolbar}
+              {renderCheckerViewToolbar(
+                <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{t('posTableStatusServed') || '서빙 완료'}</span>
+                </span>
+              )}
               <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
-                <ul className="p-1.5 space-y-1" style={{ zoom: checkerView.zoom }}>
+                <ul className="p-1 space-y-1" style={{ zoom: checkerView.zoom }}>
                   {order.items.map((item) => {
                     const cancelled = itemCancelled[item.id]
                     const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
@@ -1015,7 +1059,7 @@ export function TableOrderPanel({
                       <li
                         key={item.id}
                         className={cn(
-                          'flex cursor-default items-start gap-1.5 py-1.5 px-2 rounded-md border border-border/50 transition-shadow',
+                          'grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 py-1 px-2 rounded-md border border-border/50 transition-shadow',
                           cancelled
                             ? 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40'
                             : 'bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-800',
@@ -1028,10 +1072,10 @@ export function TableOrderPanel({
                           setSelectedLineItemId(null)
                         }}
                       >
-                        <div className="min-w-0 space-y-1">
+                        <div className="min-w-0 text-base leading-snug break-words">
                           <button
                             type="button"
-                            className="block w-full rounded-sm px-0.5 text-left text-base font-medium leading-snug break-words -mx-0.5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                            className="inline rounded-sm text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
                             onClick={(e) => {
                               e.stopPropagation()
                               if (cancelled) return
@@ -1042,26 +1086,24 @@ export function TableOrderPanel({
                             {mainNameT}
                           </button>
                           {optionPart && (
-                            <p className="text-sm text-muted-foreground line-clamp-2 break-words pl-0 leading-snug" title={optionPartT}>
+                            <span className="ml-1.5 text-sm text-muted-foreground" title={optionPartT}>
                               {optionPartT}
-                            </p>
+                            </span>
                           )}
                           {noteTrim && (
-                            <p className="text-sm text-blue-700 dark:text-blue-300/90 line-clamp-1 break-words leading-snug" title={noteTrim}>
+                            <span className="ml-1.5 text-sm text-blue-700 dark:text-blue-300/90" title={noteTrim}>
                               {noteTrim}
-                            </p>
+                            </span>
                           )}
                           {cancelled && (
-                            <p className="text-xs font-semibold text-rose-600 dark:text-rose-300">
+                            <span className="ml-1.5 text-xs font-semibold text-rose-600 dark:text-rose-300">
                               {t('posLineCancelled') || '취소 처리됨'}
-                            </p>
+                            </span>
                           )}
                         </div>
-                        <div className="shrink-0 flex flex-col items-end justify-start gap-0.5 self-start pt-0.5 text-right">
-                          <span className="text-base font-bold tabular-nums text-foreground leading-tight whitespace-nowrap">
-                            ×{item.quantity}
-                          </span>
-                          <span className="text-sm text-muted-foreground tabular-nums leading-tight whitespace-nowrap">
+                        <div className="flex shrink-0 items-baseline gap-2 whitespace-nowrap tabular-nums">
+                          <span className="text-base font-bold text-foreground">×{item.quantity}</span>
+                          <span className="text-sm text-muted-foreground">
                             {(item.price * item.quantity).toLocaleString()} ฿
                           </span>
                         </div>
@@ -1070,15 +1112,7 @@ export function TableOrderPanel({
                   })}
                 </ul>
               </ScrollArea>
-              <div className="flex justify-between text-base font-medium">
-                <span>{t('posInputTotal') || '합계'}</span>
-                <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
-              </div>
-              <PosOrderTaxInvoiceEntryRow
-                hasTaxInvoice={hasTaxInvoice}
-                onOpen={onOpenTaxInvoice}
-                t={(key, fallback) => t(key) || fallback || key}
-              />
+              {renderTotalRow()}
               <div className={cn('grid gap-2', addOrderModeActive ? 'grid-cols-1' : 'grid-cols-2')}>
                 {!addOrderModeActive && onAddOrder ? (
                   <Button
@@ -1092,10 +1126,13 @@ export function TableOrderPanel({
                   {t('posPayButton') || '결제'}
                 </Button>
               </div>
-              {canCancel && (
-                <div className="space-y-1.5">
+              {canCancel && !listExpanded && (
+                <div className="space-y-1">
                   {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
-                    <p className="text-center text-xs text-muted-foreground px-1">
+                    <p
+                      className="truncate px-1 text-center text-[11px] text-muted-foreground"
+                      title={t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst')}
+                    >
                       {t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst')}
                     </p>
                   ) : null}
@@ -1133,9 +1170,9 @@ export function TableOrderPanel({
             </>
           ) : (
             <>
-              {checkerViewToolbar}
+              {renderCheckerViewToolbar()}
               <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
-                <ul className="p-1.5 space-y-1" style={{ zoom: checkerView.zoom }}>
+                <ul className="p-1 space-y-1" style={{ zoom: checkerView.zoom }}>
                   {displayOrder.map((itemIndex, itemPos) => {
                     const item = displayItems[itemIndex]
                     const lineKey = lineKeys[itemIndex] ?? `line-${itemIndex}`
@@ -1154,7 +1191,7 @@ export function TableOrderPanel({
                       {renderRoundHeader(itemPos)}
                       <li
                         className={cn(
-                          'grid cursor-default grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-1.5 gap-y-1 py-1.5 px-2 rounded-md border border-border/50 transition-shadow',
+                          'grid cursor-default grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-1 py-1 px-2 rounded-md border border-border/50 transition-shadow',
                           cancelled && 'bg-rose-50/80 border-rose-300/60 dark:bg-rose-950/20 dark:border-rose-700/40',
                           served && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800',
                           selectedLineItemId === lineKey &&
@@ -1165,10 +1202,10 @@ export function TableOrderPanel({
                           setSelectedLineItemId(null)
                         }}
                       >
-                        <div className="min-w-0 space-y-1">
+                        <div className="min-w-0 text-base leading-snug break-words">
                           <button
                             type="button"
-                            className="w-full min-w-0 rounded-sm px-0.5 text-left hover:underline -mx-0.5"
+                            className="inline rounded-sm text-left font-medium hover:underline"
                             onClick={(e) => {
                               e.stopPropagation()
                               if (cancelled) return
@@ -1176,44 +1213,34 @@ export function TableOrderPanel({
                             }}
                             title={fullNameT}
                           >
-                            <span className="block text-base font-medium leading-snug break-words">
-                              {mainNameT}
-                            </span>
+                            {mainNameT}
                           </button>
                           {optionPart && (
-                            <p
-                              className="text-sm text-muted-foreground line-clamp-2 break-words pl-0 leading-snug"
-                              title={optionPartT}
-                            >
+                            <span className="ml-1.5 text-sm text-muted-foreground" title={optionPartT}>
                               {optionPartT}
-                            </p>
+                            </span>
                           )}
                           {noteTrim && (
-                            <p
-                              className="text-sm text-blue-700 dark:text-blue-300/90 line-clamp-1 break-words leading-snug"
-                              title={noteTrim}
-                            >
+                            <span className="ml-1.5 text-sm text-blue-700 dark:text-blue-300/90" title={noteTrim}>
                               {noteTrim}
-                            </p>
+                            </span>
                           )}
                           {cancelled && (
-                            <p className="text-xs font-semibold text-rose-600 dark:text-rose-300">
+                            <span className="ml-1.5 text-xs font-semibold text-rose-600 dark:text-rose-300">
                               {t('posLineCancelled') || '취소 처리됨'}
-                            </p>
+                            </span>
                           )}
                         </div>
-                        <div className="shrink-0 flex flex-col items-end justify-start gap-0.5 self-start pt-0.5 text-right">
-                          <span className="text-base font-bold tabular-nums text-foreground leading-tight whitespace-nowrap">
-                            ×{item.quantity}
-                          </span>
-                          <span className="text-sm text-muted-foreground tabular-nums leading-tight whitespace-nowrap">
+                        <div className="flex shrink-0 items-baseline gap-2 whitespace-nowrap tabular-nums">
+                          <span className="text-base font-bold text-foreground">×{item.quantity}</span>
+                          <span className="text-sm text-muted-foreground">
                             {(item.price * item.quantity).toLocaleString()} ฿
                           </span>
                         </div>
                         <Button
                           size="sm"
                           variant={served ? 'default' : 'outline'}
-                          className="shrink-0 self-start mt-0.5 h-9 w-9 p-0"
+                          className="shrink-0 h-9 w-9 p-0"
                           onClick={(e) => {
                             e.stopPropagation()
                             void toggleItemServed(lineKey)
@@ -1228,7 +1255,7 @@ export function TableOrderPanel({
                           {served ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
                         </Button>
                         {hasSetChildren && (
-                          <div className="col-span-3 w-full overflow-hidden space-y-1 rounded-md border border-border/50 bg-background/70 p-1.5">
+                          <div className="col-span-3 grid w-full grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-1 overflow-hidden rounded-md border border-border/50 bg-background/70 p-1">
                             {item.promoItems!.flatMap((line, idx) => {
                               const qty = Math.max(1, Math.trunc(Number(line.quantity ?? 1) || 1))
                               const menuId = String(line.menuId ?? '').trim()
@@ -1279,16 +1306,7 @@ export function TableOrderPanel({
                   })}
                 </ul>
               </ScrollArea>
-
-              <div className="flex justify-between text-base font-medium">
-                <span>{t('posInputTotal') || '합계'}</span>
-                <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
-              </div>
-              <PosOrderTaxInvoiceEntryRow
-                hasTaxInvoice={hasTaxInvoice}
-                onOpen={onOpenTaxInvoice}
-                t={(key, fallback) => t(key) || fallback || key}
-              />
+              {renderTotalRow()}
 
               <Button
                 data-tour="pos-tour-serving-complete"
@@ -1314,10 +1332,13 @@ export function TableOrderPanel({
                   {t('posPayButton') || '결제'}
                 </Button>
               </div>
-              {canCancel && (
-                <div className="space-y-1.5">
+              {canCancel && !listExpanded && (
+                <div className="space-y-1">
                   {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
-                    <p className="text-center text-xs text-muted-foreground px-1">
+                    <p
+                      className="truncate px-1 text-center text-[11px] text-muted-foreground"
+                      title={t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst')}
+                    >
                       {t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst')}
                     </p>
                   ) : null}
