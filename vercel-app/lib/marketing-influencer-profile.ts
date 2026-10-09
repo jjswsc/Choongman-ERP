@@ -20,11 +20,26 @@ export function isInfluencerPipelineStatus(v: unknown): v is InfluencerPipelineS
 }
 
 /** 구글 시트 드롭다운·스마트칩이 비어 있을 때 보이는 안내 문구 */
-const SHEET_PLACEHOLDERS = new Set(['พื้นที่รับงาน', 'double click', 'สถานะ', 'ประเภทคอนเทนต์', '​'])
+const SHEET_PLACEHOLDERS = new Set([
+  'พื้นที่รับงาน',
+  'double click',
+  'สถานะ',
+  'สถานะงาน',
+  'สถานะชำระเงิน',
+  'ประเภทคอนเทนต์',
+  'false',
+  '​',
+])
 
 export function isSheetPlaceholder(raw: unknown): boolean {
+  if (raw === false) return true
   const s = String(raw ?? '').replace(/\u200b/g, '').trim().toLowerCase()
   return !s || SHEET_PLACEHOLDERS.has(s)
+}
+
+/** 시트에서 แ 를 เ+เ 로 입력한 경우(ลงงานเเล้ว) 정규화 */
+export function normalizeThaiSaraAe(raw: unknown): string {
+  return String(raw ?? '').replace(/เเ/g, 'แ')
 }
 
 export function cleanSheetCell(raw: unknown): string {
@@ -120,6 +135,84 @@ export function minRateAcross(...raws: unknown[]): number | null {
     if (n != null && (min == null || n < min)) min = n
   }
   return min
+}
+
+/** 금액 원문 → THB. `10.9k` → 10900, `3,000` → 3000, 숫자 셀은 그대로. 해석 불가 시 0 */
+export function parseThbAmount(raw: unknown): number {
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : 0
+  const s = cleanSheetCell(raw).replace(/,/g, '')
+  const m = s.match(/(\d+(?:\.\d+)?)\s*([kKmM])?/)
+  if (!m) return 0
+  let n = parseFloat(m[1]!)
+  const suf = (m[2] || '').toLowerCase()
+  if (suf === 'k') n *= 1000
+  else if (suf === 'm') n *= 1000000
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0
+}
+
+/** 업로드 기록(marketing_influencers.status) — 캠페인 상태와 같은 코드 */
+export type InfluencerPostStatus = 'draft' | 'ongoing' | 'finish'
+
+/** 시트 สถานะงาน → 업로드 기록 상태. 해석 불가 시 null */
+export function mapThaiJobStatus(raw: unknown): InfluencerPostStatus | null {
+  const s = normalizeThaiSaraAe(cleanSheetCell(raw))
+  if (!s) return null
+  if (/ลงงานแล้ว|โพสต์แล้ว|posted|done|finish/i.test(s)) return 'finish'
+  if (/นัดวันแล้ว|คอนเฟิร์ม|ถ่ายแล้ว|รอโพสต์|confirm|schedul|ongoing/i.test(s)) return 'ongoing'
+  if (/ติดต่อ|รอ|draft/i.test(s)) return 'draft'
+  return null
+}
+
+export const INFLUENCER_PAYMENT_STATUSES = ['unpaid', 'billed', 'paid'] as const
+export type InfluencerPaymentStatus = (typeof INFLUENCER_PAYMENT_STATUSES)[number]
+
+export function isInfluencerPaymentStatus(v: unknown): v is InfluencerPaymentStatus {
+  return typeof v === 'string' && (INFLUENCER_PAYMENT_STATUSES as readonly string[]).includes(v)
+}
+
+/** 시트 สถานะชำระเงิน → 지급 상태. 해석 불가 시 null */
+export function mapThaiPaymentStatus(raw: unknown): InfluencerPaymentStatus | null {
+  const s = normalizeThaiSaraAe(cleanSheetCell(raw))
+  if (!s) return null
+  if (isInfluencerPaymentStatus(s.toLowerCase())) return s.toLowerCase() as InfluencerPaymentStatus
+  if (/ชำระแล้ว|จ่ายแล้ว|โอนแล้ว|paid/i.test(s)) return 'paid'
+  if (/วางบิล|รอชำระ|รอโอน|bill|invoice/i.test(s)) return 'billed'
+  if (/ยังไม่|ไม่ดำเนินการ|unpaid/i.test(s)) return 'unpaid'
+  return null
+}
+
+export type ContentPlatform = 'tiktok' | 'instagram' | 'facebook' | 'youtube' | 'lemon8' | 'other'
+
+export function contentUrlPlatform(url: string): ContentPlatform {
+  if (/tiktok\.com\//i.test(url)) return 'tiktok'
+  if (/instagram\.com\//i.test(url)) return 'instagram'
+  if (/facebook\.com\/|fb\.com\/|fb\.watch\//i.test(url)) return 'facebook'
+  if (/youtube\.com\/|youtu\.be\//i.test(url)) return 'youtube'
+  if (/lemon8/i.test(url)) return 'lemon8'
+  return 'other'
+}
+
+/**
+ * TikTok 영상 ID 상위 32비트 = 게시 시각(unix 초). `…/video/7662318859533438215` → 방콕 기준 YYYY-MM-DD.
+ * 영상 URL이 아니거나 범위를 벗어나면 null
+ */
+export function tiktokVideoPostedYmd(url: unknown): string | null {
+  const m = String(url ?? '').match(/tiktok\.com\/.*\/video\/(\d{15,20})/i)
+  if (!m) return null
+  const sec = Math.floor(Number(m[1]) / 4294967296)
+  if (!Number.isFinite(sec) || sec < 1451606400 || sec > 4102444800) return null
+  return new Date(sec * 1000).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+}
+
+/** 셀 텍스트(`TT - https://… Ig - https://…`)에서 URL 목록 */
+export function extractUrls(raw: unknown): string[] {
+  const s = String(raw ?? '')
+  const out: string[] = []
+  for (const m of s.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
+    const u = m[0].replace(/[),.;]+$/, '')
+    if (!out.includes(u)) out.push(u)
+  }
+  return out
 }
 
 /** 연락처 원문에서 태국 휴대폰/전화번호 추출 (`097-1977441`, `0814096548`) */

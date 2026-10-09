@@ -65,6 +65,22 @@ export type SalesLiftResult = SalesLiftWindows & {
   noSales: boolean
   /** 업로드일이 미래라 계산 불가 */
   notStarted: boolean
+  /** 대조군(같은 기간 다른 매장 합계) 증감률(%) — 대조군 없으면 null */
+  controlLiftPct: number | null
+  /** 대조군 추세를 뺀 순증감률(%) = 후 일평균 ÷ (전 일평균 × 대조군 증감비) − 1 */
+  netLiftPct: number | null
+  /** 대조군 보정 증분 매출 = (후 일평균 − 전 일평균 × 대조군 증감비) × N */
+  netIncrementalSales: number | null
+  netRoi: number | null
+}
+
+export type SalesLiftSeriesPoint = {
+  date: string
+  /** 업로드일 이후(후 구간) */
+  post: boolean
+  sales: number
+  /** 대조군 일매출(전 구간 일평균 = 매장 전 구간 일평균이 되도록 스케일) */
+  control: number | null
 }
 
 export type InfluencerSalesLiftRow = {
@@ -79,6 +95,9 @@ export type InfluencerSalesLiftRow = {
   /** 매장 권한 없음·매출 RPC 실패 */
   unavailable: boolean
   lift: SalesLiftResult | null
+  /** 업로드일을 TikTok 영상 링크 시각으로 추정 */
+  publishDateEstimated?: boolean
+  series?: SalesLiftSeriesPoint[]
 }
 
 function sumRange(
@@ -117,8 +136,10 @@ export function computeSalesLift(params: {
   daily: ReadonlyMap<string, DailyStoreSales>
   cost: number
   overlap?: boolean
+  /** 대조군 일별 매출(다른 매장 합계). 없으면 순효과 null */
+  controlDaily?: ReadonlyMap<string, DailyStoreSales> | null
 }): SalesLiftResult {
-  const { publishYmd, windowDays, todayYmd, daily } = params
+  const { publishYmd, windowDays, todayYmd, daily, controlDaily } = params
   const w = salesLiftWindows(publishYmd, windowDays)
   const yesterday = addDaysYmd(todayYmd, -1)
   const notStarted = publishYmd > yesterday
@@ -134,6 +155,23 @@ export function computeSalesLift(params: {
   const postOrdersAvg = post.days > 0 ? post.orders / post.days : 0
   const cost = Math.max(0, Number(params.cost) || 0)
   const incrementalSales = post.days > 0 ? (postAvg - preAvg) * windowDays : 0
+
+  let controlLiftPct: number | null = null
+  let netLiftPct: number | null = null
+  let netIncrementalSales: number | null = null
+  if (controlDaily && post.days > 0) {
+    const cPre = sumRange(controlDaily, w.preFrom, w.preTo)
+    const cPost = sumRange(controlDaily, w.postFrom, postEnd)
+    const cPreAvg = cPre.days > 0 ? cPre.sales / cPre.days : 0
+    const cPostAvg = cPost.days > 0 ? cPost.sales / cPost.days : 0
+    if (cPreAvg > 0) {
+      const ratio = cPostAvg / cPreAvg
+      controlLiftPct = (ratio - 1) * 100
+      const expectedPostAvg = preAvg * ratio
+      netIncrementalSales = (postAvg - expectedPostAvg) * windowDays
+      netLiftPct = pct(postAvg, expectedPostAvg)
+    }
+  }
 
   return {
     ...w,
@@ -154,6 +192,100 @@ export function computeSalesLift(params: {
     overlap: Boolean(params.overlap),
     noSales: pre.sales <= 0 && post.sales <= 0,
     notStarted,
+    controlLiftPct,
+    netLiftPct,
+    netIncrementalSales,
+    netRoi: netIncrementalSales != null && cost > 0 ? netIncrementalSales / cost : null,
+  }
+}
+
+/** 미니 차트용 일별 시리즈(전 N일 + 후 N일 중 어제까지). 대조군은 전 구간 평균을 매장 전 구간 평균에 맞춰 스케일 */
+export function salesLiftSeries(params: {
+  publishYmd: string
+  windowDays: number
+  todayYmd: string
+  daily: ReadonlyMap<string, DailyStoreSales>
+  controlDaily?: ReadonlyMap<string, DailyStoreSales> | null
+}): SalesLiftSeriesPoint[] {
+  const { publishYmd, windowDays, todayYmd, daily, controlDaily } = params
+  const w = salesLiftWindows(publishYmd, windowDays)
+  const yesterday = addDaysYmd(todayYmd, -1)
+  const end = w.postTo <= yesterday ? w.postTo : yesterday
+  if (end < w.preFrom) return []
+  let scale: number | null = null
+  if (controlDaily) {
+    const pre = sumRange(daily, w.preFrom, w.preTo)
+    const cPre = sumRange(controlDaily, w.preFrom, w.preTo)
+    scale = cPre.sales > 0 ? pre.sales / cPre.sales : null
+  }
+  const out: SalesLiftSeriesPoint[] = []
+  for (let d = w.preFrom; d <= end; d = addDaysYmd(d, 1)) {
+    out.push({
+      date: d,
+      post: d >= w.postFrom,
+      sales: daily.get(d)?.sales ?? 0,
+      control: scale != null && controlDaily ? (controlDaily.get(d)?.sales ?? 0) * scale : null,
+    })
+  }
+  return out
+}
+
+/** 합계에 넣을 수 있는(후 구간 완료·전후 구간 비겹침·매출 있음·권한 있음) 행 */
+export function isSalesLiftRowSettled(r: InfluencerSalesLiftRow): boolean {
+  const l = r.lift
+  return Boolean(l && !r.unavailable && !l.pending && !l.overlap && !l.noSales && !l.notStarted && l.postDaysCounted > 0)
+}
+
+/** 여러 업로드 행 → KPI 합계(정산된 행만 ROI·증분 합산) */
+export function summarizeSalesLiftRows(rows: readonly InfluencerSalesLiftRow[]): {
+  total: number
+  settled: number
+  cost: number
+  incremental: number
+  netIncremental: number | null
+  roi: number | null
+  netRoi: number | null
+  avgLiftPct: number | null
+  avgNetLiftPct: number | null
+} {
+  let settled = 0
+  let cost = 0
+  let incremental = 0
+  let netIncremental = 0
+  let netCount = 0
+  let liftSum = 0
+  let liftCount = 0
+  let netLiftSum = 0
+  let netLiftCount = 0
+  for (const r of rows) {
+    const l = r.lift
+    if (!l || !isSalesLiftRowSettled(r)) continue
+    settled++
+    cost += l.cost
+    incremental += l.incrementalSales
+    if (l.netIncrementalSales != null) {
+      netIncremental += l.netIncrementalSales
+      netCount++
+    }
+    if (l.liftPct != null) {
+      liftSum += l.liftPct
+      liftCount++
+    }
+    if (l.netLiftPct != null) {
+      netLiftSum += l.netLiftPct
+      netLiftCount++
+    }
+  }
+  return {
+    total: rows.length,
+    settled,
+    cost,
+    incremental,
+    netIncremental: netCount > 0 ? netIncremental : null,
+    roi: cost > 0 && settled > 0 ? incremental / cost : null,
+    netRoi: cost > 0 && netCount > 0 ? netIncremental / cost : null,
+    avgLiftPct: liftCount > 0 ? liftSum / liftCount : null,
+    avgNetLiftPct: netLiftCount > 0 ? netLiftSum / netLiftCount : null,
   }
 }
 

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { MarketingInfluencer, MarketingCampaign } from "@/lib/api-client"
+import { InfluencerPaymentBadge, InfluencerPostLinkIcons } from "@/components/marketing/marketing-influencer-post-badges"
 import {
   getBangkokCurrentMonthRangeYmd,
   getBangkokRolling30DayRangeYmd,
@@ -15,6 +16,7 @@ import {
 type TFn = (key: string) => string
 
 type InquiryStatusFilter = "all" | "draft" | "ongoing" | "finish" | "unlinked"
+type PaymentFilter = "" | "unpaid" | "billed" | "paid" | "none"
 
 const overviewSelectClass =
   "h-8 w-full min-w-[6rem] max-w-[9rem] shrink-0 rounded-md border border-input bg-background px-1.5 text-[11px] disabled:opacity-60 cursor-pointer appearance-none"
@@ -123,6 +125,7 @@ export function MarketingInfluencersOverviewTab(props: {
   const [searchDraft, setSearchDraft] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [inquiryStatusFilter, setInquiryStatusFilter] = React.useState<InquiryStatusFilter>("all")
+  const [paymentFilter, setPaymentFilter] = React.useState<PaymentFilter>("")
   const lastApplySearchToken = React.useRef(0)
 
   React.useEffect(() => {
@@ -164,6 +167,9 @@ export function MarketingInfluencersOverviewTab(props: {
         return camp.status === inquiryStatusFilter
       })
     }
+    if (paymentFilter) {
+      rows = rows.filter((i) => (paymentFilter === "none" ? !i.paymentStatus : i.paymentStatus === paymentFilter))
+    }
     const q = searchQuery.trim().toLowerCase()
     if (q) {
       rows = rows.filter((i) => {
@@ -202,7 +208,19 @@ export function MarketingInfluencersOverviewTab(props: {
       })
     }
     return rows
-  }, [influencers, periodFrom, periodTo, inquiryStatusFilter, searchQuery, campaignById])
+  }, [influencers, periodFrom, periodTo, inquiryStatusFilter, paymentFilter, searchQuery, campaignById])
+
+  /** 미지급·청구됨 건수와 금액(실지출, 없으면 예산) */
+  const outstanding = React.useMemo(() => {
+    let n = 0
+    let amount = 0
+    for (const i of filteredRows) {
+      if (i.paymentStatus !== "unpaid" && i.paymentStatus !== "billed") continue
+      n++
+      amount += (i.actualCost ?? 0) > 0 ? i.actualCost ?? 0 : i.budget || 0
+    }
+    return { n, amount }
+  }, [filteredRows])
 
   return (
     <div className="space-y-4">
@@ -256,6 +274,23 @@ export function MarketingInfluencersOverviewTab(props: {
               <option value="unlinked">{t("marketingAdsStatusUnlinked")}</option>
             </select>
           </div>
+          <div className="flex flex-col gap-0.5">
+            <Label className="whitespace-nowrap text-[9px] leading-tight text-muted-foreground">
+              {t("mktInfFieldPaymentStatus")}
+            </Label>
+            <select
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value as PaymentFilter)}
+              className={overviewSelectClass}
+              disabled={loading}
+            >
+              <option value="">{t("all")}</option>
+              <option value="unpaid">{t("mktInfPay_unpaid")}</option>
+              <option value="billed">{t("mktInfPay_billed")}</option>
+              <option value="paid">{t("mktInfPay_paid")}</option>
+              <option value="none">{t("mktInfPayNone")}</option>
+            </select>
+          </div>
           <div className="flex min-w-[min(100%,10rem)] flex-1 flex-col gap-0.5 basis-[14rem] sm:min-w-[12rem] sm:basis-0">
             <Label className="inline-flex items-center gap-1 text-[9px] leading-tight text-muted-foreground">
               <Search className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
@@ -289,6 +324,13 @@ export function MarketingInfluencersOverviewTab(props: {
             </div>
           </div>
         </div>
+        {outstanding.n > 0 ? (
+          <p className="mt-1.5 text-[11px] text-amber-800 dark:text-amber-200">
+            {t("mktInfOutstandingLine")
+              .replace("{n}", String(outstanding.n))
+              .replace("{amount}", `฿${Math.round(outstanding.amount).toLocaleString()}`)}
+          </p>
+        ) : null}
       </div>
 
       {onBulkLink && selected.size > 0 ? (
@@ -385,7 +427,7 @@ export function MarketingInfluencersOverviewTab(props: {
                         {(i.contactName || "").trim() || i.name || "—"}
                       </div>
                       {(i.contactName || "").trim() && (i.name || "").trim() ? (
-                        <div className="mt-0.5 text-[11px] text-muted-foreground">@{i.name.trim()}</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">@{i.name.trim().replace(/^@/, "")}</div>
                       ) : null}
                       {(i.contactPhone ?? "").trim() ? (
                         <div className="mt-0.5 text-[11px] text-muted-foreground">{(i.contactPhone ?? "").trim()}</div>
@@ -400,6 +442,11 @@ export function MarketingInfluencersOverviewTab(props: {
                         {i.contentTopic ? <p className="font-medium text-foreground">{i.contentTopic}</p> : null}
                         {i.contentFormat ? <p className="text-muted-foreground">{i.contentFormat}</p> : null}
                         {i.branchReview ? <p className="line-clamp-2 text-[11px] text-muted-foreground">{i.branchReview}</p> : null}
+                        <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                          <InfluencerPaymentBadge t={t} status={i.paymentStatus || ""} />
+                          {i.paidAt ? <span className="text-[10px] text-muted-foreground">{i.paidAt}</span> : null}
+                          <InfluencerPostLinkIcons links={i.platformLinks} />
+                        </div>
                       </div>
                     </td>
                     <td className="px-3 py-2.5 align-top">

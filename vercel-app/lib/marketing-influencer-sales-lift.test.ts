@@ -5,7 +5,9 @@ import {
   detectSalesLiftOverlaps,
   influencerPostCost,
   normalizeSalesLiftWindow,
+  salesLiftSeries,
   salesLiftWindows,
+  summarizeSalesLiftRows,
   type DailyStoreSales,
 } from './marketing-influencer-sales-lift'
 
@@ -70,6 +72,63 @@ describe('computeSalesLift', () => {
     const r = computeSalesLift({ publishYmd: '2026-09-24', windowDays: 7, todayYmd: '2026-10-09', daily, cost: 1000 })
     expect(r.liftPct).toBeNull()
     expect(r.incrementalSales).toBe(35000)
+  })
+})
+
+describe('computeSalesLift 대조군 보정', () => {
+  it('다른 매장도 같이 오르면 순증감은 그만큼 작아진다', () => {
+    const daily = new Map([
+      ...dailyRange('2026-09-17', 7, 10000),
+      ...dailyRange('2026-09-24', 7, 12000),
+    ])
+    const controlDaily = new Map([
+      ...dailyRange('2026-09-17', 7, 100000),
+      ...dailyRange('2026-09-24', 7, 110000),
+    ])
+    const r = computeSalesLift({ publishYmd: '2026-09-24', windowDays: 7, todayYmd: '2026-10-09', daily, cost: 7000, controlDaily })
+    expect(r.liftPct).toBeCloseTo(20)
+    expect(r.controlLiftPct).toBeCloseTo(10)
+    expect(r.netIncrementalSales).toBeCloseTo((12000 - 11000) * 7)
+    expect(r.netLiftPct).toBeCloseTo((12000 / 11000 - 1) * 100)
+    expect(r.netRoi).toBeCloseTo(1)
+  })
+
+  it('대조군 없으면 순지표 null', () => {
+    const daily = dailyRange('2026-09-17', 14, 10000)
+    const r = computeSalesLift({ publishYmd: '2026-09-24', windowDays: 7, todayYmd: '2026-10-09', daily, cost: 1 })
+    expect(r.netLiftPct).toBeNull()
+    expect(r.netIncrementalSales).toBeNull()
+  })
+})
+
+describe('salesLiftSeries · summarizeSalesLiftRows', () => {
+  it('시리즈는 전 N일 + 후(어제까지), 대조군은 전 구간 합에 맞춰 스케일', () => {
+    const daily = dailyRange('2026-09-30', 10, 1000)
+    const controlDaily = dailyRange('2026-09-30', 10, 10000)
+    const s = salesLiftSeries({ publishYmd: '2026-10-07', windowDays: 7, todayYmd: '2026-10-09', daily, controlDaily })
+    expect(s).toHaveLength(9)
+    expect(s[0]).toMatchObject({ date: '2026-09-30', post: false, sales: 1000, control: 1000 })
+    expect(s[7]!.post).toBe(true)
+    expect(s[8]!.date).toBe('2026-10-08')
+  })
+
+  it('KPI는 집계 완료·비겹침 행만 합산', () => {
+    const daily = new Map([
+      ...dailyRange('2026-09-17', 7, 10000),
+      ...dailyRange('2026-09-24', 7, 12000),
+    ])
+    const done = computeSalesLift({ publishYmd: '2026-09-24', windowDays: 7, todayYmd: '2026-10-09', daily, cost: 7000 })
+    const overlap = { ...done, overlap: true }
+    const base = { profileId: null, campaignId: null, name: '', contactName: '', store: 'A', publishDate: '2026-09-24', actualCost: 0, unavailable: false }
+    const k = summarizeSalesLiftRows([
+      { ...base, id: '1', lift: done },
+      { ...base, id: '2', lift: overlap },
+    ])
+    expect(k.total).toBe(2)
+    expect(k.settled).toBe(1)
+    expect(k.incremental).toBe(14000)
+    expect(k.roi).toBeCloseTo(2)
+    expect(k.netRoi).toBeNull()
   })
 })
 

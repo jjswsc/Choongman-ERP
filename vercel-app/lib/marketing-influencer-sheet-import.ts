@@ -44,7 +44,8 @@ export type InfluencerProfileFields = {
   note: string
 }
 
-export type InfluencerProfileDraft = InfluencerProfileFields & { sourceRows: number[] }
+/** sourceRows·sheetSeqs 는 미리보기·작업시트 매칭용(저장 안 함) */
+export type InfluencerProfileDraft = InfluencerProfileFields & { sourceRows: number[]; sheetSeqs: number[] }
 
 export type InfluencerSheetParseResult = {
   profiles: InfluencerProfileDraft[]
@@ -86,6 +87,7 @@ export function emptyInfluencerProfileFields(): InfluencerProfileFields {
 }
 
 type ColKey =
+  | 'seq'
   | 'name'
   | 'category'
   | 'tiktokUrl'
@@ -106,9 +108,11 @@ type ColKey =
   | 'status'
   | 'rateCard'
   | 'note'
+  | 'works'
 
 /** 시트 기본 열 순서(A=ลำดับ) — 헤더를 못 찾을 때 사용 */
 const DEFAULT_COLS: Record<ColKey, number> = {
+  seq: 0,
   name: 1,
   category: 2,
   tiktokUrl: 3,
@@ -129,6 +133,7 @@ const DEFAULT_COLS: Record<ColKey, number> = {
   status: 18,
   rateCard: 19,
   note: 20,
+  works: -1,
 }
 
 function normHeader(v: unknown): string {
@@ -156,6 +161,8 @@ function headerToKey(h: string): ColKey | null {
     if (has('แพ็กเกจ') || has('package')) return 'ratePackage'
     if (has('วันที่') || has('date')) return 'inquiredAt'
   }
+  if (has('ลำดับ') || h === 'no.' || h === 'no' || h === '#') return 'seq'
+  if (has('ผลงาน') || has('link content') || h === 'works') return 'works'
   if (h === 'tiktok') return 'tiktokUrl'
   if (h === 'instagram') return 'instagramUrl'
   if (h === 'facebook') return 'facebookUrl'
@@ -171,6 +178,13 @@ function headerToKey(h: string): ColKey | null {
   return null
 }
 
+export type InfluencerSheetColKey = ColKey
+
+/** INFLUENCER_DB·Hired 공통 헤더 탐지(없는 열은 -1) */
+export function detectInfluencerSheetColumns(rows: unknown[][]) {
+  return detectHeader(rows)
+}
+
 function detectHeader(rows: unknown[][]): { headerRow: number; cols: Record<ColKey, number> } | null {
   const scan = Math.min(rows.length, 8)
   for (let r = 0; r < scan; r++) {
@@ -181,7 +195,9 @@ function detectHeader(rows: unknown[][]): { headerRow: number; cols: Record<ColK
       if (k && cols[k] == null) cols[k] = idx
     })
     if (cols.tiktokUrl != null && cols.name != null) {
-      return { headerRow: r, cols: { ...DEFAULT_COLS, ...cols } as Record<ColKey, number> }
+      const full = {} as Record<ColKey, number>
+      for (const k of Object.keys(DEFAULT_COLS) as ColKey[]) full[k] = cols[k] ?? -1
+      return { headerRow: r, cols: full }
     }
   }
   return null
@@ -337,6 +353,7 @@ export function parseInfluencerSheetRows(
     if (statusRaw && !status) warnings.push(`${sheetRowNo}행: 상태 "${statusRaw}"를 해석하지 못해 '대기'로 저장합니다.`)
 
     const note = [at('note'), ...shiftedNotes].filter(Boolean).join('\n')
+    const seqNum = Number(at('seq'))
     const draft: InfluencerProfileDraft = {
       displayName: name || tiktokHandle,
       contentCategories: urlPlatform(at('category')) ? [] : splitContentCategories(at('category')),
@@ -364,6 +381,7 @@ export function parseInfluencerSheetRows(
       rateCardUrl: at('rateCard'),
       note,
       sourceRows: [sheetRowNo],
+      sheetSeqs: Number.isInteger(seqNum) && seqNum > 0 ? [seqNum] : [],
     }
 
     const key = influencerProfileDedupeKey(draft)
@@ -372,6 +390,7 @@ export function parseInfluencerSheetRows(
       mergedDuplicates++
       Object.assign(prev, fillEmptyInfluencerProfileFields(prev, draft))
       prev.sourceRows.push(sheetRowNo)
+      for (const s of draft.sheetSeqs) if (!prev.sheetSeqs.includes(s)) prev.sheetSeqs.push(s)
     } else {
       byKey.set(key, draft)
     }
