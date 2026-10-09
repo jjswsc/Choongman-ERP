@@ -90,6 +90,7 @@ import {
   defaultQrOrderStoreSettings,
   isQrTableCreatedBy,
   markNewlyPrepaidQrExtraLines,
+  normalizeQrHiddenMenuIds,
   parseQrTableSessionIdFromCreatedBy,
   type QrBuffetTier,
   type QrCartLineInput,
@@ -116,6 +117,7 @@ type DbSettings = {
   print_brand_color?: string | null
   print_accent_color?: string | null
   print_brand_line?: string | null
+  hidden_menu_ids?: unknown
 }
 
 type DbTier = {
@@ -226,7 +228,13 @@ function mapSettings(row: DbSettings | null | undefined, storeCode: string): QrO
     printBrandColor: String(row.print_brand_color || '').trim() || '#b45309',
     printAccentColor: String(row.print_accent_color || '').trim() || '#faf7f2',
     printBrandLine: String(row.print_brand_line || '').trim(),
+    hiddenMenuIds: normalizeQrHiddenMenuIds(row.hidden_menu_ids),
   }
+}
+
+function isMissingHiddenMenuIdsColumnError(e: unknown): boolean {
+  const msg = String(e instanceof Error ? e.message : e || '').toLowerCase()
+  return msg.includes('hidden_menu_ids')
 }
 
 function mapTier(row: DbTier, includedMenuIds?: number[], extraMenuIds?: number[]): QrBuffetTier {
@@ -390,29 +398,33 @@ export async function upsertQrOrderStoreSettings(
     storeCode,
   })
   const now = getBangkokDateTimeString()
-  await upsertRowsTenantStore(
-    'pos_qr_order_store_settings',
-    'store_code',
-    [
-      {
-        store_code: storeCode,
-        enabled: Boolean(settings.enabled),
-        mode: settings.mode,
-        entry_payment_mode: settings.entryPaymentMode,
-        extras_payment_mode: settings.extrasPaymentMode,
-        guest_bill_pay_enabled: settings.guestBillPayEnabled !== false,
-        require_staff_open: Boolean(settings.requireStaffOpen),
-        max_open_minutes: Math.max(30, Math.floor(settings.maxOpenMinutes || 240)),
-        allow_reorder_after_paid: Boolean(settings.allowReorderAfterPaid),
-        print_logo_url: String(settings.printLogoUrl || '').trim() || null,
-        print_brand_color: String(settings.printBrandColor || '').trim() || null,
-        print_accent_color: String(settings.printAccentColor || '').trim() || null,
-        print_brand_line: String(settings.printBrandLine || '').trim() || null,
-        updated_at: now,
-      },
-    ],
-    tenantScope
-  )
+  const row: Record<string, unknown> = {
+    store_code: storeCode,
+    enabled: Boolean(settings.enabled),
+    mode: settings.mode,
+    entry_payment_mode: settings.entryPaymentMode,
+    extras_payment_mode: settings.extrasPaymentMode,
+    guest_bill_pay_enabled: settings.guestBillPayEnabled !== false,
+    require_staff_open: Boolean(settings.requireStaffOpen),
+    max_open_minutes: Math.max(30, Math.floor(settings.maxOpenMinutes || 240)),
+    allow_reorder_after_paid: Boolean(settings.allowReorderAfterPaid),
+    print_logo_url: String(settings.printLogoUrl || '').trim() || null,
+    print_brand_color: String(settings.printBrandColor || '').trim() || null,
+    print_accent_color: String(settings.printAccentColor || '').trim() || null,
+    print_brand_line: String(settings.printBrandLine || '').trim() || null,
+    updated_at: now,
+  }
+  const hiddenMenuIds =
+    settings.hiddenMenuIds !== undefined ? normalizeQrHiddenMenuIds(settings.hiddenMenuIds) : undefined
+  if (hiddenMenuIds !== undefined) row.hidden_menu_ids = hiddenMenuIds
+  try {
+    await upsertRowsTenantStore('pos_qr_order_store_settings', 'store_code', [row], tenantScope)
+  } catch (e) {
+    if (!('hidden_menu_ids' in row) || !isMissingHiddenMenuIdsColumnError(e)) throw e
+    if (hiddenMenuIds && hiddenMenuIds.length > 0) throw new Error('hidden_menu_ids_schema_missing')
+    delete row.hidden_menu_ids
+    await upsertRowsTenantStore('pos_qr_order_store_settings', 'store_code', [row], tenantScope)
+  }
   return loadQrOrderStoreSettings(storeCode, tenantId)
 }
 
@@ -1870,7 +1882,12 @@ export async function loadQrMenusForSession(session: QrTableSession) {
     tierId > 0 ? loadExtraMenuIdSet(tierId) : Promise.resolve(new Set<number>()),
   ])
   const limitExtras = extraAllow.size > 0
-  const menus = await loadHallMenusForStore(session.storeCode)
+  const [hallMenus, storeSettings] = await Promise.all([
+    loadHallMenusForStore(session.storeCode),
+    loadQrOrderStoreSettings(session.storeCode),
+  ])
+  const hiddenMenuIds = new Set(storeSettings.hiddenMenuIds || [])
+  const menus = hallMenus.filter((m) => !hiddenMenuIds.has(Number(m.id || 0)))
   const catalogScope = await resolvePosCatalogTenantScope({ storeCode: session.storeCode })
   const tabOrder = await readPosCategoryTabOrder(catalogScope)
   const soldOutLoad = await loadStoreMenuSoldOutMap(session.storeCode).catch(() => ({
@@ -2314,7 +2331,7 @@ export async function submitQrCart(params: {
     .filter((id) => id > 0)
   const optionLookupIds = [...requestedIds, ...flavorIds]
 
-  const [included, extraAllow, byId, optionsByMenuId, flavorIdsByBanban, orderRows, soldOutLoad] =
+  const [included, extraAllow, byId, optionsByMenuId, flavorIdsByBanban, orderRows, soldOutLoad, storeSettings] =
     await Promise.all([
     tierId > 0 ? loadIncludedMenuIdSet(tierId, requestedIds) : Promise.resolve(new Set<number>()),
     tierId > 0
@@ -2353,7 +2370,9 @@ export async function submitQrCart(params: {
       byMenuId: new Map<number, string>(),
       schemaReady: false,
     })),
+    loadQrOrderStoreSettings(session.storeCode),
   ])
+  const hiddenMenuIds = new Set(storeSettings.hiddenMenuIds || [])
 
   let promoComposeById = new Map<string, QrGuestPromoCompose>()
   try {
@@ -2378,7 +2397,7 @@ export async function submitQrCart(params: {
     const qty = Math.min(99, Math.max(1, Math.floor(Number(line.qty) || 0)))
     if (!menuId || !qty) continue
     const menu = byId.get(menuId)
-    if (!menu) throw new Error(`menu_not_found:${menuId}`)
+    if (!menu || hiddenMenuIds.has(menuId)) throw new Error(`menu_not_found:${menuId}`)
     if (
       isMenuSoldOutForStore({
         menuId,

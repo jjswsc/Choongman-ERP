@@ -88,6 +88,7 @@ export function PosQrTableOrderContent() {
   const [tokens, setTokens] = React.useState<Array<{ tableName: string; token: string; publicUrl?: string }>>([])
   const [menus, setMenus] = React.useState<Array<{ id: string; name: string; code: string }>>([])
   const [menuSearch, setMenuSearch] = React.useState('')
+  const [hiddenMenuSearch, setHiddenMenuSearch] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [editing, setEditing] = React.useState(false)
   const [tierForm, setTierForm] = React.useState(EMPTY_TIER_FORM)
@@ -105,12 +106,48 @@ export function PosQrTableOrderContent() {
     )
   }, [menus, menuSearch])
 
+  const hiddenMenuIdSet = React.useMemo(() => new Set(settings.hiddenMenuIds || []), [settings.hiddenMenuIds])
+
+  const filteredHiddenMenus = React.useMemo(() => {
+    const q = hiddenMenuSearch.trim().toLowerCase()
+    const list = q
+      ? menus.filter(
+          (m) =>
+            m.name.toLowerCase().includes(q) ||
+            m.code.toLowerCase().includes(q) ||
+            String(m.id).includes(q)
+        )
+      : menus
+    return [...list].sort(
+      (a, b) => Number(hiddenMenuIdSet.has(Number(b.id))) - Number(hiddenMenuIdSet.has(Number(a.id)))
+    )
+  }, [menus, hiddenMenuSearch, hiddenMenuIdSet])
+
+  function toggleHiddenMenu(id: number) {
+    setSettings((s) => {
+      const cur = s.hiddenMenuIds || []
+      return {
+        ...s,
+        hiddenMenuIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+      }
+    })
+  }
+
   React.useEffect(() => {
     if (!storeCode && posStoreOptions?.length) setStoreCode(posStoreOptions[0].code)
   }, [posStoreOptions, storeCode])
 
   const alertApiError = React.useCallback(
     async (raw: string) => {
+      if (raw === 'hidden_menu_ids_schema_missing') {
+        await appAlert(
+          tr(
+            'qrTableHiddenMenusSchemaMissing',
+            'QR 숨김 메뉴 컬럼이 아직 없습니다. Supabase에서 pos_qr_hidden_menu_ids_01_ddl.sql 을 먼저 실행해 주세요.'
+          )
+        )
+        return
+      }
       if (isSchemaMissingError(raw)) {
         await appAlert(tr('qrTableSchemaMissing', 'DB 테이블이 아직 없습니다. SQL을 먼저 실행해 주세요.'))
         return
@@ -547,6 +584,59 @@ export function PosQrTableOrderContent() {
             </div>
           </details>
 
+          <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
+        </section>
+
+        {/* QR 숨김 메뉴 (이 매장 손님 QR만) */}
+        <section className="space-y-3 rounded-lg border bg-card p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold">{tr('qrTableHiddenMenus', 'QR에서 숨길 메뉴')}</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {tr(
+                  'qrTableHiddenMenusHint',
+                  '체크한 메뉴는 이 매장 손님 QR 화면에만 안 보입니다. POS 직원 화면과 다른 매장은 그대로입니다. 예: 무료 김치.'
+                )}
+              </p>
+            </div>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {tr('qrTableHiddenMenusCount', '숨김 {n}개').replace('{n}', String(hiddenMenuIdSet.size))}
+            </span>
+          </div>
+          <Input
+            placeholder={tr('qrTableMenuSearch', '메뉴 검색…')}
+            value={hiddenMenuSearch}
+            onChange={(e) => setHiddenMenuSearch(e.target.value)}
+          />
+          <div className="max-h-56 overflow-auto rounded-md border bg-background p-2">
+            <div className="grid gap-1 sm:grid-cols-2">
+              {filteredHiddenMenus.length === 0 ? (
+                <p className="col-span-full px-1 py-3 text-sm text-muted-foreground">
+                  {menus.length === 0
+                    ? tr('qrTableIncludedMenusEmpty', '이 매장에 등록된 메뉴가 없습니다.')
+                    : tr('qrTableMenuSearchEmpty', '검색 결과가 없습니다.')}
+                </p>
+              ) : (
+                filteredHiddenMenus.map((m) => {
+                  const id = Number(m.id)
+                  const checked = hiddenMenuIdSet.has(id)
+                  return (
+                    <label
+                      key={`hide-${m.id}`}
+                      className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60 ${
+                        checked ? 'bg-destructive/10' : ''
+                      }`}
+                    >
+                      <input type="checkbox" checked={checked} onChange={() => toggleHiddenMenu(id)} />
+                      <span className="min-w-0 truncate">
+                        <span className="text-muted-foreground">{m.code}</span> {m.name}
+                      </span>
+                    </label>
+                  )
+                })
+              )}
+            </div>
+          </div>
           <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
         </section>
 

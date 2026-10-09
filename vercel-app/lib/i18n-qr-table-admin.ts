@@ -44,6 +44,12 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTableExtraMenusHint:
     '체크한 메뉴만 별도 탭에 표시됩니다. 비우면 포함 메뉴를 뺀 전체가 나갑니다. 299/399/499마다 다르게 고를 수 있습니다.',
   qrTableExtraMenusCount: '별도 {n}개',
+  qrTableHiddenMenus: 'QR에서 숨길 메뉴',
+  qrTableHiddenMenusHint:
+    '체크한 메뉴는 이 매장 손님 QR 화면에만 안 보입니다. POS 직원 화면과 다른 매장은 그대로입니다. 예: 무료 김치.',
+  qrTableHiddenMenusCount: '숨김 {n}개',
+  qrTableHiddenMenusSchemaMissing:
+    'QR 숨김 메뉴 컬럼이 아직 없습니다. Supabase에서 pos_qr_hidden_menu_ids_01_ddl.sql 을 먼저 실행해 주세요.',
   qrTableTokens: '테이블 QR',
   qrTableTokensHint: '테이블 레이아웃 기준으로 QR을 만든 뒤 인쇄·부착합니다.',
   qrTableGenerateTokens: '레이아웃 기준 생성',
@@ -128,7 +134,7 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   helpSum_admin_pos_qr_table_order:
     '손님 폰으로 QR 주문하고, 인당 패키지(입장가·포함 메뉴 0฿)를 매장별로 켭니다. 같은 테이블 QR은 여러 대가 동시에 스캔해 주문할 수 있습니다. 패키지·포함 메뉴는 이 화면에서만 설정하면 됩니다.',
   helpHow_admin_pos_qr_table_order:
-    '① 매장을 고른 뒤「QR 테이블오더 사용」을 켭니다. Omni 파일럿은 직원 세션 오픈 필수·후불을 권장합니다.\n② 주문 방식에서「인당 패키지」를 고르고, 패키지를 추가합니다(이름·인당가·포함 메뉴 체크).\n③ 「레이아웃 기준 생성」후 PNG/PDF/인쇄로 테이블 카드를 부착합니다.\n④ 메인 POS·오더 태블릿·직원 휴대폰 어디서든 홀(테이블) 화면의 QR 버튼으로 세션을 엽니다. 손님이 /t/{token}으로 주문하고, 퇴장 시 POS에서 결제합니다. 영수증 프린터로 QR을 찍는 것은 메인 POS에서 합니다. 한 테이블에서 여러 폰이 같이 주문할 수 있습니다.\n⑤ 선결제는 KBank PromptPay이며, 중간 입금 시에도 주문 status는 pending을 유지합니다.',
+    '① 매장을 고른 뒤「QR 테이블오더 사용」을 켭니다. Omni 파일럿은 직원 세션 오픈 필수·후불을 권장합니다.\n② 주문 방식에서「인당 패키지」를 고르고, 패키지를 추가합니다(이름·인당가·포함 메뉴 체크).\n③ 「레이아웃 기준 생성」후 PNG/PDF/인쇄로 테이블 카드를 부착합니다.\n④ 메인 POS·오더 태블릿·직원 휴대폰 어디서든 홀(테이블) 화면의 QR 버튼으로 세션을 엽니다. 손님이 /t/{token}으로 주문하고, 퇴장 시 POS에서 결제합니다. 영수증 프린터로 QR을 찍는 것은 메인 POS에서 합니다. 한 테이블에서 여러 폰이 같이 주문할 수 있습니다.\n⑤ 선결제는 KBank PromptPay이며, 중간 입금 시에도 주문 status는 pending을 유지합니다.\n⑥ 「QR에서 숨길 메뉴」에서 체크한 메뉴는 이 매장 손님 QR 화면에만 안 보입니다(예: 무료 김치). POS 직원 화면과 다른 매장은 그대로이며, 체크 후「저장」을 눌러야 반영됩니다.',
 }
 
 export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
@@ -177,6 +183,12 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTableExtraMenusHint:
     'Only checked menus appear on the Extra tab. Leave empty to show all menus except included. Set this per 299/399/499 package.',
   qrTableExtraMenusCount: '{n} extras',
+  qrTableHiddenMenus: 'Hide menus on guest QR',
+  qrTableHiddenMenusHint:
+    'Checked menus are hidden only on this store’s guest QR. Staff POS and other stores are unchanged. e.g. free kimchi.',
+  qrTableHiddenMenusCount: '{n} hidden',
+  qrTableHiddenMenusSchemaMissing:
+    'The QR hidden-menu column is missing. Run pos_qr_hidden_menu_ids_01_ddl.sql in Supabase SQL Editor first.',
   qrTableTokens: 'Table QR',
   qrTableTokensHint: 'Generate QR from the table layout, then print and place on tables.',
   qrTableGenerateTokens: 'Generate from layout',
@@ -260,7 +272,7 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   helpSum_admin_pos_qr_table_order:
     'Enable guest-phone QR ordering and per-person packages (entry price + included menus at ฿0) per store. Multiple phones can scan the same table QR and order together. Set packages and includes on this screen only.',
   helpHow_admin_pos_qr_table_order:
-    '① Pick a store and turn on QR table order. For Omni pilot, prefer require staff open + postpay.\n② Choose “Per-person package”, then add packages (name, price/pax, included menus).\n③ Generate QR from layout, then download PNG/PDF or print cards.\n④ Open a session from the main POS, an order tablet, or a staff phone with the QR button on the table screen. Guests order via /t/{token} and pay at POS when they leave. Printing the QR slip on the receipt printer stays on the main POS. Several phones at one table can order at the same time.\n⑤ Prepay uses KBank PromptPay; keep order status pending until final close.',
+    '① Pick a store and turn on QR table order. For Omni pilot, prefer require staff open + postpay.\n② Choose “Per-person package”, then add packages (name, price/pax, included menus).\n③ Generate QR from layout, then download PNG/PDF or print cards.\n④ Open a session from the main POS, an order tablet, or a staff phone with the QR button on the table screen. Guests order via /t/{token} and pay at POS when they leave. Printing the QR slip on the receipt printer stays on the main POS. Several phones at one table can order at the same time.\n⑤ Prepay uses KBank PromptPay; keep order status pending until final close.\n⑥ Menus checked under “Hide menus on guest QR” disappear only from this store’s guest QR (e.g. free kimchi). Staff POS and other stores are unchanged; press Save to apply.',
 }
 
 export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
@@ -309,6 +321,12 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTableExtraMenusHint:
     'ติ๊กเฉพาะเมนูที่อยากให้ขึ้นแท็บเมนูเพิ่ม ถ้าไม่ติ๊กจะโชว์ทุกเมนูนอกชุดรวม ตั้งคนละแบบได้ตามแพ็กเกจ 299/399/499 ครับ',
   qrTableExtraMenusCount: 'เมนูเพิ่ม {n} รายการ',
+  qrTableHiddenMenus: 'ซ่อนเมนูในหน้า QR ลูกค้า',
+  qrTableHiddenMenusHint:
+    'เมนูที่ติ๊กจะไม่ขึ้นในหน้า QR ของลูกค้าเฉพาะสาขานี้ หน้าจอ POS พนักงานและสาขาอื่นไม่เปลี่ยนครับ เช่น กิมจิฟรี',
+  qrTableHiddenMenusCount: 'ซ่อน {n} รายการ',
+  qrTableHiddenMenusSchemaMissing:
+    'ยังไม่มีคอลัมน์ซ่อนเมนู QR กรุณารัน pos_qr_hidden_menu_ids_01_ddl.sql ใน Supabase SQL Editor ก่อนครับ',
   qrTableTokens: 'QR โต๊ะ',
   qrTableTokensHint: 'สร้าง QR จากผังโต๊ะ แล้วพิมพ์ติดโต๊ะ',
   qrTableGenerateTokens: 'สร้างจากผังโต๊ะ',
@@ -392,5 +410,5 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   helpSum_admin_pos_qr_table_order:
     'เปิดให้ลูกค้าสั่งผ่าน QR และตั้งแพ็กเกจต่อคน (ค่าเข้า + เมนูรวม ฿0) ตามสาขา โทรศัพท์หลายเครื่องสแกน QR โต๊ะเดียวกันแล้วสั่งพร้อมกันได้ครับ ตั้งแพ็กเกจและเมนูรวมที่หน้านี้พอครับ',
   helpHow_admin_pos_qr_table_order:
-    '① เลือกสาขาแล้วเปิด「สั่งอาหารด้วย QR」 แนะนำให้พนักงานเปิดเซสชันก่อน + จ่ายทีหลังสำหรับไฟลอต Omni\n② เลือก「แพ็กเกจต่อคน」แล้วเพิ่มแพ็กเกจ (ชื่อ ราคา/คน ติ๊กเมนูรวม)\n③ สร้าง QR จากผังโต๊ะ แล้วดาวน์โหลด PNG/PDF หรือพิมพ์การ์ด\n④ เปิดเซสชันได้จากเครื่อง POS หลัก แท็บเล็ตออเดอร์ หรือมือถือพนักงาน ที่ปุ่ม QR ในหน้าโต๊ะ ลูกค้าสั่งผ่าน /t/{token} แล้วชำระที่ POS เมื่อออก การพิมพ์ QR ที่เครื่องพิมพ์ใบเสร็จทำที่เครื่อง POS หลัก โต๊ะเดียวใช้มือถือหลายเครื่องสั่งพร้อมกันได้ครับ\n⑤ ชำระล่วงหน้าใช้ KBank PromptPay และคงสถานะออเดอร์เป็น pending จนกว่าจะปิดบิล',
+    '① เลือกสาขาแล้วเปิด「สั่งอาหารด้วย QR」 แนะนำให้พนักงานเปิดเซสชันก่อน + จ่ายทีหลังสำหรับไฟลอต Omni\n② เลือก「แพ็กเกจต่อคน」แล้วเพิ่มแพ็กเกจ (ชื่อ ราคา/คน ติ๊กเมนูรวม)\n③ สร้าง QR จากผังโต๊ะ แล้วดาวน์โหลด PNG/PDF หรือพิมพ์การ์ด\n④ เปิดเซสชันได้จากเครื่อง POS หลัก แท็บเล็ตออเดอร์ หรือมือถือพนักงาน ที่ปุ่ม QR ในหน้าโต๊ะ ลูกค้าสั่งผ่าน /t/{token} แล้วชำระที่ POS เมื่อออก การพิมพ์ QR ที่เครื่องพิมพ์ใบเสร็จทำที่เครื่อง POS หลัก โต๊ะเดียวใช้มือถือหลายเครื่องสั่งพร้อมกันได้ครับ\n⑤ ชำระล่วงหน้าใช้ KBank PromptPay และคงสถานะออเดอร์เป็น pending จนกว่าจะปิดบิล\n⑥ เมนูที่ติ๊กใน「ซ่อนเมนูในหน้า QR ลูกค้า」จะไม่ขึ้นในหน้า QR ลูกค้าเฉพาะสาขานี้ (เช่น กิมจิฟรี) หน้าจอ POS พนักงานและสาขาอื่นไม่เปลี่ยน ติ๊กแล้วกด「บันทึก」ครับ',
 }

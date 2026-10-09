@@ -28,6 +28,11 @@ export type QrOrderStoreSettings = {
   printBrandColor?: string
   printAccentColor?: string
   printBrandLine?: string
+  /**
+   * 이 매장 손님 QR에서만 숨길 메뉴 id (POS 직원 화면·다른 매장은 그대로).
+   * undefined로 저장 요청하면 기존 값을 유지한다.
+   */
+  hiddenMenuIds?: number[]
 }
 
 export type QrBuffetTier = {
@@ -481,5 +486,30 @@ export function defaultQrOrderStoreSettings(storeCode: string): QrOrderStoreSett
     printBrandColor: '#b45309',
     printAccentColor: '#faf7f2',
     printBrandLine: '',
+    hiddenMenuIds: [],
   }
+}
+
+export function normalizeQrHiddenMenuIds(raw: unknown): number[] {
+  let list: unknown[] = []
+  if (Array.isArray(raw)) list = raw
+  else if (typeof raw === 'string' && raw.trim()) {
+    const s = raw.trim()
+    if (s.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(s) as unknown
+        if (Array.isArray(parsed)) list = parsed
+      } catch {
+        list = []
+      }
+    } else {
+      list = s.replace(/^\{|\}$/g, '').split(',')
+    }
+  }
+  const out: number[] = []
+  for (const x of list) {
+    const n = Math.floor(Number(x))
+    if (Number.isFinite(n) && n > 0 && !out.includes(n)) out.push(n)
+  }
+  return out.sort((a, b) => a - b)
 }

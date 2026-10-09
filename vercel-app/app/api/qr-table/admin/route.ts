@@ -10,7 +10,7 @@ import {
 } from '@/lib/qr-table-server'
 import { requirePosStoreWriteAuth, posApiCorsHeaders, applyPosApiCors } from '@/lib/pos-api-write-auth'
 import { requireAuth } from '@/lib/verify-auth'
-import type { QrOrderMode, QrPaymentMode } from '@/lib/qr-table-types'
+import { normalizeQrHiddenMenuIds, type QrOrderMode, type QrPaymentMode } from '@/lib/qr-table-types'
 
 function schemaErrorMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e || 'error')
@@ -70,6 +70,7 @@ export async function PUT(req: NextRequest) {
       printBrandColor: body.printBrandColor != null ? String(body.printBrandColor) : '',
       printAccentColor: body.printAccentColor != null ? String(body.printAccentColor) : '',
       printBrandLine: body.printBrandLine != null ? String(body.printBrandLine) : '',
+      hiddenMenuIds: Array.isArray(body.hiddenMenuIds) ? normalizeQrHiddenMenuIds(body.hiddenMenuIds) : undefined,
     }, write.auth.tenantId)
     return applyPosApiCors(NextResponse.json({ success: true, settings }, { headers }))
   } catch (e) {
