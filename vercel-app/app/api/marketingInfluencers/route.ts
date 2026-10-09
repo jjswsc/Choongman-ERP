@@ -92,6 +92,21 @@ function isColumnSchemaError(e: unknown): boolean {
   )
 }
 
+/** profile_id 컬럼 미배포(SQL 02 전) DB에서도 저장되도록 한 번만 컬럼 제외 재시도 */
+async function withoutProfileColumnFallback<T>(
+  row: Record<string, unknown>,
+  run: (r: Record<string, unknown>) => Promise<T>
+): Promise<T> {
+  try {
+    return await run(row)
+  } catch (e) {
+    if (!isColumnSchemaError(e) || !String(e).includes('profile_id')) throw e
+    const rest = { ...row }
+    delete rest.profile_id
+    return run(rest)
+  }
+}
+
 function normalizeStoreName(val: unknown): string {
   return String(val ?? '').trim()
 }
@@ -115,9 +130,14 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const campaignId = searchParams.get('campaignId')?.trim()
+    const profileId = searchParams.get('profileId')?.trim()
+    const unlinked = searchParams.get('unlinked') === '1'
 
-    let filter = ''
-    if (campaignId) filter = `campaign_id=eq.${encodeURIComponent(campaignId)}`
+    const parts: string[] = []
+    if (campaignId) parts.push(`campaign_id=eq.${encodeURIComponent(campaignId)}`)
+    else if (unlinked) parts.push('campaign_id=is.null')
+    if (profileId) parts.push(`profile_id=eq.${encodeURIComponent(profileId)}`)
+    const filter = parts.join('&')
 
     const listLimit = 8000
     const rows = ((await supabaseSelectFilter('marketing_influencers', appendSaasTenantFilter(filter || 'id=gt.0', tenantScope, 'marketing_influencers'), {
@@ -128,6 +148,7 @@ export async function GET(req: NextRequest) {
     const base = (rows || []).map((row) => ({
       id: String(row.id ?? ''),
       campaignId: row.campaign_id != null ? String(row.campaign_id) : null,
+      profileId: row.profile_id != null ? String(row.profile_id) : null,
       name: String(row.name ?? ''),
       contactName: row.contact_name != null ? String(row.contact_name) : '',
       contactPhone: row.contact_phone != null ? String(row.contact_phone) : '',
@@ -206,6 +227,7 @@ export async function POST(req: NextRequest) {
       user_name?: string
       vendorCode?: string
       vendor_code?: string
+      profileId?: string | null
     }
 
     const name = String(body.name ?? '').trim()
@@ -214,6 +236,7 @@ export async function POST(req: NextRequest) {
     const providedMenus = parseProvidedMenus(body.providedMenus)
     const editingId = body.id?.trim()
     const campaignId = String(body.campaignId ?? '').trim()
+    const profileId = String(body.profileId ?? '').trim()
     const userRole = String(auth.role || '')
     const userName = String(auth.name || body.userName || body.user_name || '').trim()
     const userStore = normalizeStoreName(auth.store || '')
@@ -225,11 +248,8 @@ export async function POST(req: NextRequest) {
         { headers }
       )
     }
-    if (!campaignId) {
-      return NextResponse.json(
-        { success: false, message: '캠페인 선택은 필수입니다. 캠페인 허브에서 먼저 등록·선택해 주세요.' },
-        { headers }
-      )
+    if (campaignId && !(Number(campaignId) > 0)) {
+      return NextResponse.json({ success: false, message: '캠페인 ID가 올바르지 않습니다.' }, { headers })
     }
 
     let priorAccrualId: number | null = null
@@ -252,7 +272,8 @@ export async function POST(req: NextRequest) {
       : {}
 
     const row: Record<string, unknown> = stampSaasTenantId({
-      campaign_id: Number(campaignId),
+      campaign_id: campaignId ? Number(campaignId) : null,
+      profile_id: Number(profileId) > 0 ? Number(profileId) : null,
       name,
       contact_name: contactName,
       contact_phone: contactPhone,
@@ -281,13 +302,17 @@ export async function POST(req: NextRequest) {
         { limit: 1 }
       )) as { id?: number }[] | null
       if (existing?.length) {
-        await supabaseUpdateByFilter('marketing_influencers', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_influencers'), row)
+        await withoutProfileColumnFallback(row, (r) =>
+          supabaseUpdateByFilter('marketing_influencers', appendSaasTenantFilter(`id=eq.${editingId}`, tenantScope, 'marketing_influencers'), r)
+        )
         recordId = editingId
       } else {
         return NextResponse.json({ success: false, message: '수정할 항목을 찾을 수 없습니다.' }, { headers })
       }
     } else {
-      const inserted = (await supabaseInsert('marketing_influencers', row)) as { id?: number }[]
+      const inserted = (await withoutProfileColumnFallback(row, (r) =>
+        supabaseInsert('marketing_influencers', r)
+      )) as { id?: number }[]
       const created = Array.isArray(inserted) ? inserted[0] : inserted
       recordId = created?.id != null ? String(created.id) : ''
       if (!recordId) {
@@ -295,7 +320,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const camp = await fetchCampaignMetaForExpenseMemo(campaignId)
+    const camp = campaignId ? await fetchCampaignMetaForExpenseMemo(campaignId) : null
     const topic = camp?.topic || ''
     const campaignNo = camp?.campaignNo || ''
     const actual = parseNum(body.actualCost)

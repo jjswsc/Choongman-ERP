@@ -12,17 +12,21 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   getMarketingInfluencers,
+  getMarketingInfluencerProfiles,
   getMarketingCampaigns,
   getPosMenus,
   saveMarketingInfluencer,
   saveMarketingCampaignDesignDates,
   deleteMarketingInfluencer,
+  linkMarketingInfluencersToCampaign,
   useStoreList,
   type MarketingInfluencer,
+  type MarketingInfluencerProfile,
   type MarketingCampaign,
   type PosMenu,
   type InfluencerProvidedMenuSnapshot,
 } from "@/lib/api-client"
+import { formatFollowersShort } from "@/lib/marketing-influencer-profile"
 import { cn } from "@/lib/utils"
 import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
@@ -38,10 +42,10 @@ import {
 } from "@/lib/admin-tab-styles"
 import { MarketingPageHero } from "@/components/marketing/marketing-page-hero"
 import { MarketingPageShell } from "@/components/marketing/marketing-page-shell"
-import { MarketingEnterViaCampaignBanner } from "@/components/marketing/marketing-enter-via-campaign-banner"
 import { MarketingHubCampaignContextStrip } from "@/components/marketing/marketing-hub-campaign-context-strip"
 import { MarketingInfluencersOverviewTab } from "@/components/marketing/marketing-influencers-overview-tab"
-import { MarketingInfluencersDirectoryTab } from "@/components/marketing/marketing-influencers-directory-tab"
+import { MarketingInfluencerProfilesTab } from "@/components/marketing/marketing-influencer-profiles-tab"
+import { MarketingInfluencerSalesLiftTab } from "@/components/marketing/marketing-influencer-sales-lift-tab"
 import { MarketingLinkedCampaignStrip } from "@/components/marketing/marketing-linked-campaign-strip"
 import { MarketingHubRecordScheduleCard } from "@/components/marketing/marketing-hub-record-schedule-card"
 import { MarketingInfluencerAdsPanel } from "@/components/marketing/marketing-influencer-ads-panel"
@@ -97,7 +101,7 @@ function getCpf(budget: number, followersStr: string): number | null {
   return budget / f
 }
 
-type MainTab = "compose" | "inquiry" | "directory"
+type MainTab = "profiles" | "compose" | "inquiry" | "lift"
 
 export default function MarketingInfluencersPage() {
   const searchParams = useSearchParams()
@@ -108,11 +112,12 @@ export default function MarketingInfluencersPage() {
   const { stores, loading: storesLoading, formatStoreLabel } = useStoreList()
   const [mainTab, setMainTab] = useAdminUrlTab(
     "tab",
-    ["compose", "inquiry", "directory"] as const,
-    "compose"
+    ["profiles", "compose", "inquiry", "lift"] as const,
+    "profiles"
   )
-  const [inquirySearchApplyToken, setInquirySearchApplyToken] = React.useState(0)
-  const [inquirySearchApplyQuery, setInquirySearchApplyQuery] = React.useState("")
+  const [profiles, setProfiles] = React.useState<MarketingInfluencerProfile[]>([])
+  const [profilesLoading, setProfilesLoading] = React.useState(false)
+  const [profileSearch, setProfileSearch] = React.useState("")
   const [list, setList] = React.useState<MarketingInfluencer[]>([])
   const [allInfs, setAllInfs] = React.useState<MarketingInfluencer[]>([])
   const [campaigns, setCampaigns] = React.useState<MarketingCampaign[]>([])
@@ -129,6 +134,7 @@ export default function MarketingInfluencersPage() {
   const [menuSearchDraft, setMenuSearchDraft] = React.useState("")
   const [form, setForm] = React.useState({
     campaignId: "",
+    profileId: "",
     name: "",
     contactName: "",
     contactPhone: "",
@@ -226,7 +232,7 @@ export default function MarketingInfluencersPage() {
     const cid = campaignFilter.trim()
     setLoading(true)
     return Promise.all([
-      cid ? getMarketingInfluencers({ campaignId: cid }) : Promise.resolve([] as MarketingInfluencer[]),
+      cid ? getMarketingInfluencers({ campaignId: cid }) : getMarketingInfluencers({ unlinked: true }),
       getMarketingCampaigns(),
     ])
       .then(([infs, camps]) => {
@@ -254,26 +260,71 @@ export default function MarketingInfluencersPage() {
     loadData()
   }, [loadData])
 
-  React.useEffect(() => {
-    if (mainTab === "inquiry" || mainTab === "directory") void loadInquiryInfs()
-  }, [mainTab, loadInquiryInfs])
-
-  const inquiryApplySearch = React.useMemo(
-    () => ({ token: inquirySearchApplyToken, query: inquirySearchApplyQuery }),
-    [inquirySearchApplyToken, inquirySearchApplyQuery]
-  )
-
-  const openInquiryWithNameSearch = React.useCallback((name: string) => {
-    setInquirySearchApplyQuery(name)
-    setInquirySearchApplyToken((t) => t + 1)
-    setMainTab("inquiry")
+  const loadProfiles = React.useCallback(async () => {
+    setProfilesLoading(true)
+    try {
+      setProfiles(await getMarketingInfluencerProfiles())
+    } catch {
+      setProfiles([])
+    } finally {
+      setProfilesLoading(false)
+    }
   }, [])
+
+  React.useEffect(() => {
+    void loadProfiles()
+  }, [loadProfiles])
+
+  React.useEffect(() => {
+    if (mainTab === "inquiry" || mainTab === "profiles") void loadInquiryInfs()
+  }, [mainTab, loadInquiryInfs])
 
   React.useEffect(() => {
     if (!campaignIdFromQuery) return
     setCampaignFilter(campaignIdFromQuery)
     setForm((f) => ({ ...f, campaignId: campaignIdFromQuery }))
+    setMainTab("compose")
   }, [campaignIdFromQuery])
+
+  const profileById = React.useMemo(() => {
+    const m = new Map<string, MarketingInfluencerProfile>()
+    for (const p of profiles) m.set(p.id, p)
+    return m
+  }, [profiles])
+
+  const profilePickerOptions = React.useMemo(() => {
+    const q = profileSearch.trim().toLowerCase()
+    const rows = q
+      ? profiles.filter((p) =>
+          [p.displayName, p.tiktokHandle, p.instagramHandle, p.contactName, p.contactPhone]
+            .join(" ")
+            .toLowerCase()
+            .includes(q)
+        )
+      : profiles
+    return [...rows].sort((a, b) => a.displayName.localeCompare(b.displayName, "th")).slice(0, 300)
+  }, [profiles, profileSearch])
+
+  /** 명부 선택 시 비어 있는 업로드 필드만 채움(이미 입력한 값은 유지) */
+  const applyProfileToForm = React.useCallback((p: MarketingInfluencerProfile | undefined) => {
+    setForm((f) => {
+      if (!p) return { ...f, profileId: "" }
+      const followers = Math.max(p.tiktokFollowers || 0, p.instagramFollowers || 0, p.facebookFollowers || 0)
+      const keep = (cur: string, next: string) => (cur.trim() ? cur : next)
+      return {
+        ...f,
+        profileId: p.id,
+        name: keep(f.name, p.tiktokHandle ? `@${p.tiktokHandle}` : p.displayName),
+        contactName: keep(f.contactName, p.contactName || p.displayName),
+        contactPhone: keep(f.contactPhone, p.contactPhone),
+        followers: keep(f.followers, followers > 0 ? formatFollowersShort(followers) : ""),
+        branchReview: keep(f.branchReview, p.preferredStore),
+        tiktok: keep(f.tiktok, p.tiktokUrl),
+        instagram: keep(f.instagram, p.instagramUrl),
+        facebook: keep(f.facebook, p.facebookUrl),
+      }
+    })
+  }, [])
 
   /** 캠페인만 바꿔도 저장 폼의 캠페인이 맞게 따라가도록 (신규 등록 중일 때만) */
   React.useEffect(() => {
@@ -399,8 +450,10 @@ export default function MarketingInfluencersPage() {
     setMenuCategoryKey("")
     setMenuSearchDraft("")
     setMenuPickerValue("")
+    setProfileSearch("")
     setForm({
       campaignId: campaignFilter || "",
+      profileId: "",
       name: "",
       contactName: "",
       contactPhone: "",
@@ -428,8 +481,10 @@ export default function MarketingInfluencersPage() {
     if (i.campaignId) setCampaignFilter(String(i.campaignId))
     setEditingId(i.id)
     const links = i.platformLinks || {}
+    setProfileSearch("")
     setForm({
       campaignId: i.campaignId || "",
+      profileId: i.profileId || "",
       name: i.name || "",
       contactName: (i.contactName ?? "").trim(),
       contactPhone: (i.contactPhone ?? "").trim(),
@@ -473,10 +528,6 @@ export default function MarketingInfluencersPage() {
   }
 
   const handleSave = async () => {
-    if (!form.campaignId.trim()) {
-      await appAlert(t("marketingAlertSelectCampaignHubToSave"))
-      return
-    }
     const name = form.name.trim()
     if (!name) {
       await appAlert(t("marketingAlertEnterName"))
@@ -514,6 +565,7 @@ export default function MarketingInfluencersPage() {
       const res = await saveMarketingInfluencer({
         id: editingId ?? undefined,
         campaignId: form.campaignId.trim() || null,
+        profileId: form.profileId || null,
         name,
         contactName: form.contactName.trim(),
         contactPhone: form.contactPhone.trim(),
@@ -549,6 +601,19 @@ export default function MarketingInfluencersPage() {
     }
   }
 
+  const handleBulkLink = async (ids: string[], campaignId: string | null): Promise<boolean> => {
+    if (campaignId == null && !(await appConfirm(t("mktInfBulkUnlinkConfirm").replace("{n}", String(ids.length))))) {
+      return false
+    }
+    const res = await linkMarketingInfluencersToCampaign({ ids, campaignId })
+    if (!res.success) {
+      await appAlert(res.message || t("marketingCollabDetailSaveError"))
+      return false
+    }
+    await refreshAllLists()
+    return true
+  }
+
   const handleDelete = async (i: MarketingInfluencer) => {
     if (!(await appConfirm(`"${i.name}" ${t("posMenuConfirmDelete") || "삭제하시겠습니까?"}`))) return
     const res = await deleteMarketingInfluencer({ id: i.id })
@@ -563,7 +628,6 @@ export default function MarketingInfluencersPage() {
   return (
     <MarketingPageShell maxWidthClass="max-w-6xl">
         <MarketingPageHero icon={Users} title={t("adminMarketingInfluencers")} description={t("marketingHeroDescInfluencers")} />
-        <MarketingEnterViaCampaignBanner />
         {campaignIdFromQuery && (
           <div className="mb-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-foreground/90">
             {t("marketingHubFilteredAutoLinkNew")}
@@ -574,31 +638,70 @@ export default function MarketingInfluencersPage() {
           <div className={cn(adminTabsBarCn, "px-2 py-2.5 sm:px-4")}>
             <div className={adminTabsScrollCn}>
               <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="profiles" className={adminTabsTriggerCn}>
+                  {t("mktInfTabProfiles")}
+                </TabsTrigger>
                 <TabsTrigger value="compose" className={adminTabsTriggerCn}>
                   {t("marketingInfluencersTabCompose")}
                 </TabsTrigger>
                 <TabsTrigger value="inquiry" className={adminTabsTriggerCn}>
                   {t("marketingInfluencersTabInquiry")}
                 </TabsTrigger>
-                <TabsTrigger value="directory" className={adminTabsTriggerCn}>
-                  {t("marketingInfluencersTabDirectory")}
+                <TabsTrigger value="lift" className={adminTabsTriggerCn}>
+                  {t("mktInfTabLift")}
                 </TabsTrigger>
               </TabsList>
             </div>
           </div>
 
-          <MarketingHubCampaignContextStrip
-            value={campaignFilter}
-            onChange={setCampaignFilter}
-            campaigns={campaigns}
-            onRefresh={refreshAllLists}
-            disabled={loading}
-          />
+          <TabsContent value="profiles" className={adminTabsContentCn}>
+            <MarketingInfluencerProfilesTab
+              t={t}
+              profiles={profiles}
+              posts={allInfs}
+              stores={stores}
+              formatStoreLabel={formatStoreLabel}
+              loading={profilesLoading}
+              onReload={async () => {
+                await loadProfiles()
+              }}
+              onCreatePost={(p) => {
+                handleNew()
+                applyProfileToForm(p)
+                setMainTab("compose")
+                requestAnimationFrame(() => {
+                  document.getElementById("marketing-influencer-compose-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                })
+              }}
+            />
+          </TabsContent>
 
-          {campaignFilter.trim() ? (
-            <div className="px-2 pb-2 sm:px-4">
-              <MarketingInfluencerAdsPanel campaignId={campaignFilter} />
-            </div>
+          <TabsContent value="lift" className={adminTabsContentCn}>
+            <MarketingInfluencerSalesLiftTab
+              t={t}
+              profiles={profiles}
+              campaigns={campaigns}
+              stores={stores}
+              formatStoreLabel={formatStoreLabel}
+              campaignLabel={campaignLabel}
+            />
+          </TabsContent>
+
+          {mainTab === "compose" ? (
+            <>
+              <MarketingHubCampaignContextStrip
+                value={campaignFilter}
+                onChange={setCampaignFilter}
+                campaigns={campaigns}
+                onRefresh={refreshAllLists}
+                disabled={loading}
+              />
+              {campaignFilter.trim() ? (
+                <div className="px-2 pb-2 sm:px-4">
+                  <MarketingInfluencerAdsPanel campaignId={campaignFilter} />
+                </div>
+              ) : null}
+            </>
           ) : null}
 
           <TabsContent value="compose" className={adminTabsContentCn}>
@@ -607,12 +710,6 @@ export default function MarketingInfluencersPage() {
             )}
 
             <div className="space-y-4">
-              {!campaignFilter.trim() && (
-                <p className="rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
-                  {t("marketingSelectCampaignForFormBelow")}
-                </p>
-              )}
-              {(editingId !== null || Boolean(campaignFilter.trim())) && (
                 <Card
                   id="marketing-influencer-compose-anchor"
                   className="overflow-hidden border-primary/15 shadow-md ring-1 ring-primary/5"
@@ -628,16 +725,59 @@ export default function MarketingInfluencersPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4 pt-6">
-                  {form.campaignId.trim() ? (
-                    <MarketingLinkedCampaignStrip
-                      label={t("marketingAdsOptionsLinkedCampaign")}
-                      title={campaignLabel(form.campaignId) || form.campaignId}
-                    />
-                  ) : (
-                    <div className="mb-1 rounded-lg border-2 border-dashed border-amber-500/50 bg-amber-500/[0.08] px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-400/40 dark:bg-amber-950/25 dark:text-amber-100">
-                      {t("marketingAdsEmptyNeedCampaign")}
+                  <div className="grid gap-3 rounded-lg border border-border/60 bg-muted/15 p-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">{t("mktInfComposeProfile")}</Label>
+                      <Input
+                        className="h-8 text-xs"
+                        value={profileSearch}
+                        onChange={(e) => setProfileSearch(e.target.value)}
+                        placeholder={t("mktInfSearchPh")}
+                      />
+                      <select
+                        value={form.profileId}
+                        onChange={(e) => applyProfileToForm(profileById.get(e.target.value))}
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                      >
+                        <option value="">{t("mktInfComposeProfileNone")}</option>
+                        {form.profileId && !profilePickerOptions.some((p) => p.id === form.profileId) ? (
+                          <option value={form.profileId}>
+                            {profileById.get(form.profileId)?.displayName || `#${form.profileId}`}
+                          </option>
+                        ) : null}
+                        {profilePickerOptions.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.displayName}
+                            {p.tiktokHandle ? ` (@${p.tiktokHandle})` : ""}
+                            {p.preferredStore ? ` · ${formatStoreLabel(p.preferredStore)}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-muted-foreground">{t("mktInfComposeProfileHint")}</p>
                     </div>
-                  )}
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">{t("mktInfCampaignOptional")}</Label>
+                      <select
+                        value={form.campaignId}
+                        onChange={(e) => setForm((f) => ({ ...f, campaignId: e.target.value }))}
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                      >
+                        <option value="">{t("mktInfCampaignNone")}</option>
+                        {campaigns.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {campaignLabel(c.id)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-muted-foreground">{t("mktInfCampaignOptionalHint")}</p>
+                      {form.campaignId.trim() ? (
+                        <MarketingLinkedCampaignStrip
+                          label={t("marketingAdsOptionsLinkedCampaign")}
+                          title={campaignLabel(form.campaignId) || form.campaignId}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
                   <MarketingHubRecordScheduleCard
                     disabled={saving}
                     designOutOfRange={designOutOfRange}
@@ -936,11 +1076,12 @@ export default function MarketingInfluencersPage() {
                   </div>
                   </CardContent>
                 </Card>
-              )}
 
               <div className="rounded-xl border bg-card">
                 <div className="flex items-center justify-between border-b px-4 py-3">
-                  <h3 className="text-sm font-semibold">{t("marketingInfluencerListHeading")}</h3>
+                  <h3 className="text-sm font-semibold">
+                    {campaignFilter.trim() ? t("marketingInfluencerListHeading") : t("mktInfListHeadingUnlinked")}
+                  </h3>
                   <div className="flex gap-1">
                     <Button variant={sortBy === "name" ? "default" : "outline"} size="sm" onClick={() => setSortBy("name")}>
                       {t("marketingSortName")}
@@ -953,9 +1094,7 @@ export default function MarketingInfluencersPage() {
                 <div className="divide-y overflow-x-auto">
                   {list.length === 0 && !loading && (
                     <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                      {!campaignFilter.trim()
-                        ? t("marketingEmptySelectCampaignInfluencers")
-                        : t("marketingEmptyNoInfluencers")}
+                      {!campaignFilter.trim() ? t("mktInfListEmptyUnlinked") : t("marketingEmptyNoInfluencers")}
                     </p>
                   )}
                   {[...list]
@@ -1059,25 +1198,7 @@ export default function MarketingInfluencersPage() {
                   onOpenComposeGoTo={openInfInCompose}
                   onComposeQuickEdit={handleComposeQuickEdit}
                   onDelete={handleDelete}
-                  applySearchRequest={inquiryApplySearch}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="directory" className={adminTabsContentCn}>
-            <Card>
-              <CardContent className="p-4 sm:p-5">
-                <MarketingInfluencersDirectoryTab
-                  influencers={allInfs}
-                  campaigns={campaigns}
-                  stores={stores}
-                  storesLoading={storesLoading}
-                  loading={inquiryLoading}
-                  t={t}
-                  campaignLabel={campaignLabel}
-                  onComposeQuickEdit={handleComposeQuickEdit}
-                  onOpenInquiryWithSearch={openInquiryWithNameSearch}
+                  onBulkLink={handleBulkLink}
                 />
               </CardContent>
             </Card>

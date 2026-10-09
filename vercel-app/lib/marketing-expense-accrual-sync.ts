@@ -70,17 +70,52 @@ export async function fetchCampaignMetaForExpenseMemo(campaignId: string): Promi
   return { topic: String(r.topic || '').trim(), campaignNo: String(r.campaign_no || '').trim() }
 }
 
-function buildMemo(params: {
+export function buildMarketingExpenseMemo(params: {
   channel: MarketingExpenseChannel
+  campaignId?: string
   campaignNo: string
   campaignTopic: string
   detailLine: string
 }): string {
+  const unlinked = params.campaignId != null && !String(params.campaignId).trim()
   const no = params.campaignNo ? `[${params.campaignNo}] ` : ''
-  const topic = params.campaignTopic || '캠페인'
+  const topic = unlinked ? '(캠페인 미연결)' : params.campaignTopic || '캠페인'
   const det = params.detailLine.trim()
-  const base = `[마케팅·${CHANNEL_KO[params.channel]}] ${no}${topic}${det ? ` | ${det}` : ''}`
+  const base = `[마케팅·${CHANNEL_KO[params.channel]}] ${unlinked ? '' : no}${topic}${det ? ` | ${det}` : ''}`
   return base.slice(0, 480)
+}
+
+/**
+ * 나중에 캠페인을 연결했을 때 지급예정(planned) 메모만 갱신. 승인·지급된 건은 건드리지 않음.
+ */
+export async function relinkMarketingExpenseAccrualMemo(params: {
+  expenseAccrualId: number
+  channel: MarketingExpenseChannel
+  campaignId: string
+  campaignNo: string
+  campaignTopic: string
+  detailLine: string
+}): Promise<boolean> {
+  const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${params.expenseAccrualId}`, {
+    select: 'id,status',
+    limit: 1,
+  })) as AccrualRow[] | null
+  const row = rows?.[0]
+  if (!row?.id || String(row.status || '').toLowerCase() !== 'planned') return false
+  const memo = buildMarketingExpenseMemo(params)
+  await supabaseUpdate('expense_accruals', params.expenseAccrualId, {
+    memo,
+    updated_at: new Date().toISOString(),
+  })
+  const payables = (await supabaseSelectFilter(
+    'payable_transactions',
+    `expense_accrual_id=eq.${params.expenseAccrualId}`,
+    { select: 'id', limit: 50 }
+  )) as PayableMini[] | null
+  for (const p of payables || []) {
+    if (p.id) await supabaseUpdate('payable_transactions', p.id, { memo: `지출발생: ${memo.slice(0, 200)}` })
+  }
+  return true
 }
 
 type AccrualRow = {
@@ -298,8 +333,9 @@ export async function syncMarketingExpenseAccrual(params: {
   const payeeCode = `mkt_${params.channel}_${params.recordId}`
   const payeeName = `마케팅·${CHANNEL_KO[params.channel]}`
   const vendorCode = normalizeVendorCode(params.vendorCode)
-  const memo = buildMemo({
+  const memo = buildMarketingExpenseMemo({
     channel: params.channel,
+    campaignId: params.campaignId,
     campaignNo: params.campaignNo,
     campaignTopic: params.campaignTopic,
     detailLine: params.detailLine,

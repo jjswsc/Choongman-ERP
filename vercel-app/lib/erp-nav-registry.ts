@@ -99,6 +99,7 @@ export const ERP_NAV_MENU_SECTIONS: ErpNavMenuSection[] = [
       { titleKey: "adminMarketingCampaigns", icon: Megaphone, href: "/admin/marketing/campaigns" },
       { titleKey: "adminMarketingPromos", icon: Tag, href: "/admin/marketing/promos" },
       { titleKey: "adminMarketingCollabMenus", icon: Handshake, href: "/admin/marketing/collab-menus" },
+      { titleKey: "adminMarketingInfluencers", icon: Users, href: "/admin/marketing/influencers" },
       { titleKey: "adminMarketingTasks", icon: ClipboardList, href: "/admin/marketing/tasks" },
       { titleKey: "adminMarketingResults", icon: BarChart3, href: "/admin/marketing/results" },
       { titleKey: "adminMarketingAds", icon: TrendingUp, href: "/admin/marketing/ads" },

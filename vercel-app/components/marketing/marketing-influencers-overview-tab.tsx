@@ -69,6 +69,8 @@ export function MarketingInfluencersOverviewTab(props: {
   onDelete: (i: MarketingInfluencer) => void
   /** 인플 풀 등에서 전체 조회로 넘어올 때 검색어 자동 반영 */
   applySearchRequest?: { token: number; query: string } | null
+  /** 선택한 업로드 기록을 캠페인에 일괄 연결(null = 해제) */
+  onBulkLink?: (ids: string[], campaignId: string | null) => Promise<boolean>
 }) {
   const {
     influencers,
@@ -83,7 +85,38 @@ export function MarketingInfluencersOverviewTab(props: {
     onComposeQuickEdit,
     onDelete,
     applySearchRequest,
+    onBulkLink,
   } = props
+
+  const [selected, setSelected] = React.useState<Set<string>>(() => new Set())
+  const [linkCampaignId, setLinkCampaignId] = React.useState("")
+  const [linking, setLinking] = React.useState(false)
+
+  const toggleSelected = React.useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const runBulkLink = React.useCallback(
+    async (campaignId: string | null) => {
+      if (!onBulkLink || selected.size === 0) return
+      setLinking(true)
+      try {
+        const ok = await onBulkLink([...selected], campaignId)
+        if (ok) {
+          setSelected(new Set())
+          setLinkCampaignId("")
+        }
+      } finally {
+        setLinking(false)
+      }
+    },
+    [onBulkLink, selected]
+  )
 
   const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokRolling30DayRangeYmd().from)
   const [periodTo, setPeriodTo] = React.useState(() => getBangkokRolling30DayRangeYmd().to)
@@ -258,6 +291,40 @@ export function MarketingInfluencersOverviewTab(props: {
         </div>
       </div>
 
+      {onBulkLink && selected.size > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/[0.05] px-3 py-2 text-xs">
+          <span className="font-semibold">{t("mktInfBulkSelected").replace("{n}", String(selected.size))}</span>
+          <select
+            className="h-8 max-w-[18rem] rounded-md border border-input bg-background px-2 text-xs"
+            value={linkCampaignId}
+            onChange={(e) => setLinkCampaignId(e.target.value)}
+            disabled={linking}
+          >
+            <option value="">{t("mktInfBulkLinkPick")}</option>
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {campaignLabel(c.id)}
+              </option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 text-xs"
+            disabled={linking || !linkCampaignId}
+            onClick={() => void runBulkLink(linkCampaignId)}
+          >
+            {t("mktInfBulkLinkBtn")}
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="h-8 text-xs" disabled={linking} onClick={() => void runBulkLink(null)}>
+            {t("mktInfBulkUnlinkBtn")}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" disabled={linking} onClick={() => setSelected(new Set())}>
+            {t("mktInfBulkClear")}
+          </Button>
+        </div>
+      ) : null}
+
       {loading ? (
         <p className="text-sm text-muted-foreground">{t("loading")}</p>
       ) : filteredRows.length === 0 ? (
@@ -269,6 +336,18 @@ export function MarketingInfluencersOverviewTab(props: {
           <table className="w-full min-w-[920px] border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/50 text-left text-xs font-medium text-muted-foreground">
+                {onBulkLink ? (
+                  <th className="w-8 px-2 py-2.5">
+                    <input
+                      type="checkbox"
+                      aria-label={t("all")}
+                      checked={filteredRows.length > 0 && filteredRows.every((r) => selected.has(r.id))}
+                      onChange={(e) =>
+                        setSelected(e.target.checked ? new Set(filteredRows.map((r) => r.id)) : new Set())
+                      }
+                    />
+                  </th>
+                ) : null}
                 <th className="min-w-[120px] px-3 py-2.5">{t("marketingInfluencersInquiryColName")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5">{t("marketingInfluencersInquiryColPeriod")}</th>
                 <th className="min-w-[140px] px-3 py-2.5">{t("marketingInfluencersInquiryColSummary")}</th>
@@ -290,7 +369,17 @@ export function MarketingInfluencersOverviewTab(props: {
                 const periodLine = formatInfPeriodLine(i.shootingDate, i.publishDate) || "—"
                 const cpf = getCpf(i.budget ?? 0, i.followers ?? "")
                 return (
-                  <tr key={i.id} className="border-b border-border/40 last:border-0">
+                  <tr key={i.id} className={cn("border-b border-border/40 last:border-0", selected.has(i.id) && "bg-primary/[0.04]")}>
+                    {onBulkLink ? (
+                      <td className="px-2 py-2.5 align-top">
+                        <input
+                          type="checkbox"
+                          aria-label={i.name}
+                          checked={selected.has(i.id)}
+                          onChange={() => toggleSelected(i.id)}
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-3 py-2.5 align-top">
                       <div className="font-semibold leading-snug">
                         {(i.contactName || "").trim() || i.name || "—"}
