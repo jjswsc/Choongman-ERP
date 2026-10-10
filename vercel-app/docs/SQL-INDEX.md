@@ -72,9 +72,9 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **745**개 · 접두어 그룹 **94**개
+- `sql/` 최상위: **746**개 · 접두어 그룹 **94**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **46**개
+- `sql/archive/` (진단 전용 등 보관): **49**개
 
 <details><summary><code>pos_*</code> (214)</summary>
 
@@ -837,6 +837,16 @@
 
 </details>
 
+<details><summary><code>grab_*</code> (5)</summary>
+
+- [`grab_auto_settle_backfill_01_preview.sql`](../sql/grab_auto_settle_backfill_01_preview.sql) — preview, backfill
+- [`grab_option_integrity_audit.sql`](../sql/grab_option_integrity_audit.sql) — diagnose
+- [`grab_option_integrity_fix.sql`](../sql/grab_option_integrity_fix.sql) — apply
+- [`grab_sync_actor_01_menu_audit.sql`](../sql/grab_sync_actor_01_menu_audit.sql) — diagnose
+- [`grab_tenant_id.sql`](../sql/grab_tenant_id.sql)
+
+</details>
+
 <details><summary><code>hr_*</code> (5)</summary>
 
 - [`hr_attendance_payroll_tenant_id.sql`](../sql/hr_attendance_payroll_tenant_id.sql)
@@ -863,15 +873,6 @@
 - [`daily_plans_02_time_rpc.sql`](../sql/daily_plans_02_time_rpc.sql) — rpc
 - [`daily_plans_03_seed_sv_template.sql`](../sql/daily_plans_03_seed_sv_template.sql)
 - [`daily_plans_04_schedule_columns.sql`](../sql/daily_plans_04_schedule_columns.sql)
-
-</details>
-
-<details><summary><code>grab_*</code> (4)</summary>
-
-- [`grab_option_integrity_audit.sql`](../sql/grab_option_integrity_audit.sql) — diagnose
-- [`grab_option_integrity_fix.sql`](../sql/grab_option_integrity_fix.sql) — apply
-- [`grab_sync_actor_01_menu_audit.sql`](../sql/grab_sync_actor_01_menu_audit.sql) — diagnose
-- [`grab_tenant_id.sql`](../sql/grab_tenant_id.sql)
 
 </details>
 
@@ -1440,7 +1441,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (46)</summary>
+<details><summary><code>archive/</code> (49)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_bank_expense_link_empty_candidates.sql`](../sql/archive/diagnose/diagnose_bank_expense_link_empty_candidates.sql)
@@ -1480,6 +1481,9 @@
 - [`archive/diagnose/diagnose_pos_menus_hidden_but_code_exists.sql`](../sql/archive/diagnose/diagnose_pos_menus_hidden_but_code_exists.sql)
 - [`archive/diagnose/diagnose_pos_menus_store_1001_scope.sql`](../sql/archive/diagnose/diagnose_pos_menus_store_1001_scope.sql)
 - [`archive/diagnose/diagnose_rpkm2026_promo_code.sql`](../sql/archive/diagnose/diagnose_rpkm2026_promo_code.sql)
+- [`archive/diagnose/diagnose_silom_delivery_sales_01_status.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_01_status.sql)
+- [`archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql)
+- [`archive/diagnose/diagnose_silom_delivery_sales_03_paid_at.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_03_paid_at.sql)
 - [`archive/diagnose/diagnose_silom_tax_wh_195_dup_01_accruals.sql`](../sql/archive/diagnose/diagnose_silom_tax_wh_195_dup_01_accruals.sql)
 - [`archive/diagnose/diagnose_silom_tax_wh_195_dup_02_payables.sql`](../sql/archive/diagnose/diagnose_silom_tax_wh_195_dup_02_payables.sql)
 - [`archive/diagnose/diagnose_silom_tax_wh_195_dup_03_linked.sql`](../sql/archive/diagnose/diagnose_silom_tax_wh_195_dup_03_linked.sql)

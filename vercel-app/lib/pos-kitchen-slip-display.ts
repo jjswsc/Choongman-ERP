@@ -23,6 +23,7 @@ import {
   stripLeadingPrintCodeBrackets,
 } from '@/lib/pos-print-item-line'
 import type { KitchenSlipRoutingItem } from '@/lib/pos-kitchen-slip-routing'
+import { splitKitchenGuestMemo, withKitchenGuestMemoSplit } from '@/lib/pos-kitchen-guest-memo'
 
 export type KitchenSlipPrintLine = {
   name: string
@@ -31,6 +32,8 @@ export type KitchenSlipPrintLine = {
   cancelled?: boolean
   /** 홀 주문서와 동일: 세트 구성품을 `- 메뉴명 (옵션) x수량` 줄로 */
   promoComposeLines?: string[]
+  /** QR 손님 메뉴 메모 — 옵션 그룹 인쇄 설정과 무관하게 그대로 인쇄 */
+  guestMemo?: string
 }
 
 type PromoSnapshot = NonNullable<KitchenSlipRoutingItem['promoItems']>[number]
@@ -533,7 +536,7 @@ export function buildKitchenHallStyleSlipLines(
   const regular: KitchenSlipRoutingItem[] = []
 
   for (const raw of slipItems) {
-    const it = normalizeQrKitchenSlipItem(raw)
+    const it = withKitchenGuestMemoSplit(normalizeQrKitchenSlipItem(raw))
     const groupId = String((it as { kitchenPromoGroupId?: string }).kitchenPromoGroupId ?? '').trim()
     const metaParent = String((it as { kitchenPromoParentName?: string }).kitchenPromoParentName ?? '').trim()
     let parsed = parseKitchenSplitPromoLineName(String(it.name ?? ''))
@@ -645,10 +648,18 @@ export function buildKitchenHallStyleSlipLines(
     const cancelled =
       g.children.length > 0 &&
       g.children.every((ch) => Boolean((ch as { kitchenLineCancelled?: boolean }).kitchenLineCancelled))
+    const guestMemo = [
+      ...new Set(
+        [...g.children, ...(parentOrder ? [parentOrder] : [])]
+          .map((row) => kitchenGuestMemoOf(row))
+          .filter(Boolean)
+      ),
+    ].join(' · ')
     out.push({
       name: displayParentName,
       qty: parentQty,
       ...(note ? { note } : {}),
+      ...(guestMemo ? { guestMemo } : {}),
       ...(cancelled ? { cancelled: true } : {}),
       ...(promoComposeLines.length > 0 ? { promoComposeLines } : {}),
     })
@@ -675,6 +686,7 @@ export function buildKitchenHallStyleSlipLines(
           return note ? { note } : {}
         })(),
         ...(promoComposeLines.length > 0 ? { promoComposeLines } : {}),
+        ...(kitchenGuestMemoOf(it) ? { guestMemo: kitchenGuestMemoOf(it) } : {}),
       })
       continue
     }
@@ -759,10 +771,15 @@ export function buildKitchenHallStyleSlipLines(
       ...((it as { kitchenLineCancelled?: boolean }).kitchenLineCancelled
         ? { cancelled: true }
         : {}),
+      ...(kitchenGuestMemoOf(it) ? { guestMemo: kitchenGuestMemoOf(it) } : {}),
     })
   }
 
   return out
+}
+
+function kitchenGuestMemoOf(row: KitchenSlipRoutingItem | undefined | null): string {
+  return row ? splitKitchenGuestMemo(row).guestMemo : ''
 }
 
 export function mapKitchenSlipGroupItemsForPrint(
@@ -823,5 +840,6 @@ export function mapKitchenSlipGroupItemsForPrint(
         })()
       : {}),
     ...((opts.cancelled ?? row.cancelled) ? { cancelled: true } : {}),
+    ...(row.guestMemo ? { guestMemo: row.guestMemo } : {}),
   }))
 }

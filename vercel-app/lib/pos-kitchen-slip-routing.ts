@@ -16,6 +16,7 @@ import {
   type PosOrderReceiptLineOptions,
 } from "@/lib/pos-payment-receipt-from-order"
 import type { OrderItem } from "@/lib/pos-types"
+import { withKitchenGuestMemoSplit } from "@/lib/pos-kitchen-guest-memo"
 import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
 
 /**
@@ -56,6 +57,9 @@ export type KitchenSlipRoutingItem = {
   /** QR 뷔페 패키지 입장료 — 홀 계산용, 주방 미출력 */
   isBuffetEntry?: boolean
   kitchenPrinter?: number | null
+  source?: string
+  /** QR 손님이 쓴 메뉴 메모 — note(옵션 처리)와 분리해 주방 슬립에 그대로 인쇄 */
+  kitchenGuestMemo?: string
 }
 
 /** 0 = 주방으로 출력 안 함, 1~3 = 해당 주방 프린터 */
@@ -766,7 +770,7 @@ export function preparePosOrderItemsForKitchenSlip<T extends KitchenSlipRoutingI
   const menus = opts.menus ?? []
   const lookup = buildKitchenMenuNameLookup(menus)
   const enriched = enrichPosOrderLikeItemsWithPromoSnapshot(
-    items as unknown as Record<string, unknown>[],
+    items.map((it) => withKitchenGuestMemoSplit(it)) as unknown as Record<string, unknown>[],
     opts
   ) as T[]
 

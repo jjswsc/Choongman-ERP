@@ -504,6 +504,7 @@ export function formatKitchenSlipItemRowHtml(
     cancelled?: boolean
     /** 홀 주문서와 동일한 세트 구성품 (`- 메뉴 x1` 줄) */
     promoComposeLines?: string[]
+    guestMemo?: string | null
   },
   escapeHtml: (s: string) => string,
   close: (tag: string) => string,
@@ -662,7 +663,21 @@ export function formatKitchenSlipItemRowHtml(
         promoLines.map((line) => '- ' + escapeHtml(line)).join('<br/>') +
         close('div')
       : ''
-  if (noteLines.length === 0) return rowOpen + main + optionHtml + banbanHtml + promoHtml + close('div')
+  const guestMemoLines = showLineNotes
+    ? String(it.guestMemo ?? '')
+        .split(/\r?\n|\s+·\s+/)
+        .map((line) => sanitizeKitchenSlipTextForPrint(line.trim()))
+        .filter(Boolean)
+    : []
+  const guestMemoHtml =
+    guestMemoLines.length > 0
+      ? '<div class="k-line-note">' +
+        guestMemoLines.map((line) => '- ' + escapeHtml(line)).join('<br/>') +
+        close('div')
+      : ''
+  if (noteLines.length === 0) {
+    return rowOpen + main + optionHtml + banbanHtml + promoHtml + guestMemoHtml + close('div')
+  }
   return (
     rowOpen +
     main +
@@ -672,6 +687,7 @@ export function formatKitchenSlipItemRowHtml(
     '<div class="k-line-note">' +
     noteLines.map((line) => '- ' + escapeHtml(line)).join('<br/>') +
     close('div') +
+    guestMemoHtml +
     close('div')
   )
 }
@@ -683,6 +699,7 @@ export function buildKitchenSlipItemsHtml(
     note?: string | null | undefined
     cancelled?: boolean
     promoComposeLines?: string[]
+    guestMemo?: string | null
   }[],
   escapeHtml: (s: string) => string,
   design: KitchenSlipDesignResolved,
@@ -838,6 +855,7 @@ export function buildKitchenSlipDocumentHtml(params: {
     note?: string | null | undefined
     cancelled?: boolean
     promoComposeLines?: string[]
+    guestMemo?: string | null
   }[]
   memoLine: string | null | undefined
   escapeHtml: (s: string) => string
