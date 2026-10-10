@@ -4,6 +4,7 @@ import {
   buildPosHallOrderReceiptDocumentHtml,
   mergeSetChildrenForReceipt,
   resolveHallOrderReceiptDiscountAmt,
+  resolveHallReceiptRoundBreaks,
 } from '@/lib/pos-hall-order-receipt-document-html'
 import { mergeGrabSetChildLinesIntoPromoParents } from '@/lib/grab-set-pos-lines'
 
@@ -406,6 +407,83 @@ describe('buildPosHallOrderReceiptDocumentHtml', () => {
     expect(html).toContain('1x Banban Chicken')
     expect(html).toContain('1x &gt; Squid Ring')
     expect(html).not.toContain('1x &gt; Banban Chicken')
+  })
+
+  it('separates order rounds with a labelled rule and QR/POS source, keeping line order', () => {
+    const items = [
+      { id: 'qr-9-1-1791541577630-a', name: 'Pad Thai', price: 120, qty: 1, addedAt: '2026-10-09 17:26:17', source: 'qr_table' },
+      { id: 'qr-9-2-1791541577630-b', name: 'Coke', price: 40, qty: 2, addedAt: '2026-10-09 17:26:18', source: 'qr_table' },
+      { id: 'staff-1', name: 'Squid Ring', price: 130, qty: 1, addedAt: '2026-10-09 18:10:18', isAddon: true },
+      { id: 'qr-9-3-1791544218492-c', name: 'Singha', price: 140, qty: 1, addedAt: '2026-10-09 18:25:00', source: 'qr_table' },
+    ]
+    expect(resolveHallReceiptRoundBreaks(items, 'Round {n}')).toEqual([
+      { label: 'Round 1 · 17:26 · QR', first: true },
+      null,
+      { label: 'Round 2 · 18:10 · POS', first: false },
+      { label: 'Round 3 · 18:25 · QR', first: false },
+    ])
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '010',
+        storeCode: 'CM Union Mall',
+        orderType: 'dine-in',
+        tableName: 'T5',
+        items,
+        subtotal: 470,
+        discountAmt: 0,
+        total: 470,
+      },
+      t: (k) => (k === 'posOrderRoundN' ? 'รอบที่ {n}' : k),
+      lang: 'th',
+    })
+    const seps = html.match(/class="receipt-round-sep[^"]*">[^<]*/g) ?? []
+    expect(seps).toEqual([
+      'class="receipt-round-sep receipt-round-sep--first">รอบที่ 1 · 17:26 · QR',
+      'class="receipt-round-sep">รอบที่ 2 · 18:10 · POS',
+      'class="receipt-round-sep">รอบที่ 3 · 18:25 · QR',
+    ])
+    expect(html.indexOf('Pad Thai')).toBeLessThan(html.indexOf('Squid Ring'))
+    expect(html.indexOf('Squid Ring')).toBeLessThan(html.indexOf('Singha'))
+  })
+
+  it('prints no round separators for a single round or a void receipt', () => {
+    const single = [
+      { id: 'a', name: 'Pad Thai', price: 120, qty: 1, addedAt: '2026-10-09 17:26:17' },
+      { id: 'b', name: 'Coke', price: 40, qty: 1, addedAt: '2026-10-09 17:26:19' },
+    ]
+    expect(resolveHallReceiptRoundBreaks(single, 'Round {n}').every((b) => b == null)).toBe(true)
+    expect(resolveHallReceiptRoundBreaks([{ id: 'x', name: 'A', price: 1, qty: 1 }], 'Round {n}')).toEqual([null])
+    const html = buildPosHallOrderReceiptDocumentHtml({
+      payload: {
+        orderNo: '011',
+        storeCode: 'CM Union Mall',
+        orderType: 'dine-in',
+        items: [
+          { id: 'a', name: 'Pad Thai', price: 120, qty: 1, addedAt: '2026-10-09 17:26:17' },
+          { id: 'b', name: 'Coke', price: 40, qty: 1, addedAt: '2026-10-09 18:10:18' },
+        ],
+        subtotal: 160,
+        discountAmt: 0,
+        total: 160,
+        voidReceiptMode: true,
+      },
+      t: (k) => k,
+      lang: 'en',
+    })
+    expect(html).not.toContain('class="receipt-round-sep')
+  })
+
+  it('does not let the buffet entry line open a round of its own', () => {
+    const breaks = resolveHallReceiptRoundBreaks(
+      [
+        { id: 'qr-9-1-1791541577630-a', name: 'Chicken', price: 0, qty: 1, addedAt: '2026-10-09 17:26:17' },
+        { id: 'buffet-entry-9', name: 'Buffet 299', price: 299, qty: 2, isBuffetEntry: true, addedAt: '2026-10-09 17:00:00' },
+        { id: 'staff-1', name: 'Coke', price: 40, qty: 1, addedAt: '2026-10-09 18:10:18' },
+      ],
+      'Round {n}'
+    )
+    expect(breaks[1]).toBeNull()
+    expect(breaks.filter(Boolean)).toHaveLength(2)
   })
 
   it('does not print the option twice when it is in both the name and the note', () => {

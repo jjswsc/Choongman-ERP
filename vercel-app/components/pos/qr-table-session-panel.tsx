@@ -37,13 +37,14 @@ import { useT, tOr } from '@/lib/i18n'
 import { playQrStaffCallMelody } from '@/lib/pos-qr-staff-call-sound'
 import { normalizeQrStaffCallKind, qrStaffCallKindLabel } from '@/lib/qr-table-staff-call'
 
-type OrderBalance = {
+export type QrTableOrderBalance = {
   orderId: number | null
   total: number
   paymentQr: number
   balanceDue: number
   status: string
 }
+type OrderBalance = QrTableOrderBalance
 
 export function QrTableSessionPanel(props: {
   storeCode: string
@@ -53,8 +54,12 @@ export function QrTableSessionPanel(props: {
   onChanged?: () => void
   /** 세션이 열린 뒤 인원·입장료 줄 숨김 (메뉴·추가 주문 화면 — 인원은 서빙 패널에서 조정) */
   hideGuestControls?: boolean
+  /** 주문 합계·QR 입금·잔액 줄을 이 카드에서 빼고 `onOrderBalanceChange`로 넘긴다 (서빙 패널 합계 줄에 합침) */
+  hideOrderBalance?: boolean
+  onOrderBalanceChange?: (balance: QrTableOrderBalance | null) => void
 }) {
-  const { storeCode, tableName, storeLabel, onChanged, hideGuestControls } = props
+  const { storeCode, tableName, storeLabel, onChanged, hideGuestControls, hideOrderBalance, onOrderBalanceChange } =
+    props
   const { lang } = useLang()
   const t = useT(lang)
   const tr = (k: string, fb: string) => tOr(t, k, fb)
@@ -69,6 +74,16 @@ export function QrTableSessionPanel(props: {
   const [printing, setPrinting] = React.useState(false)
   const [loaded, setLoaded] = React.useState(false)
   const lastCallAtRef = React.useRef<string | null>(null)
+  const onOrderBalanceChangeRef = React.useRef(onOrderBalanceChange)
+  React.useEffect(() => {
+    onOrderBalanceChangeRef.current = onOrderBalanceChange
+  })
+
+  React.useEffect(() => {
+    onOrderBalanceChangeRef.current?.(session && orderBalance?.orderId ? orderBalance : null)
+  }, [session, orderBalance])
+
+  React.useEffect(() => () => onOrderBalanceChangeRef.current?.(null), [])
 
   const isAlaCarte = settings.mode === 'a_la_carte'
 
@@ -360,7 +375,7 @@ export function QrTableSessionPanel(props: {
               </>
             ) : null}
 
-            {orderBalance && orderBalance.orderId ? (
+            {!hideOrderBalance && orderBalance && orderBalance.orderId ? (
               <span className="inline-flex flex-wrap items-center gap-x-1 text-[11px] text-slate-600">
                 <span className="whitespace-nowrap">
                   {tr('qrTableSessionOrderTotal', '주문 합계')} ฿

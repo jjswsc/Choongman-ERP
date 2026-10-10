@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from 'react'
 
 export type LangCode = 'ko' | 'en' | 'th' | 'mm' | 'la' | 'kh' | 'vi' | 'ms'
 
@@ -88,18 +88,37 @@ function loadLang(): LangCode {
 
 const LangContext = createContext<{ lang: LangCode; setLang: (l: LangCode) => void } | null>(null)
 
+function persistLang(l: LangCode) {
+  try {
+    sessionStorage.setItem('cm_lang', l)
+  } catch {}
+  try {
+    localStorage.setItem('cm_lang', l)
+  } catch {}
+}
+
+/** SSR·hydration 첫 렌더는 'ko'(서버는 storage를 못 읽음), 그 직후 저장 언어로 바뀐다. */
+const SERVER_LANG: LangCode = 'ko'
+let clientLang: LangCode | null = null
+const langListeners = new Set<() => void>()
+
+function getClientLang(): LangCode {
+  if (clientLang == null) clientLang = loadLang()
+  return clientLang
+}
+
+function subscribeLang(cb: () => void) {
+  langListeners.add(cb)
+  return () => {
+    langListeners.delete(cb)
+  }
+}
+
 export function LangProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<LangCode>(() => loadLang())
+  const lang = useSyncExternalStore(subscribeLang, getClientLang, () => SERVER_LANG)
 
   useEffect(() => {
-    const loaded = loadLang()
-    setLangState(loaded)
-    try {
-      sessionStorage.setItem('cm_lang', loaded)
-    } catch {}
-    try {
-      localStorage.setItem('cm_lang', loaded)
-    } catch {}
+    persistLang(getClientLang())
   }, [])
 
   useEffect(() => {
@@ -108,13 +127,9 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   }, [lang])
 
   const setLang = useCallback((l: LangCode) => {
-    setLangState(l)
-    try {
-      sessionStorage.setItem('cm_lang', l)
-    } catch {}
-    try {
-      localStorage.setItem('cm_lang', l)
-    } catch {}
+    clientLang = l
+    persistLang(l)
+    langListeners.forEach((cb) => cb())
   }, [])
 
   const value = useMemo(() => ({ lang, setLang }), [lang, setLang])

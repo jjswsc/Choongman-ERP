@@ -847,6 +847,35 @@ function hallOrderItemsFromReceiptLines(
   }))
 }
 
+/** 홀 주문서 회차 구분선용: 원본 `items_json` 줄의 addedAt·source 를 id 로 이어 붙인다. */
+export function attachPosOrderLineRoundFields<T extends { id?: unknown; addedAt?: string | null; source?: string }>(
+  items: T[],
+  orderItems: ReadonlyArray<unknown> | null | undefined
+): T[] {
+  const byId = new Map<string, { addedAt: string; source: string }>()
+  for (const raw of orderItems || []) {
+    if (!raw || typeof raw !== 'object') continue
+    const row = raw as Record<string, unknown>
+    const id = String(row.id ?? '').trim()
+    if (!id || byId.has(id)) continue
+    const addedAt = String(row.addedAt ?? row.added_at ?? '').trim()
+    const source = String(row.source ?? '').trim()
+    if (addedAt || source) byId.set(id, { addedAt, source })
+  }
+  if (byId.size === 0) return items
+  return items.map((it) => {
+    const hit = byId.get(String(it.id ?? '').trim())
+    if (!hit) return it
+    const addedAt = String(it.addedAt ?? '').trim() || hit.addedAt
+    const source = String(it.source ?? '').trim() || hit.source
+    return {
+      ...it,
+      ...(addedAt ? { addedAt } : {}),
+      ...(source ? { source } : {}),
+    }
+  })
+}
+
 /** 홀 주문서(บิลสั้น) 인쇄 payload — 결제 영수증과 동일 할인·합계 기준 */
 export function hallOrderReceiptPayloadFromPosOrder(
   order: PosOrder,
@@ -880,7 +909,7 @@ export function hallOrderReceiptPayloadFromPosOrder(
     ...(String(order.deliveryAppCode ?? '').trim()
       ? { deliveryAppCode: String(order.deliveryAppCode).trim() }
       : {}),
-    items: hallOrderItemsFromReceiptLines(lines),
+    items: attachPosOrderLineRoundFields(hallOrderItemsFromReceiptLines(lines), order.items),
     subtotal,
     discountAmt: effectiveDiscountAmt,
     couponDiscountAmt,

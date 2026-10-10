@@ -7,15 +7,24 @@ type CookClockItem = {
   addedAt?: string | null
 }
 
+function posTableFoodLines(items: CookClockItem[] | null | undefined): CookClockItem[] {
+  return (items || []).filter((it) => {
+    if (String(it.cancelledAt ?? '').trim()) return false
+    return !isQrBuffetPackageKitchenSkipLine(it)
+  })
+}
+
+/** 취소·뷔페 입장 줄을 뺀 실제 음식 주문이 있는가. 없으면 테이블은 「주문 대기」(QR만 연 상태). */
+export function posTableHasFoodLines(order: { items?: CookClockItem[] | null }): boolean {
+  return posTableFoodLines(order.items).length > 0
+}
+
 /** 바닥 타일 조리 시계. 음식 줄이 없으면 undefined — QR만 연 빈 주문은 노랑/빨강으로 세지 않는다. */
 export function posTableCookClockIso(order: {
   createdAt?: Date | string | null
   items?: CookClockItem[] | null
 }): string | undefined {
-  const food = (order.items || []).filter((it) => {
-    if (String(it.cancelledAt ?? '').trim()) return false
-    return !isQrBuffetPackageKitchenSkipLine(it)
-  })
+  const food = posTableFoodLines(order.items)
   if (food.length === 0) return undefined
 
   let earliestMs: number | null = null

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  attachPosOrderLineRoundFields,
   buildCheckoutPaymentReceiptModalData,
   enrichPosOrderLikeItemsWithPromoSnapshot,
   mergePartialPromoSnapshotWithCatalog,
@@ -285,5 +286,24 @@ describe('enrichPosOrderLikeItemsWithPromoSnapshot partial set', () => {
       { promoCatalogById, menus: [] }
     )
     expect((enriched[0] as { promoItems?: unknown[] }).promoItems).toBeUndefined()
+  })
+})
+
+describe('attachPosOrderLineRoundFields', () => {
+  it('copies addedAt/source from order lines by id without overwriting existing values', () => {
+    const out = attachPosOrderLineRoundFields(
+      [
+        { id: 'qr-1', name: 'A' },
+        { id: 'staff-1', name: 'B', addedAt: '2026-10-09 18:30:00' },
+        { id: 'missing', name: 'C' },
+      ],
+      [
+        { id: 'qr-1', addedAt: '2026-10-09 17:26:17', source: 'qr_table' },
+        { id: 'staff-1', addedAt: '2026-10-09 18:10:18' },
+      ]
+    )
+    expect(out[0]).toMatchObject({ addedAt: '2026-10-09 17:26:17', source: 'qr_table' })
+    expect(out[1].addedAt).toBe('2026-10-09 18:30:00')
+    expect(out[2]).toEqual({ id: 'missing', name: 'C' })
   })
 })

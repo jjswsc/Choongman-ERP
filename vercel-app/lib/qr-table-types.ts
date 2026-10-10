@@ -229,6 +229,8 @@ export type QrGuestCumulativeHallPrintItem = {
   }>
   /** 추가분이 있을 때만 신규 줄에 true — 홀 전표 `>` 표시 */
   isAddon?: true
+  addedAt?: string
+  source?: string
 }
 
 function qrHallPromoFieldsFromOrderLine(it: Record<string, unknown>): Pick<
@@ -301,6 +303,8 @@ export function buildQrGuestCumulativeHallPrintItems(
     const price = Number(it.price ?? 0) || 0
     const menuId = String(it.menuId ?? '').trim()
     const note = String(it.note ?? '').trim()
+    const addedAt = String(it.addedAt ?? it.added_at ?? '').trim()
+    const source = String(it.source ?? '').trim()
     items.push({
       id,
       name: String(it.name ?? ''),
@@ -308,6 +312,8 @@ export function buildQrGuestCumulativeHallPrintItems(
       qty,
       ...(menuId ? { menuId } : {}),
       ...(note ? { note } : {}),
+      ...(addedAt ? { addedAt } : {}),
+      ...(source ? { source } : {}),
       ...qrHallPromoFieldsFromOrderLine(it),
       ...(hasPrevious && newIds.has(id) ? { isAddon: true as const } : {}),
     })

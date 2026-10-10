@@ -259,6 +259,25 @@ describe('shouldAutoprintPaymentReceiptOnRealtimeUpdate', () => {
     ).toBe(true)
   })
 
+  it('skips Grab orders settled by the delivered webhook', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        {
+          id: 1,
+          status: 'cooking',
+          payment_delivery_app: 279,
+          memo: 'grab_order:001-ABC|grab_state:DRIVER_ARRIVED',
+        },
+        {
+          id: 1,
+          status: 'paid',
+          payment_delivery_app: 279,
+          memo: 'grab_order:001-ABC|grab_state:COLLECTED|grab_auto_paid:1',
+        }
+      )
+    ).toBe(false)
+  })
+
   it('allows status unpaid→paid even if payment was already on OLD', () => {
     expect(
       shouldAutoprintPaymentReceiptOnRealtimeUpdate(

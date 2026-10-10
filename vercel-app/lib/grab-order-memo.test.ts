@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildGrabOrderMemo,
   extractGrabOrderIdFromMemo,
+  extractGrabStateFromMemo,
+  isGrabAutoPaidMemo,
   mergeGrabStateIntoFullMemo,
   preserveGrabDeliveryMemoAnchor,
 } from '@/lib/grab-order-memo'
@@ -40,5 +42,30 @@ describe('preserveGrabDeliveryMemoAnchor', () => {
     const merged = mergeGrabStateIntoFullMemo('', grabId, 'DELIVERED')
     expect(extractGrabOrderIdFromMemo(merged)).toBe(grabId)
     expect(merged).toContain('grab_state:DELIVERED')
+  })
+})
+
+describe('grab auto-paid memo token', () => {
+  const grabId = '001889724231-C8ACVGM1V35HC6'
+
+  it('marks auto-paid without breaking id/state parsing', () => {
+    const memo = mergeGrabStateIntoFullMemo(buildGrabOrderMemo(grabId, 'COLLECTED'), grabId, 'COLLECTED', {
+      autoPaid: true,
+    })
+    expect(isGrabAutoPaidMemo(memo)).toBe(true)
+    expect(extractGrabOrderIdFromMemo(memo)).toBe(grabId)
+    expect(extractGrabStateFromMemo(memo)).toBe('COLLECTED')
+  })
+
+  it('keeps the token through later state merges and anchor restores', () => {
+    const autoPaid = buildGrabOrderMemo(grabId, 'COLLECTED', { autoPaid: true })
+    const delivered = mergeGrabStateIntoFullMemo(autoPaid, grabId, 'DELIVERED')
+    expect(isGrabAutoPaidMemo(delivered)).toBe(true)
+    expect(extractGrabStateFromMemo(delivered)).toBe('DELIVERED')
+    expect(isGrabAutoPaidMemo(preserveGrabDeliveryMemoAnchor('note', autoPaid))).toBe(true)
+  })
+
+  it('is absent on normal grab memos', () => {
+    expect(isGrabAutoPaidMemo(buildGrabOrderMemo(grabId, 'DELIVERED'))).toBe(false)
   })
 })

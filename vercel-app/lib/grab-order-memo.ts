@@ -1,13 +1,25 @@
 import { TAX_INVOICE_MARKER } from '@/lib/pos-tax-invoice'
 
+/** Grab 픽업·배달 완료 웹훅으로 서버가 결제 마감한 주문 — Realtime 결제 영수증 자동인쇄 제외 판단에 쓴다 */
+export const GRAB_AUTO_PAID_MEMO_TOKEN = 'grab_auto_paid:1'
+
 /** pos_orders.memo에 저장하는 Grab 주문 앵커(세금계산서 마커 앞에 둠) */
-export function buildGrabOrderMemo(orderID: string, grabState?: string | null): string {
+export function buildGrabOrderMemo(
+  orderID: string,
+  grabState?: string | null,
+  opts?: { autoPaid?: boolean }
+): string {
   const id = String(orderID || '').trim()
   if (!id) return ''
   let base = `grab_order:${id}`
   const st = String(grabState || '').trim()
   if (st) base += `|grab_state:${st}`
+  if (opts?.autoPaid) base += `|${GRAB_AUTO_PAID_MEMO_TOKEN}`
   return base
+}
+
+export function isGrabAutoPaidMemo(memo: unknown): boolean {
+  return /\|grab_auto_paid:1\b/i.test(String(memo ?? ''))
 }
 
 /** PostgREST `ilike` — SQL LIKE 와일드카드는 `%` (`*` 아님). */
@@ -29,11 +41,17 @@ export function extractGrabStateFromMemo(memo: string): string | null {
 }
 
 /** 기존 memo(세금계산서 꼬리 포함)에서 grab_state만 교체 */
-export function mergeGrabStateIntoFullMemo(fullMemo: string, orderID: string, newState: string): string {
+export function mergeGrabStateIntoFullMemo(
+  fullMemo: string,
+  orderID: string,
+  newState: string,
+  opts?: { autoPaid?: boolean }
+): string {
   const raw = String(fullMemo || '')
   const markerIdx = raw.indexOf(TAX_INVOICE_MARKER)
   const tail = markerIdx >= 0 ? raw.slice(markerIdx) : ''
-  return buildGrabOrderMemo(orderID, newState) + tail
+  const autoPaid = opts?.autoPaid ?? isGrabAutoPaidMemo(raw)
+  return buildGrabOrderMemo(orderID, newState, { autoPaid }) + tail
 }
 
 /**
@@ -48,7 +66,7 @@ export function preserveGrabDeliveryMemoAnchor(incomingMemo: string, existingMem
   if (extractGrabOrderIdFromMemo(incomingRaw)) return incomingRaw.trim()
 
   const grabState = extractGrabStateFromMemo(existing)
-  const anchor = buildGrabOrderMemo(grabId, grabState)
+  const anchor = buildGrabOrderMemo(grabId, grabState, { autoPaid: isGrabAutoPaidMemo(existing) })
 
   if (!incomingRaw.trim()) {
     return mergeGrabStateIntoFullMemo(existing, grabId, grabState || '')

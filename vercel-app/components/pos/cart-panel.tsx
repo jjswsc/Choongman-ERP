@@ -5861,24 +5861,39 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           {formatBahtNum(item.price)} ฿
                         </p>
                       </div>
-                      <div className="flex items-center gap-0.5 w-[5.5rem] shrink-0 justify-end self-start pt-0.5">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => updateItemQuantity(item.id, -1)}
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </Button>
-                        <span className="w-6 text-center text-sm font-medium tabular-nums">{item.quantity}</span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => updateItemQuantity(item.id, 1)}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </Button>
+                      <div className="flex w-[5.5rem] shrink-0 flex-col items-end gap-0.5 self-start pt-0.5">
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7 shrink-0"
+                            onClick={() => updateItemQuantity(item.id, -1)}
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </Button>
+                          <span className="w-6 text-center text-sm font-medium tabular-nums">{item.quantity}</span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7 shrink-0"
+                            onClick={() => updateItemQuantity(item.id, 1)}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                        {!(item.note ?? '').trim() && editingNoteItemId !== item.id ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-7 text-muted-foreground hover:text-foreground"
+                            aria-label={tr('posLineNote', '메모')}
+                            title={tr('posLineNote', '메모')}
+                            onClick={() => setEditingNoteItemId(item.id)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                     {((item.note ?? '').trim() || editingNoteItemId === item.id) ? (
@@ -5917,21 +5932,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           </div>
                         )}
                       </div>
-                    ) : (
-                      <div className="px-2 pb-1 pt-0 flex justify-end">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                          aria-label={tr('posLineNote', '메모')}
-                          title={tr('posLineNote', '메모')}
-                          onClick={() => setEditingNoteItemId(item.id)}
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    )}
+                    ) : null}
                   </div>
                   )
                 })}

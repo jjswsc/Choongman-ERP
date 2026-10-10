@@ -353,6 +353,8 @@ async function printQrNoKitchenLinesToHall(
     ...(it.promoCode ? { promoCode: it.promoCode } : {}),
     ...(it.promoItems && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
     ...(it.isAddon ? { isAddon: true as const } : {}),
+    ...(it.addedAt ? { addedAt: it.addedAt } : {}),
+    ...(it.source ? { source: it.source } : {}),
   })) as PosOrder['items']
 
   const hallPayloadBase = hallOrderReceiptPayloadFromPosOrder(
@@ -391,6 +393,12 @@ async function printQrNoKitchenLinesToHall(
         : {}),
       ...(Array.isArray(it.promoItems) && it.promoItems.length > 0 ? { promoItems: it.promoItems } : {}),
       ...((it as { isAddon?: boolean }).isAddon ? { isAddon: true as const } : {}),
+      ...(String((it as { addedAt?: string | null }).addedAt ?? '').trim()
+        ? { addedAt: String((it as { addedAt?: string | null }).addedAt).trim() }
+        : {}),
+      ...(String((it as { source?: string }).source ?? '').trim()
+        ? { source: String((it as { source?: string }).source).trim() }
+        : {}),
     })),
     ...(roundLabel ? { roundLabel } : {}),
     _autoPrintDedupeKey: `order:${orderId}:hall:qr-nokitchen:${built.newLineIdsKey || '0'}`,

@@ -53,6 +53,9 @@ import {
   resolvePosReceiptSubtotalAndVatPrint,
 } from '@/lib/pos-receipt-totals-print'
 import { formatPosOrderNoDigitsOnly } from '@/lib/pos-order-no'
+import { computePosOrderLineRounds, formatPosOrderRoundLabel } from '@/lib/pos-order-rounds'
+import { isQrBuffetPackageKitchenSkipLine } from '@/lib/pos-qr-buffet-entry'
+import { isQrTableGuestOrderLine } from '@/lib/qr-table-types'
 import {
   expandBanbanComposeLineForPrint,
   filterReceiptOptionLinesForBanban,
@@ -82,6 +85,10 @@ export type HallOrderItem = {
   isBuffetEntry?: boolean
   /** 추가 주문(테이블 merge)으로 새로 들어온 줄 — 영수증 품목명 앞 `>` 표시 */
   isAddon?: boolean
+  /** 줄이 들어온 시각(방콕 벽시계) — 회차 구분선 */
+  addedAt?: string | null
+  /** `qr_table` 이면 QR 손님 줄 */
+  source?: string
   promoId?: string
   promoCode?: string
   promoItems?: {
@@ -510,6 +517,40 @@ export function mergeSetChildrenForReceipt(
   return out.filter((_, idx) => !hide.has(idx))
 }
 
+export type HallReceiptRoundBreak = { label: string; first: boolean }
+
+/**
+ * 회차가 2개 이상이면 회차가 시작되는 줄 위치에 라벨("รอบที่ 2 · 18:10 · QR")을 돌려준다.
+ * 줄 순서는 바꾸지 않는다(줄 할인 배분이 인덱스 기준). 뷔페 입장료 줄은 경계를 만들지 않는다.
+ */
+export function resolveHallReceiptRoundBreaks(
+  items: HallOrderItem[],
+  template: string
+): Array<HallReceiptRoundBreak | null> {
+  const out: Array<HallReceiptRoundBreak | null> = items.map(() => null)
+  const rounds = computePosOrderLineRounds(items)
+  const counted = items.map((it, i) => (isQrBuffetPackageKitchenSkipLine(it) ? null : rounds[i] ?? null))
+  const sourcesByRound = new Map<number, Set<'QR' | 'POS'>>()
+  items.forEach((it, i) => {
+    const r = counted[i]
+    if (!r) return
+    const set = sourcesByRound.get(r.round) ?? new Set<'QR' | 'POS'>()
+    set.add(isQrTableGuestOrderLine(it) ? 'QR' : 'POS')
+    sourcesByRound.set(r.round, set)
+  })
+  if (sourcesByRound.size < 2) return out
+  let prev: number | null = null
+  counted.forEach((r, i) => {
+    if (!r || r.round === prev) return
+    const sources = sourcesByRound.get(r.round)
+    const sourceText = sources ? (['QR', 'POS'] as const).filter((s) => sources.has(s)).join('+') : ''
+    const head = formatPosOrderRoundLabel(r, template)
+    out[i] = { label: sourceText ? `${head} · ${sourceText}` : head, first: prev == null }
+    prev = r.round
+  })
+  return out
+}
+
 export function buildPosHallOrderReceiptDocumentHtml(params: {
   payload: HallOrderPayload
   t: (key: string) => string
@@ -671,6 +712,9 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
         ? mergedLineDiscSum
         : resolveHallOrderReceiptDiscountAmt(payload)
   const lineDiscountAlloc = resolvePosReceiptLineDiscountAlloc(receiptItems, discountForLineAlloc)
+  const roundBreaks = voidMode
+    ? []
+    : resolveHallReceiptRoundBreaks(receiptItems, tr('posOrderRoundN', 'Round {n}'))
   const itemsRows = receiptItems
     .map((it, idx) => {
       const lineName = resolveOrderItemDisplayName ? resolveOrderItemDisplayName(it) : String(it.name ?? '')
@@ -798,7 +842,16 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
             c('div')
           : ''
       const addonPrefix = it.isAddon ? '&gt; ' : ''
+      const roundBreak = roundBreaks[idx]
+      const roundSepHtml = roundBreak
+        ? '<div class="receipt-round-sep' +
+          (roundBreak.first ? ' receipt-round-sep--first' : '') +
+          '">' +
+          esc(roundBreak.label) +
+          c('div')
+        : ''
       return (
+        roundSepHtml +
         '<div class="receipt-row"><span>' +
         String(it.qty) +
         'x ' +
@@ -1079,7 +1132,7 @@ export function buildPosHallOrderReceiptDocumentHtml(params: {
       String(RECEIPT_GRID_COL_GAP_PX) +
       'px;vertical-align:top}.receipt-order-simple .receipt-row>span:last-child,.receipt-order-simple .receipt-item-head>span:last-child{display:table-cell;width:' +
       String(RECEIPT_AMOUNT_COL_MM) +
-      'mm;text-align:right;vertical-align:top;white-space:nowrap}.receipt-order-simple .receipt-meta-row{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-meta-label{display:table-cell;width:22mm;vertical-align:top;white-space:nowrap;padding-right:3mm}.receipt-order-simple .receipt-meta-value{display:table-cell;width:auto;vertical-align:top}.receipt-order-simple .receipt-total-eq-rule{margin:6px 0 2px 0;font-size:11px;font-weight:800;letter-spacing:0;line-height:1.1;color:#000;white-space:nowrap;overflow:hidden}.receipt-order-simple .receipt-total{margin-top:2px;padding-top:0;border-top:none}' +
+      'mm;text-align:right;vertical-align:top;white-space:nowrap}.receipt-order-simple .receipt-meta-row{display:table;width:100%;table-layout:fixed;border-collapse:collapse}.receipt-order-simple .receipt-meta-label{display:table-cell;width:22mm;vertical-align:top;white-space:nowrap;padding-right:3mm}.receipt-order-simple .receipt-meta-value{display:table-cell;width:auto;vertical-align:top}.receipt-order-simple .receipt-total-eq-rule{margin:6px 0 2px 0;font-size:11px;font-weight:800;letter-spacing:0;line-height:1.1;color:#000;white-space:nowrap;overflow:hidden}.receipt-order-simple .receipt-total{margin-top:2px;padding-top:0;border-top:none}.receipt-order-simple .receipt-round-sep{margin:4px 0 2px 0;padding-top:2px;border-top:1px solid #000;font-size:10px;font-weight:700;line-height:1.2;color:#000}.receipt-order-simple .receipt-round-sep--first{margin-top:0;padding-top:0;border-top:none}' +
       GRAB_ECO_CUTLERY_RECEIPT_PRINT_CSS +
       (voidMode ? POS_RECEIPT_VOID_EXTRA_STYLES : ''),
   })

@@ -20,8 +20,8 @@ const FLOOR_H = 480
 const SEAT_R = 6
 const SEAT_INSET = 6
 
-/** 조리중 구간: 0~10분 연두, 10~15분 주황, 15분~ 빨강 */
-export type TableStatus = 'preparing' | 'partial_served' | 'completed' | null
+/** 조리중 구간: 0~10분 연두, 10~15분 주황, 15분~ 빨강. `open` = 테이블은 열렸지만(QR 세션 등) 주문 메뉴 없음 */
+export type TableStatus = 'open' | 'preparing' | 'partial_served' | 'completed' | null
 export type TableStatusStage = 'fresh' | 'warning' | 'urgent'
 
 export type TableStatusResult =
@@ -225,7 +225,9 @@ export function TableFloorView({
             : typeof raw === 'object'
               ? raw.status
               : raw
-        if (tableListMode === 'in_progress') return status === 'preparing' || status === 'partial_served'
+        if (tableListMode === 'in_progress') {
+          return status === 'open' || status === 'preparing' || status === 'partial_served'
+        }
         if (tableListMode === 'completed') return status === 'completed'
         return true
       })
@@ -403,7 +405,9 @@ export function TableFloorView({
                 : posCookStageElapsedBadgeClass.fresh
         const isOccupied = status !== null
         const statusLabel =
-          status === 'preparing'
+          status === 'open'
+            ? (t('posTableStatusAwaitingOrder') || '주문 대기')
+            : status === 'preparing'
             ? (t('posTableStatusPreparing') || '조리중')
             : status === 'partial_served'
               ? (t('posTableStatusPartiallyServed') || '일부 서빙')
@@ -421,7 +425,9 @@ export function TableFloorView({
               ? 'border-sky-300/95 bg-sky-950/90 text-sky-50 ring-1 ring-sky-400/40'
               : status === 'completed'
                 ? 'border-slate-300/90 bg-slate-950/90 text-slate-50 ring-1 ring-slate-400/35'
-                : 'border-white/40 bg-black/50 text-white'
+                : status === 'open'
+                  ? 'border-emerald-200/90 bg-emerald-900/85 text-emerald-50 ring-1 ring-emerald-400/40'
+                  : 'border-white/40 bg-black/50 text-white'
         const minuteUnit = t('posMinuteUnit') || '분'
         const tableMetaTitle =
           isOccupied && createdAt
@@ -453,7 +459,8 @@ export function TableFloorView({
           status === 'preparing' && stage === 'warning' && posCookStageTableSurfaceClass.warning,
           status === 'preparing' && stage === 'urgent' && posCookStageTableSurfaceClass.urgent,
           status === 'partial_served' && 'bg-sky-400/95 border-sky-600 ring-2 ring-sky-600/80',
-          status === 'completed' && 'bg-slate-500/90 border-slate-600 ring-2 ring-slate-600/80'
+          status === 'completed' && 'bg-slate-500/90 border-slate-600 ring-2 ring-slate-600/80',
+          status === 'open' && 'bg-emerald-50/95 border-emerald-500 ring-2 ring-emerald-400/70'
         )
 
         const labelTextClass = cn(
@@ -465,7 +472,8 @@ export function TableFloorView({
           status === 'preparing' && stage === 'warning' && posCookStageTableTextClass.warning,
           status === 'preparing' && stage === 'urgent' && posCookStageTableTextClass.urgent,
           status === 'partial_served' && 'text-sky-950',
-          status === 'completed' && 'text-slate-100 [text-shadow:0_1px_3px_rgba(0,0,0,0.75)]'
+          status === 'completed' && 'text-slate-100 [text-shadow:0_1px_3px_rgba(0,0,0,0.75)]',
+          status === 'open' && 'text-emerald-950'
         )
 
         const rot = Number(tab.rotation) || 0
@@ -616,7 +624,7 @@ export function TableFloorView({
                     </span>
                   )}
                 </div>
-                {(isOccupied && !!createdAt) && (
+                {(isOccupied && status !== 'open' && !!createdAt) && (
                   <div className="flex max-w-full flex-nowrap items-center justify-center gap-1 overflow-hidden">
                     {createdAt && (
                       <span

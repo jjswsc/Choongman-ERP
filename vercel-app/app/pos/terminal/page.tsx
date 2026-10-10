@@ -12,10 +12,9 @@ import { DeliveryOrderPanel } from '@/components/pos/delivery-order-panel'
 import { TakeoutOrderPanel } from '@/components/pos/takeout-order-panel'
 import { PosAdvanceOrderPanel } from '@/components/pos/pos-advance-order-panel'
 import { PosAddonExistingItems } from '@/components/pos/pos-addon-existing-items'
-import { PosAdvanceDepositDialog } from '@/components/pos/pos-advance-deposit-dialog'
 import { OrderBarList, type OrderBarItem, type OrderBarStatus } from '@/components/pos/order-bar-list'
 import { resolveOrderBarCookElapsedEndAt } from '@/lib/pos-order-bar-cook-elapsed'
-import { posTableCookClockIso } from '@/lib/pos-table-cook-clock'
+import { posTableCookClockIso, posTableHasFoodLines } from '@/lib/pos-table-cook-clock'
 import { PosTerminalMenuScreen } from '@/components/pos/pos-terminal-menu-screen'
 import type { PosTerminalParentCatalog } from '@/components/pos/pos-terminal-menu-screen'
 import {
@@ -42,7 +41,7 @@ import {
   buildPosStoreCodeMatchVariants,
   posStoreCodeMatchesVariants,
 } from '@/lib/pos-store-code-match-variants'
-import { LayoutGrid, Bike, Package, QrCode, Search } from 'lucide-react'
+import { LayoutGrid, Bike, Package, Search } from 'lucide-react'
 import {
   getMembers,
   getPosMenus,
@@ -875,7 +874,6 @@ export default function PosTerminalPage() {
   const [pendingTakeoutPayRequest, setPendingTakeoutPayRequest] = useState<PendingPayRequest>(null)
   const [pendingDeliveryOrderId, setPendingDeliveryOrderId] = useState<number | null>(null)
   const [pendingDeliveryPayRequest, setPendingDeliveryPayRequest] = useState<PendingPayRequest>(null)
-  const [showPosDepositDialog, setShowPosDepositDialog] = useState(false)
   const [depositQueueTick, setDepositQueueTick] = useState(0)
   const handleReceivePosDeposit = useCallback(
     async (payload: {
@@ -10201,6 +10199,8 @@ export default function PosTerminalPage() {
                   qty: number
                   note?: string
                   isAddon?: boolean
+                  addedAt?: string
+                  source?: string
                   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
                 }
                 const mapPosItemToReceiptLine = (
@@ -10213,6 +10213,12 @@ export default function PosTerminalPage() {
                   qty: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }),
                   ...(String((it as { note?: string }).note ?? '').trim()
                     ? { note: String((it as { note?: string }).note).trim() }
+                    : {}),
+                  ...(String((it as { addedAt?: string | null }).addedAt ?? '').trim()
+                    ? { addedAt: String((it as { addedAt?: string | null }).addedAt).trim() }
+                    : {}),
+                  ...(String((it as { source?: string }).source ?? '').trim()
+                    ? { source: String((it as { source?: string }).source).trim() }
                     : {}),
                   ...(Array.isArray((it as { promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }).promoItems)
                     ? {
@@ -11070,6 +11076,8 @@ export default function PosTerminalPage() {
                     qty: number
                     note?: string
                     isAddon?: boolean
+                    addedAt?: string
+                    source?: string
                   }
                   const mapPosItemToReceiptLine = (
                     it: (typeof posItemsForSave)[number],
@@ -11081,6 +11089,12 @@ export default function PosTerminalPage() {
                     qty: resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown }),
                     ...(String((it as { note?: string }).note ?? '').trim()
                       ? { note: String((it as { note?: string }).note).trim() }
+                      : {}),
+                    ...(String((it as { addedAt?: string | null }).addedAt ?? '').trim()
+                      ? { addedAt: String((it as { addedAt?: string | null }).addedAt).trim() }
+                      : {}),
+                    ...(String((it as { source?: string }).source ?? '').trim()
+                      ? { source: String((it as { source?: string }).source).trim() }
                       : {}),
                     ...(addon ? { isAddon: true as const } : {}),
                   })
@@ -11930,23 +11944,8 @@ export default function PosTerminalPage() {
                       storeCode={currentStoreId}
                       busy={posCartBackendBusy}
                       reloadToken={depositQueueTick}
-                      onReceive={() => setShowPosDepositDialog(true)}
                       onRefund={handleRefundPosDeposit}
                     />
-                  )}
-                  {activeTab === 'tables' && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-9 shrink-0 gap-1 px-2.5 touch-manipulation min-[640px]:h-8"
-                      title={t('posQrTableOpenTile') || 'QR 테이블 오픈'}
-                      aria-label={t('posQrTableOpenTile') || 'QR 테이블 오픈'}
-                      onClick={() => router.push('/pos/qr-open')}
-                    >
-                      <QrCode className="h-4 w-4 shrink-0" aria-hidden />
-                      <span className="hidden min-[880px]:inline">{t('posQrTableOpenTile') || 'QR 테이블 오픈'}</span>
-                    </Button>
                   )}
                   {activeTab === 'tables' && (
                     <Select
@@ -12262,12 +12261,14 @@ export default function PosTerminalPage() {
                           const items = Array.isArray(order.items) ? order.items : []
                           const servedCount = items.filter((item) => Boolean(item.servedAt)).length
                           const allServed = items.length > 0 && servedCount >= items.length
-                          const status: 'preparing' | 'partial_served' | 'completed' =
+                          const status: 'open' | 'preparing' | 'partial_served' | 'completed' =
                             (order.status === 'completed' || (order.status === 'ready' && allServed))
                               ? 'completed'
-                              : servedCount > 0
-                                ? 'partial_served'
-                                : 'preparing'
+                              : !posTableHasFoodLines(order)
+                                ? 'open'
+                                : servedCount > 0
+                                  ? 'partial_served'
+                                  : 'preparing'
                           const getItemTarget = (item: { id?: string; name?: string }) => {
                             const rawId = String(item.id || '').trim()
                             const rawName = String(item.name || '').trim()
@@ -12789,17 +12790,6 @@ export default function PosTerminalPage() {
           )
         })()}
       </div>
-      <PosAdvanceDepositDialog
-        open={showPosDepositDialog}
-        onOpenChange={setShowPosDepositDialog}
-        t={t}
-        busy={posCartBackendBusy}
-        onSubmit={async (payload) => {
-          const ok = await handleReceivePosDeposit(payload)
-          if (ok === false) return
-          setShowPosDepositDialog(false)
-        }}
-      />
       <PosTerminalDialogs
         t={t}
         tPrint={tPrint}

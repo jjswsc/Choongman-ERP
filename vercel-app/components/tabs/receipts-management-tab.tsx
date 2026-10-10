@@ -86,6 +86,7 @@ import { addDaysYmd, getPosBusinessDateStr, setPosBusinessHoursClient } from '@/
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
 import {
+  attachPosOrderLineRoundFields,
   enrichReceiptModalItemsForPromoDisplay,
   receiptModalDataFromPosOrderReprint,
   type PosOrderReceiptLineOptions,
@@ -781,18 +782,21 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
           tableName: receiptData.tableName ? String(receiptData.tableName) : undefined,
           memo: hallMemo,
           guestCount: o.guestCount,
-          items: itemsForReceipt.map((it) => ({
-            id: String(it.id ?? ''),
-            name: String(it.name ?? ''),
-            price: Number(it.price ?? 0) || 0,
-            qty: Number(it.qty ?? 0) || 0,
-            note: String(it.note ?? ''),
-            ...(it.isAddon ? { isAddon: true as const } : {}),
-            ...(Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001
-              ? { lineDiscountAmt: Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) }
-              : {}),
-            promoItems: Array.isArray(it.promoItems) ? it.promoItems : [],
-          })),
+          items: attachPosOrderLineRoundFields(
+            itemsForReceipt.map((it) => ({
+              id: String(it.id ?? ''),
+              name: String(it.name ?? ''),
+              price: Number(it.price ?? 0) || 0,
+              qty: Number(it.qty ?? 0) || 0,
+              note: String(it.note ?? ''),
+              ...(it.isAddon ? { isAddon: true as const } : {}),
+              ...(Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001
+                ? { lineDiscountAmt: Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) }
+                : {}),
+              promoItems: Array.isArray(it.promoItems) ? it.promoItems : [],
+            })),
+            o.items
+          ),
           subtotal: Number(receiptData.subtotal ?? 0) || 0,
           discountAmt: Number(receiptData.discountAmt ?? 0) || 0,
           couponDiscountAmt: Math.max(

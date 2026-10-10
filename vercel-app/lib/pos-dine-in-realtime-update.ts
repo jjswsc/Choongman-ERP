@@ -10,6 +10,7 @@ import {
   isPosOrderPaidLikeStatus,
   posOrderRowPaymentSum,
 } from '@/lib/pos-payment-receipt-from-order'
+import { isGrabAutoPaidMemo } from '@/lib/grab-order-memo'
 
 const PACKAGING_STATE_ITEM_KEYS = new Set([
   'servedAt',
@@ -95,6 +96,7 @@ export function posOrderRealtimePricingFieldsChanged(
  * — 이미 paid 인 주문에 collab backfill·메모·포장상태 등 비결제 UPDATE가 오면 재인쇄 금지.
  * — OLD 가 PK만 있으면(REPLICA IDENTITY DEFAULT) 로컬 prior(미결제였음)로만 전환을 증명.
  * — 로컬 결제 직후 인쇄는 checkout 경로가 담당.
+ * — Grab 픽업·배달 완료 웹훅이 서버에서 마감한 주문은 라이더가 이미 떠난 뒤라 인쇄하지 않음.
  */
 export function shouldAutoprintPaymentReceiptOnRealtimeUpdate(
   oldRow: Record<string, unknown> | null | undefined,
@@ -105,6 +107,7 @@ export function shouldAutoprintPaymentReceiptOnRealtimeUpdate(
   }
 ): boolean {
   if (!isPosOrderPaidLikeStatus(String(newRow.status ?? ''))) return false
+  if (isGrabAutoPaidMemo(newRow.memo)) return false
   if (posOrderRowPaymentSum(newRow) <= 0) return false
   if (!oldRow) return false
 

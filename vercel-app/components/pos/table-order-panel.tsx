@@ -36,7 +36,6 @@ import {
   Users,
   ArrowRightLeft,
   Combine,
-  LayoutGrid,
   ArrowLeft,
   Maximize2,
   Minimize2,
@@ -45,13 +44,13 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
-import { useT, tr as i18nTr } from '@/lib/i18n'
+import { useT, tOr, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { executePosFullOrderCancel } from '@/lib/pos-order-full-cancel-execute'
 import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
-import { QrTableSessionPanel } from '@/components/pos/qr-table-session-panel'
+import { QrTableSessionPanel, type QrTableOrderBalance } from '@/components/pos/qr-table-session-panel'
 import {
   PosOrderTaxInvoiceStatusButton,
 } from '@/components/pos/pos-tax-invoice-form-ui'
@@ -742,16 +741,83 @@ export function TableOrderPanel({
   }
 
   const listExpanded = checkerView.expanded && !isPaidPrepaid
+  const [qrBalance, setQrBalance] = useState<QrTableOrderBalance | null>(null)
+
+  const showTableActions = order?.type === 'dine-in' && !listExpanded
+
+  const renderTableActions = () => {
+    if (!order || !showTableActions || allTables.length === 0) return null
+    return (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 min-w-8 shrink-0 gap-1 px-1.5 text-xs font-semibold"
+          disabled={emptyTableOptions.length === 0 || transferSubmitting}
+          onClick={() => setMoveOpen(true)}
+          title={t('posTableMoveBtn') || ''}
+          aria-label={t('posTableMoveBtn') || undefined}
+        >
+          <ArrowRightLeft className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="hidden @[21rem]/tbl:inline">{t('posTableMoveBtn')}</span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 min-w-8 shrink-0 gap-1 px-1.5 text-xs font-semibold"
+          title={mergeDisabledByPayment ? (t('posTableMergeHint') || '') : (t('posTableMergeBtn') || '')}
+          aria-label={t('posTableMergeBtn') || undefined}
+          disabled={
+            mergePeerOptions.length === 0 || mergeDisabledByPayment || transferSubmitting
+          }
+          onClick={() => setMergeOpen(true)}
+        >
+          <Combine className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="hidden @[21rem]/tbl:inline">{t('posTableMergeBtn')}</span>
+        </Button>
+      </>
+    )
+  }
+
+  const renderGuestCountButton = () => {
+    if (!order || order.type !== 'dine-in') return null
+    return (
+      <button
+        type="button"
+        className={cn(
+          'flex h-10 shrink-0 items-center gap-1 rounded-full border border-sky-500/45 bg-sky-500/[0.08] px-2.5 text-base shadow-sm',
+          'transition-colors hover:bg-sky-500/15 active:scale-[0.98]',
+          'dark:border-sky-500/35 dark:bg-sky-950/25 dark:hover:bg-sky-950/40',
+          guestSaving || String(order.status ?? '').toLowerCase() === 'cancelled'
+            ? 'pointer-events-none opacity-50'
+            : 'touch-manipulation'
+        )}
+        title={t('posOrderGuestCount') || ''}
+        aria-label={t('posOrderGuestCount') || undefined}
+        onClick={openGuestCountEditor}
+      >
+        <Users className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300" aria-hidden />
+        <span className="font-semibold tabular-nums text-foreground">{order.guestCount ?? 0}</span>
+      </button>
+    )
+  }
 
   const renderCheckerViewToolbar = (leading?: ReactNode) => (
-    <div className="flex shrink-0 items-center justify-end gap-1">
-      <div className="mr-auto flex min-w-0 items-center">{leading}</div>
+    <div className="@container/tbl flex shrink-0 flex-wrap items-center justify-end gap-1">
+      <div className="mr-auto flex min-w-0 items-center gap-1">{leading}</div>
       <Button
         type="button"
         variant={listExpanded ? 'secondary' : 'outline'}
         size="sm"
-        className="h-8 gap-1 px-2 text-xs font-semibold"
+        className={cn('h-8 gap-1 text-xs font-semibold', listExpanded ? 'px-2' : 'w-8 p-0')}
         onClick={checkerView.toggleExpanded}
+        aria-label={
+          listExpanded
+            ? tr('posCheckerListRestore', '원래대로')
+            : tr('posCheckerListExpand', '목록 크게')
+        }
         title={
           listExpanded
             ? tr('posCheckerListRestore', '원래대로')
@@ -763,17 +829,15 @@ export function TableOrderPanel({
         ) : (
           <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
         )}
-        <span className="truncate">
-          {listExpanded
-            ? tr('posCheckerListRestore', '원래대로')
-            : tr('posCheckerListExpand', '목록 크게')}
-        </span>
+        {listExpanded ? (
+          <span className="truncate">{tr('posCheckerListRestore', '원래대로')}</span>
+        ) : null}
       </Button>
       <Button
         type="button"
         variant="outline"
         size="sm"
-        className="h-8 w-9 p-0"
+        className="h-8 w-8 p-0"
         disabled={!checkerView.canZoomOut}
         onClick={checkerView.zoomOut}
         aria-label={tr('posCheckerZoomOut', '글자 작게')}
@@ -785,7 +849,7 @@ export function TableOrderPanel({
         type="button"
         variant="outline"
         size="sm"
-        className="h-8 w-9 p-0"
+        className="h-8 w-8 p-0"
         disabled={!checkerView.canZoomIn}
         onClick={checkerView.zoomIn}
         aria-label={tr('posCheckerZoomIn', '글자 크게')}
@@ -797,7 +861,7 @@ export function TableOrderPanel({
         type="button"
         variant={checkerView.width === 'normal' ? 'outline' : 'secondary'}
         size="sm"
-        className="hidden h-8 w-9 p-0 min-[921px]:inline-flex"
+        className="hidden h-8 w-8 p-0 min-[921px]:inline-flex"
         onClick={checkerView.cycleWidth}
         aria-label={tr('posCheckerWidth', '패널 폭')}
         title={tr('posCheckerWidth', '패널 폭')}
@@ -807,21 +871,38 @@ export function TableOrderPanel({
     </div>
   )
 
-  const renderTotalRow = () => (
-    <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-1.5">
-      <span className="flex min-w-0 items-baseline gap-2 text-base font-medium">
-        <span className="truncate">{t('posTotal') || '합계'}</span>
-        <span className="font-bold tabular-nums">{order ? order.total.toLocaleString() : 0} ฿</span>
-      </span>
-      {!listExpanded ? (
-        <PosOrderTaxInvoiceStatusButton
-          hasTaxInvoice={hasTaxInvoice}
-          onOpen={onOpenTaxInvoice}
-          t={(key, fallback) => t(key) || fallback || key}
-        />
-      ) : null}
-    </div>
-  )
+  const renderTotalRow = () => {
+    const orderTotal = order ? Number(order.total) || 0 : 0
+    const qrPaid = Math.max(0, Number(qrBalance?.paymentQr ?? 0) || 0)
+    return (
+      <div className="shrink-0 space-y-0.5 rounded-lg bg-muted/50 px-3 py-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-baseline gap-2 text-base font-medium">
+            <span className="truncate">{t('posTotal') || '합계'}</span>
+            <span className="font-bold tabular-nums">{orderTotal.toLocaleString()} ฿</span>
+          </span>
+          {!listExpanded ? (
+            <PosOrderTaxInvoiceStatusButton
+              hasTaxInvoice={hasTaxInvoice}
+              onOpen={onOpenTaxInvoice}
+              t={(key, fallback) => t(key) || fallback || key}
+            />
+          ) : null}
+        </div>
+        {qrPaid > 0.005 ? (
+          <div className="flex items-baseline justify-between gap-2 text-xs tabular-nums text-muted-foreground">
+            <span className="truncate">
+              {tOr(tDefault, 'qrTableSessionPaidQr', 'QR 입금')} ฿{qrPaid.toLocaleString()}
+            </span>
+            <span className="shrink-0 font-semibold text-amber-800 dark:text-amber-300">
+              {tOr(tDefault, 'qrTableSessionBalanceDue', '잔액')} ฿
+              {Math.max(0, Math.round((orderTotal - qrPaid) * 100) / 100).toLocaleString()}
+            </span>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
 
   const renderRoundHeader = (itemPos: number) => {
     if (roundCount < 2) return null
@@ -866,27 +947,19 @@ export function TableOrderPanel({
       <div className="px-3 py-2.5 border-b flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span
-            className="inline-flex shrink-0 items-center gap-1.5"
+            className={cn(
+              'inline-flex h-10 min-w-[2.5rem] max-w-[9rem] shrink-0 items-center justify-center rounded-full border px-2 shadow-sm',
+              'border-emerald-600/45 bg-gradient-to-b from-emerald-50/95 to-emerald-100/90 text-emerald-950',
+              'dark:border-emerald-500/40 dark:from-emerald-950/55 dark:to-emerald-900/70 dark:text-emerald-50',
+              'ring-1 ring-emerald-700/15 dark:ring-emerald-400/20'
+            )}
             title={t('posTableLabel') || ''}
           >
-            <LayoutGrid
-              className="h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300"
-              strokeWidth={2.25}
-              aria-hidden
-            />
-            <span
-              className={cn(
-                'inline-flex h-10 min-w-[2.5rem] max-w-[9rem] shrink-0 items-center justify-center rounded-full border px-2 shadow-sm',
-                'border-emerald-600/45 bg-gradient-to-b from-emerald-50/95 to-emerald-100/90 text-emerald-950',
-                'dark:border-emerald-500/40 dark:from-emerald-950/55 dark:to-emerald-900/70 dark:text-emerald-50',
-                'ring-1 ring-emerald-700/15 dark:ring-emerald-400/20'
-              )}
-            >
-              <span className="truncate text-center text-sm font-extrabold leading-none tracking-tight">
-                {tableDisplayName}
-              </span>
+            <span className="truncate text-center text-sm font-extrabold leading-none tracking-tight">
+              {tableDisplayName}
             </span>
           </span>
+          {renderGuestCountButton()}
           {order && (
             <span
               className="min-w-0 truncate text-sm font-semibold tabular-nums text-muted-foreground"
@@ -932,58 +1005,13 @@ export function TableOrderPanel({
               tableName={String(tableName || '').trim()}
               storeLabel={storeLabel}
               onChanged={onServed}
+              hideOrderBalance={!isPaidPrepaid}
+              onOrderBalanceChange={setQrBalance}
             />
           ) : null}
-          {order.type === 'dine-in' && !listExpanded && (
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className={cn(
-                    'flex shrink-0 items-center gap-2 rounded-xl border border-sky-500/45 bg-sky-500/[0.08] px-3 py-2 text-base shadow-sm',
-                    'transition-colors hover:bg-sky-500/15 active:scale-[0.98]',
-                    'dark:border-sky-500/35 dark:bg-sky-950/25 dark:hover:bg-sky-950/40',
-                    guestSaving || String(order.status ?? '').toLowerCase() === 'cancelled'
-                      ? 'pointer-events-none opacity-50'
-                      : 'touch-manipulation'
-                  )}
-                  title={t('posOrderGuestCount') || ''}
-                  aria-label={t('posOrderGuestCount') || undefined}
-                  onClick={openGuestCountEditor}
-                >
-                  <Users className="h-5 w-5 shrink-0 text-sky-700 dark:text-sky-300" aria-hidden />
-                  <span className="font-semibold tabular-nums text-foreground">{order.guestCount ?? 0}</span>
-                </button>
-                {allTables.length > 0 && (
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 min-w-0 flex-1 gap-1.5 px-2 text-xs font-semibold"
-                      disabled={emptyTableOptions.length === 0 || transferSubmitting}
-                      onClick={() => setMoveOpen(true)}
-                    >
-                      <ArrowRightLeft className="h-4 w-4 shrink-0" aria-hidden />
-                      {t('posTableMoveBtn')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9 min-w-0 flex-1 gap-1.5 px-2 text-xs font-semibold"
-                      title={mergeDisabledByPayment ? (t('posTableMergeHint') || '') : undefined}
-                      disabled={
-                        mergePeerOptions.length === 0 || mergeDisabledByPayment || transferSubmitting
-                      }
-                      onClick={() => setMergeOpen(true)}
-                    >
-                      <Combine className="h-4 w-4 shrink-0" aria-hidden />
-                      {t('posTableMergeBtn')}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+          {isPaidPrepaid && showTableActions ? (
+            <div className="@container/tbl flex flex-wrap items-center gap-1">{renderTableActions()}</div>
+          ) : null}
 
           {isPaidPrepaid ? (
             <>
@@ -1039,10 +1067,18 @@ export function TableOrderPanel({
           ) : isServedReadyForPayment ? (
             <>
               {renderCheckerViewToolbar(
-                <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{t('posTableStatusServed') || '서빙 완료'}</span>
-                </span>
+                <>
+                  <span
+                    className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400"
+                    title={t('posTableStatusServed') || '서빙 완료'}
+                  >
+                    <CheckCircle className="h-4 w-4 shrink-0" />
+                    {showTableActions ? null : (
+                      <span className="truncate">{t('posTableStatusServed') || '서빙 완료'}</span>
+                    )}
+                  </span>
+                  {renderTableActions()}
+                </>
               )}
               <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
                 <ul className="p-1 space-y-1" style={{ zoom: checkerView.zoom }}>
@@ -1085,25 +1121,28 @@ export function TableOrderPanel({
                           >
                             {mainNameT}
                           </button>
-                          {optionPart && (
-                            <span className="ml-1.5 text-sm text-muted-foreground" title={optionPartT}>
-                              {optionPartT}
-                            </span>
-                          )}
-                          {noteTrim && (
-                            <span className="ml-1.5 text-sm text-blue-700 dark:text-blue-300/90" title={noteTrim}>
-                              {noteTrim}
-                            </span>
-                          )}
                           {cancelled && (
                             <span className="ml-1.5 text-xs font-semibold text-rose-600 dark:text-rose-300">
                               {t('posLineCancelled') || '취소 처리됨'}
                             </span>
                           )}
+                          {optionPart && (
+                            <span className="block text-sm leading-tight text-muted-foreground" title={optionPartT}>
+                              {optionPartT}
+                            </span>
+                          )}
+                          {noteTrim && (
+                            <span
+                              className="mt-0.5 line-clamp-2 block text-sm leading-tight text-blue-700 dark:text-blue-300/90"
+                              title={noteTrim}
+                            >
+                              - {noteTrim}
+                            </span>
+                          )}
                         </div>
-                        <div className="flex shrink-0 items-baseline gap-2 whitespace-nowrap tabular-nums">
+                        <div className="flex shrink-0 flex-col items-end whitespace-nowrap leading-tight tabular-nums">
                           <span className="text-base font-bold text-foreground">×{item.quantity}</span>
-                          <span className="text-sm text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {(item.price * item.quantity).toLocaleString()} ฿
                           </span>
                         </div>
@@ -1127,50 +1166,39 @@ export function TableOrderPanel({
                 </Button>
               </div>
               {canCancel && !listExpanded && (
-                <div className="space-y-1">
-                  {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
-                    <p
-                      className="truncate px-1 text-center text-[11px] text-muted-foreground"
-                      title={t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst')}
-                    >
-                      {t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst')}
-                    </p>
-                  ) : null}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive border-destructive/50 hover:bg-destructive/10"
-                      disabled={
-                        cancelling ||
-                        removingItemId !== null ||
-                        !canStartPosLinePartialCancel(order) ||
-                        !selectedLineItemId
-                      }
-                      onClick={() => {
-                        void handlePartialCancel()
-                      }}
-                    >
-                      {t('posOrderCancelPartial') || tDefault('posOrderCancelPartial')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      className="disabled:opacity-50"
-                      disabled={cancelling || removingItemId !== null}
-                      onClick={handleCancelOrder}
-                    >
-                      {t('posOrderCancelFull') || tDefault('posOrderCancelFull')}
-                    </Button>
-                  </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs text-destructive border-destructive/50 hover:bg-destructive/10"
+                    disabled={
+                      cancelling ||
+                      removingItemId !== null ||
+                      !canStartPosLinePartialCancel(order)
+                    }
+                    onClick={() => {
+                      void handlePartialCancel()
+                    }}
+                  >
+                    {t('posOrderCancelPartial') || tDefault('posOrderCancelPartial')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 text-xs disabled:opacity-50"
+                    disabled={cancelling || removingItemId !== null}
+                    onClick={handleCancelOrder}
+                  >
+                    {t('posOrderCancelFull') || tDefault('posOrderCancelFull')}
+                  </Button>
                 </div>
               )}
             </>
           ) : (
             <>
-              {renderCheckerViewToolbar()}
+              {renderCheckerViewToolbar(renderTableActions())}
               <ScrollArea className="flex-1 min-h-0 rounded-md border" data-tour="pos-tour-serving-items">
                 <ul className="p-1 space-y-1" style={{ zoom: checkerView.zoom }}>
                   {displayOrder.map((itemIndex, itemPos) => {
@@ -1215,25 +1243,28 @@ export function TableOrderPanel({
                           >
                             {mainNameT}
                           </button>
-                          {optionPart && (
-                            <span className="ml-1.5 text-sm text-muted-foreground" title={optionPartT}>
-                              {optionPartT}
-                            </span>
-                          )}
-                          {noteTrim && (
-                            <span className="ml-1.5 text-sm text-blue-700 dark:text-blue-300/90" title={noteTrim}>
-                              {noteTrim}
-                            </span>
-                          )}
                           {cancelled && (
                             <span className="ml-1.5 text-xs font-semibold text-rose-600 dark:text-rose-300">
                               {t('posLineCancelled') || '취소 처리됨'}
                             </span>
                           )}
+                          {optionPart && (
+                            <span className="block text-sm leading-tight text-muted-foreground" title={optionPartT}>
+                              {optionPartT}
+                            </span>
+                          )}
+                          {noteTrim && (
+                            <span
+                              className="mt-0.5 line-clamp-2 block text-sm leading-tight text-blue-700 dark:text-blue-300/90"
+                              title={noteTrim}
+                            >
+                              - {noteTrim}
+                            </span>
+                          )}
                         </div>
-                        <div className="flex shrink-0 items-baseline gap-2 whitespace-nowrap tabular-nums">
+                        <div className="flex shrink-0 flex-col items-end whitespace-nowrap leading-tight tabular-nums">
                           <span className="text-base font-bold text-foreground">×{item.quantity}</span>
-                          <span className="text-sm text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {(item.price * item.quantity).toLocaleString()} ฿
                           </span>
                         </div>
@@ -1333,42 +1364,31 @@ export function TableOrderPanel({
                 </Button>
               </div>
               {canCancel && !listExpanded && (
-                <div className="space-y-1">
-                  {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
-                    <p
-                      className="truncate px-1 text-center text-[11px] text-muted-foreground"
-                      title={t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst')}
-                    >
-                      {t('posLineItemSelectFirst') || tDefault('posLineItemSelectFirst')}
-                    </p>
-                  ) : null}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive border-destructive/50 hover:bg-destructive/10"
-                      disabled={
-                        cancelling ||
-                        removingItemId !== null ||
-                        !canStartPosLinePartialCancel(order) ||
-                        !selectedLineItemId
-                      }
-                      onClick={() => { void handlePartialCancel() }}
-                    >
-                      {t('posOrderCancelPartial') || tDefault('posOrderCancelPartial')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      className="disabled:opacity-50"
-                      disabled={cancelling || removingItemId !== null}
-                      onClick={handleCancelOrder}
-                    >
-                      {t('posOrderCancelFull') || tDefault('posOrderCancelFull')}
-                    </Button>
-                  </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs text-destructive border-destructive/50 hover:bg-destructive/10"
+                    disabled={
+                      cancelling ||
+                      removingItemId !== null ||
+                      !canStartPosLinePartialCancel(order)
+                    }
+                    onClick={() => { void handlePartialCancel() }}
+                  >
+                    {t('posOrderCancelPartial') || tDefault('posOrderCancelPartial')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 text-xs disabled:opacity-50"
+                    disabled={cancelling || removingItemId !== null}
+                    onClick={handleCancelOrder}
+                  >
+                    {t('posOrderCancelFull') || tDefault('posOrderCancelFull')}
+                  </Button>
                 </div>
               )}
             </>

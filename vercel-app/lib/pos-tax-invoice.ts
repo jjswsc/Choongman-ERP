@@ -127,6 +127,7 @@ function stripPosInternalMemoTokens(input: string): string {
   text = text
     .replace(/\b(grab|lineman|shopee)_order:[A-Za-z0-9._:-]+/gi, '')
     .replace(/\|?\s*grab_state:[A-Za-z0-9._-]+/gi, '')
+    .replace(/\|?\s*grab_auto_paid:[A-Za-z0-9._-]+/gi, '')
     .replace(/\|?\s*(grab|lineman|shopee)_state:[A-Za-z0-9._-]+/gi, '')
     .replace(/\|\s*\|+/g, '|')
     .replace(/\s{2,}/g, ' ')

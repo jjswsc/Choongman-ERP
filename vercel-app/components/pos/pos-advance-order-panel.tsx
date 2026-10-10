@@ -18,17 +18,16 @@ const KIND_KEY: Record<string, string> = {
   forfeit: 'posDepositKindForfeit',
 }
 
-/** 상단 툴바 버튼 — 누르면 예약금(จอง / มัดจำ) 팝업 */
+/** 상단 툴바 버튼 — 예약금 현황(걸린 목록·환불·이력 조회). 받기는 장바구니 「예약금」 버튼. */
 export function PosAdvanceOrderPanel(props: {
   t: (k: string) => string
   lang?: string
   storeCode?: string
   busy?: boolean
   reloadToken?: number
-  onReceive: () => void
   onRefund?: (holder: { memberId?: number; phone: string }) => void | Promise<void>
 }) {
-  const { t, storeCode, busy, reloadToken, onReceive, onRefund } = props
+  const { t, storeCode, busy, reloadToken, onRefund } = props
   const [open, setOpen] = useState(false)
   const [phoneQuery, setPhoneQuery] = useState('')
   const [historyRows, setHistoryRows] = useState<PosDepositHistoryRow[]>([])
@@ -54,9 +53,9 @@ export function PosAdvanceOrderPanel(props: {
     loadHeld()
   }, [loadHeld, reloadToken])
 
-  const title = t('posDepositQueueTitle') || 'จอง / มัดจำ'
+  const title = t('posDepositStatusTitle') || 'สถานะมัดจำ'
 
-  /** 환불·받기는 별도 확인/입력 모달을 띄우므로 이 팝업을 먼저 닫는다 */
+  /** 환불은 별도 확인 모달을 띄우므로 이 팝업을 먼저 닫는다 */
   const runRefund = (holder: { memberId?: number; phone: string }) => {
     if (!onRefund) return
     setOpen(false)
@@ -95,21 +94,6 @@ export function PosAdvanceOrderPanel(props: {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <Button
-              type="button"
-              className="h-11 w-full text-base font-semibold"
-              disabled={busy}
-              onClick={() => {
-                setOpen(false)
-                onReceive()
-              }}
-            >
-              {t('posDepositButton') || 'มัดจำ'}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              {t('posDepositUseLaterHint') ||
-                '메뉴 없이 예약금만 걸어 둡니다. 방문 때 회원 선택 또는 같은 전화로 결제하면 차감됩니다.'}
-            </p>
             {heldBusy && heldHolders.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t('loading') || '…'}</p>
             ) : heldHolders.length === 0 ? (

@@ -111,7 +111,7 @@ export const POS_SUBMENUS: Record<"business" | "operations", POSSubMenuItem[]> =
   ],
 }
 
-/** 주문: 매장/포장/배달 → 터미널. QR 세션은 홀 테이블 화면의 QR 버튼(/pos/qr-open). 관리: 매출→영수증→근태→영업관리(세부: 영업시작/마감)→시재관리(입금/출금/돈통)→운영관리(새로고침/로그아웃/설정) */
+/** 주문: 매장/포장/배달 → 터미널. QR 세션은 테이블 주문 패널의 QR 카드 또는 홈 타일(/pos/qr-open). 관리: 매출→영수증→근태→영업관리(세부: 영업시작/마감)→시재관리(입금/출금/돈통)→운영관리(새로고침/로그아웃/설정) */
 export const DEFAULT_TILES: POSTile[] = [
   { id: "1", type: "dine-in", label: "매장 주문", labelEn: "Dine In", labelKey: "posOrderTypeDineIn", icon: "utensils", variant: "primary", size: "large", enabled: true, order: 1, group: "order" },
   { id: "2", type: "takeout", label: "포장", labelEn: "Takeout", labelKey: "posOrderTypeTakeout", icon: "package", variant: "primary", size: "medium", enabled: true, order: 2, group: "order" },

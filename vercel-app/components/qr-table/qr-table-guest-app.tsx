@@ -104,7 +104,11 @@ type CartLine = {
   menuId2?: number
   promoPicks?: QrPromoPick[]
   setDetail?: string
+  note?: string
 }
+
+/** 서버 `submitQrCart`도 200자로 자른다. */
+const QR_GUEST_LINE_NOTE_MAX = 200
 
 type OrderSummaryItem = {
   id?: string
@@ -362,6 +366,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [extraMenus, setExtraMenus] = React.useState<MenuItem[]>([])
   const [categoryTabOrder, setCategoryTabOrder] = React.useState<PosCategoryTabOrder>(emptyPosCategoryTabOrder)
   const [cart, setCart] = React.useState<CartLine[]>([])
+  const [editingNoteKey, setEditingNoteKey] = React.useState<string | null>(null)
   const [optionMenu, setOptionMenu] = React.useState<MenuItem | null>(null)
   const [setMenu, setSetMenu] = React.useState<MenuItem | null>(null)
   const [tab, setTab] = React.useState<'included' | 'extras'>('included')
@@ -745,6 +750,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
     setCart((prev) => prev.filter((line) => line.key !== key))
   }
 
+  function setCartLineNote(key: string, note: string) {
+    const next = note.slice(0, QR_GUEST_LINE_NOTE_MAX)
+    setCart((prev) => prev.map((line) => (line.key === key ? { ...line, note: next } : line)))
+  }
+
   function requestSubmit() {
     if (submitLockRef.current || busy || cart.length === 0) return
     setFinalConfirmOpen(false)
@@ -775,6 +785,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       menuId1: line.menuId1,
       menuId2: line.menuId2,
       promoPicks: line.promoPicks && line.promoPicks.length ? line.promoPicks : undefined,
+      note: line.note?.trim() || undefined,
     }))
     if (!lines.length || submitLockRef.current) return
     submitLockRef.current = true
@@ -1830,6 +1841,49 @@ export function QrTableGuestApp({ token }: { token: string }) {
                           {guestLabel(line.optionName)}
                         </p>
                       ) : null}
+                      {editingNoteKey === line.key ? (
+                        <input
+                          type="text"
+                          autoFocus
+                          value={line.note ?? ''}
+                          maxLength={QR_GUEST_LINE_NOTE_MAX}
+                          placeholder={g('itemNotePh')}
+                          className="mt-1.5 h-9 w-full rounded-lg border border-stone-300 bg-white px-2.5 text-[16px] text-stone-900 outline-none focus:border-[var(--qr-brand,#b45309)]"
+                          onChange={(e) => setCartLineNote(line.key, e.target.value)}
+                          onBlur={() => {
+                            setCartLineNote(line.key, (line.note ?? '').trim())
+                            setEditingNoteKey(null)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                          }}
+                        />
+                      ) : line.note?.trim() ? (
+                        <button
+                          type="button"
+                          className="mt-1.5 flex w-full items-start gap-1.5 rounded-lg bg-stone-100 px-2.5 py-1.5 text-left text-[13px] leading-snug text-stone-700"
+                          onClick={() => setEditingNoteKey(line.key)}
+                        >
+                          <svg className="mt-0.5 h-3.5 w-3.5 shrink-0 text-stone-500" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <path
+                              d="M4 20h4L19 9l-4-4L4 16v4Zm9-13 4 4"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                          <span className="min-w-0 break-words">{line.note}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-dashed border-stone-300 px-2.5 py-1 text-[12px] font-semibold text-stone-600"
+                          onClick={() => setEditingNoteKey(line.key)}
+                        >
+                          + {g('itemNote')}
+                        </button>
+                      )}
                       <p className="mt-1 text-sm font-bold tabular-nums text-stone-800">
                         {m?.buffetIncluded ? (
                           <span className="text-emerald-700">{g('included')}</span>
@@ -1942,6 +1996,9 @@ export function QrTableGuestApp({ token }: { token: string }) {
                       <p className="mt-0.5 text-[12px] text-[var(--qr-brand,#b45309)]">
                         {guestLabel(line.optionName)}
                       </p>
+                    ) : null}
+                    {line.note?.trim() ? (
+                      <p className="mt-0.5 break-words text-[12px] text-stone-600">- {line.note.trim()}</p>
                     ) : null}
                   </div>
                   <div className="shrink-0 text-right">

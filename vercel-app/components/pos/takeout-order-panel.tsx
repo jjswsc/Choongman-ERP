@@ -706,41 +706,33 @@ export function TakeoutOrderPanel({
               ) : null}
               {moveToTableButton}
               {canCancel && (
-                <div className="space-y-1.5">
-                  {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
-                    <p className="text-center text-xs text-muted-foreground px-1">
-                      {t('posLineItemSelectFirst') || ti('posLineItemSelectFirst')}
-                    </p>
-                  ) : null}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive border-destructive/50 hover:bg-destructive/10"
-                      disabled={
-                        cancelling ||
-                        removingItemId !== null ||
-                        !canStartPosLinePartialCancel(order) ||
-                        !selectedLineItemId
-                      }
-                      onClick={() => {
-                        void handlePartialCancel()
-                      }}
-                    >
-                      {t('posOrderCancelPartial') || ti('posOrderCancelPartial')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      className="disabled:opacity-50"
-                      disabled={cancelling || removingItemId !== null}
-                      onClick={handleCancelOrder}
-                    >
-                      {t('posOrderCancelFull') || ti('posOrderCancelFull')}
-                    </Button>
-                  </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs text-destructive border-destructive/50 hover:bg-destructive/10"
+                    disabled={
+                      cancelling ||
+                      removingItemId !== null ||
+                      !canStartPosLinePartialCancel(order)
+                    }
+                    onClick={() => {
+                      void handlePartialCancel()
+                    }}
+                  >
+                    {t('posOrderCancelPartial') || ti('posOrderCancelPartial')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 text-xs disabled:opacity-50"
+                    disabled={cancelling || removingItemId !== null}
+                    onClick={handleCancelOrder}
+                  >
+                    {t('posOrderCancelFull') || ti('posOrderCancelFull')}
+                  </Button>
                 </div>
               )}
             </>
@@ -901,39 +893,31 @@ export function TakeoutOrderPanel({
                   : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeLineEntries.length || order.items.length})`}
               </Button>
               {canCancel && (
-                <div className="space-y-1.5">
-                  {canStartPosLinePartialCancel(order) && !selectedLineItemId ? (
-                    <p className="text-center text-xs text-muted-foreground px-1">
-                      {t('posLineItemSelectFirst') || ti('posLineItemSelectFirst')}
-                    </p>
-                  ) : null}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive border-destructive/50 hover:bg-destructive/10"
-                      disabled={
-                        cancelling ||
-                        removingItemId !== null ||
-                        !canStartPosLinePartialCancel(order) ||
-                        !selectedLineItemId
-                      }
-                      onClick={() => { void handlePartialCancel() }}
-                    >
-                      {t('posOrderCancelPartial') || ti('posOrderCancelPartial')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      className="disabled:opacity-50"
-                      disabled={cancelling || removingItemId !== null}
-                      onClick={handleCancelOrder}
-                    >
-                      {t('posOrderCancelFull') || ti('posOrderCancelFull')}
-                    </Button>
-                  </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs text-destructive border-destructive/50 hover:bg-destructive/10"
+                    disabled={
+                      cancelling ||
+                      removingItemId !== null ||
+                      !canStartPosLinePartialCancel(order)
+                    }
+                    onClick={() => { void handlePartialCancel() }}
+                  >
+                    {t('posOrderCancelPartial') || ti('posOrderCancelPartial')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 text-xs disabled:opacity-50"
+                    disabled={cancelling || removingItemId !== null}
+                    onClick={handleCancelOrder}
+                  >
+                    {t('posOrderCancelFull') || ti('posOrderCancelFull')}
+                  </Button>
                 </div>
               )}
             </>

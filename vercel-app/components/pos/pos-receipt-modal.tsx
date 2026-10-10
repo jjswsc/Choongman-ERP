@@ -64,6 +64,9 @@ export type ReceiptModalData = {
     buffetIncluded?: boolean
     /** 추가 주문 줄 — 홀 주문 영수증에 `>` 접두 표시 */
     isAddon?: boolean
+    /** 홀 주문서 회차 구분선 */
+    addedAt?: string | null
+    source?: string
     promoId?: string
     promoItems?: { menuId: string; optionId: string | null; optionCode?: string | null; quantity: number }[]
     /** 줄 단위 배달 플랫폼(있으면 영수증 채널 유추에 사용) */
@@ -293,6 +296,8 @@ export function PosReceiptModal({
               note: String(it.note ?? ''),
               ...(it.buffetIncluded ? { buffetIncluded: true as const } : {}),
               ...(it.isAddon ? { isAddon: true as const } : {}),
+              ...(it.addedAt ? { addedAt: it.addedAt } : {}),
+              ...(it.source ? { source: it.source } : {}),
               ...(Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) > 0.0001
                 ? { lineDiscountAmt: Math.max(0, Number(it.lineDiscountAmt ?? 0) || 0) }
                 : {}),

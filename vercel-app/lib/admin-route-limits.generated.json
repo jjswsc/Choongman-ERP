@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-09T10:37:57.562Z",
+  "generatedAt": "2026-10-10T17:40:13.898Z",
   "entryCount": 1992,
   "entries": [
     {
@@ -7277,7 +7277,7 @@
     },
     {
       "path": "app/api/updatePosOrder/route.ts",
-      "line": 178,
+      "line": 179,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updatePosOrder"
@@ -7536,77 +7536,77 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1890,
+      "line": 1892,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 4347,
+      "line": 4360,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 5878,
+      "line": 5897,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6110,
+      "line": 6129,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6415,
+      "line": 6440,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6875,
+      "line": 6900,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 7910,
+      "line": 7935,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 8280,
+      "line": 8305,
       "kind": "limit",
       "value": 20,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 9761,
+      "line": 9786,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 10430,
+      "line": 10463,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 10937,
+      "line": 10970,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
@@ -9230,56 +9230,56 @@
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 452,
+      "line": 461,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 473,
+      "line": 482,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 479,
+      "line": 488,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1243,
+      "line": 1252,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1371,
+      "line": 1365,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1386,
+      "line": 1380,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1406,
+      "line": 1400,
       "kind": "limit",
       "value": 2,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1438,
+      "line": 1432,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
@@ -9636,28 +9636,28 @@
     },
     {
       "path": "lib/line-crm-import.ts",
-      "line": 561,
+      "line": 564,
       "kind": "limit",
       "value": 5,
       "apiLabel": "lib:line-crm-import"
     },
     {
       "path": "lib/line-crm-import.ts",
-      "line": 572,
+      "line": 575,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:line-crm-import"
     },
     {
       "path": "lib/line-crm-import.ts",
-      "line": 584,
+      "line": 587,
       "kind": "limit",
       "value": 3,
       "apiLabel": "lib:line-crm-import"
     },
     {
       "path": "lib/line-crm-import.ts",
-      "line": 601,
+      "line": 604,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:line-crm-import"
@@ -9839,63 +9839,63 @@
     },
     {
       "path": "lib/member-merge-server.ts",
-      "line": 86,
+      "line": 88,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-merge-server"
     },
     {
       "path": "lib/member-merge-server.ts",
-      "line": 104,
+      "line": 106,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-merge-server"
     },
     {
       "path": "lib/member-merge-server.ts",
-      "line": 112,
+      "line": 114,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:member-merge-server"
     },
     {
       "path": "lib/member-merge-server.ts",
-      "line": 122,
+      "line": 124,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "lib:member-merge-server"
     },
     {
       "path": "lib/member-merge-server.ts",
-      "line": 178,
+      "line": 180,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:member-merge-server"
     },
     {
       "path": "lib/member-merge-server.ts",
-      "line": 189,
+      "line": 191,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:member-merge-server"
     },
     {
       "path": "lib/member-merge-server.ts",
-      "line": 259,
+      "line": 261,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:member-merge-server"
     },
     {
       "path": "lib/member-merge-server.ts",
-      "line": 295,
+      "line": 297,
       "kind": "limit",
       "value": 100,
       "apiLabel": "lib:member-merge-server"
     },
     {
       "path": "lib/member-merge-server.ts",
-      "line": 299,
+      "line": 301,
       "kind": "limit",
       "value": 100,
       "apiLabel": "lib:member-merge-server"
@@ -9923,16 +9923,16 @@
     },
     {
       "path": "lib/member-point-expiry-server.ts",
-      "line": 38,
+      "line": 40,
       "kind": "limit",
-      "value": 1,
+      "value": 50000,
       "apiLabel": "lib:member-point-expiry-server"
     },
     {
       "path": "lib/member-point-expiry-server.ts",
-      "line": 44,
+      "line": 90,
       "kind": "limit",
-      "value": 50000,
+      "value": 1,
       "apiLabel": "lib:member-point-expiry-server"
     },
     {
@@ -11442,7 +11442,7 @@
     },
     {
       "path": "lib/pos-main-device-autoprint.ts",
-      "line": 723,
+      "line": 760,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-main-device-autoprint"
@@ -12191,294 +12191,287 @@
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 377,
+      "line": 386,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 430,
+      "line": 443,
       "kind": "limit",
       "value": 200,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 440,
+      "line": 453,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 456,
+      "line": 469,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 574,
+      "line": 587,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 586,
+      "line": 599,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 659,
+      "line": 672,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 676,
+      "line": 689,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 683,
+      "line": 696,
       "kind": "limit",
       "value": 40,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 761,
+      "line": 774,
       "kind": "limit",
       "value": 20,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 901,
+      "line": 914,
       "kind": "limit",
       "value": 500,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 980,
+      "line": 993,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1006,
+      "line": 1019,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1045,
+      "line": 1058,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1051,
+      "line": 1064,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1119,
+      "line": 1132,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1177,
+      "line": 1190,
       "kind": "limit",
       "value": 3000,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1252,
+      "line": 1265,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1318,
+      "line": 1331,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1739,
+      "line": 1752,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1785,
+      "line": 1798,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1827,
+      "line": 1840,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2055,
+      "line": 2073,
       "kind": "limit",
       "value": 200,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2145,
+      "line": 2163,
       "kind": "limit",
       "value": 40,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2201,
+      "line": 2219,
       "kind": "limit",
       "value": 20,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2249,
+      "line": 2267,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2258,
+      "line": 2276,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2265,
+      "line": 2283,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2330,
+      "line": 2348,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2562,
+      "line": 2587,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2670,
+      "line": 2695,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2740,
+      "line": 2765,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2789,
+      "line": 2814,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2827,
+      "line": 2852,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2895,
+      "line": 2920,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2955,
+      "line": 2980,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3017,
+      "line": 3042,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3039,
+      "line": 3064,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3168,
+      "line": 3193,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3232,
+      "line": 3257,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3256,
-      "kind": "limit",
-      "value": 1,
-      "apiLabel": "lib:qr-table-server"
-    },
-    {
-      "path": "lib/qr-table-server.ts",
-      "line": 3338,
+      "line": 3281,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
@@ -12492,14 +12485,21 @@
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3376,
+      "line": 3388,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3509,
+      "line": 3401,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:qr-table-server"
+    },
+    {
+      "path": "lib/qr-table-server.ts",
+      "line": 3534,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"

@@ -9,8 +9,17 @@ import { consumeDeliveryMenuStockByName } from '@/lib/pos-delivery-policy'
 import {
   buildGrabOrderMemo,
   grabOrderMemoPostgrestIlikeFilter,
+  isGrabAutoPaidMemo,
   mergeGrabStateIntoFullMemo,
 } from '@/lib/grab-order-memo'
+import {
+  buildGrabAutoSettlePaymentPatch,
+  canApplyGrabStatusTransition,
+  GRAB_AUTO_SETTLE_FROM_STATUSES,
+  mapGrabStateToPosStatus,
+  type GrabAutoSettleOrderRow,
+} from '@/lib/grab-order-state-transition'
+import { writePosOrderAuditTrail } from '@/lib/pos-order-audit'
 import { resolveCanonicalErpStoreCode } from '@/lib/erp-store-identity'
 import { enrichPosOrderRowForSaaS } from '@/lib/pos-saas-schema-compat'
 import { resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
@@ -1337,31 +1346,16 @@ export async function persistGrabOrderToPos(
   }
 }
 
-function mapGrabStateToPosStatus(state: string): string | null {
-  const s = String(state || '').trim().toUpperCase()
-  if (!s) return null
-  // 매장 운영 기준: Grab의 배송 완료 신호로 POS 주문을 자동 완료/결제 처리하지 않는다.
-  // POS 화면에서 직접 "포장 완료/결제"를 눌러 마감하도록 유지한다.
-  if (s === 'REFUNDED') return 'refunded'
-  if (s === 'CANCELLED' || s === 'FAILED') return 'cancelled'
-  return null
+type PosOrderGrabSyncRow = GrabAutoSettleOrderRow & {
+  id?: number
+  status?: string
+  memo?: string
+  order_no?: string
+  store_code?: string
 }
 
-function canApplyGrabStatusTransition(prevStatus: string, nextStatus: string): boolean {
-  const prev = String(prevStatus || '').trim().toLowerCase()
-  const next = String(nextStatus || '').trim().toLowerCase()
-  if (!next) return false
-  if (!prev) return true
-  // POS에서 이미 확정된 상태는 Grab 상태 푸시로 덮어쓰지 않는다.
-  if (prev === 'completed' || prev === 'paid' || prev === 'cancelled' || prev === 'refunded') return false
-  // 중복 업데이트 방지
-  if (prev === next) return false
-  // 이 경로에서 허용하는 것은 취소/환불 동기화만
-  if (next === 'cancelled' || next === 'refunded') return true
-  return false
-}
-
-type PosOrderGrabSyncRow = { id?: number; status?: string; memo?: string }
+const POS_ORDER_GRAB_SYNC_SELECT =
+  'id,status,memo,order_no,store_code,total,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,paid_at'
 
 async function loadGrabSubmitOrderWebhookPayload(orderID: string): Promise<Record<string, unknown> | null> {
   try {
@@ -1384,7 +1378,7 @@ async function loadGrabSubmitOrderWebhookPayload(orderID: string): Promise<Recor
 async function findPosOrderRowForGrabStateSync(orderID: string): Promise<PosOrderGrabSyncRow | null> {
   let rows = (await supabaseSelectFilter('pos_orders', grabOrderMemoPostgrestIlikeFilter(orderID), {
     limit: 1,
-    select: 'id,status,memo',
+    select: POS_ORDER_GRAB_SYNC_SELECT,
   })) as PosOrderGrabSyncRow[]
 
   if (rows?.[0]?.id) return rows[0] ?? null
@@ -1405,7 +1399,7 @@ async function findPosOrderRowForGrabStateSync(orderID: string): Promise<PosOrde
   rows = (await supabaseSelectFilter('pos_orders', filter, {
     limit: 2,
     order: 'created_at.desc',
-    select: 'id,status,memo',
+    select: POS_ORDER_GRAB_SYNC_SELECT,
   })) as PosOrderGrabSyncRow[]
 
   if ((rows?.length ?? 0) > 1) return null
@@ -1436,19 +1430,50 @@ export async function syncGrabOrderStateToPos(params: {
     row =
       ((await supabaseSelectFilter('pos_orders', `id=eq.${persisted.orderId}`, {
         limit: 1,
-        select: 'id,status,memo',
+        select: POS_ORDER_GRAB_SYNC_SELECT,
       })) as PosOrderGrabSyncRow[])?.[0] ?? null
   }
 
   if (!row?.id) return { ok: false, message: 'pos_order_not_found' }
 
   const prevMemo = String(row.memo ?? '')
-  const mergedMemo = mergeGrabStateIntoFullMemo(prevMemo, orderID, incomingState)
+  const prevStatus = String(row.status ?? '').trim().toLowerCase()
+  const autoPaid = isGrabAutoPaidMemo(prevMemo)
+  const canTransition =
+    !!nextStatus && canApplyGrabStatusTransition(prevStatus, nextStatus, { autoPaid })
+  const autoSettle = canTransition && nextStatus === 'paid'
+  const mergedMemo = mergeGrabStateIntoFullMemo(
+    prevMemo,
+    orderID,
+    incomingState,
+    autoSettle ? { autoPaid: true } : undefined
+  )
   const memoChanged = mergedMemo !== prevMemo
 
   let statusUpdated = false
-  const prevStatus = String(row.status ?? '').trim().toLowerCase()
-  if (nextStatus && canApplyGrabStatusTransition(prevStatus, nextStatus)) {
+  if (autoSettle) {
+    const orderId = Number(row.id)
+    const patch: Record<string, unknown> = {
+      status: 'paid',
+      memo: mergedMemo,
+      ...buildGrabAutoSettlePaymentPatch(row, new Date().toISOString()),
+    }
+    // 직원이 같은 순간 POS에서 결제하면 그 결과를 덮지 않는다.
+    const unsettledFilter = `id=eq.${orderId}&status=in.(${GRAB_AUTO_SETTLE_FROM_STATUSES.join(',')})`
+    await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', unsettledFilter, patch, 'grabOrderToPos:autoSettle')
+    statusUpdated = true
+    await writePosOrderAuditTrail({
+      orderId,
+      orderNo: String(row.order_no ?? '') || null,
+      storeCode: String(row.store_code ?? '') || null,
+      actionType: 'update_status',
+      source: 'grab_webhook',
+      actor: { name: 'Grab webhook', role: 'system' },
+      before: { status: prevStatus, paid_at: row.paid_at ?? null },
+      after: { status: 'paid', paid_at: patch.paid_at ?? row.paid_at ?? null },
+      reason: `grab_state:${incomingState}`,
+    }).catch((e) => console.error('grabOrderToPos autoSettle audit:', e))
+  } else if (canTransition) {
     await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${Number(row.id)}`, {
       status: nextStatus,
       ...(memoChanged ? { memo: mergedMemo } : {}),
