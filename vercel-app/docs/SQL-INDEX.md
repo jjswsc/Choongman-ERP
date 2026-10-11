@@ -74,7 +74,7 @@
 
 - `sql/` 최상위: **747**개 · 접두어 그룹 **95**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **49**개
+- `sql/archive/` (진단 전용 등 보관): **50**개
 
 <details><summary><code>pos_*</code> (214)</summary>
 
@@ -1447,7 +1447,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (49)</summary>
+<details><summary><code>archive/</code> (50)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_bank_expense_link_empty_candidates.sql`](../sql/archive/diagnose/diagnose_bank_expense_link_empty_candidates.sql)
@@ -1484,6 +1484,7 @@
 - [`archive/diagnose/diagnose_orphan_force_push_06_delete_preview.sql`](../sql/archive/diagnose/diagnose_orphan_force_push_06_delete_preview.sql)
 - [`archive/diagnose/diagnose_orphan_force_push_07_delete_apply.sql`](../sql/archive/diagnose/diagnose_orphan_force_push_07_delete_apply.sql)
 - [`archive/diagnose/diagnose_pos_1001_tenant_and_category.sql`](../sql/archive/diagnose/diagnose_pos_1001_tenant_and_category.sql)
+- [`archive/diagnose/diagnose_pos_main_device_ekkamai.sql`](../sql/archive/diagnose/diagnose_pos_main_device_ekkamai.sql)
 - [`archive/diagnose/diagnose_pos_menus_hidden_but_code_exists.sql`](../sql/archive/diagnose/diagnose_pos_menus_hidden_but_code_exists.sql)
 - [`archive/diagnose/diagnose_pos_menus_store_1001_scope.sql`](../sql/archive/diagnose/diagnose_pos_menus_store_1001_scope.sql)
 - [`archive/diagnose/diagnose_rpkm2026_promo_code.sql`](../sql/archive/diagnose/diagnose_rpkm2026_promo_code.sql)

@@ -1,10 +1,11 @@
-import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { upsertRowsTenantStore } from '@/lib/saas-store-conflict'
+import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { isNoUniqueConflictTargetError } from '@/lib/saas-store-conflict'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
+  stampSaasTenantIdForUniqueKey,
   type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
 import {
@@ -75,18 +76,26 @@ export async function saveAttendanceQrStoreMode(params: {
   if (params.mode !== 'fixed' && params.mode !== 'rotating') {
     throw new Error('invalid_mode')
   }
-  await upsertRowsTenantStore(
-    TABLE,
-    'store_code',
-    [
-      {
-        store_code: store,
-        mode,
-        updated_at: new Date().toISOString(),
-      },
-    ],
+  const row = stampSaasTenantIdForUniqueKey(
+    { store_code: store, mode, updated_at: new Date().toISOString() },
     params.scope
   )
+  try {
+    await supabaseUpsert(TABLE, [row], 'tenant_id,store_code')
+  } catch (e) {
+    if (isMissingSaasTenantColumnError(e)) {
+      markSaasTenantColumnMissing(TABLE)
+      const { tenant_id: _t, ...legacy } = row
+      await supabaseUpsert(TABLE, [legacy], 'store_code')
+      return
+    }
+    /** PK가 아직 store_code 단독이면 같은 매장코드를 쓰는 다른 회사 행을 덮어쓴다 — attendance_qr_store_mode_tenant_pk.sql 적용 필요 */
+    if (isNoUniqueConflictTargetError(e)) {
+      await supabaseUpsert(TABLE, [row], 'store_code')
+      return
+    }
+    throw e
+  }
 }
 
 /**
