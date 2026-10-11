@@ -55,6 +55,7 @@ import {
 } from '@/components/qr-table/qr-table-guest-member-sheet'
 import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
 import { QrTableGuestCategoryNav } from '@/components/qr-table/qr-table-guest-category-nav'
+import { QrTableGuestScrollRow } from '@/components/qr-table/qr-table-guest-scroll-row'
 import { orderPosMainCategoryTabs, uniqueSubcategoriesForMainMenu } from '@/lib/pos-promo-constants'
 import { emptyPosCategoryTabOrder, sanitizePosCategoryTabOrder, type PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 import { QrTableGuestSwipeSheet } from '@/components/qr-table/qr-table-guest-swipe-sheet'
@@ -1623,7 +1624,12 @@ export function QrTableGuestApp({ token }: { token: string }) {
       {step === 'menu' ? (
         <section className="pb-[calc(9.5rem+env(safe-area-inset-bottom))]">
           {!useSubSections && subCategories.length > 0 ? (
-            <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain border-b border-stone-100 bg-white/80 px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <QrTableGuestScrollRow
+              className="border-b border-stone-100 bg-white/80"
+              scrollerClassName="flex gap-1.5 overflow-x-auto overscroll-x-contain px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              prevLabel={g('scrollPrevCategories')}
+              nextLabel={g('scrollNextCategories')}
+            >
               {['', ...subCategories].map((c) => {
                 const selected = c ? subCategory === c : !subCategory
                 const label = c || g('allCategories')
@@ -1646,7 +1652,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
                   </button>
                 )
               })}
-            </div>
+            </QrTableGuestScrollRow>
           ) : null}
           <div className="space-y-2.5 px-3 pt-1 pb-1">
             {listSections.map((section) => (
@@ -1759,6 +1765,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
               counts={mainCategoryCounts}
               labelFor={guestLabel}
               ariaLabel={g('mainCategory')}
+              scrollPrevLabel={g('scrollPrevCategories')}
+              scrollNextLabel={g('scrollNextCategories')}
               onSelect={(c) => {
                 setMainCategory(c)
                 setSubCategory('')

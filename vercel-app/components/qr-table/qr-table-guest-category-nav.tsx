@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { QrTableGuestScrollRow } from '@/components/qr-table/qr-table-guest-scroll-row'
 
 type CategoryTone = {
   /** 비활성 아이콘·라벨 */
@@ -209,14 +210,21 @@ export function QrTableGuestCategoryNav(props: {
   counts?: Map<string, number>
   labelFor: (raw: string) => string
   ariaLabel: string
+  scrollPrevLabel: string
+  scrollNextLabel: string
   onSelect: (category: string) => void
 }) {
-  const { categories, selected, counts, labelFor, ariaLabel, onSelect } = props
+  const { categories, selected, counts, labelFor, ariaLabel, scrollPrevLabel, scrollNextLabel, onSelect } = props
   if (categories.length === 0) return null
 
   return (
     <nav className="border-t border-stone-200/90 bg-white" aria-label={ariaLabel}>
-      <div className="flex gap-0.5 overflow-x-auto overscroll-x-contain px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <QrTableGuestScrollRow
+        scrollerClassName="flex gap-0.5 overflow-x-auto overscroll-x-contain px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        prevLabel={scrollPrevLabel}
+        nextLabel={scrollNextLabel}
+        nudgeHintKey="mainCategoryNav"
+      >
         {categories.map((c) => {
           const active = selected === c
           const count = counts?.get(c)
@@ -249,7 +257,7 @@ export function QrTableGuestCategoryNav(props: {
             </button>
           )
         })}
-      </div>
+      </QrTableGuestScrollRow>
     </nav>
   )
 }
