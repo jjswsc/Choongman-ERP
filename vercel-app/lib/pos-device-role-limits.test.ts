@@ -4,6 +4,7 @@ import {
   clampOrderDeviceMaxCount,
   countMainDevicesFromRows,
   countRecentOrderDevicesFromRows,
+  parsePosDeviceRegisterClientRole,
   parsePosDeviceRoleLimitsRow,
   resolveDeviceRoleForRegister,
   DEFAULT_POS_DEVICE_ROLE_LIMITS,
@@ -60,5 +61,19 @@ describe('pos-device-role-limits', () => {
     const limits = { ...DEFAULT_POS_DEVICE_ROLE_LIMITS, mainDeviceRoleLocked: true }
     const rows = [{ device_token: 'pc1', role: 'main', last_seen_at: new Date().toISOString() }]
     expect(resolveDeviceRoleForRegister(rows, 'pc1', 'order', limits)).toEqual({ role: 'main' })
+  })
+
+  it('keep does not demote main when unlocked (settings not loaded yet)', () => {
+    const limits = { ...DEFAULT_POS_DEVICE_ROLE_LIMITS, mainDeviceRoleLocked: false }
+    const rows = [{ device_token: 'pc1', role: 'main', last_seen_at: new Date().toISOString() }]
+    expect(resolveDeviceRoleForRegister(rows, 'pc1', 'keep', limits)).toEqual({ role: 'main' })
+    expect(resolveDeviceRoleForRegister(rows, 'new1', 'keep', limits)).toEqual({ role: 'order' })
+  })
+
+  it('parses client role', () => {
+    expect(parsePosDeviceRegisterClientRole('MAIN')).toBe('main')
+    expect(parsePosDeviceRegisterClientRole('keep')).toBe('keep')
+    expect(parsePosDeviceRegisterClientRole(undefined)).toBe('order')
+    expect(parsePosDeviceRegisterClientRole('x')).toBe('order')
   })
 })

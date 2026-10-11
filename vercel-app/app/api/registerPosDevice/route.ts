@@ -6,7 +6,10 @@ import {
   getPosDeviceRoleLimits,
   listStoreDevicesForRoleLimits,
 } from '@/lib/pos-device-role-limits-server'
-import { resolveDeviceRoleForRegister } from '@/lib/pos-device-role-limits'
+import {
+  parsePosDeviceRegisterClientRole,
+  resolveDeviceRoleForRegister,
+} from '@/lib/pos-device-role-limits'
 import {
   assertSaasPosDeviceRegistrationAllowed,
   resolveSaasPosDeviceNewForTenant,
@@ -21,7 +24,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}))
     const storeCode = String(body?.storeCode ?? '').trim()
     const deviceToken = String(body?.deviceToken ?? '').trim()
-    const clientRole = String(body?.role ?? 'order').toLowerCase() === 'main' ? 'main' : 'order'
+    const clientRole = parsePosDeviceRegisterClientRole(body?.role)
     if (!storeCode || !deviceToken) {
       return NextResponse.json(
         { success: false, message: 'storeCode and deviceToken required' },

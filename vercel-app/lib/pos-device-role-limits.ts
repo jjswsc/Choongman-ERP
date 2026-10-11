@@ -141,11 +141,23 @@ export function checkCanRegisterAsOrderFromRows(
   return { ok: true }
 }
 
-/** 잠금 ON: DB에 저장된 역할 유지(메인↔주문 모두 현장 변경 불가). 신규 기기는 주문 단말. */
+export type PosDeviceRegisterClientRole = 'main' | 'order' | 'keep'
+
+export function parsePosDeviceRegisterClientRole(raw: unknown): PosDeviceRegisterClientRole {
+  const v = String(raw ?? 'order').trim().toLowerCase()
+  if (v === 'main') return 'main'
+  if (v === 'keep') return 'keep'
+  return 'order'
+}
+
+/**
+ * 잠금 ON: DB에 저장된 역할 유지(메인↔주문 모두 현장 변경 불가). 신규 기기는 주문 단말.
+ * `keep`: 단말이 아직 서버 설정을 못 받은 상태 — 기존 역할 유지(잠금 OFF여도 메인을 주문으로 내리지 않음).
+ */
 export function resolveDeviceRoleForRegister(
   rows: DeviceRow[],
   deviceToken: string,
-  clientRole: 'main' | 'order',
+  clientRole: PosDeviceRegisterClientRole,
   limits: PosDeviceRoleLimits
 ): { role: 'main' | 'order'; reject?: DeviceRoleLimitCheck } {
   const token = String(deviceToken || '').trim()
@@ -158,6 +170,10 @@ export function resolveDeviceRoleForRegister(
     const orderCheck = checkCanRegisterAsOrderFromRows(rows, token, limits)
     if (!orderCheck.ok) return { role: 'order', reject: orderCheck }
     return { role: 'order' }
+  }
+
+  if (clientRole === 'keep' && existing && existing.role !== 'attendance_display') {
+    return { role: existing.role === 'main' ? 'main' : 'order' }
   }
 
   let role: 'main' | 'order' = clientRole === 'main' ? 'main' : 'order'

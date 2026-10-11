@@ -681,6 +681,10 @@ export async function GET(request: NextRequest) {
     }, { headers })
   } catch (e) {
     console.error('getPosPrinterSettings:', e)
-    return NextResponse.json(defaultRes, { headers })
+    // 200 기본값을 주면 클라이언트가 「메인 없음·잠금 OFF·자동인쇄 OFF」로 캐시를 덮어쓴다 → 마지막 정상 캐시를 쓰게 함
+    return NextResponse.json(
+      { success: false, message: 'pos_printer_settings_unavailable' },
+      { status: 503, headers }
+    )
   }
 }

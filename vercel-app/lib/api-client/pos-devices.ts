@@ -50,7 +50,8 @@ export async function getPosDevices(params: { storeCode: string }) {
 export async function registerPosDevice(params: {
   storeCode: string
   deviceToken: string
-  role: 'main' | 'order'
+  /** `keep`: 서버 설정 수신 전 — DB에 저장된 역할 유지 */
+  role: 'main' | 'order' | 'keep'
   /** 브라우저 UA·OS 등 (선택). 접속 시마다 갱신되면 목록에서 단말 구분에 도움 */
   clientHint?: string
 }) {
@@ -66,7 +67,7 @@ export async function registerPosDevice(params: {
         : {}),
     }),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{ success: boolean; message?: string; role?: 'main' | 'order' }>
 }
 
 export async function updatePosDeviceDisplayLabel(params: {
