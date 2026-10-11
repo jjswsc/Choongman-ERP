@@ -968,7 +968,7 @@ export async function POST(req: NextRequest) {
           orderNo: String(current?.order_no || `POS-${id}`),
           tableName: String(current?.table_name || '').trim(),
           memo: String(current?.memo || '').trim(),
-          guestCount: Number(current?.guest_count || 0) || undefined,
+          guestCount: Number(patch.guest_count ?? current?.guest_count ?? 0) || undefined,
           ...(deliveryAppCode ? { deliveryAppCode } : {}),
           ...(kitchenRound ? { roundNo: kitchenRound.round, roundAtMs: kitchenRound.atMs } : {}),
         },
