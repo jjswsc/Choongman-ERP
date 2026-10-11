@@ -1821,7 +1821,7 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_hr_calendar:
     'View birthdays, hire dates, work anniversaries, and resignations on a monthly calendar and list.',
   helpHow_admin_hr_calendar:
-    '① Filter by month, store, and event type.\n② Click a calendar chip or list row to open the employee profile.\n③ Use birthdays and anniversaries alongside store operations.',
+    '① Filter by month, store, and event type.\n② Turn on [Birthdays: office, managers & franchisees] at the top to show only birthdays of office staff, franchisees, and manager-level employees (role or job such as Manager, Supervisor, Officer, Director). Hire, anniversary, and resignation events are unaffected; the setting is remembered in this browser.\n③ Click a calendar chip or list row to open the employee profile.\n④ Use birthdays and anniversaries alongside store operations.',
   helpSum_admin_payroll:
     'Calculate and save payroll, view statements, salary change history, holidays, rules, and help in one place.',
   helpHow_admin_payroll:
@@ -1851,6 +1851,9 @@ Only matters the employee must handle personally on a working day:
   hrCalFilterAllTypes: 'All types',
   hrCalAnniversaryYearLabel: 'Tenure (years)',
   hrCalAnniversaryYearAll: 'All years',
+  hrCalBirthdayKeyStaffOnly: 'Birthdays: office, managers & franchisees',
+  hrCalBirthdayKeyStaffHint:
+    'When on, birthdays show only for office staff, franchisees, or employees whose role or job is Manager, Supervisor, Officer, or Director level. Hire, anniversary, and resignation events still show.',
   emp_search_hint: 'Select store/grade or enter name, then click [Search].',
   emp_list_new_hire_legend: 'Yellow row: joined within the last 3 months',
   emp_row_new_hire_hint: 'Employee has been with the company for less than 3 months.',

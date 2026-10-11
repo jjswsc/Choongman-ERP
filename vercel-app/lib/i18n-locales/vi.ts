@@ -1869,6 +1869,9 @@ export const I18N_BASE_VI = {
   hrCalFilterAllTypes: 'Mọi loại',
   hrCalAnniversaryYearLabel: 'Thâm niên (năm)',
   hrCalAnniversaryYearAll: 'Mọi năm',
+  hrCalBirthdayKeyStaffOnly: 'Sinh nhật: văn phòng, quản lý & chủ nhượng quyền',
+  hrCalBirthdayKeyStaffHint:
+    'Khi bật, chỉ hiện sinh nhật của nhân viên văn phòng, chủ nhượng quyền hoặc cấp Manager, Supervisor, Officer, Director. Nhận việc, thâm niên, từ chức vẫn hiện.',
   salesCancelReasonTop: 'Lý do hủy phổ biến',
   salesCancelReasonTopLine: 'TOP lý do hủy dòng món',
   salesCancelReasonTopOrder: 'TOP lý do hủy cả đơn',

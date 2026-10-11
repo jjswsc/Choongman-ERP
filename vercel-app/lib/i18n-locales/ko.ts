@@ -1830,7 +1830,7 @@ export const I18N_BASE_KO = {
   helpSum_admin_hr_calendar:
     '재직 직원의 생일·입사·N년·퇴사일을 월별 캘린더와 목록으로 확인합니다.',
   helpHow_admin_hr_calendar:
-    '① 월·매장·유형 필터로 일정을 좁힙니다.\n② 캘린더·목록에서 행을 클릭하면 직원 관리로 이동합니다.\n③ 생일·입사기념 등을 매장 운영 일정과 함께 활용합니다.',
+    '① 월·매장·유형 필터로 일정을 좁힙니다.\n② 상단 [생일: 오피스·매니저·점주만] 버튼을 켜면 생일은 오피스 소속·매니저급 이상(권한 또는 직무가 Manager·Supervisor·Officer·Director 등)·가맹점주만 보입니다. 입사·N년·퇴사에는 영향이 없고, 설정은 이 브라우저에 기억됩니다.\n③ 캘린더·목록에서 행을 클릭하면 직원 관리로 이동합니다.\n④ 생일·입사기념 등을 매장 운영 일정과 함께 활용합니다.',
   helpSum_admin_payroll:
     '급여 계산·DB 저장, 명세서 조회·공지, 급여 변경 이력, 공휴일·규칙, 도움말을 한 화면에서 다룹니다.',
   helpHow_admin_payroll:
@@ -1860,6 +1860,9 @@ export const I18N_BASE_KO = {
   hrCalFilterAllTypes: '유형 전체',
   hrCalAnniversaryYearLabel: '입사 년차',
   hrCalAnniversaryYearAll: '년차 전체',
+  hrCalBirthdayKeyStaffOnly: '생일: 오피스·매니저·점주만',
+  hrCalBirthdayKeyStaffHint:
+    '켜면 생일은 오피스 소속 또는 권한·직무가 매니저·슈퍼바이저·오피서·디렉터급이거나 가맹점주인 사람만 표시합니다. 입사·N년·퇴사는 그대로 보입니다.',
   emp_search_hint: '매장·등급을 선택하거나 이름을 입력 후 [검색] 버튼을 눌러주세요.',
   emp_list_new_hire_legend: '노란 배경: 입사 3개월 미만',
   emp_row_new_hire_hint: '입사한 지 3개월이 되지 않은 직원입니다.',

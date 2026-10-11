@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react"
+import { CalendarDays, ChevronLeft, ChevronRight, Star } from "lucide-react"
 import { useT } from "@/lib/i18n"
 import { useLang, type LangCode } from "@/lib/lang-context"
 import { useAuth } from "@/lib/auth-context"
@@ -26,6 +26,8 @@ const HR_CAL_KIND_ORDER: HrCalendarEventKind[] = ["birthday", "hire", "anniversa
 
 /** 입사 년차 드롭다운 상한 (미선택 시 전체) */
 const ANNIVERSARY_YEAR_MAX = 50
+
+const BIRTHDAY_KEY_STAFF_ONLY_STORAGE = "hrCal.birthdayKeyStaffOnly"
 
 const defaultKindFlags = (): Record<HrCalendarEventKind, boolean> => ({
   birthday: true,
@@ -164,6 +166,27 @@ export default function AdminHrCalendarPage() {
   const [kindFlags, setKindFlags] = React.useState<Record<HrCalendarEventKind, boolean>>(defaultKindFlags)
   /** 빈 문자열 = 입사 년차 전체 */
   const [anniversaryYearFilter, setAnniversaryYearFilter] = React.useState("")
+  const [birthdayKeyStaffOnly, setBirthdayKeyStaffOnly] = React.useState(false)
+
+  React.useEffect(() => {
+    try {
+      setBirthdayKeyStaffOnly(window.localStorage.getItem(BIRTHDAY_KEY_STAFF_ONLY_STORAGE) === "1")
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const toggleBirthdayKeyStaffOnly = React.useCallback(() => {
+    setBirthdayKeyStaffOnly((prev) => {
+      const next = !prev
+      try {
+        window.localStorage.setItem(BIRTHDAY_KEY_STAFF_ONLY_STORAGE, next ? "1" : "0")
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [])
 
   const todayBangkok = React.useMemo(() => bangkokTodayYmd(), [month])
 
@@ -190,12 +213,13 @@ export default function AdminHrCalendarPage() {
 
     return allEvents.filter((e) => {
       if (!kindFlags[e.kind]) return false
+      if (e.kind === "birthday" && birthdayKeyStaffOnly && !e.isKeyStaff) return false
       if (e.kind === "anniversary" && yearOk) {
         if (e.anniversaryYears !== yearN) return false
       }
       return true
     })
-  }, [allEvents, kindFlags, anniversaryYearFilter])
+  }, [allEvents, kindFlags, anniversaryYearFilter, birthdayKeyStaffOnly])
 
   const eventsByDate = React.useMemo(() => {
     const map: Record<string, HrCalendarEvent[]> = {}
@@ -260,7 +284,23 @@ export default function AdminHrCalendarPage() {
                   <CardDescription className="mt-1.5 max-w-xl text-pretty">{t("hrCalHint")}</CardDescription>
                 </div>
               </div>
-              <div className="flex flex-col items-stretch gap-2 sm:items-end">
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                <Button
+                  type="button"
+                  variant={birthdayKeyStaffOnly ? "default" : "outline"}
+                  aria-pressed={birthdayKeyStaffOnly}
+                  title={t("hrCalBirthdayKeyStaffHint")}
+                  disabled={!kindFlags.birthday}
+                  onClick={toggleBirthdayKeyStaffOnly}
+                  className={cn(
+                    "h-10 gap-1.5",
+                    birthdayKeyStaffOnly &&
+                      "bg-rose-600 text-white hover:bg-rose-600/90 dark:bg-rose-500 dark:hover:bg-rose-500/90"
+                  )}
+                >
+                  <Star className={cn("h-4 w-4", birthdayKeyStaffOnly && "fill-current")} />
+                  {t("hrCalBirthdayKeyStaffOnly")}
+                </Button>
                 <select
                   value={storeFilter}
                   onChange={(e) => setStoreFilter(e.target.value)}

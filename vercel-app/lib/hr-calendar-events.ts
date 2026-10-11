@@ -1,4 +1,12 @@
 import type { AdminEmployeeItem } from "@/lib/api-client"
+import { isOfficeStoreVariant } from "@/lib/office-store-canonical"
+import {
+  isAccountingRole,
+  isFranchiseeRole,
+  isManagerRole,
+  isOfficeRole,
+  isSupervisorRole,
+} from "@/lib/permissions"
 
 export type HrCalendarEventKind = "birthday" | "hire" | "anniversary" | "resign"
 
@@ -16,6 +24,26 @@ export interface HrCalendarEvent {
   /** 직원 관리 딥링크용 */
   employeeCode?: string
   employeeName?: string
+  /** 오피스 소속·매니저급 이상·가맹점주 — 「생일: 오피스·매니저·점주만」 필터 대상 */
+  isKeyStaff: boolean
+}
+
+function isKeyStaffTitle(text: string): boolean {
+  const s = String(text || "").trim()
+  if (!s) return false
+  return (
+    isOfficeRole(s) ||
+    isManagerRole(s) ||
+    isSupervisorRole(s) ||
+    isAccountingRole(s) ||
+    isFranchiseeRole(s)
+  )
+}
+
+/** 오피스(본사) 소속이거나 권한·직무가 매니저/슈퍼바이저/오피서/디렉터급 또는 가맹점주인 직원 */
+export function isHrCalendarKeyStaff(emp: Pick<AdminEmployeeItem, "store" | "role" | "job">): boolean {
+  if (isOfficeStoreVariant(emp.store)) return true
+  return isKeyStaffTitle(emp.role) || isKeyStaffTitle(emp.job)
 }
 
 function parseYmd(s: string): { y: number; m: number; d: number } | null {
@@ -78,6 +106,7 @@ export function buildHrCalendarEvents(
     const empLink = {
       employeeCode: String(emp.employeeCode || "").trim() || undefined,
       employeeName: nameRaw || undefined,
+      isKeyStaff: isHrCalendarKeyStaff(emp),
     }
 
     const resign = String(emp.resign || "").trim()

@@ -1851,6 +1851,9 @@ export const I18N_BASE_MS = {
   hrCalFilterAllTypes: 'Semua jenis',
   hrCalAnniversaryYearLabel: 'Tempoh perkhidmatan (tahun)',
   hrCalAnniversaryYearAll: 'Semua tahun',
+  hrCalBirthdayKeyStaffOnly: 'Hari jadi: pejabat, pengurus & francaisi',
+  hrCalBirthdayKeyStaffHint:
+    'Apabila dihidupkan, hari jadi hanya dipaparkan untuk staf pejabat, francaisi atau tahap Manager, Supervisor, Officer, Director. Acara dilantik, tempoh dan berhenti masih dipaparkan.',
   mobileStoreSalesTitle: 'Jualan langsung mengikut kedai',
   mobileStoreSalesSub:
     'Jumlah POS hari ini dimuat semula apabila anda pilih kedai atau Semua. Gunakan Cari untuk muat semula status meja dan pesanan terbuka.',
