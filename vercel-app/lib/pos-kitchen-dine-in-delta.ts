@@ -297,8 +297,16 @@ export function capDineInAddonSnapshotForLineConsolidation<T extends KitchenComp
     if (!lineKey || !increasedLines.has(lineKey)) continue
     changedLineKeys.add(lineKey)
   }
+  /**
+   * 같은 메뉴를 다른 회차에 다시 담으면 내용 키가 같은 줄이 여럿이다. 앞쪽(예전 회차) 줄을 고르면
+   * 서버 인쇄 큐(새 줄 기준)와 dedupe 키가 갈라져 주방이 두 장 나간다 — 수량이 늘어난 줄을 먼저 본다.
+   */
+  const changedFirst = [
+    ...params.items.filter((line) => changedLineKeys.has(params.resolveLineKey(line))),
+    ...params.items.filter((line) => !changedLineKeys.has(params.resolveLineKey(line))),
+  ]
   const kitchenLines = buildKitchenCartLinesFromSnapshotDelta(
-    params.items,
+    changedFirst,
     prevContent,
     newContent,
     (line) => dineInLineConsolidationContentKey(line, formatNote)

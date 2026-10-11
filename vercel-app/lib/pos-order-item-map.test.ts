@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  carryOverPosLineMenuRefs,
   cartLinesToPosOrderItems,
   isDineInAddonOnlyIncomingCart,
   mergeDineInAddonCartPosItemsWithExisting,
@@ -27,6 +28,24 @@ describe('parsePosOrderItemsJson', () => {
 
   it('unwraps { items: [...] }', () => {
     expect(parsePosOrderItemsJson({ items: [line] })).toEqual([line])
+  })
+})
+
+describe('carryOverPosLineMenuRefs', () => {
+  it('restores menu/option refs for the same line id when the client snapshot dropped them', () => {
+    const prev = [
+      { id: 'banban-71-73-x', menuId1: '73', menuId2: '71', optionCode1: 'G1' },
+      { id: '16-old', menuId1: '16' },
+    ]
+    const next = [
+      { id: 'cart-existing-0-banban-71-73-x', name: 'Banban', qty: 1 },
+      { id: '16-old', name: 'Fries', qty: 1, menuId1: '99' },
+      { id: '16-new', name: 'Fries', qty: 1 },
+    ]
+    const out = carryOverPosLineMenuRefs(prev, next)
+    expect(out[0]).toMatchObject({ menuId1: '73', menuId2: '71', optionCode1: 'G1' })
+    expect(out[1].menuId1).toBe('99')
+    expect(out[2]).toBe(next[2])
   })
 })
 

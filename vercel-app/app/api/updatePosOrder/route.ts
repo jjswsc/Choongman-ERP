@@ -28,7 +28,11 @@ import {
   coercePaymentOtherBreakdownForSave,
   paymentOtherBreakdownForDb,
 } from '@/lib/pos-payment-other-breakdown'
-import { parsePosOrderItemsJson, resolveCartLineQuantityForSave } from '@/lib/pos-order-item-map'
+import {
+  carryOverPosLineMenuRefs,
+  parsePosOrderItemsJson,
+  resolveCartLineQuantityForSave,
+} from '@/lib/pos-order-item-map'
 import { carryOverPosLineAddedAt, resolvePosOrderRoundForLineIds } from '@/lib/pos-order-rounds'
 import { enrichOrderItemsWithOptionCode } from '@/lib/pos-option-code-enrich-server'
 import { enrichOrderItemsWithPromoRegularPrice } from '@/lib/pos-order-promo-regular-price-server'
@@ -343,9 +347,14 @@ export async function POST(req: NextRequest) {
     const isDineInForRounds =
       coercePosOrderTypeForDb(String(current?.order_type ?? body?.orderType ?? body?.order_type ?? '')) ===
       'dine_in'
+    const currentItemsForCarryOver = parsePosOrderItemsJson(current?.items_json)
+    items = carryOverPosLineMenuRefs(
+      currentItemsForCarryOver,
+      items as Array<Record<string, unknown>>
+    ) as typeof items
     if (isDineInForRounds) {
       items = carryOverPosLineAddedAt(
-        parsePosOrderItemsJson(current?.items_json),
+        currentItemsForCarryOver,
         items as Array<Record<string, unknown>>
       ) as typeof items
     }

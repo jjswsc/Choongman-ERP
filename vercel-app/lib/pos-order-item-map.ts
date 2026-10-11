@@ -102,6 +102,43 @@ export function parsePosOrderItemsJson(raw: unknown): Record<string, unknown>[] 
   return []
 }
 
+const POS_LINE_MENU_REF_KEYS = [
+  'menuId1',
+  'menuId2',
+  'optionId1',
+  'optionId2',
+  'optionCode1',
+  'optionCode2',
+] as const
+
+/**
+ * 저장 직전: 같은 줄 id 인데 메뉴 id 가 빠진 줄은 DB 줄에서 메뉴·옵션 참조를 이어 받는다.
+ * 클라이언트 스냅샷이 menuId1 을 잃은 채 items_json 을 덮어쓰면 메뉴별 집계·주방 dedupe 키가 깨진다.
+ */
+export function carryOverPosLineMenuRefs<T extends Record<string, unknown>>(
+  prevLines: Array<Record<string, unknown>>,
+  nextLines: T[]
+): T[] {
+  const prevById = new Map<string, Record<string, unknown>>()
+  for (const p of prevLines || []) {
+    const k = normalizeCartLineIdForSave(p?.id)
+    if (k) prevById.set(k, p)
+  }
+  if (prevById.size === 0) return nextLines
+  return (nextLines || []).map((line) => {
+    const ownMenu = String(line?.menuId1 ?? line?.menuId ?? line?.menu_id1 ?? '').trim()
+    if (ownMenu) return line
+    const prev = prevById.get(normalizeCartLineIdForSave(line?.id))
+    if (!prev) return line
+    const patch: Record<string, unknown> = {}
+    for (const key of POS_LINE_MENU_REF_KEYS) {
+      const v = String(prev[key] ?? '').trim()
+      if (v && !String(line?.[key] ?? '').trim()) patch[key] = v
+    }
+    return Object.keys(patch).length ? ({ ...line, ...patch } as T) : line
+  })
+}
+
 /** 카트→저장 시 최종 qty (양수가 아니면 1) */
 export function resolveCartLineQuantityForSave(line: {
   quantity?: unknown

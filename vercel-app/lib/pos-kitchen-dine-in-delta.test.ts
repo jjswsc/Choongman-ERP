@@ -390,6 +390,26 @@ describe('capDineInAddonSnapshotForLineConsolidation', () => {
     ])
   })
 
+  it('picks the newly added round line so the dedupe key matches the print-job line', () => {
+    const fries = { name: 'Supreme Cajun Fries', price: 150 }
+    const oldRound = { id: '16-old', ...fries, qty: 1 }
+    const newRound = { id: '16-new', ...fries, qty: 1, menuId: '16' }
+    const prev = buildDineInQtySnapshotMap([oldRound], resolveKey)
+    const nextItems = [oldRound, newRound]
+    const next = buildDineInQtySnapshotMap(nextItems, resolveKey)
+    const capped = capDineInAddonSnapshotForLineConsolidation({
+      items: nextItems,
+      prevLineQty: prev,
+      newLineQty: next,
+      resolveLineKey: resolveKey,
+    })
+    expect(capped?.kitchenLines).toEqual([newRound])
+    const jobLine = { id: '16-new', ...fries, qty: 1, quantity: 1, menuId1: '16' }
+    expect(buildDineInAddKitchenAutoPrintDedupeKey(138588, capped?.kitchenLines ?? [])).toBe(
+      buildDineInAddKitchenAutoPrintDedupeKey(138588, [jobLine])
+    )
+  })
+
   it('returns null when the previous snapshot has no content totals', () => {
     const prev = new Map([['a', 1]])
     const next = new Map([
