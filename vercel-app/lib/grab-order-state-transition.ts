@@ -46,8 +46,10 @@ export type GrabAutoSettleOrderRow = {
 }
 
 /**
- * Grab 주문은 저장 시 payment_delivery_app(또는 현금)이 이미 채워져 있다.
- * 비어 있는 예외 주문만 총액을 배달앱 결제로 채운다.
+ * Grab 주문은 저장 시 payment_delivery_app이 이미 채워져 있다.
+ * 비어 있는 예외 주문은 총액을 배달앱 결제로 채우고,
+ * 예전 웹훅이 Grab CASH를 payment_cash로 넣어 둔 주문은 배달앱 결제로 옮긴다
+ * (그 돈은 라이더가 받아 Grab이 정산 — 매장 서랍 현금이 아님).
  */
 export function buildGrabAutoSettlePaymentPatch(
   row: GrabAutoSettleOrderRow,
@@ -55,15 +57,25 @@ export function buildGrabAutoSettlePaymentPatch(
 ): Record<string, unknown> {
   const patch: Record<string, unknown> = {}
   const total = Math.max(0, Number(row.total ?? 0) || 0)
+  const cash = Math.max(0, Number(row.payment_cash ?? 0) || 0)
+  const deliveryApp = Math.max(0, Number(row.payment_delivery_app ?? 0) || 0)
+  const nonCashTender =
+    Math.max(0, Number(row.payment_card ?? 0) || 0) +
+    Math.max(0, Number(row.payment_qr ?? 0) || 0) +
+    Math.max(0, Number(row.payment_other ?? 0) || 0)
   const paymentSum = posOrderPaymentSumFromAmounts({
-    paymentCash: Number(row.payment_cash ?? 0) || 0,
+    paymentCash: cash,
     paymentCard: Number(row.payment_card ?? 0) || 0,
     paymentQr: Number(row.payment_qr ?? 0) || 0,
     paymentOther: Number(row.payment_other ?? 0) || 0,
-    paymentDeliveryApp: Number(row.payment_delivery_app ?? 0) || 0,
+    paymentDeliveryApp: deliveryApp,
   })
   if (paymentSum <= 0.005 && total > 0.005) {
     patch.payment_delivery_app = total
+    patch.delivery_payment_channel = 'grab'
+  } else if (cash > 0.005 && nonCashTender <= 0.005) {
+    patch.payment_cash = 0
+    patch.payment_delivery_app = total > 0.005 ? total : Math.round((deliveryApp + cash) * 100) / 100
     patch.delivery_payment_channel = 'grab'
   }
   if (!String(row.paid_at ?? '').trim()) {

@@ -72,9 +72,9 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **747**개 · 접두어 그룹 **95**개
+- `sql/` 최상위: **748**개 · 접두어 그룹 **95**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **50**개
+- `sql/archive/` (진단 전용 등 보관): **52**개
 
 <details><summary><code>pos_*</code> (214)</summary>
 
@@ -576,6 +576,24 @@
 
 </details>
 
+<details><summary><code>attendance_*</code> (13)</summary>
+
+- [`attendance_break_resume_dedupe.sql`](../sql/attendance_break_resume_dedupe.sql)
+- [`attendance_employee_id_hardening.sql`](../sql/attendance_employee_id_hardening.sql)
+- [`attendance_employee_id_second_pass.sql`](../sql/attendance_employee_id_second_pass.sql)
+- [`attendance_employee_id_third_pass.sql`](../sql/attendance_employee_id_third_pass.sql)
+- [`attendance_log_adjustments.sql`](../sql/attendance_log_adjustments.sql)
+- [`attendance_logs_employee_code.sql`](../sql/attendance_logs_employee_code.sql)
+- [`attendance_manual_map_cm_office.sql`](../sql/attendance_manual_map_cm_office.sql)
+- [`attendance_qr_store_mode.sql`](../sql/attendance_qr_store_mode.sql)
+- [`attendance_qr_store_mode_tenant_pk.sql`](../sql/attendance_qr_store_mode_tenant_pk.sql) — log
+- [`attendance_schedule_employee_keys.sql`](../sql/attendance_schedule_employee_keys.sql)
+- [`attendance_schedule_match_diagnostic.sql`](../sql/attendance_schedule_match_diagnostic.sql) — diagnose
+- [`attendance_unresolved_csv2_lookup.sql`](../sql/attendance_unresolved_csv2_lookup.sql) — diagnose
+- [`attendance_unresolved_fuzzy_lookup.sql`](../sql/attendance_unresolved_fuzzy_lookup.sql) — diagnose
+
+</details>
+
 <details><summary><code>kbank_*</code> (13)</summary>
 
 - [`kbank_mbk_true_digital_01_preview.sql`](../sql/kbank_mbk_true_digital_01_preview.sql) — preview
@@ -609,23 +627,6 @@
 - [`true_digital_receipt_biz_address_01_check.sql`](../sql/true_digital_receipt_biz_address_01_check.sql) — verify
 - [`true_digital_receipt_biz_address_02_preview.sql`](../sql/true_digital_receipt_biz_address_02_preview.sql) — preview
 - [`true_digital_receipt_biz_address_03_apply.sql`](../sql/true_digital_receipt_biz_address_03_apply.sql) — apply
-
-</details>
-
-<details><summary><code>attendance_*</code> (12)</summary>
-
-- [`attendance_break_resume_dedupe.sql`](../sql/attendance_break_resume_dedupe.sql)
-- [`attendance_employee_id_hardening.sql`](../sql/attendance_employee_id_hardening.sql)
-- [`attendance_employee_id_second_pass.sql`](../sql/attendance_employee_id_second_pass.sql)
-- [`attendance_employee_id_third_pass.sql`](../sql/attendance_employee_id_third_pass.sql)
-- [`attendance_log_adjustments.sql`](../sql/attendance_log_adjustments.sql)
-- [`attendance_logs_employee_code.sql`](../sql/attendance_logs_employee_code.sql)
-- [`attendance_manual_map_cm_office.sql`](../sql/attendance_manual_map_cm_office.sql)
-- [`attendance_qr_store_mode.sql`](../sql/attendance_qr_store_mode.sql)
-- [`attendance_schedule_employee_keys.sql`](../sql/attendance_schedule_employee_keys.sql)
-- [`attendance_schedule_match_diagnostic.sql`](../sql/attendance_schedule_match_diagnostic.sql) — diagnose
-- [`attendance_unresolved_csv2_lookup.sql`](../sql/attendance_unresolved_csv2_lookup.sql) — diagnose
-- [`attendance_unresolved_fuzzy_lookup.sql`](../sql/attendance_unresolved_fuzzy_lookup.sql) — diagnose
 
 </details>
 
@@ -1447,9 +1448,11 @@
 
 </details>
 
-<details><summary><code>archive/</code> (50)</summary>
+<details><summary><code>archive/</code> (52)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
+- [`archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql)
+- [`archive/diagnose/diagnose_attendance_qr_mode_02_shared_store_codes.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_02_shared_store_codes.sql)
 - [`archive/diagnose/diagnose_bank_expense_link_empty_candidates.sql`](../sql/archive/diagnose/diagnose_bank_expense_link_empty_candidates.sql)
 - [`archive/diagnose/diagnose_barbq_chicken_option_bom.sql`](../sql/archive/diagnose/diagnose_barbq_chicken_option_bom.sql)
 - [`archive/diagnose/diagnose_bbq_two_phase_fields.sql`](../sql/archive/diagnose/diagnose_bbq_two_phase_fields.sql)

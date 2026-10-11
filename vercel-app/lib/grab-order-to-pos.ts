@@ -1158,8 +1158,9 @@ export async function buildGrabPosOrderSnapshot(
     grabPlatformDeliveryFee,
   })
   const vat = tax > 0 ? tax : pricing.vatFeeAmt
-  const paymentCash = paymentType === 'CASH' ? total : 0
-  const paymentDeliveryApp = paymentType === 'CASHLESS' ? total : 0
+  /** Grab CASH는 손님이 라이더에게 내는 돈 — 매장 서랍에 안 들어오고 Grab 정산으로 받으므로 배달앱 결제로 기록 */
+  const paymentCash = 0
+  const paymentDeliveryApp = paymentType === 'CASH' || paymentType === 'CASHLESS' ? total : 0
 
   return {
     items,

@@ -70,10 +70,28 @@ describe('buildGrabAutoSettlePaymentPatch', () => {
     })
   })
 
-  it('does not overwrite cash orders or existing paid_at', () => {
+  it('moves legacy Grab CASH rows to delivery app (not drawer cash)', () => {
+    expect(buildGrabAutoSettlePaymentPatch({ total: 279, payment_cash: 279, paid_at: null }, now)).toEqual({
+      payment_cash: 0,
+      payment_delivery_app: 279,
+      delivery_payment_channel: 'grab',
+      paid_at: now,
+    })
+  })
+
+  it('keeps existing paid_at', () => {
     expect(
       buildGrabAutoSettlePaymentPatch(
-        { total: 169, payment_cash: 169, paid_at: '2026-10-10T16:00:00.000Z' },
+        { total: 169, payment_delivery_app: 169, paid_at: '2026-10-10T16:00:00.000Z' },
+        now
+      )
+    ).toEqual({})
+  })
+
+  it('leaves mixed tenders alone', () => {
+    expect(
+      buildGrabAutoSettlePaymentPatch(
+        { total: 200, payment_cash: 100, payment_card: 100, paid_at: '2026-10-10T16:00:00.000Z' },
         now
       )
     ).toEqual({})
