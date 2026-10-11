@@ -52,6 +52,13 @@ export function AttendanceQrScannerDialog({
   const [supported, setSupported] = React.useState(true)
   const [cameraBlocked, setCameraBlocked] = React.useState(false)
   const [scanAttempt, setScanAttempt] = React.useState(0)
+  // 부모가 매초 리렌더(시계)해도 카메라가 재시작되지 않도록 콜백은 ref로만 참조
+  const onScanRef = React.useRef(onScan)
+  const onOpenChangeRef = React.useRef(onOpenChange)
+  React.useEffect(() => {
+    onScanRef.current = onScan
+    onOpenChangeRef.current = onOpenChange
+  })
 
   const stopCamera = React.useCallback(() => {
     stopScanRef.current?.()
@@ -137,8 +144,8 @@ export function AttendanceQrScannerDialog({
         stopScanRef.current = startQrScanLoop({
           video,
           onScan: (raw) => {
-            onScan(raw)
-            onOpenChange(false)
+            onScanRef.current(raw)
+            onOpenChangeRef.current(false)
           },
         })
       } catch (error) {
@@ -155,7 +162,7 @@ export function AttendanceQrScannerDialog({
       cancelled = true
       stopCamera()
     }
-  }, [open, onOpenChange, onScan, scanAttempt, showCameraError, stopCamera])
+  }, [open, scanAttempt, showCameraError, stopCamera])
 
   const handleRetry = () => {
     stopCamera()
