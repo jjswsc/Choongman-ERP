@@ -46,6 +46,11 @@ describe('qr-table-thermal-slip-html', () => {
     expect(html).not.toContain('30번')
   })
 
+  it('keeps the floor prefix so the slip matches the admin QR card', () => {
+    const html = buildQrTableThermalSlipHtml({ tableName: '1F-1', qrDataUrl: QR_DATA })
+    expect(html).toContain('>1F-1<')
+  })
+
   it('rejects remote QR images', () => {
     expect(() =>
       buildQrTableThermalSlipHtml({

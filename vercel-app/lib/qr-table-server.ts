@@ -1466,7 +1466,10 @@ export async function getPublicSessionBootstrap(token: string, origin?: string) 
       : await loadBuffetTiersForStore(tok.storeCode, { withMenus: true })
   const activeSession = await loadActiveSessionForTable(tok.storeCode, tok.tableName)
   return {
-    token: mapToken(tok, origin),
+    token: {
+      ...tok,
+      publicUrl: origin && tok.token ? `${origin.replace(/\/$/, '')}/t/${tok.token}` : undefined,
+    },
     settings,
     tiers,
     activeSession,

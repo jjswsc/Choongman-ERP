@@ -62,7 +62,7 @@ import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { buildPosCustomerMemoLineForPrint } from '@/lib/pos-member-portal-takeout-label'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { escapeHtml } from '@/lib/utils'
-import { posKitchenGuestSpread } from '@/lib/pos-terminal-auto-print'
+import { posKitchenGuestSpread, storeAutoPrintFlagsFromSettings } from '@/lib/pos-terminal-auto-print'
 import { isQrTableGuestOrderLine, pickQrGuestLinesForHallAutoprint, buildQrGuestCumulativeHallPrintItems } from '@/lib/qr-table-types'
 import {
   formatPosOrderRoundLabel,
@@ -583,7 +583,10 @@ export async function printKitchenForOrder(
       kitchenItemsWithResolvedPromo(items as Record<string, unknown>[], ctx) as typeof items,
       buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
     )
-    const printAllQrGuestHall = (opts?.kitchenLines || []).some((it) => isQrTableGuestOrderLine(it))
+    /** 「추가주문 시 영수증 자동인쇄」가 꺼져 있으면 QR 손님 줄도 주방에 안 오른 줄(음료 등)만 홀로 */
+    const printAllQrGuestHall =
+      (opts?.kitchenLines || []).some((it) => isQrTableGuestOrderLine(it)) &&
+      storeAutoPrintFlagsFromSettings(settings).receiptOnAddOrder
     const hallLines = pickQrGuestLinesForHallAutoprint(
       items as Array<{
         id?: unknown

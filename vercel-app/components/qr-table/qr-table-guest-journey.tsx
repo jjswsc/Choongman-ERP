@@ -322,6 +322,9 @@ export function QrTableGuestOrderHistorySheet(props: {
   tableName: string
   orderId: number | null
   balanceDue?: number
+  /** VAT·봉사료 전 음식 합계 — 잔액 카드 내역 표시용 */
+  foodSubtotal?: number
+  orderTotal?: number
   g: (key: string) => string
   labelFor: (raw: string) => string
   onAddMenu: () => void
@@ -336,6 +339,8 @@ export function QrTableGuestOrderHistorySheet(props: {
     tableName,
     orderId,
     balanceDue = 0,
+    foodSubtotal = 0,
+    orderTotal = 0,
     g,
     labelFor,
     onAddMenu,
@@ -351,6 +356,7 @@ export function QrTableGuestOrderHistorySheet(props: {
   const current = rounds.length > 0 ? rounds[rounds.length - 1] : null
   const past = rounds.length > 1 ? rounds.slice(0, -1).reverse() : []
   const canPay = balanceDue >= 1 && onPayBill
+  const feeAmt = foodSubtotal > 0 ? Math.round(orderTotal - foodSubtotal) : 0
 
   React.useEffect(() => {
     if (open) setTab('current')
@@ -401,6 +407,18 @@ export function QrTableGuestOrderHistorySheet(props: {
       <div className="space-y-3 px-4 py-2 pb-6">
         {canPay ? (
           <div className="rounded-2xl border border-[var(--qr-brand,#b45309)]/25 bg-[var(--qr-brand,#b45309)]/10 px-4 py-3">
+            {feeAmt >= 1 ? (
+              <div className="mb-1.5 space-y-0.5 border-b border-[var(--qr-brand,#b45309)]/15 pb-1.5 text-xs text-stone-600">
+                <div className="flex items-center justify-between gap-2">
+                  <span>{g('foodSubtotal')}</span>
+                  <span className="tabular-nums">฿{Math.round(foodSubtotal).toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span>{g('taxServiceFee')}</span>
+                  <span className="tabular-nums">฿{feeAmt.toLocaleString()}</span>
+                </div>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-2 text-sm">
               <span className="text-stone-600">{g('balance')}</span>
               <span className="font-bold tabular-nums text-[var(--qr-brand,#b45309)]">

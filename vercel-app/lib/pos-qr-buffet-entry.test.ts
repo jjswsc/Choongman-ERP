@@ -173,22 +173,23 @@ describe('buildQrGuestCumulativeHallPrintItems', () => {
       'qr-old-coke',
       'qr-new-food',
       'qr-new-coke',
+      'buffet-entry-9',
     ])
     expect(built.items.filter((it) => it.isAddon).map((it) => it.id)).toEqual([
       'qr-new-food',
       'qr-new-coke',
     ])
-    expect(built.subtotal).toBe(169 + 30 + 169 + 30)
+    expect(built.subtotal).toBe(169 + 30 + 169 + 30 + 499 * 2)
     expect(built.newLineIdsKey).toBe('qr-new-coke,qr-new-food')
   })
 
-  it('does not mark isAddon on the first hall slip (no previous guest lines)', () => {
+  it('does not mark isAddon on the first food slip when only the buffet entry came before', () => {
     const built = buildQrGuestCumulativeHallPrintItems({
-      allOrderItems: [...newest, buffet],
+      allOrderItems: [buffet, ...newest],
       newLineIds: newest.map((it) => it.id),
     })
     expect(built.items.every((it) => !it.isAddon)).toBe(true)
-    expect(built.items).toHaveLength(2)
+    expect(built.items.map((it) => it.id)).toEqual(['buffet-entry-9', 'qr-new-food', 'qr-new-coke'])
   })
 
   it('keeps set composition on the hall slip', () => {
@@ -215,7 +216,7 @@ describe('buildQrGuestCumulativeHallPrintItems', () => {
     expect(built.items[0]?.promoItems?.map((row) => row.menuName)).toEqual(['Soy Garlic Chicken', 'Rice'])
   })
 
-  it('excludes buffet entry but keeps staff POS lines so the total matches the bill', () => {
+  it('keeps buffet entry and staff POS lines so the total matches the bill', () => {
     const built = buildQrGuestCumulativeHallPrintItems({
       allOrderItems: [
         buffet,
@@ -226,6 +227,7 @@ describe('buildQrGuestCumulativeHallPrintItems', () => {
       newLineIds: newest.map((it) => it.id),
     })
     expect(built.items.map((it) => it.id)).toEqual([
+      'buffet-entry-9',
       'qr-old-food',
       'qr-old-coke',
       '56-staff-pepsi',
@@ -233,7 +235,7 @@ describe('buildQrGuestCumulativeHallPrintItems', () => {
       'qr-new-coke',
     ])
     expect(built.items.filter((it) => it.isAddon).map((it) => it.id)).toEqual(['qr-new-food', 'qr-new-coke'])
-    expect(built.subtotal).toBe(169 + 30 + 90 + 169 + 30)
+    expect(built.subtotal).toBe(499 * 2 + 169 + 30 + 90 + 169 + 30)
   })
 
   it('marks new QR lines as addon when only staff lines came before', () => {

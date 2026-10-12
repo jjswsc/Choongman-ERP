@@ -128,6 +128,7 @@ type OrderSummaryItem = {
 
 type OrderSummaryState = {
   orderId: number | null
+  subtotal: number
   total: number
   paymentQr: number
   balanceDue: number
@@ -136,6 +137,7 @@ type OrderSummaryState = {
 
 function toOrderSummary(order: {
   orderId?: number | null
+  subtotal?: number
   total?: number
   paymentQr?: number
   balanceDue?: number
@@ -143,6 +145,7 @@ function toOrderSummary(order: {
 }): OrderSummaryState {
   return {
     orderId: order.orderId != null && Number(order.orderId) > 0 ? Number(order.orderId) : null,
+    subtotal: Number(order.subtotal || 0),
     total: Number(order.total || 0),
     paymentQr: Number(order.paymentQr || 0),
     balanceDue: Number(order.balanceDue || 0),
@@ -1345,73 +1348,74 @@ export function QrTableGuestApp({ token }: { token: string }) {
   return (
     <div className="mx-auto min-h-dvh max-w-lg bg-[var(--qr-accent,#faf7f2)] text-stone-900" style={brandCss(settings)}>
       <header className="sticky top-0 z-10 border-b border-stone-200/80 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-          <div className="min-w-0">
-            <h1 className="truncate text-[15px] font-semibold leading-tight">
-              {g('table')} {tableName}
-            </h1>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {sessionAuth ? (
-              member ? (
-                <button
-                  type="button"
-                  disabled={memberBusy}
-                  className="max-w-[8.5rem] truncate rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800"
-                  onClick={() => {
-                    void handleMemberLogout().then(() => showToast(g('memberLogout'), 2800))
-                  }}
-                  title={g('memberLogout')}
-                >
-                  {g('memberLogout')} · {(member.name || member.memberNo || '').slice(0, 8)}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
-                  onClick={() => {
-                    setMemberError('')
-                    setMemberLoginOpen(true)
-                  }}
-                >
-                  {g('memberLogin')}
-                </button>
-              )
-            ) : null}
-            {step === 'menu' &&
-            sessionAuth &&
-            guestPayEnabled &&
-            Number(orderSummary?.balanceDue || 0) >= 1 ? (
+        <div className="flex items-center justify-between gap-2 px-3 pt-1.5">
+          <h1 className="flex min-w-0 items-center gap-1.5 text-[15px] font-semibold leading-tight">
+            <span className="shrink-0 text-stone-500">{g('table')}</span>
+            <span className="truncate rounded-lg bg-[var(--qr-brand,#b45309)] px-2 py-0.5 font-bold text-white">
+              {tableName || '—'}
+            </span>
+          </h1>
+          <GuestLangHeaderButton lang={lang} onClick={() => setLangSheetOpen(true)} />
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 px-3 py-1.5 empty:hidden">
+          {sessionAuth ? (
+            member ? (
               <button
                 type="button"
-                disabled={busy}
-                className="rounded-full bg-[var(--qr-brand,#b45309)] px-2.5 py-1 text-[11px] font-semibold text-white"
-                onClick={() => void openBillPay()}
+                disabled={memberBusy}
+                className="max-w-[8.5rem] truncate rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800"
+                onClick={() => {
+                  void handleMemberLogout().then(() => showToast(g('memberLogout'), 2800))
+                }}
+                title={g('memberLogout')}
               >
-                {g('payBill')}
+                {g('memberLogout')} · {(member.name || member.memberNo || '').slice(0, 8)}
               </button>
-            ) : null}
-            {step === 'menu' && sessionAuth ? (
+            ) : (
               <button
                 type="button"
                 className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
-                onClick={() => setHistoryOpen(true)}
+                onClick={() => {
+                  setMemberError('')
+                  setMemberLoginOpen(true)
+                }}
               >
-                {g('orderHistory')}
-                {sentLines.length > 0 ? ` (${sentLines.reduce((n, l) => n + l.qty, 0)})` : ''}
+                {g('memberLogin')}
               </button>
-            ) : null}
-            {(step === 'menu' || step === 'wait_staff' || step === 'pay_entry') && sessionAuth ? (
-              <button
-                type="button"
-                className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
-                onClick={() => setCallOpen((v) => !v)}
-              >
-                {g('callStaff')}
-              </button>
-            ) : null}
-            <GuestLangHeaderButton lang={lang} onClick={() => setLangSheetOpen(true)} />
-          </div>
+            )
+          ) : null}
+          {step === 'menu' &&
+          sessionAuth &&
+          guestPayEnabled &&
+          Number(orderSummary?.balanceDue || 0) >= 1 ? (
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-full bg-[var(--qr-brand,#b45309)] px-2.5 py-1 text-[11px] font-semibold text-white"
+              onClick={() => void openBillPay()}
+            >
+              {g('payBill')}
+            </button>
+          ) : null}
+          {step === 'menu' && sessionAuth ? (
+            <button
+              type="button"
+              className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
+              onClick={() => setHistoryOpen(true)}
+            >
+              {g('orderHistory')}
+              {sentLines.length > 0 ? ` (${sentLines.reduce((n, l) => n + l.qty, 0)})` : ''}
+            </button>
+          ) : null}
+          {(step === 'menu' || step === 'wait_staff' || step === 'pay_entry') && sessionAuth ? (
+            <button
+              type="button"
+              className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
+              onClick={() => setCallOpen((v) => !v)}
+            >
+              {g('callStaff')}
+            </button>
+          ) : null}
         </div>
         {step === 'menu' ? (
           <div className="flex items-center gap-1.5 border-t border-stone-100 px-3 py-1.5">
@@ -1475,6 +1479,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
         tableName={tableName}
         orderId={orderSummary?.orderId ?? null}
         balanceDue={Number(orderSummary?.balanceDue || 0)}
+        foodSubtotal={Number(orderSummary?.subtotal || 0)}
+        orderTotal={Number(orderSummary?.total || 0)}
         g={g}
         labelFor={guestLabel}
         onAddMenu={() => {

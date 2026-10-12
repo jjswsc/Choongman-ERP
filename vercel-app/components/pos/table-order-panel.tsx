@@ -40,6 +40,7 @@ import {
   Maximize2,
   Minimize2,
   MoveHorizontal,
+  Printer,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
@@ -107,6 +108,8 @@ export interface TableOrderPanelProps {
   onAfterFullOrderKitchenReprint?: (orderId: number, detail: PosKitchenReprintPayload) => void | Promise<void>
   /** 테이블 이동·합석 직후 — 터미널에서 갱신된 테이블 번호로 홀 주문서 재인쇄 */
   onAfterTableTransfer?: (keepOrderId: number) => void | Promise<void>
+  /** 직원 수동 — 현재 주문 전체로 홀 주문서(체크빌) 재인쇄 */
+  onReprintHallOrder?: (orderId: number) => void | Promise<void>
   /** 합석 API 호출 직전 — Realtime 추가주문 인쇄와 중복 방지 */
   onBeforeTableMerge?: (keepOrderId: number) => void
   /** 테이블 이동 API 호출 직전 — Realtime 추가주문 인쇄와 중복 방지 */
@@ -141,6 +144,7 @@ export function TableOrderPanel({
   onAfterPartialLineRemoved,
   onAfterFullOrderKitchenReprint,
   onAfterTableTransfer,
+  onReprintHallOrder,
   onBeforeTableMerge,
   onBeforeTableMove,
   onTableMovedFrom,
@@ -745,38 +749,71 @@ export function TableOrderPanel({
 
   const showTableActions = order?.type === 'dine-in' && !listExpanded
 
+  const [hallReprinting, setHallReprinting] = useState(false)
+  const handleReprintHallOrder = async () => {
+    const orderId = Number(order?.id ?? 0)
+    if (!onReprintHallOrder || !Number.isFinite(orderId) || orderId <= 0) return
+    setHallReprinting(true)
+    try {
+      await onReprintHallOrder(orderId)
+    } finally {
+      setHallReprinting(false)
+    }
+  }
+
   const renderTableActions = () => {
-    if (!order || !showTableActions || allTables.length === 0) return null
+    if (!order || !showTableActions) return null
+    const canTransfer = allTables.length > 0
+    if (!canTransfer && !onReprintHallOrder) return null
     return (
       <>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 min-w-8 shrink-0 gap-1 px-1.5 text-xs font-semibold"
-          disabled={emptyTableOptions.length === 0 || transferSubmitting}
-          onClick={() => setMoveOpen(true)}
-          title={t('posTableMoveBtn') || ''}
-          aria-label={t('posTableMoveBtn') || undefined}
-        >
-          <ArrowRightLeft className="h-4 w-4 shrink-0" aria-hidden />
-          <span className="hidden @[21rem]/tbl:inline">{t('posTableMoveBtn')}</span>
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 min-w-8 shrink-0 gap-1 px-1.5 text-xs font-semibold"
-          title={mergeDisabledByPayment ? (t('posTableMergeHint') || '') : (t('posTableMergeBtn') || '')}
-          aria-label={t('posTableMergeBtn') || undefined}
-          disabled={
-            mergePeerOptions.length === 0 || mergeDisabledByPayment || transferSubmitting
-          }
-          onClick={() => setMergeOpen(true)}
-        >
-          <Combine className="h-4 w-4 shrink-0" aria-hidden />
-          <span className="hidden @[21rem]/tbl:inline">{t('posTableMergeBtn')}</span>
-        </Button>
+        {onReprintHallOrder ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 min-w-8 shrink-0 gap-1 px-1.5 text-xs font-semibold"
+            disabled={hallReprinting}
+            onClick={() => void handleReprintHallOrder()}
+            title={t('posHallOrder') || ''}
+            aria-label={t('posHallOrder') || undefined}
+          >
+            <Printer className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="hidden @[21rem]/tbl:inline">{t('posHallOrder')}</span>
+          </Button>
+        ) : null}
+        {canTransfer ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 min-w-8 shrink-0 gap-1 px-1.5 text-xs font-semibold"
+              disabled={emptyTableOptions.length === 0 || transferSubmitting}
+              onClick={() => setMoveOpen(true)}
+              title={t('posTableMoveBtn') || ''}
+              aria-label={t('posTableMoveBtn') || undefined}
+            >
+              <ArrowRightLeft className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="hidden @[21rem]/tbl:inline">{t('posTableMoveBtn')}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 min-w-8 shrink-0 gap-1 px-1.5 text-xs font-semibold"
+              title={mergeDisabledByPayment ? (t('posTableMergeHint') || '') : (t('posTableMergeBtn') || '')}
+              aria-label={t('posTableMergeBtn') || undefined}
+              disabled={
+                mergePeerOptions.length === 0 || mergeDisabledByPayment || transferSubmitting
+              }
+              onClick={() => setMergeOpen(true)}
+            >
+              <Combine className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="hidden @[21rem]/tbl:inline">{t('posTableMergeBtn')}</span>
+            </Button>
+          </>
+        ) : null}
       </>
     )
   }

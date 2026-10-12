@@ -4907,6 +4907,28 @@ export default function PosTerminalPage() {
     }
   }
 
+  /** 테이블 패널 수동 재인쇄 — 자동인쇄 설정과 무관하게 DB 최신 주문 전체로 홀 주문서 1장 */
+  async function reprintTableHallOrder(orderId: number) {
+    if (posDemoRef.current) return
+    try {
+      const list = await getPosOrders({ orderId, storeCode: currentStoreId })
+      const po = list?.[0] as PosOrder | undefined
+      if (!po?.items?.length) {
+        await appAlert(t('posPrintUnavailable'))
+        return
+      }
+      const receiptPayload = hallOrderReceiptPayloadFromPosOrder(po, pricingAdjustments, {
+        ...posReceiptLineOpts,
+        orderTypeLabel: t('posOrderTypeDineIn') ?? '매장',
+        storeCodeFallback: currentStoreId,
+      })
+      await printReceiptNow(receiptPayload, null, false, undefined, true)
+    } catch (e) {
+      console.error('reprintTableHallOrder:', e)
+      await appAlert(t('posPrintUnavailable'))
+    }
+  }
+
   /** 테이블 이동·합석 직후: 갱신된 테이블 번호·품목으로 홀 주문서만 재인쇄 */
   async function runAfterTableTransferHallReprint(keepOrderId: number) {
     await runAfterPartialLineCancelPrints(keepOrderId, 'dine_in', undefined, { skipKitchen: true })
@@ -12483,6 +12505,7 @@ export default function PosTerminalPage() {
                       await runAfterTableTransferHallReprint(keepOrderId)
                     }
               }
+              onReprintHallOrder={isPosDemo ? undefined : reprintTableHallOrder}
               onBeforeTableMerge={
                 isPosDemo
                   ? undefined
