@@ -1,15 +1,13 @@
 "use client"
 
 import { AdminTabsBarWithHelp } from "@/components/erp/admin-tabs-bar-with-help"
-import { PosScreenConfigStoreSelect } from "@/components/pos/pos-screen-config-store-select"
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, Ban, FolderTree, History, Calculator, ClipboardList, Download, Upload, Search, Copy, Megaphone, Truck } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, Plus, LayoutGrid, Layers, Monitor, FolderTree, History, Calculator, ClipboardList, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -18,19 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -85,7 +71,6 @@ import {
   type PosPromo,
 } from "@/lib/api-client"
 import { preparePosMenuImageFileForUpload } from "@/lib/pos-menu-image-compress"
-import { formatPosMenuImageUploadSpecHint } from "@/lib/pos-menu-image-upload-spec"
 import { getAutoBanbanFlavorMenuList } from "@/lib/pos-banban-utils"
 import {
   adminTabsBarCn,
@@ -97,11 +82,9 @@ import {
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
 import { PosMenuCategorySettingsDialog } from "@/components/erp/pos-menu-category-settings-dialog"
 import { PosSetMenuTabWorkspace } from "@/components/erp/pos-set-menu-tab-workspace"
 import { PosSetMenuInquiryTab } from "@/components/erp/pos-set-menu-inquiry-tab"
-import { AdminEmptyState } from "@/components/erp/admin-empty-state"
 import { AdminTableSkeleton } from "@/components/erp/admin-table-skeleton"
 import { PosStoreFinalPriceSettings } from "@/components/erp/pos-store-final-price-settings"
 import { PriceHistoryTab } from "@/components/erp/price-history-tab"
@@ -109,14 +92,12 @@ import { PriceScheduleTab } from "@/components/erp/price-schedule-tab"
 import { OptionsConfigShell } from "@/components/erp/options-config-shell"
 import { OptionGroupListPanel } from "@/components/erp/option-group-list-panel"
 import { OptionGroupEditorPanel } from "@/components/erp/option-group-editor-panel"
-import { OptionItemRowCard } from "@/components/erp/option-item-row-card"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import {
   resolveConfiguredCategoriesForMain,
 } from "@/lib/pos-menu-categories"
 import {
-  GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH,
   GRAB_MENU_MODIFIER_NAME_MAX_LENGTH,
   composeGrabModifierName,
   maxGrabModifierDescriptionChars,
@@ -133,6 +114,11 @@ import {
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { translatePosMenuLineForReceipt, chickenPartDedupeKey, prettyChickenPartLibraryLabel } from "@/lib/pos-print-translate"
 import { sortByCode } from "@/lib/sort-utils"
+import {
+  buildPosMenuExportRows,
+  posMenuExportDetailedMenuCols,
+  posMenuExportMenuCols,
+} from "./pos-menus-excel-rows"
 import { isPosMenuSoldOut } from "@/lib/pos-menu-sold-out"
 import { isStrictBonelessBbqChickenCode } from "@/lib/pos-bbq-option-guard"
 import {
@@ -140,8 +126,6 @@ import {
   normalizeOptionGroupsForMenu,
   syncOptionSelectionConfigToGroupKeys,
 } from "@/lib/pos-option-selection-groups"
-import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
-import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
 import { resolvePosMenuImageUrlPayloadForSave } from "@/lib/pos-menu-image-storage-path"
 import {
   isPosMenuStoreScopeCompatibilityModeForBrand,
@@ -152,8 +136,6 @@ import {
 } from "@/lib/pos-menu-store-scope"
 import { deleteErpCacheByPrefix } from "@/lib/offline/cache"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
-
-import { posMenuCodePlaceholderForMain } from "@/lib/pos-menu-next-code"
 import {
   POS_MENUS_EDIT_RESUME_KEY,
   menuScopeStoreCodes,
@@ -161,12 +143,10 @@ import {
   supportsPosMenuAutoCode,
   OPTION_SIZE_VALUES,
   OPTION_PART_VALUES,
-  formatPosMenuBulkPickLabel,
   formatChickenOptionStepDisplayLabel,
   hasCustomGroupLabel,
   applyChickenDeliveryRulesToConfig,
   isChickenMenu,
-  isChickenDefaultOption,
   parseOptionGroupsFromText,
   isSizePartGroups,
   optionStepOrderAfterSwap,
@@ -174,14 +154,10 @@ import {
   shouldInferChickenPartFromName,
   optionStepValueForGroupFilter,
   optionMatchesGroupFilter,
-  groupChickenMenuOptionsByPartValue,
-  groupChickenMenuOptionsBySizeValue,
   normalizeOptionSelectionConfig,
-  additiveOptionLinkSuffix,
   buildOptionCode,
   resolveOptionCode,
   emptyForm,
-  newPackagingChecklistRow,
   isPersistedPosMenuOptionId,
   isDraftPosMenuOptionId,
   optionConfigHasResettableState,
@@ -194,6 +170,23 @@ import {
   pickLinkedOptionGroupItemToDelete,
   type PackagingChecklistDraftRow,
 } from './pos-menus-page-helpers'
+import { PosMenusBulkMenuPickerDialogContent } from "@/components/erp/pos-menus-bulk-menu-picker-dialog"
+import { PosMenuEditInfoTab } from "@/components/erp/pos-menus-edit-info-tab"
+import { PosMenuEditOptionsTab } from "@/components/erp/pos-menus-edit-options-tab"
+import { PosMenuEditCostTab } from "@/components/erp/pos-menus-edit-cost-tab"
+import { PosMenuEditDescriptionTab } from "@/components/erp/pos-menus-edit-description-tab"
+import { PosMenuEditPackagingTab } from "@/components/erp/pos-menus-edit-packaging-tab"
+import { PosMenuNewForm } from "@/components/erp/pos-menus-new-form"
+import { PosMenuListTable } from "@/components/erp/pos-menus-list-table"
+import { PosMenuOptionsMenuListPanel } from "@/components/erp/pos-menus-options-menu-list-panel"
+import { PosMenuOptionsAddStepSection } from "@/components/erp/pos-menus-options-add-step"
+import { PosMenuOptionsImportSection } from "@/components/erp/pos-menus-options-import"
+import { PosMenuOptionsRowAddSection } from "@/components/erp/pos-menus-options-row-add"
+import { PosMenuOptionsListSection } from "@/components/erp/pos-menus-options-list"
+import { PosDeliveryOpsToolbar } from "@/components/erp/pos-menus-delivery-ops-toolbar"
+import { PosDeliveryOpsSettings } from "@/components/erp/pos-menus-delivery-ops-settings"
+import { PosDeliveryOpsMenuPolicies } from "@/components/erp/pos-menus-delivery-ops-menus"
+import { PosGrabCampaignsPanel } from "@/components/erp/pos-menus-grab-campaigns"
 
 export default function PosMenusPage() {
   const { auth } = useAuth()
@@ -3275,102 +3268,9 @@ export default function PosMenusPage() {
     }
     try {
       const XLSX = await import("xlsx")
-      const filteredMenuIdSet = new Set(filteredMenus.map((m) => m.id))
-      const rowKindCol = t("posMenuExportRowKind") || "행 구분"
-      const rowKindMenu = t("posMenuExportRowMenu") || "메뉴"
-      const rowKindOption = t("posMenuExportRowOption") || "옵션"
       const sheetUnified = (t("posMenuExportSheetUnified") || "메뉴+옵션(통합)").slice(0, 31)
-
-      const menuCols = (m: (typeof filteredMenus)[0]) => ({
-        [t("itemsColCode") || "코드"]: m.code ?? "",
-        [t("posMenuName") || "메뉴명"]: m.name ?? "",
-        [t("posMenuCategoryMain") || "대분류"]: m.categoryMain ?? "",
-        [t("posMenuCategory") || "카테고리"]: m.category ?? "",
-        [t("posMenuPriceHall") || "홀 가격"]: Number(m.price ?? 0),
-        [t("posMenuPriceDelivery") || "배달 가격"]: Number(m.priceDelivery ?? 0),
-        [t("posMenuVatIncluded") || "부가세 포함"]: m.vatIncluded ? (t("yes") || "Y") : (t("no") || "N"),
-        [t("posMenuActive") || "활성"]: m.isActive ? (t("yes") || "Y") : (t("no") || "N"),
-      })
-
-      const emptyOptionCols = () => ({
-        menuId: "",
-        menuCode: "",
-        menuName: "",
-        optionId: "",
-        optionCode: "",
-        optionName: "",
-        sortOrder: "",
-        priceModifierHall: "",
-        priceModifierDelivery: "",
-        priceModifierPackaging: "",
-        optionType: "",
-        itemCode: "",
-        additiveSourceMenuId: "",
-        quantity: "",
-        sellHall: "",
-        sellDelivery: "",
-        sellPackaging: "",
-        optionDescriptionDefault: "",
-        optionDescriptionDelivery: "",
-        optionDescriptionTable: "",
-        optionStepValues: "",
-      })
-
-      const optionExportCols = (opt: PosMenuOption, menu: (typeof filteredMenus)[0]) => {
-        const optionCode = resolveOptionCode(opt, menu?.code)
-        return {
-          menuId: opt.menuId ?? "",
-          menuCode: menu?.code ?? "",
-          menuName: menu?.name ?? "",
-          optionId: opt.id ?? "",
-          optionCode,
-          optionName: opt.name ?? "",
-          sortOrder: opt.sortOrder ?? 0,
-          priceModifierHall: Number(opt.priceModifier ?? 0),
-          priceModifierDelivery: Number(opt.priceModifierDelivery ?? 0),
-          priceModifierPackaging: Number(opt.priceModifierPackaging ?? 0),
-          optionType: opt.optionType ?? "",
-          itemCode: opt.itemCode ?? "",
-          additiveSourceMenuId: opt.additiveSourceMenuId ?? "",
-          quantity: opt.quantity ?? "",
-          sellHall: opt.sellHall === false ? (t("no") || "N") : (t("yes") || "Y"),
-          sellDelivery: opt.sellDelivery === false ? (t("no") || "N") : (t("yes") || "Y"),
-          sellPackaging: opt.sellPackaging === false ? (t("no") || "N") : (t("yes") || "Y"),
-          optionDescriptionDefault: opt.descriptionDefault ?? "",
-          optionDescriptionDelivery: opt.descriptionDelivery ?? "",
-          optionDescriptionTable: opt.descriptionTable ?? "",
-          optionStepValues: opt.optionStepValues ? JSON.stringify(opt.optionStepValues) : "",
-        }
-      }
-
       const allOptions = await getPosMenuOptions({ fresh: true }).catch(() => [])
-      const optionsByMenu = new Map<string, PosMenuOption[]>()
-      for (const opt of allOptions) {
-        if (opt.menuId == null || opt.menuId === "" || !filteredMenuIdSet.has(opt.menuId)) continue
-        const arr = optionsByMenu.get(opt.menuId) ?? []
-        arr.push(opt)
-        optionsByMenu.set(opt.menuId, arr)
-      }
-      for (const [, list] of optionsByMenu) {
-        list.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      }
-
-      const unifiedRows: Record<string, string | number>[] = []
-      for (const m of filteredMenus) {
-        const opts = optionsByMenu.get(m.id) ?? []
-        const base = menuCols(m)
-        if (opts.length === 0) {
-          unifiedRows.push({ [rowKindCol]: rowKindMenu, ...base, ...emptyOptionCols() })
-          continue
-        }
-        for (const opt of opts) {
-          unifiedRows.push({
-            [rowKindCol]: rowKindOption,
-            ...base,
-            ...optionExportCols(opt, m),
-          })
-        }
-      }
+      const unifiedRows = buildPosMenuExportRows(filteredMenus, allOptions, t, posMenuExportMenuCols)
 
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unifiedRows), sheetUnified)
@@ -3397,113 +3297,9 @@ export default function PosMenusPage() {
     try {
       const XLSX = await import("xlsx")
       const sortedMenus = sortByCode([...menus], (m) => m.code)
-      const rowKindCol = t("posMenuExportRowKind") || "행 구분"
-      const rowKindMenu = t("posMenuExportRowMenu") || "메뉴"
-      const rowKindOption = t("posMenuExportRowOption") || "옵션"
       const sheetUnified = (t("posMenuExportSheetUnified") || "메뉴+옵션(통합)").slice(0, 31)
-
-      const detailedMenuCols = (m: (typeof menus)[0]) => ({
-        id: m.id ?? "",
-        [t("itemsColCode") || "코드"]: m.code ?? "",
-        [t("posMenuName") || "메뉴명"]: m.name ?? "",
-        [t("posMenuCategoryMain") || "대분류"]: m.categoryMain ?? "",
-        [t("posMenuCategory") || "카테고리"]: m.category ?? "",
-        [t("posMenuPriceHall") || "홀 가격"]: Number(m.price ?? 0),
-        [t("posMenuPriceDelivery") || "배달 가격"]: Number(m.priceDelivery ?? 0),
-        [t("posMenuVatIncluded") || "부가세 포함"]: m.vatIncluded ? (t("yes") || "Y") : (t("no") || "N"),
-        [t("posMenuActive") || "활성"]: m.isActive ? (t("yes") || "Y") : (t("no") || "N"),
-        soldOutDate: m.soldOutDate ?? "",
-        isBanban: m.isBanban ? (t("yes") || "Y") : (t("no") || "N"),
-        promoId: m.promoId ?? "",
-        kitchenPrinter: m.kitchenPrinter ?? "",
-        cookingTimeMin: m.cookingTimeMin ?? "",
-        optionSelectionGroups: Array.isArray(m.optionSelectionGroups) ? m.optionSelectionGroups.join(", ") : "",
-        descriptionDefault: m.descriptionDefault ?? "",
-        descriptionDelivery: m.descriptionDelivery ?? "",
-        descriptionTable: m.descriptionTable ?? "",
-        imageUrl: m.imageUrl ?? "",
-      })
-
-      const emptyOptionColsDetailed = () => ({
-        menuId: "",
-        menuCode: "",
-        menuName: "",
-        optionId: "",
-        optionCode: "",
-        optionName: "",
-        sortOrder: "",
-        priceModifierHall: "",
-        priceModifierDelivery: "",
-        priceModifierPackaging: "",
-        optionType: "",
-        itemCode: "",
-        additiveSourceMenuId: "",
-        quantity: "",
-        sellHall: "",
-        sellDelivery: "",
-        sellPackaging: "",
-        optionDescriptionDefault: "",
-        optionDescriptionDelivery: "",
-        optionDescriptionTable: "",
-        optionStepValues: "",
-      })
-
-      const optionExportColsDetailed = (opt: PosMenuOption, menu: (typeof menus)[0]) => {
-        const optionCode = resolveOptionCode(opt, menu?.code)
-        return {
-          menuId: opt.menuId ?? "",
-          menuCode: menu?.code ?? "",
-          menuName: menu?.name ?? "",
-          optionId: opt.id ?? "",
-          optionCode,
-          optionName: opt.name ?? "",
-          sortOrder: opt.sortOrder ?? 0,
-          priceModifierHall: Number(opt.priceModifier ?? 0),
-          priceModifierDelivery: Number(opt.priceModifierDelivery ?? 0),
-          priceModifierPackaging: Number(opt.priceModifierPackaging ?? 0),
-          optionType: opt.optionType ?? "",
-          itemCode: opt.itemCode ?? "",
-          additiveSourceMenuId: opt.additiveSourceMenuId ?? "",
-          quantity: opt.quantity ?? "",
-          sellHall: opt.sellHall === false ? (t("no") || "N") : (t("yes") || "Y"),
-          sellDelivery: opt.sellDelivery === false ? (t("no") || "N") : (t("yes") || "Y"),
-          sellPackaging: opt.sellPackaging === false ? (t("no") || "N") : (t("yes") || "Y"),
-          optionDescriptionDefault: opt.descriptionDefault ?? "",
-          optionDescriptionDelivery: opt.descriptionDelivery ?? "",
-          optionDescriptionTable: opt.descriptionTable ?? "",
-          optionStepValues: opt.optionStepValues ? JSON.stringify(opt.optionStepValues) : "",
-        }
-      }
-
       const allOptions = await getPosMenuOptions({ fresh: true }).catch(() => [])
-      const sortedMenuIds = new Set(sortedMenus.map((m) => m.id))
-      const optionsByMenu = new Map<string, PosMenuOption[]>()
-      for (const opt of allOptions) {
-        if (opt.menuId == null || opt.menuId === "" || !sortedMenuIds.has(opt.menuId)) continue
-        const arr = optionsByMenu.get(opt.menuId) ?? []
-        arr.push(opt)
-        optionsByMenu.set(opt.menuId, arr)
-      }
-      for (const [, list] of optionsByMenu) {
-        list.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-      }
-
-      const unifiedRows: Record<string, string | number>[] = []
-      for (const m of sortedMenus) {
-        const opts = optionsByMenu.get(m.id) ?? []
-        const base = detailedMenuCols(m)
-        if (opts.length === 0) {
-          unifiedRows.push({ [rowKindCol]: rowKindMenu, ...base, ...emptyOptionColsDetailed() })
-          continue
-        }
-        for (const opt of opts) {
-          unifiedRows.push({
-            [rowKindCol]: rowKindOption,
-            ...base,
-            ...optionExportColsDetailed(opt, m),
-          })
-        }
-      }
+      const unifiedRows = buildPosMenuExportRows(sortedMenus, allOptions, t, posMenuExportDetailedMenuCols)
 
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(unifiedRows), sheetUnified)
@@ -4160,89 +3956,18 @@ export default function PosMenusPage() {
             }
           }}
         >
-          <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden gap-3 p-4 sm:p-6">
-            <DialogHeader>
-              <DialogTitle className="text-base">{t("posOptionBulkMenuPickerTitle") || "메뉴에서 값으로 넣기"}</DialogTitle>
-              <DialogDescription className="text-xs">{t("posOptionBulkMenuPickerHint")}</DialogDescription>
-            </DialogHeader>
-            <Input
-              className="h-9 text-sm"
-              placeholder={t("posOptionBulkMenuPickerSearchPh") || "코드·메뉴명 검색"}
-              value={optionsConfigBulkMenuPickerSearch}
-              onChange={(e) => setOptionsConfigBulkMenuPickerSearch(e.target.value)}
-              autoFocus
-            />
-            <div className="max-h-[min(52vh,28rem)] overflow-y-auto rounded-md border">
-              {optionsConfigBulkMenuPickerList.length === 0 ? (
-                <p className="p-4 text-center text-sm text-muted-foreground">{t("posOptionBulkMenuPickerEmpty")}</p>
-              ) : (
-                <ul className="divide-y">
-                  {optionsConfigBulkMenuPickerList.map((m) => {
-                    const line = formatPosMenuBulkPickLabel(m)
-                    const checked = !!optionsConfigBulkMenuPickerChecked[String(m.id)]
-                    return (
-                      <li key={m.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/40">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(c) =>
-                            setOptionsConfigBulkMenuPickerChecked((prev) => ({
-                              ...prev,
-                              [String(m.id)]: c === true,
-                            }))
-                          }
-                          aria-label={line}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-sm" title={line}>
-                          {m.code ? (
-                            <>
-                              <span className="font-mono text-xs text-muted-foreground">{m.code}</span>
-                              <span className="text-muted-foreground"> — </span>
-                            </>
-                          ) : null}
-                          <span>{m.name}</span>
-                        </span>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className={`${ADMIN_BTN_XS_CN} shrink-0 text-[11px]`}
-                          onClick={() => appendOptionsConfigBulkLabels([line])}
-                        >
-                          {t("posOptionBulkMenuPickerRowAdd")}
-                        </Button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-            <DialogFooter className="gap-2 sm:justify-between">
-              <Button type="button" variant="outline" size="sm" onClick={() => setOptionsConfigBulkMenuPickerOpen(false)}>
-                {t("btn_close")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={optionsConfigBulkMenuPickerSelectedCount === 0}
-                onClick={() => {
-                  const ids = Object.entries(optionsConfigBulkMenuPickerChecked)
-                    .filter(([, v]) => v)
-                    .map(([k]) => k)
-                  const labels = ids
-                    .map((id) => menus.find((mm) => String(mm.id) === id))
-                    .filter((x): x is PosMenu => !!x)
-                    .map(formatPosMenuBulkPickLabel)
-                  appendOptionsConfigBulkLabels(labels)
-                  setOptionsConfigBulkMenuPickerChecked({})
-                }}
-              >
-                {(t("posOptionBulkMenuPickerAddSelected") || "선택한 메뉴를 입력란에 추가 ({n})").replace(
-                  "{n}",
-                  String(optionsConfigBulkMenuPickerSelectedCount)
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
+          <PosMenusBulkMenuPickerDialogContent
+            t={t}
+            optionsConfigBulkMenuPickerSearch={optionsConfigBulkMenuPickerSearch}
+            setOptionsConfigBulkMenuPickerSearch={setOptionsConfigBulkMenuPickerSearch}
+            optionsConfigBulkMenuPickerList={optionsConfigBulkMenuPickerList}
+            optionsConfigBulkMenuPickerChecked={optionsConfigBulkMenuPickerChecked}
+            setOptionsConfigBulkMenuPickerChecked={setOptionsConfigBulkMenuPickerChecked}
+            appendOptionsConfigBulkLabels={appendOptionsConfigBulkLabels}
+            setOptionsConfigBulkMenuPickerOpen={setOptionsConfigBulkMenuPickerOpen}
+            optionsConfigBulkMenuPickerSelectedCount={optionsConfigBulkMenuPickerSelectedCount}
+            menus={menus}
+          />
         </Dialog>
 
         <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as typeof mainTab)} className={adminTabsRootCn}>
@@ -4323,776 +4048,107 @@ export default function PosMenusPage() {
                       </TabsList>
                     </div>
                   </div>
-                  <TabsContent value="info" className="space-y-4 mt-4">
-                    <div>
-                      <label className="text-xs font-semibold">{t("posMenuCode")}</label>
-                      <Input placeholder="M001" className="mt-1 h-10" value={formData.code} onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))} disabled />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold">{t("posMenuName")}</label>
-                      <Input
-                        placeholder={t("itemsNamePh")}
-                        className="mt-1 h-10"
-                        value={formData.name}
-                        onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                        disabled={isPromoLinkedMenuEdit}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold">{t("posMenuCategoryMain")}</label>
-                      <DropdownMenu open={categoryMainOpen} onOpenChange={setCategoryMainOpen}>
-                        <div className="flex h-10 rounded-md border border-input bg-background overflow-hidden mt-1">
-                          <Input
-                            placeholder={t("posMenuCategoryMain")}
-                            className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                            value={formData.categoryMain}
-                            onChange={(e) => setFormData((p) => ({ ...p, categoryMain: e.target.value }))}
-                            onFocus={() => setCategoryMainOpen(true)}
-                            disabled={isPromoLinkedMenuEdit}
-                          />
-                          <DropdownMenuTrigger asChild>
-                            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
-                              <ChevronDown className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                        </div>
-                        <DropdownMenuContent align="start" className="max-h-60 min-w-[200px]">
-                          {mainCategories.map((c) => (
-                            <DropdownMenuItem
-                              key={c}
-                              onClick={() => {
-                                setFormData((p) => ({ ...p, categoryMain: c, category: "" }))
-                                setCategoryMainOpen(false)
-                              }}
-                            >
-                              {c}
-                            </DropdownMenuItem>
-                          ))}
-                          {formData.categoryMain.trim() &&
-                            !mainCategories.some((c) => c.toLowerCase() === formData.categoryMain.trim().toLowerCase()) && (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setFormData((p) => ({ ...p, categoryMain: formData.categoryMain.trim() }))
-                                setCategoryMainOpen(false)
-                              }}
-                              className="text-primary font-medium"
-                            >
-                              + {t("itemsCategoryNew") || "신규 대분류"}: {formData.categoryMain.trim()}
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold">{t("posMenuCategory")}</label>
-                      <DropdownMenu open={categoryOpen} onOpenChange={setCategoryOpen}>
-                        <div className="flex h-10 rounded-md border border-input bg-background overflow-hidden mt-1">
-                          <Input
-                            placeholder={t("itemsCategoryPh")}
-                            className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                            value={formData.category}
-                            onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
-                            onFocus={() => setCategoryOpen(true)}
-                            disabled={isPromoLinkedMenuEdit}
-                          />
-                          <DropdownMenuTrigger asChild>
-                            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
-                              <ChevronDown className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                        </div>
-                        <DropdownMenuContent align="start" className="max-h-60 min-w-[200px]">
-                          {categoriesByMain.map((c) => (
-                            <DropdownMenuItem
-                              key={c}
-                              onClick={() => {
-                                setFormData((p) => ({ ...p, category: c }))
-                                setCategoryOpen(false)
-                              }}
-                            >
-                              {translatePosMenuCategoryLabel(c, t)}
-                            </DropdownMenuItem>
-                          ))}
-                          {formData.category.trim() &&
-                            !categoriesByMain.some((c) => c.toLowerCase() === formData.category.trim().toLowerCase()) && (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setFormData((p) => ({ ...p, category: formData.category.trim() }))
-                                setCategoryOpen(false)
-                              }}
-                              className="text-primary font-medium"
-                            >
-                              + {t("itemsCategoryNew") || "신규 카테고리"}: {formData.category.trim()}
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    {renderMenuStoreScopePicker("posMenuVisibleStoresScopeHint", "scope-edit")}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
-                        <Input type="number" placeholder="0" className="mt-1 h-10 text-right" value={formData.price} onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))} disabled={isPromoLinkedMenuEdit} />
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
-                        <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} disabled={isPromoLinkedMenuEdit} />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={formData.sellHall}
-                          onChange={(e) => setFormData((p) => ({ ...p, sellHall: e.target.checked }))}
-                          disabled={isPromoLinkedMenuEdit}
-                        />
-                        {t("posOptionSellHall") || "홀"}
-                      </label>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={formData.sellDelivery}
-                          onChange={(e) => setFormData((p) => ({ ...p, sellDelivery: e.target.checked }))}
-                          disabled={isPromoLinkedMenuEdit}
-                        />
-                        {t("posOptionSellDelivery") || "배달"}
-                      </label>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={formData.sellPackaging}
-                          onChange={(e) => setFormData((p) => ({ ...p, sellPackaging: e.target.checked }))}
-                          disabled={isPromoLinkedMenuEdit}
-                        />
-                        {t("posOptionSellPackaging") || "포장"}
-                      </label>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={formData.sellMember}
-                          onChange={(e) => setFormData((p) => ({ ...p, sellMember: e.target.checked }))}
-                          disabled={isPromoLinkedMenuEdit}
-                        />
-                        {t("posOptionSellMember") || "회원"}
-                      </label>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={formData.vatIncluded} onChange={(e) => setFormData((p) => ({ ...p, vatIncluded: e.target.checked }))} disabled={isPromoLinkedMenuEdit} />
-                        {t("posMenuVatIncluded")}
-                      </label>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} disabled={isPromoLinkedMenuEdit} />
-                        {t("posMenuActive")}
-                      </label>
-                      <label className="flex items-center gap-2 text-xs" title={t("posMenuBanbanHint") || "POS에서 다른 치킨(S Boneless) 2개를 골라 한 상으로 주문. 원가는 각 0.5씩."}>
-                        <input type="checkbox" checked={formData.isBanban} onChange={(e) => setFormData((p) => ({ ...p, isBanban: e.target.checked }))} disabled={isPromoLinkedMenuEdit} />
-                        {t("posMenuBanban") || "반반 메뉴 (맛 2개 선택)"}
-                      </label>
-                      <label
-                        className="flex items-center gap-2 text-xs"
-                        title={
-                          t("posMenuBuffetIncludableHint") ||
-                          "QR 뷔페 티어에서 포함(0원) 후보로 고를 수 있습니다. 실제 포함은 QR 테이블오더 티어에서 체크합니다."
-                        }
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.buffetIncludable}
-                          onChange={(e) => setFormData((p) => ({ ...p, buffetIncludable: e.target.checked }))}
-                          disabled={isPromoLinkedMenuEdit}
-                        />
-                        {t("posMenuBuffetIncludable") || "뷔페 포함 가능 (QR)"}
-                      </label>
-                    </div>
-                    {formData.isBanban && (
-                      <div className="rounded border border-dashed border-sky-300 bg-sky-50/40 p-3">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <h4 className="text-xs font-semibold text-sky-800">
-                              {t("posMenuBanbanFlavorWhitelistTitle") || "반반 허용 맛"}
-                            </h4>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {t("posMenuBanbanFlavorWhitelistHint") || "이 반반 메뉴에서 보여줄 맛만 직접 선택합니다. 비워 두면 기존 자동 후보 규칙을 사용합니다."}
-                            </p>
-                          </div>
-                          <span className="rounded bg-white px-2 py-1 text-[11px] text-muted-foreground">
-                            {(t("posMenuBanbanFlavorSelectedCount") || "{count} selected").replace(
-                              "{count}",
-                              String(formData.banbanFlavorMenuIds.length)
-                            )}
-                          </span>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-xs"
-                            disabled={isPromoLinkedMenuEdit}
-                            onClick={async () => {
-                              const nextIds = banbanFlavorAutoMenus
-                                .map((menu) => String(menu.id || "").trim())
-                                .filter(Boolean)
-                              if (nextIds.length === 0) {
-                                await appAlert("반반 기본 후보로 넣을 치킨 메뉴가 없습니다.")
-                                return
-                              }
-                              setFormData((p) => ({ ...p, banbanFlavorMenuIds: nextIds }))
-                            }}
-                          >
-                            {t("posMenuBanbanFlavorLoadDefaults") || "치킨 기본값 불러오기"}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-xs"
-                            disabled={isPromoLinkedMenuEdit || formData.banbanFlavorMenuIds.length === 0}
-                            onClick={() => setFormData((p) => ({ ...p, banbanFlavorMenuIds: [] }))}
-                          >
-                            {t("posMenuBanbanFlavorClearAll") || "전체 해제"}
-                          </Button>
-                        </div>
-                        {banbanFlavorSelectableMenus.length > 0 ? (
-                          <div className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-md border border-border/40 bg-background/70 p-2">
-                            {banbanFlavorSelectableMenus.map((menu) => {
-                              const id = String(menu.id || "").trim()
-                              const checked = banbanSelectedMenuIdSet.has(id)
-                              const label = `${menu.code ? `[${menu.code}] ` : ""}${menu.name}`
-                              return (
-                                <div key={id} className="flex items-start gap-2 py-1">
-                                  <Checkbox
-                                    id={`banban-flavor-${id}`}
-                                    checked={checked}
-                                    disabled={isPromoLinkedMenuEdit}
-                                    onCheckedChange={(nextChecked) => {
-                                      setFormData((prev) => ({
-                                        ...prev,
-                                        banbanFlavorMenuIds: nextChecked === true
-                                          ? Array.from(new Set([...prev.banbanFlavorMenuIds, id]))
-                                          : prev.banbanFlavorMenuIds.filter((x) => String(x || "").trim() !== id),
-                                      }))
-                                    }}
-                                  />
-                                  <label htmlFor={`banban-flavor-${id}`} className="min-w-0 cursor-pointer text-xs leading-tight">
-                                    <span className="block truncate">{label}</span>
-                                    <span className="block text-[11px] text-muted-foreground">
-                                      {String(menu.categoryMain ?? "").trim() || "-"} / {String(menu.category ?? "").trim() || "-"}
-                                    </span>
-                                  </label>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        ) : (
-                          <p className="mt-3 text-xs text-muted-foreground">
-                            선택할 치킨 후보가 없습니다. 카테고리/활성 상태를 확인해 주세요.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    <div className="rounded border border-dashed border-primary/30 bg-muted/20 p-3">
-                      <h4 className="text-xs font-semibold text-muted-foreground">{t("posMenuOptions") || "옵션"}</h4>
-                      {(() => {
-                        const optsToShow = isChickenMenu(formData.code) ? menuOptions.filter((o) => !isChickenDefaultOption(o.name)) : menuOptions
-                        return optsToShow.length > 0 ? (
-                        <ul className="mt-2 space-y-1 max-h-28 overflow-y-auto">
-                          {optsToShow.map((o) => (
-                            <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
-                              <span>{optionPartLabel(o.name)}</span>
-                              <span className="text-muted-foreground tabular-nums">
-                                {(o.priceModifier ?? 0) !== 0 ? `+${o.priceModifier}` : "-"}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="mt-1 text-xs text-muted-foreground">{t("posMenuOptionsSelectHint") || "옵션 구성 탭에서 사이즈, 부위를 추가해 주세요."}</p>
-                      )
-                      })()}
-                      <Button variant="outline" size="sm" className="mt-2 text-xs" onClick={() => { setFormTab("options"); setMainTab("optionsConfig"); setOptionsConfigSelectedMenuId(editingId); }}>{t("posMenuTabOptionsConfig") || "옵션 구성"}</Button>
-                    </div>
-                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <span className="text-xs text-muted-foreground">{t("posMenuCostRatio") || "최종 원가율"}</span>
-                          <span className="ml-2 text-lg font-bold text-amber-600">
-                            {baseMenuCost != null && (Number(formData.price) || 0) > 0
-                              ? `${((baseMenuCost / (Number(formData.price) || 1)) * 100).toFixed(1)}%`
-                              : "-"}
-                          </span>
-                        </div>
-                        {editingId && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="text-xs"
-                            onClick={() => {
-                              try {
-                                sessionStorage.setItem(
-                                  POS_MENUS_EDIT_RESUME_KEY,
-                                  JSON.stringify({
-                                    editingId,
-                                    selectedStoreCodes,
-                                  })
-                                )
-                              } catch {
-                                /* ignore */
-                              }
-                              const qs = new URLSearchParams({
-                                menuId: editingId,
-                                menuCode: formData.code || "",
-                              })
-                              window.location.href = `/admin/pos-cost-analysis?${qs.toString()}`
-                            }}
-                          >
-                            {t("posMenuCostAnalysisShortcut") || "원가 분석 바로가기"}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="options" className="mt-4">
-                    <div className="rounded border border-dashed p-3">
-                      <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 (반반, 뼈/순살 등)"}</h4>
-                      <ul className="mb-2 space-y-1">
-                        {(isChickenMenu(formData.code) ? menuOptions.filter((o) => !isChickenDefaultOption(o.name)) : menuOptions).map((o) => (
-                          <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
-                            <span>
-                              <span className={o.optionType === "additive" ? "text-amber-600" : ""}>{optionPartLabel(o.name)}</span>
-                              {o.optionType === "additive" && additiveOptionLinkSuffix(o, menus) && (
-                                <span className="ml-1 text-muted-foreground">+{additiveOptionLinkSuffix(o, menus)}</span>
-                              )}
-                              {o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0 && (
-                                <span className="ml-1 text-muted-foreground">({Object.entries(o.optionStepValues).map(([k, v]) => `${k}:${v}`).join(" / ")})</span>
-                              )}
-                              {(o.priceModifier ?? 0) !== 0 || (o.priceModifierDelivery ?? o.priceModifier ?? 0) !== 0
-                                ? ` (홀 ${(o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifier ?? 0} / 배달 ${(o.priceModifierDelivery ?? o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifierDelivery ?? o.priceModifier ?? 0})` : ""}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="flex flex-col gap-2">
-                        <div className="flex gap-2">
-                          <Input placeholder={t("posOptionNamePh") || "옵션명"} className="h-8 text-xs flex-1" value={newOptionName} onChange={(e) => setNewOptionName(e.target.value)} />
-                          <Button size="sm" className="h-8 px-2 shrink-0" onClick={handleAddOption}><Plus className="h-3.5 w-3.5" /></Button>
-                        </div>
-                        <div className="flex gap-2 items-center">
-                          <span className="text-[10px] text-muted-foreground shrink-0">{t("posOptionType") || "타입"}</span>
-                          <Select value={newOptionType} onValueChange={(v) => setNewOptionType(v as "substitution" | "additive")}>
-                            <SelectTrigger className="h-8 w-28 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="substitution">{t("posOptionTypeSubstitution") || "대체형"}</SelectItem>
-                              <SelectItem value="additive">{t("posOptionTypeAdditive") || "추가형"}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {newOptionType === "substitution" && currentMenuGroups.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {currentMenuGroups.map((g) => (
-                              <div key={g} className="flex items-center gap-1">
-                                <span className="text-[10px] text-muted-foreground">{g}</span>
-                                <Input
-                                  placeholder={g}
-                                  className="h-8 w-24 text-xs"
-                                  value={newOptionStepValues[g] ?? ""}
-                                  onChange={(e) => setNewOptionStepValues((p) => ({ ...p, [g]: e.target.value }))}
-                                />
-                              </div>
-                            ))}
-                            <p className="text-[10px] text-muted-foreground w-full">예: size=M, part=Boneless</p>
-                          </div>
-                        )}
-                        {newOptionType === "additive" && (
-                          <div className="flex flex-col gap-2">
-                            <div className="flex gap-2 items-center flex-wrap">
-                              <Select value={newOptionSourceMenuId} onValueChange={setNewOptionSourceMenuId}>
-                                <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
-                                  <SelectValue placeholder={t("posOptionAdditiveMenu") || "연결 메뉴"} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {additiveMenusForOptions.map((m) => (
-                                    <SelectItem key={m.id} value={m.id}>
-                                      {m.code} — {m.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Input type="number" min={0.001} step={0.1} placeholder="1" className="h-8 w-16 text-right text-xs" value={newOptionQuantity} onChange={(e) => setNewOptionQuantity(e.target.value)} />
-                            </div>
-                            <p className="text-[10px] text-muted-foreground">
-                              {t("posAdditiveOptionMenuHint") ||
-                                "추가형은 별도 등록한 POS 메뉴(메뉴코드)를 연결합니다. 해당 메뉴의 기본 재료(BOM)가 옵션 수량 배수만큼 원가·재고에 가산됩니다."}
-                            </p>
-                          </div>
-                        )}
-                        <div className="flex gap-2 text-xs">
-                          <span className="shrink-0 py-2 text-muted-foreground w-16">{t("posChannel") || "채널"}</span>
-                          <Select value={newOptionChannelScope} onValueChange={(v) => setNewOptionChannelScope(v as "all" | "hall" | "delivery" | "packaging")}>
-                            <SelectTrigger className="h-8 w-32 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">{t("all") || "전체"}</SelectItem>
-                              <SelectItem value="hall">{t("posOptionSellHall") || "홀"}</SelectItem>
-                              <SelectItem value="delivery">{t("posOptionSellDelivery") || "배달"}</SelectItem>
-                              <SelectItem value="packaging">{t("posOptionSellPackaging") || "포장"}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex gap-2 text-xs">
-                          <span className="shrink-0 py-2 text-muted-foreground w-16">{t("posOptionModifierHall")}</span>
-                          <Input type="number" placeholder="+0" className="h-8 w-20 text-right text-xs" value={newOptionModifier} onChange={(e) => setNewOptionModifier(e.target.value)} />
-                          <span className="shrink-0 py-2 text-muted-foreground w-20">{t("posOptionModifierDelivery")}</span>
-                          <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="h-8 w-20 text-right text-xs" value={newOptionModifierDelivery} onChange={(e) => setNewOptionModifierDelivery(e.target.value)} />
-                        </div>
-                      </div>
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="cost" className="mt-4">
-                    {(isChickenMenu(formData.code) ? menuOptions.some((o) => o.optionType === "substitution" && !isChickenDefaultOption(o.name)) : menuOptions.some((o) => o.optionType === "substitution")) && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground shrink-0">{t("posIngredientScope") || "재료 범위"}</span>
-                        <Select value={selectedIngredientOptionId || "base"} onValueChange={(v) => setSelectedIngredientOptionId(v === "base" ? "" : v)}>
-                          <SelectTrigger className="h-8 w-40 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="base">{isChickenMenu(formData.code) ? (t("posIngredientScopeBaseChicken") || "기본 (S Boneless)") : (t("posIngredientScopeBase") || "기본 (옵션 없음)")}</SelectItem>
-                            {(isChickenMenu(formData.code) ? menuOptions.filter((o) => o.optionType === "substitution" && !isChickenDefaultOption(o.name)) : menuOptions.filter((o) => o.optionType === "substitution")).map((o) => (
-                              <SelectItem key={o.id} value={o.id}>{t("posIngredientScopeOption") || "옵션"}: {optionPartLabel(o.name)}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                    <div className="rounded border border-dashed border-amber-500/50 p-3">
-                      <h4 className="mb-2 text-xs font-semibold">
-                        {selectedIngredientOptionId ? `${t("posIngredientScopeOption") || "옵션"}: ${optionPartLabel(menuOptions.find((o) => o.id === selectedIngredientOptionId)?.name ?? "")}` : t("posMenuIngredients") || "재료 (BOM)"}
-                      </h4>
-                      <ul className="mb-2 max-h-48 overflow-y-auto space-y-1">
-                        {menuIngredients.map((ing) => (
-                          <li key={ing.id} className="flex items-center justify-between rounded bg-amber-500/10 px-2 py-1 text-xs">
-                            <span>
-                              {ing.itemCode} × {ing.quantity}{(ing.lossRate ?? 0) > 0 ? ` (로스 ${ing.lossRate}%)` : ""}
-                              {ing.ingredientType === "packaging" && <span className="ml-1 text-amber-600">[포장]</span>}
-                            </span>
-                            <Button size="sm" variant="ghost" className="h-5 px-1 text-destructive hover:text-destructive" onClick={() => handleDeleteIngredient(ing)}><Trash2 className="h-3 w-3" /></Button>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="flex flex-wrap gap-2">
-                        <Select value={newIngredientType} onValueChange={(v) => setNewIngredientType(v as "food" | "packaging")}>
-                          <SelectTrigger className="h-8 w-24 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="food">{t("posCostTypeFood") || "음식"}</SelectItem>
-                            <SelectItem value="packaging">{t("posCostTypePackaging") || "포장"}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Select value={newIngredientCode} onValueChange={setNewIngredientCode}>
-                          <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
-                            <SelectValue placeholder={t("posIngredientPh") || "재료 선택"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {items.map((it) => <SelectItem key={it.code} value={it.code}>{it.code} — {it.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <Input type="number" min={0.001} step={0.1} placeholder="1" className="h-8 w-16 text-right text-xs" value={newIngredientQty} onChange={(e) => setNewIngredientQty(e.target.value)} />
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-muted-foreground shrink-0">{t("posIngredientLoss") || "로스"}</span>
-                          <Input type="number" min={0} max={100} step={0.5} placeholder="0" className="h-8 w-14 text-right text-xs" value={newIngredientLossRate} onChange={(e) => setNewIngredientLossRate(e.target.value)} />
-                          <span className="text-[10px] text-muted-foreground">%</span>
-                        </div>
-                        <Button size="sm" className="h-8 px-2" onClick={handleAddIngredient}><Plus className="h-3.5 w-3.5" /></Button>
-                      </div>
-                      <p className="mt-1 text-[10px] text-muted-foreground">{t("posIngredientHint") || "판매 시 해당 재료가 자동 차감됩니다."}</p>
-                    </div>
-                    {menuCost != null && menuCost.breakdown.length > 0 && (
-                      <div className="rounded border bg-muted/30 overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="px-3 py-2 text-left font-semibold">{t("posMenuIngredients") || "재료"}</th>
-                              <th className="px-3 py-2 text-right font-semibold">{t("quantity") || "수량"}</th>
-                              <th className="px-3 py-2 text-right font-semibold">{t("posIngredientLoss") || "로스"}</th>
-                              <th className="px-3 py-2 text-right font-semibold">{t("posMenuCost") || "원가"}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {menuCost.breakdown.map((b) => (
-                              <tr key={b.itemCode} className="border-b last:border-b-0">
-                                <td className="px-3 py-2">{b.itemName}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">{b.quantity}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">{(b.lossRate ?? 0) > 0 ? `${b.lossRate}%` : "-"}</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium">{b.costTotal.toFixed(1)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <div className="flex justify-between items-center border-t bg-muted/30 px-3 py-2">
-                          <span className="text-xs font-semibold">{t("posMenuCost") || "총 원가"}</span>
-                          <span className="font-bold tabular-nums">{menuCost.cost.toFixed(1)}</span>
-                        </div>
-                        {(Number(formData.price) || 0) > 0 && (
-                          <div className="flex justify-between items-center border-t px-3 py-2">
-                            <span className="text-xs font-semibold">{t("posMenuCostRatio") || "원가율"}</span>
-                            <span className="font-bold text-amber-600 tabular-nums">{((menuCost.cost / (Number(formData.price) || 1)) * 100).toFixed(1)}%</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {baseMenuCost != null && (Number(formData.price) || 0) > 0 && (
-                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-                        <span className="text-xs text-muted-foreground">{t("posMenuCostRatio") || "최종 원가율"}</span>
-                        <span className="ml-2 text-lg font-bold text-amber-600">
-                          {((baseMenuCost / (Number(formData.price) || 1)) * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    )}
-                  </TabsContent>
-                  <TabsContent value="description" className="mt-4 space-y-4">
-                    <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
-                      <h4 className="text-xs font-semibold">
-                        {t("posMenuDescriptionSection") || "메뉴 설명 (배달앱/테이블오더용)"}
-                      </h4>
-                      <div>
-                        <label className="text-xs font-semibold">
-                          {t("posMenuDescriptionDefault") || "기본 설명"}
-                        </label>
-                        <Textarea
-                          className="mt-1 min-h-[72px] text-xs"
-                          placeholder={t("posMenuDescriptionDefaultPh") || "메뉴 기본 설명을 입력하세요."}
-                          value={formData.descriptionDefault}
-                          maxLength={GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
-                          onChange={(e) =>
-                            setFormData((p) => ({
-                              ...p,
-                              descriptionDefault: e.target.value.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH),
-                            }))
-                          }
-                        />
-                        <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
-                          {formData.descriptionDefault.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold">
-                          {t("posMenuDescriptionDelivery") || "배달앱 설명 (비우면 기본 설명 사용)"}
-                        </label>
-                        <Textarea
-                          className="mt-1 min-h-[60px] text-xs"
-                          placeholder={t("posMenuDescriptionDeliveryPh") || "Grab/LineMan 등에 노출할 설명"}
-                          value={formData.descriptionDelivery}
-                          maxLength={GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
-                          onChange={(e) =>
-                            setFormData((p) => ({
-                              ...p,
-                              descriptionDelivery: e.target.value.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH),
-                            }))
-                          }
-                        />
-                        <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
-                          {formData.descriptionDelivery.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold">
-                          {t("posMenuDescriptionTable") || "테이블오더 설명 (비우면 기본 설명 사용)"}
-                        </label>
-                        <Textarea
-                          className="mt-1 min-h-[60px] text-xs"
-                          placeholder={t("posMenuDescriptionTablePh") || "테이블오더(QR 메뉴)용 설명"}
-                          value={formData.descriptionTable}
-                          onChange={(e) =>
-                            setFormData((p) => ({ ...p, descriptionTable: e.target.value }))
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="rounded border border-border/70 bg-muted/20 p-3 space-y-2">
-                      <h4 className="text-xs font-semibold">
-                        {t("posOptionDescriptionEdit") || "옵션 설명 수정"}
-                      </h4>
-                      {menuOptions.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          {t("posOptionDescriptionEmpty") || "옵션이 없습니다. 먼저 옵션 탭에서 옵션을 추가해 주세요."}
-                        </p>
-                      ) : (
-                        <>
-                          <Select
-                            value={selectedOptionDescId}
-                            onValueChange={setSelectedOptionDescId}
-                          >
-                            <SelectTrigger className="h-9 text-xs">
-                              <SelectValue
-                                placeholder={t("posOptionDescriptionSelect") || "옵션 선택"}
-                              />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {menuOptions.map((o) => (
-                                <SelectItem key={o.id} value={o.id}>
-                                  {optionPartLabel(o.name)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {selectedOptionDescId && (
-                            <div className="grid gap-2">
-                              <div>
-                                <Textarea
-                                  className="min-h-[56px] text-xs"
-                                  placeholder={t("posOptionDescriptionDefaultPh") || "옵션 기본 설명"}
-                                  value={optionDescDefaultDraft}
-                                  maxLength={GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
-                                  onChange={(e) =>
-                                    setOptionDescDefaultDraft(e.target.value.slice(0, GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH))
-                                  }
-                                />
-                                <div className="mt-0.5 text-right text-[10px] text-muted-foreground">
-                                  {optionDescDefaultDraft.length}/{GRAB_MENU_ITEM_DESCRIPTION_MAX_LENGTH}
-                                </div>
-                              </div>
-                              <div>
-                                <Textarea
-                                  className="min-h-[48px] text-xs"
-                                  placeholder={t("posOptionDescriptionDeliveryPh") || "배달앱 옵션 설명 (비우면 기본 설명)"}
-                                  value={optionDescDeliveryDraft}
-                                  maxLength={grabModifierDescMaxLen}
-                                  onChange={(e) =>
-                                    setOptionDescDeliveryDraft(
-                                      e.target.value.slice(0, grabModifierDescMaxLen)
-                                    )
-                                  }
-                                />
-                                <div className="mt-0.5 flex items-start justify-between gap-2 text-[10px] text-muted-foreground">
-                                  <span className="leading-snug">
-                                    {t("posOptionDescriptionDeliveryGrabHint") ||
-                                      "Grab 손님 앱에는「옵션명 (배달 설명)」한 줄로 보이며, 합쳐서 최대 40자입니다. 비우면 기본 설명이 쓰입니다. 예: Boneless (9ชิ้น 315g)"}
-                                  </span>
-                                  <span className="shrink-0">
-                                    {optionDescDeliveryDraft.length}/{grabModifierDescMaxLen}
-                                  </span>
-                                </div>
-                                {selectedOptionForDesc && (
-                                  <div
-                                    className={`mt-1 rounded border px-2 py-1.5 text-[10px] leading-snug ${
-                                      grabModifierDescTooLong || grabModifierNameTooLong
-                                        ? "border-amber-500/60 bg-amber-500/10 text-amber-900 dark:text-amber-100"
-                                        : "border-border/60 bg-muted/30 text-muted-foreground"
-                                    }`}
-                                  >
-                                    <span className="font-medium">
-                                      {t("posOptionGrabModifierPreview") || "Grab 표시 미리보기"}:{" "}
-                                    </span>
-                                    <span className="font-mono break-all">{grabModifierPreview || "-"}</span>
-                                    <span className="ml-1 tabular-nums">
-                                      ({grabModifierPreview.length}/{GRAB_MENU_MODIFIER_NAME_MAX_LENGTH})
-                                    </span>
-                                    {(grabModifierDescTooLong || grabModifierNameTooLong) && (
-                                      <p className="mt-0.5">
-                                        {t("posOptionGrabModifierOverLimit") ||
-                                          "40자를 넘으면 Grab 손님 앱에서 잘립니다. 옵션명·설명을 짧게 줄이세요."}
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                              <Textarea
-                                className="min-h-[48px] text-xs"
-                                placeholder={t("posOptionDescriptionTablePh") || "테이블오더 옵션 설명 (비우면 기본 설명)"}
-                                value={optionDescTableDraft}
-                                onChange={(e) => setOptionDescTableDraft(e.target.value)}
-                              />
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="packagingChecklist" className="mt-4 space-y-3">
-                    <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-semibold">
-                          {t("posPackagingChecklistTitle") || "포장 체크리스트"}
-                        </h4>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs"
-                            onClick={() => setPackagingChecklistRows((prev) => [...prev, newPackagingChecklistRow(prev.length)])}
-                          >
-                            <Plus className="mr-1 h-3.5 w-3.5" />
-                            {t("posPackagingChecklistAddRow") || "항목 추가"}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-8 text-xs"
-                            onClick={handleSavePackagingChecklist}
-                            disabled={packagingChecklistSaving || packagingChecklistLoading}
-                          >
-                            {packagingChecklistSaving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
-                          </Button>
-                        </div>
-                      </div>
-                      {packagingChecklistLoading ? (
-                        <p className="text-xs text-muted-foreground">{t("loading") || "불러오는 중..."}</p>
-                      ) : packagingChecklistRows.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          {t("posPackagingChecklistEmpty") || "등록된 체크 항목이 없습니다. [추가]로 첫 항목을 만드세요."}
-                        </p>
-                      ) : (
-                        <div className="divide-y rounded-md border bg-background">
-                          {packagingChecklistRows.map((row) => (
-                            <div key={row.localId} className="grid grid-cols-12 gap-2 p-2 md:items-end">
-                              <div className="col-span-12 md:col-span-8">
-                                <label className="mb-1 block text-[11px] font-semibold">{t("posPackagingChecklistColItemName") || "항목명"}</label>
-                                <Input
-                                  className="h-8 text-xs"
-                                  value={row.itemName}
-                                  onChange={(e) => handlePackagingChecklistRowPatch(row.localId, { itemName: e.target.value })}
-                                  placeholder={t("posPackagingChecklistItemNamePh") || "예: 소스컵 2개"}
-                                />
-                              </div>
-                              <div className="col-span-6 md:col-span-4">
-                                <label className="mb-1 block text-[11px] font-semibold">{t("posPackagingChecklistMenuCommon") || "메뉴 공통"}</label>
-                                <div className="h-8 rounded-md border bg-muted/40 px-2 text-xs text-muted-foreground flex items-center">
-                                  {t("posPackagingChecklistMenuCommon") || "메뉴 공통"}
-                                </div>
-                              </div>
-                              <div className="col-span-12 flex items-center justify-between gap-2 text-xs">
-                                <div className="flex items-center gap-4">
-                                  <label className="inline-flex items-center gap-2">
-                                    <Checkbox
-                                      checked={row.isRequired}
-                                      onCheckedChange={(v) => handlePackagingChecklistRowPatch(row.localId, { isRequired: v === true })}
-                                    />
-                                    <span>{t("posRequired") || "필수 항목"}</span>
-                                  </label>
-                                  <label className="inline-flex items-center gap-2">
-                                    <Checkbox
-                                      checked={row.isActive}
-                                      onCheckedChange={(v) => handlePackagingChecklistRowPatch(row.localId, { isActive: v === true })}
-                                    />
-                                    <span>{t("use") || "사용"}</span>
-                                  </label>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </TabsContent>
+                  <PosMenuEditInfoTab
+                    t={t}
+                    formData={formData}
+                    setFormData={setFormData}
+                    isPromoLinkedMenuEdit={isPromoLinkedMenuEdit}
+                    categoryMainOpen={categoryMainOpen}
+                    setCategoryMainOpen={setCategoryMainOpen}
+                    mainCategories={mainCategories}
+                    categoryOpen={categoryOpen}
+                    setCategoryOpen={setCategoryOpen}
+                    categoriesByMain={categoriesByMain}
+                    renderMenuStoreScopePicker={renderMenuStoreScopePicker}
+                    banbanFlavorAutoMenus={banbanFlavorAutoMenus}
+                    banbanFlavorSelectableMenus={banbanFlavorSelectableMenus}
+                    banbanSelectedMenuIdSet={banbanSelectedMenuIdSet}
+                    menuOptions={menuOptions}
+                    optionPartLabel={optionPartLabel}
+                    setFormTab={setFormTab}
+                    setMainTab={setMainTab}
+                    setOptionsConfigSelectedMenuId={setOptionsConfigSelectedMenuId}
+                    editingId={editingId}
+                    baseMenuCost={baseMenuCost}
+                    selectedStoreCodes={selectedStoreCodes}
+                  />
+                  <PosMenuEditOptionsTab
+                    t={t}
+                    formData={formData}
+                    menuOptions={menuOptions}
+                    optionPartLabel={optionPartLabel}
+                    menus={menus}
+                    newOptionName={newOptionName}
+                    setNewOptionName={setNewOptionName}
+                    handleAddOption={handleAddOption}
+                    newOptionType={newOptionType}
+                    setNewOptionType={setNewOptionType}
+                    currentMenuGroups={currentMenuGroups}
+                    newOptionStepValues={newOptionStepValues}
+                    setNewOptionStepValues={setNewOptionStepValues}
+                    newOptionSourceMenuId={newOptionSourceMenuId}
+                    setNewOptionSourceMenuId={setNewOptionSourceMenuId}
+                    additiveMenusForOptions={additiveMenusForOptions}
+                    newOptionQuantity={newOptionQuantity}
+                    setNewOptionQuantity={setNewOptionQuantity}
+                    newOptionChannelScope={newOptionChannelScope}
+                    setNewOptionChannelScope={setNewOptionChannelScope}
+                    newOptionModifier={newOptionModifier}
+                    setNewOptionModifier={setNewOptionModifier}
+                    newOptionModifierDelivery={newOptionModifierDelivery}
+                    setNewOptionModifierDelivery={setNewOptionModifierDelivery}
+                  />
+                  <PosMenuEditCostTab
+                    formData={formData}
+                    menuOptions={menuOptions}
+                    t={t}
+                    selectedIngredientOptionId={selectedIngredientOptionId}
+                    setSelectedIngredientOptionId={setSelectedIngredientOptionId}
+                    optionPartLabel={optionPartLabel}
+                    menuIngredients={menuIngredients}
+                    handleDeleteIngredient={handleDeleteIngredient}
+                    newIngredientType={newIngredientType}
+                    setNewIngredientType={setNewIngredientType}
+                    newIngredientCode={newIngredientCode}
+                    setNewIngredientCode={setNewIngredientCode}
+                    items={items}
+                    newIngredientQty={newIngredientQty}
+                    setNewIngredientQty={setNewIngredientQty}
+                    newIngredientLossRate={newIngredientLossRate}
+                    setNewIngredientLossRate={setNewIngredientLossRate}
+                    handleAddIngredient={handleAddIngredient}
+                    menuCost={menuCost}
+                    baseMenuCost={baseMenuCost}
+                  />
+                  <PosMenuEditDescriptionTab
+                    t={t}
+                    formData={formData}
+                    setFormData={setFormData}
+                    menuOptions={menuOptions}
+                    selectedOptionDescId={selectedOptionDescId}
+                    setSelectedOptionDescId={setSelectedOptionDescId}
+                    optionPartLabel={optionPartLabel}
+                    optionDescDefaultDraft={optionDescDefaultDraft}
+                    setOptionDescDefaultDraft={setOptionDescDefaultDraft}
+                    optionDescDeliveryDraft={optionDescDeliveryDraft}
+                    grabModifierDescMaxLen={grabModifierDescMaxLen}
+                    setOptionDescDeliveryDraft={setOptionDescDeliveryDraft}
+                    selectedOptionForDesc={selectedOptionForDesc}
+                    grabModifierDescTooLong={grabModifierDescTooLong}
+                    grabModifierNameTooLong={grabModifierNameTooLong}
+                    grabModifierPreview={grabModifierPreview}
+                    optionDescTableDraft={optionDescTableDraft}
+                    setOptionDescTableDraft={setOptionDescTableDraft}
+                  />
+                  <PosMenuEditPackagingTab
+                    t={t}
+                    setPackagingChecklistRows={setPackagingChecklistRows}
+                    handleSavePackagingChecklist={handleSavePackagingChecklist}
+                    packagingChecklistSaving={packagingChecklistSaving}
+                    packagingChecklistLoading={packagingChecklistLoading}
+                    packagingChecklistRows={packagingChecklistRows}
+                    handlePackagingChecklistRowPatch={handlePackagingChecklistRowPatch}
+                  />
                 </Tabs>
                     <div className="flex gap-3 pt-2">
                       <Button className="flex-1" onClick={handleSave}><Save className="mr-2 h-4 w-4" />{t("itemsBtnSave")}</Button>
@@ -5100,169 +4156,20 @@ export default function PosMenusPage() {
                     </div>
                 </>
               ) : (
-                <>
-                  <div>
-                    <label className="text-xs font-semibold">{t("posMenuCategoryMain")}</label>
-                    <DropdownMenu open={categoryMainOpen} onOpenChange={setCategoryMainOpen}>
-                      <div className="flex h-10 rounded-md border border-input bg-background overflow-hidden mt-1">
-                        <Input
-                          placeholder={t("posMenuCategoryMain")}
-                          className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                          value={formData.categoryMain}
-                          onChange={(e) => setFormData((p) => ({ ...p, categoryMain: e.target.value, category: "" }))}
-                          onFocus={() => setCategoryMainOpen(true)}
-                        />
-                        <DropdownMenuTrigger asChild>
-                          <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
-                            <ChevronDown className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                      </div>
-                      <DropdownMenuContent align="start" className="max-h-60 min-w-[200px]">
-                        {mainCategories.map((c) => (
-                          <DropdownMenuItem
-                            key={c}
-                            onClick={async () => {
-                              setFormData((p) => ({ ...p, categoryMain: c, category: "" }))
-                              setCategoryMainOpen(false)
-                              if (supportsPosMenuAutoCode(c)) {
-                                const { code: next } = await getNextPosMenuCode(c)
-                                if (next) setFormData((p) => ({ ...p, categoryMain: c, category: "", code: next }))
-                              }
-                            }}
-                          >
-                            {c}
-                          </DropdownMenuItem>
-                        ))}
-                        {formData.categoryMain.trim() &&
-                          !mainCategories.some((m) => m.toLowerCase() === formData.categoryMain.trim().toLowerCase()) && (
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              const trimmed = formData.categoryMain.trim()
-                              setFormData((p) => ({ ...p, categoryMain: trimmed }))
-                              setCategoryMainOpen(false)
-                              if (supportsPosMenuAutoCode(trimmed)) {
-                                const { code: next } = await getNextPosMenuCode(trimmed)
-                                if (next) setFormData((p) => ({ ...p, categoryMain: trimmed, code: next }))
-                              }
-                            }}
-                            className="text-primary font-medium"
-                          >
-                            + {t("itemsCategoryNew") || "신규 대분류"}: {formData.categoryMain.trim()}
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold">{t("posMenuCode")}</label>
-                    <Input
-                      placeholder={posMenuCodePlaceholderForMain(formData.categoryMain)}
-                      className="mt-1 h-10"
-                      value={formData.code}
-                      onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))}
-                      disabled={
-                        supportsPosMenuAutoCode(formData.categoryMain) && !!formData.code.trim()
-                      }
-                      title={
-                        supportsPosMenuAutoCode(formData.categoryMain)
-                          ? (t("posMenuCodeAuto") || "대분류 선택 시 자동 생성")
-                          : undefined
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold">{t("posMenuName")}</label>
-                    <Input placeholder={t("itemsNamePh")} className="mt-1 h-10" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold">{t("posMenuCategory")}</label>
-                    <DropdownMenu open={categoryOpen} onOpenChange={setCategoryOpen}>
-                      <div className="flex h-10 rounded-md border border-input bg-background overflow-hidden mt-1">
-                        <Input
-                          placeholder={t("itemsCategoryPh")}
-                          className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                          value={formData.category}
-                          onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
-                          onFocus={() => setCategoryOpen(true)}
-                        />
-                        <DropdownMenuTrigger asChild>
-                          <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
-                            <ChevronDown className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                      </div>
-                      <DropdownMenuContent align="start" className="max-h-60 min-w-[200px]">
-                        {categoriesByMain.map((c) => (
-                          <DropdownMenuItem
-                            key={c}
-                            onClick={() => {
-                              setFormData((p) => ({ ...p, category: c }))
-                              setCategoryOpen(false)
-                            }}
-                          >
-                            {translatePosMenuCategoryLabel(c, t)}
-                          </DropdownMenuItem>
-                        ))}
-                        {formData.category.trim() &&
-                          !categoriesByMain.some((c) => c.toLowerCase() === formData.category.trim().toLowerCase()) && (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setFormData((p) => ({ ...p, category: formData.category.trim() }))
-                              setCategoryOpen(false)
-                            }}
-                            className="text-primary font-medium"
-                          >
-                            + {t("itemsCategoryNew") || "신규 카테고리"}: {formData.category.trim()}
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  {renderMenuStoreScopePicker("posMenuVisibleStoresRequiredToSave", "scope-new")}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
-                      <Input type="number" placeholder="0" className="mt-1 h-10 text-right" value={formData.price} onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
-                      <Input type="number" placeholder={t("posMenuSameAsHallPlaceholder")} className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 text-xs">
-                      <input type="checkbox" checked={formData.sellHall} onChange={(e) => setFormData((p) => ({ ...p, sellHall: e.target.checked }))} />
-                      {t("posOptionSellHall") || "홀"}
-                    </label>
-                    <label className="flex items-center gap-2 text-xs">
-                      <input type="checkbox" checked={formData.sellDelivery} onChange={(e) => setFormData((p) => ({ ...p, sellDelivery: e.target.checked }))} />
-                      {t("posOptionSellDelivery") || "배달"}
-                    </label>
-                    <label className="flex items-center gap-2 text-xs">
-                      <input type="checkbox" checked={formData.sellPackaging} onChange={(e) => setFormData((p) => ({ ...p, sellPackaging: e.target.checked }))} />
-                      {t("posOptionSellPackaging") || "포장"}
-                    </label>
-                    <label className="flex items-center gap-2 text-xs">
-                      <input type="checkbox" checked={formData.sellMember} onChange={(e) => setFormData((p) => ({ ...p, sellMember: e.target.checked }))} />
-                      {t("posOptionSellMember") || "회원"}
-                    </label>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 text-xs">
-                      <input type="checkbox" checked={formData.vatIncluded} onChange={(e) => setFormData((p) => ({ ...p, vatIncluded: e.target.checked }))} />
-                      {t("posMenuVatIncluded")}
-                    </label>
-                    <label className="flex items-center gap-2 text-xs">
-                      <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} />
-                      {t("posMenuActive")}
-                    </label>
-                  </div>
-                  <div className="flex gap-3 pt-2">
-                    <Button className="flex-1" onClick={handleSave}><Save className="mr-2 h-4 w-4" />{t("itemsBtnSave")}</Button>
-                    <Button variant="outline" onClick={handleReset}><RotateCcw className="mr-2 h-4 w-4" />{t("itemsBtnReset")}</Button>
-                  </div>
-                </>
+                <PosMenuNewForm
+                  t={t}
+                  categoryMainOpen={categoryMainOpen}
+                  setCategoryMainOpen={setCategoryMainOpen}
+                  formData={formData}
+                  setFormData={setFormData}
+                  mainCategories={mainCategories}
+                  categoryOpen={categoryOpen}
+                  setCategoryOpen={setCategoryOpen}
+                  categoriesByMain={categoriesByMain}
+                  renderMenuStoreScopePicker={renderMenuStoreScopePicker}
+                  handleSave={handleSave}
+                  handleReset={handleReset}
+                />
               )}
             </div>
           </div>
@@ -5272,449 +4179,67 @@ export default function PosMenusPage() {
           {loading ? (
             <AdminTableSkeleton columns={7} rows={12} />
           ) : (
-          <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
-              <h3 className="text-sm font-bold">{t("posMenuList") || "메뉴 목록"}</h3>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <input
-                  ref={menuImportInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-                  className="hidden"
-                  onChange={handlePosMenuImportFileChange}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => void handleDownloadFilteredMenusExcel()}
-                >
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
-                  {t("outExcelDownload") || "엑셀 다운로드"} ({t("btn_query") || "조회"})
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => void handleDownloadAllMenusDetailedExcel()}
-                >
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
-                  {t("outExcelDownload") || "엑셀 다운로드"} ({t("all") || "전체"})
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  disabled={menuImportBusy}
-                  onClick={handleDownloadPosMenuTemplate}
-                >
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
-                  {t("posMenuImportTemplate")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  disabled={menuImportBusy}
-                  onClick={() => menuImportInputRef.current?.click()}
-                >
-                  <Upload className={cn("h-3.5 w-3.5 mr-1.5", menuImportBusy && "animate-pulse")} />
-                  {menuImportBusy
-                    ? menuImportProgress
-                      ? `${t("loading") || "Loading"} ${menuImportProgress.done}/${menuImportProgress.total}`
-                      : (t("loading") || "처리 중…")
-                    : t("posMenuImportUpload")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs"
-                  disabled={refreshLoading}
-                  onClick={() => loadMenusAndCategories(setRefreshLoading)}
-                >
-                  <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", refreshLoading && "animate-spin")} />
-                  {t("btn_query") || t("stockBtnSearch") || "조회"}
-                </Button>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 border-b bg-muted/20 px-6 py-3">
-              <Select
-                value={mainCategoryFilter}
-                onValueChange={(v) => {
-                  setMainCategoryFilter(v)
-                  setCategoryFilter("all")
-                }}
-              >
-                <SelectTrigger className="h-9 w-32 text-xs">
-                  <SelectValue placeholder={t("posMenuCategoryMain")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
-                  {mainCategories.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="h-9 w-36 text-xs">
-                  <SelectValue placeholder={t("posMenuCategorySub") || "소분류"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
-                  {optionsConfigCategoriesByMain.map((c) => (
-                    <SelectItem key={c} value={c}>{translatePosMenuCategoryLabel(c, t)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={soldOutFilter} onValueChange={(v) => setSoldOutFilter(v as "all" | "selling" | "soldOut")}>
-                <SelectTrigger className="h-9 w-28 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
-                  <SelectItem value="selling">{t("posAvailable") || "판매"}</SelectItem>
-                  <SelectItem value="soldOut">{t("posSoldOut") || "품절"}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={t("itemsSearchPh")}
-                className="h-9 flex-1 text-xs"
-              />
-            </div>
-            <AdminTableScroll className="max-h-[calc(100dvh-14rem)]">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
-                  <tr className="border-b bg-muted/30">
-                    <th className="px-2 py-3 text-[11px] font-bold text-center w-8"></th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[88px]">{t("itemsColCode")}</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[140px]">{t("posMenuName")}</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("posMenuCategoryMain")}</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuCategory")}</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuPriceCol") || "가격"}</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[112px]">{t("itemsColAction")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMenus.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-0">
-                        <AdminEmptyState
-                          icon={UtensilsCrossed}
-                          title={t("itemsNoResults")}
-                          className="border-0 bg-transparent"
-                        />
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredMenus.map((m, idx) => {
-                      const isEditingRow = editingId === m.id
-                      const isSoldOutToday = isPosMenuSoldOut(m.soldOutDate)
-                      const isExpanded = expandedMenuId === m.id
-                      const expanded = isExpanded ? expandedMenuData : null
-                      const expandedRows = (() => {
-                        if (!isExpanded || !expanded) return null
-                        const sorted = [...expanded.options].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-                        const toShow = isChickenMenu(m.code) ? sorted.filter((opt) => !isChickenDefaultOption(opt.name)) : sorted
-                        if (toShow.length === 0) {
-                          if (isChickenMenu(m.code) && sorted.length > 0) {
-                            return (
-                              <tr key={`${m.id}-base`} className="bg-amber-500/5 border-b">
-                                <td className="px-2 py-2 w-8" />
-                                <td className="px-5 py-2 text-center min-w-[88px] font-mono text-[10px] text-muted-foreground">{m.code}</td>
-                                <td className="px-5 py-2 min-w-[140px] pl-8 text-xs text-muted-foreground">{t("posIngredientScopeBaseChicken") || "기본 (S Boneless)"}</td>
-                                <td colSpan={4} className="px-5 py-2 text-xs text-muted-foreground">{t("posChickenBaseOnlyHint") || "메뉴 기본가에 해당. M Boneless / Wing / Drumette는 옵션 구성에서 추가."}</td>
-                              </tr>
-                            )
-                          }
-                          return null
-                        }
-                        return toShow.map((opt) => {
-                          const optCode = resolveOptionCode(opt, m.code)
-                          const optPrice = (m.price ?? 0) + (opt.priceModifier ?? 0)
-                          const isOptSoldOut = !(opt.sellHall ?? true) && !(opt.sellDelivery ?? true) && !(opt.sellPackaging ?? true)
-                          return (
-                            <tr key={opt.id} className="bg-amber-500/5 border-b hover:bg-amber-500/10" onClick={(e) => e.stopPropagation()}>
-                              <td className="px-2 py-2 w-8" />
-                              <td className="px-5 py-2 text-center min-w-[88px] whitespace-nowrap">
-                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{optCode}</span>
-                              </td>
-                              <td className="px-5 py-2 min-w-[140px] pl-8">
-                                <span className={cn("text-sm", isOptSoldOut && "text-muted-foreground line-through")}>{optionPartLabel(opt.name)}</span>
-                                {isOptSoldOut ? (
-                                  <span className="ml-1.5 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                    {t("posMenuUnused")}
-                                  </span>
-                                ) : null}
-                              </td>
-                              <td className="px-5 py-2 text-center text-muted-foreground text-xs w-20">{m.categoryMain || "-"}</td>
-                              <td className="px-5 py-2 text-center text-muted-foreground w-24">
-                                {m.category ? translatePosMenuCategoryLabel(m.category, t) : "-"}
-                              </td>
-                              <td className="px-5 py-2 text-right font-medium tabular-nums text-xs w-24">{optPrice > 0 ? optPrice.toLocaleString() : "-"}</td>
-                              <td className="px-5 py-2 w-28" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex justify-center gap-1">
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className={cn(
-                                      "h-7 w-7",
-                                      isOptSoldOut
-                                        ? "text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                                        : "text-muted-foreground border-muted hover:bg-muted/50"
-                                    )}
-                                    onClick={() => handleSoldOutToggleOption(opt, m.id)}
-                                    disabled={soldOutTogglingOptionId === String(opt.id)}
-                                    title={soldOutTogglingOptionId === String(opt.id) ? "..." : isOptSoldOut ? (t("posSoldOut") || "품절") : (t("posAvailable") || "판매")}
-                                  >
-                                    {soldOutTogglingOptionId === String(opt.id) ? (
-                                      <span className="text-[10px]">...</span>
-                                    ) : isOptSoldOut ? (
-                                      <PauseCircle className="h-3.5 w-3.5" />
-                                    ) : (
-                                      <PlayCircle className="h-3.5 w-3.5" />
-                                    )}
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
-                                    onClick={() => handleEditOptionInList(m.id)}
-                                    title={t("itemsBtnEdit")}
-                                  >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })
-                      })()
-                      return (
-                      <React.Fragment key={m.id}>
-                      <tr
-                        data-menu-row-id={m.id}
-                        className={cn(
-                          "border-b cursor-pointer transition-colors",
-                          isEditingRow
-                            ? "bg-primary/20 hover:bg-primary/25 border-l-4 border-l-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.2)]"
-                            : "hover:bg-muted/20",
-                          !isEditingRow && idx % 2 === 1 && "bg-muted/5",
-                          !m.isActive && !isEditingRow && "bg-muted/40"
-                        )}
-                        onClick={() => handleExpandMenu(m.id)}
-                      >
-                        <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleExpandMenu(m.id)}>
-                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                          </Button>
-                        </td>
-                        <td className="px-5 py-3 text-center min-w-[88px] whitespace-nowrap">
-                          <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                            {m.code}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3">
-                          <span className={cn(!m.isActive && "text-muted-foreground line-through")}>{m.name}</span>
-                          {!m.isActive ? (
-                            <span className="ml-1.5 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                              {t("posMenuUnused")}
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="px-5 py-3 text-center text-muted-foreground text-xs">{m.categoryMain || "-"}</td>
-                        <td className="px-5 py-3 text-center text-muted-foreground">
-                          {m.category ? translatePosMenuCategoryLabel(m.category, t) : "-"}
-                        </td>
-                        <td className="px-5 py-3 text-right font-bold tabular-nums text-xs">
-                          {m.price > 0 ? m.price.toLocaleString() : "-"}
-                        </td>
-                        <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex justify-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className={cn(
-                                "h-7 w-7",
-                                isSoldOutToday
-                                  ? "text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                                  : "text-muted-foreground border-muted hover:bg-muted/50"
-                              )}
-                              onClick={() => handleSoldOutToggle(m)}
-                              disabled={soldOutTogglingId === m.id || !m.isActive}
-                              title={soldOutTogglingId === m.id ? "..." : isSoldOutToday ? (t("posSoldOut") || "품절") : (t("posAvailable") || "판매")}
-                            >
-                              {soldOutTogglingId === m.id ? (
-                                <span className="text-[10px]">...</span>
-                              ) : isSoldOutToday ? (
-                                <PauseCircle className="h-3.5 w-3.5" />
-                              ) : (
-                                <PlayCircle className="h-3.5 w-3.5" />
-                              )}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
-                              onClick={() => handleEdit(m)}
-                              title={t("itemsBtnEdit")}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className={cn(
-                                "h-7 w-7",
-                                !m.isActive
-                                  ? "text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/40"
-                                  : "text-muted-foreground border-muted hover:bg-muted/50"
-                              )}
-                              onClick={() => handleMarkUnused(m)}
-                              title={!m.isActive ? t("posMenuUseAgain") : t("posMenuUnused")}
-                            >
-                              {!m.isActive ? (
-                                <PlayCircle className="h-3.5 w-3.5" />
-                              ) : (
-                                <Ban className="h-3.5 w-3.5" />
-                              )}
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                      {expandedRows}
-                      </React.Fragment>
-                    )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </AdminTableScroll>
-          </div>
+          <PosMenuListTable
+            t={t}
+            menuImportInputRef={menuImportInputRef}
+            handlePosMenuImportFileChange={handlePosMenuImportFileChange}
+            handleDownloadFilteredMenusExcel={handleDownloadFilteredMenusExcel}
+            handleDownloadAllMenusDetailedExcel={handleDownloadAllMenusDetailedExcel}
+            menuImportBusy={menuImportBusy}
+            handleDownloadPosMenuTemplate={handleDownloadPosMenuTemplate}
+            menuImportProgress={menuImportProgress}
+            refreshLoading={refreshLoading}
+            loadMenusAndCategories={loadMenusAndCategories}
+            setRefreshLoading={setRefreshLoading}
+            mainCategoryFilter={mainCategoryFilter}
+            setMainCategoryFilter={setMainCategoryFilter}
+            setCategoryFilter={setCategoryFilter}
+            mainCategories={mainCategories}
+            categoryFilter={categoryFilter}
+            optionsConfigCategoriesByMain={optionsConfigCategoriesByMain}
+            soldOutFilter={soldOutFilter}
+            setSoldOutFilter={setSoldOutFilter}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            filteredMenus={filteredMenus}
+            editingId={editingId}
+            expandedMenuId={expandedMenuId}
+            expandedMenuData={expandedMenuData}
+            optionPartLabel={optionPartLabel}
+            handleSoldOutToggleOption={handleSoldOutToggleOption}
+            soldOutTogglingOptionId={soldOutTogglingOptionId}
+            handleEditOptionInList={handleEditOptionInList}
+            handleExpandMenu={handleExpandMenu}
+            handleSoldOutToggle={handleSoldOutToggle}
+            soldOutTogglingId={soldOutTogglingId}
+            handleEdit={handleEdit}
+            handleMarkUnused={handleMarkUnused}
+          />
           )}
         </div>
           </TabsContent>
           <TabsContent value="optionsConfig" className={adminTabsContentCn}>
             <OptionsConfigShell
               menuListPanel={
-                <div className="rounded-xl border bg-card overflow-hidden">
-                  <div className="border-b px-4 py-3 bg-muted/20 flex items-center justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-bold">{t("posMenuList")}</h3>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {t("posMenuOptionsConfigSelectMenuHint")}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs shrink-0"
-                      disabled={optionsConfigListLoading}
-                      onClick={async () => {
-                        await loadMenusAndCategories(setOptionsConfigListLoading)
-                        if (optionsConfigSelectedMenuId) {
-                          const opts = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId })
-                          applyLoadedOptionsForConfig(Array.isArray(opts) ? opts : [])
-                        }
-                      }}
-                    >
-                      <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", optionsConfigListLoading && "animate-spin")} />
-                      {t("btn_query") || "조회"}
-                    </Button>
-                  </div>
-                  <div className="p-3 space-y-2 border-b">
-                    <Select
-                      value={mainCategoryFilter}
-                      onValueChange={(v) => {
-                        setMainCategoryFilter(v)
-                        setOptionsConfigCategoryFilter("all")
-                      }}
-                    >
-                      <SelectTrigger className="h-9 w-full text-xs">
-                        <SelectValue placeholder={t("posMenuCategoryMain")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
-                        {mainCategories.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={optionsConfigCategoryFilter} onValueChange={setOptionsConfigCategoryFilter}>
-                      <SelectTrigger className="h-9 w-full text-xs">
-                        <SelectValue placeholder={t("posMenuCategorySub") || "소분류"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
-                        {optionsConfigCategoriesByMain.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {translatePosMenuCategoryLabel(c, t)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      value={optionsConfigSearchTerm}
-                      onChange={(e) => setOptionsConfigSearchTerm(e.target.value)}
-                      placeholder={t("itemsSearchPh")}
-                      className="h-9 text-xs"
-                    />
-                  </div>
-                  <div className="max-h-[400px] overflow-y-auto p-2">
-                    {optionsConfigFilteredMenus.length === 0 ? (
-                      <p className="py-6 text-center text-xs text-muted-foreground">{t("itemsNoResults")}</p>
-                    ) : (
-                      <ul className="space-y-0.5">
-                        {optionsConfigFilteredMenus.map((m) => {
-                          const isSelected = optionsConfigSelectedMenuId === m.id
-                          const optCount = isSelected
-                            ? isChickenMenu(m.code)
-                              ? (() => {
-                                  const nd = optionsConfigMenuOptions.filter((o) => !isChickenDefaultOption(o.name))
-                                  const hasHiddenS = optionsConfigMenuOptions.some((o) => isChickenDefaultOption(o.name))
-                                  if (nd.length === 0 && hasHiddenS) return 1
-                                  return nd.length
-                                })()
-                              : optionsConfigMenuOptions.length
-                            : null
-                          return (
-                            <li key={m.id}>
-                              <button
-                                type="button"
-                                className={cn(
-                                  "w-full text-left px-3 py-2.5 rounded-lg text-xs transition-colors",
-                                  isSelected ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted/60"
-                                )}
-                                onClick={() => setOptionsConfigSelectedMenuId(m.id)}
-                              >
-                                <span className="font-medium">{m.code}</span>
-                                <span className="text-muted-foreground ml-1">—</span>
-                                <span className={isSelected ? "text-primary-foreground/90" : ""}>{m.name}</span>
-                                {optCount != null && optCount > 0 && (
-                                  <span
-                                    className={cn(
-                                      "ml-1.5",
-                                      isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
-                                    )}
-                                  >
-                                    ({optCount})
-                                  </span>
-                                )}
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                </div>
+                <PosMenuOptionsMenuListPanel
+                  t={t}
+                  optionsConfigListLoading={optionsConfigListLoading}
+                  loadMenusAndCategories={loadMenusAndCategories}
+                  setOptionsConfigListLoading={setOptionsConfigListLoading}
+                  optionsConfigSelectedMenuId={optionsConfigSelectedMenuId}
+                  applyLoadedOptionsForConfig={applyLoadedOptionsForConfig}
+                  mainCategoryFilter={mainCategoryFilter}
+                  setMainCategoryFilter={setMainCategoryFilter}
+                  setOptionsConfigCategoryFilter={setOptionsConfigCategoryFilter}
+                  mainCategories={mainCategories}
+                  optionsConfigCategoryFilter={optionsConfigCategoryFilter}
+                  optionsConfigCategoriesByMain={optionsConfigCategoriesByMain}
+                  optionsConfigSearchTerm={optionsConfigSearchTerm}
+                  setOptionsConfigSearchTerm={setOptionsConfigSearchTerm}
+                  optionsConfigFilteredMenus={optionsConfigFilteredMenus}
+                  optionsConfigMenuOptions={optionsConfigMenuOptions}
+                  setOptionsConfigSelectedMenuId={setOptionsConfigSelectedMenuId}
+                />
               }
               optionGroupPanel={
                 <OptionGroupListPanel
@@ -5773,544 +4298,60 @@ export default function PosMenusPage() {
                       {t("posOptionSaveIncludesStepsHint") ||
                         "상단 [저장]은 옵션 항목·가격·판매 채널과 함께 왼쪽 단계의 채널(홀/배달) 설정도 DB에 반영합니다. 단계 순서·추가만 바꾼 경우 [단계 저장]을 눌러 주세요."}
                     </p>
-                    <div className="rounded border border-dashed border-border/70 bg-muted/15 p-3 space-y-2">
-                      <p className="text-xs font-semibold">{t("posOptionAddStepTitle") || "선택 단계 추가"}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {t("posOptionAddStepHint") ||
-                          "영문 키(예: sauce, spicy). 치킨(c 코드)은 부위(part) 단계가 항상 포함됩니다. 추가 후 [단계 저장]으로 서버에 반영하세요."}
-                      </p>
-                      <div className="flex flex-wrap items-end gap-2">
-                        <Input
-                          className="h-8 min-w-[200px] max-w-sm flex-1 text-xs"
-                          placeholder={t("posOptionAddStepPlaceholder") || "새 단계 키 (예: sauce)"}
-                          value={optionsConfigNewGroupKeyInput}
-                          onChange={(e) => setOptionsConfigNewGroupKeyInput(e.target.value)}
-                          disabled={!optionsConfigSelectedMenuId || !!optionsConfigSelectedMenu?.promoId?.trim()}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault()
-                              void handleAppendOptionStepKey()
-                            }
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-8 text-xs"
-                          disabled={!optionsConfigSelectedMenuId || !!optionsConfigSelectedMenu?.promoId?.trim()}
-                          onClick={() => void handleAppendOptionStepKey()}
-                        >
-                          {t("posOptionAddStepButton") || "단계 추가"}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="rounded border bg-muted/10 p-3 space-y-4">
-                      <div>
-                        <p className="text-xs font-semibold">
-                          {t("posOptionImportCardTitle") || "옵션 가져오기 · 공통 그룹 연결"}
-                        </p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          {t("posOptionImportCardHint") ||
-                            "다른 메뉴에서 옵션 단계와 항목을 복사하거나, 저장된 공통 옵션그룹을 현재 메뉴에 연결합니다."}
-                        </p>
-                      </div>
+                    <PosMenuOptionsAddStepSection
+                      t={t}
+                      optionsConfigNewGroupKeyInput={optionsConfigNewGroupKeyInput}
+                      setOptionsConfigNewGroupKeyInput={setOptionsConfigNewGroupKeyInput}
+                      optionsConfigSelectedMenuId={optionsConfigSelectedMenuId}
+                      optionsConfigSelectedMenu={optionsConfigSelectedMenu}
+                      handleAppendOptionStepKey={handleAppendOptionStepKey}
+                    />
+                    <PosMenuOptionsImportSection
+                      t={t}
+                      optionsConfigCopySourceMenuId={optionsConfigCopySourceMenuId}
+                      setOptionsConfigCopySourceMenuId={setOptionsConfigCopySourceMenuId}
+                      optionsConfigSelectedMenuId={optionsConfigSelectedMenuId}
+                      optionsConfigCopying={optionsConfigCopying}
+                      optionsConfigCopySourceMenus={optionsConfigCopySourceMenus}
+                      handleImportOptionsFromExistingMenu={handleImportOptionsFromExistingMenu}
+                      optionsConfigLibrarySearchTerm={optionsConfigLibrarySearchTerm}
+                      setOptionsConfigLibrarySearchTerm={setOptionsConfigLibrarySearchTerm}
+                      optionsConfigLibraryFilter={optionsConfigLibraryFilter}
+                      setOptionsConfigLibraryFilter={setOptionsConfigLibraryFilter}
+                      optionsConfigLibraryLoading={optionsConfigLibraryLoading}
+                      optionsConfigLibraryItems={optionsConfigLibraryItems}
+                      handleUseOptionTemplateFromLibrary={handleUseOptionTemplateFromLibrary}
+                    />
 
-                      <div className="space-y-2">
-                        <p className="text-[11px] font-medium text-muted-foreground">
-                          {t("posOptionImportFromMenuLabel") || "다른 메뉴에서 복사"}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {t("posOptionCopyFromMenuHint") ||
-                            "원본 메뉴의 옵션 단계/옵션 항목을 가져옵니다. option_code는 우선 유지하고 충돌 시 자동 재매핑됩니다."}
-                        </p>
-                        <div className="flex flex-wrap items-end gap-2">
-                          <Select
-                            value={optionsConfigCopySourceMenuId || "__none__"}
-                            onValueChange={(v) => setOptionsConfigCopySourceMenuId(v === "__none__" ? "" : v)}
-                            disabled={!optionsConfigSelectedMenuId || optionsConfigCopying}
-                          >
-                            <SelectTrigger className="h-8 min-w-[240px] text-xs">
-                              <SelectValue placeholder={t("posOptionCopySourceSelect") || "원본 메뉴 선택"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">{t("posOptionCopySourceSelect") || "원본 메뉴 선택"}</SelectItem>
-                              {optionsConfigCopySourceMenus.map((m) => (
-                                <SelectItem key={m.id} value={m.id}>
-                                  {m.code} - {m.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-8 text-xs"
-                            onClick={() => void handleImportOptionsFromExistingMenu()}
-                            disabled={!optionsConfigCopySourceMenuId || optionsConfigCopying || !optionsConfigSelectedMenuId}
-                          >
-                            {optionsConfigCopying
-                              ? t("loading") || "로딩 중..."
-                              : t("posOptionCopyImportButton") || "옵션 가져오기"}
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-border/60 pt-3 space-y-2">
-                        <p className="text-[11px] font-medium text-muted-foreground">
-                          {t("posOptionTemplateLibraryTitle") || "공통 옵션 목록"}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {t("posOptionImportLibraryHint") ||
-                            "목록에서 공통 옵션그룹을 고른 뒤 [이 그룹 사용]으로 연결합니다. 이미 연결된 그룹은 다시 넣을 수 없습니다."}
-                        </p>
-                        <div className="flex flex-wrap gap-2 items-end">
-                          <div className="min-w-[160px] flex-1">
-                            <label className="text-[11px] text-muted-foreground block mb-0.5">
-                              {t("itemsSearchPh") || "검색"}
-                            </label>
-                            <Input
-                              className="h-8 text-xs"
-                              placeholder={t("posOptionTemplateSearchPlaceholder") || ""}
-                              value={optionsConfigLibrarySearchTerm}
-                              onChange={(e) => setOptionsConfigLibrarySearchTerm(e.target.value)}
-                              disabled={!optionsConfigSelectedMenuId}
-                            />
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {(
-                            [
-                              ["all", t("noticeFilterAll") || "전체"],
-                              ["recent", t("posOptionTemplateFilterRecent") || "최근"],
-                              ["frequent", t("posOptionTemplateFilterFrequent") || "자주"],
-                              ["deliveryOnly", t("posOptionTemplateFilterDeliveryOnly") || "배달 전용"],
-                            ] as const
-                          ).map(([key, lab]) => (
-                            <Button
-                              key={key}
-                              type="button"
-                              variant={optionsConfigLibraryFilter === key ? "default" : "outline"}
-                              size="sm"
-                              className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                              disabled={!optionsConfigSelectedMenuId}
-                              onClick={() => setOptionsConfigLibraryFilter(key)}
-                            >
-                              {lab}
-                            </Button>
-                          ))}
-                        </div>
-                        <div className="max-h-[320px] overflow-y-auto rounded border bg-background p-2 space-y-2">
-                          {optionsConfigLibraryLoading ? (
-                            <p className="py-6 text-center text-xs text-muted-foreground">
-                              {t("loading") || "로딩 중..."}
-                            </p>
-                          ) : optionsConfigLibraryItems.length === 0 ? (
-                            <p className="py-6 text-center text-xs text-muted-foreground">
-                              {t("posOptionTemplateListEmpty") || "목록이 비어 있습니다."}
-                            </p>
-                          ) : (
-                            optionsConfigLibraryItems.map((row) => (
-                              <div
-                                key={row.id}
-                                className="flex flex-col gap-2 rounded-md border border-border/50 bg-muted/20 px-2.5 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
-                              >
-                                <div className="min-w-0 flex-1 space-y-1">
-                                  <p className="text-xs font-mono font-semibold leading-snug break-all text-foreground">
-                                    {row.groupCode}
-                                  </p>
-                                  <p className="text-[11px] leading-snug break-words text-foreground/90">
-                                    {row.groupTitle}
-                                  </p>
-                                  {row.groupKey ? (
-                                    <p className="text-[10px] text-muted-foreground font-mono">
-                                      {(t("posOptionTemplateStepKeyLabel") || "단계 key").replace("{key}", row.groupKey)}
-                                    </p>
-                                  ) : null}
-                                  {row.itemLines.length > 0 ? (
-                                    <ul className="mt-1 max-h-[140px] list-disc space-y-0.5 overflow-y-auto pl-4 text-[11px] leading-snug text-muted-foreground marker:text-muted-foreground/80">
-                                      {row.itemLines.map((line, i) => (
-                                        <li key={`${row.id}-it-${i}`} className="break-words">
-                                          {line}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  ) : (
-                                    <p className="text-[11px] text-amber-800 dark:text-amber-200/90">
-                                      {t("posOptionTemplateGroupNoItems")}
-                                    </p>
-                                  )}
-                                  {row.footerNote ? (
-                                    <p className="text-[10px] text-muted-foreground">{row.footerNote}</p>
-                                  ) : null}
-                                </div>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant={row.canUse ? "default" : "secondary"}
-                                  className={cn(
-                                    "h-auto min-h-8 shrink-0 cursor-pointer self-stretch px-3 py-2 text-[11px] font-semibold sm:self-start sm:min-w-[7.5rem]",
-                                    row.canUse && "shadow-sm ring-1 ring-primary/25 hover:ring-primary/40"
-                                  )}
-                                  disabled={!optionsConfigSelectedMenuId || !row.canUse}
-                                  title={
-                                    !row.canUse
-                                      ? (t("posOptionTemplateUseDisabledHint") ||
-                                          "공통 그룹에 저장된 항목이 있을 때만 연결할 수 있습니다.")
-                                      : undefined
-                                  }
-                                  onClick={() => void handleUseOptionTemplateFromLibrary(row.id)}
-                                >
-                                  {t("posOptionTemplateUseBtn") || "이 그룹 사용"}
-                                </Button>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded border p-3 bg-muted/20">
-                      <p className="text-xs font-semibold">{t("posOptionRowAddBlockTitle")}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground leading-snug">
-                        {t("posOptionRowAddBlockHint")}
-                      </p>
-                      <div className="mt-3 space-y-2">
-                        <div className="w-full">
-                          <label className="text-xs font-medium block mb-0.5">
-                            {t("posOptionTitle") || "선택지 줄 이름"}
-                          </label>
-                          <Input
-                            className="h-8 w-full text-xs"
-                            placeholder={t("posOptionNamePlaceholder") || "미입력 시 단계값으로 자동 생성"}
-                            value={optionsConfigNewOptionTitle}
-                            onChange={(e) => setOptionsConfigNewOptionTitle(e.target.value)}
-                          />
-                        </div>
-
-                        {optionsConfigUseSizePartUi ? (
-                          <div className="flex flex-wrap gap-2 items-end">
-                            <div>
-                              <label className="text-xs font-medium block mb-0.5">1. {t("posOptionGroupSize")}</label>
-                              <Select value={newOptionSize || "_"} onValueChange={(v) => setNewOptionSize(v === "_" ? "" : v)}>
-                                <SelectTrigger className="h-8 w-20 text-xs">
-                                  <SelectValue placeholder={t("posOptionSizeAbbrevPlaceholder")} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="_">{t("posMenuCategoryAll") || "선택"}</SelectItem>
-                                  {OPTION_SIZE_VALUES.map((v) => (
-                                    <SelectItem key={v} value={v}>
-                                      {v}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <label className="text-xs font-medium block mb-0.5">2. {t("posOptionGroupPart")}</label>
-                              <div className="flex items-center gap-1">
-                                <Select value={newOptionPart || "_"} onValueChange={(v) => setNewOptionPart(v === "_" ? "" : v)}>
-                                  <SelectTrigger className="h-8 w-28 text-xs">
-                                    <SelectValue placeholder={t("posOptionPartPlaceholder") || "Boneless/Wing/Drumette"} />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="_">{t("posMenuCategoryAll") || "선택"}</SelectItem>
-                                    {OPTION_PART_VALUES.map((v) => (
-                                      <SelectItem key={v} value={v}>
-                                        {v}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Input
-                                  className="h-8 w-28 text-xs"
-                                  value={newOptionPart}
-                                  onChange={(e) => setNewOptionPart(e.target.value)}
-                                  placeholder={t("posOptionPartCustomPlaceholder") || "Custom type"}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ) : optionsConfigPanelStepGroups.length > 0 ? (
-                          <div className="flex flex-wrap gap-2 items-end w-full">
-                            {[...(optionsConfigPanelStepGroups || [])]
-                              .sort((a, b) => {
-                                if (a === optionsConfigEffectiveGroupKey) return -1
-                                if (b === optionsConfigEffectiveGroupKey) return 1
-                                return 0
-                              })
-                              .map((g) => {
-                                const stepFieldLabel =
-                                  optionsConfigGroupPanelItems.find((x) => x.key === g)?.label ?? g
-                                return (
-                              <div key={g}>
-                                <label className="text-xs font-medium block mb-0.5">
-                                  {stepFieldLabel}
-                                  {g === optionsConfigEffectiveGroupKey ? (
-                                    <span className="ml-1 text-[10px] text-primary">
-                                      {t("posOptionSelectedGroupBadge") || "편집 중"}
-                                    </span>
-                                  ) : null}
-                                </label>
-                                <Input
-                                  className="h-8 w-28 text-xs"
-                                  placeholder={g}
-                                  value={optionsConfigNewStepValues[g] ?? ""}
-                                  onChange={(e) => setOptionsConfigNewStepValues((p) => ({ ...p, [g]: e.target.value }))}
-                                />
-                              </div>
-                                )
-                              })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground py-1">
-                            {t("posOptionConfigNeedGroupsShort") || "먼저 위에서 선택 단계를 저장하세요."}
-                          </p>
-                        )}
-
-                        <div className="rounded border bg-background p-2">
-                          <p className="mb-1 text-[11px] font-semibold text-muted-foreground">
-                            {t("posOptionChannelScopeTitle") || "채널 설정 (기본채널=홀+포장, 배달)"}
-                          </p>
-                          {optionsConfigEffectiveGroupKey && optionsConfigEffectiveGroupKey !== "__default__" ? (
-                            <p className="mb-1.5 text-[10px] leading-snug text-muted-foreground">
-                              {t("posOptionChannelScopeStepHint") ||
-                                "선택 단계가 매장·포장/배달 중 어디에 보일지 정합니다. 변경 후 [단계 저장]을 눌러 주세요."}
-                            </p>
-                          ) : null}
-                          <div className="flex flex-wrap items-end justify-between gap-2">
-                            <div className="flex flex-wrap gap-1.5">
-                              <Button
-                                type="button"
-                                variant={optionsConfigStepChannelScope === "all" ? "default" : "outline"}
-                                size="sm"
-                                className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                                onClick={() => handleOptionsConfigStepChannelScope("all")}
-                              >
-                                {t("posOptionScopeAll") || "기본+배달"}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant={optionsConfigStepChannelScope === "hall" ? "default" : "outline"}
-                                size="sm"
-                                className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                                onClick={() => handleOptionsConfigStepChannelScope("hall")}
-                              >
-                                {t("posOptionScopeBaseOnly") || "기본채널만"}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant={optionsConfigStepChannelScope === "delivery" ? "default" : "outline"}
-                                size="sm"
-                                className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                                onClick={() => handleOptionsConfigStepChannelScope("delivery")}
-                              >
-                                {t("posOptionScopeDeliveryOnly") || "배달만"}
-                              </Button>
-                            </div>
-                            {optionsConfigSelectedMenuId &&
-                              optionsConfigPanelStepGroups.length > 0 &&
-                              optionsConfigEffectiveGroupKey &&
-                              optionsConfigEffectiveGroupKey !== "__default__" &&
-                              (() => {
-                                const groupKey = optionsConfigEffectiveGroupKey
-                                const row =
-                                  optionsConfigGroupRulesDraft.find((x) => x.key === groupKey) ||
-                                  ({
-                                    key: groupKey,
-                                    label: groupKey,
-                                    audience: "all",
-                                    required: true,
-                                    minSelect: 1,
-                                    maxSelect: 1,
-                                  } as PosOptionSelectionGroupConfig)
-                                const minSel =
-                                  row.minSelect != null && Number.isFinite(Number(row.minSelect))
-                                    ? Math.max(0, Math.floor(Number(row.minSelect)))
-                                    : row.required !== false
-                                      ? 1
-                                      : 0
-                                const maxSel =
-                                  row.maxSelect != null && Number.isFinite(Number(row.maxSelect))
-                                    ? Math.max(1, Math.floor(Number(row.maxSelect)))
-                                    : 1
-                                const promoLocked = !!optionsConfigSelectedMenu?.promoId?.trim()
-                                return (
-                                  <div className="flex w-full min-w-0 flex-col gap-2">
-                                    <div className="flex max-w-md items-start gap-2 rounded-md border border-border/50 bg-muted/15 px-2 py-1.5">
-                                      <Checkbox
-                                        id={`opt-req-${groupKey}`}
-                                        checked={row.required !== false}
-                                        disabled={promoLocked}
-                                        onCheckedChange={(ck) => {
-                                          const on = ck === true
-                                          handleOptionGroupRuleFieldChange(groupKey, {
-                                            required: on,
-                                            minSelect: on ? Math.max(1, minSel || 1) : 0,
-                                            maxSelect: on
-                                              ? Math.max(maxSel, Math.max(1, minSel || 1))
-                                              : Math.max(1, maxSel),
-                                          })
-                                        }}
-                                      />
-                                      <label
-                                        htmlFor={`opt-req-${groupKey}`}
-                                        className="cursor-pointer text-[11px] leading-snug"
-                                      >
-                                        <span className="font-medium">{t("posOptionRuleRequireForOrder")}</span>
-                                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                                          {t("posOptionRuleRequireForOrderHint")}
-                                        </span>
-                                      </label>
-                                    </div>
-                                    <div className="flex max-w-md flex-col gap-0.5">
-                                      <label
-                                        htmlFor={`opt-grp-label-${groupKey}`}
-                                        className="text-[11px] font-medium text-muted-foreground"
-                                      >
-                                        {t("posOptionGroupDisplayName") || "그룹 표시명(배달)"}
-                                      </label>
-                                      <Input
-                                        id={`opt-grp-label-${groupKey}`}
-                                        type="text"
-                                        className="h-7 text-xs"
-                                        disabled={promoLocked}
-                                        placeholder={groupKey}
-                                        value={hasCustomGroupLabel(row as PosOptionSelectionGroupConfig, t) ? String(row.label ?? "") : ""}
-                                        onChange={(e) => {
-                                          handleOptionGroupRuleFieldChange(groupKey, {
-                                            label: e.target.value,
-                                          })
-                                        }}
-                                      />
-                                      <span className="text-[10px] text-muted-foreground">
-                                        {t("posOptionGroupDisplayNameHint") ||
-                                          "Grab 배달 화면의 옵션 그룹 제목으로 표시됩니다. 비우면 단계 키가 사용됩니다."}
-                                      </span>
-                                    </div>
-                                    <div className="flex flex-wrap items-end gap-2">
-                                      <div>
-                                        <label className="mb-0.5 block text-[11px] font-medium text-muted-foreground">
-                                          {t("posOptionRuleMinSelect")}
-                                        </label>
-                                        <Input
-                                          type="number"
-                                          min={0}
-                                          className="h-7 w-14 text-right text-xs"
-                                          disabled={promoLocked}
-                                          value={minSel}
-                                          onChange={(e) => {
-                                            const n = Math.max(0, Math.floor(Number(e.target.value)))
-                                            handleOptionGroupRuleFieldChange(groupKey, {
-                                              required: n > 0,
-                                              minSelect: n,
-                                              maxSelect: Math.max(maxSel, n > 0 ? n : 1),
-                                            })
-                                          }}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="mb-0.5 block text-[11px] font-medium text-muted-foreground">
-                                          {t("posOptionRuleMaxSelect")}
-                                        </label>
-                                        <Input
-                                          type="number"
-                                          min={1}
-                                          className="h-7 w-14 text-right text-xs"
-                                          disabled={promoLocked}
-                                          value={maxSel}
-                                          onChange={(e) => {
-                                            const n = Math.max(1, Math.floor(Number(e.target.value)))
-                                            handleOptionGroupRuleFieldChange(groupKey, {
-                                              maxSelect: n,
-                                              minSelect: Math.min(minSel, n),
-                                            })
-                                          }}
-                                        />
-                                      </div>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                                        onClick={() => void handleApplyOptionGroupsForConfig()}
-                                        disabled={optionsConfigApplyingGroups || promoLocked}
-                                      >
-                                        {optionsConfigApplyingGroups
-                                          ? (t("saving") || "저장 중...")
-                                          : (t("posOptionConfigApplySteps") || "단계 저장")}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                )
-                              })()}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 items-end">
-                          <div className="flex gap-2">
-                            <div>
-                              <div className="text-xs font-medium mb-0.5">
-                                {t("posOptionBasePriceLabel") || "기본채널 가격"}
-                              </div>
-                              <Input
-                                type="number"
-                                placeholder="0"
-                                className="h-8 w-28 text-right text-xs"
-                                value={newOptionModifier}
-                                onChange={(e) => setNewOptionModifier(e.target.value)}
-                              />
-                            </div>
-                            <div>
-                              <div className="text-xs font-medium mb-0.5">
-                                {t("posOptionDeliveryPriceLabel") || "배달 가격"}
-                              </div>
-                              <Input
-                                type="number"
-                                placeholder="-"
-                                className="h-8 w-24 text-right text-xs"
-                                value={newOptionModifierDelivery}
-                                onChange={(e) => setNewOptionModifierDelivery(e.target.value)}
-                              />
-                            </div>
-                            <div>
-                              <div className="text-xs font-medium mb-0.5 text-muted-foreground">
-                                {t("posOptionPackagingIncludedInBase") || "포장은 기본채널 가격에 포함"}
-                              </div>
-                            </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            className="h-8 px-3"
-                            onClick={handleAddOptionForConfig}
-                            disabled={
-                              optionsConfigUseSizePartUi
-                                ? !newOptionSize || !newOptionPart
-                                : optionsConfigPanelStepGroups.length === 0 ||
-                                  optionsConfigPanelStepGroups.some((g) => !(optionsConfigNewStepValues[g] ?? "").trim())
-                            }
-                            type="button"
-                          >
-                            <Plus className="h-3.5 w-3.5 mr-1" />
-                            {t("posOptionAddSingle") || "옵션 추가"}
-                          </Button>
-                          {!optionsConfigSelectedMenu || !isChickenMenu(optionsConfigSelectedMenu.code) ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8"
-                              onClick={handleAddAllOptionsForConfig}
-                              disabled={!optionsConfigSelectedMenu || !isSizePartGroups(optionsConfigPanelStepGroups)}
-                              title={
-                                !optionsConfigSelectedMenu || !isSizePartGroups(optionsConfigPanelStepGroups)
-                                  ? (t("posOptionConfigAddAllSizePartOnly") || "size, part 단계일 때만 사용")
-                                  : undefined
-                              }
-                            >
-                              {t("posOptionAddAll")}
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
+                    <PosMenuOptionsRowAddSection
+                      t={t}
+                      optionsConfigNewOptionTitle={optionsConfigNewOptionTitle}
+                      setOptionsConfigNewOptionTitle={setOptionsConfigNewOptionTitle}
+                      optionsConfigUseSizePartUi={optionsConfigUseSizePartUi}
+                      newOptionSize={newOptionSize}
+                      setNewOptionSize={setNewOptionSize}
+                      newOptionPart={newOptionPart}
+                      setNewOptionPart={setNewOptionPart}
+                      optionsConfigPanelStepGroups={optionsConfigPanelStepGroups}
+                      optionsConfigEffectiveGroupKey={optionsConfigEffectiveGroupKey}
+                      optionsConfigGroupPanelItems={optionsConfigGroupPanelItems}
+                      optionsConfigNewStepValues={optionsConfigNewStepValues}
+                      setOptionsConfigNewStepValues={setOptionsConfigNewStepValues}
+                      optionsConfigStepChannelScope={optionsConfigStepChannelScope}
+                      handleOptionsConfigStepChannelScope={handleOptionsConfigStepChannelScope}
+                      optionsConfigSelectedMenuId={optionsConfigSelectedMenuId}
+                      optionsConfigGroupRulesDraft={optionsConfigGroupRulesDraft}
+                      optionsConfigSelectedMenu={optionsConfigSelectedMenu}
+                      handleOptionGroupRuleFieldChange={handleOptionGroupRuleFieldChange}
+                      handleApplyOptionGroupsForConfig={handleApplyOptionGroupsForConfig}
+                      optionsConfigApplyingGroups={optionsConfigApplyingGroups}
+                      newOptionModifier={newOptionModifier}
+                      setNewOptionModifier={setNewOptionModifier}
+                      newOptionModifierDelivery={newOptionModifierDelivery}
+                      setNewOptionModifierDelivery={setNewOptionModifierDelivery}
+                      handleAddOptionForConfig={handleAddOptionForConfig}
+                      handleAddAllOptionsForConfig={handleAddAllOptionsForConfig}
+                    />
 
                     {optionsConfigSelectedMenu &&
                     !isChickenMenu(optionsConfigSelectedMenu.code) &&
@@ -6341,266 +4382,38 @@ export default function PosMenusPage() {
                       </div>
                     ) : null}
 
-                    <div className="rounded border p-3">
-                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                        <h4 className="text-xs font-semibold">
-                          {t("posMenuOptions") || "옵션 목록"}{" "}
-                          {optionsConfigEffectiveGroupKey && optionsConfigEffectiveGroupKey !== "__default__"
-                            ? `(${optionsConfigOptionListBracketLabel})`
-                            : ""}
-                        </h4>
-                        <Button
-                          type="button"
-                          variant={optionsConfigShowAllOptions ? "default" : "outline"}
-                          size="sm"
-                          className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                          onClick={() => setOptionsConfigShowAllOptions((prev) => !prev)}
-                        >
-                          {optionsConfigShowAllOptions
-                            ? t("posOptionShowSelectedGroupOnly") || "선택 그룹만 보기"
-                            : t("posOptionShowAll") || "전체 보기"}
-                        </Button>
-                      </div>
-                      {!optionsConfigShowAllOptions &&
-                      optionsConfigEffectiveGroupKey &&
-                      optionsConfigEffectiveGroupKey !== "__default__" &&
-                      optionsConfigOptionsOutsideSelectedGroupCount > 0 ? (
-                        <p className="mb-2 text-[11px] text-muted-foreground">
-                          {(t("posOptionGroupHiddenCountHint") || "선택 그룹과 무관한 {n}개 옵션은 숨김 상태입니다.")
-                            .replace("{n}", String(optionsConfigOptionsOutsideSelectedGroupCount))}
-                        </p>
-                      ) : null}
-                      <div className="mb-2 rounded border bg-muted/10 p-2">
-                        <p className="mb-1 text-[11px] font-medium text-muted-foreground">
-                          {(t("posOptionBulkAddTitle") || "선택 그룹에 값 일괄 추가")} ({optionsConfigEffectiveGroupKey || "-"})
-                        </p>
-                        <div className="flex flex-wrap items-end gap-2">
-                          <Input
-                            className="h-8 min-w-[240px] flex-1 text-xs"
-                            placeholder={t("posOptionBulkAddPlaceholder") || "예: 치킨무, 김치, 단무지"}
-                            value={optionsConfigBulkValuesInput}
-                            onChange={(e) => setOptionsConfigBulkValuesInput(e.target.value)}
-                          />
-                          <Input
-                            className="h-8 w-24 text-xs text-right"
-                            type="number"
-                            placeholder={t("posOptionBasePriceLabel") || "기본채널 가격"}
-                            value={optionsConfigBulkHallPrice}
-                            onChange={(e) => setOptionsConfigBulkHallPrice(e.target.value)}
-                          />
-                          <Input
-                            className="h-8 w-24 text-xs text-right"
-                            type="number"
-                            placeholder={t("posOptionDeliveryPriceLabel") || "배달 가격"}
-                            value={optionsConfigBulkDeliveryPrice}
-                            onChange={(e) => setOptionsConfigBulkDeliveryPrice(e.target.value)}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 shrink-0 gap-1 text-xs"
-                            disabled={!optionsConfigSelectedMenuId}
-                            onClick={() => {
-                              setOptionsConfigBulkMenuPickerSearch("")
-                              setOptionsConfigBulkMenuPickerChecked({})
-                              setOptionsConfigBulkMenuPickerOpen(true)
-                            }}
-                          >
-                            <Search className="h-3.5 w-3.5" aria-hidden />
-                            {t("posOptionBulkMenuSearchBtn") || "메뉴 검색·선택"}
-                          </Button>
-                          <Button type="button" size="sm" className="h-8 text-xs" onClick={() => void handleBulkAddValuesForSelectedGroup()}>
-                            {t("posOptionBulkAddBtn") || "값 일괄 추가"}
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="max-h-[520px] overflow-y-auto space-y-2 pr-1">
-                        {(() => {
-                          const optionsToShowRaw =
-                            optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code)
-                              ? optionsConfigOptionsInSelectedGroup.filter((o) => !isChickenDefaultOption(o.name))
-                              : optionsConfigOptionsInSelectedGroup
-                          const optionsToShowSource = optionsConfigShowAllOptions
-                            ? optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code)
-                              ? optionsConfigMenuOptions.filter((o) => !isChickenDefaultOption(o.name))
-                              : optionsConfigMenuOptions
-                            : optionsToShowRaw
-                          const optionsToShow = [...optionsToShowSource].sort((a, b) => {
-                            const ao = Number(a.sortOrder ?? 0)
-                            const bo = Number(b.sortOrder ?? 0)
-                            if (ao !== bo) return ao - bo
-                            return String(a.name ?? "").localeCompare(String(b.name ?? ""))
-                          })
-                          if (optionsToShow.length === 0) {
-                            return (
-                              <p className="py-6 text-center text-xs text-muted-foreground">
-                                {optionsConfigMenuOptions.length === 0
-                                  ? (t("posOptionsConfigEmptyOptions") || "위에서 옵션을 추가해 주세요.")
-                                  : t("posOptionListFilteredEmpty")}
-                              </p>
-                            )
-                          }
-                          const chickenSizeStepGrouped =
-                            optionsConfigSelectedMenu &&
-                            isChickenMenu(optionsConfigSelectedMenu.code) &&
-                            isSizePartGroups(optionsConfigPanelStepGroups) &&
-                            optionsConfigEffectiveGroupKey === "size" &&
-                            !optionsConfigShowAllOptions
-
-                          const chickenPartStepGrouped =
-                            optionsConfigSelectedMenu &&
-                            isChickenMenu(optionsConfigSelectedMenu.code) &&
-                            isSizePartGroups(optionsConfigPanelStepGroups) &&
-                            optionsConfigEffectiveGroupKey === "part" &&
-                            !optionsConfigShowAllOptions
-
-                          const renderOptionCard = (o: PosMenuOption) => (
-                            <OptionItemRowCard
-                              key={o.id}
-                              option={o}
-                              displayCode={resolveOptionCode(o, optionsConfigSelectedMenu?.code)}
-                              displayName={optionPartLabel(o.name)}
-                              editableName={!!optionsConfigSelectedMenu}
-                              optionNamePlaceholder={t("posOptionNamePlaceholder") || "옵션명"}
-                              channelTitle={t("posOptionChannelTitle") || "판매 채널"}
-                              baseChannelLabel={t("posOptionBaseChannelLabel") || "기본채널(홀+포장)"}
-                              deliveryChannelLabel={t("posOptionSellDelivery") || "배달"}
-                              priceAdjustTitle={t("posOptionPriceAdjustTitle") || "가격 조정"}
-                              basePricePlaceholder={t("posOptionBasePricePlaceholder") || "기본채널"}
-                              deliveryPricePlaceholder={t("posOptionDeliveryPricePlaceholder") || "배달(미입력=기본)"}
-                              onChangeName={(value) => handleOptionNameChangeForConfig(o, value)}
-                              onChangePrice={(field, value) => handlePriceChangeForConfig(o, field, value)}
-                              onToggleBaseChannel={(checked) =>
-                                handleOptionChannelsChangeForConfig(o, {
-                                  sellHall: checked,
-                                  sellPackaging: checked,
-                                })
-                              }
-                              onToggleDeliveryChannel={(checked) =>
-                                handleOptionChannelsChangeForConfig(o, {
-                                  sellDelivery: checked,
-                                })
-                              }
-                              onDelete={() => void handleDeleteOptionForConfig(o)}
-                              deleteLabel={t("posOptionDeleteBtn") || "옵션 삭제"}
-                              deleteDisabled={optionsConfigSaving}
-                              draggable={true}
-                              onDragStart={() => setOptionsConfigDraggingOptionId(String(o.id))}
-                              onDragOver={() => undefined}
-                              onDrop={() => {
-                                if (!optionsConfigDraggingOptionId) return
-                                handleOptionReorderForConfig(optionsConfigDraggingOptionId, String(o.id))
-                                setOptionsConfigDraggingOptionId(null)
-                              }}
-                            />
-                          )
-
-                          if (chickenSizeStepGrouped) {
-                            const sections = groupChickenMenuOptionsBySizeValue(optionsToShow)
-                            if (sections.length === 0) {
-                              return <div className="space-y-2">{optionsToShow.map((o) => renderOptionCard(o))}</div>
-                            }
-                            return (
-                              <div className="space-y-4">
-                                <p className="text-[11px] leading-snug text-muted-foreground">
-                                  {t("posOptionChickenSizeStepAdminHint")}
-                                </p>
-                                <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-border/60 bg-muted/25 px-2 py-1.5">
-                                  <span className="text-[10px] font-medium text-muted-foreground">
-                                    {t("posOptionChickenRegisteredSizes")}
-                                  </span>
-                                  {sections.map(({ sizeValue }) => (
-                                    <span
-                                      key={sizeValue}
-                                      className="rounded-full border border-primary/35 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary"
-                                    >
-                                      {sizeValue}
-                                    </span>
-                                  ))}
-                                </div>
-                                <p className="text-[10px] leading-snug text-muted-foreground">
-                                  사이즈 단계는 S/M/L만 선택합니다. 가격·채널 조합 편집은 [부위] 단계에서 진행해 주세요.
-                                </p>
-                                {sections.map(({ sizeValue, items }) => (
-                                  <div key={sizeValue} className="space-y-2">
-                                    <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-1.5">
-                                      <span className="text-[11px] font-semibold text-primary">
-                                        {t("posOptionGroupSize")}
-                                      </span>
-                                      <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums">
-                                        {sizeValue}
-                                      </span>
-                                      <span className="text-[10px] text-muted-foreground">
-                                        {(t("posOptionChickenSizeStepComboCount") || "{n}개 조합").replace(
-                                          "{n}",
-                                          String(items.length)
-                                        )}
-                                      </span>
-                                    </div>
-                                    <p className="px-0.5 text-[10px] leading-snug text-muted-foreground">
-                                      {(t("posOptionChickenSizeSectionSub") || "").replace("{size}", sizeValue)}
-                                    </p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {Array.from(
-                                        new Set(
-                                          items
-                                            .map((o) => inferChickenOptionPartValue(o))
-                                            .filter((x) => String(x).trim())
-                                            .map((x) => optionPartLabel(String(x)))
-                                        )
-                                      ).map((part) => (
-                                        <span
-                                          key={`${sizeValue}-${part}`}
-                                          className="rounded-md border border-border/80 bg-background px-2 py-0.5 text-[11px] text-foreground/90"
-                                        >
-                                          {part}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )
-                          }
-
-                          if (chickenPartStepGrouped) {
-                            const sections = groupChickenMenuOptionsByPartValue(optionsToShow)
-                            if (sections.length === 0) {
-                              return <div className="space-y-2">{optionsToShow.map((o) => renderOptionCard(o))}</div>
-                            }
-                            return (
-                              <div className="space-y-4">
-                                <p className="text-[11px] leading-snug text-muted-foreground">
-                                  {t("posOptionChickenPartStepAdminHint")}
-                                </p>
-                                {sections.map(({ partValue, items }) => (
-                                  <div key={partValue} className="space-y-2">
-                                    <div className="flex flex-wrap items-center gap-2 border-b border-border/70 pb-1.5">
-                                      <span className="text-[11px] font-semibold text-primary">
-                                        {t("posOptionGroupPart")}
-                                      </span>
-                                      <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold">
-                                        {optionPartLabel(partValue)}
-                                      </span>
-                                      <span className="text-[10px] text-muted-foreground">
-                                        {(t("posOptionChickenSizeStepComboCount") || "{n}개 조합").replace(
-                                          "{n}",
-                                          String(items.length)
-                                        )}
-                                      </span>
-                                    </div>
-                                    <div className="space-y-2">{items.map((o) => renderOptionCard(o))}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            )
-                          }
-
-                          return optionsToShow.map((o) => renderOptionCard(o))
-                        })()}
-                      </div>
-                    </div>
+                    <PosMenuOptionsListSection
+                      t={t}
+                      optionsConfigEffectiveGroupKey={optionsConfigEffectiveGroupKey}
+                      optionsConfigOptionListBracketLabel={optionsConfigOptionListBracketLabel}
+                      optionsConfigShowAllOptions={optionsConfigShowAllOptions}
+                      setOptionsConfigShowAllOptions={setOptionsConfigShowAllOptions}
+                      optionsConfigOptionsOutsideSelectedGroupCount={optionsConfigOptionsOutsideSelectedGroupCount}
+                      optionsConfigBulkValuesInput={optionsConfigBulkValuesInput}
+                      setOptionsConfigBulkValuesInput={setOptionsConfigBulkValuesInput}
+                      optionsConfigBulkHallPrice={optionsConfigBulkHallPrice}
+                      setOptionsConfigBulkHallPrice={setOptionsConfigBulkHallPrice}
+                      optionsConfigBulkDeliveryPrice={optionsConfigBulkDeliveryPrice}
+                      setOptionsConfigBulkDeliveryPrice={setOptionsConfigBulkDeliveryPrice}
+                      optionsConfigSelectedMenuId={optionsConfigSelectedMenuId}
+                      setOptionsConfigBulkMenuPickerSearch={setOptionsConfigBulkMenuPickerSearch}
+                      setOptionsConfigBulkMenuPickerChecked={setOptionsConfigBulkMenuPickerChecked}
+                      setOptionsConfigBulkMenuPickerOpen={setOptionsConfigBulkMenuPickerOpen}
+                      handleBulkAddValuesForSelectedGroup={handleBulkAddValuesForSelectedGroup}
+                      optionsConfigSelectedMenu={optionsConfigSelectedMenu}
+                      optionsConfigOptionsInSelectedGroup={optionsConfigOptionsInSelectedGroup}
+                      optionsConfigMenuOptions={optionsConfigMenuOptions}
+                      optionsConfigPanelStepGroups={optionsConfigPanelStepGroups}
+                      optionPartLabel={optionPartLabel}
+                      handleOptionNameChangeForConfig={handleOptionNameChangeForConfig}
+                      handlePriceChangeForConfig={handlePriceChangeForConfig}
+                      handleOptionChannelsChangeForConfig={handleOptionChannelsChangeForConfig}
+                      handleDeleteOptionForConfig={handleDeleteOptionForConfig}
+                      optionsConfigSaving={optionsConfigSaving}
+                      setOptionsConfigDraggingOptionId={setOptionsConfigDraggingOptionId}
+                      optionsConfigDraggingOptionId={optionsConfigDraggingOptionId}
+                      handleOptionReorderForConfig={handleOptionReorderForConfig}
+                    />
                   </div>
                 </OptionGroupEditorPanel>
               }
@@ -6697,181 +4510,39 @@ export default function PosMenusPage() {
           </TabsContent>
           <TabsContent value="deliveryOps" className={adminTabsContentCn}>
             <div className="rounded-xl border bg-card p-5 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-bold">{t("posMenuTabDeliveryOps") || "배달앱 운영"}</h3>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {canSearchAllStores && (
-                    <>
-                      <Select
-                        value={deliveryOpsCopySourceStore || "__none__"}
-                        onValueChange={(v) => setDeliveryOpsCopySourceStore(v === "__none__" ? "" : v)}
-                      >
-                        <SelectTrigger className="h-9 w-48">
-                          <SelectValue placeholder={t("posTableLayoutCopyFrom") || "다른 매장에서 복사"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">{t("posTableLayoutCopyFrom") || "다른 매장에서 복사"}</SelectItem>
-                          {stores
-                            .filter((s) => s && s !== deliveryOpsStoreCode)
-                            .map((s) => (
-                              <SelectItem key={s} value={s}>
-                                {s}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9"
-                        onClick={() => void handleCopyDeliveryOpsFromStore()}
-                        disabled={
-                          deliveryOpsCopying ||
-                          !deliveryOpsCopySourceStore ||
-                          deliveryOpsCopySourceStore === deliveryOpsStoreCode
-                        }
-                      >
-                        {deliveryOpsCopying ? (t("loading") || "처리 중...") : (t("posTableLayoutCopyBtn") || "복사")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9"
-                        onClick={() => void handleApplyDeliveryOpsToAllStores()}
-                        disabled={deliveryOpsApplyingAll || stores.filter((s) => s && s !== deliveryOpsStoreCode).length === 0}
-                      >
-                        {deliveryOpsApplyingAll
-                          ? (t("loading") || "처리 중...")
-                          : (t("posDeliveryOpsApplyAll") || "전체 적용")}
-                      </Button>
-                    </>
-                  )}
-                  <Button type="button" onClick={handleSaveDeliveryOpsPolicy} disabled={deliveryOpsSaving}>
-                    <Save className="h-4 w-4 mr-1.5" />
-                    {deliveryOpsSaving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
-                  </Button>
-                </div>
-              </div>
+              <PosDeliveryOpsToolbar
+                t={t}
+                canSearchAllStores={canSearchAllStores}
+                deliveryOpsCopySourceStore={deliveryOpsCopySourceStore}
+                setDeliveryOpsCopySourceStore={setDeliveryOpsCopySourceStore}
+                stores={stores}
+                deliveryOpsStoreCode={deliveryOpsStoreCode}
+                handleCopyDeliveryOpsFromStore={handleCopyDeliveryOpsFromStore}
+                deliveryOpsCopying={deliveryOpsCopying}
+                handleApplyDeliveryOpsToAllStores={handleApplyDeliveryOpsToAllStores}
+                deliveryOpsApplyingAll={deliveryOpsApplyingAll}
+                handleSaveDeliveryOpsPolicy={handleSaveDeliveryOpsPolicy}
+                deliveryOpsSaving={deliveryOpsSaving}
+              />
 
-              <div className="grid gap-3 md:grid-cols-4">
-                <div className="md:col-span-2">
-                  <label className="text-xs font-semibold">{t("store") || "매장"}</label>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <PosScreenConfigStoreSelect
-                      value={deliveryOpsStoreDraft || undefined}
-                      onValueChange={setDeliveryOpsStoreDraft}
-                      stores={(canSearchAllStores ? stores : [auth?.store || ""]).filter(Boolean)}
-                      storeLabels={storeLabels}
-                      disabled={!canSearchAllStores && !auth?.store}
-                      className="h-9 min-w-[10rem] flex-1 max-w-md"
-                      searchPlaceholder={t("outStoreSearchPh") || "매장 검색"}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-9 gap-1.5 shrink-0"
-                      onClick={handleQueryDeliveryOps}
-                      disabled={deliveryOpsLoading || !String(deliveryOpsStoreDraft || "").trim()}
-                    >
-                      <Search className="h-4 w-4" />
-                      {t("search") || t("btn_query") || "조회"}
-                    </Button>
-                    {deliveryOpsStoreCode ? (
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-md border px-2 py-1 text-[11px] font-medium",
-                          deliveryOpsStoreDraftPending
-                            ? "border-amber-300 bg-amber-50 text-amber-900"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-900"
-                        )}
-                      >
-                        {(t("posDeliveryOpsLoadedStore") || "현재 조회").replace(
-                          "{{store}}",
-                          formatStoreLabel(deliveryOpsStoreCode) || deliveryOpsStoreCode
-                        )}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground leading-snug">
-                    {deliveryOpsStoreDraftPending
-                      ? t("posDeliveryOpsStorePendingQuery") ||
-                        "매장을 바꾸었습니다. [조회]를 눌러 해당 매장 설정을 불러오세요."
-                      : t("posScreenConfigStoreQueryHint") ||
-                        "매장명·코드로 검색한 뒤 [조회]를 눌러 해당 매장 설정을 불러오세요."}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold">{t("posDeliveryOpsApp") || "앱"}</label>
-                  <Select value={deliveryOpsAppCode} onValueChange={(v) => setDeliveryOpsAppCode(v as DeliveryAppCode)}>
-                    <SelectTrigger className="mt-1 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="grab">Grab</SelectItem>
-                      <SelectItem value="lineman">LineMan</SelectItem>
-                      <SelectItem value="shopee">Shopee</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold">{t("posDeliveryOpsAcceptMode") || "주문 수락 모드"}</label>
-                  <Select
-                    value={deliveryOpsAppPolicy.orderAcceptanceMode}
-                    onValueChange={(v) =>
-                      setDeliveryOpsAppPolicy((p) => ({ ...p, orderAcceptanceMode: v as "manual" | "auto" }))
-                    }
-                  >
-                    <SelectTrigger className="mt-1 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="manual">{t("posDeliveryOpsAcceptModeManual") || "수동"}</SelectItem>
-                      <SelectItem value="auto">{t("posDeliveryOpsAcceptModeAuto") || "자동"}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold">
-                    {t("posDeliveryOpsSettlementFeePct") || "플랫폼 정산 수수료 (%)"}
-                  </label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.01}
-                    className="mt-1 h-9 tabular-nums"
-                    placeholder={t("posDeliveryOpsSettlementFeePctPh") || "미입력 시 25%"}
-                    value={
-                      deliveryOpsAppPolicy.settlementFeePct != null
-                        ? String(deliveryOpsAppPolicy.settlementFeePct)
-                        : ""
-                    }
-                    onChange={(e) => {
-                      const raw = e.target.value.trim()
-                      setDeliveryOpsAppPolicy((p) => ({
-                        ...p,
-                        settlementFeePct: raw === "" ? null : Math.max(0, Math.min(100, Number(raw) || 0)),
-                      }))
-                    }}
-                  />
-                  <p className="mt-1 text-[10px] text-muted-foreground leading-snug">
-                    {t("posDeliveryOpsSettlementFeePctHint") ||
-                      "앱이 매출에서 차감·익일 NET 입금하는 비율. 본사 PO 배달 GP 청구와 별도."}
-                  </p>
-                </div>
-                <div className="flex items-end gap-4 pb-1">
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={deliveryOpsAppPolicy.enabled}
-                      onChange={(e) => setDeliveryOpsAppPolicy((p) => ({ ...p, enabled: e.target.checked }))}
-                    />
-                    {t("posDeliveryOpsEnabled") || "앱 연동 사용"}
-                  </label>
-                </div>
-              </div>
+              <PosDeliveryOpsSettings
+                t={t}
+                deliveryOpsStoreDraft={deliveryOpsStoreDraft}
+                setDeliveryOpsStoreDraft={setDeliveryOpsStoreDraft}
+                canSearchAllStores={canSearchAllStores}
+                stores={stores}
+                auth={auth}
+                storeLabels={storeLabels}
+                handleQueryDeliveryOps={handleQueryDeliveryOps}
+                deliveryOpsLoading={deliveryOpsLoading}
+                deliveryOpsStoreCode={deliveryOpsStoreCode}
+                deliveryOpsStoreDraftPending={deliveryOpsStoreDraftPending}
+                formatStoreLabel={formatStoreLabel}
+                deliveryOpsAppCode={deliveryOpsAppCode}
+                setDeliveryOpsAppCode={setDeliveryOpsAppCode}
+                deliveryOpsAppPolicy={deliveryOpsAppPolicy}
+                setDeliveryOpsAppPolicy={setDeliveryOpsAppPolicy}
+              />
               <div className="rounded-lg border p-3 space-y-2">
                 <h4 className="text-xs font-semibold">{t("posDeliveryOpsCategoryOrder") || "카테고리 순서"}</h4>
                 <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
@@ -6896,377 +4567,40 @@ export default function PosMenusPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border p-3 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-xs font-semibold">{t("posDeliveryOpsVisibleMenus") || "배달앱 노출 메뉴"}</h4>
-                  <Input
-                    className="h-8 w-60 text-xs"
-                    value={deliveryOpsSearch}
-                    onChange={(e) => setDeliveryOpsSearch(e.target.value)}
-                    placeholder={t("itemsSearchPh") || "검색"}
-                  />
-                </div>
-                <div className="rounded-md border bg-muted/30 p-2.5 space-y-2">
-                  <div className="flex flex-wrap items-end gap-2">
-                    <span className="text-xs font-semibold shrink-0">
-                      {t("posDeliveryOpsBulkSellTimes") || "판매 시간 일괄"}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-[11px] text-muted-foreground">
-                        {t("posDeliveryOpsSellStart") || "판매 시작"}
-                      </label>
-                      <Input
-                        type="time"
-                        className="h-8 w-32 text-xs"
-                        value={deliveryOpsBulkSellStart}
-                        onChange={(e) => setDeliveryOpsBulkSellStart(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-[11px] text-muted-foreground">
-                        {t("posDeliveryOpsSellEnd") || "판매 종료"}
-                      </label>
-                      <Input
-                        type="time"
-                        className="h-8 w-32 text-xs"
-                        value={deliveryOpsBulkSellEnd}
-                        onChange={(e) => setDeliveryOpsBulkSellEnd(e.target.value)}
-                      />
-                    </div>
-                    <Button type="button" variant="outline" className="h-8 text-xs" onClick={() => void handleApplyBulkSellTimes()}>
-                      {t("posDeliveryOpsBulkSellApply") || "전체 메뉴에 적용"}
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-snug">
-                    {t("posDeliveryOpsBulkSellHint") ||
-                      "하루 판매 가능 시간(HH:mm)입니다. 공란이면 Grab에 종일 판매(OpenAllDay)로 전송됩니다. 저장 시 Grab 메뉴(serviceHours)에 반영됩니다. 프로모 기간·컷프라이스(취소선)는 POS 프로모·Grab 캠페인과 별도입니다."}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground leading-snug">
-                    {formatPosMenuImageUploadSpecHint(t)}
-                  </p>
-                </div>
-                <div className="max-h-[420px] overflow-auto border rounded">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-muted/80">
-                      <tr className="border-b">
-                        <th className="p-2 text-left">{t("posMenuName") || "메뉴"}</th>
-                        <th className="p-2 text-center w-16">{t("use") || "사용"}</th>
-                        <th className="p-2 text-center w-20">{t("sortOrder") || "순서"}</th>
-                        <th className="p-2 text-center w-24">{t("posDeliveryOpsSellStart") || "판매 시작"}</th>
-                        <th className="p-2 text-center w-24">{t("posDeliveryOpsSellEnd") || "판매 종료"}</th>
-                        <th className="p-2 text-center w-24">{t("posDeliveryOpsStockQty") || "재고수량"}</th>
-                        <th className="p-2 text-center w-20">{t("posSoldOut") || "품절"}</th>
-                        <th className="p-2 text-center w-44">{t("image") || "이미지"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {deliveryOpsVisibleMenus.map((m) => {
-                        const policy = deliveryOpsMenuPolicyMap[String(m.id)] || {
-                          storeCode: deliveryOpsStoreCode,
-                          appCode: deliveryOpsAppCode,
-                          menuId: Number(m.id),
-                          enabled: true,
-                          sortOrder: m.sortOrder ?? 0,
-                          sellStartTime: null,
-                          sellEndTime: null,
-                          stockQty: null,
-                          soldOut: false,
-                          autoStopOnZero: true,
-                          imageUrl: null,
-                        }
-                        const fallbackImageUrl = String(m.imageUrl || "").trim()
-                        const overrideImageUrl = String(policy.imageUrl || "").trim()
-                        const effectiveImageUrl = overrideImageUrl || fallbackImageUrl
-                        return (
-                          <tr key={m.id} className="border-b last:border-b-0">
-                            <td className="p-2">
-                              <div className="font-medium">{m.code} - {m.name}</div>
-                              <div className="text-muted-foreground">{m.categoryMain || "-"} / {translatePosMenuCategoryLabel(m.category || "-", t)}</div>
-                            </td>
-                            <td className="p-2 text-center">
-                              <Checkbox
-                                checked={policy.enabled}
-                                onCheckedChange={(v) => upsertDeliveryMenuPolicy(String(m.id), { enabled: Boolean(v) })}
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                type="number"
-                                className="h-7 text-right"
-                                value={String(policy.sortOrder ?? 0)}
-                                onChange={(e) => upsertDeliveryMenuPolicy(String(m.id), { sortOrder: Number(e.target.value) || 0 })}
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                type="time"
-                                className="h-7"
-                                value={String(policy.sellStartTime ?? "")}
-                                onChange={(e) => upsertDeliveryMenuPolicy(String(m.id), { sellStartTime: e.target.value || null })}
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                type="time"
-                                className="h-7"
-                                value={String(policy.sellEndTime ?? "")}
-                                onChange={(e) => upsertDeliveryMenuPolicy(String(m.id), { sellEndTime: e.target.value || null })}
-                              />
-                            </td>
-                            <td className="p-2">
-                              <Input
-                                type="number"
-                                className="h-7 text-right"
-                                value={policy.stockQty == null ? "" : String(policy.stockQty)}
-                                onChange={(e) => upsertDeliveryMenuPolicy(String(m.id), { stockQty: e.target.value === "" ? null : Number(e.target.value) })}
-                              />
-                            </td>
-                            <td className="p-2 text-center">
-                              <Checkbox
-                                checked={policy.soldOut}
-                                onCheckedChange={(v) => upsertDeliveryMenuPolicy(String(m.id), { soldOut: Boolean(v) })}
-                              />
-                            </td>
-                            <td className="p-2">
-                              <input
-                                ref={(el) => {
-                                  deliveryOpsImageInputRefs.current[String(m.id)] = el
-                                }}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0]
-                                  if (file) {
-                                    await handleUploadDeliveryMenuImage(m, file)
-                                  }
-                                  e.currentTarget.value = ""
-                                }}
-                              />
-                              <div className="flex items-center justify-center gap-1.5">
-                                {effectiveImageUrl ? (
-                                  <img
-                                    src={effectiveImageUrl}
-                                    alt={`${m.name} delivery`}
-                                    className="h-8 w-8 rounded border object-cover"
-                                  />
-                                ) : (
-                                  <div className="h-8 w-8 rounded border bg-muted" />
-                                )}
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                                  disabled={deliveryOpsImageUploadingMenuId === String(m.id)}
-                                  onClick={() => deliveryOpsImageInputRefs.current[String(m.id)]?.click()}
-                                >
-                                  {deliveryOpsImageUploadingMenuId === String(m.id)
-                                    ? (t("loading") || "업로드중")
-                                    : (t("upload") || "업로드")}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className={`${ADMIN_BTN_XS_CN} text-[11px]`}
-                                  disabled={!overrideImageUrl}
-                                  onClick={() => upsertDeliveryMenuPolicy(String(m.id), { imageUrl: null })}
-                                >
-                                  {t("reset") || "기본"}
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <PosDeliveryOpsMenuPolicies
+                t={t}
+                deliveryOpsSearch={deliveryOpsSearch}
+                setDeliveryOpsSearch={setDeliveryOpsSearch}
+                deliveryOpsBulkSellStart={deliveryOpsBulkSellStart}
+                setDeliveryOpsBulkSellStart={setDeliveryOpsBulkSellStart}
+                deliveryOpsBulkSellEnd={deliveryOpsBulkSellEnd}
+                setDeliveryOpsBulkSellEnd={setDeliveryOpsBulkSellEnd}
+                handleApplyBulkSellTimes={handleApplyBulkSellTimes}
+                deliveryOpsVisibleMenus={deliveryOpsVisibleMenus}
+                deliveryOpsMenuPolicyMap={deliveryOpsMenuPolicyMap}
+                deliveryOpsStoreCode={deliveryOpsStoreCode}
+                deliveryOpsAppCode={deliveryOpsAppCode}
+                upsertDeliveryMenuPolicy={upsertDeliveryMenuPolicy}
+                deliveryOpsImageInputRefs={deliveryOpsImageInputRefs}
+                handleUploadDeliveryMenuImage={handleUploadDeliveryMenuImage}
+                deliveryOpsImageUploadingMenuId={deliveryOpsImageUploadingMenuId}
+              />
 
               {deliveryOpsAppCode === "grab" && (
-                <div className="rounded-lg border p-3 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Megaphone className="h-4 w-4 text-primary" />
-                      <h4 className="text-xs font-semibold">{t("posGrabCampaignsTitle") || "Grab 캠페인 현황"}</h4>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-8 text-xs gap-1.5"
-                      onClick={() => void handleLoadGrabCampaigns()}
-                      disabled={grabCampaignsLoading || !deliveryOpsStoreCode}
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${grabCampaignsLoading ? "animate-spin" : ""}`} />
-                      {grabCampaignsLoading ? (t("loading") || "조회 중...") : (t("posGrabCampaignsLoad") || "조회")}
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-snug">
-                    {t("posGrabCampaignsHint") ||
-                      "Grab에 전송된 프로모션 캠페인 목록입니다. Grab이 'Campaign ID'를 요청하면 아래 ID(복사 버튼)를 전달하세요. 0건이면 현재 이 매장에 살아있는 캠페인이 없습니다. 새 프로모가 안 바뀌면 해당 캠페인을 취소한 뒤 다시 조회하세요."}
-                  </p>
-                  {grabCampaignsMeta && (
-                    <p className="text-[11px] text-muted-foreground">
-                      merchantID: <span className="font-mono">{grabCampaignsMeta.merchantIDs.join(", ") || "-"}</span>
-                    </p>
-                  )}
-                  {grabCampaignsMeta?.campaignsSuppressed && (
-                    <p className="text-xs rounded border border-amber-200 bg-amber-50 text-amber-950 px-3 py-2 leading-snug">
-                      {t("posGrabCampaignsSuppressedBanner") ||
-                        "운영 모드: Grab Campaign API 미사용 — 할인은 메뉴 가격(Menu sync)만 반영. Campaign ID 없음이 정상입니다."}
-                      {grabCampaignsMeta.consumerListPriceMode
-                        ? ` (listPrice=${grabCampaignsMeta.consumerListPriceMode})`
-                        : ""}
-                    </p>
-                  )}
-                  {grabCampaignsRows != null && grabCampaignsRows.length === 0 && (
-                    <p className="text-xs text-muted-foreground rounded border bg-muted/30 px-3 py-2 leading-snug">
-                      {grabCampaignsMeta?.hint || (t("posGrabCampaignsEmpty") || "조회된 Grab 캠페인이 없습니다.")}
-                    </p>
-                  )}
-                  {grabCampaignsMeta && (grabCampaignsMeta.erpGrabPromos?.length ?? 0) > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h5 className="text-xs font-semibold">
-                          {t("posGrabCampaignsErpPromosTitle") || "ERP Grab 프로모 (메뉴 가격 동기화)"}
-                        </h5>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-7 text-[11px] gap-1"
-                          onClick={async () => {
-                            const text = buildGrabSupportReplyText()
-                            try {
-                              await navigator.clipboard.writeText(text)
-                              setGrabCampaignCopiedId("__grab_reply__")
-                              window.setTimeout(
-                                () => setGrabCampaignCopiedId((prev) => (prev === "__grab_reply__" ? null : prev)),
-                                2000
-                              )
-                            } catch {
-                              // ignore
-                            }
-                          }}
-                        >
-                          <Copy className="h-3 w-3" />
-                          {grabCampaignCopiedId === "__grab_reply__"
-                            ? (t("copied") || "복사됨")
-                            : (t("posGrabCampaignsCopyGrabReply") || "Grab 답변(태국어) 복사")}
-                        </Button>
-                      </div>
-                      <div className="max-h-[280px] overflow-auto border rounded">
-                        <table className="w-full text-xs">
-                          <thead className="sticky top-0 bg-muted/80">
-                            <tr className="border-b">
-                              <th className="p-2 text-left">{t("posGrabCampaignName") || "캠페인"}</th>
-                              <th className="p-2 text-left">{t("posGrabCampaignErpRef") || "참조명"}</th>
-                              <th className="p-2 text-left">Grab item ID</th>
-                              <th className="p-2 text-right w-24">{t("posGrabCampaignDiscount") || "할인"}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {grabCampaignsMeta.erpGrabPromos.map((p) => (
-                              <tr key={p.promoId} className="border-b last:border-b-0">
-                                <td className="p-2">
-                                  <div className="font-medium">{p.name}</div>
-                                  <div className="text-muted-foreground">#{p.promoId}</div>
-                                </td>
-                                <td className="p-2 font-mono text-[11px]">{p.campaignNameRef}</td>
-                                <td className="p-2 font-mono text-[11px] break-all">{p.grabMenuItemId}</td>
-                                <td className="p-2 text-right tabular-nums">
-                                  ฿{p.salePrice}
-                                  {p.regularPrice > p.salePrice ? (
-                                    <div className="text-muted-foreground line-through text-[10px]">฿{p.regularPrice}</div>
-                                  ) : null}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                  {grabCampaignsRows != null && grabCampaignsRows.length > 0 && (
-                      <div className="max-h-[360px] overflow-auto border rounded">
-                        <table className="w-full text-xs">
-                          <thead className="sticky top-0 bg-muted/80">
-                            <tr className="border-b">
-                              <th className="p-2 text-left">{t("posGrabCampaignName") || "캠페인"}</th>
-                              <th className="p-2 text-left w-64">Campaign ID</th>
-                              <th className="p-2 text-center w-20">{t("posGrabCampaignState") || "상태"}</th>
-                              <th className="p-2 text-center w-24">{t("posGrabCampaignDiscount") || "할인"}</th>
-                              <th className="p-2 text-left w-44">{t("posGrabCampaignPeriod") || "기간(BKK)"}</th>
-                              <th className="p-2 text-right w-24">{t("posGrabCampaignCancel") || "취소"}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {grabCampaignsRows.map((c) => (
-                              <tr key={`${c.merchantID}-${c.id}`} className="border-b last:border-b-0 align-top">
-                                <td className="p-2">
-                                  <div className="font-medium break-all">{c.name}</div>
-                                  <div className="text-muted-foreground break-all">{c.itemIds.join(", ") || "-"}</div>
-                                </td>
-                                <td className="p-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-mono break-all">{c.id}</span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 px-1.5 shrink-0"
-                                      onClick={() => void handleCopyGrabCampaignId(c.id)}
-                                    >
-                                      <Copy className="h-3 w-3" />
-                                      <span className="ml-1 text-[10px]">
-                                        {grabCampaignCopiedId === c.id ? (t("copied") || "복사됨") : (t("copy") || "복사")}
-                                      </span>
-                                    </Button>
-                                  </div>
-                                </td>
-                                <td className="p-2 text-center">
-                                  <span className={c.section === "ongoing" ? "text-emerald-600 font-medium" : "text-amber-600"}>
-                                    {c.section === "ongoing"
-                                      ? (t("posGrabCampaignOngoing") || "진행중")
-                                      : (t("posGrabCampaignUpcoming") || "예정")}
-                                  </span>
-                                </td>
-                                <td className="p-2 text-center tabular-nums">
-                                  {c.discountType === "percentage"
-                                    ? `${c.discountValue}%`
-                                    : c.discountType === "fixPrice"
-                                      ? `฿${c.discountValue}`
-                                      : `${c.discountType || "-"} ${c.discountValue || ""}`}
-                                </td>
-                                <td className="p-2 text-[11px] leading-snug">
-                                  <div>{c.startTimeBkk || c.startTimeUtc || "-"}</div>
-                                  <div className="text-muted-foreground">~ {c.endTimeBkk || c.endTimeUtc || "-"}</div>
-                                </td>
-                                <td className="p-2 text-right">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className={`${ADMIN_BTN_XS_CN} text-[11px] text-destructive`}
-                                    disabled={
-                                      grabCampaignsLoading ||
-                                      grabCampaignCancellingId === `${c.merchantID}:${c.id}`
-                                    }
-                                    onClick={() => void handleCancelGrabCampaign(c)}
-                                  >
-                                    {grabCampaignCancellingId === `${c.merchantID}:${c.id}`
-                                      ? (t("loading") || "처리 중...")
-                                      : (t("posGrabCampaignCancel") || "취소")}
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                  )}
-                </div>
+                <PosGrabCampaignsPanel
+                  t={t}
+                  handleLoadGrabCampaigns={handleLoadGrabCampaigns}
+                  grabCampaignsLoading={grabCampaignsLoading}
+                  deliveryOpsStoreCode={deliveryOpsStoreCode}
+                  grabCampaignsMeta={grabCampaignsMeta}
+                  grabCampaignsRows={grabCampaignsRows}
+                  buildGrabSupportReplyText={buildGrabSupportReplyText}
+                  setGrabCampaignCopiedId={setGrabCampaignCopiedId}
+                  grabCampaignCopiedId={grabCampaignCopiedId}
+                  handleCopyGrabCampaignId={handleCopyGrabCampaignId}
+                  grabCampaignCancellingId={grabCampaignCancellingId}
+                  handleCancelGrabCampaign={handleCancelGrabCampaign}
+                />
               )}
 
               {deliveryOpsLoading && (

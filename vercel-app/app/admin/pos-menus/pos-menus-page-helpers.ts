@@ -373,6 +373,46 @@ export const emptyForm = {
   sellMember: true,
 }
 
+export type PosMenuFormData = typeof emptyForm
+
+export type PosMenuFormTab = "info" | "options" | "cost" | "description" | "packagingChecklist"
+
+export type PosMenusMainTab =
+  | "screen"
+  | "optionsConfig"
+  | "set"
+  | "setInquiry"
+  | "priceHistory"
+  | "finalPrice"
+  | "deliveryOps"
+
+export type PosMenuCostResult = {
+  cost: number
+  breakdown: {
+    itemCode: string
+    itemName: string
+    quantity: number
+    lossRate: number
+    costPerUnit: number
+    costTotal: number
+  }[]
+}
+
+export type OptionsConfigLibraryItemRow = {
+  id: string
+  groupCode: string
+  groupTitle: string
+  groupKey: string
+  itemLines: string[]
+  itemTotal: number
+  footerNote: string
+  sortLabel: string
+  linkedMenuCount: number
+  sortOrder: number
+  numericId: number
+  canUse: boolean
+}
+
 export type PackagingChecklistDraftRow = {
   localId: string
   optionId: string
