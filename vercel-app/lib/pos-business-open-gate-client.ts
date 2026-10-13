@@ -177,6 +177,81 @@ async function isSettlementClosedForCandidates(
   return false
 }
 
+async function isSettlementClosedInLocalCache(
+  storeCandidates: string[],
+  settleDate: string
+): Promise<boolean> {
+  for (const sc of storeCandidates) {
+    for (const key of settlementStoreCacheKeys(sc)) {
+      try {
+        const cached = await getFromCache<{ settlement?: PosSettlement | PosSettlement[] | null }>(
+          'pos_sales_cache',
+          `settlement:${key}:${settleDate}`
+        )
+        if (normalizeSettlement(cached?.settlement)?.closed) return true
+      } catch {
+        /* next alias */
+      }
+    }
+  }
+  return false
+}
+
+type PosBusinessOpenStatusResponse = Awaited<ReturnType<typeof getPosBusinessOpenStatus>>
+
+/** 연속 주문 시 주문마다 개점 API 왕복을 줄임 — 개점 확인된 응답만 보관 */
+const OPEN_STATUS_MEMO_TTL_MS = 15_000
+const openStatusMemo = new Map<string, { at: number; value: PosBusinessOpenStatusResponse }>()
+const openStatusInflight = new Map<string, Promise<PosBusinessOpenStatusResponse>>()
+
+export function clearPosBusinessOpenStatusMemo(): void {
+  openStatusMemo.clear()
+  openStatusInflight.clear()
+}
+
+async function getPosBusinessOpenStatusMemo(store: string): Promise<PosBusinessOpenStatusResponse> {
+  const key = normStoreKey(store)
+  const hit = openStatusMemo.get(key)
+  if (hit && Date.now() - hit.at < OPEN_STATUS_MEMO_TTL_MS) return hit.value
+  const pending = openStatusInflight.get(key)
+  if (pending) return pending
+  const promise = getPosBusinessOpenStatus({ storeCode: store })
+    .then((value) => {
+      if (value?.success && value.allowed && !value.settlementClosed) {
+        openStatusMemo.set(key, { at: Date.now(), value })
+      } else {
+        openStatusMemo.delete(key)
+      }
+      return value
+    })
+    .finally(() => {
+      if (openStatusInflight.get(key) === promise) openStatusInflight.delete(key)
+    })
+  openStatusInflight.set(key, promise)
+  return promise
+}
+
+/**
+ * 로컬 개점이 확인된 뒤 당일 마감 여부.
+ * 결산 집계 API(`getPosSettlement`)는 당일 주문 전체를 읽어 무겁고 별칭마다 직렬 호출되므로,
+ * 별칭을 한 번에 조회하는 개점 상태 API 1회로 판정하고 실패 시에만 결산 API로 폴백한다.
+ */
+async function resolveSettlementClosedForOpenDay(
+  store: string,
+  storeCandidates: string[],
+  settleDate: string
+): Promise<boolean> {
+  if (await isSettlementClosedInLocalCache(storeCandidates, settleDate)) return true
+  if (!isOnline() || shouldPreferOfflineCache()) return false
+  try {
+    const remote = await getPosBusinessOpenStatusMemo(store)
+    if (remote?.success) return Boolean(remote.allowed && remote.settlementClosed)
+  } catch {
+    /* 결산 API 폴백 */
+  }
+  return isSettlementClosedForCandidates(storeCandidates, settleDate)
+}
+
 async function loadStoreBusinessHours(storeCode: string): Promise<PosBusinessHoursConfig> {
   try {
     const j = await getPosBusinessDaySettings(storeCode)
@@ -220,7 +295,7 @@ export async function checkPosBusinessOpenClient(params: {
     for (const sc of candidates) {
       if (await isBusinessOpenInLocalCache(sc, probeDate)) {
         allowedToday = true
-        if (await isSettlementClosedForCandidates(candidates, probeDate)) closedToday = true
+        if (await resolveSettlementClosedForOpenDay(store, candidates, probeDate)) closedToday = true
         break
       }
     }
@@ -228,7 +303,7 @@ export async function checkPosBusinessOpenClient(params: {
   }
   if (!allowedToday) {
     try {
-      const remote = await getPosBusinessOpenStatus({ storeCode: store })
+      const remote = await getPosBusinessOpenStatusMemo(store)
       if (remote?.success && remote.allowed) {
         allowedToday = true
         closedToday = Boolean(remote.settlementClosed)
