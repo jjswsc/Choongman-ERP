@@ -93,7 +93,6 @@ import {
 import type { MarketingCollabDetail } from '@/lib/marketing-collab-detail'
 import {
   buildCartPanelLineDiscountAllocations,
-  collabDiscountAmountForCart,
   collabSupportsQuantityEntry,
   resolveCartLineMenuIdFromCatalog,
 } from '@/lib/pos-collab-discount'
@@ -110,9 +109,7 @@ import {
   normalizeLineDiscountPct,
   parseDiscountUnitKey,
   selectedDiscountAmountForLine,
-  selectedDiscountQuantityForLine,
   summarizeLineDiscountPcts,
-  manualPromoDiscountedQuantityForLine,
 } from '@/lib/pos-manual-line-discount'
 import {
   normalizeMemberTierCodeForDiscount,
@@ -123,12 +120,7 @@ import {
   type MemberTierDiscountPolicy,
 } from '@/lib/member-tier-discount-policy'
 import {
-  computeMemberTierDiscountEligibleSubtotal,
-  resolveMemberTierDiscountAmount,
-} from '@/lib/pos-member-tier-discount'
-import {
   buildCouponDiscountLineAllocations,
-  formatAppliedCouponsDiscountReason,
   summarizeLegacyCouponFields,
 } from '@/lib/pos-coupon-domain'
 import { localizeApiMessage } from '@/lib/translate-api-message'
@@ -155,7 +147,6 @@ import {
   resolvePaymentTotalRoundingMode,
   resolveReceiptSubtotalPrintAmount,
   resolveReceiptVatPrintAmount,
-  roundMenuSplitPaymentDues,
   roundSplitPaymentDuesToWholeBaht,
   type PosPricingAdjustments,
   type PosPricingResult,
@@ -174,9 +165,7 @@ import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { getPosCartSessionKey } from '@/lib/pos-cart-session'
 import { shouldShowEdcNativeQrPayTab } from '@/lib/pos-qr-display-mode'
 import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
-import { allocateLineDiscountByAssignedQty, computeMenuSplitDueByPerson, computeMenuSplitDueFromBaseSum } from '@/lib/pos-menu-split-due'
 import {
-  collabAssignedQtyForLine,
   computeAmountSplitDueWithCollabJoin,
   padSplitPersonFlags,
   padSplitPersonIds,
@@ -262,16 +251,33 @@ import {
   seedCheckoutDiscountFromExistingOrder,
   resolveDineInTableNameForStorage,
 } from '@/lib/cart-panel-checkout-helpers'
-
-/** 배포 직후 옛 split-due 청크에 새 export가 없으면 POS 전체가 흰 오류 화면이 된다 */
-function allocateLineDiscountOrZero(
-  params: Parameters<typeof allocateLineDiscountByAssignedQty>[0]
-): number[] {
-  if (typeof allocateLineDiscountByAssignedQty === 'function') {
-    return allocateLineDiscountByAssignedQty(params)
-  }
-  return (params.assignedQtyByPerson || []).map(() => 0)
-}
+import {
+  computeCartPanelCollabDiscountAmt,
+  computeCartPanelTierDiscountAmt,
+  computeCartPanelLineDiscountSnapshot,
+  computeCartPanelOtherLineDiscountSnapshot,
+  buildCartPanelPaymentDiscountReason,
+} from '@/lib/cart-panel-discount-calcs'
+import {
+  buildCartPanelOrderItemPayload,
+  buildCartPanelPaymentOtherBreakdown,
+  buildCartPanelPaymentSnapshot,
+} from '@/lib/cart-panel-payment-snapshot'
+import {
+  computeCartPanelMenuSplitBaseByPerson,
+  computeCartPanelMenuSplitDiscountByPerson,
+  computeCartPanelMenuSplitUnassignedQty,
+  computeCartPanelMenuSplitDueByPerson,
+  computeCartPanelMenuSplitPendingAmount,
+  computeCartPanelMenuSplitItemStatuses,
+  computeCartPanelAmountSplitPersonStatuses,
+  computeCartPanelSplitSettledPersonCount,
+  computeCartPanelDisplayedSplitTargetRemaining,
+  computeCartPanelSplitCurrentPersonPaymentReady,
+  computeCartPanelSplitOpenRemainders,
+  computeCartPanelSplitReadyForComplete,
+  buildCartPanelSplitReceiptPayloads,
+} from '@/lib/cart-panel-split-calcs'
 
 type PaymentMethodTab = CartPanelPaymentMethodTab
 type MenuLineDiscountMode = CartPanelMenuLineDiscountMode
@@ -1326,41 +1332,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     [collabOptions, appliedCollabId]
   )
   const collabDiscountAmt = useMemo(() => {
-    if (!appliedCollab || menuByIdForCollab.size === 0) return 0
-    const promoOpts = {
+    return computeCartPanelCollabDiscountAmt({
+      appliedCollab,
+      menuByIdForCollab,
       lineDiscountModeByItemId,
       lineDiscountPctByItemId,
-      fallbackPct: discountType === 'percent' ? discountValue : 0,
-      excludeSelectedForFixed: discountType === 'fixed' && discountValue > 0.0001,
-    }
-    const joinFlags = padSplitPersonFlags(splitCollabJoinByPerson, Math.max(1, Number(splitCount) || 1), true)
-    const collabScopeItems = cartItems.flatMap((item) => {
-      if ((lineDiscountModeByItemId[item.id] ?? 'none') === 'cancel') return []
-      const promoQty = manualPromoDiscountedQuantityForLine(item, promoOpts)
-      const selectedQty = hasSelectedDiscountScope
-        ? selectedDiscountQuantityForLine(item, lineDiscountModeByItemId)
-        : resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown })
-      const assignedRow = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-      const collabQty = Math.max(
-        0,
-        collabAssignedQtyForLine({
-          showSplit,
-          splitMode,
-          lineQty: Math.max(0, selectedQty - promoQty),
-          assignedQtyByPerson: assignedRow,
-          joinByPerson: joinFlags,
-        })
-      )
-      if (collabQty <= 0) return []
-      return [{ ...item, quantity: collabQty }]
+      discountType,
+      discountValue,
+      splitCollabJoinByPerson,
+      splitCount,
+      cartItems,
+      hasSelectedDiscountScope,
+      menuSplitAssigned,
+      showSplit,
+      splitMode,
+      collabQuantity,
     })
-    if (!collabScopeItems.length) return 0
-    return collabDiscountAmountForCart(
-      collabScopeItems,
-      menuByIdForCollab,
-      appliedCollab.collabDetail,
-      collabQuantity
-    )
   }, [
     appliedCollab,
     cartItems,
@@ -1387,31 +1374,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return resolveMemberTierDisplayLabel(memberMap[selectedMemberId]?.tierCode || 'BRONZE', tierNames)
   }, [memberMap, selectedMemberId, tierNames])
   const tierDiscountAmt = useMemo(() => {
-    if (!selectedMemberId || selectedMemberTierDiscountRate <= 0) return 0
-    const eligibleSubtotal = computeMemberTierDiscountEligibleSubtotal({
-      lines: cartItems.map((i) => ({
-        id: String(i.id ?? ''),
-        name: String(i.name ?? ''),
-        price: Number(i.price ?? 0),
-        quantity: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
-        ...(i.promoId ? { promoId: String(i.promoId) } : {}),
-        ...(i.menuId ? { menuId: String(i.menuId) } : {}),
-        ...(i.menuId1 != null ? { menuId1: i.menuId1, menuId2: i.menuId2 } : {}),
-      })),
-      menuById: menuByIdForCollab,
-      policy: tierDiscountPolicy,
+    return computeCartPanelTierDiscountAmt({
+      selectedMemberId,
+      selectedMemberTierDiscountRate,
+      cartItems,
+      menuByIdForCollab,
+      tierDiscountPolicy,
       lineDiscountModeByItemId,
       lineDiscountPctByItemId,
-      fallbackPct: discountType === 'percent' ? discountValue : 0,
-      wholeOrderManualDiscount: !hasSelectedDiscountScope && manualDiscountAmt > 0.0001,
-      excludeSelectedForFixed: discountType === 'fixed' && discountValue > 0.0001,
-    })
-    return resolveMemberTierDiscountAmount({
-      eligibleSubtotal,
-      discountRate: selectedMemberTierDiscountRate,
-      policy: tierDiscountPolicy,
-      hasCollab: Boolean(appliedCollab),
-      hasCoupons: appliedCoupons.length > 0,
+      discountType,
+      discountValue,
+      hasSelectedDiscountScope,
+      manualDiscountAmt,
+      appliedCollab,
+      appliedCoupons,
       orderType,
     })
   }, [
@@ -1507,31 +1483,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const discount = Math.min(subtotal, baseDiscount + collabDiscountAmt)
   const discountExpectedTotal = Math.min(subtotal, cancelledLineAmt + serviceDiscountAmt + manualDiscountAmt + couponDiscountTotal + tierDiscountAmt + collabDiscountAmt)
   const lineDiscountSnapshot = useMemo(() => {
-    const totalDiscount = Math.max(0, Number(discount) || 0)
-    if (!Array.isArray(cartItems) || cartItems.length === 0 || totalDiscount <= 0.0001) {
-      return cartItems.map(() => 0)
-    }
-    return buildCartPanelLineDiscountAllocations({
-      lines: cartItems.map((i) => ({
-        id: String(i.id ?? ''),
-        name: String(i.name ?? ''),
-        price: Number(i.price ?? 0),
-        qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
-        ...(i.promoId ? { promoId: String(i.promoId) } : {}),
-        ...(i.menuId ? { menuId: String(i.menuId) } : {}),
-        ...(i.menuId1 != null ? { menuId1: i.menuId1, menuId2: i.menuId2 } : {}),
-      })),
-      menuById: menuByIdForCollab,
-      lineModeById: lineDiscountModeByItemId,
+    return computeCartPanelLineDiscountSnapshot({
+      discount,
+      cartItems,
+      menuByIdForCollab,
+      lineDiscountModeByItemId,
       hasSelectedDiscountScope,
-      collabDetail: appliedCollab?.collabDetail ?? null,
-      collabDiscountAmt: appliedCollab ? collabDiscountAmt : 0,
+      appliedCollab,
+      collabDiscountAmt,
       serviceDiscountAmt,
       cancelledLineAmt,
       tierDiscountAmt,
       manualDiscountAmt,
       couponLineAlloc,
-      ...(manualLineAlloc && manualLineAlloc.length === cartItems.length ? { manualLineAlloc } : {}),
+      manualLineAlloc,
     })
   }, [
     appliedCollab,
@@ -1549,28 +1514,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     serviceDiscountAmt,
   ])
   const otherLineDiscountSnapshot = useMemo(() => {
-    if (!Array.isArray(cartItems) || cartItems.length === 0) return cartItems.map(() => 0)
-    return buildCartPanelLineDiscountAllocations({
-      lines: cartItems.map((i) => ({
-        id: String(i.id ?? ''),
-        name: String(i.name ?? ''),
-        price: Number(i.price ?? 0),
-        qty: resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown }),
-        ...(i.promoId ? { promoId: String(i.promoId) } : {}),
-        ...(i.menuId ? { menuId: String(i.menuId) } : {}),
-        ...(i.menuId1 != null ? { menuId1: i.menuId1, menuId2: i.menuId2 } : {}),
-      })),
-      menuById: menuByIdForCollab,
-      lineModeById: lineDiscountModeByItemId,
+    return computeCartPanelOtherLineDiscountSnapshot({
+      cartItems,
+      menuByIdForCollab,
+      lineDiscountModeByItemId,
       hasSelectedDiscountScope,
-      collabDetail: null,
-      collabDiscountAmt: 0,
       serviceDiscountAmt,
       cancelledLineAmt,
       tierDiscountAmt,
       manualDiscountAmt,
       couponLineAlloc,
-      ...(manualLineAlloc && manualLineAlloc.length === cartItems.length ? { manualLineAlloc } : {}),
+      manualLineAlloc,
     })
   }, [
     cancelledLineAmt,
@@ -1591,84 +1545,33 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     lineIdx?: number,
     lineDiscountAmtOverride?: number
   ) => {
-    const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
-    const lineNote = String(i.note ?? '').trim()
-    const quantity =
-      quantityOverride != null
-        ? resolveCartLineQuantityForSave({ quantity: quantityOverride })
-        : resolveCartLineQuantityForSave(i as { quantity?: unknown; qty?: unknown })
-    const menuIdLine = String(i.menuId ?? '').trim()
-    const menuId1Line = String(i.menuId1 ?? '').trim()
-    const menuId2Line = String(i.menuId2 ?? '').trim()
-    const optionIdLine = String(i.optionId ?? '').trim()
-    const optionCodeLine = String(i.optionCode ?? '').trim()
-    const lineDiscountAmt =
-      lineDiscountAmtOverride != null
-        ? Math.max(0, Number(lineDiscountAmtOverride) || 0)
-        : lineIdx != null && lineIdx >= 0
-          ? Math.max(0, Number(lineDiscountSnapshot[lineIdx] ?? 0) || 0)
-          : 0
-    return {
-      id: i.id,
-      name: i.name,
-      price: i.price,
-      quantity,
-      orderType: orderTypeNorm,
-      ...(lineDiscountAmt > 0.0001 ? { lineDiscountAmt } : {}),
-      ...(lineNote ? { note: lineNote } : {}),
-      ...(menuIdLine ? { menuId: menuIdLine } : {}),
-      ...(menuId1Line ? { menuId1: menuId1Line } : {}),
-      ...(menuId2Line ? { menuId2: menuId2Line } : {}),
-      ...(optionIdLine ? { optionId: optionIdLine } : {}),
-      ...(optionCodeLine ? { optionCode: optionCodeLine } : {}),
-      ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),
-      ...(i.promoId
-        ? {
-            promoId: i.promoId,
-            ...(i.promoCode ? { promoCode: i.promoCode } : {}),
-            ...(Array.isArray(i.promoItems) && i.promoItems.length > 0 ? { promoItems: i.promoItems } : {}),
-          }
-        : {}),
-    }
+    return buildCartPanelOrderItemPayload({
+      orderType,
+      i,
+      quantityOverride,
+      lineDiscountAmtOverride,
+      lineIdx,
+      lineDiscountSnapshot,
+      deliveryAppProp,
+    })
   }
 
   const paymentDiscountReason = useMemo(() => {
-    const base = discountReason.trim()
-    const collabPart = appliedCollab
-      ? `${t('posCollabDiscount')}: ${appliedCollab.topic}${
-          collabSupportsQuantityEntry(appliedCollab.collabDetail) && collabQuantity > 1
-            ? ` × ${collabQuantity}`
-            : ''
-        }`
-      : ''
-    const tierPart =
-      tierDiscountAmt > 0
-        ? `${tr('posTierDiscount', '등급 할인')} (${normalizeMemberTierCodeForDiscount(memberMap[selectedMemberId]?.tierCode || 'BRONZE')} ${(selectedMemberTierDiscountRate * 100).toFixed(1)}%)`
-        : ''
-    const couponPart = appliedCoupons.length
-      ? appliedCoupons
-          .map((row) => {
-            const code = String(row.code || '').trim().toUpperCase()
-            if (!code) return ''
-            const qty = Math.max(1, Math.trunc(Number(row.quantity ?? 1) || 1))
-            const codeLabel = qty > 1 ? `${code}×${qty}` : code
-            return i18nTr(t, 'posCouponDiscountReason', { code: codeLabel }) || `쿠폰: ${codeLabel}`
-          })
-          .filter(Boolean)
-          .join(' · ') || formatAppliedCouponsDiscountReason(appliedCoupons)
-      : ''
-    const lineDiscountCount = collectSelectedDiscountTargetKeys(cartItems, lineDiscountModeByItemId).length
-    const linePart = [
-      lineDiscountCount > 0 ? `${tr('posDiscount', '할인')} ${lineDiscountCount}${tr('posMenuLineUnit', '건')}` : '',
-    ]
-      .filter(Boolean)
-      .join(', ')
-    const cancelPart =
-      selectedCancelledLineCount > 0
-        ? `${tr('posLineCancelledShort', '취소처리')} ${selectedCancelledLineCount}${tr('posMenuLineUnit', '건')}`
-        : ''
-    const parts = [base, couponPart, collabPart, tierPart, linePart, cancelPart].filter(Boolean)
-    return parts.join(' · ')
+    return buildCartPanelPaymentDiscountReason({
+      discountReason,
+      appliedCollab,
+      t,
+      collabQuantity,
+      tierDiscountAmt,
+      tr,
+      memberMap,
+      selectedMemberId,
+      selectedMemberTierDiscountRate,
+      appliedCoupons,
+      cartItems,
+      lineDiscountModeByItemId,
+      selectedCancelledLineCount,
+    })
   }, [
     appliedCollab,
     appliedCoupons,
@@ -1820,48 +1723,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const paymentSumMatch = paymentTotalsReconcile(paymentEnteredSum, collectableDue)
 
   const buildPaymentOtherBreakdownSnapshot = useCallback((): PosPaymentOtherBreakdown | undefined => {
-    const r2 = (n: number) => Math.round(Math.max(0, n) * 100) / 100
-    if (useAdminPaymentLines) {
-      const admin: Record<string, number> = {}
-      const adminLabels: Record<string, string> = {}
-      for (const line of adminPaymentLines) {
-        const v = r2(parseBahtAmount(payAdminLineAmounts[line.id] || '0') || 0)
-        if (v <= 0.005) continue
-        const id = String(line.id)
-        admin[id] = v
-        const name = String(line.name || '').trim()
-        if (name) adminLabels[id] = name
-      }
-      if (Object.keys(admin).length === 0) return undefined
-      return Object.keys(adminLabels).length > 0 ? { admin, adminLabels } : { admin }
-    }
-    const out: PosPaymentOtherBreakdown = {}
-    const tm = r2(parseBahtAmount(payTrueMoney) || 0)
-    const wc = r2(parseBahtAmount(payWeChat) || 0)
-    const ap = r2(parseBahtAmount(payAlipay) || 0)
-    const up = r2(parseBahtAmount(payUnionPay) || 0)
-    const lp = r2(parseBahtAmount(payLinePay) || 0)
-    const sp = r2(parseBahtAmount(payShopeePay) || 0)
-    const misc = r2(parseBahtAmount(payOther) || 0)
-    if (tm > 0.005) out.trueMoney = tm
-    if (wc > 0.005) out.weChat = wc
-    if (ap > 0.005) out.alipay = ap
-    if (up > 0.005) out.unionPay = up
-    if (lp > 0.005) out.linePay = lp
-    if (sp > 0.005) out.shopeePay = sp
-    if (misc > 0.005) out.misc = misc
-    if (
-      !out.trueMoney &&
-      !out.weChat &&
-      !out.alipay &&
-      !out.unionPay &&
-      !out.linePay &&
-      !out.shopeePay &&
-      !out.misc
-    ) {
-      return undefined
-    }
-    return out
+    return buildCartPanelPaymentOtherBreakdown({
+      useAdminPaymentLines,
+      adminPaymentLines,
+      payAdminLineAmounts,
+      payTrueMoney,
+      payWeChat,
+      payAlipay,
+      payUnionPay,
+      payLinePay,
+      payShopeePay,
+      payOther,
+    })
   }, [
     useAdminPaymentLines,
     adminPaymentLines,
@@ -1876,50 +1749,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   ])
 
   const buildPaymentSnapshot = useCallback((): CartPanelPaymentPayload => {
-    const payDel = parseBahtAmount(payDeliveryApp) || 0
-    const channelCtx = cartPanelDeliveryChannelContext({
+    return buildCartPanelPaymentSnapshot({
+      payDeliveryApp,
       deliveryAppProp,
       deliveryOrderNoProp,
       paymentTableNameOverride,
       customerMemo,
       deliveryPaymentChannel,
+      useAdminPaymentLines,
+      adminConfiguredWalletSum,
+      legacyWalletPaymentSum,
+      buildPaymentOtherBreakdownSnapshot,
+      payCash,
+      cashTenderedRef,
+      cashTendered,
+      payCard,
+      payPromptPay,
+      payCrypto,
+      payQrType,
+      cryptoMeta,
     })
-    const deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'> =
-      payDel > 0
-        ? {
-            paymentDeliveryApp: payDel,
-            deliveryPaymentChannel: resolveDeliveryPaymentChannelForSave({
-              ...channelCtx,
-              paymentDeliveryApp: payDel,
-            }),
-          }
-        : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
-    const paymentOtherSum = useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum
-    const ob = buildPaymentOtherBreakdownSnapshot()
-    const cashPay = parseBahtAmount(payCash) || 0
-    const tenderedRaw =
-      parseBahtAmount(cashTenderedRef.current) || parseBahtAmount(cashTendered)
-    const nonCashPay =
-      (parseBahtAmount(payCard) || 0) +
-      (parseBahtAmount(payPromptPay) || 0) +
-      (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
-      (parseBahtAmount(payDeliveryApp) || 0) +
-      (parseBahtAmount(payCrypto) || 0)
-    const cashOnlyPay = nonCashPay <= 0.005 && cashPay > 0.005
-    const effectiveTendered = tenderedRaw > 0.005 ? tenderedRaw : cashOnlyPay ? cashPay : 0
-    return {
-      paymentCash: cashPay,
-      paymentCard: parseBahtAmount(payCard) || 0,
-      paymentQr: parseBahtAmount(payPromptPay) || 0,
-      paymentQrType: payQrType === 'EDC' ? 'THAI_QR' : payQrType,
-      paymentQrShowOnEdc: payQrType === 'EDC',
-      paymentOther: paymentOtherSum,
-      ...(ob ? { paymentOtherBreakdown: ob } : {}),
-      ...deliveryPayPart,
-      paymentCrypto: parseBahtAmount(payCrypto) || 0,
-      ...(cryptoMeta ? { paymentCryptoMeta: cryptoMeta } : {}),
-      ...(effectiveTendered > 0.005 ? { paymentCashTendered: effectiveTendered } : {}),
-    }
   }, [
     payCash,
     payCard,
@@ -2004,49 +1853,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     ? Math.max(1, Number(splitCount) || 1)
     : Math.max(splitPaidSteps + 1, 2)
   const menuSplitBaseByPerson = useMemo(() => {
-    const count = Math.max(1, Number(splitCount) || 1)
-    const baseByPerson = Array.from({ length: count }, () => 0)
-    for (const item of cartItems) {
-      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-      for (let i = 0; i < count; i += 1) {
-        const qty = Math.max(0, Number(row[i] || 0))
-        baseByPerson[i] += (Number(item.price) || 0) * qty
-      }
-    }
-    return baseByPerson.map((v) => round2(v))
+    return computeCartPanelMenuSplitBaseByPerson({
+      splitCount,
+      cartItems,
+      menuSplitAssigned,
+      round2,
+    })
   }, [cartItems, menuSplitAssigned, splitCount])
   const menuSplitDiscountByPerson = useMemo(() => {
-    const count = Math.max(1, Number(splitCount) || 1)
-    const discByPerson = Array.from({ length: count }, () => 0)
-    const joinFlags = padSplitPersonFlags(splitCollabJoinByPerson, count, true)
-    cartItems.forEach((item, cartIdx) => {
-      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-      const assignedQtyByPerson = Array.from({ length: count }, (_, i) => Math.max(0, Number(row[i] || 0)))
-      const otherAmt = Math.max(0, Number(otherLineDiscountSnapshot[cartIdx] ?? 0) || 0)
-      const collabAmt = Math.max(
-        0,
-        round2(Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0) - otherAmt)
-      )
-      const otherAlloc = allocateLineDiscountOrZero({
-        lineDiscountAmt: otherAmt,
-        lineQty: resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown }),
-        assignedQtyByPerson,
-        round2,
-      })
-      const joinAssigned = assignedQtyByPerson.map((qty, i) => (joinFlags[i] === false ? 0 : qty))
-      const collabAlloc = allocateLineDiscountOrZero({
-        lineDiscountAmt: collabAmt,
-        lineQty: joinAssigned.reduce((s, q) => s + q, 0),
-        assignedQtyByPerson: joinAssigned,
-        round2,
-      })
-      for (let i = 0; i < count; i += 1) {
-        discByPerson[i] = round2(
-          discByPerson[i] + Math.max(0, Number(otherAlloc[i] || 0)) + Math.max(0, Number(collabAlloc[i] || 0))
-        )
-      }
+    return computeCartPanelMenuSplitDiscountByPerson({
+      splitCount,
+      splitCollabJoinByPerson,
+      cartItems,
+      menuSplitAssigned,
+      otherLineDiscountSnapshot,
+      round2,
+      lineDiscountSnapshot,
     })
-    return discByPerson
   }, [
     cartItems,
     lineDiscountSnapshot,
@@ -2057,31 +1880,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     splitCount,
   ])
   const menuSplitUnassignedQty = useMemo(() => {
-    let sum = 0
-    for (const item of cartItems) {
-      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-      const assigned = row.reduce((s, v) => s + Math.max(0, Number(v || 0)), 0)
-      sum += Math.max(0, (Number(item.quantity) || 0) - assigned)
-    }
-    return round2(sum)
+    return computeCartPanelMenuSplitUnassignedQty({ cartItems, menuSplitAssigned, round2 })
   }, [cartItems, menuSplitAssigned])
   const menuSplitDueByPerson = useMemo(() => {
-    const netByPerson = menuSplitBaseByPerson.map((base, i) =>
-      round2(Math.max(0, Number(base) || 0) - Math.max(0, Number(menuSplitDiscountByPerson[i] || 0)))
-    )
-    const orderNet = round2(Math.max(0, Number(subtotal) || 0) - Math.max(0, Number(discount) || 0))
-    const raw = computeMenuSplitDueByPerson({
-      total,
-      subtotal: orderNet > 0.009 ? orderNet : subtotal,
-      baseByPerson: netByPerson,
+    return computeCartPanelMenuSplitDueByPerson({
+      menuSplitBaseByPerson,
       round2,
-    })
-    return roundMenuSplitPaymentDues(
-      raw,
-      resolvePaymentTotalRoundingMode(pricingAdjustments),
+      menuSplitDiscountByPerson,
+      subtotal,
+      discount,
       total,
-      menuSplitUnassignedQty
-    )
+      pricingAdjustments,
+      menuSplitUnassignedQty,
+    })
   }, [
     menuSplitBaseByPerson,
     menuSplitDiscountByPerson,
@@ -2106,59 +1917,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return round2(sum)
   }, [cartItems, menuSplitPendingQty])
   const menuSplitPendingAmount = useMemo(() => {
-    let baseSum = 0
-    let discountSum = 0
-    cartItems.forEach((item, cartIdx) => {
-      const qty = Math.max(0, Number(menuSplitPendingQty[item.id] || 0))
-      baseSum += qty * (Number(item.price) || 0)
-      const fullQty = resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown })
-      const fullDisc = Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0)
-      if (qty > 0.0001 && fullQty > 0.0001 && fullDisc > 0.0001) {
-        discountSum += fullQty - qty <= 0.0001 ? fullDisc : (fullDisc * qty) / fullQty
-      }
-    })
-    const pendingNet = round2(Math.max(0, baseSum - discountSum))
-    const orderNet = round2(Math.max(0, Number(subtotal) || 0) - Math.max(0, Number(discount) || 0))
-    return computeMenuSplitDueFromBaseSum({
-      total,
-      subtotal: orderNet > 0.009 ? orderNet : subtotal,
-      baseSum: pendingNet,
+    return computeCartPanelMenuSplitPendingAmount({
+      cartItems,
+      menuSplitPendingQty,
+      lineDiscountSnapshot,
       round2,
+      subtotal,
+      discount,
+      total,
     })
   }, [cartItems, discount, lineDiscountSnapshot, menuSplitPendingQty, subtotal, total])
   const menuSplitItemStatuses = useMemo(() => {
-    return cartItems.map((item) => {
-      const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-      const qtyTotal = Math.max(0, Number(item.quantity) || 0)
-      const pendingQty = Math.max(0, Number(menuSplitPendingQty[item.id] || 0))
-      const assigned = row.reduce((s, v) => s + Math.max(0, Number(v || 0)), 0)
-      const unassigned = Math.max(0, qtyTotal - assigned - pendingQty)
-      const holders = row
-        .map((q, idx) => ({ idx, qty: Math.max(0, Number(q || 0)) }))
-        .filter((h) => h.qty > 0.009)
-      const allHoldersPaid =
-        holders.length > 0 &&
-        holders.every(
-          (h) =>
-            Math.max(0, Number(menuSplitDueByPerson[h.idx] || 0)) > 0.009 &&
-            Math.max(0, Number(menuSplitRemainingByPerson[h.idx] || 0)) <= 0.009
-        )
-      const fullyAssigned = unassigned <= 0.009 && pendingQty <= 0.009 && assigned > 0.009
-      const settled = qtyTotal > 0.009 && fullyAssigned && allHoldersPaid
-      const awaitingPay = fullyAssigned && !allHoldersPaid && assigned > 0.009
-      const selecting = pendingQty > 0.009
-      return {
-        item,
-        row,
-        qtyTotal,
-        pendingQty,
-        assigned,
-        unassigned,
-        holders,
-        settled,
-        awaitingPay,
-        selecting,
-      }
+    return computeCartPanelMenuSplitItemStatuses({
+      cartItems,
+      menuSplitAssigned,
+      menuSplitPendingQty,
+      menuSplitDueByPerson,
+      menuSplitRemainingByPerson,
     })
   }, [
     cartItems,
@@ -2234,14 +2009,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [amountSplitDueByPerson, amountSplitPaidByPerson, splitCount])
 
   const amountSplitPersonStatuses = useMemo(() => {
-    const count = Math.max(1, Number(splitCount) || 1)
-    return Array.from({ length: count }, (_, idx) => {
-      const due = Math.max(0, Number(amountSplitDueByPerson[idx] || 0))
-      const remaining = Math.max(0, Number(amountSplitRemainingByPerson[idx] || 0))
-      const paid = Math.max(0, Number(amountSplitPaidByPerson[idx] || 0))
-      const isPaid = due > 0.009 && remaining <= 0.009
-      const isPayTarget = idx === amountSplitTargetPersonIndex
-      return { idx, due, remaining, paid, isPaid, isPayTarget }
+    return computeCartPanelAmountSplitPersonStatuses({
+      splitCount,
+      amountSplitDueByPerson,
+      amountSplitRemainingByPerson,
+      amountSplitPaidByPerson,
+      amountSplitTargetPersonIndex,
     })
   }, [
     splitCount,
@@ -2256,18 +2029,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   )
   /** 일부 결제 확정(캡처) 완료 인원 — splitPaidSteps와 별도로 실제 잔액 기준 */
   const splitSettledPersonCount = useMemo(() => {
-    if (!showSplit) return 0
-    const count = Math.max(1, Number(splitCount) || 1)
-    if (splitMode === 'menu') {
-      let settled = 0
-      for (let i = 0; i < count; i += 1) {
-        const due = Math.max(0, Number(menuSplitDueByPerson[i] || 0))
-        const remaining = Math.max(0, Number(menuSplitRemainingByPerson[i] || 0))
-        if (due > 0.009 && remaining <= 0.009) settled += 1
-      }
-      return settled
-    }
-    return amountSplitPaidPersonCount
+    return computeCartPanelSplitSettledPersonCount({
+      showSplit,
+      splitCount,
+      splitMode,
+      menuSplitDueByPerson,
+      menuSplitRemainingByPerson,
+      amountSplitPaidPersonCount,
+    })
   }, [
     showSplit,
     splitMode,
@@ -2289,12 +2058,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       : currentSplitTargetAmount
   /** 결제 대상 손님 잔액 — 상단 진행 바에 강조 */
   const displayedSplitTargetRemaining = useMemo(() => {
-    if (!showSplit) return Math.max(0, round2(total - paymentSum))
-    if (splitMode === 'menu' && menuSplitPendingQtyTotal > 0.009) return menuSplitPendingAmount
-    const idx = splitMode === 'menu' ? menuSplitTargetPersonIndex : amountSplitTargetPersonIndex
-    return splitMode === 'menu'
-      ? Math.max(0, Number(menuSplitRemainingByPerson[idx] || 0))
-      : Math.max(0, Number(amountSplitRemainingByPerson[idx] || 0))
+    return computeCartPanelDisplayedSplitTargetRemaining({
+      showSplit,
+      round2,
+      total,
+      paymentSum,
+      splitMode,
+      menuSplitPendingQtyTotal,
+      menuSplitPendingAmount,
+      menuSplitTargetPersonIndex,
+      amountSplitTargetPersonIndex,
+      menuSplitRemainingByPerson,
+      amountSplitRemainingByPerson,
+    })
   }, [
     showSplit,
     splitMode,
@@ -2376,22 +2152,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   /** 현재 인원 분이 결제 입력에 반영됐는지(수단 전환 후 remaining=0이어도 일부 결제 가능해야 함) */
   const splitCurrentPersonPaymentReady = useMemo(() => {
-    if (!showSplit || total <= 0) return false
-    if (splitMode === 'menu' && menuSplitPendingQtyTotal > 0.009) return false
-    const idx =
-      splitMode === 'menu' ? menuSplitTargetPersonIndex : amountSplitTargetPersonIndex
-    const due =
-      splitMode === 'menu'
-        ? Number(menuSplitDueByPerson[idx] || 0)
-        : Number(amountSplitDueByPerson[idx] || 0)
-    const personRemaining =
-      splitMode === 'menu'
-        ? Math.max(0, Number(menuSplitRemainingByPerson[idx] || 0))
-        : Math.max(0, Number(amountSplitRemainingByPerson[idx] || 0))
-    if (personRemaining <= SPLIT_AMOUNT_EPS) return false
-    if (paymentSum <= SPLIT_AMOUNT_EPS) return false
-    if (due <= SPLIT_AMOUNT_EPS) return false
-    return paymentSum >= personRemaining - SPLIT_AMOUNT_EPS
+    return computeCartPanelSplitCurrentPersonPaymentReady({
+      showSplit,
+      total,
+      splitMode,
+      menuSplitPendingQtyTotal,
+      menuSplitTargetPersonIndex,
+      amountSplitTargetPersonIndex,
+      menuSplitDueByPerson,
+      amountSplitDueByPerson,
+      menuSplitRemainingByPerson,
+      amountSplitRemainingByPerson,
+      SPLIT_AMOUNT_EPS,
+      paymentSum,
+    })
   }, [
     showSplit,
     total,
@@ -2407,17 +2181,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   ])
   /** 인원별 미결제 잔액(>ε) 목록 — 금액·메뉴 공통 */
   const splitOpenRemainders = useMemo(() => {
-    if (!showSplit) return [] as number[]
-    const count = Math.max(1, Number(splitCount) || 1)
-    const open: number[] = []
-    for (let i = 0; i < count; i += 1) {
-      const remaining =
-        splitMode === 'menu'
-          ? Math.max(0, Number(menuSplitRemainingByPerson[i] || 0))
-          : Math.max(0, Number(amountSplitRemainingByPerson[i] || 0))
-      if (remaining > SPLIT_AMOUNT_EPS) open.push(remaining)
-    }
-    return open
+    return computeCartPanelSplitOpenRemainders({
+      showSplit,
+      splitCount,
+      splitMode,
+      menuSplitRemainingByPerson,
+      amountSplitRemainingByPerson,
+      SPLIT_AMOUNT_EPS,
+    })
   }, [
     showSplit,
     splitMode,
@@ -2437,18 +2208,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return splitSettledPersonCount >= count
   }, [showSplit, splitCount, splitSettledPersonCount])
   const splitReadyForComplete = useMemo(() => {
-    if (!showSplit) return paymentSumMatch && cryptoPaymentConfirmed
-    if (splitMode === 'menu' && menuSplitUnassignedQty > 0.009) return false
-    const reconciled =
-      paymentSumMatch ||
-      (splitAllGuestsSettled && paymentTotalsReconcile(splitCapturedPaymentSum, collectableDue))
-    if (!reconciled) return false
-    if (!cryptoPaymentConfirmed) return false
-    if (splitOpenRemainders.length === 0) return true
-    if (splitOpenRemainders.length === 1 && paymentSum >= splitOpenRemainders[0] - SPLIT_AMOUNT_EPS) {
-      return true
-    }
-    return false
+    return computeCartPanelSplitReadyForComplete({
+      showSplit,
+      paymentSumMatch,
+      cryptoPaymentConfirmed,
+      splitMode,
+      menuSplitUnassignedQty,
+      splitAllGuestsSettled,
+      paymentTotalsReconcile,
+      splitCapturedPaymentSum,
+      collectableDue,
+      splitOpenRemainders,
+      paymentSum,
+      SPLIT_AMOUNT_EPS,
+    })
   }, [
     showSplit,
     paymentSumMatch,
@@ -2696,115 +2469,25 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [])
 
   const buildSplitReceiptPayloads = (): CartPanelSplitReceiptPayload[] | undefined => {
-    if (!showSplit) return undefined
-    const count = Math.max(1, Number(splitCount) || 1)
-    if (count <= 1) return undefined
-    const round2Local = (n: number) => Math.round(n * 100) / 100
-    const joinFlags = padSplitPersonFlags(splitCollabJoinByPerson, count, true)
-    const memberIds = padSplitPersonIds(splitMemberIdByPerson, count)
-    const memberForPerson = (idx: number) => {
-      const mid = memberIds[idx]
-      const detail = memberMap[mid]
-      const memberIdNum = Math.max(0, Number(mid) || 0)
-      const joined = Boolean(appliedCollab) && joinFlags[idx] !== false
-      if (memberIdNum <= 0 && !joined && !detail) return undefined
-      return {
-        ...(memberIdNum > 0 ? { memberId: memberIdNum } : {}),
-        ...(detail?.memberNo ? { memberNo: detail.memberNo } : {}),
-        ...(detail?.phone ? { memberPhone: detail.phone } : {}),
-        ...(detail?.tierCode ? { memberTierCode: detail.tierCode } : {}),
-        collabJoined: joined,
-      }
-    }
-    if (splitMode === 'menu') {
-      const lineDiscountByItemId: Record<string, number[]> = {}
-      cartItems.forEach((item, cartIdx) => {
-        const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-        const assignedQtyByPerson = Array.from({ length: count }, (_, i) => Math.max(0, Number(row[i] || 0)))
-        const otherAmt = Math.max(0, Number(otherLineDiscountSnapshot[cartIdx] ?? 0) || 0)
-        const collabAmt = Math.max(
-          0,
-          round2Local(Math.max(0, Number(lineDiscountSnapshot[cartIdx] ?? 0) || 0) - otherAmt)
-        )
-        const otherAlloc = allocateLineDiscountOrZero({
-          lineDiscountAmt: otherAmt,
-          lineQty: resolveCartLineQuantityForSave(item as { quantity?: unknown; qty?: unknown }),
-          assignedQtyByPerson,
-          round2: round2Local,
-        })
-        const joinAssigned = assignedQtyByPerson.map((qty, i) => (joinFlags[i] === false ? 0 : qty))
-        const collabAlloc = allocateLineDiscountOrZero({
-          lineDiscountAmt: collabAmt,
-          lineQty: joinAssigned.reduce((s, q) => s + q, 0),
-          assignedQtyByPerson: joinAssigned,
-          round2: round2Local,
-        })
-        lineDiscountByItemId[item.id] = Array.from({ length: count }, (_, i) =>
-          round2Local(Math.max(0, Number(otherAlloc[i] || 0)) + Math.max(0, Number(collabAlloc[i] || 0)))
-        )
-      })
-      const entries: CartPanelSplitReceiptPayload[] = []
-      for (let personIdx = 0; personIdx < count; personIdx += 1) {
-        const lines: CartPanelOrderLinePayload[] = []
-        let subtotalByPerson = 0
-        for (const item of cartItems) {
-          const row = Array.isArray(menuSplitAssigned[item.id]) ? menuSplitAssigned[item.id] : []
-          const qty = Math.max(0, Number(row[personIdx] || 0))
-          if (qty <= 0) continue
-          const cartIdx = cartItems.findIndex((c) => c.id === item.id)
-          const personLineDisc = Math.max(0, Number(lineDiscountByItemId[item.id]?.[personIdx] ?? 0) || 0)
-          lines.push(
-            mapCartItemToOrderPayload(item, qty, cartIdx >= 0 ? cartIdx : undefined, personLineDisc)
-          )
-          subtotalByPerson += (Number(item.price) || 0) * qty
-        }
-        const subtotalRounded = round2Local(subtotalByPerson)
-        const due = round2Local(Math.max(0, Number(menuSplitDueByPerson[personIdx] || 0)))
-        const totalByPerson = due > 0 ? due : subtotalRounded
-        const discountByPerson = round2Local(
-          Math.max(0, Number(menuSplitDiscountByPerson[personIdx] || 0))
-        )
-        if (lines.length === 0 && totalByPerson <= 0) continue
-        const member = memberForPerson(personIdx)
-        entries.push({
-          key: `menu-${personIdx + 1}`,
-          label: `${tr('posCurrentPerson', '현재 인원')} ${personIdx + 1}/${count}`,
-          items: lines,
-          subtotal: subtotalRounded,
-          discountAmt: discountByPerson,
-          total: totalByPerson,
-          payment: splitPaymentsByPersonRef.current[personIdx],
-          ...(member ? { member } : {}),
-        })
-      }
-      return entries.length > 0 ? entries : undefined
-    }
-    const dueByPerson = amountSplitDueByPerson
-    const fullMenuLines = cartItems.map((item, idx) => mapCartItemToOrderPayload(item, undefined, idx, 0))
-    const entries: CartPanelSplitReceiptPayload[] = dueByPerson
-      .map((due, idx) => {
-        const member = memberForPerson(idx)
-        return {
-          key: `amount-${idx + 1}`,
-          label: `${tr('posCurrentPerson', '현재 인원')} ${idx + 1}/${count}`,
-          items: [
-            ...fullMenuLines,
-            {
-              id: `dutch-amount-${idx + 1}`,
-              name: `${tr('posDutchPayHeader', '더치페이')} ${idx + 1}/${count}`,
-              price: due,
-              quantity: 1,
-            },
-          ],
-          subtotal: due,
-          discountAmt: 0,
-          total: due,
-          payment: splitPaymentsByPersonRef.current[idx],
-          ...(member ? { member } : {}),
-        }
-      })
-      .filter((entry) => entry.total > 0)
-    return entries.length > 0 ? entries : undefined
+    return buildCartPanelSplitReceiptPayloads({
+      showSplit,
+      splitCount,
+      splitCollabJoinByPerson,
+      splitMemberIdByPerson,
+      memberMap,
+      appliedCollab,
+      splitMode,
+      cartItems,
+      menuSplitAssigned,
+      otherLineDiscountSnapshot,
+      lineDiscountSnapshot,
+      mapCartItemToOrderPayload,
+      menuSplitDueByPerson,
+      menuSplitDiscountByPerson,
+      tr,
+      splitPaymentsByPersonRef,
+      amountSplitDueByPerson,
+    })
   }
 
   useEffect(() => {
