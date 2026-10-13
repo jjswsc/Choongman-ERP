@@ -135,6 +135,7 @@ import {
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
+import { mergeCheckoutPrepaidQr, resolveCheckoutPrepaidQrAmt } from '@/lib/pos-checkout-prepaid-qr'
 import { posOrderCouponFieldsFromOrderRow, posOrderCouponFieldsFromPayload } from '@/lib/pos-order-coupon-fields'
 import { posOrderTierDiscountFieldsFromPayload } from '@/lib/pos-order-tier-discount-fields'
 import { posOrderCollabDiscountFieldsFromPayload } from '@/lib/pos-order-collab-discount-fields'
@@ -455,6 +456,8 @@ type PendingPayRequest = {
   orderMemo?: string
   /** 선주문 보유 선수금 — 잔금 결제 due */
   depositAmt?: number
+  /** 손님 폰 QR 부분 입금 — 카운터는 잔액만 받음 */
+  prepaidQrAmt?: number
 } | null
 
 /** 테이블 현황 + 배달/포장 주문 + 장바구니. 테이블 선택 시 메뉴로 주문 추가. */
@@ -1162,6 +1165,11 @@ export default function PosTerminalPage() {
   >({})
   /** partnerTxnUid → order id (QR 대기 중 결제금액이 올라간 주문 — Cancel 시 결제필드 클리어용) */
   const kbankPendingOrderIdRef = useRef<Record<string, number>>({})
+  /**
+   * order id → 손님 폰 QR 부분 입금액. 카운터 QR 대기 중 payment_qr에 합산돼 있으므로
+   * 재결제 시 차감액·Cancel 시 복원값으로 이 값을 쓴다.
+   */
+  const counterPrepaidQrByOrderIdRef = useRef<Record<number, number>>({})
   /** partnerTxnUid → โต๊ะ/포장·배달 라벨 (성공 sticky 표시용) */
   const kbankQrDisplayLabelByTxnRef = useRef<Record<string, string>>({})
   /** 콜백이 결제 후처리 등록보다 빠를 때 승인 정보 보관 (partnerTxnUid별). */
@@ -2173,6 +2181,7 @@ export default function PosTerminalPage() {
       orderMember: pendingPayRequest.orderMember,
       orderMemo: pendingPayRequest.orderMemo,
       depositAmt: pendingPayRequest.depositAmt,
+      prepaidQrAmt: pendingPayRequest.prepaidQrAmt,
     })
     setPendingPayRequest(null)
   }, [pendingPayRequest])
@@ -6889,6 +6898,8 @@ export default function PosTerminalPage() {
         0
       if (key) delete kbankPendingOrderIdRef.current[key]
       if (!(orderId > 0) || !currentStoreId) return
+      const restorePrepaidQr = Math.max(0, Number(counterPrepaidQrByOrderIdRef.current[orderId] || 0))
+      delete counterPrepaidQrByOrderIdRef.current[orderId]
       // UI 즉시 반영 — Pay(ชำระที่ร้าน) 잠금 해제
       clearTerminalOrderPaymentTenders(currentStoreId, orderId)
       try {
@@ -6898,7 +6909,7 @@ export default function PosTerminalPage() {
           paymentCash: 0,
           paymentCashTendered: 0,
           paymentCard: 0,
-          paymentQr: 0,
+          paymentQr: restorePrepaidQr,
           paymentOther: 0,
           paymentDeliveryApp: 0,
           clearPaymentTender: true,
@@ -10694,6 +10705,12 @@ export default function PosTerminalPage() {
                 const cartItemsForSave = cartLinesToPosOrderItems(payloadItemsNormalized)
                 let itemsForPaymentSave = cartItemsForSave
                 const targetClose: 'paid' | 'completed' = payload.isPrepaid ? 'paid' : 'completed'
+                const prepaidQrAmt =
+                  existingOrderId != null && existingOrderId > 0
+                    ? Math.max(0, Number(payload.prepaidQrAmt) || 0)
+                    : 0
+                /** 저장·영수증용: 카운터 tender + 손님 폰 QR 부분 입금 (LinkPOS·KBank·돈통은 `pay`) */
+                const paySaved = pay ? mergeCheckoutPrepaidQr(pay, prepaidQrAmt) : pay
                 /** 서버에 행이 있을 때만 update API 사용 (오프라인 임시 음수 id 제외) */
                 if (existingOrderId != null && existingOrderId > 0 && pay != null) {
                   /** Omni settleFast 는 items 무시 — merge/fetch 왕복 생략 */
@@ -10717,7 +10734,7 @@ export default function PosTerminalPage() {
                     ...posOrderCollabDiscountFieldsFromPayload(payload),
                     pointUsed: payload.pointUsed,
                     guestCount: payload.guestCount,
-                    ...posOrderPaymentFieldsFromSnapshot(pay),
+                    ...posOrderPaymentFieldsFromSnapshot(paySaved),
                     linkposPayment: linkpos.linkposPayment,
                     ...(payload.depositAmt && payload.depositAmt > 0.005
                       ? { depositAmt: payload.depositAmt }
@@ -10739,6 +10756,9 @@ export default function PosTerminalPage() {
                   })
                   orderIdToComplete = existingOrderId
                   orderNo = pendingReceiptOrderNo ?? ''
+                  if (kbankQrPending && prepaidQrAmt > 0.005) {
+                    counterPrepaidQrByOrderIdRef.current[existingOrderId] = prepaidQrAmt
+                  }
                 } else if (pay != null) {
                   const localNoCandidate =
                     (pendingReceiptOrderNo?.startsWith('LOCAL-') ? pendingReceiptOrderNo : null) ??
@@ -10832,6 +10852,7 @@ export default function PosTerminalPage() {
                 }
                 const finalizeDineInPaid = async (): Promise<boolean> => {
                   if (orderIdToComplete != null) {
+                    delete counterPrepaidQrByOrderIdRef.current[orderIdToComplete]
                     const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
                     /**
                      * Omni: 기존 주문은 status를 백그라운드. 신규+closeStatus는 저장 시 이미 마감 → 생략.
@@ -10872,17 +10893,17 @@ export default function PosTerminalPage() {
                     discountReason: payload.discountReason,
                     appliedCoupons: payload.appliedCoupons,
                     cardPaymentAmount: resolveCardPaymentAmountForPricing(pay),
-                    paymentSum: pay
+                    paymentSum: paySaved
                       ? posOrderPaymentSum({
-                          paymentCash: pay.paymentCash,
-                          paymentCard: pay.paymentCard,
-                          paymentQr: pay.paymentQr,
-                          paymentOther: pay.paymentOther,
-                          paymentDeliveryApp: pay.paymentDeliveryApp,
+                          paymentCash: paySaved.paymentCash,
+                          paymentCard: paySaved.paymentCard,
+                          paymentQr: paySaved.paymentQr,
+                          paymentOther: paySaved.paymentOther,
+                          paymentDeliveryApp: paySaved.paymentDeliveryApp,
                         } as PosOrder)
                       : 0,
                     adjustments: pricingAdjustments,
-                    paymentFields: pay ? receiptPaymentFieldsFromSnapshot(pay) : undefined,
+                    paymentFields: paySaved ? receiptPaymentFieldsFromSnapshot(paySaved) : undefined,
                     depositAppliedAmt: payload.depositAmt,
                     suppressReceiptModalAutoPrint: !isMainPosDevice,
                     serverOrderId: orderIdToComplete ?? undefined,
@@ -12549,9 +12570,13 @@ export default function PosTerminalPage() {
                   return
                 }
                 if (!servingTableId || !servingTable?.order) return
-                setPendingDineInOrderId(Number(servingTable.order.id))
+                const payOrderId = Number(servingTable.order.id)
+                setPendingDineInOrderId(payOrderId)
                 pendingDineInOrderTableRef.current = String(servingTable?.name ?? '').trim()
                 setPendingReceiptOrderNo(servingTable.order.orderNo ?? null)
+                const prepaidQrAmt =
+                  counterPrepaidQrByOrderIdRef.current[payOrderId] ??
+                  resolveCheckoutPrepaidQrAmt(servingTable.order)
                 setPendingPayRequest({
                   tableName: servingTable.name,
                   existingOrderId: Number(servingTable.order.id),
@@ -12574,6 +12599,7 @@ export default function PosTerminalPage() {
                   orderMember: posOrderToCheckoutMemberSnapshot(servingTable.order),
                   orderMemo: servingTable.order.memo,
                   depositAmt: servingTable.order.depositAmt,
+                  ...(prepaidQrAmt > 0 ? { prepaidQrAmt } : {}),
                 })
                 setServingTableId(null)
               }}

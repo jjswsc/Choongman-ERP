@@ -120,6 +120,8 @@ export interface CartPanelHandle {
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
     depositAmt?: number
+    /** 손님 폰 QR로 이미 받은 부분 입금 — 카운터는 잔액만 받음 */
+    prepaidQrAmt?: number
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
     orderLabel: string

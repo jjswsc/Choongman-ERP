@@ -72,7 +72,7 @@ import { formatBahtAmountForField, formatBahtInputDisplay, formatIntegerInputDis
 import { PosPaymentBahtInput } from '@/components/pos/pos-payment-baht-input'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { useLang } from '@/lib/lang-context'
-import { useT, tr as i18nTr } from '@/lib/i18n'
+import { useT, tOr, tr as i18nTr } from '@/lib/i18n'
 import { PosAdvanceDepositDialog, type PosAdvanceDepositSubmit } from '@/components/pos/pos-advance-deposit-dialog'
 import { posOrderCollectableDue } from '@/lib/pos-deposit-domain'
 import { useAuth } from '@/lib/auth-context'
@@ -420,6 +420,8 @@ interface CartPanelProps {
     guestCount?: number
     depositAmt?: number
     depositPhone?: string
+    /** 손님 폰 QR 부분 입금 — 저장 시 payment_qr에 더함 */
+    prepaidQrAmt?: number
   }, existingOrderId?: number) => CartPanelOrderCompleteResult
   /** 배달/포장 주문 결제 완료 시 */
   onNonDineOrderComplete?: (payload: {
@@ -950,6 +952,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     normalizeExistingPosOrderId(selectedTable?.order?.id) == null &&
     normalizeExistingPosOrderId(pendingOrderId) == null
   const [checkoutDepositAmt, setCheckoutDepositAmt] = useState(0)
+  const [checkoutPrepaidQrAmt, setCheckoutPrepaidQrAmt] = useState(0)
   const [checkoutDepositPhone, setCheckoutDepositPhone] = useState('')
   const prevSelectedTableIdRef = useRef<string | null>(selectedTable?.id ?? null)
   const instanceIdRef = useRef(`cart-${Math.random().toString(36).slice(2, 10)}`)
@@ -1692,7 +1695,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     adjustments: pricingAdjustments,
   })
   const total = pricing.finalTotal
-  const collectableDue = posOrderCollectableDue(total, checkoutDepositAmt)
+  const collectableDue = posOrderCollectableDue(total, checkoutDepositAmt + checkoutPrepaidQrAmt)
   const round2 = (n: number) => Math.round(n * 100) / 100
   const receiptSubtotalForUi = resolveReceiptSubtotalPrintAmount({
     subtotal,
@@ -3041,7 +3044,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'crypto' | 'truemoney' | 'wechat' | 'alipay' | 'unionpay' | 'linepay' | 'shopeepay') => {
-    const amount = Math.max(0, round2(total))
+    const amount = Math.max(0, round2(collectableDue))
     resetPaymentInputs()
     const lines = adminPaymentLinesRef.current
     const walletToAdmin =
@@ -3265,7 +3268,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const applyFullAmountToSingleAdminLine = (lineId: string) => {
-    const amount = Math.max(0, round2(total))
+    const amount = Math.max(0, round2(collectableDue))
     resetPaymentInputs()
     const lines = adminPaymentLinesRef.current
     setPayAdminLineAmounts(Object.fromEntries(lines.map((li) => [li.id, li.id === lineId ? formatBahtAmountForField(amount) : '0'])))
@@ -3712,9 +3715,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   // 협업·수동 할인 등으로 합계가 바뀌면 일반 결제(더치 아님)는 입력 금액을 새 합계로 덮어씀
   useEffect(() => {
-    if (!showPaymentModal || total <= 0 || showSplit || splitPaidSteps > 0) return
+    if (!showPaymentModal || collectableDue <= 0 || showSplit || splitPaidSteps > 0) return
     if (isActivelyEditingPaymentAmount()) return
-    const newTotal = round2(total)
+    const newTotal = round2(collectableDue)
     resetPaymentInputs()
     if (activePaymentTab === 'cash') {
       setPayCash(formatBahtAmountForField(newTotal))
@@ -3746,6 +3749,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }, [
     showPaymentModal,
     total,
+    collectableDue,
     discount,
     discountType,
     pointUsedNum,
@@ -4016,6 +4020,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     checkoutExistingPosOrderIdRef.current = null
     setIsExistingOrderCheckout(false)
     setCheckoutDepositAmt(0)
+    setCheckoutPrepaidQrAmt(0)
     void openPaymentModalWithAmount(total)
   }
 
@@ -4229,6 +4234,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           guestCount: guestCount > 0 ? guestCount : undefined,
           ...(checkoutDepositAmt > 0.005 ? { depositAmt: checkoutDepositAmt } : {}),
           ...(checkoutDepositPhone ? { depositPhone: checkoutDepositPhone } : {}),
+          ...(checkoutPrepaidQrAmt > 0.005 && resolvedExistingCheckoutId != null
+            ? { prepaidQrAmt: checkoutPrepaidQrAmt }
+            : {}),
         },
         resolvedExistingCheckoutId ?? undefined
       )) !== false
@@ -4919,11 +4927,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
     depositAmt?: number
+    prepaidQrAmt?: number
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
     setCheckoutDepositAmt(Math.max(0, Number(payload.depositAmt) || 0))
+    setCheckoutPrepaidQrAmt(existingId != null ? Math.max(0, Number(payload.prepaidQrAmt) || 0) : 0)
     const normalized = payload.items.map((i, idx) => {
       const menuId =
         String(i.menuId ?? i.menuId1 ?? '').trim() ||
@@ -5010,6 +5020,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
     setCheckoutDepositAmt(Math.max(0, Number(payload.depositAmt) || 0))
+    setCheckoutPrepaidQrAmt(0)
     const normalized = payload.items.map((i, idx) => {
       const menuId =
         String(i.menuId ?? i.menuId1 ?? '').trim() ||
@@ -5094,6 +5105,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     checkoutExistingPosOrderIdRef.current = existingId
     setIsExistingOrderCheckout(existingId != null)
     setCheckoutDepositAmt(Math.max(0, Number(payload.depositAmt) || 0))
+    setCheckoutPrepaidQrAmt(0)
     const normalized = payload.items.map((i, idx) => {
       const menuId =
         String(i.menuId ?? i.menuId1 ?? '').trim() ||
@@ -5243,6 +5255,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (openId == null || openId !== id) return
     setShowPaymentModal(false)
     setCheckoutDepositAmt(0)
+    setCheckoutPrepaidQrAmt(0)
   }
 
   useEffect(() => {
@@ -7931,6 +7944,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 <div className="flex justify-between gap-2">
                   <span>{tr('posDepositApplied', 'มัดจำ 차감')}</span>
                   <span className="tabular-nums font-semibold">-{formatBahtNum(checkoutDepositAmt)} ฿</span>
+                </div>
+                <div className="flex justify-between gap-2 font-bold">
+                  <span>{tr('posDepositCollectable', '받을 금액')}</span>
+                  <span className="tabular-nums">{formatBahtNum(collectableDue)} ฿</span>
+                </div>
+              </div>
+            )}
+            {checkoutPrepaidQrAmt > 0.005 && (
+              <div className="rounded-xl border border-sky-300/60 bg-sky-50 px-4 py-2 text-sm dark:border-sky-700/40 dark:bg-sky-950/30">
+                <div className="flex justify-between gap-2">
+                  <span>{tOr(tDefault, 'qrTableSessionPaidQr', 'QR 입금')}</span>
+                  <span className="tabular-nums font-semibold">-{formatBahtNum(checkoutPrepaidQrAmt)} ฿</span>
                 </div>
                 <div className="flex justify-between gap-2 font-bold">
                   <span>{tr('posDepositCollectable', '받을 금액')}</span>
