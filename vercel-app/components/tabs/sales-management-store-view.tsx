@@ -46,6 +46,7 @@ export function SalesStoreView({
           <thead className="bg-slate-100">
             <tr>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">{tr("salesStoreName", "매장명")}</th>
+              <th className="px-4 py-3 text-right font-semibold text-slate-700 md:hidden">{tr("salesAmount", "매출액")}</th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesOccupancy", "주문건수")}</th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesGuestCount", "손님 수(홀)")}</th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesHallPerOrder", "홀 건당")}</th>
@@ -55,7 +56,7 @@ export function SalesStoreView({
               <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesTax", "세금")}</th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesDiscountAmount", "할인 금액")}</th>
               <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesServiceAmount", "서비스처리 금액")}</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-700">{tr("salesAmount", "매출액")}</th>
+              <th className="hidden px-4 py-3 text-right font-semibold text-slate-700 md:table-cell">{tr("salesAmount", "매출액")}</th>
             </tr>
           </thead>
           <tbody>
@@ -100,6 +101,7 @@ export function SalesStoreView({
               return (
               <tr key={r.storeName} className="border-t border-slate-100 hover:bg-slate-50">
                 <td className="px-4 py-2.5 font-medium">{posStoreDisplayName(r.storeName)}</td>
+                <td className="px-4 py-2.5 text-right font-erp-numeric font-semibold md:hidden">{formatSalesAmount(r.total)}</td>
                 <td className="px-4 py-2.5 text-right font-erp-numeric">{r.count.toLocaleString()}</td>
                 <td className="px-4 py-2.5 text-right font-erp-numeric">{hallGuestSum.toLocaleString()}</td>
                 <td className="px-4 py-2.5 text-right font-erp-numeric">
@@ -115,13 +117,16 @@ export function SalesStoreView({
                 <td className="px-4 py-2.5 text-right font-erp-numeric">{formatSalesAmount(r.vat)}</td>
                 <td className="px-4 py-2.5 text-right font-erp-numeric">{formatSalesAmount(r.discount ?? 0)}</td>
                 <td className="px-4 py-2.5 text-right font-erp-numeric">{formatSalesAmount(r.service ?? 0)}</td>
-                <td className="px-4 py-2.5 text-right font-erp-numeric font-semibold">{formatSalesAmount(r.total)}</td>
+                <td className="hidden px-4 py-2.5 text-right font-erp-numeric font-semibold md:table-cell">{formatSalesAmount(r.total)}</td>
               </tr>
               )
             })}
             {scopedStoreData.length > 0 && (
               <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
                 <td className="px-4 py-3">{tr("salesTotalLabel", "합계")}</td>
+                <td className="px-4 py-3 text-right font-erp-numeric md:hidden">
+                  {formatSalesAmount(scopedStoreData.reduce((a, r) => a + r.total, 0))}
+                </td>
                 <td className="px-4 py-3 text-right font-erp-numeric">
                   {scopedStoreData.reduce((a, r) => a + r.count, 0).toLocaleString()}
                 </td>
@@ -182,7 +187,7 @@ export function SalesStoreView({
                 <td className="px-4 py-3 text-right font-erp-numeric">
                   {formatSalesAmount(scopedStoreData.reduce((a, r) => a + (r.service ?? 0), 0))}
                 </td>
-                <td className="px-4 py-3 text-right font-erp-numeric">
+                <td className="hidden px-4 py-3 text-right font-erp-numeric md:table-cell">
                   {formatSalesAmount(scopedStoreData.reduce((a, r) => a + r.total, 0))}
                 </td>
               </tr>
