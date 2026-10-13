@@ -8,9 +8,13 @@ import {
 } from '@/lib/payments/kbank-api-reference'
 import type { KbankGenerateQrRequest } from '@/lib/payments/kbank-types'
 import { resolveKbankRuntime } from '@/lib/tenant-integration-resolve'
-import { supabaseInsert } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
 const KBANK_PARTNER_TXN_UID_MAX_LEN = 32
+
+export function isDuplicateLocalTxIdError(msg: string): boolean {
+  return /23505|duplicate key value/i.test(msg) && /local_tx_id/i.test(msg)
+}
 
 function pickPrimitiveText(v: unknown): string {
   if (typeof v === 'string') return v.trim()
@@ -106,27 +110,44 @@ export async function generateMemberPortalKbankQr(params: {
   })
 
   const sessionTxnNo = extractKbankQrSessionTxnNo(responseData).slice(0, 40)
+  const attemptRefresh = {
+    order_id: orderId > 0 ? orderId : null,
+    request_amount: amount,
+    ...(sessionTxnNo ? { trace_no: sessionTxnNo } : {}),
+    request_raw: JSON.stringify(result.requestBodyMasked || {}),
+    response_raw: JSON.stringify(result.responseBodyMasked || maskKbankMessageForLog(responseData)),
+    response_code: result.statusCode || null,
+    response_text: result.statusMessage || null,
+  }
   try {
     await supabaseInsert('pos_payment_attempts', {
-      order_id: orderId > 0 ? orderId : null,
+      ...attemptRefresh,
       local_tx_id: partnerTransactionId,
       provider: 'kbank_qr_api',
       mode: 'openapi',
       tx_code: 'QR',
       bank_id: 'KBANK',
-      request_amount: amount,
       approved_amount: 0,
-      ...(sessionTxnNo ? { trace_no: sessionTxnNo } : {}),
-      request_raw: JSON.stringify(result.requestBodyMasked || {}),
-      response_raw: JSON.stringify(result.responseBodyMasked || maskKbankMessageForLog(responseData)),
-      response_code: result.statusCode || null,
-      response_text: result.statusMessage || null,
       status: result.ok ? 'pending' : 'failed',
       error_reason: result.ok ? null : result.statusMessage || 'generate_qr_failed',
       created_at: requestedAt,
     })
   } catch (e) {
-    console.error('member-portal kbank attempt insert:', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!isDuplicateLocalTxIdError(msg)) {
+      console.error('member-portal kbank attempt insert:', e)
+    } else if (result.ok) {
+      // 같은 partnerTxnUid 재발급(잔액 동일 재사용) — 승인된 행은 건드리지 않는다.
+      try {
+        await supabaseUpdateByFilter(
+          'pos_payment_attempts',
+          `local_tx_id=eq.${encodeURIComponent(partnerTransactionId)}&status=in.(pending,failed)`,
+          { ...attemptRefresh, status: 'pending', error_reason: null }
+        )
+      } catch (e2) {
+        console.error('member-portal kbank attempt refresh:', e2)
+      }
+    }
   }
 
   void resolveKbankQrTypeCode(qrType)
