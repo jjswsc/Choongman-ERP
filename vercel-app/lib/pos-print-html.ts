@@ -4,6 +4,7 @@ import {
   type PrintHtmlInHiddenIframeOptions,
 } from '@/lib/print-html-iframe'
 import { isPosAndroidWebPrintClient } from '@/lib/cm-pos-shell'
+import { isAndroidSilentPrintActive, printHtmlViaAndroidThermal } from '@/lib/android-thermal-printer'
 import { appAlert } from '@/lib/app-message'
 import { getClientUiLang, getRuntimeUiString } from '@/lib/runtime-ui-strings'
 
@@ -40,37 +41,31 @@ export const POS_PRINT_DOCUMENT_UNAVAILABLE_MESSAGE = '__CM_POS_PRINT_DOCUMENT_U
 export const POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS = 1000
 export const POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS_HYBRID = 600
 
+/** Windows 하이브리드 셸 또는 Android 앱 ESC/POS 직접 전송 — 드라이버 스풀이 없어 짧은 간격으로 충분 */
+function hasNativeSilentPrint(): boolean {
+  if (typeof window === 'undefined') return false
+  return typeof window.cmPosShell?.printHtml === 'function' || isAndroidSilentPrintActive()
+}
+
 /**
  * 영수증(홀 주문) 직후 주방전 시작 지연.
  * - 웹: 기존 보수값 유지
- * - 하이브리드 셸: 소폭 단축
+ * - 하이브리드 셸·Android 무음 인쇄: 소폭 단축
  */
 export function resolveAfterReceiptToKitchenDelayMs(): number {
-  if (typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function') {
-    return POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS_HYBRID
-  }
-  return POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
+  return hasNativeSilentPrint() ? POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS_HYBRID : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
 }
 
 export function resolveBetweenKitchenSlipsDelayMs(): number {
-  if (typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function') {
-    return POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS_HYBRID
-  }
-  return POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS
+  return hasNativeSilentPrint() ? POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS_HYBRID : POS_THERMAL_BETWEEN_KITCHEN_SLIPS_MS
 }
 
 export function resolveBetweenSplitReceiptsDelayMs(): number {
-  if (typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function') {
-    return POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS_HYBRID
-  }
-  return POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS
+  return hasNativeSilentPrint() ? POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS_HYBRID : POS_THERMAL_BETWEEN_SPLIT_RECEIPTS_MS
 }
 
 export function resolveAfterKitchenToReceiptDelayMs(): number {
-  if (typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function') {
-    return POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS_HYBRID
-  }
-  return POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS
+  return hasNativeSilentPrint() ? POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS_HYBRID : POS_THERMAL_AFTER_KITCHEN_TO_RECEIPT_MS
 }
 
 /** 하이브리드 셸: Windows `runtime-config.json`의 receipt vs kitchen1~3 프린터로 분기 */
@@ -234,6 +229,37 @@ async function printPosHtmlDocumentInner(
     return
   }
 
+  if (!preferDialog) {
+    const android = await printHtmlViaAndroidThermal(documentHtml, {
+      printRole: opts?.printRole,
+      kitchenStation: opts?.kitchenStation,
+      cut: opts?.escPosCutOverride !== false,
+    })
+    if (!android.skipped) {
+      opts?.onShellPrintResult?.({ ok: android.ok, reason: android.reason, usedDevice: android.usedDevice })
+      if (android.ok) {
+        opts?.onAfterCleanup?.()
+        return
+      }
+      if (opts?.suppressPrintError !== true) {
+        void appAlert(
+          getRuntimeUiString(getClientUiLang(), 'posPrintFailedWithReason', {
+            reason: android.reason || 'print_failed',
+          })
+        )
+      }
+      if (!shouldSkipShellIframeFallback(opts)) {
+        try {
+          await printPosHtmlDocumentViaIframe(documentHtml, opts)
+        } catch {
+          /* 다음 장 체인 유지 */
+        }
+      }
+      opts?.onAfterCleanup?.()
+      return
+    }
+  }
+
   try {
     await printPosHtmlDocumentViaIframe(documentHtml, opts)
   } catch {
@@ -278,7 +304,7 @@ function printPosHtmlDocumentViaIframe(
 
 /**
  * POS 영수증·주방전 등: Windows 하이브리드 셸이면 main 프로세스 인쇄(iframe.print 무시 대응),
- * 그 외(크롬 등 웹)는 숨김 iframe 인쇄. 연속 인쇄는 내부 큐로 직렬화하며 `await` 시 완료까지 반환한다.
+ * Android 앱에 프린터가 지정돼 있으면 ESC/POS 직접 전송, 그 외(크롬 등 웹)는 숨김 iframe 인쇄. 연속 인쇄는 내부 큐로 직렬화하며 `await` 시 완료까지 반환한다.
  */
 export function printPosHtmlDocument(
   fullDocumentHtml: string,

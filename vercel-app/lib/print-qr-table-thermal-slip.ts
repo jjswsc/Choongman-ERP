@@ -4,6 +4,7 @@
  */
 import QRCode from 'qrcode'
 import type { PosPrinterSettings } from '@/lib/api-client'
+import { isAndroidSilentPrintActive } from '@/lib/android-thermal-printer'
 import { isCmPosHybridShell, isPosAndroidWebPrintClient } from '@/lib/cm-pos-shell'
 import { printPosHtmlDocument } from '@/lib/pos-print-html'
 import { resolveEscPosCutOverride } from '@/lib/pos-thermal-escpos-cut'
@@ -13,6 +14,7 @@ import { buildQrTableThermalSlipHtml } from '@/lib/qr-table-thermal-slip-html'
 export function shouldQueueTableQrPrintToMainPos(): boolean {
   if (typeof window === 'undefined') return true
   if (isCmPosHybridShell()) return false
+  if (isAndroidSilentPrintActive()) return false
   if (isPosAndroidWebPrintClient()) return true
   if (/iPhone|iPad|iPod/i.test(navigator.userAgent || '')) return true
   try {

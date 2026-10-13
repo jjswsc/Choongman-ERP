@@ -12,6 +12,7 @@ import {
   STUCK_AUTH_SHELL_RECOVER_MS,
 } from "@/lib/chunk-load-recovery"
 import { PosHybridPrintDiagnosticsButton } from "@/components/pos/pos-hybrid-print-diagnostics"
+import { loadAndroidThermalConfig } from "@/lib/android-thermal-printer"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
@@ -199,6 +200,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     )
     setShellMinimizeAvailable(typeof window.cmPosShell?.minimizeWindow === "function")
     setShellQuitAvailable(typeof window.cmPosShell?.quitApp === "function")
+    void loadAndroidThermalConfig()
   }, [])
 
   const showingAuthShell = !isPosLoginPage && !isCustomerDisplayPage && (!initialized || !auth)

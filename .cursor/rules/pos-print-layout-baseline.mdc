@@ -12,6 +12,7 @@ alwaysApply: true
 | **같음** | 영수증·주방 HTML/CSS는 **동일 TypeScript 소스**에서 생성됨. 웹 브라우저 인쇄든, Windows Electron `printHtml` 이든 **본문 레이아웃 수치는 같다.** |
 | **다름** | **인쇄 엔진**: 브라우저 `window.print` vs Electron `webContents.print` + 숨김 창 폭·`printableArea` 등 (`windows-pos/main.js`). |
 | **Android(Capacitor) 웹뷰** | `lib/print-html-iframe.ts`: `print()` 직전 `requestAnimationFrame` **1회**(데스크톱 Chromium은 **2회**). |
+| **Android 앱 무음 인쇄** | APK versionCode 2+ `CmThermalPrinter` 플러그인: 같은 HTML을 숨김 WebView로 **80mm × 8dots/mm** 비트맵 → 왼쪽 **2mm**부터 **72mm(576 dots)** 잘라 ESC/POS 래스터 → LAN(9100)·블루투스·USB. 매핑은 기기 로컬(POS 홈 하단 「프린터 설정」), 슬롯 폴백은 Windows와 동일(`lib/android-thermal-printer-config.ts`). 미설정·구버전 APK는 위 웹뷰 `print()` 경로. |
 | **기록 위치** | 레이아웃 숫자 → 아래 표 + `lib/pos-receipt-layout.ts`, `lib/pos-kitchen-slip-html.ts`, `lib/pos-receipt-paper.ts`. Electron 전용 → `windows-pos/main.js` + `windows-pos/README.md`(런타임 설정). |
 
 ---
@@ -71,6 +72,7 @@ alwaysApply: true
 1. **영수증** 숫자 바꾸면 `pos-receipt-layout.ts` + 이 규칙 표 동시 갱신.
 2. **주방** 숫자 바꾸면 `pos-kitchen-slip-html.ts` + 이 규칙 표 동시 갱신.
 3. **하이브리드 전용**만 바꾸면 `main.js` + 이 규칙 § Windows 표 갱신.
+3-1. **Android 네이티브**(`android/app/src/main/java/.../CmThermalPrinterPlugin.java` 등)를 바꾸면 `versionCode` 올리고 APK 재배포 — Vercel 배포만으로는 반영 안 됨.
 4. 실제 **80mm 기기**에서 웹·하이브리드 각각 한 번씩 출력 확인.
 
 ---

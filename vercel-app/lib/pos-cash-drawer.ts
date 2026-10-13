@@ -1,3 +1,5 @@
+import { openCashDrawerViaAndroidThermal } from '@/lib/android-thermal-printer'
+
 export type PosCashDrawerOpenSource =
   | 'payment_auto'
   | 'manual'
@@ -75,6 +77,9 @@ export function formatPosCashDrawerFailureMessage(
       )
     }
     return tx('posDrawerOpenBridgeFail', '현금 서랍 열기에 실패했습니다.')
+  }
+  if (error.startsWith('android:')) {
+    return `${tx('posDrawerOpenBridgeFail', '현금 서랍 열기에 실패했습니다.')} (${error.slice('android:'.length)})`
   }
   if (error === 'all_local_bridge_endpoints_failed') {
     return tx(
@@ -172,6 +177,13 @@ export async function openPosCashDrawer(
     } catch {
       return { success: false, error: 'shell:shell_exception' }
     }
+  }
+
+  const android = await openCashDrawerViaAndroidThermal()
+  if (!android.skipped) {
+    return android.ok
+      ? { success: true, endpoint: 'android-thermal' }
+      : { success: false, error: `android:${android.reason || 'drawer_kick_failed'}` }
   }
 
   /** 웹 전용: 브리지를 병렬로 짧게 시도(순차 1.2초×N 금지) */

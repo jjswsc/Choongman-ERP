@@ -61,6 +61,7 @@ import {
 } from '@/lib/pos-cash-drawer'
 import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import { PosDrawerPinSettingsDialog } from '@/components/pos/pos-drawer-pin-settings-dialog'
+import { PosAndroidPrinterSettingsButton } from '@/components/pos/pos-android-printer-settings'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePosStore } from '@/hooks/use-pos-store'
 
@@ -719,6 +720,7 @@ function POSMainPageInner() {
                 <span className="hidden sm:inline">{t('posResetCacheReload')}</span>
               </Button>
             ) : null}
+            <PosAndroidPrinterSettingsButton />
           </div>
         </div>
         {currentTime && (
