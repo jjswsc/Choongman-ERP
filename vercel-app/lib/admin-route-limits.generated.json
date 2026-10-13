@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-10T18:33:16.879Z",
+  "generatedAt": "2026-10-13T13:10:38.980Z",
   "entryCount": 1992,
   "entries": [
     {
@@ -7277,7 +7277,7 @@
     },
     {
       "path": "app/api/updatePosOrder/route.ts",
-      "line": 179,
+      "line": 183,
       "kind": "limit",
       "value": 1,
       "apiLabel": "updatePosOrder"
@@ -7536,77 +7536,77 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1892,
+      "line": 1900,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 4360,
+      "line": 4369,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 5897,
+      "line": 5928,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6129,
+      "line": 6160,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6440,
+      "line": 6471,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6900,
+      "line": 6933,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 7935,
+      "line": 7968,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 8305,
+      "line": 8338,
       "kind": "limit",
       "value": 20,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 9786,
+      "line": 9819,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 10463,
+      "line": 10496,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 10970,
+      "line": 11013,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
@@ -8173,7 +8173,7 @@
     },
     {
       "path": "lib/attendance-qr-mode-server.ts",
-      "line": 31,
+      "line": 32,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:attendance-qr-mode-server"
@@ -9251,35 +9251,35 @@
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1252,
+      "line": 1253,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1365,
+      "line": 1366,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1380,
+      "line": 1381,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1400,
+      "line": 1401,
       "kind": "limit",
       "value": 2,
       "apiLabel": "lib:grab-order-to-pos"
     },
     {
       "path": "lib/grab-order-to-pos.ts",
-      "line": 1432,
+      "line": 1433,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:grab-order-to-pos"
@@ -11442,7 +11442,7 @@
     },
     {
       "path": "lib/pos-main-device-autoprint.ts",
-      "line": 760,
+      "line": 763,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-main-device-autoprint"
@@ -12324,182 +12324,182 @@
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1752,
+      "line": 1755,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1798,
+      "line": 1801,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 1840,
+      "line": 1843,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2073,
+      "line": 2076,
       "kind": "limit",
       "value": 200,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2163,
+      "line": 2166,
       "kind": "limit",
       "value": 40,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2219,
+      "line": 2222,
       "kind": "limit",
       "value": 20,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2267,
+      "line": 2270,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2276,
+      "line": 2279,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2283,
+      "line": 2286,
       "kind": "limit",
       "value": 50,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2348,
+      "line": 2351,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2587,
+      "line": 2590,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2695,
+      "line": 2698,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2765,
+      "line": 2768,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2814,
+      "line": 2817,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2852,
+      "line": 2855,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2920,
+      "line": 2923,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 2980,
+      "line": 2983,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3042,
+      "line": 3045,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3064,
+      "line": 3067,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3193,
+      "line": 3196,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3257,
+      "line": 3260,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3281,
+      "line": 3284,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3363,
+      "line": 3366,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3388,
+      "line": 3391,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3401,
+      "line": 3404,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"
     },
     {
       "path": "lib/qr-table-server.ts",
-      "line": 3534,
+      "line": 3537,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:qr-table-server"

@@ -72,9 +72,9 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **748**개 · 접두어 그룹 **95**개
+- `sql/` 최상위: **752**개 · 접두어 그룹 **95**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **52**개
+- `sql/archive/` (진단 전용 등 보관): **54**개
 
 <details><summary><code>pos_*</code> (214)</summary>
 
@@ -708,6 +708,20 @@
 
 </details>
 
+<details><summary><code>grab_*</code> (9)</summary>
+
+- [`grab_auto_settle_backfill_01_preview.sql`](../sql/grab_auto_settle_backfill_01_preview.sql) — preview, backfill
+- [`grab_cash_to_delivery_app_01_preview.sql`](../sql/grab_cash_to_delivery_app_01_preview.sql) — preview
+- [`grab_cash_to_delivery_app_02_order_events.sql`](../sql/grab_cash_to_delivery_app_02_order_events.sql)
+- [`grab_cash_to_delivery_app_03_apply.sql`](../sql/grab_cash_to_delivery_app_03_apply.sql) — apply, log
+- [`grab_cash_to_delivery_app_04_order_row.sql`](../sql/grab_cash_to_delivery_app_04_order_row.sql)
+- [`grab_option_integrity_audit.sql`](../sql/grab_option_integrity_audit.sql) — diagnose
+- [`grab_option_integrity_fix.sql`](../sql/grab_option_integrity_fix.sql) — apply
+- [`grab_sync_actor_01_menu_audit.sql`](../sql/grab_sync_actor_01_menu_audit.sql) — diagnose
+- [`grab_tenant_id.sql`](../sql/grab_tenant_id.sql)
+
+</details>
+
 <details><summary><code>payable_*</code> (9)</summary>
 
 - [`payable_backfill_from_bank_purchase_payment.sql`](../sql/payable_backfill_from_bank_purchase_payment.sql) — backfill
@@ -835,16 +849,6 @@
 - [`company_hybrid_documents_all_in_one.sql`](../sql/company_hybrid_documents_all_in_one.sql) — bundle
 - [`company_hybrid_documents_metadata.sql`](../sql/company_hybrid_documents_metadata.sql)
 - [`company_hybrid_documents_summary_rpc.sql`](../sql/company_hybrid_documents_summary_rpc.sql) — rpc
-
-</details>
-
-<details><summary><code>grab_*</code> (5)</summary>
-
-- [`grab_auto_settle_backfill_01_preview.sql`](../sql/grab_auto_settle_backfill_01_preview.sql) — preview, backfill
-- [`grab_option_integrity_audit.sql`](../sql/grab_option_integrity_audit.sql) — diagnose
-- [`grab_option_integrity_fix.sql`](../sql/grab_option_integrity_fix.sql) — apply
-- [`grab_sync_actor_01_menu_audit.sql`](../sql/grab_sync_actor_01_menu_audit.sql) — diagnose
-- [`grab_tenant_id.sql`](../sql/grab_tenant_id.sql)
 
 </details>
 
@@ -1448,7 +1452,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (52)</summary>
+<details><summary><code>archive/</code> (54)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql)
@@ -1490,6 +1494,8 @@
 - [`archive/diagnose/diagnose_pos_main_device_ekkamai.sql`](../sql/archive/diagnose/diagnose_pos_main_device_ekkamai.sql)
 - [`archive/diagnose/diagnose_pos_menus_hidden_but_code_exists.sql`](../sql/archive/diagnose/diagnose_pos_menus_hidden_but_code_exists.sql)
 - [`archive/diagnose/diagnose_pos_menus_store_1001_scope.sql`](../sql/archive/diagnose/diagnose_pos_menus_store_1001_scope.sql)
+- [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_01_orders.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_01_orders.sql)
+- [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql)
 - [`archive/diagnose/diagnose_rpkm2026_promo_code.sql`](../sql/archive/diagnose/diagnose_rpkm2026_promo_code.sql)
 - [`archive/diagnose/diagnose_silom_delivery_sales_01_status.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_01_status.sql)
 - [`archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql)
