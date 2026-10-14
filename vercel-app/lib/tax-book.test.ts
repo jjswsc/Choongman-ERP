@@ -144,6 +144,7 @@ describe('tax book rules', () => {
     ).toBe('sales')
     expect(taxBookIssuedDocumentNo('EXP2026090041')).toBe('EXP2026090041')
     expect(taxBookIssuedDocumentNo('JE-TAX-MIRROR-63437')).toBe('')
+    expect(taxBookIssuedDocumentNo('IV20261006-2807#RV512')).toBe('IV20261006-2807')
     const sales = taxInvoiceSalesJournalLines({ gross: 107, vatAmount: 7 })
     expect(taxJournalBalanced(sales)).toBe(true)
     expect(sales.map((l) => `${l.side}:${l.accountCode}:${l.amount}`)).toEqual([

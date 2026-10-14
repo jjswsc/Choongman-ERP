@@ -112,16 +112,18 @@ export async function GET(request: NextRequest) {
       const invoiceNos = [...new Set(rows.map((r) => String(r.invoiceNo || '').trim()).filter(Boolean))]
       const statusSelect = { select: 'invoice_no,printed,printed_at', limit: 10000 } as const
       try {
-        if (invoiceNos.length > 0) {
-          const inList = postgrestQuotedInList(invoiceNos)
-          if (inList) {
-            const statusRows = (await supabaseSelectFilter(
-              'outbound_invoice_print_status',
-              `invoice_no=in.(${inList})`,
-              { ...statusSelect, limit: Math.min(invoiceNos.length + 20, 10000) }
-            )) as { invoice_no?: string; printed?: boolean; printed_at?: string }[]
-            applyOutboundBillPlacedStatus(rows, statusRows || [])
-          }
+        // 기간이 길면 IV 수백 건이 URL 하나에 들어가 PostgREST가 Bad Request를 낸다.
+        const IN_CHUNK = 150
+        for (let i = 0; i < invoiceNos.length; i += IN_CHUNK) {
+          const chunk = invoiceNos.slice(i, i + IN_CHUNK)
+          const inList = postgrestQuotedInList(chunk)
+          if (!inList) continue
+          const statusRows = (await supabaseSelectFilter(
+            'outbound_invoice_print_status',
+            `invoice_no=in.(${inList})`,
+            { ...statusSelect, limit: chunk.length + 20 }
+          )) as { invoice_no?: string; printed?: boolean; printed_at?: string }[]
+          applyOutboundBillPlacedStatus(rows, statusRows || [])
         }
         const unmatched = unmatchedOutboundBillLookupIds(rows)
         const suffixIds = [...unmatched.orderIds, ...unmatched.forceStockLogIds]

@@ -35,6 +35,14 @@ export function outboundBillKey(invoiceNo: string): { sourceType: 'outbound_bill
   }
 }
 
+/** 청구(SV)가 IV 번호를 쓰므로 수금(RV)은 미수 건마다 접미사로 entry_no를 나눈다. */
+export function outboundCollectionEntryNo(invoiceNo: string, accrualId: number): string | null {
+  const inv = String(invoiceNo || '').trim()
+  const id = Math.floor(Number(accrualId) || 0)
+  if (!inv || id <= 0) return null
+  return `${inv}#RV${id}`
+}
+
 async function receivableGrossForInvoice(invoiceNo: string): Promise<{ gross: number; date: string } | null> {
   const key = String(invoiceNo || '').trim()
   if (!key) return null
@@ -86,6 +94,8 @@ export async function postOutboundBillSalesJournals(invoiceNos: string[]): Promi
     try {
       await postOutboundBillSalesJournal(invoiceNo)
     } catch (e) {
+      // 출고 화면·인쇄 화면이 동시에 호출하면 회사 전표 UNIQUE(source_type, source_id)가 두 번째를 막는다.
+      if (String(e instanceof Error ? e.message : e).includes('"23505"')) continue
       console.error('outbound bill sales journal:', invoiceNo, e)
     }
   }
@@ -123,7 +133,7 @@ export async function postOutboundCollectionJournal(params: {
     storeName: INVOICE_SALES_STORE,
     memo: invoiceNo ? `수금 ${invoiceNo}` : '수금',
     voucherKind: 'receipt',
-    entryNo: invoiceNo || null,
+    entryNo: outboundCollectionEntryNo(invoiceNo, accrualId),
     lines,
   })
 }

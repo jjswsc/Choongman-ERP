@@ -72,11 +72,11 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **758**개 · 접두어 그룹 **96**개
+- `sql/` 최상위: **761**개 · 접두어 그룹 **96**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **62**개
+- `sql/archive/` (진단 전용 등 보관): **67**개
 
-<details><summary><code>pos_*</code> (217)</summary>
+<details><summary><code>pos_*</code> (218)</summary>
 
 - [`pos_banban_flavor_links.sql`](../sql/pos_banban_flavor_links.sql)
 - [`pos_business_day_start_system_settings.sql`](../sql/pos_business_day_start_system_settings.sql)
@@ -286,6 +286,7 @@
 - [`pos_queue_tickets_01_table.sql`](../sql/pos_queue_tickets_01_table.sql) — log
 - [`pos_queue_tickets_02_enable_union_mall.sql`](../sql/pos_queue_tickets_02_enable_union_mall.sql) — log
 - [`pos_queue_tickets_03_verify.sql`](../sql/pos_queue_tickets_03_verify.sql) — verify
+- [`pos_queue_tickets_04_store_code_check.sql`](../sql/pos_queue_tickets_04_store_code_check.sql) — verify
 - [`pos_sales_payment_tender_gap_diagnostic.sql`](../sql/pos_sales_payment_tender_gap_diagnostic.sql) — diagnose
 - [`pos_settlements_align_app_columns.sql`](../sql/pos_settlements_align_app_columns.sql)
 - [`pos_settlements_bootstrap.sql`](../sql/pos_settlements_bootstrap.sql)
@@ -433,7 +434,7 @@
 
 </details>
 
-<details><summary><code>fix_*</code> (26)</summary>
+<details><summary><code>fix_*</code> (28)</summary>
 
 - [`fix_abc_company_1001_align_malatang01.sql`](../sql/fix_abc_company_1001_align_malatang01.sql) — apply
 - [`fix_barbq_chicken_option_prices.sql`](../sql/fix_barbq_chicken_option_prices.sql) — apply
@@ -460,6 +461,8 @@
 - [`fix_store_visit_duplicate_opens_2026_08_07.sql`](../sql/fix_store_visit_duplicate_opens_2026_08_07.sql) — apply
 - [`fix_tax_entity_mapping_choongman_live.sql`](../sql/fix_tax_entity_mapping_choongman_live.sql) — apply
 - [`fix_tax_invoice_reference_apo_to_po_no.sql`](../sql/fix_tax_invoice_reference_apo_to_po_no.sql) — apply
+- [`fix_tax_outbound_iv_mirror_02_apply.sql`](../sql/fix_tax_outbound_iv_mirror_02_apply.sql) — apply, log
+- [`fix_tax_outbound_iv_mirror_04_company_dedupe.sql`](../sql/fix_tax_outbound_iv_mirror_04_company_dedupe.sql) — apply, log
 - [`fix_wht_ledger_natural_person_pnd3.sql`](../sql/fix_wht_ledger_natural_person_pnd3.sql) — apply
 
 </details>
@@ -1463,7 +1466,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (62)</summary>
+<details><summary><code>archive/</code> (67)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql)
@@ -1494,6 +1497,9 @@
 - [`archive/diagnose/diagnose_hq_like_receivable_pepsi_office_05_po89_lines.sql`](../sql/archive/diagnose/diagnose_hq_like_receivable_pepsi_office_05_po89_lines.sql)
 - [`archive/diagnose/diagnose_kimchi_soup_with_rice_cost.sql`](../sql/archive/diagnose/diagnose_kimchi_soup_with_rice_cost.sql)
 - [`archive/diagnose/diagnose_loan_deposit_posted_as_revenue.sql`](../sql/archive/diagnose/diagnose_loan_deposit_posted_as_revenue.sql)
+- [`archive/diagnose/diagnose_lucky_day_discount_01_summary.sql`](../sql/archive/diagnose/diagnose_lucky_day_discount_01_summary.sql)
+- [`archive/diagnose/diagnose_lucky_day_discount_02_missing.sql`](../sql/archive/diagnose/diagnose_lucky_day_discount_02_missing.sql)
+- [`archive/diagnose/diagnose_lucky_day_discount_03_order_105685.sql`](../sql/archive/diagnose/diagnose_lucky_day_discount_03_order_105685.sql)
 - [`archive/diagnose/diagnose_m007359_stamp_no_coupon.sql`](../sql/archive/diagnose/diagnose_m007359_stamp_no_coupon.sql)
 - [`archive/diagnose/diagnose_member_notifications_m007359.sql`](../sql/archive/diagnose/diagnose_member_notifications_m007359.sql)
 - [`archive/diagnose/diagnose_member_notifications_m007359_followup.sql`](../sql/archive/diagnose/diagnose_member_notifications_m007359_followup.sql)
@@ -1527,6 +1533,8 @@
 - [`archive/diagnose/diagnose_stamp10_m007359.sql`](../sql/archive/diagnose/diagnose_stamp10_m007359.sql)
 - [`archive/diagnose/diagnose_stamp_and_promo_systemic.sql`](../sql/archive/diagnose/diagnose_stamp_and_promo_systemic.sql)
 - [`archive/diagnose/diagnose_tax_entity_mapping_live.sql`](../sql/archive/diagnose/diagnose_tax_entity_mapping_live.sql)
+- [`archive/diagnose/diagnose_tax_outbound_iv_mirror_01_summary.sql`](../sql/archive/diagnose/diagnose_tax_outbound_iv_mirror_01_summary.sql)
+- [`archive/diagnose/diagnose_tax_outbound_iv_mirror_03_company_duplicates.sql`](../sql/archive/diagnose/diagnose_tax_outbound_iv_mirror_03_company_duplicates.sql)
 
 </details>
 

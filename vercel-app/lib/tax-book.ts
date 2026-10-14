@@ -452,10 +452,11 @@ function rewriteJournalAccount<T extends {
 }
 
 /** 발행 문서번호(EXP·IV 등). 내부 JE- 번호는 참조가 아니다. */
+/** entry_no UNIQUE라 같은 IV에 여러 전표(SV·RV)가 붙으면 `IV…#RV12`처럼 접미사를 둔다. 참조번호는 `#` 앞만. */
 export function taxBookIssuedDocumentNo(entryNo: string | null | undefined): string {
   const n = String(entryNo || '').trim()
   if (!n || /^JE-/i.test(n)) return ''
-  return n
+  return n.split('#')[0].trim()
 }
 
 /**
